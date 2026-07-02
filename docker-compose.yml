@@ -1,0 +1,9 @@
+services:
+  bot:
+    build: ./webhook
+    container_name: xau-bot
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ./data:/data
+    # No ports exposed — the bot uses outbound Telegram long-polling only.
