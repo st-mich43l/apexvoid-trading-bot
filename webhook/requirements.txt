@@ -1,0 +1,7 @@
+aiogram==3.13.1
+pydantic==2.9.2
+pydantic-settings==2.6.0
+aiosqlite==0.20.0
+pyrofork
+tgcrypto==1.2.5
+anthropic>=0.40.0
