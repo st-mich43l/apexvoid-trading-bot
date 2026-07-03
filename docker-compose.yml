@@ -1,7 +1,7 @@
 services:
   bot:
     build: ./webhook
-    container_name: xau-bot
+    container_name: signal-bot
     restart: unless-stopped
     env_file: .env
     volumes:

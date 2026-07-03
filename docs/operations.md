@@ -35,8 +35,6 @@ docker compose logs --since 2h bot    # since a time
 - `~/xau-signal-bot/data/signals.db` — signal lifecycle + pips history.
 - `~/xau-signal-bot/.env` — secrets. Store in a password manager, **not** on
   the same host.
-- The Pyrogram session string — needed for the pips calculator; regenerable via
-  `gen_session.py` but a backup avoids re-login.
 
 ### Daily local snapshot
 
@@ -129,13 +127,8 @@ docker compose logs bot
 
 ### DM commands are ignored
 
-- If `TELEGRAM_OWNER_ID` is set, only that user's DMs are processed. Confirm
-  your numeric ID matches.
-
-### Pips calculator says the session is unavailable
-
-- The Pyrogram session expired or was terminated. Re-run `gen_session.py` and
-  update the stored session, then restart the container.
+- DM commands are disabled unless `TELEGRAM_OWNER_ID` is set. Confirm your
+  numeric ID is configured and matches the sender.
 
 ### Chart analysis fails
 

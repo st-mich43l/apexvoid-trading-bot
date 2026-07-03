@@ -211,23 +211,6 @@ The bot reads from the `pips_log` table, which is populated whenever the bot aut
 💰 Net:    +165 pips
 ```
 
-### Pyrogram (channel history scanning)
-
-For richer history scanning (reading past messages that were not auto-edited during the current bot session), the bot optionally uses a Pyrogram MTProto client in bot-token mode.
-
-To enable, add to `.env`:
-
-```
-TELEGRAM_API_ID=12345678
-TELEGRAM_API_HASH=abcdef1234567890abcdef1234567890
-```
-
-Obtain these from [my.telegram.org](https://my.telegram.org) → API development tools.
-
-Without these, the pips calculator works only from the local `pips_log` table (edits made while the bot was running).
-
----
-
 ## Auto-Edit Pips Messages
 
 This feature runs **automatically** — no command needed.
@@ -259,9 +242,7 @@ The raw `+/-N pips` text also triggers auto-edit on edited messages if the chann
 |---|---|---|
 | `TELEGRAM_BOT_TOKEN` | ✅ | Bot token from @BotFather |
 | `TELEGRAM_CHAT_ID` | ✅ | Channel ID where signals are posted (e.g. `-1001234567890`) |
-| `TELEGRAM_OWNER_ID` | Recommended | Your numeric Telegram user ID — locks DM commands to you only |
-| `TELEGRAM_API_ID` | Optional | Enables Pyrogram history scanning for pips calculator |
-| `TELEGRAM_API_HASH` | Optional | Required if `TELEGRAM_API_ID` is set |
+| `TELEGRAM_OWNER_ID` | Required for DMs | Your numeric Telegram user ID; privileged DMs are disabled when unset |
 | `ANTHROPIC_API_KEY` | Optional | Enables chart screenshot analysis via Claude vision |
 | `DB_PATH` | Optional | SQLite database path (default: `/data/signals.db`) |
 | `LOG_LEVEL` | Optional | Python log level (default: `INFO`) |

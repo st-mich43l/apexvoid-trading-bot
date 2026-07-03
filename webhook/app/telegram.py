@@ -5,19 +5,47 @@ import time
 from datetime import datetime, timezone, timedelta
 from html import escape
 from typing import Optional
+from zoneinfo import ZoneInfo
 from aiogram import Bot, Dispatcher, F
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
 from aiogram.exceptions import TelegramNetworkError, TelegramRetryAfter
-from aiogram.types import Message
+from aiogram.filters import Command
+from aiogram.types import (
+  BotCommand,
+  BotCommandScopeChat,
+  BotCommandScopeDefault,
+  Message,
+)
 
 from app.config import settings
 from app.chart_analysis import analyse_chart_image
 from app.dedup import (
-  store_pips, get_pips_summary,
-  store_manual_signal, set_manual_signal_channel_id,
-  get_open_signals, close_manual_signal, cancel_manual_signal,
-  cancel_manual_signal_by_channel_id,
+  store_pips, get_pips_summary, get_pips_records,
+  store_manual_signal,
+  get_open_signals, get_all_signals, get_manual_signal,
+  get_signal_by_post,
+  get_signal_cluster,
+  event_in_window,
+)
+from app.reports import build_stats, format_review, format_stats
+from app.broadcast import broadcast_entry, render_entry
+from app.symbols import (
+  SYMBOLS,
+  channel_for_symbol,
+  symbol_for_channel,
+  tier_for_channel,
+)
+from app.trade_ops import (
+  do_active,
+  do_cancel,
+  do_close,
+  do_note,
+  do_reopen,
+  do_sl,
+  do_tag,
+  post_result,
+  render_result,
 )
 
 log = logging.getLogger(__name__)
@@ -27,6 +55,32 @@ bot = Bot(
   default=DefaultBotProperties(parse_mode=ParseMode.HTML),
 )
 dp = Dispatcher()
+
+OWNER_COMMANDS = [
+  BotCommand(command="trade_active", description="[SYMBOL] [#id]"),
+  BotCommand(command="trade_close", description="[SYMBOL] #id ±pips [%] | be"),
+  BotCommand(command="trade_sl", description="[SYMBOL] #id be|price"),
+  BotCommand(command="trade_cancel", description="[SYMBOL] #id"),
+  BotCommand(command="trade_reopen", description="[SYMBOL] #id [lo-hi]"),
+  BotCommand(command="trade_tag", description="[SYMBOL] #id setup [***]"),
+  BotCommand(command="trade_note", description="[SYMBOL] #id text"),
+  BotCommand(command="trade_review", description="[SYMBOL] #id"),
+  BotCommand(command="trade_stats", description="[SYMBOL] [today|week|month]"),
+  BotCommand(command="trade_pips", description="[SYMBOL] [period]"),
+  BotCommand(command="help", description="Trade command reference"),
+]
+
+
+async def setup_commands(target_bot: Bot) -> None:
+  await target_bot.set_my_commands(
+    [],
+    scope=BotCommandScopeDefault(),
+  )
+  if settings.telegram_owner_id:
+    await target_bot.set_my_commands(
+      OWNER_COMMANDS,
+      scope=BotCommandScopeChat(chat_id=settings.telegram_owner_id),
+    )
 
 # Matches: +100 pips / -50 pips / +1500Pips / -30 PIPS
 _PIPS_RE = re.compile(r'([+-])\s*(\d+)\s*pips?', re.IGNORECASE)
@@ -41,8 +95,18 @@ _MANUAL_RE = re.compile(
   r'\s*tp\s+([\d./]+)',
   re.IGNORECASE,
 )
+_SETUP_SUFFIX_RE = re.compile(
+  r'(?i)\s*/\s*setup\s+([a-z0-9][a-z0-9_-]*)'
+  r'(?:\s+(\*{1,3}|[1-3]))?\s*$'
+)
 
-_TP_ICONS = ['💰'] * 5
+def _expand_entry_endpoint(value: float, anchor: float) -> float:
+  """Expand a short zone endpoint to the closest price around the anchor."""
+  if value >= 100:
+    return value
+  base = int(anchor / 100) * 100
+  candidates = (base + value - 100, base + value, base + value + 100)
+  return min(candidates, key=lambda price: abs(price - anchor))
 
 
 def _expand_tp(val: float, entry: float, action: str) -> float:
@@ -60,12 +124,35 @@ def _expand_tp(val: float, entry: float, action: str) -> float:
 
 
 def _parse_manual(text: str) -> Optional[dict]:
-  m = _MANUAL_RE.search(text.strip())
+  raw = text.strip()
+  raw, vip_count = re.subn(
+    r'(?i)\s*/\s*vip(?=\s*(?:/|$))',
+    "",
+    raw,
+  )
+  setup_type = None
+  confluence = None
+  setup_match = _SETUP_SUFFIX_RE.search(raw)
+  if setup_match:
+    setup_type = setup_match.group(1).lower()
+    grade = setup_match.group(2)
+    if grade:
+      confluence = len(grade) if grade.startswith("*") else int(grade)
+    raw = raw[:setup_match.start()].rstrip()
+  raw = re.sub(
+    r'\s*/\s*(?=(?:sl|tp)\b)',
+    "\n",
+    raw,
+    flags=re.IGNORECASE,
+  )
+  m = _MANUAL_RE.search(raw)
   if not m:
     return None
   action, entry_a, entry_b, sl, tp_raw = m.groups()
   action = action.upper()
-  entry_low, entry_high = sorted((float(entry_a), float(entry_b)))
+  entry_anchor = float(entry_a)
+  entry_other = _expand_entry_endpoint(float(entry_b), entry_anchor)
+  entry_low, entry_high = sorted((entry_anchor, entry_other))
   sl = float(sl)
   # Use the edge with the greatest exposure for conservative risk/R values.
   rr_entry = entry_low if action == 'SELL' else entry_high
@@ -81,38 +168,33 @@ def _parse_manual(text: str) -> Optional[dict]:
     'sl': sl,
     'tps': tps,
     'risk': risk,
+    'setup_type': setup_type,
+    'confluence': confluence,
+    'visibility': 'vip' if vip_count else 'both',
   }
 
 
-def _fmt_rr_val(tp: float, entry: float, risk: float) -> str:
-  return f"{abs(tp - entry) / risk:.1f}R" if risk > 0 else '-'
-
-
-def _format_manual_signal(sig: dict) -> str:
-  action = sig['action']
-  risk = sig['risk']
-  lines = [
-    f"{_action_icon(action)} <b>{escape(action)} XAUUSD</b>  🔔",
-    "",
-    f"⚡️ Entry Zone:  <b>{_fmt_price(sig['entry'])} - {_fmt_price(sig['entry_end'])}</b>",
-    f"🛡 SL:     <b>{_fmt_price(sig['sl'])}</b>  ·  risk <b>{_fmt_price(risk)}</b>",
-  ]
-  for i, tp in enumerate(sig['tps']):
-    ico = _TP_ICONS[i] if i < len(_TP_ICONS) else '💰'
-    lines.append(f"{ico} TP{i+1}:   <b>{_fmt_price(tp)}</b>  ·  <b>{_fmt_rr_val(tp, sig['rr_entry'], risk)}</b>")
-  return "\n".join(lines)
-
-
-_CALC_RE = re.compile(
-  r'calculate\s+gold\s+pips\s+(today|yesterday|this\s+week|last\s+week)',
-  re.IGNORECASE,
-)
+def _format_manual_signal(
+  sig: dict,
+  daily_seq: int,
+  symbol: str = "XAU",
+) -> str:
+  return render_entry(
+    {
+      **sig,
+      "daily_seq": daily_seq,
+      "symbol": symbol,
+    },
+    "vip",
+  )
 
 
 def _period_range(period: str) -> tuple[int, int]:
   now = datetime.now(timezone.utc)
   today = now.replace(hour=0, minute=0, second=0, microsecond=0)
   p = period.lower().replace('  ', ' ')
+  if p == "week":
+    p = "this week"
   if p == 'today':
     return int(today.timestamp()), int(now.timestamp())
   if p == 'yesterday':
@@ -129,36 +211,62 @@ def _period_range(period: str) -> tuple[int, int]:
 
 def _is_owner(msg: Message) -> bool:
   if not settings.telegram_owner_id:
-    return True  # open if not configured — set TELEGRAM_OWNER_ID to lock down
+    return False  # fail-closed: no owner configured -> deny privileged DMs
   return msg.from_user is not None and msg.from_user.id == settings.telegram_owner_id
 
 
-@dp.message(F.chat.type == "private", F.text.regexp(r'(?i)calculate\s+gold\s+pips'))
-async def handle_calculate(msg: Message) -> None:
+def _command_args(msg: Message) -> str:
+  return (msg.text or "").partition(" ")[2].strip()
+
+
+def _take_symbol(
+  raw: str,
+  *,
+  default: str | None = "XAU",
+) -> tuple[str | None, str]:
+  parts = raw.split(maxsplit=1)
+  if parts and parts[0].upper() in SYMBOLS:
+    return parts[0].upper(), parts[1] if len(parts) > 1 else ""
+  return default, raw
+
+
+def _seq_token(value: str) -> int | None:
+  value = value.strip().lstrip("#")
+  return int(value) if value.isdigit() else None
+
+
+@dp.message(Command("trade_pips"), F.chat.type == "private")
+async def handle_trade_pips(msg: Message) -> None:
   if not _is_owner(msg):
     return
-  m = _CALC_RE.search(msg.text or "")
-  if not m:
-    await msg.answer("Try: <code>calculate gold pips today</code> or <code>this week</code>")
+  symbol, raw_period = _take_symbol(_command_args(msg), default=None)
+  period = (raw_period or "today").lower()
+  if period not in {"today", "yesterday", "week", "this week", "last week"}:
+    await msg.answer(
+      "Usage: <code>/trade_pips [SYMBOL] "
+      "[today|yesterday|week|last week]</code>"
+    )
     return
-  period = m.group(1).lower()
   start_ts, end_ts = _period_range(period)
-  await msg.answer("🔍 Scanning channel history…")
+  await msg.answer("📊 Calculating pips…")
   try:
-    s = await get_pips_summary(start_ts, end_ts)
+    s = await get_pips_summary(start_ts, end_ts, symbol)
   except RuntimeError as e:
     await msg.answer(f"⚠️ {e}")
     return
 
+  scope = symbol or "All symbols"
   if s['total'] == 0:
-    await msg.answer(f"📊 No pips results found for <b>{period}</b>.")
+    await msg.answer(
+      f"📊 No {escape(scope)} pips results found for <b>{period}</b>."
+    )
     return
 
   net_icon = '💰' if s['net'] >= 0 else '🔻'
   net_sign = '+' if s['net'] >= 0 else ''
-  label = period.title()
+  label = f"{scope} · {period.title()}"
   lines = [
-    f"📊 <b>Gold Pips — {label}</b>",
+    f"📊 <b>Trade Pips — {escape(label)}</b>",
     "",
     f"✅ Wins:    {s['wins']} trade{'s' if s['wins'] != 1 else ''}  <b>+{s['win_pips']} pips</b>",
     f"❌ Losses:  {s['losses']} trade{'s' if s['losses'] != 1 else ''}  <b>-{s['loss_pips']} pips</b>",
@@ -168,100 +276,439 @@ async def handle_calculate(msg: Message) -> None:
   await msg.answer("\n".join(lines))
 
 
-_ACTIVE_RE = re.compile(r'^active$', re.IGNORECASE)
-_CLOSE_RE  = re.compile(r'^close\s+(\d+)\s+([+-]\s*\d+)', re.IGNORECASE)
-_CANCEL_RE = re.compile(r'^cancel\s+(\d+)$', re.IGNORECASE)
+_HELP_TEXT = """<b>Trade controls</b>
+
+<b>Channel replies</b>
+<code>active [#id]</code>
+<code>close #id ±pips [%] | be</code>
+<code>sl #id be|price</code>
+<code>cancel #id</code>
+<code>reopen #id [lo-hi]</code>
+<code>tag #id &lt;setup&gt; [***]</code>
+<code>note #id &lt;text&gt;</code>
+
+<b>Owner DM commands</b>
+<code>/trade_active [SYMBOL] [#id]</code>
+<code>/trade_close [SYMBOL] #id ±pips [%] | be</code>
+<code>/trade_sl [SYMBOL] #id be|price</code>
+<code>/trade_cancel [SYMBOL] #id</code>
+<code>/trade_reopen [SYMBOL] #id [lo-hi]</code>
+<code>/trade_tag [SYMBOL] #id &lt;setup&gt; [***]</code>
+<code>/trade_note [SYMBOL] #id &lt;text&gt;</code>
+<code>/trade_review [SYMBOL] #id</code>
+<code>/trade_stats [SYMBOL] [today|week|month]</code>
+<code>/trade_pips [SYMBOL] [today|yesterday|week|last week]</code>"""
 
 
-def _ago(ts: int) -> str:
-  secs = int(time.time()) - ts
-  if secs < 60:
-    return f"{secs}s ago"
-  if secs < 3600:
-    return f"{secs // 60}m ago"
-  if secs < 86400:
-    return f"{secs // 3600}h ago"
-  return f"{secs // 86400}d ago"
-
-
-@dp.message(F.chat.type == "private", F.text.regexp(r'(?i)^active$'))
-async def handle_active(msg: Message) -> None:
+@dp.message(Command("help"), F.chat.type == "private")
+async def handle_help(msg: Message) -> None:
   if not _is_owner(msg):
     return
-  signals = await get_open_signals()
-  if not signals:
-    await msg.answer("📋 No open signals.")
-    return
-  lines = [f"📋 <b>Open Signals ({len(signals)})</b>", ""]
-  for s in signals:
-    icon = '📈' if s['action'] == 'BUY' else '📉'
-    entry_end = s['entry_end'] if s['entry_end'] is not None else s['entry']
-    entry_display = _fmt_price(s['entry'])
-    if entry_end != s['entry']:
-      entry_display += f" - {_fmt_price(entry_end)}"
-    tps_str = '/'.join(_fmt_price(t) for t in s['tps'])
-    lines.append(
-      f"<b>#{s['id']}</b>  {icon} {s['action']} @ {entry_display}\n"
-      f"  SL {_fmt_price(s['sl'])}  · TP {tps_str}\n"
-      f"  Opened {_ago(s['ts'])}"
+  await msg.answer(_HELP_TEXT)
+
+
+_ACTIVE_RE = re.compile(r'(?i)^\s*active(?:\s+#?(\d+))?\s*$')
+_CLOSE_RE = re.compile(
+  r'(?i)^\s*close(?:\s+#?(\d+))?\s+([+-]\d+)\s*'
+  r'(?:pips?)?(?:\s+(\d{1,3})\s*%)?\s*$'
+)
+_CLOSEBE_RE = re.compile(r'(?i)^\s*close(?:\s+#?(\d+))?\s+be\s*$')
+_CANCEL_RE = re.compile(r'(?i)^\s*cancel(?:\s+#?(\d+))?\s*$')
+_SL_RE = re.compile(
+  r'(?i)^\s*sl(?:\s+#?(\d+))?\s+(be|\d+(?:\.\d+)?)\s*$'
+)
+_REOPEN_RE = re.compile(
+  r'(?i)^\s*reopen(?:\s+#?(\d+))?'
+  r'(?:\s+([\d.]+)\s*[-–]\s*([\d.]+))?\s*$'
+)
+_TAG_RE = re.compile(
+  r'(?i)^\s*tag\s+#?(\d+)\s+([a-z0-9][a-z0-9_-]*)'
+  r'(?:\s+(\*{1,3}|[1-3]))?\s*$'
+)
+_NOTE_RE = re.compile(r'(?is)^\s*note\s+#?(\d+)\s+(.+?)\s*$')
+
+
+def _today_str() -> str:
+  tz = ZoneInfo(settings.seq_reset_tz)
+  return datetime.now(tz).date().isoformat()
+
+
+async def _resolve_sid(
+  explicit_seq: int | None,
+  reply_to_id: int | None,
+  symbol: str = "XAU",
+) -> int | None:
+  """Resolve a daily display number or reply target to a primary key."""
+  opens = await get_open_signals(symbol)
+  if explicit_seq is not None:
+    todays = [
+      s for s in opens
+      if s["daily_seq"] == explicit_seq and s["trade_date"] == _today_str()
+    ]
+    if todays:
+      return todays[-1]["id"]
+    any_seq = [s for s in opens if s["daily_seq"] == explicit_seq]
+    return any_seq[-1]["id"] if any_seq else None
+  if reply_to_id is not None:
+    row = await get_signal_by_post(
+      channel_for_symbol(symbol),
+      reply_to_id,
+      open_only=True,
     )
-  await msg.answer("\n\n".join(lines))
+    return (
+      row["id"]
+      if row and row.get("symbol", "XAU") == symbol
+      else None
+    )
+  return opens[0]["id"] if len(opens) == 1 else None
 
 
-@dp.message(F.chat.type == "private", F.text.regexp(r'(?i)^close\s+\d+\s+[+-]'))
-async def handle_close(msg: Message) -> None:
+async def _resolve_any_sid(
+  explicit_seq: int | None,
+  reply_to_id: int | None,
+  symbol: str = "XAU",
+) -> int | None:
+  """Resolve a display number or reply across all lifecycle states."""
+  signals = await get_all_signals(symbol)
+  if explicit_seq is not None:
+    todays = [
+      signal for signal in signals
+      if (
+        signal["daily_seq"] == explicit_seq
+        and signal["trade_date"] == _today_str()
+      )
+    ]
+    if todays:
+      return todays[-1]["id"]
+    matching = [
+      signal for signal in signals
+      if signal["daily_seq"] == explicit_seq
+    ]
+    return matching[-1]["id"] if matching else None
+  if reply_to_id is not None:
+    row = await get_signal_by_post(
+      channel_for_symbol(symbol),
+      reply_to_id,
+    )
+    return (
+      row["id"]
+      if row and row.get("symbol", "XAU") == symbol
+      else None
+    )
+  return signals[0]["id"] if len(signals) == 1 else None
+
+
+def _parse_close(text: str) -> tuple[int | None, int, float | None] | None:
+  match = _CLOSE_RE.match(text)
+  if match:
+    seq = int(match.group(1)) if match.group(1) else None
+    frac = int(match.group(3)) / 100 if match.group(3) else None
+    return seq, int(match.group(2)), frac
+  match = _CLOSEBE_RE.match(text)
+  if match:
+    seq = int(match.group(1)) if match.group(1) else None
+    return seq, 0, None
+  return None
+
+
+async def _book_leg(
+  sid: int,
+  pips: int,
+  frac: float | None,
+  chat_id: str | int,
+) -> tuple[dict, str] | None:
+  symbol = symbol_for_channel(chat_id) or "XAU"
+  result = await do_close({
+    "sid": sid,
+    "symbol": symbol,
+    "pips": pips,
+    "frac": frac,
+  })
+  if not result.get("ok"):
+    return None
+  return result["row"], render_result(result, symbol)
+
+
+async def _reopen_signal(
+  source_id: int,
+  entry_a: float | None,
+  entry_b: float | None,
+) -> tuple[dict, str] | None:
+  source = await get_manual_signal(source_id)
+  if source is None:
+    return None
+  symbol = source.get("symbol", "XAU")
+  result = await do_reopen({
+    "sid": source_id,
+    "symbol": symbol,
+    "entry_override": (
+      (entry_a, entry_b) if entry_a is not None else None
+    ),
+  })
+  if not result.get("ok"):
+    return None
+  text = await post_result(result, symbol)
+  return result["record"], text
+
+
+async def _move_stop(
+  sid: int,
+  target: str,
+) -> tuple[dict, str] | None:
+  signal = await get_manual_signal(sid)
+  if signal is None:
+    return None
+  symbol = signal.get("symbol", "XAU")
+  result = await do_sl({
+    "sid": sid,
+    "symbol": symbol,
+    "sl": target,
+  })
+  if not result.get("ok"):
+    return None
+  return result["row"], render_result(result, symbol)
+
+
+@dp.message(Command("trade_active"), F.chat.type == "private")
+async def handle_trade_active(msg: Message) -> None:
   if not _is_owner(msg):
     return
-  m = _CLOSE_RE.search((msg.text or "").strip())
-  if not m:
-    await msg.answer("Usage: <code>close &lt;id&gt; +50</code> or <code>close &lt;id&gt; -30</code>")
+  symbol, raw = _take_symbol(_command_args(msg))
+  explicit_seq = _seq_token(raw) if raw else None
+  sid = await _resolve_sid(explicit_seq, None, symbol)
+  if sid is None:
+    await msg.answer(
+      "⚠️ Signal not found or ambiguous; specify "
+      "<code>/trade_active [SYMBOL] #N</code>."
+    )
     return
-  row_id = int(m.group(1))
-  pips = int(m.group(2).replace(' ', ''))
-  row = await close_manual_signal(row_id, pips)
-  if row is None:
-    await msg.answer(f"⚠️ Signal #{row_id} not found or already closed.")
-    return
+  result = await do_active({
+    "sid": sid,
+    "symbol": symbol,
+    "chat_id": channel_for_symbol(symbol),
+    "reply_to": None,
+  })
+  text = await post_result(result, symbol)
+  await msg.answer(text)
 
-  if pips >= 0:
-    result_text = f"✅ Closed: <b>+{pips} pips</b> 💰"
+
+@dp.message(Command("trade_close"), F.chat.type == "private")
+async def handle_trade_close(msg: Message) -> None:
+  if not _is_owner(msg):
+    return
+  symbol, raw = _take_symbol(_command_args(msg))
+  parsed = _parse_close(f"close {raw}")
+  if parsed is None:
+    await msg.answer(
+      "Usage: <code>/trade_close [SYMBOL] #N +50 50%</code>, "
+      "<code>#N -30</code>, or <code>#N be</code>"
+    )
+    return
+  explicit_seq, pips, frac = parsed
+  sid = await _resolve_sid(explicit_seq, None, symbol)
+  if sid is None:
+    await msg.answer("⚠️ Signal not found.")
+    return
+  result = await do_close({
+    "sid": sid,
+    "symbol": symbol,
+    "chat_id": channel_for_symbol(symbol),
+    "reply_to": None,
+    "pips": pips,
+    "frac": "be" if raw.lower().endswith(" be") else frac,
+  })
+  await msg.answer(await post_result(result, symbol))
+
+
+@dp.message(Command("trade_cancel"), F.chat.type == "private")
+async def handle_trade_cancel(msg: Message) -> None:
+  if not _is_owner(msg):
+    return
+  symbol, raw = _take_symbol(_command_args(msg))
+  sid = await _resolve_sid(_seq_token(raw), None, symbol)
+  if sid is None:
+    await msg.answer("⚠️ Signal not found.")
+    return
+  result = await do_cancel({
+    "sid": sid,
+    "symbol": symbol,
+    "chat_id": channel_for_symbol(symbol),
+    "reply_to": None,
+  })
+  await msg.answer(await post_result(result, symbol))
+
+
+@dp.message(Command("trade_sl"), F.chat.type == "private")
+async def handle_trade_sl(msg: Message) -> None:
+  if not _is_owner(msg):
+    return
+  symbol, raw = _take_symbol(_command_args(msg))
+  match = _SL_RE.match(f"sl {raw}")
+  if not match:
+    await msg.answer(
+      "Usage: <code>/trade_sl [SYMBOL] #N be|price</code>"
+    )
+    return
+  explicit_seq = int(match.group(1)) if match.group(1) else None
+  sid = await _resolve_sid(explicit_seq, None, symbol)
+  if sid is None:
+    await msg.answer("⚠️ Signal not found.")
+    return
+  result = await do_sl({
+    "sid": sid,
+    "symbol": symbol,
+    "chat_id": channel_for_symbol(symbol),
+    "reply_to": None,
+    "sl": match.group(2),
+  })
+  await msg.answer(await post_result(result, symbol))
+
+
+@dp.message(Command("trade_reopen"), F.chat.type == "private")
+async def handle_trade_reopen(msg: Message) -> None:
+  if not _is_owner(msg):
+    return
+  symbol, raw = _take_symbol(_command_args(msg))
+  match = _REOPEN_RE.match(f"reopen {raw}")
+  if not match:
+    await msg.answer(
+      "Usage: <code>/trade_reopen [SYMBOL] #N [lo-hi]</code>"
+    )
+    return
+  explicit_seq = int(match.group(1)) if match and match.group(1) else None
+  source_id = await _resolve_any_sid(explicit_seq, None, symbol)
+  if source_id is None:
+    await msg.answer("⚠️ Signal not found.")
+    return
+  entry_a = float(match.group(2)) if match and match.group(2) else None
+  entry_b = float(match.group(3)) if match and match.group(3) else None
+  override = (entry_a, entry_b) if entry_a is not None else None
+  result = await do_reopen({
+    "sid": source_id,
+    "symbol": symbol,
+    "chat_id": channel_for_symbol(symbol),
+    "reply_to": None,
+    "entry_override": override,
+  })
+  text = await post_result(result, symbol)
+  await msg.answer(text)
+
+
+@dp.message(Command("trade_tag"), F.chat.type == "private")
+async def handle_trade_tag(msg: Message) -> None:
+  if not _is_owner(msg):
+    return
+  symbol, raw = _take_symbol(_command_args(msg))
+  match = _TAG_RE.match(f"tag {raw}")
+  if not match:
+    await msg.answer(
+      "Usage: <code>/trade_tag [SYMBOL] #N setup [***]</code>"
+    )
+    return
+  seq = int(match.group(1))
+  sid = await _resolve_any_sid(seq, None, symbol)
+  if sid is None:
+    await msg.answer("⚠️ Signal not found.")
+    return
+  setup_type = match.group(2).lower()
+  grade = match.group(3)
+  confluence = None
+  if grade:
+    confluence = len(grade) if grade.startswith("*") else int(grade)
+  result = await do_tag({
+    "sid": sid,
+    "symbol": symbol,
+    "chat_id": channel_for_symbol(symbol),
+    "reply_to": None,
+    "seq": seq,
+    "setup": setup_type,
+    "stars": confluence,
+  })
+  await msg.answer(await post_result(result, symbol))
+
+
+@dp.message(Command("trade_note"), F.chat.type == "private")
+async def handle_trade_note(msg: Message) -> None:
+  if not _is_owner(msg):
+    return
+  symbol, raw = _take_symbol(_command_args(msg))
+  match = _NOTE_RE.match(f"note {raw}")
+  if not match:
+    await msg.answer(
+      "Usage: <code>/trade_note [SYMBOL] #N text</code>"
+    )
+    return
+  seq = int(match.group(1))
+  sid = await _resolve_any_sid(seq, None, symbol)
+  if sid is None:
+    await msg.answer("⚠️ Signal not found.")
+    return
+  result = await do_note({
+    "sid": sid,
+    "symbol": symbol,
+    "chat_id": channel_for_symbol(symbol),
+    "reply_to": None,
+    "seq": seq,
+    "text": match.group(2).strip(),
+  })
+  await msg.answer(await post_result(result, symbol))
+
+
+@dp.message(Command("trade_review"), F.chat.type == "private")
+async def handle_trade_review(msg: Message) -> None:
+  if not _is_owner(msg):
+    return
+  symbol, raw = _take_symbol(_command_args(msg))
+  seq = _seq_token(raw)
+  sid = await _resolve_any_sid(seq, None, symbol)
+  cluster = await get_signal_cluster(sid) if sid is not None else []
+  if not cluster:
+    await msg.answer("⚠️ Signal not found.")
+    return
+  await msg.answer(format_review(cluster))
+
+
+def _stats_range(period: str) -> tuple[int, int]:
+  tz = ZoneInfo(settings.seq_reset_tz)
+  now = datetime.now(tz)
+  today = now.replace(hour=0, minute=0, second=0, microsecond=0)
+  if period == "today":
+    start = today
+  elif period == "week":
+    start = today - timedelta(days=today.weekday())
+  elif period == "month":
+    start = today.replace(day=1)
   else:
-    result_text = f"🛑 Closed: <b>{pips} pips</b>"
-
-  channel_msg_id = row.get("channel_message_id")
-  if channel_msg_id:
-    try:
-      await _send_with_retry(result_text, reply_to=channel_msg_id)
-    except Exception as e:
-      log.warning("Could not post close reply to channel: %s", e)
-
-  await msg.answer(f"#{row_id} marked closed ({'+' if pips >= 0 else ''}{pips} pips).")
-  log.info("Manual signal #%d closed: %+d pips", row_id, pips)
+    return 0, int(now.timestamp())
+  return int(start.timestamp()), int(now.timestamp())
 
 
-@dp.message(F.chat.type == "private", F.text.regexp(r'(?i)^cancel\s+\d+$'))
-async def handle_cancel(msg: Message) -> None:
+@dp.message(Command("trade_stats"), F.chat.type == "private")
+async def handle_trade_stats(msg: Message) -> None:
   if not _is_owner(msg):
     return
-  m = _CANCEL_RE.search((msg.text or "").strip())
-  if not m:
-    await msg.answer("Usage: <code>cancel &lt;id&gt;</code>")
+  symbol, raw = _take_symbol(_command_args(msg), default=None)
+  period = (raw or "today").lower()
+  if period not in {"today", "week", "month", "all"}:
+    await msg.answer(
+      "Usage: <code>/trade_stats [SYMBOL] [today|week|month]</code>"
+    )
     return
-  row_id = int(m.group(1))
-  row = await cancel_manual_signal(row_id)
-  if row is None:
-    await msg.answer(f"⚠️ Signal #{row_id} not found or already closed/cancelled.")
-    return
-
-  channel_msg_id = row.get("channel_message_id")
-  if channel_msg_id:
-    try:
-      await _send_with_retry("❌ Signal cancelled.", reply_to=channel_msg_id)
-    except Exception as e:
-      log.warning("Could not post cancel reply to channel: %s", e)
-
-  await msg.answer(f"#{row_id} cancelled.")
-  log.info("Manual signal #%d cancelled", row_id)
+  start_ts, end_ts = _stats_range(period)
+  records = await get_pips_records(start_ts, end_ts, symbol)
+  signals = await get_all_signals(symbol)
+  label = f"{symbol} {period}" if symbol else period
+  stats = build_stats(
+    records,
+    signals,
+    settings.seq_reset_tz,
+    settings.session_asia_start,
+    settings.session_london_start,
+    settings.session_ny_start,
+  )
+  await msg.answer(
+    format_stats(stats, label)
+  )
 
 
 # Per-user photo buffer — batches all photos sent within PHOTO_WINDOW seconds.
@@ -343,27 +790,62 @@ async def handle_private_signal(msg: Message) -> None:
       "Format:\n\n"
       "<code>gold sell entry zone (4100-4105)\nsl 4110\ntp 95/90/80</code>\n\n"
       "TP: absolute prices or last 2 digits. Any count.\n\n"
-      "Commands: <code>active</code> · <code>close &lt;id&gt; +50</code> · <code>cancel &lt;id&gt;</code>"
+      "Commands: <code>/help</code>"
     )
     return
-  sent = await _send_with_retry(_format_manual_signal(sig))
-  row_id = await store_manual_signal(
-    ts=int(time.time()),
+  now = int(time.time())
+  event = await event_in_window(
+    now,
+    int(settings.event_guard_hours * 3600),
+  )
+  if event and settings.news_guard_block:
+    await msg.answer(
+      f"⚠️ Signal not posted: {escape(event['title'])} "
+      f"{_event_guard_timing(event['ts_utc'], now)} — expect volatility"
+    )
+    return
+  rec = await store_manual_signal(
+    ts=now,
     action=sig['action'],
     entry=sig['entry'],
     entry_end=sig['entry_end'],
     sl=sig['sl'],
     tps=sig['tps'],
-    channel_message_id=sent.message_id,
+    setup_type=sig['setup_type'],
+    confluence=sig['confluence'],
+    symbol="XAU",
+    visibility=sig["visibility"],
   )
-  await msg.answer(f"✅ Sent to channel (signal #{row_id})")
+  guard_text = None
+  if event:
+    guard_text = (
+      f"⚠️ {escape(event['title'])} "
+      f"{_event_guard_timing(event['ts_utc'], now)} — expect volatility"
+    )
+  signal = await get_manual_signal(rec["id"])
+  signal["guard_text"] = guard_text
+  await broadcast_entry(signal)
+  await msg.answer(f"✅ Sent to channel (#{rec['daily_seq']})")
   log.info(
-    "Manual signal #%d: %s XAUUSD @ %s-%s",
-    row_id, sig['action'], sig['entry'], sig['entry_end'],
+    "Manual signal #%d (daily #%d): %s XAUUSD @ %s-%s",
+    rec["id"], rec["daily_seq"], sig['action'], sig['entry'], sig['entry_end'],
   )
+
+
+def _event_guard_timing(ts_utc: int, now: int) -> str:
+  delta = ts_utc - now
+  if delta < 0:
+    return f"started {max(1, abs(delta) // 60)}m ago"
+  hours, remainder = divmod(delta, 3600)
+  minutes = remainder // 60
+  return f"in {hours}h {minutes}m"
 
 
 async def _handle_pips(msg: Message, text: str, has_photo: bool) -> None:
+  if getattr(msg, "from_user", None) and msg.from_user.is_bot:
+    return
+  if tier_for_channel(msg.chat.id) != "vip":
+    return
   m = _PIPS_RE.search(text)
   if not m:
     return
@@ -384,63 +866,237 @@ async def _handle_pips(msg: Message, text: str, has_photo: bool) -> None:
     log.warning("Failed to edit pips message: %s", e)
 
 
-@dp.channel_post(F.text.regexp(r'(?i)^cancel$'), F.reply_to_message)
-async def handle_channel_cancel(msg: Message) -> None:
-  orig_id = msg.reply_to_message.message_id
-  row = await cancel_manual_signal_by_channel_id(orig_id)
-  if row is None:
-    return  # not a tracked signal — ignore silently
-  # Delete the admin's "cancel" message to keep channel clean
+async def _delete_command(msg: Message) -> None:
   try:
     await bot.delete_message(msg.chat.id, msg.message_id)
   except Exception:
     pass
-  # Post a cancellation notice as reply to the original signal
-  try:
-    await _send_with_retry("❌ Signal cancelled.", reply_to=orig_id)
-  except Exception as e:
-    log.warning("Could not post cancel notice to channel: %s", e)
-  log.info("Channel-reply cancel: signal #%d (msg %d) cancelled", row["id"], orig_id)
+
+
+def _channel_symbol(msg: Message) -> str | None:
+  if tier_for_channel(msg.chat.id) != "vip":
+    return None
+  return symbol_for_channel(msg.chat.id)
+
+
+@dp.channel_post(F.text.regexp(_ACTIVE_RE), F.reply_to_message)
+async def handle_channel_active(msg: Message) -> None:
+  symbol = _channel_symbol(msg)
+  if symbol is None:
+    return
+  match = _ACTIVE_RE.match(msg.text or "")
+  explicit_seq = int(match.group(1)) if match and match.group(1) else None
+  reply_to = msg.reply_to_message.message_id
+  sid = await _resolve_sid(explicit_seq, reply_to, symbol)
+  if sid is None:
+    return
+  result = await do_active({
+    "sid": sid,
+    "symbol": symbol,
+    "chat_id": msg.chat.id,
+    "reply_to": reply_to,
+  })
+  if not result.get("ok"):
+    return
+  await post_result(result, symbol)
+  await _delete_command(msg)
+
+
+@dp.channel_post(
+  F.text.regexp(_CLOSE_RE) | F.text.regexp(_CLOSEBE_RE),
+  F.reply_to_message,
+)
+async def handle_channel_close(msg: Message) -> None:
+  symbol = _channel_symbol(msg)
+  if symbol is None:
+    return
+  parsed = _parse_close(msg.text or "")
+  if parsed is None:
+    return
+  explicit_seq, pips, frac = parsed
+  reply_to = msg.reply_to_message.message_id
+  sid = await _resolve_sid(explicit_seq, reply_to, symbol)
+  if sid is None:
+    return
+  result = await do_close({
+    "sid": sid,
+    "symbol": symbol,
+    "chat_id": msg.chat.id,
+    "reply_to": reply_to,
+    "pips": pips,
+    "frac": (
+      "be"
+      if (msg.text or "").strip().lower().endswith(" be")
+      else frac
+    ),
+  })
+  if not result.get("ok"):
+    return
+  await post_result(result, symbol)
+  await _delete_command(msg)
+
+
+@dp.channel_post(F.text.regexp(_CANCEL_RE), F.reply_to_message)
+async def handle_channel_cancel(msg: Message) -> None:
+  symbol = _channel_symbol(msg)
+  if symbol is None:
+    return
+  match = _CANCEL_RE.match(msg.text or "")
+  explicit_seq = int(match.group(1)) if match and match.group(1) else None
+  reply_to = msg.reply_to_message.message_id
+  sid = await _resolve_sid(explicit_seq, reply_to, symbol)
+  if sid is None:
+    return
+  result = await do_cancel({
+    "sid": sid,
+    "symbol": symbol,
+    "chat_id": msg.chat.id,
+    "reply_to": reply_to,
+  })
+  if not result.get("ok"):
+    return
+  await post_result(result, symbol)
+  await _delete_command(msg)
+
+
+@dp.channel_post(F.text.regexp(_SL_RE), F.reply_to_message)
+async def handle_channel_sl(msg: Message) -> None:
+  symbol = _channel_symbol(msg)
+  if symbol is None:
+    return
+  match = _SL_RE.match(msg.text or "")
+  explicit_seq = int(match.group(1)) if match and match.group(1) else None
+  reply_to = msg.reply_to_message.message_id
+  sid = await _resolve_sid(explicit_seq, reply_to, symbol)
+  if sid is None:
+    return
+  result = await do_sl({
+    "sid": sid,
+    "symbol": symbol,
+    "chat_id": msg.chat.id,
+    "reply_to": reply_to,
+    "sl": match.group(2),
+  })
+  if not result.get("ok"):
+    return
+  await post_result(result, symbol)
+  await _delete_command(msg)
+
+
+@dp.channel_post(F.text.regexp(_REOPEN_RE), F.reply_to_message)
+async def handle_channel_reopen(msg: Message) -> None:
+  symbol = _channel_symbol(msg)
+  if symbol is None:
+    return
+  match = _REOPEN_RE.match(msg.text or "")
+  explicit_seq = int(match.group(1)) if match and match.group(1) else None
+  reply_to = msg.reply_to_message.message_id
+  source_id = await _resolve_any_sid(
+    explicit_seq,
+    reply_to,
+    symbol,
+  )
+  if source_id is None:
+    return
+  entry_a = float(match.group(2)) if match and match.group(2) else None
+  entry_b = float(match.group(3)) if match and match.group(3) else None
+  result = await do_reopen({
+    "sid": source_id,
+    "symbol": symbol,
+    "chat_id": msg.chat.id,
+    "reply_to": reply_to,
+    "entry_override": (
+      (entry_a, entry_b) if entry_a is not None else None
+    ),
+  })
+  if not result.get("ok"):
+    return
+  await post_result(result, symbol)
+  await _delete_command(msg)
+
+
+@dp.channel_post(F.text.regexp(_TAG_RE), F.reply_to_message)
+async def handle_channel_tag(msg: Message) -> None:
+  symbol = _channel_symbol(msg)
+  if symbol is None:
+    return
+  match = _TAG_RE.match(msg.text or "")
+  seq = int(match.group(1))
+  reply_to = msg.reply_to_message.message_id
+  sid = await _resolve_any_sid(seq, reply_to, symbol)
+  if sid is None:
+    return
+  grade = match.group(3)
+  stars = (
+    len(grade) if grade and grade.startswith("*")
+    else int(grade) if grade else None
+  )
+  result = await do_tag({
+    "sid": sid,
+    "symbol": symbol,
+    "chat_id": msg.chat.id,
+    "reply_to": reply_to,
+    "seq": seq,
+    "setup": match.group(2).lower(),
+    "stars": stars,
+  })
+  if result.get("ok"):
+    await post_result(result, symbol)
+    await _delete_command(msg)
+
+
+@dp.channel_post(F.text.regexp(_NOTE_RE), F.reply_to_message)
+async def handle_channel_note(msg: Message) -> None:
+  symbol = _channel_symbol(msg)
+  if symbol is None:
+    return
+  match = _NOTE_RE.match(msg.text or "")
+  seq = int(match.group(1))
+  reply_to = msg.reply_to_message.message_id
+  sid = await _resolve_any_sid(seq, reply_to, symbol)
+  if sid is None:
+    return
+  result = await do_note({
+    "sid": sid,
+    "symbol": symbol,
+    "chat_id": msg.chat.id,
+    "reply_to": reply_to,
+    "seq": seq,
+    "text": match.group(2).strip(),
+  })
+  if result.get("ok"):
+    await post_result(result, symbol)
+    await _delete_command(msg)
 
 
 @dp.channel_post(F.photo)
 async def handle_profit_screenshot(msg: Message) -> None:
+  # Optional legacy behavior; canonical booking is now "close #N ±P".
+  if not settings.auto_book_bare_pips:
+    return
   await _handle_pips(msg, msg.caption or "", has_photo=True)
 
 
 @dp.channel_post(F.text)
 async def handle_profit_text(msg: Message) -> None:
+  # Optional legacy behavior; canonical booking is now "close #N ±P".
+  if not settings.auto_book_bare_pips:
+    return
   await _handle_pips(msg, msg.text or "", has_photo=False)
-
-
-
-def _action_icon(action: str) -> str:
-  return "📈" if action == "BUY" else "📉"
-
-
-def _trim_number(value: float, decimals: int = 2, grouping: bool = False) -> str:
-  fmt = f"{{:,.{decimals}f}}" if grouping else f"{{:.{decimals}f}}"
-  return fmt.format(value).rstrip("0").rstrip(".")
-
-
-def _fmt_price(value: Optional[float]) -> str:
-  if value is None:
-    return "-"
-  abs_value = abs(value)
-  if abs_value >= 1:
-    return _trim_number(value, decimals=2, grouping=True)
-  return _trim_number(value, decimals=5, grouping=False)
-
 
 _MAX_SEND_ATTEMPTS = 3
 
 
-async def _send_with_retry(text: str, reply_to: int | None = None) -> Message:
+async def _send_with_retry(
+  text: str,
+  reply_to: int | None = None,
+  chat_id: int | str | None = None,
+) -> Message:
   """Send a Telegram message with exponential-backoff retry on network errors."""
   for attempt in range(1, _MAX_SEND_ATTEMPTS + 1):
     try:
       return await bot.send_message(
-        chat_id=settings.telegram_chat_id,
+        chat_id=chat_id or settings.telegram_channel_id,
         text=text,
         reply_to_message_id=reply_to,
       )
