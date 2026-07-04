@@ -2,8 +2,11 @@ import asyncio
 import logging
 
 from app.config import settings
-from app.telegram import bot, dp
+from app.telegram import bot, dp, setup_commands
 from app.dedup import init_db
+from app.watcher import watcher_loop
+from app.calendar import calendar_sync_loop
+from app.weekly_report import weekly_report_loop
 
 logging.basicConfig(
   level=settings.log_level,
@@ -14,7 +17,16 @@ log = logging.getLogger("bot")
 
 async def main() -> None:
   await init_db()
+  await setup_commands(bot)
+  asyncio.create_task(watcher_loop())
+  asyncio.create_task(calendar_sync_loop())
+  asyncio.create_task(weekly_report_loop())
   log.info("DB ready at %s", settings.db_path)
+  if not settings.telegram_owner_id:
+    log.warning(
+      "TELEGRAM_OWNER_ID not set — owner-only DM commands are DISABLED. "
+      "Set it to enable the DM interface."
+    )
   log.info("Starting Telegram polling")
   # Long-polling is outbound-only — no inbound webhook server is required.
   # start_polling installs its own SIGINT/SIGTERM handlers and closes the

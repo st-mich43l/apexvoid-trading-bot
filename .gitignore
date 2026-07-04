@@ -221,9 +221,6 @@ __marimo__/
 # Secrets & credentials
 .env
 *.pem
-# Pyrogram user session (authenticates as your Telegram account)
-*.session
-*.session-journal
 # SQLite database + backups
 data/
 *.db

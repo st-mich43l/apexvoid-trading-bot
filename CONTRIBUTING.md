@@ -30,7 +30,7 @@ Examples:
 ```
 feat(bot): add cancel-by-channel-reply handler
 fix(pips): correct week boundary in period range
-docs(deployment): document Pyrogram session setup
+docs(deployment): document owner-only DM setup
 ops(infra): drop exposed ports from compose
 ```
 
@@ -40,7 +40,7 @@ Before pushing a branch, verify:
 
 ```bash
 # Secrets are not staged
-git diff --cached | grep -E '(TELEGRAM_BOT_TOKEN|TELEGRAM_API_HASH|ANTHROPIC_API_KEY|BEGIN.*PRIVATE KEY)' \
+git diff --cached | grep -E '(TELEGRAM_BOT_TOKEN|ANTHROPIC_API_KEY|BEGIN.*PRIVATE KEY)' \
   && echo "SECRET DETECTED - do not push" \
   || echo "clean"
 
@@ -65,7 +65,6 @@ When changing deployment steps, update both `docs/deployment.md` and the
 ## What Not to Commit
 
 - `.env` and anything else containing a real secret.
-- The Pyrogram session string / session files.
 - `data/` and any `*.db` file.
 - Editor/OS metadata (`.vscode/`, `.idea/`, `.DS_Store`).
 

@@ -1,121 +1,139 @@
-# Signal Bot
+# 📉 Signal Bot 🤖
 
-A self-hosted Telegram bot for posting and tracking XAUUSD (Gold) trading
-signals by hand, with optional AI chart analysis. It runs as a single
-long-polling process — no inbound webhook server, no public endpoint, no TLS.
+![Python](https://img.shields.io/badge/Python-3.12-3776AB?style=for-the-badge&logo=python&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)
+![SQLite](https://img.shields.io/badge/SQLite-003B57?style=for-the-badge&logo=sqlite&logoColor=white)
+![Telegram](https://img.shields.io/badge/Telegram-2CA5E0?style=for-the-badge&logo=telegram&logoColor=white)
+![Claude](https://img.shields.io/badge/Claude_Vision-D97757?style=for-the-badge&logo=anthropic&logoColor=white)
 
-```
+A self-hosted Telegram bot for posting and tracking XAUUSD (Gold) trading signals by hand, with optional **AI chart analysis**. It runs as a single long-polling process — no inbound webhook server, no public endpoint, no TLS required. 🚀
+
+```text
 ┌────────────┐   DM    ┌──────────────────────────┐        ┌────────────┐
 │  You (DM)  │ ──────▶ │  Telegram bot (aiogram)  │ ─────▶ │  Telegram  │
-│  + charts  │         │  ├─ manual signal parse  │        │  channel   │
-└────────────┘         │  ├─ lifecycle tracking   │        └────────────┘
-                       │  ├─ pips calculator      │
-                       │  └─ Claude chart vision  │
+│  + charts  │         │  ├─ 📝 manual parse      │        │  channel   │
+└────────────┘         │  ├─ 🔄 lifecycle track   │        └────────────┘
+                       │  ├─ 🧮 pips calculator    │
+                       │  └─ 👁️ Claude vision      │
                        └────────────┬─────────────┘
                                     ▼
                           ┌──────────────────────┐
-                          │ SQLite               │
+                          │ 💾 SQLite            │
                           │ ├─ manual_signals    │
                           │ └─ pips_log          │
                           └──────────────────────┘
 ```
 
-The bot talks to Telegram over **outbound long-polling only**, so it needs no
-open ports, no domain, and no reverse proxy.
+The bot talks to Telegram over **outbound long-polling only**, meaning it requires zero open ports, no domain names, and no reverse proxy to operate securely. 🔒
 
-## Features
+---
 
-### Manual signal posting (DM interface)
-- **Post a signal** — DM `gold sell entry zone (4100-4105) / sl 4110 / tp 95/90/80`
-  and the bot posts a clean, formatted signal to the channel instantly.
-- **TP shorthand** — write the last 2 digits only (`35` → `3835`); any number of TPs.
-- **Signal lifecycle** — every manual signal is tracked. DM `active` to see open
-  positions, `close 3 +80` to record a result, `cancel 3` to invalidate.
-- **Cancel by reply** — reply `cancel` directly to a channel signal post; the bot
-  cancels it and cleans up the reply.
-- **Owner-only** — set `TELEGRAM_OWNER_ID` to lock all DM commands to you.
+## ✨ Features
 
-### Pips calculator
-- DM `calculate gold pips today` / `this week` for a win/loss pips summary drawn
-  from channel history (via a Pyrogram MTProto client).
-- **Auto-edit pips** — post `+80 pips` or `-30 pips` in the channel and the bot
-  instantly replaces it with a clean formatted result (works on photos too).
+### 📡 Manual Signal Posting (DM interface)
+- **Insta-Post Signals** ⚡ — DM `gold sell entry zone (4100-4105) / sl 4110 / tp 95/90/80` and the bot will instantly post a beautifully formatted signal to the channel.
+- **TP Shorthand** 🎯 — Just write the last 2 digits (`35` → `3835`). You can list any number of TPs!
+- **Lifecycle Tracking** 🔄 — Every signal is tracked perfectly. DM `active` to see open positions, `close 3 +80` to log a result, or `cancel 3` to drop it.
+- **Cancel by Reply** 🗑️ — Simply reply `cancel` directly to a channel signal post; the bot removes the original and cleans up your reply.
+- **Owner-Exclusive** 👑 — Set `TELEGRAM_OWNER_ID` to strictly lock all DM commands to you.
 
-### AI chart analysis
-- DM one or more chart screenshots and the bot runs a structured Smart Money
-  Concepts analysis via **Claude vision**, then posts the setup to the channel.
-- Multi-timeframe aware — send several charts and it uses the higher TFs for bias
-  and the lowest for entry precision.
+### 📣 VIP + Public Broadcast
+- `SIGNAL_VIP_CHANNEL_ID` is the private control channel; bare lifecycle
+  commands are accepted only there.
+- `SIGNAL_PUBLIC_CHANNEL_ID` receives broadcast-only signal posts and updates
+  without internal `#id` values.
+- `SIGNAL_PUBLIC_SHOW_PIPS=true` shows per-signal results publicly; set it to
+  `false` for event-only wording. Aggregate stats always stay in owner DM.
+- Signals publish to both channels by default. Add `/ vip` to an entry to keep
+  that signal and all later updates VIP-only.
+- The bot must be an administrator with post/edit permissions in both channels.
+- A restart-safe Sunday performance recap is delivered to VIP only. Configure
+  it with `WEEKLY_REPORT_ENABLED`, `WEEKLY_REPORT_DOW`, and
+  `WEEKLY_REPORT_HOUR`; public never receives aggregate performance.
 
-## Tech Stack
+### 🧮 Pips Calculator
+- DM `calculate gold pips today` or `this week` for a win/loss pips summary drawn from the local `pips_log` (populated automatically whenever you close a result).
+- **Auto-edit Pips** ✏️ — Post `+80 pips` or `-30 pips` in the channel and the bot replaces it with a clean formatted result (even works on photos!).
+
+### 🧠 AI Chart Analysis
+- DM one or more chart screenshots and the bot will run a structured **Smart Money Concepts (SMC)** analysis via **Claude Vision**, automatically drafting the setup to the channel.
+- **Multi-Timeframe Aware** ⏱️ — Send several charts; it uses higher TFs for directional bias and lower TFs for entry precision.
+
+---
+
+## 🛠️ Tech Stack
 
 | Layer | Choice |
 |---|---|
-| Runtime | Python 3.12 |
-| Telegram bot | aiogram 3 (long-polling) |
-| Channel history | Pyrogram (pyrofork) MTProto client |
-| AI analysis | Anthropic Claude (vision) |
-| Persistence | SQLite (aiosqlite) |
-| Packaging | Docker + Compose v2 |
+| **Runtime** | Python 3.12 🐍 |
+| **Telegram Bot** | aiogram 3 (long-polling) 🤖 |
+| **AI Analysis** | Anthropic Claude (Vision) 👁️ |
+| **Persistence** | SQLite (aiosqlite) 🗄️ |
+| **Packaging** | Docker + Compose v2 🐳 |
 
-## Documentation
+---
 
-- [Bot Commands](docs/bot-commands.md) — manual posting, lifecycle
-  (`active`/`close`/`cancel`), pips calculator, auto-edit, env setup.
-- [Architecture](docs/architecture.md) — process model, message flow,
-  database schema, design decisions.
-- [Deployment Guide](docs/deployment.md) — from a fresh host to a running bot.
-- [Operations](docs/operations.md) — monitoring, backups, log rotation,
-  updates, troubleshooting.
-- [Security](docs/security.md) — threat model, secret management, hardening.
+## 📚 Documentation
 
-## Quick Start
+Dive into the docs for full details on configuring and operating the bot:
+
+- 📖 [Bot Commands](docs/bot-commands.md) — Manual posting, lifecycle (`active`/`close`/`cancel`), pips calculator, auto-edit, env setup.
+- 🏗️ [Architecture](docs/architecture.md) — Process model, message flow, database schema, design decisions.
+- 🚀 [Deployment Guide](docs/deployment.md) — From a fresh host to a running bot.
+- ⚙️ [Operations](docs/operations.md) — Monitoring, backups, log rotation, updates, troubleshooting.
+- 🔒 [Security](docs/security.md) — Threat model, secret management, hardening.
+
+---
+
+## 🚀 Quick Start
 
 ```bash
 git clone <this-repo> xau-signal-bot
 cd xau-signal-bot
 
+# Setup Environment
 cp .env.example .env
-# Edit .env: TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, TELEGRAM_OWNER_ID,
-#            TELEGRAM_API_ID/HASH (pips), ANTHROPIC_API_KEY (chart analysis)
+# Edit .env: TELEGRAM_BOT_TOKEN, SIGNAL_VIP_CHANNEL_ID,
+#            SIGNAL_PUBLIC_CHANNEL_ID, SIGNAL_PUBLIC_SHOW_PIPS,
+#            TELEGRAM_OWNER_ID,
+#            ANTHROPIC_API_KEY (chart analysis)
 
-# First run generates the Pyrogram session for channel history (pips):
-python gen_session.py     # follow the prompts, writes the session string
-
+# Deploy
 docker compose up -d --build
 docker compose logs -f bot
 ```
 
-Expected startup lines:
-
-```
+**Expected startup lines:**
+```log
 bot: DB ready at /data/signals.db
 bot: Starting Telegram polling
 ```
 
-Then DM your bot: `active` should reply `📋 No open signals.`
+Then, just DM your bot: `active` should reply with `📋 No open signals.` 🎉
 
-## Repository Layout
+---
 
-```
+## 📁 Repository Layout
+
+```tree
 xau-signal-bot/
-├── docker-compose.yml        # single 'bot' service, no exposed ports
-├── .env.example
-├── gen_session.py            # one-time Pyrogram session generator (pips)
-├── README.md                 # this file
-├── docs/                     # detailed documentation
-└── webhook/                  # the bot application (dir name kept for history)
+├── docker-compose.yml        🐳 single 'bot' service, no exposed ports
+├── .env.example              🔑 env template
+├── README.md                 📖 this file
+├── docs/                     📚 detailed documentation
+└── webhook/                  🤖 the bot application (dir name kept for history)
     ├── Dockerfile
     ├── requirements.txt
     └── app/
-        ├── main.py           # entrypoint: init DB, start long-polling
-        ├── config.py         # pydantic-settings (all env vars)
-        ├── telegram.py       # aiogram bot: DM commands, channel handlers, formatting
-        ├── chart_analysis.py # Claude vision chart analysis
-        ├── history.py        # Pyrogram MTProto client for channel history
-        └── dedup.py          # SQLite: manual_signals + pips_log
+        ├── main.py           🏁 entrypoint: init DB, start long-polling
+        ├── config.py         ⚙️ pydantic-settings (all env vars)
+        ├── telegram.py       💬 aiogram bot: DM commands, channel handlers, formatting
+        ├── chart_analysis.py 👁️ Claude vision chart analysis
+        └── dedup.py          🗄️ SQLite: manual_signals + pips_log
 ```
 
-## License
+---
 
-Private project. Not licensed for redistribution.
+## 📄 License
+
+Private project. Not licensed for redistribution. ⛔

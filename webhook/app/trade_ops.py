@@ -1,0 +1,289 @@
+"""Shared trade lifecycle executors used by DM and channel adapters."""
+
+import time
+from html import escape
+
+from app.config import settings
+from app.dedup import (
+  cancel_manual_signal,
+  close_leg,
+  get_manual_signal,
+  get_open_signals,
+  get_signal_cluster,
+  mark_filled,
+  set_note,
+  signal_root,
+  store_manual_signal,
+  store_pips,
+  update_setup,
+  update_sl,
+)
+from app.broadcast import broadcast_entry, fanout_update
+from app.symbols import SYMBOLS, channel_for_symbol
+
+
+def _display_seq(row: dict) -> int:
+  return row.get("daily_seq") or row["id"]
+
+
+def _price(value: float, symbol: str) -> str:
+  digits = int(SYMBOLS[symbol]["digits"])
+  return f"{value:,.{digits}f}".rstrip("0").rstrip(".")
+
+
+async def do_active(ctx: dict) -> dict:
+  row = await mark_filled(ctx["sid"])
+  if row is None:
+    return {"action": "active", "ok": False, "error": "not_pending"}
+  return {
+    "action": "active",
+    "ok": True,
+    "row": row,
+    "reply_to": row.get("channel_message_id") or ctx.get("reply_to"),
+  }
+
+
+async def do_close(ctx: dict) -> dict:
+  pips = 0 if ctx.get("frac") == "be" else int(ctx["pips"])
+  frac = None if ctx.get("frac") == "be" else ctx.get("frac")
+  row = await close_leg(ctx["sid"], pips, frac)
+  if row is None:
+    return {"action": "close", "ok": False, "error": "not_open"}
+  result = {
+    "action": "close",
+    "ok": True,
+    "row": row,
+    "pips": pips,
+    "reply_to": row.get("channel_message_id") or ctx.get("reply_to"),
+  }
+  if row.get("closed"):
+    net = row["net"]
+    await store_pips(
+      "+" if net >= 0 else "-",
+      abs(net),
+      message_id=row.get("channel_message_id"),
+      chat_id=channel_for_symbol(ctx["symbol"]),
+      signal_id=ctx["sid"],
+    )
+  return result
+
+
+async def do_sl(ctx: dict) -> dict:
+  signals = await get_open_signals(ctx["symbol"])
+  signal = next(
+    (row for row in signals if row["id"] == ctx["sid"]),
+    None,
+  )
+  if signal is None:
+    return {"action": "sl", "ok": False, "error": "not_open"}
+  target = str(ctx["sl"])
+  is_be = target.lower() == "be"
+  if is_be:
+    entry_end = signal.get("entry_end")
+    if entry_end is None:
+      entry_end = signal["entry"]
+    price = (signal["entry"] + entry_end) / 2
+  else:
+    price = float(target)
+  row = await update_sl(ctx["sid"], price)
+  if row is None:
+    return {"action": "sl", "ok": False, "error": "not_open"}
+  from app.watcher import clear_sl_alert
+  clear_sl_alert(ctx["sid"])
+  return {
+    "action": "sl",
+    "ok": True,
+    "row": row,
+    "price": price,
+    "is_be": is_be,
+    "reply_to": row.get("channel_message_id") or ctx.get("reply_to"),
+  }
+
+
+async def do_cancel(ctx: dict) -> dict:
+  row = await cancel_manual_signal(ctx["sid"])
+  if row is None:
+    return {"action": "cancel", "ok": False, "error": "not_open"}
+  return {
+    "action": "cancel",
+    "ok": True,
+    "row": row,
+    "reply_to": row.get("channel_message_id") or ctx.get("reply_to"),
+  }
+
+
+async def do_reopen(ctx: dict) -> dict:
+  source = await get_manual_signal(ctx["sid"])
+  if source is None or source.get("symbol", "XAU") != ctx["symbol"]:
+    return {"action": "reopen", "ok": False, "error": "not_found"}
+  cluster = await get_signal_cluster(ctx["sid"])
+  entry = source["entry"]
+  entry_end = source.get("entry_end")
+  override = ctx.get("entry_override")
+  if override:
+    entry, entry_end = sorted(override)
+  if entry_end is None:
+    entry_end = entry
+  rec = await store_manual_signal(
+    ts=int(time.time()),
+    action=source["action"],
+    entry=entry,
+    entry_end=entry_end,
+    sl=source["sl"],
+    tps=source["tps"],
+    parent_id=signal_root(source),
+    setup_type=source.get("setup_type"),
+    confluence=source.get("confluence"),
+    symbol=ctx["symbol"],
+    visibility=source.get("visibility", "both"),
+  )
+  return {
+    "action": "reopen",
+    "ok": True,
+    "source": source,
+    "record": rec,
+    "entry": entry,
+    "entry_end": entry_end,
+    "round": len(cluster) + 1,
+    "reply_to": None,
+  }
+
+
+async def do_tag(ctx: dict) -> dict:
+  if not await update_setup(ctx["sid"], ctx["setup"], ctx.get("stars")):
+    return {"action": "tag", "ok": False, "error": "not_found"}
+  return {
+    "action": "tag",
+    "ok": True,
+    "seq": ctx["seq"],
+    "sid": ctx["sid"],
+    "setup": ctx["setup"],
+    "stars": ctx.get("stars"),
+    "reply_to": ctx.get("reply_to"),
+  }
+
+
+async def do_note(ctx: dict) -> dict:
+  if not await set_note(ctx["sid"], ctx["text"]):
+    return {"action": "note", "ok": False, "error": "not_found"}
+  return {
+    "action": "note",
+    "ok": True,
+    "seq": ctx["seq"],
+    "sid": ctx["sid"],
+    "reply_to": ctx.get("reply_to"),
+  }
+
+
+def render_result(
+  result: dict,
+  symbol: str,
+  tier: str = "vip",
+) -> str:
+  action = result["action"]
+  if not result.get("ok"):
+    return "⚠️ Signal not found or action is no longer valid."
+  if action == "active":
+    seq = f"#{_display_seq(result['row'])} " if tier == "vip" else ""
+    return f"🟢 {seq}active — entry filled"
+  if action == "cancel":
+    seq = f"#{_display_seq(result['row'])} " if tier == "vip" else ""
+    return f"❌ {seq}cancelled"
+  if action == "sl":
+    suffix = " (BE)" if result["is_be"] else ""
+    seq = f"#{_display_seq(result['row'])} " if tier == "vip" else ""
+    return (
+      f"🛡 {seq}SL → "
+      f"{_price(result['price'], symbol)}{suffix}"
+    )
+  if action == "close":
+    row = result["row"]
+    seq = (
+      f"#{row.get('daily_seq') or '?'} "
+      if tier == "vip"
+      else ""
+    )
+    if row.get("error") == "exceeds_remaining":
+      remaining = int(round(row["remaining"] * 100))
+      return f"⚠️ {seq}only has {remaining}% remaining to close"
+    if row["closed"]:
+      net = row["net"]
+      if tier == "public":
+        if net > 0:
+          detail = f"+{net}p win" if settings.public_show_pips else "win"
+          return f"✅ closed — {detail}"
+        if net < 0:
+          detail = f"{net}p loss" if settings.public_show_pips else "loss"
+          return f"🛑 closed — {detail}"
+        return "➖ closed — breakeven"
+      icon = "✅" if net >= 0 else "🛑"
+      sign = "+" if net >= 0 else ""
+      return f"{icon} {seq}closed — net {sign}{net}p"
+    if tier == "public" and not settings.public_show_pips:
+      return "🎯 partial booked"
+    booked = int(round(row["frac"] * 100))
+    remaining = int(round(row["remaining"] * 100))
+    return (
+      f"🎯 {seq}— booked {booked}% @ {result['pips']:+d}p · "
+      f"remaining {remaining}%"
+    )
+  if action == "reopen":
+    source = result["source"]
+    rec = result["record"]
+    tps = "/".join(_price(tp, symbol) for tp in source["tps"])
+    seq = f"#{rec['daily_seq']} · " if tier == "vip" else ""
+    source_seq = (
+      f" from #{_display_seq(source)}"
+      if tier == "vip"
+      else ""
+    )
+    return (
+      f"♻️ <b>{seq}round {result['round']}{source_seq}</b> — "
+      f"{source['action']} "
+      f"{_price(result['entry'], symbol)}–"
+      f"{_price(result['entry_end'], symbol)} / "
+      f"🛡 {_price(source['sl'], symbol)} / TP {tps}"
+    )
+  if action == "tag":
+    stars = f" {'⭐' * result['stars']}" if result.get("stars") else ""
+    seq = f"#{result['seq']} " if tier == "vip" else ""
+    return (
+      f"🏷 {seq}tagged "
+      f"{escape(result['setup'])}{stars}"
+    )
+  seq = f"#{result['seq']} " if tier == "vip" else ""
+  return f"📝 {seq}note saved"
+
+
+async def post_result(result: dict, symbol: str) -> str:
+  """Render and deliver one result through persisted fan-out paths."""
+  text = render_result(result, symbol, "vip")
+  if not result.get("ok"):
+    return text
+  if result["action"] == "reopen":
+    sig = await get_manual_signal(result["record"]["id"])
+    await broadcast_entry(
+      sig,
+      lambda tier: render_result(result, symbol, tier),
+    )
+    return text
+  signal_id = (
+    result["row"]["id"]
+    if "row" in result
+    else result["sid"]
+  )
+  sig = await get_manual_signal(signal_id)
+  if (
+    result["action"] == "close"
+    and result.get("row", {}).get("error")
+  ):
+    await fanout_update(
+      sig,
+      lambda tier: text if tier == "vip" else None,
+    )
+    return text
+  await fanout_update(
+    sig,
+    lambda tier: render_result(result, symbol, tier),
+  )
+  return text

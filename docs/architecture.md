@@ -15,16 +15,16 @@ orders and it does not receive webhooks. Everything is single-node.
 │   │   ├─ aiogram Dispatcher (long-polling)             │    │
 │   │   ├─ manual signal parse + formatting              │    │
 │   │   ├─ signal lifecycle (SQLite)                     │    │
-│   │   ├─ pips calculator (Pyrogram MTProto)            │    │
+│   │   ├─ pips calculator (local SQLite log)            │    │
 │   │   └─ chart analysis (Claude vision)                │    │
 │   └───────────────┬────────────────────────────────────┘    │
 │                   │  SQLite (/data/signals.db)               │
 └───────────────────┼──────────────────────────────────────────┘
                     │ outbound HTTPS
-        ┌───────────┼───────────────┬─────────────────┐
-        ▼           ▼               ▼                 ▼
-  api.telegram.org  (MTProto)  api.anthropic.com
-  (bot polling)     (history)  (chart vision)
+        ┌───────────┴───────────────┐
+        ▼                           ▼
+  api.telegram.org           api.anthropic.com
+  (bot polling)              (chart vision)
 ```
 
 All external connections are **outbound**. No inbound ports are opened; the
@@ -120,10 +120,10 @@ CREATE TABLE pips_log (
 - **Signal-only, not auto-execution.** The bot forwards data to a human; it
   never places orders. Manual confirmation is a deliberate speed bump.
 - **Owner lock.** All DM handlers check `TELEGRAM_OWNER_ID`. With it unset the
-  bot is open to any DM — set it in production.
+  privileged DM interface is disabled.
 - **SQLite, not Postgres.** Write volume is a handful of rows per day; a
   bind-mounted SQLite file is simpler and fully adequate.
-- **Pyrogram for history.** The pips calculator scans channel history via
-  MTProto (a user session), which the Bot API cannot do. See `gen_session.py`.
+- **Local accounting.** The pips calculator aggregates the SQLite `pips_log`
+  populated when lifecycle results are booked.
 - **Single node, no HA.** For a personal tool a second node is not worth the
   complexity; `restart: unless-stopped` covers common downtime.
