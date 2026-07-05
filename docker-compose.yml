@@ -1,7 +1,10 @@
+name: apexvoid-trading-bot
+
 services:
   bot:
     build: ./webhook
-    container_name: signal-bot
+    image: apexvoid-trading-bot:latest
+    container_name: apexvoid-trading-bot
     restart: unless-stopped
     env_file: .env
     volumes:
