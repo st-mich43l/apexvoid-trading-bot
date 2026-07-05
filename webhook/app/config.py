@@ -46,13 +46,12 @@ class Settings(BaseSettings):
   calendar_feed_nextweek: str = (
     "https://nfs.faireconomy.media/ff_calendar_nextweek.json"
   )
-  calendar_user_agent: str = "signal-bot/1.0 (+contact)"
+  calendar_user_agent: str = "apexvoid-trading-bot/1.0 (+contact)"
   calendar_currencies: str = "USD"
   oil_keywords: str = (
     "crude oil inventories,opec,cushing,api weekly crude"
   )
   news_brief_hour: int = 7
-  news_brief_skip_empty: bool = False
   event_guard_hours: float = 4.0
   news_guard_block: bool = False
   weekly_report_enabled: bool = True
