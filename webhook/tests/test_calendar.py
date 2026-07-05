@@ -157,7 +157,7 @@ async def test_request_denied_keeps_last_good_cache(tmp_path, monkeypatch):
   ]
 
 
-def test_digest_renders_local_times_and_empty_setting(monkeypatch):
+def test_digest_renders_local_times_and_skips_empty_days():
   tz = ZoneInfo("Asia/Ho_Chi_Minh")
   rows = [
     {
@@ -181,17 +181,38 @@ def test_digest_renders_local_times_and_empty_setting(monkeypatch):
       "all_day": 0,
     },
   ]
-  monkeypatch.setattr(calendar.settings, "news_brief_skip_empty", False)
-
   text = calendar._format_brief(rows, tz)
 
   assert "20:30  USD · Non-Farm Payrolls" in text
   assert "21:30  Oil · Crude Oil Inventories" in text
-  assert calendar._format_brief([], tz) == (
-    "🗓 No high-impact events today"
-  )
-  monkeypatch.setattr(calendar.settings, "news_brief_skip_empty", True)
   assert calendar._format_brief([], tz) is None
+
+
+@pytest.mark.asyncio
+async def test_empty_day_records_guard_without_broadcast(monkeypatch):
+  monkeypatch.setattr(
+    calendar,
+    "get_meta",
+    AsyncMock(return_value=None),
+  )
+  monkeypatch.setattr(
+    calendar,
+    "events_between",
+    AsyncMock(return_value=[]),
+  )
+  set_meta = AsyncMock()
+  send = AsyncMock()
+  channels = AsyncMock()
+  monkeypatch.setattr(calendar, "set_meta", set_meta)
+  monkeypatch.setattr(calendar, "_send_with_retry", send)
+  monkeypatch.setattr(calendar, "channels_for", channels)
+  now = datetime(2026, 7, 5, 8, tzinfo=ZoneInfo("Asia/Ho_Chi_Minh"))
+
+  await calendar._post_brief(now)
+
+  send.assert_not_awaited()
+  channels.assert_not_awaited()
+  set_meta.assert_awaited_once_with("last_brief_date", "2026-07-05")
 
 
 def _private_message():
@@ -275,7 +296,6 @@ async def test_same_day_restart_skips_fetch_and_digest(
   feed,
 ):
   monkeypatch.setattr(dedup.settings, "db_path", str(tmp_path / "restart.db"))
-  monkeypatch.setattr(calendar.settings, "news_brief_skip_empty", False)
   monkeypatch.setattr(
     calendar,
     "_CACHE_THISWEEK",
@@ -291,12 +311,23 @@ async def test_same_day_restart_skips_fetch_and_digest(
   send = AsyncMock()
   monkeypatch.setattr(calendar, "_fetch_feed", fetch)
   monkeypatch.setattr(calendar, "_send_with_retry", send)
-  now = datetime(2026, 7, 4, 8, tzinfo=ZoneInfo("Asia/Ho_Chi_Minh"))
+  monkeypatch.setattr(
+    calendar,
+    "channels_for",
+    lambda symbol, visibility: [
+      {"symbol": symbol, "tier": "vip", "channel_id": -1001},
+      {"symbol": symbol, "tier": "public", "channel_id": -1002},
+    ],
+  )
+  now = datetime(2026, 7, 3, 8, tzinfo=ZoneInfo("Asia/Ho_Chi_Minh"))
 
   await calendar._sync_day(now)
   await calendar._sync_day(now)
 
   assert fetch.await_count == 2
-  send.assert_awaited_once()
-  assert await dedup.get_meta("last_sync_date") == "2026-07-04"
-  assert await dedup.get_meta("last_brief_date") == "2026-07-04"
+  assert [call.kwargs["chat_id"] for call in send.await_args_list] == [
+    -1001,
+    -1002,
+  ]
+  assert await dedup.get_meta("last_sync_date") == "2026-07-03"
+  assert await dedup.get_meta("last_brief_date") == "2026-07-03"

@@ -1,4 +1,4 @@
-# 📉 Signal Bot 🤖
+# 📉 ApexVoid Trading Bot 🤖
 
 ![Python](https://img.shields.io/badge/Python-3.12-3776AB?style=for-the-badge&logo=python&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)
@@ -51,6 +51,12 @@ The bot talks to Telegram over **outbound long-polling only**, meaning it requir
   it with `WEEKLY_REPORT_ENABLED`, `WEEKLY_REPORT_DOW`, and
   `WEEKLY_REPORT_HOUR`; public never receives aggregate performance.
 
+### 🗓 Economic Calendar
+- The daily ForexFactory brief includes only configured high-impact USD,
+  gold, and oil events. The bot stays silent when none are scheduled.
+- Calendar briefs are broadcast to both VIP and public channels.
+- Upcoming events can tag or block a new signal through the local event guard.
+
 ### 🧮 Pips Calculator
 - DM `calculate gold pips today` or `this week` for a win/loss pips summary drawn from the local `pips_log` (populated automatically whenever you close a result).
 - **Auto-edit Pips** ✏️ — Post `+80 pips` or `-30 pips` in the channel and the bot replaces it with a clean formatted result (even works on photos!).
@@ -88,8 +94,8 @@ Dive into the docs for full details on configuring and operating the bot:
 ## 🚀 Quick Start
 
 ```bash
-git clone <this-repo> xau-signal-bot
-cd xau-signal-bot
+git clone <this-repo> apexvoid-trading-bot
+cd apexvoid-trading-bot
 
 # Setup Environment
 cp .env.example .env
@@ -116,7 +122,7 @@ Then, just DM your bot: `active` should reply with `📋 No open signals.` 🎉
 ## 📁 Repository Layout
 
 ```tree
-xau-signal-bot/
+apexvoid-trading-bot/
 ├── docker-compose.yml        🐳 single 'bot' service, no exposed ports
 ├── .env.example              🔑 env template
 ├── README.md                 📖 this file

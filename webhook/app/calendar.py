@@ -21,6 +21,7 @@ from app.dedup import (
   set_meta,
   upsert_events,
 )
+from app.symbols import channels_for
 from app.telegram import _send_with_retry
 
 log = logging.getLogger(__name__)
@@ -232,9 +233,7 @@ def _bot_safe(value: Any) -> str:
 
 def _format_brief(events: list[dict], tz: ZoneInfo) -> str | None:
   if not events:
-    if settings.news_brief_skip_empty:
-      return None
-    return "🗓 No high-impact events today"
+    return None
   lines = ["🗓 Today · high-impact (USD / gold / oil)"]
   for event in events:
     local = datetime.fromtimestamp(event["ts_utc"], _UTC).astimezone(tz)
@@ -263,7 +262,11 @@ async def _post_brief(now: datetime) -> None:
     ZoneInfo(settings.seq_reset_tz),
   )
   if text is not None:
-    await _send_with_retry(text)
+    for target in channels_for("XAU", "both"):
+      await _send_with_retry(
+        text,
+        chat_id=int(target["channel_id"]),
+      )
   await set_meta("last_brief_date", day)
 
 
