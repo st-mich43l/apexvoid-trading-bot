@@ -44,6 +44,7 @@ from app.trade_ops import (
   do_reopen,
   do_sl,
   do_tag,
+  do_tp,
   post_result,
   render_result,
 )
@@ -59,6 +60,7 @@ dp = Dispatcher()
 OWNER_COMMANDS = [
   BotCommand(command="trade_active", description="[SYMBOL] [#id]"),
   BotCommand(command="trade_close", description="[SYMBOL] #id ±pips [%] | be"),
+  BotCommand(command="trade_tp", description="[SYMBOL] #id TP +pips"),
   BotCommand(command="trade_sl", description="[SYMBOL] #id be|price"),
   BotCommand(command="trade_cancel", description="[SYMBOL] #id"),
   BotCommand(command="trade_reopen", description="[SYMBOL] #id [lo-hi]"),
@@ -290,6 +292,7 @@ _HELP_TEXT = """<b>Trade controls</b>
 <b>Owner DM commands</b>
 <code>/trade_active [SYMBOL] [#id]</code>
 <code>/trade_close [SYMBOL] #id ±pips [%] | be</code>
+<code>/trade_tp [SYMBOL] #id TP +pips</code>
 <code>/trade_sl [SYMBOL] #id be|price</code>
 <code>/trade_cancel [SYMBOL] #id</code>
 <code>/trade_reopen [SYMBOL] #id [lo-hi]</code>
@@ -326,6 +329,9 @@ _TAG_RE = re.compile(
   r'(?:\s+(\*{1,3}|[1-3]))?\s*$'
 )
 _NOTE_RE = re.compile(r'(?is)^\s*note\s+#?(\d+)\s+(.+?)\s*$')
+_TP_RE = re.compile(
+  r'(?i)^\s*tp\s+#?(\d+)\s+(?:tp)?(\d+)\s+\+(\d+)\s*(?:pips?)?\s*$'
+)
 
 
 def _today_str() -> str:
@@ -516,6 +522,31 @@ async def handle_trade_close(msg: Message) -> None:
     "reply_to": None,
     "pips": pips,
     "frac": "be" if raw.lower().endswith(" be") else frac,
+  })
+  await msg.answer(await post_result(result, symbol))
+
+
+@dp.message(Command("trade_tp"), F.chat.type == "private")
+async def handle_trade_tp(msg: Message) -> None:
+  if not _is_owner(msg):
+    return
+  symbol, raw = _take_symbol(_command_args(msg))
+  match = _TP_RE.match(f"tp {raw}")
+  if not match:
+    await msg.answer(
+      "Usage: <code>/trade_tp [SYMBOL] #N TP_NUMBER +PIPS</code>"
+    )
+    return
+  seq = int(match.group(1))
+  sid = await _resolve_sid(seq, None, symbol)
+  if sid is None:
+    await msg.answer("⚠️ Open signal not found.")
+    return
+  result = await do_tp({
+    "sid": sid,
+    "symbol": symbol,
+    "tp_number": int(match.group(2)),
+    "pips": int(match.group(3)),
   })
   await msg.answer(await post_result(result, symbol))
 

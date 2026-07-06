@@ -45,7 +45,7 @@ async def test_scoped_command_menu(monkeypatch):
   assert second.args[0] == telegram.OWNER_COMMANDS
   assert second.kwargs["scope"].chat_id == 42
   assert {command.command for command in telegram.OWNER_COMMANDS} == {
-    "trade_active", "trade_close", "trade_sl", "trade_cancel",
+    "trade_active", "trade_close", "trade_tp", "trade_sl", "trade_cancel",
     "trade_reopen", "trade_tag", "trade_note", "trade_review",
     "trade_stats", "trade_pips", "help",
   }
@@ -80,6 +80,39 @@ async def test_channel_and_dm_close_share_executor(monkeypatch):
     key: dm_ctx[key]
     for key in ("sid", "symbol", "chat_id", "pips", "frac")
   }
+
+
+@pytest.mark.asyncio
+async def test_manual_tp_command_is_notify_only(monkeypatch):
+  monkeypatch.setattr(telegram.settings, "telegram_owner_id", 42)
+  monkeypatch.setattr(
+    telegram,
+    "_resolve_sid",
+    AsyncMock(return_value=3),
+  )
+  execute = AsyncMock(return_value={
+    "action": "tp",
+    "ok": True,
+    "sid": 3,
+    "seq": 1,
+    "tp_number": 2,
+    "pips": 56,
+  })
+  post = AsyncMock(return_value="🎯 #1 TP2 (+56 pips)")
+  monkeypatch.setattr(telegram, "do_tp", execute)
+  monkeypatch.setattr(telegram, "post_result", post)
+  msg = _dm("/trade_tp XAU #1 2 +56")
+
+  await telegram.handle_trade_tp(msg)
+
+  execute.assert_awaited_once_with({
+    "sid": 3,
+    "symbol": "XAU",
+    "tp_number": 2,
+    "pips": 56,
+  })
+  post.assert_awaited_once_with(execute.return_value, "XAU")
+  msg.answer.assert_awaited_once_with("🎯 #1 TP2 (+56 pips)")
 
 
 @pytest.mark.asyncio
@@ -256,4 +289,5 @@ async def test_help_is_owner_only_and_documents_both_surfaces(monkeypatch):
   assert "Channel replies" in text
   assert "close #id ±pips [%] | be" in text
   assert "/trade_close [SYMBOL]" in text
+  assert "/trade_tp [SYMBOL]" in text
   stranger.answer.assert_not_awaited()

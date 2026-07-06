@@ -153,6 +153,18 @@ If the signal is not found or already closed: `⚠️ Signal #3 not found or alr
 
 ---
 
+### `/trade_tp` — notify a TP manually
+
+```text
+/trade_tp XAU #3 1 +56
+```
+
+Posts `🎯 TP1 (+56 pips)` to the channels where signal `#3` was originally
+published. This is notify-only: it does not close the signal, book pips, or
+change performance accounting.
+
+---
+
 ### `cancel <id>` — cancel via DM
 
 ```

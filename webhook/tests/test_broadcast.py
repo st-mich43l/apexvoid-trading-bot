@@ -145,10 +145,10 @@ def test_public_close_pips_toggle_never_reveals_id(monkeypatch):
 
   monkeypatch.setattr(trade_ops.settings, "public_show_pips", True)
   assert trade_ops.render_result(result, "XAU", "public") == (
-    "✅ closed — +70p win"
+    "✅ closed — +70 pips win"
   )
   assert trade_ops.render_result(result, "XAU", "vip") == (
-    "✅ #7 closed — net +70p"
+    "✅ #7 closed — net +70 pips"
   )
 
   monkeypatch.setattr(trade_ops.settings, "public_show_pips", False)
@@ -157,8 +157,90 @@ def test_public_close_pips_toggle_never_reveals_id(monkeypatch):
   assert "#7" not in public
   assert "70" not in public
   assert trade_ops.render_result(result, "XAU", "vip") == (
-    "✅ #7 closed — net +70p"
+    "✅ #7 closed — net +70 pips"
   )
+
+
+def test_partial_close_uses_clear_pips_without_at_sign():
+  result = {
+    "action": "close",
+    "ok": True,
+    "row": {
+      "daily_seq": 7,
+      "closed": False,
+      "frac": 0.5,
+      "remaining": 0.5,
+    },
+    "pips": 100,
+  }
+
+  text = trade_ops.render_result(result, "XAU", "public")
+
+  assert text == "🎯 booked 50% · +100 pips · remaining 50%"
+  assert "@" not in text
+
+
+@pytest.mark.asyncio
+async def test_metadata_acks_stay_in_owner_dm(monkeypatch):
+  fanout = AsyncMock()
+  get_signal = AsyncMock()
+  monkeypatch.setattr(trade_ops, "fanout_update", fanout)
+  monkeypatch.setattr(trade_ops, "get_manual_signal", get_signal)
+
+  text = await trade_ops.post_result({
+    "action": "note",
+    "ok": True,
+    "sid": 1,
+    "seq": 7,
+  }, "XAU")
+
+  assert text == "📝 #7 note saved"
+  tagged = await trade_ops.post_result({
+    "action": "tag",
+    "ok": True,
+    "sid": 1,
+    "seq": 7,
+    "setup": "ob-retest",
+    "stars": 3,
+  }, "XAU")
+
+  assert tagged == "🏷 #7 tagged ob-retest ⭐⭐⭐"
+  fanout.assert_not_awaited()
+  get_signal.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_manual_tp_is_notify_only_and_tier_aware(monkeypatch):
+  signal = {
+    "id": 1,
+    "daily_seq": 7,
+    "status": "open",
+    "symbol": "XAU",
+    "tps": [2010.0, 2020.0],
+  }
+  monkeypatch.setattr(
+    trade_ops,
+    "get_manual_signal",
+    AsyncMock(return_value=signal),
+  )
+
+  result = await trade_ops.do_tp({
+    "sid": 1,
+    "symbol": "XAU",
+    "tp_number": 2,
+    "pips": 56,
+  })
+
+  assert result["ok"]
+  assert trade_ops.render_result(result, "XAU", "vip") == (
+    "🎯 #7 TP2 (+56 pips)"
+  )
+  assert trade_ops.render_result(result, "XAU", "public") == (
+    "🎯 TP2 (+56 pips)"
+  )
+
+  monkeypatch.setattr(trade_ops.settings, "public_show_pips", False)
+  assert trade_ops.render_result(result, "XAU", "public") == "🎯 TP2 hit"
 
 
 @pytest.mark.asyncio

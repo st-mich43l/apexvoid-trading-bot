@@ -20,6 +20,11 @@ def clear_sl_alert(row_id: int) -> None:
   _alerts.get(row_id, set()).discard("SL")
 
 
+def mark_tp_alert(row_id: int, tp_number: int) -> None:
+  """Prevent a manual TP notification from being repeated by the watcher."""
+  _alerts.setdefault(row_id, set()).add(f"TP{tp_number}")
+
+
 def _market_open() -> bool:
   """Return whether XAU is outside its approximate weekend closure."""
   now = datetime.now(timezone.utc)
@@ -48,12 +53,12 @@ def _render_level_alert(
   if tier == "public":
     if kind == "TP":
       return (
-        f"🎯 {key} (+{pips}p)"
+        f"🎯 {key} (+{pips} pips)"
         if settings.public_show_pips
         else "🎯 TP hit"
       )
     return (
-      f"🛡 SL (-{pips}p)"
+      f"🛡 SL (-{pips} pips)"
       if settings.public_show_pips
       else "🛡 SL hit"
     )

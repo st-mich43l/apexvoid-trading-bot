@@ -175,6 +175,30 @@ async def do_note(ctx: dict) -> dict:
   }
 
 
+async def do_tp(ctx: dict) -> dict:
+  """Build a notify-only TP event without changing trade accounting."""
+  signal = await get_manual_signal(ctx["sid"])
+  tp_number = int(ctx["tp_number"])
+  if (
+    signal is None
+    or signal.get("status") != "open"
+    or signal.get("symbol", "XAU") != ctx["symbol"]
+  ):
+    return {"action": "tp", "ok": False, "error": "not_open"}
+  if tp_number < 1 or tp_number > len(signal.get("tps") or []):
+    return {"action": "tp", "ok": False, "error": "invalid_tp"}
+  from app.watcher import mark_tp_alert
+  mark_tp_alert(signal["id"], tp_number)
+  return {
+    "action": "tp",
+    "ok": True,
+    "sid": signal["id"],
+    "seq": _display_seq(signal),
+    "tp_number": tp_number,
+    "pips": int(ctx["pips"]),
+  }
+
+
 def render_result(
   result: dict,
   symbol: str,
@@ -189,6 +213,14 @@ def render_result(
   if action == "cancel":
     seq = f"#{_display_seq(result['row'])} " if tier == "vip" else ""
     return f"❌ {seq}cancelled"
+  if action == "tp":
+    seq = f"#{result['seq']} " if tier == "vip" else ""
+    if tier == "public" and not settings.public_show_pips:
+      return f"🎯 TP{result['tp_number']} hit"
+    return (
+      f"🎯 {seq}TP{result['tp_number']} "
+      f"(+{result['pips']} pips)"
+    )
   if action == "sl":
     suffix = " (BE)" if result["is_be"] else ""
     seq = f"#{_display_seq(result['row'])} " if tier == "vip" else ""
@@ -210,21 +242,29 @@ def render_result(
       net = row["net"]
       if tier == "public":
         if net > 0:
-          detail = f"+{net}p win" if settings.public_show_pips else "win"
+          detail = (
+            f"+{net} pips win"
+            if settings.public_show_pips
+            else "win"
+          )
           return f"✅ closed — {detail}"
         if net < 0:
-          detail = f"{net}p loss" if settings.public_show_pips else "loss"
+          detail = (
+            f"{net} pips loss"
+            if settings.public_show_pips
+            else "loss"
+          )
           return f"🛑 closed — {detail}"
         return "➖ closed — breakeven"
       icon = "✅" if net >= 0 else "🛑"
       sign = "+" if net >= 0 else ""
-      return f"{icon} {seq}closed — net {sign}{net}p"
+      return f"{icon} {seq}closed — net {sign}{net} pips"
     if tier == "public" and not settings.public_show_pips:
       return "🎯 partial booked"
     booked = int(round(row["frac"] * 100))
     remaining = int(round(row["remaining"] * 100))
     return (
-      f"🎯 {seq}— booked {booked}% @ {result['pips']:+d}p · "
+      f"🎯 {seq}booked {booked}% · {result['pips']:+d} pips · "
       f"remaining {remaining}%"
     )
   if action == "reopen":
@@ -259,6 +299,8 @@ async def post_result(result: dict, symbol: str) -> str:
   """Render and deliver one result through persisted fan-out paths."""
   text = render_result(result, symbol, "vip")
   if not result.get("ok"):
+    return text
+  if result["action"] in {"note", "tag"}:
     return text
   if result["action"] == "reopen":
     sig = await get_manual_signal(result["record"]["id"])
