@@ -1,0 +1,17 @@
+{# Rendered on the VPS by ansible (deploy_image role). Do not edit on the host. #}
+{# Vars: image_tag, registry_namespace, apexvoid_trading_bot_env (from vault) #}
+name: apexvoid-trading-bot
+
+services:
+  bot:
+    image: "{{ registry_namespace }}/apexvoid-trading-bot:{{ image_tag }}"
+    container_name: apexvoid-trading-bot
+    restart: unless-stopped
+    # No .env — all environment declared here (values from the vaulted dict).
+    environment:
+{% for key, value in apexvoid_trading_bot_env.items() %}
+      {{ key }}: {{ value | to_json }}
+{% endfor %}
+    # SQLite + calendar cache persist across deploys.
+    volumes:
+      - ./data:/data
