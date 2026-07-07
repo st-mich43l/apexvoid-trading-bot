@@ -7,6 +7,7 @@ import aiohttp
 from app.config import settings
 from app.broadcast import fanout_update
 from app.dedup import get_open_signals
+from app.pips_format import wing_icons
 from app.price import get_xau_price
 from app.symbols import pip_for
 
@@ -53,7 +54,7 @@ def _render_level_alert(
   if tier == "public":
     if kind == "TP":
       return (
-        f"🎯 {key} (+{pips} pips)"
+        f"🎯 {key} (+{pips} pips) {wing_icons(pips)}"
         if settings.public_show_pips
         else "🎯 TP hit"
       )
@@ -74,7 +75,7 @@ def _render_level_alert(
     f"🎯 <b>TP HIT</b> | #{seq}\n"
     f"💰 Level: <b>{key}</b>\n"
     f"📈 Price: <b>{display_price}</b>\n"
-    f"✅ Profit: <b>+{pips} pips</b>\n\n"
+    f"✅ Profit: <b>+{pips} pips</b> {wing_icons(pips)}\n\n"
     f"<i>Reply to confirm:</i> "
     f"<code>close #{seq} +{pips}</code>"
   )
