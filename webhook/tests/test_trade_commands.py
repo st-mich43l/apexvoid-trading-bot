@@ -186,7 +186,6 @@ def test_symbol_channel_and_pip_maps(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_per_symbol_sequence_and_resolver(tmp_path, monkeypatch):
-  monkeypatch.setattr(dedup.settings, "db_path", str(tmp_path / "symbols.db"))
   await dedup.init_db()
   xau = await dedup.store_manual_signal(
     1, "BUY", 2000, 2001, 1990, [2010], symbol="XAU",

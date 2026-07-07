@@ -21,7 +21,7 @@ async def main() -> None:
   asyncio.create_task(watcher_loop())
   asyncio.create_task(calendar_sync_loop())
   asyncio.create_task(weekly_report_loop())
-  log.info("DB ready at %s", settings.db_path)
+  log.info("DB ready (PostgreSQL)")
   if not settings.telegram_owner_id:
     log.warning(
       "TELEGRAM_OWNER_ID not set — owner-only DM commands are DISABLED. "

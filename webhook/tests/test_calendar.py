@@ -1,6 +1,5 @@
 import json
 import os
-import sqlite3
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
@@ -50,11 +49,9 @@ def test_parse_timezone_all_day_and_filter(feed, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_event_id_upsert_updates_actual_without_duplicate(
-  tmp_path,
-  monkeypatch,
+  sql,
   feed,
 ):
-  monkeypatch.setattr(dedup.settings, "db_path", str(tmp_path / "events.db"))
   await dedup.init_db()
   first = calendar._filter_events(calendar._parse_feed(feed, synced_at=1))
   await dedup.upsert_events(first)
@@ -67,19 +64,16 @@ async def test_event_id_upsert_updates_actual_without_duplicate(
   assert first[0]["event_id"] == second[0]["event_id"]
   await dedup.upsert_events(second)
 
-  db = sqlite3.connect(dedup.settings.db_path)
-  count = db.execute("SELECT COUNT(*) FROM events").fetchone()[0]
-  actual = db.execute(
+  count = await sql.val("SELECT COUNT(*) FROM events")
+  actual = await sql.val(
     "SELECT actual FROM events WHERE title = 'Non-Farm Payrolls'"
-  ).fetchone()[0]
-  db.close()
+  )
   assert count == 2
   assert actual == "210K"
 
 
 @pytest.mark.asyncio
-async def test_event_window_uses_local_database_only(tmp_path, monkeypatch):
-  monkeypatch.setattr(dedup.settings, "db_path", str(tmp_path / "guard.db"))
+async def test_event_window_uses_local_database_only():
   await dedup.init_db()
   now = 1_800_000_000
   base = {
@@ -295,7 +289,6 @@ async def test_same_day_restart_skips_fetch_and_digest(
   monkeypatch,
   feed,
 ):
-  monkeypatch.setattr(dedup.settings, "db_path", str(tmp_path / "restart.db"))
   monkeypatch.setattr(
     calendar,
     "_CACHE_THISWEEK",
