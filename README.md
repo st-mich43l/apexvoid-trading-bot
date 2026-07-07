@@ -33,6 +33,7 @@ The bot talks to Telegram over **outbound long-polling only**, meaning it requir
 ### 📡 Manual Signal Posting (DM interface)
 - **Insta-Post Signals** ⚡ — DM `gold sell entry zone (4100-4105) / sl 4110 / tp 95/90/80` and the bot will instantly post a beautifully formatted signal to the channel.
 - **TP Shorthand** 🎯 — Just write the last 2 digits (`35` → `3835`). You can list any number of TPs!
+- **Scalp Metadata** ⚡ — Add `/ scalp` or `/ scalp nhanh` to mark a fast scalp internally for review/stats without exposing a channel tag.
 - **Lifecycle Tracking** 🔄 — Every signal is tracked. DM `/trade_active` to see open positions, `/trade_close XAU #3 +80` to log a result, `/trade_uncclose XAU #3` to restore a mistaken close, or `/trade_cancel XAU #3` to drop it.
 - **Cancel by Reply** 🗑️ — Simply reply `cancel` directly to a channel signal post; the bot removes the original and cleans up your reply.
 - **Owner-Exclusive** 👑 — Set `TELEGRAM_OWNER_ID` to strictly lock all DM commands to you.
