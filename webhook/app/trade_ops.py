@@ -15,6 +15,7 @@ from app.dedup import (
   signal_root,
   store_manual_signal,
   store_pips,
+  undo_last_close_leg,
   update_setup,
   update_sl,
 )
@@ -66,6 +67,26 @@ async def do_close(ctx: dict) -> dict:
       signal_id=ctx["sid"],
     )
   return result
+
+
+async def do_uncclose(ctx: dict) -> dict:
+  signal = await get_manual_signal(ctx["sid"])
+  if (
+    signal is None
+    or signal.get("symbol", "XAU") != ctx["symbol"]
+  ):
+    return {"action": "uncclose", "ok": False, "error": "not_found"}
+  row = await undo_last_close_leg(ctx["sid"])
+  if row is None:
+    return {"action": "uncclose", "ok": False, "error": "not_restorable"}
+  return {
+    "action": "uncclose",
+    "ok": True,
+    "row": row,
+    "sid": row["id"],
+    "remaining": row["remaining"],
+    "reply_to": row.get("channel_message_id") or ctx.get("reply_to"),
+  }
 
 
 async def do_sl(ctx: dict) -> dict:
@@ -213,6 +234,11 @@ def render_result(
   if action == "cancel":
     seq = f"#{_display_seq(result['row'])} " if tier == "vip" else ""
     return f"❌ {seq}cancelled"
+  if action == "uncclose":
+    seq = f"#{_display_seq(result['row'])} " if tier == "vip" else ""
+    remaining = int(round(float(result["remaining"]) * 100))
+    suffix = f" · remaining {remaining}%" if remaining < 100 else ""
+    return f"♻️ {seq}restored — trade still running{suffix}"
   if action == "tp":
     seq = f"#{result['seq']} " if tier == "vip" else ""
     if tier == "public" and not settings.public_show_pips:

@@ -45,6 +45,7 @@ from app.trade_ops import (
   do_sl,
   do_tag,
   do_tp,
+  do_uncclose,
   post_result,
   render_result,
 )
@@ -60,6 +61,7 @@ dp = Dispatcher()
 OWNER_COMMANDS = [
   BotCommand(command="trade_active", description="[SYMBOL] [#id]"),
   BotCommand(command="trade_close", description="[SYMBOL] #id ±pips [%] | be"),
+  BotCommand(command="trade_uncclose", description="[SYMBOL] #id"),
   BotCommand(command="trade_tp", description="[SYMBOL] #id TP +pips"),
   BotCommand(command="trade_sl", description="[SYMBOL] #id be|price"),
   BotCommand(command="trade_cancel", description="[SYMBOL] #id"),
@@ -292,6 +294,7 @@ _HELP_TEXT = """<b>Trade controls</b>
 <b>Owner DM commands</b>
 <code>/trade_active [SYMBOL] [#id]</code>
 <code>/trade_close [SYMBOL] #id ±pips [%] | be</code>
+<code>/trade_uncclose [SYMBOL] #id</code>
 <code>/trade_tp [SYMBOL] #id TP +pips</code>
 <code>/trade_sl [SYMBOL] #id be|price</code>
 <code>/trade_cancel [SYMBOL] #id</code>
@@ -547,6 +550,30 @@ async def handle_trade_tp(msg: Message) -> None:
     "symbol": symbol,
     "tp_number": int(match.group(2)),
     "pips": int(match.group(3)),
+  })
+  await msg.answer(await post_result(result, symbol))
+
+
+@dp.message(Command("trade_uncclose", "trade_restore"), F.chat.type == "private")
+async def handle_trade_uncclose(msg: Message) -> None:
+  if not _is_owner(msg):
+    return
+  symbol, raw = _take_symbol(_command_args(msg))
+  seq = _seq_token(raw)
+  if seq is None:
+    await msg.answer(
+      "Usage: <code>/trade_uncclose [SYMBOL] #N</code>"
+    )
+    return
+  sid = await _resolve_any_sid(seq, None, symbol)
+  if sid is None:
+    await msg.answer("⚠️ Signal not found.")
+    return
+  result = await do_uncclose({
+    "sid": sid,
+    "symbol": symbol,
+    "chat_id": channel_for_symbol(symbol),
+    "reply_to": None,
   })
   await msg.answer(await post_result(result, symbol))
 

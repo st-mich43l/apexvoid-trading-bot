@@ -153,6 +153,33 @@ If the signal is not found or already closed: `⚠️ Signal #3 not found or alr
 
 ---
 
+### `/trade_uncclose` — undo a mistaken close
+
+```text
+/trade_uncclose XAU #3
+```
+
+Restores signal `#3` to `open/running` when it was closed in the bot by
+mistake. If the signal had earlier partial bookings, the bot removes only the
+latest close leg and keeps the earlier partials. Linked `pips_log` accounting
+for the mistaken final close is removed so stats stop counting it.
+
+Alias:
+
+```text
+/trade_restore XAU #3
+```
+
+Channel correction:
+
+```text
+♻️ #3 restored — trade still running
+```
+
+Public channels receive the same correction without the internal `#id`.
+
+---
+
 ### `/trade_tp` — notify a TP manually
 
 ```text

@@ -675,6 +675,57 @@ async def get_manual_signal(row_id: int) -> dict | None:
   return _decode_signal(row) if row else None
 
 
+async def undo_last_close_leg(row_id: int) -> dict | None:
+  """Undo the latest close booking and leave the signal open again.
+
+  This is used for operator mistakes: the trade was marked closed in the bot,
+  but is still running in reality. If the signal had partial legs, only the
+  most recent leg is removed so earlier intentional scale-outs remain intact.
+  Final-close accounting rows linked to the signal are removed from pips_log.
+  """
+  async with _connect() as db:
+    await db.execute("BEGIN IMMEDIATE")
+    db.row_factory = aiosqlite.Row
+    cur = await db.execute(
+      "SELECT * FROM manual_signals WHERE id = ?",
+      (row_id,),
+    )
+    row = await cur.fetchone()
+    if row is None or row["status"] == "cancelled":
+      return None
+
+    legs = json.loads(row["legs"] or "[]")
+    if row["status"] == "open" and not legs:
+      return None
+
+    restored_leg = legs.pop() if legs else None
+    remaining = max(
+      0.0,
+      1.0 - sum(float(leg["frac"]) for leg in legs),
+    )
+    await db.execute(
+      "UPDATE manual_signals "
+      "SET status = 'open', result_pips = NULL, closed_at = NULL, "
+      "legs = ? WHERE id = ?",
+      (json.dumps(legs), row_id),
+    )
+    await db.execute(
+      "DELETE FROM pips_log WHERE signal_id = ?",
+      (row_id,),
+    )
+    await db.commit()
+    return {
+      **_decode_signal(row),
+      "status": "open",
+      "result_pips": None,
+      "closed_at": None,
+      "legs": legs,
+      "restored_leg": restored_leg,
+      "remaining": remaining,
+      "previous_status": row["status"],
+    }
+
+
 async def get_manual_signal_any_by_channel_id(
   channel_message_id: int,
 ) -> dict | None:
