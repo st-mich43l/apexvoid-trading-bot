@@ -1,12 +1,35 @@
 name: apexvoid-trading-bot
 
 services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: apexvoid-trading-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-apexvoid}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-apexvoid}
+      POSTGRES_DB: ${POSTGRES_DB:-signals}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-apexvoid} -d ${POSTGRES_DB:-signals}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    # No ports exposed — only the bot on the internal network reaches it.
+
   bot:
     build: ./webhook
     image: apexvoid-trading-bot:latest
     container_name: apexvoid-trading-bot
     restart: unless-stopped
     env_file: .env
+    depends_on:
+      postgres:
+        condition: service_healthy
     volumes:
-      - ./data:/data
+      - ./data:/data   # calendar cache (ff_*.json) still persists here
     # No ports exposed — the bot uses outbound Telegram long-polling only.
+
+volumes:
+  pgdata:
