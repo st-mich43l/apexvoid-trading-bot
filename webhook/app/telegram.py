@@ -30,6 +30,7 @@ from app.dedup import (
 )
 from app.reports import build_stats, format_review, format_stats
 from app.broadcast import broadcast_entry, render_entry
+from app.pips_format import wing_icons
 from app.symbols import (
   SYMBOLS,
   channel_for_symbol,
@@ -916,8 +917,7 @@ async def _handle_pips(msg: Message, text: str, has_photo: bool) -> None:
     return
   sign, pips = m.group(1), int(m.group(2))
   if sign == "+":
-    icon_count = 1 if pips <= 100 else 2 if pips < 300 else 3
-    new_text = f"✅ Booked +{pips} pips profit! {'💸' * icon_count}"
+    new_text = f"✅ Booked +{pips} pips profit! {wing_icons(pips)}"
   else:
     new_text = f"🛑 Stopped out -{pips} pips. Managed & moving on 💪"
   try:

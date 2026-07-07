@@ -203,9 +203,12 @@ Public channels receive the same correction without the internal `#id`.
 /trade_tp XAU #3 1 +56
 ```
 
-Posts `🎯 TP1 (+56 pips)` to the channels where signal `#3` was originally
+Posts `🎯 TP1 (+56 pips) 💸` to the channels where signal `#3` was originally
 published. This is notify-only: it does not close the signal, book pips, or
 change performance accounting.
+
+Positive TP/close updates append dollar-wing icons by pip size: `1–100` pips
+gets `💸`, `101–299` gets `💸💸`, and `300+` gets `💸💸💸`.
 
 ---
 

@@ -20,6 +20,7 @@ from app.dedup import (
   update_sl,
 )
 from app.broadcast import broadcast_entry, fanout_update
+from app.pips_format import wing_icons
 from app.symbols import SYMBOLS, channel_for_symbol
 
 
@@ -30,6 +31,11 @@ def _display_seq(row: dict) -> int:
 def _price(value: float, symbol: str) -> str:
   digits = int(SYMBOLS[symbol]["digits"])
   return f"{value:,.{digits}f}".rstrip("0").rstrip(".")
+
+
+def _win_wings(pips: int) -> str:
+  icons = wing_icons(pips)
+  return f" {icons}" if icons else ""
 
 
 async def do_active(ctx: dict) -> dict:
@@ -245,7 +251,7 @@ def render_result(
       return f"🎯 TP{result['tp_number']} hit"
     return (
       f"🎯 {seq}TP{result['tp_number']} "
-      f"(+{result['pips']} pips)"
+      f"(+{result['pips']} pips){_win_wings(result['pips'])}"
     )
   if action == "sl":
     suffix = " (BE)" if result["is_be"] else ""
@@ -269,7 +275,7 @@ def render_result(
       if tier == "public":
         if net > 0:
           detail = (
-            f"+{net} pips win"
+            f"+{net} pips win{_win_wings(net)}"
             if settings.public_show_pips
             else "win"
           )
@@ -284,13 +290,15 @@ def render_result(
         return "➖ closed — breakeven"
       icon = "✅" if net >= 0 else "🛑"
       sign = "+" if net >= 0 else ""
-      return f"{icon} {seq}closed — net {sign}{net} pips"
+      suffix = _win_wings(net) if net > 0 else ""
+      return f"{icon} {seq}closed — net {sign}{net} pips{suffix}"
     if tier == "public" and not settings.public_show_pips:
       return "🎯 partial booked"
     booked = int(round(row["frac"] * 100))
     remaining = int(round(row["remaining"] * 100))
     return (
-      f"🎯 {seq}booked {booked}% · {result['pips']:+d} pips · "
+      f"🎯 {seq}booked {booked}% · {result['pips']:+d} pips"
+      f"{_win_wings(result['pips']) if result['pips'] > 0 else ''} · "
       f"remaining {remaining}%"
     )
   if action == "reopen":
