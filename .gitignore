@@ -221,7 +221,8 @@ __marimo__/
 # Secrets & credentials
 .env
 *.pem
-# SQLite database + backups
+# Local database data + legacy SQLite files/backups
 data/
+pgdata/
 *.db
 *.bak

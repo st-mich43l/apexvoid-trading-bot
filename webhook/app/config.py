@@ -14,7 +14,13 @@ class Settings(BaseSettings):
       "TELEGRAM_CHAT_ID",
     )
   )
-  db_path: str = "/data/signals.db"
+  # PostgreSQL connection URL (libpq/asyncpg DSN). In production this is
+  # injected via the compose environment; the localhost default is for local
+  # development against a throwaway Postgres container.
+  database_url: str = Field(
+    default="postgresql://apexvoid:apexvoid@localhost:5432/signals",
+    validation_alias=AliasChoices("DATABASE_URL", "POSTGRES_DSN"),
+  )
   log_level: str = "INFO"
   telegram_owner_id: Optional[int] = None  # your Telegram user ID — only this user can DM the bot
   signal_public_channel_id: Optional[int] = Field(
