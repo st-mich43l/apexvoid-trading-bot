@@ -1,5 +1,4 @@
 import os
-import sqlite3
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -30,7 +29,6 @@ def dual_channels(monkeypatch):
 
 
 async def _signal(tmp_path, monkeypatch, visibility="both"):
-  monkeypatch.setattr(dedup.settings, "db_path", str(tmp_path / "signals.db"))
   await dedup.init_db()
   record = await dedup.store_manual_signal(
     1,
@@ -260,10 +258,10 @@ async def test_manual_tp_is_notify_only_and_tier_aware(monkeypatch):
 
   assert result["ok"]
   assert trade_ops.render_result(result, "XAU", "vip") == (
-    "🎯 #7 TP2 (+56 pips) 💸"
+    "🎯 #7 TP2 +56 pips 💸"
   )
   assert trade_ops.render_result(result, "XAU", "public") == (
-    "🎯 TP2 (+56 pips) 💸"
+    "🎯 TP2 +56 pips 💸"
   )
 
   monkeypatch.setattr(trade_ops.settings, "public_show_pips", False)
@@ -303,15 +301,13 @@ async def test_existing_single_post_is_backfilled(
   tmp_path,
   monkeypatch,
   dual_channels,
+  sql,
 ):
   signal = await _signal(tmp_path, monkeypatch)
-  db = sqlite3.connect(dedup.settings.db_path)
-  db.execute(
-    "UPDATE manual_signals SET channel_message_id = 777 WHERE id = ?",
-    (signal["id"],),
+  await sql.exec(
+    "UPDATE manual_signals SET channel_message_id = 777 WHERE id = $1",
+    signal["id"],
   )
-  db.commit()
-  db.close()
 
   await dedup.init_db()
 

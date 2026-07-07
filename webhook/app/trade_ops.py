@@ -251,7 +251,7 @@ def render_result(
       return f"🎯 TP{result['tp_number']} hit"
     return (
       f"🎯 {seq}TP{result['tp_number']} "
-      f"(+{result['pips']} pips){_win_wings(result['pips'])}"
+      f"+{result['pips']} pips{_win_wings(result['pips'])}"
     )
   if action == "sl":
     suffix = " (BE)" if result["is_be"] else ""

@@ -54,7 +54,7 @@ def _render_level_alert(
   if tier == "public":
     if kind == "TP":
       return (
-        f"🎯 {key} (+{pips} pips) {wing_icons(pips)}"
+        f"🎯 {key} +{pips} pips {wing_icons(pips)}"
         if settings.public_show_pips
         else "🎯 TP hit"
       )

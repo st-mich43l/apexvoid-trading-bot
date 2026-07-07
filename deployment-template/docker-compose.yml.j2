@@ -1,17 +1,41 @@
 {# Rendered on the VPS by ansible (deploy_image role). Do not edit on the host. #}
-{# Vars: image_tag, registry_namespace, apexvoid_trading_bot_env (from vault) #}
+{# Vars: image_tag, registry_namespace, apexvoid_trading_bot_env (from vault). #}
+{# The vaulted env dict must define DATABASE_URL, POSTGRES_USER,             #}
+{# POSTGRES_PASSWORD and POSTGRES_DB. DATABASE_URL host must be "postgres".  #}
 name: apexvoid-trading-bot
 
 services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: apexvoid-trading-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: {{ apexvoid_trading_bot_env.POSTGRES_USER | to_json }}
+      POSTGRES_PASSWORD: {{ apexvoid_trading_bot_env.POSTGRES_PASSWORD | to_json }}
+      POSTGRES_DB: {{ apexvoid_trading_bot_env.POSTGRES_DB | to_json }}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U {{ apexvoid_trading_bot_env.POSTGRES_USER }} -d {{ apexvoid_trading_bot_env.POSTGRES_DB }}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   bot:
     image: "{{ registry_namespace }}/apexvoid-trading-bot:{{ image_tag }}"
     container_name: apexvoid-trading-bot
     restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
     # No .env — all environment declared here (values from the vaulted dict).
     environment:
 {% for key, value in apexvoid_trading_bot_env.items() %}
       {{ key }}: {{ value | to_json }}
 {% endfor %}
-    # SQLite + calendar cache persist across deploys.
+    # Calendar cache (ff_*.json) still persists here; signals live in Postgres.
     volumes:
       - ./data:/data
+
+volumes:
+  pgdata:

@@ -99,7 +99,7 @@ async def test_manual_tp_command_is_notify_only(monkeypatch):
     "tp_number": 2,
     "pips": 56,
   })
-  post = AsyncMock(return_value="🎯 #1 TP2 (+56 pips) 💸")
+  post = AsyncMock(return_value="🎯 #1 TP2 +56 pips 💸")
   monkeypatch.setattr(telegram, "do_tp", execute)
   monkeypatch.setattr(telegram, "post_result", post)
   msg = _dm("/trade_tp XAU #1 2 +56")
@@ -113,7 +113,7 @@ async def test_manual_tp_command_is_notify_only(monkeypatch):
     "pips": 56,
   })
   post.assert_awaited_once_with(execute.return_value, "XAU")
-  msg.answer.assert_awaited_once_with("🎯 #1 TP2 (+56 pips) 💸")
+  msg.answer.assert_awaited_once_with("🎯 #1 TP2 +56 pips 💸")
 
 
 @pytest.mark.asyncio
@@ -186,7 +186,6 @@ def test_symbol_channel_and_pip_maps(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_per_symbol_sequence_and_resolver(tmp_path, monkeypatch):
-  monkeypatch.setattr(dedup.settings, "db_path", str(tmp_path / "symbols.db"))
   await dedup.init_db()
   xau = await dedup.store_manual_signal(
     1, "BUY", 2000, 2001, 1990, [2010], symbol="XAU",

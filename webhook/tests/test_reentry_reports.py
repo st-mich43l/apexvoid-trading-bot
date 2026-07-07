@@ -38,7 +38,6 @@ async def test_reopen_creates_independent_root_linked_rounds(
   tmp_path,
   monkeypatch,
 ):
-  monkeypatch.setattr(dedup.settings, "db_path", str(tmp_path / "reopen.db"))
   await dedup.init_db()
   source_rec = await _new_signal(1)
   await dedup.close_leg(source_rec["id"], 70)
@@ -119,7 +118,6 @@ def test_short_entry_endpoint_expands_near_anchor(zone, expected):
 
 @pytest.mark.asyncio
 async def test_tag_command_updates_metadata(tmp_path, monkeypatch):
-  monkeypatch.setattr(dedup.settings, "db_path", str(tmp_path / "tag.db"))
   monkeypatch.setattr(telegram.settings, "telegram_owner_id", 42)
   await dedup.init_db()
   rec = await _new_signal(1, setup_type=None, confluence=None)
@@ -143,7 +141,6 @@ async def test_tag_command_updates_metadata(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_linked_accounting_stats_and_cluster_review(tmp_path, monkeypatch):
-  monkeypatch.setattr(dedup.settings, "db_path", str(tmp_path / "stats.db"))
   await dedup.init_db()
   source = await _new_signal(1)
   await dedup.set_note(source["id"], "Retest held at the key level")
