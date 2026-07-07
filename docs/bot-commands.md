@@ -70,6 +70,23 @@ If the computed price ends up on the **wrong side of entry**, the bot shifts it 
 
 You can also pass full prices directly: `tp 3835/3830/3820`.  Any number of TP levels is accepted.
 
+### Entry Options
+
+Append these suffixes to a manual signal:
+
+```text
+gold sell 4100-4105 / sl 4110 / tp 95/90/80 / scalp
+gold sell 4100-4105 / sl 4110 / tp 95/90/80 / scalp nhanh
+gold sell 4100-4105 / sl 4110 / tp 95/90/80 / vip
+gold sell 4100-4105 / sl 4110 / tp 95/90/80 / setup ob-retest ***
+```
+
+| Option | Effect |
+|---|---|
+| `/ scalp`, `/ scalp nhanh`, `/ quick scalp` | Marks the trade internally as `scalp` for review/stats. It does not add a channel tag. |
+| `/ vip` | Publishes the signal and later lifecycle updates to VIP only. |
+| `/ setup <name> [*|**|***]` | Sets the internal setup label and optional confidence grade. If used with `/ scalp`, explicit `/ setup` wins. |
+
 ### Channel Output
 
 The bot posts a message like:

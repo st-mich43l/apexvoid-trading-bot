@@ -343,3 +343,6 @@ def test_entry_vip_flag_is_standalone_and_defaults_both():
   )
   assert parsed["visibility"] == "vip"
   assert parsed["setup_type"] == "ob-retest"
+  scalp = telegram._parse_manual(base + " / scalp / vip")
+  assert scalp["visibility"] == "vip"
+  assert scalp["setup_type"] == "scalp"
