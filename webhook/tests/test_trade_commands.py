@@ -99,7 +99,7 @@ async def test_manual_tp_command_is_notify_only(monkeypatch):
     "tp_number": 2,
     "pips": 56,
   })
-  post = AsyncMock(return_value="🎯 #1 TP2 (+56 pips)")
+  post = AsyncMock(return_value="🎯 #1 TP2 (+56 pips) 💸")
   monkeypatch.setattr(telegram, "do_tp", execute)
   monkeypatch.setattr(telegram, "post_result", post)
   msg = _dm("/trade_tp XAU #1 2 +56")
@@ -113,7 +113,7 @@ async def test_manual_tp_command_is_notify_only(monkeypatch):
     "pips": 56,
   })
   post.assert_awaited_once_with(execute.return_value, "XAU")
-  msg.answer.assert_awaited_once_with("🎯 #1 TP2 (+56 pips)")
+  msg.answer.assert_awaited_once_with("🎯 #1 TP2 (+56 pips) 💸")
 
 
 @pytest.mark.asyncio

@@ -65,10 +65,10 @@ async def test_watcher_alert_is_notify_only_and_deduplicated(monkeypatch):
     "🎯 <b>TP HIT</b> | #2\n"
     "💰 Level: <b>TP1</b>\n"
     "📈 Price: <b>2010</b>\n"
-    "✅ Profit: <b>+90 pips</b>\n\n"
+    "✅ Profit: <b>+90 pips</b> 💸\n\n"
     "<i>Reply to confirm:</i> <code>close #2 +90</code>"
   )
-  assert render("public") == "🎯 TP1 (+90 pips)"
+  assert render("public") == "🎯 TP1 (+90 pips) 💸"
 
 
 def test_public_watcher_alert_hides_pips_when_disabled(monkeypatch):

@@ -30,6 +30,7 @@ from app.dedup import (
 )
 from app.reports import build_stats, format_review, format_stats
 from app.broadcast import broadcast_entry, render_entry
+from app.pips_format import wing_icons
 from app.symbols import (
   SYMBOLS,
   channel_for_symbol,
@@ -103,6 +104,10 @@ _SETUP_SUFFIX_RE = re.compile(
   r'(?i)\s*/\s*setup\s+([a-z0-9][a-z0-9_-]*)'
   r'(?:\s+(\*{1,3}|[1-3]))?\s*$'
 )
+_SCALP_SUFFIX_RE = re.compile(
+  r'(?i)\s*/\s*(?:scalp|scalp[-_\s]*nhanh|quick[-_\s]*scalp)'
+  r'(?=\s*(?:/|$))'
+)
 
 def _expand_entry_endpoint(value: float, anchor: float) -> float:
   """Expand a short zone endpoint to the closest price around the anchor."""
@@ -134,6 +139,7 @@ def _parse_manual(text: str) -> Optional[dict]:
     "",
     raw,
   )
+  raw, scalp_count = _SCALP_SUFFIX_RE.subn("", raw)
   setup_type = None
   confluence = None
   setup_match = _SETUP_SUFFIX_RE.search(raw)
@@ -143,6 +149,8 @@ def _parse_manual(text: str) -> Optional[dict]:
     if grade:
       confluence = len(grade) if grade.startswith("*") else int(grade)
     raw = raw[:setup_match.start()].rstrip()
+  elif scalp_count:
+    setup_type = "scalp"
   raw = re.sub(
     r'\s*/\s*(?=(?:sl|tp)\b)',
     "\n",
@@ -909,8 +917,7 @@ async def _handle_pips(msg: Message, text: str, has_photo: bool) -> None:
     return
   sign, pips = m.group(1), int(m.group(2))
   if sign == "+":
-    icon_count = 1 if pips <= 100 else 2 if pips < 300 else 3
-    new_text = f"✅ Booked +{pips} pips profit! {'💸' * icon_count}"
+    new_text = f"✅ Booked +{pips} pips profit! {wing_icons(pips)}"
   else:
     new_text = f"🛑 Stopped out -{pips} pips. Managed & moving on 💪"
   try:

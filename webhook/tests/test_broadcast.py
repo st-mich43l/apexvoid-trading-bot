@@ -12,6 +12,7 @@ os.environ.setdefault(
 os.environ.setdefault("TELEGRAM_CHAT_ID", "-100123456789")
 
 from app import broadcast, dedup, symbols, telegram, trade_ops
+from app.pips_format import wing_icons
 
 
 VIP_ID = -100123456789
@@ -145,10 +146,10 @@ def test_public_close_pips_toggle_never_reveals_id(monkeypatch):
 
   monkeypatch.setattr(trade_ops.settings, "public_show_pips", True)
   assert trade_ops.render_result(result, "XAU", "public") == (
-    "✅ closed — +70 pips win"
+    "✅ closed — +70 pips win 💸"
   )
   assert trade_ops.render_result(result, "XAU", "vip") == (
-    "✅ #7 closed — net +70 pips"
+    "✅ #7 closed — net +70 pips 💸"
   )
 
   monkeypatch.setattr(trade_ops.settings, "public_show_pips", False)
@@ -157,7 +158,7 @@ def test_public_close_pips_toggle_never_reveals_id(monkeypatch):
   assert "#7" not in public
   assert "70" not in public
   assert trade_ops.render_result(result, "XAU", "vip") == (
-    "✅ #7 closed — net +70 pips"
+    "✅ #7 closed — net +70 pips 💸"
   )
 
 
@@ -176,8 +177,15 @@ def test_partial_close_uses_clear_pips_without_at_sign():
 
   text = trade_ops.render_result(result, "XAU", "public")
 
-  assert text == "🎯 booked 50% · +100 pips · remaining 50%"
+  assert text == "🎯 booked 50% · +100 pips 💸 · remaining 50%"
   assert "@" not in text
+
+
+def test_dollar_wing_thresholds():
+  assert wing_icons(100) == "💸"
+  assert wing_icons(101) == "💸💸"
+  assert wing_icons(299) == "💸💸"
+  assert wing_icons(300) == "💸💸💸"
 
 
 def test_uncclose_rendering_restores_running_status_without_public_id():
@@ -252,10 +260,10 @@ async def test_manual_tp_is_notify_only_and_tier_aware(monkeypatch):
 
   assert result["ok"]
   assert trade_ops.render_result(result, "XAU", "vip") == (
-    "🎯 #7 TP2 (+56 pips)"
+    "🎯 #7 TP2 (+56 pips) 💸"
   )
   assert trade_ops.render_result(result, "XAU", "public") == (
-    "🎯 TP2 (+56 pips)"
+    "🎯 TP2 (+56 pips) 💸"
   )
 
   monkeypatch.setattr(trade_ops.settings, "public_show_pips", False)
@@ -343,3 +351,6 @@ def test_entry_vip_flag_is_standalone_and_defaults_both():
   )
   assert parsed["visibility"] == "vip"
   assert parsed["setup_type"] == "ob-retest"
+  scalp = telegram._parse_manual(base + " / scalp / vip")
+  assert scalp["visibility"] == "vip"
+  assert scalp["setup_type"] == "scalp"

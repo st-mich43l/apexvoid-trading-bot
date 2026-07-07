@@ -77,6 +77,29 @@ def test_entry_setup_segment_parses_like_tag():
   assert signal["confluence"] == 3
 
 
+def test_entry_scalp_option_sets_internal_setup():
+  signal = telegram._parse_manual(
+    "gold sell 4100-4105 / sl 4110 / tp 95/90/80 / scalp"
+  )
+
+  assert signal["setup_type"] == "scalp"
+  assert signal["confluence"] is None
+  assert signal["visibility"] == "both"
+
+
+def test_entry_scalp_nhanh_option_and_setup_override():
+  base = "gold buy 4100-4105 / sl 4090 / tp 10/20"
+
+  assert telegram._parse_manual(
+    base + " / scalp nhanh / vip"
+  )["setup_type"] == "scalp"
+  parsed = telegram._parse_manual(
+    base + " / scalp / setup breakout-retest **"
+  )
+  assert parsed["setup_type"] == "breakout-retest"
+  assert parsed["confluence"] == 2
+
+
 @pytest.mark.parametrize(
   ("zone", "expected"),
   [
