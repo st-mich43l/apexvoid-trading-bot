@@ -482,6 +482,9 @@ def _partial_kb(
   )]]
   if steps:
     keyboard.append(steps)
+  keyboard.append([InlineKeyboardButton(
+    text="✖ Cancel", callback_data=f"cx:{sid}:{tp}:{pips}"
+  )])
   return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
 
@@ -517,6 +520,19 @@ async def handle_close_menu(cb: CallbackQuery) -> None:
     reply_markup=_partial_kb(sid, int(tp_s), int(pips_s), remaining)
   )
   await cb.answer()
+
+
+@dp.callback_query(F.data.startswith("cx:"))
+async def handle_close_cancel(cb: CallbackQuery) -> None:
+  if not _is_owner_cb(cb):
+    await cb.answer("⛔ Chỉ owner dùng được", show_alert=True)
+    return
+  _, sid_s, tp_s, pips_s = cb.data.split(":")
+  # Back out of the submenu: restore the single Close button, close nothing.
+  await cb.message.edit_reply_markup(
+    reply_markup=build_tp_close_kb(int(sid_s), int(tp_s), int(pips_s))
+  )
+  await cb.answer("Đã huỷ")
 
 
 @dp.callback_query(F.data.startswith("c1:"))
