@@ -133,12 +133,22 @@ async def _evaluate(sig: dict, bar: dict, progress: dict) -> bool:
 
 
 async def _watcher_tick(session: aiohttp.ClientSession) -> None:
-  sigs = [
+  filled = [
     sig for sig in await get_open_signals("XAU")
     if sig["fill_state"] == "filled"
   ]
-  if not sigs or not _market_open():
+  if not filled or not _market_open():
     return
+  # Load progress once and drop signals already stopped out: they have nothing
+  # left to alert, so keeping them would poll Tiingo forever for no reason
+  # (e.g. an SL-hit signal that was never manually closed).
+  active = []
+  for sig in filled:
+    progress = await redis_state.get_progress(sig["id"])
+    if not progress["sl"]:
+      active.append((sig, progress))
+  if not active:
+    return  # no actionable signal -> skip the Tiingo request entirely
   bars = await get_xau_bars(session)
   if not bars:
     return
@@ -150,8 +160,7 @@ async def _watcher_tick(session: aiohttp.ClientSession) -> None:
     # Cold start: anchor the cursor without replaying the day's history.
     await redis_state.set_cursor("XAU", new_bars[-1]["date"])
     return
-  for sig in sigs:
-    progress = await redis_state.get_progress(sig["id"])
+  for sig, progress in active:
     for bar in new_bars:
       if await _evaluate(sig, bar, progress):
         break
