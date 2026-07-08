@@ -149,6 +149,22 @@ async def test_manual_tp_mark_suppresses_watcher(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_stopped_out_signal_skips_tiingo_fetch(monkeypatch):
+  # A filled signal that already hit SL is done — it must not keep polling
+  # Tiingo (which would silently drain the free-tier request quota).
+  await redis_state.set_sl_flag(3)
+  bars = AsyncMock()
+  monkeypatch.setattr(
+    watcher, "get_open_signals", AsyncMock(return_value=[_buy_signal()])
+  )
+  monkeypatch.setattr(watcher, "get_xau_bars", bars)
+
+  await watcher._watcher_tick(object())
+
+  bars.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_tp_alert_carries_owner_button_on_vip_only(monkeypatch):
   await redis_state.set_cursor("XAU", "2026-07-08T09:59:00.000Z")
   bar = _bar("2026-07-08T10:00:00.000Z", 2005, 2010, 2004, 2003)
