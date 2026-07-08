@@ -33,7 +33,12 @@ async def main() -> None:
   # start_polling installs its own SIGINT/SIGTERM handlers and closes the
   # bot session on shutdown.
   try:
-    await dp.start_polling(bot, allowed_updates=["channel_post", "message"])
+    # callback_query is required for the inline Close buttons on TP alerts;
+    # without it Telegram never delivers button presses.
+    await dp.start_polling(
+      bot,
+      allowed_updates=["channel_post", "message", "callback_query"],
+    )
   finally:
     await redis_state.close_client()
     await close_pool()
