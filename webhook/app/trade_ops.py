@@ -151,12 +151,19 @@ async def do_reopen(ctx: dict) -> dict:
     entry, entry_end = sorted(override)
   if entry_end is None:
     entry_end = entry
+  # Inherit the ORIGINAL stop, not a moved one (e.g. after TP1 → SL to BE),
+  # otherwise the reopened round starts with its stop inside the entry zone.
+  original_sl = (
+    source["original_sl"]
+    if source.get("original_sl") is not None
+    else source["sl"]
+  )
   rec = await store_manual_signal(
     ts=int(time.time()),
     action=source["action"],
     entry=entry,
     entry_end=entry_end,
-    sl=source["sl"],
+    sl=original_sl,
     tps=source["tps"],
     parent_id=signal_root(source),
     setup_type=source.get("setup_type"),

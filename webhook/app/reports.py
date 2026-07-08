@@ -50,7 +50,12 @@ def _round_lines(signal: dict, index: int) -> list[str]:
   if entry_end is None:
     entry_end = signal["entry"]
   midpoint = (signal["entry"] + entry_end) / 2
-  risk_price = abs(midpoint - signal["sl"])
+  # Risk is measured against the stop as originally placed; a stop moved to BE
+  # or trailed must not shrink (or zero out) the denominator for realized R.
+  original_sl = signal.get("original_sl")
+  if original_sl is None:
+    original_sl = signal["sl"]
+  risk_price = abs(midpoint - original_sl)
   risk_pips = round(risk_price / pip_for(signal.get("symbol", "XAU")))
   tps = signal.get("tps") or []
   planned = abs(tps[-1] - midpoint) / risk_price if tps and risk_price else None
