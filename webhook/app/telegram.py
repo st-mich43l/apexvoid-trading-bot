@@ -15,6 +15,9 @@ from aiogram.types import (
   BotCommand,
   BotCommandScopeChat,
   BotCommandScopeDefault,
+  CallbackQuery,
+  InlineKeyboardButton,
+  InlineKeyboardMarkup,
   Message,
 )
 
@@ -444,6 +447,112 @@ async def _book_leg(
   if not result.get("ok"):
     return None
   return result["row"], render_result(result, symbol)
+
+
+# ── Owner-only inline "Close" buttons on watcher TP-hit alerts ───────────────
+# The watcher attaches build_tp_close_kb() to the VIP TP alert. Pressing it
+# expands to Full/partial-% options; a choice books via do_close (same path as
+# the /trade_close command). Only the configured owner may act.
+
+_PARTIAL_STEPS = (25, 50, 75)
+
+
+def build_tp_close_kb(sid: int, tp: int, pips: int) -> InlineKeyboardMarkup:
+  """Single Close button for a fresh (or partially-booked) VIP TP alert."""
+  return InlineKeyboardMarkup(inline_keyboard=[[
+    InlineKeyboardButton(
+      text="🔒 Close", callback_data=f"c0:{sid}:{tp}:{pips}"
+    ),
+  ]])
+
+
+def _partial_kb(
+  sid: int, tp: int, pips: int, remaining: float
+) -> InlineKeyboardMarkup:
+  """Full + partial %, hiding fractions that exceed what remains open."""
+  rem_pct = round(remaining * 100)
+  steps = [
+    InlineKeyboardButton(
+      text=f"{p}%", callback_data=f"c1:{sid}:{tp}:{pips}:{p}"
+    )
+    for p in _PARTIAL_STEPS if p < rem_pct
+  ]
+  keyboard = [[InlineKeyboardButton(
+    text="✅ Full", callback_data=f"c1:{sid}:{tp}:{pips}:100"
+  )]]
+  if steps:
+    keyboard.append(steps)
+  return InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+
+def _is_owner_cb(cb: CallbackQuery) -> bool:
+  # Fail-closed: no owner configured -> deny (mirrors _is_owner for messages).
+  if not settings.telegram_owner_id:
+    return False
+  return cb.from_user is not None and cb.from_user.id == settings.telegram_owner_id
+
+
+async def _remaining_fraction(sid: int) -> float | None:
+  """Open fraction still un-booked, or None if the signal is not open."""
+  signal = await get_manual_signal(sid)
+  if signal is None or signal.get("status") != "open":
+    return None
+  used = sum(float(leg["frac"]) for leg in (signal.get("legs") or []))
+  return max(0.0, 1.0 - used)
+
+
+@dp.callback_query(F.data.startswith("c0:"))
+async def handle_close_menu(cb: CallbackQuery) -> None:
+  if not _is_owner_cb(cb):
+    await cb.answer("⛔ Chỉ owner dùng được", show_alert=True)
+    return
+  _, sid_s, tp_s, pips_s = cb.data.split(":")
+  sid = int(sid_s)
+  remaining = await _remaining_fraction(sid)
+  if remaining is None or remaining <= 0:
+    await cb.answer("⚠️ Lệnh đã đóng", show_alert=True)
+    await cb.message.edit_reply_markup(reply_markup=None)
+    return
+  await cb.message.edit_reply_markup(
+    reply_markup=_partial_kb(sid, int(tp_s), int(pips_s), remaining)
+  )
+  await cb.answer()
+
+
+@dp.callback_query(F.data.startswith("c1:"))
+async def handle_close_book(cb: CallbackQuery) -> None:
+  if not _is_owner_cb(cb):
+    await cb.answer("⛔ Chỉ owner dùng được", show_alert=True)
+    return
+  _, sid_s, tp_s, pips_s, frac_s = cb.data.split(":")
+  sid, tp, pips, frac_pct = int(sid_s), int(tp_s), int(pips_s), int(frac_s)
+  frac = None if frac_pct >= 100 else frac_pct / 100
+  symbol = symbol_for_channel(cb.message.chat.id) or "XAU"
+  result = await do_close({
+    "sid": sid, "symbol": symbol, "pips": pips, "frac": frac,
+  })
+  if not result.get("ok"):
+    await cb.answer("⚠️ Lệnh đã đóng hoặc không hợp lệ", show_alert=True)
+    await cb.message.edit_reply_markup(reply_markup=None)
+    return
+  row = result["row"]
+  base = cb.message.html_text or cb.message.text or ""
+  if row.get("closed"):
+    net = row["net"]
+    sign = "+" if net >= 0 else "-"
+    await cb.message.edit_text(
+      f"{base}\n\n✅ <b>Closed</b> · net <b>{sign}{abs(net)} pips</b>",
+      reply_markup=None,
+    )
+    await cb.answer("Đã đóng lệnh")
+  else:
+    rem_pct = round(row["remaining"] * 100)
+    await cb.message.edit_text(
+      f"{base}\n\n📊 Booked <b>{frac_pct}%</b> @ +{pips} pips · "
+      f"remaining <b>{rem_pct}%</b>",
+      reply_markup=build_tp_close_kb(sid, tp, pips),
+    )
+    await cb.answer(f"Booked {frac_pct}%")
 
 
 async def _reopen_signal(
@@ -1156,6 +1265,7 @@ async def _send_with_retry(
   text: str,
   reply_to: int | None = None,
   chat_id: int | str | None = None,
+  reply_markup: InlineKeyboardMarkup | None = None,
 ) -> Message:
   """Send a Telegram message with exponential-backoff retry on network errors."""
   for attempt in range(1, _MAX_SEND_ATTEMPTS + 1):
@@ -1164,6 +1274,7 @@ async def _send_with_retry(
         chat_id=chat_id or settings.telegram_channel_id,
         text=text,
         reply_to_message_id=reply_to,
+        reply_markup=reply_markup,
       )
     except TelegramRetryAfter as e:
       log.warning("Telegram rate-limited; waiting %ds (attempt %d/%d)", e.retry_after, attempt, _MAX_SEND_ATTEMPTS)

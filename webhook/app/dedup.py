@@ -126,6 +126,7 @@ async def init_db() -> None:
         entry              DOUBLE PRECISION NOT NULL,
         entry_end          DOUBLE PRECISION,
         sl                 DOUBLE PRECISION NOT NULL,
+        original_sl        DOUBLE PRECISION,
         tps                TEXT             NOT NULL,
         order_type         TEXT             NOT NULL,
         channel_message_id BIGINT,
@@ -145,6 +146,16 @@ async def init_db() -> None:
         visibility         TEXT             NOT NULL DEFAULT 'both'
       )
       """
+    )
+    # Migration: original_sl records the stop as first placed and is never
+    # updated (update_sl only moves `sl`). Older rows predate the column, so
+    # add it idempotently and backfill from the current stop.
+    await db.execute(
+      "ALTER TABLE manual_signals "
+      "ADD COLUMN IF NOT EXISTS original_sl DOUBLE PRECISION"
+    )
+    await db.execute(
+      "UPDATE manual_signals SET original_sl = sl WHERE original_sl IS NULL"
     )
     await db.execute(
       "CREATE INDEX IF NOT EXISTS idx_manual_signals_status "
@@ -440,10 +451,10 @@ async def store_manual_signal(
       new_id = await db.fetchval(
         """
         INSERT INTO manual_signals
-          (ts, action, entry, entry_end, sl, tps, order_type,
+          (ts, action, entry, entry_end, sl, original_sl, tps, order_type,
            channel_message_id, daily_seq, trade_date, parent_id,
            setup_type, confluence, symbol, visibility)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+        VALUES ($1, $2, $3, $4, $5, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
         RETURNING id
         """,
         ts, action, entry, entry_end, sl, json.dumps(tps), "zone",
