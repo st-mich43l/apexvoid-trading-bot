@@ -3,10 +3,11 @@ import logging
 
 from app.config import settings
 from app.telegram import bot, dp, setup_commands
-from app.dedup import init_db
+from app.dedup import init_db, close_pool
 from app.watcher import watcher_loop
 from app.calendar import calendar_sync_loop
 from app.weekly_report import weekly_report_loop
+from app import redis_state
 
 logging.basicConfig(
   level=settings.log_level,
@@ -31,7 +32,11 @@ async def main() -> None:
   # Long-polling is outbound-only — no inbound webhook server is required.
   # start_polling installs its own SIGINT/SIGTERM handlers and closes the
   # bot session on shutdown.
-  await dp.start_polling(bot, allowed_updates=["channel_post", "message"])
+  try:
+    await dp.start_polling(bot, allowed_updates=["channel_post", "message"])
+  finally:
+    await redis_state.close_client()
+    await close_pool()
 
 
 if __name__ == "__main__":

@@ -21,12 +21,27 @@ services:
       timeout: 5s
       retries: 10
 
+  redis:
+    image: redis:7-alpine
+    container_name: apexvoid-trading-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   bot:
     image: "{{ registry_namespace }}/apexvoid-trading-bot:{{ image_tag }}"
     container_name: apexvoid-trading-bot
     restart: unless-stopped
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     # No .env — all environment declared here (values from the vaulted dict).
     environment:
@@ -39,3 +54,4 @@ services:
 
 volumes:
   pgdata:
+  redisdata:

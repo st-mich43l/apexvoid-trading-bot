@@ -116,7 +116,7 @@ async def do_sl(ctx: dict) -> dict:
   if row is None:
     return {"action": "sl", "ok": False, "error": "not_open"}
   from app.watcher import clear_sl_alert
-  clear_sl_alert(ctx["sid"])
+  await clear_sl_alert(ctx["sid"])
   return {
     "action": "sl",
     "ok": True,
@@ -215,7 +215,7 @@ async def do_tp(ctx: dict) -> dict:
   if tp_number < 1 or tp_number > len(signal.get("tps") or []):
     return {"action": "tp", "ok": False, "error": "invalid_tp"}
   from app.watcher import mark_tp_alert
-  mark_tp_alert(signal["id"], tp_number)
+  await mark_tp_alert(signal["id"], tp_number)
   return {
     "action": "tp",
     "ok": True,
@@ -236,7 +236,7 @@ def render_result(
     return "⚠️ Signal not found or action is no longer valid."
   if action == "active":
     seq = f"#{_display_seq(result['row'])} " if tier == "vip" else ""
-    return f"🟢 {seq}active — entry filled"
+    return f"🟢 {seq}active — order filled"
   if action == "cancel":
     seq = f"#{_display_seq(result['row'])} " if tier == "vip" else ""
     return f"❌ {seq}cancelled"
@@ -358,8 +358,17 @@ async def post_result(result: dict, symbol: str) -> str:
       lambda tier: text if tier == "vip" else None,
     )
     return text
+  markup_fn = None
+  if result["action"] == "tp":
+    # Same owner-only Close button the watcher attaches to auto TP alerts.
+    from app.telegram import build_tp_close_kb
+    sid_, tp_, pips_ = result["sid"], result["tp_number"], result["pips"]
+    markup_fn = (
+      lambda tier: build_tp_close_kb(sid_, tp_, pips_) if tier == "vip" else None
+    )
   await fanout_update(
     sig,
     lambda tier: render_result(result, symbol, tier),
+    markup_fn=markup_fn,
   )
   return text

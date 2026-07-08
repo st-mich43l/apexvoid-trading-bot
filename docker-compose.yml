@@ -18,6 +18,20 @@ services:
       retries: 10
     # No ports exposed — only the bot on the internal network reaches it.
 
+  redis:
+    image: redis:7-alpine
+    container_name: apexvoid-trading-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    # No ports exposed — holds watcher TP/SL progress + bar cursor only.
+
   bot:
     build: ./webhook
     image: apexvoid-trading-bot:latest
@@ -27,9 +41,12 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     volumes:
       - ./data:/data   # calendar cache (ff_*.json) still persists here
     # No ports exposed — the bot uses outbound Telegram long-polling only.
 
 volumes:
   pgdata:
+  redisdata:
