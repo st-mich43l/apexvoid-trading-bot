@@ -40,8 +40,11 @@ class Settings(BaseSettings):
   anthropic_api_key: Optional[str] = None  # for chart screenshot analysis via Claude vision
   seq_reset_tz: str = "Asia/Ho_Chi_Minh"
   auto_book_bare_pips: bool = False
-  twelvedata_api_key: Optional[str] = None
-  track_interval: int = 20
+  tiingo_api_key: Optional[str] = None
+  # Redis backs the watcher's TP/SL progress + bar cursor so state survives a
+  # restart. Default host matches the compose service name; override locally.
+  redis_url: str = "redis://redis:6379/0"
+  track_interval: int = 120
   session_asia_start: int = 22
   session_london_start: int = 7
   session_ny_start: int = 13

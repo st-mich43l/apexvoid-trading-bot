@@ -10,6 +10,7 @@ import asyncio
 import os
 
 import asyncpg
+import fakeredis
 import pytest
 
 os.environ.setdefault(
@@ -23,6 +24,7 @@ os.environ.setdefault(
 )
 
 from app import dedup  # noqa: E402  (import after env is seeded)
+from app import redis_state  # noqa: E402
 
 
 @pytest.fixture(scope="session")
@@ -31,6 +33,18 @@ def event_loop():
   loop = asyncio.new_event_loop()
   yield loop
   loop.close()
+
+
+@pytest.fixture(autouse=True)
+def _fake_redis(monkeypatch):
+  """Back the watcher's Redis state with an isolated in-memory fake per test."""
+  monkeypatch.setattr(
+    redis_state,
+    "_client",
+    fakeredis.FakeAsyncRedis(decode_responses=True),
+  )
+  yield
+  redis_state._client = None
 
 
 @pytest.fixture(autouse=True)

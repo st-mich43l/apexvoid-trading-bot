@@ -266,8 +266,8 @@ async def test_move_sl_to_breakeven_resets_alert(monkeypatch):
   update = AsyncMock(return_value=signal)
   monkeypatch.setattr(trade_ops, "update_sl", update)
 
-  from app import watcher
-  watcher._alerts[31] = {"SL"}
+  from app import redis_state
+  await redis_state.set_sl_flag(31)
   moved = await trade_ops.do_sl({
     "sid": 31,
     "symbol": "XAU",
@@ -278,4 +278,4 @@ async def test_move_sl_to_breakeven_resets_alert(monkeypatch):
   assert trade_ops.render_result(moved, "XAU") == (
     "🛡 #4 SL → 2,002 (BE)"
   )
-  assert "SL" not in watcher._alerts[31]
+  assert (await redis_state.get_progress(31))["sl"] is False

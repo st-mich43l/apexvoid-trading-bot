@@ -1,10 +1,10 @@
 # 📉 ApexVoid Trading Bot 🤖
 
-![Python](https://img.shields.io/badge/Python-3.12-3776AB?style=for-the-badge&logo=python&logoColor=white)
-![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)
-![SQLite](https://img.shields.io/badge/SQLite-003B57?style=for-the-badge&logo=sqlite&logoColor=white)
-![Telegram](https://img.shields.io/badge/Telegram-2CA5E0?style=for-the-badge&logo=telegram&logoColor=white)
-![Claude](https://img.shields.io/badge/Claude_Vision-D97757?style=for-the-badge&logo=anthropic&logoColor=white)
+![Python](https://img.shields.io/badge/Python-3.12-3776AB?style=flat-square&logo=python&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat-square&logo=docker&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?style=flat-square&logo=postgresql&logoColor=white)
+![Telegram](https://img.shields.io/badge/Telegram-2CA5E0?style=flat-square&logo=telegram&logoColor=white)
+![Claude](https://img.shields.io/badge/Claude_Vision-D97757?style=flat-square&logo=anthropic&logoColor=white)
 
 A self-hosted Telegram bot for posting and tracking XAUUSD (Gold) trading signals by hand, with optional **AI chart analysis**. It runs as a single long-polling process — no inbound webhook server, no public endpoint, no TLS required. 🚀
 

@@ -58,12 +58,14 @@ async def _send_message(
   text: str,
   channel_id: int,
   reply_to: int | None = None,
+  reply_markup=None,
 ):
   from app.telegram import _send_with_retry
   return await _send_with_retry(
     text,
     reply_to=reply_to,
     chat_id=channel_id,
+    reply_markup=reply_markup,
   )
 
 
@@ -125,8 +127,13 @@ async def fanout_update(
   sig: dict,
   render_fn: Callable[[str], str | None],
   sticker: str | None = None,
+  markup_fn: Callable[[str], object] | None = None,
 ) -> list:
-  """Reply only to persisted entry posts; never recompute visibility."""
+  """Reply only to persisted entry posts; never recompute visibility.
+
+  ``markup_fn(tier)`` may return an inline keyboard to attach per tier (e.g. an
+  owner-only action button on the VIP post but nothing on the public one).
+  """
   sent_messages = []
   for post in await get_signal_posts(sig["id"]):
     text = render_fn(post["tier"])
@@ -136,6 +143,7 @@ async def fanout_update(
       text,
       int(post["channel_id"]),
       int(post["message_id"]),
+      reply_markup=markup_fn(post["tier"]) if markup_fn else None,
     )
     sent_messages.append(sent)
     if sticker:
