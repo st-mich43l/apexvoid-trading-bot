@@ -507,13 +507,13 @@ async def _remaining_fraction(sid: int) -> float | None:
 @dp.callback_query(F.data.startswith("c0:"))
 async def handle_close_menu(cb: CallbackQuery) -> None:
   if not _is_owner_cb(cb):
-    await cb.answer("⛔ Chỉ owner dùng được", show_alert=True)
+    await cb.answer("⛔ Owner only", show_alert=True)
     return
   _, sid_s, tp_s, pips_s = cb.data.split(":")
   sid = int(sid_s)
   remaining = await _remaining_fraction(sid)
   if remaining is None or remaining <= 0:
-    await cb.answer("⚠️ Lệnh đã đóng", show_alert=True)
+    await cb.answer("⚠️ Already closed", show_alert=True)
     await cb.message.edit_reply_markup(reply_markup=None)
     return
   await cb.message.edit_reply_markup(
@@ -525,20 +525,20 @@ async def handle_close_menu(cb: CallbackQuery) -> None:
 @dp.callback_query(F.data.startswith("cx:"))
 async def handle_close_cancel(cb: CallbackQuery) -> None:
   if not _is_owner_cb(cb):
-    await cb.answer("⛔ Chỉ owner dùng được", show_alert=True)
+    await cb.answer("⛔ Owner only", show_alert=True)
     return
   _, sid_s, tp_s, pips_s = cb.data.split(":")
   # Back out of the submenu: restore the single Close button, close nothing.
   await cb.message.edit_reply_markup(
     reply_markup=build_tp_close_kb(int(sid_s), int(tp_s), int(pips_s))
   )
-  await cb.answer("Đã huỷ")
+  await cb.answer("Cancelled")
 
 
 @dp.callback_query(F.data.startswith("c1:"))
 async def handle_close_book(cb: CallbackQuery) -> None:
   if not _is_owner_cb(cb):
-    await cb.answer("⛔ Chỉ owner dùng được", show_alert=True)
+    await cb.answer("⛔ Owner only", show_alert=True)
     return
   _, sid_s, tp_s, pips_s, frac_s = cb.data.split(":")
   sid, tp, pips, frac_pct = int(sid_s), int(tp_s), int(pips_s), int(frac_s)
@@ -548,7 +548,7 @@ async def handle_close_book(cb: CallbackQuery) -> None:
     "sid": sid, "symbol": symbol, "pips": pips, "frac": frac,
   })
   if not result.get("ok"):
-    await cb.answer("⚠️ Lệnh đã đóng hoặc không hợp lệ", show_alert=True)
+    await cb.answer("⚠️ Already closed or invalid", show_alert=True)
     await cb.message.edit_reply_markup(reply_markup=None)
     return
   row = result["row"]
@@ -560,7 +560,7 @@ async def handle_close_book(cb: CallbackQuery) -> None:
       f"{base}\n\n✅ <b>Closed</b> · net <b>{sign}{abs(net)} pips</b>",
       reply_markup=None,
     )
-    await cb.answer("Đã đóng lệnh")
+    await cb.answer("Closed")
   else:
     rem_pct = round(row["remaining"] * 100)
     await cb.message.edit_text(
