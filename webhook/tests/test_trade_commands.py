@@ -49,7 +49,39 @@ async def test_scoped_command_menu(monkeypatch):
     "trade_sl", "trade_cancel",
     "trade_reopen", "trade_tag", "trade_note", "trade_review",
     "trade_stats", "trade_pips", "help",
-  }
+  } | {"trade_open"}
+
+
+@pytest.mark.asyncio
+async def test_trade_open_lists_open_signals(monkeypatch):
+  monkeypatch.setattr(telegram.settings, "telegram_owner_id", 42)
+  monkeypatch.setattr(
+    telegram,
+    "get_open_signals",
+    AsyncMock(return_value=[{
+      "id": 9, "daily_seq": 6, "symbol": "XAU", "action": "BUY",
+      "entry": 4100.0, "entry_end": 4105.0, "sl": 4088.0,
+      "fill_state": "filled", "legs": [{"frac": 0.5, "pips": 90}],
+    }]),
+  )
+  msg = _dm("/trade_open")
+
+  await telegram.handle_trade_open(msg)
+
+  out = msg.answer.await_args.args[0]
+  assert "#6 XAU BUY 4100–4105" in out
+  assert "SL 4088" in out and "filled" in out and "50% open" in out
+
+
+@pytest.mark.asyncio
+async def test_trade_open_empty(monkeypatch):
+  monkeypatch.setattr(telegram.settings, "telegram_owner_id", 42)
+  monkeypatch.setattr(telegram, "get_open_signals", AsyncMock(return_value=[]))
+  msg = _dm("/trade_open")
+
+  await telegram.handle_trade_open(msg)
+
+  assert "No open signals" in msg.answer.await_args.args[0]
 
 
 @pytest.mark.asyncio

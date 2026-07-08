@@ -63,6 +63,7 @@ bot = Bot(
 dp = Dispatcher()
 
 OWNER_COMMANDS = [
+  BotCommand(command="trade_open", description="[SYMBOL] — list open signals"),
   BotCommand(command="trade_active", description="[SYMBOL] [#id]"),
   BotCommand(command="trade_close", description="[SYMBOL] #id ±pips [%] | be"),
   BotCommand(command="trade_uncclose", description="[SYMBOL] #id"),
@@ -303,6 +304,7 @@ _HELP_TEXT = """<b>Trade controls</b>
 <code>note #id &lt;text&gt;</code>
 
 <b>Owner DM commands</b>
+<code>/trade_open [SYMBOL]</code>
 <code>/trade_active [SYMBOL] [#id]</code>
 <code>/trade_close [SYMBOL] #id ±pips [%] | be</code>
 <code>/trade_uncclose [SYMBOL] #id</code>
@@ -609,6 +611,35 @@ async def _move_stop(
   if not result.get("ok"):
     return None
   return result["row"], render_result(result, symbol)
+
+
+def _num(value: float | int) -> str:
+  return f"{value:g}"
+
+
+@dp.message(Command("trade_open"), F.chat.type == "private")
+async def handle_trade_open(msg: Message) -> None:
+  """List currently-open signals so stale ones (which keep the price watcher
+  polling) can be spotted and closed."""
+  if not _is_owner(msg):
+    return
+  symbol, _ = _take_symbol(_command_args(msg), default=None)
+  opens = await get_open_signals(symbol)
+  if not opens:
+    await msg.answer("📭 No open signals.")
+    return
+  lines = ["📂 <b>Open signals</b>"]
+  for sig in opens:
+    seq = sig.get("daily_seq") or sig["id"]
+    used = sum(float(leg["frac"]) for leg in (sig.get("legs") or []))
+    remaining = round(max(0.0, 1.0 - used) * 100)
+    entry_end = sig["entry_end"] if sig["entry_end"] is not None else sig["entry"]
+    lines.append(
+      f"#{seq} {escape(sig.get('symbol', 'XAU'))} {escape(sig['action'])} "
+      f"{_num(sig['entry'])}–{_num(entry_end)} · SL {_num(sig['sl'])} · "
+      f"{escape(sig['fill_state'])} · {remaining}% open"
+    )
+  await msg.answer("\n".join(lines))
 
 
 @dp.message(Command("trade_active"), F.chat.type == "private")
