@@ -1,4 +1,5 @@
 import os
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock
 
 import pytest
@@ -99,6 +100,39 @@ async def test_tp_hit_notify_and_deduplicated(monkeypatch):
     "✅ Profit: <b>+90 pips</b> 💸\n\n"
   )
   assert render("public") == "🎯 TP1 +90 pips 💸"
+  assert (await redis_state.get_progress(3))["tp"] == 1
+
+
+@pytest.mark.asyncio
+async def test_ignores_bars_before_signal_fill(monkeypatch):
+  # Idle overnight leaves the global cursor stale, so new_bars spans the whole
+  # day. A signal filled at 10:00 must not react to the 09:00 bar that already
+  # swept both TP1 (2010) and SL (1990) — otherwise it trips on open.
+  await redis_state.set_cursor("XAU", "2026-07-08T08:59:00.000Z")
+  fill_ts = datetime(2026, 7, 8, 10, 0, 0, tzinfo=timezone.utc).timestamp()
+  pre_fill = _bar("2026-07-08T09:00:00.000Z", 2005, 2015, 1985, 2003)
+  post_fill = _bar("2026-07-08T10:01:00.000Z", 2003, 2004, 2002, 2003)
+  fanout = _feed(monkeypatch, _buy_signal(filled_at=fill_ts), [pre_fill, post_fill])
+
+  await watcher._watcher_tick(object())
+
+  fanout.assert_not_awaited()
+  assert await redis_state.get_cursor("XAU") == "2026-07-08T10:01:00.000Z"
+
+
+@pytest.mark.asyncio
+async def test_alerts_on_bar_at_or_after_fill(monkeypatch):
+  # Boundary: a post-fill bar still alerts even when a pre-fill bar is present,
+  # proving the fill filter does not over-suppress live price action.
+  await redis_state.set_cursor("XAU", "2026-07-08T08:59:00.000Z")
+  fill_ts = datetime(2026, 7, 8, 10, 0, 0, tzinfo=timezone.utc).timestamp()
+  pre_fill = _bar("2026-07-08T09:00:00.000Z", 2005, 2006, 2004, 2005)
+  post_fill = _bar("2026-07-08T10:00:00.000Z", 2005, 2010, 2004, 2003)
+  fanout = _feed(monkeypatch, _buy_signal(filled_at=fill_ts), [pre_fill, post_fill])
+
+  await watcher._watcher_tick(object())
+
+  fanout.assert_awaited_once()
   assert (await redis_state.get_progress(3))["tp"] == 1
 
 
