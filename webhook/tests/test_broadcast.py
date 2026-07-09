@@ -326,6 +326,7 @@ async def test_reopen_inherits_vip_visibility(
   dual_channels,
 ):
   source = await _signal(tmp_path, monkeypatch, "vip")
+  await dedup.close_leg(source["id"], 50)  # re-entry only applies once closed
 
   result = await trade_ops.do_reopen({
     "sid": source["id"],

@@ -162,6 +162,12 @@ async def do_reopen(ctx: dict) -> dict:
   source = await get_manual_signal(ctx["sid"])
   if source is None or source.get("symbol", "XAU") != ctx["symbol"]:
     return {"action": "reopen", "ok": False, "error": "not_found"}
+  # Re-entry is for a round that already ended: reopening a still-open signal
+  # would run two live trades in the same zone (both tracked by the watcher).
+  if source.get("status") == "open":
+    return {
+      "action": "reopen", "ok": False, "error": "still_open", "source": source,
+    }
   cluster = await get_signal_cluster(ctx["sid"])
   entry = source["entry"]
   entry_end = source.get("entry_end")
@@ -262,6 +268,11 @@ def render_result(
     if result.get("error") == "has_rounds":
       return (
         "⚠️ Has re-entry rounds — cancel it, or delete the later rounds first."
+      )
+    if result.get("error") == "still_open":
+      seq = _display_seq(result["source"])
+      return (
+        f"⚠️ #{seq} still open — close or cancel it before reopening"
       )
     return "⚠️ Signal not found or action is no longer valid."
   if action == "active":

@@ -27,6 +27,7 @@ async def test_reopen_inherits_original_stop_not_moved_sl():
   moved = await dedup.get_manual_signal(src["id"])
   assert moved["sl"] == 4102.5 and moved["original_sl"] == 4088.0
 
+  await dedup.close_leg(src["id"], 0)  # round must end before it can reopen
   result = await trade_ops.do_reopen({
     "sid": src["id"], "symbol": "XAU", "entry_override": None,
   })
@@ -34,6 +35,21 @@ async def test_reopen_inherits_original_stop_not_moved_sl():
   # Round 2 must start from the ORIGINAL stop, not the break-even one.
   assert round2["sl"] == 4088.0
   assert round2["original_sl"] == 4088.0
+
+
+@pytest.mark.asyncio
+async def test_reopen_rejects_open_signal():
+  await dedup.init_db()
+  src = await dedup.store_manual_signal(
+    1, "BUY", 4100.0, 4105.0, 4088.0, [4130.0], symbol="XAU",
+  )  # left OPEN on purpose
+  result = await trade_ops.do_reopen({
+    "sid": src["id"], "symbol": "XAU", "entry_override": None,
+  })
+  assert result["ok"] is False
+  assert result["error"] == "still_open"
+  # No re-entry round was created; the cluster is still just the source.
+  assert len(await dedup.get_signal_cluster(src["id"])) == 1
 
 
 def test_reports_risk_uses_original_stop():
@@ -89,6 +105,7 @@ async def test_reopen_creates_independent_root_linked_rounds(
   assert first_row["setup_type"] == "ob-retest"
   assert "round 2 from #1" in first[1]
 
+  await dedup.close_leg(first_row["id"], 40)  # close round 2 before reopening it
   send.return_value = SimpleNamespace(message_id=802)
   second = await telegram._reopen_signal(first_row["id"], 4101.0, 4104.0)
   second_row = await dedup.get_manual_signal(second[0]["id"])
