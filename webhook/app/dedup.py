@@ -547,7 +547,7 @@ async def get_open_signals(symbol: str | None = None) -> list[dict]:
   """Return all signals currently in ``status = 'open'``, oldest first."""
   query = (
     "SELECT id, ts, action, entry, entry_end, sl, tps, "
-    "channel_message_id, daily_seq, trade_date, fill_state, legs, "
+    "channel_message_id, daily_seq, trade_date, fill_state, filled_at, legs, "
     "parent_id, setup_type, confluence, note, status, result_pips, "
     "symbol, visibility "
     "FROM manual_signals WHERE status = 'open'"

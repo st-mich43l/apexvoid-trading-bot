@@ -40,6 +40,21 @@ def _market_open() -> bool:
 def _price_text(price: float) -> str:
   return f"{price:.2f}".rstrip("0").rstrip(".")
 
+def _bar_epoch(bar_date: str) -> float:
+  """Parse a Tiingo bar's ISO date (UTC) into epoch seconds.
+
+  Bars are 1-minute and timestamped at the start of the minute. Returns +inf
+  on an unparseable date so a bad row is never mistaken for pre-fill history.
+  """
+  try:
+    text = bar_date.replace("Z", "+00:00")
+    dt = datetime.fromisoformat(text)
+    if dt.tzinfo is None:
+      dt = dt.replace(tzinfo=timezone.utc)
+    return dt.timestamp()
+  except ValueError:
+    return float("inf")
+
 def _render_level_alert(
   tier: str,
   kind: str,
@@ -161,7 +176,13 @@ async def _watcher_tick(session: aiohttp.ClientSession) -> None:
     await redis_state.set_cursor("XAU", new_bars[-1]["date"])
     return
   for sig, progress in active:
+    # Never react to price action from before the trade went live: a stale
+    # global cursor (idle between signals) would otherwise replay the whole
+    # day's bars against a freshly-filled signal and trip every TP at once.
+    fill_ts = sig.get("filled_at") or sig.get("ts") or 0
     for bar in new_bars:
+      if _bar_epoch(bar["date"]) < fill_ts:
+        continue
       if await _evaluate(sig, bar, progress):
         break
   await redis_state.set_cursor("XAU", new_bars[-1]["date"])
