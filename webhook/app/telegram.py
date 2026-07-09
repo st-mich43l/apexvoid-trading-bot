@@ -1258,6 +1258,14 @@ async def handle_channel_reopen(msg: Message) -> None:
     ),
   })
   if not result.get("ok"):
+    # Surface real states (e.g. still_open) to the operator instead of a silent
+    # no-op, then still clean up the command like the success path.
+    await _send_with_retry(
+      render_result(result, symbol, "vip"),
+      reply_to=reply_to,
+      chat_id=msg.chat.id,
+    )
+    await _delete_command(msg)
     return
   await post_result(result, symbol)
   await _delete_command(msg)
