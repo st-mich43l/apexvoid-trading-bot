@@ -7,6 +7,7 @@ from app.config import settings
 from app.dedup import (
   cancel_manual_signal,
   close_leg,
+  delete_manual_signal,
   get_manual_signal,
   get_open_signals,
   get_signal_cluster,
@@ -19,7 +20,7 @@ from app.dedup import (
   update_setup,
   update_sl,
 )
-from app.broadcast import broadcast_entry, fanout_update
+from app.broadcast import broadcast_entry, delete_posts, fanout_update
 from app.pips_format import wing_icons
 from app.symbols import SYMBOLS, channel_for_symbol
 
@@ -139,6 +140,24 @@ async def do_cancel(ctx: dict) -> dict:
   }
 
 
+async def do_delete(ctx: dict) -> dict:
+  signal = await get_manual_signal(ctx["sid"])
+  if signal is None or signal.get("symbol", "XAU") != ctx["symbol"]:
+    return {"action": "delete", "ok": False, "error": "not_found"}
+  result = await delete_manual_signal(ctx["sid"])
+  if result is None:
+    return {"action": "delete", "ok": False, "error": "not_found"}
+  if result.get("error") == "has_rounds":
+    return {"action": "delete", "ok": False, "error": "has_rounds"}
+  await delete_posts(result.get("posts") or [])
+  return {
+    "action": "delete",
+    "ok": True,
+    "row": result,
+    "seq": _display_seq(result),
+  }
+
+
 async def do_reopen(ctx: dict) -> dict:
   source = await get_manual_signal(ctx["sid"])
   if source is None or source.get("symbol", "XAU") != ctx["symbol"]:
@@ -240,6 +259,10 @@ def render_result(
 ) -> str:
   action = result["action"]
   if not result.get("ok"):
+    if result.get("error") == "has_rounds":
+      return (
+        "⚠️ Has re-entry rounds — cancel it, or delete the later rounds first."
+      )
     return "⚠️ Signal not found or action is no longer valid."
   if action == "active":
     seq = f"#{_display_seq(result['row'])} " if tier == "vip" else ""
@@ -247,6 +270,9 @@ def render_result(
   if action == "cancel":
     seq = f"#{_display_seq(result['row'])} " if tier == "vip" else ""
     return f"❌ {seq}cancelled"
+  if action == "delete":
+    seq = f"#{result['seq']} " if tier == "vip" else ""
+    return f"🗑 {seq}deleted"
   if action == "uncclose":
     seq = f"#{_display_seq(result['row'])} " if tier == "vip" else ""
     remaining = int(round(float(result["remaining"]) * 100))
@@ -341,7 +367,7 @@ async def post_result(result: dict, symbol: str) -> str:
   text = render_result(result, symbol, "vip")
   if not result.get("ok"):
     return text
-  if result["action"] in {"note", "tag"}:
+  if result["action"] in {"note", "tag", "delete"}:
     return text
   if result["action"] == "reopen":
     sig = await get_manual_signal(result["record"]["id"])

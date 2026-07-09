@@ -875,3 +875,33 @@ async def cancel_manual_signal(row_id: int) -> dict | None:
         int(time.time()), row_id,
       )
     return dict(row)
+
+
+async def delete_manual_signal(row_id: int) -> dict | None:
+  """Hard-delete a mistyped signal, unlike ``cancel`` which keeps the record.
+
+  Removes the row plus its delivered posts and accounting rows, and returns
+  the deleted signal with a ``posts`` list so the caller can also delete the
+  channel messages. Returns ``None`` if the signal is gone, or a dict with
+  ``{"error": "has_rounds"}`` when re-entry rounds point at it — deleting then
+  would orphan later rounds, so cancel (or delete the rounds first) instead.
+  """
+  async with _connect() as db:
+    async with db.transaction():
+      row = await db.fetchrow(
+        "SELECT * FROM manual_signals WHERE id = $1 FOR UPDATE", row_id,
+      )
+      if row is None:
+        return None
+      child = await db.fetchrow(
+        "SELECT 1 FROM manual_signals WHERE parent_id = $1 LIMIT 1", row_id,
+      )
+      if child is not None:
+        return {"error": "has_rounds"}
+      posts = await db.fetch(
+        "SELECT * FROM signal_posts WHERE signal_id = $1", row_id,
+      )
+      await db.execute("DELETE FROM pips_log WHERE signal_id = $1", row_id)
+      await db.execute("DELETE FROM signal_posts WHERE signal_id = $1", row_id)
+      await db.execute("DELETE FROM manual_signals WHERE id = $1", row_id)
+    return {**_decode_signal(row), "posts": [dict(post) for post in posts]}

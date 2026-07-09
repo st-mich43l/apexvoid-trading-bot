@@ -44,6 +44,7 @@ from app.trade_ops import (
   do_active,
   do_cancel,
   do_close,
+  do_delete,
   do_note,
   do_reopen,
   do_sl,
@@ -70,6 +71,7 @@ OWNER_COMMANDS = [
   BotCommand(command="trade_tp", description="[SYMBOL] #id TP +pips"),
   BotCommand(command="trade_sl", description="[SYMBOL] #id be|price"),
   BotCommand(command="trade_cancel", description="[SYMBOL] #id"),
+  BotCommand(command="trade_delete", description="[SYMBOL] #id — remove a typo"),
   BotCommand(command="trade_reopen", description="[SYMBOL] #id [lo-hi]"),
   BotCommand(command="trade_tag", description="[SYMBOL] #id setup [***]"),
   BotCommand(command="trade_note", description="[SYMBOL] #id text"),
@@ -311,6 +313,7 @@ _HELP_TEXT = """<b>Trade controls</b>
 <code>/trade_tp [SYMBOL] #id TP +pips</code>
 <code>/trade_sl [SYMBOL] #id be|price</code>
 <code>/trade_cancel [SYMBOL] #id</code>
+<code>/trade_delete [SYMBOL] #id</code>
 <code>/trade_reopen [SYMBOL] #id [lo-hi]</code>
 <code>/trade_tag [SYMBOL] #id &lt;setup&gt; [***]</code>
 <code>/trade_note [SYMBOL] #id &lt;text&gt;</code>
@@ -752,6 +755,30 @@ async def handle_trade_cancel(msg: Message) -> None:
     await msg.answer("⚠️ Signal not found.")
     return
   result = await do_cancel({
+    "sid": sid,
+    "symbol": symbol,
+    "chat_id": channel_for_symbol(symbol),
+    "reply_to": None,
+  })
+  await msg.answer(await post_result(result, symbol))
+
+
+@dp.message(Command("trade_delete"), F.chat.type == "private")
+async def handle_trade_delete(msg: Message) -> None:
+  if not _is_owner(msg):
+    return
+  symbol, raw = _take_symbol(_command_args(msg))
+  seq = _seq_token(raw)
+  if seq is None:
+    await msg.answer(
+      "Usage: <code>/trade_delete [SYMBOL] #N</code>"
+    )
+    return
+  sid = await _resolve_any_sid(seq, None, symbol)
+  if sid is None:
+    await msg.answer("⚠️ Signal not found.")
+    return
+  result = await do_delete({
     "sid": sid,
     "symbol": symbol,
     "chat_id": channel_for_symbol(symbol),
