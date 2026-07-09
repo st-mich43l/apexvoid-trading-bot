@@ -46,7 +46,7 @@ async def test_scoped_command_menu(monkeypatch):
   assert second.kwargs["scope"].chat_id == 42
   assert {command.command for command in telegram.OWNER_COMMANDS} == {
     "trade_active", "trade_close", "trade_uncclose", "trade_tp",
-    "trade_sl", "trade_cancel",
+    "trade_sl", "trade_cancel", "trade_delete",
     "trade_reopen", "trade_tag", "trade_note", "trade_review",
     "trade_stats", "trade_pips", "help",
   } | {"trade_open"}
@@ -180,6 +180,37 @@ async def test_uncclose_command_resolves_closed_signal(monkeypatch):
   msg.answer.assert_awaited_once_with(
     "♻️ #1 restored — trade still running"
   )
+
+
+@pytest.mark.asyncio
+async def test_delete_command_resolves_any_state(monkeypatch):
+  monkeypatch.setattr(telegram.settings, "telegram_owner_id", 42)
+  monkeypatch.setattr(
+    telegram,
+    "_resolve_any_sid",
+    AsyncMock(return_value=7),
+  )
+  execute = AsyncMock(return_value={
+    "action": "delete",
+    "ok": True,
+    "row": {"id": 7, "daily_seq": 2},
+    "seq": 2,
+  })
+  post = AsyncMock(return_value="🗑 #2 deleted")
+  monkeypatch.setattr(telegram, "do_delete", execute)
+  monkeypatch.setattr(telegram, "post_result", post)
+  msg = _dm("/trade_delete XAU #2")
+
+  await telegram.handle_trade_delete(msg)
+
+  execute.assert_awaited_once_with({
+    "sid": 7,
+    "symbol": "XAU",
+    "chat_id": telegram.channel_for_symbol("XAU"),
+    "reply_to": None,
+  })
+  post.assert_awaited_once_with(execute.return_value, "XAU")
+  msg.answer.assert_awaited_once_with("🗑 #2 deleted")
 
 
 @pytest.mark.asyncio
