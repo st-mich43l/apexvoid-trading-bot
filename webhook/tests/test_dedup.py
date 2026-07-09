@@ -146,3 +146,52 @@ async def test_undo_legacy_close_without_legs(sql):
   assert row["result_pips"] is None
   assert row["closed_at"] is None
   assert row["legs"] == []
+
+
+@pytest.mark.asyncio
+async def test_delete_manual_signal_purges_row_posts_and_pips(sql):
+  await dedup.init_db()
+  rec = await dedup.store_manual_signal(
+    1, "BUY", 2000.0, 2002.0, 1990.0, [2010.0],
+  )
+  await dedup.insert_signal_post(rec["id"], -100123456789, 555, "vip")
+  await dedup.store_pips("+", 30, signal_id=rec["id"])
+
+  deleted = await dedup.delete_manual_signal(rec["id"])
+
+  assert deleted["id"] == rec["id"]
+  assert deleted["posts"] == [
+    {
+      "signal_id": rec["id"],
+      "channel_id": -100123456789,
+      "message_id": 555,
+      "tier": "vip",
+    }
+  ]
+  assert await dedup.get_manual_signal(rec["id"]) is None
+  assert await dedup.get_signal_posts(rec["id"]) == []
+  assert await sql.val(
+    "SELECT COUNT(*) FROM pips_log WHERE signal_id = $1", rec["id"],
+  ) == 0
+
+
+@pytest.mark.asyncio
+async def test_delete_manual_signal_refuses_when_rounds_exist(sql):
+  await dedup.init_db()
+  root = await dedup.store_manual_signal(
+    1, "BUY", 2000.0, 2002.0, 1990.0, [2010.0],
+  )
+  await dedup.store_manual_signal(
+    2, "BUY", 2001.0, 2003.0, 1991.0, [2011.0], parent_id=root["id"],
+  )
+
+  result = await dedup.delete_manual_signal(root["id"])
+
+  assert result == {"error": "has_rounds"}
+  assert await dedup.get_manual_signal(root["id"]) is not None
+
+
+@pytest.mark.asyncio
+async def test_delete_manual_signal_missing_returns_none():
+  await dedup.init_db()
+  assert await dedup.delete_manual_signal(9999) is None
