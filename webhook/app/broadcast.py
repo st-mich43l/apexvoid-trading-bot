@@ -1,5 +1,6 @@
 """Signal delivery chokepoint for VIP/public channel fan-out."""
 
+import logging
 from html import escape
 from typing import Callable
 
@@ -8,6 +9,8 @@ from app.dedup import (
   insert_signal_post,
 )
 from app.symbols import SYMBOLS, channels_for
+
+log = logging.getLogger(__name__)
 
 
 def _price(value: float, symbol: str) -> str:
@@ -80,6 +83,25 @@ async def _send_sticker(
     sticker=sticker,
     reply_to_message_id=reply_to,
   )
+
+
+async def delete_posts(posts: list[dict]) -> None:
+  """Remove already-delivered channel messages for a hard-deleted signal.
+
+  Best-effort: a post may already be gone or older than Telegram's 48h delete
+  window, so per-message failures are swallowed rather than aborting the rest.
+  """
+  from app.telegram import bot
+  for post in posts:
+    try:
+      await bot.delete_message(
+        int(post["channel_id"]), int(post["message_id"]),
+      )
+    except Exception:
+      log.warning(
+        "could not delete post %s/%s",
+        post.get("channel_id"), post.get("message_id"),
+      )
 
 
 async def broadcast_entry(
