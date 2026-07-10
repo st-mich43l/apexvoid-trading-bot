@@ -33,6 +33,11 @@ def _get_client() -> redis.Redis:
   return _client
 
 
+def get_client() -> redis.Redis:
+  """Shared Redis client for transient bot state and bar-feed consumers."""
+  return _get_client()
+
+
 async def close_client() -> None:
   """Close the shared client. Used on shutdown and between tests."""
   global _client
