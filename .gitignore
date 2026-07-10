@@ -226,3 +226,14 @@ data/
 pgdata/
 *.db
 *.bak
+
+# .NET build/test artifacts
+**/bin/
+**/obj/
+**/TestResults/
+**/publish/
+**/artifacts/
+.vs/
+*.user
+*.suo
+*.nupkg

@@ -47,6 +47,22 @@ services:
       - ./data:/data   # calendar cache (ff_*.json) still persists here
     # No ports exposed — the bot uses outbound Telegram long-polling only.
 
+  ctrader-feed:
+    build: ./ctrader-feed
+    image: apexvoid-ctrader-feed:latest
+    container_name: apexvoid-ctrader-feed
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "/app/ctrader-feed", "--healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    # No ports exposed — outbound cTrader TLS + internal Redis only.
+
 volumes:
   pgdata:
   redisdata:
