@@ -34,6 +34,23 @@ def _buy_signal(**over) -> dict:
   return sig
 
 
+def _sell_signal(**over) -> dict:
+  sig = {
+    "id": 3,
+    "daily_seq": 2,
+    "channel_message_id": 77,
+    "fill_state": "filled",
+    "action": "SELL",
+    "symbol": "XAU",
+    "entry": 2000.0,
+    "entry_end": 2002.0,
+    "sl": 2010.0,
+    "tps": [1990.0],
+  }
+  sig.update(over)
+  return sig
+
+
 @pytest.fixture(autouse=True)
 def _market_always_open(monkeypatch):
   monkeypatch.setattr(watcher, "_market_open", lambda: True)
@@ -86,8 +103,8 @@ async def test_tp_hit_notify_and_deduplicated(monkeypatch):
   fanout = _feed(monkeypatch, _buy_signal(), [bar])
 
   await watcher._watcher_tick(object())
-  # A later bar still above TP must not re-alert (progress persisted).
-  later = _bar("2026-07-08T10:01:00.000Z", 2010, 2011, 2009, 2010)
+  # A later bar still touching TP but not extending profit must not re-alert.
+  later = _bar("2026-07-08T10:01:00.000Z", 2010, 2010, 2009, 2010)
   monkeypatch.setattr(watcher, "get_xau_bars", AsyncMock(return_value=[later]))
   await watcher._watcher_tick(object())
 
@@ -101,6 +118,62 @@ async def test_tp_hit_notify_and_deduplicated(monkeypatch):
   )
   assert render("public") == "🎯 TP1 +90 pips 💸"
   assert (await redis_state.get_progress(3))["tp"] == 1
+
+
+@pytest.mark.asyncio
+async def test_runner_alerts_after_final_tp_new_high(monkeypatch):
+  await redis_state.set_cursor("XAU", "2026-07-08T09:59:00.000Z")
+  tp_bar = _bar("2026-07-08T10:00:00.000Z", 2005, 2010, 2004, 2010)
+  fanout = _feed(monkeypatch, _buy_signal(), [tp_bar])
+
+  await watcher._watcher_tick(object())
+
+  runner = _bar("2026-07-08T10:01:00.000Z", 2010, 2015, 2009, 2014)
+  monkeypatch.setattr(watcher, "get_xau_bars", AsyncMock(return_value=[runner]))
+  await watcher._watcher_tick(object())
+
+  assert fanout.await_count == 2
+  _, render = fanout.await_args_list[1].args
+  assert render("vip") == (
+    "🚀 <b>TP RUNNER</b> | #2\n"
+    "📈 Price: <b>2015</b>\n"
+    "✅ Profit: <b>+140 pips</b> 💸💸\n\n"
+  )
+  assert render("public") == "🚀 runner +140 pips 💸💸"
+  markup_fn = fanout.await_args_list[1].kwargs["markup_fn"]
+  assert markup_fn("public") is None
+  assert markup_fn("vip").inline_keyboard[0][0].callback_data == "c0:3:1:140"
+  assert (await redis_state.get_progress(3))["runner_pips"] == 140
+
+  lower_high = _bar("2026-07-08T10:02:00.000Z", 2014, 2014, 2011, 2012)
+  monkeypatch.setattr(
+    watcher, "get_xau_bars", AsyncMock(return_value=[lower_high])
+  )
+  await watcher._watcher_tick(object())
+
+  assert fanout.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_runner_alerts_after_final_tp_new_low_for_sell(monkeypatch):
+  await redis_state.set_cursor("XAU", "2026-07-08T09:59:00.000Z")
+  tp_bar = _bar("2026-07-08T10:00:00.000Z", 1995, 2003, 1990, 1991)
+  fanout = _feed(monkeypatch, _sell_signal(), [tp_bar])
+
+  await watcher._watcher_tick(object())
+
+  runner = _bar("2026-07-08T10:01:00.000Z", 1991, 1992, 1985, 1986)
+  monkeypatch.setattr(watcher, "get_xau_bars", AsyncMock(return_value=[runner]))
+  await watcher._watcher_tick(object())
+
+  assert fanout.await_count == 2
+  _, render = fanout.await_args_list[1].args
+  assert render("vip") == (
+    "🚀 <b>TP RUNNER</b> | #2\n"
+    "📈 Price: <b>1985</b>\n"
+    "✅ Profit: <b>+160 pips</b> 💸💸\n\n"
+  )
+  assert render("public") == "🚀 runner +160 pips 💸💸"
 
 
 @pytest.mark.asyncio
@@ -217,7 +290,11 @@ def test_public_watcher_alert_hides_pips_when_disabled(monkeypatch):
 
   tp = watcher._render_level_alert("public", "TP", "TP1", 2, "2010", 90)
   sl = watcher._render_level_alert("public", "SL", "SL", 2, "1990", 110)
+  runner = watcher._render_level_alert(
+    "public", "RUNNER", "RUNNER", 2, "2020", 190
+  )
 
   assert tp == "🎯 TP hit"
   assert sl == "🛡 SL hit"
-  assert not any(char.isdigit() for char in tp + sl)
+  assert runner == "🚀 runner"
+  assert not any(char.isdigit() for char in tp + sl + runner)
