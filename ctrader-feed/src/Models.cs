@@ -1,0 +1,33 @@
+namespace ApexVoid.CTraderFeed;
+
+public sealed record RawTrendbar(
+  string Timeframe,
+  long Low,
+  ulong DeltaOpen,
+  ulong DeltaHigh,
+  ulong DeltaClose,
+  long Volume,
+  uint UtcTimestampInMinutes
+);
+
+public sealed record OhlcBar(
+  long Timestamp,
+  decimal Open,
+  decimal High,
+  decimal Low,
+  decimal Close,
+  long Volume
+)
+{
+  public long CloseTimestamp(string timeframe) =>
+    Timestamp + TimeframeCodec.ToSeconds(timeframe);
+}
+
+public sealed record SymbolInfo(
+  string RedisSymbol,
+  string CTraderSymbol,
+  long SymbolId,
+  int Digits
+);
+
+public sealed record RedisBarEntry(long Timestamp, string Json);

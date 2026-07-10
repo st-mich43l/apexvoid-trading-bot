@@ -89,6 +89,7 @@ Dive into the docs for full details on configuring and operating the bot:
 - 🚀 [Deployment Guide](docs/deployment.md) — From a fresh host to a running bot.
 - ⚙️ [Operations](docs/operations.md) — Monitoring, backups, log rotation, updates, troubleshooting.
 - 🔒 [Security](docs/security.md) — Threat model, secret management, hardening.
+- 📊 [Redis Bar Contract](docs/redis-contract.md) — Closed OHLC window keys shared by the cTrader feed and scanners.
 
 ---
 
@@ -124,10 +125,11 @@ Then, just DM your bot: `active` should reply with `📋 No open signals.` 🎉
 
 ```tree
 apexvoid-trading-bot/
-├── docker-compose.yml        🐳 single 'bot' service, no exposed ports
+├── docker-compose.yml        🐳 bot + postgres + redis + cTrader feed
 ├── .env.example              🔑 env template
 ├── README.md                 📖 this file
 ├── docs/                     📚 detailed documentation
+├── ctrader-feed/             📊 .NET cTrader Open API → Redis bar producer
 └── webhook/                  🤖 the bot application (dir name kept for history)
     ├── Dockerfile
     ├── requirements.txt

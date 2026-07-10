@@ -1,7 +1,8 @@
 {# Rendered on the VPS by ansible (deploy_image role). Do not edit on the host. #}
 {# Vars: image_tag, registry_namespace, apexvoid_trading_bot_env (from vault). #}
 {# The vaulted env dict must define DATABASE_URL, POSTGRES_USER,             #}
-{# POSTGRES_PASSWORD and POSTGRES_DB. DATABASE_URL host must be "postgres".  #}
+{# POSTGRES_PASSWORD, POSTGRES_DB, and CTRADER_* feed secrets. DATABASE_URL  #}
+{# host must be "postgres"; REDIS_URL host should be "redis".               #}
 name: apexvoid-trading-bot
 
 services:
@@ -51,6 +52,23 @@ services:
     # Calendar cache (ff_*.json) still persists here; signals live in Postgres.
     volumes:
       - ./data:/data
+
+  ctrader-feed:
+    image: "{{ registry_namespace }}/apexvoid-ctrader-feed:{{ image_tag }}"
+    container_name: apexvoid-ctrader-feed
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+{% for key, value in apexvoid_trading_bot_env.items() %}
+      {{ key }}: {{ value | to_json }}
+{% endfor %}
+    healthcheck:
+      test: ["CMD", "/app/ctrader-feed", "--healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
 volumes:
   pgdata:

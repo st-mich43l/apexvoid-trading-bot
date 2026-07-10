@@ -1,0 +1,97 @@
+# Redis Bar Contract
+
+Redis is the reconstructable market-data cache shared by `ctrader-feed`,
+the Python price-action scanner, and future dashboards. Postgres remains the
+durable trade/accounting store. Market bars do not belong in Postgres.
+
+## Series Key
+
+One sorted set per `(symbol, timeframe)`:
+
+```text
+bars:{symbol}:{tf}
+```
+
+Examples:
+
+```text
+bars:XAU:M5
+bars:XAU:M15
+bars:XAU:M30
+```
+
+## ZSET Member
+
+Score is the UTC bar-open epoch seconds. Member is compact JSON:
+
+```json
+{"t":4102444800,"o":4100.12,"h":4104.2,"l":4098.5,"c":4101.7,"v":1234}
+```
+
+Fields:
+
+| Field | Meaning |
+|---|---|
+| `t` | UTC bar-open epoch seconds |
+| `o` | open price |
+| `h` | high price |
+| `l` | low price |
+| `c` | close price |
+| `v` | tick volume |
+
+Only closed bars are written. Forming bars must never enter Redis.
+
+## Write Semantics
+
+For a closed bar:
+
+```text
+ZREMRANGEBYSCORE bars:XAU:M5 <ts> <ts>
+ZADD bars:XAU:M5 <ts> <bar_json>
+ZREMRANGEBYRANK bars:XAU:M5 0 -(N+1)
+PUBLISH bars:new "XAU:M5:<ts>"
+```
+
+Removing by score before `ZADD` guarantees exactly one member per timestamp,
+even when backfill overlaps reconnect delivery. `N` is `BARS_WINDOW_MAX`,
+default `1500`.
+
+## Read Semantics
+
+Consumers read the latest window:
+
+```text
+ZREVRANGE bars:XAU:M5 0 <k-1>
+```
+
+The returned members are newest-first. Consumers that need chronological
+analysis should reverse the window locally.
+
+## Pub/Sub Trigger
+
+Channel:
+
+```text
+bars:new
+```
+
+Payload:
+
+```text
+{symbol}:{tf}:{ts}
+```
+
+Example:
+
+```text
+XAU:M5:4102444800
+```
+
+The publish is a cadence signal only: "a closed bar arrived, pull the window".
+The ZSET is the material data source.
+
+## Persistence
+
+Redis is allowed to lose this data on restart. `ctrader-feed` backfills the
+window from cTrader on startup or reconnect. Deep historical backtesting storage
+is a separate future sink, not this Redis contract.
