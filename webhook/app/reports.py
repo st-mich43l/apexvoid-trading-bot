@@ -20,6 +20,15 @@ def _signed(value: float | int, suffix: str = "") -> str:
   return f"{value:+g}{suffix}"
 
 
+def _signed_p(value: float | int) -> str:
+  rounded = round(value)
+  if rounded > 0:
+    return f"+{rounded}p"
+  if rounded < 0:
+    return f"−{abs(rounded)}p"
+  return "0p"
+
+
 def _stars(value: int | None) -> str:
   return "⭐" * value if value else "-"
 
@@ -225,6 +234,85 @@ def _group_line(group: dict) -> str:
   )
 
 
+def _stats_title(period: str) -> str:
+  words = period.strip().split()
+  if not words:
+    return "STATS"
+  if words[0].upper() == "XAU":
+    words[0] = "XAU/USD"
+  return " ".join(words).upper()
+
+
+def _metric_line(
+  icon: str,
+  label: str,
+  value: str,
+  suffix: str = "",
+) -> str:
+  line = f"{icon} {label:<11} {value:>7}"
+  if suffix:
+    line = f"{line}  {suffix}"
+  return line
+
+
+def _setup_label(value: str | None) -> str:
+  words = (value or "untagged").replace("_", " ").replace("-", " ").split()
+  return " ".join(
+    word.upper() if word.lower() in {"ob", "fvg", "ny"} else word.title()
+    for word in words
+  )
+
+
+def _short_label(value: str, width: int = 19) -> str:
+  if len(value) <= width:
+    return value
+  if width <= 1:
+    return value[:width]
+  return value[:width - 1] + "…"
+
+
+def _stats_group_lines(groups: list[dict], *, setup: bool) -> list[str]:
+  if not groups:
+    return ["└─ —"]
+  lines = []
+  session_icons = {
+    "Asia": "🌏",
+    "London": "🌍",
+    "NY": "🌎",
+    "Legacy": "🕐",
+  }
+  for index, group in enumerate(groups):
+    branch = "└─" if index == len(groups) - 1 else "├─"
+    if setup:
+      label = _short_label(_setup_label(group["label"]))
+      lines.append(
+        f"{branch} {label:<19} {_signed_p(group['net']):>7} · "
+        f"{group['wins']}W/{group['losses']}L · {group['win_rate']:.0f}%"
+      )
+    else:
+      icon = session_icons.get(group["label"], "🕐")
+      lines.append(
+        f"{branch} {icon} {group['label']:<8} "
+        f"{_signed_p(group['net']):>7} · "
+        f"{group['wins']}W/{group['losses']}L · {group['win_rate']:.0f}%"
+      )
+  return lines
+
+
+def _cluster_lines(groups: list[dict]) -> list[str]:
+  if not groups:
+    return ["└─ —"]
+  lines = []
+  for index, group in enumerate(groups):
+    branch = "└─" if index == len(groups) - 1 else "├─"
+    lines.append(
+      f"{branch} {_short_label(group['label'], 20):<20} "
+      f"{_signed_p(group['net']):>7} · "
+      f"{group['rounds']}r · {group['wins']}W/{group['losses']}L"
+    )
+  return lines
+
+
 def build_stats(
   records: list[dict],
   signals: list[dict],
@@ -337,49 +425,68 @@ def build_stats(
 
 def format_stats(stats: dict, period: str) -> str:
   """Render the interactive stats view from canonical aggregated facts."""
+  if not stats["trades"]:
+    text = "\n".join([
+      f"📊 STATS — {_stats_title(period)}",
+      "━━━━━━━━━━━━━━━━━━━━━━",
+      "🧘 No closed trades",
+      "capital preserved · no stats to report",
+      "━━━━━━━━━━━━━━━━━━━━━━",
+      "🤖 Apex Void · stats",
+    ])
+    return f"<pre>{escape(text)}</pre>"
+
+  best = stats["best"]
+  worst = stats["worst"]
+  best_seq = best.get("daily_seq") or best.get("signal_id") or "?"
+  worst_seq = worst.get("daily_seq") or worst.get("signal_id") or "?"
+  net_icon = "🟢" if stats["net"] >= 0 else "🔴"
   lines = [
-    f"📊 <b>Stats — {escape(period.title())}</b>",
+    f"📊 STATS — {_stats_title(period)}",
+    "━━━━━━━━━━━━━━━━━━━━━━",
+    _metric_line("💰", "Net", _signed_p(stats["net"]), net_icon),
+    _metric_line(
+      "🎯",
+      "Winrate",
+      f"{stats['win_rate']:.0f}%",
+      f"({stats['wins']}W / {stats['losses']}L)",
+    ),
+    _metric_line("📦", "Trades", str(stats["trades"])),
+    _metric_line("🟢", "Avg win", _signed_p(stats["average_win"])),
+    _metric_line("🔴", "Avg loss", _signed_p(stats["average_loss"])),
+    _metric_line("⚖", "Expectancy", _signed_p(stats["expectancy"]), "/ trade"),
+    _metric_line(
+      "🏆",
+      "Best",
+      _signed_p(best["value"]),
+      f"· #{best_seq} {_setup_label(best.get('setup_type'))}",
+    ),
+    _metric_line(
+      "🩸",
+      "Worst",
+      _signed_p(worst["value"]),
+      f"· #{worst_seq} {_setup_label(worst.get('setup_type'))}",
+    ),
     "",
-    (
-      f"Trades: {stats['trades']} · {stats['wins']}W / "
-      f"{stats['losses']}L · {stats['win_rate']:.1f}%"
-    ),
-    f"Net: <b>{_signed(stats['net'], ' pips')}</b>",
-    (
-      f"Avg win: {_signed(stats['average_win'], 'p')} · "
-      f"avg loss: {_signed(stats['average_loss'], 'p')}"
-    ),
-    f"Expectancy: {_signed(stats['expectancy'], 'p')} per trade",
-    (
-      f"Best: {_signed(stats['best']['value'], 'p')} · "
-      f"worst: {_signed(stats['worst']['value'], 'p')}"
-      if stats["best"] else "Best: — · worst: —"
-    ),
+    "📐 By setup",
+    *_stats_group_lines(stats["by_setup"], setup=True),
     "",
-    "<b>By setup</b>",
+    "🕐 By session",
+    *_stats_group_lines(stats["by_session"], setup=False),
   ]
-  lines.extend(_group_line(group) for group in stats["by_setup"])
-  if not stats["by_setup"]:
-    lines.append("—")
 
-  lines.extend(["", "<b>By session</b>"])
-  lines.extend(_group_line(group) for group in stats["by_session"])
-  if not stats["by_session"]:
-    lines.append("—")
-
-  lines.extend(["", "<b>By re-entry cluster</b>"])
-  for group in stats["by_cluster"]:
-    lines.append(
-      f"{group['label']}: {group['rounds']} rounds, "
-      f"{group['wins']}W/{group['losses']}L, "
-      f"{_signed(group['net'], 'p')}"
-    )
-  if not stats["by_cluster"]:
-    lines.append("—")
+  if stats["by_cluster"]:
+    lines.extend([
+      "",
+      "🔁 By re-entry",
+      *_cluster_lines(stats["by_cluster"]),
+    ])
 
   lines.extend([
     "",
-    "<b>Equity</b>",
-    f"<code>{sparkline(stats['cumulative'])}</code>",
+    "📈 Equity",
+    f"{sparkline(stats['cumulative'])}  {_signed_p(stats['net'])}",
+    "━━━━━━━━━━━━━━━━━━━━━━",
+    "🤖 Apex Void · stats",
   ])
-  return "\n".join(lines)
+  return f"<pre>{escape(chr(10).join(lines))}</pre>"

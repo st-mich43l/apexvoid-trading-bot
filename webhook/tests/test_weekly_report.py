@@ -147,7 +147,10 @@ def test_weekly_uses_shared_stats_and_safe_format():
     end,
   )
 
-  assert "Net: <b>+40 pips</b>" in interactive
+  assert "📊 STATS — XAU/USD WEEK" in interactive
+  assert "💰 Net" in interactive
+  assert "+40p" in interactive
+  assert "🤖 Apex Void · stats" in interactive
   assert "📊 WEEKLY RECAP — XAU/USD" in recap
   assert "💰 Net" in recap
   assert "+40p" in recap
