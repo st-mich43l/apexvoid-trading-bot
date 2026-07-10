@@ -206,8 +206,12 @@ public sealed class CTraderOpenApiFeedClient(
 
   private void OnError(Exception exception)
   {
-    _responses.Writer.TryComplete(exception);
-    _liveTrendbars.Writer.TryComplete(exception);
+    var wrapped = new InvalidOperationException(
+      $"cTrader transport error: {exception.GetType().Name}: {exception.Message}",
+      exception
+    );
+    _responses.Writer.TryComplete(wrapped);
+    _liveTrendbars.Writer.TryComplete(wrapped);
   }
 
   private async Task<T> SendAndWaitAsync<T>(
@@ -222,21 +226,40 @@ public sealed class CTraderOpenApiFeedClient(
     timeout.CancelAfter(options.RequestTimeout);
 
     await client.SendMessage(request);
-    while (await _responses.Reader.WaitToReadAsync(timeout.Token))
+    try
     {
-      while (_responses.Reader.TryRead(out var message))
+      while (await _responses.Reader.WaitToReadAsync(timeout.Token))
       {
-        if (message is ProtoOAErrorRes error)
+        while (_responses.Reader.TryRead(out var message))
         {
-          throw new InvalidOperationException($"cTrader Open API error: {error.ErrorCode}");
-        }
-        if (message is T typed && predicate(typed))
-        {
-          return typed;
+          if (message is ProtoOAErrorRes error)
+          {
+            throw new InvalidOperationException(
+              $"cTrader Open API error while waiting for {typeof(T).Name} after {request.GetType().Name}: {FormatError(error)}"
+            );
+          }
+          if (message is ProtoErrorRes genericError)
+          {
+            throw new InvalidOperationException(
+              $"cTrader transport error while waiting for {typeof(T).Name} after {request.GetType().Name}: {FormatError(genericError)}"
+            );
+          }
+          if (message is T typed && predicate(typed))
+          {
+            return typed;
+          }
         }
       }
     }
-    throw new TimeoutException($"Timed out waiting for {typeof(T).Name}");
+    catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+    {
+      throw new TimeoutException(
+        $"Timed out after {options.RequestTimeout.TotalSeconds:N0}s waiting for {typeof(T).Name} after {request.GetType().Name}"
+      );
+    }
+    throw new TimeoutException(
+      $"Timed out after {options.RequestTimeout.TotalSeconds:N0}s waiting for {typeof(T).Name} after {request.GetType().Name}"
+    );
   }
 
   private static RawTrendbar ToRaw(ProtoOATrendbar bar) =>
@@ -252,4 +275,14 @@ public sealed class CTraderOpenApiFeedClient(
 
   private static string NormalizeSymbol(string symbol) =>
     symbol.Replace("/", "", StringComparison.Ordinal).ToUpperInvariant();
+
+  private static string FormatError(ProtoOAErrorRes error) =>
+    string.IsNullOrWhiteSpace(error.Description)
+      ? error.ErrorCode
+      : $"{error.ErrorCode}: {error.Description}";
+
+  private static string FormatError(ProtoErrorRes error) =>
+    string.IsNullOrWhiteSpace(error.Description)
+      ? error.ErrorCode
+      : $"{error.ErrorCode}: {error.Description}";
 }
