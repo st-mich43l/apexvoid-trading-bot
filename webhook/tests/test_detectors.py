@@ -21,29 +21,6 @@ def _series(df: pd.DataFrame, value: float) -> pd.Series:
   return pd.Series([value] * len(df), index=df.index)
 
 
-def _wae(
-  df: pd.DataFrame,
-  *,
-  up_last: float = 2,
-  up_prev: float = 1,
-  down_last: float = 0,
-  down_prev: float = 0,
-  explosion: float = 2,
-  dead_zone: float = 1,
-) -> pd.DataFrame:
-  up = [0.0] * len(df)
-  down = [0.0] * len(df)
-  if len(df) >= 2:
-    up[-2], up[-1] = up_prev, up_last
-    down[-2], down[-1] = down_prev, down_last
-  return pd.DataFrame({
-    "trend_up": up,
-    "trend_down": down,
-    "explosion": [explosion] * len(df),
-    "dead_zone": [dead_zone] * len(df),
-  }, index=df.index)
-
-
 def _indicators(
   df: pd.DataFrame,
   *,
@@ -51,15 +28,12 @@ def _indicators(
   ema_slow: float = 102,
   atr: float = 2,
   mfi: float = 60,
-  wae: pd.DataFrame | None = None,
 ) -> detectors.IndicatorSet:
   return detectors.IndicatorSet(
     ema_fast=_series(df, ema_fast),
     ema_slow=_series(df, ema_slow),
     atr=_series(df, atr),
     mfi=_series(df, mfi),
-    bbands=pd.DataFrame(index=df.index),
-    wae=wae if wae is not None else _wae(df),
   )
 
 
@@ -70,6 +44,7 @@ def _ctx(
   levels: list[Level] | None = None,
   equal_levels: list[Level] | None = None,
   indicator_set: detectors.IndicatorSet | None = None,
+  momentum: str = "neutral",
 ) -> detectors.DetectionContext:
   tf = "M5"
   structure = detectors.StructureSet(
@@ -79,6 +54,7 @@ def _ctx(
     equal_levels=equal_levels or [],
     fvg_zones=[],
     order_blocks=[],
+    momentum=momentum,
   )
   return detectors.DetectionContext(
     symbol="XAU",
@@ -132,12 +108,13 @@ def _momentum_ride_ctx() -> detectors.DetectionContext:
   rows = [(110, 112, 90, 110, 100)] * 24
   rows.append((122, 130, 121, 124, 220))
   df = _df(rows)
-  ind = _indicators(
+  ind = _indicators(df, mfi=65)
+  return _ctx(
     df,
-    mfi=65,
-    wae=_wae(df, up_last=10, up_prev=4, explosion=5, dead_zone=2),
+    levels=[Level(122, "reaction")],
+    indicator_set=ind,
+    momentum="bull",
   )
-  return _ctx(df, levels=[Level(122, "reaction")], indicator_set=ind)
 
 
 def _fade_scalp_ctx() -> detectors.DetectionContext:
@@ -148,12 +125,10 @@ def _fade_scalp_ctx() -> detectors.DetectionContext:
     (103, 104, 100.5, 102, 100),
     (100.5, 102, 99.5, 101, 100),
   ])
-  ind = _indicators(df, wae=_wae(df, up_last=1, up_prev=2))
   return _ctx(
     df,
     levels=[Level(100, "reaction")],
     equal_levels=[Level(100, "equal_low", touches=2)],
-    indicator_set=ind,
   )
 
 

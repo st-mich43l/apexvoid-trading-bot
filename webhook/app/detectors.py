@@ -30,8 +30,6 @@ class IndicatorSet:
   ema_slow: pd.Series
   atr: pd.Series
   mfi: pd.Series
-  bbands: pd.DataFrame
-  wae: pd.DataFrame
 
 
 @dataclass(frozen=True)
@@ -52,11 +50,8 @@ class StructureSet:
 @dataclass(frozen=True)
 class DetectorSettings:
   confluence_floor: int = 2
-  wae_fast: int = 20
-  wae_slow: int = 40
-  wae_sensitivity: float = 150.0
-  wae_bb_length: int = 20
-  wae_bb_mult: float = 2.0
+  ema_fast_length: int = 20
+  ema_slow_length: int = 40
   snap_atr_mult: float = 1.5
   swing_fractal_n: int = 2
   zigzag_pct: float = 0.0
@@ -139,19 +134,10 @@ def build_context(
 
 def _indicator_set(df: pd.DataFrame, settings: DetectorSettings) -> IndicatorSet:
   return IndicatorSet(
-    ema_fast=indicators.ema(df, settings.wae_fast),
-    ema_slow=indicators.ema(df, settings.wae_slow),
+    ema_fast=indicators.ema(df, settings.ema_fast_length),
+    ema_slow=indicators.ema(df, settings.ema_slow_length),
     atr=indicators.atr(df, 14),
     mfi=indicators.mfi(df, 14),
-    bbands=indicators.bbands(df, settings.wae_bb_length, settings.wae_bb_mult),
-    wae=indicators.wae(
-      df,
-      settings.wae_fast,
-      settings.wae_slow,
-      settings.wae_sensitivity,
-      settings.wae_bb_length,
-      settings.wae_bb_mult,
-    ),
   )
 
 
@@ -234,11 +220,6 @@ def _last(series: pd.Series, default: float = 0.0) -> float:
   return float(clean.iloc[-1]) if not clean.empty else default
 
 
-def _prev(series: pd.Series, default: float = 0.0) -> float:
-  clean = series.dropna()
-  return float(clean.iloc[-2]) if len(clean) >= 2 else default
-
-
 def _atr(ind: IndicatorSet, fallback: float = 1.0) -> float:
   value = _last(ind.atr, fallback)
   return value if value > 0 else fallback
@@ -307,16 +288,12 @@ def trend_pullback(ctx: DetectionContext) -> DetectionResult | None:
   )
   near_ema = abs(close - ema_slow) <= atr * 1.1
   in_zone = _zone_contains_price(zone, close)
-  wae_col = "trend_up" if direction == "BUY" else "trend_down"
-  wae_reset = _last(ind.wae[wae_col]) > _prev(ind.wae[wae_col])
-  if not (ema_aligned and (near_ema or in_zone) and wae_reset):
+  if not (ema_aligned and (near_ema or in_zone)):
     return None
   reasons = [f"HTF bias {ctx.htf_bias}"]
   reasons.append("EMA aligned")
   if near_ema or in_zone:
     reasons.append("pullback into EMA/zone")
-  if wae_reset:
-    reasons.append("WAE reset")
   if ctx.session_ok:
     reasons.append("session")
   return _finish(ctx, "Trend Pullback", direction, level.price, zone, reasons)
@@ -374,45 +351,57 @@ def momentum_ride(ctx: DetectionContext) -> DetectionResult | None:
   direction = _direction(ctx)
   if direction is None:
     return None
-  wae_col = "trend_up" if direction == "BUY" else "trend_down"
-  wae_value = _last(ind.wae[wae_col])
-  explosion = _last(ind.wae["explosion"])
-  dead_zone = _last(ind.wae["dead_zone"])
   mfi_value = _last(ind.mfi, 50)
   volume_avg = float(df["volume"].rolling(20).mean().iloc[-1] or 0)
   if not math.isfinite(volume_avg):
     volume_avg = 0
   volume_ok = volume_avg <= 0 or float(df["volume"].iloc[-1]) >= volume_avg
   mfi_ok = mfi_value >= 55 if direction == "BUY" else mfi_value <= 45
-  if wae_value <= max(dead_zone, explosion * 0.2):
-    return None
-  if not (mfi_ok and volume_ok):
-    return None
+  open_ = float(df["open"].iloc[-1])
   close = float(df["close"].iloc[-1])
+  high = float(df["high"].iloc[-1])
+  low = float(df["low"].iloc[-1])
+  candle_range = max(0.0, high - low)
+  body = abs(close - open_)
+  body_ratio = body / candle_range if candle_range else 0.0
+  impulse_ok = body_ratio >= ctx.settings.momentum_body_frac and (
+    close > open_ if direction == "BUY" else close < open_
+  )
+  momentum_ok = (
+    st.momentum == "bull"
+    if direction == "BUY"
+    else st.momentum == "bear"
+  )
+  if not ((momentum_ok or impulse_ok) and mfi_ok and volume_ok):
+    return None
   level = _nearest_level(st.levels, close, direction)
   price = level.price if level else close
   zone = entry_zone(df, price, direction)
-  reasons = [f"HTF bias {ctx.htf_bias}", "WAE explosion", "MFI/volume confirm"]
+  reasons = [f"HTF bias {ctx.htf_bias}"]
+  reasons.append("price momentum" if momentum_ok else "impulse candle")
+  reasons.append("MFI/volume confirm")
   return _finish(ctx, "Momentum Ride", direction, price, zone, reasons)
 
 
 def fade_scalp(ctx: DetectionContext) -> DetectionResult | None:
-  df, ind, st = _exec(ctx)
+  df, _ind, st = _exec(ctx)
   if len(df) < 5 or _mid_range(df):
     return None
   direction = _direction(ctx)
   if direction is None:
     return None
   desired_kind = "equal_low" if direction == "BUY" else "equal_high"
-  wae_col = "trend_up" if direction == "BUY" else "trend_down"
-  wae_weakening = _last(ind.wae[wae_col]) <= _prev(ind.wae[wae_col], 0)
   for level in st.equal_levels:
     if level.kind != desired_kind:
       continue
     sweep = liquidity_sweep(df, level)
-    if sweep == direction.lower() and wae_weakening:
+    if sweep == direction.lower():
       zone = entry_zone(df, level.price, direction)
-      reasons = [f"HTF bias {ctx.htf_bias}", "equal level sweep", "WAE weakening"]
+      reasons = [
+        f"HTF bias {ctx.htf_bias}",
+        "equal level sweep",
+        "liquidity rejection",
+      ]
       return _finish(ctx, "Fade Scalp", direction, level.price, zone, reasons)
   return None
 
