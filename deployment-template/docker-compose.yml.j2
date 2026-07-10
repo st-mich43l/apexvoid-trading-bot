@@ -1,8 +1,8 @@
 {# Rendered on the VPS by ansible (deploy_image role). Do not edit on the host. #}
 {# Vars: image_tag, registry_namespace, apexvoid_trading_bot_env (from vault). #}
 {# The vaulted env dict must define DATABASE_URL, POSTGRES_USER,             #}
-{# POSTGRES_PASSWORD, POSTGRES_DB, and CTRADER_* feed secrets. DATABASE_URL  #}
-{# host must be "postgres"; REDIS_URL host should be "redis".               #}
+{# POSTGRES_PASSWORD, POSTGRES_DB, and required CTRADER_* feed secrets.      #}
+{# DATABASE_URL host must be "postgres"; REDIS_URL host should be "redis".  #}
 name: apexvoid-trading-bot
 
 services:
@@ -61,9 +61,22 @@ services:
       redis:
         condition: service_healthy
     environment:
-{% for key, value in apexvoid_trading_bot_env.items() %}
-      {{ key }}: {{ value | to_json }}
-{% endfor %}
+      CTRADER_CLIENT_ID: {{ apexvoid_trading_bot_env.CTRADER_CLIENT_ID | mandatory | string | to_json }}
+      CTRADER_CLIENT_SECRET: {{ apexvoid_trading_bot_env.CTRADER_CLIENT_SECRET | mandatory | string | to_json }}
+      CTRADER_ACCESS_TOKEN: {{ apexvoid_trading_bot_env.CTRADER_ACCESS_TOKEN | mandatory | string | to_json }}
+      CTRADER_REFRESH_TOKEN: {{ apexvoid_trading_bot_env.CTRADER_REFRESH_TOKEN | mandatory | string | to_json }}
+      CTRADER_ACCOUNT_ID: {{ apexvoid_trading_bot_env.CTRADER_ACCOUNT_ID | mandatory | string | to_json }}
+      CTRADER_HOST: {{ apexvoid_trading_bot_env.CTRADER_HOST | default('demo.ctraderapi.com') | string | to_json }}
+      CTRADER_PORT: {{ apexvoid_trading_bot_env.CTRADER_PORT | default('5035') | string | to_json }}
+      CTRADER_SYMBOL: {{ apexvoid_trading_bot_env.CTRADER_SYMBOL | default('XAUUSD') | string | to_json }}
+      CTRADER_TIMEFRAMES: {{ apexvoid_trading_bot_env.CTRADER_TIMEFRAMES | default('M5,M15,M30') | string | to_json }}
+      CTRADER_BACKFILL_BARS: {{ apexvoid_trading_bot_env.CTRADER_BACKFILL_BARS | default('1500') | string | to_json }}
+      CTRADER_REQUEST_TIMEOUT: {{ apexvoid_trading_bot_env.CTRADER_REQUEST_TIMEOUT | default('30') | string | to_json }}
+      CTRADER_TOKEN_REFRESH_MINUTES: {{ apexvoid_trading_bot_env.CTRADER_TOKEN_REFRESH_MINUTES | default('50') | string | to_json }}
+      REDIS_URL: {{ apexvoid_trading_bot_env.REDIS_URL | default('redis://redis:6379/0') | string | to_json }}
+      BARS_WINDOW_MAX: {{ apexvoid_trading_bot_env.BARS_WINDOW_MAX | default('1500') | string | to_json }}
+      BARS_CHANNEL: {{ apexvoid_trading_bot_env.BARS_CHANNEL | default('bars:new') | string | to_json }}
+      HEALTH_FILE: {{ apexvoid_trading_bot_env.HEALTH_FILE | default('/tmp/ctrader-feed.heartbeat') | string | to_json }}
     healthcheck:
       test: ["CMD", "/app/ctrader-feed", "--healthcheck"]
       interval: 30s
