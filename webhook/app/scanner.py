@@ -1,6 +1,8 @@
-"""Notify-only price-action scanner over closed Redis OHLC bars."""
+"""Price-action scanner over closed Redis OHLC bars."""
 
+import json
 import logging
+from datetime import datetime, timezone
 from html import escape
 from typing import Any, Awaitable, Callable, Iterable
 
@@ -180,6 +182,18 @@ async def _notify_once(
   notify: NotifyFn,
   htf_order: list[str],
 ) -> bool:
+  if not settings.telegram_owner_id:
+    log.info(
+      "scanner detection suppressed: TELEGRAM_OWNER_ID not set "
+      "symbol=%s tf=%s setup=%s direction=%s level=%s",
+      symbol,
+      tf,
+      result.setup,
+      result.direction,
+      _price_text(result.key_level, symbol),
+    )
+    return False
+
   key = _dedup_key(symbol, tf, result)
   claimed = await client.set(
     key,
@@ -196,6 +210,43 @@ async def _notify_once(
   return True
 
 
+async def _record_status(
+  client: Any,
+  *,
+  symbol: str,
+  tf: str,
+  event_ts: str,
+  frames: dict[str, Any],
+  detected: list[DetectionResult],
+  sent: list[DetectionResult],
+  status: str,
+) -> None:
+  payload = {
+    "status": status,
+    "symbol": symbol,
+    "tf": tf,
+    "event_ts": event_ts,
+    "checked_at": datetime.now(timezone.utc).isoformat(),
+    "frames": {
+      name: len(frame)
+      for name, frame in sorted(frames.items())
+    },
+    "detected": [
+      {
+        "setup": item.setup,
+        "direction": item.direction,
+        "key_level": item.key_level,
+        "confluence": item.confluence,
+      }
+      for item in detected
+    ],
+    "sent": len(sent),
+  }
+  encoded = json.dumps(payload, separators=(",", ":"), sort_keys=True)
+  await client.set("scanner:last_tick", encoded)
+  await client.set(f"scanner:last_tick:{symbol}:{tf}", encoded)
+
+
 async def _handle_event(
   data: object,
   *,
@@ -207,17 +258,27 @@ async def _handle_event(
   parsed = _parse_bar_event(data)
   if parsed is None:
     return []
-  symbol, tf, _ts = parsed
+  symbol, tf, event_ts = parsed
   exec_tf = settings.scanner_exec_tf.upper()
   if tf != exec_tf or symbol not in _watched_symbols():
     return []
 
-  source = source or RedisOHLCSource(client)
   client = client or redis_state.get_client()
+  source = source or RedisOHLCSource(client)
   notify = notify or send_with_retry
   htf_order = _htf_tfs()
   frames = await _load_frames(source, symbol, exec_tf, htf_order)
   if exec_tf not in frames:
+    await _record_status(
+      client,
+      symbol=symbol,
+      tf=exec_tf,
+      event_ts=event_ts,
+      frames=frames,
+      detected=[],
+      sent=[],
+      status="missing_exec_frame",
+    )
     return []
 
   ctx = build_context(
@@ -227,33 +288,47 @@ async def _handle_event(
     _detector_settings(),
     htf_order,
   )
+  detected = []
   sent = []
   for detector in detectors or DEFAULT_DETECTORS:
     result = detector(ctx)
     if result is None:
       continue
+    detected.append(result)
     if await _notify_once(client, symbol, exec_tf, ctx, result, notify, htf_order):
       sent.append(result)
+  await _record_status(
+    client,
+    symbol=symbol,
+    tf=exec_tf,
+    event_ts=event_ts,
+    frames=frames,
+    detected=detected,
+    sent=sent,
+    status="ok",
+  )
   return sent
 
 
 async def scanner_loop() -> None:
-  """Subscribe to closed-bar events and DM owner for scanner detections."""
+  """Subscribe to closed-bar events and analyze scanner detections."""
   if not settings.scanner_enabled:
     log.info("Price-action scanner disabled: SCANNER_ENABLED=false")
     return
   if not settings.telegram_owner_id:
-    log.info("Price-action scanner disabled: TELEGRAM_OWNER_ID not set")
-    return
+    log.info(
+      "Price-action scanner notifications disabled: TELEGRAM_OWNER_ID not set"
+    )
 
   client = redis_state.get_client()
   source = RedisOHLCSource(client)
   pubsub = client.pubsub()
   await pubsub.subscribe("bars:new")
   log.info(
-    "Price-action scanner watching %s on %s",
+    "Price-action scanner watching %s on %s (%s)",
     ",".join(sorted(_watched_symbols())),
     settings.scanner_exec_tf.upper(),
+    "owner DM enabled" if settings.telegram_owner_id else "analysis only",
   )
   try:
     async for message in pubsub.listen():
