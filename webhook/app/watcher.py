@@ -20,9 +20,15 @@ async def clear_sl_alert(row_id: int) -> None:
   await redis_state.clear_sl_flag(row_id)
 
 
-async def mark_tp_alert(row_id: int, tp_number: int) -> None:
+async def mark_tp_alert(
+  row_id: int,
+  tp_number: int,
+  pips: int | None = None,
+) -> None:
   """Prevent a manual TP notification from being repeated by the watcher."""
   await redis_state.set_tp_progress(row_id, tp_number)
+  if pips is not None:
+    await redis_state.set_runner_pips(row_id, pips)
 
 
 def _market_open() -> bool:
@@ -70,6 +76,12 @@ def _render_level_alert(
         if settings.public_show_pips
         else "🎯 TP hit"
       )
+    if kind == "RUNNER":
+      return (
+        f"🚀 runner +{pips} pips {wing_icons(pips)}"
+        if settings.public_show_pips
+        else "🚀 runner"
+      )
     return (
       f"🛡 SL (-{pips} pips)"
       if settings.public_show_pips
@@ -81,12 +93,65 @@ def _render_level_alert(
       f"📉 Price: <b>{display_price}</b>\n"
       f"❌ Loss: <b>-{pips} pips</b>\n\n"
     )
+  if kind == "RUNNER":
+    return (
+      f"🚀 <b>TP RUNNER</b> | #{seq}\n"
+      f"📈 Price: <b>{display_price}</b>\n"
+      f"✅ Profit: <b>+{pips} pips</b> {wing_icons(pips)}\n\n"
+    )
   return (
     f"🎯 <b>TP HIT</b> | #{seq}\n"
     f"💰 Level: <b>{key}</b>\n"
     f"📈 Price: <b>{display_price}</b>\n"
     f"✅ Profit: <b>+{pips} pips</b> {wing_icons(pips)}\n\n"
   )
+
+
+def _pips_from_entry(sig: dict, price: float) -> int:
+  entry_end = sig["entry_end"] if sig["entry_end"] is not None else sig["entry"]
+  entry_mid = (sig["entry"] + entry_end) / 2
+  pip = pip_for(sig.get("symbol", "XAU"))
+  return round(abs(price - entry_mid) / pip)
+
+
+def _last_tp_floor_pips(sig: dict) -> int:
+  tps = sig.get("tps") or []
+  if not tps:
+    return 0
+  return _pips_from_entry(sig, float(tps[-1]))
+
+
+async def _maybe_alert_runner(
+  sig: dict,
+  bar: dict,
+  progress: dict,
+  seq: int,
+  is_buy: bool,
+) -> None:
+  """After final TP, keep alerting each new favorable extreme until close."""
+  tps = sig.get("tps") or []
+  if not tps or progress["tp"] < len(tps):
+    return
+
+  touch = bar["high"] if is_buy else bar["low"]
+  pips = _pips_from_entry(sig, touch)
+  previous = max(progress.get("runner_pips", 0), _last_tp_floor_pips(sig))
+  if pips <= previous:
+    return
+
+  from app.telegram import build_tp_close_kb
+  await fanout_update(
+    sig,
+    lambda tier, dp=_price_text(touch), p=pips: _render_level_alert(
+      tier, "RUNNER", "RUNNER", seq, dp, p
+    ),
+    markup_fn=lambda tier, s=sig["id"], t=len(tps), p=pips: (
+      build_tp_close_kb(s, t, p) if tier == "vip" else None
+    ),
+  )
+  progress["runner_pips"] = pips
+  await redis_state.set_runner_pips(sig["id"], pips)
+
 
 async def _evaluate(sig: dict, bar: dict, progress: dict) -> bool:
   """Advisory level alerts for one OHLC bar. Mutates ``progress`` in place.
@@ -100,15 +165,12 @@ async def _evaluate(sig: dict, bar: dict, progress: dict) -> bool:
     return True
 
   seq = sig.get("daily_seq") or sig["id"]
-  entry_end = sig["entry_end"] if sig["entry_end"] is not None else sig["entry"]
-  entry_mid = (sig["entry"] + entry_end) / 2
-  pip = pip_for(sig.get("symbol", "XAU"))
   is_buy = sig["action"] == "BUY"
 
   sl_hit = bar["low"] <= sig["sl"] if is_buy else bar["high"] >= sig["sl"]
   if sl_hit:
     touch = bar["low"] if is_buy else bar["high"]
-    pips = round(abs(touch - entry_mid) / pip)
+    pips = _pips_from_entry(sig, touch)
     display_price = _price_text(touch)
     await fanout_update(
       sig,
@@ -129,7 +191,7 @@ async def _evaluate(sig: dict, bar: dict, progress: dict) -> bool:
     if not tp_hit:
       break
     touch = bar["high"] if is_buy else bar["low"]
-    pips = round(abs(touch - entry_mid) / pip)
+    pips = _pips_from_entry(sig, touch)
     key = f"TP{idx + 1}"
     # Lazy import mirrors the watcher<->trade_ops pattern; avoids an import cycle.
     from app.telegram import build_tp_close_kb
@@ -143,7 +205,10 @@ async def _evaluate(sig: dict, bar: dict, progress: dict) -> bool:
       ),
     )
     progress["tp"] = idx + 1
+    progress["runner_pips"] = max(progress.get("runner_pips", 0), pips)
     await redis_state.set_tp_progress(sig["id"], idx + 1)
+    await redis_state.set_runner_pips(sig["id"], pips)
+  await _maybe_alert_runner(sig, bar, progress, seq, is_buy)
   return False
 
 

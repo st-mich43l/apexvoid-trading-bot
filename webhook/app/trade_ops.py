@@ -247,7 +247,7 @@ async def do_tp(ctx: dict) -> dict:
   if tp_number < 1 or tp_number > len(signal.get("tps") or []):
     return {"action": "tp", "ok": False, "error": "invalid_tp"}
   from app.watcher import mark_tp_alert
-  await mark_tp_alert(signal["id"], tp_number)
+  await mark_tp_alert(signal["id"], tp_number, int(ctx["pips"]))
   return {
     "action": "tp",
     "ok": True,

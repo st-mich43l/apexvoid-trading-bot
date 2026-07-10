@@ -58,11 +58,12 @@ async def set_cursor(symbol: str, iso_ts: str) -> None:
 
 
 async def get_progress(row_id: int) -> dict:
-  """Return ``{"tp": int, "sl": bool}`` — highest TP alerted and SL state."""
+  """Return watcher progress for one signal."""
   raw = await _get_client().hgetall(_progress_key(row_id))
   return {
     "tp": int(raw.get("tp", 0)),
     "sl": raw.get("sl") == "1",
+    "runner_pips": int(raw.get("runner_pips", 0)),
   }
 
 
@@ -73,6 +74,16 @@ async def set_tp_progress(row_id: int, tp_number: int) -> None:
   current = int(await client.hget(key, "tp") or 0)
   if tp_number > current:
     await client.hset(key, "tp", tp_number)
+    await client.expire(key, _PROGRESS_TTL)
+
+
+async def set_runner_pips(row_id: int, pips: int) -> None:
+  """Advance the best post-TP profit alert (monotonic in pips)."""
+  client = _get_client()
+  key = _progress_key(row_id)
+  current = int(await client.hget(key, "runner_pips") or 0)
+  if pips > current:
+    await client.hset(key, "runner_pips", pips)
     await client.expire(key, _PROGRESS_TTL)
 
 

@@ -70,7 +70,26 @@ async def test_menu_shows_only_valid_fractions(monkeypatch):
   codes = _codes(kb)
   assert "c1:3:1:90:100" in codes          # Full
   assert "c1:3:1:90:25" in codes           # 25% < 50% remaining
-  assert not any(c.endswith(":50") or c.endswith(":75") for c in codes)
+  assert not any(
+    c.startswith("c1:") and c.rsplit(":", 1)[-1] in {"50", "75", "90"}
+    for c in codes
+  )
+
+
+@pytest.mark.asyncio
+async def test_menu_offers_90_percent_for_full_open_signal(monkeypatch):
+  monkeypatch.setattr(
+    telegram,
+    "get_manual_signal",
+    AsyncMock(return_value={"status": "open", "legs": []}),
+  )
+  cb = _cb("c0:3:1:90")
+
+  await telegram.handle_close_menu(cb)
+
+  kb = cb.message.edit_reply_markup.await_args.kwargs["reply_markup"]
+  codes = _codes(kb)
+  assert "c1:3:1:90:90" in codes
 
 
 @pytest.mark.asyncio
