@@ -14,7 +14,11 @@ public sealed class CTraderOpenApiFeedClient(
   private readonly Channel<RawTrendbar> _liveTrendbars = Channel.CreateUnbounded<RawTrendbar>();
   private readonly List<IDisposable> _subscriptions = [];
   private readonly RefreshTokenState _tokens = new(options, refreshTokenStore);
+  private readonly object _spotSubscriptionLock = new();
   private OpenClient? _client;
+  private TaskCompletionSource<bool>? _spotSubscriptionReady;
+  private long _spotSubscriptionAccountId;
+  private long _spotSubscriptionSymbolId;
 
   public event Action? Heartbeat;
 
@@ -130,29 +134,61 @@ public sealed class CTraderOpenApiFeedClient(
     CancellationToken cancellationToken
   )
   {
+    var spotReady = new TaskCompletionSource<bool>(
+      TaskCreationOptions.RunContinuationsAsynchronously
+    );
+    lock (_spotSubscriptionLock)
+    {
+      _spotSubscriptionReady = spotReady;
+      _spotSubscriptionAccountId = options.AccountId;
+      _spotSubscriptionSymbolId = symbol.SymbolId;
+    }
+
     var spotReq = new ProtoOASubscribeSpotsReq
     {
       CtidTraderAccountId = options.AccountId,
     };
     spotReq.SymbolId.Add(symbol.SymbolId);
-    await SendAndWaitAsync<ProtoOASubscribeSpotsRes>(
-      spotReq,
-      response => response.CtidTraderAccountId == options.AccountId,
-      cancellationToken
-    );
+    try
+    {
+      Log($"subscribing spots {symbol.RedisSymbol} symbolId={symbol.SymbolId}");
+      await SendAndWaitAsync<ProtoOASubscribeSpotsRes>(
+        spotReq,
+        response => response.CtidTraderAccountId == options.AccountId,
+        cancellationToken
+      );
+      Log($"spot subscription queued {symbol.RedisSymbol}; waiting for technical spot event");
+      await WaitForSpotSubscriptionAsync(spotReady.Task, cancellationToken);
+      Log($"spot subscription active {symbol.RedisSymbol}");
+    }
+    finally
+    {
+      lock (_spotSubscriptionLock)
+      {
+        if (ReferenceEquals(_spotSubscriptionReady, spotReady))
+        {
+          _spotSubscriptionReady = null;
+        }
+      }
+    }
 
     foreach (var timeframe in timeframes)
     {
+      var period = TimeframeCodec.ToProto(timeframe);
+      Log(
+        $"subscribing live trendbar {symbol.RedisSymbol} {timeframe} symbolId={symbol.SymbolId} period={period}"
+      );
       await SendAndWaitAsync<ProtoOASubscribeLiveTrendbarRes>(
         new ProtoOASubscribeLiveTrendbarReq
         {
           CtidTraderAccountId = options.AccountId,
           SymbolId = symbol.SymbolId,
-          Period = TimeframeCodec.ToProto(timeframe),
+          Period = period,
         },
-        response => response.CtidTraderAccountId == options.AccountId,
+        AccountMatches,
         cancellationToken
       );
+      Log($"live trendbar subscribed {symbol.RedisSymbol} {timeframe}");
     }
   }
 
@@ -195,6 +231,7 @@ public sealed class CTraderOpenApiFeedClient(
     }
     if (message is ProtoOASpotEvent spot)
     {
+      CompleteSpotSubscription(spot);
       foreach (var trendbar in spot.Trendbar)
       {
         _liveTrendbars.Writer.TryWrite(ToRaw(trendbar));
@@ -212,6 +249,13 @@ public sealed class CTraderOpenApiFeedClient(
     );
     _responses.Writer.TryComplete(wrapped);
     _liveTrendbars.Writer.TryComplete(wrapped);
+    TaskCompletionSource<bool>? spotSubscriptionReady;
+    lock (_spotSubscriptionLock)
+    {
+      spotSubscriptionReady = _spotSubscriptionReady;
+      _spotSubscriptionReady = null;
+    }
+    spotSubscriptionReady?.TrySetException(wrapped);
   }
 
   private async Task<T> SendAndWaitAsync<T>(
@@ -276,6 +320,47 @@ public sealed class CTraderOpenApiFeedClient(
   private static string NormalizeSymbol(string symbol) =>
     symbol.Replace("/", "", StringComparison.Ordinal).ToUpperInvariant();
 
+  private void CompleteSpotSubscription(ProtoOASpotEvent spot)
+  {
+    TaskCompletionSource<bool>? ready = null;
+    lock (_spotSubscriptionLock)
+    {
+      if (
+        _spotSubscriptionReady is not null
+        && spot.CtidTraderAccountId == _spotSubscriptionAccountId
+        && spot.SymbolId == _spotSubscriptionSymbolId
+      )
+      {
+        ready = _spotSubscriptionReady;
+      }
+    }
+    ready?.TrySetResult(true);
+  }
+
+  private async Task WaitForSpotSubscriptionAsync(
+    Task spotReady,
+    CancellationToken cancellationToken
+  )
+  {
+    using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+    timeout.CancelAfter(options.RequestTimeout);
+    try
+    {
+      await spotReady.WaitAsync(timeout.Token);
+    }
+    catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+    {
+      throw new TimeoutException(
+        $"Timed out after {options.RequestTimeout.TotalSeconds:N0}s waiting for technical ProtoOASpotEvent after ProtoOASubscribeSpotsReq"
+      );
+    }
+  }
+
+  private bool AccountMatches(ProtoOASubscribeLiveTrendbarRes response) =>
+    !response.HasCtidTraderAccountId
+    || response.CtidTraderAccountId == 0
+    || response.CtidTraderAccountId == options.AccountId;
+
   private static string FormatError(ProtoOAErrorRes error) =>
     string.IsNullOrWhiteSpace(error.Description)
       ? error.ErrorCode
@@ -285,4 +370,7 @@ public sealed class CTraderOpenApiFeedClient(
     string.IsNullOrWhiteSpace(error.Description)
       ? error.ErrorCode
       : $"{error.ErrorCode}: {error.Description}";
+
+  private static void Log(string message) =>
+    Console.Error.WriteLine($"ctrader-feed {message}");
 }
