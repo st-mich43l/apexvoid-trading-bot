@@ -178,17 +178,18 @@ public sealed class CTraderOpenApiFeedClient(
       Log(
         $"subscribing live trendbar {symbol.RedisSymbol} {timeframe} symbolId={symbol.SymbolId} period={period}"
       );
-      await SendAndWaitAsync<ProtoOASubscribeLiveTrendbarRes>(
+      await SendAsync(
         new ProtoOASubscribeLiveTrendbarReq
         {
           CtidTraderAccountId = options.AccountId,
           SymbolId = symbol.SymbolId,
           Period = period,
         },
-        AccountMatches,
         cancellationToken
       );
-      Log($"live trendbar subscribed {symbol.RedisSymbol} {timeframe}");
+      Log(
+        $"live trendbar subscribe sent {symbol.RedisSymbol} {timeframe}; continuing without ack"
+      );
     }
   }
 
@@ -306,6 +307,16 @@ public sealed class CTraderOpenApiFeedClient(
     );
   }
 
+  private async Task SendAsync(
+    IMessage request,
+    CancellationToken cancellationToken
+  )
+  {
+    var client = _client ?? throw new InvalidOperationException("Client is not connected");
+    cancellationToken.ThrowIfCancellationRequested();
+    await client.SendMessage(request);
+  }
+
   private static RawTrendbar ToRaw(ProtoOATrendbar bar) =>
     new(
       TimeframeCodec.FromProto(bar.Period),
@@ -355,11 +366,6 @@ public sealed class CTraderOpenApiFeedClient(
       );
     }
   }
-
-  private bool AccountMatches(ProtoOASubscribeLiveTrendbarRes response) =>
-    !response.HasCtidTraderAccountId
-    || response.CtidTraderAccountId == 0
-    || response.CtidTraderAccountId == options.AccountId;
 
   private static string FormatError(ProtoOAErrorRes error) =>
     string.IsNullOrWhiteSpace(error.Description)
