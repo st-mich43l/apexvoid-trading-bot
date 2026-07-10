@@ -43,14 +43,24 @@ public sealed class FeedRunner(
     Task? refreshTask = null;
     try
     {
+      Log(
+        $"connecting to {options.Host}:{options.Port} account={options.AccountId} symbol={options.CTraderSymbol} timeframes={string.Join(",", options.Timeframes)}"
+      );
       await client.ConnectAndAuthorizeAsync(cancellationToken);
+      Log("authorized cTrader session");
       var symbol = await client.ResolveSymbolAsync(cancellationToken);
+      Log(
+        $"resolved symbol {symbol.CTraderSymbol} -> id={symbol.SymbolId} redis={symbol.RedisSymbol} digits={symbol.Digits}"
+      );
       await BackfillAsync(client, symbol, cancellationToken);
+      Log("backfill complete");
       await client.SubscribeAsync(symbol, options.Timeframes, cancellationToken);
+      Log("subscribed live trendbars");
       healthFile.Touch();
 
       refreshTask = RefreshLoopAsync(client, linked.Token);
       var emitter = new ClosedBarEmitter();
+      Log("live stream started");
       await foreach (var raw in client.LiveTrendbarsAsync(cancellationToken))
       {
         var bar = TrendbarDecoder.Decode(raw, symbol.Digits);
@@ -95,6 +105,9 @@ public sealed class FeedRunner(
       var from = latest is null
         ? now.AddSeconds(-seconds * options.BackfillBars)
         : DateTimeOffset.FromUnixTimeSeconds(latest.Value + seconds);
+      Log(
+        $"backfill {symbol.RedisSymbol} {timeframe} from={from:O} to={now:O}"
+      );
       var rawBars = await client.GetTrendbarsAsync(
         symbol,
         timeframe,
@@ -116,6 +129,7 @@ public sealed class FeedRunner(
           cancellationToken
         );
       }
+      Log($"backfill {symbol.RedisSymbol} {timeframe}: wrote {rawBars.Count} raw bars");
     }
     healthFile.Touch();
   }
@@ -148,4 +162,7 @@ public sealed class FeedRunner(
     {
     }
   }
+
+  private static void Log(string message) =>
+    Console.Error.WriteLine($"ctrader-feed {message}");
 }
