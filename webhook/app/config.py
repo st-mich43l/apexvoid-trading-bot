@@ -86,11 +86,6 @@ class Settings(BaseSettings):
   key_level_min_touches: int = 2
   momentum_lookback: int = 8
   momentum_body_frac: float = 0.6
-  wae_fast: int = 20
-  wae_slow: int = 40
-  wae_sensitivity: float = 150.0
-  wae_bb_length: int = 20
-  wae_bb_mult: float = 2.0
 
   @property
   def telegram_chat_id(self) -> str:
