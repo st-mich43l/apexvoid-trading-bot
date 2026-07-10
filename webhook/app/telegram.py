@@ -459,7 +459,7 @@ async def _book_leg(
 # expands to Full/partial-% options; a choice books via do_close (same path as
 # the /trade_close command). Only the configured owner may act.
 
-_PARTIAL_STEPS = (25, 50, 75)
+_PARTIAL_STEPS = (25, 50, 75, 90)
 
 
 def build_tp_close_kb(sid: int, tp: int, pips: int) -> InlineKeyboardMarkup:
