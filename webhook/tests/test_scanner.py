@@ -110,7 +110,7 @@ async def test_scanner_dedups_same_setup_level_and_only_dms_owner(monkeypatch):
     key_level=4100.0,
     entry_zone=Zone(4098, 4102, "demand"),
     confluence=3,
-    reasons=["HTF bias up", "WAE reset"],
+    reasons=["HTF bias up", "EMA aligned"],
   )
 
   def detector(received_ctx):
@@ -184,7 +184,7 @@ async def test_scanner_records_analysis_status_without_owner(monkeypatch):
     key_level=4100.0,
     entry_zone=Zone(4098, 4102, "demand"),
     confluence=3,
-    reasons=["HTF bias up", "WAE reset"],
+    reasons=["HTF bias up", "EMA aligned"],
   )
 
   sent = await scanner._handle_event(

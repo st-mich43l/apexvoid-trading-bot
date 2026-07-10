@@ -21,6 +21,8 @@ log = logging.getLogger(__name__)
 
 _META_KEY = "last_weekly_report_date"
 _WEEKLY_INTERVAL = 1800
+_SEP = "━━━━━━━━━━━━━━━━━━━━━━"
+_METRIC_LABEL_WIDTH = 11
 
 
 def _closed_week_window(now: datetime) -> tuple[datetime, datetime]:
@@ -66,9 +68,31 @@ def _date_range(start: datetime, end: datetime) -> str:
   return f"{start_text} – {end_text}"
 
 
+def _metric_line(
+  icon: str,
+  label: str,
+  value: str,
+  suffix: str = "",
+) -> str:
+  line = f"{icon} {label:<{_METRIC_LABEL_WIDTH}} {value:>7}"
+  if suffix:
+    line = f"{line}  {suffix}"
+  return line
+
+
+def _best_worst_line(icon: str, label: str, row: dict) -> str:
+  seq = row.get("daily_seq") or row.get("signal_id") or "?"
+  return _metric_line(
+    icon,
+    label,
+    _signed(row["value"]),
+    f"· #{seq} {_setup_label(row.get('setup_type'))}",
+  )
+
+
 def _branch_lines(groups: list[dict], kind: str) -> list[str]:
   if not groups:
-    return ["└ —"]
+    return ["└─ —"]
   lines = []
   icons = {
     "Asia": "🌏",
@@ -77,18 +101,18 @@ def _branch_lines(groups: list[dict], kind: str) -> list[str]:
     "Legacy": "🕐",
   }
   for index, group in enumerate(groups):
-    branch = "└" if index == len(groups) - 1 else "├"
+    branch = "└─" if index == len(groups) - 1 else "├─"
     if kind == "setup":
       label = _setup_label(group["label"])
       lines.append(
-        f"{branch} {label:<15} {_signed(group['net']):>6} · "
+        f"{branch} {label:<16} {_signed(group['net']):>7} · "
         f"{group['wins']}W/{group['losses']}L"
       )
     else:
       icon = icons.get(group["label"], "🕐")
       lines.append(
-        f"{branch} {icon} {group['label']:<7} "
-        f"{_signed(group['net']):>6}"
+        f"{branch} {icon} {group['label']:<8} "
+        f"{_signed(group['net']):>7}"
       )
   return lines
 
@@ -101,38 +125,37 @@ def format_weekly_recap(
 ) -> str:
   """Render one HTML monospace digest without pips-trigger phrasing."""
   if not stats["trades"]:
-    text = (
-      f"📊 Weekly recap — {_symbol_label(symbol)}\n"
-      "no trades this week · capital preserved"
-    )
+    text = "\n".join([
+      f"📊 WEEKLY RECAP — {_symbol_label(symbol)}",
+      f"🗓 {_date_range(start, end)}",
+      _SEP,
+      "🧘 No closed trades",
+      "capital preserved · no stats to report",
+      _SEP,
+      "🤖 Apex Void · weekly recap",
+    ])
     return f"<pre>{escape(text)}</pre>"
 
   best = stats["best"]
   worst = stats["worst"]
-  best_seq = best.get("daily_seq") or best.get("signal_id") or "?"
-  worst_seq = worst.get("daily_seq") or worst.get("signal_id") or "?"
   net_icon = "🟢" if stats["net"] >= 0 else "🔴"
   lines = [
     f"📊 WEEKLY RECAP — {_symbol_label(symbol)}",
     f"🗓 {_date_range(start, end)}",
-    "━━━━━━━━━━━━━━━━━━━━",
-    f"💰 Net        {_signed(stats['net']):>6}  {net_icon}",
-    (
-      f"🎯 Winrate    {stats['win_rate']:.0f}%   "
-      f"({stats['wins']}W / {stats['losses']}L)"
+    _SEP,
+    _metric_line("💰", "Net", _signed(stats["net"]), net_icon),
+    _metric_line(
+      "🎯",
+      "Winrate",
+      f"{stats['win_rate']:.0f}%",
+      f"({stats['wins']}W / {stats['losses']}L)",
     ),
-    f"📦 Trades     {stats['trades']}",
-    f"🟢 Avg win    {_signed(stats['average_win'])}",
-    f"🔴 Avg loss   {_signed(stats['average_loss'])}",
-    f"⚖️ Expectancy {_signed(stats['expectancy'])} / trade",
-    (
-      f"🏆 Best       {_signed(best['value'])}  · "
-      f"#{best_seq} {_setup_label(best.get('setup_type'))}"
-    ),
-    (
-      f"🩸 Worst      {_signed(worst['value'])}  · "
-      f"#{worst_seq} {_setup_label(worst.get('setup_type'))}"
-    ),
+    _metric_line("📦", "Trades", str(stats["trades"])),
+    _metric_line("🟢", "Avg win", _signed(stats["average_win"])),
+    _metric_line("🔴", "Avg loss", _signed(stats["average_loss"])),
+    _metric_line("⚖", "Expectancy", _signed(stats["expectancy"]), "/ trade"),
+    _best_worst_line("🏆", "Best", best),
+    _best_worst_line("🩸", "Worst", worst),
     "",
     "📐 By setup",
     *_branch_lines(stats["by_setup"], "setup"),
@@ -142,8 +165,8 @@ def format_weekly_recap(
     "",
     "📈 Equity",
     f"{sparkline(stats['cumulative'])}  {_signed(stats['net'])}",
-    "━━━━━━━━━━━━━━━━━━━━",
-    "🤖 st_mich43l · weekly recap",
+    _SEP,
+    "🤖 Apex Void · weekly recap",
   ]
   return f"<pre>{escape(chr(10).join(lines))}</pre>"
 

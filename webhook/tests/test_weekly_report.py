@@ -148,7 +148,10 @@ def test_weekly_uses_shared_stats_and_safe_format():
   )
 
   assert "Net: <b>+40 pips</b>" in interactive
-  assert "💰 Net          +40p" in recap
+  assert "📊 WEEKLY RECAP — XAU/USD" in recap
+  assert "💰 Net" in recap
+  assert "+40p" in recap
+  assert "🤖 Apex Void · weekly recap" in recap
   assert "2W" not in recap
   assert "1W / 1L" in recap
   assert not re.search(r"\d+\s*pips?", recap, re.IGNORECASE)

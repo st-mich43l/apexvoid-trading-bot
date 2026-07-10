@@ -29,26 +29,13 @@ def test_ema_and_atr_match_small_hand_fixture():
   assert atr.dropna().iloc[-1] == pytest.approx(2.0)
 
 
-def test_wae_uptrend_produces_trend_up_frame():
+def test_bbands_exposes_normalized_columns():
   closes = [100 + i * 0.2 + i * i * 0.01 for i in range(80)]
   df = _frame(closes)
 
-  wae = indicators.wae(
-    df,
-    fast=3,
-    slow=8,
-    sensitivity=150,
-    bb_length=10,
-    bb_mult=2,
-  )
+  bands = indicators.bbands(df, length=10, mult=2)
 
-  assert list(wae.columns) == [
-    "trend_up",
-    "trend_down",
-    "explosion",
-    "dead_zone",
-  ]
-  assert wae["trend_up"].dropna().iloc[-1] > 0
-  assert wae["trend_down"].dropna().iloc[-1] == pytest.approx(0)
-  assert wae["explosion"].dropna().iloc[-1] > 0
-  assert wae["dead_zone"].dropna().iloc[-1] > 0
+  assert list(bands.columns) == ["lower", "middle", "upper", "bandwidth"]
+  assert bands["upper"].dropna().iloc[-1] > bands["middle"].dropna().iloc[-1]
+  assert bands["middle"].dropna().iloc[-1] > bands["lower"].dropna().iloc[-1]
+  assert bands["bandwidth"].dropna().iloc[-1] > 0

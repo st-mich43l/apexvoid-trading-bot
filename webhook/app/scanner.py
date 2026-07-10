@@ -54,11 +54,6 @@ def _all_tfs(exec_tf: str, htf_tfs: Iterable[str]) -> list[str]:
 def _detector_settings() -> DetectorSettings:
   return DetectorSettings(
     confluence_floor=settings.scanner_confluence_floor,
-    wae_fast=settings.wae_fast,
-    wae_slow=settings.wae_slow,
-    wae_sensitivity=settings.wae_sensitivity,
-    wae_bb_length=settings.wae_bb_length,
-    wae_bb_mult=settings.wae_bb_mult,
     swing_fractal_n=settings.swing_fractal_n,
     zigzag_pct=settings.zigzag_pct,
     zigzag_atr_mult=settings.zigzag_atr_mult,
