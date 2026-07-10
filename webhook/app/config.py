@@ -67,6 +67,19 @@ class Settings(BaseSettings):
   weekly_report_dow: int = 6
   weekly_report_hour: int = 8
   weekly_report_skip_empty: bool = False
+  scanner_enabled: bool = False
+  scanner_symbols: str = "XAU"
+  scanner_exec_tf: str = "M5"
+  scanner_htf: str = "M30,M15"
+  scanner_window: int = 500
+  scanner_alert_ttl: int = 7200
+  scanner_level_bucket: int = 20
+  scanner_confluence_floor: int = 2
+  wae_fast: int = 20
+  wae_slow: int = 40
+  wae_sensitivity: float = 150.0
+  wae_bb_length: int = 20
+  wae_bb_mult: float = 2.0
 
   @property
   def telegram_chat_id(self) -> str:
