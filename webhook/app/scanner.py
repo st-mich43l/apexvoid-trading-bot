@@ -57,6 +57,17 @@ def _detector_settings() -> DetectorSettings:
     wae_sensitivity=settings.wae_sensitivity,
     wae_bb_length=settings.wae_bb_length,
     wae_bb_mult=settings.wae_bb_mult,
+    swing_fractal_n=settings.swing_fractal_n,
+    zigzag_pct=settings.zigzag_pct,
+    zigzag_atr_mult=settings.zigzag_atr_mult,
+    displacement_atr_mult=settings.displacement_atr_mult,
+    zone_width=settings.zone_width,
+    equal_tol_atr=settings.equal_tol_atr,
+    level_cluster_atr=settings.level_cluster_atr,
+    round_step=settings.round_step,
+    key_level_min_touches=settings.key_level_min_touches,
+    momentum_lookback=settings.momentum_lookback,
+    momentum_body_frac=settings.momentum_body_frac,
   )
 
 

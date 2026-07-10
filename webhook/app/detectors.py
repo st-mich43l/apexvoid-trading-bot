@@ -1,12 +1,13 @@
 """Pure price-action setup detectors for replayable scanner decisions."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import math
 from typing import Callable, Protocol
 
 import pandas as pd
 
 from app import indicators
+from app.analysis import AnalysisSettings, analyze
 from app.structure import (
   Level,
   Swing,
@@ -41,6 +42,11 @@ class StructureSet:
   equal_levels: list[Level]
   fvg_zones: list[Zone]
   order_blocks: list[Zone]
+  breaks: list = field(default_factory=list)
+  zones: list[Zone] = field(default_factory=list)
+  liquidity_pools: list = field(default_factory=list)
+  liquidity_grabs: list = field(default_factory=list)
+  momentum: str = "neutral"
 
 
 @dataclass(frozen=True)
@@ -52,6 +58,32 @@ class DetectorSettings:
   wae_bb_length: int = 20
   wae_bb_mult: float = 2.0
   snap_atr_mult: float = 1.5
+  swing_fractal_n: int = 2
+  zigzag_pct: float = 0.0
+  zigzag_atr_mult: float = 1.0
+  displacement_atr_mult: float = 1.5
+  zone_width: str = "body"
+  equal_tol_atr: float = 0.15
+  level_cluster_atr: float = 0.5
+  round_step: float = 5.0
+  key_level_min_touches: int = 2
+  momentum_lookback: int = 8
+  momentum_body_frac: float = 0.6
+
+  def analysis_settings(self) -> AnalysisSettings:
+    return AnalysisSettings(
+      swing_fractal_n=self.swing_fractal_n,
+      zigzag_pct=self.zigzag_pct,
+      zigzag_atr_mult=self.zigzag_atr_mult,
+      displacement_atr_mult=self.displacement_atr_mult,
+      zone_width=self.zone_width,
+      equal_tol_atr=self.equal_tol_atr,
+      level_cluster_atr=self.level_cluster_atr,
+      round_step=self.round_step,
+      key_level_min_touches=self.key_level_min_touches,
+      momentum_lookback=self.momentum_lookback,
+      momentum_body_frac=self.momentum_body_frac,
+    )
 
 
 @dataclass(frozen=True)
@@ -88,29 +120,19 @@ def build_context(
   settings: DetectorSettings,
   htf_order: list[str],
 ) -> DetectionContext:
+  analysis_ctx = analyze(frames, settings.analysis_settings(), htf_order)
   indicator_sets = {
     name: _indicator_set(df, settings)
     for name, df in frames.items()
   }
-  structure_sets = {
-    name: _structure_set(df)
-    for name, df in frames.items()
-  }
-  htf_bias = "range"
-  for name in htf_order:
-    bias = structure_sets.get(name, StructureSet([], "range", [], [], [], [])).bias
-    if bias != "range":
-      htf_bias = bias
-      break
-  if htf_bias == "range":
-    htf_bias = structure_sets.get(tf, StructureSet([], "range", [], [], [], [])).bias
+  structure_sets = _structure_sets_from_analysis(analysis_ctx.per_tf)
   return DetectionContext(
     symbol=symbol,
     tf=tf,
     frames=frames,
     indicators=indicator_sets,
     structures=structure_sets,
-    htf_bias=htf_bias,
+    htf_bias=analysis_ctx.htf_bias,
     settings=settings,
   )
 
@@ -134,6 +156,9 @@ def _indicator_set(df: pd.DataFrame, settings: DetectorSettings) -> IndicatorSet
 
 
 def _structure_set(df: pd.DataFrame) -> StructureSet:
+  ctx = analyze({"_": df})
+  if "_" in ctx.per_tf:
+    return _structure_sets_from_analysis(ctx.per_tf)["_"]
   items = swings(df, 2, 2)
   return StructureSet(
     swings=items,
@@ -143,6 +168,36 @@ def _structure_set(df: pd.DataFrame) -> StructureSet:
     fvg_zones=fvg(df),
     order_blocks=order_blocks(df),
   )
+
+
+def _structure_sets_from_analysis(items) -> dict[str, StructureSet]:
+  result = {}
+  for name, item in items.items():
+    equal_levels = [
+      Level(
+        pool.level,
+        "equal_high" if pool.side == "buy" else "equal_low",
+        pool.touches,
+        pool.band,
+        float(pool.touches),
+      )
+      for pool in item.liquidity_pools
+      if pool.touches >= 2
+    ]
+    result[name] = StructureSet(
+      swings=item.swings,
+      bias=item.structure,
+      levels=item.key_levels,
+      equal_levels=equal_levels,
+      fvg_zones=item.fvg_zones,
+      order_blocks=item.order_blocks,
+      breaks=item.breaks,
+      zones=item.zones,
+      liquidity_pools=item.liquidity_pools,
+      liquidity_grabs=item.liquidity_grabs,
+      momentum=item.momentum,
+    )
+  return result
 
 
 def _exec(ctx: DetectionContext) -> tuple[pd.DataFrame, IndicatorSet, StructureSet]:
