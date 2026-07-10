@@ -7,28 +7,14 @@ import aiohttp
 from app.config import settings
 from app.broadcast import fanout_update
 from app.dedup import get_open_signals
+from app.keyboards import build_tp_close_kb
 from app.pips_format import wing_icons
 from app.price import get_xau_bars
+from app.redis_state import clear_sl_alert, mark_tp_alert
 from app.symbols import pip_for
 from app import redis_state
 
 log = logging.getLogger(__name__)
-
-
-async def clear_sl_alert(row_id: int) -> None:
-  """Allow an updated stop-loss level to produce a fresh alert."""
-  await redis_state.clear_sl_flag(row_id)
-
-
-async def mark_tp_alert(
-  row_id: int,
-  tp_number: int,
-  pips: int | None = None,
-) -> None:
-  """Prevent a manual TP notification from being repeated by the watcher."""
-  await redis_state.set_tp_progress(row_id, tp_number)
-  if pips is not None:
-    await redis_state.set_runner_pips(row_id, pips)
 
 
 def _market_open() -> bool:
@@ -139,7 +125,6 @@ async def _maybe_alert_runner(
   if pips <= previous:
     return
 
-  from app.telegram import build_tp_close_kb
   await fanout_update(
     sig,
     lambda tier, dp=_price_text(touch), p=pips: _render_level_alert(
@@ -193,8 +178,6 @@ async def _evaluate(sig: dict, bar: dict, progress: dict) -> bool:
     touch = bar["high"] if is_buy else bar["low"]
     pips = _pips_from_entry(sig, touch)
     key = f"TP{idx + 1}"
-    # Lazy import mirrors the watcher<->trade_ops pattern; avoids an import cycle.
-    from app.telegram import build_tp_close_kb
     await fanout_update(
       sig,
       lambda tier, k=key, dp=_price_text(touch), p=pips: _render_level_alert(
