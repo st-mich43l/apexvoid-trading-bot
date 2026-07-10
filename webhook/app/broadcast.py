@@ -9,6 +9,7 @@ from app.dedup import (
   insert_signal_post,
 )
 from app.symbols import SYMBOLS, channels_for
+from app.tg_core import delete_message, send_sticker, send_with_retry
 
 log = logging.getLogger(__name__)
 
@@ -63,8 +64,7 @@ async def _send_message(
   reply_to: int | None = None,
   reply_markup=None,
 ):
-  from app.telegram import _send_with_retry
-  return await _send_with_retry(
+  return await send_with_retry(
     text,
     reply_to=reply_to,
     chat_id=channel_id,
@@ -77,12 +77,7 @@ async def _send_sticker(
   channel_id: int,
   reply_to: int | None = None,
 ):
-  from app.telegram import bot
-  return await bot.send_sticker(
-    chat_id=channel_id,
-    sticker=sticker,
-    reply_to_message_id=reply_to,
-  )
+  return await send_sticker(sticker, channel_id, reply_to)
 
 
 async def delete_posts(posts: list[dict]) -> None:
@@ -91,12 +86,9 @@ async def delete_posts(posts: list[dict]) -> None:
   Best-effort: a post may already be gone or older than Telegram's 48h delete
   window, so per-message failures are swallowed rather than aborting the rest.
   """
-  from app.telegram import bot
   for post in posts:
     try:
-      await bot.delete_message(
-        int(post["channel_id"]), int(post["message_id"]),
-      )
+      await delete_message(post["channel_id"], post["message_id"])
     except Exception:
       log.warning(
         "could not delete post %s/%s",
