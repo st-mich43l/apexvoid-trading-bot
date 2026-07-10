@@ -2,6 +2,8 @@ namespace ApexVoid.CTraderFeed;
 
 public interface ICTraderFeedClient : IAsyncDisposable
 {
+  event Action? Heartbeat;
+
   Task ConnectAndAuthorizeAsync(CancellationToken cancellationToken);
   Task RefreshTokenAsync(CancellationToken cancellationToken);
   Task<SymbolInfo> ResolveSymbolAsync(CancellationToken cancellationToken);

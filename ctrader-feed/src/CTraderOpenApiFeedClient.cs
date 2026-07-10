@@ -5,17 +5,22 @@ using OpenAPI.Net;
 
 namespace ApexVoid.CTraderFeed;
 
-public sealed class CTraderOpenApiFeedClient(FeedOptions options) : ICTraderFeedClient
+public sealed class CTraderOpenApiFeedClient(
+  FeedOptions options,
+  IRefreshTokenStore refreshTokenStore
+) : ICTraderFeedClient
 {
   private readonly Channel<IMessage> _responses = Channel.CreateUnbounded<IMessage>();
   private readonly Channel<RawTrendbar> _liveTrendbars = Channel.CreateUnbounded<RawTrendbar>();
   private readonly List<IDisposable> _subscriptions = [];
+  private readonly RefreshTokenState _tokens = new(options, refreshTokenStore);
   private OpenClient? _client;
-  private string _accessToken = options.AccessToken;
-  private string _refreshToken = options.RefreshToken;
+
+  public event Action? Heartbeat;
 
   public async Task ConnectAndAuthorizeAsync(CancellationToken cancellationToken)
   {
+    await _tokens.SeedAsync(cancellationToken);
     _client = new OpenClient(
       options.Host,
       options.Port,
@@ -39,7 +44,7 @@ public sealed class CTraderOpenApiFeedClient(FeedOptions options) : ICTraderFeed
       new ProtoOAAccountAuthReq
       {
         CtidTraderAccountId = options.AccountId,
-        AccessToken = _accessToken,
+        AccessToken = _tokens.AccessToken,
       },
       _ => true,
       cancellationToken
@@ -48,24 +53,17 @@ public sealed class CTraderOpenApiFeedClient(FeedOptions options) : ICTraderFeed
 
   public async Task RefreshTokenAsync(CancellationToken cancellationToken)
   {
-    if (string.IsNullOrWhiteSpace(_refreshToken))
+    if (string.IsNullOrWhiteSpace(_tokens.RefreshToken))
     {
       return;
     }
 
     var response = await SendAndWaitAsync<ProtoOARefreshTokenRes>(
-      new ProtoOARefreshTokenReq { RefreshToken = _refreshToken },
+      new ProtoOARefreshTokenReq { RefreshToken = _tokens.RefreshToken },
       _ => true,
       cancellationToken
     );
-    if (!string.IsNullOrWhiteSpace(response.AccessToken))
-    {
-      _accessToken = response.AccessToken;
-    }
-    if (!string.IsNullOrWhiteSpace(response.RefreshToken))
-    {
-      _refreshToken = response.RefreshToken;
-    }
+    await _tokens.ApplyAsync(response, cancellationToken);
   }
 
   public async Task<SymbolInfo> ResolveSymbolAsync(CancellationToken cancellationToken)
@@ -192,6 +190,7 @@ public sealed class CTraderOpenApiFeedClient(FeedOptions options) : ICTraderFeed
   {
     if (message is ProtoHeartbeatEvent)
     {
+      Heartbeat?.Invoke();
       return;
     }
     if (message is ProtoOASpotEvent spot)

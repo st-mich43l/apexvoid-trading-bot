@@ -95,7 +95,10 @@ public sealed class RedisBarSink(
     $"bars:{symbol.ToUpperInvariant()}:{timeframe.ToUpperInvariant()}";
 }
 
-public sealed class StackExchangeRedisSeriesCommands : IRedisSeriesCommands, IAsyncDisposable
+public sealed class StackExchangeRedisSeriesCommands :
+  IRedisSeriesCommands,
+  IRedisStringCommands,
+  IAsyncDisposable
 {
   private readonly IConnectionMultiplexer _connection;
   private readonly IDatabase _db;
@@ -172,6 +175,21 @@ public sealed class StackExchangeRedisSeriesCommands : IRedisSeriesCommands, IAs
       ))
       .ToArray();
   }
+
+  public async Task<string?> GetStringAsync(
+    string key,
+    CancellationToken cancellationToken
+  )
+  {
+    var value = await _db.StringGetAsync(key);
+    return value.HasValue ? value.ToString() : null;
+  }
+
+  public Task SetStringAsync(
+    string key,
+    string value,
+    CancellationToken cancellationToken
+  ) => _db.StringSetAsync(key, value);
 
   public async ValueTask DisposeAsync()
   {

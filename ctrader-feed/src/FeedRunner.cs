@@ -37,17 +37,20 @@ public sealed class FeedRunner(
   public async Task RunOneSessionAsync(CancellationToken cancellationToken)
   {
     await using var client = clientFactory();
-    await client.ConnectAndAuthorizeAsync(cancellationToken);
-    var symbol = await client.ResolveSymbolAsync(cancellationToken);
-    await BackfillAsync(client, symbol, cancellationToken);
-    await client.SubscribeAsync(symbol, options.Timeframes, cancellationToken);
-    healthFile.Touch();
-
+    void TouchOnHeartbeat() => healthFile.Touch();
+    client.Heartbeat += TouchOnHeartbeat;
     using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-    var refreshTask = RefreshLoopAsync(client, linked.Token);
-    var emitter = new ClosedBarEmitter();
+    Task? refreshTask = null;
     try
     {
+      await client.ConnectAndAuthorizeAsync(cancellationToken);
+      var symbol = await client.ResolveSymbolAsync(cancellationToken);
+      await BackfillAsync(client, symbol, cancellationToken);
+      await client.SubscribeAsync(symbol, options.Timeframes, cancellationToken);
+      healthFile.Touch();
+
+      refreshTask = RefreshLoopAsync(client, linked.Token);
+      var emitter = new ClosedBarEmitter();
       await foreach (var raw in client.LiveTrendbarsAsync(cancellationToken))
       {
         var bar = TrendbarDecoder.Decode(raw, symbol.Digits);
@@ -65,8 +68,12 @@ public sealed class FeedRunner(
     }
     finally
     {
+      client.Heartbeat -= TouchOnHeartbeat;
       linked.Cancel();
-      await IgnoreCancellation(refreshTask);
+      if (refreshTask is not null)
+      {
+        await IgnoreCancellation(refreshTask);
+      }
     }
   }
 

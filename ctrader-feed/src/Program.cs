@@ -20,9 +20,13 @@ public static class Program
       options.BarsWindowMax,
       options.BarsChannel
     );
+    var refreshTokenStore = new RedisRefreshTokenStore(
+      redis,
+      options.RefreshTokenKey
+    );
     var runner = new FeedRunner(
       options,
-      () => new CTraderOpenApiFeedClient(options),
+      () => new CTraderOpenApiFeedClient(options, refreshTokenStore),
       sink,
       new HealthFile(options.HeartbeatFile)
     );

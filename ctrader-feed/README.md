@@ -44,6 +44,7 @@ CTRADER_TIMEFRAMES=M5,M15,M30
 CTRADER_BACKFILL_BARS=1500
 CTRADER_REQUEST_TIMEOUT=30
 CTRADER_TOKEN_REFRESH_MINUTES=50
+CTRADER_REFRESH_TOKEN_KEY=ctrader:refresh_token
 REDIS_URL=redis://redis:6379/0
 BARS_WINDOW_MAX=1500
 BARS_CHANNEL=bars:new
@@ -60,6 +61,11 @@ account access, and store the client ID/secret plus access/refresh tokens in
 the deployment environment. Tokens are never logged. The service application
 auths, refreshes the access token, account-auths, resolves the symbol, then
 backfills and subscribes.
+
+When cTrader rotates the refresh token, the latest value is persisted in Redis
+at `CTRADER_REFRESH_TOKEN_KEY` (default `ctrader:refresh_token`) and preferred
+over the deployment environment on the next reconnect. Redis is internal to the
+compose network and not exposed publicly; do not log this key or its value.
 
 Demo is the default endpoint:
 
@@ -82,9 +88,11 @@ Switching to live later should be a deliberate environment change.
 
 ## Healthcheck
 
-The app writes a heartbeat file after backfill and every successful closed-bar
-write. Compose calls the same binary with `--healthcheck`; it exits non-zero if
-the heartbeat is missing or older than ten minutes.
+The app writes a heartbeat file after backfill, after subscribe success, every
+successful closed-bar write, and every received cTrader heartbeat. Compose calls
+the same binary with `--healthcheck`; it exits non-zero if the heartbeat is
+missing or older than ten minutes. This tracks connection liveness even during
+weekends or quiet market periods when no XAU bars close.
 
 ## Local Commands
 

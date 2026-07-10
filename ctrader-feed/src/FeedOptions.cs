@@ -16,6 +16,7 @@ public sealed record FeedOptions(
   int BarsWindowMax,
   string BarsChannel,
   string HeartbeatFile,
+  string RefreshTokenKey,
   TimeSpan RequestTimeout,
   TimeSpan TokenRefreshInterval
 )
@@ -39,6 +40,7 @@ public sealed record FeedOptions(
       BarsWindowMax: int.Parse(Env("BARS_WINDOW_MAX", "1500")),
       BarsChannel: Env("BARS_CHANNEL", "bars:new"),
       HeartbeatFile: Env("HEALTH_FILE", "/tmp/ctrader-feed.heartbeat"),
+      RefreshTokenKey: Env("CTRADER_REFRESH_TOKEN_KEY", "ctrader:refresh_token"),
       RequestTimeout: TimeSpan.FromSeconds(int.Parse(Env("CTRADER_REQUEST_TIMEOUT", "30"))),
       TokenRefreshInterval: TimeSpan.FromMinutes(
         int.Parse(Env("CTRADER_TOKEN_REFRESH_MINUTES", "50"))
