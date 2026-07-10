@@ -15,6 +15,7 @@ from app.dedup import (
 )
 from app.reports import build_stats, sparkline
 from app.symbols import SYMBOLS, channels_for
+from app.tg_core import send_with_retry
 
 log = logging.getLogger(__name__)
 
@@ -148,8 +149,7 @@ def format_weekly_recap(
 
 
 async def _send_recap(text: str, channel_id: int) -> None:
-  from app.telegram import _send_with_retry
-  await _send_with_retry(text, chat_id=channel_id)
+  await send_with_retry(text, chat_id=channel_id)
 
 
 async def _weekly_report_tick(now: datetime | None = None) -> bool:

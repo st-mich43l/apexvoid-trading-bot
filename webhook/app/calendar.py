@@ -22,7 +22,7 @@ from app.dedup import (
   upsert_events,
 )
 from app.symbols import channels_for
-from app.telegram import _send_with_retry
+from app.tg_core import send_with_retry as _send_with_retry
 
 log = logging.getLogger(__name__)
 
