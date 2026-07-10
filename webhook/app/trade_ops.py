@@ -21,7 +21,9 @@ from app.dedup import (
   update_sl,
 )
 from app.broadcast import broadcast_entry, delete_posts, fanout_update
+from app.keyboards import build_tp_close_kb
 from app.pips_format import wing_icons
+from app.redis_state import clear_sl_alert, mark_tp_alert
 from app.symbols import SYMBOLS, channel_for_symbol
 
 
@@ -116,7 +118,6 @@ async def do_sl(ctx: dict) -> dict:
   row = await update_sl(ctx["sid"], price)
   if row is None:
     return {"action": "sl", "ok": False, "error": "not_open"}
-  from app.watcher import clear_sl_alert
   await clear_sl_alert(ctx["sid"])
   return {
     "action": "sl",
@@ -246,7 +247,6 @@ async def do_tp(ctx: dict) -> dict:
     return {"action": "tp", "ok": False, "error": "not_open"}
   if tp_number < 1 or tp_number > len(signal.get("tps") or []):
     return {"action": "tp", "ok": False, "error": "invalid_tp"}
-  from app.watcher import mark_tp_alert
   await mark_tp_alert(signal["id"], tp_number, int(ctx["pips"]))
   return {
     "action": "tp",
@@ -405,7 +405,6 @@ async def post_result(result: dict, symbol: str) -> str:
   markup_fn = None
   if result["action"] == "tp":
     # Same owner-only Close button the watcher attaches to auto TP alerts.
-    from app.telegram import build_tp_close_kb
     sid_, tp_, pips_ = result["sid"], result["tp_number"], result["pips"]
     markup_fn = (
       lambda tier: build_tp_close_kb(sid_, tp_, pips_) if tier == "vip" else None

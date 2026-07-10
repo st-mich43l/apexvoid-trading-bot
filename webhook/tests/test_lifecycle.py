@@ -173,6 +173,10 @@ def test_close_be_parses_as_full_remaining():
   assert telegram._parse_close("close #3 be") == (3, 0, None)
 
 
+def test_fallback_router_is_included_last():
+  assert telegram.dp.sub_routers[-1].name == "fallback"
+
+
 @pytest.mark.asyncio
 async def test_channel_active_deduplicates(monkeypatch):
   msg = _channel_message("active #1")

@@ -16,6 +16,7 @@ log = logging.getLogger(__name__)
 
 # Progress keys outlive an open trade comfortably, then self-expire so closed
 # signals do not accumulate forever.
+_KEY_PREFIX = "watcher"
 _PROGRESS_TTL = 30 * 24 * 3600
 _CURSOR_TTL = 2 * 24 * 3600
 
@@ -41,11 +42,11 @@ async def close_client() -> None:
 
 
 def _cursor_key(symbol: str) -> str:
-  return f"watch:cursor:{symbol.upper()}"
+  return f"{_KEY_PREFIX}:cursor:{symbol.upper()}"
 
 
 def _progress_key(row_id: int) -> str:
-  return f"watch:progress:{row_id}"
+  return f"{_KEY_PREFIX}:progress:{row_id}"
 
 
 async def get_cursor(symbol: str) -> str | None:
@@ -85,6 +86,22 @@ async def set_runner_pips(row_id: int, pips: int) -> None:
   if pips > current:
     await client.hset(key, "runner_pips", pips)
     await client.expire(key, _PROGRESS_TTL)
+
+
+async def clear_sl_alert(row_id: int) -> None:
+  """Allow an updated stop-loss level to produce a fresh alert."""
+  await clear_sl_flag(row_id)
+
+
+async def mark_tp_alert(
+  row_id: int,
+  tp_number: int,
+  pips: int | None = None,
+) -> None:
+  """Prevent a manual TP notification from being repeated by the watcher."""
+  await set_tp_progress(row_id, tp_number)
+  if pips is not None:
+    await set_runner_pips(row_id, pips)
 
 
 async def set_sl_flag(row_id: int) -> None:
