@@ -228,10 +228,13 @@ async def test_linked_accounting_stats_and_cluster_review(tmp_path, monkeypatch)
     source["id"],
     round_two["id"],
   ]
-  assert "Trades: 2" in report
-  assert "Net: <b>+40 pips</b>" in report
-  assert "Expectancy: +20p per trade" in report
-  assert "zone 4100–4105 BUY: 2 rounds, 1W/1L, +40p" in report
+  assert "📦 Trades" in report
+  assert "💰 Net" in report
+  assert "+40p" in report
+  assert "⚖ Expectancy" in report
+  assert "+20p" in report
+  assert "zone 4100–4105 BUY" in report
+  assert "2r · 1W/1L" in report
   assert "Round 1 · #1" in review
   assert "Round 2 · #2" in review
   assert "Cluster:</b> 2 rounds · 1W / 1L · net +40p" in review
@@ -288,10 +291,12 @@ def test_stats_groups_sessions_and_sparkline():
   )
   report = format_stats(stats, "week")
 
-  assert "ob-retest: 2 · 1W/1L · +40p · 50%" in report
-  assert "Asia: 1" in report
-  assert "London: 1" in report
-  assert "NY: 1" in report
+  assert "OB Retest" in report
+  assert "1W/1L · 50%" in report
+  assert "+40p" in report
+  assert "🌏 Asia" in report
+  assert "🌍 London" in report
+  assert "🌎 NY" in report
   assert len(sparkline([70, 40, 60])) == 3
 
 
