@@ -75,6 +75,17 @@ class Settings(BaseSettings):
   scanner_alert_ttl: int = 7200
   scanner_level_bucket: int = 20
   scanner_confluence_floor: int = 2
+  swing_fractal_n: int = 2
+  zigzag_pct: float = 0.0
+  zigzag_atr_mult: float = 1.0
+  displacement_atr_mult: float = 1.5
+  zone_width: str = "body"
+  equal_tol_atr: float = 0.15
+  level_cluster_atr: float = 0.5
+  round_step: float = 5.0
+  key_level_min_touches: int = 2
+  momentum_lookback: int = 8
+  momentum_body_frac: float = 0.6
   wae_fast: int = 20
   wae_slow: int = 40
   wae_sensitivity: float = 150.0

@@ -1,63 +1,13 @@
-"""Pure price-action structure helpers over closed-bar windows."""
+"""Pure structure layer plus compatibility helpers over closed OHLC bars."""
 
-from dataclasses import dataclass
-import math
+from __future__ import annotations
 
 import pandas as pd
 
-
-@dataclass(frozen=True)
-class Swing:
-  index: pd.Timestamp
-  kind: str
-  price: float
-  label: str
-
-
-@dataclass(frozen=True)
-class Level:
-  price: float
-  kind: str
-  touches: int = 1
-
-
-@dataclass(frozen=True)
-class Zone:
-  low: float
-  high: float
-  kind: str
-
-
-def _tol(df: pd.DataFrame) -> float:
-  if df.empty:
-    return 0.0
-  span = float(df["high"].max() - df["low"].min())
-  return max(span * 0.003, 0.1)
-
-
-def swings(df: pd.DataFrame, left: int = 2, right: int = 2) -> list[Swing]:
-  result: list[Swing] = []
-  last_high: float | None = None
-  last_low: float | None = None
-  for i in range(left, max(left, len(df) - right)):
-    window = df.iloc[i - left:i + right + 1]
-    row = df.iloc[i]
-    high = float(row["high"])
-    low = float(row["low"])
-    idx = df.index[i]
-    if high >= float(window["high"].max()) and (
-      window["high"].eq(high).sum() == 1
-    ):
-      label = "HH" if last_high is None or high > last_high else "LH"
-      last_high = high
-      result.append(Swing(idx, "high", high, label))
-    if low <= float(window["low"].min()) and (
-      window["low"].eq(low).sum() == 1
-    ):
-      label = "HL" if last_low is None or low > last_low else "LL"
-      last_low = low
-      result.append(Swing(idx, "low", low, label))
-  return sorted(result, key=lambda item: item.index)
+from app.levels import key_levels as cluster_key_levels
+from app.pa_math import atr_series
+from app.pa_types import Break, Level, Swing, Zone
+from app.swings import find_swings
 
 
 def market_structure(items: list[Swing]) -> str:
@@ -76,82 +26,82 @@ def market_structure(items: list[Swing]) -> str:
   return "range"
 
 
+def structure_breaks(swings: list[Swing], df: pd.DataFrame) -> list[Break]:
+  breaks: list[Break] = []
+  trend = market_structure(swings)
+  broken: set[tuple[str, float]] = set()
+  for i in range(len(df)):
+    close = float(df["close"].iloc[i])
+    prior = [s for s in swings if int(s.index) < i]
+    highs = [s for s in prior if s.kind == "high"]
+    lows = [s for s in prior if s.kind == "low"]
+    if highs:
+      level = highs[-1].price
+      key = ("up", level)
+      if close > level and key not in broken:
+        broken.add(key)
+        breaks.append(Break(_break_kind(trend, "up"), "up", level, i, df.index[i]))
+    if lows:
+      level = lows[-1].price
+      key = ("down", level)
+      if close < level and key not in broken:
+        broken.add(key)
+        breaks.append(Break(_break_kind(trend, "down"), "down", level, i, df.index[i]))
+  return breaks
+
+
+def swings(df: pd.DataFrame, left: int = 2, right: int = 2) -> list[Swing]:
+  return find_swings(
+    df,
+    fractal_n=max(left, right),
+    zigzag_pct=0.0,
+    zigzag_atr_mult=0.0,
+  )
+
+
 def key_levels(df: pd.DataFrame) -> list[Level]:
-  tolerance = _tol(df)
-  raw = [
-    *(float(s.price) for s in swings(df, 2, 2)),
-  ]
-  levels: list[Level] = []
-  for price in raw:
-    for idx, level in enumerate(levels):
-      if abs(level.price - price) <= tolerance:
-        touches = level.touches + 1
-        merged = ((level.price * level.touches) + price) / touches
-        levels[idx] = Level(merged, level.kind, touches)
-        break
-    else:
-      levels.append(Level(price, "reaction", 1))
-  if not df.empty:
-    close = float(df["close"].iloc[-1])
-    base = round(close / 10) * 10
-    for price in (base - 10, base, base + 10):
-      levels.append(Level(float(price), "round", 1))
-  return sorted(levels, key=lambda level: level.price)
-
-
-def flip_zones(df: pd.DataFrame) -> list[Zone]:
-  zones = []
-  for level in key_levels(df):
-    retest = find_retest(df, level.price)
-    if retest:
-      zones.append(retest)
-  return zones
-
-
-def order_blocks(df: pd.DataFrame) -> list[Zone]:
-  zones: list[Zone] = []
-  for i in range(1, len(df)):
-    prev = df.iloc[i - 1]
-    cur = df.iloc[i]
-    impulse = abs(float(cur["close"] - cur["open"]))
-    avg_range = float((df["high"] - df["low"]).rolling(10).mean().iloc[i] or 0)
-    if not math.isfinite(avg_range):
-      avg_range = 0
-    if avg_range and impulse < avg_range:
-      continue
-    if cur["close"] > cur["open"] and prev["close"] < prev["open"]:
-      zones.append(Zone(float(prev["low"]), float(prev["high"]), "bullish_ob"))
-    if cur["close"] < cur["open"] and prev["close"] > prev["open"]:
-      zones.append(Zone(float(prev["low"]), float(prev["high"]), "bearish_ob"))
-  return zones
-
-
-def fvg(df: pd.DataFrame) -> list[Zone]:
-  zones: list[Zone] = []
-  for i in range(2, len(df)):
-    older = df.iloc[i - 2]
-    cur = df.iloc[i]
-    if float(older["high"]) < float(cur["low"]):
-      zones.append(Zone(float(older["high"]), float(cur["low"]), "bullish_fvg"))
-    if float(older["low"]) > float(cur["high"]):
-      zones.append(Zone(float(cur["high"]), float(older["low"]), "bearish_fvg"))
-  return zones
+  atr = atr_series(df)
+  return cluster_key_levels(swings(df, 2, 2), atr, min_touches=1)
 
 
 def equal_highs_lows(df: pd.DataFrame) -> list[Level]:
-  tolerance = _tol(df)
+  from app.liquidity import liquidity_pools
+
+  pivots = swings(df, 1, 1)
+  pools = liquidity_pools(pivots, df)
   levels: list[Level] = []
-  highs = [s for s in swings(df, 1, 1) if s.kind == "high"]
-  lows = [s for s in swings(df, 1, 1) if s.kind == "low"]
-  for kind, items in (("equal_high", highs), ("equal_low", lows)):
-    for i, item in enumerate(items):
-      touches = 1 + sum(
-        1 for other in items[i + 1:]
-        if abs(other.price - item.price) <= tolerance
-      )
-      if touches >= 2:
-        levels.append(Level(item.price, kind, touches))
+  for pool in pools:
+    if pool.touches < 2:
+      continue
+    kind = "equal_high" if pool.side == "buy" else "equal_low"
+    levels.append(Level(pool.level, kind, pool.touches, pool.band, float(pool.touches)))
   return levels
+
+
+def order_blocks(df: pd.DataFrame) -> list[Zone]:
+  from app.zones import displacement, mark_mitigation, order_blocks as find_order_blocks
+
+  atr = atr_series(df)
+  pivots = find_swings(df, 2, 0.0, 0.0, atr)
+  breaks = structure_breaks(pivots, df)
+  legs = displacement(df, atr)
+  zones = find_order_blocks(df, legs, breaks)
+  if zones:
+    return mark_mitigation(zones, df)
+  return _legacy_order_blocks(df)
+
+
+def fvg(df: pd.DataFrame) -> list[Zone]:
+  from app.zones import fvg as find_fvg
+
+  return find_fvg(df)
+
+
+def flip_zones(df: pd.DataFrame) -> list[Zone]:
+  return [
+    zone for level in key_levels(df)
+    if (zone := find_retest(df, level.price)) is not None
+  ]
 
 
 def liquidity_sweep(df: pd.DataFrame, level: float | Level) -> str | None:
@@ -200,9 +150,23 @@ def find_retest(df: pd.DataFrame, level: float | Level) -> Zone | None:
     if not touched:
       continue
     if direction == "buy" and float(row["close"]) >= price:
-      return Zone(price - tolerance, price + tolerance, "retest_support")
+      return Zone(
+        price - tolerance,
+        price + tolerance,
+        "demand",
+        i,
+        df.index[i],
+        source="retest_support",
+      )
     if direction == "sell" and float(row["close"]) <= price:
-      return Zone(price - tolerance, price + tolerance, "retest_resistance")
+      return Zone(
+        price - tolerance,
+        price + tolerance,
+        "supply",
+        i,
+        df.index[i],
+        source="retest_resistance",
+      )
   return None
 
 
@@ -217,5 +181,36 @@ def entry_zone(
   for zone in reversed(zones):
     if zone.low - tolerance <= price <= zone.high + tolerance:
       return zone
-  kind = "demand" if direction.upper() == "BUY" else "supply"
-  return Zone(price - tolerance, price + tolerance, kind)
+  side = "demand" if direction.upper() == "BUY" else "supply"
+  return Zone(price - tolerance, price + tolerance, side, source=side)
+
+
+def _break_kind(trend: str, direction: str) -> str:
+  if trend == "up":
+    return "BOS" if direction == "up" else "CHoCH"
+  if trend == "down":
+    return "BOS" if direction == "down" else "CHoCH"
+  return "BOS"
+
+
+def _tol(df: pd.DataFrame) -> float:
+  if df.empty:
+    return 0.0
+  span = float(df["high"].max() - df["low"].min())
+  return max(span * 0.003, 0.1)
+
+
+def _legacy_order_blocks(df: pd.DataFrame) -> list[Zone]:
+  zones: list[Zone] = []
+  avg_range = (df["high"] - df["low"]).rolling(10, min_periods=1).mean()
+  for i in range(1, len(df)):
+    prev = df.iloc[i - 1]
+    cur = df.iloc[i]
+    impulse = abs(float(cur["close"] - cur["open"]))
+    if impulse < float(avg_range.iloc[i]):
+      continue
+    if cur["close"] > cur["open"] and prev["close"] < prev["open"]:
+      zones.append(Zone(float(prev["low"]), float(prev["high"]), "demand", i - 1, df.index[i - 1], source="bullish_ob"))
+    if cur["close"] < cur["open"] and prev["close"] > prev["open"]:
+      zones.append(Zone(float(prev["low"]), float(prev["high"]), "supply", i - 1, df.index[i - 1], source="bearish_ob"))
+  return zones
