@@ -47,6 +47,31 @@ async def test_redis_ohlc_source_returns_oldest_to_newest_window():
 
 
 @pytest.mark.asyncio
+async def test_redis_ohlc_source_normalizes_legacy_ctrader_xau_scale():
+  client = redis_state.get_client()
+  await client.zadd(
+    "bars:XAU:M5",
+    {
+      json.dumps({
+        "t": 1,
+        "o": 4104130,
+        "h": 4107960,
+        "l": 4103000,
+        "c": 4105500,
+        "v": 100,
+      }): 1
+    },
+  )
+
+  df = await RedisOHLCSource(client).window("xau", "m5", 1)
+
+  assert df.iloc[0]["open"] == pytest.approx(4104.13)
+  assert df.iloc[0]["high"] == pytest.approx(4107.96)
+  assert df.iloc[0]["low"] == pytest.approx(4103.0)
+  assert df.iloc[0]["close"] == pytest.approx(4105.5)
+
+
+@pytest.mark.asyncio
 async def test_scanner_dedups_same_setup_level_and_only_dms_owner(monkeypatch):
   client = redis_state.get_client()
   notify = AsyncMock()
@@ -113,6 +138,7 @@ async def test_scanner_dedups_same_setup_level_and_only_dms_owner(monkeypatch):
   text = notify.await_args.args[0]
   assert "Setup forming" in text
   assert "Trend Pullback" in text
+  assert "Key level <b>4,100</b>" in text
   assert "+90 pips" not in text
   assert notify.await_args.kwargs == {"chat_id": 4242}
   assert await client.get(

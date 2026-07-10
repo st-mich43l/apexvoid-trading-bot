@@ -5,14 +5,14 @@ namespace CTraderFeed.Tests;
 public sealed class TrendbarDecoderTests
 {
   [Fact]
-  public void DecodeUsesLowDeltaEncodingDigitsAndUtcOpenTimestamp()
+  public void DecodeUsesOpenApiPriceScaleAndUtcOpenTimestamp()
   {
     var raw = new RawTrendbar(
       Timeframe: "M5",
-      Low: 410000,
-      DeltaOpen: 123,
-      DeltaHigh: 567,
-      DeltaClose: 345,
+      Low: 410000000,
+      DeltaOpen: 123000,
+      DeltaHigh: 567000,
+      DeltaClose: 345000,
       Volume: 77,
       UtcTimestampInMinutes: 60
     );

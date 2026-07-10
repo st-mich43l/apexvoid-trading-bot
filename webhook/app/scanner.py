@@ -82,9 +82,10 @@ def _parse_bar_event(data: object) -> tuple[str, str, str] | None:
   return symbol, tf, ":".join(parts[2:])
 
 
-def _price_text(value: float, symbol: str) -> str:
+def _price_text(value: float, symbol: str, *, grouped: bool = False) -> str:
   digits = int(SYMBOLS.get(symbol.upper(), {}).get("digits", 2))
-  return f"{value:.{digits}f}".rstrip("0").rstrip(".")
+  spec = f",.{digits}f" if grouped else f".{digits}f"
+  return f"{value:{spec}}".rstrip("0").rstrip(".")
 
 
 def _pip_size(symbol: str) -> float:
@@ -120,10 +121,10 @@ def _htf_bias_text(ctx: DetectionContext, htf_order: list[str]) -> str:
   return "range"
 
 
-def _zone_text(zone: Zone, symbol: str) -> str:
+def _zone_text(zone: Zone, symbol: str, *, grouped: bool = False) -> str:
   return (
-    f"{_price_text(zone.low, symbol)}"
-    f"-{_price_text(zone.high, symbol)}"
+    f"{_price_text(zone.low, symbol, grouped=grouped)}"
+    f"-{_price_text(zone.high, symbol, grouped=grouped)}"
   )
 
 
@@ -151,8 +152,8 @@ def _format_detection(
       f"· {stars}"
     ),
     (
-      f"Key level <b>{_price_text(result.key_level, symbol)}</b> "
-      f"· entry zone <b>{_zone_text(result.entry_zone, symbol)}</b>"
+      f"Key level <b>{_price_text(result.key_level, symbol, grouped=True)}</b> "
+      f"· entry zone <b>{_zone_text(result.entry_zone, symbol, grouped=True)}</b>"
     ),
     f"HTF bias: {escape(_htf_bias_text(ctx, htf_order))}{reason_suffix}",
     "→ review & post if it holds",
