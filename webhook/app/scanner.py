@@ -54,6 +54,8 @@ def _all_tfs(exec_tf: str, htf_tfs: Iterable[str]) -> list[str]:
 def _detector_settings() -> DetectorSettings:
   return DetectorSettings(
     confluence_floor=settings.scanner_confluence_floor,
+    max_entry_atr=settings.max_entry_atr,
+    range_lookback=settings.range_lookback,
     swing_fractal_n=settings.swing_fractal_n,
     zigzag_pct=settings.zigzag_pct,
     zigzag_atr_mult=settings.zigzag_atr_mult,
@@ -147,8 +149,9 @@ def _format_detection(
       f"· {stars}"
     ),
     (
-      f"Key level <b>{_price_text(result.key_level, symbol, grouped=True)}</b> "
-      f"· entry zone <b>{_zone_text(result.entry_zone, symbol, grouped=True)}</b>"
+      f"Price now <b>{_price_text(result.current_price, symbol, grouped=True)}</b> "
+      f"· entry <b>{_zone_text(result.entry_zone, symbol, grouped=True)}</b> "
+      f"· key <b>{_price_text(result.key_level, symbol, grouped=True)}</b>"
     ),
     f"HTF bias: {escape(_htf_bias_text(ctx, htf_order))}{reason_suffix}",
     "→ review & post if it holds",
@@ -232,6 +235,11 @@ async def _record_status(
         "setup": item.setup,
         "direction": item.direction,
         "key_level": item.key_level,
+        "entry_zone": {
+          "low": item.entry_zone.low,
+          "high": item.entry_zone.high,
+        },
+        "current_price": item.current_price,
         "confluence": item.confluence,
       }
       for item in detected

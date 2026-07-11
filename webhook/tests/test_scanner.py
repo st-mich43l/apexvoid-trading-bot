@@ -109,8 +109,9 @@ async def test_scanner_dedups_same_setup_level_and_only_dms_owner(monkeypatch):
     direction="BUY",
     key_level=4100.0,
     entry_zone=Zone(4098, 4102, "demand"),
+    current_price=4103.0,
     confluence=3,
-    reasons=["HTF bias up", "EMA aligned"],
+    reasons=["HTF bias up", "rejection at support"],
   )
 
   def detector(received_ctx):
@@ -138,7 +139,9 @@ async def test_scanner_dedups_same_setup_level_and_only_dms_owner(monkeypatch):
   text = notify.await_args.args[0]
   assert "Setup forming" in text
   assert "Trend Pullback" in text
-  assert "Key level <b>4,100</b>" in text
+  assert "Price now <b>4,103</b>" in text
+  assert "entry <b>4,098-4,102</b>" in text
+  assert "key <b>4,100</b>" in text
   assert "+90 pips" not in text
   assert notify.await_args.kwargs == {"chat_id": 4242}
   assert await client.get(
@@ -183,8 +186,9 @@ async def test_scanner_records_analysis_status_without_owner(monkeypatch):
     direction="BUY",
     key_level=4100.0,
     entry_zone=Zone(4098, 4102, "demand"),
+    current_price=4103.0,
     confluence=3,
-    reasons=["HTF bias up", "EMA aligned"],
+    reasons=["HTF bias up", "rejection at support"],
   )
 
   sent = await scanner._handle_event(
@@ -204,4 +208,6 @@ async def test_scanner_records_analysis_status_without_owner(monkeypatch):
   assert status["event_ts"] == "123"
   assert status["frames"] == {"M15": 1, "M30": 1, "M5": 1}
   assert status["detected"][0]["setup"] == "Trend Pullback"
+  assert status["detected"][0]["current_price"] == 4103.0
+  assert status["detected"][0]["entry_zone"] == {"low": 4098, "high": 4102}
   assert status["sent"] == 0
