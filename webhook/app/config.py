@@ -75,6 +75,8 @@ class Settings(BaseSettings):
   scanner_alert_ttl: int = 7200
   scanner_level_bucket: int = 20
   scanner_confluence_floor: int = 2
+  max_entry_atr: float = 2.0
+  range_lookback: int = 50
   swing_fractal_n: int = 2
   zigzag_pct: float = 0.0
   zigzag_atr_mult: float = 1.0
