@@ -8,7 +8,16 @@ import math
 import pandas as pd
 
 from app.pa_math import atr_at, atr_series, body_fraction, candle_direction
-from app.pa_types import Break, Leg, Level, Pool, Zone
+from app.pa_types import (
+  Break,
+  DealingRange,
+  Grab,
+  Leg,
+  Level,
+  Pool,
+  SessionLevel,
+  Zone,
+)
 
 ZONE_MERGE_OVERLAP = 0.5
 FRESH_SCORE = 3.0
@@ -16,6 +25,7 @@ SINGLE_TOUCH_SCORE = 1.0
 SOURCE_SCORE_CAP = 5.0
 SOURCE_SCORES = {
   "order_block": 3.0,
+  "breaker": 2.0,
   "flip_zone": 2.0,
   "supply_demand": 1.5,
   "bullish_fvg": 1.0,
@@ -25,6 +35,9 @@ KEY_LEVEL_SCORE = 2.0
 ROUND_NUMBER_SCORE = 1.0
 LIQUIDITY_SCORE = 2.0
 HTF_SCORE = 3.0
+SESSION_LEVEL_SCORE = 2.0
+PD_POSITION_SCORE = 2.0
+GRAB_A_SCORE = 2.0
 
 
 def displacement(
@@ -107,6 +120,33 @@ def order_blocks(
   return zones
 
 
+def breaker_blocks(order_blocks: list[Zone], df: pd.DataFrame) -> list[Zone]:
+  zones: list[Zone] = []
+  for zone in order_blocks:
+    violation = _breaker_violation(zone, df)
+    if violation is None:
+      zones.append(zone)
+      continue
+    dead = replace(
+      zone,
+      touches=max(zone.touches, 1),
+      mitigated=True,
+    )
+    zones.append(dead)
+    side = "supply" if zone.side == "demand" else "demand"
+    zones.append(Zone(
+      bottom=zone.low,
+      top=zone.high,
+      side=side,
+      origin_index=violation,
+      created_ts=df.index[violation],
+      source="breaker",
+      break_kind="breaker",
+      break_index=violation,
+    ))
+  return zones
+
+
 def flip_zones(levels: list[Level], breaks: list[Break]) -> list[Zone]:
   zones: list[Zone] = []
   seen: set[tuple[float, str]] = set()
@@ -156,10 +196,11 @@ def mark_mitigation(
       if touched and not in_touch:
         touches += 1
       in_touch = touched
+    final_touches = max(touches, zone.touches)
     stamped.append(replace(
       zone,
-      touches=touches,
-      mitigated=touches > 0,
+      touches=final_touches,
+      mitigated=zone.mitigated or final_touches > 0,
     ))
   return stamped
 
@@ -187,9 +228,21 @@ def score_zones(
   pools: list[Pool],
   round_step: float,
   htf_zones: list[Zone] | None = None,
+  session_levels: list[SessionLevel] | None = None,
+  dealing_range: DealingRange | None = None,
+  grabs: list[Grab] | None = None,
 ) -> list[Zone]:
   scored = [
-    _score_zone(zone, key_levels, pools, round_step, htf_zones or [])
+    _score_zone(
+      zone,
+      key_levels,
+      pools,
+      round_step,
+      htf_zones or [],
+      session_levels or [],
+      dealing_range,
+      grabs or [],
+    )
     for zone in zones
   ]
   return sorted(
@@ -273,6 +326,9 @@ def _score_zone(
   pools: list[Pool],
   round_step: float,
   htf_zones: list[Zone],
+  session_levels: list[SessionLevel],
+  dealing_range: DealingRange | None,
+  grabs: list[Grab],
 ) -> Zone:
   score = 0.0
   reasons: list[str] = []
@@ -297,6 +353,16 @@ def _score_zone(
   if _has_liquidity_confluence(zone, pools):
     score += LIQUIDITY_SCORE
     reasons.append("liquidity pool")
+  for session_name in _session_level_confluences(zone, session_levels):
+    score += SESSION_LEVEL_SCORE
+    reasons.append(session_name)
+  pd_reason = _pd_position_reason(zone, dealing_range)
+  if pd_reason is not None:
+    score += PD_POSITION_SCORE
+    reasons.append(pd_reason)
+  if _has_grade_a_grab(zone, grabs):
+    score += GRAB_A_SCORE
+    reasons.append("sweep A")
   if any(_inside_htf_zone(zone, htf) for htf in htf_zones):
     score += HTF_SCORE
     reasons.append("HTF zone")
@@ -324,6 +390,8 @@ def _source_quality(zone: Zone) -> float:
 def _source_reason(source: str) -> str:
   if source == "order_block":
     return "OB"
+  if source == "breaker":
+    return "breaker"
   if source == "flip_zone":
     return "flip"
   if source == "supply_demand":
@@ -364,6 +432,77 @@ def _has_liquidity_confluence(zone: Zone, pools: list[Pool]) -> bool:
   return False
 
 
+def _session_level_confluences(
+  zone: Zone,
+  session_levels: list[SessionLevel],
+) -> list[str]:
+  result: list[str] = []
+  width = max(zone.high - zone.low, 0.0)
+  tolerance = max(width, 0.1)
+  for level in session_levels:
+    if level.swept:
+      continue
+    if level.name in result:
+      continue
+    if zone.side == "demand" and _is_low_session_level(level.name):
+      if (
+        zone.low <= level.price <= zone.high
+        or zone.low - tolerance <= level.price <= zone.low
+      ):
+        result.append(level.name)
+    if zone.side == "supply" and _is_high_session_level(level.name):
+      if (
+        zone.low <= level.price <= zone.high
+        or zone.high <= level.price <= zone.high + tolerance
+      ):
+        result.append(level.name)
+  return result
+
+
+def _pd_position_reason(
+  zone: Zone,
+  dealing_range: DealingRange | None,
+) -> str | None:
+  if dealing_range is None:
+    return None
+  if zone.side == "demand" and zone.high <= dealing_range.eq:
+    return "discount"
+  if zone.side == "supply" and zone.low >= dealing_range.eq:
+    return "premium"
+  return None
+
+
+def _has_grade_a_grab(zone: Zone, grabs: list[Grab]) -> bool:
+  for grab in grabs:
+    if grab.grade != "A":
+      continue
+    if zone.side == "demand" and grab.direction == "bull":
+      if _pool_points_into_zone(zone, grab.pool):
+        return True
+    if zone.side == "supply" and grab.direction == "bear":
+      if _pool_points_into_zone(zone, grab.pool):
+        return True
+  return False
+
+
+def _pool_points_into_zone(zone: Zone, pool: Pool) -> bool:
+  width = max(zone.high - zone.low, 0.0)
+  tolerance = max(pool.band, width, 0.1)
+  if zone.side == "demand" and pool.side == "sell":
+    return zone.low - tolerance <= pool.level <= zone.high
+  if zone.side == "supply" and pool.side == "buy":
+    return zone.low <= pool.level <= zone.high + tolerance
+  return False
+
+
+def _is_low_session_level(name: str) -> bool:
+  return name.endswith("_L") or name in {"PDL", "PWL"}
+
+
+def _is_high_session_level(name: str) -> bool:
+  return name.endswith("_H") or name in {"PDH", "PWH"}
+
+
 def _inside_htf_zone(zone: Zone, htf: Zone) -> bool:
   return (
     zone.side == htf.side
@@ -374,6 +513,17 @@ def _inside_htf_zone(zone: Zone, htf: Zone) -> bool:
 
 def _number(value: float) -> str:
   return f"{value:.2f}".rstrip("0").rstrip(".")
+
+
+def _breaker_violation(zone: Zone, df: pd.DataFrame) -> int | None:
+  start = max(0, zone.origin_index + 1)
+  for i in range(start, len(df)):
+    close = float(df["close"].iloc[i])
+    if zone.side == "demand" and close < zone.low:
+      return i
+    if zone.side == "supply" and close > zone.high:
+      return i
+  return None
 
 
 def _append_leg(

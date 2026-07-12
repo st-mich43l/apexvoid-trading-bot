@@ -2,19 +2,32 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 
 import pandas as pd
 
+from app.dealing_range import dealing_range
 from app.levels import key_levels
 from app.liquidity import liquidity_grabs, liquidity_pools
 from app.momentum import momentum
 from app.pa_math import atr_series
-from app.pa_types import Break, Grab, Leg, Level, Pool, Swing, Zone
+from app.pa_types import (
+  Break,
+  DealingRange,
+  Grab,
+  Leg,
+  Level,
+  Pool,
+  SessionLevel,
+  Swing,
+  Zone,
+)
+from app.session_liquidity import previous_week_levels, session_levels
 from app.structure import market_structure, structure_breaks
 from app.swings import find_swings
 from app.zones import (
   ZONE_MERGE_OVERLAP,
+  breaker_blocks,
   displacement,
   flip_zones,
   fvg,
@@ -52,6 +65,14 @@ class AnalysisSettings:
   key_level_min_touches: int = 2
   momentum_lookback: int = 8
   momentum_body_frac: float = 0.6
+  session_asia_start: int = 22
+  session_london_start: int = 7
+  session_ny_start: int = 13
+  daily_rollover_utc_hour: int = 21
+  eq_band: float = 0.10
+  sweep_body_frac: float = 0.5
+  sweep_react_bars: int = 3
+  inducement_band_atr: float = 0.3
 
 
 @dataclass(frozen=True)
@@ -71,6 +92,8 @@ class TimeframeAnalysis:
   liquidity_pools: list[Pool]
   liquidity_grabs: list[Grab]
   momentum: str
+  session_levels: list[SessionLevel] = field(default_factory=list)
+  dealing_range: DealingRange | None = None
 
 
 @dataclass(frozen=True)
@@ -78,6 +101,7 @@ class AnalysisContext:
   frames: dict[str, pd.DataFrame]
   per_tf: dict[str, TimeframeAnalysis]
   htf_bias: str
+  dealing_range: DealingRange | None = None
 
 
 def analyze(
@@ -86,10 +110,15 @@ def analyze(
   htf_order: list[str] | None = None,
 ) -> AnalysisContext:
   settings = settings or AnalysisSettings()
-  per_tf = {
-    tf.upper(): _analyze_tf(df, settings)
+  frames = {
+    tf.upper(): df
     for tf, df in df_by_tf.items()
     if not df.empty
+  }
+  weekly_levels = _weekly_session_levels(frames)
+  per_tf = {
+    tf: _analyze_tf(df, settings, weekly_levels)
+    for tf, df in frames.items()
   }
   htf_order = htf_order or ["M30", "M15"]
   per_tf = _apply_mtf_zone_scores(per_tf, settings)
@@ -97,10 +126,15 @@ def analyze(
     frames={tf.upper(): df for tf, df in df_by_tf.items()},
     per_tf=per_tf,
     htf_bias=_htf_bias(per_tf, htf_order),
+    dealing_range=_exec_dealing_range(per_tf),
   )
 
 
-def _analyze_tf(df: pd.DataFrame, settings: AnalysisSettings) -> TimeframeAnalysis:
+def _analyze_tf(
+  df: pd.DataFrame,
+  settings: AnalysisSettings,
+  weekly_levels: list[SessionLevel] | None = None,
+) -> TimeframeAnalysis:
   atr = atr_series(df, settings.atr_length)
   swings = find_swings(
     df,
@@ -126,16 +160,43 @@ def _analyze_tf(df: pd.DataFrame, settings: AnalysisSettings) -> TimeframeAnalys
   )
   sd_zones = supply_demand(df, legs)
   ob_zones = order_blocks(df, legs, breaks, settings.zone_width)
+  ob_zones = breaker_blocks(ob_zones, df)
   flip = flip_zones(levels, breaks)
   fvg_zones = fvg(df)
   pools = liquidity_pools(swings, df, settings.equal_tol_atr, atr)
-  grabs = liquidity_grabs(df, pools)
+  sessions = [
+    *session_levels(df, settings),
+    *(weekly_levels or []),
+  ]
+  range_ = dealing_range(
+    swings,
+    float(df["close"].iloc[-1]),
+    settings.eq_band,
+  )
   zones = merge_zones(
     [*sd_zones, *ob_zones, *flip, *fvg_zones],
     settings.zone_merge_overlap,
   )
   zones = mark_mitigation(zones, df, cutoff=max(0, len(df) - 1))
-  zones = score_zones(zones, levels, pools, settings.round_step)
+  grabs = liquidity_grabs(
+    df,
+    pools,
+    legs,
+    zones,
+    atr,
+    settings.sweep_body_frac,
+    settings.sweep_react_bars,
+    settings.inducement_band_atr,
+  )
+  zones = score_zones(
+    zones,
+    levels,
+    pools,
+    settings.round_step,
+    session_levels=sessions,
+    dealing_range=range_,
+    grabs=grabs,
+  )
   ob_zones, sd_zones, flip, fvg_zones = _zone_views(zones)
   return TimeframeAnalysis(
     df=df,
@@ -153,6 +214,8 @@ def _analyze_tf(df: pd.DataFrame, settings: AnalysisSettings) -> TimeframeAnalys
     liquidity_pools=pools,
     liquidity_grabs=grabs,
     momentum=momentum(df, atr, settings.momentum_lookback, settings.momentum_body_frac),
+    session_levels=sessions,
+    dealing_range=range_,
   )
 
 
@@ -171,6 +234,9 @@ def _apply_mtf_zone_scores(
         item.liquidity_pools,
         settings.round_step,
         higher_zones,
+        item.session_levels,
+        item.dealing_range,
+        item.liquidity_grabs,
       )
       item = _with_zone_views(item, zones)
       updated[tf] = item
@@ -229,6 +295,26 @@ def _zone_views(
 
 def _has_source(zone: Zone, source: str) -> bool:
   return source in zone.sources or zone.source == source
+
+
+def _weekly_session_levels(frames: dict[str, pd.DataFrame]) -> list[SessionLevel]:
+  if not frames:
+    return []
+  tf = _ordered_frame_tfs(frames)[0]
+  return previous_week_levels(frames[tf])
+
+
+def _ordered_frame_tfs(frames: dict[str, pd.DataFrame]) -> list[str]:
+  return sorted(frames, key=lambda tf: (-_tf_rank(tf), tf))
+
+
+def _exec_dealing_range(
+  per_tf: dict[str, TimeframeAnalysis],
+) -> DealingRange | None:
+  if not per_tf:
+    return None
+  tf = sorted(per_tf, key=lambda item: (_tf_rank(item), item))[0]
+  return per_tf[tf].dealing_range
 
 
 def _htf_bias(

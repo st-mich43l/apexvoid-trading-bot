@@ -8,6 +8,7 @@ import pandas as pd
 
 from app.analysis import AnalysisSettings, analyze
 from app.indicators import atr as atr_indicator
+from app.pa_types import DealingRange, Grab, SessionLevel
 from app.structure import (
   Level,
   Swing,
@@ -17,7 +18,6 @@ from app.structure import (
   find_retest,
   fvg,
   key_levels,
-  liquidity_sweep,
   market_structure,
   order_blocks,
   swings,
@@ -45,6 +45,8 @@ class StructureSet:
   liquidity_pools: list = field(default_factory=list)
   liquidity_grabs: list = field(default_factory=list)
   momentum: str = "neutral"
+  session_levels: list[SessionLevel] = field(default_factory=list)
+  dealing_range: DealingRange | None = None
 
 
 @dataclass(frozen=True)
@@ -66,6 +68,15 @@ class DetectorSettings:
   key_level_min_touches: int = 2
   momentum_lookback: int = 8
   momentum_body_frac: float = 0.6
+  session_asia_start: int = 22
+  session_london_start: int = 7
+  session_ny_start: int = 13
+  daily_rollover_utc_hour: int = 21
+  eq_band: float = 0.10
+  strict_pd_gate: bool = False
+  sweep_body_frac: float = 0.5
+  sweep_react_bars: int = 3
+  inducement_band_atr: float = 0.3
 
   def analysis_settings(self) -> AnalysisSettings:
     return AnalysisSettings(
@@ -82,6 +93,14 @@ class DetectorSettings:
       key_level_min_touches=self.key_level_min_touches,
       momentum_lookback=self.momentum_lookback,
       momentum_body_frac=self.momentum_body_frac,
+      session_asia_start=self.session_asia_start,
+      session_london_start=self.session_london_start,
+      session_ny_start=self.session_ny_start,
+      daily_rollover_utc_hour=self.daily_rollover_utc_hour,
+      eq_band=self.eq_band,
+      sweep_body_frac=self.sweep_body_frac,
+      sweep_react_bars=self.sweep_react_bars,
+      inducement_band_atr=self.inducement_band_atr,
     )
 
 
@@ -182,6 +201,8 @@ def _structure_sets_from_analysis(items) -> dict[str, StructureSet]:
       liquidity_pools=item.liquidity_pools,
       liquidity_grabs=item.liquidity_grabs,
       momentum=item.momentum,
+      session_levels=item.session_levels,
+      dealing_range=item.dealing_range,
     )
   return result
 
@@ -204,20 +225,6 @@ def _direction(ctx: DetectionContext) -> str | None:
 
 def _bias_for_direction(direction: str) -> str:
   return "up" if direction == "BUY" else "down"
-
-
-def _range_position(df: pd.DataFrame, lookback: int) -> float:
-  recent = df.tail(max(2, int(lookback)))
-  high = float(recent["high"].max())
-  low = float(recent["low"].min())
-  if high <= low:
-    return 0.5
-  return (float(recent["close"].iloc[-1]) - low) / (high - low)
-
-
-def _mid_range(df: pd.DataFrame, settings: DetectorSettings) -> bool:
-  pos = _range_position(df, settings.range_lookback)
-  return 0.40 <= pos <= 0.60
 
 
 def _last(series: pd.Series, default: float = 0.0) -> float:
@@ -395,6 +402,21 @@ def _confirmation_direction(ctx: DetectionContext) -> str | None:
   return direction if ctx.htf_bias == _bias_for_direction(direction) else None
 
 
+def _pd_gate(st: StructureSet, direction: str, settings: DetectorSettings) -> bool:
+  range_ = st.dealing_range
+  if range_ is None:
+    return True
+  if range_.zone == "eq":
+    return False
+  if direction == "BUY":
+    if settings.strict_pd_gate:
+      return range_.zone == "discount"
+    return range_.zone != "premium"
+  if settings.strict_pd_gate:
+    return range_.zone == "premium"
+  return range_.zone != "discount"
+
+
 def _confluence_from_zone(zone: Zone, reasons: list[str]) -> int:
   score = float(getattr(zone, "score", 0.0))
   if score > 0:
@@ -440,7 +462,11 @@ def _finish(
     return None
   if not _entry_valid_for_settings(zone, price, atr, direction, ctx.settings):
     return None
-  full_reasons = _merge_score_reasons(reasons, zone)
+  st = ctx.structures[ctx.tf]
+  full_reasons = _merge_score_reasons(
+    _merge_tp_anchor(reasons, st, price, direction),
+    zone,
+  )
   confluence = _confluence_from_zone(zone, full_reasons)
   if confluence < ctx.settings.confluence_floor:
     return None
@@ -455,12 +481,52 @@ def _finish(
   )
 
 
+def _merge_tp_anchor(
+  reasons: list[str],
+  st: StructureSet,
+  price: float,
+  direction: str,
+) -> list[str]:
+  anchor = _nearest_session_tp(st.session_levels, price, direction)
+  if anchor is None:
+    return reasons[:]
+  reason = f"TP anchor {anchor.name}"
+  if reason in reasons:
+    return reasons[:]
+  return [*reasons, reason]
+
+
+def _nearest_session_tp(
+  levels: list[SessionLevel],
+  price: float,
+  direction: str,
+) -> SessionLevel | None:
+  if direction == "BUY":
+    candidates = [
+      level for level in levels
+      if not level.swept and _is_high_session_level(level.name) and level.price > price
+    ]
+  else:
+    candidates = [
+      level for level in levels
+      if not level.swept and _is_low_session_level(level.name) and level.price < price
+    ]
+  if not candidates:
+    return None
+  return min(candidates, key=lambda level: abs(level.price - price))
+
+
 def trend_pullback(ctx: DetectionContext) -> DetectionResult | None:
   df, ind, st = _exec(ctx)
-  if len(df) < 5 or _mid_range(df, ctx.settings):
+  if len(df) < 5:
     return None
   direction = _confirmation_direction(ctx)
-  if direction is None or st.bias != ctx.htf_bias or not _rejection(df, direction):
+  if (
+    direction is None
+    or not _pd_gate(st, direction, ctx.settings)
+    or st.bias != ctx.htf_bias
+    or not _rejection(df, direction)
+  ):
     return None
   price = float(df["close"].iloc[-1])
   atr = _atr(ind)
@@ -489,10 +555,14 @@ def trend_pullback(ctx: DetectionContext) -> DetectionResult | None:
 
 def break_retest(ctx: DetectionContext) -> DetectionResult | None:
   df, ind, st = _exec(ctx)
-  if len(df) < 5 or _mid_range(df, ctx.settings):
+  if len(df) < 5:
     return None
   direction = _confirmation_direction(ctx)
-  if direction is None or not _rejection(df, direction):
+  if (
+    direction is None
+    or not _pd_gate(st, direction, ctx.settings)
+    or not _rejection(df, direction)
+  ):
     return None
   price = float(df["close"].iloc[-1])
   atr = _atr(ind)
@@ -516,10 +586,14 @@ def break_retest(ctx: DetectionContext) -> DetectionResult | None:
 
 def snap_back(ctx: DetectionContext) -> DetectionResult | None:
   df, ind, st = _exec(ctx)
-  if len(df) < 5 or _mid_range(df, ctx.settings):
+  if len(df) < 5:
     return None
   direction = _confirmation_direction(ctx)
-  if direction is None or not _rejection(df, direction):
+  if (
+    direction is None
+    or not _pd_gate(st, direction, ctx.settings)
+    or not _rejection(df, direction)
+  ):
     return None
   price = float(df["close"].iloc[-1])
   atr = _atr(ind)
@@ -538,16 +612,24 @@ def snap_back(ctx: DetectionContext) -> DetectionResult | None:
     level = nearest.price
   if distance < atr * ctx.settings.snap_atr_mult:
     return None
-  reasons = [f"HTF bias {ctx.htf_bias}", "ATR extension", "reversal rejection"]
+  grab = _zone_grab(st, zone, direction)
+  if grab is None or grab.grade not in {"A", "B"}:
+    return None
+  reasons = [
+    f"HTF bias {ctx.htf_bias}",
+    "ATR extension",
+    "reversal rejection",
+    f"sweep {grab.grade}",
+  ]
   return _finish(ctx, "Snap-Back", direction, level, zone, price, atr, reasons)
 
 
 def momentum_ride(ctx: DetectionContext) -> DetectionResult | None:
   df, ind, st = _exec(ctx)
-  if len(df) < 5 or _mid_range(df, ctx.settings):
+  if len(df) < 5:
     return None
   direction = _confirmation_direction(ctx)
-  if direction is None:
+  if direction is None or not _pd_gate(st, direction, ctx.settings):
     return None
   if not _strong_body_break(df, st, direction, ctx.settings.momentum_body_frac):
     return None
@@ -574,10 +656,14 @@ def momentum_ride(ctx: DetectionContext) -> DetectionResult | None:
 
 def fade_scalp(ctx: DetectionContext) -> DetectionResult | None:
   df, ind, st = _exec(ctx)
-  if len(df) < 5 or _mid_range(df, ctx.settings):
+  if len(df) < 5:
     return None
   direction = _confirmation_direction(ctx)
-  if direction is None or not _rejection(df, direction):
+  if (
+    direction is None
+    or not _pd_gate(st, direction, ctx.settings)
+    or not _rejection(df, direction)
+  ):
     return None
   price = float(df["close"].iloc[-1])
   atr = _atr(ind)
@@ -585,19 +671,68 @@ def fade_scalp(ctx: DetectionContext) -> DetectionResult | None:
   for level in st.equal_levels:
     if level.kind != desired_kind:
       continue
-    sweep = liquidity_sweep(df, level)
-    if sweep != direction.lower():
+    grab = _level_grab(st, level, direction)
+    if grab is None or grab.grade not in {"A", "B"}:
       continue
     zone = entry_zone(df, level.price, direction)
     reasons = [
       f"HTF bias {ctx.htf_bias}",
       "equal level sweep",
       "liquidity rejection",
+      f"sweep {grab.grade}",
     ]
     result = _finish(ctx, "Fade Scalp", direction, level.price, zone, price, atr, reasons)
     if result is not None:
       return result
   return None
+
+
+def _level_grab(
+  st: StructureSet,
+  level: Level,
+  direction: str,
+) -> Grab | None:
+  wanted_direction = "bull" if direction == "BUY" else "bear"
+  wanted_side = "sell" if direction == "BUY" else "buy"
+  for grab in reversed(st.liquidity_grabs):
+    if grab.direction != wanted_direction or grab.pool.side != wanted_side:
+      continue
+    if abs(grab.pool.level - level.price) <= max(grab.pool.band, level.band, _EPS):
+      return grab
+  return None
+
+
+def _zone_grab(
+  st: StructureSet,
+  zone: Zone,
+  direction: str,
+) -> Grab | None:
+  wanted_direction = "bull" if direction == "BUY" else "bear"
+  wanted_side = "sell" if direction == "BUY" else "buy"
+  for grab in reversed(st.liquidity_grabs):
+    if grab.direction != wanted_direction or grab.pool.side != wanted_side:
+      continue
+    if _grab_points_into_zone(grab, zone):
+      return grab
+  return None
+
+
+def _grab_points_into_zone(grab: Grab, zone: Zone) -> bool:
+  width = max(zone.high - zone.low, 0.0)
+  tolerance = max(grab.pool.band, width, 0.1)
+  if zone.side == "demand" and grab.pool.side == "sell":
+    return zone.low - tolerance <= grab.pool.level <= zone.high
+  if zone.side == "supply" and grab.pool.side == "buy":
+    return zone.low <= grab.pool.level <= zone.high + tolerance
+  return False
+
+
+def _is_high_session_level(name: str) -> bool:
+  return name.endswith("_H") or name in {"PDH", "PWH"}
+
+
+def _is_low_session_level(name: str) -> bool:
+  return name.endswith("_L") or name in {"PDL", "PWL"}
 
 
 DEFAULT_DETECTORS: tuple[SetupDetector, ...] = (

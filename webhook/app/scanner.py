@@ -69,6 +69,15 @@ def _detector_settings() -> DetectorSettings:
     key_level_min_touches=settings.key_level_min_touches,
     momentum_lookback=settings.momentum_lookback,
     momentum_body_frac=settings.momentum_body_frac,
+    session_asia_start=settings.session_asia_start,
+    session_london_start=settings.session_london_start,
+    session_ny_start=settings.session_ny_start,
+    daily_rollover_utc_hour=settings.daily_rollover_utc_hour,
+    eq_band=settings.eq_band,
+    strict_pd_gate=settings.strict_pd_gate,
+    sweep_body_frac=settings.sweep_body_frac,
+    sweep_react_bars=settings.sweep_react_bars,
+    inducement_band_atr=settings.inducement_band_atr,
   )
 
 
