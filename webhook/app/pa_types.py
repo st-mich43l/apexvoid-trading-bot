@@ -43,6 +43,24 @@ class Level:
 
 
 @dataclass(frozen=True)
+class SessionLevel:
+  name: str
+  price: float
+  ts: pd.Timestamp
+  swept: bool
+  swept_ts: pd.Timestamp | None = None
+
+
+@dataclass(frozen=True)
+class DealingRange:
+  high: float
+  low: float
+  eq: float
+  position: float
+  zone: str
+
+
+@dataclass(frozen=True)
 class Zone:
   bottom: float
   top: float
@@ -94,3 +112,6 @@ class Grab:
   index: int
   direction: str
   ts: pd.Timestamp | None = None
+  grade: str = "C"
+  displacement: bool = False
+  inducement: bool = False

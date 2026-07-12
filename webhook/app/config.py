@@ -48,6 +48,8 @@ class Settings(BaseSettings):
   session_asia_start: int = 22
   session_london_start: int = 7
   session_ny_start: int = 13
+  # Metals daily candle rolls at the NY futures close, 21:00 UTC.
+  daily_rollover_utc_hour: int = 21
   calendar_enabled: bool = True
   calendar_feed_thisweek: str = (
     "https://nfs.faireconomy.media/ff_calendar_thisweek.json"
@@ -90,6 +92,11 @@ class Settings(BaseSettings):
   key_level_min_touches: int = 2
   momentum_lookback: int = 8
   momentum_body_frac: float = 0.6
+  eq_band: float = 0.10
+  strict_pd_gate: bool = False
+  sweep_body_frac: float = 0.5
+  sweep_react_bars: int = 3
+  inducement_band_atr: float = 0.3
 
   @property
   def telegram_chat_id(self) -> str:
