@@ -77,11 +77,13 @@ class Settings(BaseSettings):
   scanner_confluence_floor: int = 2
   max_entry_atr: float = 2.0
   range_lookback: int = 50
+  atr_length: int = 14
   swing_fractal_n: int = 2
   zigzag_pct: float = 0.0
   zigzag_atr_mult: float = 1.0
   displacement_atr_mult: float = 1.5
   zone_width: str = "body"
+  zone_merge_overlap: float = 0.5
   equal_tol_atr: float = 0.15
   level_cluster_atr: float = 0.5
   round_step: float = 5.0

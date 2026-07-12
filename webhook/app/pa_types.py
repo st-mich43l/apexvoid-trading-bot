@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import pandas as pd
 
@@ -52,6 +52,9 @@ class Zone:
   touches: int = 0
   mitigated: bool = False
   source: str = ""
+  sources: list[str] = field(default_factory=list)
+  score: float = 0.0
+  score_reasons: list[str] = field(default_factory=list)
   break_kind: str | None = None
   break_index: int | None = None
 
@@ -61,6 +64,8 @@ class Zone:
       top = self.bottom
       object.__setattr__(self, "bottom", bottom)
       object.__setattr__(self, "top", top)
+    if not self.sources and self.source:
+      object.__setattr__(self, "sources", [self.source])
 
   @property
   def low(self) -> float:

@@ -53,11 +53,13 @@ class DetectorSettings:
   max_entry_atr: float = 2.0
   range_lookback: int = 50
   snap_atr_mult: float = 1.5
+  atr_length: int = 14
   swing_fractal_n: int = 2
   zigzag_pct: float = 0.0
   zigzag_atr_mult: float = 1.0
   displacement_atr_mult: float = 1.5
   zone_width: str = "body"
+  zone_merge_overlap: float = 0.5
   equal_tol_atr: float = 0.15
   level_cluster_atr: float = 0.5
   round_step: float = 5.0
@@ -67,11 +69,13 @@ class DetectorSettings:
 
   def analysis_settings(self) -> AnalysisSettings:
     return AnalysisSettings(
+      atr_length=self.atr_length,
       swing_fractal_n=self.swing_fractal_n,
       zigzag_pct=self.zigzag_pct,
       zigzag_atr_mult=self.zigzag_atr_mult,
       displacement_atr_mult=self.displacement_atr_mult,
       zone_width=self.zone_width,
+      zone_merge_overlap=self.zone_merge_overlap,
       equal_tol_atr=self.equal_tol_atr,
       level_cluster_atr=self.level_cluster_atr,
       round_step=self.round_step,
@@ -118,7 +122,7 @@ def build_context(
 ) -> DetectionContext:
   analysis_ctx = analyze(frames, settings.analysis_settings(), htf_order)
   indicator_sets = {
-    name: _indicator_set(df)
+    name: _indicator_set(df, settings.atr_length)
     for name, df in frames.items()
   }
   structure_sets = _structure_sets_from_analysis(analysis_ctx.per_tf)
@@ -133,8 +137,8 @@ def build_context(
   )
 
 
-def _indicator_set(df: pd.DataFrame) -> IndicatorSet:
-  return IndicatorSet(atr=atr_indicator(df, 14))
+def _indicator_set(df: pd.DataFrame, length: int = 14) -> IndicatorSet:
+  return IndicatorSet(atr=atr_indicator(df, length))
 
 
 def _structure_set(df: pd.DataFrame) -> StructureSet:
@@ -345,7 +349,7 @@ def _last_touches_zone(df: pd.DataFrame, zone: Zone) -> bool:
   return float(row["low"]) <= zone.high and float(row["high"]) >= zone.low
 
 
-def _nearest_valid_zone(
+def _best_valid_zone(
   zones: list[Zone],
   price: float,
   atr: float,
@@ -358,9 +362,14 @@ def _nearest_valid_zone(
   ]
   if not valid:
     return None
-  if direction == "BUY":
-    return min(valid, key=lambda zone: abs(price - zone.high))
-  return min(valid, key=lambda zone: abs(zone.low - price))
+  return min(
+    valid,
+    key=lambda zone: (
+      -float(getattr(zone, "score", 0.0)),
+      _zone_distance(zone, price, direction),
+      zone.low,
+    ),
+  )
 
 
 def _zone_distance(zone: Zone, price: float, direction: str) -> float:
@@ -386,6 +395,37 @@ def _confirmation_direction(ctx: DetectionContext) -> str | None:
   return direction if ctx.htf_bias == _bias_for_direction(direction) else None
 
 
+def _confluence_from_zone(zone: Zone, reasons: list[str]) -> int:
+  score = float(getattr(zone, "score", 0.0))
+  if score > 0:
+    if score >= 8:
+      return 3
+    if score >= 5:
+      return 2
+    return 1
+  return min(3, len(reasons))
+
+
+def _merge_score_reasons(base: list[str], zone: Zone) -> list[str]:
+  score_reasons = list(getattr(zone, "score_reasons", []) or [])
+  if not score_reasons:
+    return base[:]
+  merged: list[str] = []
+  inserted = False
+  for reason in base:
+    merged.append(reason)
+    if not inserted and reason.lower().startswith("htf bias"):
+      for score_reason in score_reasons:
+        if score_reason not in merged:
+          merged.append(score_reason)
+      inserted = True
+  if not inserted:
+    for score_reason in score_reasons:
+      if score_reason not in merged:
+        merged.append(score_reason)
+  return merged
+
+
 def _finish(
   ctx: DetectionContext,
   setup: str,
@@ -400,8 +440,9 @@ def _finish(
     return None
   if not _entry_valid_for_settings(zone, price, atr, direction, ctx.settings):
     return None
-  score = min(3, len(reasons))
-  if score < ctx.settings.confluence_floor:
+  full_reasons = _merge_score_reasons(reasons, zone)
+  confluence = _confluence_from_zone(zone, full_reasons)
+  if confluence < ctx.settings.confluence_floor:
     return None
   return DetectionResult(
     setup=setup,
@@ -409,8 +450,8 @@ def _finish(
     key_level=float(level),
     entry_zone=zone,
     current_price=price,
-    confluence=score,
-    reasons=reasons[:],
+    confluence=confluence,
+    reasons=full_reasons,
   )
 
 
@@ -423,7 +464,7 @@ def trend_pullback(ctx: DetectionContext) -> DetectionResult | None:
     return None
   price = float(df["close"].iloc[-1])
   atr = _atr(ind)
-  zone = _nearest_valid_zone(
+  zone = _best_valid_zone(
     [
       zone for zone in _candidate_zones(st, direction)
       if _last_touches_zone(df, zone)
@@ -483,7 +524,7 @@ def snap_back(ctx: DetectionContext) -> DetectionResult | None:
   price = float(df["close"].iloc[-1])
   atr = _atr(ind)
   zones = _candidate_zones(st, direction)
-  zone = _nearest_valid_zone(zones, price, atr, direction, ctx.settings)
+  zone = _best_valid_zone(zones, price, atr, direction, ctx.settings)
   level = None
   if zone is not None:
     distance = _zone_distance(zone, price, direction)
@@ -512,6 +553,17 @@ def momentum_ride(ctx: DetectionContext) -> DetectionResult | None:
     return None
   price = float(df["close"].iloc[-1])
   atr = _atr(ind)
+  zone = _best_valid_zone(
+    _candidate_zones(st, direction),
+    price,
+    atr,
+    direction,
+    ctx.settings,
+  )
+  if zone is not None:
+    level_price = _zone_key(zone, price, direction)
+    reasons = [f"HTF bias {ctx.htf_bias}", "impulse break", "near scored zone"]
+    return _finish(ctx, "Momentum Ride", direction, level_price, zone, price, atr, reasons)
   level = _nearest_level(st.levels, price, direction)
   if level is None:
     return None
