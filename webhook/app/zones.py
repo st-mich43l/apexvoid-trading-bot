@@ -3,11 +3,28 @@
 from __future__ import annotations
 
 from dataclasses import replace
+import math
 
 import pandas as pd
 
 from app.pa_math import atr_at, atr_series, body_fraction, candle_direction
-from app.pa_types import Break, Leg, Level, Zone
+from app.pa_types import Break, Leg, Level, Pool, Zone
+
+ZONE_MERGE_OVERLAP = 0.5
+FRESH_SCORE = 3.0
+SINGLE_TOUCH_SCORE = 1.0
+SOURCE_SCORE_CAP = 5.0
+SOURCE_SCORES = {
+  "order_block": 3.0,
+  "flip_zone": 2.0,
+  "supply_demand": 1.5,
+  "bullish_fvg": 1.0,
+  "bearish_fvg": 1.0,
+}
+KEY_LEVEL_SCORE = 2.0
+ROUND_NUMBER_SCORE = 1.0
+LIQUIDITY_SCORE = 2.0
+HTF_SCORE = 3.0
 
 
 def displacement(
@@ -115,14 +132,25 @@ def flip_zones(levels: list[Level], breaks: list[Break]) -> list[Zone]:
   return zones
 
 
-def mark_mitigation(zones: list[Zone], df: pd.DataFrame) -> list[Zone]:
+def mark_mitigation(
+  zones: list[Zone],
+  df: pd.DataFrame,
+  cutoff: int | None = None,
+) -> list[Zone]:
+  """Stamp touches with as-of semantics.
+
+  ``cutoff`` is exclusive. With ``cutoff=len(df)-1``, a zone tapped for the
+  first time by the current trigger bar still has ``touches == 0`` and is
+  considered fresh. Pass ``cutoff=None`` for full-history reporting.
+  """
   stamped: list[Zone] = []
+  end = len(df) if cutoff is None else max(0, min(cutoff, len(df)))
   for zone in zones:
     touches = 0
     in_touch = False
     start_from = zone.break_index if zone.break_index is not None else zone.origin_index
     start = max(0, start_from + 1)
-    for i in range(start, len(df)):
+    for i in range(start, end):
       row = df.iloc[i]
       touched = float(row["low"]) <= zone.top and float(row["high"]) >= zone.bottom
       if touched and not in_touch:
@@ -134,6 +162,41 @@ def mark_mitigation(zones: list[Zone], df: pd.DataFrame) -> list[Zone]:
       mitigated=touches > 0,
     ))
   return stamped
+
+
+def merge_zones(
+  zones: list[Zone],
+  min_overlap: float = ZONE_MERGE_OVERLAP,
+) -> list[Zone]:
+  groups: list[list[Zone]] = []
+  for zone in sorted(zones, key=lambda item: (item.side, item.low, item.high)):
+    for group in groups:
+      if group[0].side != zone.side:
+        continue
+      if any(_overlap_ratio(zone, member) >= min_overlap for member in group):
+        group.append(zone)
+        break
+    else:
+      groups.append([zone])
+  return [_composite_zone(group) for group in groups]
+
+
+def score_zones(
+  zones: list[Zone],
+  key_levels: list[Level],
+  pools: list[Pool],
+  round_step: float,
+  htf_zones: list[Zone] | None = None,
+) -> list[Zone]:
+  scored = [
+    _score_zone(zone, key_levels, pools, round_step, htf_zones or [])
+    for zone in zones
+  ]
+  return sorted(
+    scored,
+    key=lambda zone: (zone.score, -zone.touches, -zone.low),
+    reverse=True,
+  )
 
 
 def fvg(df: pd.DataFrame) -> list[Zone]:
@@ -160,6 +223,157 @@ def fvg(df: pd.DataFrame) -> list[Zone]:
         source="bearish_fvg",
       ))
   return zones
+
+
+def _overlap_ratio(first: Zone, second: Zone) -> float:
+  overlap = min(first.high, second.high) - max(first.low, second.low)
+  if overlap <= 0:
+    return 0.0
+  smaller = min(first.high - first.low, second.high - second.low)
+  if smaller <= 0:
+    return 1.0 if first.low <= second.high and second.low <= first.high else 0.0
+  return overlap / smaller
+
+
+def _composite_zone(group: list[Zone]) -> Zone:
+  if len(group) == 1:
+    zone = group[0]
+    sources = _unique_sources([zone])
+    return replace(zone, sources=sources)
+  best = max(group, key=_source_quality)
+  earliest = min(group, key=lambda item: item.origin_index)
+  touches = min(item.touches for item in group)
+  return Zone(
+    bottom=min(item.low for item in group),
+    top=max(item.high for item in group),
+    side=group[0].side,
+    origin_index=earliest.origin_index,
+    created_ts=earliest.created_ts,
+    touches=touches,
+    mitigated=touches > 0,
+    source=best.source,
+    sources=_unique_sources(group),
+    break_kind=best.break_kind,
+    break_index=best.break_index,
+  )
+
+
+def _unique_sources(zones: list[Zone]) -> list[str]:
+  result: list[str] = []
+  for zone in zones:
+    for source in zone.sources or ([zone.source] if zone.source else []):
+      if source and source not in result:
+        result.append(source)
+  return result
+
+
+def _score_zone(
+  zone: Zone,
+  levels: list[Level],
+  pools: list[Pool],
+  round_step: float,
+  htf_zones: list[Zone],
+) -> Zone:
+  score = 0.0
+  reasons: list[str] = []
+  if zone.touches == 0:
+    score += FRESH_SCORE
+    reasons.append("fresh")
+  elif zone.touches == 1:
+    score += SINGLE_TOUCH_SCORE
+    reasons.append("1 touch")
+
+  source_score, source_reasons = _source_score(zone)
+  score += source_score
+  reasons.extend(source_reasons)
+
+  if any(_zone_overlaps_level(zone, level) for level in levels):
+    score += KEY_LEVEL_SCORE
+    reasons.append("key level")
+  round_number = _round_number_inside(zone, round_step)
+  if round_number is not None:
+    score += ROUND_NUMBER_SCORE
+    reasons.append(f"round {_number(round_number)}")
+  if _has_liquidity_confluence(zone, pools):
+    score += LIQUIDITY_SCORE
+    reasons.append("liquidity pool")
+  if any(_inside_htf_zone(zone, htf) for htf in htf_zones):
+    score += HTF_SCORE
+    reasons.append("HTF zone")
+  return replace(zone, score=score, score_reasons=reasons)
+
+
+def _source_score(zone: Zone) -> tuple[float, list[str]]:
+  total = 0.0
+  reasons: list[str] = []
+  for source in zone.sources or ([zone.source] if zone.source else []):
+    value = SOURCE_SCORES.get(source, 0.0)
+    if source == "order_block" and zone.break_kind is None:
+      value = 0.0
+    if value <= 0:
+      continue
+    total += value
+    reasons.append(_source_reason(source))
+  return min(total, SOURCE_SCORE_CAP), reasons
+
+
+def _source_quality(zone: Zone) -> float:
+  return _source_score(zone)[0]
+
+
+def _source_reason(source: str) -> str:
+  if source == "order_block":
+    return "OB"
+  if source == "flip_zone":
+    return "flip"
+  if source == "supply_demand":
+    return "S/D"
+  if source.endswith("_fvg"):
+    return "FVG"
+  return source
+
+
+def _zone_overlaps_level(zone: Zone, level: Level) -> bool:
+  band = max(level.band, 0.0)
+  low = level.price - band
+  high = level.price + band
+  if band == 0:
+    return zone.low <= level.price <= zone.high
+  return zone.low <= high and zone.high >= low
+
+
+def _round_number_inside(zone: Zone, round_step: float) -> float | None:
+  if round_step <= 0:
+    return None
+  first = math.ceil(zone.low / round_step) * round_step
+  if first <= zone.high:
+    return first
+  return None
+
+
+def _has_liquidity_confluence(zone: Zone, pools: list[Pool]) -> bool:
+  width = max(zone.high - zone.low, 0.0)
+  for pool in pools:
+    tolerance = max(pool.band, width, 0.1)
+    if zone.side == "demand" and pool.side == "sell":
+      if zone.low - tolerance <= pool.level <= zone.low:
+        return True
+    if zone.side == "supply" and pool.side == "buy":
+      if zone.high <= pool.level <= zone.high + tolerance:
+        return True
+  return False
+
+
+def _inside_htf_zone(zone: Zone, htf: Zone) -> bool:
+  return (
+    zone.side == htf.side
+    and zone.low >= htf.low
+    and zone.high <= htf.high
+  )
+
+
+def _number(value: float) -> str:
+  return f"{value:.2f}".rstrip("0").rstrip(".")
 
 
 def _append_leg(
