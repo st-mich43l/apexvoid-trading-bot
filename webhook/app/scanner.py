@@ -2,6 +2,7 @@
 
 import json
 import logging
+import math
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from html import escape
@@ -278,9 +279,9 @@ def _attach_price_context(
   ctx: DetectionContext,
   spot: SpotSnapshot | None,
   event_ts: str,
+  df: Any,
 ) -> DetectionContext:
-  price = spot.price if spot is not None and spot.fresh else None
-  ts = spot.ts if spot is not None and spot.fresh else None
+  price, ts = _trusted_spot_values(spot, df)
   try:
     return replace(ctx, spot_price=price, spot_ts=ts, trigger_ts=event_ts)
   except TypeError:
@@ -288,6 +289,34 @@ def _attach_price_context(
     setattr(ctx, "spot_ts", ts)
     setattr(ctx, "trigger_ts", event_ts)
     return ctx
+
+
+def _trusted_spot_values(
+  spot: SpotSnapshot | None,
+  df: Any,
+) -> tuple[float | None, int | None]:
+  if spot is None or not spot.fresh:
+    return None, None
+
+  close = float(df["close"].iloc[-1])
+  gate = max(0.0, settings.spot_max_deviation_pct) / 100.0
+  bad = (
+    not math.isfinite(spot.price)
+    or spot.price <= 0
+    or not math.isfinite(close)
+    or close <= 0
+    or abs(spot.price - close) / close > gate
+  )
+  if bad:
+    log.warning(
+      "spot %s implausible vs close %s (deviation gate %.1f%%) - "
+      "falling back to bar close",
+      spot.price,
+      close,
+      settings.spot_max_deviation_pct,
+    )
+    return None, None
+  return spot.price, spot.ts
 
 
 def _digest_results(results: list[DetectionResult]) -> list[DetectionResult]:
@@ -472,7 +501,7 @@ async def _handle_event(
     _detector_settings(),
     htf_order,
   )
-  ctx = _attach_price_context(ctx, spot, event_ts)
+  ctx = _attach_price_context(ctx, spot, event_ts, frames[exec_tf])
   detected = []
   for detector in detectors or DEFAULT_DETECTORS:
     result = detector(ctx)

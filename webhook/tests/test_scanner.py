@@ -1,4 +1,5 @@
 import json
+import logging
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -20,6 +21,13 @@ def _frame() -> pd.DataFrame:
     "close": [4100.5],
     "volume": [100.0],
   }, index=index)
+
+
+class StaticSource:
+  async def window(self, symbol, tf, n):
+    assert symbol == "XAU"
+    assert tf in {"M5", "M30", "M15"}
+    return _frame()
 
 
 @pytest.mark.asyncio
@@ -324,6 +332,7 @@ async def test_scanner_uses_fresh_spot_for_context_and_live_render(monkeypatch):
   monkeypatch.setattr(scanner.settings, "scanner_window", 500)
   monkeypatch.setattr(scanner.settings, "telegram_owner_id", 4242)
   monkeypatch.setattr(scanner.settings, "spot_fresh_secs", 30)
+  monkeypatch.setattr(scanner.settings, "spot_max_deviation_pct", 2.0)
 
   class Source:
     async def window(self, symbol, tf, n):
@@ -363,3 +372,152 @@ async def test_scanner_uses_fresh_spot_for_context_and_live_render(monkeypatch):
 
   text = notify.await_args.args[0]
   assert "Price now <b>4,082.1</b> (live)" in text
+
+
+@pytest.mark.asyncio
+async def test_scanner_rejects_implausible_spot_and_still_fires(monkeypatch, caplog):
+  client = redis_state.get_client()
+  notify = AsyncMock()
+  now = int(datetime.now(timezone.utc).timestamp())
+  await client.set(
+    "price:XAU:spot",
+    json.dumps({"bid": 4100500.0, "ask": 4100500.0, "ts": now}),
+  )
+  monkeypatch.setattr(scanner.settings, "scanner_symbols", "XAU")
+  monkeypatch.setattr(scanner.settings, "scanner_exec_tf", "M5")
+  monkeypatch.setattr(scanner.settings, "scanner_htf", "M30,M15")
+  monkeypatch.setattr(scanner.settings, "scanner_window", 500)
+  monkeypatch.setattr(scanner.settings, "scanner_alert_ttl", 7200)
+  monkeypatch.setattr(scanner.settings, "scanner_level_bucket", 20)
+  monkeypatch.setattr(scanner.settings, "telegram_owner_id", 4242)
+  monkeypatch.setattr(scanner.settings, "spot_fresh_secs", 30)
+  monkeypatch.setattr(scanner.settings, "spot_max_deviation_pct", 2.0)
+
+  monkeypatch.setattr(
+    scanner,
+    "build_context",
+    lambda symbol, tf, frames, settings, htf_order: SimpleNamespace(
+      tf=tf,
+      htf_bias="up",
+      structures={"M30": SimpleNamespace(bias="up")},
+      frames=frames,
+    ),
+  )
+
+  def detector(received_ctx):
+    assert received_ctx.spot_price is None
+    assert received_ctx.spot_ts is None
+    close = float(received_ctx.frames["M5"]["close"].iloc[-1])
+    assert close == pytest.approx(4100.5)
+    return scanner.DetectionResult(
+      "Trend Pullback",
+      "BUY",
+      4100.0,
+      Zone(4099, 4101, "demand"),
+      close,
+      2,
+      ["HTF bias up"],
+    )
+
+  caplog.set_level(logging.WARNING, logger="app.scanner")
+  sent = await scanner._handle_event(
+    "XAU:M5:1",
+    source=StaticSource(),
+    client=client,
+    detectors=(detector,),
+    notify=notify,
+  )
+
+  assert len(sent) == 1
+  assert "implausible vs close" in caplog.text
+  text = notify.await_args.args[0]
+  assert "Price <b>4,100.5</b> (M5 close 00:05 UTC)" in text
+  assert "(live)" not in text
+
+
+@pytest.mark.parametrize("price", [float("nan"), 0.0, -4100.0])
+@pytest.mark.asyncio
+async def test_scanner_rejects_bad_spot_values_without_crashing(
+  monkeypatch,
+  caplog,
+  price,
+):
+  client = redis_state.get_client()
+  now = int(datetime.now(timezone.utc).timestamp())
+  await client.set(
+    "price:XAU:spot",
+    json.dumps({"bid": price, "ask": price, "ts": now}),
+  )
+  monkeypatch.setattr(scanner.settings, "scanner_symbols", "XAU")
+  monkeypatch.setattr(scanner.settings, "scanner_exec_tf", "M5")
+  monkeypatch.setattr(scanner.settings, "scanner_htf", "M30,M15")
+  monkeypatch.setattr(scanner.settings, "scanner_window", 500)
+  monkeypatch.setattr(scanner.settings, "telegram_owner_id", 4242)
+  monkeypatch.setattr(scanner.settings, "spot_fresh_secs", 30)
+  monkeypatch.setattr(scanner.settings, "spot_max_deviation_pct", 2.0)
+  monkeypatch.setattr(
+    scanner,
+    "build_context",
+    lambda symbol, tf, frames, settings, htf_order: SimpleNamespace(
+      tf=tf,
+      htf_bias="up",
+      structures={"M30": SimpleNamespace(bias="up")},
+      frames=frames,
+    ),
+  )
+
+  def detector(received_ctx):
+    assert received_ctx.spot_price is None
+    assert received_ctx.spot_ts is None
+    return None
+
+  caplog.set_level(logging.WARNING, logger="app.scanner")
+  sent = await scanner._handle_event(
+    "XAU:M5:1",
+    source=StaticSource(),
+    client=client,
+    detectors=(detector,),
+    notify=AsyncMock(),
+  )
+
+  assert sent == []
+  assert "implausible vs close" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_scanner_missing_spot_keeps_fallback_without_warning(monkeypatch, caplog):
+  client = redis_state.get_client()
+  monkeypatch.setattr(scanner.settings, "scanner_symbols", "XAU")
+  monkeypatch.setattr(scanner.settings, "scanner_exec_tf", "M5")
+  monkeypatch.setattr(scanner.settings, "scanner_htf", "M30,M15")
+  monkeypatch.setattr(scanner.settings, "scanner_window", 500)
+  monkeypatch.setattr(scanner.settings, "telegram_owner_id", 4242)
+  monkeypatch.setattr(scanner.settings, "spot_fresh_secs", 30)
+  monkeypatch.setattr(scanner.settings, "spot_max_deviation_pct", 2.0)
+  monkeypatch.setattr(
+    scanner,
+    "build_context",
+    lambda symbol, tf, frames, settings, htf_order: SimpleNamespace(
+      tf=tf,
+      htf_bias="up",
+      structures={"M30": SimpleNamespace(bias="up")},
+      frames=frames,
+    ),
+  )
+
+  def detector(received_ctx):
+    assert received_ctx.spot_price is None
+    assert received_ctx.spot_ts is None
+    return None
+
+  caplog.set_level(logging.WARNING, logger="app.scanner")
+  sent = await scanner._handle_event(
+    "XAU:M5:1",
+    source=StaticSource(),
+    client=client,
+    detectors=(detector,),
+    notify=AsyncMock(),
+  )
+
+  assert sent == []
+  assert "implausible vs close" not in caplog.text
