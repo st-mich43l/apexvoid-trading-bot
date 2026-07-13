@@ -80,6 +80,7 @@ class Settings(BaseSettings):
   scanner_top_n: int = 1
   alert_overlap_suppress: float = 0.5
   spot_fresh_secs: int = 30
+  spot_max_deviation_pct: float = 2.0
   max_entry_atr: float = 2.0
   max_zone_width_atr: float = 1.5
   proximal_band_atr: float = 0.5
