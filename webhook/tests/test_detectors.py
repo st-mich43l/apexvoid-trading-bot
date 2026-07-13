@@ -282,8 +282,52 @@ def test_trend_pullback_prefers_best_scored_zone_over_nearest_zone():
   assert result is not None
   assert result.entry_zone.low == 103
   assert result.entry_zone.high == 105
-  assert result.confluence == 3
+  assert result.confluence == 2
   assert result.reasons[1:4] == ["fresh", "OB", "HTF zone"]
+
+
+def test_wide_zone_uses_proximal_band_slice():
+  zone = Zone(60, 100, "demand", source="order_block", score=9)
+  selected = detectors._best_valid_zone(
+    [zone],
+    price=108,
+    atr=4,
+    direction="BUY",
+    settings=detectors.DetectorSettings(
+      max_zone_width_atr=1.5,
+      proximal_band_atr=0.5,
+    ),
+  )
+
+  assert selected is not None
+  proximal, sliced = selected
+  assert sliced is True
+  assert proximal.low == 98
+  assert proximal.high == 100
+  assert "proximal of wide zone" in detectors._add_proximal_reason([], sliced)
+
+
+def test_live_spot_is_used_for_entry_validation():
+  df = _sell_rejection_df()
+  base = _ctx(
+    df,
+    bias="down",
+    zones=[Zone(104, 106, "supply", source="order_block")],
+  )
+  live_wrong_side = replace(base, spot_price=107.0)
+
+  assert detectors.trend_pullback(base) is not None
+  assert detectors.trend_pullback(live_wrong_side) is None
+
+
+def test_star_score_remap_and_mitigated_cap():
+  fresh_two = Zone(100, 101, "demand", score=9, touches=0)
+  fresh_three = Zone(100, 101, "demand", score=13, touches=0)
+  mitigated = Zone(100, 101, "demand", score=13, touches=1)
+
+  assert detectors._confluence_from_zone(fresh_two, []) == 2
+  assert detectors._confluence_from_zone(fresh_three, []) == 3
+  assert detectors._confluence_from_zone(mitigated, []) == 2
 
 
 @pytest.mark.parametrize(("detector", "ctx_factory", "_setup"), SETUPS)
@@ -357,6 +401,117 @@ def test_rejection_helper_requires_directional_closed_bar():
   assert detectors._rejection(_buy_rejection_df(), "BUY")
   assert detectors._rejection(_sell_rejection_df(), "SELL")
   assert not detectors._rejection(_no_rejection_df(), "BUY")
+
+
+def _counter_ctx(
+  *,
+  zone: Zone | None = None,
+  zones: list[Zone] | None = None,
+  levels: list[Level] | None = None,
+  grabs: list[Grab] | None = None,
+  session_levels: list[SessionLevel] | None = None,
+  position: float = 0.2,
+  allow: bool = True,
+) -> detectors.DetectionContext:
+  df = _buy_rejection_df()
+  ctx = _ctx(
+    df,
+    bias="down",
+    zones=zones if zones is not None else ([zone] if zone is not None else []),
+    levels=levels,
+    grabs=grabs,
+    session_levels=session_levels,
+    dealing_range=DealingRange(high=150, low=100, eq=125, position=position, zone="discount"),
+  )
+  return replace(
+    ctx,
+    settings=replace(ctx.settings, allow_counter_trend=allow),
+  )
+
+
+def test_counter_reaction_requires_fresh_scored_zone_sweep_and_extreme_pd():
+  df = _buy_rejection_df()
+  zone = Zone(
+    106,
+    110,
+    "demand",
+    source="supply_demand",
+    score=11,
+    score_reasons=["fresh", "S/D", "sweep A"],
+  )
+  grab = Grab(Pool("sell", 107, 0.1, 2), 4, "bull", df.index[4], "A")
+
+  result = detectors.zone_reaction(_counter_ctx(zone=zone, grabs=[grab]))
+
+  assert result is not None
+  assert result.setup == "Zone Reaction"
+  assert result.direction == "BUY"
+  assert result.mode == "counter_reaction"
+  assert "sweep A" in result.reasons
+  assert "PD 0.20" in result.reasons
+
+  assert detectors.zone_reaction(_counter_ctx(zone=replace(zone, touches=1), grabs=[grab])) is None
+  assert detectors.zone_reaction(_counter_ctx(zone=zone, grabs=[])) is None
+  assert detectors.zone_reaction(_counter_ctx(zone=zone, grabs=[grab], position=0.4)) is None
+  assert detectors.zone_reaction(_counter_ctx(zone=zone, grabs=[grab], allow=False)) is None
+
+
+def test_counter_swing_requires_fresh_htf_order_block():
+  df = _buy_rejection_df()
+  zone = Zone(
+    106,
+    110,
+    "demand",
+    source="order_block",
+    sources=["order_block"],
+    score=13,
+    score_reasons=["fresh", "OB", "HTF zone"],
+    break_kind="BOS",
+  )
+  grab = Grab(Pool("sell", 107, 0.1, 2), 4, "bull", df.index[4], "A")
+
+  result = detectors.zone_reaction(_counter_ctx(zone=zone, grabs=[grab]))
+
+  assert result is not None
+  assert result.mode == "counter_swing"
+  assert "fresh HTF OB" in result.reasons
+  assert any(reason.startswith("TP anchor EQ") for reason in result.reasons)
+
+
+def test_counter_level_reaction_from_strong_bare_key_level_only_scalps():
+  df = _buy_rejection_df()
+  grab = Grab(Pool("sell", 105, 0.1, 2), 4, "bull", df.index[4], "A")
+
+  result = detectors.zone_reaction(
+    _counter_ctx(levels=[Level(105, "reaction", touches=4, band=0.2)], grabs=[grab])
+  )
+
+  assert result is not None
+  assert result.mode == "counter_reaction"
+  assert "key 105 x4" in result.reasons
+  assert result.entry_zone.source == "level"
+
+  weak = detectors.zone_reaction(
+    _counter_ctx(levels=[Level(105, "reaction", touches=2, band=0.2)], grabs=[grab])
+  )
+  assert weak is None
+
+
+def test_counter_unswept_session_level_reaction():
+  df = _buy_rejection_df()
+  ts = df.index[-2]
+  grab = Grab(Pool("sell", 105, 0.1, 2), 4, "bull", df.index[4], "A")
+
+  result = detectors.zone_reaction(
+    _counter_ctx(
+      grabs=[grab],
+      session_levels=[SessionLevel("PDL", 105, ts, swept=False)],
+    )
+  )
+
+  assert result is not None
+  assert result.mode == "counter_reaction"
+  assert "PDL" in result.reasons
 
 
 def test_detectors_module_has_no_delivery_or_redis_imports():

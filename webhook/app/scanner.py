@@ -2,7 +2,8 @@
 
 import json
 import logging
-from datetime import datetime, timezone
+from dataclasses import replace
+from datetime import datetime, timedelta, timezone
 from html import escape
 from typing import Any, Awaitable, Callable, Iterable
 
@@ -24,6 +25,13 @@ from app.tg_core import send_with_retry
 log = logging.getLogger(__name__)
 
 NotifyFn = Callable[..., Awaitable[Any]]
+
+
+class SpotSnapshot:
+  def __init__(self, price: float, ts: int, fresh: bool) -> None:
+    self.price = price
+    self.ts = ts
+    self.fresh = fresh
 
 
 def _csv(value: str) -> list[str]:
@@ -63,6 +71,7 @@ def _detector_settings() -> DetectorSettings:
     displacement_atr_mult=settings.displacement_atr_mult,
     zone_width=settings.zone_width,
     zone_merge_overlap=settings.zone_merge_overlap,
+    max_merged_zone_atr=settings.max_merged_zone_atr,
     equal_tol_atr=settings.equal_tol_atr,
     level_cluster_atr=settings.level_cluster_atr,
     round_step=settings.round_step,
@@ -78,6 +87,12 @@ def _detector_settings() -> DetectorSettings:
     sweep_body_frac=settings.sweep_body_frac,
     sweep_react_bars=settings.sweep_react_bars,
     inducement_band_atr=settings.inducement_band_atr,
+    max_zone_width_atr=settings.max_zone_width_atr,
+    proximal_band_atr=settings.proximal_band_atr,
+    allow_counter_trend=settings.allow_counter_trend,
+    counter_min_zone_score=settings.counter_min_zone_score,
+    counter_extreme_pd=settings.counter_extreme_pd,
+    counter_level_min_touches=settings.counter_level_min_touches,
   )
 
 
@@ -142,6 +157,7 @@ def _format_detection(
   ctx: DetectionContext,
   result: DetectionResult,
   htf_order: list[str],
+  also: list[DetectionResult] | None = None,
 ) -> str:
   stars = "⭐" * max(1, min(3, int(result.confluence)))
   extra_reasons = [
@@ -153,20 +169,74 @@ def _format_detection(
     if extra_reasons
     else ""
   )
-  return "\n".join([
+  lines = [
     f"🔎 <b>Setup forming</b> · {escape(symbol)} {escape(tf)}",
     (
       f"{escape(result.setup)} · <b>{escape(result.direction)}</b> "
       f"· {stars}"
     ),
+  ]
+  if result.mode != "with_trend":
+    label = "reaction scalp" if result.mode == "counter_reaction" else "counter swing"
+    lines.append(
+      f"⚠️ <b>COUNTER-TREND</b> (bias {escape(ctx.htf_bias)}) · {label}"
+    )
+  lines.extend([
     (
-      f"Price now <b>{_price_text(result.current_price, symbol, grouped=True)}</b> "
+      f"{_price_line(symbol, tf, ctx, result)} "
       f"· entry <b>{_zone_text(result.entry_zone, symbol, grouped=True)}</b> "
       f"· key <b>{_price_text(result.key_level, symbol, grouped=True)}</b>"
     ),
     f"HTF bias: {escape(_htf_bias_text(ctx, htf_order))}{reason_suffix}",
-    "→ review & post if it holds",
   ])
+  for extra in also or []:
+    extra_stars = "⭐" * max(1, min(3, int(extra.confluence)))
+    lines.append(
+      "also: "
+      f"{escape(_compact_setup(extra.setup))} "
+      f"{escape(_zone_text(extra.entry_zone, symbol, grouped=True))} "
+      f"{extra_stars}"
+    )
+  lines.append("→ review & post if it holds")
+  return "\n".join(lines)
+
+
+def _price_line(
+  symbol: str,
+  tf: str,
+  ctx: DetectionContext,
+  result: DetectionResult,
+) -> str:
+  if ctx.spot_price is not None:
+    return f"Price now <b>{_price_text(result.current_price, symbol, grouped=True)}</b> (live)"
+  return (
+    f"Price <b>{_price_text(result.current_price, symbol, grouped=True)}</b> "
+    f"({tf.upper()} close {_trigger_close_text(ctx, tf)})"
+  )
+
+
+def _trigger_close_text(ctx: DetectionContext, tf: str) -> str:
+  try:
+    frame = ctx.frames[ctx.tf]
+    ts = frame.index[-1]
+    close_ts = ts.to_pydatetime() + timedelta(seconds=_tf_seconds(tf))
+    close_ts = close_ts.astimezone(timezone.utc)
+    return close_ts.strftime("%H:%M UTC")
+  except Exception:
+    return "trigger bar"
+
+
+def _tf_seconds(tf: str) -> int:
+  tf = tf.upper()
+  if tf.startswith("M") and tf[1:].isdigit():
+    return int(tf[1:]) * 60
+  if tf.startswith("H") and tf[1:].isdigit():
+    return int(tf[1:]) * 3600
+  return 0
+
+
+def _compact_setup(setup: str) -> str:
+  return setup.replace(" & ", "&").replace(" ", "")
 
 
 async def _load_frames(
@@ -183,41 +253,136 @@ async def _load_frames(
   return frames
 
 
-async def _notify_once(
+async def _load_spot_snapshot(client: Any, symbol: str) -> SpotSnapshot | None:
+  raw = await client.get(f"price:{symbol.upper()}:spot")
+  if raw is None:
+    return None
+  text = raw.decode() if isinstance(raw, bytes) else str(raw)
+  try:
+    payload = json.loads(text)
+    bid = float(payload["bid"])
+    ask = float(payload["ask"])
+    ts = int(payload["ts"])
+  except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+    return None
+  price = (bid + ask) / 2
+  now = int(datetime.now(timezone.utc).timestamp())
+  return SpotSnapshot(
+    price=price,
+    ts=ts,
+    fresh=now - ts <= max(0, settings.spot_fresh_secs),
+  )
+
+
+def _attach_price_context(
+  ctx: DetectionContext,
+  spot: SpotSnapshot | None,
+  event_ts: str,
+) -> DetectionContext:
+  price = spot.price if spot is not None and spot.fresh else None
+  ts = spot.ts if spot is not None and spot.fresh else None
+  try:
+    return replace(ctx, spot_price=price, spot_ts=ts, trigger_ts=event_ts)
+  except TypeError:
+    setattr(ctx, "spot_price", price)
+    setattr(ctx, "spot_ts", ts)
+    setattr(ctx, "trigger_ts", event_ts)
+    return ctx
+
+
+def _digest_results(results: list[DetectionResult]) -> list[DetectionResult]:
+  with_trend = _suppress_overlaps([
+    result for result in results
+    if result.mode == "with_trend"
+  ])
+  candidates = with_trend or _suppress_overlaps([
+    result for result in results
+    if result.mode != "with_trend"
+  ])
+  ordered = sorted(candidates, key=_result_rank)
+  return ordered[:max(1, settings.scanner_top_n)]
+
+
+def _suppress_overlaps(results: list[DetectionResult]) -> list[DetectionResult]:
+  ordered = sorted(results, key=_result_rank)
+  selected: list[DetectionResult] = []
+  threshold = max(0.0, settings.alert_overlap_suppress)
+  for result in ordered:
+    if any(
+      result.direction == kept.direction
+      and _zone_overlap_ratio(result.entry_zone, kept.entry_zone) >= threshold
+      for kept in selected
+    ):
+      continue
+    selected.append(result)
+  return selected
+
+
+def _result_rank(result: DetectionResult) -> tuple[float, float, float]:
+  return (
+    -float(result.confluence),
+    -float(getattr(result.entry_zone, "score", 0.0)),
+    _result_zone_distance(result),
+  )
+
+
+def _result_zone_distance(result: DetectionResult) -> float:
+  zone = result.entry_zone
+  price = result.current_price
+  if zone.low <= price <= zone.high:
+    return 0.0
+  return min(abs(price - zone.low), abs(price - zone.high))
+
+
+def _zone_overlap_ratio(first: Zone, second: Zone) -> float:
+  overlap = min(first.high, second.high) - max(first.low, second.low)
+  if overlap <= 0:
+    return 0.0
+  smaller = min(first.high - first.low, second.high - second.low)
+  if smaller <= 0:
+    return 1.0
+  return overlap / smaller
+
+
+async def _notify_digest_once(
   client: Any,
   symbol: str,
   tf: str,
   ctx: DetectionContext,
-  result: DetectionResult,
+  results: list[DetectionResult],
   notify: NotifyFn,
   htf_order: list[str],
-) -> bool:
+) -> list[DetectionResult]:
+  if not results:
+    return []
   if not settings.telegram_owner_id:
     log.info(
       "scanner detection suppressed: TELEGRAM_OWNER_ID not set "
-      "symbol=%s tf=%s setup=%s direction=%s level=%s",
+      "symbol=%s tf=%s count=%s",
       symbol,
       tf,
-      result.setup,
-      result.direction,
-      _price_text(result.key_level, symbol),
+      len(results),
     )
-    return False
+    return []
 
-  key = _dedup_key(symbol, tf, result)
-  claimed = await client.set(
-    key,
-    "1",
-    ex=settings.scanner_alert_ttl,
-    nx=True,
-  )
-  if not claimed:
-    return False
+  claimed_results = []
+  for result in results:
+    key = _dedup_key(symbol, tf, result)
+    claimed = await client.set(
+      key,
+      "1",
+      ex=settings.scanner_alert_ttl,
+      nx=True,
+    )
+    if claimed:
+      claimed_results.append(result)
+  if not claimed_results:
+    return []
   await notify(
-    _format_detection(symbol, tf, ctx, result, htf_order),
+    _format_detection(symbol, tf, ctx, claimed_results[0], htf_order, claimed_results[1:]),
     chat_id=settings.telegram_owner_id,
   )
-  return True
+  return claimed_results
 
 
 async def _record_status(
@@ -244,6 +409,7 @@ async def _record_status(
     "detected": [
       {
         "setup": item.setup,
+        "mode": item.mode,
         "direction": item.direction,
         "key_level": item.key_level,
         "entry_zone": {
@@ -284,6 +450,7 @@ async def _handle_event(
   source = source or RedisOHLCSource(client)
   notify = notify or send_with_retry
   htf_order = _htf_tfs()
+  spot = await _load_spot_snapshot(client, symbol)
   frames = await _load_frames(source, symbol, exec_tf, htf_order)
   if exec_tf not in frames:
     await _record_status(
@@ -305,15 +472,23 @@ async def _handle_event(
     _detector_settings(),
     htf_order,
   )
+  ctx = _attach_price_context(ctx, spot, event_ts)
   detected = []
-  sent = []
   for detector in detectors or DEFAULT_DETECTORS:
     result = detector(ctx)
     if result is None:
       continue
     detected.append(result)
-    if await _notify_once(client, symbol, exec_tf, ctx, result, notify, htf_order):
-      sent.append(result)
+  digest = _digest_results(detected)
+  sent = await _notify_digest_once(
+    client,
+    symbol,
+    exec_tf,
+    ctx,
+    digest,
+    notify,
+    htf_order,
+  )
   await _record_status(
     client,
     symbol=symbol,

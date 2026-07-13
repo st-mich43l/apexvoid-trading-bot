@@ -179,6 +179,21 @@ def test_merge_zones_combines_overlapping_same_side_sources():
   assert [zone.side for zone in merged].count("supply") == 1
 
 
+def test_merge_zones_keeps_chain_separate_when_band_would_exceed_cap():
+  merged = merge_zones(
+    [
+      Zone(100, 104, "demand", source="supply_demand"),
+      Zone(102, 106, "demand", source="bullish_fvg"),
+      Zone(104, 108, "demand", source="order_block", break_kind="BOS"),
+    ],
+    min_overlap=0.5,
+    max_width=6,
+  )
+
+  assert len([zone for zone in merged if zone.side == "demand"]) == 2
+  assert max(zone.high - zone.low for zone in merged) <= 6
+
+
 def test_score_zones_prefers_fresh_ob_round_level_liquidity_and_htf():
   strong = Zone(
     4099,

@@ -41,6 +41,7 @@ public sealed class FeedRunner(
     client.Heartbeat += TouchOnHeartbeat;
     using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
     Task? refreshTask = null;
+    Task? spotTask = null;
     try
     {
       Log(
@@ -59,6 +60,7 @@ public sealed class FeedRunner(
       healthFile.Touch();
 
       refreshTask = RefreshLoopAsync(client, linked.Token);
+      spotTask = SpotLoopAsync(client, linked.Token);
       var emitter = new ClosedBarEmitter();
       Log("live stream started");
       await foreach (var raw in client.LiveTrendbarsAsync(cancellationToken))
@@ -84,6 +86,22 @@ public sealed class FeedRunner(
       {
         await IgnoreCancellation(refreshTask);
       }
+      if (spotTask is not null)
+      {
+        await IgnoreCancellation(spotTask);
+      }
+    }
+  }
+
+  private async Task SpotLoopAsync(
+    ICTraderFeedClient client,
+    CancellationToken cancellationToken
+  )
+  {
+    await foreach (var spot in client.LiveSpotsAsync(cancellationToken))
+    {
+      await sink.WriteSpotAsync(spot, cancellationToken);
+      healthFile.Touch();
     }
   }
 

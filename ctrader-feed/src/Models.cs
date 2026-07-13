@@ -30,4 +30,11 @@ public sealed record SymbolInfo(
   int Digits
 );
 
+public sealed record SpotPrice(
+  string Symbol,
+  decimal Bid,
+  decimal Ask,
+  long Timestamp
+);
+
 public sealed record RedisBarEntry(long Timestamp, string Json);

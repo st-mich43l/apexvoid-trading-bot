@@ -77,7 +77,13 @@ class Settings(BaseSettings):
   scanner_alert_ttl: int = 7200
   scanner_level_bucket: int = 20
   scanner_confluence_floor: int = 2
+  scanner_top_n: int = 1
+  alert_overlap_suppress: float = 0.5
+  spot_fresh_secs: int = 30
   max_entry_atr: float = 2.0
+  max_zone_width_atr: float = 1.5
+  proximal_band_atr: float = 0.5
+  max_merged_zone_atr: float = 3.0
   range_lookback: int = 50
   atr_length: int = 14
   swing_fractal_n: int = 2
@@ -97,6 +103,10 @@ class Settings(BaseSettings):
   sweep_body_frac: float = 0.5
   sweep_react_bars: int = 3
   inducement_band_atr: float = 0.3
+  allow_counter_trend: bool = True
+  counter_min_zone_score: float = 10.0
+  counter_extreme_pd: float = 0.25
+  counter_level_min_touches: int = 3
 
   @property
   def telegram_chat_id(self) -> str:

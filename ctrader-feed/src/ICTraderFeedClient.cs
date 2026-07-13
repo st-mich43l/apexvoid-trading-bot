@@ -23,4 +23,5 @@ public interface ICTraderFeedClient : IAsyncDisposable
   );
 
   IAsyncEnumerable<RawTrendbar> LiveTrendbarsAsync(CancellationToken cancellationToken);
+  IAsyncEnumerable<SpotPrice> LiveSpotsAsync(CancellationToken cancellationToken);
 }

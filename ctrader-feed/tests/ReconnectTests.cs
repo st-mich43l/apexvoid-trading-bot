@@ -150,6 +150,14 @@ internal sealed class FakeCTraderClient : ICTraderFeedClient
     yield break;
   }
 
+  public async IAsyncEnumerable<SpotPrice> LiveSpotsAsync(
+    [EnumeratorCancellation] CancellationToken cancellationToken
+  )
+  {
+    await Task.Delay(TimeSpan.FromMinutes(5), cancellationToken);
+    yield break;
+  }
+
   public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 }
 
@@ -182,6 +190,9 @@ internal sealed class RecordingSink : IBarSink
     int count,
     CancellationToken cancellationToken
   ) => Task.FromResult<IReadOnlyList<OhlcBar>>([]);
+
+  public Task WriteSpotAsync(SpotPrice spot, CancellationToken cancellationToken) =>
+    Task.CompletedTask;
 }
 
 internal sealed class TempHeartbeat : IDisposable

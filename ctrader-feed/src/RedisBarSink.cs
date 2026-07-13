@@ -25,6 +25,8 @@ public interface IBarSink
     int count,
     CancellationToken cancellationToken
   );
+
+  Task WriteSpotAsync(SpotPrice spot, CancellationToken cancellationToken);
 }
 
 public interface IRedisSeriesCommands
@@ -44,9 +46,13 @@ public interface IRedisSeriesCommands
 public sealed class RedisBarSink(
   IRedisSeriesCommands redis,
   int windowMax,
-  string channel
+  string channel,
+  IRedisStringCommands? strings = null
 ) : IBarSink
 {
+  private readonly IRedisStringCommands? _strings = strings ?? redis as IRedisStringCommands;
+  private readonly Dictionary<string, long> _lastSpotWrite = [];
+
   public async Task WriteClosedBarAsync(
     string symbol,
     string timeframe,
@@ -91,8 +97,31 @@ public sealed class RedisBarSink(
       .ToArray();
   }
 
+  public async Task WriteSpotAsync(SpotPrice spot, CancellationToken cancellationToken)
+  {
+    var strings = _strings
+      ?? throw new InvalidOperationException("Redis string commands are required for spot writes");
+    var key = SpotKey(spot.Symbol);
+    if (
+      _lastSpotWrite.TryGetValue(key, out var last)
+      && spot.Timestamp - last < 1
+    )
+    {
+      return;
+    }
+    var json = System.Text.Json.JsonSerializer.Serialize(
+      RedisSpot.From(spot),
+      RedisJsonContext.Default.RedisSpot
+    );
+    await strings.SetStringAsync(key, json, cancellationToken);
+    _lastSpotWrite[key] = spot.Timestamp;
+  }
+
   public static string Key(string symbol, string timeframe) =>
     $"bars:{symbol.ToUpperInvariant()}:{timeframe.ToUpperInvariant()}";
+
+  public static string SpotKey(string symbol) =>
+    $"price:{symbol.ToUpperInvariant()}:spot";
 }
 
 public sealed class StackExchangeRedisSeriesCommands :
@@ -243,8 +272,18 @@ internal sealed record RedisBar(
   public OhlcBar ToOhlc() => new(T, O, H, L, C, V);
 }
 
+internal sealed record RedisSpot(
+  [property: JsonPropertyName("bid")] decimal Bid,
+  [property: JsonPropertyName("ask")] decimal Ask,
+  [property: JsonPropertyName("ts")] long Ts
+)
+{
+  public static RedisSpot From(SpotPrice spot) => new(spot.Bid, spot.Ask, spot.Timestamp);
+}
+
 [JsonSourceGenerationOptions(DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
 [JsonSerializable(typeof(RedisBar))]
+[JsonSerializable(typeof(RedisSpot))]
 internal sealed partial class RedisJsonContext : JsonSerializerContext
 {
 }

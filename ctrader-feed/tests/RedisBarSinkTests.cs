@@ -29,14 +29,34 @@ public sealed class RedisBarSinkTests
     Assert.Equal(("bars:new", "XAU:M5:300"), redis.Published[^1]);
   }
 
+  [Fact]
+  public async Task WriteSpotThrottlesAndStoresPayloadShape()
+  {
+    var redis = new InMemoryRedisSeriesCommands();
+    var sink = new RedisBarSink(redis, windowMax: 2, channel: "bars:new");
+
+    await sink.WriteSpotAsync(new SpotPrice("XAU", 4082.10m, 4082.30m, 100), CancellationToken.None);
+    await sink.WriteSpotAsync(new SpotPrice("XAU", 4082.20m, 4082.40m, 100), CancellationToken.None);
+    await sink.WriteSpotAsync(new SpotPrice("XAU", 4082.50m, 4082.70m, 101), CancellationToken.None);
+
+    Assert.Equal(2, redis.StringWrites.Count);
+    Assert.Equal(
+      """{"bid":4082.50,"ask":4082.70,"ts":101}""",
+      redis.Strings[RedisBarSink.SpotKey("XAU")]
+    );
+  }
+
   private static OhlcBar Bar(long ts, decimal close) =>
     new(ts, close - 1, close + 1, close - 2, close, 100);
 }
 
 internal sealed class InMemoryRedisSeriesCommands : IRedisSeriesCommands
+  , IRedisStringCommands
 {
   public Dictionary<string, List<RedisBarEntry>> Series { get; } = [];
   public List<(string Channel, string Payload)> Published { get; } = [];
+  public Dictionary<string, string> Strings { get; } = [];
+  public List<(string Key, string Value)> StringWrites { get; } = [];
 
   public Task RemoveByScoreAsync(
     string key,
@@ -115,5 +135,22 @@ internal sealed class InMemoryRedisSeriesCommands : IRedisSeriesCommands
       ? entries.OrderByDescending(entry => entry.Timestamp).Take(count).ToArray()
       : [];
     return Task.FromResult(result);
+  }
+
+  public Task<string?> GetStringAsync(string key, CancellationToken cancellationToken)
+  {
+    Strings.TryGetValue(key, out var value);
+    return Task.FromResult(value);
+  }
+
+  public Task SetStringAsync(
+    string key,
+    string value,
+    CancellationToken cancellationToken
+  )
+  {
+    Strings[key] = value;
+    StringWrites.Add((key, value));
+    return Task.CompletedTask;
   }
 }
