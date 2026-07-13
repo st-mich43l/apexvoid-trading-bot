@@ -363,23 +363,12 @@ public sealed class CTraderOpenApiFeedClient(
     {
       return null;
     }
-    var scale = DecimalScale(symbol.Digits);
     return new SpotPrice(
       symbol.RedisSymbol,
-      spot.Bid / scale,
-      spot.Ask / scale,
+      OpenApiPrice.Decode(spot.Bid),
+      OpenApiPrice.Decode(spot.Ask),
       DateTimeOffset.UtcNow.ToUnixTimeSeconds()
     );
-  }
-
-  private static decimal DecimalScale(int digits)
-  {
-    var scale = 1m;
-    for (var i = 0; i < digits; i++)
-    {
-      scale *= 10m;
-    }
-    return scale;
   }
 
   private static string NormalizeSymbol(string symbol) =>
