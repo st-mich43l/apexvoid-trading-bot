@@ -1,6 +1,6 @@
 """Pure price-action setup detectors for replayable scanner decisions."""
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 import math
 from typing import Callable, Protocol
 
@@ -8,7 +8,7 @@ import pandas as pd
 
 from app.analysis import AnalysisSettings, analyze
 from app.indicators import atr as atr_indicator
-from app.pa_types import DealingRange, Grab, SessionLevel
+from app.pa_types import DealingRange, Grab, Pool, SessionLevel
 from app.structure import (
   Level,
   Swing,
@@ -25,6 +25,8 @@ from app.structure import (
 
 _EPS = 1e-9
 _BUY_ZONE_SIDE = "de" + "mand"
+STAR_THREE_SCORE = 12.0
+STAR_TWO_SCORE = 8.0
 
 
 @dataclass(frozen=True)
@@ -53,6 +55,8 @@ class StructureSet:
 class DetectorSettings:
   confluence_floor: int = 2
   max_entry_atr: float = 2.0
+  max_zone_width_atr: float = 1.5
+  proximal_band_atr: float = 0.5
   range_lookback: int = 50
   snap_atr_mult: float = 1.5
   atr_length: int = 14
@@ -62,6 +66,7 @@ class DetectorSettings:
   displacement_atr_mult: float = 1.5
   zone_width: str = "body"
   zone_merge_overlap: float = 0.5
+  max_merged_zone_atr: float = 3.0
   equal_tol_atr: float = 0.15
   level_cluster_atr: float = 0.5
   round_step: float = 5.0
@@ -77,6 +82,10 @@ class DetectorSettings:
   sweep_body_frac: float = 0.5
   sweep_react_bars: int = 3
   inducement_band_atr: float = 0.3
+  allow_counter_trend: bool = True
+  counter_min_zone_score: float = 10.0
+  counter_extreme_pd: float = 0.25
+  counter_level_min_touches: int = 3
 
   def analysis_settings(self) -> AnalysisSettings:
     return AnalysisSettings(
@@ -87,6 +96,7 @@ class DetectorSettings:
       displacement_atr_mult=self.displacement_atr_mult,
       zone_width=self.zone_width,
       zone_merge_overlap=self.zone_merge_overlap,
+      max_merged_zone_atr=self.max_merged_zone_atr,
       equal_tol_atr=self.equal_tol_atr,
       level_cluster_atr=self.level_cluster_atr,
       round_step=self.round_step,
@@ -114,6 +124,9 @@ class DetectionContext:
   htf_bias: str
   settings: DetectorSettings
   session_ok: bool = True
+  spot_price: float | None = None
+  spot_ts: int | None = None
+  trigger_ts: str | None = None
 
 
 @dataclass(frozen=True)
@@ -125,6 +138,7 @@ class DetectionResult:
   current_price: float
   confluence: int
   reasons: list[str]
+  mode: str = "with_trend"
 
 
 class SetupDetector(Protocol):
@@ -235,6 +249,12 @@ def _last(series: pd.Series, default: float = 0.0) -> float:
 
 def _atr(ind: IndicatorSet, fallback: float = 1.0) -> float:
   return _last(ind.atr, fallback)
+
+
+def _current_price(ctx: DetectionContext, df: pd.DataFrame) -> float:
+  if ctx.spot_price is not None and math.isfinite(float(ctx.spot_price)):
+    return float(ctx.spot_price)
+  return float(df["close"].iloc[-1])
 
 
 def _nearest_level(
@@ -362,14 +382,14 @@ def _best_valid_zone(
   atr: float,
   direction: str,
   settings: DetectorSettings,
-) -> Zone | None:
+) -> tuple[Zone, bool] | None:
   valid = [
     zone for zone in zones
     if _entry_valid_for_settings(zone, price, atr, direction, settings)
   ]
   if not valid:
     return None
-  return min(
+  zone = min(
     valid,
     key=lambda zone: (
       -float(getattr(zone, "score", 0.0)),
@@ -377,6 +397,32 @@ def _best_valid_zone(
       zone.low,
     ),
   )
+  return _proximal_if_wide(zone, price, atr, direction, settings)
+
+
+def _proximal_if_wide(
+  zone: Zone,
+  price: float,
+  atr: float,
+  direction: str,
+  settings: DetectorSettings,
+) -> tuple[Zone, bool]:
+  width = zone.high - zone.low
+  max_width = max(0.0, settings.max_zone_width_atr) * max(0.0, atr)
+  if max_width <= 0 or width <= max_width:
+    return zone, False
+  band = max(_EPS, settings.proximal_band_atr * max(0.0, atr))
+  if direction == "SELL":
+    top = min(zone.high, zone.low + band)
+    return replace(zone, bottom=zone.low, top=top), True
+  bottom = max(zone.low, zone.high - band)
+  return replace(zone, bottom=bottom, top=zone.high), True
+
+
+def _add_proximal_reason(reasons: list[str], proximal: bool) -> list[str]:
+  if not proximal:
+    return reasons
+  return [*reasons, "proximal of wide zone"]
 
 
 def _zone_distance(zone: Zone, price: float, direction: str) -> float:
@@ -420,12 +466,12 @@ def _pd_gate(st: StructureSet, direction: str, settings: DetectorSettings) -> bo
 def _confluence_from_zone(zone: Zone, reasons: list[str]) -> int:
   score = float(getattr(zone, "score", 0.0))
   if score > 0:
-    if score >= 8:
-      return 3
-    if score >= 5:
-      return 2
-    return 1
-  return min(3, len(reasons))
+    stars = 3 if score >= STAR_THREE_SCORE else 2 if score >= STAR_TWO_SCORE else 1
+  else:
+    stars = min(3, len(reasons))
+  if getattr(zone, "touches", 0) >= 1:
+    stars = min(stars, 2)
+  return max(1, stars)
 
 
 def _merge_score_reasons(base: list[str], zone: Zone) -> list[str]:
@@ -457,6 +503,7 @@ def _finish(
   price: float,
   atr: float,
   reasons: list[str],
+  mode: str = "with_trend",
 ) -> DetectionResult | None:
   if not _level_valid(level, price, direction):
     return None
@@ -478,6 +525,7 @@ def _finish(
     current_price=price,
     confluence=confluence,
     reasons=full_reasons,
+    mode=mode,
   )
 
 
@@ -528,9 +576,9 @@ def trend_pullback(ctx: DetectionContext) -> DetectionResult | None:
     or not _rejection(df, direction)
   ):
     return None
-  price = float(df["close"].iloc[-1])
+  price = _current_price(ctx, df)
   atr = _atr(ind)
-  zone = _best_valid_zone(
+  selected = _best_valid_zone(
     [
       zone for zone in _candidate_zones(st, direction)
       if _last_touches_zone(df, zone)
@@ -540,14 +588,16 @@ def trend_pullback(ctx: DetectionContext) -> DetectionResult | None:
     direction,
     ctx.settings,
   )
-  if zone is None:
+  if selected is None:
     return None
+  zone, proximal = selected
   level = _zone_key(zone, price, direction)
   reasons = [
     f"HTF bias {ctx.htf_bias}",
     "pullback into structure zone",
     "rejection at support" if direction == "BUY" else "rejection at supply",
   ]
+  reasons = _add_proximal_reason(reasons, proximal)
   if ctx.session_ok:
     reasons.append("session")
   return _finish(ctx, "Trend Pullback", direction, level, zone, price, atr, reasons)
@@ -564,7 +614,7 @@ def break_retest(ctx: DetectionContext) -> DetectionResult | None:
     or not _rejection(df, direction)
   ):
     return None
-  price = float(df["close"].iloc[-1])
+  price = _current_price(ctx, df)
   atr = _atr(ind)
   levels = sorted(st.levels, key=lambda item: abs(item.price - price))
   for level in levels:
@@ -595,12 +645,14 @@ def snap_back(ctx: DetectionContext) -> DetectionResult | None:
     or not _rejection(df, direction)
   ):
     return None
-  price = float(df["close"].iloc[-1])
+  price = _current_price(ctx, df)
   atr = _atr(ind)
   zones = _candidate_zones(st, direction)
-  zone = _best_valid_zone(zones, price, atr, direction, ctx.settings)
+  selected = _best_valid_zone(zones, price, atr, direction, ctx.settings)
   level = None
-  if zone is not None:
+  proximal = False
+  if selected is not None:
+    zone, proximal = selected
     distance = _zone_distance(zone, price, direction)
     level = _zone_key(zone, price, direction)
   else:
@@ -621,6 +673,7 @@ def snap_back(ctx: DetectionContext) -> DetectionResult | None:
     "reversal rejection",
     f"sweep {grab.grade}",
   ]
+  reasons = _add_proximal_reason(reasons, proximal)
   return _finish(ctx, "Snap-Back", direction, level, zone, price, atr, reasons)
 
 
@@ -633,18 +686,20 @@ def momentum_ride(ctx: DetectionContext) -> DetectionResult | None:
     return None
   if not _strong_body_break(df, st, direction, ctx.settings.momentum_body_frac):
     return None
-  price = float(df["close"].iloc[-1])
+  price = _current_price(ctx, df)
   atr = _atr(ind)
-  zone = _best_valid_zone(
+  selected = _best_valid_zone(
     _candidate_zones(st, direction),
     price,
     atr,
     direction,
     ctx.settings,
   )
-  if zone is not None:
+  if selected is not None:
+    zone, proximal = selected
     level_price = _zone_key(zone, price, direction)
     reasons = [f"HTF bias {ctx.htf_bias}", "impulse break", "near scored zone"]
+    reasons = _add_proximal_reason(reasons, proximal)
     return _finish(ctx, "Momentum Ride", direction, level_price, zone, price, atr, reasons)
   level = _nearest_level(st.levels, price, direction)
   if level is None:
@@ -665,7 +720,7 @@ def fade_scalp(ctx: DetectionContext) -> DetectionResult | None:
     or not _rejection(df, direction)
   ):
     return None
-  price = float(df["close"].iloc[-1])
+  price = _current_price(ctx, df)
   atr = _atr(ind)
   desired_kind = "equal_low" if direction == "BUY" else "equal_high"
   for level in st.equal_levels:
@@ -685,6 +740,256 @@ def fade_scalp(ctx: DetectionContext) -> DetectionResult | None:
     if result is not None:
       return result
   return None
+
+
+def zone_reaction(ctx: DetectionContext) -> DetectionResult | None:
+  if not ctx.settings.allow_counter_trend or ctx.htf_bias not in {"up", "down"}:
+    return None
+  df, ind, st = _exec(ctx)
+  if len(df) < 5:
+    return None
+  direction = "BUY" if ctx.htf_bias == "down" else "SELL"
+  if not _counter_pd_gate(st, direction, ctx.settings):
+    return None
+  price = _current_price(ctx, df)
+  atr = _atr(ind)
+  candidate = _counter_zone_candidate(ctx, df, st, direction, price, atr)
+  if candidate is None:
+    candidate = _counter_level_candidate(ctx, df, st, direction, price, atr)
+  if candidate is None:
+    return None
+
+  zone, level, mode, reasons, confirmation_target = candidate
+  confirmation = _counter_confirmation(
+    df,
+    st,
+    zone,
+    direction,
+    confirmation_target,
+    ctx.settings,
+  )
+  if confirmation is None:
+    return None
+  reasons = [
+    f"HTF bias {ctx.htf_bias}",
+    *reasons,
+    confirmation,
+    _pd_reason(st),
+    *_counter_target_reasons(st, price, direction, mode),
+  ]
+  return _finish(
+    ctx,
+    "Zone Reaction",
+    direction,
+    level,
+    zone,
+    price,
+    atr,
+    reasons,
+    mode,
+  )
+
+
+def _counter_zone_candidate(
+  ctx: DetectionContext,
+  df: pd.DataFrame,
+  st: StructureSet,
+  direction: str,
+  price: float,
+  atr: float,
+) -> tuple[Zone, float, str, list[str], Level | None] | None:
+  zones = [
+    zone for zone in _candidate_zones(st, direction)
+    if (
+      zone.touches == 0
+      and float(getattr(zone, "score", 0.0)) >= ctx.settings.counter_min_zone_score
+      and _last_touches_zone(df, zone)
+    )
+  ]
+  selected = _best_valid_zone(zones, price, atr, direction, ctx.settings)
+  if selected is None:
+    return None
+  zone, proximal = selected
+  mode = "counter_swing" if _counter_swing_zone(zone) else "counter_reaction"
+  reasons = ["fresh counter zone"]
+  if mode == "counter_swing":
+    reasons.append("fresh HTF OB")
+  reasons = _add_proximal_reason(reasons, proximal)
+  return zone, _zone_key(zone, price, direction), mode, reasons, None
+
+
+def _counter_level_candidate(
+  ctx: DetectionContext,
+  df: pd.DataFrame,
+  st: StructureSet,
+  direction: str,
+  price: float,
+  atr: float,
+) -> tuple[Zone, float, str, list[str], Level | None] | None:
+  band = max(_EPS, ctx.settings.proximal_band_atr * max(0.0, atr))
+  for level in sorted(st.levels, key=lambda item: abs(item.price - price)):
+    if level.touches < ctx.settings.counter_level_min_touches:
+      continue
+    if not _level_touched_last(df, level.price, max(level.band, band)):
+      continue
+    zone = _pseudo_level_zone(level.price, band, direction, f"key {_number(level.price)} x{level.touches}")
+    if not _entry_valid_for_settings(zone, price, atr, direction, ctx.settings):
+      continue
+    return (
+      zone,
+      _zone_key(zone, price, direction),
+      "counter_reaction",
+      [f"key {_number(level.price)} x{level.touches}"],
+      level,
+    )
+  for session in sorted(st.session_levels, key=lambda item: abs(item.price - price)):
+    if session.swept or not _counter_session_side(session.name, direction):
+      continue
+    if not _level_touched_last(df, session.price, band):
+      continue
+    zone = _pseudo_level_zone(session.price, band, direction, session.name)
+    if not _entry_valid_for_settings(zone, price, atr, direction, ctx.settings):
+      continue
+    return (
+      zone,
+      _zone_key(zone, price, direction),
+      "counter_reaction",
+      [session.name],
+      None,
+    )
+  return None
+
+
+def _pseudo_level_zone(price: float, band: float, direction: str, reason: str) -> Zone:
+  side = _BUY_ZONE_SIDE if direction == "BUY" else "supply"
+  return Zone(
+    price - band,
+    price + band,
+    side,
+    source="level",
+    score=STAR_TWO_SCORE,
+    score_reasons=[reason],
+  )
+
+
+def _counter_confirmation(
+  df: pd.DataFrame,
+  st: StructureSet,
+  zone: Zone,
+  direction: str,
+  level: Level | None,
+  settings: DetectorSettings,
+) -> str | None:
+  grab = _zone_grab(st, zone, direction)
+  if grab is None and level is not None:
+    grab = _level_grab(st, level, direction)
+  if grab is not None and grab.grade == "A":
+    return "sweep A"
+  if _rejection(df, direction) and _recent_choch(st, direction, len(df), settings):
+    return "rejection + CHoCH"
+  return None
+
+
+def _counter_pd_gate(
+  st: StructureSet,
+  direction: str,
+  settings: DetectorSettings,
+) -> bool:
+  range_ = st.dealing_range
+  if range_ is None:
+    return False
+  extreme = max(0.0, min(0.5, settings.counter_extreme_pd))
+  if direction == "BUY":
+    return range_.position <= extreme + _EPS
+  return range_.position >= 1.0 - extreme - _EPS
+
+
+def _pd_reason(st: StructureSet) -> str:
+  if st.dealing_range is None:
+    return "PD unknown"
+  return f"PD {st.dealing_range.position:.2f}"
+
+
+def _counter_swing_zone(zone: Zone) -> bool:
+  sources = set(zone.sources or ([zone.source] if zone.source else []))
+  has_structure = bool(sources & {"order_block", "breaker"})
+  return has_structure and "HTF zone" in set(zone.score_reasons or [])
+
+
+def _recent_choch(
+  st: StructureSet,
+  direction: str,
+  bar_count: int,
+  settings: DetectorSettings,
+) -> bool:
+  lookback = max(1, settings.sweep_react_bars)
+  earliest = max(0, bar_count - lookback - 1)
+  wanted = "up" if direction == "BUY" else "down"
+  return any(
+    item.kind == "CHoCH" and item.direction == wanted and item.index >= earliest
+    for item in st.breaks
+  )
+
+
+def _level_touched_last(df: pd.DataFrame, price: float, band: float) -> bool:
+  if df.empty:
+    return False
+  row = df.iloc[-1]
+  return (
+    float(row["low"]) <= price + max(0.0, band)
+    and float(row["high"]) >= price - max(0.0, band)
+  )
+
+
+def _counter_session_side(name: str, direction: str) -> bool:
+  if direction == "BUY":
+    return _is_low_session_level(name)
+  return _is_high_session_level(name)
+
+
+def _counter_target_reasons(
+  st: StructureSet,
+  price: float,
+  direction: str,
+  mode: str,
+) -> list[str]:
+  if mode == "counter_swing":
+    if st.dealing_range is not None:
+      return [f"TP anchor EQ {_number(st.dealing_range.eq)}"]
+    return ["TP anchor opposing HTF zone"]
+  session = _nearest_session_tp(st.session_levels, price, direction)
+  if session is not None:
+    return [f"TP anchor {session.name}"]
+  pool = _nearest_opposing_pool(st, price, direction)
+  if pool is not None:
+    return [f"TP anchor liquidity {_number(pool.level)}"]
+  if st.dealing_range is not None:
+    return [f"TP anchor EQ {_number(st.dealing_range.eq)}"]
+  return []
+
+
+def _nearest_opposing_pool(
+  st: StructureSet,
+  price: float,
+  direction: str,
+) -> Pool | None:
+  if direction == "BUY":
+    candidates = [
+      pool for pool in st.liquidity_pools
+      if pool.side == "buy" and pool.level > price
+    ]
+  else:
+    candidates = [
+      pool for pool in st.liquidity_pools
+      if pool.side == "sell" and pool.level < price
+    ]
+  if not candidates:
+    return None
+  return min(candidates, key=lambda pool: abs(pool.level - price))
+
+
+def _number(value: float) -> str:
+  return f"{value:.2f}".rstrip("0").rstrip(".")
 
 
 def _level_grab(
@@ -741,4 +1046,5 @@ DEFAULT_DETECTORS: tuple[SetupDetector, ...] = (
   snap_back,
   momentum_ride,
   fade_scalp,
+  zone_reaction,
 )

@@ -208,6 +208,7 @@ def mark_mitigation(
 def merge_zones(
   zones: list[Zone],
   min_overlap: float = ZONE_MERGE_OVERLAP,
+  max_width: float | None = None,
 ) -> list[Zone]:
   groups: list[list[Zone]] = []
   for zone in sorted(zones, key=lambda item: (item.side, item.low, item.high)):
@@ -215,6 +216,8 @@ def merge_zones(
       if group[0].side != zone.side:
         continue
       if any(_overlap_ratio(zone, member) >= min_overlap for member in group):
+        if max_width is not None and _merged_width([*group, zone]) > max_width:
+          continue
         group.append(zone)
         break
     else:
@@ -286,6 +289,10 @@ def _overlap_ratio(first: Zone, second: Zone) -> float:
   if smaller <= 0:
     return 1.0 if first.low <= second.high and second.low <= first.high else 0.0
   return overlap / smaller
+
+
+def _merged_width(zones: list[Zone]) -> float:
+  return max(zone.high for zone in zones) - min(zone.low for zone in zones)
 
 
 def _composite_zone(group: list[Zone]) -> Zone:
