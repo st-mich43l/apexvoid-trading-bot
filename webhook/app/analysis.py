@@ -10,7 +10,7 @@ from app.dealing_range import dealing_range
 from app.levels import key_levels
 from app.liquidity import liquidity_grabs, liquidity_pools
 from app.momentum import momentum
-from app.pa_math import atr_series
+from app.pa_math import atr_scalar, atr_series
 from app.pa_types import (
   Break,
   DealingRange,
@@ -59,6 +59,7 @@ class AnalysisSettings:
   displacement_atr_mult: float = 1.5
   zone_width: str = "body"
   zone_merge_overlap: float = ZONE_MERGE_OVERLAP
+  max_merged_zone_atr: float = 3.0
   equal_tol_atr: float = 0.15
   level_cluster_atr: float = 0.5
   round_step: float = 5.0
@@ -176,6 +177,7 @@ def _analyze_tf(
   zones = merge_zones(
     [*sd_zones, *ob_zones, *flip, *fvg_zones],
     settings.zone_merge_overlap,
+    atr_scalar(atr) * max(0.0, settings.max_merged_zone_atr),
   )
   zones = mark_mitigation(zones, df, cutoff=max(0, len(df) - 1))
   grabs = liquidity_grabs(

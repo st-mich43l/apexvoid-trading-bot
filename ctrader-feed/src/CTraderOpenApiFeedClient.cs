@@ -12,6 +12,7 @@ public sealed class CTraderOpenApiFeedClient(
 {
   private readonly Channel<IMessage> _responses = Channel.CreateUnbounded<IMessage>();
   private readonly Channel<RawTrendbar> _liveTrendbars = Channel.CreateUnbounded<RawTrendbar>();
+  private readonly Channel<SpotPrice> _liveSpots = Channel.CreateUnbounded<SpotPrice>();
   private readonly List<IDisposable> _subscriptions = [];
   private readonly RefreshTokenState _tokens = new(options, refreshTokenStore);
   private readonly object _spotSubscriptionLock = new();
@@ -19,6 +20,7 @@ public sealed class CTraderOpenApiFeedClient(
   private TaskCompletionSource<bool>? _spotSubscriptionReady;
   private long _spotSubscriptionAccountId;
   private long _spotSubscriptionSymbolId;
+  private SymbolInfo? _spotSymbol;
 
   public event Action? Heartbeat;
 
@@ -142,6 +144,7 @@ public sealed class CTraderOpenApiFeedClient(
       _spotSubscriptionReady = spotReady;
       _spotSubscriptionAccountId = options.AccountId;
       _spotSubscriptionSymbolId = symbol.SymbolId;
+      _spotSymbol = symbol;
     }
 
     var spotReq = new ProtoOASubscribeSpotsReq
@@ -207,6 +210,20 @@ public sealed class CTraderOpenApiFeedClient(
     }
   }
 
+  public async IAsyncEnumerable<SpotPrice> LiveSpotsAsync(
+    [System.Runtime.CompilerServices.EnumeratorCancellation]
+    CancellationToken cancellationToken
+  )
+  {
+    while (await _liveSpots.Reader.WaitToReadAsync(cancellationToken))
+    {
+      while (_liveSpots.Reader.TryRead(out var spot))
+      {
+        yield return spot;
+      }
+    }
+  }
+
   public async ValueTask DisposeAsync()
   {
     foreach (var subscription in _subscriptions)
@@ -220,6 +237,7 @@ public sealed class CTraderOpenApiFeedClient(
     }
     _responses.Writer.TryComplete();
     _liveTrendbars.Writer.TryComplete();
+    _liveSpots.Writer.TryComplete();
     await Task.CompletedTask;
   }
 
@@ -233,6 +251,11 @@ public sealed class CTraderOpenApiFeedClient(
     if (message is ProtoOASpotEvent spot)
     {
       CompleteSpotSubscription(spot);
+      var decoded = ToSpot(spot);
+      if (decoded is not null)
+      {
+        _liveSpots.Writer.TryWrite(decoded);
+      }
       foreach (var trendbar in spot.Trendbar)
       {
         _liveTrendbars.Writer.TryWrite(ToRaw(trendbar));
@@ -250,6 +273,7 @@ public sealed class CTraderOpenApiFeedClient(
     );
     _responses.Writer.TryComplete(wrapped);
     _liveTrendbars.Writer.TryComplete(wrapped);
+    _liveSpots.Writer.TryComplete(wrapped);
     TaskCompletionSource<bool>? spotSubscriptionReady;
     lock (_spotSubscriptionLock)
     {
@@ -327,6 +351,36 @@ public sealed class CTraderOpenApiFeedClient(
       bar.Volume,
       bar.UtcTimestampInMinutes
     );
+
+  private SpotPrice? ToSpot(ProtoOASpotEvent spot)
+  {
+    SymbolInfo? symbol;
+    lock (_spotSubscriptionLock)
+    {
+      symbol = _spotSymbol;
+    }
+    if (symbol is null || spot.SymbolId != symbol.SymbolId || spot.Bid <= 0 || spot.Ask <= 0)
+    {
+      return null;
+    }
+    var scale = DecimalScale(symbol.Digits);
+    return new SpotPrice(
+      symbol.RedisSymbol,
+      spot.Bid / scale,
+      spot.Ask / scale,
+      DateTimeOffset.UtcNow.ToUnixTimeSeconds()
+    );
+  }
+
+  private static decimal DecimalScale(int digits)
+  {
+    var scale = 1m;
+    for (var i = 0; i < digits; i++)
+    {
+      scale *= 10m;
+    }
+    return scale;
+  }
 
   private static string NormalizeSymbol(string symbol) =>
     symbol.Replace("/", "", StringComparison.Ordinal).ToUpperInvariant();

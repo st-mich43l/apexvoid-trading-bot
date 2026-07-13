@@ -90,6 +90,19 @@ XAU:M5:4102444800
 The publish is a cadence signal only: "a closed bar arrived, pull the window".
 The ZSET is the material data source.
 
+## Live Spot Key
+
+`ctrader-feed` also writes the latest bid/ask spot as a plain Redis string,
+throttled to at least one second between writes per symbol:
+
+```text
+SET price:XAU:spot {"bid":4082.10,"ask":4082.30,"ts":4102444800}
+```
+
+`ts` is UTC epoch seconds when the spot was observed by the feed. Consumers
+must treat this as live only while fresh; the scanner falls back to the closed
+bar price when it is absent or stale.
+
 ## Persistence
 
 Redis is allowed to lose this data on restart. `ctrader-feed` backfills the
