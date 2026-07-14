@@ -84,6 +84,16 @@ _HELP_TEXT = """<b>Trade controls</b>
 <code>/trade_stats [SYMBOL] [today|week|month]</code>
 <code>/trade_pips [SYMBOL] [today|yesterday|week|last week]</code>"""
 
+_WELCOME_TEXT = """👋 <b>Welcome to Apex Void Trading</b>
+
+📢 <b>Public channel</b>
+<a href="https://t.me/apexvoidtrading">@apexvoidtrading</a>
+
+📚 <b>Trading Knowledge Base</b>
+<a href="https://trading.apexvoid.net">trading.apexvoid.net</a>
+
+✨ Follow the channel for public updates, and use the KB to study the Apex Void trading framework."""
+
 # Per-user photo buffer — batches all photos sent within PHOTO_WINDOW seconds.
 # Works regardless of media_group_id (handles sequential sends too).
 # {user_id: {"photos": [...], "first_msg": msg, "thinking": msg|None, "task": task}}
@@ -144,6 +154,11 @@ async def _move_stop(
   if not result.get("ok"):
     return None
   return result["row"], render_result(result, symbol)
+
+
+@router.message(Command("start"), F.chat.type == "private")
+async def handle_start(msg: Message) -> None:
+  await msg.answer(_WELCOME_TEXT)
 
 
 @router.message(Command("trade_pips"), F.chat.type == "private")
