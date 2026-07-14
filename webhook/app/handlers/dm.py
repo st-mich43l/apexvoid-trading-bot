@@ -84,13 +84,15 @@ _HELP_TEXT = """<b>Trade controls</b>
 <code>/trade_stats [SYMBOL] [today|week|month]</code>
 <code>/trade_pips [SYMBOL] [today|yesterday|week|last week]</code>"""
 
-_WELCOME_TEXT = """<b>Welcome to Apex Void Trading</b>
+_WELCOME_TEXT = """👋 <b>Welcome to Apex Void Trading</b>
 
-Follow the public channel:
+📢 <b>Public channel</b>
 <a href="https://t.me/apexvoidtrading">@apexvoidtrading</a>
 
-Knowledge base:
-<a href="https://trading.apexvoid.net">trading.apexvoid.net</a>"""
+📚 <b>Trading Knowledge Base</b>
+<a href="https://trading.apexvoid.net">trading.apexvoid.net</a>
+
+✨ Follow the channel for public updates, and use the KB to study the Apex Void trading framework."""
 
 # Per-user photo buffer — batches all photos sent within PHOTO_WINDOW seconds.
 # Works regardless of media_group_id (handles sequential sends too).
