@@ -76,6 +76,11 @@ def _rowcount(status: str) -> int:
     return 0
 
 
+def _current_trade_date() -> str:
+  tz = ZoneInfo(settings.seq_reset_tz)
+  return datetime.now(tz).date().isoformat()
+
+
 # ---------------------------------------------------------------------------
 # Schema bootstrap
 # ---------------------------------------------------------------------------
@@ -432,8 +437,7 @@ async def store_manual_signal(
   visibility = visibility.lower()
   if visibility not in {"both", "vip"}:
     raise ValueError(f"Invalid visibility: {visibility}")
-  tz = ZoneInfo(settings.seq_reset_tz)
-  trade_date = datetime.now(tz).date().isoformat()
+  trade_date = _current_trade_date()
   async with _connect() as db:
     async with db.transaction():
       # Serialize concurrent inserts scoped to (symbol, trade_date) so the
@@ -531,6 +535,8 @@ async def get_signal_by_post(
   *,
   open_only: bool = False,
 ) -> dict | None:
+  if open_only:
+    await expire_unfilled_pending_signals()
   query = (
     "SELECT s.* FROM signal_posts p "
     "JOIN manual_signals s ON s.id = p.signal_id "
@@ -545,6 +551,7 @@ async def get_signal_by_post(
 
 async def get_open_signals(symbol: str | None = None) -> list[dict]:
   """Return all signals currently in ``status = 'open'``, oldest first."""
+  await expire_unfilled_pending_signals()
   query = (
     "SELECT id, ts, action, entry, entry_end, sl, tps, "
     "channel_message_id, daily_seq, trade_date, fill_state, filled_at, legs, "
@@ -560,6 +567,27 @@ async def get_open_signals(symbol: str | None = None) -> list[dict]:
   async with _connect() as db:
     rows = await db.fetch(query, *params)
   return [_decode_signal(r) for r in rows]
+
+
+async def expire_unfilled_pending_signals() -> list[dict]:
+  """Cancel pending open signals that did not fill on their trade date."""
+  today = _current_trade_date()
+  now = int(time.time())
+  async with _connect() as db:
+    rows = await db.fetch(
+      """
+      UPDATE manual_signals
+      SET status = 'cancelled', closed_at = $1
+      WHERE status = 'open'
+        AND fill_state = 'pending'
+        AND (trade_date IS NULL OR trade_date < $2)
+      RETURNING *
+      """,
+      now, today,
+    )
+  if rows:
+    log.info("Auto-cancelled %s stale pending signal(s)", len(rows))
+  return [_decode_signal(row) for row in rows]
 
 
 def _decode_signal(row) -> dict:
@@ -697,6 +725,7 @@ async def set_note(row_id: int, note: str) -> bool:
 
 async def mark_filled(row_id: int) -> dict | None:
   """Mark a pending open signal filled and return its pre-update row."""
+  await expire_unfilled_pending_signals()
   async with _connect() as db:
     async with db.transaction():
       row = await db.fetchrow(

@@ -51,6 +51,58 @@ async def test_schema_has_all_columns_and_fill_is_idempotent(sql):
 
 
 @pytest.mark.asyncio
+async def test_get_open_signals_auto_cancels_stale_pending(sql):
+  await dedup.init_db()
+  stale = await dedup.store_manual_signal(
+    1, "SELL", 4092.0, 4095.0, 4100.0, [4080.0],
+  )
+  today = await dedup.store_manual_signal(
+    2, "SELL", 4088.0, 4090.0, 4095.0, [4075.0],
+  )
+  filled = await dedup.store_manual_signal(
+    3, "SELL", 4018.0, 4022.0, 4028.0, [4010.0],
+  )
+  assert await dedup.mark_filled(filled["id"]) is not None
+  await sql.exec(
+    "UPDATE manual_signals SET trade_date = '2000-01-01' "
+    "WHERE id = ANY($1::bigint[])",
+    [stale["id"], filled["id"]],
+  )
+
+  opens = await dedup.get_open_signals()
+
+  assert [row["id"] for row in opens] == [today["id"], filled["id"]]
+  stale_row = await dedup.get_manual_signal(stale["id"])
+  assert stale_row["status"] == "cancelled"
+  assert stale_row["fill_state"] == "pending"
+  assert stale_row["closed_at"] is not None
+  today_row = await dedup.get_manual_signal(today["id"])
+  assert today_row["status"] == "open"
+  filled_row = await dedup.get_manual_signal(filled["id"])
+  assert filled_row["status"] == "open"
+  assert filled_row["fill_state"] == "filled"
+
+
+@pytest.mark.asyncio
+async def test_mark_filled_auto_cancels_stale_pending(sql):
+  await dedup.init_db()
+  rec = await dedup.store_manual_signal(
+    1, "SELL", 4092.0, 4095.0, 4100.0, [4080.0],
+  )
+  await sql.exec(
+    "UPDATE manual_signals SET trade_date = '2000-01-01' WHERE id = $1",
+    rec["id"],
+  )
+
+  assert await dedup.mark_filled(rec["id"]) is None
+
+  row = await dedup.get_manual_signal(rec["id"])
+  assert row["status"] == "cancelled"
+  assert row["fill_state"] == "pending"
+  assert row["closed_at"] is not None
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
   ("runner_pips", "expected_net"),
   [(90, 70), (-30, 10)],
