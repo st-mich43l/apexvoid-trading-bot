@@ -76,6 +76,7 @@ class Settings(BaseSettings):
   scanner_window: int = 500
   scanner_alert_ttl: int = 7200
   scanner_level_bucket: int = 20
+  zone_alert_ttl: int = 14400
   scanner_confluence_floor: int = 2
   scanner_top_n: int = 1
   alert_overlap_suppress: float = 0.5
@@ -104,6 +105,10 @@ class Settings(BaseSettings):
   sweep_body_frac: float = 0.5
   sweep_react_bars: int = 3
   inducement_band_atr: float = 0.3
+  chop_filter_enabled: bool = True
+  chop_range_atr: float = 4.0
+  chop_lookback: int = 24
+  chop_edge_frac: float = 0.25
   allow_counter_trend: bool = True
   counter_min_zone_score: float = 10.0
   counter_extreme_pd: float = 0.25
