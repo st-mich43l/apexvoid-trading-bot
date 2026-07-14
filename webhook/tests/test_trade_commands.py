@@ -53,6 +53,23 @@ async def test_scoped_command_menu(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_start_welcomes_public_users(monkeypatch):
+  monkeypatch.setattr(telegram.settings, "telegram_owner_id", 42)
+  msg = _dm("/start", user_id=999)
+
+  await telegram.handle_start(msg)
+
+  out = msg.answer.await_args.args[0]
+  assert "👋 <b>Welcome to Apex Void Trading</b>" in out
+  assert "📢 <b>Public channel</b>" in out
+  assert "📚 <b>Trading Knowledge Base</b>" in out
+  assert "✨ Follow the channel" in out
+  assert "@apexvoidtrading" in out
+  assert "https://t.me/apexvoidtrading" in out
+  assert "trading.apexvoid.net" in out
+
+
+@pytest.mark.asyncio
 async def test_trade_open_lists_open_signals(monkeypatch):
   monkeypatch.setattr(telegram.settings, "telegram_owner_id", 42)
   monkeypatch.setattr(

@@ -290,6 +290,11 @@ async def handle_close_book(cb) -> None:
   return await _callbacks.handle_close_book(cb)
 
 
+async def handle_start(msg) -> None:
+  _sync_legacy_patches()
+  return await _dm.handle_start(msg)
+
+
 async def handle_trade_pips(msg) -> None:
   _sync_legacy_patches()
   return await _dm.handle_trade_pips(msg)
