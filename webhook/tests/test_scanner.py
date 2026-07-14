@@ -155,6 +155,55 @@ async def test_scanner_dedups_same_setup_level_and_only_dms_owner(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_scanner_uses_dedicated_default_notifier(monkeypatch):
+  client = redis_state.get_client()
+  dedicated_notify = AsyncMock()
+  monkeypatch.setattr(scanner, "send_scanner_with_retry", dedicated_notify)
+  monkeypatch.setattr(scanner.settings, "scanner_symbols", "XAU")
+  monkeypatch.setattr(scanner.settings, "scanner_exec_tf", "M5")
+  monkeypatch.setattr(scanner.settings, "scanner_htf", "M30,M15")
+  monkeypatch.setattr(scanner.settings, "scanner_window", 500)
+  monkeypatch.setattr(scanner.settings, "scanner_alert_ttl", 7200)
+  monkeypatch.setattr(scanner.settings, "scanner_level_bucket", 20)
+  monkeypatch.setattr(scanner.settings, "telegram_owner_id", 4242)
+
+  class Source:
+    async def window(self, symbol, tf, n):
+      return _frame()
+
+  ctx = SimpleNamespace(
+    tf="M5",
+    htf_bias="up",
+    structures={"M30": SimpleNamespace(bias="up")},
+  )
+  monkeypatch.setattr(
+    scanner,
+    "build_context",
+    lambda symbol, tf, frames, settings, htf_order: ctx,
+  )
+  result = scanner.DetectionResult(
+    setup="Trend Pullback",
+    direction="BUY",
+    key_level=4111.0,
+    entry_zone=Zone(4108, 4110, "demand"),
+    current_price=4112.0,
+    confluence=2,
+    reasons=["HTF bias up", "fresh"],
+  )
+
+  sent = await scanner._handle_event(
+    "XAU:M5:dedicated",
+    source=Source(),
+    client=client,
+    detectors=(lambda received_ctx: result,),
+  )
+
+  assert sent == [result]
+  dedicated_notify.assert_awaited_once()
+  assert dedicated_notify.await_args.kwargs == {"chat_id": 4242}
+
+
+@pytest.mark.asyncio
 async def test_scanner_records_analysis_status_without_owner(monkeypatch):
   client = redis_state.get_client()
   notify = AsyncMock()
