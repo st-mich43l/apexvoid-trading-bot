@@ -19,7 +19,7 @@ from app.detectors import (
 from app.ohlc_source import RedisOHLCSource
 from app.structure import Zone
 from app.symbols import SYMBOLS, pip_for
-from app.tg_core import send_with_retry
+from app.tg_core import send_scanner_with_retry
 
 log = logging.getLogger(__name__)
 
@@ -282,7 +282,7 @@ async def _handle_event(
 
   client = client or redis_state.get_client()
   source = source or RedisOHLCSource(client)
-  notify = notify or send_with_retry
+  notify = notify or send_scanner_with_retry
   htf_order = _htf_tfs()
   frames = await _load_frames(source, symbol, exec_tf, htf_order)
   if exec_tf not in frames:

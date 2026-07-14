@@ -23,6 +23,10 @@ bot = Bot(
   token=settings.telegram_bot_token,
   default=DefaultBotProperties(parse_mode=ParseMode.HTML),
 )
+scanner_bot = Bot(
+  token=settings.scanner_telegram_bot_token or settings.telegram_bot_token,
+  default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+)
 dp = Dispatcher()
 
 OWNER_COMMANDS = [
@@ -65,9 +69,41 @@ async def send_with_retry(
   reply_markup: InlineKeyboardMarkup | None = None,
 ) -> Message:
   """Send a Telegram message with exponential-backoff retry on network errors."""
+  return await _send_message_with_retry(
+    bot,
+    text,
+    reply_to,
+    chat_id,
+    reply_markup,
+  )
+
+
+async def send_scanner_with_retry(
+  text: str,
+  reply_to: int | None = None,
+  chat_id: int | str | None = None,
+  reply_markup: InlineKeyboardMarkup | None = None,
+) -> Message:
+  """Send scanner/feed-analysis notifications with the scanner bot token."""
+  return await _send_message_with_retry(
+    scanner_bot,
+    text,
+    reply_to,
+    chat_id,
+    reply_markup,
+  )
+
+
+async def _send_message_with_retry(
+  target_bot: Bot,
+  text: str,
+  reply_to: int | None,
+  chat_id: int | str | None,
+  reply_markup: InlineKeyboardMarkup | None,
+) -> Message:
   for attempt in range(1, _MAX_SEND_ATTEMPTS + 1):
     try:
-      return await bot.send_message(
+      return await target_bot.send_message(
         chat_id=chat_id or settings.telegram_channel_id,
         text=text,
         reply_to_message_id=reply_to,
