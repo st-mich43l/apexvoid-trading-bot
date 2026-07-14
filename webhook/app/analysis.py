@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
+import math
 
 import pandas as pd
 
@@ -74,6 +75,18 @@ class AnalysisSettings:
   sweep_body_frac: float = 0.5
   sweep_react_bars: int = 3
   inducement_band_atr: float = 0.3
+  chop_filter_enabled: bool = True
+  chop_range_atr: float = 4.0
+  chop_lookback: int = 24
+
+
+@dataclass(frozen=True)
+class Regime:
+  kind: str
+  range_high: float
+  range_low: float
+  height_atr: float
+  reasons: list[str]
 
 
 @dataclass(frozen=True)
@@ -95,6 +108,7 @@ class TimeframeAnalysis:
   momentum: str
   session_levels: list[SessionLevel] = field(default_factory=list)
   dealing_range: DealingRange | None = None
+  regime: Regime | None = None
 
 
 @dataclass(frozen=True)
@@ -103,6 +117,7 @@ class AnalysisContext:
   per_tf: dict[str, TimeframeAnalysis]
   htf_bias: str
   dealing_range: DealingRange | None = None
+  regime: Regime | None = None
 
 
 def analyze(
@@ -128,6 +143,7 @@ def analyze(
     per_tf=per_tf,
     htf_bias=_htf_bias(per_tf, htf_order),
     dealing_range=_exec_dealing_range(per_tf),
+    regime=_exec_regime(per_tf),
   )
 
 
@@ -174,6 +190,7 @@ def _analyze_tf(
     float(df["close"].iloc[-1]),
     settings.eq_band,
   )
+  regime_ = regime(df, atr, structure, range_, settings)
   zones = merge_zones(
     [*sd_zones, *ob_zones, *flip, *fvg_zones],
     settings.zone_merge_overlap,
@@ -218,7 +235,69 @@ def _analyze_tf(
     momentum=momentum(df, atr, settings.momentum_lookback, settings.momentum_body_frac),
     session_levels=sessions,
     dealing_range=range_,
+    regime=regime_,
   )
+
+
+def regime(
+  df: pd.DataFrame,
+  atr: pd.Series,
+  structure: str,
+  range_: DealingRange | None,
+  settings: AnalysisSettings | None = None,
+) -> Regime:
+  settings = settings or AnalysisSettings()
+  close = _last_close(df)
+  if not settings.chop_filter_enabled:
+    return Regime("trend", close, close, math.inf, ["chop filter disabled"])
+  if range_ is None:
+    return Regime("trend", close, close, math.inf, ["no dealing range"])
+
+  range_high = float(range_.high)
+  range_low = float(range_.low)
+  height = max(0.0, range_high - range_low)
+  atr_value = atr_scalar(atr)
+  height_atr = height / atr_value if atr_value > 0 else math.inf
+  reasons = []
+  if height_atr < max(0.0, settings.chop_range_atr):
+    reasons.append(
+      f"range height {height_atr:.2f} ATR < {settings.chop_range_atr:.2f}"
+    )
+  if structure == "range" and _closes_inside_range(
+    df,
+    range_low,
+    range_high,
+    settings.chop_lookback,
+  ):
+    reasons.append(f"range structure held {max(1, settings.chop_lookback)} bars")
+  kind = "chop" if reasons else "trend"
+  if not reasons:
+    reasons = ["range expanded or broke edge"]
+  return Regime(kind, range_high, range_low, height_atr, reasons)
+
+
+def _last_close(df: pd.DataFrame) -> float:
+  if df.empty:
+    return 0.0
+  value = float(df["close"].iloc[-1])
+  return value if math.isfinite(value) else 0.0
+
+
+def _closes_inside_range(
+  df: pd.DataFrame,
+  low: float,
+  high: float,
+  lookback: int,
+) -> bool:
+  if df.empty:
+    return False
+  required = max(1, lookback)
+  if len(df) < required:
+    return False
+  closes = df["close"].tail(required)
+  if closes.empty:
+    return False
+  return bool(((closes >= low) & (closes <= high)).all())
 
 
 def _apply_mtf_zone_scores(
@@ -317,6 +396,15 @@ def _exec_dealing_range(
     return None
   tf = sorted(per_tf, key=lambda item: (_tf_rank(item), item))[0]
   return per_tf[tf].dealing_range
+
+
+def _exec_regime(
+  per_tf: dict[str, TimeframeAnalysis],
+) -> Regime | None:
+  if not per_tf:
+    return None
+  tf = sorted(per_tf, key=lambda item: (_tf_rank(item), item))[0]
+  return per_tf[tf].regime
 
 
 def _htf_bias(

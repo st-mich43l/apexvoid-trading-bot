@@ -90,6 +90,10 @@ def _detector_settings() -> DetectorSettings:
     inducement_band_atr=settings.inducement_band_atr,
     max_zone_width_atr=settings.max_zone_width_atr,
     proximal_band_atr=settings.proximal_band_atr,
+    chop_filter_enabled=settings.chop_filter_enabled,
+    chop_range_atr=settings.chop_range_atr,
+    chop_lookback=settings.chop_lookback,
+    chop_edge_frac=settings.chop_edge_frac,
     allow_counter_trend=settings.allow_counter_trend,
     counter_min_zone_score=settings.counter_min_zone_score,
     counter_extreme_pd=settings.counter_extreme_pd,
@@ -133,6 +137,16 @@ def _dedup_key(symbol: str, tf: str, result: DetectionResult) -> str:
     settings.scanner_level_bucket,
   )
   return f"scanner:alerted:{symbol}:{tf}:{result.setup}:{bucket}"
+
+
+def _band_dedup_key(symbol: str, result: DetectionResult) -> str:
+  midpoint = (result.entry_zone.low + result.entry_zone.high) / 2
+  bucket = _level_bucket(
+    symbol,
+    midpoint,
+    settings.scanner_level_bucket,
+  )
+  return f"scanner:alerted_band:{symbol}:{result.direction}:{bucket}"
 
 
 def _htf_bias_text(ctx: DetectionContext, htf_order: list[str]) -> str:
@@ -182,14 +196,15 @@ def _format_detection(
     lines.append(
       f"⚠️ <b>COUNTER-TREND</b> (bias {escape(ctx.htf_bias)}) · {label}"
     )
-  lines.extend([
-    (
-      f"{_price_line(symbol, tf, ctx, result)} "
-      f"· entry <b>{_zone_text(result.entry_zone, symbol, grouped=True)}</b> "
-      f"· key <b>{_price_text(result.key_level, symbol, grouped=True)}</b>"
-    ),
-    f"HTF bias: {escape(_htf_bias_text(ctx, htf_order))}{reason_suffix}",
-  ])
+  lines.append(
+    f"{_price_line(symbol, tf, ctx, result)} "
+    f"· entry <b>{_zone_text(result.entry_zone, symbol, grouped=True)}</b> "
+    f"· key <b>{_price_text(result.key_level, symbol, grouped=True)}</b>"
+  )
+  regime_line = _regime_line(symbol, tf, ctx)
+  if regime_line:
+    lines.append(regime_line)
+  lines.append(f"HTF bias: {escape(_htf_bias_text(ctx, htf_order))}{reason_suffix}")
   for extra in also or []:
     extra_stars = "⭐" * max(1, min(3, int(extra.confluence)))
     lines.append(
@@ -200,6 +215,15 @@ def _format_detection(
     )
   lines.append("→ review & post if it holds")
   return "\n".join(lines)
+
+
+def _regime_line(symbol: str, tf: str, ctx: DetectionContext) -> str | None:
+  regime = getattr(ctx, "regime", None)
+  if regime is None or getattr(regime, "kind", None) != "chop":
+    return None
+  low = _price_text(float(regime.range_low), symbol, grouped=True)
+  high = _price_text(float(regime.range_high), symbol, grouped=True)
+  return f"≈ range-bound {low}-{high} ({escape(tf.upper())}) · fading edge"
 
 
 def _price_line(
@@ -394,6 +418,16 @@ async def _notify_digest_once(
     )
     return []
 
+  band_key = _band_dedup_key(symbol, results[0])
+  if await client.get(band_key) is not None:
+    log.debug(
+      "scanner detection suppressed by zone band TTL symbol=%s tf=%s key=%s",
+      symbol,
+      tf,
+      band_key,
+    )
+    return []
+
   claimed_results = []
   for result in results:
     key = _dedup_key(symbol, tf, result)
@@ -407,6 +441,7 @@ async def _notify_digest_once(
       claimed_results.append(result)
   if not claimed_results:
     return []
+  await client.set(band_key, "1", ex=settings.zone_alert_ttl)
   await notify(
     _format_detection(symbol, tf, ctx, claimed_results[0], htf_order, claimed_results[1:]),
     chat_id=settings.telegram_owner_id,

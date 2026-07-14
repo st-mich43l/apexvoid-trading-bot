@@ -6,7 +6,7 @@ from typing import Callable, Protocol
 
 import pandas as pd
 
-from app.analysis import AnalysisSettings, analyze
+from app.analysis import AnalysisSettings, Regime, analyze
 from app.indicators import atr as atr_indicator
 from app.pa_types import DealingRange, Grab, Pool, SessionLevel
 from app.structure import (
@@ -82,6 +82,10 @@ class DetectorSettings:
   sweep_body_frac: float = 0.5
   sweep_react_bars: int = 3
   inducement_band_atr: float = 0.3
+  chop_filter_enabled: bool = True
+  chop_range_atr: float = 4.0
+  chop_lookback: int = 24
+  chop_edge_frac: float = 0.25
   allow_counter_trend: bool = True
   counter_min_zone_score: float = 10.0
   counter_extreme_pd: float = 0.25
@@ -111,6 +115,9 @@ class DetectorSettings:
       sweep_body_frac=self.sweep_body_frac,
       sweep_react_bars=self.sweep_react_bars,
       inducement_band_atr=self.inducement_band_atr,
+      chop_filter_enabled=self.chop_filter_enabled,
+      chop_range_atr=self.chop_range_atr,
+      chop_lookback=self.chop_lookback,
     )
 
 
@@ -127,6 +134,7 @@ class DetectionContext:
   spot_price: float | None = None
   spot_ts: int | None = None
   trigger_ts: str | None = None
+  regime: Regime | None = None
 
 
 @dataclass(frozen=True)
@@ -167,6 +175,7 @@ def build_context(
     structures=structure_sets,
     htf_bias=analysis_ctx.htf_bias,
     settings=settings,
+    regime=_exec_regime(analysis_ctx, tf),
   )
 
 
@@ -219,6 +228,13 @@ def _structure_sets_from_analysis(items) -> dict[str, StructureSet]:
       dealing_range=item.dealing_range,
     )
   return result
+
+
+def _exec_regime(analysis_ctx, tf: str) -> Regime | None:
+  item = analysis_ctx.per_tf.get(tf.upper())
+  if item is not None:
+    return item.regime
+  return analysis_ctx.regime
 
 
 def _exec(ctx: DetectionContext) -> tuple[pd.DataFrame, IndicatorSet, StructureSet]:
@@ -463,6 +479,39 @@ def _pd_gate(st: StructureSet, direction: str, settings: DetectorSettings) -> bo
   return range_.zone != "discount"
 
 
+def _in_chop(ctx: DetectionContext) -> bool:
+  return (
+    ctx.settings.chop_filter_enabled
+    and ctx.regime is not None
+    and ctx.regime.kind == "chop"
+  )
+
+
+def _chop_edge_ok(ctx: DetectionContext, zone: Zone, direction: str) -> bool:
+  if not _in_chop(ctx):
+    return True
+  regime_ = ctx.regime
+  if regime_ is None:
+    return False
+  low = float(regime_.range_low)
+  high = float(regime_.range_high)
+  height = high - low
+  if height <= _EPS:
+    return False
+  edge_frac = max(0.0, min(0.5, ctx.settings.chop_edge_frac))
+  edge = height * edge_frac
+  midpoint = (zone.low + zone.high) / 2
+  if direction == "SELL":
+    return midpoint >= high - edge - _EPS
+  return midpoint <= low + edge + _EPS
+
+
+def _chop_range_reason(ctx: DetectionContext) -> str | None:
+  if not _in_chop(ctx) or ctx.regime is None:
+    return None
+  return f"range {_number(ctx.regime.range_low)}-{_number(ctx.regime.range_high)}"
+
+
 def _confluence_from_zone(zone: Zone, reasons: list[str]) -> int:
   score = float(getattr(zone, "score", 0.0))
   if score > 0:
@@ -568,6 +617,8 @@ def trend_pullback(ctx: DetectionContext) -> DetectionResult | None:
   df, ind, st = _exec(ctx)
   if len(df) < 5:
     return None
+  if _in_chop(ctx):
+    return None
   direction = _confirmation_direction(ctx)
   if (
     direction is None
@@ -606,6 +657,8 @@ def trend_pullback(ctx: DetectionContext) -> DetectionResult | None:
 def break_retest(ctx: DetectionContext) -> DetectionResult | None:
   df, ind, st = _exec(ctx)
   if len(df) < 5:
+    return None
+  if _in_chop(ctx):
     return None
   direction = _confirmation_direction(ctx)
   if (
@@ -681,6 +734,8 @@ def momentum_ride(ctx: DetectionContext) -> DetectionResult | None:
   df, ind, st = _exec(ctx)
   if len(df) < 5:
     return None
+  if _in_chop(ctx):
+    return None
   direction = _confirmation_direction(ctx)
   if direction is None or not _pd_gate(st, direction, ctx.settings):
     return None
@@ -730,12 +785,17 @@ def fade_scalp(ctx: DetectionContext) -> DetectionResult | None:
     if grab is None or grab.grade not in {"A", "B"}:
       continue
     zone = entry_zone(df, level.price, direction)
+    if _in_chop(ctx) and (grab.grade != "A" or not _chop_edge_ok(ctx, zone, direction)):
+      continue
     reasons = [
       f"HTF bias {ctx.htf_bias}",
       "equal level sweep",
       "liquidity rejection",
       f"sweep {grab.grade}",
     ]
+    range_reason = _chop_range_reason(ctx)
+    if range_reason:
+      reasons.append(range_reason)
     result = _finish(ctx, "Fade Scalp", direction, level.price, zone, price, atr, reasons)
     if result is not None:
       return result
@@ -760,6 +820,8 @@ def zone_reaction(ctx: DetectionContext) -> DetectionResult | None:
     return None
 
   zone, level, mode, reasons, confirmation_target = candidate
+  if _in_chop(ctx) and not _chop_edge_ok(ctx, zone, direction):
+    return None
   confirmation = _counter_confirmation(
     df,
     st,
@@ -770,10 +832,14 @@ def zone_reaction(ctx: DetectionContext) -> DetectionResult | None:
   )
   if confirmation is None:
     return None
+  if _in_chop(ctx) and confirmation != "sweep A":
+    return None
+  range_reason = _chop_range_reason(ctx)
   reasons = [
     f"HTF bias {ctx.htf_bias}",
     *reasons,
     confirmation,
+    *([range_reason] if range_reason else []),
     _pd_reason(st),
     *_counter_target_reasons(st, price, direction, mode),
   ]
