@@ -474,6 +474,70 @@ async def test_scanner_zone_band_dedup_suppresses_cross_setup_ideas(monkeypatch)
 
 
 @pytest.mark.asyncio
+async def test_box_breakout_second_alert_on_same_edge_is_band_deduped(monkeypatch):
+  client = redis_state.get_client()
+  notify = AsyncMock()
+  monkeypatch.setattr(scanner.settings, "scanner_level_bucket", 20)
+  monkeypatch.setattr(scanner.settings, "scanner_alert_ttl", 7200)
+  monkeypatch.setattr(scanner.settings, "zone_alert_ttl", 14400)
+  monkeypatch.setattr(scanner.settings, "telegram_owner_id", 4242)
+  result = scanner.DetectionResult(
+    "Box Breakout",
+    "BUY",
+    4097.0,
+    Zone(4109.5, 4110.5, "demand", source="box_breakout", score=9.5),
+    4110.8,
+    2,
+    [
+      "HTF bias up",
+      "box 4097-4110",
+      "accepted (2 closes)",
+      "retest 4110",
+      "measured +13.0",
+      "coil",
+    ],
+  )
+  ctx = SimpleNamespace(
+    tf="M5",
+    htf_bias="up",
+    structures={"M30": SimpleNamespace(bias="up")},
+    frames={"M5": _frame()},
+    regime=Regime("chop", 4110, 4097, 3.0, ["fixture chop"], True),
+    spot_price=None,
+    trigger_ts="2026-07-10T00:00:00Z",
+  )
+
+  first = await scanner._notify_digest_once(
+    client,
+    "XAU",
+    "M5",
+    ctx,
+    [result],
+    notify,
+    ["M30"],
+  )
+  await client.delete(scanner._dedup_key("XAU", "M5", result))
+  second = await scanner._notify_digest_once(
+    client,
+    "XAU",
+    "M5",
+    ctx,
+    [result],
+    notify,
+    ["M30"],
+  )
+
+  assert first == [result]
+  assert second == []
+  assert notify.await_count == 1
+  text = notify.await_args.args[0]
+  assert "box 4097-4110" in text
+  assert "accepted (2 closes)" in text
+  assert "measured +13.0" in text
+  assert "coil" in text
+
+
+@pytest.mark.asyncio
 async def test_scanner_uses_fresh_spot_for_context_and_live_render(monkeypatch):
   client = redis_state.get_client()
   notify = AsyncMock()

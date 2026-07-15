@@ -15,6 +15,13 @@ dated section after deployment.
 
 - Introduced this changelog and the repository rule requiring future changes to
   update it.
+- Added deterministic significant-swing trendlines, diagonal reaction anchors,
+  trendline confluence scoring, and trendline break-and-retest detection.
+- Added the Box Breakout setup for accepted consolidation escapes, including
+  displacement/two-close acceptance, edge retests, measured moves, and coil
+  scoring.
+- Added trendline, coil-contraction, breakout-buffer, acceptance-bar, and
+  breakout-age configuration knobs.
 
 ### Fixed
 

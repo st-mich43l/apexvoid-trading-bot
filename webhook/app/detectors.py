@@ -9,6 +9,7 @@ import pandas as pd
 from app.analysis import AnalysisSettings, Regime, analyze
 from app.indicators import atr as atr_indicator
 from app.pa_types import DealingRange, Grab, Pool, SessionLevel
+from app.regime import BoxBreak, displacement_grade
 from app.structure import (
   Level,
   Swing,
@@ -22,11 +23,15 @@ from app.structure import (
   order_blocks,
   swings,
 )
+from app.trendlines import Trendline, value_at
+from app.zones import score_zones
 
 _EPS = 1e-9
 _BUY_ZONE_SIDE = "de" + "mand"
 STAR_THREE_SCORE = 12.0
 STAR_TWO_SCORE = 8.0
+COIL_SCORE = 1.5
+REACTION_MAX_ATR = 1.0
 
 
 @dataclass(frozen=True)
@@ -49,6 +54,8 @@ class StructureSet:
   momentum: str = "neutral"
   session_levels: list[SessionLevel] = field(default_factory=list)
   dealing_range: DealingRange | None = None
+  trendlines: list[Trendline] = field(default_factory=list)
+  box_break: BoxBreak | None = None
 
 
 @dataclass(frozen=True)
@@ -86,6 +93,13 @@ class DetectorSettings:
   chop_range_atr: float = 4.0
   chop_lookback: int = 24
   chop_edge_frac: float = 0.25
+  tl_min_touches: int = 3
+  tl_tol_atr: float = 0.3
+  tl_max_slope_atr: float = 0.15
+  coil_contract: float = 0.8
+  breakout_buffer_atr: float = 0.1
+  breakout_accept_bars: int = 2
+  breakout_max_age_bars: int = 6
   allow_counter_trend: bool = True
   counter_min_zone_score: float = 10.0
   counter_extreme_pd: float = 0.25
@@ -118,6 +132,13 @@ class DetectorSettings:
       chop_filter_enabled=self.chop_filter_enabled,
       chop_range_atr=self.chop_range_atr,
       chop_lookback=self.chop_lookback,
+      tl_min_touches=self.tl_min_touches,
+      tl_tol_atr=self.tl_tol_atr,
+      tl_max_slope_atr=self.tl_max_slope_atr,
+      coil_contract=self.coil_contract,
+      breakout_buffer_atr=self.breakout_buffer_atr,
+      breakout_accept_bars=self.breakout_accept_bars,
+      breakout_max_age_bars=self.breakout_max_age_bars,
     )
 
 
@@ -226,6 +247,8 @@ def _structure_sets_from_analysis(items) -> dict[str, StructureSet]:
       momentum=item.momentum,
       session_levels=item.session_levels,
       dealing_range=item.dealing_range,
+      trendlines=item.trendlines,
+      box_break=item.box_break,
     )
   return result
 
@@ -553,16 +576,24 @@ def _finish(
   atr: float,
   reasons: list[str],
   mode: str = "with_trend",
+  chop_tp_cap: bool = True,
+  include_score_reasons: bool = True,
 ) -> DetectionResult | None:
   if not _level_valid(level, price, direction):
     return None
   if not _entry_valid_for_settings(zone, price, atr, direction, ctx.settings):
     return None
   st = ctx.structures[ctx.tf]
-  full_reasons = _merge_score_reasons(
-    _merge_tp_anchor(ctx, reasons, st, price, direction),
-    zone,
+  full_reasons = _merge_tp_anchor(
+    ctx,
+    reasons,
+    st,
+    price,
+    direction,
+    chop_tp_cap,
   )
+  if include_score_reasons:
+    full_reasons = _merge_score_reasons(full_reasons, zone)
   confluence = _confluence_from_zone(zone, full_reasons)
   if confluence < ctx.settings.confluence_floor:
     return None
@@ -584,8 +615,9 @@ def _merge_tp_anchor(
   st: StructureSet,
   price: float,
   direction: str,
+  chop_tp_cap: bool = True,
 ) -> list[str]:
-  if _in_chop(ctx) and ctx.regime is not None:
+  if chop_tp_cap and _in_chop(ctx) and ctx.regime is not None:
     reasons = [
       reason for reason in reasons
       if not reason.startswith("TP anchor ")
@@ -683,6 +715,34 @@ def break_retest(ctx: DetectionContext) -> DetectionResult | None:
     return None
   price = _current_price(ctx, df)
   atr = _atr(ind)
+  for line in sorted(
+    st.trendlines,
+    key=lambda item: abs(value_at(item, len(df) - 1) - price),
+  ):
+    if not _trendline_break_direction(line, direction):
+      continue
+    level_price = value_at(line, len(df) - 1)
+    zone = _trendline_retest_zone(df, line, direction, atr, ctx.settings)
+    if zone is None:
+      continue
+    reasons = [
+      f"HTF bias {ctx.htf_bias}",
+      "TL break+retest",
+      f"TL {line.kind} ×{line.touches}",
+      "retest rejection",
+    ]
+    result = _finish(
+      ctx,
+      "Break & Retest",
+      direction,
+      level_price,
+      zone,
+      price,
+      atr,
+      reasons,
+    )
+    if result is not None:
+      return result
   levels = sorted(st.levels, key=lambda item: abs(item.price - price))
   for level in levels:
     if not _level_valid(level.price, price, direction):
@@ -698,6 +758,183 @@ def break_retest(ctx: DetectionContext) -> DetectionResult | None:
     result = _finish(ctx, "Break & Retest", direction, level.price, zone, price, atr, reasons)
     if result is not None:
       return result
+  return None
+
+
+def _trendline_break_direction(line: Trendline, direction: str) -> bool:
+  if not line.broken or line.break_index is None:
+    return False
+  if direction == "BUY":
+    return line.kind == "resistance"
+  return line.kind == "support"
+
+
+def _trendline_retest_zone(
+  df: pd.DataFrame,
+  line: Trendline,
+  direction: str,
+  atr: float,
+  settings: DetectorSettings,
+) -> Zone | None:
+  index = len(df) - 1
+  if line.break_index is None or index <= line.break_index:
+    return None
+  level = value_at(line, index)
+  tolerance = max(_EPS, max(0.0, settings.tl_tol_atr) * atr)
+  row = df.iloc[-1]
+  touched = (
+    float(row["low"]) <= level + tolerance
+    and float(row["high"]) >= level - tolerance
+  )
+  held = (
+    float(row["close"]) >= level
+    if direction == "BUY"
+    else float(row["close"]) <= level
+  )
+  if not touched or not held:
+    return None
+  return _pseudo_level_zone(
+    level,
+    tolerance,
+    direction,
+    f"TL {line.kind} ×{line.touches}",
+    source="trendline",
+  )
+
+
+def box_breakout(ctx: DetectionContext) -> DetectionResult | None:
+  df, ind, st = _exec(ctx)
+  box = st.box_break
+  if len(df) < 3 or box is None:
+    return None
+  direction = _confirmation_direction(ctx)
+  expected = "up" if direction == "BUY" else "down" if direction == "SELL" else None
+  if expected is None or box.direction != expected:
+    return None
+  age = len(df) - 1 - box.accept_index
+  if age < 0 or age > max(0, ctx.settings.breakout_max_age_bars):
+    return None
+
+  price = _current_price(ctx, df)
+  atr = _atr(ind)
+  edge = box.box_high if direction == "BUY" else box.box_low
+  entry_kind = _box_entry_kind(df, box, edge, direction, price, atr)
+  if entry_kind is None:
+    return None
+  zone = _scored_box_zone(ctx, st, edge, direction, atr, box)
+  measured = box.box_high - box.box_low
+  signed_move = measured if direction == "BUY" else -measured
+  reasons = [
+    f"HTF bias {ctx.htf_bias}",
+    f"box {_number(box.box_low)}-{_number(box.box_high)}",
+    f"accepted ({box.acceptance})",
+    f"{entry_kind} {_number(edge)}",
+    f"measured {signed_move:+.1f}",
+  ]
+  tp1 = _box_tp1_reason(st, price, direction)
+  if tp1 is not None:
+    reasons.append(tp1)
+  if box.coiling:
+    reasons.append("coil")
+  key_level = box.box_low if direction == "BUY" else box.box_high
+  return _finish(
+    ctx,
+    "Box Breakout",
+    direction,
+    key_level,
+    zone,
+    price,
+    atr,
+    reasons,
+    chop_tp_cap=False,
+    include_score_reasons=False,
+  )
+
+
+def _box_entry_kind(
+  df: pd.DataFrame,
+  box: BoxBreak,
+  edge: float,
+  direction: str,
+  price: float,
+  atr: float,
+) -> str | None:
+  current = len(df) - 1
+  retest = find_retest(df, edge)
+  expected_kind = "retest_support" if direction == "BUY" else "retest_resistance"
+  if (
+    retest is not None
+    and retest.kind == expected_kind
+    and retest.origin_index == current
+    and current > box.accept_index
+    and _rejection(df, direction)
+  ):
+    return "retest"
+  if current != box.accept_index:
+    return None
+  row = df.iloc[-1]
+  if not displacement_grade(row, atr, box.direction):
+    return None
+  if abs(price - edge) > REACTION_MAX_ATR * atr + _EPS:
+    return None
+  return "proximal"
+
+
+def _scored_box_zone(
+  ctx: DetectionContext,
+  st: StructureSet,
+  edge: float,
+  direction: str,
+  atr: float,
+  box: BoxBreak,
+) -> Zone:
+  band = max(_EPS, ctx.settings.proximal_band_atr * max(0.0, atr))
+  side = _BUY_ZONE_SIDE if direction == "BUY" else "supply"
+  raw = Zone(
+    edge - band,
+    edge + band,
+    side,
+    origin_index=box.accept_index,
+    source="box_breakout",
+  )
+  higher_zones = [
+    zone
+    for name, structure in ctx.structures.items()
+    if name != ctx.tf
+    for zone in structure.zones
+  ]
+  scored = score_zones(
+    [raw],
+    st.levels,
+    st.liquidity_pools,
+    ctx.settings.round_step,
+    htf_zones=higher_zones,
+    session_levels=st.session_levels,
+    dealing_range=st.dealing_range,
+    grabs=st.liquidity_grabs,
+    trendlines=st.trendlines,
+    bar_index=len(ctx.frames[ctx.tf]) - 1,
+  )[0]
+  if not box.coiling:
+    return scored
+  return replace(
+    scored,
+    score=scored.score + COIL_SCORE,
+    score_reasons=[*scored.score_reasons, "coil"],
+  )
+
+
+def _box_tp1_reason(
+  st: StructureSet,
+  price: float,
+  direction: str,
+) -> str | None:
+  session = _nearest_session_tp(st.session_levels, price, direction)
+  if session is not None:
+    return f"TP1 {session.name}"
+  pool = _nearest_opposing_pool(st, price, direction)
+  if pool is not None:
+    return f"TP1 liquidity {_number(pool.level)}"
   return None
 
 
@@ -922,6 +1159,36 @@ def _counter_level_candidate(
       [f"key {_number(level.price)} x{level.touches}"],
       level,
     )
+  for line in sorted(
+    st.trendlines,
+    key=lambda item: abs(value_at(item, len(df) - 1) - price),
+  ):
+    if line.broken:
+      continue
+    if direction == "BUY" and line.kind != "support":
+      continue
+    if direction == "SELL" and line.kind != "resistance":
+      continue
+    line_price = value_at(line, len(df) - 1)
+    if not _level_touched_last(df, line_price, band):
+      continue
+    reason = f"TL {line.kind} ×{line.touches}"
+    zone = _pseudo_level_zone(
+      line_price,
+      band,
+      direction,
+      reason,
+      source="trendline",
+    )
+    if not _entry_valid_for_settings(zone, price, atr, direction, ctx.settings):
+      continue
+    return (
+      zone,
+      _zone_key(zone, price, direction),
+      "counter_reaction",
+      [reason],
+      None,
+    )
   for session in sorted(st.session_levels, key=lambda item: abs(item.price - price)):
     if session.swept or not _counter_session_side(session.name, direction):
       continue
@@ -940,13 +1207,20 @@ def _counter_level_candidate(
   return None
 
 
-def _pseudo_level_zone(price: float, band: float, direction: str, reason: str) -> Zone:
+def _pseudo_level_zone(
+  price: float,
+  band: float,
+  direction: str,
+  reason: str,
+  *,
+  source: str = "level",
+) -> Zone:
   side = _BUY_ZONE_SIDE if direction == "BUY" else "supply"
   return Zone(
     price - band,
     price + band,
     side,
-    source="level",
+    source=source,
     score=STAR_TWO_SCORE,
     score_reasons=[reason],
   )
@@ -1121,6 +1395,7 @@ def _is_low_session_level(name: str) -> bool:
 
 
 DEFAULT_DETECTORS: tuple[SetupDetector, ...] = (
+  box_breakout,
   trend_pullback,
   break_retest,
   snap_back,

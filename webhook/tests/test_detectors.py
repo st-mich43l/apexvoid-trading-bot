@@ -7,7 +7,9 @@ import pytest
 from app.analysis import Regime
 from app import detectors
 from app.pa_types import Break, DealingRange, Grab, Pool, SessionLevel
+from app.regime import BoxBreak
 from app.structure import Level, Swing, Zone
+from app.trendlines import Trendline
 
 
 def _df(rows: list[tuple[float, float, float, float, float]]) -> pd.DataFrame:
@@ -41,6 +43,9 @@ def _ctx(
   dealing_range: DealingRange | None = None,
   indicator_set: detectors.IndicatorSet | None = None,
   regime: Regime | None = None,
+  trendlines: list[Trendline] | None = None,
+  box_break: BoxBreak | None = None,
+  liquidity_pools: list[Pool] | None = None,
   settings: detectors.DetectorSettings | None = None,
 ) -> detectors.DetectionContext:
   tf = "M5"
@@ -56,6 +61,9 @@ def _ctx(
     liquidity_grabs=grabs or [],
     session_levels=session_levels or [],
     dealing_range=dealing_range,
+    trendlines=trendlines or [],
+    box_break=box_break,
+    liquidity_pools=liquidity_pools or [],
   )
   return detectors.DetectionContext(
     symbol="XAU",
@@ -652,6 +660,111 @@ def test_counter_unswept_session_level_reaction():
   assert result is not None
   assert result.mode == "counter_reaction"
   assert "PDL" in result.reasons
+
+
+def test_unbroken_trendline_support_fires_scalp_reaction_after_grade_a_sweep():
+  df = _buy_rejection_df()
+  line = Trendline("support", (0, 2, 4), 0.0, 105.0, 3, False, None)
+  grab = Grab(Pool("sell", 105, 0.1, 3), 4, "bull", df.index[4], "A")
+  ctx = _ctx(
+    df,
+    bias="down",
+    grabs=[grab],
+    trendlines=[line],
+    dealing_range=DealingRange(150, 100, 125, 0.2, "discount"),
+  )
+
+  result = detectors.zone_reaction(ctx)
+
+  assert result is not None
+  assert result.mode == "counter_reaction"
+  assert result.entry_zone.source == "trendline"
+  assert "TL support ×3" in result.reasons
+  broken = replace(line, broken=True, break_index=3)
+  broken_st = replace(ctx.structures["M5"], trendlines=[broken])
+  assert detectors.zone_reaction(
+    replace(ctx, structures={"M5": broken_st})
+  ) is None
+
+
+def test_trendline_break_retest_fires_outside_chop_only():
+  df = _buy_rejection_df()
+  line = Trendline("resistance", (0, 1, 2), 0.0, 105.0, 3, True, 3)
+  ctx = _ctx(df, trendlines=[line])
+
+  result = detectors.break_retest(ctx)
+
+  assert result is not None
+  assert result.setup == "Break & Retest"
+  assert "TL break+retest" in result.reasons
+  assert result.entry_zone.source == "trendline"
+  assert detectors.break_retest(replace(ctx, regime=_chop_regime())) is None
+
+
+def _box_breakout_ctx(*, bias: str = "up", accept_index: int = 3):
+  df = _df([
+    (105, 106, 104, 105, 100),
+    (105, 106, 104, 105, 100),
+    (110.15, 110.5, 110.1, 110.3, 100),
+    (110.3, 110.6, 110.15, 110.4, 100),
+    (110.4, 111, 109.5, 110.8, 100),
+  ])
+  box = BoxBreak(110, 100, "up", accept_index, True, "2 closes")
+  return _ctx(
+    df,
+    bias=bias,
+    box_break=box,
+    regime=_chop_regime(100, 110),
+    session_levels=[SessionLevel("PDH", 115, df.index[0], swept=False)],
+    indicator_set=_indicators(df, atr=1.0),
+  )
+
+
+def test_box_breakout_accepts_bias_aligned_retest_inside_chop():
+  result = detectors.box_breakout(_box_breakout_ctx())
+
+  assert result is not None
+  assert result.setup == "Box Breakout"
+  assert result.direction == "BUY"
+  assert result.key_level == 100
+  assert result.reasons[1:5] == [
+    "box 100-110",
+    "accepted (2 closes)",
+    "retest 110",
+    "measured +10.0",
+  ]
+  assert "box 100-110" in result.reasons
+  assert "accepted (2 closes)" in result.reasons
+  assert "retest 110" in result.reasons
+  assert "measured +10.0" in result.reasons
+  assert "coil" in result.reasons
+  assert "TP1 PDH" in result.reasons
+  assert "coil" in result.entry_zone.score_reasons
+
+
+def test_box_breakout_allows_immediate_proximal_displacement_entry():
+  df = _df([
+    (105, 106, 104, 105, 100),
+    (105, 106, 104, 105, 100),
+    (109.7, 111.2, 109.6, 110.8, 100),
+  ])
+  ctx = _ctx(
+    df,
+    box_break=BoxBreak(110, 100, "up", 2, False, "displacement"),
+    regime=_chop_regime(100, 110),
+    indicator_set=_indicators(df, atr=1.0),
+  )
+
+  result = detectors.box_breakout(ctx)
+
+  assert result is not None
+  assert "accepted (displacement)" in result.reasons
+  assert "proximal 110" in result.reasons
+
+
+def test_box_breakout_rejects_counter_bias_and_stale_acceptance():
+  assert detectors.box_breakout(_box_breakout_ctx(bias="down")) is None
+  assert detectors.box_breakout(_box_breakout_ctx(accept_index=-3)) is None
 
 
 def test_detectors_module_has_no_delivery_or_redis_imports():

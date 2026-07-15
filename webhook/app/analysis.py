@@ -23,9 +23,11 @@ from app.pa_types import (
   Swing,
   Zone,
 )
+from app.regime import BoxBreak, accepted_box_break
 from app.session_liquidity import previous_week_levels, session_levels
 from app.structure import market_structure, structure_breaks
 from app.swings import find_swings
+from app.trendlines import Trendline, trendlines as find_trendlines
 from app.zones import (
   ZONE_MERGE_OVERLAP,
   breaker_blocks,
@@ -78,6 +80,13 @@ class AnalysisSettings:
   chop_filter_enabled: bool = True
   chop_range_atr: float = 4.0
   chop_lookback: int = 24
+  tl_min_touches: int = 3
+  tl_tol_atr: float = 0.3
+  tl_max_slope_atr: float = 0.15
+  coil_contract: float = 0.8
+  breakout_buffer_atr: float = 0.1
+  breakout_accept_bars: int = 2
+  breakout_max_age_bars: int = 6
 
 
 @dataclass(frozen=True)
@@ -87,6 +96,7 @@ class Regime:
   range_low: float
   height_atr: float
   reasons: list[str]
+  coiling: bool = False
 
 
 @dataclass(frozen=True)
@@ -109,6 +119,8 @@ class TimeframeAnalysis:
   session_levels: list[SessionLevel] = field(default_factory=list)
   dealing_range: DealingRange | None = None
   regime: Regime | None = None
+  trendlines: list[Trendline] = field(default_factory=list)
+  box_break: BoxBreak | None = None
 
 
 @dataclass(frozen=True)
@@ -162,6 +174,7 @@ def _analyze_tf(
   )
   structure = market_structure(swings)
   breaks = structure_breaks(swings, df)
+  diagonal_lines = find_trendlines(swings, df, atr, settings)
   levels = key_levels(
     swings,
     atr,
@@ -191,6 +204,7 @@ def _analyze_tf(
     settings.eq_band,
   )
   regime_ = regime(df, atr, structure, range_, settings)
+  box_break = accepted_box_break(df, atr, regime_, settings)
   zones = merge_zones(
     [*sd_zones, *ob_zones, *flip, *fvg_zones],
     settings.zone_merge_overlap,
@@ -215,6 +229,8 @@ def _analyze_tf(
     session_levels=sessions,
     dealing_range=range_,
     grabs=grabs,
+    trendlines=diagonal_lines,
+    bar_index=len(df) - 1,
   )
   ob_zones, sd_zones, flip, fvg_zones = _zone_views(zones)
   return TimeframeAnalysis(
@@ -236,6 +252,8 @@ def _analyze_tf(
     session_levels=sessions,
     dealing_range=range_,
     regime=regime_,
+    trendlines=diagonal_lines,
+    box_break=box_break,
   )
 
 
@@ -248,10 +266,18 @@ def regime(
 ) -> Regime:
   settings = settings or AnalysisSettings()
   close = _last_close(df)
+  coiling = _is_coiling(df, settings.chop_lookback, settings.coil_contract)
   if not settings.chop_filter_enabled:
-    return Regime("trend", close, close, math.inf, ["chop filter disabled"])
+    return Regime(
+      "trend",
+      close,
+      close,
+      math.inf,
+      ["chop filter disabled"],
+      coiling,
+    )
   if range_ is None:
-    return Regime("trend", close, close, math.inf, ["no dealing range"])
+    return Regime("trend", close, close, math.inf, ["no dealing range"], coiling)
 
   range_high = float(range_.high)
   range_low = float(range_.low)
@@ -273,7 +299,20 @@ def regime(
   kind = "chop" if reasons else "trend"
   if not reasons:
     reasons = ["range expanded or broke edge"]
-  return Regime(kind, range_high, range_low, height_atr, reasons)
+  return Regime(kind, range_high, range_low, height_atr, reasons, coiling)
+
+
+def _is_coiling(df: pd.DataFrame, lookback: int, contract: float) -> bool:
+  required = max(2, int(lookback))
+  if len(df) < required:
+    return False
+  window = df.tail(required)
+  split = len(window) // 2
+  first = window.iloc[:split]
+  second = window.iloc[split:]
+  first_range = float(first["high"].max() - first["low"].min())
+  second_range = float(second["high"].max() - second["low"].min())
+  return first_range > 0 and second_range < max(0.0, contract) * first_range
 
 
 def _last_close(df: pd.DataFrame) -> float:
@@ -318,6 +357,8 @@ def _apply_mtf_zone_scores(
         item.session_levels,
         item.dealing_range,
         item.liquidity_grabs,
+        item.trendlines,
+        len(item.df) - 1,
       )
       item = _with_zone_views(item, zones)
       updated[tf] = item
