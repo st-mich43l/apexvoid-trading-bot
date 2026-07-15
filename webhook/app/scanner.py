@@ -94,6 +94,13 @@ def _detector_settings() -> DetectorSettings:
     chop_range_atr=settings.chop_range_atr,
     chop_lookback=settings.chop_lookback,
     chop_edge_frac=settings.chop_edge_frac,
+    tl_min_touches=settings.tl_min_touches,
+    tl_tol_atr=settings.tl_tol_atr,
+    tl_max_slope_atr=settings.tl_max_slope_atr,
+    coil_contract=settings.coil_contract,
+    breakout_buffer_atr=settings.breakout_buffer_atr,
+    breakout_accept_bars=settings.breakout_accept_bars,
+    breakout_max_age_bars=settings.breakout_max_age_bars,
     allow_counter_trend=settings.allow_counter_trend,
     counter_min_zone_score=settings.counter_min_zone_score,
     counter_extreme_pd=settings.counter_extreme_pd,
@@ -178,7 +185,7 @@ def _format_detection(
   extra_reasons = [
     reason for reason in result.reasons
     if not reason.lower().startswith("htf bias")
-  ][:2]
+  ][:6 if result.setup == "Box Breakout" else 2]
   reason_suffix = (
     " · " + " · ".join(escape(reason) for reason in extra_reasons)
     if extra_reasons

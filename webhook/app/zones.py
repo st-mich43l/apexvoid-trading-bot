@@ -18,6 +18,7 @@ from app.pa_types import (
   SessionLevel,
   Zone,
 )
+from app.trendlines import Trendline, value_at
 
 ZONE_MERGE_OVERLAP = 0.5
 FRESH_SCORE = 3.0
@@ -30,6 +31,7 @@ SOURCE_SCORES = {
   "supply_demand": 1.5,
   "bullish_fvg": 1.0,
   "bearish_fvg": 1.0,
+  "box_breakout": 5.0,
 }
 KEY_LEVEL_SCORE = 2.0
 ROUND_NUMBER_SCORE = 1.0
@@ -38,6 +40,7 @@ HTF_SCORE = 3.0
 SESSION_LEVEL_SCORE = 2.0
 PD_POSITION_SCORE = 2.0
 GRAB_A_SCORE = 2.0
+TRENDLINE_SCORE = 1.5
 
 
 def displacement(
@@ -234,6 +237,8 @@ def score_zones(
   session_levels: list[SessionLevel] | None = None,
   dealing_range: DealingRange | None = None,
   grabs: list[Grab] | None = None,
+  trendlines: list[Trendline] | None = None,
+  bar_index: int | None = None,
 ) -> list[Zone]:
   scored = [
     _score_zone(
@@ -245,6 +250,8 @@ def score_zones(
       session_levels or [],
       dealing_range,
       grabs or [],
+      trendlines or [],
+      bar_index,
     )
     for zone in zones
   ]
@@ -336,6 +343,8 @@ def _score_zone(
   session_levels: list[SessionLevel],
   dealing_range: DealingRange | None,
   grabs: list[Grab],
+  trendlines: list[Trendline],
+  bar_index: int | None,
 ) -> Zone:
   score = 0.0
   reasons: list[str] = []
@@ -373,6 +382,9 @@ def _score_zone(
   if any(_inside_htf_zone(zone, htf) for htf in htf_zones):
     score += HTF_SCORE
     reasons.append("HTF zone")
+  if _has_trendline_confluence(zone, trendlines, bar_index):
+    score += TRENDLINE_SCORE
+    reasons.append("TL confluence")
   return replace(zone, score=score, score_reasons=reasons)
 
 
@@ -405,7 +417,22 @@ def _source_reason(source: str) -> str:
     return "S/D"
   if source.endswith("_fvg"):
     return "FVG"
+  if source == "box_breakout":
+    return "box breakout"
   return source
+
+
+def _has_trendline_confluence(
+  zone: Zone,
+  trendlines: list[Trendline],
+  bar_index: int | None,
+) -> bool:
+  if bar_index is None:
+    return False
+  return any(
+    not line.broken and zone.low <= value_at(line, bar_index) <= zone.high
+    for line in trendlines
+  )
 
 
 def _zone_overlaps_level(zone: Zone, level: Level) -> bool:

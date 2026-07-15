@@ -110,6 +110,13 @@ class Settings(BaseSettings):
   chop_range_atr: float = 4.0
   chop_lookback: int = 24
   chop_edge_frac: float = 0.25
+  tl_min_touches: int = 3
+  tl_tol_atr: float = 0.3
+  tl_max_slope_atr: float = 0.15
+  coil_contract: float = 0.8
+  breakout_buffer_atr: float = 0.1
+  breakout_accept_bars: int = 2
+  breakout_max_age_bars: int = 6
   allow_counter_trend: bool = True
   counter_min_zone_score: float = 10.0
   counter_extreme_pd: float = 0.25
