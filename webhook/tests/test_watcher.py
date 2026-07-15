@@ -121,6 +121,31 @@ async def test_tp_hit_notify_and_deduplicated(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_sell_whole_price_tp_hits_on_same_price_handle(monkeypatch):
+  await redis_state.set_cursor("XAU", "2026-07-08T09:59:00.000Z")
+  sig = _sell_signal(
+    entry=4027.0,
+    entry_end=4029.0,
+    sl=4035.0,
+    tps=[4017.0],
+  )
+  bar = _bar("2026-07-08T10:00:00.000Z", 4023, 4024, 4017.82, 4018.1)
+  fanout = _feed(monkeypatch, sig, [bar])
+
+  await watcher._watcher_tick(object())
+
+  fanout.assert_awaited_once()
+  _, render = fanout.await_args.args
+  assert "Price: <b>4017.82</b>" in render("vip")
+  assert (await redis_state.get_progress(3))["tp"] == 1
+
+
+def test_sell_decimal_tp_keeps_exact_threshold():
+  assert watcher._tp_hit(4017.82, 4017.0, is_buy=False)
+  assert not watcher._tp_hit(4017.82, 4017.5, is_buy=False)
+
+
+@pytest.mark.asyncio
 async def test_runner_alerts_after_final_tp_new_high(monkeypatch):
   await redis_state.set_cursor("XAU", "2026-07-08T09:59:00.000Z")
   tp_bar = _bar("2026-07-08T10:00:00.000Z", 2005, 2010, 2004, 2010)
