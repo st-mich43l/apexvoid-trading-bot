@@ -5,9 +5,12 @@ public sealed class FeedRunner(
   Func<ICTraderFeedClient> clientFactory,
   IBarSink sink,
   HealthFile healthFile,
-  Func<int, TimeSpan>? reconnectDelay = null
+  Func<int, TimeSpan>? reconnectDelay = null,
+  Action<string>? warningLog = null
 )
 {
+  private bool _startupBackfillPending = true;
+
   public async Task RunForeverAsync(CancellationToken cancellationToken)
   {
     var attempt = 0;
@@ -53,21 +56,48 @@ public sealed class FeedRunner(
       Log(
         $"resolved symbol {symbol.CTraderSymbol} -> id={symbol.SymbolId} redis={symbol.RedisSymbol} digits={symbol.Digits}"
       );
-      await BackfillAsync(client, symbol, cancellationToken);
+      var fullWindowBackfill = _startupBackfillPending;
+      await BackfillAsync(client, symbol, fullWindowBackfill, cancellationToken);
+      _startupBackfillPending = false;
       Log("backfill complete");
       await client.SubscribeAsync(symbol, options.Timeframes, cancellationToken);
       Log("subscribed live trendbars");
       healthFile.Touch();
 
       refreshTask = RefreshLoopAsync(client, linked.Token);
-      spotTask = SpotLoopAsync(client, linked.Token);
-      var emitter = new ClosedBarEmitter();
+      var spots = new SpotHistory();
+      spotTask = SpotLoopAsync(client, spots, linked.Token);
+      var emitter = new ClosedBarEmitter(spots, symbol.RedisSymbol);
+      var quality = new LiveBarQualityMonitor(
+        options.BarQualityLookback,
+        warningLog ?? Warn
+      );
+      var rawDumped = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
       Log("live stream started");
       await foreach (var raw in client.LiveTrendbarsAsync(cancellationToken))
       {
-        var bar = TrendbarDecoder.Decode(raw, symbol.Digits);
-        foreach (var closed in emitter.Observe(raw.Timeframe, bar))
+        if (rawDumped.Add(raw.Timeframe))
         {
+          LogRawTrendbar("live", raw);
+        }
+        var bar = TrendbarDecoder.Decode(raw, symbol.Digits);
+        foreach (var emission in emitter.Observe(raw.Timeframe, bar))
+        {
+          var closed = await ClosedBarCloseResolver.ResolveAsync(
+            client,
+            symbol,
+            raw.Timeframe,
+            emission,
+            cancellationToken
+          );
+          if (emission.RequiresHistoricalClose)
+          {
+            Log(
+              $"live close fallback {symbol.RedisSymbol} {raw.Timeframe} "
+              + $"ts={closed.Timestamp} close={closed.Close}"
+            );
+          }
+          quality.Observe(raw.Timeframe, closed);
           await sink.WriteClosedBarAsync(
             symbol.RedisSymbol,
             raw.Timeframe,
@@ -95,11 +125,13 @@ public sealed class FeedRunner(
 
   private async Task SpotLoopAsync(
     ICTraderFeedClient client,
+    SpotHistory spots,
     CancellationToken cancellationToken
   )
   {
     await foreach (var spot in client.LiveSpotsAsync(cancellationToken))
     {
+      spots.Observe(spot);
       await sink.WriteSpotAsync(spot, cancellationToken);
       healthFile.Touch();
     }
@@ -108,6 +140,7 @@ public sealed class FeedRunner(
   private async Task BackfillAsync(
     ICTraderFeedClient client,
     SymbolInfo symbol,
+    bool fullWindow,
     CancellationToken cancellationToken
   )
   {
@@ -115,16 +148,20 @@ public sealed class FeedRunner(
     foreach (var timeframe in options.Timeframes)
     {
       var seconds = TimeframeCodec.ToSeconds(timeframe);
-      var latest = await sink.GetLatestTimestampAsync(
-        symbol.RedisSymbol,
-        timeframe,
-        cancellationToken
-      );
-      var from = latest is null
+      var latest = fullWindow
+        ? null
+        : await sink.GetLatestTimestampAsync(
+          symbol.RedisSymbol,
+          timeframe,
+          cancellationToken
+        );
+      var from = fullWindow || latest is null
         ? now.AddSeconds(-seconds * options.BackfillBars)
         : DateTimeOffset.FromUnixTimeSeconds(latest.Value + seconds);
       Log(
-        $"backfill {symbol.RedisSymbol} {timeframe} from={from:O} to={now:O}"
+        $"backfill {symbol.RedisSymbol} {timeframe} "
+        + $"mode={(fullWindow ? "full-window" : "incremental")} "
+        + $"from={from:O} to={now:O}"
       );
       var rawBars = await client.GetTrendbarsAsync(
         symbol,
@@ -133,6 +170,11 @@ public sealed class FeedRunner(
         now,
         cancellationToken
       );
+      var firstRaw = rawBars.FirstOrDefault();
+      if (firstRaw is not null)
+      {
+        LogRawTrendbar("historical", firstRaw);
+      }
       foreach (var raw in rawBars.OrderBy(bar => bar.UtcTimestampInMinutes))
       {
         var bar = TrendbarDecoder.Decode(raw, symbol.Digits);
@@ -144,7 +186,8 @@ public sealed class FeedRunner(
           symbol.RedisSymbol,
           timeframe,
           bar,
-          cancellationToken
+          cancellationToken,
+          publish: false
         );
       }
       Log($"backfill {symbol.RedisSymbol} {timeframe}: wrote {rawBars.Count} raw bars");
@@ -183,4 +226,14 @@ public sealed class FeedRunner(
 
   private static void Log(string message) =>
     Console.Error.WriteLine($"ctrader-feed {message}");
+
+  private static void Warn(string message) =>
+    Console.Error.WriteLine($"ctrader-feed WARNING {message}");
+
+  private static void LogRawTrendbar(string source, RawTrendbar raw) =>
+    Log(
+      $"raw {source} trendbar tf={raw.Timeframe} tsMin={raw.UtcTimestampInMinutes} "
+      + $"low={raw.Low} deltaOpen={raw.DeltaOpen} deltaHigh={raw.DeltaHigh} "
+      + $"deltaClose={raw.DeltaClose} hasDeltaClose={raw.HasDeltaClose}"
+    );
 }

@@ -13,6 +13,7 @@ public sealed class CTraderOpenApiFeedClient(
   private readonly Channel<IMessage> _responses = Channel.CreateUnbounded<IMessage>();
   private readonly Channel<RawTrendbar> _liveTrendbars = Channel.CreateUnbounded<RawTrendbar>();
   private readonly Channel<SpotPrice> _liveSpots = Channel.CreateUnbounded<SpotPrice>();
+  private readonly SemaphoreSlim _requestLock = new(1, 1);
   private readonly List<IDisposable> _subscriptions = [];
   private readonly RefreshTokenState _tokens = new(options, refreshTokenStore);
   private readonly object _spotSubscriptionLock = new();
@@ -150,6 +151,7 @@ public sealed class CTraderOpenApiFeedClient(
     var spotReq = new ProtoOASubscribeSpotsReq
     {
       CtidTraderAccountId = options.AccountId,
+      SubscribeToSpotTimestamp = true,
     };
     spotReq.SymbolId.Add(symbol.SymbolId);
     try
@@ -290,45 +292,53 @@ public sealed class CTraderOpenApiFeedClient(
   )
     where T : class, IMessage
   {
-    var client = _client ?? throw new InvalidOperationException("Client is not connected");
-    using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-    timeout.CancelAfter(options.RequestTimeout);
-
-    await client.SendMessage(request);
+    await _requestLock.WaitAsync(cancellationToken);
     try
     {
-      while (await _responses.Reader.WaitToReadAsync(timeout.Token))
+      var client = _client ?? throw new InvalidOperationException("Client is not connected");
+      using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+      timeout.CancelAfter(options.RequestTimeout);
+
+      await client.SendMessage(request);
+      try
       {
-        while (_responses.Reader.TryRead(out var message))
+        while (await _responses.Reader.WaitToReadAsync(timeout.Token))
         {
-          if (message is ProtoOAErrorRes error)
+          while (_responses.Reader.TryRead(out var message))
           {
-            throw new InvalidOperationException(
-              $"cTrader Open API error while waiting for {typeof(T).Name} after {request.GetType().Name}: {FormatError(error)}"
-            );
-          }
-          if (message is ProtoErrorRes genericError)
-          {
-            throw new InvalidOperationException(
-              $"cTrader transport error while waiting for {typeof(T).Name} after {request.GetType().Name}: {FormatError(genericError)}"
-            );
-          }
-          if (message is T typed && predicate(typed))
-          {
-            return typed;
+            if (message is ProtoOAErrorRes error)
+            {
+              throw new InvalidOperationException(
+                $"cTrader Open API error while waiting for {typeof(T).Name} after {request.GetType().Name}: {FormatError(error)}"
+              );
+            }
+            if (message is ProtoErrorRes genericError)
+            {
+              throw new InvalidOperationException(
+                $"cTrader transport error while waiting for {typeof(T).Name} after {request.GetType().Name}: {FormatError(genericError)}"
+              );
+            }
+            if (message is T typed && predicate(typed))
+            {
+              return typed;
+            }
           }
         }
       }
-    }
-    catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-    {
+      catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+      {
+        throw new TimeoutException(
+          $"Timed out after {options.RequestTimeout.TotalSeconds:N0}s waiting for {typeof(T).Name} after {request.GetType().Name}"
+        );
+      }
       throw new TimeoutException(
         $"Timed out after {options.RequestTimeout.TotalSeconds:N0}s waiting for {typeof(T).Name} after {request.GetType().Name}"
       );
     }
-    throw new TimeoutException(
-      $"Timed out after {options.RequestTimeout.TotalSeconds:N0}s waiting for {typeof(T).Name} after {request.GetType().Name}"
-    );
+    finally
+    {
+      _requestLock.Release();
+    }
   }
 
   private async Task SendAsync(
@@ -349,7 +359,8 @@ public sealed class CTraderOpenApiFeedClient(
       bar.DeltaHigh,
       bar.DeltaClose,
       bar.Volume,
-      bar.UtcTimestampInMinutes
+      bar.UtcTimestampInMinutes,
+      bar.HasDeltaClose
     );
 
   private SpotPrice? ToSpot(ProtoOASpotEvent spot)
@@ -367,7 +378,9 @@ public sealed class CTraderOpenApiFeedClient(
       symbol.RedisSymbol,
       OpenApiPrice.Decode(spot.Bid),
       OpenApiPrice.Decode(spot.Ask),
-      DateTimeOffset.UtcNow.ToUnixTimeSeconds()
+      spot.Timestamp > 0
+        ? spot.Timestamp / 1_000
+        : DateTimeOffset.UtcNow.ToUnixTimeSeconds()
     );
   }
 

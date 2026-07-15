@@ -10,7 +10,8 @@ public interface IBarSink
     string symbol,
     string timeframe,
     OhlcBar bar,
-    CancellationToken cancellationToken
+    CancellationToken cancellationToken,
+    bool publish = true
   );
 
   Task<long?> GetLatestTimestampAsync(
@@ -57,7 +58,8 @@ public sealed class RedisBarSink(
     string symbol,
     string timeframe,
     OhlcBar bar,
-    CancellationToken cancellationToken
+    CancellationToken cancellationToken,
+    bool publish = true
   )
   {
     var key = Key(symbol, timeframe);
@@ -68,11 +70,14 @@ public sealed class RedisBarSink(
     await redis.RemoveByScoreAsync(key, bar.Timestamp, cancellationToken);
     await redis.AddAsync(key, json, bar.Timestamp, cancellationToken);
     await redis.TrimToNewestAsync(key, windowMax, cancellationToken);
-    await redis.PublishAsync(
-      channel,
-      $"{symbol.ToUpperInvariant()}:{timeframe.ToUpperInvariant()}:{bar.Timestamp}",
-      cancellationToken
-    );
+    if (publish)
+    {
+      await redis.PublishAsync(
+        channel,
+        $"{symbol.ToUpperInvariant()}:{timeframe.ToUpperInvariant()}:{bar.Timestamp}",
+        cancellationToken
+      );
+    }
   }
 
   public Task<long?> GetLatestTimestampAsync(
