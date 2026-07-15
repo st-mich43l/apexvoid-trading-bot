@@ -7,7 +7,8 @@ public sealed record RawTrendbar(
   ulong DeltaHigh,
   ulong DeltaClose,
   long Volume,
-  uint UtcTimestampInMinutes
+  uint UtcTimestampInMinutes,
+  bool HasDeltaClose = true
 );
 
 public sealed record OhlcBar(
@@ -35,6 +36,11 @@ public sealed record SpotPrice(
   decimal Bid,
   decimal Ask,
   long Timestamp
+);
+
+public sealed record ClosedBarEmission(
+  OhlcBar Bar,
+  bool RequiresHistoricalClose
 );
 
 public sealed record RedisBarEntry(long Timestamp, string Json);

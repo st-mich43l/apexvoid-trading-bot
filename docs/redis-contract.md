@@ -41,6 +41,14 @@ Fields:
 
 Only closed bars are written. Forming bars must never enter Redis.
 
+For bars finalized from the live cTrader stream, `o`, `h`, and `l` come from
+the live trendbar. Because live trendbars may omit `deltaClose`, `c` is stamped
+from the last spot bid observed inside that period and clamped to `[l, h]`. If
+the period has no spot, the feed fetches that single historical bar before
+writing. Startup always upserts the full configured historical window, allowing
+deployments to repair stale or malformed cached bars. Historical repair upserts
+do not publish `bars:new` replay events.
+
 ## Write Semantics
 
 For a closed bar:
