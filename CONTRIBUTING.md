@@ -62,6 +62,10 @@ Docs live under `docs/` and follow these conventions:
 When changing deployment steps, update both `docs/deployment.md` and the
 "Quick Start" block in `README.md` if applicable.
 
+Every behavior, configuration, deployment, or operator-facing change must also
+add a concise entry under `Unreleased` in `CHANGELOG.md` in the same pull
+request. Pure test-only and internal comment changes do not need an entry.
+
 ## What Not to Commit
 
 - `.env` and anything else containing a real secret.

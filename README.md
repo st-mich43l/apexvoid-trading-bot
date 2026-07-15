@@ -90,6 +90,7 @@ Dive into the docs for full details on configuring and operating the bot:
 - ⚙️ [Operations](docs/operations.md) — Monitoring, backups, log rotation, updates, troubleshooting.
 - 🔒 [Security](docs/security.md) — Threat model, secret management, hardening.
 - 📊 [Redis Bar Contract](docs/redis-contract.md) — Closed OHLC window keys shared by the cTrader feed and scanners.
+- 📝 [Changelog](CHANGELOG.md) — Notable behavior, configuration, and deployment changes.
 
 ---
 
