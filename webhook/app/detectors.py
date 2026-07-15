@@ -560,7 +560,7 @@ def _finish(
     return None
   st = ctx.structures[ctx.tf]
   full_reasons = _merge_score_reasons(
-    _merge_tp_anchor(reasons, st, price, direction),
+    _merge_tp_anchor(ctx, reasons, st, price, direction),
     zone,
   )
   confluence = _confluence_from_zone(zone, full_reasons)
@@ -579,11 +579,25 @@ def _finish(
 
 
 def _merge_tp_anchor(
+  ctx: DetectionContext,
   reasons: list[str],
   st: StructureSet,
   price: float,
   direction: str,
 ) -> list[str]:
+  if _in_chop(ctx) and ctx.regime is not None:
+    reasons = [
+      reason for reason in reasons
+      if not reason.startswith("TP anchor ")
+    ]
+    if direction == "BUY":
+      edge_name = "range high"
+      edge = ctx.regime.range_high
+    else:
+      edge_name = "range low"
+      edge = ctx.regime.range_low
+    return [*reasons, f"TP anchor {edge_name} {_number(edge)}"]
+
   anchor = _nearest_session_tp(st.session_levels, price, direction)
   if anchor is None:
     return reasons[:]

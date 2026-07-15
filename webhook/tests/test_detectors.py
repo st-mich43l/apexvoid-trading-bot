@@ -284,6 +284,7 @@ def test_chop_fade_scalp_requires_edge_and_grade_a_sweep():
   assert result.reasons[0] == "HTF bias down"
   assert "sweep A" in result.reasons
   assert "range 100-112" in result.reasons
+  assert "TP anchor range low 100" in result.reasons
   assert detectors.fade_scalp(grade_b) is None
   assert detectors.fade_scalp(mid_range) is None
 
@@ -567,6 +568,7 @@ def test_chop_zone_reaction_requires_edge_and_grade_a_sweep():
   assert result.direction == "BUY"
   assert "sweep A" in result.reasons
   assert "range 100-112" in result.reasons
+  assert "TP anchor range high 112" in result.reasons
 
   mid_zone = replace(edge_zone, bottom=105, top=107)
   mid_ctx = replace(
