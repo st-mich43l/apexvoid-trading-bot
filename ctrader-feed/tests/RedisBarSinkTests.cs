@@ -46,6 +46,27 @@ public sealed class RedisBarSinkTests
     );
   }
 
+  [Fact]
+  public async Task HistoricalRepairUpsertDoesNotPublishReplayEvent()
+  {
+    var redis = new InMemoryRedisSeriesCommands();
+    var sink = new RedisBarSink(redis, windowMax: 2, channel: "bars:new");
+
+    await sink.WriteClosedBarAsync(
+      "XAU",
+      "M5",
+      Bar(100, 4100),
+      CancellationToken.None,
+      publish: false
+    );
+
+    Assert.Empty(redis.Published);
+    Assert.Equal(
+      4100m,
+      Assert.Single(await sink.ReadLatestAsync("XAU", "M5", 1, CancellationToken.None)).Close
+    );
+  }
+
   private static OhlcBar Bar(long ts, decimal close) =>
     new(ts, close - 1, close + 1, close - 2, close, 100);
 }

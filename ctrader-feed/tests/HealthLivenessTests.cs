@@ -70,6 +70,7 @@ public sealed class HealthLivenessTests
       RedisUrl: "redis://redis:6379/0",
       BarsWindowMax: 1500,
       BarsChannel: "bars:new",
+      BarQualityLookback: 6,
       HeartbeatFile: heartbeatPath,
       RefreshTokenKey: "ctrader:refresh_token",
       RequestTimeout: TimeSpan.FromSeconds(1),

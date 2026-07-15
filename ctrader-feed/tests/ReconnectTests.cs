@@ -43,8 +43,47 @@ public sealed class ReconnectTests
     Assert.Equal(1, second.ResolveCount);
     Assert.Equal(1, second.SubscribeCount);
     Assert.Equal(1, second.BackfillCount);
+    Assert.Equal(
+      DateTimeOffset.FromUnixTimeSeconds(1_200),
+      Assert.Single(second.BackfillRequests).From
+    );
     Assert.Contains(sink.Writes, write => write.Bar.Timestamp == 900);
     Assert.Contains(sink.Writes, write => write.Bar.Timestamp == 1_200);
+  }
+
+  [Fact]
+  public async Task StartupFullWindowBackfillOverwritesPoisonedStoredBar()
+  {
+    using var temp = new TempHeartbeat();
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+    var options = TestOptions(temp.Path) with { BackfillBars = 10 };
+    var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+    var timestamp = now - (now % 300) - 600;
+    var sink = new RecordingSink();
+    sink.Seed("XAU", "M5", new OhlcBar(timestamp, 4.101m, 4.102m, 4.1m, 4.1m, 1));
+    var client = new FakeCTraderClient
+    {
+      Backfill = [Raw(timestamp)],
+      CancelOnLiveStart = () => cts.Cancel(),
+    };
+    var runner = new FeedRunner(
+      options,
+      () => client,
+      sink,
+      new HealthFile(temp.Path),
+      _ => TimeSpan.Zero
+    );
+
+    await Assert.ThrowsAnyAsync<OperationCanceledException>(
+      () => runner.RunOneSessionAsync(cts.Token)
+    );
+
+    var repaired = sink.Bars[("XAU", "M5", timestamp)];
+    Assert.Equal(4.1015m, repaired.Close);
+    Assert.True(
+      Assert.Single(client.BackfillRequests).From
+      < DateTimeOffset.FromUnixTimeSeconds(timestamp)
+    );
   }
 
   private static FeedOptions TestOptions(string heartbeatPath) =>
@@ -63,6 +102,7 @@ public sealed class ReconnectTests
       RedisUrl: "redis://redis:6379/0",
       BarsWindowMax: 1500,
       BarsChannel: "bars:new",
+      BarQualityLookback: 6,
       HeartbeatFile: heartbeatPath,
       RefreshTokenKey: "ctrader:refresh_token",
       RequestTimeout: TimeSpan.FromSeconds(1),
@@ -89,6 +129,7 @@ internal sealed class FakeCTraderClient : ICTraderFeedClient
   public int ResolveCount { get; private set; }
   public int BackfillCount { get; private set; }
   public int SubscribeCount { get; private set; }
+  public List<(DateTimeOffset From, DateTimeOffset To)> BackfillRequests { get; } = [];
   public IReadOnlyList<RawTrendbar> Backfill { get; init; } = [];
   public bool ThrowAfterLiveStart { get; init; }
   public Action? OnLiveStart { get; init; }
@@ -119,6 +160,7 @@ internal sealed class FakeCTraderClient : ICTraderFeedClient
   )
   {
     BackfillCount++;
+    BackfillRequests.Add((from, to));
     return Task.FromResult(Backfill);
   }
 
@@ -164,16 +206,26 @@ internal sealed class FakeCTraderClient : ICTraderFeedClient
 internal sealed class RecordingSink : IBarSink
 {
   public List<(string Symbol, string Timeframe, OhlcBar Bar)> Writes { get; } = [];
+  public Dictionary<(string Symbol, string Timeframe, long Timestamp), OhlcBar> Bars { get; }
+    = [];
   public long? Latest { get; set; }
+
+  public void Seed(string symbol, string timeframe, OhlcBar bar)
+  {
+    Bars[(symbol, timeframe, bar.Timestamp)] = bar;
+    Latest = Math.Max(Latest ?? long.MinValue, bar.Timestamp);
+  }
 
   public Task WriteClosedBarAsync(
     string symbol,
     string timeframe,
     OhlcBar bar,
-    CancellationToken cancellationToken
+    CancellationToken cancellationToken,
+    bool publish = true
   )
   {
     Writes.Add((symbol, timeframe, bar));
+    Bars[(symbol, timeframe, bar.Timestamp)] = bar;
     Latest = Math.Max(Latest ?? long.MinValue, bar.Timestamp);
     return Task.CompletedTask;
   }

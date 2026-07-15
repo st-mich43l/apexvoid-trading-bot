@@ -48,6 +48,7 @@ CTRADER_REFRESH_TOKEN_KEY=ctrader:refresh_token
 REDIS_URL=redis://redis:6379/0
 BARS_WINDOW_MAX=1500
 BARS_CHANNEL=bars:new
+BAR_QUALITY_LOOKBACK=6
 HEALTH_FILE=/tmp/ctrader-feed.heartbeat
 ```
 
@@ -79,12 +80,20 @@ Switching to live later should be a deliberate environment change.
 ## Data Flow
 
 1. Resolve `CTRADER_SYMBOL` to `symbolId` and `digits`.
-2. Backfill `CTRADER_BACKFILL_BARS` closed bars per timeframe.
+2. Upsert the full `CTRADER_BACKFILL_BARS` historical window on startup;
+   reconnects only backfill the missing gap.
 3. Subscribe to live spot + live trendbar streams.
 4. Hold each live trendbar while it is forming.
-5. Emit the previous bar only when the next period begins.
-6. For each closed bar: remove any existing member at that score, `ZADD`,
+5. When the next period begins, stamp the previous close from the last
+   in-period spot bid and clamp it to the trendbar range. If no in-period spot
+   is available, fetch that single historical bar as an authoritative fallback.
+6. For each live closed bar: remove any existing member at that score, `ZADD`,
    trim newest `BARS_WINDOW_MAX`, then `PUBLISH`.
+
+The feed logs one raw historical and one raw live trendbar per timeframe after
+each connection. These diagnostics include `hasDeltaClose` but no credentials.
+It also warns when `BAR_QUALITY_LOOKBACK` consecutive live bars close at the
+same range extreme.
 
 ## Healthcheck
 

@@ -1,3 +1,6 @@
+<!-- Every PR with behavior, config, deployment, or operator-facing changes
+must add a concise entry under Unreleased. -->
+
 # Changelog
 
 All notable changes to ApexVoid Trading Bot are documented in this file.
@@ -12,6 +15,18 @@ dated section after deployment.
 
 - Introduced this changelog and the repository rule requiring future changes to
   update it.
+
+### Fixed
+
+- `ctrader-feed`: stamp live closed-bar close from the last in-period spot bid,
+  with range clamping and an authoritative historical fallback when no spot is
+  available; live trendbars without `deltaClose` no longer persist
+  `close == low` and poison scanner structure/regime analysis.
+- `ctrader-feed`: perform a full-window historical upsert on startup so every
+  deployment repairs previously poisoned Redis bars; reconnect backfill remains
+  incremental.
+- `ctrader-feed`: warn when consecutive live bars keep closing at the same range
+  extreme, controlled by `BAR_QUALITY_LOOKBACK` (default `6`).
 
 ## 2026-07-15
 

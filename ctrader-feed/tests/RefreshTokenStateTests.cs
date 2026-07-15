@@ -42,6 +42,7 @@ public sealed class RefreshTokenStateTests
       RedisUrl: "redis://redis:6379/0",
       BarsWindowMax: 1500,
       BarsChannel: "bars:new",
+      BarQualityLookback: 6,
       HeartbeatFile: "/tmp/ctrader-feed.heartbeat",
       RefreshTokenKey: "ctrader:refresh_token",
       RequestTimeout: TimeSpan.FromSeconds(1),
