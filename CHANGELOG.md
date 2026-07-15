@@ -27,6 +27,8 @@ dated section after deployment.
   incremental.
 - `ctrader-feed`: warn when consecutive live bars keep closing at the same range
   extreme, controlled by `BAR_QUALITY_LOOKBACK` (default `6`).
+- `watcher`: count a SELL whole-price TP as hit as soon as price enters that
+  handle (for example, `4017.xx` now reaches TP `4017`).
 
 ## 2026-07-15
 

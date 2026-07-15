@@ -107,6 +107,14 @@ def _last_tp_floor_pips(sig: dict) -> int:
   return _pips_from_entry(sig, float(tps[-1]))
 
 
+def _tp_hit(touch: float, tp: float, is_buy: bool) -> bool:
+  if is_buy:
+    return touch >= tp
+  if float(tp).is_integer():
+    return touch < tp + 1.0
+  return touch <= tp
+
+
 async def _maybe_alert_runner(
   sig: dict,
   bar: dict,
@@ -172,10 +180,10 @@ async def _evaluate(sig: dict, bar: dict, progress: dict) -> bool:
   while progress["tp"] < len(tps):
     idx = progress["tp"]
     tp = tps[idx]
-    tp_hit = bar["high"] >= tp if is_buy else bar["low"] <= tp
+    touch = bar["high"] if is_buy else bar["low"]
+    tp_hit = _tp_hit(touch, tp, is_buy)
     if not tp_hit:
       break
-    touch = bar["high"] if is_buy else bar["low"]
     pips = _pips_from_entry(sig, touch)
     key = f"TP{idx + 1}"
     await fanout_update(
