@@ -54,17 +54,18 @@ async def test_scoped_command_menu(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_signal_bot_exposes_only_trade_map(monkeypatch):
+async def test_signal_bot_exposes_public_start_and_owner_trade_map(monkeypatch):
   target = SimpleNamespace(set_my_commands=AsyncMock())
   monkeypatch.setattr(telegram.settings, "telegram_owner_id", 42)
 
   await telegram.setup_scanner_commands(target)
 
   first, second = target.set_my_commands.await_args_list
-  assert first.args[0] == []
+  assert first.args[0] == telegram.SCANNER_PUBLIC_COMMANDS
   assert second.args[0] == telegram.SCANNER_OWNER_COMMANDS
   assert second.kwargs["scope"].chat_id == 42
   assert [command.command for command in telegram.SCANNER_OWNER_COMMANDS] == [
+    "start",
     "trade_map",
   ]
 
@@ -78,6 +79,17 @@ async def test_signal_bot_trade_map_handler_uses_shared_delivery(monkeypatch):
   await scanner_dm.handle_trade_map(msg)
 
   deliver.assert_awaited_once_with(msg)
+
+
+@pytest.mark.asyncio
+async def test_signal_bot_start_handler_uses_shared_welcome(monkeypatch):
+  welcome = AsyncMock()
+  monkeypatch.setattr(scanner_dm, "deliver_welcome", welcome)
+  msg = _dm("/start", user_id=999)
+
+  await scanner_dm.handle_start(msg)
+
+  welcome.assert_awaited_once_with(msg)
 
 
 @pytest.mark.asyncio

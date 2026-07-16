@@ -48,7 +48,11 @@ OWNER_COMMANDS = [
   BotCommand(command="trade_pips", description="[SYMBOL] [period]"),
   BotCommand(command="help", description="Trade command reference"),
 ]
+SCANNER_PUBLIC_COMMANDS = [
+  BotCommand(command="start", description="Welcome and public resources"),
+]
 SCANNER_OWNER_COMMANDS = [
+  *SCANNER_PUBLIC_COMMANDS,
   BotCommand(command="trade_map", description="[SYMBOL] — current market map"),
 ]
 
@@ -69,7 +73,7 @@ async def setup_commands(target_bot: Bot) -> None:
 
 async def setup_scanner_commands(target_bot: Bot) -> None:
   await target_bot.set_my_commands(
-    [],
+    SCANNER_PUBLIC_COMMANDS,
     scope=BotCommandScopeDefault(),
   )
   if settings.telegram_owner_id:

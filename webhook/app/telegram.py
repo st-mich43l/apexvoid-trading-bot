@@ -63,6 +63,7 @@ from app.symbols import (
 from app.tg_core import (
   OWNER_COMMANDS,
   SCANNER_OWNER_COMMANDS,
+  SCANNER_PUBLIC_COMMANDS,
   bot,
   dp,
   scanner_bot,
