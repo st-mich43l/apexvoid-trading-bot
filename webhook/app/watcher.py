@@ -7,7 +7,7 @@ import aiohttp
 from app.config import settings
 from app.broadcast import fanout_update
 from app.dedup import get_open_signals
-from app.keyboards import build_tp_close_kb
+from app.keyboards import build_close_kb, build_tp_close_kb
 from app.pips_format import wing_icons
 from app.price import get_xau_bars
 from app.redis_state import clear_sl_alert, mark_tp_alert
@@ -169,6 +169,9 @@ async def _evaluate(sig: dict, bar: dict, progress: dict) -> bool:
       sig,
       lambda tier: _render_level_alert(
         tier, "SL", "SL", seq, display_price, pips
+      ),
+      markup_fn=lambda tier, s=sig["id"], t=progress["tp"], p=-pips: (
+        build_close_kb(s, t, p) if tier == "vip" else None
       ),
     )
     progress["sl"] = True

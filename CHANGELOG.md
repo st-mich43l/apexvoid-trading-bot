@@ -47,6 +47,8 @@ dated section after deployment.
   extreme, controlled by `BAR_QUALITY_LOOKBACK` (default `6`).
 - `watcher`: count a SELL whole-price TP as hit as soon as price enters that
   handle (for example, `4017.xx` now reaches TP `4017`).
+- `watcher`: attach the owner Close/partial-close button to VIP SL-hit alerts
+  and book those closes with negative pips instead of TP-style profit pips.
 
 ## 2026-07-15
 

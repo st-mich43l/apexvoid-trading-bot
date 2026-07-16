@@ -98,7 +98,7 @@ async def handle_close_book(cb: CallbackQuery) -> None:
   else:
     rem_pct = round(row["remaining"] * 100)
     await cb.message.edit_text(
-      f"{base}\n\n📊 Booked <b>{frac_pct}%</b> @ +{pips} pips · "
+      f"{base}\n\n📊 Booked <b>{frac_pct}%</b> @ {pips:+d} pips · "
       f"remaining <b>{rem_pct}%</b>",
       reply_markup=build_tp_close_kb(sid, tp, pips),
     )
