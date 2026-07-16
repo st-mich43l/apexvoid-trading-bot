@@ -8,6 +8,7 @@ from app.handlers import callbacks as _callbacks
 from app.handlers import channel as _channel
 from app.handlers import dm as _dm
 from app.handlers import fallback as _fallback
+from app.handlers import scanner_dm as _scanner_dm
 from app.config import settings
 from app.dedup import (
   event_in_window,
@@ -61,10 +62,14 @@ from app.symbols import (
 )
 from app.tg_core import (
   OWNER_COMMANDS,
+  SCANNER_OWNER_COMMANDS,
   bot,
   dp,
+  scanner_bot,
+  scanner_dp,
   send_with_retry,
   setup_commands,
+  setup_scanner_commands,
 )
 from app.trade_ops import (
   do_active,
@@ -91,6 +96,7 @@ dp.include_router(_callbacks.router)
 dp.include_router(_dm.router)
 dp.include_router(_channel.router)
 dp.include_router(_fallback.router)
+scanner_dp.include_router(_scanner_dm.router)
 
 
 def _mirror_router_handlers_for_legacy_observers() -> None:

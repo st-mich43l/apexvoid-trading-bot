@@ -2,7 +2,14 @@ import asyncio
 import logging
 
 from app.config import settings
-from app.telegram import bot, dp, setup_commands
+from app.telegram import (
+  bot,
+  dp,
+  scanner_bot,
+  scanner_dp,
+  setup_commands,
+  setup_scanner_commands,
+)
 from app.dedup import init_db, close_pool
 from app.watcher import watcher_loop
 from app.calendar import calendar_sync_loop
@@ -21,6 +28,18 @@ log = logging.getLogger("bot")
 async def main() -> None:
   await init_db()
   await setup_commands(bot)
+  scanner_polling = None
+  if (
+    settings.scanner_telegram_bot_token
+    and settings.scanner_telegram_bot_token != settings.telegram_bot_token
+  ):
+    await setup_scanner_commands(scanner_bot)
+    scanner_polling = asyncio.create_task(scanner_dp.start_polling(
+      scanner_bot,
+      allowed_updates=["message"],
+      handle_signals=False,
+      close_bot_session=False,
+    ))
   asyncio.create_task(watcher_loop())
   asyncio.create_task(calendar_sync_loop())
   asyncio.create_task(weekly_report_loop())
@@ -44,6 +63,10 @@ async def main() -> None:
       allowed_updates=["channel_post", "message", "callback_query"],
     )
   finally:
+    if scanner_polling is not None:
+      scanner_polling.cancel()
+      await asyncio.gather(scanner_polling, return_exceptions=True)
+    await scanner_bot.session.close()
     await redis_state.close_client()
     await close_pool()
 

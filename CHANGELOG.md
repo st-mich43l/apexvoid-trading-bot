@@ -35,7 +35,9 @@ dated section after deployment.
   the actionable intersection, prevent key levels/trendlines from widening
   entry bands, and compact noisy tags in the owner render.
 - Route on-demand and session-open Market Maps through the dedicated scanner
-  bot (`@apexvoid_trading_bot`) instead of the general signal-management bot.
+  bot instead of the general signal-management bot.
+- Register and poll owner-only `/trade_map` on the dedicated signal bot while
+  retaining the same command on the general bot.
 - `ctrader-feed`: stamp live closed-bar close from the last in-period spot bid,
   with range clamping and an authoritative historical fallback when no spot is
   available; live trendbars without `deltaClose` no longer persist
