@@ -38,6 +38,8 @@ dated section after deployment.
   bot instead of the general signal-management bot.
 - Register and poll owner-only `/trade_map` on the dedicated signal bot while
   retaining the same command on the general bot.
+- Give the dedicated signal bot the same `/start` welcome and public
+  channel/Knowledge Base links as the general bot.
 - `ctrader-feed`: stamp live closed-bar close from the last in-period spot bid,
   with range clamping and an authoritative historical fallback when no spot is
   available; live trendbars without `deltaClose` no longer persist
