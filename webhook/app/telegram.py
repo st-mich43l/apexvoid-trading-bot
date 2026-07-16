@@ -22,6 +22,7 @@ from app.dedup import (
   store_pips,
 )
 from app.keyboards import build_close_kb, build_tp_close_kb, _partial_kb
+from app.market_map_delivery import render_current_market_map
 from app.parsing import (
   _ACTIVE_RE,
   _CANCEL_RE,
@@ -139,6 +140,7 @@ def _sync_legacy_patches() -> None:
   _dm.do_uncclose = do_uncclose
   _dm.post_result = post_result
   _dm.render_result = render_result
+  _dm.render_current_market_map = render_current_market_map
   _dm._is_owner = _is_owner
   _dm._resolve_sid = _resolve_sid
   _dm._resolve_any_sid = _resolve_any_sid
@@ -298,6 +300,11 @@ async def handle_start(msg) -> None:
 async def handle_trade_pips(msg) -> None:
   _sync_legacy_patches()
   return await _dm.handle_trade_pips(msg)
+
+
+async def handle_trade_map(msg) -> None:
+  _sync_legacy_patches()
+  return await _dm.handle_trade_map(msg)
 
 
 async def handle_help(msg) -> None:

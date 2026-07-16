@@ -117,6 +117,11 @@ class Settings(BaseSettings):
   breakout_buffer_atr: float = 0.1
   breakout_accept_bars: int = 2
   breakout_max_age_bars: int = 6
+  map_max_per_side: int = 4
+  map_major_score: float = 12.0
+  map_max_touches: int = 2
+  map_change_min: float = 1.0
+  map_session_send: bool = True
   allow_counter_trend: bool = True
   counter_min_zone_score: float = 10.0
   counter_extreme_pd: float = 0.25

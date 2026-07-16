@@ -6,7 +6,7 @@ from typing import Callable, Protocol
 
 import pandas as pd
 
-from app.analysis import AnalysisSettings, Regime, analyze
+from app.analysis import AnalysisContext, AnalysisSettings, Regime, analyze
 from app.indicators import atr as atr_indicator
 from app.pa_types import DealingRange, Grab, Pool, SessionLevel
 from app.regime import BoxBreak, displacement_grade
@@ -156,6 +156,7 @@ class DetectionContext:
   spot_ts: int | None = None
   trigger_ts: str | None = None
   regime: Regime | None = None
+  analysis: AnalysisContext | None = None
 
 
 @dataclass(frozen=True)
@@ -197,6 +198,7 @@ def build_context(
     htf_bias=analysis_ctx.htf_bias,
     settings=settings,
     regime=_exec_regime(analysis_ctx, tf),
+    analysis=analysis_ctx,
   )
 
 
