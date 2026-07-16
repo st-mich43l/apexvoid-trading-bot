@@ -48,7 +48,7 @@ async def test_scoped_command_menu(monkeypatch):
     "trade_active", "trade_close", "trade_uncclose", "trade_tp",
     "trade_sl", "trade_cancel", "trade_delete",
     "trade_reopen", "trade_tag", "trade_note", "trade_review",
-    "trade_stats", "trade_pips", "help",
+    "trade_map", "trade_stats", "trade_pips", "help",
   } | {"trade_open"}
 
 
@@ -67,6 +67,22 @@ async def test_start_welcomes_public_users(monkeypatch):
   assert "@apexvoidtrading" in out
   assert "https://t.me/apexvoidtrading" in out
   assert "trading.apexvoid.net" in out
+
+
+@pytest.mark.asyncio
+async def test_trade_map_is_owner_gated_and_returns_current_board(monkeypatch):
+  monkeypatch.setattr(telegram.settings, "telegram_owner_id", 42)
+  render = AsyncMock(return_value="<pre>XAU Market Map</pre>")
+  monkeypatch.setattr(telegram, "render_current_market_map", render)
+  owner = _dm("/trade_map XAU")
+  stranger = _dm("/trade_map XAU", user_id=999)
+
+  await telegram.handle_trade_map(owner)
+  await telegram.handle_trade_map(stranger)
+
+  render.assert_awaited_once_with("XAU")
+  owner.answer.assert_awaited_once_with("<pre>XAU Market Map</pre>")
+  stranger.answer.assert_not_awaited()
 
 
 @pytest.mark.asyncio

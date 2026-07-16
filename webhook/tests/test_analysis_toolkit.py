@@ -602,6 +602,7 @@ def test_analysis_modules_have_no_delivery_or_state_imports():
   import app.levels as levels
   import app.liquidity as liquidity
   import app.momentum as momentum_module
+  import app.market_map as market_map
   import app.pa_math as pa_math
   import app.pa_types as pa_types
   import app.regime as regime_module
@@ -623,6 +624,7 @@ def test_analysis_modules_have_no_delivery_or_state_imports():
     levels,
     liquidity,
     momentum_module,
+    market_map,
     pa_math,
     pa_types,
     regime_module,

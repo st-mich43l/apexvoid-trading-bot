@@ -18,6 +18,8 @@ from app.detectors import (
   SetupDetector,
   build_context,
 )
+from app.market_map import MarketMap, build_map, map_reference
+from app.market_map_delivery import cache_analysis
 from app.ohlc_source import RedisOHLCSource
 from app.structure import Zone
 from app.symbols import SYMBOLS, pip_for
@@ -180,6 +182,7 @@ def _format_detection(
   result: DetectionResult,
   htf_order: list[str],
   also: list[DetectionResult] | None = None,
+  market_map: MarketMap | None = None,
 ) -> str:
   stars = "⭐" * max(1, min(3, int(result.confluence)))
   extra_reasons = [
@@ -211,6 +214,15 @@ def _format_detection(
   regime_line = _regime_line(symbol, tf, ctx)
   if regime_line:
     lines.append(regime_line)
+  if market_map is not None:
+    reference = map_reference(
+      market_map,
+      result.direction,
+      result.entry_zone.low,
+      result.entry_zone.high,
+    )
+    if reference:
+      lines.append(escape(reference))
   lines.append(f"HTF bias: {escape(_htf_bias_text(ctx, htf_order))}{reason_suffix}")
   for extra in also or []:
     extra_stars = "⭐" * max(1, min(3, int(extra.confluence)))
@@ -412,6 +424,7 @@ async def _notify_digest_once(
   results: list[DetectionResult],
   notify: NotifyFn,
   htf_order: list[str],
+  market_map: MarketMap | None = None,
 ) -> list[DetectionResult]:
   if not results:
     return []
@@ -450,7 +463,15 @@ async def _notify_digest_once(
     return []
   await client.set(band_key, "1", ex=settings.zone_alert_ttl)
   await notify(
-    _format_detection(symbol, tf, ctx, claimed_results[0], htf_order, claimed_results[1:]),
+    _format_detection(
+      symbol,
+      tf,
+      ctx,
+      claimed_results[0],
+      htf_order,
+      claimed_results[1:],
+      market_map,
+    ),
     chat_id=settings.telegram_owner_id,
   )
   return claimed_results
@@ -466,7 +487,13 @@ async def _record_status(
   detected: list[DetectionResult],
   sent: list[DetectionResult],
   status: str,
+  market_map: MarketMap | None = None,
 ) -> None:
+  map_counts = {
+    "buys": len(market_map.buys) if market_map is not None else 0,
+    "sells": len(market_map.sells) if market_map is not None else 0,
+    "majors": len(market_map.majors) if market_map is not None else 0,
+  }
   payload = {
     "status": status,
     "symbol": symbol,
@@ -495,10 +522,51 @@ async def _record_status(
       for item in detected
     ],
     "sent": len(sent),
+    "map": map_counts,
+    "map_summary": (
+      f"map: buys={map_counts['buys']} sells={map_counts['sells']} "
+      f"majors={map_counts['majors']}"
+    ),
   }
   encoded = json.dumps(payload, separators=(",", ":"), sort_keys=True)
   await client.set("scanner:last_tick", encoded)
   await client.set(f"scanner:last_tick:{symbol}:{tf}", encoded)
+
+
+async def _load_market_context_for_symbol(
+  symbol: str,
+  *,
+  source: RedisOHLCSource | None = None,
+  client: Any | None = None,
+  event_ts: str | None = None,
+) -> tuple[DetectionContext | None, dict[str, Any]]:
+  symbol = symbol.upper()
+  client = client or redis_state.get_client()
+  source = source or RedisOHLCSource(client)
+  exec_tf = settings.scanner_exec_tf.upper()
+  htf_order = _htf_tfs()
+  spot = await _load_spot_snapshot(client, symbol)
+  frames = await _load_frames(source, symbol, exec_tf, htf_order)
+  if exec_tf not in frames:
+    return None, frames
+  trigger = event_ts or str(frames[exec_tf].index[-1])
+  ctx = build_context(
+    symbol,
+    exec_tf,
+    frames,
+    _detector_settings(),
+    htf_order,
+  )
+  ctx = _attach_price_context(ctx, spot, trigger, frames[exec_tf])
+  analysis = getattr(ctx, "analysis", None)
+  if analysis is not None:
+    price = (
+      float(ctx.spot_price)
+      if getattr(ctx, "spot_price", None) is not None
+      else float(frames[exec_tf]["close"].iloc[-1])
+    )
+    cache_analysis(symbol, analysis, price, frames[exec_tf].index[-1])
+  return ctx, frames
 
 
 async def _handle_event(
@@ -518,12 +586,15 @@ async def _handle_event(
     return []
 
   client = client or redis_state.get_client()
-  source = source or RedisOHLCSource(client)
   notify = notify or send_scanner_with_retry
   htf_order = _htf_tfs()
-  spot = await _load_spot_snapshot(client, symbol)
-  frames = await _load_frames(source, symbol, exec_tf, htf_order)
-  if exec_tf not in frames:
+  ctx, frames = await _load_market_context_for_symbol(
+    symbol,
+    source=source,
+    client=client,
+    event_ts=event_ts,
+  )
+  if ctx is None:
     await _record_status(
       client,
       symbol=symbol,
@@ -536,14 +607,15 @@ async def _handle_event(
     )
     return []
 
-  ctx = build_context(
-    symbol,
-    exec_tf,
-    frames,
-    _detector_settings(),
-    htf_order,
-  )
-  ctx = _attach_price_context(ctx, spot, event_ts, frames[exec_tf])
+  analysis = getattr(ctx, "analysis", None)
+  current_map = None
+  if analysis is not None:
+    price = (
+      float(ctx.spot_price)
+      if getattr(ctx, "spot_price", None) is not None
+      else float(frames[exec_tf]["close"].iloc[-1])
+    )
+    current_map = build_map(analysis, price, settings)
   detected = []
   for detector in detectors or DEFAULT_DETECTORS:
     result = detector(ctx)
@@ -559,6 +631,7 @@ async def _handle_event(
     digest,
     notify,
     htf_order,
+    current_map,
   )
   await _record_status(
     client,
@@ -569,6 +642,7 @@ async def _handle_event(
     detected=detected,
     sent=sent,
     status="ok",
+    market_map=current_map,
   )
   return sent
 

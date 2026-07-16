@@ -10,6 +10,7 @@ from aiogram.types import Message
 
 from app.chart_analysis import analyse_chart_image
 from app.config import settings
+from app.market_map_delivery import render_current_market_map
 from app.dedup import (
   get_all_signals,
   get_manual_signal,
@@ -81,6 +82,7 @@ _HELP_TEXT = """<b>Trade controls</b>
 <code>/trade_tag [SYMBOL] #id &lt;setup&gt; [***]</code>
 <code>/trade_note [SYMBOL] #id &lt;text&gt;</code>
 <code>/trade_review [SYMBOL] #id</code>
+<code>/trade_map [SYMBOL]</code>
 <code>/trade_stats [SYMBOL] [today|week|month]</code>
 <code>/trade_pips [SYMBOL] [today|yesterday|week|last week]</code>"""
 
@@ -200,6 +202,21 @@ async def handle_trade_pips(msg: Message) -> None:
     f"{net_icon} Net:    <b>{net_sign}{s['net']} pips</b>",
   ]
   await msg.answer("\n".join(lines))
+
+
+@router.message(Command("trade_map"), F.chat.type == "private")
+async def handle_trade_map(msg: Message) -> None:
+  if not _is_owner(msg):
+    return
+  symbol, remainder = _take_symbol(_command_args(msg))
+  if symbol is None or remainder:
+    await msg.answer("Usage: <code>/trade_map [SYMBOL]</code>")
+    return
+  text = await render_current_market_map(symbol)
+  if text is None:
+    await msg.answer("⚠️ Market Map unavailable: waiting for complete feed windows.")
+    return
+  await msg.answer(text)
 
 
 @router.message(Command("help"), F.chat.type == "private")

@@ -22,6 +22,12 @@ dated section after deployment.
   scoring.
 - Added trendline, coil-contraction, breakout-buffer, acceptance-bar, and
   breakout-age configuration knobs.
+- Added the two-sided Market Map assembler and monospace renderer, with scored
+  zone tiers, bare levels, trendlines, breakout-retest pivots, human rounding,
+  display merging, and per-side caps.
+- Added owner-only `/trade_map`, guarded session-open Market Map DMs, scanner
+  alert map references, gate-report map counts, and Market Map configuration
+  knobs.
 
 ### Fixed
 

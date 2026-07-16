@@ -2,13 +2,14 @@ import json
 import logging
 from datetime import datetime, timezone
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pandas as pd
 import pytest
 
 from app.analysis import Regime
 from app import broadcast, dedup, redis_state, scanner
+from app.market_map import MapEntry, MarketMap
 from app.ohlc_source import RedisOHLCSource
 from app.structure import Zone
 
@@ -276,6 +277,125 @@ async def test_scanner_records_analysis_status_without_owner(monkeypatch):
     "score_reasons": [],
   }
   assert status["sent"] == 0
+  assert status["map"] == {"buys": 0, "sells": 0, "majors": 0}
+
+
+@pytest.mark.asyncio
+async def test_gate_status_records_market_map_counts():
+  client = redis_state.get_client()
+  market_map = MarketMap(
+    [
+      MapEntry("buy", 4025, 4028, 4025, 4028, "major", ["demand"], 13),
+      MapEntry("buy", 4035, 4038, 4035, 4038, "zone", ["OB"], 9),
+      MapEntry("sell", 4063, 4066, 4063, 4066, "zone", ["supply"], 8),
+    ],
+    4041,
+    4047,
+    4032,
+    4062,
+    "down",
+    "M30",
+  )
+
+  await scanner._record_status(
+    client,
+    symbol="XAU",
+    tf="M5",
+    event_ts="map-counts",
+    frames={"M5": _frame()},
+    detected=[],
+    sent=[],
+    status="ok",
+    market_map=market_map,
+  )
+
+  payload = json.loads(await client.get("scanner:last_tick:XAU:M5"))
+  assert payload["map"] == {"buys": 2, "sells": 1, "majors": 1}
+  assert payload["map_summary"] == "map: buys=2 sells=1 majors=1"
+
+
+@pytest.mark.asyncio
+async def test_scanner_caches_analysis_context_for_market_map(monkeypatch):
+  client = redis_state.get_client()
+  marker = object()
+  cached = Mock()
+  monkeypatch.setattr(scanner.settings, "scanner_exec_tf", "M5")
+  monkeypatch.setattr(scanner.settings, "scanner_htf", "M30,M15")
+  monkeypatch.setattr(scanner.settings, "scanner_window", 500)
+  monkeypatch.setattr(
+    scanner,
+    "build_context",
+    lambda symbol, tf, frames, settings, htf_order: SimpleNamespace(
+      analysis=marker,
+      spot_price=None,
+      spot_ts=None,
+      trigger_ts=None,
+    ),
+  )
+  monkeypatch.setattr(scanner, "cache_analysis", cached)
+
+  ctx, frames = await scanner._load_market_context_for_symbol(
+    "XAU",
+    source=StaticSource(),
+    client=client,
+    event_ts="cache-test",
+  )
+
+  assert ctx is not None
+  assert set(frames) == {"M5", "M30", "M15"}
+  cached.assert_called_once_with("XAU", marker, 4100.5, frames["M5"].index[-1])
+
+
+def test_scanner_alert_references_containing_market_map_entry():
+  result = scanner.DetectionResult(
+    "Break & Retest",
+    "SELL",
+    4063,
+    Zone(4063.5, 4065.5, "supply"),
+    4060,
+    2,
+    ["HTF bias down"],
+  )
+  market_map = MarketMap(
+    [
+      MapEntry(
+        "sell",
+        4063,
+        4066,
+        4063,
+        4066,
+        "zone",
+        ["supply", "flip"],
+        10,
+      ),
+    ],
+    4041,
+    4047,
+    4032,
+    4062,
+    "down",
+    "M30",
+  )
+  ctx = SimpleNamespace(
+    tf="M5",
+    htf_bias="down",
+    structures={"M30": SimpleNamespace(bias="down")},
+    frames={"M5": _frame()},
+    regime=None,
+    spot_price=4060,
+    trigger_ts="2026-07-16T08:45:00Z",
+  )
+
+  text = scanner._format_detection(
+    "XAU",
+    "M5",
+    ctx,
+    result,
+    ["M30"],
+    market_map=market_map,
+  )
+
+  assert "map: SELL 4,063–4,066 (supply·flip)" in text
 
 
 @pytest.mark.asyncio
