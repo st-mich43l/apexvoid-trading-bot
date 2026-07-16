@@ -120,6 +120,9 @@ class Settings(BaseSettings):
   map_max_per_side: int = 4
   map_major_score: float = 12.0
   map_max_touches: int = 2
+  map_min_zone_score: float = 6.0
+  map_min_level_touches: int = 4
+  map_max_distance_atr: float = 15.0
   map_change_min: float = 1.0
   map_session_send: bool = True
   allow_counter_trend: bool = True

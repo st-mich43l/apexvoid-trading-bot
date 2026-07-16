@@ -72,16 +72,18 @@ async def test_start_welcomes_public_users(monkeypatch):
 @pytest.mark.asyncio
 async def test_trade_map_is_owner_gated_and_returns_current_board(monkeypatch):
   monkeypatch.setattr(telegram.settings, "telegram_owner_id", 42)
-  render = AsyncMock(return_value="<pre>XAU Market Map</pre>")
-  monkeypatch.setattr(telegram, "render_current_market_map", render)
+  send = AsyncMock(return_value=True)
+  monkeypatch.setattr(telegram, "send_current_market_map", send)
   owner = _dm("/trade_map XAU")
   stranger = _dm("/trade_map XAU", user_id=999)
 
   await telegram.handle_trade_map(owner)
   await telegram.handle_trade_map(stranger)
 
-  render.assert_awaited_once_with("XAU")
-  owner.answer.assert_awaited_once_with("<pre>XAU Market Map</pre>")
+  send.assert_awaited_once_with("XAU")
+  owner.answer.assert_awaited_once_with(
+    "✅ Market Map sent via the dedicated signal bot."
+  )
   stranger.answer.assert_not_awaited()
 
 

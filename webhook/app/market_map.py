@@ -14,8 +14,12 @@ from app.trendlines import value_at
 MAP_MAX_PER_SIDE = 4
 MAP_MAJOR_SCORE = 12.0
 MAP_MAX_TOUCHES = 2
+MAP_MIN_ZONE_SCORE = 6.0
+MAP_MIN_LEVEL_TOUCHES = 4
+MAP_MAX_DISTANCE_ATR = 15.0
 MAP_CHANGE_MIN = 1.0
 SESSION_BAND_ATR = 0.1
+MAP_TAG_LIMIT = 3
 _TIER_RANK = {"level": 1, "zone": 2, "major": 3}
 _MAJOR_SESSION_LEVELS = {"PDH", "PDL", "PWH", "PWL"}
 
@@ -59,34 +63,59 @@ def build_map(ctx_or_per_tf, price: float, cfg) -> MarketMap:
   per_tf = getattr(ctx_or_per_tf, "per_tf", ctx_or_per_tf)
   if not isinstance(per_tf, dict):
     per_tf = {}
-  candidates: list[MapEntry] = []
+  zone_candidates: list[MapEntry] = []
+  level_candidates: list[MapEntry] = []
+  trendline_candidates: list[MapEntry] = []
   major_score = float(getattr(cfg, "map_major_score", MAP_MAJOR_SCORE))
   max_touches = max(1, int(getattr(cfg, "map_max_touches", MAP_MAX_TOUCHES)))
+  min_zone_score = max(
+    0.0,
+    float(getattr(cfg, "map_min_zone_score", MAP_MIN_ZONE_SCORE)),
+  )
+  min_level_touches = max(
+    3,
+    int(getattr(cfg, "map_min_level_touches", MAP_MIN_LEVEL_TOUCHES)),
+  )
+  reference_atr = _reference_atr(per_tf)
+  max_distance = (
+    max(0.0, float(getattr(cfg, "map_max_distance_atr", MAP_MAX_DISTANCE_ATR)))
+    * reference_atr
+    if reference_atr > 0
+    else math.inf
+  )
+  proximal_band = (
+    max(0.0, float(getattr(cfg, "proximal_band_atr", 0.5)))
+    * reference_atr
+  )
   for tf, item in sorted(per_tf.items(), key=lambda pair: (_tf_rank(pair[0]), pair[0])):
-    atr = atr_scalar(getattr(item, "atr", None))
     session_levels = list(getattr(item, "session_levels", []) or [])
     for zone in getattr(item, "zones", []) or []:
       if int(getattr(zone, "touches", 0)) >= max_touches:
         continue
-      entry = _zone_entry(zone, tf, per_tf, session_levels, price, major_score)
-      if entry is not None:
-        candidates.append(entry)
-    for level in getattr(item, "key_levels", []) or []:
-      if int(getattr(level, "touches", 0)) < 3:
+      if float(getattr(zone, "score", 0.0)) < min_zone_score:
         continue
-      candidates.extend(_level_entry(
+      entry = _zone_entry(zone, tf, per_tf, session_levels, price, major_score)
+      if entry is not None and _within_distance(entry, price, max_distance):
+        zone_candidates.append(entry)
+    for level in getattr(item, "key_levels", []) or []:
+      if int(getattr(level, "touches", 0)) < min_level_touches:
+        continue
+      band = max(0.0, float(getattr(level, "band", 0.0)))
+      if proximal_band > 0:
+        band = min(band, proximal_band)
+      level_candidates.extend(_nearby_entries(_level_entry(
         float(level.price),
-        max(0.0, float(getattr(level, "band", 0.0))),
+        band,
         price,
         f"support ×{level.touches}",
         f"resistance ×{level.touches}",
         float(getattr(level, "strength", level.touches)),
-      ))
-    session_band = max(0.0, SESSION_BAND_ATR * atr)
+      ), price, max_distance))
+    session_band = max(0.0, SESSION_BAND_ATR * reference_atr)
     for level in session_levels:
       if bool(getattr(level, "swept", False)):
         continue
-      candidates.extend(_level_entry(
+      level_candidates.extend(_nearby_entries(_level_entry(
         float(level.price),
         session_band,
         price,
@@ -94,26 +123,22 @@ def build_map(ctx_or_per_tf, price: float, cfg) -> MarketMap:
         str(level.name),
         major_score if level.name in _MAJOR_SESSION_LEVELS else 4.0,
         major=level.name in _MAJOR_SESSION_LEVELS,
-      ))
+      ), price, max_distance))
     current_bar = max(0, len(getattr(item, "df", [])) - 1)
-    trendline_band = max(
-      0.0,
-      float(getattr(cfg, "proximal_band_atr", 0.5)) * atr,
-    )
     for line in getattr(item, "trendlines", []) or []:
       if line.broken:
         continue
       line_price = value_at(line, current_bar)
-      candidates.extend(_level_entry(
+      trendline_candidates.extend(_nearby_entries(_level_entry(
         line_price,
-        trendline_band,
+        proximal_band,
         price,
         f"TL support ×{line.touches}",
         f"TL resistance ×{line.touches}",
         float(line.touches),
         support=line.kind == "support",
         resistance=line.kind == "resistance",
-      ))
+      ), price, max_distance))
     box_break = getattr(item, "box_break", None)
     if box_break is not None:
       edge = (
@@ -121,9 +146,9 @@ def build_map(ctx_or_per_tf, price: float, cfg) -> MarketMap:
         if box_break.direction == "up"
         else float(box_break.box_low)
       )
-      candidates.extend(_level_entry(
+      zone_candidates.extend(_nearby_entries(_level_entry(
         edge,
-        trendline_band,
+        proximal_band,
         price,
         "breakout-retest",
         "breakout-retest",
@@ -131,14 +156,18 @@ def build_map(ctx_or_per_tf, price: float, cfg) -> MarketMap:
         tier="zone",
         support=box_break.direction == "up",
         resistance=box_break.direction == "down",
-      ))
+      ), price, max_distance))
 
-  merged = _merge_display_entries(candidates)
+  zones = _merge_display_entries(zone_candidates)
+  levels = _merge_display_entries(level_candidates)
+  zones, levels = _attach_confluence(zones, levels)
+  entries = [*zones, *levels]
+  entries, _ = _attach_confluence(entries, trendline_candidates)
   capped: list[MapEntry] = []
   max_per_side = max(1, int(getattr(cfg, "map_max_per_side", MAP_MAX_PER_SIDE)))
   for side in ("sell", "buy"):
     ranked = sorted(
-      (entry for entry in merged if entry.side == side),
+      (entry for entry in entries if entry.side == side),
       key=lambda entry: (
         -_TIER_RANK[entry.tier],
         -entry.score,
@@ -209,7 +238,7 @@ def map_reference(
   if not matches:
     return None
   entry = min(matches, key=lambda item: (_distance(item, (lo + hi) / 2), -item.score))
-  tags = "·".join(entry.tags[:3])
+  tags = "·".join(_compact_tags(entry.tags, 2))
   return (
     f"map: {side.upper()} {_format_band(entry.label_lo, entry.label_hi)}"
     f" ({tags})"
@@ -416,29 +445,95 @@ def _rounded_band(lo: float, hi: float) -> tuple[int, int]:
 
 
 def _merge_display_entries(entries: list[MapEntry]) -> list[MapEntry]:
+  """Collapse only genuine confluence and keep the actionable intersection."""
   merged: list[MapEntry] = []
   for side in ("buy", "sell"):
     ordered = sorted(
       (entry for entry in entries if entry.side == side),
-      key=lambda entry: (entry.label_lo, entry.label_hi, -entry.score),
+      key=lambda entry: (entry.lo, entry.hi, -entry.score),
     )
     for entry in ordered:
-      if not merged or merged[-1].side != side or not _label_overlap(merged[-1], entry):
+      if (
+        not merged
+        or merged[-1].side != side
+        or not _bands_overlap(merged[-1].lo, merged[-1].hi, entry.lo, entry.hi)
+      ):
         merged.append(entry)
         continue
       previous = merged[-1]
       tier = max((previous.tier, entry.tier), key=lambda item: _TIER_RANK[item])
-      merged[-1] = MapEntry(
-        side=side,
-        lo=min(previous.lo, entry.lo),
-        hi=max(previous.hi, entry.hi),
-        label_lo=min(previous.label_lo, entry.label_lo),
-        label_hi=max(previous.label_hi, entry.label_hi),
-        tier=tier,
-        tags=_unique([*previous.tags, *entry.tags]),
-        score=max(previous.score, entry.score),
+      merged[-1] = _entry(
+        side,
+        max(previous.lo, entry.lo),
+        min(previous.hi, entry.hi),
+        tier,
+        [*previous.tags, *entry.tags],
+        max(previous.score, entry.score),
       )
   return merged
+
+
+def _attach_confluence(
+  entries: list[MapEntry],
+  references: list[MapEntry],
+) -> tuple[list[MapEntry], list[MapEntry]]:
+  attached = list(entries)
+  unmatched: list[MapEntry] = []
+  for reference in references:
+    matches = [
+      index for index, entry in enumerate(attached)
+      if entry.side == reference.side
+      and _bands_overlap(entry.lo, entry.hi, reference.lo, reference.hi)
+    ]
+    if not matches:
+      unmatched.append(reference)
+      continue
+    center = (reference.lo + reference.hi) / 2
+    index = min(matches, key=lambda item: _distance(attached[item], center))
+    entry = attached[index]
+    tier = max((entry.tier, reference.tier), key=lambda item: _TIER_RANK[item])
+    attached[index] = _entry(
+      entry.side,
+      entry.lo,
+      entry.hi,
+      tier,
+      [*entry.tags, *reference.tags],
+      max(entry.score, reference.score),
+    )
+  return attached, unmatched
+
+
+def _nearby_entries(
+  entries: list[MapEntry],
+  price: float,
+  max_distance: float,
+) -> list[MapEntry]:
+  return [
+    entry for entry in entries
+    if _within_distance(entry, price, max_distance)
+  ]
+
+
+def _within_distance(entry: MapEntry, price: float, max_distance: float) -> bool:
+  return (
+    math.isfinite(entry.lo)
+    and math.isfinite(entry.hi)
+    and _distance(entry, price) <= max_distance
+    and entry.hi - entry.lo <= max_distance
+  )
+
+
+def _reference_atr(per_tf: dict) -> float:
+  for _, item in sorted(per_tf.items(), key=lambda pair: (_tf_rank(pair[0]), pair[0])):
+    atr = getattr(item, "atr", None)
+    if hasattr(atr, "dropna"):
+      clean = atr.dropna()
+      value = float(clean.iloc[-1]) if not clean.empty else 0.0
+    else:
+      value = atr_scalar(atr, fallback=0.0)
+    if math.isfinite(value) and value > 0:
+      return value
+  return 0.0
 
 
 def _render_side(entries: list[MapEntry], price: float) -> list[str]:
@@ -448,14 +543,73 @@ def _render_side(entries: list[MapEntry], price: float) -> list[str]:
   lines = []
   for index, entry in enumerate(ordered):
     branch = "└" if index == len(ordered) - 1 else "├"
-    tags = " · ".join(entry.tags)
-    if entry.tier == "major":
-      tags = f"MAJOR {tags}"
+    details = " · ".join(_compact_tags(entry.tags, MAP_TAG_LIMIT))
+    tags = entry.tier.upper()
+    if details:
+      tags += f" · {details}"
     suffix = " ⭐" if "breakout-retest" in entry.tags else ""
     lines.append(
       f"{branch} {_format_band(entry.label_lo, entry.label_hi)}  {tags}{suffix}"
     )
   return lines
+
+
+def _compact_tags(tags: list[str], limit: int) -> list[str]:
+  strongest: dict[str, tuple[int, str]] = {}
+  regular: list[str] = []
+  for tag in _unique(tags):
+    group = _touch_group(tag)
+    if group is None:
+      regular.append(tag)
+      continue
+    touches = _touch_count(tag)
+    if group not in strongest or touches > strongest[group][0]:
+      strongest[group] = (touches, tag)
+  regular.extend(value[1] for value in strongest.values())
+  ordered = sorted(
+    enumerate(regular),
+    key=lambda item: (_tag_priority(item[1]), item[0]),
+  )
+  return [tag for _, tag in ordered[:max(0, limit)]]
+
+
+def _touch_group(tag: str) -> str | None:
+  prefixes = (
+    "TL support ×",
+    "TL resistance ×",
+    "support ×",
+    "resistance ×",
+  )
+  return next((prefix for prefix in prefixes if tag.startswith(prefix)), None)
+
+
+def _touch_count(tag: str) -> int:
+  try:
+    return int(tag.rsplit("×", 1)[1])
+  except (IndexError, ValueError):
+    return 0
+
+
+def _tag_priority(tag: str) -> int:
+  if tag in {"OB", "demand", "supply"}:
+    return 0
+  if tag in {"flip", "breaker", "breakout-retest"}:
+    return 1
+  if tag in _MAJOR_SESSION_LEVELS:
+    return 2
+  if tag.startswith("HTF"):
+    return 3
+  if tag == "fresh":
+    return 4
+  if tag.startswith("sweep"):
+    return 5
+  if tag == "FVG":
+    return 6
+  if tag.endswith(("_H", "_L")):
+    return 7
+  if tag.startswith("TL "):
+    return 8
+  return 9
 
 
 def _session_context(now: datetime, cfg) -> str:
@@ -502,10 +656,6 @@ def _distance(entry: MapEntry, price: float) -> float:
   if entry.lo <= price <= entry.hi:
     return 0.0
   return min(abs(price - entry.lo), abs(price - entry.hi))
-
-
-def _label_overlap(first: MapEntry, second: MapEntry) -> bool:
-  return first.label_lo <= second.label_hi and second.label_lo <= first.label_hi
 
 
 def _bands_overlap(first_lo: float, first_hi: float, lo: float, hi: float) -> bool:

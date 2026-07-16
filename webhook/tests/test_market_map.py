@@ -23,6 +23,9 @@ def _cfg(**overrides):
     "map_max_per_side": 4,
     "map_major_score": 12.0,
     "map_max_touches": 2,
+    "map_min_zone_score": 6.0,
+    "map_min_level_touches": 4,
+    "map_max_distance_atr": 15.0,
     "map_change_min": 1.0,
     "proximal_band_atr": 0.5,
     "session_asia_start": 22,
@@ -127,9 +130,10 @@ def test_map_keeps_unswept_sessions_and_unbroken_trendlines_only():
     Trendline("support", (0, 1, 2), 0.0, 4035, 3, False, None),
     Trendline("resistance", (0, 1, 2), 0.0, 4065, 3, True, 3),
   ]
+  zones = [Zone(4034.5, 4036, "demand", source="supply_demand", score=8)]
 
   market_map = build_map(
-    _ctx({"M5": _item(sessions=sessions, trendlines=lines)}),
+    _ctx({"M5": _item(zones, sessions=sessions, trendlines=lines)}),
     4041,
     _cfg(),
   )
@@ -143,7 +147,7 @@ def test_map_keeps_unswept_sessions_and_unbroken_trendlines_only():
   assert all("TL resistance ×3" not in entry.tags for entry in market_map.entries)
 
 
-def test_overlapping_rounded_bands_merge_tags_and_higher_tier():
+def test_overlapping_zones_keep_confluent_intersection_and_higher_tier():
   zones = [
     Zone(4063.2, 4065.1, "supply", source="supply_demand", score=8),
     Zone(
@@ -162,7 +166,59 @@ def test_overlapping_rounded_bands_merge_tags_and_higher_tier():
   merged = market_map.sells[0]
   assert merged.tier == "major"
   assert {"supply", "flip", "breakout-retest"} <= set(merged.tags)
-  assert (merged.label_lo, merged.label_hi) == (4063, 4067)
+  assert (merged.label_lo, merged.label_hi) == (4065, 4066)
+
+
+def test_map_drops_weak_and_far_zones():
+  zones = [
+    Zone(4045, 4048, "supply", source="supply_demand", score=8),
+    Zone(4050, 4052, "supply", source="supply_demand", score=5),
+    Zone(4190, 4194, "supply", source="supply_demand", score=20),
+  ]
+
+  market_map = build_map(_ctx({"M5": _item(zones)}), 4033, _cfg())
+
+  assert [(entry.lo, entry.hi) for entry in market_map.sells] == [(4045, 4048)]
+
+
+def test_distance_gate_uses_current_atr_not_old_window_median():
+  item = _item([
+    Zone(4075, 4078, "supply", source="supply_demand", score=10),
+  ])
+  item.atr = pd.Series([10.0, 10.0, 2.0])
+
+  market_map = build_map(_ctx({"M5": item}), 4033, _cfg())
+
+  assert market_map.sells == []
+
+
+def test_transitive_overlap_does_not_create_an_oversized_zone():
+  zones = [
+    Zone(4040, 4050, "supply", source="supply_demand", score=8),
+    Zone(4048, 4060, "supply", source="order_block", score=9),
+    Zone(4058, 4070, "supply", source="flip_zone", score=10),
+  ]
+
+  market_map = build_map(_ctx({"M5": _item(zones)}), 4033, _cfg())
+
+  assert len(market_map.sells) == 2
+  assert max(entry.hi - entry.lo for entry in market_map.sells) <= 12
+  assert all((entry.lo, entry.hi) != (4040, 4070) for entry in market_map.sells)
+
+
+def test_key_level_adds_confluence_without_widening_entry_zone():
+  zones = [Zone(4048, 4051, "supply", source="order_block", score=9)]
+  levels = [Level(4050, "reaction", touches=8, band=10, strength=8)]
+
+  market_map = build_map(
+    _ctx({"M5": _item(zones, levels=levels)}),
+    4033,
+    _cfg(),
+  )
+
+  entry = market_map.sells[0]
+  assert (entry.lo, entry.hi) == (4048, 4051)
+  assert "resistance ×8" in entry.tags
 
 
 def test_cap_selects_major_then_score_before_proximity():
@@ -174,7 +230,7 @@ def test_cap_selects_major_then_score_before_proximity():
   market_map = build_map(
     _ctx({"M5": _item(zones)}, bias="up"),
     4041,
-    _cfg(map_max_per_side=4),
+    _cfg(map_max_per_side=4, map_max_distance_atr=25),
   )
 
   assert len(market_map.buys) == 4
@@ -197,6 +253,7 @@ def test_render_payload_and_material_change_are_deterministic():
   assert "<pre>" in text
   assert "XAU Market Map" in text
   assert "4,025–4,028" in text
+  assert "ZONE · OB · fresh" in text
   assert restored == market_map
   assert not map_materially_changed(market_map, restored, 1.0)
   moved_small = replace(
@@ -234,9 +291,47 @@ def test_operator_example_replay_builds_tiered_board():
     ),
   ], structure="down")
 
-  market_map = build_map(_ctx({"M5": m5, "M30": m30}), 4041, _cfg())
+  market_map = build_map(
+    _ctx({"M5": m5, "M30": m30}),
+    4041,
+    _cfg(map_max_distance_atr=20),
+  )
 
   assert len(market_map.buys) >= 2
   assert len(market_map.sells) >= 2
   assert any("breakout-retest" in entry.tags for entry in market_map.sells)
   assert any(entry.tier == "major" for entry in market_map.buys)
+
+
+def test_render_compacts_production_style_tag_inflation():
+  entry = MapEntry(
+    "sell",
+    4048,
+    4051,
+    4048,
+    4051,
+    "major",
+    [
+      "resistance ×4",
+      "resistance ×17",
+      "OB",
+      "FVG",
+      "flip",
+      "supply",
+      "PDH",
+      "HTF M30",
+    ],
+    21,
+  )
+  market_map = MarketMap([entry], 4033, 4032, 4028, 4036, "down", "M30")
+
+  text = render_market_map(
+    market_map,
+    "XAU",
+    datetime(2026, 7, 16, 11, 8, tzinfo=timezone.utc),
+    _cfg(),
+  )
+
+  assert "MAJOR · OB · supply · flip" in text
+  assert "resistance ×17" not in text
+  assert "HTF M30" not in text

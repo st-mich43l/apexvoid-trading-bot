@@ -45,7 +45,7 @@ async def test_session_map_sends_once_per_key_and_skips_unchanged_next_session(
   monkeypatch.setattr(market_map_delivery, "get_meta", get_meta)
   monkeypatch.setattr(market_map_delivery, "set_meta", set_meta)
   monkeypatch.setattr(market_map_delivery, "get_current_market_map", get_map)
-  monkeypatch.setattr(market_map_delivery, "send_with_retry", sent)
+  monkeypatch.setattr(market_map_delivery, "send_scanner_with_retry", sent)
 
   london = datetime(2026, 7, 16, 7, 5, tzinfo=timezone.utc)
   ny = datetime(2026, 7, 16, 13, 5, tzinfo=timezone.utc)
@@ -88,7 +88,7 @@ async def test_session_map_resends_when_band_moves_by_threshold(monkeypatch):
     "get_current_market_map",
     AsyncMock(return_value=current),
   )
-  monkeypatch.setattr(market_map_delivery, "send_with_retry", sent)
+  monkeypatch.setattr(market_map_delivery, "send_scanner_with_retry", sent)
 
   fired = await market_map_delivery._market_map_session_tick(
     datetime(2026, 7, 16, 13, 5, tzinfo=timezone.utc)
@@ -97,6 +97,21 @@ async def test_session_map_resends_when_band_moves_by_threshold(monkeypatch):
   assert fired
   sent.assert_awaited_once()
   assert sent.await_args.kwargs == {"chat_id": 42}
+
+
+@pytest.mark.asyncio
+async def test_on_demand_map_uses_scanner_bot(monkeypatch):
+  sent = AsyncMock()
+  monkeypatch.setattr(market_map_delivery.settings, "telegram_owner_id", 42)
+  monkeypatch.setattr(
+    market_map_delivery,
+    "render_current_market_map",
+    AsyncMock(return_value="<pre>XAU Market Map</pre>"),
+  )
+  monkeypatch.setattr(market_map_delivery, "send_scanner_with_retry", sent)
+
+  assert await market_map_delivery.send_current_market_map("XAU")
+  sent.assert_awaited_once_with("<pre>XAU Market Map</pre>", chat_id=42)
 
 
 def test_session_open_key_uses_latest_configured_open(monkeypatch):
