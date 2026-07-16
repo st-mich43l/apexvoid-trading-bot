@@ -19,7 +19,7 @@ from app.market_map import (
   render_market_map,
 )
 from app.symbols import SYMBOLS
-from app.tg_core import send_with_retry
+from app.tg_core import send_scanner_with_retry
 
 log = logging.getLogger(__name__)
 
@@ -93,6 +93,19 @@ async def render_current_market_map(
   return render_market_map(market_map, symbol, display_now, settings)
 
 
+async def send_current_market_map(
+  symbol: str,
+  now: datetime | None = None,
+) -> bool:
+  if not settings.telegram_owner_id:
+    return False
+  text = await render_current_market_map(symbol, now)
+  if text is None:
+    return False
+  await send_scanner_with_retry(text, chat_id=settings.telegram_owner_id)
+  return True
+
+
 async def _market_map_session_tick(now: datetime | None = None) -> bool:
   if not settings.map_session_send or not settings.telegram_owner_id:
     return False
@@ -118,7 +131,7 @@ async def _market_map_session_tick(now: datetime | None = None) -> bool:
       continue
     display_now = now.astimezone(ZoneInfo(settings.seq_reset_tz))
     text = render_market_map(market_map, symbol, display_now, settings)
-    await send_with_retry(text, chat_id=settings.telegram_owner_id)
+    await send_scanner_with_retry(text, chat_id=settings.telegram_owner_id)
     await set_meta(payload_key, market_map_payload(market_map))
     sent = True
 
