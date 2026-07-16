@@ -10,7 +10,7 @@ from aiogram.types import Message
 
 from app.chart_analysis import analyse_chart_image
 from app.config import settings
-from app.market_map_delivery import render_current_market_map
+from app.market_map_delivery import send_current_market_map
 from app.dedup import (
   get_all_signals,
   get_manual_signal,
@@ -212,11 +212,10 @@ async def handle_trade_map(msg: Message) -> None:
   if symbol is None or remainder:
     await msg.answer("Usage: <code>/trade_map [SYMBOL]</code>")
     return
-  text = await render_current_market_map(symbol)
-  if text is None:
+  if not await send_current_market_map(symbol):
     await msg.answer("⚠️ Market Map unavailable: waiting for complete feed windows.")
     return
-  await msg.answer(text)
+  await msg.answer("✅ Market Map sent via the dedicated signal bot.")
 
 
 @router.message(Command("help"), F.chat.type == "private")
