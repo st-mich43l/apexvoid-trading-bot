@@ -30,8 +30,8 @@ dated section after deployment.
   knobs.
 - Added the Market Map fallback ladder for spent zones, swept session levels,
   and round numbers so both trade sides retain actionable references.
-- Added near-price SCALP rails to Market Map renders and scanner alerts, with
-  controls for radius, tolerance, count, fractal size, and display-band width.
+- Added validated near-price SCALP range-edge rails to Market Map renders and
+  scanner alerts, with a configurable display radius.
 - Added deterministic Range Edge Scalp detection for both sides of local
   ranges, using repeated touch episodes, wick rejection, breakout invalidation,
   edge confirmation, EQ/opposing-edge targets, and shared Market Map rails.
@@ -44,6 +44,9 @@ dated section after deployment.
   of positional arrows, including scanner-alert rail references.
 - Evaluate automatic Market Maps once per configurable 60-minute bucket instead
   of only at session boundaries; materially unchanged boards remain suppressed.
+- Restrict actionable SCALP output to the validated `ScalpRange` support and
+  resistance pair; internal micro swings, round numbers, and standalone
+  trendlines no longer receive misleading `BUY`/`SELL` labels.
 
 ### Fixed
 
