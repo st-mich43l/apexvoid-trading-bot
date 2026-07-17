@@ -3,6 +3,7 @@
 import json
 import logging
 import math
+import re
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from html import escape
@@ -181,7 +182,23 @@ def _htf_bias_text(ctx: DetectionContext, htf_order: list[str]) -> str:
 def _zone_text(zone: Zone, symbol: str, *, grouped: bool = False) -> str:
   return (
     f"{_price_text(zone.low, symbol, grouped=grouped)}"
-    f"-{_price_text(zone.high, symbol, grouped=grouped)}"
+    f"–{_price_text(zone.high, symbol, grouped=grouped)}"
+  )
+
+
+def _copy_draft(symbol: str, result: DetectionResult) -> str | None:
+  """Build an editable one-line command without inventing SL/TP levels."""
+  if symbol.upper() != "XAU":
+    return None
+  setup = re.sub(r"[^a-z0-9]+", "-", result.setup.lower()).strip("-")
+  grade = "*" * max(1, min(3, int(result.confluence)))
+  entry = (
+    f"{_price_text(result.entry_zone.low, symbol)}-"
+    f"{_price_text(result.entry_zone.high, symbol)}"
+  )
+  return (
+    f"gold {result.direction.lower()} entry zone ({entry}) "
+    f"/ sl SL / tp TP1/TP2/TP3 / setup {setup} {grade}"
   )
 
 
@@ -195,37 +212,44 @@ def _format_detection(
   market_map: MarketMap | None = None,
 ) -> str:
   stars = "⭐" * max(1, min(3, int(result.confluence)))
+  direction_icon = "🟢" if result.direction.upper() == "BUY" else "🔴"
   extra_reasons = [
     reason for reason in result.reasons
     if not reason.lower().startswith("htf bias")
   ][:6 if result.setup in {"Box Breakout", "Range Edge Scalp"} else 2]
-  reason_suffix = (
-    " · " + " · ".join(escape(reason) for reason in extra_reasons)
-    if extra_reasons
-    else ""
-  )
   lines = [
-    f"🔎 <b>Setup forming</b> · {escape(symbol)} {escape(tf)}",
+    f"🔎 <b>{escape(symbol)} {escape(tf)} · SETUP FORMING</b>",
     (
-      f"{escape(result.setup)} · <b>{escape(result.direction)}</b> "
-      f"· {stars}"
+      f"{direction_icon} <b>{escape(result.direction)} · "
+      f"{escape(result.setup)}</b> · {stars}"
     ),
   ]
   if result.mode == "range_scalp":
-    lines.append("↔️ <b>RANGE SCALP</b> · two-sided local range")
+    lines.append("↔️ <b>Mode:</b> RANGE SCALP · two-sided local range")
   elif result.mode != "with_trend":
     label = "reaction scalp" if result.mode == "counter_reaction" else "counter swing"
     lines.append(
-      f"⚠️ <b>COUNTER-TREND</b> (bias {escape(ctx.htf_bias)}) · {label}"
+      f"⚠️ <b>Mode:</b> Counter-trend · {label}"
     )
-  lines.append(
-    f"{_price_line(symbol, tf, ctx, result)} "
-    f"· entry <b>{_zone_text(result.entry_zone, symbol, grouped=True)}</b> "
-    f"· key <b>{_price_text(result.key_level, symbol, grouped=True)}</b>"
-  )
+  lines.extend([
+    "",
+    "📍 <b>Trade area</b>",
+    _price_line(symbol, tf, ctx, result),
+    (
+      "• <b>Entry zone:</b> "
+      f"<b>{_zone_text(result.entry_zone, symbol, grouped=True)}</b>"
+    ),
+    (
+      "• <b>Key level:</b> "
+      f"<b>{_price_text(result.key_level, symbol, grouped=True)}</b>"
+    ),
+    "",
+    "🧭 <b>Context</b>",
+    f"• <b>HTF bias:</b> {escape(_htf_bias_text(ctx, htf_order))}",
+  ])
   regime_line = _regime_line(symbol, tf, ctx)
   if regime_line:
-    lines.append(regime_line)
+    lines.append(f"• {regime_line}")
   if market_map is not None:
     reference = map_reference(
       market_map,
@@ -234,24 +258,31 @@ def _format_detection(
       result.entry_zone.high,
     )
     if reference:
-      lines.append(escape(reference))
+      lines.append(f"• {escape(reference)}")
     rail = rail_reference(
       market_map,
       result.entry_zone.low,
       result.entry_zone.high,
     )
     if rail:
-      lines.append(escape(rail))
-  lines.append(f"HTF bias: {escape(_htf_bias_text(ctx, htf_order))}{reason_suffix}")
+      lines.append(f"• {escape(rail)}")
+  lines.extend(f"• {escape(reason)}" for reason in extra_reasons)
   for extra in also or []:
     extra_stars = "⭐" * max(1, min(3, int(extra.confluence)))
     lines.append(
-      "also: "
-      f"{escape(_compact_setup(extra.setup))} "
+      "• <b>Also:</b> "
+      f"{escape(_compact_setup(extra.setup))} · "
       f"{escape(_zone_text(extra.entry_zone, symbol, grouped=True))} "
       f"{extra_stars}"
     )
-  lines.append("→ review & post if it holds")
+  draft = _copy_draft(symbol, result)
+  if draft:
+    lines.extend([
+      "",
+      "📋 <b>Copy draft</b> <i>· fill SL/TP</i>",
+      f"<code>{escape(draft)}</code>",
+    ])
+  lines.append("→ Review confirmation, SL &amp; TP before posting.")
   return "\n".join(lines)
 
 
@@ -271,10 +302,15 @@ def _price_line(
   result: DetectionResult,
 ) -> str:
   if ctx.spot_price is not None:
-    return f"Price now <b>{_price_text(result.current_price, symbol, grouped=True)}</b> (live)"
+    return (
+      "• <b>Price now:</b> "
+      f"<b>{_price_text(result.current_price, symbol, grouped=True)}</b> "
+      "<i>(live)</i>"
+    )
   return (
-    f"Price <b>{_price_text(result.current_price, symbol, grouped=True)}</b> "
-    f"({tf.upper()} close {_trigger_close_text(ctx, tf)})"
+    "• <b>Trigger close:</b> "
+    f"<b>{_price_text(result.current_price, symbol, grouped=True)}</b> "
+    f"<i>({tf.upper()} · {_trigger_close_text(ctx, tf)})</i>"
   )
 
 
