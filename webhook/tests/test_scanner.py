@@ -9,7 +9,7 @@ import pytest
 
 from app.analysis import Regime
 from app import broadcast, dedup, redis_state, scanner
-from app.market_map import MapEntry, MarketMap
+from app.market_map import MapEntry, MarketMap, ScalpRail
 from app.ohlc_source import RedisOHLCSource
 from app.structure import Zone
 
@@ -375,6 +375,17 @@ def test_scanner_alert_references_containing_market_map_entry():
     4062,
     "down",
     "M30",
+    [
+      ScalpRail(
+        4064,
+        4063,
+        4065,
+        4064,
+        "↑",
+        ["micro ×3", "box-top"],
+        5,
+      ),
+    ],
   )
   ctx = SimpleNamespace(
     tf="M5",
@@ -395,7 +406,8 @@ def test_scanner_alert_references_containing_market_map_entry():
     market_map=market_map,
   )
 
-  assert "map: SELL 4,063–4,066 (supply·flip)" in text
+  assert "map: SELL 4,063–4,066 (flip·supply)" in text
+  assert "rail: ↑4,064 micro ×3·box-top" in text
 
 
 @pytest.mark.asyncio
