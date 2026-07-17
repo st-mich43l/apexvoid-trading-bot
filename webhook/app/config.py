@@ -132,6 +132,7 @@ class Settings(BaseSettings):
   map_scalp_fractal_n: int = 1
   map_change_min: float = 1.0
   map_session_send: bool = True
+  map_scan_interval_minutes: int = 60
   allow_counter_trend: bool = True
   counter_min_zone_score: float = 10.0
   counter_extreme_pd: float = 0.25

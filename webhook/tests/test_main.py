@@ -35,7 +35,7 @@ async def test_startup_warns_when_owner_id_is_unset(monkeypatch, caplog):
   monkeypatch.setattr(main, "calendar_sync_loop", calendar)
   monkeypatch.setattr(main, "weekly_report_loop", weekly)
   monkeypatch.setattr(main, "scanner_loop", scanner)
-  monkeypatch.setattr(main, "market_map_session_loop", market_map)
+  monkeypatch.setattr(main, "market_map_scan_loop", market_map)
   monkeypatch.setattr(main, "setup_commands", commands)
   monkeypatch.setattr(main, "setup_scanner_commands", scanner_commands)
   monkeypatch.setattr(main.dp, "start_polling", polling)

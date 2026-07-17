@@ -38,6 +38,13 @@ dated section after deployment.
 - Added Range Edge Scalp configuration and scanner telemetry for barrier counts,
   active range quality, and live edge-touch state.
 
+### Changed
+
+- Label Market Map SCALP rails as explicit `BUY` or `SELL` actions instead of
+  positional arrows, including scanner-alert rail references.
+- Evaluate automatic Market Maps once per configurable 60-minute bucket instead
+  of only at session boundaries; materially unchanged boards remain suppressed.
+
 ### Fixed
 
 - Market Map: reject weak or ATR-distant zones, prevent key levels/trendlines

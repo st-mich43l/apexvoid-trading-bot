@@ -8,6 +8,7 @@ import pandas as pd
 from app.market_map import (
   MapEntry,
   MarketMap,
+  ScalpRail,
   _merge_display_entries,
   build_map,
   map_materially_changed,
@@ -309,6 +310,26 @@ def test_render_payload_and_material_change_are_deterministic():
   assert map_materially_changed(market_map, moved_large, 1.0)
 
 
+def test_legacy_scalp_arrows_restore_as_actions():
+  market_map = MarketMap(
+    [],
+    4000,
+    None,
+    None,
+    None,
+    "range",
+    None,
+    [
+      ScalpRail(4005, 4004, 4006, 4005, "↑", ["micro ×3"], 3),
+      ScalpRail(3995, 3994, 3996, 3995, "↓", ["micro ×3"], 3),
+    ],
+  )
+
+  restored = market_map_from_payload(market_map_payload(market_map))
+
+  assert [rail.direction for rail in restored.rails] == ["SELL", "BUY"]
+
+
 def test_operator_example_replay_builds_tiered_board():
   m5 = _item(
     [
@@ -519,7 +540,7 @@ def test_scalp_rails_are_near_sorted_deduplicated_and_rendered():
   assert distances == sorted(distances)
   assert all(abs(rail.price - market_map.price) <= 15 for rail in market_map.rails)
   assert all(
-    rail.direction == ("↑" if rail.price > market_map.price else "↓")
+    rail.direction == ("SELL" if rail.price > market_map.price else "BUY")
     for rail in market_map.rails
   )
   assert any(any(tag.startswith("micro") for tag in rail.tags) for rail in market_map.rails)
@@ -532,7 +553,8 @@ def test_scalp_rails_are_near_sorted_deduplicated_and_rendered():
     _cfg(),
   )
   assert "\nSCALP\n" in text
-  assert "↑" in text and "↓" in text
+  assert {rail.direction for rail in market_map.rails} == {"BUY", "SELL"}
+  assert "↑" not in text and "↓" not in text
 
 
 def test_scalp_rails_reuse_detector_barriers():

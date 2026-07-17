@@ -382,7 +382,7 @@ def test_scanner_alert_references_containing_market_map_entry():
         4063,
         4065,
         4064,
-        "↑",
+        "SELL",
         ["micro ×3", "box-top"],
         5,
       ),
@@ -408,7 +408,7 @@ def test_scanner_alert_references_containing_market_map_entry():
   )
 
   assert "map: SELL 4,063–4,066 (flip·supply)" in text
-  assert "rail: ↑4,064 micro ×3·box-top" in text
+  assert "rail: SELL 4,064 micro ×3·box-top" in text
 
 
 def test_range_scalp_alert_is_two_sided_and_keeps_target_reasons():

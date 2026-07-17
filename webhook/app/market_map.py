@@ -345,7 +345,7 @@ def rail_reference(
   rail = min(matches, key=lambda item: (abs(item.price - center), -item.score))
   tags = "·".join(_compact_rail_tags(rail.tags, 3))
   suffix = f" {tags}" if tags else ""
-  return f"rail: {rail.direction}{_format_number(rail.label)}{suffix}"
+  return f"rail: {rail.direction} {_format_number(rail.label)}{suffix}"
 
 
 def market_map_payload(market_map: MarketMap) -> str:
@@ -362,7 +362,7 @@ def market_map_from_payload(payload: str) -> MarketMap:
     box_high=_optional_float(data.get("box_high")),
     bias=str(data.get("bias", "range")),
     bias_tf=data.get("bias_tf"),
-    rails=[ScalpRail(**rail) for rail in data.get("rails", [])],
+    rails=[_rail_from_payload(rail) for rail in data.get("rails", [])],
   )
 
 
@@ -943,7 +943,7 @@ def _build_scalp_rails(
         score=max(duplicate.score, score),
       )
       continue
-    direction = "↑" if level > price else "↓"
+    direction = "SELL" if level > price else "BUY"
     rails.append(ScalpRail(
       price=float(level),
       lo=float(level - tolerance),
@@ -1244,6 +1244,16 @@ def _rails_materially_changed(
 
 def _optional_float(value) -> float | None:
   return None if value is None else float(value)
+
+
+def _rail_from_payload(data: dict) -> ScalpRail:
+  values = dict(data)
+  direction = str(values.get("direction", "")).upper()
+  values["direction"] = {
+    "↑": "SELL",
+    "↓": "BUY",
+  }.get(direction, direction)
+  return ScalpRail(**values)
 
 
 def _unique(items: list[str]) -> list[str]:

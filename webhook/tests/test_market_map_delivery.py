@@ -21,12 +21,13 @@ def _map(lo: float = 4025.0, hi: float = 4028.0) -> MarketMap:
 
 
 @pytest.mark.asyncio
-async def test_session_map_sends_once_per_key_and_skips_unchanged_next_session(
+async def test_hourly_map_sends_once_per_bucket_and_skips_unchanged_next_hour(
   monkeypatch,
 ):
   meta = {}
   sent = AsyncMock()
   current = {"map": _map()}
+  map_calls = []
 
   async def get_meta(key):
     return meta.get(key)
@@ -36,37 +37,41 @@ async def test_session_map_sends_once_per_key_and_skips_unchanged_next_session(
 
   async def get_map(symbol):
     assert symbol == "XAU"
+    map_calls.append(symbol)
     return current["map"]
 
   monkeypatch.setattr(market_map_delivery.settings, "map_session_send", True)
   monkeypatch.setattr(market_map_delivery.settings, "telegram_owner_id", 42)
   monkeypatch.setattr(market_map_delivery.settings, "scanner_symbols", "XAU")
   monkeypatch.setattr(market_map_delivery.settings, "map_change_min", 1.0)
+  monkeypatch.setattr(market_map_delivery.settings, "map_scan_interval_minutes", 60)
   monkeypatch.setattr(market_map_delivery, "get_meta", get_meta)
   monkeypatch.setattr(market_map_delivery, "set_meta", set_meta)
   monkeypatch.setattr(market_map_delivery, "get_current_market_map", get_map)
   monkeypatch.setattr(market_map_delivery, "send_scanner_with_retry", sent)
 
-  london = datetime(2026, 7, 16, 7, 5, tzinfo=timezone.utc)
-  ny = datetime(2026, 7, 16, 13, 5, tzinfo=timezone.utc)
+  first = datetime(2026, 7, 16, 7, 5, tzinfo=timezone.utc)
+  same_hour = datetime(2026, 7, 16, 7, 45, tzinfo=timezone.utc)
+  next_hour = datetime(2026, 7, 16, 8, 5, tzinfo=timezone.utc)
 
-  assert await market_map_delivery._market_map_session_tick(london)
-  assert not await market_map_delivery._market_map_session_tick(london)
-  assert not await market_map_delivery._market_map_session_tick(ny)
+  assert await market_map_delivery._market_map_scan_tick(first)
+  assert not await market_map_delivery._market_map_scan_tick(same_hour)
+  assert not await market_map_delivery._market_map_scan_tick(next_hour)
   assert sent.await_count == 1
-  assert meta["last_map_session"] == "2026-07-16:NY"
+  assert map_calls == ["XAU", "XAU"]
+  assert meta["last_map_scan"] == "2026-07-16T08:00Z"
   assert meta["last_market_map:XAU"] == market_map_payload(_map())
 
 
 @pytest.mark.asyncio
-async def test_session_map_resends_when_band_moves_by_threshold(monkeypatch):
+async def test_hourly_map_resends_when_band_moves_by_threshold(monkeypatch):
   previous = _map()
   current = replace(
     previous,
     entries=[replace(previous.entries[0], lo=4026.0, hi=4029.0)],
   )
   meta = {
-    "last_map_session": "2026-07-16:LONDON",
+    "last_map_scan": "2026-07-16T07:00Z",
     "last_market_map:XAU": market_map_payload(previous),
   }
   sent = AsyncMock()
@@ -81,6 +86,7 @@ async def test_session_map_resends_when_band_moves_by_threshold(monkeypatch):
   monkeypatch.setattr(market_map_delivery.settings, "telegram_owner_id", 42)
   monkeypatch.setattr(market_map_delivery.settings, "scanner_symbols", "XAU")
   monkeypatch.setattr(market_map_delivery.settings, "map_change_min", 1.0)
+  monkeypatch.setattr(market_map_delivery.settings, "map_scan_interval_minutes", 60)
   monkeypatch.setattr(market_map_delivery, "get_meta", get_meta)
   monkeypatch.setattr(market_map_delivery, "set_meta", set_meta)
   monkeypatch.setattr(
@@ -90,8 +96,8 @@ async def test_session_map_resends_when_band_moves_by_threshold(monkeypatch):
   )
   monkeypatch.setattr(market_map_delivery, "send_scanner_with_retry", sent)
 
-  fired = await market_map_delivery._market_map_session_tick(
-    datetime(2026, 7, 16, 13, 5, tzinfo=timezone.utc)
+  fired = await market_map_delivery._market_map_scan_tick(
+    datetime(2026, 7, 16, 8, 5, tzinfo=timezone.utc)
   )
 
   assert fired
@@ -114,14 +120,12 @@ async def test_on_demand_map_uses_scanner_bot(monkeypatch):
   sent.assert_awaited_once_with("<pre>XAU Market Map</pre>", chat_id=42)
 
 
-def test_session_open_key_uses_latest_configured_open(monkeypatch):
-  monkeypatch.setattr(market_map_delivery.settings, "session_asia_start", 22)
-  monkeypatch.setattr(market_map_delivery.settings, "session_london_start", 7)
-  monkeypatch.setattr(market_map_delivery.settings, "session_ny_start", 13)
-
-  assert market_map_delivery._session_open_key(
-    datetime(2026, 7, 16, 1, tzinfo=timezone.utc)
-  ) == "2026-07-15:ASIA"
-  assert market_map_delivery._session_open_key(
-    datetime(2026, 7, 16, 8, tzinfo=timezone.utc)
-  ) == "2026-07-16:LONDON"
+def test_scan_bucket_key_uses_configured_interval():
+  assert market_map_delivery._scan_bucket_key(
+    datetime(2026, 7, 16, 7, 59, tzinfo=timezone.utc),
+    60,
+  ) == "2026-07-16T07:00Z"
+  assert market_map_delivery._scan_bucket_key(
+    datetime(2026, 7, 16, 7, 44, tzinfo=timezone.utc),
+    30,
+  ) == "2026-07-16T07:30Z"
