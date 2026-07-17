@@ -17,6 +17,7 @@ from app.market_map import (
 )
 from app.pa_types import DealingRange, Level, SessionLevel, Zone
 from app.regime import BoxBreak
+from app.scalp_ranges import ScalpBarrier
 from app.trendlines import Trendline
 
 
@@ -53,6 +54,7 @@ def _item(
   levels=None,
   sessions=None,
   trendlines=None,
+  scalp_barriers=None,
   box_break=None,
   regime=None,
   df=None,
@@ -77,6 +79,7 @@ def _item(
     key_levels=levels or [],
     session_levels=sessions or [],
     trendlines=trendlines or [],
+    scalp_barriers=scalp_barriers or [],
     box_break=box_break,
     regime=regime,
     structure=structure,
@@ -530,6 +533,28 @@ def test_scalp_rails_are_near_sorted_deduplicated_and_rendered():
   )
   assert "\nSCALP\n" in text
   assert "↑" in text and "↓" in text
+
+
+def test_scalp_rails_reuse_detector_barriers():
+  barrier = ScalpBarrier(
+    side="resistance",
+    level=3998.25,
+    low=3998.0,
+    high=3998.5,
+    touches=4,
+    wick_rejections=3,
+    accepted_closes=0,
+    last_touch_index=10,
+    tags=["micro ×4", "wick ×3", "session LONDON_H"],
+    score=11.5,
+  )
+  item = _item(scalp_barriers=[barrier])
+
+  market_map = build_map(_ctx({"M5": item}), 3992, _cfg())
+  rail = next(rail for rail in market_map.rails if rail.price == 3998.25)
+
+  assert set(rail.tags) == set(barrier.tags)
+  assert rail.score == barrier.score
 
 
 def test_major_requires_htf_plus_fresh_or_score_and_pdh_only_stays_zone():

@@ -107,6 +107,16 @@ def _detector_settings() -> DetectorSettings:
     counter_min_zone_score=settings.counter_min_zone_score,
     counter_extreme_pd=settings.counter_extreme_pd,
     counter_level_min_touches=settings.counter_level_min_touches,
+    range_scalp_enabled=settings.range_scalp_enabled,
+    range_scalp_lookback=settings.range_scalp_lookback,
+    range_scalp_cluster_atr=settings.range_scalp_cluster_atr,
+    range_scalp_min_touches=settings.range_scalp_min_touches,
+    range_scalp_min_wick_frac=settings.range_scalp_min_wick_frac,
+    range_scalp_entry_tol_atr=settings.range_scalp_entry_tol_atr,
+    range_scalp_min_width_atr=settings.range_scalp_min_width_atr,
+    range_scalp_max_width_atr=settings.range_scalp_max_width_atr,
+    range_scalp_min_room_atr=settings.range_scalp_min_room_atr,
+    range_scalp_break_closes=settings.range_scalp_break_closes,
   )
 
 
@@ -188,7 +198,7 @@ def _format_detection(
   extra_reasons = [
     reason for reason in result.reasons
     if not reason.lower().startswith("htf bias")
-  ][:6 if result.setup == "Box Breakout" else 2]
+  ][:6 if result.setup in {"Box Breakout", "Range Edge Scalp"} else 2]
   reason_suffix = (
     " · " + " · ".join(escape(reason) for reason in extra_reasons)
     if extra_reasons
@@ -201,7 +211,9 @@ def _format_detection(
       f"· {stars}"
     ),
   ]
-  if result.mode != "with_trend":
+  if result.mode == "range_scalp":
+    lines.append("↔️ <b>RANGE SCALP</b> · two-sided local range")
+  elif result.mode != "with_trend":
     label = "reaction scalp" if result.mode == "counter_reaction" else "counter swing"
     lines.append(
       f"⚠️ <b>COUNTER-TREND</b> (bias {escape(ctx.htf_bias)}) · {label}"
@@ -370,13 +382,13 @@ def _trusted_spot_values(
 
 
 def _digest_results(results: list[DetectionResult]) -> list[DetectionResult]:
-  with_trend = _suppress_overlaps([
+  primary = _suppress_overlaps([
     result for result in results
-    if result.mode == "with_trend"
+    if result.mode in {"with_trend", "range_scalp"}
   ])
-  candidates = with_trend or _suppress_overlaps([
+  candidates = primary or _suppress_overlaps([
     result for result in results
-    if result.mode != "with_trend"
+    if result.mode not in {"with_trend", "range_scalp"}
   ])
   ordered = sorted(candidates, key=_result_rank)
   return ordered[:max(1, settings.scanner_top_n)]
@@ -495,6 +507,7 @@ async def _record_status(
   sent: list[DetectionResult],
   status: str,
   market_map: MarketMap | None = None,
+  scalp: dict[str, Any] | None = None,
 ) -> None:
   map_counts = {
     "buys": len(market_map.buys) if market_map is not None else 0,
@@ -534,10 +547,60 @@ async def _record_status(
       f"map: buys={map_counts['buys']} sells={map_counts['sells']} "
       f"majors={map_counts['majors']}"
     ),
+    "scalp": scalp or {
+      "state": "unavailable",
+      "barriers": 0,
+      "supports": 0,
+      "resistances": 0,
+      "range": None,
+    },
   }
   encoded = json.dumps(payload, separators=(",", ":"), sort_keys=True)
   await client.set("scanner:last_tick", encoded)
   await client.set(f"scanner:last_tick:{symbol}:{tf}", encoded)
+
+
+def _scalp_status(ctx: DetectionContext) -> dict[str, Any]:
+  st = ctx.structures.get(ctx.tf)
+  if st is None:
+    return {
+      "state": "missing_structure",
+      "barriers": 0,
+      "supports": 0,
+      "resistances": 0,
+      "range": None,
+    }
+  barriers = list(st.scalp_barriers)
+  scalp_range = st.scalp_range
+  enabled = ctx.settings.range_scalp_enabled
+  state = "disabled" if not enabled else "no_range"
+  range_payload = None
+  if scalp_range is not None:
+    frame = ctx.frames.get(ctx.tf)
+    touched = []
+    if frame is not None and not frame.empty:
+      row = frame.iloc[-1]
+      if float(row["low"]) <= scalp_range.lower.high:
+        touched.append("lower")
+      if float(row["high"]) >= scalp_range.upper.low:
+        touched.append("upper")
+    if enabled:
+      state = "edge_touch" if touched else "waiting_edge"
+    range_payload = {
+      "lower": scalp_range.lower.level,
+      "upper": scalp_range.upper.level,
+      "eq": scalp_range.eq,
+      "width_atr": scalp_range.width_atr,
+      "quality": scalp_range.quality,
+      "touched": touched,
+    }
+  return {
+    "state": state,
+    "barriers": len(barriers),
+    "supports": sum(barrier.side == "support" for barrier in barriers),
+    "resistances": sum(barrier.side == "resistance" for barrier in barriers),
+    "range": range_payload,
+  }
 
 
 async def _load_market_context_for_symbol(
@@ -650,6 +713,7 @@ async def _handle_event(
     sent=sent,
     status="ok",
     market_map=current_map,
+    scalp=_scalp_status(ctx),
   )
   return sent
 

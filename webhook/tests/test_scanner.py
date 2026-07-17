@@ -11,6 +11,7 @@ from app.analysis import Regime
 from app import broadcast, dedup, redis_state, scanner
 from app.market_map import MapEntry, MarketMap, ScalpRail
 from app.ohlc_source import RedisOHLCSource
+from app.scalp_ranges import ScalpBarrier, ScalpRange
 from app.structure import Zone
 
 
@@ -408,6 +409,74 @@ def test_scanner_alert_references_containing_market_map_entry():
 
   assert "map: SELL 4,063–4,066 (flip·supply)" in text
   assert "rail: ↑4,064 micro ×3·box-top" in text
+
+
+def test_range_scalp_alert_is_two_sided_and_keeps_target_reasons():
+  result = scanner.DetectionResult(
+    "Range Edge Scalp",
+    "SELL",
+    4110,
+    Zone(4109.7, 4110.3, "supply", source="range_edge"),
+    4109.5,
+    3,
+    [
+      "local range 4100-4110",
+      "upper barrier ×4",
+      "wick rejection ×3",
+      "sweep + reclaim",
+      "TP1 EQ 4105",
+      "TP2 edge 4100",
+    ],
+    mode="range_scalp",
+  )
+  ctx = SimpleNamespace(
+    tf="M5",
+    htf_bias="range",
+    structures={"M30": SimpleNamespace(bias="range")},
+    frames={"M5": _frame()},
+    regime=None,
+    spot_price=4109.5,
+    trigger_ts="2026-07-17T04:00:00Z",
+  )
+
+  text = scanner._format_detection("XAU", "M5", ctx, result, ["M30"])
+
+  assert "RANGE SCALP" in text
+  assert "COUNTER-TREND" not in text
+  assert "TP1 EQ 4105" in text
+  assert "TP2 edge 4100" in text
+
+
+def test_scalp_status_reports_active_range_and_touched_edge():
+  lower = ScalpBarrier(
+    "support", 4100, 4099.7, 4100.3, 3, 3, 0, 8, ["micro ×3"], 8,
+  )
+  upper = ScalpBarrier(
+    "resistance", 4110, 4109.7, 4110.3, 4, 3, 0, 9, ["micro ×4"], 9,
+  )
+  frame = _frame()
+  frame.loc[frame.index[-1], ["high", "low", "close"]] = [4110.1, 4108.5, 4109.5]
+  ctx = SimpleNamespace(
+    tf="M5",
+    settings=SimpleNamespace(range_scalp_enabled=True),
+    structures={
+      "M5": SimpleNamespace(
+        scalp_barriers=[lower, upper],
+        scalp_range=ScalpRange(lower, upper, 4105, 5, 17),
+      ),
+    },
+    frames={"M5": frame},
+  )
+
+  status = scanner._scalp_status(ctx)
+
+  assert status["state"] == "edge_touch"
+  assert status["supports"] == 1
+  assert status["resistances"] == 1
+  assert status["range"]["touched"] == ["upper"]
+
+  ctx.settings.range_scalp_enabled = False
+  assert scanner._scalp_status(ctx)["state"] == "disabled"
 
 
 @pytest.mark.asyncio

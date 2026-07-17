@@ -24,6 +24,7 @@ from app.pa_types import (
   Zone,
 )
 from app.regime import BoxBreak, accepted_box_break
+from app.scalp_ranges import ScalpBarrier, ScalpRange, build_scalp_structure
 from app.session_liquidity import previous_week_levels, session_levels
 from app.structure import market_structure, structure_breaks
 from app.swings import find_swings
@@ -87,6 +88,15 @@ class AnalysisSettings:
   breakout_buffer_atr: float = 0.1
   breakout_accept_bars: int = 2
   breakout_max_age_bars: int = 6
+  range_scalp_lookback: int = 36
+  range_scalp_cluster_atr: float = 0.20
+  range_scalp_min_touches: int = 3
+  range_scalp_min_wick_frac: float = 0.35
+  range_scalp_entry_tol_atr: float = 0.15
+  range_scalp_min_width_atr: float = 1.2
+  range_scalp_max_width_atr: float = 6.0
+  range_scalp_min_room_atr: float = 1.0
+  range_scalp_break_closes: int = 2
 
 
 @dataclass(frozen=True)
@@ -121,6 +131,8 @@ class TimeframeAnalysis:
   regime: Regime | None = None
   trendlines: list[Trendline] = field(default_factory=list)
   box_break: BoxBreak | None = None
+  scalp_barriers: list[ScalpBarrier] = field(default_factory=list)
+  scalp_range: ScalpRange | None = None
 
 
 @dataclass(frozen=True)
@@ -232,6 +244,14 @@ def _analyze_tf(
     trendlines=diagonal_lines,
     bar_index=len(df) - 1,
   )
+  scalp_barriers, scalp_range = build_scalp_structure(
+    df,
+    atr,
+    sessions,
+    diagonal_lines,
+    regime_,
+    settings,
+  )
   ob_zones, sd_zones, flip, fvg_zones = _zone_views(zones)
   return TimeframeAnalysis(
     df=df,
@@ -254,6 +274,8 @@ def _analyze_tf(
     regime=regime_,
     trendlines=diagonal_lines,
     box_break=box_break,
+    scalp_barriers=scalp_barriers,
+    scalp_range=scalp_range,
   )
 
 

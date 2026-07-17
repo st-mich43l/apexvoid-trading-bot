@@ -8,6 +8,7 @@ from app.analysis import Regime
 from app import detectors
 from app.pa_types import Break, DealingRange, Grab, Pool, SessionLevel
 from app.regime import BoxBreak
+from app.scalp_ranges import ScalpBarrier, ScalpRange
 from app.structure import Level, Swing, Zone
 from app.trendlines import Trendline
 
@@ -46,6 +47,8 @@ def _ctx(
   trendlines: list[Trendline] | None = None,
   box_break: BoxBreak | None = None,
   liquidity_pools: list[Pool] | None = None,
+  scalp_barriers: list[ScalpBarrier] | None = None,
+  scalp_range: ScalpRange | None = None,
   settings: detectors.DetectorSettings | None = None,
 ) -> detectors.DetectionContext:
   tf = "M5"
@@ -64,6 +67,8 @@ def _ctx(
     trendlines=trendlines or [],
     box_break=box_break,
     liquidity_pools=liquidity_pools or [],
+    scalp_barriers=scalp_barriers or [],
+    scalp_range=scalp_range,
   )
   return detectors.DetectionContext(
     symbol="XAU",
@@ -497,6 +502,156 @@ def test_rejection_helper_requires_directional_closed_bar():
   assert detectors._rejection(_buy_rejection_df(), "BUY")
   assert detectors._rejection(_sell_rejection_df(), "SELL")
   assert not detectors._rejection(_no_rejection_df(), "BUY")
+
+
+def _scalp_range(
+  *,
+  lower_touches: int = 3,
+  upper_touches: int = 3,
+  lower_accepted: int = 0,
+  upper_accepted: int = 0,
+) -> ScalpRange:
+  lower = ScalpBarrier(
+    "support",
+    100,
+    99.7,
+    100.3,
+    lower_touches,
+    lower_touches,
+    lower_accepted,
+    3,
+    [f"micro ×{lower_touches}", f"wick ×{lower_touches}"],
+    9,
+  )
+  upper = ScalpBarrier(
+    "resistance",
+    110,
+    109.7,
+    110.3,
+    upper_touches,
+    upper_touches,
+    upper_accepted,
+    3,
+    [f"micro ×{upper_touches}", f"wick ×{upper_touches}"],
+    9,
+  )
+  return ScalpRange(lower, upper, 105, 5, 18)
+
+
+def _range_sell_df() -> pd.DataFrame:
+  return _df([
+    (105, 107, 103, 106, 100),
+    (106, 108, 104, 105, 100),
+    (105, 107, 103, 106, 100),
+    (106, 108, 104, 106, 100),
+    (108, 111, 105, 106, 100),
+  ])
+
+
+def _range_buy_df() -> pd.DataFrame:
+  return _df([
+    (105, 107, 103, 104, 100),
+    (104, 106, 102, 105, 100),
+    (105, 107, 103, 104, 100),
+    (104, 106, 102, 104, 100),
+    (102, 105, 99, 104, 100),
+  ])
+
+
+@pytest.mark.parametrize(
+  ("df", "direction"),
+  [
+    (_range_sell_df(), "SELL"),
+    (_range_buy_df(), "BUY"),
+  ],
+)
+def test_range_edge_scalp_fires_both_directions_with_range_htf_bias(df, direction):
+  scalp_range = _scalp_range()
+  ctx = _ctx(
+    df,
+    bias="range",
+    scalp_barriers=[scalp_range.lower, scalp_range.upper],
+    scalp_range=scalp_range,
+    indicator_set=_indicators(df, atr=2),
+  )
+
+  result = detectors.range_edge_scalp(ctx)
+
+  assert result is not None
+  assert result.setup == "Range Edge Scalp"
+  assert result.direction == direction
+  assert result.mode == "range_scalp"
+  assert any(reason.startswith("TP1 EQ") for reason in result.reasons)
+  assert any(reason.startswith("TP2 edge") for reason in result.reasons)
+
+
+def test_range_edge_scalp_waits_in_middle_and_rejects_accepted_breakout():
+  middle = _df([
+    (105, 107, 103, 106, 100),
+    (106, 108, 104, 105, 100),
+    (105, 107, 103, 106, 100),
+    (106, 108, 104, 105, 100),
+    (105, 107, 103, 106, 100),
+  ])
+  scalp_range = _scalp_range()
+  middle_ctx = _ctx(
+    middle,
+    bias="range",
+    scalp_barriers=[scalp_range.lower, scalp_range.upper],
+    scalp_range=scalp_range,
+    indicator_set=_indicators(middle, atr=2),
+  )
+  broken = _scalp_range(upper_accepted=2)
+  broken_ctx = _ctx(
+    _range_sell_df(),
+    bias="range",
+    scalp_barriers=[broken.lower, broken.upper],
+    scalp_range=broken,
+    indicator_set=_indicators(_range_sell_df(), atr=2),
+  )
+
+  assert detectors.range_edge_scalp(middle_ctx) is None
+  assert detectors.range_edge_scalp(broken_ctx) is None
+
+
+def test_two_touch_barrier_requires_grade_a_sweep():
+  df = _range_sell_df()
+  scalp_range = _scalp_range(upper_touches=2)
+  base = _ctx(
+    df,
+    bias="range",
+    scalp_barriers=[scalp_range.lower, scalp_range.upper],
+    scalp_range=scalp_range,
+    indicator_set=_indicators(df, atr=2),
+  )
+  grab = Grab(Pool("buy", 110, 0.1, 2), 4, "bear", df.index[-1], "A")
+  with_grab = replace(
+    base,
+    structures={
+      "M5": replace(base.structures["M5"], liquidity_grabs=[grab]),
+    },
+  )
+
+  assert detectors.range_edge_scalp(base) is None
+  assert detectors.range_edge_scalp(with_grab) is not None
+
+
+def test_range_edge_scalp_requires_room_to_eq():
+  df = _range_sell_df()
+  scalp_range = _scalp_range()
+  ctx = _ctx(
+    df,
+    bias="range",
+    scalp_barriers=[scalp_range.lower, scalp_range.upper],
+    scalp_range=scalp_range,
+    indicator_set=_indicators(df, atr=2),
+    settings=detectors.DetectorSettings(
+      confluence_floor=2,
+      range_scalp_min_room_atr=3,
+    ),
+  )
+
+  assert detectors.range_edge_scalp(ctx) is None
 
 
 def _counter_ctx(
