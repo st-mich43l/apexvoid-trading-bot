@@ -136,6 +136,16 @@ class Settings(BaseSettings):
   counter_min_zone_score: float = 10.0
   counter_extreme_pd: float = 0.25
   counter_level_min_touches: int = 3
+  range_scalp_enabled: bool = True
+  range_scalp_lookback: int = 36
+  range_scalp_cluster_atr: float = 0.20
+  range_scalp_min_touches: int = 3
+  range_scalp_min_wick_frac: float = 0.35
+  range_scalp_entry_tol_atr: float = 0.15
+  range_scalp_min_width_atr: float = 1.2
+  range_scalp_max_width_atr: float = 6.0
+  range_scalp_min_room_atr: float = 1.0
+  range_scalp_break_closes: int = 2
 
   @property
   def telegram_chat_id(self) -> str:
