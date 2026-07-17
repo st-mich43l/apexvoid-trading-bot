@@ -1,10 +1,10 @@
-"""Market-map cache, owner delivery, and session-open scheduling."""
+"""Market-map cache, owner delivery, and periodic scheduling."""
 
 from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 import logging
 from zoneinfo import ZoneInfo
 
@@ -23,9 +23,9 @@ from app.tg_core import send_scanner_with_retry
 
 log = logging.getLogger(__name__)
 
-_META_SESSION_KEY = "last_map_session"
+_META_SCAN_KEY = "last_map_scan"
 _META_MAP_PREFIX = "last_market_map"
-_SESSION_INTERVAL = 60
+_LOOP_INTERVAL_SECONDS = 60
 
 
 @dataclass(frozen=True)
@@ -106,12 +106,12 @@ async def send_current_market_map(
   return True
 
 
-async def _market_map_session_tick(now: datetime | None = None) -> bool:
+async def _market_map_scan_tick(now: datetime | None = None) -> bool:
   if not settings.map_session_send or not settings.telegram_owner_id:
     return False
   now = now.astimezone(timezone.utc) if now else datetime.now(timezone.utc)
-  session_key = _session_open_key(now)
-  if await get_meta(_META_SESSION_KEY) == session_key:
+  scan_key = _scan_bucket_key(now, settings.map_scan_interval_minutes)
+  if await get_meta(_META_SCAN_KEY) == scan_key:
     return False
 
   evaluated = False
@@ -136,38 +136,32 @@ async def _market_map_session_tick(now: datetime | None = None) -> bool:
     sent = True
 
   if evaluated:
-    await set_meta(_META_SESSION_KEY, session_key)
+    await set_meta(_META_SCAN_KEY, scan_key)
   return sent
 
 
-async def market_map_session_loop() -> None:
+async def market_map_scan_loop() -> None:
   if not settings.map_session_send:
-    log.info("Market Map session delivery disabled")
+    log.info("Market Map automatic delivery disabled")
     return
   while True:
     try:
-      await _market_map_session_tick()
+      await _market_map_scan_tick()
     except asyncio.CancelledError:
       raise
     except Exception:
-      log.exception("Market Map session delivery failed")
-    await asyncio.sleep(_SESSION_INTERVAL)
+      log.exception("Market Map periodic delivery failed")
+    await asyncio.sleep(_LOOP_INTERVAL_SECONDS)
 
 
-def _session_open_key(now: datetime) -> str:
-  opens = [
-    ("ASIA", int(settings.session_asia_start)),
-    ("LONDON", int(settings.session_london_start)),
-    ("NY", int(settings.session_ny_start)),
-  ]
-  candidates = []
-  for name, hour in opens:
-    opened = now.replace(hour=hour, minute=0, second=0, microsecond=0)
-    if opened > now:
-      opened -= timedelta(days=1)
-    candidates.append((opened, name))
-  opened, name = max(candidates)
-  return f"{opened.date().isoformat()}:{name}"
+def _scan_bucket_key(now: datetime, interval_minutes: int) -> str:
+  interval_seconds = max(1, int(interval_minutes)) * 60
+  timestamp = int(now.timestamp())
+  opened = datetime.fromtimestamp(
+    timestamp - timestamp % interval_seconds,
+    timezone.utc,
+  )
+  return opened.isoformat(timespec="minutes").replace("+00:00", "Z")
 
 
 def _map_symbols() -> list[str]:
