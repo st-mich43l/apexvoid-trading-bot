@@ -38,6 +38,10 @@ _TODAY_SESSION_LEVELS = {
   "NY_H",
   "NY_L",
 }
+_RAIL_ACTION_ICONS = {
+  "BUY": "🟢",
+  "SELL": "🔴",
+}
 
 
 @dataclass(frozen=True)
@@ -300,7 +304,7 @@ def render_market_map(
     "SELL",
     *_render_side(market_map.sells, market_map.price),
     "",
-    "SCALP",
+    "⚡ SCALP",
     *_render_rails(market_map.rails),
     "",
     "BUY",
@@ -345,7 +349,7 @@ def rail_reference(
   rail = min(matches, key=lambda item: (abs(item.price - center), -item.score))
   tags = "·".join(_compact_rail_tags(rail.tags, 3))
   suffix = f" {tags}" if tags else ""
-  return f"rail: {rail.direction} {_format_number(rail.label)}{suffix}"
+  return f"rail: {_rail_action(rail.direction)} {_format_number(rail.label)}{suffix}"
 
 
 def market_map_payload(market_map: MarketMap) -> str:
@@ -1057,9 +1061,16 @@ def _render_rails(rails: list[ScalpRail]) -> list[str]:
     details = " · ".join(_compact_rail_tags(rail.tags, 3))
     suffix = f"  {details}" if details else ""
     lines.append(
-      f"{branch} {rail.direction} {_format_number(rail.label)}{suffix}"
+      f"{branch} {_rail_action(rail.direction)} "
+      f"{_format_number(rail.label)}{suffix}"
     )
   return lines
+
+
+def _rail_action(direction: str) -> str:
+  action = direction.upper()
+  icon = _RAIL_ACTION_ICONS.get(action)
+  return f"{icon} {action}" if icon else action
 
 
 def _compact_tags(tags: list[str], limit: int) -> list[str]:

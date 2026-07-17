@@ -40,8 +40,8 @@ dated section after deployment.
 
 ### Changed
 
-- Label Market Map SCALP rails as explicit `BUY` or `SELL` actions instead of
-  positional arrows, including scanner-alert rail references.
+- Label Market Map SCALP rails as explicit `🟢 BUY` or `🔴 SELL` actions instead
+  of positional arrows, including scanner-alert rail references.
 - Evaluate automatic Market Maps once per configurable 60-minute bucket instead
   of only at session boundaries; materially unchanged boards remain suppressed.
 
