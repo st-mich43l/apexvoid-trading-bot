@@ -11,6 +11,7 @@ from app.analysis import Regime
 from app import broadcast, dedup, redis_state, scanner
 from app.market_map import MapEntry, MarketMap, ScalpRail
 from app.ohlc_source import RedisOHLCSource
+from app.parsing import _parse_manual
 from app.scalp_ranges import ScalpBarrier, ScalpRange
 from app.structure import Zone
 
@@ -31,6 +32,35 @@ class StaticSource:
     assert symbol == "XAU"
     assert tf in {"M5", "M30", "M15"}
     return _frame()
+
+
+def test_scanner_copy_draft_becomes_valid_manual_signal_after_filling_risk():
+  result = scanner.DetectionResult(
+    "Fade Scalp",
+    "SELL",
+    4105.0,
+    Zone(4104.13, 4107.96, "supply"),
+    4105.38,
+    3,
+    ["HTF bias down"],
+  )
+
+  draft = scanner._copy_draft("XAU", result)
+  assert draft is not None
+  ready = draft.replace("SL", "4112").replace(
+    "TP1/TP2/TP3",
+    "4100/4095/4090",
+  )
+
+  parsed = _parse_manual(ready)
+  assert parsed is not None
+  assert parsed["action"] == "SELL"
+  assert parsed["entry"] == pytest.approx(4104.13)
+  assert parsed["entry_end"] == pytest.approx(4107.96)
+  assert parsed["sl"] == pytest.approx(4112)
+  assert parsed["tps"] == [4100, 4095, 4090]
+  assert parsed["setup_type"] == "fade-scalp"
+  assert parsed["confluence"] == 3
 
 
 @pytest.mark.asyncio
@@ -149,11 +179,17 @@ async def test_scanner_dedups_same_setup_level_and_only_dms_owner(monkeypatch):
   assert second == []
   notify.assert_awaited_once()
   text = notify.await_args.args[0]
-  assert "Setup forming" in text
-  assert "Trend Pullback" in text
-  assert "Price <b>4,103</b>" in text
-  assert "entry <b>4,098-4,102</b>" in text
-  assert "key <b>4,100</b>" in text
+  assert "XAU M5 · SETUP FORMING" in text
+  assert "BUY · Trend Pullback" in text
+  assert "Trigger close:</b> <b>4,103</b>" in text
+  assert "Entry zone:</b> <b>4,098–4,102</b>" in text
+  assert "Key level:</b> <b>4,100</b>" in text
+  assert "HTF bias:</b> up (M30)" in text
+  assert "rejection at support" in text
+  assert (
+    "<code>gold buy entry zone (4098-4102) / sl SL / "
+    "tp TP1/TP2/TP3 / setup trend-pullback ***</code>"
+  ) in text
   assert "+90 pips" not in text
   assert notify.await_args.kwargs == {"chat_id": 4242}
   assert await client.get(
@@ -560,9 +596,9 @@ async def test_scanner_digest_suppresses_overlap_and_only_claims_sent(monkeypatc
 
   assert [item.setup for item in sent] == ["Snap-Back", "Break & Retest"]
   text = notify.await_args.args[0]
-  assert text.count("Setup forming") == 1
+  assert text.count("SETUP FORMING") == 1
   assert "Snap-Back" in text
-  assert "also: Break&amp;Retest" in text
+  assert "Also:</b> Break&amp;Retest" in text
   assert await client.get(scanner._dedup_key("XAU", "M5", results[0])) == "1"
   assert await client.get(scanner._dedup_key("XAU", "M5", results[2])) == "1"
   assert await client.get(scanner._dedup_key("XAU", "M5", results[1])) is None
@@ -792,7 +828,7 @@ async def test_scanner_uses_fresh_spot_for_context_and_live_render(monkeypatch):
   )
 
   text = notify.await_args.args[0]
-  assert "Price now <b>4,082.1</b> (live)" in text
+  assert "Price now:</b> <b>4,082.1</b> <i>(live)</i>" in text
 
 
 @pytest.mark.asyncio
@@ -852,7 +888,7 @@ async def test_scanner_rejects_implausible_spot_and_still_fires(monkeypatch, cap
   assert len(sent) == 1
   assert "implausible vs close" in caplog.text
   text = notify.await_args.args[0]
-  assert "Price <b>4,100.5</b> (M5 close 00:05 UTC)" in text
+  assert "Trigger close:</b> <b>4,100.5</b> <i>(M5 · 00:05 UTC)</i>" in text
   assert "(live)" not in text
 
 
