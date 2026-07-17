@@ -4,6 +4,7 @@ import random
 from types import SimpleNamespace
 
 import pandas as pd
+import pytest
 
 from app.market_map import (
   MapEntry,
@@ -18,7 +19,7 @@ from app.market_map import (
 )
 from app.pa_types import DealingRange, Level, SessionLevel, Zone
 from app.regime import BoxBreak
-from app.scalp_ranges import ScalpBarrier
+from app.scalp_ranges import ScalpBarrier, ScalpRange
 from app.trendlines import Trendline
 
 
@@ -34,10 +35,12 @@ def _cfg(**overrides):
     "map_min_per_side": 2,
     "map_fallback_radius": 30.0,
     "map_scalp_radius": 15.0,
-    "map_scalp_tol": 1.0,
-    "map_scalp_max": 5,
-    "map_scalp_fractal_n": 1,
     "round_step": 5.0,
+    "range_scalp_min_touches": 3,
+    "range_scalp_min_width_atr": 1.2,
+    "range_scalp_max_width_atr": 6.0,
+    "range_scalp_min_room_atr": 1.0,
+    "range_scalp_break_closes": 2,
     "scanner_exec_tf": "M5",
     "map_change_min": 1.0,
     "proximal_band_atr": 0.5,
@@ -56,6 +59,7 @@ def _item(
   sessions=None,
   trendlines=None,
   scalp_barriers=None,
+  scalp_range=None,
   box_break=None,
   regime=None,
   df=None,
@@ -81,6 +85,7 @@ def _item(
     session_levels=sessions or [],
     trendlines=trendlines or [],
     scalp_barriers=scalp_barriers or [],
+    scalp_range=scalp_range,
     box_break=box_break,
     regime=regime,
     structure=structure,
@@ -513,71 +518,144 @@ def test_display_merge_property_is_capped_non_overlapping_and_deterministic():
     )
 
 
-def test_scalp_rails_are_near_sorted_deduplicated_and_rendered():
-  df = pd.DataFrame(
-    {
-      "open": [3991, 3992, 3994, 3992, 3989, 3991, 3992],
-      "high": [3993, 3994, 3997, 3994, 3991, 3993, 3994],
-      "low": [3989, 3990, 3992, 3990, 3987, 3989, 3990],
-      "close": [3992, 3993, 3993, 3991, 3990, 3992, 3993],
-      "volume": [100] * 7,
-    },
-    index=pd.date_range("2026-07-17", periods=7, freq="5min", tz="UTC"),
+def _scalp_range(
+  lower_level: float = 3993,
+  upper_level: float = 3999,
+  *,
+  lower_touches: int = 4,
+  upper_touches: int = 4,
+  upper_accepted: int = 0,
+) -> ScalpRange:
+  lower = ScalpBarrier(
+    "support",
+    lower_level,
+    lower_level - 0.3,
+    lower_level + 0.3,
+    lower_touches,
+    3,
+    0,
+    10,
+    [f"micro ×{lower_touches}", "wick ×3", "box-bottom"],
+    10.5,
   )
-  regime = SimpleNamespace(range_low=3988, range_high=3996)
+  upper = ScalpBarrier(
+    "resistance",
+    upper_level,
+    upper_level - 0.3,
+    upper_level + 0.3,
+    upper_touches,
+    3,
+    upper_accepted,
+    11,
+    [f"micro ×{upper_touches}", "wick ×3", "box-top"],
+    11.5,
+  )
+  return ScalpRange(
+    lower,
+    upper,
+    (lower_level + upper_level) / 2,
+    (upper_level - lower_level) / 2,
+    lower.score + upper.score,
+  )
+
+
+def test_scalp_rails_render_only_validated_range_edges_amid_internal_noise():
+  scalp_range = _scalp_range()
+  internal_buy = replace(
+    scalp_range.lower,
+    level=3995,
+    low=3994.7,
+    high=3995.3,
+    tags=["micro ×7", "round"],
+    score=20,
+  )
+  internal_sell = replace(
+    scalp_range.upper,
+    level=3997,
+    low=3996.7,
+    high=3997.3,
+    tags=["micro ×5", "TL resistance ×5"],
+    score=20,
+  )
   item = _item(
-    sessions=[SessionLevel("ASIA_L", 3988, df.index[0], False)],
-    regime=regime,
-    df=df,
+    scalp_barriers=[
+      scalp_range.lower,
+      internal_buy,
+      internal_sell,
+      scalp_range.upper,
+    ],
+    scalp_range=scalp_range,
   )
-  ctx = _ctx({"M5": item})
-  ctx.regime = regime
 
-  market_map = build_map(ctx, 3992, _cfg())
-  distances = [abs(rail.price - market_map.price) for rail in market_map.rails]
+  market_map = build_map(_ctx({"M5": item}), 3996, _cfg())
 
-  assert 1 <= len(market_map.rails) <= 5
-  assert distances == sorted(distances)
-  assert all(abs(rail.price - market_map.price) <= 15 for rail in market_map.rails)
-  assert all(
-    rail.direction == ("SELL" if rail.price > market_map.price else "BUY")
+  assert [
+    (rail.direction, rail.price, rail.lo, rail.hi)
     for rail in market_map.rails
-  )
-  assert any(any(tag.startswith("micro") for tag in rail.tags) for rail in market_map.rails)
-  assert any(any(tag.startswith("box-") for tag in rail.tags) for rail in market_map.rails)
-  assert any("round" in rail.tags for rail in market_map.rails)
+  ] == [
+    ("BUY", 3993, 3992.7, 3993.3),
+    ("SELL", 3999, 3998.7, 3999.3),
+  ]
+  assert all("wick ×3" in rail.tags for rail in market_map.rails)
   text = render_market_map(
     market_map,
     "XAU",
     datetime(2026, 7, 17, 5, 0, tzinfo=timezone.utc),
     _cfg(),
   )
-  assert "\n⚡ SCALP\n" in text
-  assert {rail.direction for rail in market_map.rails} == {"BUY", "SELL"}
+  assert "\n⚡ SCALP · RANGE EDGES\n" in text
   assert "🟢 BUY" in text and "🔴 SELL" in text
   assert "↑" not in text and "↓" not in text
 
 
-def test_scalp_rails_reuse_detector_barriers():
-  barrier = ScalpBarrier(
-    side="resistance",
-    level=3998.25,
-    low=3998.0,
-    high=3998.5,
-    touches=4,
-    wick_rejections=3,
-    accepted_closes=0,
-    last_touch_index=10,
-    tags=["micro ×4", "wick ×3", "session LONDON_H"],
-    score=11.5,
+def test_internal_micro_round_and_box_levels_do_not_become_actions():
+  df = pd.DataFrame(
+    {
+      "open": [3994, 3996, 3994, 3996, 3995],
+      "high": [3996, 3998, 3996, 3998, 3997],
+      "low": [3992, 3994, 3992, 3994, 3993],
+      "close": [3995, 3995, 3995, 3995, 3996],
+      "volume": [100] * 5,
+    },
+    index=pd.date_range("2026-07-17", periods=5, freq="5min", tz="UTC"),
   )
-  item = _item(scalp_barriers=[barrier])
+  item = _item(
+    sessions=[SessionLevel("LONDON_L", 3993, df.index[0], False)],
+    regime=SimpleNamespace(range_low=3993, range_high=3999),
+    df=df,
+  )
 
-  market_map = build_map(_ctx({"M5": item}), 3992, _cfg())
-  rail = next(rail for rail in market_map.rails if rail.price == 3998.25)
+  market_map = build_map(_ctx({"M5": item}), 3996, _cfg())
+  text = render_market_map(
+    market_map,
+    "XAU",
+    datetime(2026, 7, 17, 5, 0, tzinfo=timezone.utc),
+    _cfg(),
+  )
 
-  assert set(rail.tags) == set(barrier.tags)
-  assert rail.score == barrier.score
+  assert market_map.rails == []
+  assert "no validated range edges" in text
+
+
+@pytest.mark.parametrize(
+  ("scalp_range", "cfg"),
+  [
+    (_scalp_range(3995, 3997), _cfg()),
+    (_scalp_range(lower_touches=2), _cfg()),
+    (_scalp_range(upper_accepted=2), _cfg()),
+    (_scalp_range(), _cfg(map_scalp_radius=2)),
+  ],
+)
+def test_scalp_rails_reject_narrow_weak_broken_or_distant_pairs(
+  scalp_range,
+  cfg,
+):
+  item = _item(
+    scalp_barriers=[scalp_range.lower, scalp_range.upper],
+    scalp_range=scalp_range,
+  )
+
+  assert build_map(_ctx({"M5": item}), scalp_range.eq, cfg).rails == []
 
 
 def test_major_requires_htf_plus_fresh_or_score_and_pdh_only_stays_zone():

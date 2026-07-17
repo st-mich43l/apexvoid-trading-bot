@@ -127,9 +127,6 @@ class Settings(BaseSettings):
   map_min_per_side: int = 2
   map_fallback_radius: float = 30.0
   map_scalp_radius: float = 15.0
-  map_scalp_tol: float = 1.0
-  map_scalp_max: int = 5
-  map_scalp_fractal_n: int = 1
   map_change_min: float = 1.0
   map_session_send: bool = True
   map_scan_interval_minutes: int = 60

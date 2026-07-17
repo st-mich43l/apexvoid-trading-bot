@@ -9,7 +9,7 @@ import json
 import math
 
 from app.pa_math import atr_scalar
-from app.swings import find_swings
+from app.scalp_ranges import ScalpBarrier, ScalpRange
 from app.trendlines import value_at
 
 MAP_MAX_PER_SIDE = 4
@@ -23,21 +23,10 @@ MAP_BAND_MAX_ATR = 2.0
 MAP_MIN_PER_SIDE = 2
 MAP_FALLBACK_RADIUS = 30.0
 MAP_SCALP_RADIUS = 15.0
-MAP_SCALP_TOL = 1.0
-MAP_SCALP_MAX = 5
-MAP_SCALP_FRACTAL_N = 1
 SESSION_BAND_ATR = 0.1
 MAP_TAG_LIMIT = 4
 _TIER_RANK = {"level": 1, "zone": 2, "major": 3}
 _MAJOR_SESSION_LEVELS = {"PDH", "PDL", "PWH", "PWL"}
-_TODAY_SESSION_LEVELS = {
-  "ASIA_H",
-  "ASIA_L",
-  "LONDON_H",
-  "LONDON_L",
-  "NY_H",
-  "NY_L",
-}
 _RAIL_ACTION_ICONS = {
   "BUY": "🟢",
   "SELL": "🔴",
@@ -269,10 +258,8 @@ def build_map(ctx_or_per_tf, price: float, cfg) -> MarketMap:
     bias=bias,
     bias_tf=_bias_timeframe(per_tf, bias),
     rails=_build_scalp_rails(
-      ctx_or_per_tf,
       per_tf,
       float(price),
-      reference_atr,
       cfg,
     ),
   )
@@ -304,7 +291,7 @@ def render_market_map(
     "SELL",
     *_render_side(market_map.sells, market_map.price),
     "",
-    "⚡ SCALP",
+    "⚡ SCALP · RANGE EDGES",
     *_render_rails(market_map.rails),
     "",
     "BUY",
@@ -847,147 +834,98 @@ def _entries_render_overlap(first: MapEntry, second: MapEntry) -> bool:
 
 
 def _build_scalp_rails(
-  ctx_or_per_tf,
   per_tf: dict,
   price: float,
-  reference_atr: float,
   cfg,
 ) -> list[ScalpRail]:
   radius = max(0.0, float(getattr(cfg, "map_scalp_radius", MAP_SCALP_RADIUS)))
-  tolerance = max(0.001, float(getattr(cfg, "map_scalp_tol", MAP_SCALP_TOL)))
-  maximum = max(0, int(getattr(cfg, "map_scalp_max", MAP_SCALP_MAX)))
-  if not per_tf or radius <= 0 or maximum == 0:
+  if not per_tf or radius <= 0:
     return []
   exec_tf = str(getattr(cfg, "scanner_exec_tf", "")).upper()
   item = per_tf.get(exec_tf)
   if item is None:
     _, item = min(per_tf.items(), key=lambda pair: (_tf_rank(pair[0]), pair[0]))
-  atr = getattr(item, "atr", None)
-  atr_value = _last_atr(atr, reference_atr)
-  candidates: list[tuple[float, list[str], float]] = []
-
-  for barrier in getattr(item, "scalp_barriers", []) or []:
-    candidates.append((
-      float(barrier.level),
-      list(barrier.tags),
-      float(barrier.score),
-    ))
-
-  df = getattr(item, "df", None)
-  if df is not None and not df.empty:
-    fractal_n = max(
-      1,
-      int(getattr(cfg, "map_scalp_fractal_n", MAP_SCALP_FRACTAL_N)),
-    )
-    micro = find_swings(
-      df,
-      fractal_n=fractal_n,
-      zigzag_pct=0.0,
-      zigzag_atr_mult=0.0,
-      atr=atr,
-    )
-    cluster_tolerance = max(0.0, atr_value * 0.3)
-    for cluster in _cluster_swing_prices(micro, cluster_tolerance):
-      level = sum(swing.price for swing in cluster) / len(cluster)
-      candidates.append((level, [f"micro ×{len(cluster)}"], float(len(cluster))))
-
-  for name, level in _latest_session_levels(
-    getattr(item, "session_levels", []) or [],
-  ):
-    candidates.append((float(level.price), [f"session {name}"], 4.0))
-
-  regime = getattr(ctx_or_per_tf, "regime", None) or getattr(item, "regime", None)
-  if regime is not None:
-    candidates.extend([
-      (float(regime.range_high), ["box-top"], 5.0),
-      (float(regime.range_low), ["box-bottom"], 5.0),
-    ])
-
-  current_bar = max(0, len(getattr(item, "df", [])) - 1)
-  for line in getattr(item, "trendlines", []) or []:
-    if bool(getattr(line, "broken", False)):
-      continue
-    candidates.append((
-      value_at(line, current_bar),
-      [f"TL {line.kind} ×{line.touches}"],
-      float(line.touches),
-    ))
-
-  step = float(getattr(cfg, "round_step", 5.0))
-  if step > 0:
-    first = math.ceil((price - radius) / step)
-    last = math.floor((price + radius) / step)
-    for multiple in range(first, last + 1):
-      candidates.append((multiple * step, ["round"], 1.0))
-
-  rails: list[ScalpRail] = []
-  ordered = sorted(
-    (
-      candidate for candidate in candidates
-      if math.isfinite(candidate[0])
-      and 0 < abs(candidate[0] - price) <= radius
-    ),
-    key=lambda candidate: (
-      abs(candidate[0] - price),
-      -candidate[2],
-      candidate[0],
-      tuple(tag.casefold() for tag in candidate[1]),
-    ),
-  )
-  for level, tags, score in ordered:
-    duplicate = next(
-      (rail for rail in rails if abs(rail.price - level) <= 1.5 * tolerance),
-      None,
-    )
-    if duplicate is not None:
-      index = rails.index(duplicate)
-      rails[index] = replace(
-        duplicate,
-        tags=_compact_rail_tags([*duplicate.tags, *tags], 4),
-        score=max(duplicate.score, score),
-      )
-      continue
-    direction = "SELL" if level > price else "BUY"
-    rails.append(ScalpRail(
-      price=float(level),
-      lo=float(level - tolerance),
-      hi=float(level + tolerance),
-      label=int(round(level)),
-      direction=direction,
-      tags=_compact_rail_tags(tags, 4),
-      score=float(score),
-    ))
+  scalp_range = getattr(item, "scalp_range", None)
+  pair = _validated_scalp_pair(scalp_range, price, radius, cfg)
+  if pair is None:
+    return []
+  lower, upper = pair
+  rails = [
+    _scalp_edge_rail(lower, "BUY"),
+    _scalp_edge_rail(upper, "SELL"),
+  ]
   return sorted(
     rails,
     key=lambda rail: (abs(rail.price - price), rail.price, rail.direction),
-  )[:maximum]
+  )
 
 
-def _cluster_swing_prices(swings: list, tolerance: float) -> list[list]:
-  clusters: list[list] = []
-  for swing in sorted(swings, key=lambda item: (item.price, int(item.index))):
-    center = (
-      sum(item.price for item in clusters[-1]) / len(clusters[-1])
-      if clusters
-      else 0.0
-    )
-    if clusters and abs(swing.price - center) <= tolerance:
-      clusters[-1].append(swing)
-    else:
-      clusters.append([swing])
-  return clusters
+def _validated_scalp_pair(
+  scalp_range: ScalpRange | None,
+  price: float,
+  radius: float,
+  cfg,
+) -> tuple[ScalpBarrier, ScalpBarrier] | None:
+  if scalp_range is None:
+    return None
+  lower = scalp_range.lower
+  upper = scalp_range.upper
+  values = (
+    lower.level,
+    lower.low,
+    lower.high,
+    upper.level,
+    upper.low,
+    upper.high,
+    scalp_range.width_atr,
+  )
+  if not all(math.isfinite(float(value)) for value in values):
+    return None
+  if lower.side != "support" or upper.side != "resistance":
+    return None
+  if lower.level >= upper.level:
+    return None
+  if not lower.low <= price <= upper.high:
+    return None
+  if max(abs(lower.level - price), abs(upper.level - price)) > radius:
+    return None
+
+  minimum_touches = max(2, int(getattr(cfg, "range_scalp_min_touches", 3)))
+  break_closes = max(1, int(getattr(cfg, "range_scalp_break_closes", 2)))
+  if (
+    lower.touches < minimum_touches
+    or upper.touches < minimum_touches
+    or lower.wick_rejections < 2
+    or upper.wick_rejections < 2
+    or lower.accepted_closes >= break_closes
+    or upper.accepted_closes >= break_closes
+  ):
+    return None
+
+  minimum_width = max(
+    0.0,
+    float(getattr(cfg, "range_scalp_min_width_atr", 1.2)),
+    2.0 * float(getattr(cfg, "range_scalp_min_room_atr", 1.0)),
+  )
+  maximum_width = max(
+    minimum_width,
+    float(getattr(cfg, "range_scalp_max_width_atr", 6.0)),
+  )
+  if not minimum_width <= scalp_range.width_atr <= maximum_width:
+    return None
+  return lower, upper
 
 
-def _latest_session_levels(levels: list) -> list[tuple[str, object]]:
-  latest: dict[str, object] = {}
-  for level in levels:
-    name = str(getattr(level, "name", "")).upper()
-    if name not in _TODAY_SESSION_LEVELS:
-      continue
-    previous = latest.get(name)
-    if previous is None or getattr(level, "ts", 0) > getattr(previous, "ts", 0):
-      latest[name] = level
-  return sorted(latest.items())
+def _scalp_edge_rail(barrier: ScalpBarrier, direction: str) -> ScalpRail:
+  return ScalpRail(
+    price=float(barrier.level),
+    lo=float(barrier.low),
+    hi=float(barrier.high),
+    label=int(round(barrier.level)),
+    direction=direction,
+    tags=_compact_rail_tags(list(barrier.tags), 4),
+    score=float(barrier.score),
+  )
 
 
 def _nearby_entries(
@@ -1023,15 +961,6 @@ def _reference_atr(per_tf: dict) -> float:
   return 0.0
 
 
-def _last_atr(atr, fallback: float) -> float:
-  if hasattr(atr, "dropna"):
-    clean = atr.dropna()
-    value = float(clean.iloc[-1]) if not clean.empty else fallback
-  else:
-    value = atr_scalar(atr, fallback=fallback)
-  return value if math.isfinite(value) and value > 0 else fallback
-
-
 def _render_side(entries: list[MapEntry], price: float) -> list[str]:
   ordered = sorted(entries, key=lambda entry: (_distance(entry, price), entry.label_lo))
   if not ordered:
@@ -1054,7 +983,7 @@ def _render_side(entries: list[MapEntry], price: float) -> list[str]:
 
 def _render_rails(rails: list[ScalpRail]) -> list[str]:
   if not rails:
-    return ["└ no nearby rails"]
+    return ["└ no validated range edges"]
   lines: list[str] = []
   for index, rail in enumerate(rails):
     branch = "└" if index == len(rails) - 1 else "├"
