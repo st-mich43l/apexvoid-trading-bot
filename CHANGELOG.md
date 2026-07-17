@@ -32,6 +32,11 @@ dated section after deployment.
   and round numbers so both trade sides retain actionable references.
 - Added near-price SCALP rails to Market Map renders and scanner alerts, with
   controls for radius, tolerance, count, fractal size, and display-band width.
+- Added deterministic Range Edge Scalp detection for both sides of local
+  ranges, using repeated touch episodes, wick rejection, breakout invalidation,
+  edge confirmation, EQ/opposing-edge targets, and shared Market Map rails.
+- Added Range Edge Scalp configuration and scanner telemetry for barrier counts,
+  active range quality, and live edge-touch state.
 
 ### Fixed
 
