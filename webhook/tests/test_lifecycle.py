@@ -280,6 +280,6 @@ async def test_move_sl_to_breakeven_resets_alert(monkeypatch):
 
   update.assert_awaited_once_with(31, 2002.0)
   assert trade_ops.render_result(moved, "XAU") == (
-    "🛡 #4 SL → 2,002 (BE)"
+    "🛡 #4 move SL to 2,002 (BE)"
   )
   assert (await redis_state.get_progress(31))["sl"] is False
