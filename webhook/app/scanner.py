@@ -18,7 +18,7 @@ from app.detectors import (
   SetupDetector,
   build_context,
 )
-from app.market_map import MarketMap, build_map, map_reference
+from app.market_map import MarketMap, build_map, map_reference, rail_reference
 from app.market_map_delivery import cache_analysis
 from app.ohlc_source import RedisOHLCSource
 from app.structure import Zone
@@ -223,6 +223,13 @@ def _format_detection(
     )
     if reference:
       lines.append(escape(reference))
+    rail = rail_reference(
+      market_map,
+      result.entry_zone.low,
+      result.entry_zone.high,
+    )
+    if rail:
+      lines.append(escape(rail))
   lines.append(f"HTF bias: {escape(_htf_bias_text(ctx, htf_order))}{reason_suffix}")
   for extra in also or []:
     extra_stars = "⭐" * max(1, min(3, int(extra.confluence)))
