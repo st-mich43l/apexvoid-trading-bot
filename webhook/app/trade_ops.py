@@ -301,7 +301,7 @@ def render_result(
     suffix = " (BE)" if result["is_be"] else ""
     seq = f"#{_display_seq(result['row'])} " if tier == "vip" else ""
     return (
-      f"🛡 {seq}SL → "
+      f"🛡 {seq}move SL to "
       f"{_price(result['price'], symbol)}{suffix}"
     )
   if action == "close":
