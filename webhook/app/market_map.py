@@ -862,6 +862,13 @@ def _build_scalp_rails(
   atr_value = _last_atr(atr, reference_atr)
   candidates: list[tuple[float, list[str], float]] = []
 
+  for barrier in getattr(item, "scalp_barriers", []) or []:
+    candidates.append((
+      float(barrier.level),
+      list(barrier.tags),
+      float(barrier.score),
+    ))
+
   df = getattr(item, "df", None)
   if df is not None and not df.empty:
     fractal_n = max(

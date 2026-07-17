@@ -10,6 +10,7 @@ from app.analysis import AnalysisContext, AnalysisSettings, Regime, analyze
 from app.indicators import atr as atr_indicator
 from app.pa_types import DealingRange, Grab, Pool, SessionLevel
 from app.regime import BoxBreak, displacement_grade
+from app.scalp_ranges import ScalpBarrier, ScalpRange
 from app.structure import (
   Level,
   Swing,
@@ -56,6 +57,8 @@ class StructureSet:
   dealing_range: DealingRange | None = None
   trendlines: list[Trendline] = field(default_factory=list)
   box_break: BoxBreak | None = None
+  scalp_barriers: list[ScalpBarrier] = field(default_factory=list)
+  scalp_range: ScalpRange | None = None
 
 
 @dataclass(frozen=True)
@@ -104,6 +107,16 @@ class DetectorSettings:
   counter_min_zone_score: float = 10.0
   counter_extreme_pd: float = 0.25
   counter_level_min_touches: int = 3
+  range_scalp_enabled: bool = True
+  range_scalp_lookback: int = 36
+  range_scalp_cluster_atr: float = 0.20
+  range_scalp_min_touches: int = 3
+  range_scalp_min_wick_frac: float = 0.35
+  range_scalp_entry_tol_atr: float = 0.15
+  range_scalp_min_width_atr: float = 1.2
+  range_scalp_max_width_atr: float = 6.0
+  range_scalp_min_room_atr: float = 1.0
+  range_scalp_break_closes: int = 2
 
   def analysis_settings(self) -> AnalysisSettings:
     return AnalysisSettings(
@@ -139,6 +152,15 @@ class DetectorSettings:
       breakout_buffer_atr=self.breakout_buffer_atr,
       breakout_accept_bars=self.breakout_accept_bars,
       breakout_max_age_bars=self.breakout_max_age_bars,
+      range_scalp_lookback=self.range_scalp_lookback,
+      range_scalp_cluster_atr=self.range_scalp_cluster_atr,
+      range_scalp_min_touches=self.range_scalp_min_touches,
+      range_scalp_min_wick_frac=self.range_scalp_min_wick_frac,
+      range_scalp_entry_tol_atr=self.range_scalp_entry_tol_atr,
+      range_scalp_min_width_atr=self.range_scalp_min_width_atr,
+      range_scalp_max_width_atr=self.range_scalp_max_width_atr,
+      range_scalp_min_room_atr=self.range_scalp_min_room_atr,
+      range_scalp_break_closes=self.range_scalp_break_closes,
     )
 
 
@@ -251,6 +273,8 @@ def _structure_sets_from_analysis(items) -> dict[str, StructureSet]:
       dealing_range=item.dealing_range,
       trendlines=item.trendlines,
       box_break=item.box_break,
+      scalp_barriers=item.scalp_barriers,
+      scalp_range=item.scalp_range,
     )
   return result
 
@@ -1017,6 +1041,156 @@ def momentum_ride(ctx: DetectionContext) -> DetectionResult | None:
   return _finish(ctx, "Momentum Ride", direction, level.price, zone, price, atr, reasons)
 
 
+def range_edge_scalp(ctx: DetectionContext) -> DetectionResult | None:
+  if not ctx.settings.range_scalp_enabled:
+    return None
+  df, ind, st = _exec(ctx)
+  scalp_range = st.scalp_range
+  if len(df) < 5 or scalp_range is None:
+    return None
+  price = _current_price(ctx, df)
+  atr = _atr(ind)
+  confirmation_bars = max(1, ctx.settings.sweep_react_bars)
+  candidates = [
+    ("BUY", scalp_range.lower, scalp_range.upper.level),
+    ("SELL", scalp_range.upper, scalp_range.lower.level),
+  ]
+  candidates = sorted(
+    candidates,
+    key=lambda item: (abs(item[1].level - price), -item[1].score, item[0]),
+  )
+  for direction, barrier, opposing_level in candidates:
+    if not _barrier_touched_recently(df, barrier, confirmation_bars):
+      continue
+    if barrier.accepted_closes >= max(1, ctx.settings.range_scalp_break_closes):
+      continue
+    zone = _barrier_zone(barrier, direction)
+    grab = _zone_grab(st, zone, direction)
+    grade_a = grab is not None and grab.grade == "A"
+    minimum_touches = max(2, ctx.settings.range_scalp_min_touches)
+    if barrier.touches < minimum_touches and not (
+      barrier.touches >= 2 and grade_a
+    ):
+      continue
+    if barrier.wick_rejections < 2 and not grade_a:
+      continue
+    room_atr = abs(barrier.level - scalp_range.eq) / max(atr, _EPS)
+    if room_atr < max(0.0, ctx.settings.range_scalp_min_room_atr):
+      continue
+    confirmation = _range_edge_confirmation(
+      df,
+      st,
+      zone,
+      barrier,
+      direction,
+      confirmation_bars,
+      ctx.settings,
+    )
+    if confirmation is None:
+      continue
+    edge = "lower" if direction == "BUY" else "upper"
+    reasons = [
+      f"local range {_number(scalp_range.lower.level)}-"
+      f"{_number(scalp_range.upper.level)}",
+      f"{edge} barrier ×{barrier.touches}",
+      f"wick rejection ×{barrier.wick_rejections}",
+      confirmation,
+      f"TP1 EQ {_number(scalp_range.eq)}",
+      f"TP2 edge {_number(opposing_level)}",
+    ]
+    return _finish(
+      ctx,
+      "Range Edge Scalp",
+      direction,
+      barrier.level,
+      zone,
+      price,
+      atr,
+      reasons,
+      mode="range_scalp",
+      chop_tp_cap=False,
+    )
+  return None
+
+
+def _barrier_zone(barrier: ScalpBarrier, direction: str) -> Zone:
+  return Zone(
+    barrier.low,
+    barrier.high,
+    _BUY_ZONE_SIDE if direction == "BUY" else "supply",
+    source="range_edge",
+    score=max(STAR_TWO_SCORE, barrier.score),
+    score_reasons=list(barrier.tags),
+  )
+
+
+def _barrier_touched_recently(
+  df: pd.DataFrame,
+  barrier: ScalpBarrier,
+  bars: int,
+) -> bool:
+  for row in df.tail(max(1, bars)).itertuples(index=False):
+    if float(row.low) <= barrier.high and float(row.high) >= barrier.low:
+      return True
+  return False
+
+
+def _range_edge_confirmation(
+  df: pd.DataFrame,
+  st: StructureSet,
+  zone: Zone,
+  barrier: ScalpBarrier,
+  direction: str,
+  bars: int,
+  settings: DetectorSettings,
+) -> str | None:
+  grab = _zone_grab(st, zone, direction)
+  if grab is not None and grab.grade == "A":
+    return "sweep A"
+  if _barrier_sweep_reclaim(df, barrier, direction, bars):
+    return "sweep + reclaim"
+  if _recent_rejection(df, direction, bars) and (
+    _recent_choch(st, direction, len(df), settings)
+    or _micro_choch(df, direction, bars)
+  ):
+    return "rejection + micro CHoCH"
+  return None
+
+
+def _barrier_sweep_reclaim(
+  df: pd.DataFrame,
+  barrier: ScalpBarrier,
+  direction: str,
+  bars: int,
+) -> bool:
+  for row in df.tail(max(1, bars)).itertuples(index=False):
+    if direction == "SELL":
+      if float(row.high) > barrier.high and float(row.close) < barrier.level:
+        return True
+    elif float(row.low) < barrier.low and float(row.close) > barrier.level:
+      return True
+  return False
+
+
+def _recent_rejection(df: pd.DataFrame, direction: str, bars: int) -> bool:
+  start = max(0, len(df) - max(1, bars))
+  for index in range(start, len(df)):
+    if _rejection(df.iloc[:index + 1], direction):
+      return True
+  return False
+
+
+def _micro_choch(df: pd.DataFrame, direction: str, bars: int) -> bool:
+  lookback = max(2, bars)
+  if len(df) < lookback + 1:
+    return False
+  prior = df.iloc[-lookback - 1:-1]
+  close = float(df["close"].iloc[-1])
+  if direction == "BUY":
+    return close > float(prior["high"].max())
+  return close < float(prior["low"].min())
+
+
 def fade_scalp(ctx: DetectionContext) -> DetectionResult | None:
   df, ind, st = _exec(ctx)
   if len(df) < 5:
@@ -1402,6 +1576,7 @@ DEFAULT_DETECTORS: tuple[SetupDetector, ...] = (
   break_retest,
   snap_back,
   momentum_ride,
+  range_edge_scalp,
   fade_scalp,
   zone_reaction,
 )

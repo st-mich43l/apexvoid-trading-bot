@@ -606,6 +606,7 @@ def test_analysis_modules_have_no_delivery_or_state_imports():
   import app.pa_math as pa_math
   import app.pa_types as pa_types
   import app.regime as regime_module
+  import app.scalp_ranges as scalp_ranges_module
   import app.session_liquidity as session_liquidity
   import app.structure as structure
   import app.swings as swings_module
@@ -628,6 +629,7 @@ def test_analysis_modules_have_no_delivery_or_state_imports():
     pa_math,
     pa_types,
     regime_module,
+    scalp_ranges_module,
     session_liquidity,
     structure,
     swings_module,
