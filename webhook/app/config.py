@@ -123,6 +123,13 @@ class Settings(BaseSettings):
   map_min_zone_score: float = 6.0
   map_min_level_touches: int = 4
   map_max_distance_atr: float = 15.0
+  map_band_max_atr: float = 2.0
+  map_min_per_side: int = 2
+  map_fallback_radius: float = 30.0
+  map_scalp_radius: float = 15.0
+  map_scalp_tol: float = 1.0
+  map_scalp_max: int = 5
+  map_scalp_fractal_n: int = 1
   map_change_min: float = 1.0
   map_session_send: bool = True
   allow_counter_trend: bool = True
