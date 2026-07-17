@@ -28,12 +28,17 @@ dated section after deployment.
 - Added owner-only `/trade_map`, guarded session-open Market Map DMs, scanner
   alert map references, gate-report map counts, and Market Map configuration
   knobs.
+- Added the Market Map fallback ladder for spent zones, swept session levels,
+  and round numbers so both trade sides retain actionable references.
+- Added near-price SCALP rails to Market Map renders and scanner alerts, with
+  controls for radius, tolerance, count, fractal size, and display-band width.
 
 ### Fixed
 
-- Market Map: reject weak or ATR-distant zones, keep overlapping confluence at
-  the actionable intersection, prevent key levels/trendlines from widening
-  entry bands, and compact noisy tags in the owner render.
+- Market Map: reject weak or ATR-distant zones, prevent key levels/trendlines
+  from widening entry bands, and compact noisy tags in the owner render.
+- Market Map: cap merged band width, remove same-side render overlap, deduplicate
+  tags case-insensitively, and require genuine HTF confluence for MAJOR tiers.
 - Route on-demand and session-open Market Maps through the dedicated scanner
   bot instead of the general signal-management bot.
 - Register and poll owner-only `/trade_map` on the dedicated signal bot while
