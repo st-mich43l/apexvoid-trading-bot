@@ -194,12 +194,15 @@ async def handle_channel_tag(msg: Message) -> None:
   if symbol is None:
     return
   match = _TAG_RE.match(msg.text or "")
+  if match.group(2):
+    # Absolute database ids are intentionally restricted to owner DM commands.
+    return
   seq = int(match.group(1))
   reply_to = msg.reply_to_message.message_id
   sid = await _resolve_any_sid(seq, reply_to, symbol)
   if sid is None:
     return
-  grade = match.group(3)
+  grade = match.group(4)
   stars = (
     len(grade) if grade and grade.startswith("*")
     else int(grade) if grade else None
@@ -210,7 +213,7 @@ async def handle_channel_tag(msg: Message) -> None:
     "chat_id": msg.chat.id,
     "reply_to": reply_to,
     "seq": seq,
-    "setup": match.group(2).lower(),
+    "setup": match.group(3).lower(),
     "stars": stars,
   })
   if result.get("ok"):
