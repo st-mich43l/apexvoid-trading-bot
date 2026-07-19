@@ -33,6 +33,19 @@ def _event_guard_timing(ts_utc: int, now: int) -> str:
   return f"in {hours}h {minutes}m"
 
 
+def _manual_signal_confirmation(sig: dict, daily_seq: int) -> str:
+  base = f"✅ Sent to channel (#{daily_seq})"
+  setup = sig.get("setup_type")
+  if not setup:
+    return (
+      f"{base} · ⚠️ no setup tag — add later with: "
+      f"<code>tag #{daily_seq} &lt;setup&gt; **</code>"
+    )
+  confluence = sig.get("confluence")
+  stars = f" {'⭐' * confluence}" if confluence else ""
+  return f"{base} · setup {escape(setup)}{stars}"
+
+
 @router.message(F.chat.type == "private", F.text)
 async def handle_private_signal(msg: Message) -> None:
   """Parse manual signal DM and post to channel."""
@@ -79,7 +92,7 @@ async def handle_private_signal(msg: Message) -> None:
   signal = await get_manual_signal(rec["id"])
   signal["guard_text"] = guard_text
   await broadcast_entry(signal)
-  await msg.answer(f"✅ Sent to channel (#{rec['daily_seq']})")
+  await msg.answer(_manual_signal_confirmation(sig, rec["daily_seq"]))
   log.info(
     "Manual signal #%d (daily #%d): %s XAUUSD @ %s-%s",
     rec["id"], rec["daily_seq"], sig['action'], sig['entry'], sig['entry_end'],

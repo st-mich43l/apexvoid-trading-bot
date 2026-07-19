@@ -611,6 +611,19 @@ async def get_all_signals(symbol: str | None = None) -> list[dict]:
   return [_decode_signal(row) for row in rows]
 
 
+async def get_untagged_signals(limit: int = 20) -> list[dict]:
+  """Return recent signals whose setup metadata still needs backfilling."""
+  limit = max(1, min(100, int(limit)))
+  async with _connect() as db:
+    rows = await db.fetch(
+      "SELECT * FROM manual_signals "
+      "WHERE setup_type IS NULL "
+      "ORDER BY ts DESC, id DESC LIMIT $1",
+      limit,
+    )
+  return [_decode_signal(row) for row in rows]
+
+
 async def get_manual_signal(row_id: int) -> dict | None:
   """Return one signal by primary key, regardless of lifecycle state."""
   async with _connect() as db:
