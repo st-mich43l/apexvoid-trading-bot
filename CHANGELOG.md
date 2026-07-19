@@ -13,6 +13,9 @@ dated section after deployment.
 
 ### Added
 
+- Added lenient trailing setup-tag parsing, setup metadata in manual-signal
+  confirmations, owner-only `/trade_untagged` backfill listings, and absolute
+  `id:<db_id>` targeting for `/trade_tag`.
 - Introduced this changelog and the repository rule requiring future changes to
   update it.
 - Added deterministic significant-swing trendlines, diagonal reaction anchors,
@@ -50,6 +53,8 @@ dated section after deployment.
 
 ### Fixed
 
+- Manual-signal setup tags are no longer silently dropped when written without
+  the literal `/ setup` prefix, including slashless human-entered tags.
 - Market Map: reject weak or ATR-distant zones, prevent key levels/trendlines
   from widening entry bands, and compact noisy tags in the owner render.
 - Market Map: cap merged band width, remove same-side render overlap, deduplicate

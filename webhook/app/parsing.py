@@ -22,8 +22,24 @@ _MANUAL_RE = re.compile(
   r'\s*tp\s+([\d./]+)',
   re.IGNORECASE,
 )
+SETUP_RESERVED_WORDS = frozenset({
+  "setup",
+  "vip",
+  "scalp",
+  "scalp-nhanh",
+  "quick-scalp",
+  "sl",
+  "tp",
+  "entry",
+  "buy",
+  "sell",
+  "gold",
+  "xau",
+  "xauusd",
+})
 _SETUP_SUFFIX_RE = re.compile(
-  r'(?i)\s*/\s*setup\s+([a-z0-9][a-z0-9_-]*)'
+  r'(?i)(?<=\d)(?:\s*/\s*|\s+)(?:setup\s+)?'
+  r'([a-z][a-z0-9_-]*)'
   r'(?:\s+(\*{1,3}|[1-3]))?\s*$'
 )
 _SCALP_SUFFIX_RE = re.compile(
@@ -45,7 +61,8 @@ _REOPEN_RE = re.compile(
   r'(?:\s+([\d.]+)\s*[-–]\s*([\d.]+))?\s*$'
 )
 _TAG_RE = re.compile(
-  r'(?i)^\s*tag\s+#?(\d+)\s+([a-z0-9][a-z0-9_-]*)'
+  r'(?i)^\s*tag\s+(?:(?:#?(\d+))|(?:id:(\d+)))\s+'
+  r'([a-z0-9][a-z0-9_-]*)'
   r'(?:\s+(\*{1,3}|[1-3]))?\s*$'
 )
 _NOTE_RE = re.compile(r'(?is)^\s*note\s+#?(\d+)\s+(.+?)\s*$')
@@ -87,7 +104,10 @@ def _parse_manual(text: str) -> Optional[dict]:
   setup_type = None
   confluence = None
   setup_match = _SETUP_SUFFIX_RE.search(raw)
-  if setup_match:
+  if (
+    setup_match
+    and setup_match.group(1).lower() not in SETUP_RESERVED_WORDS
+  ):
     setup_type = setup_match.group(1).lower()
     grade = setup_match.group(2)
     if grade:

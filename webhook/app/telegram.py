@@ -19,6 +19,7 @@ from app.dedup import (
   get_pips_summary,
   get_signal_by_post,
   get_signal_cluster,
+  get_untagged_signals,
   store_manual_signal,
   store_pips,
 )
@@ -134,6 +135,7 @@ def _sync_legacy_patches() -> None:
   _dm.get_pips_records = get_pips_records
   _dm.get_pips_summary = get_pips_summary
   _dm.get_signal_cluster = get_signal_cluster
+  _dm.get_untagged_signals = get_untagged_signals
   _dm.channel_for_symbol = channel_for_symbol
   _dm.do_active = do_active
   _dm.do_cancel = do_cancel
@@ -367,6 +369,11 @@ async def handle_trade_reopen(msg) -> None:
 async def handle_trade_tag(msg) -> None:
   _sync_legacy_patches()
   return await _dm.handle_trade_tag(msg)
+
+
+async def handle_trade_untagged(msg) -> None:
+  _sync_legacy_patches()
+  return await _dm.handle_trade_untagged(msg)
 
 
 async def handle_trade_note(msg) -> None:

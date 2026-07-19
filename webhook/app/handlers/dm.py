@@ -2,7 +2,9 @@
 
 import asyncio
 import logging
+from datetime import datetime
 from html import escape
+from zoneinfo import ZoneInfo
 
 from aiogram import F, Router
 from aiogram.filters import Command
@@ -18,6 +20,7 @@ from app.dedup import (
   get_pips_records,
   get_pips_summary,
   get_signal_cluster,
+  get_untagged_signals,
 )
 from app.broadcast import render_entry
 from app.parsing import (
@@ -79,7 +82,8 @@ _HELP_TEXT = """<b>Trade controls</b>
 <code>/trade_cancel [SYMBOL] #id</code>
 <code>/trade_delete [SYMBOL] #id</code>
 <code>/trade_reopen [SYMBOL] #id [lo-hi]</code>
-<code>/trade_tag [SYMBOL] #id &lt;setup&gt; [***]</code>
+<code>/trade_tag [SYMBOL] #id|id:DB_ID &lt;setup&gt; [***]</code>
+<code>/trade_untagged [N]</code>
 <code>/trade_note [SYMBOL] #id &lt;text&gt;</code>
 <code>/trade_review [SYMBOL] #id</code>
 <code>/trade_map [SYMBOL]</code>
@@ -455,16 +459,26 @@ async def handle_trade_tag(msg: Message) -> None:
   match = _TAG_RE.match(f"tag {raw}")
   if not match:
     await msg.answer(
-      "Usage: <code>/trade_tag [SYMBOL] #N setup [***]</code>"
+      "Usage: <code>/trade_tag [SYMBOL] #N|id:DB_ID setup [***]</code>"
     )
     return
-  seq = int(match.group(1))
-  sid = await _resolve_any_sid(seq, None, symbol)
+  seq_token = match.group(1)
+  absolute_id = match.group(2)
+  if absolute_id:
+    signal = await get_manual_signal(int(absolute_id))
+    if signal is None or signal.get("symbol", "XAU") != symbol:
+      await msg.answer("⚠️ Signal not found.")
+      return
+    sid = signal["id"]
+    seq = signal.get("daily_seq") or sid
+  else:
+    seq = int(seq_token)
+    sid = await _resolve_any_sid(seq, None, symbol)
   if sid is None:
     await msg.answer("⚠️ Signal not found.")
     return
-  setup_type = match.group(2).lower()
-  grade = match.group(3)
+  setup_type = match.group(3).lower()
+  grade = match.group(4)
   confluence = None
   if grade:
     confluence = len(grade) if grade.startswith("*") else int(grade)
@@ -478,6 +492,47 @@ async def handle_trade_tag(msg: Message) -> None:
     "stars": confluence,
   })
   await msg.answer(await post_result(result, symbol))
+
+
+def _untagged_outcome(signal: dict) -> str:
+  result = signal.get("result_pips")
+  if result is None:
+    return escape(signal.get("status") or "open")
+  result = int(result)
+  return f"{result:+d}p" if result else "0p"
+
+
+@router.message(Command("trade_untagged"), F.chat.type == "private")
+async def handle_trade_untagged(msg: Message) -> None:
+  if not _is_owner(msg):
+    return
+  raw = _command_args(msg)
+  if raw:
+    if not raw.isdigit() or not 1 <= int(raw) <= 100:
+      await msg.answer("Usage: <code>/trade_untagged [1-100]</code>")
+      return
+    limit = int(raw)
+  else:
+    limit = 20
+  signals = await get_untagged_signals(limit)
+  if not signals:
+    await msg.answer("✅ No untagged signals.")
+    return
+  tz = ZoneInfo(settings.seq_reset_tz)
+  lines = [f"📋 <b>Untagged signals ({len(signals)})</b>"]
+  for signal in signals:
+    signal_id = signal["id"]
+    date = datetime.fromtimestamp(signal["ts"], tz).strftime("%d %b")
+    entry_end = signal.get("entry_end")
+    if entry_end is None:
+      entry_end = signal["entry"]
+    lines.append(
+      f"· id:{signal_id} · {date} · {escape(signal['action'])} "
+      f"{_num(signal['entry'])}–{_num(entry_end)} · "
+      f"{_untagged_outcome(signal)} → "
+      f"<code>/trade_tag id:{signal_id} &lt;setup&gt; **</code>"
+    )
+  await msg.answer("\n".join(lines))
 
 
 @router.message(Command("trade_note"), F.chat.type == "private")

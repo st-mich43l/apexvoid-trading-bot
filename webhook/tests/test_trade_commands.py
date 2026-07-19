@@ -48,7 +48,7 @@ async def test_scoped_command_menu(monkeypatch):
   assert {command.command for command in telegram.OWNER_COMMANDS} == {
     "trade_active", "trade_close", "trade_uncclose", "trade_tp",
     "trade_sl", "trade_cancel", "trade_delete",
-    "trade_reopen", "trade_tag", "trade_note", "trade_review",
+    "trade_reopen", "trade_tag", "trade_untagged", "trade_note", "trade_review",
     "trade_map", "trade_stats", "trade_pips", "help",
   } | {"trade_open"}
 

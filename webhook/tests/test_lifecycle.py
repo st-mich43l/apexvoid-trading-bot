@@ -210,6 +210,7 @@ async def test_handler_order_and_bare_pips_default_off(monkeypatch):
     "handle_trade_reopen",
     "handle_trade_uncclose",
     "handle_trade_tag",
+    "handle_trade_untagged",
     "handle_trade_note",
     "handle_trade_review",
     "handle_trade_stats",
