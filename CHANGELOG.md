@@ -53,6 +53,8 @@ dated section after deployment.
 
 ### Fixed
 
+- Updated the reusable deploy-workflow reference and container source metadata
+  for the GitHub username change to `st-mich43l`.
 - Manual-signal setup tags are no longer silently dropped when written without
   the literal `/ setup` prefix, including slashless human-entered tags.
 - Market Map: reject weak or ATR-distant zones, prevent key levels/trendlines

@@ -16,7 +16,7 @@ on:
 
 jobs:
   release:
-    uses: mach1el/action-library/.github/workflows/build-push-deploy.yml@master
+    uses: st-mich43l/action-library/.github/workflows/build-push-deploy.yml@master
     with:
       project: apexvoid-trading-bot
       registry-namespace: mich43l
