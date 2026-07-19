@@ -8,7 +8,7 @@ LABEL org.opencontainers.image.title="apexvoid-trading-bot" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${REVISION}" \
       org.opencontainers.image.created="${CREATED}" \
-      org.opencontainers.image.source="https://github.com/mach1el/apexvoid-trading-bot"
+      org.opencontainers.image.source="https://github.com/st-mich43l/apexvoid-trading-bot"
 
 WORKDIR /app
 
