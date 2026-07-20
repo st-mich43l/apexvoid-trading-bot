@@ -89,7 +89,6 @@ services:
       AUTO_TRADE_MAX_ENTRY_DISTANCE_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_MAX_ENTRY_DISTANCE_PIPS | default('10') | string | to_json }}
       AUTO_TRADE_MAX_DAILY_TRADES: {{ apexvoid_trading_bot_env.AUTO_TRADE_MAX_DAILY_TRADES | default('6') | string | to_json }}
       AUTO_TRADE_MIN_CONFLUENCE: {{ apexvoid_trading_bot_env.AUTO_TRADE_MIN_CONFLUENCE | default('2') | string | to_json }}
-      AUTO_TRADE_FAST_SCALP_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_FAST_SCALP_ENABLED | default('false') | string | to_json }}
       AUTO_TRADE_POLL_MS: {{ apexvoid_trading_bot_env.AUTO_TRADE_POLL_MS | default('1000') | string | to_json }}
       AUTO_TRADE_STREAM: {{ apexvoid_trading_bot_env.AUTO_TRADE_STREAM | default('auto_trade:candidates') | string | to_json }}
       AUTO_TRADE_EVENT_STREAM: {{ apexvoid_trading_bot_env.AUTO_TRADE_EVENT_STREAM | default('auto_trade:events') | string | to_json }}
