@@ -131,6 +131,21 @@ async def test_close_leg_weighted_net(sql, runner_pips, expected_net):
 
 
 @pytest.mark.asyncio
+async def test_partial_profit_then_breakeven_stop_preserves_profit():
+  await dedup.init_db()
+  rec = await dedup.store_manual_signal(
+    1, "SELL", 4026.0, 4029.0, 4034.0, [4023.0, 4017.0],
+  )
+
+  partial = await dedup.close_leg(rec["id"], 90, 0.5)
+  final = await dedup.close_leg(rec["id"], 0)
+
+  assert partial["remaining"] == pytest.approx(0.5)
+  assert final["closed"] is True
+  assert final["net"] == 45
+
+
+@pytest.mark.asyncio
 async def test_close_leg_rejects_overbook():
   await dedup.init_db()
   rec = await dedup.store_manual_signal(

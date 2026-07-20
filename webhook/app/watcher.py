@@ -9,7 +9,7 @@ from app.config import settings
 from app.broadcast import fanout_update
 from app.dedup import get_open_signals
 from app.keyboards import build_close_kb, build_tp_close_kb
-from app.pips_format import pips_between, wing_icons
+from app.pips_format import pips_between, sl_result_pips, wing_icons
 from app.price import get_xau_bars
 from app.redis_state import clear_sl_alert, mark_tp_alert
 from app import redis_state
@@ -107,17 +107,25 @@ def _render_level_alert(
         if settings.public_show_pips
         else "🚀 runner"
       )
-    return (
-      f"🛡 SL (-{pips} pips)"
-      if settings.public_show_pips
-      else "🛡 SL hit"
-    )
+    if not settings.public_show_pips:
+      return "🛡 SL hit"
+    if pips < 0:
+      return f"🛡 SL ({pips} pips)"
+    if pips > 0:
+      return f"🛡 SL (+{pips} pips)"
+    return "🛡 BE (0 pips)"
   if kind == "SL":
     context = _overshoot_context(fill_price, extreme_price, atr)
+    if pips < 0:
+      result = f"❌ Loss: <b>{pips} pips</b>"
+    elif pips > 0:
+      result = f"✅ Profit: <b>+{pips} pips</b> {wing_icons(pips)}"
+    else:
+      result = "➖ Result: <b>0 pips (BE)</b>"
     return (
       f"⚠️ <b>NEAR SL</b> | #{seq}\n"
       f"📉 Fill: <b>{_price_text(fill_price)}</b> (SL){context}\n"
-      f"❌ Loss: <b>-{pips} pips</b>\n\n"
+      f"{result}\n\n"
     )
   if kind == "RUNNER":
     return (
@@ -219,13 +227,13 @@ async def _evaluate(
   if sl_hit:
     extreme = bar["low"] if is_buy else bar["high"]
     fill = _sl_fill_price(sig, bar, is_buy)
-    pips = pips_between(sig, fill)
+    pips = sl_result_pips(sig, fill)
     await fanout_update(
       sig,
       lambda tier: _render_level_alert(
         tier, "SL", "SL", seq, fill, pips, extreme, atr
       ),
-      markup_fn=lambda tier, s=sig["id"], t=progress["tp"], p=-pips: (
+      markup_fn=lambda tier, s=sig["id"], t=progress["tp"], p=pips: (
         build_close_kb(s, t, p) if tier == "vip" else None
       ),
     )
