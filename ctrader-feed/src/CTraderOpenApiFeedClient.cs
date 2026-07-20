@@ -8,7 +8,7 @@ namespace ApexVoid.CTraderFeed;
 public sealed class CTraderOpenApiFeedClient(
   FeedOptions options,
   IRefreshTokenStore refreshTokenStore
-) : ICTraderFeedClient
+) : ICTraderFeedClient, ICTraderTradeClient
 {
   private readonly Channel<IMessage> _responses = Channel.CreateUnbounded<IMessage>();
   private readonly Channel<RawTrendbar> _liveTrendbars = Channel.CreateUnbounded<RawTrendbar>();
@@ -46,16 +46,19 @@ public sealed class CTraderOpenApiFeedClient(
       _ => true,
       cancellationToken
     );
-    await RefreshTokenAsync(cancellationToken);
-    await SendAndWaitAsync<ProtoOAAccountAuthRes>(
-      new ProtoOAAccountAuthReq
-      {
-        CtidTraderAccountId = options.AccountId,
-        AccessToken = _tokens.AccessToken,
-      },
-      _ => true,
-      cancellationToken
-    );
+    ProtoOAGetAccountListByAccessTokenRes accounts;
+    try
+    {
+      accounts = await GetGrantedAccountsAsync(cancellationToken);
+    }
+    catch (InvalidOperationException)
+    {
+      Log("configured access token rejected; refreshing before one auth retry");
+      await RefreshTokenAsync(cancellationToken);
+      accounts = await GetGrantedAccountsAsync(cancellationToken);
+    }
+    RequireConfiguredAccount(accounts);
+    await AuthorizeAccountAsync(cancellationToken);
   }
 
   public async Task RefreshTokenAsync(CancellationToken cancellationToken)
@@ -104,8 +107,168 @@ public sealed class CTraderOpenApiFeedClient(
       options.RedisSymbol,
       options.CTraderSymbol,
       light.SymbolId,
-      fullSymbol.Digits
+      fullSymbol.Digits,
+      fullSymbol.PipPosition,
+      fullSymbol.MinVolume,
+      fullSymbol.StepVolume,
+      fullSymbol.MaxVolume,
+      fullSymbol.LotSize
     );
+  }
+
+  public async Task<TradingAccountSnapshot> GetTradingAccountAsync(
+    CancellationToken cancellationToken
+  )
+  {
+    var accounts = await GetGrantedAccountsAsync(cancellationToken);
+    var account = RequireConfiguredAccount(accounts);
+    var response = await SendAndWaitAsync<ProtoOATraderRes>(
+      new ProtoOATraderReq { CtidTraderAccountId = options.AccountId },
+      item => item.CtidTraderAccountId == options.AccountId,
+      cancellationToken
+    );
+    var trader = response.Trader
+      ?? throw new InvalidOperationException("cTrader account profile is missing");
+    return ToAccountSnapshot(account, accounts.PermissionScope, trader);
+  }
+
+  public async Task<IReadOnlyList<TradingAccountSnapshot>> GetGrantedDemoAccountsAsync(
+    CancellationToken cancellationToken
+  )
+  {
+    var accounts = await GetGrantedAccountsAsync(cancellationToken);
+    var snapshots = new List<TradingAccountSnapshot>();
+    foreach (var account in accounts.CtidTraderAccount.Where(item => !item.IsLive))
+    {
+      var accountId = checked((long)account.CtidTraderAccountId);
+      if (accountId != options.AccountId)
+      {
+        await AuthorizeAccountAsync(accountId, cancellationToken);
+      }
+      var response = await SendAndWaitAsync<ProtoOATraderRes>(
+        new ProtoOATraderReq { CtidTraderAccountId = accountId },
+        item => item.CtidTraderAccountId == accountId,
+        cancellationToken
+      );
+      var trader = response.Trader
+        ?? throw new InvalidOperationException(
+          $"cTrader account profile is missing for {accountId}"
+        );
+      snapshots.Add(ToAccountSnapshot(account, accounts.PermissionScope, trader));
+    }
+    return snapshots;
+  }
+
+  private static TradingAccountSnapshot ToAccountSnapshot(
+    ProtoOACtidTraderAccount account,
+    ProtoOAClientPermissionScope permissionScope,
+    ProtoOATrader trader
+  )
+  {
+    var divisor = 1m;
+    for (var index = 0; index < trader.MoneyDigits; index++)
+    {
+      divisor *= 10m;
+    }
+    return new TradingAccountSnapshot(
+      checked((long)account.CtidTraderAccountId),
+      account.IsLive,
+      permissionScope.ToString(),
+      trader.AccessRights.ToString(),
+      trader.AccountType.ToString(),
+      trader.BrokerName,
+      trader.Balance / divisor
+    );
+  }
+
+  public async Task<IReadOnlyList<TradingPosition>> ReconcilePositionsAsync(
+    CancellationToken cancellationToken
+  )
+  {
+    var response = await SendAndWaitAsync<ProtoOAReconcileRes>(
+      new ProtoOAReconcileReq { CtidTraderAccountId = options.AccountId },
+      item => item.CtidTraderAccountId == options.AccountId,
+      cancellationToken
+    );
+    return response.Position
+      .Where(position => position.TradeData is not null)
+      .Select(ToTradingPosition)
+      .ToArray();
+  }
+
+  public async Task<TradeExecution> PlaceMarketOrderAsync(
+    MarketOrderRequest order,
+    CancellationToken cancellationToken
+  )
+  {
+    var request = new ProtoOANewOrderReq
+    {
+      CtidTraderAccountId = options.AccountId,
+      SymbolId = order.SymbolId,
+      OrderType = ProtoOAOrderType.Market,
+      TradeSide = order.Direction == TradeDirection.Buy
+        ? ProtoOATradeSide.Buy
+        : ProtoOATradeSide.Sell,
+      Volume = order.Volume,
+      RelativeStopLoss = order.RelativeStopLoss,
+      Label = order.Label,
+      Comment = order.Comment,
+      ClientOrderId = order.ClientOrderId,
+    };
+    var response = await SendAndWaitAsync<ProtoOAExecutionEvent>(
+      request,
+      item => (
+        MarketOrderMatches(item, order)
+        && IsTerminalExecution(item.ExecutionType)
+      ),
+      cancellationToken
+    );
+    return ToTradeExecution(response);
+  }
+
+  public async Task AmendPositionStopLossAsync(
+    long positionId,
+    decimal stopLoss,
+    CancellationToken cancellationToken
+  )
+  {
+    var response = await SendAndWaitAsync<ProtoOAExecutionEvent>(
+      new ProtoOAAmendPositionSLTPReq
+      {
+        CtidTraderAccountId = options.AccountId,
+        PositionId = positionId,
+        StopLoss = decimal.ToDouble(stopLoss),
+      },
+      item => (
+        ExecutionPositionId(item) == positionId
+        && item.ExecutionType is ProtoOAExecutionType.OrderReplaced
+          or ProtoOAExecutionType.OrderRejected
+      ),
+      cancellationToken
+    );
+    ThrowIfRejected(response);
+  }
+
+  public async Task<TradeExecution> ClosePositionAsync(
+    long positionId,
+    long volume,
+    CancellationToken cancellationToken
+  )
+  {
+    var response = await SendAndWaitAsync<ProtoOAExecutionEvent>(
+      new ProtoOAClosePositionReq
+      {
+        CtidTraderAccountId = options.AccountId,
+        PositionId = positionId,
+        Volume = volume,
+      },
+      item => (
+        ExecutionPositionId(item) == positionId
+        && IsTerminalExecution(item.ExecutionType)
+      ),
+      cancellationToken
+    );
+    return ToTradeExecution(response);
   }
 
   public async Task<IReadOnlyList<RawTrendbar>> GetTrendbarsAsync(
@@ -318,6 +481,13 @@ public sealed class CTraderOpenApiFeedClient(
                 $"cTrader transport error while waiting for {typeof(T).Name} after {request.GetType().Name}: {FormatError(genericError)}"
               );
             }
+            if (message is ProtoOAOrderErrorEvent orderError)
+            {
+              throw new InvalidOperationException(
+                $"cTrader order error after {request.GetType().Name}: "
+                + $"{orderError.ErrorCode}: {orderError.Description}"
+              );
+            }
             if (message is T typed && predicate(typed))
             {
               return typed;
@@ -339,6 +509,59 @@ public sealed class CTraderOpenApiFeedClient(
     {
       _requestLock.Release();
     }
+  }
+
+  private Task<ProtoOAAccountAuthRes> AuthorizeAccountAsync(
+    CancellationToken cancellationToken
+  ) => AuthorizeAccountAsync(options.AccountId, cancellationToken);
+
+  private Task<ProtoOAAccountAuthRes> AuthorizeAccountAsync(
+    long accountId,
+    CancellationToken cancellationToken
+  ) => SendAndWaitAsync<ProtoOAAccountAuthRes>(
+    new ProtoOAAccountAuthReq
+    {
+      CtidTraderAccountId = accountId,
+      AccessToken = _tokens.AccessToken,
+    },
+    response => response.CtidTraderAccountId == accountId,
+    cancellationToken
+  );
+
+  private Task<ProtoOAGetAccountListByAccessTokenRes> GetGrantedAccountsAsync(
+    CancellationToken cancellationToken
+  ) => SendAndWaitAsync<ProtoOAGetAccountListByAccessTokenRes>(
+    new ProtoOAGetAccountListByAccessTokenReq
+    {
+      AccessToken = _tokens.AccessToken,
+    },
+    _ => true,
+    cancellationToken
+  );
+
+  private ProtoOACtidTraderAccount RequireConfiguredAccount(
+    ProtoOAGetAccountListByAccessTokenRes accounts
+  )
+  {
+    var account = accounts.CtidTraderAccount.FirstOrDefault(
+      item => item.CtidTraderAccountId == (ulong)options.AccountId
+    );
+    if (account is not null)
+    {
+      return account;
+    }
+    var granted = accounts.CtidTraderAccount.Count == 0
+      ? "none"
+      : string.Join(
+        ", ",
+        accounts.CtidTraderAccount.Select(item =>
+          $"{item.CtidTraderAccountId} ({(item.IsLive ? "live" : "demo")})"
+        )
+      );
+    throw new InvalidOperationException(
+      $"Account {options.AccountId} is not granted to the configured access token; "
+      + $"granted accounts: {granted}"
+    );
   }
 
   private async Task SendAsync(
@@ -432,6 +655,79 @@ public sealed class CTraderOpenApiFeedClient(
     string.IsNullOrWhiteSpace(error.Description)
       ? error.ErrorCode
       : $"{error.ErrorCode}: {error.Description}";
+
+  private static TradingPosition ToTradingPosition(ProtoOAPosition position)
+  {
+    var data = position.TradeData;
+    return new TradingPosition(
+      position.PositionId,
+      data.SymbolId,
+      data.TradeSide == ProtoOATradeSide.Buy
+        ? TradeDirection.Buy
+        : TradeDirection.Sell,
+      data.Volume,
+      Convert.ToDecimal(position.Price),
+      position.HasStopLoss ? Convert.ToDecimal(position.StopLoss) : null,
+      data.Label,
+      data.Comment
+    );
+  }
+
+  private static bool IsTerminalExecution(ProtoOAExecutionType type) =>
+    type is ProtoOAExecutionType.OrderFilled
+      or ProtoOAExecutionType.OrderRejected;
+
+  private static bool MarketOrderMatches(
+    ProtoOAExecutionEvent response,
+    MarketOrderRequest order
+  ) => response.Order?.ClientOrderId == order.ClientOrderId
+    || (
+      response.Position?.TradeData?.Label == order.Label
+      && response.Position.TradeData.Comment == order.Comment
+    );
+
+  private static long ExecutionPositionId(ProtoOAExecutionEvent response) =>
+    response.Position?.PositionId
+    ?? response.Deal?.PositionId
+    ?? response.Order?.PositionId
+    ?? 0;
+
+  private static TradeExecution ToTradeExecution(ProtoOAExecutionEvent response)
+  {
+    ThrowIfRejected(response);
+    var positionId = ExecutionPositionId(response);
+    if (positionId <= 0)
+    {
+      throw new InvalidOperationException("cTrader execution did not return a position ID");
+    }
+    var price = response.Deal?.ExecutionPrice
+      ?? response.Order?.ExecutionPrice
+      ?? response.Position?.Price
+      ?? 0;
+    var dealVolume = response.Deal is { } deal
+      ? deal.FilledVolume > 0 ? deal.FilledVolume : deal.Volume
+      : 0;
+    var volume = dealVolume > 0
+      ? dealVolume
+      : response.Order?.ExecutedVolume ?? 0;
+    return new TradeExecution(
+      positionId,
+      response.Order?.OrderId ?? response.Deal?.OrderId ?? 0,
+      Convert.ToDecimal(price),
+      volume,
+      response.Position?.TradeData?.Volume
+    );
+  }
+
+  private static void ThrowIfRejected(ProtoOAExecutionEvent response)
+  {
+    if (response.ExecutionType == ProtoOAExecutionType.OrderRejected)
+    {
+      throw new InvalidOperationException(
+        $"cTrader rejected order operation: {response.ErrorCode}"
+      );
+    }
+  }
 
   private static void Log(string message) =>
     Console.Error.WriteLine($"ctrader-feed {message}");

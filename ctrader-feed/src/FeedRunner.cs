@@ -6,7 +6,8 @@ public sealed class FeedRunner(
   IBarSink sink,
   HealthFile healthFile,
   Func<int, TimeSpan>? reconnectDelay = null,
-  Action<string>? warningLog = null
+  Action<string>? warningLog = null,
+  AutoTradeEngine? autoTrade = null
 )
 {
   private bool _startupBackfillPending = true;
@@ -45,6 +46,7 @@ public sealed class FeedRunner(
     using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
     Task? refreshTask = null;
     Task? spotTask = null;
+    Task? autoTradeTask = null;
     try
     {
       Log(
@@ -66,7 +68,17 @@ public sealed class FeedRunner(
 
       refreshTask = RefreshLoopAsync(client, linked.Token);
       var spots = new SpotHistory();
-      spotTask = SpotLoopAsync(client, spots, linked.Token);
+      spotTask = SpotLoopAsync(client, spots, autoTrade, linked.Token);
+      if (autoTrade?.Enabled == true)
+      {
+        autoTradeTask = autoTrade.RunSessionAsync(client, symbol, linked.Token);
+        _ = autoTradeTask.ContinueWith(
+          _ => linked.Cancel(),
+          CancellationToken.None,
+          TaskContinuationOptions.OnlyOnFaulted,
+          TaskScheduler.Default
+        );
+      }
       var emitter = new ClosedBarEmitter(spots, symbol.RedisSymbol);
       var quality = new LiveBarQualityMonitor(
         options.BarQualityLookback,
@@ -74,7 +86,7 @@ public sealed class FeedRunner(
       );
       var rawDumped = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
       Log("live stream started");
-      await foreach (var raw in client.LiveTrendbarsAsync(cancellationToken))
+      await foreach (var raw in client.LiveTrendbarsAsync(linked.Token))
       {
         if (rawDumped.Add(raw.Timeframe))
         {
@@ -120,12 +132,17 @@ public sealed class FeedRunner(
       {
         await IgnoreCancellation(spotTask);
       }
+      if (autoTradeTask is not null)
+      {
+        await IgnoreCancellation(autoTradeTask);
+      }
     }
   }
 
   private async Task SpotLoopAsync(
     ICTraderFeedClient client,
     SpotHistory spots,
+    AutoTradeEngine? autoTrade,
     CancellationToken cancellationToken
   )
   {
@@ -133,6 +150,10 @@ public sealed class FeedRunner(
     {
       spots.Observe(spot);
       await sink.WriteSpotAsync(spot, cancellationToken);
+      if (autoTrade is not null)
+      {
+        await autoTrade.ObserveSpotAsync(spot, cancellationToken);
+      }
       healthFile.Touch();
     }
   }

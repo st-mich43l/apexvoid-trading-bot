@@ -108,15 +108,17 @@ class DetectorSettings:
   counter_extreme_pd: float = 0.25
   counter_level_min_touches: int = 3
   range_scalp_enabled: bool = True
-  range_scalp_lookback: int = 36
-  range_scalp_cluster_atr: float = 0.20
-  range_scalp_min_touches: int = 3
-  range_scalp_min_wick_frac: float = 0.35
-  range_scalp_entry_tol_atr: float = 0.15
-  range_scalp_min_width_atr: float = 1.2
+  range_scalp_lookback: int = 48
+  range_scalp_cluster_atr: float = 0.25
+  range_scalp_min_touches: int = 2
+  range_scalp_min_wick_frac: float = 0.25
+  range_scalp_entry_tol_atr: float = 0.25
+  range_scalp_min_width_atr: float = 1.0
   range_scalp_max_width_atr: float = 6.0
-  range_scalp_min_room_atr: float = 1.0
+  range_scalp_min_room_atr: float = 0.75
   range_scalp_break_closes: int = 2
+  range_scalp_min_wick_rejections: int = 1
+  range_scalp_allow_rejection_only: bool = True
 
   def analysis_settings(self) -> AnalysisSettings:
     return AnalysisSettings(
@@ -1072,7 +1074,8 @@ def range_edge_scalp(ctx: DetectionContext) -> DetectionResult | None:
       barrier.touches >= 2 and grade_a
     ):
       continue
-    if barrier.wick_rejections < 2 and not grade_a:
+    minimum_wicks = max(1, ctx.settings.range_scalp_min_wick_rejections)
+    if barrier.wick_rejections < minimum_wicks and not grade_a:
       continue
     room_atr = abs(barrier.level - scalp_range.eq) / max(atr, _EPS)
     if room_atr < max(0.0, ctx.settings.range_scalp_min_room_atr):
@@ -1154,6 +1157,10 @@ def _range_edge_confirmation(
     or _micro_choch(df, direction, bars)
   ):
     return "rejection + micro CHoCH"
+  if settings.range_scalp_allow_rejection_only and _recent_rejection(
+    df, direction, bars
+  ):
+    return "rejection at scored edge"
   return None
 
 

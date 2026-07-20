@@ -614,7 +614,7 @@ def test_range_edge_scalp_waits_in_middle_and_rejects_accepted_breakout():
   assert detectors.range_edge_scalp(broken_ctx) is None
 
 
-def test_two_touch_barrier_requires_grade_a_sweep():
+def test_two_touch_barrier_accepts_scored_edge_rejection_or_grade_a_sweep():
   df = _range_sell_df()
   scalp_range = _scalp_range(upper_touches=2)
   base = _ctx(
@@ -632,7 +632,7 @@ def test_two_touch_barrier_requires_grade_a_sweep():
     },
   )
 
-  assert detectors.range_edge_scalp(base) is None
+  assert detectors.range_edge_scalp(base) is not None
   assert detectors.range_edge_scalp(with_grab) is not None
 
 

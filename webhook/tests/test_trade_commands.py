@@ -49,7 +49,8 @@ async def test_scoped_command_menu(monkeypatch):
     "trade_active", "trade_close", "trade_uncclose", "trade_tp",
     "trade_sl", "trade_cancel", "trade_delete",
     "trade_reopen", "trade_tag", "trade_untagged", "trade_note", "trade_review",
-    "trade_map", "trade_stats", "trade_pips", "help",
+    "trade_map", "auto_status", "auto_pause", "auto_resume",
+    "trade_stats", "trade_pips", "help",
   } | {"trade_open"}
 
 
@@ -67,6 +68,9 @@ async def test_signal_bot_exposes_public_start_and_owner_trade_map(monkeypatch):
   assert [command.command for command in telegram.SCANNER_OWNER_COMMANDS] == [
     "start",
     "trade_map",
+    "auto_status",
+    "auto_pause",
+    "auto_resume",
   ]
 
 

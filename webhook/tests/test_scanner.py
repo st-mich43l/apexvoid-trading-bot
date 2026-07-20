@@ -34,6 +34,98 @@ class StaticSource:
     return _frame()
 
 
+@pytest.mark.asyncio
+async def test_range_scalp_publishes_one_durable_auto_trade_candidate(monkeypatch):
+  client = redis_state.get_client()
+  now = int(datetime.now(timezone.utc).timestamp())
+  monkeypatch.setattr(scanner.settings, "auto_trade_enabled", True)
+  monkeypatch.setattr(scanner.settings, "auto_trade_stream", "auto_trade:test")
+  monkeypatch.setattr(scanner.settings, "auto_trade_stream_maxlen", 100)
+  monkeypatch.setattr(scanner.settings, "auto_trade_candidate_ttl", 3600)
+  monkeypatch.setattr(scanner.settings, "auto_trade_min_confluence", 2)
+  monkeypatch.setattr(scanner.settings, "auto_trade_news_guard_minutes", 30)
+  monkeypatch.setattr(
+    scanner,
+    "event_in_window",
+    AsyncMock(return_value=None),
+  )
+  ctx = SimpleNamespace(
+    spot_price=4100.2,
+    spot_ts=now,
+    trigger_ts="2026-07-20T02:00:00+00:00",
+  )
+  result = scanner.DetectionResult(
+    "Range Edge Scalp",
+    "BUY",
+    4099.5,
+    Zone(4099.2, 4100.0, "demand"),
+    4100.2,
+    2,
+    ["lower barrier ×2", "rejection at scored edge"],
+    mode="range_scalp",
+  )
+
+  first = await scanner._publish_auto_trade_candidate(
+    client, "XAU", "M5", ctx, [result]
+  )
+  second = await scanner._publish_auto_trade_candidate(
+    client, "XAU", "M5", ctx, [result]
+  )
+
+  assert first is not None
+  assert second is None
+  entries = await client.xrange("auto_trade:test")
+  assert len(entries) == 1
+  payload = json.loads(entries[0][1]["payload"])
+  assert payload["candidate_id"] == first
+  assert payload["setup"] == "Range Edge Scalp"
+  assert payload["direction"] == "BUY"
+  assert payload["entry_zone"] == {"low": 4099.2, "high": 4100.0}
+  assert payload["spot_ts"] == now
+
+
+@pytest.mark.asyncio
+async def test_auto_trade_candidate_fails_closed_on_news_or_missing_spot(
+  monkeypatch,
+):
+  client = redis_state.get_client()
+  monkeypatch.setattr(scanner.settings, "auto_trade_enabled", True)
+  monkeypatch.setattr(scanner.settings, "auto_trade_stream", "auto_trade:test")
+  monkeypatch.setattr(
+    scanner,
+    "event_in_window",
+    AsyncMock(return_value={"title": "US CPI"}),
+  )
+  result = scanner.DetectionResult(
+    "Range Edge Scalp",
+    "SELL",
+    4105.0,
+    Zone(4104.5, 4105.5, "supply"),
+    4104.8,
+    2,
+    ["upper barrier ×2"],
+    mode="range_scalp",
+  )
+  guarded = SimpleNamespace(
+    spot_price=4104.8,
+    spot_ts=1,
+    trigger_ts="1",
+  )
+  missing = SimpleNamespace(
+    spot_price=None,
+    spot_ts=None,
+    trigger_ts="2",
+  )
+
+  assert await scanner._publish_auto_trade_candidate(
+    client, "XAU", "M5", guarded, [result]
+  ) is None
+  assert await scanner._publish_auto_trade_candidate(
+    client, "XAU", "M5", missing, [result]
+  ) is None
+  assert await client.xlen("auto_trade:test") == 0
+
+
 def test_scanner_copy_draft_becomes_valid_manual_signal_after_filling_risk():
   result = scanner.DetectionResult(
     "Fade Scalp",

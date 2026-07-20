@@ -1,6 +1,7 @@
 """Price-action scanner over closed Redis OHLC bars."""
 
 import json
+import hashlib
 import logging
 import math
 import re
@@ -11,6 +12,7 @@ from typing import Any, Awaitable, Callable, Iterable
 
 from app import redis_state
 from app.config import settings
+from app.dedup import event_in_window
 from app.detectors import (
   DEFAULT_DETECTORS,
   DetectionContext,
@@ -118,6 +120,8 @@ def _detector_settings() -> DetectorSettings:
     range_scalp_max_width_atr=settings.range_scalp_max_width_atr,
     range_scalp_min_room_atr=settings.range_scalp_min_room_atr,
     range_scalp_break_closes=settings.range_scalp_break_closes,
+    range_scalp_min_wick_rejections=settings.range_scalp_min_wick_rejections,
+    range_scalp_allow_rejection_only=settings.range_scalp_allow_rejection_only,
   )
 
 
@@ -461,6 +465,104 @@ def _result_zone_distance(result: DetectionResult) -> float:
   return min(abs(price - zone.low), abs(price - zone.high))
 
 
+def _auto_trade_candidate_id(
+  symbol: str,
+  tf: str,
+  trigger_ts: str,
+  result: DetectionResult,
+) -> str:
+  raw = (
+    f"v1|{symbol.upper()}|{tf.upper()}|{trigger_ts}|"
+    f"{result.direction.upper()}|{result.entry_zone.low:.5f}|"
+    f"{result.entry_zone.high:.5f}"
+  )
+  return hashlib.sha256(raw.encode("ascii")).hexdigest()
+
+
+async def _publish_auto_trade_candidate(
+  client: Any,
+  symbol: str,
+  tf: str,
+  ctx: DetectionContext,
+  results: list[DetectionResult],
+) -> str | None:
+  if not settings.auto_trade_enabled or ctx.spot_price is None:
+    return None
+  candidates = [
+    result for result in results
+    if result.setup == "Range Edge Scalp"
+    and result.mode == "range_scalp"
+    and result.confluence >= max(1, settings.auto_trade_min_confluence)
+  ]
+  if not candidates:
+    return None
+  result = sorted(candidates, key=_result_rank)[0]
+  now = int(datetime.now(timezone.utc).timestamp())
+  try:
+    guarded = await event_in_window(
+      now,
+      max(0, settings.auto_trade_news_guard_minutes) * 60,
+    )
+  except Exception:
+    log.exception("auto-trade candidate blocked: news guard unavailable")
+    return None
+  if guarded is not None:
+    log.info(
+      "auto-trade candidate blocked by news guard symbol=%s event=%s",
+      symbol,
+      guarded.get("title", "high-impact event"),
+    )
+    return None
+
+  trigger_ts = str(ctx.trigger_ts or "")
+  candidate_id = _auto_trade_candidate_id(symbol, tf, trigger_ts, result)
+  claimed = await client.set(
+    f"auto_trade:candidate:{candidate_id}",
+    "published",
+    ex=max(60, settings.auto_trade_candidate_ttl),
+    nx=True,
+  )
+  if not claimed:
+    return None
+  payload = {
+    "version": 1,
+    "candidate_id": candidate_id,
+    "symbol": symbol.upper(),
+    "timeframe": tf.upper(),
+    "setup": result.setup,
+    "mode": result.mode,
+    "direction": result.direction.upper(),
+    "trigger_ts": trigger_ts,
+    "created_at": now,
+    "spot_ts": ctx.spot_ts,
+    "current_price": result.current_price,
+    "key_level": result.key_level,
+    "entry_zone": {
+      "low": result.entry_zone.low,
+      "high": result.entry_zone.high,
+    },
+    "confluence": result.confluence,
+    "reasons": result.reasons,
+  }
+  try:
+    await client.xadd(
+      settings.auto_trade_stream,
+      {"payload": json.dumps(payload, separators=(",", ":"))},
+      maxlen=max(100, settings.auto_trade_stream_maxlen),
+      approximate=True,
+    )
+  except Exception:
+    await client.delete(f"auto_trade:candidate:{candidate_id}")
+    raise
+  log.info(
+    "auto-trade candidate published id=%s symbol=%s direction=%s",
+    candidate_id[:12],
+    symbol,
+    result.direction,
+  )
+  return candidate_id
+
+
 def _zone_overlap_ratio(first: Zone, second: Zone) -> float:
   overlap = min(first.high, second.high) - max(first.low, second.low)
   if overlap <= 0:
@@ -729,6 +831,13 @@ async def _handle_event(
       continue
     detected.append(result)
   digest = _digest_results(detected)
+  await _publish_auto_trade_candidate(
+    client,
+    symbol,
+    exec_tf,
+    ctx,
+    detected,
+  )
   sent = await _notify_digest_once(
     client,
     symbol,

@@ -44,6 +44,58 @@ public interface IRedisSeriesCommands
   );
 }
 
+public interface IAutoTradeStore
+{
+  Task<string> GetCursorAsync(CancellationToken cancellationToken);
+  Task SetCursorAsync(string cursor, CancellationToken cancellationToken);
+  Task<IReadOnlyList<TradeStreamEntry>> ReadCandidatesAsync(
+    string stream,
+    string afterId,
+    int count,
+    CancellationToken cancellationToken
+  );
+  Task<bool> TryClaimCandidateAsync(
+    string candidateId,
+    CancellationToken cancellationToken
+  );
+  Task<string?> GetCandidateStatusAsync(
+    string candidateId,
+    CancellationToken cancellationToken
+  );
+  Task CompleteCandidateAsync(
+    string candidateId,
+    string outcome,
+    CancellationToken cancellationToken
+  );
+  Task ReleaseCandidateAsync(string candidateId, CancellationToken cancellationToken);
+  Task SavePositionAsync(
+    AutoTradePositionState state,
+    CancellationToken cancellationToken
+  );
+  Task<AutoTradePositionState?> GetPositionAsync(
+    long positionId,
+    CancellationToken cancellationToken
+  );
+  Task<IReadOnlyList<long>> GetTrackedPositionIdsAsync(
+    CancellationToken cancellationToken
+  );
+  Task DeletePositionAsync(long positionId, CancellationToken cancellationToken);
+  Task<long> GetDailyTradeCountAsync(
+    DateOnly date,
+    CancellationToken cancellationToken
+  );
+  Task<long> IncrementDailyTradeCountAsync(
+    DateOnly date,
+    CancellationToken cancellationToken
+  );
+  Task<bool> IsPausedAsync(CancellationToken cancellationToken);
+  Task PublishAutoTradeEventAsync(
+    string stream,
+    AutoTradeEvent tradeEvent,
+    CancellationToken cancellationToken
+  );
+}
+
 public sealed class RedisBarSink(
   IRedisSeriesCommands redis,
   int windowMax,
@@ -132,6 +184,7 @@ public sealed class RedisBarSink(
 public sealed class StackExchangeRedisSeriesCommands :
   IRedisSeriesCommands,
   IRedisStringCommands,
+  IAutoTradeStore,
   IAsyncDisposable
 {
   private readonly IConnectionMultiplexer _connection;
@@ -225,6 +278,155 @@ public sealed class StackExchangeRedisSeriesCommands :
     CancellationToken cancellationToken
   ) => _db.StringSetAsync(key, value);
 
+  public async Task<string> GetCursorAsync(CancellationToken cancellationToken)
+  {
+    var value = await _db.StringGetAsync("auto_trade:cursor");
+    return value.HasValue ? value.ToString() : "0-0";
+  }
+
+  public Task SetCursorAsync(string cursor, CancellationToken cancellationToken) =>
+    _db.StringSetAsync("auto_trade:cursor", cursor);
+
+  public async Task<IReadOnlyList<TradeStreamEntry>> ReadCandidatesAsync(
+    string stream,
+    string afterId,
+    int count,
+    CancellationToken cancellationToken
+  )
+  {
+    var entries = await _db.StreamReadAsync(stream, afterId, count);
+    return entries.Select(entry => new TradeStreamEntry(
+      entry.Id.ToString(),
+      entry.Values.FirstOrDefault(pair => pair.Name == "payload").Value.ToString()
+    )).Where(entry => !string.IsNullOrWhiteSpace(entry.Payload)).ToArray();
+  }
+
+  public Task<bool> TryClaimCandidateAsync(
+    string candidateId,
+    CancellationToken cancellationToken
+  ) => _db.StringSetAsync(
+    CandidateKey(candidateId),
+    "processing",
+    TimeSpan.FromSeconds(30),
+    When.NotExists
+  );
+
+  public async Task<string?> GetCandidateStatusAsync(
+    string candidateId,
+    CancellationToken cancellationToken
+  )
+  {
+    var value = await _db.StringGetAsync(CandidateKey(candidateId));
+    return value.HasValue ? value.ToString() : null;
+  }
+
+  public Task CompleteCandidateAsync(
+    string candidateId,
+    string outcome,
+    CancellationToken cancellationToken
+  ) => _db.StringSetAsync(
+    CandidateKey(candidateId),
+    outcome,
+    TimeSpan.FromDays(7)
+  );
+
+  public Task ReleaseCandidateAsync(
+    string candidateId,
+    CancellationToken cancellationToken
+  ) => _db.KeyDeleteAsync(CandidateKey(candidateId));
+
+  public async Task SavePositionAsync(
+    AutoTradePositionState state,
+    CancellationToken cancellationToken
+  )
+  {
+    await _db.StringSetAsync(
+      PositionKey(state.PositionId),
+      System.Text.Json.JsonSerializer.Serialize(
+        state,
+        RedisJsonContext.Default.AutoTradePositionState
+      )
+    );
+    await _db.SetAddAsync(TrackedPositionsKey, state.PositionId);
+  }
+
+  public async Task<AutoTradePositionState?> GetPositionAsync(
+    long positionId,
+    CancellationToken cancellationToken
+  )
+  {
+    var value = await _db.StringGetAsync(PositionKey(positionId));
+    return value.HasValue
+      ? System.Text.Json.JsonSerializer.Deserialize(
+        value.ToString(),
+        RedisJsonContext.Default.AutoTradePositionState
+      )
+      : null;
+  }
+
+  public async Task<IReadOnlyList<long>> GetTrackedPositionIdsAsync(
+    CancellationToken cancellationToken
+  )
+  {
+    var members = await _db.SetMembersAsync(TrackedPositionsKey);
+    return members
+      .Select(member => long.TryParse(member.ToString(), out var id) ? id : 0)
+      .Where(id => id > 0)
+      .ToArray();
+  }
+
+  public async Task DeletePositionAsync(
+    long positionId,
+    CancellationToken cancellationToken
+  )
+  {
+    await _db.KeyDeleteAsync(PositionKey(positionId));
+    await _db.SetRemoveAsync(TrackedPositionsKey, positionId);
+  }
+
+  public async Task<long> GetDailyTradeCountAsync(
+    DateOnly date,
+    CancellationToken cancellationToken
+  )
+  {
+    var value = await _db.StringGetAsync(DailyKey(date));
+    return value.HasValue ? (long)value : 0;
+  }
+
+  public async Task<long> IncrementDailyTradeCountAsync(
+    DateOnly date,
+    CancellationToken cancellationToken
+  )
+  {
+    var key = DailyKey(date);
+    var value = await _db.StringIncrementAsync(key);
+    await _db.KeyExpireAsync(key, TimeSpan.FromDays(3));
+    return value;
+  }
+
+  public async Task<bool> IsPausedAsync(CancellationToken cancellationToken)
+  {
+    var value = await _db.StringGetAsync("auto_trade:paused");
+    return value.HasValue && value == "1";
+  }
+
+  public Task PublishAutoTradeEventAsync(
+    string stream,
+    AutoTradeEvent tradeEvent,
+    CancellationToken cancellationToken
+  ) => _db.StreamAddAsync(
+    stream,
+    [new NameValueEntry(
+      "payload",
+      System.Text.Json.JsonSerializer.Serialize(
+        tradeEvent,
+        RedisJsonContext.Default.AutoTradeEvent
+      )
+    )],
+    maxLength: 1000,
+    useApproximateMaxLength: true
+  );
+
   public async ValueTask DisposeAsync()
   {
     await _connection.CloseAsync();
@@ -260,6 +462,17 @@ public sealed class StackExchangeRedisSeriesCommands :
     }
     return options;
   }
+
+  private static string CandidateKey(string candidateId) =>
+    $"auto_trade:executor:candidate:{candidateId}";
+
+  private static string PositionKey(long positionId) =>
+    $"auto_trade:position:{positionId}";
+
+  private const string TrackedPositionsKey = "auto_trade:positions";
+
+  private static string DailyKey(DateOnly date) =>
+    $"auto_trade:daily:{date:yyyyMMdd}:trades";
 }
 
 internal sealed record RedisBar(
@@ -286,9 +499,15 @@ internal sealed record RedisSpot(
   public static RedisSpot From(SpotPrice spot) => new(spot.Bid, spot.Ask, spot.Timestamp);
 }
 
-[JsonSourceGenerationOptions(DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
+[JsonSourceGenerationOptions(
+  DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+  PropertyNamingPolicy = JsonKnownNamingPolicy.SnakeCaseLower
+)]
 [JsonSerializable(typeof(RedisBar))]
 [JsonSerializable(typeof(RedisSpot))]
+[JsonSerializable(typeof(TradeCandidate))]
+[JsonSerializable(typeof(AutoTradePositionState))]
+[JsonSerializable(typeof(AutoTradeEvent))]
 internal sealed partial class RedisJsonContext : JsonSerializerContext
 {
 }
