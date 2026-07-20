@@ -2,10 +2,10 @@
 
 `ctrader-feed` is the cTrader gateway for ApexVoid. It runs as its own .NET
 container, writes closed XAU trendbars into Redis, and can execute tightly
-guarded demo-account scalp candidates from the Python scanner.
+guarded demo-account scalp candidates from the private Python auto-scalp gate.
 
 It does not import Python bot code, touch Postgres, or send Telegram messages.
-Scanner candidates, executor state, and operator events cross only the Redis
+Auto-gate candidates, executor state, and operator events cross only the Redis
 boundary documented in
 [`../docs/redis-contract.md`](../docs/redis-contract.md).
 
@@ -53,6 +53,7 @@ BAR_QUALITY_LOOKBACK=6
 HEALTH_FILE=/tmp/ctrader-feed.heartbeat
 AUTO_TRADE_ENABLED=false
 AUTO_TRADE_DRY_RUN=true
+AUTO_TRADE_SYMBOLS=XAU
 AUTO_TRADE_EXPECTED_BROKER=Fusion
 AUTO_TRADE_SL_DISTANCE=6.5
 AUTO_TRADE_TP_PIPS=30,50,70,90,130
@@ -96,12 +97,12 @@ matching `AUTO_TRADE_EXPECTED_BROKER`.
 
 ## Demo Auto-Trader
 
-The scanner publishes only fresh, news-cleared `M1 Decision Scalp` candidates.
-M5/M15 dealing-range edges and validated barriers are clustered into decision
-zones; their biases grade context but do not veto every counter-bias M1 trade.
-M1 must confirm the focus zone with a breakout then retest/hold or a sweep then
-reclaim. A raw momentum breakout candle never triggers an automatic order, and
-a sweep opposing both M5 and M15 requires a multi-timeframe zone.
+The independent auto-scalp worker publishes only fresh, news-cleared
+`Auto Range Scalp` candidates. It reads raw cTrader M1/M5/M15 OHLC directly and
+does not consume scanner detections, forming signals, Market Map entries, or
+Telegram state. M5/M15 build role-aware support/resistance rails; M1 must reject
+a rail, while a directional M5 impulse blocks fading into active momentum. The
+nearest opposite-role rail must leave at least 30 pips of room.
 The executor revalidates candidate age, live quote age, spread, entry distance,
 account identity, and the one-XAU-position limit before placing a market order.
 Telegram is an operator surface, never the execution trigger.
@@ -115,7 +116,7 @@ confirmed at the absolute fill price immediately afterward.
 
 `/auto_pause` blocks new entries and `/auto_resume` releases the block.
 `/auto_status` reports mode, open auto positions, the UTC daily trade count,
-and the latest M1 gate state and focus zone.
+and the latest private M1 gate state and selected rail.
 Existing positions continue to receive TP management while entry is paused.
 
 Before enabling, run the read-only diagnostic:

@@ -67,14 +67,16 @@ The bot talks to Telegram over **outbound long-polling only**, meaning it requir
 - **Multi-Timeframe Aware** ⏱️ — Send several charts; it uses higher TFs for directional bias and lower TFs for entry precision.
 
 ### 🤖 Demo Auto-Scalper
-- M1 is the execution timeframe. M5/M15 dealing-range edges and validated
-  barriers are clustered into nearby decision zones; they provide context and
-  quality rather than a blanket directional veto.
-- Entry requires an M1 breakout-retest hold or sweep-reclaim at one of those
-  zones. A raw breakout/momentum candle is never chased automatically.
+- The Auto Trader has a private gate and Redis subscriber, independent of
+  forming signals, scanner detectors, Market Map output, and Telegram alerts.
+- It builds role-aware support/resistance rails directly from raw M5/M15 OHLC.
+  M1 rejection owns entry timing; M5 blocks only a countertrend fade into an
+  active impulse and never vetoes the aligned direction.
+- The nearest opposite-role rail must leave at least 30 pips of room, while
+  each executable rail is capped at 16 pips wide.
 - The lane still fails closed on stale quotes, excessive spread, entry drift,
   guarded news, an existing XAU position, and the UTC daily trade cap.
-- `/auto_status` exposes the latest M1 gate state and its single focus zone for
+- `/auto_status` exposes the latest private M1 gate state and selected rail for
   operator diagnostics.
 
 ---
