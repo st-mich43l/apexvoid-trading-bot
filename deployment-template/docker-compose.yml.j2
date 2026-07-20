@@ -78,6 +78,21 @@ services:
       BARS_WINDOW_MAX: {{ apexvoid_trading_bot_env.BARS_WINDOW_MAX | default('1500') | string | to_json }}
       BARS_CHANNEL: {{ apexvoid_trading_bot_env.BARS_CHANNEL | default('bars:new') | string | to_json }}
       HEALTH_FILE: {{ apexvoid_trading_bot_env.HEALTH_FILE | default('/tmp/ctrader-feed.heartbeat') | string | to_json }}
+      AUTO_TRADE_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_ENABLED | default('false') | string | to_json }}
+      AUTO_TRADE_DRY_RUN: {{ apexvoid_trading_bot_env.AUTO_TRADE_DRY_RUN | default('true') | string | to_json }}
+      AUTO_TRADE_EXPECTED_BROKER: {{ apexvoid_trading_bot_env.AUTO_TRADE_EXPECTED_BROKER | default('Fusion') | string | to_json }}
+      AUTO_TRADE_SL_DISTANCE: {{ apexvoid_trading_bot_env.AUTO_TRADE_SL_DISTANCE | default('6.5') | string | to_json }}
+      AUTO_TRADE_TP_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_TP_PIPS | default('30,50,70,90,130') | string | to_json }}
+      AUTO_TRADE_CANDIDATE_MAX_AGE: {{ apexvoid_trading_bot_env.AUTO_TRADE_CANDIDATE_MAX_AGE | default('90') | string | to_json }}
+      AUTO_TRADE_SPOT_MAX_AGE: {{ apexvoid_trading_bot_env.AUTO_TRADE_SPOT_MAX_AGE | default('5') | string | to_json }}
+      AUTO_TRADE_MAX_SPREAD_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_MAX_SPREAD_PIPS | default('5') | string | to_json }}
+      AUTO_TRADE_MAX_ENTRY_DISTANCE_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_MAX_ENTRY_DISTANCE_PIPS | default('10') | string | to_json }}
+      AUTO_TRADE_MAX_DAILY_TRADES: {{ apexvoid_trading_bot_env.AUTO_TRADE_MAX_DAILY_TRADES | default('6') | string | to_json }}
+      AUTO_TRADE_MIN_CONFLUENCE: {{ apexvoid_trading_bot_env.AUTO_TRADE_MIN_CONFLUENCE | default('2') | string | to_json }}
+      AUTO_TRADE_POLL_MS: {{ apexvoid_trading_bot_env.AUTO_TRADE_POLL_MS | default('1000') | string | to_json }}
+      AUTO_TRADE_STREAM: {{ apexvoid_trading_bot_env.AUTO_TRADE_STREAM | default('auto_trade:candidates') | string | to_json }}
+      AUTO_TRADE_EVENT_STREAM: {{ apexvoid_trading_bot_env.AUTO_TRADE_EVENT_STREAM | default('auto_trade:events') | string | to_json }}
+      AUTO_TRADE_LABEL: {{ apexvoid_trading_bot_env.AUTO_TRADE_LABEL | default('apexvoid-auto') | string | to_json }}
     healthcheck:
       test: ["CMD", "/app/ctrader-feed", "--healthcheck"]
       interval: 30s

@@ -135,15 +135,26 @@ class Settings(BaseSettings):
   counter_extreme_pd: float = 0.25
   counter_level_min_touches: int = 3
   range_scalp_enabled: bool = True
-  range_scalp_lookback: int = 36
-  range_scalp_cluster_atr: float = 0.20
-  range_scalp_min_touches: int = 3
-  range_scalp_min_wick_frac: float = 0.35
-  range_scalp_entry_tol_atr: float = 0.15
-  range_scalp_min_width_atr: float = 1.2
+  range_scalp_lookback: int = 48
+  range_scalp_cluster_atr: float = 0.25
+  range_scalp_min_touches: int = 2
+  range_scalp_min_wick_frac: float = 0.25
+  range_scalp_entry_tol_atr: float = 0.25
+  range_scalp_min_width_atr: float = 1.0
   range_scalp_max_width_atr: float = 6.0
-  range_scalp_min_room_atr: float = 1.0
+  range_scalp_min_room_atr: float = 0.75
   range_scalp_break_closes: int = 2
+  range_scalp_min_wick_rejections: int = 1
+  range_scalp_allow_rejection_only: bool = True
+  auto_trade_enabled: bool = False
+  auto_trade_dry_run: bool = True
+  auto_trade_stream: str = "auto_trade:candidates"
+  auto_trade_event_stream: str = "auto_trade:events"
+  auto_trade_stream_maxlen: int = 1000
+  auto_trade_candidate_ttl: int = 86400
+  auto_trade_min_confluence: int = 2
+  auto_trade_news_guard_minutes: int = 30
+  auto_trade_max_daily_trades: int = 6
 
   @property
   def telegram_chat_id(self) -> str:
