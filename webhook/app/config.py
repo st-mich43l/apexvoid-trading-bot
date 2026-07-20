@@ -148,6 +148,8 @@ class Settings(BaseSettings):
   range_scalp_allow_rejection_only: bool = True
   auto_trade_enabled: bool = False
   auto_trade_dry_run: bool = True
+  auto_trade_symbols: str = "XAU"
+  auto_trade_spot_max_age: int = 5
   auto_trade_stream: str = "auto_trade:candidates"
   auto_trade_event_stream: str = "auto_trade:events"
   auto_trade_stream_maxlen: int = 1000

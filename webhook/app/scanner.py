@@ -1,7 +1,6 @@
 """Price-action scanner over closed Redis OHLC bars."""
 
 import json
-import hashlib
 import logging
 import math
 import re
@@ -12,17 +11,13 @@ from typing import Any, Awaitable, Callable, Iterable
 
 from app import redis_state
 from app.config import settings
-from app.dedup import event_in_window
 from app.detectors import (
   DEFAULT_DETECTORS,
   DetectionContext,
   DetectionResult,
-  DecisionZone,
   DetectorSettings,
-  M1ScalpDecision,
   SetupDetector,
   build_context,
-  evaluate_m1_decision_scalp,
 )
 from app.market_map import MarketMap, build_map, map_reference, rail_reference
 from app.market_map_delivery import cache_analysis
@@ -57,14 +52,6 @@ def _watched_symbols() -> set[str]:
 
 def _htf_tfs() -> list[str]:
   return _csv(settings.scanner_htf)
-
-
-def _auto_scalp_tf() -> str:
-  return "M1"
-
-
-def _auto_scalp_htf_tfs() -> list[str]:
-  return ["M5", "M15"]
 
 
 def _all_tfs(exec_tf: str, htf_tfs: Iterable[str]) -> list[str]:
@@ -478,138 +465,6 @@ def _result_zone_distance(result: DetectionResult) -> float:
   return min(abs(price - zone.low), abs(price - zone.high))
 
 
-def _auto_trade_candidate_id(
-  symbol: str,
-  tf: str,
-  trigger_ts: str,
-  result: DetectionResult,
-) -> str:
-  raw = (
-    f"v1|{symbol.upper()}|{tf.upper()}|{trigger_ts}|"
-    f"{result.direction.upper()}|{result.entry_zone.low:.5f}|"
-    f"{result.entry_zone.high:.5f}"
-  )
-  return hashlib.sha256(raw.encode("ascii")).hexdigest()
-
-
-async def _publish_auto_trade_candidate(
-  client: Any,
-  symbol: str,
-  tf: str,
-  ctx: DetectionContext,
-  results: list[DetectionResult],
-) -> str | None:
-  if not settings.auto_trade_enabled or ctx.spot_price is None:
-    return None
-  candidates = []
-  for result in results:
-    if not _auto_trade_setup_enabled(tf, result):
-      continue
-    if result.confluence < max(1, settings.auto_trade_min_confluence):
-      continue
-    rejection = _auto_trade_gate_rejection(ctx, tf, result)
-    if rejection is not None:
-      log.info(
-        "auto-trade candidate blocked by M1 decision gate "
-        "symbol=%s setup=%s direction=%s reason=%s",
-        symbol,
-        result.setup,
-        result.direction,
-        rejection,
-      )
-      continue
-    candidates.append(result)
-  if not candidates:
-    return None
-  result = sorted(candidates, key=_result_rank)[0]
-  now = int(datetime.now(timezone.utc).timestamp())
-  try:
-    guarded = await event_in_window(
-      now,
-      max(0, settings.auto_trade_news_guard_minutes) * 60,
-    )
-  except Exception:
-    log.exception("auto-trade candidate blocked: news guard unavailable")
-    return None
-  if guarded is not None:
-    log.info(
-      "auto-trade candidate blocked by news guard symbol=%s event=%s",
-      symbol,
-      guarded.get("title", "high-impact event"),
-    )
-    return None
-
-  trigger_ts = str(ctx.trigger_ts or "")
-  candidate_id = _auto_trade_candidate_id(symbol, tf, trigger_ts, result)
-  claimed = await client.set(
-    f"auto_trade:candidate:{candidate_id}",
-    "published",
-    ex=max(60, settings.auto_trade_candidate_ttl),
-    nx=True,
-  )
-  if not claimed:
-    return None
-  payload = {
-    "version": 1,
-    "candidate_id": candidate_id,
-    "symbol": symbol.upper(),
-    "timeframe": tf.upper(),
-    "setup": result.setup,
-    "mode": result.mode,
-    "direction": result.direction.upper(),
-    "trigger_ts": trigger_ts,
-    "created_at": now,
-    "spot_ts": ctx.spot_ts,
-    "current_price": result.current_price,
-    "key_level": result.key_level,
-    "entry_zone": {
-      "low": result.entry_zone.low,
-      "high": result.entry_zone.high,
-    },
-    "confluence": result.confluence,
-    "reasons": result.reasons,
-  }
-  try:
-    await client.xadd(
-      settings.auto_trade_stream,
-      {"payload": json.dumps(payload, separators=(",", ":"))},
-      maxlen=max(100, settings.auto_trade_stream_maxlen),
-      approximate=True,
-    )
-  except Exception:
-    await client.delete(f"auto_trade:candidate:{candidate_id}")
-    raise
-  log.info(
-    "auto-trade candidate published id=%s symbol=%s direction=%s",
-    candidate_id[:12],
-    symbol,
-    result.direction,
-  )
-  return candidate_id
-
-
-def _auto_trade_setup_enabled(tf: str, result: DetectionResult) -> bool:
-  return (
-    tf.upper() == "M1"
-    and result.setup == "M1 Decision Scalp"
-    and result.mode == "decision_scalp"
-  )
-
-
-def _auto_trade_gate_rejection(
-  ctx: DetectionContext,
-  tf: str,
-  result: DetectionResult,
-) -> str | None:
-  if tf.upper() != "M1":
-    return "execution timeframe is not M1"
-  if result.mode != "decision_scalp":
-    return "setup is not an M1 decision scalp"
-  if "M5" not in ctx.structures or "M15" not in ctx.structures:
-    return "missing M5/M15 context"
-  return None
-
-
 def _zone_overlap_ratio(first: Zone, second: Zone) -> float:
   overlap = min(first.high, second.high) - max(first.low, second.low)
   if overlap <= 0:
@@ -834,91 +689,6 @@ async def _load_market_context_for_symbol(
   return ctx, frames
 
 
-def _m1_gate_payload(
-  decision: M1ScalpDecision,
-  *,
-  symbol: str,
-  event_ts: str,
-  frames: dict[str, Any],
-  candidate_id: str | None,
-) -> dict[str, Any]:
-  zone = decision.zone
-  return {
-    "state": decision.state,
-    "symbol": symbol,
-    "tf": "M1",
-    "event_ts": event_ts,
-    "checked_at": datetime.now(timezone.utc).isoformat(),
-    "trigger": decision.trigger,
-    "direction": decision.direction,
-    "zone": None if zone is None else {
-      "low": zone.low,
-      "high": zone.high,
-      "level": zone.level,
-      "timeframes": list(zone.timeframes),
-      "sources": list(zone.sources),
-    },
-    "m5_bias": decision.m5_bias,
-    "m15_bias": decision.m15_bias,
-    "target_room": decision.target_room,
-    "candidate_id": candidate_id,
-    "published": candidate_id is not None,
-    "frames": {
-      name: len(frame)
-      for name, frame in sorted(frames.items())
-    },
-  }
-
-
-async def _handle_m1_scalp_event(
-  symbol: str,
-  event_ts: str,
-  *,
-  source: RedisOHLCSource | None,
-  client: Any,
-) -> None:
-  ctx, frames = await _load_market_context_for_symbol(
-    symbol,
-    source=source,
-    client=client,
-    event_ts=event_ts,
-    exec_tf=_auto_scalp_tf(),
-    htf_order=_auto_scalp_htf_tfs(),
-    cache_market_analysis=False,
-    window=240,
-  )
-  if ctx is None:
-    decision = M1ScalpDecision("missing_exec_frame")
-    candidate_id = None
-  else:
-    decision = evaluate_m1_decision_scalp(ctx)
-    candidate_id = await _publish_auto_trade_candidate(
-      client,
-      symbol,
-      "M1",
-      ctx,
-      [decision.result] if decision.result is not None else [],
-    )
-  payload = _m1_gate_payload(
-    decision,
-    symbol=symbol,
-    event_ts=event_ts,
-    frames=frames,
-    candidate_id=candidate_id,
-  )
-  encoded = json.dumps(payload, separators=(",", ":"), sort_keys=True)
-  await client.set("auto_trade:last_m1_gate", encoded)
-  await client.set(f"auto_trade:last_m1_gate:{symbol}", encoded)
-  log.info(
-    "M1 decision gate symbol=%s state=%s trigger=%s direction=%s candidate=%s",
-    symbol,
-    decision.state,
-    decision.trigger or "-",
-    decision.direction or "-",
-    candidate_id[:12] if candidate_id else "-",
-  )
-
-
 async def _handle_event(
   data: object,
   *,
@@ -935,17 +705,10 @@ async def _handle_event(
   if symbol not in _watched_symbols():
     return []
 
-  client = client or redis_state.get_client()
-  if settings.auto_trade_enabled and tf == _auto_scalp_tf():
-    await _handle_m1_scalp_event(
-      symbol,
-      event_ts,
-      source=source,
-      client=client,
-    )
   if tf != exec_tf:
     return []
 
+  client = client or redis_state.get_client()
   notify = notify or send_scanner_with_retry
   htf_order = _htf_tfs()
   ctx, frames = await _load_market_context_for_symbol(
@@ -983,13 +746,6 @@ async def _handle_event(
       continue
     detected.append(result)
   digest = _digest_results(detected)
-  await _publish_auto_trade_candidate(
-    client,
-    symbol,
-    exec_tf,
-    ctx,
-    detected,
-  )
   sent = await _notify_digest_once(
     client,
     symbol,

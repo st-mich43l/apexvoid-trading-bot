@@ -21,6 +21,9 @@ dated section after deployment.
   `$6.5` stop, and broker-valid partial closes at `30/50/70/90/130` pips.
 - Added owner auto-trade event DMs plus `/auto_status`, `/auto_pause`, and
   `/auto_resume` on both Telegram bots.
+- Added a private auto-scalp worker that consumes only raw cTrader M1/M5/M15
+  OHLC and live spot data, publishes Redis execution candidates, and has no
+  scanner, forming-signal, Market Map, or Telegram dependency.
 
 - Added lenient trailing setup-tag parsing, setup metadata in manual-signal
   confirmations, owner-only `/trade_untagged` backfill listings, and absolute
@@ -52,15 +55,10 @@ dated section after deployment.
 
 ### Changed
 
-- Restored M1 as the auto-scalper execution timeframe. M5/M15 dealing-range
-  edges and validated barriers now form clustered decision zones and quality
-  context instead of acting as a blanket directional veto.
-- Replaced raw M1 momentum entries with confirmed `M1 Decision Scalp` triggers:
-  breakout then retest/hold, or sweep then reclaim. Entry drift is capped at 10
-  pips and the next barrier must leave at least 30 pips of target room.
-- Require a multi-timeframe decision zone before accepting a sweep/reclaim that
-  opposes both M5 and M15, while still allowing confirmed M1 entries against a
-  higher-timeframe bias when the structural evidence is strong enough.
+- Replaced scanner-fed auto entries with an independent `Auto Range Scalp`
+  gate: M5/M15 build role-aware rails, M1 confirms rejection, active adverse M5
+  momentum is blocked, entry drift is capped at 10 pips, and the nearest
+  opposite-role rail must leave at least 30 pips of room.
 - Added a broker-valid `0.08`-lot tier for demo balances from `$500` to `$999`,
   so a drawdown below `$1,000` does not permanently disable the executor.
 - Increased two-sided range-scalp sensitivity with a longer local window,
@@ -80,6 +78,9 @@ dated section after deployment.
 
 ### Fixed
 
+- Forming signals and their detector/Market Map gates can no longer create or
+  suppress Auto Trader candidates; `SCANNER_ENABLED` no longer controls whether
+  the private auto-scalp worker runs.
 - Auto Trader quote-gate failures such as stale prices, excessive spread, or
   entry drift now terminate the candidate and advance its Redis cursor instead
   of retrying the same candidate and spamming repeated owner error messages.
