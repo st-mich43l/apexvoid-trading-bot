@@ -77,6 +77,11 @@ dated section after deployment.
 
 ### Fixed
 
+- Auto Trader quote-gate failures such as stale prices, excessive spread, or
+  entry drift now terminate the candidate and advance its Redis cursor instead
+  of retrying the same candidate and spamming repeated owner error messages.
+- Unexpected Auto Trader candidate failures now use a bounded retry delay and
+  emit at most one owner error per candidate while recovery is attempted.
 - Watcher SL accounting now treats fills anywhere inside the entry zone as
   breakeven, preserves signed profit for trailed stops, and only books a loss
   when the actual stop fill lands beyond the losing side of the zone.

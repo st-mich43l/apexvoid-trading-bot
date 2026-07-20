@@ -150,6 +150,30 @@ public sealed class AutoTradeEngineTests
   }
 
   [Fact]
+  public async Task EntryDriftIsRejectedOnceAndCursorAdvances()
+  {
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+    var store = new FakeAutoTradeStore(CandidateJson());
+    var client = new FakeTradingClient();
+    var engine = new AutoTradeEngine(Options(), store, () => Now, _ => { });
+    await engine.ObserveSpotAsync(
+      new SpotPrice("XAU", 4003.0m, 4003.2m, Now.ToUnixTimeSeconds()),
+      cts.Token
+    );
+
+    var run = engine.RunSessionAsync(client, Symbol, cts.Token);
+    await store.CursorAdvanced.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+    Assert.Empty(client.Orders);
+    var rejected = Assert.Single(store.Events, item => item.Type == "rejected");
+    Assert.Contains("entry moved", rejected.Message);
+    Assert.DoesNotContain(store.Events, item => item.Type == "error");
+    Assert.Equal("1-0", store.Cursor);
+    cts.Cancel();
+    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+  }
+
+  [Fact]
   public async Task HardLockRejectsLiveAccountBeforeReadingCandidates()
   {
     var store = new FakeAutoTradeStore(CandidateJson());
@@ -373,7 +397,10 @@ public sealed class AutoTradeEngineTests
     public TaskCompletionSource<bool> Processed { get; } = new(
       TaskCreationOptions.RunContinuationsAsynchronously
     );
-    private bool _delivered;
+    public TaskCompletionSource<bool> CursorAdvanced { get; } = new(
+      TaskCreationOptions.RunContinuationsAsynchronously
+    );
+    public string Cursor => _cursor;
     private long _daily;
 
     public Task<string> GetCursorAsync(CancellationToken cancellationToken) =>
@@ -381,6 +408,7 @@ public sealed class AutoTradeEngineTests
     public Task SetCursorAsync(string cursor, CancellationToken cancellationToken)
     {
       _cursor = cursor;
+      CursorAdvanced.TrySetResult(true);
       return Task.CompletedTask;
     }
     public Task<IReadOnlyList<TradeStreamEntry>> ReadCandidatesAsync(
@@ -390,11 +418,10 @@ public sealed class AutoTradeEngineTests
       CancellationToken cancellationToken
     )
     {
-      if (_delivered || afterId != "0-0")
+      if (afterId != "0-0")
       {
         return Task.FromResult<IReadOnlyList<TradeStreamEntry>>([]);
       }
-      _delivered = true;
       return Task.FromResult<IReadOnlyList<TradeStreamEntry>>([
         new TradeStreamEntry("1-0", payload),
       ]);
