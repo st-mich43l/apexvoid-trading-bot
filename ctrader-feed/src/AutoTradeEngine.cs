@@ -191,16 +191,16 @@ public sealed class AutoTradeEngine(
     var client = RequireClient();
     var symbol = RequireSymbol();
     var now = _clock().ToUnixTimeSeconds();
-    var rangeScalp = string.Equals(
+    var decisionScalp = string.Equals(
         candidate.Timeframe,
-        "M5",
+        "M1",
         StringComparison.OrdinalIgnoreCase
       )
-      && candidate.Setup == "Range Edge Scalp"
-      && candidate.Mode == "range_scalp";
+      && candidate.Setup == "M1 Decision Scalp"
+      && candidate.Mode == "decision_scalp";
     if (
       candidate.Version != 1
-      || !rangeScalp
+      || !decisionScalp
       || candidate.Confluence < options.MinConfluence
       || !string.Equals(
         candidate.Symbol,

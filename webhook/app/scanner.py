@@ -17,10 +17,12 @@ from app.detectors import (
   DEFAULT_DETECTORS,
   DetectionContext,
   DetectionResult,
+  DecisionZone,
   DetectorSettings,
+  M1ScalpDecision,
   SetupDetector,
   build_context,
-  structure_momentum_bias,
+  evaluate_m1_decision_scalp,
 )
 from app.market_map import MarketMap, build_map, map_reference, rail_reference
 from app.market_map_delivery import cache_analysis
@@ -55,6 +57,14 @@ def _watched_symbols() -> set[str]:
 
 def _htf_tfs() -> list[str]:
   return _csv(settings.scanner_htf)
+
+
+def _auto_scalp_tf() -> str:
+  return "M1"
+
+
+def _auto_scalp_htf_tfs() -> list[str]:
+  return ["M5", "M15"]
 
 
 def _all_tfs(exec_tf: str, htf_tfs: Iterable[str]) -> list[str]:
@@ -348,10 +358,12 @@ async def _load_frames(
   symbol: str,
   exec_tf: str,
   htf_order: list[str],
+  window: int | None = None,
 ) -> dict[str, Any]:
   frames = {}
+  count = max(50, int(window or settings.scanner_window))
   for tf in _all_tfs(exec_tf, htf_order):
-    df = await source.window(symbol, tf, settings.scanner_window)
+    df = await source.window(symbol, tf, count)
     if not df.empty:
       frames[tf] = df
   return frames
@@ -495,10 +507,10 @@ async def _publish_auto_trade_candidate(
       continue
     if result.confluence < max(1, settings.auto_trade_min_confluence):
       continue
-    rejection = _auto_trade_mtf_rejection(ctx, tf, result)
+    rejection = _auto_trade_gate_rejection(ctx, tf, result)
     if rejection is not None:
       log.info(
-        "auto-trade candidate blocked by M5/M15 gate "
+        "auto-trade candidate blocked by M1 decision gate "
         "symbol=%s setup=%s direction=%s reason=%s",
         symbol,
         result.setup,
@@ -577,49 +589,24 @@ async def _publish_auto_trade_candidate(
 
 
 def _auto_trade_setup_enabled(tf: str, result: DetectionResult) -> bool:
-  if (
-    tf.upper() == "M5"
-    and result.setup == "Range Edge Scalp"
-    and result.mode == "range_scalp"
-  ):
-    return True
-  return False
+  return (
+    tf.upper() == "M1"
+    and result.setup == "M1 Decision Scalp"
+    and result.mode == "decision_scalp"
+  )
 
 
-def _auto_trade_mtf_rejection(
+def _auto_trade_gate_rejection(
   ctx: DetectionContext,
   tf: str,
   result: DetectionResult,
 ) -> str | None:
-  if tf.upper() != "M5":
-    return "execution timeframe is not M5"
-  if result.mode != "range_scalp":
-    return None
-
-  m5 = ctx.structures.get("M5")
-  m15 = ctx.structures.get("M15")
-  if m5 is None or m15 is None:
-    return "missing M5/M15 structure"
-  if m5.regime is None or m5.regime.kind != "chop":
-    return "M5 is not a range"
-  if m15.regime is None or m15.regime.kind != "chop":
-    return "M15 is not a range"
-
-  wanted_bias = "up" if result.direction.upper() == "BUY" else "down"
-  m15_bias = structure_momentum_bias(m15)
-  if m15_bias is not None and m15_bias != wanted_bias:
-    return f"against M15 {m15_bias} bias"
-
-  range_ = m15.dealing_range
-  if range_ is None:
-    return "missing M15 dealing range"
-  position = float(range_.position)
-  if not math.isfinite(position) or not 0.0 <= position <= 1.0:
-    return "invalid M15 dealing-range position"
-  if result.direction.upper() == "BUY" and position > 0.35:
-    return f"M15 position {position:.2f} is not discount"
-  if result.direction.upper() == "SELL" and position < 0.65:
-    return f"M15 position {position:.2f} is not premium"
+  if tf.upper() != "M1":
+    return "execution timeframe is not M1"
+  if result.mode != "decision_scalp":
+    return "setup is not an M1 decision scalp"
+  if "M5" not in ctx.structures or "M15" not in ctx.structures:
+    return "missing M5/M15 context"
   return None
 
 
@@ -810,6 +797,7 @@ async def _load_market_context_for_symbol(
   exec_tf: str | None = None,
   htf_order: list[str] | None = None,
   cache_market_analysis: bool = True,
+  window: int | None = None,
 ) -> tuple[DetectionContext | None, dict[str, Any]]:
   symbol = symbol.upper()
   client = client or redis_state.get_client()
@@ -817,7 +805,13 @@ async def _load_market_context_for_symbol(
   exec_tf = (exec_tf or settings.scanner_exec_tf).upper()
   htf_order = htf_order or _htf_tfs()
   spot = await _load_spot_snapshot(client, symbol)
-  frames = await _load_frames(source, symbol, exec_tf, htf_order)
+  frames = await _load_frames(
+    source,
+    symbol,
+    exec_tf,
+    htf_order,
+    window=window,
+  )
   if exec_tf not in frames:
     return None, frames
   trigger = event_ts or str(frames[exec_tf].index[-1])
@@ -840,6 +834,91 @@ async def _load_market_context_for_symbol(
   return ctx, frames
 
 
+def _m1_gate_payload(
+  decision: M1ScalpDecision,
+  *,
+  symbol: str,
+  event_ts: str,
+  frames: dict[str, Any],
+  candidate_id: str | None,
+) -> dict[str, Any]:
+  zone = decision.zone
+  return {
+    "state": decision.state,
+    "symbol": symbol,
+    "tf": "M1",
+    "event_ts": event_ts,
+    "checked_at": datetime.now(timezone.utc).isoformat(),
+    "trigger": decision.trigger,
+    "direction": decision.direction,
+    "zone": None if zone is None else {
+      "low": zone.low,
+      "high": zone.high,
+      "level": zone.level,
+      "timeframes": list(zone.timeframes),
+      "sources": list(zone.sources),
+    },
+    "m5_bias": decision.m5_bias,
+    "m15_bias": decision.m15_bias,
+    "target_room": decision.target_room,
+    "candidate_id": candidate_id,
+    "published": candidate_id is not None,
+    "frames": {
+      name: len(frame)
+      for name, frame in sorted(frames.items())
+    },
+  }
+
+
+async def _handle_m1_scalp_event(
+  symbol: str,
+  event_ts: str,
+  *,
+  source: RedisOHLCSource | None,
+  client: Any,
+) -> None:
+  ctx, frames = await _load_market_context_for_symbol(
+    symbol,
+    source=source,
+    client=client,
+    event_ts=event_ts,
+    exec_tf=_auto_scalp_tf(),
+    htf_order=_auto_scalp_htf_tfs(),
+    cache_market_analysis=False,
+    window=240,
+  )
+  if ctx is None:
+    decision = M1ScalpDecision("missing_exec_frame")
+    candidate_id = None
+  else:
+    decision = evaluate_m1_decision_scalp(ctx)
+    candidate_id = await _publish_auto_trade_candidate(
+      client,
+      symbol,
+      "M1",
+      ctx,
+      [decision.result] if decision.result is not None else [],
+    )
+  payload = _m1_gate_payload(
+    decision,
+    symbol=symbol,
+    event_ts=event_ts,
+    frames=frames,
+    candidate_id=candidate_id,
+  )
+  encoded = json.dumps(payload, separators=(",", ":"), sort_keys=True)
+  await client.set("auto_trade:last_m1_gate", encoded)
+  await client.set(f"auto_trade:last_m1_gate:{symbol}", encoded)
+  log.info(
+    "M1 decision gate symbol=%s state=%s trigger=%s direction=%s candidate=%s",
+    symbol,
+    decision.state,
+    decision.trigger or "-",
+    decision.direction or "-",
+    candidate_id[:12] if candidate_id else "-",
+  )
+
+
 async def _handle_event(
   data: object,
   *,
@@ -857,6 +936,13 @@ async def _handle_event(
     return []
 
   client = client or redis_state.get_client()
+  if settings.auto_trade_enabled and tf == _auto_scalp_tf():
+    await _handle_m1_scalp_event(
+      symbol,
+      event_ts,
+      source=source,
+      client=client,
+    )
   if tf != exec_tf:
     return []
 

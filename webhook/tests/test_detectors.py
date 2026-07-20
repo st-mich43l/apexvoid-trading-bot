@@ -160,6 +160,50 @@ def _momentum_ride_ctx() -> detectors.DetectionContext:
   )
 
 
+def _m1_decision_ctx(
+  rows,
+  *,
+  m5_bias: str = "down",
+  m15_bias: str = "down",
+  m5_high: float = 101.0,
+  m15_high: float = 101.1,
+) -> detectors.DetectionContext:
+  df = _df(rows)
+
+  def structure(bias, low, high):
+    return detectors.StructureSet(
+      swings=[],
+      bias=bias,
+      levels=[],
+      equal_levels=[],
+      fvg_zones=[],
+      order_blocks=[],
+      momentum="neutral",
+      dealing_range=DealingRange(
+        high=high,
+        low=low,
+        eq=(high + low) / 2,
+        position=0.5,
+        zone="eq",
+      ),
+    )
+
+  return detectors.DetectionContext(
+    symbol="XAU",
+    tf="M1",
+    frames={"M1": df},
+    indicators={"M1": _indicators(df, atr=1.0)},
+    structures={
+      "M1": structure("range", 99, 102),
+      "M5": structure(m5_bias, 95, m5_high),
+      "M15": structure(m15_bias, 94, m15_high),
+    },
+    htf_bias=m5_bias,
+    settings=detectors.DetectorSettings(confluence_floor=2),
+    spot_price=float(df["close"].iloc[-1]),
+  )
+
+
 def _fade_scalp_ctx() -> detectors.DetectionContext:
   df = _df([
     (100, 101, 98, 100, 100),
@@ -222,6 +266,77 @@ def test_named_setup_triggers_only_when_confirmed_and_correct_side(
   )
   assert result.confluence >= 2
   _assert_correct_side(result)
+
+
+def test_m1_decision_scalp_uses_retest_trigger_without_htf_bias_veto():
+  ctx = _m1_decision_ctx([
+    (100.0, 100.4, 99.8, 100.2, 100),
+    (100.1, 100.5, 99.9, 100.3, 100),
+    (100.2, 100.6, 100.0, 100.4, 100),
+    (100.4, 100.7, 100.2, 100.5, 100),
+    (100.5, 100.8, 100.3, 100.6, 100),
+    (100.6, 101.9, 100.5, 101.7, 100),
+    (101.7, 101.9, 100.95, 101.55, 100),
+  ])
+
+  decision = detectors.evaluate_m1_decision_scalp(ctx)
+
+  assert decision.state == "candidate"
+  assert decision.trigger == "breakout_retest"
+  assert decision.direction == "BUY"
+  assert decision.m5_bias == "down"
+  assert decision.m15_bias == "down"
+  assert decision.zone is not None
+  assert decision.zone.timeframes == ("M15", "M5")
+  assert decision.result is not None
+  assert decision.result.setup == "M1 Decision Scalp"
+  assert decision.result.mode == "decision_scalp"
+
+
+def test_m1_decision_scalp_does_not_chase_raw_breakout_candle():
+  ctx = _m1_decision_ctx([
+    (100.0, 100.4, 99.8, 100.2, 100),
+    (100.1, 100.5, 99.9, 100.3, 100),
+    (100.2, 100.6, 100.0, 100.4, 100),
+    (100.4, 100.7, 100.2, 100.5, 100),
+    (100.5, 100.8, 100.3, 100.6, 100),
+    (100.6, 100.9, 100.4, 100.7, 100),
+    (100.7, 101.9, 100.6, 101.7, 100),
+  ])
+
+  decision = detectors.evaluate_m1_decision_scalp(ctx)
+
+  assert decision.state == "waiting_confirmation"
+  assert decision.result is None
+
+
+def test_m1_counter_sweep_needs_multi_timeframe_level_not_bias_alignment():
+  rows = [
+    (100.0, 100.4, 99.8, 100.2, 100),
+    (100.1, 100.5, 99.9, 100.3, 100),
+    (100.2, 100.6, 100.0, 100.4, 100),
+    (100.4, 100.7, 100.2, 100.5, 100),
+    (100.5, 100.8, 100.3, 100.6, 100),
+    (100.6, 100.9, 100.4, 100.5, 100),
+    (100.9, 101.5, 100.2, 100.4, 100),
+  ]
+  single_tf = detectors.evaluate_m1_decision_scalp(_m1_decision_ctx(
+    rows,
+    m5_bias="up",
+    m15_bias="up",
+    m15_high=110,
+  ))
+  multi_tf = detectors.evaluate_m1_decision_scalp(_m1_decision_ctx(
+    rows,
+    m5_bias="up",
+    m15_bias="up",
+  ))
+
+  assert single_tf.state == "weak_counter_context"
+  assert single_tf.result is None
+  assert multi_tf.state == "candidate"
+  assert multi_tf.direction == "SELL"
+  assert multi_tf.result is not None
 
 
 @pytest.mark.parametrize(

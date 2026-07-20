@@ -96,11 +96,12 @@ matching `AUTO_TRADE_EXPECTED_BROKER`.
 
 ## Demo Auto-Trader
 
-The scanner publishes only fresh, news-cleared `Range Edge Scalp` candidates.
-Automatic execution requires range regimes on both M5 and M15, no opposing
-M15 directional bias, and an M15 premium/discount location appropriate for the
-trade side. M1 and M5 momentum candles remain analysis-only and never trigger
-an automatic order.
+The scanner publishes only fresh, news-cleared `M1 Decision Scalp` candidates.
+M5/M15 dealing-range edges and validated barriers are clustered into decision
+zones; their biases grade context but do not veto every counter-bias M1 trade.
+M1 must confirm the focus zone with a breakout then retest/hold or a sweep then
+reclaim. A raw momentum breakout candle never triggers an automatic order, and
+a sweep opposing both M5 and M15 requires a multi-timeframe zone.
 The executor revalidates candidate age, live quote age, spread, entry distance,
 account identity, and the one-XAU-position limit before placing a market order.
 Telegram is an operator surface, never the execution trigger.
@@ -112,8 +113,9 @@ default stop is `$6.5`; five client-managed partial closes trigger at
 `30/50/70/90/130` pips. A server-side stop is attached to the initial order and
 confirmed at the absolute fill price immediately afterward.
 
-`/auto_pause` blocks new entries, `/auto_resume` releases the block, and
-`/auto_status` reports mode, open auto positions, and the UTC daily trade count.
+`/auto_pause` blocks new entries and `/auto_resume` releases the block.
+`/auto_status` reports mode, open auto positions, the UTC daily trade count,
+and the latest M1 gate state and focus zone.
 Existing positions continue to receive TP management while entry is paused.
 
 Before enabling, run the read-only diagnostic:

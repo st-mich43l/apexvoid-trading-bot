@@ -98,10 +98,14 @@ public sealed class AutoTradeEngineTests
   }
 
   [Fact]
-  public async Task RejectsRangeScalpOutsideM5AsUnsupported()
+  public async Task RejectsLegacyM5RangeScalpAsUnsupported()
   {
     using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-    var store = new FakeAutoTradeStore(CandidateJson(timeframe: "M1"));
+    var store = new FakeAutoTradeStore(CandidateJson(
+      timeframe: "M5",
+      setup: "Range Edge Scalp",
+      mode: "range_scalp"
+    ));
     var client = new FakeTradingClient();
     var engine = new AutoTradeEngine(Options(), store, () => Now, _ => { });
     await engine.ObserveSpotAsync(
@@ -246,9 +250,9 @@ public sealed class AutoTradeEngineTests
   );
 
   private static string CandidateJson(
-    string timeframe = "M5",
-    string setup = "Range Edge Scalp",
-    string mode = "range_scalp"
+    string timeframe = "M1",
+    string setup = "M1 Decision Scalp",
+    string mode = "decision_scalp"
   ) => JsonSerializer.Serialize(new
   {
     version = 1,

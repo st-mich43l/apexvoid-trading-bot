@@ -33,6 +33,15 @@ STAR_THREE_SCORE = 12.0
 STAR_TWO_SCORE = 8.0
 COIL_SCORE = 1.5
 REACTION_MAX_ATR = 1.0
+M1_DECISION_CLUSTER_ATR = 0.35
+M1_DECISION_HALF_WIDTH_ATR = 0.20
+M1_DECISION_MAX_DISTANCE_ATR = 1.75
+M1_DECISION_BREAK_LOOKBACK = 4
+M1_DECISION_BREAK_BUFFER_ATR = 0.08
+M1_DECISION_TOUCH_ATR = 0.12
+M1_DECISION_MIN_TARGET_PIPS = 30
+M1_DECISION_MAX_ENTRY_PIPS = 10
+_DECISION_PIP_SIZE = {"XAU": 0.1}
 
 
 @dataclass(frozen=True)
@@ -194,6 +203,28 @@ class DetectionResult:
   confluence: int
   reasons: list[str]
   mode: str = "with_trend"
+
+
+@dataclass(frozen=True)
+class DecisionZone:
+  low: float
+  high: float
+  level: float
+  score: float
+  timeframes: tuple[str, ...]
+  sources: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class M1ScalpDecision:
+  state: str
+  result: DetectionResult | None = None
+  trigger: str | None = None
+  direction: str | None = None
+  zone: DecisionZone | None = None
+  target_room: float | None = None
+  m5_bias: str | None = None
+  m15_bias: str | None = None
 
 
 class SetupDetector(Protocol):
@@ -1043,6 +1074,385 @@ def momentum_ride(ctx: DetectionContext) -> DetectionResult | None:
   zone = entry_zone(df, level.price, direction)
   reasons = [f"HTF bias {ctx.htf_bias}", "impulse break", "near valid-side level"]
   return _finish(ctx, "Momentum Ride", direction, level.price, zone, price, atr, reasons)
+
+
+def evaluate_m1_decision_scalp(ctx: DetectionContext) -> M1ScalpDecision:
+  """Evaluate a closed M1 confirmation at one clustered M5/M15 level.
+
+  Higher timeframes locate the decision area and grade context. They never
+  veto a valid M1 trigger. A raw breakout candle is deliberately not an entry:
+  the gate requires either a later retest or a sweep back through the level.
+  """
+  if ctx.tf.upper() != "M1":
+    return M1ScalpDecision("wrong_timeframe")
+  if "M5" not in ctx.structures or "M15" not in ctx.structures:
+    return M1ScalpDecision("missing_m5_m15")
+  df, ind, _ = _exec(ctx)
+  if len(df) < M1_DECISION_BREAK_LOOKBACK + 3:
+    return M1ScalpDecision("insufficient_history")
+  atr = _atr(ind, 0.0)
+  if atr <= _EPS:
+    return M1ScalpDecision("invalid_atr")
+
+  zones = _m1_decision_zones(ctx, atr)
+  m5_bias = structure_momentum_bias(ctx.structures.get("M5"))
+  m15_bias = structure_momentum_bias(ctx.structures.get("M15"))
+  if not zones:
+    return M1ScalpDecision(
+      "no_htf_zone",
+      m5_bias=m5_bias,
+      m15_bias=m15_bias,
+    )
+
+  close = float(df["close"].iloc[-1])
+  nearby = [
+    zone for zone in zones
+    if _decision_zone_distance(zone, close)
+    <= M1_DECISION_MAX_DISTANCE_ATR * atr + _EPS
+  ]
+  if not nearby:
+    nearest = min(zones, key=lambda zone: _decision_zone_distance(zone, close))
+    return M1ScalpDecision(
+      "waiting_for_zone",
+      zone=nearest,
+      m5_bias=m5_bias,
+      m15_bias=m15_bias,
+    )
+
+  triggered: list[tuple[DecisionZone, str, str]] = []
+  for zone in nearby:
+    trigger = _m1_zone_trigger(df, zone, atr)
+    if trigger is None:
+      continue
+    direction, trigger_name = trigger
+    triggered.append((zone, direction, trigger_name))
+  if not triggered:
+    nearest = min(nearby, key=lambda zone: _decision_zone_distance(zone, close))
+    return M1ScalpDecision(
+      "waiting_confirmation",
+      zone=nearest,
+      m5_bias=m5_bias,
+      m15_bias=m15_bias,
+    )
+
+  blocked: list[tuple[DecisionZone, str, str, float]] = []
+  moved: list[tuple[DecisionZone, str, str, float]] = []
+  eligible: list[tuple[DecisionZone, str, str, float | None]] = []
+  pip_size = _DECISION_PIP_SIZE.get(ctx.symbol.upper(), 1.0)
+  minimum_room = M1_DECISION_MIN_TARGET_PIPS * pip_size
+  maximum_entry_distance = M1_DECISION_MAX_ENTRY_PIPS * pip_size
+  for zone, direction, trigger_name in triggered:
+    entry_distance = _decision_zone_distance(zone, close)
+    if entry_distance > maximum_entry_distance + _EPS:
+      moved.append((zone, direction, trigger_name, entry_distance))
+      continue
+    target_room = _m1_target_room(zone, zones, close, direction, atr)
+    if target_room is not None and target_room + _EPS < minimum_room:
+      blocked.append((zone, direction, trigger_name, target_room))
+      continue
+    eligible.append((zone, direction, trigger_name, target_room))
+  if not eligible and blocked:
+    zone, direction, trigger_name, target_room = max(
+      blocked,
+      key=lambda item: (item[3], item[0].score),
+    )
+    return M1ScalpDecision(
+      "target_blocked",
+      trigger=trigger_name,
+      direction=direction,
+      zone=zone,
+      target_room=target_room,
+      m5_bias=m5_bias,
+      m15_bias=m15_bias,
+    )
+  if not eligible:
+    zone, direction, trigger_name, entry_distance = min(
+      moved,
+      key=lambda item: (item[3], -item[0].score),
+    )
+    return M1ScalpDecision(
+      "entry_moved",
+      trigger=trigger_name,
+      direction=direction,
+      zone=zone,
+      target_room=None,
+      m5_bias=m5_bias,
+      m15_bias=m15_bias,
+    )
+
+  zone, direction, trigger_name, target_room = max(
+    eligible,
+    key=lambda item: (
+      item[0].score,
+      len(item[0].timeframes),
+      -_decision_zone_distance(item[0], close),
+    ),
+  )
+  wanted = _bias_for_direction(direction)
+  aligned = sum(bias == wanted for bias in (m5_bias, m15_bias))
+  opposed = sum(
+    bias is not None and bias != wanted
+    for bias in (m5_bias, m15_bias)
+  )
+  if (
+    trigger_name == "sweep_reclaim"
+    and opposed == 2
+    and len(zone.timeframes) < 2
+  ):
+    return M1ScalpDecision(
+      "weak_counter_context",
+      trigger=trigger_name,
+      direction=direction,
+      zone=zone,
+      target_room=target_room,
+      m5_bias=m5_bias,
+      m15_bias=m15_bias,
+    )
+  score = STAR_THREE_SCORE if (
+    len(zone.timeframes) > 1 or aligned > 0
+  ) else STAR_TWO_SCORE
+  entry = Zone(
+    zone.low,
+    zone.high,
+    _BUY_ZONE_SIDE if direction == "BUY" else "supply",
+    source="m1_decision",
+    score=score,
+    score_reasons=[
+      f"HTF zone {'+'.join(zone.timeframes)}",
+      f"M1 {trigger_name.replace('_', ' ')}",
+    ],
+  )
+  context = _m1_context_reason(m5_bias, m15_bias, direction)
+  reasons = [
+    f"M1 {trigger_name.replace('_', ' ')}",
+    f"decision zone {_number(zone.low)}-{_number(zone.high)}",
+    context,
+  ]
+  if target_room is not None:
+    reasons.append(
+      f"next barrier {target_room / pip_size:.0f} pips away"
+    )
+  result = _finish(
+    ctx,
+    "M1 Decision Scalp",
+    direction,
+    zone.level,
+    entry,
+    _current_price(ctx, df),
+    atr,
+    reasons,
+    mode="decision_scalp",
+    chop_tp_cap=False,
+  )
+  if result is None:
+    return M1ScalpDecision(
+      "entry_moved",
+      trigger=trigger_name,
+      direction=direction,
+      zone=zone,
+      target_room=target_room,
+      m5_bias=m5_bias,
+      m15_bias=m15_bias,
+    )
+  return M1ScalpDecision(
+    "candidate",
+    result=result,
+    trigger=trigger_name,
+    direction=direction,
+    zone=zone,
+    target_room=target_room,
+    m5_bias=m5_bias,
+    m15_bias=m15_bias,
+  )
+
+
+def _m1_decision_zones(
+  ctx: DetectionContext,
+  atr: float,
+) -> list[DecisionZone]:
+  points: list[tuple[float, float, str, str]] = []
+  for tf, base_score in (("M5", 2.0), ("M15", 3.0)):
+    st = ctx.structures.get(tf)
+    if st is None:
+      continue
+    range_ = st.dealing_range
+    if range_ is not None:
+      points.extend([
+        (float(range_.low), base_score, tf, "range-low"),
+        (float(range_.high), base_score, tf, "range-high"),
+      ])
+    for barrier in st.scalp_barriers:
+      if barrier.accepted_closes >= max(
+        1,
+        ctx.settings.range_scalp_break_closes,
+      ):
+        continue
+      points.append((
+        float(barrier.level),
+        base_score + min(3.0, float(barrier.score) / 4.0),
+        tf,
+        f"{barrier.side}×{barrier.touches}",
+      ))
+  points = [
+    point for point in points
+    if all(math.isfinite(value) for value in point[:2])
+  ]
+  if not points:
+    return []
+
+  tolerance = max(_EPS, M1_DECISION_CLUSTER_ATR * atr)
+  clusters: list[list[tuple[float, float, str, str]]] = []
+  for point in sorted(points, key=lambda item: item[0]):
+    if not clusters:
+      clusters.append([point])
+      continue
+    cluster = clusters[-1]
+    weight = sum(item[1] for item in cluster)
+    center = sum(item[0] * item[1] for item in cluster) / max(weight, _EPS)
+    if abs(point[0] - center) <= tolerance:
+      cluster.append(point)
+    else:
+      clusters.append([point])
+
+  half_width = max(0.1, M1_DECISION_HALF_WIDTH_ATR * atr)
+  zones = []
+  for cluster in clusters:
+    weight = sum(item[1] for item in cluster)
+    level = sum(item[0] * item[1] for item in cluster) / max(weight, _EPS)
+    zones.append(DecisionZone(
+      low=level - half_width,
+      high=level + half_width,
+      level=level,
+      score=round(weight, 3),
+      timeframes=tuple(sorted({item[2] for item in cluster})),
+      sources=tuple(sorted({f"{item[2]} {item[3]}" for item in cluster})),
+    ))
+  return zones
+
+
+def _decision_zone_distance(zone: DecisionZone, price: float) -> float:
+  if zone.low <= price <= zone.high:
+    return 0.0
+  return min(abs(price - zone.low), abs(price - zone.high))
+
+
+def _m1_zone_trigger(
+  df: pd.DataFrame,
+  zone: DecisionZone,
+  atr: float,
+) -> tuple[str, str] | None:
+  row = df.iloc[-1]
+  open_ = float(row["open"])
+  high = float(row["high"])
+  low = float(row["low"])
+  close = float(row["close"])
+  prior_close = float(df["close"].iloc[-2])
+  candle_range = high - low
+  if candle_range <= _EPS:
+    return None
+  buffer = M1_DECISION_BREAK_BUFFER_ATR * atr
+  touch = M1_DECISION_TOUCH_ATR * atr
+  upper_wick = max(0.0, high - max(open_, close)) / candle_range
+  lower_wick = max(0.0, min(open_, close) - low) / candle_range
+
+  if (
+    high > zone.high + buffer
+    and prior_close <= zone.level + buffer
+    and close < zone.level - buffer
+    and (close < open_ or upper_wick >= 0.25)
+  ):
+    return "SELL", "sweep_reclaim"
+  if (
+    low < zone.low - buffer
+    and prior_close >= zone.level - buffer
+    and close > zone.level + buffer
+    and (close > open_ or lower_wick >= 0.25)
+  ):
+    return "BUY", "sweep_reclaim"
+
+  start = max(1, len(df) - M1_DECISION_BREAK_LOOKBACK - 1)
+  for index in range(len(df) - 2, start - 1, -1):
+    breakout = df.iloc[index]
+    prior_close = float(df["close"].iloc[index - 1])
+    breakout_close = float(breakout["close"])
+    if (
+      prior_close <= zone.high + buffer
+      and breakout_close > zone.high + buffer
+      and displacement_grade(breakout, atr, "up")
+    ):
+      held = all(
+        float(value) > zone.level - buffer
+        for value in df["close"].iloc[index + 1:-1]
+      )
+      if (
+        held
+        and low <= zone.high + touch
+        and high >= zone.low - touch
+        and close > zone.high
+        and (close > open_ or lower_wick >= 0.25)
+      ):
+        return "BUY", "breakout_retest"
+    if (
+      prior_close >= zone.low - buffer
+      and breakout_close < zone.low - buffer
+      and displacement_grade(breakout, atr, "down")
+    ):
+      held = all(
+        float(value) < zone.level + buffer
+        for value in df["close"].iloc[index + 1:-1]
+      )
+      if (
+        held
+        and high >= zone.low - touch
+        and low <= zone.high + touch
+        and close < zone.low
+        and (close < open_ or upper_wick >= 0.25)
+      ):
+        return "SELL", "breakout_retest"
+  return None
+
+
+def _m1_target_room(
+  active: DecisionZone,
+  zones: list[DecisionZone],
+  price: float,
+  direction: str,
+  atr: float,
+) -> float | None:
+  separation = max(_EPS, 0.5 * atr)
+  if direction == "BUY":
+    targets = [
+      zone for zone in zones
+      if zone.level > active.level + separation
+    ]
+    if not targets:
+      return None
+    target = min(targets, key=lambda zone: zone.level)
+    return max(0.0, target.low - price)
+  targets = [
+    zone for zone in zones
+    if zone.level < active.level - separation
+  ]
+  if not targets:
+    return None
+  target = max(targets, key=lambda zone: zone.level)
+  return max(0.0, price - target.high)
+
+
+def _m1_context_reason(
+  m5_bias: str | None,
+  m15_bias: str | None,
+  direction: str,
+) -> str:
+  wanted = _bias_for_direction(direction)
+  biases = [bias for bias in (m5_bias, m15_bias) if bias is not None]
+  if not biases:
+    return "M5/M15 context unresolved"
+  if all(bias == wanted for bias in biases):
+    return f"M5/M15 aligned {wanted}"
+  if all(bias != wanted for bias in biases):
+    return f"M5/M15 counter-context ({'/'.join(biases)})"
+  return f"M5/M15 mixed ({'/'.join(biases)})"
 
 
 def structure_momentum_bias(st: StructureSet | None) -> str | None:
