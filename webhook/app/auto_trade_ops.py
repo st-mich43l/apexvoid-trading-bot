@@ -59,11 +59,26 @@ async def auto_trade_status_text() -> str:
     else "demo trading"
   )
   state = "paused" if paused else "running"
-  gate_line = (
-    "\nGate: <b>M5 range · M15 confirmation</b>"
-    if settings.auto_trade_enabled
-    else ""
-  )
+  gate_line = ""
+  if settings.auto_trade_enabled:
+    gate_state = "waiting for M1 close"
+    zone_text = ""
+    raw = await client.get("auto_trade:last_m1_gate")
+    if raw:
+      try:
+        payload = json.loads(raw)
+        gate_state = str(payload.get("state") or gate_state)
+        zone = payload.get("zone")
+        if isinstance(zone, dict):
+          low = float(zone["low"])
+          high = float(zone["high"])
+          zone_text = f" · zone {low:,.2f}–{high:,.2f}"
+      except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+        pass
+    gate_line = (
+      "\nGate: <b>M1 confirmation · M5/M15 decision zone</b>"
+      f"\nLast check: <b>{escape(gate_state)}</b>{escape(zone_text)}"
+    )
   return (
     "🤖 <b>Auto Trader</b>\n"
     f"Mode: <b>{escape(mode)}</b> · State: <b>{state}</b>\n"

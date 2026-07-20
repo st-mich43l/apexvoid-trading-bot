@@ -13,7 +13,7 @@ dated section after deployment.
 
 ### Added
 
-- Added demo-only cTrader market execution for qualified Range Edge Scalp
+- Added demo-only cTrader market execution for qualified scalp
   candidates, with Fusion/Hedged/Trading-scope hard locks, one-position and
   freshness/spread/news/daily-cap gates, restart reconciliation, and durable
   Redis candidate/event contracts.
@@ -52,12 +52,15 @@ dated section after deployment.
 
 ### Changed
 
-- Auto-traded Range Edge Scalp candidates now require chop regimes on both M5
-  and M15, no opposing M15 bias, and an M15 premium/discount location. This
-  blocks local-range fades taken from the middle of the higher-timeframe range.
-- Removed the unvalidated M1 momentum auto-entry lane. Automatic execution now
-  accepts only M5 Range Edge Scalp candidates; M1/M5 momentum candles remain
-  analysis-only.
+- Restored M1 as the auto-scalper execution timeframe. M5/M15 dealing-range
+  edges and validated barriers now form clustered decision zones and quality
+  context instead of acting as a blanket directional veto.
+- Replaced raw M1 momentum entries with confirmed `M1 Decision Scalp` triggers:
+  breakout then retest/hold, or sweep then reclaim. Entry drift is capped at 10
+  pips and the next barrier must leave at least 30 pips of target room.
+- Require a multi-timeframe decision zone before accepting a sweep/reclaim that
+  opposes both M5 and M15, while still allowing confirmed M1 entries against a
+  higher-timeframe bias when the structural evidence is strong enough.
 - Added a broker-valid `0.08`-lot tier for demo balances from `$500` to `$999`,
   so a drawdown below `$1,000` does not permanently disable the executor.
 - Increased two-sided range-scalp sensitivity with a longer local window,
