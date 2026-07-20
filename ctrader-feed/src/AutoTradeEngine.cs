@@ -178,10 +178,15 @@ public sealed class AutoTradeEngine(
     var client = RequireClient();
     var symbol = RequireSymbol();
     var now = _clock().ToUnixTimeSeconds();
+    var rangeScalp = candidate.Setup == "Range Edge Scalp"
+      && candidate.Mode == "range_scalp";
+    var fastScalp = options.FastScalpEnabled
+      && string.Equals(candidate.Timeframe, "M1", StringComparison.OrdinalIgnoreCase)
+      && candidate.Setup == "M1 Momentum Scalp"
+      && candidate.Mode == "momentum_scalp";
     if (
       candidate.Version != 1
-      || candidate.Setup != "Range Edge Scalp"
-      || candidate.Mode != "range_scalp"
+      || (!rangeScalp && !fastScalp)
       || candidate.Confluence < options.MinConfluence
       || !candidate.Symbol.Equals(symbol.RedisSymbol, StringComparison.OrdinalIgnoreCase)
     )
@@ -235,7 +240,7 @@ public sealed class AutoTradeEngine(
     {
       return await RejectAsync(
         candidate,
-        "balance below 1K or broker volume invalid",
+        "balance below $500 or broker volume invalid",
         cancellationToken
       );
     }

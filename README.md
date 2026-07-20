@@ -66,6 +66,14 @@ The bot talks to Telegram over **outbound long-polling only**, meaning it requir
 - DM one or more chart screenshots and the bot will run a structured **Smart Money Concepts (SMC)** analysis via **Claude Vision**, automatically drafting the setup to the channel.
 - **Multi-Timeframe Aware** ⏱️ — Send several charts; it uses higher TFs for directional bias and lower TFs for entry precision.
 
+### 🤖 Demo Auto-Scalper
+- The cTrader executor accepts the existing M5 Range Edge Scalp gate and an
+  independently enabled M1 momentum gate; the M1 lane requires a strong closed
+  candle, a short-range breakout, and no explicit opposing M5 bias.
+- Both lanes still fail closed on stale quotes, excessive spread, entry drift,
+  guarded news, an existing XAU position, and the UTC daily trade cap.
+- `/auto_status` exposes the latest M1 gate state for operator diagnostics.
+
 ---
 
 ## 🛠️ Tech Stack

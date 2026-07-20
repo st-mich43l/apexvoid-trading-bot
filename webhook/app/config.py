@@ -155,6 +155,11 @@ class Settings(BaseSettings):
   auto_trade_min_confluence: int = 2
   auto_trade_news_guard_minutes: int = 30
   auto_trade_max_daily_trades: int = 6
+  auto_trade_fast_scalp_enabled: bool = False
+  auto_trade_fast_min_range_atr: float = 0.8
+  auto_trade_fast_min_body_frac: float = 0.6
+  auto_trade_fast_breakout_lookback: int = 3
+  auto_trade_fast_require_m5_alignment: bool = True
 
   @property
   def telegram_chat_id(self) -> str:

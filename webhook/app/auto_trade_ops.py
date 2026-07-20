@@ -59,12 +59,32 @@ async def auto_trade_status_text() -> str:
     else "demo trading"
   )
   state = "paused" if paused else "running"
+  fast_line = ""
+  if settings.auto_trade_fast_scalp_enabled:
+    fast_state = "waiting for M1 close"
+    raw = await client.get("auto_trade:last_fast_gate")
+    if raw:
+      try:
+        payload = json.loads(raw)
+        fast_state = str(payload.get("state") or fast_state)
+        if fast_state == "candidate" and not payload.get("published"):
+          fast_state = "candidate · blocked or deduplicated"
+      except (TypeError, json.JSONDecodeError):
+        pass
+    fast_line = (
+      f"\nFast {_fast_tf_label()} gate: <b>{escape(fast_state)}</b>"
+    )
   return (
     "🤖 <b>Auto Trader</b>\n"
     f"Mode: <b>{escape(mode)}</b> · State: <b>{state}</b>\n"
     f"Open positions: <b>{position_count}</b>\n"
     f"Trades today: <b>{daily}/{settings.auto_trade_max_daily_trades}</b>"
+    f"{fast_line}"
   )
+
+
+def _fast_tf_label() -> str:
+  return "M1"
 
 
 async def set_auto_trade_paused(paused: bool) -> None:
