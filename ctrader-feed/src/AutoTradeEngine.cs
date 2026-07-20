@@ -12,6 +12,7 @@ public sealed class AutoTradeEngine(
 {
   private readonly SemaphoreSlim _gate = new(1, 1);
   private readonly Dictionary<long, AutoTradePositionState> _states = [];
+  private readonly HashSet<string> _reportedErrors = [];
   private readonly Func<DateTimeOffset> _clock = clock ?? (() => DateTimeOffset.UtcNow);
   private readonly Action<string> _log = log ?? Log;
   private ICTraderTradeClient? _client;
@@ -85,6 +86,10 @@ public sealed class AutoTradeEngine(
           var advance = await ProcessEntryAsync(entry, cancellationToken);
           if (!advance)
           {
+            await Task.Delay(
+              TimeSpan.FromMilliseconds(Math.Max(100, options.PollMilliseconds)),
+              cancellationToken
+            );
             break;
           }
           cursor = entry.Id;
@@ -148,24 +153,32 @@ public sealed class AutoTradeEngine(
     }
     try
     {
-      return await WithGateAsync(
+      var advance = await WithGateAsync(
         () => ProcessCandidateAsync(candidate, cancellationToken),
         cancellationToken
       );
+      if (advance)
+      {
+        _reportedErrors.Remove(candidate.CandidateId);
+      }
+      return advance;
     }
     catch (Exception exception) when (exception is not OperationCanceledException)
     {
       await store.ReleaseCandidateAsync(candidate.CandidateId, cancellationToken);
-      await PublishAsync(
-        "error",
-        $"candidate {Short(candidate.CandidateId)} failed: {exception.Message}",
-        cancellationToken,
-        candidate.CandidateId
-      );
-      _log(
-        $"auto-trade candidate {Short(candidate.CandidateId)} failed: "
-        + $"{exception.GetType().Name}: {exception.Message}"
-      );
+      if (_reportedErrors.Add(candidate.CandidateId))
+      {
+        await PublishAsync(
+          "error",
+          $"candidate {Short(candidate.CandidateId)} failed: {exception.Message}",
+          cancellationToken,
+          candidate.CandidateId
+        );
+        _log(
+          $"auto-trade candidate {Short(candidate.CandidateId)} failed: "
+          + $"{exception.GetType().Name}: {exception.Message}"
+        );
+      }
       return false;
     }
   }
@@ -188,7 +201,17 @@ public sealed class AutoTradeEngine(
       candidate.Version != 1
       || (!rangeScalp && !fastScalp)
       || candidate.Confluence < options.MinConfluence
-      || !candidate.Symbol.Equals(symbol.RedisSymbol, StringComparison.OrdinalIgnoreCase)
+      || !string.Equals(
+        candidate.Symbol,
+        symbol.RedisSymbol,
+        StringComparison.OrdinalIgnoreCase
+      )
+      || candidate.EntryZone is null
+      || candidate.EntryZone.Low > candidate.EntryZone.High
+      || (
+        !string.Equals(candidate.Direction, "BUY", StringComparison.OrdinalIgnoreCase)
+        && !string.Equals(candidate.Direction, "SELL", StringComparison.OrdinalIgnoreCase)
+      )
     )
     {
       return await RejectAsync(candidate, "unsupported candidate", cancellationToken);
@@ -245,7 +268,15 @@ public sealed class AutoTradeEngine(
       );
     }
     var slices = VolumePlanner.SplitFive(volume, symbol);
-    var quote = ValidateQuote(candidate, symbol);
+    SpotPrice quote;
+    try
+    {
+      quote = ValidateQuote(candidate, symbol);
+    }
+    catch (CandidateRejectedException exception)
+    {
+      return await RejectAsync(candidate, exception.Message, cancellationToken);
+    }
     var direction = ParseDirection(candidate.Direction);
     var expectedEntry = direction == TradeDirection.Buy ? quote.Ask : quote.Bid;
     if (options.DryRun)
@@ -341,17 +372,17 @@ public sealed class AutoTradeEngine(
   private SpotPrice ValidateQuote(TradeCandidate candidate, SymbolInfo symbol)
   {
     var quote = _lastSpot
-      ?? throw new InvalidOperationException("live cTrader quote unavailable");
+      ?? throw new CandidateRejectedException("live cTrader quote unavailable");
     var age = _clock().ToUnixTimeSeconds() - quote.Timestamp;
     if (age < 0 || age > Math.Max(1, options.SpotMaxAgeSeconds))
     {
-      throw new InvalidOperationException("live cTrader quote is stale");
+      throw new CandidateRejectedException("live cTrader quote is stale");
     }
     var pip = PipSize(symbol);
     var spreadPips = (quote.Ask - quote.Bid) / pip;
     if (spreadPips < 0 || spreadPips > options.MaxSpreadPips)
     {
-      throw new InvalidOperationException(
+      throw new CandidateRejectedException(
         $"spread {spreadPips:N1} pips exceeds cap {options.MaxSpreadPips}"
       );
     }
@@ -365,7 +396,7 @@ public sealed class AutoTradeEngine(
     var distancePips = distance / pip;
     if (distancePips > options.MaxEntryDistancePips)
     {
-      throw new InvalidOperationException(
+      throw new CandidateRejectedException(
         $"entry moved {distancePips:N1} pips beyond candidate zone"
       );
     }
@@ -718,4 +749,7 @@ public sealed class AutoTradeEngine(
 
   private static void Log(string message) =>
     Console.Error.WriteLine($"ctrader-feed {message}");
+
+  private sealed class CandidateRejectedException(string message)
+    : Exception(message);
 }
