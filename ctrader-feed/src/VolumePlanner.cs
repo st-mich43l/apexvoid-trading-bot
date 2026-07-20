@@ -7,6 +7,7 @@ public static class VolumePlanner
     >= 5_000m => 0.30m,
     >= 2_000m => 0.20m,
     >= 1_000m => 0.12m,
+    >= 500m => 0.08m,
     _ => 0m,
   };
 

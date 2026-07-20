@@ -18,8 +18,10 @@ from app.detectors import (
   DetectionContext,
   DetectionResult,
   DetectorSettings,
+  MomentumScalpDecision,
   SetupDetector,
   build_context,
+  evaluate_m1_momentum_scalp,
 )
 from app.market_map import MarketMap, build_map, map_reference, rail_reference
 from app.market_map_delivery import cache_analysis
@@ -54,6 +56,14 @@ def _watched_symbols() -> set[str]:
 
 def _htf_tfs() -> list[str]:
   return _csv(settings.scanner_htf)
+
+
+def _fast_scalp_tf() -> str:
+  return "M1"
+
+
+def _fast_scalp_htf_tfs() -> list[str]:
+  return _all_tfs("M5", _htf_tfs())
 
 
 def _all_tfs(exec_tf: str, htf_tfs: Iterable[str]) -> list[str]:
@@ -122,6 +132,12 @@ def _detector_settings() -> DetectorSettings:
     range_scalp_break_closes=settings.range_scalp_break_closes,
     range_scalp_min_wick_rejections=settings.range_scalp_min_wick_rejections,
     range_scalp_allow_rejection_only=settings.range_scalp_allow_rejection_only,
+    fast_scalp_min_range_atr=settings.auto_trade_fast_min_range_atr,
+    fast_scalp_min_body_frac=settings.auto_trade_fast_min_body_frac,
+    fast_scalp_breakout_lookback=settings.auto_trade_fast_breakout_lookback,
+    fast_scalp_require_m5_alignment=(
+      settings.auto_trade_fast_require_m5_alignment
+    ),
   )
 
 
@@ -490,8 +506,7 @@ async def _publish_auto_trade_candidate(
     return None
   candidates = [
     result for result in results
-    if result.setup == "Range Edge Scalp"
-    and result.mode == "range_scalp"
+    if _auto_trade_setup_enabled(tf, result)
     and result.confluence >= max(1, settings.auto_trade_min_confluence)
   ]
   if not candidates:
@@ -561,6 +576,17 @@ async def _publish_auto_trade_candidate(
     result.direction,
   )
   return candidate_id
+
+
+def _auto_trade_setup_enabled(tf: str, result: DetectionResult) -> bool:
+  if result.setup == "Range Edge Scalp" and result.mode == "range_scalp":
+    return True
+  return (
+    settings.auto_trade_fast_scalp_enabled
+    and tf.upper() == _fast_scalp_tf()
+    and result.setup == "M1 Momentum Scalp"
+    and result.mode == "momentum_scalp"
+  )
 
 
 def _zone_overlap_ratio(first: Zone, second: Zone) -> float:
@@ -747,12 +773,15 @@ async def _load_market_context_for_symbol(
   source: RedisOHLCSource | None = None,
   client: Any | None = None,
   event_ts: str | None = None,
+  exec_tf: str | None = None,
+  htf_order: list[str] | None = None,
+  cache_market_analysis: bool = True,
 ) -> tuple[DetectionContext | None, dict[str, Any]]:
   symbol = symbol.upper()
   client = client or redis_state.get_client()
   source = source or RedisOHLCSource(client)
-  exec_tf = settings.scanner_exec_tf.upper()
-  htf_order = _htf_tfs()
+  exec_tf = (exec_tf or settings.scanner_exec_tf).upper()
+  htf_order = htf_order or _htf_tfs()
   spot = await _load_spot_snapshot(client, symbol)
   frames = await _load_frames(source, symbol, exec_tf, htf_order)
   if exec_tf not in frames:
@@ -767,7 +796,7 @@ async def _load_market_context_for_symbol(
   )
   ctx = _attach_price_context(ctx, spot, trigger, frames[exec_tf])
   analysis = getattr(ctx, "analysis", None)
-  if analysis is not None:
+  if analysis is not None and cache_market_analysis:
     price = (
       float(ctx.spot_price)
       if getattr(ctx, "spot_price", None) is not None
@@ -775,6 +804,84 @@ async def _load_market_context_for_symbol(
     )
     cache_analysis(symbol, analysis, price, frames[exec_tf].index[-1])
   return ctx, frames
+
+
+def _momentum_gate_payload(
+  decision: MomentumScalpDecision,
+  *,
+  symbol: str,
+  tf: str,
+  event_ts: str,
+  frames: dict[str, Any],
+  candidate_id: str | None,
+) -> dict[str, Any]:
+  return {
+    "state": decision.state,
+    "symbol": symbol,
+    "tf": tf,
+    "event_ts": event_ts,
+    "checked_at": datetime.now(timezone.utc).isoformat(),
+    "direction": decision.direction,
+    "range_atr": decision.range_atr,
+    "body_fraction": decision.body_fraction,
+    "close_wick_fraction": decision.close_wick_fraction,
+    "candidate_id": candidate_id,
+    "published": candidate_id is not None,
+    "frames": {
+      name: len(frame)
+      for name, frame in sorted(frames.items())
+    },
+  }
+
+
+async def _handle_fast_scalp_event(
+  symbol: str,
+  tf: str,
+  event_ts: str,
+  *,
+  source: RedisOHLCSource | None,
+  client: Any,
+) -> None:
+  htf_order = _fast_scalp_htf_tfs()
+  ctx, frames = await _load_market_context_for_symbol(
+    symbol,
+    source=source,
+    client=client,
+    event_ts=event_ts,
+    exec_tf=tf,
+    htf_order=htf_order,
+    cache_market_analysis=False,
+  )
+  if ctx is None:
+    decision = MomentumScalpDecision("missing_exec_frame")
+    candidate_id = None
+  else:
+    decision = evaluate_m1_momentum_scalp(ctx)
+    candidate_id = await _publish_auto_trade_candidate(
+      client,
+      symbol,
+      tf,
+      ctx,
+      [decision.result] if decision.result is not None else [],
+    )
+  payload = _momentum_gate_payload(
+    decision,
+    symbol=symbol,
+    tf=tf,
+    event_ts=event_ts,
+    frames=frames,
+    candidate_id=candidate_id,
+  )
+  encoded = json.dumps(payload, separators=(",", ":"), sort_keys=True)
+  await client.set("auto_trade:last_fast_gate", encoded)
+  await client.set(f"auto_trade:last_fast_gate:{symbol}:{tf}", encoded)
+  log.info(
+    "fast-scalp gate symbol=%s tf=%s state=%s candidate=%s",
+    symbol,
+    tf,
+    decision.state,
+    candidate_id[:12] if candidate_id else "-",
+  )
 
 
 async def _handle_event(
@@ -790,10 +897,26 @@ async def _handle_event(
     return []
   symbol, tf, event_ts = parsed
   exec_tf = settings.scanner_exec_tf.upper()
-  if tf != exec_tf or symbol not in _watched_symbols():
+  if symbol not in _watched_symbols():
     return []
 
   client = client or redis_state.get_client()
+  fast_tf = _fast_scalp_tf()
+  if (
+    settings.auto_trade_enabled
+    and settings.auto_trade_fast_scalp_enabled
+    and tf == fast_tf
+  ):
+    await _handle_fast_scalp_event(
+      symbol,
+      tf,
+      event_ts,
+      source=source,
+      client=client,
+    )
+  if tf != exec_tf:
+    return []
+
   notify = notify or send_scanner_with_retry
   htf_order = _htf_tfs()
   ctx, frames = await _load_market_context_for_symbol(

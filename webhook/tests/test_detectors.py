@@ -160,6 +160,33 @@ def _momentum_ride_ctx() -> detectors.DetectionContext:
   )
 
 
+def _m1_momentum_ctx(*, m5_bias: str = "up") -> detectors.DetectionContext:
+  df = _df([
+    (100.0, 100.5, 99.8, 100.2, 100),
+    (100.2, 100.8, 100.0, 100.5, 100),
+    (100.5, 101.0, 100.4, 100.7, 100),
+    (100.7, 102.0, 100.6, 101.9, 100),
+  ])
+  m1 = detectors.StructureSet(
+    swings=[],
+    bias="up",
+    levels=[],
+    equal_levels=[],
+    fvg_zones=[],
+    order_blocks=[],
+  )
+  m5 = replace(m1, bias=m5_bias, momentum="neutral")
+  return detectors.DetectionContext(
+    symbol="XAU",
+    tf="M1",
+    frames={"M1": df},
+    indicators={"M1": _indicators(df, atr=1.0)},
+    structures={"M1": m1, "M5": m5},
+    htf_bias=m5_bias,
+    settings=detectors.DetectorSettings(confluence_floor=2),
+  )
+
+
 def _fade_scalp_ctx() -> detectors.DetectionContext:
   df = _df([
     (100, 101, 98, 100, 100),
@@ -222,6 +249,42 @@ def test_named_setup_triggers_only_when_confirmed_and_correct_side(
   )
   assert result.confluence >= 2
   _assert_correct_side(result)
+
+
+def test_m1_momentum_scalp_accepts_closed_breakout_candle_with_m5_alignment():
+  decision = detectors.evaluate_m1_momentum_scalp(_m1_momentum_ctx())
+
+  assert decision.state == "candidate"
+  assert decision.direction == "BUY"
+  assert decision.range_atr == pytest.approx(1.4)
+  assert decision.body_fraction == pytest.approx(1.2 / 1.4)
+  assert decision.result is not None
+  assert decision.result.setup == "M1 Momentum Scalp"
+  assert decision.result.mode == "momentum_scalp"
+  assert decision.result.key_level == pytest.approx(101.0)
+  assert decision.result.entry_zone.low == pytest.approx(100.7)
+  assert decision.result.entry_zone.high == pytest.approx(101.9)
+  assert decision.result.confluence == 3
+
+
+def test_m1_momentum_scalp_rejects_counter_m5_and_weak_body():
+  counter = detectors.evaluate_m1_momentum_scalp(
+    _m1_momentum_ctx(m5_bias="down")
+  )
+  assert counter.state == "against_m5"
+  assert counter.result is None
+
+  ctx = _m1_momentum_ctx()
+  weak = ctx.frames["M1"].copy()
+  weak.iloc[-1] = [100.7, 102.0, 100.6, 101.0, 100]
+  weak_ctx = replace(
+    ctx,
+    frames={"M1": weak},
+    indicators={"M1": _indicators(weak, atr=1.0)},
+  )
+  decision = detectors.evaluate_m1_momentum_scalp(weak_ctx)
+  assert decision.state == "weak_body"
+  assert decision.result is None
 
 
 @pytest.mark.parametrize(

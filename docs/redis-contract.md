@@ -119,7 +119,8 @@ is a separate future sink, not this Redis contract.
 
 ## Auto-Trade Candidate Stream
 
-When enabled, the scanner appends qualified `Range Edge Scalp` candidates to:
+When enabled, the scanner appends qualified `Range Edge Scalp` candidates and,
+when separately enabled, closed-candle `M1 Momentum Scalp` candidates to:
 
 ```text
 XADD auto_trade:candidates MAXLEN ~ 1000 * payload <json>
@@ -131,6 +132,8 @@ entry-zone bounds, confluence count, and reasons. Publishing fails closed when
 the spot is absent/implausible or a high-impact event is active or unavailable.
 Candidate claims and outcomes use `auto_trade:executor:candidate:{id}` for
 restart-safe idempotency; the stream cursor is `auto_trade:cursor`.
+The latest M1 gate decision is stored at `auto_trade:last_fast_gate` and
+`auto_trade:last_fast_gate:{symbol}:M1` for `/auto_status` and diagnostics.
 
 ## Auto-Trade State And Events
 

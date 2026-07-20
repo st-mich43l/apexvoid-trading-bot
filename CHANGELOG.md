@@ -13,6 +13,12 @@ dated section after deployment.
 
 ### Added
 
+- Added an isolated M1 momentum auto-scalp gate using closed-candle ATR/body,
+  close-location, short-breakout, and optional M5-alignment checks, with Redis
+  decision telemetry and `/auto_status` visibility. The existing M5 range gate
+  remains unchanged.
+- Added cTrader M1 trendbar ingestion and executor support for explicitly
+  enabled `M1 Momentum Scalp` candidates.
 - Added demo-only cTrader market execution for qualified Range Edge Scalp
   candidates, with Fusion/Hedged/Trading-scope hard locks, one-position and
   freshness/spread/news/daily-cap gates, restart reconciliation, and durable
@@ -52,6 +58,8 @@ dated section after deployment.
 
 ### Changed
 
+- Added a broker-valid `0.08`-lot tier for demo balances from `$500` to `$999`,
+  so a drawdown below `$1,000` does not permanently disable the executor.
 - Increased two-sided range-scalp sensitivity with a longer local window,
   two-touch scored barriers, wider entry tolerance, and strict wick-rejection
   confirmation as an alternative to micro-CHoCH.

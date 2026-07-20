@@ -119,6 +119,10 @@ class DetectorSettings:
   range_scalp_break_closes: int = 2
   range_scalp_min_wick_rejections: int = 1
   range_scalp_allow_rejection_only: bool = True
+  fast_scalp_min_range_atr: float = 0.8
+  fast_scalp_min_body_frac: float = 0.6
+  fast_scalp_breakout_lookback: int = 3
+  fast_scalp_require_m5_alignment: bool = True
 
   def analysis_settings(self) -> AnalysisSettings:
     return AnalysisSettings(
@@ -193,6 +197,16 @@ class DetectionResult:
   confluence: int
   reasons: list[str]
   mode: str = "with_trend"
+
+
+@dataclass(frozen=True)
+class MomentumScalpDecision:
+  state: str
+  result: DetectionResult | None = None
+  direction: str | None = None
+  range_atr: float | None = None
+  body_fraction: float | None = None
+  close_wick_fraction: float | None = None
 
 
 class SetupDetector(Protocol):
@@ -1041,6 +1055,130 @@ def momentum_ride(ctx: DetectionContext) -> DetectionResult | None:
   zone = entry_zone(df, level.price, direction)
   reasons = [f"HTF bias {ctx.htf_bias}", "impulse break", "near valid-side level"]
   return _finish(ctx, "Momentum Ride", direction, level.price, zone, price, atr, reasons)
+
+
+def m1_momentum_scalp(ctx: DetectionContext) -> DetectionResult | None:
+  """Return a fast, closed-candle momentum scalp candidate for auto-trading."""
+  return evaluate_m1_momentum_scalp(ctx).result
+
+
+def evaluate_m1_momentum_scalp(ctx: DetectionContext) -> MomentumScalpDecision:
+  if ctx.tf.upper() != "M1":
+    return MomentumScalpDecision("wrong_timeframe")
+  df, ind, _ = _exec(ctx)
+  lookback = max(1, int(ctx.settings.fast_scalp_breakout_lookback))
+  if len(df) < lookback + 1:
+    return MomentumScalpDecision("insufficient_history")
+
+  atr = _atr(ind, 0.0)
+  if atr <= _EPS:
+    return MomentumScalpDecision("invalid_atr")
+  row = df.iloc[-1]
+  open_ = float(row["open"])
+  high = float(row["high"])
+  low = float(row["low"])
+  close = float(row["close"])
+  candle_range = high - low
+  if candle_range <= _EPS or close == open_:
+    return MomentumScalpDecision("flat_candle")
+
+  direction = "BUY" if close > open_ else "SELL"
+  range_atr = candle_range / atr
+  body_fraction = abs(close - open_) / candle_range
+  close_wick_fraction = (
+    (high - close) / candle_range
+    if direction == "BUY"
+    else (close - low) / candle_range
+  )
+  metrics = {
+    "direction": direction,
+    "range_atr": range_atr,
+    "body_fraction": body_fraction,
+    "close_wick_fraction": close_wick_fraction,
+  }
+  if range_atr < max(0.0, ctx.settings.fast_scalp_min_range_atr):
+    return MomentumScalpDecision("weak_range", **metrics)
+  # Reject exceptional spikes; normal momentum should be tradable without
+  # chasing a likely news candle. The economic-news guard remains mandatory.
+  if range_atr > 2.5:
+    return MomentumScalpDecision("oversized_spike", **metrics)
+  if body_fraction < max(0.0, ctx.settings.fast_scalp_min_body_frac):
+    return MomentumScalpDecision("weak_body", **metrics)
+  if close_wick_fraction > 0.20 + _EPS:
+    return MomentumScalpDecision("weak_close", **metrics)
+
+  prior = df.iloc[-lookback - 1:-1]
+  buffer = 0.05 * atr
+  if direction == "BUY":
+    key_level = float(prior["high"].max())
+    broke = close > key_level + buffer
+  else:
+    key_level = float(prior["low"].min())
+    broke = close < key_level - buffer
+  if not broke:
+    return MomentumScalpDecision("no_breakout", **metrics)
+
+  m5 = ctx.structures.get("M5")
+  m5_bias = _structure_momentum_bias(m5)
+  if (
+    ctx.settings.fast_scalp_require_m5_alignment
+    and m5_bias is not None
+    and m5_bias != _bias_for_direction(direction)
+  ):
+    return MomentumScalpDecision("against_m5", **metrics)
+
+  score = (
+    STAR_THREE_SCORE
+    if m5_bias == _bias_for_direction(direction)
+    else STAR_TWO_SCORE
+  )
+  zone = Zone(
+    min(open_, close),
+    max(open_, close),
+    _BUY_ZONE_SIDE if direction == "BUY" else "supply",
+    source="m1_momentum",
+    score=score,
+    score_reasons=[
+      f"M1 range {range_atr:.2f} ATR",
+      f"body {body_fraction:.0%}",
+    ],
+  )
+  reasons = [
+    f"M1 body {body_fraction:.0%}",
+    f"M1 range {range_atr:.2f} ATR",
+    f"close through {lookback}-bar {'high' if direction == 'BUY' else 'low'}",
+  ]
+  if m5_bias is not None:
+    reasons.append(f"M5 bias {m5_bias}")
+  result = _finish(
+    ctx,
+    "M1 Momentum Scalp",
+    direction,
+    key_level,
+    zone,
+    _current_price(ctx, df),
+    atr,
+    reasons,
+    mode="momentum_scalp",
+    chop_tp_cap=False,
+  )
+  if result is None:
+    return MomentumScalpDecision("invalid_entry", **metrics)
+  return MomentumScalpDecision("candidate", result=result, **metrics)
+
+
+def _structure_momentum_bias(st: StructureSet | None) -> str | None:
+  if st is None:
+    return None
+  if st.bias == "up" and st.momentum != "bear":
+    return "up"
+  if st.bias == "down" and st.momentum != "bull":
+    return "down"
+  if st.momentum == "bull":
+    return "up"
+  if st.momentum == "bear":
+    return "down"
+  return None
 
 
 def range_edge_scalp(ctx: DetectionContext) -> DetectionResult | None:

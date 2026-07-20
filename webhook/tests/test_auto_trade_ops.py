@@ -23,12 +23,16 @@ async def test_pause_resume_and_status(monkeypatch):
   monkeypatch.setattr(auto_trade_ops.settings, "auto_trade_enabled", True)
   monkeypatch.setattr(auto_trade_ops.settings, "auto_trade_dry_run", False)
   monkeypatch.setattr(auto_trade_ops.settings, "auto_trade_max_daily_trades", 6)
+  monkeypatch.setattr(auto_trade_ops.settings, "auto_trade_fast_scalp_enabled", True)
   await auto_trade_ops.set_auto_trade_paused(True)
   client = redis_state.get_client()
+  await client.set("auto_trade:last_fast_gate", '{"state":"weak_body"}')
   assert await client.get("auto_trade:paused") == "1"
   text = await auto_trade_ops.auto_trade_status_text()
   assert "demo trading" in text
   assert "paused" in text
   assert "0/6" in text
+  assert "Fast M1 gate" in text
+  assert "weak_body" in text
   await auto_trade_ops.set_auto_trade_paused(False)
   assert await client.get("auto_trade:paused") is None

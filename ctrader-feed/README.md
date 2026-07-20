@@ -41,7 +41,7 @@ Optional defaults:
 CTRADER_HOST=demo.ctraderapi.com
 CTRADER_PORT=5035
 CTRADER_SYMBOL=XAUUSD
-CTRADER_TIMEFRAMES=M5,M15,M30
+CTRADER_TIMEFRAMES=M1,M5,M15,M30
 CTRADER_BACKFILL_BARS=1500
 CTRADER_REQUEST_TIMEOUT=30
 CTRADER_TOKEN_REFRESH_MINUTES=50
@@ -61,6 +61,7 @@ AUTO_TRADE_SPOT_MAX_AGE=5
 AUTO_TRADE_MAX_SPREAD_PIPS=5
 AUTO_TRADE_MAX_ENTRY_DISTANCE_PIPS=10
 AUTO_TRADE_MAX_DAILY_TRADES=6
+AUTO_TRADE_FAST_SCALP_ENABLED=false
 AUTO_TRADE_STREAM=auto_trade:candidates
 AUTO_TRADE_EVENT_STREAM=auto_trade:events
 AUTO_TRADE_LABEL=apexvoid-auto
@@ -97,12 +98,16 @@ matching `AUTO_TRADE_EXPECTED_BROKER`.
 ## Demo Auto-Trader
 
 The scanner publishes only fresh, news-cleared `Range Edge Scalp` candidates.
+When `AUTO_TRADE_FAST_SCALP_ENABLED=true`, it also accepts the isolated
+`M1 Momentum Scalp` lane: a closed M1 candle must have an ATR-sized body,
+close near its extreme, break the configured short lookback, and avoid an
+opposing M5 bias. The normal M5 detector is not relaxed.
 The executor revalidates candidate age, live quote age, spread, entry distance,
 account identity, and the one-XAU-position limit before placing a market order.
 Telegram is an operator surface, never the execution trigger.
 
-Balance tiers are fixed: below `$1,000` does not trade; `$1,000` uses `0.12`
-lot, `$2,000` uses `0.20`, and `$5,000+` uses `0.30`. Broker symbol metadata
+Balance tiers are fixed: below `$500` does not trade; `$500` uses `0.08` lot,
+`$1,000` uses `0.12`, `$2,000` uses `0.20`, and `$5,000+` uses `0.30`. Broker symbol metadata
 converts lots to native volume and validates minimum/step/maximum volume. The
 default stop is `$6.5`; five client-managed partial closes trigger at
 `30/50/70/90/130` pips. A server-side stop is attached to the initial order and

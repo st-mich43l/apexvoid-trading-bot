@@ -17,7 +17,9 @@ public sealed class VolumePlannerTests
   );
 
   [Theory]
-  [InlineData(999, 0)]
+  [InlineData(499, 0)]
+  [InlineData(500, 0.08)]
+  [InlineData(999, 0.08)]
   [InlineData(1000, 0.12)]
   [InlineData(1999, 0.12)]
   [InlineData(2000, 0.20)]
@@ -34,6 +36,7 @@ public sealed class VolumePlannerTests
 
   [Theory]
   [InlineData(0.12, 1200)]
+  [InlineData(0.08, 800)]
   [InlineData(0.20, 2000)]
   [InlineData(0.30, 3000)]
   public void ConvertsLotsToBrokerVolume(double lots, long expected)
@@ -48,6 +51,12 @@ public sealed class VolumePlannerTests
   public void SplitsPointTwelveAcrossFiveValidPartialCloses()
   {
     Assert.Equal([200, 200, 200, 200, 400], VolumePlanner.SplitFive(1200, Symbol));
+  }
+
+  [Fact]
+  public void SplitsLowBalanceTierAcrossFiveValidPartialCloses()
+  {
+    Assert.Equal([100, 100, 100, 100, 400], VolumePlanner.SplitFive(800, Symbol));
   }
 
   [Theory]

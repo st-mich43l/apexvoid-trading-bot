@@ -70,6 +70,86 @@ public sealed class AutoTradeEngineTests
   }
 
   [Fact]
+  public async Task OpensEnabledM1MomentumScalpCandidate()
+  {
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+    var store = new FakeAutoTradeStore(CandidateJson(
+      timeframe: "M1",
+      setup: "M1 Momentum Scalp",
+      mode: "momentum_scalp"
+    ));
+    var client = new FakeTradingClient();
+    var engine = new AutoTradeEngine(
+      Options(fastScalpEnabled: true),
+      store,
+      () => Now,
+      _ => { }
+    );
+    await engine.ObserveSpotAsync(
+      new SpotPrice("XAU", 4000.0m, 4000.2m, Now.ToUnixTimeSeconds()),
+      cts.Token
+    );
+
+    var run = engine.RunSessionAsync(client, Symbol, cts.Token);
+    await store.Ordered.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+    Assert.Single(client.Orders);
+    cts.Cancel();
+    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+  }
+
+  [Fact]
+  public async Task RejectsM1MomentumScalpWhenFastGateIsDisabled()
+  {
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+    var store = new FakeAutoTradeStore(CandidateJson(
+      timeframe: "M1",
+      setup: "M1 Momentum Scalp",
+      mode: "momentum_scalp"
+    ));
+    var client = new FakeTradingClient();
+    var engine = new AutoTradeEngine(Options(), store, () => Now, _ => { });
+    await engine.ObserveSpotAsync(
+      new SpotPrice("XAU", 4000.0m, 4000.2m, Now.ToUnixTimeSeconds()),
+      cts.Token
+    );
+
+    var run = engine.RunSessionAsync(client, Symbol, cts.Token);
+    await store.Processed.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+    Assert.Empty(client.Orders);
+    Assert.Contains(
+      store.Events,
+      item => item.Type == "rejected" && item.Message.Contains("unsupported")
+    );
+    cts.Cancel();
+    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+  }
+
+  [Fact]
+  public async Task DrawnDownDemoBalanceUsesLowTierInsteadOfDisablingTrading()
+  {
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+    var store = new FakeAutoTradeStore(CandidateJson());
+    var client = new FakeTradingClient
+    {
+      Account = ValidAccount() with { Balance = 920.84m },
+    };
+    var engine = new AutoTradeEngine(Options(), store, () => Now, _ => { });
+    await engine.ObserveSpotAsync(
+      new SpotPrice("XAU", 4000.0m, 4000.2m, Now.ToUnixTimeSeconds()),
+      cts.Token
+    );
+
+    var run = engine.RunSessionAsync(client, Symbol, cts.Token);
+    await store.Ordered.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+    Assert.Equal(800, Assert.Single(client.Orders).Volume);
+    cts.Cancel();
+    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+  }
+
+  [Fact]
   public async Task HardLockRejectsLiveAccountBeforeReadingCandidates()
   {
     var store = new FakeAutoTradeStore(CandidateJson());
@@ -118,7 +198,7 @@ public sealed class AutoTradeEngineTests
     Assert.Empty(client.Orders);
   }
 
-  private static AutoTradeOptions Options() => new(
+  private static AutoTradeOptions Options(bool fastScalpEnabled = false) => new(
     Enabled: true,
     DryRun: false,
     ExpectedBroker: "Fusion",
@@ -130,6 +210,7 @@ public sealed class AutoTradeEngineTests
     MaxEntryDistancePips: 10,
     MaxDailyTrades: 6,
     MinConfluence: 2,
+    FastScalpEnabled: fastScalpEnabled,
     PollMilliseconds: 10,
     CandidateStream: "auto_trade:candidates",
     EventStream: "auto_trade:events",
@@ -146,14 +227,18 @@ public sealed class AutoTradeEngineTests
     Balance: 1_000m
   );
 
-  private static string CandidateJson() => JsonSerializer.Serialize(new
+  private static string CandidateJson(
+    string timeframe = "M5",
+    string setup = "Range Edge Scalp",
+    string mode = "range_scalp"
+  ) => JsonSerializer.Serialize(new
   {
     version = 1,
     candidate_id = new string('a', 64),
     symbol = "XAU",
-    timeframe = "M5",
-    setup = "Range Edge Scalp",
-    mode = "range_scalp",
+    timeframe,
+    setup,
+    mode,
     direction = "BUY",
     trigger_ts = "1000",
     created_at = 1_000,
@@ -285,6 +370,9 @@ public sealed class AutoTradeEngineTests
     public TaskCompletionSource<bool> Ordered { get; } = new(
       TaskCreationOptions.RunContinuationsAsynchronously
     );
+    public TaskCompletionSource<bool> Processed { get; } = new(
+      TaskCreationOptions.RunContinuationsAsynchronously
+    );
     private bool _delivered;
     private long _daily;
 
@@ -336,6 +424,7 @@ public sealed class AutoTradeEngineTests
     )
     {
       _candidateStatus[candidateId] = outcome;
+      Processed.TrySetResult(true);
       if (outcome.StartsWith("ordered:", StringComparison.Ordinal))
       {
         Ordered.TrySetResult(true);

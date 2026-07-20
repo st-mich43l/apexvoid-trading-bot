@@ -6,6 +6,7 @@ public static class TimeframeCodec
     StringComparer.OrdinalIgnoreCase
   )
   {
+    ["M1"] = 60,
     ["M5"] = 5 * 60,
     ["M15"] = 15 * 60,
     ["M30"] = 30 * 60,
@@ -27,13 +28,14 @@ public static class TimeframeCodec
     throw new ArgumentOutOfRangeException(
       nameof(code),
       code,
-      "Only M5, M15 and M30 are supported by this feed."
+      "Only M1, M5, M15 and M30 are supported by this feed."
     );
   }
 
   public static ProtoOATrendbarPeriod ToProto(string code) =>
     code.ToUpperInvariant() switch
     {
+      "M1" => ProtoOATrendbarPeriod.M1,
       "M5" => ProtoOATrendbarPeriod.M5,
       "M15" => ProtoOATrendbarPeriod.M15,
       "M30" => ProtoOATrendbarPeriod.M30,
@@ -43,6 +45,7 @@ public static class TimeframeCodec
   public static string FromProto(ProtoOATrendbarPeriod period) =>
     period switch
     {
+      ProtoOATrendbarPeriod.M1 => "M1",
       ProtoOATrendbarPeriod.M5 => "M5",
       ProtoOATrendbarPeriod.M15 => "M15",
       ProtoOATrendbarPeriod.M30 => "M30",

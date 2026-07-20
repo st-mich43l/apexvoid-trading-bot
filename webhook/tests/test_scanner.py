@@ -85,6 +85,81 @@ async def test_range_scalp_publishes_one_durable_auto_trade_candidate(monkeypatc
 
 
 @pytest.mark.asyncio
+async def test_m1_fast_gate_publishes_auto_candidate_without_scanner_dm(monkeypatch):
+  client = redis_state.get_client()
+  notify = AsyncMock()
+  now = int(datetime.now(timezone.utc).timestamp())
+  await client.set(
+    "price:XAU:spot",
+    json.dumps({"bid": 4100.4, "ask": 4100.6, "ts": now}),
+  )
+  monkeypatch.setattr(scanner.settings, "scanner_symbols", "XAU")
+  monkeypatch.setattr(scanner.settings, "scanner_exec_tf", "M5")
+  monkeypatch.setattr(scanner.settings, "scanner_htf", "M30,M15")
+  monkeypatch.setattr(scanner.settings, "auto_trade_enabled", True)
+  monkeypatch.setattr(scanner.settings, "auto_trade_fast_scalp_enabled", True)
+  monkeypatch.setattr(scanner.settings, "auto_trade_stream", "auto_trade:test")
+  monkeypatch.setattr(scanner.settings, "auto_trade_min_confluence", 2)
+  monkeypatch.setattr(scanner, "event_in_window", AsyncMock(return_value=None))
+
+  class Source:
+    async def window(self, symbol, tf, n):
+      assert symbol == "XAU"
+      assert tf in {"M1", "M5", "M15", "M30"}
+      return _frame()
+
+  ctx = SimpleNamespace(tf="M1", analysis=None, structures={})
+  monkeypatch.setattr(
+    scanner,
+    "build_context",
+    lambda symbol, tf, frames, detector_settings, htf_order: ctx,
+  )
+  result = scanner.DetectionResult(
+    "M1 Momentum Scalp",
+    "BUY",
+    4100.0,
+    Zone(4100.0, 4100.5, "demand"),
+    4100.5,
+    2,
+    ["M1 body 75%", "close through 3-bar high"],
+    mode="momentum_scalp",
+  )
+  monkeypatch.setattr(
+    scanner,
+    "evaluate_m1_momentum_scalp",
+    lambda received: scanner.MomentumScalpDecision(
+      "candidate",
+      result=result,
+      direction="BUY",
+      range_atr=1.1,
+      body_fraction=0.75,
+      close_wick_fraction=0.1,
+    ),
+  )
+
+  sent = await scanner._handle_event(
+    "XAU:M1:1784552400",
+    source=Source(),
+    client=client,
+    notify=notify,
+  )
+
+  assert sent == []
+  notify.assert_not_awaited()
+  entries = await client.xrange("auto_trade:test")
+  assert len(entries) == 1
+  payload = json.loads(entries[0][1]["payload"])
+  assert payload["timeframe"] == "M1"
+  assert payload["setup"] == "M1 Momentum Scalp"
+  assert payload["mode"] == "momentum_scalp"
+  status = json.loads(await client.get("auto_trade:last_fast_gate:XAU:M1"))
+  assert status["state"] == "candidate"
+  assert status["published"] is True
+  assert status["candidate_id"] == payload["candidate_id"]
+  assert status["frames"] == {"M1": 1, "M5": 1, "M15": 1, "M30": 1}
+
+
+@pytest.mark.asyncio
 async def test_auto_trade_candidate_fails_closed_on_news_or_missing_spot(
   monkeypatch,
 ):
@@ -122,6 +197,34 @@ async def test_auto_trade_candidate_fails_closed_on_news_or_missing_spot(
   ) is None
   assert await scanner._publish_auto_trade_candidate(
     client, "XAU", "M5", missing, [result]
+  ) is None
+  assert await client.xlen("auto_trade:test") == 0
+
+
+@pytest.mark.asyncio
+async def test_m1_momentum_candidate_requires_separate_fast_gate(monkeypatch):
+  client = redis_state.get_client()
+  monkeypatch.setattr(scanner.settings, "auto_trade_enabled", True)
+  monkeypatch.setattr(scanner.settings, "auto_trade_fast_scalp_enabled", False)
+  monkeypatch.setattr(scanner.settings, "auto_trade_stream", "auto_trade:test")
+  ctx = SimpleNamespace(spot_price=4100.0, spot_ts=1, trigger_ts="1")
+  result = scanner.DetectionResult(
+    "M1 Momentum Scalp",
+    "BUY",
+    4099.5,
+    Zone(4099.5, 4100.0, "demand"),
+    4100.0,
+    2,
+    ["M1 impulse"],
+    mode="momentum_scalp",
+  )
+
+  assert await scanner._publish_auto_trade_candidate(
+    client,
+    "XAU",
+    "M1",
+    ctx,
+    [result],
   ) is None
   assert await client.xlen("auto_trade:test") == 0
 

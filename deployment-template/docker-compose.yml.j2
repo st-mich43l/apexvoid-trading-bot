@@ -69,7 +69,7 @@ services:
       CTRADER_HOST: {{ apexvoid_trading_bot_env.CTRADER_HOST | default('demo.ctraderapi.com') | string | to_json }}
       CTRADER_PORT: {{ apexvoid_trading_bot_env.CTRADER_PORT | default('5035') | string | to_json }}
       CTRADER_SYMBOL: {{ apexvoid_trading_bot_env.CTRADER_SYMBOL | default('XAUUSD') | string | to_json }}
-      CTRADER_TIMEFRAMES: {{ apexvoid_trading_bot_env.CTRADER_TIMEFRAMES | default('M5,M15,M30') | string | to_json }}
+      CTRADER_TIMEFRAMES: {{ apexvoid_trading_bot_env.CTRADER_TIMEFRAMES | default('M1,M5,M15,M30') | string | to_json }}
       CTRADER_BACKFILL_BARS: {{ apexvoid_trading_bot_env.CTRADER_BACKFILL_BARS | default('1500') | string | to_json }}
       CTRADER_REQUEST_TIMEOUT: {{ apexvoid_trading_bot_env.CTRADER_REQUEST_TIMEOUT | default('30') | string | to_json }}
       CTRADER_TOKEN_REFRESH_MINUTES: {{ apexvoid_trading_bot_env.CTRADER_TOKEN_REFRESH_MINUTES | default('50') | string | to_json }}
@@ -89,6 +89,7 @@ services:
       AUTO_TRADE_MAX_ENTRY_DISTANCE_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_MAX_ENTRY_DISTANCE_PIPS | default('10') | string | to_json }}
       AUTO_TRADE_MAX_DAILY_TRADES: {{ apexvoid_trading_bot_env.AUTO_TRADE_MAX_DAILY_TRADES | default('6') | string | to_json }}
       AUTO_TRADE_MIN_CONFLUENCE: {{ apexvoid_trading_bot_env.AUTO_TRADE_MIN_CONFLUENCE | default('2') | string | to_json }}
+      AUTO_TRADE_FAST_SCALP_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_FAST_SCALP_ENABLED | default('false') | string | to_json }}
       AUTO_TRADE_POLL_MS: {{ apexvoid_trading_bot_env.AUTO_TRADE_POLL_MS | default('1000') | string | to_json }}
       AUTO_TRADE_STREAM: {{ apexvoid_trading_bot_env.AUTO_TRADE_STREAM | default('auto_trade:candidates') | string | to_json }}
       AUTO_TRADE_EVENT_STREAM: {{ apexvoid_trading_bot_env.AUTO_TRADE_EVENT_STREAM | default('auto_trade:events') | string | to_json }}
