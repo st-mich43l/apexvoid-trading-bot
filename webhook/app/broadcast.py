@@ -8,6 +8,7 @@ from app.dedup import (
   get_signal_posts,
   insert_signal_post,
 )
+from app.pips_format import rr_entry
 from app.symbols import SYMBOLS, channels_for
 from app.tg_core import delete_message, send_sticker, send_with_retry
 
@@ -29,8 +30,8 @@ def render_entry(sig: dict, tier: str) -> str:
   entry_end = sig.get("entry_end")
   if entry_end is None:
     entry_end = sig["entry"]
-  rr_entry = sig["entry"] if action == "SELL" else entry_end
-  risk = abs(rr_entry - sig["sl"])
+  entry_reference = rr_entry(sig)
+  risk = abs(entry_reference - sig["sl"])
   seq = f"  #{sig['daily_seq']}" if tier == "vip" else ""
   action_icon = "📈" if action == "BUY" else "📉"
   lines = [
@@ -51,7 +52,7 @@ def render_entry(sig: dict, tier: str) -> str:
   for index, tp in enumerate(sig.get("tps") or []):
     lines.append(
       f"💰 TP{index + 1}:   <b>{_price(tp, symbol)}</b>  ·  "
-      f"<b>{_rr(tp, rr_entry, risk)}</b>"
+      f"<b>{_rr(tp, entry_reference, risk)}</b>"
     )
   if sig.get("guard_text"):
     lines.extend(["", sig["guard_text"]])
