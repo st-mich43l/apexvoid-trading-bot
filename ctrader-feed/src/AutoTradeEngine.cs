@@ -191,15 +191,16 @@ public sealed class AutoTradeEngine(
     var client = RequireClient();
     var symbol = RequireSymbol();
     var now = _clock().ToUnixTimeSeconds();
-    var rangeScalp = candidate.Setup == "Range Edge Scalp"
+    var rangeScalp = string.Equals(
+        candidate.Timeframe,
+        "M5",
+        StringComparison.OrdinalIgnoreCase
+      )
+      && candidate.Setup == "Range Edge Scalp"
       && candidate.Mode == "range_scalp";
-    var fastScalp = options.FastScalpEnabled
-      && string.Equals(candidate.Timeframe, "M1", StringComparison.OrdinalIgnoreCase)
-      && candidate.Setup == "M1 Momentum Scalp"
-      && candidate.Mode == "momentum_scalp";
     if (
       candidate.Version != 1
-      || (!rangeScalp && !fastScalp)
+      || !rangeScalp
       || candidate.Confluence < options.MinConfluence
       || !string.Equals(
         candidate.Symbol,

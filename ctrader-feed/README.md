@@ -61,7 +61,6 @@ AUTO_TRADE_SPOT_MAX_AGE=5
 AUTO_TRADE_MAX_SPREAD_PIPS=5
 AUTO_TRADE_MAX_ENTRY_DISTANCE_PIPS=10
 AUTO_TRADE_MAX_DAILY_TRADES=6
-AUTO_TRADE_FAST_SCALP_ENABLED=false
 AUTO_TRADE_STREAM=auto_trade:candidates
 AUTO_TRADE_EVENT_STREAM=auto_trade:events
 AUTO_TRADE_LABEL=apexvoid-auto
@@ -98,10 +97,10 @@ matching `AUTO_TRADE_EXPECTED_BROKER`.
 ## Demo Auto-Trader
 
 The scanner publishes only fresh, news-cleared `Range Edge Scalp` candidates.
-When `AUTO_TRADE_FAST_SCALP_ENABLED=true`, it also accepts the isolated
-`M1 Momentum Scalp` lane: a closed M1 candle must have an ATR-sized body,
-close near its extreme, break the configured short lookback, and avoid an
-opposing M5 bias. The normal M5 detector is not relaxed.
+Automatic execution requires range regimes on both M5 and M15, no opposing
+M15 directional bias, and an M15 premium/discount location appropriate for the
+trade side. M1 and M5 momentum candles remain analysis-only and never trigger
+an automatic order.
 The executor revalidates candidate age, live quote age, spread, entry distance,
 account identity, and the one-XAU-position limit before placing a market order.
 Telegram is an operator surface, never the execution trigger.

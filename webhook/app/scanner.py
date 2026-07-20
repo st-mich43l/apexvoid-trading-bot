@@ -18,10 +18,9 @@ from app.detectors import (
   DetectionContext,
   DetectionResult,
   DetectorSettings,
-  MomentumScalpDecision,
   SetupDetector,
   build_context,
-  evaluate_m1_momentum_scalp,
+  structure_momentum_bias,
 )
 from app.market_map import MarketMap, build_map, map_reference, rail_reference
 from app.market_map_delivery import cache_analysis
@@ -56,14 +55,6 @@ def _watched_symbols() -> set[str]:
 
 def _htf_tfs() -> list[str]:
   return _csv(settings.scanner_htf)
-
-
-def _fast_scalp_tf() -> str:
-  return "M1"
-
-
-def _fast_scalp_htf_tfs() -> list[str]:
-  return _all_tfs("M5", _htf_tfs())
 
 
 def _all_tfs(exec_tf: str, htf_tfs: Iterable[str]) -> list[str]:
@@ -132,12 +123,6 @@ def _detector_settings() -> DetectorSettings:
     range_scalp_break_closes=settings.range_scalp_break_closes,
     range_scalp_min_wick_rejections=settings.range_scalp_min_wick_rejections,
     range_scalp_allow_rejection_only=settings.range_scalp_allow_rejection_only,
-    fast_scalp_min_range_atr=settings.auto_trade_fast_min_range_atr,
-    fast_scalp_min_body_frac=settings.auto_trade_fast_min_body_frac,
-    fast_scalp_breakout_lookback=settings.auto_trade_fast_breakout_lookback,
-    fast_scalp_require_m5_alignment=(
-      settings.auto_trade_fast_require_m5_alignment
-    ),
   )
 
 
@@ -504,11 +489,24 @@ async def _publish_auto_trade_candidate(
 ) -> str | None:
   if not settings.auto_trade_enabled or ctx.spot_price is None:
     return None
-  candidates = [
-    result for result in results
-    if _auto_trade_setup_enabled(tf, result)
-    and result.confluence >= max(1, settings.auto_trade_min_confluence)
-  ]
+  candidates = []
+  for result in results:
+    if not _auto_trade_setup_enabled(tf, result):
+      continue
+    if result.confluence < max(1, settings.auto_trade_min_confluence):
+      continue
+    rejection = _auto_trade_mtf_rejection(ctx, tf, result)
+    if rejection is not None:
+      log.info(
+        "auto-trade candidate blocked by M5/M15 gate "
+        "symbol=%s setup=%s direction=%s reason=%s",
+        symbol,
+        result.setup,
+        result.direction,
+        rejection,
+      )
+      continue
+    candidates.append(result)
   if not candidates:
     return None
   result = sorted(candidates, key=_result_rank)[0]
@@ -579,14 +577,50 @@ async def _publish_auto_trade_candidate(
 
 
 def _auto_trade_setup_enabled(tf: str, result: DetectionResult) -> bool:
-  if result.setup == "Range Edge Scalp" and result.mode == "range_scalp":
+  if (
+    tf.upper() == "M5"
+    and result.setup == "Range Edge Scalp"
+    and result.mode == "range_scalp"
+  ):
     return True
-  return (
-    settings.auto_trade_fast_scalp_enabled
-    and tf.upper() == _fast_scalp_tf()
-    and result.setup == "M1 Momentum Scalp"
-    and result.mode == "momentum_scalp"
-  )
+  return False
+
+
+def _auto_trade_mtf_rejection(
+  ctx: DetectionContext,
+  tf: str,
+  result: DetectionResult,
+) -> str | None:
+  if tf.upper() != "M5":
+    return "execution timeframe is not M5"
+  if result.mode != "range_scalp":
+    return None
+
+  m5 = ctx.structures.get("M5")
+  m15 = ctx.structures.get("M15")
+  if m5 is None or m15 is None:
+    return "missing M5/M15 structure"
+  if m5.regime is None or m5.regime.kind != "chop":
+    return "M5 is not a range"
+  if m15.regime is None or m15.regime.kind != "chop":
+    return "M15 is not a range"
+
+  wanted_bias = "up" if result.direction.upper() == "BUY" else "down"
+  m15_bias = structure_momentum_bias(m15)
+  if m15_bias is not None and m15_bias != wanted_bias:
+    return f"against M15 {m15_bias} bias"
+
+  range_ = m15.dealing_range
+  if range_ is None:
+    return "missing M15 dealing range"
+  position = float(range_.position)
+  if not math.isfinite(position) or not 0.0 <= position <= 1.0:
+    return "invalid M15 dealing-range position"
+  if result.direction.upper() == "BUY" and position > 0.35:
+    return f"M15 position {position:.2f} is not discount"
+  if result.direction.upper() == "SELL" and position < 0.65:
+    return f"M15 position {position:.2f} is not premium"
+  return None
 
 
 def _zone_overlap_ratio(first: Zone, second: Zone) -> float:
@@ -806,84 +840,6 @@ async def _load_market_context_for_symbol(
   return ctx, frames
 
 
-def _momentum_gate_payload(
-  decision: MomentumScalpDecision,
-  *,
-  symbol: str,
-  tf: str,
-  event_ts: str,
-  frames: dict[str, Any],
-  candidate_id: str | None,
-) -> dict[str, Any]:
-  return {
-    "state": decision.state,
-    "symbol": symbol,
-    "tf": tf,
-    "event_ts": event_ts,
-    "checked_at": datetime.now(timezone.utc).isoformat(),
-    "direction": decision.direction,
-    "range_atr": decision.range_atr,
-    "body_fraction": decision.body_fraction,
-    "close_wick_fraction": decision.close_wick_fraction,
-    "candidate_id": candidate_id,
-    "published": candidate_id is not None,
-    "frames": {
-      name: len(frame)
-      for name, frame in sorted(frames.items())
-    },
-  }
-
-
-async def _handle_fast_scalp_event(
-  symbol: str,
-  tf: str,
-  event_ts: str,
-  *,
-  source: RedisOHLCSource | None,
-  client: Any,
-) -> None:
-  htf_order = _fast_scalp_htf_tfs()
-  ctx, frames = await _load_market_context_for_symbol(
-    symbol,
-    source=source,
-    client=client,
-    event_ts=event_ts,
-    exec_tf=tf,
-    htf_order=htf_order,
-    cache_market_analysis=False,
-  )
-  if ctx is None:
-    decision = MomentumScalpDecision("missing_exec_frame")
-    candidate_id = None
-  else:
-    decision = evaluate_m1_momentum_scalp(ctx)
-    candidate_id = await _publish_auto_trade_candidate(
-      client,
-      symbol,
-      tf,
-      ctx,
-      [decision.result] if decision.result is not None else [],
-    )
-  payload = _momentum_gate_payload(
-    decision,
-    symbol=symbol,
-    tf=tf,
-    event_ts=event_ts,
-    frames=frames,
-    candidate_id=candidate_id,
-  )
-  encoded = json.dumps(payload, separators=(",", ":"), sort_keys=True)
-  await client.set("auto_trade:last_fast_gate", encoded)
-  await client.set(f"auto_trade:last_fast_gate:{symbol}:{tf}", encoded)
-  log.info(
-    "fast-scalp gate symbol=%s tf=%s state=%s candidate=%s",
-    symbol,
-    tf,
-    decision.state,
-    candidate_id[:12] if candidate_id else "-",
-  )
-
-
 async def _handle_event(
   data: object,
   *,
@@ -901,19 +857,6 @@ async def _handle_event(
     return []
 
   client = client or redis_state.get_client()
-  fast_tf = _fast_scalp_tf()
-  if (
-    settings.auto_trade_enabled
-    and settings.auto_trade_fast_scalp_enabled
-    and tf == fast_tf
-  ):
-    await _handle_fast_scalp_event(
-      symbol,
-      tf,
-      event_ts,
-      source=source,
-      client=client,
-    )
   if tf != exec_tf:
     return []
 
