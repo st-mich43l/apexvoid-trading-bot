@@ -69,6 +69,9 @@ dated section after deployment.
 
 ### Fixed
 
+- Watcher SL accounting now treats fills anywhere inside the entry zone as
+  breakeven, preserves signed profit for trailed stops, and only books a loss
+  when the actual stop fill lands beyond the losing side of the zone.
 - `watcher`: price ordinary SL/TP hits at the configured level instead of the
   bar extreme, while preserving honest open-gap fills; this removes inflated
   losses/profits and the midpoint-entry mismatch with the published card.

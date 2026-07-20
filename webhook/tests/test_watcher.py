@@ -12,7 +12,7 @@ os.environ.setdefault(
 os.environ.setdefault("TELEGRAM_CHAT_ID", "-100123456789")
 
 from app import broadcast, redis_state, watcher
-from app.pips_format import pips_between, rr_entry
+from app.pips_format import pips_between, rr_entry, sl_result_pips
 from app.symbols import pip_for
 
 
@@ -363,6 +363,39 @@ async def test_incident_replay_books_sell_sl_at_level(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_moved_sell_stop_at_entry_edge_books_breakeven(monkeypatch):
+  fanout = AsyncMock()
+  monkeypatch.setattr(watcher, "fanout_update", fanout)
+  sig = _sell_signal(
+    id=8,
+    daily_seq=8,
+    entry=4026.0,
+    entry_end=4029.0,
+    sl=4029.0,
+    tps=[4023.0, 4017.0, 4011.0, 4005.0],
+  )
+  bar = _bar("2026-07-20T11:30:00.000Z", 4028, 4037.1, 4020, 4035)
+
+  await watcher._evaluate(
+    sig,
+    bar,
+    {"tp": 2, "sl": False, "runner_pips": 0},
+    atr=4.0,
+  )
+
+  fanout.assert_awaited_once()
+  _, render = fanout.await_args.args
+  assert render("vip") == (
+    "⚠️ <b>NEAR SL</b> | #8\n"
+    "📉 Fill: <b>4,029</b> (SL) · ran to <b>4,037.1</b>\n"
+    "➖ Result: <b>0 pips (BE)</b>\n\n"
+  )
+  assert render("public") == "🛡 BE (0 pips)"
+  markup_fn = fanout.await_args.kwargs["markup_fn"]
+  assert markup_fn("vip").inline_keyboard[0][0].callback_data == "c0:8:2:0"
+
+
+@pytest.mark.asyncio
 async def test_tp_replay_books_tier_at_level_then_runner_at_extreme(monkeypatch):
   await redis_state.set_cursor("XAU", "2026-07-08T09:59:00.000Z")
   sig = _sell_signal(
@@ -508,11 +541,28 @@ async def test_tp_gap_books_at_open(monkeypatch, sig, bar, fill, pips):
 
 def test_small_overshoot_is_omitted_from_alert():
   text = watcher._render_level_alert(
-    "vip", "SL", "SL", 2, 4000.0, 50, 4000.2, atr=3.0
+    "vip", "SL", "SL", 2, 4000.0, -50, 4000.2, atr=3.0
   )
 
   assert "Fill: <b>4,000</b> (SL)" in text
   assert "ran to" not in text
+
+
+@pytest.mark.parametrize(
+  ("sig", "fill", "expected"),
+  [
+    (_sell_signal(entry=4026, entry_end=4029), 4029, 0),
+    (_sell_signal(entry=4026, entry_end=4029), 4027.5, 0),
+    (_sell_signal(entry=4026, entry_end=4029), 4034, -80),
+    (_sell_signal(entry=4026, entry_end=4029), 4023, 30),
+    (_buy_signal(entry=4026, entry_end=4029), 4026, 0),
+    (_buy_signal(entry=4026, entry_end=4029), 4027.5, 0),
+    (_buy_signal(entry=4026, entry_end=4029), 4021, -80),
+    (_buy_signal(entry=4026, entry_end=4029), 4032, 30),
+  ],
+)
+def test_stop_result_pips_is_signed_and_zone_aware(sig, fill, expected):
+  assert sl_result_pips(sig, fill) == expected
 
 
 def test_card_and_watcher_share_conservative_entry_property():
