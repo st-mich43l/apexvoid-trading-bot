@@ -13,6 +13,15 @@ dated section after deployment.
 
 ### Added
 
+- Added demo-only cTrader market execution for qualified Range Edge Scalp
+  candidates, with Fusion/Hedged/Trading-scope hard locks, one-position and
+  freshness/spread/news/daily-cap gates, restart reconciliation, and durable
+  Redis candidate/event contracts.
+- Added balance-tier volume planning (`0.12/0.20/0.30` lots), a server-side
+  `$6.5` stop, and broker-valid partial closes at `30/50/70/90/130` pips.
+- Added owner auto-trade event DMs plus `/auto_status`, `/auto_pause`, and
+  `/auto_resume` on both Telegram bots.
+
 - Added lenient trailing setup-tag parsing, setup metadata in manual-signal
   confirmations, owner-only `/trade_untagged` backfill listings, and absolute
   `id:<db_id>` targeting for `/trade_tag`.
@@ -42,6 +51,10 @@ dated section after deployment.
   active range quality, and live edge-touch state.
 
 ### Changed
+
+- Increased two-sided range-scalp sensitivity with a longer local window,
+  two-touch scored barriers, wider entry tolerance, and strict wick-rejection
+  confirmation as an alternative to micro-CHoCH.
 
 - Shared the conservative `rr_entry` and `pips_between` trade-math convention
   between entry cards and watcher accounting; SL/TP alerts now distinguish the

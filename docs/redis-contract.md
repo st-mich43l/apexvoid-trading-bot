@@ -116,3 +116,35 @@ bar price when it is absent or stale.
 Redis is allowed to lose this data on restart. `ctrader-feed` backfills the
 window from cTrader on startup or reconnect. Deep historical backtesting storage
 is a separate future sink, not this Redis contract.
+
+## Auto-Trade Candidate Stream
+
+When enabled, the scanner appends qualified `Range Edge Scalp` candidates to:
+
+```text
+XADD auto_trade:candidates MAXLEN ~ 1000 * payload <json>
+```
+
+The versioned payload contains a deterministic `candidate_id`, symbol,
+timeframe, direction, trigger timestamps, trusted live price, scored key level,
+entry-zone bounds, confluence count, and reasons. Publishing fails closed when
+the spot is absent/implausible or a high-impact event is active or unavailable.
+Candidate claims and outcomes use `auto_trade:executor:candidate:{id}` for
+restart-safe idempotency; the stream cursor is `auto_trade:cursor`.
+
+## Auto-Trade State And Events
+
+Open executor state is stored at `auto_trade:position:{position_id}`, with the
+tracked IDs in the `auto_trade:positions` set. This holds initial/remaining
+native volume, five broker-valid slices, target progress, direction, and fill.
+It allows cTrader reconciliation to resume partial TPs after restart and remove
+state for positions closed by broker SL or manually.
+
+UTC daily entry counts use `auto_trade:daily:{yyyyMMdd}:trades`. The owner kill
+switch is `auto_trade:paused`; `1` blocks new entries but does not stop existing
+position management.
+
+Executor lifecycle events are appended as JSON payloads to
+`auto_trade:events`. The Python bot persists its delivery cursor at
+`auto_trade:telegram_event_cursor` and sends only operational events to the
+owner through the dedicated signal bot.

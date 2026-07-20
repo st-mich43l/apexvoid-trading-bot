@@ -16,6 +16,7 @@ from app.calendar import calendar_sync_loop
 from app.weekly_report import weekly_report_loop
 from app.scanner import scanner_loop
 from app.market_map_delivery import market_map_scan_loop
+from app.auto_trade_ops import auto_trade_events_loop
 from app import redis_state
 
 logging.basicConfig(
@@ -45,6 +46,7 @@ async def main() -> None:
   asyncio.create_task(weekly_report_loop())
   asyncio.create_task(scanner_loop())
   asyncio.create_task(market_map_scan_loop())
+  asyncio.create_task(auto_trade_events_loop())
   log.info("DB ready (PostgreSQL)")
   if not settings.telegram_owner_id:
     log.warning(

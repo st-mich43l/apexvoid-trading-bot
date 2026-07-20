@@ -11,6 +11,7 @@ from aiogram.filters import Command
 from aiogram.types import Message
 
 from app.chart_analysis import analyse_chart_image
+from app.auto_trade_ops import auto_trade_status_text, set_auto_trade_paused
 from app.config import settings
 from app.market_map_delivery import send_current_market_map
 from app.dedup import (
@@ -87,6 +88,9 @@ _HELP_TEXT = """<b>Trade controls</b>
 <code>/trade_note [SYMBOL] #id &lt;text&gt;</code>
 <code>/trade_review [SYMBOL] #id</code>
 <code>/trade_map [SYMBOL]</code>
+<code>/auto_status</code>
+<code>/auto_pause</code>
+<code>/auto_resume</code>
 <code>/trade_stats [SYMBOL] [today|week|month]</code>
 <code>/trade_pips [SYMBOL] [today|yesterday|week|last week]</code>"""
 
@@ -165,6 +169,29 @@ async def _move_stop(
 @router.message(Command("start"), F.chat.type == "private")
 async def handle_start(msg: Message) -> None:
   await msg.answer(_WELCOME_TEXT)
+
+
+@router.message(Command("auto_status"), F.chat.type == "private")
+async def handle_auto_status(msg: Message) -> None:
+  if not _is_owner(msg):
+    return
+  await msg.answer(await auto_trade_status_text())
+
+
+@router.message(Command("auto_pause"), F.chat.type == "private")
+async def handle_auto_pause(msg: Message) -> None:
+  if not _is_owner(msg):
+    return
+  await set_auto_trade_paused(True)
+  await msg.answer("⏸ <b>Auto Trader paused</b>\nNo new entries will be opened.")
+
+
+@router.message(Command("auto_resume"), F.chat.type == "private")
+async def handle_auto_resume(msg: Message) -> None:
+  if not _is_owner(msg):
+    return
+  await set_auto_trade_paused(False)
+  await msg.answer("▶️ <b>Auto Trader resumed</b>\nNew qualified entries are enabled.")
 
 
 @router.message(Command("trade_pips"), F.chat.type == "private")
