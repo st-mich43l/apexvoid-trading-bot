@@ -17,6 +17,23 @@ def pips_between(sig: dict, price: float) -> int:
   return round(abs(float(price) - rr_entry(sig)) / pip)
 
 
+def sl_result_pips(sig: dict, fill_price: float) -> int:
+  """Return signed stop-result pips, treating fills in the entry zone as BE."""
+  entry = float(sig["entry"])
+  entry_end = sig.get("entry_end")
+  entry_end = entry if entry_end is None else float(entry_end)
+  entry_low, entry_high = sorted((entry, entry_end))
+  fill = float(fill_price)
+  if entry_low <= fill <= entry_high:
+    return 0
+  if sig["action"] == "BUY":
+    distance = fill - entry_high
+  else:
+    distance = entry_low - fill
+  pip = pip_for(sig.get("symbol", "XAU"))
+  return round(distance / pip)
+
+
 def wing_icons(pips: int) -> str:
   """Return dollar-wing icons for positive pip wins.
 
