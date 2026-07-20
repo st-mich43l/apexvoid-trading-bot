@@ -35,7 +35,7 @@ public sealed record FeedOptions(
       Port: int.Parse(Env("CTRADER_PORT", "5035")),
       CTraderSymbol: cTraderSymbol,
       RedisSymbol: RedisSymbolFromCTrader(cTraderSymbol),
-      Timeframes: TimeframeCodec.ParseList(Env("CTRADER_TIMEFRAMES", "M5,M15,M30")),
+      Timeframes: TimeframeCodec.ParseList(Env("CTRADER_TIMEFRAMES", "M1,M5,M15,M30")),
       BackfillBars: int.Parse(Env("CTRADER_BACKFILL_BARS", "1500")),
       RedisUrl: Env("REDIS_URL", "redis://redis:6379/0"),
       BarsWindowMax: int.Parse(Env("BARS_WINDOW_MAX", "1500")),
