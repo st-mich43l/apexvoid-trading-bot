@@ -119,8 +119,8 @@ is a separate future sink, not this Redis contract.
 
 ## Auto-Trade Candidate Stream
 
-When enabled, the scanner appends only M5/M15-qualified `Range Edge Scalp`
-candidates to:
+When enabled, the scanner appends only confirmed `M1 Decision Scalp` candidates
+to:
 
 ```text
 XADD auto_trade:candidates MAXLEN ~ 1000 * payload <json>
@@ -131,8 +131,13 @@ timeframe, direction, trigger timestamps, trusted live price, scored key level,
 entry-zone bounds, confluence count, and reasons. Publishing fails closed when
 the spot is absent/implausible or a high-impact event is active or unavailable.
 Candidate claims and outcomes use `auto_trade:executor:candidate:{id}` for
-restart-safe idempotency; the stream cursor is `auto_trade:cursor`. Momentum
-candidates from M1 or M5 are never published or accepted for execution.
+restart-safe idempotency; the stream cursor is `auto_trade:cursor`. Raw momentum
+and legacy M5 Range Edge candidates are never accepted for execution.
+
+The latest operator-facing M1 gate decision is stored at
+`auto_trade:last_m1_gate` and `auto_trade:last_m1_gate:{symbol}`. It contains the
+gate state, M1 trigger, selected M5/M15 decision zone, higher-timeframe biases,
+target room, and loaded frame counts; it is telemetry, not an execution input.
 
 ## Auto-Trade State And Events
 

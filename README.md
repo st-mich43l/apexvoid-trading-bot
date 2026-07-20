@@ -67,12 +67,15 @@ The bot talks to Telegram over **outbound long-polling only**, meaning it requir
 - **Multi-Timeframe Aware** ⏱️ — Send several charts; it uses higher TFs for directional bias and lower TFs for entry precision.
 
 ### 🤖 Demo Auto-Scalper
-- The cTrader executor accepts the existing M5 Range Edge Scalp gate and an
-  independently enabled M1 momentum gate; the M1 lane requires a strong closed
-  candle, a short-range breakout, and no explicit opposing M5 bias.
-- Both lanes still fail closed on stale quotes, excessive spread, entry drift,
+- M1 is the execution timeframe. M5/M15 dealing-range edges and validated
+  barriers are clustered into nearby decision zones; they provide context and
+  quality rather than a blanket directional veto.
+- Entry requires an M1 breakout-retest hold or sweep-reclaim at one of those
+  zones. A raw breakout/momentum candle is never chased automatically.
+- The lane still fails closed on stale quotes, excessive spread, entry drift,
   guarded news, an existing XAU position, and the UTC daily trade cap.
-- `/auto_status` exposes the latest M1 gate state for operator diagnostics.
+- `/auto_status` exposes the latest M1 gate state and its single focus zone for
+  operator diagnostics.
 
 ---
 
