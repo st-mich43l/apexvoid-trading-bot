@@ -1,4 +1,20 @@
-"""Shared formatting helpers for pip-result decorations."""
+"""Shared pip-accounting conventions and result decorations."""
+
+from app.symbols import pip_for
+
+
+def rr_entry(sig: dict) -> float:
+  """Return the conservative entry edge used for risk and reward."""
+  entry = float(sig["entry"])
+  entry_end = sig.get("entry_end")
+  entry_high = entry if entry_end is None else float(entry_end)
+  return entry if sig["action"] == "SELL" else entry_high
+
+
+def pips_between(sig: dict, price: float) -> int:
+  """Measure absolute pips from the same edge advertised on the card."""
+  pip = pip_for(sig.get("symbol", "XAU"))
+  return round(abs(float(price) - rr_entry(sig)) / pip)
 
 
 def wing_icons(pips: int) -> str:

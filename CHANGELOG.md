@@ -43,6 +43,9 @@ dated section after deployment.
 
 ### Changed
 
+- Shared the conservative `rr_entry` and `pips_between` trade-math convention
+  between entry cards and watcher accounting; SL/TP alerts now distinguish the
+  booked fill from a materially farther bar extreme.
 - Label Market Map SCALP rails as explicit `🟢 BUY` or `🔴 SELL` actions instead
   of positional arrows, including scanner-alert rail references.
 - Evaluate automatic Market Maps once per configurable 60-minute bucket instead
@@ -53,6 +56,9 @@ dated section after deployment.
 
 ### Fixed
 
+- `watcher`: price ordinary SL/TP hits at the configured level instead of the
+  bar extreme, while preserving honest open-gap fills; this removes inflated
+  losses/profits and the midpoint-entry mismatch with the published card.
 - Updated the reusable deploy-workflow reference and container source metadata
   for the GitHub username change to `st-mich43l`.
 - Manual-signal setup tags are no longer silently dropped when written without
