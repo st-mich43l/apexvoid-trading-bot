@@ -1,50 +1,166 @@
 namespace ApexVoid.CTraderFeed;
 
+public sealed record TargetVolumePlan(
+  IReadOnlyList<long> Slices,
+  IReadOnlyList<int> TargetsPips,
+  IReadOnlyList<int> TargetOrdinals
+);
+
+public sealed class VolumePlanningException(string message)
+  : InvalidOperationException(message);
+
 public static class VolumePlanner
 {
-  public static decimal LotsForBalance(decimal balance) => balance switch
+  public static decimal LotsForBalance(decimal balance)
   {
-    >= 5_000m => 0.30m,
-    >= 2_000m => 0.20m,
-    >= 1_000m => 0.12m,
-    >= 500m => 0.08m,
-    _ => 0m,
-  };
+    if (balance < 200m)
+    {
+      return 0m;
+    }
+    var rawLots = balance switch
+    {
+      >= 5_000m => 0.36m,
+      >= 3_000m => 0.31m + (balance - 3_000m) * 0.05m / 2_000m,
+      >= 1_000m => 0.11m + (balance - 1_000m) * 0.20m / 2_000m,
+      >= 500m => 0.05m + (balance - 500m) * 0.06m / 500m,
+      _ => 0.02m + (balance - 200m) * 0.03m / 300m,
+    };
+    return decimal.Floor(rawLots * 100m) / 100m;
+  }
 
   public static long VolumeForLots(decimal lots, SymbolInfo symbol)
   {
-    if (lots <= 0 || symbol.LotSize <= 0 || symbol.StepVolume <= 0)
+    if (
+      lots <= 0
+      || symbol.LotSize <= 0
+      || symbol.MinVolume <= 0
+      || symbol.StepVolume <= 0
+      || symbol.MaxVolume < symbol.MinVolume
+    )
     {
       return 0;
     }
-    var raw = decimal.ToInt64(decimal.Floor(lots * symbol.LotSize));
-    var stepped = raw / symbol.StepVolume * symbol.StepVolume;
-    if (stepped < symbol.MinVolume || stepped > symbol.MaxVolume)
+    var raw = decimal.Floor(lots * symbol.LotSize);
+    if (raw > symbol.MaxVolume)
     {
       return 0;
     }
-    return stepped;
+    var stepped = decimal.ToInt64(raw) / symbol.StepVolume * symbol.StepVolume;
+    return stepped >= symbol.MinVolume ? stepped : 0;
   }
 
-  public static IReadOnlyList<long> SplitFive(long volume, SymbolInfo symbol)
+  public static TargetVolumePlan BuildTargetPlan(
+    long volume,
+    SymbolInfo symbol,
+    IReadOnlyList<int> targetsPips,
+    IReadOnlyList<int> weights
+  )
   {
-    if (volume <= 0 || symbol.StepVolume <= 0)
+    if (
+      volume <= 0
+      || symbol.StepVolume <= 0
+      || symbol.MinVolume <= 0
+      || volume % symbol.StepVolume != 0
+    )
     {
-      throw new InvalidOperationException("Symbol volume step is unavailable");
+      throw new VolumePlanningException("Position volume is not broker-step aligned");
     }
-    var baseSlice = volume / 5 / symbol.StepVolume * symbol.StepVolume;
-    if (baseSlice < symbol.MinVolume)
+    if (
+      targetsPips.Count < 3
+      || weights.Count != targetsPips.Count
+      || targetsPips.Any(target => target <= 0)
+      || weights.Any(weight => weight <= 0)
+    )
     {
-      throw new InvalidOperationException(
-        "Configured volume is too small for five broker-valid partial closes"
+      throw new VolumePlanningException("Target plan configuration is invalid");
+    }
+    var minimumSteps = MinimumStepsPerClose(symbol);
+    var totalSteps = volume / symbol.StepVolume;
+    var availableExits = totalSteps / minimumSteps;
+    if (availableExits < 2)
+    {
+      throw new VolumePlanningException(
+        "Configured volume cannot support the minimum two broker-valid exits"
       );
     }
-    var slices = Enumerable.Repeat(baseSlice, 4).ToList();
-    slices.Add(volume - slices.Sum());
-    if (slices[^1] < symbol.MinVolume || slices[^1] % symbol.StepVolume != 0)
-    {
-      throw new InvalidOperationException("Final partial-close volume is invalid");
-    }
-    return slices;
+    var selectedCount = (int)Math.Min(availableExits, targetsPips.Count);
+    var indices = selectedCount == 2
+      ? new[] { 0, 2 }
+      : Enumerable.Range(0, selectedCount).ToArray();
+    var selectedTargets = indices.Select(index => targetsPips[index]).ToArray();
+    var selectedWeights = indices.Select(index => weights[index]).ToArray();
+    return new TargetVolumePlan(
+      SplitWeighted(volume, symbol, selectedWeights),
+      selectedTargets,
+      indices.Select(index => index + 1).ToArray()
+    );
   }
+
+  public static IReadOnlyList<long> SplitWeighted(
+    long volume,
+    SymbolInfo symbol,
+    IReadOnlyList<int> weights
+  )
+  {
+    if (
+      volume <= 0
+      || symbol.StepVolume <= 0
+      || symbol.MinVolume <= 0
+      || volume % symbol.StepVolume != 0
+    )
+    {
+      throw new VolumePlanningException("Position volume is not broker-step aligned");
+    }
+    if (weights.Count == 0 || weights.Any(weight => weight <= 0))
+    {
+      throw new VolumePlanningException("Target weights must all be positive");
+    }
+    var totalWeight = weights.Sum();
+    var totalSteps = volume / symbol.StepVolume;
+    var minimumSteps = MinimumStepsPerClose(symbol);
+    var requiredSteps = checked(minimumSteps * weights.Count);
+    if (totalSteps < requiredSteps)
+    {
+      throw new VolumePlanningException(
+        $"{totalSteps} volume steps cannot cover {weights.Count} targets"
+      );
+    }
+
+    var remaining = totalSteps - requiredSteps;
+    var steps = Enumerable.Repeat(minimumSteps, weights.Count).ToArray();
+    var remainders = new decimal[weights.Count];
+    for (var index = 0; index < weights.Count; index++)
+    {
+      var ideal = (decimal)remaining * weights[index] / totalWeight;
+      var whole = decimal.ToInt64(decimal.Floor(ideal));
+      steps[index] += whole;
+      remainders[index] = ideal - whole;
+    }
+    var leftover = totalSteps - steps.Sum();
+    foreach (
+      var index in Enumerable.Range(0, weights.Count)
+        .OrderByDescending(index => remainders[index])
+        .ThenBy(index => index)
+        .Take(checked((int)leftover))
+    )
+    {
+      steps[index]++;
+    }
+    return steps.Select(step => step * symbol.StepVolume).ToArray();
+  }
+
+  public static decimal PipSize(SymbolInfo symbol)
+  {
+    var divisor = 1m;
+    for (var index = 0; index < symbol.PipPosition; index++)
+    {
+      divisor *= 10m;
+    }
+    return 1m / divisor;
+  }
+
+  private static long MinimumStepsPerClose(SymbolInfo symbol) => Math.Max(
+    1,
+    (symbol.MinVolume + symbol.StepVolume - 1) / symbol.StepVolume
+  );
 }

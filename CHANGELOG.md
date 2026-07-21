@@ -13,6 +13,9 @@ dated section after deployment.
 
 ### Added
 
+- Added weighted largest-remainder target splitting, broker-valid adaptive
+  target plans for `0.02-0.04` lots, persisted TP ordinals, a monotonic stop
+  ladder, and explicit target-weight and break-even-buffer controls.
 - Added fingerprint-based cTrader refresh-token seeding with automatic cache
   reset, the `--reset-token-cache` operator command, live-account grant
   warnings, actionable account-grant remediation, and the optional
@@ -21,8 +24,9 @@ dated section after deployment.
   candidates, with Fusion/Hedged/Trading-scope hard locks, one-position and
   freshness/spread/news/daily-cap gates, restart reconciliation, and durable
   Redis candidate/event contracts.
-- Added balance-tier volume planning (`0.12/0.20/0.30` lots), a server-side
-  `$6.5` stop, and broker-valid partial closes at `30/50/70/90/130` pips.
+- Added operator-defined balance-band volume planning (`0.02-0.36` lots), a
+  server-side `$6.5` stop, and broker-valid partial closes at
+  `30/60/90/120/200` pips.
 - Added owner auto-trade event DMs plus `/auto_status`, `/auto_pause`, and
   `/auto_resume` on both Telegram bots.
 - Added a private auto-scalp worker that consumes only raw cTrader M1/M5/M15
@@ -59,6 +63,10 @@ dated section after deployment.
 
 ### Changed
 
+- Auto-trade position size now follows continuous operator-defined balance
+  bands from `$200 -> 0.02` through `$5,000 -> 0.36`, floored to `0.01` lots.
+  Low-volume plans close `0.02` at TP1/TP3, `0.03` through TP3, and `0.04`
+  through TP4 instead of rejecting every position below five volume steps.
 - Auto-trade configuration failures now disable only the executor for the
   current process, while distinct transient failures may retry on the next feed
   session and all startup faults publish a deduplicated operator event.

@@ -19,7 +19,9 @@ _NOTIFY_TYPES = {
   "dry_run",
   "opened",
   "take_profit",
+  "stop_moved",
   "position_closed",
+  "warning",
   "error",
 }
 
@@ -33,7 +35,9 @@ def render_auto_trade_event(event: dict) -> str | None:
     "dry_run": "🧪 <b>Auto Trader dry run</b>",
     "opened": "🟢 <b>Auto trade opened</b>",
     "take_profit": "💰 <b>Auto trade partial TP</b>",
+    "stop_moved": "🛡 <b>Auto trade stop moved</b>",
     "position_closed": "🛑 <b>Auto position closed</b>",
+    "warning": "⚠️ <b>Auto Trader warning</b>",
     "error": "⚠️ <b>Auto Trader error</b>",
   }
   lines = [titles[event_type], escape(str(event.get("message", "")))]

@@ -146,8 +146,11 @@ freshness, and loaded frame counts; it is telemetry, not an execution input.
 
 Open executor state is stored at `auto_trade:position:{position_id}`, with the
 tracked IDs in the `auto_trade:positions` set. This holds initial/remaining
-native volume, five broker-valid slices, target progress, direction, and fill.
-It allows cTrader reconciliation to resume partial TPs after restart and remove
+native volume, the position-specific broker-valid weighted slices and targets,
+their original TP ordinals, target progress, direction, fill, and latest managed
+stop. It allows cTrader reconciliation to resume partial TPs and monotonic
+trailing after restart while
+preserving legacy plans encoded in existing position comments, and removes
 state for positions closed by broker SL or manually.
 
 UTC daily entry counts use `auto_trade:daily:{yyyyMMdd}:trades`. The owner kill
@@ -157,4 +160,5 @@ position management.
 Executor lifecycle events are appended as JSON payloads to
 `auto_trade:events`. The Python bot persists its delivery cursor at
 `auto_trade:telegram_event_cursor` and sends only operational events to the
-owner through the dedicated signal bot.
+owner through the dedicated signal bot, including live-account warnings and
+successful stop moves.

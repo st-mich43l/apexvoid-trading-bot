@@ -8,6 +8,8 @@ public sealed record AutoTradeOptions(
   string ExpectedBroker,
   decimal StopLossDistance,
   IReadOnlyList<int> TargetsPips,
+  IReadOnlyList<int> TargetWeights,
+  int BreakEvenBufferPips,
   int CandidateMaxAgeSeconds,
   int SpotMaxAgeSeconds,
   int MaxSpreadPips,
@@ -26,7 +28,9 @@ public sealed record AutoTradeOptions(
     DryRun: Bool("AUTO_TRADE_DRY_RUN", true),
     ExpectedBroker: Env("AUTO_TRADE_EXPECTED_BROKER", "Fusion"),
     StopLossDistance: Decimal("AUTO_TRADE_SL_DISTANCE", 6.5m),
-    TargetsPips: IntList("AUTO_TRADE_TP_PIPS", "30,50,70,90,130"),
+    TargetsPips: IntList("AUTO_TRADE_TP_PIPS", "30,60,90,120,200"),
+    TargetWeights: IntList("AUTO_TRADE_TP_WEIGHTS", "20,20,20,20,20"),
+    BreakEvenBufferPips: Int("AUTO_TRADE_BE_BUFFER_PIPS", 3),
     CandidateMaxAgeSeconds: Int("AUTO_TRADE_CANDIDATE_MAX_AGE", 90),
     SpotMaxAgeSeconds: Int("AUTO_TRADE_SPOT_MAX_AGE", 5),
     MaxSpreadPips: Int("AUTO_TRADE_MAX_SPREAD_PIPS", 5),
@@ -59,6 +63,24 @@ public sealed record AutoTradeOptions(
     {
       throw new AutoTradeConfigurationException(
         "Auto trade disabled: AUTO_TRADE_TP_PIPS must be ascending"
+      );
+    }
+    if (
+      TargetWeights.Count != TargetsPips.Count
+      || TargetWeights.Any(value => value <= 0)
+      || TargetWeights.Sum() != 100
+    )
+    {
+      throw new AutoTradeConfigurationException(
+        "Auto trade disabled: AUTO_TRADE_TP_WEIGHTS must match TP_PIPS, "
+        + "contain positive values, and sum to 100"
+      );
+    }
+    if (BreakEvenBufferPips < 0 || BreakEvenBufferPips >= TargetsPips[0])
+    {
+      throw new AutoTradeConfigurationException(
+        "Auto trade disabled: AUTO_TRADE_BE_BUFFER_PIPS must be non-negative "
+        + "and below TP1"
       );
     }
     if (MaxDailyTrades <= 0)

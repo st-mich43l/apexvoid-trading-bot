@@ -57,7 +57,9 @@ AUTO_TRADE_REQUIRE_DEMO_ONLY_TOKEN=false
 AUTO_TRADE_SYMBOLS=XAU
 AUTO_TRADE_EXPECTED_BROKER=Fusion
 AUTO_TRADE_SL_DISTANCE=6.5
-AUTO_TRADE_TP_PIPS=30,50,70,90,130
+AUTO_TRADE_TP_PIPS=30,60,90,120,200
+AUTO_TRADE_TP_WEIGHTS=20,20,20,20,20
+AUTO_TRADE_BE_BUFFER_PIPS=3
 AUTO_TRADE_CANDIDATE_MAX_AGE=90
 AUTO_TRADE_SPOT_MAX_AGE=5
 AUTO_TRADE_MAX_SPREAD_PIPS=5
@@ -113,12 +115,19 @@ The executor revalidates candidate age, live quote age, spread, entry distance,
 account identity, and the one-XAU-position limit before placing a market order.
 Telegram is an operator surface, never the execution trigger.
 
-Balance tiers are fixed: below `$500` does not trade; `$500` uses `0.08` lot,
-`$1,000` uses `0.12`, `$2,000` uses `0.20`, and `$5,000+` uses `0.30`. Broker symbol metadata
-converts lots to native volume and validates minimum/step/maximum volume. The
-default stop is `$6.5`; five client-managed partial closes trigger at
-`30/50/70/90/130` pips. A server-side stop is attached to the initial order and
-confirmed at the absolute fill price immediately afterward.
+Position size is recomputed per trade from account balance using operator bands:
+`$200-$500 -> 0.02-0.05`, `$500-$1,000 -> 0.05-0.11`,
+`$1,000-$2,000 -> 0.11-0.21`, `$2,000-$3,000 -> 0.21-0.31`, and
+`$3,000-$5,000 -> 0.31-0.36` lots. The result is floored to `0.01` lots;
+balances below `$200` are rejected and balances above `$5,000` stay capped at
+`0.36` lots.
+
+The fixed stop remains `$6.5`. Weighted partial closes use
+`30/60/90/120/200` pips. A `0.02`-lot position exits at TP1 and TP3, `0.03`
+uses TP1-TP3, `0.04` uses TP1-TP4, and positions from `0.05` use all five.
+TP1 moves the stop to `BE+3`; subsequent partials trail to the preceding target.
+Existing positions retain the targets, TP ordinals, and slices encoded in their
+original cTrader comment.
 
 `/auto_pause` blocks new entries and `/auto_resume` releases the block.
 `/auto_status` reports mode, open auto positions, the UTC daily trade count,

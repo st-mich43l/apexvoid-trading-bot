@@ -136,7 +136,9 @@ public sealed record AutoTradePositionState(
   IReadOnlyList<long> Slices,
   IReadOnlyList<int> TargetsPips,
   int NextTargetIndex,
-  long OpenedAt
+  long OpenedAt,
+  decimal? CurrentStopLoss = null,
+  IReadOnlyList<int>? TargetOrdinals = null
 );
 
 public sealed record AutoTradeEvent(
