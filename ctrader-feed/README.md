@@ -57,6 +57,8 @@ AUTO_TRADE_REQUIRE_DEMO_ONLY_TOKEN=false
 AUTO_TRADE_SYMBOLS=XAU
 AUTO_TRADE_EXPECTED_BROKER=Fusion
 AUTO_TRADE_SL_DISTANCE=6.5
+AUTO_TRADE_RISK_PCT=2.0
+AUTO_TRADE_PIP_VALUE_PER_LOT=10.0
 AUTO_TRADE_TP_PIPS=30,60,90,120,200
 AUTO_TRADE_TP_WEIGHTS=20,20,20,20,20
 AUTO_TRADE_BE_BUFFER_PIPS=3
@@ -68,6 +70,17 @@ AUTO_TRADE_MAX_DAILY_TRADES=6
 AUTO_TRADE_STREAM=auto_trade:candidates
 AUTO_TRADE_EVENT_STREAM=auto_trade:events
 AUTO_TRADE_LABEL=apexvoid-auto
+AUTO_TRADE_MAX_TRANCHES=2
+AUTO_TRADE_ADD_RISK_FRACTION=0.5
+AUTO_TRADE_ADD_MAX_AGE_BARS=3
+AUTO_TRADE_ADD_COOLDOWN_BARS=3
+AUTO_TRADE_ADD_LEVEL_BUFFER_ATR=1.0
+AUTO_TRADE_ADD_STOP_BUFFER_ATR=0.3
+AUTO_TRADE_ADD_MIN_STOP_PIPS=15
+AUTO_TRADE_ADD_REQUIRE_RISK_FREE=false
+AUTO_TRADE_ZONE_FILL_ENABLED=false
+AUTO_TRADE_ZONE_FILL_MIN_ATR=0.5
+AUTO_TRADE_ZONE_FILL_TTL_BARS=3
 ```
 
 `CTRADER_SYMBOL=XAUUSD` is published under Redis symbol `XAU`, producing keys
@@ -102,6 +115,10 @@ the host is changed. It also requires a Hedged account and a broker name
 matching `AUTO_TRADE_EXPECTED_BROKER`.
 Set `AUTO_TRADE_REQUIRE_DEMO_ONLY_TOKEN=true` to disable execution whenever the
 token grants any live account, even when the selected account is demo.
+Token rotation persists the new refresh token and re-authorizes the configured
+account with the new access token atomically. A lost account authorization is
+retried once during reconcile; failed refresh/re-authorization restarts the
+whole feed session so trading cannot remain silently disconnected.
 
 ## Demo Auto-Trader
 
@@ -112,18 +129,34 @@ Telegram state. M5/M15 build role-aware support/resistance rails; M1 must reject
 a rail, while a directional M5 impulse blocks fading into active momentum. The
 nearest opposite-role rail must leave at least 30 pips of room.
 The executor revalidates candidate age, live quote age, spread, entry distance,
-account identity, and the one-XAU-position limit before placing a market order.
+account identity, and the configured XAU tranche limit before placing an order.
 Telegram is an operator surface, never the execution trigger.
 
-Position size is recomputed per trade from account balance using operator bands:
+Initial size is `min(risk-based, equity-table)` using realised account balance,
+the structure stop, and `AUTO_TRADE_RISK_PCT`. The exposure table uses the
+operator bands:
 `$200-$500 -> 0.02-0.05`, `$500-$1,000 -> 0.05-0.11`,
 `$1,000-$2,000 -> 0.11-0.21`, `$2,000-$3,000 -> 0.21-0.31`, and
 `$3,000-$5,000 -> 0.31-0.36` lots. The result is floored to `0.01` lots;
 balances below `$200` are rejected and balances above `$5,000` stay capped at
-`0.36` lots.
+`0.36` lots. Stops use the latest directional swing plus `0.3 ATR`, clamped to
+15-65 pips.
 
-The fixed stop remains `$6.5`. Weighted partial closes use
-`30/60/90/120/200` pips. A `0.02`-lot position exits at TP1 and TP3, `0.03`
+After TP1 has banked profit and moved the initial stop through breakeven, a
+fresh same-direction displacement and BOS may open one independent momentum
+tranche. Sizing is bounded by remaining table exposure, the group loss ceiling,
+and the add-risk cap. Every tranche keeps its own structure stop and target
+ladder. Adds at an adverse price or while the group is losing are refused as
+averaging down. `AUTO_TRADE_ADD_REQUIRE_RISK_FREE=true` applies the stricter
+post-add non-negative worst-case rule.
+
+When explicitly enabled, a zone at least `0.5 ATR` wide is planned as two limit
+legs at the proximal edge and midpoint. They share the original stop and split
+the planned ladder proportionally; an unfilled midpoint leg is cancelled after
+three M1 bars. This remains disabled by default.
+
+Weighted partial closes use `30/60/90/120/200` pips. A `0.02`-lot position
+exits at TP1 and TP3, `0.03`
 uses TP1-TP3, `0.04` uses TP1-TP4, and positions from `0.05` use all five.
 TP1 moves the stop to `BE+3`, TP2 keeps that stop unchanged, TP3 moves it to
 TP1, and TP4 moves it to TP2.

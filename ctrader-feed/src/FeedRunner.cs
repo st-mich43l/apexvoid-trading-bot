@@ -45,6 +45,7 @@ public sealed class FeedRunner(
     client.Heartbeat += TouchOnHeartbeat;
     using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
     Task? refreshTask = null;
+    Task? refreshMonitorTask = null;
     Task? spotTask = null;
     Task? autoTradeTask = null;
     try
@@ -67,6 +68,7 @@ public sealed class FeedRunner(
       healthFile.Touch();
 
       refreshTask = RefreshLoopAsync(client, linked.Token);
+      refreshMonitorTask = CancelSessionOnFaultAsync(refreshTask, linked);
       var spots = new SpotHistory();
       spotTask = SpotLoopAsync(client, spots, autoTrade, linked.Token);
       if (autoTrade?.Enabled == true)
@@ -123,6 +125,10 @@ public sealed class FeedRunner(
     {
       client.Heartbeat -= TouchOnHeartbeat;
       linked.Cancel();
+      if (refreshMonitorTask is not null)
+      {
+        await refreshMonitorTask;
+      }
       if (refreshTask is not null)
       {
         await IgnoreCancellation(refreshTask);
@@ -290,6 +296,24 @@ public sealed class FeedRunner(
     }
     catch (OperationCanceledException)
     {
+    }
+  }
+
+  private static async Task CancelSessionOnFaultAsync(
+    Task task,
+    CancellationTokenSource session
+  )
+  {
+    try
+    {
+      await task;
+    }
+    catch (OperationCanceledException) when (session.IsCancellationRequested)
+    {
+    }
+    catch
+    {
+      session.Cancel();
     }
   }
 

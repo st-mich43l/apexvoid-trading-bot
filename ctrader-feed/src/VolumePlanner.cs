@@ -6,11 +6,78 @@ public sealed record TargetVolumePlan(
   IReadOnlyList<int> TargetOrdinals
 );
 
+public sealed record InitialSizingResult(
+  decimal Budget,
+  decimal RiskLots,
+  decimal TableLots,
+  decimal Lots,
+  long Volume,
+  decimal StopPips,
+  string BindingTerm,
+  TargetVolumePlan TargetPlan
+);
+
 public sealed class VolumePlanningException(string message)
   : InvalidOperationException(message);
 
 public static class VolumePlanner
 {
+  public static InitialSizingResult SizeInitial(
+    decimal balance,
+    decimal riskPercent,
+    decimal stopPips,
+    decimal pipValuePerLot,
+    SymbolInfo symbol,
+    IReadOnlyList<int> targetsPips,
+    IReadOnlyList<int> targetWeights
+  )
+  {
+    if (
+      balance <= 0
+      || riskPercent <= 0
+      || stopPips <= 0
+      || pipValuePerLot <= 0
+    )
+    {
+      throw new VolumePlanningException("Initial sizing inputs must be positive");
+    }
+    var budget = balance * riskPercent / 100m;
+    var riskLots = budget / (stopPips * pipValuePerLot);
+    var tableLots = LotsForBalance(balance);
+    if (tableLots <= 0)
+    {
+      throw new VolumePlanningException(
+        $"balance {balance:N2} is below the $200 sizing floor"
+      );
+    }
+    var rawLots = Math.Min(riskLots, tableLots);
+    var volume = VolumeForLots(rawLots, symbol);
+    if (volume <= 0)
+    {
+      throw new VolumePlanningException(
+        $"min(risk {riskLots:0.###}, table {tableLots:0.##}) lots is below "
+        + "broker minimum volume"
+      );
+    }
+    var lots = volume / (decimal)symbol.LotSize;
+    var targetPlan = BuildTargetPlan(
+      volume,
+      symbol,
+      targetsPips,
+      targetWeights
+    );
+    return new InitialSizingResult(
+      budget,
+      riskLots,
+      tableLots,
+      lots,
+      volume,
+      stopPips,
+      tableLots <= riskLots ? "equity-table-bound" : "risk-bound",
+      targetPlan
+    );
+  }
+
   public static decimal LotsForBalance(decimal balance)
   {
     if (balance < 200m)

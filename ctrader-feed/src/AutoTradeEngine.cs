@@ -22,7 +22,8 @@ public sealed class AutoTradeEngine(
   private SymbolInfo? _symbol;
   private SpotPrice? _lastSpot;
   private IReadOnlyList<TradingPosition> _allSymbolPositions = [];
-  private bool _ready;
+  private IReadOnlyList<TradingPendingOrder> _allSymbolPendingOrders = [];
+  private volatile bool _ready;
   private volatile bool _disabled;
 
   public bool Enabled => options.Enabled && !_disabled;
@@ -114,9 +115,16 @@ public sealed class AutoTradeEngine(
     }
     finally
     {
-      _ready = false;
-      _client = null;
-      _symbol = null;
+      await WithGateAsync(
+        () =>
+        {
+          _ready = false;
+          _client = null;
+          _symbol = null;
+          return Task.CompletedTask;
+        },
+        CancellationToken.None
+      );
     }
   }
 
@@ -160,7 +168,11 @@ public sealed class AutoTradeEngine(
       return;
     }
     await WithGateAsync(
-      () => ProcessTargetsAsync(spot, cancellationToken),
+      () => (
+        !_ready || _client is null || _symbol is null
+          ? Task.CompletedTask
+          : ProcessTargetsAsync(spot, cancellationToken)
+      ),
       cancellationToken
     );
   }
@@ -248,7 +260,7 @@ public sealed class AutoTradeEngine(
       && candidate.Setup == "Auto Range Scalp"
       && candidate.Mode == "auto_range_scalp";
     if (
-      candidate.Version != 1
+      candidate.Version is not (1 or 2)
       || !autoRangeScalp
       || candidate.Confluence < options.MinConfluence
       || !string.Equals(
@@ -296,7 +308,35 @@ public sealed class AutoTradeEngine(
         );
         return true;
       }
-      return await RejectAsync(candidate, "XAU position already open", cancellationToken);
+    }
+    var existingPending = _allSymbolPendingOrders.FirstOrDefault(order =>
+      order.Comment.Contains(
+        CandidateToken(candidate.CandidateId),
+        StringComparison.Ordinal
+      )
+    );
+    if (existingPending is not null)
+    {
+      await store.CompleteCandidateAsync(
+        candidate.CandidateId,
+        $"ordered:{existingPending.OrderId}",
+        cancellationToken
+      );
+      return true;
+    }
+    var hasUnmanagedPosition = _allSymbolPositions.Any(
+      position => position.Label != options.Label
+    );
+    var hasUnmanagedOrder = _allSymbolPendingOrders.Any(
+      order => order.Label != options.Label
+    );
+    if (hasUnmanagedPosition || hasUnmanagedOrder)
+    {
+      return await RejectAsync(
+        candidate,
+        "unmanaged XAU position or pending order already open",
+        cancellationToken
+      );
     }
     var date = DateOnly.FromDateTime(_clock().UtcDateTime);
     var tradeCount = await store.GetDailyTradeCountAsync(date, cancellationToken);
@@ -307,38 +347,6 @@ public sealed class AutoTradeEngine(
 
     var account = await client.GetTradingAccountAsync(cancellationToken);
     ValidateAccount(account);
-    var lots = VolumePlanner.LotsForBalance(account.Balance);
-    if (lots <= 0)
-    {
-      return await RejectAsync(
-        candidate,
-        $"balance {account.Balance:N2} is below the $200 sizing floor",
-        cancellationToken
-      );
-    }
-    var volume = VolumePlanner.VolumeForLots(lots, symbol);
-    if (volume <= 0)
-    {
-      return await RejectAsync(
-        candidate,
-        $"{lots:N2} lots is outside broker volume limits",
-        cancellationToken
-      );
-    }
-    TargetVolumePlan targetPlan;
-    try
-    {
-      targetPlan = VolumePlanner.BuildTargetPlan(
-        volume,
-        symbol,
-        options.TargetsPips,
-        options.TargetWeights
-      );
-    }
-    catch (VolumePlanningException exception)
-    {
-      return await RejectAsync(candidate, exception.Message, cancellationToken);
-    }
     SpotPrice quote;
     try
     {
@@ -350,24 +358,112 @@ public sealed class AutoTradeEngine(
     }
     var direction = ParseDirection(candidate.Direction);
     var expectedEntry = direction == TradeDirection.Buy ? quote.Ask : quote.Bid;
-    if (options.DryRun)
+    StructureStopPlan stopPlan;
+    try
     {
-      await store.CompleteCandidateAsync(
-        candidate.CandidateId,
-        "dry_run",
-        cancellationToken
-      );
-      await PublishAsync(
-        "dry_run",
-        $"{direction} {lots:N2} lots planned at {expectedEntry:N2}",
-        cancellationToken,
-        candidate.CandidateId,
-        volume: volume,
-        price: expectedEntry
-      );
-      return true;
+      stopPlan = StructureStop(candidate, direction, expectedEntry, symbol);
+    }
+    catch (VolumePlanningException exception)
+    {
+      return await RejectAsync(candidate, exception.Message, cancellationToken);
     }
 
+    var group = _states.Values
+      .Where(state => state.SymbolId == symbol.SymbolId)
+      .OrderBy(state => state.TrancheIndex)
+      .ToArray();
+    if (group.Length == 0)
+    {
+      if (_allSymbolPendingOrders.Count > 0)
+      {
+        return await RejectAsync(
+          candidate,
+          "planned zone fill is still pending",
+          cancellationToken
+        );
+      }
+      return await ProcessInitialAsync(
+        candidate,
+        account,
+        direction,
+        expectedEntry,
+        stopPlan,
+        date,
+        cancellationToken
+      );
+    }
+    return await ProcessAddAsync(
+      candidate,
+      account,
+      direction,
+      expectedEntry,
+      stopPlan,
+      quote,
+      group,
+      date,
+      cancellationToken
+    );
+  }
+
+  private async Task<bool> ProcessInitialAsync(
+    TradeCandidate candidate,
+    TradingAccountSnapshot account,
+    TradeDirection direction,
+    decimal expectedEntry,
+    StructureStopPlan stopPlan,
+    DateOnly date,
+    CancellationToken cancellationToken
+  )
+  {
+    if (
+      options.ZoneFillEnabled
+      && candidate.Atr is decimal atr
+      && ZoneFillPlanner.Qualifies(
+        candidate.EntryZone,
+        atr,
+        options.ZoneFillMinAtr
+      )
+    )
+    {
+      return await ProcessZoneFillAsync(
+        candidate,
+        account,
+        direction,
+        expectedEntry,
+        date,
+        cancellationToken
+      );
+    }
+    InitialSizingResult sizing;
+    try
+    {
+      sizing = VolumePlanner.SizeInitial(
+        account.Balance,
+        options.RiskPercent,
+        stopPlan.StopPips,
+        options.PipValuePerLot,
+        RequireSymbol(),
+        options.TargetsPips,
+        options.TargetWeights
+      );
+    }
+    catch (VolumePlanningException exception)
+    {
+      return await RejectAsync(candidate, exception.Message, cancellationToken);
+    }
+    var groupId = GroupToken(candidate.CandidateId);
+    var barTs = candidate.BarTs ?? candidate.CreatedAt;
+    if (options.DryRun)
+    {
+      return await CompleteDryRunAsync(
+        candidate,
+        $"{direction} {sizing.Lots:N2} lots · structure stop "
+        + $"{stopPlan.StopPips:N0}p · {sizing.BindingTerm}",
+        sizing.Volume,
+        expectedEntry,
+        cancellationToken
+      );
+    }
     if (await store.IsPausedAsync(cancellationToken))
     {
       return await RejectAsync(candidate, "executor paused", cancellationToken);
@@ -377,24 +473,400 @@ public sealed class AutoTradeEngine(
     {
       return await RejectAsync(
         candidate,
-        "XAU position appeared before order",
+        "XAU position appeared before initial order",
         cancellationToken
       );
     }
+    return await PlaceTrancheAsync(
+      candidate,
+      direction,
+      expectedEntry,
+      stopPlan,
+      sizing.Volume,
+      sizing.TargetPlan,
+      groupId,
+      trancheIndex: 1,
+      groupBookedPnl: 0m,
+      initialBookedPnl: 0m,
+      groupOpenedAt: barTs,
+      lastTrancheBarTs: barTs,
+      groupTrancheCount: 1,
+      hadAdds: false,
+      groupRealizedPipVolume: 0m,
+      initialRealizedPipVolume: 0m,
+      groupInitialVolume: sizing.Volume,
+      initialTrancheVolume: sizing.Volume,
+      date,
+      eventType: "opened",
+      message: $"{direction} {sizing.Lots:N2} lots filled {{fill}}, "
+        + $"SL {{stop}} · {stopPlan.StopPips:N0}p structure · "
+        + sizing.BindingTerm,
+      groupWorstCase: -sizing.Lots * stopPlan.StopPips
+        * options.PipValuePerLot,
+      riskBudget: sizing.Budget,
+      cancellationToken
+    );
+  }
 
+  private async Task<bool> ProcessZoneFillAsync(
+    TradeCandidate candidate,
+    TradingAccountSnapshot account,
+    TradeDirection direction,
+    decimal expectedEntry,
+    DateOnly date,
+    CancellationToken cancellationToken
+  )
+  {
+    var symbol = RequireSymbol();
+    var proximal = direction == TradeDirection.Buy
+      ? candidate.EntryZone.High
+      : candidate.EntryZone.Low;
+    var validLimitSide = direction == TradeDirection.Buy
+      ? proximal <= expectedEntry
+      : proximal >= expectedEntry;
+    if (!validLimitSide)
+    {
+      return await RejectAsync(
+        candidate,
+        "zone-fill proximal edge is not on the valid limit-order side",
+        cancellationToken
+      );
+    }
+    StructureStopPlan stopPlan;
+    InitialSizingResult sizing;
+    ZoneFillPlan plan;
+    try
+    {
+      stopPlan = StructureStop(candidate, direction, proximal, symbol);
+      sizing = VolumePlanner.SizeInitial(
+        account.Balance,
+        options.RiskPercent,
+        stopPlan.StopPips,
+        options.PipValuePerLot,
+        symbol,
+        options.TargetsPips,
+        options.TargetWeights
+      );
+      var stopLoss = direction == TradeDirection.Buy
+        ? proximal - stopPlan.Distance
+        : proximal + stopPlan.Distance;
+      stopLoss = decimal.Round(
+        stopLoss,
+        symbol.Digits,
+        MidpointRounding.AwayFromZero
+      );
+      plan = ZoneFillPlanner.Build(
+        direction,
+        candidate.EntryZone,
+        stopLoss,
+        sizing.Volume,
+        symbol,
+        options.TargetsPips,
+        options.TargetWeights
+      );
+    }
+    catch (VolumePlanningException exception)
+    {
+      return await RejectAsync(candidate, exception.Message, cancellationToken);
+    }
+    var groupId = GroupToken(candidate.CandidateId);
+    var barTs = candidate.BarTs ?? candidate.CreatedAt;
+    if (options.DryRun)
+    {
+      return await CompleteDryRunAsync(
+        candidate,
+        $"zone fill · {sizing.Lots:N2} lots across {plan.Legs.Count} limits · "
+          + $"SL {plan.StopLoss:N2}",
+        sizing.Volume,
+        proximal,
+        cancellationToken
+      );
+    }
+    if (await store.IsPausedAsync(cancellationToken))
+    {
+      return await RejectAsync(candidate, "executor paused", cancellationToken);
+    }
+    await ReconcileAsync(cancellationToken);
+    if (_allSymbolPositions.Count > 0 || _allSymbolPendingOrders.Count > 0)
+    {
+      return await RejectAsync(
+        candidate,
+        "XAU exposure appeared before zone-fill orders",
+        cancellationToken
+      );
+    }
+    var placed = new List<long>();
+    try
+    {
+      foreach (var leg in plan.Legs)
+      {
+        var distance = Math.Abs(leg.LimitPrice - plan.StopLoss);
+        var comment = BuildZoneComment(
+          candidate.CandidateId,
+          groupId,
+          leg,
+          barTs
+        );
+        var orderId = await RequireClient().PlaceLimitOrderAsync(
+          new LimitOrderRequest(
+            symbol.SymbolId,
+            direction,
+            leg.Volume,
+            leg.LimitPrice,
+            decimal.ToInt64(distance * 100_000m),
+            options.Label,
+            comment,
+            $"{ClientOrderId(candidate.CandidateId)}-z{leg.Leg}"
+          ),
+          cancellationToken
+        );
+        placed.Add(orderId);
+      }
+    }
+    catch
+    {
+      await RollbackZoneFillAsync(
+        candidate.CandidateId,
+        placed,
+        cancellationToken
+      );
+      throw;
+    }
+    await store.CompleteCandidateAsync(
+      candidate.CandidateId,
+      $"ordered:{string.Join(',', placed)}",
+      cancellationToken
+    );
+    await store.IncrementDailyTradeCountAsync(date, cancellationToken);
+    await PublishAsync(
+      "zone_planned",
+      $"zone fill · {sizing.Lots:N2} lots · limits "
+        + string.Join(" / ", plan.Legs.Select(leg =>
+          $"{leg.LimitPrice:N2} ({leg.Volume / (decimal)symbol.LotSize:N2})"
+        ))
+        + $" · SL {plan.StopLoss:N2} · midpoint TTL "
+        + $"{options.ZoneFillTtlBars} bars",
+      cancellationToken,
+      candidate.CandidateId,
+      volume: sizing.Volume,
+      price: proximal,
+      groupId: groupId,
+      trancheIndex: 1,
+      groupWorstCase: -sizing.Lots * stopPlan.StopPips
+        * options.PipValuePerLot,
+      riskBudget: sizing.Budget,
+      hadAdds: false
+    );
+    await ReconcileAsync(cancellationToken);
+    return true;
+  }
+
+  private async Task RollbackZoneFillAsync(
+    string candidateId,
+    IReadOnlyList<long> placedOrderIds,
+    CancellationToken cancellationToken
+  )
+  {
+    var client = RequireClient();
+    foreach (var orderId in placedOrderIds)
+    {
+      try
+      {
+        await client.CancelPendingOrderAsync(orderId, cancellationToken);
+      }
+      catch (Exception exception) when (exception is not OperationCanceledException)
+      {
+        _log($"auto-trade zone-fill rollback cancel failed order={orderId}: "
+          + exception.Message);
+      }
+    }
+    var positions = await client.ReconcilePositionsAsync(cancellationToken);
+    foreach (var position in positions.Where(position => (
+      position.SymbolId == RequireSymbol().SymbolId
+      && position.Label == options.Label
+      && position.Comment.Contains(
+        CandidateToken(candidateId),
+        StringComparison.Ordinal
+      )
+    )))
+    {
+      try
+      {
+        await client.ClosePositionAsync(
+          position.PositionId,
+          position.Volume,
+          cancellationToken
+        );
+      }
+      catch (Exception exception) when (exception is not OperationCanceledException)
+      {
+        _log($"auto-trade zone-fill rollback close failed position="
+          + $"{position.PositionId}: {exception.Message}");
+        throw;
+      }
+    }
+  }
+
+  private async Task<bool> ProcessAddAsync(
+    TradeCandidate candidate,
+    TradingAccountSnapshot account,
+    TradeDirection direction,
+    decimal expectedEntry,
+    StructureStopPlan stopPlan,
+    SpotPrice quote,
+    IReadOnlyList<AutoTradePositionState> group,
+    DateOnly date,
+    CancellationToken cancellationToken
+  )
+  {
+    var triggerFailure = ValidateAddTriggers(
+      candidate,
+      direction,
+      expectedEntry,
+      quote,
+      group,
+      RequireSymbol()
+    );
+    if (triggerFailure is not null)
+    {
+      return await RejectAsync(
+        candidate,
+        triggerFailure,
+        cancellationToken
+      );
+    }
+    var groupBooked = GroupBookedPnl(group);
+    var decision = ScaleInPlanner.Plan(
+      account.Balance,
+      options.RiskPercent,
+      options.PipValuePerLot,
+      options.AddRiskFraction,
+      stopPlan.StopPips,
+      groupBooked,
+      group.Select(state => new TrancheExposure(
+        state.Direction,
+        state.EntryPrice,
+        state.CurrentStopLoss!.Value,
+        state.RemainingVolume
+      )).ToArray(),
+      options.AddRequireRiskFree,
+      RequireSymbol(),
+      options.TargetsPips,
+      options.TargetWeights
+    );
+    if (!decision.Allowed || decision.TargetPlan is null)
+    {
+      return await RejectAsync(candidate, decision.Reason, cancellationToken);
+    }
+    _log(decision.SizingLog);
+    var groupId = GroupId(group[0]);
+    var trancheIndex = group.Max(state => state.TrancheIndex) + 1;
+    var barTs = candidate.BarTs ?? candidate.CreatedAt;
+    if (options.DryRun)
+    {
+      return await CompleteDryRunAsync(
+        candidate,
+        $"Tranche {trancheIndex} · {decision.Lots:N2} lots · "
+        + $"{decision.BindingTerm} · group worst "
+        + $"${decision.PostAddWorstCase:N1}",
+        decision.Volume,
+        expectedEntry,
+        cancellationToken
+      );
+    }
+    if (await store.IsPausedAsync(cancellationToken))
+    {
+      return await RejectAsync(candidate, "executor paused", cancellationToken);
+    }
+    await ReconcileAsync(cancellationToken);
+    var refreshed = _states.Values
+      .Where(state => GroupId(state) == groupId)
+      .ToArray();
+    if (refreshed.Length != group.Count)
+    {
+      return await RejectAsync(
+        candidate,
+        "tranche group changed before add order",
+        cancellationToken
+      );
+    }
+    return await PlaceTrancheAsync(
+      candidate,
+      direction,
+      expectedEntry,
+      stopPlan,
+      decision.Volume,
+      decision.TargetPlan,
+      groupId,
+      trancheIndex,
+      groupBooked,
+      InitialBookedPnl(group),
+      GroupOpenedAt(group),
+      barTs,
+      Math.Max(group.Max(state => state.GroupTrancheCount), trancheIndex),
+      hadAdds: true,
+      groupRealizedPipVolume: GroupRealizedPipVolume(group),
+      initialRealizedPipVolume: InitialRealizedPipVolume(group),
+      groupInitialVolume: GroupInitialVolume(group) + decision.Volume,
+      initialTrancheVolume: InitialTrancheVolume(group),
+      date,
+      eventType: "add",
+      message: $"➕ Tranche {trancheIndex} · {decision.Lots:N2} lots · "
+        + $"stop {stopPlan.StopPips:N0}p (structure) · "
+        + $"{decision.BindingTerm} · group worst "
+        + $"${decision.PostAddWorstCase:N1} / budget ${decision.Budget:N0}",
+      groupWorstCase: decision.PostAddWorstCase,
+      riskBudget: decision.Budget,
+      cancellationToken
+    );
+  }
+
+  private async Task<bool> PlaceTrancheAsync(
+    TradeCandidate candidate,
+    TradeDirection direction,
+    decimal expectedEntry,
+    StructureStopPlan stopPlan,
+    long volume,
+    TargetVolumePlan targetPlan,
+    string groupId,
+    int trancheIndex,
+    decimal groupBookedPnl,
+    decimal initialBookedPnl,
+    long groupOpenedAt,
+    long lastTrancheBarTs,
+    int groupTrancheCount,
+    bool hadAdds,
+    decimal groupRealizedPipVolume,
+    decimal initialRealizedPipVolume,
+    long groupInitialVolume,
+    long initialTrancheVolume,
+    DateOnly date,
+    string eventType,
+    string message,
+    decimal groupWorstCase,
+    decimal riskBudget,
+    CancellationToken cancellationToken
+  )
+  {
+    var client = RequireClient();
+    var now = _clock().ToUnixTimeSeconds();
+    var symbol = RequireSymbol();
     var comment = BuildComment(
       candidate.CandidateId,
+      groupId,
+      trancheIndex,
       volume,
       targetPlan.Slices,
       targetPlan.TargetsPips,
-      targetPlan.TargetOrdinals
+      targetPlan.TargetOrdinals,
+      lastTrancheBarTs
     );
     var execution = await client.PlaceMarketOrderAsync(
       new MarketOrderRequest(
-        symbol.SymbolId,
+        RequireSymbol().SymbolId,
         direction,
         volume,
-        decimal.ToInt64(options.StopLossDistance * 100_000m),
+        decimal.ToInt64(stopPlan.Distance * 100_000m),
         options.Label,
         comment,
         ClientOrderId(candidate.CandidateId)
@@ -405,8 +877,8 @@ public sealed class AutoTradeEngine(
       ? execution.ExecutionPrice
       : expectedEntry;
     var stopLoss = direction == TradeDirection.Buy
-      ? fill - options.StopLossDistance
-      : fill + options.StopLossDistance;
+      ? fill - stopPlan.Distance
+      : fill + stopPlan.Distance;
     stopLoss = decimal.Round(stopLoss, symbol.Digits, MidpointRounding.AwayFromZero);
     await client.AmendPositionStopLossAsync(
       execution.PositionId,
@@ -426,9 +898,24 @@ public sealed class AutoTradeEngine(
       0,
       now,
       stopLoss,
-      targetPlan.TargetOrdinals
+      targetPlan.TargetOrdinals,
+      groupId,
+      trancheIndex,
+      groupBookedPnl,
+      initialBookedPnl,
+      groupOpenedAt,
+      lastTrancheBarTs,
+      groupTrancheCount,
+      hadAdds,
+      stopLoss,
+      ZoneLeg: 0,
+      groupRealizedPipVolume,
+      initialRealizedPipVolume,
+      groupInitialVolume,
+      initialTrancheVolume
     );
     _states[state.PositionId] = state;
+    await PropagateGroupMetadataAsync(state, cancellationToken);
     await store.SavePositionAsync(state, cancellationToken);
     await store.CompleteCandidateAsync(
       candidate.CandidateId,
@@ -436,14 +923,256 @@ public sealed class AutoTradeEngine(
       cancellationToken
     );
     await store.IncrementDailyTradeCountAsync(date, cancellationToken);
+    var rendered = message
+      .Replace("{fill}", fill.ToString("N2", CultureInfo.InvariantCulture))
+      .Replace("{stop}", stopLoss.ToString("N2", CultureInfo.InvariantCulture));
     await PublishAsync(
-      "opened",
-      $"{direction} {lots:N2} lots filled {fill:N2}, SL {stopLoss:N2}",
+      eventType,
+      rendered,
       cancellationToken,
       candidate.CandidateId,
       state.PositionId,
       volume: volume,
-      price: fill
+      price: fill,
+      groupId: groupId,
+      trancheIndex: trancheIndex,
+      groupWorstCase: groupWorstCase,
+      riskBudget: riskBudget,
+      hadAdds: hadAdds
+    );
+    return true;
+  }
+
+  private StructureStopPlan StructureStop(
+    TradeCandidate candidate,
+    TradeDirection direction,
+    decimal entryPrice,
+    SymbolInfo symbol
+  )
+  {
+    if (candidate.Atr is not decimal atr || candidate.StructureSwing is not decimal swing)
+    {
+      throw new VolumePlanningException(
+        "structure context unavailable on candidate"
+      );
+    }
+    var maximumStopPips = decimal.ToInt32(decimal.Floor(
+      options.StopLossDistance / VolumePlanner.PipSize(symbol)
+    ));
+    return StructureStopPlanner.Plan(
+      direction,
+      entryPrice,
+      swing,
+      atr,
+      options.AddStopBufferAtr,
+      options.AddMinStopPips,
+      maximumStopPips,
+      symbol
+    );
+  }
+
+  private string? ValidateAddTriggers(
+    TradeCandidate candidate,
+    TradeDirection direction,
+    decimal entryPrice,
+    SpotPrice quote,
+    IReadOnlyList<AutoTradePositionState> group,
+    SymbolInfo symbol
+  )
+  {
+    if (group.Count == 0)
+    {
+      return "scale-in group is empty";
+    }
+    var groupId = GroupId(group[0]);
+    var initialStates = group.Where(state => state.TrancheIndex == 1).ToArray();
+    var initial = initialStates[0];
+    var initialEntry = direction == TradeDirection.Buy
+      ? initialStates.Max(state => state.EntryPrice)
+      : initialStates.Min(state => state.EntryPrice);
+    var exitQuote = direction == TradeDirection.Buy ? quote.Bid : quote.Ask;
+    var floating = GroupBookedPnl(group) + group.Sum(state => OpenPnl(
+      state,
+      exitQuote,
+      symbol
+    ));
+    return ScaleInTriggerPlanner.Validate(new ScaleInTriggerInput(
+      initial.Direction,
+      direction,
+      initialEntry,
+      entryPrice,
+      floating,
+      initialStates.All(state => (
+        state.NextTargetIndex >= 1
+        && state.CurrentStopLoss is decimal initialStop
+        && AtLeastBreakeven(state.Direction, state.EntryPrice, initialStop)
+      )),
+      group.All(state => state.CurrentStopLoss is not null),
+      group.All(state => GroupId(state) == groupId && state.Direction == direction),
+      group.Max(state => state.GroupTrancheCount),
+      options.MaxTranches,
+      candidate.DisplacementDirection,
+      candidate.DisplacementAgeBars,
+      options.AddMaxAgeBars,
+      candidate.BosDirection,
+      candidate.BosTs,
+      GroupOpenedAt(group),
+      candidate.OpposingLevelDistanceAtr,
+      options.AddLevelBufferAtr,
+      candidate.BarTs ?? 0,
+      group.Max(state => state.LastTrancheBarTs),
+      options.AddCooldownBars
+    ));
+  }
+
+  private async Task PropagateGroupMetadataAsync(
+    AutoTradePositionState source,
+    CancellationToken cancellationToken
+  )
+  {
+    var groupId = GroupId(source);
+    foreach (var current in _states.Values
+      .Where(state => GroupId(state) == groupId)
+      .ToArray())
+    {
+      var updated = current with
+      {
+        GroupBookedPnl = source.GroupBookedPnl,
+        InitialTrancheBookedPnl = source.InitialTrancheBookedPnl,
+        GroupOpenedAt = source.GroupOpenedAt,
+        LastTrancheBarTs = source.LastTrancheBarTs,
+        GroupTrancheCount = source.GroupTrancheCount,
+        HadAdds = source.HadAdds,
+        GroupRealizedPipVolume = source.GroupRealizedPipVolume,
+        InitialRealizedPipVolume = source.InitialRealizedPipVolume,
+        GroupInitialVolume = source.GroupInitialVolume,
+        InitialTrancheVolume = source.InitialTrancheVolume,
+      };
+      _states[updated.PositionId] = updated;
+      await store.SavePositionAsync(updated, cancellationToken);
+    }
+  }
+
+  private decimal OpenPnl(
+    AutoTradePositionState state,
+    decimal price,
+    SymbolInfo symbol
+  )
+  {
+    var move = state.Direction == TradeDirection.Buy
+      ? price - state.EntryPrice
+      : state.EntryPrice - price;
+    var pips = move / VolumePlanner.PipSize(symbol);
+    var lots = state.RemainingVolume / (decimal)symbol.LotSize;
+    return pips * lots * options.PipValuePerLot;
+  }
+
+  private decimal RealizedPnl(
+    AutoTradePositionState state,
+    decimal price,
+    long closedVolume,
+    SymbolInfo symbol
+  )
+  {
+    var move = state.Direction == TradeDirection.Buy
+      ? price - state.EntryPrice
+      : state.EntryPrice - price;
+    var pips = move / VolumePlanner.PipSize(symbol);
+    var lots = closedVolume / (decimal)symbol.LotSize;
+    return pips * lots * options.PipValuePerLot;
+  }
+
+  private static decimal SignedPips(
+    AutoTradePositionState state,
+    decimal price,
+    SymbolInfo symbol
+  )
+  {
+    var move = state.Direction == TradeDirection.Buy
+      ? price - state.EntryPrice
+      : state.EntryPrice - price;
+    return move / VolumePlanner.PipSize(symbol);
+  }
+
+  private static decimal WeightedPips(decimal pipVolume, long initialVolume) =>
+    initialVolume > 0 ? pipVolume / initialVolume : 0m;
+
+  private static bool AtLeastBreakeven(
+    TradeDirection direction,
+    decimal entry,
+    decimal stop
+  ) => direction == TradeDirection.Buy ? stop >= entry : stop <= entry;
+
+  private static string GroupId(AutoTradePositionState state) =>
+    string.IsNullOrWhiteSpace(state.GroupId)
+      ? GroupToken(state.CandidateId)
+      : state.GroupId;
+
+  private static decimal GroupBookedPnl(
+    IReadOnlyList<AutoTradePositionState> group
+  ) => group.Count == 0 ? 0m : group.Max(state => state.GroupBookedPnl);
+
+  private static decimal InitialBookedPnl(
+    IReadOnlyList<AutoTradePositionState> group
+  ) => group.Count == 0 ? 0m : group.Max(state => state.InitialTrancheBookedPnl);
+
+  private static long GroupOpenedAt(
+    IReadOnlyList<AutoTradePositionState> group
+  )
+  {
+    var stored = group.Where(state => state.GroupOpenedAt > 0)
+      .Select(state => state.GroupOpenedAt)
+      .DefaultIfEmpty(0)
+      .Min();
+    return stored > 0
+      ? stored
+      : group.Select(state => state.OpenedAt).DefaultIfEmpty(0).Min();
+  }
+
+  private static decimal GroupRealizedPipVolume(
+    IReadOnlyList<AutoTradePositionState> group
+  ) => group.Count == 0 ? 0m : group.Max(state => state.GroupRealizedPipVolume);
+
+  private static decimal InitialRealizedPipVolume(
+    IReadOnlyList<AutoTradePositionState> group
+  ) => group.Count == 0 ? 0m : group.Max(
+    state => state.InitialRealizedPipVolume
+  );
+
+  private static long GroupInitialVolume(
+    IReadOnlyList<AutoTradePositionState> group
+  ) => group.Count == 0 ? 0 : Math.Max(
+    group.Max(state => state.GroupInitialVolume),
+    group.Sum(state => state.InitialVolume)
+  );
+
+  private static long InitialTrancheVolume(
+    IReadOnlyList<AutoTradePositionState> group
+  ) => group.Count == 0 ? 0 : Math.Max(
+    group.Max(state => state.InitialTrancheVolume),
+    group.Where(state => state.TrancheIndex == 1).Sum(state => state.InitialVolume)
+  );
+
+  private async Task<bool> CompleteDryRunAsync(
+    TradeCandidate candidate,
+    string message,
+    long volume,
+    decimal price,
+    CancellationToken cancellationToken
+  )
+  {
+    await store.CompleteCandidateAsync(
+      candidate.CandidateId,
+      "dry_run",
+      cancellationToken
+    );
+    await PublishAsync(
+      "dry_run",
+      message,
+      cancellationToken,
+      candidate.CandidateId,
+      volume: volume,
+      price: price
     );
     return true;
   }
@@ -495,7 +1224,7 @@ public sealed class AutoTradeEngine(
     }
     foreach (var original in _states.Values.ToArray())
     {
-      var state = original;
+      var state = _states.GetValueOrDefault(original.PositionId, original);
       while (
         state.RemainingVolume > 0
         && state.NextTargetIndex < state.TargetsPips.Count
@@ -523,11 +1252,36 @@ public sealed class AutoTradeEngine(
         );
         var remaining = execution.RemainingVolume
           ?? Math.Max(0, state.RemainingVolume - closeVolume);
+        var fill = execution.ExecutionPrice > 0
+          ? execution.ExecutionPrice
+          : exitQuote;
+        var realized = RealizedPnl(state, fill, closeVolume, symbol);
+        var currentGroup = _states.Values
+          .Where(item => GroupId(item) == GroupId(state))
+          .ToArray();
+        var groupBooked = GroupBookedPnl(currentGroup) + realized;
+        var initialBooked = InitialBookedPnl(currentGroup)
+          + (state.TrancheIndex == 1 ? realized : 0m);
+        var realizedPips = SignedPips(state, fill, symbol);
+        var groupPipVolume = GroupRealizedPipVolume(currentGroup)
+          + realizedPips * closeVolume;
+        var initialPipVolume = InitialRealizedPipVolume(currentGroup)
+          + (state.TrancheIndex == 1 ? realizedPips * closeVolume : 0m);
+        var groupInitialVolume = GroupInitialVolume(currentGroup);
+        var initialTrancheVolume = InitialTrancheVolume(currentGroup);
         state = state with
         {
           RemainingVolume = remaining,
           NextTargetIndex = state.NextTargetIndex + 1,
+          GroupBookedPnl = groupBooked,
+          InitialTrancheBookedPnl = initialBooked,
+          GroupRealizedPipVolume = groupPipVolume,
+          InitialRealizedPipVolume = initialPipVolume,
+          GroupInitialVolume = groupInitialVolume,
+          InitialTrancheVolume = initialTrancheVolume,
         };
+        _states[state.PositionId] = state;
+        await PropagateGroupMetadataAsync(state, cancellationToken);
         await PublishAsync(
           "take_profit",
           $"TP{targetOrdinal} +{targetPips} pips closed volume {closeVolume}",
@@ -536,12 +1290,53 @@ public sealed class AutoTradeEngine(
           state.PositionId,
           targetPips,
           closeVolume,
-          execution.ExecutionPrice > 0 ? execution.ExecutionPrice : exitQuote
+          fill,
+          groupId: GroupId(state),
+          trancheIndex: state.TrancheIndex,
+          groupRealizedPnl: groupBooked,
+          counterfactualPnl: initialBooked,
+          hadAdds: state.HadAdds,
+          groupRealizedPips: WeightedPips(
+            groupPipVolume,
+            groupInitialVolume
+          ),
+          counterfactualPips: WeightedPips(
+            initialPipVolume,
+            initialTrancheVolume
+          )
         );
         if (remaining <= 0)
         {
+          var groupId = GroupId(state);
           _states.Remove(state.PositionId);
           await store.DeletePositionAsync(state.PositionId, cancellationToken);
+          if (!_states.Values.Any(item => GroupId(item) == groupId))
+          {
+            var groupPips = WeightedPips(groupPipVolume, groupInitialVolume);
+            var counterfactualPips = WeightedPips(
+              initialPipVolume,
+              initialTrancheVolume
+            );
+            var addDelta = groupBooked - initialBooked;
+            await PublishAsync(
+              "group_result",
+              $"group {groupId} realised ${groupBooked:N2} · "
+              + $"{groupPips:N1} pips · no-add counterfactual "
+              + $"${initialBooked:N2} / {counterfactualPips:N1} pips · adds "
+              + (addDelta > 0 ? "improved" : "degraded")
+              + $" ${Math.Abs(addDelta):N2}",
+              cancellationToken,
+              state.CandidateId,
+              state.PositionId,
+              groupId: groupId,
+              groupWorstCase: groupBooked,
+              groupRealizedPnl: groupBooked,
+              counterfactualPnl: initialBooked,
+              hadAdds: state.HadAdds,
+              groupRealizedPips: groupPips,
+              counterfactualPips: counterfactualPips
+            );
+          }
           break;
         }
         state = await MoveStopAfterTargetAsync(
@@ -620,7 +1415,10 @@ public sealed class AutoTradeEngine(
       cancellationToken,
       state.CandidateId,
       state.PositionId,
-      price: move.StopLoss
+      price: move.StopLoss,
+      groupId: GroupId(state),
+      trancheIndex: state.TrancheIndex,
+      hadAdds: state.HadAdds
     );
     return state with { CurrentStopLoss = move.StopLoss };
   }
@@ -629,10 +1427,41 @@ public sealed class AutoTradeEngine(
   {
     var client = RequireClient();
     var symbol = RequireSymbol();
-    var positions = await client.ReconcilePositionsAsync(cancellationToken);
-    _allSymbolPositions = positions
+    var snapshot = await client.ReconcileAccountAsync(cancellationToken);
+    _allSymbolPositions = snapshot.Positions
       .Where(position => position.SymbolId == symbol.SymbolId)
       .ToArray();
+    _allSymbolPendingOrders = snapshot.PendingOrders
+      .Where(order => order.SymbolId == symbol.SymbolId)
+      .ToArray();
+    foreach (var order in _allSymbolPendingOrders.ToArray())
+    {
+      var zone = ParseZoneComment(order.Comment);
+      if (
+        order.Label != options.Label
+        || zone is null
+        || zone.Value.Leg != 2
+        || _clock().ToUnixTimeSeconds() - zone.Value.BarTs
+          < options.ZoneFillTtlBars * 60L
+      )
+      {
+        continue;
+      }
+      await client.CancelPendingOrderAsync(order.OrderId, cancellationToken);
+      _allSymbolPendingOrders = _allSymbolPendingOrders
+        .Where(item => item.OrderId != order.OrderId)
+        .ToArray();
+      await PublishAsync(
+        "zone_expired",
+        $"zone midpoint limit {order.OrderId} cancelled after "
+          + $"{options.ZoneFillTtlBars} bars; filled volume keeps its "
+          + "proportional ladder",
+        cancellationToken,
+        groupId: zone.Value.GroupId,
+        trancheIndex: 1,
+        hadAdds: false
+      );
+    }
     var botPositions = _allSymbolPositions
       .Where(position => position.Label == options.Label)
       .ToArray();
@@ -658,6 +1487,29 @@ public sealed class AutoTradeEngine(
     foreach (var position in botPositions)
     {
       await AdoptPositionAsync(position, cancellationToken);
+    }
+    foreach (var group in _states.Values.GroupBy(GroupId).ToArray())
+    {
+      var states = group.ToArray();
+      var source = states.MinBy(state => state.TrancheIndex)! with
+      {
+        GroupBookedPnl = states.Max(state => state.GroupBookedPnl),
+        InitialTrancheBookedPnl = states.Max(
+          state => state.InitialTrancheBookedPnl
+        ),
+        GroupOpenedAt = GroupOpenedAt(states),
+        LastTrancheBarTs = states.Max(state => state.LastTrancheBarTs),
+        GroupTrancheCount = states.Max(state => Math.Max(
+          state.GroupTrancheCount,
+          state.TrancheIndex
+        )),
+        HadAdds = states.Any(state => state.HadAdds || state.TrancheIndex > 1),
+        GroupRealizedPipVolume = GroupRealizedPipVolume(states),
+        InitialRealizedPipVolume = InitialRealizedPipVolume(states),
+        GroupInitialVolume = GroupInitialVolume(states),
+        InitialTrancheVolume = InitialTrancheVolume(states),
+      };
+      await PropagateGroupMetadataAsync(source, cancellationToken);
     }
   }
 
@@ -778,7 +1630,16 @@ public sealed class AutoTradeEngine(
     long? positionId = null,
     int? targetPips = null,
     long? volume = null,
-    decimal? price = null
+    decimal? price = null,
+    string? groupId = null,
+    int? trancheIndex = null,
+    decimal? groupWorstCase = null,
+    decimal? riskBudget = null,
+    decimal? groupRealizedPnl = null,
+    decimal? counterfactualPnl = null,
+    bool? hadAdds = null,
+    decimal? groupRealizedPips = null,
+    decimal? counterfactualPips = null
   ) => store.PublishAutoTradeEventAsync(
     options.EventStream,
     new AutoTradeEvent(
@@ -789,7 +1650,16 @@ public sealed class AutoTradeEngine(
       positionId,
       targetPips,
       volume,
-      price
+      price,
+      groupId,
+      trancheIndex,
+      groupWorstCase,
+      riskBudget,
+      groupRealizedPnl,
+      counterfactualPnl,
+      hadAdds,
+      groupRealizedPips,
+      counterfactualPips
     ),
     cancellationToken
   );
@@ -854,46 +1724,108 @@ public sealed class AutoTradeEngine(
 
   private static string BuildComment(
     string candidateId,
+    string groupId,
+    int trancheIndex,
     long volume,
     IReadOnlyList<long> slices,
     IReadOnlyList<int> targets,
-    IReadOnlyList<int> ordinals
-  ) => string.Join(
-    '|',
-    "av2",
-    CandidateToken(candidateId),
-    volume.ToString(CultureInfo.InvariantCulture),
-    string.Join(',', slices),
-    string.Join(',', targets),
-    string.Join(',', ordinals)
-  );
+    IReadOnlyList<int> ordinals,
+    long barTs
+  )
+  {
+    var comment = string.Join(
+      '|',
+      "av3",
+      CandidateToken(candidateId),
+      GroupToken(groupId),
+      trancheIndex.ToString(CultureInfo.InvariantCulture),
+      volume.ToString(CultureInfo.InvariantCulture),
+      string.Join(',', slices),
+      string.Join(',', targets),
+      string.Join(',', ordinals),
+      barTs.ToString(CultureInfo.InvariantCulture)
+    );
+    if (comment.Length > 100)
+    {
+      throw new VolumePlanningException(
+        $"tranche comment is {comment.Length} chars; cTrader maximum is 100"
+      );
+    }
+    return comment;
+  }
+
+  private static string BuildZoneComment(
+    string candidateId,
+    string groupId,
+    ZoneFillLegPlan leg,
+    long barTs
+  )
+  {
+    var comment = string.Join(
+      '|',
+      "avz",
+      CandidateToken(candidateId),
+      GroupToken(groupId),
+      leg.Leg.ToString(CultureInfo.InvariantCulture),
+      leg.Volume.ToString(CultureInfo.InvariantCulture),
+      string.Join(',', leg.TargetPlan.Slices),
+      string.Join(',', leg.TargetPlan.TargetsPips),
+      string.Join(',', leg.TargetPlan.TargetOrdinals),
+      barTs.ToString(CultureInfo.InvariantCulture)
+    );
+    if (comment.Length > 100)
+    {
+      throw new VolumePlanningException(
+        $"zone-fill comment is {comment.Length} chars; cTrader maximum is 100"
+      );
+    }
+    return comment;
+  }
 
   private static AutoTradePositionState? ParseComment(TradingPosition position)
   {
     var parts = position.Comment.Split('|');
+    var version3 = parts.Length > 0 && parts[0] == "av3";
+    var zoneVersion = parts.Length > 0 && parts[0] == "avz";
     if (
       !(
         (parts[0] == "av1" && parts.Length == 5)
         || (parts[0] == "av2" && parts.Length == 6)
+        || ((version3 || zoneVersion) && parts.Length == 9)
       )
-      || !long.TryParse(parts[2], CultureInfo.InvariantCulture, out var initial)
     )
     {
       return null;
     }
     try
     {
-      var slices = parts[3].Split(',')
+      var currentVersion = version3 || zoneVersion;
+      var initialIndex = currentVersion ? 4 : 2;
+      var slicesIndex = currentVersion ? 5 : 3;
+      var targetsIndex = currentVersion ? 6 : 4;
+      var ordinalsIndex = currentVersion ? 7 : 5;
+      var initial = long.Parse(parts[initialIndex], CultureInfo.InvariantCulture);
+      var slices = parts[slicesIndex].Split(',')
         .Select(value => long.Parse(value, CultureInfo.InvariantCulture))
         .ToArray();
-      var targets = parts[4].Split(',')
+      var targets = parts[targetsIndex].Split(',')
         .Select(value => int.Parse(value, CultureInfo.InvariantCulture))
         .ToArray();
-      var ordinals = parts.Length == 6
-        ? parts[5].Split(',')
+      var ordinals = parts[0] != "av1"
+        ? parts[ordinalsIndex].Split(',')
           .Select(value => int.Parse(value, CultureInfo.InvariantCulture))
           .ToArray()
         : Enumerable.Range(1, targets.Length).ToArray();
+      var groupId = currentVersion ? parts[2] : GroupToken(parts[1]);
+      var trancheIndex = version3
+        ? int.Parse(parts[3], CultureInfo.InvariantCulture)
+        : 1;
+      var zoneLeg = zoneVersion
+        ? int.Parse(parts[3], CultureInfo.InvariantCulture)
+        : 0;
+      var barTs = currentVersion
+        ? long.Parse(parts[8], CultureInfo.InvariantCulture)
+        : 0;
       if (
         slices.Length == 0
         || slices.Length != targets.Length
@@ -931,7 +1863,17 @@ public sealed class AutoTradeEngine(
         Math.Min(next, targets.Length),
         0,
         position.StopLoss,
-        ordinals
+        ordinals,
+        groupId,
+        trancheIndex,
+        GroupOpenedAt: trancheIndex == 1 ? barTs : 0,
+        LastTrancheBarTs: barTs,
+        GroupTrancheCount: trancheIndex,
+        HadAdds: trancheIndex > 1,
+        InitialStopLoss: position.StopLoss,
+        ZoneLeg: zoneLeg,
+        GroupInitialVolume: initial,
+        InitialTrancheVolume: trancheIndex == 1 ? initial : 0
       );
     }
     catch (FormatException)
@@ -940,11 +1882,33 @@ public sealed class AutoTradeEngine(
     }
   }
 
+  private static (int Leg, long BarTs, string GroupId)? ParseZoneComment(
+    string comment
+  )
+  {
+    var parts = comment.Split('|');
+    if (
+      parts.Length != 9
+      || parts[0] != "avz"
+      || !int.TryParse(parts[3], NumberStyles.Integer, CultureInfo.InvariantCulture, out var leg)
+      || !long.TryParse(parts[8], NumberStyles.Integer, CultureInfo.InvariantCulture, out var barTs)
+      || leg is not (1 or 2)
+      || barTs <= 0
+    )
+    {
+      return null;
+    }
+    return (leg, barTs, parts[2]);
+  }
+
   private static string ClientOrderId(string candidateId) =>
     $"av-{candidateId[..Math.Min(40, candidateId.Length)]}";
 
   private static string CandidateToken(string candidateId) =>
-    candidateId[..Math.Min(24, candidateId.Length)];
+    candidateId[..Math.Min(10, candidateId.Length)];
+
+  private static string GroupToken(string groupId) =>
+    groupId[..Math.Min(10, groupId.Length)];
 
   private static string Short(string candidateId) =>
     candidateId[..Math.Min(12, candidateId.Length)];
