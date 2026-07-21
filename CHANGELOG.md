@@ -124,11 +124,13 @@ dated section after deployment.
   cTrader session, not just a feed). Directory names, the compose service
   key, and CI build contexts moved.
 - Renamed the published `apexvoid-ctrader-feed` Docker Hub image/container to
-  `apexvoid-ctrader-engine` to match. **Operator note:** the next deploy
-  creates a new `apexvoid-ctrader-engine` container; the old
-  `apexvoid-ctrader-feed` container is not automatically removed on the VPS
-  and needs a manual `docker rm`/cleanup pass. Double-check `ansible-library`
-  for any other reference to the old image/container name before deploying.
+  `apexvoid-ctrader-engine` to match. The next deploy's `docker compose up
+  --remove-orphans` (run by `ansible-library`'s `deploy_image` role) removes
+  the old `apexvoid-ctrader-feed` container automatically since the compose
+  project name is unchanged and only the service key moved — no manual VPS
+  cleanup needed. `ansible-library`/`action-library` were checked: both are
+  fully parameterized by this repo's own templates and needed no changes,
+  aside from a stale `ctrader-feed` mention in a comment.
   `apexvoid-trading-bot` (the Telegram bot image) is unchanged.
 
 ### Fixed
