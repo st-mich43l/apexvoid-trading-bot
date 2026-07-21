@@ -260,8 +260,9 @@ public sealed class AutoTradeEngine(
       && candidate.Setup == "Auto Range Scalp"
       && candidate.Mode == "auto_range_scalp";
     var boxRangeScalp = IsBoxRangeScalp(candidate);
+    var trendCandidate = IsTrendCandidate(candidate);
     if (
-      (!legacyRangeScalp && !boxRangeScalp)
+      (!legacyRangeScalp && !boxRangeScalp && !trendCandidate)
       || candidate.Confluence < options.MinConfluence
       || !string.Equals(
         candidate.Symbol,
@@ -297,6 +298,22 @@ public sealed class AutoTradeEngine(
       return await RejectAsync(
         candidate,
         "invalid range-box contract",
+        cancellationToken
+      );
+    }
+    if (
+      trendCandidate
+      && (
+        candidate.TargetsPips is not { Count: > 0 } targetsPips
+        || targetsPips.Any(pips => pips <= 0)
+        || candidate.Atr is not decimal trendAtr || trendAtr <= 0
+        || candidate.StructureSwing is not decimal trendSwing || trendSwing <= 0
+      )
+    )
+    {
+      return await RejectAsync(
+        candidate,
+        "invalid trend candidate contract",
         cancellationToken
       );
     }
@@ -475,12 +492,16 @@ public sealed class AutoTradeEngine(
       );
     }
     InitialSizingResult sizing;
-    IReadOnlyList<int> targetPips = IsBoxRangeScalp(candidate)
-      ? [candidate.FullTakeProfitPips!.Value]
-      : options.TargetsPips;
-    IReadOnlyList<int> targetWeights = IsBoxRangeScalp(candidate)
-      ? [100]
-      : options.TargetWeights;
+    IReadOnlyList<int> targetPips = IsTrendCandidate(candidate)
+      ? candidate.TargetsPips!
+      : IsBoxRangeScalp(candidate)
+        ? [candidate.FullTakeProfitPips!.Value]
+        : options.TargetsPips;
+    IReadOnlyList<int> targetWeights = IsTrendCandidate(candidate)
+      ? EqualWeights(candidate.TargetsPips!.Count)
+      : IsBoxRangeScalp(candidate)
+        ? [100]
+        : options.TargetWeights;
     try
     {
       sizing = VolumePlanner.SizeInitial(
@@ -772,6 +793,14 @@ public sealed class AutoTradeEngine(
     CancellationToken cancellationToken
   )
   {
+    if (!string.Equals(candidate.Regime, "trend", StringComparison.OrdinalIgnoreCase))
+    {
+      return await RejectAsync(
+        candidate,
+        "scale-in adds are restricted to the trend regime",
+        cancellationToken
+      );
+    }
     var triggerFailure = ValidateAddTriggers(
       candidate,
       direction,
@@ -1009,16 +1038,21 @@ public sealed class AutoTradeEngine(
         "structure context unavailable on candidate"
       );
     }
-    var maximumStopPips = decimal.ToInt32(decimal.Floor(
-      options.StopLossDistance / VolumePlanner.PipSize(symbol)
-    ));
+    var (minimumStopPips, maximumStopPips) = IsTrendCandidate(candidate)
+      ? (options.TrendStopMinPips, options.TrendStopMaxPips)
+      : (
+        options.AddMinStopPips,
+        decimal.ToInt32(decimal.Floor(
+          options.StopLossDistance / VolumePlanner.PipSize(symbol)
+        ))
+      );
     return StructureStopPlanner.Plan(
       direction,
       entryPrice,
       swing,
       atr,
       options.AddStopBufferAtr,
-      options.AddMinStopPips,
+      minimumStopPips,
       maximumStopPips,
       symbol
     );
@@ -1770,6 +1804,30 @@ public sealed class AutoTradeEngine(
     && candidate.Timeframe.Equals("M1", StringComparison.OrdinalIgnoreCase)
     && candidate.Setup == "Range Box Scalp"
     && candidate.Mode == "auto_box_scalp";
+
+  private static bool IsTrendCandidate(TradeCandidate candidate) =>
+    candidate.Version == 3
+    && candidate.Timeframe.Equals("M1", StringComparison.OrdinalIgnoreCase)
+    && candidate.Mode is "auto_trend_pullback" or "auto_trend_breakout"
+      or "auto_box_breakout";
+
+  private static IReadOnlyList<int> EqualWeights(int count)
+  {
+    if (count <= 0)
+    {
+      throw new VolumePlanningException(
+        "Cannot build target weights for zero targets"
+      );
+    }
+    var baseWeight = 100 / count;
+    var remainder = 100 - baseWeight * count;
+    var weights = new int[count];
+    for (var index = 0; index < count; index++)
+    {
+      weights[index] = baseWeight + (index == count - 1 ? remainder : 0);
+    }
+    return weights;
+  }
 
   private static decimal TargetPrice(
     AutoTradePositionState state,
