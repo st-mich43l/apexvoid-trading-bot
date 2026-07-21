@@ -81,7 +81,7 @@ services:
       AUTO_TRADE_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_ENABLED | default('false') | string | to_json }}
       AUTO_TRADE_DRY_RUN: {{ apexvoid_trading_bot_env.AUTO_TRADE_DRY_RUN | default('true') | string | to_json }}
       AUTO_TRADE_REQUIRE_DEMO_ONLY_TOKEN: {{ apexvoid_trading_bot_env.AUTO_TRADE_REQUIRE_DEMO_ONLY_TOKEN | default('false') | string | to_json }}
-      AUTO_TRADE_EXPECTED_BROKER: {{ apexvoid_trading_bot_env.AUTO_TRADE_EXPECTED_BROKER | default('Fusion') | string | to_json }}
+      AUTO_TRADE_EXPECTED_BROKER: {{ apexvoid_trading_bot_env.AUTO_TRADE_EXPECTED_BROKER | default('fpmarkets') | string | to_json }}
       AUTO_TRADE_SL_DISTANCE: {{ apexvoid_trading_bot_env.AUTO_TRADE_SL_DISTANCE | default('6.5') | string | to_json }}
       AUTO_TRADE_TP_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_TP_PIPS | default('30,60,90,120,200') | string | to_json }}
       AUTO_TRADE_TP_WEIGHTS: {{ apexvoid_trading_bot_env.AUTO_TRADE_TP_WEIGHTS | default('20,20,20,20,20') | string | to_json }}

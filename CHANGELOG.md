@@ -75,6 +75,11 @@ dated section after deployment.
 
 ### Changed
 
+- Switched the demo auto-trade account from Fusion Markets to FP Markets;
+  `AUTO_TRADE_EXPECTED_BROKER` default moved from `Fusion` to `fpmarkets`
+  (matches the `fpmarketssc` broker string cTrader reports). Credentials
+  rotated in the deploy vault, not in this repo. Also switched the
+  `/auto_status` and event-card icon from ⚡ to 🤖 for ApexVoid Algo.
 - Range-box candidates now require flat XAU exposure, bypass scale-in and
   planned zone-fill, and use one broker-valid 100% target; legacy executor
   target plans remain unchanged.
