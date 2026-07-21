@@ -66,7 +66,7 @@ The bot talks to Telegram over **outbound long-polling only**, meaning it requir
 - DM one or more chart screenshots and the bot will run a structured **Smart Money Concepts (SMC)** analysis via **Claude Vision**, automatically drafting the setup to the channel.
 - **Multi-Timeframe Aware** ⏱️ — Send several charts; it uses higher TFs for directional bias and lower TFs for entry precision.
 
-### ⚡ ApexVoid Algo (demo)
+### 🤖 ApexVoid Algo (demo)
 - ApexVoid Algo has a private gate and Redis subscriber, independent of
   forming signals, scanner detectors, Market Map output, and Telegram alerts.
 - It builds a 60-bar M1 auction box only after repeated reactions at both
