@@ -192,6 +192,41 @@ public sealed class ReconnectTests
   }
 
   [Fact]
+  public async Task RefreshFailureCancelsSessionAndReconnects()
+  {
+    using var temp = new TempHeartbeat();
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+    var first = new FakeCTraderClient
+    {
+      RefreshException = new InvalidOperationException(
+        "Trading account is not authorized"
+      ),
+    };
+    var second = new FakeCTraderClient
+    {
+      CancelOnLiveStart = () => cts.Cancel(),
+    };
+    var clients = new Queue<FakeCTraderClient>([first, second]);
+    var runner = new FeedRunner(
+      TestOptions(temp.Path) with
+      {
+        TokenRefreshInterval = TimeSpan.FromMilliseconds(10),
+      },
+      () => clients.Dequeue(),
+      new RecordingSink(),
+      new HealthFile(temp.Path),
+      _ => TimeSpan.Zero
+    );
+
+    await Assert.ThrowsAnyAsync<OperationCanceledException>(
+      () => runner.RunForeverAsync(cts.Token)
+    );
+
+    Assert.Equal(1, first.RefreshCount);
+    Assert.Equal(1, second.AuthCount);
+  }
+
+  [Fact]
   public async Task StrictLiveGrantDisablesAutoTradeWhileFeedKeepsStreaming()
   {
     using var temp = new TempHeartbeat();
@@ -308,6 +343,8 @@ internal sealed class FakeCTraderClient : ICTraderFeedClient, ICTraderTradeClien
   public IReadOnlyList<TradingAccountGrant> Grants { get; init; } = [new(123, false)];
   public Exception? TradingAccountException { get; init; }
   public int TradingAccountRequests { get; private set; }
+  public Exception? RefreshException { get; init; }
+  public int RefreshCount { get; private set; }
 
   public Task ConnectAndAuthorizeAsync(CancellationToken cancellationToken)
   {
@@ -315,8 +352,13 @@ internal sealed class FakeCTraderClient : ICTraderFeedClient, ICTraderTradeClien
     return Task.CompletedTask;
   }
 
-  public Task RefreshTokenAsync(CancellationToken cancellationToken) =>
-    Task.CompletedTask;
+  public Task RefreshTokenAsync(CancellationToken cancellationToken)
+  {
+    RefreshCount++;
+    return RefreshException is null
+      ? Task.CompletedTask
+      : Task.FromException(RefreshException);
+  }
 
   public Task<SymbolInfo> ResolveSymbolAsync(CancellationToken cancellationToken)
   {

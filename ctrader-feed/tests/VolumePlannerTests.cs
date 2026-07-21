@@ -43,6 +43,31 @@ public sealed class VolumePlannerTests
     );
   }
 
+  [Theory]
+  [InlineData(25, 0.16, "risk-bound")]
+  [InlineData(15, 0.21, "equity-table-bound")]
+  public void InitialSizeUsesMinimumOfRiskAndEquityTable(
+    double stopPips,
+    double expectedLots,
+    string expectedBinding
+  )
+  {
+    var result = VolumePlanner.SizeInitial(
+      balance: 2_000m,
+      riskPercent: 2m,
+      stopPips: Convert.ToDecimal(stopPips),
+      pipValuePerLot: 10m,
+      Symbol,
+      [30, 60, 90, 120, 200],
+      [20, 20, 20, 20, 20]
+    );
+
+    Assert.Equal(Convert.ToDecimal(expectedLots), result.Lots);
+    Assert.Equal(expectedBinding, result.BindingTerm);
+    Assert.True(result.Lots <= result.TableLots);
+    Assert.True(result.Lots * result.StopPips * 10m <= result.Budget);
+  }
+
   [Fact]
   public void ConvertsLotsToBrokerVolume()
   {

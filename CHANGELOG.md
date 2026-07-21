@@ -13,6 +13,12 @@ dated section after deployment.
 
 ### Added
 
+- Added momentum scale-in as independent, structure-stopped tranche positions
+  under balance-based group loss, exposure, add-risk, and ladder invariants;
+  averaging down is explicitly refused by design.
+- Added planned two-limit zone fill (disabled by default), tranche/group tags,
+  restart-safe multi-position reconciliation, binding-term telemetry,
+  with-adds vs no-adds stats, and `AUTO_TRADE_ADD_REQUIRE_RISK_FREE`.
 - Added weighted largest-remainder target splitting, broker-valid adaptive
   target plans for `0.02-0.04` lots, persisted TP ordinals, a monotonic stop
   ladder, and explicit target-weight and break-even-buffer controls.
@@ -63,6 +69,9 @@ dated section after deployment.
 
 ### Changed
 
+- Initial and add sizing now use `min(risk-based, equity-table)` from realised
+  balance; the single-position guard is now a lifetime tranche-count limit,
+  and initial/add stops share the same 15-65 pip structure-stop planner.
 - Auto-trade trailing now holds the existing stop after TP2, moves it to TP1
   only after TP3, and moves it to TP2 after TP4 so the runner is not tightened
   one target too early.
@@ -96,6 +105,16 @@ dated section after deployment.
 
 ### Fixed
 
+- cTrader token rotation now re-authorizes the configured trading account with
+  the new access token before releasing the request lock; reconcile retries one
+  lost-account-auth response, and refresh failures force a clean feed reconnect.
+- Auto-trade session cleanup is now serialized with spot processing so a queued
+  tick cannot race `_client` teardown and emit a secondary "session is not
+  connected" fault.
+- Fixed scale-in sizing that ignored the equity-table exposure ceiling and a
+  worst-case rule that blocked valid adds; banked profit and trailed stops now
+  contribute to a hard group loss-ceiling headroom without using floating
+  equity.
 - Cached cTrader refresh tokens no longer shadow a newly authorized `.env`
   token, which previously preserved stale account grants across restarts.
 - Auto-trade startup and spot-processing faults no longer cancel the shared

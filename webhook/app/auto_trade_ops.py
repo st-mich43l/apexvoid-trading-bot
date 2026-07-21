@@ -14,13 +14,18 @@ log = logging.getLogger(__name__)
 
 _CURSOR_KEY = "auto_trade:telegram_event_cursor"
 _PAUSED_KEY = "auto_trade:paused"
+_STATS_KEY = "auto_trade:stats"
 _NOTIFY_TYPES = {
   "ready",
   "dry_run",
   "opened",
+  "add",
+  "zone_planned",
+  "zone_expired",
   "take_profit",
   "stop_moved",
   "position_closed",
+  "group_result",
   "warning",
   "error",
 }
@@ -34,9 +39,13 @@ def render_auto_trade_event(event: dict) -> str | None:
     "ready": "🤖 <b>Auto Trader ready</b>",
     "dry_run": "🧪 <b>Auto Trader dry run</b>",
     "opened": "🟢 <b>Auto trade opened</b>",
+    "add": "➕ <b>Auto trade scale-in</b>",
+    "zone_planned": "📐 <b>Auto zone fill planned</b>",
+    "zone_expired": "⌛ <b>Auto zone leg expired</b>",
     "take_profit": "💰 <b>Auto trade partial TP</b>",
     "stop_moved": "🛡 <b>Auto trade stop moved</b>",
     "position_closed": "🛑 <b>Auto position closed</b>",
+    "group_result": "📊 <b>Auto trade group result</b>",
     "warning": "⚠️ <b>Auto Trader warning</b>",
     "error": "⚠️ <b>Auto Trader error</b>",
   }
@@ -55,6 +64,14 @@ async def auto_trade_status_text() -> str:
   position_count = 0
   async for _ in client.scan_iter(match="auto_trade:position:*"):
     position_count += 1
+  raw_stats = await client.hgetall(_STATS_KEY)
+  stats = {
+    str(key): str(value)
+    for key, value in raw_stats.items()
+  }
+  group_count = int(float(stats.get("groups", "0")))
+  with_adds = int(float(stats.get("with_adds", "0")))
+  without_adds = int(float(stats.get("without_adds", "0")))
   mode = (
     "disabled"
     if not settings.auto_trade_enabled
@@ -89,8 +106,56 @@ async def auto_trade_status_text() -> str:
     f"Mode: <b>{escape(mode)}</b> · State: <b>{state}</b>\n"
     f"Open positions: <b>{position_count}</b>\n"
     f"Trades today: <b>{daily}/{settings.auto_trade_max_daily_trades}</b>"
+    f"\nMeasured groups: <b>{group_count}</b> · adds "
+    f"<b>{with_adds}</b> · no adds <b>{without_adds}</b>"
     f"{gate_line}"
   )
+
+
+async def _record_group_result(client, event: dict) -> None:
+  if event.get("type") != "group_result":
+    return
+  group_id = str(event.get("group_id") or "").strip()
+  if not group_id:
+    return
+  claimed = await client.set(
+    f"auto_trade:stats:group:{group_id}",
+    "1",
+    nx=True,
+  )
+  if not claimed:
+    return
+  had_adds = bool(event.get("had_adds"))
+  realized = float(event.get("group_realized_pnl") or 0)
+  counterfactual = float(event.get("counterfactual_pnl") or 0)
+  realized_pips = float(event.get("group_realized_pips") or 0)
+  counterfactual_pips = float(event.get("counterfactual_pips") or 0)
+  await client.hincrby(_STATS_KEY, "groups", 1)
+  await client.hincrby(
+    _STATS_KEY,
+    "with_adds" if had_adds else "without_adds",
+    1,
+  )
+  await client.hincrbyfloat(_STATS_KEY, "realized_pnl", realized)
+  await client.hincrbyfloat(_STATS_KEY, "realized_pips", realized_pips)
+  if had_adds:
+    await client.hincrbyfloat(
+      _STATS_KEY,
+      "counterfactual_pnl",
+      counterfactual,
+    )
+    await client.hincrbyfloat(
+      _STATS_KEY,
+      "counterfactual_pips",
+      counterfactual_pips,
+    )
+    delta = realized - counterfactual
+    await client.hincrbyfloat(_STATS_KEY, "add_delta_pnl", delta)
+    await client.hincrby(
+      _STATS_KEY,
+      "adds_improved" if delta > 0 else "adds_degraded",
+      1,
+    )
 
 
 async def set_auto_trade_paused(paused: bool) -> None:
@@ -131,6 +196,7 @@ async def auto_trade_events_loop() -> None:
           except (KeyError, TypeError, json.JSONDecodeError) as exc:
             log.warning("Invalid auto-trade event %s: %s", entry_id, exc)
             continue
+          await _record_group_result(client, event)
           text = render_auto_trade_event(event)
           if text:
             await send_scanner_with_retry(
