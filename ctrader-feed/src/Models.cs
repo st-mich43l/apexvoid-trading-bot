@@ -63,8 +63,7 @@ public sealed record TradingAccountSnapshot(
   string AccessRights,
   string AccountType,
   string BrokerName,
-  decimal Balance,
-  string DepositAsset = "USD"
+  decimal Balance
 );
 
 public sealed record TradingAccountGrant(long AccountId, bool IsLive);
@@ -138,7 +137,8 @@ public sealed record AutoTradePositionState(
   IReadOnlyList<int> TargetsPips,
   int NextTargetIndex,
   long OpenedAt,
-  decimal? CurrentStopLoss = null
+  decimal? CurrentStopLoss = null,
+  IReadOnlyList<int>? TargetOrdinals = null
 );
 
 public sealed record AutoTradeEvent(

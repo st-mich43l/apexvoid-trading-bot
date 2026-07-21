@@ -57,7 +57,6 @@ public sealed class AutoTradeEngine(
         );
       }
       var account = await _client.GetTradingAccountAsync(cancellationToken);
-      await ReportDepositAssetWarningAsync(account, cancellationToken);
       ValidateAccount(account);
       await ReconcileAsync(cancellationToken);
       _ready = true;
@@ -68,10 +67,7 @@ public sealed class AutoTradeEngine(
       );
       _log(
         $"auto-trade ready account={account.AccountId} broker={account.BrokerName} "
-        + $"balance={account.Balance:N2} asset={account.DepositAsset} "
-        + $"risk={options.RiskPercent:N1}% "
-        + $"pipValuePerLot=${options.PipValuePerLot:N2} "
-        + $"maxLots={options.MaxLots:N2} dryRun={options.DryRun}"
+        + $"balance={account.Balance:N2} dryRun={options.DryRun}"
       );
 
       var cursor = await store.GetCursorAsync(cancellationToken);
@@ -311,29 +307,31 @@ public sealed class AutoTradeEngine(
 
     var account = await client.GetTradingAccountAsync(cancellationToken);
     ValidateAccount(account);
-    RiskSizingResult sizing;
-    IReadOnlyList<long> slices;
+    var lots = VolumePlanner.LotsForBalance(account.Balance);
+    if (lots <= 0)
+    {
+      return await RejectAsync(
+        candidate,
+        $"balance {account.Balance:N2} is below the $200 sizing floor",
+        cancellationToken
+      );
+    }
+    var volume = VolumePlanner.VolumeForLots(lots, symbol);
+    if (volume <= 0)
+    {
+      return await RejectAsync(
+        candidate,
+        $"{lots:N2} lots is outside broker volume limits",
+        cancellationToken
+      );
+    }
+    TargetVolumePlan targetPlan;
     try
     {
-      sizing = VolumePlanner.SizeForRisk(
-        account.Balance,
-        options.RiskPercent,
-        options.StopLossDistance,
-        options.PipValuePerLot,
-        options.MaxLots,
-        symbol
-      );
-      VolumePlanner.EnsureTargetFeasibility(
-        sizing,
-        account.Balance,
-        options.RiskPercent,
-        options.PipValuePerLot,
-        options.TargetWeights.Count,
-        symbol
-      );
-      slices = VolumePlanner.SplitWeighted(
-        sizing.Volume,
+      targetPlan = VolumePlanner.BuildTargetPlan(
+        volume,
         symbol,
+        options.TargetsPips,
         options.TargetWeights
       );
     }
@@ -341,8 +339,6 @@ public sealed class AutoTradeEngine(
     {
       return await RejectAsync(candidate, exception.Message, cancellationToken);
     }
-    var lots = sizing.Lots;
-    var volume = sizing.Volume;
     SpotPrice quote;
     try
     {
@@ -386,7 +382,13 @@ public sealed class AutoTradeEngine(
       );
     }
 
-    var comment = BuildComment(candidate.CandidateId, volume, slices, options.TargetsPips);
+    var comment = BuildComment(
+      candidate.CandidateId,
+      volume,
+      targetPlan.Slices,
+      targetPlan.TargetsPips,
+      targetPlan.TargetOrdinals
+    );
     var execution = await client.PlaceMarketOrderAsync(
       new MarketOrderRequest(
         symbol.SymbolId,
@@ -419,11 +421,12 @@ public sealed class AutoTradeEngine(
       fill,
       volume,
       volume,
-      slices,
-      options.TargetsPips,
+      targetPlan.Slices,
+      targetPlan.TargetsPips,
       0,
       now,
-      stopLoss
+      stopLoss,
+      targetPlan.TargetOrdinals
     );
     _states[state.PositionId] = state;
     await store.SavePositionAsync(state, cancellationToken);
@@ -499,6 +502,7 @@ public sealed class AutoTradeEngine(
       )
       {
         var completedTargetIndex = state.NextTargetIndex;
+        var targetOrdinal = TargetOrdinal(state, completedTargetIndex);
         var targetPips = state.TargetsPips[state.NextTargetIndex];
         var target = TargetPrice(state, targetPips, symbol);
         var exitQuote = state.Direction == TradeDirection.Buy ? spot.Bid : spot.Ask;
@@ -526,7 +530,7 @@ public sealed class AutoTradeEngine(
         };
         await PublishAsync(
           "take_profit",
-          $"TP{state.NextTargetIndex} +{targetPips} pips closed volume {closeVolume}",
+          $"TP{targetOrdinal} +{targetPips} pips closed volume {closeVolume}",
           cancellationToken,
           state.CandidateId,
           state.PositionId,
@@ -543,6 +547,7 @@ public sealed class AutoTradeEngine(
         state = await MoveStopAfterTargetAsync(
           state,
           completedTargetIndex,
+          targetOrdinal,
           symbol,
           cancellationToken
         );
@@ -555,6 +560,7 @@ public sealed class AutoTradeEngine(
   private async Task<AutoTradePositionState> MoveStopAfterTargetAsync(
     AutoTradePositionState state,
     int completedTargetIndex,
+    int targetOrdinal,
     SymbolInfo symbol,
     CancellationToken cancellationToken
   )
@@ -584,7 +590,7 @@ public sealed class AutoTradeEngine(
     catch (Exception exception)
     {
       var errorMessage = $"position {state.PositionId} stop amend after "
-        + $"TP{completedTargetIndex + 1} failed: {exception.Message}";
+        + $"TP{targetOrdinal} failed: {exception.Message}";
       _log($"auto-trade {errorMessage}");
       try
       {
@@ -720,16 +726,6 @@ public sealed class AutoTradeEngine(
         + options.ExpectedBroker
       );
     }
-    if (
-      options.RequireUsdAccount
-      && !account.DepositAsset.Equals("USD", StringComparison.OrdinalIgnoreCase)
-    )
-    {
-      throw new AutoTradeConfigurationException(
-        $"Auto trade disabled: account deposit asset is {account.DepositAsset}; "
-        + "AUTO_TRADE_REQUIRE_USD_ACCOUNT requires USD"
-      );
-    }
   }
 
   private async Task ReportLiveGrantsAsync(
@@ -751,28 +747,6 @@ public sealed class AutoTradeEngine(
       _log(message);
       await PublishAsync("warning", message, cancellationToken);
     }
-  }
-
-  private async Task ReportDepositAssetWarningAsync(
-    TradingAccountSnapshot account,
-    CancellationToken cancellationToken
-  )
-  {
-    if (account.DepositAsset.Equals("USD", StringComparison.OrdinalIgnoreCase))
-    {
-      return;
-    }
-    var message = $"account deposit asset {account.DepositAsset} — "
-      + $"pip value ${options.PipValuePerLot:N2} per lot assumes USD";
-    lock (_reportLock)
-    {
-      if (!_reportedWarnings.Add(message))
-      {
-        return;
-      }
-    }
-    _log(message);
-    await PublishAsync("warning", message, cancellationToken);
   }
 
   private async Task<bool> RejectAsync(
@@ -873,26 +847,35 @@ public sealed class AutoTradeEngine(
     ? state.EntryPrice + targetPips * VolumePlanner.PipSize(symbol)
     : state.EntryPrice - targetPips * VolumePlanner.PipSize(symbol);
 
+  private static int TargetOrdinal(AutoTradePositionState state, int index) =>
+    state.TargetOrdinals is { } ordinals && index < ordinals.Count
+      ? ordinals[index]
+      : index + 1;
+
   private static string BuildComment(
     string candidateId,
     long volume,
     IReadOnlyList<long> slices,
-    IReadOnlyList<int> targets
+    IReadOnlyList<int> targets,
+    IReadOnlyList<int> ordinals
   ) => string.Join(
     '|',
-    "av1",
+    "av2",
     CandidateToken(candidateId),
     volume.ToString(CultureInfo.InvariantCulture),
     string.Join(',', slices),
-    string.Join(',', targets)
+    string.Join(',', targets),
+    string.Join(',', ordinals)
   );
 
   private static AutoTradePositionState? ParseComment(TradingPosition position)
   {
     var parts = position.Comment.Split('|');
     if (
-      parts.Length != 5
-      || parts[0] != "av1"
+      !(
+        (parts[0] == "av1" && parts.Length == 5)
+        || (parts[0] == "av2" && parts.Length == 6)
+      )
       || !long.TryParse(parts[2], CultureInfo.InvariantCulture, out var initial)
     )
     {
@@ -906,11 +889,19 @@ public sealed class AutoTradeEngine(
       var targets = parts[4].Split(',')
         .Select(value => int.Parse(value, CultureInfo.InvariantCulture))
         .ToArray();
+      var ordinals = parts.Length == 6
+        ? parts[5].Split(',')
+          .Select(value => int.Parse(value, CultureInfo.InvariantCulture))
+          .ToArray()
+        : Enumerable.Range(1, targets.Length).ToArray();
       if (
         slices.Length == 0
         || slices.Length != targets.Length
+        || ordinals.Length != targets.Length
         || slices.Any(value => value <= 0)
         || targets.Any(value => value <= 0)
+        || ordinals.Any(value => value <= 0)
+        || !ordinals.SequenceEqual(ordinals.Order())
       )
       {
         return null;
@@ -939,7 +930,8 @@ public sealed class AutoTradeEngine(
         targets,
         Math.Min(next, targets.Length),
         0,
-        position.StopLoss
+        position.StopLoss,
+        ordinals
       );
     }
     catch (FormatException)

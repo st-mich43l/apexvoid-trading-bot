@@ -57,10 +57,6 @@ AUTO_TRADE_REQUIRE_DEMO_ONLY_TOKEN=false
 AUTO_TRADE_SYMBOLS=XAU
 AUTO_TRADE_EXPECTED_BROKER=Fusion
 AUTO_TRADE_SL_DISTANCE=6.5
-AUTO_TRADE_RISK_PCT=2.0
-AUTO_TRADE_PIP_VALUE_PER_LOT=10.0
-AUTO_TRADE_MAX_LOTS=1.0
-AUTO_TRADE_REQUIRE_USD_ACCOUNT=false
 AUTO_TRADE_TP_PIPS=30,60,90,120,200
 AUTO_TRADE_TP_WEIGHTS=20,20,20,20,20
 AUTO_TRADE_BE_BUFFER_PIPS=3
@@ -119,19 +115,19 @@ The executor revalidates candidate age, live quote age, spread, entry distance,
 account identity, and the one-XAU-position limit before placing a market order.
 Telegram is an operator surface, never the execution trigger.
 
-Position size is recomputed per trade from account balance, the fixed stop, and
-`AUTO_TRADE_RISK_PCT` (default `2%`). `AUTO_TRADE_PIP_VALUE_PER_LOT` is an
-explicit USD constant and is never inferred from cTrader's native volume-unit
-encoding. Size is floored to the broker step and capped by both broker maximum
-and `AUTO_TRADE_MAX_LOTS`; plans too small for all five exits are rejected with
-the minimum balance or maximum-stop remedy instead of being oversized.
+Position size is recomputed per trade from account balance using operator bands:
+`$200-$500 -> 0.02-0.05`, `$500-$1,000 -> 0.05-0.11`,
+`$1,000-$2,000 -> 0.11-0.21`, `$2,000-$3,000 -> 0.21-0.31`, and
+`$3,000-$5,000 -> 0.31-0.36` lots. The result is floored to `0.01` lots;
+balances below `$200` are rejected and balances above `$5,000` stay capped at
+`0.36` lots.
 
-The default stop remains `$6.5`, so changing it also changes risk-based position
-size. Five weighted partial closes trigger at `30/60/90/120/200` pips. TP1
-moves the stop to `BE+3`; TP2, TP3, and TP4 trail to the preceding target; TP5
-closes the runner. Existing positions retain the targets and slices encoded in
-their original cTrader comment. Non-USD accounts emit a warning and can be
-refused with `AUTO_TRADE_REQUIRE_USD_ACCOUNT=true`.
+The fixed stop remains `$6.5`. Weighted partial closes use
+`30/60/90/120/200` pips. A `0.02`-lot position exits at TP1 and TP3, `0.03`
+uses TP1-TP3, `0.04` uses TP1-TP4, and positions from `0.05` use all five.
+TP1 moves the stop to `BE+3`; subsequent partials trail to the preceding target.
+Existing positions retain the targets, TP ordinals, and slices encoded in their
+original cTrader comment.
 
 `/auto_pause` blocks new entries and `/auto_resume` releases the block.
 `/auto_status` reports mode, open auto positions, the UTC daily trade count,

@@ -13,10 +13,9 @@ dated section after deployment.
 
 ### Added
 
-- Added weighted largest-remainder target splitting with deterministic
-  five-exit feasibility remedies, a monotonic TP1-to-TP4 stop ladder, USD
-  deposit-asset warnings/strict mode, a maximum-lots cap, and explicit risk,
-  pip-value, target-weight, and break-even-buffer controls.
+- Added weighted largest-remainder target splitting, broker-valid adaptive
+  target plans for `0.02-0.04` lots, persisted TP ordinals, a monotonic stop
+  ladder, and explicit target-weight and break-even-buffer controls.
 - Added fingerprint-based cTrader refresh-token seeding with automatic cache
   reset, the `--reset-token-cache` operator command, live-account grant
   warnings, actionable account-grant remediation, and the optional
@@ -25,8 +24,9 @@ dated section after deployment.
   candidates, with Fusion/Hedged/Trading-scope hard locks, one-position and
   freshness/spread/news/daily-cap gates, restart reconciliation, and durable
   Redis candidate/event contracts.
-- Added balance-tier volume planning (`0.12/0.20/0.30` lots), a server-side
-  `$6.5` stop, and broker-valid partial closes at `30/50/70/90/130` pips.
+- Added operator-defined balance-band volume planning (`0.02-0.36` lots), a
+  server-side `$6.5` stop, and broker-valid partial closes at
+  `30/60/90/120/200` pips.
 - Added owner auto-trade event DMs plus `/auto_status`, `/auto_pause`, and
   `/auto_resume` on both Telegram bots.
 - Added a private auto-scalp worker that consumes only raw cTrader M1/M5/M15
@@ -63,11 +63,10 @@ dated section after deployment.
 
 ### Changed
 
-- Auto-trade position size is now recomputed per trade from account risk
-  (default `2%`) and the fixed stop instead of a balance-to-lots table that
-  risked about `5.9%` on the live demo; the target ladder is now
-  `30/60/90/120/200`. Because sizing uses `AUTO_TRADE_SL_DISTANCE`, changing
-  that fixed stop now also changes position size.
+- Auto-trade position size now follows continuous operator-defined balance
+  bands from `$200 -> 0.02` through `$5,000 -> 0.36`, floored to `0.01` lots.
+  Low-volume plans close `0.02` at TP1/TP3, `0.03` through TP3, and `0.04`
+  through TP4 instead of rejecting every position below five volume steps.
 - Auto-trade configuration failures now disable only the executor for the
   current process, while distinct transient failures may retry on the next feed
   session and all startup faults publish a deduplicated operator event.
@@ -139,10 +138,6 @@ dated section after deployment.
   handle (for example, `4017.xx` now reaches TP `4017`).
 - `watcher`: attach the owner Close/partial-close button to VIP SL-hit alerts
   and book those closes with negative pips instead of TP-style profit pips.
-
-### Removed
-
-- Removed the hardcoded `VolumePlanner.LotsForBalance` balance-tier table.
 
 ## 2026-07-15
 

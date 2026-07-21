@@ -15,7 +15,6 @@ public sealed class CTraderOpenApiFeedClient(
   private readonly Channel<SpotPrice> _liveSpots = Channel.CreateUnbounded<SpotPrice>();
   private readonly SemaphoreSlim _requestLock = new(1, 1);
   private readonly List<IDisposable> _subscriptions = [];
-  private readonly Dictionary<(long AccountId, long AssetId), string> _depositAssets = [];
   private readonly RefreshTokenState _tokens = new(options, refreshTokenStore);
   private readonly object _spotSubscriptionLock = new();
   private OpenClient? _client;
@@ -133,12 +132,7 @@ public sealed class CTraderOpenApiFeedClient(
     );
     var trader = response.Trader
       ?? throw new InvalidOperationException("cTrader account profile is missing");
-    var depositAsset = await GetDepositAssetAsync(
-      options.AccountId,
-      trader.DepositAssetId,
-      cancellationToken
-    );
-    return ToAccountSnapshot(account, accounts.PermissionScope, trader, depositAsset);
+    return ToAccountSnapshot(account, accounts.PermissionScope, trader);
   }
 
   public async Task<IReadOnlyList<TradingAccountGrant>> GetAccountGrantsAsync(
@@ -176,17 +170,7 @@ public sealed class CTraderOpenApiFeedClient(
         ?? throw new InvalidOperationException(
           $"cTrader account profile is missing for {accountId}"
         );
-      var depositAsset = await GetDepositAssetAsync(
-        accountId,
-        trader.DepositAssetId,
-        cancellationToken
-      );
-      snapshots.Add(ToAccountSnapshot(
-        account,
-        accounts.PermissionScope,
-        trader,
-        depositAsset
-      ));
+      snapshots.Add(ToAccountSnapshot(account, accounts.PermissionScope, trader));
     }
     return snapshots;
   }
@@ -194,8 +178,7 @@ public sealed class CTraderOpenApiFeedClient(
   private static TradingAccountSnapshot ToAccountSnapshot(
     ProtoOACtidTraderAccount account,
     ProtoOAClientPermissionScope permissionScope,
-    ProtoOATrader trader,
-    string depositAsset
+    ProtoOATrader trader
   )
   {
     var divisor = 1m;
@@ -210,33 +193,8 @@ public sealed class CTraderOpenApiFeedClient(
       trader.AccessRights.ToString(),
       trader.AccountType.ToString(),
       trader.BrokerName,
-      trader.Balance / divisor,
-      depositAsset
+      trader.Balance / divisor
     );
-  }
-
-  private async Task<string> GetDepositAssetAsync(
-    long accountId,
-    long depositAssetId,
-    CancellationToken cancellationToken
-  )
-  {
-    var key = (accountId, depositAssetId);
-    if (_depositAssets.TryGetValue(key, out var cached))
-    {
-      return cached;
-    }
-    var response = await SendAndWaitAsync<ProtoOAAssetListRes>(
-      new ProtoOAAssetListReq { CtidTraderAccountId = accountId },
-      item => item.CtidTraderAccountId == accountId,
-      cancellationToken
-    );
-    var name = response.Asset.FirstOrDefault(
-      item => item.AssetId == depositAssetId
-    )?.Name
-      ?? $"asset:{depositAssetId}";
-    _depositAssets[key] = name;
-    return name;
   }
 
   private static IReadOnlyList<TradingAccountGrant> ToAccountGrants(

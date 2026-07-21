@@ -1,13 +1,9 @@
-using System.Globalization;
-
 namespace ApexVoid.CTraderFeed;
 
-public sealed record RiskSizingResult(
-  decimal RiskAmount,
-  decimal ComputedLots,
-  decimal Lots,
-  long Volume,
-  decimal StopPips
+public sealed record TargetVolumePlan(
+  IReadOnlyList<long> Slices,
+  IReadOnlyList<int> TargetsPips,
+  IReadOnlyList<int> TargetOrdinals
 );
 
 public sealed class VolumePlanningException(string message)
@@ -15,95 +11,88 @@ public sealed class VolumePlanningException(string message)
 
 public static class VolumePlanner
 {
-  public static RiskSizingResult SizeForRisk(
-    decimal balance,
-    decimal riskPercent,
-    decimal stopDistance,
-    decimal pipValuePerLot,
-    decimal maxLots,
-    SymbolInfo symbol
-  )
+  public static decimal LotsForBalance(decimal balance)
   {
-    ValidateInputs(
-      balance,
-      riskPercent,
-      stopDistance,
-      pipValuePerLot,
-      maxLots,
-      symbol
-    );
-    var stopPips = stopDistance / PipSize(symbol);
-    var riskAmount = balance * (riskPercent / 100m);
-    var computedLots = riskAmount / (stopPips * pipValuePerLot);
-    var brokerMaxLots = (decimal)symbol.MaxVolume / symbol.LotSize;
-    var cappedLots = Math.Min(computedLots, Math.Min(maxLots, brokerMaxLots));
-    var rawVolume = decimal.ToInt64(decimal.Floor(cappedLots * symbol.LotSize));
-    var volume = rawVolume / symbol.StepVolume * symbol.StepVolume;
-    if (volume < symbol.MinVolume)
+    if (balance < 200m)
     {
-      var minimumLots = (decimal)symbol.MinVolume / symbol.LotSize;
-      if (computedLots >= minimumLots)
-      {
-        throw new VolumePlanningException(
-          $"maximum {Number(maxLots)} lots is below the broker minimum "
-          + $"{Number(minimumLots)}"
-        );
-      }
-      throw new VolumePlanningException(
-        $"balance {Money(balance)} × {Number(riskPercent)}% = ${Money(riskAmount)} "
-        + $"over a {Number(stopPips)}-pip stop → {TruncatedLots(computedLots)} lots, "
-        + $"below the {Number(minimumLots)} minimum"
-      );
+      return 0m;
     }
-    return new RiskSizingResult(
-      riskAmount,
-      computedLots,
-      (decimal)volume / symbol.LotSize,
-      volume,
-      stopPips
-    );
+    var rawLots = balance switch
+    {
+      >= 5_000m => 0.36m,
+      >= 3_000m => 0.31m + (balance - 3_000m) * 0.05m / 2_000m,
+      >= 1_000m => 0.11m + (balance - 1_000m) * 0.20m / 2_000m,
+      >= 500m => 0.05m + (balance - 500m) * 0.06m / 500m,
+      _ => 0.02m + (balance - 200m) * 0.03m / 300m,
+    };
+    return decimal.Floor(rawLots * 100m) / 100m;
   }
 
-  public static void EnsureTargetFeasibility(
-    RiskSizingResult sizing,
-    decimal balance,
-    decimal riskPercent,
-    decimal pipValuePerLot,
-    int targetCount,
-    SymbolInfo symbol
+  public static long VolumeForLots(decimal lots, SymbolInfo symbol)
+  {
+    if (
+      lots <= 0
+      || symbol.LotSize <= 0
+      || symbol.MinVolume <= 0
+      || symbol.StepVolume <= 0
+      || symbol.MaxVolume < symbol.MinVolume
+    )
+    {
+      return 0;
+    }
+    var raw = decimal.Floor(lots * symbol.LotSize);
+    if (raw > symbol.MaxVolume)
+    {
+      return 0;
+    }
+    var stepped = decimal.ToInt64(raw) / symbol.StepVolume * symbol.StepVolume;
+    return stepped >= symbol.MinVolume ? stepped : 0;
+  }
+
+  public static TargetVolumePlan BuildTargetPlan(
+    long volume,
+    SymbolInfo symbol,
+    IReadOnlyList<int> targetsPips,
+    IReadOnlyList<int> weights
   )
   {
-    if (targetCount <= 0)
+    if (
+      volume <= 0
+      || symbol.StepVolume <= 0
+      || symbol.MinVolume <= 0
+      || volume % symbol.StepVolume != 0
+    )
     {
-      throw new VolumePlanningException("At least one target is required");
+      throw new VolumePlanningException("Position volume is not broker-step aligned");
     }
-    var availableSteps = sizing.Volume / symbol.StepVolume;
-    var minimumStepsPerTarget = Math.Max(
-      1,
-      (symbol.MinVolume + symbol.StepVolume - 1) / symbol.StepVolume
-    );
-    var requiredSteps = checked(targetCount * minimumStepsPerTarget);
-    if (availableSteps >= requiredSteps)
+    if (
+      targetsPips.Count < 3
+      || weights.Count != targetsPips.Count
+      || targetsPips.Any(target => target <= 0)
+      || weights.Any(weight => weight <= 0)
+    )
     {
-      return;
+      throw new VolumePlanningException("Target plan configuration is invalid");
     }
-    var requiredLots = (decimal)(requiredSteps * symbol.StepVolume) / symbol.LotSize;
-    var requiredBalance = requiredLots * sizing.StopPips * pipValuePerLot
-      / (riskPercent / 100m);
-    var maximumStopPips = balance * (riskPercent / 100m)
-      / (requiredLots * pipValuePerLot);
-    var remedyStop = maximumStopPips >= 10m
-      ? decimal.Floor(maximumStopPips / 10m) * 10m
-      : decimal.Floor(maximumStopPips);
-    var stopRemedy = remedyStop > 0
-      ? $" (or a stop ≤ {Number(remedyStop)} pips at the current balance)"
-      : string.Empty;
-    throw new VolumePlanningException(
-      $"{Number(sizing.Lots)} lots = {availableSteps} steps; "
-      + $"{targetCount} targets need {requiredSteps}. At {Number(riskPercent)}% risk "
-      + $"with a {Number(sizing.StopPips)}-pip stop this needs balance ≥ "
-      + $"${decimal.Ceiling(requiredBalance).ToString("N0", CultureInfo.InvariantCulture)}"
-      + stopRemedy
+    var minimumSteps = MinimumStepsPerClose(symbol);
+    var totalSteps = volume / symbol.StepVolume;
+    var availableExits = totalSteps / minimumSteps;
+    if (availableExits < 2)
+    {
+      throw new VolumePlanningException(
+        "Configured volume cannot support the minimum two broker-valid exits"
+      );
+    }
+    var selectedCount = (int)Math.Min(availableExits, targetsPips.Count);
+    var indices = selectedCount == 2
+      ? new[] { 0, 2 }
+      : Enumerable.Range(0, selectedCount).ToArray();
+    var selectedTargets = indices.Select(index => targetsPips[index]).ToArray();
+    var selectedWeights = indices.Select(index => weights[index]).ToArray();
+    return new TargetVolumePlan(
+      SplitWeighted(volume, symbol, selectedWeights),
+      selectedTargets,
+      indices.Select(index => index + 1).ToArray()
     );
   }
 
@@ -128,10 +117,7 @@ public static class VolumePlanner
     }
     var totalWeight = weights.Sum();
     var totalSteps = volume / symbol.StepVolume;
-    var minimumSteps = Math.Max(
-      1,
-      (symbol.MinVolume + symbol.StepVolume - 1) / symbol.StepVolume
-    );
+    var minimumSteps = MinimumStepsPerClose(symbol);
     var requiredSteps = checked(minimumSteps * weights.Count);
     if (totalSteps < requiredSteps)
     {
@@ -173,41 +159,8 @@ public static class VolumePlanner
     return 1m / divisor;
   }
 
-  private static void ValidateInputs(
-    decimal balance,
-    decimal riskPercent,
-    decimal stopDistance,
-    decimal pipValuePerLot,
-    decimal maxLots,
-    SymbolInfo symbol
-  )
-  {
-    if (balance <= 0 || riskPercent <= 0 || stopDistance <= 0)
-    {
-      throw new VolumePlanningException("Risk sizing inputs must be positive");
-    }
-    if (pipValuePerLot <= 0 || maxLots <= 0)
-    {
-      throw new VolumePlanningException("Pip value and maximum lots must be positive");
-    }
-    if (
-      symbol.LotSize <= 0
-      || symbol.MinVolume <= 0
-      || symbol.StepVolume <= 0
-      || symbol.MaxVolume < symbol.MinVolume
-    )
-    {
-      throw new VolumePlanningException("Broker symbol volume metadata is invalid");
-    }
-  }
-
-  private static string Money(decimal value) =>
-    value.ToString("N2", CultureInfo.InvariantCulture);
-
-  private static string Number(decimal value) =>
-    value.ToString("0.##", CultureInfo.InvariantCulture);
-
-  private static string TruncatedLots(decimal value) =>
-    (decimal.Floor(value * 1_000m) / 1_000m)
-      .ToString("0.000", CultureInfo.InvariantCulture);
+  private static long MinimumStepsPerClose(SymbolInfo symbol) => Math.Max(
+    1,
+    (symbol.MinVolume + symbol.StepVolume - 1) / symbol.StepVolume
+  );
 }
