@@ -49,8 +49,8 @@ services:
 
   ctrader-engine:
     build: ./ctrader-engine
-    image: apexvoid-ctrader-feed:latest
-    container_name: apexvoid-ctrader-feed
+    image: apexvoid-ctrader-engine:latest
+    container_name: apexvoid-ctrader-engine
     restart: unless-stopped
     env_file: .env
     depends_on:

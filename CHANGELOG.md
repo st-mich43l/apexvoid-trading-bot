@@ -122,9 +122,14 @@ dated section after deployment.
   bot moved to long-polling) and `ctrader-feed/` to `ctrader-engine/` (it has
   always run both the market-data feed and demo auto-trade execution off one
   cTrader session, not just a feed). Directory names, the compose service
-  key, and CI build contexts moved; the published Docker Hub image names
-  (`apexvoid-trading-bot`, `apexvoid-ctrader-feed`) are unchanged so the
-  existing deploy pipeline keeps working without coordination.
+  key, and CI build contexts moved.
+- Renamed the published `apexvoid-ctrader-feed` Docker Hub image/container to
+  `apexvoid-ctrader-engine` to match. **Operator note:** the next deploy
+  creates a new `apexvoid-ctrader-engine` container; the old
+  `apexvoid-ctrader-feed` container is not automatically removed on the VPS
+  and needs a manual `docker rm`/cleanup pass. Double-check `ansible-library`
+  for any other reference to the old image/container name before deploying.
+  `apexvoid-trading-bot` (the Telegram bot image) is unchanged.
 
 ### Fixed
 
