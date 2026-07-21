@@ -149,8 +149,8 @@ apexvoid-trading-bot/
 ├── .env.example              🔑 env template
 ├── README.md                 📖 this file
 ├── docs/                     📚 detailed documentation
-├── ctrader-feed/             📊 .NET cTrader Open API → Redis bar producer
-└── webhook/                  🤖 the bot application (dir name kept for history)
+├── ctrader-engine/           📊 .NET: cTrader Open API feed + auto-trade execution
+└── telegram-bot/             🤖 the Telegram bot application
     ├── Dockerfile
     ├── requirements.txt
     ├── scripts/               🧰 one-off/manual utility scripts

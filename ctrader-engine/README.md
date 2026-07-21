@@ -1,6 +1,6 @@
-# cTrader Feed
+# cTrader Engine
 
-`ctrader-feed` is the cTrader gateway for ApexVoid. It runs as its own .NET
+`ctrader-engine` is the cTrader gateway for ApexVoid. It runs as its own .NET
 container, writes closed XAU trendbars into Redis, and can execute tightly
 guarded demo-account scalp candidates from the private Python auto-scalp gate.
 
@@ -207,9 +207,9 @@ weekends or quiet market periods when no XAU bars close.
 
 ```bash
 dotnet test tests/CTraderFeed.Tests.csproj
-docker build -t apexvoid-ctrader-feed:local ctrader-feed
+docker build -t apexvoid-ctrader-feed:local ctrader-engine
 # fallback mode if an SDK update regresses AOT compatibility:
-docker build --build-arg PUBLISH_AOT=false -t apexvoid-ctrader-feed:trimmed ctrader-feed
+docker build --build-arg PUBLISH_AOT=false -t apexvoid-ctrader-feed:trimmed ctrader-engine
 # operator escape hatch after supplying the normal feed environment:
 dotnet run --project src/CTraderFeed.csproj -- --reset-token-cache
 ```
@@ -217,6 +217,6 @@ dotnet run --project src/CTraderFeed.csproj -- --reset-token-cache
 Run via root compose:
 
 ```bash
-docker compose up -d --build redis ctrader-feed
-docker compose logs -f ctrader-feed
+docker compose up -d --build redis ctrader-engine
+docker compose logs -f ctrader-engine
 ```

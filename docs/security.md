@@ -82,7 +82,7 @@ if you have a static address.
 
 - Base image (`python:3.12-slim`) is pinned by tag. For stricter
   reproducibility, pin to a digest and update deliberately.
-- Python dependencies are pinned in `webhook/requirements.txt`. Run `pip-audit`
+- Python dependencies are pinned in `telegram-bot/requirements.txt`. Run `pip-audit`
   before bumping.
 
 ## Incident Response

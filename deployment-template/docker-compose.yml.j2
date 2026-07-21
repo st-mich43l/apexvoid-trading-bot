@@ -53,7 +53,7 @@ services:
     volumes:
       - ./data:/data
 
-  ctrader-feed:
+  ctrader-engine:
     image: "{{ registry_namespace }}/apexvoid-ctrader-feed:{{ image_tag }}"
     container_name: apexvoid-ctrader-feed
     restart: unless-stopped

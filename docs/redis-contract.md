@@ -1,6 +1,6 @@
 # Redis Bar Contract
 
-Redis is the reconstructable market-data cache shared by `ctrader-feed`,
+Redis is the reconstructable market-data cache shared by `ctrader-engine`,
 the Python price-action scanner, and future dashboards. Postgres remains the
 durable trade/accounting store. Market bars do not belong in Postgres.
 
@@ -100,7 +100,7 @@ The ZSET is the material data source.
 
 ## Live Spot Key
 
-`ctrader-feed` also writes the latest bid/ask spot as a plain Redis string,
+`ctrader-engine` also writes the latest bid/ask spot as a plain Redis string,
 throttled to at least one second between writes per symbol:
 
 ```text
@@ -113,7 +113,7 @@ bar price when it is absent or stale.
 
 ## Persistence
 
-Redis is allowed to lose this data on restart. `ctrader-feed` backfills the
+Redis is allowed to lose this data on restart. `ctrader-engine` backfills the
 window from cTrader on startup or reconnect. Deep historical backtesting storage
 is a separate future sink, not this Redis contract.
 

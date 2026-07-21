@@ -118,6 +118,13 @@ dated section after deployment.
   subpackages with no runtime behavior change; also fixed stale repo-name
   and branch references in the docs and swapped the SQLite-era backup
   procedure for a Postgres `pg_dump`/`psql` one.
+- Renamed `webhook/` to `telegram-bot/` (it hasn't hosted a webhook since the
+  bot moved to long-polling) and `ctrader-feed/` to `ctrader-engine/` (it has
+  always run both the market-data feed and demo auto-trade execution off one
+  cTrader session, not just a feed). Directory names, the compose service
+  key, and CI build contexts moved; the published Docker Hub image names
+  (`apexvoid-trading-bot`, `apexvoid-ctrader-feed`) are unchanged so the
+  existing deploy pipeline keeps working without coordination.
 
 ### Fixed
 

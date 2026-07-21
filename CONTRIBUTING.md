@@ -45,7 +45,7 @@ git diff --cached | grep -E '(TELEGRAM_BOT_TOKEN|ANTHROPIC_API_KEY|BEGIN.*PRIVAT
   || echo "clean"
 
 # Python syntax
-python3 -m compileall -q webhook/
+python3 -m compileall -q telegram-bot/
 ```
 
 ## Updating Documentation
