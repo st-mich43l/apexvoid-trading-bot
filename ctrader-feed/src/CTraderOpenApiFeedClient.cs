@@ -70,12 +70,42 @@ public sealed class CTraderOpenApiFeedClient(
       return;
     }
 
-    var response = await SendAndWaitAsync<ProtoOARefreshTokenRes>(
-      new ProtoOARefreshTokenReq { RefreshToken = _tokens.RefreshToken },
-      _ => true,
-      cancellationToken
-    );
-    await _tokens.ApplyAsync(response, cancellationToken);
+    await _requestLock.WaitAsync(cancellationToken);
+    try
+    {
+      var response = await SendAndWaitLockedAsync<ProtoOARefreshTokenRes>(
+        new ProtoOARefreshTokenReq { RefreshToken = _tokens.RefreshToken },
+        _ => true,
+        cancellationToken
+      );
+      await _tokens.ApplyAsync(response, cancellationToken);
+      var accounts = await SendAndWaitLockedAsync<
+        ProtoOAGetAccountListByAccessTokenRes
+      >(
+        new ProtoOAGetAccountListByAccessTokenReq
+        {
+          AccessToken = _tokens.AccessToken,
+        },
+        _ => true,
+        cancellationToken
+      );
+      _accountGrants = ToAccountGrants(accounts);
+      RequireConfiguredAccount(accounts);
+      await SendAndWaitLockedAsync<ProtoOAAccountAuthRes>(
+        new ProtoOAAccountAuthReq
+        {
+          CtidTraderAccountId = options.AccountId,
+          AccessToken = _tokens.AccessToken,
+        },
+        response => response.CtidTraderAccountId == options.AccountId,
+        cancellationToken
+      );
+      Log($"refreshed token and re-authorized account {options.AccountId}");
+    }
+    finally
+    {
+      _requestLock.Release();
+    }
   }
 
   public async Task<SymbolInfo> ResolveSymbolAsync(CancellationToken cancellationToken)
@@ -208,29 +238,27 @@ public sealed class CTraderOpenApiFeedClient(
 
   public async Task<IReadOnlyList<TradingPosition>> ReconcilePositionsAsync(
     CancellationToken cancellationToken
-  )
-  {
-    var response = await SendAndWaitAsync<ProtoOAReconcileRes>(
-      new ProtoOAReconcileReq { CtidTraderAccountId = options.AccountId },
-      item => item.CtidTraderAccountId == options.AccountId,
-      cancellationToken
-    );
-    return response.Position
-      .Where(position => position.TradeData is not null)
-      .Select(ToTradingPosition)
-      .ToArray();
-  }
+  ) => (await ReconcileAccountAsync(cancellationToken)).Positions;
 
   public async Task<IReadOnlyList<TradingPendingOrder>> ReconcilePendingOrdersAsync(
     CancellationToken cancellationToken
-  )
-  {
-    var response = await SendAndWaitAsync<ProtoOAReconcileRes>(
-      new ProtoOAReconcileReq { CtidTraderAccountId = options.AccountId },
-      item => item.CtidTraderAccountId == options.AccountId,
-      cancellationToken
-    );
-    return response.Order
+  ) => (await ReconcileAccountAsync(cancellationToken)).PendingOrders;
+
+  public Task<TradingReconcileSnapshot> ReconcileAccountAsync(
+    CancellationToken cancellationToken
+  ) => WithAccountAuthorizationRetryAsync(
+    async () =>
+    {
+      var response = await SendAndWaitAsync<ProtoOAReconcileRes>(
+        new ProtoOAReconcileReq { CtidTraderAccountId = options.AccountId },
+        item => item.CtidTraderAccountId == options.AccountId,
+        cancellationToken
+      );
+      var positions = response.Position
+        .Where(position => position.TradeData is not null)
+        .Select(ToTradingPosition)
+        .ToArray();
+      var pendingOrders = response.Order
       .Where(order => (
         order.TradeData is not null
         && order.OrderType == ProtoOAOrderType.Limit
@@ -238,7 +266,10 @@ public sealed class CTraderOpenApiFeedClient(
       ))
       .Select(ToTradingPendingOrder)
       .ToArray();
-  }
+      return new TradingReconcileSnapshot(positions, pendingOrders);
+    },
+    cancellationToken
+  );
 
   public async Task<TradeExecution> PlaceMarketOrderAsync(
     MarketOrderRequest order,
@@ -564,58 +595,93 @@ public sealed class CTraderOpenApiFeedClient(
     await _requestLock.WaitAsync(cancellationToken);
     try
     {
-      var client = _client ?? throw new InvalidOperationException("Client is not connected");
-      using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-      timeout.CancelAfter(options.RequestTimeout);
-
-      await client.SendMessage(request);
-      try
-      {
-        while (await _responses.Reader.WaitToReadAsync(timeout.Token))
-        {
-          while (_responses.Reader.TryRead(out var message))
-          {
-            if (message is ProtoOAErrorRes error)
-            {
-              throw new InvalidOperationException(
-                $"cTrader Open API error while waiting for {typeof(T).Name} after {request.GetType().Name}: {FormatError(error)}"
-              );
-            }
-            if (message is ProtoErrorRes genericError)
-            {
-              throw new InvalidOperationException(
-                $"cTrader transport error while waiting for {typeof(T).Name} after {request.GetType().Name}: {FormatError(genericError)}"
-              );
-            }
-            if (message is ProtoOAOrderErrorEvent orderError)
-            {
-              throw new InvalidOperationException(
-                $"cTrader order error after {request.GetType().Name}: "
-                + $"{orderError.ErrorCode}: {orderError.Description}"
-              );
-            }
-            if (message is T typed && predicate(typed))
-            {
-              return typed;
-            }
-          }
-        }
-      }
-      catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-      {
-        throw new TimeoutException(
-          $"Timed out after {options.RequestTimeout.TotalSeconds:N0}s waiting for {typeof(T).Name} after {request.GetType().Name}"
-        );
-      }
-      throw new TimeoutException(
-        $"Timed out after {options.RequestTimeout.TotalSeconds:N0}s waiting for {typeof(T).Name} after {request.GetType().Name}"
-      );
+      return await SendAndWaitLockedAsync(request, predicate, cancellationToken);
     }
     finally
     {
       _requestLock.Release();
     }
   }
+
+  private async Task<T> SendAndWaitLockedAsync<T>(
+    IMessage request,
+    Func<T, bool> predicate,
+    CancellationToken cancellationToken
+  )
+    where T : class, IMessage
+  {
+    var client = _client ?? throw new InvalidOperationException("Client is not connected");
+    using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+    timeout.CancelAfter(options.RequestTimeout);
+
+    await client.SendMessage(request);
+    try
+    {
+      while (await _responses.Reader.WaitToReadAsync(timeout.Token))
+      {
+        while (_responses.Reader.TryRead(out var message))
+        {
+          if (message is ProtoOAErrorRes error)
+          {
+            throw new InvalidOperationException(
+              $"cTrader Open API error while waiting for {typeof(T).Name} after {request.GetType().Name}: {FormatError(error)}"
+            );
+          }
+          if (message is ProtoErrorRes genericError)
+          {
+            throw new InvalidOperationException(
+              $"cTrader transport error while waiting for {typeof(T).Name} after {request.GetType().Name}: {FormatError(genericError)}"
+            );
+          }
+          if (message is ProtoOAOrderErrorEvent orderError)
+          {
+            throw new InvalidOperationException(
+              $"cTrader order error after {request.GetType().Name}: "
+              + $"{orderError.ErrorCode}: {orderError.Description}"
+            );
+          }
+          if (message is T typed && predicate(typed))
+          {
+            return typed;
+          }
+        }
+      }
+    }
+    catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+    {
+      throw new TimeoutException(
+        $"Timed out after {options.RequestTimeout.TotalSeconds:N0}s waiting for {typeof(T).Name} after {request.GetType().Name}"
+      );
+    }
+    throw new TimeoutException(
+      $"Timed out after {options.RequestTimeout.TotalSeconds:N0}s waiting for {typeof(T).Name} after {request.GetType().Name}"
+    );
+  }
+
+  private async Task<T> WithAccountAuthorizationRetryAsync<T>(
+    Func<Task<T>> action,
+    CancellationToken cancellationToken
+  )
+  {
+    try
+    {
+      return await action();
+    }
+    catch (InvalidOperationException exception) when (
+      IsAccountNotAuthorized(exception)
+    )
+    {
+      Log($"account {options.AccountId} lost authorization; re-authorizing once");
+      await AuthorizeAccountAsync(cancellationToken);
+      return await action();
+    }
+  }
+
+  private static bool IsAccountNotAuthorized(InvalidOperationException exception) =>
+    exception.Message.Contains(
+      "Trading account is not authorized",
+      StringComparison.OrdinalIgnoreCase
+    );
 
   private Task<ProtoOAAccountAuthRes> AuthorizeAccountAsync(
     CancellationToken cancellationToken

@@ -110,6 +110,11 @@ public sealed record TradingPendingOrder(
   string Comment
 );
 
+public sealed record TradingReconcileSnapshot(
+  IReadOnlyList<TradingPosition> Positions,
+  IReadOnlyList<TradingPendingOrder> PendingOrders
+);
+
 public sealed record TradeExecution(
   long PositionId,
   long OrderId,

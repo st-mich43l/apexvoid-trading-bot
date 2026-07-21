@@ -18,6 +18,13 @@ public interface ICTraderTradeClient
     CancellationToken cancellationToken
   ) => Task.FromResult<IReadOnlyList<TradingPendingOrder>>([]);
 
+  async Task<TradingReconcileSnapshot> ReconcileAccountAsync(
+    CancellationToken cancellationToken
+  ) => new(
+    await ReconcilePositionsAsync(cancellationToken),
+    await ReconcilePendingOrdersAsync(cancellationToken)
+  );
+
   Task<TradeExecution> PlaceMarketOrderAsync(
     MarketOrderRequest order,
     CancellationToken cancellationToken

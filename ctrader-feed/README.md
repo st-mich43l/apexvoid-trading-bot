@@ -115,6 +115,10 @@ the host is changed. It also requires a Hedged account and a broker name
 matching `AUTO_TRADE_EXPECTED_BROKER`.
 Set `AUTO_TRADE_REQUIRE_DEMO_ONLY_TOKEN=true` to disable execution whenever the
 token grants any live account, even when the selected account is demo.
+Token rotation persists the new refresh token and re-authorizes the configured
+account with the new access token atomically. A lost account authorization is
+retried once during reconcile; failed refresh/re-authorization restarts the
+whole feed session so trading cannot remain silently disconnected.
 
 ## Demo Auto-Trader
 

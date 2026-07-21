@@ -23,7 +23,7 @@ public sealed class AutoTradeEngine(
   private SpotPrice? _lastSpot;
   private IReadOnlyList<TradingPosition> _allSymbolPositions = [];
   private IReadOnlyList<TradingPendingOrder> _allSymbolPendingOrders = [];
-  private bool _ready;
+  private volatile bool _ready;
   private volatile bool _disabled;
 
   public bool Enabled => options.Enabled && !_disabled;
@@ -115,9 +115,16 @@ public sealed class AutoTradeEngine(
     }
     finally
     {
-      _ready = false;
-      _client = null;
-      _symbol = null;
+      await WithGateAsync(
+        () =>
+        {
+          _ready = false;
+          _client = null;
+          _symbol = null;
+          return Task.CompletedTask;
+        },
+        CancellationToken.None
+      );
     }
   }
 
@@ -161,7 +168,11 @@ public sealed class AutoTradeEngine(
       return;
     }
     await WithGateAsync(
-      () => ProcessTargetsAsync(spot, cancellationToken),
+      () => (
+        !_ready || _client is null || _symbol is null
+          ? Task.CompletedTask
+          : ProcessTargetsAsync(spot, cancellationToken)
+      ),
       cancellationToken
     );
   }
@@ -1416,12 +1427,11 @@ public sealed class AutoTradeEngine(
   {
     var client = RequireClient();
     var symbol = RequireSymbol();
-    var positions = await client.ReconcilePositionsAsync(cancellationToken);
-    _allSymbolPositions = positions
+    var snapshot = await client.ReconcileAccountAsync(cancellationToken);
+    _allSymbolPositions = snapshot.Positions
       .Where(position => position.SymbolId == symbol.SymbolId)
       .ToArray();
-    var pendingOrders = await client.ReconcilePendingOrdersAsync(cancellationToken);
-    _allSymbolPendingOrders = pendingOrders
+    _allSymbolPendingOrders = snapshot.PendingOrders
       .Where(order => order.SymbolId == symbol.SymbolId)
       .ToArray();
     foreach (var order in _allSymbolPendingOrders.ToArray())

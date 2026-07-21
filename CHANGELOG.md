@@ -105,6 +105,12 @@ dated section after deployment.
 
 ### Fixed
 
+- cTrader token rotation now re-authorizes the configured trading account with
+  the new access token before releasing the request lock; reconcile retries one
+  lost-account-auth response, and refresh failures force a clean feed reconnect.
+- Auto-trade session cleanup is now serialized with spot processing so a queued
+  tick cannot race `_client` teardown and emit a secondary "session is not
+  connected" fault.
 - Fixed scale-in sizing that ignored the equity-table exposure ceiling and a
   worst-case rule that blocked valid adds; banked profit and trailed stops now
   contribute to a hard group loss-ceiling headroom without using floating
