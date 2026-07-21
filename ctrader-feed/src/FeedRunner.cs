@@ -71,12 +71,11 @@ public sealed class FeedRunner(
       spotTask = SpotLoopAsync(client, spots, autoTrade, linked.Token);
       if (autoTrade?.Enabled == true)
       {
-        autoTradeTask = autoTrade.RunSessionAsync(client, symbol, linked.Token);
-        _ = autoTradeTask.ContinueWith(
-          _ => linked.Cancel(),
-          CancellationToken.None,
-          TaskContinuationOptions.OnlyOnFaulted,
-          TaskScheduler.Default
+        autoTradeTask = RunAutoTradeSafelyAsync(
+          autoTrade,
+          client,
+          symbol,
+          linked.Token
         );
       }
       var emitter = new ClosedBarEmitter(spots, symbol.RedisSymbol);
@@ -152,9 +151,58 @@ public sealed class FeedRunner(
       await sink.WriteSpotAsync(spot, cancellationToken);
       if (autoTrade is not null)
       {
-        await autoTrade.ObserveSpotAsync(spot, cancellationToken);
+        try
+        {
+          await autoTrade.ObserveSpotAsync(spot, cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+          throw;
+        }
+        catch (Exception exception)
+        {
+          await ReportAutoTradeFaultAsync(autoTrade, exception);
+        }
       }
       healthFile.Touch();
+    }
+  }
+
+  private static async Task RunAutoTradeSafelyAsync(
+    AutoTradeEngine autoTrade,
+    ICTraderFeedClient client,
+    SymbolInfo symbol,
+    CancellationToken cancellationToken
+  )
+  {
+    try
+    {
+      await autoTrade.RunSessionAsync(client, symbol, cancellationToken);
+    }
+    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+    {
+    }
+    catch (Exception exception)
+    {
+      await ReportAutoTradeFaultAsync(autoTrade, exception);
+    }
+  }
+
+  private static async Task ReportAutoTradeFaultAsync(
+    AutoTradeEngine autoTrade,
+    Exception exception
+  )
+  {
+    try
+    {
+      await autoTrade.HandleSessionFaultAsync(exception, CancellationToken.None);
+    }
+    catch (Exception reportException)
+    {
+      Log(
+        $"auto-trade fault reporting failed: {reportException.GetType().Name}: "
+        + reportException.Message
+      );
     }
   }
 

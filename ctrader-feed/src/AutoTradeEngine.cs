@@ -13,6 +13,9 @@ public sealed class AutoTradeEngine(
   private readonly SemaphoreSlim _gate = new(1, 1);
   private readonly Dictionary<long, AutoTradePositionState> _states = [];
   private readonly HashSet<string> _reportedErrors = [];
+  private readonly HashSet<string> _reportedSessionErrors = [];
+  private readonly HashSet<string> _reportedWarnings = [];
+  private readonly object _reportLock = new();
   private readonly Func<DateTimeOffset> _clock = clock ?? (() => DateTimeOffset.UtcNow);
   private readonly Action<string> _log = log ?? Log;
   private ICTraderTradeClient? _client;
@@ -20,8 +23,9 @@ public sealed class AutoTradeEngine(
   private SpotPrice? _lastSpot;
   private IReadOnlyList<TradingPosition> _allSymbolPositions = [];
   private bool _ready;
+  private volatile bool _disabled;
 
-  public bool Enabled => options.Enabled;
+  public bool Enabled => options.Enabled && !_disabled;
 
   public async Task RunSessionAsync(
     ICTraderFeedClient feedClient,
@@ -29,35 +33,46 @@ public sealed class AutoTradeEngine(
     CancellationToken cancellationToken
   )
   {
-    if (!options.Enabled)
+    if (!Enabled)
     {
       return;
     }
-    options.Validate();
-    _client = feedClient as ICTraderTradeClient
-      ?? throw new InvalidOperationException(
-        "Configured cTrader client does not support trade operations"
-      );
-    _symbol = symbol;
-    var account = await _client.GetTradingAccountAsync(cancellationToken);
-    ValidateAccount(account);
-    await ReconcileAsync(cancellationToken);
-    _ready = true;
-    await PublishAsync(
-      "ready",
-      $"demo executor ready: {account.BrokerName} balance {account.Balance:N2}",
-      cancellationToken
-    );
-    _log(
-      $"auto-trade ready account={account.AccountId} broker={account.BrokerName} "
-      + $"balance={account.Balance:N2} dryRun={options.DryRun}"
-    );
-
-    var cursor = await store.GetCursorAsync(cancellationToken);
-    var nextReconcile = _clock();
     try
     {
-      while (!cancellationToken.IsCancellationRequested)
+      options.Validate();
+      _client = feedClient as ICTraderTradeClient
+        ?? throw new AutoTradeConfigurationException(
+          "Auto trade disabled: configured cTrader client does not support "
+          + "trade operations"
+        );
+      _symbol = symbol;
+      var grants = await _client.GetAccountGrantsAsync(cancellationToken);
+      await ReportLiveGrantsAsync(grants, cancellationToken);
+      if (options.RequireDemoOnlyToken && grants.Any(item => item.IsLive))
+      {
+        var live = grants.First(item => item.IsLive);
+        throw new AutoTradeConfigurationException(
+          $"Auto trade disabled: token grants live account {live.AccountId}; "
+          + "AUTO_TRADE_REQUIRE_DEMO_ONLY_TOKEN requires a demo-only token"
+        );
+      }
+      var account = await _client.GetTradingAccountAsync(cancellationToken);
+      ValidateAccount(account);
+      await ReconcileAsync(cancellationToken);
+      _ready = true;
+      await PublishAsync(
+        "ready",
+        $"demo executor ready: {account.BrokerName} balance {account.Balance:N2}",
+        cancellationToken
+      );
+      _log(
+        $"auto-trade ready account={account.AccountId} broker={account.BrokerName} "
+        + $"balance={account.Balance:N2} dryRun={options.DryRun}"
+      );
+
+      var cursor = await store.GetCursorAsync(cancellationToken);
+      var nextReconcile = _clock();
+      while (Enabled && !cancellationToken.IsCancellationRequested)
       {
         if (_clock() >= nextReconcile)
         {
@@ -105,13 +120,42 @@ public sealed class AutoTradeEngine(
     }
   }
 
+  public async Task HandleSessionFaultAsync(
+    Exception exception,
+    CancellationToken cancellationToken
+  )
+  {
+    if (exception is AutoTradeConfigurationException)
+    {
+      _disabled = true;
+    }
+    lock (_reportLock)
+    {
+      if (!_reportedSessionErrors.Add(exception.Message))
+      {
+        return;
+      }
+    }
+    if (exception is AutoTradeConfigurationException)
+    {
+      _log(exception.Message);
+    }
+    else
+    {
+      _log(
+        $"auto-trade session failed: {exception.GetType().Name}: {exception.Message}"
+      );
+    }
+    await PublishAsync("error", exception.Message, cancellationToken);
+  }
+
   public async Task ObserveSpotAsync(
     SpotPrice spot,
     CancellationToken cancellationToken
   )
   {
     _lastSpot = spot;
-    if (!_ready || options.DryRun || !options.Enabled)
+    if (!_ready || options.DryRun || !Enabled)
     {
       return;
     }
@@ -162,6 +206,11 @@ public sealed class AutoTradeEngine(
         _reportedErrors.Remove(candidate.CandidateId);
       }
       return advance;
+    }
+    catch (AutoTradeConfigurationException)
+    {
+      await store.ReleaseCandidateAsync(candidate.CandidateId, cancellationToken);
+      throw;
     }
     catch (Exception exception) when (exception is not OperationCanceledException)
     {
@@ -527,25 +576,31 @@ public sealed class AutoTradeEngine(
   {
     if (account.IsLive)
     {
-      throw new InvalidOperationException("auto-trade hard lock refuses live accounts");
+      throw new AutoTradeConfigurationException(
+        $"Auto trade disabled: hard lock refuses live account {account.AccountId}"
+      );
     }
     if (
       !account.PermissionScope.Equals("ScopeTrade", StringComparison.OrdinalIgnoreCase)
       && !account.PermissionScope.Equals("Trading", StringComparison.OrdinalIgnoreCase)
     )
     {
-      throw new InvalidOperationException("cTrader token does not have trading scope");
+      throw new AutoTradeConfigurationException(
+        "Auto trade disabled: cTrader token does not have trading scope"
+      );
     }
     if (!account.AccessRights.Equals("FullAccess", StringComparison.OrdinalIgnoreCase))
     {
-      throw new InvalidOperationException(
-        $"cTrader account access is {account.AccessRights}, expected FullAccess"
+      throw new AutoTradeConfigurationException(
+        $"Auto trade disabled: cTrader account access is {account.AccessRights}, "
+        + "expected FullAccess"
       );
     }
     if (!account.AccountType.Equals("Hedged", StringComparison.OrdinalIgnoreCase))
     {
-      throw new InvalidOperationException(
-        $"auto-trade requires a Hedged demo account, got {account.AccountType}"
+      throw new AutoTradeConfigurationException(
+        "Auto trade disabled: auto-trade requires a Hedged demo account, "
+        + $"got {account.AccountType}"
       );
     }
     if (
@@ -556,9 +611,31 @@ public sealed class AutoTradeEngine(
       )
     )
     {
-      throw new InvalidOperationException(
-        $"broker {account.BrokerName} does not match {options.ExpectedBroker}"
+      throw new AutoTradeConfigurationException(
+        $"Auto trade disabled: broker {account.BrokerName} does not match "
+        + options.ExpectedBroker
       );
+    }
+  }
+
+  private async Task ReportLiveGrantsAsync(
+    IReadOnlyList<TradingAccountGrant> grants,
+    CancellationToken cancellationToken
+  )
+  {
+    foreach (var grant in grants.Where(item => item.IsLive))
+    {
+      var message = $"token grants live account {grant.AccountId} — "
+        + "re-authorize with the demo account only";
+      lock (_reportLock)
+      {
+        if (!_reportedWarnings.Add(message))
+        {
+          continue;
+        }
+      }
+      _log(message);
+      await PublishAsync("warning", message, cancellationToken);
     }
   }
 

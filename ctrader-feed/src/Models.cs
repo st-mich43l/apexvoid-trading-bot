@@ -66,6 +66,8 @@ public sealed record TradingAccountSnapshot(
   decimal Balance
 );
 
+public sealed record TradingAccountGrant(long AccountId, bool IsLive);
+
 public sealed record TradingPosition(
   long PositionId,
   long SymbolId,

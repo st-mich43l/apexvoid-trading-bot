@@ -278,6 +278,11 @@ public sealed class StackExchangeRedisSeriesCommands :
     CancellationToken cancellationToken
   ) => _db.StringSetAsync(key, value);
 
+  public Task DeleteStringAsync(
+    string key,
+    CancellationToken cancellationToken
+  ) => _db.KeyDeleteAsync(key);
+
   public async Task<string> GetCursorAsync(CancellationToken cancellationToken)
   {
     var value = await _db.StringGetAsync("auto_trade:cursor");
@@ -508,6 +513,7 @@ internal sealed record RedisSpot(
 [JsonSerializable(typeof(TradeCandidate))]
 [JsonSerializable(typeof(AutoTradePositionState))]
 [JsonSerializable(typeof(AutoTradeEvent))]
+[JsonSerializable(typeof(RefreshTokenDocument))]
 internal sealed partial class RedisJsonContext : JsonSerializerContext
 {
 }

@@ -12,11 +12,6 @@ public static class Program
     }
 
     var options = FeedOptions.FromEnvironment();
-    var autoTradeOptions = AutoTradeOptions.FromEnvironment();
-    if (autoTradeOptions.Enabled)
-    {
-      autoTradeOptions.Validate();
-    }
     await using var redis = await StackExchangeRedisSeriesCommands.ConnectAsync(
       options.RedisUrl
     );
@@ -29,6 +24,13 @@ public static class Program
       redis,
       options.RefreshTokenKey
     );
+    if (args.Contains("--reset-token-cache", StringComparer.OrdinalIgnoreCase))
+    {
+      await refreshTokenStore.DeleteAsync(CancellationToken.None);
+      Console.WriteLine($"Deleted refresh-token cache key {options.RefreshTokenKey}");
+      return 0;
+    }
+    var autoTradeOptions = AutoTradeOptions.FromEnvironment();
     if (
       args.Contains("--account-check", StringComparer.OrdinalIgnoreCase)
       || args.Contains("--account-list", StringComparer.OrdinalIgnoreCase)

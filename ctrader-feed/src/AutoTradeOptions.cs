@@ -17,7 +17,8 @@ public sealed record AutoTradeOptions(
   int PollMilliseconds,
   string CandidateStream,
   string EventStream,
-  string Label
+  string Label,
+  bool RequireDemoOnlyToken = false
 )
 {
   public static AutoTradeOptions FromEnvironment() => new(
@@ -35,35 +36,41 @@ public sealed record AutoTradeOptions(
     PollMilliseconds: Int("AUTO_TRADE_POLL_MS", 1000),
     CandidateStream: Env("AUTO_TRADE_STREAM", "auto_trade:candidates"),
     EventStream: Env("AUTO_TRADE_EVENT_STREAM", "auto_trade:events"),
-    Label: Env("AUTO_TRADE_LABEL", "apexvoid-auto")
+    Label: Env("AUTO_TRADE_LABEL", "apexvoid-auto"),
+    RequireDemoOnlyToken: Bool("AUTO_TRADE_REQUIRE_DEMO_ONLY_TOKEN", false)
   );
 
   public void Validate()
   {
     if (StopLossDistance <= 0 || StopLossDistance > 6.5m)
     {
-      throw new InvalidOperationException(
-        "AUTO_TRADE_SL_DISTANCE must be greater than zero and at most 6.5"
+      throw new AutoTradeConfigurationException(
+        "Auto trade disabled: AUTO_TRADE_SL_DISTANCE must be greater than zero "
+        + "and at most 6.5"
       );
     }
     if (TargetsPips.Count != 5 || TargetsPips.Any(value => value <= 0))
     {
-      throw new InvalidOperationException(
-        "AUTO_TRADE_TP_PIPS must contain five positive targets"
+      throw new AutoTradeConfigurationException(
+        "Auto trade disabled: AUTO_TRADE_TP_PIPS must contain five positive targets"
       );
     }
     if (!TargetsPips.SequenceEqual(TargetsPips.OrderBy(value => value)))
     {
-      throw new InvalidOperationException("AUTO_TRADE_TP_PIPS must be ascending");
+      throw new AutoTradeConfigurationException(
+        "Auto trade disabled: AUTO_TRADE_TP_PIPS must be ascending"
+      );
     }
     if (MaxDailyTrades <= 0)
     {
-      throw new InvalidOperationException("AUTO_TRADE_MAX_DAILY_TRADES must be positive");
+      throw new AutoTradeConfigurationException(
+        "Auto trade disabled: AUTO_TRADE_MAX_DAILY_TRADES must be positive"
+      );
     }
     if (MinConfluence is < 1 or > 3)
     {
-      throw new InvalidOperationException(
-        "AUTO_TRADE_MIN_CONFLUENCE must be between 1 and 3"
+      throw new AutoTradeConfigurationException(
+        "Auto trade disabled: AUTO_TRADE_MIN_CONFLUENCE must be between 1 and 3"
       );
     }
   }

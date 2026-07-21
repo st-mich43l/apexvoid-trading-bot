@@ -22,6 +22,7 @@ public sealed class CTraderOpenApiFeedClient(
   private long _spotSubscriptionAccountId;
   private long _spotSubscriptionSymbolId;
   private SymbolInfo? _spotSymbol;
+  private IReadOnlyList<TradingAccountGrant> _accountGrants = [];
 
   public event Action? Heartbeat;
 
@@ -57,6 +58,7 @@ public sealed class CTraderOpenApiFeedClient(
       await RefreshTokenAsync(cancellationToken);
       accounts = await GetGrantedAccountsAsync(cancellationToken);
     }
+    _accountGrants = ToAccountGrants(accounts);
     RequireConfiguredAccount(accounts);
     await AuthorizeAccountAsync(cancellationToken);
   }
@@ -121,6 +123,7 @@ public sealed class CTraderOpenApiFeedClient(
   )
   {
     var accounts = await GetGrantedAccountsAsync(cancellationToken);
+    _accountGrants = ToAccountGrants(accounts);
     var account = RequireConfiguredAccount(accounts);
     var response = await SendAndWaitAsync<ProtoOATraderRes>(
       new ProtoOATraderReq { CtidTraderAccountId = options.AccountId },
@@ -130,6 +133,19 @@ public sealed class CTraderOpenApiFeedClient(
     var trader = response.Trader
       ?? throw new InvalidOperationException("cTrader account profile is missing");
     return ToAccountSnapshot(account, accounts.PermissionScope, trader);
+  }
+
+  public async Task<IReadOnlyList<TradingAccountGrant>> GetAccountGrantsAsync(
+    CancellationToken cancellationToken
+  )
+  {
+    if (_accountGrants.Count > 0)
+    {
+      return _accountGrants;
+    }
+    var accounts = await GetGrantedAccountsAsync(cancellationToken);
+    _accountGrants = ToAccountGrants(accounts);
+    return _accountGrants;
   }
 
   public async Task<IReadOnlyList<TradingAccountSnapshot>> GetGrantedDemoAccountsAsync(
@@ -180,6 +196,15 @@ public sealed class CTraderOpenApiFeedClient(
       trader.Balance / divisor
     );
   }
+
+  private static IReadOnlyList<TradingAccountGrant> ToAccountGrants(
+    ProtoOAGetAccountListByAccessTokenRes accounts
+  ) => accounts.CtidTraderAccount
+    .Select(item => new TradingAccountGrant(
+      checked((long)item.CtidTraderAccountId),
+      item.IsLive
+    ))
+    .ToArray();
 
   public async Task<IReadOnlyList<TradingPosition>> ReconcilePositionsAsync(
     CancellationToken cancellationToken
@@ -550,17 +575,9 @@ public sealed class CTraderOpenApiFeedClient(
     {
       return account;
     }
-    var granted = accounts.CtidTraderAccount.Count == 0
-      ? "none"
-      : string.Join(
-        ", ",
-        accounts.CtidTraderAccount.Select(item =>
-          $"{item.CtidTraderAccountId} ({(item.IsLive ? "live" : "demo")})"
-        )
-      );
-    throw new InvalidOperationException(
-      $"Account {options.AccountId} is not granted to the configured access token; "
-      + $"granted accounts: {granted}"
+    throw AutoTradeConfigurationException.AccountNotGranted(
+      options.AccountId,
+      ToAccountGrants(accounts)
     );
   }
 

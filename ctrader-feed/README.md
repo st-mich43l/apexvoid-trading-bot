@@ -53,6 +53,7 @@ BAR_QUALITY_LOOKBACK=6
 HEALTH_FILE=/tmp/ctrader-feed.heartbeat
 AUTO_TRADE_ENABLED=false
 AUTO_TRADE_DRY_RUN=true
+AUTO_TRADE_REQUIRE_DEMO_ONLY_TOKEN=false
 AUTO_TRADE_SYMBOLS=XAU
 AUTO_TRADE_EXPECTED_BROKER=Fusion
 AUTO_TRADE_SL_DISTANCE=6.5
@@ -80,9 +81,12 @@ never logged. The service first tries the supplied access token and refreshes
 only after rejection or on the configured rotation interval.
 
 When cTrader rotates the refresh token, the latest value is persisted in Redis
-at `CTRADER_REFRESH_TOKEN_KEY` (default `ctrader:refresh_token`) and preferred
-over the deployment environment on the next reconnect. Redis is internal to the
-compose network and not exposed publicly; do not log this key or its value.
+at `CTRADER_REFRESH_TOKEN_KEY` (default `ctrader:refresh_token`) with a SHA-256
+fingerprint of the `.env` seed token. The rotation is reused only while that
+fingerprint still matches. Supplying a newly authorized token in `.env`
+automatically starts a fresh rotation chain; legacy bare-token cache values are
+also replaced automatically. Redis is internal to the compose network and not
+exposed publicly; token values are never logged.
 
 Demo is the default endpoint:
 
@@ -94,6 +98,8 @@ CTRADER_PORT=5035
 Auto-trading has an independent hard lock that refuses live accounts even if
 the host is changed. It also requires a Hedged account and a broker name
 matching `AUTO_TRADE_EXPECTED_BROKER`.
+Set `AUTO_TRADE_REQUIRE_DEMO_ONLY_TOKEN=true` to disable execution whenever the
+token grants any live account, even when the selected account is demo.
 
 ## Demo Auto-Trader
 
@@ -161,6 +167,8 @@ dotnet test tests/CTraderFeed.Tests.csproj
 docker build -t apexvoid-ctrader-feed:local ctrader-feed
 # fallback mode if an SDK update regresses AOT compatibility:
 docker build --build-arg PUBLISH_AOT=false -t apexvoid-ctrader-feed:trimmed ctrader-feed
+# operator escape hatch after supplying the normal feed environment:
+dotnet run --project src/CTraderFeed.csproj -- --reset-token-cache
 ```
 
 Run via root compose:
