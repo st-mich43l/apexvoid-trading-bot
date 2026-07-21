@@ -20,7 +20,7 @@ public sealed class AutoTradeEngineTests
   );
 
   [Fact]
-  public async Task OpensMarketWithSixPointFiveStopAndClosesFiveTargets()
+  public async Task OpensRiskBoundMarketWithSixPointFiveStopAndClosesFiveTargets()
   {
     using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
     var store = new FakeAutoTradeStore(CandidateJson());
@@ -42,7 +42,7 @@ public sealed class AutoTradeEngineTests
 
     var order = Assert.Single(client.Orders);
     Assert.Equal(TradeDirection.Buy, order.Direction);
-    Assert.Equal(2_100, order.Volume);
+    Assert.Equal(600, order.Volume);
     Assert.Equal(650_000, order.RelativeStopLoss);
     Assert.Equal("apexvoid-auto", order.Label);
     Assert.StartsWith("av-", order.ClientOrderId);
@@ -56,7 +56,7 @@ public sealed class AutoTradeEngineTests
     );
 
     Assert.Equal(
-      new long[] { 500, 400, 400, 400, 400 },
+      new long[] { 200, 100, 100, 100, 100 },
       client.Closes.Select(item => item.Volume)
     );
     Assert.Equal(
@@ -161,7 +161,7 @@ public sealed class AutoTradeEngineTests
   }
 
   [Fact]
-  public async Task DrawnDownBalanceUsesConfiguredBandAndKeepsFiveTargets()
+  public async Task DrawnDownBalanceUsesRiskBoundFallbackLadder()
   {
     using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
     var store = new FakeAutoTradeStore(CandidateJson());
@@ -179,8 +179,8 @@ public sealed class AutoTradeEngineTests
     await store.Ordered.Task.WaitAsync(TimeSpan.FromSeconds(2));
 
     var order = Assert.Single(client.Orders);
-    Assert.Equal(900, order.Volume);
-    Assert.Contains("|30,60,90,120,200|1,2,3,4,5", order.Comment);
+    Assert.Equal(200, order.Volume);
+    Assert.Contains("|30,90|1,3", order.Comment);
     cts.Cancel();
     await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
   }
@@ -192,7 +192,7 @@ public sealed class AutoTradeEngineTests
     var store = new FakeAutoTradeStore(CandidateJson());
     var client = new FakeTradingClient
     {
-      Account = ValidAccount() with { Balance = 200m },
+      Account = ValidAccount() with { Balance = 650m },
     };
     var engine = new AutoTradeEngine(Options(), store, () => Now, _ => { });
     await engine.ObserveSpotAsync(
@@ -445,10 +445,141 @@ public sealed class AutoTradeEngineTests
     await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
   }
 
+  [Fact]
+  public async Task MomentumContinuationOpensIndependentSecondTranche()
+  {
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+    var store = new FakeAutoTradeStore(CandidateJson());
+    var client = new FakeTradingClient();
+    var engine = new AutoTradeEngine(Options(), store, () => Now, _ => { });
+    await engine.ObserveSpotAsync(
+      new SpotPrice("XAU", 4000.0m, 4000.2m, 1_000),
+      cts.Token
+    );
+    var run = engine.RunSessionAsync(client, Symbol, cts.Token);
+    await store.Ordered.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+    await engine.ObserveSpotAsync(
+      new SpotPrice("XAU", 4003.2m, 4003.4m, 1_000),
+      cts.Token
+    );
+    client.EnqueueMarketExecutionPrice(4003.4m);
+    store.EnqueueCandidate(CandidateJson(
+      candidate: 'b',
+      barTs: 1_180,
+      structureSwing: 4001.9m,
+      entryLow: 4003m,
+      entryHigh: 4004m
+    ));
+    await WaitForEventAsync(store, "add");
+
+    Assert.Equal(2, client.Orders.Count);
+    Assert.StartsWith("av3|bbbbbbbbbb|aaaaaaaaaa|2|", client.Orders[1].Comment);
+    Assert.Equal(1_100, client.Orders[1].Volume);
+    Assert.Equal((92, 4001.6m), client.StopAmendments.Last());
+    var add = Assert.Single(store.Events, item => item.Type == "add");
+    Assert.Equal(2, add.TrancheIndex);
+    Assert.Equal("aaaaaaaaaa", add.GroupId);
+    Assert.Contains("add-cap-bound", add.Message);
+
+    cts.Cancel();
+    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+  }
+
+  [Fact]
+  public async Task ReconcileAdoptsTwoTranchesWithIndependentPlans()
+  {
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+    var store = new FakeAutoTradeStore(CandidateJson());
+    var client = new FakeTradingClient();
+    client.SeedPosition(new TradingPosition(
+      91, 7, TradeDirection.Buy, 400, 4000m, 4000.3m,
+      "apexvoid-auto", "av3|aaaaaaaaaa|aaaaaaaaaa|1|600|200,100,100,100,100|30,60,90,120,200|1,2,3,4,5|1000"
+    ));
+    client.SeedPosition(new TradingPosition(
+      92, 7, TradeDirection.Buy, 300, 4003m, 4001.2m,
+      "apexvoid-auto", "av3|bbbbbbbbbb|aaaaaaaaaa|2|300|100,100,100|30,60,90|1,2,3|1180"
+    ));
+    var engine = new AutoTradeEngine(Options(), store, () => Now, _ => { });
+    var run = engine.RunSessionAsync(client, Symbol, cts.Token);
+    await WaitForEventAsync(store, "ready");
+
+    Assert.Equal(2, store.Positions.Count);
+    Assert.Equal(new[] { 1, 2 }, store.Positions.Values
+      .OrderBy(state => state.TrancheIndex)
+      .Select(state => state.TrancheIndex));
+    Assert.All(store.Positions.Values, state =>
+      Assert.Equal("aaaaaaaaaa", state.GroupId));
+    Assert.Equal(
+      new[] { 5, 3 },
+      store.Positions.Values.OrderBy(state => state.PositionId)
+        .Select(state => state.TargetsPips.Count)
+    );
+
+    cts.Cancel();
+    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+  }
+
+  [Fact]
+  public async Task WideZonePlacesTwoLimitsAndExpiresUnfilledMidpointLeg()
+  {
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+    var now = Now;
+    var store = new FakeAutoTradeStore(CandidateJson(
+      entryLow: 3999m,
+      entryHigh: 4000.5m
+    ));
+    var client = new FakeTradingClient();
+    var engine = new AutoTradeEngine(
+      Options() with { ZoneFillEnabled = true },
+      store,
+      () => now,
+      _ => { }
+    );
+    await engine.ObserveSpotAsync(
+      new SpotPrice("XAU", 4000.4m, 4000.6m, 1_000),
+      cts.Token
+    );
+    var run = engine.RunSessionAsync(client, Symbol, cts.Token);
+    await WaitForEventAsync(store, "zone_planned");
+
+    Assert.Equal(2, client.LimitOrders.Count);
+    Assert.Equal(
+      new[] { 4000.5m, 3999.75m },
+      client.LimitOrders.Select(order => order.LimitPrice)
+    );
+    Assert.Equal(new long[] { 300, 300 }, client.LimitOrders.Select(order => order.Volume));
+    Assert.All(client.LimitOrders, order => Assert.StartsWith("avz|", order.Comment));
+
+    client.FillPendingOrder(client.PendingOrders[0].OrderId);
+    now = Now.AddMinutes(3);
+    await WaitForEventAsync(store, "zone_expired");
+
+    Assert.Single(client.CancelledOrders);
+    Assert.Empty(client.PendingOrders);
+    await WaitUntilAsync(() => store.Positions.Count == 1);
+    var filled = Assert.Single(store.Positions.Values);
+    Assert.Equal(1, filled.ZoneLeg);
+    Assert.Equal(300, filled.InitialVolume);
+    Assert.Equal(3, filled.TargetsPips.Count);
+
+    cts.Cancel();
+    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+  }
+
   private static async Task WaitForEventAsync(FakeAutoTradeStore store, string type)
   {
     using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
     while (!store.Events.Any(item => item.Type == type))
+    {
+      await Task.Delay(10, cts.Token);
+    }
+  }
+
+  private static async Task WaitUntilAsync(Func<bool> predicate)
+  {
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+    while (!predicate())
     {
       await Task.Delay(10, cts.Token);
     }
@@ -488,24 +619,39 @@ public sealed class AutoTradeEngineTests
     string timeframe = "M1",
     string setup = "Auto Range Scalp",
     string mode = "auto_range_scalp",
-    string direction = "BUY"
+    string direction = "BUY",
+    char candidate = 'a',
+    long createdAt = 1_000,
+    long barTs = 1_000,
+    decimal? structureSwing = null,
+    decimal entryLow = 3999.5m,
+    decimal entryHigh = 4000.5m
   ) => JsonSerializer.Serialize(new
   {
-    version = 1,
-    candidate_id = new string('a', 64),
+    version = 2,
+    candidate_id = new string(candidate, 64),
     symbol = "XAU",
     timeframe,
     setup,
     mode,
     direction,
     trigger_ts = "1000",
-    created_at = 1_000,
+    created_at = createdAt,
     spot_ts = 1_000,
     current_price = 4000.1,
     key_level = 4000.0,
-    entry_zone = new { low = 3999.5, high = 4000.5 },
+    entry_zone = new { low = entryLow, high = entryHigh },
     confluence = 2,
     reasons = new[] { "lower barrier x2", "rejection at scored edge" },
+    bar_ts = barTs,
+    atr = 1.0,
+    structure_swing = structureSwing
+      ?? (direction == "BUY" ? 3993.5m : 4006.2m),
+    displacement_direction = direction == "BUY" ? "up" : "down",
+    displacement_age_bars = 1,
+    bos_direction = direction == "BUY" ? "up" : "down",
+    bos_ts = 1_000,
+    opposing_level_distance_atr = 2.0,
   });
 
   private sealed class FakeTradingClient : ICTraderFeedClient, ICTraderTradeClient
@@ -518,13 +664,42 @@ public sealed class AutoTradeEngineTests
     public TradingAccountSnapshot Account { get; init; } = ValidAccount();
     public IReadOnlyList<TradingAccountGrant> Grants { get; init; } = [new(123, false)];
     public List<MarketOrderRequest> Orders { get; } = [];
+    public List<LimitOrderRequest> LimitOrders { get; } = [];
+    public List<TradingPendingOrder> PendingOrders { get; } = [];
+    public List<long> CancelledOrders { get; } = [];
     public List<(long PositionId, decimal StopLoss)> StopAmendments { get; } = [];
     public List<(long PositionId, long Volume)> Closes { get; } = [];
     public int? FailAmendmentCall { get; init; }
     private readonly List<TradingPosition> _positions = [];
+    private readonly Queue<decimal> _marketExecutionPrices = [];
     private int _amendmentCalls;
+    private long _nextPositionId = 91;
+    private long _nextOrderId = 81;
 
     public void SeedPosition(TradingPosition position) => _positions.Add(position);
+    public void EnqueueMarketExecutionPrice(decimal price) =>
+      _marketExecutionPrices.Enqueue(price);
+
+    public void FillPendingOrder(long orderId)
+    {
+      var pending = PendingOrders.Single(order => order.OrderId == orderId);
+      var request = LimitOrders.Single(order => order.Comment == pending.Comment);
+      PendingOrders.Remove(pending);
+      var distance = request.RelativeStopLoss / 100_000m;
+      var stopLoss = request.Direction == TradeDirection.Buy
+        ? request.LimitPrice - distance
+        : request.LimitPrice + distance;
+      _positions.Add(new TradingPosition(
+        _nextPositionId++,
+        request.SymbolId,
+        request.Direction,
+        request.Volume,
+        request.LimitPrice,
+        stopLoss,
+        request.Label,
+        request.Comment
+      ));
+    }
 
     public Task<IReadOnlyList<TradingAccountGrant>> GetAccountGrantsAsync(
       CancellationToken cancellationToken
@@ -538,23 +713,72 @@ public sealed class AutoTradeEngineTests
       CancellationToken cancellationToken
     ) => Task.FromResult<IReadOnlyList<TradingPosition>>(_positions.ToArray());
 
+    public Task<IReadOnlyList<TradingPendingOrder>> ReconcilePendingOrdersAsync(
+      CancellationToken cancellationToken
+    ) => Task.FromResult<IReadOnlyList<TradingPendingOrder>>(
+      PendingOrders.ToArray()
+    );
+
     public Task<TradeExecution> PlaceMarketOrderAsync(
       MarketOrderRequest order,
       CancellationToken cancellationToken
     )
     {
       Orders.Add(order);
+      var fill = _marketExecutionPrices.TryDequeue(out var queued)
+        ? queued
+        : 4000.2m;
+      var positionId = _nextPositionId++;
+      var orderId = _nextOrderId++;
+      var distance = order.RelativeStopLoss / 100_000m;
+      var stopLoss = order.Direction == TradeDirection.Buy
+        ? fill - distance
+        : fill + distance;
       _positions.Add(new TradingPosition(
-        91,
+        positionId,
         order.SymbolId,
         order.Direction,
         order.Volume,
-        4000.2m,
-        3993.7m,
+        fill,
+        stopLoss,
         order.Label,
         order.Comment
       ));
-      return Task.FromResult(new TradeExecution(91, 81, 4000.2m, order.Volume));
+      return Task.FromResult(new TradeExecution(
+        positionId,
+        orderId,
+        fill,
+        order.Volume
+      ));
+    }
+
+    public Task<long> PlaceLimitOrderAsync(
+      LimitOrderRequest order,
+      CancellationToken cancellationToken
+    )
+    {
+      LimitOrders.Add(order);
+      var orderId = _nextOrderId++;
+      PendingOrders.Add(new TradingPendingOrder(
+        orderId,
+        order.SymbolId,
+        order.Direction,
+        order.Volume,
+        order.LimitPrice,
+        order.Label,
+        order.Comment
+      ));
+      return Task.FromResult(orderId);
+    }
+
+    public Task CancelPendingOrderAsync(
+      long orderId,
+      CancellationToken cancellationToken
+    )
+    {
+      CancelledOrders.Add(orderId);
+      PendingOrders.RemoveAll(order => order.OrderId == orderId);
+      return Task.CompletedTask;
     }
 
     public Task AmendPositionStopLossAsync(
@@ -639,6 +863,7 @@ public sealed class AutoTradeEngineTests
   {
     private string _cursor = "0-0";
     private readonly Dictionary<string, string> _candidateStatus = [];
+    private readonly List<string> _payloads = [payload];
     public Dictionary<long, AutoTradePositionState> Positions { get; } = [];
     public List<AutoTradeEvent> Events { get; } = [];
     public TaskCompletionSource<bool> Ordered { get; } = new(
@@ -652,6 +877,9 @@ public sealed class AutoTradeEngineTests
     );
     public string Cursor => _cursor;
     private long _daily;
+
+    public void EnqueueCandidate(string candidatePayload) =>
+      _payloads.Add(candidatePayload);
 
     public Task<string> GetCursorAsync(CancellationToken cancellationToken) =>
       Task.FromResult(_cursor);
@@ -668,12 +896,15 @@ public sealed class AutoTradeEngineTests
       CancellationToken cancellationToken
     )
     {
-      if (afterId != "0-0")
+      var last = afterId == "0-0"
+        ? 0
+        : int.Parse(afterId.Split('-')[0]);
+      if (last >= _payloads.Count)
       {
         return Task.FromResult<IReadOnlyList<TradeStreamEntry>>([]);
       }
       return Task.FromResult<IReadOnlyList<TradeStreamEntry>>([
-        new TradeStreamEntry("1-0", payload),
+        new TradeStreamEntry($"{last + 1}-0", _payloads[last]),
       ]);
     }
     public Task<bool> TryClaimCandidateAsync(

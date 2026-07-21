@@ -35,6 +35,58 @@ def test_render_auto_trade_stop_and_warning_events():
   assert "live account 44669326" in warning
 
 
+def test_render_scale_in_zone_and_group_events():
+  scale_in = auto_trade_ops.render_auto_trade_event({
+    "type": "add",
+    "message": "Tranche 2 · 0.08 lots · exposure-bound",
+  })
+  zone = auto_trade_ops.render_auto_trade_event({
+    "type": "zone_planned",
+    "message": "two limits",
+  })
+  result = auto_trade_ops.render_auto_trade_event({
+    "type": "group_result",
+    "message": "realised $42 · no-add $31",
+  })
+
+  assert "scale-in" in scale_in
+  assert "zone fill" in zone
+  assert "group result" in result
+
+
+@pytest.mark.asyncio
+async def test_group_stats_split_adds_and_deduplicate():
+  client = redis_state.get_client()
+  event = {
+    "type": "group_result",
+    "group_id": "group-a",
+    "had_adds": True,
+    "group_realized_pnl": 42,
+    "counterfactual_pnl": 31,
+    "group_realized_pips": 84,
+    "counterfactual_pips": 73,
+  }
+
+  await auto_trade_ops._record_group_result(client, event)
+  await auto_trade_ops._record_group_result(client, event)
+  await auto_trade_ops._record_group_result(client, {
+    "type": "group_result",
+    "group_id": "group-b",
+    "had_adds": False,
+    "group_realized_pnl": 7,
+  })
+
+  stats = await client.hgetall("auto_trade:stats")
+  assert stats["groups"] == "2"
+  assert stats["with_adds"] == "1"
+  assert stats["without_adds"] == "1"
+  assert float(stats["realized_pnl"]) == 49
+  assert float(stats["add_delta_pnl"]) == 11
+  assert float(stats["realized_pips"]) == 84
+  assert float(stats["counterfactual_pips"]) == 73
+  assert stats["adds_improved"] == "1"
+
+
 @pytest.mark.asyncio
 async def test_pause_resume_and_status(monkeypatch):
   monkeypatch.setattr(auto_trade_ops.settings, "auto_trade_enabled", True)
@@ -51,6 +103,7 @@ async def test_pause_resume_and_status(monkeypatch):
   assert "demo trading" in text
   assert "paused" in text
   assert "0/6" in text
+  assert "Measured groups" in text
   assert "independent M1 range scalp · raw M5/M15 rails" in text
   assert "waiting_rejection" in text
   assert "support" in text

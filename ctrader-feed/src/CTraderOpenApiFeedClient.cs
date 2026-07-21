@@ -221,6 +221,25 @@ public sealed class CTraderOpenApiFeedClient(
       .ToArray();
   }
 
+  public async Task<IReadOnlyList<TradingPendingOrder>> ReconcilePendingOrdersAsync(
+    CancellationToken cancellationToken
+  )
+  {
+    var response = await SendAndWaitAsync<ProtoOAReconcileRes>(
+      new ProtoOAReconcileReq { CtidTraderAccountId = options.AccountId },
+      item => item.CtidTraderAccountId == options.AccountId,
+      cancellationToken
+    );
+    return response.Order
+      .Where(order => (
+        order.TradeData is not null
+        && order.OrderType == ProtoOAOrderType.Limit
+        && order.HasLimitPrice
+      ))
+      .Select(ToTradingPendingOrder)
+      .ToArray();
+  }
+
   public async Task<TradeExecution> PlaceMarketOrderAsync(
     MarketOrderRequest order,
     CancellationToken cancellationToken
@@ -249,6 +268,68 @@ public sealed class CTraderOpenApiFeedClient(
       cancellationToken
     );
     return ToTradeExecution(response);
+  }
+
+  public async Task<long> PlaceLimitOrderAsync(
+    LimitOrderRequest order,
+    CancellationToken cancellationToken
+  )
+  {
+    var request = new ProtoOANewOrderReq
+    {
+      CtidTraderAccountId = options.AccountId,
+      SymbolId = order.SymbolId,
+      OrderType = ProtoOAOrderType.Limit,
+      TradeSide = order.Direction == TradeDirection.Buy
+        ? ProtoOATradeSide.Buy
+        : ProtoOATradeSide.Sell,
+      Volume = order.Volume,
+      LimitPrice = decimal.ToDouble(order.LimitPrice),
+      RelativeStopLoss = order.RelativeStopLoss,
+      Label = order.Label,
+      Comment = order.Comment,
+      ClientOrderId = order.ClientOrderId,
+    };
+    var response = await SendAndWaitAsync<ProtoOAExecutionEvent>(
+      request,
+      item => (
+        LimitOrderMatches(item, order)
+        && item.ExecutionType is ProtoOAExecutionType.OrderAccepted
+          or ProtoOAExecutionType.OrderFilled
+          or ProtoOAExecutionType.OrderRejected
+      ),
+      cancellationToken
+    );
+    ThrowIfRejected(response);
+    var orderId = response.Order?.OrderId ?? response.Deal?.OrderId ?? 0;
+    if (orderId <= 0)
+    {
+      throw new InvalidOperationException(
+        "cTrader limit-order response did not return an order ID"
+      );
+    }
+    return orderId;
+  }
+
+  public async Task CancelPendingOrderAsync(
+    long orderId,
+    CancellationToken cancellationToken
+  )
+  {
+    var response = await SendAndWaitAsync<ProtoOAExecutionEvent>(
+      new ProtoOACancelOrderReq
+      {
+        CtidTraderAccountId = options.AccountId,
+        OrderId = orderId,
+      },
+      item => (
+        item.Order?.OrderId == orderId
+        && item.ExecutionType is ProtoOAExecutionType.OrderCancelled
+          or ProtoOAExecutionType.OrderRejected
+      ),
+      cancellationToken
+    );
+    ThrowIfRejected(response);
   }
 
   public async Task AmendPositionStopLossAsync(
@@ -690,6 +771,22 @@ public sealed class CTraderOpenApiFeedClient(
     );
   }
 
+  private static TradingPendingOrder ToTradingPendingOrder(ProtoOAOrder order)
+  {
+    var data = order.TradeData;
+    return new TradingPendingOrder(
+      order.OrderId,
+      data.SymbolId,
+      data.TradeSide == ProtoOATradeSide.Buy
+        ? TradeDirection.Buy
+        : TradeDirection.Sell,
+      data.Volume,
+      Convert.ToDecimal(order.LimitPrice),
+      data.Label,
+      data.Comment
+    );
+  }
+
   private static bool IsTerminalExecution(ProtoOAExecutionType type) =>
     type is ProtoOAExecutionType.OrderFilled
       or ProtoOAExecutionType.OrderRejected;
@@ -701,6 +798,15 @@ public sealed class CTraderOpenApiFeedClient(
     || (
       response.Position?.TradeData?.Label == order.Label
       && response.Position.TradeData.Comment == order.Comment
+    );
+
+  private static bool LimitOrderMatches(
+    ProtoOAExecutionEvent response,
+    LimitOrderRequest order
+  ) => response.Order?.ClientOrderId == order.ClientOrderId
+    || (
+      response.Order?.TradeData?.Label == order.Label
+      && response.Order.TradeData.Comment == order.Comment
     );
 
   private static long ExecutionPositionId(ProtoOAExecutionEvent response) =>

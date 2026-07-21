@@ -89,6 +89,27 @@ public sealed record MarketOrderRequest(
   string ClientOrderId
 );
 
+public sealed record LimitOrderRequest(
+  long SymbolId,
+  TradeDirection Direction,
+  long Volume,
+  decimal LimitPrice,
+  long RelativeStopLoss,
+  string Label,
+  string Comment,
+  string ClientOrderId
+);
+
+public sealed record TradingPendingOrder(
+  long OrderId,
+  long SymbolId,
+  TradeDirection Direction,
+  long Volume,
+  decimal LimitPrice,
+  string Label,
+  string Comment
+);
+
 public sealed record TradeExecution(
   long PositionId,
   long OrderId,
@@ -117,7 +138,15 @@ public sealed record TradeCandidate(
   decimal KeyLevel,
   TradeCandidateZone EntryZone,
   int Confluence,
-  IReadOnlyList<string> Reasons
+  IReadOnlyList<string> Reasons,
+  long? BarTs = null,
+  decimal? Atr = null,
+  decimal? StructureSwing = null,
+  string? DisplacementDirection = null,
+  int? DisplacementAgeBars = null,
+  string? BosDirection = null,
+  long? BosTs = null,
+  decimal? OpposingLevelDistanceAtr = null
 );
 
 public sealed record TradeStreamEntry(
@@ -138,7 +167,21 @@ public sealed record AutoTradePositionState(
   int NextTargetIndex,
   long OpenedAt,
   decimal? CurrentStopLoss = null,
-  IReadOnlyList<int>? TargetOrdinals = null
+  IReadOnlyList<int>? TargetOrdinals = null,
+  string? GroupId = null,
+  int TrancheIndex = 1,
+  decimal GroupBookedPnl = 0m,
+  decimal InitialTrancheBookedPnl = 0m,
+  long GroupOpenedAt = 0,
+  long LastTrancheBarTs = 0,
+  int GroupTrancheCount = 1,
+  bool HadAdds = false,
+  decimal? InitialStopLoss = null,
+  int ZoneLeg = 0,
+  decimal GroupRealizedPipVolume = 0m,
+  decimal InitialRealizedPipVolume = 0m,
+  long GroupInitialVolume = 0,
+  long InitialTrancheVolume = 0
 );
 
 public sealed record AutoTradeEvent(
@@ -149,5 +192,14 @@ public sealed record AutoTradeEvent(
   long? PositionId = null,
   int? TargetPips = null,
   long? Volume = null,
-  decimal? Price = null
+  decimal? Price = null,
+  string? GroupId = null,
+  int? TrancheIndex = null,
+  decimal? GroupWorstCase = null,
+  decimal? RiskBudget = null,
+  decimal? GroupRealizedPnl = null,
+  decimal? CounterfactualPnl = null,
+  bool? HadAdds = null,
+  decimal? GroupRealizedPips = null,
+  decimal? CounterfactualPips = null
 );

@@ -8,6 +8,7 @@ import pytest
 
 from app import auto_scalp_worker, redis_state, scanner
 from app.auto_scalp_gate import AutoScalpDecision, AutoScalpRail
+from app.auto_scale_context import AutoScaleContext
 
 
 def _frame() -> pd.DataFrame:
@@ -44,6 +45,19 @@ def _decision() -> AutoScalpDecision:
   )
 
 
+def _scale_context(now: int) -> AutoScaleContext:
+  return AutoScaleContext(
+    bar_ts=now - 60,
+    atr=1.2,
+    structure_swing=4014.8,
+    displacement_direction="up",
+    displacement_age_bars=1,
+    bos_direction="up",
+    bos_ts=now - 60,
+    opposing_level_distance_atr=2.5,
+  )
+
+
 @pytest.mark.asyncio
 async def test_worker_publishes_one_durable_auto_only_candidate(monkeypatch):
   client = redis_state.get_client()
@@ -57,10 +71,10 @@ async def test_worker_publishes_one_durable_auto_only_candidate(monkeypatch):
   spot = auto_scalp_worker.AutoTradeSpot(4017.2, now, True)
 
   first = await auto_scalp_worker._publish_candidate(
-    client, "XAU", "1784552400", spot, _decision()
+    client, "XAU", "1784552400", spot, _decision(), _scale_context(now)
   )
   second = await auto_scalp_worker._publish_candidate(
-    client, "XAU", "1784552400", spot, _decision()
+    client, "XAU", "1784552400", spot, _decision(), _scale_context(now)
   )
 
   assert first is not None
@@ -75,6 +89,10 @@ async def test_worker_publishes_one_durable_auto_only_candidate(monkeypatch):
   assert payload["direction"] == "BUY"
   assert payload["entry_zone"] == {"low": 4016.5, "high": 4017.1}
   assert payload["spot_ts"] == now
+  assert payload["version"] == 2
+  assert payload["structure_swing"] == 4014.8
+  assert payload["displacement_age_bars"] == 1
+  assert payload["bos_direction"] == "up"
 
 
 @pytest.mark.asyncio

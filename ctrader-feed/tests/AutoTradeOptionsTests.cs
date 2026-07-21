@@ -20,6 +20,28 @@ public sealed class AutoTradeOptionsTests
     );
   }
 
+  [Fact]
+  public void ValidatesScaleInAndZoneFillSettingsAsOneSet()
+  {
+    Options().Validate();
+
+    Assert.Throws<AutoTradeConfigurationException>(
+      () => (Options() with { MaxTranches = 0 }).Validate()
+    );
+    Assert.Throws<AutoTradeConfigurationException>(
+      () => (Options() with { AddRiskFraction = 1.1m }).Validate()
+    );
+    Assert.Throws<AutoTradeConfigurationException>(
+      () => (Options() with { AddMinStopPips = 0 }).Validate()
+    );
+    Assert.Throws<AutoTradeConfigurationException>(
+      () => (Options() with { AddMinStopPips = 66 }).Validate()
+    );
+    Assert.Throws<AutoTradeConfigurationException>(
+      () => (Options() with { ZoneFillTtlBars = 0 }).Validate()
+    );
+  }
+
   private static AutoTradeOptions Options() => new(
     Enabled: true,
     DryRun: false,
