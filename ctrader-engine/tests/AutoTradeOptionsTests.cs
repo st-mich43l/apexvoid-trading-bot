@@ -45,6 +45,22 @@ public sealed class AutoTradeOptionsTests
     );
   }
 
+  [Fact]
+  public void ValidatesTrendStopBandBounds()
+  {
+    Options().Validate();
+
+    Assert.Throws<AutoTradeConfigurationException>(
+      () => (Options() with { TrendStopMinPips = 0 }).Validate()
+    );
+    Assert.Throws<AutoTradeConfigurationException>(
+      () => (Options() with { TrendStopMaxPips = 0 }).Validate()
+    );
+    Assert.Throws<AutoTradeConfigurationException>(
+      () => (Options() with { TrendStopMinPips = 150, TrendStopMaxPips = 120 }).Validate()
+    );
+  }
+
   private static AutoTradeOptions Options() => new(
     Enabled: true,
     DryRun: false,

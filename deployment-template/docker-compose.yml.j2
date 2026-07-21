@@ -96,6 +96,8 @@ services:
       AUTO_TRADE_STREAM: {{ apexvoid_trading_bot_env.AUTO_TRADE_STREAM | default('auto_trade:candidates') | string | to_json }}
       AUTO_TRADE_EVENT_STREAM: {{ apexvoid_trading_bot_env.AUTO_TRADE_EVENT_STREAM | default('auto_trade:events') | string | to_json }}
       AUTO_TRADE_LABEL: {{ apexvoid_trading_bot_env.AUTO_TRADE_LABEL | default('apexvoid-auto') | string | to_json }}
+      AUTO_TRADE_TREND_STOP_MIN_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_TREND_STOP_MIN_PIPS | default('40') | string | to_json }}
+      AUTO_TRADE_TREND_STOP_MAX_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_TREND_STOP_MAX_PIPS | default('120') | string | to_json }}
     healthcheck:
       test: ["CMD", "/app/ctrader-feed", "--healthcheck"]
       interval: 30s

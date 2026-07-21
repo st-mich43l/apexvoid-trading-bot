@@ -18,6 +18,12 @@ from typing import Any
 from app.persistence import redis_state
 from app.autotrade.gate import AutoScalpDecision, evaluate_auto_scalp_gate
 from app.autotrade.scale_context import AutoScaleContext, build_auto_scale_context
+from app.autotrade.trend import (
+  RegimeInfo,
+  TrendDecision,
+  classify_regime,
+  evaluate_trend_gate,
+)
 from app.core.config import settings
 from app.persistence.store import event_in_window
 from app.analysis.ohlc_source import RedisOHLCSource
@@ -26,6 +32,11 @@ from app.analysis.ohlc_source import RedisOHLCSource
 log = logging.getLogger(__name__)
 EXECUTION_TIMEFRAME = "M1"
 CONTEXT_TIMEFRAMES = ("M5", "M15")
+# Regime instrumentation: rolling 24h chop/trend/breakout share per symbol,
+# used by delivery.py's /auto_status line and the mis-tuning alert below.
+_REGIME_HISTORY_WINDOW_SECONDS = 24 * 3600
+_REGIME_HISTORY_TTL_SECONDS = 26 * 3600
+_REGIME_ALERT_COOLDOWN_SECONDS = 24 * 3600
 
 
 @dataclass(frozen=True)
@@ -111,6 +122,8 @@ async def _publish_candidate(
   spot: AutoTradeSpot | None,
   decision: AutoScalpDecision,
   scale_context: AutoScaleContext | None = None,
+  *,
+  regime: RegimeInfo | None = None,
 ) -> str | None:
   if (
     not settings.auto_trade_enabled
@@ -123,6 +136,10 @@ async def _publish_candidate(
     or decision.full_tp_pips not in {50, 70}
     or scale_context is None
     or decision.confluence < max(1, settings.auto_trade_min_confluence)
+    # Mutual exclusion with the trend/breakout strategy family: a box
+    # candidate only ever ships while the regime router says "chop".
+    # `regime is None` preserves pre-regime-router callers/tests.
+    or (regime is not None and regime.state != "chop")
   ):
     return None
   now = int(datetime.now(timezone.utc).timestamp())
@@ -175,6 +192,7 @@ async def _publish_candidate(
     "range_low": decision.box.lower.level,
     "range_high": decision.box.upper.level,
     "full_take_profit_pips": decision.full_tp_pips,
+    "regime": regime.state if regime is not None else "chop",
   }
   if scale_context is not None:
     payload.update({
@@ -213,6 +231,222 @@ async def _publish_candidate(
   return candidate_id
 
 
+_TREND_SETUP_LABELS = {
+  "pullback": "Trend Pullback",
+  "breakout_continuation": "Breakout Continuation",
+  "box_breakout": "Box Breakout",
+}
+_TREND_MODE_LABELS = {
+  "pullback": "auto_trend_pullback",
+  "breakout_continuation": "auto_trend_breakout",
+  "box_breakout": "auto_box_breakout",
+}
+
+
+def _trend_candidate_id(
+  symbol: str,
+  trigger_ts: str,
+  trend_decision: TrendDecision,
+) -> str:
+  if trend_decision.direction is None or trend_decision.mode is None:
+    raise ValueError("trend candidate requires a direction and mode")
+  key_level = (
+    trend_decision.key_level if trend_decision.key_level is not None else 0.0
+  )
+  raw = (
+    f"v3|trend|{symbol.upper()}|{trend_decision.mode}|{trigger_ts}|"
+    f"{trend_decision.direction.upper()}|{key_level:.5f}"
+  )
+  return hashlib.sha256(raw.encode("ascii")).hexdigest()
+
+
+async def _publish_trend_candidate(
+  client: Any,
+  symbol: str,
+  event_ts: str,
+  spot: AutoTradeSpot | None,
+  regime: RegimeInfo,
+  trend_decision: TrendDecision,
+) -> str | None:
+  if (
+    not settings.auto_trade_enabled
+    or not settings.auto_trade_trend_enabled
+    or spot is None
+    or not spot.fresh
+    or regime.state not in ("trend", "breakout")
+    or trend_decision.state != "candidate"
+    or trend_decision.direction is None
+    or trend_decision.mode not in _TREND_SETUP_LABELS
+    or trend_decision.entry_zone is None
+    or trend_decision.key_level is None
+    or trend_decision.atr is None
+    or trend_decision.structure_swing is None
+    or not trend_decision.targets_pips
+    or trend_decision.confluence < max(1, settings.auto_trade_min_confluence)
+  ):
+    return None
+  now = int(datetime.now(timezone.utc).timestamp())
+  try:
+    guarded = await event_in_window(
+      now,
+      max(0, settings.auto_trade_news_guard_minutes) * 60,
+    )
+  except Exception:
+    log.exception("auto-trend candidate blocked: news guard unavailable")
+    return None
+  if guarded is not None:
+    log.info(
+      "auto-trend candidate blocked by news guard symbol=%s event=%s",
+      symbol,
+      guarded.get("title", "high-impact event"),
+    )
+    return None
+
+  trigger_ts = str(event_ts or "")
+  candidate_id = _trend_candidate_id(symbol, trigger_ts, trend_decision)
+  claimed = await client.set(
+    f"auto_trade:candidate:{candidate_id}",
+    "published",
+    ex=max(60, settings.auto_trade_candidate_ttl),
+    nx=True,
+  )
+  if not claimed:
+    return None
+  payload = {
+    "version": 3,
+    "candidate_id": candidate_id,
+    "symbol": symbol.upper(),
+    "timeframe": EXECUTION_TIMEFRAME,
+    "setup": _TREND_SETUP_LABELS[trend_decision.mode],
+    "mode": _TREND_MODE_LABELS[trend_decision.mode],
+    "direction": trend_decision.direction.upper(),
+    "trigger_ts": trigger_ts,
+    "created_at": now,
+    "spot_ts": spot.ts,
+    "current_price": spot.price,
+    "key_level": trend_decision.key_level,
+    "entry_zone": {
+      "low": trend_decision.entry_zone[0],
+      "high": trend_decision.entry_zone[1],
+    },
+    "confluence": trend_decision.confluence,
+    "reasons": list(trend_decision.reasons),
+    "atr": trend_decision.atr,
+    "structure_swing": trend_decision.structure_swing,
+    "targets_pips": list(trend_decision.targets_pips),
+    "regime": regime.state,
+  }
+  try:
+    await client.xadd(
+      settings.auto_trade_stream,
+      {"payload": json.dumps(payload, separators=(",", ":"))},
+      maxlen=max(100, settings.auto_trade_stream_maxlen),
+      approximate=True,
+    )
+  except Exception:
+    await client.delete(f"auto_trade:candidate:{candidate_id}")
+    raise
+  log.info(
+    "auto-trend candidate published id=%s symbol=%s mode=%s direction=%s",
+    candidate_id[:12],
+    symbol,
+    trend_decision.mode,
+    trend_decision.direction,
+  )
+  return candidate_id
+
+
+def _regime_history_key(symbol: str) -> str:
+  return f"auto_trade:regime_history:{symbol.upper()}"
+
+
+def _regime_alert_key(symbol: str) -> str:
+  return f"auto_trade:regime_alert_pending:{symbol.upper()}"
+
+
+async def _record_regime(client: Any, symbol: str, state: str, now: int) -> None:
+  key = _regime_history_key(symbol)
+  await client.zadd(key, {f"{now}:{state}": now})
+  await client.zremrangebyscore(key, 0, now - _REGIME_HISTORY_WINDOW_SECONDS)
+  await client.expire(key, _REGIME_HISTORY_TTL_SECONDS)
+
+
+async def regime_share_24h(client: Any, symbol: str) -> dict[str, float] | None:
+  """Rolling 24h chop/trend/breakout share for ``symbol``.
+
+  Returns ``None`` when there isn't yet close to a full day of samples, so
+  callers (delivery.py's /auto_status) can show "warming up" instead of a
+  misleading split computed from a handful of bars.
+  """
+  key = _regime_history_key(symbol)
+  now = int(datetime.now(timezone.utc).timestamp())
+  await client.zremrangebyscore(key, 0, now - _REGIME_HISTORY_WINDOW_SECONDS)
+  members = await client.zrangebyscore(
+    key,
+    now - _REGIME_HISTORY_WINDOW_SECONDS,
+    now,
+  )
+  if not members:
+    return None
+  counts = {"chop": 0, "trend": 0, "breakout": 0}
+  oldest_ts: int | None = None
+  for member in members:
+    text = member.decode() if isinstance(member, bytes) else str(member)
+    ts_text, _, state = text.partition(":")
+    try:
+      ts = int(ts_text)
+    except ValueError:
+      continue
+    if oldest_ts is None or ts < oldest_ts:
+      oldest_ts = ts
+    if state in counts:
+      counts[state] += 1
+  total = sum(counts.values())
+  if total == 0 or oldest_ts is None:
+    return None
+  # Require the samples to span close to a full day before trusting the
+  # split - a freshly-started bot shouldn't alarm on a 100%/0% sliver.
+  if now - oldest_ts < _REGIME_HISTORY_WINDOW_SECONDS * 0.9:
+    return None
+  return {state: value / total for state, value in counts.items()}
+
+
+async def _maybe_flag_regime_alert(
+  client: Any,
+  symbol: str,
+  shares: dict[str, float] | None,
+) -> None:
+  """Flag (at most once per 24h per symbol) that the chop share is high
+  enough to warrant an owner DM. worker.py cannot import app.bot.client
+  (see the architecture-guard test at the bottom of this module), so it
+  only writes a Redis flag here; delivery.py's existing event-delivery
+  loop (which already imports send_scanner_with_retry) polls for it and
+  sends the actual Telegram message. See delivery.py's
+  `_check_regime_alerts` for the consuming side.
+  """
+  if not shares:
+    return
+  threshold = max(0.0, min(1.0, float(settings.regime_chop_alert_share)))
+  chop_share = shares.get("chop", 0.0)
+  if chop_share <= threshold:
+    return
+  payload = json.dumps({
+    "symbol": symbol.upper(),
+    "chop_share": chop_share,
+    "trend_share": shares.get("trend", 0.0),
+    "breakout_share": shares.get("breakout", 0.0),
+    "flagged_at": int(datetime.now(timezone.utc).timestamp()),
+  })
+  # SETNX + TTL: only (re)flag once per cooldown window per symbol, even
+  # though this runs on every bar close while the condition holds.
+  await client.set(
+    _regime_alert_key(symbol),
+    payload,
+    ex=_REGIME_ALERT_COOLDOWN_SECONDS,
+    nx=True,
+  )
+
+
 def _status_payload(
   decision: AutoScalpDecision,
   *,
@@ -221,6 +455,7 @@ def _status_payload(
   frames: dict[str, Any],
   spot: AutoTradeSpot | None,
   candidate_id: str | None,
+  regime: RegimeInfo | None = None,
 ) -> dict[str, Any]:
   rail = decision.rail
   target = decision.target
@@ -263,6 +498,8 @@ def _status_payload(
       timeframe: len(frame)
       for timeframe, frame in sorted(frames.items())
     },
+    "regime": None if regime is None else regime.state,
+    "regime_reasons": [] if regime is None else list(regime.reasons),
   }
 
 
@@ -345,6 +582,26 @@ async def _handle_event(
     symbol=symbol,
     spot_price=None if spot is None or not spot.fresh else spot.price,
   )
+  regime = classify_regime(frames, decision, settings)
+  now_ts = int(datetime.now(timezone.utc).timestamp())
+  try:
+    await _record_regime(client, symbol, regime.state, now_ts)
+    shares = await regime_share_24h(client, symbol)
+    await _maybe_flag_regime_alert(client, symbol, shares)
+  except Exception:
+    log.exception("regime instrumentation failed symbol=%s", symbol)
+  trend_decision = (
+    evaluate_trend_gate(
+      frames,
+      regime,
+      decision,
+      symbol=symbol,
+      spot_price=None if spot is None or not spot.fresh else spot.price,
+      cfg=settings,
+    )
+    if regime.state in ("trend", "breakout")
+    else TrendDecision("no_setup")
+  )
   closed_price = (
     float(frames[EXECUTION_TIMEFRAME]["close"].iloc[-1])
     if EXECUTION_TIMEFRAME in frames
@@ -369,14 +626,24 @@ async def _handle_event(
       and spot.fresh
     ) else None
   )
-  candidate_id = await _publish_candidate(
+  box_candidate_id = await _publish_candidate(
     client,
     symbol,
     event_ts,
     spot,
     decision,
     scale_context,
+    regime=regime,
   )
+  trend_candidate_id = await _publish_trend_candidate(
+    client,
+    symbol,
+    event_ts,
+    spot,
+    regime,
+    trend_decision,
+  )
+  candidate_id = box_candidate_id or trend_candidate_id
   payload = _status_payload(
     decision,
     symbol=symbol,
@@ -384,18 +651,20 @@ async def _handle_event(
     frames=frames,
     spot=spot,
     candidate_id=candidate_id,
+    regime=regime,
   )
   encoded = json.dumps(payload, separators=(",", ":"), sort_keys=True)
   await client.set("auto_trade:last_gate", encoded)
   await client.set(f"auto_trade:last_gate:{symbol}", encoded)
   log.info(
     "independent auto-scalp gate symbol=%s state=%s trigger=%s "
-    "direction=%s candidate=%s",
+    "direction=%s candidate=%s regime=%s",
     symbol,
     decision.state,
     decision.trigger or "-",
     decision.direction or "-",
     candidate_id[:12] if candidate_id else "-",
+    regime.state,
   )
   return decision
 
