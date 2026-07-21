@@ -13,6 +13,12 @@ dated section after deployment.
 
 ### Added
 
+- Added an independent two-edge range-box scalp contract for ApexVoid Algo:
+  BUY lower-edge and SELL upper-edge M1 rejections, full-position +50/+70-pip
+  exits, repeated-touch 60-bar auction boxes, midpoint edge re-arming, stable
+  box IDs, and confirmed-breakout retirement.
+- Added shareable ApexVoid Algo Telegram cards for entries, full take profit,
+  stop protection, warnings, and status without the old Auto Trader branding.
 - Added momentum scale-in as independent, structure-stopped tranche positions
   under balance-based group loss, exposure, add-risk, and ladder invariants;
   averaging down is explicitly refused by design.
@@ -69,6 +75,11 @@ dated section after deployment.
 
 ### Changed
 
+- Range-box candidates now require flat XAU exposure, bypass scale-in and
+  planned zone-fill, and use one broker-valid 100% target; legacy executor
+  target plans remain unchanged.
+- Removed the six-trade daily ceiling from ApexVoid Algo; qualified box cycles
+  remain unlimited until box invalidation or another safety gate blocks entry.
 - Initial and add sizing now use `min(risk-based, equity-table)` from realised
   balance; the single-position guard is now a lifetime tranche-count limit,
   and initial/add stops share the same 15-65 pip structure-stop planner.

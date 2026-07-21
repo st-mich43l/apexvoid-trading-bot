@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+import re
 from datetime import datetime, timezone
 from html import escape
 
@@ -30,29 +31,147 @@ _NOTIFY_TYPES = {
   "error",
 }
 
+_AUTO_NAME_RE = re.compile(r"(?i)\bauto[\s-]*(?:trade|trader)\b")
+_OPENED_RE = re.compile(
+  r"(?i)^(BUY|SELL)\s+([\d.,]+)\s+lots?\s+filled\s+([\d.,]+),\s*"
+  r"SL\s+([\d.,]+)\s*·\s*([\d.,]+)p\s+structure\s*·\s*(.+)$"
+)
+_TP_RE = re.compile(
+  r"(?i)^(FULL TP|TP\d+)\s+\+(\d+)\s+pips\s+closed\s+volume\s+(\d+)$"
+)
+_STOP_RE = re.compile(
+  r"(?i)^🛡\s+(?:ApexVoid Algo|Auto[\s-]*(?:trade|trader))\s+stop\s+→\s+"
+  r"([\d.,]+)\s+\(([^)]+)\)(?:\s*·\s*position\s+\d+)?$"
+)
+
+
+def _clean_message(value: object) -> str:
+  return _AUTO_NAME_RE.sub("ApexVoid Algo", str(value or "")).strip()
+
+
+def _position_line(event: dict) -> str | None:
+  position_id = event.get("position_id")
+  if position_id is None:
+    return None
+  return f"🆔 Position: <code>{int(position_id)}</code>"
+
+
+def _format_opened(event: dict, message: str) -> str | None:
+  match = _OPENED_RE.match(message)
+  if match is None:
+    return None
+  direction, lots, entry, stop, stop_pips, details = match.groups()
+  side_icon = "🟢" if direction.upper() == "BUY" else "🔴"
+  full_tp = re.search(r"(?i)full TP\s+(\d+)p", details)
+  range_box = re.search(r"(?i)range\s+([\d.,]+)-([\d.,]+)", details)
+  lines = [
+    "⚡ <b>ApexVoid Algo</b>",
+    f"{side_icon} <b>XAU {direction.upper()} opened</b>",
+    "",
+    f"📍 Entry: <b>{escape(entry)}</b>",
+    f"🛡 SL: <b>{escape(stop)}</b> · {escape(stop_pips)} pips",
+  ]
+  if full_tp is not None:
+    target_pips = int(full_tp.group(1))
+    try:
+      entry_price = float(entry.replace(",", ""))
+      target_price = entry_price + (
+        target_pips * 0.1 if direction.upper() == "BUY" else -target_pips * 0.1
+      )
+      lines.append(
+        f"🎯 Full TP: <b>{target_price:,.2f}</b> · +{target_pips} pips"
+      )
+    except ValueError:
+      lines.append(f"🎯 Full TP: <b>+{target_pips} pips</b>")
+  if range_box is not None:
+    lines.append(
+      "📦 Box: <b>"
+      f"{escape(range_box.group(1))}–{escape(range_box.group(2))}</b>"
+    )
+  lines.append(f"📊 Size: <b>{escape(lots)} lot</b>")
+  position = _position_line(event)
+  if position:
+    lines.extend(["", position])
+  return "\n".join(lines)
+
+
+def _format_take_profit(event: dict, message: str) -> str | None:
+  match = _TP_RE.match(message)
+  if match is None:
+    return None
+  label, pips, _ = match.groups()
+  full = label.upper() == "FULL TP"
+  lines = [
+    "⚡ <b>ApexVoid Algo</b>",
+    "🎯 <b>FULL TAKE PROFIT</b>" if full else f"🎯 <b>{label.upper()} HIT</b>",
+    "",
+    f"✅ Profit: <b>+{pips} pips</b>",
+  ]
+  if full:
+    lines.append("🏁 Position closed in full")
+  price = event.get("price")
+  if price is not None:
+    lines.append(f"📍 Exit: <b>{float(price):,.2f}</b>")
+  position = _position_line(event)
+  if position:
+    lines.extend(["", position])
+  return "\n".join(lines)
+
+
+def _format_stop_moved(event: dict, message: str) -> str | None:
+  match = _STOP_RE.match(message)
+  if match is None:
+    return None
+  stop, label = match.groups()
+  lines = [
+    "⚡ <b>ApexVoid Algo</b>",
+    "🛡 <b>Risk protected</b>",
+    "",
+    f"SL moved to <b>{escape(stop)}</b> · {escape(label)}",
+  ]
+  position = _position_line(event)
+  if position:
+    lines.extend(["", position])
+  return "\n".join(lines)
+
 
 def render_auto_trade_event(event: dict) -> str | None:
   event_type = str(event.get("type", ""))
   if event_type not in _NOTIFY_TYPES:
     return None
-  titles = {
-    "ready": "🤖 <b>Auto Trader ready</b>",
-    "dry_run": "🧪 <b>Auto Trader dry run</b>",
-    "opened": "🟢 <b>Auto trade opened</b>",
-    "add": "➕ <b>Auto trade scale-in</b>",
-    "zone_planned": "📐 <b>Auto zone fill planned</b>",
-    "zone_expired": "⌛ <b>Auto zone leg expired</b>",
-    "take_profit": "💰 <b>Auto trade partial TP</b>",
-    "stop_moved": "🛡 <b>Auto trade stop moved</b>",
-    "position_closed": "🛑 <b>Auto position closed</b>",
-    "group_result": "📊 <b>Auto trade group result</b>",
-    "warning": "⚠️ <b>Auto Trader warning</b>",
-    "error": "⚠️ <b>Auto Trader error</b>",
+  message = _clean_message(event.get("message", ""))
+  if event_type == "opened":
+    rendered = _format_opened(event, message)
+    if rendered:
+      return rendered
+  if event_type == "take_profit":
+    rendered = _format_take_profit(event, message)
+    if rendered:
+      return rendered
+  if event_type == "stop_moved":
+    rendered = _format_stop_moved(event, message)
+    if rendered:
+      return rendered
+  labels = {
+    "ready": "✅ <b>Engine ready</b>",
+    "dry_run": "🧪 <b>Simulation</b>",
+    "opened": "🟢 <b>Position opened</b>",
+    "add": "➕ <b>Scale-in filled</b>",
+    "zone_planned": "📐 <b>Entry plan ready</b>",
+    "zone_expired": "⌛ <b>Entry plan expired</b>",
+    "take_profit": "🎯 <b>Take profit hit</b>",
+    "stop_moved": "🛡 <b>Risk protected</b>",
+    "position_closed": "🏁 <b>Position closed</b>",
+    "group_result": "📊 <b>Trade result</b>",
+    "warning": "⚠️ <b>Warning</b>",
+    "error": "⚠️ <b>Execution issue</b>",
   }
-  lines = [titles[event_type], escape(str(event.get("message", "")))]
-  position_id = event.get("position_id")
-  if position_id is not None:
-    lines.append(f"Position: <code>{int(position_id)}</code>")
+  lines = ["⚡ <b>ApexVoid Algo</b>", labels[event_type]]
+  if message:
+    lines.extend(["", escape(message)])
+  position = _position_line(event)
+  if position and f"position {event.get('position_id')}" not in message.lower():
+    lines.extend(["", position])
   return "\n".join(lines)
 
 
@@ -89,23 +208,25 @@ async def auto_trade_status_text() -> str:
       try:
         payload = json.loads(raw)
         gate_state = str(payload.get("state") or gate_state)
-        rail = payload.get("rail")
-        if isinstance(rail, dict):
-          low = float(rail["low"])
-          high = float(rail["high"])
-          role = str(rail.get("role") or "rail")
-          zone_text = f" · {role} {low:,.2f}–{high:,.2f}"
+        box = payload.get("box")
+        if isinstance(box, dict):
+          low = float(box["low"])
+          high = float(box["high"])
+          tp = payload.get("full_tp_pips")
+          zone_text = f" · box {low:,.2f}–{high:,.2f}"
+          if tp is not None:
+            zone_text += f" · full TP {int(tp)}p"
       except (KeyError, TypeError, ValueError, json.JSONDecodeError):
         pass
     gate_line = (
-      "\nGate: <b>independent M1 range scalp · raw M5/M15 rails</b>"
+      "\nGate: <b>independent M1 two-edge box scalp</b>"
       f"\nLast check: <b>{escape(gate_state)}</b>{escape(zone_text)}"
     )
   return (
-    "🤖 <b>Auto Trader</b>\n"
+    "⚡ <b>ApexVoid Algo</b>\n"
     f"Mode: <b>{escape(mode)}</b> · State: <b>{state}</b>\n"
     f"Open positions: <b>{position_count}</b>\n"
-    f"Trades today: <b>{daily}/{settings.auto_trade_max_daily_trades}</b>"
+    f"Trades today: <b>{daily}</b> · <b>unlimited</b>"
     f"\nMeasured groups: <b>{group_count}</b> · adds "
     f"<b>{with_adds}</b> · no adds <b>{without_adds}</b>"
     f"{gate_line}"

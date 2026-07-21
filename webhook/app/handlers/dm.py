@@ -183,7 +183,7 @@ async def handle_auto_pause(msg: Message) -> None:
   if not _is_owner(msg):
     return
   await set_auto_trade_paused(True)
-  await msg.answer("⏸ <b>Auto Trader paused</b>\nNo new entries will be opened.")
+  await msg.answer("⏸ <b>ApexVoid Algo paused</b>\nNo new entries will be opened.")
 
 
 @router.message(Command("auto_resume"), F.chat.type == "private")
@@ -191,7 +191,7 @@ async def handle_auto_resume(msg: Message) -> None:
   if not _is_owner(msg):
     return
   await set_auto_trade_paused(False)
-  await msg.answer("▶️ <b>Auto Trader resumed</b>\nNew qualified entries are enabled.")
+  await msg.answer("▶️ <b>ApexVoid Algo resumed</b>\nNew qualified entries are enabled.")
 
 
 @router.message(Command("trade_pips"), F.chat.type == "private")

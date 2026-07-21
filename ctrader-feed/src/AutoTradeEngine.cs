@@ -252,16 +252,16 @@ public sealed class AutoTradeEngine(
     var client = RequireClient();
     var symbol = RequireSymbol();
     var now = _clock().ToUnixTimeSeconds();
-    var autoRangeScalp = string.Equals(
+    var legacyRangeScalp = candidate.Version is 1 or 2 && string.Equals(
         candidate.Timeframe,
         "M1",
         StringComparison.OrdinalIgnoreCase
       )
       && candidate.Setup == "Auto Range Scalp"
       && candidate.Mode == "auto_range_scalp";
+    var boxRangeScalp = IsBoxRangeScalp(candidate);
     if (
-      candidate.Version is not (1 or 2)
-      || !autoRangeScalp
+      (!legacyRangeScalp && !boxRangeScalp)
       || candidate.Confluence < options.MinConfluence
       || !string.Equals(
         candidate.Symbol,
@@ -277,6 +277,28 @@ public sealed class AutoTradeEngine(
     )
     {
       return await RejectAsync(candidate, "unsupported candidate", cancellationToken);
+    }
+    if (
+      boxRangeScalp
+      && (
+        string.IsNullOrWhiteSpace(candidate.RangeId)
+        || candidate.RangeLow is not decimal rangeLow
+        || candidate.RangeHigh is not decimal rangeHigh
+        || rangeLow <= 0
+        || rangeHigh <= rangeLow
+        || candidate.FullTakeProfitPips is not (50 or 70)
+        || rangeHigh - rangeLow
+          < candidate.FullTakeProfitPips.Value * VolumePlanner.PipSize(symbol)
+        || candidate.KeyLevel < rangeLow
+        || candidate.KeyLevel > rangeHigh
+      )
+    )
+    {
+      return await RejectAsync(
+        candidate,
+        "invalid range-box contract",
+        cancellationToken
+      );
     }
     if (
       now - candidate.CreatedAt > Math.Max(10, options.CandidateMaxAgeSeconds)
@@ -338,13 +360,18 @@ public sealed class AutoTradeEngine(
         cancellationToken
       );
     }
-    var date = DateOnly.FromDateTime(_clock().UtcDateTime);
-    var tradeCount = await store.GetDailyTradeCountAsync(date, cancellationToken);
-    if (tradeCount >= options.MaxDailyTrades)
+    if (
+      boxRangeScalp
+      && (_allSymbolPositions.Count > 0 || _allSymbolPendingOrders.Count > 0)
+    )
     {
-      return await RejectAsync(candidate, "daily trade cap reached", cancellationToken);
+      return await RejectAsync(
+        candidate,
+        "range-box scalp waits for flat XAU exposure",
+        cancellationToken
+      );
     }
-
+    var date = DateOnly.FromDateTime(_clock().UtcDateTime);
     var account = await client.GetTradingAccountAsync(cancellationToken);
     ValidateAccount(account);
     SpotPrice quote;
@@ -366,6 +393,18 @@ public sealed class AutoTradeEngine(
     catch (VolumePlanningException exception)
     {
       return await RejectAsync(candidate, exception.Message, cancellationToken);
+    }
+    if (
+      boxRangeScalp
+      && candidate.FullTakeProfitPips!.Value / stopPlan.StopPips
+        < options.BoxMinRiskReward
+    )
+    {
+      return await RejectAsync(
+        candidate,
+        $"range-box reward/risk below {options.BoxMinRiskReward:0.##}",
+        cancellationToken
+      );
     }
 
     var group = _states.Values
@@ -416,7 +455,8 @@ public sealed class AutoTradeEngine(
   )
   {
     if (
-      options.ZoneFillEnabled
+      !IsBoxRangeScalp(candidate)
+      && options.ZoneFillEnabled
       && candidate.Atr is decimal atr
       && ZoneFillPlanner.Qualifies(
         candidate.EntryZone,
@@ -435,6 +475,12 @@ public sealed class AutoTradeEngine(
       );
     }
     InitialSizingResult sizing;
+    IReadOnlyList<int> targetPips = IsBoxRangeScalp(candidate)
+      ? [candidate.FullTakeProfitPips!.Value]
+      : options.TargetsPips;
+    IReadOnlyList<int> targetWeights = IsBoxRangeScalp(candidate)
+      ? [100]
+      : options.TargetWeights;
     try
     {
       sizing = VolumePlanner.SizeInitial(
@@ -443,8 +489,8 @@ public sealed class AutoTradeEngine(
         stopPlan.StopPips,
         options.PipValuePerLot,
         RequireSymbol(),
-        options.TargetsPips,
-        options.TargetWeights
+        targetPips,
+        targetWeights
       );
     }
     catch (VolumePlanningException exception)
@@ -455,10 +501,13 @@ public sealed class AutoTradeEngine(
     var barTs = candidate.BarTs ?? candidate.CreatedAt;
     if (options.DryRun)
     {
+      var targetSummary = IsBoxRangeScalp(candidate)
+        ? $" · full TP {targetPips[0]}p"
+        : "";
       return await CompleteDryRunAsync(
         candidate,
         $"{direction} {sizing.Lots:N2} lots · structure stop "
-        + $"{stopPlan.StopPips:N0}p · {sizing.BindingTerm}",
+        + $"{stopPlan.StopPips:N0}p{targetSummary} · {sizing.BindingTerm}",
         sizing.Volume,
         expectedEntry,
         cancellationToken
@@ -500,6 +549,10 @@ public sealed class AutoTradeEngine(
       eventType: "opened",
       message: $"{direction} {sizing.Lots:N2} lots filled {{fill}}, "
         + $"SL {{stop}} · {stopPlan.StopPips:N0}p structure · "
+        + (IsBoxRangeScalp(candidate)
+          ? $"full TP {targetPips[0]}p · range "
+            + $"{candidate.RangeLow:N2}-{candidate.RangeHigh:N2} · "
+          : "")
         + sizing.BindingTerm,
       groupWorstCase: -sizing.Lots * stopPlan.StopPips
         * options.PipValuePerLot,
@@ -1282,9 +1335,12 @@ public sealed class AutoTradeEngine(
         };
         _states[state.PositionId] = state;
         await PropagateGroupMetadataAsync(state, cancellationToken);
+        var targetLabel = state.TargetsPips.Count == 1
+          ? "FULL TP"
+          : $"TP{targetOrdinal}";
         await PublishAsync(
           "take_profit",
-          $"TP{targetOrdinal} +{targetPips} pips closed volume {closeVolume}",
+          $"{targetLabel} +{targetPips} pips closed volume {closeVolume}",
           cancellationToken,
           state.CandidateId,
           state.PositionId,
@@ -1407,7 +1463,7 @@ public sealed class AutoTradeEngine(
       }
       return state;
     }
-    var moveMessage = $"🛡 Auto trade stop → {move.StopLoss:N2} ({move.Label}) "
+    var moveMessage = $"🛡 ApexVoid Algo stop → {move.StopLoss:N2} ({move.Label}) "
       + $"· position {state.PositionId}";
     await PublishAsync(
       "stop_moved",
@@ -1708,6 +1764,12 @@ public sealed class AutoTradeEngine(
       : value.Equals("SELL", StringComparison.OrdinalIgnoreCase)
         ? TradeDirection.Sell
         : throw new InvalidOperationException($"Unsupported direction {value}");
+
+  private static bool IsBoxRangeScalp(TradeCandidate candidate) =>
+    candidate.Version == 3
+    && candidate.Timeframe.Equals("M1", StringComparison.OrdinalIgnoreCase)
+    && candidate.Setup == "Range Box Scalp"
+    && candidate.Mode == "auto_box_scalp";
 
   private static decimal TargetPrice(
     AutoTradePositionState state,

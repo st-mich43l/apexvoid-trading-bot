@@ -156,7 +156,7 @@ class Settings(BaseSettings):
   auto_trade_candidate_ttl: int = 86400
   auto_trade_min_confluence: int = 2
   auto_trade_news_guard_minutes: int = 30
-  auto_trade_max_daily_trades: int = 6
+  auto_trade_box_retire_seconds: int = 14400
 
   @property
   def telegram_chat_id(self) -> str:
