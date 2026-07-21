@@ -125,7 +125,8 @@ balances below `$200` are rejected and balances above `$5,000` stay capped at
 The fixed stop remains `$6.5`. Weighted partial closes use
 `30/60/90/120/200` pips. A `0.02`-lot position exits at TP1 and TP3, `0.03`
 uses TP1-TP3, `0.04` uses TP1-TP4, and positions from `0.05` use all five.
-TP1 moves the stop to `BE+3`; subsequent partials trail to the preceding target.
+TP1 moves the stop to `BE+3`, TP2 keeps that stop unchanged, TP3 moves it to
+TP1, and TP4 moves it to TP2.
 Existing positions retain the targets, TP ordinals, and slices encoded in their
 original cTrader comment.
 

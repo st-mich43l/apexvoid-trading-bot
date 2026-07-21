@@ -63,6 +63,9 @@ dated section after deployment.
 
 ### Changed
 
+- Auto-trade trailing now holds the existing stop after TP2, moves it to TP1
+  only after TP3, and moves it to TP2 after TP4 so the runner is not tightened
+  one target too early.
 - Auto-trade position size now follows continuous operator-defined balance
   bands from `$200 -> 0.02` through `$5,000 -> 0.36`, floored to `0.01` lots.
   Low-volume plans close `0.02` at TP1/TP3, `0.03` through TP3, and `0.04`

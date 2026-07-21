@@ -66,10 +66,10 @@ public sealed class AutoTradeEngineTests
         .Select(item => Assert.IsType<int>(item.TargetPips))
     );
     Assert.Equal(
-      new decimal[] { 3993.7m, 4000.5m, 4003.2m, 4006.2m, 4009.2m },
+      new decimal[] { 3993.7m, 4000.5m, 4003.2m, 4006.2m },
       client.StopAmendments.Select(item => item.StopLoss)
     );
-    Assert.Equal(4, store.Events.Count(item => item.Type == "stop_moved"));
+    Assert.Equal(3, store.Events.Count(item => item.Type == "stop_moved"));
     Assert.Empty(store.Positions);
 
     cts.Cancel();
@@ -356,8 +356,12 @@ public sealed class AutoTradeEngineTests
       new SpotPrice("XAU", 4006.2m, 4006.4m, Now.ToUnixTimeSeconds()),
       cts.Token
     );
+    await engine.ObserveSpotAsync(
+      new SpotPrice("XAU", 4009.2m, 4009.4m, Now.ToUnixTimeSeconds()),
+      cts.Token
+    );
 
-    Assert.Equal(2, client.Closes.Count);
+    Assert.Equal(3, client.Closes.Count);
     Assert.Equal(
       new decimal[] { 3993.7m, 4003.2m },
       client.StopAmendments.Select(item => item.StopLoss)
@@ -399,7 +403,7 @@ public sealed class AutoTradeEngineTests
     );
 
     Assert.Equal((91, 200), Assert.Single(client.Closes));
-    Assert.Equal((91, 4003.2m), Assert.Single(client.StopAmendments));
+    Assert.Empty(client.StopAmendments);
     cts.Cancel();
     await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
   }
