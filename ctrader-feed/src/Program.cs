@@ -52,7 +52,8 @@ public static class Program
             $"account={grantedAccount.AccountId} demo={!grantedAccount.IsLive} "
             + $"broker={grantedAccount.BrokerName} type={grantedAccount.AccountType} "
             + $"scope={grantedAccount.PermissionScope} access={grantedAccount.AccessRights} "
-            + $"balance={grantedAccount.Balance:N2}"
+            + $"balance={grantedAccount.Balance:N2} "
+            + $"depositAsset={grantedAccount.DepositAsset}"
           );
         }
         return 0;
@@ -63,7 +64,7 @@ public static class Program
         $"account={account.AccountId} demo={!account.IsLive} "
         + $"broker={account.BrokerName} type={account.AccountType} "
         + $"scope={account.PermissionScope} access={account.AccessRights} "
-        + $"balance={account.Balance:N2}"
+        + $"balance={account.Balance:N2} depositAsset={account.DepositAsset}"
       );
       Console.WriteLine(
         $"symbol={symbol.CTraderSymbol} id={symbol.SymbolId} "

@@ -13,6 +13,10 @@ dated section after deployment.
 
 ### Added
 
+- Added weighted largest-remainder target splitting with deterministic
+  five-exit feasibility remedies, a monotonic TP1-to-TP4 stop ladder, USD
+  deposit-asset warnings/strict mode, a maximum-lots cap, and explicit risk,
+  pip-value, target-weight, and break-even-buffer controls.
 - Added fingerprint-based cTrader refresh-token seeding with automatic cache
   reset, the `--reset-token-cache` operator command, live-account grant
   warnings, actionable account-grant remediation, and the optional
@@ -59,6 +63,11 @@ dated section after deployment.
 
 ### Changed
 
+- Auto-trade position size is now recomputed per trade from account risk
+  (default `2%`) and the fixed stop instead of a balance-to-lots table that
+  risked about `5.9%` on the live demo; the target ladder is now
+  `30/60/90/120/200`. Because sizing uses `AUTO_TRADE_SL_DISTANCE`, changing
+  that fixed stop now also changes position size.
 - Auto-trade configuration failures now disable only the executor for the
   current process, while distinct transient failures may retry on the next feed
   session and all startup faults publish a deduplicated operator event.
@@ -130,6 +139,10 @@ dated section after deployment.
   handle (for example, `4017.xx` now reaches TP `4017`).
 - `watcher`: attach the owner Close/partial-close button to VIP SL-hit alerts
   and book those closes with negative pips instead of TP-style profit pips.
+
+### Removed
+
+- Removed the hardcoded `VolumePlanner.LotsForBalance` balance-tier table.
 
 ## 2026-07-15
 

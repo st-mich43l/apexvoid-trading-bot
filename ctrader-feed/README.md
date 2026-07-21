@@ -57,7 +57,13 @@ AUTO_TRADE_REQUIRE_DEMO_ONLY_TOKEN=false
 AUTO_TRADE_SYMBOLS=XAU
 AUTO_TRADE_EXPECTED_BROKER=Fusion
 AUTO_TRADE_SL_DISTANCE=6.5
-AUTO_TRADE_TP_PIPS=30,50,70,90,130
+AUTO_TRADE_RISK_PCT=2.0
+AUTO_TRADE_PIP_VALUE_PER_LOT=10.0
+AUTO_TRADE_MAX_LOTS=1.0
+AUTO_TRADE_REQUIRE_USD_ACCOUNT=false
+AUTO_TRADE_TP_PIPS=30,60,90,120,200
+AUTO_TRADE_TP_WEIGHTS=20,20,20,20,20
+AUTO_TRADE_BE_BUFFER_PIPS=3
 AUTO_TRADE_CANDIDATE_MAX_AGE=90
 AUTO_TRADE_SPOT_MAX_AGE=5
 AUTO_TRADE_MAX_SPREAD_PIPS=5
@@ -113,12 +119,19 @@ The executor revalidates candidate age, live quote age, spread, entry distance,
 account identity, and the one-XAU-position limit before placing a market order.
 Telegram is an operator surface, never the execution trigger.
 
-Balance tiers are fixed: below `$500` does not trade; `$500` uses `0.08` lot,
-`$1,000` uses `0.12`, `$2,000` uses `0.20`, and `$5,000+` uses `0.30`. Broker symbol metadata
-converts lots to native volume and validates minimum/step/maximum volume. The
-default stop is `$6.5`; five client-managed partial closes trigger at
-`30/50/70/90/130` pips. A server-side stop is attached to the initial order and
-confirmed at the absolute fill price immediately afterward.
+Position size is recomputed per trade from account balance, the fixed stop, and
+`AUTO_TRADE_RISK_PCT` (default `2%`). `AUTO_TRADE_PIP_VALUE_PER_LOT` is an
+explicit USD constant and is never inferred from cTrader's native volume-unit
+encoding. Size is floored to the broker step and capped by both broker maximum
+and `AUTO_TRADE_MAX_LOTS`; plans too small for all five exits are rejected with
+the minimum balance or maximum-stop remedy instead of being oversized.
+
+The default stop remains `$6.5`, so changing it also changes risk-based position
+size. Five weighted partial closes trigger at `30/60/90/120/200` pips. TP1
+moves the stop to `BE+3`; TP2, TP3, and TP4 trail to the preceding target; TP5
+closes the runner. Existing positions retain the targets and slices encoded in
+their original cTrader comment. Non-USD accounts emit a warning and can be
+refused with `AUTO_TRADE_REQUIRE_USD_ACCOUNT=true`.
 
 `/auto_pause` blocks new entries and `/auto_resume` releases the block.
 `/auto_status` reports mode, open auto positions, the UTC daily trade count,

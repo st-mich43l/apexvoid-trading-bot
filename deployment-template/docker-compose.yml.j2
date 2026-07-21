@@ -80,9 +80,16 @@ services:
       HEALTH_FILE: {{ apexvoid_trading_bot_env.HEALTH_FILE | default('/tmp/ctrader-feed.heartbeat') | string | to_json }}
       AUTO_TRADE_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_ENABLED | default('false') | string | to_json }}
       AUTO_TRADE_DRY_RUN: {{ apexvoid_trading_bot_env.AUTO_TRADE_DRY_RUN | default('true') | string | to_json }}
+      AUTO_TRADE_REQUIRE_DEMO_ONLY_TOKEN: {{ apexvoid_trading_bot_env.AUTO_TRADE_REQUIRE_DEMO_ONLY_TOKEN | default('false') | string | to_json }}
       AUTO_TRADE_EXPECTED_BROKER: {{ apexvoid_trading_bot_env.AUTO_TRADE_EXPECTED_BROKER | default('Fusion') | string | to_json }}
       AUTO_TRADE_SL_DISTANCE: {{ apexvoid_trading_bot_env.AUTO_TRADE_SL_DISTANCE | default('6.5') | string | to_json }}
-      AUTO_TRADE_TP_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_TP_PIPS | default('30,50,70,90,130') | string | to_json }}
+      AUTO_TRADE_RISK_PCT: {{ apexvoid_trading_bot_env.AUTO_TRADE_RISK_PCT | default('2.0') | string | to_json }}
+      AUTO_TRADE_PIP_VALUE_PER_LOT: {{ apexvoid_trading_bot_env.AUTO_TRADE_PIP_VALUE_PER_LOT | default('10.0') | string | to_json }}
+      AUTO_TRADE_MAX_LOTS: {{ apexvoid_trading_bot_env.AUTO_TRADE_MAX_LOTS | default('1.0') | string | to_json }}
+      AUTO_TRADE_REQUIRE_USD_ACCOUNT: {{ apexvoid_trading_bot_env.AUTO_TRADE_REQUIRE_USD_ACCOUNT | default('false') | string | to_json }}
+      AUTO_TRADE_TP_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_TP_PIPS | default('30,60,90,120,200') | string | to_json }}
+      AUTO_TRADE_TP_WEIGHTS: {{ apexvoid_trading_bot_env.AUTO_TRADE_TP_WEIGHTS | default('20,20,20,20,20') | string | to_json }}
+      AUTO_TRADE_BE_BUFFER_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_BE_BUFFER_PIPS | default('3') | string | to_json }}
       AUTO_TRADE_CANDIDATE_MAX_AGE: {{ apexvoid_trading_bot_env.AUTO_TRADE_CANDIDATE_MAX_AGE | default('90') | string | to_json }}
       AUTO_TRADE_SPOT_MAX_AGE: {{ apexvoid_trading_bot_env.AUTO_TRADE_SPOT_MAX_AGE | default('5') | string | to_json }}
       AUTO_TRADE_MAX_SPREAD_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_MAX_SPREAD_PIPS | default('5') | string | to_json }}

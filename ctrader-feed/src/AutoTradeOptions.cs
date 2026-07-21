@@ -7,7 +7,13 @@ public sealed record AutoTradeOptions(
   bool DryRun,
   string ExpectedBroker,
   decimal StopLossDistance,
+  decimal RiskPercent,
+  decimal PipValuePerLot,
+  decimal MaxLots,
+  bool RequireUsdAccount,
   IReadOnlyList<int> TargetsPips,
+  IReadOnlyList<int> TargetWeights,
+  int BreakEvenBufferPips,
   int CandidateMaxAgeSeconds,
   int SpotMaxAgeSeconds,
   int MaxSpreadPips,
@@ -26,7 +32,13 @@ public sealed record AutoTradeOptions(
     DryRun: Bool("AUTO_TRADE_DRY_RUN", true),
     ExpectedBroker: Env("AUTO_TRADE_EXPECTED_BROKER", "Fusion"),
     StopLossDistance: Decimal("AUTO_TRADE_SL_DISTANCE", 6.5m),
-    TargetsPips: IntList("AUTO_TRADE_TP_PIPS", "30,50,70,90,130"),
+    RiskPercent: Decimal("AUTO_TRADE_RISK_PCT", 2m),
+    PipValuePerLot: Decimal("AUTO_TRADE_PIP_VALUE_PER_LOT", 10m),
+    MaxLots: Decimal("AUTO_TRADE_MAX_LOTS", 1m),
+    RequireUsdAccount: Bool("AUTO_TRADE_REQUIRE_USD_ACCOUNT", false),
+    TargetsPips: IntList("AUTO_TRADE_TP_PIPS", "30,60,90,120,200"),
+    TargetWeights: IntList("AUTO_TRADE_TP_WEIGHTS", "20,20,20,20,20"),
+    BreakEvenBufferPips: Int("AUTO_TRADE_BE_BUFFER_PIPS", 3),
     CandidateMaxAgeSeconds: Int("AUTO_TRADE_CANDIDATE_MAX_AGE", 90),
     SpotMaxAgeSeconds: Int("AUTO_TRADE_SPOT_MAX_AGE", 5),
     MaxSpreadPips: Int("AUTO_TRADE_MAX_SPREAD_PIPS", 5),
@@ -59,6 +71,42 @@ public sealed record AutoTradeOptions(
     {
       throw new AutoTradeConfigurationException(
         "Auto trade disabled: AUTO_TRADE_TP_PIPS must be ascending"
+      );
+    }
+    if (
+      TargetWeights.Count != TargetsPips.Count
+      || TargetWeights.Any(value => value <= 0)
+      || TargetWeights.Sum() != 100
+    )
+    {
+      throw new AutoTradeConfigurationException(
+        "Auto trade disabled: AUTO_TRADE_TP_WEIGHTS must match TP_PIPS, "
+        + "contain positive values, and sum to 100"
+      );
+    }
+    if (RiskPercent is < 0.1m or > 10m)
+    {
+      throw new AutoTradeConfigurationException(
+        "Auto trade disabled: AUTO_TRADE_RISK_PCT must be between 0.1 and 10"
+      );
+    }
+    if (PipValuePerLot <= 0)
+    {
+      throw new AutoTradeConfigurationException(
+        "Auto trade disabled: AUTO_TRADE_PIP_VALUE_PER_LOT must be positive"
+      );
+    }
+    if (MaxLots <= 0)
+    {
+      throw new AutoTradeConfigurationException(
+        "Auto trade disabled: AUTO_TRADE_MAX_LOTS must be positive"
+      );
+    }
+    if (BreakEvenBufferPips < 0 || BreakEvenBufferPips >= TargetsPips[0])
+    {
+      throw new AutoTradeConfigurationException(
+        "Auto trade disabled: AUTO_TRADE_BE_BUFFER_PIPS must be non-negative "
+        + "and below TP1"
       );
     }
     if (MaxDailyTrades <= 0)
