@@ -113,6 +113,25 @@ dated section after deployment.
 - Restrict actionable SCALP output to the validated `ScalpRange` support and
   resistance pair; internal micro swings, round numbers, and standalone
   trendlines no longer receive misleading `BUY`/`SELL` labels.
+- Reorganized `webhook/app/` from a flat module layout into `core/`,
+  `persistence/`, `bot/`, `signals/`, `analysis/`, and `autotrade/`
+  subpackages with no runtime behavior change; also fixed stale repo-name
+  and branch references in the docs and swapped the SQLite-era backup
+  procedure for a Postgres `pg_dump`/`psql` one.
+- Renamed `webhook/` to `telegram-bot/` (it hasn't hosted a webhook since the
+  bot moved to long-polling) and `ctrader-feed/` to `ctrader-engine/` (it has
+  always run both the market-data feed and demo auto-trade execution off one
+  cTrader session, not just a feed). Directory names, the compose service
+  key, and CI build contexts moved.
+- Renamed the published `apexvoid-ctrader-feed` Docker Hub image/container to
+  `apexvoid-ctrader-engine` to match. The next deploy's `docker compose up
+  --remove-orphans` (run by `ansible-library`'s `deploy_image` role) removes
+  the old `apexvoid-ctrader-feed` container automatically since the compose
+  project name is unchanged and only the service key moved — no manual VPS
+  cleanup needed. `ansible-library`/`action-library` were checked: both are
+  fully parameterized by this repo's own templates and needed no changes,
+  aside from a stale `ctrader-feed` mention in a comment.
+  `apexvoid-trading-bot` (the Telegram bot image) is unchanged.
 
 ### Fixed
 

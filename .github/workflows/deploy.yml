@@ -7,8 +7,8 @@ on:
   push:
     branches: [master]
     paths:
-      - "webhook/**"
-      - "ctrader-feed/**"
+      - "telegram-bot/**"
+      - "ctrader-engine/**"
       - "docs/redis-contract.md"
       - "deployment-template/**"
       - ".github/workflows/deploy.yml"
@@ -22,8 +22,8 @@ jobs:
       registry-namespace: mich43l
       images: >-
         [
-          {"name": "apexvoid-trading-bot", "context": "webhook", "dockerfile": "webhook/Dockerfile"},
-          {"name": "apexvoid-ctrader-feed", "context": "ctrader-feed", "dockerfile": "ctrader-feed/Dockerfile"}
+          {"name": "apexvoid-trading-bot", "context": "telegram-bot", "dockerfile": "telegram-bot/Dockerfile"},
+          {"name": "apexvoid-ctrader-engine", "context": "ctrader-engine", "dockerfile": "ctrader-engine/Dockerfile"}
         ]
     secrets:
       registry-token: ${{ secrets.DOCKERHUB_TOKEN }}

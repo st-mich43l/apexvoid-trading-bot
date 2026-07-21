@@ -33,7 +33,7 @@ services:
     # No ports exposed — holds watcher TP/SL progress + bar cursor only.
 
   bot:
-    build: ./webhook
+    build: ./telegram-bot
     image: apexvoid-trading-bot:latest
     container_name: apexvoid-trading-bot
     restart: unless-stopped
@@ -47,10 +47,10 @@ services:
       - ./data:/data   # calendar cache (ff_*.json) still persists here
     # No ports exposed — the bot uses outbound Telegram long-polling only.
 
-  ctrader-feed:
-    build: ./ctrader-feed
-    image: apexvoid-ctrader-feed:latest
-    container_name: apexvoid-ctrader-feed
+  ctrader-engine:
+    build: ./ctrader-engine
+    image: apexvoid-ctrader-engine:latest
+    container_name: apexvoid-ctrader-engine
     restart: unless-stopped
     env_file: .env
     depends_on:
