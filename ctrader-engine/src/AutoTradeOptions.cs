@@ -41,7 +41,7 @@ public sealed record AutoTradeOptions(
   public static AutoTradeOptions FromEnvironment() => new(
     Enabled: Bool("AUTO_TRADE_ENABLED", false),
     DryRun: Bool("AUTO_TRADE_DRY_RUN", true),
-    ExpectedBroker: Env("AUTO_TRADE_EXPECTED_BROKER", "Fusion"),
+    ExpectedBroker: Env("AUTO_TRADE_EXPECTED_BROKER", "fpmarkets"),
     StopLossDistance: Decimal("AUTO_TRADE_SL_DISTANCE", 6.5m),
     TargetsPips: IntList("AUTO_TRADE_TP_PIPS", "30,60,90,120,200"),
     TargetWeights: IntList("AUTO_TRADE_TP_WEIGHTS", "20,20,20,20,20"),

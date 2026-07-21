@@ -68,7 +68,7 @@ def _format_opened(event: dict, message: str) -> str | None:
   full_tp = re.search(r"(?i)full TP\s+(\d+)p", details)
   range_box = re.search(r"(?i)range\s+([\d.,]+)-([\d.,]+)", details)
   lines = [
-    "⚡ <b>ApexVoid Algo</b>",
+    "🤖 <b>ApexVoid Algo</b>",
     f"{side_icon} <b>XAU {direction.upper()} opened</b>",
     "",
     f"📍 Entry: <b>{escape(entry)}</b>",
@@ -105,7 +105,7 @@ def _format_take_profit(event: dict, message: str) -> str | None:
   label, pips, _ = match.groups()
   full = label.upper() == "FULL TP"
   lines = [
-    "⚡ <b>ApexVoid Algo</b>",
+    "🤖 <b>ApexVoid Algo</b>",
     "🎯 <b>FULL TAKE PROFIT</b>" if full else f"🎯 <b>{label.upper()} HIT</b>",
     "",
     f"✅ Profit: <b>+{pips} pips</b>",
@@ -127,7 +127,7 @@ def _format_stop_moved(event: dict, message: str) -> str | None:
     return None
   stop, label = match.groups()
   lines = [
-    "⚡ <b>ApexVoid Algo</b>",
+    "🤖 <b>ApexVoid Algo</b>",
     "🛡 <b>Risk protected</b>",
     "",
     f"SL moved to <b>{escape(stop)}</b> · {escape(label)}",
@@ -169,7 +169,7 @@ def render_auto_trade_event(event: dict) -> str | None:
     "warning": "⚠️ <b>Warning</b>",
     "error": "⚠️ <b>Execution issue</b>",
   }
-  lines = ["⚡ <b>ApexVoid Algo</b>", labels[event_type]]
+  lines = ["🤖 <b>ApexVoid Algo</b>", labels[event_type]]
   if message:
     lines.extend(["", escape(message)])
   position = _position_line(event)
@@ -247,7 +247,7 @@ async def auto_trade_status_text() -> str:
       f"{regime_line}"
     )
   return (
-    "⚡ <b>ApexVoid Algo</b>\n"
+    "🤖 <b>ApexVoid Algo</b>\n"
     f"Mode: <b>{escape(mode)}</b> · State: <b>{state}</b>\n"
     f"Open positions: <b>{position_count}</b>\n"
     f"Trades today: <b>{daily}</b> · <b>unlimited</b>"
