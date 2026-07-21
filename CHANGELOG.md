@@ -13,6 +13,10 @@ dated section after deployment.
 
 ### Added
 
+- Added fingerprint-based cTrader refresh-token seeding with automatic cache
+  reset, the `--reset-token-cache` operator command, live-account grant
+  warnings, actionable account-grant remediation, and the optional
+  `AUTO_TRADE_REQUIRE_DEMO_ONLY_TOKEN` hardening switch.
 - Added demo-only cTrader market execution for qualified scalp
   candidates, with Fusion/Hedged/Trading-scope hard locks, one-position and
   freshness/spread/news/daily-cap gates, restart reconciliation, and durable
@@ -55,6 +59,9 @@ dated section after deployment.
 
 ### Changed
 
+- Auto-trade configuration failures now disable only the executor for the
+  current process, while distinct transient failures may retry on the next feed
+  session and all startup faults publish a deduplicated operator event.
 - Replaced scanner-fed auto entries with an independent `Auto Range Scalp`
   gate: M5/M15 build role-aware rails, M1 confirms rejection, active adverse M5
   momentum is blocked, entry drift is capped at 10 pips, and the nearest
@@ -78,6 +85,10 @@ dated section after deployment.
 
 ### Fixed
 
+- Cached cTrader refresh tokens no longer shadow a newly authorized `.env`
+  token, which previously preserved stale account grants across restarts.
+- Auto-trade startup and spot-processing faults no longer cancel the shared
+  market-data session or trap the feed in a reconnect loop with no bars.
 - Forming signals and their detector/Market Map gates can no longer create or
   suppress Auto Trader candidates; `SCANNER_ENABLED` no longer controls whether
   the private auto-scalp worker runs.

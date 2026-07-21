@@ -2,6 +2,10 @@ namespace ApexVoid.CTraderFeed;
 
 public interface ICTraderTradeClient
 {
+  Task<IReadOnlyList<TradingAccountGrant>> GetAccountGrantsAsync(
+    CancellationToken cancellationToken
+  ) => Task.FromResult<IReadOnlyList<TradingAccountGrant>>([]);
+
   Task<TradingAccountSnapshot> GetTradingAccountAsync(
     CancellationToken cancellationToken
   );
