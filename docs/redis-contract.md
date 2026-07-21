@@ -120,7 +120,7 @@ is a separate future sink, not this Redis contract.
 ## Auto-Trade Candidate Stream
 
 When enabled, the independent auto-scalp worker appends only confirmed
-`Auto Range Scalp` candidates to:
+`Range Box Scalp` v3 candidates to:
 
 ```text
 XADD auto_trade:candidates MAXLEN ~ 1000 * payload <json>
@@ -128,16 +128,19 @@ XADD auto_trade:candidates MAXLEN ~ 1000 * payload <json>
 
 The worker reads only raw `bars:XAU:M1`, `bars:XAU:M5`, `bars:XAU:M15`, and
 `price:XAU:spot` data. It does not consume scanner/forming detections, Market
-Map output, or Telegram state. The versioned payload contains a deterministic `candidate_id`, symbol,
-timeframe, direction, trigger timestamps, trusted live price, scored key level,
-entry-zone bounds, confluence count, and reasons. Publishing fails closed when
-the spot is absent/stale or a high-impact event is active or unavailable.
+Map output, or Telegram state. A 60-bar repeated-touch M1 auction defines both
+box edges; M5 confirms breakout while M15 never directionally vetoes an edge.
+The versioned payload includes stable range bounds and a single 50- or 70-pip
+full-position target. Publishing fails closed when the spot is absent/stale,
+structure-stop context is unavailable, or a high-impact event is guarded.
 Candidate claims and outcomes use `auto_trade:executor:candidate:{id}` for
 restart-safe idempotency; the stream cursor is `auto_trade:cursor`. Scanner,
 raw momentum, legacy M5 Range Edge, and legacy M1 Decision Scalp candidates are
 never accepted for execution.
 
-The latest operator-facing M1 gate decision is stored at
+Used box edges are disarmed until a closed M1 price crosses the box midpoint.
+Confirmed broken box IDs are retired for the configured TTL. The latest
+operator-facing M1 gate decision is stored at
 `auto_trade:last_gate` and `auto_trade:last_gate:{symbol}`. It contains the gate
 state, M1 trigger, selected role-aware rail, opposite target, target room, spot
 freshness, and loaded frame counts; it is telemetry, not an execution input.

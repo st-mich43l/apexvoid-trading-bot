@@ -133,7 +133,7 @@ public static class VolumePlanner
       throw new VolumePlanningException("Position volume is not broker-step aligned");
     }
     if (
-      targetsPips.Count < 3
+      targetsPips.Count < 1
       || weights.Count != targetsPips.Count
       || targetsPips.Any(target => target <= 0)
       || weights.Any(weight => weight <= 0)
@@ -144,14 +144,17 @@ public static class VolumePlanner
     var minimumSteps = MinimumStepsPerClose(symbol);
     var totalSteps = volume / symbol.StepVolume;
     var availableExits = totalSteps / minimumSteps;
-    if (availableExits < 2)
+    var requiredExits = targetsPips.Count == 1 ? 1 : 2;
+    if (availableExits < requiredExits)
     {
       throw new VolumePlanningException(
-        "Configured volume cannot support the minimum two broker-valid exits"
+        requiredExits == 1
+          ? "Configured volume cannot support a broker-valid exit"
+          : "Configured volume cannot support the minimum two broker-valid exits"
       );
     }
     var selectedCount = (int)Math.Min(availableExits, targetsPips.Count);
-    var indices = selectedCount == 2
+    var indices = selectedCount == 2 && targetsPips.Count >= 3
       ? new[] { 0, 2 }
       : Enumerable.Range(0, selectedCount).ToArray();
     var selectedTargets = indices.Select(index => targetsPips[index]).ToArray();

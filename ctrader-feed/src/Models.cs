@@ -151,7 +151,11 @@ public sealed record TradeCandidate(
   int? DisplacementAgeBars = null,
   string? BosDirection = null,
   long? BosTs = null,
-  decimal? OpposingLevelDistanceAtr = null
+  decimal? OpposingLevelDistanceAtr = null,
+  string? RangeId = null,
+  decimal? RangeLow = null,
+  decimal? RangeHigh = null,
+  int? FullTakeProfitPips = null
 );
 
 public sealed record TradeStreamEntry(

@@ -66,17 +66,23 @@ The bot talks to Telegram over **outbound long-polling only**, meaning it requir
 - DM one or more chart screenshots and the bot will run a structured **Smart Money Concepts (SMC)** analysis via **Claude Vision**, automatically drafting the setup to the channel.
 - **Multi-Timeframe Aware** ⏱️ — Send several charts; it uses higher TFs for directional bias and lower TFs for entry precision.
 
-### 🤖 Demo Auto-Scalper
-- The Auto Trader has a private gate and Redis subscriber, independent of
+### ⚡ ApexVoid Algo (demo)
+- ApexVoid Algo has a private gate and Redis subscriber, independent of
   forming signals, scanner detectors, Market Map output, and Telegram alerts.
-- It builds role-aware support/resistance rails directly from raw M5/M15 OHLC.
-  M1 rejection owns entry timing; M5 blocks only a countertrend fade into an
-  active impulse and never vetoes the aligned direction.
-- The nearest opposite-role rail must leave at least 30 pips of room, while
-  each executable rail is capped at 16 pips wide.
+- It builds a 60-bar M1 auction box only after repeated reactions at both
+  edges, at least 82% of closes remain inside, and close-path efficiency shows
+  consolidation rather than trend. M1 rejection can BUY the lower edge or SELL
+  the upper edge without depending on the scanner's forming-signal gate.
+- A box entry closes the full position at +50 pips, or +70 pips when at least
+  75 pips of clean room remain to the opposite edge. Box mode does not scale in
+  or use planned zone-fill orders.
+- Two accepted M1 closes, or one accepted M5 close, outside the box retire that
+  box and stop new entries from it. A used edge must first travel through the
+  box midpoint before that same side can fire again.
 - The lane still fails closed on stale quotes, excessive spread, entry drift,
-  guarded news, an existing XAU position, and the UTC daily trade cap.
-- `/auto_status` exposes the latest private M1 gate state and selected rail for
+  guarded news, and an existing XAU position. There is no daily trade cap;
+  a validated box may keep cycling until its breakout is confirmed.
+- `/auto_status` exposes the latest private M1 gate state and selected box for
   operator diagnostics.
 
 ---

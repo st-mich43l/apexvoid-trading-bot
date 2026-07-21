@@ -7,7 +7,7 @@ forming-signal, Market Map, detector, or Telegram dependency.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -94,10 +94,11 @@ def _candidate_id(
   decision: AutoScalpDecision,
 ) -> str:
   rail = decision.rail
-  if rail is None or decision.direction is None:
-    raise ValueError("candidate decision requires a rail and direction")
+  box = decision.box
+  if rail is None or box is None or decision.direction is None:
+    raise ValueError("candidate decision requires a box, rail, and direction")
   raw = (
-    f"v1|auto-range|{symbol.upper()}|M1|{trigger_ts}|"
+    f"v3|box-range|{box.box_id}|{symbol.upper()}|M1|{trigger_ts}|"
     f"{decision.direction.upper()}|{rail.low:.5f}|{rail.high:.5f}"
   )
   return hashlib.sha256(raw.encode("ascii")).hexdigest()
@@ -117,7 +118,10 @@ async def _publish_candidate(
     or not spot.fresh
     or decision.state != "candidate"
     or decision.rail is None
+    or decision.box is None
     or decision.direction is None
+    or decision.full_tp_pips not in {50, 70}
+    or scale_context is None
     or decision.confluence < max(1, settings.auto_trade_min_confluence)
   ):
     return None
@@ -149,12 +153,12 @@ async def _publish_candidate(
   if not claimed:
     return None
   payload = {
-    "version": 1,
+    "version": 3,
     "candidate_id": candidate_id,
     "symbol": symbol.upper(),
     "timeframe": EXECUTION_TIMEFRAME,
-    "setup": "Auto Range Scalp",
-    "mode": "auto_range_scalp",
+    "setup": "Range Box Scalp",
+    "mode": "auto_box_scalp",
     "direction": decision.direction.upper(),
     "trigger_ts": trigger_ts,
     "created_at": now,
@@ -167,10 +171,13 @@ async def _publish_candidate(
     },
     "confluence": decision.confluence,
     "reasons": list(decision.reasons),
+    "range_id": decision.box.box_id,
+    "range_low": decision.box.lower.level,
+    "range_high": decision.box.upper.level,
+    "full_take_profit_pips": decision.full_tp_pips,
   }
   if scale_context is not None:
     payload.update({
-      "version": 2,
       "bar_ts": scale_context.bar_ts,
       "atr": scale_context.atr,
       "structure_swing": scale_context.structure_swing,
@@ -192,6 +199,11 @@ async def _publish_candidate(
   except Exception:
     await client.delete(f"auto_trade:candidate:{candidate_id}")
     raise
+  await client.set(
+    _box_edge_key(symbol, decision.box.box_id, decision.direction),
+    "1",
+    ex=max(300, settings.auto_trade_box_retire_seconds),
+  )
   log.info(
     "auto-scalp candidate published id=%s symbol=%s direction=%s",
     candidate_id[:12],
@@ -212,6 +224,7 @@ def _status_payload(
 ) -> dict[str, Any]:
   rail = decision.rail
   target = decision.target
+  box = decision.box
   return {
     "state": decision.state,
     "symbol": symbol,
@@ -235,6 +248,13 @@ def _status_payload(
       "role": target.role,
     },
     "target_room_pips": decision.target_room_pips,
+    "full_tp_pips": decision.full_tp_pips,
+    "box": None if box is None else {
+      "id": box.box_id,
+      "low": box.lower.level,
+      "high": box.upper.level,
+      "width_pips": box.width_pips,
+    },
     "rail_count": decision.rail_count,
     "spot_fresh": None if spot is None else spot.fresh,
     "candidate_id": candidate_id,
@@ -244,6 +264,63 @@ def _status_payload(
       for timeframe, frame in sorted(frames.items())
     },
   }
+
+
+def _box_retired_key(symbol: str, box_id: str) -> str:
+  return f"auto_trade:box:retired:{symbol.upper()}:{box_id}"
+
+
+def _box_edge_key(symbol: str, box_id: str, direction: str) -> str:
+  return (
+    f"auto_trade:box:edge:{symbol.upper()}:{box_id}:"
+    f"{direction.upper()}"
+  )
+
+
+async def _apply_box_retirement(
+  client: Any,
+  symbol: str,
+  decision: AutoScalpDecision,
+  price: float | None = None,
+) -> AutoScalpDecision:
+  box = decision.box
+  if box is None:
+    return decision
+  key = _box_retired_key(symbol, box.box_id)
+  if price is not None and math.isfinite(price):
+    midpoint = (box.lower.level + box.upper.level) / 2
+    if price >= midpoint:
+      await client.delete(_box_edge_key(symbol, box.box_id, "BUY"))
+    if price <= midpoint:
+      await client.delete(_box_edge_key(symbol, box.box_id, "SELL"))
+  if decision.state == "box_broken":
+    await client.set(
+      key,
+      "1",
+      ex=max(300, settings.auto_trade_box_retire_seconds),
+    )
+    return decision
+  if decision.state == "candidate" and await client.exists(key):
+    return replace(
+      decision,
+      state="box_retired",
+      reasons=(*decision.reasons, "box already retired after breakout"),
+    )
+  if (
+    decision.state == "candidate"
+    and decision.direction is not None
+    and await client.exists(_box_edge_key(
+      symbol,
+      box.box_id,
+      decision.direction,
+    ))
+  ):
+    return replace(
+      decision,
+      state="edge_disarmed",
+      reasons=(*decision.reasons, "edge waits for a midpoint reset"),
+    )
+  return decision
 
 
 async def _handle_event(
@@ -268,6 +345,17 @@ async def _handle_event(
     symbol=symbol,
     spot_price=None if spot is None or not spot.fresh else spot.price,
   )
+  closed_price = (
+    float(frames[EXECUTION_TIMEFRAME]["close"].iloc[-1])
+    if EXECUTION_TIMEFRAME in frames
+    else None
+  )
+  decision = await _apply_box_retirement(
+    client,
+    symbol,
+    decision,
+    closed_price,
+  )
   scale_context = (
     build_auto_scale_context(
       frames,
@@ -275,7 +363,11 @@ async def _handle_event(
       spot_price=spot.price,
       cfg=settings,
     )
-    if spot is not None and spot.fresh else None
+    if (
+      decision.state == "candidate"
+      and spot is not None
+      and spot.fresh
+    ) else None
   )
   candidate_id = await _publish_candidate(
     client,

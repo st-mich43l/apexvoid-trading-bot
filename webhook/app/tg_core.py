@@ -45,9 +45,9 @@ OWNER_COMMANDS = [
   BotCommand(command="trade_note", description="[SYMBOL] #id text"),
   BotCommand(command="trade_review", description="[SYMBOL] #id"),
   BotCommand(command="trade_map", description="[SYMBOL] — current market map"),
-  BotCommand(command="auto_status", description="Demo auto-trader status"),
-  BotCommand(command="auto_pause", description="Pause new auto entries"),
-  BotCommand(command="auto_resume", description="Resume new auto entries"),
+  BotCommand(command="auto_status", description="ApexVoid Algo status"),
+  BotCommand(command="auto_pause", description="Pause ApexVoid Algo entries"),
+  BotCommand(command="auto_resume", description="Resume ApexVoid Algo entries"),
   BotCommand(command="trade_stats", description="[SYMBOL] [today|week|month]"),
   BotCommand(command="trade_pips", description="[SYMBOL] [period]"),
   BotCommand(command="help", description="Trade command reference"),
@@ -58,9 +58,9 @@ SCANNER_PUBLIC_COMMANDS = [
 SCANNER_OWNER_COMMANDS = [
   *SCANNER_PUBLIC_COMMANDS,
   BotCommand(command="trade_map", description="[SYMBOL] — current market map"),
-  BotCommand(command="auto_status", description="Demo auto-trader status"),
-  BotCommand(command="auto_pause", description="Pause new auto entries"),
-  BotCommand(command="auto_resume", description="Resume new auto entries"),
+  BotCommand(command="auto_status", description="ApexVoid Algo status"),
+  BotCommand(command="auto_pause", description="Pause ApexVoid Algo entries"),
+  BotCommand(command="auto_resume", description="Resume ApexVoid Algo entries"),
 ]
 
 _MAX_SEND_ATTEMPTS = 3

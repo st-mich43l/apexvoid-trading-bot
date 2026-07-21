@@ -14,7 +14,6 @@ public sealed record AutoTradeOptions(
   int SpotMaxAgeSeconds,
   int MaxSpreadPips,
   int MaxEntryDistancePips,
-  int MaxDailyTrades,
   int MinConfluence,
   int PollMilliseconds,
   string CandidateStream,
@@ -33,7 +32,8 @@ public sealed record AutoTradeOptions(
   bool AddRequireRiskFree = false,
   bool ZoneFillEnabled = false,
   decimal ZoneFillMinAtr = 0.5m,
-  int ZoneFillTtlBars = 3
+  int ZoneFillTtlBars = 3,
+  decimal BoxMinRiskReward = 1.25m
 )
 {
   public static AutoTradeOptions FromEnvironment() => new(
@@ -48,7 +48,6 @@ public sealed record AutoTradeOptions(
     SpotMaxAgeSeconds: Int("AUTO_TRADE_SPOT_MAX_AGE", 5),
     MaxSpreadPips: Int("AUTO_TRADE_MAX_SPREAD_PIPS", 5),
     MaxEntryDistancePips: Int("AUTO_TRADE_MAX_ENTRY_DISTANCE_PIPS", 10),
-    MaxDailyTrades: Int("AUTO_TRADE_MAX_DAILY_TRADES", 6),
     MinConfluence: Int("AUTO_TRADE_MIN_CONFLUENCE", 2),
     PollMilliseconds: Int("AUTO_TRADE_POLL_MS", 1000),
     CandidateStream: Env("AUTO_TRADE_STREAM", "auto_trade:candidates"),
@@ -67,7 +66,8 @@ public sealed record AutoTradeOptions(
     AddRequireRiskFree: Bool("AUTO_TRADE_ADD_REQUIRE_RISK_FREE", false),
     ZoneFillEnabled: Bool("AUTO_TRADE_ZONE_FILL_ENABLED", false),
     ZoneFillMinAtr: Decimal("AUTO_TRADE_ZONE_FILL_MIN_ATR", 0.5m),
-    ZoneFillTtlBars: Int("AUTO_TRADE_ZONE_FILL_TTL_BARS", 3)
+    ZoneFillTtlBars: Int("AUTO_TRADE_ZONE_FILL_TTL_BARS", 3),
+    BoxMinRiskReward: Decimal("AUTO_TRADE_BOX_MIN_RR", 1.25m)
   );
 
   public void Validate()
@@ -139,10 +139,10 @@ public sealed record AutoTradeOptions(
         "Auto trade disabled: zone-fill settings must be positive"
       );
     }
-    if (MaxDailyTrades <= 0)
+    if (BoxMinRiskReward is < 1m or > 3m)
     {
       throw new AutoTradeConfigurationException(
-        "Auto trade disabled: AUTO_TRADE_MAX_DAILY_TRADES must be positive"
+        "Auto trade disabled: AUTO_TRADE_BOX_MIN_RR must be between 1 and 3"
       );
     }
     if (MinConfluence is < 1 or > 3)

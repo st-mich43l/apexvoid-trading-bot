@@ -12,20 +12,25 @@ ATR_LENGTH = 14
 M1_WINDOW = 120
 M5_WINDOW = 96
 M15_WINDOW = 64
-M5_PIVOT_SPAN = 1
-M15_PIVOT_SPAN = 1
-RAIL_CLUSTER_ATR = 0.28
-RAIL_HALF_WIDTH_ATR = 0.12
-RAIL_MERGE_ATR = 0.35
-MAX_MERGED_RAIL_WIDTH_ATR = 0.70
-MAX_RAIL_HALF_WIDTH_PIPS = 8
-MAX_MERGED_RAIL_WIDTH_PIPS = 16
 M1_TOUCH_ATR = 0.25
 M1_BREAK_BUFFER_ATR = 0.06
-M5_CONTEXT_LOOKBACK = 12
-M5_MAX_RANGE_EFFICIENCY = 0.75
-M5_MAX_ADVERSE_MOMENTUM_ATR = 1.20
-MIN_TARGET_PIPS = 30
+BOX_LOOKBACK = 60
+BOX_EDGE_QUANTILE = 0.05
+BOX_MIN_WIDTH_PIPS = 55
+BOX_MAX_WIDTH_PIPS = 120
+BOX_MIN_INSIDE_RATIO = 0.82
+BOX_MIN_TOUCH_EPISODES = 2
+BOX_MAX_CLOSE_EFFICIENCY = 0.45
+BOX_TOUCH_BAND_ATR = 0.18
+BOX_MIN_TOUCH_BAND_PIPS = 2.5
+BOX_MAX_TOUCH_BAND_PIPS = 6
+BOX_RECOVERY_ATR = 0.15
+BOX_MIN_WICK_FRACTION = 0.15
+BOX_MIN_BODY_FRACTION = 0.15
+BOX_BREAK_BUFFER_ATR = 0.12
+BOX_BREAK_M1_CLOSES = 2
+BOX_TP_BUFFER_PIPS = 5
+BOX_TP_CHOICES = (70, 50)
 MAX_ENTRY_DISTANCE_PIPS = 10
 _PIP_SIZE = {"XAU": 0.1}
 _EPS = 1e-9
@@ -44,6 +49,16 @@ class AutoScalpRail:
 
 
 @dataclass(frozen=True)
+class AutoScalpBox:
+  box_id: str
+  lower: AutoScalpRail
+  upper: AutoScalpRail
+  width_pips: float
+  inside_ratio: float = 0.0
+  efficiency: float = 0.0
+
+
+@dataclass(frozen=True)
 class AutoScalpDecision:
   state: str
   direction: str | None = None
@@ -51,6 +66,8 @@ class AutoScalpDecision:
   rail: AutoScalpRail | None = None
   target: AutoScalpRail | None = None
   target_room_pips: float | None = None
+  full_tp_pips: int | None = None
+  box: AutoScalpBox | None = None
   confluence: int = 0
   reasons: tuple[str, ...] = ()
   rail_count: int = 0
@@ -65,9 +82,9 @@ def evaluate_auto_scalp_gate(
   """Return one auto-only M1 trade decision from raw M1/M5/M15 OHLC.
 
   This module deliberately does not consume scanner detections, forming
-  signals, Market Map entries, or Telegram state. M5 supplies executable
-  range rails, M15 only strengthens overlapping rails, and M1 owns entry
-  timing.
+  signals, Market Map entries, or Telegram state. A 60-bar M1 auction builds
+  the executable box and owns entry timing. M5 confirms box acceptance;
+  M15 is feed-health context and never directionally vetoes an M1 edge.
   """
   required = {"M1", "M5", "M15"}
   if not required <= frames.keys():
@@ -75,28 +92,46 @@ def evaluate_auto_scalp_gate(
   m1 = _clean_frame(frames["M1"].tail(M1_WINDOW))
   m5 = _clean_frame(frames["M5"].tail(M5_WINDOW))
   m15 = _clean_frame(frames["M15"].tail(M15_WINDOW))
-  if len(m1) < ATR_LENGTH + 3 or len(m5) < 12 or len(m15) < 8:
+  if len(m1) < BOX_LOOKBACK + 1 or len(m5) < 12 or len(m15) < 8:
     return AutoScalpDecision("insufficient_history")
 
   m1_atr = _atr(m1)
   m5_atr = _atr(m5)
   if m1_atr <= _EPS or m5_atr <= _EPS:
     return AutoScalpDecision("invalid_atr")
-  rails = build_auto_scalp_rails(m5, m15)
-  if not rails:
-    return AutoScalpDecision("waiting_for_rails")
-
   close = float(m1["close"].iloc[-1])
+  pip_size = _PIP_SIZE.get(symbol.upper(), 1.0)
+  box = _m1_consolidation_box(m1, m1_atr, symbol)
+  if box is None:
+    return AutoScalpDecision(
+      "waiting_for_box",
+      rail_count=0,
+    )
+  if _box_is_broken(m1, m5, box, m5_atr, pip_size):
+    return AutoScalpDecision(
+      "box_broken",
+      box=box,
+      rail_count=2,
+      reasons=(f"range box {box.box_id} accepted outside",),
+    )
+
   live_price = close if spot_price is None else float(spot_price)
   if not math.isfinite(live_price) or live_price <= 0:
-    return AutoScalpDecision("invalid_spot", rail_count=len(rails))
+    return AutoScalpDecision(
+      "invalid_spot",
+      box=box,
+      rail_count=2,
+    )
   triggered: list[tuple[AutoScalpRail, str, str]] = []
-  for rail in rails:
+  for rail in (box.lower, box.upper):
     trigger = _m1_rail_trigger(m1, rail, m1_atr)
     if trigger is not None:
       triggered.append((rail, *trigger))
   if not triggered:
-    nearest = min(rails, key=lambda rail: _rail_distance(rail, close))
+    nearest = min(
+      (box.lower, box.upper),
+      key=lambda rail: _rail_distance(rail, close),
+    )
     state = (
       "waiting_rejection"
       if _rail_distance(nearest, close) <= M1_TOUCH_ATR * m1_atr
@@ -105,32 +140,38 @@ def evaluate_auto_scalp_gate(
     return AutoScalpDecision(
       state,
       rail=nearest,
-      rail_count=len(rails),
+      box=box,
+      rail_count=2,
     )
 
-  pip_size = _PIP_SIZE.get(symbol.upper(), 1.0)
   maximum_entry_distance = MAX_ENTRY_DISTANCE_PIPS * pip_size
   eligible: list[
-    tuple[AutoScalpRail, str, str, AutoScalpRail | None, float | None]
+    tuple[AutoScalpRail, str, str, AutoScalpRail, float, int]
   ] = []
   blocked: list[
     tuple[AutoScalpRail, str, str, AutoScalpRail, float]
   ] = []
   moved: list[tuple[AutoScalpRail, str, str, float]] = []
   for rail, direction, trigger in triggered:
-    if _m5_countertrend_blocks(m5, direction, m5_atr):
-      continue
     entry_distance = _rail_distance(rail, live_price)
     if entry_distance > maximum_entry_distance + _EPS:
       moved.append((rail, direction, trigger, entry_distance))
       continue
-    target = _opposite_target(rails, live_price, direction, m5_atr)
+    target = box.upper if direction == "BUY" else box.lower
     room = _target_room(live_price, direction, target)
-    room_pips = None if room is None else room / pip_size
-    if room_pips is not None and room_pips + _EPS < MIN_TARGET_PIPS:
+    room_pips = 0.0 if room is None else room / pip_size
+    full_tp_pips = _full_tp_pips(room_pips)
+    if full_tp_pips is None:
       blocked.append((rail, direction, trigger, target, room_pips))
       continue
-    eligible.append((rail, direction, trigger, target, room_pips))
+    eligible.append((
+      rail,
+      direction,
+      trigger,
+      target,
+      room_pips,
+      full_tp_pips,
+    ))
 
   if not eligible and blocked:
     rail, direction, trigger, target, room = max(
@@ -144,31 +185,21 @@ def evaluate_auto_scalp_gate(
       rail=rail,
       target=target,
       target_room_pips=room,
-      rail_count=len(rails),
+      box=box,
+      rail_count=2,
     )
   if not eligible:
-    if not moved:
-      rail, direction, trigger = max(
-        triggered,
-        key=lambda item: item[0].score,
-      )
-      return AutoScalpDecision(
-        "trend_blocked",
-        direction=direction,
-        trigger=trigger,
-        rail=rail,
-        rail_count=len(rails),
-      )
     rail, direction, trigger, _ = min(moved, key=lambda item: item[3])
     return AutoScalpDecision(
       "entry_moved",
       direction=direction,
       trigger=trigger,
       rail=rail,
-      rail_count=len(rails),
+      box=box,
+      rail_count=2,
     )
 
-  rail, direction, trigger, target, room_pips = max(
+  rail, direction, trigger, target, room_pips, full_tp_pips = max(
     eligible,
     key=lambda item: (
       item[0].score,
@@ -181,11 +212,12 @@ def evaluate_auto_scalp_gate(
     f"M1 {trigger.replace('_', ' ')}",
     f"{rail.role} rail {rail.low:.2f}-{rail.high:.2f}",
     f"rail touches {rail.touches}",
+    f"range box {box.box_id} {box.width_pips:.0f} pips",
+    f"{box.inside_ratio:.0%} closes held inside",
+    f"range efficiency {box.efficiency:.2f}",
+    f"full TP {full_tp_pips} pips",
   ]
-  if room_pips is not None:
-    reasons.append(f"opposite rail {room_pips:.0f} pips away")
-  else:
-    reasons.append("open room beyond rail")
+  reasons.append(f"opposite edge {room_pips:.0f} pips away")
   return AutoScalpDecision(
     "candidate",
     direction=direction,
@@ -193,35 +225,12 @@ def evaluate_auto_scalp_gate(
     rail=rail,
     target=target,
     target_room_pips=room_pips,
+    full_tp_pips=full_tp_pips,
+    box=box,
     confluence=confluence,
     reasons=tuple(reasons),
-    rail_count=len(rails),
+    rail_count=2,
   )
-
-
-def build_auto_scalp_rails(
-  m5: pd.DataFrame,
-  m15: pd.DataFrame,
-) -> list[AutoScalpRail]:
-  """Build independent support/resistance rails from raw closed bars."""
-  m5 = _clean_frame(m5.tail(M5_WINDOW))
-  m15 = _clean_frame(m15.tail(M15_WINDOW))
-  if len(m5) < 5:
-    return []
-  m5_atr = _atr(m5)
-  if m5_atr <= _EPS:
-    return []
-  points = [
-    *_pivot_points(m5, "M5", M5_PIVOT_SPAN, 2.0),
-    *_pivot_points(m15, "M15", M15_PIVOT_SPAN, 2.6),
-    *_rolling_extremes(m5, "M5", 24, 1.5),
-    *_rolling_extremes(m15, "M15", 16, 2.0),
-  ]
-  clustered: list[AutoScalpRail] = []
-  for role in ("support", "resistance"):
-    role_points = [point for point in points if point[0] == role]
-    clustered.extend(_cluster_rails(role_points, role, m5_atr))
-  return _merge_same_role_rails(clustered, m5_atr)
 
 
 def _clean_frame(df: pd.DataFrame) -> pd.DataFrame:
@@ -252,129 +261,6 @@ def _atr(df: pd.DataFrame) -> float:
   return value if math.isfinite(value) and value > 0 else 0.0
 
 
-def _pivot_points(
-  df: pd.DataFrame,
-  timeframe: str,
-  span: int,
-  weight: float,
-) -> list[tuple[str, float, int, float, str]]:
-  if len(df) < 2 * span + 1:
-    return []
-  points: list[tuple[str, float, int, float, str]] = []
-  for index in range(span, len(df) - span):
-    window = df.iloc[index - span:index + span + 1]
-    high = float(df["high"].iloc[index])
-    low = float(df["low"].iloc[index])
-    if high == float(window["high"].max()) and window["high"].eq(high).sum() == 1:
-      points.append(("resistance", high, index, weight, f"{timeframe} swing-high"))
-    if low == float(window["low"].min()) and window["low"].eq(low).sum() == 1:
-      points.append(("support", low, index, weight, f"{timeframe} swing-low"))
-  return points
-
-
-def _rolling_extremes(
-  df: pd.DataFrame,
-  timeframe: str,
-  lookback: int,
-  weight: float,
-) -> list[tuple[str, float, int, float, str]]:
-  if len(df) < 4:
-    return []
-  frame = df.iloc[-min(len(df), max(4, lookback)):-1]
-  low_index = int(df.index.get_loc(frame["low"].idxmin()))
-  high_index = int(df.index.get_loc(frame["high"].idxmax()))
-  return [
-    ("support", float(frame["low"].min()), low_index, weight, f"{timeframe} range-low"),
-    ("resistance", float(frame["high"].max()), high_index, weight, f"{timeframe} range-high"),
-  ]
-
-
-def _cluster_rails(
-  points: list[tuple[str, float, int, float, str]],
-  role: str,
-  atr: float,
-) -> list[AutoScalpRail]:
-  tolerance = max(0.1, RAIL_CLUSTER_ATR * atr)
-  clusters: list[list[tuple[str, float, int, float, str]]] = []
-  for point in sorted(points, key=lambda item: item[1]):
-    if not clusters:
-      clusters.append([point])
-      continue
-    cluster = clusters[-1]
-    weight = sum(item[3] for item in cluster)
-    center = sum(item[1] * item[3] for item in cluster) / max(weight, _EPS)
-    if abs(point[1] - center) <= tolerance:
-      cluster.append(point)
-    else:
-      clusters.append([point])
-  xau_pip = _PIP_SIZE["XAU"]
-  half_width = min(
-    max(xau_pip, RAIL_HALF_WIDTH_ATR * atr),
-    MAX_RAIL_HALF_WIDTH_PIPS * xau_pip,
-  )
-  rails: list[AutoScalpRail] = []
-  for cluster in clusters:
-    weight = sum(item[3] for item in cluster)
-    level = sum(item[1] * item[3] for item in cluster) / max(weight, _EPS)
-    timeframes = tuple(sorted({item[4].split()[0] for item in cluster}))
-    recency = max(item[2] for item in cluster) / max(1, max(item[2] for item in points))
-    rails.append(AutoScalpRail(
-      role=role,
-      low=level - half_width,
-      high=level + half_width,
-      level=level,
-      touches=len(cluster),
-      score=round(weight + recency, 3),
-      timeframes=timeframes,
-      sources=tuple(sorted({item[4] for item in cluster})),
-    ))
-  return rails
-
-
-def _merge_same_role_rails(
-  rails: list[AutoScalpRail],
-  atr: float,
-) -> list[AutoScalpRail]:
-  tolerance = max(0.1, RAIL_MERGE_ATR * atr)
-  maximum_width = min(
-    MAX_MERGED_RAIL_WIDTH_ATR * atr,
-    MAX_MERGED_RAIL_WIDTH_PIPS * _PIP_SIZE["XAU"],
-  )
-  merged: list[AutoScalpRail] = []
-  for role in ("support", "resistance"):
-    for rail in sorted(
-      (item for item in rails if item.role == role),
-      key=lambda item: item.level,
-    ):
-      if not merged or merged[-1].role != role or abs(
-        rail.level - merged[-1].level
-      ) > tolerance:
-        merged.append(rail)
-        continue
-      current = merged.pop()
-      if max(current.high, rail.high) - min(
-        current.low,
-        rail.low,
-      ) > maximum_width:
-        merged.extend([current, rail])
-        continue
-      total = current.score + rail.score
-      level = (
-        current.level * current.score + rail.level * rail.score
-      ) / max(total, _EPS)
-      merged.append(AutoScalpRail(
-        role=role,
-        low=min(current.low, rail.low),
-        high=max(current.high, rail.high),
-        level=level,
-        touches=current.touches + rail.touches,
-        score=round(total, 3),
-        timeframes=tuple(sorted(set(current.timeframes + rail.timeframes))),
-        sources=tuple(sorted(set(current.sources + rail.sources))),
-      ))
-  return merged
-
-
 def _m1_rail_trigger(
   df: pd.DataFrame,
   rail: AutoScalpRail,
@@ -388,8 +274,14 @@ def _m1_rail_trigger(
   span = high - low
   if span <= _EPS:
     return None
-  touch = M1_TOUCH_ATR * atr
+  pip_size = _PIP_SIZE["XAU"]
+  touch = min(
+    BOX_MAX_TOUCH_BAND_PIPS * pip_size,
+    max(BOX_MIN_TOUCH_BAND_PIPS * pip_size, BOX_TOUCH_BAND_ATR * atr),
+  )
   buffer = M1_BREAK_BUFFER_ATR * atr
+  recovery = BOX_RECOVERY_ATR * atr
+  body = abs(close - open_) / span
   upper_wick = max(0.0, high - max(open_, close)) / span
   lower_wick = max(0.0, min(open_, close) - low) / span
 
@@ -397,9 +289,10 @@ def _m1_rail_trigger(
     touched = low <= rail.high + touch and high >= rail.low - touch
     accepted = close < rail.low - buffer
     reaction = (
-      (close > open_ or lower_wick >= 0.30)
-      and close >= low + 0.60 * span
-      and close >= rail.level - buffer
+      close > open_
+      and lower_wick >= BOX_MIN_WICK_FRACTION
+      and body >= BOX_MIN_BODY_FRACTION
+      and close >= rail.level + recovery
     )
     if touched and not accepted and reaction:
       return "BUY", "range_rejection"
@@ -407,9 +300,10 @@ def _m1_rail_trigger(
     touched = high >= rail.low - touch and low <= rail.high + touch
     accepted = close > rail.high + buffer
     reaction = (
-      (close < open_ or upper_wick >= 0.30)
-      and close <= low + 0.40 * span
-      and close <= rail.level + buffer
+      close < open_
+      and upper_wick >= BOX_MIN_WICK_FRACTION
+      and body >= BOX_MIN_BODY_FRACTION
+      and close <= rail.level - recovery
     )
     if touched and not accepted and reaction:
       return "SELL", "range_rejection"
@@ -417,58 +311,115 @@ def _m1_rail_trigger(
   return None
 
 
-def _m5_countertrend_blocks(
-  m5: pd.DataFrame,
-  direction: str,
+def _m1_consolidation_box(
+  m1: pd.DataFrame,
   atr: float,
-) -> bool:
-  frame = m5.tail(M5_CONTEXT_LOOKBACK)
-  if len(frame) < 5 or atr <= _EPS:
-    return True
-  close = frame["close"].astype(float)
-  path = float(close.diff().abs().sum())
-  efficiency = (
-    abs(float(close.iloc[-1] - close.iloc[0])) / path
-    if path > _EPS else 0.0
+  symbol: str,
+) -> AutoScalpBox | None:
+  pip_size = _PIP_SIZE.get(symbol.upper(), 1.0)
+  if len(m1) < BOX_LOOKBACK + 1 or atr <= _EPS:
+    return None
+  history = m1.iloc[-(BOX_LOOKBACK + 1):-1]
+  lower_level = float(history["low"].quantile(BOX_EDGE_QUANTILE))
+  upper_level = float(history["high"].quantile(1 - BOX_EDGE_QUANTILE))
+  width_pips = (upper_level - lower_level) / pip_size
+  if not BOX_MIN_WIDTH_PIPS <= width_pips <= BOX_MAX_WIDTH_PIPS:
+    return None
+  touch = min(
+    BOX_MAX_TOUCH_BAND_PIPS * pip_size,
+    max(BOX_MIN_TOUCH_BAND_PIPS * pip_size, BOX_TOUCH_BAND_ATR * atr),
   )
-  net_move = float(close.iloc[-1] - close.iloc[0])
-  if efficiency > M5_MAX_RANGE_EFFICIENCY:
-    if direction == "BUY" and net_move < 0:
-      return True
-    if direction == "SELL" and net_move > 0:
-      return True
-  momentum = float(close.iloc[-1] - close.iloc[-4]) / atr
-  if direction == "BUY" and momentum < -M5_MAX_ADVERSE_MOMENTUM_ATR:
+  lower_flags = history["low"].astype(float) <= lower_level + touch
+  upper_flags = history["high"].astype(float) >= upper_level - touch
+  lower_touches = _touch_episodes(lower_flags)
+  upper_touches = _touch_episodes(upper_flags)
+  if min(lower_touches, upper_touches) < BOX_MIN_TOUCH_EPISODES:
+    return None
+  inside_buffer = max(3 * pip_size, BOX_BREAK_BUFFER_ATR * atr)
+  inside_ratio = float(history["close"].astype(float).between(
+    lower_level - inside_buffer,
+    upper_level + inside_buffer,
+  ).mean())
+  if inside_ratio + _EPS < BOX_MIN_INSIDE_RATIO:
+    return None
+  close_path = float(history["close"].astype(float).diff().abs().sum())
+  efficiency = (
+    abs(float(history["close"].iloc[-1] - history["close"].iloc[0]))
+    / close_path
+    if close_path > _EPS else 0.0
+  )
+  if efficiency > BOX_MAX_CLOSE_EFFICIENCY:
+    return None
+  lower = AutoScalpRail(
+    role="support",
+    low=lower_level,
+    high=lower_level,
+    level=lower_level,
+    touches=lower_touches,
+    score=round(lower_touches + inside_ratio, 3),
+    timeframes=("M1",),
+    sources=(f"M1 {BOX_LOOKBACK}-bar range-low",),
+  )
+  upper = AutoScalpRail(
+    role="resistance",
+    low=upper_level,
+    high=upper_level,
+    level=upper_level,
+    touches=upper_touches,
+    score=round(upper_touches + inside_ratio, 3),
+    timeframes=("M1",),
+    sources=(f"M1 {BOX_LOOKBACK}-bar range-high",),
+  )
+  bucket = 10 * pip_size
+  low_bucket = round(lower_level / bucket)
+  high_bucket = round(upper_level / bucket)
+  return AutoScalpBox(
+    f"{symbol.lower()}-{low_bucket}-{high_bucket}",
+    lower,
+    upper,
+    width_pips,
+    inside_ratio,
+    efficiency,
+  )
+
+
+def _touch_episodes(flags: pd.Series) -> int:
+  values = flags.astype(bool)
+  previous = values.shift(1, fill_value=False)
+  return int((values & ~previous).sum())
+
+
+def _box_is_broken(
+  m1: pd.DataFrame,
+  m5: pd.DataFrame,
+  box: AutoScalpBox,
+  atr: float,
+  pip_size: float,
+) -> bool:
+  buffer = max(3 * pip_size, BOX_BREAK_BUFFER_ATR * atr)
+  lower_break = box.lower.low - buffer
+  upper_break = box.upper.high + buffer
+  recent_m1 = m1["close"].astype(float).tail(BOX_BREAK_M1_CLOSES)
+  if len(recent_m1) >= BOX_BREAK_M1_CLOSES and (
+    bool((recent_m1 < lower_break).all())
+    or bool((recent_m1 > upper_break).all())
+  ):
     return True
-  if direction == "SELL" and momentum > M5_MAX_ADVERSE_MOMENTUM_ATR:
-    return True
-  return False
+  m5_close = float(m5["close"].iloc[-1])
+  return m5_close < lower_break or m5_close > upper_break
+
+
+def _full_tp_pips(room_pips: float) -> int | None:
+  for target in BOX_TP_CHOICES:
+    if room_pips + _EPS >= target + BOX_TP_BUFFER_PIPS:
+      return target
+  return None
 
 
 def _rail_distance(rail: AutoScalpRail, price: float) -> float:
   if rail.low <= price <= rail.high:
     return 0.0
   return min(abs(price - rail.low), abs(price - rail.high))
-
-
-def _opposite_target(
-  rails: list[AutoScalpRail],
-  price: float,
-  direction: str,
-  atr: float,
-) -> AutoScalpRail | None:
-  separation = max(0.1, 0.35 * atr)
-  if direction == "BUY":
-    candidates = [
-      rail for rail in rails
-      if rail.role == "resistance" and rail.level > price + separation
-    ]
-    return min(candidates, key=lambda item: item.level) if candidates else None
-  candidates = [
-    rail for rail in rails
-    if rail.role == "support" and rail.level < price - separation
-  ]
-  return max(candidates, key=lambda item: item.level) if candidates else None
 
 
 def _target_room(
