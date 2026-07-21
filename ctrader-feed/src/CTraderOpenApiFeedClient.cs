@@ -47,20 +47,18 @@ public sealed class CTraderOpenApiFeedClient(
       _ => true,
       cancellationToken
     );
-    ProtoOAGetAccountListByAccessTokenRes accounts;
-    try
-    {
-      accounts = await GetGrantedAccountsAsync(cancellationToken);
-    }
-    catch (InvalidOperationException)
-    {
-      Log("configured access token rejected; refreshing before one auth retry");
-      await RefreshTokenAsync(cancellationToken);
-      accounts = await GetGrantedAccountsAsync(cancellationToken);
-    }
-    _accountGrants = ToAccountGrants(accounts);
-    RequireConfiguredAccount(accounts);
-    await AuthorizeAccountAsync(cancellationToken);
+    await AccountAuthorizationFlow.RunAsync(
+      GetGrantedAccountsAsync,
+      accounts =>
+      {
+        _accountGrants = ToAccountGrants(accounts);
+        RequireConfiguredAccount(accounts);
+      },
+      RefreshTokenAsync,
+      AuthorizeAccountAsync,
+      Log,
+      cancellationToken
+    );
   }
 
   public async Task RefreshTokenAsync(CancellationToken cancellationToken)

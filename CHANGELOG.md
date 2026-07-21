@@ -105,6 +105,9 @@ dated section after deployment.
 
 ### Fixed
 
+- Startup recovery from a rejected cTrader access token no longer sends a
+  duplicate account-authorization request after refresh already authorized the
+  channel, avoiding the `ALREADY_LOGGED_IN` reconnect loop.
 - cTrader token rotation now re-authorizes the configured trading account with
   the new access token before releasing the request lock; reconcile retries one
   lost-account-auth response, and refresh failures force a clean feed reconnect.
