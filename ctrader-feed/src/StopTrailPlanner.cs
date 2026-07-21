@@ -18,13 +18,23 @@ public static class StopTrailPlanner
     {
       return null;
     }
+    var completedTargetOrdinal = TargetOrdinal(state, completedTargetIndex);
+    if (completedTargetOrdinal == 2)
+    {
+      return null;
+    }
     var pip = VolumePlanner.PipSize(symbol);
-    var offsetPips = completedTargetIndex == 0
+    var trailTargetOrdinal = completedTargetOrdinal - 2;
+    var offsetPips = completedTargetOrdinal == 1
       ? breakEvenBufferPips
-      : state.TargetsPips[completedTargetIndex - 1];
+      : TargetPips(state, trailTargetOrdinal);
+    if (offsetPips is null)
+    {
+      return null;
+    }
     var desired = state.Direction == TradeDirection.Buy
-      ? state.EntryPrice + offsetPips * pip
-      : state.EntryPrice - offsetPips * pip;
+      ? state.EntryPrice + offsetPips.Value * pip
+      : state.EntryPrice - offsetPips.Value * pip;
     desired = decimal.Round(desired, symbol.Digits, MidpointRounding.AwayFromZero);
     if (
       state.CurrentStopLoss is decimal current
@@ -33,10 +43,34 @@ public static class StopTrailPlanner
     {
       return null;
     }
-    var label = completedTargetIndex == 0
+    var label = completedTargetOrdinal == 1
       ? $"BE+{breakEvenBufferPips}"
-      : $"TP{completedTargetIndex}";
+      : $"TP{trailTargetOrdinal}";
     return new StopTrailMove(desired, label);
+  }
+
+  private static int TargetOrdinal(AutoTradePositionState state, int index) =>
+    state.TargetOrdinals is { } ordinals && index < ordinals.Count
+      ? ordinals[index]
+      : index + 1;
+
+  private static int? TargetPips(
+    AutoTradePositionState state,
+    int targetOrdinal
+  )
+  {
+    if (targetOrdinal < 1)
+    {
+      return null;
+    }
+    for (var index = 0; index < state.TargetsPips.Count; index++)
+    {
+      if (TargetOrdinal(state, index) == targetOrdinal)
+      {
+        return state.TargetsPips[index];
+      }
+    }
+    return null;
   }
 
   private static bool MovesTowardProfit(
