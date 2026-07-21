@@ -153,12 +153,15 @@ apexvoid-trading-bot/
 └── webhook/                  🤖 the bot application (dir name kept for history)
     ├── Dockerfile
     ├── requirements.txt
+    ├── scripts/               🧰 one-off/manual utility scripts
     └── app/
-        ├── main.py           🏁 entrypoint: init DB, start long-polling
-        ├── config.py         ⚙️ pydantic-settings (all env vars)
-        ├── telegram.py       💬 aiogram bot: DM commands, channel handlers, formatting
-        ├── chart_analysis.py 👁️ Claude vision chart analysis
-        └── dedup.py          🗄️ SQLite: manual_signals + pips_log
+        ├── main.py            🏁 entrypoint: init DB, start long-polling
+        ├── core/               ⚙️ settings (pydantic-settings) and symbol config
+        ├── persistence/        🗄️ PostgreSQL store + Redis watcher state
+        ├── bot/                💬 aiogram: client, wiring, keyboards, handlers/
+        ├── signals/            📡 manual-signal lifecycle: parsing, broadcast, watcher, reports
+        ├── analysis/           📈 price-action primitives, detectors, scanner, market map
+        └── autotrade/          🤖 independent auto-scalp gate, scale context, worker, delivery
 ```
 
 ---

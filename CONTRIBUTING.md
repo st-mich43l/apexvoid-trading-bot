@@ -5,10 +5,10 @@ document the internal workflow for keeping the repository clean.
 
 ## Branching
 
-- `main` — deployable. Only merge-ready changes land here.
+- `master` — deployable. Only merge-ready changes land here.
 - `feature/<short-slug>` — work in progress for a single logical change.
 
-Do not commit directly to `main`. Every change goes through a branch, even
+Do not commit directly to `master`. Every change goes through a branch, even
 trivial doc edits, so the history is reviewable.
 
 ## Commit Messages
@@ -77,17 +77,17 @@ types appears in `git status`, something is wrong.
 
 ## Release / Deploy
 
-"Release" here means deploying `main` to the production host:
+"Release" here means deploying `master` to the production host:
 
 ```bash
 ssh <user>@<host>
-cd ~/xau-signal-bot
+cd ~/apexvoid-trading-bot
 git pull --ff-only
 docker compose up -d --build
 docker compose logs -f bot     # watch for startup messages
 ```
 
-There is no tag-based release process; the host simply tracks `main`.
+There is no tag-based release process; the host simply tracks `master`.
 
 ## Backing Out a Bad Deploy
 

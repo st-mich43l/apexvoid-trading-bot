@@ -1,0 +1,610 @@
+"""Displacement, supply/demand, order-block, and mitigation logic."""
+
+from __future__ import annotations
+
+from dataclasses import replace
+import math
+
+import pandas as pd
+
+from app.analysis.math_utils import atr_at, atr_series, body_fraction, candle_direction
+from app.analysis.types import (
+  Break,
+  DealingRange,
+  Grab,
+  Leg,
+  Level,
+  Pool,
+  SessionLevel,
+  Zone,
+)
+from app.analysis.trendlines import Trendline, value_at
+
+ZONE_MERGE_OVERLAP = 0.5
+FRESH_SCORE = 3.0
+SINGLE_TOUCH_SCORE = 1.0
+SOURCE_SCORE_CAP = 5.0
+SOURCE_SCORES = {
+  "order_block": 3.0,
+  "breaker": 2.0,
+  "flip_zone": 2.0,
+  "supply_demand": 1.5,
+  "bullish_fvg": 1.0,
+  "bearish_fvg": 1.0,
+  "box_breakout": 5.0,
+}
+KEY_LEVEL_SCORE = 2.0
+ROUND_NUMBER_SCORE = 1.0
+LIQUIDITY_SCORE = 2.0
+HTF_SCORE = 3.0
+SESSION_LEVEL_SCORE = 2.0
+PD_POSITION_SCORE = 2.0
+GRAB_A_SCORE = 2.0
+TRENDLINE_SCORE = 1.5
+
+
+def displacement(
+  df: pd.DataFrame,
+  atr: pd.Series | None = None,
+  k: float = 1.5,
+  body_frac: float = 0.55,
+) -> list[Leg]:
+  if df.empty:
+    return []
+  atr = atr if atr is not None else atr_series(df)
+  legs: list[Leg] = []
+  start: int | None = None
+  direction: str | None = None
+  for i, row in enumerate(df.itertuples()):
+    current = "up" if row.close > row.open else "down" if row.close < row.open else None
+    if current is None:
+      _append_leg(df, atr, legs, start, i - 1, direction, k, body_frac)
+      start, direction = None, None
+      continue
+    if direction is None:
+      start, direction = i, current
+      continue
+    if current != direction:
+      _append_leg(df, atr, legs, start, i - 1, direction, k, body_frac)
+      start, direction = i, current
+  _append_leg(df, atr, legs, start, len(df) - 1, direction, k, body_frac)
+  return legs
+
+
+def supply_demand(df: pd.DataFrame, legs: list[Leg]) -> list[Zone]:
+  zones: list[Zone] = []
+  for leg in legs:
+    if leg.start <= 0:
+      continue
+    base_start = max(0, leg.start - 3)
+    base = df.iloc[base_start:leg.start]
+    if base.empty:
+      continue
+    side = "demand" if leg.direction == "up" else "supply"
+    origin = leg.start - 1
+    zones.append(Zone(
+      bottom=float(base["low"].min()),
+      top=float(base["high"].max()),
+      side=side,
+      origin_index=origin,
+      created_ts=df.index[origin],
+      source="supply_demand",
+    ))
+  return zones
+
+
+def order_blocks(
+  df: pd.DataFrame,
+  legs: list[Leg],
+  breaks: list[Break],
+  zone_width: str = "body",
+) -> list[Zone]:
+  zones: list[Zone] = []
+  for leg in legs:
+    bos = _causing_bos(leg, breaks)
+    if bos is None:
+      continue
+    origin = _last_opposite_candle(df, leg)
+    if origin is None:
+      continue
+    row = df.iloc[origin]
+    bottom, top = _zone_band(row, zone_width)
+    side = "demand" if leg.direction == "up" else "supply"
+    zones.append(Zone(
+      bottom=bottom,
+      top=top,
+      side=side,
+      origin_index=origin,
+      created_ts=df.index[origin],
+      source="order_block",
+      break_kind=bos.kind,
+      break_index=bos.index,
+    ))
+  return zones
+
+
+def breaker_blocks(order_blocks: list[Zone], df: pd.DataFrame) -> list[Zone]:
+  zones: list[Zone] = []
+  for zone in order_blocks:
+    violation = _breaker_violation(zone, df)
+    if violation is None:
+      zones.append(zone)
+      continue
+    dead = replace(
+      zone,
+      touches=max(zone.touches, 1),
+      mitigated=True,
+    )
+    zones.append(dead)
+    side = "supply" if zone.side == "demand" else "demand"
+    zones.append(Zone(
+      bottom=zone.low,
+      top=zone.high,
+      side=side,
+      origin_index=violation,
+      created_ts=df.index[violation],
+      source="breaker",
+      break_kind="breaker",
+      break_index=violation,
+    ))
+  return zones
+
+
+def flip_zones(levels: list[Level], breaks: list[Break]) -> list[Zone]:
+  zones: list[Zone] = []
+  seen: set[tuple[float, str]] = set()
+  for item in breaks:
+    for level in levels:
+      if abs(item.level - level.price) > max(level.band, 0.0):
+        continue
+      side = "demand" if item.direction == "up" else "supply"
+      key = (round(level.price, 6), side)
+      if key in seen:
+        continue
+      seen.add(key)
+      zones.append(Zone(
+        bottom=level.price - level.band,
+        top=level.price + level.band,
+        side=side,
+        origin_index=item.index,
+        created_ts=item.ts,
+        source="flip_zone",
+        break_kind=item.kind,
+        break_index=item.index,
+      ))
+  return zones
+
+
+def mark_mitigation(
+  zones: list[Zone],
+  df: pd.DataFrame,
+  cutoff: int | None = None,
+) -> list[Zone]:
+  """Stamp touches with as-of semantics.
+
+  ``cutoff`` is exclusive. With ``cutoff=len(df)-1``, a zone tapped for the
+  first time by the current trigger bar still has ``touches == 0`` and is
+  considered fresh. Pass ``cutoff=None`` for full-history reporting.
+  """
+  stamped: list[Zone] = []
+  end = len(df) if cutoff is None else max(0, min(cutoff, len(df)))
+  for zone in zones:
+    touches = 0
+    in_touch = False
+    start_from = zone.break_index if zone.break_index is not None else zone.origin_index
+    start = max(0, start_from + 1)
+    for i in range(start, end):
+      row = df.iloc[i]
+      touched = float(row["low"]) <= zone.top and float(row["high"]) >= zone.bottom
+      if touched and not in_touch:
+        touches += 1
+      in_touch = touched
+    final_touches = max(touches, zone.touches)
+    stamped.append(replace(
+      zone,
+      touches=final_touches,
+      mitigated=zone.mitigated or final_touches > 0,
+    ))
+  return stamped
+
+
+def merge_zones(
+  zones: list[Zone],
+  min_overlap: float = ZONE_MERGE_OVERLAP,
+  max_width: float | None = None,
+) -> list[Zone]:
+  groups: list[list[Zone]] = []
+  for zone in sorted(zones, key=lambda item: (item.side, item.low, item.high)):
+    for group in groups:
+      if group[0].side != zone.side:
+        continue
+      if any(_overlap_ratio(zone, member) >= min_overlap for member in group):
+        if max_width is not None and _merged_width([*group, zone]) > max_width:
+          continue
+        group.append(zone)
+        break
+    else:
+      groups.append([zone])
+  return [_composite_zone(group) for group in groups]
+
+
+def score_zones(
+  zones: list[Zone],
+  key_levels: list[Level],
+  pools: list[Pool],
+  round_step: float,
+  htf_zones: list[Zone] | None = None,
+  session_levels: list[SessionLevel] | None = None,
+  dealing_range: DealingRange | None = None,
+  grabs: list[Grab] | None = None,
+  trendlines: list[Trendline] | None = None,
+  bar_index: int | None = None,
+) -> list[Zone]:
+  scored = [
+    _score_zone(
+      zone,
+      key_levels,
+      pools,
+      round_step,
+      htf_zones or [],
+      session_levels or [],
+      dealing_range,
+      grabs or [],
+      trendlines or [],
+      bar_index,
+    )
+    for zone in zones
+  ]
+  return sorted(
+    scored,
+    key=lambda zone: (zone.score, -zone.touches, -zone.low),
+    reverse=True,
+  )
+
+
+def fvg(df: pd.DataFrame) -> list[Zone]:
+  zones: list[Zone] = []
+  for i in range(2, len(df)):
+    older = df.iloc[i - 2]
+    cur = df.iloc[i]
+    if float(older["high"]) < float(cur["low"]):
+      zones.append(Zone(
+        float(older["high"]),
+        float(cur["low"]),
+        "demand",
+        i,
+        df.index[i],
+        source="bullish_fvg",
+      ))
+    if float(older["low"]) > float(cur["high"]):
+      zones.append(Zone(
+        float(cur["high"]),
+        float(older["low"]),
+        "supply",
+        i,
+        df.index[i],
+        source="bearish_fvg",
+      ))
+  return zones
+
+
+def _overlap_ratio(first: Zone, second: Zone) -> float:
+  overlap = min(first.high, second.high) - max(first.low, second.low)
+  if overlap <= 0:
+    return 0.0
+  smaller = min(first.high - first.low, second.high - second.low)
+  if smaller <= 0:
+    return 1.0 if first.low <= second.high and second.low <= first.high else 0.0
+  return overlap / smaller
+
+
+def _merged_width(zones: list[Zone]) -> float:
+  return max(zone.high for zone in zones) - min(zone.low for zone in zones)
+
+
+def _composite_zone(group: list[Zone]) -> Zone:
+  if len(group) == 1:
+    zone = group[0]
+    sources = _unique_sources([zone])
+    return replace(zone, sources=sources)
+  best = max(group, key=_source_quality)
+  earliest = min(group, key=lambda item: item.origin_index)
+  touches = min(item.touches for item in group)
+  return Zone(
+    bottom=min(item.low for item in group),
+    top=max(item.high for item in group),
+    side=group[0].side,
+    origin_index=earliest.origin_index,
+    created_ts=earliest.created_ts,
+    touches=touches,
+    mitigated=touches > 0,
+    source=best.source,
+    sources=_unique_sources(group),
+    break_kind=best.break_kind,
+    break_index=best.break_index,
+  )
+
+
+def _unique_sources(zones: list[Zone]) -> list[str]:
+  result: list[str] = []
+  for zone in zones:
+    for source in zone.sources or ([zone.source] if zone.source else []):
+      if source and source not in result:
+        result.append(source)
+  return result
+
+
+def _score_zone(
+  zone: Zone,
+  levels: list[Level],
+  pools: list[Pool],
+  round_step: float,
+  htf_zones: list[Zone],
+  session_levels: list[SessionLevel],
+  dealing_range: DealingRange | None,
+  grabs: list[Grab],
+  trendlines: list[Trendline],
+  bar_index: int | None,
+) -> Zone:
+  score = 0.0
+  reasons: list[str] = []
+  if zone.touches == 0:
+    score += FRESH_SCORE
+    reasons.append("fresh")
+  elif zone.touches == 1:
+    score += SINGLE_TOUCH_SCORE
+    reasons.append("1 touch")
+
+  source_score, source_reasons = _source_score(zone)
+  score += source_score
+  reasons.extend(source_reasons)
+
+  if any(_zone_overlaps_level(zone, level) for level in levels):
+    score += KEY_LEVEL_SCORE
+    reasons.append("key level")
+  round_number = _round_number_inside(zone, round_step)
+  if round_number is not None:
+    score += ROUND_NUMBER_SCORE
+    reasons.append(f"round {_number(round_number)}")
+  if _has_liquidity_confluence(zone, pools):
+    score += LIQUIDITY_SCORE
+    reasons.append("liquidity pool")
+  for session_name in _session_level_confluences(zone, session_levels):
+    score += SESSION_LEVEL_SCORE
+    reasons.append(session_name)
+  pd_reason = _pd_position_reason(zone, dealing_range)
+  if pd_reason is not None:
+    score += PD_POSITION_SCORE
+    reasons.append(pd_reason)
+  if _has_grade_a_grab(zone, grabs):
+    score += GRAB_A_SCORE
+    reasons.append("sweep A")
+  if any(_inside_htf_zone(zone, htf) for htf in htf_zones):
+    score += HTF_SCORE
+    reasons.append("HTF zone")
+  if _has_trendline_confluence(zone, trendlines, bar_index):
+    score += TRENDLINE_SCORE
+    reasons.append("TL confluence")
+  return replace(zone, score=score, score_reasons=reasons)
+
+
+def _source_score(zone: Zone) -> tuple[float, list[str]]:
+  total = 0.0
+  reasons: list[str] = []
+  for source in zone.sources or ([zone.source] if zone.source else []):
+    value = SOURCE_SCORES.get(source, 0.0)
+    if source == "order_block" and zone.break_kind is None:
+      value = 0.0
+    if value <= 0:
+      continue
+    total += value
+    reasons.append(_source_reason(source))
+  return min(total, SOURCE_SCORE_CAP), reasons
+
+
+def _source_quality(zone: Zone) -> float:
+  return _source_score(zone)[0]
+
+
+def _source_reason(source: str) -> str:
+  if source == "order_block":
+    return "OB"
+  if source == "breaker":
+    return "breaker"
+  if source == "flip_zone":
+    return "flip"
+  if source == "supply_demand":
+    return "S/D"
+  if source.endswith("_fvg"):
+    return "FVG"
+  if source == "box_breakout":
+    return "box breakout"
+  return source
+
+
+def _has_trendline_confluence(
+  zone: Zone,
+  trendlines: list[Trendline],
+  bar_index: int | None,
+) -> bool:
+  if bar_index is None:
+    return False
+  return any(
+    not line.broken and zone.low <= value_at(line, bar_index) <= zone.high
+    for line in trendlines
+  )
+
+
+def _zone_overlaps_level(zone: Zone, level: Level) -> bool:
+  band = max(level.band, 0.0)
+  low = level.price - band
+  high = level.price + band
+  if band == 0:
+    return zone.low <= level.price <= zone.high
+  return zone.low <= high and zone.high >= low
+
+
+def _round_number_inside(zone: Zone, round_step: float) -> float | None:
+  if round_step <= 0:
+    return None
+  first = math.ceil(zone.low / round_step) * round_step
+  if first <= zone.high:
+    return first
+  return None
+
+
+def _has_liquidity_confluence(zone: Zone, pools: list[Pool]) -> bool:
+  width = max(zone.high - zone.low, 0.0)
+  for pool in pools:
+    tolerance = max(pool.band, width, 0.1)
+    if zone.side == "demand" and pool.side == "sell":
+      if zone.low - tolerance <= pool.level <= zone.low:
+        return True
+    if zone.side == "supply" and pool.side == "buy":
+      if zone.high <= pool.level <= zone.high + tolerance:
+        return True
+  return False
+
+
+def _session_level_confluences(
+  zone: Zone,
+  session_levels: list[SessionLevel],
+) -> list[str]:
+  result: list[str] = []
+  width = max(zone.high - zone.low, 0.0)
+  tolerance = max(width, 0.1)
+  for level in session_levels:
+    if level.swept:
+      continue
+    if level.name in result:
+      continue
+    if zone.side == "demand" and _is_low_session_level(level.name):
+      if (
+        zone.low <= level.price <= zone.high
+        or zone.low - tolerance <= level.price <= zone.low
+      ):
+        result.append(level.name)
+    if zone.side == "supply" and _is_high_session_level(level.name):
+      if (
+        zone.low <= level.price <= zone.high
+        or zone.high <= level.price <= zone.high + tolerance
+      ):
+        result.append(level.name)
+  return result
+
+
+def _pd_position_reason(
+  zone: Zone,
+  dealing_range: DealingRange | None,
+) -> str | None:
+  if dealing_range is None:
+    return None
+  if zone.side == "demand" and zone.high <= dealing_range.eq:
+    return "discount"
+  if zone.side == "supply" and zone.low >= dealing_range.eq:
+    return "premium"
+  return None
+
+
+def _has_grade_a_grab(zone: Zone, grabs: list[Grab]) -> bool:
+  for grab in grabs:
+    if grab.grade != "A":
+      continue
+    if zone.side == "demand" and grab.direction == "bull":
+      if _pool_points_into_zone(zone, grab.pool):
+        return True
+    if zone.side == "supply" and grab.direction == "bear":
+      if _pool_points_into_zone(zone, grab.pool):
+        return True
+  return False
+
+
+def _pool_points_into_zone(zone: Zone, pool: Pool) -> bool:
+  width = max(zone.high - zone.low, 0.0)
+  tolerance = max(pool.band, width, 0.1)
+  if zone.side == "demand" and pool.side == "sell":
+    return zone.low - tolerance <= pool.level <= zone.high
+  if zone.side == "supply" and pool.side == "buy":
+    return zone.low <= pool.level <= zone.high + tolerance
+  return False
+
+
+def _is_low_session_level(name: str) -> bool:
+  return name.endswith("_L") or name in {"PDL", "PWL"}
+
+
+def _is_high_session_level(name: str) -> bool:
+  return name.endswith("_H") or name in {"PDH", "PWH"}
+
+
+def _inside_htf_zone(zone: Zone, htf: Zone) -> bool:
+  return (
+    zone.side == htf.side
+    and zone.low >= htf.low
+    and zone.high <= htf.high
+  )
+
+
+def _number(value: float) -> str:
+  return f"{value:.2f}".rstrip("0").rstrip(".")
+
+
+def _breaker_violation(zone: Zone, df: pd.DataFrame) -> int | None:
+  start = max(0, zone.origin_index + 1)
+  for i in range(start, len(df)):
+    close = float(df["close"].iloc[i])
+    if zone.side == "demand" and close < zone.low:
+      return i
+    if zone.side == "supply" and close > zone.high:
+      return i
+  return None
+
+
+def _append_leg(
+  df: pd.DataFrame,
+  atr: pd.Series,
+  legs: list[Leg],
+  start: int | None,
+  end: int,
+  direction: str | None,
+  k: float,
+  body_frac: float,
+) -> None:
+  if start is None or direction is None or end < start:
+    return
+  open_ = float(df["open"].iloc[start])
+  close = float(df["close"].iloc[end])
+  size = close - open_ if direction == "up" else open_ - close
+  if size < atr_at(atr, end) * k:
+    return
+  run = df.iloc[start:end + 1]
+  strong = sum(1 for _, row in run.iterrows() if body_fraction(row) >= body_frac)
+  if strong < max(1, len(run) // 2):
+    return
+  legs.append(Leg(start, end, direction, size))
+
+
+def _causing_bos(leg: Leg, breaks: list[Break]) -> Break | None:
+  for item in breaks:
+    if item.kind != "BOS" or item.direction != leg.direction:
+      continue
+    if leg.start <= item.index <= leg.end:
+      return item
+  return None
+
+
+def _last_opposite_candle(df: pd.DataFrame, leg: Leg) -> int | None:
+  opposite = "down" if leg.direction == "up" else "up"
+  for i in range(leg.start - 1, -1, -1):
+    if candle_direction(df.iloc[i]) == opposite:
+      return i
+  return None
+
+
+def _zone_band(row: pd.Series, zone_width: str) -> tuple[float, float]:
+  if zone_width == "range":
+    return float(row["low"]), float(row["high"])
+  return (
+    min(float(row["open"]), float(row["close"])),
+    max(float(row["open"]), float(row["close"])),
+  )

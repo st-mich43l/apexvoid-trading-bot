@@ -8,7 +8,7 @@ and troubleshooting. There is no TLS certificate or nginx to manage.
 A weekly sanity pass takes under a minute:
 
 ```bash
-cd ~/xau-signal-bot
+cd ~/apexvoid-trading-bot
 docker compose ps                          # 'bot' is Up
 docker compose logs --tail=50 bot          # any ERROR lines?
 df -h /                                     # free space
@@ -32,24 +32,25 @@ docker compose logs --since 2h bot    # since a time
 
 ### What to back up
 
-- `~/xau-signal-bot/data/signals.db` — signal lifecycle + pips history.
-- `~/xau-signal-bot/.env` — secrets. Store in a password manager, **not** on
-  the same host.
+- The `postgres` container's `signals` database — signal lifecycle + pips
+  history. Dumped via `pg_dump`, not a raw volume/file copy.
+- `~/apexvoid-trading-bot/.env` — secrets. Store in a password manager, **not**
+  on the same host.
 
 ### Daily local snapshot
 
 ```bash
 # crontab -e
-0 2 * * * cp ~/xau-signal-bot/data/signals.db ~/backup-$(date +\%F).db && \
-          find ~ -maxdepth 1 -name 'backup-*.db' -mtime +14 -delete
+0 2 * * * docker exec apexvoid-trading-postgres pg_dump -U apexvoid signals \
+          > ~/backup-$(date +\%F).sql && \
+          find ~ -maxdepth 1 -name 'backup-*.sql' -mtime +14 -delete
 ```
 
 ### Restore
 
 ```bash
-docker compose down
-cp ~/backup-YYYY-MM-DD.db ~/xau-signal-bot/data/signals.db
-docker compose up -d
+docker exec -i apexvoid-trading-postgres psql -U apexvoid signals \
+  < ~/backup-YYYY-MM-DD.sql
 ```
 
 ## Database Maintenance
@@ -76,7 +77,7 @@ print(f'Deleted {n} closed signals')
 ### Code changes
 
 ```bash
-cd ~/xau-signal-bot
+cd ~/apexvoid-trading-bot
 git pull
 docker compose up -d --build
 docker compose logs -f bot

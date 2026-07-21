@@ -1,8 +1,8 @@
 import asyncio
 import logging
 
-from app.config import settings
-from app.telegram import (
+from app.core.config import settings
+from app.bot.wiring import (
   bot,
   dp,
   scanner_bot,
@@ -10,15 +10,15 @@ from app.telegram import (
   setup_commands,
   setup_scanner_commands,
 )
-from app.dedup import init_db, close_pool
-from app.watcher import watcher_loop
-from app.calendar import calendar_sync_loop
-from app.weekly_report import weekly_report_loop
-from app.scanner import scanner_loop
-from app.market_map_delivery import market_map_scan_loop
-from app.auto_trade_ops import auto_trade_events_loop
-from app.auto_scalp_worker import auto_scalp_loop
-from app import redis_state
+from app.persistence.store import init_db, close_pool
+from app.signals.watcher import watcher_loop
+from app.signals.calendar import calendar_sync_loop
+from app.signals.weekly_report import weekly_report_loop
+from app.analysis.scanner import scanner_loop
+from app.analysis.market_map_delivery import market_map_scan_loop
+from app.autotrade.delivery import auto_trade_events_loop
+from app.autotrade.worker import auto_scalp_loop
+from app.persistence import redis_state
 
 logging.basicConfig(
   level=settings.log_level,

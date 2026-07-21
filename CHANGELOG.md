@@ -113,6 +113,11 @@ dated section after deployment.
 - Restrict actionable SCALP output to the validated `ScalpRange` support and
   resistance pair; internal micro swings, round numbers, and standalone
   trendlines no longer receive misleading `BUY`/`SELL` labels.
+- Reorganized `webhook/app/` from a flat module layout into `core/`,
+  `persistence/`, `bot/`, `signals/`, `analysis/`, and `autotrade/`
+  subpackages with no runtime behavior change; also fixed stale repo-name
+  and branch references in the docs and swapped the SQLite-era backup
+  procedure for a Postgres `pg_dump`/`psql` one.
 
 ### Fixed
 

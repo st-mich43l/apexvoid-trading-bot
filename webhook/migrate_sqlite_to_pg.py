@@ -3,7 +3,7 @@
 migrate_sqlite_to_pg.py — one-shot data migration from the legacy SQLite
 ``signals.db`` into the new PostgreSQL database.
 
-It creates the schema (via ``app.dedup.init_db``) and copies every row of the
+It creates the schema (via ``app.persistence.store.init_db``) and copies every row of the
 five live tables, preserving primary keys, then advances the identity
 sequences so future inserts do not collide.
 
@@ -28,8 +28,8 @@ import sys
 
 import asyncpg
 
-from app import dedup
-from app.config import settings
+from app.persistence import store
+from app.core.config import settings
 
 logging.basicConfig(level="INFO", format="%(levelname)s: %(message)s")
 log = logging.getLogger("migrate")
@@ -134,7 +134,7 @@ async def main() -> None:
   log.info("Target Postgres: %s", settings.database_url.split("@")[-1])
 
   # Create the schema in Postgres (idempotent).
-  await dedup.init_db()
+  await store.init_db()
 
   pg = await asyncpg.connect(settings.database_url)
   try:
@@ -148,7 +148,7 @@ async def main() -> None:
     await verify(pg, args.sqlite)
   finally:
     await pg.close()
-    await dedup.close_pool()
+    await store.close_pool()
 
   log.info("Migration complete.")
 
