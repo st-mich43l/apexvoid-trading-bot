@@ -157,6 +157,28 @@ class Settings(BaseSettings):
   auto_trade_min_confluence: int = 2
   auto_trade_news_guard_minutes: int = 30
   auto_trade_box_retire_seconds: int = 14400
+  # Trend/breakout regime classifier (app/autotrade/trend.py). Named with a
+  # trend_/auto_trade_trend_ prefix to avoid colliding with the existing
+  # scanner-owned breakout_accept_bars/breakout_max_age_bars fields above,
+  # which feed a different pipeline (app.analysis.regime.accepted_box_break
+  # via detectors.py) and must keep their own tuning independent of this
+  # feature.
+  trend_min_bos: int = 2
+  trend_min_height_atr: float = 3.0
+  trend_atr_expansion: float = 1.15
+  trend_atr_baseline_bars: int = 48
+  trend_allow_chase: bool = True
+  trend_level_buffer_atr: float = 1.0
+  tp_min_spacing_atr: float = 0.5
+  # How many M1 bars a box break stays eligible for breakout-mode entry
+  # before it's considered stale; how many consecutive closes beyond the
+  # edge count as "accepted" absent a displacement-grade candle. Both are
+  # initial/tunable starting values, not established facts.
+  trend_breakout_max_age_bars: int = 5
+  trend_breakout_accept_bars: int = 2
+  reaction_max_atr: float = 0.5
+  regime_chop_alert_share: float = 0.75
+  auto_trade_trend_enabled: bool = False  # kill switch — default OFF
 
   @property
   def telegram_chat_id(self) -> str:
