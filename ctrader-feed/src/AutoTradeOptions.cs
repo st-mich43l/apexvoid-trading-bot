@@ -20,7 +20,20 @@ public sealed record AutoTradeOptions(
   string CandidateStream,
   string EventStream,
   string Label,
-  bool RequireDemoOnlyToken = false
+  bool RequireDemoOnlyToken = false,
+  decimal RiskPercent = 2m,
+  decimal PipValuePerLot = 10m,
+  int MaxTranches = 2,
+  decimal AddRiskFraction = 0.5m,
+  int AddMaxAgeBars = 3,
+  int AddCooldownBars = 3,
+  decimal AddLevelBufferAtr = 1m,
+  decimal AddStopBufferAtr = 0.3m,
+  int AddMinStopPips = 15,
+  bool AddRequireRiskFree = false,
+  bool ZoneFillEnabled = false,
+  decimal ZoneFillMinAtr = 0.5m,
+  int ZoneFillTtlBars = 3
 )
 {
   public static AutoTradeOptions FromEnvironment() => new(
@@ -41,7 +54,20 @@ public sealed record AutoTradeOptions(
     CandidateStream: Env("AUTO_TRADE_STREAM", "auto_trade:candidates"),
     EventStream: Env("AUTO_TRADE_EVENT_STREAM", "auto_trade:events"),
     Label: Env("AUTO_TRADE_LABEL", "apexvoid-auto"),
-    RequireDemoOnlyToken: Bool("AUTO_TRADE_REQUIRE_DEMO_ONLY_TOKEN", false)
+    RequireDemoOnlyToken: Bool("AUTO_TRADE_REQUIRE_DEMO_ONLY_TOKEN", false),
+    RiskPercent: Decimal("AUTO_TRADE_RISK_PCT", 2m),
+    PipValuePerLot: Decimal("AUTO_TRADE_PIP_VALUE_PER_LOT", 10m),
+    MaxTranches: Int("AUTO_TRADE_MAX_TRANCHES", 2),
+    AddRiskFraction: Decimal("AUTO_TRADE_ADD_RISK_FRACTION", 0.5m),
+    AddMaxAgeBars: Int("AUTO_TRADE_ADD_MAX_AGE_BARS", 3),
+    AddCooldownBars: Int("AUTO_TRADE_ADD_COOLDOWN_BARS", 3),
+    AddLevelBufferAtr: Decimal("AUTO_TRADE_ADD_LEVEL_BUFFER_ATR", 1m),
+    AddStopBufferAtr: Decimal("AUTO_TRADE_ADD_STOP_BUFFER_ATR", 0.3m),
+    AddMinStopPips: Int("AUTO_TRADE_ADD_MIN_STOP_PIPS", 15),
+    AddRequireRiskFree: Bool("AUTO_TRADE_ADD_REQUIRE_RISK_FREE", false),
+    ZoneFillEnabled: Bool("AUTO_TRADE_ZONE_FILL_ENABLED", false),
+    ZoneFillMinAtr: Decimal("AUTO_TRADE_ZONE_FILL_MIN_ATR", 0.5m),
+    ZoneFillTtlBars: Int("AUTO_TRADE_ZONE_FILL_TTL_BARS", 3)
   );
 
   public void Validate()
@@ -81,6 +107,36 @@ public sealed record AutoTradeOptions(
       throw new AutoTradeConfigurationException(
         "Auto trade disabled: AUTO_TRADE_BE_BUFFER_PIPS must be non-negative "
         + "and below TP1"
+      );
+    }
+    if (RiskPercent is < 0.1m or > 10m || PipValuePerLot <= 0)
+    {
+      throw new AutoTradeConfigurationException(
+        "Auto trade disabled: risk percent must be 0.1-10 and pip value positive"
+      );
+    }
+    if (
+      MaxTranches is < 1 or > 5
+      || AddRiskFraction <= 0
+      || AddRiskFraction > 1
+      || AddMaxAgeBars <= 0
+      || AddCooldownBars <= 0
+      || AddLevelBufferAtr < 0
+      || AddStopBufferAtr < 0
+      || AddMinStopPips <= 0
+      || AddMinStopPips > decimal.ToInt32(decimal.Floor(
+        StopLossDistance * 10m
+      ))
+    )
+    {
+      throw new AutoTradeConfigurationException(
+        "Auto trade disabled: scale-in settings are invalid"
+      );
+    }
+    if (ZoneFillMinAtr <= 0 || ZoneFillTtlBars <= 0)
+    {
+      throw new AutoTradeConfigurationException(
+        "Auto trade disabled: zone-fill settings must be positive"
       );
     }
     if (MaxDailyTrades <= 0)

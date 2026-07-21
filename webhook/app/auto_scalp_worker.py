@@ -17,6 +17,7 @@ from typing import Any
 
 from app import redis_state
 from app.auto_scalp_gate import AutoScalpDecision, evaluate_auto_scalp_gate
+from app.auto_scale_context import AutoScaleContext, build_auto_scale_context
 from app.config import settings
 from app.dedup import event_in_window
 from app.ohlc_source import RedisOHLCSource
@@ -108,6 +109,7 @@ async def _publish_candidate(
   event_ts: str,
   spot: AutoTradeSpot | None,
   decision: AutoScalpDecision,
+  scale_context: AutoScaleContext | None = None,
 ) -> str | None:
   if (
     not settings.auto_trade_enabled
@@ -166,6 +168,20 @@ async def _publish_candidate(
     "confluence": decision.confluence,
     "reasons": list(decision.reasons),
   }
+  if scale_context is not None:
+    payload.update({
+      "version": 2,
+      "bar_ts": scale_context.bar_ts,
+      "atr": scale_context.atr,
+      "structure_swing": scale_context.structure_swing,
+      "displacement_direction": scale_context.displacement_direction,
+      "displacement_age_bars": scale_context.displacement_age_bars,
+      "bos_direction": scale_context.bos_direction,
+      "bos_ts": scale_context.bos_ts,
+      "opposing_level_distance_atr": (
+        scale_context.opposing_level_distance_atr
+      ),
+    })
   try:
     await client.xadd(
       settings.auto_trade_stream,
@@ -252,12 +268,22 @@ async def _handle_event(
     symbol=symbol,
     spot_price=None if spot is None or not spot.fresh else spot.price,
   )
+  scale_context = (
+    build_auto_scale_context(
+      frames,
+      decision,
+      spot_price=spot.price,
+      cfg=settings,
+    )
+    if spot is not None and spot.fresh else None
+  )
   candidate_id = await _publish_candidate(
     client,
     symbol,
     event_ts,
     spot,
     decision,
+    scale_context,
   )
   payload = _status_payload(
     decision,
