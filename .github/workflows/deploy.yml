@@ -23,7 +23,7 @@ jobs:
       images: >-
         [
           {"name": "apexvoid-trading-bot", "context": "telegram-bot", "dockerfile": "telegram-bot/Dockerfile"},
-          {"name": "apexvoid-ctrader-feed", "context": "ctrader-engine", "dockerfile": "ctrader-engine/Dockerfile"}
+          {"name": "apexvoid-ctrader-engine", "context": "ctrader-engine", "dockerfile": "ctrader-engine/Dockerfile"}
         ]
     secrets:
       registry-token: ${{ secrets.DOCKERHUB_TOKEN }}

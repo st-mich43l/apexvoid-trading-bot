@@ -207,9 +207,9 @@ weekends or quiet market periods when no XAU bars close.
 
 ```bash
 dotnet test tests/CTraderFeed.Tests.csproj
-docker build -t apexvoid-ctrader-feed:local ctrader-engine
+docker build -t apexvoid-ctrader-engine:local ctrader-engine
 # fallback mode if an SDK update regresses AOT compatibility:
-docker build --build-arg PUBLISH_AOT=false -t apexvoid-ctrader-feed:trimmed ctrader-engine
+docker build --build-arg PUBLISH_AOT=false -t apexvoid-ctrader-engine:trimmed ctrader-engine
 # operator escape hatch after supplying the normal feed environment:
 dotnet run --project src/CTraderFeed.csproj -- --reset-token-cache
 ```
