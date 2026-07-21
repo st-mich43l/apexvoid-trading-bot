@@ -10,12 +10,15 @@ from html import escape
 from app.persistence import redis_state
 from app.core.config import settings
 from app.bot.client import send_scanner_with_retry
+from app.autotrade.worker import regime_share_24h
 
 log = logging.getLogger(__name__)
 
 _CURSOR_KEY = "auto_trade:telegram_event_cursor"
 _PAUSED_KEY = "auto_trade:paused"
 _STATS_KEY = "auto_trade:stats"
+_REGIME_ALERT_PENDING_PREFIX = "auto_trade:regime_alert_pending:"
+_REGIME_ALERT_SENT_TTL = 86400
 _NOTIFY_TYPES = {
   "ready",
   "dry_run",
@@ -218,9 +221,30 @@ async def auto_trade_status_text() -> str:
             zone_text += f" · full TP {int(tp)}p"
       except (KeyError, TypeError, ValueError, json.JSONDecodeError):
         pass
+    regime_line = "\nRegime: <b>warming up</b>"
+    primary_symbol = next(
+      (
+        item.strip().upper()
+        for item in settings.auto_trade_symbols.split(",")
+        if item.strip()
+      ),
+      "XAU",
+    )
+    try:
+      shares = await regime_share_24h(client, primary_symbol)
+    except Exception:
+      shares = None
+    if shares is not None:
+      regime_line = (
+        "\nRegime (24h): chop "
+        f"<b>{shares.get('chop', 0.0):.0%}</b> · trend "
+        f"<b>{shares.get('trend', 0.0):.0%}</b> · breakout "
+        f"<b>{shares.get('breakout', 0.0):.0%}</b>"
+      )
     gate_line = (
       "\nGate: <b>independent M1 two-edge box scalp</b>"
       f"\nLast check: <b>{escape(gate_state)}</b>{escape(zone_text)}"
+      f"{regime_line}"
     )
   return (
     "🤖 <b>ApexVoid Algo</b>\n"
@@ -287,6 +311,46 @@ async def set_auto_trade_paused(paused: bool) -> None:
     await client.delete(_PAUSED_KEY)
 
 
+async def _check_regime_alerts(client) -> None:
+  """Consume any regime mis-tuning flags worker.py wrote to Redis.
+
+  worker.py cannot import app.bot.client (architecture guard test), so it
+  only flags a pending alert key; this function - called from the existing
+  auto_trade_events_loop poll below - is the delivery side that actually
+  sends the owner DM, deduping via a companion "sent" key so a flag never
+  fires twice within its cooldown window.
+  """
+  async for key in client.scan_iter(match=f"{_REGIME_ALERT_PENDING_PREFIX}*"):
+    symbol = key[len(_REGIME_ALERT_PENDING_PREFIX):]
+    sent_key = f"auto_trade:regime_alert_sent:{symbol}"
+    claimed = await client.set(
+      sent_key,
+      "1",
+      nx=True,
+      ex=_REGIME_ALERT_SENT_TTL,
+    )
+    if not claimed:
+      continue
+    raw = await client.get(key)
+    if not raw:
+      continue
+    try:
+      payload = json.loads(raw)
+    except (TypeError, json.JSONDecodeError):
+      continue
+    chop = float(payload.get("chop_share", 0.0))
+    trend = float(payload.get("trend_share", 0.0))
+    breakout = float(payload.get("breakout_share", 0.0))
+    text = (
+      "⚠️ <b>ApexVoid Algo</b>\n"
+      f"Regime mix looks chop-heavy for {escape(symbol)}: "
+      f"chop {chop:.0%} · trend {trend:.0%} · breakout {breakout:.0%} "
+      "over the trailing 24h. Trend/breakout thresholds may need tuning."
+    )
+    if settings.telegram_owner_id:
+      await send_scanner_with_retry(text, chat_id=settings.telegram_owner_id)
+
+
 async def auto_trade_events_loop() -> None:
   if not settings.auto_trade_enabled or not settings.telegram_owner_id:
     return
@@ -303,6 +367,7 @@ async def auto_trade_events_loop() -> None:
 
   while True:
     try:
+      await _check_regime_alerts(client)
       batches = await client.xread(
         {settings.auto_trade_event_stream: cursor},
         count=20,

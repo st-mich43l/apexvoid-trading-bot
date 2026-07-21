@@ -155,7 +155,9 @@ public sealed record TradeCandidate(
   string? RangeId = null,
   decimal? RangeLow = null,
   decimal? RangeHigh = null,
-  int? FullTakeProfitPips = null
+  int? FullTakeProfitPips = null,
+  IReadOnlyList<int>? TargetsPips = null,
+  string? Regime = null
 );
 
 public sealed record TradeStreamEntry(

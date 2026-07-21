@@ -72,6 +72,21 @@ dated section after deployment.
   edge confirmation, EQ/opposing-edge targets, and shared Market Map rails.
 - Added Range Edge Scalp configuration and scanner telemetry for barrier counts,
   active range quality, and live edge-touch state.
+- Added a three-state market regime classifier (chop/trend/breakout) for
+  ApexVoid Algo, with a router that keeps trend/breakout candidates
+  mutually exclusive with the box-scalp gate on every bar.
+- Added trend-pullback and breakout-continuation entry modes reusing the
+  existing price-action toolkit (swings, structure, displacement/zones,
+  session liquidity), plus level-anchored target selection with
+  spacing/de-dup rules and a fixed-ladder fallback.
+- Added box-breakout as a tradeable setup instead of purely informational
+  bookkeeping: an accepted, still-fresh box break now opens a position
+  against the opposite box edge.
+- Added 24h chop/trend/breakout share instrumentation on `/auto_status` and
+  a one-shot owner DM when the chop share looks mistuned.
+- Added the `AUTO_TRADE_TREND_ENABLED` kill switch (default off) and the C#
+  `AUTO_TRADE_TREND_STOP_MIN_PIPS`/`AUTO_TRADE_TREND_STOP_MAX_PIPS`
+  structure-stop band for trend-family candidates.
 
 ### Changed
 
@@ -80,6 +95,9 @@ dated section after deployment.
   (matches the `fpmarketssc` broker string cTrader reports). Credentials
   rotated in the deploy vault, not in this repo. Also switched the
   `/auto_status` and event-card icon from ⚡ to 🤖 for ApexVoid Algo.
+- Scale-in/pyramiding is now restricted to the trend regime; an add
+  candidate whose `regime` is not `"trend"` is rejected before the
+  existing scale-in trigger checks run.
 - Range-box candidates now require flat XAU exposure, bypass scale-in and
   planned zone-fill, and use one broker-valid 100% target; legacy executor
   target plans remain unchanged.

@@ -11,6 +11,7 @@ from app.persistence import redis_state
 from app.analysis import scanner
 from app.autotrade.gate import AutoScalpBox, AutoScalpDecision, AutoScalpRail
 from app.autotrade.scale_context import AutoScaleContext
+from app.autotrade.trend import RegimeInfo, TrendDecision
 
 
 def _frame() -> pd.DataFrame:
@@ -288,6 +289,70 @@ async def test_non_candidate_decision_is_never_published(monkeypatch):
     client, "XAU", "1", spot, AutoScalpDecision("waiting_for_touch")
   ) is None
   assert await client.xlen("auto_trade:test") == 0
+
+
+@pytest.mark.asyncio
+async def test_trend_regime_blocks_box_publish_and_only_trend_path_fires(
+  monkeypatch,
+):
+  """Mutual exclusion: even though evaluate_auto_scalp_gate legitimately
+  returns a "candidate" box decision on this bar, the regime router says
+  "trend" - so only the trend/breakout publish path may fire, never the
+  box path, on the same bar.
+  """
+  client = redis_state.get_client()
+  now = int(datetime.now(timezone.utc).timestamp())
+  monkeypatch.setattr(worker.settings, "auto_trade_enabled", True)
+  monkeypatch.setattr(worker.settings, "auto_trade_trend_enabled", True)
+  monkeypatch.setattr(worker.settings, "auto_trade_symbols", "XAU")
+  monkeypatch.setattr(worker.settings, "auto_trade_stream", "auto_trade:test")
+  monkeypatch.setattr(worker.settings, "auto_trade_min_confluence", 2)
+  monkeypatch.setattr(worker, "event_in_window", AsyncMock(return_value=None))
+  source = AsyncMock()
+  source.window = AsyncMock(return_value=_frame())
+  monkeypatch.setattr(
+    worker,
+    "_load_spot",
+    AsyncMock(return_value=worker.AutoTradeSpot(4017.2, now, True)),
+  )
+  monkeypatch.setattr(
+    worker, "evaluate_auto_scalp_gate", lambda frames, **kwargs: _decision(),
+  )
+  monkeypatch.setattr(
+    worker, "build_auto_scale_context", lambda *a, **k: _scale_context(now),
+  )
+  trend_regime = RegimeInfo("trend", "up", 5, 1.3, True, None, ("forced trend",))
+  monkeypatch.setattr(
+    worker, "classify_regime", lambda frames, decision, cfg: trend_regime,
+  )
+  trend_decision = TrendDecision(
+    "candidate",
+    direction="BUY",
+    mode="pullback",
+    entry_zone=(4016.0, 4016.5),
+    key_level=4016.2,
+    atr=1.2,
+    structure_swing=4010.0,
+    target_prices=(4020.0,),
+    targets_pips=(38,),
+    confluence=2,
+    reasons=("forced",),
+  )
+  monkeypatch.setattr(worker, "evaluate_trend_gate", lambda *a, **k: trend_decision)
+
+  result = await worker._handle_event(
+    "XAU:M1:1784552400", source=source, client=client,
+  )
+
+  assert result == _decision()
+  entries = await client.xrange("auto_trade:test")
+  assert len(entries) == 1
+  payload = json.loads(entries[0][1]["payload"])
+  assert payload["mode"] == "auto_trend_pullback"
+  assert payload["setup"] == "Trend Pullback"
+  assert payload["regime"] == "trend"
+  status = json.loads(await client.get("auto_trade:last_gate:XAU"))
+  assert status["regime"] == "trend"
 
 
 def test_worker_source_has_no_forming_scanner_market_map_or_telegram_import():

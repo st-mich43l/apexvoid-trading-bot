@@ -33,7 +33,9 @@ public sealed record AutoTradeOptions(
   bool ZoneFillEnabled = false,
   decimal ZoneFillMinAtr = 0.5m,
   int ZoneFillTtlBars = 3,
-  decimal BoxMinRiskReward = 1.25m
+  decimal BoxMinRiskReward = 1.25m,
+  int TrendStopMinPips = 40,
+  int TrendStopMaxPips = 120
 )
 {
   public static AutoTradeOptions FromEnvironment() => new(
@@ -67,7 +69,9 @@ public sealed record AutoTradeOptions(
     ZoneFillEnabled: Bool("AUTO_TRADE_ZONE_FILL_ENABLED", false),
     ZoneFillMinAtr: Decimal("AUTO_TRADE_ZONE_FILL_MIN_ATR", 0.5m),
     ZoneFillTtlBars: Int("AUTO_TRADE_ZONE_FILL_TTL_BARS", 3),
-    BoxMinRiskReward: Decimal("AUTO_TRADE_BOX_MIN_RR", 1.25m)
+    BoxMinRiskReward: Decimal("AUTO_TRADE_BOX_MIN_RR", 1.25m),
+    TrendStopMinPips: Int("AUTO_TRADE_TREND_STOP_MIN_PIPS", 40),
+    TrendStopMaxPips: Int("AUTO_TRADE_TREND_STOP_MAX_PIPS", 120)
   );
 
   public void Validate()
@@ -149,6 +153,16 @@ public sealed record AutoTradeOptions(
     {
       throw new AutoTradeConfigurationException(
         "Auto trade disabled: AUTO_TRADE_MIN_CONFLUENCE must be between 1 and 3"
+      );
+    }
+    if (
+      TrendStopMinPips <= 0
+      || TrendStopMaxPips < TrendStopMinPips
+    )
+    {
+      throw new AutoTradeConfigurationException(
+        "Auto trade disabled: AUTO_TRADE_TREND_STOP_MIN_PIPS/MAX_PIPS must be "
+        + "positive and MIN must not exceed MAX"
       );
     }
   }
