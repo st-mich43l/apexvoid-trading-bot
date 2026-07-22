@@ -4,9 +4,9 @@
 container, writes closed XAU trendbars into Redis, and can execute tightly
 guarded demo-account scalp candidates from the private Python auto-scalp gate.
 
-It does not import Python bot code, touch Postgres, or send Telegram messages.
-Auto-gate candidates, executor state, and operator events cross only the Redis
-boundary documented in
+It does not import Python bot code or touch Postgres. Auto-gate candidates,
+executor state, and operator events, including token lifecycle alerts delivered
+by Telegram, cross only the Redis boundary documented in
 [`../docs/redis-contract.md`](../docs/redis-contract.md).
 
 ## Runtime
@@ -44,8 +44,10 @@ CTRADER_SYMBOL=XAUUSD
 CTRADER_TIMEFRAMES=M1,M5,M15,M30
 CTRADER_BACKFILL_BARS=1500
 CTRADER_REQUEST_TIMEOUT=30
-CTRADER_TOKEN_REFRESH_MINUTES=50
+CTRADER_TOKEN_REFRESH_LEAD_DAYS=5
+CTRADER_TOKEN_CHECK_INTERVAL_HOURS=6
 CTRADER_REFRESH_TOKEN_KEY=ctrader:refresh_token
+CTRADER_REFRESH_TOKEN_FILE=/var/lib/apexvoid/ctrader-token.json
 REDIS_URL=redis://redis:6379/0
 BARS_WINDOW_MAX=1500
 BARS_CHANNEL=bars:new
@@ -94,16 +96,19 @@ Create a cTrader Open API application in the cTrader portal. Market data needs
 account access; auto-trading additionally requires a token granted with the
 `Trading` scope and `FullAccess` on the selected account. Store the client
 ID/secret plus access/refresh tokens in the deployment environment. Tokens are
-never logged. The service first tries the supplied access token and refreshes
-only after rejection or on the configured rotation interval.
+never logged. The service first tries the persisted access token, refreshes
+ahead of its recorded expiry, and keeps rejection-triggered refresh as a safety
+net.
 
 When cTrader rotates the refresh token, the latest value is persisted in Redis
 at `CTRADER_REFRESH_TOKEN_KEY` (default `ctrader:refresh_token`) with a SHA-256
 fingerprint of the `.env` seed token. The rotation is reused only while that
 fingerprint still matches. Supplying a newly authorized token in `.env`
 automatically starts a fresh rotation chain; legacy bare-token cache values are
-also replaced automatically. Redis is internal to the compose network and not
-exposed publicly; token values are never logged.
+also replaced automatically. The complete token document is mirrored atomically
+to `CTRADER_REFRESH_TOKEN_FILE` on a host bind mount, and a missing Redis value
+is healed from that mirror. Redis is internal to the compose network and not
+exposed publicly; token values are never logged or included in alerts.
 
 Demo is the default endpoint:
 
@@ -119,8 +124,18 @@ Set `AUTO_TRADE_REQUIRE_DEMO_ONLY_TOKEN=true` to disable execution whenever the
 token grants any live account, even when the selected account is demo.
 Token rotation persists the new refresh token and re-authorizes the configured
 account with the new access token atomically. A lost account authorization is
-retried once during reconcile; failed refresh/re-authorization restarts the
-whole feed session so trading cannot remain silently disconnected.
+retried once during reconcile. Proactive refresh failures use a 15-minute to
+6-hour exponential backoff without taking down market-data ingestion; reactive
+startup failures still reconnect the whole session.
+
+Clearing both persisted token tiers is intentionally guarded:
+
+```bash
+/app/ctrader-feed --reset-token-cache --yes-i-know
+```
+
+The environment refresh token is normally invalid after the first rotation,
+so resetting both tiers may require a manual cTrader Playground re-authorisation.
 
 ## Demo Auto-Trader
 

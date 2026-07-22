@@ -32,6 +32,7 @@ RUN if [ "$PUBLISH_AOT" = "true" ]; then \
 FROM mcr.microsoft.com/dotnet/runtime-deps:8.0 AS runtime
 WORKDIR /app
 COPY --from=build /out/ctrader-feed /app/ctrader-feed
+COPY docker-entrypoint.sh /app/docker-entrypoint.sh
+RUN chmod 0755 /app/docker-entrypoint.sh
 
-USER app
-ENTRYPOINT ["/app/ctrader-feed"]
+ENTRYPOINT ["/app/docker-entrypoint.sh"]

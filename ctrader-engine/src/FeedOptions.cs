@@ -18,8 +18,10 @@ public sealed record FeedOptions(
   int BarQualityLookback,
   string HeartbeatFile,
   string RefreshTokenKey,
+  string RefreshTokenFile,
   TimeSpan RequestTimeout,
-  TimeSpan TokenRefreshInterval
+  TimeSpan TokenRefreshLead,
+  TimeSpan TokenCheckInterval
 )
 {
   public static FeedOptions FromEnvironment()
@@ -43,9 +45,16 @@ public sealed record FeedOptions(
       BarQualityLookback: int.Parse(Env("BAR_QUALITY_LOOKBACK", "6")),
       HeartbeatFile: Env("HEALTH_FILE", "/tmp/ctrader-feed.heartbeat"),
       RefreshTokenKey: Env("CTRADER_REFRESH_TOKEN_KEY", "ctrader:refresh_token"),
+      RefreshTokenFile: Env(
+        "CTRADER_REFRESH_TOKEN_FILE",
+        "/var/lib/apexvoid/ctrader-token.json"
+      ),
       RequestTimeout: TimeSpan.FromSeconds(int.Parse(Env("CTRADER_REQUEST_TIMEOUT", "30"))),
-      TokenRefreshInterval: TimeSpan.FromMinutes(
-        int.Parse(Env("CTRADER_TOKEN_REFRESH_MINUTES", "50"))
+      TokenRefreshLead: TimeSpan.FromDays(
+        double.Parse(Env("CTRADER_TOKEN_REFRESH_LEAD_DAYS", "5"))
+      ),
+      TokenCheckInterval: TimeSpan.FromHours(
+        double.Parse(Env("CTRADER_TOKEN_CHECK_INTERVAL_HOURS", "6"))
       )
     );
   }

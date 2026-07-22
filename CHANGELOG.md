@@ -13,6 +13,9 @@ dated section after deployment.
 
 ### Added
 
+- Added proactive cTrader access-token refresh ahead of expiry, defensive
+  `expiresIn` unit resolution, a host-mounted file mirror for rotated token
+  recovery after Redis-volume loss, and rate-limited Telegram lifecycle alerts.
 - Added an independent two-edge range-box scalp contract for ApexVoid Algo:
   BUY lower-edge and SELL upper-edge M1 rejections, full-position +50/+70-pip
   exits, repeated-touch 60-bar auction boxes, midpoint edge re-arming, stable
@@ -90,6 +93,8 @@ dated section after deployment.
 
 ### Changed
 
+- cTrader token state now persists access-token expiry, reports its serving
+  tier at startup, and requires `--yes-i-know` before token-cache reset.
 - Auto-trade pip size is now configuration-owned (`0.1` for XAUUSD) instead of
   broker-derived, with a startup invariant across pip size, 100 oz contract
   size, and pip value per lot; the trend-stop maximum is now 65 pips to match

@@ -172,6 +172,12 @@ public sealed class AutoTradeEngine(
     await PublishAsync("error", exception.Message, cancellationToken);
   }
 
+  public Task PublishOperationalEventAsync(
+    string kind,
+    string message,
+    CancellationToken cancellationToken
+  ) => PublishAsync(kind, message, cancellationToken);
+
   public async Task ObserveSpotAsync(
     SpotPrice spot,
     CancellationToken cancellationToken

@@ -11,26 +11,63 @@ public static class Program
       return HealthFile.Check(path, TimeSpan.FromMinutes(10));
     }
 
+    var resetTokenCache = args.Contains(
+      "--reset-token-cache",
+      StringComparer.OrdinalIgnoreCase
+    );
+    if (
+      resetTokenCache
+      && !args.Contains("--yes-i-know", StringComparer.OrdinalIgnoreCase)
+    )
+    {
+      Console.Error.WriteLine(
+        "Refusing to reset the cTrader token cache without --yes-i-know. "
+        + "The environment refresh token was likely invalidated by rotation; "
+        + "deleting both persisted tiers may require manual Playground re-authorisation."
+      );
+      return 2;
+    }
+
     var options = FeedOptions.FromEnvironment();
     await using var redis = await StackExchangeRedisSeriesCommands.ConnectAsync(
       options.RedisUrl
     );
+    var redisRefreshTokenStore = new RedisRefreshTokenStore(
+      redis,
+      options.RefreshTokenKey
+    );
+    var fileRefreshTokenStore = new FileRefreshTokenStore(
+      options.RefreshTokenFile
+    );
+    if (resetTokenCache)
+    {
+      var resetStore = new TieredRefreshTokenStore(
+        redisRefreshTokenStore,
+        fileRefreshTokenStore
+      );
+      await resetStore.DeleteAsync(CancellationToken.None);
+      Console.WriteLine(
+        $"Deleted refresh-token cache key {options.RefreshTokenKey} "
+        + $"and mirror {options.RefreshTokenFile}"
+      );
+      return 0;
+    }
     var sink = new RedisBarSink(
       redis,
       options.BarsWindowMax,
       options.BarsChannel
     );
-    var refreshTokenStore = new RedisRefreshTokenStore(
-      redis,
-      options.RefreshTokenKey
-    );
-    if (args.Contains("--reset-token-cache", StringComparer.OrdinalIgnoreCase))
-    {
-      await refreshTokenStore.DeleteAsync(CancellationToken.None);
-      Console.WriteLine($"Deleted refresh-token cache key {options.RefreshTokenKey}");
-      return 0;
-    }
     var autoTradeOptions = AutoTradeOptions.FromEnvironment();
+    var autoTrade = new AutoTradeEngine(autoTradeOptions, redis);
+    Func<string, string, CancellationToken, Task> notify =
+      autoTrade.PublishOperationalEventAsync;
+    var tokenEvents = new TokenEventNotifier(notify);
+    var refreshTokenStore = new TieredRefreshTokenStore(
+      redisRefreshTokenStore,
+      fileRefreshTokenStore,
+      notify,
+      notifications: tokenEvents
+    );
     if (
       args.Contains("--account-check", StringComparer.OrdinalIgnoreCase)
       || args.Contains("--account-list", StringComparer.OrdinalIgnoreCase)
@@ -38,7 +75,9 @@ public static class Program
     {
       await using var client = new CTraderOpenApiFeedClient(
         options,
-        refreshTokenStore
+        refreshTokenStore,
+        notify,
+        tokenEvents: tokenEvents
       );
       await client.ConnectAndAuthorizeAsync(CancellationToken.None);
       if (args.Contains("--account-list", StringComparer.OrdinalIgnoreCase))
@@ -75,10 +114,15 @@ public static class Program
     }
     var runner = new FeedRunner(
       options,
-      () => new CTraderOpenApiFeedClient(options, refreshTokenStore),
+      () => new CTraderOpenApiFeedClient(
+        options,
+        refreshTokenStore,
+        notify,
+        tokenEvents: tokenEvents
+      ),
       sink,
       new HealthFile(options.HeartbeatFile),
-      autoTrade: new AutoTradeEngine(autoTradeOptions, redis)
+      autoTrade: autoTrade
     );
 
     using var cts = new CancellationTokenSource();
