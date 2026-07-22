@@ -83,6 +83,61 @@ def _rail(role: str, low: float, high: float, level: float) -> AutoScalpRail:
   return AutoScalpRail(role, low, high, level, 3, 5.0, ("M1",), ("m1",))
 
 
+def _box_breakout_replay_frame(
+  *,
+  obstacle: float = 4122.24,
+  valid_retest: bool = True,
+  data_gap: bool = False,
+) -> pd.DataFrame:
+  frame = _flat_m1(65, base=4118.0)
+  frame.iloc[-8] = [4119.0, obstacle, 4118.7, 4119.2]
+  frame.iloc[-7] = [4119.2, 4120.2, 4118.8, 4119.6]
+  frame.iloc[-6] = [4119.6, 4120.3, 4119.4, 4120.0]
+  frame.iloc[-2] = [4120.84, 4121.95, 4120.52, 4121.76]
+  if valid_retest:
+    frame.iloc[-1] = [4121.05, 4121.65, 4120.75, 4121.50]
+  else:
+    # Incident candle: only a tiny lower wick and a large upper wick.
+    frame.iloc[-1] = [4121.18, 4122.28, 4121.06, 4121.46]
+  if data_gap:
+    index = frame.index.to_list()
+    index[-1] += pd.Timedelta(minutes=1)
+    frame.index = pd.DatetimeIndex(index)
+  return frame
+
+
+def _box_breakout_context() -> tuple[AutoScalpDecision, trend.RegimeInfo]:
+  lower = _rail("support", 4113.73, 4113.73, 4113.73)
+  upper = _rail("resistance", 4120.80, 4120.80, 4120.80)
+  box = AutoScalpBox("xau-4113-4121", lower, upper, 70.7, 0.9, 0.2)
+  return (
+    AutoScalpDecision("box_broken", box=box),
+    trend.RegimeInfo("breakout", "up", 0, 1.1, True, 1, ()),
+  )
+
+
+def _mirrored_sell_breakout_replay() -> tuple[
+  pd.DataFrame,
+  AutoScalpDecision,
+  trend.RegimeInfo,
+]:
+  pivot = 4121.50
+  source = _box_breakout_replay_frame()
+  frame = pd.DataFrame(index=source.index)
+  frame["open"] = 2 * pivot - source["open"]
+  frame["high"] = 2 * pivot - source["low"]
+  frame["low"] = 2 * pivot - source["high"]
+  frame["close"] = 2 * pivot - source["close"]
+  lower = _rail("support", 4122.20, 4122.20, 4122.20)
+  upper = _rail("resistance", 4129.27, 4129.27, 4129.27)
+  box = AutoScalpBox("xau-4122-4129", lower, upper, 70.7, 0.9, 0.2)
+  return (
+    frame,
+    AutoScalpDecision("box_broken", box=box),
+    trend.RegimeInfo("breakout", "down", 0, 1.1, True, 1, ()),
+  )
+
+
 class _NoOpCfg:
   """Delegates every attribute lookup to the real settings object, so tests
   can flip one field without needing to hand-roll every duck-typed cfg
@@ -160,6 +215,100 @@ def test_accepted_box_break_classifies_as_breakout_even_with_narrow_window():
   assert regime.state == "breakout"
   assert regime.direction == "up"
   assert regime.box_break_age_bars == 0
+
+
+def test_incident_replay_rejects_upper_wick_chase():
+  m1 = _box_breakout_replay_frame(valid_retest=False)
+  box_decision, regime = _box_breakout_context()
+
+  decision = trend.evaluate_trend_gate(
+    {"M1": m1},
+    regime,
+    box_decision,
+    symbol="XAU",
+    spot_price=4121.55,
+    cfg=settings,
+  )
+
+  assert decision.state == "retest_rejected"
+  assert "wick rejection" in decision.reasons[0]
+
+
+def test_incident_replay_rejects_missing_m1_bar():
+  m1 = _box_breakout_replay_frame(data_gap=True)
+  box_decision, regime = _box_breakout_context()
+
+  decision = trend.evaluate_trend_gate(
+    {"M1": m1},
+    regime,
+    box_decision,
+    symbol="XAU",
+    spot_price=4121.55,
+    cfg=settings,
+  )
+
+  assert decision.state == "data_gap"
+  assert "missing M1 bar" in decision.reasons[0]
+
+
+def test_incident_replay_rejects_nearby_prebreak_barrier(monkeypatch):
+  m1 = _box_breakout_replay_frame()
+  box_decision, regime = _box_breakout_context()
+  monkeypatch.setattr(settings, "trend_breakout_min_room_pips", 35)
+
+  decision = trend.evaluate_trend_gate(
+    {"M1": m1},
+    regime,
+    box_decision,
+    symbol="XAU",
+    spot_price=4121.55,
+    cfg=settings,
+  )
+
+  assert decision.state == "target_blocked"
+  assert "6.9 pips room" in decision.reasons[0]
+  assert "4122.24" in decision.reasons[0]
+
+
+def test_box_breakout_retest_with_room_can_trade(monkeypatch):
+  m1 = _box_breakout_replay_frame(obstacle=4126.05)
+  box_decision, regime = _box_breakout_context()
+  monkeypatch.setattr(settings, "trend_breakout_min_room_pips", 35)
+  monkeypatch.setattr(trend, "session_levels", lambda df, cfg: [])
+  monkeypatch.setattr(trend, "previous_week_levels", lambda df: [])
+  monkeypatch.setattr(trend, "displacement", lambda *args, **kwargs: [])
+
+  decision = trend.evaluate_trend_gate(
+    {"M1": m1},
+    regime,
+    box_decision,
+    symbol="XAU",
+    spot_price=4121.55,
+    cfg=settings,
+  )
+
+  assert decision.state == "candidate"
+  assert decision.mode == "box_breakout"
+  assert 45 in decision.targets_pips
+  assert len(decision.targets_pips) == len(trend._FALLBACK_TP_PIPS)
+
+
+def test_sell_breakout_has_symmetric_prior_barrier_gate(monkeypatch):
+  m1, box_decision, regime = _mirrored_sell_breakout_replay()
+  monkeypatch.setattr(settings, "trend_breakout_min_room_pips", 35)
+
+  decision = trend.evaluate_trend_gate(
+    {"M1": m1},
+    regime,
+    box_decision,
+    symbol="XAU",
+    spot_price=4121.45,
+    cfg=settings,
+  )
+
+  assert decision.state == "target_blocked"
+  assert "6.9 pips room" in decision.reasons[0]
+  assert "4120.76" in decision.reasons[0]
 
 
 # ---------------------------------------------------------------------------
@@ -311,7 +460,7 @@ def test_mode_b_accepted_break_fires_candidate(monkeypatch):
     regime,
     AutoScalpDecision("waiting_for_box"),
     symbol="XAU",
-    spot_price=4006.5,
+    spot_price=4005.1,
     cfg=settings,
   )
 
@@ -341,7 +490,7 @@ def test_mode_b_break_without_displacement_acceptance_does_not_fire(monkeypatch)
 def test_mode_b_opposing_major_level_inside_buffer_blocks_entry(monkeypatch):
   m1 = _mode_b_frame(accepted=True)
   _patch_mode_b_primitives(monkeypatch, _mode_b_swings())
-  opposing = SessionLevel("PDH", 4007.0, m1.index[0], False)
+  opposing = SessionLevel("PDH", 4005.5, m1.index[0], False)
   monkeypatch.setattr(trend, "session_levels", lambda df, cfg: [opposing])
   regime = trend.RegimeInfo("trend", "up", 5, 1.2, True, None, ())
 
@@ -350,7 +499,7 @@ def test_mode_b_opposing_major_level_inside_buffer_blocks_entry(monkeypatch):
     regime,
     AutoScalpDecision("waiting_for_box"),
     symbol="XAU",
-    spot_price=4006.5,
+    spot_price=4005.1,
     cfg=settings,
   )
 
@@ -444,6 +593,7 @@ def test_build_trend_targets_empty_falls_back_to_fixed_ladder(monkeypatch):
 def test_mode_b_falls_back_to_fixed_ladder_and_tags_reason(monkeypatch):
   m1 = _mode_b_frame(accepted=True)
   _patch_mode_b_primitives(monkeypatch, _mode_b_swings())
+  monkeypatch.setattr(trend, "build_trend_targets", lambda *a, **k: [])
   regime = trend.RegimeInfo("trend", "up", 5, 1.2, True, None, ())
 
   decision = trend.evaluate_trend_gate(
@@ -451,7 +601,7 @@ def test_mode_b_falls_back_to_fixed_ladder_and_tags_reason(monkeypatch):
     regime,
     AutoScalpDecision("waiting_for_box"),
     symbol="XAU",
-    spot_price=4006.5,
+    spot_price=4005.1,
     cfg=settings,
   )
 

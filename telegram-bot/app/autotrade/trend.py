@@ -41,6 +41,8 @@ _BREAK_BUFFER_ATR = 0.12
 # zone. Deliberately a bit stricter than gate.py's BOX_MIN_WICK_FRACTION
 # (0.15) since a trend pullback entry has no opposite rail to lean on.
 _REJECTION_WICK_FRACTION = 0.3
+_BREAKOUT_RETEST_TOUCH_ATR = 0.2
+_TIMEFRAME_SECONDS = {"M1": 60, "M5": 300, "M15": 900}
 # Fixed fallback ladder, mirrors AUTO_TRADE_TP_PIPS's default value on the
 # C# side (30,60,90,120,200) so a trend candidate never ships with an empty
 # target list.
@@ -61,8 +63,9 @@ class RegimeInfo:
 
 @dataclass(frozen=True)
 class TrendDecision:
-  # "candidate" | "no_setup" | "missing_frames" | "insufficient_history"
-  # | "invalid_atr" | "invalid_spot"
+  # "candidate" | "no_setup" | "waiting_retest" | "retest_rejected"
+  # | "data_gap" | "target_blocked" | "missing_frames"
+  # | "insufficient_history" | "invalid_atr" | "invalid_spot"
   state: str
   direction: str | None = None  # "BUY" | "SELL"
   mode: str | None = None       # "pullback" | "breakout_continuation" | "box_breakout"
@@ -206,7 +209,7 @@ def evaluate_trend_gate(
 
   if regime.state == "breakout":
     return _evaluate_box_breakout(
-      m1, box_decision, regime, atr, pip_size, frames, cfg,
+      m1, box_decision, regime, atr, pip_size, live_price, frames, cfg,
     )
 
   direction_pa = regime.direction
@@ -396,6 +399,7 @@ def _evaluate_box_breakout(
   regime: RegimeInfo,
   atr: float,
   pip_size: float,
+  live_price: float,
   frames: dict[str, pd.DataFrame],
   cfg: Any,
 ) -> TrendDecision:
@@ -408,12 +412,55 @@ def _evaluate_box_breakout(
   key_level = key_rail.level
   structure_swing = stop_rail.level
 
-  entry_reference = float(m1["close"].iloc[-1])
+  break_age = regime.box_break_age_bars
+  if break_age is None or break_age < 1:
+    return TrendDecision(
+      "waiting_retest",
+      reasons=("breakout: waiting for a closed M1 retest",),
+    )
+  if not _m1_breakout_tail_is_contiguous(m1, break_age):
+    return TrendDecision(
+      "data_gap",
+      reasons=("breakout: missing M1 bar inside acceptance sequence",),
+    )
+  retest_reason = _breakout_retest_rejection_reason(
+    m1,
+    key_rail,
+    direction,
+    atr,
+    pip_size,
+  )
+  if retest_reason is not None:
+    return TrendDecision("retest_rejected", reasons=(retest_reason,))
+
+  entry_reference = live_price
   band = max(0.05 * atr, pip_size)
   entry_zone = (entry_reference - band, entry_reference + band)
   stop_distance = abs(entry_reference - structure_swing)
   if stop_distance <= _EPS:
     return TrendDecision("no_setup", reasons=("breakout: degenerate stop distance",))
+
+  obstacle = _nearest_prebreak_obstacle(
+    direction,
+    entry_reference,
+    m1,
+    frames,
+    break_age,
+  )
+  min_room_pips = max(
+    0,
+    int(getattr(cfg, "trend_breakout_min_room_pips", 35)),
+  )
+  if obstacle is not None:
+    room_pips = abs(obstacle - entry_reference) / pip_size
+    if room_pips + _EPS < min_room_pips:
+      return TrendDecision(
+        "target_blocked",
+        reasons=(
+          f"breakout: only {room_pips:.1f} pips room to prior barrier "
+          f"{obstacle:.2f} (need {min_room_pips})",
+        ),
+      )
 
   targets = build_trend_targets(
     direction,
@@ -432,6 +479,15 @@ def _evaluate_box_breakout(
   if not targets:
     targets = _fixed_fallback_targets(direction, entry_reference, pip_size)
     reasons.append("targets: fixed-fallback")
+  if obstacle is not None:
+    targets = _merge_breakout_obstacle_target(
+      direction,
+      entry_reference,
+      obstacle,
+      targets,
+      max(0.0, float(getattr(cfg, "tp_min_spacing_atr", 0.5))) * atr,
+    )
+    reasons.append(f"prior barrier {obstacle:.2f}")
   targets_pips = tuple(
     round(abs(price - entry_reference) / pip_size) for price in targets
   )
@@ -449,6 +505,114 @@ def _evaluate_box_breakout(
     confluence=confluence,
     reasons=tuple(reasons),
   )
+
+
+def _m1_breakout_tail_is_contiguous(m1: pd.DataFrame, break_age: int) -> bool:
+  count = break_age + 1
+  if count < 2:
+    return True
+  tail = m1.index[-count:]
+  if not isinstance(tail, pd.DatetimeIndex) or len(tail) != count:
+    return False
+  deltas = tail.to_series().diff().dropna().dt.total_seconds()
+  return bool((deltas == _TIMEFRAME_SECONDS["M1"]).all())
+
+
+def _breakout_retest_rejection_reason(
+  m1: pd.DataFrame,
+  key_rail: AutoScalpRail,
+  direction: str,
+  atr: float,
+  pip_size: float,
+) -> str | None:
+  row = m1.iloc[-1]
+  low = float(row["low"])
+  high = float(row["high"])
+  close = float(row["close"])
+  break_buffer = max(3 * pip_size, _BREAK_BUFFER_ATR * atr)
+  touch = max(3 * pip_size, _BREAKOUT_RETEST_TOUCH_ATR * atr)
+  if direction == "BUY":
+    threshold = key_rail.high + break_buffer
+    touched = low <= threshold + touch
+    held = close > threshold
+    direction_pa = "up"
+  else:
+    threshold = key_rail.low - break_buffer
+    touched = high >= threshold - touch
+    held = close < threshold
+    direction_pa = "down"
+  if not touched:
+    return f"breakout: waiting for retest of {key_rail.level:.2f}"
+  if not held:
+    return f"breakout: retest failed to hold {key_rail.level:.2f}"
+  if not _is_rejection(row, direction_pa):
+    return "breakout: retest candle lacks directional wick rejection"
+  return None
+
+
+def _nearest_prebreak_obstacle(
+  direction: str,
+  entry: float,
+  m1: pd.DataFrame,
+  frames: dict[str, pd.DataFrame],
+  break_age: int,
+) -> float | None:
+  break_position = len(m1) - break_age - 1
+  if break_position <= 0:
+    return None
+  break_time = m1.index[break_position]
+  candidates: list[float] = []
+  source_frames = {**frames, "M1": m1}
+  for timeframe, seconds in _TIMEFRAME_SECONDS.items():
+    raw = source_frames.get(timeframe)
+    if raw is None or raw.empty:
+      continue
+    frame = _clean(raw)
+    if not isinstance(frame.index, pd.DatetimeIndex):
+      continue
+    closed_before_break = frame.index + pd.to_timedelta(seconds, unit="s")
+    history = frame.loc[closed_before_break <= break_time].tail(60)
+    if len(history) < 5:
+      continue
+    column = "high" if direction == "BUY" else "low"
+    values = history[column].astype(float).to_numpy()
+    for index in range(2, len(values) - 2):
+      center = float(values[index])
+      left = values[index - 2:index]
+      right = values[index + 1:index + 3]
+      is_fractal = (
+        center >= float(left.max()) and center > float(right.max())
+        if direction == "BUY"
+        else center <= float(left.min()) and center < float(right.min())
+      )
+      if is_fractal and (
+        center > entry if direction == "BUY" else center < entry
+      ):
+        candidates.append(center)
+  if not candidates:
+    return None
+  return min(candidates) if direction == "BUY" else max(candidates)
+
+
+def _merge_breakout_obstacle_target(
+  direction: str,
+  entry: float,
+  obstacle: float,
+  targets: list[float],
+  min_spacing: float,
+) -> list[float]:
+  limit = max(1, len(targets))
+  ahead = [
+    price for price in (obstacle, *targets)
+    if (price > entry if direction == "BUY" else price < entry)
+  ]
+  ordered = sorted(ahead, key=lambda price: abs(price - entry))
+  merged: list[float] = []
+  for price in ordered:
+    if merged and abs(price - merged[-1]) < min_spacing:
+      continue
+    merged.append(price)
+  return merged[:limit]
 
 
 def _evaluate_mode_a(

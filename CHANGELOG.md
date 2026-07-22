@@ -184,6 +184,13 @@ dated section after deployment.
 
 ### Fixed
 
+- Block false market-chased box breakouts unless closed M1 bars are continuous,
+  the break receives a directional edge retest, and at least 35 pips remain to
+  the nearest pre-break M1/M5/M15 barrier; nearby barriers now join the target
+  ladder instead of being skipped in favor of distant levels. Room and targets
+  are measured from the fresh execution spot rather than the prior bar close.
+- Disable trend-continuation chase entries by default; the auto-scalp engine
+  now waits for a pullback to the broken level before considering execution.
 - Dedicated signal-bot scanner and auto-trade events now remain owner-DM-only;
   `SIGNAL_PUBLIC_CHANNEL_ID` is reserved for manual general-bot broadcasts.
 - Auto-trade Telegram cursors now advance only after owner delivery succeeds,
