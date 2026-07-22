@@ -74,6 +74,7 @@ public sealed class AutoTradeEngine(
       }
       var account = await _client.GetTradingAccountAsync(cancellationToken);
       ValidateAccount(account);
+      _log(VolumePlanner.SizingDiagnostic(account.Balance, options));
       await ReconcileAsync(cancellationToken);
       _ready = true;
       await PublishAsync(
@@ -525,10 +526,34 @@ public sealed class AutoTradeEngine(
         account,
         direction,
         expectedEntry,
+        stopPlan,
         date,
         cancellationToken
       );
     }
+    return await ProcessSingleInitialAsync(
+      candidate,
+      account,
+      direction,
+      expectedEntry,
+      stopPlan,
+      date,
+      routingReason: null,
+      cancellationToken: cancellationToken
+    );
+  }
+
+  private async Task<bool> ProcessSingleInitialAsync(
+    TradeCandidate candidate,
+    TradingAccountSnapshot account,
+    TradeDirection direction,
+    decimal expectedEntry,
+    StructureStopPlan stopPlan,
+    DateOnly date,
+    string? routingReason,
+    CancellationToken cancellationToken
+  )
+  {
     InitialSizingResult sizing;
     IReadOnlyList<int> targetPips = IsTrendCandidate(candidate)
       ? candidate.TargetsPips!
@@ -545,6 +570,7 @@ public sealed class AutoTradeEngine(
       sizing = VolumePlanner.SizeInitial(
         account.Balance,
         options.RiskPercent,
+        options.SizingMode,
         stopPlan.StopPips,
         options.PipValuePerLot,
         RequireSymbol(),
@@ -558,6 +584,7 @@ public sealed class AutoTradeEngine(
     }
     var groupId = GroupToken(candidate.CandidateId);
     var barTs = candidate.BarTs ?? candidate.CreatedAt;
+    var routingSuffix = routingReason is null ? "" : $" · {routingReason}";
     if (options.DryRun)
     {
       var targetSummary = IsBoxRangeScalp(candidate)
@@ -566,7 +593,8 @@ public sealed class AutoTradeEngine(
       return await CompleteDryRunAsync(
         candidate,
         $"{direction} {sizing.Lots:N2} lots · structure stop "
-        + $"{stopPlan.StopPips:N0}p{targetSummary} · {sizing.BindingTerm}",
+        + $"{stopPlan.StopPips:N0}p{targetSummary} · {sizing.BindingTerm}"
+        + routingSuffix,
         sizing.Volume,
         expectedEntry,
         cancellationToken
@@ -612,7 +640,8 @@ public sealed class AutoTradeEngine(
           ? $"full TP {targetPips[0]}p · range "
             + $"{candidate.RangeLow:N2}-{candidate.RangeHigh:N2} · "
           : "")
-        + sizing.BindingTerm,
+        + sizing.BindingTerm
+        + routingSuffix,
       groupWorstCase: -sizing.Lots * stopPlan.StopPips
         * options.PipValuePerLot,
       riskBudget: sizing.Budget,
@@ -625,6 +654,7 @@ public sealed class AutoTradeEngine(
     TradingAccountSnapshot account,
     TradeDirection direction,
     decimal expectedEntry,
+    StructureStopPlan singleEntryStopPlan,
     DateOnly date,
     CancellationToken cancellationToken
   )
@@ -633,6 +663,42 @@ public sealed class AutoTradeEngine(
     var proximal = direction == TradeDirection.Buy
       ? candidate.EntryZone.High
       : candidate.EntryZone.Low;
+    StructureStopPlan zoneStopPlan;
+    InitialSizingResult sizing;
+    try
+    {
+      zoneStopPlan = StructureStop(candidate, direction, proximal, symbol);
+      sizing = VolumePlanner.SizeInitial(
+        account.Balance,
+        options.RiskPercent,
+        options.SizingMode,
+        zoneStopPlan.StopPips,
+        options.PipValuePerLot,
+        symbol,
+        options.TargetsPips,
+        options.TargetWeights
+      );
+    }
+    catch (VolumePlanningException exception)
+    {
+      return await RejectAsync(candidate, exception.Message, cancellationToken);
+    }
+    if (sizing.Lots < options.ZoneFillMinLots)
+    {
+      var reason = $"zone-fill skipped: {sizing.Lots:0.00} lots below "
+        + $"{options.ZoneFillMinLots:0.00} minimum";
+      _log($"auto-trade {reason}");
+      return await ProcessSingleInitialAsync(
+        candidate,
+        account,
+        direction,
+        expectedEntry,
+        singleEntryStopPlan,
+        date,
+        reason,
+        cancellationToken
+      );
+    }
     var validLimitSide = direction == TradeDirection.Buy
       ? proximal <= expectedEntry
       : proximal >= expectedEntry;
@@ -644,24 +710,12 @@ public sealed class AutoTradeEngine(
         cancellationToken
       );
     }
-    StructureStopPlan stopPlan;
-    InitialSizingResult sizing;
     ZoneFillPlan plan;
     try
     {
-      stopPlan = StructureStop(candidate, direction, proximal, symbol);
-      sizing = VolumePlanner.SizeInitial(
-        account.Balance,
-        options.RiskPercent,
-        stopPlan.StopPips,
-        options.PipValuePerLot,
-        symbol,
-        options.TargetsPips,
-        options.TargetWeights
-      );
       var stopLoss = direction == TradeDirection.Buy
-        ? proximal - stopPlan.Distance
-        : proximal + stopPlan.Distance;
+        ? proximal - zoneStopPlan.Distance
+        : proximal + zoneStopPlan.Distance;
       stopLoss = decimal.Round(
         stopLoss,
         symbol.Digits,
@@ -688,7 +742,7 @@ public sealed class AutoTradeEngine(
       return await CompleteDryRunAsync(
         candidate,
         $"zone fill · {sizing.Lots:N2} lots across {plan.Legs.Count} limits · "
-          + $"SL {plan.StopLoss:N2}",
+          + $"SL {plan.StopLoss:N2} · {sizing.BindingTerm}",
         sizing.Volume,
         proximal,
         cancellationToken
@@ -757,14 +811,14 @@ public sealed class AutoTradeEngine(
           $"{leg.LimitPrice:N2} ({leg.Volume / (decimal)symbol.LotSize:N2})"
         ))
         + $" · SL {plan.StopLoss:N2} · midpoint TTL "
-        + $"{options.ZoneFillTtlBars} bars",
+        + $"{options.ZoneFillTtlBars} bars · {sizing.BindingTerm}",
       cancellationToken,
       candidate.CandidateId,
       volume: sizing.Volume,
       price: proximal,
       groupId: groupId,
       trancheIndex: 1,
-      groupWorstCase: -sizing.Lots * stopPlan.StopPips
+      groupWorstCase: -sizing.Lots * zoneStopPlan.StopPips
         * options.PipValuePerLot,
       riskBudget: sizing.Budget,
       hadAdds: false

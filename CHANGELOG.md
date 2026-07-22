@@ -43,7 +43,7 @@ dated section after deployment.
   candidates, with Fusion/Hedged/Trading-scope hard locks, one-position and
   freshness/spread/news/daily-cap gates, restart reconciliation, and durable
   Redis candidate/event contracts.
-- Added operator-defined balance-band volume planning (`0.02-0.36` lots), a
+- Added operator-defined balance-band volume planning (`0.02-0.30` lots), a
   server-side `$6.5` stop, and broker-valid partial closes at
   `30/60/90/120/200` pips.
 - Added owner auto-trade event DMs plus `/auto_status`, `/auto_pause`, and
@@ -97,6 +97,19 @@ dated section after deployment.
 
 ### Changed
 
+- Re-anchored the equity sizing table to `$200-$900 -> 0.02-0.06`,
+  `$1,000-$2,000 -> 0.09-0.15`, and `$3,000-$5,000 -> 0.25-0.30`, holding
+  `0.06` and `0.15` across the intervening gaps with intentional jumps at
+  `$1,000` and `$3,000`; sizing selection is now explicit through
+  `AUTO_TRADE_SIZING_MODE`, whose code default preserves the previous `min`
+  behavior while deployment uses `table`.
+- Enabled deployment zone-fill laddering with a `0.09`-lot minimum guard;
+  smaller plans record the reason and use the existing single-entry path.
+  Deployment keeps the recently raised `BE+6` buffer.
+- At a `$2,072.02` balance and 65-pip stop, deployment table sizing changes
+  per-trade risk from about `$39` (`1.9%`) to `$97.50` (`4.7%`). P&L across the
+  eventual deploy timestamp is therefore not directly comparable; record that
+  timestamp when this release reaches the VPS.
 - Deployment configuration now protects positions at `BE+6` pips instead of
   `BE+3`; the engine's code fallback remains unchanged.
 - cTrader token state now persists access-token expiry, reports its serving
@@ -124,8 +137,8 @@ dated section after deployment.
 - Auto-trade trailing now holds the existing stop after TP2, moves it to TP1
   only after TP3, and moves it to TP2 after TP4 so the runner is not tightened
   one target too early.
-- Auto-trade position size now follows continuous operator-defined balance
-  bands from `$200 -> 0.02` through `$5,000 -> 0.36`, floored to `0.01` lots.
+- Auto-trade position size now follows the operator-defined balance schedule
+  from `$200 -> 0.02` through `$5,000 -> 0.30`, floored to `0.01` lots.
   Low-volume plans close `0.02` at TP1/TP3, `0.03` through TP3, and `0.04`
   through TP4 instead of rejecting every position below five volume steps.
 - Auto-trade configuration failures now disable only the executor for the
