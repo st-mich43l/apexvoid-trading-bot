@@ -110,11 +110,15 @@ def build_scalp_structure(
     side_contacts = contacts[side]
     for cluster in _cluster_contacts(side_contacts, cluster_tolerance):
       episodes = _touch_episodes(cluster)
-      if len(episodes) < max(2, minimum_touches - 1):
+      # Matches market_map.py's _validated_scalp_pair touch/wick thresholds
+      # (converged after the two subsystems were found to disagree on range
+      # validity - see B4). No relaxation here: a barrier that wouldn't
+      # validate on the map shouldn't validate for a live scalp alert either.
+      if len(episodes) < minimum_touches:
         continue
       level = sum(contact.price for contact in episodes) / len(episodes)
       wick_rejections = sum(contact.rejected for contact in episodes)
-      if wick_rejections == 0:
+      if wick_rejections < 2:
         continue
       accepted = _max_accepted_close_run(
         df,
@@ -363,17 +367,22 @@ def _best_range(
   atr: float,
   cfg,
 ) -> ScalpRange | None:
+  minimum_room = max(
+    0.0,
+    float(getattr(cfg, "range_scalp_min_room_atr", RANGE_SCALP_MIN_ROOM_ATR)),
+  )
+  # Matches market_map.py's _validated_scalp_pair minimum-width formula
+  # (converged after B4 found the two subsystems disagreed on range
+  # validity) - a range too narrow to hold two rooms either side of EQ was
+  # never a valid two-sided range in the first place.
   minimum_width = max(
     0.0,
     float(getattr(cfg, "range_scalp_min_width_atr", RANGE_SCALP_MIN_WIDTH_ATR)),
+    2.0 * minimum_room,
   )
   maximum_width = max(
     minimum_width,
     float(getattr(cfg, "range_scalp_max_width_atr", RANGE_SCALP_MAX_WIDTH_ATR)),
-  )
-  minimum_room = max(
-    0.0,
-    float(getattr(cfg, "range_scalp_min_room_atr", RANGE_SCALP_MIN_ROOM_ATR)),
   )
   supports = [
     barrier for barrier in barriers

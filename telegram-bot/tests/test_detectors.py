@@ -431,6 +431,62 @@ def test_star_score_remap_and_mitigated_cap():
   assert detectors._confluence_from_zone(mitigated, []) == 2
 
 
+def test_confluence_rubric_is_shared_across_detectors():
+  """Two different detectors observing the same factor set must derive the
+  same confluence - the rubric, not the calling detector, is the source of
+  truth (B2). Exercised through the real _finish/_confluence_from_zone path
+  each of the 8 DEFAULT_DETECTORS funnels through.
+  """
+  df = _buy_rejection_df()
+  ctx = _ctx(df, indicator_set=_indicators(df, atr=1.0))
+  zone = Zone(99, 101, "demand")  # score=0.0 -> factors path
+  same_factors = detectors.ConfluenceFactors(
+    htf_aligned=True,
+    touches=3,
+    wick_rejection=True,
+    displacement_grade=True,
+  )
+
+  from_setup_a = detectors._finish(
+    ctx, "Snap-Back", "BUY", 100.0, zone, 100.5, 1.0,
+    ["reason from detector A"], factors=same_factors,
+  )
+  from_setup_b = detectors._finish(
+    ctx, "Momentum Ride", "BUY", 100.0, zone, 100.5, 1.0,
+    ["a completely different reason string from detector B"],
+    factors=same_factors,
+  )
+
+  assert from_setup_a is not None
+  assert from_setup_b is not None
+  assert from_setup_a.confluence == from_setup_b.confluence == 3
+
+
+def test_reasons_list_length_no_longer_influences_confluence():
+  """B2: delete the len(reasons) fallback. Adding reason strings must not
+  move the score - only ConfluenceFactors does.
+  """
+  df = _buy_rejection_df()
+  ctx = _ctx(df, indicator_set=_indicators(df, atr=1.0))
+  zone = Zone(99, 101, "demand")  # score=0.0 -> factors path
+  factors = detectors.ConfluenceFactors(
+    htf_aligned=True, wick_rejection=True, displacement_grade=True,
+  )
+
+  short = detectors._finish(
+    ctx, "Fade Scalp", "BUY", 100.0, zone, 100.5, 1.0,
+    ["one reason"], factors=factors,
+  )
+  long = detectors._finish(
+    ctx, "Fade Scalp", "BUY", 100.0, zone, 100.5, 1.0,
+    ["one reason", "two", "three", "four", "five", "six"], factors=factors,
+  )
+
+  assert short is not None
+  assert long is not None
+  assert short.confluence == long.confluence
+
+
 @pytest.mark.parametrize(("detector", "ctx_factory", "_setup"), SETUPS)
 def test_named_setup_returns_none_in_dealing_range_eq(detector, ctx_factory, _setup):
   ctx = ctx_factory()
