@@ -13,6 +13,14 @@ dated section after deployment.
 
 ### Added
 
+- Added an optional, kill-switched Market Map + forming gate for ApexVoid
+  Algo: the scanner emits a short-lived versioned `Range Edge Scalp` intent
+  only when its entry overlaps a validated two-sided Market Map rail, and the
+  worker requires an explicit recent M5 rail hold/reclaim, then an M1
+  rejection, plus all existing execution safeguards.
+- Added stable shared range IDs, scanner-intent expiry, typed Redis validation,
+  gate-source attribution, and `/auto_status` visibility for mapped setups.
+
 - Added per-position Telegram reply threads for ApexVoid Algo trade events,
   including standalone fallback when the original message is unavailable.
 - Added proactive cTrader access-token refresh ahead of expiry, defensive
@@ -94,6 +102,11 @@ dated section after deployment.
   structure-stop band for trend-family candidates.
 
 ### Changed
+
+- An active Market Map/forming intent now temporarily owns range routing: the
+  private M1 box and trend publishers are suppressed until that intent clears,
+  while midpoint re-arm and confirmed-break retirement remain shared across
+  BUY and SELL cards for the same range.
 
 - Re-anchored the equity sizing table to `$200-$900 -> 0.02-0.06`,
   `$1,000-$2,000 -> 0.09-0.15`, and `$3,000-$5,000 -> 0.25-0.30`, holding

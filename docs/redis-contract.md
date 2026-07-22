@@ -125,31 +125,50 @@ broker-reported `pipPosition`. Python resolves that unit from its shared
 auto-trade units module and C# from `AUTO_TRADE_PIP_SIZE`; broker metadata is
 diagnostic only and must never drive price-to-pip conversion.
 
-When enabled, the independent auto-scalp worker appends only confirmed
+When enabled, the auto-scalp worker appends only confirmed
 `Range Box Scalp` v3 candidates to:
 
 ```text
 XADD auto_trade:candidates MAXLEN ~ 1000 * payload <json>
 ```
 
-The worker reads only raw `bars:XAU:M1`, `bars:XAU:M5`, `bars:XAU:M15`, and
-`price:XAU:spot` data. It does not consume scanner/forming detections, Market
-Map output, or Telegram state. A 60-bar repeated-touch M1 auction defines both
-box edges; M5 confirms breakout while M15 never directionally vetoes an edge.
-The versioned payload includes stable range bounds and a single 50- or 70-pip
-full-position target. Publishing fails closed when the spot is absent/stale,
+The default private gate reads raw `bars:XAU:M1`, `bars:XAU:M5`,
+`bars:XAU:M15`, and `price:XAU:spot` data. An optional scanner bridge reads a
+short-lived typed intent from `auto_trade:forming_gate:{symbol}` when a
+`Range Edge Scalp` overlaps the matching side of a validated two-rail Market
+Map. It never parses Telegram text. A 60-bar repeated-touch M1 auction defines
+the fallback box; a mapped intent temporarily supplies the box while M1 still
+confirms the actual entry. The mapped gate independently verifies that recent
+M5 structure touched and still holds/reclaims the nominated rail.
+
+The versioned candidate includes stable range bounds, `signal_source`, typed
+`source_m5_confirmation`, and a single 50- or 70-pip full-position target.
+Publishing fails closed when the spot is absent/stale,
 structure-stop context is unavailable, or a high-impact event is guarded.
 Candidate claims and outcomes use `auto_trade:executor:candidate:{id}` for
-restart-safe idempotency; the stream cursor is `auto_trade:cursor`. Scanner,
-raw momentum, legacy M5 Range Edge, and legacy M1 Decision Scalp candidates are
-never accepted for execution.
+restart-safe idempotency; the stream cursor is `auto_trade:cursor`. Raw
+Telegram cards, raw momentum, legacy M5 Range Edge payloads, and legacy M1
+Decision Scalp candidates are never accepted for execution.
+
+The forming contract has its own version and TTL:
+
+```text
+SETEX auto_trade:forming_gate:XAU 420 <json>
+```
+
+It contains a per-event `setup_id` and a rail-bucketed `range_id` shared by
+both directions. An invalid, stale, symbol-mismatched, unsupported, or
+non-overlapping intent is removed or ignored. A fresh mapped intent suppresses
+the private box and trend publishers until the scanner clears it or its TTL
+expires.
 
 Used box edges are disarmed until a closed M1 price crosses the box midpoint.
 Confirmed broken box IDs are retired for the configured TTL. The latest
 operator-facing M1 gate decision is stored at
 `auto_trade:last_gate` and `auto_trade:last_gate:{symbol}`. It contains the gate
 state, M1 trigger, selected role-aware rail, opposite target, target room, spot
-freshness, and loaded frame counts; it is telemetry, not an execution input.
+freshness, loaded frame counts, `gate_source`, and active forming metadata; it
+is telemetry, not an execution input.
 
 ## Auto-Trade State And Events
 
