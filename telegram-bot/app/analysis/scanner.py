@@ -16,13 +16,11 @@ from app.analysis.detectors import (
   DetectionContext,
   DetectionResult,
   DetectorSettings,
-  RANGE_CONFIRMATION_LABELS,
   SetupDetector,
   build_context,
 )
 from app.analysis.market_map import (
   MarketMap,
-  ScalpRail,
   build_map,
   map_reference,
   rail_reference,
@@ -30,14 +28,14 @@ from app.analysis.market_map import (
 from app.analysis.market_map_delivery import cache_analysis
 from app.analysis.ohlc_source import RedisOHLCSource
 from app.analysis.structure import Zone
-from app.autotrade.forming_gate import (
-  FORMING_GATE_VERSION,
-  FormingRail,
-  FormingRangeSetup,
-  forming_gate_key,
-  forming_range_id,
-  forming_setup_id,
+from app.autotrade.strategy_match import (
+  STRATEGY_MATCH_VERSION,
+  StrategyMatch,
+  strategy_match_id,
+  strategy_match_key,
+  strategy_range_id,
 )
+from app.autotrade import units
 from app.core.symbols import SYMBOLS, pip_for
 from app.bot.client import send_scanner_with_retry
 
@@ -186,144 +184,147 @@ def _band_dedup_key(symbol: str, result: DetectionResult) -> str:
   return f"scanner:alerted_band:{symbol}:{result.direction}:{bucket}"
 
 
-def _build_forming_range_setup(
+def _configured_strategy_targets() -> tuple[int, ...]:
+  values = {
+    int(item.strip())
+    for item in settings.auto_trade_tp_pips.split(",")
+    if item.strip().isdigit() and int(item.strip()) > 0
+  }
+  return tuple(sorted(values))
+
+
+def _build_strategy_match(
   symbol: str,
   tf: str,
   event_ts: str,
+  ctx: DetectionContext,
   results: list[DetectionResult],
-  market_map: MarketMap | None,
   *,
   now: int | None = None,
-) -> FormingRangeSetup | None:
-  """Create the typed Algo intent only when forming setup and map agree."""
-  if market_map is None:
+) -> StrategyMatch | None:
+  """Transport the scanner's strongest completed strategy match to Algo.
+
+  Detector output is already the strategy decision.  This function does not
+  classify regime, require a particular setup name, or ask another timeframe
+  to confirm the match again.
+  """
+  if not results:
     return None
-  candidates = [
-    result for result in results
-    if (
-      result.setup == "Range Edge Scalp"
-      and result.mode == "range_scalp"
-      and result.confirmation in RANGE_CONFIRMATION_LABELS
-    )
-  ]
-  if not candidates:
+  result = min(results, key=_result_rank)
+  indicators = getattr(ctx, "indicators", None)
+  if not isinstance(indicators, dict):
     return None
-  rails = {
-    direction: max(
-      (rail for rail in market_map.rails if rail.direction == direction),
-      key=lambda rail: rail.score,
-      default=None,
-    )
-    for direction in ("BUY", "SELL")
-  }
-  lower = rails["BUY"]
-  upper = rails["SELL"]
-  if lower is None or upper is None or lower.price >= upper.price:
+  indicator = indicators.get(tf.upper())
+  if indicator is None or indicator.atr.empty:
     return None
-  matched = [
-    result for result in candidates
-    if result.direction.upper() in rails
-    if _bands_touch(
-      result.entry_zone.low,
-      result.entry_zone.high,
-      rails[result.direction.upper()].lo,
-      rails[result.direction.upper()].hi,
-    )
-  ]
-  if not matched:
+  atr = float(indicator.atr.iloc[-1])
+  if not math.isfinite(atr) or atr <= 0:
     return None
-  result = min(matched, key=_result_rank)
   issued_at = (
     int(datetime.now(timezone.utc).timestamp())
     if now is None else int(now)
   )
-  ttl = max(60, int(settings.auto_trade_forming_max_age_seconds))
-  setup_id = forming_setup_id(
+  ttl = max(60, int(settings.auto_trade_strategy_match_max_age_seconds))
+  entry_low = float(result.entry_zone.low)
+  entry_high = float(result.entry_zone.high)
+  direction = result.direction.upper()
+  structure_swing = entry_low if direction == "BUY" else entry_high
+  targets_pips = _configured_strategy_targets()
+  range_id = None
+  range_low = None
+  range_high = None
+  full_take_profit_pips = None
+  if result.setup == "Range Edge Scalp" and result.mode == "range_scalp":
+    structures = getattr(ctx, "structures", None)
+    structure = (
+      structures.get(tf.upper()) if isinstance(structures, dict) else None
+    )
+    scalp_range = None if structure is None else structure.scalp_range
+    if scalp_range is None:
+      return None
+    range_low = float(scalp_range.lower.level)
+    range_high = float(scalp_range.upper.level)
+    room = (
+      range_high - float(result.current_price)
+      if direction == "BUY"
+      else float(result.current_price) - range_low
+    )
+    room_pips = room / units.pip_size(symbol)
+    full_take_profit_pips = 70 if room_pips >= 70 else 50 if room_pips >= 50 else None
+    if full_take_profit_pips is None:
+      return None
+    targets_pips = (full_take_profit_pips,)
+    range_id = strategy_range_id(symbol, range_low, range_high)
+  if not targets_pips:
+    return None
+  match_id = strategy_match_id(
     symbol,
     tf,
     event_ts,
+    result.setup,
     result.direction,
-    lower.price,
-    upper.price,
+    entry_low,
+    entry_high,
   )
-  return FormingRangeSetup(
-    version=FORMING_GATE_VERSION,
-    setup_id=setup_id,
-    range_id=forming_range_id(symbol, lower.price, upper.price),
+  return StrategyMatch(
+    version=STRATEGY_MATCH_VERSION,
+    match_id=match_id,
     symbol=symbol.upper(),
     source_tf=tf.upper(),
     event_ts=str(event_ts),
     issued_at=issued_at,
     expires_at=issued_at + ttl,
-    setup=result.setup,
-    mode=result.mode,
-    direction=result.direction.upper(),
-    m5_confirmation=str(result.confirmation),
+    strategy=result.setup,
+    strategy_mode=result.mode,
+    direction=direction,
     key_level=float(result.key_level),
-    entry_low=float(result.entry_zone.low),
-    entry_high=float(result.entry_zone.high),
+    entry_low=entry_low,
+    entry_high=entry_high,
+    current_price=float(result.current_price),
     confluence=int(result.confluence),
     reasons=tuple(result.reasons),
-    lower=_forming_rail(lower),
-    upper=_forming_rail(upper),
-    map_bias=market_map.bias,
-    map_bias_tf=market_map.bias_tf,
+    atr=atr,
+    structure_swing=structure_swing,
+    targets_pips=targets_pips,
+    range_id=range_id,
+    range_low=range_low,
+    range_high=range_high,
+    full_take_profit_pips=full_take_profit_pips,
   )
 
 
-def _forming_rail(rail: ScalpRail) -> FormingRail:
-  return FormingRail(
-    direction=str(rail.direction).upper(),
-    low=float(rail.lo),
-    high=float(rail.hi),
-    level=float(rail.price),
-    score=float(rail.score),
-    tags=tuple(str(item) for item in rail.tags),
-  )
-
-
-def _bands_touch(
-  first_lo: float,
-  first_hi: float,
-  second_lo: float,
-  second_hi: float,
-) -> bool:
-  return min(first_hi, second_hi) >= max(first_lo, second_lo)
-
-
-async def _sync_forming_gate(
+async def _sync_strategy_match(
   client: Any,
   symbol: str,
   tf: str,
   event_ts: str,
+  ctx: DetectionContext,
   results: list[DetectionResult],
-  market_map: MarketMap | None,
-) -> FormingRangeSetup | None:
-  key = forming_gate_key(symbol)
-  if not settings.auto_trade_forming_gate_enabled:
+) -> StrategyMatch | None:
+  key = strategy_match_key(symbol)
+  if not settings.auto_trade_strategy_bridge_enabled:
     await client.delete(key)
     return None
-  setup = _build_forming_range_setup(
+  match = _build_strategy_match(
     symbol,
     tf,
     event_ts,
+    ctx,
     results,
-    market_map,
   )
-  if setup is None:
+  if match is None:
     await client.delete(key)
     return None
-  ttl = max(60, setup.expires_at - setup.issued_at)
-  await client.set(key, setup.to_json(), ex=ttl)
+  ttl = max(60, match.expires_at - match.issued_at)
+  await client.set(key, match.to_json(), ex=ttl)
   log.info(
-    "forming gate synced symbol=%s setup=%s direction=%s map=%s-%s",
+    "strategy match synced symbol=%s id=%s strategy=%s direction=%s",
     symbol,
-    setup.setup_id[:12],
-    setup.direction,
-    setup.lower.level,
-    setup.upper.level,
+    match.match_id[:12],
+    match.strategy,
+    match.direction,
   )
-  return setup
+  return match
 
 
 # --- B3: setup invalidation --------------------------------------------------
@@ -1194,13 +1195,13 @@ async def _handle_event(
       continue
     detected.append(result)
   digest, conflicts = _digest_results(detected)
-  await _sync_forming_gate(
+  await _sync_strategy_match(
     client,
     symbol,
     exec_tf,
     event_ts,
+    ctx,
     digest,
-    current_map,
   )
   sent = await _notify_digest_once(
     client,

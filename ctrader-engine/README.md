@@ -143,7 +143,7 @@ so resetting both tiers may require a manual cTrader Playground re-authorisation
 
 The independent auto-scalp worker publishes only fresh, news-cleared
 `Auto Range Scalp` candidates. It reads raw cTrader M1/M5/M15 OHLC directly and
-does not consume scanner detections, forming signals, Market Map entries, or
+does not parse scanner messages, rendered signals, Market Map cards, or
 Telegram state. M5/M15 build role-aware support/resistance rails; M1 must reject
 a rail, while a directional M5 impulse blocks fading into active momentum. The
 nearest opposite-role rail must leave at least 30 pips of room.
