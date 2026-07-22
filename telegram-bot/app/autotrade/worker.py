@@ -376,6 +376,13 @@ async def _publish_candidate(
     or decision.full_tp_pips not in {50, 70}
     or scale_context is None
     or decision.confluence < max(1, settings.auto_trade_min_confluence)
+    # Box-scalp is a mean-reversion play on an actual consolidation - it must
+    # not fire once the regime classifier has already moved on to trend/
+    # breakout (22 Jul incident: a box-labeled BUY filled straight into a
+    # sharp post-rally pullback and was stopped in under a minute). regime
+    # is only None in tests that don't care about this axis; a real caller
+    # always passes it.
+    or (regime is not None and regime.state != "chop")
   ):
     return None
   entry_reference = spot.price
@@ -528,6 +535,7 @@ async def _publish_strategy_match(
   match_source: str = "scanner_strategy_match",
   htf_zones: list[Zone] | None = None,
   htf_levels: list[Level] | None = None,
+  regime: RegimeInfo | None = None,
 ) -> str | None:
   """Publish a completed scanner strategy match without PA re-confirmation."""
   if (
@@ -539,6 +547,18 @@ async def _publish_strategy_match(
   ):
     return None
   if match.is_range_edge:
+    # Range Edge Scalp ("Range Box Scalp" label) is a mean-reversion play on
+    # an actual consolidation, same as the private box gate above - it must
+    # not fire once regime has moved past chop (22 Jul incident: this exact
+    # path filled a BUY straight into a sharp post-rally pullback, stopped
+    # in under a minute). Other strategy_match types (Box Breakout, Liquidity
+    # Sweep, Mapped Zone Reaction, ...) are trend/breakout-appropriate by
+    # design and stay ungated here.
+    if regime is not None and regime.state != "chop":
+      if consume_redis_match:
+        await client.delete(strategy_match_key(symbol))
+      await _record_gate_reject(client, symbol, "range_edge_not_chop")
+      return None
     assert match.range_id is not None
     assert match.range_low is not None
     assert match.range_high is not None
@@ -955,6 +975,11 @@ def _status_payload(
     and trend_decision.state == "candidate"
     and (
       decision.state != "candidate"
+      # Box-scalp is not a real routing candidate outside chop (see
+      # box_selected in _handle_event) - telemetry must agree with what
+      # actually got published, or /auto_status would show "Range Box
+      # Scalp" selected while the trend candidate is what actually fired.
+      or (regime is not None and regime.state != "chop")
       or trend_decision.confluence > decision.confluence
     )
   )
@@ -1236,6 +1261,11 @@ async def _handle_event(
   box_selected = (
     strategy_match is None
     and decision.state == "candidate"
+    # Box-scalp is a mean-reversion play on an actual consolidation; outside
+    # chop it must lose the selection entirely (not just get rejected inside
+    # _publish_candidate after already winning here), or trend_selected below
+    # would wrongly stay False too and nothing would publish at all.
+    and regime.state == "chop"
     and (
       trend_decision.state != "candidate"
       or decision.confluence >= trend_decision.confluence
@@ -1271,6 +1301,7 @@ async def _handle_event(
       match_source=gate_source,
       htf_zones=htf_zones,
       htf_levels=htf_levels,
+      regime=regime,
     )
     if strategy_match is not None else None
   )
