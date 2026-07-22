@@ -94,12 +94,12 @@ public static class VolumePlanner
     // The upward discontinuities at band boundaries are intentional.
     var rawLots = balance switch
     {
-      >= 5_000m => 0.36m,
-      >= 3_000m => 0.31m + (balance - 3_000m) * 0.05m / 2_000m,
-      >= 2_000m => 0.20m + (balance - 2_000m) * 0.05m / 1_000m,
-      >= 1_000m => 0.11m + (balance - 1_000m) * 0.04m / 1_000m,
-      >= 500m => 0.05m + (balance - 500m) * 0.03m / 500m,
-      _ => 0.02m + (balance - 200m) * 0.03m / 300m,
+      >= 5_000m => 0.30m,
+      >= 3_000m => 0.25m + (balance - 3_000m) * 0.05m / 2_000m,
+      >= 2_000m => 0.15m,
+      >= 1_000m => 0.09m + (balance - 1_000m) * 0.06m / 1_000m,
+      >= 900m => 0.06m,
+      _ => 0.02m + (balance - 200m) * 0.04m / 700m,
     };
     // Snap currency-cent band endpoints to their intended lot-cent anchor.
     rawLots = decimal.Round(rawLots, 5, MidpointRounding.AwayFromZero);

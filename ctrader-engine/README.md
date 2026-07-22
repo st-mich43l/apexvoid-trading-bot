@@ -155,12 +155,12 @@ Initial size selects `min(risk-based, equity-table)`, `table`, or `risk` via
 `AUTO_TRADE_SIZING_MODE`, using realised account balance, the structure stop,
 and `AUTO_TRADE_RISK_PCT`. The code default is the conservative `min` mode;
 deployment selects `table`. The exposure table uses the operator bands:
-`$200-$500 -> 0.02-0.05`, `$500-$1,000 -> 0.05-0.08`,
-`$1,000-$2,000 -> 0.11-0.15`, `$2,000-$3,000 -> 0.20-0.25`, and
-`$3,000-$5,000 -> 0.31-0.36` lots. Boundary jumps are intentional. The result
-is floored to `0.01` lots;
+`$200-$900 -> 0.02-0.06`, `$900-$1,000 -> 0.06`,
+`$1,000-$2,000 -> 0.09-0.15`, `$2,000-$3,000 -> 0.15`, and
+`$3,000-$5,000 -> 0.25-0.30` lots. The jumps at `$1,000` and `$3,000` are
+intentional. The result is floored to `0.01` lots;
 balances below `$200` are rejected and balances above `$5,000` stay capped at
-`0.36` lots. Stops use the latest directional swing plus `0.3 ATR`, clamped to
+`0.30` lots. Stops use the latest directional swing plus `0.3 ATR`, clamped to
 15-65 pips.
 
 After TP1 has banked profit and moved the initial stop through breakeven, a
