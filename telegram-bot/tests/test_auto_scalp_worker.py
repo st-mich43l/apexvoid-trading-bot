@@ -280,6 +280,80 @@ async def test_worker_routes_scanner_strategy_without_regime_confirmation(
   assert status["strategy_match"]["id"] == match.match_id
   assert status["strategy_match"]["strategy"] == "Liquidity Sweep"
   assert status["direction"] == "BUY"
+  assert status["selected_strategy"] == "Liquidity Sweep"
+  assert status["selected_timeframe"] == "M5"
+  assert status["selection_state"] == "published"
+
+
+@pytest.mark.asyncio
+async def test_worker_routes_m1_market_map_reaction_as_its_own_strategy(
+  monkeypatch,
+):
+  client = redis_state.get_client()
+  now = int(datetime.now(timezone.utc).timestamp())
+  match = replace(
+    _strategy_match(now),
+    match_id=strategy_match_id(
+      "XAU",
+      "M1",
+      str(now),
+      "Mapped Zone Reaction",
+      "SELL",
+      4016.5,
+      4017.4,
+    ),
+    source_tf="M1",
+    event_ts=str(now),
+    strategy="Mapped Zone Reaction",
+    strategy_mode="mapped_zone_reaction",
+    direction="SELL",
+    reasons=("M30 bias down", "M1 touch + rejection"),
+    structure_swing=4017.4,
+  )
+  map_decision = worker.MarketMapStrategyDecision(
+    "candidate",
+    match.reasons,
+    match,
+    (4016.5, 4017.4),
+  )
+  monkeypatch.setattr(worker.settings, "auto_trade_enabled", True)
+  monkeypatch.setattr(worker.settings, "auto_trade_symbols", "XAU")
+  monkeypatch.setattr(worker.settings, "auto_trade_stream", "auto_trade:test")
+  monkeypatch.setattr(worker.settings, "auto_trade_min_confluence", 2)
+  monkeypatch.setattr(worker, "event_in_window", AsyncMock(return_value=None))
+  source = AsyncMock()
+  source.window = AsyncMock(return_value=_frame())
+  monkeypatch.setattr(
+    worker,
+    "_load_spot",
+    AsyncMock(return_value=worker.AutoTradeSpot(4017.2, now, True)),
+  )
+  monkeypatch.setattr(
+    worker,
+    "evaluate_auto_scalp_gate",
+    lambda *args, **kwargs: AutoScalpDecision("waiting_for_box"),
+  )
+  monkeypatch.setattr(
+    worker,
+    "evaluate_market_map_strategy",
+    lambda *args, **kwargs: map_decision,
+  )
+
+  await worker._handle_event(
+    f"XAU:M1:{now}", source=source, client=client,
+  )
+
+  entries = await client.xrange("auto_trade:test")
+  assert len(entries) == 1
+  candidate = json.loads(entries[0][1]["payload"])
+  assert candidate["setup"] == "Mapped Zone Reaction"
+  assert candidate["signal_source"] == "market_map_strategy"
+  assert candidate["timeframe"] == "M1"
+  status = json.loads(await client.get("auto_trade:last_gate:XAU"))
+  assert status["gate_source"] == "market_map_strategy"
+  assert status["market_map_state"] == "candidate"
+  assert status["selected_strategy"] == "Mapped Zone Reaction"
+  assert status["selection_state"] == "published"
 
 
 @pytest.mark.asyncio
@@ -524,6 +598,8 @@ async def test_private_strategy_match_uses_confluence_not_regime_label(
   assert status["trend_state"] == "candidate"
   assert status["trend_mode"] == "pullback"
   assert status["direction"] == "BUY"
+  assert status["selected_strategy"] == "Range Box Scalp"
+  assert status["selection_state"] == "published"
 
 
 def test_worker_source_has_no_direct_scanner_market_map_or_telegram_import():

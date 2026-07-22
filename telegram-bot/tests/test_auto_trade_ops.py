@@ -486,7 +486,10 @@ async def test_pause_resume_and_status(monkeypatch):
   client = redis_state.get_client()
   await client.set(
     "auto_trade:last_gate",
-    '{"state":"waiting_rejection","box":{"low":4016.5,"high":4024.5},"full_tp_pips":70}',
+    '{"state":"waiting_rejection","box_state":"candidate",'
+    '"trend_state":"no_setup","selected_strategy":"Range Box Scalp",'
+    '"selected_timeframe":"M1","direction":"BUY",'
+    '"box":{"low":4016.5,"high":4024.5},"full_tp_pips":70}',
   )
   assert await client.get("auto_trade:paused") == "1"
   text = await delivery.auto_trade_status_text()
@@ -495,8 +498,9 @@ async def test_pause_resume_and_status(monkeypatch):
   assert "Trades today: <b>0</b> · <b>unlimited</b>" in text
   assert "Measured groups" in text
   assert "ApexVoid Algo" in text
-  assert "independent M1 two-edge box scalp" in text
-  assert "waiting_rejection" in text
+  assert "Selected strategy: <b>Range Box Scalp · BUY · M1</b>" in text
+  assert "Source: <b>private OHLC matcher</b>" in text
+  assert "Execution: <b>waiting rejection</b>" in text
   assert "box 4,016.50–4,024.50" in text
   assert "full TP 70p" in text
   assert "auto trader" not in text.lower()
@@ -518,6 +522,11 @@ async def test_status_identifies_scanner_strategy_match(monkeypatch):
         "direction": "SELL",
         "source_tf": "M5",
       },
+      "selected_strategy": "Liquidity Sweep",
+      "selected_timeframe": "M5",
+      "direction": "SELL",
+      "box_state": "waiting_for_box",
+      "trend_state": "no_setup",
       "box": {"low": 4113.0, "high": 4122.0},
       "reasons": ["sell-side liquidity swept"],
     }),
@@ -525,8 +534,35 @@ async def test_status_identifies_scanner_strategy_match(monkeypatch):
 
   text = await delivery.auto_trade_status_text()
 
-  assert "scanner strategy match" in text
-  assert "Liquidity Sweep" in text
-  assert "SELL M5" in text
-  assert "strategy_match_waiting" in text
+  assert "Selected strategy: <b>Liquidity Sweep · SELL · M5</b>" in text
+  assert "Source: <b>scanner detector</b>" in text
+  assert "Execution: <b>strategy match waiting</b>" in text
   assert "Why: sell-side liquidity swept" in text
+
+
+@pytest.mark.asyncio
+async def test_status_explains_when_no_strategy_matches(monkeypatch):
+  monkeypatch.setattr(delivery.settings, "auto_trade_enabled", True)
+  client = redis_state.get_client()
+  await client.set("auto_trade:last_gate", json.dumps({
+    "state": "waiting_for_box",
+    "box_state": "waiting_for_box",
+    "trend_state": "no_setup",
+    "selected_strategy": None,
+    "direction": None,
+    "regime": "chop",
+    "reasons": ["no valid M1 consolidation box in the lookback window"],
+  }))
+  await client.set("scanner:last_tick", json.dumps({
+    "detected": [],
+    "scalp": {"state": "waiting_edge"},
+  }))
+
+  text = await delivery.auto_trade_status_text()
+
+  assert "Selected strategy: <b>none</b>" in text
+  assert "Source: <b>none</b>" in text
+  assert "Scanner M5: <b>no setup matched · range waiting edge</b>" in text
+  assert "Range Box <b>waiting for box</b> · Trend <b>no setup</b>" in text
+  assert "Market context: <b>chop</b> <i>(telemetry only)</i>" in text
+  assert "Gate:" not in text

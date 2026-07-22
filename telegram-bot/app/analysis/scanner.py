@@ -15,14 +15,15 @@ from app.analysis.detectors import (
   DEFAULT_DETECTORS,
   DetectionContext,
   DetectionResult,
-  DetectorSettings,
   SetupDetector,
   build_context,
+  detector_settings_from,
 )
 from app.analysis.market_map import (
   MarketMap,
   build_map,
   map_reference,
+  market_map_payload,
   rail_reference,
 )
 from app.analysis.market_map_delivery import cache_analysis
@@ -36,6 +37,7 @@ from app.autotrade.strategy_match import (
   strategy_range_id,
 )
 from app.autotrade import units
+from app.autotrade.map_strategy import market_map_key
 from app.core.symbols import SYMBOLS, pip_for
 from app.bot.client import send_scanner_with_retry
 
@@ -76,64 +78,8 @@ def _all_tfs(exec_tf: str, htf_tfs: Iterable[str]) -> list[str]:
   return result
 
 
-def _detector_settings() -> DetectorSettings:
-  return DetectorSettings(
-    confluence_floor=settings.scanner_confluence_floor,
-    max_entry_atr=settings.max_entry_atr,
-    range_lookback=settings.range_lookback,
-    atr_length=settings.atr_length,
-    swing_fractal_n=settings.swing_fractal_n,
-    zigzag_pct=settings.zigzag_pct,
-    zigzag_atr_mult=settings.zigzag_atr_mult,
-    displacement_atr_mult=settings.displacement_atr_mult,
-    zone_width=settings.zone_width,
-    zone_merge_overlap=settings.zone_merge_overlap,
-    max_merged_zone_atr=settings.max_merged_zone_atr,
-    equal_tol_atr=settings.equal_tol_atr,
-    level_cluster_atr=settings.level_cluster_atr,
-    round_step=settings.round_step,
-    key_level_min_touches=settings.key_level_min_touches,
-    momentum_lookback=settings.momentum_lookback,
-    momentum_body_frac=settings.momentum_body_frac,
-    session_asia_start=settings.session_asia_start,
-    session_london_start=settings.session_london_start,
-    session_ny_start=settings.session_ny_start,
-    daily_rollover_utc_hour=settings.daily_rollover_utc_hour,
-    eq_band=settings.eq_band,
-    strict_pd_gate=settings.strict_pd_gate,
-    sweep_body_frac=settings.sweep_body_frac,
-    sweep_react_bars=settings.sweep_react_bars,
-    inducement_band_atr=settings.inducement_band_atr,
-    max_zone_width_atr=settings.max_zone_width_atr,
-    proximal_band_atr=settings.proximal_band_atr,
-    chop_filter_enabled=settings.chop_filter_enabled,
-    chop_range_atr=settings.chop_range_atr,
-    chop_lookback=settings.chop_lookback,
-    chop_edge_frac=settings.chop_edge_frac,
-    tl_min_touches=settings.tl_min_touches,
-    tl_tol_atr=settings.tl_tol_atr,
-    tl_max_slope_atr=settings.tl_max_slope_atr,
-    coil_contract=settings.coil_contract,
-    breakout_buffer_atr=settings.breakout_buffer_atr,
-    breakout_accept_bars=settings.breakout_accept_bars,
-    breakout_max_age_bars=settings.breakout_max_age_bars,
-    allow_counter_trend=settings.allow_counter_trend,
-    counter_min_zone_score=settings.counter_min_zone_score,
-    counter_extreme_pd=settings.counter_extreme_pd,
-    counter_level_min_touches=settings.counter_level_min_touches,
-    range_scalp_enabled=settings.range_scalp_enabled,
-    range_scalp_lookback=settings.range_scalp_lookback,
-    range_scalp_cluster_atr=settings.range_scalp_cluster_atr,
-    range_scalp_min_touches=settings.range_scalp_min_touches,
-    range_scalp_min_wick_frac=settings.range_scalp_min_wick_frac,
-    range_scalp_entry_tol_atr=settings.range_scalp_entry_tol_atr,
-    range_scalp_min_width_atr=settings.range_scalp_min_width_atr,
-    range_scalp_max_width_atr=settings.range_scalp_max_width_atr,
-    range_scalp_min_room_atr=settings.range_scalp_min_room_atr,
-    range_scalp_break_closes=settings.range_scalp_break_closes,
-    range_scalp_min_wick_rejections=settings.range_scalp_min_wick_rejections,
-    range_scalp_allow_rejection_only=settings.range_scalp_allow_rejection_only,
-  )
+def _detector_settings():
+  return detector_settings_from(settings)
 
 
 def _parse_bar_event(data: object) -> tuple[str, str, str] | None:
@@ -1188,6 +1134,14 @@ async def _handle_event(
       else float(frames[exec_tf]["close"].iloc[-1])
     )
     current_map = build_map(analysis, price, settings)
+    await client.set(
+      market_map_key(symbol),
+      market_map_payload(current_map),
+      ex=max(
+        900,
+        int(settings.auto_trade_strategy_match_max_age_seconds) * 2,
+      ),
+    )
   detected = []
   for detector in detectors or DEFAULT_DETECTORS:
     result = detector(ctx)

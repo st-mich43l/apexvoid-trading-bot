@@ -457,31 +457,46 @@ async def auto_trade_status_text() -> str:
     else "demo trading"
   )
   state = "paused" if paused else "running"
-  gate_line = ""
+  strategy_lines = ""
   if settings.auto_trade_enabled:
-    gate_state = "waiting for M1 close"
+    execution_state = "waiting for M1 close"
     zone_text = ""
-    gate_name = "independent M1 two-edge box scalp"
-    strategy_text = ""
-    gate_reason = ""
+    selected_text = "none"
+    selection_source = "none"
+    selection_reason = ""
+    box_state = "waiting"
+    trend_state = "waiting"
+    market_map_state = "waiting"
+    current_regime = "unknown"
     raw = await client.get("auto_trade:last_gate")
     if raw:
       try:
         payload = json.loads(raw)
-        gate_state = str(payload.get("state") or gate_state)
+        execution_state = str(payload.get("state") or execution_state)
+        box_state = str(payload.get("box_state") or box_state)
+        trend_state = str(payload.get("trend_state") or trend_state)
+        market_map_state = str(
+          payload.get("market_map_state") or market_map_state
+        )
+        current_regime = str(payload.get("regime") or current_regime)
         reasons = payload.get("reasons")
         if isinstance(reasons, list) and reasons:
-          gate_reason = str(reasons[-1])
-        if payload.get("gate_source") == "scanner_strategy_match":
-          gate_name = "scanner strategy match"
-          match = payload.get("strategy_match")
-          if isinstance(match, dict):
-            strategy = str(match.get("strategy") or "")
-            direction = str(match.get("direction") or "")
-            source_tf = str(match.get("source_tf") or "")
-            strategy_text = (
-              f" · {strategy} · {direction} {source_tf}"
-            ).rstrip(" ·")
+          selection_reason = str(reasons[-1])
+        selected = str(payload.get("selected_strategy") or "")
+        selected_tf = str(payload.get("selected_timeframe") or "")
+        direction = str(payload.get("direction") or "")
+        if selected:
+          selected_text = " · ".join(
+            item for item in (selected, direction, selected_tf) if item
+          )
+          source_name = str(payload.get("gate_source") or "")
+          selection_source = (
+            "scanner detector"
+            if source_name == "scanner_strategy_match"
+            else "Market Map + M1 reaction"
+            if source_name == "market_map_strategy"
+            else "private OHLC matcher"
+          )
         box = payload.get("box")
         if isinstance(box, dict):
           low = float(box["low"])
@@ -492,7 +507,28 @@ async def auto_trade_status_text() -> str:
             zone_text += f" · full TP {int(tp)}p"
       except (KeyError, TypeError, ValueError, json.JSONDecodeError):
         pass
-    regime_line = "\nRegime: <b>warming up</b>"
+    scanner_state = "waiting for next M5 scan"
+    scanner_raw = await client.get("scanner:last_tick")
+    if scanner_raw:
+      try:
+        scanner_payload = json.loads(scanner_raw)
+        detected = scanner_payload.get("detected")
+        count = len(detected) if isinstance(detected, list) else 0
+        scanner_state = (
+          f"{count} setup{'s' if count != 1 else ''} matched"
+          if count
+          else "no setup matched"
+        )
+        scalp = scanner_payload.get("scalp")
+        if isinstance(scalp, dict) and scalp.get("state"):
+          scanner_state += f" · range {str(scalp['state']).replace('_', ' ')}"
+      except (TypeError, ValueError, json.JSONDecodeError):
+        pass
+    regime_line = (
+      "\nMarket context: "
+      f"<b>{escape(current_regime.replace('_', ' '))}</b>"
+      " <i>(telemetry only)</i>"
+    )
     primary_symbol = next(
       (
         item.strip().upper()
@@ -506,16 +542,28 @@ async def auto_trade_status_text() -> str:
     except Exception:
       shares = None
     if shares is not None:
-      regime_line = (
-        "\nRegime (24h): chop "
+      regime_line += (
+        "\nContext (24h): chop "
         f"<b>{shares.get('chop', 0.0):.0%}</b> · trend "
         f"<b>{shares.get('trend', 0.0):.0%}</b> · breakout "
         f"<b>{shares.get('breakout', 0.0):.0%}</b>"
       )
-    reason_line = f"\nWhy: {escape(gate_reason)}" if gate_reason else ""
-    gate_line = (
-      f"\nGate: <b>{escape(gate_name)}</b>{escape(strategy_text)}"
-      f"\nLast check: <b>{escape(gate_state)}</b>{escape(zone_text)}"
+    reason_line = (
+      f"\nWhy no order: {escape(selection_reason)}"
+      if selected_text == "none" and selection_reason else
+      f"\nWhy: {escape(selection_reason)}" if selection_reason else ""
+    )
+    strategy_lines = (
+      f"\nSelected strategy: <b>{escape(selected_text)}</b>"
+      f"\nSource: <b>{escape(selection_source)}</b>"
+      f"\nScanner M5: <b>{escape(scanner_state)}</b>"
+      "\nMarket Map strategy: "
+      f"<b>{escape(market_map_state.replace('_', ' '))}</b>"
+      "\nPrivate strategies: "
+      f"Range Box <b>{escape(box_state.replace('_', ' '))}</b> · "
+      f"Trend <b>{escape(trend_state.replace('_', ' '))}</b>"
+      f"\nExecution: <b>{escape(execution_state.replace('_', ' '))}</b>"
+      f"{escape(zone_text)}"
       f"{reason_line}"
       f"{regime_line}"
     )
@@ -526,7 +574,7 @@ async def auto_trade_status_text() -> str:
     f"Trades today: <b>{daily}</b> · <b>unlimited</b>"
     f"\nMeasured groups: <b>{group_count}</b> · adds "
     f"<b>{with_adds}</b> · no adds <b>{without_adds}</b>"
-    f"{gate_line}"
+    f"{strategy_lines}"
   )
 
 
