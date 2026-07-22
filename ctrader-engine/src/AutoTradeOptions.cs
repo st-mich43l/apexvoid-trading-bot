@@ -37,7 +37,8 @@ public sealed record AutoTradeOptions(
   int ZoneFillTtlBars = 3,
   decimal BoxMinRiskReward = 1.25m,
   int TrendStopMinPips = 40,
-  int TrendStopMaxPips = 65
+  int TrendStopMaxPips = 65,
+  bool StopPushBeyondZone = true
 )
 {
   public static AutoTradeOptions FromEnvironment() => new(
@@ -75,7 +76,8 @@ public sealed record AutoTradeOptions(
     ZoneFillTtlBars: Int("AUTO_TRADE_ZONE_FILL_TTL_BARS", 3),
     BoxMinRiskReward: Decimal("AUTO_TRADE_BOX_MIN_RR", 1.25m),
     TrendStopMinPips: Int("AUTO_TRADE_TREND_STOP_MIN_PIPS", 40),
-    TrendStopMaxPips: Int("AUTO_TRADE_TREND_STOP_MAX_PIPS", 65)
+    TrendStopMaxPips: Int("AUTO_TRADE_TREND_STOP_MAX_PIPS", 65),
+    StopPushBeyondZone: Bool("AUTO_TRADE_STOP_PUSH_BEYOND_ZONE", true)
   );
 
   public void Validate()

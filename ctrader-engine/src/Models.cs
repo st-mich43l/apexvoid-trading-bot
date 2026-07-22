@@ -157,7 +157,9 @@ public sealed record TradeCandidate(
   decimal? RangeHigh = null,
   int? FullTakeProfitPips = null,
   IReadOnlyList<int>? TargetsPips = null,
-  string? Regime = null
+  string? Regime = null,
+  decimal? OpposingZoneLow = null,
+  decimal? OpposingZoneHigh = null
 );
 
 public sealed record TradeStreamEntry(
@@ -192,7 +194,10 @@ public sealed record AutoTradePositionState(
   decimal GroupRealizedPipVolume = 0m,
   decimal InitialRealizedPipVolume = 0m,
   long GroupInitialVolume = 0,
-  long InitialTrancheVolume = 0
+  long InitialTrancheVolume = 0,
+  string? Setup = null,
+  string? Regime = null,
+  int? Confluence = null
 );
 
 public sealed record AutoTradeEvent(
@@ -212,5 +217,8 @@ public sealed record AutoTradeEvent(
   decimal? CounterfactualPnl = null,
   bool? HadAdds = null,
   decimal? GroupRealizedPips = null,
-  decimal? CounterfactualPips = null
+  decimal? CounterfactualPips = null,
+  string? Setup = null,
+  string? Regime = null,
+  int? Confluence = null
 );

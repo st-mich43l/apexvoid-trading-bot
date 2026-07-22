@@ -157,6 +157,15 @@ class Settings(BaseSettings):
   auto_trade_min_confluence: int = 2
   auto_trade_news_guard_minutes: int = 30
   auto_trade_box_retire_seconds: int = 14400
+  # Trade-quality guards added after the 22 Jul 2026 incident (SELL filled at
+  # box EQ, 13 pips below the nearest published supply zone). EQ exclusion and
+  # edge proximity apply to box-scalp ("auto_box_scalp") candidates only - a
+  # breakout/trend-continuation candidate legitimately transits the mid-range.
+  auto_trade_eq_exclusion_fraction: float = 0.15
+  auto_trade_edge_proximity_atr: float = 0.5
+  # HTF supply/demand veto (worker.py only - gate.py/trend.py stay untouched).
+  # Kill switch so the veto can be disabled without a redeploy if too strict.
+  auto_trade_htf_veto_enabled: bool = True
   # Trend/breakout regime classifier (app/autotrade/trend.py). Named with a
   # trend_/auto_trade_trend_ prefix to avoid colliding with the existing
   # scanner-owned breakout_accept_bars/breakout_max_age_bars fields above,

@@ -16,7 +16,12 @@ import math
 from typing import Any
 
 from app.persistence import redis_state
-from app.autotrade.gate import AutoScalpDecision, evaluate_auto_scalp_gate
+from app.autotrade.gate import (
+  AutoScalpBox,
+  AutoScalpDecision,
+  AutoScalpRail,
+  evaluate_auto_scalp_gate,
+)
 from app.autotrade.scale_context import AutoScaleContext, build_auto_scale_context
 from app.autotrade.trend import (
   RegimeInfo,
@@ -27,11 +32,16 @@ from app.autotrade.trend import (
 from app.core.config import settings
 from app.persistence.store import event_in_window
 from app.analysis.ohlc_source import RedisOHLCSource
+from app.analysis.math_utils import atr_series
+from app.analysis.types import Zone
+from app.analysis.zones import displacement, mark_mitigation, supply_demand
 
 
 log = logging.getLogger(__name__)
 EXECUTION_TIMEFRAME = "M1"
 CONTEXT_TIMEFRAMES = ("M5", "M15")
+# Matches trend.py's own HTF-bias definition (classify_regime uses M15 too).
+_HTF_TIMEFRAME = "M15"
 # Regime instrumentation: rolling 24h chop/trend/breakout share per symbol,
 # used by delivery.py's /auto_status line and the mis-tuning alert below.
 _REGIME_HISTORY_WINDOW_SECONDS = 24 * 3600
@@ -99,6 +109,126 @@ async def _load_spot(client: Any, symbol: str) -> AutoTradeSpot | None:
   )
 
 
+def _eq_exclusion_reason(
+  box: AutoScalpBox,
+  entry_reference: float,
+  fraction: float,
+) -> str | None:
+  """Reject an entry parked at the box's equilibrium (defect 2, 22 Jul).
+
+  EQ is the lowest-information location in a range - neither an edge to fade
+  nor a breakout to follow.
+  """
+  eq = (box.lower.level + box.upper.level) / 2
+  width = box.upper.level - box.lower.level
+  if width <= 0:
+    return None
+  if abs(entry_reference - eq) < max(0.0, fraction) * width:
+    return f"EQ exclusion: entry {entry_reference:.2f} within {fraction:.0%} of box EQ {eq:.2f}"
+  return None
+
+
+def _edge_proximity_reason(
+  rail: AutoScalpRail,
+  entry_reference: float,
+  atr: float,
+  limit_atr: float,
+) -> str | None:
+  """A range-edge candidate must actually be near the edge it claims to trade."""
+  if atr <= 0:
+    return None
+  distance_atr = abs(entry_reference - rail.level) / atr
+  if distance_atr > max(0.0, limit_atr):
+    return (
+      f"Range Edge Scalp not near an edge: entry {entry_reference:.2f} is "
+      f"{distance_atr:.2f} ATR from rail {rail.level:.2f} "
+      f"(limit {limit_atr:.2f} ATR)"
+    )
+  return None
+
+
+def _htf_zones(frames: dict[str, Any], cfg: Any) -> list[Zone]:
+  """Fresh/tested HTF (M15) supply/demand zones, for the A3 veto and the A2
+  opposing-zone attachment. Independent of gate.py/trend.py's own M1 legs -
+  this is the one place the shared analysis stack enters the autotrade path,
+  and it enters only as a veto input, never as a signal.
+  """
+  htf = frames.get(_HTF_TIMEFRAME)
+  if htf is None or htf.empty:
+    return []
+  atr_length = max(2, int(getattr(cfg, "atr_length", 14)))
+  legs = displacement(
+    htf,
+    atr_series(htf, atr_length),
+    max(0.1, float(getattr(cfg, "displacement_atr_mult", 1.5))),
+    max(0.0, float(getattr(cfg, "momentum_body_frac", 0.6))),
+  )
+  if not legs:
+    return []
+  zones = supply_demand(htf, legs)
+  return mark_mitigation(zones, htf)
+
+
+def _nearest_directional_zone(
+  direction: str,
+  entry_reference: float,
+  zones: list[Zone],
+) -> Zone | None:
+  """Nearest HTF zone on the side that justifies (and can trap the stop of)
+  ``direction`` - supply for a SELL, demand for a BUY. Used both for A2's
+  opposing-zone attachment (any freshness) and the A3 veto (fresh only).
+  """
+  side = "supply" if direction == "SELL" else "demand"
+  candidates = [zone for zone in zones if zone.side == side]
+  if not candidates:
+    return None
+
+  def _distance(zone: Zone) -> float:
+    if zone.low <= entry_reference <= zone.high:
+      return 0.0
+    return min(abs(entry_reference - zone.low), abs(entry_reference - zone.high))
+
+  return min(candidates, key=_distance)
+
+
+def _htf_veto_reason(
+  direction: str,
+  entry_reference: float,
+  zone: Zone | None,
+) -> str | None:
+  """Veto a direction that opposes a fresh HTF zone price hasn't reached yet
+  (defect 4, 22 Jul: SELL taken 13 pips below untested supply). A short
+  should be taken at supply, not beneath it.
+  """
+  if zone is None or zone.touches > 0:
+    return None
+  untested_and_ahead = (
+    zone.low > entry_reference if direction == "SELL"
+    else zone.high < entry_reference
+  )
+  if not untested_and_ahead:
+    return None
+  kind = "supply" if direction == "SELL" else "demand"
+  side_word = "below" if direction == "SELL" else "above"
+  return (
+    f"HTF veto: {direction} {side_word} untested {kind} "
+    f"{zone.low:.2f}-{zone.high:.2f}"
+  )
+
+
+async def _record_gate_reject(client: Any, symbol: str, condition: str) -> None:
+  try:
+    await client.hincrby(
+      f"auto_trade:gate_reject:{symbol.upper()}:{condition}",
+      "count",
+      1,
+    )
+  except Exception:
+    log.exception(
+      "gate-reject counter failed symbol=%s condition=%s", symbol, condition,
+    )
+
+
 def _candidate_id(
   symbol: str,
   trigger_ts: str,
@@ -124,6 +254,7 @@ async def _publish_candidate(
   scale_context: AutoScaleContext | None = None,
   *,
   regime: RegimeInfo | None = None,
+  htf_zones: list[Zone] | None = None,
 ) -> str | None:
   if (
     not settings.auto_trade_enabled
@@ -142,6 +273,43 @@ async def _publish_candidate(
     or (regime is not None and regime.state != "chop")
   ):
     return None
+
+  entry_reference = spot.price
+  eq_reason = _eq_exclusion_reason(
+    decision.box,
+    entry_reference,
+    settings.auto_trade_eq_exclusion_fraction,
+  )
+  if eq_reason is not None:
+    log.info(
+      "auto-scalp candidate blocked symbol=%s reason=%s", symbol, eq_reason,
+    )
+    await _record_gate_reject(client, symbol, "eq_exclusion")
+    return None
+  edge_reason = _edge_proximity_reason(
+    decision.rail,
+    entry_reference,
+    scale_context.atr,
+    settings.auto_trade_edge_proximity_atr,
+  )
+  if edge_reason is not None:
+    log.info(
+      "auto-scalp candidate blocked symbol=%s reason=%s", symbol, edge_reason,
+    )
+    await _record_gate_reject(client, symbol, "edge_proximity")
+    return None
+  opposing_zone = _nearest_directional_zone(
+    decision.direction, entry_reference, htf_zones or [],
+  )
+  if settings.auto_trade_htf_veto_enabled:
+    veto_reason = _htf_veto_reason(decision.direction, entry_reference, opposing_zone)
+    if veto_reason is not None:
+      log.info(
+        "auto-scalp candidate blocked symbol=%s reason=%s", symbol, veto_reason,
+      )
+      await _record_gate_reject(client, symbol, "htf_veto")
+      return None
+
   now = int(datetime.now(timezone.utc).timestamp())
   try:
     guarded = await event_in_window(
@@ -193,6 +361,8 @@ async def _publish_candidate(
     "range_high": decision.box.upper.level,
     "full_take_profit_pips": decision.full_tp_pips,
     "regime": regime.state if regime is not None else "chop",
+    "opposing_zone_low": None if opposing_zone is None else opposing_zone.low,
+    "opposing_zone_high": None if opposing_zone is None else opposing_zone.high,
   }
   if scale_context is not None:
     payload.update({
@@ -267,6 +437,7 @@ async def _publish_trend_candidate(
   spot: AutoTradeSpot | None,
   regime: RegimeInfo,
   trend_decision: TrendDecision,
+  htf_zones: list[Zone] | None = None,
 ) -> str | None:
   if (
     not settings.auto_trade_enabled
@@ -285,6 +456,22 @@ async def _publish_trend_candidate(
     or trend_decision.confluence < max(1, settings.auto_trade_min_confluence)
   ):
     return None
+
+  entry_reference = spot.price
+  opposing_zone = _nearest_directional_zone(
+    trend_decision.direction, entry_reference, htf_zones or [],
+  )
+  if settings.auto_trade_htf_veto_enabled:
+    veto_reason = _htf_veto_reason(
+      trend_decision.direction, entry_reference, opposing_zone,
+    )
+    if veto_reason is not None:
+      log.info(
+        "auto-trend candidate blocked symbol=%s reason=%s", symbol, veto_reason,
+      )
+      await _record_gate_reject(client, symbol, "htf_veto")
+      return None
+
   now = int(datetime.now(timezone.utc).timestamp())
   try:
     guarded = await event_in_window(
@@ -335,6 +522,8 @@ async def _publish_trend_candidate(
     "structure_swing": trend_decision.structure_swing,
     "targets_pips": list(trend_decision.targets_pips),
     "regime": regime.state,
+    "opposing_zone_low": None if opposing_zone is None else opposing_zone.low,
+    "opposing_zone_high": None if opposing_zone is None else opposing_zone.high,
   }
   try:
     await client.xadd(
@@ -626,6 +815,7 @@ async def _handle_event(
       and spot.fresh
     ) else None
   )
+  htf_zones = _htf_zones(frames, settings)
   box_candidate_id = await _publish_candidate(
     client,
     symbol,
@@ -634,6 +824,7 @@ async def _handle_event(
     decision,
     scale_context,
     regime=regime,
+    htf_zones=htf_zones,
   )
   trend_candidate_id = await _publish_trend_candidate(
     client,
@@ -642,8 +833,14 @@ async def _handle_event(
     spot,
     regime,
     trend_decision,
+    htf_zones=htf_zones,
   )
   candidate_id = box_candidate_id or trend_candidate_id
+  if candidate_id is None:
+    if decision.state != "candidate":
+      await _record_gate_reject(client, symbol, decision.state)
+    if regime.state in ("trend", "breakout") and trend_decision.state != "candidate":
+      await _record_gate_reject(client, symbol, trend_decision.state)
   payload = _status_payload(
     decision,
     symbol=symbol,
