@@ -13,9 +13,12 @@ from app.core.config import settings
 from app.persistence.store import (
   event_in_window,
   get_manual_signal,
+  set_execution_intent,
+  set_execution_status,
   store_manual_signal,
   store_pips,
 )
+from app.signals.manual_intent import build_intent, publish_intent
 from app.signals.parsing import _PIPS_RE, _is_owner, _parse_manual
 from app.signals.pips_format import wing_icons
 from app.core.symbols import tier_for_channel
@@ -33,17 +36,49 @@ def _event_guard_timing(ts_utc: int, now: int) -> str:
   return f"in {hours}h {minutes}m"
 
 
-def _manual_signal_confirmation(sig: dict, daily_seq: int) -> str:
+def _manual_signal_confirmation(
+  sig: dict,
+  daily_seq: int,
+  algo_note: str | None = None,
+) -> str:
   base = f"✅ Sent to channel (#{daily_seq})"
   setup = sig.get("setup_type")
   if not setup:
-    return (
+    text = (
       f"{base} · ⚠️ no setup tag — add later with: "
       f"<code>tag #{daily_seq} &lt;setup&gt; **</code>"
     )
-  confluence = sig.get("confluence")
-  stars = f" {'⭐' * confluence}" if confluence else ""
-  return f"{base} · setup {escape(setup)}{stars}"
+  else:
+    confluence = sig.get("confluence")
+    stars = f" {'⭐' * confluence}" if confluence else ""
+    text = f"{base} · setup {escape(setup)}{stars}"
+  return f"{text} · {algo_note}" if algo_note else text
+
+
+async def _arm_algo_intent(signal_id: int, signal: dict) -> str:
+  """Arm (or explain why not arming) broker-side execution for a signal.
+
+  Never raises — the channel post has already happened by the time this
+  runs, so a failure here must read as "algo arming failed" and nothing
+  else, never as the whole DM being rejected.
+  """
+  if not settings.manual_algo_enabled:
+    return "⚠️ Algo suffix ignored — MANUAL_ALGO_ENABLED is off"
+  try:
+    intent = build_intent(signal, revision=0)
+    await set_execution_intent(
+      signal_id,
+      intent_id=intent.intent_id,
+      status="armed",
+      revision=0,
+    )
+    await publish_intent(intent)
+  except Exception as exc:
+    log.exception("Failed to arm algo execution for signal #%d", signal_id)
+    await set_execution_status(signal_id, "error", error=str(exc))
+    return "⚠️ Algo arm failed — signal posted notify-only"
+  suffix = " (dry-run)" if settings.manual_algo_dry_run else ""
+  return f"🤖 Algo armed{suffix}"
 
 
 @router.message(F.chat.type == "private", F.text)
@@ -82,6 +117,7 @@ async def handle_private_signal(msg: Message) -> None:
     confluence=sig['confluence'],
     symbol="XAU",
     visibility=sig["visibility"],
+    execution_mode=sig["execution_mode"],
   )
   guard_text = None
   if event:
@@ -92,7 +128,12 @@ async def handle_private_signal(msg: Message) -> None:
   signal = await get_manual_signal(rec["id"])
   signal["guard_text"] = guard_text
   await broadcast_entry(signal)
-  await msg.answer(_manual_signal_confirmation(sig, rec["daily_seq"]))
+  algo_note = None
+  if sig["execution_mode"] == "algo":
+    algo_note = await _arm_algo_intent(rec["id"], signal)
+  await msg.answer(
+    _manual_signal_confirmation(sig, rec["daily_seq"], algo_note)
+  )
   log.info(
     "Manual signal #%d (daily #%d): %s XAUUSD @ %s-%s",
     rec["id"], rec["daily_seq"], sig['action'], sig['entry'], sig['entry_end'],

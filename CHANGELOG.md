@@ -13,6 +13,20 @@ dated section after deployment.
 
 ### Added
 
+- Added manual-signal broker execution infrastructure (PR 2 of 3; no broker
+  executes real orders yet — this PR is plumbing only). `manual_signals`
+  gained `execution_mode`/`execution_status`/`execution_intent_id`/
+  `execution_revision`/`broker_position_id`/`broker_fill_price`/
+  `execution_error` columns; a new versioned `ManualTradeIntent` contract
+  (`app.signals.manual_intent`) carries the owner's exact entered SL/TP
+  (not a re-derived structure stop) and publishes to the new
+  `manual_trade:intents` Redis stream; and manual DM signals now accept an
+  opt-in `/ algo` suffix (composes with the existing `/ vip` and `/ scalp`
+  suffixes) that arms this contract when `MANUAL_ALGO_ENABLED=true`
+  (default `false`). Nothing in this codebase consumes
+  `manual_trade:intents` yet — a future `ctrader-engine` change is required
+  before an `/ algo` signal can actually place a broker order.
+
 - Added typed scanner-to-Algo strategy routing: the strongest completed M5
   detector match is transported with stable identity, expiry, entry/stop/TP
   context, attribution, and `/auto_status` visibility.
