@@ -297,83 +297,62 @@ async def test_bad_reply_target_retries_once_standalone():
 
 
 @pytest.mark.asyncio
-async def test_public_delivery_failure_keeps_only_public_cursor_for_replay():
+async def test_owner_delivery_failure_keeps_cursor_for_replay():
   client = redis_state.get_client()
   await client.set(delivery._CURSOR_KEY, "100-0")
-  internal_cursor = await delivery._initial_profile_cursor(client, "internal")
-  public_cursor = await delivery._initial_profile_cursor(client, "public")
   entries = [("101-0", {"payload": json.dumps(_opened_event())})]
   calls = []
 
-  async def internal_send(text, **kwargs):
-    calls.append(("internal", text, kwargs))
-    return SimpleNamespace(message_id=8123)
-
-  async def unavailable_public_send(text, **kwargs):
-    calls.append(("public-failed", text, kwargs))
+  async def failed_send(text, **kwargs):
+    calls.append("failed")
     raise TelegramBadRequest(
       method=None,
-      message="Bad Request: chat not found",
+      message="Bad Request: owner temporarily unavailable",
     )
 
-  internal_cursor = await delivery._process_profile_entries(
-    client,
-    entries,
-    cursor=internal_cursor,
-    profile="internal",
-    chat_id=123,
-    send=internal_send,
-  )
-  with pytest.raises(TelegramBadRequest, match="chat not found"):
-    await delivery._process_profile_entries(
+  with pytest.raises(TelegramBadRequest, match="temporarily unavailable"):
+    await delivery._process_owner_entries(
       client,
       entries,
-      cursor=public_cursor,
-      profile="public",
-      chat_id=-100456,
-      send=unavailable_public_send,
+      cursor="100-0",
+      chat_id=123,
+      send=failed_send,
     )
 
-  assert internal_cursor == "101-0"
-  assert await client.get(
-    delivery._profile_cursor_key("internal")
-  ) == "101-0"
-  assert await client.get(
-    delivery._profile_cursor_key("public")
-  ) == "100-0"
+  assert await client.get(delivery._CURSOR_KEY) == "100-0"
 
-  async def public_send(text, **kwargs):
-    calls.append(("public-replayed", text, kwargs))
+  async def replayed_send(text, **kwargs):
+    calls.append("replayed")
     return SimpleNamespace(message_id=9123)
 
-  public_cursor = await delivery._process_profile_entries(
+  cursor = await delivery._process_owner_entries(
     client,
     entries,
-    cursor=public_cursor,
-    profile="public",
-    chat_id=-100456,
-    send=public_send,
+    cursor="100-0",
+    chat_id=123,
+    send=replayed_send,
   )
 
-  assert public_cursor == "101-0"
-  assert await client.get(
-    delivery._profile_cursor_key("public")
-  ) == "101-0"
-  assert [call[0] for call in calls] == [
-    "internal",
-    "public-failed",
-    "public-replayed",
-  ]
-  assert "0.06" not in calls[-1][1]
+  assert cursor == "101-0"
+  assert await client.get(delivery._CURSOR_KEY) == "101-0"
+  assert calls == ["failed", "replayed"]
 
 
-def test_unavailable_chat_error_is_actionable_delivery_failure():
-  error = TelegramBadRequest(
-    method=None,
-    message="Bad Request: chat not found",
-  )
+@pytest.mark.asyncio
+async def test_auto_trade_loop_only_starts_owner_delivery(monkeypatch):
+  calls = []
 
-  assert delivery._is_unavailable_chat(error) is True
+  async def owner_loop(*, chat_id):
+    calls.append(chat_id)
+
+  monkeypatch.setattr(delivery.settings, "auto_trade_enabled", True)
+  monkeypatch.setattr(delivery.settings, "telegram_owner_id", 123)
+  monkeypatch.setattr(delivery.settings, "signal_public_channel_id", -100456)
+  monkeypatch.setattr(delivery, "_auto_trade_owner_events_loop", owner_loop)
+
+  await delivery.auto_trade_events_loop()
+
+  assert calls == [123]
 
 
 @pytest.mark.asyncio

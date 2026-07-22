@@ -14,9 +14,7 @@ dated section after deployment.
 ### Added
 
 - Added per-position Telegram reply threads for ApexVoid Algo trade events,
-  including standalone fallback when the original message is unavailable, and
-  a public-channel profile that hides lot/position IDs while showing target R.
-- Added the optional `SIGNAL_PUBLIC_FOOTER` for public entry cards.
+  including standalone fallback when the original message is unavailable.
 - Added proactive cTrader access-token refresh ahead of expiry, defensive
   `expiresIn` unit resolution, a host-mounted file mirror for rotated token
   recovery after Redis-volume loss, and rate-limited Telegram lifecycle alerts.
@@ -186,9 +184,10 @@ dated section after deployment.
 
 ### Fixed
 
-- Isolated internal and public auto-trade Telegram delivery with independent
-  Redis cursors; an unavailable public channel now retains its event for replay
-  after permissions are restored without interrupting owner notifications.
+- Dedicated signal-bot scanner and auto-trade events now remain owner-DM-only;
+  `SIGNAL_PUBLIC_CHANNEL_ID` is reserved for manual general-bot broadcasts.
+- Auto-trade Telegram cursors now advance only after owner delivery succeeds,
+  preventing transient DM failures from silently dropping an event.
 
 - Fixed a 10x pip-unit mismatch that blocked every auto-trade candidate on FP
   Markets (`pipPosition=2`); brokers reporting `pipPosition=1` were unaffected.
