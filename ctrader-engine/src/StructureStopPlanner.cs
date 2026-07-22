@@ -18,6 +18,7 @@ public static class StructureStopPlanner
     decimal bufferAtr,
     int minimumStopPips,
     int maximumStopPips,
+    decimal pipSize,
     SymbolInfo symbol
   )
   {
@@ -28,11 +29,11 @@ public static class StructureStopPlanner
       || bufferAtr < 0
       || minimumStopPips <= 0
       || maximumStopPips < minimumStopPips
+      || pipSize <= 0
     )
     {
       throw new VolumePlanningException("Structure-stop inputs are invalid");
     }
-    var pip = VolumePlanner.PipSize(symbol);
     var rawStop = direction == TradeDirection.Buy
       ? structureSwing - bufferAtr * atr
       : structureSwing + bufferAtr * atr;
@@ -45,13 +46,13 @@ public static class StructureStopPlanner
         "Structure invalidation is not on the losing side of entry"
       );
     }
-    var rawPips = rawDistance / pip;
+    var rawPips = rawDistance / pipSize;
     var stopPips = Math.Clamp(
       rawPips,
       Convert.ToDecimal(minimumStopPips),
       Convert.ToDecimal(maximumStopPips)
     );
-    var distance = stopPips * pip;
+    var distance = stopPips * pipSize;
     var stopLoss = direction == TradeDirection.Buy
       ? entryPrice - distance
       : entryPrice + distance;
@@ -61,7 +62,7 @@ public static class StructureStopPlanner
       MidpointRounding.AwayFromZero
     );
     distance = Math.Abs(entryPrice - stopLoss);
-    stopPips = distance / pip;
+    stopPips = distance / pipSize;
     return new StructureStopPlan(
       stopLoss,
       distance,

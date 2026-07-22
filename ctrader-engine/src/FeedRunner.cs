@@ -59,6 +59,10 @@ public sealed class FeedRunner(
       Log(
         $"resolved symbol {symbol.CTraderSymbol} -> id={symbol.SymbolId} redis={symbol.RedisSymbol} digits={symbol.Digits}"
       );
+      if (autoTrade?.Enabled == true)
+      {
+        autoTrade.LogUnitConfiguration(symbol, Log, warningLog ?? Warn);
+      }
       var fullWindowBackfill = _startupBackfillPending;
       await BackfillAsync(client, symbol, fullWindowBackfill, cancellationToken);
       _startupBackfillPending = false;

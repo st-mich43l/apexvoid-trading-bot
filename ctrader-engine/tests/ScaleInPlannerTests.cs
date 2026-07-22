@@ -9,7 +9,7 @@ public sealed class ScaleInPlannerTests
     "XAUUSD",
     7,
     Digits: 2,
-    PipPosition: 1,
+    PipPosition: 2,
     MinVolume: 100,
     StepVolume: 100,
     MaxVolume: 100_000,
@@ -96,6 +96,7 @@ public sealed class ScaleInPlannerTests
       bookedPnl: 20m,
       openTranches: [new(TradeDirection.Buy, 4000m, 4000.3m, openVolume)],
       requireRiskFree: false,
+      pipSize: 0.1m,
       Symbol,
       [30, 60, 90, 120, 200],
       [20, 20, 20, 20, 20]
@@ -118,6 +119,7 @@ public sealed class ScaleInPlannerTests
       bookedPnl: 20m,
       openTranches: [new(TradeDirection.Buy, 4000m, 4000.3m, 400)],
       requireRiskFree: false,
+      pipSize: 0.1m,
       Symbol,
       [30, 60, 90, 120, 200],
       [20, 20, 20, 20, 20]
@@ -169,6 +171,7 @@ public sealed class ScaleInPlannerTests
         booked,
         [new(TradeDirection.Buy, entry, stop, openVolume)],
         false,
+        0.1m,
         Symbol,
         [30, 60, 90, 120, 200],
         [20, 20, 20, 20, 20]
@@ -196,6 +199,7 @@ public sealed class ScaleInPlannerTests
     bookedPnl,
     open,
     requireRiskFree,
+    pipSize: 0.1m,
     Symbol,
     [30, 60, 90, 120, 200],
     [20, 20, 20, 20, 20]

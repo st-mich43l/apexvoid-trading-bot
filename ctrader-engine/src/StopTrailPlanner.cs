@@ -8,6 +8,7 @@ public static class StopTrailPlanner
     AutoTradePositionState state,
     int completedTargetIndex,
     SymbolInfo symbol,
+    decimal pipSize,
     int breakEvenBufferPips
   )
   {
@@ -23,7 +24,6 @@ public static class StopTrailPlanner
     {
       return null;
     }
-    var pip = VolumePlanner.PipSize(symbol);
     var trailTargetOrdinal = completedTargetOrdinal - 2;
     var offsetPips = completedTargetOrdinal == 1
       ? breakEvenBufferPips
@@ -33,8 +33,8 @@ public static class StopTrailPlanner
       return null;
     }
     var desired = state.Direction == TradeDirection.Buy
-      ? state.EntryPrice + offsetPips.Value * pip
-      : state.EntryPrice - offsetPips.Value * pip;
+      ? state.EntryPrice + offsetPips.Value * pipSize
+      : state.EntryPrice - offsetPips.Value * pipSize;
     desired = decimal.Round(desired, symbol.Digits, MidpointRounding.AwayFromZero);
     if (
       state.CurrentStopLoss is decimal current

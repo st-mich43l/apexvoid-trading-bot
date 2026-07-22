@@ -28,6 +28,21 @@ public sealed class AutoTradeEngine(
 
   public bool Enabled => options.Enabled && !_disabled;
 
+  public void LogUnitConfiguration(
+    SymbolInfo symbol,
+    Action<string> info,
+    Action<string> warning
+  )
+  {
+    var diagnostic = VolumePlanner.PipUnitDiagnostic(symbol, options);
+    if (diagnostic.Differs)
+    {
+      warning(diagnostic.Message);
+      return;
+    }
+    info(diagnostic.Message);
+  }
+
   public async Task RunSessionAsync(
     ICTraderFeedClient feedClient,
     SymbolInfo symbol,
@@ -289,7 +304,7 @@ public sealed class AutoTradeEngine(
         || rangeHigh <= rangeLow
         || candidate.FullTakeProfitPips is not (50 or 70)
         || rangeHigh - rangeLow
-          < candidate.FullTakeProfitPips.Value * VolumePlanner.PipSize(symbol)
+          < candidate.FullTakeProfitPips.Value * options.PipSize
         || candidate.KeyLevel < rangeLow
         || candidate.KeyLevel > rangeHigh
       )
@@ -394,7 +409,7 @@ public sealed class AutoTradeEngine(
     SpotPrice quote;
     try
     {
-      quote = ValidateQuote(candidate, symbol);
+      quote = ValidateQuote(candidate);
     }
     catch (CandidateRejectedException exception)
     {
@@ -832,6 +847,7 @@ public sealed class AutoTradeEngine(
         state.RemainingVolume
       )).ToArray(),
       options.AddRequireRiskFree,
+      options.PipSize,
       RequireSymbol(),
       options.TargetsPips,
       options.TargetWeights
@@ -1043,7 +1059,7 @@ public sealed class AutoTradeEngine(
       : (
         options.AddMinStopPips,
         decimal.ToInt32(decimal.Floor(
-          options.StopLossDistance / VolumePlanner.PipSize(symbol)
+          options.StopLossDistance / options.PipSize
         ))
       );
     return StructureStopPlanner.Plan(
@@ -1054,6 +1070,7 @@ public sealed class AutoTradeEngine(
       options.AddStopBufferAtr,
       minimumStopPips,
       maximumStopPips,
+      options.PipSize,
       symbol
     );
   }
@@ -1149,7 +1166,7 @@ public sealed class AutoTradeEngine(
     var move = state.Direction == TradeDirection.Buy
       ? price - state.EntryPrice
       : state.EntryPrice - price;
-    var pips = move / VolumePlanner.PipSize(symbol);
+    var pips = move / options.PipSize;
     var lots = state.RemainingVolume / (decimal)symbol.LotSize;
     return pips * lots * options.PipValuePerLot;
   }
@@ -1164,21 +1181,17 @@ public sealed class AutoTradeEngine(
     var move = state.Direction == TradeDirection.Buy
       ? price - state.EntryPrice
       : state.EntryPrice - price;
-    var pips = move / VolumePlanner.PipSize(symbol);
+    var pips = move / options.PipSize;
     var lots = closedVolume / (decimal)symbol.LotSize;
     return pips * lots * options.PipValuePerLot;
   }
 
-  private static decimal SignedPips(
-    AutoTradePositionState state,
-    decimal price,
-    SymbolInfo symbol
-  )
+  private decimal SignedPips(AutoTradePositionState state, decimal price)
   {
     var move = state.Direction == TradeDirection.Buy
       ? price - state.EntryPrice
       : state.EntryPrice - price;
-    return move / VolumePlanner.PipSize(symbol);
+    return move / options.PipSize;
   }
 
   private static decimal WeightedPips(decimal pipVolume, long initialVolume) =>
@@ -1264,7 +1277,7 @@ public sealed class AutoTradeEngine(
     return true;
   }
 
-  private SpotPrice ValidateQuote(TradeCandidate candidate, SymbolInfo symbol)
+  private SpotPrice ValidateQuote(TradeCandidate candidate)
   {
     var quote = _lastSpot
       ?? throw new CandidateRejectedException("live cTrader quote unavailable");
@@ -1273,12 +1286,14 @@ public sealed class AutoTradeEngine(
     {
       throw new CandidateRejectedException("live cTrader quote is stale");
     }
-    var pip = VolumePlanner.PipSize(symbol);
-    var spreadPips = (quote.Ask - quote.Bid) / pip;
+    var spread = quote.Ask - quote.Bid;
+    var spreadPips = spread / options.PipSize;
     if (spreadPips < 0 || spreadPips > options.MaxSpreadPips)
     {
       throw new CandidateRejectedException(
-        $"spread {spreadPips:N1} pips exceeds cap {options.MaxSpreadPips}"
+        $"spread rejected: bid={quote.Bid:0.00} ask={quote.Ask:0.00} "
+          + $"raw={spread:0.00} pip={options.PipSize} -> "
+          + $"{spreadPips:0.0} pips, cap {options.MaxSpreadPips:0.0}"
       );
     }
     var direction = ParseDirection(candidate.Direction);
@@ -1288,11 +1303,14 @@ public sealed class AutoTradeEngine(
       : entry > candidate.EntryZone.High
         ? entry - candidate.EntryZone.High
         : 0m;
-    var distancePips = distance / pip;
+    var distancePips = distance / options.PipSize;
     if (distancePips > options.MaxEntryDistancePips)
     {
       throw new CandidateRejectedException(
-        $"entry moved {distancePips:N1} pips beyond candidate zone"
+        $"entry distance rejected: entry={entry:0.00} "
+          + $"zone={candidate.EntryZone.Low:0.00}-{candidate.EntryZone.High:0.00} "
+          + $"raw={distance:0.00} pip={options.PipSize} -> "
+          + $"{distancePips:0.0} pips, cap {options.MaxEntryDistancePips:0.0}"
       );
     }
     return quote;
@@ -1320,7 +1338,7 @@ public sealed class AutoTradeEngine(
         var completedTargetIndex = state.NextTargetIndex;
         var targetOrdinal = TargetOrdinal(state, completedTargetIndex);
         var targetPips = state.TargetsPips[state.NextTargetIndex];
-        var target = TargetPrice(state, targetPips, symbol);
+        var target = TargetPrice(state, targetPips);
         var exitQuote = state.Direction == TradeDirection.Buy ? spot.Bid : spot.Ask;
         var hit = state.Direction == TradeDirection.Buy
           ? exitQuote >= target
@@ -1349,7 +1367,7 @@ public sealed class AutoTradeEngine(
         var groupBooked = GroupBookedPnl(currentGroup) + realized;
         var initialBooked = InitialBookedPnl(currentGroup)
           + (state.TrancheIndex == 1 ? realized : 0m);
-        var realizedPips = SignedPips(state, fill, symbol);
+        var realizedPips = SignedPips(state, fill);
         var groupPipVolume = GroupRealizedPipVolume(currentGroup)
           + realizedPips * closeVolume;
         var initialPipVolume = InitialRealizedPipVolume(currentGroup)
@@ -1454,6 +1472,7 @@ public sealed class AutoTradeEngine(
       state,
       completedTargetIndex,
       symbol,
+      options.PipSize,
       options.BreakEvenBufferPips
     );
     if (move is null)
@@ -1829,13 +1848,12 @@ public sealed class AutoTradeEngine(
     return weights;
   }
 
-  private static decimal TargetPrice(
+  private decimal TargetPrice(
     AutoTradePositionState state,
-    int targetPips,
-    SymbolInfo symbol
+    int targetPips
   ) => state.Direction == TradeDirection.Buy
-    ? state.EntryPrice + targetPips * VolumePlanner.PipSize(symbol)
-    : state.EntryPrice - targetPips * VolumePlanner.PipSize(symbol);
+    ? state.EntryPrice + targetPips * options.PipSize
+    : state.EntryPrice - targetPips * options.PipSize;
 
   private static int TargetOrdinal(AutoTradePositionState state, int index) =>
     state.TargetOrdinals is { } ordinals && index < ordinals.Count

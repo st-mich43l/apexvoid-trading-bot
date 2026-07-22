@@ -36,6 +36,7 @@ public static class ScaleInPlanner
     decimal bookedPnl,
     IReadOnlyList<TrancheExposure> openTranches,
     bool requireRiskFree,
+    decimal pipSize,
     SymbolInfo symbol,
     IReadOnlyList<int> targetsPips,
     IReadOnlyList<int> targetWeights
@@ -48,6 +49,7 @@ public static class ScaleInPlanner
       || addRiskFraction <= 0
       || addRiskFraction > 1
       || addStopPips <= 0
+      || pipSize <= 0
     )
     {
       return Reject("add sizing inputs are invalid");
@@ -58,6 +60,7 @@ public static class ScaleInPlanner
     var stopPnl = openTranches.Sum(item => StopPnl(
       item,
       pipValuePerLot,
+      pipSize,
       symbol
     ));
     var currentWorstCase = bookedPnl + stopPnl;
@@ -192,13 +195,14 @@ public static class ScaleInPlanner
   public static decimal StopPnl(
     TrancheExposure tranche,
     decimal pipValuePerLot,
+    decimal pipSize,
     SymbolInfo symbol
   )
   {
     var move = tranche.Direction == TradeDirection.Buy
       ? tranche.StopLoss - tranche.EntryPrice
       : tranche.EntryPrice - tranche.StopLoss;
-    var pips = move / VolumePlanner.PipSize(symbol);
+    var pips = move / pipSize;
     return pips * Lots(tranche.RemainingVolume, symbol) * pipValuePerLot;
   }
 

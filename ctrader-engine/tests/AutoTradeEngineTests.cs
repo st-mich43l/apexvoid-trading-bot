@@ -12,7 +12,7 @@ public sealed class AutoTradeEngineTests
     "XAUUSD",
     7,
     Digits: 2,
-    PipPosition: 1,
+    PipPosition: 2,
     MinVolume: 100,
     StepVolume: 100,
     MaxVolume: 100_000,
@@ -322,9 +322,71 @@ public sealed class AutoTradeEngineTests
 
     Assert.Empty(client.Orders);
     var rejected = Assert.Single(store.Events, item => item.Type == "rejected");
-    Assert.Contains("entry moved", rejected.Message);
+    Assert.Contains("entry distance rejected", rejected.Message);
+    Assert.Contains("raw=2.70 pip=0.1 -> 27.0 pips, cap 10.0", rejected.Message);
     Assert.DoesNotContain(store.Events, item => item.Type == "error");
     Assert.Equal("1-0", store.Cursor);
+    cts.Cancel();
+    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+  }
+
+  [Fact]
+  public async Task ProductionSpreadUsesConfiguredPipDespiteBrokerMetadata()
+  {
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+    var store = new FakeAutoTradeStore(CandidateJson(
+      entryLow: 4030m,
+      entryHigh: 4031m,
+      structureSwing: 4024m
+    ));
+    var client = new FakeTradingClient();
+    var engine = new AutoTradeEngine(Options(), store, () => Now, _ => { });
+    await engine.ObserveSpotAsync(
+      new SpotPrice("XAU", 4030.12m, 4030.21m, Now.ToUnixTimeSeconds()),
+      cts.Token
+    );
+
+    var run = engine.RunSessionAsync(client, Symbol, cts.Token);
+    await store.Ordered.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+    Assert.Equal(0.01m, VolumePlanner.BrokerPipSize(Symbol));
+    Assert.Single(client.Orders);
+    Assert.DoesNotContain(store.Events, item => item.Type == "rejected");
+    cts.Cancel();
+    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+  }
+
+  [Fact]
+  public async Task ProductionSpreadShowsOldOneCentPipRejectionArithmetic()
+  {
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+    var store = new FakeAutoTradeStore(CandidateJson(
+      entryLow: 4030m,
+      entryHigh: 4031m,
+      structureSwing: 4024m
+    ));
+    var client = new FakeTradingClient();
+    var oldUnits = Options() with
+    {
+      PipSize = 0.01m,
+      ContractSize = 1_000m,
+    };
+    var engine = new AutoTradeEngine(oldUnits, store, () => Now, _ => { });
+    await engine.ObserveSpotAsync(
+      new SpotPrice("XAU", 4030.12m, 4030.21m, Now.ToUnixTimeSeconds()),
+      cts.Token
+    );
+
+    var run = engine.RunSessionAsync(client, Symbol, cts.Token);
+    await store.CursorAdvanced.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+    Assert.Empty(client.Orders);
+    var rejected = Assert.Single(store.Events, item => item.Type == "rejected");
+    Assert.Contains(
+      "spread rejected: bid=4030.12 ask=4030.21 raw=0.09 "
+      + "pip=0.01 -> 9.0 pips, cap 5.0",
+      rejected.Message
+    );
     cts.Cancel();
     await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
   }
@@ -727,16 +789,13 @@ public sealed class AutoTradeEngineTests
   [Fact]
   public async Task TrendCandidateUsesTrendStopBandInsteadOfAddBand()
   {
-    // Raw structure distance (after StructureStopPlanner's existing
-    // AddStopBufferAtr buffer, applied identically on both paths) is 103
-    // pips: outside the legacy/add band's 15-65 pip clamp ceiling, but
-    // inside the trend band's 40-120 range. Same raw swing fed through
-    // each path proves StructureStop() is actually branching on
-    // IsTrendCandidate rather than always reusing the add band.
+    // The same raw 20-pip structure stop stays at 20 on the legacy path but
+    // clamps to the trend family's 40-pip minimum. Both paths now share the
+    // same 65-pip maximum risk envelope.
     using (var trendCts = new CancellationTokenSource(TimeSpan.FromSeconds(5)))
     {
       var trendStore = new FakeAutoTradeStore(
-        TrendCandidateJson(structureSwing: 3990.2m)
+        TrendCandidateJson(structureSwing: 3998.5m)
       );
       var trendClient = new FakeTradingClient();
       var trendEngine = new AutoTradeEngine(Options(), trendStore, () => Now, _ => { });
@@ -748,7 +807,7 @@ public sealed class AutoTradeEngineTests
       await trendStore.Ordered.Task.WaitAsync(TimeSpan.FromSeconds(2));
 
       var trendOrder = Assert.Single(trendClient.Orders);
-      Assert.Equal(1_030_000, trendOrder.RelativeStopLoss);
+      Assert.Equal(400_000, trendOrder.RelativeStopLoss);
 
       trendCts.Cancel();
       await Assert.ThrowsAnyAsync<OperationCanceledException>(() => trendRun);
@@ -757,7 +816,7 @@ public sealed class AutoTradeEngineTests
     using (var legacyCts = new CancellationTokenSource(TimeSpan.FromSeconds(5)))
     {
       var legacyStore = new FakeAutoTradeStore(
-        CandidateJson(structureSwing: 3990.2m)
+        CandidateJson(structureSwing: 3998.5m)
       );
       var legacyClient = new FakeTradingClient();
       var legacyEngine = new AutoTradeEngine(Options(), legacyStore, () => Now, _ => { });
@@ -769,7 +828,7 @@ public sealed class AutoTradeEngineTests
       await legacyStore.Ordered.Task.WaitAsync(TimeSpan.FromSeconds(2));
 
       var legacyOrder = Assert.Single(legacyClient.Orders);
-      Assert.Equal(650_000, legacyOrder.RelativeStopLoss);
+      Assert.Equal(200_000, legacyOrder.RelativeStopLoss);
 
       legacyCts.Cancel();
       await Assert.ThrowsAnyAsync<OperationCanceledException>(() => legacyRun);

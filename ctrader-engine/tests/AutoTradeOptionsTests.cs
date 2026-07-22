@@ -59,6 +59,21 @@ public sealed class AutoTradeOptionsTests
     Assert.Throws<AutoTradeConfigurationException>(
       () => (Options() with { TrendStopMinPips = 150, TrendStopMaxPips = 120 }).Validate()
     );
+    Assert.Throws<AutoTradeConfigurationException>(
+      () => (Options() with { TrendStopMaxPips = 120 }).Validate()
+    );
+  }
+
+  [Fact]
+  public void RejectsInconsistentPipContractAtStartup()
+  {
+    var error = Assert.Throws<AutoTradeConfigurationException>(
+      () => (Options() with { PipSize = 0.01m }).Validate()
+    );
+
+    Assert.Contains("pip value inconsistent", error.Message);
+    Assert.Contains("PipValuePerLot=10", error.Message);
+    Assert.Contains("ContractSize 100 x PipSize 0.01 = 1.00", error.Message);
   }
 
   private static AutoTradeOptions Options() => new(

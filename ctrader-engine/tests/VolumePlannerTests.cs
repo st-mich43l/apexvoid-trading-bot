@@ -9,7 +9,7 @@ public sealed class VolumePlannerTests
     "XAUUSD",
     7,
     Digits: 2,
-    PipPosition: 1,
+    PipPosition: 2,
     MinVolume: 100,
     StepVolume: 100,
     MaxVolume: 100_000,
@@ -73,6 +73,31 @@ public sealed class VolumePlannerTests
   {
     Assert.Equal(200, VolumePlanner.VolumeForLots(0.02m, Symbol));
     Assert.Equal(900, VolumePlanner.VolumeForLots(0.09m, Symbol));
+  }
+
+  [Fact]
+  public void LiveAccountSizingFloorsWithinTwoPercentRiskBudget()
+  {
+    var result = VolumePlanner.SizeInitial(
+      balance: 2_072.02m,
+      riskPercent: 2m,
+      stopPips: 60m,
+      pipValuePerLot: 10m,
+      Symbol,
+      [30, 60, 90, 120, 200],
+      [20, 20, 20, 20, 20]
+    );
+
+    Assert.Equal(600, result.Volume);
+    Assert.Equal(0.06m, result.Lots);
+    Assert.Equal(36m, result.Lots * result.StopPips * 10m);
+    Assert.True(result.Lots * result.StopPips * 10m <= result.Budget);
+  }
+
+  [Fact]
+  public void BrokerPipSizeIsDiagnosticOnly()
+  {
+    Assert.Equal(0.01m, VolumePlanner.BrokerPipSize(Symbol));
   }
 
   [Theory]

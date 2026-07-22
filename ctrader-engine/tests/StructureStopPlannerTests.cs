@@ -9,7 +9,7 @@ public sealed class StructureStopPlannerTests
     "XAUUSD",
     7,
     Digits: 2,
-    PipPosition: 1,
+    PipPosition: 2,
     MinVolume: 100,
     StepVolume: 100,
     MaxVolume: 100_000,
@@ -33,6 +33,7 @@ public sealed class StructureStopPlannerTests
       bufferAtr: 0.3m,
       minimumStopPips: 15,
       maximumStopPips: 65,
+      pipSize: 0.1m,
       Symbol
     );
 
@@ -61,6 +62,7 @@ public sealed class StructureStopPlannerTests
       bufferAtr: 0.3m,
       minimumStopPips: 15,
       maximumStopPips: 65,
+      pipSize: 0.1m,
       Symbol
     );
 

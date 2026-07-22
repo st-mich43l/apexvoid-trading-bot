@@ -90,6 +90,10 @@ dated section after deployment.
 
 ### Changed
 
+- Auto-trade pip size is now configuration-owned (`0.1` for XAUUSD) instead of
+  broker-derived, with a startup invariant across pip size, 100 oz contract
+  size, and pip value per lot; the trend-stop maximum is now 65 pips to match
+  the existing 6.5-price risk envelope.
 - Switched the demo auto-trade account from Fusion Markets to FP Markets;
   `AUTO_TRADE_EXPECTED_BROKER` default moved from `Fusion` to `fpmarkets`
   (matches the `fpmarketssc` broker string cTrader reports). Credentials
@@ -158,6 +162,8 @@ dated section after deployment.
 
 ### Fixed
 
+- Fixed a 10x pip-unit mismatch that blocked every auto-trade candidate on FP
+  Markets (`pipPosition=2`); brokers reporting `pipPosition=1` were unaffected.
 - Startup recovery from a rejected cTrader access token no longer sends a
   duplicate account-authorization request after refresh already authorized the
   channel, avoiding the `ALREADY_LOGGED_IN` reconnect loop.

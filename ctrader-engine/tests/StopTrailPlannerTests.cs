@@ -9,7 +9,7 @@ public sealed class StopTrailPlannerTests
     "XAUUSD",
     7,
     Digits: 2,
-    PipPosition: 1
+    PipPosition: 2
   );
 
   [Theory]
@@ -24,27 +24,27 @@ public sealed class StopTrailPlannerTests
   {
     var state = State(direction);
     var tp1 = Assert.IsType<StopTrailMove>(
-      StopTrailPlanner.Plan(state, 0, Symbol, 3)
+      StopTrailPlanner.Plan(state, 0, Symbol, 0.1m, 3)
     );
     Assert.Equal(Convert.ToDecimal(afterTp1), tp1.StopLoss);
     Assert.Equal("BE+3", tp1.Label);
     state = state with { CurrentStopLoss = tp1.StopLoss };
 
-    Assert.Null(StopTrailPlanner.Plan(state, 1, Symbol, 3));
+    Assert.Null(StopTrailPlanner.Plan(state, 1, Symbol, 0.1m, 3));
 
     var tp3 = Assert.IsType<StopTrailMove>(
-      StopTrailPlanner.Plan(state, 2, Symbol, 3)
+      StopTrailPlanner.Plan(state, 2, Symbol, 0.1m, 3)
     );
     Assert.Equal(Convert.ToDecimal(afterTp3), tp3.StopLoss);
     Assert.Equal("TP1", tp3.Label);
     state = state with { CurrentStopLoss = tp3.StopLoss };
 
     var tp4 = Assert.IsType<StopTrailMove>(
-      StopTrailPlanner.Plan(state, 3, Symbol, 3)
+      StopTrailPlanner.Plan(state, 3, Symbol, 0.1m, 3)
     );
     Assert.Equal(Convert.ToDecimal(afterTp4), tp4.StopLoss);
     Assert.Equal("TP2", tp4.Label);
-    Assert.Null(StopTrailPlanner.Plan(state, 4, Symbol, 3));
+    Assert.Null(StopTrailPlanner.Plan(state, 4, Symbol, 0.1m, 3));
   }
 
   [Fact]
@@ -58,7 +58,7 @@ public sealed class StopTrailPlannerTests
     };
 
     var move = Assert.IsType<StopTrailMove>(
-      StopTrailPlanner.Plan(state, 1, Symbol, 3)
+      StopTrailPlanner.Plan(state, 1, Symbol, 0.1m, 3)
     );
 
     Assert.Equal(4003.2m, move.StopLoss);
@@ -78,7 +78,7 @@ public sealed class StopTrailPlannerTests
       CurrentStopLoss = Convert.ToDecimal(currentStop),
     };
 
-    Assert.Null(StopTrailPlanner.Plan(state, 0, Symbol, 3));
+    Assert.Null(StopTrailPlanner.Plan(state, 0, Symbol, 0.1m, 3));
   }
 
   private static AutoTradePositionState State(TradeDirection direction) => new(

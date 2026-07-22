@@ -227,6 +227,52 @@ public sealed class ReconnectTests
   }
 
   [Fact]
+  public async Task StartupWarnsThatBrokerPipPositionIsDiagnosticOnly()
+  {
+    using var temp = new TempHeartbeat();
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+    var warnings = new List<string>();
+    var client = new FakeCTraderClient
+    {
+      Symbol = new SymbolInfo(
+        "XAU",
+        "XAUUSD",
+        41,
+        Digits: 2,
+        PipPosition: 2,
+        MinVolume: 100,
+        StepVolume: 100,
+        MaxVolume: 200_000,
+        LotSize: 10_000
+      ),
+      CancelOnLiveStart = () => cts.Cancel(),
+    };
+    var runner = new FeedRunner(
+      TestOptions(temp.Path),
+      () => client,
+      new RecordingSink(),
+      new HealthFile(temp.Path),
+      _ => TimeSpan.Zero,
+      warningLog: warnings.Add,
+      autoTrade: new AutoTradeEngine(
+        AutoOptions(),
+        new FaultAutoTradeStore(),
+        log: _ => { }
+      )
+    );
+
+    await Assert.ThrowsAnyAsync<OperationCanceledException>(
+      () => runner.RunOneSessionAsync(cts.Token)
+    );
+
+    var warning = Assert.Single(warnings);
+    Assert.Contains("auto-trade units: pipSize=0.1 (configured)", warning);
+    Assert.Contains("brokerPipPosition=2 (->0.01, ignored)", warning);
+    Assert.Contains("contractSize=100 pipValuePerLot=10.00", warning);
+    Assert.Contains("symbol=XAUUSD digits=2 lotSize=10000", warning);
+  }
+
+  [Fact]
   public async Task StrictLiveGrantDisablesAutoTradeWhileFeedKeepsStreaming()
   {
     using var temp = new TempHeartbeat();
@@ -344,6 +390,7 @@ internal sealed class FakeCTraderClient : ICTraderFeedClient, ICTraderTradeClien
   public int TradingAccountRequests { get; private set; }
   public Exception? RefreshException { get; init; }
   public int RefreshCount { get; private set; }
+  public SymbolInfo Symbol { get; init; } = new("XAU", "XAUUSD", 7, 2);
 
   public Task ConnectAndAuthorizeAsync(CancellationToken cancellationToken)
   {
@@ -362,7 +409,7 @@ internal sealed class FakeCTraderClient : ICTraderFeedClient, ICTraderTradeClien
   public Task<SymbolInfo> ResolveSymbolAsync(CancellationToken cancellationToken)
   {
     ResolveCount++;
-    return Task.FromResult(new SymbolInfo("XAU", "XAUUSD", 7, 2));
+    return Task.FromResult(Symbol);
   }
 
   public Task<IReadOnlyList<RawTrendbar>> GetTrendbarsAsync(

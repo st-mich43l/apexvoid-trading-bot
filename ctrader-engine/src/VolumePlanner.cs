@@ -219,7 +219,11 @@ public static class VolumePlanner
     return steps.Select(step => step * symbol.StepVolume).ToArray();
   }
 
-  public static decimal PipSize(SymbolInfo symbol)
+  /// <summary>
+  /// Derives the broker-reported pip size for diagnostics only. Price-to-pip
+  /// conversions must use the configured AutoTradeOptions.PipSize value.
+  /// </summary>
+  public static decimal BrokerPipSize(SymbolInfo symbol)
   {
     var divisor = 1m;
     for (var index = 0; index < symbol.PipPosition; index++)
@@ -227,6 +231,21 @@ public static class VolumePlanner
       divisor *= 10m;
     }
     return 1m / divisor;
+  }
+
+  public static (string Message, bool Differs) PipUnitDiagnostic(
+    SymbolInfo symbol,
+    AutoTradeOptions options
+  )
+  {
+    var brokerPipSize = BrokerPipSize(symbol);
+    var message = $"auto-trade units: pipSize={options.PipSize} (configured) "
+      + $"brokerPipPosition={symbol.PipPosition} (->{brokerPipSize}, ignored) "
+      + $"contractSize={options.ContractSize} "
+      + $"pipValuePerLot={options.PipValuePerLot:0.00} "
+      + $"symbol={symbol.CTraderSymbol} digits={symbol.Digits} "
+      + $"lotSize={symbol.LotSize}";
+    return (message, brokerPipSize != options.PipSize);
   }
 
   private static long MinimumStepsPerClose(SymbolInfo symbol) => Math.Max(
