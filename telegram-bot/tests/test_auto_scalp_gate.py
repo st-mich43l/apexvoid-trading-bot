@@ -326,6 +326,83 @@ def test_m1_consolidation_box_requires_repeated_two_edge_auctions():
   assert box.inside_ratio >= 0.82
 
 
+def test_missing_and_insufficient_frame_states_carry_reasons():
+  assert gate.evaluate_auto_scalp_gate(
+    {}, symbol="XAU", spot_price=100.0,
+  ).reasons
+  assert gate.evaluate_auto_scalp_gate(
+    {"M1": _frame(5, "1min"), "M5": _frame(5, "5min"), "M15": _frame(5, "15min")},
+    symbol="XAU",
+    spot_price=100.0,
+  ).reasons
+
+
+def test_invalid_atr_state_carries_reasons():
+  flat_index = pd.date_range("2026-07-20", periods=80, freq="1min", tz="UTC")
+  flat = pd.DataFrame({
+    "open": [100.0] * 80,
+    "high": [100.0] * 80,
+    "low": [100.0] * 80,
+    "close": [100.0] * 80,
+  }, index=flat_index)
+  decision = gate.evaluate_auto_scalp_gate(
+    {"M1": flat, "M5": flat, "M15": flat},
+    symbol="XAU",
+    spot_price=100.0,
+  )
+  assert decision.state == "invalid_atr"
+  assert decision.reasons
+
+
+def test_waiting_for_box_state_carries_reasons():
+  frames = _frames({
+    "open": 99.50, "high": 100.85, "low": 99.40, "close": 100.75,
+  })
+  decision = gate.evaluate_auto_scalp_gate(frames, symbol="XAU", spot_price=100.75)
+  assert decision.state == "waiting_for_box"
+  assert decision.reasons
+
+
+def test_target_blocked_state_carries_reasons(monkeypatch):
+  support = _rail("support", 100.0, touches=3)
+  resistance = _rail("resistance", 105.7)
+  monkeypatch.setattr(
+    gate, "_m1_consolidation_box", lambda m1, atr, symbol: _box(support, resistance),
+  )
+  frames = _frames({
+    "open": 100.25, "high": 100.70, "low": 99.85, "close": 100.55,
+  })
+  decision = gate.evaluate_auto_scalp_gate(frames, symbol="XAU", spot_price=100.55)
+  assert decision.state == "target_blocked"
+  assert decision.reasons
+
+
+def test_entry_moved_state_carries_reasons(monkeypatch):
+  support = _rail("support", 100.0, touches=3)
+  resistance = _rail("resistance", 106.3)
+  monkeypatch.setattr(
+    gate, "_m1_consolidation_box", lambda m1, atr, symbol: _box(support, resistance),
+  )
+  frames = _frames({
+    "open": 100.25, "high": 100.75, "low": 99.85, "close": 100.60,
+  })
+  decision = gate.evaluate_auto_scalp_gate(frames, symbol="XAU", spot_price=105.0)
+  assert decision.state == "entry_moved"
+  assert decision.reasons
+
+
+def test_waiting_rejection_and_waiting_for_touch_states_carry_reasons(monkeypatch):
+  support = _rail("support", 100.0, touches=3)
+  resistance = _rail("resistance", 106.3)
+  monkeypatch.setattr(
+    gate, "_m1_consolidation_box", lambda m1, atr, symbol: _box(support, resistance),
+  )
+  frames = _frames()  # no rejection candle at the last bar -> no trigger
+  decision = gate.evaluate_auto_scalp_gate(frames, symbol="XAU", spot_price=100.5)
+  assert decision.state in ("waiting_rejection", "waiting_for_touch")
+  assert decision.reasons
+
+
 def test_gate_has_no_forming_signal_or_market_map_dependency():
   forbidden = {
     "app.analysis",

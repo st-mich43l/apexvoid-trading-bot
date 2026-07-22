@@ -610,6 +610,12 @@ internal sealed class FaultAutoTradeStore : IAutoTradeStore
     Events.Add(tradeEvent);
     return Task.CompletedTask;
   }
+
+  public Task IncrementGateRejectAsync(
+    string symbol,
+    string condition,
+    CancellationToken cancellationToken
+  ) => Task.CompletedTask;
 }
 
 internal sealed class RecordingSink : IBarSink

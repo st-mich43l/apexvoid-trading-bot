@@ -49,6 +49,35 @@ def test_render_box_open_and_full_tp_as_shareable_cards():
   assert "Auto trade" not in (opened + take_profit)
 
 
+def test_opened_event_renders_strategy_attribution():
+  opened = delivery.render_auto_trade_event({
+    "type": "opened",
+    "message": (
+      "Sell 0.04 lots filled 4,066.78, SL 4,070.63 · 39p structure · "
+      "full TP 50p · range 4,062.00-4,069.00 · risk-bound"
+    ),
+    "position_id": 39025496,
+    "candidate_id": "a" * 64,
+    "setup": "Range Box Scalp",
+    "regime": "chop",
+    "confluence": 3,
+  })
+
+  assert "Range Box Scalp" in opened
+  assert "chop" in opened
+  assert "★★★" in opened
+
+
+def test_opened_event_without_attribution_degrades_gracefully():
+  opened = delivery.render_auto_trade_event({
+    "type": "opened",
+    "message": "Sell 0.04 lots filled 4,066.78, SL 4,070.63 · 39p structure · legacy",
+    "position_id": 1,
+  })
+  assert opened is not None
+  assert "🧭" not in opened
+
+
 def test_render_auto_trade_stop_and_warning_events():
   stop = delivery.render_auto_trade_event({
     "type": "stop_moved",
