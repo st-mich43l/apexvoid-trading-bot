@@ -25,6 +25,7 @@ from app.analysis.session_liquidity import previous_week_levels, session_levels
 from app.analysis.structure import market_structure, structure_breaks
 from app.analysis.swings import find_swings
 from app.analysis.zones import displacement, supply_demand
+from app.autotrade import units
 from app.autotrade.gate import AutoScalpBox, AutoScalpDecision
 
 
@@ -44,7 +45,6 @@ _REJECTION_WICK_FRACTION = 0.3
 # C# side (30,60,90,120,200) so a trend candidate never ships with an empty
 # target list.
 _FALLBACK_TP_PIPS = (30, 60, 90, 120, 200)
-_PIP_SIZE = {"XAU": 0.1}
 _EPS = 1e-9
 
 
@@ -197,7 +197,7 @@ def evaluate_trend_gate(
   live_price = close if spot_price is None else float(spot_price)
   if not math.isfinite(live_price) or live_price <= 0:
     return TrendDecision("invalid_spot")
-  pip_size = _PIP_SIZE.get(symbol.upper(), 1.0)
+  pip_size = units.pip_size(symbol)
 
   if regime.state == "breakout":
     return _evaluate_box_breakout(
@@ -356,7 +356,7 @@ def _breakout_direction_and_age(
   atr: float,
   max_age_bars: int,
 ) -> tuple[str | None, int | None]:
-  pip_size = _PIP_SIZE.get("XAU", 1.0)
+  pip_size = units.pip_size("XAU")
   buffer = max(3 * pip_size, _BREAK_BUFFER_ATR * atr)
   lower_break = box.lower.low - buffer
   upper_break = box.upper.high + buffer
