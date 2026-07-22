@@ -30,6 +30,7 @@ class Settings(BaseSettings):
       "XAU_PUBLIC_CHANNEL_ID",
     ),
   )
+  signal_public_footer: str = ""
   public_show_pips: bool = Field(
     default=True,
     validation_alias=AliasChoices(

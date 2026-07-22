@@ -1065,7 +1065,9 @@ public sealed class AutoTradeEngine(
       hadAdds: hadAdds,
       setup: candidate.Setup,
       regime: candidate.Regime,
-      confluence: candidate.Confluence
+      confluence: candidate.Confluence,
+      stopPips: stopPlan.StopPips,
+      targetsPips: targetPlan.TargetsPips
     );
     return true;
   }
@@ -1293,6 +1295,14 @@ public sealed class AutoTradeEngine(
     return move / options.PipSize;
   }
 
+  private decimal? InitialStopPips(AutoTradePositionState state)
+  {
+    var stop = state.InitialStopLoss ?? state.CurrentStopLoss;
+    return stop is decimal price
+      ? Math.Abs(state.EntryPrice - price) / options.PipSize
+      : null;
+  }
+
   private static decimal WeightedPips(decimal pipVolume, long initialVolume) =>
     initialVolume > 0 ? pipVolume / initialVolume : 0m;
 
@@ -1510,7 +1520,8 @@ public sealed class AutoTradeEngine(
           counterfactualPips: WeightedPips(
             initialPipVolume,
             initialTrancheVolume
-          )
+          ),
+          stopPips: InitialStopPips(state)
         );
         if (remaining <= 0)
         {
@@ -1850,7 +1861,9 @@ public sealed class AutoTradeEngine(
     decimal? counterfactualPips = null,
     string? setup = null,
     string? regime = null,
-    int? confluence = null
+    int? confluence = null,
+    decimal? stopPips = null,
+    IReadOnlyList<int>? targetsPips = null
   ) => store.PublishAutoTradeEventAsync(
     options.EventStream,
     new AutoTradeEvent(
@@ -1873,7 +1886,9 @@ public sealed class AutoTradeEngine(
       counterfactualPips,
       setup,
       regime,
-      confluence
+      confluence,
+      stopPips,
+      targetsPips
     ),
     cancellationToken
   );
