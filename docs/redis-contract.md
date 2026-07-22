@@ -173,9 +173,9 @@ initial `stop_pips`; open events also carry the broker-valid `targets_pips`
 ladder used by that position, so delivery never reconstructs risk from a
 global default.
 
-The dedicated signal bot sends full operational cards to the owner and a
-redacted trade-only profile to `SIGNAL_PUBLIC_CHANNEL_ID` when configured.
-Order message IDs are cached for seven days under
-`auto_trade:msg:{position_id}` (with destination-specific public/group
-namespaces) so TP, stop, close, and scale-in updates reply to their trade root.
-A missing or rejected Telegram reply target falls back to a standalone card.
+The dedicated signal bot sends full operational cards only to the configured
+owner DM. `SIGNAL_PUBLIC_CHANNEL_ID` remains exclusively for manual broadcasts
+from the general bot. Order message IDs are cached for seven days under
+`auto_trade:msg:{position_id}` (plus group namespaces) so TP, stop, close, and
+scale-in updates reply to their trade root. A missing or rejected Telegram
+reply target falls back to a standalone card.

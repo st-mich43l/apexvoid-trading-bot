@@ -24,13 +24,6 @@ _STATS_KEY = "auto_trade:stats"
 _REGIME_ALERT_PENDING_PREFIX = "auto_trade:regime_alert_pending:"
 _REGIME_ALERT_SENT_TTL = 86400
 _TRADE_MESSAGE_TTL = 7 * 24 * 3600
-_PUBLIC_EVENT_TYPES = {
-  "opened",
-  "add",
-  "take_profit",
-  "stop_moved",
-  "position_closed",
-}
 _NOTIFY_TYPES = {
   "ready",
   "dry_run",
@@ -257,7 +250,7 @@ def render_auto_trade_event(
       event,
       message,
       profile,
-      settings.signal_public_footer if footer is None else footer,
+      footer,
     )
     if rendered:
       return rendered
@@ -295,7 +288,7 @@ def render_auto_trade_event(
   elif event_type == "opened":
     _append_public_footer(
       lines,
-      settings.signal_public_footer if footer is None else footer,
+      footer,
     )
   return "\n".join(lines)
 
@@ -590,11 +583,34 @@ async def _check_regime_alerts(client) -> None:
       await send_scanner_with_retry(text, chat_id=settings.telegram_owner_id)
 
 
-async def auto_trade_events_loop() -> None:
-  if not settings.auto_trade_enabled or not (
-    settings.telegram_owner_id or settings.signal_public_channel_id
-  ):
-    return
+async def _process_owner_entries(
+  client,
+  entries,
+  *,
+  cursor: str,
+  chat_id: int,
+  send=None,
+) -> str:
+  for entry_id, fields in entries:
+    try:
+      event = json.loads(fields["payload"])
+    except (KeyError, TypeError, json.JSONDecodeError) as exc:
+      log.warning("Invalid auto-trade event %s: %s", entry_id, exc)
+    else:
+      await _record_group_result(client, event)
+      await _deliver_auto_trade_event(
+        client,
+        event,
+        profile="internal",
+        chat_id=chat_id,
+        send=send,
+      )
+    cursor = entry_id
+    await client.set(_CURSOR_KEY, cursor)
+  return cursor
+
+
+async def _auto_trade_owner_events_loop(*, chat_id: int) -> None:
   client = redis_state.get_client()
   cursor = await client.get(_CURSOR_KEY)
   if not cursor:
@@ -604,7 +620,11 @@ async def auto_trade_events_loop() -> None:
     )
     cursor = latest[0][0] if latest else "0-0"
     await client.set(_CURSOR_KEY, cursor)
-  log.info("Auto-trade event delivery active from Redis cursor %s", cursor)
+  log.info(
+    "Auto-trade owner delivery active for chat %s from Redis cursor %s",
+    chat_id,
+    cursor,
+  )
 
   while True:
     try:
@@ -615,35 +635,24 @@ async def auto_trade_events_loop() -> None:
         block=5000,
       )
       for _, entries in batches:
-        for entry_id, fields in entries:
-          cursor = entry_id
-          await client.set(_CURSOR_KEY, cursor)
-          try:
-            event = json.loads(fields["payload"])
-          except (KeyError, TypeError, json.JSONDecodeError) as exc:
-            log.warning("Invalid auto-trade event %s: %s", entry_id, exc)
-            continue
-          await _record_group_result(client, event)
-          if settings.telegram_owner_id:
-            await _deliver_auto_trade_event(
-              client,
-              event,
-              profile="internal",
-              chat_id=settings.telegram_owner_id,
-            )
-          if (
-            settings.signal_public_channel_id
-            and settings.signal_public_channel_id != settings.telegram_owner_id
-            and event.get("type") in _PUBLIC_EVENT_TYPES
-          ):
-            await _deliver_auto_trade_event(
-              client,
-              event,
-              profile="public",
-              chat_id=settings.signal_public_channel_id,
-            )
+        cursor = await _process_owner_entries(
+          client,
+          entries,
+          cursor=cursor,
+          chat_id=chat_id,
+        )
     except asyncio.CancelledError:
       raise
     except Exception:
-      log.exception("Auto-trade event delivery failed; retrying")
+      cursor = str(await client.get(_CURSOR_KEY) or cursor)
+      log.exception(
+        "Auto-trade owner delivery failed at cursor %s; retrying",
+        cursor,
+      )
       await asyncio.sleep(5)
+
+
+async def auto_trade_events_loop() -> None:
+  if not settings.auto_trade_enabled or not settings.telegram_owner_id:
+    return
+  await _auto_trade_owner_events_loop(chat_id=settings.telegram_owner_id)
