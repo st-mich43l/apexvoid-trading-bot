@@ -19,7 +19,7 @@ from app.autotrade.strategy_match import (
 )
 from app.autotrade.scale_context import AutoScaleContext
 from app.autotrade.trend import RegimeInfo, TrendDecision
-from app.analysis.types import Zone
+from app.analysis.types import Level, Zone
 
 
 def _frame() -> pd.DataFrame:
@@ -737,6 +737,97 @@ async def test_htf_veto_blocks_publish_when_enabled_and_passes_when_disabled(
   passed = await worker._publish_candidate(
     client, "XAU", "2", spot, decision, _scale_context(now),
     htf_zones=untested_demand,
+  )
+  assert passed is not None
+
+
+# --- opposing-barrier veto (22 Jul incident: strategy_match BUY filled 20
+# pips below a published round-number supply level with no check at all) ---
+
+
+def test_opposing_barrier_reason_buy_vetoed_by_nearby_supply_zone():
+  supply = [Zone(4017.5, 4018.0, "supply", touches=2)]
+  reason = worker._opposing_barrier_reason(
+    "BUY", 4017.2, 1.2, supply, [], 0.5,
+  )
+  assert reason is not None
+  assert "supply" in reason
+
+
+def test_opposing_barrier_reason_buy_ignores_supply_outside_buffer():
+  far_supply = [Zone(4020.0, 4020.5, "supply", touches=2)]
+  reason = worker._opposing_barrier_reason(
+    "BUY", 4017.2, 1.2, far_supply, [], 0.5,
+  )
+  assert reason is None
+
+
+def test_opposing_barrier_reason_ignores_zone_behind_entry():
+  # A supply zone below current price is behind a BUY, not ahead of it.
+  behind = [Zone(4010.0, 4011.0, "supply", touches=0)]
+  assert worker._opposing_barrier_reason(
+    "BUY", 4017.2, 1.2, behind, [], 0.5,
+  ) is None
+
+
+def test_opposing_barrier_reason_round_number_level_blocks_either_direction():
+  # A round-number level isn't sided like a Zone: it can cap a BUY from below
+  # or a SELL from above, unlike supply/demand.
+  round_level = [Level(price=4020.0, kind="round", touches=3, band=0.3)]
+  buy_reason = worker._opposing_barrier_reason(
+    "BUY", 4019.5, 1.2, [], round_level, 0.5,
+  )
+  sell_reason = worker._opposing_barrier_reason(
+    "SELL", 4020.5, 1.2, [], round_level, 0.5,
+  )
+  assert buy_reason is not None and "round" in buy_reason
+  assert sell_reason is not None and "round" in sell_reason
+
+
+def test_opposing_barrier_reason_respects_disabled_atr_or_buffer():
+  supply = [Zone(4017.5, 4018.0, "supply", touches=2)]
+  assert worker._opposing_barrier_reason(
+    "BUY", 4017.2, None, supply, [], 0.5,
+  ) is None
+  assert worker._opposing_barrier_reason(
+    "BUY", 4017.2, 1.2, supply, [], 0.0,
+  ) is None
+
+
+@pytest.mark.asyncio
+async def test_opposing_barrier_blocks_strategy_match_into_round_number(
+  monkeypatch,
+):
+  """Reproduces the 22 Jul incident: a Box Breakout-style strategy_match BUY
+  filled straight into an untested round-number supply level. Before this
+  fix, _publish_strategy_match had no opposing-barrier check at all.
+  """
+  client = redis_state.get_client()
+  now = int(datetime.now(timezone.utc).timestamp())
+  match = _strategy_match(now)  # BUY, entry 4016.5-4017.4
+  monkeypatch.setattr(worker.settings, "auto_trade_enabled", True)
+  monkeypatch.setattr(worker.settings, "auto_trade_stream", "auto_trade:test")
+  monkeypatch.setattr(worker.settings, "auto_trade_min_confluence", 2)
+  monkeypatch.setattr(worker.settings, "auto_trade_opposing_barrier_veto_enabled", True)
+  monkeypatch.setattr(worker.settings, "auto_trade_opposing_barrier_atr", 0.5)
+  monkeypatch.setattr(worker, "event_in_window", AsyncMock(return_value=None))
+  spot = worker.AutoTradeSpot(4017.2, now, True)
+  round_level = [Level(price=4017.5, kind="round", touches=4, band=0.1)]
+
+  vetoed = await worker._publish_strategy_match(
+    client, "XAU", spot, match, htf_levels=round_level,
+  )
+  assert vetoed is None
+  reject_count = await client.hget(
+    "auto_trade:gate_reject:XAU:opposing_barrier", "count",
+  )
+  assert reject_count is not None and int(reject_count) >= 1
+
+  monkeypatch.setattr(
+    worker.settings, "auto_trade_opposing_barrier_veto_enabled", False,
+  )
+  passed = await worker._publish_strategy_match(
+    client, "XAU", spot, match, htf_levels=round_level,
   )
   assert passed is not None
 

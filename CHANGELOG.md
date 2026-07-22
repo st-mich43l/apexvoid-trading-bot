@@ -125,6 +125,14 @@ dated section after deployment.
 
 ### Fixed
 
+- Added an opposing-barrier veto (`AUTO_TRADE_OPPOSING_BARRIER_VETO_ENABLED`)
+  for HTF supply/demand zones and round-number/reaction key levels sitting
+  just ahead of an entry, and wired it into `_publish_strategy_match` (the
+  scanner-bridge path), which previously had no opposing-zone check of any
+  kind — the existing `AUTO_TRADE_HTF_VETO_ENABLED` check only protects the
+  zone a trade retests *from*, not what could cap the move ahead of it.
+  Fixes a 22 Jul incident where a Box Breakout BUY filled straight into an
+  untested round-number supply level with nothing checking for it.
 - Connected structural Market Map zones to an executable `Mapped Zone
   Reaction` strategy: Algo now evaluates M1 touches/rejections with
   M5/M15/M30 context instead of showing a valid map level while producing no

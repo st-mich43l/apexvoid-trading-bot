@@ -200,6 +200,14 @@ class Settings(BaseSettings):
   # HTF supply/demand veto (worker.py only - gate.py/trend.py stay untouched).
   # Kill switch so the veto can be disabled without a redeploy if too strict.
   auto_trade_htf_veto_enabled: bool = True
+  # Opposing-barrier veto added after the 22 Jul incident where a strategy-
+  # match BUY filled straight into an untested round-number supply level with
+  # no check at all (unlike the box-scalp/trend paths, which only check the
+  # zone a trade retests *from*, not what could cap the move ahead of it).
+  # Separate kill switch from auto_trade_htf_veto_enabled so either check can
+  # be disabled independently if it proves too strict.
+  auto_trade_opposing_barrier_veto_enabled: bool = True
+  auto_trade_opposing_barrier_atr: float = 0.5
   # Trend/breakout regime classifier (app/autotrade/trend.py). Named with a
   # trend_/auto_trade_trend_ prefix to avoid colliding with the existing
   # scanner-owned breakout_accept_bars/breakout_max_age_bars fields above,
