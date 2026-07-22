@@ -224,6 +224,18 @@ class Settings(BaseSettings):
   regime_chop_alert_share: float = 0.75
   auto_trade_trend_enabled: bool = False  # kill switch — default OFF
 
+  # `/ algo` DM suffix on a manual signal — owner opt-in per signal to also
+  # arm cTrader broker-side execution using the owner's exact entered SL/TP,
+  # instead of staying notify-only. Entirely independent of the AUTO_TRADE_*
+  # box-scalp/trend engine flags above (different signal source, different
+  # stop policy). Ships dark: no broker consumes manual_trade_intent_stream
+  # yet, this only builds and publishes the contract.
+  manual_algo_enabled: bool = False
+  manual_algo_dry_run: bool = True
+  manual_algo_risk_pct: float = 2.0
+  manual_trade_intent_stream: str = "manual_trade:intents"
+  manual_trade_intent_stream_maxlen: int = 1000
+
   @property
   def telegram_chat_id(self) -> str:
     """Backward-compatible name for existing deployments and call sites."""

@@ -162,6 +162,54 @@ async def init_db() -> None:
     await db.execute(
       "UPDATE manual_signals SET original_sl = sl WHERE original_sl IS NULL"
     )
+    # Migration: execution lifecycle columns for the opt-in `/ algo` DM
+    # suffix (manual-signal broker execution, PR 2 of 3 — infra only, no
+    # broker consumes these yet). Every pre-existing row predates broker
+    # execution entirely, so NULL/default is correct for all of them; there
+    # is nothing to backfill, unlike original_sl above.
+    await db.execute(
+      # 'notify' (default, today's behavior) | 'algo' (owner armed broker
+      # execution for this signal via the `/ algo` suffix).
+      "ALTER TABLE manual_signals "
+      "ADD COLUMN IF NOT EXISTS execution_mode TEXT NOT NULL DEFAULT 'notify'"
+    )
+    await db.execute(
+      # NULL (never armed) | 'armed' | 'filled' | 'closed' | 'cancelled' |
+      # 'rejected' | 'error'.
+      "ALTER TABLE manual_signals "
+      "ADD COLUMN IF NOT EXISTS execution_status TEXT"
+    )
+    await db.execute(
+      # Stable id of the published ManualTradeIntent, 'manual:<id>:<revision>'.
+      "ALTER TABLE manual_signals "
+      "ADD COLUMN IF NOT EXISTS execution_intent_id TEXT"
+    )
+    await db.execute(
+      # Bumped each time a new intent is published for the same signal
+      # (e.g. a re-arm after SL/TP edit) — not used anywhere yet in this PR.
+      "ALTER TABLE manual_signals "
+      "ADD COLUMN IF NOT EXISTS execution_revision INTEGER NOT NULL DEFAULT 0"
+    )
+    await db.execute(
+      # Broker-side position id once filled. Internal only — never rendered
+      # to Telegram.
+      "ALTER TABLE manual_signals "
+      "ADD COLUMN IF NOT EXISTS broker_position_id TEXT"
+    )
+    await db.execute(
+      # Actual broker fill price, once filled.
+      "ALTER TABLE manual_signals "
+      "ADD COLUMN IF NOT EXISTS broker_fill_price DOUBLE PRECISION"
+    )
+    await db.execute(
+      # Last error message from an arm/fill/close attempt, if any.
+      "ALTER TABLE manual_signals "
+      "ADD COLUMN IF NOT EXISTS execution_error TEXT"
+    )
+    await db.execute(
+      "CREATE INDEX IF NOT EXISTS idx_manual_signals_execution_intent_id "
+      "ON manual_signals(execution_intent_id)"
+    )
     await db.execute(
       "CREATE INDEX IF NOT EXISTS idx_manual_signals_status "
       "ON manual_signals(status)"
@@ -427,8 +475,15 @@ async def store_manual_signal(
   confluence: int | None = None,
   symbol: str = "XAU",
   visibility: str = "both",
+  execution_mode: str = "notify",
 ) -> dict:
   """Insert a manual signal and return its primary and daily display ids.
+
+  Args:
+    execution_mode: ``'notify'`` (default) posts to the channel only, as
+      today. ``'algo'`` additionally arms broker-side execution (handled by
+      the caller — this function only persists the flag, it does not branch
+      on it).
 
   Returns:
     A dict containing the primary key ``id`` and today's ``daily_seq``.
@@ -457,13 +512,13 @@ async def store_manual_signal(
         INSERT INTO manual_signals
           (ts, action, entry, entry_end, sl, original_sl, tps, order_type,
            channel_message_id, daily_seq, trade_date, parent_id,
-           setup_type, confluence, symbol, visibility)
-        VALUES ($1, $2, $3, $4, $5, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+           setup_type, confluence, symbol, visibility, execution_mode)
+        VALUES ($1, $2, $3, $4, $5, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
         RETURNING id
         """,
         ts, action, entry, entry_end, sl, json.dumps(tps), "zone",
         channel_message_id, daily_seq, trade_date, parent_id,
-        setup_type, confluence, symbol, visibility,
+        setup_type, confluence, symbol, visibility, execution_mode,
       )
   return {
     "id": new_id,
@@ -841,6 +896,46 @@ async def update_sl(row_id: int, price: float) -> dict | None:
         price, row_id,
       )
     return dict(row)
+
+
+async def set_execution_intent(
+  signal_id: int,
+  *,
+  intent_id: str,
+  status: str,
+  revision: int,
+) -> dict | None:
+  """Attach a freshly published ManualTradeIntent to its signal row.
+
+  Returns the updated row, or ``None`` if ``signal_id`` does not exist.
+  """
+  async with _connect() as db:
+    row = await db.fetchrow(
+      "UPDATE manual_signals SET execution_intent_id = $1, "
+      "execution_status = $2, execution_revision = $3 "
+      "WHERE id = $4 RETURNING *",
+      intent_id, status, revision, signal_id,
+    )
+  return _decode_signal(row) if row else None
+
+
+async def set_execution_status(
+  signal_id: int,
+  status: str,
+  *,
+  error: str | None = None,
+) -> dict | None:
+  """Update the execution lifecycle status (and optional error) on a signal.
+
+  Returns the updated row, or ``None`` if ``signal_id`` does not exist.
+  """
+  async with _connect() as db:
+    row = await db.fetchrow(
+      "UPDATE manual_signals SET execution_status = $1, execution_error = $2 "
+      "WHERE id = $3 RETURNING *",
+      status, error, signal_id,
+    )
+  return _decode_signal(row) if row else None
 
 
 async def get_manual_signal_by_channel_id(channel_message_id: int) -> dict | None:

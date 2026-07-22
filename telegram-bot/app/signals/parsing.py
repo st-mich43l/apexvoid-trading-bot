@@ -28,6 +28,7 @@ SETUP_RESERVED_WORDS = frozenset({
   "scalp",
   "scalp-nhanh",
   "quick-scalp",
+  "algo",
   "sl",
   "tp",
   "entry",
@@ -45,6 +46,12 @@ _SETUP_SUFFIX_RE = re.compile(
 _SCALP_SUFFIX_RE = re.compile(
   r'(?i)\s*/\s*(?:scalp|scalp[-_\s]*nhanh|quick[-_\s]*scalp)'
   r'(?=\s*(?:/|$))'
+)
+# Owner opt-in to arm broker-side execution for this signal (see
+# app.signals.manual_intent). Composes with /vip and /scalp exactly like
+# they compose with each other — stripped independently, order-agnostic.
+_ALGO_SUFFIX_RE = re.compile(
+  r'(?i)\s*/\s*algo(?=\s*(?:/|$))'
 )
 _ACTIVE_RE = re.compile(r'(?i)^\s*active(?:\s+#?(\d+))?\s*$')
 _CLOSE_RE = re.compile(
@@ -101,6 +108,7 @@ def _parse_manual(text: str) -> Optional[dict]:
     raw,
   )
   raw, scalp_count = _SCALP_SUFFIX_RE.subn("", raw)
+  raw, algo_count = _ALGO_SUFFIX_RE.subn("", raw)
   setup_type = None
   confluence = None
   setup_match = _SETUP_SUFFIX_RE.search(raw)
@@ -149,6 +157,7 @@ def _parse_manual(text: str) -> Optional[dict]:
     'setup_type': setup_type,
     'confluence': confluence,
     'visibility': 'vip' if vip_count else 'both',
+    'execution_mode': 'algo' if algo_count else 'notify',
   }
 
 
