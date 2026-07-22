@@ -461,11 +461,30 @@ async def auto_trade_status_text() -> str:
   if settings.auto_trade_enabled:
     gate_state = "waiting for M1 close"
     zone_text = ""
+    gate_name = "independent M1 two-edge box scalp"
+    forming_text = ""
+    gate_reason = ""
     raw = await client.get("auto_trade:last_gate")
     if raw:
       try:
         payload = json.loads(raw)
         gate_state = str(payload.get("state") or gate_state)
+        reasons = payload.get("reasons")
+        if isinstance(reasons, list) and reasons:
+          gate_reason = str(reasons[-1])
+        if payload.get("gate_source") == "market_map_forming":
+          gate_name = "Market Map + forming + M1"
+          forming = payload.get("forming_setup")
+          if isinstance(forming, dict):
+            direction = str(forming.get("direction") or "")
+            source_tf = str(forming.get("source_tf") or "")
+            confirmation = str(
+              forming.get("m5_confirmation") or ""
+            ).replace("_", " ")
+            forming_text = (
+              f" · {direction} {source_tf}"
+              f" · {confirmation}"
+            ).rstrip(" ·")
         box = payload.get("box")
         if isinstance(box, dict):
           low = float(box["low"])
@@ -496,9 +515,11 @@ async def auto_trade_status_text() -> str:
         f"<b>{shares.get('trend', 0.0):.0%}</b> · breakout "
         f"<b>{shares.get('breakout', 0.0):.0%}</b>"
       )
+    reason_line = f"\nWhy: {escape(gate_reason)}" if gate_reason else ""
     gate_line = (
-      "\nGate: <b>independent M1 two-edge box scalp</b>"
+      f"\nGate: <b>{escape(gate_name)}</b>{escape(forming_text)}"
       f"\nLast check: <b>{escape(gate_state)}</b>{escape(zone_text)}"
+      f"{reason_line}"
       f"{regime_line}"
     )
   return (

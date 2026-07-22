@@ -1,8 +1,9 @@
-"""Redis worker for the independent automatic M1 range-scalp gate.
+"""Redis worker for ApexVoid Algo's private and scanner-bridged gates.
 
-This worker consumes only cTrader OHLC/spot keys and writes executable
-candidates to the auto-trade Redis stream. It deliberately has no scanner,
-forming-signal, Market Map, detector, or Telegram dependency.
+The worker always consumes cTrader OHLC/spot keys.  An optional, typed Redis
+contract lets a Market Map-aligned forming setup nominate the active range;
+the worker still owns M1 timing and every execution safety check.  It never
+parses Telegram text or imports scanner/detector/Market Map modules.
 """
 
 from __future__ import annotations
@@ -21,6 +22,11 @@ from app.autotrade.gate import (
   AutoScalpDecision,
   AutoScalpRail,
   evaluate_auto_scalp_gate,
+)
+from app.autotrade.forming_gate import (
+  FormingRangeSetup,
+  evaluate_forming_range_gate,
+  forming_gate_key,
 )
 from app.autotrade.scale_context import AutoScaleContext, build_auto_scale_context
 from app.autotrade.trend import (
@@ -107,6 +113,28 @@ async def _load_spot(client: Any, symbol: str) -> AutoTradeSpot | None:
     ts=ts,
     fresh=0 <= now - ts <= max(1, settings.auto_trade_spot_max_age),
   )
+
+
+async def _load_forming_setup(
+  client: Any,
+  symbol: str,
+) -> FormingRangeSetup | None:
+  if not settings.auto_trade_forming_gate_enabled:
+    return None
+  key = forming_gate_key(symbol)
+  raw = await client.get(key)
+  if raw is None:
+    return None
+  setup = FormingRangeSetup.from_json(raw)
+  now = int(datetime.now(timezone.utc).timestamp())
+  if (
+    setup is None
+    or setup.symbol != symbol.upper()
+    or now > setup.expires_at
+  ):
+    await client.delete(key)
+    return None
+  return setup
 
 
 def _eq_exclusion_reason(
@@ -255,6 +283,8 @@ async def _publish_candidate(
   *,
   regime: RegimeInfo | None = None,
   htf_zones: list[Zone] | None = None,
+  gate_source: str = "private_ohlc",
+  forming_setup: FormingRangeSetup | None = None,
 ) -> str | None:
   if (
     not settings.auto_trade_enabled
@@ -267,10 +297,14 @@ async def _publish_candidate(
     or decision.full_tp_pips not in {50, 70}
     or scale_context is None
     or decision.confluence < max(1, settings.auto_trade_min_confluence)
-    # Mutual exclusion with the trend/breakout strategy family: a box
-    # candidate only ever ships while the regime router says "chop".
-    # `regime is None` preserves pre-regime-router callers/tests.
-    or (regime is not None and regime.state != "chop")
+    # The private box family only ships in chop. A Market Map-aligned forming
+    # setup is already range-classified by the scanner and is not vetoed by a
+    # second, conflicting private regime label.
+    or (
+      gate_source == "private_ohlc"
+      and regime is not None
+      and regime.state != "chop"
+    )
   ):
     return None
 
@@ -344,6 +378,16 @@ async def _publish_candidate(
     "timeframe": EXECUTION_TIMEFRAME,
     "setup": "Range Box Scalp",
     "mode": "auto_box_scalp",
+    "signal_source": gate_source,
+    "source_setup_id": (
+      None if forming_setup is None else forming_setup.setup_id
+    ),
+    "source_event_ts": (
+      None if forming_setup is None else forming_setup.event_ts
+    ),
+    "source_m5_confirmation": (
+      None if forming_setup is None else forming_setup.m5_confirmation
+    ),
     "direction": decision.direction.upper(),
     "trigger_ts": trigger_ts,
     "created_at": now,
@@ -646,11 +690,17 @@ def _status_payload(
   candidate_id: str | None,
   regime: RegimeInfo | None = None,
   trend_decision: TrendDecision | None = None,
+  gate_source: str = "private_ohlc",
+  forming_setup: FormingRangeSetup | None = None,
 ) -> dict[str, Any]:
   rail = decision.rail
   target = decision.target
   box = decision.box
-  trend_routed = regime is not None and regime.state in ("trend", "breakout")
+  trend_routed = (
+    gate_source == "private_ohlc"
+    and regime is not None
+    and regime.state in ("trend", "breakout")
+  )
   state = decision.state
   direction = decision.direction
   if trend_routed and trend_decision is not None:
@@ -695,6 +745,17 @@ def _status_payload(
     "spot_fresh": None if spot is None else spot.fresh,
     "candidate_id": candidate_id,
     "published": candidate_id is not None,
+    "gate_source": gate_source,
+    "forming_setup": None if forming_setup is None else {
+      "id": forming_setup.setup_id,
+      "setup": forming_setup.setup,
+      "direction": forming_setup.direction,
+      "source_tf": forming_setup.source_tf,
+      "event_ts": forming_setup.event_ts,
+      "expires_at": forming_setup.expires_at,
+      "m5_confirmation": forming_setup.m5_confirmation,
+    },
+    "reasons": list(decision.reasons),
     "frames": {
       timeframe: len(frame)
       for timeframe, frame in sorted(frames.items())
@@ -783,11 +844,25 @@ async def _handle_event(
   source = source or RedisOHLCSource(client)
   frames = await _load_frames(source, symbol)
   spot = await _load_spot(client, symbol)
-  decision = evaluate_auto_scalp_gate(
+  private_decision = evaluate_auto_scalp_gate(
     frames,
     symbol=symbol,
     spot_price=None if spot is None or not spot.fresh else spot.price,
   )
+  forming_setup = await _load_forming_setup(client, symbol)
+  if forming_setup is not None:
+    decision = evaluate_forming_range_gate(
+      frames,
+      forming_setup,
+      symbol=symbol,
+      spot_price=None if spot is None or not spot.fresh else spot.price,
+      m1_confirmation_bars=settings.auto_trade_forming_m1_confirmation_bars,
+      m5_structure_bars=settings.auto_trade_forming_m5_structure_bars,
+    )
+    gate_source = "market_map_forming"
+  else:
+    decision = private_decision
+    gate_source = "private_ohlc"
   regime = classify_regime(frames, decision, settings)
   now_ts = int(datetime.now(timezone.utc).timestamp())
   try:
@@ -805,7 +880,7 @@ async def _handle_event(
       spot_price=None if spot is None or not spot.fresh else spot.price,
       cfg=settings,
     )
-    if regime.state in ("trend", "breakout")
+    if forming_setup is None and regime.state in ("trend", "breakout")
     else TrendDecision("no_setup")
   )
   closed_price = (
@@ -842,21 +917,30 @@ async def _handle_event(
     scale_context,
     regime=regime,
     htf_zones=htf_zones,
+    gate_source=gate_source,
+    forming_setup=forming_setup,
   )
-  trend_candidate_id = await _publish_trend_candidate(
-    client,
-    symbol,
-    event_ts,
-    spot,
-    regime,
-    trend_decision,
-    htf_zones=htf_zones,
+  trend_candidate_id = (
+    await _publish_trend_candidate(
+      client,
+      symbol,
+      event_ts,
+      spot,
+      regime,
+      trend_decision,
+      htf_zones=htf_zones,
+    )
+    if forming_setup is None else None
   )
   candidate_id = box_candidate_id or trend_candidate_id
   if candidate_id is None:
     if decision.state != "candidate":
       await _record_gate_reject(client, symbol, decision.state)
-    if regime.state in ("trend", "breakout") and trend_decision.state != "candidate":
+    if (
+      forming_setup is None
+      and regime.state in ("trend", "breakout")
+      and trend_decision.state != "candidate"
+    ):
       await _record_gate_reject(client, symbol, trend_decision.state)
   payload = _status_payload(
     decision,
@@ -867,14 +951,17 @@ async def _handle_event(
     candidate_id=candidate_id,
     regime=regime,
     trend_decision=trend_decision,
+    gate_source=gate_source,
+    forming_setup=forming_setup,
   )
   encoded = json.dumps(payload, separators=(",", ":"), sort_keys=True)
   await client.set("auto_trade:last_gate", encoded)
   await client.set(f"auto_trade:last_gate:{symbol}", encoded)
   log.info(
-    "independent auto-scalp gate symbol=%s state=%s trigger=%s "
+    "auto-scalp gate symbol=%s source=%s state=%s trigger=%s "
     "direction=%s candidate=%s regime=%s",
     symbol,
+    gate_source,
     payload["state"],
     decision.trigger or "-",
     payload["direction"] or "-",
@@ -885,9 +972,9 @@ async def _handle_event(
 
 
 async def auto_scalp_loop() -> None:
-  """Run the auto executor's private OHLC gate subscriber."""
+  """Run the auto executor's M1 gate subscriber."""
   if not settings.auto_trade_enabled:
-    log.info("Independent auto-scalp gate disabled: AUTO_TRADE_ENABLED=false")
+    log.info("ApexVoid Algo gate disabled: AUTO_TRADE_ENABLED=false")
     return
 
   client = redis_state.get_client()
@@ -895,8 +982,9 @@ async def auto_scalp_loop() -> None:
   pubsub = client.pubsub()
   await pubsub.subscribe("bars:new")
   log.info(
-    "Independent auto-scalp gate watching %s on M1 with M5/M15 context",
+    "ApexVoid Algo gate watching %s on M1 with M5/M15 context forming=%s",
     ",".join(sorted(_symbols())),
+    settings.auto_trade_forming_gate_enabled,
   )
   try:
     async for message in pubsub.listen():
@@ -905,7 +993,7 @@ async def auto_scalp_loop() -> None:
       try:
         await _handle_event(message.get("data"), source=source, client=client)
       except Exception:
-        log.exception("independent auto-scalp tick failed")
+        log.exception("ApexVoid Algo gate tick failed")
   finally:
     await pubsub.unsubscribe("bars:new")
     await pubsub.close()

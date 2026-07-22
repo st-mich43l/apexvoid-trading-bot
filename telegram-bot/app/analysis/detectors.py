@@ -33,6 +33,12 @@ STAR_THREE_SCORE = 12.0
 STAR_TWO_SCORE = 8.0
 COIL_SCORE = 1.5
 REACTION_MAX_ATR = 1.0
+RANGE_CONFIRMATION_LABELS = {
+  "sweep_a": "sweep A",
+  "sweep_reclaim": "sweep + reclaim",
+  "rejection_choch": "rejection + micro CHoCH",
+  "rejection_edge": "rejection at scored edge",
+}
 
 
 @dataclass(frozen=True)
@@ -194,6 +200,7 @@ class DetectionResult:
   confluence: int
   reasons: list[str]
   mode: str = "with_trend"
+  confirmation: str | None = None
 
 
 class SetupDetector(Protocol):
@@ -654,6 +661,7 @@ def _finish(
   chop_tp_cap: bool = True,
   include_score_reasons: bool = True,
   factors: ConfluenceFactors | None = None,
+  confirmation: str | None = None,
 ) -> DetectionResult | None:
   if not _level_valid(level, price, direction):
     return None
@@ -682,6 +690,7 @@ def _finish(
     confluence=confluence,
     reasons=full_reasons,
     mode=mode,
+    confirmation=confirmation,
   )
 
 
@@ -1198,7 +1207,7 @@ def range_edge_scalp(ctx: DetectionContext) -> DetectionResult | None:
       f"{_number(scalp_range.upper.level)}",
       f"{edge} barrier ×{barrier.touches}",
       f"wick rejection ×{barrier.wick_rejections}",
-      confirmation,
+      RANGE_CONFIRMATION_LABELS[confirmation],
       f"TP1 EQ {_number(scalp_range.eq)}",
       f"TP2 edge {_number(opposing_level)}",
     ]
@@ -1213,6 +1222,7 @@ def range_edge_scalp(ctx: DetectionContext) -> DetectionResult | None:
       reasons,
       mode="range_scalp",
       chop_tp_cap=False,
+      confirmation=confirmation,
     )
   return None
 
@@ -1250,18 +1260,18 @@ def _range_edge_confirmation(
 ) -> str | None:
   grab = _zone_grab(st, zone, direction)
   if grab is not None and grab.grade == "A":
-    return "sweep A"
+    return "sweep_a"
   if _barrier_sweep_reclaim(df, barrier, direction, bars):
-    return "sweep + reclaim"
+    return "sweep_reclaim"
   if _recent_rejection(df, direction, bars) and (
     _recent_choch(st, direction, len(df), settings)
     or _micro_choch(df, direction, bars)
   ):
-    return "rejection + micro CHoCH"
+    return "rejection_choch"
   if settings.range_scalp_allow_rejection_only and _recent_rejection(
     df, direction, bars
   ):
-    return "rejection at scored edge"
+    return "rejection_edge"
   return None
 
 

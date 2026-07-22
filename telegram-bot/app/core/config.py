@@ -163,6 +163,13 @@ class Settings(BaseSettings):
   auto_trade_min_confluence: int = 2
   auto_trade_news_guard_minutes: int = 30
   auto_trade_box_retire_seconds: int = 14400
+  # Optional scanner -> Algo bridge. Scanner emits a short-lived typed setup
+  # only when Range Edge Scalp overlaps a validated two-sided Market Map pair;
+  # the worker still requires a recent M1 rejection before publishing.
+  auto_trade_forming_gate_enabled: bool = False
+  auto_trade_forming_max_age_seconds: int = 420
+  auto_trade_forming_m1_confirmation_bars: int = 5
+  auto_trade_forming_m5_structure_bars: int = 3
   # Trade-quality guards added after the 22 Jul 2026 incident (SELL filled at
   # box EQ, 13 pips below the nearest published supply zone). EQ exclusion and
   # edge proximity apply to box-scalp ("auto_box_scalp") candidates only - a

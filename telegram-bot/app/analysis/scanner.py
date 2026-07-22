@@ -16,13 +16,28 @@ from app.analysis.detectors import (
   DetectionContext,
   DetectionResult,
   DetectorSettings,
+  RANGE_CONFIRMATION_LABELS,
   SetupDetector,
   build_context,
 )
-from app.analysis.market_map import MarketMap, build_map, map_reference, rail_reference
+from app.analysis.market_map import (
+  MarketMap,
+  ScalpRail,
+  build_map,
+  map_reference,
+  rail_reference,
+)
 from app.analysis.market_map_delivery import cache_analysis
 from app.analysis.ohlc_source import RedisOHLCSource
 from app.analysis.structure import Zone
+from app.autotrade.forming_gate import (
+  FORMING_GATE_VERSION,
+  FormingRail,
+  FormingRangeSetup,
+  forming_gate_key,
+  forming_range_id,
+  forming_setup_id,
+)
 from app.core.symbols import SYMBOLS, pip_for
 from app.bot.client import send_scanner_with_retry
 
@@ -169,6 +184,146 @@ def _band_dedup_key(symbol: str, result: DetectionResult) -> str:
     settings.scanner_level_bucket,
   )
   return f"scanner:alerted_band:{symbol}:{result.direction}:{bucket}"
+
+
+def _build_forming_range_setup(
+  symbol: str,
+  tf: str,
+  event_ts: str,
+  results: list[DetectionResult],
+  market_map: MarketMap | None,
+  *,
+  now: int | None = None,
+) -> FormingRangeSetup | None:
+  """Create the typed Algo intent only when forming setup and map agree."""
+  if market_map is None:
+    return None
+  candidates = [
+    result for result in results
+    if (
+      result.setup == "Range Edge Scalp"
+      and result.mode == "range_scalp"
+      and result.confirmation in RANGE_CONFIRMATION_LABELS
+    )
+  ]
+  if not candidates:
+    return None
+  rails = {
+    direction: max(
+      (rail for rail in market_map.rails if rail.direction == direction),
+      key=lambda rail: rail.score,
+      default=None,
+    )
+    for direction in ("BUY", "SELL")
+  }
+  lower = rails["BUY"]
+  upper = rails["SELL"]
+  if lower is None or upper is None or lower.price >= upper.price:
+    return None
+  matched = [
+    result for result in candidates
+    if result.direction.upper() in rails
+    if _bands_touch(
+      result.entry_zone.low,
+      result.entry_zone.high,
+      rails[result.direction.upper()].lo,
+      rails[result.direction.upper()].hi,
+    )
+  ]
+  if not matched:
+    return None
+  result = min(matched, key=_result_rank)
+  issued_at = (
+    int(datetime.now(timezone.utc).timestamp())
+    if now is None else int(now)
+  )
+  ttl = max(60, int(settings.auto_trade_forming_max_age_seconds))
+  setup_id = forming_setup_id(
+    symbol,
+    tf,
+    event_ts,
+    result.direction,
+    lower.price,
+    upper.price,
+  )
+  return FormingRangeSetup(
+    version=FORMING_GATE_VERSION,
+    setup_id=setup_id,
+    range_id=forming_range_id(symbol, lower.price, upper.price),
+    symbol=symbol.upper(),
+    source_tf=tf.upper(),
+    event_ts=str(event_ts),
+    issued_at=issued_at,
+    expires_at=issued_at + ttl,
+    setup=result.setup,
+    mode=result.mode,
+    direction=result.direction.upper(),
+    m5_confirmation=str(result.confirmation),
+    key_level=float(result.key_level),
+    entry_low=float(result.entry_zone.low),
+    entry_high=float(result.entry_zone.high),
+    confluence=int(result.confluence),
+    reasons=tuple(result.reasons),
+    lower=_forming_rail(lower),
+    upper=_forming_rail(upper),
+    map_bias=market_map.bias,
+    map_bias_tf=market_map.bias_tf,
+  )
+
+
+def _forming_rail(rail: ScalpRail) -> FormingRail:
+  return FormingRail(
+    direction=str(rail.direction).upper(),
+    low=float(rail.lo),
+    high=float(rail.hi),
+    level=float(rail.price),
+    score=float(rail.score),
+    tags=tuple(str(item) for item in rail.tags),
+  )
+
+
+def _bands_touch(
+  first_lo: float,
+  first_hi: float,
+  second_lo: float,
+  second_hi: float,
+) -> bool:
+  return min(first_hi, second_hi) >= max(first_lo, second_lo)
+
+
+async def _sync_forming_gate(
+  client: Any,
+  symbol: str,
+  tf: str,
+  event_ts: str,
+  results: list[DetectionResult],
+  market_map: MarketMap | None,
+) -> FormingRangeSetup | None:
+  key = forming_gate_key(symbol)
+  if not settings.auto_trade_forming_gate_enabled:
+    await client.delete(key)
+    return None
+  setup = _build_forming_range_setup(
+    symbol,
+    tf,
+    event_ts,
+    results,
+    market_map,
+  )
+  if setup is None:
+    await client.delete(key)
+    return None
+  ttl = max(60, setup.expires_at - setup.issued_at)
+  await client.set(key, setup.to_json(), ex=ttl)
+  log.info(
+    "forming gate synced symbol=%s setup=%s direction=%s map=%s-%s",
+    symbol,
+    setup.setup_id[:12],
+    setup.direction,
+    setup.lower.level,
+    setup.upper.level,
+  )
+  return setup
 
 
 # --- B3: setup invalidation --------------------------------------------------
@@ -734,6 +889,7 @@ async def _record_status(
         },
         "current_price": item.current_price,
         "confluence": item.confluence,
+        "confirmation": item.confirmation,
       }
       for item in detected
     ],
@@ -1038,6 +1194,14 @@ async def _handle_event(
       continue
     detected.append(result)
   digest, conflicts = _digest_results(detected)
+  await _sync_forming_gate(
+    client,
+    symbol,
+    exec_tf,
+    event_ts,
+    digest,
+    current_map,
+  )
   sent = await _notify_digest_once(
     client,
     symbol,
