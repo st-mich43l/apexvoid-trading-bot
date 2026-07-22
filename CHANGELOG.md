@@ -125,6 +125,18 @@ dated section after deployment.
 
 ### Fixed
 
+- Box-scalp (both the private gate's own candidates and the scanner-bridge
+  `Range Edge Scalp` match, labeled "Range Box Scalp") no longer fires
+  outside the `chop` regime. This mean-reversion mutual-exclusion guard
+  existed when the regime classifier first shipped but was silently dropped
+  once scanner strategy-match selection landed ("private strategies select
+  the higher-confluence match instead of using a regime label as a global
+  veto"), so a box-labeled trade could fire straight into an active trend.
+  Fixes a 22 Jul incident where a Range Edge Scalp BUY filled at the bottom
+  of a sharp post-rally pullback and was stopped within a minute. Other
+  scanner strategies (Box Breakout, Liquidity Sweep, Mapped Zone Reaction)
+  are trend/breakout-appropriate by design and stay ungated. `/auto_status`
+  telemetry (`selected_strategy`) now agrees with what actually publishes.
 - Added an opposing-barrier veto (`AUTO_TRADE_OPPOSING_BARRIER_VETO_ENABLED`)
   for HTF supply/demand zones and round-number/reaction key levels sitting
   just ahead of an entry, and wired it into `_publish_strategy_match` (the

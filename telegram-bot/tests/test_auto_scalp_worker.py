@@ -390,6 +390,66 @@ async def test_worker_publishes_range_match_as_strategy_and_disarms_edge(
 
 
 @pytest.mark.asyncio
+async def test_range_edge_match_blocked_outside_chop_regime(monkeypatch):
+  """Range Edge Scalp ("Range Box Scalp" label) is a mean-reversion play on
+  an actual consolidation, same as the private box gate - it must not fire
+  once regime has moved past chop (22 Jul incident: this exact path filled
+  a BUY straight into a sharp post-rally pullback, stopped in under a
+  minute).
+  """
+  client = redis_state.get_client()
+  now = int(datetime.now(timezone.utc).timestamp())
+  match = _range_strategy_match(now)
+  monkeypatch.setattr(worker.settings, "auto_trade_enabled", True)
+  monkeypatch.setattr(worker.settings, "auto_trade_stream", "auto_trade:test")
+  monkeypatch.setattr(worker.settings, "auto_trade_min_confluence", 2)
+  monkeypatch.setattr(worker, "event_in_window", AsyncMock(return_value=None))
+  trend_regime = RegimeInfo("trend", "up", 5, 1.3, True, None, ("forced trend",))
+
+  candidate_id = await worker._publish_strategy_match(
+    client,
+    "XAU",
+    worker.AutoTradeSpot(4017.2, now, True),
+    match,
+    regime=trend_regime,
+  )
+
+  assert candidate_id is None
+  assert await client.xlen("auto_trade:test") == 0
+  reject_count = await client.hget(
+    "auto_trade:gate_reject:XAU:range_edge_not_chop", "count",
+  )
+  assert reject_count is not None and int(reject_count) >= 1
+
+
+@pytest.mark.asyncio
+async def test_non_range_edge_strategy_match_ignores_regime(monkeypatch):
+  """Box Breakout / Liquidity Sweep / Mapped Zone Reaction matches are
+  trend/breakout-appropriate by design and must NOT be gated by chop -
+  only Range Edge Scalp's mean-reversion premise requires it.
+  """
+  client = redis_state.get_client()
+  now = int(datetime.now(timezone.utc).timestamp())
+  match = _strategy_match(now)  # Liquidity Sweep, not is_range_edge
+  monkeypatch.setattr(worker.settings, "auto_trade_enabled", True)
+  monkeypatch.setattr(worker.settings, "auto_trade_stream", "auto_trade:test")
+  monkeypatch.setattr(worker.settings, "auto_trade_min_confluence", 2)
+  monkeypatch.setattr(worker, "event_in_window", AsyncMock(return_value=None))
+  trend_regime = RegimeInfo("trend", "up", 5, 1.3, True, None, ("forced trend",))
+
+  candidate_id = await worker._publish_strategy_match(
+    client,
+    "XAU",
+    worker.AutoTradeSpot(4017.2, now, True),
+    match,
+    regime=trend_regime,
+  )
+
+  assert candidate_id == match.match_id
+  assert await client.xlen("auto_trade:test") == 1
+
+
+@pytest.mark.asyncio
 async def test_broken_box_is_retired_and_cannot_publish_again(monkeypatch):
   client = redis_state.get_client()
   monkeypatch.setattr(
@@ -536,10 +596,16 @@ async def test_non_candidate_decision_is_never_published(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_private_strategy_match_uses_confluence_not_regime_label(
+async def test_box_scalp_does_not_fire_outside_chop_regime(
   monkeypatch,
 ):
-  """A regime label cannot veto the stronger matched strategy."""
+  """Box-scalp is a mean-reversion play on an actual consolidation, so it
+  must lose selection once regime has moved past chop even when its own
+  confluence would otherwise "win" the comparison against trend (22 Jul
+  incident: a box-labeled BUY filled straight into a sharp post-rally
+  pullback and was stopped in well under a minute). The trend candidate
+  must be the one selected here instead - not neither.
+  """
   client = redis_state.get_client()
   now = int(datetime.now(timezone.utc).timestamp())
   monkeypatch.setattr(worker.settings, "auto_trade_enabled", True)
@@ -588,18 +654,79 @@ async def test_private_strategy_match_uses_confluence_not_regime_label(
   entries = await client.xrange("auto_trade:test")
   assert len(entries) == 1
   payload = json.loads(entries[0][1]["payload"])
-  assert payload["mode"] == "auto_box_scalp"
-  assert payload["setup"] == "Range Box Scalp"
+  assert payload["mode"] == "auto_trend_pullback"
+  assert payload["setup"] == "Trend Pullback"
   assert payload["regime"] == "trend"
   status = json.loads(await client.get("auto_trade:last_gate:XAU"))
   assert status["regime"] == "trend"
-  assert status["state"] == "candidate"
   assert status["box_state"] == "candidate"
   assert status["trend_state"] == "candidate"
   assert status["trend_mode"] == "pullback"
   assert status["direction"] == "BUY"
-  assert status["selected_strategy"] == "Range Box Scalp"
+  assert status["selected_strategy"] == "Trend Pullback"
   assert status["selection_state"] == "published"
+
+
+@pytest.mark.asyncio
+async def test_box_scalp_fires_in_chop_even_when_trend_also_candidate(
+  monkeypatch,
+):
+  """Regression guard for the fix above: chop regime must still let
+  box-scalp win the confluence comparison exactly as before when trend is
+  ALSO (spuriously) a candidate - the new regime gate must not accidentally
+  suppress box-scalp during genuine chop.
+  """
+  client = redis_state.get_client()
+  now = int(datetime.now(timezone.utc).timestamp())
+  monkeypatch.setattr(worker.settings, "auto_trade_enabled", True)
+  monkeypatch.setattr(worker.settings, "auto_trade_trend_enabled", True)
+  monkeypatch.setattr(worker.settings, "auto_trade_symbols", "XAU")
+  monkeypatch.setattr(worker.settings, "auto_trade_stream", "auto_trade:test")
+  monkeypatch.setattr(worker.settings, "auto_trade_min_confluence", 2)
+  monkeypatch.setattr(worker, "event_in_window", AsyncMock(return_value=None))
+  source = AsyncMock()
+  source.window = AsyncMock(return_value=_frame())
+  monkeypatch.setattr(
+    worker,
+    "_load_spot",
+    AsyncMock(return_value=worker.AutoTradeSpot(4017.2, now, True)),
+  )
+  monkeypatch.setattr(
+    worker, "evaluate_auto_scalp_gate", lambda frames, **kwargs: _decision(),
+  )
+  monkeypatch.setattr(
+    worker, "build_auto_scale_context", lambda *a, **k: _scale_context(now),
+  )
+  chop_regime = RegimeInfo("chop", None, 0, 0.5, False, None, ("forced chop",))
+  monkeypatch.setattr(
+    worker, "classify_regime", lambda frames, decision, cfg: chop_regime,
+  )
+  trend_decision = TrendDecision(
+    "candidate",
+    direction="BUY",
+    mode="pullback",
+    entry_zone=(4016.0, 4016.5),
+    key_level=4016.2,
+    atr=1.2,
+    structure_swing=4010.0,
+    target_prices=(4020.0,),
+    targets_pips=(38,),
+    confluence=2,
+    reasons=("forced",),
+  )
+  monkeypatch.setattr(worker, "evaluate_trend_gate", lambda *a, **k: trend_decision)
+
+  result = await worker._handle_event(
+    "XAU:M1:1784552400", source=source, client=client,
+  )
+
+  assert result == _decision()
+  entries = await client.xrange("auto_trade:test")
+  assert len(entries) == 1
+  payload = json.loads(entries[0][1]["payload"])
+  assert payload["mode"] == "auto_box_scalp"
+  assert payload["setup"] == "Range Box Scalp"
+  assert payload["regime"] == "chop"
 
 
 def test_worker_source_has_no_direct_scanner_market_map_or_telegram_import():
