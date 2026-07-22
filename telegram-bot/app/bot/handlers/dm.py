@@ -13,7 +13,9 @@ from aiogram.types import Message
 from app.signals.chart_analysis import analyse_chart_image
 from app.autotrade.delivery import auto_trade_status_text, set_auto_trade_paused
 from app.core.config import settings
+from app.analysis import scanner
 from app.analysis.market_map_delivery import send_current_market_map
+from app.persistence import redis_state
 from app.persistence.store import (
   get_all_signals,
   get_manual_signal,
@@ -89,6 +91,7 @@ _HELP_TEXT = """<b>Trade controls</b>
 <code>/trade_review [SYMBOL] #id</code>
 <code>/trade_map [SYMBOL]</code>
 <code>/auto_status</code>
+<code>/scan_report [SYMBOL] [hours]</code>
 <code>/auto_pause</code>
 <code>/auto_resume</code>
 <code>/trade_stats [SYMBOL] [today|week|month]</code>
@@ -176,6 +179,25 @@ async def handle_auto_status(msg: Message) -> None:
   if not _is_owner(msg):
     return
   await msg.answer(await auto_trade_status_text())
+
+
+@router.message(Command("scan_report"), F.chat.type == "private")
+async def handle_scan_report(msg: Message) -> None:
+  if not _is_owner(msg):
+    return
+  raw = _command_args(msg)
+  symbol, rest = _take_symbol(raw, default=None)
+  symbol = (symbol or settings.scanner_symbols.split(",")[0]).strip().upper()
+  hours = 24.0
+  if rest.strip():
+    try:
+      hours = max(1.0, float(rest.strip().split()[0]))
+    except ValueError:
+      pass
+  tf = settings.scanner_exec_tf.upper()
+  client = redis_state.get_client()
+  rows = await scanner.scan_report(client, symbol, tf, hours=hours)
+  await msg.answer(scanner.format_scan_report(rows, symbol, tf, hours))
 
 
 @router.message(Command("auto_pause"), F.chat.type == "private")
