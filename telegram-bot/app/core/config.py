@@ -163,13 +163,25 @@ class Settings(BaseSettings):
   auto_trade_min_confluence: int = 2
   auto_trade_news_guard_minutes: int = 30
   auto_trade_box_retire_seconds: int = 14400
-  # Optional scanner -> Algo bridge. Scanner emits a short-lived typed setup
-  # only when Range Edge Scalp overlaps a validated two-sided Market Map pair;
-  # the worker still requires a recent M1 rejection before publishing.
-  auto_trade_forming_gate_enabled: bool = False
-  auto_trade_forming_max_age_seconds: int = 420
-  auto_trade_forming_m1_confirmation_bars: int = 5
-  auto_trade_forming_m5_structure_bars: int = 3
+  auto_trade_tp_pips: str = "30,60,90,120,200"
+  # Scanner detectors already own the complete strategy match.  The bridge
+  # transports that typed decision to the executor without another regime or
+  # timeframe confirmation layer.  The legacy aliases keep existing VPS envs
+  # readable while deployments move to the accurate names.
+  auto_trade_strategy_bridge_enabled: bool = Field(
+    default=True,
+    validation_alias=AliasChoices(
+      "AUTO_TRADE_STRATEGY_BRIDGE_ENABLED",
+      "AUTO_TRADE_FORMING_GATE_ENABLED",
+    ),
+  )
+  auto_trade_strategy_match_max_age_seconds: int = Field(
+    default=420,
+    validation_alias=AliasChoices(
+      "AUTO_TRADE_STRATEGY_MATCH_MAX_AGE_SECONDS",
+      "AUTO_TRADE_FORMING_MAX_AGE_SECONDS",
+    ),
+  )
   # Trade-quality guards added after the 22 Jul 2026 incident (SELL filled at
   # box EQ, 13 pips below the nearest published supply zone). EQ exclusion and
   # edge proximity apply to box-scalp ("auto_box_scalp") candidates only - a

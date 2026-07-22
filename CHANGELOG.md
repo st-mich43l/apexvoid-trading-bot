@@ -13,13 +13,9 @@ dated section after deployment.
 
 ### Added
 
-- Added an optional, kill-switched Market Map + forming gate for ApexVoid
-  Algo: the scanner emits a short-lived versioned `Range Edge Scalp` intent
-  only when its entry overlaps a validated two-sided Market Map rail, and the
-  worker requires an explicit recent M5 rail hold/reclaim, then an M1
-  rejection, plus all existing execution safeguards.
-- Added stable shared range IDs, scanner-intent expiry, typed Redis validation,
-  gate-source attribution, and `/auto_status` visibility for mapped setups.
+- Added typed scanner-to-Algo strategy routing: the strongest completed M5
+  detector match is transported with stable identity, expiry, entry/stop/TP
+  context, attribution, and `/auto_status` visibility.
 
 - Added per-position Telegram reply threads for ApexVoid Algo trade events,
   including standalone fallback when the original message is unavailable.
@@ -86,8 +82,7 @@ dated section after deployment.
 - Added Range Edge Scalp configuration and scanner telemetry for barrier counts,
   active range quality, and live edge-touch state.
 - Added a three-state market regime classifier (chop/trend/breakout) for
-  ApexVoid Algo, with a router that keeps trend/breakout candidates
-  mutually exclusive with the box-scalp gate on every bar.
+  ApexVoid Algo telemetry and private strategy context.
 - Added trend-pullback and breakout-continuation entry modes reusing the
   existing price-action toolkit (swings, structure, displacement/zones,
   session liquidity), plus level-anchored target selection with
@@ -103,10 +98,16 @@ dated section after deployment.
 
 ### Changed
 
-- An active Market Map/forming intent now temporarily owns range routing: the
-  private M1 box and trend publishers are suppressed until that intent clears,
-  while midpoint re-arm and confirmed-break retirement remain shared across
-  BUY and SELL cards for the same range.
+- Scanner detector output now owns strategy selection. The Algo worker no
+  longer re-confirms a matched setup with a second M1/M5 or Market Map gate,
+  and private strategies select the higher-confluence match instead of using a
+  regime label as a global veto.
+
+### Fixed
+
+- Fixed `Range Edge Scalp` being modeled as a confirmation regime that could
+  suppress otherwise valid scanner strategies. It is now one executable
+  strategy alongside the other detector matches.
 
 - Re-anchored the equity sizing table to `$200-$900 -> 0.02-0.06`,
   `$1,000-$2,000 -> 0.09-0.15`, and `$3,000-$5,000 -> 0.25-0.30`, holding
@@ -232,9 +233,9 @@ dated section after deployment.
   token, which previously preserved stale account grants across restarts.
 - Auto-trade startup and spot-processing faults no longer cancel the shared
   market-data session or trap the feed in a reconnect loop with no bars.
-- Forming signals and their detector/Market Map gates can no longer create or
-  suppress Auto Trader candidates; `SCANNER_ENABLED` no longer controls whether
-  the private auto-scalp worker runs.
+- Untyped Telegram forming cards and rendered Market Maps cannot create or
+  suppress Algo candidates; scanner execution now uses only the explicit typed
+  strategy-match contract, while the private worker remains independent.
 - Auto Trader quote-gate failures such as stale prices, excessive spread, or
   entry drift now terminate the candidate and advance its Redis cursor instead
   of retrying the same candidate and spamming repeated owner error messages.

@@ -125,50 +125,49 @@ broker-reported `pipPosition`. Python resolves that unit from its shared
 auto-trade units module and C# from `AUTO_TRADE_PIP_SIZE`; broker metadata is
 diagnostic only and must never drive price-to-pip conversion.
 
-When enabled, the auto-scalp worker appends only confirmed
-`Range Box Scalp` v3 candidates to:
+When enabled, the Algo worker appends private strategy candidates and completed
+scanner strategy matches to:
 
 ```text
 XADD auto_trade:candidates MAXLEN ~ 1000 * payload <json>
 ```
 
-The default private gate reads raw `bars:XAU:M1`, `bars:XAU:M5`,
-`bars:XAU:M15`, and `price:XAU:spot` data. An optional scanner bridge reads a
-short-lived typed intent from `auto_trade:forming_gate:{symbol}` when a
-`Range Edge Scalp` overlaps the matching side of a validated two-rail Market
-Map. It never parses Telegram text. A 60-bar repeated-touch M1 auction defines
-the fallback box; a mapped intent temporarily supplies the box while M1 still
-confirms the actual entry. The mapped gate independently verifies that recent
-M5 structure touched and still holds/reclaims the nominated rail.
+The private strategies read raw `bars:XAU:M1`, `bars:XAU:M5`,
+`bars:XAU:M15`, and `price:XAU:spot` data. The scanner bridge reads a
+short-lived typed match from `auto_trade:strategy_match:{symbol}`. It never
+parses Telegram text. Scanner detectors already decide which strategy matches;
+the worker does not reclassify it by regime or demand another M1/M5 signal.
 
-The versioned candidate includes stable range bounds, `signal_source`, typed
-`source_m5_confirmation`, and a single 50- or 70-pip full-position target.
-Publishing fails closed when the spot is absent/stale,
+Generic scanner matches become `auto_strategy_match` v4 candidates with their
+detector setup name, M5 source, structure stop context, and target ladder.
+`Range Edge Scalp` remains one strategy and uses the existing
+`auto_box_scalp` v3 candidate with stable range bounds and one 50- or 70-pip
+full-position target. Publishing fails closed when the spot is absent/stale,
 structure-stop context is unavailable, or a high-impact event is guarded.
 Candidate claims and outcomes use `auto_trade:executor:candidate:{id}` for
 restart-safe idempotency; the stream cursor is `auto_trade:cursor`. Raw
-Telegram cards, raw momentum, legacy M5 Range Edge payloads, and legacy M1
-Decision Scalp candidates are never accepted for execution.
+Telegram cards and legacy untyped scanner payloads are never accepted for
+execution.
 
-The forming contract has its own version and TTL:
+The strategy-match contract has its own version and TTL:
 
 ```text
-SETEX auto_trade:forming_gate:XAU 420 <json>
+SETEX auto_trade:strategy_match:XAU 420 <json>
 ```
 
-It contains a per-event `setup_id` and a rail-bucketed `range_id` shared by
-both directions. An invalid, stale, symbol-mismatched, unsupported, or
-non-overlapping intent is removed or ignored. A fresh mapped intent suppresses
-the private box and trend publishers until the scanner clears it or its TTL
-expires.
+It contains a stable `match_id`, detector strategy/mode, direction, entry zone,
+ATR, structure swing, targets, reasons, and source timestamp. Range-specific
+bounds exist only for `Range Edge Scalp`. Invalid, stale, symbol-mismatched, or
+malformed matches are removed or ignored. A fresh scanner match has priority
+over private strategies for that execution tick.
 
 Used box edges are disarmed until a closed M1 price crosses the box midpoint.
 Confirmed broken box IDs are retired for the configured TTL. The latest
 operator-facing M1 gate decision is stored at
 `auto_trade:last_gate` and `auto_trade:last_gate:{symbol}`. It contains the gate
 state, M1 trigger, selected role-aware rail, opposite target, target room, spot
-freshness, loaded frame counts, `gate_source`, and active forming metadata; it
-is telemetry, not an execution input.
+freshness, loaded frame counts, `gate_source`, and active strategy-match
+metadata; it is telemetry, not an execution input.
 
 ## Auto-Trade State And Events
 

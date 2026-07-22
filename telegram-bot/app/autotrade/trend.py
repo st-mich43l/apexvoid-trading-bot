@@ -6,8 +6,8 @@ of the scanner/detector stack, this module *does* reuse the shared
 price-action primitives in ``app.analysis`` (swings, structure, zones,
 session liquidity, trendlines, the engine's HTF-bias check) - it just never
 imports the scanner, the detector functions themselves, or Market Map. See
-``app.autotrade.worker`` for the regime router that keeps this strategy
-family mutually exclusive with the box-scalp gate.
+``app.autotrade.worker`` for the private strategy selector, which resolves an
+overlap by match confluence rather than treating regime as a global veto.
 """
 
 from __future__ import annotations

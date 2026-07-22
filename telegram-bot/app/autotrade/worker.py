@@ -1,9 +1,9 @@
-"""Redis worker for ApexVoid Algo's private and scanner-bridged gates.
+"""Redis worker for ApexVoid Algo strategies and execution delivery.
 
-The worker always consumes cTrader OHLC/spot keys.  An optional, typed Redis
-contract lets a Market Map-aligned forming setup nominate the active range;
-the worker still owns M1 timing and every execution safety check.  It never
-parses Telegram text or imports scanner/detector/Market Map modules.
+The private OHLC strategies consume cTrader bars directly.  Scanner detectors
+may also publish a typed completed strategy match; the worker transports that
+decision to the executor without confirming it again or routing it by regime.
+It never parses rendered Telegram text or imports scanner detector functions.
 """
 
 from __future__ import annotations
@@ -17,16 +17,17 @@ import math
 from typing import Any
 
 from app.persistence import redis_state
+from app.autotrade import units
 from app.autotrade.gate import (
+  MAX_ENTRY_DISTANCE_PIPS,
   AutoScalpBox,
   AutoScalpDecision,
   AutoScalpRail,
   evaluate_auto_scalp_gate,
 )
-from app.autotrade.forming_gate import (
-  FormingRangeSetup,
-  evaluate_forming_range_gate,
-  forming_gate_key,
+from app.autotrade.strategy_match import (
+  StrategyMatch,
+  strategy_match_key,
 )
 from app.autotrade.scale_context import AutoScaleContext, build_auto_scale_context
 from app.autotrade.trend import (
@@ -115,26 +116,26 @@ async def _load_spot(client: Any, symbol: str) -> AutoTradeSpot | None:
   )
 
 
-async def _load_forming_setup(
+async def _load_strategy_match(
   client: Any,
   symbol: str,
-) -> FormingRangeSetup | None:
-  if not settings.auto_trade_forming_gate_enabled:
+) -> StrategyMatch | None:
+  if not settings.auto_trade_strategy_bridge_enabled:
     return None
-  key = forming_gate_key(symbol)
+  key = strategy_match_key(symbol)
   raw = await client.get(key)
   if raw is None:
     return None
-  setup = FormingRangeSetup.from_json(raw)
+  match = StrategyMatch.from_json(raw)
   now = int(datetime.now(timezone.utc).timestamp())
   if (
-    setup is None
-    or setup.symbol != symbol.upper()
-    or now > setup.expires_at
+    match is None
+    or match.symbol != symbol.upper()
+    or now > match.expires_at
   ):
     await client.delete(key)
     return None
-  return setup
+  return match
 
 
 def _eq_exclusion_reason(
@@ -284,7 +285,6 @@ async def _publish_candidate(
   regime: RegimeInfo | None = None,
   htf_zones: list[Zone] | None = None,
   gate_source: str = "private_ohlc",
-  forming_setup: FormingRangeSetup | None = None,
 ) -> str | None:
   if (
     not settings.auto_trade_enabled
@@ -297,17 +297,8 @@ async def _publish_candidate(
     or decision.full_tp_pips not in {50, 70}
     or scale_context is None
     or decision.confluence < max(1, settings.auto_trade_min_confluence)
-    # The private box family only ships in chop. A Market Map-aligned forming
-    # setup is already range-classified by the scanner and is not vetoed by a
-    # second, conflicting private regime label.
-    or (
-      gate_source == "private_ohlc"
-      and regime is not None
-      and regime.state != "chop"
-    )
   ):
     return None
-
   entry_reference = spot.price
   eq_reason = _eq_exclusion_reason(
     decision.box,
@@ -379,15 +370,6 @@ async def _publish_candidate(
     "setup": "Range Box Scalp",
     "mode": "auto_box_scalp",
     "signal_source": gate_source,
-    "source_setup_id": (
-      None if forming_setup is None else forming_setup.setup_id
-    ),
-    "source_event_ts": (
-      None if forming_setup is None else forming_setup.event_ts
-    ),
-    "source_m5_confirmation": (
-      None if forming_setup is None else forming_setup.m5_confirmation
-    ),
     "direction": decision.direction.upper(),
     "trigger_ts": trigger_ts,
     "created_at": now,
@@ -441,6 +423,144 @@ async def _publish_candidate(
     candidate_id[:12],
     symbol,
     decision.direction,
+  )
+  return candidate_id
+
+
+async def _publish_strategy_match(
+  client: Any,
+  symbol: str,
+  spot: AutoTradeSpot | None,
+  match: StrategyMatch,
+) -> str | None:
+  """Publish a completed scanner strategy match without PA re-confirmation."""
+  if (
+    not settings.auto_trade_enabled
+    or spot is None
+    or not spot.fresh
+    or match.symbol != symbol.upper()
+    or match.confluence < max(1, settings.auto_trade_min_confluence)
+  ):
+    return None
+  if match.is_range_edge:
+    assert match.range_id is not None
+    assert match.range_low is not None
+    assert match.range_high is not None
+    if await client.exists(_box_retired_key(symbol, match.range_id)):
+      await client.delete(strategy_match_key(symbol))
+      return None
+    edge_key = _box_edge_key(symbol, match.range_id, match.direction)
+    if await client.exists(edge_key):
+      midpoint = (match.range_low + match.range_high) / 2
+      crossed_midpoint = (
+        spot.price >= midpoint
+        if match.direction == "BUY"
+        else spot.price <= midpoint
+      )
+      if not crossed_midpoint:
+        return None
+      await client.delete(edge_key)
+  distance = (
+    match.entry_low - spot.price
+    if spot.price < match.entry_low
+    else spot.price - match.entry_high
+    if spot.price > match.entry_high
+    else 0.0
+  )
+  distance_pips = distance / units.pip_size(symbol)
+  if distance_pips > MAX_ENTRY_DISTANCE_PIPS:
+    log.info(
+      "strategy match skipped id=%s strategy=%s: entry moved %.1f pips",
+      match.match_id[:12],
+      match.strategy,
+      distance_pips,
+    )
+    await client.delete(strategy_match_key(symbol))
+    await _record_gate_reject(client, symbol, "strategy_entry_moved")
+    return None
+  now = int(datetime.now(timezone.utc).timestamp())
+  try:
+    guarded = await event_in_window(
+      now,
+      max(0, settings.auto_trade_news_guard_minutes) * 60,
+    )
+  except Exception:
+    log.exception("strategy match blocked: news guard unavailable")
+    return None
+  if guarded is not None:
+    log.info(
+      "strategy match blocked by news symbol=%s strategy=%s event=%s",
+      symbol,
+      match.strategy,
+      guarded.get("title", "high-impact event"),
+    )
+    return None
+  candidate_id = match.match_id
+  claimed = await client.set(
+    f"auto_trade:candidate:{candidate_id}",
+    "published",
+    ex=max(60, settings.auto_trade_candidate_ttl),
+    nx=True,
+  )
+  if not claimed:
+    await client.delete(strategy_match_key(symbol))
+    return None
+  payload = {
+    "version": 3 if match.is_range_edge else 4,
+    "candidate_id": candidate_id,
+    "symbol": symbol.upper(),
+    "timeframe": match.source_tf,
+    "setup": "Range Box Scalp" if match.is_range_edge else match.strategy,
+    "mode": "auto_box_scalp" if match.is_range_edge else "auto_strategy_match",
+    "signal_source": "scanner_strategy_match",
+    "source_strategy": match.strategy,
+    "source_event_ts": match.event_ts,
+    "direction": match.direction,
+    "trigger_ts": match.event_ts,
+    "created_at": now,
+    "spot_ts": spot.ts,
+    "current_price": spot.price,
+    "key_level": match.key_level,
+    "entry_zone": {"low": match.entry_low, "high": match.entry_high},
+    "confluence": match.confluence,
+    "reasons": list(match.reasons),
+    "bar_ts": int(match.event_ts) if match.event_ts.isdigit() else None,
+    "atr": match.atr,
+    "structure_swing": match.structure_swing,
+    "targets_pips": list(match.targets_pips),
+    "range_id": match.range_id,
+    "range_low": match.range_low,
+    "range_high": match.range_high,
+    "full_take_profit_pips": match.full_take_profit_pips,
+    "regime": "strategy_match",
+  }
+  try:
+    await client.xadd(
+      settings.auto_trade_stream,
+      {"payload": json.dumps(payload, separators=(",", ":"))},
+      maxlen=max(100, settings.auto_trade_stream_maxlen),
+      approximate=True,
+    )
+  except Exception:
+    await client.delete(f"auto_trade:candidate:{candidate_id}")
+    raise
+  await client.delete(strategy_match_key(symbol))
+  if match.is_range_edge:
+    await client.set(
+      _box_edge_key(symbol, match.range_id, match.direction),
+      json.dumps({
+        "source": "scanner_strategy_match",
+        "direction": match.direction,
+        "midpoint": (match.range_low + match.range_high) / 2,
+      }, separators=(",", ":")),
+      ex=max(300, settings.auto_trade_box_retire_seconds),
+    )
+  log.info(
+    "strategy candidate published id=%s symbol=%s strategy=%s direction=%s",
+    candidate_id[:12],
+    symbol,
+    match.strategy,
+    match.direction,
   )
   return candidate_id
 
@@ -691,19 +811,28 @@ def _status_payload(
   regime: RegimeInfo | None = None,
   trend_decision: TrendDecision | None = None,
   gate_source: str = "private_ohlc",
-  forming_setup: FormingRangeSetup | None = None,
+  strategy_match: StrategyMatch | None = None,
 ) -> dict[str, Any]:
   rail = decision.rail
   target = decision.target
   box = decision.box
   trend_routed = (
     gate_source == "private_ohlc"
-    and regime is not None
-    and regime.state in ("trend", "breakout")
+    and trend_decision is not None
+    and trend_decision.state == "candidate"
+    and (
+      decision.state != "candidate"
+      or trend_decision.confluence > decision.confluence
+    )
   )
   state = decision.state
   direction = decision.direction
-  if trend_routed and trend_decision is not None:
+  reasons = decision.reasons
+  if strategy_match is not None:
+    state = "candidate" if candidate_id is not None else "strategy_match_waiting"
+    direction = strategy_match.direction
+    reasons = strategy_match.reasons
+  elif trend_routed and trend_decision is not None:
     state = (
       trend_decision.state
       if settings.auto_trade_trend_enabled
@@ -746,16 +875,16 @@ def _status_payload(
     "candidate_id": candidate_id,
     "published": candidate_id is not None,
     "gate_source": gate_source,
-    "forming_setup": None if forming_setup is None else {
-      "id": forming_setup.setup_id,
-      "setup": forming_setup.setup,
-      "direction": forming_setup.direction,
-      "source_tf": forming_setup.source_tf,
-      "event_ts": forming_setup.event_ts,
-      "expires_at": forming_setup.expires_at,
-      "m5_confirmation": forming_setup.m5_confirmation,
+    "strategy_match": None if strategy_match is None else {
+      "id": strategy_match.match_id,
+      "strategy": strategy_match.strategy,
+      "strategy_mode": strategy_match.strategy_mode,
+      "direction": strategy_match.direction,
+      "source_tf": strategy_match.source_tf,
+      "event_ts": strategy_match.event_ts,
+      "expires_at": strategy_match.expires_at,
     },
-    "reasons": list(decision.reasons),
+    "reasons": list(reasons),
     "frames": {
       timeframe: len(frame)
       for timeframe, frame in sorted(frames.items())
@@ -779,6 +908,35 @@ def _box_edge_key(symbol: str, box_id: str, direction: str) -> str:
     f"auto_trade:box:edge:{symbol.upper()}:{box_id}:"
     f"{direction.upper()}"
   )
+
+
+async def _rearm_scanner_range_edges(
+  client: Any,
+  symbol: str,
+  spot: AutoTradeSpot | None,
+) -> None:
+  """Re-arm a scanner range side after price crosses the stored box EQ."""
+  if spot is None or not spot.fresh:
+    return
+  pattern = f"auto_trade:box:edge:{symbol.upper()}:*"
+  async for raw_key in client.scan_iter(match=pattern):
+    key = raw_key.decode() if isinstance(raw_key, bytes) else str(raw_key)
+    raw_value = await client.get(key)
+    try:
+      payload = json.loads(
+        raw_value.decode() if isinstance(raw_value, bytes) else str(raw_value)
+      )
+      if payload.get("source") != "scanner_strategy_match":
+        continue
+      direction = str(payload["direction"]).upper()
+      midpoint = float(payload["midpoint"])
+    except (AttributeError, KeyError, TypeError, ValueError, json.JSONDecodeError):
+      continue
+    crossed = (
+      spot.price >= midpoint if direction == "BUY" else spot.price <= midpoint
+    )
+    if direction in {"BUY", "SELL"} and crossed:
+      await client.delete(key)
 
 
 async def _apply_box_retirement(
@@ -844,25 +1002,17 @@ async def _handle_event(
   source = source or RedisOHLCSource(client)
   frames = await _load_frames(source, symbol)
   spot = await _load_spot(client, symbol)
+  await _rearm_scanner_range_edges(client, symbol, spot)
   private_decision = evaluate_auto_scalp_gate(
     frames,
     symbol=symbol,
     spot_price=None if spot is None or not spot.fresh else spot.price,
   )
-  forming_setup = await _load_forming_setup(client, symbol)
-  if forming_setup is not None:
-    decision = evaluate_forming_range_gate(
-      frames,
-      forming_setup,
-      symbol=symbol,
-      spot_price=None if spot is None or not spot.fresh else spot.price,
-      m1_confirmation_bars=settings.auto_trade_forming_m1_confirmation_bars,
-      m5_structure_bars=settings.auto_trade_forming_m5_structure_bars,
-    )
-    gate_source = "market_map_forming"
-  else:
-    decision = private_decision
-    gate_source = "private_ohlc"
+  strategy_match = await _load_strategy_match(client, symbol)
+  decision = private_decision
+  gate_source = (
+    "scanner_strategy_match" if strategy_match is not None else "private_ohlc"
+  )
   regime = classify_regime(frames, decision, settings)
   now_ts = int(datetime.now(timezone.utc).timestamp())
   try:
@@ -880,7 +1030,7 @@ async def _handle_event(
       spot_price=None if spot is None or not spot.fresh else spot.price,
       cfg=settings,
     )
-    if forming_setup is None and regime.state in ("trend", "breakout")
+    if strategy_match is None
     else TrendDecision("no_setup")
   )
   closed_price = (
@@ -894,6 +1044,19 @@ async def _handle_event(
     decision,
     closed_price,
   )
+  box_selected = (
+    strategy_match is None
+    and decision.state == "candidate"
+    and (
+      trend_decision.state != "candidate"
+      or decision.confluence >= trend_decision.confluence
+    )
+  )
+  trend_selected = (
+    strategy_match is None
+    and trend_decision.state == "candidate"
+    and not box_selected
+  )
   scale_context = (
     build_auto_scale_context(
       frames,
@@ -902,23 +1065,29 @@ async def _handle_event(
       cfg=settings,
     )
     if (
-      decision.state == "candidate"
+      box_selected
       and spot is not None
       and spot.fresh
     ) else None
   )
   htf_zones = _htf_zones(frames, settings)
-  box_candidate_id = await _publish_candidate(
-    client,
-    symbol,
-    event_ts,
-    spot,
-    decision,
-    scale_context,
-    regime=regime,
-    htf_zones=htf_zones,
-    gate_source=gate_source,
-    forming_setup=forming_setup,
+  strategy_candidate_id = (
+    await _publish_strategy_match(client, symbol, spot, strategy_match)
+    if strategy_match is not None else None
+  )
+  box_candidate_id = (
+    await _publish_candidate(
+      client,
+      symbol,
+      event_ts,
+      spot,
+      decision,
+      scale_context,
+      regime=regime,
+      htf_zones=htf_zones,
+      gate_source=gate_source,
+    )
+    if box_selected else None
   )
   trend_candidate_id = (
     await _publish_trend_candidate(
@@ -930,15 +1099,14 @@ async def _handle_event(
       trend_decision,
       htf_zones=htf_zones,
     )
-    if forming_setup is None else None
+    if trend_selected else None
   )
-  candidate_id = box_candidate_id or trend_candidate_id
+  candidate_id = strategy_candidate_id or box_candidate_id or trend_candidate_id
   if candidate_id is None:
-    if decision.state != "candidate":
+    if strategy_match is None and decision.state != "candidate":
       await _record_gate_reject(client, symbol, decision.state)
     if (
-      forming_setup is None
-      and regime.state in ("trend", "breakout")
+      strategy_match is None
       and trend_decision.state != "candidate"
     ):
       await _record_gate_reject(client, symbol, trend_decision.state)
@@ -952,14 +1120,14 @@ async def _handle_event(
     regime=regime,
     trend_decision=trend_decision,
     gate_source=gate_source,
-    forming_setup=forming_setup,
+    strategy_match=strategy_match,
   )
   encoded = json.dumps(payload, separators=(",", ":"), sort_keys=True)
   await client.set("auto_trade:last_gate", encoded)
   await client.set(f"auto_trade:last_gate:{symbol}", encoded)
   log.info(
-    "auto-scalp gate symbol=%s source=%s state=%s trigger=%s "
-    "direction=%s candidate=%s regime=%s",
+    "ApexVoid Algo cycle symbol=%s source=%s state=%s trigger=%s "
+    "direction=%s candidate=%s observed_regime=%s",
     symbol,
     gate_source,
     payload["state"],
@@ -972,7 +1140,7 @@ async def _handle_event(
 
 
 async def auto_scalp_loop() -> None:
-  """Run the auto executor's M1 gate subscriber."""
+  """Route scanner strategy matches and private Algo strategies."""
   if not settings.auto_trade_enabled:
     log.info("ApexVoid Algo gate disabled: AUTO_TRADE_ENABLED=false")
     return
@@ -982,9 +1150,9 @@ async def auto_scalp_loop() -> None:
   pubsub = client.pubsub()
   await pubsub.subscribe("bars:new")
   log.info(
-    "ApexVoid Algo gate watching %s on M1 with M5/M15 context forming=%s",
+    "ApexVoid Algo watching %s on M1/M5 with strategy_bridge=%s",
     ",".join(sorted(_symbols())),
-    settings.auto_trade_forming_gate_enabled,
+    settings.auto_trade_strategy_bridge_enabled,
   )
   try:
     async for message in pubsub.listen():

@@ -112,7 +112,10 @@ public sealed class AutoTradeEngineTests
   public async Task BoxRangeScalpClosesFullVolumeAtItsSingleTarget()
   {
     using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-    var store = new FakeAutoTradeStore(BoxCandidateJson(fullTpPips: 70))
+    var store = new FakeAutoTradeStore(BoxCandidateJson(
+      fullTpPips: 70,
+      timeframe: "M5"
+    ))
     {
       DailyTradeCount = 100,
     };
@@ -861,6 +864,60 @@ public sealed class AutoTradeEngineTests
   }
 
   [Fact]
+  public async Task ScannerStrategyMatchIsAcceptedWithoutRegimeRouting()
+  {
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+    var store = new FakeAutoTradeStore(StrategyMatchCandidateJson());
+    var client = new FakeTradingClient();
+    var engine = new AutoTradeEngine(
+      Options() with { ZoneFillEnabled = true },
+      store,
+      () => Now,
+      _ => { }
+    );
+    await engine.ObserveSpotAsync(
+      new SpotPrice("XAU", 4000.0m, 4000.2m, Now.ToUnixTimeSeconds()),
+      cts.Token
+    );
+
+    var run = engine.RunSessionAsync(client, Symbol, cts.Token);
+    await store.Ordered.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+    var order = Assert.Single(client.Orders);
+    Assert.Empty(client.LimitOrders);
+    Assert.Contains("|30,60,90|", order.Comment);
+    Assert.DoesNotContain(store.Events, item => item.Type == "rejected");
+    cts.Cancel();
+    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+  }
+
+  [Fact]
+  public async Task ScannerStrategyMatchRejectsMissingExecutionContext()
+  {
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+    var store = new FakeAutoTradeStore(
+      StrategyMatchCandidateJson(targetsPips: [])
+    );
+    var client = new FakeTradingClient();
+    var engine = new AutoTradeEngine(Options(), store, () => Now, _ => { });
+    await engine.ObserveSpotAsync(
+      new SpotPrice("XAU", 4000.0m, 4000.2m, Now.ToUnixTimeSeconds()),
+      cts.Token
+    );
+
+    var run = engine.RunSessionAsync(client, Symbol, cts.Token);
+    await store.Processed.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+    Assert.Empty(client.Orders);
+    Assert.Contains(store.Events, item =>
+      item.Type == "rejected"
+      && item.Message.Contains("invalid strategy candidate contract")
+    );
+    cts.Cancel();
+    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+  }
+
+  [Fact]
   public async Task TrendCandidateTargetsPipsDriveItsOwnTargetPlan()
   {
     using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
@@ -1234,8 +1291,38 @@ public sealed class AutoTradeEngineTests
     regime,
   });
 
+  private static string StrategyMatchCandidateJson(
+    string setup = "Liquidity Sweep",
+    string direction = "BUY",
+    char candidate = 's',
+    int[]? targetsPips = null
+  ) => JsonSerializer.Serialize(new
+  {
+    version = 4,
+    candidate_id = new string(candidate, 64),
+    symbol = "XAU",
+    timeframe = "M5",
+    setup,
+    mode = "auto_strategy_match",
+    direction,
+    trigger_ts = "1000",
+    created_at = 1_000,
+    spot_ts = 1_000,
+    current_price = 4000.1,
+    key_level = 4000.0,
+    entry_zone = new { low = 3999.5m, high = 4000.5m },
+    confluence = 3,
+    reasons = new[] { "scanner detector matched structure" },
+    bar_ts = 1_000,
+    atr = 1.0,
+    structure_swing = direction == "BUY" ? 3993.5m : 4006.2m,
+    targets_pips = targetsPips ?? new[] { 30, 60, 90 },
+    regime = "strategy_match",
+  });
+
   private static string BoxCandidateJson(
     int fullTpPips,
+    string timeframe = "M1",
     string direction = "BUY",
     char candidate = 'a',
     decimal? structureSwing = null,
@@ -1248,7 +1335,7 @@ public sealed class AutoTradeEngineTests
     version = 3,
     candidate_id = new string(candidate, 64),
     symbol = "XAU",
-    timeframe = "M1",
+    timeframe,
     setup = "Range Box Scalp",
     mode = "auto_box_scalp",
     direction,

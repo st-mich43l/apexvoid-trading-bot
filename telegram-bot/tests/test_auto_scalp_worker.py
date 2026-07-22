@@ -1,5 +1,6 @@
 import inspect
 import json
+from dataclasses import replace
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock
 
@@ -10,13 +11,11 @@ from app.autotrade import worker
 from app.persistence import redis_state
 from app.analysis import scanner
 from app.autotrade.gate import AutoScalpBox, AutoScalpDecision, AutoScalpRail
-from app.autotrade.forming_gate import (
-  FORMING_GATE_VERSION,
-  FormingRail,
-  FormingRangeSetup,
-  forming_gate_key,
-  forming_range_id,
-  forming_setup_id,
+from app.autotrade.strategy_match import (
+  STRATEGY_MATCH_VERSION,
+  StrategyMatch,
+  strategy_match_id,
+  strategy_match_key,
 )
 from app.autotrade.scale_context import AutoScaleContext
 from app.autotrade.trend import RegimeInfo, TrendDecision
@@ -84,29 +83,46 @@ def _scale_context(now: int) -> AutoScaleContext:
   )
 
 
-def _forming_setup(now: int) -> FormingRangeSetup:
-  return FormingRangeSetup(
-    FORMING_GATE_VERSION,
-    forming_setup_id("XAU", "M5", str(now), "BUY", 4016.8, 4025.1),
-    forming_range_id("XAU", 4016.8, 4025.1),
+def _strategy_match(now: int) -> StrategyMatch:
+  return StrategyMatch(
+    STRATEGY_MATCH_VERSION,
+    strategy_match_id(
+      "XAU", "M5", str(now), "Liquidity Sweep", "BUY", 4016.5, 4017.4,
+    ),
     "XAU",
     "M5",
     str(now),
     now,
     now + 420,
-    "Range Edge Scalp",
-    "range_scalp",
+    "Liquidity Sweep",
+    "with_trend",
     "BUY",
-    "sweep_reclaim",
     4016.8,
     4016.5,
-    4017.1,
+    4017.4,
+    4017.0,
     3,
-    ("local range", "wick rejection"),
-    FormingRail("BUY", 4016.5, 4017.1, 4016.8, 9.0, ("micro ×4",)),
-    FormingRail("SELL", 4024.8, 4025.4, 4025.1, 9.0, ("micro ×4",)),
-    "range",
-    "M30",
+    ("sell-side liquidity swept", "bullish reclaim"),
+    1.2,
+    4014.8,
+    (30, 60, 90),
+  )
+
+
+def _range_strategy_match(now: int) -> StrategyMatch:
+  return replace(
+    _strategy_match(now),
+    match_id=strategy_match_id(
+      "XAU", "M5", str(now), "Range Edge Scalp", "BUY", 4016.5, 4017.4,
+    ),
+    strategy="Range Edge Scalp",
+    strategy_mode="range_scalp",
+    reasons=("two-sided local range", "lower-edge rejection"),
+    targets_pips=(70,),
+    range_id="xau-strategy-range-4016.80-4025.10",
+    range_low=4016.8,
+    range_high=4025.1,
+    full_take_profit_pips=70,
   )
 
 
@@ -202,16 +218,15 @@ async def test_worker_handles_m1_without_calling_scanner(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_worker_routes_typed_forming_setup_without_importing_scanner(
+async def test_worker_routes_scanner_strategy_without_regime_confirmation(
   monkeypatch,
 ):
   client = redis_state.get_client()
   now = int(datetime.now(timezone.utc).timestamp())
-  setup = _forming_setup(now)
-  await client.set(forming_gate_key("XAU"), setup.to_json(), ex=420)
+  match = _strategy_match(now)
+  await client.set(strategy_match_key("XAU"), match.to_json(), ex=420)
   monkeypatch.setattr(worker.settings, "auto_trade_enabled", True)
-  monkeypatch.setattr(worker.settings, "auto_trade_forming_gate_enabled", True)
-  monkeypatch.setattr(worker.settings, "auto_trade_forming_m1_confirmation_bars", 5)
+  monkeypatch.setattr(worker.settings, "auto_trade_strategy_bridge_enabled", True)
   monkeypatch.setattr(worker.settings, "auto_trade_stream", "auto_trade:test")
   monkeypatch.setattr(worker.settings, "auto_trade_stream_maxlen", 100)
   monkeypatch.setattr(worker.settings, "auto_trade_candidate_ttl", 3600)
@@ -228,11 +243,6 @@ async def test_worker_routes_typed_forming_setup_without_importing_scanner(
     worker,
     "evaluate_auto_scalp_gate",
     lambda *args, **kwargs: AutoScalpDecision("waiting_for_box"),
-  )
-  monkeypatch.setattr(
-    worker,
-    "evaluate_forming_range_gate",
-    lambda *args, **kwargs: _decision(),
   )
   monkeypatch.setattr(
     worker,
@@ -253,20 +263,56 @@ async def test_worker_routes_typed_forming_setup_without_importing_scanner(
     f"XAU:M1:{now}", source=source, client=client,
   )
 
-  assert result == _decision()
+  assert result.state == "waiting_for_box"
   trend_publish.assert_not_awaited()
   entries = await client.xrange("auto_trade:test")
   assert len(entries) == 1
   candidate = json.loads(entries[0][1]["payload"])
-  assert candidate["signal_source"] == "market_map_forming"
-  assert candidate["source_setup_id"] == setup.setup_id
-  assert candidate["source_event_ts"] == setup.event_ts
-  assert candidate["source_m5_confirmation"] == "sweep_reclaim"
+  assert candidate["version"] == 4
+  assert candidate["mode"] == "auto_strategy_match"
+  assert candidate["setup"] == "Liquidity Sweep"
+  assert candidate["signal_source"] == "scanner_strategy_match"
+  assert candidate["candidate_id"] == match.match_id
+  assert candidate["source_event_ts"] == match.event_ts
   status = json.loads(await client.get("auto_trade:last_gate:XAU"))
   assert status["state"] == "candidate"
-  assert status["gate_source"] == "market_map_forming"
-  assert status["forming_setup"]["id"] == setup.setup_id
-  assert status["forming_setup"]["m5_confirmation"] == "sweep_reclaim"
+  assert status["gate_source"] == "scanner_strategy_match"
+  assert status["strategy_match"]["id"] == match.match_id
+  assert status["strategy_match"]["strategy"] == "Liquidity Sweep"
+  assert status["direction"] == "BUY"
+
+
+@pytest.mark.asyncio
+async def test_worker_publishes_range_match_as_strategy_and_disarms_edge(
+  monkeypatch,
+):
+  client = redis_state.get_client()
+  now = int(datetime.now(timezone.utc).timestamp())
+  match = _range_strategy_match(now)
+  monkeypatch.setattr(worker.settings, "auto_trade_enabled", True)
+  monkeypatch.setattr(worker.settings, "auto_trade_stream", "auto_trade:test")
+  monkeypatch.setattr(worker.settings, "auto_trade_stream_maxlen", 100)
+  monkeypatch.setattr(worker.settings, "auto_trade_candidate_ttl", 3600)
+  monkeypatch.setattr(worker.settings, "auto_trade_min_confluence", 2)
+  monkeypatch.setattr(worker, "event_in_window", AsyncMock(return_value=None))
+
+  candidate_id = await worker._publish_strategy_match(
+    client,
+    "XAU",
+    worker.AutoTradeSpot(4017.2, now, True),
+    match,
+  )
+
+  assert candidate_id == match.match_id
+  entries = await client.xrange("auto_trade:test")
+  payload = json.loads(entries[0][1]["payload"])
+  assert payload["version"] == 3
+  assert payload["timeframe"] == "M5"
+  assert payload["mode"] == "auto_box_scalp"
+  assert payload["source_strategy"] == "Range Edge Scalp"
+  assert payload["full_take_profit_pips"] == 70
+  edge = worker._box_edge_key("XAU", match.range_id, "BUY")
+  assert await client.exists(edge)
 
 
 @pytest.mark.asyncio
@@ -326,6 +372,27 @@ async def test_used_edge_rearms_only_after_midpoint_close():
 
   assert blocked.state == "edge_disarmed"
   assert rearmed.state == "candidate"
+  assert not await client.exists(key)
+
+
+@pytest.mark.asyncio
+async def test_scanner_range_edge_rearms_after_spot_crosses_midpoint():
+  client = redis_state.get_client()
+  key = worker._box_edge_key("XAU", "xau-strategy-range", "BUY")
+  await client.set(key, json.dumps({
+    "source": "scanner_strategy_match",
+    "direction": "BUY",
+    "midpoint": 4020.0,
+  }))
+
+  await worker._rearm_scanner_range_edges(
+    client, "XAU", worker.AutoTradeSpot(4019.9, 1, True),
+  )
+  assert await client.exists(key)
+
+  await worker._rearm_scanner_range_edges(
+    client, "XAU", worker.AutoTradeSpot(4020.0, 2, True),
+  )
   assert not await client.exists(key)
 
 
@@ -395,14 +462,10 @@ async def test_non_candidate_decision_is_never_published(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_trend_regime_blocks_box_publish_and_only_trend_path_fires(
+async def test_private_strategy_match_uses_confluence_not_regime_label(
   monkeypatch,
 ):
-  """Mutual exclusion: even though evaluate_auto_scalp_gate legitimately
-  returns a "candidate" box decision on this bar, the regime router says
-  "trend" - so only the trend/breakout publish path may fire, never the
-  box path, on the same bar.
-  """
+  """A regime label cannot veto the stronger matched strategy."""
   client = redis_state.get_client()
   now = int(datetime.now(timezone.utc).timestamp())
   monkeypatch.setattr(worker.settings, "auto_trade_enabled", True)
@@ -451,8 +514,8 @@ async def test_trend_regime_blocks_box_publish_and_only_trend_path_fires(
   entries = await client.xrange("auto_trade:test")
   assert len(entries) == 1
   payload = json.loads(entries[0][1]["payload"])
-  assert payload["mode"] == "auto_trend_pullback"
-  assert payload["setup"] == "Trend Pullback"
+  assert payload["mode"] == "auto_box_scalp"
+  assert payload["setup"] == "Range Box Scalp"
   assert payload["regime"] == "trend"
   status = json.loads(await client.get("auto_trade:last_gate:XAU"))
   assert status["regime"] == "trend"
