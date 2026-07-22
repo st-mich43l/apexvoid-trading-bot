@@ -13,6 +13,21 @@ dated section after deployment.
 
 ### Added
 
+- Added real broker execution for `/ algo` manual signals (PR 3 of 3):
+  `ctrader-engine` now consumes `manual_trade:intents` (via a new
+  Python-side bridge onto the existing `auto_trade:candidates` pipeline) and
+  places a single pending LIMIT order at the owner's exact entry zone,
+  absolute stop loss, and take-profit ladder — never a re-derived structure
+  stop or fixed pip ladder like the autonomous box-scalp/trend/
+  strategy-match engines use for themselves. Owner-override commands
+  (`/trade_close`/`/trade_sl`/`/trade_cancel`) now route to the real
+  position/pending order once a signal is algo-armed or filled, instead of
+  only ever mutating Postgres/Telegram. Broker fill/TP/SL/close events drive
+  the same `trade_ops.py → post_result → broadcast.fanout_update` lifecycle
+  path a manually-confirmed signal already uses, so VIP/public channel posts
+  update exactly like a manual command would. Ships dark:
+  `MANUAL_ALGO_ENABLED` stays `false` by default.
+
 - Added manual-signal broker execution infrastructure (PR 2 of 3; no broker
   executes real orders yet — this PR is plumbing only). `manual_signals`
   gained `execution_mode`/`execution_status`/`execution_intent_id`/
