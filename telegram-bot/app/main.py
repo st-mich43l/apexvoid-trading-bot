@@ -18,6 +18,7 @@ from app.analysis.scanner import scanner_loop
 from app.analysis.market_map_delivery import market_map_scan_loop
 from app.autotrade.delivery import auto_trade_events_loop
 from app.autotrade.worker import auto_scalp_loop
+from app.signals.manual_execution import bridge_intents_loop, reconcile_events_loop
 from app.persistence import redis_state
 
 logging.basicConfig(
@@ -49,6 +50,8 @@ async def main() -> None:
   asyncio.create_task(auto_scalp_loop())
   asyncio.create_task(market_map_scan_loop())
   asyncio.create_task(auto_trade_events_loop())
+  asyncio.create_task(bridge_intents_loop())
+  asyncio.create_task(reconcile_events_loop())
   log.info("DB ready (PostgreSQL)")
   if not settings.telegram_owner_id:
     log.warning(

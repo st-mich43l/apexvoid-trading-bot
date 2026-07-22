@@ -53,10 +53,18 @@ async def do_active(ctx: dict) -> dict:
   }
 
 
-async def do_close(ctx: dict) -> dict:
-  pips = 0 if ctx.get("frac") == "be" else int(ctx["pips"])
-  frac = None if ctx.get("frac") == "be" else ctx.get("frac")
-  row = await close_leg(ctx["sid"], pips, frac)
+async def _execute_close(
+  sid: int,
+  symbol: str,
+  pips: int,
+  frac: float | None,
+  reply_to: int | None = None,
+) -> dict:
+  """The actual Postgres booking for a close - shared by the direct
+  (non-algo, or algo-not-yet-filled) path and the broker-confirmed algo
+  path (app.signals.manual_execution, once the real close/SL/TP fires).
+  """
+  row = await close_leg(sid, pips, frac)
   if row is None:
     return {"action": "close", "ok": False, "error": "not_open"}
   result = {
@@ -64,7 +72,7 @@ async def do_close(ctx: dict) -> dict:
     "ok": True,
     "row": row,
     "pips": pips,
-    "reply_to": row.get("channel_message_id") or ctx.get("reply_to"),
+    "reply_to": row.get("channel_message_id") or reply_to,
   }
   if row.get("closed"):
     net = row["net"]
@@ -72,10 +80,51 @@ async def do_close(ctx: dict) -> dict:
       "+" if net >= 0 else "-",
       abs(net),
       message_id=row.get("channel_message_id"),
-      chat_id=channel_for_symbol(ctx["symbol"]),
-      signal_id=ctx["sid"],
+      chat_id=channel_for_symbol(symbol),
+      signal_id=sid,
     )
   return result
+
+
+async def _maybe_defer_close_to_broker(
+  sid: int,
+  frac: float | None,
+  reply_to: int | None,
+) -> dict | None:
+  """Route to the real broker instead of Postgres when this signal is an
+  algo-armed/filled manual /algo signal - the entire reason this feature
+  exists (today /trade_close only ever mutated Postgres/Telegram, never a
+  real position). Returns None to fall through to the direct path
+  unchanged for every non-algo (or not-yet-filled) signal.
+  """
+  full = await get_manual_signal(sid)
+  if full is None or full.get("execution_mode") != "algo":
+    return None
+  if full.get("execution_status") != "filled":
+    return None
+  position_id = full.get("broker_position_id")
+  if position_id is None:
+    return None
+  from app.signals import manual_execution
+  await manual_execution.request_close(sid, int(position_id), frac=frac)
+  return {
+    "action": "close",
+    "ok": True,
+    "pending": True,
+    "row": full,
+    "reply_to": full.get("channel_message_id") or reply_to,
+  }
+
+
+async def do_close(ctx: dict) -> dict:
+  pips = 0 if ctx.get("frac") == "be" else int(ctx["pips"])
+  frac = None if ctx.get("frac") == "be" else ctx.get("frac")
+  pending = await _maybe_defer_close_to_broker(
+    ctx["sid"], frac, ctx.get("reply_to"),
+  )
+  if pending is not None:
+    return pending
+  return await _execute_close(ctx["sid"], ctx["symbol"], pips, frac, ctx.get("reply_to"))
 
 
 async def do_uncclose(ctx: dict) -> dict:
@@ -98,6 +147,57 @@ async def do_uncclose(ctx: dict) -> dict:
   }
 
 
+async def _execute_sl(
+  sid: int,
+  price: float,
+  is_be: bool,
+  reply_to: int | None = None,
+) -> dict:
+  """The actual Postgres SL move - shared by the direct (non-algo, or
+  algo-not-yet-filled) path and the broker-confirmed algo path
+  (app.signals.manual_execution, once AmendPositionStopLossAsync confirms).
+  """
+  row = await update_sl(sid, price)
+  if row is None:
+    return {"action": "sl", "ok": False, "error": "not_open"}
+  await clear_sl_alert(sid)
+  return {
+    "action": "sl",
+    "ok": True,
+    "row": row,
+    "price": price,
+    "is_be": is_be,
+    "reply_to": row.get("channel_message_id") or reply_to,
+  }
+
+
+async def _maybe_defer_sl_to_broker(
+  sid: int,
+  price: float,
+  is_be: bool,
+  reply_to: int | None,
+) -> dict | None:
+  full = await get_manual_signal(sid)
+  if full is None or full.get("execution_mode") != "algo":
+    return None
+  if full.get("execution_status") != "filled":
+    return None
+  position_id = full.get("broker_position_id")
+  if position_id is None:
+    return None
+  from app.signals import manual_execution
+  await manual_execution.request_move_sl(sid, int(position_id), price)
+  return {
+    "action": "sl",
+    "ok": True,
+    "pending": True,
+    "row": full,
+    "price": price,
+    "is_be": is_be,
+    "reply_to": full.get("channel_message_id") or reply_to,
+  }
+
+
 async def do_sl(ctx: dict) -> dict:
   signals = await get_open_signals(ctx["symbol"])
   signal = next(
@@ -115,30 +215,63 @@ async def do_sl(ctx: dict) -> dict:
     price = (signal["entry"] + entry_end) / 2
   else:
     price = float(target)
-  row = await update_sl(ctx["sid"], price)
-  if row is None:
-    return {"action": "sl", "ok": False, "error": "not_open"}
-  await clear_sl_alert(ctx["sid"])
-  return {
-    "action": "sl",
-    "ok": True,
-    "row": row,
-    "price": price,
-    "is_be": is_be,
-    "reply_to": row.get("channel_message_id") or ctx.get("reply_to"),
-  }
+  pending = await _maybe_defer_sl_to_broker(
+    ctx["sid"], price, is_be, ctx.get("reply_to"),
+  )
+  if pending is not None:
+    return pending
+  return await _execute_sl(ctx["sid"], price, is_be, ctx.get("reply_to"))
 
 
-async def do_cancel(ctx: dict) -> dict:
-  row = await cancel_manual_signal(ctx["sid"])
+async def _execute_cancel(sid: int, reply_to: int | None = None) -> dict:
+  """The actual Postgres cancel - shared by the direct (non-algo) path and
+  the broker-confirmed algo path (app.signals.manual_execution, once
+  CancelPendingOrderAsync confirms).
+  """
+  row = await cancel_manual_signal(sid)
   if row is None:
     return {"action": "cancel", "ok": False, "error": "not_open"}
   return {
     "action": "cancel",
     "ok": True,
     "row": row,
-    "reply_to": row.get("channel_message_id") or ctx.get("reply_to"),
+    "reply_to": row.get("channel_message_id") or reply_to,
   }
+
+
+async def _maybe_defer_cancel_to_broker(
+  sid: int,
+  reply_to: int | None,
+) -> dict | None:
+  """Only an ARMED (not yet filled) manual algo signal defers here - once
+  filled, /trade_cancel is not a broker verb (the position is open; the
+  owner wants /trade_close instead), so a filled/error/cancelled signal
+  falls through unchanged.
+  """
+  full = await get_manual_signal(sid)
+  if full is None or full.get("execution_mode") != "algo":
+    return None
+  if full.get("execution_status") != "armed":
+    return None
+  intent_id = full.get("execution_intent_id")
+  if not intent_id:
+    return None
+  from app.signals import manual_execution
+  await manual_execution.request_cancel(intent_id)
+  return {
+    "action": "cancel",
+    "ok": True,
+    "pending": True,
+    "row": full,
+    "reply_to": full.get("channel_message_id") or reply_to,
+  }
+
+
+async def do_cancel(ctx: dict) -> dict:
+  pending = await _maybe_defer_cancel_to_broker(ctx["sid"], ctx.get("reply_to"))
+  if pending is not None:
+    return pending
+  return await _execute_cancel(ctx["sid"], ctx.get("reply_to"))
 
 
 async def do_delete(ctx: dict) -> dict:
@@ -196,6 +329,11 @@ async def do_reopen(ctx: dict) -> dict:
     confluence=source.get("confluence"),
     symbol=ctx["symbol"],
     visibility=source.get("visibility", "both"),
+    # Bug fix: without this the reopened round always silently reverted to
+    # 'notify' even when the parent round was armed 'algo' - a reopen keeps
+    # the parent's execution mode, it does not need the owner to re-suffix
+    # / algo by hand.
+    execution_mode=source.get("execution_mode", "notify"),
   )
   return {
     "action": "reopen",
@@ -280,6 +418,8 @@ def render_result(
     return f"🟢 {seq}active — order filled"
   if action == "cancel":
     seq = f"#{_display_seq(result['row'])} " if tier == "vip" else ""
+    if result.get("pending"):
+      return f"⏳ {seq}cancel requested — awaiting broker confirmation"
     return f"❌ {seq}cancelled"
   if action == "delete":
     seq = f"#{result['seq']} " if tier == "vip" else ""
@@ -298,8 +438,10 @@ def render_result(
       f"+{result['pips']} pips{_win_wings(result['pips'])}"
     )
   if action == "sl":
-    suffix = " (BE)" if result["is_be"] else ""
     seq = f"#{_display_seq(result['row'])} " if tier == "vip" else ""
+    if result.get("pending"):
+      return f"⏳ {seq}stop-loss move requested — awaiting broker confirmation"
+    suffix = " (BE)" if result["is_be"] else ""
     return (
       f"🛡 {seq}move SL to "
       f"{_price(result['price'], symbol)}{suffix}"
@@ -311,6 +453,8 @@ def render_result(
       if tier == "vip"
       else ""
     )
+    if result.get("pending"):
+      return f"⏳ {seq}close requested — awaiting broker confirmation"
     if row.get("error") == "exceeds_remaining":
       remaining = int(round(row["remaining"] * 100))
       return f"⚠️ {seq}only has {remaining}% remaining to close"

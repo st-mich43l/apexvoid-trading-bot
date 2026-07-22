@@ -938,6 +938,55 @@ async def set_execution_status(
   return _decode_signal(row) if row else None
 
 
+async def set_execution_fill(
+  signal_id: int,
+  *,
+  broker_position_id: int,
+  broker_fill_price: float,
+) -> dict | None:
+  """Record a manual-algo limit order's real broker fill.
+
+  Called once (from the reconcile loop) when AutoTradeEngine.cs's fill
+  adoption reconstructs the position and publishes its "manual_opened"
+  event — marks the signal ``'filled'`` and records the real position id
+  and fill price the owner-override commands (``/trade_close``/``/trade_sl``)
+  need to route to the broker afterwards.
+
+  Returns the updated row, or ``None`` if ``signal_id`` does not exist.
+  """
+  async with _connect() as db:
+    row = await db.fetchrow(
+      "UPDATE manual_signals SET execution_status = 'filled', "
+      "broker_position_id = $1, broker_fill_price = $2 WHERE id = $3 "
+      "RETURNING *",
+      str(broker_position_id), broker_fill_price, signal_id,
+    )
+  return _decode_signal(row) if row else None
+
+
+async def get_signal_by_execution_intent_id(intent_token: str) -> dict | None:
+  """Look up a manual signal by its ``execution_intent_id``.
+
+  Tolerates the truncated identity cTrader comments carry: comment fields
+  are capped at 100 chars broker-side, so AutoTradeEngine.cs embeds only
+  ``CandidateToken(intent_id)`` (the first 10 characters) in a manual-algo
+  position/order comment — the same truncation convention every other
+  candidate type in this codebase already accepts for comment-based
+  identity matching. Matching by prefix means either the full
+  ``execution_intent_id`` or that truncated token resolves the same row.
+  On the rare (and, for this single-owner bot, extremely unlikely) case of
+  two signals sharing a 10-character prefix, the most recently created
+  match wins.
+  """
+  async with _connect() as db:
+    row = await db.fetchrow(
+      "SELECT * FROM manual_signals WHERE execution_intent_id LIKE $1 || '%' "
+      "ORDER BY id DESC LIMIT 1",
+      intent_token[:10],
+    )
+  return _decode_signal(row) if row else None
+
+
 async def get_manual_signal_by_channel_id(channel_message_id: int) -> dict | None:
   """Look up an open manual signal by its Telegram channel message_id."""
   async with _connect() as db:

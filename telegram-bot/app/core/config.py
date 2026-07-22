@@ -243,6 +243,12 @@ class Settings(BaseSettings):
   manual_algo_risk_pct: float = 2.0
   manual_trade_intent_stream: str = "manual_trade:intents"
   manual_trade_intent_stream_maxlen: int = 1000
+  # Consumed by this PR's bridge/reconcile loops (app.signals.manual_execution)
+  # and by ctrader-engine's owner-override command poll. The stream name must
+  # match AutoTradeEngine.cs's hardcoded ManualCommandStream constant — it is
+  # not itself wired through AUTO_TRADE_* options on the C# side.
+  manual_trade_command_stream: str = "manual_trade:commands"
+  manual_trade_command_stream_maxlen: int = 1000
 
   @property
   def telegram_chat_id(self) -> str:

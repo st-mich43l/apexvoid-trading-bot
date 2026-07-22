@@ -537,6 +537,12 @@ internal sealed class FaultAutoTradeStore : IAutoTradeStore
   public Task SetCursorAsync(string cursor, CancellationToken cancellationToken) =>
     Task.CompletedTask;
 
+  public Task<string> GetCommandCursorAsync(CancellationToken cancellationToken) =>
+    Task.FromResult("0-0");
+
+  public Task SetCommandCursorAsync(string cursor, CancellationToken cancellationToken) =>
+    Task.CompletedTask;
+
   public Task<IReadOnlyList<TradeStreamEntry>> ReadCandidatesAsync(
     string stream,
     string afterId,

@@ -159,7 +159,9 @@ public sealed record TradeCandidate(
   IReadOnlyList<int>? TargetsPips = null,
   string? Regime = null,
   decimal? OpposingZoneLow = null,
-  decimal? OpposingZoneHigh = null
+  decimal? OpposingZoneHigh = null,
+  decimal? ManualStopLoss = null,
+  long? ManualExpiresAt = null
 );
 
 public sealed record TradeStreamEntry(
@@ -198,6 +200,18 @@ public sealed record AutoTradePositionState(
   string? Setup = null,
   string? Regime = null,
   int? Confluence = null
+);
+
+// One owner-override command for an already-armed/filled manual-algo
+// signal (`/trade_close`, `/trade_sl`, `/trade_cancel`), published by the
+// Python side onto `manual_trade:commands` and consumed by AutoTradeEngine's
+// command poll. `Type` is one of "cancel_pending" | "close" | "move_sl".
+public sealed record ManualTradeCommand(
+  string Type,
+  string? IntentId = null,
+  long? PositionId = null,
+  decimal? Price = null,
+  decimal? Frac = null
 );
 
 public sealed record AutoTradeEvent(

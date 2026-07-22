@@ -10,6 +10,13 @@ public sealed class AutoTradeEngine(
   Action<string>? log = null
 )
 {
+  // Owner-override commands for algo-armed/filled manual signals
+  // (cancel_pending/close/move_sl). Not wired through AutoTradeOptions -
+  // this stream name is a fixed constant matching Python's
+  // settings.manual_trade_command_stream default, kept out of the
+  // per-environment options surface deliberately (this feature is driven
+  // by per-candidate/per-command data, not new global tuning knobs).
+  private const string ManualCommandStream = "manual_trade:commands";
   private readonly SemaphoreSlim _gate = new(1, 1);
   private readonly Dictionary<long, AutoTradePositionState> _states = [];
   private readonly HashSet<string> _reportedErrors = [];
@@ -88,6 +95,7 @@ public sealed class AutoTradeEngine(
       );
 
       var cursor = await store.GetCursorAsync(cancellationToken);
+      var commandCursor = await store.GetCommandCursorAsync(cancellationToken);
       var nextReconcile = _clock();
       while (Enabled && !cancellationToken.IsCancellationRequested)
       {
@@ -98,6 +106,25 @@ public sealed class AutoTradeEngine(
             cancellationToken
           );
           nextReconcile = _clock().AddSeconds(15);
+        }
+        // Owner-override commands (/trade_close, /trade_sl, /trade_cancel on
+        // an algo-armed/filled signal) share this loop/gate/thread rather
+        // than a second poll loop, so they never race _states mutations
+        // from ObserveSpotAsync's ProcessTargetsAsync.
+        var commandEntries = await store.ReadCandidatesAsync(
+          ManualCommandStream,
+          commandCursor,
+          10,
+          cancellationToken
+        );
+        foreach (var commandEntry in commandEntries)
+        {
+          await WithGateAsync(
+            () => ProcessCommandEntryAsync(commandEntry, cancellationToken),
+            cancellationToken
+          );
+          commandCursor = commandEntry.Id;
+          await store.SetCommandCursorAsync(commandCursor, cancellationToken);
         }
         var entries = await store.ReadCandidatesAsync(
           options.CandidateStream,
@@ -266,6 +293,195 @@ public sealed class AutoTradeEngine(
     }
   }
 
+  // Dispatches one manual_trade:commands entry to the real broker. Unlike
+  // ProcessEntryAsync there is no SETNX candidate-claim idempotency here -
+  // each owner command is a one-shot fire-and-forget stream entry with no
+  // republish-on-crash semantics on the Python side, so failures are
+  // logged/published and the cursor still advances rather than retrying
+  // forever.
+  private async Task ProcessCommandEntryAsync(
+    TradeStreamEntry entry,
+    CancellationToken cancellationToken
+  )
+  {
+    ManualTradeCommand? command;
+    try
+    {
+      command = JsonSerializer.Deserialize(
+        entry.Payload,
+        RedisJsonContext.Default.ManualTradeCommand
+      );
+    }
+    catch (JsonException exception)
+    {
+      _log($"auto-trade ignored malformed manual command {entry.Id}: {exception.Message}");
+      return;
+    }
+    if (command is null || string.IsNullOrWhiteSpace(command.Type))
+    {
+      return;
+    }
+    try
+    {
+      switch (command.Type)
+      {
+        case "cancel_pending":
+          await HandleCancelPendingCommandAsync(command, cancellationToken);
+          break;
+        case "close":
+          await HandleCloseCommandAsync(command, cancellationToken);
+          break;
+        case "move_sl":
+          await HandleMoveSlCommandAsync(command, cancellationToken);
+          break;
+        default:
+          _log($"auto-trade ignored unknown manual command type {command.Type}");
+          break;
+      }
+    }
+    catch (OperationCanceledException)
+    {
+      throw;
+    }
+    catch (Exception exception)
+    {
+      _log($"auto-trade manual command {command.Type} failed: {exception.Message}");
+      await PublishAsync(
+        "manual_command_error",
+        $"manual command {command.Type} failed: {exception.Message}",
+        cancellationToken,
+        candidateId: command.IntentId,
+        positionId: command.PositionId
+      );
+    }
+  }
+
+  // /trade_cancel on an armed (not yet filled) manual algo signal: find the
+  // still-resting limit order by its candidate token (the same
+  // Contains(CandidateToken(...)) matching every other candidate type
+  // already uses) and cancel it for real.
+  private async Task HandleCancelPendingCommandAsync(
+    ManualTradeCommand command,
+    CancellationToken cancellationToken
+  )
+  {
+    if (string.IsNullOrWhiteSpace(command.IntentId))
+    {
+      _log("auto-trade cancel_pending command missing intent_id");
+      return;
+    }
+    var client = RequireClient();
+    var pendingOrders = await client.ReconcilePendingOrdersAsync(cancellationToken);
+    var token = CandidateToken(command.IntentId);
+    var target = pendingOrders.FirstOrDefault(order =>
+      order.Label == options.Label
+      && order.Comment.Contains(token, StringComparison.Ordinal)
+    );
+    if (target is null)
+    {
+      _log($"auto-trade cancel_pending: no matching pending order for {token}");
+      await PublishAsync(
+        "manual_command_error",
+        $"cancel requested but no pending order found for {token}",
+        cancellationToken,
+        candidateId: command.IntentId
+      );
+      return;
+    }
+    await client.CancelPendingOrderAsync(target.OrderId, cancellationToken);
+    _allSymbolPendingOrders = _allSymbolPendingOrders
+      .Where(item => item.OrderId != target.OrderId)
+      .ToArray();
+    await PublishAsync(
+      "manual_cancelled",
+      $"manual algo limit {target.OrderId} cancelled by owner",
+      cancellationToken,
+      candidateId: command.IntentId
+    );
+  }
+
+  // /trade_close on a filled manual algo signal: close the real position
+  // (full or partial by Frac) and publish the REAL execution price so
+  // Python can compute the pip result itself - no pip math belongs here.
+  private async Task HandleCloseCommandAsync(
+    ManualTradeCommand command,
+    CancellationToken cancellationToken
+  )
+  {
+    if (command.PositionId is not long positionId)
+    {
+      _log("auto-trade close command missing position_id");
+      return;
+    }
+    var client = RequireClient();
+    var remaining = _states.GetValueOrDefault(positionId)?.RemainingVolume
+      ?? (await store.GetPositionAsync(positionId, cancellationToken))?.RemainingVolume;
+    if (remaining is null)
+    {
+      var positions = await client.ReconcilePositionsAsync(cancellationToken);
+      remaining = positions.FirstOrDefault(item => item.PositionId == positionId)?.Volume;
+    }
+    if (remaining is not long remainingVolume || remainingVolume <= 0)
+    {
+      _log($"auto-trade close command: position {positionId} not found");
+      await PublishAsync(
+        "manual_command_error",
+        $"close requested but position {positionId} is not open",
+        cancellationToken,
+        candidateId: command.IntentId,
+        positionId: positionId
+      );
+      return;
+    }
+    var volume = command.Frac is decimal frac && frac > 0 && frac < 1
+      ? Math.Clamp(
+        decimal.ToInt64(decimal.Floor(remainingVolume * frac)),
+        1,
+        remainingVolume
+      )
+      : remainingVolume;
+    var execution = await client.ClosePositionAsync(positionId, volume, cancellationToken);
+    await PublishAsync(
+      "manual_closed",
+      $"manual algo position {positionId} closed by owner",
+      cancellationToken,
+      candidateId: command.IntentId,
+      positionId: positionId,
+      volume: execution.ExecutedVolume,
+      price: execution.ExecutionPrice
+    );
+  }
+
+  // /trade_sl on a filled manual algo signal: amend the real position's
+  // stop loss. The existing trailing-stop technique (StopTrailPlanner via
+  // ProcessTargetsAsync) is untouched and keeps running afterwards.
+  private async Task HandleMoveSlCommandAsync(
+    ManualTradeCommand command,
+    CancellationToken cancellationToken
+  )
+  {
+    if (command.PositionId is not long positionId || command.Price is not decimal price)
+    {
+      _log("auto-trade move_sl command missing position_id or price");
+      return;
+    }
+    await RequireClient().AmendPositionStopLossAsync(positionId, price, cancellationToken);
+    if (_states.TryGetValue(positionId, out var state))
+    {
+      state = state with { CurrentStopLoss = price };
+      _states[positionId] = state;
+      await store.SavePositionAsync(state, cancellationToken);
+    }
+    await PublishAsync(
+      "manual_sl_moved",
+      $"manual algo position {positionId} stop moved to {price:N2} by owner",
+      cancellationToken,
+      candidateId: command.IntentId,
+      positionId: positionId,
+      price: price
+    );
+  }
+
   private async Task<bool> ProcessCandidateAsync(
     TradeCandidate candidate,
     CancellationToken cancellationToken
@@ -284,14 +500,21 @@ public sealed class AutoTradeEngine(
     var boxRangeScalp = IsBoxRangeScalp(candidate);
     var trendCandidate = IsTrendCandidate(candidate);
     var strategyMatchCandidate = IsStrategyMatchCandidate(candidate);
+    var manualAlgoCandidate = IsManualAlgoCandidate(candidate);
     if (
       (
         !legacyRangeScalp
         && !boxRangeScalp
         && !trendCandidate
         && !strategyMatchCandidate
+        && !manualAlgoCandidate
       )
-      || candidate.Confluence < options.MinConfluence
+      // MinConfluence exists to filter the autonomous engines' own
+      // confidence scoring - a manually-typed /algo signal is the owner's
+      // explicit decision (Python defaults an untagged signal's confluence
+      // to 1), so it is exempt rather than silently rejected under the
+      // default MinConfluence=2.
+      || (!manualAlgoCandidate && candidate.Confluence < options.MinConfluence)
       || !string.Equals(
         candidate.Symbol,
         symbol.RedisSymbol,
@@ -342,6 +565,20 @@ public sealed class AutoTradeEngine(
       return await RejectAsync(
         candidate,
         "invalid strategy candidate contract",
+        cancellationToken
+      );
+    }
+    if (
+      manualAlgoCandidate
+      && (
+        candidate.TargetsPips is not { Count: > 0 } manualTargetsPips
+        || manualTargetsPips.Any(pips => pips <= 0)
+      )
+    )
+    {
+      return await RejectAsync(
+        candidate,
+        "invalid manual algo target contract",
         cancellationToken
       );
     }
@@ -433,7 +670,9 @@ public sealed class AutoTradeEngine(
     StructureStopPlan stopPlan;
     try
     {
-      stopPlan = StructureStop(candidate, direction, expectedEntry, symbol);
+      stopPlan = manualAlgoCandidate
+        ? ManualStop(candidate, direction, expectedEntry, symbol)
+        : StructureStop(candidate, direction, expectedEntry, symbol);
     }
     catch (VolumePlanningException exception)
     {
@@ -516,6 +755,18 @@ public sealed class AutoTradeEngine(
     CancellationToken cancellationToken
   )
   {
+    if (IsManualAlgoCandidate(candidate))
+    {
+      return await ProcessManualAlgoAsync(
+        candidate,
+        account,
+        direction,
+        expectedEntry,
+        stopPlan,
+        date,
+        cancellationToken
+      );
+    }
     if (
       !IsBoxRangeScalp(candidate)
       && !IsStrategyMatchCandidate(candidate)
@@ -880,6 +1131,140 @@ public sealed class AutoTradeEngine(
     }
   }
 
+  // Owner's manual /algo signal: a single pending LIMIT order at the
+  // proximal-or-current-price edge (mirrors ZoneFillPlanner's proximal-edge
+  // concept, one leg instead of two), an absolute stop from ManualStop, and
+  // TargetsPips taken directly from the candidate (already pip-converted by
+  // the Python bridge). No AutoTradePositionState/store.SavePositionAsync
+  // happens here - like zone-fill, that only happens once ReconcileAsync
+  // notices the limit order filled and reconstructs state from its comment.
+  private async Task<bool> ProcessManualAlgoAsync(
+    TradeCandidate candidate,
+    TradingAccountSnapshot account,
+    TradeDirection direction,
+    decimal expectedEntry,
+    StructureStopPlan stopPlan,
+    DateOnly date,
+    CancellationToken cancellationToken
+  )
+  {
+    var symbol = RequireSymbol();
+    var zone = candidate.EntryZone;
+    var insideZone = expectedEntry >= zone.Low && expectedEntry <= zone.High;
+    var limitPrice = insideZone
+      ? expectedEntry
+      : (direction == TradeDirection.Buy ? zone.High : zone.Low);
+    limitPrice = decimal.Round(
+      limitPrice,
+      symbol.Digits,
+      MidpointRounding.AwayFromZero
+    );
+    StructureStopPlan manualStopPlan;
+    try
+    {
+      manualStopPlan = ManualStop(candidate, direction, limitPrice, symbol);
+    }
+    catch (VolumePlanningException exception)
+    {
+      return await RejectAsync(candidate, exception.Message, cancellationToken);
+    }
+    var targetsPips = candidate.TargetsPips!;
+    var targetWeights = EqualWeights(targetsPips.Count);
+    InitialSizingResult sizing;
+    try
+    {
+      sizing = VolumePlanner.SizeInitial(
+        account.Balance,
+        options.RiskPercent,
+        options.SizingMode,
+        manualStopPlan.StopPips,
+        options.PipValuePerLot,
+        symbol,
+        targetsPips,
+        targetWeights
+      );
+    }
+    catch (VolumePlanningException exception)
+    {
+      return await RejectAsync(candidate, exception.Message, cancellationToken);
+    }
+    var groupId = GroupToken(candidate.CandidateId);
+    var barTs = candidate.BarTs ?? candidate.CreatedAt;
+    var expiresAt = candidate.ManualExpiresAt ?? 0;
+    if (options.DryRun)
+    {
+      return await CompleteDryRunAsync(
+        candidate,
+        $"manual algo {direction} {sizing.Lots:N2} lots @ {limitPrice:N2} · "
+          + $"SL {manualStopPlan.StopLoss:N2} · {sizing.BindingTerm}",
+        sizing.Volume,
+        limitPrice,
+        cancellationToken
+      );
+    }
+    if (await store.IsPausedAsync(cancellationToken))
+    {
+      return await RejectAsync(candidate, "executor paused", cancellationToken);
+    }
+    await ReconcileAsync(cancellationToken);
+    if (_allSymbolPositions.Count > 0 || _allSymbolPendingOrders.Count > 0)
+    {
+      return await RejectAsync(
+        candidate,
+        "XAU exposure appeared before manual algo order",
+        cancellationToken
+      );
+    }
+    var comment = BuildManualComment(
+      candidate.CandidateId,
+      groupId,
+      sizing.Volume,
+      sizing.TargetPlan.Slices,
+      sizing.TargetPlan.TargetsPips,
+      sizing.TargetPlan.TargetOrdinals,
+      barTs,
+      expiresAt
+    );
+    var orderId = await RequireClient().PlaceLimitOrderAsync(
+      new LimitOrderRequest(
+        symbol.SymbolId,
+        direction,
+        sizing.Volume,
+        limitPrice,
+        decimal.ToInt64(manualStopPlan.Distance * 100_000m),
+        options.Label,
+        comment,
+        ClientOrderId(candidate.CandidateId)
+      ),
+      cancellationToken
+    );
+    await store.CompleteCandidateAsync(
+      candidate.CandidateId,
+      $"ordered:{orderId}",
+      cancellationToken
+    );
+    await store.IncrementDailyTradeCountAsync(date, cancellationToken);
+    await PublishAsync(
+      "manual_planned",
+      $"manual algo {direction} limit {sizing.Lots:N2} lots @ {limitPrice:N2} · "
+        + $"SL {manualStopPlan.StopLoss:N2} · {sizing.BindingTerm}",
+      cancellationToken,
+      candidate.CandidateId,
+      volume: sizing.Volume,
+      price: limitPrice,
+      groupId: groupId,
+      trancheIndex: 1,
+      groupWorstCase: -sizing.Lots * manualStopPlan.StopPips
+        * options.PipValuePerLot,
+      riskBudget: sizing.Budget,
+      hadAdds: false,
+      setup: candidate.Setup,
+      stopPips: manualStopPlan.StopPips,
+      targetsPips: sizing.TargetPlan.TargetsPips
+    );
+    return true;
+  }
+
   private async Task<bool> ProcessAddAsync(
     TradeCandidate candidate,
     TradingAccountSnapshot account,
@@ -1158,6 +1543,47 @@ public sealed class AutoTradeEngine(
       options.PipSize,
       symbol
     );
+  }
+
+  // The owner's exact entered stop, never a re-derived structure stop -
+  // this is the entire reason the manual-algo path exists. No min/max stop
+  // pips clamping either: options.AddMinStopPips/TrendStopMinPips/MaxPips
+  // exist to bound the AUTONOMOUS engines' own structure-derived stops, not
+  // an owner's explicit price.
+  private StructureStopPlan ManualStop(
+    TradeCandidate candidate,
+    TradeDirection direction,
+    decimal entryPrice,
+    SymbolInfo symbol
+  )
+  {
+    var manualStopLoss = candidate.ManualStopLoss
+      ?? throw new VolumePlanningException("manual algo candidate has no stop loss");
+    var rawDistance = direction == TradeDirection.Buy
+      ? entryPrice - manualStopLoss
+      : manualStopLoss - entryPrice;
+    if (rawDistance <= 0)
+    {
+      throw new VolumePlanningException(
+        "manual stop loss is not on the losing side of entry"
+      );
+    }
+    var stopLoss = decimal.Round(
+      manualStopLoss,
+      symbol.Digits,
+      MidpointRounding.AwayFromZero
+    );
+    var distance = direction == TradeDirection.Buy
+      ? entryPrice - stopLoss
+      : stopLoss - entryPrice;
+    if (distance <= 0)
+    {
+      throw new VolumePlanningException(
+        "manual stop loss is not on the losing side of entry"
+      );
+    }
+    var stopPips = distance / options.PipSize;
+    return new StructureStopPlan(stopLoss, distance, stopPips, manualStopLoss, false);
   }
 
   private (int Minimum, int Maximum) StopPipsBounds(TradeCandidate candidate) =>
@@ -1466,6 +1892,16 @@ public sealed class AutoTradeEngine(
           + $"{spreadPips:0.0} pips, cap {options.MaxSpreadPips:0.0}"
       );
     }
+    // MaxEntryDistancePips exists to catch the AUTONOMOUS engines chasing a
+    // setup whose zone price has already moved away from - it does not
+    // apply to a manual /algo signal, whose entire design is a resting
+    // limit order that is expected to sit and wait for price to arrive at
+    // the owner's own zone, often well outside this (10-pip default) cap
+    // at arm-time. See IsManualAlgoCandidate below.
+    if (IsManualAlgoCandidate(candidate))
+    {
+      return quote;
+    }
     var direction = ParseDirection(candidate.Direction);
     var entry = direction == TradeDirection.Buy ? quote.Ask : quote.Bid;
     var distance = entry < candidate.EntryZone.Low
@@ -1742,6 +2178,32 @@ public sealed class AutoTradeEngine(
         hadAdds: false
       );
     }
+    foreach (var order in _allSymbolPendingOrders.ToArray())
+    {
+      var manual = ParseManualExpiry(order.Comment);
+      if (
+        order.Label != options.Label
+        || manual is null
+        || manual.Value.ExpiresAt <= 0
+        || _clock().ToUnixTimeSeconds() < manual.Value.ExpiresAt
+      )
+      {
+        continue;
+      }
+      await client.CancelPendingOrderAsync(order.OrderId, cancellationToken);
+      _allSymbolPendingOrders = _allSymbolPendingOrders
+        .Where(item => item.OrderId != order.OrderId)
+        .ToArray();
+      await PublishAsync(
+        "manual_expired",
+        $"manual algo limit {order.OrderId} cancelled after expiry",
+        cancellationToken,
+        candidateId: manual.Value.CandidateToken,
+        groupId: manual.Value.GroupId,
+        trancheIndex: 1,
+        hadAdds: false
+      );
+    }
     var botPositions = _allSymbolPositions
       .Where(position => position.Label == options.Label)
       .ToArray();
@@ -1760,7 +2222,8 @@ public sealed class AutoTradeEngine(
           "position is no longer open at broker (SL or manual close)",
           cancellationToken,
           state.CandidateId,
-          stale
+          stale,
+          price: state.CurrentStopLoss
         );
       }
     }
@@ -1798,8 +2261,23 @@ public sealed class AutoTradeEngine(
     CancellationToken cancellationToken
   )
   {
-    var state = await store.GetPositionAsync(position.PositionId, cancellationToken)
-      ?? ParseComment(position);
+    var stored = await store.GetPositionAsync(position.PositionId, cancellationToken);
+    var state = stored ?? ParseComment(position);
+    // A manual-algo limit order fill is never seen by PlaceTrancheAsync (no
+    // market order is ever placed for it) - this adoption, the very first
+    // time nothing in Redis/parseable-av* comments already knows this
+    // position, IS the fill event for it, unlike av1/av2/av3/avz adoption
+    // which is always recovering an already-published trade.
+    var isNewManualFill = false;
+    if (state is null)
+    {
+      var manual = ParseManualComment(position);
+      if (manual is not null)
+      {
+        state = manual;
+        isNewManualFill = true;
+      }
+    }
     if (state is null)
     {
       _log($"auto-trade cannot reconstruct position {position.PositionId}");
@@ -1812,6 +2290,25 @@ public sealed class AutoTradeEngine(
     };
     _states[position.PositionId] = state;
     await store.SavePositionAsync(state, cancellationToken);
+    if (isNewManualFill)
+    {
+      var directionLabel = state.Direction == TradeDirection.Buy ? "BUY" : "SELL";
+      var lots = state.InitialVolume / (decimal)RequireSymbol().LotSize;
+      await PublishAsync(
+        "manual_opened",
+        $"{directionLabel} {lots:N2} lots filled {state.EntryPrice:N2}, "
+          + $"SL {state.CurrentStopLoss:N2} · manual algo",
+        cancellationToken,
+        state.CandidateId,
+        state.PositionId,
+        volume: state.InitialVolume,
+        price: state.EntryPrice,
+        groupId: state.GroupId,
+        trancheIndex: 1,
+        setup: "Manual Algo",
+        targetsPips: state.TargetsPips
+      );
+    }
   }
 
   private void ValidateAccount(TradingAccountSnapshot account)
@@ -2025,6 +2522,11 @@ public sealed class AutoTradeEngine(
     && !string.IsNullOrWhiteSpace(candidate.Setup)
     && candidate.Mode == "auto_strategy_match";
 
+  private static bool IsManualAlgoCandidate(TradeCandidate candidate) =>
+    candidate.Version == 3
+    && candidate.Mode == "manual_algo"
+    && candidate.ManualStopLoss is not null;
+
   private static bool UsesCandidateTargetPlan(TradeCandidate candidate) =>
     IsTrendCandidate(candidate) || IsStrategyMatchCandidate(candidate);
 
@@ -2116,6 +2618,128 @@ public sealed class AutoTradeEngine(
       );
     }
     return comment;
+  }
+
+  // avm|{candidateToken}|{groupId}|{volume}|{slices}|{targets}|{ordinals}|
+  // {barTs}|{expiresAt} - single-leg manual-algo equivalent of av3/avz.
+  // expiresAt is an absolute unix timestamp (0 = never expires), unlike
+  // zone-fill's bars*60s TTL formula.
+  private static string BuildManualComment(
+    string candidateId,
+    string groupId,
+    long volume,
+    IReadOnlyList<long> slices,
+    IReadOnlyList<int> targets,
+    IReadOnlyList<int> ordinals,
+    long barTs,
+    long expiresAt
+  )
+  {
+    var comment = string.Join(
+      '|',
+      "avm",
+      CandidateToken(candidateId),
+      GroupToken(groupId),
+      volume.ToString(CultureInfo.InvariantCulture),
+      string.Join(',', slices),
+      string.Join(',', targets),
+      string.Join(',', ordinals),
+      barTs.ToString(CultureInfo.InvariantCulture),
+      expiresAt.ToString(CultureInfo.InvariantCulture)
+    );
+    if (comment.Length > 100)
+    {
+      throw new VolumePlanningException(
+        $"manual algo comment is {comment.Length} chars; cTrader maximum is 100"
+      );
+    }
+    return comment;
+  }
+
+  private static AutoTradePositionState? ParseManualComment(TradingPosition position)
+  {
+    var parts = position.Comment.Split('|');
+    if (parts.Length != 9 || parts[0] != "avm")
+    {
+      return null;
+    }
+    try
+    {
+      var initial = long.Parse(parts[3], CultureInfo.InvariantCulture);
+      var slices = parts[4].Split(',')
+        .Select(value => long.Parse(value, CultureInfo.InvariantCulture))
+        .ToArray();
+      var targets = parts[5].Split(',')
+        .Select(value => int.Parse(value, CultureInfo.InvariantCulture))
+        .ToArray();
+      var ordinals = parts[6].Split(',')
+        .Select(value => int.Parse(value, CultureInfo.InvariantCulture))
+        .ToArray();
+      var barTs = long.Parse(parts[7], CultureInfo.InvariantCulture);
+      if (
+        slices.Length == 0
+        || slices.Length != targets.Length
+        || ordinals.Length != targets.Length
+        || slices.Any(value => value <= 0)
+        || targets.Any(value => value <= 0)
+        || ordinals.Any(value => value <= 0)
+        || !ordinals.SequenceEqual(ordinals.Order())
+      )
+      {
+        return null;
+      }
+      return new AutoTradePositionState(
+        parts[1],
+        position.PositionId,
+        position.SymbolId,
+        position.Direction,
+        position.EntryPrice,
+        initial,
+        position.Volume,
+        slices,
+        targets,
+        NextTargetIndex: 0,
+        OpenedAt: 0,
+        position.StopLoss,
+        ordinals,
+        parts[2],
+        TrancheIndex: 1,
+        GroupOpenedAt: barTs,
+        LastTrancheBarTs: barTs,
+        GroupTrancheCount: 1,
+        HadAdds: false,
+        InitialStopLoss: position.StopLoss,
+        ZoneLeg: 0,
+        GroupInitialVolume: initial,
+        InitialTrancheVolume: initial,
+        Setup: "Manual Algo"
+      );
+    }
+    catch (FormatException)
+    {
+      return null;
+    }
+  }
+
+  private static (long ExpiresAt, string GroupId, string CandidateToken)? ParseManualExpiry(
+    string comment
+  )
+  {
+    var parts = comment.Split('|');
+    if (
+      parts.Length != 9
+      || parts[0] != "avm"
+      || !long.TryParse(
+        parts[8],
+        NumberStyles.Integer,
+        CultureInfo.InvariantCulture,
+        out var expiresAt
+      )
+    )
+    {
+      return null;
+    }
+    return (expiresAt, parts[2], parts[1]);
   }
 
   private static AutoTradePositionState? ParseComment(TradingPosition position)

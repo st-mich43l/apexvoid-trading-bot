@@ -1166,6 +1166,333 @@ public sealed class AutoTradeEngineTests
     await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
   }
 
+  [Fact]
+  public async Task ManualAlgoCandidateIsAcceptedAndPlacesLimitAtProximalEdgeWhenPriceOutsideZone()
+  {
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+    var store = new FakeAutoTradeStore(ManualCandidateJson(
+      direction: "SELL",
+      entryLow: 3999.5m,
+      entryHigh: 4000.5m,
+      manualStopLoss: 4006.0m
+    ));
+    var client = new FakeTradingClient();
+    var engine = new AutoTradeEngine(Options(), store, () => Now, _ => { });
+    // Bid 3990.0 sits well outside (below) the zone - previously this
+    // exact shape ("unsupported" mode/version combo) would have hit the
+    // "unsupported candidate" reject.
+    await engine.ObserveSpotAsync(
+      new SpotPrice("XAU", 3990.0m, 3990.2m, Now.ToUnixTimeSeconds()),
+      cts.Token
+    );
+
+    var run = engine.RunSessionAsync(client, Symbol, cts.Token);
+    await store.Ordered.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+    Assert.Empty(client.Orders);
+    var order = Assert.Single(client.LimitOrders);
+    Assert.Equal(TradeDirection.Sell, order.Direction);
+    // SELL proximal edge = zone.Low (mirrors ZoneFillPlanner's proximal
+    // edge: the side price would touch first approaching from outside).
+    Assert.Equal(3999.5m, order.LimitPrice);
+    Assert.Equal(600, order.Volume);
+    Assert.Equal(650_000, order.RelativeStopLoss);
+    Assert.StartsWith("avm|", order.Comment);
+    Assert.DoesNotContain(store.Events, item => item.Type == "rejected");
+    var planned = Assert.Single(store.Events, item => item.Type == "manual_planned");
+    Assert.Equal("Manual Algo", planned.Setup);
+    Assert.Equal(new[] { 30, 60, 90 }, planned.TargetsPips);
+
+    cts.Cancel();
+    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+  }
+
+  [Fact]
+  public async Task ManualAlgoPlacesLimitAtCurrentPriceWhenPriceAlreadyInsideZone()
+  {
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+    var store = new FakeAutoTradeStore(ManualCandidateJson(
+      direction: "SELL",
+      entryLow: 3999.5m,
+      entryHigh: 4000.5m,
+      manualStopLoss: 4006.0m
+    ));
+    var client = new FakeTradingClient();
+    var engine = new AutoTradeEngine(Options(), store, () => Now, _ => { });
+    // Bid 4000.0 already sits inside [3999.5, 4000.5].
+    await engine.ObserveSpotAsync(
+      new SpotPrice("XAU", 4000.0m, 4000.2m, Now.ToUnixTimeSeconds()),
+      cts.Token
+    );
+
+    var run = engine.RunSessionAsync(client, Symbol, cts.Token);
+    await store.Ordered.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+    var order = Assert.Single(client.LimitOrders);
+    Assert.Equal(4000.0m, order.LimitPrice);
+
+    cts.Cancel();
+    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+  }
+
+  [Fact]
+  public async Task ManualAlgoUsesAbsoluteStopNotStructureStopMath()
+  {
+    // No atr/structure_swing anywhere on this candidate - if the manual
+    // algo path ever fell through to StructureStopPlanner.Plan (which
+    // requires both to be positive decimals), this would be rejected with
+    // "structure context unavailable on candidate" instead of an order.
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+    var store = new FakeAutoTradeStore(ManualCandidateJson(
+      direction: "BUY",
+      entryLow: 3999.5m,
+      entryHigh: 4000.5m,
+      manualStopLoss: 3994.0m
+    ));
+    var client = new FakeTradingClient();
+    var engine = new AutoTradeEngine(Options(), store, () => Now, _ => { });
+    await engine.ObserveSpotAsync(
+      new SpotPrice("XAU", 4010.0m, 4010.2m, Now.ToUnixTimeSeconds()),
+      cts.Token
+    );
+
+    var run = engine.RunSessionAsync(client, Symbol, cts.Token);
+    await store.Ordered.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+    var order = Assert.Single(client.LimitOrders);
+    Assert.Equal(TradeDirection.Buy, order.Direction);
+    // BUY proximal edge = zone.High.
+    Assert.Equal(4000.5m, order.LimitPrice);
+    // |4000.5 - 3994.0| = 6.5 -> 65p, straight from the manual stop, not
+    // any structure-swing-derived distance (there is none on this candidate).
+    Assert.Equal(650_000, order.RelativeStopLoss);
+    Assert.DoesNotContain(store.Events, item => item.Type == "rejected");
+
+    cts.Cancel();
+    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+  }
+
+  [Fact]
+  public async Task ManualAlgoTtlCancelUsesIntentExpiresAtNotZoneFillFormula()
+  {
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+    var now = Now;
+    var expiresAt = now.ToUnixTimeSeconds() + 120;
+    var store = new FakeAutoTradeStore(ManualCandidateJson(
+      direction: "SELL",
+      entryLow: 3999.5m,
+      entryHigh: 4000.5m,
+      manualStopLoss: 4006.0m,
+      expiresAt: expiresAt
+    ));
+    var client = new FakeTradingClient();
+    // ZoneFillTtlBars=30 -> 1800s, far longer than the manual intent's own
+    // 120s expiry: if the manual TTL cancel used zone-fill's bars*60s
+    // formula instead of the intent's own absolute expires_at, this order
+    // would still be resting at t+121s.
+    var engine = new AutoTradeEngine(
+      Options() with { ZoneFillTtlBars = 30 },
+      store,
+      () => now,
+      _ => { }
+    );
+    await engine.ObserveSpotAsync(
+      new SpotPrice("XAU", 3990.0m, 3990.2m, now.ToUnixTimeSeconds()),
+      cts.Token
+    );
+    var run = engine.RunSessionAsync(client, Symbol, cts.Token);
+    await store.Ordered.Task.WaitAsync(TimeSpan.FromSeconds(2));
+    Assert.Single(client.LimitOrders);
+
+    now = Now.AddSeconds(121);
+    await WaitForEventAsync(store, "manual_expired");
+
+    Assert.Single(client.CancelledOrders);
+    Assert.Empty(client.PendingOrders);
+
+    cts.Cancel();
+    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+  }
+
+  [Fact]
+  public async Task ManualCommandCancelPendingCancelsRealPendingOrder()
+  {
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+    var store = new FakeAutoTradeStore(ManualCandidateJson(manualStopLoss: 4006.0m));
+    var client = new FakeTradingClient();
+    var engine = new AutoTradeEngine(Options(), store, () => Now, _ => { });
+    await engine.ObserveSpotAsync(
+      new SpotPrice("XAU", 3990.0m, 3990.2m, Now.ToUnixTimeSeconds()),
+      cts.Token
+    );
+    var run = engine.RunSessionAsync(client, Symbol, cts.Token);
+    await store.Ordered.Task.WaitAsync(TimeSpan.FromSeconds(2));
+    var orderId = client.PendingOrders.Single().OrderId;
+
+    store.EnqueueCommand(JsonSerializer.Serialize(new
+    {
+      type = "cancel_pending",
+      intent_id = "manual:1:0",
+    }));
+    await WaitForEventAsync(store, "manual_cancelled");
+
+    Assert.Contains(orderId, client.CancelledOrders);
+    Assert.Empty(client.PendingOrders);
+
+    cts.Cancel();
+    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+  }
+
+  private static async Task<long> OpenManualAlgoPositionAsync(
+    FakeAutoTradeStore store,
+    FakeTradingClient client,
+    Func<DateTimeOffset> clock,
+    Action<DateTimeOffset> advanceClock,
+    CancellationToken cancellationToken
+  )
+  {
+    var orderId = client.PendingOrders.Single().OrderId;
+    client.FillPendingOrder(orderId);
+    advanceClock(Now.AddSeconds(16));
+    await WaitForEventAsync(store, "manual_opened");
+    return store.Events.Single(item => item.Type == "manual_opened").PositionId!.Value;
+  }
+
+  [Fact]
+  public async Task ManualCommandCloseClosesRealPositionAtBrokerPrice()
+  {
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+    var now = Now;
+    var store = new FakeAutoTradeStore(ManualCandidateJson(manualStopLoss: 4006.0m));
+    var client = new FakeTradingClient();
+    var engine = new AutoTradeEngine(Options(), store, () => now, _ => { });
+    await engine.ObserveSpotAsync(
+      new SpotPrice("XAU", 3990.0m, 3990.2m, now.ToUnixTimeSeconds()),
+      cts.Token
+    );
+    var run = engine.RunSessionAsync(client, Symbol, cts.Token);
+    await store.Ordered.Task.WaitAsync(TimeSpan.FromSeconds(2));
+    var positionId = await OpenManualAlgoPositionAsync(
+      store, client, () => now, value => now = value, cts.Token
+    );
+
+    store.EnqueueCommand(JsonSerializer.Serialize(new
+    {
+      type = "close",
+      intent_id = "manual:1:0",
+      position_id = positionId,
+    }));
+    await WaitForEventAsync(store, "manual_closed");
+
+    var close = Assert.Single(client.Closes);
+    Assert.Equal(positionId, close.PositionId);
+    Assert.Equal(600, close.Volume);
+    var closed = store.Events.Single(item => item.Type == "manual_closed");
+    Assert.Equal(4013.2m, closed.Price);
+    Assert.Equal(600, closed.Volume);
+
+    cts.Cancel();
+    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+  }
+
+  [Fact]
+  public async Task ManualCommandCloseSupportsPartialFraction()
+  {
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+    var now = Now;
+    var store = new FakeAutoTradeStore(ManualCandidateJson(manualStopLoss: 4006.0m));
+    var client = new FakeTradingClient();
+    var engine = new AutoTradeEngine(Options(), store, () => now, _ => { });
+    await engine.ObserveSpotAsync(
+      new SpotPrice("XAU", 3990.0m, 3990.2m, now.ToUnixTimeSeconds()),
+      cts.Token
+    );
+    var run = engine.RunSessionAsync(client, Symbol, cts.Token);
+    await store.Ordered.Task.WaitAsync(TimeSpan.FromSeconds(2));
+    var positionId = await OpenManualAlgoPositionAsync(
+      store, client, () => now, value => now = value, cts.Token
+    );
+
+    store.EnqueueCommand(JsonSerializer.Serialize(new
+    {
+      type = "close",
+      intent_id = "manual:1:0",
+      position_id = positionId,
+      frac = 0.5,
+    }));
+    await WaitForEventAsync(store, "manual_closed");
+
+    var close = Assert.Single(client.Closes);
+    Assert.Equal(300, close.Volume);
+
+    cts.Cancel();
+    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+  }
+
+  [Fact]
+  public async Task ManualCommandMoveSlAmendsRealStopLoss()
+  {
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+    var now = Now;
+    var store = new FakeAutoTradeStore(ManualCandidateJson(manualStopLoss: 4006.0m));
+    var client = new FakeTradingClient();
+    var engine = new AutoTradeEngine(Options(), store, () => now, _ => { });
+    await engine.ObserveSpotAsync(
+      new SpotPrice("XAU", 3990.0m, 3990.2m, now.ToUnixTimeSeconds()),
+      cts.Token
+    );
+    var run = engine.RunSessionAsync(client, Symbol, cts.Token);
+    await store.Ordered.Task.WaitAsync(TimeSpan.FromSeconds(2));
+    var positionId = await OpenManualAlgoPositionAsync(
+      store, client, () => now, value => now = value, cts.Token
+    );
+    var amendmentsBefore = client.StopAmendments.Count;
+
+    store.EnqueueCommand(JsonSerializer.Serialize(new
+    {
+      type = "move_sl",
+      intent_id = "manual:1:0",
+      position_id = positionId,
+      price = 4008.5,
+    }));
+    await WaitForEventAsync(store, "manual_sl_moved");
+
+    Assert.Equal(amendmentsBefore + 1, client.StopAmendments.Count);
+    Assert.Contains((positionId, 4008.5m), client.StopAmendments);
+
+    cts.Cancel();
+    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+  }
+
+  [Fact]
+  public async Task PositionClosedEventCarriesLastKnownStopLossAsPrice()
+  {
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+    var now = Now;
+    var store = new FakeAutoTradeStore(CandidateJson());
+    var client = new FakeTradingClient();
+    var engine = new AutoTradeEngine(Options(), store, () => now, _ => { });
+    await engine.ObserveSpotAsync(
+      new SpotPrice("XAU", 4000.0m, 4000.2m, now.ToUnixTimeSeconds()),
+      cts.Token
+    );
+    var run = engine.RunSessionAsync(client, Symbol, cts.Token);
+    await store.Ordered.Task.WaitAsync(TimeSpan.FromSeconds(2));
+    var positionId = client.StopAmendments.Single().PositionId;
+
+    // Simulate a broker-side SL hit or a manual close done directly in the
+    // cTrader app: the position simply vanishes from ReconcilePositionsAsync.
+    client.RemovePosition(positionId);
+    now = Now.AddSeconds(16);
+    await WaitForEventAsync(store, "position_closed");
+
+    var closed = store.Events.Single(item => item.Type == "position_closed");
+    Assert.Equal(3993.7m, closed.Price);
+
+    cts.Cancel();
+    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+  }
+
   private static async Task WaitForEventAsync(FakeAutoTradeStore store, string type)
   {
     using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
@@ -1362,6 +1689,41 @@ public sealed class AutoTradeEngineTests
     opposing_zone_high = opposingZoneHigh,
   });
 
+  // Mirrors telegram-bot's manual_execution._intent_to_candidate_payload:
+  // no atr/structure_swing at all (the manual-algo path must never need
+  // them), manual_stop_loss/manual_expires_at/targets_pips instead.
+  private static string ManualCandidateJson(
+    string direction = "SELL",
+    string candidateId = "manual:1:0",
+    long createdAt = 1_000,
+    decimal entryLow = 3999.5m,
+    decimal entryHigh = 4000.5m,
+    decimal manualStopLoss = 4006.0m,
+    int[]? targetsPips = null,
+    long? expiresAt = null,
+    int confluence = 1
+  ) => JsonSerializer.Serialize(new
+  {
+    version = 3,
+    candidate_id = candidateId,
+    symbol = "XAU",
+    timeframe = "M1",
+    setup = "Manual Algo",
+    mode = "manual_algo",
+    direction,
+    trigger_ts = "1000",
+    created_at = createdAt,
+    spot_ts = (long?)null,
+    current_price = (double)((entryLow + entryHigh) / 2m),
+    key_level = (double)((entryLow + entryHigh) / 2m),
+    entry_zone = new { low = entryLow, high = entryHigh },
+    confluence,
+    reasons = new[] { "manual /algo signal" },
+    manual_stop_loss = manualStopLoss,
+    manual_expires_at = expiresAt,
+    targets_pips = targetsPips ?? new[] { 30, 60, 90 },
+  });
+
   private sealed class FakeTradingClient : ICTraderFeedClient, ICTraderTradeClient
   {
     public event Action? Heartbeat
@@ -1395,6 +1757,8 @@ public sealed class AutoTradeEngineTests
     public void SeedPosition(TradingPosition position) => _positions.Add(position);
     public void EnqueueMarketExecutionPrice(decimal price) =>
       _marketExecutionPrices.Enqueue(price);
+    public void RemovePosition(long positionId) =>
+      _positions.RemoveAll(position => position.PositionId == positionId);
 
     public void FillPendingOrder(long orderId)
     {
@@ -1592,11 +1956,17 @@ public sealed class AutoTradeEngineTests
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;
   }
 
+  // Must match AutoTradeEngine's private ManualCommandStream constant - not
+  // exposed via AutoTradeOptions, see the comment on that constant.
+  private const string CommandStreamName = "manual_trade:commands";
+
   private sealed class FakeAutoTradeStore(string payload) : IAutoTradeStore
   {
     private string _cursor = "0-0";
+    private string _commandCursor = "0-0";
     private readonly Dictionary<string, string> _candidateStatus = [];
     private readonly List<string> _payloads = [payload];
+    private readonly List<string> _commandPayloads = [];
     public Dictionary<long, AutoTradePositionState> Positions { get; } = [];
     public List<AutoTradeEvent> Events { get; } = [];
     public TaskCompletionSource<bool> Ordered { get; } = new(
@@ -1608,7 +1978,11 @@ public sealed class AutoTradeEngineTests
     public TaskCompletionSource<bool> CursorAdvanced { get; } = new(
       TaskCreationOptions.RunContinuationsAsynchronously
     );
+    public TaskCompletionSource<bool> CommandCursorAdvanced { get; } = new(
+      TaskCreationOptions.RunContinuationsAsynchronously
+    );
     public string Cursor => _cursor;
+    public string CommandCursor => _commandCursor;
     private long _daily;
     public long DailyTradeCount
     {
@@ -1619,12 +1993,23 @@ public sealed class AutoTradeEngineTests
     public void EnqueueCandidate(string candidatePayload) =>
       _payloads.Add(candidatePayload);
 
+    public void EnqueueCommand(string commandPayload) =>
+      _commandPayloads.Add(commandPayload);
+
     public Task<string> GetCursorAsync(CancellationToken cancellationToken) =>
       Task.FromResult(_cursor);
     public Task SetCursorAsync(string cursor, CancellationToken cancellationToken)
     {
       _cursor = cursor;
       CursorAdvanced.TrySetResult(true);
+      return Task.CompletedTask;
+    }
+    public Task<string> GetCommandCursorAsync(CancellationToken cancellationToken) =>
+      Task.FromResult(_commandCursor);
+    public Task SetCommandCursorAsync(string cursor, CancellationToken cancellationToken)
+    {
+      _commandCursor = cursor;
+      CommandCursorAdvanced.TrySetResult(true);
       return Task.CompletedTask;
     }
     public Task<IReadOnlyList<TradeStreamEntry>> ReadCandidatesAsync(
@@ -1634,15 +2019,16 @@ public sealed class AutoTradeEngineTests
       CancellationToken cancellationToken
     )
     {
+      var list = stream == CommandStreamName ? _commandPayloads : _payloads;
       var last = afterId == "0-0"
         ? 0
         : int.Parse(afterId.Split('-')[0]);
-      if (last >= _payloads.Count)
+      if (last >= list.Count)
       {
         return Task.FromResult<IReadOnlyList<TradeStreamEntry>>([]);
       }
       return Task.FromResult<IReadOnlyList<TradeStreamEntry>>([
-        new TradeStreamEntry($"{last + 1}-0", _payloads[last]),
+        new TradeStreamEntry($"{last + 1}-0", list[last]),
       ]);
     }
     public Task<bool> TryClaimCandidateAsync(

@@ -172,3 +172,84 @@ async def test_manual_signal_defaults_to_notify_execution_mode():
   assert row["execution_status"] is None
   assert row["execution_revision"] == 0
   assert row["execution_intent_id"] is None
+
+
+@pytest.mark.asyncio
+async def test_set_execution_fill_records_broker_position_and_price():
+  await store.init_db()
+  rec = await store.store_manual_signal(
+    1_800_000_000, "SELL", 4100, 4105, 4110, [4095, 4090, 4080],
+    execution_mode="algo",
+  )
+
+  updated = await store.set_execution_fill(
+    rec["id"], broker_position_id=555, broker_fill_price=4100.25,
+  )
+
+  assert updated is not None
+  assert updated["execution_status"] == "filled"
+  assert updated["broker_position_id"] == "555"
+  assert updated["broker_fill_price"] == pytest.approx(4100.25)
+
+  row = await store.get_manual_signal(rec["id"])
+  assert row["execution_status"] == "filled"
+  assert row["broker_position_id"] == "555"
+  assert row["broker_fill_price"] == pytest.approx(4100.25)
+
+
+@pytest.mark.asyncio
+async def test_set_execution_fill_returns_none_for_missing_signal():
+  await store.init_db()
+
+  result = await store.set_execution_fill(
+    999999, broker_position_id=1, broker_fill_price=1.0,
+  )
+
+  assert result is None
+
+
+@pytest.mark.asyncio
+async def test_get_signal_by_execution_intent_id_matches_full_id():
+  await store.init_db()
+  rec = await store.store_manual_signal(
+    1_800_000_000, "SELL", 4100, 4105, 4110, [4095, 4090, 4080],
+    execution_mode="algo",
+  )
+  intent_id = f"manual:{rec['id']}:0"
+  await store.set_execution_intent(
+    rec["id"], intent_id=intent_id, status="armed", revision=0,
+  )
+
+  found = await store.get_signal_by_execution_intent_id(intent_id)
+
+  assert found is not None
+  assert found["id"] == rec["id"]
+
+
+@pytest.mark.asyncio
+async def test_get_signal_by_execution_intent_id_matches_truncated_token():
+  # AutoTradeEngine.cs only embeds the first 10 characters of the intent_id
+  # in a broker comment (CandidateToken) - this must still resolve.
+  await store.init_db()
+  rec = await store.store_manual_signal(
+    1_800_000_000, "SELL", 4100, 4105, 4110, [4095, 4090, 4080],
+    execution_mode="algo",
+  )
+  intent_id = f"manual:{rec['id']}:0"
+  await store.set_execution_intent(
+    rec["id"], intent_id=intent_id, status="armed", revision=0,
+  )
+
+  found = await store.get_signal_by_execution_intent_id(intent_id[:10])
+
+  assert found is not None
+  assert found["id"] == rec["id"]
+
+
+@pytest.mark.asyncio
+async def test_get_signal_by_execution_intent_id_returns_none_when_unmatched():
+  await store.init_db()
+
+  found = await store.get_signal_by_execution_intent_id("manual:999999:0")
+
+  assert found is None

@@ -257,6 +257,12 @@ async def test_handler_order_and_bare_pips_default_off(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_move_sl_to_breakeven_resets_alert(monkeypatch):
+  # do_sl always checks execution_mode via a real get_manual_signal(sid)
+  # lookup now (the algo owner-override deferral check) - signal id 31 has
+  # no real row, so that lookup returns None and falls through unchanged,
+  # but the manual_signals table itself must exist for the query to run.
+  from app.persistence import store
+  await store.init_db()
   signal = {
     **_signal(31, 4, "2026-07-03", 704),
     "entry": 2000.0,

@@ -48,6 +48,10 @@ public interface IAutoTradeStore
 {
   Task<string> GetCursorAsync(CancellationToken cancellationToken);
   Task SetCursorAsync(string cursor, CancellationToken cancellationToken);
+  // Dedicated cursor for the `manual_trade:commands` poll - separate key so
+  // it never collides with the candidate-stream cursor above.
+  Task<string> GetCommandCursorAsync(CancellationToken cancellationToken);
+  Task SetCommandCursorAsync(string cursor, CancellationToken cancellationToken);
   Task<IReadOnlyList<TradeStreamEntry>> ReadCandidatesAsync(
     string stream,
     string afterId,
@@ -297,6 +301,15 @@ public sealed class StackExchangeRedisSeriesCommands :
   public Task SetCursorAsync(string cursor, CancellationToken cancellationToken) =>
     _db.StringSetAsync("auto_trade:cursor", cursor);
 
+  public async Task<string> GetCommandCursorAsync(CancellationToken cancellationToken)
+  {
+    var value = await _db.StringGetAsync("manual_trade:command_cursor");
+    return value.HasValue ? value.ToString() : "0-0";
+  }
+
+  public Task SetCommandCursorAsync(string cursor, CancellationToken cancellationToken) =>
+    _db.StringSetAsync("manual_trade:command_cursor", cursor);
+
   public async Task<IReadOnlyList<TradeStreamEntry>> ReadCandidatesAsync(
     string stream,
     string afterId,
@@ -528,6 +541,7 @@ internal sealed record RedisSpot(
 [JsonSerializable(typeof(TradeCandidate))]
 [JsonSerializable(typeof(AutoTradePositionState))]
 [JsonSerializable(typeof(AutoTradeEvent))]
+[JsonSerializable(typeof(ManualTradeCommand))]
 [JsonSerializable(typeof(RefreshTokenDocument))]
 internal sealed partial class RedisJsonContext : JsonSerializerContext
 {
