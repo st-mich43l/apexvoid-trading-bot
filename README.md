@@ -67,16 +67,15 @@ The bot talks to Telegram over **outbound long-polling only**, meaning it requir
 - **Multi-Timeframe Aware** ⏱️ — Send several charts; it uses higher TFs for directional bias and lower TFs for entry precision.
 
 ### 🤖 ApexVoid Algo (demo)
-- ApexVoid Algo always owns its M1 entry timing and executor safety. By
-  default it uses its private gate; the optional
-  `AUTO_TRADE_FORMING_GATE_ENABLED` bridge lets a typed, Market Map-aligned
-  `Range Edge Scalp` nominate the active range without parsing Telegram text.
+- Scanner detectors own complete strategy matching. With
+  `AUTO_TRADE_STRATEGY_BRIDGE_ENABLED=true`, the strongest completed M5 match
+  is sent to ApexVoid Algo as typed data without parsing Telegram text or
+  asking a private regime/M1 gate to confirm it again.
 - It builds a 60-bar M1 auction box only after repeated reactions at both
   edges, at least 82% of closes remain inside, and close-path efficiency shows
-  consolidation rather than trend. When the bridge is active, validated M5
-  Market Map rails replace that private box temporarily; M5 must still show a
-  recent hold/reclaim at the nominated rail, then M1 rejection times BUY at
-  the lower edge or SELL at the upper edge.
+  consolidation rather than trend. This remains a separate private strategy,
+  not a market regime. When private strategies overlap, the higher-confluence
+  match wins; regime classification is telemetry rather than a veto.
 - A box entry closes the full position at +50 pips, or +70 pips when at least
   75 pips of clean room remain to the opposite edge. Box mode does not scale in
   or use planned zone-fill orders.
@@ -86,9 +85,9 @@ The bot talks to Telegram over **outbound long-polling only**, meaning it requir
 - The lane still fails closed on stale quotes, excessive spread, entry drift,
   guarded news, and an existing XAU position. There is no daily trade cap;
   a validated box may keep cycling until its breakout is confirmed.
-- `/auto_status` exposes the selected gate source, forming direction, latest
-  M1 state, and selected box for operator diagnostics. The full bridge design
-  is documented in `docs/algo-market-map-forming-gate.md`.
+- `/auto_status` exposes the selected source, scanner strategy/direction,
+  latest private-strategy state, and selected box for diagnostics. The typed
+  routing design is documented in `docs/algo-strategy-match-routing.md`.
 
 ---
 

@@ -462,7 +462,7 @@ async def auto_trade_status_text() -> str:
     gate_state = "waiting for M1 close"
     zone_text = ""
     gate_name = "independent M1 two-edge box scalp"
-    forming_text = ""
+    strategy_text = ""
     gate_reason = ""
     raw = await client.get("auto_trade:last_gate")
     if raw:
@@ -472,18 +472,15 @@ async def auto_trade_status_text() -> str:
         reasons = payload.get("reasons")
         if isinstance(reasons, list) and reasons:
           gate_reason = str(reasons[-1])
-        if payload.get("gate_source") == "market_map_forming":
-          gate_name = "Market Map + forming + M1"
-          forming = payload.get("forming_setup")
-          if isinstance(forming, dict):
-            direction = str(forming.get("direction") or "")
-            source_tf = str(forming.get("source_tf") or "")
-            confirmation = str(
-              forming.get("m5_confirmation") or ""
-            ).replace("_", " ")
-            forming_text = (
-              f" · {direction} {source_tf}"
-              f" · {confirmation}"
+        if payload.get("gate_source") == "scanner_strategy_match":
+          gate_name = "scanner strategy match"
+          match = payload.get("strategy_match")
+          if isinstance(match, dict):
+            strategy = str(match.get("strategy") or "")
+            direction = str(match.get("direction") or "")
+            source_tf = str(match.get("source_tf") or "")
+            strategy_text = (
+              f" · {strategy} · {direction} {source_tf}"
             ).rstrip(" ·")
         box = payload.get("box")
         if isinstance(box, dict):
@@ -517,7 +514,7 @@ async def auto_trade_status_text() -> str:
       )
     reason_line = f"\nWhy: {escape(gate_reason)}" if gate_reason else ""
     gate_line = (
-      f"\nGate: <b>{escape(gate_name)}</b>{escape(forming_text)}"
+      f"\nGate: <b>{escape(gate_name)}</b>{escape(strategy_text)}"
       f"\nLast check: <b>{escape(gate_state)}</b>{escape(zone_text)}"
       f"{reason_line}"
       f"{regime_line}"

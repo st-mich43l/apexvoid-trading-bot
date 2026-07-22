@@ -283,8 +283,14 @@ public sealed class AutoTradeEngine(
       && candidate.Mode == "auto_range_scalp";
     var boxRangeScalp = IsBoxRangeScalp(candidate);
     var trendCandidate = IsTrendCandidate(candidate);
+    var strategyMatchCandidate = IsStrategyMatchCandidate(candidate);
     if (
-      (!legacyRangeScalp && !boxRangeScalp && !trendCandidate)
+      (
+        !legacyRangeScalp
+        && !boxRangeScalp
+        && !trendCandidate
+        && !strategyMatchCandidate
+      )
       || candidate.Confluence < options.MinConfluence
       || !string.Equals(
         candidate.Symbol,
@@ -324,7 +330,7 @@ public sealed class AutoTradeEngine(
       );
     }
     if (
-      trendCandidate
+      (trendCandidate || strategyMatchCandidate)
       && (
         candidate.TargetsPips is not { Count: > 0 } targetsPips
         || targetsPips.Any(pips => pips <= 0)
@@ -335,7 +341,7 @@ public sealed class AutoTradeEngine(
     {
       return await RejectAsync(
         candidate,
-        "invalid trend candidate contract",
+        "invalid strategy candidate contract",
         cancellationToken
       );
     }
@@ -512,6 +518,7 @@ public sealed class AutoTradeEngine(
   {
     if (
       !IsBoxRangeScalp(candidate)
+      && !IsStrategyMatchCandidate(candidate)
       && options.ZoneFillEnabled
       && candidate.Atr is decimal atr
       && ZoneFillPlanner.Qualifies(
@@ -555,12 +562,12 @@ public sealed class AutoTradeEngine(
   )
   {
     InitialSizingResult sizing;
-    IReadOnlyList<int> targetPips = IsTrendCandidate(candidate)
+    IReadOnlyList<int> targetPips = UsesCandidateTargetPlan(candidate)
       ? candidate.TargetsPips!
       : IsBoxRangeScalp(candidate)
         ? [candidate.FullTakeProfitPips!.Value]
         : options.TargetsPips;
-    IReadOnlyList<int> targetWeights = IsTrendCandidate(candidate)
+    IReadOnlyList<int> targetWeights = UsesCandidateTargetPlan(candidate)
       ? EqualWeights(candidate.TargetsPips!.Count)
       : IsBoxRangeScalp(candidate)
         ? [100]
@@ -1154,7 +1161,7 @@ public sealed class AutoTradeEngine(
   }
 
   private (int Minimum, int Maximum) StopPipsBounds(TradeCandidate candidate) =>
-    IsTrendCandidate(candidate)
+    UsesCandidateTargetPlan(candidate)
       ? (options.TrendStopMinPips, options.TrendStopMaxPips)
       : (
         options.AddMinStopPips,
@@ -1994,7 +2001,11 @@ public sealed class AutoTradeEngine(
 
   private static bool IsBoxRangeScalp(TradeCandidate candidate) =>
     candidate.Version == 3
-    && candidate.Timeframe.Equals("M1", StringComparison.OrdinalIgnoreCase)
+    && candidate.Timeframe is not null
+    && (
+      candidate.Timeframe.Equals("M1", StringComparison.OrdinalIgnoreCase)
+      || candidate.Timeframe.Equals("M5", StringComparison.OrdinalIgnoreCase)
+    )
     && candidate.Setup == "Range Box Scalp"
     && candidate.Mode == "auto_box_scalp";
 
@@ -2003,6 +2014,19 @@ public sealed class AutoTradeEngine(
     && candidate.Timeframe.Equals("M1", StringComparison.OrdinalIgnoreCase)
     && candidate.Mode is "auto_trend_pullback" or "auto_trend_breakout"
       or "auto_box_breakout";
+
+  private static bool IsStrategyMatchCandidate(TradeCandidate candidate) =>
+    candidate.Version == 4
+    && candidate.Timeframe is not null
+    && (
+      candidate.Timeframe.Equals("M1", StringComparison.OrdinalIgnoreCase)
+      || candidate.Timeframe.Equals("M5", StringComparison.OrdinalIgnoreCase)
+    )
+    && !string.IsNullOrWhiteSpace(candidate.Setup)
+    && candidate.Mode == "auto_strategy_match";
+
+  private static bool UsesCandidateTargetPlan(TradeCandidate candidate) =>
+    IsTrendCandidate(candidate) || IsStrategyMatchCandidate(candidate);
 
   private static IReadOnlyList<int> EqualWeights(int count)
   {
