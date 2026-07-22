@@ -458,3 +458,39 @@ def test_mode_b_falls_back_to_fixed_ladder_and_tags_reason(monkeypatch):
   assert decision.state == "candidate"
   assert "targets: fixed-fallback" in decision.reasons
   assert decision.targets_pips == (30, 60, 90, 120, 200)
+
+
+def test_early_bailout_states_carry_reasons():
+  regime = trend.RegimeInfo("trend", "up", 5, 1.2, True, None, ())
+  box_decision = AutoScalpDecision("waiting_for_box")
+
+  missing = trend.evaluate_trend_gate(
+    {}, regime, box_decision, symbol="XAU", spot_price=4000.0, cfg=settings,
+  )
+  assert missing.state == "missing_frames"
+  assert missing.reasons
+
+  insufficient = trend.evaluate_trend_gate(
+    {"M1": _flat_m1(periods=5)},
+    regime, box_decision, symbol="XAU", spot_price=4000.0, cfg=settings,
+  )
+  assert insufficient.state == "insufficient_history"
+  assert insufficient.reasons
+
+  flat_zero_range = pd.DataFrame({
+    "open": [4000.0] * 61, "high": [4000.0] * 61,
+    "low": [4000.0] * 61, "close": [4000.0] * 61,
+  }, index=pd.date_range("2026-07-20", periods=61, freq="1min", tz="UTC"))
+  invalid_atr = trend.evaluate_trend_gate(
+    {"M1": flat_zero_range},
+    regime, box_decision, symbol="XAU", spot_price=4000.0, cfg=settings,
+  )
+  assert invalid_atr.state == "invalid_atr"
+  assert invalid_atr.reasons
+
+  invalid_spot = trend.evaluate_trend_gate(
+    {"M1": _flat_m1()},
+    regime, box_decision, symbol="XAU", spot_price=-1.0, cfg=settings,
+  )
+  assert invalid_spot.state == "invalid_spot"
+  assert invalid_spot.reasons

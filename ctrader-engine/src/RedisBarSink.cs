@@ -94,6 +94,11 @@ public interface IAutoTradeStore
     AutoTradeEvent tradeEvent,
     CancellationToken cancellationToken
   );
+  Task IncrementGateRejectAsync(
+    string symbol,
+    string condition,
+    CancellationToken cancellationToken
+  );
 }
 
 public sealed class RedisBarSink(
@@ -430,6 +435,16 @@ public sealed class StackExchangeRedisSeriesCommands :
     )],
     maxLength: 1000,
     useApproximateMaxLength: true
+  );
+
+  public Task IncrementGateRejectAsync(
+    string symbol,
+    string condition,
+    CancellationToken cancellationToken
+  ) => _db.HashIncrementAsync(
+    $"auto_trade:gate_reject:{symbol.ToUpperInvariant()}:{condition}",
+    "count",
+    1
   );
 
   public async ValueTask DisposeAsync()

@@ -886,6 +886,131 @@ public sealed class AutoTradeEngineTests
     await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
   }
 
+  [Fact]
+  public async Task StopInsideOpposingZoneIsPushedBeyondItWithBuffer()
+  {
+    // Default BUY box-scalp stop lands at 3997.70 (structureSwing 3998.0 -
+    // AddStopBufferAtr 0.3 * atr 1.0, clamped). An opposing (demand) zone of
+    // 3997.00-3998.50 traps that stop inside it - the guard must push the
+    // stop below the zone's low edge by another AddStopBufferAtr * atr.
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+    var store = new FakeAutoTradeStore(BoxCandidateJson(
+      fullTpPips: 70,
+      opposingZoneLow: 3997.0m,
+      opposingZoneHigh: 3998.5m
+    ));
+    var client = new FakeTradingClient();
+    var engine = new AutoTradeEngine(Options(), store, () => Now, _ => { });
+    await engine.ObserveSpotAsync(
+      new SpotPrice("XAU", 4000.0m, 4000.2m, Now.ToUnixTimeSeconds()),
+      cts.Token
+    );
+
+    var run = engine.RunSessionAsync(client, Symbol, cts.Token);
+    await store.Ordered.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+    Assert.Single(client.Orders);
+    Assert.Equal((91, 3996.7m), Assert.Single(client.StopAmendments));
+    Assert.DoesNotContain(store.Events, item => item.Type == "rejected");
+
+    cts.Cancel();
+    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+  }
+
+  [Fact]
+  public async Task StopInsideOpposingZoneIsRejectedWhenPushWouldExceedMaxStopDistance()
+  {
+    // Zone wide/far enough that pushing beyond its low edge would demand a
+    // stop distance past the 65-pip (6.5 price) non-trend maximum - the
+    // candidate must be rejected instead of silently accepting an oversized
+    // stop.
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+    var store = new FakeAutoTradeStore(BoxCandidateJson(
+      fullTpPips: 70,
+      opposingZoneLow: 3990.0m,
+      opposingZoneHigh: 3998.0m
+    ));
+    var client = new FakeTradingClient();
+    var engine = new AutoTradeEngine(Options(), store, () => Now, _ => { });
+    await engine.ObserveSpotAsync(
+      new SpotPrice("XAU", 4000.0m, 4000.2m, Now.ToUnixTimeSeconds()),
+      cts.Token
+    );
+
+    var run = engine.RunSessionAsync(client, Symbol, cts.Token);
+    await WaitForEventAsync(store, "rejected");
+
+    Assert.Empty(client.Orders);
+    Assert.Contains(store.Events, item =>
+      item.Type == "rejected" && item.Message.Contains("opposing zone")
+    );
+    Assert.Contains(("XAU", "stop_in_opposing_zone"), store.GateRejects);
+
+    cts.Cancel();
+    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+  }
+
+  [Fact]
+  public async Task StopInsideOpposingZoneIsRejectedWhenPushDisabledByFlag()
+  {
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+    var store = new FakeAutoTradeStore(BoxCandidateJson(
+      fullTpPips: 70,
+      opposingZoneLow: 3997.0m,
+      opposingZoneHigh: 3998.5m
+    ));
+    var client = new FakeTradingClient();
+    var engine = new AutoTradeEngine(
+      Options() with { StopPushBeyondZone = false },
+      store,
+      () => Now,
+      _ => { }
+    );
+    await engine.ObserveSpotAsync(
+      new SpotPrice("XAU", 4000.0m, 4000.2m, Now.ToUnixTimeSeconds()),
+      cts.Token
+    );
+
+    var run = engine.RunSessionAsync(client, Symbol, cts.Token);
+    await WaitForEventAsync(store, "rejected");
+
+    Assert.Empty(client.Orders);
+    Assert.Contains(store.Events, item =>
+      item.Type == "rejected" && item.Message.Contains("opposing zone")
+    );
+
+    cts.Cancel();
+    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+  }
+
+  [Fact]
+  public async Task OpenedEventCarriesSetupRegimeAndConfluence()
+  {
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+    var store = new FakeAutoTradeStore(BoxCandidateJson(
+      fullTpPips: 70,
+      regime: "chop",
+      confluence: 3
+    ));
+    var client = new FakeTradingClient();
+    var engine = new AutoTradeEngine(Options(), store, () => Now, _ => { });
+    await engine.ObserveSpotAsync(
+      new SpotPrice("XAU", 4000.0m, 4000.2m, Now.ToUnixTimeSeconds()),
+      cts.Token
+    );
+
+    var run = engine.RunSessionAsync(client, Symbol, cts.Token);
+    await store.Ordered.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+    var opened = Assert.Single(store.Events, item => item.Type == "opened");
+    Assert.Equal("Range Box Scalp", opened.Setup);
+    Assert.Equal("chop", opened.Regime);
+    Assert.Equal(3, opened.Confluence);
+
+    cts.Cancel();
+    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+  }
+
   private static async Task WaitForEventAsync(FakeAutoTradeStore store, string type)
   {
     using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
@@ -1015,7 +1140,11 @@ public sealed class AutoTradeEngineTests
     int fullTpPips,
     string direction = "BUY",
     char candidate = 'a',
-    decimal? structureSwing = null
+    decimal? structureSwing = null,
+    decimal? opposingZoneLow = null,
+    decimal? opposingZoneHigh = null,
+    string? regime = null,
+    int? confluence = null
   ) => JsonSerializer.Serialize(new
   {
     version = 3,
@@ -1033,7 +1162,7 @@ public sealed class AutoTradeEngineTests
     entry_zone = direction == "BUY"
       ? new { low = 3999.5m, high = 4000.5m }
       : new { low = 4007.8m, high = 4008.2m },
-    confluence = 2,
+    confluence = confluence ?? 2,
     reasons = new[] { "M1 range rejection", $"full TP {fullTpPips} pips" },
     bar_ts = 1_000,
     atr = 1.0,
@@ -1043,6 +1172,9 @@ public sealed class AutoTradeEngineTests
     range_low = 4000.0,
     range_high = 4008.0,
     full_take_profit_pips = fullTpPips,
+    regime,
+    opposing_zone_low = opposingZoneLow,
+    opposing_zone_high = opposingZoneHigh,
   });
 
   private sealed class FakeTradingClient : ICTraderFeedClient, ICTraderTradeClient
@@ -1410,6 +1542,16 @@ public sealed class AutoTradeEngineTests
     )
     {
       Events.Add(tradeEvent);
+      return Task.CompletedTask;
+    }
+    public List<(string Symbol, string Condition)> GateRejects { get; } = [];
+    public Task IncrementGateRejectAsync(
+      string symbol,
+      string condition,
+      CancellationToken cancellationToken
+    )
+    {
+      GateRejects.Add((symbol, condition));
       return Task.CompletedTask;
     }
   }

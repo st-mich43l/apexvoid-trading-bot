@@ -76,6 +76,23 @@ public sealed class AutoTradeOptionsTests
     Assert.Contains("ContractSize 100 x PipSize 0.01 = 1.00", error.Message);
   }
 
+  [Fact]
+  public void StopPushBeyondZoneDefaultsTrueAndReadsFromEnvironment()
+  {
+    Environment.SetEnvironmentVariable("AUTO_TRADE_STOP_PUSH_BEYOND_ZONE", null);
+    Assert.True(AutoTradeOptions.FromEnvironment().StopPushBeyondZone);
+
+    Environment.SetEnvironmentVariable("AUTO_TRADE_STOP_PUSH_BEYOND_ZONE", "false");
+    try
+    {
+      Assert.False(AutoTradeOptions.FromEnvironment().StopPushBeyondZone);
+    }
+    finally
+    {
+      Environment.SetEnvironmentVariable("AUTO_TRADE_STOP_PUSH_BEYOND_ZONE", null);
+    }
+  }
+
   private static AutoTradeOptions Options() => new(
     Enabled: true,
     DryRun: false,

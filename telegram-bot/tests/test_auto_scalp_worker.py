@@ -12,6 +12,7 @@ from app.analysis import scanner
 from app.autotrade.gate import AutoScalpBox, AutoScalpDecision, AutoScalpRail
 from app.autotrade.scale_context import AutoScaleContext
 from app.autotrade.trend import RegimeInfo, TrendDecision
+from app.analysis.types import Zone
 
 
 def _frame() -> pd.DataFrame:
@@ -364,3 +365,145 @@ def test_worker_source_has_no_forming_scanner_market_map_or_telegram_import():
     "from app.bot.client",
   )
   assert all(item not in source for item in forbidden)
+
+
+# --- A1: entry-location guard -----------------------------------------------
+
+def test_eq_exclusion_rejects_entry_near_box_midpoint_spec_example():
+  support = AutoScalpRail(
+    "support", 4116.9, 4117.1, 4117.0, 3, 8.0, ("M1",), ("m1",),
+  )
+  resistance = AutoScalpRail(
+    "resistance", 4141.9, 4142.1, 4142.0, 3, 8.0, ("M1",), ("m1",),
+  )
+  box = AutoScalpBox("xau-test", support, resistance, 250.0)
+
+  rejected = worker._eq_exclusion_reason(box, 4127.18, 0.15)
+  accepted = worker._eq_exclusion_reason(box, 4121.0, 0.15)
+
+  assert rejected is not None
+  assert "EQ" in rejected
+  assert accepted is None
+
+
+def test_edge_proximity_rejects_entry_two_atr_from_rail():
+  rail = AutoScalpRail(
+    "support", 4016.5, 4017.1, 4016.8, 3, 8.0, ("M5",), ("m5",),
+  )
+
+  rejected = worker._edge_proximity_reason(rail, 4016.8 + 2 * 1.2, 1.2, 0.5)
+  accepted = worker._edge_proximity_reason(rail, 4016.8 + 0.2 * 1.2, 1.2, 0.5)
+
+  assert rejected is not None
+  assert accepted is None
+
+
+@pytest.mark.asyncio
+async def test_eq_exclusion_blocks_publish_and_is_not_applied_to_trend(
+  monkeypatch,
+):
+  """EQ exclusion applies only to the box-scalp ("auto_box_scalp") family:
+  a breakout/trend candidate legitimately transits the mid-range.
+  """
+  client = redis_state.get_client()
+  now = int(datetime.now(timezone.utc).timestamp())
+  monkeypatch.setattr(worker.settings, "auto_trade_enabled", True)
+  monkeypatch.setattr(worker.settings, "auto_trade_stream", "auto_trade:test")
+  monkeypatch.setattr(worker.settings, "auto_trade_min_confluence", 2)
+  monkeypatch.setattr(worker.settings, "auto_trade_eq_exclusion_fraction", 0.15)
+  monkeypatch.setattr(worker, "event_in_window", AsyncMock(return_value=None))
+  decision = _decision()  # box: support level=4016.8, resistance level=4025.1
+  eq = (decision.box.lower.level + decision.box.upper.level) / 2  # 4020.95
+  spot = worker.AutoTradeSpot(eq, now, True)
+
+  result = await worker._publish_candidate(
+    client, "XAU", "1784552400", spot, decision, _scale_context(now),
+  )
+
+  assert result is None
+  reject_count = await client.hget(
+    "auto_trade:gate_reject:XAU:eq_exclusion", "count",
+  )
+  assert reject_count is not None and int(reject_count) >= 1
+  # EQ exclusion is never even evaluated on the trend/breakout publish path -
+  # structural guarantee, independent of any specific fixture's numbers.
+  trend_source = inspect.getsource(worker._publish_trend_candidate)
+  assert "_eq_exclusion_reason" not in trend_source
+
+
+# --- A3: HTF supply/demand veto ---------------------------------------------
+
+def test_htf_veto_rejects_sell_below_untested_supply_and_allows_at_supply():
+  zone = Zone(4131.0, 4133.0, "supply", touches=0)
+
+  below = worker._htf_veto_reason("SELL", 4127.18, zone)
+  at_supply = worker._htf_veto_reason("SELL", 4132.0, zone)
+
+  assert below is not None
+  assert at_supply is None
+
+
+def test_htf_veto_ignores_already_tested_zones():
+  tested_zone = Zone(4131.0, 4133.0, "supply", touches=1)
+  assert worker._htf_veto_reason("SELL", 4127.18, tested_zone) is None
+
+
+def test_nearest_directional_zone_picks_supply_for_sell_demand_for_buy():
+  supply = Zone(4131.0, 4133.0, "supply", touches=0)
+  demand = Zone(4100.0, 4102.0, "demand", touches=0)
+  zones = [supply, demand]
+
+  assert worker._nearest_directional_zone("SELL", 4127.18, zones) is supply
+  assert worker._nearest_directional_zone("BUY", 4105.0, zones) is demand
+
+
+@pytest.mark.asyncio
+async def test_htf_veto_blocks_publish_when_enabled_and_passes_when_disabled(
+  monkeypatch,
+):
+  client = redis_state.get_client()
+  now = int(datetime.now(timezone.utc).timestamp())
+  monkeypatch.setattr(worker.settings, "auto_trade_enabled", True)
+  monkeypatch.setattr(worker.settings, "auto_trade_stream", "auto_trade:test")
+  monkeypatch.setattr(worker.settings, "auto_trade_min_confluence", 2)
+  # Push the rail/entry far enough from EQ and from each other that A1's
+  # guards don't also fire - isolate the HTF veto under test.
+  monkeypatch.setattr(worker.settings, "auto_trade_eq_exclusion_fraction", 0.0)
+  monkeypatch.setattr(worker.settings, "auto_trade_edge_proximity_atr", 999.0)
+  monkeypatch.setattr(worker, "event_in_window", AsyncMock(return_value=None))
+  decision = _decision()  # direction="BUY", rail (support) level=4016.8
+  spot = worker.AutoTradeSpot(4016.8, now, True)
+  # Fresh demand zone below price the BUY hasn't reached yet -> untested-ahead.
+  untested_demand = [Zone(4010.0, 4014.0, "demand", touches=0)]
+
+  monkeypatch.setattr(worker.settings, "auto_trade_htf_veto_enabled", True)
+  vetoed = await worker._publish_candidate(
+    client, "XAU", "1", spot, decision, _scale_context(now),
+    htf_zones=untested_demand,
+  )
+  assert vetoed is None
+  reject_count = await client.hget(
+    "auto_trade:gate_reject:XAU:htf_veto", "count",
+  )
+  assert reject_count is not None and int(reject_count) >= 1
+
+  monkeypatch.setattr(worker.settings, "auto_trade_htf_veto_enabled", False)
+  passed = await worker._publish_candidate(
+    client, "XAU", "2", spot, decision, _scale_context(now),
+    htf_zones=untested_demand,
+  )
+  assert passed is not None
+
+
+# --- A5: rejection counters --------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_record_gate_reject_increments_condition_counter():
+  client = redis_state.get_client()
+  await worker._record_gate_reject(client, "XAU", "waiting_for_box")
+  await worker._record_gate_reject(client, "XAU", "waiting_for_box")
+
+  count = await client.hget(
+    "auto_trade:gate_reject:XAU:waiting_for_box", "count",
+  )
+  assert int(count) == 2

@@ -60,6 +60,23 @@ def _position_line(event: dict) -> str | None:
   return f"🆔 Position: <code>{int(position_id)}</code>"
 
 
+def _attribution_line(event: dict) -> str | None:
+  """Strategy attribution (A4) - the "which setup produced this order"
+  question that was previously unanswerable from the Telegram message alone.
+  """
+  setup = event.get("setup")
+  if not setup:
+    return None
+  parts = [escape(str(setup))]
+  regime = event.get("regime")
+  if regime:
+    parts.append(escape(str(regime)))
+  confluence = event.get("confluence")
+  if isinstance(confluence, (int, float)) and confluence > 0:
+    parts.append("★" * min(3, int(confluence)))
+  return f"🧭 {' · '.join(parts)}"
+
+
 def _format_opened(event: dict, message: str) -> str | None:
   match = _OPENED_RE.match(message)
   if match is None:
@@ -95,6 +112,9 @@ def _format_opened(event: dict, message: str) -> str | None:
       f"{escape(range_box.group(1))}–{escape(range_box.group(2))}</b>"
     )
   lines.append(f"📊 Size: <b>{escape(lots)} lot</b>")
+  attribution = _attribution_line(event)
+  if attribution:
+    lines.append(attribution)
   position = _position_line(event)
   if position:
     lines.extend(["", position])

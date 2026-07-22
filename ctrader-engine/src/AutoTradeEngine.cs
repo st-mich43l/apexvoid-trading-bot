@@ -432,6 +432,23 @@ public sealed class AutoTradeEngine(
     {
       return await RejectAsync(candidate, exception.Message, cancellationToken);
     }
+    var (guardedStopPlan, stopRejectReason) = ApplyOpposingZoneGuard(
+      candidate,
+      direction,
+      expectedEntry,
+      stopPlan,
+      symbol
+    );
+    if (stopRejectReason is not null)
+    {
+      await store.IncrementGateRejectAsync(
+        candidate.Symbol,
+        "stop_in_opposing_zone",
+        cancellationToken
+      );
+      return await RejectAsync(candidate, stopRejectReason, cancellationToken);
+    }
+    stopPlan = guardedStopPlan;
     if (
       boxRangeScalp
       && candidate.FullTakeProfitPips!.Value / stopPlan.StopPips
@@ -1016,7 +1033,10 @@ public sealed class AutoTradeEngine(
       groupRealizedPipVolume,
       initialRealizedPipVolume,
       groupInitialVolume,
-      initialTrancheVolume
+      initialTrancheVolume,
+      Setup: candidate.Setup,
+      Regime: candidate.Regime,
+      Confluence: candidate.Confluence
     );
     _states[state.PositionId] = state;
     await PropagateGroupMetadataAsync(state, cancellationToken);
@@ -1042,7 +1062,10 @@ public sealed class AutoTradeEngine(
       trancheIndex: trancheIndex,
       groupWorstCase: groupWorstCase,
       riskBudget: riskBudget,
-      hadAdds: hadAdds
+      hadAdds: hadAdds,
+      setup: candidate.Setup,
+      regime: candidate.Regime,
+      confluence: candidate.Confluence
     );
     return true;
   }
@@ -1060,14 +1083,7 @@ public sealed class AutoTradeEngine(
         "structure context unavailable on candidate"
       );
     }
-    var (minimumStopPips, maximumStopPips) = IsTrendCandidate(candidate)
-      ? (options.TrendStopMinPips, options.TrendStopMaxPips)
-      : (
-        options.AddMinStopPips,
-        decimal.ToInt32(decimal.Floor(
-          options.StopLossDistance / options.PipSize
-        ))
-      );
+    var (minimumStopPips, maximumStopPips) = StopPipsBounds(candidate);
     return StructureStopPlanner.Plan(
       direction,
       entryPrice,
@@ -1079,6 +1095,83 @@ public sealed class AutoTradeEngine(
       options.PipSize,
       symbol
     );
+  }
+
+  private (int Minimum, int Maximum) StopPipsBounds(TradeCandidate candidate) =>
+    IsTrendCandidate(candidate)
+      ? (options.TrendStopMinPips, options.TrendStopMaxPips)
+      : (
+        options.AddMinStopPips,
+        decimal.ToInt32(decimal.Floor(
+          options.StopLossDistance / options.PipSize
+        ))
+      );
+
+  // A stop must sit beyond the nearest opposing HTF supply/demand zone, never
+  // inside it - the 22 Jul 2026 incident's SL sat inside the very supply zone
+  // the SELL was meant to fade, killing the position before its own thesis
+  // could be tested. `candidate.OpposingZoneLow/High` are attached by
+  // worker.py from the same HTF veto lookup as the A3 supply/demand check.
+  private (StructureStopPlan Plan, string? RejectReason) ApplyOpposingZoneGuard(
+    TradeCandidate candidate,
+    TradeDirection direction,
+    decimal entryPrice,
+    StructureStopPlan stopPlan,
+    SymbolInfo symbol
+  )
+  {
+    if (
+      candidate.OpposingZoneLow is not decimal zoneLow
+      || candidate.OpposingZoneHigh is not decimal zoneHigh
+    )
+    {
+      return (stopPlan, null);
+    }
+    if (stopPlan.StopLoss < zoneLow || stopPlan.StopLoss > zoneHigh)
+    {
+      return (stopPlan, null);
+    }
+    var zoneDescription =
+      $"stop {stopPlan.StopLoss:0.####} inside opposing zone "
+      + $"{zoneLow:0.####}-{zoneHigh:0.####}";
+    if (!options.StopPushBeyondZone)
+    {
+      _log($"auto-trade stop rejected: {zoneDescription}");
+      return (stopPlan, zoneDescription);
+    }
+    var atr = candidate.Atr ?? 0m;
+    var buffer = options.AddStopBufferAtr * atr;
+    var pushedStop = direction == TradeDirection.Buy
+      ? zoneLow - buffer
+      : zoneHigh + buffer;
+    pushedStop = decimal.Round(
+      pushedStop,
+      symbol.Digits,
+      MidpointRounding.AwayFromZero
+    );
+    var pushedDistance = Math.Abs(entryPrice - pushedStop);
+    var pushedPips = pushedDistance / options.PipSize;
+    var (_, maximumStopPips) = StopPipsBounds(candidate);
+    if (pushedPips > maximumStopPips)
+    {
+      var rejectReason =
+        $"{zoneDescription} - pushing beyond it would need {pushedPips:0.#}p, "
+        + $"over the {maximumStopPips}p max";
+      _log($"auto-trade stop rejected: {rejectReason}");
+      return (stopPlan, rejectReason);
+    }
+    _log(
+      $"auto-trade stop pushed beyond opposing zone: {zoneDescription} -> "
+      + $"{pushedStop:0.####} ({pushedPips:0.#}p)"
+    );
+    var pushedPlan = new StructureStopPlan(
+      pushedStop,
+      pushedDistance,
+      pushedPips,
+      stopPlan.RawStopLoss,
+      true
+    );
+    return (pushedPlan, null);
   }
 
   private string? ValidateAddTriggers(
@@ -1754,7 +1847,10 @@ public sealed class AutoTradeEngine(
     decimal? counterfactualPnl = null,
     bool? hadAdds = null,
     decimal? groupRealizedPips = null,
-    decimal? counterfactualPips = null
+    decimal? counterfactualPips = null,
+    string? setup = null,
+    string? regime = null,
+    int? confluence = null
   ) => store.PublishAutoTradeEventAsync(
     options.EventStream,
     new AutoTradeEvent(
@@ -1774,7 +1870,10 @@ public sealed class AutoTradeEngine(
       counterfactualPnl,
       hadAdds,
       groupRealizedPips,
-      counterfactualPips
+      counterfactualPips,
+      setup,
+      regime,
+      confluence
     ),
     cancellationToken
   );

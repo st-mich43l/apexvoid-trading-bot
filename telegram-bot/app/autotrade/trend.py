@@ -184,19 +184,24 @@ def evaluate_trend_gate(
     return TrendDecision("no_setup", reasons=(f"regime is {regime.state}",))
   m1_raw = frames.get("M1")
   if m1_raw is None or m1_raw.empty:
-    return TrendDecision("missing_frames")
+    return TrendDecision("missing_frames", reasons=("missing M1 frame",))
   m1 = _clean(m1_raw)
   if len(m1) < BOX_LOOKBACK_FOR_HEIGHT + 1:
-    return TrendDecision("insufficient_history")
+    return TrendDecision(
+      "insufficient_history",
+      reasons=(f"insufficient M1 history: {len(m1)} bars",),
+    )
   atr_length = max(2, int(getattr(cfg, "atr_length", 14)))
   atr_series_full = atr_series(m1, atr_length)
   atr = float(atr_series_full.iloc[-1])
   if not math.isfinite(atr) or atr <= _EPS:
-    return TrendDecision("invalid_atr")
+    return TrendDecision("invalid_atr", reasons=(f"invalid atr: {atr!r}",))
   close = float(m1["close"].iloc[-1])
   live_price = close if spot_price is None else float(spot_price)
   if not math.isfinite(live_price) or live_price <= 0:
-    return TrendDecision("invalid_spot")
+    return TrendDecision(
+      "invalid_spot", reasons=(f"invalid spot price: {spot_price!r}",),
+    )
   pip_size = units.pip_size(symbol)
 
   if regime.state == "breakout":
