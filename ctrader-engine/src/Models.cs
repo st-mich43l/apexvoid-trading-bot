@@ -220,5 +220,7 @@ public sealed record AutoTradeEvent(
   decimal? CounterfactualPips = null,
   string? Setup = null,
   string? Regime = null,
-  int? Confluence = null
+  int? Confluence = null,
+  decimal? StopPips = null,
+  IReadOnlyList<int>? TargetsPips = null
 );
