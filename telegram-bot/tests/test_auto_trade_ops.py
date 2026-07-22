@@ -38,7 +38,7 @@ def test_render_auto_trade_event_filters_noise_and_escapes_message():
   assert "ApexVoid Algo" in text
   assert "Position opened" in text
   assert "BUY &lt;0.12&gt; lots" in text
-  assert "<code>91</code>" in text
+  assert "91" not in text
   assert "auto trade" not in text.lower()
 
 
@@ -56,6 +56,8 @@ def test_render_box_open_and_full_tp_as_shareable_cards():
     "message": "FULL TP +50 pips closed volume 400",
     "position_id": 39025496,
     "price": 4061.78,
+    "group_realized_pips": 51.3,
+    "group_realized_pnl": 71.82,
   })
 
   assert "XAU SELL opened" in opened
@@ -63,10 +65,13 @@ def test_render_box_open_and_full_tp_as_shareable_cards():
   assert "SL: <b>4,070.63</b> · 39 pips" in opened
   assert "Full TP: <b>4,061.78</b> · +50 pips" in opened
   assert "Box: <b>4,062.00–4,069.00</b>" in opened
-  assert opened.count("39025496") == 1
+  assert "39025496" not in opened
   assert "FULL TAKE PROFIT" in take_profit
   assert "Profit: <b>+50 pips</b>" in take_profit
   assert "Position closed in full" in take_profit
+  assert "Trade result" in take_profit
+  assert "+51.3 pips · +$71.82" in take_profit
+  assert "39025496" not in take_profit
   assert "Auto trade" not in (opened + take_profit)
 
 
@@ -114,6 +119,7 @@ def test_render_auto_trade_stop_and_warning_events():
   assert "Risk protected" in stop
   assert "SL moved to <b>4,029.49</b>" in stop
   assert "BE+3" in stop
+  assert "39016393" not in stop
   assert "Warning" in warning
   assert "live account 44669326" in warning
   assert "auto trade" not in (stop + warning).lower()
@@ -139,7 +145,7 @@ def test_render_scale_in_zone_and_group_events():
   assert "ApexVoid Algo" in scale_in + zone + result
 
 
-def test_internal_profile_is_byte_identical_to_existing_card():
+def test_internal_profile_hides_broker_position_id():
   assert delivery.render_auto_trade_event(_opened_event(), profile="internal") == (
     "🤖 <b>ApexVoid Algo</b>\n"
     "🔴 <b>XAU SELL opened</b>\n"
@@ -147,9 +153,7 @@ def test_internal_profile_is_byte_identical_to_existing_card():
     "📍 Entry: <b>4,111.26</b>\n"
     "🛡 SL: <b>4,117.76</b> · 65 pips\n"
     "📊 Size: <b>0.06 lot</b>\n"
-    "🧭 Box Breakout · breakout · ★★★\n"
-    "\n"
-    "🆔 Position: <code>39000344</code>"
+    "🧭 Box Breakout · breakout · ★★★"
   )
 
 
@@ -240,7 +244,7 @@ async def test_take_profit_replies_to_stored_order_message():
 
 
 @pytest.mark.asyncio
-async def test_missing_message_key_sends_standalone_with_position_line():
+async def test_missing_message_key_sends_standalone_without_position_id():
   calls = []
 
   async def sent(text, **kwargs):
@@ -262,7 +266,62 @@ async def test_missing_message_key_sends_standalone_with_position_line():
 
   assert len(calls) == 1
   assert calls[0][1]["reply_to"] is None
-  assert "🆔 Position: <code>39000344</code>" in calls[0][0]
+  assert "39000344" not in calls[0][0]
+
+
+@pytest.mark.asyncio
+async def test_full_tp_merges_result_and_suppresses_duplicate_group_reply():
+  client = redis_state.get_client()
+  await client.set("auto_trade:msg:39000344", "8123", ex=60)
+  calls = []
+
+  async def sent(text, **kwargs):
+    calls.append((text, kwargs))
+    return SimpleNamespace(message_id=8124)
+
+  full_tp = {
+    "type": "take_profit",
+    "message": "FULL TP +50 pips closed volume 400",
+    "position_id": 39000344,
+    "group_id": "group-39000344",
+    "price": 4061.78,
+    "group_realized_pips": 51.3,
+    "group_realized_pnl": 71.82,
+  }
+  group_result = {
+    "type": "group_result",
+    "message": (
+      "group group-39000344 realised $71.82 · 51.3 pips · "
+      "no-add counterfactual $71.82 / 51.3 pips · adds degraded $0.00"
+    ),
+    "position_id": 39000344,
+    "group_id": "group-39000344",
+    "group_realized_pips": 51.3,
+    "group_realized_pnl": 71.82,
+  }
+
+  delivered_tp = await delivery._deliver_auto_trade_event(
+    client,
+    full_tp,
+    profile="internal",
+    chat_id=123,
+    send=sent,
+  )
+  delivered_group = await delivery._deliver_auto_trade_event(
+    client,
+    group_result,
+    profile="internal",
+    chat_id=123,
+    send=sent,
+  )
+
+  assert delivered_tp is True
+  assert delivered_group is False
+  assert len(calls) == 1
+  assert calls[0][1]["reply_to"] == 8123
+  assert "Trade result" in calls[0][0]
+  assert "+51.3 pips · +$71.82" in calls[0][0]
+  assert "39000344" not in calls[0][0]
 
 
 @pytest.mark.asyncio

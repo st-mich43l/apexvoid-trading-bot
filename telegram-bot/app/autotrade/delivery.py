@@ -24,6 +24,7 @@ _STATS_KEY = "auto_trade:stats"
 _REGIME_ALERT_PENDING_PREFIX = "auto_trade:regime_alert_pending:"
 _REGIME_ALERT_SENT_TTL = 86400
 _TRADE_MESSAGE_TTL = 7 * 24 * 3600
+_FULL_TP_RESULT_TTL = 24 * 3600
 _NOTIFY_TYPES = {
   "ready",
   "dry_run",
@@ -58,14 +59,10 @@ DeliveryProfile = Literal["internal", "public"]
 
 
 def _clean_message(value: object) -> str:
-  return _AUTO_NAME_RE.sub("ApexVoid Algo", str(value or "")).strip()
-
-
-def _position_line(event: dict) -> str | None:
-  position_id = event.get("position_id")
-  if position_id is None:
-    return None
-  return f"🆔 Position: <code>{int(position_id)}</code>"
+  text = _AUTO_NAME_RE.sub("ApexVoid Algo", str(value or ""))
+  text = _POSITION_TEXT_RE.sub("", text)
+  text = re.sub(r"\s*·\s*(?=·|$)", "", text)
+  return text.strip(" ·")
 
 
 def _attribution_line(event: dict) -> str | None:
@@ -166,11 +163,7 @@ def _format_opened(
   attribution = _attribution_line(event)
   if attribution:
     lines.append(attribution)
-  if profile == "internal":
-    position = _position_line(event)
-    if position:
-      lines.extend(["", position])
-  else:
+  if profile == "public":
     _append_public_footer(lines, footer)
   return "\n".join(lines)
 
@@ -202,13 +195,27 @@ def _format_take_profit(
       lines.append(f"📐 Result: <b>+{profit_pips / stop_pips:.2f}R</b>")
   if full:
     lines.append("🏁 Position closed in full")
+    result_pips = event.get("group_realized_pips")
+    result_pnl = event.get("group_realized_pnl")
+    if result_pips is not None or result_pnl is not None:
+      lines.extend(["", "📊 <b>Trade result</b>"])
+      result_parts = []
+      try:
+        value = float(result_pips)
+        result_parts.append(f"{value:+,.1f} pips")
+      except (TypeError, ValueError):
+        pass
+      try:
+        value = float(result_pnl)
+        sign = "+" if value >= 0 else "-"
+        result_parts.append(f"{sign}${abs(value):,.2f}")
+      except (TypeError, ValueError):
+        pass
+      if result_parts:
+        lines.append(f"💰 <b>{' · '.join(result_parts)}</b>")
   price = event.get("price")
   if price is not None:
     lines.append(f"📍 Exit: <b>{float(price):,.2f}</b>")
-  if profile == "internal":
-    position = _position_line(event)
-    if position:
-      lines.extend(["", position])
   return "\n".join(lines)
 
 
@@ -227,10 +234,6 @@ def _format_stop_moved(
     "",
     f"SL moved to <b>{escape(stop)}</b> · {escape(label)}",
   ]
-  if profile == "internal":
-    position = _position_line(event)
-    if position:
-      lines.extend(["", position])
   return "\n".join(lines)
 
 
@@ -281,11 +284,7 @@ def render_auto_trade_event(
     message = _public_message(event, message)
   if message:
     lines.extend(["", escape(message)])
-  if profile == "internal":
-    position = _position_line(event)
-    if position and f"position {event.get('position_id')}" not in message.lower():
-      lines.extend(["", position])
-  elif event_type == "opened":
+  if profile == "public" and event_type == "opened":
     _append_public_footer(
       lines,
       footer,
@@ -305,6 +304,17 @@ def _group_message_key(profile: DeliveryProfile, group_id: str) -> str:
     else "auto_trade:public_group_msg"
   )
   return f"{prefix}:{group_id}"
+
+
+def _full_tp_result_key(profile: DeliveryProfile, group_id: str) -> str:
+  return f"auto_trade:full_tp_result:{profile}:{group_id}"
+
+
+def _is_full_take_profit(event: dict) -> bool:
+  return (
+    event.get("type") == "take_profit"
+    and str(event.get("message") or "").upper().startswith("FULL TP ")
+  )
 
 
 def _is_bad_reply_target(error: TelegramBadRequest) -> bool:
@@ -372,11 +382,18 @@ async def _deliver_auto_trade_event(
   chat_id: int,
   send=None,
 ) -> bool:
+  event_type = str(event.get("type") or "")
+  group_id = str(event.get("group_id") or "").strip()
+  if (
+    event_type == "group_result"
+    and group_id
+    and await client.exists(_full_tp_result_key(profile, group_id))
+  ):
+    return False
   text = render_auto_trade_event(event, profile=profile)
   if not text:
     return False
   send = send or send_scanner_with_retry
-  event_type = str(event.get("type") or "")
   position_id = event.get("position_id")
   reply_to = None
   if event_type != "opened" and position_id is not None:
@@ -406,6 +423,12 @@ async def _deliver_auto_trade_event(
       event,
       profile,
       int(sent.message_id),
+    )
+  if _is_full_take_profit(event) and group_id:
+    await client.set(
+      _full_tp_result_key(profile, group_id),
+      "1",
+      ex=_FULL_TP_RESULT_TTL,
     )
   return True
 

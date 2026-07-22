@@ -149,14 +149,6 @@ def _sl_fill_price(sig: dict, bar: dict, is_buy: bool) -> float:
   return level
 
 
-def _tp_fill_price(tp: float, bar: dict, is_buy: bool) -> float:
-  level = float(tp)
-  opened = float(bar["open"])
-  if (is_buy and opened > level) or (not is_buy and opened < level):
-    return opened
-  return level
-
-
 def _last_tp_floor_pips(sig: dict) -> int:
   tps = sig.get("tps") or []
   if not tps:
@@ -250,7 +242,10 @@ async def _evaluate(
     tp_hit = _tp_hit(touch, tp, is_buy)
     if not tp_hit:
       break
-    fill = _tp_fill_price(tp, bar, is_buy)
+    # Watcher alerts account for each configured target at that target level.
+    # A candle may open or wick far beyond it, but that overshoot belongs in
+    # `ran to`/runner telemetry and must not inflate the booked TP result.
+    fill = float(tp)
     pips = pips_between(sig, fill)
     key = f"TP{idx + 1}"
     await fanout_update(

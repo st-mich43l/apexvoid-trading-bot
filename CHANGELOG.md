@@ -184,6 +184,10 @@ dated section after deployment.
 
 ### Fixed
 
+- Watcher TP alerts now always book the configured TP level even when a candle
+  opens or runs far beyond it; ApexVoid Algo reply cards no longer expose
+  broker position IDs, and full-TP cards include the realized trade result
+  without a duplicate technical group-result reply.
 - Block false market-chased box breakouts unless closed M1 bars are continuous,
   the break receives a directional edge retest, and at least 35 pips remain to
   the nearest pre-break M1/M5/M15 barrier; nearby barriers now join the target

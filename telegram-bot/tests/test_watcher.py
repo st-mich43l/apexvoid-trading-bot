@@ -512,19 +512,19 @@ async def test_sl_gap_books_at_open(monkeypatch, sig, bar, fill, pips):
     (
       _sell_signal(entry=3995, entry_end=3997, sl=4005, tps=[3990]),
       _bar("2026-07-08T10:00:00.000Z", 3988, 3989, 3987, 3988),
-      "3,988",
-      70,
+      "3,990",
+      50,
     ),
     (
       _buy_signal(entry=3995, entry_end=3997, sl=3990, tps=[4002]),
       _bar("2026-07-08T10:00:00.000Z", 4004, 4005, 4003, 4004),
-      "4,004",
-      70,
+      "4,002",
+      50,
     ),
   ],
   ids=["sell", "buy"],
 )
-async def test_tp_gap_books_at_open(monkeypatch, sig, bar, fill, pips):
+async def test_tp_gap_books_at_configured_level(monkeypatch, sig, bar, fill, pips):
   fanout = AsyncMock()
   monkeypatch.setattr(watcher, "fanout_update", fanout)
   progress = {"tp": 0, "sl": False, "runner_pips": 0}
@@ -538,6 +538,41 @@ async def test_tp_gap_books_at_open(monkeypatch, sig, bar, fill, pips):
   assert markup_fn("vip").inline_keyboard[0][0].callback_data == (
     f"c0:3:1:{pips}"
   )
+
+
+@pytest.mark.asyncio
+async def test_sell_tp_incident_books_tp_pips_not_far_overshoot(monkeypatch):
+  fanout = AsyncMock()
+  monkeypatch.setattr(watcher, "fanout_update", fanout)
+  sig = _sell_signal(
+    entry=4123,
+    entry_end=4125,
+    sl=4128,
+    tps=[4120],
+  )
+  bar = _bar(
+    "2026-07-22T07:43:00.000Z",
+    4112,
+    4113,
+    4111.19,
+    4111.8,
+  )
+
+  await watcher._evaluate(
+    sig,
+    bar,
+    {"tp": 0, "sl": False, "runner_pips": 0},
+    atr=3.0,
+  )
+
+  _, render = fanout.await_args_list[0].args
+  assert (
+    "Fill: <b>4,120</b> (TP1) · ran to <b>4,111.19</b>"
+    in render("vip")
+  )
+  assert "Profit: <b>+30 pips</b>" in render("vip")
+  markup_fn = fanout.await_args_list[0].kwargs["markup_fn"]
+  assert markup_fn("vip").inline_keyboard[0][0].callback_data == "c0:3:1:30"
 
 
 def test_small_overshoot_is_omitted_from_alert():
