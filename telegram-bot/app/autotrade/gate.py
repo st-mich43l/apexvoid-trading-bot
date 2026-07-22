@@ -89,17 +89,27 @@ def evaluate_auto_scalp_gate(
   """
   required = {"M1", "M5", "M15"}
   if not required <= frames.keys():
-    return AutoScalpDecision("missing_frames")
+    missing = sorted(required - frames.keys())
+    return AutoScalpDecision(
+      "missing_frames", reasons=(f"missing timeframes: {', '.join(missing)}",),
+    )
   m1 = _clean_frame(frames["M1"].tail(M1_WINDOW))
   m5 = _clean_frame(frames["M5"].tail(M5_WINDOW))
   m15 = _clean_frame(frames["M15"].tail(M15_WINDOW))
   if len(m1) < BOX_LOOKBACK + 1 or len(m5) < 12 or len(m15) < 8:
-    return AutoScalpDecision("insufficient_history")
+    return AutoScalpDecision(
+      "insufficient_history",
+      reasons=(
+        f"insufficient history: M1={len(m1)} M5={len(m5)} M15={len(m15)}",
+      ),
+    )
 
   m1_atr = _atr(m1)
   m5_atr = _atr(m5)
   if m1_atr <= _EPS or m5_atr <= _EPS:
-    return AutoScalpDecision("invalid_atr")
+    return AutoScalpDecision(
+      "invalid_atr", reasons=(f"invalid atr: M1={m1_atr:.4f} M5={m5_atr:.4f}",),
+    )
   close = float(m1["close"].iloc[-1])
   pip_size = units.pip_size(symbol)
   box = _m1_consolidation_box(m1, m1_atr, symbol)
@@ -107,6 +117,7 @@ def evaluate_auto_scalp_gate(
     return AutoScalpDecision(
       "waiting_for_box",
       rail_count=0,
+      reasons=("no valid M1 consolidation box in the lookback window",),
     )
   if _box_is_broken(m1, m5, box, m5_atr, pip_size):
     return AutoScalpDecision(
@@ -122,6 +133,7 @@ def evaluate_auto_scalp_gate(
       "invalid_spot",
       box=box,
       rail_count=2,
+      reasons=(f"invalid spot price: {spot_price!r}",),
     )
   triggered: list[tuple[AutoScalpRail, str, str]] = []
   for rail in (box.lower, box.upper):
@@ -143,6 +155,10 @@ def evaluate_auto_scalp_gate(
       rail=nearest,
       box=box,
       rail_count=2,
+      reasons=(
+        f"{state.replace('_', ' ')} at {nearest.role} rail "
+        f"{nearest.low:.2f}-{nearest.high:.2f}",
+      ),
     )
 
   maximum_entry_distance = MAX_ENTRY_DISTANCE_PIPS * pip_size
@@ -188,9 +204,10 @@ def evaluate_auto_scalp_gate(
       target_room_pips=room,
       box=box,
       rail_count=2,
+      reasons=(f"target blocked: only {room:.0f} pips room to opposite edge",),
     )
   if not eligible:
-    rail, direction, trigger, _ = min(moved, key=lambda item: item[3])
+    rail, direction, trigger, distance = min(moved, key=lambda item: item[3])
     return AutoScalpDecision(
       "entry_moved",
       direction=direction,
@@ -198,6 +215,10 @@ def evaluate_auto_scalp_gate(
       rail=rail,
       box=box,
       rail_count=2,
+      reasons=(
+        f"entry moved {distance / pip_size:.1f} pips beyond "
+        f"{MAX_ENTRY_DISTANCE_PIPS} pip limit from rail {rail.level:.2f}",
+      ),
     )
 
   rail, direction, trigger, target, room_pips, full_tp_pips = max(
