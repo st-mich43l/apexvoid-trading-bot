@@ -565,12 +565,57 @@ def _chop_range_reason(ctx: DetectionContext) -> str | None:
   return f"range {_number(ctx.regime.range_low)}-{_number(ctx.regime.range_high)}"
 
 
-def _confluence_from_zone(zone: Zone, reasons: list[str]) -> int:
+@dataclass(frozen=True)
+class ConfluenceFactors:
+  """Named, independently-observable confluence factors, shared by every
+  detector in ``DEFAULT_DETECTORS``. Used only when a detector's zone was
+  synthesised rather than drawn from the scored zone engine (``zone.score``
+  is then 0 and carries no confluence signal of its own) - see
+  ``_confluence_from_zone``. Two detectors observing the same factor set
+  must produce the same confluence, since a reader can't tell which
+  detector produced a given star rating.
+  """
+  htf_aligned: bool = False
+  touches: int = 0
+  wick_rejection: bool = False
+  displacement_grade: bool = False
+  session_context: bool = False
+  structural_agreement: bool = False
+
+
+_FACTOR_HTF_ALIGN_WEIGHT = 4.0
+_FACTOR_TOUCH_UNIT_WEIGHT = 1.0
+_FACTOR_TOUCH_CAP = 3
+_FACTOR_WICK_REJECTION_WEIGHT = 3.0
+_FACTOR_DISPLACEMENT_WEIGHT = 3.0
+_FACTOR_SESSION_CONTEXT_WEIGHT = 2.0
+_FACTOR_STRUCTURAL_AGREEMENT_WEIGHT = 3.0
+
+
+def _confluence_from_factors(factors: ConfluenceFactors) -> int:
+  score = (
+    (_FACTOR_HTF_ALIGN_WEIGHT if factors.htf_aligned else 0.0)
+    + min(max(0, factors.touches), _FACTOR_TOUCH_CAP) * _FACTOR_TOUCH_UNIT_WEIGHT
+    + (_FACTOR_WICK_REJECTION_WEIGHT if factors.wick_rejection else 0.0)
+    + (_FACTOR_DISPLACEMENT_WEIGHT if factors.displacement_grade else 0.0)
+    + (_FACTOR_SESSION_CONTEXT_WEIGHT if factors.session_context else 0.0)
+    + (
+      _FACTOR_STRUCTURAL_AGREEMENT_WEIGHT
+      if factors.structural_agreement else 0.0
+    )
+  )
+  return 3 if score >= STAR_THREE_SCORE else 2 if score >= STAR_TWO_SCORE else 1
+
+
+def _confluence_from_zone(
+  zone: Zone,
+  factors: ConfluenceFactors | None = None,
+) -> int:
   score = float(getattr(zone, "score", 0.0))
   if score > 0:
     stars = 3 if score >= STAR_THREE_SCORE else 2 if score >= STAR_TWO_SCORE else 1
   else:
-    stars = min(3, len(reasons))
+    stars = _confluence_from_factors(factors or ConfluenceFactors())
   if getattr(zone, "touches", 0) >= 1:
     stars = min(stars, 2)
   return max(1, stars)
@@ -608,6 +653,7 @@ def _finish(
   mode: str = "with_trend",
   chop_tp_cap: bool = True,
   include_score_reasons: bool = True,
+  factors: ConfluenceFactors | None = None,
 ) -> DetectionResult | None:
   if not _level_valid(level, price, direction):
     return None
@@ -624,7 +670,7 @@ def _finish(
   )
   if include_score_reasons:
     full_reasons = _merge_score_reasons(full_reasons, zone)
-  confluence = _confluence_from_zone(zone, full_reasons)
+  confluence = _confluence_from_zone(zone, factors)
   if confluence < ctx.settings.confluence_floor:
     return None
   return DetectionResult(
@@ -727,7 +773,17 @@ def trend_pullback(ctx: DetectionContext) -> DetectionResult | None:
   reasons = _add_proximal_reason(reasons, proximal)
   if ctx.session_ok:
     reasons.append("session")
-  return _finish(ctx, "Trend Pullback", direction, level, zone, price, atr, reasons)
+  factors = ConfluenceFactors(
+    htf_aligned=True,  # gated above via st.bias == ctx.htf_bias
+    touches=zone.touches,
+    wick_rejection=True,  # gated above via _rejection(df, direction)
+    session_context=ctx.session_ok,
+    structural_agreement=True,  # zone drawn from structural swing zones
+  )
+  return _finish(
+    ctx, "Trend Pullback", direction, level, zone, price, atr, reasons,
+    factors=factors,
+  )
 
 
 def break_retest(ctx: DetectionContext) -> DetectionResult | None:
@@ -785,7 +841,19 @@ def break_retest(ctx: DetectionContext) -> DetectionResult | None:
     if direction == "SELL" and zone.kind != "retest_resistance":
       continue
     reasons = [f"HTF bias {ctx.htf_bias}", "break and retest", "retest rejection"]
-    result = _finish(ctx, "Break & Retest", direction, level.price, zone, price, atr, reasons)
+    factors = ConfluenceFactors(
+      htf_aligned=ctx.htf_bias == _bias_for_direction(direction),
+      touches=level.touches,
+      wick_rejection=True,  # gated above via _rejection(df, direction)
+      displacement_grade=_strong_body_break(
+        df, st, direction, ctx.settings.momentum_body_frac,
+      ),
+      structural_agreement=True,  # zone.kind already matched direction above
+    )
+    result = _finish(
+      ctx, "Break & Retest", direction, level.price, zone, price, atr, reasons,
+      factors=factors,
+    )
     if result is not None:
       return result
   return None
@@ -985,10 +1053,14 @@ def snap_back(ctx: DetectionContext) -> DetectionResult | None:
   selected = _best_valid_zone(zones, price, atr, direction, ctx.settings)
   level = None
   proximal = False
+  touches = 0
+  structural_agreement = False
   if selected is not None:
     zone, proximal = selected
     distance = _zone_distance(zone, price, direction)
     level = _zone_key(zone, price, direction)
+    touches = zone.touches
+    structural_agreement = True  # zone drawn from structural swing zones
   else:
     nearest = _nearest_level(st.levels, price, direction)
     if nearest is None:
@@ -996,6 +1068,7 @@ def snap_back(ctx: DetectionContext) -> DetectionResult | None:
     zone = entry_zone(df, nearest.price, direction)
     distance = _zone_distance(zone, price, direction)
     level = nearest.price
+    touches = nearest.touches
   if distance < atr * ctx.settings.snap_atr_mult:
     return None
   grab = _zone_grab(st, zone, direction)
@@ -1008,7 +1081,16 @@ def snap_back(ctx: DetectionContext) -> DetectionResult | None:
     f"sweep {grab.grade}",
   ]
   reasons = _add_proximal_reason(reasons, proximal)
-  return _finish(ctx, "Snap-Back", direction, level, zone, price, atr, reasons)
+  factors = ConfluenceFactors(
+    htf_aligned=ctx.htf_bias == _bias_for_direction(direction),
+    touches=touches,
+    wick_rejection=True,  # gated above via _rejection(df, direction)
+    displacement_grade=grab.grade == "A",
+    structural_agreement=structural_agreement,
+  )
+  return _finish(
+    ctx, "Snap-Back", direction, level, zone, price, atr, reasons, factors=factors,
+  )
 
 
 def momentum_ride(ctx: DetectionContext) -> DetectionResult | None:
@@ -1036,13 +1118,30 @@ def momentum_ride(ctx: DetectionContext) -> DetectionResult | None:
     level_price = _zone_key(zone, price, direction)
     reasons = [f"HTF bias {ctx.htf_bias}", "impulse break", "near scored zone"]
     reasons = _add_proximal_reason(reasons, proximal)
-    return _finish(ctx, "Momentum Ride", direction, level_price, zone, price, atr, reasons)
+    factors = ConfluenceFactors(
+      htf_aligned=ctx.htf_bias == _bias_for_direction(direction),
+      touches=zone.touches,
+      displacement_grade=True,  # gated above via _strong_body_break(...)
+      structural_agreement=True,  # zone drawn from structural swing zones
+    )
+    return _finish(
+      ctx, "Momentum Ride", direction, level_price, zone, price, atr, reasons,
+      factors=factors,
+    )
   level = _nearest_level(st.levels, price, direction)
   if level is None:
     return None
   zone = entry_zone(df, level.price, direction)
   reasons = [f"HTF bias {ctx.htf_bias}", "impulse break", "near valid-side level"]
-  return _finish(ctx, "Momentum Ride", direction, level.price, zone, price, atr, reasons)
+  factors = ConfluenceFactors(
+    htf_aligned=ctx.htf_bias == _bias_for_direction(direction),
+    touches=level.touches,
+    displacement_grade=True,  # gated above via _strong_body_break(...)
+  )
+  return _finish(
+    ctx, "Momentum Ride", direction, level.price, zone, price, atr, reasons,
+    factors=factors,
+  )
 
 
 def range_edge_scalp(ctx: DetectionContext) -> DetectionResult | None:
@@ -1232,7 +1331,16 @@ def fade_scalp(ctx: DetectionContext) -> DetectionResult | None:
     range_reason = _chop_range_reason(ctx)
     if range_reason:
       reasons.append(range_reason)
-    result = _finish(ctx, "Fade Scalp", direction, level.price, zone, price, atr, reasons)
+    factors = ConfluenceFactors(
+      htf_aligned=ctx.htf_bias == _bias_for_direction(direction),
+      touches=level.touches,
+      wick_rejection=True,  # gated above via _rejection(df, direction)
+      displacement_grade=grab.grade == "A",
+    )
+    result = _finish(
+      ctx, "Fade Scalp", direction, level.price, zone, price, atr, reasons,
+      factors=factors,
+    )
     if result is not None:
       return result
   return None

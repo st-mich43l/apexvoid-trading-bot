@@ -171,6 +171,105 @@ def _band_dedup_key(symbol: str, result: DetectionResult) -> str:
   return f"scanner:alerted_band:{symbol}:{result.direction}:{bucket}"
 
 
+# --- B3: setup invalidation --------------------------------------------------
+# Mirrors the *pattern* of worker.py's _apply_box_retirement (autotrade path):
+# a retirement-flag key with a TTL, checked on every subsequent scan, cleared
+# once fired so a broken setup is never re-announced as invalidated twice.
+# Cannot reuse that function directly - it operates on AutoScalpDecision/
+# auto_trade:box:* state, a different pipeline entirely (see its docstring).
+_ACTIVE_SETUP_TTL_SECONDS = 4 * 3600
+_INVALIDATION_BREAK_BUFFER_ATR = 0.1
+
+
+def _active_setup_key(
+  symbol: str,
+  tf: str,
+  setup: str,
+  direction: str,
+) -> str:
+  slug = setup.lower().replace(" ", "_")
+  return f"scanner:setup:active:{symbol.upper()}:{tf.upper()}:{slug}:{direction.upper()}"
+
+
+async def _track_active_setups(
+  client: Any,
+  symbol: str,
+  tf: str,
+  sent: list[DetectionResult],
+) -> None:
+  for result in sent:
+    payload = json.dumps({
+      "setup": result.setup,
+      "direction": result.direction,
+      "zone_low": result.entry_zone.low,
+      "zone_high": result.entry_zone.high,
+      "confluence": result.confluence,
+    }, separators=(",", ":"))
+    await client.set(
+      _active_setup_key(symbol, tf, result.setup, result.direction),
+      payload,
+      ex=_ACTIVE_SETUP_TTL_SECONDS,
+    )
+
+
+def _format_invalidation(state: dict[str, Any], symbol: str, tf: str) -> str:
+  direction = str(state.get("direction", ""))
+  setup = str(state.get("setup", "setup"))
+  low = float(state.get("zone_low", 0.0))
+  high = float(state.get("zone_high", 0.0))
+  return (
+    f"⌛ <b>{escape(symbol)} {escape(tf)} · SETUP INVALIDATED</b>\n"
+    f"{escape(direction)} · {escape(setup)} · zone "
+    f"{_zone_text(Zone(low, high, 'demand' if direction == 'BUY' else 'supply'), symbol)} "
+    "no longer holds - structure broke through it."
+  )
+
+
+async def _check_setup_invalidations(
+  client: Any,
+  symbol: str,
+  tf: str,
+  df: Any,
+  notify: NotifyFn,
+  atr: float,
+) -> None:
+  if df.empty:
+    return
+  close = float(df["close"].iloc[-1])
+  if not math.isfinite(close):
+    return
+  buffer = max(0.0, _INVALIDATION_BREAK_BUFFER_ATR) * max(0.0, atr)
+  pattern = f"scanner:setup:active:{symbol.upper()}:{tf.upper()}:*"
+  async for key in client.scan_iter(match=pattern):
+    raw = await client.get(key)
+    if not raw:
+      continue
+    try:
+      state = json.loads(raw)
+    except (TypeError, json.JSONDecodeError):
+      continue
+    direction = state.get("direction")
+    try:
+      zone_low = float(state["zone_low"])
+      zone_high = float(state["zone_high"])
+    except (KeyError, TypeError, ValueError):
+      await client.delete(key)
+      continue
+    invalidated = (
+      close > zone_high + buffer if direction == "SELL"
+      else close < zone_low - buffer if direction == "BUY"
+      else False
+    )
+    if not invalidated:
+      continue
+    await client.delete(key)
+    if settings.telegram_owner_id:
+      await notify(
+        _format_invalidation(state, symbol, tf),
+        chat_id=settings.telegram_owner_id,
+      )
+
+
 def _htf_bias_text(ctx: DetectionContext, htf_order: list[str]) -> str:
   for tf in htf_order:
     structure = ctx.structures.get(tf)
@@ -421,32 +520,87 @@ def _trusted_spot_values(
   return spot.price, spot.ts
 
 
-def _digest_results(results: list[DetectionResult]) -> list[DetectionResult]:
-  primary = _suppress_overlaps([
+def _digest_results(
+  results: list[DetectionResult],
+) -> tuple[list[DetectionResult], list[dict[str, Any]]]:
+  primary, primary_conflicts = _suppress_overlaps([
     result for result in results
     if result.mode in {"with_trend", "range_scalp"}
   ])
-  candidates = primary or _suppress_overlaps([
-    result for result in results
-    if result.mode not in {"with_trend", "range_scalp"}
-  ])
+  if primary:
+    candidates, conflicts = primary, primary_conflicts
+  else:
+    candidates, conflicts = _suppress_overlaps([
+      result for result in results
+      if result.mode not in {"with_trend", "range_scalp"}
+    ])
   ordered = sorted(candidates, key=_result_rank)
-  return ordered[:max(1, settings.scanner_top_n)]
+  return ordered[:max(1, settings.scanner_top_n)], conflicts
 
 
-def _suppress_overlaps(results: list[DetectionResult]) -> list[DetectionResult]:
+def _conflict_record(
+  stronger: DetectionResult,
+  weaker: DetectionResult,
+  outcome: str,
+) -> dict[str, Any]:
+  return {
+    "outcome": outcome,  # "stronger_kept" | "both_dropped"
+    "a": {
+      "setup": stronger.setup,
+      "direction": stronger.direction,
+      "confluence": stronger.confluence,
+    },
+    "b": {
+      "setup": weaker.setup,
+      "direction": weaker.direction,
+      "confluence": weaker.confluence,
+    },
+  }
+
+
+def _suppress_overlaps(
+  results: list[DetectionResult],
+) -> tuple[list[DetectionResult], list[dict[str, Any]]]:
+  """Same-direction overlap is a duplicate - keep the higher-ranked, drop the
+  other. Opposite-direction overlap is a contradiction: two credible,
+  contradictory readings mean the market is undecided, so unless the
+  higher-ranked result's confluence decisively beats the other's, both are
+  dropped rather than shipping either as a coin flip.
+  """
   ordered = sorted(results, key=_result_rank)
   selected: list[DetectionResult] = []
-  threshold = max(0.0, settings.alert_overlap_suppress)
+  conflicts: list[dict[str, Any]] = []
+  same_threshold = max(0.0, settings.alert_overlap_suppress)
+  conflict_threshold = max(0.0, settings.scanner_conflict_overlap)
+  margin = max(0.0, settings.scanner_conflict_margin)
   for result in ordered:
-    if any(
+    same_direction_duplicate = any(
       result.direction == kept.direction
-      and _zone_overlap_ratio(result.entry_zone, kept.entry_zone) >= threshold
+      and _zone_overlap_ratio(result.entry_zone, kept.entry_zone) >= same_threshold
       for kept in selected
-    ):
+    )
+    if same_direction_duplicate:
+      continue
+    # `selected` is built in rank order, so the first opposing overlap found
+    # is always the strongest (highest-ranked) survivor so far.
+    opposing = next(
+      (
+        kept for kept in selected
+        if result.direction != kept.direction
+        and _zone_overlap_ratio(result.entry_zone, kept.entry_zone)
+          >= conflict_threshold
+      ),
+      None,
+    )
+    if opposing is not None:
+      if opposing.confluence - result.confluence >= margin:
+        conflicts.append(_conflict_record(opposing, result, "stronger_kept"))
+        continue
+      selected.remove(opposing)
+      conflicts.append(_conflict_record(opposing, result, "both_dropped"))
       continue
     selected.append(result)
-  return selected
+  return selected, conflicts
 
 
 def _result_rank(result: DetectionResult) -> tuple[float, float, float]:
@@ -533,6 +687,7 @@ async def _notify_digest_once(
     ),
     chat_id=settings.telegram_owner_id,
   )
+  await _track_active_setups(client, symbol, tf, claimed_results)
   return claimed_results
 
 
@@ -548,6 +703,7 @@ async def _record_status(
   status: str,
   market_map: MarketMap | None = None,
   scalp: dict[str, Any] | None = None,
+  conflicts: list[dict[str, Any]] | None = None,
 ) -> None:
   map_counts = {
     "buys": len(market_map.buys) if market_map is not None else 0,
@@ -581,6 +737,7 @@ async def _record_status(
       }
       for item in detected
     ],
+    "conflicts": conflicts or [],
     "sent": len(sent),
     "map": map_counts,
     "map_summary": (
@@ -598,6 +755,129 @@ async def _record_status(
   encoded = json.dumps(payload, separators=(",", ":"), sort_keys=True)
   await client.set("scanner:last_tick", encoded)
   await client.set(f"scanner:last_tick:{symbol}:{tf}", encoded)
+
+
+# --- B5: per-detector reporting ---------------------------------------------
+# scanner.py already builds `detected` on every scan (line ~723) but nothing
+# reads it historically - `scanner:last_tick*` is overwrite-only, holding
+# only the single latest snapshot. This appends a bounded, queryable history
+# so the BOX_* tuning and regime-router-exclusivity questions (out of scope
+# for this PR) have data to work from before anyone touches those constants.
+_DETECT_LOG_MAXLEN = 5000
+_DETECT_LOG_TTL_SECONDS = 8 * 24 * 3600
+
+
+def _detect_log_key(symbol: str, tf: str) -> str:
+  return f"scanner:detect_log:{symbol.upper()}:{tf.upper()}"
+
+
+async def _append_detect_log(
+  client: Any,
+  symbol: str,
+  tf: str,
+  detected: list[DetectionResult],
+  sent: list[DetectionResult],
+  conflicts: list[dict[str, Any]],
+) -> None:
+  if not detected:
+    return
+  sent_keys = {(item.setup, item.direction) for item in sent}
+  conflict_keys = {
+    (side["setup"], side["direction"])
+    for record in conflicts
+    for side in (record["a"], record["b"])
+  }
+  entries = []
+  for item in detected:
+    detection_key = (item.setup, item.direction)
+    if detection_key in sent_keys:
+      outcome = "sent"
+    elif detection_key in conflict_keys:
+      outcome = "dropped_conflict"
+    else:
+      outcome = "suppressed_duplicate"
+    entries.append({
+      "setup": item.setup,
+      "confluence": item.confluence,
+      "outcome": outcome,
+    })
+  record = json.dumps({
+    "recorded_at": datetime.now(timezone.utc).timestamp(),
+    "entries": entries,
+  }, separators=(",", ":"))
+  key = _detect_log_key(symbol, tf)
+  await client.lpush(key, record)
+  await client.ltrim(key, 0, _DETECT_LOG_MAXLEN - 1)
+  await client.expire(key, _DETECT_LOG_TTL_SECONDS)
+
+
+async def scan_report(
+  client: Any,
+  symbol: str,
+  tf: str,
+  hours: float = 24.0,
+) -> dict[str, dict[str, float]]:
+  """Aggregate the last ``hours`` of detections into a per-detector table:
+  fire count, mean confluence, times sent (~ranked first and delivered),
+  times suppressed as a same-direction duplicate, times dropped as an
+  opposite-direction conflict. Read-only - does not tune any BOX_* constant.
+  """
+  cutoff = datetime.now(timezone.utc).timestamp() - max(0.0, hours) * 3600
+  raw = await client.lrange(_detect_log_key(symbol, tf), 0, _DETECT_LOG_MAXLEN - 1)
+  totals: dict[str, dict[str, float]] = {}
+  for item in raw:
+    try:
+      record = json.loads(item)
+    except (TypeError, json.JSONDecodeError):
+      continue
+    if float(record.get("recorded_at", 0.0)) < cutoff:
+      continue
+    for entry in record.get("entries", []):
+      setup = str(entry.get("setup", "unknown"))
+      row = totals.setdefault(setup, {
+        "fires": 0.0,
+        "confluence_sum": 0.0,
+        "sent": 0.0,
+        "suppressed_duplicate": 0.0,
+        "dropped_conflict": 0.0,
+      })
+      row["fires"] += 1
+      row["confluence_sum"] += float(entry.get("confluence", 0))
+      outcome = entry.get("outcome")
+      if outcome in row:
+        row[outcome] += 1
+  return {
+    setup: {
+      "fires": row["fires"],
+      "mean_confluence": row["confluence_sum"] / row["fires"] if row["fires"] else 0.0,
+      "sent": row["sent"],
+      "suppressed_duplicate": row["suppressed_duplicate"],
+      "dropped_conflict": row["dropped_conflict"],
+    }
+    for setup, row in totals.items()
+  }
+
+
+def format_scan_report(
+  rows: dict[str, dict[str, float]],
+  symbol: str,
+  tf: str,
+  hours: float,
+) -> str:
+  if not rows:
+    return (
+      f"📊 <b>Scan report · {escape(symbol)} {escape(tf)} · "
+      f"{hours:.0f}h</b>\nNo detections recorded in this window."
+    )
+  lines = [f"📊 <b>Scan report · {escape(symbol)} {escape(tf)} · {hours:.0f}h</b>", ""]
+  for setup, row in sorted(rows.items(), key=lambda item: -item[1]["fires"]):
+    lines.append(
+      f"<b>{escape(setup)}</b> · fires {int(row['fires'])} · "
+      f"avg {row['mean_confluence']:.1f}★ · sent {int(row['sent'])} · "
+      f"dup {int(row['suppressed_duplicate'])} · "
+      f"conflict {int(row['dropped_conflict'])}"
+    )
+  return "\n".join(lines)
 
 
 def _scalp_status(ctx: DetectionContext) -> dict[str, Any]:
@@ -730,6 +1010,18 @@ async def _handle_event(
     )
     return []
 
+  exec_indicators = getattr(ctx, "indicators", {}).get(exec_tf)
+  invalidation_atr = (
+    float(exec_indicators.atr.iloc[-1])
+    if exec_indicators is not None and not exec_indicators.atr.empty
+    else 0.0
+  )
+  if not math.isfinite(invalidation_atr):
+    invalidation_atr = 0.0
+  await _check_setup_invalidations(
+    client, symbol, exec_tf, frames[exec_tf], notify, invalidation_atr,
+  )
+
   analysis = getattr(ctx, "analysis", None)
   current_map = None
   if analysis is not None:
@@ -745,7 +1037,7 @@ async def _handle_event(
     if result is None:
       continue
     detected.append(result)
-  digest = _digest_results(detected)
+  digest, conflicts = _digest_results(detected)
   sent = await _notify_digest_once(
     client,
     symbol,
@@ -767,7 +1059,9 @@ async def _handle_event(
     status="ok",
     market_map=current_map,
     scalp=_scalp_status(ctx),
+    conflicts=conflicts,
   )
+  await _append_detect_log(client, symbol, exec_tf, detected, sent, conflicts)
   return sent
 
 
