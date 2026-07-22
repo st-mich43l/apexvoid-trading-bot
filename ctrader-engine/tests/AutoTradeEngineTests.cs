@@ -107,6 +107,9 @@ public sealed class AutoTradeEngineTests
     var opened = Assert.Single(store.Events, item => item.Type == "opened");
     Assert.Contains("full TP 70p", opened.Message);
     Assert.Contains("range 4,000.00-4,008.00", opened.Message);
+    var stopPips = order.RelativeStopLoss / 10_000m;
+    Assert.Equal(stopPips, opened.StopPips);
+    Assert.Equal(new[] { 70 }, opened.TargetsPips);
 
     await engine.ObserveSpotAsync(
       new SpotPrice("XAU", 4007.2m, 4007.4m, Now.ToUnixTimeSeconds()),
@@ -119,6 +122,7 @@ public sealed class AutoTradeEngineTests
       item => item.Type == "take_profit"
     );
     Assert.Equal(70, takeProfit.TargetPips);
+    Assert.Equal(stopPips, takeProfit.StopPips);
     Assert.StartsWith("FULL TP +70 pips", takeProfit.Message);
     Assert.DoesNotContain(store.Events, item => item.Type == "stop_moved");
     Assert.Empty(store.Positions);

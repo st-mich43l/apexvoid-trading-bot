@@ -168,6 +168,14 @@ position management.
 
 Executor lifecycle events are appended as JSON payloads to
 `auto_trade:events`. The Python bot persists its delivery cursor at
-`auto_trade:telegram_event_cursor` and sends only operational events to the
-owner through the dedicated signal bot, including live-account warnings and
-successful stop moves.
+`auto_trade:telegram_event_cursor`. Open and target events carry their own
+initial `stop_pips`; open events also carry the broker-valid `targets_pips`
+ladder used by that position, so delivery never reconstructs risk from a
+global default.
+
+The dedicated signal bot sends full operational cards to the owner and a
+redacted trade-only profile to `SIGNAL_PUBLIC_CHANNEL_ID` when configured.
+Order message IDs are cached for seven days under
+`auto_trade:msg:{position_id}` (with destination-specific public/group
+namespaces) so TP, stop, close, and scale-in updates reply to their trade root.
+A missing or rejected Telegram reply target falls back to a standalone card.

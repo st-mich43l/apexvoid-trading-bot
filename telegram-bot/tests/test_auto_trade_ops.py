@@ -1,7 +1,27 @@
+from types import SimpleNamespace
+
 import pytest
+from aiogram.exceptions import TelegramBadRequest
 
 from app.autotrade import delivery
 from app.persistence import redis_state
+
+
+def _opened_event() -> dict:
+  return {
+    "type": "opened",
+    "message": (
+      "SELL 0.06 lots filled 4,111.26, SL 4,117.76 · "
+      "65p structure · risk-bound"
+    ),
+    "position_id": 39000344,
+    "group_id": "group-39000344",
+    "setup": "Box Breakout",
+    "regime": "breakout",
+    "confluence": 3,
+    "stop_pips": 65,
+    "targets_pips": [30, 60, 90, 120, 200],
+  }
 
 
 def test_render_auto_trade_event_filters_noise_and_escapes_message():
@@ -116,6 +136,194 @@ def test_render_scale_in_zone_and_group_events():
   assert "Entry plan ready" in zone
   assert "Trade result" in result
   assert "ApexVoid Algo" in scale_in + zone + result
+
+
+def test_internal_profile_is_byte_identical_to_existing_card():
+  assert delivery.render_auto_trade_event(_opened_event(), profile="internal") == (
+    "🤖 <b>ApexVoid Algo</b>\n"
+    "🔴 <b>XAU SELL opened</b>\n"
+    "\n"
+    "📍 Entry: <b>4,111.26</b>\n"
+    "🛡 SL: <b>4,117.76</b> · 65 pips\n"
+    "📊 Size: <b>0.06 lot</b>\n"
+    "🧭 Box Breakout · breakout · ★★★\n"
+    "\n"
+    "🆔 Position: <code>39000344</code>"
+  )
+
+
+def test_public_profile_hides_position_and_lot_and_keeps_ladder():
+  text = delivery.render_auto_trade_event(
+    _opened_event(),
+    profile="public",
+    footer="Trade responsibly.",
+  )
+
+  assert "39000344" not in text
+  assert "0.06" not in text
+  assert "lot" not in text.lower()
+  assert "Position" not in text
+  assert "Targets: <b>+30 / +60 / +90 / +120 / +200 pips</b>" in text
+  assert text.endswith("Trade responsibly.")
+
+
+def test_public_take_profit_computes_r_from_event_stop_distance():
+  text = delivery.render_auto_trade_event({
+    "type": "take_profit",
+    "message": "TP1 +30 pips closed volume 200",
+    "position_id": 39000344,
+    "target_pips": 30,
+    "stop_pips": 65,
+  }, profile="public")
+
+  assert "+0.46R" in text
+  assert "39000344" not in text
+
+
+def test_empty_public_footer_adds_no_trailing_blank_lines():
+  text = delivery.render_auto_trade_event(
+    _opened_event(),
+    profile="public",
+    footer="",
+  )
+
+  assert text == text.rstrip()
+  assert not text.endswith("\n\n")
+
+
+@pytest.mark.asyncio
+async def test_opened_event_stores_message_id_with_ttl():
+  client = redis_state.get_client()
+
+  async def sent(*args, **kwargs):
+    return SimpleNamespace(message_id=8123)
+
+  await delivery._deliver_auto_trade_event(
+    client,
+    _opened_event(),
+    profile="internal",
+    chat_id=123,
+    send=sent,
+  )
+
+  key = "auto_trade:msg:39000344"
+  assert await client.get(key) == "8123"
+  assert 0 < await client.ttl(key) <= 7 * 24 * 3600
+
+
+@pytest.mark.asyncio
+async def test_take_profit_replies_to_stored_order_message():
+  client = redis_state.get_client()
+  await client.set("auto_trade:msg:39000344", "8123", ex=60)
+  calls = []
+
+  async def sent(text, **kwargs):
+    calls.append((text, kwargs))
+    return SimpleNamespace(message_id=8124)
+
+  await delivery._deliver_auto_trade_event(
+    client,
+    {
+      "type": "take_profit",
+      "message": "TP1 +30 pips closed volume 200",
+      "position_id": 39000344,
+      "stop_pips": 65,
+    },
+    profile="internal",
+    chat_id=123,
+    send=sent,
+  )
+
+  assert len(calls) == 1
+  assert calls[0][1]["reply_to"] == 8123
+
+
+@pytest.mark.asyncio
+async def test_missing_message_key_sends_standalone_with_position_line():
+  calls = []
+
+  async def sent(text, **kwargs):
+    calls.append((text, kwargs))
+    return SimpleNamespace(message_id=8124)
+
+  await delivery._deliver_auto_trade_event(
+    redis_state.get_client(),
+    {
+      "type": "take_profit",
+      "message": "TP1 +30 pips closed volume 200",
+      "position_id": 39000344,
+      "stop_pips": 65,
+    },
+    profile="internal",
+    chat_id=123,
+    send=sent,
+  )
+
+  assert len(calls) == 1
+  assert calls[0][1]["reply_to"] is None
+  assert "🆔 Position: <code>39000344</code>" in calls[0][0]
+
+
+@pytest.mark.asyncio
+async def test_bad_reply_target_retries_once_standalone():
+  client = redis_state.get_client()
+  await client.set("auto_trade:msg:39000344", "8123", ex=60)
+  calls = []
+
+  async def sent(text, **kwargs):
+    calls.append(kwargs)
+    if len(calls) == 1:
+      raise TelegramBadRequest(
+        method=None,
+        message="Bad Request: message to be replied not found",
+      )
+    return SimpleNamespace(message_id=8124)
+
+  await delivery._deliver_auto_trade_event(
+    client,
+    {
+      "type": "take_profit",
+      "message": "TP1 +30 pips closed volume 200",
+      "position_id": 39000344,
+      "stop_pips": 65,
+    },
+    profile="internal",
+    chat_id=123,
+    send=sent,
+  )
+
+  assert [call["reply_to"] for call in calls] == [8123, None]
+
+
+@pytest.mark.asyncio
+async def test_scale_in_replies_to_group_root_and_starts_tranche_thread():
+  client = redis_state.get_client()
+  await client.set(
+    "auto_trade:group_msg:group-39000344",
+    "8123",
+    ex=60,
+  )
+  calls = []
+
+  async def sent(text, **kwargs):
+    calls.append(kwargs)
+    return SimpleNamespace(message_id=8125)
+
+  await delivery._deliver_auto_trade_event(
+    client,
+    {
+      "type": "add",
+      "message": "Tranche 2 · 0.03 lots · exposure-bound",
+      "position_id": 39000345,
+      "group_id": "group-39000344",
+    },
+    profile="internal",
+    chat_id=123,
+    send=sent,
+  )
+
+  assert calls[0]["reply_to"] == 8123
+  assert await client.get("auto_trade:msg:39000345") == "8125"
 
 
 @pytest.mark.asyncio

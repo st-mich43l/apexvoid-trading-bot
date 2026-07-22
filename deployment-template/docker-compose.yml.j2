@@ -89,7 +89,7 @@ services:
       AUTO_TRADE_CONTRACT_SIZE: {{ apexvoid_trading_bot_env.AUTO_TRADE_CONTRACT_SIZE | default('100') | string | to_json }}
       AUTO_TRADE_TP_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_TP_PIPS | default('30,60,90,120,200') | string | to_json }}
       AUTO_TRADE_TP_WEIGHTS: {{ apexvoid_trading_bot_env.AUTO_TRADE_TP_WEIGHTS | default('20,20,20,20,20') | string | to_json }}
-      AUTO_TRADE_BE_BUFFER_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_BE_BUFFER_PIPS | default('3') | string | to_json }}
+      AUTO_TRADE_BE_BUFFER_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_BE_BUFFER_PIPS | default('6') | string | to_json }}
       AUTO_TRADE_CANDIDATE_MAX_AGE: {{ apexvoid_trading_bot_env.AUTO_TRADE_CANDIDATE_MAX_AGE | default('90') | string | to_json }}
       AUTO_TRADE_SPOT_MAX_AGE: {{ apexvoid_trading_bot_env.AUTO_TRADE_SPOT_MAX_AGE | default('5') | string | to_json }}
       AUTO_TRADE_MAX_SPREAD_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_MAX_SPREAD_PIPS | default('5') | string | to_json }}

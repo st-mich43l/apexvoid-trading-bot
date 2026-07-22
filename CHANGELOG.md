@@ -13,6 +13,10 @@ dated section after deployment.
 
 ### Added
 
+- Added per-position Telegram reply threads for ApexVoid Algo trade events,
+  including standalone fallback when the original message is unavailable, and
+  a public-channel profile that hides lot/position IDs while showing target R.
+- Added the optional `SIGNAL_PUBLIC_FOOTER` for public entry cards.
 - Added proactive cTrader access-token refresh ahead of expiry, defensive
   `expiresIn` unit resolution, a host-mounted file mirror for rotated token
   recovery after Redis-volume loss, and rate-limited Telegram lifecycle alerts.
@@ -93,6 +97,8 @@ dated section after deployment.
 
 ### Changed
 
+- Deployment configuration now protects positions at `BE+6` pips instead of
+  `BE+3`; the engine's code fallback remains unchanged.
 - cTrader token state now persists access-token expiry, reports its serving
   tier at startup, and requires `--yes-i-know` before token-cache reset.
 - Auto-trade pip size is now configuration-owned (`0.1` for XAUUSD) instead of

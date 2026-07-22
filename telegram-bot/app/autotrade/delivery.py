@@ -6,6 +6,9 @@ import logging
 import re
 from datetime import datetime, timezone
 from html import escape
+from typing import Literal
+
+from aiogram.exceptions import TelegramBadRequest
 
 from app.autotrade import units
 from app.persistence import redis_state
@@ -20,6 +23,14 @@ _PAUSED_KEY = "auto_trade:paused"
 _STATS_KEY = "auto_trade:stats"
 _REGIME_ALERT_PENDING_PREFIX = "auto_trade:regime_alert_pending:"
 _REGIME_ALERT_SENT_TTL = 86400
+_TRADE_MESSAGE_TTL = 7 * 24 * 3600
+_PUBLIC_EVENT_TYPES = {
+  "opened",
+  "add",
+  "take_profit",
+  "stop_moved",
+  "position_closed",
+}
 _NOTIFY_TYPES = {
   "ready",
   "dry_run",
@@ -47,6 +58,10 @@ _STOP_RE = re.compile(
   r"(?i)^🛡\s+(?:ApexVoid Algo|Auto[\s-]*(?:trade|trader))\s+stop\s+→\s+"
   r"([\d.,]+)\s+\(([^)]+)\)(?:\s*·\s*position\s+\d+)?$"
 )
+_LOT_TEXT_RE = re.compile(r"(?i)(?<!\w)<?[\d.,]+>?\s+lots?\b")
+_POSITION_TEXT_RE = re.compile(r"(?i)\bposition\s*[:#]?\s*\d+\b")
+
+DeliveryProfile = Literal["internal", "public"]
 
 
 def _clean_message(value: object) -> str:
@@ -77,7 +92,46 @@ def _attribution_line(event: dict) -> str | None:
   return f"🧭 {' · '.join(parts)}"
 
 
-def _format_opened(event: dict, message: str) -> str | None:
+def _targets_line(event: dict) -> str | None:
+  raw = event.get("targets_pips")
+  if not isinstance(raw, (list, tuple)):
+    return None
+  try:
+    targets = [int(value) for value in raw if int(value) > 0]
+  except (TypeError, ValueError):
+    return None
+  if not targets:
+    return None
+  ladder = " / ".join(f"+{value}" for value in targets)
+  return f"🎯 Targets: <b>{ladder} pips</b>"
+
+
+def _public_message(event: dict, message: str) -> str:
+  cleaned = _LOT_TEXT_RE.sub("", message)
+  cleaned = _POSITION_TEXT_RE.sub("", cleaned)
+  position_id = event.get("position_id")
+  if position_id is not None:
+    cleaned = re.sub(
+      rf"\b{re.escape(str(position_id))}\b",
+      "",
+      cleaned,
+    )
+  cleaned = re.sub(r"\s*·\s*(?=·|$)", "", cleaned)
+  return cleaned.strip(" ·")
+
+
+def _append_public_footer(lines: list[str], footer: str | None) -> None:
+  value = str(footer or "").strip()
+  if value:
+    lines.extend(["", escape(value)])
+
+
+def _format_opened(
+  event: dict,
+  message: str,
+  profile: DeliveryProfile,
+  footer: str | None,
+) -> str | None:
   match = _OPENED_RE.match(message)
   if match is None:
     return None
@@ -92,7 +146,10 @@ def _format_opened(event: dict, message: str) -> str | None:
     f"📍 Entry: <b>{escape(entry)}</b>",
     f"🛡 SL: <b>{escape(stop)}</b> · {escape(stop_pips)} pips",
   ]
-  if full_tp is not None:
+  targets = _targets_line(event) if profile == "public" else None
+  if targets is not None:
+    lines.append(targets)
+  elif full_tp is not None:
     target_pips = int(full_tp.group(1))
     try:
       entry_price = float(entry.replace(",", ""))
@@ -111,17 +168,25 @@ def _format_opened(event: dict, message: str) -> str | None:
       "📦 Box: <b>"
       f"{escape(range_box.group(1))}–{escape(range_box.group(2))}</b>"
     )
-  lines.append(f"📊 Size: <b>{escape(lots)} lot</b>")
+  if profile == "internal":
+    lines.append(f"📊 Size: <b>{escape(lots)} lot</b>")
   attribution = _attribution_line(event)
   if attribution:
     lines.append(attribution)
-  position = _position_line(event)
-  if position:
-    lines.extend(["", position])
+  if profile == "internal":
+    position = _position_line(event)
+    if position:
+      lines.extend(["", position])
+  else:
+    _append_public_footer(lines, footer)
   return "\n".join(lines)
 
 
-def _format_take_profit(event: dict, message: str) -> str | None:
+def _format_take_profit(
+  event: dict,
+  message: str,
+  profile: DeliveryProfile,
+) -> str | None:
   match = _TP_RE.match(message)
   if match is None:
     return None
@@ -133,18 +198,32 @@ def _format_take_profit(event: dict, message: str) -> str | None:
     "",
     f"✅ Profit: <b>+{pips} pips</b>",
   ]
+  if profile == "public":
+    try:
+      stop_pips = float(event.get("stop_pips"))
+      profit_pips = float(event.get("target_pips") or pips)
+    except (TypeError, ValueError):
+      stop_pips = 0
+      profit_pips = 0
+    if stop_pips > 0:
+      lines.append(f"📐 Result: <b>+{profit_pips / stop_pips:.2f}R</b>")
   if full:
     lines.append("🏁 Position closed in full")
   price = event.get("price")
   if price is not None:
     lines.append(f"📍 Exit: <b>{float(price):,.2f}</b>")
-  position = _position_line(event)
-  if position:
-    lines.extend(["", position])
+  if profile == "internal":
+    position = _position_line(event)
+    if position:
+      lines.extend(["", position])
   return "\n".join(lines)
 
 
-def _format_stop_moved(event: dict, message: str) -> str | None:
+def _format_stop_moved(
+  event: dict,
+  message: str,
+  profile: DeliveryProfile,
+) -> str | None:
   match = _STOP_RE.match(message)
   if match is None:
     return None
@@ -155,27 +234,39 @@ def _format_stop_moved(event: dict, message: str) -> str | None:
     "",
     f"SL moved to <b>{escape(stop)}</b> · {escape(label)}",
   ]
-  position = _position_line(event)
-  if position:
-    lines.extend(["", position])
+  if profile == "internal":
+    position = _position_line(event)
+    if position:
+      lines.extend(["", position])
   return "\n".join(lines)
 
 
-def render_auto_trade_event(event: dict) -> str | None:
+def render_auto_trade_event(
+  event: dict,
+  profile: DeliveryProfile = "internal",
+  footer: str | None = None,
+) -> str | None:
+  if profile not in {"internal", "public"}:
+    raise ValueError(f"Unknown auto-trade delivery profile: {profile}")
   event_type = str(event.get("type", ""))
   if event_type not in _NOTIFY_TYPES:
     return None
   message = _clean_message(event.get("message", ""))
   if event_type == "opened":
-    rendered = _format_opened(event, message)
+    rendered = _format_opened(
+      event,
+      message,
+      profile,
+      settings.signal_public_footer if footer is None else footer,
+    )
     if rendered:
       return rendered
   if event_type == "take_profit":
-    rendered = _format_take_profit(event, message)
+    rendered = _format_take_profit(event, message, profile)
     if rendered:
       return rendered
   if event_type == "stop_moved":
-    rendered = _format_stop_moved(event, message)
+    rendered = _format_stop_moved(event, message, profile)
     if rendered:
       return rendered
   labels = {
@@ -193,12 +284,137 @@ def render_auto_trade_event(event: dict) -> str | None:
     "error": "⚠️ <b>Execution issue</b>",
   }
   lines = ["🤖 <b>ApexVoid Algo</b>", labels[event_type]]
+  if profile == "public":
+    message = _public_message(event, message)
   if message:
     lines.extend(["", escape(message)])
-  position = _position_line(event)
-  if position and f"position {event.get('position_id')}" not in message.lower():
-    lines.extend(["", position])
+  if profile == "internal":
+    position = _position_line(event)
+    if position and f"position {event.get('position_id')}" not in message.lower():
+      lines.extend(["", position])
+  elif event_type == "opened":
+    _append_public_footer(
+      lines,
+      settings.signal_public_footer if footer is None else footer,
+    )
   return "\n".join(lines)
+
+
+def _message_key(profile: DeliveryProfile, position_id: int) -> str:
+  prefix = "auto_trade:msg" if profile == "internal" else "auto_trade:public_msg"
+  return f"{prefix}:{position_id}"
+
+
+def _group_message_key(profile: DeliveryProfile, group_id: str) -> str:
+  prefix = (
+    "auto_trade:group_msg"
+    if profile == "internal"
+    else "auto_trade:public_group_msg"
+  )
+  return f"{prefix}:{group_id}"
+
+
+def _is_bad_reply_target(error: TelegramBadRequest) -> bool:
+  reason = str(error).lower()
+  return (
+    "reply" in reason
+    and ("not found" in reason or "invalid" in reason)
+  ) or "message to be replied" in reason
+
+
+async def _reply_message_id(
+  client,
+  event: dict,
+  profile: DeliveryProfile,
+) -> tuple[int | None, str]:
+  position_id = event.get("position_id")
+  if position_id is None:
+    return None, "event has no position id"
+  keys = [_message_key(profile, int(position_id))]
+  group_id = str(event.get("group_id") or "").strip()
+  if event.get("type") == "add" and group_id:
+    keys.append(_group_message_key(profile, group_id))
+  for key in keys:
+    raw = await client.get(key)
+    if not raw:
+      continue
+    try:
+      message_id = int(raw)
+    except (TypeError, ValueError):
+      return None, f"invalid cached message id in {key}"
+    if message_id > 0:
+      return message_id, ""
+    return None, f"invalid cached message id in {key}"
+  return None, "stored order message is missing or expired"
+
+
+async def _remember_trade_message(
+  client,
+  event: dict,
+  profile: DeliveryProfile,
+  message_id: int,
+) -> None:
+  position_id = event.get("position_id")
+  if position_id is None or message_id <= 0:
+    return
+  await client.set(
+    _message_key(profile, int(position_id)),
+    str(message_id),
+    ex=_TRADE_MESSAGE_TTL,
+  )
+  group_id = str(event.get("group_id") or "").strip()
+  if event.get("type") == "opened" and group_id:
+    await client.set(
+      _group_message_key(profile, group_id),
+      str(message_id),
+      ex=_TRADE_MESSAGE_TTL,
+    )
+
+
+async def _deliver_auto_trade_event(
+  client,
+  event: dict,
+  *,
+  profile: DeliveryProfile,
+  chat_id: int,
+  send=None,
+) -> bool:
+  text = render_auto_trade_event(event, profile=profile)
+  if not text:
+    return False
+  send = send or send_scanner_with_retry
+  event_type = str(event.get("type") or "")
+  position_id = event.get("position_id")
+  reply_to = None
+  if event_type != "opened" and position_id is not None:
+    reply_to, reason = await _reply_message_id(client, event, profile)
+    if reply_to is None:
+      log.info(
+        "Auto-trade reply unavailable for position %s (%s): %s; sending standalone",
+        position_id,
+        profile,
+        reason,
+      )
+  try:
+    sent = await send(text, reply_to=reply_to, chat_id=chat_id)
+  except TelegramBadRequest as error:
+    if reply_to is None or not _is_bad_reply_target(error):
+      raise
+    log.info(
+      "Auto-trade reply rejected for position %s (%s): %s; retrying standalone",
+      position_id,
+      profile,
+      error,
+    )
+    sent = await send(text, reply_to=None, chat_id=chat_id)
+  if event_type in {"opened", "add"}:
+    await _remember_trade_message(
+      client,
+      event,
+      profile,
+      int(sent.message_id),
+    )
+  return True
 
 
 async def auto_trade_status_text() -> str:
@@ -375,7 +591,9 @@ async def _check_regime_alerts(client) -> None:
 
 
 async def auto_trade_events_loop() -> None:
-  if not settings.auto_trade_enabled or not settings.telegram_owner_id:
+  if not settings.auto_trade_enabled or not (
+    settings.telegram_owner_id or settings.signal_public_channel_id
+  ):
     return
   client = redis_state.get_client()
   cursor = await client.get(_CURSOR_KEY)
@@ -406,11 +624,23 @@ async def auto_trade_events_loop() -> None:
             log.warning("Invalid auto-trade event %s: %s", entry_id, exc)
             continue
           await _record_group_result(client, event)
-          text = render_auto_trade_event(event)
-          if text:
-            await send_scanner_with_retry(
-              text,
+          if settings.telegram_owner_id:
+            await _deliver_auto_trade_event(
+              client,
+              event,
+              profile="internal",
               chat_id=settings.telegram_owner_id,
+            )
+          if (
+            settings.signal_public_channel_id
+            and settings.signal_public_channel_id != settings.telegram_owner_id
+            and event.get("type") in _PUBLIC_EVENT_TYPES
+          ):
+            await _deliver_auto_trade_event(
+              client,
+              event,
+              profile="public",
+              chat_id=settings.signal_public_channel_id,
             )
     except asyncio.CancelledError:
       raise
