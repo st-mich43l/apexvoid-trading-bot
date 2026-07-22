@@ -97,6 +97,17 @@ dated section after deployment.
 
 ### Changed
 
+- Re-anchored the equity sizing table with a `$2,000-$3,000` band of
+  `0.20-0.25` lots and intentional upward steps at band boundaries; sizing
+  selection is now explicit through `AUTO_TRADE_SIZING_MODE`, whose code
+  default preserves the previous `min` behavior while deployment uses `table`.
+- Enabled deployment zone-fill laddering with a `0.09`-lot minimum guard;
+  smaller plans record the reason and use the existing single-entry path.
+  Deployment keeps the recently raised `BE+6` buffer.
+- At a `$2,072.02` balance and 65-pip stop, deployment table sizing changes
+  per-trade risk from about `$39` (`1.9%`) to `$130` (`6.3%`). P&L across the
+  eventual deploy timestamp is therefore not directly comparable; record that
+  timestamp when this release reaches the VPS.
 - Deployment configuration now protects positions at `BE+6` pips instead of
   `BE+3`; the engine's code fallback remains unchanged.
 - cTrader token state now persists access-token expiry, reports its serving
