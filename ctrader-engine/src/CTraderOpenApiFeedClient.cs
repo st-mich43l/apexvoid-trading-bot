@@ -5,18 +5,20 @@ using OpenAPI.Net;
 
 namespace ApexVoid.CTraderFeed;
 
-public sealed class CTraderOpenApiFeedClient(
-  FeedOptions options,
-  IRefreshTokenStore refreshTokenStore
-) : ICTraderFeedClient, ICTraderTradeClient
+public sealed class CTraderOpenApiFeedClient : ICTraderFeedClient, ICTraderTradeClient
 {
+  private readonly FeedOptions options;
   private readonly Channel<IMessage> _responses = Channel.CreateUnbounded<IMessage>();
   private readonly Channel<RawTrendbar> _liveTrendbars = Channel.CreateUnbounded<RawTrendbar>();
   private readonly Channel<SpotPrice> _liveSpots = Channel.CreateUnbounded<SpotPrice>();
   private readonly SemaphoreSlim _requestLock = new(1, 1);
+  private readonly SingleFlightOperation _refreshSingleFlight = new();
   private readonly List<IDisposable> _subscriptions = [];
-  private readonly RefreshTokenState _tokens = new(options, refreshTokenStore);
+  private readonly RefreshTokenState _tokens;
+  private readonly TokenEventNotifier _tokenEvents;
+  private readonly Func<DateTimeOffset> _clock;
   private readonly object _spotSubscriptionLock = new();
+  private int _refreshFailureCount;
   private OpenClient? _client;
   private TaskCompletionSource<bool>? _spotSubscriptionReady;
   private long _spotSubscriptionAccountId;
@@ -25,6 +27,26 @@ public sealed class CTraderOpenApiFeedClient(
   private IReadOnlyList<TradingAccountGrant> _accountGrants = [];
 
   public event Action? Heartbeat;
+  public TokenLifecycleStatus TokenStatus => _tokens.Status;
+
+  public CTraderOpenApiFeedClient(
+    FeedOptions options,
+    IRefreshTokenStore refreshTokenStore,
+    Func<string, string, CancellationToken, Task>? notify = null,
+    Func<DateTimeOffset>? clock = null,
+    TokenEventNotifier? tokenEvents = null
+  )
+  {
+    this.options = options;
+    _clock = clock ?? (() => DateTimeOffset.UtcNow);
+    _tokenEvents = tokenEvents ?? new TokenEventNotifier(notify, _clock);
+    _tokens = new RefreshTokenState(
+      options,
+      refreshTokenStore,
+      notify: notify,
+      notifications: _tokenEvents
+    );
+  }
 
   public async Task ConnectAndAuthorizeAsync(CancellationToken cancellationToken)
   {
@@ -61,7 +83,10 @@ public sealed class CTraderOpenApiFeedClient(
     );
   }
 
-  public async Task RefreshTokenAsync(CancellationToken cancellationToken)
+  public Task RefreshTokenAsync(CancellationToken cancellationToken) =>
+    _refreshSingleFlight.RunAsync(RefreshTokenCoreAsync, cancellationToken);
+
+  private async Task RefreshTokenCoreAsync(CancellationToken cancellationToken)
   {
     if (string.IsNullOrWhiteSpace(_tokens.RefreshToken))
     {
@@ -71,34 +96,86 @@ public sealed class CTraderOpenApiFeedClient(
     await _requestLock.WaitAsync(cancellationToken);
     try
     {
-      var response = await SendAndWaitLockedAsync<ProtoOARefreshTokenRes>(
-        new ProtoOARefreshTokenReq { RefreshToken = _tokens.RefreshToken },
-        _ => true,
-        cancellationToken
-      );
-      await _tokens.ApplyAsync(response, cancellationToken);
-      var accounts = await SendAndWaitLockedAsync<
-        ProtoOAGetAccountListByAccessTokenRes
-      >(
-        new ProtoOAGetAccountListByAccessTokenReq
+      try
+      {
+        var response = await SendAndWaitLockedAsync<ProtoOARefreshTokenRes>(
+          new ProtoOARefreshTokenReq { RefreshToken = _tokens.RefreshToken },
+          _ => true,
+          cancellationToken
+        );
+        var now = _clock();
+        var expiry = TokenExpiry.ResolveExpiry(response.ExpiresIn, now);
+        var days = (expiry.ExpiresAt - now).TotalDays;
+        Log(
+          $"token refreshed: rawExpiresIn={response.ExpiresIn} "
+          + $"-> interpreted={expiry.Interpretation} "
+          + $"expiresAt={expiry.ExpiresAt:O} ({days:F1} days)"
+        );
+        if (expiry.Warning)
         {
-          AccessToken = _tokens.AccessToken,
-        },
-        _ => true,
-        cancellationToken
-      );
-      _accountGrants = ToAccountGrants(accounts);
-      RequireConfiguredAccount(accounts);
-      await SendAndWaitLockedAsync<ProtoOAAccountAuthRes>(
-        new ProtoOAAccountAuthReq
-        {
-          CtidTraderAccountId = options.AccountId,
-          AccessToken = _tokens.AccessToken,
-        },
-        response => response.CtidTraderAccountId == options.AccountId,
-        cancellationToken
-      );
-      Log($"refreshed token and re-authorized account {options.AccountId}");
+          Warn(
+            $"token expiry rawExpiresIn={response.ExpiresIn}: {expiry.WarningMessage}"
+          );
+        }
+        await _tokens.ApplyAsync(response, expiry, cancellationToken);
+        var accounts = await SendAndWaitLockedAsync<
+          ProtoOAGetAccountListByAccessTokenRes
+        >(
+          new ProtoOAGetAccountListByAccessTokenReq
+          {
+            AccessToken = _tokens.AccessToken,
+          },
+          _ => true,
+          cancellationToken
+        );
+        _accountGrants = ToAccountGrants(accounts);
+        RequireConfiguredAccount(accounts);
+        await SendAndWaitLockedAsync<ProtoOAAccountAuthRes>(
+          new ProtoOAAccountAuthReq
+          {
+            CtidTraderAccountId = options.AccountId,
+            AccessToken = _tokens.AccessToken,
+          },
+          item => item.CtidTraderAccountId == options.AccountId,
+          cancellationToken
+        );
+        Interlocked.Exchange(ref _refreshFailureCount, 0);
+        Log($"refreshed token and re-authorized account {options.AccountId}");
+        await _tokenEvents.NotifyAsync(
+          "refresh-succeeded",
+          "cTrader token refresh succeeded: "
+          + $"expiresAt={expiry.ExpiresAt:O} rawExpiresIn={response.ExpiresIn} "
+          + $"interpretation={expiry.Interpretation}",
+          cancellationToken
+        );
+      }
+      catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+      {
+        throw;
+      }
+      catch (Exception exception)
+      {
+        var attempt = Interlocked.Increment(ref _refreshFailureCount);
+        var now = _clock();
+        var expiresAt = _tokens.ExpiresAt;
+        var expiryText = expiresAt is null ? "unknown" : $"{expiresAt:O}";
+        var days = expiresAt is null
+          ? "unknown"
+          : $"{(expiresAt.Value - now).TotalDays:F1}";
+        var safeError = TokenRedaction.Redact(
+          exception.Message,
+          _tokens.AccessToken,
+          _tokens.RefreshToken
+        );
+        await _tokenEvents.NotifyAsync(
+          "refresh-failed",
+          "cTrader token refresh failed: "
+          + $"attempt={attempt} error={safeError} expiresAt={expiryText} "
+          + $"daysRemaining={days}",
+          cancellationToken
+        );
+        throw;
+      }
     }
     finally
     {
@@ -918,4 +995,7 @@ public sealed class CTraderOpenApiFeedClient(
 
   private static void Log(string message) =>
     Console.Error.WriteLine($"ctrader-feed {message}");
+
+  private static void Warn(string message) =>
+    Console.Error.WriteLine($"ctrader-feed WARNING {message}");
 }

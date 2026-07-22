@@ -221,6 +221,8 @@ __marimo__/
 # Secrets & credentials
 .env
 *.pem
+# Host-mounted mirror of the live rotated cTrader token.
+data/ctrader-token/
 # Local database data + legacy SQLite files/backups
 data/
 pgdata/

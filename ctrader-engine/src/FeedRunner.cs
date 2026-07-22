@@ -7,7 +7,9 @@ public sealed class FeedRunner(
   HealthFile healthFile,
   Func<int, TimeSpan>? reconnectDelay = null,
   Action<string>? warningLog = null,
-  AutoTradeEngine? autoTrade = null
+  AutoTradeEngine? autoTrade = null,
+  Func<DateTimeOffset>? clock = null,
+  Func<TimeSpan, CancellationToken, Task>? delay = null
 )
 {
   private bool _startupBackfillPending = true;
@@ -45,7 +47,6 @@ public sealed class FeedRunner(
     client.Heartbeat += TouchOnHeartbeat;
     using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
     Task? refreshTask = null;
-    Task? refreshMonitorTask = null;
     Task? spotTask = null;
     Task? autoTradeTask = null;
     try
@@ -55,6 +56,7 @@ public sealed class FeedRunner(
       );
       await client.ConnectAndAuthorizeAsync(cancellationToken);
       Log("authorized cTrader session");
+      LogTokenStatus(client.TokenStatus);
       var symbol = await client.ResolveSymbolAsync(cancellationToken);
       Log(
         $"resolved symbol {symbol.CTraderSymbol} -> id={symbol.SymbolId} redis={symbol.RedisSymbol} digits={symbol.Digits}"
@@ -72,7 +74,6 @@ public sealed class FeedRunner(
       healthFile.Touch();
 
       refreshTask = RefreshLoopAsync(client, linked.Token);
-      refreshMonitorTask = CancelSessionOnFaultAsync(refreshTask, linked);
       var spots = new SpotHistory();
       spotTask = SpotLoopAsync(client, spots, autoTrade, linked.Token);
       if (autoTrade?.Enabled == true)
@@ -129,10 +130,6 @@ public sealed class FeedRunner(
     {
       client.Heartbeat -= TouchOnHeartbeat;
       linked.Cancel();
-      if (refreshMonitorTask is not null)
-      {
-        await refreshMonitorTask;
-      }
       if (refreshTask is not null)
       {
         await IgnoreCancellation(refreshTask);
@@ -279,12 +276,65 @@ public sealed class FeedRunner(
     CancellationToken cancellationToken
   )
   {
+    var failures = 0;
     while (!cancellationToken.IsCancellationRequested)
     {
-      await Task.Delay(options.TokenRefreshInterval, cancellationToken);
-      await client.RefreshTokenAsync(cancellationToken);
+      var wait = options.TokenCheckInterval;
+      if (
+        TokenRefreshPolicy.ShouldRefresh(
+          client.TokenStatus.ExpiresAt,
+          Now(),
+          options.TokenRefreshLead
+        )
+      )
+      {
+        try
+        {
+          await client.RefreshTokenAsync(cancellationToken);
+          failures = 0;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+          throw;
+        }
+        catch (Exception exception)
+        {
+          failures++;
+          wait = TokenRefreshPolicy.FailureBackoff(failures);
+          var safeError = TokenRedaction.Redact(
+            exception.Message,
+            options.AccessToken,
+            options.RefreshToken
+          );
+          (warningLog ?? Warn)(
+            $"proactive token refresh failed attempt={failures}: "
+            + $"{exception.GetType().Name}: {safeError}; retrying in "
+            + $"{wait.TotalMinutes:N0}m"
+          );
+        }
+      }
+      await Delay(wait, cancellationToken);
     }
   }
+
+  private void LogTokenStatus(TokenLifecycleStatus status)
+  {
+    var now = Now();
+    var expiresAt = status.ExpiresAt is null ? "unknown" : $"{status.ExpiresAt:O}";
+    var remaining = status.ExpiresAt is null
+      ? "unknown"
+      : $"{(status.ExpiresAt.Value - now).TotalDays:F1} days";
+    var seed = status.SeedFingerprint[..Math.Min(8, status.SeedFingerprint.Length)];
+    Console.Error.WriteLine(
+      $"token: tier={status.Tier} expiresAt={expiresAt} ({remaining}) "
+      + $"seed={seed} refreshLead={options.TokenRefreshLead.TotalDays:0.#}d"
+    );
+  }
+
+  private DateTimeOffset Now() => (clock ?? (() => DateTimeOffset.UtcNow))();
+
+  private Task Delay(TimeSpan duration, CancellationToken cancellationToken) =>
+    (delay ?? Task.Delay)(duration, cancellationToken);
 
   private static TimeSpan Backoff(int attempt)
   {
@@ -300,24 +350,6 @@ public sealed class FeedRunner(
     }
     catch (OperationCanceledException)
     {
-    }
-  }
-
-  private static async Task CancelSessionOnFaultAsync(
-    Task task,
-    CancellationTokenSource session
-  )
-  {
-    try
-    {
-      await task;
-    }
-    catch (OperationCanceledException) when (session.IsCancellationRequested)
-    {
-    }
-    catch
-    {
-      session.Cancel();
     }
   }
 

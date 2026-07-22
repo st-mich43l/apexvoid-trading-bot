@@ -3,6 +3,7 @@ namespace ApexVoid.CTraderFeed;
 public interface ICTraderFeedClient : IAsyncDisposable
 {
   event Action? Heartbeat;
+  TokenLifecycleStatus TokenStatus => TokenLifecycleStatus.Unknown;
 
   Task ConnectAndAuthorizeAsync(CancellationToken cancellationToken);
   Task RefreshTokenAsync(CancellationToken cancellationToken);

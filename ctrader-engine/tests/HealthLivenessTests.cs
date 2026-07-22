@@ -73,8 +73,10 @@ public sealed class HealthLivenessTests
       BarQualityLookback: 6,
       HeartbeatFile: heartbeatPath,
       RefreshTokenKey: "ctrader:refresh_token",
+      RefreshTokenFile: "/tmp/ctrader-token.json",
       RequestTimeout: TimeSpan.FromSeconds(1),
-      TokenRefreshInterval: TimeSpan.FromHours(1)
+      TokenRefreshLead: TimeSpan.FromDays(5),
+      TokenCheckInterval: TimeSpan.FromHours(6)
     );
 
   private static void TouchStale(string path, DateTime stale)

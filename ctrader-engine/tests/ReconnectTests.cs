@@ -192,10 +192,10 @@ public sealed class ReconnectTests
   }
 
   [Fact]
-  public async Task RefreshFailureCancelsSessionAndReconnects()
+  public async Task ProactiveRefreshFailureKeepsFeedSessionAlive()
   {
     using var temp = new TempHeartbeat();
-    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(1));
     var first = new FakeCTraderClient
     {
       RefreshException = new InvalidOperationException(
@@ -210,7 +210,7 @@ public sealed class ReconnectTests
     var runner = new FeedRunner(
       TestOptions(temp.Path) with
       {
-        TokenRefreshInterval = TimeSpan.FromMilliseconds(10),
+        TokenCheckInterval = TimeSpan.FromMilliseconds(10),
       },
       () => clients.Dequeue(),
       new RecordingSink(),
@@ -223,7 +223,7 @@ public sealed class ReconnectTests
     );
 
     Assert.Equal(1, first.RefreshCount);
-    Assert.Equal(1, second.AuthCount);
+    Assert.Equal(0, second.AuthCount);
   }
 
   [Fact]
@@ -334,8 +334,10 @@ public sealed class ReconnectTests
       BarQualityLookback: 6,
       HeartbeatFile: heartbeatPath,
       RefreshTokenKey: "ctrader:refresh_token",
+      RefreshTokenFile: "/tmp/ctrader-token.json",
       RequestTimeout: TimeSpan.FromSeconds(1),
-      TokenRefreshInterval: TimeSpan.FromHours(1)
+      TokenRefreshLead: TimeSpan.FromDays(5),
+      TokenCheckInterval: TimeSpan.FromHours(6)
     );
 
   private static AutoTradeOptions AutoOptions() => new(

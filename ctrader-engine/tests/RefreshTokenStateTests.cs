@@ -97,6 +97,11 @@ public sealed class RefreshTokenStateTests
     var store = new FakeRefreshTokenStore();
     var state = new RefreshTokenState(Options(), store);
     await state.SeedAsync(CancellationToken.None);
+    var firstExpiry = new TokenExpiryResolution(
+      DateTimeOffset.Parse("2026-08-20T00:00:00Z"),
+      "seconds-remaining",
+      false
+    );
 
     await state.ApplyAsync(
       new ProtoOARefreshTokenRes
@@ -104,6 +109,7 @@ public sealed class RefreshTokenStateTests
         AccessToken = "rotated-access",
         RefreshToken = "rotated-refresh",
       },
+      firstExpiry,
       CancellationToken.None
     );
 
@@ -112,21 +118,29 @@ public sealed class RefreshTokenStateTests
     AssertDocument(store.Token, "env-refresh", "rotated-refresh");
     Assert.Equal(2, store.Writes);
 
+    var secondExpiry = new TokenExpiryResolution(
+      DateTimeOffset.Parse("2026-09-20T00:00:00Z"),
+      "absolute-ms",
+      false
+    );
     await state.ApplyAsync(
       new ProtoOARefreshTokenRes
       {
         AccessToken = "second-access",
         RefreshToken = "rotated-refresh",
       },
+      secondExpiry,
       CancellationToken.None
     );
-    Assert.Equal(2, store.Writes);
+    Assert.Equal(3, store.Writes);
 
     var restarted = new RefreshTokenState(Options(), store);
     await restarted.SeedAsync(CancellationToken.None);
 
     Assert.Equal("rotated-refresh", restarted.RefreshToken);
-    Assert.Equal(2, store.Writes);
+    Assert.Equal("second-access", restarted.AccessToken);
+    Assert.Equal(secondExpiry.ExpiresAt, restarted.ExpiresAt);
+    Assert.Equal(3, store.Writes);
   }
 
   private static void AssertNoTokenValues(IEnumerable<string> logs)
@@ -182,8 +196,10 @@ public sealed class RefreshTokenStateTests
       BarQualityLookback: 6,
       HeartbeatFile: "/tmp/ctrader-feed.heartbeat",
       RefreshTokenKey: "ctrader:refresh_token",
+      RefreshTokenFile: "/tmp/ctrader-token.json",
       RequestTimeout: TimeSpan.FromSeconds(1),
-      TokenRefreshInterval: TimeSpan.FromHours(1)
+      TokenRefreshLead: TimeSpan.FromDays(5),
+      TokenCheckInterval: TimeSpan.FromHours(6)
     );
 }
 
