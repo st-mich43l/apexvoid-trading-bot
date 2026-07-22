@@ -11,6 +11,7 @@ from app.persistence.store import get_open_signals
 from app.bot.keyboards import build_close_kb, build_tp_close_kb
 from app.signals.pips_format import pips_between, sl_result_pips, wing_icons
 from app.signals.price import get_xau_bars
+from app.analysis.ohlc_source import RedisOHLCSource
 from app.persistence.redis_state import clear_sl_alert, mark_tp_alert
 from app.persistence import redis_state
 
@@ -265,6 +266,59 @@ async def _evaluate(
   return False
 
 
+def _iso_ms(ts) -> str:
+  """Format a UTC timestamp exactly like Tiingo's bar ``date`` field.
+
+  The watcher cursor is compared with plain string ``>``, so every source
+  must emit the same fixed-precision format or a bar from one source can
+  sort incorrectly against a cursor set by the other.
+  """
+  return ts.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+
+
+async def _ctrader_bars() -> list[dict] | None:
+  """Fetch closed M1 XAU bars from ctrader-feed's Redis ZSET.
+
+  Returns the same shape as ``price.get_xau_bars`` (ascending, ``date`` as a
+  Tiingo-format ISO string) so callers don't need to know which source
+  produced a bar. Returns ``None`` on any error or if the window is empty.
+  """
+  try:
+    df = await RedisOHLCSource().window("XAU", "M1", 300)
+  except Exception:
+    log.warning("Could not fetch XAU/USD bars from ctrader-feed")
+    return None
+  if df.empty:
+    return None
+  return [
+    {
+      "date": _iso_ms(ts),
+      "open": float(row["open"]),
+      "high": float(row["high"]),
+      "low": float(row["low"]),
+      "close": float(row["close"]),
+    }
+    for ts, row in df.iterrows()
+  ]
+
+
+def _bars_are_fresh(bars: list[dict]) -> bool:
+  age = datetime.now(timezone.utc).timestamp() - _bar_epoch(bars[-1]["date"])
+  return age <= settings.watcher_ctrader_stale_seconds
+
+
+async def _load_bars(session: aiohttp.ClientSession) -> list[dict] | None:
+  """ctrader-feed is the primary M1 source; Tiingo is a fallback for a gap.
+
+  Falls through to Tiingo even without TIINGO_API_KEY configured -- that
+  request just fails and returns None, same as it always has.
+  """
+  bars = await _ctrader_bars()
+  if bars and _bars_are_fresh(bars):
+    return bars
+  return await get_xau_bars(session)
+
+
 async def _watcher_tick(session: aiohttp.ClientSession) -> None:
   filled = [
     sig for sig in await get_open_signals("XAU")
@@ -273,7 +327,7 @@ async def _watcher_tick(session: aiohttp.ClientSession) -> None:
   if not filled or not _market_open():
     return
   # Load progress once and drop signals already stopped out: they have nothing
-  # left to alert, so keeping them would poll Tiingo forever for no reason
+  # left to alert, so keeping them would poll for bars forever for no reason
   # (e.g. an SL-hit signal that was never manually closed).
   active = []
   for sig in filled:
@@ -281,8 +335,8 @@ async def _watcher_tick(session: aiohttp.ClientSession) -> None:
     if not progress["sl"]:
       active.append((sig, progress))
   if not active:
-    return  # no actionable signal -> skip the Tiingo request entirely
-  bars = await get_xau_bars(session)
+    return  # no actionable signal -> skip the bar fetch entirely
+  bars = await _load_bars(session)
   if not bars:
     return
   cursor = await redis_state.get_cursor("XAU")
@@ -308,10 +362,14 @@ async def _watcher_tick(session: aiohttp.ClientSession) -> None:
 
 
 async def watcher_loop() -> None:
-  """Poll XAU for active signals and send notify-only level hints."""
+  """Poll XAU for active signals and send notify-only level hints.
+
+  Reads closed M1 bars from ctrader-feed's Redis window; Tiingo is used only
+  as a fallback when that feed is missing or stale, so the loop runs even
+  without TIINGO_API_KEY configured -- it just has no fallback for a gap.
+  """
   if not settings.tiingo_api_key:
-    log.info("Price watcher disabled: TIINGO_API_KEY not set")
-    return
+    log.info("Price watcher fallback disabled: TIINGO_API_KEY not set")
 
   async with aiohttp.ClientSession() as session:
     while True:
