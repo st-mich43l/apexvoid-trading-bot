@@ -699,6 +699,13 @@ async def test_scanner_zone_band_dedup_suppresses_cross_setup_ideas(monkeypatch)
   assert await client.get(scanner._dedup_key("XAU", "M5", result_b)) is None
 
   await client.delete(scanner._band_dedup_key("XAU", result_a))
+  # This fixture's frame never advances, so result_far's zone would read as
+  # "invalidated" (B3) on the very next scan against the same static close -
+  # clear its tracking state, matching the band-dedup reset above, since this
+  # test isn't exercising invalidation.
+  await client.delete(
+    scanner._active_setup_key("XAU", "M5", result_far.setup, result_far.direction)
+  )
   current["result"] = result_b
   after_ttl = await scanner._handle_event(
     "XAU:M5:4",
@@ -980,3 +987,152 @@ async def test_scanner_missing_spot_keeps_fallback_without_warning(monkeypatch, 
 
   assert sent == []
   assert "implausible vs close" not in caplog.text
+
+
+# --- B1: opposite-direction conflicts ---------------------------------------
+
+def test_opposite_direction_conflict_with_decisive_margin_keeps_stronger(
+  monkeypatch,
+):
+  monkeypatch.setattr(scanner.settings, "scanner_conflict_overlap", 0.5)
+  monkeypatch.setattr(scanner.settings, "scanner_conflict_margin", 1)
+  # Numbers lifted straight from the 22 Jul 2026 incident: overlap ratio 1.0.
+  strong = scanner.DetectionResult(
+    "Box Breakout", "BUY", 4121.5,
+    Zone(4121.22, 4126.14, "demand"), 4123.0, 3, ["HTF bias up"],
+  )
+  weak = scanner.DetectionResult(
+    "Range Edge Scalp", "SELL", 4123.5,
+    Zone(4122.24, 4124.73, "supply"), 4123.0, 2, ["HTF bias down"],
+  )
+
+  selected, conflicts = scanner._suppress_overlaps([strong, weak])
+
+  assert selected == [strong]
+  assert len(conflicts) == 1
+  assert conflicts[0]["outcome"] == "stronger_kept"
+  assert conflicts[0]["a"]["setup"] == "Box Breakout"
+  assert conflicts[0]["b"]["setup"] == "Range Edge Scalp"
+
+
+def test_opposite_direction_conflict_with_equal_confluence_drops_both(monkeypatch):
+  monkeypatch.setattr(scanner.settings, "scanner_conflict_overlap", 0.5)
+  monkeypatch.setattr(scanner.settings, "scanner_conflict_margin", 1)
+  a = scanner.DetectionResult(
+    "Box Breakout", "BUY", 4121.5,
+    Zone(4121.22, 4126.14, "demand"), 4123.0, 2, ["HTF bias up"],
+  )
+  b = scanner.DetectionResult(
+    "Range Edge Scalp", "SELL", 4123.5,
+    Zone(4122.24, 4124.73, "supply"), 4123.0, 2, ["HTF bias down"],
+  )
+
+  selected, conflicts = scanner._suppress_overlaps([a, b])
+
+  assert selected == []
+  assert len(conflicts) == 1
+  assert conflicts[0]["outcome"] == "both_dropped"
+
+
+def test_same_direction_overlap_behaviour_is_unchanged(monkeypatch):
+  """Regression guard: B1 only changes opposite-direction handling."""
+  monkeypatch.setattr(scanner.settings, "alert_overlap_suppress", 0.5)
+  monkeypatch.setattr(scanner.settings, "scanner_conflict_overlap", 0.5)
+  monkeypatch.setattr(scanner.settings, "scanner_conflict_margin", 1)
+  strong = scanner.DetectionResult(
+    "Snap-Back", "SELL", 4094.0,
+    Zone(4094, 4096, "supply", score=13), 4090.0, 3, ["HTF bias down"],
+  )
+  weak = scanner.DetectionResult(
+    "Fade Scalp", "SELL", 4095.0,
+    Zone(4095, 4097, "supply", score=11), 4090.0, 2, ["HTF bias down"],
+  )
+
+  selected, conflicts = scanner._suppress_overlaps([strong, weak])
+
+  assert selected == [strong]
+  assert conflicts == []
+
+
+# --- B3: setup invalidation --------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_setup_invalidation_fires_when_zone_is_violated(monkeypatch):
+  client = redis_state.get_client()
+  notify = AsyncMock()
+  monkeypatch.setattr(scanner.settings, "telegram_owner_id", 4242)
+  key = scanner._active_setup_key("XAU", "M5", "Range Edge Scalp", "SELL")
+  await client.set(key, json.dumps({
+    "setup": "Range Edge Scalp",
+    "direction": "SELL",
+    "zone_low": 4122.24,
+    "zone_high": 4124.73,
+    "confluence": 2,
+  }))
+  df = pd.DataFrame(
+    {"close": [4125.5]},
+    index=pd.date_range("2026-07-22", periods=1, freq="5min", tz="UTC"),
+  )
+
+  await scanner._check_setup_invalidations(client, "XAU", "M5", df, notify, 0.0)
+
+  notify.assert_awaited_once()
+  text = notify.await_args.args[0]
+  assert "SETUP INVALIDATED" in text
+  assert "Range Edge Scalp" in text
+  assert await client.get(key) is None
+
+
+@pytest.mark.asyncio
+async def test_setup_invalidation_does_not_fire_while_zone_holds():
+  client = redis_state.get_client()
+  notify = AsyncMock()
+  key = scanner._active_setup_key("XAU", "M5", "Range Edge Scalp", "SELL")
+  await client.set(key, json.dumps({
+    "setup": "Range Edge Scalp",
+    "direction": "SELL",
+    "zone_low": 4122.24,
+    "zone_high": 4124.73,
+    "confluence": 2,
+  }))
+  df = pd.DataFrame(
+    {"close": [4123.0]},
+    index=pd.date_range("2026-07-22", periods=1, freq="5min", tz="UTC"),
+  )
+
+  await scanner._check_setup_invalidations(client, "XAU", "M5", df, notify, 0.0)
+
+  notify.assert_not_awaited()
+  assert await client.get(key) is not None
+
+
+# --- B5: per-detector reporting ---------------------------------------------
+
+@pytest.mark.asyncio
+async def test_scan_report_aggregates_fires_sent_and_conflicts():
+  client = redis_state.get_client()
+  detected = [
+    scanner.DetectionResult(
+      "Fade Scalp", "SELL", 100.0, Zone(99, 101, "supply"), 100.5, 2, ["r"],
+    ),
+    scanner.DetectionResult(
+      "Box Breakout", "BUY", 100.0, Zone(99, 101, "demand"), 100.5, 3, ["r"],
+    ),
+  ]
+  sent = [detected[1]]
+  conflicts = [{
+    "outcome": "both_dropped",
+    "a": {"setup": "Fade Scalp", "direction": "SELL", "confluence": 2},
+    "b": {"setup": "Box Breakout", "direction": "BUY", "confluence": 3},
+  }]
+
+  await scanner._append_detect_log(client, "XAU", "M5", detected, sent, conflicts)
+  rows = await scanner.scan_report(client, "XAU", "M5", hours=24)
+
+  assert rows["Box Breakout"]["fires"] == 1
+  assert rows["Box Breakout"]["sent"] == 1
+  assert rows["Fade Scalp"]["fires"] == 1
+  assert rows["Fade Scalp"]["dropped_conflict"] == 1
+  text = scanner.format_scan_report(rows, "XAU", "M5", 24)
+  assert "Box Breakout" in text
+  assert "Fade Scalp" in text
