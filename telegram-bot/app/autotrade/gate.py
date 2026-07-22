@@ -7,6 +7,8 @@ import math
 
 import pandas as pd
 
+from app.autotrade import units
+
 
 ATR_LENGTH = 14
 M1_WINDOW = 120
@@ -32,7 +34,6 @@ BOX_BREAK_M1_CLOSES = 2
 BOX_TP_BUFFER_PIPS = 5
 BOX_TP_CHOICES = (70, 50)
 MAX_ENTRY_DISTANCE_PIPS = 10
-_PIP_SIZE = {"XAU": 0.1}
 _EPS = 1e-9
 
 
@@ -100,7 +101,7 @@ def evaluate_auto_scalp_gate(
   if m1_atr <= _EPS or m5_atr <= _EPS:
     return AutoScalpDecision("invalid_atr")
   close = float(m1["close"].iloc[-1])
-  pip_size = _PIP_SIZE.get(symbol.upper(), 1.0)
+  pip_size = units.pip_size(symbol)
   box = _m1_consolidation_box(m1, m1_atr, symbol)
   if box is None:
     return AutoScalpDecision(
@@ -274,7 +275,7 @@ def _m1_rail_trigger(
   span = high - low
   if span <= _EPS:
     return None
-  pip_size = _PIP_SIZE["XAU"]
+  pip_size = units.pip_size("XAU")
   touch = min(
     BOX_MAX_TOUCH_BAND_PIPS * pip_size,
     max(BOX_MIN_TOUCH_BAND_PIPS * pip_size, BOX_TOUCH_BAND_ATR * atr),
@@ -316,7 +317,7 @@ def _m1_consolidation_box(
   atr: float,
   symbol: str,
 ) -> AutoScalpBox | None:
-  pip_size = _PIP_SIZE.get(symbol.upper(), 1.0)
+  pip_size = units.pip_size(symbol)
   if len(m1) < BOX_LOOKBACK + 1 or atr <= _EPS:
     return None
   history = m1.iloc[-(BOX_LOOKBACK + 1):-1]

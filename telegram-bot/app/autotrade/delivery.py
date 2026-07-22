@@ -7,6 +7,7 @@ import re
 from datetime import datetime, timezone
 from html import escape
 
+from app.autotrade import units
 from app.persistence import redis_state
 from app.core.config import settings
 from app.bot.client import send_scanner_with_retry
@@ -79,7 +80,9 @@ def _format_opened(event: dict, message: str) -> str | None:
     try:
       entry_price = float(entry.replace(",", ""))
       target_price = entry_price + (
-        target_pips * 0.1 if direction.upper() == "BUY" else -target_pips * 0.1
+        target_pips * units.pip_size("XAU")
+        if direction.upper() == "BUY"
+        else -target_pips * units.pip_size("XAU")
       )
       lines.append(
         f"🎯 Full TP: <b>{target_price:,.2f}</b> · +{target_pips} pips"

@@ -22,6 +22,8 @@ public sealed record AutoTradeOptions(
   bool RequireDemoOnlyToken = false,
   decimal RiskPercent = 2m,
   decimal PipValuePerLot = 10m,
+  decimal PipSize = 0.1m,
+  decimal ContractSize = 100m,
   int MaxTranches = 2,
   decimal AddRiskFraction = 0.5m,
   int AddMaxAgeBars = 3,
@@ -35,7 +37,7 @@ public sealed record AutoTradeOptions(
   int ZoneFillTtlBars = 3,
   decimal BoxMinRiskReward = 1.25m,
   int TrendStopMinPips = 40,
-  int TrendStopMaxPips = 120
+  int TrendStopMaxPips = 65
 )
 {
   public static AutoTradeOptions FromEnvironment() => new(
@@ -58,6 +60,8 @@ public sealed record AutoTradeOptions(
     RequireDemoOnlyToken: Bool("AUTO_TRADE_REQUIRE_DEMO_ONLY_TOKEN", false),
     RiskPercent: Decimal("AUTO_TRADE_RISK_PCT", 2m),
     PipValuePerLot: Decimal("AUTO_TRADE_PIP_VALUE_PER_LOT", 10m),
+    PipSize: Decimal("AUTO_TRADE_PIP_SIZE", 0.1m),
+    ContractSize: Decimal("AUTO_TRADE_CONTRACT_SIZE", 100m),
     MaxTranches: Int("AUTO_TRADE_MAX_TRANCHES", 2),
     AddRiskFraction: Decimal("AUTO_TRADE_ADD_RISK_FRACTION", 0.5m),
     AddMaxAgeBars: Int("AUTO_TRADE_ADD_MAX_AGE_BARS", 3),
@@ -71,7 +75,7 @@ public sealed record AutoTradeOptions(
     ZoneFillTtlBars: Int("AUTO_TRADE_ZONE_FILL_TTL_BARS", 3),
     BoxMinRiskReward: Decimal("AUTO_TRADE_BOX_MIN_RR", 1.25m),
     TrendStopMinPips: Int("AUTO_TRADE_TREND_STOP_MIN_PIPS", 40),
-    TrendStopMaxPips: Int("AUTO_TRADE_TREND_STOP_MAX_PIPS", 120)
+    TrendStopMaxPips: Int("AUTO_TRADE_TREND_STOP_MAX_PIPS", 65)
   );
 
   public void Validate()
@@ -119,6 +123,22 @@ public sealed record AutoTradeOptions(
         "Auto trade disabled: risk percent must be 0.1-10 and pip value positive"
       );
     }
+    if (PipSize <= 0 || ContractSize <= 0)
+    {
+      throw new AutoTradeConfigurationException(
+        "Auto trade disabled: AUTO_TRADE_PIP_SIZE and "
+        + "AUTO_TRADE_CONTRACT_SIZE must be positive"
+      );
+    }
+    var derivedPipValue = ContractSize * PipSize;
+    if (PipValuePerLot != derivedPipValue)
+    {
+      throw new AutoTradeConfigurationException(
+        $"Auto trade disabled: pip value inconsistent: PipValuePerLot="
+        + $"{PipValuePerLot} but ContractSize {ContractSize} x PipSize "
+        + $"{PipSize} = {derivedPipValue}"
+      );
+    }
     if (
       MaxTranches is < 1 or > 5
       || AddRiskFraction <= 0
@@ -129,7 +149,7 @@ public sealed record AutoTradeOptions(
       || AddStopBufferAtr < 0
       || AddMinStopPips <= 0
       || AddMinStopPips > decimal.ToInt32(decimal.Floor(
-        StopLossDistance * 10m
+        StopLossDistance / PipSize
       ))
     )
     {
@@ -158,6 +178,7 @@ public sealed record AutoTradeOptions(
     if (
       TrendStopMinPips <= 0
       || TrendStopMaxPips < TrendStopMinPips
+      || TrendStopMaxPips > StopLossDistance / PipSize
     )
     {
       throw new AutoTradeConfigurationException(
