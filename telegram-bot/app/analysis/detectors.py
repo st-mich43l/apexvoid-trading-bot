@@ -173,6 +173,67 @@ class DetectorSettings:
     )
 
 
+def detector_settings_from(config) -> DetectorSettings:
+  """Build detector settings from the app config for every PA consumer."""
+  return DetectorSettings(
+    confluence_floor=config.scanner_confluence_floor,
+    max_entry_atr=config.max_entry_atr,
+    range_lookback=config.range_lookback,
+    atr_length=config.atr_length,
+    swing_fractal_n=config.swing_fractal_n,
+    zigzag_pct=config.zigzag_pct,
+    zigzag_atr_mult=config.zigzag_atr_mult,
+    displacement_atr_mult=config.displacement_atr_mult,
+    zone_width=config.zone_width,
+    zone_merge_overlap=config.zone_merge_overlap,
+    max_merged_zone_atr=config.max_merged_zone_atr,
+    equal_tol_atr=config.equal_tol_atr,
+    level_cluster_atr=config.level_cluster_atr,
+    round_step=config.round_step,
+    key_level_min_touches=config.key_level_min_touches,
+    momentum_lookback=config.momentum_lookback,
+    momentum_body_frac=config.momentum_body_frac,
+    session_asia_start=config.session_asia_start,
+    session_london_start=config.session_london_start,
+    session_ny_start=config.session_ny_start,
+    daily_rollover_utc_hour=config.daily_rollover_utc_hour,
+    eq_band=config.eq_band,
+    strict_pd_gate=config.strict_pd_gate,
+    sweep_body_frac=config.sweep_body_frac,
+    sweep_react_bars=config.sweep_react_bars,
+    inducement_band_atr=config.inducement_band_atr,
+    max_zone_width_atr=config.max_zone_width_atr,
+    proximal_band_atr=config.proximal_band_atr,
+    chop_filter_enabled=config.chop_filter_enabled,
+    chop_range_atr=config.chop_range_atr,
+    chop_lookback=config.chop_lookback,
+    chop_edge_frac=config.chop_edge_frac,
+    tl_min_touches=config.tl_min_touches,
+    tl_tol_atr=config.tl_tol_atr,
+    tl_max_slope_atr=config.tl_max_slope_atr,
+    coil_contract=config.coil_contract,
+    breakout_buffer_atr=config.breakout_buffer_atr,
+    breakout_accept_bars=config.breakout_accept_bars,
+    breakout_max_age_bars=config.breakout_max_age_bars,
+    allow_counter_trend=config.allow_counter_trend,
+    counter_min_zone_score=config.counter_min_zone_score,
+    counter_extreme_pd=config.counter_extreme_pd,
+    counter_level_min_touches=config.counter_level_min_touches,
+    range_scalp_enabled=config.range_scalp_enabled,
+    range_scalp_lookback=config.range_scalp_lookback,
+    range_scalp_cluster_atr=config.range_scalp_cluster_atr,
+    range_scalp_min_touches=config.range_scalp_min_touches,
+    range_scalp_min_wick_frac=config.range_scalp_min_wick_frac,
+    range_scalp_entry_tol_atr=config.range_scalp_entry_tol_atr,
+    range_scalp_min_width_atr=config.range_scalp_min_width_atr,
+    range_scalp_max_width_atr=config.range_scalp_max_width_atr,
+    range_scalp_min_room_atr=config.range_scalp_min_room_atr,
+    range_scalp_break_closes=config.range_scalp_break_closes,
+    range_scalp_min_wick_rejections=config.range_scalp_min_wick_rejections,
+    range_scalp_allow_rejection_only=config.range_scalp_allow_rejection_only,
+  )
+
+
 @dataclass(frozen=True)
 class DetectionContext:
   symbol: str

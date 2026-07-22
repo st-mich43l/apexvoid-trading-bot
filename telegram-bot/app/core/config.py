@@ -161,6 +161,7 @@ class Settings(BaseSettings):
   auto_trade_stream_maxlen: int = 1000
   auto_trade_candidate_ttl: int = 86400
   auto_trade_min_confluence: int = 2
+  auto_trade_max_entry_distance_pips: float = 10.0
   auto_trade_news_guard_minutes: int = 30
   auto_trade_box_retire_seconds: int = 14400
   auto_trade_tp_pips: str = "30,60,90,120,200"
@@ -182,6 +183,9 @@ class Settings(BaseSettings):
       "AUTO_TRADE_FORMING_MAX_AGE_SECONDS",
     ),
   )
+  # Executes only structural Market Map zones (never display-only round-number
+  # fallbacks) after the latest M1 candle touches and rejects the zone.
+  auto_trade_market_map_strategy_enabled: bool = True
   # Trade-quality guards added after the 22 Jul 2026 incident (SELL filled at
   # box EQ, 13 pips below the nearest published supply zone). EQ exclusion and
   # edge proximity apply to box-scalp ("auto_box_scalp") candidates only - a
