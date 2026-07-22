@@ -354,6 +354,11 @@ async def test_trend_regime_blocks_box_publish_and_only_trend_path_fires(
   assert payload["regime"] == "trend"
   status = json.loads(await client.get("auto_trade:last_gate:XAU"))
   assert status["regime"] == "trend"
+  assert status["state"] == "candidate"
+  assert status["box_state"] == "candidate"
+  assert status["trend_state"] == "candidate"
+  assert status["trend_mode"] == "pullback"
+  assert status["direction"] == "BUY"
 
 
 def test_worker_source_has_no_forming_scanner_market_map_or_telegram_import():
