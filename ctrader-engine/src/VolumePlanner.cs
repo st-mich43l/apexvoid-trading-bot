@@ -25,6 +25,7 @@ public static class VolumePlanner
   public static InitialSizingResult SizeInitial(
     decimal balance,
     decimal riskPercent,
+    string sizingMode,
     decimal stopPips,
     decimal pipValuePerLot,
     SymbolInfo symbol,
@@ -50,13 +51,18 @@ public static class VolumePlanner
         $"balance {balance:N2} is below the $200 sizing floor"
       );
     }
-    var rawLots = Math.Min(riskLots, tableLots);
+    var rawLots = sizingMode switch
+    {
+      "table" => tableLots,
+      "risk" => riskLots,
+      _ => Math.Min(riskLots, tableLots),
+    };
     var volume = VolumeForLots(rawLots, symbol);
     if (volume <= 0)
     {
       throw new VolumePlanningException(
-        $"min(risk {riskLots:0.###}, table {tableLots:0.##}) lots is below "
-        + "broker minimum volume"
+        $"sizing={sizingMode} lots={rawLots:0.###} (risk {riskLots:0.###}, "
+        + $"table {tableLots:0.##}) is below broker minimum volume"
       );
     }
     var lots = volume / (decimal)symbol.LotSize;
@@ -73,7 +79,8 @@ public static class VolumePlanner
       lots,
       volume,
       stopPips,
-      tableLots <= riskLots ? "equity-table-bound" : "risk-bound",
+      $"sizing={sizingMode} lots={lots:0.00} (risk {riskLots:0.00}, "
+        + $"table {tableLots:0.00})",
       targetPlan
     );
   }
@@ -84,14 +91,18 @@ public static class VolumePlanner
     {
       return 0m;
     }
+    // The upward discontinuities at band boundaries are intentional.
     var rawLots = balance switch
     {
       >= 5_000m => 0.36m,
       >= 3_000m => 0.31m + (balance - 3_000m) * 0.05m / 2_000m,
-      >= 1_000m => 0.11m + (balance - 1_000m) * 0.20m / 2_000m,
-      >= 500m => 0.05m + (balance - 500m) * 0.06m / 500m,
+      >= 2_000m => 0.20m + (balance - 2_000m) * 0.05m / 1_000m,
+      >= 1_000m => 0.11m + (balance - 1_000m) * 0.04m / 1_000m,
+      >= 500m => 0.05m + (balance - 500m) * 0.03m / 500m,
       _ => 0.02m + (balance - 200m) * 0.03m / 300m,
     };
+    // Snap currency-cent band endpoints to their intended lot-cent anchor.
+    rawLots = decimal.Round(rawLots, 5, MidpointRounding.AwayFromZero);
     return decimal.Floor(rawLots * 100m) / 100m;
   }
 
@@ -246,6 +257,18 @@ public static class VolumePlanner
       + $"symbol={symbol.CTraderSymbol} digits={symbol.Digits} "
       + $"lotSize={symbol.LotSize}";
     return (message, brokerPipSize != options.PipSize);
+  }
+
+  public static string SizingDiagnostic(
+    decimal balance,
+    AutoTradeOptions options
+  )
+  {
+    var tableLots = LotsForBalance(balance);
+    var riskLots = balance * options.RiskPercent / 100m
+      / (options.TrendStopMaxPips * options.PipValuePerLot);
+    return $"sizing: mode={options.SizingMode} balance={balance:0.00} "
+      + $"→ table {tableLots:0.00} lots · risk {riskLots:0.00} lots";
   }
 
   private static long MinimumStepsPerClose(SymbolInfo symbol) => Math.Max(

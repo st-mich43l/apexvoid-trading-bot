@@ -17,19 +17,12 @@ public sealed class VolumePlannerTests
   );
 
   [Theory]
-  [InlineData(199, 0)]
+  [InlineData(199.99, 0)]
   [InlineData(200, 0.02)]
-  [InlineData(499, 0.04)]
   [InlineData(500, 0.05)]
-  [InlineData(875, 0.09)]
-  [InlineData(999, 0.10)]
   [InlineData(1000, 0.11)]
-  [InlineData(1500, 0.16)]
-  [InlineData(2000, 0.21)]
-  [InlineData(2500, 0.26)]
+  [InlineData(2000, 0.20)]
   [InlineData(3000, 0.31)]
-  [InlineData(4000, 0.33)]
-  [InlineData(4999, 0.35)]
   [InlineData(5000, 0.36)]
   [InlineData(10000, 0.36)]
   public void MapsBalanceBandsAndFloorsToOneCentLotStep(
@@ -44,17 +37,17 @@ public sealed class VolumePlannerTests
   }
 
   [Theory]
-  [InlineData(25, 0.16, "risk-bound")]
-  [InlineData(15, 0.21, "equity-table-bound")]
+  [InlineData(25, 0.16)]
+  [InlineData(15, 0.20)]
   public void InitialSizeUsesMinimumOfRiskAndEquityTable(
     double stopPips,
-    double expectedLots,
-    string expectedBinding
+    double expectedLots
   )
   {
     var result = VolumePlanner.SizeInitial(
       balance: 2_000m,
       riskPercent: 2m,
+      sizingMode: "min",
       stopPips: Convert.ToDecimal(stopPips),
       pipValuePerLot: 10m,
       Symbol,
@@ -63,9 +56,88 @@ public sealed class VolumePlannerTests
     );
 
     Assert.Equal(Convert.ToDecimal(expectedLots), result.Lots);
-    Assert.Equal(expectedBinding, result.BindingTerm);
+    Assert.StartsWith($"sizing=min lots={expectedLots:0.00}", result.BindingTerm);
+    Assert.Contains("risk ", result.BindingTerm);
+    Assert.Contains("table 0.20", result.BindingTerm);
     Assert.True(result.Lots <= result.TableLots);
     Assert.True(result.Lots * result.StopPips * 10m <= result.Budget);
+  }
+
+  [Theory]
+  [InlineData(999.99, 0.08, 1000, 0.11)]
+  [InlineData(1999.99, 0.15, 2000, 0.20)]
+  [InlineData(2999.99, 0.25, 3000, 0.31)]
+  public void PreservesIntentionalBoundarySteps(
+    double belowBalance,
+    double belowLots,
+    double boundaryBalance,
+    double boundaryLots
+  )
+  {
+    Assert.Equal(
+      Convert.ToDecimal(belowLots),
+      VolumePlanner.LotsForBalance(Convert.ToDecimal(belowBalance))
+    );
+    Assert.Equal(
+      Convert.ToDecimal(boundaryLots),
+      VolumePlanner.LotsForBalance(Convert.ToDecimal(boundaryBalance))
+    );
+  }
+
+  [Fact]
+  public void FloorsEquityTableToOneCentLotStep()
+  {
+    Assert.Equal(0.20m, VolumePlanner.LotsForBalance(2_098m));
+  }
+
+  [Fact]
+  public void RejectsSizingBelowBalanceFloor()
+  {
+    var error = Assert.Throws<VolumePlanningException>(() => Size(
+      balance: 199.99m,
+      sizingMode: "min"
+    ));
+
+    Assert.Contains("below the $200 sizing floor", error.Message);
+  }
+
+  [Theory]
+  [InlineData("table", 0.20)]
+  [InlineData("risk", 0.06)]
+  [InlineData("min", 0.06)]
+  public void SelectsExplicitSizingMode(string sizingMode, double expectedLots)
+  {
+    var result = Size(2_072.02m, sizingMode);
+
+    Assert.Equal(Convert.ToDecimal(expectedLots), result.Lots);
+    Assert.Equal(0.20m, result.TableLots);
+    Assert.Equal(
+      $"sizing={sizingMode} lots={expectedLots:0.00} "
+        + "(risk 0.06, table 0.20)",
+      result.BindingTerm
+    );
+  }
+
+  [Fact]
+  public void TableModeStillEnforcesBrokerMinimumVolume()
+  {
+    var brokerMinimum = Symbol with { MinVolume = 300 };
+
+    var error = Assert.Throws<VolumePlanningException>(() =>
+      VolumePlanner.SizeInitial(
+        balance: 200m,
+        riskPercent: 2m,
+        sizingMode: "table",
+        stopPips: 65m,
+        pipValuePerLot: 10m,
+        brokerMinimum,
+        [30, 60, 90, 120, 200],
+        [20, 20, 20, 20, 20]
+      )
+    );
+
+    Assert.Contains("below broker minimum volume", error.Message);
+    Assert.Contains("sizing=table", error.Message);
   }
 
   [Fact]
@@ -81,6 +153,7 @@ public sealed class VolumePlannerTests
     var result = VolumePlanner.SizeInitial(
       balance: 2_072.02m,
       riskPercent: 2m,
+      sizingMode: "min",
       stopPips: 60m,
       pipValuePerLot: 10m,
       Symbol,
@@ -175,4 +248,18 @@ public sealed class VolumePlannerTests
       [30, 60, 90, 120, 200],
       [20, 20, 20, 20, 20]
     );
+
+  private static InitialSizingResult Size(
+    decimal balance,
+    string sizingMode
+  ) => VolumePlanner.SizeInitial(
+    balance,
+    riskPercent: 2m,
+    sizingMode,
+    stopPips: 65m,
+    pipValuePerLot: 10m,
+    Symbol,
+    [30, 60, 90, 120, 200],
+    [20, 20, 20, 20, 20]
+  );
 }

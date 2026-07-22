@@ -85,6 +85,8 @@ services:
       AUTO_TRADE_REQUIRE_DEMO_ONLY_TOKEN: {{ apexvoid_trading_bot_env.AUTO_TRADE_REQUIRE_DEMO_ONLY_TOKEN | default('false') | string | to_json }}
       AUTO_TRADE_EXPECTED_BROKER: {{ apexvoid_trading_bot_env.AUTO_TRADE_EXPECTED_BROKER | default('fpmarkets') | string | to_json }}
       AUTO_TRADE_SL_DISTANCE: {{ apexvoid_trading_bot_env.AUTO_TRADE_SL_DISTANCE | default('6.5') | string | to_json }}
+      AUTO_TRADE_RISK_PCT: {{ apexvoid_trading_bot_env.AUTO_TRADE_RISK_PCT | default('2.0') | string | to_json }}
+      AUTO_TRADE_SIZING_MODE: {{ apexvoid_trading_bot_env.AUTO_TRADE_SIZING_MODE | default('table') | string | to_json }}
       AUTO_TRADE_PIP_SIZE: {{ apexvoid_trading_bot_env.AUTO_TRADE_PIP_SIZE | default('0.1') | string | to_json }}
       AUTO_TRADE_CONTRACT_SIZE: {{ apexvoid_trading_bot_env.AUTO_TRADE_CONTRACT_SIZE | default('100') | string | to_json }}
       AUTO_TRADE_TP_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_TP_PIPS | default('30,60,90,120,200') | string | to_json }}
@@ -100,6 +102,10 @@ services:
       AUTO_TRADE_STREAM: {{ apexvoid_trading_bot_env.AUTO_TRADE_STREAM | default('auto_trade:candidates') | string | to_json }}
       AUTO_TRADE_EVENT_STREAM: {{ apexvoid_trading_bot_env.AUTO_TRADE_EVENT_STREAM | default('auto_trade:events') | string | to_json }}
       AUTO_TRADE_LABEL: {{ apexvoid_trading_bot_env.AUTO_TRADE_LABEL | default('apexvoid-auto') | string | to_json }}
+      AUTO_TRADE_ZONE_FILL_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_ZONE_FILL_ENABLED | default('true') | string | to_json }}
+      AUTO_TRADE_ZONE_FILL_MIN_LOTS: {{ apexvoid_trading_bot_env.AUTO_TRADE_ZONE_FILL_MIN_LOTS | default('0.09') | string | to_json }}
+      AUTO_TRADE_ZONE_FILL_MIN_ATR: {{ apexvoid_trading_bot_env.AUTO_TRADE_ZONE_FILL_MIN_ATR | default('0.5') | string | to_json }}
+      AUTO_TRADE_ZONE_FILL_TTL_BARS: {{ apexvoid_trading_bot_env.AUTO_TRADE_ZONE_FILL_TTL_BARS | default('3') | string | to_json }}
       AUTO_TRADE_TREND_STOP_MIN_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_TREND_STOP_MIN_PIPS | default('40') | string | to_json }}
       AUTO_TRADE_TREND_STOP_MAX_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_TREND_STOP_MAX_PIPS | default('65') | string | to_json }}
     volumes:

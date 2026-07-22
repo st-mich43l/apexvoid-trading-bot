@@ -60,12 +60,13 @@ AUTO_TRADE_SYMBOLS=XAU
 AUTO_TRADE_EXPECTED_BROKER=fpmarkets
 AUTO_TRADE_SL_DISTANCE=6.5
 AUTO_TRADE_RISK_PCT=2.0
+AUTO_TRADE_SIZING_MODE=table
 AUTO_TRADE_PIP_SIZE=0.1
 AUTO_TRADE_CONTRACT_SIZE=100
 AUTO_TRADE_PIP_VALUE_PER_LOT=10.0
 AUTO_TRADE_TP_PIPS=30,60,90,120,200
 AUTO_TRADE_TP_WEIGHTS=20,20,20,20,20
-AUTO_TRADE_BE_BUFFER_PIPS=3
+AUTO_TRADE_BE_BUFFER_PIPS=6
 AUTO_TRADE_CANDIDATE_MAX_AGE=90
 AUTO_TRADE_SPOT_MAX_AGE=5
 AUTO_TRADE_MAX_SPREAD_PIPS=5
@@ -82,7 +83,8 @@ AUTO_TRADE_ADD_LEVEL_BUFFER_ATR=1.0
 AUTO_TRADE_ADD_STOP_BUFFER_ATR=0.3
 AUTO_TRADE_ADD_MIN_STOP_PIPS=15
 AUTO_TRADE_ADD_REQUIRE_RISK_FREE=false
-AUTO_TRADE_ZONE_FILL_ENABLED=false
+AUTO_TRADE_ZONE_FILL_ENABLED=true
+AUTO_TRADE_ZONE_FILL_MIN_LOTS=0.09
 AUTO_TRADE_ZONE_FILL_MIN_ATR=0.5
 AUTO_TRADE_ZONE_FILL_TTL_BARS=3
 ```
@@ -149,12 +151,14 @@ The executor revalidates candidate age, live quote age, spread, entry distance,
 account identity, and the configured XAU tranche limit before placing an order.
 Telegram is an operator surface, never the execution trigger.
 
-Initial size is `min(risk-based, equity-table)` using realised account balance,
-the structure stop, and `AUTO_TRADE_RISK_PCT`. The exposure table uses the
-operator bands:
-`$200-$500 -> 0.02-0.05`, `$500-$1,000 -> 0.05-0.11`,
-`$1,000-$2,000 -> 0.11-0.21`, `$2,000-$3,000 -> 0.21-0.31`, and
-`$3,000-$5,000 -> 0.31-0.36` lots. The result is floored to `0.01` lots;
+Initial size selects `min(risk-based, equity-table)`, `table`, or `risk` via
+`AUTO_TRADE_SIZING_MODE`, using realised account balance, the structure stop,
+and `AUTO_TRADE_RISK_PCT`. The code default is the conservative `min` mode;
+deployment selects `table`. The exposure table uses the operator bands:
+`$200-$500 -> 0.02-0.05`, `$500-$1,000 -> 0.05-0.08`,
+`$1,000-$2,000 -> 0.11-0.15`, `$2,000-$3,000 -> 0.20-0.25`, and
+`$3,000-$5,000 -> 0.31-0.36` lots. Boundary jumps are intentional. The result
+is floored to `0.01` lots;
 balances below `$200` are rejected and balances above `$5,000` stay capped at
 `0.36` lots. Stops use the latest directional swing plus `0.3 ATR`, clamped to
 15-65 pips.
@@ -167,10 +171,11 @@ ladder. Adds at an adverse price or while the group is losing are refused as
 averaging down. `AUTO_TRADE_ADD_REQUIRE_RISK_FREE=true` applies the stricter
 post-add non-negative worst-case rule.
 
-When explicitly enabled, a zone at least `0.5 ATR` wide is planned as two limit
-legs at the proximal edge and midpoint. They share the original stop and split
-the planned ladder proportionally; an unfilled midpoint leg is cancelled after
-three M1 bars. This remains disabled by default.
+When enabled, a zone at least `0.5 ATR` wide and a planned size of at least
+`0.09` lots is split into two limit legs at the proximal edge and midpoint.
+They share the original stop and split the planned ladder proportionally; an
+unfilled midpoint leg is cancelled after three M1 bars. Smaller plans use the
+single market-entry path. The code fallback remains disabled by default.
 
 Weighted partial closes use `30/60/90/120/200` pips. A `0.02`-lot position
 exits at TP1 and TP3, `0.03`

@@ -41,8 +41,38 @@ public sealed class AutoTradeOptionsTests
       () => (Options() with { ZoneFillTtlBars = 0 }).Validate()
     );
     Assert.Throws<AutoTradeConfigurationException>(
+      () => (Options() with { ZoneFillMinLots = 0 }).Validate()
+    );
+    Assert.Throws<AutoTradeConfigurationException>(
       () => (Options() with { BoxMinRiskReward = 0.9m }).Validate()
     );
+  }
+
+  [Fact]
+  public void SizingModeDefaultsToMinAndRejectsUnknownValues()
+  {
+    Assert.Equal("min", Options().SizingMode);
+
+    var error = Assert.Throws<AutoTradeConfigurationException>(
+      () => (Options() with { SizingMode = "maximum" }).Validate()
+    );
+
+    Assert.Contains("AUTO_TRADE_SIZING_MODE", error.Message);
+    Assert.Contains("min, table, risk", error.Message);
+  }
+
+  [Fact]
+  public void ReadsExplicitSizingModeFromEnvironment()
+  {
+    Environment.SetEnvironmentVariable("AUTO_TRADE_SIZING_MODE", "table");
+    try
+    {
+      Assert.Equal("table", AutoTradeOptions.FromEnvironment().SizingMode);
+    }
+    finally
+    {
+      Environment.SetEnvironmentVariable("AUTO_TRADE_SIZING_MODE", null);
+    }
   }
 
   [Fact]

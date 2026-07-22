@@ -26,12 +26,12 @@ public sealed class ScaleInPlannerTests
     );
 
     Assert.True(decision.Allowed);
-    Assert.Equal(0.08m, decision.Lots);
-    Assert.Equal(800, decision.Volume);
+    Assert.Equal(0.07m, decision.Lots);
+    Assert.Equal(700, decision.Volume);
     Assert.Equal("exposure-bound", decision.BindingTerm);
-    Assert.Equal(-1.5m, decision.PostAddWorstCase);
+    Assert.Equal(0.3m, decision.PostAddWorstCase);
     Assert.Equal(40m, decision.Budget);
-    Assert.Contains("headroom_lots 0.08", decision.SizingLog);
+    Assert.Contains("headroom_lots 0.07", decision.SizingLog);
   }
 
   [Fact]
@@ -69,8 +69,8 @@ public sealed class ScaleInPlannerTests
     var open = new[] {
       new TrancheExposure(TradeDirection.Buy, 4000m, 4000.3m, 1_300),
     };
-    var refused = Plan(9m, 18m, open, requireRiskFree: true);
-    var allowed = Plan(11m, 18m, open, requireRiskFree: true);
+    var refused = Plan(8m, 18m, open, requireRiskFree: true);
+    var allowed = Plan(9m, 18m, open, requireRiskFree: true);
 
     Assert.False(refused.Allowed);
     Assert.Contains("risk-free mode", refused.Reason);
@@ -145,7 +145,7 @@ public sealed class ScaleInPlannerTests
       addStopPips: 18m,
       open: [new(TradeDirection.Buy, 4000m, 4000.3m, 1_300)]
     );
-    Assert.Equal(0.08m, decision.HeadroomLots);
+    Assert.Equal(0.07m, decision.HeadroomLots);
   }
 
   [Fact]

@@ -21,6 +21,7 @@ public sealed record AutoTradeOptions(
   string Label,
   bool RequireDemoOnlyToken = false,
   decimal RiskPercent = 2m,
+  string SizingMode = "min",
   decimal PipValuePerLot = 10m,
   decimal PipSize = 0.1m,
   decimal ContractSize = 100m,
@@ -33,6 +34,7 @@ public sealed record AutoTradeOptions(
   int AddMinStopPips = 15,
   bool AddRequireRiskFree = false,
   bool ZoneFillEnabled = false,
+  decimal ZoneFillMinLots = 0.09m,
   decimal ZoneFillMinAtr = 0.5m,
   int ZoneFillTtlBars = 3,
   decimal BoxMinRiskReward = 1.25m,
@@ -60,6 +62,7 @@ public sealed record AutoTradeOptions(
     Label: Env("AUTO_TRADE_LABEL", "apexvoid-auto"),
     RequireDemoOnlyToken: Bool("AUTO_TRADE_REQUIRE_DEMO_ONLY_TOKEN", false),
     RiskPercent: Decimal("AUTO_TRADE_RISK_PCT", 2m),
+    SizingMode: Env("AUTO_TRADE_SIZING_MODE", "min"),
     PipValuePerLot: Decimal("AUTO_TRADE_PIP_VALUE_PER_LOT", 10m),
     PipSize: Decimal("AUTO_TRADE_PIP_SIZE", 0.1m),
     ContractSize: Decimal("AUTO_TRADE_CONTRACT_SIZE", 100m),
@@ -72,6 +75,7 @@ public sealed record AutoTradeOptions(
     AddMinStopPips: Int("AUTO_TRADE_ADD_MIN_STOP_PIPS", 15),
     AddRequireRiskFree: Bool("AUTO_TRADE_ADD_REQUIRE_RISK_FREE", false),
     ZoneFillEnabled: Bool("AUTO_TRADE_ZONE_FILL_ENABLED", false),
+    ZoneFillMinLots: Decimal("AUTO_TRADE_ZONE_FILL_MIN_LOTS", 0.09m),
     ZoneFillMinAtr: Decimal("AUTO_TRADE_ZONE_FILL_MIN_ATR", 0.5m),
     ZoneFillTtlBars: Int("AUTO_TRADE_ZONE_FILL_TTL_BARS", 3),
     BoxMinRiskReward: Decimal("AUTO_TRADE_BOX_MIN_RR", 1.25m),
@@ -125,6 +129,13 @@ public sealed record AutoTradeOptions(
         "Auto trade disabled: risk percent must be 0.1-10 and pip value positive"
       );
     }
+    if (SizingMode is not "min" and not "table" and not "risk")
+    {
+      throw new AutoTradeConfigurationException(
+        "Auto trade disabled: AUTO_TRADE_SIZING_MODE must be one of "
+        + "min, table, risk"
+      );
+    }
     if (PipSize <= 0 || ContractSize <= 0)
     {
       throw new AutoTradeConfigurationException(
@@ -159,7 +170,11 @@ public sealed record AutoTradeOptions(
         "Auto trade disabled: scale-in settings are invalid"
       );
     }
-    if (ZoneFillMinAtr <= 0 || ZoneFillTtlBars <= 0)
+    if (
+      ZoneFillMinLots <= 0
+      || ZoneFillMinAtr <= 0
+      || ZoneFillTtlBars <= 0
+    )
     {
       throw new AutoTradeConfigurationException(
         "Auto trade disabled: zone-fill settings must be positive"
