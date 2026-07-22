@@ -45,6 +45,11 @@ class Settings(BaseSettings):
   # restart. Default host matches the compose service name; override locally.
   redis_url: str = "redis://redis:6379/0"
   track_interval: int = 120
+  # Watcher reads closed M1 bars from ctrader-feed's Redis ZSET first; if the
+  # newest bar there is older than this, it falls back to Tiingo for that
+  # tick instead (feed gap/restart). ~3x the M1 interval gives room for one
+  # missed close without flapping between sources every tick.
+  watcher_ctrader_stale_seconds: int = 180
   session_asia_start: int = 22
   session_london_start: int = 7
   session_ny_start: int = 13

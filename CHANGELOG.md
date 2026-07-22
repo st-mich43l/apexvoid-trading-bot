@@ -98,6 +98,12 @@ dated section after deployment.
 
 ### Changed
 
+- The notify-only price watcher now reads closed M1 bars from ctrader-feed's
+  Redis window as its primary source instead of polling Tiingo. Tiingo
+  remains as a fallback for a single tick when the ctrader-feed bar is
+  missing or older than `WATCHER_CTRADER_STALE_SECONDS` (default 180s); the
+  watcher now runs even without `TIINGO_API_KEY` set, it just has no
+  fallback for a gap in that case.
 - Scanner detector output now owns strategy selection. The Algo worker no
   longer re-confirms a matched setup with a second M1/M5 or Market Map gate,
   and private strategies select the higher-confluence match instead of using a
