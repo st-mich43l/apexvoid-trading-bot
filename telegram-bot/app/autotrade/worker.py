@@ -645,18 +645,30 @@ def _status_payload(
   spot: AutoTradeSpot | None,
   candidate_id: str | None,
   regime: RegimeInfo | None = None,
+  trend_decision: TrendDecision | None = None,
 ) -> dict[str, Any]:
   rail = decision.rail
   target = decision.target
   box = decision.box
+  trend_routed = regime is not None and regime.state in ("trend", "breakout")
+  state = decision.state
+  direction = decision.direction
+  if trend_routed and trend_decision is not None:
+    state = (
+      trend_decision.state
+      if settings.auto_trade_trend_enabled
+      else "trend_disabled"
+    )
+    direction = trend_decision.direction
   return {
-    "state": decision.state,
+    "state": state,
+    "box_state": decision.state,
     "symbol": symbol,
     "tf": EXECUTION_TIMEFRAME,
     "event_ts": event_ts,
     "checked_at": datetime.now(timezone.utc).isoformat(),
     "trigger": decision.trigger,
-    "direction": decision.direction,
+    "direction": direction,
     "rail": None if rail is None else {
       "low": rail.low,
       "high": rail.high,
@@ -689,6 +701,11 @@ def _status_payload(
     },
     "regime": None if regime is None else regime.state,
     "regime_reasons": [] if regime is None else list(regime.reasons),
+    "trend_state": None if trend_decision is None else trend_decision.state,
+    "trend_mode": None if trend_decision is None else trend_decision.mode,
+    "trend_reasons": (
+      [] if trend_decision is None else list(trend_decision.reasons)
+    ),
   }
 
 
@@ -849,6 +866,7 @@ async def _handle_event(
     spot=spot,
     candidate_id=candidate_id,
     regime=regime,
+    trend_decision=trend_decision,
   )
   encoded = json.dumps(payload, separators=(",", ":"), sort_keys=True)
   await client.set("auto_trade:last_gate", encoded)
@@ -857,9 +875,9 @@ async def _handle_event(
     "independent auto-scalp gate symbol=%s state=%s trigger=%s "
     "direction=%s candidate=%s regime=%s",
     symbol,
-    decision.state,
+    payload["state"],
     decision.trigger or "-",
-    decision.direction or "-",
+    payload["direction"] or "-",
     candidate_id[:12] if candidate_id else "-",
     regime.state,
   )

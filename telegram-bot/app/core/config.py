@@ -182,7 +182,7 @@ class Settings(BaseSettings):
   trend_min_height_atr: float = 3.0
   trend_atr_expansion: float = 1.15
   trend_atr_baseline_bars: int = 48
-  trend_allow_chase: bool = True
+  trend_allow_chase: bool = False
   trend_level_buffer_atr: float = 1.0
   tp_min_spacing_atr: float = 0.5
   # How many M1 bars a box break stays eligible for breakout-mode entry
@@ -191,6 +191,7 @@ class Settings(BaseSettings):
   # initial/tunable starting values, not established facts.
   trend_breakout_max_age_bars: int = 5
   trend_breakout_accept_bars: int = 2
+  trend_breakout_min_room_pips: int = 35
   reaction_max_atr: float = 0.5
   regime_chop_alert_share: float = 0.75
   auto_trade_trend_enabled: bool = False  # kill switch — default OFF
