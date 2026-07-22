@@ -30,7 +30,9 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
-    # No ports exposed — holds watcher TP/SL progress + bar cursor only.
+    # redisdata holds the rotated live cTrader refresh token; each rotation
+    # invalidates the previous token. The host file mirror recovers Redis loss,
+    # but destroying both requires manual cTrader Playground re-authorisation.
 
   bot:
     build: ./telegram-bot
@@ -56,6 +58,8 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+    volumes:
+      - ./data/ctrader-token:/var/lib/apexvoid
     healthcheck:
       test: ["CMD", "/app/ctrader-feed", "--healthcheck"]
       interval: 30s

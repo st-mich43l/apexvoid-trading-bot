@@ -72,8 +72,10 @@ services:
       CTRADER_TIMEFRAMES: {{ apexvoid_trading_bot_env.CTRADER_TIMEFRAMES | default('M1,M5,M15,M30') | string | to_json }}
       CTRADER_BACKFILL_BARS: {{ apexvoid_trading_bot_env.CTRADER_BACKFILL_BARS | default('1500') | string | to_json }}
       CTRADER_REQUEST_TIMEOUT: {{ apexvoid_trading_bot_env.CTRADER_REQUEST_TIMEOUT | default('30') | string | to_json }}
-      CTRADER_TOKEN_REFRESH_MINUTES: {{ apexvoid_trading_bot_env.CTRADER_TOKEN_REFRESH_MINUTES | default('50') | string | to_json }}
+      CTRADER_TOKEN_REFRESH_LEAD_DAYS: {{ apexvoid_trading_bot_env.CTRADER_TOKEN_REFRESH_LEAD_DAYS | default('5') | string | to_json }}
+      CTRADER_TOKEN_CHECK_INTERVAL_HOURS: {{ apexvoid_trading_bot_env.CTRADER_TOKEN_CHECK_INTERVAL_HOURS | default('6') | string | to_json }}
       CTRADER_REFRESH_TOKEN_KEY: {{ apexvoid_trading_bot_env.CTRADER_REFRESH_TOKEN_KEY | default('ctrader:refresh_token') | string | to_json }}
+      CTRADER_REFRESH_TOKEN_FILE: {{ apexvoid_trading_bot_env.CTRADER_REFRESH_TOKEN_FILE | default('/var/lib/apexvoid/ctrader-token.json') | string | to_json }}
       REDIS_URL: {{ apexvoid_trading_bot_env.REDIS_URL | default('redis://redis:6379/0') | string | to_json }}
       BARS_WINDOW_MAX: {{ apexvoid_trading_bot_env.BARS_WINDOW_MAX | default('1500') | string | to_json }}
       BARS_CHANNEL: {{ apexvoid_trading_bot_env.BARS_CHANNEL | default('bars:new') | string | to_json }}
@@ -100,6 +102,8 @@ services:
       AUTO_TRADE_LABEL: {{ apexvoid_trading_bot_env.AUTO_TRADE_LABEL | default('apexvoid-auto') | string | to_json }}
       AUTO_TRADE_TREND_STOP_MIN_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_TREND_STOP_MIN_PIPS | default('40') | string | to_json }}
       AUTO_TRADE_TREND_STOP_MAX_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_TREND_STOP_MAX_PIPS | default('65') | string | to_json }}
+    volumes:
+      - ./data/ctrader-token:/var/lib/apexvoid
     healthcheck:
       test: ["CMD", "/app/ctrader-feed", "--healthcheck"]
       interval: 30s
