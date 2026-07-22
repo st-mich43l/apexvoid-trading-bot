@@ -45,8 +45,10 @@ from app.core.config import settings
 from app.persistence.store import event_in_window
 from app.analysis.ohlc_source import RedisOHLCSource
 from app.analysis.math_utils import atr_series
-from app.analysis.types import Zone
+from app.analysis.types import Level, Zone
 from app.analysis.zones import displacement, mark_mitigation, supply_demand
+from app.analysis.levels import key_levels
+from app.analysis.swings import find_swings
 
 
 log = logging.getLogger(__name__)
@@ -203,6 +205,77 @@ def _htf_zones(frames: dict[str, Any], cfg: Any) -> list[Zone]:
   return mark_mitigation(zones, htf)
 
 
+def _htf_levels(frames: dict[str, Any], cfg: Any) -> list[Level]:
+  """HTF (M15) round-number and reaction key levels, for the opposing-barrier
+  veto below. Round-number levels aren't sided the way supply/demand zones
+  are (a round number caps a rally the same way it floors a selloff), so
+  they're kept as a separate ``Level`` list rather than folded into ``Zone``.
+  """
+  htf = frames.get(_HTF_TIMEFRAME)
+  if htf is None or htf.empty:
+    return []
+  atr_length = max(2, int(getattr(cfg, "atr_length", 14)))
+  atr = atr_series(htf, atr_length)
+  swings = find_swings(
+    htf,
+    max(1, int(getattr(cfg, "swing_fractal_n", 2))),
+    max(0.0, float(getattr(cfg, "zigzag_pct", 0.0))),
+    max(0.0, float(getattr(cfg, "zigzag_atr_mult", 1.0))),
+    atr,
+  )
+  if not swings:
+    return []
+  return key_levels(
+    swings,
+    atr,
+    max(0.0, float(getattr(cfg, "level_cluster_atr", 0.5))),
+    max(0.1, float(getattr(cfg, "round_step", 5.0))),
+    max(1, int(getattr(cfg, "key_level_min_touches", 2))),
+  )
+
+
+def _opposing_barrier_reason(
+  direction: str,
+  entry_reference: float,
+  atr: float | None,
+  zones: list[Zone],
+  levels: list[Level],
+  buffer_atr: float,
+) -> str | None:
+  """Veto a direction about to run straight into an opposing HTF barrier it
+  hasn't broken through yet (22 Jul incident: a Box Breakout BUY filled 20
+  pips below a published round-number supply level nobody checked). This is
+  the mirror image of ``_htf_veto_reason`` above: that one protects the zone
+  a trade is retesting *from*; this one checks what could cap the move
+  *ahead* of entry - the opposing side, not the supporting one.
+  """
+  if not atr or atr <= 0 or buffer_atr <= 0:
+    return None
+  opposing_side = "supply" if direction == "BUY" else "demand"
+  bounds = [
+    (zone.low, zone.high, zone.side) for zone in zones if zone.side == opposing_side
+  ]
+  bounds += [
+    (level.price - level.band, level.price + level.band, level.kind)
+    for level in levels
+  ]
+  ahead = []
+  for low, high, kind in bounds:
+    if direction == "BUY" and low > entry_reference:
+      ahead.append((low - entry_reference, low, high, kind))
+    elif direction == "SELL" and high < entry_reference:
+      ahead.append((entry_reference - high, low, high, kind))
+  if not ahead:
+    return None
+  distance, low, high, kind = min(ahead, key=lambda item: item[0])
+  if distance > buffer_atr * atr:
+    return None
+  return (
+    f"Opposing barrier ahead: {direction} into {kind} "
+    f"{low:.2f}-{high:.2f} ({distance:.2f} away)"
+  )
+
+
 def _nearest_directional_zone(
   direction: str,
   entry_reference: float,
@@ -289,6 +362,7 @@ async def _publish_candidate(
   *,
   regime: RegimeInfo | None = None,
   htf_zones: list[Zone] | None = None,
+  htf_levels: list[Level] | None = None,
   gate_source: str = "private_ohlc",
 ) -> str | None:
   if (
@@ -338,6 +412,18 @@ async def _publish_candidate(
         "auto-scalp candidate blocked symbol=%s reason=%s", symbol, veto_reason,
       )
       await _record_gate_reject(client, symbol, "htf_veto")
+      return None
+  if settings.auto_trade_opposing_barrier_veto_enabled:
+    barrier_reason = _opposing_barrier_reason(
+      decision.direction, entry_reference, scale_context.atr,
+      htf_zones or [], htf_levels or [],
+      settings.auto_trade_opposing_barrier_atr,
+    )
+    if barrier_reason is not None:
+      log.info(
+        "auto-scalp candidate blocked symbol=%s reason=%s", symbol, barrier_reason,
+      )
+      await _record_gate_reject(client, symbol, "opposing_barrier")
       return None
 
   now = int(datetime.now(timezone.utc).timestamp())
@@ -440,6 +526,8 @@ async def _publish_strategy_match(
   *,
   consume_redis_match: bool = True,
   match_source: str = "scanner_strategy_match",
+  htf_zones: list[Zone] | None = None,
+  htf_levels: list[Level] | None = None,
 ) -> str | None:
   """Publish a completed scanner strategy match without PA re-confirmation."""
   if (
@@ -469,6 +557,21 @@ async def _publish_strategy_match(
       if not crossed_midpoint:
         return None
       await client.delete(edge_key)
+  if settings.auto_trade_opposing_barrier_veto_enabled:
+    barrier_reason = _opposing_barrier_reason(
+      match.direction, spot.price, match.atr,
+      htf_zones or [], htf_levels or [],
+      settings.auto_trade_opposing_barrier_atr,
+    )
+    if barrier_reason is not None:
+      log.info(
+        "strategy match blocked symbol=%s strategy=%s reason=%s",
+        symbol, match.strategy, barrier_reason,
+      )
+      if consume_redis_match:
+        await client.delete(strategy_match_key(symbol))
+      await _record_gate_reject(client, symbol, "opposing_barrier")
+      return None
   distance = (
     match.entry_low - spot.price
     if spot.price < match.entry_low
@@ -618,6 +721,7 @@ async def _publish_trend_candidate(
   regime: RegimeInfo,
   trend_decision: TrendDecision,
   htf_zones: list[Zone] | None = None,
+  htf_levels: list[Level] | None = None,
 ) -> str | None:
   if (
     not settings.auto_trade_enabled
@@ -650,6 +754,18 @@ async def _publish_trend_candidate(
         "auto-trend candidate blocked symbol=%s reason=%s", symbol, veto_reason,
       )
       await _record_gate_reject(client, symbol, "htf_veto")
+      return None
+  if settings.auto_trade_opposing_barrier_veto_enabled:
+    barrier_reason = _opposing_barrier_reason(
+      trend_decision.direction, entry_reference, trend_decision.atr,
+      htf_zones or [], htf_levels or [],
+      settings.auto_trade_opposing_barrier_atr,
+    )
+    if barrier_reason is not None:
+      log.info(
+        "auto-trend candidate blocked symbol=%s reason=%s", symbol, barrier_reason,
+      )
+      await _record_gate_reject(client, symbol, "opposing_barrier")
       return None
 
   now = int(datetime.now(timezone.utc).timestamp())
@@ -1144,6 +1260,7 @@ async def _handle_event(
     ) else None
   )
   htf_zones = _htf_zones(frames, settings)
+  htf_levels = _htf_levels(frames, settings)
   strategy_candidate_id = (
     await _publish_strategy_match(
       client,
@@ -1152,6 +1269,8 @@ async def _handle_event(
       strategy_match,
       consume_redis_match=scanner_strategy_match is not None,
       match_source=gate_source,
+      htf_zones=htf_zones,
+      htf_levels=htf_levels,
     )
     if strategy_match is not None else None
   )
@@ -1165,6 +1284,7 @@ async def _handle_event(
       scale_context,
       regime=regime,
       htf_zones=htf_zones,
+      htf_levels=htf_levels,
       gate_source=gate_source,
     )
     if box_selected else None
@@ -1178,6 +1298,7 @@ async def _handle_event(
       regime,
       trend_decision,
       htf_zones=htf_zones,
+      htf_levels=htf_levels,
     )
     if trend_selected else None
   )
