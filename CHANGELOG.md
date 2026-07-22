@@ -186,6 +186,10 @@ dated section after deployment.
 
 ### Fixed
 
+- Isolated internal and public auto-trade Telegram delivery with independent
+  Redis cursors; an unavailable public channel now retains its event for replay
+  after permissions are restored without interrupting owner notifications.
+
 - Fixed a 10x pip-unit mismatch that blocked every auto-trade candidate on FP
   Markets (`pipPosition=2`); brokers reporting `pipPosition=1` were unaffected.
 - Startup recovery from a rejected cTrader access token no longer sends a

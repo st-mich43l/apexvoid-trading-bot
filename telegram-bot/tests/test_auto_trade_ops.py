@@ -1,3 +1,4 @@
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -293,6 +294,86 @@ async def test_bad_reply_target_retries_once_standalone():
   )
 
   assert [call["reply_to"] for call in calls] == [8123, None]
+
+
+@pytest.mark.asyncio
+async def test_public_delivery_failure_keeps_only_public_cursor_for_replay():
+  client = redis_state.get_client()
+  await client.set(delivery._CURSOR_KEY, "100-0")
+  internal_cursor = await delivery._initial_profile_cursor(client, "internal")
+  public_cursor = await delivery._initial_profile_cursor(client, "public")
+  entries = [("101-0", {"payload": json.dumps(_opened_event())})]
+  calls = []
+
+  async def internal_send(text, **kwargs):
+    calls.append(("internal", text, kwargs))
+    return SimpleNamespace(message_id=8123)
+
+  async def unavailable_public_send(text, **kwargs):
+    calls.append(("public-failed", text, kwargs))
+    raise TelegramBadRequest(
+      method=None,
+      message="Bad Request: chat not found",
+    )
+
+  internal_cursor = await delivery._process_profile_entries(
+    client,
+    entries,
+    cursor=internal_cursor,
+    profile="internal",
+    chat_id=123,
+    send=internal_send,
+  )
+  with pytest.raises(TelegramBadRequest, match="chat not found"):
+    await delivery._process_profile_entries(
+      client,
+      entries,
+      cursor=public_cursor,
+      profile="public",
+      chat_id=-100456,
+      send=unavailable_public_send,
+    )
+
+  assert internal_cursor == "101-0"
+  assert await client.get(
+    delivery._profile_cursor_key("internal")
+  ) == "101-0"
+  assert await client.get(
+    delivery._profile_cursor_key("public")
+  ) == "100-0"
+
+  async def public_send(text, **kwargs):
+    calls.append(("public-replayed", text, kwargs))
+    return SimpleNamespace(message_id=9123)
+
+  public_cursor = await delivery._process_profile_entries(
+    client,
+    entries,
+    cursor=public_cursor,
+    profile="public",
+    chat_id=-100456,
+    send=public_send,
+  )
+
+  assert public_cursor == "101-0"
+  assert await client.get(
+    delivery._profile_cursor_key("public")
+  ) == "101-0"
+  assert [call[0] for call in calls] == [
+    "internal",
+    "public-failed",
+    "public-replayed",
+  ]
+  assert "0.06" not in calls[-1][1]
+
+
+def test_unavailable_chat_error_is_actionable_delivery_failure():
+  error = TelegramBadRequest(
+    method=None,
+    message="Bad Request: chat not found",
+  )
+
+  assert delivery._is_unavailable_chat(error) is True
 
 
 @pytest.mark.asyncio

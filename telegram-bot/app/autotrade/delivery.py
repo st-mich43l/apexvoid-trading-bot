@@ -19,6 +19,7 @@ from app.autotrade.worker import regime_share_24h
 log = logging.getLogger(__name__)
 
 _CURSOR_KEY = "auto_trade:telegram_event_cursor"
+_PROFILE_CURSOR_PREFIX = "auto_trade:telegram_event_cursor:"
 _PAUSED_KEY = "auto_trade:paused"
 _STATS_KEY = "auto_trade:stats"
 _REGIME_ALERT_PENDING_PREFIX = "auto_trade:regime_alert_pending:"
@@ -322,6 +323,16 @@ def _is_bad_reply_target(error: TelegramBadRequest) -> bool:
   ) or "message to be replied" in reason
 
 
+def _is_unavailable_chat(error: TelegramBadRequest) -> bool:
+  reason = str(error).lower()
+  return any(marker in reason for marker in (
+    "chat not found",
+    "bot is not a member",
+    "not enough rights",
+    "need administrator rights",
+  ))
+
+
 async def _reply_message_id(
   client,
   event: dict,
@@ -590,60 +601,135 @@ async def _check_regime_alerts(client) -> None:
       await send_scanner_with_retry(text, chat_id=settings.telegram_owner_id)
 
 
-async def auto_trade_events_loop() -> None:
-  if not settings.auto_trade_enabled or not (
-    settings.telegram_owner_id or settings.signal_public_channel_id
-  ):
-    return
-  client = redis_state.get_client()
-  cursor = await client.get(_CURSOR_KEY)
+def _profile_cursor_key(profile: DeliveryProfile) -> str:
+  return f"{_PROFILE_CURSOR_PREFIX}{profile}"
+
+
+async def _initial_profile_cursor(client, profile: DeliveryProfile) -> str:
+  key = _profile_cursor_key(profile)
+  cursor = await client.get(key)
   if not cursor:
-    latest = await client.xrevrange(
-      settings.auto_trade_event_stream,
-      count=1,
-    )
-    cursor = latest[0][0] if latest else "0-0"
-    await client.set(_CURSOR_KEY, cursor)
-  log.info("Auto-trade event delivery active from Redis cursor %s", cursor)
+    cursor = await client.get(_CURSOR_KEY)
+    if not cursor:
+      latest = await client.xrevrange(
+        settings.auto_trade_event_stream,
+        count=1,
+      )
+      cursor = latest[0][0] if latest else "0-0"
+    await client.set(key, cursor)
+  return str(cursor)
+
+
+async def _process_profile_entries(
+  client,
+  entries,
+  *,
+  cursor: str,
+  profile: DeliveryProfile,
+  chat_id: int,
+  send=None,
+) -> str:
+  key = _profile_cursor_key(profile)
+  for entry_id, fields in entries:
+    try:
+      event = json.loads(fields["payload"])
+    except (KeyError, TypeError, json.JSONDecodeError) as exc:
+      log.warning("Invalid auto-trade event %s: %s", entry_id, exc)
+    else:
+      if profile == "internal":
+        await _record_group_result(client, event)
+      if profile == "internal" or event.get("type") in _PUBLIC_EVENT_TYPES:
+        await _deliver_auto_trade_event(
+          client,
+          event,
+          profile=profile,
+          chat_id=chat_id,
+          send=send,
+        )
+    cursor = entry_id
+    await client.set(key, cursor)
+  return cursor
+
+
+async def _auto_trade_profile_events_loop(
+  *,
+  profile: DeliveryProfile,
+  chat_id: int,
+) -> None:
+  client = redis_state.get_client()
+  cursor = await _initial_profile_cursor(client, profile)
+  log.info(
+    "Auto-trade %s delivery active for chat %s from Redis cursor %s",
+    profile,
+    chat_id,
+    cursor,
+  )
 
   while True:
     try:
-      await _check_regime_alerts(client)
+      if profile == "internal":
+        await _check_regime_alerts(client)
       batches = await client.xread(
         {settings.auto_trade_event_stream: cursor},
         count=20,
         block=5000,
       )
       for _, entries in batches:
-        for entry_id, fields in entries:
-          cursor = entry_id
-          await client.set(_CURSOR_KEY, cursor)
-          try:
-            event = json.loads(fields["payload"])
-          except (KeyError, TypeError, json.JSONDecodeError) as exc:
-            log.warning("Invalid auto-trade event %s: %s", entry_id, exc)
-            continue
-          await _record_group_result(client, event)
-          if settings.telegram_owner_id:
-            await _deliver_auto_trade_event(
-              client,
-              event,
-              profile="internal",
-              chat_id=settings.telegram_owner_id,
-            )
-          if (
-            settings.signal_public_channel_id
-            and settings.signal_public_channel_id != settings.telegram_owner_id
-            and event.get("type") in _PUBLIC_EVENT_TYPES
-          ):
-            await _deliver_auto_trade_event(
-              client,
-              event,
-              profile="public",
-              chat_id=settings.signal_public_channel_id,
-            )
+        cursor = await _process_profile_entries(
+          client,
+          entries,
+          cursor=cursor,
+          profile=profile,
+          chat_id=chat_id,
+        )
     except asyncio.CancelledError:
       raise
-    except Exception:
-      log.exception("Auto-trade event delivery failed; retrying")
+    except TelegramBadRequest as exc:
+      cursor = str(await client.get(_profile_cursor_key(profile)) or cursor)
+      if _is_unavailable_chat(exc):
+        log.error(
+          "Auto-trade %s delivery target %s is unavailable: %s; "
+          "ensure the configured bot is a channel admin. Keeping cursor %s "
+          "for replay",
+          profile,
+          chat_id,
+          exc,
+          cursor,
+        )
+        await asyncio.sleep(30)
+        continue
+      log.exception(
+        "Auto-trade %s delivery failed at cursor %s; retrying",
+        profile,
+        cursor,
+      )
       await asyncio.sleep(5)
+    except Exception:
+      cursor = str(await client.get(_profile_cursor_key(profile)) or cursor)
+      log.exception(
+        "Auto-trade %s delivery failed at cursor %s; retrying",
+        profile,
+        cursor,
+      )
+      await asyncio.sleep(5)
+
+
+async def auto_trade_events_loop() -> None:
+  if not settings.auto_trade_enabled:
+    return
+  loops = []
+  if settings.telegram_owner_id:
+    loops.append(_auto_trade_profile_events_loop(
+      profile="internal",
+      chat_id=settings.telegram_owner_id,
+    ))
+  if (
+    settings.signal_public_channel_id
+    and settings.signal_public_channel_id != settings.telegram_owner_id
+  ):
+    loops.append(_auto_trade_profile_events_loop(
+      profile="public",
+      chat_id=settings.signal_public_channel_id,
+    ))
+  if loops:
+    await asyncio.gather(*loops)
