@@ -105,6 +105,14 @@ dated section after deployment.
 
 ### Fixed
 
+- Connected structural Market Map zones to an executable `Mapped Zone
+  Reaction` strategy: Algo now evaluates M1 touches/rejections with
+  M5/M15/M30 context instead of showing a valid map level while producing no
+  strategy candidate. Round-number display fallbacks remain non-executable.
+- Reworked `/auto_status` around strategy selection: it no longer labels the
+  private Range Box strategy as a global gate, and now shows the selected
+  strategy/source, scanner M5 result, private-strategy states, execution state,
+  and current regime explicitly as telemetry only.
 - Fixed `Range Edge Scalp` being modeled as a confirmation regime that could
   suppress otherwise valid scanner strategies. It is now one executable
   strategy alongside the other detector matches.
