@@ -103,6 +103,12 @@ public interface IAutoTradeStore
     string condition,
     CancellationToken cancellationToken
   );
+  Task IncrementAddRejectAsync(
+    string symbol,
+    string mode,
+    string condition,
+    CancellationToken cancellationToken
+  );
   Task RecordZoneCooldownAsync(
     string symbol,
     string direction,
@@ -465,6 +471,17 @@ public sealed class StackExchangeRedisSeriesCommands :
     CancellationToken cancellationToken
   ) => _db.HashIncrementAsync(
     $"auto_trade:gate_reject:{symbol.ToUpperInvariant()}:{condition}",
+    "count",
+    1
+  );
+
+  public Task IncrementAddRejectAsync(
+    string symbol,
+    string mode,
+    string condition,
+    CancellationToken cancellationToken
+  ) => _db.HashIncrementAsync(
+    $"auto_trade:add_reject:{symbol.ToUpperInvariant()}:{mode}:{condition}",
     "count",
     1
   );
