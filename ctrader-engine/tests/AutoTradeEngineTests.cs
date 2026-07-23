@@ -1493,6 +1493,77 @@ public sealed class AutoTradeEngineTests
     await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
   }
 
+  [Fact]
+  public async Task ReconcileDetectedCloseRecordsZoneCooldown()
+  {
+    // The engine cannot tell an SL hit from a manual close apart here - both
+    // look identical (a tracked position vanishes from the broker snapshot)
+    // - so per Fix 3's rule, this branch always records the cooldown marker.
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+    var now = Now;
+    var store = new FakeAutoTradeStore(CandidateJson());
+    var client = new FakeTradingClient();
+    var engine = new AutoTradeEngine(Options(), store, () => now, _ => { });
+    await engine.ObserveSpotAsync(
+      new SpotPrice("XAU", 4000.0m, 4000.2m, now.ToUnixTimeSeconds()),
+      cts.Token
+    );
+    var run = engine.RunSessionAsync(client, Symbol, cts.Token);
+    await store.Ordered.Task.WaitAsync(TimeSpan.FromSeconds(2));
+    var positionId = client.StopAmendments.Single().PositionId;
+
+    client.RemovePosition(positionId);
+    now = Now.AddSeconds(16);
+    await WaitForEventAsync(store, "position_closed");
+
+    var cooldown = Assert.Single(store.ZoneCooldowns);
+    Assert.Equal(4000.2m, cooldown.EntryPrice);
+    Assert.Equal(3993.7m, cooldown.StopPrice);
+    Assert.Equal(("XAU", "BUY"), Assert.Single(store.ZoneCooldownDirections));
+
+    cts.Cancel();
+    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+  }
+
+  [Fact]
+  public async Task FullTakeProfitCloseNeverRecordsZoneCooldown()
+  {
+    // A clean TP full-close untracks the position itself (ProcessTargetsAsync)
+    // before the next reconcile ever runs, so it must never be mistaken for
+    // an ambiguous stop-out/manual close.
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+    var now = Now;
+    var store = new FakeAutoTradeStore(BoxCandidateJson(fullTpPips: 70))
+    {
+      DailyTradeCount = 100,
+    };
+    var client = new FakeTradingClient();
+    var engine = new AutoTradeEngine(Options(), store, () => now, _ => { });
+    await engine.ObserveSpotAsync(
+      new SpotPrice("XAU", 4000.0m, 4000.2m, now.ToUnixTimeSeconds()),
+      cts.Token
+    );
+    var run = engine.RunSessionAsync(client, Symbol, cts.Token);
+    await store.Ordered.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+    await engine.ObserveSpotAsync(
+      new SpotPrice("XAU", 4007.2m, 4007.4m, now.ToUnixTimeSeconds()),
+      cts.Token
+    );
+    await WaitForEventAsync(store, "take_profit");
+
+    // ProcessTargetsAsync already removed the position from the store the
+    // instant it closed (state.RemainingVolume <= 0) - it is structurally
+    // impossible for a later reconcile tick to ever see it as "stale",
+    // since GetTrackedPositionIdsAsync can no longer return it at all.
+    Assert.Empty(store.Positions);
+    Assert.Empty(store.ZoneCooldowns);
+    Assert.DoesNotContain(store.Events, item => item.Type == "position_closed");
+
+    cts.Cancel();
+    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+  }
+
   private static async Task WaitForEventAsync(FakeAutoTradeStore store, string type)
   {
     using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
@@ -2123,6 +2194,22 @@ public sealed class AutoTradeEngineTests
     )
     {
       GateRejects.Add((symbol, condition));
+      return Task.CompletedTask;
+    }
+    public List<ZoneCooldownRecord> ZoneCooldowns { get; } = [];
+    public List<(string Symbol, string Direction)> ZoneCooldownDirections { get; } = [];
+    public Task RecordZoneCooldownAsync(
+      string symbol,
+      string direction,
+      decimal entryPrice,
+      decimal stopPrice,
+      long closedAt,
+      int ttlMinutes,
+      CancellationToken cancellationToken
+    )
+    {
+      ZoneCooldowns.Add(new ZoneCooldownRecord(entryPrice, stopPrice, closedAt));
+      ZoneCooldownDirections.Add((symbol, direction));
       return Task.CompletedTask;
     }
   }

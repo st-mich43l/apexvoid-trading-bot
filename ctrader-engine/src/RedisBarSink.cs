@@ -103,6 +103,15 @@ public interface IAutoTradeStore
     string condition,
     CancellationToken cancellationToken
   );
+  Task RecordZoneCooldownAsync(
+    string symbol,
+    string direction,
+    decimal entryPrice,
+    decimal stopPrice,
+    long closedAt,
+    int ttlMinutes,
+    CancellationToken cancellationToken
+  );
 }
 
 public sealed class RedisBarSink(
@@ -460,6 +469,23 @@ public sealed class StackExchangeRedisSeriesCommands :
     1
   );
 
+  public Task RecordZoneCooldownAsync(
+    string symbol,
+    string direction,
+    decimal entryPrice,
+    decimal stopPrice,
+    long closedAt,
+    int ttlMinutes,
+    CancellationToken cancellationToken
+  ) => _db.StringSetAsync(
+    $"auto_trade:zone:cooldown:{symbol.ToUpperInvariant()}:{direction.ToUpperInvariant()}",
+    System.Text.Json.JsonSerializer.Serialize(
+      new ZoneCooldownRecord(entryPrice, stopPrice, closedAt),
+      RedisJsonContext.Default.ZoneCooldownRecord
+    ),
+    TimeSpan.FromMinutes(Math.Max(1, ttlMinutes))
+  );
+
   public async ValueTask DisposeAsync()
   {
     await _connection.CloseAsync();
@@ -542,6 +568,7 @@ internal sealed record RedisSpot(
 [JsonSerializable(typeof(AutoTradePositionState))]
 [JsonSerializable(typeof(AutoTradeEvent))]
 [JsonSerializable(typeof(ManualTradeCommand))]
+[JsonSerializable(typeof(ZoneCooldownRecord))]
 [JsonSerializable(typeof(RefreshTokenDocument))]
 internal sealed partial class RedisJsonContext : JsonSerializerContext
 {

@@ -20,6 +20,7 @@ from app.autotrade.strategy_match import (
 from app.autotrade.scale_context import AutoScaleContext
 from app.autotrade.trend import RegimeInfo, TrendDecision
 from app.analysis.types import Level, Zone
+from app.analysis.market_map import MapEntry, MarketMap
 
 
 def _frame() -> pd.DataFrame:
@@ -971,3 +972,265 @@ async def test_record_gate_reject_increments_condition_counter():
     "auto_trade:gate_reject:XAU:waiting_for_box", "count",
   )
   assert int(count) == 2
+
+
+# --- Fix 1: opposing-barrier containment gap --------------------------------
+
+def _map_entry(side: str, lo: float, hi: float, *, score: float = 5.0) -> MapEntry:
+  return MapEntry(
+    side=side, lo=lo, hi=hi, label_lo=int(lo), label_hi=int(hi),
+    tier="major", tags=[], score=score,
+  )
+
+
+def _market_map(entries: list[MapEntry], *, price: float = 4118.0) -> MarketMap:
+  return MarketMap(
+    entries=entries, price=price, eq=None, box_low=None, box_high=None,
+    bias="up", bias_tf="M30",
+  )
+
+
+def test_opposing_barrier_reason_vetoes_buy_inside_opposing_supply():
+  supply = [Zone(4116.0, 4127.0, "supply", touches=8)]
+  reason = worker._opposing_barrier_reason(
+    "BUY", 4116.25, 1.2, supply, [], 0.5,
+  )
+  assert reason is not None
+  assert "inside opposing" in reason
+  assert worker._opposing_barrier_condition(reason) == "entry_inside_opposing_zone"
+
+
+def test_opposing_barrier_reason_vetoes_sell_inside_opposing_demand():
+  demand = [Zone(4112.0, 4122.0, "demand", touches=5)]
+  reason = worker._opposing_barrier_reason(
+    "SELL", 4117.0, 1.2, demand, [], 0.5,
+  )
+  assert reason is not None
+  assert "inside opposing" in reason
+  assert worker._opposing_barrier_condition(reason) == "entry_inside_opposing_zone"
+
+
+def test_opposing_barrier_reason_ahead_logic_unchanged_when_not_contained():
+  # Regression guard: an entry genuinely ahead of (not inside) the barrier
+  # still uses the pre-existing ATR/buffer tolerance logic, unchanged.
+  # distance = 4116.0 - 4115.5 = 0.5, within buffer_atr(0.5) * atr(1.2) = 0.6.
+  supply = [Zone(4116.0, 4127.0, "supply", touches=8)]
+  reason = worker._opposing_barrier_reason(
+    "BUY", 4115.5, 1.2, supply, [], 0.5,
+  )
+  assert reason is not None
+  assert reason.startswith("Opposing barrier ahead:")
+  assert worker._opposing_barrier_condition(reason) == "opposing_barrier"
+  # And still respects the buffer: too far away, no veto at all.
+  assert worker._opposing_barrier_reason(
+    "BUY", 4110.0, 1.2, supply, [], 0.5,
+  ) is None
+
+
+def test_opposing_barrier_reason_containment_is_boundary_inclusive():
+  supply = [Zone(4116.0, 4127.0, "supply", touches=8)]
+  low_edge = worker._opposing_barrier_reason("BUY", 4116.0, 1.2, supply, [], 0.5)
+  high_edge = worker._opposing_barrier_reason("BUY", 4127.0, 1.2, supply, [], 0.5)
+  assert low_edge is not None and "inside opposing" in low_edge
+  assert high_edge is not None and "inside opposing" in high_edge
+
+
+def test_opposing_barrier_condition_containment_has_its_own_counter(monkeypatch):
+  client = redis_state.get_client()
+  monkeypatch.setattr(worker.settings, "auto_trade_opposing_barrier_atr", 0.5)
+  supply = [Zone(4116.0, 4127.0, "supply", touches=8)]
+  reason = worker._opposing_barrier_reason("BUY", 4116.25, 1.2, supply, [], 0.5)
+
+  return_value = worker._opposing_barrier_condition(reason)
+
+  assert return_value == "entry_inside_opposing_zone"
+  assert return_value != "opposing_barrier"
+
+
+@pytest.mark.asyncio
+async def test_incident_replay_buy_at_4116_25_is_vetoed_by_two_guards(monkeypatch):
+  """Replays the 23 Jul 2026 incident numbers directly: a SELL resistance
+  band tested 8x at 4,116-4,127, and a Market Map that simultaneously
+  publishes BUY 4,112-4,122 and SELL 4,116-4,127 (overlapping 4,116-4,122).
+  Both the containment veto and the overlap veto must independently fire.
+  """
+  entry_reference = 4116.25
+  supply = [Zone(4116.0, 4127.0, "supply", touches=8)]
+  market_map = _market_map([
+    _map_entry("sell", 4116.0, 4127.0),
+    _map_entry("buy", 4112.0, 4122.0),
+  ])
+
+  barrier_reason = worker._opposing_barrier_reason(
+    "BUY", entry_reference, 1.2, supply, [], 0.5,
+  )
+  overlap_reason = worker._overlapping_zone_conflict_reason(
+    entry_reference, market_map,
+  )
+
+  assert barrier_reason is not None
+  assert worker._opposing_barrier_condition(barrier_reason) == (
+    "entry_inside_opposing_zone"
+  )
+  assert overlap_reason is not None
+  assert "demand" in overlap_reason and "supply" in overlap_reason
+
+
+# --- Fix 3: post-stop-out cooldown ------------------------------------------
+
+@pytest.mark.asyncio
+async def test_zone_cooldown_reason_vetoes_same_direction_near_stopped_out_entry():
+  client = redis_state.get_client()
+  await client.set(
+    worker._zone_cooldown_key("XAU", "BUY"),
+    json.dumps({"entry_price": 4116.25, "stop_price": 4111.54, "closed_at": 1000}),
+  )
+
+  reason = await worker._zone_cooldown_reason(
+    client, "XAU", "BUY", 4116.90, 2.0, 1.0,
+  )
+
+  assert reason is not None
+  assert "zone cooldown" in reason
+
+
+@pytest.mark.asyncio
+async def test_zone_cooldown_reason_allows_opposite_direction():
+  client = redis_state.get_client()
+  await client.set(
+    worker._zone_cooldown_key("XAU", "BUY"),
+    json.dumps({"entry_price": 4116.25, "stop_price": 4111.54, "closed_at": 1000}),
+  )
+
+  reason = await worker._zone_cooldown_reason(
+    client, "XAU", "SELL", 4116.90, 2.0, 1.0,
+  )
+
+  assert reason is None
+
+
+@pytest.mark.asyncio
+async def test_zone_cooldown_reason_none_when_marker_absent_or_expired():
+  client = redis_state.get_client()
+  # Never written / already expired (Redis TTL naturally removes the key) -
+  # both look identical from the read side: GET returns None.
+  reason = await worker._zone_cooldown_reason(
+    client, "XAU", "BUY", 4116.90, 2.0, 1.0,
+  )
+  assert reason is None
+
+
+@pytest.mark.asyncio
+async def test_zone_cooldown_reason_none_outside_atr_band():
+  client = redis_state.get_client()
+  await client.set(
+    worker._zone_cooldown_key("XAU", "BUY"),
+    json.dumps({"entry_price": 4116.25, "stop_price": 4111.54, "closed_at": 1000}),
+  )
+
+  reason = await worker._zone_cooldown_reason(
+    client, "XAU", "BUY", 4200.0, 2.0, 1.0,
+  )
+
+  assert reason is None
+
+
+@pytest.mark.asyncio
+async def test_publish_candidate_is_vetoed_during_active_cooldown(monkeypatch):
+  client = redis_state.get_client()
+  now = int(datetime.now(timezone.utc).timestamp())
+  monkeypatch.setattr(worker.settings, "auto_trade_enabled", True)
+  monkeypatch.setattr(worker.settings, "auto_trade_stream", "auto_trade:test")
+  monkeypatch.setattr(worker.settings, "auto_trade_min_confluence", 2)
+  monkeypatch.setattr(worker.settings, "auto_trade_zone_cooldown_atr", 1.0)
+  monkeypatch.setattr(worker, "event_in_window", AsyncMock(return_value=None))
+  decision = _decision()  # BUY, rail level=4016.8
+  await client.set(
+    worker._zone_cooldown_key("XAU", "BUY"),
+    json.dumps({"entry_price": 4017.0, "stop_price": 4014.8, "closed_at": now}),
+  )
+  spot = worker.AutoTradeSpot(4017.2, now, True)
+
+  result = await worker._publish_candidate(
+    client, "XAU", "1", spot, decision, _scale_context(now),
+  )
+
+  assert result is None
+  reject_count = await client.hget("auto_trade:gate_reject:XAU:zone_cooldown", "count")
+  assert reject_count is not None and int(reject_count) >= 1
+
+
+# --- Fix 4: overlapping opposing-zone veto ----------------------------------
+
+def test_overlapping_zone_conflict_reason_vetoes_entry_inside_both():
+  market_map = _market_map([
+    _map_entry("sell", 4116.0, 4127.0),
+    _map_entry("buy", 4112.0, 4122.0),
+  ])
+
+  reason = worker._overlapping_zone_conflict_reason(4118.0, market_map)
+
+  assert reason is not None
+  assert "demand" in reason and "supply" in reason
+
+
+def test_overlapping_zone_conflict_reason_allows_entry_in_demand_only():
+  market_map = _market_map([
+    _map_entry("sell", 4116.0, 4127.0),
+    _map_entry("buy", 4112.0, 4122.0),
+  ])
+
+  reason = worker._overlapping_zone_conflict_reason(4113.0, market_map)
+
+  assert reason is None
+
+
+def test_has_overlapping_zones_detects_map_self_contradiction():
+  overlapping = _market_map([
+    _map_entry("sell", 4116.0, 4127.0),
+    _map_entry("buy", 4112.0, 4122.0),
+  ])
+  disjoint = _market_map([
+    _map_entry("sell", 4130.0, 4140.0),
+    _map_entry("buy", 4100.0, 4110.0),
+  ])
+
+  assert worker._has_overlapping_zones(overlapping) is True
+  assert worker._has_overlapping_zones(disjoint) is False
+  assert worker._has_overlapping_zones(None) is False
+
+
+@pytest.mark.asyncio
+async def test_publish_candidate_overlap_veto_disabled_still_increments_counter(
+  monkeypatch,
+):
+  client = redis_state.get_client()
+  now = int(datetime.now(timezone.utc).timestamp())
+  monkeypatch.setattr(worker.settings, "auto_trade_enabled", True)
+  monkeypatch.setattr(worker.settings, "auto_trade_stream", "auto_trade:test")
+  monkeypatch.setattr(worker.settings, "auto_trade_min_confluence", 2)
+  monkeypatch.setattr(worker, "event_in_window", AsyncMock(return_value=None))
+  decision = _decision()  # BUY, rail level=4016.8, EQ far from spot
+  spot = worker.AutoTradeSpot(4016.8, now, True)
+  market_map = _market_map([
+    _map_entry("sell", 4016.0, 4018.0),
+    _map_entry("buy", 4015.0, 4017.5),
+  ])
+
+  monkeypatch.setattr(worker.settings, "auto_trade_overlap_veto_enabled", False)
+  passed = await worker._publish_candidate(
+    client, "XAU", "1", spot, decision, _scale_context(now),
+    market_map=market_map,
+  )
+  assert passed is not None
+
+  monkeypatch.setattr(worker.settings, "auto_trade_overlap_veto_enabled", True)
+  vetoed = await worker._publish_candidate(
+    client, "XAU", "2", spot, decision, _scale_context(now),
+    market_map=market_map,
+  )
+  assert vetoed is None
+  reject_count = await client.hget(
+    "auto_trade:gate_reject:XAU:overlapping_zone_conflict", "count",
+  )
+  assert reject_count is not None and int(reject_count) >= 1

@@ -3,8 +3,10 @@ import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+import pandas as pd
 import pytest
 
+from app.analysis.types import Zone
 from app.core.config import settings
 from app.persistence import redis_state, store
 from app.signals import broadcast, manual_execution
@@ -158,6 +160,122 @@ async def test_bridge_intents_loop_is_a_no_op_when_disabled():
 @pytest.mark.asyncio
 async def test_reconcile_events_loop_is_a_no_op_when_disabled():
   await asyncio.wait_for(manual_execution.reconcile_events_loop(), timeout=2)
+
+
+# ---------------------------------------------------------------------------
+# _warn_if_would_be_vetoed (Fixes 1/3/4: manual_algo is exempt from every
+# worker.py veto by construction - it never touches worker.py at all - but
+# should still warn the owner when an entry would have been refused on the
+# auto path.)
+# ---------------------------------------------------------------------------
+
+def _stub_frames_and_atr(monkeypatch, atr: float) -> None:
+  monkeypatch.setattr(
+    manual_execution.worker,
+    "_load_frames",
+    AsyncMock(return_value={"M1": pd.DataFrame({"close": [4116.9]})}),
+  )
+  monkeypatch.setattr(
+    manual_execution, "atr_series", lambda df, length: pd.Series([atr]),
+  )
+
+
+@pytest.mark.asyncio
+async def test_warn_if_would_be_vetoed_sends_owner_dm_for_opposing_barrier(
+  monkeypatch,
+):
+  monkeypatch.setattr(manual_execution.settings, "telegram_owner_id", 4242)
+  _stub_frames_and_atr(monkeypatch, atr=1.2)
+  monkeypatch.setattr(
+    manual_execution.worker,
+    "_htf_zones",
+    lambda frames, cfg: [Zone(4116.0, 4127.0, "supply", touches=8)],
+  )
+  monkeypatch.setattr(manual_execution.worker, "_htf_levels", lambda frames, cfg: [])
+  monkeypatch.setattr(manual_execution.worker, "decode_market_map", lambda raw: None)
+  sent = AsyncMock()
+  monkeypatch.setattr(manual_execution, "send_scanner_with_retry", sent)
+  client = redis_state.get_client()
+  intent = _intent(direction="BUY", entry_low=4116.0, entry_high=4116.5)
+
+  # Never a veto: manual_algo never calls worker.py's publish functions at
+  # all, so there is nothing here to "pass" or "block" - only to warn about.
+  await manual_execution._warn_if_would_be_vetoed(client, intent, 4116.25)
+
+  sent.assert_awaited_once()
+  text = sent.await_args.args[0]
+  assert "would be refused" in text
+  assert "inside opposing" in text
+
+
+@pytest.mark.asyncio
+async def test_warn_if_would_be_vetoed_is_silent_when_nothing_would_fire(
+  monkeypatch,
+):
+  monkeypatch.setattr(manual_execution.settings, "telegram_owner_id", 4242)
+  _stub_frames_and_atr(monkeypatch, atr=1.2)
+  monkeypatch.setattr(manual_execution.worker, "_htf_zones", lambda frames, cfg: [])
+  monkeypatch.setattr(manual_execution.worker, "_htf_levels", lambda frames, cfg: [])
+  monkeypatch.setattr(manual_execution.worker, "decode_market_map", lambda raw: None)
+  sent = AsyncMock()
+  monkeypatch.setattr(manual_execution, "send_scanner_with_retry", sent)
+  client = redis_state.get_client()
+  intent = _intent(direction="BUY", entry_low=4116.0, entry_high=4116.5)
+
+  await manual_execution._warn_if_would_be_vetoed(client, intent, 4116.25)
+
+  sent.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_manual_intent_inside_cooldown_is_still_published_but_warns(
+  monkeypatch,
+):
+  """Fix 3's manual-path rule: manual_algo is exempt from the cooldown veto
+  (the owner may deliberately re-enter a failed zone) - the intent is still
+  bridged onto auto_trade:candidates, just with an owner warning alongside.
+  """
+  monkeypatch.setattr(manual_execution.settings, "auto_trade_stream", "auto_trade:test3")
+  monkeypatch.setattr(manual_execution.settings, "auto_trade_stream_maxlen", 100)
+  monkeypatch.setattr(manual_execution.settings, "telegram_owner_id", 4242)
+  monkeypatch.setattr(manual_execution.settings, "auto_trade_zone_cooldown_atr", 1.0)
+  _stub_frames_and_atr(monkeypatch, atr=2.0)
+  monkeypatch.setattr(manual_execution.worker, "_htf_zones", lambda frames, cfg: [])
+  monkeypatch.setattr(manual_execution.worker, "_htf_levels", lambda frames, cfg: [])
+  monkeypatch.setattr(manual_execution.worker, "decode_market_map", lambda raw: None)
+  sent = AsyncMock()
+  monkeypatch.setattr(manual_execution, "send_scanner_with_retry", sent)
+  client = redis_state.get_client()
+  await client.set(
+    manual_execution.worker._zone_cooldown_key("XAU", "BUY"),
+    json.dumps({"entry_price": 4116.25, "stop_price": 4111.54, "closed_at": 1000}),
+  )
+  intent_payload = {
+    "intent_id": "manual:9:0",
+    "manual_signal_id": 9,
+    "revision": 0,
+    "direction": "BUY",
+    "entry_low": 4116.5,
+    "entry_high": 4117.0,
+    "sl": 4111.5,
+    "tps": [4130.0],
+    "created_at": 1_800_000_000,
+    "expires_at": None,
+    "setup_type": None,
+    "confluence": 1,
+    "execution_mode": "algo",
+  }
+  entries = [("201-0", {"payload": json.dumps(intent_payload)})]
+
+  cursor = await manual_execution._process_intent_entries(
+    client, entries, cursor="0-0",
+  )
+
+  assert cursor == "201-0"
+  candidates = await client.xrange("auto_trade:test3")
+  assert len(candidates) == 1
+  sent.assert_awaited_once()
+  assert "zone cooldown" in sent.await_args.args[0]
 
 
 # ---------------------------------------------------------------------------
