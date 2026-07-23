@@ -9,11 +9,11 @@ from typing import Any
 
 import pandas as pd
 
-from app.autotrade.gate import AutoScalpDecision
 from app.analysis.math_utils import atr_series
 from app.analysis.structure import structure_breaks
 from app.analysis.swings import find_swings
 from app.analysis.zones import displacement
+from app.autotrade.map_strategy import _rejects
 
 
 @dataclass(frozen=True)
@@ -26,16 +26,27 @@ class AutoScaleContext:
   bos_direction: str | None
   bos_ts: int | None
   opposing_level_distance_atr: float | None
+  # Pullback scale-in add (ScaleInTriggerPlanner P1-P4 in ctrader-engine) -
+  # counter_bos_ts/extreme_price/extreme_ts follow the same "position-
+  # agnostic market observation, gated by the caller's own GroupOpenedAt"
+  # pattern bos_ts already uses (AutoTradeEngine.ValidateAddTriggers does
+  # the gating): this module has no notion of which group is open.
+  counter_bos_ts: int | None = None
+  extreme_price: float | None = None
+  extreme_ts: int | None = None
+  rejection_confirmed: bool = False
 
 
 def build_auto_scale_context(
   frames: dict[str, pd.DataFrame],
-  decision: AutoScalpDecision,
+  direction: str,
   *,
   spot_price: float,
   cfg: Any,
+  target_low: float | None = None,
+  target_high: float | None = None,
 ) -> AutoScaleContext | None:
-  direction = str(decision.direction or "").upper()
+  direction = str(direction or "").upper()
   frame = frames.get("M1")
   if direction not in {"BUY", "SELL"} or frame is None or frame.empty:
     return None
@@ -72,6 +83,7 @@ def build_auto_scale_context(
     max(0.0, float(getattr(cfg, "momentum_body_frac", 0.6))),
   )
   pa_direction = "up" if direction == "BUY" else "down"
+  counter_direction = "down" if pa_direction == "up" else "up"
   matching_legs = [item for item in legs if item.direction == pa_direction]
   latest_leg = matching_legs[-1] if matching_legs else None
   displacement_age = (
@@ -87,15 +99,39 @@ def build_auto_scale_context(
   latest_break = matching_breaks[-1] if matching_breaks else None
   bos_ts = _epoch(latest_break.ts) if latest_break is not None else None
 
-  target = decision.target
+  counter_breaks = [
+    item for item in breaks
+    if item.direction == counter_direction and item.kind == "BOS"
+  ]
+  latest_counter_break = counter_breaks[-1] if counter_breaks else None
+  counter_bos_ts = (
+    _epoch(latest_counter_break.ts) if latest_counter_break is not None else None
+  )
+
   opposing_distance_atr = None
-  if target is not None:
+  if target_low is not None and target_high is not None:
     distance = (
-      float(target.low) - spot_price
+      float(target_low) - spot_price
       if direction == "BUY"
-      else spot_price - float(target.high)
+      else spot_price - float(target_high)
     )
     opposing_distance_atr = max(0.0, distance) / atr_value
+
+  # "Best price reached" (P2's retrace denominator): the highest high for a
+  # BUY, lowest low for a SELL, over the whole visible M1 window. Bounded
+  # by that window (see _load_frames' 240-bar/4h default) - a group open
+  # longer than the window understates the true extreme, which
+  # AutoTradeEngine.ValidateAddTriggers treats as "insufficient history"
+  # (gated against GroupOpenedAt) rather than guess past what's visible.
+  if direction == "BUY":
+    extreme_idx = m1["high"].idxmax()
+    extreme_price = float(m1["high"].max())
+  else:
+    extreme_idx = m1["low"].idxmin()
+    extreme_price = float(m1["low"].min())
+  extreme_ts = _epoch(extreme_idx)
+
+  rejection_confirmed = bool(_rejects(m1.iloc[-1], direction, atr_value))
 
   return AutoScaleContext(
     bar_ts=_epoch(m1.index[-1]) or 0,
@@ -108,6 +144,10 @@ def build_auto_scale_context(
     bos_direction=(pa_direction if latest_break is not None else None),
     bos_ts=bos_ts,
     opposing_level_distance_atr=opposing_distance_atr,
+    counter_bos_ts=counter_bos_ts,
+    extreme_price=extreme_price,
+    extreme_ts=extreme_ts,
+    rejection_confirmed=rejection_confirmed,
   )
 
 

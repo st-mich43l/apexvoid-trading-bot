@@ -724,7 +724,19 @@ public sealed class AutoTradeEngine(
       }
       return await RejectAsync(candidate, exception.Message, cancellationToken);
     }
-    if (!manualAlgoCandidate)
+    // A trend-regime candidate arriving while this symbol already has an
+    // open tranche group will route to ProcessAddAsync below, which may
+    // pick pullback mode - a fundamentally different stop (P5: beyond the
+    // retrace extreme, not beyond structure). Applying the guard here
+    // against the STRUCTURE stop first would let a momentum-shaped
+    // rejection wrongly kill a valid pullback candidate before mode
+    // selection ever runs, so this candidate shape defers stop guarding
+    // to ProcessAddAsync entirely (same skip mechanism manual-algo already
+    // uses for its own independently-computed stop).
+    var deferStopGuardToAddPath = string.Equals(
+      candidate.Regime, "trend", StringComparison.OrdinalIgnoreCase
+    ) && _states.Values.Any(state => state.SymbolId == symbol.SymbolId);
+    if (!manualAlgoCandidate && !deferStopGuardToAddPath)
     {
       var (guardedStopPlan, stopRejectReason, stopNotice) = ApplyOpposingZoneGuard(
         candidate,
@@ -1397,23 +1409,81 @@ public sealed class AutoTradeEngine(
         cancellationToken
       );
     }
-    var triggerFailure = ValidateAddTriggers(
+    var symbol = RequireSymbol();
+    var triggerResult = ValidateAddTriggers(
       candidate,
       direction,
       expectedEntry,
       quote,
       group,
-      RequireSymbol()
+      symbol
     );
-    if (triggerFailure is not null)
+    if (!triggerResult.Accepted)
     {
+      await store.IncrementAddRejectAsync(
+        candidate.Symbol,
+        triggerResult.Mode ?? "shared",
+        triggerResult.Condition ?? "unknown",
+        cancellationToken
+      );
       return await RejectAsync(
         candidate,
-        triggerFailure,
+        triggerResult.RejectReason ?? "add rejected",
         cancellationToken
       );
     }
+    var mode = triggerResult.Mode!;
+    // Momentum's stop guard was deferred here (see ProcessCandidateAsync) so
+    // a pullback candidate never gets killed by a guard check against the
+    // wrong (structure) stop; pullback computes an entirely different stop
+    // (P5) instead of reusing the structure one at all.
+    StructureStopPlan rawStopPlan;
+    if (mode == "add_pullback")
+    {
+      try
+      {
+        rawStopPlan = PullbackAddStop(candidate, direction, expectedEntry, symbol);
+      }
+      catch (VolumePlanningException exception)
+      {
+        await store.IncrementAddRejectAsync(
+          candidate.Symbol, mode, "stop_exceeds_envelope", cancellationToken
+        );
+        return await RejectAsync(candidate, exception.Message, cancellationToken);
+      }
+    }
+    else
+    {
+      rawStopPlan = stopPlan;
+    }
+    var (guardedStopPlan, stopRejectReason, stopNotice) = ApplyOpposingZoneGuard(
+      candidate, direction, expectedEntry, rawStopPlan, symbol
+    );
+    if (stopRejectReason is not null)
+    {
+      await store.IncrementAddRejectAsync(
+        candidate.Symbol, mode, "stop_in_opposing_zone", cancellationToken
+      );
+      return await RejectAsync(candidate, stopRejectReason, cancellationToken);
+    }
+    stopPlan = guardedStopPlan;
+    if (stopNotice is not null)
+    {
+      await PublishAsync(
+        "warning", stopNotice, cancellationToken, candidate.CandidateId,
+        setup: candidate.Setup, regime: candidate.Regime,
+        confluence: candidate.Confluence, stopPips: stopPlan.StopPips
+      );
+    }
     var groupBooked = GroupBookedPnl(group);
+    // AUTO_TRADE_ADD_SIZE_RATIO only constrains pullback tranches - momentum
+    // keeps ScaleInPlanner's existing exposure/risk/add-cap sizing exactly
+    // as before (byte-identical, proven by
+    // MomentumContinuationOpensIndependentSecondTranche's fixed 600-volume
+    // add-cap-bound expectation).
+    var initialTrancheLots = mode == "add_pullback"
+      ? InitialTrancheVolume(group) / (decimal)symbol.LotSize
+      : (decimal?)null;
     var decision = ScaleInPlanner.Plan(
       account.Balance,
       options.RiskPercent,
@@ -1429,13 +1499,39 @@ public sealed class AutoTradeEngine(
       )).ToArray(),
       options.AddRequireRiskFree,
       options.PipSize,
-      RequireSymbol(),
+      symbol,
       options.TargetsPips,
-      options.TargetWeights
+      options.TargetWeights,
+      initialTrancheLots,
+      options.AddSizeRatio
     );
     if (!decision.Allowed || decision.TargetPlan is null)
     {
+      await store.IncrementAddRejectAsync(
+        candidate.Symbol, mode, "sizing_infeasible", cancellationToken
+      );
       return await RejectAsync(candidate, decision.Reason, cancellationToken);
+    }
+    // P6 (pullback only) - the guard that matters most: the initial
+    // tranche's stop may sit in profit while the add's does not, and both
+    // can stop out on the same move. Momentum keeps its existing
+    // budget-based worst-case check inside ScaleInPlanner.Plan unchanged.
+    if (mode == "add_pullback" && decision.PostAddWorstCase < 0)
+    {
+      var worstCaseLossPct = -decision.PostAddWorstCase / account.Balance * 100m;
+      if (worstCaseLossPct > options.AddMaxGroupRiskPct)
+      {
+        await store.IncrementAddRejectAsync(
+          candidate.Symbol, mode, "group_worst_case_exceeded", cancellationToken
+        );
+        return await RejectAsync(
+          candidate,
+          $"pullback add rejected: combined group worst case "
+            + $"{worstCaseLossPct:0.##}% exceeds max "
+            + $"{options.AddMaxGroupRiskPct:0.##}% of balance",
+          cancellationToken
+        );
+      }
     }
     _log(decision.SizingLog);
     var groupId = GroupId(group[0]);
@@ -1445,7 +1541,7 @@ public sealed class AutoTradeEngine(
     {
       return await CompleteDryRunAsync(
         candidate,
-        $"Tranche {trancheIndex} · {decision.Lots:N2} lots · "
+        $"Tranche {trancheIndex} · {mode} · {decision.Lots:N2} lots · "
         + $"{decision.BindingTerm} · group worst "
         + $"${decision.PostAddWorstCase:N1}",
         decision.Volume,
@@ -1490,13 +1586,15 @@ public sealed class AutoTradeEngine(
       initialTrancheVolume: InitialTrancheVolume(group),
       date,
       eventType: "add",
-      message: $"➕ Tranche {trancheIndex} · {decision.Lots:N2} lots · "
-        + $"stop {stopPlan.StopPips:N0}p (structure) · "
+      message: $"➕ Tranche {trancheIndex} · {mode} · {decision.Lots:N2} lots · "
+        + $"stop {stopPlan.StopPips:N0}p "
+        + (mode == "add_pullback" ? "(retrace)" : "(structure)") + " · "
         + $"{decision.BindingTerm} · group worst "
         + $"${decision.PostAddWorstCase:N1} / budget ${decision.Budget:N0}",
       groupWorstCase: decision.PostAddWorstCase,
       riskBudget: decision.Budget,
-      cancellationToken
+      cancellationToken,
+      addMode: mode
     );
   }
 
@@ -1524,12 +1622,22 @@ public sealed class AutoTradeEngine(
     string message,
     decimal groupWorstCase,
     decimal riskBudget,
-    CancellationToken cancellationToken
+    CancellationToken cancellationToken,
+    // Trigger mode for a scale-in tranche ("add_momentum"/"add_pullback") -
+    // null for the initial tranche. Folded into Setup (not a new column)
+    // so it rides the existing attribution pipeline (auto_trade_fills.
+    // setup_type, delivery.py's attribution line, stats streams) the same
+    // way box-scalp's "counter_bias" tag already does, and is independently
+    // measurable per mode without a schema change.
+    string? addMode = null
   )
   {
     var client = RequireClient();
     var now = _clock().ToUnixTimeSeconds();
     var symbol = RequireSymbol();
+    var effectiveSetup = addMode is null
+      ? candidate.Setup
+      : $"{candidate.Setup} · {addMode}";
     var comment = BuildComment(
       candidate.CandidateId,
       groupId,
@@ -1592,7 +1700,7 @@ public sealed class AutoTradeEngine(
       initialRealizedPipVolume,
       groupInitialVolume,
       initialTrancheVolume,
-      Setup: candidate.Setup,
+      Setup: effectiveSetup,
       Regime: candidate.Regime,
       Confluence: candidate.Confluence,
       RangeId: candidate.RangeId,
@@ -1628,7 +1736,7 @@ public sealed class AutoTradeEngine(
       groupWorstCase: groupWorstCase,
       riskBudget: riskBudget,
       hadAdds: hadAdds,
-      setup: candidate.Setup,
+      setup: effectiveSetup,
       regime: candidate.Regime,
       confluence: candidate.Confluence,
       stopPips: stopPlan.StopPips,
@@ -1666,6 +1774,58 @@ public sealed class AutoTradeEngine(
       options.PipSize,
       symbol
     );
+  }
+
+  // P5: a pullback add's stop must sit beyond the retrace extreme, not
+  // merely beyond structure - averaging down disguised as a pullback would
+  // otherwise slip through. retraceHigh/Low reuses StructureSwing (the
+  // same latest-swing point StructureStop already uses) maxed/minned
+  // against the mapped zone's far edge, so the stop clears whichever is
+  // further. Throws (never clamps) when the result exceeds the trend
+  // envelope - ProcessAddAsync rejects the add rather than place a stop
+  // inside the very retrace it's supposed to sit beyond.
+  private StructureStopPlan PullbackAddStop(
+    TradeCandidate candidate,
+    TradeDirection direction,
+    decimal entryPrice,
+    SymbolInfo symbol
+  )
+  {
+    if (
+      candidate.Atr is not decimal atr
+      || candidate.StructureSwing is not decimal retraceExtreme
+      || candidate.OpposingZoneLow is not decimal zoneLow
+      || candidate.OpposingZoneHigh is not decimal zoneHigh
+    )
+    {
+      throw new VolumePlanningException(
+        "pullback add stop requires atr, structure swing, and a mapped zone"
+      );
+    }
+    var buffer = options.AddStopBufferAtr * atr;
+    var rawStop = direction == TradeDirection.Buy
+      ? Math.Min(retraceExtreme, zoneLow) - buffer
+      : Math.Max(retraceExtreme, zoneHigh) + buffer;
+    var rawDistance = direction == TradeDirection.Buy
+      ? entryPrice - rawStop
+      : rawStop - entryPrice;
+    if (rawDistance <= 0)
+    {
+      throw new VolumePlanningException(
+        "pullback stop is not on the losing side of entry"
+      );
+    }
+    var stopLoss = decimal.Round(rawStop, symbol.Digits, MidpointRounding.AwayFromZero);
+    var distance = Math.Abs(entryPrice - stopLoss);
+    var stopPips = distance / options.PipSize;
+    var (_, maximumStopPips) = StopPipsBounds(candidate);
+    if (stopPips > maximumStopPips)
+    {
+      throw new VolumePlanningException(
+        $"pullback stop {stopPips:0.#}p exceeds {maximumStopPips}p envelope"
+      );
+    }
+    return new StructureStopPlan(stopLoss, distance, stopPips, rawStop, false);
   }
 
   // The owner's exact entered stop, never a re-derived structure stop -
@@ -1825,7 +1985,7 @@ public sealed class AutoTradeEngine(
     return (pushedPlan, null, notice);
   }
 
-  private string? ValidateAddTriggers(
+  private ScaleInTriggerResult ValidateAddTriggers(
     TradeCandidate candidate,
     TradeDirection direction,
     decimal entryPrice,
@@ -1836,7 +1996,9 @@ public sealed class AutoTradeEngine(
   {
     if (group.Count == 0)
     {
-      return "scale-in group is empty";
+      return ScaleInTriggerResult.Reject(
+        "shared", "empty_group", "scale-in group is empty"
+      );
     }
     var groupId = GroupId(group[0]);
     var initialStates = group.Where(state => state.TrancheIndex == 1).ToArray();
@@ -1850,6 +2012,17 @@ public sealed class AutoTradeEngine(
       exitQuote,
       symbol
     ));
+    var groupOpenedAt = GroupOpenedAt(group);
+    // Both timestamps are position-agnostic market observations Python
+    // publishes on every candidate (mirroring BosTs) - gating them against
+    // this specific group's own open time only makes sense here, where
+    // GroupOpenedAt is known.
+    var counterBosSinceGroupOpen = candidate.CounterBosTs is long counterBosTs
+      && counterBosTs >= groupOpenedAt;
+    var extremeSinceGroupOpen = candidate.ExtremeTs is long extremeTs
+      && extremeTs >= groupOpenedAt
+      ? candidate.ExtremePrice
+      : null;
     return ScaleInTriggerPlanner.Validate(new ScaleInTriggerInput(
       initial.Direction,
       direction,
@@ -1870,12 +2043,21 @@ public sealed class AutoTradeEngine(
       options.AddMaxAgeBars,
       candidate.BosDirection,
       candidate.BosTs,
-      GroupOpenedAt(group),
+      groupOpenedAt,
       candidate.OpposingLevelDistanceAtr,
       options.AddLevelBufferAtr,
       candidate.BarTs ?? 0,
       group.Max(state => state.LastTrancheBarTs),
-      options.AddCooldownBars
+      options.AddCooldownBars,
+      PullbackEnabled: options.AddPullbackEnabled,
+      CounterBosSinceGroupOpen: counterBosSinceGroupOpen,
+      ExtremeSinceGroupOpen: extremeSinceGroupOpen,
+      MinRetraceRatio: options.AddPullbackMinRetrace,
+      MaxRetraceRatio: options.AddPullbackMaxRetrace,
+      AddZoneLow: candidate.OpposingZoneLow,
+      AddZoneHigh: candidate.OpposingZoneHigh,
+      AddZoneSide: candidate.AddZoneSide,
+      RejectionConfirmed: candidate.RejectionConfirmed
     ));
   }
 

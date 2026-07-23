@@ -39,7 +39,9 @@ public static class ScaleInPlanner
     decimal pipSize,
     SymbolInfo symbol,
     IReadOnlyList<int> targetsPips,
-    IReadOnlyList<int> targetWeights
+    IReadOnlyList<int> targetWeights,
+    decimal? initialTrancheLots = null,
+    decimal addSizeRatio = 1m
   )
   {
     if (
@@ -50,6 +52,8 @@ public static class ScaleInPlanner
       || addRiskFraction > 1
       || addStopPips <= 0
       || pipSize <= 0
+      || addSizeRatio <= 0
+      || addSizeRatio > 1
     )
     {
       return Reject("add sizing inputs are invalid");
@@ -87,15 +91,25 @@ public static class ScaleInPlanner
     var riskHeadroomLots = headroomRisk / (addStopPips * pipValuePerLot);
     var addCapLots = addRiskFraction * budget
       / (addStopPips * pipValuePerLot);
+    // A pyramid whose additions equal the base inverts the average-entry
+    // advantage the pyramid is supposed to create - cap each tranche at a
+    // fraction of the INITIAL tranche's own size (AUTO_TRADE_ADD_SIZE_RATIO),
+    // not just a fraction of the risk budget. No cap when the initial
+    // tranche's size is unknown (e.g. legacy positions from before this
+    // field existed) - the other three terms still apply.
+    var sizeRatioCapLots = initialTrancheLots is decimal initial
+      ? initial * addSizeRatio
+      : decimal.MaxValue;
     var rawLots = Math.Min(
       headroomLots,
-      Math.Min(riskHeadroomLots, addCapLots)
+      Math.Min(riskHeadroomLots, Math.Min(addCapLots, sizeRatioCapLots))
     );
     var bindingTerm = BindingTerm(
       rawLots,
       headroomLots,
       riskHeadroomLots,
-      addCapLots
+      addCapLots,
+      sizeRatioCapLots
     );
     var volume = VolumePlanner.VolumeForLots(rawLots, symbol);
     if (volume <= 0)
@@ -259,9 +273,14 @@ public static class ScaleInPlanner
     decimal chosen,
     decimal exposure,
     decimal risk,
-    decimal cap
+    decimal cap,
+    decimal sizeRatioCap
   )
   {
+    if (chosen == sizeRatioCap)
+    {
+      return "size-ratio-bound";
+    }
     if (chosen == exposure)
     {
       return "exposure-bound";

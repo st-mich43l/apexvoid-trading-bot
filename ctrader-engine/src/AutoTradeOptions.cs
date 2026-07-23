@@ -45,7 +45,12 @@ public sealed record AutoTradeOptions(
   bool RangeFlipEnabled = false,
   int FlipExitBufferPips = 10,
   int FlipConfirmTimeoutSeconds = 30,
-  int ZoneCooldownMinutes = 60
+  int ZoneCooldownMinutes = 60,
+  bool AddPullbackEnabled = false,
+  decimal AddPullbackMinRetrace = 0.20m,
+  decimal AddPullbackMaxRetrace = 0.70m,
+  decimal AddMaxGroupRiskPct = 3.0m,
+  decimal AddSizeRatio = 0.5m
 )
 {
   public static AutoTradeOptions FromEnvironment() => new(
@@ -94,7 +99,12 @@ public sealed record AutoTradeOptions(
       "AUTO_TRADE_FLIP_CONFIRM_TIMEOUT_SECONDS",
       30
     ),
-    ZoneCooldownMinutes: Int("AUTO_TRADE_ZONE_COOLDOWN_MINUTES", 60)
+    ZoneCooldownMinutes: Int("AUTO_TRADE_ZONE_COOLDOWN_MINUTES", 60),
+    AddPullbackEnabled: Bool("AUTO_TRADE_ADD_PULLBACK_ENABLED", false),
+    AddPullbackMinRetrace: Decimal("AUTO_TRADE_ADD_PULLBACK_MIN_RETRACE", 0.20m),
+    AddPullbackMaxRetrace: Decimal("AUTO_TRADE_ADD_PULLBACK_MAX_RETRACE", 0.70m),
+    AddMaxGroupRiskPct: Decimal("AUTO_TRADE_ADD_MAX_GROUP_RISK_PCT", 3.0m),
+    AddSizeRatio: Decimal("AUTO_TRADE_ADD_SIZE_RATIO", 0.5m)
   );
 
   public void Validate()
@@ -182,6 +192,20 @@ public sealed record AutoTradeOptions(
     {
       throw new AutoTradeConfigurationException(
         "Auto trade disabled: scale-in settings are invalid"
+      );
+    }
+    if (
+      AddPullbackMinRetrace < 0
+      || AddPullbackMaxRetrace <= AddPullbackMinRetrace
+      || AddPullbackMaxRetrace > 1
+      || AddMaxGroupRiskPct <= 0
+      || AddMaxGroupRiskPct > 100
+      || AddSizeRatio <= 0
+      || AddSizeRatio > 1
+    )
+    {
+      throw new AutoTradeConfigurationException(
+        "Auto trade disabled: pullback add settings are invalid"
       );
     }
     if (

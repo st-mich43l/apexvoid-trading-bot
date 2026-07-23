@@ -13,6 +13,40 @@ dated section after deployment.
 
 ### Added
 
+- Added a second scale-in trigger, pullback add, alongside the existing
+  momentum add — both now share one set of averaging-down/exposure
+  invariants (favorable entry, profitable group, initial reached
+  breakeven, every stop known, tranche cooldown, `MaxTranches`) but never
+  both fire on the same candidate: fresh in-direction displacement is
+  always evaluated as momentum regardless of anything else, otherwise a
+  counter-direction/stale-displacement candidate is evaluated as pullback
+  if `AUTO_TRADE_ADD_PULLBACK_ENABLED=true` (default `false`). Pullback
+  requires no counter-direction BOS since the group opened, a retrace
+  ratio from the extreme price back toward the initial entry within
+  `AUTO_TRADE_ADD_PULLBACK_MIN_RETRACE`/`_MAX_RETRACE` (default
+  `0.20`-`0.70`), the add entry inside a mapped zone on the correct side,
+  and an M1 rejection candle; its stop sits beyond the retrace extreme
+  (never clamped — a stop that would exceed the trend envelope rejects the
+  add instead), and a combined-group-worst-case check
+  (`AUTO_TRADE_ADD_MAX_GROUP_RISK_PCT`, default `3.0`) is enforced on top
+  of the existing budget-based sizing check, since a pullback add's own
+  stop isn't guaranteed to sit in profit the way the initial tranche's
+  does. Every pullback tranche is also capped at
+  `AUTO_TRADE_ADD_SIZE_RATIO` (default `0.5`) of the initial tranche's own
+  size — momentum's existing sizing is unchanged. Every rejection now
+  names both the mode evaluated and the specific condition
+  (`auto_trade:add_reject:{symbol}:{mode}:{condition}`), and each tranche
+  is tagged `add_momentum`/`add_pullback` in its order message and
+  persisted setup so the two are measurable separately from each other and
+  from initial entries. Along the way, fixed the reason momentum adds have
+  never fired in production (`/auto_status` showed `adds 0` regardless of
+  regime): the only function that ever publishes a `regime="trend"`
+  candidate never attached the displacement/BOS/opposing-level context
+  `ScaleInTriggerPlanner` needs to accept a momentum add — box-scalp
+  candidates carried it, trend candidates never did. Ships dark: both the
+  new pullback flag and its prerequisite trend-candidate wiring land with
+  `AUTO_TRADE_ADD_PULLBACK_ENABLED=false`, so momentum add behavior is
+  otherwise unaffected until deliberately enabled.
 - Added an inspectable Market Map strategy working set with one-hour Redis
   snapshots, `/auto_status` entry/filter/distance telemetry, rendered-map
   divergence warnings, and a default-enabled quality-gated `counter_bias` reaction

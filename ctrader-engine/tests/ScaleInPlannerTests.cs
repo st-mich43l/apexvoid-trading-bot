@@ -185,6 +185,79 @@ public sealed class ScaleInPlannerTests
     }
   }
 
+  [Fact]
+  public void SizeRatioCapsATrancheToAFractionOfTheInitialTranche()
+  {
+    // 0.06 lot initial * 0.5 ratio = 0.03 lot - well under the exposure/
+    // risk/add-cap terms this fixture would otherwise allow, so the new
+    // term must be the one that binds.
+    var decision = ScaleInPlanner.Plan(
+      balance: 5_000m,
+      riskPercent: 2m,
+      pipValuePerLot: 10m,
+      addRiskFraction: 0.5m,
+      addStopPips: 15m,
+      bookedPnl: 20m,
+      openTranches: [new(TradeDirection.Buy, 4000m, 4000.3m, 600)],
+      requireRiskFree: false,
+      pipSize: 0.1m,
+      Symbol,
+      [30, 60, 90, 120, 200],
+      [20, 20, 20, 20, 20],
+      initialTrancheLots: 0.06m,
+      addSizeRatio: 0.5m
+    );
+
+    Assert.True(decision.Allowed);
+    Assert.Equal(0.03m, decision.Lots);
+    Assert.Equal(300, decision.Volume);
+    Assert.Equal("size-ratio-bound", decision.BindingTerm);
+  }
+
+  [Fact]
+  public void SizeRatioBelowBrokerMinimumRejectsRatherThanRoundingToZero()
+  {
+    // 0.01 lot initial * 0.5 ratio = 0.005 lot, floored below the broker's
+    // 0.01 lot (100-unit) minimum volume.
+    var decision = ScaleInPlanner.Plan(
+      balance: 5_000m,
+      riskPercent: 2m,
+      pipValuePerLot: 10m,
+      addRiskFraction: 0.5m,
+      addStopPips: 15m,
+      bookedPnl: 20m,
+      openTranches: [new(TradeDirection.Buy, 4000m, 4000.3m, 100)],
+      requireRiskFree: false,
+      pipSize: 0.1m,
+      Symbol,
+      [30, 60, 90, 120, 200],
+      [20, 20, 20, 20, 20],
+      initialTrancheLots: 0.01m,
+      addSizeRatio: 0.5m
+    );
+
+    Assert.False(decision.Allowed);
+    Assert.Contains("below broker minimum volume", decision.Reason);
+  }
+
+  [Fact]
+  public void MissingInitialTrancheLotsLeavesSizeRatioCapInactive()
+  {
+    var withCap = Plan(bookedPnl: 9m, addStopPips: 18m,
+      open: [new(TradeDirection.Buy, 4000m, 4000.3m, 1_300)]);
+    var withoutInitial = ScaleInPlanner.Plan(
+      balance: 2_000m, riskPercent: 2m, pipValuePerLot: 10m,
+      addRiskFraction: 0.5m, addStopPips: 18m, bookedPnl: 9m,
+      openTranches: [new(TradeDirection.Buy, 4000m, 4000.3m, 1_300)],
+      requireRiskFree: false, pipSize: 0.1m, Symbol,
+      [30, 60, 90, 120, 200], [20, 20, 20, 20, 20],
+      initialTrancheLots: null, addSizeRatio: 0.5m
+    );
+
+    Assert.Equal(withCap.Lots, withoutInitial.Lots);
+    Assert.Equal(withCap.BindingTerm, withoutInitial.BindingTerm);
+  }
+
   private static ScaleInSizingDecision Plan(
     decimal bookedPnl,
     decimal addStopPips,

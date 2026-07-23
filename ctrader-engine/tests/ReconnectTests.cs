@@ -623,6 +623,13 @@ internal sealed class FaultAutoTradeStore : IAutoTradeStore
     CancellationToken cancellationToken
   ) => Task.CompletedTask;
 
+  public Task IncrementAddRejectAsync(
+    string symbol,
+    string mode,
+    string condition,
+    CancellationToken cancellationToken
+  ) => Task.CompletedTask;
+
   public Task RecordZoneCooldownAsync(
     string symbol,
     string direction,

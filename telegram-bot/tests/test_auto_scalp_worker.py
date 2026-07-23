@@ -734,6 +734,89 @@ async def test_box_scalp_fires_in_chop_even_when_trend_also_candidate(
   assert payload["regime"] == "chop"
 
 
+@pytest.mark.asyncio
+async def test_trend_candidate_carries_scale_context_for_scale_in_add_evaluation(
+  monkeypatch,
+):
+  """Regression guard for the dead-plumbing bug found alongside pullback
+  add: before this, no regime="trend" candidate ever carried displacement/
+  BOS/counter-BOS/extreme/rejection context, so ScaleInTriggerPlanner in
+  ctrader-engine could never actually accept a scale-in add in production
+  (momentum's own conditions had nothing to evaluate against). This proves
+  _publish_trend_candidate now attaches the same scale-context fields the
+  box-scalp path already carried.
+  """
+  client = redis_state.get_client()
+  now = int(datetime.now(timezone.utc).timestamp())
+  monkeypatch.setattr(worker.settings, "auto_trade_enabled", True)
+  monkeypatch.setattr(worker.settings, "auto_trade_trend_enabled", True)
+  monkeypatch.setattr(worker.settings, "auto_trade_symbols", "XAU")
+  monkeypatch.setattr(worker.settings, "auto_trade_stream", "auto_trade:test")
+  monkeypatch.setattr(worker.settings, "auto_trade_min_confluence", 2)
+  monkeypatch.setattr(worker, "event_in_window", AsyncMock(return_value=None))
+  source = AsyncMock()
+  source.window = AsyncMock(return_value=_frame())
+  monkeypatch.setattr(
+    worker,
+    "_load_spot",
+    AsyncMock(return_value=worker.AutoTradeSpot(4017.2, now, True)),
+  )
+  monkeypatch.setattr(
+    worker, "evaluate_auto_scalp_gate", lambda frames, **kwargs: _decision(),
+  )
+  trend_context = AutoScaleContext(
+    bar_ts=now - 60,
+    atr=1.2,
+    structure_swing=4014.8,
+    displacement_direction="up",
+    displacement_age_bars=1,
+    bos_direction="up",
+    bos_ts=now - 60,
+    opposing_level_distance_atr=None,
+    counter_bos_ts=now - 300,
+    extreme_price=4020.0,
+    extreme_ts=now - 30,
+    rejection_confirmed=True,
+  )
+  monkeypatch.setattr(
+    worker, "build_auto_scale_context", lambda *a, **k: trend_context,
+  )
+  trend_regime = RegimeInfo("trend", "up", 2, 1.3, True, None, ("forced trend",))
+  monkeypatch.setattr(
+    worker, "classify_regime", lambda frames, decision, cfg: trend_regime,
+  )
+  trend_decision = TrendDecision(
+    "candidate",
+    direction="BUY",
+    mode="pullback",
+    entry_zone=(4016.0, 4016.5),
+    key_level=4016.2,
+    atr=1.2,
+    structure_swing=4010.0,
+    target_prices=(4020.0,),
+    targets_pips=(38,),
+    confluence=2,
+    reasons=("forced",),
+  )
+  monkeypatch.setattr(worker, "evaluate_trend_gate", lambda *a, **k: trend_decision)
+
+  await worker._handle_event("XAU:M1:1784552400", source=source, client=client)
+
+  entries = await client.xrange("auto_trade:test")
+  assert len(entries) == 1
+  payload = json.loads(entries[0][1]["payload"])
+  assert payload["mode"] == "auto_trend_pullback"
+  assert payload["regime"] == "trend"
+  assert payload["displacement_direction"] == "up"
+  assert payload["displacement_age_bars"] == 1
+  assert payload["bos_direction"] == "up"
+  assert payload["counter_bos_ts"] == now - 300
+  assert payload["extreme_price"] == 4020.0
+  assert payload["extreme_ts"] == now - 30
+  assert payload["rejection_confirmed"] is True
+  assert "add_zone_side" in payload
+
+
 def test_worker_source_has_no_direct_scanner_market_map_or_telegram_import():
   source = inspect.getsource(worker)
   forbidden = (

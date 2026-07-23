@@ -1182,6 +1182,206 @@ public sealed class AutoTradeEngineTests
   }
 
   [Fact]
+  public async Task PullbackAddOpensAndTagsTheTrancheAndOrderMessage()
+  {
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+    var store = new FakeAutoTradeStore(CandidateJson());
+    var client = new FakeTradingClient();
+    var engine = new AutoTradeEngine(
+      Options() with { AddPullbackEnabled = true },
+      store, () => Now, _ => { }
+    );
+    await engine.ObserveSpotAsync(
+      new SpotPrice("XAU", 4000.0m, 4000.2m, Now.ToUnixTimeSeconds()),
+      cts.Token
+    );
+    var run = engine.RunSessionAsync(client, Symbol, cts.Token);
+    await store.Ordered.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+    // Price runs through the initial BUY's TP1 (entry 4000.2 + 30p),
+    // banking a partial (FakeTradingClient.ClosePositionAsync always fills
+    // at 4013.2) and moving the stop to breakeven, satisfying the shared
+    // "initial reached TP1/breakeven" and "group profitable" invariants.
+    await engine.ObserveSpotAsync(
+      new SpotPrice("XAU", 4003.2m, 4003.4m, Now.ToUnixTimeSeconds()),
+      cts.Token
+    );
+    client.EnqueueMarketExecutionPrice(4003.4m);
+
+    // Retrace back down into the mapped demand zone: retraceRatio =
+    // |4008.0 - 4015.0| / |4000.2 - 4015.0| = 7 / 14.8 = 0.473, inside
+    // [0.20, 0.70]. AddEntry (4008.0) still stays above InitialEntry
+    // (4000.2) - a pullback, not averaging down.
+    await engine.ObserveSpotAsync(
+      new SpotPrice("XAU", 4007.8m, 4008.0m, Now.ToUnixTimeSeconds()),
+      cts.Token
+    );
+    client.EnqueueMarketExecutionPrice(4008.0m);
+    store.EnqueueCandidate(PullbackAddCandidateJson());
+    await WaitForEventAsync(store, "add");
+
+    Assert.Equal(2, client.Orders.Count);
+    var add = Assert.Single(store.Events, item => item.Type == "add");
+    Assert.Contains("add_pullback", add.Message);
+    Assert.Contains("add_pullback", add.Setup);
+    Assert.Equal(2, add.TrancheIndex);
+    var state = Assert.Single(store.Positions.Values, s => s.TrancheIndex == 2);
+    Assert.Contains("add_pullback", state.Setup);
+
+    cts.Cancel();
+    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+  }
+
+  [Fact]
+  public async Task PullbackAddRejectsWhenRequiredStopExceedsEnvelope()
+  {
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+    var store = new FakeAutoTradeStore(CandidateJson());
+    var client = new FakeTradingClient();
+    var engine = new AutoTradeEngine(
+      Options() with { AddPullbackEnabled = true },
+      store, () => Now, _ => { }
+    );
+    await engine.ObserveSpotAsync(
+      new SpotPrice("XAU", 4000.0m, 4000.2m, Now.ToUnixTimeSeconds()),
+      cts.Token
+    );
+    var run = engine.RunSessionAsync(client, Symbol, cts.Token);
+    await store.Ordered.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+    await engine.ObserveSpotAsync(
+      new SpotPrice("XAU", 4003.2m, 4003.4m, Now.ToUnixTimeSeconds()),
+      cts.Token
+    );
+    client.EnqueueMarketExecutionPrice(4003.4m);
+    await engine.ObserveSpotAsync(
+      new SpotPrice("XAU", 4007.8m, 4008.0m, Now.ToUnixTimeSeconds()),
+      cts.Token
+    );
+    // A zone/structure swing 10 price units (100p) below entry pushes the
+    // P5 stop far past the 65p trend envelope - must reject, not clamp the
+    // stop inside the retrace.
+    store.EnqueueCandidate(PullbackAddCandidateJson(
+      structureSwing: 3908.0m
+    ));
+    await WaitForEventAsync(store, "rejected");
+
+    Assert.Single(client.Orders);
+    Assert.Contains(store.Events, item =>
+      item.Type == "rejected" && item.Message.Contains("envelope")
+    );
+    Assert.Contains(store.AddRejects, item =>
+      item.Mode == "add_pullback" && item.Condition == "stop_exceeds_envelope"
+    );
+
+    cts.Cancel();
+    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+  }
+
+  [Fact]
+  public async Task PullbackAddRejectsWhenCombinedGroupWorstCaseExceedsCap()
+  {
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+    var store = new FakeAutoTradeStore(CandidateJson());
+    var client = new FakeTradingClient();
+    // AddRiskFraction/AddSizeRatio widened so the add's own risk exceeds
+    // the (fake-client-inflated) booked-profit buffer ScaleInPlanner's own
+    // budget check already tolerates - P6, not that shared check, is what
+    // must fire here. AddMaxGroupRiskPct tightened well below the
+    // resulting worst-case percentage.
+    var engine = new AutoTradeEngine(
+      Options() with {
+        AddPullbackEnabled = true,
+        AddMaxGroupRiskPct = 0.1m,
+        AddSizeRatio = 1.0m,
+        AddRiskFraction = 1.0m,
+      },
+      store, () => Now, _ => { }
+    );
+    await engine.ObserveSpotAsync(
+      new SpotPrice("XAU", 4000.0m, 4000.2m, Now.ToUnixTimeSeconds()),
+      cts.Token
+    );
+    var run = engine.RunSessionAsync(client, Symbol, cts.Token);
+    await store.Ordered.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+    // Stops short of TP2 (60p/4006.2) so only TP1's partial is booked -
+    // retraceRatio = |4005.0 - 4010.0| / |4000.2 - 4010.0| = 5 / 9.8 = 0.51.
+    await engine.ObserveSpotAsync(
+      new SpotPrice("XAU", 4004.8m, 4005.0m, Now.ToUnixTimeSeconds()),
+      cts.Token
+    );
+    client.EnqueueMarketExecutionPrice(4004.8m);
+    // structureSwing far below entry pushes the P5 stop to ~64p - inside
+    // the 65p envelope, but wide enough that this tranche's own risk
+    // outweighs the booked-profit buffer.
+    store.EnqueueCandidate(PullbackAddCandidateJson(
+      structureSwing: 3998.9m,
+      entryLow: 4004.5m,
+      entryHigh: 4005.5m,
+      opposingZoneLow: 4004.5m,
+      opposingZoneHigh: 4005.5m,
+      extremePrice: 4010.0m
+    ));
+    await WaitForEventAsync(store, "rejected");
+
+    Assert.Single(client.Orders);
+    Assert.Contains(store.Events, item =>
+      item.Type == "rejected" && item.Message.Contains("group worst case")
+    );
+    Assert.Contains(store.AddRejects, item =>
+      item.Mode == "add_pullback" && item.Condition == "group_worst_case_exceeded"
+    );
+
+    cts.Cancel();
+    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+  }
+
+  [Fact]
+  public async Task PullbackDisabledRejectsPullbackShapedCandidate()
+  {
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+    var store = new FakeAutoTradeStore(CandidateJson());
+    var client = new FakeTradingClient();
+    // AddPullbackEnabled defaults false - not set here on purpose. Momentum
+    // itself still opening a second tranche with the flag at this same
+    // default is already covered by the pre-existing
+    // MomentumContinuationOpensIndependentSecondTranche regression test.
+    var engine = new AutoTradeEngine(Options(), store, () => Now, _ => { });
+    await engine.ObserveSpotAsync(
+      new SpotPrice("XAU", 4000.0m, 4000.2m, Now.ToUnixTimeSeconds()),
+      cts.Token
+    );
+    var run = engine.RunSessionAsync(client, Symbol, cts.Token);
+    await store.Ordered.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+    await engine.ObserveSpotAsync(
+      new SpotPrice("XAU", 4003.2m, 4003.4m, Now.ToUnixTimeSeconds()),
+      cts.Token
+    );
+    client.EnqueueMarketExecutionPrice(4003.4m);
+    await engine.ObserveSpotAsync(
+      new SpotPrice("XAU", 4007.8m, 4008.0m, Now.ToUnixTimeSeconds()),
+      cts.Token
+    );
+    // PullbackAddCandidateJson carries no displacement/BOS fields, so
+    // momentum can't qualify either - this exercises the "neither mode,
+    // pullback disabled" fallthrough at the engine level.
+    store.EnqueueCandidate(PullbackAddCandidateJson());
+    await WaitForEventAsync(store, "rejected");
+
+    Assert.Single(client.Orders);
+    Assert.Contains(store.Events, item =>
+      item.Type == "rejected"
+      && item.Message.Contains("fresh")
+      && item.Message.Contains("displacement")
+    );
+
+    cts.Cancel();
+    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+  }
+
+  [Fact]
   public async Task StopInsideOpposingZoneIsPushedBeyondItWithBuffer()
   {
     // Default BUY box-scalp stop lands at 3997.70 (structureSwing 3998.0 -
@@ -1997,6 +2197,60 @@ public sealed class AutoTradeEngineTests
     regime,
   });
 
+  // BUY-only: FakeTradingClient.ClosePositionAsync always fills TP legs at
+  // a hardcoded 4013.2 (see the class below), which is only a profitable
+  // close relative to a ~4000 BUY entry - a SELL scenario would book a
+  // loss on "TP1" and never reach a profitable, breakeven group the shared
+  // invariants require. Direction-specific pullback math (SELL retrace
+  // ratios, zone sides) is already covered independently at the
+  // ScaleInTriggerPlanner level (SellIsMirrored, ValidPullback's SELL
+  // shape) - this helper only needs to prove the AutoTradeEngine wiring.
+  private static string PullbackAddCandidateJson(
+    char candidate = 'b',
+    long barTs = 1_180,
+    decimal structureSwing = 4007.5m,
+    decimal atr = 1.0m,
+    decimal entryLow = 4007.5m,
+    decimal entryHigh = 4008.5m,
+    int[]? targetsPips = null,
+    decimal? opposingZoneLow = 4007.5m,
+    decimal? opposingZoneHigh = 4008.5m,
+    string? addZoneSide = "demand",
+    long? counterBosTs = null,
+    decimal? extremePrice = 4015.0m,
+    long? extremeTs = 1_100,
+    bool rejectionConfirmed = true
+  ) => JsonSerializer.Serialize(new
+  {
+    version = 3,
+    candidate_id = new string(candidate, 64),
+    symbol = "XAU",
+    timeframe = "M1",
+    setup = "Trend Pullback",
+    mode = "auto_trend_pullback",
+    direction = "BUY",
+    trigger_ts = "1000",
+    created_at = 1_000,
+    spot_ts = 1_000,
+    current_price = 4008.0,
+    key_level = 4008.0,
+    entry_zone = new { low = entryLow, high = entryHigh },
+    confluence = 2,
+    reasons = new[] { "pullback retrace into demand" },
+    bar_ts = barTs,
+    atr,
+    structure_swing = structureSwing,
+    targets_pips = targetsPips ?? new[] { 30, 60, 90 },
+    regime = "trend",
+    opposing_zone_low = opposingZoneLow,
+    opposing_zone_high = opposingZoneHigh,
+    add_zone_side = addZoneSide,
+    counter_bos_ts = counterBosTs,
+    extreme_price = extremePrice,
+    extreme_ts = extremeTs,
+    rejection_confirmed = rejectionConfirmed,
+  });
+
   private static string StrategyMatchCandidateJson(
     string setup = "Liquidity Sweep",
     string direction = "BUY",
@@ -2515,6 +2769,17 @@ public sealed class AutoTradeEngineTests
     )
     {
       GateRejects.Add((symbol, condition));
+      return Task.CompletedTask;
+    }
+    public List<(string Symbol, string Mode, string Condition)> AddRejects { get; } = [];
+    public Task IncrementAddRejectAsync(
+      string symbol,
+      string mode,
+      string condition,
+      CancellationToken cancellationToken
+    )
+    {
+      AddRejects.Add((symbol, mode, condition));
       return Task.CompletedTask;
     }
     public List<ZoneCooldownRecord> ZoneCooldowns { get; } = [];
