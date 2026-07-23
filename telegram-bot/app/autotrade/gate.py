@@ -72,6 +72,8 @@ class AutoScalpDecision:
   confluence: int = 0
   reasons: tuple[str, ...] = ()
   rail_count: int = 0
+  sweep_low: float | None = None
+  sweep_high: float | None = None
 
 
 def evaluate_auto_scalp_gate(
@@ -135,7 +137,7 @@ def evaluate_auto_scalp_gate(
       rail_count=2,
       reasons=(f"invalid spot price: {spot_price!r}",),
     )
-  triggered: list[tuple[AutoScalpRail, str, str]] = []
+  triggered: list[tuple[AutoScalpRail, str, str, float]] = []
   for rail in (box.lower, box.upper):
     trigger = _m1_rail_trigger(m1, rail, m1_atr)
     if trigger is not None:
@@ -163,13 +165,13 @@ def evaluate_auto_scalp_gate(
 
   maximum_entry_distance = MAX_ENTRY_DISTANCE_PIPS * pip_size
   eligible: list[
-    tuple[AutoScalpRail, str, str, AutoScalpRail, float, int]
+    tuple[AutoScalpRail, str, str, float, AutoScalpRail, float, int]
   ] = []
   blocked: list[
     tuple[AutoScalpRail, str, str, AutoScalpRail, float]
   ] = []
   moved: list[tuple[AutoScalpRail, str, str, float]] = []
-  for rail, direction, trigger in triggered:
+  for rail, direction, trigger, sweep_extreme in triggered:
     entry_distance = _rail_distance(rail, live_price)
     if entry_distance > maximum_entry_distance + _EPS:
       moved.append((rail, direction, trigger, entry_distance))
@@ -185,6 +187,7 @@ def evaluate_auto_scalp_gate(
       rail,
       direction,
       trigger,
+      sweep_extreme,
       target,
       room_pips,
       full_tp_pips,
@@ -221,7 +224,7 @@ def evaluate_auto_scalp_gate(
       ),
     )
 
-  rail, direction, trigger, target, room_pips, full_tp_pips = max(
+  rail, direction, trigger, sweep_extreme, target, room_pips, full_tp_pips = max(
     eligible,
     key=lambda item: (
       item[0].score,
@@ -252,6 +255,8 @@ def evaluate_auto_scalp_gate(
     confluence=confluence,
     reasons=tuple(reasons),
     rail_count=2,
+    sweep_low=sweep_extreme if direction == "BUY" else None,
+    sweep_high=sweep_extreme if direction == "SELL" else None,
   )
 
 
@@ -287,7 +292,7 @@ def _m1_rail_trigger(
   df: pd.DataFrame,
   rail: AutoScalpRail,
   atr: float,
-) -> tuple[str, str] | None:
+) -> tuple[str, str, float] | None:
   row = df.iloc[-1]
   open_ = float(row["open"])
   high = float(row["high"])
@@ -317,7 +322,7 @@ def _m1_rail_trigger(
       and close >= rail.level + recovery
     )
     if touched and not accepted and reaction:
-      return "BUY", "range_rejection"
+      return "BUY", "range_rejection", low
   else:
     touched = high >= rail.low - touch and low <= rail.high + touch
     accepted = close > rail.high + buffer
@@ -328,7 +333,7 @@ def _m1_rail_trigger(
       and close <= rail.level - recovery
     )
     if touched and not accepted and reaction:
-      return "SELL", "range_rejection"
+      return "SELL", "range_rejection", high
 
   return None
 

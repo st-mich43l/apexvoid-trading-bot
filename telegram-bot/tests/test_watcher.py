@@ -294,6 +294,47 @@ async def test_manual_tp_mark_suppresses_watcher(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_algo_armed_signal_suppresses_watcher_tp_booking(monkeypatch):
+  fanout = AsyncMock()
+  send = AsyncMock()
+  monkeypatch.setattr(watcher, "fanout_update", fanout)
+  monkeypatch.setattr(watcher, "send_scanner_with_retry", send)
+  progress = {"tp": 0, "sl": False, "runner_pips": 0}
+  sig = _buy_signal(algo_armed=True, broker_position_id="555")
+  bar = _bar("2026-07-08T10:00:00.000Z", 2005, 2012, 2004, 2010)
+
+  await watcher._evaluate(sig, bar, progress, atr=1.0)
+
+  fanout.assert_not_awaited()
+  send.assert_not_awaited()
+  assert progress["tp"] == 0
+
+
+@pytest.mark.asyncio
+async def test_algo_runner_replies_to_engine_tp_message(monkeypatch):
+  fanout = AsyncMock()
+  send = AsyncMock()
+  monkeypatch.setattr(watcher, "fanout_update", fanout)
+  monkeypatch.setattr(watcher, "send_scanner_with_retry", send)
+  monkeypatch.setattr(watcher.settings, "telegram_owner_id", 12345)
+  await redis_state.get_client().set(
+    watcher.tp_message_key("internal", 555), "8124", ex=60,
+  )
+  progress = {"tp": 1, "sl": False, "runner_pips": 80}
+  sig = _buy_signal(algo_armed=True, broker_position_id="555")
+  bar = _bar("2026-07-08T10:01:00.000Z", 2010, 2015, 2009, 2014)
+
+  await watcher._evaluate(sig, bar, progress, atr=1.0)
+
+  fanout.assert_not_awaited()
+  send.assert_awaited_once()
+  assert send.await_args.kwargs["reply_to"] == 8124
+  assert send.await_args.kwargs["chat_id"] == 12345
+  assert "TP RUNNER" in send.await_args.args[0]
+  assert progress["runner_pips"] == 130
+
+
+@pytest.mark.asyncio
 async def test_stopped_out_signal_skips_tiingo_fetch(monkeypatch):
   # A filled signal that already hit SL is done — it must not keep polling
   # Tiingo (which would silently drain the free-tier request quota).

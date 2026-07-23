@@ -117,11 +117,13 @@ async def test_set_execution_intent_updates_row_and_returns_it():
   assert updated is not None
   assert updated["execution_intent_id"] == f"manual:{rec['id']}:0"
   assert updated["execution_status"] == "armed"
+  assert updated["algo_armed"] is True
   assert updated["execution_revision"] == 0
 
   row = await store.get_manual_signal(rec["id"])
   assert row["execution_intent_id"] == f"manual:{rec['id']}:0"
   assert row["execution_status"] == "armed"
+  assert row["algo_armed"] is True
 
 
 @pytest.mark.asyncio
@@ -148,6 +150,28 @@ async def test_set_execution_status_updates_status_and_error():
   assert updated is not None
   assert updated["execution_status"] == "error"
   assert updated["execution_error"] == "boom"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", ["cancelled", "expired", "rejected"])
+async def test_terminal_unfilled_execution_status_clears_algo_armed(status):
+  await store.init_db()
+  rec = await store.store_manual_signal(
+    ts=1_800_000_000,
+    action="SELL",
+    entry=4100.0,
+    entry_end=4105.0,
+    sl=4110.0,
+    tps=[4095.0],
+    execution_mode="algo",
+  )
+  await store.set_execution_intent(
+    rec["id"], intent_id=f"manual:{rec['id']}:0", status="armed", revision=0,
+  )
+
+  updated = await store.set_execution_status(rec["id"], status)
+
+  assert updated["algo_armed"] is False
 
 
 @pytest.mark.asyncio

@@ -247,6 +247,18 @@ async def _handle_take_profit(event: dict, signal_id: int) -> None:
     pips_format.pips_between(sig, tp) for tp in sig.get("tps") or []
   ]
   target_pips = event.get("target_pips")
+  if target_pips is not None and configured:
+    reached = max(
+      (
+        index + 1
+        for index, configured_pips in enumerate(configured)
+        if configured_pips <= int(target_pips)
+      ),
+      default=0,
+    )
+    if reached:
+      await redis_state.set_tp_progress(signal_id, reached)
+      await redis_state.set_runner_pips(signal_id, int(target_pips))
   # The broker's real target ladder can collapse (BuildTargetPlan skips
   # middle targets when volume is too small for every configured exit), so
   # "is this the last leg" is decided by comparing against the LARGEST
@@ -338,8 +350,20 @@ async def _handle_manual_cancelled(event: dict) -> None:
       "manual_cancelled event: no signal for intent token %s", candidate_id,
     )
     return
+  await set_execution_status(sig["id"], "cancelled")
   result = await trade_ops._execute_cancel(sig["id"])
   await trade_ops.post_result(result, sig.get("symbol", "XAU"))
+
+
+async def _handle_manual_expired(event: dict) -> None:
+  candidate_id = event.get("candidate_id")
+  if not candidate_id:
+    return
+  sig = await get_signal_by_execution_intent_id(str(candidate_id))
+  if sig is None:
+    log.warning("manual_expired event: no signal for intent token %s", candidate_id)
+    return
+  await set_execution_status(sig["id"], "expired")
 
 
 async def _handle_command_error(
@@ -378,6 +402,9 @@ async def _handle_event(
   if event_type == "manual_cancelled":
     await _handle_manual_cancelled(event)
     return
+  if event_type == "manual_expired":
+    await _handle_manual_expired(event)
+    return
   if event_type == "manual_command_error":
     await _handle_command_error(event, positions)
     return
@@ -402,7 +429,7 @@ async def _handle_event(
       positions.pop(int(position_id), None)
   elif event_type == "manual_sl_moved":
     await _handle_manual_sl_moved(event, signal_id)
-  # Any other type (e.g. manual_planned, manual_expired) is informational
+  # Any other type (e.g. manual_planned) is informational
   # only for this loop's purposes.
 
 

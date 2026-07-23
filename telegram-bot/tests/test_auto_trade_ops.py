@@ -5,7 +5,7 @@ import pytest
 from aiogram.exceptions import TelegramBadRequest
 
 from app.autotrade import delivery
-from app.persistence import redis_state
+from app.persistence import redis_state, store
 
 
 def _opened_event() -> dict:
@@ -241,6 +241,7 @@ async def test_take_profit_replies_to_stored_order_message():
 
   assert len(calls) == 1
   assert calls[0][1]["reply_to"] == 8123
+  assert await client.get("auto_trade:tp_msg:39000344") == "8124"
 
 
 @pytest.mark.asyncio
@@ -476,6 +477,94 @@ async def test_group_stats_split_adds_and_deduplicate():
   assert float(stats["realized_pips"]) == 84
   assert float(stats["counterfactual_pips"]) == 73
   assert stats["adds_improved"] == "1"
+
+
+@pytest.mark.asyncio
+async def test_execution_stream_is_persisted_at_fill_and_queryable_with_manual():
+  await store.init_db()
+  signal = await store.store_manual_signal(
+    1, "BUY", 4000, 4001, 3997, [4006], execution_mode="algo",
+  )
+  await store.set_execution_intent(
+    signal["id"], intent_id=f"manual:{signal['id']}:1",
+    status="armed", revision=1,
+  )
+  await store.record_auto_trade_event({
+    "type": "manual_opened",
+    "timestamp": 10,
+    "candidate_id": f"manual:{signal['id']}:1",
+    "position_id": 901,
+    "group_id": "manual-group-1",
+    "stream": "algo_manual",
+    "direction": "BUY",
+    "setup": "Manual Algo",
+    "price": 4001,
+    "stop_pips": 40,
+    "volume": 200,
+  })
+  await store.store_pips("+", 50, signal_id=signal["id"])
+  await store.record_auto_trade_event({
+    "type": "group_result",
+    "timestamp": 20,
+    "group_id": "manual-group-1",
+    "group_realized_pips": 48,
+  })
+  await store.record_auto_trade_event({
+    "type": "position_closed",
+    "timestamp": 21,
+    "position_id": 901,
+    "group_id": "manual-group-1",
+    "price": 3997,
+  })
+
+  records = await store.get_pips_records(0, 4_000_000_000)
+  by_stream = {row["stream"]: row for row in records}
+  persisted = await store.get_manual_signal(signal["id"])
+
+  assert set(by_stream) == {"manual", "algo_manual"}
+  assert by_stream["manual"]["trade_key"] == f"manual:{signal['id']}"
+  assert by_stream["algo_manual"]["trade_key"] == f"manual:{signal['id']}"
+  assert by_stream["algo_manual"]["pips"] == 48
+  assert persisted["trade_stream"] == "algo_manual"
+
+
+@pytest.mark.asyncio
+async def test_terminal_manual_close_uses_broker_fill_before_reconcile_fallback():
+  await store.init_db()
+  await store.record_auto_trade_event({
+    "type": "opened",
+    "timestamp": 10,
+    "position_id": 902,
+    "group_id": "auto-group-2",
+    "stream": "algo_auto",
+    "direction": "BUY",
+    "setup": "Range Box Scalp",
+    "price": 4000,
+    "stop_pips": 30,
+    "volume": 200,
+  })
+  await store.record_auto_trade_event({
+    "type": "manual_closed",
+    "timestamp": 20,
+    "position_id": 902,
+    "group_id": "auto-group-2",
+    "remaining_volume": 0,
+    "price": 4004,
+  })
+  await store.record_auto_trade_event({
+    "type": "position_closed",
+    "timestamp": 21,
+    "position_id": 902,
+    "group_id": "auto-group-2",
+    "price": 3997,
+  })
+
+  records = await store.get_pips_records(0, 4_000_000_000)
+
+  assert len(records) == 1
+  assert records[0]["stream"] == "algo_auto"
+  assert records[0]["pips"] == 40
+  assert records[0]["sign"] == "+"
 
 
 @pytest.mark.asyncio

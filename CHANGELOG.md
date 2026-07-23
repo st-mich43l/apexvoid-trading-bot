@@ -13,6 +13,14 @@ dated section after deployment.
 
 ### Added
 
+- Added opt-in broker-confirmed range flip execution for defined box scalps,
+  with opposing-edge targets, a `flip_pending` claim, timeout alerts, and the
+  existing flat-exposure guard preserved. The feature defaults off.
+- Added durable `algo_auto` and `algo_manual` execution ledgers plus per-stream
+  fill count, win rate, mean R, total pips, and mean stop distance in trade
+  stats and weekly reports. `/algo` remains visible in manual stats while
+  `all_unique` removes the duplicate from combined figures.
+
 - Added real broker execution for `/ algo` manual signals (PR 3 of 3):
   `ctrader-engine` now consumes `manual_trade:intents` (via a new
   Python-side bridge onto the existing `auto_trade:candidates` pipeline) and
@@ -127,6 +135,13 @@ dated section after deployment.
 
 ### Changed
 
+- Raised the autonomous range-scalp minimum stop from 15 to 30 pips and added
+  a 0.15 ATR swept-wick clearance floor. Manual stops retain owner precedence:
+  opposing-zone protection may widen and notify, but never tighten them.
+- Broker execution events now persist their `algo_auto`/`algo_manual` stream
+  at fill time; watcher runner telemetry replies to the engine TP thread for
+  algo-armed manual signals.
+
 - The notify-only price watcher now reads closed M1 bars from ctrader-feed's
   Redis window as its primary source instead of polling Tiingo. Tiingo
   remains as a fallback for a single tick when the ctrader-feed bar is
@@ -139,6 +154,13 @@ dated section after deployment.
   regime label as a global veto.
 
 ### Fixed
+
+- Fixed range-scalp stops being placed inside the sweep wick, including an
+  explicit `stop_exceeds_envelope_after_wick` rejection and counter when the
+  safe stop cannot fit the configured risk envelope.
+- Fixed duplicate `/algo` TP accounting and announcements: the engine owns
+  broker TP fills and booked percentages, while the watcher only reports
+  subsequent runner extension until the position closes.
 
 - Box-scalp (both the private gate's own candidates and the scanner-bridge
   `Range Edge Scalp` match, labeled "Range Box Scalp") no longer fires

@@ -99,6 +99,8 @@ def test_support_rejection_creates_buy_with_full_50_pip_target(monkeypatch):
   assert decision.target_room_pips == pytest.approx(56.0)
   assert decision.full_tp_pips == 50
   assert decision.box is not None
+  assert decision.sweep_low == pytest.approx(99.85)
+  assert decision.sweep_high is None
 
 
 def test_support_rejection_uses_70_pips_when_box_has_room(monkeypatch):
@@ -205,6 +207,8 @@ def test_resistance_rejection_creates_sell(monkeypatch):
   assert decision.direction == "SELL"
   assert decision.target == support
   assert decision.full_tp_pips == 70
+  assert decision.sweep_low is None
+  assert decision.sweep_high == pytest.approx(100.15)
 
 
 def test_single_rail_cannot_form_a_box(monkeypatch):
