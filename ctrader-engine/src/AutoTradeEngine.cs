@@ -1287,6 +1287,19 @@ public sealed class AutoTradeEngine(
     {
       return await RejectAsync(candidate, exception.Message, cancellationToken);
     }
+    if (sizing.Lots > ManualAlgoFirstLegThresholdLots)
+    {
+      var fixedFirstLeg = VolumePlanner.VolumeForLots(ManualAlgoFirstLegLots, symbol);
+      sizing = sizing with
+      {
+        TargetPlan = VolumePlanner.FixFirstLegVolume(
+          sizing.TargetPlan,
+          sizing.Volume,
+          fixedFirstLeg,
+          symbol
+        ),
+      };
+    }
     var groupId = GroupToken(candidate.CandidateId);
     var barTs = candidate.BarTs ?? candidate.CreatedAt;
     var expiresAt = candidate.ManualExpiresAt ?? 0;
@@ -2788,6 +2801,12 @@ public sealed class AutoTradeEngine(
     candidate.Version == 3
     && candidate.Mode == "manual_algo"
     && candidate.ManualStopLoss is not null;
+
+  // On larger manual /algo positions the first booking should stay a
+  // consistent ~0.05 lots rather than a proportional share that keeps
+  // growing with account size - see VolumePlanner.FixFirstLegVolume.
+  private const decimal ManualAlgoFirstLegThresholdLots = 0.13m;
+  private const decimal ManualAlgoFirstLegLots = 0.05m;
 
   private static bool UsesCandidateTargetPlan(TradeCandidate candidate) =>
     IsTrendCandidate(candidate) || IsStrategyMatchCandidate(candidate);

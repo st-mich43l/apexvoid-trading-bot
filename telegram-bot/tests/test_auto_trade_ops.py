@@ -245,6 +245,37 @@ async def test_take_profit_replies_to_stored_order_message():
 
 
 @pytest.mark.asyncio
+async def test_manual_algo_events_never_dm_the_owner():
+  """Manual /algo signals get their lifecycle update on the VIP/public
+  channel via app.signals.manual_execution's reconcile loop - a separate
+  '🤖 ApexVoid Algo' owner DM for the same take_profit/stop_moved/
+  position_closed event would be a duplicate, not new information.
+  """
+  calls = []
+
+  async def sent(text, **kwargs):
+    calls.append(text)
+    return SimpleNamespace(message_id=1)
+
+  for event_type in ("take_profit", "stop_moved", "position_closed"):
+    delivered = await delivery._deliver_auto_trade_event(
+      redis_state.get_client(),
+      {
+        "type": event_type,
+        "message": "irrelevant",
+        "position_id": 1,
+        "setup": "Manual Algo",
+      },
+      profile="internal",
+      chat_id=123,
+      send=sent,
+    )
+    assert delivered is False
+
+  assert calls == []
+
+
+@pytest.mark.asyncio
 async def test_missing_message_key_sends_standalone_without_position_id():
   calls = []
 

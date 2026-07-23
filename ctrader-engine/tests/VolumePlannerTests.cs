@@ -240,6 +240,49 @@ public sealed class VolumePlannerTests
     }
   }
 
+  [Fact]
+  public void FixFirstLegVolumeOverridesFirstSliceAndSplitsRemainderEvenly()
+  {
+    var plan = Plan(3_000); // equal 600 x 5 before the fix
+
+    var fixed_ = VolumePlanner.FixFirstLegVolume(plan, 3_000, 500, Symbol);
+
+    Assert.Equal(new long[] { 500, 700, 600, 600, 600 }, fixed_.Slices);
+    Assert.Equal(3_000, fixed_.Slices.Sum());
+    Assert.Equal(plan.TargetsPips, fixed_.TargetsPips);
+    Assert.Equal(plan.TargetOrdinals, fixed_.TargetOrdinals);
+  }
+
+  [Fact]
+  public void FixFirstLegVolumeLeavesSingleLegPlanUnchanged()
+  {
+    var plan = VolumePlanner.BuildTargetPlan(1_000, Symbol, [70], [100]);
+
+    var fixed_ = VolumePlanner.FixFirstLegVolume(plan, 1_000, 500, Symbol);
+
+    Assert.Same(plan.Slices, fixed_.Slices);
+  }
+
+  [Fact]
+  public void FixFirstLegVolumeFailsOpenWhenFixedAmountDoesNotFit()
+  {
+    var plan = Plan(3_000);
+
+    var fixed_ = VolumePlanner.FixFirstLegVolume(plan, 3_000, 5_000, Symbol);
+
+    Assert.Equal(plan.Slices, fixed_.Slices);
+  }
+
+  [Fact]
+  public void FixFirstLegVolumeFailsOpenWhenRemainderCannotCoverOtherLegs()
+  {
+    var plan = Plan(600);
+
+    var fixed_ = VolumePlanner.FixFirstLegVolume(plan, 600, 500, Symbol);
+
+    Assert.Equal(plan.Slices, fixed_.Slices);
+  }
+
   private static TargetVolumePlan Plan(long volume) =>
     VolumePlanner.BuildTargetPlan(
       volume,

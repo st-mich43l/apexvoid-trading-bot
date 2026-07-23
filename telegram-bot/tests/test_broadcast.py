@@ -182,6 +182,50 @@ def test_partial_close_uses_clear_pips_without_at_sign():
   assert "@" not in text
 
 
+def test_partial_close_with_tp_number_labels_which_target_was_hit():
+  result = {
+    "action": "close",
+    "ok": True,
+    "row": {
+      "daily_seq": 7,
+      "closed": False,
+      "frac": 0.25,
+      "remaining": 0.75,
+    },
+    "pips": 37,
+    "tp_number": 1,
+  }
+
+  assert trade_ops.render_result(result, "XAU", "vip") == (
+    "🎯 #7 TP1 booked 25% · +37 pips 💸 · remaining 75%"
+  )
+  assert trade_ops.render_result(result, "XAU", "public") == (
+    "🎯 TP1 booked 25% · +37 pips 💸 · remaining 75%"
+  )
+
+
+def test_final_close_with_tp_number_labels_which_target_closed_it(monkeypatch):
+  monkeypatch.setattr(trade_ops.settings, "public_show_pips", True)
+  result = {
+    "action": "close",
+    "ok": True,
+    "row": {
+      "daily_seq": 7,
+      "closed": True,
+      "net": 570,
+    },
+    "pips": 570,
+    "tp_number": 4,
+  }
+
+  assert trade_ops.render_result(result, "XAU", "vip") == (
+    "✅ #7 TP4 closed — net +570 pips 💸💸💸"
+  )
+  assert trade_ops.render_result(result, "XAU", "public") == (
+    "✅ TP4 closed — +570 pips win 💸💸💸"
+  )
+
+
 def test_dollar_wing_thresholds():
   assert wing_icons(100) == "💸"
   assert wing_icons(101) == "💸💸"
