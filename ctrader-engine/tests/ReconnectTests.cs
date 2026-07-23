@@ -622,6 +622,16 @@ internal sealed class FaultAutoTradeStore : IAutoTradeStore
     string condition,
     CancellationToken cancellationToken
   ) => Task.CompletedTask;
+
+  public Task RecordZoneCooldownAsync(
+    string symbol,
+    string direction,
+    decimal entryPrice,
+    decimal stopPrice,
+    long closedAt,
+    int ttlMinutes,
+    CancellationToken cancellationToken
+  ) => Task.CompletedTask;
 }
 
 internal sealed class RecordingSink : IBarSink

@@ -44,7 +44,8 @@ public sealed record AutoTradeOptions(
   decimal WickStopBufferAtr = 0.15m,
   bool RangeFlipEnabled = false,
   int FlipExitBufferPips = 10,
-  int FlipConfirmTimeoutSeconds = 30
+  int FlipConfirmTimeoutSeconds = 30,
+  int ZoneCooldownMinutes = 60
 )
 {
   public static AutoTradeOptions FromEnvironment() => new(
@@ -92,7 +93,8 @@ public sealed record AutoTradeOptions(
     FlipConfirmTimeoutSeconds: Int(
       "AUTO_TRADE_FLIP_CONFIRM_TIMEOUT_SECONDS",
       30
-    )
+    ),
+    ZoneCooldownMinutes: Int("AUTO_TRADE_ZONE_COOLDOWN_MINUTES", 60)
   );
 
   public void Validate()
@@ -190,6 +192,12 @@ public sealed record AutoTradeOptions(
     {
       throw new AutoTradeConfigurationException(
         "Auto trade disabled: zone-fill settings must be positive"
+      );
+    }
+    if (ZoneCooldownMinutes <= 0)
+    {
+      throw new AutoTradeConfigurationException(
+        "Auto trade disabled: AUTO_TRADE_ZONE_COOLDOWN_MINUTES must be positive"
       );
     }
     if (BoxMinRiskReward is < 1m or > 3m)

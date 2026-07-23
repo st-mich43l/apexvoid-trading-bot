@@ -46,6 +46,29 @@ public sealed class ZoneFillPlannerTests
   }
 
   [Fact]
+  public void IncidentZoneLegVolumesSumExactlyToTotalVolume()
+  {
+    // 23 Jul 2026 incident numbers: BUY demand zone 4,112-4,122, 0.13 lots.
+    var plan = ZoneFillPlanner.Build(
+      TradeDirection.Buy,
+      new TradeCandidateZone(4112m, 4122m),
+      4108m,
+      1300,
+      Symbol,
+      [30, 60, 90, 120, 200],
+      [20, 20, 20, 20, 20]
+    );
+
+    Assert.Equal(1300, plan.Legs.Sum(leg => leg.Volume));
+    Assert.Equal(2, plan.Legs.Count);
+    // Proximal edge for a BUY is zone.High (4,122) - the planner never
+    // prices at the true distal edge (4,112) at all, only proximal +
+    // midpoint (4,117). See Fix 2's plan notes: this is a deliberate
+    // "no further code change" scope boundary, not an oversight here.
+    Assert.Equal(new[] { 4122m, 4117m }, plan.Legs.Select(leg => leg.LimitPrice));
+  }
+
+  [Fact]
   public void ZoneMustBeWideEnoughAndBothLegsNeedAFeasibleLadder()
   {
     Assert.True(ZoneFillPlanner.Qualifies(

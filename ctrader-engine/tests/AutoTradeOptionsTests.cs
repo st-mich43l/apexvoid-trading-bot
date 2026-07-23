@@ -76,6 +76,31 @@ public sealed class AutoTradeOptionsTests
   }
 
   [Fact]
+  public void ZoneCooldownMinutesDefaultsToSixtyAndValidatesPositive()
+  {
+    Assert.Equal(60, AutoTradeOptions.FromEnvironment().ZoneCooldownMinutes);
+    Options().Validate();
+
+    Assert.Throws<AutoTradeConfigurationException>(
+      () => (Options() with { ZoneCooldownMinutes = 0 }).Validate()
+    );
+  }
+
+  [Fact]
+  public void ReadsZoneCooldownMinutesFromEnvironment()
+  {
+    Environment.SetEnvironmentVariable("AUTO_TRADE_ZONE_COOLDOWN_MINUTES", "90");
+    try
+    {
+      Assert.Equal(90, AutoTradeOptions.FromEnvironment().ZoneCooldownMinutes);
+    }
+    finally
+    {
+      Environment.SetEnvironmentVariable("AUTO_TRADE_ZONE_COOLDOWN_MINUTES", null);
+    }
+  }
+
+  [Fact]
   public void ValidatesTrendStopBandBounds()
   {
     Options().Validate();
