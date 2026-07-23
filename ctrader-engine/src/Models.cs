@@ -161,7 +161,9 @@ public sealed record TradeCandidate(
   decimal? OpposingZoneLow = null,
   decimal? OpposingZoneHigh = null,
   decimal? ManualStopLoss = null,
-  long? ManualExpiresAt = null
+  long? ManualExpiresAt = null,
+  decimal? SweepLow = null,
+  decimal? SweepHigh = null
 );
 
 public sealed record TradeStreamEntry(
@@ -199,7 +201,12 @@ public sealed record AutoTradePositionState(
   long InitialTrancheVolume = 0,
   string? Setup = null,
   string? Regime = null,
-  int? Confluence = null
+  int? Confluence = null,
+  string? RangeId = null,
+  decimal? RangeLow = null,
+  decimal? RangeHigh = null,
+  decimal? RangeExitPrice = null,
+  string Stream = "algo_auto"
 );
 
 // One owner-override command for an already-armed/filled manual-algo
@@ -236,5 +243,8 @@ public sealed record AutoTradeEvent(
   string? Regime = null,
   int? Confluence = null,
   decimal? StopPips = null,
-  IReadOnlyList<int>? TargetsPips = null
+  IReadOnlyList<int>? TargetsPips = null,
+  string? Stream = null,
+  string? Direction = null,
+  long? RemainingVolume = null
 );

@@ -6,6 +6,8 @@ from datetime import datetime, timezone
 import aiohttp
 
 from app.core.config import settings
+from app.autotrade.delivery import tp_message_key
+from app.bot.client import send_scanner_with_retry
 from app.signals.broadcast import fanout_update
 from app.persistence.store import get_open_signals
 from app.bot.keyboards import build_close_kb, build_tp_close_kb
@@ -183,15 +185,31 @@ async def _maybe_alert_runner(
   if pips <= previous:
     return
 
-  await fanout_update(
-    sig,
-    lambda tier, price=touch, p=pips: _render_level_alert(
-      tier, "RUNNER", "RUNNER", seq, price, p
-    ),
-    markup_fn=lambda tier, s=sig["id"], t=len(tps), p=pips: (
-      build_tp_close_kb(s, t, p) if tier == "vip" else None
-    ),
-  )
+  if sig.get("algo_armed"):
+    position_id = sig.get("broker_position_id")
+    if position_id is None:
+      return
+    reply_to = await redis_state.get_client().get(
+      tp_message_key("internal", int(position_id))
+    )
+    if not reply_to:
+      return
+    await send_scanner_with_retry(
+      _render_level_alert("vip", "RUNNER", "RUNNER", seq, touch, pips),
+      reply_to=int(reply_to),
+      chat_id=settings.telegram_owner_id,
+      reply_markup=build_tp_close_kb(sig["id"], len(tps), pips),
+    )
+  else:
+    await fanout_update(
+      sig,
+      lambda tier, price=touch, p=pips: _render_level_alert(
+        tier, "RUNNER", "RUNNER", seq, price, p
+      ),
+      markup_fn=lambda tier, s=sig["id"], t=len(tps), p=pips: (
+        build_tp_close_kb(s, t, p) if tier == "vip" else None
+      ),
+    )
   progress["runner_pips"] = pips
   await redis_state.set_runner_pips(sig["id"], pips)
 
@@ -236,6 +254,9 @@ async def _evaluate(
 
   # Sequential TPs: only alert TP(n) once every earlier TP has been alerted.
   tps = sig["tps"]
+  if sig.get("algo_armed"):
+    await _maybe_alert_runner(sig, bar, progress, seq, is_buy)
+    return False
   while progress["tp"] < len(tps):
     idx = progress["tp"]
     tp = tps[idx]

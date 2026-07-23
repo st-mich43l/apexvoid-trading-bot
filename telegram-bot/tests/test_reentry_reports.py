@@ -302,6 +302,44 @@ def test_stats_groups_sessions_and_sparkline():
   assert len(sparkline([70, 40, 60])) == 3
 
 
+def test_stats_split_algo_manual_and_all_unique_without_double_count():
+  records = [
+    {
+      "sign": "+", "pips": 60, "signal_id": 7,
+      "stream": "manual", "trade_key": "manual:7",
+      "fill_count": 1, "stop_pips": 30, "r_multiple": 2.0,
+      "signal_ts": 1,
+    },
+    {
+      "sign": "+", "pips": 58, "signal_id": None,
+      "stream": "algo_manual", "trade_key": "manual:7",
+      "fill_count": 1, "stop_pips": 30, "r_multiple": 58 / 30,
+      "signal_ts": 1,
+    },
+    {
+      "sign": "-", "pips": 30, "signal_id": None,
+      "stream": "algo_auto", "trade_key": "algo:box-8",
+      "fill_count": 2, "stop_pips": 30, "r_multiple": -1.0,
+      "signal_ts": 2,
+    },
+  ]
+
+  stats = build_stats(records, [], "UTC", 22, 7, 13)
+  report = format_stats(stats, "today")
+
+  assert stats["by_stream"]["manual"]["fill_count"] == 1
+  assert stats["by_stream"]["algo_manual"]["fill_count"] == 1
+  assert stats["by_stream"]["algo_auto"]["fill_count"] == 2
+  assert stats["by_stream"]["all_unique"]["trades"] == 2
+  assert stats["by_stream"]["all_unique"]["total_pips"] == 28
+  assert stats["by_stream"]["algo_manual"]["win_rate"] == 100
+  assert stats["by_stream"]["algo_auto"]["mean_r"] == -1
+  assert "Algo auto" in report
+  assert "Algo manual" in report
+  assert "Manual signal" in report
+  assert "All unique" in report
+
+
 def test_review_map_renders_all_tp_tiers_and_last_branch():
   signal = {
     "id": 1,

@@ -219,6 +219,7 @@ async def test_handle_event_fill_marks_filled_records_broker_fields_and_activate
   assert row["execution_status"] == "filled"
   assert row["broker_position_id"] == "555"
   assert row["broker_fill_price"] == pytest.approx(4100.5)
+  assert row["algo_armed"] is True
   assert row["fill_state"] == "filled"
   send.assert_awaited_once()
 
@@ -408,7 +409,28 @@ async def test_handle_event_manual_cancelled_cancels_armed_signal(monkeypatch):
 
   row = await store.get_manual_signal(sid)
   assert row["status"] == "cancelled"
+  assert row["execution_status"] == "cancelled"
+  assert row["algo_armed"] is False
   send.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_handle_event_manual_expired_releases_watcher_ownership(monkeypatch):
+  send = _mock_send(monkeypatch)
+  sid = await _algo_signal()
+  client = redis_state.get_client()
+
+  await manual_execution._handle_event(
+    client,
+    {"type": "manual_expired", "candidate_id": f"manual:{sid}:0"},
+    {},
+  )
+
+  row = await store.get_manual_signal(sid)
+  assert row["status"] == "open"
+  assert row["execution_status"] == "expired"
+  assert row["algo_armed"] is False
+  send.assert_not_awaited()
 
 
 @pytest.mark.asyncio

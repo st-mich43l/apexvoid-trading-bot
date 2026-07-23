@@ -484,6 +484,8 @@ async def _publish_candidate(
     "range_low": decision.box.lower.level,
     "range_high": decision.box.upper.level,
     "full_take_profit_pips": decision.full_tp_pips,
+    "sweep_low": decision.sweep_low,
+    "sweep_high": decision.sweep_high,
     "regime": regime.state if regime is not None else "chop",
     "opposing_zone_low": None if opposing_zone is None else opposing_zone.low,
     "opposing_zone_high": None if opposing_zone is None else opposing_zone.high,

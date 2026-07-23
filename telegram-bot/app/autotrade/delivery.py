@@ -12,6 +12,7 @@ from aiogram.exceptions import TelegramBadRequest
 
 from app.autotrade import units
 from app.persistence import redis_state
+from app.persistence.store import record_auto_trade_event
 from app.core.config import settings
 from app.bot.client import send_scanner_with_retry
 from app.autotrade.worker import regime_share_24h
@@ -306,6 +307,11 @@ def _group_message_key(profile: DeliveryProfile, group_id: str) -> str:
   return f"{prefix}:{group_id}"
 
 
+def tp_message_key(profile: DeliveryProfile, position_id: int) -> str:
+  prefix = "auto_trade:tp_msg" if profile == "internal" else "auto_trade:public_tp_msg"
+  return f"{prefix}:{position_id}"
+
+
 def _full_tp_result_key(profile: DeliveryProfile, group_id: str) -> str:
   return f"auto_trade:full_tp_result:{profile}:{group_id}"
 
@@ -423,6 +429,12 @@ async def _deliver_auto_trade_event(
       event,
       profile,
       int(sent.message_id),
+    )
+  if event_type == "take_profit" and position_id is not None:
+    await client.set(
+      tp_message_key(profile, int(position_id)),
+      str(sent.message_id),
+      ex=_TRADE_MESSAGE_TTL,
     )
   if _is_full_take_profit(event) and group_id:
     await client.set(
@@ -686,6 +698,7 @@ async def _process_owner_entries(
     except (KeyError, TypeError, json.JSONDecodeError) as exc:
       log.warning("Invalid auto-trade event %s: %s", entry_id, exc)
     else:
+      await record_auto_trade_event(event)
       await _record_group_result(client, event)
       await _deliver_auto_trade_event(
         client,

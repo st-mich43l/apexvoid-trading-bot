@@ -123,6 +123,37 @@ public sealed class AutoTradeOptionsTests
     }
   }
 
+  [Fact]
+  public void StopFloorAndWickBufferUseSafeDefaults()
+  {
+    Environment.SetEnvironmentVariable("AUTO_TRADE_ADD_MIN_STOP_PIPS", null);
+    Environment.SetEnvironmentVariable("AUTO_TRADE_WICK_STOP_BUFFER_ATR", null);
+
+    var options = AutoTradeOptions.FromEnvironment();
+
+    Assert.Equal(30, options.AddMinStopPips);
+    Assert.Equal(0.15m, options.WickStopBufferAtr);
+    Assert.Throws<AutoTradeConfigurationException>(
+      () => (Options() with { WickStopBufferAtr = -0.01m }).Validate()
+    );
+  }
+
+  [Fact]
+  public void RangeFlipDefaultsOffAndValidatesItsControls()
+  {
+    var options = AutoTradeOptions.FromEnvironment();
+
+    Assert.False(options.RangeFlipEnabled);
+    Assert.Equal(10, options.FlipExitBufferPips);
+    Assert.Equal(30, options.FlipConfirmTimeoutSeconds);
+    Assert.Throws<AutoTradeConfigurationException>(
+      () => (Options() with { FlipExitBufferPips = -1 }).Validate()
+    );
+    Assert.Throws<AutoTradeConfigurationException>(
+      () => (Options() with { FlipConfirmTimeoutSeconds = 0 }).Validate()
+    );
+  }
+
   private static AutoTradeOptions Options() => new(
     Enabled: true,
     DryRun: false,

@@ -67,6 +67,7 @@ def _decision() -> AutoScalpDecision:
     confluence=3,
     reasons=("M1 range rejection", "support rail"),
     rail_count=4,
+    sweep_low=4015.9,
   )
 
 
@@ -162,6 +163,8 @@ async def test_worker_publishes_one_durable_auto_only_candidate(monkeypatch):
   assert payload["range_low"] == 4016.8
   assert payload["range_high"] == 4025.1
   assert payload["full_take_profit_pips"] == 70
+  assert payload["sweep_low"] == 4015.9
+  assert payload["sweep_high"] is None
   assert payload["structure_swing"] == 4014.8
   assert payload["displacement_age_bars"] == 1
   assert payload["bos_direction"] == "up"

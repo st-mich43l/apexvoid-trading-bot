@@ -31,7 +31,7 @@ public sealed record AutoTradeOptions(
   int AddCooldownBars = 3,
   decimal AddLevelBufferAtr = 1m,
   decimal AddStopBufferAtr = 0.3m,
-  int AddMinStopPips = 15,
+  int AddMinStopPips = 30,
   bool AddRequireRiskFree = false,
   bool ZoneFillEnabled = false,
   decimal ZoneFillMinLots = 0.09m,
@@ -40,7 +40,11 @@ public sealed record AutoTradeOptions(
   decimal BoxMinRiskReward = 1.25m,
   int TrendStopMinPips = 40,
   int TrendStopMaxPips = 65,
-  bool StopPushBeyondZone = true
+  bool StopPushBeyondZone = true,
+  decimal WickStopBufferAtr = 0.15m,
+  bool RangeFlipEnabled = false,
+  int FlipExitBufferPips = 10,
+  int FlipConfirmTimeoutSeconds = 30
 )
 {
   public static AutoTradeOptions FromEnvironment() => new(
@@ -72,7 +76,7 @@ public sealed record AutoTradeOptions(
     AddCooldownBars: Int("AUTO_TRADE_ADD_COOLDOWN_BARS", 3),
     AddLevelBufferAtr: Decimal("AUTO_TRADE_ADD_LEVEL_BUFFER_ATR", 1m),
     AddStopBufferAtr: Decimal("AUTO_TRADE_ADD_STOP_BUFFER_ATR", 0.3m),
-    AddMinStopPips: Int("AUTO_TRADE_ADD_MIN_STOP_PIPS", 15),
+    AddMinStopPips: Int("AUTO_TRADE_ADD_MIN_STOP_PIPS", 30),
     AddRequireRiskFree: Bool("AUTO_TRADE_ADD_REQUIRE_RISK_FREE", false),
     ZoneFillEnabled: Bool("AUTO_TRADE_ZONE_FILL_ENABLED", false),
     ZoneFillMinLots: Decimal("AUTO_TRADE_ZONE_FILL_MIN_LOTS", 0.09m),
@@ -81,7 +85,14 @@ public sealed record AutoTradeOptions(
     BoxMinRiskReward: Decimal("AUTO_TRADE_BOX_MIN_RR", 1.25m),
     TrendStopMinPips: Int("AUTO_TRADE_TREND_STOP_MIN_PIPS", 40),
     TrendStopMaxPips: Int("AUTO_TRADE_TREND_STOP_MAX_PIPS", 65),
-    StopPushBeyondZone: Bool("AUTO_TRADE_STOP_PUSH_BEYOND_ZONE", true)
+    StopPushBeyondZone: Bool("AUTO_TRADE_STOP_PUSH_BEYOND_ZONE", true),
+    WickStopBufferAtr: Decimal("AUTO_TRADE_WICK_STOP_BUFFER_ATR", 0.15m),
+    RangeFlipEnabled: Bool("AUTO_TRADE_RANGE_FLIP_ENABLED", false),
+    FlipExitBufferPips: Int("AUTO_TRADE_FLIP_EXIT_BUFFER_PIPS", 10),
+    FlipConfirmTimeoutSeconds: Int(
+      "AUTO_TRADE_FLIP_CONFIRM_TIMEOUT_SECONDS",
+      30
+    )
   );
 
   public void Validate()
@@ -160,6 +171,7 @@ public sealed record AutoTradeOptions(
       || AddCooldownBars <= 0
       || AddLevelBufferAtr < 0
       || AddStopBufferAtr < 0
+      || WickStopBufferAtr < 0
       || AddMinStopPips <= 0
       || AddMinStopPips > decimal.ToInt32(decimal.Floor(
         StopLossDistance / PipSize
@@ -184,6 +196,13 @@ public sealed record AutoTradeOptions(
     {
       throw new AutoTradeConfigurationException(
         "Auto trade disabled: AUTO_TRADE_BOX_MIN_RR must be between 1 and 3"
+      );
+    }
+    if (FlipExitBufferPips < 0 || FlipConfirmTimeoutSeconds <= 0)
+    {
+      throw new AutoTradeConfigurationException(
+        "Auto trade disabled: range-flip buffer must be non-negative and "
+        + "confirmation timeout must be positive"
       );
     }
     if (MinConfluence is < 1 or > 3)
