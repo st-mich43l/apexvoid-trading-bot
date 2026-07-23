@@ -177,6 +177,42 @@ public static class VolumePlanner
     );
   }
 
+  /// <summary>
+  /// Overrides a target plan's first leg to a fixed broker volume (e.g. a
+  /// consistent ~0.05 lot first booking on larger manual /algo positions,
+  /// rather than a proportional share that grows with account size),
+  /// splitting the remainder evenly across the remaining legs. Fails open
+  /// (returns <paramref name="plan"/> unchanged) if there's only one leg,
+  /// the fixed amount doesn't strictly fit inside the total, or the
+  /// remainder can't cover the remaining legs' broker minimums - callers
+  /// should not have to special-case an edge configuration just to try
+  /// this rebalance.
+  /// </summary>
+  public static TargetVolumePlan FixFirstLegVolume(
+    TargetVolumePlan plan,
+    long totalVolume,
+    long firstLegVolume,
+    SymbolInfo symbol
+  )
+  {
+    if (plan.Slices.Count < 2 || firstLegVolume <= 0 || firstLegVolume >= totalVolume)
+    {
+      return plan;
+    }
+    var remainder = totalVolume - firstLegVolume;
+    var remainingWeights = Enumerable.Repeat(1, plan.Slices.Count - 1).ToArray();
+    IReadOnlyList<long> remainingSlices;
+    try
+    {
+      remainingSlices = SplitWeighted(remainder, symbol, remainingWeights);
+    }
+    catch (VolumePlanningException)
+    {
+      return plan;
+    }
+    return plan with { Slices = [firstLegVolume, .. remainingSlices] };
+  }
+
   public static IReadOnlyList<long> SplitWeighted(
     long volume,
     SymbolInfo symbol,

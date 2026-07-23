@@ -313,6 +313,7 @@ async def _handle_take_profit(event: dict, signal_id: int) -> None:
     pips_format.pips_between(sig, tp) for tp in sig.get("tps") or []
   ]
   target_pips = event.get("target_pips")
+  reached = 0
   if target_pips is not None and configured:
     reached = max(
       (
@@ -334,6 +335,7 @@ async def _handle_take_profit(event: dict, signal_id: int) -> None:
     frac = round(1.0 / len(configured), 6)
   result = await trade_ops._execute_close(
     signal_id, sig.get("symbol", "XAU"), pips, frac,
+    tp_number=reached or None,
   )
   await trade_ops.post_result(result, sig.get("symbol", "XAU"))
 
