@@ -5,7 +5,13 @@ from unittest.mock import AsyncMock
 import pytest
 
 from app.analysis import market_map_delivery
-from app.analysis.market_map import MapEntry, MarketMap, market_map_payload
+from app.analysis.market_map import (
+  MapEntry,
+  MarketMap,
+  market_map_from_payload,
+  market_map_payload,
+)
+from app.persistence import redis_state
 
 
 def _map(lo: float = 4025.0, hi: float = 4028.0) -> MarketMap:
@@ -61,6 +67,11 @@ async def test_hourly_map_sends_once_per_bucket_and_skips_unchanged_next_hour(
   assert map_calls == ["XAU", "XAU"]
   assert meta["last_map_scan"] == "2026-07-16T08:00Z"
   assert meta["last_market_map:XAU"] == market_map_payload(_map())
+  client = redis_state.get_client()
+  assert market_map_from_payload(await client.get(
+    "auto_trade:market_map_display:XAU"
+  )) == _map()
+  assert 0 < await client.ttl("auto_trade:market_map_display:XAU") <= 7200
 
 
 @pytest.mark.asyncio
@@ -111,13 +122,15 @@ async def test_on_demand_map_uses_scanner_bot(monkeypatch):
   monkeypatch.setattr(market_map_delivery.settings, "telegram_owner_id", 42)
   monkeypatch.setattr(
     market_map_delivery,
-    "render_current_market_map",
-    AsyncMock(return_value="<pre>XAU Market Map</pre>"),
+    "get_current_market_map",
+    AsyncMock(return_value=_map()),
   )
   monkeypatch.setattr(market_map_delivery, "send_scanner_with_retry", sent)
 
   assert await market_map_delivery.send_current_market_map("XAU")
-  sent.assert_awaited_once_with("<pre>XAU Market Map</pre>", chat_id=42)
+  sent.assert_awaited_once()
+  assert "XAU Market Map" in sent.await_args.args[0]
+  assert sent.await_args.kwargs == {"chat_id": 42}
 
 
 def test_scan_bucket_key_uses_configured_interval():

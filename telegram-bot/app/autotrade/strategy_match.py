@@ -43,6 +43,8 @@ class StrategyMatch:
   range_low: float | None = None
   range_high: float | None = None
   full_take_profit_pips: int | None = None
+  tags: tuple[str, ...] = ()
+  target_price: float | None = None
 
   @property
   def is_range_edge(self) -> bool:
@@ -97,6 +99,11 @@ class StrategyMatch:
         full_take_profit_pips=(
           None if payload.get("full_take_profit_pips") is None
           else int(payload["full_take_profit_pips"])
+        ),
+        tags=tuple(str(item) for item in payload.get("tags", [])),
+        target_price=(
+          None if payload.get("target_price") is None
+          else float(payload["target_price"])
         ),
       )
     except (KeyError, TypeError, ValueError, json.JSONDecodeError):
@@ -165,6 +172,10 @@ def _valid_match(match: StrategyMatch) -> bool:
     and bool(match.targets_pips)
     and all(value > 0 for value in match.targets_pips)
     and tuple(sorted(set(match.targets_pips))) == match.targets_pips
+    and (
+      match.target_price is None
+      or math.isfinite(match.target_price)
+    )
     and valid_range
     and match.match_id == strategy_match_id(
       match.symbol,

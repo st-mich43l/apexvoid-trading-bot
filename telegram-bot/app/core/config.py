@@ -195,6 +195,15 @@ class Settings(BaseSettings):
   # Executes only structural Market Map zones (never display-only round-number
   # fallbacks) after the latest M1 candle touches and rejects the zone.
   auto_trade_market_map_strategy_enabled: bool = True
+  # Reject collapsed map geometry before it can become the nearest target.
+  # Both thresholds apply; the effective minimum is their maximum.
+  auto_trade_map_zone_min_width_atr: float = 0.15
+  auto_trade_map_zone_min_width_abs: float = 1.0
+  # Counter-bias mean reversion is quality-gated independently of HTF-aligned
+  # mapped reactions and enabled by default.
+  auto_trade_map_counter_bias_enabled: bool = True
+  auto_trade_map_counter_bias_min_score: float = 6.0
+  auto_trade_map_counter_bias_min_confluence: int = 2
   # Trade-quality guards added after the 22 Jul 2026 incident (SELL filled at
   # box EQ, 13 pips below the nearest published supply zone). EQ exclusion and
   # edge proximity apply to box-scalp ("auto_box_scalp") candidates only - a

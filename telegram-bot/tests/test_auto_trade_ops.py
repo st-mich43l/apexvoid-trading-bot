@@ -686,3 +686,61 @@ async def test_status_explains_when_no_strategy_matches(monkeypatch):
   assert "Range Box <b>waiting for box</b> · Trend <b>no setup</b>" in text
   assert "Market context: <b>chop</b> <i>(telemetry only)</i>" in text
   assert "Gate:" not in text
+
+
+@pytest.mark.asyncio
+async def test_status_shows_market_map_working_set_and_filter_counts(
+  monkeypatch,
+):
+  monkeypatch.setattr(delivery.settings, "auto_trade_enabled", True)
+  client = redis_state.get_client()
+  await client.set("auto_trade:last_gate", json.dumps({
+    "state": "waiting_for_touch",
+    "box_state": "waiting_for_box",
+    "trend_state": "no_setup",
+    "market_map_state": "waiting_for_touch",
+    "selected_strategy": None,
+    "direction": None,
+    "reasons": [
+      "no mapped SELL zone within reach "
+      "(nearest 4087.00-4095.00 at 14.1 price, limit 1.5×ATR = 4.5)",
+    ],
+    "market_map_entries_seen": 7,
+    "market_map_entries_actionable": 2,
+    "market_map_top": [
+      {
+        "side": "buy",
+        "lo": 4066.0,
+        "hi": 4073.0,
+        "tier": "zone",
+        "score": 6.5,
+        "contains_price": True,
+        "distance": 0.0,
+      },
+      {
+        "side": "sell",
+        "lo": 4087.0,
+        "hi": 4095.0,
+        "tier": "zone",
+        "score": 9.0,
+        "contains_price": False,
+        "distance": 14.12,
+      },
+    ],
+    "market_map_filter_counts": {
+      "side": 3,
+      "actionable": 1,
+      "degenerate_width": 1,
+      "distance": 1,
+    },
+  }))
+
+  text = await delivery.auto_trade_status_text()
+
+  assert "Map entries: <b>7</b> seen · <b>2</b> actionable" in text
+  assert "BUY 4,066.00–4,073.00 (inside)" in text
+  assert "SELL 4,087.00–4,095.00 (14.1 away)" in text
+  assert (
+    "Map filters: side <b>3</b> · actionable <b>1</b> · "
+    "width <b>1</b> · distance <b>1</b>"
+  ) in text
