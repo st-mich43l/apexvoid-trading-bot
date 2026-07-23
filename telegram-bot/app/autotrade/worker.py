@@ -29,6 +29,7 @@ from app.autotrade.strategy_match import (
   strategy_match_key,
 )
 from app.autotrade.map_strategy import (
+  MarketMap,
   MarketMapStrategyDecision,
   decode_market_map,
   evaluate_market_map_strategy,
@@ -248,9 +249,14 @@ def _opposing_barrier_reason(
   the mirror image of ``_htf_veto_reason`` above: that one protects the zone
   a trade is retesting *from*; this one checks what could cap the move
   *ahead* of entry - the opposing side, not the supporting one.
+
+  An entry already *inside* an opposing barrier (23 Jul incident: a BUY
+  filled inside a SELL resistance band tested eight times) is vetoed
+  unconditionally, with no ATR/buffer tolerance - that geometry has zero
+  room by definition. Reason strings for this case start with "entry " so
+  callers can attribute it to its own reject counter; see
+  ``_opposing_barrier_condition`` below.
   """
-  if not atr or atr <= 0 or buffer_atr <= 0:
-    return None
   opposing_side = "supply" if direction == "BUY" else "demand"
   bounds = [
     (zone.low, zone.high, zone.side) for zone in zones if zone.side == opposing_side
@@ -259,6 +265,14 @@ def _opposing_barrier_reason(
     (level.price - level.band, level.price + level.band, level.kind)
     for level in levels
   ]
+  for low, high, kind in bounds:
+    if low <= entry_reference <= high:
+      return (
+        f"entry {entry_reference:.2f} inside opposing {kind} "
+        f"{low:.2f}-{high:.2f}"
+      )
+  if not atr or atr <= 0 or buffer_atr <= 0:
+    return None
   ahead = []
   for low, high, kind in bounds:
     if direction == "BUY" and low > entry_reference:
@@ -273,6 +287,102 @@ def _opposing_barrier_reason(
   return (
     f"Opposing barrier ahead: {direction} into {kind} "
     f"{low:.2f}-{high:.2f} ({distance:.2f} away)"
+  )
+
+
+def _opposing_barrier_condition(reason: str) -> str:
+  """Gate-reject condition key for an ``_opposing_barrier_reason`` hit -
+  containment (zero room by definition) and ahead-of-entry (buffer/ATR
+  tolerance applied) are geometrically distinct failures and must stay
+  separable in the reject counters.
+  """
+  return (
+    "entry_inside_opposing_zone" if reason.startswith("entry ")
+    else "opposing_barrier"
+  )
+
+
+def _zone_cooldown_key(symbol: str, direction: str) -> str:
+  return f"auto_trade:zone:cooldown:{symbol.upper()}:{direction.upper()}"
+
+
+async def _zone_cooldown_reason(
+  client: Any,
+  symbol: str,
+  direction: str,
+  entry_reference: float,
+  atr: float | None,
+  cooldown_atr: float,
+) -> str | None:
+  """Veto a same-direction re-entry near a price that just stopped a trade
+  out (23 Jul 2026 incident: a stopped-out zone was re-traded 15 minutes
+  later). The marker is written by AutoTradeEngine.cs whenever a tracked
+  position vanishes from the broker without the engine itself having closed
+  it - always ambiguous (SL hit or manual close), so it's written
+  unconditionally on every such close; a clean take-profit exit never
+  produces one (see AutoTradeEngine.cs's reconcile stale-position branch).
+  """
+  if not atr or atr <= 0 or cooldown_atr <= 0:
+    return None
+  raw = await client.get(_zone_cooldown_key(symbol, direction))
+  if raw is None:
+    return None
+  try:
+    state = json.loads(raw)
+    recorded_entry = float(state["entry_price"])
+  except (TypeError, ValueError, KeyError, json.JSONDecodeError):
+    return None
+  distance_atr = abs(entry_reference - recorded_entry) / atr
+  if distance_atr > cooldown_atr:
+    return None
+  return (
+    f"zone cooldown: {direction} entry {entry_reference:.2f} is "
+    f"{distance_atr:.2f} ATR from a stopped-out entry at "
+    f"{recorded_entry:.2f} (limit {cooldown_atr:.2f} ATR)"
+  )
+
+
+def _has_overlapping_zones(market_map: MarketMap | None) -> bool:
+  """True when the published Market Map itself contains a BUY and a SELL
+  band whose ranges intersect at all - a self-contradiction in the map, not
+  yet necessarily where any candidate is entering. Feeds the observability
+  counter regardless of the veto flag or any specific candidate.
+  """
+  if market_map is None:
+    return False
+  return any(
+    buy.lo <= sell.hi and sell.lo <= buy.hi
+    for buy in market_map.buys
+    for sell in market_map.sells
+  )
+
+
+def _overlapping_zone_conflict_reason(
+  entry_reference: float,
+  market_map: MarketMap | None,
+) -> str | None:
+  """Veto an entry that falls inside both a demand (BUY) and a supply
+  (SELL) band on the same published Market Map (23 Jul 2026 incident: BUY
+  4,112-4,122 and SELL 4,116-4,127 overlapped 4,116-4,122; the fill landed
+  inside it). Direction-agnostic - a price the map calls both a floor and a
+  ceiling is not a tradeable location in either direction.
+  """
+  if market_map is None:
+    return None
+  demand_hit = next(
+    (entry for entry in market_map.buys if entry.lo <= entry_reference <= entry.hi),
+    None,
+  )
+  supply_hit = next(
+    (entry for entry in market_map.sells if entry.lo <= entry_reference <= entry.hi),
+    None,
+  )
+  if demand_hit is None or supply_hit is None:
+    return None
+  return (
+    f"entry {entry_reference:.2f} inside both demand "
+    f"{demand_hit.lo:.2f}-{demand_hit.hi:.2f} and supply "
+    f"{supply_hit.lo:.2f}-{supply_hit.hi:.2f}"
   )
 
 
@@ -364,6 +474,7 @@ async def _publish_candidate(
   htf_zones: list[Zone] | None = None,
   htf_levels: list[Level] | None = None,
   gate_source: str = "private_ohlc",
+  market_map: MarketMap | None = None,
 ) -> str | None:
   if (
     not settings.auto_trade_enabled
@@ -430,7 +541,27 @@ async def _publish_candidate(
       log.info(
         "auto-scalp candidate blocked symbol=%s reason=%s", symbol, barrier_reason,
       )
-      await _record_gate_reject(client, symbol, "opposing_barrier")
+      await _record_gate_reject(
+        client, symbol, _opposing_barrier_condition(barrier_reason),
+      )
+      return None
+  cooldown_reason = await _zone_cooldown_reason(
+    client, symbol, decision.direction, entry_reference,
+    scale_context.atr, settings.auto_trade_zone_cooldown_atr,
+  )
+  if cooldown_reason is not None:
+    log.info(
+      "auto-scalp candidate blocked symbol=%s reason=%s", symbol, cooldown_reason,
+    )
+    await _record_gate_reject(client, symbol, "zone_cooldown")
+    return None
+  if settings.auto_trade_overlap_veto_enabled:
+    overlap_reason = _overlapping_zone_conflict_reason(entry_reference, market_map)
+    if overlap_reason is not None:
+      log.info(
+        "auto-scalp candidate blocked symbol=%s reason=%s", symbol, overlap_reason,
+      )
+      await _record_gate_reject(client, symbol, "overlapping_zone_conflict")
       return None
 
   now = int(datetime.now(timezone.utc).timestamp())
@@ -538,6 +669,7 @@ async def _publish_strategy_match(
   htf_zones: list[Zone] | None = None,
   htf_levels: list[Level] | None = None,
   regime: RegimeInfo | None = None,
+  market_map: MarketMap | None = None,
 ) -> str | None:
   """Publish a completed scanner strategy match without PA re-confirmation."""
   if (
@@ -592,7 +724,33 @@ async def _publish_strategy_match(
       )
       if consume_redis_match:
         await client.delete(strategy_match_key(symbol))
-      await _record_gate_reject(client, symbol, "opposing_barrier")
+      await _record_gate_reject(
+        client, symbol, _opposing_barrier_condition(barrier_reason),
+      )
+      return None
+  cooldown_reason = await _zone_cooldown_reason(
+    client, symbol, match.direction, spot.price,
+    match.atr, settings.auto_trade_zone_cooldown_atr,
+  )
+  if cooldown_reason is not None:
+    log.info(
+      "strategy match blocked symbol=%s strategy=%s reason=%s",
+      symbol, match.strategy, cooldown_reason,
+    )
+    if consume_redis_match:
+      await client.delete(strategy_match_key(symbol))
+    await _record_gate_reject(client, symbol, "zone_cooldown")
+    return None
+  if settings.auto_trade_overlap_veto_enabled:
+    overlap_reason = _overlapping_zone_conflict_reason(spot.price, market_map)
+    if overlap_reason is not None:
+      log.info(
+        "strategy match blocked symbol=%s strategy=%s reason=%s",
+        symbol, match.strategy, overlap_reason,
+      )
+      if consume_redis_match:
+        await client.delete(strategy_match_key(symbol))
+      await _record_gate_reject(client, symbol, "overlapping_zone_conflict")
       return None
   distance = (
     match.entry_low - spot.price
@@ -744,6 +902,7 @@ async def _publish_trend_candidate(
   trend_decision: TrendDecision,
   htf_zones: list[Zone] | None = None,
   htf_levels: list[Level] | None = None,
+  market_map: MarketMap | None = None,
 ) -> str | None:
   if (
     not settings.auto_trade_enabled
@@ -787,7 +946,27 @@ async def _publish_trend_candidate(
       log.info(
         "auto-trend candidate blocked symbol=%s reason=%s", symbol, barrier_reason,
       )
-      await _record_gate_reject(client, symbol, "opposing_barrier")
+      await _record_gate_reject(
+        client, symbol, _opposing_barrier_condition(barrier_reason),
+      )
+      return None
+  cooldown_reason = await _zone_cooldown_reason(
+    client, symbol, trend_decision.direction, entry_reference,
+    trend_decision.atr, settings.auto_trade_zone_cooldown_atr,
+  )
+  if cooldown_reason is not None:
+    log.info(
+      "auto-trend candidate blocked symbol=%s reason=%s", symbol, cooldown_reason,
+    )
+    await _record_gate_reject(client, symbol, "zone_cooldown")
+    return None
+  if settings.auto_trade_overlap_veto_enabled:
+    overlap_reason = _overlapping_zone_conflict_reason(entry_reference, market_map)
+    if overlap_reason is not None:
+      log.info(
+        "auto-trend candidate blocked symbol=%s reason=%s", symbol, overlap_reason,
+      )
+      await _record_gate_reject(client, symbol, "overlapping_zone_conflict")
       return None
 
   now = int(datetime.now(timezone.utc).timestamp())
@@ -1304,6 +1483,7 @@ async def _handle_event(
       htf_zones=htf_zones,
       htf_levels=htf_levels,
       regime=regime,
+      market_map=cached_market_map,
     )
     if strategy_match is not None else None
   )
@@ -1319,6 +1499,7 @@ async def _handle_event(
       htf_zones=htf_zones,
       htf_levels=htf_levels,
       gate_source=gate_source,
+      market_map=cached_market_map,
     )
     if box_selected else None
   )
@@ -1332,9 +1513,12 @@ async def _handle_event(
       trend_decision,
       htf_zones=htf_zones,
       htf_levels=htf_levels,
+      market_map=cached_market_map,
     )
     if trend_selected else None
   )
+  if _has_overlapping_zones(cached_market_map):
+    await client.incr(f"auto_trade:zone_overlap:{symbol.upper()}")
   candidate_id = strategy_candidate_id or box_candidate_id or trend_candidate_id
   if candidate_id is None:
     if strategy_match is None and decision.state != "candidate":

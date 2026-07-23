@@ -27,6 +27,10 @@ import asyncio
 import json
 import logging
 
+from app.analysis.math_utils import atr_series
+from app.analysis.ohlc_source import RedisOHLCSource
+from app.autotrade import worker
+from app.bot.client import send_scanner_with_retry
 from app.core.config import settings
 from app.persistence import redis_state
 from app.persistence.store import (
@@ -116,6 +120,65 @@ def _intent_to_candidate_payload(intent: ManualTradeIntent) -> dict:
   }
 
 
+async def _warn_if_would_be_vetoed(
+  client,
+  intent: ManualTradeIntent,
+  reference_entry: float,
+) -> None:
+  """Manual /algo entries never go through worker.py's veto functions (they
+  bypass worker.py entirely, XADD-ing straight onto the candidate stream) -
+  that's a deliberate design choice, the owner's entry is a deliberate
+  choice too. But the owner should still be told when they're about to do
+  what the auto path would have refused, so this reuses worker.py's pure
+  veto-reason functions read-only, in a single pass, and only ever warns.
+  """
+  if not settings.telegram_owner_id:
+    return
+  try:
+    symbol = "XAU"
+    frames = await worker._load_frames(RedisOHLCSource(client), symbol)
+    m1 = frames.get("M1")
+    atr = None
+    if m1 is not None and not m1.empty:
+      atr_length = max(2, int(getattr(settings, "atr_length", 14)))
+      atr = float(atr_series(m1, atr_length).iloc[-1])
+    htf_zones = worker._htf_zones(frames, settings)
+    htf_levels = worker._htf_levels(frames, settings)
+    cached_market_map = worker.decode_market_map(
+      await client.get(worker.market_map_key(symbol))
+    )
+    reasons = []
+    barrier_reason = worker._opposing_barrier_reason(
+      intent.direction, reference_entry, atr, htf_zones, htf_levels,
+      settings.auto_trade_opposing_barrier_atr,
+    )
+    if barrier_reason is not None:
+      reasons.append(barrier_reason)
+    cooldown_reason = await worker._zone_cooldown_reason(
+      client, symbol, intent.direction, reference_entry, atr,
+      settings.auto_trade_zone_cooldown_atr,
+    )
+    if cooldown_reason is not None:
+      reasons.append(cooldown_reason)
+    overlap_reason = worker._overlapping_zone_conflict_reason(
+      reference_entry, cached_market_map,
+    )
+    if overlap_reason is not None:
+      reasons.append(overlap_reason)
+    if not reasons:
+      return
+    text = (
+      "⚠️ <b>Manual /algo entry warning</b>\n"
+      f"{intent.direction} {reference_entry:.2f} would be refused on the "
+      "auto path:\n" + "\n".join(f"• {reason}" for reason in reasons)
+    )
+    await send_scanner_with_retry(text, chat_id=settings.telegram_owner_id)
+  except Exception:
+    log.exception(
+      "manual-algo warning check failed for intent %s", intent.intent_id,
+    )
+
+
 async def _process_intent_entries(client, entries, *, cursor: str) -> str:
   for entry_id, fields in entries:
     try:
@@ -127,6 +190,9 @@ async def _process_intent_entries(client, entries, *, cursor: str) -> str:
         {"payload": json.dumps(candidate, separators=(",", ":"))},
         maxlen=max(100, settings.auto_trade_stream_maxlen),
         approximate=True,
+      )
+      await _warn_if_would_be_vetoed(
+        client, intent, float(candidate["current_price"]),
       )
     except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
       log.warning("Invalid manual trade intent %s: %s", entry_id, exc)
