@@ -716,6 +716,7 @@ async def _publish_candidate(
     "regime": regime.state if regime is not None else "chop",
     "opposing_zone_low": None if opposing_zone is None else opposing_zone.low,
     "opposing_zone_high": None if opposing_zone is None else opposing_zone.high,
+    "add_zone_side": None if opposing_zone is None else opposing_zone.side,
   }
   if scale_context is not None:
     payload.update({
@@ -729,6 +730,10 @@ async def _publish_candidate(
       "opposing_level_distance_atr": (
         scale_context.opposing_level_distance_atr
       ),
+      "counter_bos_ts": scale_context.counter_bos_ts,
+      "extreme_price": scale_context.extreme_price,
+      "extreme_ts": scale_context.extreme_ts,
+      "rejection_confirmed": scale_context.rejection_confirmed,
     })
   try:
     await client.xadd(
@@ -1029,6 +1034,7 @@ async def _publish_trend_candidate(
   htf_zones: list[Zone] | None = None,
   htf_levels: list[Level] | None = None,
   market_map: MarketMap | None = None,
+  frames: dict[str, Any] | None = None,
 ) -> str | None:
   if (
     not settings.auto_trade_enabled
@@ -1122,6 +1128,23 @@ async def _publish_trend_candidate(
   )
   if not claimed:
     return None
+  # Scale-in add evaluation (ScaleInTriggerPlanner, ctrader-engine) needs
+  # displacement/BOS/opposing-level context on trend candidates the same
+  # way box-scalp candidates already carry it - this is the wiring gap that
+  # left the momentum-add path unreachable in production (no regime="trend"
+  # candidate ever carried these fields before). There's no analogous
+  # single "target rail" for a trend candidate's own ladder, so
+  # opposing_level_distance_atr stays unset here (momentum's buffer check
+  # is a no-op when absent, same as any other candidate type lacking it).
+  scale_context = (
+    build_auto_scale_context(
+      frames or {},
+      trend_decision.direction,
+      spot_price=entry_reference,
+      cfg=settings,
+    )
+    if frames is not None else None
+  )
   payload = {
     "version": 3,
     "candidate_id": candidate_id,
@@ -1147,7 +1170,19 @@ async def _publish_trend_candidate(
     "regime": regime.state,
     "opposing_zone_low": None if opposing_zone is None else opposing_zone.low,
     "opposing_zone_high": None if opposing_zone is None else opposing_zone.high,
+    "add_zone_side": None if opposing_zone is None else opposing_zone.side,
   }
+  if scale_context is not None:
+    payload.update({
+      "displacement_direction": scale_context.displacement_direction,
+      "displacement_age_bars": scale_context.displacement_age_bars,
+      "bos_direction": scale_context.bos_direction,
+      "bos_ts": scale_context.bos_ts,
+      "counter_bos_ts": scale_context.counter_bos_ts,
+      "extreme_price": scale_context.extreme_price,
+      "extreme_ts": scale_context.extreme_ts,
+      "rejection_confirmed": scale_context.rejection_confirmed,
+    })
   try:
     await client.xadd(
       settings.auto_trade_stream,
@@ -1619,9 +1654,11 @@ async def _handle_event(
   scale_context = (
     build_auto_scale_context(
       frames,
-      decision,
+      decision.direction or "",
       spot_price=spot.price,
       cfg=settings,
+      target_low=None if decision.target is None else decision.target.low,
+      target_high=None if decision.target is None else decision.target.high,
     )
     if (
       box_selected
@@ -1673,6 +1710,7 @@ async def _handle_event(
       htf_zones=htf_zones,
       htf_levels=htf_levels,
       market_map=cached_market_map,
+      frames=frames,
     )
     if trend_selected else None
   )

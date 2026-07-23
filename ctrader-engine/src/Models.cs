@@ -163,7 +163,18 @@ public sealed record TradeCandidate(
   decimal? ManualStopLoss = null,
   long? ManualExpiresAt = null,
   decimal? SweepLow = null,
-  decimal? SweepHigh = null
+  decimal? SweepHigh = null,
+  // Pullback scale-in add (ScaleInTriggerPlanner P1-P4) - see scale_context.py.
+  // CounterBosTs/ExtremeTs are raw timestamps gated against a group's own
+  // GroupOpenedAt by ValidateAddTriggers (AutoTradeEngine.cs), the same
+  // pattern BosTs already uses; AddZoneLow/High reuse OpposingZoneLow/High
+  // (the nearest zone on the trade-direction side is the same lookup for
+  // both purposes) and only the side label is new.
+  long? CounterBosTs = null,
+  decimal? ExtremePrice = null,
+  long? ExtremeTs = null,
+  string? AddZoneSide = null,
+  bool RejectionConfirmed = false
 );
 
 public sealed record TradeStreamEntry(
