@@ -44,7 +44,11 @@ class Settings(BaseSettings):
   # Redis backs the watcher's TP/SL progress + bar cursor so state survives a
   # restart. Default host matches the compose service name; override locally.
   redis_url: str = "redis://redis:6379/0"
-  track_interval: int = 120
+  # 30s under normal operation just polls the cTrader Redis bar window more
+  # often (cheap). If the cTrader feed is down and Tiingo fallback kicks in,
+  # this pace is ~120 req/hour - over Tiingo's free-tier 50/hour cap for the
+  # duration of the outage; accepted tradeoff for faster TP/SL notifications.
+  track_interval: int = 30
   # Watcher reads closed M1 bars from ctrader-feed's Redis ZSET first; if the
   # newest bar there is older than this, it falls back to Tiingo for that
   # tick instead (feed gap/restart). ~3x the M1 interval gives room for one
