@@ -1426,6 +1426,16 @@ def _status_payload(
       if market_map_decision is None
       else dict(market_map_decision.filter_counts)
     ),
+    "market_map_track_limit": (
+      None
+      if market_map_decision is None
+      else market_map_decision.track_limit
+    ),
+    "market_map_execute_limit": (
+      None
+      if market_map_decision is None
+      else market_map_decision.execute_limit
+    ),
     "selected_strategy": selected_strategy,
     "selected_timeframe": selected_timeframe,
     "selection_state": (
