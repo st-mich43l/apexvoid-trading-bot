@@ -26,8 +26,8 @@ def test_regime_marks_contracting_window_as_coiling():
   range_ = DealingRange(110, 100, 105, 0.5, "eq")
   cfg = AnalysisSettings(chop_lookback=6, coil_contract=0.8)
 
-  assert regime(contracting, 1.0, "range", range_, cfg).coiling is True
-  assert regime(steady, 1.0, "range", range_, cfg).coiling is False
+  assert regime(contracting, 1.0, [], "range", range_, cfg).coiling is True
+  assert regime(steady, 1.0, [], "range", range_, cfg).coiling is False
 
 
 def test_displacement_close_accepts_box_break_immediately():

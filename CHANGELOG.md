@@ -11,6 +11,27 @@ dated section after deployment.
 
 ## Unreleased
 
+### Fixed
+
+- Regime classification no longer treats every narrow staircase step as chop.
+  Height and containment tests stay as the primary chop signals; an additive
+  directional override (LH/LL or HH/HL pairs over
+  `AUTO_TRADE_REGIME_DIRECTION_LOOKBACK`, default `120`, with net displacement
+  ≥ `AUTO_TRADE_REGIME_MIN_DISPLACEMENT_ATR`, default `4.0`) reclassifies as
+  trend when both conditions hold, and records the override in the reason
+  list. Ships dark behind `AUTO_TRADE_REGIME_DIRECTION_ENABLED=false`. Every
+  scan still writes `auto_trade:regime_compare:{symbol}` with
+  `{legacy}:{new}` so the counterfactual can be measured for 48h before
+  enabling. The same override feeds the private-strategy regime gate when
+  the flag is on so Trend becomes eligible on a directed tape.
+- Market Map reaction distance no longer discards zones beyond `1.5×ATR`.
+  Tracking (`AUTO_TRADE_MAP_TRACK_DISTANCE_ATR`, default `8.0`) and execution
+  (`AUTO_TRADE_MAP_EXECUTE_DISTANCE_ATR`, default `1.5`) are separate: distant
+  zones report as `waiting_for_touch` with both distances on `/auto_status`,
+  while only the execute window may place an immediate market entry after
+  unchanged M1 touch + rejection. Zones beyond track distance report
+  `no_zone_in_range`.
+
 ### Added
 
 - Added a second scale-in trigger, pullback add, alongside the existing

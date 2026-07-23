@@ -662,6 +662,7 @@ def test_regime_marks_tight_exec_range_as_chop():
   result = regime(
     df,
     pd.Series([3.0] * len(df), index=df.index),
+    [],
     "up",
     range_,
     AnalysisSettings(chop_range_atr=4.0, chop_lookback=24),
@@ -673,6 +674,8 @@ def test_regime_marks_tight_exec_range_as_chop():
     100,
     result.height_atr,
     result.reasons,
+    legacy_kind="chop",
+    new_kind="chop",
   )
   assert result.height_atr == pytest.approx(10 / 3)
   assert any(reason.startswith("range height") for reason in result.reasons)
@@ -689,6 +692,7 @@ def test_regime_marks_contained_range_structure_as_chop():
   result = regime(
     df,
     pd.Series([1.0] * len(df), index=df.index),
+    [],
     "range",
     range_,
     AnalysisSettings(chop_range_atr=4.0, chop_lookback=24),
@@ -709,6 +713,7 @@ def test_regime_keeps_expanded_breakout_as_trend():
   result = regime(
     df,
     pd.Series([1.0] * len(df), index=df.index),
+    [],
     "range",
     range_,
     AnalysisSettings(chop_range_atr=4.0, chop_lookback=24),

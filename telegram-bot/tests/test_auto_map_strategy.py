@@ -67,6 +67,8 @@ def _cfg(**overrides) -> SimpleNamespace:
     "auto_trade_map_counter_bias_enabled": True,
     "auto_trade_map_counter_bias_min_score": 6.0,
     "auto_trade_map_counter_bias_min_confluence": 2,
+    "auto_trade_map_track_distance_atr": 8.0,
+    "auto_trade_map_execute_distance_atr": 1.5,
     "atr_length": 14,
     "proximal_band_atr": 0.5,
   }
@@ -235,13 +237,12 @@ def test_unreachable_zone_reports_distance_limit_and_filters():
 
   assert selected is None
   assert state == "waiting_for_touch"
-  assert "no mapped SELL zone within reach" in reasons[0]
-  assert "at 14.1 price" in reasons[0]
-  assert "1.5×ATR = 4.5" in reasons[0]
+  assert "nearest mapped SELL zone 4087.00-4095.00" in reasons[0]
+  assert "14.1 away · tracked, execute within 4.5" in reasons[0]
   assert "side=0" in reasons[0]
   assert "actionable=0" in reasons[0]
   assert "degenerate_width=0" in reasons[0]
-  assert "distance=1" in reasons[0]
+  assert "distance=0" in reasons[0]
 
 
 def test_nearest_absent_from_rendered_map_is_flagged():
@@ -479,8 +480,150 @@ def test_replay_1938_filters_dead_band_then_selects_counter_bias(monkeypatch):
   )
 
   assert aligned_only.state == "waiting_for_touch"
-  assert "nearest 4087.00-4095.00" in aligned_only.reasons[0]
+  assert "nearest mapped SELL zone 4087.00-4095.00" in aligned_only.reasons[0]
   assert "degenerate_width=1" in aligned_only.reasons[0]
   assert counter_enabled.state == "candidate"
   assert counter_enabled.match is not None
   assert counter_enabled.match.tags == ("counter_bias",)
+
+
+def test_zone_beyond_default_track_limit_is_no_zone_in_range():
+  # 22.2 away with atr=2.4 → track 8.0×ATR = 19.2, so still out of range.
+  supply = MapEntry(
+    "sell", 4075.0, 4087.51, 4075, 4088,
+    "major", ["flip", "supply", "FVG", "breakout-retest"], 12.0,
+  )
+  track_limit = 8.0 * 2.4
+  distance = 4075.0 - 4052.0
+  assert distance == pytest.approx(23.0)
+  # Use the evidence distance 22.2 against the lo edge via price 4052.8.
+  price = 4075.0 - 22.2
+  assert 22.2 > track_limit
+
+  selected, state, reasons = map_strategy._select_reaction(
+    _map(supply, bias="down", price=price, eq=4051.0, box_low=4040.0, box_high=4062.0),
+    _m1_bar(open_=price, high=price + 0.5, low=price - 0.5, close=price),
+    price,
+    2.4,
+    0.5,
+    _cfg(),
+  )
+
+  assert selected is None
+  assert state == "no_zone_in_range"
+  assert "within track distance" in reasons[0]
+  assert "track limit 8.0×ATR = 19.2" in reasons[0]
+  assert "distance=1" in reasons[0]
+
+
+def test_zone_inside_track_outside_execute_is_waiting_for_touch():
+  supply = MapEntry(
+    "sell", 4075.0, 4087.51, 4075, 4088,
+    "major", ["supply", "fresh"], 10.0,
+  )
+  price = 4070.0  # 5.0 away from lo
+  atr = 2.4
+  assert 5.0 <= 8.0 * atr
+  assert 5.0 > 1.5 * atr
+
+  selected, state, reasons = map_strategy._select_reaction(
+    _map(supply, bias="down", price=price),
+    _m1_bar(open_=price, high=price + 0.4, low=price - 0.4, close=price),
+    price,
+    atr,
+    0.5,
+    _cfg(),
+  )
+
+  assert selected is None
+  assert state == "waiting_for_touch"
+  assert "5.0 away · tracked, execute within 3.6" in reasons[0]
+
+
+def test_zone_inside_execute_distance_is_market_eligible():
+  supply = MapEntry(
+    "sell", 4075.0, 4087.51, 4075, 4088,
+    "major", ["supply", "fresh"], 10.0,
+  )
+  price = 4072.0  # 3.0 away
+  atr = 2.4
+  assert 3.0 <= 1.5 * atr
+
+  selected, state, reasons = map_strategy._select_reaction(
+    _map(supply, bias="down", price=price),
+    _m1_bar(
+      open_=4074.0,
+      high=4076.5,
+      low=4071.5,
+      close=4072.0,
+    ),
+    price,
+    atr,
+    0.5,
+    _cfg(),
+  )
+
+  assert state == "candidate"
+  assert selected is not None
+  assert selected[1] == "SELL"
+
+
+def test_tracked_zone_still_requires_touch_and_reject():
+  supply = MapEntry(
+    "sell", 4075.0, 4087.51, 4075, 4088,
+    "major", ["supply", "fresh"], 10.0,
+  )
+  price = 4072.0
+
+  selected, state, reasons = map_strategy._select_reaction(
+    _map(supply, bias="down", price=price),
+    _m1_bar(open_=price, high=price + 0.2, low=price - 0.2, close=price),
+    price,
+    2.4,
+    0.5,
+    _cfg(),
+  )
+
+  assert selected is None
+  assert state == "waiting_for_touch"
+  assert "waiting for M1 touch" in reasons[0]
+
+
+def test_replay_2213_map_tracks_nearest_sell_without_order(monkeypatch):
+  """Fix 2 only: 22:14 map at price 4052, nearest SELL 4075-4087.51."""
+  supply = MapEntry(
+    "sell", 4075.0, 4087.51, 4075, 4088,
+    "major", ["flip", "supply", "FVG", "breakout-retest"], 12.0,
+  )
+  price = 4052.0
+  atr = 2.4
+  # Default track 8.0×ATR=19.2 leaves 23.0 out of range; raise track so the
+  # motivating session qualifies while keeping execute at 1.5×ATR.
+  monkeypatch.setattr(
+    map_strategy,
+    "atr_indicator",
+    lambda *args: pd.Series([atr]),
+  )
+  decision = map_strategy.evaluate_market_map_strategy(
+    {"M1": _m1_bar(open_=price, high=price + 0.4, low=price - 0.4, close=price)},
+    symbol="XAUUSD",
+    event_ts="1784823180",
+    spot_price=price,
+    cfg=_cfg(auto_trade_map_track_distance_atr=10.0),
+    market_map=_map(
+      supply,
+      bias="down",
+      price=price,
+      eq=4051.0,
+      box_low=4040.0,
+      box_high=4062.0,
+    ),
+    now=1784823180,
+  )
+
+  assert decision.state == "waiting_for_touch"
+  assert decision.match is None
+  assert "4075.00-4087.51" in decision.reasons[0]
+  assert "tracked, execute within 3.6" in decision.reasons[0]
+  assert decision.track_limit == pytest.approx(24.0)
+  assert decision.execute_limit == pytest.approx(3.6)

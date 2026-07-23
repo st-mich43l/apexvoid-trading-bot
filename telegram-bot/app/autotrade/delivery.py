@@ -494,6 +494,8 @@ async def auto_trade_status_text() -> str:
     map_entries_actionable: int | None = None
     map_top: list[dict] = []
     map_filters: dict[str, int] = {}
+    map_track_limit: float | None = None
+    map_execute_limit: float | None = None
     raw = await client.get("auto_trade:last_gate")
     if raw:
       try:
@@ -521,6 +523,10 @@ async def auto_trade_status_text() -> str:
             str(key): int(value)
             for key, value in payload["market_map_filter_counts"].items()
           }
+        if payload.get("market_map_track_limit") is not None:
+          map_track_limit = float(payload["market_map_track_limit"])
+        if payload.get("market_map_execute_limit") is not None:
+          map_execute_limit = float(payload["market_map_execute_limit"])
         reasons = payload.get("reasons")
         if isinstance(reasons, list) and reasons:
           selection_reason = str(reasons[-1])
@@ -610,7 +616,19 @@ async def auto_trade_status_text() -> str:
           distance = float(item.get("distance") or 0)
         except (KeyError, TypeError, ValueError):
           continue
-        location = "inside" if distance <= 0 else f"{distance:.1f} away"
+        if distance <= 0:
+          location = "inside"
+        elif (
+          map_track_limit is not None
+          and map_execute_limit is not None
+          and distance <= map_track_limit
+        ):
+          location = (
+            f"{distance:.1f} away · tracked, "
+            f"execute within {map_execute_limit:.1f}"
+          )
+        else:
+          location = f"{distance:.1f} away"
         nearest.append(
           f"{side} {low:,.2f}–{high:,.2f} ({location})"
         )

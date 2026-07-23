@@ -195,6 +195,11 @@ class Settings(BaseSettings):
   # Executes only structural Market Map zones (never display-only round-number
   # fallbacks) after the latest M1 candle touches and rejects the zone.
   auto_trade_market_map_strategy_enabled: bool = True
+  # Tracking vs execution reach for mapped reactions. Zones inside the track
+  # window are reported as the working target; only the execute window may
+  # produce an immediate market entry after M1 touch + rejection.
+  auto_trade_map_track_distance_atr: float = 8.0
+  auto_trade_map_execute_distance_atr: float = 1.5
   # Reject collapsed map geometry before it can become the nearest target.
   # Both thresholds apply; the effective minimum is their maximum.
   auto_trade_map_zone_min_width_atr: float = 0.15
@@ -236,6 +241,14 @@ class Settings(BaseSettings):
   # them. Kill switch so reconciliation can be disabled without a redeploy
   # if it trims a zone the strategy actually needed.
   auto_trade_zone_reconcile_enabled: bool = True
+  # Directional override for chop→trend. Height/containment stay as the
+  # primary chop tests; when enabled, a staircase of LH/LL or HH/HL pairs
+  # with enough net ATR displacement reclassifies as trend. Ships dark —
+  # run regime_compare for 48h before enabling.
+  auto_trade_regime_direction_enabled: bool = False
+  auto_trade_regime_direction_lookback: int = 120
+  auto_trade_regime_min_directional_swings: int = 3
+  auto_trade_regime_min_displacement_atr: float = 4.0
   # Trend/breakout regime classifier (app/autotrade/trend.py). Named with a
   # trend_/auto_trade_trend_ prefix to avoid colliding with the existing
   # scanner-owned breakout_accept_bars/breakout_max_age_bars fields above,

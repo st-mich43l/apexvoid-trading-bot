@@ -92,6 +92,8 @@ class MarketMapStrategyDecision:
   entries_seen: int = 0
   actionable_entries: tuple[ActionableMapEntry, ...] = ()
   filter_counts: tuple[tuple[str, int], ...] = ()
+  track_limit: float | None = None
+  execute_limit: float | None = None
 
 
 @dataclass(frozen=True)
@@ -102,6 +104,8 @@ class _ReactionSelection:
   entries_seen: int
   actionable_entries: tuple[ActionableMapEntry, ...]
   filter_counts: tuple[tuple[str, int], ...]
+  track_limit: float | None = None
+  execute_limit: float | None = None
 
 
 def evaluate_market_map_strategy(
@@ -153,6 +157,8 @@ def evaluate_market_map_strategy(
       entries_seen=selection.entries_seen,
       actionable_entries=selection.actionable_entries,
       filter_counts=selection.filter_counts,
+      track_limit=selection.track_limit,
+      execute_limit=selection.execute_limit,
     )
   entry, direction, entry_low, entry_high, counter_bias = selection.selected
 
@@ -173,6 +179,8 @@ def evaluate_market_map_strategy(
       entries_seen=selection.entries_seen,
       actionable_entries=selection.actionable_entries,
       filter_counts=selection.filter_counts,
+      track_limit=selection.track_limit,
+      execute_limit=selection.execute_limit,
     )
 
   issued_at = (
@@ -199,6 +207,8 @@ def evaluate_market_map_strategy(
       entries_seen=selection.entries_seen,
       actionable_entries=selection.actionable_entries,
       filter_counts=selection.filter_counts,
+      track_limit=selection.track_limit,
+      execute_limit=selection.execute_limit,
     )
   strategy = "Mapped Zone Reaction"
   match_id = strategy_match_id(
@@ -259,6 +269,8 @@ def evaluate_market_map_strategy(
     selection.entries_seen,
     selection.actionable_entries,
     selection.filter_counts,
+    selection.track_limit,
+    selection.execute_limit,
   )
 
 
@@ -381,31 +393,67 @@ def _select_reaction_detailed(
       -item[0].score,
     ),
   )
-  reach_limit = MAP_REACTION_REACH_ATR * atr
-  reachable = [
+  track_limit_atr = float(getattr(cfg, "auto_trade_map_track_distance_atr", 8.0))
+  track_limit = track_limit_atr * atr
+  execute_limit_atr = float(
+    getattr(
+      cfg,
+      "auto_trade_map_execute_distance_atr",
+      MAP_REACTION_REACH_ATR,
+    )
+  )
+  execute_limit = execute_limit_atr * atr
+
+  tracked = [
     item for item in ordered
-    if _band_distance(price, item[0].lo, item[0].hi) <= reach_limit
+    if _band_distance(price, item[0].lo, item[0].hi) <= track_limit
   ]
-  counts["distance"] = len(ordered) - len(reachable)
-  if not reachable:
+  counts["distance"] = len(ordered) - len(tracked)
+  if not tracked:
     nearest, nearest_direction, _ = ordered[0]
+    distance = _band_distance(price, nearest.lo, nearest.hi)
+    divergence = _render_divergence(nearest, rendered_map)
+    return _ReactionSelection(
+      None,
+      "no_zone_in_range",
+      (
+        f"no mapped {nearest_direction} zone within track distance "
+        f"(nearest {nearest.lo:.2f}-{nearest.hi:.2f} at {distance:.1f} price, "
+        f"track limit {track_limit_atr:.1f}×ATR = {track_limit:.1f})"
+        f"{divergence}{_filter_summary(counts)}",
+      ),
+      len(market_map.entries),
+      tuple(actionable),
+      _filter_counts(**counts),
+      track_limit,
+      execute_limit,
+    )
+
+  executable = [
+    item for item in tracked
+    if _band_distance(price, item[0].lo, item[0].hi) <= execute_limit
+  ]
+
+  if not executable:
+    nearest, nearest_direction, _ = tracked[0]
     distance = _band_distance(price, nearest.lo, nearest.hi)
     divergence = _render_divergence(nearest, rendered_map)
     return _ReactionSelection(
       None,
       "waiting_for_touch",
       (
-        f"no mapped {nearest_direction} zone within reach "
-        f"(nearest {nearest.lo:.2f}-{nearest.hi:.2f} at {distance:.1f} price, "
-        f"limit {MAP_REACTION_REACH_ATR:.1f}×ATR = {reach_limit:.1f})"
+        f"nearest mapped {nearest_direction} zone {nearest.lo:.2f}-{nearest.hi:.2f} "
+        f"({distance:.1f} away · tracked, execute within {execute_limit:.1f})"
         f"{divergence}{_filter_summary(counts)}",
       ),
       len(market_map.entries),
       tuple(actionable),
       _filter_counts(**counts),
+      track_limit,
+      execute_limit,
     )
 
-  for entry, candidate_direction, counter_bias in reachable:
+  for entry, candidate_direction, counter_bias in executable:
     if not _touches(m1.iloc[-1], entry, tolerance):
       continue
     if not _rejects(m1.iloc[-1], candidate_direction, atr):
@@ -420,6 +468,8 @@ def _select_reaction_detailed(
         len(market_map.entries),
         tuple(actionable),
         _filter_counts(**counts),
+        track_limit,
+        execute_limit,
       )
     # The executable band includes the rejection close. Waiting for M1 to
     # confirm necessarily means entry happens after price leaves the raw HTF
@@ -433,21 +483,27 @@ def _select_reaction_detailed(
       len(market_map.entries),
       tuple(actionable),
       _filter_counts(**counts),
+      track_limit,
+      execute_limit,
     )
 
-  nearest, nearest_direction, _ = reachable[0]
+  nearest, nearest_direction, _ = executable[0]
+  distance = _band_distance(price, nearest.lo, nearest.hi)
   divergence = _render_divergence(nearest, rendered_map)
   return _ReactionSelection(
     None,
     "waiting_for_touch",
     (
-      f"nearest mapped {nearest_direction} zone "
-      f"{nearest.lo:.2f}-{nearest.hi:.2f}; waiting for M1 touch"
+      f"nearest mapped {nearest_direction} zone {nearest.lo:.2f}-{nearest.hi:.2f} "
+      f"({distance:.1f} away · tracked, execute within {execute_limit:.1f}); "
+      f"waiting for M1 touch"
       f"{divergence}{_filter_summary(counts)}",
     ),
     len(market_map.entries),
     tuple(actionable),
     _filter_counts(**counts),
+    track_limit,
+    execute_limit,
   )
 
 

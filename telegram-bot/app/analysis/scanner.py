@@ -1158,6 +1158,25 @@ async def _handle_event(
         )
       if exec_analysis.zone_reconcile_aborted:
         await client.incr(f"auto_trade:zone_reconcile_aborted:{symbol.upper()}")
+      if exec_analysis.regime is not None:
+        regime = exec_analysis.regime
+        await client.hincrby(
+          f"auto_trade:regime_compare:{symbol.upper()}",
+          f"{regime.legacy_kind}:{regime.new_kind}",
+          1,
+        )
+        if regime.new_kind != regime.legacy_kind:
+          lookback = int(
+            getattr(settings, "auto_trade_regime_direction_lookback", 120)
+          )
+          log.debug(
+            "regime: legacy=%s new=%s (%s) height=%.2fATR lookback=%s",
+            regime.legacy_kind,
+            regime.new_kind,
+            regime.directional_detail or "directional override",
+            regime.height_atr,
+            lookback,
+          )
   detected = []
   for detector in detectors or DEFAULT_DETECTORS:
     result = detector(ctx)

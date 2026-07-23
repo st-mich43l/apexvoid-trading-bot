@@ -702,11 +702,13 @@ async def test_status_shows_market_map_working_set_and_filter_counts(
     "selected_strategy": None,
     "direction": None,
     "reasons": [
-      "no mapped SELL zone within reach "
-      "(nearest 4087.00-4095.00 at 14.1 price, limit 1.5×ATR = 4.5)",
+      "nearest mapped SELL zone 4087.00-4095.00 "
+      "(14.1 away · tracked, execute within 4.5)",
     ],
     "market_map_entries_seen": 7,
     "market_map_entries_actionable": 2,
+    "market_map_track_limit": 24.0,
+    "market_map_execute_limit": 4.5,
     "market_map_top": [
       {
         "side": "buy",
@@ -739,7 +741,10 @@ async def test_status_shows_market_map_working_set_and_filter_counts(
 
   assert "Map entries: <b>7</b> seen · <b>2</b> actionable" in text
   assert "BUY 4,066.00–4,073.00 (inside)" in text
-  assert "SELL 4,087.00–4,095.00 (14.1 away)" in text
+  assert (
+    "SELL 4,087.00–4,095.00 "
+    "(14.1 away · tracked, execute within 4.5)"
+  ) in text
   assert (
     "Map filters: side <b>3</b> · actionable <b>1</b> · "
     "width <b>1</b> · distance <b>1</b>"
