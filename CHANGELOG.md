@@ -13,6 +13,10 @@ dated section after deployment.
 
 ### Added
 
+- Added an inspectable Market Map strategy working set with one-hour Redis
+  snapshots, `/auto_status` entry/filter/distance telemetry, rendered-map
+  divergence warnings, and a default-enabled quality-gated `counter_bias` reaction
+  path whose profit ladder is capped at box EQ.
 - Added opt-in broker-confirmed range flip execution for defined box scalps,
   with opposing-edge targets, a `flip_pending` claim, timeout alerts, and the
   existing flat-exposure guard preserved. The feature defaults off.
@@ -155,6 +159,11 @@ dated section after deployment.
 
 ### Fixed
 
+- Fixed the Market Map strategy deadlock where a collapsed zone could become
+  the reported nearest target even though the same loop would never execute
+  it. Degenerate geometry is now rejected by ATR/absolute minimum width,
+  counted and warned; unreachable zones produce an honest distance-limit
+  reason instead of waiting indefinitely for a touch.
 - Fixed three manual `/algo` execution gaps found from live cards: (1) a
   broker-confirmed TP hit rendered as a bare "booked X% · +N pips" with no
   indication of which configured target fired, unlike the watcher-driven

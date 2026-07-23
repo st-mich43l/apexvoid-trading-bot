@@ -18,6 +18,7 @@ from app.autotrade.strategy_match import (
   strategy_match_key,
 )
 from app.autotrade.scale_context import AutoScaleContext
+from app.autotrade.map_strategy import ActionableMapEntry
 from app.autotrade.trend import RegimeInfo, TrendDecision
 from app.analysis.types import Level, Zone
 from app.analysis.market_map import MapEntry, MarketMap
@@ -975,6 +976,142 @@ async def test_record_gate_reject_increments_condition_counter():
     "auto_trade:gate_reject:XAU:waiting_for_box", "count",
   )
   assert int(count) == 2
+
+
+@pytest.mark.asyncio
+async def test_market_map_actionable_snapshot_and_degenerate_counter_have_ttl():
+  client = redis_state.get_client()
+  decision = worker.MarketMapStrategyDecision(
+    "waiting_for_touch",
+    ("no mapped SELL zone within reach",),
+    entries_seen=3,
+    actionable_entries=(
+      ActionableMapEntry(
+        "sell", 4087.0, 4095.0, "zone", 8.0, False, 14.12,
+      ),
+    ),
+    filter_counts=(
+      ("side", 1),
+      ("actionable", 0),
+      ("degenerate_width", 1),
+      ("distance", 1),
+    ),
+  )
+
+  await worker._record_market_map_strategy_telemetry(
+    client,
+    "XAU",
+    decision,
+  )
+
+  payload = json.loads(
+    await client.get("auto_trade:map_strategy:actionable:XAU")
+  )
+  assert payload == [{
+    "contains_price": False,
+    "hi": 4095.0,
+    "lo": 4087.0,
+    "score": 8.0,
+    "side": "sell",
+    "tier": "zone",
+  }]
+  ttl = await client.ttl("auto_trade:map_strategy:actionable:XAU")
+  assert 0 < ttl <= 3600
+  assert int(await client.get(
+    "auto_trade:map_zone_rejected:XAU:degenerate_width"
+  )) == 1
+
+
+@pytest.mark.asyncio
+async def test_counter_bias_target_barrier_rejects_before_eq(monkeypatch):
+  client = redis_state.get_client()
+  now = int(datetime.now(timezone.utc).timestamp())
+  base = _strategy_match(now)
+  match = replace(
+    base,
+    match_id=strategy_match_id(
+      "XAU", "M1", str(now), "Mapped Zone Reaction", "BUY", 4066.0, 4074.5,
+    ),
+    source_tf="M1",
+    strategy="Mapped Zone Reaction",
+    strategy_mode="mapped_zone_reaction",
+    direction="BUY",
+    entry_low=4066.0,
+    entry_high=4074.5,
+    current_price=4072.88,
+    structure_swing=4066.0,
+    targets_pips=(30, 60, 90, 111),
+    tags=("counter_bias",),
+    target_price=4084.0,
+  )
+  monkeypatch.setattr(worker.settings, "auto_trade_enabled", True)
+  monkeypatch.setattr(worker.settings, "auto_trade_stream", "auto_trade:test")
+  monkeypatch.setattr(worker.settings, "auto_trade_min_confluence", 2)
+  monkeypatch.setattr(worker, "event_in_window", AsyncMock(return_value=None))
+  barrier = Zone(4078.0, 4080.0, "supply", touches=0)
+
+  candidate_id = await worker._publish_strategy_match(
+    client,
+    "XAU",
+    worker.AutoTradeSpot(4072.88, now, True),
+    match,
+    consume_redis_match=False,
+    match_source="market_map_strategy",
+    htf_zones=[barrier],
+  )
+
+  assert candidate_id is None
+  assert await client.xlen("auto_trade:test") == 0
+  assert int(await client.hget(
+    "auto_trade:gate_reject:XAU:counter_bias_target_barrier",
+    "count",
+  )) == 1
+
+
+@pytest.mark.asyncio
+async def test_counter_bias_tag_reaches_candidate_setup_and_stats_label(
+  monkeypatch,
+):
+  client = redis_state.get_client()
+  now = int(datetime.now(timezone.utc).timestamp())
+  base = _strategy_match(now)
+  match = replace(
+    base,
+    match_id=strategy_match_id(
+      "XAU", "M1", str(now), "Mapped Zone Reaction", "BUY", 4066.0, 4074.5,
+    ),
+    source_tf="M1",
+    strategy="Mapped Zone Reaction",
+    strategy_mode="mapped_zone_reaction",
+    direction="BUY",
+    entry_low=4066.0,
+    entry_high=4074.5,
+    current_price=4072.88,
+    structure_swing=4066.0,
+    targets_pips=(30, 60, 90, 111),
+    tags=("counter_bias",),
+    target_price=4084.0,
+  )
+  monkeypatch.setattr(worker.settings, "auto_trade_enabled", True)
+  monkeypatch.setattr(worker.settings, "auto_trade_stream", "auto_trade:test")
+  monkeypatch.setattr(worker.settings, "auto_trade_min_confluence", 2)
+  monkeypatch.setattr(worker, "event_in_window", AsyncMock(return_value=None))
+
+  candidate_id = await worker._publish_strategy_match(
+    client,
+    "XAU",
+    worker.AutoTradeSpot(4072.88, now, True),
+    match,
+    consume_redis_match=False,
+    match_source="market_map_strategy",
+  )
+
+  assert candidate_id == match.match_id
+  entries = await client.xrange("auto_trade:test")
+  payload = json.loads(entries[0][1]["payload"])
+  assert payload["setup"] == "Mapped Zone Reaction · counter_bias"
+  assert payload["strategy_tags"] == ["counter_bias"]
+  assert payload["target_price"] == 4084.0
 
 
 # --- Fix 1: opposing-barrier containment gap --------------------------------

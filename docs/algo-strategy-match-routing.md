@@ -25,9 +25,16 @@ deduplication, and Market Map rendering do not control execution.
 
 - Scanner detectors decide whether their own structure is present.
 - `Mapped Zone Reaction` is a separate M1 execution strategy. It reads the
-  same structural Market Map model, requires an HTF-aligned FVG/OB/supply/
-  demand zone and an M1 touch/rejection, and ignores display-only round-number
-  fallback levels.
+  structural Market Map model, requires a usable FVG/OB/supply/demand band and
+  an M1 touch/rejection, and ignores display-only round-number fallback levels.
+  A mapped band must also satisfy
+  `max(AUTO_TRADE_MAP_ZONE_MIN_WIDTH_ATR × M1 ATR,
+  AUTO_TRADE_MAP_ZONE_MIN_WIDTH_ABS)` before it can become a target.
+- HTF-aligned and counter-bias mapped reactions are both enabled. Counter-bias
+  mean reversion is a distinct quality path: the zone must be fresh, meet the score
+  floor, and carry enough structural tags (or a nearby same-side trendline
+  level). It does not use the display tier as a quality proxy, still requires
+  M1 rejection, and ends at box EQ rather than the opposite range boundary.
 - The digest ranks matches by confluence, zone score, then distance.
 - The worker does not require another M1 rejection, M5 hold, Market Map rail,
   or `chop`/`trend`/`breakout` label.
@@ -61,11 +68,28 @@ strategy and mode, direction, entry/key level, ATR, structure swing, target
 plan, confluence, and reasons. Optional range fields are valid only for a
 range-edge strategy. Malformed, expired, or symbol-mismatched data fails closed.
 
+Every Market Map evaluation also replaces this one-hour diagnostic snapshot:
+
+```text
+SETEX auto_trade:map_strategy:actionable:{SYMBOL} 3600 <JSON array>
+```
+
+Each item contains the side, raw `lo`/`hi`, tier, score, and `contains_price`.
+`/auto_status` shows total entries seen, survivors, the three nearest entries,
+and per-rule side/actionability/width/distance counts. The last owner-rendered
+map is cached separately so a reason can explicitly flag a strategy/display
+divergence instead of citing a band the owner cannot see.
+
 ## Controls and telemetry
 
 ```text
 AUTO_TRADE_STRATEGY_BRIDGE_ENABLED=true
 AUTO_TRADE_STRATEGY_MATCH_MAX_AGE_SECONDS=420
+AUTO_TRADE_MAP_ZONE_MIN_WIDTH_ATR=0.15
+AUTO_TRADE_MAP_ZONE_MIN_WIDTH_ABS=1.0
+AUTO_TRADE_MAP_COUNTER_BIAS_ENABLED=true
+AUTO_TRADE_MAP_COUNTER_BIAS_MIN_SCORE=6.0
+AUTO_TRADE_MAP_COUNTER_BIAS_MIN_CONFLUENCE=2
 ```
 
 Legacy `AUTO_TRADE_FORMING_GATE_ENABLED` and
