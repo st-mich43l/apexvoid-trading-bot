@@ -208,6 +208,16 @@ class Settings(BaseSettings):
   # be disabled independently if it proves too strict.
   auto_trade_opposing_barrier_veto_enabled: bool = True
   auto_trade_opposing_barrier_atr: float = 0.5
+  # Post-stop-out cooldown (23 Jul 2026 incident: a stopped-out zone was
+  # re-entered same-direction 15 minutes later at essentially the same
+  # price). The TTL itself lives on the C# side (AUTO_TRADE_ZONE_COOLDOWN_
+  # MINUTES, AutoTradeOptions.cs) since only the engine knows when a
+  # position closed; worker.py only needs the ATR band for the veto check.
+  auto_trade_zone_cooldown_atr: float = 1.0
+  # Overlapping opposing Market Map zones (23 Jul incident: published SELL
+  # 4,116-4,127 and BUY 4,112-4,122 overlapped 4,116-4,122; the fill landed
+  # inside it). Trade-time veto only - Market Map output/zones.py untouched.
+  auto_trade_overlap_veto_enabled: bool = True
   # Trend/breakout regime classifier (app/autotrade/trend.py). Named with a
   # trend_/auto_trade_trend_ prefix to avoid colliding with the existing
   # scanner-owned breakout_accept_bars/breakout_max_age_bars fields above,

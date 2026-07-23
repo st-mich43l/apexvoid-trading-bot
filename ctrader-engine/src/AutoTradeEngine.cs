@@ -2225,6 +2225,26 @@ public sealed class AutoTradeEngine(
           stale,
           price: state.CurrentStopLoss
         );
+        // Reached only when the engine did NOT close this position itself
+        // (a clean take-profit exit untracks in ProcessTargetsAsync before
+        // this branch ever runs) - so this is always an SL hit or a manual
+        // close, indistinguishable from the data available here. Per the
+        // 23 Jul 2026 incident (a stopped-out zone re-entered 15 minutes
+        // later), default to starting the cooldown every time rather than
+        // trying to guess which one it was.
+        if (state.CurrentStopLoss is decimal lastStopLoss)
+        {
+          var directionLabel = state.Direction == TradeDirection.Buy ? "BUY" : "SELL";
+          await store.RecordZoneCooldownAsync(
+            RequireSymbol().RedisSymbol,
+            directionLabel,
+            state.EntryPrice,
+            lastStopLoss,
+            _clock().ToUnixTimeSeconds(),
+            options.ZoneCooldownMinutes,
+            cancellationToken
+          );
+        }
       }
     }
     foreach (var position in botPositions)

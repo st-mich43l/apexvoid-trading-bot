@@ -214,6 +214,21 @@ public sealed record ManualTradeCommand(
   decimal? Frac = null
 );
 
+// Written when a tracked position vanishes from the broker's open-position
+// snapshot without the engine itself having closed it (see
+// AutoTradeEngine.cs's reconcile stale-position branch) - this is always
+// ambiguous (SL hit or manual close look identical), so it is written
+// unconditionally on every such close. A clean take-profit close never
+// reaches that branch (ProcessTargetsAsync untracks the position itself
+// first), so it never produces one of these. Read by worker.py before
+// publishing a new same-direction candidate near this price (Fix 3, 23 Jul
+// 2026 incident: a stopped-out zone was re-entered 15 minutes later).
+public sealed record ZoneCooldownRecord(
+  decimal EntryPrice,
+  decimal StopPrice,
+  long ClosedAt
+);
+
 public sealed record AutoTradeEvent(
   string Type,
   long Timestamp,

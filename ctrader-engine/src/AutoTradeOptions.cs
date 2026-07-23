@@ -40,7 +40,8 @@ public sealed record AutoTradeOptions(
   decimal BoxMinRiskReward = 1.25m,
   int TrendStopMinPips = 40,
   int TrendStopMaxPips = 65,
-  bool StopPushBeyondZone = true
+  bool StopPushBeyondZone = true,
+  int ZoneCooldownMinutes = 60
 )
 {
   public static AutoTradeOptions FromEnvironment() => new(
@@ -81,7 +82,8 @@ public sealed record AutoTradeOptions(
     BoxMinRiskReward: Decimal("AUTO_TRADE_BOX_MIN_RR", 1.25m),
     TrendStopMinPips: Int("AUTO_TRADE_TREND_STOP_MIN_PIPS", 40),
     TrendStopMaxPips: Int("AUTO_TRADE_TREND_STOP_MAX_PIPS", 65),
-    StopPushBeyondZone: Bool("AUTO_TRADE_STOP_PUSH_BEYOND_ZONE", true)
+    StopPushBeyondZone: Bool("AUTO_TRADE_STOP_PUSH_BEYOND_ZONE", true),
+    ZoneCooldownMinutes: Int("AUTO_TRADE_ZONE_COOLDOWN_MINUTES", 60)
   );
 
   public void Validate()
@@ -178,6 +180,12 @@ public sealed record AutoTradeOptions(
     {
       throw new AutoTradeConfigurationException(
         "Auto trade disabled: zone-fill settings must be positive"
+      );
+    }
+    if (ZoneCooldownMinutes <= 0)
+    {
+      throw new AutoTradeConfigurationException(
+        "Auto trade disabled: AUTO_TRADE_ZONE_COOLDOWN_MINUTES must be positive"
       );
     }
     if (BoxMinRiskReward is < 1m or > 3m)
