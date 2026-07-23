@@ -16,6 +16,8 @@ public static class StructureStopPlanner
     decimal structureSwing,
     decimal atr,
     decimal bufferAtr,
+    decimal? sweepExtreme,
+    decimal wickBufferAtr,
     int minimumStopPips,
     int maximumStopPips,
     decimal pipSize,
@@ -27,6 +29,7 @@ public static class StructureStopPlanner
       || structureSwing <= 0
       || atr <= 0
       || bufferAtr < 0
+      || wickBufferAtr < 0
       || minimumStopPips <= 0
       || maximumStopPips < minimumStopPips
       || pipSize <= 0
@@ -37,6 +40,32 @@ public static class StructureStopPlanner
     var rawStop = direction == TradeDirection.Buy
       ? structureSwing - bufferAtr * atr
       : structureSwing + bufferAtr * atr;
+    if (sweepExtreme is decimal sweep)
+    {
+      if (sweep <= 0)
+      {
+        throw new VolumePlanningException("Sweep extreme is invalid");
+      }
+      var wickStop = direction == TradeDirection.Buy
+        ? sweep - wickBufferAtr * atr
+        : sweep + wickBufferAtr * atr;
+      var wickDistance = direction == TradeDirection.Buy
+        ? entryPrice - wickStop
+        : wickStop - entryPrice;
+      if (wickDistance <= 0)
+      {
+        throw new VolumePlanningException(
+          "Sweep invalidation is not on the losing side of entry"
+        );
+      }
+      if (wickDistance / pipSize > maximumStopPips)
+      {
+        throw new VolumePlanningException("stop_exceeds_envelope_after_wick");
+      }
+      rawStop = direction == TradeDirection.Buy
+        ? Math.Min(rawStop, wickStop)
+        : Math.Max(rawStop, wickStop);
+    }
     var rawDistance = direction == TradeDirection.Buy
       ? entryPrice - rawStop
       : rawStop - entryPrice;
