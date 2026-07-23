@@ -21,6 +21,15 @@ from app.analysis.types import (
 from app.analysis.trendlines import Trendline, value_at
 
 ZONE_MERGE_OVERLAP = 0.5
+# Floor for reconcile_opposing's trim-vs-drop decision - a remainder this
+# narrow (or narrower) carries no tradeable information and is dropped
+# rather than kept as a sliver. Callers scale this against ATR (see
+# engine.py's reconcile_opposing call site) and take the smaller of the two.
+ZONE_MIN_WIDTH = 2.0
+# Prefix stamped into a trimmed zone's score_reasons so downstream readers
+# (market_map.py's tag rendering, scanner.py's reconciliation counter) can
+# recognize a reconciled zone without a dedicated Zone field.
+ZONE_RECONCILED_TAG_PREFIX = "reconciled vs "
 FRESH_SCORE = 3.0
 SINGLE_TOUCH_SCORE = 1.0
 SOURCE_SCORE_CAP = 5.0
@@ -259,6 +268,104 @@ def score_zones(
     scored,
     key=lambda zone: (zone.score, -zone.touches, -zone.low),
     reverse=True,
+  )
+
+
+def reconcile_opposing(zones: list[Zone], min_width: float) -> list[Zone]:
+  """Trim the lower-scored side of any overlapping supply/demand pair to the
+  non-overlapping remainder (23 Jul 2026 incident: a published SELL and BUY
+  band overlapped six price wide, and price sat inside both at once).
+
+  merge_zones only reconciles same-side overlaps by construction; opposing
+  sides pass through untouched. This runs strictly after merge_zones and
+  score_zones (scores must already exist for the keep/trim comparison) and
+  only ever looks at supply-vs-demand pairs, so same-side behaviour is
+  exactly what merge_zones already produced.
+
+  Deterministic: both sides are sorted independently before any comparison
+  (so caller list order never matters), the keep/trim decision is a pure
+  rank function with no ties left undecided, and the fixed-point outer loop
+  always terminates because every trim strictly shrinks or removes a zone.
+  """
+  supply: list[Zone | None] = sorted(
+    (zone for zone in zones if zone.side == "supply"), key=_reconcile_sort_key,
+  )
+  demand: list[Zone | None] = sorted(
+    (zone for zone in zones if zone.side == "demand"), key=_reconcile_sort_key,
+  )
+  other = [zone for zone in zones if zone.side not in ("supply", "demand")]
+
+  changed = True
+  while changed:
+    changed = False
+    for s_index in range(len(supply)):
+      s_zone = supply[s_index]
+      if s_zone is None:
+        continue
+      for d_index in range(len(demand)):
+        d_zone = demand[d_index]
+        if d_zone is None:
+          continue
+        if not _ranges_overlap(s_zone.low, s_zone.high, d_zone.low, d_zone.high):
+          continue
+        if _reconcile_rank(s_zone) > _reconcile_rank(d_zone):
+          demand[d_index] = _trim_outside(d_zone, s_zone, min_width)
+        else:
+          supply[s_index] = _trim_outside(s_zone, d_zone, min_width)
+        changed = True
+        break
+      if changed:
+        break
+
+  return [
+    *(zone for zone in supply if zone is not None),
+    *(zone for zone in demand if zone is not None),
+    *other,
+  ]
+
+
+def _ranges_overlap(low1: float, high1: float, low2: float, high2: float) -> bool:
+  return min(high1, high2) - max(low1, low2) > 0
+
+
+def _reconcile_sort_key(zone: Zone) -> tuple[float, float, int]:
+  return (zone.low, zone.high, zone.origin_index)
+
+
+def _reconcile_rank(zone: Zone) -> tuple[float, float, int, str]:
+  # Higher score wins; tie -> wider zone; tie -> lower (older) origin_index.
+  # The final element (side) guarantees a decidable comparison even in the
+  # vanishingly unlikely case a supply and demand zone otherwise tie -
+  # opposing zones always differ on side, so two ranks here never truly tie.
+  return (zone.score, zone.high - zone.low, -zone.origin_index, zone.side)
+
+
+def _trim_outside(trim: Zone, keep: Zone, min_width: float) -> Zone | None:
+  covers_low = keep.low <= trim.low
+  covers_high = keep.high >= trim.high
+  if covers_low and covers_high:
+    return None
+  if covers_low:
+    remainder_low, remainder_high = keep.high, trim.high
+  elif covers_high:
+    remainder_low, remainder_high = trim.low, keep.low
+  else:
+    # keep sits strictly inside trim - splitting would produce two disjoint
+    # fragments; keep only the larger remaining side instead.
+    lower_width = keep.low - trim.low
+    upper_width = trim.high - keep.high
+    if lower_width >= upper_width:
+      remainder_low, remainder_high = trim.low, keep.low
+    else:
+      remainder_low, remainder_high = keep.high, trim.high
+  if remainder_high - remainder_low < min_width:
+    return None
+  reason = f"{ZONE_RECONCILED_TAG_PREFIX}{keep.side} {keep.low:.2f}-{keep.high:.2f}"
+  return replace(
+    trim,
+    bottom=remainder_low,
+    top=remainder_high,
+    score_reasons=[*trim.score_reasons, reason],
   )
 
 

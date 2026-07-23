@@ -31,6 +31,7 @@ from app.analysis.swings import find_swings
 from app.analysis.trendlines import Trendline, trendlines as find_trendlines
 from app.analysis.zones import (
   ZONE_MERGE_OVERLAP,
+  ZONE_MIN_WIDTH,
   breaker_blocks,
   displacement,
   flip_zones,
@@ -38,6 +39,7 @@ from app.analysis.zones import (
   mark_mitigation,
   merge_zones,
   order_blocks,
+  reconcile_opposing,
   score_zones,
   supply_demand,
 )
@@ -97,6 +99,7 @@ class AnalysisSettings:
   range_scalp_max_width_atr: float = 6.0
   range_scalp_min_room_atr: float = 1.0
   range_scalp_break_closes: int = 2
+  zone_reconcile_enabled: bool = True
 
 
 @dataclass(frozen=True)
@@ -244,6 +247,8 @@ def _analyze_tf(
     trendlines=diagonal_lines,
     bar_index=len(df) - 1,
   )
+  if settings.zone_reconcile_enabled:
+    zones = reconcile_opposing(zones, min(0.3 * atr_scalar(atr), ZONE_MIN_WIDTH))
   scalp_barriers, scalp_range = build_scalp_structure(
     df,
     atr,

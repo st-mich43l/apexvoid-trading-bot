@@ -29,6 +29,7 @@ from app.analysis.market_map import (
 from app.analysis.market_map_delivery import cache_analysis
 from app.analysis.ohlc_source import RedisOHLCSource
 from app.analysis.structure import Zone
+from app.analysis.zones import ZONE_RECONCILED_TAG_PREFIX
 from app.autotrade.strategy_match import (
   STRATEGY_MATCH_VERSION,
   StrategyMatch,
@@ -1142,6 +1143,12 @@ async def _handle_event(
         int(settings.auto_trade_strategy_match_max_age_seconds) * 2,
       ),
     )
+    reconciled = sum(
+      1 for entry in current_map.entries
+      if any(tag.startswith(ZONE_RECONCILED_TAG_PREFIX) for tag in entry.tags)
+    )
+    if reconciled:
+      await client.incrby(f"auto_trade:zone_reconciled:{symbol.upper()}", reconciled)
   detected = []
   for detector in detectors or DEFAULT_DETECTORS:
     result = detector(ctx)

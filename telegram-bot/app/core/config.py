@@ -222,6 +222,11 @@ class Settings(BaseSettings):
   # 4,116-4,127 and BUY 4,112-4,122 overlapped 4,116-4,122; the fill landed
   # inside it). Trade-time veto only - Market Map output/zones.py untouched.
   auto_trade_overlap_veto_enabled: bool = True
+  # Reconciles overlapping supply/demand zones at the analysis source
+  # (zones.py::reconcile_opposing) rather than only vetoing trades against
+  # them. Kill switch so reconciliation can be disabled without a redeploy
+  # if it trims a zone the strategy actually needed.
+  auto_trade_zone_reconcile_enabled: bool = True
   # Trend/breakout regime classifier (app/autotrade/trend.py). Named with a
   # trend_/auto_trade_trend_ prefix to avoid colliding with the existing
   # scanner-owned breakout_accept_bars/breakout_max_age_bars fields above,
