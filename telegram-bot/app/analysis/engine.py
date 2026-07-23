@@ -100,6 +100,10 @@ class AnalysisSettings:
   range_scalp_min_room_atr: float = 1.0
   range_scalp_break_closes: int = 2
   zone_reconcile_enabled: bool = True
+  regime_direction_enabled: bool = False
+  regime_direction_lookback: int = 120
+  regime_min_directional_swings: int = 3
+  regime_min_displacement_atr: float = 4.0
 
 
 @dataclass(frozen=True)
@@ -110,6 +114,11 @@ class Regime:
   height_atr: float
   reasons: list[str]
   coiling: bool = False
+  legacy_kind: str = "trend"
+  new_kind: str = "trend"
+  # Counterfactual detail for regime_compare DEBUG logs (always populated
+  # when the directional test would override, even with the flag off).
+  directional_detail: str = ""
 
 
 @dataclass(frozen=True)
@@ -222,7 +231,7 @@ def _analyze_tf(
     float(df["close"].iloc[-1]),
     settings.eq_band,
   )
-  regime_ = regime(df, atr, structure, range_, settings)
+  regime_ = regime(df, atr, swings, structure, range_, settings)
   box_break = accepted_box_break(df, atr, regime_, settings)
   zones = merge_zones(
     [*sd_zones, *ob_zones, *flip, *fvg_zones],
@@ -302,6 +311,7 @@ def _analyze_tf(
 def regime(
   df: pd.DataFrame,
   atr: pd.Series,
+  swings: list[Swing],
   structure: str,
   range_: DealingRange | None,
   settings: AnalysisSettings | None = None,
@@ -317,16 +327,27 @@ def regime(
       math.inf,
       ["chop filter disabled"],
       coiling,
+      "trend",
+      "trend",
     )
   if range_ is None:
-    return Regime("trend", close, close, math.inf, ["no dealing range"], coiling)
+    return Regime(
+      "trend",
+      close,
+      close,
+      math.inf,
+      ["no dealing range"],
+      coiling,
+      "trend",
+      "trend",
+    )
 
   range_high = float(range_.high)
   range_low = float(range_.low)
   height = max(0.0, range_high - range_low)
   atr_value = atr_scalar(atr)
   height_atr = height / atr_value if atr_value > 0 else math.inf
-  reasons = []
+  reasons: list[str] = []
   if height_atr < max(0.0, settings.chop_range_atr):
     reasons.append(
       f"range height {height_atr:.2f} ATR < {settings.chop_range_atr:.2f}"
@@ -338,10 +359,132 @@ def regime(
     settings.chop_lookback,
   ):
     reasons.append(f"range structure held {max(1, settings.chop_lookback)} bars")
-  kind = "chop" if reasons else "trend"
+  legacy_kind = "chop" if reasons else "trend"
+  kind = legacy_kind
+  new_kind = legacy_kind
+  directional_detail = ""
+
+  override = _directional_trend_override(
+    df,
+    swings,
+    atr_value,
+    settings,
+  )
+  if override is not None:
+    pair_count, label, net_displacement, lookback = override
+    directional_detail = (
+      f"{pair_count} {label}, net {net_displacement:.1f} ATR"
+    )
+    override_reasons = [
+      (
+        f"trend (directional override): {pair_count} consecutive {label}, "
+        f"net {net_displacement:.1f} ATR over {lookback} bars"
+      ),
+    ]
+    if legacy_kind == "chop" and reasons:
+      override_reasons.append(
+        f"  [{reasons[0]} would have said chop]"
+      )
+    new_kind = "trend"
+    if settings.regime_direction_enabled:
+      kind = "trend"
+      reasons = override_reasons
+
   if not reasons:
     reasons = ["range expanded or broke edge"]
-  return Regime(kind, range_high, range_low, height_atr, reasons, coiling)
+
+  return Regime(
+    kind,
+    range_high,
+    range_low,
+    height_atr,
+    reasons,
+    coiling,
+    legacy_kind,
+    new_kind,
+    directional_detail,
+  )
+
+
+def _directional_pairs(swings: list[Swing]) -> list[int]:
+  """Classify adjacent swing pairs as bullish (+1) or bearish (-1)."""
+  pairs: list[int] = []
+  index = 0
+  while index < len(swings) - 1:
+    first, second = swings[index], swings[index + 1]
+    labels = {first.label, second.label}
+    if labels == {"LH", "LL"}:
+      pairs.append(-1)
+      index += 2
+    elif labels == {"HH", "HL"}:
+      pairs.append(1)
+      index += 2
+    else:
+      index += 1
+  return pairs
+
+
+def directional_trend_override(
+  df: pd.DataFrame,
+  swings: list[Swing],
+  atr_value: float,
+  *,
+  lookback: int = 120,
+  min_directional_swings: int = 3,
+  min_displacement_atr: float = 4.0,
+) -> tuple[int, str, float, int] | None:
+  """Return (pair_count, label, net_displacement_atr, lookback) when trending.
+
+  A window is trending when it has enough same-direction swing pairs, at most
+  one counter-direction pair, and net displacement clears the ATR floor.
+  """
+  if df.empty or atr_value <= 0:
+    return None
+  lookback = max(1, int(lookback))
+  start_idx = max(0, len(df) - lookback)
+  window = df.iloc[start_idx:]
+  window_swings = [
+    swing for swing in swings
+    if int(swing.index) >= start_idx
+  ]
+  pairs = _directional_pairs(window_swings)
+  bullish = sum(1 for pair in pairs if pair > 0)
+  bearish = sum(1 for pair in pairs if pair < 0)
+  first_close = float(window["close"].iloc[0])
+  last_close = float(window["close"].iloc[-1])
+  net_displacement = (last_close - first_close) / atr_value
+  min_swings = max(1, int(min_directional_swings))
+  min_disp = max(0.0, float(min_displacement_atr))
+
+  if (
+    bearish >= min_swings
+    and bullish <= 1
+    and net_displacement <= -min_disp
+  ):
+    return bearish, "LH/LL", net_displacement, lookback
+  if (
+    bullish >= min_swings
+    and bearish <= 1
+    and net_displacement >= min_disp
+  ):
+    return bullish, "HH/HL", net_displacement, lookback
+  return None
+
+
+def _directional_trend_override(
+  df: pd.DataFrame,
+  swings: list[Swing],
+  atr_value: float,
+  settings: AnalysisSettings,
+) -> tuple[int, str, float, int] | None:
+  return directional_trend_override(
+    df,
+    swings,
+    atr_value,
+    lookback=settings.regime_direction_lookback,
+    min_directional_swings=settings.regime_min_directional_swings,
+    min_displacement_atr=settings.regime_min_displacement_atr,
+  )
 
 
 def _is_coiling(df: pd.DataFrame, lookback: int, contract: float) -> bool:

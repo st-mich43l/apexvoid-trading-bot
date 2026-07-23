@@ -127,6 +127,10 @@ class DetectorSettings:
   range_scalp_min_wick_rejections: int = 1
   range_scalp_allow_rejection_only: bool = True
   zone_reconcile_enabled: bool = True
+  regime_direction_enabled: bool = False
+  regime_direction_lookback: int = 120
+  regime_min_directional_swings: int = 3
+  regime_min_displacement_atr: float = 4.0
 
   def analysis_settings(self) -> AnalysisSettings:
     return AnalysisSettings(
@@ -172,6 +176,10 @@ class DetectorSettings:
       range_scalp_min_room_atr=self.range_scalp_min_room_atr,
       range_scalp_break_closes=self.range_scalp_break_closes,
       zone_reconcile_enabled=self.zone_reconcile_enabled,
+      regime_direction_enabled=self.regime_direction_enabled,
+      regime_direction_lookback=self.regime_direction_lookback,
+      regime_min_directional_swings=self.regime_min_directional_swings,
+      regime_min_displacement_atr=self.regime_min_displacement_atr,
     )
 
 
@@ -234,6 +242,10 @@ def detector_settings_from(config) -> DetectorSettings:
     range_scalp_min_wick_rejections=config.range_scalp_min_wick_rejections,
     range_scalp_allow_rejection_only=config.range_scalp_allow_rejection_only,
     zone_reconcile_enabled=config.auto_trade_zone_reconcile_enabled,
+    regime_direction_enabled=config.auto_trade_regime_direction_enabled,
+    regime_direction_lookback=config.auto_trade_regime_direction_lookback,
+    regime_min_directional_swings=config.auto_trade_regime_min_directional_swings,
+    regime_min_displacement_atr=config.auto_trade_regime_min_displacement_atr,
   )
 
 

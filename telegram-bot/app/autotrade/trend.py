@@ -18,7 +18,7 @@ from typing import Any
 
 import pandas as pd
 
-from app.analysis.engine import analyze
+from app.analysis.engine import analyze, directional_trend_override
 from app.analysis.math_utils import atr_series
 from app.analysis.regime import displacement_grade
 from app.analysis.session_liquidity import previous_week_levels, session_levels
@@ -118,27 +118,48 @@ def classify_regime(
   structure = market_structure(swings)
   atr_ratio = _atr_ratio(atr_series_full, atr, cfg)
   if structure not in ("up", "down"):
-    return RegimeInfo(
-      "chop", None, 0, atr_ratio, False, None,
+    return _maybe_directional_trend(
+      m1,
+      swings,
+      atr,
+      structure,
+      0,
+      atr_ratio,
+      False,
       (f"structure is {structure}",),
+      cfg,
     )
 
   breaks = structure_breaks(swings, m1)
   bos_count = _bos_count_since_choch(breaks)
   min_bos = max(0, int(getattr(cfg, "trend_min_bos", 2)))
   if bos_count < min_bos:
-    return RegimeInfo(
-      "chop", structure, bos_count, atr_ratio, False, None,
+    return _maybe_directional_trend(
+      m1,
+      swings,
+      atr,
+      structure,
+      bos_count,
+      atr_ratio,
+      False,
       (f"bos_count {bos_count} < required {min_bos}",),
+      cfg,
     )
 
   window = m1.tail(BOX_LOOKBACK_FOR_HEIGHT)
   height = float(window["high"].max() - window["low"].min())
   min_height_atr = max(0.0, float(getattr(cfg, "trend_min_height_atr", 3.0)))
   if height < min_height_atr * atr:
-    return RegimeInfo(
-      "chop", structure, bos_count, atr_ratio, False, None,
+    return _maybe_directional_trend(
+      m1,
+      swings,
+      atr,
+      structure,
+      bos_count,
+      atr_ratio,
+      False,
       (f"range height {height:.2f} < {min_height_atr:.2f}x ATR",),
+      cfg,
     )
 
   m15 = frames.get("M15")
@@ -147,16 +168,32 @@ def classify_regime(
     htf_bias = analyze({"M15": m15}, htf_order=["M15"]).htf_bias
   htf_aligned = htf_bias == structure or htf_bias == "range"
   if not htf_aligned:
-    return RegimeInfo(
-      "chop", structure, bos_count, atr_ratio, False, None,
+    return _maybe_directional_trend(
+      m1,
+      swings,
+      atr,
+      structure,
+      bos_count,
+      atr_ratio,
+      False,
       (f"HTF bias {htf_bias} opposes {structure}",),
+      cfg,
     )
 
   expansion_needed = max(0.0, float(getattr(cfg, "trend_atr_expansion", 1.15)))
   if atr_ratio < expansion_needed:
-    return RegimeInfo(
-      "chop", structure, bos_count, atr_ratio, True, None,
-      (f"atr_ratio {atr_ratio:.2f} < required {expansion_needed:.2f}",),
+    return _maybe_directional_trend(
+      m1,
+      swings,
+      atr,
+      structure,
+      bos_count,
+      atr_ratio,
+      True,
+      (
+        f"atr_ratio {atr_ratio:.2f} < required {expansion_needed:.2f}",
+      ),
+      cfg,
     )
 
   return RegimeInfo(
@@ -166,6 +203,62 @@ def classify_regime(
       f"range height {height:.1f} >= {min_height_atr:.2f}x ATR",
       f"htf_bias={htf_bias}",
       f"atr_ratio={atr_ratio:.2f}",
+    ),
+  )
+
+
+def _maybe_directional_trend(
+  m1: pd.DataFrame,
+  swings: list,
+  atr: float,
+  structure: str | None,
+  bos_count: int,
+  atr_ratio: float,
+  htf_aligned: bool,
+  chop_reasons: tuple[str, ...],
+  cfg: Any,
+) -> RegimeInfo:
+  """Apply the engine directional override when the private flag is on.
+
+  Breakout classification is untouched; this only rescues chop→trend when
+  successive LH/LL or HH/HL pairs show a directed market that the BOS/height
+  path still called chop.
+  """
+  if not bool(getattr(cfg, "auto_trade_regime_direction_enabled", False)):
+    return RegimeInfo(
+      "chop", structure, bos_count, atr_ratio, htf_aligned, None, chop_reasons,
+    )
+  override = directional_trend_override(
+    m1,
+    swings,
+    atr,
+    lookback=int(getattr(cfg, "auto_trade_regime_direction_lookback", 120)),
+    min_directional_swings=int(
+      getattr(cfg, "auto_trade_regime_min_directional_swings", 3)
+    ),
+    min_displacement_atr=float(
+      getattr(cfg, "auto_trade_regime_min_displacement_atr", 4.0)
+    ),
+  )
+  if override is None:
+    return RegimeInfo(
+      "chop", structure, bos_count, atr_ratio, htf_aligned, None, chop_reasons,
+    )
+  pair_count, label, net_displacement, lookback = override
+  direction = "down" if net_displacement < 0 else "up"
+  return RegimeInfo(
+    "trend",
+    direction,
+    bos_count,
+    atr_ratio,
+    True,
+    None,
+    (
+      (
+        f"trend (directional override): {pair_count} consecutive {label}, "
+        f"net {net_displacement:.1f} ATR over {lookback} bars"
+      ),
+      f"  [{chop_reasons[0]} would have said chop]",
     ),
   )
 
