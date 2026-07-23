@@ -126,6 +126,7 @@ class DetectorSettings:
   range_scalp_break_closes: int = 2
   range_scalp_min_wick_rejections: int = 1
   range_scalp_allow_rejection_only: bool = True
+  zone_reconcile_enabled: bool = True
 
   def analysis_settings(self) -> AnalysisSettings:
     return AnalysisSettings(
@@ -170,6 +171,7 @@ class DetectorSettings:
       range_scalp_max_width_atr=self.range_scalp_max_width_atr,
       range_scalp_min_room_atr=self.range_scalp_min_room_atr,
       range_scalp_break_closes=self.range_scalp_break_closes,
+      zone_reconcile_enabled=self.zone_reconcile_enabled,
     )
 
 
@@ -231,6 +233,7 @@ def detector_settings_from(config) -> DetectorSettings:
     range_scalp_break_closes=config.range_scalp_break_closes,
     range_scalp_min_wick_rejections=config.range_scalp_min_wick_rejections,
     range_scalp_allow_rejection_only=config.range_scalp_allow_rejection_only,
+    zone_reconcile_enabled=config.auto_trade_zone_reconcile_enabled,
   )
 
 

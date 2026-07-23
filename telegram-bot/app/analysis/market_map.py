@@ -6,11 +6,14 @@ from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, timedelta, timezone
 from html import escape
 import json
+import logging
 import math
 
 from app.analysis.math_utils import atr_scalar
 from app.analysis.scalp_ranges import ScalpBarrier, ScalpRange
 from app.analysis.trendlines import value_at
+
+log = logging.getLogger(__name__)
 
 MAP_MAX_PER_SIDE = 4
 MAP_MAJOR_SCORE = 12.0
@@ -43,6 +46,10 @@ class MapEntry:
   tier: str
   tags: list[str]
   score: float
+  # True when current price is already inside [lo, hi] - this describes
+  # where price *is*, not something ahead of it. Defaults False so a payload
+  # written before this field existed still round-trips correctly.
+  contains_price: bool = False
 
 
 @dataclass(frozen=True)
@@ -249,6 +256,14 @@ def build_map(ctx_or_per_tf, price: float, cfg) -> MarketMap:
   regime = getattr(ctx_or_per_tf, "regime", None)
   dealing_range = getattr(ctx_or_per_tf, "dealing_range", None)
   bias = str(getattr(ctx_or_per_tf, "htf_bias", "range"))
+  rails, scalp_rejected_by = _build_scalp_rails(per_tf, float(price), cfg)
+  log.debug(
+    "range check: box=%s-%s (source=dealing_range) scalp_edges=%s (source=scalp_ranges, rejected_by=%s)",
+    regime.range_low if regime is not None else None,
+    regime.range_high if regime is not None else None,
+    "present" if rails else "none",
+    scalp_rejected_by,
+  )
   return MarketMap(
     entries=capped,
     price=float(price),
@@ -257,11 +272,7 @@ def build_map(ctx_or_per_tf, price: float, cfg) -> MarketMap:
     box_high=float(regime.range_high) if regime is not None else None,
     bias=bias,
     bias_tf=_bias_timeframe(per_tf, bias),
-    rails=_build_scalp_rails(
-      per_tf,
-      float(price),
-      cfg,
-    ),
+    rails=rails,
   )
 
 
@@ -309,7 +320,11 @@ def map_reference(
   side = "buy" if direction.upper() == "BUY" else "sell"
   matches = [
     entry for entry in market_map.entries
-    if entry.side == side and _bands_overlap(entry.lo, entry.hi, lo, hi)
+    if entry.side == side
+    and _bands_overlap(entry.lo, entry.hi, lo, hi)
+    # A zone price is already inside is not ahead of this entry - it
+    # describes where price is, not what lies between here and there.
+    and not entry.contains_price
   ]
   if not matches:
     return None
@@ -329,6 +344,10 @@ def rail_reference(
   matches = [
     rail for rail in market_map.rails
     if _bands_overlap(rail.lo, rail.hi, lo, hi)
+    # A rail band price already sits inside isn't ahead either - ScalpRail
+    # has no stored contains_price flag, so this is computed inline against
+    # the map's own recorded price.
+    and not (rail.lo <= market_map.price <= rail.hi)
   ]
   if not matches:
     return None
@@ -391,7 +410,23 @@ def _zone_entry(
   price: float,
   major_score: float,
 ) -> MapEntry | None:
-  side = _geometry_side(zone.side, (float(zone.low) + float(zone.high)) / 2, price)
+  zone_low = float(zone.low)
+  zone_high = float(zone.high)
+  # A zone price is already inside is not a forward barrier - it describes
+  # where price *is*, not something price must travel to reach. The
+  # midpoint-anchored geometry check below is only meaningful for a zone
+  # price hasn't reached yet (23 Jul 2026 incident: a supply zone spanning
+  # the box floor through EQ, with price inside it, was still published as
+  # the nearest forward barrier and traded against).
+  contains_price = zone_low <= price <= zone_high
+  if contains_price:
+    side = (
+      "sell" if zone.side in {"supply", "resistance"}
+      else "buy" if zone.side in {"demand", "support"}
+      else None
+    )
+  else:
+    side = _geometry_side(zone.side, (zone_low + zone_high) / 2, price)
   if side is None:
     return None
   score = float(getattr(zone, "score", 0.0))
@@ -400,7 +435,7 @@ def _zone_entry(
     (
       level.name for level in session_levels
       if level.name in _MAJOR_SESSION_LEVELS
-      and float(zone.low) <= float(level.price) <= float(zone.high)
+      and zone_low <= float(level.price) <= zone_high
     ),
     None,
   )
@@ -413,7 +448,9 @@ def _zone_entry(
   if major_level:
     tags.append(major_level)
   tags.extend(_score_tags(score_reasons))
-  return _entry(side, float(zone.low), float(zone.high), tier, tags, score)
+  if contains_price:
+    tags.append("price inside")
+  return _entry(side, zone_low, zone_high, tier, tags, score, contains_price)
 
 
 def _zone_tags(zone, side: str) -> list[str]:
@@ -517,6 +554,7 @@ def _entry(
   tier: str,
   tags: list[str],
   score: float,
+  contains_price: bool = False,
 ) -> MapEntry:
   lo, hi = sorted((float(lo), float(hi)))
   label_lo, label_hi = _rounded_band(lo, hi)
@@ -529,6 +567,7 @@ def _entry(
     tier,
     _compact_tags(tags, MAP_TAG_LIMIT),
     float(score),
+    contains_price,
   )
 
 
@@ -604,6 +643,10 @@ def _is_oversized_container(
 
 
 def _cap_entry_width(entry: MapEntry, cap: float) -> MapEntry:
+  log.debug(
+    "map entry pre-cap width=%.2f cap=%.2f side=%s band=%.2f-%.2f",
+    entry.hi - entry.lo, cap, entry.side, entry.lo, entry.hi,
+  )
   if entry.hi - entry.lo <= cap:
     return _limit_label_width(entry, cap)
   center = (entry.lo + entry.hi) / 2
@@ -614,6 +657,7 @@ def _cap_entry_width(entry: MapEntry, cap: float) -> MapEntry:
     entry.tier,
     entry.tags,
     entry.score,
+    entry.contains_price,
   )
   return _limit_label_width(capped, cap)
 
@@ -641,6 +685,7 @@ def _merged_entry(
     tier,
     [*first.tags, *second.tags],
     max(first.score, second.score),
+    first.contains_price or second.contains_price,
   )
 
 
@@ -747,6 +792,7 @@ def _attach_confluence(
       tier,
       [*entry.tags, *reference.tags],
       max(entry.score, reference.score),
+      entry.contains_price,
     )
   return attached, unmatched
 
@@ -837,18 +883,18 @@ def _build_scalp_rails(
   per_tf: dict,
   price: float,
   cfg,
-) -> list[ScalpRail]:
+) -> tuple[list[ScalpRail], str | None]:
   radius = max(0.0, float(getattr(cfg, "map_scalp_radius", MAP_SCALP_RADIUS)))
   if not per_tf or radius <= 0:
-    return []
+    return [], "no_radius"
   exec_tf = str(getattr(cfg, "scanner_exec_tf", "")).upper()
   item = per_tf.get(exec_tf)
   if item is None:
     _, item = min(per_tf.items(), key=lambda pair: (_tf_rank(pair[0]), pair[0]))
   scalp_range = getattr(item, "scalp_range", None)
-  pair = _validated_scalp_pair(scalp_range, price, radius, cfg)
+  pair, rejected_by = _validated_scalp_pair(scalp_range, price, radius, cfg)
   if pair is None:
-    return []
+    return [], rejected_by
   lower, upper = pair
   rails = [
     _scalp_edge_rail(lower, "BUY"),
@@ -857,7 +903,7 @@ def _build_scalp_rails(
   return sorted(
     rails,
     key=lambda rail: (abs(rail.price - price), rail.price, rail.direction),
-  )
+  ), None
 
 
 def _validated_scalp_pair(
@@ -865,9 +911,9 @@ def _validated_scalp_pair(
   price: float,
   radius: float,
   cfg,
-) -> tuple[ScalpBarrier, ScalpBarrier] | None:
+) -> tuple[tuple[ScalpBarrier, ScalpBarrier] | None, str | None]:
   if scalp_range is None:
-    return None
+    return None, "no_scalp_range"
   lower = scalp_range.lower
   upper = scalp_range.upper
   values = (
@@ -880,15 +926,15 @@ def _validated_scalp_pair(
     scalp_range.width_atr,
   )
   if not all(math.isfinite(float(value)) for value in values):
-    return None
+    return None, "non_finite"
   if lower.side != "support" or upper.side != "resistance":
-    return None
+    return None, "wrong_side"
   if lower.level >= upper.level:
-    return None
+    return None, "inverted"
   if not lower.low <= price <= upper.high:
-    return None
+    return None, "outside_price"
   if max(abs(lower.level - price), abs(upper.level - price)) > radius:
-    return None
+    return None, "outside_radius"
 
   minimum_touches = max(2, int(getattr(cfg, "range_scalp_min_touches", 3)))
   break_closes = max(1, int(getattr(cfg, "range_scalp_break_closes", 2)))
@@ -900,7 +946,7 @@ def _validated_scalp_pair(
     or lower.accepted_closes >= break_closes
     or upper.accepted_closes >= break_closes
   ):
-    return None
+    return None, "touch_or_wick_or_break"
 
   minimum_width = max(
     0.0,
@@ -912,8 +958,8 @@ def _validated_scalp_pair(
     float(getattr(cfg, "range_scalp_max_width_atr", 6.0)),
   )
   if not minimum_width <= scalp_range.width_atr <= maximum_width:
-    return None
-  return lower, upper
+    return None, "width_out_of_range"
+  return (lower, upper), None
 
 
 def _scalp_edge_rail(barrier: ScalpBarrier, direction: str) -> ScalpRail:
@@ -1136,7 +1182,9 @@ def _geometry_side(kind: str, anchor: float, price: float) -> str | None:
 
 def _distance(entry: MapEntry, price: float) -> float:
   if entry.lo <= price <= entry.hi:
-    return 0.0
+    # Room to the far edge, not zero - zero caused a containing band to
+    # sort first in "nearest" orderings, the opposite of correct.
+    return max(abs(price - entry.lo), abs(price - entry.hi))
   return min(abs(price - entry.lo), abs(price - entry.hi))
 
 
