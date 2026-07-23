@@ -155,6 +155,24 @@ dated section after deployment.
 
 ### Fixed
 
+- Fixed `reconcile_opposing` over-trimming the zone map (regression from
+  PR #89, live 22-23 Jul 2026 incident: zero `SETUP FORMING` cards for 6+
+  hours). The original implementation treated any nonzero overlap between
+  opposing supply/demand zones as a conflict and re-compared already-trimmed
+  zones on every pass, so on dense M5 FVG output the cascade could empty the
+  map. Opposing overlap now requires the same overlap-*ratio* bar as
+  same-side merging (`ZONE_RECONCILE_OVERLAP = 0.5`, full containment still
+  scores 1.0), each zone can be a trim *target* at most once per call, and a
+  circuit breaker (`ZONE_RECONCILE_MAX_FRACTION = 0.20`, evaluated only once
+  there are at least 5 input zones) discards the whole pass and returns the
+  input unchanged — logging a warning and incrementing
+  `auto_trade:zone_reconcile_aborted:{symbol}` — instead of letting a
+  runaway cascade strip the map further. Added `auto_trade:zone_dropped:
+  {symbol}` alongside the existing `auto_trade:zone_reconciled:{symbol}`
+  counter, and a debug/info summary log line per call
+  (`zone reconcile: in=.. trimmed=.. dropped=.. out=..`). Mitigated live via
+  `AUTO_TRADE_ZONE_RECONCILE_ENABLED=false`; this PR ships with the flag
+  still `false` and re-enabling is a separate follow-up step.
 - Fixed range-scalp stops being placed inside the sweep wick, including an
   explicit `stop_exceeds_envelope_after_wick` rejection and counter when the
   safe stop cannot fit the configured risk envelope.

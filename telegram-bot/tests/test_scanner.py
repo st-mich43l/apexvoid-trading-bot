@@ -403,7 +403,13 @@ async def test_scanner_increments_zone_reconciled_counter(monkeypatch):
     tf="M5",
     htf_bias="up",
     structures={"M30": SimpleNamespace(bias="up")},
-    analysis=object(),
+    analysis=SimpleNamespace(
+      per_tf={
+        "M5": SimpleNamespace(
+          zone_reconcile_dropped=0, zone_reconcile_aborted=False,
+        ),
+      },
+    ),
     spot_price=None,
   )
   monkeypatch.setattr(
@@ -443,6 +449,51 @@ async def test_scanner_increments_zone_reconciled_counter(monkeypatch):
   )
 
   assert await client.get("auto_trade:zone_reconciled:XAU") == "1"
+
+
+@pytest.mark.asyncio
+async def test_scanner_increments_zone_dropped_and_aborted_counters(monkeypatch):
+  client = redis_state.get_client()
+  monkeypatch.setattr(scanner.settings, "scanner_symbols", "XAU")
+  monkeypatch.setattr(scanner.settings, "scanner_exec_tf", "M5")
+  monkeypatch.setattr(scanner.settings, "scanner_htf", "M30,M15")
+  monkeypatch.setattr(scanner.settings, "scanner_window", 500)
+  monkeypatch.setattr(scanner.settings, "telegram_owner_id", None)
+
+  class Source:
+    async def window(self, symbol, tf, n):
+      return _frame()
+
+  ctx = SimpleNamespace(
+    tf="M5",
+    htf_bias="up",
+    structures={"M30": SimpleNamespace(bias="up")},
+    analysis=SimpleNamespace(
+      per_tf={
+        "M5": SimpleNamespace(
+          zone_reconcile_dropped=3, zone_reconcile_aborted=True,
+        ),
+      },
+    ),
+    spot_price=None,
+  )
+  monkeypatch.setattr(
+    scanner,
+    "build_context",
+    lambda symbol, tf, frames, settings, htf_order: ctx,
+  )
+  empty_map = MarketMap([], 4113, None, None, None, "down", "M30")
+  monkeypatch.setattr(scanner, "build_map", lambda analysis, price, settings: empty_map)
+
+  await scanner._handle_event(
+    "XAU:M5:reconciled",
+    source=Source(),
+    client=client,
+    detectors=(lambda received_ctx: None,),
+  )
+
+  assert await client.get("auto_trade:zone_dropped:XAU") == "3"
+  assert await client.get("auto_trade:zone_reconcile_aborted:XAU") == "1"
 
 
 def test_scanner_alert_references_containing_market_map_entry():

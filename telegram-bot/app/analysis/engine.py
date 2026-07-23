@@ -136,6 +136,10 @@ class TimeframeAnalysis:
   box_break: BoxBreak | None = None
   scalp_barriers: list[ScalpBarrier] = field(default_factory=list)
   scalp_range: ScalpRange | None = None
+  # reconcile_opposing() diagnostics (zones.py) - dropped-zone count and
+  # whether the circuit breaker discarded this pass's reconciliation.
+  zone_reconcile_dropped: int = 0
+  zone_reconcile_aborted: bool = False
 
 
 @dataclass(frozen=True)
@@ -247,8 +251,17 @@ def _analyze_tf(
     trendlines=diagonal_lines,
     bar_index=len(df) - 1,
   )
+  zone_reconcile_dropped = 0
+  zone_reconcile_aborted = False
   if settings.zone_reconcile_enabled:
-    zones = reconcile_opposing(zones, min(0.3 * atr_scalar(atr), ZONE_MIN_WIDTH))
+    reconcile_stats: dict = {}
+    zones = reconcile_opposing(
+      zones,
+      min(0.3 * atr_scalar(atr), ZONE_MIN_WIDTH),
+      stats=reconcile_stats,
+    )
+    zone_reconcile_dropped = reconcile_stats.get("dropped", 0)
+    zone_reconcile_aborted = reconcile_stats.get("aborted", False)
   scalp_barriers, scalp_range = build_scalp_structure(
     df,
     atr,
@@ -281,6 +294,8 @@ def _analyze_tf(
     box_break=box_break,
     scalp_barriers=scalp_barriers,
     scalp_range=scalp_range,
+    zone_reconcile_dropped=zone_reconcile_dropped,
+    zone_reconcile_aborted=zone_reconcile_aborted,
   )
 
 

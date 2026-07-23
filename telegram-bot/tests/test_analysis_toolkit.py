@@ -235,13 +235,181 @@ def test_reconcile_opposing_trims_lower_scored_supply_side():
 
 
 def test_reconcile_opposing_drops_remainder_narrower_than_min_width():
+  # High overlap ratio (~0.91, well above the 0.5 threshold) so this tests
+  # the min_width drop specifically, not the overlap-ratio gate below.
   supply = Zone(4116, 4127, "supply", origin_index=1, score=8.0)
-  demand = Zone(4114.5, 4117, "demand", origin_index=2, score=5.0)
+  demand = Zone(4115, 4126, "demand", origin_index=2, score=5.0)
 
   result = reconcile_opposing([supply, demand], min_width=2.0)
 
   assert [zone.side for zone in result] == ["supply"]
   assert (result[0].low, result[0].high) == (4116, 4127)
+
+
+def test_reconcile_opposing_leaves_marginal_overlap_untouched():
+  # 0.5-wide overlap on a 4.5-wide zone -> ratio ~0.11, well below the 0.5
+  # threshold: partial overlap between adjacent zones is normal market
+  # structure, not a contradiction (22 Jul 2026 regression).
+  supply = Zone(4124, 4130, "supply", origin_index=1, score=8.0)
+  demand = Zone(4120, 4124.5, "demand", origin_index=2, score=5.0)
+
+  result = reconcile_opposing([supply, demand], min_width=2.0)
+
+  assert supply in result
+  assert demand in result
+
+
+def test_reconcile_opposing_full_containment_reconciles():
+  # A zone entirely inside an opposing zone normalises to ratio 1.0
+  # (_overlap_ratio divides by the narrower zone) - full containment is a
+  # genuine conflict and must still reconcile even under the new threshold.
+  supply = Zone(4120, 4122, "supply", origin_index=1, score=10.0)
+  demand = Zone(4110, 4130, "demand", origin_index=2, score=5.0)
+
+  result = reconcile_opposing([supply, demand], min_width=2.0)
+
+  demand_zones = [zone for zone in result if zone.side == "demand"]
+  assert len(demand_zones) == 1
+  assert (demand_zones[0].low, demand_zones[0].high) != (4110, 4130)
+
+
+def test_reconcile_opposing_trims_a_zone_at_most_once_per_pass():
+  # One demand zone overlaps three supply zones above threshold. Without
+  # the single-trim cap this cascades: each pass re-trims the same
+  # (shrinking) demand zone against the next supply zone until it clears
+  # min_width and is dropped entirely (the 22 Jul regression). With the
+  # cap, the demand zone is trimmed by whichever supply zone it compares
+  # against first and then exhausted as a trim target - it survives if
+  # that single remainder clears min_width.
+  demand = Zone(4100, 4140, "demand", origin_index=1, score=1.0)
+  supply_a = Zone(4095, 4108, "supply", origin_index=2, score=9.0)
+  supply_b = Zone(4130, 4145, "supply", origin_index=3, score=9.0)
+  supply_c = Zone(4108, 4132, "supply", origin_index=4, score=9.0)
+
+  result = reconcile_opposing(
+    [demand, supply_a, supply_b, supply_c], min_width=2.0,
+  )
+
+  demand_zones = [zone for zone in result if zone.side == "demand"]
+  assert len(demand_zones) == 1, (
+    "demand must survive as exactly one zone, not be trimmed away by "
+    "repeated comparisons against multiple opposing zones"
+  )
+  original_width = 4140 - 4100
+  survivor_width = demand_zones[0].high - demand_zones[0].low
+  assert survivor_width < original_width
+  assert any(
+    tag.startswith(ZONE_RECONCILED_TAG_PREFIX)
+    for tag in demand_zones[0].score_reasons
+  )
+
+
+def test_reconcile_opposing_circuit_breaker_fails_open():
+  # A synthetic map where every pair overlaps heavily - far more than the
+  # 20% default max_fraction - must discard the whole reconciliation pass
+  # and return the input completely unchanged, rather than let a cascade
+  # (or even a series of well-formed single trims) strip most of the map.
+  zones = []
+  for i in range(6):
+    base = 4100 + i * 20
+    zones.append(Zone(base, base + 12, "supply", origin_index=2 * i, score=8.0))
+    zones.append(
+      Zone(base + 1, base + 11, "demand", origin_index=2 * i + 1, score=5.0),
+    )
+
+  stats: dict = {}
+  result = reconcile_opposing(zones, min_width=2.0, stats=stats)
+
+  key = lambda zone: (zone.side, zone.low, zone.high, zone.origin_index)
+  assert sorted(result, key=key) == sorted(zones, key=key)
+  assert stats["aborted"] is True
+  assert stats["dropped"] == 0
+  assert stats["trimmed"] == 0
+  assert stats["output"] == len(zones)
+
+
+def test_reconcile_opposing_realistic_fvg_density_retains_most_zones():
+  """Regression guard: dense M5-style FVG output must not get stripped by
+  reconciliation. This is the test that would have caught the 22 Jul
+  regression before merge: the pre-fix code had a zero-overlap-ratio test
+  plus an uncapped cascade and no circuit breaker at all, so on a fixture
+  this dense it would have driven retention toward zero with no possible
+  fail-open outcome. Real production zone maps mix several construction
+  sources (supply/demand, order blocks, FVGs) merged together and rarely
+  run this hot; a pure-FVG synthetic fixture like this one is a worst case,
+  so either outcome below is healthy - the property that must always hold
+  is that the map is never silently gutted the way it was in the incident.
+  """
+  from app.analysis.zones import fvg, merge_zones, score_zones
+
+  rows = []
+  price = 4100.0
+  for i in range(150):
+    direction = 1 if i % 6 < 4 else -1
+    step = direction * (1.2 + (i % 3) * 0.4)
+    open_ = price
+    close = price + step
+    high = max(open_, close) + 0.3
+    low = min(open_, close) - 0.3
+    rows.append((open_, high, low, close))
+    price = close
+  df = _df(rows)
+
+  zones = score_zones(merge_zones(fvg(df)), [], [], 5.0)
+  assert len(zones) > 10, "fixture must actually produce a dense FVG map"
+
+  stats: dict = {}
+  reconciled = reconcile_opposing(zones, min_width=2.0, stats=stats)
+
+  retained_fraction = len(reconciled) / len(zones)
+  assert stats["aborted"] or retained_fraction >= 0.8, (
+    f"reconciliation retained only {retained_fraction:.0%} of {len(zones)} "
+    "zones without failing open - expected either >=80% retention or the "
+    "circuit breaker to discard the pass and leave the map unchanged"
+  )
+  if stats["aborted"]:
+    assert reconciled == zones
+
+
+def test_analyze_skips_reconcile_opposing_when_disabled_by_settings(monkeypatch):
+  import app.analysis.engine as engine_module
+
+  calls: list[int] = []
+  original = engine_module.reconcile_opposing
+
+  def _spy(*args, **kwargs):
+    calls.append(1)
+    return original(*args, **kwargs)
+
+  monkeypatch.setattr(engine_module, "reconcile_opposing", _spy)
+
+  m5 = _df([
+    (100, 101, 99, 100),
+    (100, 105, 100, 104),
+    (104, 104.5, 98, 99),
+    (99, 108, 99, 107),
+    (107, 107.5, 101, 102),
+    (102, 111, 102, 110),
+    (110, 110.5, 104, 105),
+  ])
+
+  analyze(
+    {"M5": m5},
+    AnalysisSettings(
+      zigzag_atr_mult=0.0, key_level_min_touches=1, zone_reconcile_enabled=False,
+    ),
+    [],
+  )
+  assert calls == [], "reconcile_opposing must not run when the flag is off"
+
+  analyze(
+    {"M5": m5},
+    AnalysisSettings(
+      zigzag_atr_mult=0.0, key_level_min_touches=1, zone_reconcile_enabled=True,
+    ),
+    [],
+  )
+  assert calls == [1], "reconcile_opposing must run when the flag is on"
 
 
 def test_reconcile_opposing_split_keeps_larger_remainder_only():
