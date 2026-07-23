@@ -389,6 +389,16 @@ async def _deliver_auto_trade_event(
   send=None,
 ) -> bool:
   event_type = str(event.get("type") or "")
+  if event.get("setup") == "Manual Algo":
+    # Manual /algo signals already get their lifecycle update on the
+    # VIP/public channel via app.signals.manual_execution's reconcile loop
+    # (trade_ops.post_result -> broadcast.fanout_update) - the "opened"
+    # event is already suppressed here by using a distinct type
+    # ("manual_opened"), but take_profit/stop_moved/position_closed reuse
+    # the SAME shared event types the autonomous engines use, so without
+    # this check the owner would also get a duplicate "ApexVoid Algo" DM
+    # for a signal they typed themselves.
+    return False
   group_id = str(event.get("group_id") or "").strip()
   if (
     event_type == "group_result"
