@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+import logging
 import math
 
 import pandas as pd
@@ -21,6 +22,28 @@ from app.analysis.types import (
 from app.analysis.trendlines import Trendline, value_at
 
 ZONE_MERGE_OVERLAP = 0.5
+# Opposing-side reconciliation (reconcile_opposing) uses the same bar as
+# same-side merging above: partial overlap between adjacent FVGs is normal
+# market structure, not a contradiction. Only a genuinely substantial
+# overlap (or full containment, which scores 1.0 - see _overlap_ratio)
+# should trigger a trim. 22 Jul 2026 regression: the original
+# implementation used a bare "any overlap > 0" test, which on dense M5 FVG
+# output treated nearly every opposing pair as a conflict and, combined
+# with the cascading trim loop, emptied the zone map.
+ZONE_RECONCILE_OVERLAP = 0.5
+# Circuit breaker: if a single reconcile_opposing() call would trim or drop
+# more than this fraction of the input zones, the map has a different
+# problem than reconciliation can safely resolve - discard the
+# reconciliation results and fail open (return the input unchanged) rather
+# than let a runaway cascade strip the map, per the 22 Jul regression.
+ZONE_RECONCILE_MAX_FRACTION = 0.20
+# Below this many input zones, a fraction is not a meaningful signal - one
+# legitimate trim out of 2-4 zones is already >20%, and the circuit breaker
+# firing there would block the exact kind of small, correct reconciliation
+# (e.g. the 23 Jul incident's isolated pair) the fix exists to perform.
+# 5 is the smallest sample where a single affected zone (1/5 = 20%, not
+# > 20%) doesn't itself trip the breaker.
+ZONE_RECONCILE_MIN_SAMPLE = 5
 # Floor for reconcile_opposing's trim-vs-drop decision - a remainder this
 # narrow (or narrower) carries no tradeable information and is dropped
 # rather than kept as a sliver. Callers scale this against ATR (see
@@ -50,6 +73,8 @@ SESSION_LEVEL_SCORE = 2.0
 PD_POSITION_SCORE = 2.0
 GRAB_A_SCORE = 2.0
 TRENDLINE_SCORE = 1.5
+
+log = logging.getLogger(__name__)
 
 
 def displacement(
@@ -271,10 +296,18 @@ def score_zones(
   )
 
 
-def reconcile_opposing(zones: list[Zone], min_width: float) -> list[Zone]:
-  """Trim the lower-scored side of any overlapping supply/demand pair to the
-  non-overlapping remainder (23 Jul 2026 incident: a published SELL and BUY
-  band overlapped six price wide, and price sat inside both at once).
+def reconcile_opposing(
+  zones: list[Zone],
+  min_width: float,
+  *,
+  min_overlap: float = ZONE_RECONCILE_OVERLAP,
+  max_fraction: float = ZONE_RECONCILE_MAX_FRACTION,
+  stats: dict | None = None,
+) -> list[Zone]:
+  """Trim the lower-scored side of any *substantially* overlapping
+  supply/demand pair to the non-overlapping remainder (23 Jul 2026
+  incident: a published SELL and BUY band overlapped six price wide, and
+  price sat inside both at once).
 
   merge_zones only reconciles same-side overlaps by construction; opposing
   sides pass through untouched. This runs strictly after merge_zones and
@@ -282,10 +315,39 @@ def reconcile_opposing(zones: list[Zone], min_width: float) -> list[Zone]:
   only ever looks at supply-vs-demand pairs, so same-side behaviour is
   exactly what merge_zones already produced.
 
+  ``min_overlap`` uses the same overlap-*ratio* bar as ``merge_zones``
+  (``_overlap_ratio``, normalised by the narrower zone - full containment
+  scores 1.0) rather than a bare "any overlap" test: dense FVG output on a
+  fast timeframe routinely produces small opposing overlaps that are
+  normal market structure, not a genuine contradiction (22 Jul 2026
+  regression - a zero-threshold test treated nearly every pair as a
+  conflict and, compounded by repeated trims of the same zone, emptied the
+  map). Each zone may be the *trim target* at most once per invocation
+  (it may still stand in as the untouched *keep* side of a later
+  comparison) - this caps total shrinkage per zone and removes the
+  compounding path to ``min_width``.
+
+  If the fraction of input zones trimmed-or-dropped in one call exceeds
+  ``max_fraction`` (only evaluated once there are at least
+  ``ZONE_RECONCILE_MIN_SAMPLE`` input zones - below that, a single trim is
+  already a large fraction and isn't evidence of a cascade), the map has a
+  different problem than reconciliation can safely resolve on its own: the
+  whole result is discarded and the original ``zones`` are returned
+  unchanged (fail open - an unreconciled map with a known defect is still
+  covered by the trade-time vetoes; an empty map is not recoverable by
+  anything downstream).
+
   Deterministic: both sides are sorted independently before any comparison
   (so caller list order never matters), the keep/trim decision is a pure
-  rank function with no ties left undecided, and the fixed-point outer loop
-  always terminates because every trim strictly shrinks or removes a zone.
+  rank function with no ties left undecided, and the outer loop always
+  terminates because every pass either trims/drops a not-yet-exhausted
+  zone (bounded by the supply/demand counts) or finds nothing left to do.
+
+  ``stats``, if given a dict, is filled in place with
+  ``{"input", "trimmed", "dropped", "output", "aborted", "min_overlap",
+  "min_width"}`` for callers (engine.py) that want to surface counters
+  without this function touching Redis/logging config itself beyond the
+  one summary log line it always emits.
   """
   supply: list[Zone | None] = sorted(
     (zone for zone in zones if zone.side == "supply"), key=_reconcile_sort_key,
@@ -294,6 +356,14 @@ def reconcile_opposing(zones: list[Zone], min_width: float) -> list[Zone]:
     (zone for zone in zones if zone.side == "demand"), key=_reconcile_sort_key,
   )
   other = [zone for zone in zones if zone.side not in ("supply", "demand")]
+  input_count = len(supply) + len(demand)
+
+  # (side, origin_index) pairs already used as a TRIM target this
+  # invocation - exhausted from being trimmed again, but still eligible to
+  # be compared against / act as the keep side for a different pair.
+  exhausted: set[tuple[str, int]] = set()
+  trimmed_count = 0
+  dropped_count = 0
 
   changed = True
   while changed:
@@ -306,26 +376,69 @@ def reconcile_opposing(zones: list[Zone], min_width: float) -> list[Zone]:
         d_zone = demand[d_index]
         if d_zone is None:
           continue
-        if not _ranges_overlap(s_zone.low, s_zone.high, d_zone.low, d_zone.high):
+        if _overlap_ratio(s_zone, d_zone) < min_overlap:
           continue
-        if _reconcile_rank(s_zone) > _reconcile_rank(d_zone):
-          demand[d_index] = _trim_outside(d_zone, s_zone, min_width)
+        supply_is_target = _reconcile_rank(s_zone) <= _reconcile_rank(d_zone)
+        target_key = (
+          ("supply", s_zone.origin_index)
+          if supply_is_target
+          else ("demand", d_zone.origin_index)
+        )
+        if target_key in exhausted:
+          continue
+        exhausted.add(target_key)
+        if supply_is_target:
+          result = _trim_outside(s_zone, d_zone, min_width)
+          supply[s_index] = result
         else:
-          supply[s_index] = _trim_outside(s_zone, d_zone, min_width)
+          result = _trim_outside(d_zone, s_zone, min_width)
+          demand[d_index] = result
+        if result is None:
+          dropped_count += 1
+        else:
+          trimmed_count += 1
         changed = True
         break
       if changed:
         break
+
+  affected = trimmed_count + dropped_count
+  aborted = (
+    input_count >= ZONE_RECONCILE_MIN_SAMPLE
+    and (affected / input_count) > max_fraction
+  )
+  if aborted:
+    log.warning(
+      "zone reconcile aborted: in=%d affected=%d (%.0f%% > max %.0f%%) "
+      "min_overlap=%.2f min_width=%.2f",
+      input_count, affected, 100 * affected / input_count,
+      100 * max_fraction, min_overlap, min_width,
+    )
+    if stats is not None:
+      stats.update(
+        input=input_count, trimmed=0, dropped=0, output=input_count,
+        aborted=True, min_overlap=min_overlap, min_width=min_width,
+      )
+    return zones
+
+  output_count = input_count - dropped_count
+  log_fn = log.info if dropped_count > 0 else log.debug
+  log_fn(
+    "zone reconcile: in=%d trimmed=%d dropped=%d out=%d min_overlap=%.2f min_width=%.2f",
+    input_count, trimmed_count, dropped_count, output_count, min_overlap, min_width,
+  )
+  if stats is not None:
+    stats.update(
+      input=input_count, trimmed=trimmed_count, dropped=dropped_count,
+      output=output_count, aborted=False, min_overlap=min_overlap,
+      min_width=min_width,
+    )
 
   return [
     *(zone for zone in supply if zone is not None),
     *(zone for zone in demand if zone is not None),
     *other,
   ]
-
-
-def _ranges_overlap(low1: float, high1: float, low2: float, high2: float) -> bool:
-  return min(high1, high2) - max(low1, low2) > 0
 
 
 def _reconcile_sort_key(zone: Zone) -> tuple[float, float, int]:

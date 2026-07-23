@@ -1149,6 +1149,15 @@ async def _handle_event(
     )
     if reconciled:
       await client.incrby(f"auto_trade:zone_reconciled:{symbol.upper()}", reconciled)
+    exec_analysis = analysis.per_tf.get(exec_tf.upper())
+    if exec_analysis is not None:
+      if exec_analysis.zone_reconcile_dropped:
+        await client.incrby(
+          f"auto_trade:zone_dropped:{symbol.upper()}",
+          exec_analysis.zone_reconcile_dropped,
+        )
+      if exec_analysis.zone_reconcile_aborted:
+        await client.incr(f"auto_trade:zone_reconcile_aborted:{symbol.upper()}")
   detected = []
   for detector in detectors or DEFAULT_DETECTORS:
     result = detector(ctx)
