@@ -155,6 +155,24 @@ dated section after deployment.
 
 ### Fixed
 
+- Fixed three manual `/algo` execution gaps found from live cards: (1) a
+  broker-confirmed TP hit rendered as a bare "booked X% · +N pips" with no
+  indication of which configured target fired, unlike the watcher-driven
+  `TPn hit` label a regular manual signal gets — `manual_execution.py` now
+  threads the already-resolved target ordinal through to `render_result`,
+  which prefixes both partial and final-close cards with `TPn`. (2) the
+  owner got a duplicate "🤖 ApexVoid Algo" DM for every take_profit/
+  stop_moved/position_closed event on a manual-algo position, on top of
+  the VIP/public channel card the signal already gets — `take_profit`/
+  `stop_moved`/`position_closed` reuse the same event types the autonomous
+  engines use and weren't filtered by `setup`, unlike the `opened` event
+  which already used a distinct type for this reason; `_deliver_auto_trade_
+  event` now skips any event with `setup == "Manual Algo"` outright. (3) on
+  larger manual-algo positions (table/risk sizing > 0.13 lots) the first
+  partial booking scaled up proportionally with account size instead of
+  staying a consistent size; `VolumePlanner.FixFirstLegVolume` now pins the
+  first leg to ~0.05 lots and redistributes the remainder evenly across the
+  rest when total volume exceeds that threshold.
 - Fixed `reconcile_opposing` over-trimming the zone map (regression from
   PR #89, live 22-23 Jul 2026 incident: zero `SETUP FORMING` cards for 6+
   hours). The original implementation treated any nonzero overlap between

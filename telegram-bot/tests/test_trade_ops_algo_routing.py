@@ -45,6 +45,7 @@ async def test_do_close_non_algo_calls_close_leg_with_unchanged_arguments(monkey
     "row": close_row,
     "pips": 50,
     "reply_to": 7,
+    "tp_number": None,
   }
   assert "pending" not in result
 

@@ -1440,6 +1440,76 @@ public sealed class AutoTradeEngineTests
   }
 
   [Fact]
+  public async Task ManualAlgoFixesFirstLegToPointZeroFiveLotsAboveThreshold()
+  {
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+    // Balance 5000 -> table 0.30 lots; a 3.0-price-unit (30 pip) stop keeps
+    // risk-bound sizing (0.333 lots) from binding instead, so the table
+    // caps it at exactly 0.30 lots (3000 volume) - well above the 0.13
+    // threshold, and evenly across 3 targets would otherwise book 0.10
+    // lots (1000) on TP1.
+    var store = new FakeAutoTradeStore(ManualCandidateJson(
+      direction: "SELL",
+      entryLow: 3999.5m,
+      entryHigh: 4000.5m,
+      manualStopLoss: 4002.5m
+    ));
+    var client = new FakeTradingClient
+    {
+      Account = ValidAccount() with { Balance = 5_000m },
+    };
+    var engine = new AutoTradeEngine(Options(), store, () => Now, _ => { });
+    await engine.ObserveSpotAsync(
+      new SpotPrice("XAU", 3990.0m, 3990.2m, Now.ToUnixTimeSeconds()),
+      cts.Token
+    );
+
+    var run = engine.RunSessionAsync(client, Symbol, cts.Token);
+    await store.Ordered.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+    var order = Assert.Single(client.LimitOrders);
+    Assert.Equal(3_000, order.Volume);
+    // Comment layout: avm|candidate|group|volume|slices|targets|ordinals|barTs|expiresAt
+    var slices = order.Comment.Split('|')[4];
+    Assert.Equal("500,1300,1200", slices);
+
+    cts.Cancel();
+    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+  }
+
+  [Fact]
+  public async Task ManualAlgoKeepsEvenSplitAtOrBelowThreshold()
+  {
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+    // Same shape as the existing proximal-edge test: balance 2000 with a
+    // 6.5-price-unit stop sizes to 0.06 lots, well under the 0.13
+    // threshold, so the fix must not touch the even 3-way split.
+    var store = new FakeAutoTradeStore(ManualCandidateJson(
+      direction: "SELL",
+      entryLow: 3999.5m,
+      entryHigh: 4000.5m,
+      manualStopLoss: 4006.0m
+    ));
+    var client = new FakeTradingClient();
+    var engine = new AutoTradeEngine(Options(), store, () => Now, _ => { });
+    await engine.ObserveSpotAsync(
+      new SpotPrice("XAU", 3990.0m, 3990.2m, Now.ToUnixTimeSeconds()),
+      cts.Token
+    );
+
+    var run = engine.RunSessionAsync(client, Symbol, cts.Token);
+    await store.Ordered.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+    var order = Assert.Single(client.LimitOrders);
+    Assert.Equal(600, order.Volume);
+    var slices = order.Comment.Split('|')[4];
+    Assert.Equal("200,200,200", slices);
+
+    cts.Cancel();
+    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+  }
+
+  [Fact]
   public async Task ManualAlgoPlacesLimitAtCurrentPriceWhenPriceAlreadyInsideZone()
   {
     using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));

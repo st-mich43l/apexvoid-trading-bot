@@ -59,10 +59,17 @@ async def _execute_close(
   pips: int,
   frac: float | None,
   reply_to: int | None = None,
+  tp_number: int | None = None,
 ) -> dict:
   """The actual Postgres booking for a close - shared by the direct
   (non-algo, or algo-not-yet-filled) path and the broker-confirmed algo
   path (app.signals.manual_execution, once the real close/SL/TP fires).
+
+  ``tp_number``, when the broker-confirmed close is attributable to a
+  specific configured target (app.signals.manual_execution._handle_take_
+  profit already resolves this from the fill's target_pips), is surfaced
+  in the result so render_result can label the channel card the same way
+  a watcher-detected TP does, instead of a bare "booked X%".
   """
   row = await close_leg(sid, pips, frac)
   if row is None:
@@ -73,6 +80,7 @@ async def _execute_close(
     "row": row,
     "pips": pips,
     "reply_to": row.get("channel_message_id") or reply_to,
+    "tp_number": tp_number,
   }
   if row.get("closed"):
     net = row["net"]
@@ -458,6 +466,8 @@ def render_result(
     if row.get("error") == "exceeds_remaining":
       remaining = int(round(row["remaining"] * 100))
       return f"⚠️ {seq}only has {remaining}% remaining to close"
+    tp_number = result.get("tp_number")
+    tp_label = f"TP{tp_number} " if tp_number else ""
     if row["closed"]:
       net = row["net"]
       if tier == "public":
@@ -467,25 +477,25 @@ def render_result(
             if settings.public_show_pips
             else "win"
           )
-          return f"✅ closed — {detail}"
+          return f"✅ {tp_label}closed — {detail}"
         if net < 0:
           detail = (
             f"{net} pips loss"
             if settings.public_show_pips
             else "loss"
           )
-          return f"🛑 closed — {detail}"
-        return "➖ closed — breakeven"
+          return f"🛑 {tp_label}closed — {detail}"
+        return f"➖ {tp_label}closed — breakeven"
       icon = "✅" if net >= 0 else "🛑"
       sign = "+" if net >= 0 else ""
       suffix = _win_wings(net) if net > 0 else ""
-      return f"{icon} {seq}closed — net {sign}{net} pips{suffix}"
+      return f"{icon} {seq}{tp_label}closed — net {sign}{net} pips{suffix}"
     if tier == "public" and not settings.public_show_pips:
-      return "🎯 partial booked"
+      return f"🎯 {tp_label}partial booked"
     booked = int(round(row["frac"] * 100))
     remaining = int(round(row["remaining"] * 100))
     return (
-      f"🎯 {seq}booked {booked}% · {result['pips']:+d} pips"
+      f"🎯 {seq}{tp_label}booked {booked}% · {result['pips']:+d} pips"
       f"{_win_wings(result['pips']) if result['pips'] > 0 else ''} · "
       f"remaining {remaining}%"
     )

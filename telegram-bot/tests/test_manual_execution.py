@@ -395,6 +395,7 @@ async def test_handle_event_take_profit_books_equal_weight_partial_leg(monkeypat
   assert legs[0]["frac"] == pytest.approx(1 / 3, rel=1e-3)
   assert legs[0]["pips"] == 50
   send.assert_awaited_once()
+  assert "TP1" in send.call_args.args[0]
 
 
 @pytest.mark.asyncio
@@ -418,6 +419,7 @@ async def test_handle_event_take_profit_closes_in_full_on_last_configured_target
   assert row["status"] == "closed"
   assert row["result_pips"] == 200
   send.assert_awaited_once()
+  assert "TP3" in send.call_args.args[0]
 
 
 @pytest.mark.asyncio
