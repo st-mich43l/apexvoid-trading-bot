@@ -13,7 +13,7 @@ from app.persistence.store import (
   get_pips_records,
   set_meta,
 )
-from app.signals.reports import build_stats, sparkline
+from app.signals.reports import _stream_lines, build_stats, sparkline
 from app.core.symbols import SYMBOLS, channels_for
 from app.bot.client import send_with_retry
 
@@ -156,6 +156,9 @@ def format_weekly_recap(
     _metric_line("⚖", "Expectancy", _signed(stats["expectancy"]), "/ trade"),
     _best_worst_line("🏆", "Best", best),
     _best_worst_line("🩸", "Worst", worst),
+    "",
+    "🧬 By stream",
+    *_stream_lines(stats["by_stream"]),
     "",
     "📐 By setup",
     *_branch_lines(stats["by_setup"], "setup"),

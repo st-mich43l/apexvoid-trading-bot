@@ -31,6 +31,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from app.core.config import settings
+from app.core.symbols import pip_for
 
 log = logging.getLogger(__name__)
 
@@ -148,7 +149,9 @@ async def init_db() -> None:
         confluence         INTEGER,
         note               TEXT,
         symbol             TEXT             NOT NULL DEFAULT 'XAU',
-        visibility         TEXT             NOT NULL DEFAULT 'both'
+        visibility         TEXT             NOT NULL DEFAULT 'both',
+        algo_armed         BOOLEAN          NOT NULL DEFAULT FALSE,
+        trade_stream       TEXT             NOT NULL DEFAULT 'manual'
       )
       """
     )
@@ -207,6 +210,14 @@ async def init_db() -> None:
       "ADD COLUMN IF NOT EXISTS execution_error TEXT"
     )
     await db.execute(
+      "ALTER TABLE manual_signals "
+      "ADD COLUMN IF NOT EXISTS algo_armed BOOLEAN NOT NULL DEFAULT FALSE"
+    )
+    await db.execute(
+      "ALTER TABLE manual_signals "
+      "ADD COLUMN IF NOT EXISTS trade_stream TEXT NOT NULL DEFAULT 'manual'"
+    )
+    await db.execute(
       "CREATE INDEX IF NOT EXISTS idx_manual_signals_execution_intent_id "
       "ON manual_signals(execution_intent_id)"
     )
@@ -225,6 +236,45 @@ async def init_db() -> None:
     await db.execute(
       "CREATE INDEX IF NOT EXISTS idx_manual_signals_parent_id "
       "ON manual_signals(parent_id)"
+    )
+
+    # Broker execution ledger. Fills and results are separate so scale-ins
+    # retain their real fill count while one group result remains one trade.
+    await db.execute(
+      """
+      CREATE TABLE IF NOT EXISTS auto_trade_fills (
+        position_id BIGINT PRIMARY KEY,
+        group_id    TEXT             NOT NULL,
+        trade_key   TEXT             NOT NULL,
+        trade_stream TEXT            NOT NULL,
+        symbol      TEXT             NOT NULL DEFAULT 'XAU',
+        setup_type  TEXT,
+        direction   TEXT,
+        entry_price DOUBLE PRECISION,
+        stop_pips   DOUBLE PRECISION,
+        volume      BIGINT,
+        filled_at   BIGINT           NOT NULL
+      )
+      """
+    )
+    await db.execute(
+      "CREATE INDEX IF NOT EXISTS idx_auto_trade_fills_group "
+      "ON auto_trade_fills(group_id)"
+    )
+    await db.execute(
+      """
+      CREATE TABLE IF NOT EXISTS auto_trade_results (
+        group_id     TEXT PRIMARY KEY,
+        trade_key    TEXT             NOT NULL,
+        trade_stream TEXT             NOT NULL,
+        result_pips  DOUBLE PRECISION NOT NULL,
+        closed_at    BIGINT           NOT NULL
+      )
+      """
+    )
+    await db.execute(
+      "CREATE INDEX IF NOT EXISTS idx_auto_trade_results_closed "
+      "ON auto_trade_results(closed_at)"
     )
 
     await db.execute(
@@ -439,11 +489,15 @@ async def get_pips_records(
   end_ts: int,
   symbol: str | None = None,
 ) -> list[dict]:
-  """Return pips rows with their linked signal metadata, oldest first."""
+  """Return manual and broker execution results, oldest first."""
   query = """
     SELECT p.id, p.ts, p.sign, p.pips, p.signal_id,
            s.ts AS signal_ts, s.action, s.entry, s.entry_end,
-           s.parent_id, s.setup_type, s.daily_seq, s.symbol
+           s.parent_id, s.setup_type, s.daily_seq, s.symbol,
+           s.original_sl, 'manual'::TEXT AS stream,
+           ('manual:' || COALESCE(p.signal_id::TEXT, 'pips:' || p.id::TEXT))
+             AS trade_key,
+           1::BIGINT AS fill_count
     FROM pips_log p
     LEFT JOIN manual_signals s ON s.id = p.signal_id
     WHERE p.ts >= $1 AND p.ts <= $2
@@ -454,8 +508,194 @@ async def get_pips_records(
     params.append(symbol.upper())
   query += " ORDER BY p.ts ASC, p.id ASC"
   async with _connect() as db:
-    rows = await db.fetch(query, *params)
-  return [dict(row) for row in rows]
+    manual_rows = await db.fetch(query, *params)
+    algo_query = """
+      SELECT r.group_id AS id, r.closed_at AS ts,
+             CASE WHEN r.result_pips >= 0 THEN '+' ELSE '-' END AS sign,
+             ABS(ROUND(r.result_pips))::INTEGER AS pips,
+             NULL::BIGINT AS signal_id,
+             MIN(f.filled_at) AS signal_ts,
+             MIN(f.direction) AS action,
+             AVG(f.entry_price) AS entry,
+             AVG(f.entry_price) AS entry_end,
+             NULL::BIGINT AS parent_id,
+             MIN(f.setup_type) AS setup_type,
+             NULL::INTEGER AS daily_seq,
+             MIN(f.symbol) AS symbol,
+             NULL::DOUBLE PRECISION AS original_sl,
+             r.trade_stream AS stream,
+             r.trade_key,
+             COUNT(*)::BIGINT AS fill_count,
+             AVG(f.stop_pips) AS stop_pips,
+             r.result_pips / NULLIF(AVG(f.stop_pips), 0) AS r_multiple
+      FROM auto_trade_results r
+      JOIN auto_trade_fills f ON f.group_id = r.group_id
+      WHERE r.closed_at >= $1 AND r.closed_at <= $2
+    """
+    algo_params: list = [start_ts, end_ts]
+    if symbol:
+      algo_query += " AND f.symbol = $3"
+      algo_params.append(symbol.upper())
+    algo_query += (
+      " GROUP BY r.group_id, r.closed_at, r.result_pips, "
+      "r.trade_stream, r.trade_key ORDER BY r.closed_at ASC, r.group_id ASC"
+    )
+    algo_rows = await db.fetch(algo_query, *algo_params)
+
+  records = [dict(row) for row in manual_rows]
+  for record in records:
+    signal_symbol = record.get("symbol") or "XAU"
+    entry = record.get("entry")
+    entry_end = record.get("entry_end")
+    stop = record.get("original_sl")
+    if entry is None or stop is None:
+      continue
+    reference = (
+      entry_end if record.get("action") == "BUY" and entry_end is not None
+      else entry
+    )
+    stop_pips = abs(float(reference) - float(stop)) / pip_for(signal_symbol)
+    record["stop_pips"] = stop_pips
+    record["r_multiple"] = (
+      (record["pips"] if record["sign"] == "+" else -record["pips"])
+      / stop_pips
+      if stop_pips > 0 else None
+    )
+  records.extend(dict(row) for row in algo_rows)
+  return sorted(records, key=lambda row: (row["ts"], str(row["id"])))
+
+
+async def record_auto_trade_event(event: dict) -> None:
+  """Persist fill attribution and terminal broker results idempotently."""
+  event_type = str(event.get("type") or "")
+  if event_type in {"opened", "add", "manual_opened"}:
+    await _record_auto_trade_fill(event)
+  elif event_type in {"group_result", "position_closed", "manual_closed"}:
+    await _record_auto_trade_result(event)
+
+
+async def _record_auto_trade_fill(event: dict) -> None:
+  position_id = event.get("position_id")
+  stream = str(event.get("stream") or "").strip()
+  if position_id is None or stream not in {"algo_auto", "algo_manual"}:
+    return
+  group_id = str(event.get("group_id") or position_id)
+  trade_key = f"algo:{group_id}"
+  candidate_id = str(event.get("candidate_id") or "")
+  async with _connect() as db:
+    if stream == "algo_manual" and candidate_id:
+      signal_id = await db.fetchval(
+        "SELECT id FROM manual_signals "
+        "WHERE execution_intent_id LIKE $1 || '%' "
+        "ORDER BY id DESC LIMIT 1",
+        candidate_id[:10],
+      )
+      if signal_id is not None:
+        trade_key = f"manual:{signal_id}"
+        await db.execute(
+          "UPDATE manual_signals SET trade_stream = 'algo_manual' "
+          "WHERE id = $1",
+          signal_id,
+        )
+    await db.execute(
+      """
+      INSERT INTO auto_trade_fills (
+        position_id, group_id, trade_key, trade_stream, symbol,
+        setup_type, direction, entry_price, stop_pips, volume, filled_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      ON CONFLICT (position_id) DO UPDATE SET
+        group_id = excluded.group_id,
+        trade_key = excluded.trade_key,
+        trade_stream = excluded.trade_stream,
+        symbol = excluded.symbol,
+        setup_type = COALESCE(excluded.setup_type, auto_trade_fills.setup_type),
+        direction = COALESCE(excluded.direction, auto_trade_fills.direction),
+        entry_price = COALESCE(excluded.entry_price, auto_trade_fills.entry_price),
+        stop_pips = COALESCE(excluded.stop_pips, auto_trade_fills.stop_pips),
+        volume = COALESCE(excluded.volume, auto_trade_fills.volume)
+      """,
+      int(position_id), group_id, trade_key, stream,
+      str(event.get("symbol") or "XAU").upper(), event.get("setup"),
+      event.get("direction"), event.get("price"), event.get("stop_pips"),
+      event.get("volume"), int(event.get("timestamp") or time.time()),
+    )
+
+
+async def _record_auto_trade_result(event: dict) -> None:
+  if (
+    event.get("type") == "manual_closed"
+    and (
+      event.get("remaining_volume") is None
+      or int(event["remaining_volume"]) > 0
+    )
+  ):
+    return
+  group_id = str(event.get("group_id") or "").strip()
+  position_id = event.get("position_id")
+  async with _connect() as db:
+    if not group_id and position_id is not None:
+      group_id = str(await db.fetchval(
+        "SELECT group_id FROM auto_trade_fills WHERE position_id = $1",
+        int(position_id),
+      ) or "")
+    if not group_id:
+      return
+    fill = await db.fetchrow(
+      "SELECT trade_key, trade_stream FROM auto_trade_fills "
+      "WHERE group_id = $1 ORDER BY filled_at ASC LIMIT 1",
+      group_id,
+    )
+    if fill is None:
+      return
+    if (
+      event.get("type") == "position_closed"
+      and await db.fetchval(
+        "SELECT 1 FROM auto_trade_results WHERE group_id = $1", group_id,
+      )
+    ):
+      return
+    result_pips = event.get("group_realized_pips")
+    if result_pips is None and event.get("type") in {
+      "position_closed", "manual_closed",
+    }:
+      exit_price = event.get("price")
+      if exit_price is None:
+        return
+      fills = await db.fetch(
+        "SELECT symbol, direction, entry_price, volume "
+        "FROM auto_trade_fills WHERE group_id = $1",
+        group_id,
+      )
+      weighted = 0.0
+      total_volume = 0
+      for row in fills:
+        if row["entry_price"] is None:
+          continue
+        volume = int(row["volume"] or 1)
+        move = float(exit_price) - float(row["entry_price"])
+        if str(row["direction"]).upper() == "SELL":
+          move = -move
+        weighted += move / pip_for(row["symbol"] or "XAU") * volume
+        total_volume += volume
+      if not total_volume:
+        return
+      result_pips = weighted / total_volume
+    if result_pips is None:
+      return
+    await db.execute(
+      """
+      INSERT INTO auto_trade_results (
+        group_id, trade_key, trade_stream, result_pips, closed_at
+      ) VALUES ($1, $2, $3, $4, $5)
+      ON CONFLICT (group_id) DO UPDATE SET
+        trade_key = excluded.trade_key,
+        trade_stream = excluded.trade_stream,
+        result_pips = excluded.result_pips,
+        closed_at = excluded.closed_at
+      """,
+      group_id, fill["trade_key"], fill["trade_stream"],
+      float(result_pips), int(event.get("timestamp") or time.time()),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -611,7 +851,7 @@ async def get_open_signals(symbol: str | None = None) -> list[dict]:
     "SELECT id, ts, action, entry, entry_end, sl, tps, "
     "channel_message_id, daily_seq, trade_date, fill_state, filled_at, legs, "
     "parent_id, setup_type, confluence, note, status, result_pips, "
-    "symbol, visibility "
+    "symbol, visibility, algo_armed "
     "FROM manual_signals WHERE status = 'open'"
   )
   params: list = []
@@ -632,7 +872,7 @@ async def expire_unfilled_pending_signals() -> list[dict]:
     rows = await db.fetch(
       """
       UPDATE manual_signals
-      SET status = 'cancelled', closed_at = $1
+      SET status = 'cancelled', closed_at = $1, algo_armed = FALSE
       WHERE status = 'open'
         AND fill_state = 'pending'
         AND (trade_date IS NULL OR trade_date < $2)
@@ -912,7 +1152,7 @@ async def set_execution_intent(
   async with _connect() as db:
     row = await db.fetchrow(
       "UPDATE manual_signals SET execution_intent_id = $1, "
-      "execution_status = $2, execution_revision = $3 "
+      "execution_status = $2, execution_revision = $3, algo_armed = TRUE "
       "WHERE id = $4 RETURNING *",
       intent_id, status, revision, signal_id,
     )
@@ -930,10 +1170,12 @@ async def set_execution_status(
   Returns the updated row, or ``None`` if ``signal_id`` does not exist.
   """
   async with _connect() as db:
+    clear_armed = status in {"cancelled", "expired", "rejected"}
     row = await db.fetchrow(
-      "UPDATE manual_signals SET execution_status = $1, execution_error = $2 "
-      "WHERE id = $3 RETURNING *",
-      status, error, signal_id,
+      "UPDATE manual_signals SET execution_status = $1, execution_error = $2, "
+      "algo_armed = CASE WHEN $3 AND broker_position_id IS NULL "
+      "THEN FALSE ELSE algo_armed END WHERE id = $4 RETURNING *",
+      status, error, clear_armed, signal_id,
     )
   return _decode_signal(row) if row else None
 
@@ -956,8 +1198,9 @@ async def set_execution_fill(
   """
   async with _connect() as db:
     row = await db.fetchrow(
-      "UPDATE manual_signals SET execution_status = 'filled', "
-      "broker_position_id = $1, broker_fill_price = $2 WHERE id = $3 "
+      "UPDATE manual_signals SET execution_status = 'filled', algo_armed = TRUE, "
+      "trade_stream = 'algo_manual', broker_position_id = $1, "
+      "broker_fill_price = $2 WHERE id = $3 "
       "RETURNING *",
       str(broker_position_id), broker_fill_price, signal_id,
     )
