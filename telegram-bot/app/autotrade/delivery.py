@@ -490,6 +490,10 @@ async def auto_trade_status_text() -> str:
     trend_state = "waiting"
     market_map_state = "waiting"
     current_regime = "unknown"
+    map_entries_seen: int | None = None
+    map_entries_actionable: int | None = None
+    map_top: list[dict] = []
+    map_filters: dict[str, int] = {}
     raw = await client.get("auto_trade:last_gate")
     if raw:
       try:
@@ -501,6 +505,22 @@ async def auto_trade_status_text() -> str:
           payload.get("market_map_state") or market_map_state
         )
         current_regime = str(payload.get("regime") or current_regime)
+        if payload.get("market_map_entries_seen") is not None:
+          map_entries_seen = int(payload["market_map_entries_seen"])
+        if payload.get("market_map_entries_actionable") is not None:
+          map_entries_actionable = int(
+            payload["market_map_entries_actionable"]
+          )
+        if isinstance(payload.get("market_map_top"), list):
+          map_top = [
+            item for item in payload["market_map_top"]
+            if isinstance(item, dict)
+          ][:3]
+        if isinstance(payload.get("market_map_filter_counts"), dict):
+          map_filters = {
+            str(key): int(value)
+            for key, value in payload["market_map_filter_counts"].items()
+          }
         reasons = payload.get("reasons")
         if isinstance(reasons, list) and reasons:
           selection_reason = str(reasons[-1])
@@ -575,6 +595,37 @@ async def auto_trade_status_text() -> str:
       if selected_text == "none" and selection_reason else
       f"\nWhy: {escape(selection_reason)}" if selection_reason else ""
     )
+    map_observability = ""
+    if map_entries_seen is not None and map_entries_actionable is not None:
+      map_observability = (
+        f"\nMap entries: <b>{map_entries_seen}</b> seen · "
+        f"<b>{map_entries_actionable}</b> actionable"
+      )
+      nearest: list[str] = []
+      for item in map_top:
+        try:
+          side = str(item["side"]).upper()
+          low = float(item["lo"])
+          high = float(item["hi"])
+          distance = float(item.get("distance") or 0)
+        except (KeyError, TypeError, ValueError):
+          continue
+        location = "inside" if distance <= 0 else f"{distance:.1f} away"
+        nearest.append(
+          f"{side} {low:,.2f}–{high:,.2f} ({location})"
+        )
+      if nearest:
+        map_observability += (
+          "\nMap nearest: " + escape(" · ".join(nearest))
+        )
+      if map_filters:
+        map_observability += (
+          "\nMap filters: "
+          f"side <b>{map_filters.get('side', 0)}</b> · "
+          f"actionable <b>{map_filters.get('actionable', 0)}</b> · "
+          f"width <b>{map_filters.get('degenerate_width', 0)}</b> · "
+          f"distance <b>{map_filters.get('distance', 0)}</b>"
+        )
     strategy_lines = (
       f"\nSelected strategy: <b>{escape(selected_text)}</b>"
       f"\nSource: <b>{escape(selection_source)}</b>"
@@ -587,6 +638,7 @@ async def auto_trade_status_text() -> str:
       f"\nExecution: <b>{escape(execution_state.replace('_', ' '))}</b>"
       f"{escape(zone_text)}"
       f"{reason_line}"
+      f"{map_observability}"
       f"{regime_line}"
     )
   return (

@@ -9,6 +9,7 @@ import logging
 from zoneinfo import ZoneInfo
 
 from app.core.config import settings
+from app.persistence import redis_state
 from app.persistence.store import get_meta, set_meta
 from app.analysis.market_map import (
   MarketMap,
@@ -20,6 +21,7 @@ from app.analysis.market_map import (
 )
 from app.core.symbols import SYMBOLS
 from app.bot.client import send_scanner_with_retry
+from app.autotrade.map_strategy import market_map_display_key
 
 log = logging.getLogger(__name__)
 
@@ -99,10 +101,14 @@ async def send_current_market_map(
 ) -> bool:
   if not settings.telegram_owner_id:
     return False
-  text = await render_current_market_map(symbol, now)
-  if text is None:
+  market_map = await get_current_market_map(symbol)
+  if market_map is None:
     return False
+  local_tz = ZoneInfo(settings.seq_reset_tz)
+  display_now = now.astimezone(local_tz) if now else datetime.now(local_tz)
+  text = render_market_map(market_map, symbol, display_now, settings)
   await send_scanner_with_retry(text, chat_id=settings.telegram_owner_id)
+  await _remember_displayed_map(symbol, market_map)
   return True
 
 
@@ -128,10 +134,13 @@ async def _market_map_scan_tick(now: datetime | None = None) -> bool:
       market_map,
       settings.map_change_min,
     ):
+      if previous is not None:
+        await _remember_displayed_map(symbol, previous)
       continue
     display_now = now.astimezone(ZoneInfo(settings.seq_reset_tz))
     text = render_market_map(market_map, symbol, display_now, settings)
     await send_scanner_with_retry(text, chat_id=settings.telegram_owner_id)
+    await _remember_displayed_map(symbol, market_map)
     await set_meta(payload_key, market_map_payload(market_map))
     sent = True
 
@@ -152,6 +161,21 @@ async def market_map_scan_loop() -> None:
     except Exception:
       log.exception("Market Map periodic delivery failed")
     await asyncio.sleep(_LOOP_INTERVAL_SECONDS)
+
+
+async def _remember_displayed_map(
+  symbol: str,
+  market_map: MarketMap,
+) -> None:
+  ttl = max(
+    3600,
+    max(1, int(settings.map_scan_interval_minutes)) * 120,
+  )
+  await redis_state.get_client().set(
+    market_map_display_key(symbol),
+    market_map_payload(market_map),
+    ex=ttl,
+  )
 
 
 def _scan_bucket_key(now: datetime, interval_minutes: int) -> str:

@@ -161,6 +161,20 @@ bounds exist only for `Range Edge Scalp`. Invalid, stale, symbol-mismatched, or
 malformed matches are removed or ignored. A fresh scanner match has priority
 over private strategies for that execution tick.
 
+Mapped-zone execution exposes its evaluated geometry separately:
+
+```text
+SETEX auto_trade:map_strategy:actionable:XAU 3600 <json-array>
+INCRBY auto_trade:map_zone_rejected:XAU:degenerate_width <count>
+```
+
+The snapshot is replaced on every M1 evaluation and contains only the exact
+side/lo/hi/tier/score/contains-price entries surviving the strategy's current
+side, quality, and minimum-width rules. The counter records collapsed bands
+filtered before selection. `auto_trade:market_map_display:XAU` keeps the last
+map actually rendered to the owner so stall reasons can identify a display/
+strategy divergence.
+
 Used box edges are disarmed until a closed M1 price crosses the box midpoint.
 Confirmed broken box IDs are retired for the configured TTL. The latest
 operator-facing M1 gate decision is stored at

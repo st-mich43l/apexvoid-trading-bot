@@ -33,6 +33,8 @@ from app.autotrade.map_strategy import (
   MarketMapStrategyDecision,
   decode_market_map,
   evaluate_market_map_strategy,
+  market_map_actionable_key,
+  market_map_display_key,
   market_map_key,
 )
 from app.autotrade.scale_context import AutoScaleContext, build_auto_scale_context
@@ -302,6 +304,73 @@ def _opposing_barrier_condition(reason: str) -> str:
   )
 
 
+def _counter_bias_target_barrier_reason(
+  match: StrategyMatch,
+  entry_reference: float,
+  zones: list[Zone],
+  levels: list[Level],
+) -> str | None:
+  """Reject a counter-bias mean-reversion route obstructed before box EQ."""
+  if "counter_bias" not in match.tags or match.target_price is None:
+    return None
+  target = float(match.target_price)
+  if (
+    match.direction == "BUY" and target <= entry_reference
+    or match.direction == "SELL" and target >= entry_reference
+  ):
+    return (
+      f"counter-bias target {target:.2f} is not ahead of "
+      f"{match.direction} entry {entry_reference:.2f}"
+    )
+
+  if match.direction == "BUY":
+    between = [
+      zone for zone in zones
+      if zone.side == "supply"
+      and zone.high >= entry_reference
+      and zone.low <= target
+    ]
+    barrier = _nearest_directional_zone("SELL", entry_reference, between)
+  else:
+    between = [
+      zone for zone in zones
+      if zone.side == "demand"
+      and zone.low <= entry_reference
+      and zone.high >= target
+    ]
+    barrier = _nearest_directional_zone("BUY", entry_reference, between)
+  if barrier is not None:
+    return (
+      f"counter-bias target blocked before EQ {target:.2f} by "
+      f"{barrier.side} {barrier.low:.2f}-{barrier.high:.2f}"
+    )
+
+  level_bounds = [
+    (level.price - level.band, level.price + level.band, level.kind)
+    for level in levels
+  ]
+  ahead = [
+    (abs(entry_reference - low), low, high, kind)
+    for low, high, kind in level_bounds
+    if (
+      match.direction == "BUY"
+      and high >= entry_reference
+      and low <= target
+    ) or (
+      match.direction == "SELL"
+      and low <= entry_reference
+      and high >= target
+    )
+  ]
+  if not ahead:
+    return None
+  _, low, high, kind = min(ahead, key=lambda item: item[0])
+  return (
+    f"counter-bias target blocked before EQ {target:.2f} by "
+    f"{kind} {low:.2f}-{high:.2f}"
+  )
+
+
 def _zone_cooldown_key(symbol: str, direction: str) -> str:
   return f"auto_trade:zone:cooldown:{symbol.upper()}:{direction.upper()}"
 
@@ -444,6 +513,33 @@ async def _record_gate_reject(client: Any, symbol: str, condition: str) -> None:
     log.exception(
       "gate-reject counter failed symbol=%s condition=%s", symbol, condition,
     )
+
+
+async def _record_market_map_strategy_telemetry(
+  client: Any,
+  symbol: str,
+  decision: MarketMapStrategyDecision,
+) -> None:
+  """Expose the exact entry set the Market Map strategy evaluated."""
+  try:
+    payload = [
+      entry.payload()
+      for entry in decision.actionable_entries
+    ]
+    await client.set(
+      market_map_actionable_key(symbol),
+      json.dumps(payload, separators=(",", ":"), sort_keys=True),
+      ex=3600,
+    )
+    counts = dict(decision.filter_counts)
+    rejected = int(counts.get("degenerate_width", 0))
+    if rejected:
+      await client.incrby(
+        f"auto_trade:map_zone_rejected:{symbol.upper()}:degenerate_width",
+        rejected,
+      )
+  except Exception:
+    log.exception("Market Map strategy telemetry failed symbol=%s", symbol)
 
 
 def _candidate_id(
@@ -711,6 +807,27 @@ async def _publish_strategy_match(
       if not crossed_midpoint:
         return None
       await client.delete(edge_key)
+  counter_bias_barrier = _counter_bias_target_barrier_reason(
+    match,
+    spot.price,
+    htf_zones or [],
+    htf_levels or [],
+  )
+  if counter_bias_barrier is not None:
+    log.info(
+      "strategy match blocked symbol=%s strategy=%s reason=%s",
+      symbol,
+      match.strategy,
+      counter_bias_barrier,
+    )
+    if consume_redis_match:
+      await client.delete(strategy_match_key(symbol))
+    await _record_gate_reject(
+      client,
+      symbol,
+      "counter_bias_target_barrier",
+    )
+    return None
   if settings.auto_trade_opposing_barrier_veto_enabled:
     barrier_reason = _opposing_barrier_reason(
       match.direction, spot.price, match.atr,
@@ -803,12 +920,19 @@ async def _publish_strategy_match(
     if consume_redis_match:
       await client.delete(strategy_match_key(symbol))
     return None
+  setup = (
+    f"{match.strategy} · counter_bias"
+    if "counter_bias" in match.tags
+    else "Range Box Scalp"
+    if match.is_range_edge
+    else match.strategy
+  )
   payload = {
     "version": 3 if match.is_range_edge else 4,
     "candidate_id": candidate_id,
     "symbol": symbol.upper(),
     "timeframe": match.source_tf,
-    "setup": "Range Box Scalp" if match.is_range_edge else match.strategy,
+    "setup": setup,
     "mode": "auto_box_scalp" if match.is_range_edge else "auto_strategy_match",
     "signal_source": match_source,
     "source_strategy": match.strategy,
@@ -826,6 +950,8 @@ async def _publish_strategy_match(
     "atr": match.atr,
     "structure_swing": match.structure_swing,
     "targets_pips": list(match.targets_pips),
+    "strategy_tags": list(match.tags),
+    "target_price": match.target_price,
     "range_id": match.range_id,
     "range_low": match.range_low,
     "range_high": match.range_high,
@@ -1241,6 +1367,30 @@ def _status_payload(
     "market_map_reasons": (
       [] if market_map_decision is None else list(market_map_decision.reasons)
     ),
+    "market_map_entries_seen": (
+      0 if market_map_decision is None else market_map_decision.entries_seen
+    ),
+    "market_map_entries_actionable": (
+      0
+      if market_map_decision is None
+      else len(market_map_decision.actionable_entries)
+    ),
+    "market_map_top": (
+      []
+      if market_map_decision is None
+      else [
+        {
+          **entry.payload(),
+          "distance": entry.distance,
+        }
+        for entry in market_map_decision.actionable_entries[:3]
+      ]
+    ),
+    "market_map_filter_counts": (
+      {}
+      if market_map_decision is None
+      else dict(market_map_decision.filter_counts)
+    ),
     "selected_strategy": selected_strategy,
     "selected_timeframe": selected_timeframe,
     "selection_state": (
@@ -1387,6 +1537,9 @@ async def _handle_event(
   cached_market_map = decode_market_map(
     await client.get(market_map_key(symbol))
   )
+  displayed_market_map = decode_market_map(
+    await client.get(market_map_display_key(symbol))
+  )
   market_map_decision = evaluate_market_map_strategy(
     frames,
     symbol=symbol,
@@ -1396,6 +1549,12 @@ async def _handle_event(
     ),
     cfg=settings,
     market_map=cached_market_map,
+    rendered_map=displayed_market_map,
+  )
+  await _record_market_map_strategy_telemetry(
+    client,
+    symbol,
+    market_map_decision,
   )
   strategy_match = (
     scanner_strategy_match or market_map_decision.match
