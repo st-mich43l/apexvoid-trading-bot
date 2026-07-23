@@ -313,6 +313,63 @@ def _cluster_lines(groups: list[dict]) -> list[str]:
   return lines
 
 
+_STREAM_ORDER = ("algo_auto", "algo_manual", "manual")
+_STREAM_LABELS = {
+  "algo_auto": "Algo auto",
+  "algo_manual": "Algo manual",
+  "manual": "Manual signal",
+  "all_unique": "All unique",
+}
+
+
+def _performance_stats(rows: list[dict]) -> dict:
+  values = [float(row["value"]) for row in rows]
+  wins = sum(value > 0 for value in values)
+  r_values = [
+    float(row["r_multiple"])
+    for row in rows
+    if row.get("r_multiple") is not None
+  ]
+  weighted_stops = [
+    (float(row["stop_pips"]), int(row.get("fill_count") or 1))
+    for row in rows
+    if row.get("stop_pips") is not None
+  ]
+  stop_weight = sum(weight for _, weight in weighted_stops)
+  return {
+    "trades": len(rows),
+    "fill_count": sum(int(row.get("fill_count") or 1) for row in rows),
+    "wins": wins,
+    "losses": sum(value < 0 for value in values),
+    "win_rate": wins / len(rows) * 100 if rows else 0,
+    "mean_r": sum(r_values) / len(r_values) if r_values else 0,
+    "total_pips": sum(values),
+    "mean_stop_pips": (
+      sum(stop * weight for stop, weight in weighted_stops) / stop_weight
+      if stop_weight else 0
+    ),
+  }
+
+
+def _unique_trade_rows(rows: list[dict]) -> list[dict]:
+  """Collapse cross-view duplicates while preserving the broker facts."""
+  priority = {"manual": 0, "algo_auto": 1, "algo_manual": 2}
+  selected: dict[str, dict] = {}
+  for index, row in enumerate(rows):
+    key = str(row.get("trade_key") or f"row:{index}")
+    current = selected.get(key)
+    if current is None:
+      selected[key] = row
+      continue
+    if priority.get(row.get("stream"), 0) <= priority.get(current.get("stream"), 0):
+      continue
+    selected[key] = {
+      **current,
+      **{key: value for key, value in row.items() if value is not None},
+    }
+  return sorted(selected.values(), key=lambda row: row.get("ts") or 0)
+
+
 def build_stats(
   records: list[dict],
   signals: list[dict],
@@ -322,13 +379,23 @@ def build_stats(
   ny_start: int,
 ) -> dict:
   """Build the canonical trade-stat aggregation used by every renderer."""
-  rows = [
+  stream_rows = [
     {
       **record,
+      "stream": record.get("stream") or "manual",
+      "fill_count": int(record.get("fill_count") or 1),
       "value": record["pips"] if record["sign"] == "+" else -record["pips"],
     }
     for record in records
   ]
+  rows = _unique_trade_rows(stream_rows)
+  by_stream = {
+    stream: _performance_stats([
+      row for row in stream_rows if row["stream"] == stream
+    ])
+    for stream in _STREAM_ORDER
+  }
+  by_stream["all_unique"] = _performance_stats(rows)
   all_values = [row["value"] for row in rows]
   wins = [value for value in all_values if value > 0]
   losses = [value for value in all_values if value < 0]
@@ -419,8 +486,27 @@ def build_stats(
     "by_setup": setup_groups,
     "by_session": session_groups,
     "by_cluster": cluster_groups,
+    "by_stream": by_stream,
     "cumulative": cumulative,
   }
+
+
+def _stream_lines(by_stream: dict[str, dict]) -> list[str]:
+  lines = []
+  shown = [
+    stream for stream in (*_STREAM_ORDER, "all_unique")
+    if by_stream.get(stream, {}).get("fill_count")
+  ]
+  for index, stream in enumerate(shown):
+    item = by_stream[stream]
+    branch = "└─" if index == len(shown) - 1 else "├─"
+    lines.extend([
+      f"{branch} {_STREAM_LABELS[stream]:<13} "
+      f"{item['fill_count']} fills · {item['win_rate']:.0f}% WR",
+      f"   {_signed_p(item['total_pips'])} · {item['mean_r']:+.2f}R "
+      f"· stop {item['mean_stop_pips']:.0f}p",
+    ])
+  return lines or ["└─ —"]
 
 
 def format_stats(stats: dict, period: str) -> str:
@@ -467,6 +553,9 @@ def format_stats(stats: dict, period: str) -> str:
       _signed_p(worst["value"]),
       f"· #{worst_seq} {_setup_label(worst.get('setup_type'))}",
     ),
+    "",
+    "🧬 By stream",
+    *_stream_lines(stats["by_stream"]),
     "",
     "📐 By setup",
     *_stats_group_lines(stats["by_setup"], setup=True),
