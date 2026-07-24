@@ -12,6 +12,21 @@ SYMBOLS = {
   # "EURUSD": {"pip": 0.0001, "digits": 5},
 }
 
+# Broker-facing aliases that must resolve to the same logical instrument as
+# the internal SYMBOLS key. CTRADER_SYMBOL is configured as "XAUUSD" while
+# every internal candidate/analysis payload uses "XAU" - without this map, a
+# lookup keyed on the broker's own symbol string would either KeyError or
+# (in a looser caller) silently fall back to a generic 1.0 pip size instead
+# of XAU's actual 0.1, a 10x error in room/target/sizing math.
+_SYMBOL_ALIASES = {
+  "XAUUSD": "XAU",
+}
+
+
+def canonical_symbol(symbol: str) -> str:
+  upper = symbol.upper()
+  return _SYMBOL_ALIASES.get(upper, upper)
+
 CHANNELS = [
   {
     "symbol": "XAU",
@@ -27,7 +42,7 @@ CHANNELS = [
 
 
 def pip_for(symbol: str) -> float:
-  return float(SYMBOLS[symbol.upper()]["pip"])
+  return float(SYMBOLS[canonical_symbol(symbol)]["pip"])
 
 
 def symbol_for_channel(chat_id: int | str) -> str | None:
