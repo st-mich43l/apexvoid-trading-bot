@@ -3310,22 +3310,27 @@ public sealed class AutoTradeEngine(
           rangeId: state.RangeId,
           strategyFamily: state.StrategyFamily
         );
-        // Reached only when the engine did NOT close this position itself
-        // (a clean take-profit exit untracks in ProcessTargetsAsync before
-        // this branch ever runs) - so this is always an SL hit or a manual
-        // close, indistinguishable from the data available here. Per the
-        // 23 Jul 2026 incident (a stopped-out zone re-entered 15 minutes
-        // later), default to starting the cooldown every time rather than
-        // trying to guess which one it was.
+        // A broker snapshot disappearance is ambiguous: it can be SL,
+        // manual close, external close, or a reconciliation gap.  The Open
+        // API adapter does not expose a confirmed close reason here, so do
+        // not guess stop_loss.  Persist warning-only evidence; Python only
+        // enforces reason=stop_loss + confidence=confirmed.
         if (state.CurrentStopLoss is decimal lastStopLoss)
         {
           var directionLabel = state.Direction == TradeDirection.Buy ? "BUY" : "SELL";
           await store.RecordZoneCooldownAsync(
             RequireSymbol().RedisSymbol,
             directionLabel,
-            state.EntryPrice,
-            lastStopLoss,
-            _clock().ToUnixTimeSeconds(),
+            new ZoneCooldownRecord(
+              Reason: "reconciliation_unknown",
+              Confidence: "unconfirmed",
+              EntryPrice: state.EntryPrice,
+              StopPrice: lastStopLoss,
+              ClosedAt: _clock().ToUnixTimeSeconds(),
+              GroupId: GroupId(state),
+              ZoneId: state.ZoneId,
+              Strategy: state.Setup
+            ),
             options.ZoneCooldownMinutes,
             cancellationToken
           );

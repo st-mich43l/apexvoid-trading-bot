@@ -678,6 +678,15 @@ async def auto_trade_status_text() -> str:
   last_lifecycle = await _json_key(
     client, f"auto_trade:last_lifecycle:{primary_symbol}",
   )
+  last_guard = await _json_key(
+    client, f"auto_trade:last_guard:{primary_symbol}",
+  )
+  reconcile_raw = await client.hgetall(
+    f"auto_trade:zone_reconcile:{primary_symbol}",
+  )
+  reconcile = {
+    str(key): str(value) for key, value in reconcile_raw.items()
+  }
   mode = (
     "disabled"
     if not settings.auto_trade_enabled
@@ -983,6 +992,73 @@ async def auto_trade_status_text() -> str:
       if item
     )
   )
+  guard_summary = "none"
+  if last_guard:
+    measured = last_guard.get("measured") or {}
+    room = measured.get("available_room_pips")
+    drift = measured.get("effective_pips")
+    original_target = measured.get("original_target")
+    adjustment = measured.get("adjusted_target")
+    barrier_price = measured.get("barrier_price")
+    opposing = last_guard.get("opposing_structure") or {}
+    opposing_summary = ""
+    if isinstance(opposing, dict) and opposing:
+      opposing_name = (
+        opposing.get("level_kind")
+        or opposing.get("side")
+        or opposing.get("source_type")
+        or "structure"
+      )
+      opposing_summary = (
+        f"opposing {opposing_name} "
+        f"{opposing.get('low')}-{opposing.get('high')}"
+      )
+    detail = " · ".join(
+      item for item in (
+        f"room {room}p" if room is not None else "",
+        f"drift {drift}p" if drift is not None else "",
+        (
+          f"target {original_target}→{adjustment}"
+          if adjustment is not None and original_target is not None
+          else f"target {adjustment}"
+          if adjustment is not None else ""
+        ),
+        f"barrier {barrier_price}" if barrier_price is not None else "",
+      )
+      if item
+    )
+    guard_summary = " · ".join(
+      item for item in (
+        str(last_guard.get("strategy") or ""),
+        str(last_guard.get("direction") or ""),
+        str(last_guard.get("guard") or ""),
+        str(last_guard.get("outcome") or ""),
+        str(last_guard.get("reason") or ""),
+        f"hard block={bool(last_guard.get('hard_block'))}",
+        f"source={last_guard.get('source_structure')}"
+        if last_guard.get("source_structure") else "",
+        opposing_summary,
+        detail,
+        f"at={last_guard.get('updated_at')}"
+        if last_guard.get("updated_at") else "",
+      )
+      if item
+    )
+  reconcile_summary = (
+    "none"
+    if not reconcile else
+    " · ".join(
+      f"{name}={reconcile.get(name, '0')}"
+      for name in (
+        "mode",
+        "zones_input",
+        "zones_shadow_output",
+        "zones_trimmed",
+        "zones_dropped",
+        "candidate_difference_count",
+      )
+    )
+  )
   health_detail = (
     f" · fatal {escape(', '.join(str(item) for item in config_fatal))}"
     if config_fatal else ""
@@ -990,6 +1066,7 @@ async def auto_trade_status_text() -> str:
   operations = (
     "\n\n⚙️ <b>Execution contract</b>"
     f"\nProfile: <b>{escape(settings.auto_trade_profile)}</b>"
+    f"\nStructural guards: <b>{escape(settings.auto_trade_structural_guard_mode)}</b>"
     f"\nBroker account: <b>{escape(account_mode)} · {escape(hedge_mode)}</b>"
     f"\nExecutor ready: <b>{bool((readiness or {}).get('ready'))}</b>"
     f"\nPython dry-run: <b>{settings.auto_trade_dry_run}</b>"
@@ -1007,6 +1084,8 @@ async def auto_trade_status_text() -> str:
     f"pending <b>{pending}</b>"
     f"\nMetrics: <code>{escape(metric_summary)}</code>"
     f"\nReject counters: <code>{escape(reject_summary)}</code>"
+    f"\nLast execution guard: <b>{escape(guard_summary)}</b>"
+    f"\nZone reconcile: <code>{escape(reconcile_summary)}</code>"
     f"\nLast lifecycle: <b>{escape(lifecycle_summary)}</b>"
   )
   return (
