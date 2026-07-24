@@ -12,6 +12,7 @@ from aiogram.types import Message
 
 from app.signals.chart_analysis import analyse_chart_image
 from app.autotrade.delivery import auto_trade_status_text, set_auto_trade_paused
+from app.signals.manual_execution import request_close_all
 from app.core.config import settings
 from app.analysis import scanner
 from app.analysis.market_map_delivery import send_current_market_map
@@ -94,6 +95,7 @@ _HELP_TEXT = """<b>Trade controls</b>
 <code>/scan_report [SYMBOL] [hours]</code>
 <code>/auto_pause</code>
 <code>/auto_resume</code>
+<code>/auto_close_all confirm</code>
 <code>/trade_stats [SYMBOL] [today|week|month]</code>
 <code>/trade_pips [SYMBOL] [today|yesterday|week|last week]</code>"""
 
@@ -214,6 +216,37 @@ async def handle_auto_resume(msg: Message) -> None:
     return
   await set_auto_trade_paused(False)
   await msg.answer("▶️ <b>ApexVoid Algo resumed</b>\nNew qualified entries are enabled.")
+
+
+@router.message(Command("auto_close_all"), F.chat.type == "private")
+async def handle_auto_close_all(msg: Message) -> None:
+  if not _is_owner(msg):
+    return
+  args = _command_args(msg).strip().lower()
+  if args and args != "confirm":
+    await msg.answer(
+      "Usage: <code>/auto_close_all</code> then "
+      "<code>/auto_close_all confirm</code>"
+    )
+    return
+  if args != "confirm":
+    status = await auto_trade_status_text()
+    await msg.answer(
+      "⚠️ <b>Flatten ApexVoid Algo?</b>\n"
+      "This market-closes every open algo position and cancels pending "
+      "limits. Total net uses the real broker fill.\n\n"
+      "Send <code>/auto_close_all confirm</code> to proceed.\n\n"
+      f"{status}"
+    )
+    return
+  await set_auto_trade_paused(True)
+  await request_close_all()
+  await msg.answer(
+    "🧹 <b>Flatten requested</b>\n"
+    "New entries paused. Closing open positions at market — "
+    "POSITION CLOSED / Trade result cards show volume-weighted "
+    "<b>Total net</b> from the broker fill."
+  )
 
 
 @router.message(Command("trade_pips"), F.chat.type == "private")

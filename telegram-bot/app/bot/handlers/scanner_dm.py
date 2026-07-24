@@ -5,6 +5,7 @@ from aiogram.filters import Command
 from aiogram.types import Message
 
 from app.bot.handlers.dm import (
+  handle_auto_close_all as deliver_auto_close_all,
   handle_auto_pause as deliver_auto_pause,
   handle_auto_resume as deliver_auto_resume,
   handle_auto_status as deliver_auto_status,
@@ -38,3 +39,8 @@ async def handle_auto_pause(msg: Message) -> None:
 @router.message(Command("auto_resume"), F.chat.type == "private")
 async def handle_auto_resume(msg: Message) -> None:
   await deliver_auto_resume(msg)
+
+
+@router.message(Command("auto_close_all"), F.chat.type == "private")
+async def handle_auto_close_all(msg: Message) -> None:
+  await deliver_auto_close_all(msg)

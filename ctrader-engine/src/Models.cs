@@ -259,9 +259,10 @@ public sealed record RedisClaimPayload(
 );
 
 // One owner-override command for an already-armed/filled manual-algo
-// signal (`/trade_close`, `/trade_sl`, `/trade_cancel`), published by the
-// Python side onto `manual_trade:commands` and consumed by AutoTradeEngine's
-// command poll. `Type` is one of "cancel_pending" | "close" | "move_sl".
+// signal (`/trade_close`, `/trade_sl`, `/trade_cancel`) or a bulk flatten
+// (`/auto_close_all`), published by the Python side onto
+// `manual_trade:commands` and consumed by AutoTradeEngine's command poll.
+// `Type` is one of "cancel_pending" | "close" | "move_sl" | "close_all".
 public sealed record ManualTradeCommand(
   string Type,
   string? IntentId = null,

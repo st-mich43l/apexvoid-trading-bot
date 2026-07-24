@@ -437,6 +437,9 @@ public sealed class AutoTradeEngine(
         case "close":
           await HandleCloseCommandAsync(command, cancellationToken);
           break;
+        case "close_all":
+          await HandleCloseAllCommandAsync(cancellationToken);
+          break;
         case "move_sl":
           await HandleMoveSlCommandAsync(command, cancellationToken);
           break;
@@ -507,8 +510,10 @@ public sealed class AutoTradeEngine(
   }
 
   // /trade_close on a filled manual algo signal: close the real position
-  // (full or partial by Frac) and publish the REAL execution price so
-  // Python can compute the pip result itself - no pip math belongs here.
+  // (full or partial by Frac) at the REAL broker fill. Full closes must
+  // drop tracked state immediately so the next reconcile does not re-book
+  // the same exit using a stop-loss estimate (wrong Total net / duplicate
+  // POSITION CLOSED cards).
   private async Task HandleCloseCommandAsync(
     ManualTradeCommand command,
     CancellationToken cancellationToken
@@ -548,18 +553,20 @@ public sealed class AutoTradeEngine(
       )
       : remainingVolume;
     var execution = await client.ClosePositionAsync(positionId, volume, cancellationToken);
+    if (state is not null)
+    {
+      await ApplyOwnerCloseAsync(
+        state,
+        execution,
+        eventType: "manual_closed",
+        message: $"manual algo position {positionId} closed by owner",
+        candidateId: command.IntentId,
+        cancellationToken
+      );
+      return;
+    }
     var remainingAfter = execution.RemainingVolume
       ?? Math.Max(0, remainingVolume - execution.ExecutedVolume);
-    decimal? terminalGroupPips = null;
-    if (state is not null && remainingAfter <= 0)
-    {
-      var initialVolume = state.GroupInitialVolume > 0
-        ? state.GroupInitialVolume
-        : state.InitialVolume;
-      var pipVolume = state.GroupRealizedPipVolume
-        + SignedPips(state, execution.ExecutionPrice) * execution.ExecutedVolume;
-      terminalGroupPips = WeightedPips(pipVolume, initialVolume);
-    }
     await PublishAsync(
       "manual_closed",
       $"manual algo position {positionId} closed by owner",
@@ -568,16 +575,191 @@ public sealed class AutoTradeEngine(
       positionId: positionId,
       volume: execution.ExecutedVolume,
       price: execution.ExecutionPrice,
-      groupId: state is null ? null : GroupId(state),
-      setup: state?.Setup,
-      regime: state?.Regime,
-      confluence: state?.Confluence,
-      groupRealizedPips: terminalGroupPips,
-      stopPips: state is null ? null : InitialStopPips(state),
-      stream: state is null ? null : ExecutionStream(state),
-      direction: state is null ? null : DirectionLabel(state.Direction),
       remainingVolume: remainingAfter
     );
+  }
+
+  // /auto_close_all: market-close every tracked ApexVoid Algo position and
+  // cancel resting labeled limits. Net pips use the broker close fill, not
+  // a stop estimate.
+  private async Task HandleCloseAllCommandAsync(CancellationToken cancellationToken)
+  {
+    var client = RequireClient();
+    await ReconcileAsync(cancellationToken);
+    var openStates = _states.Values.ToArray();
+    var pending = _allSymbolPendingOrders
+      .Where(order => order.Label == options.Label)
+      .ToArray();
+    await PublishAsync(
+      "owner_flatten",
+      $"owner flatten: closing {openStates.Length} position(s), "
+        + $"cancelling {pending.Length} pending",
+      cancellationToken
+    );
+    foreach (var state in openStates)
+    {
+      if (state.RemainingVolume <= 0)
+      {
+        continue;
+      }
+      var execution = await client.ClosePositionAsync(
+        state.PositionId,
+        state.RemainingVolume,
+        cancellationToken
+      );
+      await ApplyOwnerCloseAsync(
+        state,
+        execution,
+        eventType: "position_closed",
+        message: "position closed by owner flatten",
+        candidateId: state.CandidateId,
+        cancellationToken
+      );
+    }
+    foreach (var order in pending)
+    {
+      await client.CancelPendingOrderAsync(order.OrderId, cancellationToken);
+      _allSymbolPendingOrders = _allSymbolPendingOrders
+        .Where(item => item.OrderId != order.OrderId)
+        .ToArray();
+      var manual = ParseManualExpiry(order.Comment);
+      await PublishAsync(
+        "manual_cancelled",
+        $"pending order {order.OrderId} cancelled by owner flatten",
+        cancellationToken,
+        candidateId: manual?.CandidateToken,
+        groupId: manual?.GroupId
+      );
+    }
+    await PublishAsync(
+      "owner_flatten",
+      "owner flatten complete",
+      cancellationToken
+    );
+  }
+
+  private async Task ApplyOwnerCloseAsync(
+    AutoTradePositionState state,
+    TradeExecution execution,
+    string eventType,
+    string message,
+    string? candidateId,
+    CancellationToken cancellationToken
+  )
+  {
+    var symbol = RequireSymbol();
+    var closeVolume = execution.ExecutedVolume > 0
+      ? execution.ExecutedVolume
+      : state.RemainingVolume;
+    var remainingAfter = execution.RemainingVolume
+      ?? Math.Max(0, state.RemainingVolume - closeVolume);
+    var fill = execution.ExecutionPrice > 0
+      ? execution.ExecutionPrice
+      : state.EntryPrice;
+    var realizedPips = SignedPips(state, fill);
+    var currentGroup = _states.Values
+      .Where(item => GroupId(item) == GroupId(state))
+      .ToArray();
+    if (currentGroup.Length == 0)
+    {
+      currentGroup = [state];
+    }
+    var groupPipVolume = GroupRealizedPipVolume(currentGroup)
+      + realizedPips * closeVolume;
+    var groupInitialVolume = GroupInitialVolume(currentGroup);
+    if (groupInitialVolume <= 0)
+    {
+      groupInitialVolume = state.GroupInitialVolume > 0
+        ? state.GroupInitialVolume
+        : state.InitialVolume;
+    }
+    var weightedGroupPips = WeightedPips(groupPipVolume, groupInitialVolume);
+    var groupId = GroupId(state);
+    if (remainingAfter > 0)
+    {
+      state = state with
+      {
+        RemainingVolume = remainingAfter,
+        GroupRealizedPipVolume = groupPipVolume,
+        GroupInitialVolume = groupInitialVolume,
+      };
+      _states[state.PositionId] = state;
+      await store.SavePositionAsync(state, cancellationToken);
+      await PublishAsync(
+        eventType,
+        message,
+        cancellationToken,
+        candidateId: candidateId ?? state.CandidateId,
+        positionId: state.PositionId,
+        volume: closeVolume,
+        price: fill,
+        groupId: groupId,
+        setup: state.Setup,
+        regime: state.Regime,
+        confluence: state.Confluence,
+        groupRealizedPips: weightedGroupPips,
+        stopPips: InitialStopPips(state),
+        stream: ExecutionStream(state),
+        direction: DirectionLabel(state.Direction),
+        remainingVolume: remainingAfter,
+        matchId: state.MatchId,
+        rangeId: state.RangeId,
+        strategyFamily: state.StrategyFamily,
+        legRealizedPips: realizedPips,
+        groupInitialVolume: groupInitialVolume,
+        lotSize: symbol.LotSize
+      );
+      return;
+    }
+    _states.Remove(state.PositionId);
+    await store.DeletePositionAsync(state.PositionId, cancellationToken);
+    await PublishAsync(
+      eventType,
+      message,
+      cancellationToken,
+      candidateId: candidateId ?? state.CandidateId,
+      positionId: state.PositionId,
+      volume: closeVolume,
+      price: fill,
+      groupId: groupId,
+      setup: state.Setup,
+      regime: state.Regime,
+      confluence: state.Confluence,
+      groupRealizedPips: weightedGroupPips,
+      stopPips: InitialStopPips(state),
+      stream: ExecutionStream(state),
+      direction: DirectionLabel(state.Direction),
+      remainingVolume: 0,
+      matchId: state.MatchId,
+      rangeId: state.RangeId,
+      strategyFamily: state.StrategyFamily,
+      legRealizedPips: realizedPips,
+      groupInitialVolume: groupInitialVolume,
+      lotSize: symbol.LotSize
+    );
+    if (!_states.Values.Any(item => GroupId(item) == groupId))
+    {
+      await PublishAsync(
+        "group_result",
+        $"group {groupId} realised {weightedGroupPips.ToString("0.0", CultureInfo.InvariantCulture)} pips",
+        cancellationToken,
+        candidateId: candidateId ?? state.CandidateId,
+        positionId: state.PositionId,
+        groupId: groupId,
+        groupRealizedPips: weightedGroupPips,
+        setup: state.Setup,
+        matchId: state.MatchId,
+        rangeId: state.RangeId,
+        strategyFamily: state.StrategyFamily,
+        regime: state.Regime,
+        confluence: state.Confluence,
+        stopPips: InitialStopPips(state),
+        stream: ExecutionStream(state),
+        direction: DirectionLabel(state.Direction),
+        groupInitialVolume: groupInitialVolume,
+        lotSize: symbol.LotSize
+      );
+    }
   }
 
   // /trade_sl on a filled manual algo signal: amend the real position's
