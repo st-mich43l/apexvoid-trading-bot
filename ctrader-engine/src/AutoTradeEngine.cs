@@ -992,6 +992,24 @@ public sealed class AutoTradeEngine(
     var candidateGroupId = CandidateGroupId(candidate);
     if (string.IsNullOrWhiteSpace(candidate.ParentGroupId))
     {
+      if (await HasActiveDuplicateReactionAsync(candidate, cancellationToken))
+      {
+        await store.IncrementMetricAsync(
+          candidate.Symbol,
+          "executor_duplicate_reaction_rejected",
+          cancellationToken
+        );
+        await store.CompleteCandidateAsync(
+          candidate.CandidateId,
+          "already_processed:duplicate_reaction_active",
+          cancellationToken
+        );
+        _log(
+          $"auto-trade candidate {Short(candidate.CandidateId)} "
+          + "already_processed:duplicate_reaction_active"
+        );
+        return true;
+      }
       var pendingForGroup = _allSymbolPendingOrders.Any(order =>
         order.Label == options.Label
         && order.Comment.Contains(
@@ -2247,7 +2265,9 @@ public sealed class AutoTradeEngine(
       ZoneId: candidate.ZoneId,
       TriggerId: candidate.TriggerId,
       ParentGroupId: candidate.ParentGroupId,
-      StructuralSource: candidate.StructuralSource
+      StructuralSource: candidate.StructuralSource,
+      ReactionId: candidate.ReactionId,
+      ThesisId: candidate.ThesisId
     );
     _states[state.PositionId] = state;
     await PropagateGroupMetadataAsync(state, cancellationToken);
@@ -3445,6 +3465,8 @@ public sealed class AutoTradeEngine(
           TriggerId = plan.TriggerId,
           ParentGroupId = plan.ParentGroupId,
           StructuralSource = plan.StructuralSource,
+          ReactionId = plan.ReactionId,
+          ThesisId = plan.ThesisId,
         };
       }
     }
@@ -3690,6 +3712,61 @@ public sealed class AutoTradeEngine(
         : candidate.GroupId
     );
 
+  private async Task<bool> HasActiveDuplicateReactionAsync(
+    TradeCandidate candidate,
+    CancellationToken cancellationToken
+  )
+  {
+    var reactionId = candidate.ReactionId;
+    if (string.IsNullOrWhiteSpace(reactionId))
+    {
+      return false;
+    }
+    if (
+      _states.Values.Any(state =>
+        string.Equals(state.ReactionId, reactionId, StringComparison.Ordinal)
+        && string.IsNullOrWhiteSpace(state.ParentGroupId)
+      )
+    )
+    {
+      return true;
+    }
+    var candidateGroupId = CandidateGroupId(candidate);
+    if (
+      _allSymbolPendingOrders.Any(order =>
+        order.Label == options.Label
+        && order.Comment.Contains(
+          GroupToken(candidateGroupId),
+          StringComparison.Ordinal
+        )
+      )
+    )
+    {
+      return true;
+    }
+    var claim = await store.GetValueAsync(
+      $"auto_trade:reaction_claim:{reactionId}",
+      cancellationToken
+    );
+    if (string.IsNullOrWhiteSpace(claim))
+    {
+      return false;
+    }
+    // The publisher of this candidate owns the claim; only a different
+    // candidate_id on a live claim is a duplicate.
+    if (claim.Contains($"\"candidate_id\":\"{candidate.CandidateId}\"", StringComparison.Ordinal))
+    {
+      return false;
+    }
+    return !(
+      claim.Contains("\"state\":\"closed\"", StringComparison.Ordinal)
+      || claim.Contains("\"state\":\"cancelled\"", StringComparison.Ordinal)
+      || claim.Contains("\"state\":\"rejected\"", StringComparison.Ordinal)
+      || claim.Contains("\"state\":\"expired\"", StringComparison.Ordinal)
+      || claim.Contains("\"state\":\"terminal\"", StringComparison.Ordinal)
+    );
+  }
+
   private IReadOnlyList<long> PendingOrderIdsForGroup(string? groupId)
   {
     if (string.IsNullOrWhiteSpace(groupId))
@@ -3726,7 +3803,9 @@ public sealed class AutoTradeEngine(
       candidate.ZoneId,
       candidate.TriggerId,
       candidate.ParentGroupId,
-      candidate.StructuralSource
+      candidate.StructuralSource,
+      candidate.ReactionId,
+      candidate.ThesisId
     );
     await store.SetValueAsync(
       $"auto_trade:group_plan:{groupId}",

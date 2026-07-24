@@ -24,11 +24,54 @@ def same_thesis(left: StrategyMatch, right: StrategyMatch, *, atr: float) -> boo
     return False
   if left.symbol != right.symbol:
     return False
-  if left.event_ts != right.event_ts:
-    return False
   if left.strategy != right.strategy:
     return False
   if left.family and right.family and left.family != right.family:
+    return False
+
+  # Mapped Zone Reaction: identity is the reaction sequence, not the worker tick.
+  if left.reaction_id and right.reaction_id:
+    return left.reaction_id == right.reaction_id
+  if left.reaction_id or right.reaction_id:
+    return False
+
+  structural_left = left.structural_zone_id or left.zone_id
+  structural_right = right.structural_zone_id or right.zone_id
+  if (
+    left.strategy_mode == "mapped_zone_reaction"
+    or right.strategy_mode == "mapped_zone_reaction"
+  ):
+    if structural_left and structural_right and structural_left == structural_right:
+      if left.touch_bar_ts and right.touch_bar_ts:
+        return (
+          left.touch_bar_ts == right.touch_bar_ts
+          and left.confirmation_bar_ts == right.confirmation_bar_ts
+          and left.reaction_type == right.reaction_type
+        )
+      from app.autotrade.reaction_identity import zones_materially_equivalent
+      return zones_materially_equivalent(
+        left.entry_low,
+        left.entry_high,
+        right.entry_low,
+        right.entry_high,
+        atr=atr,
+      )
+    from app.autotrade.reaction_identity import zones_materially_equivalent
+    return (
+      left.touch_bar_ts == right.touch_bar_ts
+      and left.confirmation_bar_ts == right.confirmation_bar_ts
+      and left.reaction_type == right.reaction_type
+      and zones_materially_equivalent(
+        left.entry_low,
+        left.entry_high,
+        right.entry_low,
+        right.entry_high,
+        atr=atr,
+      )
+    )
+
+  # Event-based scanner strategies keep timestamp identity.
+  if left.event_ts != right.event_ts:
     return False
   if left.range_id != right.range_id:
     return False

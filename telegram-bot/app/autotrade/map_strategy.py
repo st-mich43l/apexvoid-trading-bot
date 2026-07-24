@@ -25,10 +25,14 @@ from app.analysis.market_map import (
   market_map_from_payload,
 )
 from app.autotrade import units
+from app.autotrade.reaction_identity import (
+  mapped_reaction_id,
+  mapped_thesis_id,
+  structural_zone_id,
+)
 from app.autotrade.strategy_match import (
   STRATEGY_MATCH_VERSION,
   StrategyMatch,
-  strategy_match_id,
 )
 
 
@@ -278,15 +282,34 @@ def evaluate_market_map_strategy(
       reaction_type=hit.reaction_type,
     )
   strategy = "Mapped Zone Reaction"
-  match_id = strategy_match_id(
+  pip_size = units.pip_size(symbol)
+  zone_structural_id = structural_zone_id(
     symbol,
-    EXECUTION_TIMEFRAME,
-    str(event_ts),
-    strategy,
     direction,
-    entry_low,
-    entry_high,
+    float(entry.lo),
+    float(entry.hi),
+    atr=atr,
+    pip_size=pip_size,
+    tags=entry.tags,
+    source_tf=getattr(market_map, "source_timeframe", None) or "M5",
   )
+  reaction_id = mapped_reaction_id(
+    symbol=symbol,
+    strategy=strategy,
+    direction=direction,
+    structural_zone_id=zone_structural_id,
+    touch_bar_ts=str(hit.touch_bar_ts),
+    confirmation_bar_ts=str(hit.confirmation_bar_ts),
+    reaction_type=str(hit.reaction_type),
+  )
+  thesis_id = mapped_thesis_id(
+    symbol=symbol,
+    strategy=strategy,
+    direction=direction,
+    structural_zone_id=zone_structural_id,
+  )
+  # Mapped reactions identity from the reaction sequence, never the worker tick.
+  match_id = reaction_id
   confluence = _confluence(entry, market_map)
   tag_text = " · ".join(entry.tags[:4])
   reaction_label = (
@@ -338,14 +361,19 @@ def evaluate_market_map_strategy(
       *reaction_tags,
     ),
     target_price=float(market_map.eq) if counter_bias and market_map.eq is not None else None,
+    family="mapped_zone",
     structural_source="market_map_zone",
-    zone_id=(
-      f"{symbol.upper()}:{direction}:{entry.lo:.5f}:{entry.hi:.5f}"
-    ),
+    zone_id=zone_structural_id,
     level_id=(
       f"{symbol.upper()}:{EXECUTION_TIMEFRAME}:level:"
       f"{float(entry.lo if direction == 'SELL' else entry.hi):.5f}"
     ),
+    reaction_id=reaction_id,
+    thesis_id=thesis_id,
+    structural_zone_id=zone_structural_id,
+    touch_bar_ts=str(hit.touch_bar_ts),
+    confirmation_bar_ts=str(hit.confirmation_bar_ts),
+    reaction_type=str(hit.reaction_type),
   )
   return MarketMapStrategyDecision(
     "candidate",

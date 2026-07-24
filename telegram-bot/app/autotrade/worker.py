@@ -51,6 +51,13 @@ from app.autotrade.multi_match import (
   strategy_matches_key,
 )
 from app.autotrade.lifecycle import emit_lifecycle, increment_metric
+from app.autotrade.reaction_identity import (
+  mapped_group_id,
+  parse_reaction_claim,
+  price_left_zone,
+  reaction_claim_key,
+  reaction_claim_payload,
+)
 from app.autotrade.range_context import (
   RangeContext,
   private_range_context,
@@ -1462,8 +1469,17 @@ def _group_id(*parts: object) -> str:
 
 
 def _strategy_group_id(match: StrategyMatch) -> str:
+  if match.reaction_id:
+    return mapped_group_id(
+      symbol=match.symbol,
+      strategy_family=match.family or "mapped_zone",
+      direction=match.direction,
+      reaction_id=match.reaction_id,
+    )
   structural_key = (
     match.range_id
+    or match.structural_zone_id
+    or match.zone_id
     or f"{match.key_level:.2f}:{match.entry_low:.2f}:{match.entry_high:.2f}"
   )
   return _group_id(
@@ -1471,8 +1487,57 @@ def _strategy_group_id(match: StrategyMatch) -> str:
     match.family or match.strategy,
     match.direction,
     structural_key,
-    match.match_id,
   )
+
+
+async def _reaction_may_rearm(
+  client: Any,
+  match: StrategyMatch,
+  price: float,
+  claim: dict[str, Any],
+) -> bool:
+  """Allow a new candidate only after a terminal claim and a fresh reaction."""
+  state = str(claim.get("state") or "").casefold()
+  if state not in {"closed", "cancelled", "rejected", "expired", "terminal"}:
+    return False
+  previous_confirm = str(claim.get("confirmation_bar_ts") or "")
+  new_touch = str(match.touch_bar_ts or "")
+  if not previous_confirm or not new_touch:
+    return False
+  if new_touch <= previous_confirm:
+    return False
+  lo = float(match.entry_low)
+  hi = float(match.entry_high)
+  # Prefer raw structural band when present in claim metadata via zone geometry.
+  if not price_left_zone(
+    price,
+    lo,
+    hi,
+    atr=float(match.atr),
+    rearm_atr=float(getattr(settings, "auto_trade_map_reaction_rearm_atr", 0.5)),
+  ):
+    return False
+  # New confirmation must also be later than the previous one.
+  new_confirm = str(match.confirmation_bar_ts or "")
+  if not new_confirm or new_confirm <= previous_confirm:
+    return False
+  return True
+
+
+async def _mark_reaction_claim_terminal(
+  client: Any,
+  *,
+  reaction_id: str | None,
+  state: str,
+) -> None:
+  if not reaction_id:
+    return
+  key = reaction_claim_key(reaction_id)
+  existing = parse_reaction_claim(await client.get(key))
+  if existing is None:
+    return
+  existing["state"] = state
+  await client.set(key, json.dumps(existing, separators=(",", ":"), sort_keys=True))
 
 
 def _trend_group_id(
@@ -2225,6 +2290,38 @@ async def _publish_strategy_match(
       guarded.get("title", "high-impact event"),
     )
     return None
+
+  group_id = _strategy_group_id(match)
+  if match.reaction_id:
+    await increment_metric(client, "mapped_reaction_evaluated", symbol=symbol)
+    claim_key = reaction_claim_key(match.reaction_id)
+    existing_claim = parse_reaction_claim(await client.get(claim_key))
+    if existing_claim is not None:
+      rearmed = await _reaction_may_rearm(
+        client,
+        match,
+        spot.price,
+        existing_claim,
+      )
+      if not rearmed:
+        await increment_metric(
+          client, "duplicate_reaction_suppressed", symbol=symbol,
+        )
+        if existing_claim.get("group_id"):
+          await increment_metric(
+            client, "same_thesis_group_active", symbol=symbol,
+          )
+        log.info(
+          "duplicate mapped reaction suppressed id=%s symbol=%s claim=%s",
+          match.reaction_id[:12],
+          symbol,
+          existing_claim.get("state"),
+        )
+        await _consume_strategy_match(client, symbol, match)
+        return None
+      await increment_metric(client, "mapped_reaction_rearmed", symbol=symbol)
+      await client.delete(claim_key)
+
   candidate_id = match.match_id
   claimed = await client.set(
     f"auto_trade:candidate:{candidate_id}",
@@ -2233,8 +2330,41 @@ async def _publish_strategy_match(
     nx=True,
   )
   if not claimed:
+    if match.reaction_id:
+      await increment_metric(
+        client, "duplicate_reaction_suppressed", symbol=symbol,
+      )
     await _consume_strategy_match(client, symbol, match)
     return None
+
+  if match.reaction_id:
+    claim_key = reaction_claim_key(match.reaction_id)
+    claim_body = reaction_claim_payload(
+      reaction_id=match.reaction_id,
+      thesis_id=match.thesis_id or "",
+      candidate_id=candidate_id,
+      group_id=group_id,
+      touch_bar_ts=str(match.touch_bar_ts or ""),
+      confirmation_bar_ts=str(match.confirmation_bar_ts or ""),
+      state="claimed",
+      claimed_at=now,
+      structural_zone_id=str(
+        match.structural_zone_id or match.zone_id or ""
+      ),
+      symbol=symbol,
+      direction=match.direction,
+    )
+    # Persist for the whole group lifetime; do not expire with lookback.
+    reaction_claimed = await client.set(claim_key, claim_body, nx=True)
+    if not reaction_claimed:
+      await client.delete(f"auto_trade:candidate:{candidate_id}")
+      await increment_metric(
+        client, "duplicate_reaction_suppressed", symbol=symbol,
+      )
+      await _consume_strategy_match(client, symbol, match)
+      return None
+    await increment_metric(client, "mapped_reaction_claimed", symbol=symbol)
+
   setup = (
     f"{match.strategy} · counter_bias"
     if "counter_bias" in match.tags
@@ -2246,10 +2376,11 @@ async def _publish_strategy_match(
     "version": 3 if match.is_range_edge else 4,
     "candidate_id": candidate_id,
     "match_id": match.match_id,
-    "group_id": _strategy_group_id(match),
+    "group_id": group_id,
     "strategy_family": match.family or "scanner",
     "zone_id": (
-      match.zone_id
+      match.structural_zone_id
+      or match.zone_id
       or match.range_id
       or f"{match.key_level:.5f}:{match.entry_low:.5f}:{match.entry_high:.5f}"
     ),
@@ -2257,6 +2388,12 @@ async def _publish_strategy_match(
     "trigger_id": match.event_ts,
     "parent_group_id": None,
     "structural_source": match.structural_source or match.strategy,
+    "reaction_id": match.reaction_id,
+    "thesis_id": match.thesis_id,
+    "structural_zone_id": match.structural_zone_id or match.zone_id,
+    "touch_bar_ts": match.touch_bar_ts,
+    "confirmation_bar_ts": match.confirmation_bar_ts,
+    "reaction_type": match.reaction_type,
     "symbol": symbol.upper(),
     "timeframe": match.source_tf,
     "setup": setup,
@@ -2312,6 +2449,8 @@ async def _publish_strategy_match(
     )
   except Exception:
     await client.delete(f"auto_trade:candidate:{candidate_id}")
+    if match.reaction_id:
+      await client.delete(reaction_claim_key(match.reaction_id))
     raise
   await increment_metric(client, "candidate_published", symbol=symbol)
   await emit_lifecycle(
@@ -2330,6 +2469,13 @@ async def _publish_strategy_match(
     current_price=spot.price,
     target_plan=list(match.targets_pips),
     message="strategy match candidate published to executor",
+    measured={
+      "reaction_id": match.reaction_id,
+      "thesis_id": match.thesis_id,
+      "structural_zone_id": match.structural_zone_id or match.zone_id,
+      "touch_bar_ts": match.touch_bar_ts,
+      "confirmation_bar_ts": match.confirmation_bar_ts,
+    },
     publish_status=True,
   )
   if match.is_range_edge and match.range_id is not None:

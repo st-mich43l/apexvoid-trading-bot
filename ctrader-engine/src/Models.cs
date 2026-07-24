@@ -184,7 +184,10 @@ public sealed record TradeCandidate(
   string? ParentGroupId = null,
   string? StructuralSource = null,
   string? Bias = null,
-  string? RelationshipToBias = null
+  string? RelationshipToBias = null,
+  string? ReactionId = null,
+  string? ThesisId = null,
+  string? StructuralZoneId = null
 );
 
 public sealed record TradeStreamEntry(
@@ -234,7 +237,9 @@ public sealed record AutoTradePositionState(
   string? ZoneId = null,
   string? TriggerId = null,
   string? ParentGroupId = null,
-  string? StructuralSource = null
+  string? StructuralSource = null,
+  string? ReactionId = null,
+  string? ThesisId = null
 );
 
 // One owner-override command for an already-armed/filled manual-algo
@@ -326,7 +331,9 @@ public sealed record AutoTradeGroupPlan(
   string? ZoneId = null,
   string? TriggerId = null,
   string? ParentGroupId = null,
-  string? StructuralSource = null
+  string? StructuralSource = null,
+  string? ReactionId = null,
+  string? ThesisId = null
 );
 
 public sealed record AutoTradeConfigManifest(
