@@ -241,7 +241,12 @@ public sealed record AutoTradePositionState(
   string? ParentGroupId = null,
   string? StructuralSource = null,
   string? ReactionId = null,
-  string? ThesisId = null
+  string? ThesisId = null,
+  bool RangeBoxScaleOutBooked = false,
+  long? RangeBoxScaleOutVolume = null,
+  decimal? RangeBoxScaleOutPrice = null,
+  decimal? RangeBoxScaleOutPips = null,
+  long? RangeBoxScaleOutAt = null
 );
 
 public sealed record RedisClaimPayload(
@@ -399,7 +404,12 @@ public sealed record AutoTradeConfigManifest(
   string BrokerReported = "",
   string StructuralGuardMode = "balanced",
   bool ZoneCooldownEnabled = true,
-  string ZoneReconcileMode = "enforce"
+  string ZoneReconcileMode = "enforce",
+  bool RangeBoxScaleOutEnabled = true,
+  int RangeBoxScaleOutThresholdPips = 70,
+  int RangeBoxScaleOutTriggerPips = 30,
+  decimal RangeBoxScaleOutFraction = 0.50m,
+  bool RangeBoxMoveSlToBeAfterScaleOut = false
 );
 
 public sealed record AutoTradeConfigHealthDocument(

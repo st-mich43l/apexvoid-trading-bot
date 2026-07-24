@@ -161,6 +161,39 @@ def _public_message(event: dict, message: str) -> str:
   return cleaned.strip(" ·")
 
 
+def _format_range_box_scale_out_targets(
+  event: dict,
+  direction: str,
+  entry: str,
+) -> list[str] | None:
+  """Owner ORDER FILLED lines for Range Box 30p/50% then Full TP."""
+  raw = event.get("targets_pips")
+  if not isinstance(raw, (list, tuple)) or len(raw) < 2:
+    return None
+  setup = str(event.get("setup") or "")
+  mode = str(event.get("mode") or "")
+  if "Range Box Scalp" not in setup and mode != "auto_box_scalp":
+    # Still allow when the opened event only carries the ladder.
+    if "TP1 +" not in str(event.get("message") or ""):
+      return None
+  try:
+    trigger = int(raw[0])
+    full_tp = int(raw[-1])
+  except (TypeError, ValueError):
+    return None
+  if trigger <= 0 or full_tp <= trigger:
+    return None
+  fraction = event.get("scale_out_fraction")
+  try:
+    fraction_text = f"{float(fraction):.0%}" if fraction is not None else "50%"
+  except (TypeError, ValueError):
+    fraction_text = "50%"
+  return [
+    f"🎯 TP1: <b>+{trigger} pips</b> · book {escape(fraction_text)}",
+    f"🎯 Full TP: <b>+{full_tp} pips</b>",
+  ]
+
+
 def _append_public_footer(lines: list[str], footer: str | None) -> None:
   value = str(footer or "").strip()
   if value:
@@ -188,9 +221,16 @@ def _format_opened(
     f"📍 Entry: <b>{escape(entry)}</b>",
     f"🛡 SL: <b>{escape(stop)}</b> · {escape(stop_pips)} pips",
   ]
-  targets = _targets_line(event) if profile == "public" else None
-  if targets is not None:
-    lines.append(targets)
+  public_targets = _targets_line(event) if profile == "public" else None
+  scale_out_lines = (
+    None if profile == "public" else _format_range_box_scale_out_targets(
+      event, direction, entry,
+    )
+  )
+  if public_targets is not None:
+    lines.append(public_targets)
+  elif scale_out_lines:
+    lines.extend(scale_out_lines)
   elif full_tp is not None:
     target_pips = int(full_tp.group(1))
     try:

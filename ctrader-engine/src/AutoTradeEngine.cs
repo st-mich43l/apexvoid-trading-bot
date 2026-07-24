@@ -1188,16 +1188,21 @@ public sealed class AutoTradeEngine(
     var boxTarget = IsBoxRangeScalp(candidate)
       ? BoxTarget(candidate, direction, expectedEntry)
       : ((int Pips, decimal? ExitPrice)?)null;
+    var rangeBoxScaleOut = TryRangeBoxScaleOutPlan(candidate, out var scaleOutPips);
     IReadOnlyList<int> targetPips = UsesCandidateTargetPlan(candidate)
       ? candidate.TargetsPips!
-      : IsBoxRangeScalp(candidate)
-        ? [boxTarget!.Value.Pips]
-        : options.TargetsPips;
+      : rangeBoxScaleOut
+        ? scaleOutPips!
+        : IsBoxRangeScalp(candidate)
+          ? [boxTarget!.Value.Pips]
+          : options.TargetsPips;
     IReadOnlyList<int> targetWeights = UsesCandidateTargetPlan(candidate)
       ? EqualWeights(candidate.TargetsPips!.Count)
-      : IsBoxRangeScalp(candidate)
-        ? [100]
-        : options.TargetWeights;
+      : rangeBoxScaleOut
+        ? RangeBoxScaleOutWeights()
+        : IsBoxRangeScalp(candidate)
+          ? [100]
+          : options.TargetWeights;
     try
     {
       sizing = VolumePlanner.SizeInitial(
@@ -1211,6 +1216,37 @@ public sealed class AutoTradeEngine(
         targetWeights
       );
     }
+    catch (VolumePlanningException exception) when (rangeBoxScaleOut)
+    {
+      // Valid 50/50 split impossible (broker min/step) — keep full position
+      // to the original Full TP only.
+      _log(
+        $"range-box scale-out skipped for {candidate.CandidateId}: "
+        + exception.Message
+      );
+      rangeBoxScaleOut = false;
+      targetPips = [boxTarget!.Value.Pips];
+      targetWeights = [100];
+      try
+      {
+        sizing = VolumePlanner.SizeInitial(
+          account.Balance,
+          options.RiskPercent,
+          options.SizingMode,
+          stopPlan.StopPips,
+          options.PipValuePerLot,
+          RequireSymbol(),
+          targetPips,
+          targetWeights
+        );
+      }
+      catch (VolumePlanningException fallbackException)
+      {
+        return await RejectAsync(
+          candidate, fallbackException.Message, cancellationToken
+        );
+      }
+    }
     catch (VolumePlanningException exception)
     {
       return await RejectAsync(candidate, exception.Message, cancellationToken);
@@ -1221,7 +1257,11 @@ public sealed class AutoTradeEngine(
     if (options.DryRun)
     {
       var targetSummary = IsBoxRangeScalp(candidate)
-        ? $" · full TP {targetPips[0]}p"
+        ? (
+          targetPips.Count >= 2
+            ? $" · TP1 +{targetPips[0]}p book {options.RangeBoxScaleOutFraction:0%} · Full TP +{targetPips[^1]}p"
+            : $" · full TP {targetPips[0]}p"
+        )
         : "";
       return await CompleteDryRunAsync(
         candidate,
@@ -1270,8 +1310,13 @@ public sealed class AutoTradeEngine(
       message: $"{direction} {sizing.Lots:N2} lots filled {{fill}}, "
         + $"SL {{stop}} · {stopPlan.StopPips:N0}p structure · "
         + (IsBoxRangeScalp(candidate)
-          ? $"full TP {targetPips[0]}p · range "
-            + $"{candidate.RangeLow:N2}-{candidate.RangeHigh:N2} · "
+          ? (
+            targetPips.Count >= 2
+              ? $"TP1 +{targetPips[0]}p book {options.RangeBoxScaleOutFraction:0%} · Full TP +{targetPips[^1]}p · range "
+                + $"{candidate.RangeLow:N2}-{candidate.RangeHigh:N2} · "
+              : $"full TP {targetPips[0]}p · range "
+                + $"{candidate.RangeLow:N2}-{candidate.RangeHigh:N2} · "
+          )
           : "")
         + sizing.BindingTerm
         + routingSuffix,
@@ -2238,6 +2283,23 @@ public sealed class AutoTradeEngine(
       stopLoss,
       cancellationToken
     );
+    IReadOnlyList<decimal>? targetPrices = null;
+    if (
+      IsBoxRangeScalp(candidate)
+      && targetPlan.TargetsPips.Count >= 2
+      && !options.RangeFlipEnabled
+    )
+    {
+      targetPrices = targetPlan.TargetsPips
+        .Select(pips => decimal.Round(
+          direction == TradeDirection.Buy
+            ? fill + pips * options.PipSize
+            : fill - pips * options.PipSize,
+          symbol.Digits,
+          MidpointRounding.AwayFromZero
+        ))
+        .ToArray();
+    }
     var state = new AutoTradePositionState(
       candidate.CandidateId,
       execution.PositionId,
@@ -2272,7 +2334,7 @@ public sealed class AutoTradeEngine(
       RangeId: candidate.RangeId,
       RangeLow: candidate.RangeLow,
       RangeHigh: candidate.RangeHigh,
-      RangeExitPrice: IsBoxRangeScalp(candidate)
+      RangeExitPrice: IsBoxRangeScalp(candidate) && targetPlan.TargetsPips.Count < 2
         ? BoxExitPrice(candidate, direction)
         : null,
       Stream: "algo_auto",
@@ -2280,6 +2342,7 @@ public sealed class AutoTradeEngine(
       StrategyFamily: string.IsNullOrWhiteSpace(candidate.StrategyFamily)
         ? StrategyFamilyFromSetup(candidate.Setup)
         : candidate.StrategyFamily,
+      TargetPrices: targetPrices,
       ZoneId: candidate.ZoneId,
       TriggerId: candidate.TriggerId,
       ParentGroupId: candidate.ParentGroupId,
@@ -2922,6 +2985,17 @@ public sealed class AutoTradeEngine(
       )
       {
         var completedTargetIndex = state.NextTargetIndex;
+        if (
+          IsRangeBoxScaleOutState(state)
+          && completedTargetIndex == 0
+          && state.RangeBoxScaleOutBooked
+        )
+        {
+          state = state with { NextTargetIndex = 1 };
+          _states[state.PositionId] = state;
+          await store.SavePositionAsync(state, cancellationToken);
+          continue;
+        }
         var targetOrdinal = TargetOrdinal(state, completedTargetIndex);
         var targetPips = state.TargetsPips[state.NextTargetIndex];
         var target = TargetPrice(state, targetPips, completedTargetIndex);
@@ -2936,6 +3010,23 @@ public sealed class AutoTradeEngine(
         var closeVolume = state.NextTargetIndex == state.TargetsPips.Count - 1
           ? state.RemainingVolume
           : Math.Min(state.Slices[state.NextTargetIndex], state.RemainingVolume);
+        if (
+          state.NextTargetIndex < state.TargetsPips.Count - 1
+          && closeVolume > 0
+          && state.RemainingVolume - closeVolume > 0
+          && state.RemainingVolume - closeVolume < RequireSymbol().MinVolume
+        )
+        {
+          // Would leave an invalid dust remainder — skip partial, ride Full TP.
+          _log(
+            $"range-box scale-out skipped at runtime for position "
+            + $"{state.PositionId}: dust remainder after TP1"
+          );
+          state = state with { NextTargetIndex = state.TargetsPips.Count - 1 };
+          _states[state.PositionId] = state;
+          await store.SavePositionAsync(state, cancellationToken);
+          continue;
+        }
         TradeExecution execution;
         var flipClose = options.RangeFlipEnabled
           && state.RangeExitPrice is not null
@@ -3064,10 +3155,39 @@ public sealed class AutoTradeEngine(
           InitialRealizedPipVolume = initialPipVolume,
           GroupInitialVolume = groupInitialVolume,
           InitialTrancheVolume = initialTrancheVolume,
+          RangeBoxScaleOutBooked = state.RangeBoxScaleOutBooked
+            || (
+              IsRangeBoxScaleOutState(state)
+              && completedTargetIndex == 0
+            ),
+          RangeBoxScaleOutVolume = (
+            IsRangeBoxScaleOutState(state) && completedTargetIndex == 0
+          )
+            ? closeVolume
+            : state.RangeBoxScaleOutVolume,
+          RangeBoxScaleOutPrice = (
+            IsRangeBoxScaleOutState(state) && completedTargetIndex == 0
+          )
+            ? fill
+            : state.RangeBoxScaleOutPrice,
+          RangeBoxScaleOutPips = (
+            IsRangeBoxScaleOutState(state) && completedTargetIndex == 0
+          )
+            ? realizedPips
+            : state.RangeBoxScaleOutPips,
+          RangeBoxScaleOutAt = (
+            IsRangeBoxScaleOutState(state) && completedTargetIndex == 0
+          )
+            ? _clock().ToUnixTimeSeconds()
+            : state.RangeBoxScaleOutAt,
         };
         _states[state.PositionId] = state;
         await PropagateGroupMetadataAsync(state, cancellationToken);
         var targetLabel = state.TargetsPips.Count == 1
+          || (
+            IsRangeBoxScaleOutState(state)
+            && completedTargetIndex == state.TargetsPips.Count - 1
+          )
           ? "FULL TP"
           : $"TP{targetOrdinal}";
         var legPipText = realizedPips.ToString(
@@ -4564,6 +4684,45 @@ public sealed class AutoTradeEngine(
     )
     && candidate.Setup == "Range Box Scalp"
     && candidate.Mode == "auto_box_scalp";
+
+  private bool TryRangeBoxScaleOutPlan(
+    TradeCandidate candidate,
+    out IReadOnlyList<int>? targetsPips
+  )
+  {
+    targetsPips = null;
+    if (
+      !IsBoxRangeScalp(candidate)
+      || !options.RangeBoxScaleOutEnabled
+      || options.RangeFlipEnabled
+      || candidate.FullTakeProfitPips is not int fullTp
+      || fullTp <= options.RangeBoxScaleOutThresholdPips
+      || options.RangeBoxScaleOutTriggerPips <= 0
+      || options.RangeBoxScaleOutTriggerPips >= fullTp
+    )
+    {
+      return false;
+    }
+    targetsPips = [options.RangeBoxScaleOutTriggerPips, fullTp];
+    return true;
+  }
+
+  private int[] RangeBoxScaleOutWeights()
+  {
+    var first = decimal.ToInt32(decimal.Round(
+      options.RangeBoxScaleOutFraction * 100m,
+      MidpointRounding.AwayFromZero
+    ));
+    first = Math.Clamp(first, 1, 99);
+    return [first, 100 - first];
+  }
+
+  private static bool IsRangeBoxScaleOutState(AutoTradePositionState state) =>
+    state.Setup is not null
+    && state.Setup.Contains("Range Box Scalp", StringComparison.OrdinalIgnoreCase)
+    && state.TargetsPips.Count >= 2
+    && state.TrancheIndex == 1
+    && string.IsNullOrWhiteSpace(state.ParentGroupId);
 
   private static bool IsTrendCandidate(TradeCandidate candidate) =>
     candidate.Version == 3

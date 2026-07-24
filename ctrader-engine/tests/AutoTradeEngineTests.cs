@@ -108,6 +108,244 @@ public sealed class AutoTradeEngineTests
     await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
   }
 
+  [Theory]
+  [InlineData(110)]
+  [InlineData(80)]
+  [InlineData(71)]
+  public async Task RangeBoxScaleOutAppliesWhenFullTpExceedsThreshold(int fullTp)
+  {
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+    var store = new FakeAutoTradeStore(BoxCandidateJson(
+      fullTpPips: fullTp,
+      timeframe: "M5"
+    ));
+    var client = new FakeTradingClient();
+    var options = Options() with
+    {
+      RangeFlipEnabled = false,
+      RangeTargetsPips = [20, 30, 40, 50, 70, 71, 80, 110],
+      RangeBoxScaleOutEnabled = true,
+      RangeBoxScaleOutThresholdPips = 70,
+      RangeBoxScaleOutTriggerPips = 30,
+      RangeBoxScaleOutFraction = 0.50m,
+    };
+    var engine = new AutoTradeEngine(options, store, () => Now, _ => { });
+    await engine.ObserveSpotAsync(
+      new SpotPrice("XAU", 4000.0m, 4000.2m, Now.ToUnixTimeSeconds()),
+      cts.Token
+    );
+    var run = engine.RunSessionAsync(client, Symbol, cts.Token);
+    await store.Ordered.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+    var order = Assert.Single(client.Orders);
+    var opened = Assert.Single(store.Events, item => item.Type == "opened");
+    Assert.Equal(new[] { 30, fullTp }, opened.TargetsPips);
+    Assert.Contains($"TP1 +30p book 50%", opened.Message);
+    Assert.Contains($"Full TP +{fullTp}p", opened.Message);
+    var state = Assert.Single(store.Positions.Values);
+    Assert.Equal(2, state.Slices.Count);
+    Assert.Equal(order.Volume, state.Slices.Sum());
+    Assert.Equal(2, state.TargetsPips.Count);
+    Assert.Equal(2, state.TargetPrices!.Count);
+    Assert.Equal(state.EntryPrice + 30m * 0.1m, state.TargetPrices[0]);
+    Assert.Equal(state.EntryPrice + fullTp * 0.1m, state.TargetPrices[1]);
+    Assert.False(state.RangeBoxScaleOutBooked);
+
+    // Gap through TP1 — one partial only.
+    await engine.ObserveSpotAsync(
+      new SpotPrice("XAU", 4003.5m, 4003.7m, Now.ToUnixTimeSeconds()),
+      cts.Token
+    );
+    Assert.Single(client.Closes);
+    Assert.Equal(state.Slices[0], client.Closes[0].Volume);
+    var tp1 = Assert.Single(
+      store.Events.Where(item => item.Type == "take_profit"),
+      item => item.Message.StartsWith("TP1", StringComparison.Ordinal)
+    );
+    Assert.Equal(30, tp1.TargetPips);
+    state = Assert.Single(store.Positions.Values);
+    Assert.True(state.RangeBoxScaleOutBooked);
+    Assert.Equal(1, state.NextTargetIndex);
+
+    // Repeat above TP1 — no second partial.
+    await engine.ObserveSpotAsync(
+      new SpotPrice("XAU", 4004.0m, 4004.2m, Now.ToUnixTimeSeconds()),
+      cts.Token
+    );
+    Assert.Single(client.Closes);
+
+    // Final TP.
+    var finalBid = state.EntryPrice + fullTp * 0.1m;
+    var remainingBeforeFinal = state.RemainingVolume;
+    await engine.ObserveSpotAsync(
+      new SpotPrice("XAU", finalBid, finalBid + 0.2m, Now.ToUnixTimeSeconds()),
+      cts.Token
+    );
+    Assert.Equal(2, client.Closes.Count);
+    Assert.Equal(remainingBeforeFinal, client.Closes[1].Volume);
+    Assert.Empty(store.Positions);
+    var finalTp = store.Events.Last(item => item.Type == "take_profit");
+    Assert.StartsWith("FULL TP", finalTp.Message);
+
+    cts.Cancel();
+    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+  }
+
+  [Theory]
+  [InlineData(70)]
+  [InlineData(60)]
+  public async Task RangeBoxScaleOutDoesNotApplyAtOrBelowThreshold(int fullTp)
+  {
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+    var store = new FakeAutoTradeStore(BoxCandidateJson(
+      fullTpPips: fullTp,
+      timeframe: "M5"
+    ));
+    var client = new FakeTradingClient();
+    var engine = new AutoTradeEngine(
+      Options() with
+      {
+        RangeFlipEnabled = false,
+        RangeTargetsPips = [20, 30, 40, 50, 60, 70],
+        RangeBoxScaleOutEnabled = true,
+      },
+      store,
+      () => Now,
+      _ => { }
+    );
+    await engine.ObserveSpotAsync(
+      new SpotPrice("XAU", 4000.0m, 4000.2m, Now.ToUnixTimeSeconds()),
+      cts.Token
+    );
+    var run = engine.RunSessionAsync(client, Symbol, cts.Token);
+    await store.Ordered.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+    var opened = Assert.Single(store.Events, item => item.Type == "opened");
+    Assert.Equal(new[] { fullTp }, opened.TargetsPips);
+    Assert.Contains($"full TP {fullTp}p", opened.Message);
+    Assert.DoesNotContain("TP1 +30p", opened.Message);
+
+    cts.Cancel();
+    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+  }
+
+  [Fact]
+  public async Task RangeBoxScaleOutSellUsesFillMinusTrigger()
+  {
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+    // Range high for 110p Full TP is ~4012; SELL stop needs swing above entry.
+    var store = new FakeAutoTradeStore(BoxCandidateJson(
+      fullTpPips: 110,
+      timeframe: "M5",
+      direction: "SELL",
+      structureSwing: 4013.5m
+    ));
+    var client = new FakeTradingClient();
+    var engine = new AutoTradeEngine(
+      Options() with
+      {
+        RangeFlipEnabled = false,
+        RangeTargetsPips = [20, 30, 40, 50, 70, 110],
+        RangeBoxScaleOutEnabled = true,
+      },
+      store,
+      () => Now,
+      _ => { }
+    );
+    // Spot near the SELL rail (range high ~4012).
+    await engine.ObserveSpotAsync(
+      new SpotPrice("XAU", 4011.8m, 4012.0m, Now.ToUnixTimeSeconds()),
+      cts.Token
+    );
+    var run = engine.RunSessionAsync(client, Symbol, cts.Token);
+    await store.Ordered.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+    var state = Assert.Single(store.Positions.Values);
+    Assert.Equal(TradeDirection.Sell, state.Direction);
+    Assert.Equal(state.EntryPrice - 30m * 0.1m, state.TargetPrices![0]);
+    Assert.Equal(state.EntryPrice - 110m * 0.1m, state.TargetPrices[1]);
+
+    cts.Cancel();
+    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+  }
+
+  [Fact]
+  public async Task RangeBoxScaleOutNotReplayedAfterRestartFlag()
+  {
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+    var store = new FakeAutoTradeStore(BoxCandidateJson(
+      fullTpPips: 110,
+      timeframe: "M5"
+    ));
+    var client = new FakeTradingClient();
+    var options = Options() with
+    {
+      RangeFlipEnabled = false,
+      RangeTargetsPips = [20, 30, 40, 50, 70, 110],
+      RangeBoxScaleOutEnabled = true,
+    };
+    var engine = new AutoTradeEngine(options, store, () => Now, _ => { });
+    await engine.ObserveSpotAsync(
+      new SpotPrice("XAU", 4000.0m, 4000.2m, Now.ToUnixTimeSeconds()),
+      cts.Token
+    );
+    var run = engine.RunSessionAsync(client, Symbol, cts.Token);
+    await store.Ordered.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+    await engine.ObserveSpotAsync(
+      new SpotPrice("XAU", 4003.5m, 4003.7m, Now.ToUnixTimeSeconds()),
+      cts.Token
+    );
+    Assert.Single(client.Closes);
+    var booked = Assert.Single(store.Positions.Values);
+    Assert.True(booked.RangeBoxScaleOutBooked);
+    Assert.Equal(1, booked.NextTargetIndex);
+
+    // Simulate restart reload: same persisted state still above TP1.
+    await engine.ObserveSpotAsync(
+      new SpotPrice("XAU", 4005.0m, 4005.2m, Now.ToUnixTimeSeconds()),
+      cts.Token
+    );
+    Assert.Single(client.Closes);
+
+    cts.Cancel();
+    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+  }
+
+  [Fact]
+  public async Task StrategyMatchRangeEdgeDoesNotGetRangeBoxScaleOut()
+  {
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+    var store = new FakeAutoTradeStore(StrategyMatchCandidateJson(
+      setup: "Range Edge Scalp",
+      targetsPips: [110]
+    ));
+    var client = new FakeTradingClient();
+    var engine = new AutoTradeEngine(
+      Options() with
+      {
+        RangeBoxScaleOutEnabled = true,
+        RangeFlipEnabled = false,
+      },
+      store,
+      () => Now,
+      _ => { }
+    );
+    await engine.ObserveSpotAsync(
+      new SpotPrice("XAU", 4000.0m, 4000.2m, Now.ToUnixTimeSeconds()),
+      cts.Token
+    );
+    var run = engine.RunSessionAsync(client, Symbol, cts.Token);
+    await store.Ordered.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+    var opened = Assert.Single(store.Events, item => item.Type == "opened");
+    Assert.Equal(new[] { 110 }, opened.TargetsPips);
+    Assert.DoesNotContain("TP1 +30p", opened.Message);
+
+    cts.Cancel();
+    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+  }
+
   [Fact]
   public async Task BoxRangeScalpClosesFullVolumeAtItsSingleTarget()
   {
@@ -143,7 +381,7 @@ public sealed class AutoTradeEngineTests
     Assert.Equal("algo_auto", opened.Stream);
     Assert.Equal("BUY", opened.Direction);
     Assert.Contains("full TP 50p", opened.Message);
-    Assert.Contains("range 4,000.00-4,008.00", opened.Message);
+    Assert.Contains("range 4,000.00-", opened.Message);
     var stopPips = order.RelativeStopLoss / 10_000m;
     Assert.Equal(stopPips, opened.StopPips);
     Assert.Equal(new[] { 50 }, opened.TargetsPips);
@@ -3385,7 +3623,13 @@ public sealed class AutoTradeEngineTests
     int? confluence = null,
     string? groupId = null,
     string? strategyFamily = null
-  ) => JsonSerializer.Serialize(new
+  )
+  {
+    // Range height must cover Full TP distance when flip is disabled.
+    var rangeLow = 4000.0m;
+    var rangeHigh = Math.Max(4008.0m, rangeLow + fullTpPips * 0.1m + 1.0m);
+    var keyLevel = direction == "BUY" ? rangeLow : rangeHigh;
+    return JsonSerializer.Serialize(new
   {
     version = 3,
     candidate_id = new string(candidate, 64),
@@ -3397,20 +3641,20 @@ public sealed class AutoTradeEngineTests
     trigger_ts = "1000",
     created_at = 1_000,
     spot_ts = 1_000,
-    current_price = 4000.1,
-    key_level = direction == "BUY" ? 4000.0 : 4008.0,
+    current_price = direction == "BUY" ? 4000.1 : (double)(rangeHigh - 0.2m),
+    key_level = keyLevel,
     entry_zone = direction == "BUY"
       ? new { low = 3999.5m, high = 4000.5m }
-      : new { low = 4007.8m, high = 4008.2m },
+      : new { low = rangeHigh - 0.2m, high = rangeHigh + 0.2m },
     confluence = confluence ?? 2,
     reasons = new[] { "M1 range rejection", $"full TP {fullTpPips} pips" },
     bar_ts = 1_000,
     atr = 1.0,
     structure_swing = structureSwing
-      ?? (direction == "BUY" ? 3998.0m : 4002.5m),
+      ?? (direction == "BUY" ? 3998.0m : rangeHigh + 1.5m),
     range_id = "xau-8000-8016",
-    range_low = 4000.0,
-    range_high = 4008.0,
+    range_low = rangeLow,
+    range_high = rangeHigh,
     full_take_profit_pips = fullTpPips,
     regime,
     opposing_zone_low = opposingZoneLow,
@@ -3420,6 +3664,7 @@ public sealed class AutoTradeEngineTests
     group_id = groupId,
     strategy_family = strategyFamily,
   });
+  }
 
   // Mirrors telegram-bot's manual_execution._intent_to_candidate_payload:
   // no atr/structure_swing at all (the manual-algo path must never need

@@ -163,6 +163,11 @@ services:
       AUTO_TRADE_ZONE_FILL_FALLBACK_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_ZONE_FILL_FALLBACK_ENABLED | default('true') | string | to_json }}
       AUTO_TRADE_INSIDE_ZONE_MARKET_ENTRY_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_INSIDE_ZONE_MARKET_ENTRY_ENABLED | default('true') | string | to_json }}
       AUTO_TRADE_RANGE_TARGETS_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_RANGE_TARGETS_PIPS | default('20,30,40,50,70') | string | to_json }}
+      AUTO_TRADE_RANGE_BOX_SCALE_OUT_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_RANGE_BOX_SCALE_OUT_ENABLED | default('true') | string | to_json }}
+      AUTO_TRADE_RANGE_BOX_SCALE_OUT_THRESHOLD_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_RANGE_BOX_SCALE_OUT_THRESHOLD_PIPS | default('70') | string | to_json }}
+      AUTO_TRADE_RANGE_BOX_SCALE_OUT_TRIGGER_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_RANGE_BOX_SCALE_OUT_TRIGGER_PIPS | default('30') | string | to_json }}
+      AUTO_TRADE_RANGE_BOX_SCALE_OUT_FRACTION: {{ apexvoid_trading_bot_env.AUTO_TRADE_RANGE_BOX_SCALE_OUT_FRACTION | default('0.50') | string | to_json }}
+      AUTO_TRADE_RANGE_BOX_MOVE_SL_TO_BE_AFTER_SCALE_OUT: {{ apexvoid_trading_bot_env.AUTO_TRADE_RANGE_BOX_MOVE_SL_TO_BE_AFTER_SCALE_OUT | default('false') | string | to_json }}
       AUTO_TRADE_RANGE_TP_BUFFER_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_RANGE_TP_BUFFER_PIPS | default('3') | string | to_json }}
       AUTO_TRADE_RANGE_FLIP_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_RANGE_FLIP_ENABLED | default(demo_eval_default) | string | to_json }}
       AUTO_TRADE_NON_HEDGED_OPPOSITE_POLICY: {{ apexvoid_trading_bot_env.AUTO_TRADE_NON_HEDGED_OPPOSITE_POLICY | default('broker_netting') | string | to_json }}
