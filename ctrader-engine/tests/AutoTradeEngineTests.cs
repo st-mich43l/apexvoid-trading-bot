@@ -1426,6 +1426,119 @@ public sealed class AutoTradeEngineTests
     await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
   }
 
+  [Theory]
+  [InlineData("Key Level Reaction", "key_level", "key_level")]
+  [InlineData("Demand Zone Reaction", "supply_demand", "supply_demand")]
+  [InlineData("Supply Zone Reaction", "supply_demand", "supply_demand")]
+  [InlineData("Session Level Reaction", "session_level", "session_level")]
+  [InlineData("Trendline Reaction", "trendline", "trendline")]
+  public async Task StructuralRouteLifecycleCarriesIdsFromReceivedToFilled(
+    string setup,
+    string family,
+    string structuralSource
+  )
+  {
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+    var zoneId = $"{family}-zone-1";
+    var reactionId = new string('r', 64);
+    var thesisId = new string('t', 64);
+    var store = new FakeAutoTradeStore(StrategyMatchCandidateJson(
+      setup: setup,
+      strategyFamily: family,
+      structuralSource: structuralSource,
+      zoneId: zoneId,
+      reactionId: reactionId,
+      thesisId: thesisId,
+      structuralZoneLow: 3998.0m,
+      structuralZoneHigh: 4001.0m
+    ));
+    store.SeedPublishedCandidate(new string('s', 64));
+    var client = new FakeTradingClient();
+    var engine = new AutoTradeEngine(
+      Options() with { ZoneFillEnabled = true },
+      store,
+      () => Now,
+      _ => { }
+    );
+    await engine.ObserveSpotAsync(
+      new SpotPrice("XAU", 4000.0m, 4000.2m, Now.ToUnixTimeSeconds()),
+      cts.Token
+    );
+
+    var run = engine.RunSessionAsync(client, Symbol, cts.Token);
+    await store.Ordered.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+    Assert.Single(client.Orders);
+    var position = Assert.Single(store.Positions.Values);
+    Assert.Equal(family, position.StrategyFamily);
+    Assert.Equal(structuralSource, position.StructuralSource);
+    Assert.Equal(zoneId, position.ZoneId);
+    Assert.Equal(zoneId, position.StructuralZoneId);
+    Assert.Equal(reactionId, position.ReactionId);
+    Assert.Equal(thesisId, position.ThesisId);
+    Assert.Equal(3998.0m, position.StructuralZoneLow);
+    Assert.Equal(4001.0m, position.StructuralZoneHigh);
+
+    var routeEvents = store.LifecycleEvents
+      .Where(item => item.CandidateId == new string('s', 64))
+      .ToArray();
+    Assert.Contains(routeEvents, item => item.Type == "executor_received");
+    Assert.Contains(
+      routeEvents,
+      item => item.State == "order_filled" || item.Type == "opened"
+    );
+    Assert.All(
+      routeEvents.Where(item => !string.IsNullOrWhiteSpace(item.CandidateId)),
+      item =>
+      {
+        Assert.Equal(new string('s', 64), item.CorrelationId);
+        Assert.Equal(structuralSource, item.StructuralSource);
+        Assert.Equal(zoneId, item.ZoneId);
+        Assert.Equal(zoneId, item.StructuralZoneId);
+        Assert.Equal(reactionId, item.ReactionId);
+        Assert.Equal(thesisId, item.ThesisId);
+      }
+    );
+
+    cts.Cancel();
+    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+  }
+
+  [Fact]
+  public async Task ContextOnlyOpposingZoneDoesNotRejectOrPushStop()
+  {
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+    var store = new FakeAutoTradeStore(BoxCandidateJson(
+      fullTpPips: 70,
+      opposingZoneLow: 3990.0m,
+      opposingZoneHigh: 4025.0m
+    ));
+    var client = new FakeTradingClient();
+    var engine = new AutoTradeEngine(
+      Options() with
+      {
+        ZoneFillEnabled = true,
+        ExecutionZoneMaxWidthPips = 100m,
+        ExecutionZoneMaxWidthAtr = 2.0m,
+      },
+      store,
+      () => Now,
+      _ => { }
+    );
+    await engine.ObserveSpotAsync(
+      new SpotPrice("XAU", 4000.0m, 4000.2m, Now.ToUnixTimeSeconds()),
+      cts.Token
+    );
+
+    var run = engine.RunSessionAsync(client, Symbol, cts.Token);
+    await store.Ordered.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+    Assert.Single(client.Orders);
+    Assert.DoesNotContain(store.Events, item => item.Type == "rejected");
+    cts.Cancel();
+    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+  }
+
   [Fact]
   public async Task ScannerStrategyMatchRejectsMissingExecutionContext()
   {
@@ -1820,7 +1933,8 @@ public sealed class AutoTradeEngineTests
     var store = new FakeAutoTradeStore(BoxCandidateJson(
       fullTpPips: 50,
       opposingZoneLow: 3990.0m,
-      opposingZoneHigh: 3998.0m
+      opposingZoneHigh: 3998.0m,
+      atr: 5.0m
     ));
     var client = new FakeTradingClient();
     var engine = new AutoTradeEngine(Options(), store, () => Now, _ => { });
@@ -3649,7 +3763,10 @@ public sealed class AutoTradeEngineTests
     string? strategyFamily = null,
     string? reactionId = null,
     string? thesisId = null,
-    string? zoneId = null
+    string? zoneId = null,
+    string? structuralSource = null,
+    decimal? structuralZoneLow = null,
+    decimal? structuralZoneHigh = null
   ) => JsonSerializer.Serialize(new
   {
     version = 4,
@@ -3678,7 +3795,10 @@ public sealed class AutoTradeEngineTests
     reaction_id = reactionId,
     thesis_id = thesisId,
     zone_id = zoneId,
+    structural_source = structuralSource,
     structural_zone_id = zoneId,
+    structural_zone_low = structuralZoneLow,
+    structural_zone_high = structuralZoneHigh,
   });
 
   private static string BoxCandidateJson(
@@ -3694,7 +3814,8 @@ public sealed class AutoTradeEngineTests
     string? regime = null,
     int? confluence = null,
     string? groupId = null,
-    string? strategyFamily = null
+    string? strategyFamily = null,
+    decimal atr = 1.0m
   )
   {
     // Range height must cover Full TP distance when flip is disabled.
@@ -3721,7 +3842,7 @@ public sealed class AutoTradeEngineTests
     confluence = confluence ?? 2,
     reasons = new[] { "M1 range rejection", $"full TP {fullTpPips} pips" },
     bar_ts = 1_000,
-    atr = 1.0,
+    atr,
     structure_swing = structureSwing
       ?? (direction == "BUY" ? 3998.0m : rangeHigh + 1.5m),
     range_id = "xau-8000-8016",

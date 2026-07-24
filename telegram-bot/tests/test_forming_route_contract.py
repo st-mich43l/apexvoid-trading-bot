@@ -4,13 +4,14 @@ import time
 import pytest
 
 from app.analysis.types import Zone
+from app.analysis.structural_reaction_support import structural_thesis_id
 from app.autotrade import worker
 from app.autotrade.multi_match import (
   deserialize_matches,
   serialize_matches,
   strategy_matches_key,
 )
-from app.autotrade.strategy_match import StrategyMatch, strategy_match_id
+from app.autotrade.strategy_match import StrategyMatch
 from app.persistence import redis_state
 
 
@@ -20,11 +21,19 @@ pytestmark = pytest.mark.no_database
 def _supply_match() -> StrategyMatch:
   now = int(time.time())
   event_ts = str(now)
+  structural_id = "supply:M5:4062.49:4066.18"
+  touch_bar_ts = str(now - 60)
+  confirmation_bar_ts = str(now)
   return StrategyMatch(
     version=1,
-    match_id=strategy_match_id(
-      "XAU", "M5", event_ts, "Supply Zone Reaction", "SELL",
-      4062.49, 4066.18,
+    match_id=structural_thesis_id(
+      symbol="XAU",
+      strategy="Supply Zone Reaction",
+      direction="SELL",
+      structural_source="supply_demand",
+      structural_id=structural_id,
+      touch_bar_ts=touch_bar_ts,
+      confirmation_bar_ts=confirmation_bar_ts,
     ),
     symbol="XAU",
     source_tf="M5",
@@ -47,11 +56,13 @@ def _supply_match() -> StrategyMatch:
     target_price=4059.03,
     family="supply_demand",
     structural_source="supply_demand",
-    structural_zone_id="supply:M5:4062.49:4066.18",
+    zone_id=structural_id,
+    level_id=structural_id,
+    structural_zone_id=structural_id,
     structural_zone_low=4062.49,
     structural_zone_high=4066.18,
-    touch_bar_ts=str(now - 60),
-    confirmation_bar_ts=str(now),
+    touch_bar_ts=touch_bar_ts,
+    confirmation_bar_ts=confirmation_bar_ts,
     reaction_type="sweep_reclaim",
   )
 
@@ -157,6 +168,15 @@ def test_oversized_singleton_zone_is_context_only():
   assert classification.width_pips == pytest.approx(344.7)
   assert classification.context_only
   assert not classification.execution_grade
+
+
+def test_structural_supply_match_round_trips_through_redis_contract():
+  match = _supply_match()
+  restored = StrategyMatch.from_json(match.to_json())
+  assert restored is not None
+  assert restored.match_id == match.match_id
+  assert restored.structural_source == "supply_demand"
+  assert restored.strategy == "Supply Zone Reaction"
 
 
 async def _no_news(*args, **kwargs):
