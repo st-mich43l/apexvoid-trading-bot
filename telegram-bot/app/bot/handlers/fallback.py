@@ -1,5 +1,6 @@
 """Generic catch-all handlers included after command routers."""
 
+import json
 import logging
 import time
 from html import escape
@@ -9,7 +10,9 @@ from aiogram.exceptions import TelegramNetworkError
 from aiogram.types import Message
 
 from app.signals.broadcast import broadcast_entry
+from app.autotrade.config_health import CONFIG_HEALTH_KEY
 from app.core.config import settings
+from app.persistence import redis_state
 from app.persistence.store import (
   event_in_window,
   get_manual_signal,
@@ -65,11 +68,22 @@ async def _arm_algo_intent(signal_id: int, signal: dict) -> str:
   if not settings.manual_algo_enabled:
     return "⚠️ Algo suffix ignored — MANUAL_ALGO_ENABLED is off"
   try:
+    raw_health = await redis_state.get_client().get(CONFIG_HEALTH_KEY)
+    if raw_health:
+      health = json.loads(
+        raw_health.decode() if isinstance(raw_health, bytes) else str(raw_health)
+      )
+      if health.get("state") == "fatal":
+        fatal = ",".join(str(item) for item in health.get("fatal") or [])
+        return (
+          "⛔ Algo request blocked — CONFIG_HEALTH=FATAL"
+          + (f" ({fatal})" if fatal else "")
+        )
     intent = build_intent(signal, revision=0)
     await set_execution_intent(
       signal_id,
       intent_id=intent.intent_id,
-      status="armed",
+      status="requested",
       revision=0,
     )
     await publish_intent(intent)
@@ -77,8 +91,7 @@ async def _arm_algo_intent(signal_id: int, signal: dict) -> str:
     log.exception("Failed to arm algo execution for signal #%d", signal_id)
     await set_execution_status(signal_id, "error", error=str(exc))
     return "⚠️ Algo arm failed — signal posted notify-only"
-  suffix = " (dry-run)" if settings.manual_algo_dry_run else ""
-  return f"🤖 Algo armed{suffix}"
+  return "📨 ALGO REQUEST RECEIVED\nWaiting for executor confirmation"
 
 
 @router.message(F.chat.type == "private", F.text)

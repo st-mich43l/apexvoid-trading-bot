@@ -690,17 +690,39 @@ public sealed class AutoTradeEngine(
         cancellationToken
       );
     }
+    if (manualAlgoCandidate && !options.ManualAlgoEnabled)
+    {
+      return await RejectAsync(
+        candidate,
+        "manual_algo_disabled",
+        cancellationToken
+      );
+    }
     if (
       manualAlgoCandidate
       && (
-        candidate.TargetsPips is not { Count: > 0 } manualTargetsPips
-        || manualTargetsPips.Any(pips => pips <= 0)
+        candidate.ManualTakeProfits is not { Count: > 0 } manualTargets
+        || manualTargets.Any(price => price <= 0)
       )
     )
     {
       return await RejectAsync(
         candidate,
         "invalid manual algo target contract",
+        cancellationToken
+      );
+    }
+    if (
+      manualAlgoCandidate
+      && (
+        candidate.ManualStopLoss is not decimal manualStopLoss
+        || manualStopLoss <= 0
+      )
+    )
+    {
+      return await RejectAsync(
+        candidate,
+        "invalid manual algo stop contract",
         cancellationToken
       );
     }
@@ -771,7 +793,7 @@ public sealed class AutoTradeEngine(
     var hasUnmanagedOrder = _allSymbolPendingOrders.Any(
       order => order.Label != options.Label
     );
-    if (hasUnmanagedPosition || hasUnmanagedOrder)
+    if (!manualAlgoCandidate && (hasUnmanagedPosition || hasUnmanagedOrder))
     {
       await store.IncrementGateRejectAsync(
         candidate.Symbol,
@@ -841,12 +863,21 @@ public sealed class AutoTradeEngine(
       return await RejectAsync(candidate, exception.Message, cancellationToken);
     }
     var expectedEntry = direction == TradeDirection.Buy ? quote.Ask : quote.Bid;
+    if (manualAlgoCandidate)
+    {
+      return await ProcessManualAlgoAsync(
+        candidate,
+        account,
+        direction,
+        expectedEntry,
+        date,
+        cancellationToken
+      );
+    }
     StructureStopPlan stopPlan;
     try
     {
-      stopPlan = manualAlgoCandidate
-        ? ManualStop(candidate, direction, expectedEntry, symbol)
-        : StructureStop(candidate, direction, expectedEntry, symbol);
+      stopPlan = StructureStop(candidate, direction, expectedEntry, symbol);
     }
     catch (VolumePlanningException exception)
     {
@@ -860,19 +891,13 @@ public sealed class AutoTradeEngine(
       }
       return await RejectAsync(candidate, exception.Message, cancellationToken);
     }
-    // A trend-regime candidate arriving while this symbol already has an
-    // open tranche group will route to ProcessAddAsync below, which may
-    // pick pullback mode - a fundamentally different stop (P5: beyond the
-    // retrace extreme, not beyond structure). Applying the guard here
-    // against the STRUCTURE stop first would let a momentum-shaped
-    // rejection wrongly kill a valid pullback candidate before mode
-    // selection ever runs, so this candidate shape defers stop guarding
-    // to ProcessAddAsync entirely (same skip mechanism manual-algo already
-    // uses for its own independently-computed stop).
-    var deferStopGuardToAddPath = string.Equals(
-      candidate.Regime, "trend", StringComparison.OrdinalIgnoreCase
-    ) && _states.Values.Any(state => state.SymbolId == symbol.SymbolId);
-    if (!manualAlgoCandidate && !deferStopGuardToAddPath)
+    // An explicitly linked trend candidate may use a pullback stop rather
+    // than this initial structure stop, so its opposing-zone guard belongs
+    // to ProcessAddAsync after the add mode is selected.
+    var deferStopGuardToAddPath = !string.IsNullOrWhiteSpace(
+      candidate.ParentGroupId
+    );
+    if (!deferStopGuardToAddPath)
     {
       var (guardedStopPlan, stopRejectReason, stopNotice) = ApplyOpposingZoneGuard(
         candidate,
@@ -930,17 +955,7 @@ public sealed class AutoTradeEngine(
     }
 
     var candidateGroupId = CandidateGroupId(candidate);
-    var group = _states.Values
-      .Where(state =>
-        state.SymbolId == symbol.SymbolId
-        && (
-          !options.AllowConcurrentStrategies
-          || GroupId(state) == candidateGroupId
-        )
-      )
-      .OrderBy(state => state.TrancheIndex)
-      .ToArray();
-    if (group.Length == 0)
+    if (string.IsNullOrWhiteSpace(candidate.ParentGroupId))
     {
       var pendingForGroup = _allSymbolPendingOrders.Any(order =>
         order.Label == options.Label
@@ -951,10 +966,6 @@ public sealed class AutoTradeEngine(
       );
       if (
         pendingForGroup
-        || (
-          !options.AllowConcurrentStrategies
-          && _allSymbolPendingOrders.Count > 0
-        )
       )
       {
         return await RejectAsync(
@@ -973,11 +984,58 @@ public sealed class AutoTradeEngine(
         cancellationToken
       );
     }
+    if (!IsTrendCandidate(candidate))
+    {
+      return await RejectAsync(
+        candidate,
+        "only trend candidates may reference parent_group_id",
+        cancellationToken
+      );
+    }
+    var parentGroupId = GroupToken(candidate.ParentGroupId);
+    var group = _states.Values
+      .Where(state =>
+        state.SymbolId == symbol.SymbolId
+        && GroupId(state) == parentGroupId
+      )
+      .OrderBy(state => state.TrancheIndex)
+      .ToArray();
+    if (group.Length == 0)
+    {
+      return await RejectAsync(
+        candidate,
+        "explicit parent trend group is not active",
+        cancellationToken
+      );
+    }
     if (
-      options.AllowConcurrentStrategies
-      && (
-        group.Any(state => state.Direction != direction)
-        || group.Any(state => !SameStrategyFamily(state, candidate))
+      group.Any(state => state.Direction != direction)
+      || group.Any(state => !SameStrategyFamily(state, candidate))
+      || group.Any(state =>
+        !string.IsNullOrWhiteSpace(state.RangeId)
+        && !string.Equals(
+          state.RangeId,
+          candidate.RangeId,
+          StringComparison.Ordinal
+        )
+      )
+      || group.Any(state =>
+        !string.IsNullOrWhiteSpace(state.StructuralSource)
+        && !string.IsNullOrWhiteSpace(candidate.StructuralSource)
+        && !string.Equals(
+          state.StructuralSource,
+          candidate.StructuralSource,
+          StringComparison.Ordinal
+        )
+      )
+      || group.Any(state =>
+        !string.IsNullOrWhiteSpace(state.ZoneId)
+        && !string.IsNullOrWhiteSpace(candidate.ZoneId)
+        && !string.Equals(
+          state.ZoneId,
+          candidate.ZoneId,
+          StringComparison.Ordinal
+        )
       )
     )
     {
@@ -1010,18 +1068,6 @@ public sealed class AutoTradeEngine(
     CancellationToken cancellationToken
   )
   {
-    if (IsManualAlgoCandidate(candidate))
-    {
-      return await ProcessManualAlgoAsync(
-        candidate,
-        account,
-        direction,
-        expectedEntry,
-        stopPlan,
-        date,
-        cancellationToken
-      );
-    }
     if (
       !IsBoxRangeScalp(candidate)
       && !IsStrategyMatchCandidate(candidate)
@@ -1608,19 +1654,13 @@ public sealed class AutoTradeEngine(
     }
   }
 
-  // Owner's manual /algo signal: a single pending LIMIT order at the
-  // proximal-or-current-price edge (mirrors ZoneFillPlanner's proximal-edge
-  // concept, one leg instead of two), an absolute stop from ManualStop, and
-  // TargetsPips taken directly from the candidate (already pip-converted by
-  // the Python bridge). No AutoTradePositionState/store.SavePositionAsync
-  // happens here - like zone-fill, that only happens once ReconcileAsync
-  // notices the limit order filled and reconstructs state from its comment.
+  // Owner /algo instructions have their own execution route. Autonomous
+  // selection, zone, regime, bias and scale-in policy must never alter them.
   private async Task<bool> ProcessManualAlgoAsync(
     TradeCandidate candidate,
     TradingAccountSnapshot account,
     TradeDirection direction,
     decimal expectedEntry,
-    StructureStopPlan stopPlan,
     DateOnly date,
     CancellationToken cancellationToken
   )
@@ -1636,6 +1676,17 @@ public sealed class AutoTradeEngine(
       symbol.Digits,
       MidpointRounding.AwayFromZero
     );
+    var targetPrices = candidate.ManualTakeProfits!;
+    var priceValidation = ValidateManualPrices(
+      candidate,
+      direction,
+      limitPrice,
+      symbol
+    );
+    if (priceValidation is not null)
+    {
+      return await RejectAsync(candidate, priceValidation, cancellationToken);
+    }
     StructureStopPlan manualStopPlan;
     try
     {
@@ -1645,31 +1696,14 @@ public sealed class AutoTradeEngine(
     {
       return await RejectAsync(candidate, exception.Message, cancellationToken);
     }
-    var (guardedStopPlan, stopRejectReason, stopNotice) = ApplyOpposingZoneGuard(
-      candidate,
-      direction,
-      limitPrice,
-      manualStopPlan,
-      symbol
-    );
-    if (stopRejectReason is not null)
-    {
-      return await RejectAsync(candidate, stopRejectReason, cancellationToken);
-    }
-    manualStopPlan = guardedStopPlan;
-    if (stopNotice is not null)
-    {
-      await PublishAsync(
-        "warning",
-        stopNotice,
-        cancellationToken,
-        candidate.CandidateId,
-        setup: candidate.Setup,
-        stopPips: manualStopPlan.StopPips
-      );
-    }
-    var targetsPips = candidate.TargetsPips!;
-    var targetWeights = EqualWeights(targetsPips.Count);
+    var targetsPips = targetPrices
+      .Select(price => decimal.ToInt32(decimal.Round(
+        decimal.Abs(price - limitPrice) / options.PipSize,
+        0,
+        MidpointRounding.AwayFromZero
+      )))
+      .ToArray();
+    var targetWeights = EqualWeights(targetsPips.Length);
     InitialSizingResult sizing;
     try
     {
@@ -1712,7 +1746,12 @@ public sealed class AutoTradeEngine(
           + $"SL {manualStopPlan.StopLoss:N2} · {sizing.BindingTerm}",
         sizing.Volume,
         limitPrice,
-        cancellationToken
+        cancellationToken,
+        setup: candidate.Setup,
+        direction: candidate.Direction,
+        stopLoss: manualStopPlan.StopLoss,
+        targetPrices: targetPrices,
+        stream: "algo_manual"
       );
     }
     if (await store.IsPausedAsync(cancellationToken))
@@ -1720,14 +1759,21 @@ public sealed class AutoTradeEngine(
       return await RejectAsync(candidate, "executor paused", cancellationToken);
     }
     await ReconcileAsync(cancellationToken);
-    if (!CanOpenNewGroup(direction))
+    if (
+      !_accountSupportsHedging
+      && (
+        _allSymbolPositions.Any(position => position.Direction != direction)
+        || _allSymbolPendingOrders.Any(order => order.Direction != direction)
+      )
+    )
     {
       return await RejectAsync(
         candidate,
-        "XAU exposure policy changed before manual algo order",
+        "broker_account_not_hedged_for_opposite_manual_order",
         cancellationToken
       );
     }
+    await SaveGroupPlanAsync(candidate, groupId, cancellationToken);
     var comment = BuildManualComment(
       candidate.CandidateId,
       groupId,
@@ -1758,7 +1804,7 @@ public sealed class AutoTradeEngine(
     );
     await store.IncrementDailyTradeCountAsync(date, cancellationToken);
     await PublishAsync(
-      "manual_planned",
+      "manual_limit_placed",
       $"manual algo {direction} limit {sizing.Lots:N2} lots @ {limitPrice:N2} · "
         + $"SL {manualStopPlan.StopLoss:N2} · {sizing.BindingTerm}",
       cancellationToken,
@@ -1773,7 +1819,14 @@ public sealed class AutoTradeEngine(
       hadAdds: false,
       setup: candidate.Setup,
       stopPips: manualStopPlan.StopPips,
-      targetsPips: sizing.TargetPlan.TargetsPips
+      targetsPips: sizing.TargetPlan.TargetsPips,
+      stream: "algo_manual",
+      direction: candidate.Direction,
+      orderId: orderId,
+      stopLoss: manualStopPlan.StopLoss,
+      targetPrices: targetPrices,
+      entryLow: candidate.EntryZone.Low,
+      entryHigh: candidate.EntryZone.High
     );
     return true;
   }
@@ -2155,7 +2208,11 @@ public sealed class AutoTradeEngine(
       MatchId: candidate.MatchId,
       StrategyFamily: string.IsNullOrWhiteSpace(candidate.StrategyFamily)
         ? StrategyFamilyFromSetup(candidate.Setup)
-        : candidate.StrategyFamily
+        : candidate.StrategyFamily,
+      ZoneId: candidate.ZoneId,
+      TriggerId: candidate.TriggerId,
+      ParentGroupId: candidate.ParentGroupId,
+      StructuralSource: candidate.StructuralSource
     );
     _states[state.PositionId] = state;
     await PropagateGroupMetadataAsync(state, cancellationToken);
@@ -2308,6 +2365,51 @@ public sealed class AutoTradeEngine(
   // pips clamping either: options.AddMinStopPips/TrendStopMinPips/MaxPips
   // exist to bound the AUTONOMOUS engines' own structure-derived stops, not
   // an owner's explicit price.
+  private string? ValidateManualPrices(
+    TradeCandidate candidate,
+    TradeDirection direction,
+    decimal executableEntry,
+    SymbolInfo symbol
+  )
+  {
+    var prices = new[]
+    {
+      candidate.EntryZone.Low,
+      candidate.EntryZone.High,
+      candidate.ManualStopLoss!.Value,
+    }.Concat(candidate.ManualTakeProfits!);
+    if (prices.Any(price =>
+      decimal.Round(
+        price,
+        symbol.Digits,
+        MidpointRounding.AwayFromZero
+      ) != price
+    ))
+    {
+      return "manual_price_precision_not_supported";
+    }
+    var targets = candidate.ManualTakeProfits!;
+    if (
+      direction == TradeDirection.Buy
+        ? targets.Any(price => price <= executableEntry)
+        : targets.Any(price => price >= executableEntry)
+    )
+    {
+      return "manual_take_profit_not_on_profitable_side";
+    }
+    var distances = targets
+      .Select(price => decimal.Abs(price - executableEntry))
+      .ToArray();
+    if (
+      distances.Zip(distances.Skip(1), (left, right) => right > left)
+        .Any(increasing => !increasing)
+    )
+    {
+      return "manual_take_profits_not_ordered_near_to_far";
+    }
+    return null;
+  }
+
   private StructureStopPlan ManualStop(
     TradeCandidate candidate,
     TradeDirection direction,
@@ -2387,14 +2489,6 @@ public sealed class AutoTradeEngine(
       + $"{zoneLow:0.####}-{zoneHigh:0.####}";
     if (!options.StopPushBeyondZone)
     {
-      if (IsManualAlgoCandidate(candidate))
-      {
-        _log(
-          $"manual algo kept owner SL {stopPlan.StopLoss:0.####}; "
-          + $"opposing-zone push disabled ({zoneLow:0.####}-{zoneHigh:0.####})"
-        );
-        return (stopPlan, null, null);
-      }
       _log($"auto-trade stop rejected: {zoneDescription}");
       return (stopPlan, zoneDescription, null);
     }
@@ -2413,34 +2507,11 @@ public sealed class AutoTradeEngine(
     var (_, maximumStopPips) = StopPipsBounds(candidate);
     if (pushedPips > maximumStopPips)
     {
-      if (IsManualAlgoCandidate(candidate))
-      {
-        _log(
-          $"manual algo kept owner SL {stopPlan.StopLoss:0.####}; widening to "
-          + $"{pushedStop:0.####} beyond opposing zone would exceed the "
-          + $"{maximumStopPips}p autonomous envelope"
-        );
-        return (stopPlan, null, null);
-      }
       var rejectReason =
         $"{zoneDescription} - pushing beyond it would need {pushedPips:0.#}p, "
         + $"over the {maximumStopPips}p max";
       _log($"auto-trade stop rejected: {rejectReason}");
       return (stopPlan, rejectReason, null);
-    }
-    if (IsManualAlgoCandidate(candidate))
-    {
-      var widens = direction == TradeDirection.Buy
-        ? pushedStop <= stopPlan.StopLoss
-        : pushedStop >= stopPlan.StopLoss;
-      if (!widens)
-      {
-        _log(
-          $"manual algo discarded opposing-zone guard that would tighten owner "
-          + $"SL {stopPlan.StopLoss:0.####} -> {pushedStop:0.####}"
-        );
-        return (stopPlan, null, null);
-      }
     }
     _log(
       $"auto-trade stop pushed beyond opposing zone: {zoneDescription} -> "
@@ -2453,11 +2524,7 @@ public sealed class AutoTradeEngine(
       stopPlan.RawStopLoss,
       true
     );
-    var notice = IsManualAlgoCandidate(candidate)
-      ? $"SL widened {stopPlan.StopLoss:0.####} -> {pushedStop:0.####} · "
-        + $"cleared opposing zone {zoneLow:0.####}-{zoneHigh:0.####}"
-      : null;
-    return (pushedPlan, null, notice);
+    return (pushedPlan, null, null);
   }
 
   private ScaleInTriggerResult ValidateAddTriggers(
@@ -2681,7 +2748,12 @@ public sealed class AutoTradeEngine(
     string message,
     long volume,
     decimal price,
-    CancellationToken cancellationToken
+    CancellationToken cancellationToken,
+    string? setup = null,
+    string? direction = null,
+    decimal? stopLoss = null,
+    IReadOnlyList<decimal>? targetPrices = null,
+    string? stream = null
   )
   {
     await store.CompleteCandidateAsync(
@@ -2695,7 +2767,15 @@ public sealed class AutoTradeEngine(
       cancellationToken,
       candidate.CandidateId,
       volume: volume,
-      price: price
+      price: price,
+      groupId: CandidateGroupId(candidate),
+      setup: setup ?? candidate.Setup,
+      direction: direction ?? candidate.Direction,
+      stream: stream,
+      stopLoss: stopLoss,
+      targetPrices: targetPrices,
+      entryLow: candidate.EntryZone.Low,
+      entryHigh: candidate.EntryZone.High
     );
     return true;
   }
@@ -2771,7 +2851,7 @@ public sealed class AutoTradeEngine(
         var completedTargetIndex = state.NextTargetIndex;
         var targetOrdinal = TargetOrdinal(state, completedTargetIndex);
         var targetPips = state.TargetsPips[state.NextTargetIndex];
-        var target = TargetPrice(state, targetPips);
+        var target = TargetPrice(state, targetPips, completedTargetIndex);
         var exitQuote = state.Direction == TradeDirection.Buy ? spot.Bid : spot.Ask;
         var hit = state.Direction == TradeDirection.Buy
           ? exitQuote >= target
@@ -3311,6 +3391,11 @@ public sealed class AutoTradeEngine(
           RangeId = plan.RangeId,
           MatchId = plan.MatchId,
           StrategyFamily = plan.StrategyFamily,
+          TargetPrices = plan.TargetPrices,
+          ZoneId = plan.ZoneId,
+          TriggerId = plan.TriggerId,
+          ParentGroupId = plan.ParentGroupId,
+          StructuralSource = plan.StructuralSource,
         };
       }
     }
@@ -3384,11 +3469,13 @@ public sealed class AutoTradeEngine(
         price: state.EntryPrice,
         groupId: state.GroupId,
         trancheIndex: 1,
-        setup: "Manual Algo",
+        setup: state.Setup,
         stopPips: InitialStopPips(state),
         targetsPips: state.TargetsPips,
         stream: state.Stream,
-        direction: directionLabel
+        direction: directionLabel,
+        stopLoss: state.CurrentStopLoss,
+        targetPrices: state.TargetPrices
       );
     }
   }
@@ -3576,7 +3663,13 @@ public sealed class AutoTradeEngine(
       candidate.RangeId,
       candidate.Setup,
       candidate.Direction,
-      _clock().ToUnixTimeSeconds()
+      _clock().ToUnixTimeSeconds(),
+      candidate.ManualTakeProfits,
+      candidate.ManualStopLoss,
+      candidate.ZoneId,
+      candidate.TriggerId,
+      candidate.ParentGroupId,
+      candidate.StructuralSource
     );
     await store.SetValueAsync(
       $"auto_trade:group_plan:{groupId}",
@@ -3692,9 +3785,9 @@ public sealed class AutoTradeEngine(
     }
     if (
       !string.IsNullOrWhiteSpace(options.ExpectedBroker)
-      && !account.BrokerName.Contains(
-        options.ExpectedBroker,
-        StringComparison.OrdinalIgnoreCase
+      && !NormalizeBrokerIdentity(account.BrokerName).Contains(
+        NormalizeBrokerIdentity(options.ExpectedBroker),
+        StringComparison.Ordinal
       )
     )
     {
@@ -3704,6 +3797,10 @@ public sealed class AutoTradeEngine(
       );
     }
   }
+
+  private static string NormalizeBrokerIdentity(string value) => string.Concat(
+    value.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant)
+  );
 
   private ExposurePolicy EffectiveExposurePolicy()
   {
@@ -3825,7 +3922,12 @@ public sealed class AutoTradeEngine(
       reasonCode: reason,
       matchId: candidate.MatchId,
       rangeId: candidate.RangeId,
-      strategyFamily: candidate.StrategyFamily
+      strategyFamily: candidate.StrategyFamily,
+      stream: IsManualAlgoCandidate(candidate) ? "algo_manual" : "algo_auto",
+      stopLoss: candidate.ManualStopLoss,
+      targetPrices: candidate.ManualTakeProfits,
+      entryLow: candidate.EntryZone.Low,
+      entryHigh: candidate.EntryZone.High
     );
     _log($"auto-trade candidate {Short(candidate.CandidateId)} rejected: {reason}");
     return true;
@@ -3861,7 +3963,12 @@ public sealed class AutoTradeEngine(
     string? matchId = null,
     string? rangeId = null,
     string? strategyFamily = null,
-    IReadOnlyList<long>? pendingOrderIds = null
+    IReadOnlyList<long>? pendingOrderIds = null,
+    long? orderId = null,
+    decimal? stopLoss = null,
+    IReadOnlyList<decimal>? targetPrices = null,
+    decimal? entryLow = null,
+    decimal? entryHigh = null
   )
   {
     var state = LifecycleState(type, remainingVolume);
@@ -3919,7 +4026,12 @@ public sealed class AutoTradeEngine(
       _account?.BrokerName,
       candidateId ?? groupId ?? lifecycleId,
       previousState,
-      pendingOrderIds
+      pendingOrderIds,
+      orderId,
+      stopLoss,
+      targetPrices,
+      entryLow,
+      entryHigh
     );
     await store.PublishAutoTradeEventAsync(
       options.EventStream,
@@ -4076,9 +4188,7 @@ public sealed class AutoTradeEngine(
     && candidate.Mode == "auto_strategy_match";
 
   private static bool IsManualAlgoCandidate(TradeCandidate candidate) =>
-    candidate.Version == 3
-    && candidate.Mode == "manual_algo"
-    && candidate.ManualStopLoss is not null;
+    candidate.Mode == "manual_algo";
 
   // On larger manual /algo positions the first booking should stay a
   // consistent ~0.05 lots rather than a proportional share that keeps
@@ -4234,8 +4344,14 @@ public sealed class AutoTradeEngine(
 
   private decimal TargetPrice(
     AutoTradePositionState state,
-    int targetPips
-  ) => state.RangeExitPrice ?? (
+    int targetPips,
+    int targetIndex
+  ) => (
+    state.TargetPrices is { } targetPrices
+    && targetIndex < targetPrices.Count
+  )
+    ? targetPrices[targetIndex]
+    : state.RangeExitPrice ?? (
     state.Direction == TradeDirection.Buy
       ? state.EntryPrice + targetPips * options.PipSize
       : state.EntryPrice - targetPips * options.PipSize

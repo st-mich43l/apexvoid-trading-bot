@@ -126,6 +126,8 @@ CTRADER_PORT=5035
 Auto-trading has an independent hard lock that refuses live accounts even if
 the host is changed. It also requires a Hedged account and a broker name
 matching `AUTO_TRADE_EXPECTED_BROKER`.
+Broker matching normalizes case, spaces and punctuation, so `fpmarkets`,
+`FPMarkets` and `FP Markets` identify the same broker.
 Set `AUTO_TRADE_REQUIRE_DEMO_ONLY_TOKEN=true` to disable execution whenever the
 token grants any live account, even when the selected account is demo.
 Token rotation persists the new refresh token and re-authorizes the configured

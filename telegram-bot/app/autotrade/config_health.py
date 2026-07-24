@@ -46,6 +46,8 @@ def python_manifest() -> dict[str, Any]:
     "profile": settings.auto_trade_profile,
     "auto_trade_enabled": settings.auto_trade_enabled,
     "dry_run": settings.auto_trade_dry_run,
+    "manual_algo_enabled": settings.manual_algo_enabled,
+    "manual_algo_dry_run": settings.manual_algo_dry_run,
     "redis_fingerprint": fingerprint,
     "redis_database": database,
     "candidate_stream": settings.auto_trade_stream,
@@ -68,7 +70,19 @@ def python_manifest() -> dict[str, Any]:
     "two_sided_range": settings.auto_trade_range_two_sided_enabled,
     "concurrent_strategies": settings.auto_trade_allow_concurrent_strategies,
     "hedging_policy": settings.auto_trade_allow_hedged_xau,
+    "hedging_capability": settings.auto_trade_allow_hedged_xau,
     "zone_fill": settings.auto_trade_market_map_strategy_enabled,
+    "trend_enabled": settings.auto_trade_trend_enabled,
+    "range_enabled": settings.auto_trade_range_enabled,
+    "mapped_zone_enabled": settings.auto_trade_market_map_strategy_enabled,
+    "strategy_match_enabled": settings.auto_trade_strategy_bridge_enabled,
+    "breakout_enabled": settings.auto_trade_breakout_enabled,
+    "retest_enabled": settings.auto_trade_retest_enabled,
+    "reaction_enabled": settings.auto_trade_reaction_enabled,
+    "liquidity_reversal_enabled": (
+      settings.auto_trade_liquidity_reversal_enabled
+    ),
+    "allow_counter_bias": settings.auto_trade_allow_counter_bias,
     "min_confluence": settings.auto_trade_min_confluence,
     "account_mode": "demo_required"
     if settings.auto_trade_require_demo_account else "unspecified",
@@ -92,9 +106,15 @@ def compare_manifests(
       "warnings": ["ctrader_manifest_missing"],
     }
   fatal_fields = (
+    "auto_trade_enabled",
+    "dry_run",
+    "manual_algo_enabled",
+    "manual_algo_dry_run",
     "candidate_stream",
+    "event_stream",
     "redis_database",
     "redis_fingerprint",
+    "symbols",
     "canonical_symbol",
     "pip_size",
     "candidate_contract_version",
@@ -110,12 +130,21 @@ def compare_manifests(
   warnings = [
     field
     for field in (
-      "event_stream",
       "range_flip",
       "two_sided_range",
       "concurrent_strategies",
       "hedging_policy",
       "zone_fill",
+      "hedging_capability",
+      "trend_enabled",
+      "range_enabled",
+      "mapped_zone_enabled",
+      "strategy_match_enabled",
+      "breakout_enabled",
+      "retest_enabled",
+      "reaction_enabled",
+      "liquidity_reversal_enabled",
+      "allow_counter_bias",
       "min_confluence",
       "profile",
     )

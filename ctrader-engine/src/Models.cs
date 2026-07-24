@@ -177,7 +177,14 @@ public sealed record TradeCandidate(
   bool RejectionConfirmed = false,
   string? MatchId = null,
   string? GroupId = null,
-  string? StrategyFamily = null
+  string? StrategyFamily = null,
+  IReadOnlyList<decimal>? ManualTakeProfits = null,
+  string? ZoneId = null,
+  string? TriggerId = null,
+  string? ParentGroupId = null,
+  string? StructuralSource = null,
+  string? Bias = null,
+  string? RelationshipToBias = null
 );
 
 public sealed record TradeStreamEntry(
@@ -222,7 +229,12 @@ public sealed record AutoTradePositionState(
   decimal? RangeExitPrice = null,
   string Stream = "algo_auto",
   string? MatchId = null,
-  string? StrategyFamily = null
+  string? StrategyFamily = null,
+  IReadOnlyList<decimal>? TargetPrices = null,
+  string? ZoneId = null,
+  string? TriggerId = null,
+  string? ParentGroupId = null,
+  string? StructuralSource = null
 );
 
 // One owner-override command for an already-armed/filled manual-algo
@@ -290,7 +302,12 @@ public sealed record AutoTradeEvent(
   string? Broker = null,
   string? CorrelationId = null,
   string? PreviousState = null,
-  IReadOnlyList<long>? PendingOrderIds = null
+  IReadOnlyList<long>? PendingOrderIds = null,
+  long? OrderId = null,
+  decimal? StopLoss = null,
+  IReadOnlyList<decimal>? TargetPrices = null,
+  decimal? EntryLow = null,
+  decimal? EntryHigh = null
 );
 
 public sealed record AutoTradeGroupPlan(
@@ -301,7 +318,13 @@ public sealed record AutoTradeGroupPlan(
   string? RangeId,
   string Setup,
   string Direction,
-  long CreatedAt
+  long CreatedAt,
+  IReadOnlyList<decimal>? TargetPrices = null,
+  decimal? ManualStopLoss = null,
+  string? ZoneId = null,
+  string? TriggerId = null,
+  string? ParentGroupId = null,
+  string? StructuralSource = null
 );
 
 public sealed record AutoTradeConfigManifest(
@@ -334,7 +357,19 @@ public sealed record AutoTradeConfigManifest(
   string AccountMode,
   string Broker,
   int CandidateContractVersion,
-  long GeneratedAt
+  long GeneratedAt,
+  bool ManualAlgoEnabled = false,
+  bool ManualAlgoDryRun = true,
+  bool HedgingCapability = false,
+  bool TrendEnabled = false,
+  bool RangeEnabled = false,
+  bool MappedZoneEnabled = false,
+  bool StrategyMatchEnabled = false,
+  bool BreakoutEnabled = false,
+  bool RetestEnabled = false,
+  bool ReactionEnabled = false,
+  bool LiquidityReversalEnabled = false,
+  bool AllowCounterBias = false
 );
 
 public sealed record AutoTradeConfigHealthDocument(

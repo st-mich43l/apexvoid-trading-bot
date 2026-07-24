@@ -57,7 +57,22 @@ public static class AutoTradeConfigHealth
       AccountMode: account.IsLive ? "live" : "demo",
       Broker: account.BrokerName,
       CandidateContractVersion: options.CandidateContractVersion,
-      GeneratedAt: generatedAt
+      GeneratedAt: generatedAt,
+      ManualAlgoEnabled: options.ManualAlgoEnabled,
+      ManualAlgoDryRun: options.DryRun,
+      HedgingCapability: account.AccountType.Equals(
+        "Hedged",
+        StringComparison.OrdinalIgnoreCase
+      ),
+      TrendEnabled: options.TrendEnabled,
+      RangeEnabled: options.RangeEnabled,
+      MappedZoneEnabled: options.MappedZoneEnabled,
+      StrategyMatchEnabled: options.StrategyMatchEnabled,
+      BreakoutEnabled: options.BreakoutEnabled,
+      RetestEnabled: options.RetestEnabled,
+      ReactionEnabled: options.ReactionEnabled,
+      LiquidityReversalEnabled: options.LiquidityReversalEnabled,
+      AllowCounterBias: options.AllowCounterBias
     );
   }
 
@@ -83,11 +98,21 @@ public static class AutoTradeConfigHealth
     {
       var root = document.RootElement;
       var fatal = new List<string>();
+      CompareBool(root, "auto_trade_enabled", current.AutoTradeEnabled, fatal);
+      CompareBool(root, "dry_run", current.DryRun, fatal);
+      CompareBool(
+        root, "manual_algo_enabled", current.ManualAlgoEnabled, fatal
+      );
+      CompareBool(
+        root, "manual_algo_dry_run", current.ManualAlgoDryRun, fatal
+      );
       CompareString(root, "candidate_stream", current.CandidateStream, fatal);
+      CompareString(root, "event_stream", current.EventStream, fatal);
       CompareInt(root, "redis_database", current.RedisDatabase, fatal);
       CompareString(
         root, "redis_fingerprint", current.RedisFingerprint, fatal
       );
+      CompareStringList(root, "symbols", current.Symbols, fatal);
       CompareString(root, "canonical_symbol", current.CanonicalSymbol, fatal);
       CompareDecimal(root, "pip_size", current.PipSize, fatal);
       CompareInt(
@@ -104,7 +129,6 @@ public static class AutoTradeConfigHealth
         fatal
       );
       var warnings = new List<string>();
-      CompareString(root, "event_stream", current.EventStream, warnings);
       CompareString(root, "profile", current.Profile, warnings);
       CompareBool(root, "range_flip", current.RangeFlip, warnings);
       CompareBool(
@@ -118,6 +142,31 @@ public static class AutoTradeConfigHealth
       );
       CompareBool(root, "hedging_policy", current.HedgingPolicy, warnings);
       CompareBool(root, "zone_fill", current.ZoneFill, warnings);
+      CompareBool(
+        root, "hedging_capability", current.HedgingCapability, warnings
+      );
+      CompareBool(root, "trend_enabled", current.TrendEnabled, warnings);
+      CompareBool(root, "range_enabled", current.RangeEnabled, warnings);
+      CompareBool(
+        root, "mapped_zone_enabled", current.MappedZoneEnabled, warnings
+      );
+      CompareBool(
+        root, "strategy_match_enabled", current.StrategyMatchEnabled, warnings
+      );
+      CompareBool(
+        root, "breakout_enabled", current.BreakoutEnabled, warnings
+      );
+      CompareBool(root, "retest_enabled", current.RetestEnabled, warnings);
+      CompareBool(root, "reaction_enabled", current.ReactionEnabled, warnings);
+      CompareBool(
+        root,
+        "liquidity_reversal_enabled",
+        current.LiquidityReversalEnabled,
+        warnings
+      );
+      CompareBool(
+        root, "allow_counter_bias", current.AllowCounterBias, warnings
+      );
       CompareInt(root, "min_confluence", current.MinConfluence, warnings);
       var state = fatal.Count > 0
         ? "fatal"
@@ -234,6 +283,27 @@ public static class AutoTradeConfigHealth
       .Select(item => item.TryGetInt32(out var parsed) ? parsed : int.MinValue)
       .ToArray();
     if (!actual.SequenceEqual(expected))
+    {
+      differences.Add(name);
+    }
+  }
+
+  private static void CompareStringList(
+    JsonElement root,
+    string name,
+    IReadOnlyList<string> expected,
+    ICollection<string> differences
+  )
+  {
+    if (!root.TryGetProperty(name, out var value) || value.ValueKind != JsonValueKind.Array)
+    {
+      differences.Add(name);
+      return;
+    }
+    var actual = value.EnumerateArray()
+      .Select(item => item.GetString() ?? "")
+      .ToArray();
+    if (!actual.SequenceEqual(expected, StringComparer.OrdinalIgnoreCase))
     {
       differences.Add(name);
     }

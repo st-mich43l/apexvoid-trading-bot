@@ -65,7 +65,17 @@ public sealed record AutoTradeOptions(
   bool TrackAllStructuralMatches = false,
   string RedisUrl = "redis://redis:6379/0",
   string CanonicalSymbol = "XAU",
-  int CandidateContractVersion = 4
+  int CandidateContractVersion = 4,
+  bool ManualAlgoEnabled = false,
+  bool TrendEnabled = false,
+  bool RangeEnabled = true,
+  bool MappedZoneEnabled = true,
+  bool StrategyMatchEnabled = true,
+  bool BreakoutEnabled = true,
+  bool RetestEnabled = true,
+  bool ReactionEnabled = true,
+  bool LiquidityReversalEnabled = true,
+  bool AllowCounterBias = true
 )
 {
   // Shared target-selection contract (app/autotrade/range_targets.py on the
@@ -176,7 +186,20 @@ public sealed record AutoTradeOptions(
     ),
     RedisUrl: Env("REDIS_URL", "redis://redis:6379/0"),
     CanonicalSymbol: Env("AUTO_TRADE_CANONICAL_SYMBOL", "XAU").ToUpperInvariant(),
-    CandidateContractVersion: Int("AUTO_TRADE_CANDIDATE_CONTRACT_VERSION", 4)
+    CandidateContractVersion: Int("AUTO_TRADE_CANDIDATE_CONTRACT_VERSION", 4),
+    ManualAlgoEnabled: Bool("MANUAL_ALGO_ENABLED", false),
+    TrendEnabled: Bool("AUTO_TRADE_TREND_ENABLED", demoEval),
+    RangeEnabled: Bool("AUTO_TRADE_RANGE_ENABLED", true),
+    MappedZoneEnabled: Bool("AUTO_TRADE_MAPPED_ZONE_ENABLED", true),
+    StrategyMatchEnabled: Bool("AUTO_TRADE_STRATEGY_MATCH_ENABLED", true),
+    BreakoutEnabled: Bool("AUTO_TRADE_BREAKOUT_ENABLED", true),
+    RetestEnabled: Bool("AUTO_TRADE_RETEST_ENABLED", true),
+    ReactionEnabled: Bool("AUTO_TRADE_REACTION_ENABLED", true),
+    LiquidityReversalEnabled: Bool(
+      "AUTO_TRADE_LIQUIDITY_REVERSAL_ENABLED",
+      true
+    ),
+    AllowCounterBias: Bool("AUTO_TRADE_ALLOW_COUNTER_BIAS", demoEval)
   );
   }
 

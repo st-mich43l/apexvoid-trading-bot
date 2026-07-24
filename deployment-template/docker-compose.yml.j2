@@ -3,6 +3,9 @@
 {# The vaulted env dict must define DATABASE_URL, POSTGRES_USER,             #}
 {# POSTGRES_PASSWORD, POSTGRES_DB, and required CTRADER_* feed secrets.      #}
 {# DATABASE_URL host must be "postgres"; REDIS_URL host should be "redis".  #}
+{% set auto_trade_profile = apexvoid_trading_bot_env.AUTO_TRADE_PROFILE | default('conservative') | string | lower %}
+{% set demo_eval_default = 'true' if auto_trade_profile == 'demo_eval' else 'false' %}
+{% set range_flat_default = 'false' if auto_trade_profile == 'demo_eval' else 'true' %}
 name: apexvoid-trading-bot
 
 services:
@@ -82,14 +85,24 @@ services:
       HEALTH_FILE: {{ apexvoid_trading_bot_env.HEALTH_FILE | default('/tmp/ctrader-feed.heartbeat') | string | to_json }}
       AUTO_TRADE_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_ENABLED | default('false') | string | to_json }}
       AUTO_TRADE_DRY_RUN: {{ apexvoid_trading_bot_env.AUTO_TRADE_DRY_RUN | default('true') | string | to_json }}
-      AUTO_TRADE_PROFILE: {{ apexvoid_trading_bot_env.AUTO_TRADE_PROFILE | default('conservative') | string | to_json }}
+      AUTO_TRADE_PROFILE: {{ auto_trade_profile | to_json }}
       AUTO_TRADE_REQUIRE_DEMO_ACCOUNT: {{ apexvoid_trading_bot_env.AUTO_TRADE_REQUIRE_DEMO_ACCOUNT | default('true') | string | to_json }}
-      AUTO_TRADE_ALLOW_CONCURRENT_STRATEGIES: {{ apexvoid_trading_bot_env.AUTO_TRADE_ALLOW_CONCURRENT_STRATEGIES | default('false') | string | to_json }}
-      AUTO_TRADE_ALLOW_HEDGED_XAU: {{ apexvoid_trading_bot_env.AUTO_TRADE_ALLOW_HEDGED_XAU | default('false') | string | to_json }}
-      AUTO_TRADE_REQUIRE_FLAT_FOR_RANGE: {{ apexvoid_trading_bot_env.AUTO_TRADE_REQUIRE_FLAT_FOR_RANGE | default('true') | string | to_json }}
-      AUTO_TRADE_RANGE_TWO_SIDED_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_RANGE_TWO_SIDED_ENABLED | default('false') | string | to_json }}
-      AUTO_TRADE_MULTI_MATCH_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_MULTI_MATCH_ENABLED | default('false') | string | to_json }}
-      AUTO_TRADE_TRACK_ALL_STRUCTURAL_MATCHES: {{ apexvoid_trading_bot_env.AUTO_TRADE_TRACK_ALL_STRUCTURAL_MATCHES | default('false') | string | to_json }}
+      AUTO_TRADE_ALLOW_CONCURRENT_STRATEGIES: {{ apexvoid_trading_bot_env.AUTO_TRADE_ALLOW_CONCURRENT_STRATEGIES | default(demo_eval_default) | string | to_json }}
+      AUTO_TRADE_ALLOW_HEDGED_XAU: {{ apexvoid_trading_bot_env.AUTO_TRADE_ALLOW_HEDGED_XAU | default(demo_eval_default) | string | to_json }}
+      AUTO_TRADE_REQUIRE_FLAT_FOR_RANGE: {{ apexvoid_trading_bot_env.AUTO_TRADE_REQUIRE_FLAT_FOR_RANGE | default(range_flat_default) | string | to_json }}
+      AUTO_TRADE_TREND_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_TREND_ENABLED | default(demo_eval_default) | string | to_json }}
+      AUTO_TRADE_RANGE_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_RANGE_ENABLED | default('true') | string | to_json }}
+      AUTO_TRADE_RANGE_TWO_SIDED_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_RANGE_TWO_SIDED_ENABLED | default(demo_eval_default) | string | to_json }}
+      AUTO_TRADE_MAPPED_ZONE_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_MAPPED_ZONE_ENABLED | default('true') | string | to_json }}
+      AUTO_TRADE_STRATEGY_MATCH_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_STRATEGY_MATCH_ENABLED | default('true') | string | to_json }}
+      AUTO_TRADE_BREAKOUT_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_BREAKOUT_ENABLED | default('true') | string | to_json }}
+      AUTO_TRADE_RETEST_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_RETEST_ENABLED | default('true') | string | to_json }}
+      AUTO_TRADE_REACTION_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_REACTION_ENABLED | default('true') | string | to_json }}
+      AUTO_TRADE_LIQUIDITY_REVERSAL_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_LIQUIDITY_REVERSAL_ENABLED | default('true') | string | to_json }}
+      AUTO_TRADE_MULTI_MATCH_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_MULTI_MATCH_ENABLED | default(demo_eval_default) | string | to_json }}
+      AUTO_TRADE_ALLOW_COUNTER_BIAS: {{ apexvoid_trading_bot_env.AUTO_TRADE_ALLOW_COUNTER_BIAS | default(demo_eval_default) | string | to_json }}
+      AUTO_TRADE_TRACK_ALL_STRUCTURAL_MATCHES: {{ apexvoid_trading_bot_env.AUTO_TRADE_TRACK_ALL_STRUCTURAL_MATCHES | default(demo_eval_default) | string | to_json }}
+      MANUAL_ALGO_ENABLED: {{ apexvoid_trading_bot_env.MANUAL_ALGO_ENABLED | default('false') | string | to_json }}
       AUTO_TRADE_CANDIDATE_CONTRACT_VERSION: {{ apexvoid_trading_bot_env.AUTO_TRADE_CANDIDATE_CONTRACT_VERSION | default('4') | string | to_json }}
       AUTO_TRADE_CANONICAL_SYMBOL: {{ apexvoid_trading_bot_env.AUTO_TRADE_CANONICAL_SYMBOL | default('XAU') | string | to_json }}
       AUTO_TRADE_REQUIRE_DEMO_ONLY_TOKEN: {{ apexvoid_trading_bot_env.AUTO_TRADE_REQUIRE_DEMO_ONLY_TOKEN | default('false') | string | to_json }}
@@ -121,7 +134,7 @@ services:
       AUTO_TRADE_INSIDE_ZONE_MARKET_ENTRY_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_INSIDE_ZONE_MARKET_ENTRY_ENABLED | default('true') | string | to_json }}
       AUTO_TRADE_RANGE_TARGETS_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_RANGE_TARGETS_PIPS | default('20,30,40,50,70') | string | to_json }}
       AUTO_TRADE_RANGE_TP_BUFFER_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_RANGE_TP_BUFFER_PIPS | default('3') | string | to_json }}
-      AUTO_TRADE_RANGE_FLIP_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_RANGE_FLIP_ENABLED | default('false') | string | to_json }}
+      AUTO_TRADE_RANGE_FLIP_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_RANGE_FLIP_ENABLED | default(demo_eval_default) | string | to_json }}
       AUTO_TRADE_FLIP_EXIT_BUFFER_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_FLIP_EXIT_BUFFER_PIPS | default('10') | string | to_json }}
       AUTO_TRADE_FLIP_CONFIRM_TIMEOUT_SECONDS: {{ apexvoid_trading_bot_env.AUTO_TRADE_FLIP_CONFIRM_TIMEOUT_SECONDS | default('30') | string | to_json }}
       AUTO_TRADE_TREND_STOP_MIN_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_TREND_STOP_MIN_PIPS | default('40') | string | to_json }}

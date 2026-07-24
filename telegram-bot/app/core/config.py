@@ -169,8 +169,14 @@ class Settings(BaseSettings):
   auto_trade_require_flat_for_range: bool = True
   auto_trade_range_two_sided_enabled: bool = False
   auto_trade_range_flip_enabled: bool = False
+  auto_trade_range_enabled: bool = True
   auto_trade_multi_match_enabled: bool = False
   auto_trade_track_all_structural_matches: bool = False
+  auto_trade_breakout_enabled: bool = True
+  auto_trade_retest_enabled: bool = True
+  auto_trade_reaction_enabled: bool = True
+  auto_trade_liquidity_reversal_enabled: bool = True
+  auto_trade_allow_counter_bias: bool = True
   auto_trade_candidate_contract_version: int = 4
   auto_trade_canonical_symbol: str = "XAU"
   auto_trade_contract_size: float = 100.0
@@ -192,6 +198,7 @@ class Settings(BaseSettings):
   auto_trade_strategy_bridge_enabled: bool = Field(
     default=True,
     validation_alias=AliasChoices(
+      "AUTO_TRADE_STRATEGY_MATCH_ENABLED",
       "AUTO_TRADE_STRATEGY_BRIDGE_ENABLED",
       "AUTO_TRADE_FORMING_GATE_ENABLED",
     ),
@@ -205,7 +212,13 @@ class Settings(BaseSettings):
   )
   # Executes only structural Market Map zones (never display-only round-number
   # fallbacks) after the latest M1 candle touches and rejects the zone.
-  auto_trade_market_map_strategy_enabled: bool = True
+  auto_trade_market_map_strategy_enabled: bool = Field(
+    default=True,
+    validation_alias=AliasChoices(
+      "AUTO_TRADE_MAPPED_ZONE_ENABLED",
+      "AUTO_TRADE_MARKET_MAP_STRATEGY_ENABLED",
+    ),
+  )
   # Tracking vs execution reach for mapped reactions. Zones inside the track
   # window are reported as the working target; only the execute window may
   # produce an immediate market entry after M1 touch + rejection.
@@ -364,8 +377,18 @@ class Settings(BaseSettings):
       "auto_trade_require_flat_for_range": False,
       "auto_trade_range_two_sided_enabled": True,
       "auto_trade_range_flip_enabled": True,
+      "auto_trade_range_enabled": True,
       "auto_trade_multi_match_enabled": True,
       "auto_trade_track_all_structural_matches": True,
+      "auto_trade_trend_enabled": True,
+      "auto_trade_market_map_strategy_enabled": True,
+      "auto_trade_strategy_bridge_enabled": True,
+      "auto_trade_breakout_enabled": True,
+      "auto_trade_retest_enabled": True,
+      "auto_trade_reaction_enabled": True,
+      "auto_trade_liquidity_reversal_enabled": True,
+      "auto_trade_allow_counter_bias": True,
+      "auto_trade_map_counter_bias_enabled": True,
       "auto_trade_max_tracked_candidates": 0,
       "auto_trade_max_active_positions_per_symbol": 0,
       "scanner_top_n": 0,
