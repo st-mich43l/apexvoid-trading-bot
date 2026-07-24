@@ -52,11 +52,19 @@ from app.autotrade.multi_match import (
 )
 from app.autotrade.lifecycle import emit_lifecycle, increment_metric
 from app.autotrade.reaction_identity import (
+  THESIS_CLAIM_ACQUIRE_LUA,
+  ACTIVE_THESIS_STATES,
+  advance_thesis_rearm_on_bar,
+  dump_claim,
+  evaluate_thesis_rearm_for_publish,
   mapped_group_id,
   parse_reaction_claim,
-  price_left_zone,
+  parse_thesis_claim,
   reaction_claim_key,
   reaction_claim_payload,
+  thesis_claim_key,
+  thesis_claim_payload,
+  thesis_state_blocks_new_initial,
 )
 from app.autotrade.range_context import (
   RangeContext,
@@ -1468,12 +1476,24 @@ def _group_id(*parts: object) -> str:
   return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
-def _strategy_group_id(match: StrategyMatch) -> str:
+def _strategy_group_id(match: StrategyMatch, *, thesis_cycle: int = 1) -> str:
+  if match.thesis_id and (
+    match.reaction_id or match.family == "mapped_zone"
+    or match.strategy_mode == "mapped_zone_reaction"
+  ):
+    return mapped_group_id(
+      symbol=match.symbol,
+      strategy_family=match.family or "mapped_zone",
+      direction=match.direction,
+      thesis_id=match.thesis_id,
+      thesis_cycle=thesis_cycle,
+    )
   if match.reaction_id:
     return mapped_group_id(
       symbol=match.symbol,
       strategy_family=match.family or "mapped_zone",
       direction=match.direction,
+      thesis_id="",
       reaction_id=match.reaction_id,
     )
   structural_key = (
@@ -1490,38 +1510,46 @@ def _strategy_group_id(match: StrategyMatch) -> str:
   )
 
 
-async def _reaction_may_rearm(
-  client: Any,
-  match: StrategyMatch,
-  price: float,
-  claim: dict[str, Any],
-) -> bool:
-  """Allow a new candidate only after a terminal claim and a fresh reaction."""
-  state = str(claim.get("state") or "").casefold()
-  if state not in {"closed", "cancelled", "rejected", "expired", "terminal"}:
-    return False
-  previous_confirm = str(claim.get("confirmation_bar_ts") or "")
-  new_touch = str(match.touch_bar_ts or "")
-  if not previous_confirm or not new_touch:
-    return False
-  if new_touch <= previous_confirm:
-    return False
-  lo = float(match.entry_low)
-  hi = float(match.entry_high)
-  # Prefer raw structural band when present in claim metadata via zone geometry.
-  if not price_left_zone(
-    price,
-    lo,
-    hi,
-    atr=float(match.atr),
-    rearm_atr=float(getattr(settings, "auto_trade_map_reaction_rearm_atr", 0.5)),
+def _thesis_lock_enabled() -> bool:
+  return bool(getattr(settings, "auto_trade_map_thesis_lock_enabled", True))
+
+
+async def _load_thesis_claim(client: Any, thesis_id: str | None) -> dict[str, Any] | None:
+  if not thesis_id:
+    return None
+  return parse_thesis_claim(await client.get(thesis_claim_key(thesis_id)))
+
+
+async def _save_thesis_claim(client: Any, thesis_id: str, payload: dict[str, Any]) -> None:
+  await client.set(thesis_claim_key(thesis_id), dump_claim(payload))
+
+
+async def _acquire_thesis_claim(client: Any, payload_json: str, thesis_id: str) -> bool:
+  key = thesis_claim_key(thesis_id)
+  try:
+    result = await client.eval(
+      THESIS_CLAIM_ACQUIRE_LUA,
+      1,
+      key,
+      payload_json,
+    )
+    return int(result or 0) == 1
+  except Exception:
+    log.exception("thesis claim lua acquire failed; using conditional SET")
+  existing = parse_thesis_claim(await client.get(key))
+  if existing is None:
+    return bool(await client.set(key, payload_json, nx=True))
+  state = str(existing.get("state") or "").casefold()
+  rearm = bool(existing.get("rearm_ready"))
+  if state == "rearm_ready" or (
+    state in {"closed", "cancelled", "rejected", "expired"} and rearm
   ):
-    return False
-  # New confirmation must also be later than the previous one.
-  new_confirm = str(match.confirmation_bar_ts or "")
-  if not new_confirm or new_confirm <= previous_confirm:
-    return False
-  return True
+    await client.set(key, payload_json)
+    return True
+  if state in {"cancelled", "rejected", "expired"}:
+    await client.set(key, payload_json)
+    return True
+  return False
 
 
 async def _mark_reaction_claim_terminal(
@@ -1529,15 +1557,168 @@ async def _mark_reaction_claim_terminal(
   *,
   reaction_id: str | None,
   state: str,
+  thesis_id: str | None = None,
 ) -> None:
-  if not reaction_id:
+  if reaction_id:
+    key = reaction_claim_key(reaction_id)
+    existing = parse_reaction_claim(await client.get(key))
+    if existing is not None:
+      existing["state"] = state
+      await client.set(key, dump_claim(existing))
+  if thesis_id and _thesis_lock_enabled():
+    claim = await _load_thesis_claim(client, thesis_id)
+    if claim is None:
+      return
+    claim["state"] = state
+    if state in {"cancelled", "rejected", "expired"}:
+      claim["terminal_at"] = int(datetime.now(timezone.utc).timestamp())
+      # Rejected/cancelled before a live managed group may recycle.
+      if state in {"cancelled", "rejected", "expired"}:
+        claim["rearm_ready"] = True
+    await _save_thesis_claim(client, thesis_id, claim)
+
+
+async def _mark_thesis_terminal_waiting_exit(
+  client: Any,
+  *,
+  thesis_id: str | None,
+  reaction_id: str | None = None,
+) -> None:
+  if not thesis_id or not _thesis_lock_enabled():
     return
-  key = reaction_claim_key(reaction_id)
-  existing = parse_reaction_claim(await client.get(key))
-  if existing is None:
+  claim = await _load_thesis_claim(client, thesis_id)
+  if claim is None:
     return
-  existing["state"] = state
-  await client.set(key, json.dumps(existing, separators=(",", ":"), sort_keys=True))
+  now = int(datetime.now(timezone.utc).timestamp())
+  claim["state"] = "terminal_waiting_exit"
+  claim["terminal_at"] = now
+  claim["rearm_ready"] = False
+  claim["outside_bar_count"] = 0
+  claim["first_outside_bar_ts"] = None
+  claim["latest_outside_bar_ts"] = None
+  claim["reentry_bar_ts"] = None
+  claim["exit_detected_at"] = None
+  if reaction_id:
+    claim["active_reaction_id"] = reaction_id
+  await _save_thesis_claim(client, thesis_id, claim)
+  await increment_metric(client, "mapped_thesis_terminal", symbol=claim.get("symbol"))
+
+
+async def _advance_mapped_thesis_rearms(
+  client: Any,
+  *,
+  symbol: str,
+  m1: Any,
+  atr: float,
+) -> None:
+  """Advance exit/outside-bar tracking for terminal mapped theses."""
+  if not _thesis_lock_enabled() or m1 is None or getattr(m1, "empty", True):
+    return
+  try:
+    bar = m1.iloc[-1]
+    bar_ts = str(m1.index[-1])
+    bar_low = float(bar["low"])
+    bar_high = float(bar["high"])
+    close = float(bar["close"])
+  except Exception:
+    return
+  now = int(datetime.now(timezone.utc).timestamp())
+  rearm_atr = float(getattr(settings, "auto_trade_map_reaction_rearm_atr", 0.5))
+  rearm_bars = int(getattr(settings, "auto_trade_map_reaction_rearm_bars", 3))
+  pattern = "auto_trade:thesis_claim:*"
+  async for raw_key in client.scan_iter(match=pattern, count=50):
+    key = raw_key.decode() if isinstance(raw_key, bytes) else str(raw_key)
+    claim = parse_thesis_claim(await client.get(key))
+    if claim is None:
+      continue
+    if str(claim.get("symbol") or "").upper() != symbol.upper():
+      continue
+    state = str(claim.get("state") or "").casefold()
+    if state not in {"terminal_waiting_exit", "outside_zone", "closed"}:
+      continue
+    updated, metric = advance_thesis_rearm_on_bar(
+      claim,
+      bar_ts=bar_ts,
+      bar_low=bar_low,
+      bar_high=bar_high,
+      close=close,
+      atr=float(atr) if atr and atr > 0 else float(claim.get("atr") or 0) or 1.0,
+      rearm_atr=rearm_atr,
+      rearm_bars=rearm_bars,
+      now_ts=now,
+    )
+    if updated != claim:
+      await client.set(key, dump_claim(updated))
+    if metric:
+      await increment_metric(client, metric, symbol=symbol)
+
+
+async def _reconcile_legacy_mapped_thesis_claims(client: Any) -> None:
+  """Create thesis claims for open mapped groups that predate the lock."""
+  if not _thesis_lock_enabled():
+    return
+  pattern = "auto_trade:group_plan:*"
+  async for raw_key in client.scan_iter(match=pattern, count=50):
+    key = raw_key.decode() if isinstance(raw_key, bytes) else str(raw_key)
+    raw = await client.get(key)
+    if raw is None:
+      continue
+    try:
+      text = raw.decode() if isinstance(raw, bytes) else str(raw)
+      plan = json.loads(text)
+    except (TypeError, ValueError, json.JSONDecodeError):
+      continue
+    if not isinstance(plan, dict):
+      continue
+    thesis_id = plan.get("ThesisId") or plan.get("thesis_id")
+    reaction_id = plan.get("ReactionId") or plan.get("reaction_id")
+    zone_id = plan.get("ZoneId") or plan.get("zone_id") or plan.get("StructuralZoneId")
+    symbol = str(plan.get("Symbol") or plan.get("symbol") or settings.auto_trade_canonical_symbol).upper()
+    direction = str(plan.get("Direction") or plan.get("direction") or "").upper()
+    strategy = str(plan.get("Setup") or plan.get("setup") or "Mapped Zone Reaction")
+    family = str(
+      plan.get("StrategyFamily") or plan.get("strategy_family") or "mapped_zone"
+    )
+    if family not in {"mapped_zone", "mapped_zone_reaction"} and "mapped" not in strategy.casefold():
+      continue
+    if not thesis_id and reaction_id and zone_id and direction:
+      from app.autotrade.reaction_identity import mapped_thesis_id
+      thesis_id = mapped_thesis_id(
+        symbol=symbol,
+        strategy=strategy if strategy else "Mapped Zone Reaction",
+        direction=direction,
+        structural_zone_id=str(zone_id),
+      )
+    if not thesis_id:
+      await increment_metric(client, "legacy_group_thesis_unattributed", symbol=symbol)
+      continue
+    existing = await _load_thesis_claim(client, str(thesis_id))
+    if existing is not None and thesis_state_blocks_new_initial(existing.get("state")):
+      continue
+    if existing is not None and str(existing.get("state") or "") in ACTIVE_THESIS_STATES:
+      continue
+    now = int(datetime.now(timezone.utc).timestamp())
+    body = thesis_claim_payload(
+      thesis_id=str(thesis_id),
+      strategy=strategy,
+      strategy_family="mapped_zone",
+      symbol=symbol,
+      direction=direction or "BUY",
+      structural_zone_id=str(zone_id or ""),
+      structural_zone_low=None,
+      structural_zone_high=None,
+      active_reaction_id=str(reaction_id or ""),
+      candidate_id=str(plan.get("CandidateId") or plan.get("candidate_id") or ""),
+      group_id=str(plan.get("GroupId") or plan.get("group_id") or ""),
+      state="managing",
+      claimed_at=now,
+      touch_bar_ts="",
+      confirmation_bar_ts="",
+      thesis_cycle=1,
+    )
+    claimed = await client.set(thesis_claim_key(str(thesis_id)), body, nx=True)
+    if claimed:
+      await increment_metric(client, "legacy_group_thesis_recovered", symbol=symbol)
 
 
 def _trend_group_id(
@@ -2291,19 +2472,52 @@ async def _publish_strategy_match(
     )
     return None
 
-  group_id = _strategy_group_id(match)
+  thesis_cycle = 1
+  thesis_claim_existing: dict[str, Any] | None = None
+  if match.thesis_id and _thesis_lock_enabled():
+    await increment_metric(client, "mapped_thesis_evaluated", symbol=symbol)
+    thesis_claim_existing = await _load_thesis_claim(client, match.thesis_id)
+    if thesis_claim_existing is not None:
+      decision = evaluate_thesis_rearm_for_publish(
+        thesis_claim_existing,
+        new_touch_ts=str(match.touch_bar_ts or ""),
+        new_confirmation_ts=str(match.confirmation_bar_ts or ""),
+        price=float(spot.price),
+        atr=float(match.atr),
+        rearm_atr=float(getattr(settings, "auto_trade_map_reaction_rearm_atr", 0.5)),
+        rearm_bars=int(getattr(settings, "auto_trade_map_reaction_rearm_bars", 3)),
+      )
+      if not decision.allowed:
+        await increment_metric(
+          client, "duplicate_thesis_suppressed", symbol=symbol,
+        )
+        await increment_metric(
+          client, "same_thesis_group_active", symbol=symbol,
+        )
+        log.info(
+          "duplicate mapped thesis suppressed thesis=%s reaction=%s "
+          "reason=%s state=%s",
+          match.thesis_id[:12],
+          (match.reaction_id or "")[:12],
+          decision.reason_code,
+          decision.state,
+        )
+        await _consume_strategy_match(client, symbol, match)
+        return None
+      thesis_cycle = int(thesis_claim_existing.get("thesis_cycle") or 1) + 1
+      await increment_metric(client, "mapped_thesis_rearmed", symbol=symbol)
+
+  group_id = _strategy_group_id(match, thesis_cycle=thesis_cycle)
   if match.reaction_id:
     await increment_metric(client, "mapped_reaction_evaluated", symbol=symbol)
     claim_key = reaction_claim_key(match.reaction_id)
     existing_claim = parse_reaction_claim(await client.get(claim_key))
     if existing_claim is not None:
-      rearmed = await _reaction_may_rearm(
-        client,
-        match,
-        spot.price,
-        existing_claim,
-      )
-      if not rearmed:
+      # Same reaction_id replay: keep reaction-level protection.
+      state = str(existing_claim.get("state") or "").casefold()
+      if state not in {
+        "closed", "cancelled", "rejected", "expired", "terminal", "rearm_ready",
+      }:
         await increment_metric(
           client, "duplicate_reaction_suppressed", symbol=symbol,
         )
@@ -2319,8 +2533,9 @@ async def _publish_strategy_match(
         )
         await _consume_strategy_match(client, symbol, match)
         return None
-      await increment_metric(client, "mapped_reaction_rearmed", symbol=symbol)
+      # Terminal reaction claim may be deleted once thesis rearm already passed.
       await client.delete(claim_key)
+      await increment_metric(client, "mapped_reaction_rearmed", symbol=symbol)
 
   candidate_id = match.match_id
   claimed = await client.set(
@@ -2353,6 +2568,8 @@ async def _publish_strategy_match(
       ),
       symbol=symbol,
       direction=match.direction,
+      structural_zone_low=match.structural_zone_low,
+      structural_zone_high=match.structural_zone_high,
     )
     # Persist for the whole group lifetime; do not expire with lookback.
     reaction_claimed = await client.set(claim_key, claim_body, nx=True)
@@ -2364,6 +2581,41 @@ async def _publish_strategy_match(
       await _consume_strategy_match(client, symbol, match)
       return None
     await increment_metric(client, "mapped_reaction_claimed", symbol=symbol)
+
+  if match.thesis_id and _thesis_lock_enabled():
+    thesis_body = thesis_claim_payload(
+      thesis_id=match.thesis_id,
+      strategy=match.strategy,
+      strategy_family=match.family or "mapped_zone",
+      symbol=symbol,
+      direction=match.direction,
+      structural_zone_id=str(match.structural_zone_id or match.zone_id or ""),
+      structural_zone_low=match.structural_zone_low,
+      structural_zone_high=match.structural_zone_high,
+      active_reaction_id=str(match.reaction_id or ""),
+      candidate_id=candidate_id,
+      group_id=group_id,
+      state="candidate_published",
+      claimed_at=now,
+      touch_bar_ts=str(match.touch_bar_ts or ""),
+      confirmation_bar_ts=str(match.confirmation_bar_ts or ""),
+      thesis_cycle=thesis_cycle,
+      rearm_ready=False,
+    )
+    thesis_ok = await _acquire_thesis_claim(client, thesis_body, match.thesis_id)
+    if not thesis_ok:
+      await client.delete(f"auto_trade:candidate:{candidate_id}")
+      if match.reaction_id:
+        await client.delete(reaction_claim_key(match.reaction_id))
+      await increment_metric(
+        client, "duplicate_thesis_suppressed", symbol=symbol,
+      )
+      await increment_metric(
+        client, "same_thesis_group_active", symbol=symbol,
+      )
+      await _consume_strategy_match(client, symbol, match)
+      return None
+    await increment_metric(client, "mapped_thesis_claimed", symbol=symbol)
 
   setup = (
     f"{match.strategy} · counter_bias"
@@ -2391,6 +2643,9 @@ async def _publish_strategy_match(
     "reaction_id": match.reaction_id,
     "thesis_id": match.thesis_id,
     "structural_zone_id": match.structural_zone_id or match.zone_id,
+    "structural_zone_low": match.structural_zone_low,
+    "structural_zone_high": match.structural_zone_high,
+    "thesis_cycle": thesis_cycle,
     "touch_bar_ts": match.touch_bar_ts,
     "confirmation_bar_ts": match.confirmation_bar_ts,
     "reaction_type": match.reaction_type,
@@ -2451,6 +2706,8 @@ async def _publish_strategy_match(
     await client.delete(f"auto_trade:candidate:{candidate_id}")
     if match.reaction_id:
       await client.delete(reaction_claim_key(match.reaction_id))
+    if match.thesis_id and _thesis_lock_enabled():
+      await client.delete(thesis_claim_key(match.thesis_id))
     raise
   await increment_metric(client, "candidate_published", symbol=symbol)
   await emit_lifecycle(
@@ -2473,6 +2730,8 @@ async def _publish_strategy_match(
       "reaction_id": match.reaction_id,
       "thesis_id": match.thesis_id,
       "structural_zone_id": match.structural_zone_id or match.zone_id,
+      "structural_zone_low": match.structural_zone_low,
+      "structural_zone_high": match.structural_zone_high,
       "touch_bar_ts": match.touch_bar_ts,
       "confirmation_bar_ts": match.confirmation_bar_ts,
     },
@@ -3249,6 +3508,22 @@ async def _handle_event(
   frames = await _load_frames(source, symbol)
   spot = await _load_spot(client, symbol)
   await _rearm_scanner_range_edges(client, symbol, spot)
+  # Advance mapped thesis rearm tracking on every closed M1 before detection.
+  try:
+    from app.analysis.indicators import atr as atr_indicator
+    m1 = frames.get(EXECUTION_TIMEFRAME) or frames.get("M1")
+    if m1 is not None and len(m1) >= 15:
+      atr_series = atr_indicator(m1, int(getattr(settings, "atr_length", 14)))
+      atr_for_rearm = float(atr_series.iloc[-1])
+      if math.isfinite(atr_for_rearm) and atr_for_rearm > 0:
+        await _advance_mapped_thesis_rearms(
+          client,
+          symbol=symbol,
+          m1=m1,
+          atr=atr_for_rearm,
+        )
+  except Exception:
+    log.exception("mapped thesis rearm advance failed symbol=%s", symbol)
   private_decision = evaluate_auto_scalp_gate(
     frames,
     symbol=symbol,
@@ -3512,13 +3787,23 @@ async def auto_scalp_loop() -> None:
 
   client = redis_state.get_client()
   source = RedisOHLCSource(client)
+  try:
+    await _reconcile_legacy_mapped_thesis_claims(client)
+  except Exception:
+    log.exception("legacy mapped thesis claim reconcile failed")
   pubsub = client.pubsub()
   await pubsub.subscribe("bars:new")
   log.info(
-    "ApexVoid Algo watching %s on M1/M5 with strategy_bridge=%s",
+    "ApexVoid Algo watching %s on M1/M5 with strategy_bridge=%s thesis_lock=%s",
     ",".join(sorted(_symbols())),
     settings.auto_trade_strategy_bridge_enabled,
+    _thesis_lock_enabled(),
   )
+  if not _thesis_lock_enabled():
+    log.warning(
+      "AUTO_TRADE_MAP_THESIS_LOCK_ENABLED=false — mapped theses may open "
+      "multiple active groups; disable only for intentional diagnostics"
+    )
   try:
     async for message in pubsub.listen():
       if message.get("type") != "message":

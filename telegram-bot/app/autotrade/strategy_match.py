@@ -57,6 +57,9 @@ class StrategyMatch:
   reaction_id: str | None = None
   thesis_id: str | None = None
   structural_zone_id: str | None = None
+  # Raw Market Map zone bounds before proximal/spot execution expansion.
+  structural_zone_low: float | None = None
+  structural_zone_high: float | None = None
   touch_bar_ts: str | None = None
   confirmation_bar_ts: str | None = None
   reaction_type: str | None = None
@@ -158,6 +161,14 @@ class StrategyMatch:
         structural_zone_id=(
           None if payload.get("structural_zone_id") is None
           else str(payload["structural_zone_id"])
+        ),
+        structural_zone_low=(
+          None if payload.get("structural_zone_low") is None
+          else float(payload["structural_zone_low"])
+        ),
+        structural_zone_high=(
+          None if payload.get("structural_zone_high") is None
+          else float(payload["structural_zone_high"])
         ),
         touch_bar_ts=(
           None if payload.get("touch_bar_ts") is None
