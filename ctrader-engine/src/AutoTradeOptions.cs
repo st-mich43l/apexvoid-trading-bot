@@ -85,7 +85,12 @@ public sealed record AutoTradeOptions(
   IReadOnlyDictionary<string, string>? ConfigSources = null,
   IReadOnlyList<string>? DeprecatedVariables = null,
   string StructuralGuardMode = "balanced",
-  string ZoneReconcileMode = "enforce"
+  string ZoneReconcileMode = "enforce",
+  bool RangeBoxScaleOutEnabled = true,
+  int RangeBoxScaleOutThresholdPips = 70,
+  int RangeBoxScaleOutTriggerPips = 30,
+  decimal RangeBoxScaleOutFraction = 0.50m,
+  bool RangeBoxMoveSlToBeAfterScaleOut = false
 )
 {
   // Shared target-selection contract (app/autotrade/range_targets.py on the
@@ -357,13 +362,28 @@ public sealed record AutoTradeOptions(
       "AUTO_TRADE_ZONE_RECONCILE_MODE",
       demoEval ? "shadow" : "enforce",
       profileSource
-    ).ToLowerInvariant()
+    ),
+    RangeBoxScaleOutEnabled: resolver.Bool(
+      "AUTO_TRADE_RANGE_BOX_SCALE_OUT_ENABLED", true
+    ),
+    RangeBoxScaleOutThresholdPips: resolver.Int(
+      "AUTO_TRADE_RANGE_BOX_SCALE_OUT_THRESHOLD_PIPS", 70
+    ),
+    RangeBoxScaleOutTriggerPips: resolver.Int(
+      "AUTO_TRADE_RANGE_BOX_SCALE_OUT_TRIGGER_PIPS", 30
+    ),
+    RangeBoxScaleOutFraction: resolver.Decimal(
+      "AUTO_TRADE_RANGE_BOX_SCALE_OUT_FRACTION", 0.50m
+    ),
+    RangeBoxMoveSlToBeAfterScaleOut: resolver.Bool(
+      "AUTO_TRADE_RANGE_BOX_MOVE_SL_TO_BE_AFTER_SCALE_OUT", false
+    )
   );
-    return options with
-    {
-      ConfigSources = resolver.Sources,
-      DeprecatedVariables = resolver.DeprecatedVariables,
-    };
+  return options with
+  {
+    ConfigSources = resolver.Sources,
+    DeprecatedVariables = resolver.DeprecatedVariables,
+  };
   }
 
   public void Validate()
@@ -548,6 +568,20 @@ public sealed record AutoTradeOptions(
         "Auto trade disabled: AUTO_TRADE_RANGE_TARGETS_PIPS must contain "
         + "positive values and AUTO_TRADE_RANGE_TP_BUFFER_PIPS must be "
         + "non-negative"
+      );
+    }
+    if (
+      RangeBoxScaleOutThresholdPips <= 0
+      || RangeBoxScaleOutTriggerPips <= 0
+      || RangeBoxScaleOutTriggerPips >= RangeBoxScaleOutThresholdPips
+      || RangeBoxScaleOutFraction <= 0m
+      || RangeBoxScaleOutFraction >= 1m
+    )
+    {
+      throw new AutoTradeConfigurationException(
+        "Auto trade disabled: Range Box scale-out settings invalid "
+        + "(threshold > 0, trigger > 0, trigger < threshold, "
+        + "0 < fraction < 1)"
       );
     }
     if (

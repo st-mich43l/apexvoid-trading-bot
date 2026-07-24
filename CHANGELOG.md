@@ -13,6 +13,11 @@ dated section after deployment.
 
 ### Added
 
+- Range Box Scalp trades with Full TP **> 70** pips now scale out 50% at
+  +30 pips from the broker fill, then ride the original Full TP for the
+  remainder (`AUTO_TRADE_RANGE_BOX_SCALE_OUT_*`). Break-even stop move after
+  scale-out stays off by default.
+
 - Promote Key Level, Demand/Supply Zone, Session Level, and Trendline reactions
   to first-class executable scanner strategies (stable structural IDs, shared
   closed-bar confirmation lookback, bias as context not a hard gate). Generic
