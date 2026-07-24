@@ -46,6 +46,9 @@ _PROFILE_DEFAULT_FIELDS = {
   "AUTO_TRADE_CANDIDATE_MAX_AGE_SECONDS",
   "AUTO_TRADE_CANDIDATE_STORAGE_TTL_SECONDS",
   "AUTO_TRADE_NON_HEDGED_OPPOSITE_POLICY",
+  "AUTO_TRADE_STRUCTURAL_GUARD_MODE",
+  "AUTO_TRADE_ZONE_COOLDOWN_ENABLED",
+  "AUTO_TRADE_ZONE_RECONCILE_MODE",
 }
 
 _CANONICAL_ENV_NAMES = {
@@ -73,6 +76,9 @@ _CANONICAL_ENV_NAMES = {
   "AUTO_TRADE_MIN_CONFLUENCE",
   "AUTO_TRADE_REQUIRE_DEMO_ACCOUNT",
   "AUTO_TRADE_NON_HEDGED_OPPOSITE_POLICY",
+  "AUTO_TRADE_STRUCTURAL_GUARD_MODE",
+  "AUTO_TRADE_ZONE_COOLDOWN_ENABLED",
+  "AUTO_TRADE_ZONE_RECONCILE_MODE",
 }
 
 
@@ -243,6 +249,9 @@ def python_manifest() -> dict[str, Any]:
     "non_hedged_opposite_policy": (
       settings.auto_trade_non_hedged_opposite_policy
     ),
+    "structural_guard_mode": settings.auto_trade_structural_guard_mode,
+    "zone_cooldown_enabled": settings.auto_trade_zone_cooldown_enabled,
+    "zone_reconcile_mode": settings.auto_trade_zone_reconcile_mode,
     "candidate_contract_version": (
       settings.auto_trade_candidate_contract_version
     ),
@@ -355,6 +364,9 @@ def compare_manifests(
     "min_confluence",
     "profile",
     "non_hedged_opposite_policy",
+    "structural_guard_mode",
+    "zone_cooldown_enabled",
+    "zone_reconcile_mode",
   )
   warnings = [
     field

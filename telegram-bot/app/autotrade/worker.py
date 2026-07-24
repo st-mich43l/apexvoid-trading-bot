@@ -8,7 +8,7 @@ It never parses rendered Telegram text or imports scanner detector functions.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -19,6 +19,20 @@ from typing import Any
 from app.persistence import redis_state
 from app.autotrade import units
 from app.autotrade.range_targets import configured_range_targets
+from app.autotrade.execution_policy import (
+  GUARD_MODE_OBSERVE,
+  GUARD_MODE_STRICT,
+  OUTCOME_ALLOW,
+  OUTCOME_WAIT,
+  ExecutionGuardDecision,
+  GuardOutcome,
+  StructuralBarrier,
+  StructuralSourceIdentity,
+  classify_barrier_relationship,
+  classify_guard_severity,
+  max_entry_drift_pips,
+  resolve_guard_mode,
+)
 from app.autotrade.gate import (
   AutoScalpBox,
   AutoScalpDecision,
@@ -33,6 +47,7 @@ from app.autotrade.multi_match import (
   dedupe_matches,
   deserialize_matches,
   select_primary,
+  serialize_matches,
   strategy_matches_key,
 )
 from app.autotrade.lifecycle import emit_lifecycle, increment_metric
@@ -203,6 +218,31 @@ async def _load_strategy_matches(
     return active
   legacy = await _load_strategy_match(client, symbol)
   return [] if legacy is None else [legacy]
+
+
+async def _consume_strategy_match(
+  client: Any,
+  symbol: str,
+  match: StrategyMatch,
+) -> None:
+  """Remove exactly one terminal/published match without touching siblings."""
+  multi_key = strategy_matches_key(symbol)
+  matches = deserialize_matches(await client.get(multi_key))
+  kept = [item for item in matches if item.match_id != match.match_id]
+  if len(kept) != len(matches):
+    if kept:
+      now = int(datetime.now(timezone.utc).timestamp())
+      await client.set(
+        multi_key,
+        serialize_matches(kept),
+        ex=max(60, max(item.expires_at for item in kept) - now),
+      )
+    else:
+      await client.delete(multi_key)
+  legacy_key = strategy_match_key(symbol)
+  legacy = StrategyMatch.from_json(await client.get(legacy_key) or "")
+  if legacy is not None and legacy.match_id == match.match_id:
+    await client.delete(legacy_key)
 
 
 async def _resolve_worker_range(
@@ -578,6 +618,231 @@ def _htf_levels(frames: dict[str, Any], cfg: Any) -> list[Level]:
   )
 
 
+def _barrier_id(
+  source_type: str,
+  side: str,
+  low: float,
+  high: float,
+  level_kind: str = "",
+) -> str:
+  return (
+    f"{source_type}:{side}:{level_kind}:"
+    f"{low:.5f}:{high:.5f}"
+  )
+
+
+def _structural_source_identity(
+  *,
+  strategy: str,
+  family: str,
+  structural_source: str,
+  low: float,
+  high: float,
+  key_level: float | None,
+  zone_id: str | None = None,
+  level_id: str | None = None,
+) -> StructuralSourceIdentity:
+  return StructuralSourceIdentity(
+    strategy=strategy,
+    strategy_family=family,
+    structural_source=structural_source,
+    zone_id=zone_id,
+    level_id=level_id,
+    key_level=key_level,
+    low=min(low, high),
+    high=max(low, high),
+  )
+
+
+def _structural_barriers(
+  zones: list[Zone],
+  levels: list[Level],
+  source: StructuralSourceIdentity,
+  direction: str,
+) -> list[StructuralBarrier]:
+  """Convert raw analysis structures into sided, source-aware barriers."""
+  result: list[StructuralBarrier] = []
+  supports = {"demand"} if direction == "BUY" else {"supply"}
+  for zone in zones:
+    barrier_id = _barrier_id(
+      "zone", zone.side, zone.low, zone.high, zone.kind,
+    )
+    overlaps_source = (
+      zone.low <= source.high and zone.high >= source.low
+    )
+    primary = bool(
+      source.zone_id == barrier_id
+      or (
+        overlaps_source
+        and zone.side in supports
+        and (
+          source.key_level is None
+          or zone.low <= source.key_level <= zone.high
+        )
+      )
+    )
+    result.append(StructuralBarrier(
+      barrier_id=barrier_id,
+      source_type="zone",
+      side=zone.side,
+      low=zone.low,
+      high=zone.high,
+      level_kind=zone.kind,
+      timeframe=_HTF_TIMEFRAME,
+      touches=zone.touches,
+      score=zone.score,
+      is_primary_source=primary,
+      is_supporting_source=overlaps_source and zone.side in supports,
+    ))
+  for level in levels:
+    low = level.price - level.band
+    high = level.price + level.band
+    barrier_id = _barrier_id(
+      "level", "neutral", low, high, level.kind,
+    )
+    primary = bool(
+      source.level_id == barrier_id
+      or (
+        low <= source.high
+        and high >= source.low
+        and source.key_level is not None
+        and low <= source.key_level <= high
+      )
+    )
+    result.append(StructuralBarrier(
+      barrier_id=barrier_id,
+      source_type="level",
+      side="neutral",
+      low=low,
+      high=high,
+      level_kind=level.kind,
+      timeframe=_HTF_TIMEFRAME,
+      touches=level.touches,
+      score=level.strength,
+      is_primary_source=primary,
+    ))
+  return result
+
+
+def _opposing_barrier_decision(
+  direction: str,
+  entry_reference: float,
+  target_reference: float | None,
+  atr: float | None,
+  zones: list[Zone],
+  levels: list[Level],
+  buffer_atr: float,
+  *,
+  source: StructuralSourceIdentity,
+  guard_mode: str,
+) -> ExecutionGuardDecision:
+  relationships: list[tuple[StructuralBarrier, str]] = []
+  for barrier in _structural_barriers(zones, levels, source, direction):
+    relationship = classify_barrier_relationship(
+      strategy=source.strategy,
+      direction=direction,
+      entry_reference=entry_reference,
+      target_reference=target_reference,
+      source_identity=source,
+      barrier=barrier,
+    )
+    relationships.append((barrier, relationship))
+
+  primary = next(
+    (
+      barrier for barrier, relationship in relationships
+      if relationship == "primary_source"
+    ),
+    None,
+  )
+  ambiguous = next(
+    (
+      barrier for barrier, relationship in relationships
+      if relationship == "overlapping_ambiguous"
+    ),
+    None,
+  )
+  if ambiguous is not None:
+    message = (
+      f"entry {entry_reference:.2f} inside opposing/ambiguous "
+      f"{ambiguous.level_kind or ambiguous.side} "
+      f"{ambiguous.low:.2f}-{ambiguous.high:.2f}"
+    )
+    decision = classify_guard_severity(
+      "opposing_barrier",
+      "entry_inside_opposing_zone",
+      message,
+      guard_mode=guard_mode,
+      hard_geometry=True,
+    )
+    return replace(
+      decision,
+      barrier=ambiguous,
+      measured={
+        "entry_reference": entry_reference,
+        "relationship": "overlapping_ambiguous",
+      },
+    )
+
+  ahead: list[tuple[float, StructuralBarrier]] = []
+  for barrier, relationship in relationships:
+    if relationship != "opposing_ahead":
+      continue
+    distance = (
+      barrier.low - entry_reference
+      if direction == "BUY"
+      else entry_reference - barrier.high
+    )
+    if distance >= 0:
+      ahead.append((distance, barrier))
+  if ahead and atr and atr > 0 and buffer_atr > 0:
+    distance, barrier = min(ahead, key=lambda item: item[0])
+    if distance <= buffer_atr * atr:
+      message = (
+        f"Opposing barrier ahead: {direction} into "
+        f"{barrier.level_kind or barrier.side} "
+        f"{barrier.low:.2f}-{barrier.high:.2f} "
+        f"({distance:.2f} away)"
+      )
+      decision = classify_guard_severity(
+        "opposing_barrier",
+        "opposing_barrier",
+        message,
+        guard_mode=guard_mode,
+      )
+      return replace(
+        decision,
+        barrier=barrier,
+        measured={
+          "entry_reference": entry_reference,
+          "distance": distance,
+          "distance_atr": distance / atr,
+          "relationship": "opposing_ahead",
+        },
+      )
+
+  if primary is not None:
+    return ExecutionGuardDecision(
+      "opposing_barrier",
+      OUTCOME_ALLOW,
+      "primary_source_excluded_from_barrier",
+      (
+        f"primary source {primary.low:.2f}-{primary.high:.2f} "
+        "excluded from opposing barriers"
+      ),
+      False,
+      measured={"relationship": "primary_source"},
+      barrier=primary,
+    )
+  return ExecutionGuardDecision(
+    "opposing_barrier",
+    OUTCOME_ALLOW,
+    "no_opposing_barrier",
+    "no opposing barrier",
+    False,
+  )
+
+
 def _opposing_barrier_reason(
   direction: str,
   entry_reference: float,
@@ -585,6 +850,9 @@ def _opposing_barrier_reason(
   zones: list[Zone],
   levels: list[Level],
   buffer_atr: float,
+  *,
+  exclude_low: float | None = None,
+  exclude_high: float | None = None,
 ) -> str | None:
   """Veto a direction about to run straight into an opposing HTF barrier it
   hasn't broken through yet (22 Jul incident: a Box Breakout BUY filled 20
@@ -599,38 +867,40 @@ def _opposing_barrier_reason(
   room by definition. Reason strings for this case start with "entry " so
   callers can attribute it to its own reject counter; see
   ``_opposing_barrier_condition`` below.
+
+  ``exclude_low``/``exclude_high``, when given, drop any barrier bound
+  that overlaps the candidate's own structural source before either check
+  runs - see ``_excludes_own_source``. A structural source must never veto
+  the strategy explicitly trading it.
   """
-  opposing_side = "supply" if direction == "BUY" else "demand"
-  bounds = [
-    (zone.low, zone.high, zone.side) for zone in zones if zone.side == opposing_side
-  ]
-  bounds += [
-    (level.price - level.band, level.price + level.band, level.kind)
-    for level in levels
-  ]
-  for low, high, kind in bounds:
-    if low <= entry_reference <= high:
-      return (
-        f"entry {entry_reference:.2f} inside opposing {kind} "
-        f"{low:.2f}-{high:.2f}"
-      )
-  if not atr or atr <= 0 or buffer_atr <= 0:
-    return None
-  ahead = []
-  for low, high, kind in bounds:
-    if direction == "BUY" and low > entry_reference:
-      ahead.append((low - entry_reference, low, high, kind))
-    elif direction == "SELL" and high < entry_reference:
-      ahead.append((entry_reference - high, low, high, kind))
-  if not ahead:
-    return None
-  distance, low, high, kind = min(ahead, key=lambda item: item[0])
-  if distance > buffer_atr * atr:
-    return None
-  return (
-    f"Opposing barrier ahead: {direction} into {kind} "
-    f"{low:.2f}-{high:.2f} ({distance:.2f} away)"
+  low = (
+    entry_reference if exclude_low is None
+    else min(exclude_low, exclude_high or exclude_low)
   )
+  high = (
+    entry_reference if exclude_high is None
+    else max(exclude_high, exclude_low or exclude_high)
+  )
+  source = _structural_source_identity(
+    strategy="legacy",
+    family="",
+    structural_source="legacy",
+    low=low,
+    high=high,
+    key_level=entry_reference if exclude_low is not None else None,
+  )
+  decision = _opposing_barrier_decision(
+    direction,
+    entry_reference,
+    None,
+    atr,
+    zones,
+    levels,
+    buffer_atr,
+    source=source,
+    guard_mode=GUARD_MODE_STRICT,
+  )
+  return decision.message if decision.hard_block else None
 
 
 def _opposing_barrier_condition(reason: str) -> str:
@@ -643,6 +913,64 @@ def _opposing_barrier_condition(reason: str) -> str:
     "entry_inside_opposing_zone" if reason.startswith("entry ")
     else "opposing_barrier"
   )
+
+
+def _counter_bias_barrier_between(
+  direction: str,
+  entry_reference: float,
+  target: float,
+  zones: list[Zone],
+  levels: list[Level],
+) -> tuple[float, str] | None:
+  """Nearest structural barrier strictly between ``entry_reference`` and
+  ``target``, as (near_edge_price, description). Shared by
+  ``_counter_bias_target_barrier_reason`` (existence check) and
+  ``_adapt_counter_bias_target`` (Fix 7 - anchor the target to the barrier
+  instead of only rejecting).
+  """
+  if direction == "BUY":
+    between = [
+      zone for zone in zones
+      if zone.side == "supply"
+      and zone.high >= entry_reference
+      and zone.low <= target
+    ]
+    barrier = _nearest_directional_zone("SELL", entry_reference, between)
+    if barrier is not None:
+      return barrier.low, f"{barrier.side} {barrier.low:.2f}-{barrier.high:.2f}"
+  else:
+    between = [
+      zone for zone in zones
+      if zone.side == "demand"
+      and zone.low <= entry_reference
+      and zone.high >= target
+    ]
+    barrier = _nearest_directional_zone("BUY", entry_reference, between)
+    if barrier is not None:
+      return barrier.high, f"{barrier.side} {barrier.low:.2f}-{barrier.high:.2f}"
+
+  level_bounds = [
+    (level.price - level.band, level.price + level.band, level.kind)
+    for level in levels
+  ]
+  ahead = [
+    (abs(entry_reference - low), low, high, kind)
+    for low, high, kind in level_bounds
+    if (
+      direction == "BUY"
+      and high >= entry_reference
+      and low <= target
+    ) or (
+      direction == "SELL"
+      and low <= entry_reference
+      and high >= target
+    )
+  ]
+  if not ahead:
+    return None
+  _, low, high, kind = min(ahead, key=lambda item: item[0])
+  near_edge = low if direction == "BUY" else high
+  return near_edge, f"{kind} {low:.2f}-{high:.2f}"
 
 
 def _counter_bias_target_barrier_reason(
@@ -663,52 +991,122 @@ def _counter_bias_target_barrier_reason(
       f"counter-bias target {target:.2f} is not ahead of "
       f"{match.direction} entry {entry_reference:.2f}"
     )
-
-  if match.direction == "BUY":
-    between = [
-      zone for zone in zones
-      if zone.side == "supply"
-      and zone.high >= entry_reference
-      and zone.low <= target
-    ]
-    barrier = _nearest_directional_zone("SELL", entry_reference, between)
-  else:
-    between = [
-      zone for zone in zones
-      if zone.side == "demand"
-      and zone.low <= entry_reference
-      and zone.high >= target
-    ]
-    barrier = _nearest_directional_zone("BUY", entry_reference, between)
-  if barrier is not None:
-    return (
-      f"counter-bias target blocked before EQ {target:.2f} by "
-      f"{barrier.side} {barrier.low:.2f}-{barrier.high:.2f}"
-    )
-
-  level_bounds = [
-    (level.price - level.band, level.price + level.band, level.kind)
-    for level in levels
-  ]
-  ahead = [
-    (abs(entry_reference - low), low, high, kind)
-    for low, high, kind in level_bounds
-    if (
-      match.direction == "BUY"
-      and high >= entry_reference
-      and low <= target
-    ) or (
-      match.direction == "SELL"
-      and low <= entry_reference
-      and high >= target
-    )
-  ]
-  if not ahead:
+  barrier = _counter_bias_barrier_between(
+    match.direction, entry_reference, target, zones, levels,
+  )
+  if barrier is None:
     return None
-  _, low, high, kind = min(ahead, key=lambda item: item[0])
-  return (
-    f"counter-bias target blocked before EQ {target:.2f} by "
-    f"{kind} {low:.2f}-{high:.2f}"
+  _, description = barrier
+  return f"counter-bias target blocked before EQ {target:.2f} by {description}"
+
+
+_MIN_COUNTER_BIAS_TARGET_PIPS = 15
+
+
+def _adapt_counter_bias_target(
+  match: StrategyMatch,
+  entry_reference: float,
+  zones: list[Zone],
+  levels: list[Level],
+  pip_size: float,
+) -> tuple[StrategyMatch, GuardOutcome]:
+  """Fix 7: a barrier before a counter-bias target caps the target instead
+  of rejecting the setup outright. Selects the largest configured target
+  that still fits inside the room to the barrier (buffered a couple of
+  pips short of it), and trims ``targets_pips`` to match; only blocks when
+  even the smallest configured target does not fit.
+  """
+  target = float(match.target_price) if match.target_price is not None else None
+  if target is None or "counter_bias" not in match.tags:
+    return match, GuardOutcome(
+      "counter_bias", OUTCOME_ALLOW, "not_counter_bias", "", False,
+    )
+  if (
+    match.direction == "BUY" and target <= entry_reference
+    or match.direction == "SELL" and target >= entry_reference
+  ):
+    # Not adaptable - the target itself is on the wrong side of entry,
+    # a genuine invalidation regardless of guard mode.
+    return match, GuardOutcome(
+      "counter_bias",
+      "block",
+      "target_not_ahead_of_entry",
+      f"counter-bias target {target:.2f} is not ahead of "
+      f"{match.direction} entry {entry_reference:.2f}",
+      True,
+    )
+  source_levels = [
+    level for level in levels
+    if not (
+      level.price - level.band <= match.key_level <= level.price + level.band
+      and level.price - level.band <= match.entry_high
+      and level.price + level.band >= match.entry_low
+    )
+  ]
+  barrier = _counter_bias_barrier_between(
+    match.direction, entry_reference, target, zones, source_levels,
+  )
+  if barrier is None:
+    return match, GuardOutcome(
+      "counter_bias", OUTCOME_ALLOW, "no_barrier", "no barrier before target", False,
+    )
+  barrier_price, description = barrier
+  buffer_pips = 2.0
+  if match.direction == "BUY":
+    room_pips = (barrier_price - entry_reference) / pip_size - buffer_pips
+  else:
+    room_pips = (entry_reference - barrier_price) / pip_size - buffer_pips
+  fitted = max(
+    (pips for pips in match.targets_pips if pips <= room_pips),
+    default=None,
+  )
+  if fitted is None and room_pips >= _MIN_COUNTER_BIAS_TARGET_PIPS:
+    fitted = max(
+      _MIN_COUNTER_BIAS_TARGET_PIPS,
+      int(math.floor(room_pips)),
+    )
+  if fitted is None:
+    return match, GuardOutcome(
+      "counter_bias",
+      "block",
+      "target_room_insufficient",
+      (
+        f"counter-bias target blocked before EQ {target:.2f} by {description}: "
+        f"room {room_pips:.1f}p does not fit the smallest configured target "
+        f"({min(match.targets_pips) if match.targets_pips else 0}p)"
+      ),
+      True,
+      measured={"available_room_pips": round(room_pips, 1), "barrier_price": barrier_price},
+    )
+  adjusted_target = (
+    entry_reference + fitted * pip_size
+    if match.direction == "BUY"
+    else entry_reference - fitted * pip_size
+  )
+  adapted = replace(
+    match,
+    target_price=adjusted_target,
+    targets_pips=tuple(sorted(set([
+      *(p for p in match.targets_pips if p <= room_pips),
+      fitted,
+    ]))),
+  )
+  return adapted, GuardOutcome(
+    "counter_bias",
+    "adjust_target",
+    "target_capped_by_structure",
+    (
+      f"counter-bias target adapted {target:.2f} -> {adjusted_target:.2f} "
+      f"(room {room_pips:.1f}p, barrier {description})"
+    ),
+    False,
+    measured={
+      "original_target": target,
+      "adjusted_target": adjusted_target,
+      "barrier_price": barrier_price,
+      "available_room_pips": round(room_pips, 1),
+      "selected_target_pips": fitted,
+    },
   )
 
 
@@ -726,13 +1124,27 @@ async def _zone_cooldown_reason(
 ) -> str | None:
   """Veto a same-direction re-entry near a price that just stopped a trade
   out (23 Jul 2026 incident: a stopped-out zone was re-traded 15 minutes
-  later). The marker is written by AutoTradeEngine.cs whenever a tracked
-  position vanishes from the broker without the engine itself having closed
-  it - always ambiguous (SL hit or manual close), so it's written
-  unconditionally on every such close; a clean take-profit exit never
-  produces one (see AutoTradeEngine.cs's reconcile stale-position branch).
+  later).
+
+  The marker is written by AutoTradeEngine.cs whenever a tracked position
+  vanishes from the broker without the engine itself having closed it - a
+  clean take-profit exit never produces one (see AutoTradeEngine.cs's
+  reconcile stale-position branch) - but the vanish itself is ambiguous
+  between a genuine stop-loss and a manual/external close, and the current
+  broker integration has no execution-history lookup to tell them apart.
+  Root cause of the post-23-Jul frequency collapse: the marker was treated
+  as a confirmed stop-out unconditionally, blocking every ambiguous close
+  (including manual closes) for the full cooldown window. Only a marker
+  explicitly tagged ``reason=stop_loss`` and ``confidence=confirmed``
+  enforces the block now; legacy markers and anything the engine could not
+  positively attribute pass straight through (fail open, matching the
+  pattern the zone-reconcile circuit breaker already uses for "don't guess,
+  don't destroy the opportunity").
   """
-  if not atr or atr <= 0 or cooldown_atr <= 0:
+  if (
+    not settings.auto_trade_zone_cooldown_enabled
+    or not atr or atr <= 0 or cooldown_atr <= 0
+  ):
     return None
   raw = await client.get(_zone_cooldown_key(symbol, direction))
   if raw is None:
@@ -741,6 +1153,11 @@ async def _zone_cooldown_reason(
     state = json.loads(raw)
     recorded_entry = float(state["entry_price"])
   except (TypeError, ValueError, KeyError, json.JSONDecodeError):
+    return None
+  if (
+    state.get("reason") != "stop_loss"
+    or state.get("confidence") != "confirmed"
+  ):
     return None
   distance_atr = abs(entry_reference - recorded_entry) / atr
   if distance_atr > cooldown_atr:
@@ -793,6 +1210,78 @@ def _overlapping_zone_conflict_reason(
     f"entry {entry_reference:.2f} inside both demand "
     f"{demand_hit.lo:.2f}-{demand_hit.hi:.2f} and supply "
     f"{supply_hit.lo:.2f}-{supply_hit.hi:.2f}"
+  )
+
+
+def _resolve_overlap_thesis(
+  direction: str,
+  entry_reference: float,
+  market_map: MarketMap | None,
+  m1: Any,
+  atr: float | None,
+  cfg: Any,
+) -> GuardOutcome:
+  """Resolve an entry inside both a demand and a supply band by the same
+  M1 reaction-lookback memory ``map_strategy.py`` already computes for its
+  own reaction selection (PR #100), instead of the previous unconditional
+  "both directions are dead" veto. Never trims or deletes either band from
+  the Market Map itself - this only decides whether THIS candidate's
+  thesis has directional confirmation.
+  """
+  from app.autotrade.map_strategy import _reaction_in_lookback
+
+  guard_mode = resolve_guard_mode(cfg)
+  if market_map is None:
+    return GuardOutcome("overlap", OUTCOME_ALLOW, "no_map", "no market map", False)
+  demand_hit = next(
+    (entry for entry in market_map.buys if entry.lo <= entry_reference <= entry.hi),
+    None,
+  )
+  supply_hit = next(
+    (entry for entry in market_map.sells if entry.lo <= entry_reference <= entry.hi),
+    None,
+  )
+  if demand_hit is None or supply_hit is None:
+    return GuardOutcome("overlap", OUTCOME_ALLOW, "no_overlap", "no overlap", False)
+  reason = (
+    f"entry {entry_reference:.2f} inside both demand "
+    f"{demand_hit.lo:.2f}-{demand_hit.hi:.2f} and supply "
+    f"{supply_hit.lo:.2f}-{supply_hit.hi:.2f}"
+  )
+  strict_block = guard_mode == GUARD_MODE_STRICT
+  if m1 is None or getattr(m1, "empty", True) or not atr or atr <= 0:
+    # No reaction data to resolve with - can't distinguish resolved from
+    # ambiguous, so treat it the same as a genuinely ambiguous overlap.
+    return GuardOutcome(
+      "overlap", OUTCOME_WAIT, "ambiguous_waiting_confirmation", reason, strict_block,
+    )
+  tolerance = max(0.05, 0.5 * atr)
+  own_entry = demand_hit if direction == "BUY" else supply_hit
+  own_reaction = _reaction_in_lookback(
+    m1, own_entry, direction, atr, tolerance, cfg, entry_reference,
+  )
+  if own_reaction is not None and own_reaction.reaction_type in ("rejection", "reclaim"):
+    return GuardOutcome(
+      "overlap", OUTCOME_ALLOW, "reaction_direction_resolved",
+      f"{reason} - {direction} {own_reaction.reaction_type} confirms thesis",
+      False,
+    )
+  opposite_direction = "SELL" if direction == "BUY" else "BUY"
+  opposite_entry = supply_hit if direction == "BUY" else demand_hit
+  opposite_reaction = _reaction_in_lookback(
+    m1, opposite_entry, opposite_direction, atr, tolerance, cfg, entry_reference,
+  )
+  if (
+    opposite_reaction is not None
+    and opposite_reaction.reaction_type in ("rejection", "reclaim")
+  ):
+    return GuardOutcome(
+      "overlap", OUTCOME_WAIT, "opposing_zone_ahead",
+      f"{reason} - {opposite_direction} reaction confirmed instead of {direction}",
+      strict_block,
+    )
+  return GuardOutcome(
+    "overlap", OUTCOME_WAIT, "ambiguous_waiting_confirmation", reason, strict_block,
   )
 
 
@@ -853,6 +1342,74 @@ async def _record_gate_reject(client: Any, symbol: str, condition: str) -> None:
   except Exception:
     log.exception(
       "gate-reject counter failed symbol=%s condition=%s", symbol, condition,
+    )
+
+
+async def _record_guard_evaluation(
+  client: Any,
+  symbol: str,
+  outcome: GuardOutcome,
+  *,
+  strategy: str = "",
+  direction: str = "",
+  source_structure: str = "",
+) -> None:
+  """Fix 10: full observability for every structural-guard evaluation, not
+  just terminal blocks - `auto_trade:gate_reject:*` (legacy) only
+  increments when ``outcome.hard_block`` is true; this counter always
+  fires so allow/warning/wait/adjust outcomes stay visible too.
+  """
+  try:
+    now = int(datetime.now(timezone.utc).timestamp())
+    counter_key = (
+      f"auto_trade:guard_evaluation:{symbol.upper()}:"
+      f"{outcome.guard}:{outcome.outcome}"
+    )
+    await client.hincrby(
+      counter_key,
+      "count",
+      1,
+    )
+    await client.hset(counter_key, mapping={"last_at": now})
+    metric_key = None
+    if outcome.reason_code == "primary_source_excluded_from_barrier":
+      metric_key = "primary_source_excluded_from_barrier"
+    elif outcome.reason_code == "ambiguous_waiting_confirmation":
+      metric_key = "ambiguous_overlap_waiting"
+    elif outcome.outcome == OUTCOME_WAIT:
+      metric_key = "structural_guard_waiting"
+    elif outcome.hard_block:
+      metric_key = "structural_guard_would_block"
+    elif outcome.outcome != OUTCOME_ALLOW:
+      metric_key = "structural_guard_allowed_demo"
+    if metric_key:
+      await client.hincrby(
+        f"auto_trade:metrics:{symbol.upper()}", metric_key, 1,
+      )
+    barrier = (
+      asdict(outcome.barrier) if outcome.barrier is not None else None
+    )
+    await client.set(
+      f"auto_trade:last_guard:{symbol.upper()}",
+      json.dumps({
+        "strategy": strategy,
+        "direction": direction,
+        "guard": outcome.guard,
+        "outcome": outcome.outcome,
+        "reason": outcome.reason_code,
+        "message": outcome.message,
+        "hard_block": outcome.hard_block,
+        "source_structure": source_structure,
+        "opposing_structure": barrier,
+        "measured": outcome.measured,
+        "updated_at": now,
+      }, separators=(",", ":"), sort_keys=True),
+      ex=86400,
+    )
+  except Exception:
+    log.exception(
+      "guard-evaluation counter failed symbol=%s guard=%s outcome=%s",
+      symbol, outcome.guard, outcome.outcome,
     )
 
 
@@ -990,6 +1547,7 @@ async def _publish_candidate(
   htf_levels: list[Level] | None = None,
   gate_source: str = "private_ohlc",
   market_map: MarketMap | None = None,
+  frames: dict[str, Any] | None = None,
 ) -> str | None:
   if (
     not settings.auto_trade_enabled
@@ -1002,13 +1560,6 @@ async def _publish_candidate(
     or decision.direction is None
     or scale_context is None
     or decision.confluence < max(1, settings.auto_trade_min_confluence)
-    # Box-scalp is a mean-reversion play on an actual consolidation - it must
-    # not fire once the regime classifier has already moved on to trend/
-    # breakout (22 Jul incident: a box-labeled BUY filled straight into a
-    # sharp post-rally pullback and was stopped in under a minute). regime
-    # is only None in tests that don't care about this axis; a real caller
-    # always passes it.
-    or (regime is not None and regime.state != "chop")
   ):
     return None
   if decision.full_tp_pips not in configured_range_targets():
@@ -1019,17 +1570,55 @@ async def _publish_candidate(
     await _record_gate_reject(client, symbol, "insufficient_target_room")
     return None
   entry_reference = spot.price
+  guard_mode = resolve_guard_mode(settings)
+  if regime is not None and regime.state != "chop":
+    regime_outcome = classify_guard_severity(
+      "regime",
+      "range_edge_not_chop",
+      (
+        f"range-box strategy evaluated while regime={regime.state}; "
+        "strategy geometry remains authoritative"
+      ),
+      guard_mode=guard_mode,
+    )
+    await _record_guard_evaluation(
+      client, symbol, regime_outcome,
+      strategy="Range Box Scalp",
+      direction=decision.direction,
+      source_structure=(
+        f"range_box_edge {decision.rail.low:.2f}-{decision.rail.high:.2f}"
+      ),
+    )
+    if regime_outcome.hard_block:
+      await _record_gate_reject(client, symbol, "range_edge_not_chop")
+      return None
   eq_reason = _eq_exclusion_reason(
     decision.box,
     entry_reference,
     settings.auto_trade_eq_exclusion_fraction,
   )
   if eq_reason is not None:
-    log.info(
-      "auto-scalp candidate blocked symbol=%s reason=%s", symbol, eq_reason,
+    eq_outcome = classify_guard_severity(
+      "eq_exclusion",
+      "eq_exclusion",
+      eq_reason,
+      guard_mode=guard_mode,
     )
-    await _record_gate_reject(client, symbol, "eq_exclusion")
-    return None
+    await _record_guard_evaluation(
+      client, symbol, eq_outcome,
+      strategy="Range Box Scalp",
+      direction=decision.direction,
+      source_structure="range_box_edge",
+    )
+    log.info(
+      "auto-scalp candidate %s symbol=%s reason=%s",
+      "blocked" if eq_outcome.hard_block else eq_outcome.outcome,
+      symbol,
+      eq_reason,
+    )
+    if eq_outcome.hard_block:
+      await _record_gate_reject(client, symbol, "eq_exclusion")
+      return None
   edge_reason = _edge_proximity_reason(
     decision.rail,
     entry_reference,
@@ -1037,53 +1626,141 @@ async def _publish_candidate(
     settings.auto_trade_edge_proximity_atr,
   )
   if edge_reason is not None:
-    log.info(
-      "auto-scalp candidate blocked symbol=%s reason=%s", symbol, edge_reason,
+    edge_outcome = classify_guard_severity(
+      "edge_proximity",
+      "edge_proximity",
+      edge_reason,
+      guard_mode=guard_mode,
     )
-    await _record_gate_reject(client, symbol, "edge_proximity")
-    return None
+    await _record_guard_evaluation(
+      client, symbol, edge_outcome,
+      strategy="Range Box Scalp",
+      direction=decision.direction,
+      source_structure="range_box_edge",
+    )
+    log.info(
+      "auto-scalp candidate %s symbol=%s reason=%s",
+      "blocked" if edge_outcome.hard_block else edge_outcome.outcome,
+      symbol,
+      edge_reason,
+    )
+    if edge_outcome.hard_block:
+      await _record_gate_reject(client, symbol, "edge_proximity")
+      return None
   opposing_zone = _nearest_directional_zone(
     decision.direction, entry_reference, htf_zones or [],
   )
   if settings.auto_trade_htf_veto_enabled:
     veto_reason = _htf_veto_reason(decision.direction, entry_reference, opposing_zone)
     if veto_reason is not None:
-      log.info(
-        "auto-scalp candidate blocked symbol=%s reason=%s", symbol, veto_reason,
+      veto_outcome = classify_guard_severity(
+        "htf_veto",
+        "htf_veto",
+        veto_reason,
+        guard_mode=guard_mode,
       )
-      await _record_gate_reject(client, symbol, "htf_veto")
-      return None
-  if settings.auto_trade_opposing_barrier_veto_enabled:
-    barrier_reason = _opposing_barrier_reason(
-      decision.direction, entry_reference, scale_context.atr,
+      await _record_guard_evaluation(
+        client, symbol, veto_outcome,
+        strategy="Range Box Scalp",
+        direction=decision.direction,
+        source_structure="range_box_edge",
+      )
+      log.info(
+        "auto-scalp candidate %s symbol=%s reason=%s",
+        "blocked" if veto_outcome.hard_block else veto_outcome.outcome,
+        symbol,
+        veto_reason,
+      )
+      if veto_outcome.hard_block:
+        await _record_gate_reject(client, symbol, "htf_veto")
+        return None
+  m1 = (frames or {}).get("M1") if frames is not None else None
+  if (
+    settings.auto_trade_opposing_barrier_veto_enabled
+    or guard_mode == GUARD_MODE_OBSERVE
+  ):
+    source = _structural_source_identity(
+      strategy="Range Box Scalp",
+      family="range",
+      structural_source="range_box_edge",
+      low=decision.rail.low,
+      high=decision.rail.high,
+      key_level=decision.rail.level,
+      zone_id=f"{decision.box.box_id}:{decision.direction.upper()}",
+    )
+    barrier_outcome = _opposing_barrier_decision(
+      decision.direction, entry_reference, None, scale_context.atr,
       htf_zones or [], htf_levels or [],
       settings.auto_trade_opposing_barrier_atr,
+      source=source,
+      guard_mode=guard_mode,
     )
-    if barrier_reason is not None:
+    if barrier_outcome.reason_code != "no_opposing_barrier":
+      await _record_guard_evaluation(
+        client, symbol, barrier_outcome,
+        strategy="Range Box Scalp",
+        direction=decision.direction,
+        source_structure="range_box_edge",
+      )
       log.info(
-        "auto-scalp candidate blocked symbol=%s reason=%s", symbol, barrier_reason,
+        "auto-scalp candidate %s symbol=%s reason=%s",
+        "blocked" if barrier_outcome.hard_block else barrier_outcome.outcome,
+        symbol, barrier_outcome.message,
       )
+    if barrier_outcome.hard_block:
       await _record_gate_reject(
-        client, symbol, _opposing_barrier_condition(barrier_reason),
+        client, symbol, barrier_outcome.reason_code,
       )
+      return None
+    if barrier_outcome.outcome == OUTCOME_WAIT:
       return None
   cooldown_reason = await _zone_cooldown_reason(
     client, symbol, decision.direction, entry_reference,
     scale_context.atr, settings.auto_trade_zone_cooldown_atr,
   )
   if cooldown_reason is not None:
-    log.info(
-      "auto-scalp candidate blocked symbol=%s reason=%s", symbol, cooldown_reason,
+    cooldown_outcome = classify_guard_severity(
+      "zone_cooldown", "zone_cooldown", cooldown_reason,
+      guard_mode=guard_mode, hard_geometry=False,
     )
-    await _record_gate_reject(client, symbol, "zone_cooldown")
-    return None
-  if settings.auto_trade_overlap_veto_enabled:
-    overlap_reason = _overlapping_zone_conflict_reason(entry_reference, market_map)
-    if overlap_reason is not None:
-      log.info(
-        "auto-scalp candidate blocked symbol=%s reason=%s", symbol, overlap_reason,
+    await _record_guard_evaluation(
+      client, symbol, cooldown_outcome,
+      strategy="Range Box Scalp",
+      direction=decision.direction,
+      source_structure="range_box_edge",
+    )
+    log.info(
+      "auto-scalp candidate %s symbol=%s reason=%s",
+      "blocked" if cooldown_outcome.hard_block else cooldown_outcome.outcome,
+      symbol, cooldown_reason,
+    )
+    if cooldown_outcome.hard_block:
+      await _record_gate_reject(client, symbol, "zone_cooldown")
+      return None
+  if (
+    settings.auto_trade_overlap_veto_enabled
+    or guard_mode == GUARD_MODE_OBSERVE
+  ):
+    overlap_outcome = _resolve_overlap_thesis(
+      decision.direction, entry_reference, market_map, m1,
+      scale_context.atr, settings,
+    )
+    if overlap_outcome.reason_code not in ("no_map", "no_overlap"):
+      await _record_guard_evaluation(
+        client, symbol, overlap_outcome,
+        strategy="Range Box Scalp",
+        direction=decision.direction,
+        source_structure="range_box_edge",
       )
+      log.info(
+        "auto-scalp candidate %s symbol=%s reason=%s",
+        "blocked" if overlap_outcome.hard_block else overlap_outcome.outcome,
+        symbol, overlap_outcome.message,
+      )
+    if overlap_outcome.hard_block:
       await _record_gate_reject(client, symbol, "overlapping_zone_conflict")
+      return None
+    if overlap_outcome.outcome == OUTCOME_WAIT:
       return None
 
   now = int(datetime.now(timezone.utc).timestamp())
@@ -1236,6 +1913,7 @@ async def _publish_strategy_match(
   htf_levels: list[Level] | None = None,
   regime: RegimeInfo | None = None,
   market_map: MarketMap | None = None,
+  frames: dict[str, Any] | None = None,
 ) -> str | None:
   """Publish a completed scanner strategy match without PA re-confirmation."""
   if spot is None or not spot.fresh:
@@ -1263,6 +1941,11 @@ async def _publish_strategy_match(
     or match.confluence < max(1, settings.auto_trade_min_confluence)
   ):
     return None
+  guard_mode = resolve_guard_mode(settings)
+  source_summary = (
+    f"{match.structural_source or match.strategy} "
+    f"{match.entry_low:.2f}-{match.entry_high:.2f}"
+  )
   if match.is_range_edge:
     # Range Edge Scalp ("Range Box Scalp" label) is a mean-reversion play on
     # an actual consolidation, same as the private box gate above - it must
@@ -1272,16 +1955,30 @@ async def _publish_strategy_match(
     # Sweep, Mapped Zone Reaction, ...) are trend/breakout-appropriate by
     # design and stay ungated here.
     if regime is not None and regime.state != "chop":
-      if consume_redis_match:
-        await client.delete(strategy_match_key(symbol))
-      await _record_gate_reject(client, symbol, "range_edge_not_chop")
-      return None
+      regime_outcome = classify_guard_severity(
+        "regime",
+        "range_edge_not_chop",
+        (
+          f"range-edge strategy evaluated while regime={regime.state}; "
+          "strategy structure remains authoritative"
+        ),
+        guard_mode=guard_mode,
+      )
+      await _record_guard_evaluation(
+        client, symbol, regime_outcome,
+        strategy=match.strategy,
+        direction=match.direction,
+        source_structure=source_summary,
+      )
+      if regime_outcome.hard_block:
+        await _consume_strategy_match(client, symbol, match)
+        await _record_gate_reject(client, symbol, "range_edge_not_chop")
+        return None
     assert match.range_id is not None
     assert match.range_low is not None
     assert match.range_high is not None
     if await client.exists(_box_retired_key(symbol, match.range_id)):
-      if consume_redis_match:
-        await client.delete(strategy_match_key(symbol))
+      await _consume_strategy_match(client, symbol, match)
       return None
     edge_key = _box_edge_key(symbol, match.range_id, match.direction)
     if await client.exists(edge_key):
@@ -1294,68 +1991,152 @@ async def _publish_strategy_match(
       if not crossed_midpoint:
         return None
       await client.delete(edge_key)
-  counter_bias_barrier = _counter_bias_target_barrier_reason(
-    match,
-    spot.price,
-    htf_zones or [],
-    htf_levels or [],
+  m1 = (frames or {}).get("M1")
+
+  match, cb_outcome = _adapt_counter_bias_target(
+    match, spot.price, htf_zones or [], htf_levels or [], units.pip_size(symbol),
   )
-  if counter_bias_barrier is not None:
+  if cb_outcome.reason_code not in ("not_counter_bias", "no_barrier"):
+    await _record_guard_evaluation(
+      client, symbol, cb_outcome,
+      strategy=match.strategy,
+      direction=match.direction,
+      source_structure=source_summary,
+    )
     log.info(
-      "strategy match blocked symbol=%s strategy=%s reason=%s",
-      symbol,
-      match.strategy,
-      counter_bias_barrier,
+      "strategy match %s symbol=%s strategy=%s reason=%s",
+      "blocked" if cb_outcome.hard_block else cb_outcome.outcome,
+      symbol, match.strategy, cb_outcome.message,
     )
-    if consume_redis_match:
-      await client.delete(strategy_match_key(symbol))
-    await _record_gate_reject(
-      client,
-      symbol,
-      "counter_bias_target_barrier",
-    )
+  if cb_outcome.hard_block:
+    await _consume_strategy_match(client, symbol, match)
+    await _record_gate_reject(client, symbol, "counter_bias_target_barrier")
     return None
-  if settings.auto_trade_opposing_barrier_veto_enabled:
-    barrier_reason = _opposing_barrier_reason(
-      match.direction, spot.price, match.atr,
+
+  if (
+    settings.auto_trade_opposing_barrier_veto_enabled
+    or guard_mode == GUARD_MODE_OBSERVE
+  ):
+    source = _structural_source_identity(
+      strategy=match.strategy,
+      family=match.family,
+      structural_source=match.structural_source or match.strategy,
+      low=match.entry_low,
+      high=match.entry_high,
+      key_level=match.key_level,
+      zone_id=match.zone_id,
+      level_id=match.level_id,
+    )
+    barrier_outcome = _opposing_barrier_decision(
+      match.direction, spot.price, match.target_price, match.atr,
       htf_zones or [], htf_levels or [],
       settings.auto_trade_opposing_barrier_atr,
+      source=source,
+      guard_mode=guard_mode,
     )
-    if barrier_reason is not None:
-      log.info(
-        "strategy match blocked symbol=%s strategy=%s reason=%s",
-        symbol, match.strategy, barrier_reason,
+    if barrier_outcome.reason_code != "no_opposing_barrier":
+      await _record_guard_evaluation(
+        client, symbol, barrier_outcome,
+        strategy=match.strategy,
+        direction=match.direction,
+        source_structure=source_summary,
       )
-      if consume_redis_match:
-        await client.delete(strategy_match_key(symbol))
+      log.info(
+        "strategy match %s symbol=%s strategy=%s reason=%s",
+        "blocked" if barrier_outcome.hard_block else barrier_outcome.outcome,
+        symbol, match.strategy, barrier_outcome.message,
+      )
+    if barrier_outcome.hard_block:
+      await _consume_strategy_match(client, symbol, match)
       await _record_gate_reject(
-        client, symbol, _opposing_barrier_condition(barrier_reason),
+        client, symbol, barrier_outcome.reason_code,
       )
       return None
+    if barrier_outcome.outcome == OUTCOME_WAIT:
+      return None
+
   cooldown_reason = await _zone_cooldown_reason(
     client, symbol, match.direction, spot.price,
     match.atr, settings.auto_trade_zone_cooldown_atr,
   )
   if cooldown_reason is not None:
+    cooldown_outcome = classify_guard_severity(
+      "zone_cooldown", "zone_cooldown", cooldown_reason,
+      guard_mode=guard_mode, hard_geometry=False,
+    )
+    await _record_guard_evaluation(
+      client, symbol, cooldown_outcome,
+      strategy=match.strategy,
+      direction=match.direction,
+      source_structure=source_summary,
+    )
     log.info(
-      "strategy match blocked symbol=%s strategy=%s reason=%s",
+      "strategy match %s symbol=%s strategy=%s reason=%s",
+      "blocked" if cooldown_outcome.hard_block else cooldown_outcome.outcome,
       symbol, match.strategy, cooldown_reason,
     )
-    if consume_redis_match:
-      await client.delete(strategy_match_key(symbol))
-    await _record_gate_reject(client, symbol, "zone_cooldown")
-    return None
-  if settings.auto_trade_overlap_veto_enabled:
-    overlap_reason = _overlapping_zone_conflict_reason(spot.price, market_map)
-    if overlap_reason is not None:
-      log.info(
-        "strategy match blocked symbol=%s strategy=%s reason=%s",
-        symbol, match.strategy, overlap_reason,
+    if cooldown_outcome.hard_block:
+      await _consume_strategy_match(client, symbol, match)
+      await _record_gate_reject(client, symbol, "zone_cooldown")
+      return None
+
+  if (
+    settings.auto_trade_overlap_veto_enabled
+    or guard_mode == GUARD_MODE_OBSERVE
+  ):
+    overlap_outcome = _resolve_overlap_thesis(
+      match.direction, spot.price, market_map, m1, match.atr, settings,
+    )
+    if overlap_outcome.reason_code not in ("no_map", "no_overlap"):
+      await _record_guard_evaluation(
+        client, symbol, overlap_outcome,
+        strategy=match.strategy,
+        direction=match.direction,
+        source_structure=source_summary,
       )
-      if consume_redis_match:
-        await client.delete(strategy_match_key(symbol))
+      log.info(
+        "strategy match %s symbol=%s strategy=%s reason=%s",
+        "blocked" if overlap_outcome.hard_block else overlap_outcome.outcome,
+        symbol, match.strategy, overlap_outcome.message,
+      )
+    if overlap_outcome.hard_block:
+      await _consume_strategy_match(client, symbol, match)
       await _record_gate_reject(client, symbol, "overlapping_zone_conflict")
       return None
+    if overlap_outcome.outcome == OUTCOME_WAIT:
+      return None
+
+  invalidated = (
+    match.direction == "BUY" and spot.price < match.structure_swing
+    or match.direction == "SELL" and spot.price > match.structure_swing
+  )
+  if invalidated:
+    invalidation_outcome = ExecutionGuardDecision(
+      "entry_drift",
+      "block",
+      "reaction_crossed_invalidation",
+      (
+        f"{match.direction} reaction crossed invalidation "
+        f"{match.structure_swing:.2f} at {spot.price:.2f}"
+      ),
+      True,
+      measured={
+        "spot_price": spot.price,
+        "invalidation_price": match.structure_swing,
+      },
+    )
+    await _record_guard_evaluation(
+      client, symbol, invalidation_outcome,
+      strategy=match.strategy,
+      direction=match.direction,
+      source_structure=source_summary,
+    )
+    await _consume_strategy_match(client, symbol, match)
+    await _record_gate_reject(
+      client, symbol, "reaction_crossed_invalidation",
+    )
+    return None
+
   distance = (
     match.entry_low - spot.price
     if spot.price < match.entry_low
@@ -1364,7 +2145,6 @@ async def _publish_strategy_match(
     else 0.0
   )
   distance_pips = distance / units.pip_size(symbol)
-  from app.autotrade.execution_policy import max_entry_drift_pips
   remaining_room = None
   if match.full_take_profit_pips:
     remaining_room = float(match.full_take_profit_pips)
@@ -1376,18 +2156,57 @@ async def _publish_strategy_match(
     cfg=settings,
   )
   if distance_pips > distance_limit:
+    # Genuinely stale only when even the strategy's absolute hard cap is
+    # exceeded - a single tick beyond the (now latency-realistic) adaptive
+    # limit is a non-terminal "wait", not an invalidation (Fix 9).
+    hard_cap = drift_measured.get("hard_cap_pips", distance_limit)
+    drift_outcome = (
+      ExecutionGuardDecision(
+        "entry_drift",
+        "block",
+        "strategy_entry_moved_beyond_hard_cap",
+        (
+          f"entry moved {distance_pips:.1f}p beyond hard cap "
+          f"{hard_cap:.1f}p"
+        ),
+        True,
+        measured={
+          **drift_measured,
+          "distance_pips": round(distance_pips, 3),
+        },
+      )
+      if distance_pips > hard_cap else ExecutionGuardDecision(
+        "entry_drift",
+        OUTCOME_WAIT,
+        "strategy_entry_moved",
+        f"entry moved {distance_pips:.1f}p (limit {distance_limit:.1f}p)",
+        False,
+        measured={
+          **drift_measured,
+          "distance_pips": round(distance_pips, 3),
+        },
+      )
+    )
+    await _record_guard_evaluation(
+      client, symbol, drift_outcome,
+      strategy=match.strategy,
+      direction=match.direction,
+      source_structure=source_summary,
+    )
     log.info(
-      "strategy match skipped id=%s strategy=%s: entry moved %.1f pips "
+      "strategy match %s id=%s strategy=%s: entry moved %.1f pips "
       "(limit %.1f measured=%s)",
+      "blocked" if drift_outcome.hard_block else drift_outcome.outcome,
       match.match_id[:12],
       match.strategy,
       distance_pips,
       distance_limit,
       drift_measured,
     )
-    if consume_redis_match:
-      await client.delete(strategy_match_key(symbol))
-    await _record_gate_reject(client, symbol, "strategy_entry_moved")
+    if drift_outcome.hard_block:
+      await _consume_strategy_match(client, symbol, match)
+      await _record_gate_reject(client, symbol, "strategy_entry_moved")
+      return None
     return None
   now = int(datetime.now(timezone.utc).timestamp())
   try:
@@ -1414,8 +2233,7 @@ async def _publish_strategy_match(
     nx=True,
   )
   if not claimed:
-    if consume_redis_match:
-      await client.delete(strategy_match_key(symbol))
+    await _consume_strategy_match(client, symbol, match)
     return None
   setup = (
     f"{match.strategy} · counter_bias"
@@ -1431,12 +2249,14 @@ async def _publish_strategy_match(
     "group_id": _strategy_group_id(match),
     "strategy_family": match.family or "scanner",
     "zone_id": (
-      match.range_id
+      match.zone_id
+      or match.range_id
       or f"{match.key_level:.5f}:{match.entry_low:.5f}:{match.entry_high:.5f}"
     ),
+    "level_id": match.level_id,
     "trigger_id": match.event_ts,
     "parent_group_id": None,
-    "structural_source": match.strategy,
+    "structural_source": match.structural_source or match.strategy,
     "symbol": symbol.upper(),
     "timeframe": match.source_tf,
     "setup": setup,
@@ -1478,6 +2298,10 @@ async def _publish_strategy_match(
       else "neutral" if market_map is None or market_map.bias == "range"
       else "with_bias"
     ),
+    "target_adjustment": (
+      cb_outcome.measured
+      if cb_outcome.outcome == "adjust_target" else None
+    ),
   }
   try:
     await client.xadd(
@@ -1516,8 +2340,7 @@ async def _publish_strategy_match(
       direction=match.direction,
       candidate_id=candidate_id,
     )
-  if consume_redis_match:
-    await client.delete(strategy_match_key(symbol))
+  await _consume_strategy_match(client, symbol, match)
   if match.is_range_edge:
     await client.set(
       _box_edge_key(symbol, match.range_id, match.direction),
@@ -1601,47 +2424,119 @@ async def _publish_trend_candidate(
   opposing_zone = _nearest_directional_zone(
     trend_decision.direction, entry_reference, htf_zones or [],
   )
+  guard_mode = resolve_guard_mode(settings)
   if settings.auto_trade_htf_veto_enabled:
     veto_reason = _htf_veto_reason(
       trend_decision.direction, entry_reference, opposing_zone,
     )
     if veto_reason is not None:
-      log.info(
-        "auto-trend candidate blocked symbol=%s reason=%s", symbol, veto_reason,
+      veto_outcome = classify_guard_severity(
+        "htf_veto",
+        "htf_veto",
+        veto_reason,
+        guard_mode=guard_mode,
       )
-      await _record_gate_reject(client, symbol, "htf_veto")
-      return None
-  if settings.auto_trade_opposing_barrier_veto_enabled:
-    barrier_reason = _opposing_barrier_reason(
-      trend_decision.direction, entry_reference, trend_decision.atr,
+      await _record_guard_evaluation(
+        client, symbol, veto_outcome,
+        strategy=_TREND_SETUP_LABELS[trend_decision.mode],
+        direction=trend_decision.direction,
+        source_structure=trend_decision.mode,
+      )
+      log.info(
+        "auto-trend candidate %s symbol=%s reason=%s",
+        "blocked" if veto_outcome.hard_block else veto_outcome.outcome,
+        symbol,
+        veto_reason,
+      )
+      if veto_outcome.hard_block:
+        await _record_gate_reject(client, symbol, "htf_veto")
+        return None
+  trend_m1 = (frames or {}).get("M1") if frames is not None else None
+  if (
+    settings.auto_trade_opposing_barrier_veto_enabled
+    or guard_mode == GUARD_MODE_OBSERVE
+  ):
+    source = _structural_source_identity(
+      strategy=_TREND_SETUP_LABELS[trend_decision.mode],
+      family="trend",
+      structural_source=trend_decision.mode,
+      low=trend_decision.entry_zone[0],
+      high=trend_decision.entry_zone[1],
+      key_level=trend_decision.key_level,
+    )
+    barrier_outcome = _opposing_barrier_decision(
+      trend_decision.direction, entry_reference, None, trend_decision.atr,
       htf_zones or [], htf_levels or [],
       settings.auto_trade_opposing_barrier_atr,
+      source=source,
+      guard_mode=guard_mode,
     )
-    if barrier_reason is not None:
+    if barrier_outcome.reason_code != "no_opposing_barrier":
+      await _record_guard_evaluation(
+        client, symbol, barrier_outcome,
+        strategy=_TREND_SETUP_LABELS[trend_decision.mode],
+        direction=trend_decision.direction,
+        source_structure=trend_decision.mode,
+      )
       log.info(
-        "auto-trend candidate blocked symbol=%s reason=%s", symbol, barrier_reason,
+        "auto-trend candidate %s symbol=%s reason=%s",
+        "blocked" if barrier_outcome.hard_block else barrier_outcome.outcome,
+        symbol, barrier_outcome.message,
       )
+    if barrier_outcome.hard_block:
       await _record_gate_reject(
-        client, symbol, _opposing_barrier_condition(barrier_reason),
+        client, symbol, barrier_outcome.reason_code,
       )
+      return None
+    if barrier_outcome.outcome == OUTCOME_WAIT:
       return None
   cooldown_reason = await _zone_cooldown_reason(
     client, symbol, trend_decision.direction, entry_reference,
     trend_decision.atr, settings.auto_trade_zone_cooldown_atr,
   )
   if cooldown_reason is not None:
-    log.info(
-      "auto-trend candidate blocked symbol=%s reason=%s", symbol, cooldown_reason,
+    cooldown_outcome = classify_guard_severity(
+      "zone_cooldown", "zone_cooldown", cooldown_reason,
+      guard_mode=guard_mode, hard_geometry=False,
     )
-    await _record_gate_reject(client, symbol, "zone_cooldown")
-    return None
-  if settings.auto_trade_overlap_veto_enabled:
-    overlap_reason = _overlapping_zone_conflict_reason(entry_reference, market_map)
-    if overlap_reason is not None:
-      log.info(
-        "auto-trend candidate blocked symbol=%s reason=%s", symbol, overlap_reason,
+    await _record_guard_evaluation(
+      client, symbol, cooldown_outcome,
+      strategy=_TREND_SETUP_LABELS[trend_decision.mode],
+      direction=trend_decision.direction,
+      source_structure=trend_decision.mode,
+    )
+    log.info(
+      "auto-trend candidate %s symbol=%s reason=%s",
+      "blocked" if cooldown_outcome.hard_block else cooldown_outcome.outcome,
+      symbol, cooldown_reason,
+    )
+    if cooldown_outcome.hard_block:
+      await _record_gate_reject(client, symbol, "zone_cooldown")
+      return None
+  if (
+    settings.auto_trade_overlap_veto_enabled
+    or guard_mode == GUARD_MODE_OBSERVE
+  ):
+    overlap_outcome = _resolve_overlap_thesis(
+      trend_decision.direction, entry_reference, market_map, trend_m1,
+      trend_decision.atr, settings,
+    )
+    if overlap_outcome.reason_code not in ("no_map", "no_overlap"):
+      await _record_guard_evaluation(
+        client, symbol, overlap_outcome,
+        strategy=_TREND_SETUP_LABELS[trend_decision.mode],
+        direction=trend_decision.direction,
+        source_structure=trend_decision.mode,
       )
+      log.info(
+        "auto-trend candidate %s symbol=%s reason=%s",
+        "blocked" if overlap_outcome.hard_block else overlap_outcome.outcome,
+        symbol, overlap_outcome.message,
+      )
+    if overlap_outcome.hard_block:
       await _record_gate_reject(client, symbol, "overlapping_zone_conflict")
+      return None
+    if overlap_outcome.outcome == OUTCOME_WAIT:
       return None
 
   now = int(datetime.now(timezone.utc).timestamp())
@@ -2353,6 +3248,7 @@ async def _handle_event(
       htf_levels=htf_levels,
       regime=regime,
       market_map=cached_market_map,
+      frames=frames,
     )
     if published is not None:
       strategy_candidate_ids.append(published)
@@ -2369,6 +3265,7 @@ async def _handle_event(
       htf_levels=htf_levels,
       gate_source=gate_source,
       market_map=cached_market_map,
+      frames=frames,
     )
     if box_selected else None
   )

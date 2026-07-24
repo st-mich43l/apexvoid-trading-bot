@@ -335,6 +335,14 @@ def _build_one_strategy_match(
     risk_multiplier=risk_mult,
     family=strategy_family(result.setup),
     range_state=range_state,
+    structural_source=result.setup,
+    zone_id=(
+      f"{symbol.upper()}:{tf.upper()}:{direction}:"
+      f"{entry_low:.5f}:{entry_high:.5f}"
+    ),
+    level_id=(
+      f"{symbol.upper()}:{tf.upper()}:level:{float(result.key_level):.5f}"
+    ),
   )
   return match, None, {}
 
@@ -1494,6 +1502,33 @@ async def _handle_event(
       await client.incrby(f"auto_trade:zone_reconciled:{symbol.upper()}", reconciled)
     exec_analysis = analysis.per_tf.get(exec_tf.upper())
     if exec_analysis is not None:
+      await client.hset(
+        f"auto_trade:zone_reconcile:{symbol.upper()}",
+        mapping={
+          "mode": settings.auto_trade_zone_reconcile_mode,
+          "zones_input": getattr(
+            exec_analysis, "zone_reconcile_input", 0,
+          ),
+          "zones_shadow_output": (
+            getattr(exec_analysis, "zone_reconcile_shadow_output", 0)
+          ),
+          "zones_trimmed": getattr(
+            exec_analysis, "zone_reconcile_trimmed", 0,
+          ),
+          "zones_dropped": exec_analysis.zone_reconcile_dropped,
+          "reconcile_aborted": int(
+            exec_analysis.zone_reconcile_aborted
+          ),
+          "candidate_difference_count": (
+            getattr(
+              exec_analysis,
+              "zone_reconcile_candidate_difference_count",
+              0,
+            )
+          ),
+          "updated_at": int(datetime.now(timezone.utc).timestamp()),
+        },
+      )
       if exec_analysis.zone_reconcile_dropped:
         await client.incrby(
           f"auto_trade:zone_dropped:{symbol.upper()}",

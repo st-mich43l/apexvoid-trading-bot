@@ -100,6 +100,7 @@ class AnalysisSettings:
   range_scalp_min_room_atr: float = 1.0
   range_scalp_break_closes: int = 2
   zone_reconcile_enabled: bool = True
+  zone_reconcile_mode: str = "enforce"
   regime_direction_enabled: bool = False
   regime_direction_lookback: int = 120
   regime_min_directional_swings: int = 3
@@ -149,6 +150,10 @@ class TimeframeAnalysis:
   # whether the circuit breaker discarded this pass's reconciliation.
   zone_reconcile_dropped: int = 0
   zone_reconcile_aborted: bool = False
+  zone_reconcile_input: int = 0
+  zone_reconcile_shadow_output: int = 0
+  zone_reconcile_trimmed: int = 0
+  zone_reconcile_candidate_difference_count: int = 0
 
 
 @dataclass(frozen=True)
@@ -262,15 +267,38 @@ def _analyze_tf(
   )
   zone_reconcile_dropped = 0
   zone_reconcile_aborted = False
-  if settings.zone_reconcile_enabled:
+  zone_reconcile_input = len(zones)
+  zone_reconcile_shadow_output = len(zones)
+  zone_reconcile_trimmed = 0
+  zone_reconcile_candidate_difference_count = 0
+  reconcile_mode = (
+    settings.zone_reconcile_mode.strip().lower()
+    if settings.zone_reconcile_enabled else "off"
+  )
+  if reconcile_mode in {"shadow", "enforce"}:
     reconcile_stats: dict = {}
-    zones = reconcile_opposing(
+    reconciled = reconcile_opposing(
       zones,
       min(0.3 * atr_scalar(atr), ZONE_MIN_WIDTH),
       stats=reconcile_stats,
     )
     zone_reconcile_dropped = reconcile_stats.get("dropped", 0)
     zone_reconcile_aborted = reconcile_stats.get("aborted", False)
+    zone_reconcile_shadow_output = len(reconciled)
+    zone_reconcile_trimmed = int(reconcile_stats.get("trimmed", 0))
+    original_geometry = {
+      (zone.side, round(zone.low, 6), round(zone.high, 6))
+      for zone in zones
+    }
+    reconciled_geometry = {
+      (zone.side, round(zone.low, 6), round(zone.high, 6))
+      for zone in reconciled
+    }
+    zone_reconcile_candidate_difference_count = len(
+      original_geometry.symmetric_difference(reconciled_geometry)
+    )
+    if reconcile_mode == "enforce":
+      zones = reconciled
   scalp_barriers, scalp_range = build_scalp_structure(
     df,
     atr,
@@ -305,6 +333,12 @@ def _analyze_tf(
     scalp_range=scalp_range,
     zone_reconcile_dropped=zone_reconcile_dropped,
     zone_reconcile_aborted=zone_reconcile_aborted,
+    zone_reconcile_input=zone_reconcile_input,
+    zone_reconcile_shadow_output=zone_reconcile_shadow_output,
+    zone_reconcile_trimmed=zone_reconcile_trimmed,
+    zone_reconcile_candidate_difference_count=(
+      zone_reconcile_candidate_difference_count
+    ),
   )
 
 
