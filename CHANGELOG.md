@@ -13,6 +13,16 @@ dated section after deployment.
 
 ### Fixed
 
+- Mapped Zone Reaction now allows at most one active initial group per
+  structural thesis. A newer M1 touch/confirmation that produces a different
+  `reaction_id` for the same `thesis_id` is suppressed via Redis
+  `auto_trade:thesis_claim:{thesis_id}` (SET NX / Lua) before publish, with C#
+  `active_thesis_group` defence-in-depth. Rearm requires the prior group to be
+  terminal, price to leave the *raw* structural zone by
+  `AUTO_TRADE_MAP_REACTION_REARM_ATR`, remain outside for
+  `AUTO_TRADE_MAP_REACTION_REARM_BARS` closed M1 bars, then re-enter and form a
+  newer confirmation. Keep `AUTO_TRADE_MAPPED_ZONE_ENABLED=false` until the
+  thesis-lock images are deployed; `AUTO_TRADE_MAP_THESIS_LOCK_ENABLED=true`.
 - Telegram ApexVoid Algo cards now show only the essential trade lifecycle
   (`order_filled` / opened, TP booked, risk protected, closed, group result,
   executor rejects). Pre-fill noise (`candidate_published`, `order_submitted`,

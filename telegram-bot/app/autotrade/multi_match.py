@@ -29,9 +29,14 @@ def same_thesis(left: StrategyMatch, right: StrategyMatch, *, atr: float) -> boo
   if left.family and right.family and left.family != right.family:
     return False
 
-  # Mapped Zone Reaction: identity is the reaction sequence, not the worker tick.
+  # Mapped Zone Reaction: same reaction_id is identical; same thesis_id is the
+  # same structural occupancy (dedupe before publish — claim still enforces).
+  if left.reaction_id and right.reaction_id and left.reaction_id == right.reaction_id:
+    return True
+  if left.thesis_id and right.thesis_id and left.thesis_id == right.thesis_id:
+    return True
   if left.reaction_id and right.reaction_id:
-    return left.reaction_id == right.reaction_id
+    return False
   if left.reaction_id or right.reaction_id:
     return False
 
@@ -49,11 +54,15 @@ def same_thesis(left: StrategyMatch, right: StrategyMatch, *, atr: float) -> boo
           and left.reaction_type == right.reaction_type
         )
       from app.autotrade.reaction_identity import zones_materially_equivalent
+      left_lo = left.structural_zone_low if left.structural_zone_low is not None else left.entry_low
+      left_hi = left.structural_zone_high if left.structural_zone_high is not None else left.entry_high
+      right_lo = right.structural_zone_low if right.structural_zone_low is not None else right.entry_low
+      right_hi = right.structural_zone_high if right.structural_zone_high is not None else right.entry_high
       return zones_materially_equivalent(
-        left.entry_low,
-        left.entry_high,
-        right.entry_low,
-        right.entry_high,
+        left_lo,
+        left_hi,
+        right_lo,
+        right_hi,
         atr=atr,
       )
     from app.autotrade.reaction_identity import zones_materially_equivalent

@@ -2954,6 +2954,59 @@ public sealed class AutoTradeEngineTests
   }
 
   [Fact]
+  public async Task MappedThesisDuplicateDifferentReactionDoesNotSubmitSecondOrder()
+  {
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+    const string thesis = "thesis-shared-xyz";
+    var first = StrategyMatchCandidateJson(
+      setup: "Mapped Zone Reaction",
+      candidate: 'p',
+      groupId: "mapped-group-a",
+      strategyFamily: "mapped_zone",
+      reactionId: "reaction-a",
+      thesisId: thesis,
+      zoneId: "zone-shared"
+    );
+    var second = StrategyMatchCandidateJson(
+      setup: "Mapped Zone Reaction",
+      candidate: 'q',
+      groupId: "mapped-group-b",
+      strategyFamily: "mapped_zone",
+      reactionId: "reaction-b",
+      thesisId: thesis,
+      zoneId: "zone-shared"
+    );
+    var store = new FakeAutoTradeStore(first);
+    store.Values[$"auto_trade:thesis_claim:{thesis}"] =
+      "{\"candidate_id\":\"" + new string('p', 64)
+      + "\",\"state\":\"managing\",\"thesis_id\":\"" + thesis
+      + "\",\"rearm_ready\":false}";
+    store.EnqueueCandidate(second);
+    var client = new FakeTradingClient();
+    var engine = new AutoTradeEngine(
+      DemoEvalOptions(), store, () => Now, _ => { }
+    );
+    await engine.ObserveSpotAsync(
+      new SpotPrice("XAU", 4000.0m, 4000.2m, Now.ToUnixTimeSeconds()),
+      cts.Token
+    );
+
+    var run = engine.RunSessionAsync(client, Symbol, cts.Token);
+    await WaitUntilAsync(() => store.Cursor == "2-0");
+
+    Assert.Single(client.Orders);
+    Assert.Contains("executor_duplicate_thesis_rejected", store.Metrics);
+    Assert.DoesNotContain(
+      store.Events,
+      item => item.Type == "rejected"
+        && item.Message.Contains("active_thesis_group")
+    );
+
+    cts.Cancel();
+    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+  }
+
+  [Fact]
   public async Task DemoEvalLiveAccountPublishesFatalAndNeverOrders()
   {
     using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));

@@ -154,6 +154,7 @@ async def test_incident_replay_publishes_one_candidate(monkeypatch):
   monkeypatch.setattr(config_mod.settings, "auto_trade_overlap_veto_enabled", False)
   monkeypatch.setattr(config_mod.settings, "auto_trade_zone_cooldown_enabled", False)
   monkeypatch.setattr(config_mod.settings, "auto_trade_htf_veto_enabled", False)
+  monkeypatch.setattr(config_mod.settings, "auto_trade_map_thesis_lock_enabled", True)
 
   class FakeRedis:
     def __init__(self):
@@ -177,6 +178,9 @@ async def test_incident_replay_publishes_one_candidate(monkeypatch):
 
     async def exists(self, key):
       return 1 if key in self.kv else 0
+
+    async def eval(self, *args, **kwargs):
+      raise RuntimeError("lua unavailable in FakeRedis")
 
     async def xadd(self, stream, fields, maxlen=None, approximate=True):
       self.stream.append((stream, fields))
@@ -261,8 +265,13 @@ async def test_incident_replay_publishes_one_candidate(monkeypatch):
   assert sum(1 for item in published if item is not None) == 1
   assert sum(1 for item in published if item is None) == 6
   metrics = client.metrics.get("auto_trade:metrics:XAUUSD", {})
-  assert metrics.get("duplicate_reaction_suppressed", 0) == 6
+  suppressed = (
+    metrics.get("duplicate_reaction_suppressed", 0)
+    + metrics.get("duplicate_thesis_suppressed", 0)
+  )
+  assert suppressed == 6
   assert metrics.get("mapped_reaction_claimed", 0) == 1
+  assert metrics.get("mapped_thesis_claimed", 0) == 1
   assert len(client.stream) == 1
 
 
@@ -300,7 +309,15 @@ def test_same_thesis_uses_reaction_id_not_event_ts():
   # Bypass _valid_match by constructing via dataclass directly — already done.
   assert same_thesis(left, right, atr=2.4) is True
   other = StrategyMatch(**{**base, "reaction_id": "other-reaction", "match_id": "other-reaction"})
-  assert same_thesis(left, other, atr=2.4) is False
+  # Same thesis_id still collapses for in-memory dedupe before publish.
+  assert same_thesis(left, other, atr=2.4) is True
+  different_thesis = StrategyMatch(**{
+    **base,
+    "reaction_id": "other-reaction",
+    "match_id": "other-reaction",
+    "thesis_id": "other-thesis",
+  })
+  assert same_thesis(left, different_thesis, atr=2.4) is False
 
 
 def test_group_id_stable_for_reaction():
@@ -309,12 +326,14 @@ def test_group_id_stable_for_reaction():
     symbol="XAUUSD",
     strategy_family="mapped_zone",
     direction="BUY",
+    thesis_id="",
     reaction_id=rid,
   )
   b = mapped_group_id(
     symbol="XAUUSD",
     strategy_family="mapped_zone",
     direction="BUY",
+    thesis_id="",
     reaction_id=rid,
   )
   assert a == b

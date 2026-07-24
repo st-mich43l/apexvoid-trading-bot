@@ -362,12 +362,16 @@ def render_auto_trade_event(
     "duplicate_reaction_active",
     "already_processed",
     "already_processed:duplicate_reaction_active",
+    "already_processed:active_thesis_group",
+    "active_thesis_group",
   }:
     return None
-  if "duplicate_reaction" in reason_code:
+  if "duplicate_reaction" in reason_code or "active_thesis_group" in reason_code:
     return None
   message = _clean_message(event.get("message", ""))
   if "already_processed:duplicate_reaction_active" in message:
+    return None
+  if "already_processed:active_thesis_group" in message:
     return None
   if event_type == "rejected":
     lines = [
@@ -660,6 +664,36 @@ async def auto_trade_status_text() -> str:
       await client.hgetall(f"auto_trade:metrics:{primary_symbol}")
     ).items()
   }
+  thesis_lines: list[str] = []
+  try:
+    from app.autotrade.reaction_identity import parse_thesis_claim
+    async for raw_key in client.scan_iter(
+      match="auto_trade:thesis_claim:*", count=20,
+    ):
+      key = raw_key.decode() if isinstance(raw_key, bytes) else str(raw_key)
+      claim = parse_thesis_claim(await client.get(key))
+      if claim is None:
+        continue
+      if str(claim.get("symbol") or "").upper() != primary_symbol.upper():
+        continue
+      tid = str(claim.get("thesis_id") or "")[:10]
+      zid = str(claim.get("structural_zone_id") or "")[:10]
+      rid = str(claim.get("active_reaction_id") or "")[:10]
+      gid = str(claim.get("group_id") or "")[:10]
+      state = str(claim.get("state") or "-")
+      outside = int(claim.get("outside_bar_count") or 0)
+      required = int(
+        getattr(settings, "auto_trade_map_reaction_rearm_bars", 3)
+      )
+      rearm = "yes" if claim.get("rearm_ready") else "no"
+      thesis_lines.append(
+        f"{tid}/{zid} · {state} · rx={rid} · grp={gid} · "
+        f"out={outside}/{required} · rearm={rearm}"
+      )
+      if len(thesis_lines) >= 3:
+        break
+  except Exception:
+    thesis_lines = []
   reject_summary = await _gate_reject_summary(client, primary_symbol)
   last_lifecycle = await _json_key(
     client, f"auto_trade:last_lifecycle:{primary_symbol}",
@@ -1068,6 +1102,8 @@ async def auto_trade_status_text() -> str:
     f"\nTracked matches: <b>{len(active_matches)}</b> · {escape(match_summary)}"
     f"\nOpen groups: <b>{groups}</b> · positions <b>{positions}</b> · "
     f"pending <b>{pending}</b>"
+    f"{chr(10)}Mapped thesis: <b>"
+    f"{escape(chr(10).join(thesis_lines) if thesis_lines else 'none')}</b>"
     f"\nMetrics: <code>{escape(metric_summary)}</code>"
     f"\nReject counters: <code>{escape(reject_summary)}</code>"
     f"\nLast execution guard: <b>{escape(guard_summary)}</b>"
@@ -1131,8 +1167,10 @@ async def _record_group_result(client, event: dict) -> None:
   if event.get("type") != "group_result":
     return
   reaction_id = event.get("reaction_id")
+  thesis_id = event.get("thesis_id")
   if reaction_id:
     from app.autotrade.reaction_identity import (
+      dump_claim,
       parse_reaction_claim,
       reaction_claim_key,
     )
@@ -1140,10 +1178,16 @@ async def _record_group_result(client, event: dict) -> None:
     existing = parse_reaction_claim(await client.get(key))
     if existing is not None:
       existing["state"] = "closed"
-      await client.set(
-        key,
-        json.dumps(existing, separators=(",", ":"), sort_keys=True),
-      )
+      await client.set(key, dump_claim(existing))
+      if not thesis_id:
+        thesis_id = existing.get("thesis_id")
+  if thesis_id:
+    from app.autotrade.worker import _mark_thesis_terminal_waiting_exit
+    await _mark_thesis_terminal_waiting_exit(
+      client,
+      thesis_id=str(thesis_id),
+      reaction_id=str(reaction_id) if reaction_id else None,
+    )
   group_id = str(event.get("group_id") or "").strip()
   if not group_id:
     return

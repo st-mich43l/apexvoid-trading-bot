@@ -1010,6 +1010,24 @@ public sealed class AutoTradeEngine(
         );
         return true;
       }
+      if (await HasActiveDuplicateMappedThesisAsync(candidate, cancellationToken))
+      {
+        await store.IncrementMetricAsync(
+          candidate.Symbol,
+          "executor_duplicate_thesis_rejected",
+          cancellationToken
+        );
+        await store.CompleteCandidateAsync(
+          candidate.CandidateId,
+          "already_processed:active_thesis_group",
+          cancellationToken
+        );
+        _log(
+          $"auto-trade candidate {Short(candidate.CandidateId)} "
+          + "already_processed:active_thesis_group"
+        );
+        return true;
+      }
       var pendingForGroup = _allSymbolPendingOrders.Any(order =>
         order.Label == options.Label
         && order.Comment.Contains(
@@ -3752,19 +3770,144 @@ public sealed class AutoTradeEngine(
     {
       return false;
     }
-    // The publisher of this candidate owns the claim; only a different
-    // candidate_id on a live claim is a duplicate.
-    if (claim.Contains($"\"candidate_id\":\"{candidate.CandidateId}\"", StringComparison.Ordinal))
+    if (!TryParseClaim(claim, out var parsed))
+    {
+      // Legacy substring fallback when claim JSON is malformed.
+      if (claim.Contains($"\"candidate_id\":\"{candidate.CandidateId}\"", StringComparison.Ordinal))
+      {
+        return false;
+      }
+      return !(
+        claim.Contains("\"state\":\"closed\"", StringComparison.Ordinal)
+        || claim.Contains("\"state\":\"cancelled\"", StringComparison.Ordinal)
+        || claim.Contains("\"state\":\"rejected\"", StringComparison.Ordinal)
+        || claim.Contains("\"state\":\"expired\"", StringComparison.Ordinal)
+        || claim.Contains("\"state\":\"terminal\"", StringComparison.Ordinal)
+      );
+    }
+    if (string.Equals(parsed.CandidateId, candidate.CandidateId, StringComparison.Ordinal))
     {
       return false;
     }
-    return !(
-      claim.Contains("\"state\":\"closed\"", StringComparison.Ordinal)
-      || claim.Contains("\"state\":\"cancelled\"", StringComparison.Ordinal)
-      || claim.Contains("\"state\":\"rejected\"", StringComparison.Ordinal)
-      || claim.Contains("\"state\":\"expired\"", StringComparison.Ordinal)
-      || claim.Contains("\"state\":\"terminal\"", StringComparison.Ordinal)
+    return !IsTerminalClaimState(parsed.State);
+  }
+
+  private async Task<bool> HasActiveDuplicateMappedThesisAsync(
+    TradeCandidate candidate,
+    CancellationToken cancellationToken
+  )
+  {
+    if (!options.MapThesisLockEnabled)
+    {
+      return false;
+    }
+    var thesisId = candidate.ThesisId;
+    if (string.IsNullOrWhiteSpace(thesisId))
+    {
+      return false;
+    }
+    // Explicit linked scale-ins are not initial thesis occupancy.
+    if (!string.IsNullOrWhiteSpace(candidate.ParentGroupId))
+    {
+      return false;
+    }
+    if (
+      _states.Values.Any(state =>
+        string.Equals(state.ThesisId, thesisId, StringComparison.Ordinal)
+        && string.IsNullOrWhiteSpace(state.ParentGroupId)
+      )
+    )
+    {
+      return true;
+    }
+    var candidateGroupId = CandidateGroupId(candidate);
+    if (
+      _allSymbolPendingOrders.Any(order =>
+        order.Label == options.Label
+        && order.Comment.Contains(
+          GroupToken(candidateGroupId),
+          StringComparison.Ordinal
+        )
+      )
+    )
+    {
+      // Pending for this exact group is handled elsewhere; different reaction
+      // / group with same thesis is caught via claim below.
+    }
+    // Persisted group plans with the same thesis.
+    // Scan is not available on the store interface in all fakes; rely on claim.
+    var claim = await store.GetValueAsync(
+      $"auto_trade:thesis_claim:{thesisId}",
+      cancellationToken
     );
+    if (string.IsNullOrWhiteSpace(claim))
+    {
+      return false;
+    }
+    if (!TryParseClaim(claim, out var parsed))
+    {
+      if (claim.Contains($"\"candidate_id\":\"{candidate.CandidateId}\"", StringComparison.Ordinal))
+      {
+        return false;
+      }
+      return !(
+        claim.Contains("\"state\":\"rearm_ready\"", StringComparison.Ordinal)
+        || claim.Contains("\"state\":\"closed\"", StringComparison.Ordinal)
+        || claim.Contains("\"state\":\"cancelled\"", StringComparison.Ordinal)
+        || claim.Contains("\"state\":\"rejected\"", StringComparison.Ordinal)
+        || claim.Contains("\"state\":\"expired\"", StringComparison.Ordinal)
+      );
+    }
+    if (string.Equals(parsed.CandidateId, candidate.CandidateId, StringComparison.Ordinal))
+    {
+      return false;
+    }
+    if (string.Equals(parsed.State, "rearm_ready", StringComparison.OrdinalIgnoreCase))
+    {
+      return false;
+    }
+    if (IsTerminalClaimState(parsed.State) && parsed.RearmReady)
+    {
+      return false;
+    }
+    // Active + post-terminal waiting-rearm states block another initial order.
+    return true;
+  }
+
+  private static bool IsTerminalClaimState(string? state)
+  {
+    if (string.IsNullOrWhiteSpace(state))
+    {
+      return false;
+    }
+    return state.Equals("closed", StringComparison.OrdinalIgnoreCase)
+      || state.Equals("cancelled", StringComparison.OrdinalIgnoreCase)
+      || state.Equals("rejected", StringComparison.OrdinalIgnoreCase)
+      || state.Equals("expired", StringComparison.OrdinalIgnoreCase)
+      || state.Equals("terminal", StringComparison.OrdinalIgnoreCase);
+  }
+
+  private static bool TryParseClaim(string raw, out RedisClaimPayload parsed)
+  {
+    try
+    {
+      var value = System.Text.Json.JsonSerializer.Deserialize(
+        raw,
+        RedisJsonContext.Default.RedisClaimPayload
+      );
+      if (value is null)
+      {
+        parsed = default!;
+        return false;
+      }
+      parsed = value;
+      return true;
+    }
+    catch (System.Text.Json.JsonException)
+    {
+      parsed = default!;
+      return false;
+    }
   }
 
   private IReadOnlyList<long> PendingOrderIdsForGroup(string? groupId)

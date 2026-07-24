@@ -792,6 +792,7 @@ internal sealed record RedisSpot(
 [JsonSerializable(typeof(AutoTradeExecutorReadiness))]
 [JsonSerializable(typeof(AutoTradeExecutorSnapshot))]
 [JsonSerializable(typeof(AutoTradeGroupPlan))]
+[JsonSerializable(typeof(RedisClaimPayload))]
 internal sealed partial class RedisJsonContext : JsonSerializerContext
 {
 }
