@@ -403,6 +403,22 @@ def _select_reaction_detailed(
     )
   )
   execute_limit = execute_limit_atr * atr
+  pip_size = max(
+    1e-9,
+    float(getattr(cfg, "pip_size", 0.1) or 0.1),
+  )
+  # Small execution tolerance absorbs bid/ask, ATR recalc, and bar-vs-spot
+  # rounding without turning distant tracked zones into market entries.
+  exec_tol_pips = max(
+    0.0,
+    float(getattr(cfg, "auto_trade_map_execute_tolerance_pips", 3.0)),
+  )
+  exec_tol_atr = max(
+    0.0,
+    float(getattr(cfg, "auto_trade_map_execute_tolerance_atr", 0.15)),
+  )
+  execute_tolerance = max(exec_tol_pips * pip_size, exec_tol_atr * atr)
+  effective_execute_limit = execute_limit + execute_tolerance
 
   tracked = [
     item for item in ordered
@@ -426,12 +442,12 @@ def _select_reaction_detailed(
       tuple(actionable),
       _filter_counts(**counts),
       track_limit,
-      execute_limit,
+      effective_execute_limit,
     )
 
   executable = [
     item for item in tracked
-    if _band_distance(price, item[0].lo, item[0].hi) <= execute_limit
+    if _band_distance(price, item[0].lo, item[0].hi) <= effective_execute_limit
   ]
 
   if not executable:
@@ -443,14 +459,15 @@ def _select_reaction_detailed(
       "waiting_for_touch",
       (
         f"nearest mapped {nearest_direction} zone {nearest.lo:.2f}-{nearest.hi:.2f} "
-        f"({distance:.1f} away · tracked, execute within {execute_limit:.1f})"
+        f"({distance:.1f} away · tracked, execute within {effective_execute_limit:.1f}"
+        f" = base {execute_limit:.1f} + tol {execute_tolerance:.1f})"
         f"{divergence}{_filter_summary(counts)}",
       ),
       len(market_map.entries),
       tuple(actionable),
       _filter_counts(**counts),
       track_limit,
-      execute_limit,
+      effective_execute_limit,
     )
 
   for entry, candidate_direction, counter_bias in executable:
@@ -469,7 +486,7 @@ def _select_reaction_detailed(
         tuple(actionable),
         _filter_counts(**counts),
         track_limit,
-        execute_limit,
+        effective_execute_limit,
       )
     # The executable band includes the rejection close. Waiting for M1 to
     # confirm necessarily means entry happens after price leaves the raw HTF
@@ -484,7 +501,7 @@ def _select_reaction_detailed(
       tuple(actionable),
       _filter_counts(**counts),
       track_limit,
-      execute_limit,
+      effective_execute_limit,
     )
 
   nearest, nearest_direction, _ = executable[0]
@@ -495,7 +512,7 @@ def _select_reaction_detailed(
     "waiting_for_touch",
     (
       f"nearest mapped {nearest_direction} zone {nearest.lo:.2f}-{nearest.hi:.2f} "
-      f"({distance:.1f} away · tracked, execute within {execute_limit:.1f}); "
+      f"({distance:.1f} away · tracked, execute within {effective_execute_limit:.1f}); "
       f"waiting for M1 touch"
       f"{divergence}{_filter_summary(counts)}",
     ),
@@ -503,7 +520,7 @@ def _select_reaction_detailed(
     tuple(actionable),
     _filter_counts(**counts),
     track_limit,
-    execute_limit,
+    effective_execute_limit,
   )
 
 

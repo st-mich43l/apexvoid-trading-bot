@@ -37,6 +37,8 @@ public sealed record AutoTradeOptions(
   decimal ZoneFillMinLots = 0.09m,
   decimal ZoneFillMinAtr = 0.5m,
   int ZoneFillTtlBars = 3,
+  bool ZoneFillFallbackEnabled = true,
+  bool InsideZoneMarketEntryEnabled = true,
   decimal BoxMinRiskReward = 1.25m,
   int TrendStopMinPips = 40,
   int TrendStopMaxPips = 65,
@@ -63,7 +65,7 @@ public sealed record AutoTradeOptions(
   // test fixture that never sets it) falls back to the same "30,40,50"
   // default Python uses.
   private static readonly IReadOnlyList<int> DefaultRangeTargetsPips =
-    new[] { 30, 40, 50 };
+    new[] { 20, 30, 40, 50, 70 };
 
   // Only a missing (null) override falls back to the default - an
   // explicitly empty list is a misconfiguration and must fail Validate(),
@@ -106,6 +108,11 @@ public sealed record AutoTradeOptions(
     ZoneFillMinLots: Decimal("AUTO_TRADE_ZONE_FILL_MIN_LOTS", 0.09m),
     ZoneFillMinAtr: Decimal("AUTO_TRADE_ZONE_FILL_MIN_ATR", 0.5m),
     ZoneFillTtlBars: Int("AUTO_TRADE_ZONE_FILL_TTL_BARS", 3),
+    ZoneFillFallbackEnabled: Bool("AUTO_TRADE_ZONE_FILL_FALLBACK_ENABLED", true),
+    InsideZoneMarketEntryEnabled: Bool(
+      "AUTO_TRADE_INSIDE_ZONE_MARKET_ENTRY_ENABLED",
+      true
+    ),
     BoxMinRiskReward: Decimal("AUTO_TRADE_BOX_MIN_RR", 1.25m),
     TrendStopMinPips: Int("AUTO_TRADE_TREND_STOP_MIN_PIPS", 40),
     TrendStopMaxPips: Int("AUTO_TRADE_TREND_STOP_MAX_PIPS", 65),
@@ -123,8 +130,8 @@ public sealed record AutoTradeOptions(
     AddPullbackMaxRetrace: Decimal("AUTO_TRADE_ADD_PULLBACK_MAX_RETRACE", 0.70m),
     AddMaxGroupRiskPct: Decimal("AUTO_TRADE_ADD_MAX_GROUP_RISK_PCT", 3.0m),
     AddSizeRatio: Decimal("AUTO_TRADE_ADD_SIZE_RATIO", 0.5m),
-    RangeTargetsPips: IntList("AUTO_TRADE_RANGE_TARGETS_PIPS", "30,40,50"),
-    RangeTpBufferPips: Decimal("AUTO_TRADE_RANGE_TP_BUFFER_PIPS", 5m)
+    RangeTargetsPips: IntList("AUTO_TRADE_RANGE_TARGETS_PIPS", "20,30,40,50,70"),
+    RangeTpBufferPips: Decimal("AUTO_TRADE_RANGE_TP_BUFFER_PIPS", 3m)
   );
 
   public void Validate()

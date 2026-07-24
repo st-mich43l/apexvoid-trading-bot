@@ -38,6 +38,17 @@ from app.autotrade.strategy_match import (
   strategy_match_key,
   strategy_range_id,
 )
+from app.autotrade.execution_policy import (
+  classify_tier,
+  risk_multiplier_for_tier,
+  strategy_family,
+)
+from app.autotrade.multi_match import (
+  dedupe_matches,
+  select_primary,
+  serialize_matches,
+  strategy_matches_key,
+)
 from app.autotrade import units
 from app.autotrade.map_strategy import market_map_key
 from app.core.symbols import SYMBOLS, canonical_symbol, pip_for
@@ -150,20 +161,50 @@ def _build_strategy_match(
   *,
   now: int | None = None,
 ) -> tuple[StrategyMatch | None, str | None, dict[str, Any]]:
-  """Transport the scanner's strongest completed strategy match to Algo.
+  """Transport scanner strategy matches to Algo.
 
-  Detector output is already the strategy decision.  This function does not
-  classify regime, require a particular setup name, or ask another timeframe
-  to confirm the match again.
-
-  Returns (match, None, {}) on success, or (None, reason_code, measured) on
-  rejection - every exit point must be traceable, never a bare None (23 Jul
-  incident: 40-49 pip range-edge setups silently produced no StrategyMatch
-  at all, with zero record of why, while Telegram still showed the card).
+  Builds typed matches for every detection result, dedupes same-thesis
+  setups, and returns the primary match for the legacy single-key contract.
+  All matches are persisted under strategy_matches:{symbol}.
   """
   if not results:
     return None, "no_detection_result", {}
-  result = min(results, key=_result_rank)
+  built: list[StrategyMatch] = []
+  last_reason = "no_detection_result"
+  last_measured: dict[str, Any] = {}
+  for result in sorted(results, key=_result_rank):
+    match, reason, measured = _build_one_strategy_match(
+      symbol, tf, event_ts, ctx, result, now=now,
+    )
+    if match is None:
+      last_reason = reason or "match_build_failed"
+      last_measured = measured
+      continue
+    built.append(match)
+  if not built:
+    return None, last_reason, last_measured
+  atr = built[0].atr
+  deduped, _events = dedupe_matches(built, atr=atr)
+  primary = select_primary(deduped)
+  if primary is None:
+    return None, "all_matches_tier_c", {"count": len(built)}
+  # Stash multi-match payload for _sync_strategy_match via measured.
+  return primary, None, {
+    "matches": len(deduped),
+    "raw": len(built),
+    "all_matches": deduped,
+  }
+
+
+def _build_one_strategy_match(
+  symbol: str,
+  tf: str,
+  event_ts: str,
+  ctx: DetectionContext,
+  result: DetectionResult,
+  *,
+  now: int | None = None,
+) -> tuple[StrategyMatch | None, str | None, dict[str, Any]]:
   indicators = getattr(ctx, "indicators", None)
   if not isinstance(indicators, dict):
     return None, "missing_indicators", {}
@@ -187,33 +228,67 @@ def _build_strategy_match(
   range_low = None
   range_high = None
   full_take_profit_pips = None
-  if result.setup == "Range Edge Scalp" and result.mode == "range_scalp":
+  range_state = None
+  one_sided = result.setup == "One-Sided Range Reaction"
+  post_impulse = False
+  fallback_edge = False
+  if result.setup in {"Range Edge Scalp", "One-Sided Range Reaction"} and (
+    result.mode in {"range_scalp", "one_sided_range"}
+  ):
     structures = getattr(ctx, "structures", None)
     structure = (
       structures.get(tf.upper()) if isinstance(structures, dict) else None
     )
     scalp_range = None if structure is None else structure.scalp_range
-    if scalp_range is None:
+    if scalp_range is None and not one_sided:
       return None, "missing_scalp_range", {}
-    range_low = float(scalp_range.lower.level)
-    range_high = float(scalp_range.upper.level)
-    room = (
-      range_high - float(result.current_price)
-      if direction == "BUY"
-      else float(result.current_price) - range_low
-    )
-    room_pips = room / units.pip_size(symbol)
-    full_take_profit_pips = select_range_target(room_pips)
-    if full_take_profit_pips is None:
-      return None, "insufficient_target_room", {
-        "room_pips": round(room_pips, 1),
-        "range_low": range_low,
-        "range_high": range_high,
-      }
-    targets_pips = (full_take_profit_pips,)
-    range_id = strategy_range_id(symbol, range_low, range_high)
+    if scalp_range is not None:
+      range_low = float(scalp_range.lower.level)
+      range_high = float(scalp_range.upper.level)
+      range_state = getattr(scalp_range, "state", None)
+      post_impulse = bool(getattr(scalp_range, "post_impulse", False))
+      fallback_edge = bool(
+        getattr(scalp_range.lower, "fallback", False)
+        or getattr(scalp_range.upper, "fallback", False)
+      )
+      room = (
+        range_high - float(result.current_price)
+        if direction == "BUY"
+        else float(result.current_price) - range_low
+      )
+      eq_room = abs(float(scalp_range.eq) - float(result.current_price))
+      room = max(room, eq_room)
+      room_pips = room / units.pip_size(symbol)
+      full_take_profit_pips = select_range_target(room_pips)
+      if full_take_profit_pips is None:
+        return None, "insufficient_target_room", {
+          "room_pips": round(room_pips, 1),
+          "range_low": range_low,
+          "range_high": range_high,
+        }
+      targets_pips = (full_take_profit_pips,)
+      range_id = strategy_range_id(symbol, range_low, range_high)
   if not targets_pips:
     return None, "empty_target_config", {}
+  tier = classify_tier(
+    confluence=int(result.confluence),
+    strategy=result.setup,
+    range_state=range_state,
+    fallback_edge=fallback_edge,
+    post_impulse=post_impulse,
+    one_sided=one_sided,
+  )
+  if tier == "C":
+    return None, "tier_c_analysis_only", {
+      "strategy": result.setup,
+      "confluence": int(result.confluence),
+    }
+  risk_mult = risk_multiplier_for_tier(
+    tier,
+    settings,
+    post_impulse=post_impulse,
+    one_sided=one_sided,
+  )
   match_id = strategy_match_id(
     symbol,
     tf,
@@ -247,6 +322,10 @@ def _build_strategy_match(
     range_low=range_low,
     range_high=range_high,
     full_take_profit_pips=full_take_profit_pips,
+    tier=tier,
+    risk_multiplier=risk_mult,
+    family=strategy_family(result.setup),
+    range_state=range_state,
   )
   return match, None, {}
 
@@ -316,8 +395,10 @@ async def _sync_strategy_match(
   results: list[DetectionResult],
 ) -> StrategyMatch | None:
   key = strategy_match_key(symbol)
+  matches_key = strategy_matches_key(symbol)
   if not settings.auto_trade_strategy_bridge_enabled:
     await client.delete(key)
+    await client.delete(matches_key)
     return None
   match, reason, measured = _build_strategy_match(
     symbol,
@@ -328,18 +409,32 @@ async def _sync_strategy_match(
   )
   if match is None:
     await client.delete(key)
+    await client.delete(matches_key)
     if reason is not None:
       await _record_match_build_rejected(client, symbol, reason, measured)
     return None
   await _record_match_build_outcome(client, symbol, match)
   ttl = max(60, match.expires_at - match.issued_at)
   await client.set(key, match.to_json(), ex=ttl)
+  all_matches = measured.get("all_matches") if isinstance(measured, dict) else None
+  if isinstance(all_matches, list) and all_matches:
+    top_n = max(1, int(getattr(settings, "scanner_top_n", 3)))
+    await client.set(
+      matches_key,
+      serialize_matches(all_matches[:top_n]),
+      ex=ttl,
+    )
+  else:
+    await client.set(matches_key, serialize_matches([match]), ex=ttl)
   log.info(
-    "strategy match synced symbol=%s id=%s strategy=%s direction=%s",
+    "strategy match synced symbol=%s id=%s strategy=%s direction=%s "
+    "tier=%s matches=%s",
     symbol,
     match.match_id[:12],
     match.strategy,
     match.direction,
+    match.tier,
+    measured.get("matches", 1) if isinstance(measured, dict) else 1,
   )
   return match
 
@@ -1063,11 +1158,15 @@ def _scalp_status(ctx: DetectionContext) -> dict[str, Any]:
       "supports": 0,
       "resistances": 0,
       "range": None,
+      "range_state": "no_range",
+      "fallback_barriers": 0,
+      "missing_side_reason": "missing_structure",
     }
   barriers = list(st.scalp_barriers)
   scalp_range = st.scalp_range
   enabled = ctx.settings.range_scalp_enabled
-  state = "disabled" if not enabled else "no_range"
+  range_state = getattr(scalp_range, "state", None) if scalp_range else "no_range"
+  state = "disabled" if not enabled else (range_state or "no_range")
   range_payload = None
   if scalp_range is not None:
     frame = ctx.frames.get(ctx.tf)
@@ -1078,7 +1177,9 @@ def _scalp_status(ctx: DetectionContext) -> dict[str, Any]:
         touched.append("lower")
       if float(row["high"]) >= scalp_range.upper.low:
         touched.append("upper")
-    if enabled:
+    if enabled and range_state in {
+      "confirmed_range", "provisional_range", "post_impulse_range",
+    }:
       state = "edge_touch" if touched else "waiting_edge"
     range_payload = {
       "lower": scalp_range.lower.level,
@@ -1087,13 +1188,28 @@ def _scalp_status(ctx: DetectionContext) -> dict[str, Any]:
       "width_atr": scalp_range.width_atr,
       "quality": scalp_range.quality,
       "touched": touched,
+      "state": range_state,
+      "one_sided": bool(getattr(scalp_range, "one_sided", False)),
+      "post_impulse": bool(getattr(scalp_range, "post_impulse", False)),
     }
+  supports = [b for b in barriers if b.side == "support"]
+  resistances = [b for b in barriers if b.side == "resistance"]
+  missing = None
+  if resistances and not supports:
+    missing = "no_support"
+  elif supports and not resistances:
+    missing = "no_resistance"
+  elif not supports and not resistances:
+    missing = "no_barriers"
   return {
     "state": state,
     "barriers": len(barriers),
-    "supports": sum(barrier.side == "support" for barrier in barriers),
-    "resistances": sum(barrier.side == "resistance" for barrier in barriers),
+    "supports": len(supports),
+    "resistances": len(resistances),
     "range": range_payload,
+    "range_state": range_state or "no_range",
+    "fallback_barriers": sum(1 for b in barriers if getattr(b, "fallback", False)),
+    "missing_side_reason": missing,
   }
 
 

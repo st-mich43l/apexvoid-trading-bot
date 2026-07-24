@@ -1025,14 +1025,52 @@ public sealed class AutoTradeEngine(
   )
   {
     var symbol = RequireSymbol();
-    var proximal = direction == TradeDirection.Buy
-      ? candidate.EntryZone.High
-      : candidate.EntryZone.Low;
+    var geometry = ClassifyEntryGeometry(
+      candidate.EntryZone,
+      direction,
+      expectedEntry
+    );
+    // Prefer the portion of the zone that remains on the valid limit-order
+    // side. When price is already inside the zone the classic distal edge
+    // (BUY→zone.High / SELL→zone.Low) can sit on the wrong side of price and
+    // must not hard-reject a fresh candidate.
+    var proximal = SelectValidSideProximal(
+      candidate.EntryZone,
+      direction,
+      expectedEntry,
+      geometry,
+      options.InsideZoneMarketEntryEnabled
+    );
+    if (proximal is null)
+    {
+      if (!options.ZoneFillFallbackEnabled)
+      {
+        return await RejectAsync(
+          candidate,
+          "zone-fill proximal edge is not on the valid limit-order side",
+          cancellationToken
+        );
+      }
+      var fallbackReason =
+        "zone-fill geometry invalid; single-entry fallback"
+        + $" ({geometry})";
+      _log($"auto-trade {fallbackReason}");
+      return await ProcessSingleInitialAsync(
+        candidate,
+        account,
+        direction,
+        expectedEntry,
+        singleEntryStopPlan,
+        date,
+        fallbackReason,
+        cancellationToken
+      );
+    }
     StructureStopPlan zoneStopPlan;
     InitialSizingResult sizing;
     try
     {
-      zoneStopPlan = StructureStop(candidate, direction, proximal, symbol);
+      zoneStopPlan = StructureStop(candidate, direction, proximal.Value, symbol);
       sizing = VolumePlanner.SizeInitial(
         account.Balance,
         options.RiskPercent,
@@ -1065,22 +1103,45 @@ public sealed class AutoTradeEngine(
       );
     }
     var validLimitSide = direction == TradeDirection.Buy
-      ? proximal <= expectedEntry
-      : proximal >= expectedEntry;
+      ? proximal.Value <= expectedEntry
+      : proximal.Value >= expectedEntry;
     if (!validLimitSide)
     {
-      return await RejectAsync(
+      if (!options.ZoneFillFallbackEnabled)
+      {
+        return await RejectAsync(
+          candidate,
+          "zone-fill proximal edge is not on the valid limit-order side",
+          cancellationToken
+        );
+      }
+      var fallbackReason =
+        "zone-fill geometry invalid; single-entry fallback"
+        + $" ({geometry})";
+      _log($"auto-trade {fallbackReason}");
+      return await ProcessSingleInitialAsync(
         candidate,
-        "zone-fill proximal edge is not on the valid limit-order side",
+        account,
+        direction,
+        expectedEntry,
+        singleEntryStopPlan,
+        date,
+        fallbackReason,
         cancellationToken
       );
     }
+    var fillZone = SliceValidSideZone(
+      candidate.EntryZone,
+      direction,
+      expectedEntry,
+      proximal.Value
+    );
     ZoneFillPlan plan;
     try
     {
       var stopLoss = direction == TradeDirection.Buy
-        ? proximal - zoneStopPlan.Distance
-        : proximal + zoneStopPlan.Distance;
+        ? proximal.Value - zoneStopPlan.Distance
+        : proximal.Value + zoneStopPlan.Distance;
       stopLoss = decimal.Round(
         stopLoss,
         symbol.Digits,
@@ -1088,7 +1149,7 @@ public sealed class AutoTradeEngine(
       );
       plan = ZoneFillPlanner.Build(
         direction,
-        candidate.EntryZone,
+        fillZone,
         stopLoss,
         sizing.Volume,
         symbol,
@@ -1107,9 +1168,9 @@ public sealed class AutoTradeEngine(
       return await CompleteDryRunAsync(
         candidate,
         $"zone fill · {sizing.Lots:N2} lots across {plan.Legs.Count} limits · "
-          + $"SL {plan.StopLoss:N2} · {sizing.BindingTerm}",
+          + $"SL {plan.StopLoss:N2} · {sizing.BindingTerm} · route={geometry}",
         sizing.Volume,
-        proximal,
+        proximal.Value,
         cancellationToken
       );
     }
@@ -1176,11 +1237,11 @@ public sealed class AutoTradeEngine(
           $"{leg.LimitPrice:N2} ({leg.Volume / (decimal)symbol.LotSize:N2})"
         ))
         + $" · SL {plan.StopLoss:N2} · midpoint TTL "
-        + $"{options.ZoneFillTtlBars} bars · {sizing.BindingTerm}",
+        + $"{options.ZoneFillTtlBars} bars · {sizing.BindingTerm} · route={geometry}",
       cancellationToken,
       candidate.CandidateId,
       volume: sizing.Volume,
-      price: proximal,
+      price: proximal.Value,
       groupId: groupId,
       trancheIndex: 1,
       groupWorstCase: -sizing.Lots * zoneStopPlan.StopPips
@@ -1190,6 +1251,112 @@ public sealed class AutoTradeEngine(
     );
     await ReconcileAsync(cancellationToken);
     return true;
+  }
+
+  private static string ClassifyEntryGeometry(
+    TradeCandidateZone zone,
+    TradeDirection direction,
+    decimal expectedEntry
+  )
+  {
+    if (zone.High <= zone.Low)
+    {
+      return "stale_zone";
+    }
+    if (direction == TradeDirection.Buy)
+    {
+      // BUY LIMIT needs at least some zone mass at/below ask.
+      if (zone.Low > expectedEntry)
+      {
+        return "price_beyond_zone";
+      }
+      if (zone.High <= expectedEntry)
+      {
+        return expectedEntry < zone.Low ? "price_before_zone" : "valid_limit_side";
+      }
+      return "price_inside_zone";
+    }
+    // SELL LIMIT needs at least some zone mass at/above bid.
+    if (zone.High < expectedEntry)
+    {
+      return "price_beyond_zone";
+    }
+    if (zone.Low >= expectedEntry)
+    {
+      return "valid_limit_side";
+    }
+    return "price_inside_zone";
+  }
+
+  private static decimal? SelectValidSideProximal(
+    TradeCandidateZone zone,
+    TradeDirection direction,
+    decimal expectedEntry,
+    string geometry,
+    bool insideZoneMarketEntryEnabled
+  )
+  {
+    if (geometry is "stale_zone" or "price_beyond_zone")
+    {
+      return null;
+    }
+    // Prefer a single market/limit entry when price is already inside the
+    // published zone — zone-fill's classic distal edge is the wrong side.
+    if (geometry == "price_inside_zone" && insideZoneMarketEntryEnabled)
+    {
+      return null;
+    }
+    if (direction == TradeDirection.Buy)
+    {
+      if (zone.High <= expectedEntry)
+      {
+        return zone.High;
+      }
+      var remaining = expectedEntry - zone.Low;
+      if (remaining >= (zone.High - zone.Low) * 0.35m)
+      {
+        return expectedEntry;
+      }
+      return null;
+    }
+    if (zone.Low >= expectedEntry)
+    {
+      return zone.Low;
+    }
+    var sellRemaining = zone.High - expectedEntry;
+    if (sellRemaining >= (zone.High - zone.Low) * 0.35m)
+    {
+      return expectedEntry;
+    }
+    return null;
+  }
+
+  // Removed erroneous static options hook.
+
+  private static TradeCandidateZone SliceValidSideZone(
+    TradeCandidateZone zone,
+    TradeDirection direction,
+    decimal expectedEntry,
+    decimal proximal
+  )
+  {
+    if (direction == TradeDirection.Buy)
+    {
+      var high = Math.Min(zone.High, expectedEntry);
+      var low = Math.Min(zone.Low, high);
+      if (high <= low)
+      {
+        return new TradeCandidateZone(proximal, proximal);
+      }
+      return new TradeCandidateZone(low, high);
+    }
+    var sellLow = Math.Max(zone.Low, expectedEntry);
+    var sellHigh = Math.Max(zone.High, sellLow);
+    if (sellHigh <= sellLow)
+    {
+      return new TradeCandidateZone(proximal, proximal);
+    }
+    return new TradeCandidateZone(sellLow, sellHigh);
   }
 
   private async Task RollbackZoneFillAsync(
