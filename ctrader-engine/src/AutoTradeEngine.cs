@@ -19,6 +19,7 @@ public sealed class AutoTradeEngine(
   private const string ManualCommandStream = "manual_trade:commands";
   private readonly SemaphoreSlim _gate = new(1, 1);
   private readonly Dictionary<long, AutoTradePositionState> _states = [];
+  private readonly Dictionary<string, StructuralRouteIdentity> _routeIdentityByCandidate = [];
   private readonly HashSet<string> _reportedErrors = [];
   private readonly HashSet<string> _reportedSessionErrors = [];
   private readonly HashSet<string> _reportedWarnings = [];
@@ -34,6 +35,14 @@ public sealed class AutoTradeEngine(
   private bool _accountSupportsHedging;
   private volatile bool _ready;
   private volatile bool _disabled;
+
+  private sealed record StructuralRouteIdentity(
+    string? StructuralSource,
+    string? ZoneId,
+    string? StructuralZoneId,
+    string? ReactionId,
+    string? ThesisId
+  );
 
   public bool Enabled => options.Enabled && !_disabled;
 
@@ -327,6 +336,7 @@ public sealed class AutoTradeEngine(
     {
       return true;
     }
+    RememberRouteIdentity(candidate);
     await store.IncrementMetricAsync(
       candidate.Symbol,
       "executor_received",
@@ -342,7 +352,12 @@ public sealed class AutoTradeEngine(
       direction: candidate.Direction,
       matchId: candidate.MatchId,
       rangeId: candidate.RangeId,
-      strategyFamily: candidate.StrategyFamily
+      strategyFamily: candidate.StrategyFamily,
+      structuralSource: candidate.StructuralSource,
+      zoneId: candidate.ZoneId,
+      structuralZoneId: candidate.StructuralZoneId,
+      reactionId: candidate.ReactionId,
+      thesisId: candidate.ThesisId
     );
     if (!await store.TryClaimCandidateAsync(candidate.CandidateId, cancellationToken))
     {
@@ -2801,6 +2816,25 @@ public sealed class AutoTradeEngine(
     {
       return (stopPlan, null, null);
     }
+    var zoneWidth = zoneHigh - zoneLow;
+    var atr = candidate.Atr ?? 0m;
+    if (zoneWidth > 0m)
+    {
+      var widthPips = zoneWidth / options.PipSize;
+      var widthAtr = atr > 0m ? zoneWidth / atr : decimal.MaxValue;
+      if (
+        widthPips > options.ExecutionZoneMaxWidthPips
+        || widthAtr > options.ExecutionZoneMaxWidthAtr
+      )
+      {
+        _log(
+          "auto-trade ignoring context-only opposing zone "
+          + $"{zoneLow:0.####}-{zoneHigh:0.####} "
+          + $"({widthPips:0.#}p / {widthAtr:0.##} ATR)"
+        );
+        return (stopPlan, null, null);
+      }
+    }
     if (stopPlan.StopLoss < zoneLow || stopPlan.StopLoss > zoneHigh)
     {
       return (stopPlan, null, null);
@@ -2813,7 +2847,6 @@ public sealed class AutoTradeEngine(
       _log($"auto-trade stop rejected: {zoneDescription}");
       return (stopPlan, zoneDescription, null);
     }
-    var atr = candidate.Atr ?? 0m;
     var buffer = options.AddStopBufferAtr * atr;
     var pushedStop = direction == TradeDirection.Buy
       ? zoneLow - buffer
@@ -4623,7 +4656,12 @@ public sealed class AutoTradeEngine(
       stopLoss: candidate.ManualStopLoss,
       targetPrices: candidate.ManualTakeProfits,
       entryLow: candidate.EntryZone.Low,
-      entryHigh: candidate.EntryZone.High
+      entryHigh: candidate.EntryZone.High,
+      structuralSource: candidate.StructuralSource,
+      zoneId: candidate.ZoneId,
+      structuralZoneId: candidate.StructuralZoneId,
+      reactionId: candidate.ReactionId,
+      thesisId: candidate.ThesisId
     );
     _log($"auto-trade candidate {Short(candidate.CandidateId)} rejected: {reason}");
     return true;
@@ -4667,7 +4705,12 @@ public sealed class AutoTradeEngine(
     decimal? entryHigh = null,
     decimal? legRealizedPips = null,
     long? groupInitialVolume = null,
-    long? lotSize = null
+    long? lotSize = null,
+    string? structuralSource = null,
+    string? zoneId = null,
+    string? structuralZoneId = null,
+    string? reactionId = null,
+    string? thesisId = null
   )
   {
     var state = LifecycleState(type, remainingVolume);
@@ -4685,6 +4728,17 @@ public sealed class AutoTradeEngine(
     )
     {
       _log($"auto-trade lifecycle state read failed: {exception.Message}");
+    }
+    if (
+      !string.IsNullOrWhiteSpace(candidateId)
+      && _routeIdentityByCandidate.TryGetValue(candidateId, out var remembered)
+    )
+    {
+      structuralSource ??= remembered.StructuralSource;
+      zoneId ??= remembered.ZoneId;
+      structuralZoneId ??= remembered.StructuralZoneId;
+      reactionId ??= remembered.ReactionId;
+      thesisId ??= remembered.ThesisId;
     }
     var lifecycleId = Guid.NewGuid().ToString("N");
     var tradeEvent = new AutoTradeEvent(
@@ -4733,7 +4787,12 @@ public sealed class AutoTradeEngine(
       entryHigh,
       legRealizedPips,
       groupInitialVolume,
-      lotSize
+      lotSize,
+      structuralSource,
+      zoneId,
+      structuralZoneId,
+      reactionId,
+      thesisId
     );
     await store.PublishAutoTradeEventAsync(
       options.EventStream,
@@ -5414,6 +5473,21 @@ public sealed class AutoTradeEngine(
 
   private static string GroupToken(string groupId) =>
     groupId[..Math.Min(10, groupId.Length)];
+
+  private void RememberRouteIdentity(TradeCandidate candidate)
+  {
+    if (string.IsNullOrWhiteSpace(candidate.CandidateId))
+    {
+      return;
+    }
+    _routeIdentityByCandidate[candidate.CandidateId] = new StructuralRouteIdentity(
+      candidate.StructuralSource,
+      candidate.ZoneId,
+      candidate.StructuralZoneId,
+      candidate.ReactionId,
+      candidate.ThesisId
+    );
+  }
 
   private static string Short(string candidateId) =>
     candidateId[..Math.Min(12, candidateId.Length)];

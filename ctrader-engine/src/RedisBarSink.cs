@@ -627,6 +627,10 @@ public sealed class StackExchangeRedisSeriesCommands :
       ("detector", tradeEvent.MatchId is null ? null : tradeEvent.Setup),
       ("execution_route", tradeEvent.Type),
       ("rejection_reason", tradeEvent.ReasonCode),
+      ("structural_source", tradeEvent.StructuralSource),
+      ("structural_zone_id", tradeEvent.StructuralZoneId),
+      ("reaction_id", tradeEvent.ReactionId),
+      ("thesis_id", tradeEvent.ThesisId),
       ("hour_utc", hour),
       ("session_utc", session),
     };

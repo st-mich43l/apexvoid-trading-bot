@@ -334,7 +334,12 @@ public sealed record AutoTradeEvent(
   decimal? EntryHigh = null,
   decimal? LegRealizedPips = null,
   long? GroupInitialVolume = null,
-  long? LotSize = null
+  long? LotSize = null,
+  string? StructuralSource = null,
+  string? ZoneId = null,
+  string? StructuralZoneId = null,
+  string? ReactionId = null,
+  string? ThesisId = null
 );
 
 public sealed record AutoTradeGroupPlan(
