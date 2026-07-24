@@ -406,7 +406,7 @@ async def test_scanner_increments_zone_reconciled_counter(monkeypatch):
     analysis=SimpleNamespace(
       per_tf={
         "M5": SimpleNamespace(
-          zone_reconcile_dropped=0, zone_reconcile_aborted=False,
+          zone_reconcile_dropped=0, zone_reconcile_aborted=False, regime=None,
         ),
       },
     ),
@@ -471,7 +471,7 @@ async def test_scanner_increments_zone_dropped_and_aborted_counters(monkeypatch)
     analysis=SimpleNamespace(
       per_tf={
         "M5": SimpleNamespace(
-          zone_reconcile_dropped=3, zone_reconcile_aborted=True,
+          zone_reconcile_dropped=3, zone_reconcile_aborted=True, regime=None,
         ),
       },
     ),
