@@ -45,24 +45,35 @@ def test_render_auto_trade_event_filters_noise_and_escapes_message():
   assert "auto trade" not in text.lower()
 
 
-def test_execution_lifecycle_cards_have_explicit_badges():
-  published = delivery.render_auto_trade_event({
-    "type": "candidate_published",
-    "strategy": "Range Edge Scalp",
-    "direction": "BUY",
-    "range_id": "range-1",
-    "configuration_profile": "demo_eval",
-  })
-  submitted = delivery.render_auto_trade_event({
-    "type": "order_submitted",
-    "strategy": "Range Edge Scalp",
-    "direction": "BUY",
-  })
-  managing = delivery.render_auto_trade_event({
-    "type": "managing",
-    "strategy": "Range Edge Scalp",
-    "direction": "BUY",
-  })
+def test_execution_lifecycle_cards_suppress_noise_keep_essentials():
+  for silent in (
+    "candidate_published",
+    "order_submitted",
+    "order_accepted",
+    "managing",
+    "position_managing",
+    "config_fatal",
+    "broker_fatal",
+    "configuration_health",
+    "config_health",
+  ):
+    assert delivery.render_auto_trade_event({
+      "type": silent,
+      "strategy": "Range Edge Scalp",
+      "direction": "BUY",
+      "message": "noise",
+    }) is None
+
+  assert delivery.render_auto_trade_event({
+    "type": "rejected",
+    "reason_code": "duplicate_reaction_active",
+    "message": "duplicate",
+  }) is None
+  assert delivery.render_auto_trade_event({
+    "type": "rejected",
+    "reason_code": "already_processed",
+  }) is None
+
   waiting = delivery.render_auto_trade_event({
     "type": "zone_planned",
     "message": "BUY limit is armed",
@@ -71,13 +82,14 @@ def test_execution_lifecycle_cards_have_explicit_badges():
     "type": "position_closed",
     "message": "BUY position is closed",
   })
+  rejected = delivery.render_auto_trade_event({
+    "type": "rejected",
+    "message": "stop plan invalid",
+  })
 
-  assert "CANDIDATE PUBLISHED" in published
-  assert "OPPOSITE RANGE SIDE ARMED" in published
-  assert "ORDER SUBMITTED" in submitted
-  assert "POSITION MANAGING" in managing
   assert "WAITING FOR PRICE" in waiting
   assert "POSITION CLOSED" in closed
+  assert "EXECUTOR REJECTED" in rejected
 
 
 def test_render_box_open_and_full_tp_as_shareable_cards():
@@ -111,7 +123,8 @@ def test_render_box_open_and_full_tp_as_shareable_cards():
   assert "39025496" not in opened
   assert "✅ closed" in take_profit
   assert "Net: <b>+51.3 pips</b>" in take_profit
-  assert "Initial volume: <b>0.04 lot</b>" in take_profit
+  assert "Initial volume" not in take_profit
+  assert "lot" not in take_profit.lower()
   assert "$" not in take_profit
   assert "71.82" not in take_profit
   assert "39025496" not in take_profit
@@ -145,17 +158,76 @@ def test_partial_and_final_tp_use_volume_weighted_pips_not_money():
   assert partial == (
     "🤖 <b>ApexVoid Algo</b>\n"
     "🎯 #1 TP1 booked 33.3%\n"
-    "Realized: <b>+48.4 pips</b>\n"
-    "Remaining: <b>0.06 lot</b> · 66.7%"
+    "Realized: <b>+48.4 pips</b>"
   )
+  assert "Remaining" not in partial
+  assert "lot" not in partial.lower()
   assert final == (
     "🤖 <b>ApexVoid Algo</b>\n"
     "✅ #1 closed\n"
-    "Net: <b>+16.7 pips</b>\n"
-    "Initial volume: <b>0.09 lot</b>"
+    "Net: <b>+16.7 pips</b>"
   )
+  assert "Initial volume" not in final
+  assert "lot" not in final.lower()
   assert "$" not in partial + final
 
+
+
+def test_essential_trade_lifecycle_still_renders():
+  filled = delivery.render_auto_trade_event(_opened_event())
+  partial = delivery.render_auto_trade_event({
+    "type": "take_profit",
+    "message": "TP1 +30.4 pips closed volume 300",
+    "volume": 300,
+    "remaining_volume": 600,
+    "group_initial_volume": 900,
+    "leg_realized_pips": 30.4,
+  })
+  protected = delivery.render_auto_trade_event({
+    "type": "stop_moved",
+    "message": "🛡 ApexVoid Algo stop → 4,100.00 (breakeven)",
+  })
+  closed = delivery.render_auto_trade_event({
+    "type": "position_closed",
+    "message": "BUY position is closed",
+  })
+  rejected = delivery.render_auto_trade_event({
+    "type": "rejected",
+    "message": "volume planning failed",
+  })
+
+  assert "ORDER FILLED" in filled
+  assert "TP1 booked 33.3%" in partial
+  assert "Realized: <b>+30.4 pips</b>" in partial
+  assert "Remaining" not in partial
+  assert "lot" not in partial.lower()
+  assert "Risk protected" in protected or "SL moved" in protected
+  assert "POSITION CLOSED" in closed
+  assert "EXECUTOR REJECTED" in rejected
+
+
+@pytest.mark.asyncio
+async def test_silent_lifecycle_events_still_persist_in_redis(monkeypatch):
+  client = redis_state.get_client()
+  recorded = []
+
+  async def _capture(*args, **kwargs):
+    recorded.append((args, kwargs))
+    return {"state": args[1] if len(args) > 1 else kwargs.get("state")}
+
+  monkeypatch.setattr(delivery, "emit_lifecycle", _capture)
+  await delivery._record_lifecycle_event(client, {
+    "type": "opened",
+    "lifecycle_id": "life-1",
+    "candidate_id": "cand-1",
+    "symbol": "XAU",
+    "message": "filled",
+  })
+  # Managing is still emitted internally after fill, even though Telegram is silent.
+  states = [call[0][1] for call in recorded]
+  assert "order_filled" in states
+  assert "managing" in states
+  assert delivery.render_auto_trade_event({"type": "managing"}) is None
 
 
 def test_opened_event_renders_strategy_attribution():
@@ -239,7 +311,6 @@ def test_internal_profile_hides_broker_position_id():
     "\n"
     "📍 Entry: <b>4,111.26</b>\n"
     "🛡 SL: <b>4,117.76</b> · 65 pips\n"
-    "📊 Size: <b>0.06 lot</b>\n"
     "🧭 Box Breakout · breakout · ★★★"
   )
 
