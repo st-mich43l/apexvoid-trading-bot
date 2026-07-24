@@ -6,6 +6,27 @@
 {% set auto_trade_profile = apexvoid_trading_bot_env.AUTO_TRADE_PROFILE | default('demo_eval') | string | lower %}
 {% set demo_eval_default = 'true' if auto_trade_profile == 'demo_eval' else 'false' %}
 {% set range_flat_default = 'false' if auto_trade_profile == 'demo_eval' else 'true' %}
+{% set require_demo = apexvoid_trading_bot_env.AUTO_TRADE_REQUIRE_DEMO_ACCOUNT | default('true') | string | lower %}
+{% set structural_guard_default = 'observe' if auto_trade_profile == 'demo_eval' else ('balanced' if require_demo == 'true' else 'strict') %}
+{% set zone_cooldown_default = 'false' if auto_trade_profile == 'demo_eval' else 'true' %}
+{% set zone_reconcile_default = 'shadow' if auto_trade_profile == 'demo_eval' else 'enforce' %}
+{% set demo_execution_defaults = {
+  'AUTO_TRADE_STRUCTURAL_GUARD_MODE': 'observe',
+  'AUTO_TRADE_OPPOSING_BARRIER_VETO_ENABLED': 'false',
+  'AUTO_TRADE_OVERLAP_VETO_ENABLED': 'false',
+  'AUTO_TRADE_ZONE_COOLDOWN_ENABLED': 'false',
+  'AUTO_TRADE_ZONE_RECONCILE_MODE': 'shadow',
+  'AUTO_TRADE_RANGE_MIN_ENTRY_DRIFT_PIPS': '10',
+  'AUTO_TRADE_MAP_MIN_ENTRY_DRIFT_PIPS': '10',
+  'AUTO_TRADE_TREND_MIN_ENTRY_DRIFT_PIPS': '15',
+  'AUTO_TRADE_RANGE_MAX_ENTRY_DRIFT_ATR': '1.0',
+  'AUTO_TRADE_MAP_MAX_ENTRY_DRIFT_ATR': '1.0',
+  'AUTO_TRADE_TREND_MAX_ENTRY_DRIFT_ATR': '1.5',
+  'AUTO_TRADE_RANGE_HARD_ENTRY_DRIFT_PIPS': '20',
+  'AUTO_TRADE_MAP_HARD_ENTRY_DRIFT_PIPS': '20',
+  'AUTO_TRADE_TREND_HARD_ENTRY_DRIFT_PIPS': '30'
+} if auto_trade_profile == 'demo_eval' else {} %}
+{% set resolved_bot_env = demo_execution_defaults | combine(apexvoid_trading_bot_env) %}
 name: apexvoid-trading-bot
 
 services:
@@ -49,7 +70,7 @@ services:
         condition: service_healthy
     # No .env — all environment declared here (values from the vaulted dict).
     environment:
-{% for key, value in apexvoid_trading_bot_env.items() %}
+{% for key, value in resolved_bot_env.items() %}
       {{ key }}: {{ value | to_json }}
 {% endfor %}
     # Calendar cache (ff_*.json) still persists here; signals live in Postgres.
@@ -138,6 +159,9 @@ services:
       AUTO_TRADE_RANGE_TP_BUFFER_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_RANGE_TP_BUFFER_PIPS | default('3') | string | to_json }}
       AUTO_TRADE_RANGE_FLIP_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_RANGE_FLIP_ENABLED | default(demo_eval_default) | string | to_json }}
       AUTO_TRADE_NON_HEDGED_OPPOSITE_POLICY: {{ apexvoid_trading_bot_env.AUTO_TRADE_NON_HEDGED_OPPOSITE_POLICY | default('broker_netting') | string | to_json }}
+      AUTO_TRADE_STRUCTURAL_GUARD_MODE: {{ apexvoid_trading_bot_env.AUTO_TRADE_STRUCTURAL_GUARD_MODE | default(structural_guard_default) | string | to_json }}
+      AUTO_TRADE_ZONE_COOLDOWN_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_ZONE_COOLDOWN_ENABLED | default(zone_cooldown_default) | string | to_json }}
+      AUTO_TRADE_ZONE_RECONCILE_MODE: {{ apexvoid_trading_bot_env.AUTO_TRADE_ZONE_RECONCILE_MODE | default(zone_reconcile_default) | string | to_json }}
       AUTO_TRADE_FLIP_EXIT_BUFFER_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_FLIP_EXIT_BUFFER_PIPS | default('10') | string | to_json }}
       AUTO_TRADE_FLIP_CONFIRM_TIMEOUT_SECONDS: {{ apexvoid_trading_bot_env.AUTO_TRADE_FLIP_CONFIRM_TIMEOUT_SECONDS | default('30') | string | to_json }}
       AUTO_TRADE_TREND_STOP_MIN_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_TREND_STOP_MIN_PIPS | default('40') | string | to_json }}
