@@ -285,6 +285,14 @@ class Settings(BaseSettings):
   # price has left then re-touched with a newer confirmation.
   auto_trade_map_reaction_rearm_bars: int = 3
   auto_trade_map_reaction_rearm_atr: float = 0.50
+  # One active initial group per mapped-zone thesis (independent of reaction_id).
+  # Default true; disabling must be explicit and produces a config warning.
+  auto_trade_map_thesis_lock_enabled: bool = Field(
+    default=True,
+    validation_alias=AliasChoices(
+      "AUTO_TRADE_MAP_THESIS_LOCK_ENABLED",
+    ),
+  )
   # Reject collapsed map geometry before it can become the nearest target.
   # Both thresholds apply; the effective minimum is their maximum.
   auto_trade_map_zone_min_width_atr: float = 0.15

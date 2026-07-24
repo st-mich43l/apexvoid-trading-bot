@@ -371,6 +371,8 @@ def evaluate_market_map_strategy(
     reaction_id=reaction_id,
     thesis_id=thesis_id,
     structural_zone_id=zone_structural_id,
+    structural_zone_low=float(entry.lo),
+    structural_zone_high=float(entry.hi),
     touch_bar_ts=str(hit.touch_bar_ts),
     confirmation_bar_ts=str(hit.confirmation_bar_ts),
     reaction_type=str(hit.reaction_type),
