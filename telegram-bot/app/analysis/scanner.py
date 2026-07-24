@@ -56,7 +56,7 @@ from app.autotrade.range_context import (
   scanner_range_context,
 )
 from app.autotrade import units
-from app.autotrade.map_strategy import market_map_key
+from app.autotrade.map_strategy import market_map_display_key, market_map_key
 from app.core.symbols import SYMBOLS, canonical_symbol, pip_for
 from app.bot.client import send_scanner_with_retry
 
@@ -1470,13 +1470,21 @@ async def _handle_event(
       else float(frames[exec_tf]["close"].iloc[-1])
     )
     current_map = build_map(analysis, price, settings)
+    map_payload = market_map_payload(current_map)
+    map_ttl = max(
+      900,
+      int(settings.auto_trade_strategy_match_max_age_seconds) * 2,
+    )
     await client.set(
       market_map_key(symbol),
-      market_map_payload(current_map),
-      ex=max(
-        900,
-        int(settings.auto_trade_strategy_match_max_age_seconds) * 2,
-      ),
+      map_payload,
+      ex=map_ttl,
+    )
+    # Strategy and Telegram must share the same map_id snapshot.
+    await client.set(
+      market_map_display_key(symbol),
+      map_payload,
+      ex=map_ttl,
     )
     reconciled = sum(
       1 for entry in current_map.entries

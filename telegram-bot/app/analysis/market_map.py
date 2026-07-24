@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, timedelta, timezone
 from html import escape
+import hashlib
 import json
 import logging
 import math
@@ -73,6 +74,10 @@ class MarketMap:
   bias: str
   bias_tf: str | None
   rails: list[ScalpRail] = field(default_factory=list)
+  map_id: str = ""
+  generated_at: int = 0
+  source_timeframe: str = "M5"
+  actionable_entries: list[MapEntry] = field(default_factory=list)
 
   @property
   def buys(self) -> list[MapEntry]:
@@ -220,6 +225,10 @@ def build_map(ctx_or_per_tf, price: float, cfg) -> MarketMap:
   entries = [*zones, *levels]
   entries, _ = _attach_confluence(entries, trendline_candidates)
   entries = _merge_display_entries(entries, band_max)
+  actionable_pool = [
+    entry for entry in entries
+    if _is_structural_actionable(entry)
+  ]
   capped: list[MapEntry] = []
   min_per_side = max(0, int(getattr(cfg, "map_min_per_side", MAP_MIN_PER_SIDE)))
   max_per_side = max(
@@ -264,6 +273,20 @@ def build_map(ctx_or_per_tf, price: float, cfg) -> MarketMap:
     "present" if rails else "none",
     scalp_rejected_by,
   )
+  generated_at = int(datetime.now(timezone.utc).timestamp())
+  source_tf = str(
+    getattr(cfg, "scanner_exec_tf", None)
+    or getattr(cfg, "map_source_timeframe", "M5")
+    or "M5"
+  ).upper()
+  actionable_entries = _rank_entries(actionable_pool, float(price))
+  map_id = _build_map_id(
+    capped,
+    actionable_entries,
+    float(price),
+    generated_at,
+    source_tf,
+  )
   return MarketMap(
     entries=capped,
     price=float(price),
@@ -273,6 +296,10 @@ def build_map(ctx_or_per_tf, price: float, cfg) -> MarketMap:
     bias=bias,
     bias_tf=_bias_timeframe(per_tf, bias),
     rails=rails,
+    map_id=map_id,
+    generated_at=generated_at,
+    source_timeframe=source_tf,
+    actionable_entries=actionable_entries,
   )
 
 
@@ -308,6 +335,12 @@ def render_market_map(
     "BUY",
     *_render_side(market_map.buys, market_map.price),
   ]
+  actionable_now = _actionable_now_lines(market_map)
+  if actionable_now:
+    lines.extend(["", "⚡ ACTIONABLE NOW", *actionable_now])
+  if market_map.map_id:
+    lines.append("")
+    lines.append(f"map_id {market_map.map_id}")
   return f"<pre>{escape(chr(10).join(lines))}</pre>"
 
 
@@ -373,6 +406,12 @@ def market_map_from_payload(payload: str) -> MarketMap:
     bias=str(data.get("bias", "range")),
     bias_tf=data.get("bias_tf"),
     rails=[_rail_from_payload(rail) for rail in data.get("rails", [])],
+    map_id=str(data.get("map_id") or ""),
+    generated_at=int(data.get("generated_at") or 0),
+    source_timeframe=str(data.get("source_timeframe") or "M5"),
+    actionable_entries=[
+      MapEntry(**entry) for entry in data.get("actionable_entries", [])
+    ],
   )
 
 
@@ -809,6 +848,66 @@ def _rank_entries(entries, price: float) -> list[MapEntry]:
       tuple(tag.casefold() for tag in entry.tags),
     ),
   )
+
+
+_ACTIONABLE_MAP_TAGS = {
+  "breakout-retest",
+  "demand",
+  "flip",
+  "fresh",
+  "fvg",
+  "ob",
+  "supply",
+}
+
+
+def _is_structural_actionable(entry: MapEntry) -> bool:
+  tags = {tag.lower() for tag in entry.tags}
+  return entry.tier in {"zone", "major"} and bool(tags & _ACTIONABLE_MAP_TAGS)
+
+
+def _build_map_id(
+  entries: list[MapEntry],
+  actionable: list[MapEntry],
+  price: float,
+  generated_at: int,
+  source_timeframe: str,
+) -> str:
+  parts = [
+    source_timeframe,
+    f"{price:.2f}",
+    str(generated_at),
+  ]
+  for entry in [*entries, *actionable]:
+    parts.append(
+      f"{entry.side}:{entry.lo:.2f}-{entry.hi:.2f}:{entry.tier}"
+    )
+  digest = hashlib.sha256("|".join(parts).encode("ascii")).hexdigest()
+  return digest[:16]
+
+
+def _entry_in_list(entry: MapEntry, entries: list[MapEntry]) -> bool:
+  return any(
+    candidate.side == entry.side
+    and math.isclose(candidate.lo, entry.lo, abs_tol=1e-6)
+    and math.isclose(candidate.hi, entry.hi, abs_tol=1e-6)
+    for candidate in entries
+  )
+
+
+def _actionable_now_lines(market_map: MarketMap) -> list[str]:
+  """Render actionable bands dropped only by display capping."""
+  lines: list[str] = []
+  for entry in market_map.actionable_entries:
+    if _entry_in_list(entry, market_map.entries):
+      continue
+    tags = "·".join(_compact_tags(entry.tags, 2))
+    suffix = f" ({tags})" if tags else ""
+    lines.append(
+      f"{entry.side.upper()} {_format_band(entry.label_lo, entry.label_hi)}"
+      f"{suffix}"
+    )
+  return lines
 
 
 def _fallback_tags(tags: list[str], marker: str) -> list[str]:
