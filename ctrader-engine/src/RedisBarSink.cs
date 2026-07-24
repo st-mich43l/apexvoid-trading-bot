@@ -113,9 +113,7 @@ public interface IAutoTradeStore
   Task RecordZoneCooldownAsync(
     string symbol,
     string direction,
-    decimal entryPrice,
-    decimal stopPrice,
-    long closedAt,
+    ZoneCooldownRecord record,
     int ttlMinutes,
     CancellationToken cancellationToken
   );
@@ -518,15 +516,13 @@ public sealed class StackExchangeRedisSeriesCommands :
   public Task RecordZoneCooldownAsync(
     string symbol,
     string direction,
-    decimal entryPrice,
-    decimal stopPrice,
-    long closedAt,
+    ZoneCooldownRecord record,
     int ttlMinutes,
     CancellationToken cancellationToken
   ) => _db.StringSetAsync(
     $"auto_trade:zone:cooldown:{symbol.ToUpperInvariant()}:{direction.ToUpperInvariant()}",
     System.Text.Json.JsonSerializer.Serialize(
-      new ZoneCooldownRecord(entryPrice, stopPrice, closedAt),
+      record,
       RedisJsonContext.Default.ZoneCooldownRecord
     ),
     TimeSpan.FromMinutes(Math.Max(1, ttlMinutes))
