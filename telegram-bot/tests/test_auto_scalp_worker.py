@@ -231,7 +231,7 @@ async def test_worker_routes_scanner_strategy_without_regime_confirmation(
   match = _strategy_match(now)
   await client.set(strategy_match_key("XAU"), match.to_json(), ex=420)
   monkeypatch.setattr(worker.settings, "auto_trade_enabled", True)
-  monkeypatch.setattr(worker.settings, "auto_trade_strategy_bridge_enabled", True)
+  monkeypatch.setattr(worker.settings, "auto_trade_strategy_match_enabled", True)
   monkeypatch.setattr(worker.settings, "auto_trade_stream", "auto_trade:test")
   monkeypatch.setattr(worker.settings, "auto_trade_stream_maxlen", 100)
   monkeypatch.setattr(worker.settings, "auto_trade_candidate_ttl", 3600)

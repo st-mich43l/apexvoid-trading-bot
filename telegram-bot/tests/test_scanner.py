@@ -597,7 +597,8 @@ def test_range_scalp_alert_is_two_sided_and_keeps_target_reasons():
   assert "TP2 edge 4100" in text
 
 
-def test_scanner_card_always_classifies_auto_execution(monkeypatch):
+@pytest.mark.no_database
+def test_scanner_card_never_claims_ready_before_worker(monkeypatch):
   result = scanner.DetectionResult(
     "Range Edge Scalp",
     "BUY",
@@ -636,7 +637,8 @@ def test_scanner_card_always_classifies_auto_execution(monkeypatch):
     execution_match=None,
   )
 
-  assert "AUTO READY" in ready
+  assert "AUTO CHECKING" in ready
+  assert "AUTO READY" not in ready
   assert "AUTO BLOCKED" in blocked
 
 

@@ -58,7 +58,7 @@ def _supply() -> MapEntry:
 
 def _cfg(**overrides) -> SimpleNamespace:
   values = {
-    "auto_trade_market_map_strategy_enabled": True,
+    "auto_trade_mapped_zone_enabled": True,
     "auto_trade_max_entry_distance_pips": 10,
     "auto_trade_strategy_match_max_age_seconds": 420,
     "auto_trade_tp_pips": "30,60,90,120,200",

@@ -43,8 +43,8 @@ def test_demo_profile_resolves_execution_defaults(monkeypatch):
   assert cfg.auto_trade_range_flip_enabled
   assert cfg.auto_trade_trend_enabled
   assert cfg.auto_trade_range_enabled
-  assert cfg.auto_trade_market_map_strategy_enabled
-  assert cfg.auto_trade_strategy_bridge_enabled
+  assert cfg.auto_trade_mapped_zone_enabled
+  assert cfg.auto_trade_strategy_match_enabled
   assert cfg.auto_trade_breakout_enabled
   assert cfg.auto_trade_retest_enabled
   assert cfg.auto_trade_reaction_enabled

@@ -233,7 +233,7 @@ def test_insufficient_target_room_is_rejected_with_a_reason_not_silently(
 @pytest.mark.asyncio
 async def test_scanner_syncs_and_clears_strategy_match(monkeypatch):
   client = redis_state.get_client()
-  monkeypatch.setattr(scanner.settings, "auto_trade_strategy_bridge_enabled", True)
+  monkeypatch.setattr(scanner.settings, "auto_trade_strategy_match_enabled", True)
   monkeypatch.setattr(
     scanner.settings, "auto_trade_strategy_match_max_age_seconds", 420,
   )

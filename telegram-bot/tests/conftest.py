@@ -51,8 +51,11 @@ def _fake_redis(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def _reset_db(event_loop):
+def _reset_db(event_loop, request):
   """Drop and recreate the schema before each test; drop the pool after."""
+  if request.node.get_closest_marker("no_database"):
+    yield
+    return
   async def _wipe():
     await store.close_pool()
     conn = await asyncpg.connect(store.settings.database_url)

@@ -90,7 +90,9 @@ public sealed record AutoTradeOptions(
   int RangeBoxScaleOutThresholdPips = 70,
   int RangeBoxScaleOutTriggerPips = 30,
   decimal RangeBoxScaleOutFraction = 0.50m,
-  bool RangeBoxMoveSlToBeAfterScaleOut = false
+  bool RangeBoxMoveSlToBeAfterScaleOut = false,
+  decimal ExecutionZoneMaxWidthAtr = 2.0m,
+  decimal ExecutionZoneMaxWidthPips = 100m
 )
 {
   // Shared target-selection contract (app/autotrade/range_targets.py on the
@@ -322,13 +324,22 @@ public sealed record AutoTradeOptions(
       "AUTO_TRADE_TREND_ENABLED", demoEval, profileSource
     ),
     RangeEnabled: resolver.Bool("AUTO_TRADE_RANGE_ENABLED", true),
-    MappedZoneEnabled: resolver.Bool("AUTO_TRADE_MAPPED_ZONE_ENABLED", true),
+    MappedZoneEnabled: resolver.Bool(
+      "AUTO_TRADE_MAPPED_ZONE_ENABLED",
+      true,
+      "application_default",
+      "AUTO_TRADE_MARKET_MAP_STRATEGY_ENABLED"
+    ),
     MapThesisLockEnabled: resolver.Bool(
       "AUTO_TRADE_MAP_THESIS_LOCK_ENABLED",
       true
     ),
     StrategyMatchEnabled: resolver.Bool(
-      "AUTO_TRADE_STRATEGY_MATCH_ENABLED", true
+      "AUTO_TRADE_STRATEGY_MATCH_ENABLED",
+      true,
+      "application_default",
+      "AUTO_TRADE_STRATEGY_BRIDGE_ENABLED",
+      "AUTO_TRADE_FORMING_GATE_ENABLED"
     ),
     BreakoutEnabled: resolver.Bool("AUTO_TRADE_BREAKOUT_ENABLED", true),
     RetestEnabled: resolver.Bool("AUTO_TRADE_RETEST_ENABLED", true),
@@ -377,6 +388,12 @@ public sealed record AutoTradeOptions(
     ),
     RangeBoxMoveSlToBeAfterScaleOut: resolver.Bool(
       "AUTO_TRADE_RANGE_BOX_MOVE_SL_TO_BE_AFTER_SCALE_OUT", false
+    ),
+    ExecutionZoneMaxWidthAtr: resolver.Decimal(
+      "AUTO_TRADE_EXECUTION_ZONE_MAX_WIDTH_ATR", 2.0m
+    ),
+    ExecutionZoneMaxWidthPips: resolver.Decimal(
+      "AUTO_TRADE_EXECUTION_ZONE_MAX_WIDTH_PIPS", 100m
     )
   );
   return options with
@@ -584,6 +601,13 @@ public sealed record AutoTradeOptions(
         + "0 < fraction < 1)"
       );
     }
+    if (ExecutionZoneMaxWidthAtr <= 0 || ExecutionZoneMaxWidthPips <= 0)
+    {
+      throw new AutoTradeConfigurationException(
+        "Auto trade disabled: AUTO_TRADE_EXECUTION_ZONE_MAX_WIDTH_ATR and "
+        + "AUTO_TRADE_EXECUTION_ZONE_MAX_WIDTH_PIPS must be positive"
+      );
+    }
     if (
       CandidateMaxAgeSeconds <= 0
       || CandidateStorageTtlSeconds <= 0
@@ -651,22 +675,49 @@ public sealed record AutoTradeOptions(
     )
     {
       var explicitValue = Environment.GetEnvironmentVariable(canonical);
+      var legacyValues = aliases
+        .Select(alias => (
+          Alias: alias,
+          Value: Environment.GetEnvironmentVariable(alias)
+        ))
+        .Where(item => !string.IsNullOrWhiteSpace(item.Value))
+        .Select(item => (item.Alias, Value: item.Value!.Trim()))
+        .ToArray();
+      foreach (var item in legacyValues)
+      {
+        _deprecated.Add(item.Alias);
+      }
       if (!string.IsNullOrWhiteSpace(explicitValue))
       {
-        RecordDeprecatedAliases(aliases);
-        _sources[canonical] = "explicit_env";
-        return explicitValue.Trim();
-      }
-      foreach (var alias in aliases)
-      {
-        var legacyValue = Environment.GetEnvironmentVariable(alias);
-        if (string.IsNullOrWhiteSpace(legacyValue))
+        var normalized = explicitValue.Trim();
+        if (legacyValues.Any(item => !string.Equals(
+          item.Value, normalized, StringComparison.OrdinalIgnoreCase
+        )))
         {
-          continue;
+          throw new AutoTradeConfigurationException(
+            $"Auto trade disabled: conflicting environment aliases for {canonical}"
+          );
         }
-        _deprecated.Add(alias);
-        _sources[canonical] = $"deprecated_env:{alias}";
-        return legacyValue.Trim();
+        _sources[canonical] = "explicit_env";
+        return normalized;
+      }
+      if (
+        legacyValues.Length > 1
+        && legacyValues.Skip(1).Any(item => !string.Equals(
+          item.Value,
+          legacyValues[0].Value,
+          StringComparison.OrdinalIgnoreCase
+        ))
+      )
+      {
+        throw new AutoTradeConfigurationException(
+          $"Auto trade disabled: conflicting legacy aliases for {canonical}"
+        );
+      }
+      if (legacyValues.Length > 0)
+      {
+        _sources[canonical] = $"deprecated_env:{legacyValues[0].Alias}";
+        return legacyValues[0].Value;
       }
       _sources[canonical] = fallbackSource;
       return fallback;
@@ -679,18 +730,45 @@ public sealed record AutoTradeOptions(
       params string[] aliases
     )
     {
-      var raw = String(
-        canonical,
-        fallback ? "true" : "false",
-        fallbackSource,
-        aliases
-      ).ToLowerInvariant();
-      return raw switch
+      static bool Parse(string name, string raw) => raw.Trim().ToLowerInvariant() switch
       {
         "true" or "1" or "yes" => true,
         "false" or "0" or "no" => false,
-        _ => throw Invalid(canonical, raw, "true,false,1,0,yes,no"),
+        _ => throw Invalid(name, raw, "true,false,1,0,yes,no"),
       };
+      var present = new List<(string Name, bool Value)>();
+      var canonicalRaw = Environment.GetEnvironmentVariable(canonical);
+      if (!string.IsNullOrWhiteSpace(canonicalRaw))
+      {
+        present.Add((canonical, Parse(canonical, canonicalRaw)));
+      }
+      foreach (var alias in aliases)
+      {
+        var raw = Environment.GetEnvironmentVariable(alias);
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+          continue;
+        }
+        _deprecated.Add(alias);
+        present.Add((alias, Parse(alias, raw)));
+      }
+      if (present.Count > 1 && present.Skip(1).Any(
+        item => item.Value != present[0].Value
+      ))
+      {
+        throw new AutoTradeConfigurationException(
+          $"Auto trade disabled: conflicting environment aliases for {canonical}"
+        );
+      }
+      if (present.Count == 0)
+      {
+        _sources[canonical] = fallbackSource;
+        return fallback;
+      }
+      _sources[canonical] = present[0].Name == canonical
+        ? "explicit_env"
+        : $"deprecated_env:{present[0].Name}";
+      return present[0].Value;
     }
 
     public int Int(
@@ -789,19 +867,6 @@ public sealed record AutoTradeOptions(
       .Distinct(StringComparer.Ordinal)
       .Order(StringComparer.Ordinal)
       .ToArray();
-
-    private void RecordDeprecatedAliases(IEnumerable<string> aliases)
-    {
-      foreach (var alias in aliases)
-      {
-        if (!string.IsNullOrWhiteSpace(
-          Environment.GetEnvironmentVariable(alias)
-        ))
-        {
-          _deprecated.Add(alias);
-        }
-      }
-    }
 
     private static AutoTradeConfigurationException Invalid(
       string canonical,

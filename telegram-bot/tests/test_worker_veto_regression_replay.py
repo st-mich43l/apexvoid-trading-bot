@@ -131,7 +131,7 @@ def test_opposing_barrier_reason_without_exclusion_args_is_unchanged():
     ),
   ],
 )
-def test_unrelated_opposing_structure_waits_in_demo_and_blocks_in_strict(
+def test_unrelated_opposing_structure_warns_in_observe_and_blocks_in_strict(
   direction,
   entry,
   target,
@@ -160,7 +160,7 @@ def test_unrelated_opposing_structure_waits_in_demo_and_blocks_in_strict(
     guard_mode="strict",
   )
 
-  assert observed.outcome == "wait"
+  assert observed.outcome == "allow_with_warning"
   assert not observed.hard_block
   assert strict.outcome == "block"
   assert strict.hard_block

@@ -78,7 +78,7 @@ def _context(
 
 def _cfg(**overrides) -> SimpleNamespace:
   values = {
-    "auto_trade_market_map_strategy_enabled": True,
+    "auto_trade_mapped_zone_enabled": True,
     "auto_trade_map_track_distance_atr": 8.0,
     "auto_trade_map_execute_distance_atr": 1.5,
     "auto_trade_map_execute_tolerance_pips": 0.0,

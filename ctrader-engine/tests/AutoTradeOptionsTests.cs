@@ -5,6 +5,63 @@ namespace CTraderFeed.Tests;
 public sealed class AutoTradeOptionsTests
 {
   [Fact]
+  public void CanonicalMappedZoneOptionAcceptsEqualAliasAndRejectsConflict()
+  {
+    Environment.SetEnvironmentVariable("AUTO_TRADE_MAPPED_ZONE_ENABLED", "false");
+    Environment.SetEnvironmentVariable(
+      "AUTO_TRADE_MARKET_MAP_STRATEGY_ENABLED", "0"
+    );
+    try
+    {
+      var options = AutoTradeOptions.FromEnvironment();
+      Assert.False(options.MappedZoneEnabled);
+      Assert.Contains(
+        "AUTO_TRADE_MARKET_MAP_STRATEGY_ENABLED",
+        options.DeprecatedVariables!
+      );
+      Environment.SetEnvironmentVariable(
+        "AUTO_TRADE_MARKET_MAP_STRATEGY_ENABLED", "true"
+      );
+      Assert.Throws<AutoTradeConfigurationException>(
+        AutoTradeOptions.FromEnvironment
+      );
+    }
+    finally
+    {
+      Environment.SetEnvironmentVariable("AUTO_TRADE_MAPPED_ZONE_ENABLED", null);
+      Environment.SetEnvironmentVariable(
+        "AUTO_TRADE_MARKET_MAP_STRATEGY_ENABLED", null
+      );
+    }
+  }
+
+  [Fact]
+  public void ConflictingStrategyMatchLegacyAliasesFail()
+  {
+    Environment.SetEnvironmentVariable(
+      "AUTO_TRADE_STRATEGY_BRIDGE_ENABLED", "true"
+    );
+    Environment.SetEnvironmentVariable(
+      "AUTO_TRADE_FORMING_GATE_ENABLED", "false"
+    );
+    try
+    {
+      Assert.Throws<AutoTradeConfigurationException>(
+        AutoTradeOptions.FromEnvironment
+      );
+    }
+    finally
+    {
+      Environment.SetEnvironmentVariable(
+        "AUTO_TRADE_STRATEGY_BRIDGE_ENABLED", null
+      );
+      Environment.SetEnvironmentVariable(
+        "AUTO_TRADE_FORMING_GATE_ENABLED", null
+      );
+    }
+  }
+
+  [Fact]
   public void ValidatesTargetsWeightsAndBreakEvenAsOneSet()
   {
     Options().Validate();
@@ -296,7 +353,7 @@ public sealed class AutoTradeOptionsTests
   }
 
   [Fact]
-  public void CanonicalEnvironmentTakesPrecedenceOverDeprecatedAlias()
+  public void ConflictingCanonicalAndDeprecatedAliasesFail()
   {
     Environment.SetEnvironmentVariable(
       "AUTO_TRADE_CANDIDATE_STREAM", "canonical:candidates"
@@ -312,19 +369,9 @@ public sealed class AutoTradeOptionsTests
     );
     try
     {
-      var options = AutoTradeOptions.FromEnvironment();
-
-      Assert.Equal("canonical:candidates", options.CandidateStream);
-      Assert.Equal(
-        new[] { 30, 60, 90, 120, 200 },
-        options.TargetsPips
+      Assert.Throws<AutoTradeConfigurationException>(
+        AutoTradeOptions.FromEnvironment
       );
-      Assert.Equal(
-        "explicit_env",
-        options.ConfigSources!["AUTO_TRADE_CANDIDATE_STREAM"]
-      );
-      Assert.Contains("AUTO_TRADE_STREAM", options.DeprecatedVariables!);
-      Assert.Contains("AUTO_TRADE_TP_PIPS", options.DeprecatedVariables!);
     }
     finally
     {

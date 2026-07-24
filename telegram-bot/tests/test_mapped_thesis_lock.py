@@ -23,7 +23,7 @@ from app.autotrade.worker import _publish_strategy_match
 
 def _cfg(**overrides):
   values = {
-    "auto_trade_market_map_strategy_enabled": True,
+    "auto_trade_mapped_zone_enabled": True,
     "auto_trade_map_thesis_lock_enabled": True,
     "auto_trade_map_reaction_rearm_bars": 3,
     "auto_trade_map_reaction_rearm_atr": 0.50,
@@ -126,7 +126,7 @@ async def test_incident_second_reaction_suppressed_by_thesis_lock(monkeypatch):
 
   monkeypatch.setattr(config_mod.settings, "auto_trade_enabled", True)
   monkeypatch.setattr(
-    config_mod.settings, "auto_trade_market_map_strategy_enabled", True,
+    config_mod.settings, "auto_trade_mapped_zone_enabled", True,
   )
   monkeypatch.setattr(config_mod.settings, "auto_trade_map_thesis_lock_enabled", True)
   monkeypatch.setattr(config_mod.settings, "auto_trade_min_confluence", 1)
@@ -198,7 +198,10 @@ async def test_incident_second_reaction_suppressed_by_thesis_lock(monkeypatch):
     ),
   )
   assert first is not None
-  assert len(client.stream) == 1
+  assert sum(
+    1 for stream, _ in client.stream
+    if stream == config_mod.settings.auto_trade_stream
+  ) == 1
 
   second = await _publish_strategy_match(
     client,
@@ -213,7 +216,10 @@ async def test_incident_second_reaction_suppressed_by_thesis_lock(monkeypatch):
     ),
   )
   assert second is None
-  assert len(client.stream) == 1
+  assert sum(
+    1 for stream, _ in client.stream
+    if stream == config_mod.settings.auto_trade_stream
+  ) == 1
   metrics = client.metrics.get("auto_trade:metrics:XAU", {})
   assert metrics.get("mapped_thesis_claimed", 0) == 1
   assert metrics.get("duplicate_thesis_suppressed", 0) >= 1

@@ -76,6 +76,7 @@ _NOTIFY_TYPES = {
   "stop_moved",
   "position_closed",
   "group_result",
+  "strategy_route",
   "owner_flatten",
   "warning",
   "error",
@@ -391,6 +392,44 @@ def _format_position_closed(event: dict, message: str) -> str:
   return "\n".join(lines)
 
 
+def _format_strategy_route(event: dict) -> str | None:
+  status = str(event.get("status") or "")
+  if status == "candidate_published":
+    headline = "🟢 <b>AUTO READY</b> · candidate published"
+  elif status == "waiting":
+    headline = "🟠 <b>AUTO WAIT</b>"
+  elif status in {"blocked", "executor_rejected"}:
+    headline = "🔴 <b>AUTO BLOCKED</b>"
+  else:
+    return None
+  measured = event.get("measured") or {}
+  strategy = escape(str(event.get("strategy") or "StrategyMatch"))
+  direction = escape(str(event.get("direction") or ""))
+  reason = escape(str(event.get("message") or event.get("reason_code") or ""))
+  lines = [
+    "🤖 <b>ApexVoid Algo</b>",
+    headline,
+    f"{direction} · <b>{strategy}</b>",
+    "",
+    f"Reason: {reason}",
+  ]
+  distance = measured.get("distance_pips")
+  limit = measured.get("adaptive_limit_pips")
+  if distance is not None:
+    drift = f"Drift: <b>{float(distance):.1f}p</b>"
+    if limit is not None:
+      drift += f" · limit {float(limit):.1f}p"
+    lines.append(drift)
+  if status == "blocked" and measured.get("available_room_pips") is not None:
+    lines.append(
+      f"Room: {float(measured['available_room_pips']):.0f}p · "
+      f"minimum target: {float(measured.get('minimum_target_pips', 0)):.0f}p"
+    )
+  if status == "waiting" and event.get("expires_at"):
+    lines.append(f"Match retained until: <code>{event['expires_at']}</code>")
+  return "\n".join(lines)
+
+
 def _format_owner_flatten(event: dict, message: str) -> str:
   body = escape(message) if message else "owner flatten"
   return "\n".join([
@@ -494,6 +533,8 @@ def render_auto_trade_event(
     return _format_group_result(event, message)
   if event_type == "position_closed":
     return _format_position_closed(event, message)
+  if event_type == "strategy_route":
+    return _format_strategy_route(event)
   if event_type == "owner_flatten":
     return _format_owner_flatten(event, message)
   labels = {
@@ -507,6 +548,7 @@ def render_auto_trade_event(
     "stop_moved": "🛡 <b>Risk protected</b>",
     "position_closed": "🏁 <b>POSITION CLOSED</b>",
     "group_result": "📊 <b>Trade result</b>",
+    "strategy_route": "🧭 <b>Strategy route</b>",
     "owner_flatten": "🧹 <b>FLATTEN</b>",
     "warning": "⚠️ <b>Warning</b>",
     "error": "⚠️ <b>Execution issue</b>",
@@ -614,6 +656,62 @@ async def _remember_trade_message(
     )
 
 
+async def _correlate_strategy_route(client, event: dict) -> None:
+  match_id = str(event.get("match_id") or "").strip()
+  symbol = str(event.get("symbol") or "").upper()
+  if not match_id or not symbol:
+    return
+  key = f"auto_trade:route_outcome:{symbol}:{match_id}"
+  current = await _json_key(client, key)
+  if not current:
+    return
+  event_type = str(event.get("type") or "")
+  transition = {
+    "executor_received": ("executor_received", "executor"),
+    "order_submitted": ("order_submitted", "broker"),
+    "opened": ("order_filled", "broker"),
+    "order_filled": ("order_filled", "broker"),
+    "rejected": ("executor_rejected", "executor"),
+    "executor_rejected": ("executor_rejected", "executor"),
+  }.get(event_type)
+  if transition is None:
+    return
+  status, stage = transition
+  now = int(datetime.now(timezone.utc).timestamp())
+  current.update({
+    "status": status,
+    "stage": stage,
+    "reason_code": str(
+      event.get("reason_code") or event.get("reason") or status
+    ),
+    "message": str(event.get("message") or status.replace("_", " ")),
+    "checked_at": now,
+    "candidate_id": event.get("candidate_id") or current.get("candidate_id"),
+    "group_id": event.get("group_id") or current.get("group_id"),
+    "executor_event_id": (
+      event.get("event_id")
+      or event.get("lifecycle_id")
+      or current.get("executor_event_id")
+    ),
+  })
+  encoded = json.dumps(current, separators=(",", ":"), sort_keys=True)
+  pipe = client.pipeline()
+  pipe.set(key, encoded, ex=_TRADE_MESSAGE_TTL)
+  pipe.set(
+    f"auto_trade:last_route_outcome:{symbol}",
+    encoded,
+    ex=_TRADE_MESSAGE_TTL,
+  )
+  pipe.xadd(
+    f"auto_trade:route_history:{symbol}",
+    {"payload": encoded},
+    maxlen=1000,
+    approximate=True,
+  )
+  pipe.hincrby(f"auto_trade:metrics:{symbol}", f"strategy_match_{status}", 1)
+  await pipe.execute()
+
+
 async def _deliver_auto_trade_event(
   client,
   event: dict,
@@ -623,6 +721,8 @@ async def _deliver_auto_trade_event(
   send=None,
 ) -> bool:
   event_type = str(event.get("type") or "")
+  if profile == "internal":
+    await _correlate_strategy_route(client, event)
   if (
     event.get("setup") == "Manual Algo"
     or event.get("stream") == "algo_manual"
@@ -779,6 +879,9 @@ async def auto_trade_status_text() -> str:
   )
   last_guard = await _json_key(
     client, f"auto_trade:last_guard:{primary_symbol}",
+  )
+  last_route = await _json_key(
+    client, f"auto_trade:last_route_outcome:{primary_symbol}",
   )
   reconcile_raw = await client.hgetall(
     f"auto_trade:zone_reconcile:{primary_symbol}",
@@ -1190,6 +1293,35 @@ async def auto_trade_status_text() -> str:
       )
       if item
     )
+  route_summary = "none"
+  if last_route:
+    measured = last_route.get("measured") or {}
+    checked_at = int(last_route.get("checked_at") or 0)
+    age = max(
+      0,
+      int(datetime.now(timezone.utc).timestamp()) - checked_at,
+    ) if checked_at else 0
+    route_summary = " · ".join(
+      item for item in (
+        str(last_route.get("strategy") or ""),
+        str(last_route.get("direction") or ""),
+        f"id {str(last_route.get('match_id') or '')[:10]}",
+        str(last_route.get("status") or ""),
+        str(last_route.get("stage") or ""),
+        str(last_route.get("reason_code") or ""),
+        (
+          f"drift {float(measured['distance_pips']):.1f}p"
+          if measured.get("distance_pips") is not None else ""
+        ),
+        f"guard {measured.get('guard_mode')}"
+        if measured.get("guard_mode") else "",
+        f"candidate {str(last_route.get('candidate_id') or '')[:10]}"
+        if last_route.get("candidate_id") else "",
+        f"age {age}s",
+        "retained" if measured.get("match_retained") else "consumed",
+      )
+      if item
+    )
   reconcile_summary = (
     "none"
     if not reconcile else
@@ -1232,6 +1364,8 @@ async def auto_trade_status_text() -> str:
     f"{escape(chr(10).join(thesis_lines) if thesis_lines else 'none')}</b>"
     f"\nMetrics: <code>{escape(metric_summary)}</code>"
     f"\nReject counters: <code>{escape(reject_summary)}</code>"
+    f"\nLatest strategy route: <b>{escape(route_summary)}</b>"
+    f"\nWatchers: <b>{escape(match_build_line.strip() or 'none')}</b>"
     f"\nLast execution guard: <b>{escape(guard_summary)}</b>"
     f"\nZone reconcile: <code>{escape(reconcile_summary)}</code>"
     f"\nLast lifecycle: <b>{escape(lifecycle_summary)}</b>"

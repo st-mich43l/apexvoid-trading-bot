@@ -2859,6 +2859,7 @@ public sealed class AutoTradeEngineTests
       strategyFamily: existingFamily
     );
     var store = new FakeAutoTradeStore(first);
+    store.SeedPublishedCandidate(new string('s', 64));
     var client = new FakeTradingClient();
     var options = DemoEvalOptions();
     var engine = new AutoTradeEngine(options, store, () => Now, _ => { });
@@ -4067,6 +4068,9 @@ public sealed class AutoTradeEngineTests
     public void EnqueueCandidate(string candidatePayload) =>
       _payloads.Add(candidatePayload);
 
+    public void SeedPublishedCandidate(string candidateId) =>
+      _candidateStatus[candidateId] = "published";
+
     public void EnqueueCommand(string commandPayload) =>
       _commandPayloads.Add(commandPayload);
 
@@ -4110,7 +4114,10 @@ public sealed class AutoTradeEngineTests
       CancellationToken cancellationToken
     )
     {
-      if (_candidateStatus.ContainsKey(candidateId))
+      if (
+        _candidateStatus.TryGetValue(candidateId, out var current)
+        && !string.Equals(current, "published", StringComparison.Ordinal)
+      )
       {
         return Task.FromResult(false);
       }

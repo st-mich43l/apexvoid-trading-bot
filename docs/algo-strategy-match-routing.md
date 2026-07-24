@@ -93,7 +93,7 @@ divergence instead of citing a band the owner cannot see.
 ## Controls and telemetry
 
 ```text
-AUTO_TRADE_STRATEGY_BRIDGE_ENABLED=true
+AUTO_TRADE_STRATEGY_MATCH_ENABLED=true
 AUTO_TRADE_STRATEGY_MATCH_MAX_AGE_SECONDS=420
 AUTO_TRADE_MAP_ZONE_MIN_WIDTH_ATR=0.15
 AUTO_TRADE_MAP_ZONE_MIN_WIDTH_ABS=1.0
@@ -102,7 +102,8 @@ AUTO_TRADE_MAP_COUNTER_BIAS_MIN_SCORE=6.0
 AUTO_TRADE_MAP_COUNTER_BIAS_MIN_CONFLUENCE=2
 ```
 
-Legacy `AUTO_TRADE_FORMING_GATE_ENABLED` and
+Legacy `AUTO_TRADE_STRATEGY_BRIDGE_ENABLED`,
+`AUTO_TRADE_FORMING_GATE_ENABLED`, and
 `AUTO_TRADE_FORMING_MAX_AGE_SECONDS` names remain read aliases during rollout.
 `/auto_status` and `auto_trade:last_gate*` expose the active strategy name,
 direction, source timeframe, source event, reasons, and candidate ID.

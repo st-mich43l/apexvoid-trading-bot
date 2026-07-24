@@ -2,6 +2,8 @@ from typing import Optional
 from pydantic import AliasChoices, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.core.environment_options import RESOLVED_ENVIRONMENT_OPTIONS
+
 
 class Settings(BaseSettings):
   model_config = SettingsConfigDict(env_file=".env", extra="ignore")
@@ -244,7 +246,7 @@ class Settings(BaseSettings):
   # transports that typed decision to the executor without another regime or
   # timeframe confirmation layer.  The legacy aliases keep existing VPS envs
   # readable while deployments move to the accurate names.
-  auto_trade_strategy_bridge_enabled: bool = Field(
+  auto_trade_strategy_match_enabled: bool = Field(
     default=True,
     validation_alias=AliasChoices(
       "AUTO_TRADE_STRATEGY_MATCH_ENABLED",
@@ -261,7 +263,7 @@ class Settings(BaseSettings):
   )
   # Executes only structural Market Map zones (never display-only round-number
   # fallbacks) after the latest M1 candle touches and rejects the zone.
-  auto_trade_market_map_strategy_enabled: bool = Field(
+  auto_trade_mapped_zone_enabled: bool = Field(
     default=True,
     validation_alias=AliasChoices(
       "AUTO_TRADE_MAPPED_ZONE_ENABLED",
@@ -323,6 +325,10 @@ class Settings(BaseSettings):
   # Both thresholds apply; the effective minimum is their maximum.
   auto_trade_map_zone_min_width_atr: float = 0.15
   auto_trade_map_zone_min_width_abs: float = 1.0
+  # Raw zones wider than either limit remain useful as context, but are not
+  # execution barriers, stop containers, or target obstructions.
+  auto_trade_execution_zone_max_width_atr: float = 2.0
+  auto_trade_execution_zone_max_width_pips: float = 100.0
   # Counter-bias mean reversion is quality-gated independently of HTF-aligned
   # mapped reactions and enabled by default.
   auto_trade_map_counter_bias_enabled: bool = True
@@ -493,8 +499,8 @@ class Settings(BaseSettings):
       "auto_trade_multi_match_enabled": True,
       "auto_trade_track_all_structural_matches": True,
       "auto_trade_trend_enabled": True,
-      "auto_trade_market_map_strategy_enabled": True,
-      "auto_trade_strategy_bridge_enabled": True,
+      "auto_trade_mapped_zone_enabled": True,
+      "auto_trade_strategy_match_enabled": True,
       "auto_trade_breakout_enabled": True,
       "auto_trade_retest_enabled": True,
       "auto_trade_reaction_enabled": True,
@@ -553,6 +559,14 @@ class Settings(BaseSettings):
     if int(self.auto_trade_structural_reaction_lookback_bars) < 1:
       raise ValueError(
         "AUTO_TRADE_STRUCTURAL_REACTION_LOOKBACK_BARS must be >= 1"
+      )
+    if (
+      self.auto_trade_execution_zone_max_width_atr <= 0
+      or self.auto_trade_execution_zone_max_width_pips <= 0
+    ):
+      raise ValueError(
+        "AUTO_TRADE_EXECUTION_ZONE_MAX_WIDTH_ATR and "
+        "AUTO_TRADE_EXECUTION_ZONE_MAX_WIDTH_PIPS must be positive"
       )
     if (
       int(self.auto_trade_range_box_scale_out_threshold_pips) <= 0

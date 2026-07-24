@@ -47,7 +47,7 @@ def _map(entry: MapEntry, price: float = 4058.0) -> MarketMap:
 
 def _cfg(**overrides):
   values = {
-    "auto_trade_market_map_strategy_enabled": True,
+    "auto_trade_mapped_zone_enabled": True,
     "auto_trade_max_entry_distance_pips": 50,
     "auto_trade_strategy_match_max_age_seconds": 420,
     "auto_trade_tp_pips": "30,60,90",
@@ -144,7 +144,7 @@ async def test_incident_replay_publishes_one_candidate(monkeypatch):
   from app.core import config as config_mod
   monkeypatch.setattr(config_mod.settings, "auto_trade_enabled", True)
   monkeypatch.setattr(
-    config_mod.settings, "auto_trade_market_map_strategy_enabled", True,
+    config_mod.settings, "auto_trade_mapped_zone_enabled", True,
   )
   monkeypatch.setattr(config_mod.settings, "auto_trade_min_confluence", 1)
   monkeypatch.setattr(config_mod.settings, "auto_trade_candidate_ttl", 600)
@@ -272,7 +272,10 @@ async def test_incident_replay_publishes_one_candidate(monkeypatch):
   assert suppressed == 6
   assert metrics.get("mapped_reaction_claimed", 0) == 1
   assert metrics.get("mapped_thesis_claimed", 0) == 1
-  assert len(client.stream) == 1
+  assert sum(
+    1 for stream, _ in client.stream
+    if stream == config_mod.settings.auto_trade_stream
+  ) == 1
 
 
 def test_same_thesis_uses_reaction_id_not_event_ts():

@@ -2530,7 +2530,10 @@ public sealed class AutoTradeEngine(
       ParentGroupId: candidate.ParentGroupId,
       StructuralSource: candidate.StructuralSource,
       ReactionId: candidate.ReactionId,
-      ThesisId: candidate.ThesisId
+      ThesisId: candidate.ThesisId,
+      StructuralZoneId: candidate.StructuralZoneId,
+      StructuralZoneLow: candidate.StructuralZoneLow,
+      StructuralZoneHigh: candidate.StructuralZoneHigh
     );
     _states[state.PositionId] = state;
     await PropagateGroupMetadataAsync(state, cancellationToken);
@@ -4291,7 +4294,10 @@ public sealed class AutoTradeEngine(
       candidate.ParentGroupId,
       candidate.StructuralSource,
       candidate.ReactionId,
-      candidate.ThesisId
+      candidate.ThesisId,
+      candidate.StructuralZoneId,
+      candidate.StructuralZoneLow,
+      candidate.StructuralZoneHigh
     );
     await store.SetValueAsync(
       $"auto_trade:group_plan:{groupId}",

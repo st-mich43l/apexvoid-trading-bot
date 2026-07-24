@@ -246,7 +246,10 @@ public sealed record AutoTradePositionState(
   long? RangeBoxScaleOutVolume = null,
   decimal? RangeBoxScaleOutPrice = null,
   decimal? RangeBoxScaleOutPips = null,
-  long? RangeBoxScaleOutAt = null
+  long? RangeBoxScaleOutAt = null,
+  string? StructuralZoneId = null,
+  decimal? StructuralZoneLow = null,
+  decimal? StructuralZoneHigh = null
 );
 
 public sealed record RedisClaimPayload(
@@ -350,7 +353,18 @@ public sealed record AutoTradeGroupPlan(
   string? ParentGroupId = null,
   string? StructuralSource = null,
   string? ReactionId = null,
-  string? ThesisId = null
+  string? ThesisId = null,
+  string? StructuralZoneId = null,
+  decimal? StructuralZoneLow = null,
+  decimal? StructuralZoneHigh = null
+);
+
+public sealed record CanonicalConfigOption(
+  string Name,
+  string NormalizedValue,
+  string Source,
+  IReadOnlyList<string> DeprecatedAliasesPresent,
+  bool Conflict
 );
 
 public sealed record AutoTradeConfigManifest(
@@ -410,7 +424,10 @@ public sealed record AutoTradeConfigManifest(
   int RangeBoxScaleOutThresholdPips = 70,
   int RangeBoxScaleOutTriggerPips = 30,
   decimal RangeBoxScaleOutFraction = 0.50m,
-  bool RangeBoxMoveSlToBeAfterScaleOut = false
+  bool RangeBoxMoveSlToBeAfterScaleOut = false,
+  decimal ExecutionZoneMaxWidthAtr = 2.0m,
+  decimal ExecutionZoneMaxWidthPips = 100m,
+  IReadOnlyList<CanonicalConfigOption>? CanonicalOptions = null
 );
 
 public sealed record AutoTradeConfigHealthDocument(

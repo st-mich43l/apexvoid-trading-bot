@@ -51,6 +51,7 @@ from app.autotrade.multi_match import (
   strategy_matches_key,
 )
 from app.autotrade.lifecycle import emit_lifecycle, increment_metric
+from app.autotrade.route_outcome import record_route_outcome
 from app.autotrade.reaction_identity import (
   THESIS_CLAIM_ACQUIRE_LUA,
   ACTIVE_THESIS_STATES,
@@ -128,6 +129,51 @@ class AutoTradeSpot:
   fresh: bool
 
 
+@dataclass(frozen=True)
+class ExecutionZoneClassification:
+  side: str
+  source: str
+  timeframe: str
+  width_pips: float
+  width_atr: float
+  execution_grade: bool
+  context_only: bool
+  invalid_geometry: bool
+
+
+def classify_execution_zone(
+  zone: Zone,
+  *,
+  atr: float,
+  pip_size: float,
+  cfg: Any,
+  timeframe: str = _HTF_TIMEFRAME,
+) -> ExecutionZoneClassification:
+  width = float(zone.high - zone.low)
+  invalid = (
+    not math.isfinite(width)
+    or width <= 0
+    or pip_size <= 0
+    or atr <= 0
+  )
+  width_pips = width / pip_size if pip_size > 0 else math.inf
+  width_atr = width / atr if atr > 0 else math.inf
+  exceeds = (
+    width_atr > float(cfg.auto_trade_execution_zone_max_width_atr)
+    or width_pips > float(cfg.auto_trade_execution_zone_max_width_pips)
+  )
+  return ExecutionZoneClassification(
+    side=zone.side,
+    source=zone.kind or "supply_demand",
+    timeframe=timeframe,
+    width_pips=round(width_pips, 3),
+    width_atr=round(width_atr, 3),
+    execution_grade=not invalid and not exceeds,
+    context_only=not invalid and exceeds,
+    invalid_geometry=invalid,
+  )
+
+
 def _symbols() -> set[str]:
   return {
     item.strip().upper()
@@ -185,7 +231,7 @@ async def _load_strategy_match(
   client: Any,
   symbol: str,
 ) -> StrategyMatch | None:
-  if not settings.auto_trade_strategy_bridge_enabled:
+  if not settings.auto_trade_strategy_match_enabled:
     return None
   key = strategy_match_key(symbol)
   raw = await client.get(key)
@@ -198,6 +244,23 @@ async def _load_strategy_match(
     or match.symbol != symbol.upper()
     or now > match.expires_at
   ):
+    if match is not None:
+      await record_route_outcome(
+        client,
+        match,
+        stage="scanner" if now > match.expires_at else "mode_check",
+        status="expired" if now > match.expires_at else "blocked",
+        reason_code=(
+          "match_expired" if now > match.expires_at else "symbol_mismatch"
+        ),
+        message=(
+          "StrategyMatch expired before execution"
+          if now > match.expires_at
+          else f"match symbol {match.symbol} does not match {symbol.upper()}"
+        ),
+        retained=False,
+        publish_status=False,
+      )
     await client.delete(key)
     return None
   return match
@@ -207,7 +270,7 @@ async def _load_strategy_matches(
   client: Any,
   symbol: str,
 ) -> list[StrategyMatch]:
-  if not settings.auto_trade_strategy_bridge_enabled:
+  if not settings.auto_trade_strategy_match_enabled:
     return []
   if not settings.auto_trade_multi_match_enabled:
     match = await _load_strategy_match(client, symbol)
@@ -215,6 +278,29 @@ async def _load_strategy_matches(
   raw = await client.get(strategy_matches_key(symbol))
   matches = deserialize_matches(raw)
   now = int(datetime.now(timezone.utc).timestamp())
+  for match in matches:
+    if match.symbol != symbol.upper():
+      await record_route_outcome(
+        client,
+        match,
+        stage="mode_check",
+        status="blocked",
+        reason_code="symbol_mismatch",
+        message=f"match symbol {match.symbol} does not match {symbol.upper()}",
+        retained=False,
+        publish_status=False,
+      )
+    elif now > match.expires_at:
+      await record_route_outcome(
+        client,
+        match,
+        stage="scanner",
+        status="expired",
+        reason_code="match_expired",
+        message="StrategyMatch expired before execution",
+        retained=False,
+        publish_status=False,
+      )
   active = [
     match for match in matches
     if match.symbol == symbol.upper() and now <= match.expires_at
@@ -592,16 +678,33 @@ def _htf_zones(frames: dict[str, Any], cfg: Any) -> list[Zone]:
   if htf is None or htf.empty:
     return []
   atr_length = max(2, int(getattr(cfg, "atr_length", 14)))
+  atr_values = atr_series(htf, atr_length)
+  current_atr = (
+    float(atr_values.iloc[-1])
+    if not atr_values.empty and math.isfinite(float(atr_values.iloc[-1]))
+    else 0.0
+  )
   legs = displacement(
     htf,
-    atr_series(htf, atr_length),
+    atr_values,
     max(0.1, float(getattr(cfg, "displacement_atr_mult", 1.5))),
     max(0.0, float(getattr(cfg, "momentum_body_frac", 0.6))),
   )
   if not legs:
     return []
   zones = supply_demand(htf, legs)
-  return mark_mitigation(zones, htf)
+  marked = mark_mitigation(zones, htf)
+  pip_size = float(getattr(cfg, "auto_trade_xau_pip_size", 0.1))
+  return [
+    zone
+    for zone in marked
+    if classify_execution_zone(
+      zone,
+      atr=current_atr,
+      pip_size=pip_size,
+      cfg=cfg,
+    ).execution_grade
+  ]
 
 
 def _htf_levels(frames: dict[str, Any], cfg: Any) -> list[Level]:
@@ -1035,6 +1138,7 @@ def _adapt_counter_bias_target(
   if target is None or "counter_bias" not in match.tags:
     return match, GuardOutcome(
       "counter_bias", OUTCOME_ALLOW, "not_counter_bias", "", False,
+      measured={"target_outcome": "target_unchanged"},
     )
   if (
     match.direction == "BUY" and target <= entry_reference
@@ -1064,6 +1168,7 @@ def _adapt_counter_bias_target(
   if barrier is None:
     return match, GuardOutcome(
       "counter_bias", OUTCOME_ALLOW, "no_barrier", "no barrier before target", False,
+      measured={"target_outcome": "target_unchanged"},
     )
   barrier_price, description = barrier
   buffer_pips = 2.0
@@ -1091,7 +1196,15 @@ def _adapt_counter_bias_target(
         f"({min(match.targets_pips) if match.targets_pips else 0}p)"
       ),
       True,
-      measured={"available_room_pips": round(room_pips, 1), "barrier_price": barrier_price},
+      measured={
+        "target_outcome": "target_room_insufficient",
+        "available_room_pips": round(room_pips, 1),
+        "minimum_target_pips": (
+          min(match.targets_pips)
+          if match.targets_pips else _MIN_COUNTER_BIAS_TARGET_PIPS
+        ),
+        "barrier_price": barrier_price,
+      },
     )
   adjusted_target = (
     entry_reference + fitted * pip_size
@@ -1116,6 +1229,7 @@ def _adapt_counter_bias_target(
     ),
     False,
     measured={
+      "target_outcome": "target_adapted",
       "original_target": target,
       "adjusted_target": adjusted_target,
       "barrier_price": barrier_price,
@@ -1742,7 +1856,7 @@ def _strategy_mode_enabled(match: StrategyMatch) -> bool:
   if match.is_range_edge or family in {"range", "range_reversion"}:
     return settings.auto_trade_range_enabled
   if "mapped" in value or family in {"mapped_zone", "mapped_zone_reaction"}:
-    return settings.auto_trade_market_map_strategy_enabled
+    return settings.auto_trade_mapped_zone_enabled
   if family == "key_level" or value == "key level reaction":
     return bool(getattr(settings, "auto_trade_key_level_reaction_enabled", True))
   if family == "supply_demand" or value in {
@@ -1770,7 +1884,7 @@ def _strategy_mode_enabled(match: StrategyMatch) -> bool:
     or "demand" in value
   ):
     return settings.auto_trade_reaction_enabled
-  return settings.auto_trade_strategy_bridge_enabled
+  return settings.auto_trade_strategy_match_enabled
 
 
 def _trend_bias_metadata(
@@ -2204,6 +2318,41 @@ async def _publish_strategy_match(
   frames: dict[str, Any] | None = None,
 ) -> str | None:
   """Publish a completed scanner strategy match without PA re-confirmation."""
+  async def route(
+    stage: str,
+    status: str,
+    reason_code: str,
+    message: str,
+    *,
+    measured: dict[str, Any] | None = None,
+    retained: bool,
+    candidate_id: str | None = None,
+    group_id: str | None = None,
+    executor_event_id: str | None = None,
+    publish_status: bool = True,
+  ) -> None:
+    await record_route_outcome(
+      client,
+      match,
+      stage=stage,  # type: ignore[arg-type]
+      status=status,  # type: ignore[arg-type]
+      reason_code=reason_code,
+      message=message,
+      measured={
+        "guard_mode": resolve_guard_mode(settings),
+        "spot_price": None if spot is None else spot.price,
+        "entry_low": match.entry_low,
+        "entry_high": match.entry_high,
+        **(measured or {}),
+      },
+      retained=retained,
+      candidate_id=candidate_id,
+      group_id=group_id,
+      executor_event_id=executor_event_id,
+      publish_status=publish_status,
+    )
+
+  await increment_metric(client, "strategy_match_evaluated", symbol=symbol)
   if spot is None or not spot.fresh:
     await emit_lifecycle(
       client,
@@ -2221,13 +2370,61 @@ async def _publish_strategy_match(
       reason_code="stale_or_missing_spot",
       message="strategy match waits for a fresh cTrader quote",
     )
+    await route(
+      "spot_check",
+      "waiting",
+      "stale_or_missing_spot",
+      "strategy match waits for a fresh cTrader quote",
+      retained=True,
+    )
+    await increment_metric(client, "strategy_match_waiting", symbol=symbol)
     return None
-  if (
-    not settings.auto_trade_enabled
-    or not _strategy_mode_enabled(match)
-    or match.symbol != symbol.upper()
-    or match.confluence < max(1, settings.auto_trade_min_confluence)
-  ):
+  if not settings.auto_trade_enabled:
+    await route(
+      "mode_check", "blocked", "auto_trade_disabled",
+      "autonomous execution is disabled", retained=True,
+    )
+    await increment_metric(client, "strategy_match_blocked", symbol=symbol)
+    return None
+  if not settings.auto_trade_strategy_match_enabled:
+    await route(
+      "mode_check", "blocked", "strategy_match_disabled",
+      "new StrategyMatch routing is disabled; existing positions remain managed",
+      retained=True,
+    )
+    await increment_metric(client, "strategy_match_blocked", symbol=symbol)
+    return None
+  if not _strategy_mode_enabled(match):
+    await route(
+      "mode_check", "blocked", "strategy_disabled",
+      f"{match.strategy} execution is disabled", retained=True,
+    )
+    await increment_metric(client, "strategy_match_blocked", symbol=symbol)
+    return None
+  if match.symbol != symbol.upper():
+    await route(
+      "mode_check", "blocked", "symbol_mismatch",
+      f"match symbol {match.symbol} does not match worker {symbol.upper()}",
+      retained=False,
+    )
+    await _consume_strategy_match(client, symbol, match)
+    await increment_metric(client, "strategy_match_blocked", symbol=symbol)
+    return None
+  if match.confluence < max(1, settings.auto_trade_min_confluence):
+    await route(
+      "mode_check", "blocked", "confluence_below_minimum",
+      (
+        f"confluence {match.confluence} below minimum "
+        f"{max(1, settings.auto_trade_min_confluence)}"
+      ),
+      measured={
+        "confluence": match.confluence,
+        "minimum_confluence": max(1, settings.auto_trade_min_confluence),
+      },
+      retained=False,
+    )
+    await _consume_strategy_match(client, symbol, match)
+    await increment_metric(client, "strategy_match_blocked", symbol=symbol)
     return None
   guard_mode = resolve_guard_mode(settings)
   source_summary = (
@@ -2261,12 +2458,21 @@ async def _publish_strategy_match(
       if regime_outcome.hard_block:
         await _consume_strategy_match(client, symbol, match)
         await _record_gate_reject(client, symbol, "range_edge_not_chop")
+        await route(
+          "mode_check", "blocked", "range_edge_not_chop",
+          regime_outcome.message, measured=regime_outcome.measured,
+          retained=False,
+        )
         return None
     assert match.range_id is not None
     assert match.range_low is not None
     assert match.range_high is not None
     if await client.exists(_box_retired_key(symbol, match.range_id)):
       await _consume_strategy_match(client, symbol, match)
+      await route(
+        "entry_invalidation", "expired", "range_retired",
+        "range thesis has retired", retained=False,
+      )
       return None
     edge_key = _box_edge_key(symbol, match.range_id, match.direction)
     if await client.exists(edge_key):
@@ -2277,6 +2483,10 @@ async def _publish_strategy_match(
         else spot.price <= midpoint
       )
       if not crossed_midpoint:
+        await route(
+          "entry_invalidation", "waiting", "range_rearm_pending",
+          "range entry waits for midpoint rearm", retained=True,
+        )
         return None
       await client.delete(edge_key)
   m1 = (frames or {}).get("M1")
@@ -2299,6 +2509,15 @@ async def _publish_strategy_match(
   if cb_outcome.hard_block:
     await _consume_strategy_match(client, symbol, match)
     await _record_gate_reject(client, symbol, "counter_bias_target_barrier")
+    await route(
+      "counter_bias", "blocked", "target_room_insufficient",
+      cb_outcome.message, measured=cb_outcome.measured, retained=False,
+    )
+    await increment_metric(
+      client,
+      f"{match.strategy.lower().replace(' ', '_')}_target_room_insufficient",
+      symbol=symbol,
+    )
     return None
 
   if (
@@ -2339,8 +2558,18 @@ async def _publish_strategy_match(
       await _record_gate_reject(
         client, symbol, barrier_outcome.reason_code,
       )
+      await route(
+        "opposing_barrier", "blocked", barrier_outcome.reason_code,
+        barrier_outcome.message, measured=barrier_outcome.measured,
+        retained=False,
+      )
       return None
     if barrier_outcome.outcome == OUTCOME_WAIT:
+      await route(
+        "opposing_barrier", "waiting", barrier_outcome.reason_code,
+        barrier_outcome.message, measured=barrier_outcome.measured,
+        retained=True,
+      )
       return None
 
   cooldown_reason = await _zone_cooldown_reason(
@@ -2366,6 +2595,10 @@ async def _publish_strategy_match(
     if cooldown_outcome.hard_block:
       await _consume_strategy_match(client, symbol, match)
       await _record_gate_reject(client, symbol, "zone_cooldown")
+      await route(
+        "cooldown", "blocked", "zone_cooldown",
+        cooldown_reason, measured=cooldown_outcome.measured, retained=False,
+      )
       return None
 
   if (
@@ -2390,8 +2623,18 @@ async def _publish_strategy_match(
     if overlap_outcome.hard_block:
       await _consume_strategy_match(client, symbol, match)
       await _record_gate_reject(client, symbol, "overlapping_zone_conflict")
+      await route(
+        "overlap", "blocked", "overlapping_zone_conflict",
+        overlap_outcome.message, measured=overlap_outcome.measured,
+        retained=False,
+      )
       return None
     if overlap_outcome.outcome == OUTCOME_WAIT:
+      await route(
+        "overlap", "waiting", overlap_outcome.reason_code,
+        overlap_outcome.message, measured=overlap_outcome.measured,
+        retained=True,
+      )
       return None
 
   invalidated = (
@@ -2422,6 +2665,11 @@ async def _publish_strategy_match(
     await _consume_strategy_match(client, symbol, match)
     await _record_gate_reject(
       client, symbol, "reaction_crossed_invalidation",
+    )
+    await route(
+      "entry_invalidation", "blocked", "reaction_crossed_invalidation",
+      invalidation_outcome.message, measured=invalidation_outcome.measured,
+      retained=False,
     )
     return None
 
@@ -2494,7 +2742,38 @@ async def _publish_strategy_match(
     if drift_outcome.hard_block:
       await _consume_strategy_match(client, symbol, match)
       await _record_gate_reject(client, symbol, "strategy_entry_moved")
+      await route(
+        "entry_drift", "blocked",
+        "strategy_entry_moved_beyond_hard_cap",
+        drift_outcome.message,
+        measured={
+          **drift_outcome.measured,
+          "distance_price": round(distance, 6),
+          "distance_pips": round(distance_pips, 3),
+          "adaptive_limit_pips": round(distance_limit, 3),
+          "hard_cap_pips": round(float(hard_cap), 3),
+          "spot_price": spot.price,
+          "entry_low": match.entry_low,
+          "entry_high": match.entry_high,
+        },
+        retained=False,
+      )
       return None
+    await route(
+      "entry_drift", "waiting", "strategy_entry_moved",
+      drift_outcome.message,
+      measured={
+        **drift_outcome.measured,
+        "distance_price": round(distance, 6),
+        "distance_pips": round(distance_pips, 3),
+        "adaptive_limit_pips": round(distance_limit, 3),
+        "hard_cap_pips": round(float(hard_cap), 3),
+        "spot_price": spot.price,
+        "entry_low": match.entry_low,
+        "entry_high": match.entry_high,
+      },
+      retained=True,
+    )
     return None
   now = int(datetime.now(timezone.utc).timestamp())
   try:
@@ -2504,6 +2783,10 @@ async def _publish_strategy_match(
     )
   except Exception:
     log.exception("strategy match blocked: news guard unavailable")
+    await route(
+      "news", "waiting", "news_guard_unavailable",
+      "news guard unavailable; match retained", retained=True,
+    )
     return None
   if guarded is not None:
     log.info(
@@ -2511,6 +2794,12 @@ async def _publish_strategy_match(
       symbol,
       match.strategy,
       guarded.get("title", "high-impact event"),
+    )
+    await route(
+      "news", "blocked", "terminal_news_policy",
+      f"high-impact event: {guarded.get('title', 'unknown')}",
+      measured={"event": guarded.get("title")},
+      retained=True,
     )
     return None
 
@@ -2545,6 +2834,13 @@ async def _publish_strategy_match(
           decision.state,
         )
         await _consume_strategy_match(client, symbol, match)
+        await route(
+          "candidate_claim", "duplicate_suppressed",
+          decision.reason_code,
+          "an active group already owns this mapped thesis",
+          measured={"thesis_state": decision.state},
+          retained=False,
+        )
         return None
       thesis_cycle = int(thesis_claim_existing.get("thesis_cycle") or 1) + 1
       await increment_metric(client, "mapped_thesis_rearmed", symbol=symbol)
@@ -2574,6 +2870,13 @@ async def _publish_strategy_match(
           existing_claim.get("state"),
         )
         await _consume_strategy_match(client, symbol, match)
+        await route(
+          "candidate_claim", "duplicate_suppressed",
+          "duplicate_reaction",
+          "an active candidate already owns this reaction",
+          measured={"reaction_state": state},
+          retained=False,
+        )
         return None
       # Terminal reaction claim may be deleted once thesis rearm already passed.
       await client.delete(claim_key)
@@ -2591,11 +2894,19 @@ async def _publish_strategy_match(
       await increment_metric(
         client, "duplicate_reaction_suppressed", symbol=symbol,
       )
-    await _consume_strategy_match(client, symbol, match)
+    await route(
+      "candidate_claim", "duplicate_suppressed",
+      "duplicate_candidate",
+      "candidate ID is already claimed; match retained pending ownership proof",
+      retained=True,
+    )
     return None
 
+  reaction_claim_previous_raw: Any = None
+  reaction_claim_created = False
   if match.reaction_id:
     claim_key = reaction_claim_key(match.reaction_id)
+    reaction_claim_previous_raw = await client.get(claim_key)
     claim_body = reaction_claim_payload(
       reaction_id=match.reaction_id,
       thesis_id=match.thesis_id or "",
@@ -2620,11 +2931,22 @@ async def _publish_strategy_match(
       await increment_metric(
         client, "duplicate_reaction_suppressed", symbol=symbol,
       )
-      await _consume_strategy_match(client, symbol, match)
+      await route(
+        "candidate_claim", "duplicate_suppressed",
+        "duplicate_reaction",
+        "reaction claim was acquired by another candidate",
+        retained=True,
+      )
       return None
+    reaction_claim_created = True
     await increment_metric(client, "mapped_reaction_claimed", symbol=symbol)
 
+  thesis_claim_previous_raw: Any = None
+  thesis_claim_created = False
   if match.thesis_id and _thesis_lock_enabled():
+    thesis_claim_previous_raw = await client.get(
+      thesis_claim_key(match.thesis_id)
+    )
     thesis_body = thesis_claim_payload(
       thesis_id=match.thesis_id,
       strategy=match.strategy,
@@ -2655,8 +2977,14 @@ async def _publish_strategy_match(
       await increment_metric(
         client, "same_thesis_group_active", symbol=symbol,
       )
-      await _consume_strategy_match(client, symbol, match)
+      await route(
+        "candidate_claim", "duplicate_suppressed",
+        "duplicate_thesis",
+        "thesis claim was acquired by another active group",
+        retained=True,
+      )
       return None
+    thesis_claim_created = True
     await increment_metric(client, "mapped_thesis_claimed", symbol=symbol)
 
   setup = (
@@ -2738,20 +3066,61 @@ async def _publish_strategy_match(
     ),
   }
   try:
-    await client.xadd(
+    executor_event_id = await client.xadd(
       settings.auto_trade_stream,
       {"payload": json.dumps(payload, separators=(",", ":"))},
       maxlen=max(100, settings.auto_trade_stream_maxlen),
       approximate=True,
     )
-  except Exception:
+  except Exception as exc:
     await client.delete(f"auto_trade:candidate:{candidate_id}")
-    if match.reaction_id:
-      await client.delete(reaction_claim_key(match.reaction_id))
-    if match.thesis_id and _thesis_lock_enabled():
-      await client.delete(thesis_claim_key(match.thesis_id))
-    raise
+    if match.reaction_id and reaction_claim_created:
+      reaction_key = reaction_claim_key(match.reaction_id)
+      if reaction_claim_previous_raw is None:
+        await client.delete(reaction_key)
+      else:
+        await client.set(reaction_key, reaction_claim_previous_raw)
+    if (
+      match.thesis_id
+      and _thesis_lock_enabled()
+      and thesis_claim_created
+    ):
+      thesis_key = thesis_claim_key(match.thesis_id)
+      if thesis_claim_previous_raw is None:
+        await client.delete(thesis_key)
+      else:
+        await client.set(thesis_key, thesis_claim_previous_raw)
+    await route(
+      "stream_publish", "waiting", "stream_publish_failed",
+      f"candidate stream publish failed: {type(exc).__name__}",
+      retained=True,
+    )
+    return None
   await increment_metric(client, "candidate_published", symbol=symbol)
+  await increment_metric(
+    client, "strategy_match_candidate_published", symbol=symbol,
+  )
+  await route(
+    "stream_publish", "candidate_published", "candidate_published",
+    "candidate published to executor stream",
+    measured={
+      "distance_price": round(distance, 6),
+      "distance_pips": round(distance_pips, 3),
+      "adaptive_limit_pips": round(distance_limit, 3),
+      "hard_cap_pips": drift_measured.get("hard_cap_pips"),
+      "spot_price": spot.price,
+      "entry_low": match.entry_low,
+      "entry_high": match.entry_high,
+    },
+    retained=False,
+    candidate_id=candidate_id,
+    group_id=group_id,
+    executor_event_id=(
+      executor_event_id.decode()
+      if isinstance(executor_event_id, bytes)
+      else str(executor_event_id)
+    ),
+  )
   if match.strategy in {
     "Key Level Reaction",
     "Demand Zone Reaction",
@@ -3709,22 +4078,41 @@ async def _handle_event(
   htf_levels = _htf_levels(frames, settings)
   strategy_candidate_ids: list[str] = []
   for routed_match in strategy_matches:
-    published = await _publish_strategy_match(
-      client,
-      symbol,
-      spot,
-      routed_match,
-      consume_redis_match=(
-        not settings.auto_trade_multi_match_enabled
-        and bool(scanner_strategy_matches)
-      ),
-      match_source=gate_source,
-      htf_zones=htf_zones,
-      htf_levels=htf_levels,
-      regime=regime,
-      market_map=cached_market_map,
-      frames=frames,
+    route_lock = (
+      f"auto_trade:route_lock:{symbol.upper()}:{routed_match.match_id}"
     )
+    locked = await client.set(route_lock, "1", nx=True, ex=30)
+    if not locked:
+      await record_route_outcome(
+        client,
+        routed_match,
+        stage="candidate_claim",
+        status="waiting",
+        reason_code="route_evaluation_in_progress",
+        message="another worker is evaluating this exact match",
+        retained=True,
+        publish_status=False,
+      )
+      continue
+    try:
+      published = await _publish_strategy_match(
+        client,
+        symbol,
+        spot,
+        routed_match,
+        consume_redis_match=(
+          not settings.auto_trade_multi_match_enabled
+          and bool(scanner_strategy_matches)
+        ),
+        match_source=gate_source,
+        htf_zones=htf_zones,
+        htf_levels=htf_levels,
+        regime=regime,
+        market_map=cached_market_map,
+        frames=frames,
+      )
+    finally:
+      await client.delete(route_lock)
     if published is not None:
       strategy_candidate_ids.append(published)
   box_candidate_id = (
@@ -3850,7 +4238,7 @@ async def auto_scalp_loop() -> None:
   log.info(
     "ApexVoid Algo watching %s on M1/M5 with strategy_bridge=%s thesis_lock=%s",
     ",".join(sorted(_symbols())),
-    settings.auto_trade_strategy_bridge_enabled,
+    settings.auto_trade_strategy_match_enabled,
     _thesis_lock_enabled(),
   )
   if not _thesis_lock_enabled():

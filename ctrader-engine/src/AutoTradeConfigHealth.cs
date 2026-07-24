@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Globalization;
 
 namespace ApexVoid.CTraderFeed;
 
@@ -88,9 +89,56 @@ public static class AutoTradeConfigHealth
       RangeBoxScaleOutThresholdPips: options.RangeBoxScaleOutThresholdPips,
       RangeBoxScaleOutTriggerPips: options.RangeBoxScaleOutTriggerPips,
       RangeBoxScaleOutFraction: options.RangeBoxScaleOutFraction,
-      RangeBoxMoveSlToBeAfterScaleOut: options.RangeBoxMoveSlToBeAfterScaleOut
+      RangeBoxMoveSlToBeAfterScaleOut: options.RangeBoxMoveSlToBeAfterScaleOut,
+      ExecutionZoneMaxWidthAtr: options.ExecutionZoneMaxWidthAtr,
+      ExecutionZoneMaxWidthPips: options.ExecutionZoneMaxWidthPips,
+      CanonicalOptions:
+      [
+        CanonicalOption(
+          options,
+          "AUTO_TRADE_MAPPED_ZONE_ENABLED",
+          options.MappedZoneEnabled ? "true" : "false",
+          ["AUTO_TRADE_MARKET_MAP_STRATEGY_ENABLED"]
+        ),
+        CanonicalOption(
+          options,
+          "AUTO_TRADE_STRATEGY_MATCH_ENABLED",
+          options.StrategyMatchEnabled ? "true" : "false",
+          [
+            "AUTO_TRADE_STRATEGY_BRIDGE_ENABLED",
+            "AUTO_TRADE_FORMING_GATE_ENABLED",
+          ]
+        ),
+        CanonicalOption(
+          options,
+          "AUTO_TRADE_EXECUTION_ZONE_MAX_WIDTH_ATR",
+          options.ExecutionZoneMaxWidthAtr.ToString(CultureInfo.InvariantCulture),
+          []
+        ),
+        CanonicalOption(
+          options,
+          "AUTO_TRADE_EXECUTION_ZONE_MAX_WIDTH_PIPS",
+          options.ExecutionZoneMaxWidthPips.ToString(CultureInfo.InvariantCulture),
+          []
+        ),
+      ]
     );
   }
+
+  private static CanonicalConfigOption CanonicalOption(
+    AutoTradeOptions options,
+    string name,
+    string value,
+    IReadOnlyList<string> aliases
+  ) => new(
+    name,
+    value,
+    options.ConfigSources?.GetValueOrDefault(name) ?? "application_default",
+    aliases.Where(alias => (
+      options.DeprecatedVariables ?? []
+    ).Contains(alias, StringComparer.Ordinal)).ToArray(),
+    false
+  );
 
   public static AutoTradeConfigHealthResult Compare(
     AutoTradeConfigManifest current,
@@ -150,6 +198,24 @@ public static class AutoTradeConfigHealth
       CompareDecimal(
         root, "range_tp_buffer", current.RangeTpBuffer, fatal
       );
+      if (root.TryGetProperty("execution_zone_max_width_atr", out _))
+      {
+        CompareDecimal(
+          root,
+          "execution_zone_max_width_atr",
+          current.ExecutionZoneMaxWidthAtr,
+          fatal
+        );
+      }
+      if (root.TryGetProperty("execution_zone_max_width_pips", out _))
+      {
+        CompareDecimal(
+          root,
+          "execution_zone_max_width_pips",
+          current.ExecutionZoneMaxWidthPips,
+          fatal
+        );
+      }
       CompareInt(
         root,
         "candidate_execution_max_age_seconds",
