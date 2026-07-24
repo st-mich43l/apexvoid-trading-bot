@@ -38,6 +38,10 @@ from app.autotrade.strategy_match import (
   strategy_match_key,
   strategy_range_id,
 )
+from app.analysis.structural_reaction_support import (
+  STRUCTURAL_SETUPS,
+  structural_thesis_id,
+)
 from app.autotrade.execution_policy import (
   classify_tier,
   risk_multiplier_for_tier,
@@ -131,6 +135,12 @@ def _level_bucket(symbol: str, level: float, bucket_pips: int) -> str:
 
 
 def _dedup_key(symbol: str, tf: str, result: DetectionResult) -> str:
+  if result.structural_id:
+    return (
+      f"scanner:alerted:{symbol}:{tf}:{result.setup}:"
+      f"{result.structural_id}:{result.touch_bar_ts or ''}:"
+      f"{result.confirmation_bar_ts or ''}"
+    )
   bucket = _level_bucket(
     symbol,
     result.key_level,
@@ -140,6 +150,11 @@ def _dedup_key(symbol: str, tf: str, result: DetectionResult) -> str:
 
 
 def _band_dedup_key(symbol: str, result: DetectionResult) -> str:
+  if result.structural_id:
+    return (
+      f"scanner:alerted_band:{symbol}:{result.direction}:"
+      f"{result.structural_source or result.setup}:{result.structural_id}"
+    )
   midpoint = (result.entry_zone.low + result.entry_zone.high) / 2
   bucket = _level_bucket(
     symbol,
@@ -298,15 +313,46 @@ def _build_one_strategy_match(
     post_impulse=post_impulse,
     one_sided=one_sided,
   )
-  match_id = strategy_match_id(
-    symbol,
-    tf,
-    event_ts,
-    result.setup,
-    result.direction,
-    entry_low,
-    entry_high,
-  )
+  structural_source = result.structural_source or ""
+  structural_id = result.structural_id
+  if structural_id:
+    match_id = structural_thesis_id(
+      symbol=symbol,
+      strategy=result.setup,
+      direction=direction,
+      structural_source=structural_source or result.setup,
+      structural_id=structural_id,
+      touch_bar_ts=str(result.touch_bar_ts or ""),
+      confirmation_bar_ts=str(result.confirmation_bar_ts or ""),
+    )
+    zone_id = structural_id
+    level_id = structural_id
+  else:
+    match_id = strategy_match_id(
+      symbol,
+      tf,
+      event_ts,
+      result.setup,
+      result.direction,
+      entry_low,
+      entry_high,
+    )
+    zone_id = (
+      f"{symbol.upper()}:{tf.upper()}:{direction}:"
+      f"{entry_low:.5f}:{entry_high:.5f}"
+    )
+    level_id = (
+      f"{symbol.upper()}:{tf.upper()}:level:{float(result.key_level):.5f}"
+    )
+  tags = []
+  if result.structural_kind:
+    tags.append(f"kind:{result.structural_kind}")
+  if result.bias_relationship:
+    tags.append(f"bias:{result.bias_relationship}")
+  if result.confirmation_type or result.confirmation:
+    tags.append(f"confirm:{result.confirmation_type or result.confirmation}")
+  if result.source_touches is not None:
+    tags.append(f"touches:{result.source_touches}")
   match = StrategyMatch(
     version=STRATEGY_MATCH_VERSION,
     match_id=match_id,
@@ -331,18 +377,24 @@ def _build_one_strategy_match(
     range_low=range_low,
     range_high=range_high,
     full_take_profit_pips=full_take_profit_pips,
+    tags=tuple(tags),
     tier=tier,
     risk_multiplier=risk_mult,
     family=strategy_family(result.setup),
     range_state=range_state,
-    structural_source=result.setup,
-    zone_id=(
-      f"{symbol.upper()}:{tf.upper()}:{direction}:"
-      f"{entry_low:.5f}:{entry_high:.5f}"
+    structural_source=structural_source or result.setup,
+    zone_id=zone_id,
+    level_id=level_id,
+    structural_zone_id=structural_id,
+    structural_zone_low=(
+      None if result.structural_low is None else float(result.structural_low)
     ),
-    level_id=(
-      f"{symbol.upper()}:{tf.upper()}:level:{float(result.key_level):.5f}"
+    structural_zone_high=(
+      None if result.structural_high is None else float(result.structural_high)
     ),
+    touch_bar_ts=result.touch_bar_ts,
+    confirmation_bar_ts=result.confirmation_bar_ts,
+    reaction_type=result.confirmation_type or result.confirmation,
   )
   return match, None, {}
 
@@ -483,6 +535,12 @@ async def _sync_strategy_match(
       )
     return None
   await _record_match_build_outcome(client, symbol, match)
+  if match.strategy in STRUCTURAL_SETUPS or match.structural_source in {
+    "key_level", "supply_demand", "session_level", "trendline",
+  }:
+    await increment_metric(
+      client, "structural_reaction_match_built", symbol=symbol,
+    )
   ttl = max(60, match.expires_at - match.issued_at)
   all_matches = measured.get("all_matches") if isinstance(measured, dict) else None
   current = (
@@ -736,10 +794,33 @@ def _format_detection(
   ]
   if result.mode == "range_scalp":
     lines.append("↔️ <b>Mode:</b> RANGE SCALP · two-sided local range")
+  elif result.mode == "counter_bias":
+    lines.append("⚠️ <b>Bias:</b> counter_bias")
+  elif result.mode == "with_bias":
+    lines.append("🧭 <b>Bias:</b> with_bias")
+  elif result.mode == "neutral":
+    lines.append("🧭 <b>Bias:</b> neutral")
   elif result.mode != "with_trend":
     label = "reaction scalp" if result.mode == "counter_reaction" else "counter swing"
     lines.append(
       f"⚠️ <b>Mode:</b> Counter-trend · {label}"
+    )
+  if result.structural_source:
+    lines.append(
+      f"🧱 <b>Structural source:</b> {escape(result.structural_source)}"
+    )
+  if result.structural_kind:
+    lines.append(
+      f"🏷️ <b>Identity:</b> {escape(str(result.structural_kind))}"
+    )
+  if result.confirmation_type or result.confirmation:
+    lines.append(
+      "✅ <b>Confirmation:</b> "
+      f"{escape(str(result.confirmation_type or result.confirmation))}"
+    )
+  if result.structural_timeframe:
+    lines.append(
+      f"⏱ <b>Source TF:</b> {escape(str(result.structural_timeframe))}"
     )
   lines.extend([
     "",
@@ -929,6 +1010,12 @@ def _trusted_spot_values(
   return spot.price, spot.ts
 
 
+def _is_digest_primary(result: DetectionResult) -> bool:
+  if result.structural_source or result.setup in STRUCTURAL_SETUPS:
+    return True
+  return result.mode in {"with_trend", "range_scalp"}
+
+
 def _digest_results(
   results: list[DetectionResult],
 ) -> tuple[list[DetectionResult], list[dict[str, Any]]]:
@@ -936,15 +1023,13 @@ def _digest_results(
     candidates, conflicts = _suppress_overlaps(results)
     return sorted(candidates, key=_result_rank), conflicts
   primary, primary_conflicts = _suppress_overlaps([
-    result for result in results
-    if result.mode in {"with_trend", "range_scalp"}
+    result for result in results if _is_digest_primary(result)
   ])
   if primary:
     candidates, conflicts = primary, primary_conflicts
   else:
     candidates, conflicts = _suppress_overlaps([
-      result for result in results
-      if result.mode not in {"with_trend", "range_scalp"}
+      result for result in results if not _is_digest_primary(result)
     ])
   ordered = sorted(candidates, key=_result_rank)
   top_n = int(settings.scanner_top_n)
@@ -989,9 +1074,21 @@ def _suppress_overlaps(
   for result in ordered:
     same_direction_duplicate = any(
       result.direction == kept.direction
-      and result.setup == kept.setup
-      and result.mode == kept.mode
-      and _zone_overlap_ratio(result.entry_zone, kept.entry_zone) >= same_threshold
+      and (
+        (
+          bool(result.structural_id)
+          and bool(kept.structural_id)
+          and result.structural_id == kept.structural_id
+          and result.touch_bar_ts == kept.touch_bar_ts
+          and result.confirmation_bar_ts == kept.confirmation_bar_ts
+        )
+        or (
+          result.setup == kept.setup
+          and result.mode == kept.mode
+          and _zone_overlap_ratio(result.entry_zone, kept.entry_zone)
+            >= same_threshold
+        )
+      )
       for kept in selected
     )
     if same_direction_duplicate:
@@ -1021,8 +1118,17 @@ def _suppress_overlaps(
   return selected, conflicts
 
 
-def _result_rank(result: DetectionResult) -> tuple[float, float, float]:
+def _structural_priority(result: DetectionResult) -> int:
+  # First-class structural reactions outrank wrapper/legacy labels when ranked
+  # together; among wrappers, confluence/score still decide.
+  if result.setup in STRUCTURAL_SETUPS:
+    return 0
+  return 1
+
+
+def _result_rank(result: DetectionResult) -> tuple[float, float, float, float]:
   return (
+    float(_structural_priority(result)),
     -float(result.confluence),
     -float(getattr(result.entry_zone, "score", 0.0)),
     _result_zone_distance(result),
@@ -1099,19 +1205,36 @@ async def _notify_digest_once(
       "1",
       ex=settings.zone_alert_ttl,
     )
-  await notify(
-    _format_detection(
-      symbol,
-      tf,
-      ctx,
-      claimed_results[0],
-      htf_order,
-      claimed_results[1:],
-      market_map,
-      execution_match,
-    ),
-    chat_id=settings.telegram_owner_id,
-  )
+  structural = [
+    item for item in claimed_results if item.setup in STRUCTURAL_SETUPS
+  ]
+  cards = structural or claimed_results[:1]
+  for index, result in enumerate(cards):
+    also = claimed_results[1:] if not structural and index == 0 else []
+    match_for_card = None
+    if execution_match is not None:
+      if execution_match.strategy == result.setup:
+        match_for_card = execution_match
+      elif (
+        result.structural_id
+        and execution_match.structural_zone_id == result.structural_id
+      ):
+        match_for_card = execution_match
+      elif index == 0:
+        match_for_card = execution_match
+    await notify(
+      _format_detection(
+        symbol,
+        tf,
+        ctx,
+        result,
+        htf_order,
+        also,
+        market_map,
+        match_for_card,
+      ),
+      chat_id=settings.telegram_owner_id,
+    )
   await _track_active_setups(client, symbol, tf, claimed_results)
   return claimed_results
 
@@ -1561,6 +1684,15 @@ async def _handle_event(
     if result is None:
       continue
     detected.append(result)
+    metric_name = {
+      "Key Level Reaction": "key_level_reaction_detected",
+      "Demand Zone Reaction": "demand_zone_reaction_detected",
+      "Supply Zone Reaction": "supply_zone_reaction_detected",
+      "Session Level Reaction": "session_level_reaction_detected",
+      "Trendline Reaction": "trendline_reaction_detected",
+    }.get(result.setup)
+    if metric_name:
+      await increment_metric(client, metric_name, symbol=symbol)
   digest, conflicts = _digest_results(detected)
   execution_match = await _sync_strategy_match(
     client,
