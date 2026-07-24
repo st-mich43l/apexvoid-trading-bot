@@ -27,7 +27,11 @@ from app.autotrade.range_context import (
   range_context_key,
   range_context_source_key,
 )
-from app.autotrade.config_health import CONFIG_HEALTH_KEY, CTRADER_MANIFEST_KEY
+from app.autotrade.config_health import (
+  CONFIG_HEALTH_KEY,
+  CTRADER_MANIFEST_KEY,
+  EXECUTOR_READINESS_KEY,
+)
 
 log = logging.getLogger(__name__)
 
@@ -554,6 +558,7 @@ async def auto_trade_status_text() -> str:
     "XAU",
   )
   config_health = await _json_key(client, CONFIG_HEALTH_KEY)
+  readiness = await _json_key(client, EXECUTOR_READINESS_KEY)
   ctrader_manifest = await _json_key(client, CTRADER_MANIFEST_KEY)
   executor = await _json_key(
     client, f"auto_trade:executor_snapshot:{primary_symbol}",
@@ -875,7 +880,7 @@ async def auto_trade_status_text() -> str:
     "\n\n⚙️ <b>Execution contract</b>"
     f"\nProfile: <b>{escape(settings.auto_trade_profile)}</b>"
     f"\nBroker account: <b>{escape(account_mode)} · {escape(hedge_mode)}</b>"
-    f"\nExecutor ready: <b>{bool((executor or {}).get('ready'))}</b>"
+    f"\nExecutor ready: <b>{bool((readiness or {}).get('ready'))}</b>"
     f"\nPython dry-run: <b>{settings.auto_trade_dry_run}</b>"
     f"\nExecutor dry-run: <b>{escape(str(executor_dry_run))}</b>"
     f"\nPython/C# config: <b>{escape(config_state)}</b>{health_detail}"

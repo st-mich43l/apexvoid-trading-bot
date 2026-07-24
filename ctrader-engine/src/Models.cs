@@ -328,6 +328,7 @@ public sealed record AutoTradeGroupPlan(
 );
 
 public sealed record AutoTradeConfigManifest(
+  int ConfigManifestVersion,
   string Service,
   string ServiceVersion,
   string GitSha,
@@ -345,9 +346,9 @@ public sealed record AutoTradeConfigManifest(
   IReadOnlyList<int> TargetPlans,
   IReadOnlyList<int> RangeTargetPlans,
   decimal RangeTpBuffer,
-  int CandidateTtl,
-  int CandidateMaxAge,
-  int SpotMaxAge,
+  int CandidateStorageTtlSeconds,
+  int CandidateExecutionMaxAgeSeconds,
+  int SpotMaxAgeSeconds,
   bool RangeFlip,
   bool TwoSidedRange,
   bool ConcurrentStrategies,
@@ -355,12 +356,13 @@ public sealed record AutoTradeConfigManifest(
   bool ZoneFill,
   int MinConfluence,
   string AccountMode,
+  bool RequireDemoAccount,
   string Broker,
   int CandidateContractVersion,
   long GeneratedAt,
   bool ManualAlgoEnabled = false,
   bool ManualAlgoDryRun = true,
-  bool HedgingCapability = false,
+  bool BrokerHedgingCapability = false,
   bool TrendEnabled = false,
   bool RangeEnabled = false,
   bool MappedZoneEnabled = false,
@@ -369,10 +371,23 @@ public sealed record AutoTradeConfigManifest(
   bool RetestEnabled = false,
   bool ReactionEnabled = false,
   bool LiquidityReversalEnabled = false,
-  bool AllowCounterBias = false
+  bool AllowCounterBias = false,
+  string NonHedgedOppositePolicy = "reject",
+  IReadOnlyList<string>? DeprecatedVariables = null,
+  IReadOnlyDictionary<string, string>? ConfigSources = null,
+  string BrokerReported = ""
 );
 
 public sealed record AutoTradeConfigHealthDocument(
+  string State,
+  IReadOnlyList<string> Fatal,
+  IReadOnlyList<string> Warnings,
+  string Profile,
+  long CheckedAt
+);
+
+public sealed record AutoTradeExecutorReadiness(
+  bool Ready,
   string State,
   IReadOnlyList<string> Fatal,
   IReadOnlyList<string> Warnings,

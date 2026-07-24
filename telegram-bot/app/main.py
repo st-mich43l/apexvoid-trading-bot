@@ -18,7 +18,10 @@ from app.analysis.scanner import scanner_loop
 from app.analysis.market_map_delivery import market_map_scan_loop
 from app.autotrade.delivery import auto_trade_events_loop
 from app.autotrade.worker import auto_scalp_loop
-from app.autotrade.config_health import publish_python_manifest
+from app.autotrade.config_health import (
+  python_manifest,
+  publish_python_manifest,
+)
 from app.signals.manual_execution import bridge_intents_loop, reconcile_events_loop
 from app.persistence import redis_state
 
@@ -32,18 +35,32 @@ log = logging.getLogger("bot")
 async def main() -> None:
   await init_db()
   config_health = await publish_python_manifest(redis_state.get_client())
+  manifest = python_manifest()
   log.info(
-    "Auto-trade profile=%s demo_required=%s concurrent=%s hedged=%s "
-    "range_flat=%s two_sided=%s range_flip=%s multi_match=%s "
-    "config_health=%s",
-    settings.auto_trade_profile,
-    settings.auto_trade_require_demo_account,
-    settings.auto_trade_allow_concurrent_strategies,
-    settings.auto_trade_allow_hedged_xau,
-    settings.auto_trade_require_flat_for_range,
-    settings.auto_trade_range_two_sided_enabled,
-    settings.auto_trade_range_flip_enabled,
-    settings.auto_trade_multi_match_enabled,
+    "AUTO-TRADE CONFIG service=telegram-bot profile=%s enabled=%s "
+    "dry_run=%s candidate_stream=%s event_stream=%s symbols=%s "
+    "targets=%s range_targets=%s candidate_max_age=%s "
+    "candidate_storage_ttl=%s range_flip=%s two_sided=%s concurrent=%s "
+    "counter_bias=%s account_mode=%s contract_version=%s "
+    "deprecated=%s sources=%s config_health=%s",
+    manifest["profile"],
+    manifest["auto_trade_enabled"],
+    manifest["dry_run"],
+    manifest["candidate_stream"],
+    manifest["event_stream"],
+    manifest["symbols"],
+    manifest["target_plans"],
+    manifest["range_target_plans"],
+    manifest["candidate_execution_max_age_seconds"],
+    manifest["candidate_storage_ttl_seconds"],
+    manifest["range_flip"],
+    manifest["two_sided_range"],
+    manifest["concurrent_strategies"],
+    manifest["allow_counter_bias"],
+    manifest["account_mode"],
+    manifest["candidate_contract_version"],
+    manifest["deprecated_variables"],
+    manifest["config_sources"],
     config_health["state"],
   )
   await setup_commands(bot)

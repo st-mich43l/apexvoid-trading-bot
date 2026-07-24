@@ -3,7 +3,7 @@
 {# The vaulted env dict must define DATABASE_URL, POSTGRES_USER,             #}
 {# POSTGRES_PASSWORD, POSTGRES_DB, and required CTRADER_* feed secrets.      #}
 {# DATABASE_URL host must be "postgres"; REDIS_URL host should be "redis".  #}
-{% set auto_trade_profile = apexvoid_trading_bot_env.AUTO_TRADE_PROFILE | default('conservative') | string | lower %}
+{% set auto_trade_profile = apexvoid_trading_bot_env.AUTO_TRADE_PROFILE | default('demo_eval') | string | lower %}
 {% set demo_eval_default = 'true' if auto_trade_profile == 'demo_eval' else 'false' %}
 {% set range_flat_default = 'false' if auto_trade_profile == 'demo_eval' else 'true' %}
 name: apexvoid-trading-bot
@@ -103,27 +103,29 @@ services:
       AUTO_TRADE_ALLOW_COUNTER_BIAS: {{ apexvoid_trading_bot_env.AUTO_TRADE_ALLOW_COUNTER_BIAS | default(demo_eval_default) | string | to_json }}
       AUTO_TRADE_TRACK_ALL_STRUCTURAL_MATCHES: {{ apexvoid_trading_bot_env.AUTO_TRADE_TRACK_ALL_STRUCTURAL_MATCHES | default(demo_eval_default) | string | to_json }}
       MANUAL_ALGO_ENABLED: {{ apexvoid_trading_bot_env.MANUAL_ALGO_ENABLED | default('false') | string | to_json }}
-      AUTO_TRADE_CANDIDATE_CONTRACT_VERSION: {{ apexvoid_trading_bot_env.AUTO_TRADE_CANDIDATE_CONTRACT_VERSION | default('4') | string | to_json }}
+      AUTO_TRADE_CANDIDATE_CONTRACT_VERSION: {{ apexvoid_trading_bot_env.AUTO_TRADE_CANDIDATE_CONTRACT_VERSION | default('5') | string | to_json }}
+      AUTO_TRADE_SYMBOLS: {{ apexvoid_trading_bot_env.AUTO_TRADE_SYMBOLS | default('XAU') | string | to_json }}
       AUTO_TRADE_CANONICAL_SYMBOL: {{ apexvoid_trading_bot_env.AUTO_TRADE_CANONICAL_SYMBOL | default('XAU') | string | to_json }}
       AUTO_TRADE_REQUIRE_DEMO_ONLY_TOKEN: {{ apexvoid_trading_bot_env.AUTO_TRADE_REQUIRE_DEMO_ONLY_TOKEN | default('false') | string | to_json }}
       AUTO_TRADE_EXPECTED_BROKER: {{ apexvoid_trading_bot_env.AUTO_TRADE_EXPECTED_BROKER | default('fpmarkets') | string | to_json }}
       AUTO_TRADE_SL_DISTANCE: {{ apexvoid_trading_bot_env.AUTO_TRADE_SL_DISTANCE | default('6.5') | string | to_json }}
       AUTO_TRADE_RISK_PCT: {{ apexvoid_trading_bot_env.AUTO_TRADE_RISK_PCT | default('2.0') | string | to_json }}
       AUTO_TRADE_SIZING_MODE: {{ apexvoid_trading_bot_env.AUTO_TRADE_SIZING_MODE | default('table') | string | to_json }}
-      AUTO_TRADE_PIP_SIZE: {{ apexvoid_trading_bot_env.AUTO_TRADE_PIP_SIZE | default('0.1') | string | to_json }}
-      AUTO_TRADE_CONTRACT_SIZE: {{ apexvoid_trading_bot_env.AUTO_TRADE_CONTRACT_SIZE | default('100') | string | to_json }}
+      AUTO_TRADE_XAU_PIP_SIZE: {{ apexvoid_trading_bot_env.AUTO_TRADE_XAU_PIP_SIZE | default('0.1') | string | to_json }}
+      AUTO_TRADE_XAU_CONTRACT_SIZE: {{ apexvoid_trading_bot_env.AUTO_TRADE_XAU_CONTRACT_SIZE | default('100') | string | to_json }}
       AUTO_TRADE_PIP_VALUE_PER_LOT: {{ apexvoid_trading_bot_env.AUTO_TRADE_PIP_VALUE_PER_LOT | default('10.0') | string | to_json }}
-      AUTO_TRADE_TP_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_TP_PIPS | default('30,60,90,120,200') | string | to_json }}
+      AUTO_TRADE_TARGET_PLANS_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_TARGET_PLANS_PIPS | default('30,60,90,120,200') | string | to_json }}
       AUTO_TRADE_TP_WEIGHTS: {{ apexvoid_trading_bot_env.AUTO_TRADE_TP_WEIGHTS | default('20,20,20,20,20') | string | to_json }}
       AUTO_TRADE_BE_BUFFER_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_BE_BUFFER_PIPS | default('6') | string | to_json }}
-      AUTO_TRADE_CANDIDATE_MAX_AGE: {{ apexvoid_trading_bot_env.AUTO_TRADE_CANDIDATE_MAX_AGE | default('90') | string | to_json }}
-      AUTO_TRADE_SPOT_MAX_AGE: {{ apexvoid_trading_bot_env.AUTO_TRADE_SPOT_MAX_AGE | default('5') | string | to_json }}
+      AUTO_TRADE_CANDIDATE_MAX_AGE_SECONDS: {{ apexvoid_trading_bot_env.AUTO_TRADE_CANDIDATE_MAX_AGE_SECONDS | default('420') | string | to_json }}
+      AUTO_TRADE_CANDIDATE_STORAGE_TTL_SECONDS: {{ apexvoid_trading_bot_env.AUTO_TRADE_CANDIDATE_STORAGE_TTL_SECONDS | default('604800') | string | to_json }}
+      AUTO_TRADE_SPOT_MAX_AGE_SECONDS: {{ apexvoid_trading_bot_env.AUTO_TRADE_SPOT_MAX_AGE_SECONDS | default('5') | string | to_json }}
       AUTO_TRADE_MAX_SPREAD_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_MAX_SPREAD_PIPS | default('5') | string | to_json }}
       AUTO_TRADE_MAX_ENTRY_DISTANCE_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_MAX_ENTRY_DISTANCE_PIPS | default('10') | string | to_json }}
       AUTO_TRADE_BOX_MIN_RR: {{ apexvoid_trading_bot_env.AUTO_TRADE_BOX_MIN_RR | default('1.25') | string | to_json }}
       AUTO_TRADE_MIN_CONFLUENCE: {{ apexvoid_trading_bot_env.AUTO_TRADE_MIN_CONFLUENCE | default('2') | string | to_json }}
       AUTO_TRADE_POLL_MS: {{ apexvoid_trading_bot_env.AUTO_TRADE_POLL_MS | default('1000') | string | to_json }}
-      AUTO_TRADE_STREAM: {{ apexvoid_trading_bot_env.AUTO_TRADE_STREAM | default('auto_trade:candidates') | string | to_json }}
+      AUTO_TRADE_CANDIDATE_STREAM: {{ apexvoid_trading_bot_env.AUTO_TRADE_CANDIDATE_STREAM | default('auto_trade:candidates') | string | to_json }}
       AUTO_TRADE_EVENT_STREAM: {{ apexvoid_trading_bot_env.AUTO_TRADE_EVENT_STREAM | default('auto_trade:events') | string | to_json }}
       AUTO_TRADE_LABEL: {{ apexvoid_trading_bot_env.AUTO_TRADE_LABEL | default('apexvoid-auto') | string | to_json }}
       AUTO_TRADE_ZONE_FILL_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_ZONE_FILL_ENABLED | default('true') | string | to_json }}
@@ -135,6 +137,7 @@ services:
       AUTO_TRADE_RANGE_TARGETS_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_RANGE_TARGETS_PIPS | default('20,30,40,50,70') | string | to_json }}
       AUTO_TRADE_RANGE_TP_BUFFER_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_RANGE_TP_BUFFER_PIPS | default('3') | string | to_json }}
       AUTO_TRADE_RANGE_FLIP_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_RANGE_FLIP_ENABLED | default(demo_eval_default) | string | to_json }}
+      AUTO_TRADE_NON_HEDGED_OPPOSITE_POLICY: {{ apexvoid_trading_bot_env.AUTO_TRADE_NON_HEDGED_OPPOSITE_POLICY | default('broker_netting') | string | to_json }}
       AUTO_TRADE_FLIP_EXIT_BUFFER_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_FLIP_EXIT_BUFFER_PIPS | default('10') | string | to_json }}
       AUTO_TRADE_FLIP_CONFIRM_TIMEOUT_SECONDS: {{ apexvoid_trading_bot_env.AUTO_TRADE_FLIP_CONFIRM_TIMEOUT_SECONDS | default('30') | string | to_json }}
       AUTO_TRADE_TREND_STOP_MIN_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_TREND_STOP_MIN_PIPS | default('40') | string | to_json }}

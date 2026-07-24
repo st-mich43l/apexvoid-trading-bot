@@ -31,6 +31,14 @@ dated section after deployment.
 
 ### Changed
 
+- Python and C# now resolve one versioned auto-trade configuration contract
+  (manifest v2, candidate v5) from canonical environment names. Target/symbol
+  sets are canonical in manifests while range target selection remains
+  largest-fitting-first at runtime; execution max age and Redis storage TTL
+  are separate settings.
+- Executor readiness is published at `auto_trade:executor_readiness`.
+  Non-hedged demo capability and storage-TTL drift are warning-only, with an
+  explicit `AUTO_TRADE_NON_HEDGED_OPPOSITE_POLICY` for opposite exposure.
 - Demo evaluation treats HTF bias as scoring/reporting metadata. Valid local
   BUY and SELL structures, including counter-bias mapped zones and trend
   pullbacks, remain executable; all supported strategy modes are enabled and
@@ -45,6 +53,10 @@ dated section after deployment.
 
 ### Fixed
 
+- Fixed semantically identical Python/C# target ladders (descending versus
+  ascending), numeric JSON forms, symbol ordering, FP Markets aliases, and
+  demo account aliases being treated as fatal configuration mismatches that
+  disabled all autonomous execution.
 - Fixed owner `/algo` orders being filtered by autonomous confluence, regime,
   opposing-zone, exposure and scale-in gates, and fixed premature Telegram
   acknowledgement before the cTrader executor confirmed broker action.

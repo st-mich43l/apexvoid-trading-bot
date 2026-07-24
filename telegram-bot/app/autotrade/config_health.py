@@ -1,22 +1,169 @@
-"""Cross-service startup configuration manifests and compatibility health."""
+"""Canonical cross-service auto-trade configuration and compatibility health."""
 
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from decimal import Decimal, InvalidOperation
 import hashlib
 import json
 import os
-from typing import Any
+from typing import Any, Iterable
 from urllib.parse import urlparse
 
-from app.autotrade import units
 from app.autotrade.range_targets import configured_range_targets
 from app.core.config import settings
 
 
+CONFIG_MANIFEST_VERSION = 2
 PYTHON_MANIFEST_KEY = "auto_trade:config_manifest:python"
 CTRADER_MANIFEST_KEY = "auto_trade:config_manifest:ctrader"
 CONFIG_HEALTH_KEY = "auto_trade:config_health"
+EXECUTOR_READINESS_KEY = "auto_trade:executor_readiness"
+
+_LEGACY_ENV_ALIASES = {
+  "AUTO_TRADE_CANDIDATE_STREAM": ("AUTO_TRADE_STREAM",),
+  "AUTO_TRADE_XAU_PIP_SIZE": ("AUTO_TRADE_PIP_SIZE",),
+  "AUTO_TRADE_XAU_CONTRACT_SIZE": ("AUTO_TRADE_CONTRACT_SIZE",),
+  "AUTO_TRADE_TARGET_PLANS_PIPS": ("AUTO_TRADE_TP_PIPS",),
+  "AUTO_TRADE_CANDIDATE_MAX_AGE_SECONDS": (
+    "AUTO_TRADE_CANDIDATE_MAX_AGE",
+  ),
+  "AUTO_TRADE_CANDIDATE_STORAGE_TTL_SECONDS": (
+    "AUTO_TRADE_CANDIDATE_TTL",
+  ),
+  "AUTO_TRADE_SPOT_MAX_AGE_SECONDS": ("AUTO_TRADE_SPOT_MAX_AGE",),
+}
+
+_PROFILE_DEFAULT_FIELDS = {
+  "AUTO_TRADE_ENABLED",
+  "AUTO_TRADE_DRY_RUN",
+  "AUTO_TRADE_REQUIRE_DEMO_ACCOUNT",
+  "AUTO_TRADE_RANGE_FLIP_ENABLED",
+  "AUTO_TRADE_RANGE_TWO_SIDED_ENABLED",
+  "AUTO_TRADE_ALLOW_CONCURRENT_STRATEGIES",
+  "AUTO_TRADE_ALLOW_COUNTER_BIAS",
+  "AUTO_TRADE_ZONE_FILL_ENABLED",
+  "AUTO_TRADE_CANDIDATE_MAX_AGE_SECONDS",
+  "AUTO_TRADE_CANDIDATE_STORAGE_TTL_SECONDS",
+  "AUTO_TRADE_NON_HEDGED_OPPOSITE_POLICY",
+}
+
+_CANONICAL_ENV_NAMES = {
+  "AUTO_TRADE_PROFILE",
+  "AUTO_TRADE_ENABLED",
+  "AUTO_TRADE_DRY_RUN",
+  "AUTO_TRADE_CANDIDATE_STREAM",
+  "AUTO_TRADE_EVENT_STREAM",
+  "AUTO_TRADE_CANDIDATE_CONTRACT_VERSION",
+  "AUTO_TRADE_SYMBOLS",
+  "AUTO_TRADE_CANONICAL_SYMBOL",
+  "AUTO_TRADE_XAU_PIP_SIZE",
+  "AUTO_TRADE_XAU_CONTRACT_SIZE",
+  "AUTO_TRADE_TARGET_PLANS_PIPS",
+  "AUTO_TRADE_RANGE_TARGETS_PIPS",
+  "AUTO_TRADE_RANGE_TP_BUFFER_PIPS",
+  "AUTO_TRADE_CANDIDATE_MAX_AGE_SECONDS",
+  "AUTO_TRADE_CANDIDATE_STORAGE_TTL_SECONDS",
+  "AUTO_TRADE_SPOT_MAX_AGE_SECONDS",
+  "AUTO_TRADE_RANGE_FLIP_ENABLED",
+  "AUTO_TRADE_RANGE_TWO_SIDED_ENABLED",
+  "AUTO_TRADE_ALLOW_CONCURRENT_STRATEGIES",
+  "AUTO_TRADE_ALLOW_COUNTER_BIAS",
+  "AUTO_TRADE_ZONE_FILL_ENABLED",
+  "AUTO_TRADE_MIN_CONFLUENCE",
+  "AUTO_TRADE_REQUIRE_DEMO_ACCOUNT",
+  "AUTO_TRADE_NON_HEDGED_OPPOSITE_POLICY",
+}
+
+
+def canonicalize_int_set(values: Iterable[Any]) -> list[int]:
+  """Return a stable manifest representation independent of runtime order."""
+  canonical: set[int] = set()
+  for value in values:
+    parsed = Decimal(str(value))
+    if parsed != parsed.to_integral_value():
+      raise ValueError(f"non-integer target plan: {value}")
+    canonical.add(int(parsed))
+  return sorted(canonical)
+
+
+def canonicalize_symbols(values: Iterable[Any]) -> list[str]:
+  return sorted({
+    str(value).strip().upper()
+    for value in values
+    if str(value).strip()
+  })
+
+
+def _broker_identity(value: Any) -> str:
+  return "".join(
+    char for char in str(value or "").strip().lower()
+    if char.isalnum()
+  )
+
+
+def canonicalize_broker(value: Any) -> str:
+  raw = _broker_identity(value)
+  if raw in {"fpmarkets", "fpmarketssc"}:
+    return "fpmarkets"
+  return raw
+
+
+def canonicalize_account_mode(value: Any) -> str:
+  raw = str(value or "").strip().lower().replace("_", "-")
+  if raw in {"demo", "demo-only", "demo-required"}:
+    return "demo"
+  if raw in {"live", "live-only", "live-required"}:
+    return "live"
+  return raw
+
+
+def deprecated_environment_variables() -> list[str]:
+  deprecated = []
+  for canonical, aliases in _LEGACY_ENV_ALIASES.items():
+    if os.getenv(canonical) is not None:
+      continue
+    deprecated.extend(alias for alias in aliases if os.getenv(alias) is not None)
+  return sorted(set(deprecated))
+
+
+def resolved_config_sources() -> dict[str, str]:
+  sources: dict[str, str] = {}
+  for canonical, aliases in _LEGACY_ENV_ALIASES.items():
+    if os.getenv(canonical) is not None:
+      sources[canonical] = "explicit_env"
+      continue
+    legacy = next(
+      (alias for alias in aliases if os.getenv(alias) is not None),
+      None,
+    )
+    if legacy:
+      sources[canonical] = f"deprecated_env:{legacy}"
+    elif (
+      settings.auto_trade_profile == "demo_eval"
+      and canonical in _PROFILE_DEFAULT_FIELDS
+    ):
+      sources[canonical] = "profile_demo_eval"
+    else:
+      sources[canonical] = "application_default"
+  for canonical in _PROFILE_DEFAULT_FIELDS:
+    if canonical in sources:
+      continue
+    sources[canonical] = (
+      "explicit_env"
+      if os.getenv(canonical) is not None
+      else "profile_demo_eval"
+      if settings.auto_trade_profile == "demo_eval"
+      else "application_default"
+    )
+  for canonical in _CANONICAL_ENV_NAMES:
+    sources.setdefault(
+      canonical,
+      "explicit_env"
+      if os.getenv(canonical) is not None
+      else "application_default",
+    )
+  return dict(sorted(sources.items()))
 
 
 def _redis_identity(url: str) -> tuple[str, int]:
@@ -31,15 +178,19 @@ def _redis_identity(url: str) -> tuple[str, int]:
   return fingerprint, database
 
 
+def _int_values(raw: str) -> list[int]:
+  return canonicalize_int_set(
+    item.strip() for item in raw.split(",") if item.strip()
+  )
+
+
 def python_manifest() -> dict[str, Any]:
   fingerprint, database = _redis_identity(settings.redis_url)
-  symbols = sorted({
-    item.strip().upper()
-    for item in settings.auto_trade_symbols.split(",")
-    if item.strip()
-  })
+  symbols = canonicalize_symbols(settings.auto_trade_symbols.split(","))
   now = datetime.now(timezone.utc)
+  raw_broker = os.getenv("AUTO_TRADE_EXPECTED_BROKER", "")
   return {
+    "config_manifest_version": CONFIG_MANIFEST_VERSION,
     "service": "telegram-bot",
     "service_version": os.getenv("SERVICE_VERSION", "dev"),
     "git_sha": os.getenv("GIT_SHA", "unknown"),
@@ -54,24 +205,24 @@ def python_manifest() -> dict[str, Any]:
     "event_stream": settings.auto_trade_event_stream,
     "symbols": symbols,
     "canonical_symbol": settings.auto_trade_canonical_symbol.upper(),
-    "pip_size": units.pip_size("XAU"),
+    "pip_size": settings.auto_trade_xau_pip_size,
     "contract_size": settings.auto_trade_contract_size,
-    "target_plans": [
-      int(item)
-      for item in settings.auto_trade_tp_pips.split(",")
-      if item.strip()
-    ],
-    "range_target_plans": list(configured_range_targets()),
+    "target_plans": _int_values(settings.auto_trade_tp_pips),
+    "range_target_plans": canonicalize_int_set(
+      configured_range_targets()
+    ),
     "range_tp_buffer": settings.auto_trade_range_tp_buffer_pips,
-    "candidate_ttl": settings.auto_trade_candidate_ttl,
-    "candidate_max_age": settings.auto_trade_strategy_match_max_age_seconds,
-    "spot_max_age": settings.auto_trade_spot_max_age,
+    "candidate_storage_ttl_seconds": settings.auto_trade_candidate_ttl,
+    "candidate_execution_max_age_seconds": (
+      settings.auto_trade_candidate_max_age_seconds
+    ),
+    "spot_max_age_seconds": settings.auto_trade_spot_max_age,
     "range_flip": settings.auto_trade_range_flip_enabled,
     "two_sided_range": settings.auto_trade_range_two_sided_enabled,
     "concurrent_strategies": settings.auto_trade_allow_concurrent_strategies,
     "hedging_policy": settings.auto_trade_allow_hedged_xau,
-    "hedging_capability": settings.auto_trade_allow_hedged_xau,
-    "zone_fill": settings.auto_trade_market_map_strategy_enabled,
+    "broker_hedging_capability": None,
+    "zone_fill": settings.auto_trade_zone_fill_enabled,
     "trend_enabled": settings.auto_trade_trend_enabled,
     "range_enabled": settings.auto_trade_range_enabled,
     "mapped_zone_enabled": settings.auto_trade_market_map_strategy_enabled,
@@ -84,15 +235,64 @@ def python_manifest() -> dict[str, Any]:
     ),
     "allow_counter_bias": settings.auto_trade_allow_counter_bias,
     "min_confluence": settings.auto_trade_min_confluence,
-    "account_mode": "demo_required"
-    if settings.auto_trade_require_demo_account else "unspecified",
-    "broker": os.getenv("AUTO_TRADE_EXPECTED_BROKER", ""),
+    "account_mode": "demo"
+    if settings.auto_trade_require_demo_account else "live",
+    "require_demo_account": settings.auto_trade_require_demo_account,
+    "broker": canonicalize_broker(raw_broker),
+    "broker_configured": raw_broker,
+    "non_hedged_opposite_policy": (
+      settings.auto_trade_non_hedged_opposite_policy
+    ),
     "candidate_contract_version": (
       settings.auto_trade_candidate_contract_version
     ),
+    "deprecated_variables": deprecated_environment_variables(),
+    "config_sources": resolved_config_sources(),
     "generated_at": int(now.timestamp()),
     "generated_at_iso": now.isoformat(),
   }
+
+
+def _numeric_equal(left: Any, right: Any) -> bool:
+  try:
+    return Decimal(str(left)) == Decimal(str(right))
+  except (InvalidOperation, TypeError, ValueError):
+    return False
+
+
+def _canonical_field(field: str, value: Any) -> Any:
+  if field in {"target_plans", "range_target_plans"}:
+    try:
+      return canonicalize_int_set(value or [])
+    except (InvalidOperation, TypeError, ValueError):
+      return None
+  if field == "symbols":
+    return canonicalize_symbols(value or [])
+  if field == "broker":
+    return canonicalize_broker(value)
+  if field == "account_mode":
+    return canonicalize_account_mode(value)
+  if field == "canonical_symbol":
+    return str(value or "").strip().upper()
+  return value
+
+
+def _different(field: str, left: Any, right: Any) -> bool:
+  left = _canonical_field(field, left)
+  right = _canonical_field(field, right)
+  if field in {
+    "pip_size",
+    "contract_size",
+    "range_tp_buffer",
+    "candidate_execution_max_age_seconds",
+    "candidate_storage_ttl_seconds",
+    "spot_max_age_seconds",
+    "min_confluence",
+    "candidate_contract_version",
+    "config_manifest_version",
+  }:
+    return not _numeric_equal(left, right)
+  return left != right
 
 
 def compare_manifests(
@@ -106,10 +306,9 @@ def compare_manifests(
       "warnings": ["ctrader_manifest_missing"],
     }
   fatal_fields = (
+    "config_manifest_version",
     "auto_trade_enabled",
     "dry_run",
-    "manual_algo_enabled",
-    "manual_algo_dry_run",
     "candidate_stream",
     "event_stream",
     "redis_database",
@@ -117,41 +316,80 @@ def compare_manifests(
     "symbols",
     "canonical_symbol",
     "pip_size",
+    "contract_size",
     "candidate_contract_version",
+    "target_plans",
+    "range_target_plans",
+    "range_tp_buffer",
+    "candidate_execution_max_age_seconds",
+    "spot_max_age_seconds",
+    "require_demo_account",
   )
   fatal = [
     field for field in fatal_fields
-    if python.get(field) != ctrader.get(field)
+    if _different(field, python.get(field), ctrader.get(field))
   ]
-  if python.get("target_plans") != ctrader.get("target_plans"):
-    fatal.append("target_plans")
-  if python.get("range_target_plans") != ctrader.get("range_target_plans"):
-    fatal.append("range_target_plans")
+  if (
+    python.get("profile") == "demo_eval"
+    and canonicalize_account_mode(ctrader.get("account_mode")) == "live"
+  ):
+    fatal.append("demo_eval_live_account")
+  warning_fields = (
+    "candidate_storage_ttl_seconds",
+    "manual_algo_enabled",
+    "manual_algo_dry_run",
+    "range_flip",
+    "two_sided_range",
+    "concurrent_strategies",
+    "hedging_policy",
+    "zone_fill",
+    "trend_enabled",
+    "range_enabled",
+    "mapped_zone_enabled",
+    "strategy_match_enabled",
+    "breakout_enabled",
+    "retest_enabled",
+    "reaction_enabled",
+    "liquidity_reversal_enabled",
+    "allow_counter_bias",
+    "min_confluence",
+    "profile",
+    "non_hedged_opposite_policy",
+  )
   warnings = [
     field
-    for field in (
-      "range_flip",
-      "two_sided_range",
-      "concurrent_strategies",
-      "hedging_policy",
-      "zone_fill",
-      "hedging_capability",
-      "trend_enabled",
-      "range_enabled",
-      "mapped_zone_enabled",
-      "strategy_match_enabled",
-      "breakout_enabled",
-      "retest_enabled",
-      "reaction_enabled",
-      "liquidity_reversal_enabled",
-      "allow_counter_bias",
-      "min_confluence",
-      "profile",
-    )
-    if python.get(field) != ctrader.get(field)
+    for field in warning_fields
+    if _different(field, python.get(field), ctrader.get(field))
   ]
-  state = "fatal" if fatal else "warning" if warnings else "healthy"
-  return {"state": state, "fatal": fatal, "warnings": warnings}
+  if not bool(ctrader.get("broker_hedging_capability", True)):
+    warnings.append("broker_non_hedged")
+  if (
+    canonicalize_broker(python.get("broker"))
+    != canonicalize_broker(ctrader.get("broker"))
+  ):
+    warnings.append("broker")
+  for manifest in (python, ctrader):
+    reported = (
+      manifest.get("broker_configured")
+      or manifest.get("broker_reported")
+    )
+    if (
+      reported
+      and _broker_identity(reported) != canonicalize_broker(reported)
+    ):
+      warnings.append("broker_alias_normalized")
+  for manifest in (python, ctrader):
+    for variable in manifest.get("deprecated_variables") or []:
+      warnings.append(f"deprecated_variable:{variable}")
+  if python.get("git_sha") in {None, "", "unknown"}:
+    warnings.append("python_git_sha_unknown")
+  if ctrader.get("git_sha") in {None, "", "unknown"}:
+    warnings.append("ctrader_git_sha_unknown")
+  return {
+    "state": "fatal" if fatal else "healthy",
+    "fatal": sorted(set(fatal)),
+    "warnings": sorted(set(warnings)),
+  }
 
 
 async def publish_python_manifest(client: Any) -> dict[str, Any]:

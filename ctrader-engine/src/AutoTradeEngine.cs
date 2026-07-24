@@ -62,6 +62,7 @@ public sealed class AutoTradeEngine(
     {
       return;
     }
+    AutoTradeConfigHealthResult? sessionHealth = null;
     try
     {
       options.Validate();
@@ -101,8 +102,15 @@ public sealed class AutoTradeEngine(
         symbol,
         cancellationToken
       );
+      sessionHealth = configHealth;
       if (configHealth.State == "fatal")
       {
+        await PublishReadinessAsync(
+          false,
+          "fatal",
+          configHealth,
+          cancellationToken
+        );
         throw new AutoTradeConfigurationException(
           "Auto trade disabled: Python/C# configuration mismatch: "
           + string.Join(", ", configHealth.Fatal)
@@ -111,6 +119,12 @@ public sealed class AutoTradeEngine(
       _log(VolumePlanner.SizingDiagnostic(account.Balance, options));
       await ReconcileAsync(cancellationToken);
       _ready = true;
+      await PublishReadinessAsync(
+        true,
+        "ready",
+        configHealth,
+        cancellationToken
+      );
       await PublishAsync(
         "ready",
         $"demo executor ready: {account.BrokerName} balance {account.Balance:N2}",
@@ -121,13 +135,15 @@ public sealed class AutoTradeEngine(
         + $"balance={account.Balance:N2} dryRun={options.DryRun} "
         + $"profile={options.Profile} exposure={EffectiveExposurePolicy()} "
         + $"twoSided={options.RangeTwoSidedEnabled} flip={options.RangeFlipEnabled} "
-        + $"multiMatch={options.MultiMatchEnabled} config={configHealth.State}"
+        + $"multiMatch={options.MultiMatchEnabled} config={configHealth.State} "
+        + $"warnings=[{string.Join(',', configHealth.Warnings)}]"
       );
       await PublishAsync(
         "account_capability",
         _accountSupportsHedging
           ? "demo account supports hedged two-sided XAU execution"
-          : "demo account is non-hedged; opposite range entries use close-and-reverse",
+          : "demo account is non-hedged; opposite routing policy "
+            + options.NonHedgedOppositePolicy,
         cancellationToken
       );
 
@@ -207,6 +223,15 @@ public sealed class AutoTradeEngine(
         },
         CancellationToken.None
       );
+      if (sessionHealth is not null)
+      {
+        await PublishReadinessAsync(
+          false,
+          _disabled ? "fatal" : "stopped",
+          sessionHealth,
+          CancellationToken.None
+        );
+      }
     }
   }
 
@@ -241,6 +266,15 @@ public sealed class AutoTradeEngine(
         ? "config_fatal"
         : "error",
       exception.Message,
+      cancellationToken
+    );
+    var fatal = exception is AutoTradeConfigurationException
+      ? new[] { "service_initialization" }
+      : new[] { "broker_or_redis_connection" };
+    await PublishReadinessAsync(
+      false,
+      "fatal",
+      new AutoTradeConfigHealthResult("fatal", fatal, []),
       cancellationToken
     );
   }
@@ -841,6 +875,7 @@ public sealed class AutoTradeEngine(
       boxRangeScalp
       && options.RangeTwoSidedEnabled
       && !_accountSupportsHedging
+      && options.NonHedgedOppositePolicy == "close_then_reverse"
     )
     {
       await CloseOppositeExposureForNonHedgedAsync(
@@ -3495,6 +3530,14 @@ public sealed class AutoTradeEngine(
     var botOrders = _allSymbolPendingOrders
       .Where(order => order.Label == options.Label)
       .ToArray();
+    if (
+      !_accountSupportsHedging
+      && options.AllowConcurrentStrategies
+      && options.NonHedgedOppositePolicy == "broker_netting"
+    )
+    {
+      return true;
+    }
     return ExposurePolicyRules.AllowsNewGroup(
       EffectiveExposurePolicy(),
       direction,
@@ -3850,6 +3893,33 @@ public sealed class AutoTradeEngine(
       ),
       cancellationToken
     );
+    _log(
+      "AUTO-TRADE CONFIG service=ctrader-engine "
+      + $"profile={manifest.Profile} enabled={manifest.AutoTradeEnabled} "
+      + $"dry_run={manifest.DryRun} candidate_stream={manifest.CandidateStream} "
+      + $"event_stream={manifest.EventStream} "
+      + $"symbols=[{string.Join(',', manifest.Symbols)}] "
+      + $"targets=[{string.Join(',', manifest.TargetPlans)}] "
+      + $"range_targets=[{string.Join(',', manifest.RangeTargetPlans)}] "
+      + $"candidate_max_age={manifest.CandidateExecutionMaxAgeSeconds} "
+      + $"candidate_storage_ttl={manifest.CandidateStorageTtlSeconds} "
+      + $"range_flip={manifest.RangeFlip} "
+      + $"two_sided={manifest.TwoSidedRange} "
+      + $"concurrent={manifest.ConcurrentStrategies} "
+      + $"counter_bias={manifest.AllowCounterBias} "
+      + $"broker={manifest.Broker} account_mode={manifest.AccountMode} "
+      + $"broker_hedged={manifest.BrokerHedgingCapability} "
+      + $"contract_version={manifest.CandidateContractVersion} "
+      + $"deprecated=[{string.Join(',', manifest.DeprecatedVariables ?? [])}] "
+      + "sources=["
+      + string.Join(
+        ',',
+        (manifest.ConfigSources ?? new Dictionary<string, string>())
+          .OrderBy(item => item.Key)
+          .Select(item => $"{item.Key}={item.Value}")
+      )
+      + "]"
+    );
     if (health.State != "healthy")
     {
       await store.IncrementMetricAsync(
@@ -3871,6 +3941,27 @@ public sealed class AutoTradeEngine(
     );
     return health;
   }
+
+  private Task PublishReadinessAsync(
+    bool ready,
+    string state,
+    AutoTradeConfigHealthResult health,
+    CancellationToken cancellationToken
+  ) => store.SetValueAsync(
+    AutoTradeConfigHealth.ReadinessKey,
+    JsonSerializer.Serialize(
+      new AutoTradeExecutorReadiness(
+        ready,
+        state,
+        health.Fatal,
+        health.Warnings,
+        options.Profile,
+        _clock().ToUnixTimeSeconds()
+      ),
+      RedisJsonContext.Default.AutoTradeExecutorReadiness
+    ),
+    cancellationToken
+  );
 
   private async Task ReportLiveGrantsAsync(
     IReadOnlyList<TradingAccountGrant> grants,

@@ -177,20 +177,66 @@ class Settings(BaseSettings):
   auto_trade_reaction_enabled: bool = True
   auto_trade_liquidity_reversal_enabled: bool = True
   auto_trade_allow_counter_bias: bool = True
-  auto_trade_candidate_contract_version: int = 4
+  auto_trade_candidate_contract_version: int = 5
   auto_trade_canonical_symbol: str = "XAU"
-  auto_trade_contract_size: float = 100.0
+  auto_trade_xau_pip_size: float = Field(
+    default=0.1,
+    validation_alias=AliasChoices(
+      "AUTO_TRADE_XAU_PIP_SIZE",
+      "AUTO_TRADE_PIP_SIZE",
+    ),
+  )
+  auto_trade_contract_size: float = Field(
+    default=100.0,
+    validation_alias=AliasChoices(
+      "AUTO_TRADE_XAU_CONTRACT_SIZE",
+      "AUTO_TRADE_CONTRACT_SIZE",
+    ),
+  )
   auto_trade_symbols: str = "XAU"
-  auto_trade_spot_max_age: int = 5
-  auto_trade_stream: str = "auto_trade:candidates"
+  auto_trade_spot_max_age: int = Field(
+    default=5,
+    validation_alias=AliasChoices(
+      "AUTO_TRADE_SPOT_MAX_AGE_SECONDS",
+      "AUTO_TRADE_SPOT_MAX_AGE",
+    ),
+  )
+  auto_trade_stream: str = Field(
+    default="auto_trade:candidates",
+    validation_alias=AliasChoices(
+      "AUTO_TRADE_CANDIDATE_STREAM",
+      "AUTO_TRADE_STREAM",
+    ),
+  )
   auto_trade_event_stream: str = "auto_trade:events"
   auto_trade_stream_maxlen: int = 1000
-  auto_trade_candidate_ttl: int = 86400
+  auto_trade_candidate_ttl: int = Field(
+    default=86400,
+    validation_alias=AliasChoices(
+      "AUTO_TRADE_CANDIDATE_STORAGE_TTL_SECONDS",
+      "AUTO_TRADE_CANDIDATE_TTL",
+    ),
+  )
+  auto_trade_candidate_max_age_seconds: int = Field(
+    default=90,
+    validation_alias=AliasChoices(
+      "AUTO_TRADE_CANDIDATE_MAX_AGE_SECONDS",
+      "AUTO_TRADE_CANDIDATE_MAX_AGE",
+    ),
+  )
   auto_trade_min_confluence: int = 2
   auto_trade_max_entry_distance_pips: float = 10.0
   auto_trade_news_guard_minutes: int = 30
   auto_trade_box_retire_seconds: int = 14400
-  auto_trade_tp_pips: str = "30,60,90,120,200"
+  auto_trade_tp_pips: str = Field(
+    default="30,60,90,120,200",
+    validation_alias=AliasChoices(
+      "AUTO_TRADE_TARGET_PLANS_PIPS",
+      "AUTO_TRADE_TP_PIPS",
+    ),
+  )
+  auto_trade_zone_fill_enabled: bool = False
+  auto_trade_non_hedged_opposite_policy: str = "reject"
   # Scanner detectors already own the complete strategy match.  The bridge
   # transports that typed decision to the executor without another regime or
   # timeframe confirmation layer.  The legacy aliases keep existing VPS envs
@@ -360,9 +406,9 @@ class Settings(BaseSettings):
         "AUTO_TRADE_PROFILE must be conservative or demo_eval"
       )
     self.auto_trade_profile = profile
-    if profile != "demo_eval":
-      return self
     if (
+      profile == "demo_eval"
+      and
       "auto_trade_require_demo_account" in self.model_fields_set
       and not self.auto_trade_require_demo_account
     ):
@@ -371,6 +417,8 @@ class Settings(BaseSettings):
         "AUTO_TRADE_REQUIRE_DEMO_ACCOUNT=true"
       )
     demo_defaults = {
+      "auto_trade_enabled": True,
+      "auto_trade_dry_run": False,
       "auto_trade_require_demo_account": True,
       "auto_trade_allow_concurrent_strategies": True,
       "auto_trade_allow_hedged_xau": True,
@@ -389,14 +437,31 @@ class Settings(BaseSettings):
       "auto_trade_liquidity_reversal_enabled": True,
       "auto_trade_allow_counter_bias": True,
       "auto_trade_map_counter_bias_enabled": True,
+      "auto_trade_zone_fill_enabled": True,
+      "auto_trade_candidate_max_age_seconds": 420,
+      "auto_trade_candidate_ttl": 604800,
+      "auto_trade_non_hedged_opposite_policy": "broker_netting",
       "auto_trade_max_tracked_candidates": 0,
       "auto_trade_max_active_positions_per_symbol": 0,
       "scanner_top_n": 0,
     }
-    explicitly_set = self.model_fields_set
-    for field_name, value in demo_defaults.items():
-      if field_name not in explicitly_set:
-        setattr(self, field_name, value)
+    if profile == "demo_eval":
+      explicitly_set = self.model_fields_set
+      for field_name, value in demo_defaults.items():
+        if field_name not in explicitly_set:
+          setattr(self, field_name, value)
+    self.auto_trade_non_hedged_opposite_policy = (
+      self.auto_trade_non_hedged_opposite_policy.strip().lower()
+    )
+    if self.auto_trade_non_hedged_opposite_policy not in {
+      "broker_netting",
+      "close_then_reverse",
+      "reject",
+    }:
+      raise ValueError(
+        "AUTO_TRADE_NON_HEDGED_OPPOSITE_POLICY must be "
+        "broker_netting, close_then_reverse, or reject"
+      )
     return self
 
   @property

@@ -122,7 +122,7 @@ is a separate future sink, not this Redis contract.
 All fields ending in `*_pips` that cross Redis between the Python gate and the
 C# engine are denominated in **0.1 price units for XAUUSD**, independent of the
 broker-reported `pipPosition`. Python resolves that unit from its shared
-auto-trade units module and C# from `AUTO_TRADE_PIP_SIZE`; broker metadata is
+auto-trade units module and C# from `AUTO_TRADE_XAU_PIP_SIZE`; broker metadata is
 diagnostic only and must never drive price-to-pip conversion.
 
 When enabled, the Algo worker appends private strategy candidates and completed
