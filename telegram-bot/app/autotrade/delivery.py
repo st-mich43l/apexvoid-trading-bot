@@ -76,6 +76,7 @@ _NOTIFY_TYPES = {
   "stop_moved",
   "position_closed",
   "group_result",
+  "owner_flatten",
   "warning",
   "error",
   "candidate_published",
@@ -390,6 +391,16 @@ def _format_position_closed(event: dict, message: str) -> str:
   return "\n".join(lines)
 
 
+def _format_owner_flatten(event: dict, message: str) -> str:
+  body = escape(message) if message else "owner flatten"
+  return "\n".join([
+    "🤖 <b>ApexVoid Algo</b>",
+    "🧹 <b>FLATTEN</b>",
+    "",
+    body,
+  ])
+
+
 def _format_stop_moved(
   event: dict,
   message: str,
@@ -483,6 +494,8 @@ def render_auto_trade_event(
     return _format_group_result(event, message)
   if event_type == "position_closed":
     return _format_position_closed(event, message)
+  if event_type == "owner_flatten":
+    return _format_owner_flatten(event, message)
   labels = {
     "ready": "✅ <b>Engine ready</b>",
     "dry_run": "🧪 <b>Simulation</b>",
@@ -494,6 +507,7 @@ def render_auto_trade_event(
     "stop_moved": "🛡 <b>Risk protected</b>",
     "position_closed": "🏁 <b>POSITION CLOSED</b>",
     "group_result": "📊 <b>Trade result</b>",
+    "owner_flatten": "🧹 <b>FLATTEN</b>",
     "warning": "⚠️ <b>Warning</b>",
     "error": "⚠️ <b>Execution issue</b>",
     "account_capability": "🧾 <b>Account capability</b>",

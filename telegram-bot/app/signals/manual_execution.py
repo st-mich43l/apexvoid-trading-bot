@@ -591,6 +591,11 @@ async def _xadd_command(payload: dict) -> None:
   )
 
 
+async def request_close_all() -> None:
+  """Owner `/auto_close_all`: flatten every tracked ApexVoid Algo position."""
+  await _xadd_command({"type": "close_all"})
+
+
 async def request_cancel(intent_id: str) -> None:
   """/trade_cancel on an armed (not yet filled) manual algo signal."""
   await _xadd_command({"type": "cancel_pending", "intent_id": intent_id})
