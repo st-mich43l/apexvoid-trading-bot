@@ -1089,19 +1089,19 @@ async def close_leg(
       now = int(time.time())
       legs.append({"frac": close_frac, "pips": pips, "ts": now})
       new_remaining = 1.0 - sum(float(leg["frac"]) for leg in legs)
+      net_so_far = round(
+        sum(float(leg["frac"]) * int(leg["pips"]) for leg in legs)
+      )
       if new_remaining <= _LEG_EPSILON:
-        net = round(
-          sum(float(leg["frac"]) * int(leg["pips"]) for leg in legs)
-        )
         await db.execute(
           "UPDATE manual_signals SET status = 'closed', result_pips = $1, "
           "closed_at = $2, legs = $3 WHERE id = $4 AND status = 'open'",
-          net, now, json.dumps(legs), row_id,
+          net_so_far, now, json.dumps(legs), row_id,
         )
         return {
           **result_base,
           "closed": True,
-          "net": net,
+          "net": net_so_far,
           "remaining": 0.0,
           "frac": close_frac,
         }
@@ -1114,7 +1114,7 @@ async def close_leg(
     return {
       **result_base,
       "closed": False,
-      "net": None,
+      "net": net_so_far,
       "remaining": new_remaining,
       "frac": close_frac,
     }

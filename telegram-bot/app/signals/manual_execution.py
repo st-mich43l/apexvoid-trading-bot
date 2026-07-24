@@ -326,7 +326,7 @@ async def _handle_take_profit(event: dict, signal_id: int) -> None:
   if price is None:
     log.error("take_profit event missing price for signal %s", signal_id)
     return
-  pips = pips_format.pips_between(sig, float(price))
+  pips = pips_format.signed_result_pips(sig, float(price))
   configured = [
     pips_format.pips_between(sig, tp) for tp in sig.get("tps") or []
   ]

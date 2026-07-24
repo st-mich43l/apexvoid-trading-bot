@@ -3330,14 +3330,27 @@ public sealed class AutoTradeEngine(
       await store.DeletePositionAsync(stale, cancellationToken);
       if (state is not null)
       {
+        var initialVolume = state.GroupInitialVolume > 0
+          ? state.GroupInitialVolume
+          : state.InitialVolume;
+        // Broker snapshot disappearance does not expose the true fill. Use the
+        // last known protective stop (or entry) to book the remaining volume
+        // into the volume-weighted net so Telegram can show Total net pips.
+        var exitEstimate = state.CurrentStopLoss ?? state.EntryPrice;
+        var remainingVolume = Math.Max(0, state.RemainingVolume);
+        var pipVolume = state.GroupRealizedPipVolume
+          + SignedPips(state, exitEstimate) * remainingVolume;
+        var terminalGroupPips = WeightedPips(pipVolume, initialVolume);
+        var groupId = GroupId(state);
         await PublishAsync(
           "position_closed",
           "position is no longer open at broker (SL or manual close)",
           cancellationToken,
           state.CandidateId,
           stale,
-          price: state.CurrentStopLoss,
-          groupId: GroupId(state),
+          price: exitEstimate,
+          volume: remainingVolume > 0 ? remainingVolume : null,
+          groupId: groupId,
           setup: state.Setup,
           regime: state.Regime,
           confluence: state.Confluence,
@@ -3346,8 +3359,36 @@ public sealed class AutoTradeEngine(
           direction: DirectionLabel(state.Direction),
           matchId: state.MatchId,
           rangeId: state.RangeId,
-          strategyFamily: state.StrategyFamily
+          strategyFamily: state.StrategyFamily,
+          groupRealizedPips: terminalGroupPips,
+          groupInitialVolume: initialVolume,
+          remainingVolume: 0,
+          legRealizedPips: remainingVolume > 0
+            ? SignedPips(state, exitEstimate)
+            : null
         );
+        if (!_states.Values.Any(item => GroupId(item) == groupId))
+        {
+          await PublishAsync(
+            "group_result",
+            $"group {groupId} realised {terminalGroupPips.ToString("0.0", CultureInfo.InvariantCulture)} pips",
+            cancellationToken,
+            state.CandidateId,
+            stale,
+            groupId: groupId,
+            groupRealizedPips: terminalGroupPips,
+            setup: state.Setup,
+            matchId: state.MatchId,
+            rangeId: state.RangeId,
+            strategyFamily: state.StrategyFamily,
+            regime: state.Regime,
+            confluence: state.Confluence,
+            stopPips: InitialStopPips(state),
+            stream: ExecutionStream(state),
+            direction: DirectionLabel(state.Direction),
+            groupInitialVolume: initialVolume
+          );
+        }
         // A broker snapshot disappearance is ambiguous: it can be SL,
         // manual close, external close, or a reconciliation gap.  The Open
         // API adapter does not expose a confirmed close reason here, so do
