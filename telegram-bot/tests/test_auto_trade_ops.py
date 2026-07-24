@@ -629,6 +629,52 @@ async def test_pause_resume_and_status(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_status_surfaces_match_build_rejection_reason(monkeypatch):
+  # 23 Jul incident: Telegram showed a Range Edge Scalp card with ~40-49
+  # pips of room but no autonomous order ever opened, and nothing recorded
+  # why - /auto_status must now answer that without reading source code.
+  monkeypatch.setattr(delivery.settings, "auto_trade_enabled", True)
+  monkeypatch.setattr(delivery.settings, "auto_trade_dry_run", False)
+  client = redis_state.get_client()
+  await client.set(
+    "auto_trade:last_match_build:XAU",
+    json.dumps({
+      "stage": "match_build_rejected",
+      "reason": "insufficient_target_room",
+      "measured": {"room_pips": 45.2},
+    }),
+  )
+
+  text = await delivery.auto_trade_status_text()
+
+  assert "StrategyMatch bridge: <b>blocked</b>" in text
+  assert "insufficient_target_room" in text
+  assert "room 45.2 pips" in text
+
+
+@pytest.mark.asyncio
+async def test_status_surfaces_match_build_ready(monkeypatch):
+  monkeypatch.setattr(delivery.settings, "auto_trade_enabled", True)
+  monkeypatch.setattr(delivery.settings, "auto_trade_dry_run", False)
+  client = redis_state.get_client()
+  await client.set(
+    "auto_trade:last_match_build:XAU",
+    json.dumps({
+      "stage": "match_ready",
+      "strategy": "Range Edge Scalp",
+      "direction": "BUY",
+      "full_take_profit_pips": 40,
+    }),
+  )
+
+  text = await delivery.auto_trade_status_text()
+
+  assert "StrategyMatch bridge: <b>ready</b>" in text
+  assert "Range Edge Scalp BUY" in text
+  assert "TP 40p" in text
+
+
+@pytest.mark.asyncio
 async def test_status_identifies_scanner_strategy_match(monkeypatch):
   monkeypatch.setattr(delivery.settings, "auto_trade_enabled", True)
   client = redis_state.get_client()
