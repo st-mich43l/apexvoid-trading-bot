@@ -115,6 +115,12 @@ services:
       AUTO_TRADE_RANGE_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_RANGE_ENABLED | default('true') | string | to_json }}
       AUTO_TRADE_RANGE_TWO_SIDED_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_RANGE_TWO_SIDED_ENABLED | default(demo_eval_default) | string | to_json }}
       AUTO_TRADE_MAPPED_ZONE_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_MAPPED_ZONE_ENABLED | default('false') | string | to_json }}
+      AUTO_TRADE_KEY_LEVEL_REACTION_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_KEY_LEVEL_REACTION_ENABLED | default('true') | string | to_json }}
+      AUTO_TRADE_DEMAND_REACTION_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_DEMAND_REACTION_ENABLED | default('true') | string | to_json }}
+      AUTO_TRADE_SUPPLY_REACTION_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_SUPPLY_REACTION_ENABLED | default('true') | string | to_json }}
+      AUTO_TRADE_SESSION_LEVEL_REACTION_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_SESSION_LEVEL_REACTION_ENABLED | default('true') | string | to_json }}
+      AUTO_TRADE_TRENDLINE_REACTION_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_TRENDLINE_REACTION_ENABLED | default('true') | string | to_json }}
+      AUTO_TRADE_STRUCTURAL_REACTION_LOOKBACK_BARS: {{ apexvoid_trading_bot_env.AUTO_TRADE_STRUCTURAL_REACTION_LOOKBACK_BARS | default('3') | string | to_json }}
       AUTO_TRADE_MAP_THESIS_LOCK_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_MAP_THESIS_LOCK_ENABLED | default('true') | string | to_json }}
       AUTO_TRADE_STRATEGY_MATCH_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_STRATEGY_MATCH_ENABLED | default('true') | string | to_json }}
       AUTO_TRADE_BREAKOUT_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_BREAKOUT_ENABLED | default('true') | string | to_json }}

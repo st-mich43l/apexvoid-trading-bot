@@ -2531,6 +2531,11 @@ public sealed class AutoTradeEngineTests
   [Theory]
   [InlineData("Trend Pullback", "trend")]
   [InlineData("Mapped Zone Reaction", "mapped_zone")]
+  [InlineData("Demand Zone Reaction", "supply_demand")]
+  [InlineData("Key Level Reaction", "key_level")]
+  [InlineData("Session Level Reaction", "session_level")]
+  [InlineData("Trendline Reaction", "trendline")]
+  [InlineData("Supply Zone Reaction", "supply_demand")]
   public async Task DemoEvalRangeBoxOpensBesideAnotherStrategy(
     string existingSetup,
     string existingFamily

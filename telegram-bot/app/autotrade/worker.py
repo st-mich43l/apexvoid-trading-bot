@@ -1738,13 +1738,28 @@ def _trend_group_id(
 
 def _strategy_mode_enabled(match: StrategyMatch) -> bool:
   value = match.strategy.casefold()
-  if match.is_range_edge or "range" in value:
+  family = (match.family or "").casefold()
+  if match.is_range_edge or family in {"range", "range_reversion"}:
     return settings.auto_trade_range_enabled
-  if "mapped" in value or match.family == "mapped_zone":
+  if "mapped" in value or family in {"mapped_zone", "mapped_zone_reaction"}:
     return settings.auto_trade_market_map_strategy_enabled
-  if "liquidity" in value or "sweep" in value:
+  if family == "key_level" or value == "key level reaction":
+    return bool(getattr(settings, "auto_trade_key_level_reaction_enabled", True))
+  if family == "supply_demand" or value in {
+    "demand zone reaction", "supply zone reaction",
+  }:
+    if "demand" in value:
+      return bool(getattr(settings, "auto_trade_demand_reaction_enabled", True))
+    return bool(getattr(settings, "auto_trade_supply_reaction_enabled", True))
+  if family == "session_level" or value == "session level reaction":
+    return bool(
+      getattr(settings, "auto_trade_session_level_reaction_enabled", True)
+    )
+  if family == "trendline" or value == "trendline reaction":
+    return bool(getattr(settings, "auto_trade_trendline_reaction_enabled", True))
+  if "liquidity" in value or "sweep" in value or family == "liquidity_reversal":
     return settings.auto_trade_liquidity_reversal_enabled
-  if "retest" in value:
+  if "retest" in value or family == "breakout_retest":
     return settings.auto_trade_retest_enabled
   if "breakout" in value or "breakdown" in value:
     return settings.auto_trade_breakout_enabled
@@ -2710,6 +2725,18 @@ async def _publish_strategy_match(
       await client.delete(thesis_claim_key(match.thesis_id))
     raise
   await increment_metric(client, "candidate_published", symbol=symbol)
+  if match.strategy in {
+    "Key Level Reaction",
+    "Demand Zone Reaction",
+    "Supply Zone Reaction",
+    "Session Level Reaction",
+    "Trendline Reaction",
+  } or match.family in {
+    "key_level", "supply_demand", "session_level", "trendline",
+  }:
+    await increment_metric(
+      client, "structural_reaction_candidate_published", symbol=symbol,
+    )
   await emit_lifecycle(
     client,
     "candidate_published",

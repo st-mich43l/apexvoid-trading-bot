@@ -468,7 +468,7 @@ def test_confluence_rubric_is_shared_across_detectors():
   """Two different detectors observing the same factor set must derive the
   same confluence - the rubric, not the calling detector, is the source of
   truth (B2). Exercised through the real _finish/_confluence_from_zone path
-  each of the 8 DEFAULT_DETECTORS funnels through.
+  each of the DEFAULT_DETECTORS funnels through.
   """
   df = _buy_rejection_df()
   ctx = _ctx(df, indicator_set=_indicators(df, atr=1.0))
