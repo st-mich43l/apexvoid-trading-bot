@@ -160,9 +160,17 @@ public sealed class AutoTradeEngineTests
     );
     Assert.Equal(50, takeProfit.TargetPips);
     Assert.Equal(stopPips, takeProfit.StopPips);
-    Assert.StartsWith("FULL TP +50 pips", takeProfit.Message);
+    Assert.Equal(130.0m, takeProfit.LegRealizedPips);
+    Assert.Equal(order.Volume, takeProfit.GroupInitialVolume);
+    Assert.Equal(Symbol.LotSize, takeProfit.LotSize);
+    Assert.StartsWith("FULL TP +130.0 pips", takeProfit.Message);
+    Assert.DoesNotContain("$", takeProfit.Message);
     Assert.DoesNotContain(store.Events, item => item.Type == "stop_moved");
     Assert.Empty(store.Positions);
+
+    var groupResult = Assert.Single(store.Events, item => item.Type == "group_result");
+    Assert.DoesNotContain("$", groupResult.Message);
+    Assert.Contains("pips", groupResult.Message);
 
     cts.Cancel();
     await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);

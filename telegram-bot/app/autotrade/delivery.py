@@ -11,6 +11,12 @@ from typing import Literal
 from aiogram.exceptions import TelegramBadRequest
 
 from app.autotrade import units
+from app.autotrade.volume_pips import (
+  broker_volume_to_lots,
+  format_lots,
+  format_signed_pips,
+  volume_percent,
+)
 from app.persistence import redis_state
 from app.persistence.store import record_auto_trade_event
 from app.core.config import settings
@@ -73,8 +79,10 @@ _OPENED_RE = re.compile(
   r"SL\s+([\d.,]+)\s*·\s*([\d.,]+)p\s+structure\s*·\s*(.+)$"
 )
 _TP_RE = re.compile(
-  r"(?i)^(FULL TP|TP\d+)\s+\+(\d+)\s+pips\s+closed\s+volume\s+(\d+)$"
+  r"(?i)^(FULL TP|TP\d+)\s+([+-]?\d+(?:\.\d+)?)\s+pips\s+closed\s+volume\s+(\d+)$"
 )
+_DEFAULT_LOT_SIZE = 10_000.0
+_MONEY_RE = re.compile(r"\$|USD|EUR|GBP|balance|equity|brokerNetProfit", re.I)
 _STOP_RE = re.compile(
   r"(?i)^🛡\s+(?:ApexVoid Algo|Auto[\s-]*(?:trade|trader))\s+stop\s+→\s+"
   r"([\d.,]+)\s+\(([^)]+)\)(?:\s*·\s*position\s+\d+)?$"
@@ -196,6 +204,39 @@ def _format_opened(
   return "\n".join(lines)
 
 
+def _event_float(event: dict, *keys: str) -> float | None:
+  for key in keys:
+    raw = event.get(key)
+    if raw is None:
+      continue
+    try:
+      return float(raw)
+    except (TypeError, ValueError):
+      continue
+  return None
+
+
+def _event_lot_size(event: dict) -> float:
+  value = _event_float(event, "lot_size")
+  if value is not None and value > 0:
+    return value
+  return _DEFAULT_LOT_SIZE
+
+
+def _trade_seq_prefix(event: dict) -> str:
+  for key in ("daily_seq", "trade_seq", "seq"):
+    raw = event.get(key)
+    if raw is None:
+      continue
+    try:
+      return f"#{int(raw)} "
+    except (TypeError, ValueError):
+      text = str(raw).strip()
+      if text:
+        return f"#{text} "
+  return ""
+
+
 def _format_take_profit(
   event: dict,
   message: str,
@@ -204,46 +245,89 @@ def _format_take_profit(
   match = _TP_RE.match(message)
   if match is None:
     return None
-  label, pips, _ = match.groups()
+  label, message_pips, message_volume = match.groups()
   full = label.upper() == "FULL TP"
-  lines = [
-    "🤖 <b>ApexVoid Algo</b>",
-    "🎯 <b>FULL TAKE PROFIT</b>" if full else f"🎯 <b>{label.upper()} HIT</b>",
-    "",
-    f"✅ Profit: <b>+{pips} pips</b>",
-  ]
+  closed_volume = _event_float(event, "volume")
+  if closed_volume is None:
+    closed_volume = float(message_volume)
+  initial_volume = _event_float(
+    event,
+    "group_initial_volume",
+    "initial_filled_volume",
+    "initial_volume",
+  )
+  remaining_volume = _event_float(event, "remaining_volume")
+  if remaining_volume is None:
+    remaining_volume = 0.0 if full else None
+  leg_realized = _event_float(event, "leg_realized_pips")
+  if leg_realized is None:
+    leg_realized = float(message_pips)
+  net_pips = _event_float(event, "group_realized_pips")
+  if net_pips is None:
+    net_pips = leg_realized
+  lot_size = _event_lot_size(event)
+  seq = _trade_seq_prefix(event)
+  is_final = full or (remaining_volume is not None and remaining_volume <= 0)
+
+  if is_final:
+    lines = [
+      "🤖 <b>ApexVoid Algo</b>",
+      f"✅ {seq}closed",
+      f"Net: <b>{format_signed_pips(net_pips)} pips</b>",
+    ]
+    if initial_volume is not None and initial_volume > 0 and profile != "public":
+      lots = format_lots(broker_volume_to_lots(initial_volume, lot_size))
+      lines.append(f"Initial volume: <b>{lots} lot</b>")
+  else:
+    if (
+      initial_volume is None
+      or initial_volume <= 0
+      or remaining_volume is None
+    ):
+      return None
+    booked_pct = volume_percent(closed_volume, initial_volume)
+    remaining = max(0.0, float(remaining_volume))
+    remaining_pct = volume_percent(remaining, initial_volume)
+    remaining_lots = format_lots(broker_volume_to_lots(remaining, lot_size))
+    lines = [
+      "🤖 <b>ApexVoid Algo</b>",
+      f"🎯 {seq}{label.upper()} booked {booked_pct:.1f}%",
+      f"Realized: <b>{format_signed_pips(leg_realized)} pips</b>",
+    ]
+    if profile != "public":
+      lines.append(
+        f"Remaining: <b>{remaining_lots} lot</b> · {remaining_pct:.1f}%"
+      )
+
   if profile == "public":
     try:
       stop_pips = float(event.get("stop_pips"))
-      profit_pips = float(event.get("target_pips") or pips)
     except (TypeError, ValueError):
-      stop_pips = 0
-      profit_pips = 0
+      stop_pips = 0.0
+    display_pips = net_pips if is_final else leg_realized
     if stop_pips > 0:
-      lines.append(f"📐 Result: <b>+{profit_pips / stop_pips:.2f}R</b>")
-  if full:
-    lines.append("🏁 Position closed in full")
-    result_pips = event.get("group_realized_pips")
-    result_pnl = event.get("group_realized_pnl")
-    if result_pips is not None or result_pnl is not None:
-      lines.extend(["", "📊 <b>Trade result</b>"])
-      result_parts = []
-      try:
-        value = float(result_pips)
-        result_parts.append(f"{value:+,.1f} pips")
-      except (TypeError, ValueError):
-        pass
-      try:
-        value = float(result_pnl)
-        sign = "+" if value >= 0 else "-"
-        result_parts.append(f"{sign}${abs(value):,.2f}")
-      except (TypeError, ValueError):
-        pass
-      if result_parts:
-        lines.append(f"💰 <b>{' · '.join(result_parts)}</b>")
-  price = event.get("price")
-  if price is not None:
-    lines.append(f"📍 Exit: <b>{float(price):,.2f}</b>")
+      lines.append(
+        f"📐 Result: <b>{display_pips / stop_pips:+.2f}R</b>"
+      )
+  text = "\n".join(lines)
+  if _MONEY_RE.search(text):
+    text = _MONEY_RE.sub("", text)
+  return text
+
+
+def _format_group_result(event: dict, message: str) -> str:
+  net = _event_float(event, "group_realized_pips")
+  lines = [
+    "🤖 <b>ApexVoid Algo</b>",
+    "📊 <b>Trade result</b>",
+    "",
+  ]
+  if net is not None:
+    lines.append(f"Net: <b>{format_signed_pips(net)} pips</b>")
+  else:
+    cleaned = _MONEY_RE.sub("", message).strip(" ·")
+    if cleaned:
+      lines.append(escape(cleaned))
   return "\n".join(lines)
 
 
@@ -336,6 +420,8 @@ def render_auto_trade_event(
     rendered = _format_stop_moved(event, message, profile)
     if rendered:
       return rendered
+  if event_type == "group_result":
+    return _format_group_result(event, message)
   labels = {
     "ready": "✅ <b>Engine ready</b>",
     "dry_run": "🧪 <b>Simulation</b>",

@@ -3032,9 +3032,17 @@ public sealed class AutoTradeEngine(
         var targetLabel = state.TargetsPips.Count == 1
           ? "FULL TP"
           : $"TP{targetOrdinal}";
+        var legPipText = realizedPips.ToString(
+          "+0.0;-0.0;+0.0",
+          CultureInfo.InvariantCulture
+        );
+        var weightedGroupPips = WeightedPips(
+          groupPipVolume,
+          groupInitialVolume
+        );
         await PublishAsync(
           "take_profit",
-          $"{targetLabel} +{targetPips} pips closed volume {closeVolume}",
+          $"{targetLabel} {legPipText} pips closed volume {closeVolume}",
           cancellationToken,
           state.CandidateId,
           state.PositionId,
@@ -3046,10 +3054,7 @@ public sealed class AutoTradeEngine(
           groupRealizedPnl: groupBooked,
           counterfactualPnl: initialBooked,
           hadAdds: state.HadAdds,
-          groupRealizedPips: WeightedPips(
-            groupPipVolume,
-            groupInitialVolume
-          ),
+          groupRealizedPips: weightedGroupPips,
           counterfactualPips: WeightedPips(
             initialPipVolume,
             initialTrancheVolume
@@ -3063,7 +3068,10 @@ public sealed class AutoTradeEngine(
           remainingVolume: remaining,
           matchId: state.MatchId,
           rangeId: state.RangeId,
-          strategyFamily: state.StrategyFamily
+          strategyFamily: state.StrategyFamily,
+          legRealizedPips: realizedPips,
+          groupInitialVolume: groupInitialVolume,
+          lotSize: symbol.LotSize
         );
         if (remaining <= 0)
         {
@@ -3078,13 +3086,12 @@ public sealed class AutoTradeEngine(
               initialTrancheVolume
             );
             var addDelta = groupBooked - initialBooked;
+            var addLabel = addDelta > 0 ? "improved" : "degraded";
             await PublishAsync(
               "group_result",
-              $"group {groupId} realised ${groupBooked:N2} · "
-              + $"{groupPips:N1} pips · no-add counterfactual "
-              + $"${initialBooked:N2} / {counterfactualPips:N1} pips · adds "
-              + (addDelta > 0 ? "improved" : "degraded")
-              + $" ${Math.Abs(addDelta):N2}",
+              $"group {groupId} realised {groupPips.ToString("0.0", CultureInfo.InvariantCulture)} pips · "
+              + $"no-add counterfactual {counterfactualPips.ToString("0.0", CultureInfo.InvariantCulture)} pips · adds "
+              + addLabel,
               cancellationToken,
               state.CandidateId,
               state.PositionId,
@@ -3103,7 +3110,9 @@ public sealed class AutoTradeEngine(
               confluence: state.Confluence,
               stopPips: InitialStopPips(state),
               stream: ExecutionStream(state),
-              direction: DirectionLabel(state.Direction)
+              direction: DirectionLabel(state.Direction),
+              groupInitialVolume: groupInitialVolume,
+              lotSize: symbol.LotSize
             );
           }
           break;
@@ -4059,7 +4068,10 @@ public sealed class AutoTradeEngine(
     decimal? stopLoss = null,
     IReadOnlyList<decimal>? targetPrices = null,
     decimal? entryLow = null,
-    decimal? entryHigh = null
+    decimal? entryHigh = null,
+    decimal? legRealizedPips = null,
+    long? groupInitialVolume = null,
+    long? lotSize = null
   )
   {
     var state = LifecycleState(type, remainingVolume);
@@ -4122,7 +4134,10 @@ public sealed class AutoTradeEngine(
       stopLoss,
       targetPrices,
       entryLow,
-      entryHigh
+      entryHigh,
+      legRealizedPips,
+      groupInitialVolume,
+      lotSize
     );
     await store.PublishAutoTradeEventAsync(
       options.EventStream,

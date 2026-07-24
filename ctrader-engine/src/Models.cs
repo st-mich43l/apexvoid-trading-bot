@@ -307,7 +307,10 @@ public sealed record AutoTradeEvent(
   decimal? StopLoss = null,
   IReadOnlyList<decimal>? TargetPrices = null,
   decimal? EntryLow = null,
-  decimal? EntryHigh = null
+  decimal? EntryHigh = null,
+  decimal? LegRealizedPips = null,
+  long? GroupInitialVolume = null,
+  long? LotSize = null
 );
 
 public sealed record AutoTradeGroupPlan(

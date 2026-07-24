@@ -91,10 +91,15 @@ def test_render_box_open_and_full_tp_as_shareable_cards():
   })
   take_profit = delivery.render_auto_trade_event({
     "type": "take_profit",
-    "message": "FULL TP +50 pips closed volume 400",
+    "message": "FULL TP +51.3 pips closed volume 400",
     "position_id": 39025496,
     "price": 4061.78,
+    "volume": 400,
+    "group_initial_volume": 400,
+    "remaining_volume": 0,
+    "leg_realized_pips": 51.3,
     "group_realized_pips": 51.3,
+    "lot_size": 10_000,
     "group_realized_pnl": 71.82,
   })
 
@@ -104,13 +109,53 @@ def test_render_box_open_and_full_tp_as_shareable_cards():
   assert "Full TP: <b>4,061.78</b> · +50 pips" in opened
   assert "Box: <b>4,062.00–4,069.00</b>" in opened
   assert "39025496" not in opened
-  assert "FULL TAKE PROFIT" in take_profit
-  assert "Profit: <b>+50 pips</b>" in take_profit
-  assert "Position closed in full" in take_profit
-  assert "Trade result" in take_profit
-  assert "+51.3 pips · +$71.82" in take_profit
+  assert "✅ closed" in take_profit
+  assert "Net: <b>+51.3 pips</b>" in take_profit
+  assert "Initial volume: <b>0.04 lot</b>" in take_profit
+  assert "$" not in take_profit
+  assert "71.82" not in take_profit
   assert "39025496" not in take_profit
   assert "Auto trade" not in (opened + take_profit)
+
+
+def test_partial_and_final_tp_use_volume_weighted_pips_not_money():
+  partial = delivery.render_auto_trade_event({
+    "type": "take_profit",
+    "message": "TP1 +48.4 pips closed volume 300",
+    "daily_seq": 1,
+    "volume": 300,
+    "remaining_volume": 600,
+    "group_initial_volume": 900,
+    "leg_realized_pips": 48.4,
+    "group_realized_pips": 16.133333,
+    "lot_size": 10_000,
+  })
+  final = delivery.render_auto_trade_event({
+    "type": "take_profit",
+    "message": "TP2 +0.9 pips closed volume 600",
+    "daily_seq": 1,
+    "volume": 600,
+    "remaining_volume": 0,
+    "group_initial_volume": 900,
+    "leg_realized_pips": 0.9,
+    "group_realized_pips": 16.7,
+    "lot_size": 10_000,
+  })
+
+  assert partial == (
+    "🤖 <b>ApexVoid Algo</b>\n"
+    "🎯 #1 TP1 booked 33.3%\n"
+    "Realized: <b>+48.4 pips</b>\n"
+    "Remaining: <b>0.06 lot</b> · 66.7%"
+  )
+  assert final == (
+    "🤖 <b>ApexVoid Algo</b>\n"
+    "✅ #1 closed\n"
+    "Net: <b>+16.7 pips</b>\n"
+    "Initial volume: <b>0.09 lot</b>"
+  )
+  assert "$" not in partial + final
+
 
 
 def test_opened_event_renders_strategy_attribution():
@@ -174,12 +219,15 @@ def test_render_scale_in_zone_and_group_events():
   })
   result = delivery.render_auto_trade_event({
     "type": "group_result",
-    "message": "realised $42 · no-add $31",
+    "message": "realised 42.0 pips · no-add 31.0 pips",
+    "group_realized_pips": 42.0,
   })
 
   assert "Scale-in filled" in scale_in
   assert "WAITING FOR PRICE" in zone
   assert "Trade result" in result
+  assert "Net: <b>+42.0 pips</b>" in result
+  assert "$" not in result
   assert "ApexVoid Algo" in scale_in + zone + result
 
 
@@ -214,14 +262,34 @@ def test_public_profile_hides_position_and_lot_and_keeps_ladder():
 def test_public_take_profit_computes_r_from_event_stop_distance():
   text = delivery.render_auto_trade_event({
     "type": "take_profit",
-    "message": "TP1 +30 pips closed volume 200",
+    "message": "TP1 +30.0 pips closed volume 200",
     "position_id": 39000344,
     "target_pips": 30,
     "stop_pips": 65,
+    "volume": 200,
+    "remaining_volume": 400,
+    "group_initial_volume": 600,
+    "leg_realized_pips": 30.0,
+    "lot_size": 10_000,
   }, profile="public")
 
   assert "+0.46R" in text
   assert "39000344" not in text
+  assert "$" not in text
+  assert "lot" not in text.lower()
+
+
+def test_group_result_telegram_is_pips_only():
+  text = delivery.render_auto_trade_event({
+    "type": "group_result",
+    "message": "group abc realised $42.00 · 16.7 pips",
+    "group_realized_pips": 16.7,
+    "group_realized_pnl": 42.0,
+  })
+  assert "Net: <b>+16.7 pips</b>" in text
+  assert "$" not in text
+  assert "42" not in text
+
 
 
 def test_empty_public_footer_adds_no_trailing_blank_lines():
@@ -352,18 +420,23 @@ async def test_full_tp_merges_result_and_suppresses_duplicate_group_reply():
 
   full_tp = {
     "type": "take_profit",
-    "message": "FULL TP +50 pips closed volume 400",
+    "message": "FULL TP +51.3 pips closed volume 400",
     "position_id": 39000344,
     "group_id": "group-39000344",
     "price": 4061.78,
+    "volume": 400,
+    "remaining_volume": 0,
+    "group_initial_volume": 400,
+    "leg_realized_pips": 51.3,
     "group_realized_pips": 51.3,
+    "lot_size": 10_000,
     "group_realized_pnl": 71.82,
   }
   group_result = {
     "type": "group_result",
     "message": (
-      "group group-39000344 realised $71.82 · 51.3 pips · "
-      "no-add counterfactual $71.82 / 51.3 pips · adds degraded $0.00"
+      "group group-39000344 realised 51.3 pips · "
+      "no-add counterfactual 51.3 pips · adds degraded"
     ),
     "position_id": 39000344,
     "group_id": "group-39000344",
@@ -390,8 +463,9 @@ async def test_full_tp_merges_result_and_suppresses_duplicate_group_reply():
   assert delivered_group is False
   assert len(calls) == 1
   assert calls[0][1]["reply_to"] == 8123
-  assert "Trade result" in calls[0][0]
-  assert "+51.3 pips · +$71.82" in calls[0][0]
+  assert "Net: <b>+51.3 pips</b>" in calls[0][0]
+  assert "$" not in calls[0][0]
+  assert "71.82" not in calls[0][0]
   assert "39000344" not in calls[0][0]
 
 
