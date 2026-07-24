@@ -79,6 +79,11 @@ _CANONICAL_ENV_NAMES = {
   "AUTO_TRADE_STRUCTURAL_GUARD_MODE",
   "AUTO_TRADE_ZONE_COOLDOWN_ENABLED",
   "AUTO_TRADE_ZONE_RECONCILE_MODE",
+  "AUTO_TRADE_RANGE_BOX_SCALE_OUT_ENABLED",
+  "AUTO_TRADE_RANGE_BOX_SCALE_OUT_THRESHOLD_PIPS",
+  "AUTO_TRADE_RANGE_BOX_SCALE_OUT_TRIGGER_PIPS",
+  "AUTO_TRADE_RANGE_BOX_SCALE_OUT_FRACTION",
+  "AUTO_TRADE_RANGE_BOX_MOVE_SL_TO_BE_AFTER_SCALE_OUT",
 }
 
 
@@ -253,6 +258,21 @@ def python_manifest() -> dict[str, Any]:
     "structural_guard_mode": settings.auto_trade_structural_guard_mode,
     "zone_cooldown_enabled": settings.auto_trade_zone_cooldown_enabled,
     "zone_reconcile_mode": settings.auto_trade_zone_reconcile_mode,
+    "range_box_scale_out_enabled": (
+      settings.auto_trade_range_box_scale_out_enabled
+    ),
+    "range_box_scale_out_threshold_pips": (
+      settings.auto_trade_range_box_scale_out_threshold_pips
+    ),
+    "range_box_scale_out_trigger_pips": (
+      settings.auto_trade_range_box_scale_out_trigger_pips
+    ),
+    "range_box_scale_out_fraction": (
+      settings.auto_trade_range_box_scale_out_fraction
+    ),
+    "range_box_move_sl_to_be_after_scale_out": (
+      settings.auto_trade_range_box_move_sl_to_be_after_scale_out
+    ),
     "candidate_contract_version": (
       settings.auto_trade_candidate_contract_version
     ),
@@ -300,6 +320,9 @@ def _different(field: str, left: Any, right: Any) -> bool:
     "min_confluence",
     "candidate_contract_version",
     "config_manifest_version",
+    "range_box_scale_out_threshold_pips",
+    "range_box_scale_out_trigger_pips",
+    "range_box_scale_out_fraction",
   }:
     return not _numeric_equal(left, right)
   return left != right
@@ -369,6 +392,11 @@ def compare_manifests(
     "structural_guard_mode",
     "zone_cooldown_enabled",
     "zone_reconcile_mode",
+    "range_box_scale_out_enabled",
+    "range_box_scale_out_threshold_pips",
+    "range_box_scale_out_trigger_pips",
+    "range_box_scale_out_fraction",
+    "range_box_move_sl_to_be_after_scale_out",
   )
   warnings = [
     field
