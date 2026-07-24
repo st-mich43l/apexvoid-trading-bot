@@ -13,6 +13,11 @@ dated section after deployment.
 
 ### Fixed
 
+- Algo `POSITION CLOSED` cards now include **Total net pips** (volume-weighted).
+  Broker reconciliation closes also book the remaining volume into the weighted
+  net and emit `group_result`. Partial TP cards show **Leg** pips plus **Net so
+  far**. Manual/algo VIP booking measures signed pips from the real
+  `broker_fill_price` when present, not only the advertised zone edge.
 - Telegram ApexVoid Algo cards now show only the essential trade lifecycle
   (`order_filled` / opened, TP booked, risk protected, closed, group result,
   executor rejects). Pre-fill noise (`candidate_published`, `order_submitted`,
