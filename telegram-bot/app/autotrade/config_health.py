@@ -232,6 +232,7 @@ def python_manifest() -> dict[str, Any]:
     "trend_enabled": settings.auto_trade_trend_enabled,
     "range_enabled": settings.auto_trade_range_enabled,
     "mapped_zone_enabled": settings.auto_trade_market_map_strategy_enabled,
+    "map_thesis_lock_enabled": settings.auto_trade_map_thesis_lock_enabled,
     "strategy_match_enabled": settings.auto_trade_strategy_bridge_enabled,
     "breakout_enabled": settings.auto_trade_breakout_enabled,
     "retest_enabled": settings.auto_trade_retest_enabled,
@@ -355,6 +356,7 @@ def compare_manifests(
     "trend_enabled",
     "range_enabled",
     "mapped_zone_enabled",
+    "map_thesis_lock_enabled",
     "strategy_match_enabled",
     "breakout_enabled",
     "retest_enabled",
@@ -397,6 +399,10 @@ def compare_manifests(
     warnings.append("python_git_sha_unknown")
   if ctrader.get("git_sha") in {None, "", "unknown"}:
     warnings.append("ctrader_git_sha_unknown")
+  if not bool(python.get("map_thesis_lock_enabled", True)):
+    warnings.append("map_thesis_lock_disabled")
+  if not bool(ctrader.get("map_thesis_lock_enabled", True)):
+    warnings.append("map_thesis_lock_disabled")
   return {
     "state": "fatal" if fatal else "healthy",
     "fatal": sorted(set(fatal)),

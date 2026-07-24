@@ -71,6 +71,7 @@ public sealed record AutoTradeOptions(
   bool TrendEnabled = false,
   bool RangeEnabled = true,
   bool MappedZoneEnabled = true,
+  bool MapThesisLockEnabled = true,
   bool StrategyMatchEnabled = true,
   bool BreakoutEnabled = true,
   bool RetestEnabled = true,
@@ -317,6 +318,10 @@ public sealed record AutoTradeOptions(
     ),
     RangeEnabled: resolver.Bool("AUTO_TRADE_RANGE_ENABLED", true),
     MappedZoneEnabled: resolver.Bool("AUTO_TRADE_MAPPED_ZONE_ENABLED", true),
+    MapThesisLockEnabled: resolver.Bool(
+      "AUTO_TRADE_MAP_THESIS_LOCK_ENABLED",
+      true
+    ),
     StrategyMatchEnabled: resolver.Bool(
       "AUTO_TRADE_STRATEGY_MATCH_ENABLED", true
     ),
