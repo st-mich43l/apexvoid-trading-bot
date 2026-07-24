@@ -1,5 +1,5 @@
 from typing import Optional
-from pydantic import AliasChoices, Field
+from pydantic import AliasChoices, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -88,7 +88,6 @@ class Settings(BaseSettings):
   scanner_level_bucket: int = 20
   zone_alert_ttl: int = 14400
   scanner_confluence_floor: int = 2
-  scanner_top_n: int = 1
   alert_overlap_suppress: float = 0.5
   # Opposite-direction, overlapping detections are a contradiction, not a
   # duplicate. Above this overlap ratio, the weaker one only survives if its
@@ -163,6 +162,18 @@ class Settings(BaseSettings):
   range_scalp_allow_rejection_only: bool = True
   auto_trade_enabled: bool = False
   auto_trade_dry_run: bool = True
+  auto_trade_profile: str = "conservative"
+  auto_trade_require_demo_account: bool = True
+  auto_trade_allow_concurrent_strategies: bool = False
+  auto_trade_allow_hedged_xau: bool = False
+  auto_trade_require_flat_for_range: bool = True
+  auto_trade_range_two_sided_enabled: bool = False
+  auto_trade_range_flip_enabled: bool = False
+  auto_trade_multi_match_enabled: bool = False
+  auto_trade_track_all_structural_matches: bool = False
+  auto_trade_candidate_contract_version: int = 4
+  auto_trade_canonical_symbol: str = "XAU"
+  auto_trade_contract_size: float = 100.0
   auto_trade_symbols: str = "XAU"
   auto_trade_spot_max_age: int = 5
   auto_trade_stream: str = "auto_trade:candidates"
@@ -327,6 +338,43 @@ class Settings(BaseSettings):
   # not itself wired through AUTO_TRADE_* options on the C# side.
   manual_trade_command_stream: str = "manual_trade:commands"
   manual_trade_command_stream_maxlen: int = 1000
+
+  @model_validator(mode="after")
+  def _resolve_auto_trade_profile(self):
+    profile = self.auto_trade_profile.strip().lower()
+    if profile not in {"conservative", "demo_eval"}:
+      raise ValueError(
+        "AUTO_TRADE_PROFILE must be conservative or demo_eval"
+      )
+    self.auto_trade_profile = profile
+    if profile != "demo_eval":
+      return self
+    if (
+      "auto_trade_require_demo_account" in self.model_fields_set
+      and not self.auto_trade_require_demo_account
+    ):
+      raise ValueError(
+        "AUTO_TRADE_PROFILE=demo_eval requires "
+        "AUTO_TRADE_REQUIRE_DEMO_ACCOUNT=true"
+      )
+    demo_defaults = {
+      "auto_trade_require_demo_account": True,
+      "auto_trade_allow_concurrent_strategies": True,
+      "auto_trade_allow_hedged_xau": True,
+      "auto_trade_require_flat_for_range": False,
+      "auto_trade_range_two_sided_enabled": True,
+      "auto_trade_range_flip_enabled": True,
+      "auto_trade_multi_match_enabled": True,
+      "auto_trade_track_all_structural_matches": True,
+      "auto_trade_max_tracked_candidates": 0,
+      "auto_trade_max_active_positions_per_symbol": 0,
+      "scanner_top_n": 0,
+    }
+    explicitly_set = self.model_fields_set
+    for field_name, value in demo_defaults.items():
+      if field_name not in explicitly_set:
+        setattr(self, field_name, value)
+    return self
 
   @property
   def telegram_chat_id(self) -> str:

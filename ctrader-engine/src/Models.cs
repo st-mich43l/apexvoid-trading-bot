@@ -174,7 +174,10 @@ public sealed record TradeCandidate(
   decimal? ExtremePrice = null,
   long? ExtremeTs = null,
   string? AddZoneSide = null,
-  bool RejectionConfirmed = false
+  bool RejectionConfirmed = false,
+  string? MatchId = null,
+  string? GroupId = null,
+  string? StrategyFamily = null
 );
 
 public sealed record TradeStreamEntry(
@@ -217,7 +220,9 @@ public sealed record AutoTradePositionState(
   decimal? RangeLow = null,
   decimal? RangeHigh = null,
   decimal? RangeExitPrice = null,
-  string Stream = "algo_auto"
+  string Stream = "algo_auto",
+  string? MatchId = null,
+  string? StrategyFamily = null
 );
 
 // One owner-override command for an already-armed/filled manual-algo
@@ -251,6 +256,7 @@ public sealed record AutoTradeEvent(
   string Type,
   long Timestamp,
   string Message,
+  string Symbol,
   string? CandidateId = null,
   long? PositionId = null,
   int? TargetPips = null,
@@ -272,5 +278,82 @@ public sealed record AutoTradeEvent(
   IReadOnlyList<int>? TargetsPips = null,
   string? Stream = null,
   string? Direction = null,
-  long? RemainingVolume = null
+  long? RemainingVolume = null,
+  string? LifecycleId = null,
+  string? State = null,
+  string? ReasonCode = null,
+  string? MatchId = null,
+  string? RangeId = null,
+  string? StrategyFamily = null,
+  string? ConfigurationProfile = null,
+  string? AccountType = null,
+  string? Broker = null,
+  string? CorrelationId = null,
+  string? PreviousState = null,
+  IReadOnlyList<long>? PendingOrderIds = null
+);
+
+public sealed record AutoTradeGroupPlan(
+  string CandidateId,
+  string GroupId,
+  string? MatchId,
+  string? StrategyFamily,
+  string? RangeId,
+  string Setup,
+  string Direction,
+  long CreatedAt
+);
+
+public sealed record AutoTradeConfigManifest(
+  string Service,
+  string ServiceVersion,
+  string GitSha,
+  string Profile,
+  bool AutoTradeEnabled,
+  bool DryRun,
+  string RedisFingerprint,
+  int RedisDatabase,
+  string CandidateStream,
+  string EventStream,
+  IReadOnlyList<string> Symbols,
+  string CanonicalSymbol,
+  decimal PipSize,
+  decimal ContractSize,
+  IReadOnlyList<int> TargetPlans,
+  IReadOnlyList<int> RangeTargetPlans,
+  decimal RangeTpBuffer,
+  int CandidateTtl,
+  int CandidateMaxAge,
+  int SpotMaxAge,
+  bool RangeFlip,
+  bool TwoSidedRange,
+  bool ConcurrentStrategies,
+  bool HedgingPolicy,
+  bool ZoneFill,
+  int MinConfluence,
+  string AccountMode,
+  string Broker,
+  int CandidateContractVersion,
+  long GeneratedAt
+);
+
+public sealed record AutoTradeConfigHealthDocument(
+  string State,
+  IReadOnlyList<string> Fatal,
+  IReadOnlyList<string> Warnings,
+  string Profile,
+  long CheckedAt
+);
+
+public sealed record AutoTradeExecutorSnapshot(
+  string Symbol,
+  string Profile,
+  string ExposurePolicy,
+  bool Demo,
+  bool Hedged,
+  bool Ready,
+  IReadOnlyList<long> PositionIds,
+  IReadOnlyList<long> PendingOrderIds,
+  IReadOnlyList<string> GroupIds,
+  long UpdatedAt
 );

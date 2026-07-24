@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import math
+from typing import Any
 
 import pandas as pd
 
@@ -80,6 +81,7 @@ def evaluate_auto_scalp_gate(
   *,
   symbol: str,
   spot_price: float | None = None,
+  range_context: Any | None = None,
 ) -> AutoScalpDecision:
   """Return one auto-only M1 trade decision from raw M1/M5/M15 OHLC.
 
@@ -113,7 +115,9 @@ def evaluate_auto_scalp_gate(
     )
   close = float(m1["close"].iloc[-1])
   pip_size = units.pip_size(symbol)
-  box = _m1_consolidation_box(m1, m1_atr, symbol)
+  box = _box_from_range_context(range_context, symbol) or _m1_consolidation_box(
+    m1, m1_atr, symbol,
+  )
   if box is None:
     return AutoScalpDecision(
       "waiting_for_box",
@@ -256,6 +260,63 @@ def evaluate_auto_scalp_gate(
     rail_count=2,
     sweep_low=sweep_extreme if direction == "BUY" else None,
     sweep_high=sweep_extreme if direction == "SELL" else None,
+  )
+
+
+def _box_from_range_context(
+  context: Any | None,
+  symbol: str,
+) -> AutoScalpBox | None:
+  if context is None:
+    return None
+  if str(getattr(context, "symbol", "")).upper() != symbol.upper():
+    return None
+  if str(getattr(context, "state", "")) not in {
+    "provisional",
+    "confirmed",
+    "post_impulse",
+    "breakout_pending",
+  }:
+    return None
+  lower_context = getattr(context, "lower_barrier", None)
+  upper_context = getattr(context, "upper_barrier", None)
+  if lower_context is None or upper_context is None:
+    return None
+  lower = AutoScalpRail(
+    role="support",
+    low=float(lower_context.low),
+    high=float(lower_context.high),
+    level=float(lower_context.level),
+    touches=int(lower_context.touches),
+    score=float(lower_context.touches + lower_context.wick_rejections),
+    timeframes=tuple(getattr(context, "context_timeframes", ("M1",))),
+    sources=tuple(lower_context.sources) or ("unified-range",),
+  )
+  upper = AutoScalpRail(
+    role="resistance",
+    low=float(upper_context.low),
+    high=float(upper_context.high),
+    level=float(upper_context.level),
+    touches=int(upper_context.touches),
+    score=float(upper_context.touches + upper_context.wick_rejections),
+    timeframes=tuple(getattr(context, "context_timeframes", ("M1",))),
+    sources=tuple(upper_context.sources) or ("unified-range",),
+  )
+  if upper.level <= lower.level:
+    return None
+  return AutoScalpBox(
+    box_id=str(context.range_id),
+    lower=lower,
+    upper=upper,
+    width_pips=float(context.width_pips),
+    inside_ratio=min(
+      1.0,
+      max(0.0, float(context.inside_close_count) / BOX_LOOKBACK),
+    ),
+    efficiency=max(
+      0.0,
+      min(1.0, 1.0 - float(context.contraction_score) / 10.0),
+    ),
   )
 
 

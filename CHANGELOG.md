@@ -11,6 +11,23 @@ dated section after deployment.
 
 ## Unreleased
 
+### Added
+
+- Added the explicit `demo_eval` auto-trade profile, independent hedged
+  strategy/range groups, two-sided range rails, multi-match routing, unified
+  scanner/private `RangeContext`, complete candidate lifecycle history, and
+  Python/C# startup contract health manifests.
+- Expanded `/auto_status` and execution Telegram cards with account capability,
+  config health, resolved range/barriers, both rail states, active matches,
+  strategy groups, counters, and real executor lifecycle badges.
+
+### Changed
+
+- Demo evaluation no longer requires flat bot-owned XAU exposure before a
+  Range Box order. The former veto remains as
+  `range_box_would_have_awaited_flat` counterfactual telemetry, while candidate
+  and pending-order deduplication is scoped to its strategy group.
+
 ### Fixed
 
 - Zone-fill no longer hard-rejects when price is already inside the entry zone

@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using StackExchange.Redis;
 
@@ -118,6 +119,34 @@ public interface IAutoTradeStore
     int ttlMinutes,
     CancellationToken cancellationToken
   );
+  Task SetValueAsync(
+    string key,
+    string value,
+    CancellationToken cancellationToken
+  ) => Task.CompletedTask;
+  Task<string?> GetValueAsync(
+    string key,
+    CancellationToken cancellationToken
+  ) => Task.FromResult<string?>(null);
+  Task IncrementMetricAsync(
+    string symbol,
+    string metric,
+    CancellationToken cancellationToken
+  ) => Task.CompletedTask;
+  Task RecordLifecycleEventAsync(
+    AutoTradeEvent tradeEvent,
+    CancellationToken cancellationToken
+  ) => Task.CompletedTask;
+  Task UpdateRangeSideStateAsync(
+    string symbol,
+    string rangeId,
+    string direction,
+    string state,
+    string? candidateId,
+    long? positionId,
+    IReadOnlyList<long>? pendingOrderIds,
+    CancellationToken cancellationToken
+  ) => Task.CompletedTask;
 }
 
 public sealed class RedisBarSink(
@@ -503,6 +532,181 @@ public sealed class StackExchangeRedisSeriesCommands :
     TimeSpan.FromMinutes(Math.Max(1, ttlMinutes))
   );
 
+  public Task SetValueAsync(
+    string key,
+    string value,
+    CancellationToken cancellationToken
+  ) => _db.StringSetAsync(key, value);
+
+  public async Task<string?> GetValueAsync(
+    string key,
+    CancellationToken cancellationToken
+  )
+  {
+    var value = await _db.StringGetAsync(key);
+    return value.HasValue ? value.ToString() : null;
+  }
+
+  public Task IncrementMetricAsync(
+    string symbol,
+    string metric,
+    CancellationToken cancellationToken
+  ) => _db.HashIncrementAsync(
+    $"auto_trade:metrics:{symbol.ToUpperInvariant()}",
+    metric,
+    1
+  );
+
+  public async Task RecordLifecycleEventAsync(
+    AutoTradeEvent tradeEvent,
+    CancellationToken cancellationToken
+  )
+  {
+    var owner = tradeEvent.CandidateId
+      ?? tradeEvent.GroupId
+      ?? tradeEvent.CorrelationId
+      ?? "service";
+    var payload = System.Text.Json.JsonSerializer.Serialize(
+      tradeEvent,
+      RedisJsonContext.Default.AutoTradeEvent
+    );
+    var historyKey = $"auto_trade:lifecycle:{owner}";
+    await _db.ListRightPushAsync(historyKey, payload);
+    await _db.ListTrimAsync(historyKey, -100, -1);
+    await _db.KeyExpireAsync(historyKey, TimeSpan.FromDays(7));
+    await _db.StringSetAsync(
+      $"auto_trade:lifecycle_state:{owner}",
+      tradeEvent.State ?? "managing",
+      TimeSpan.FromDays(7)
+    );
+    await _db.StringSetAsync(
+      $"auto_trade:last_lifecycle:{tradeEvent.Symbol.ToUpperInvariant()}",
+      payload
+    );
+    await _db.StringSetAsync(
+      $"auto_trade:last_executor_decision:{tradeEvent.Symbol.ToUpperInvariant()}",
+      payload
+    );
+    await _db.StreamAddAsync(
+      "auto_trade:lifecycle_events",
+      [new NameValueEntry("payload", payload)],
+      maxLength: 5000,
+      useApproximateMaxLength: true
+    );
+    await RecordEvaluationDimensionsAsync(tradeEvent);
+  }
+
+  private async Task RecordEvaluationDimensionsAsync(
+    AutoTradeEvent tradeEvent
+  )
+  {
+    var prefix = $"auto_trade:evaluation:{tradeEvent.Symbol.ToUpperInvariant()}";
+    var state = tradeEvent.State ?? tradeEvent.Type;
+    var timestamp = DateTimeOffset.FromUnixTimeSeconds(tradeEvent.Timestamp);
+    var hour = timestamp.UtcDateTime.ToString("HH", CultureInfo.InvariantCulture);
+    var session = timestamp.Hour switch
+    {
+      < 7 => "asia",
+      < 13 => "london",
+      < 21 => "new_york",
+      _ => "rollover",
+    };
+    var dimensions = new List<(string Name, string? Value)>
+    {
+      ("strategy", tradeEvent.Setup),
+      ("strategy_family", tradeEvent.StrategyFamily),
+      ("direction", tradeEvent.Direction),
+      ("range_side", tradeEvent.RangeId is null ? null : tradeEvent.Direction),
+      ("detector", tradeEvent.MatchId is null ? null : tradeEvent.Setup),
+      ("execution_route", tradeEvent.Type),
+      ("rejection_reason", tradeEvent.ReasonCode),
+      ("hour_utc", hour),
+      ("session_utc", session),
+    };
+    foreach (var (name, value) in dimensions)
+    {
+      if (!string.IsNullOrWhiteSpace(value))
+      {
+        await _db.HashIncrementAsync(
+          $"{prefix}:{name}",
+          $"{state}:{value}",
+          1
+        );
+      }
+    }
+  }
+
+  public async Task UpdateRangeSideStateAsync(
+    string symbol,
+    string rangeId,
+    string direction,
+    string state,
+    string? candidateId,
+    long? positionId,
+    IReadOnlyList<long>? pendingOrderIds,
+    CancellationToken cancellationToken
+  )
+  {
+    var key = $"auto_trade:range_side:{symbol.ToUpperInvariant()}:{rangeId}:"
+      + direction.ToUpperInvariant();
+    var existing = await _db.StringGetAsync(key);
+    JsonObject payload;
+    try
+    {
+      payload = existing.HasValue
+        ? JsonNode.Parse(existing.ToString()) as JsonObject ?? new JsonObject()
+        : new JsonObject();
+    }
+    catch (System.Text.Json.JsonException)
+    {
+      payload = new JsonObject();
+    }
+    payload["symbol"] = symbol.ToUpperInvariant();
+    payload["range_id"] = rangeId;
+    payload["direction"] = direction.ToUpperInvariant();
+    payload["candidate_id"] = candidateId;
+    if (pendingOrderIds is not null)
+    {
+      payload["pending_order_ids"] = new JsonArray(
+        pendingOrderIds.Select(
+          value => (JsonNode?)JsonValue.Create(value)
+        ).ToArray()
+      );
+    }
+    var positions = payload["position_ids"] as JsonArray ?? new JsonArray();
+    if (positionId is long id)
+    {
+      var existingIds = positions
+        .Select(item => item?.GetValue<long>())
+        .Where(item => item is not null)
+        .Select(item => item!.Value)
+        .ToHashSet();
+      if (state.Equals("CLOSED", StringComparison.OrdinalIgnoreCase))
+      {
+        positions = new JsonArray(
+          existingIds.Where(value => value != id)
+            .Select(value => (JsonNode?)JsonValue.Create(value))
+            .ToArray()
+        );
+      }
+      else if (existingIds.Add(id))
+      {
+        positions.Add((JsonNode?)JsonValue.Create(id));
+      }
+    }
+    payload["position_ids"] = positions;
+    payload["state"] = (
+      state.Equals("CLOSED", StringComparison.OrdinalIgnoreCase)
+      && positions.Count > 0
+    ) ? "MANAGING" : state.ToUpperInvariant();
+    payload["updated_at"] = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+    await _db.StringSetAsync(
+      key,
+      payload.ToJsonString(),
+      TimeSpan.FromHours(4)
+    );
+  }
+
   public async ValueTask DisposeAsync()
   {
     await _connection.CloseAsync();
@@ -587,6 +791,10 @@ internal sealed record RedisSpot(
 [JsonSerializable(typeof(ManualTradeCommand))]
 [JsonSerializable(typeof(ZoneCooldownRecord))]
 [JsonSerializable(typeof(RefreshTokenDocument))]
+[JsonSerializable(typeof(AutoTradeConfigManifest))]
+[JsonSerializable(typeof(AutoTradeConfigHealthDocument))]
+[JsonSerializable(typeof(AutoTradeExecutorSnapshot))]
+[JsonSerializable(typeof(AutoTradeGroupPlan))]
 internal sealed partial class RedisJsonContext : JsonSerializerContext
 {
 }

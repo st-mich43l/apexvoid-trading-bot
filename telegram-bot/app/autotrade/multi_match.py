@@ -24,6 +24,12 @@ def same_thesis(left: StrategyMatch, right: StrategyMatch, *, atr: float) -> boo
     return False
   if left.symbol != right.symbol:
     return False
+  if left.event_ts != right.event_ts:
+    return False
+  if left.family and right.family and left.family != right.family:
+    return False
+  if left.targets_pips != right.targets_pips:
+    return False
   tol = max(atr * 0.35, 0.5) if atr > 0 else 0.5
   overlap = (
     min(left.entry_high, right.entry_high) - max(left.entry_low, right.entry_low)

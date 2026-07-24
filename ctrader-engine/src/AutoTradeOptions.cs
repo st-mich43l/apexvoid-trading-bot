@@ -54,7 +54,18 @@ public sealed record AutoTradeOptions(
   decimal AddMaxGroupRiskPct = 3.0m,
   decimal AddSizeRatio = 0.5m,
   IReadOnlyList<int>? RangeTargetsPips = null,
-  decimal RangeTpBufferPips = 5m
+  decimal RangeTpBufferPips = 5m,
+  string Profile = "conservative",
+  bool RequireDemoAccount = true,
+  bool AllowConcurrentStrategies = false,
+  bool AllowHedgedXau = false,
+  bool RequireFlatForRange = true,
+  bool RangeTwoSidedEnabled = false,
+  bool MultiMatchEnabled = false,
+  bool TrackAllStructuralMatches = false,
+  string RedisUrl = "redis://redis:6379/0",
+  string CanonicalSymbol = "XAU",
+  int CandidateContractVersion = 4
 )
 {
   // Shared target-selection contract (app/autotrade/range_targets.py on the
@@ -73,7 +84,21 @@ public sealed record AutoTradeOptions(
   public IReadOnlyList<int> EffectiveRangeTargetsPips =>
     RangeTargetsPips ?? DefaultRangeTargetsPips;
 
-  public static AutoTradeOptions FromEnvironment() => new(
+  public ExposurePolicy ExposurePolicy => (
+    AllowConcurrentStrategies,
+    AllowHedgedXau
+  ) switch
+  {
+    (true, true) => ExposurePolicy.HedgedConcurrent,
+    (true, false) => ExposurePolicy.SameDirectionConcurrent,
+    _ => ExposurePolicy.FlatOnly,
+  };
+
+  public static AutoTradeOptions FromEnvironment()
+  {
+    var profile = Env("AUTO_TRADE_PROFILE", "conservative").ToLowerInvariant();
+    var demoEval = profile == "demo_eval";
+    return new(
     Enabled: Bool("AUTO_TRADE_ENABLED", false),
     DryRun: Bool("AUTO_TRADE_DRY_RUN", true),
     ExpectedBroker: Env("AUTO_TRADE_EXPECTED_BROKER", "fpmarkets"),
@@ -118,7 +143,7 @@ public sealed record AutoTradeOptions(
     TrendStopMaxPips: Int("AUTO_TRADE_TREND_STOP_MAX_PIPS", 65),
     StopPushBeyondZone: Bool("AUTO_TRADE_STOP_PUSH_BEYOND_ZONE", true),
     WickStopBufferAtr: Decimal("AUTO_TRADE_WICK_STOP_BUFFER_ATR", 0.15m),
-    RangeFlipEnabled: Bool("AUTO_TRADE_RANGE_FLIP_ENABLED", false),
+    RangeFlipEnabled: Bool("AUTO_TRADE_RANGE_FLIP_ENABLED", demoEval),
     FlipExitBufferPips: Int("AUTO_TRADE_FLIP_EXIT_BUFFER_PIPS", 10),
     FlipConfirmTimeoutSeconds: Int(
       "AUTO_TRADE_FLIP_CONFIRM_TIMEOUT_SECONDS",
@@ -131,11 +156,51 @@ public sealed record AutoTradeOptions(
     AddMaxGroupRiskPct: Decimal("AUTO_TRADE_ADD_MAX_GROUP_RISK_PCT", 3.0m),
     AddSizeRatio: Decimal("AUTO_TRADE_ADD_SIZE_RATIO", 0.5m),
     RangeTargetsPips: IntList("AUTO_TRADE_RANGE_TARGETS_PIPS", "20,30,40,50,70"),
-    RangeTpBufferPips: Decimal("AUTO_TRADE_RANGE_TP_BUFFER_PIPS", 3m)
+    RangeTpBufferPips: Decimal("AUTO_TRADE_RANGE_TP_BUFFER_PIPS", 3m),
+    Profile: profile,
+    RequireDemoAccount: Bool("AUTO_TRADE_REQUIRE_DEMO_ACCOUNT", true),
+    AllowConcurrentStrategies: Bool(
+      "AUTO_TRADE_ALLOW_CONCURRENT_STRATEGIES",
+      demoEval
+    ),
+    AllowHedgedXau: Bool("AUTO_TRADE_ALLOW_HEDGED_XAU", demoEval),
+    RequireFlatForRange: Bool("AUTO_TRADE_REQUIRE_FLAT_FOR_RANGE", !demoEval),
+    RangeTwoSidedEnabled: Bool(
+      "AUTO_TRADE_RANGE_TWO_SIDED_ENABLED",
+      demoEval
+    ),
+    MultiMatchEnabled: Bool("AUTO_TRADE_MULTI_MATCH_ENABLED", demoEval),
+    TrackAllStructuralMatches: Bool(
+      "AUTO_TRADE_TRACK_ALL_STRUCTURAL_MATCHES",
+      demoEval
+    ),
+    RedisUrl: Env("REDIS_URL", "redis://redis:6379/0"),
+    CanonicalSymbol: Env("AUTO_TRADE_CANONICAL_SYMBOL", "XAU").ToUpperInvariant(),
+    CandidateContractVersion: Int("AUTO_TRADE_CANDIDATE_CONTRACT_VERSION", 4)
   );
+  }
 
   public void Validate()
   {
+    if (Profile is not "conservative" and not "demo_eval")
+    {
+      throw new AutoTradeConfigurationException(
+        "Auto trade disabled: AUTO_TRADE_PROFILE must be conservative or demo_eval"
+      );
+    }
+    if (Profile == "demo_eval" && !RequireDemoAccount)
+    {
+      throw new AutoTradeConfigurationException(
+        "Auto trade disabled: demo_eval requires AUTO_TRADE_REQUIRE_DEMO_ACCOUNT=true"
+      );
+    }
+    if (CandidateContractVersion <= 0 || string.IsNullOrWhiteSpace(CanonicalSymbol))
+    {
+      throw new AutoTradeConfigurationException(
+        "Auto trade disabled: candidate contract version and canonical symbol "
+        + "must be configured"
+      );
+    }
     if (StopLossDistance <= 0 || StopLossDistance > 6.5m)
     {
       throw new AutoTradeConfigurationException(
