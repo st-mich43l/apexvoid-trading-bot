@@ -53,6 +53,13 @@ class StrategyMatch:
   structural_source: str = ""
   zone_id: str | None = None
   level_id: str | None = None
+  # Stable Mapped Zone Reaction identity (additive; absent on older matches).
+  reaction_id: str | None = None
+  thesis_id: str | None = None
+  structural_zone_id: str | None = None
+  touch_bar_ts: str | None = None
+  confirmation_bar_ts: str | None = None
+  reaction_type: str | None = None
 
   @property
   def is_range_edge(self) -> bool:
@@ -140,6 +147,30 @@ class StrategyMatch:
           None if payload.get("level_id") is None
           else str(payload["level_id"])
         ),
+        reaction_id=(
+          None if payload.get("reaction_id") is None
+          else str(payload["reaction_id"])
+        ),
+        thesis_id=(
+          None if payload.get("thesis_id") is None
+          else str(payload["thesis_id"])
+        ),
+        structural_zone_id=(
+          None if payload.get("structural_zone_id") is None
+          else str(payload["structural_zone_id"])
+        ),
+        touch_bar_ts=(
+          None if payload.get("touch_bar_ts") is None
+          else str(payload["touch_bar_ts"])
+        ),
+        confirmation_bar_ts=(
+          None if payload.get("confirmation_bar_ts") is None
+          else str(payload["confirmation_bar_ts"])
+        ),
+        reaction_type=(
+          None if payload.get("reaction_type") is None
+          else str(payload["reaction_type"])
+        ),
       )
     except (KeyError, TypeError, ValueError, json.JSONDecodeError):
       return None
@@ -192,6 +223,18 @@ def _valid_match(match: StrategyMatch) -> bool:
     and match.range_low < match.range_high
     and match.full_take_profit_pips > 0
   )
+  if match.reaction_id:
+    identity_ok = match.match_id == match.reaction_id
+  else:
+    identity_ok = match.match_id == strategy_match_id(
+      match.symbol,
+      match.source_tf,
+      match.event_ts,
+      match.strategy,
+      match.direction,
+      match.entry_low,
+      match.entry_high,
+    )
   return (
     match.version == STRATEGY_MATCH_VERSION
     and bool(match.match_id)
@@ -215,13 +258,5 @@ def _valid_match(match: StrategyMatch) -> bool:
     and math.isfinite(match.risk_multiplier)
     and match.risk_multiplier >= 0
     and valid_range
-    and match.match_id == strategy_match_id(
-      match.symbol,
-      match.source_tf,
-      match.event_ts,
-      match.strategy,
-      match.direction,
-      match.entry_low,
-      match.entry_high,
-    )
+    and identity_ok
   )
