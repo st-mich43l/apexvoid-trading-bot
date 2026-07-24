@@ -489,15 +489,23 @@ def render_result(
       icon = "✅" if net >= 0 else "🛑"
       sign = "+" if net >= 0 else ""
       suffix = _win_wings(net) if net > 0 else ""
-      return f"{icon} {seq}{tp_label}closed — net {sign}{net} pips{suffix}"
+      return (
+        f"{icon} {seq}{tp_label}closed — total net {sign}{net} pips{suffix}"
+      )
     if tier == "public" and not settings.public_show_pips:
       return f"🎯 {tp_label}partial booked"
     booked = int(round(row["frac"] * 100))
     remaining = int(round(row["remaining"] * 100))
+    net_so_far = row.get("net")
+    net_part = (
+      f" · net so far {net_so_far:+d}"
+      if isinstance(net_so_far, int)
+      else ""
+    )
     return (
       f"🎯 {seq}{tp_label}booked {booked}% · {result['pips']:+d} pips"
-      f"{_win_wings(result['pips']) if result['pips'] > 0 else ''} · "
-      f"remaining {remaining}%"
+      f"{_win_wings(result['pips']) if result['pips'] > 0 else ''}"
+      f"{net_part} · remaining {remaining}%"
     )
   if action == "reopen":
     source = result["source"]

@@ -419,11 +419,55 @@ async def test_handle_event_position_closed_uses_signed_sl_result_pips(monkeypat
 
   row = await store.get_manual_signal(sid)
   assert row["status"] == "closed"
-  # sl_result_pips: SELL, fill 4110 outside [4100,4105] -> distance =
-  # entry_low(4100) - fill(4110) = -10 -> -100 pips.
+  # Fill equals zone low: 4100 → 4110 = -100 pips.
   assert row["result_pips"] == -100
   assert 555 not in positions
   send.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_handle_event_position_closed_uses_broker_fill_not_zone_edge(
+  monkeypatch,
+):
+  send = _mock_send(monkeypatch)
+  sid = await _algo_signal()  # SELL entry zone 4100-4105
+  await store.set_execution_fill(sid, broker_position_id=555, broker_fill_price=4103.0)
+  client = redis_state.get_client()
+  positions = {555: sid}
+
+  event = {"type": "position_closed", "position_id": 555, "price": 4110.0}
+  await manual_execution._handle_event(client, event, positions)
+
+  row = await store.get_manual_signal(sid)
+  assert row["status"] == "closed"
+  # From actual fill 4103 → 4110 = -70 pips (not zone-low 4100 → -100).
+  assert row["result_pips"] == -70
+  send.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_handle_take_profit_uses_broker_fill_for_leg_pips(monkeypatch):
+  send = _mock_send(monkeypatch)
+  sid = await _algo_signal()
+  sig = await store.get_manual_signal(sid)
+  await store.set_execution_fill(sid, broker_position_id=555, broker_fill_price=4104.0)
+  client = redis_state.get_client()
+  positions = {555: sid}
+  event = {
+    "type": "take_profit",
+    "position_id": 555,
+    "price": 4095.0,
+    "target_pips": 50,
+  }
+  await manual_execution._handle_event(client, event, positions)
+  # From fill 4104 → 4095 = +90 pips (zone-edge math would be +50).
+  assert send.await_count >= 1
+  text = send.call_args.args[0]
+  assert "+90 pips" in text
+  row = await store.get_manual_signal(sid)
+  assert row["status"] == "open"
+  assert row["legs"][0]["pips"] == 90
+
 
 
 @pytest.mark.asyncio

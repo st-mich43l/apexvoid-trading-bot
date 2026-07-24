@@ -122,7 +122,7 @@ def test_render_box_open_and_full_tp_as_shareable_cards():
   assert "Box: <b>4,062.00–4,069.00</b>" in opened
   assert "39025496" not in opened
   assert "✅ closed" in take_profit
-  assert "Net: <b>+51.3 pips</b>" in take_profit
+  assert "Total net: <b>+51.3 pips</b>" in take_profit
   assert "Initial volume" not in take_profit
   assert "lot" not in take_profit.lower()
   assert "$" not in take_profit
@@ -155,17 +155,13 @@ def test_partial_and_final_tp_use_volume_weighted_pips_not_money():
     "lot_size": 10_000,
   })
 
+  assert "✅ #1 closed" in final or "closed" in final
+  assert "Total net: <b>+16.7 pips</b>" in final
   assert partial == (
     "🤖 <b>ApexVoid Algo</b>\n"
     "🎯 #1 TP1 booked 33.3%\n"
-    "Realized: <b>+48.4 pips</b>"
-  )
-  assert "Remaining" not in partial
-  assert "lot" not in partial.lower()
-  assert final == (
-    "🤖 <b>ApexVoid Algo</b>\n"
-    "✅ #1 closed\n"
-    "Net: <b>+16.7 pips</b>"
+    "Leg: <b>+48.4 pips</b>\n"
+    "Net so far: <b>+16.1 pips</b>"
   )
   assert "Initial volume" not in final
   assert "lot" not in final.lower()
@@ -189,6 +185,12 @@ def test_essential_trade_lifecycle_still_renders():
   })
   closed = delivery.render_auto_trade_event({
     "type": "position_closed",
+    "message": "position is no longer open at broker (SL or manual close)",
+    "group_realized_pips": 7.2,
+    "daily_seq": 3,
+  })
+  closed_without_net = delivery.render_auto_trade_event({
+    "type": "position_closed",
     "message": "BUY position is closed",
   })
   rejected = delivery.render_auto_trade_event({
@@ -198,11 +200,13 @@ def test_essential_trade_lifecycle_still_renders():
 
   assert "ORDER FILLED" in filled
   assert "TP1 booked 33.3%" in partial
-  assert "Realized: <b>+30.4 pips</b>" in partial
+  assert "Leg: <b>+30.4 pips</b>" in partial
   assert "Remaining" not in partial
   assert "lot" not in partial.lower()
   assert "Risk protected" in protected or "SL moved" in protected
   assert "POSITION CLOSED" in closed
+  assert "Total net: <b>+7.2 pips</b>" in closed
+  assert "POSITION CLOSED" in closed_without_net
   assert "EXECUTOR REJECTED" in rejected
 
 
@@ -298,7 +302,7 @@ def test_render_scale_in_zone_and_group_events():
   assert "Scale-in filled" in scale_in
   assert "WAITING FOR PRICE" in zone
   assert "Trade result" in result
-  assert "Net: <b>+42.0 pips</b>" in result
+  assert "Total net: <b>+42.0 pips</b>" in result
   assert "$" not in result
   assert "ApexVoid Algo" in scale_in + zone + result
 
@@ -357,7 +361,7 @@ def test_group_result_telegram_is_pips_only():
     "group_realized_pips": 16.7,
     "group_realized_pnl": 42.0,
   })
-  assert "Net: <b>+16.7 pips</b>" in text
+  assert "Total net: <b>+16.7 pips</b>" in text
   assert "$" not in text
   assert "42" not in text
 
@@ -534,7 +538,7 @@ async def test_full_tp_merges_result_and_suppresses_duplicate_group_reply():
   assert delivered_group is False
   assert len(calls) == 1
   assert calls[0][1]["reply_to"] == 8123
-  assert "Net: <b>+51.3 pips</b>" in calls[0][0]
+  assert "Total net: <b>+51.3 pips</b>" in calls[0][0]
   assert "$" not in calls[0][0]
   assert "71.82" not in calls[0][0]
   assert "39000344" not in calls[0][0]

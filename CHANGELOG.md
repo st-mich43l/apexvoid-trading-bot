@@ -13,6 +13,11 @@ dated section after deployment.
 
 ### Fixed
 
+- Algo `POSITION CLOSED` cards now include **Total net pips** (volume-weighted).
+  Broker reconciliation closes also book the remaining volume into the weighted
+  net and emit `group_result`. Partial TP cards show **Leg** pips plus **Net so
+  far**. Manual/algo VIP booking measures signed pips from the real
+  `broker_fill_price` when present, not only the advertised zone edge.
 - Mapped Zone Reaction now allows at most one active initial group per
   structural thesis. A newer M1 touch/confirmation that produces a different
   `reaction_id` for the same `thesis_id` is suppressed via Redis
