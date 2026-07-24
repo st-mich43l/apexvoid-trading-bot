@@ -12,8 +12,6 @@ from aiogram.exceptions import TelegramBadRequest
 
 from app.autotrade import units
 from app.autotrade.volume_pips import (
-  broker_volume_to_lots,
-  format_lots,
   format_signed_pips,
   volume_percent,
 )
@@ -52,6 +50,21 @@ _REGIME_ALERT_PENDING_PREFIX = "auto_trade:regime_alert_pending:"
 _REGIME_ALERT_SENT_TTL = 86400
 _TRADE_MESSAGE_TTL = 7 * 24 * 3600
 _FULL_TP_RESULT_TTL = 24 * 3600
+# Lifecycle/event types that stay in Redis + metrics + /auto_status but must
+# never become Telegram cards. Keep emission paths intact.
+TELEGRAM_SILENT_LIFECYCLE_TYPES = frozenset({
+  "candidate_published",
+  "order_submitted",
+  "order_accepted",
+  "managing",
+  "position_managing",
+  "config_fatal",
+  "broker_fatal",
+  "broker_account_fatal",
+  "executor_readiness_fatal",
+  "configuration_health",
+  "config_health",
+})
 _NOTIFY_TYPES = {
   "ready",
   "dry_run",
@@ -85,7 +98,6 @@ _OPENED_RE = re.compile(
 _TP_RE = re.compile(
   r"(?i)^(FULL TP|TP\d+)\s+([+-]?\d+(?:\.\d+)?)\s+pips\s+closed\s+volume\s+(\d+)$"
 )
-_DEFAULT_LOT_SIZE = 10_000.0
 _MONEY_RE = re.compile(r"\$|USD|EUR|GBP|balance|equity|brokerNetProfit", re.I)
 _STOP_RE = re.compile(
   r"(?i)^🛡\s+(?:ApexVoid Algo|Auto[\s-]*(?:trade|trader))\s+stop\s+→\s+"
@@ -164,7 +176,7 @@ def _format_opened(
   match = _OPENED_RE.match(message)
   if match is None:
     return None
-  direction, lots, entry, stop, stop_pips, details = match.groups()
+  direction, _lots, entry, stop, stop_pips, details = match.groups()
   side_icon = "🟢" if direction.upper() == "BUY" else "🔴"
   full_tp = re.search(r"(?i)full TP\s+(\d+)p", details)
   range_box = re.search(r"(?i)range\s+([\d.,]+)-([\d.,]+)", details)
@@ -198,8 +210,6 @@ def _format_opened(
       "📦 Box: <b>"
       f"{escape(range_box.group(1))}–{escape(range_box.group(2))}</b>"
     )
-  if profile == "internal":
-    lines.append(f"📊 Size: <b>{escape(lots)} lot</b>")
   attribution = _attribution_line(event)
   if attribution:
     lines.append(attribution)
@@ -218,13 +228,6 @@ def _event_float(event: dict, *keys: str) -> float | None:
     except (TypeError, ValueError):
       continue
   return None
-
-
-def _event_lot_size(event: dict) -> float:
-  value = _event_float(event, "lot_size")
-  if value is not None and value > 0:
-    return value
-  return _DEFAULT_LOT_SIZE
 
 
 def _trade_seq_prefix(event: dict) -> str:
@@ -269,7 +272,6 @@ def _format_take_profit(
   net_pips = _event_float(event, "group_realized_pips")
   if net_pips is None:
     net_pips = leg_realized
-  lot_size = _event_lot_size(event)
   seq = _trade_seq_prefix(event)
   is_final = full or (remaining_volume is not None and remaining_volume <= 0)
 
@@ -279,9 +281,6 @@ def _format_take_profit(
       f"✅ {seq}closed",
       f"Net: <b>{format_signed_pips(net_pips)} pips</b>",
     ]
-    if initial_volume is not None and initial_volume > 0 and profile != "public":
-      lots = format_lots(broker_volume_to_lots(initial_volume, lot_size))
-      lines.append(f"Initial volume: <b>{lots} lot</b>")
   else:
     if (
       initial_volume is None
@@ -290,18 +289,11 @@ def _format_take_profit(
     ):
       return None
     booked_pct = volume_percent(closed_volume, initial_volume)
-    remaining = max(0.0, float(remaining_volume))
-    remaining_pct = volume_percent(remaining, initial_volume)
-    remaining_lots = format_lots(broker_volume_to_lots(remaining, lot_size))
     lines = [
       "🤖 <b>ApexVoid Algo</b>",
       f"🎯 {seq}{label.upper()} booked {booked_pct:.1f}%",
       f"Realized: <b>{format_signed_pips(leg_realized)} pips</b>",
     ]
-    if profile != "public":
-      lines.append(
-        f"Remaining: <b>{remaining_lots} lot</b> · {remaining_pct:.1f}%"
-      )
 
   if profile == "public":
     try:
@@ -361,6 +353,8 @@ def render_auto_trade_event(
   if profile not in {"internal", "public"}:
     raise ValueError(f"Unknown auto-trade delivery profile: {profile}")
   event_type = str(event.get("type", ""))
+  if event_type in TELEGRAM_SILENT_LIFECYCLE_TYPES:
+    return None
   if event_type not in _NOTIFY_TYPES:
     return None
   reason_code = str(event.get("reason_code") or event.get("reason") or "")
@@ -375,21 +369,11 @@ def render_auto_trade_event(
   message = _clean_message(event.get("message", ""))
   if "already_processed:duplicate_reaction_active" in message:
     return None
-  if event_type in {
-    "candidate_published",
-    "order_submitted",
-    "order_accepted",
-    "rejected",
-    "managing",
-  }:
-    badge = {
-      "candidate_published": "🤖 <b>CANDIDATE PUBLISHED</b>",
-      "order_submitted": "📨 <b>ORDER SUBMITTED</b>",
-      "order_accepted": "✅ <b>ORDER ACCEPTED</b>",
-      "rejected": "⛔ <b>EXECUTOR REJECTED</b>",
-      "managing": "📈 <b>POSITION MANAGING</b>",
-    }[event_type]
-    lines = ["🤖 <b>ApexVoid Algo</b>", badge]
+  if event_type == "rejected":
+    lines = [
+      "🤖 <b>ApexVoid Algo</b>",
+      "⛔ <b>EXECUTOR REJECTED</b>",
+    ]
     strategy = event.get("strategy") or event.get("setup")
     if strategy:
       lines.append(f"Strategy: <b>{escape(str(strategy))}</b>")
@@ -405,13 +389,6 @@ def render_auto_trade_event(
         )
       except (KeyError, TypeError, ValueError):
         pass
-    range_id = event.get("range_id")
-    if range_id:
-      lines.append(f"Range: <code>{escape(str(range_id))}</code>")
-      lines.append("🔁 <b>OPPOSITE RANGE SIDE ARMED</b>")
-    profile_name = event.get("configuration_profile")
-    if profile_name:
-      lines.append(f"Profile: <b>{escape(str(profile_name))}</b>")
     reason = event.get("reason_code")
     if reason:
       lines.append(f"Reason: <code>{escape(str(reason))}</code>")
@@ -450,8 +427,6 @@ def render_auto_trade_event(
     "group_result": "📊 <b>Trade result</b>",
     "warning": "⚠️ <b>Warning</b>",
     "error": "⚠️ <b>Execution issue</b>",
-    "config_health": "⚙️ <b>Configuration health</b>",
-    "config_fatal": "⛔ <b>Fatal configuration</b>",
     "account_capability": "🧾 <b>Account capability</b>",
     "range_flip_attempted": "🔁 <b>Range flip attempted</b>",
     "range_flip_filled": "✅ <b>Range flip completed</b>",
