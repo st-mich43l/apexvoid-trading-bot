@@ -106,6 +106,10 @@ services:
       AUTO_TRADE_ZONE_FILL_MIN_LOTS: {{ apexvoid_trading_bot_env.AUTO_TRADE_ZONE_FILL_MIN_LOTS | default('0.09') | string | to_json }}
       AUTO_TRADE_ZONE_FILL_MIN_ATR: {{ apexvoid_trading_bot_env.AUTO_TRADE_ZONE_FILL_MIN_ATR | default('0.5') | string | to_json }}
       AUTO_TRADE_ZONE_FILL_TTL_BARS: {{ apexvoid_trading_bot_env.AUTO_TRADE_ZONE_FILL_TTL_BARS | default('3') | string | to_json }}
+      AUTO_TRADE_ZONE_FILL_FALLBACK_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_ZONE_FILL_FALLBACK_ENABLED | default('true') | string | to_json }}
+      AUTO_TRADE_INSIDE_ZONE_MARKET_ENTRY_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_INSIDE_ZONE_MARKET_ENTRY_ENABLED | default('true') | string | to_json }}
+      AUTO_TRADE_RANGE_TARGETS_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_RANGE_TARGETS_PIPS | default('20,30,40,50,70') | string | to_json }}
+      AUTO_TRADE_RANGE_TP_BUFFER_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_RANGE_TP_BUFFER_PIPS | default('3') | string | to_json }}
       AUTO_TRADE_TREND_STOP_MIN_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_TREND_STOP_MIN_PIPS | default('40') | string | to_json }}
       AUTO_TRADE_TREND_STOP_MAX_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_TREND_STOP_MAX_PIPS | default('65') | string | to_json }}
     volumes:
