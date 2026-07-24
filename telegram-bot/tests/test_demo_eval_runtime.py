@@ -60,6 +60,20 @@ def test_demo_profile_resolves_execution_defaults(monkeypatch):
   assert cfg.auto_trade_spot_max_age == 5
   assert cfg.auto_trade_zone_fill_enabled
   assert cfg.auto_trade_non_hedged_opposite_policy == "broker_netting"
+  assert cfg.auto_trade_structural_guard_mode == "observe"
+  assert not cfg.auto_trade_opposing_barrier_veto_enabled
+  assert not cfg.auto_trade_overlap_veto_enabled
+  assert not cfg.auto_trade_zone_cooldown_enabled
+  assert cfg.auto_trade_zone_reconcile_mode == "shadow"
+  assert cfg.auto_trade_range_min_entry_drift_pips == 10
+  assert cfg.auto_trade_map_min_entry_drift_pips == 10
+  assert cfg.auto_trade_trend_min_entry_drift_pips == 15
+  assert cfg.auto_trade_range_max_entry_drift_atr == 1.0
+  assert cfg.auto_trade_map_max_entry_drift_atr == 1.0
+  assert cfg.auto_trade_trend_max_entry_drift_atr == 1.5
+  assert cfg.auto_trade_range_hard_entry_drift_pips == 20
+  assert cfg.auto_trade_map_hard_entry_drift_pips == 20
+  assert cfg.auto_trade_trend_hard_entry_drift_pips == 30
   assert cfg.scanner_top_n == 0
   assert cfg.auto_trade_max_tracked_candidates == 0
 
@@ -251,6 +265,9 @@ async def test_python_config_manifest_is_published(monkeypatch):
   assert manifest["profile"] == "demo_eval"
   assert manifest["two_sided_range"]
   assert manifest["concurrent_strategies"]
+  assert manifest["structural_guard_mode"] == "observe"
+  assert manifest["zone_cooldown_enabled"] is False
+  assert manifest["zone_reconcile_mode"] == "shadow"
   assert health["state"] == "warning"
   assert health["warnings"] == ["ctrader_manifest_missing"]
 

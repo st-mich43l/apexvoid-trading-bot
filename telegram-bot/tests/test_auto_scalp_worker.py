@@ -406,6 +406,9 @@ async def test_range_edge_match_blocked_outside_chop_regime(monkeypatch):
   now = int(datetime.now(timezone.utc).timestamp())
   match = _range_strategy_match(now)
   monkeypatch.setattr(worker.settings, "auto_trade_enabled", True)
+  monkeypatch.setattr(
+    worker.settings, "auto_trade_structural_guard_mode", "strict",
+  )
   monkeypatch.setattr(worker.settings, "auto_trade_stream", "auto_trade:test")
   monkeypatch.setattr(worker.settings, "auto_trade_min_confluence", 2)
   monkeypatch.setattr(worker, "event_in_window", AsyncMock(return_value=None))
@@ -425,6 +428,54 @@ async def test_range_edge_match_blocked_outside_chop_regime(monkeypatch):
     "auto_trade:gate_reject:XAU:range_edge_not_chop", "count",
   )
   assert reject_count is not None and int(reject_count) >= 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+  ("guard_mode", "publishes"),
+  [("observe", True), ("strict", False)],
+)
+async def test_private_range_regime_guard_is_profile_aware(
+  monkeypatch,
+  guard_mode,
+  publishes,
+):
+  client = redis_state.get_client()
+  now = int(datetime.now(timezone.utc).timestamp())
+  monkeypatch.setattr(worker.settings, "auto_trade_enabled", True)
+  monkeypatch.setattr(worker.settings, "auto_trade_stream", "auto_trade:test")
+  monkeypatch.setattr(worker.settings, "auto_trade_min_confluence", 2)
+  monkeypatch.setattr(
+    worker.settings, "auto_trade_structural_guard_mode", guard_mode,
+  )
+  monkeypatch.setattr(worker.settings, "auto_trade_eq_exclusion_fraction", 0.0)
+  monkeypatch.setattr(worker.settings, "auto_trade_edge_proximity_atr", 999.0)
+  monkeypatch.setattr(worker.settings, "auto_trade_htf_veto_enabled", False)
+  monkeypatch.setattr(
+    worker.settings, "auto_trade_opposing_barrier_veto_enabled", False,
+  )
+  monkeypatch.setattr(worker.settings, "auto_trade_overlap_veto_enabled", False)
+  monkeypatch.setattr(worker.settings, "auto_trade_zone_cooldown_enabled", False)
+  monkeypatch.setattr(worker, "event_in_window", AsyncMock(return_value=None))
+
+  candidate_id = await worker._publish_candidate(
+    client,
+    "XAU",
+    "1784552400",
+    worker.AutoTradeSpot(4016.8, now, True),
+    _decision(),
+    _scale_context(now),
+    regime=RegimeInfo(
+      "trend", "up", 5, 1.3, True, None, ("forced trend",),
+    ),
+  )
+
+  assert (candidate_id is not None) is publishes
+  assert await client.xlen("auto_trade:test") == int(publishes)
+  reject_count = await client.hget(
+    "auto_trade:gate_reject:XAU:range_edge_not_chop", "count",
+  )
+  assert bool(reject_count) is (not publishes)
 
 
 @pytest.mark.asyncio
@@ -906,6 +957,9 @@ async def test_eq_exclusion_blocks_publish_and_is_not_applied_to_trend(
   client = redis_state.get_client()
   now = int(datetime.now(timezone.utc).timestamp())
   monkeypatch.setattr(worker.settings, "auto_trade_enabled", True)
+  monkeypatch.setattr(
+    worker.settings, "auto_trade_structural_guard_mode", "strict",
+  )
   monkeypatch.setattr(worker.settings, "auto_trade_stream", "auto_trade:test")
   monkeypatch.setattr(worker.settings, "auto_trade_min_confluence", 2)
   monkeypatch.setattr(worker.settings, "auto_trade_eq_exclusion_fraction", 0.15)
@@ -962,6 +1016,9 @@ async def test_htf_veto_blocks_publish_when_enabled_and_passes_when_disabled(
   client = redis_state.get_client()
   now = int(datetime.now(timezone.utc).timestamp())
   monkeypatch.setattr(worker.settings, "auto_trade_enabled", True)
+  monkeypatch.setattr(
+    worker.settings, "auto_trade_structural_guard_mode", "strict",
+  )
   monkeypatch.setattr(worker.settings, "auto_trade_stream", "auto_trade:test")
   monkeypatch.setattr(worker.settings, "auto_trade_min_confluence", 2)
   # Push the rail/entry far enough from EQ and from each other that A1's
@@ -1058,6 +1115,9 @@ async def test_opposing_barrier_blocks_strategy_match_into_round_number(
   now = int(datetime.now(timezone.utc).timestamp())
   match = _strategy_match(now)  # BUY, entry 4016.5-4017.4
   monkeypatch.setattr(worker.settings, "auto_trade_enabled", True)
+  monkeypatch.setattr(
+    worker.settings, "auto_trade_structural_guard_mode", "strict",
+  )
   monkeypatch.setattr(worker.settings, "auto_trade_stream", "auto_trade:test")
   monkeypatch.setattr(worker.settings, "auto_trade_min_confluence", 2)
   monkeypatch.setattr(worker.settings, "auto_trade_opposing_barrier_veto_enabled", True)
@@ -1143,7 +1203,7 @@ async def test_market_map_actionable_snapshot_and_degenerate_counter_have_ttl():
 
 
 @pytest.mark.asyncio
-async def test_counter_bias_target_barrier_rejects_before_eq(monkeypatch):
+async def test_counter_bias_target_barrier_adapts_before_eq(monkeypatch):
   client = redis_state.get_client()
   now = int(datetime.now(timezone.utc).timestamp())
   base = _strategy_match(now)
@@ -1180,12 +1240,11 @@ async def test_counter_bias_target_barrier_rejects_before_eq(monkeypatch):
     htf_zones=[barrier],
   )
 
-  assert candidate_id is None
-  assert await client.xlen("auto_trade:test") == 0
-  assert int(await client.hget(
-    "auto_trade:gate_reject:XAU:counter_bias_target_barrier",
-    "count",
-  )) == 1
+  assert candidate_id is not None
+  entries = await client.xrange("auto_trade:test")
+  payload = json.loads(entries[0][1]["payload"])
+  assert payload["target_price"] < barrier.low
+  assert payload["target_adjustment"]["selected_target_pips"] == 30
 
 
 @pytest.mark.asyncio
@@ -1339,11 +1398,35 @@ async def test_incident_replay_buy_at_4116_25_is_vetoed_by_two_guards(monkeypatc
 # --- Fix 3: post-stop-out cooldown ------------------------------------------
 
 @pytest.mark.asyncio
-async def test_zone_cooldown_reason_vetoes_same_direction_near_stopped_out_entry():
+async def test_zone_cooldown_reason_ignores_legacy_ambiguous_marker():
   client = redis_state.get_client()
   await client.set(
     worker._zone_cooldown_key("XAU", "BUY"),
     json.dumps({"entry_price": 4116.25, "stop_price": 4111.54, "closed_at": 1000}),
+  )
+
+  reason = await worker._zone_cooldown_reason(
+    client, "XAU", "BUY", 4116.90, 2.0, 1.0,
+  )
+
+  assert reason is None
+
+
+@pytest.mark.asyncio
+async def test_zone_cooldown_reason_vetoes_confirmed_stop_loss(monkeypatch):
+  client = redis_state.get_client()
+  monkeypatch.setattr(
+    worker.settings, "auto_trade_zone_cooldown_enabled", True,
+  )
+  await client.set(
+    worker._zone_cooldown_key("XAU", "BUY"),
+    json.dumps({
+      "entry_price": 4116.25,
+      "stop_price": 4111.54,
+      "closed_at": 1000,
+      "reason": "stop_loss",
+      "confidence": "confirmed",
+    }),
   )
 
   reason = await worker._zone_cooldown_reason(
@@ -1402,12 +1485,24 @@ async def test_publish_candidate_is_vetoed_during_active_cooldown(monkeypatch):
   monkeypatch.setattr(worker.settings, "auto_trade_enabled", True)
   monkeypatch.setattr(worker.settings, "auto_trade_stream", "auto_trade:test")
   monkeypatch.setattr(worker.settings, "auto_trade_min_confluence", 2)
+  monkeypatch.setattr(
+    worker.settings, "auto_trade_structural_guard_mode", "strict",
+  )
+  monkeypatch.setattr(
+    worker.settings, "auto_trade_zone_cooldown_enabled", True,
+  )
   monkeypatch.setattr(worker.settings, "auto_trade_zone_cooldown_atr", 1.0)
   monkeypatch.setattr(worker, "event_in_window", AsyncMock(return_value=None))
   decision = _decision()  # BUY, rail level=4016.8
   await client.set(
     worker._zone_cooldown_key("XAU", "BUY"),
-    json.dumps({"entry_price": 4017.0, "stop_price": 4014.8, "closed_at": now}),
+    json.dumps({
+      "entry_price": 4017.0,
+      "stop_price": 4014.8,
+      "closed_at": now,
+      "reason": "stop_loss",
+      "confidence": "confirmed",
+    }),
   )
   spot = worker.AutoTradeSpot(4017.2, now, True)
 
@@ -1493,4 +1588,8 @@ async def test_publish_candidate_overlap_veto_disabled_still_increments_counter(
   reject_count = await client.hget(
     "auto_trade:gate_reject:XAU:overlapping_zone_conflict", "count",
   )
-  assert reject_count is not None and int(reject_count) >= 1
+  assert reject_count is None
+  waiting = await client.hget(
+    "auto_trade:guard_evaluation:XAU:overlap:wait", "count",
+  )
+  assert waiting is not None and int(waiting) >= 1

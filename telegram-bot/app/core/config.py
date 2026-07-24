@@ -163,6 +163,9 @@ class Settings(BaseSettings):
   auto_trade_enabled: bool = False
   auto_trade_dry_run: bool = True
   auto_trade_profile: str = "conservative"
+  # Structural guards are quality policy, not broker-safety checks.  Resolve
+  # once here so every worker route observes the same profile semantics.
+  auto_trade_structural_guard_mode: str = "balanced"
   auto_trade_require_demo_account: bool = True
   auto_trade_allow_concurrent_strategies: bool = False
   auto_trade_allow_hedged_xau: bool = False
@@ -309,6 +312,7 @@ class Settings(BaseSettings):
   # price). The TTL itself lives on the C# side (AUTO_TRADE_ZONE_COOLDOWN_
   # MINUTES, AutoTradeOptions.cs) since only the engine knows when a
   # position closed; worker.py only needs the ATR band for the veto check.
+  auto_trade_zone_cooldown_enabled: bool = True
   auto_trade_zone_cooldown_atr: float = 1.0
   # Overlapping opposing Market Map zones (23 Jul incident: published SELL
   # 4,116-4,127 and BUY 4,112-4,122 overlapped 4,116-4,122; the fill landed
@@ -319,6 +323,9 @@ class Settings(BaseSettings):
   # them. Kill switch so reconciliation can be disabled without a redeploy
   # if it trims a zone the strategy actually needed.
   auto_trade_zone_reconcile_enabled: bool = True
+  # off = retain original zones; shadow = compute/measure reconciliation but
+  # feed original zones to strategies; enforce = use reconciled zones.
+  auto_trade_zone_reconcile_mode: str = "enforce"
   # Adaptive range-scalp target ladder (app/autotrade/range_targets.py) - the
   # single source of truth for turning available room into a take-profit
   # target. Previously hardcoded to {50,70} independently in four Python
@@ -353,6 +360,12 @@ class Settings(BaseSettings):
   auto_trade_range_max_entry_drift_atr: float = 0.35
   auto_trade_trend_max_entry_drift_atr: float = 0.85
   auto_trade_map_max_entry_drift_atr: float = 0.40
+  auto_trade_range_min_entry_drift_pips: float = 10.0
+  auto_trade_map_min_entry_drift_pips: float = 10.0
+  auto_trade_trend_min_entry_drift_pips: float = 15.0
+  auto_trade_range_hard_entry_drift_pips: float = 20.0
+  auto_trade_map_hard_entry_drift_pips: float = 20.0
+  auto_trade_trend_hard_entry_drift_pips: float = 30.0
   # Zone-fill geometry fallback (mirrored on C# AutoTradeOptions).
   auto_trade_zone_fill_fallback_enabled: bool = True
   auto_trade_inside_zone_market_entry_enabled: bool = True
@@ -446,6 +459,20 @@ class Settings(BaseSettings):
       "auto_trade_allow_counter_bias": True,
       "auto_trade_map_counter_bias_enabled": True,
       "auto_trade_zone_fill_enabled": True,
+      "auto_trade_structural_guard_mode": "observe",
+      "auto_trade_opposing_barrier_veto_enabled": False,
+      "auto_trade_overlap_veto_enabled": False,
+      "auto_trade_zone_cooldown_enabled": False,
+      "auto_trade_zone_reconcile_mode": "shadow",
+      "auto_trade_range_min_entry_drift_pips": 10.0,
+      "auto_trade_map_min_entry_drift_pips": 10.0,
+      "auto_trade_trend_min_entry_drift_pips": 15.0,
+      "auto_trade_range_max_entry_drift_atr": 1.0,
+      "auto_trade_map_max_entry_drift_atr": 1.0,
+      "auto_trade_trend_max_entry_drift_atr": 1.5,
+      "auto_trade_range_hard_entry_drift_pips": 20.0,
+      "auto_trade_map_hard_entry_drift_pips": 20.0,
+      "auto_trade_trend_hard_entry_drift_pips": 30.0,
       "auto_trade_candidate_max_age_seconds": 420,
       "auto_trade_candidate_ttl": 604800,
       "auto_trade_non_hedged_opposite_policy": "broker_netting",
@@ -458,6 +485,35 @@ class Settings(BaseSettings):
       for field_name, value in demo_defaults.items():
         if field_name not in explicitly_set:
           setattr(self, field_name, value)
+    elif (
+      not self.auto_trade_require_demo_account
+      and "auto_trade_structural_guard_mode" not in self.model_fields_set
+    ):
+      self.auto_trade_structural_guard_mode = "strict"
+    self.auto_trade_structural_guard_mode = (
+      self.auto_trade_structural_guard_mode.strip().lower()
+    )
+    if self.auto_trade_structural_guard_mode not in {
+      "observe",
+      "balanced",
+      "strict",
+    }:
+      raise ValueError(
+        "AUTO_TRADE_STRUCTURAL_GUARD_MODE must be observe, balanced, or strict"
+      )
+    self.auto_trade_zone_reconcile_mode = (
+      self.auto_trade_zone_reconcile_mode.strip().lower()
+    )
+    if not self.auto_trade_zone_reconcile_enabled:
+      self.auto_trade_zone_reconcile_mode = "off"
+    if self.auto_trade_zone_reconcile_mode not in {
+      "off",
+      "shadow",
+      "enforce",
+    }:
+      raise ValueError(
+        "AUTO_TRADE_ZONE_RECONCILE_MODE must be off, shadow, or enforce"
+      )
     self.auto_trade_non_hedged_opposite_policy = (
       self.auto_trade_non_hedged_opposite_policy.strip().lower()
     )

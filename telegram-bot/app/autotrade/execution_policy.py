@@ -2,8 +2,194 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+import math
 from typing import Any
+
+GUARD_MODE_OBSERVE = "observe"
+GUARD_MODE_BALANCED = "balanced"
+GUARD_MODE_STRICT = "strict"
+_GUARD_MODES = (GUARD_MODE_OBSERVE, GUARD_MODE_BALANCED, GUARD_MODE_STRICT)
+
+OUTCOME_ALLOW = "allow"
+OUTCOME_ALLOW_WITH_WARNING = "allow_with_warning"
+OUTCOME_ADJUST_TARGET = "adjust_target"
+OUTCOME_WAIT = "wait"
+OUTCOME_BLOCK = "block"
+
+
+@dataclass(frozen=True)
+class StructuralBarrier:
+  """One price structure evaluated by an execution guard.
+
+  ``barrier_id`` is deliberately stable enough to compare with the
+  candidate source identity.  The worker may still build a deterministic
+  fallback id from geometry for older StrategyMatch payloads.
+  """
+  barrier_id: str
+  source_type: str
+  side: str
+  low: float
+  high: float
+  level_kind: str = ""
+  timeframe: str = ""
+  touches: int = 0
+  score: float = 0.0
+  is_primary_source: bool = False
+  is_supporting_source: bool = False
+
+
+@dataclass(frozen=True)
+class StructuralSourceIdentity:
+  strategy: str
+  strategy_family: str
+  structural_source: str
+  zone_id: str | None
+  level_id: str | None
+  key_level: float | None
+  low: float
+  high: float
+
+
+@dataclass(frozen=True)
+class ExecutionGuardDecision:
+  """Typed result of a structural-quality guard evaluation. ``hard_block``
+  (not ``outcome`` alone) is the single source of truth for whether a
+  caller may delete/consume a match or terminal-reject a candidate -
+  ``outcome`` is presentation/observability detail.
+  """
+  guard: str
+  outcome: str
+  reason_code: str
+  message: str
+  hard_block: bool
+  measured: dict[str, Any] = field(default_factory=dict)
+  barrier: StructuralBarrier | None = None
+
+
+# Compatibility for the first replay commit on this branch.  New code should
+# use the explicit public name above.
+GuardOutcome = ExecutionGuardDecision
+
+
+def classify_barrier_relationship(
+  *,
+  strategy: str,
+  direction: str,
+  entry_reference: float,
+  target_reference: float | None,
+  source_identity: StructuralSourceIdentity,
+  barrier: StructuralBarrier,
+) -> str:
+  """Classify a barrier relative to one concrete trade thesis.
+
+  The identity check is intentionally stronger than generic band overlap:
+  exact ids win, while legacy matches may identify their source by the
+  selected key level plus entry band.  This prevents an unrelated,
+  overlapping opposing zone from being incorrectly discarded as "own
+  source".
+  """
+  direction = direction.upper()
+  exact_id = bool(
+    (source_identity.zone_id and source_identity.zone_id == barrier.barrier_id)
+    or (
+      source_identity.level_id
+      and source_identity.level_id == barrier.barrier_id
+    )
+  )
+  source_overlap = (
+    barrier.low <= source_identity.high
+    and barrier.high >= source_identity.low
+  )
+  key_matches = (
+    source_identity.key_level is not None
+    and barrier.low <= source_identity.key_level <= barrier.high
+  )
+  side_supports = (
+    direction == "BUY" and barrier.side in {"demand", "support"}
+    or direction == "SELL" and barrier.side in {"supply", "resistance"}
+  )
+  if barrier.is_primary_source or exact_id or (
+    source_overlap and key_matches and side_supports
+  ):
+    return "primary_source"
+  if barrier.is_supporting_source or (
+    side_supports and barrier.low <= entry_reference <= barrier.high
+  ):
+    return "supportive"
+
+  if direction == "BUY":
+    if barrier.high < entry_reference:
+      return "behind_entry"
+    opposing = barrier.side in {"supply", "resistance"}
+    ahead = barrier.low > entry_reference
+  else:
+    if barrier.low > entry_reference:
+      return "behind_entry"
+    opposing = barrier.side in {"demand", "support"}
+    ahead = barrier.high < entry_reference
+
+  contains_entry = barrier.low <= entry_reference <= barrier.high
+  if contains_entry:
+    return (
+      "overlapping_ambiguous"
+      if barrier.side == "neutral" or not opposing
+      else "overlapping_ambiguous"
+    )
+  if opposing and ahead:
+    if target_reference is None:
+      return "opposing_ahead"
+    target_crosses = (
+      direction == "BUY" and target_reference >= barrier.low
+      or direction == "SELL" and target_reference <= barrier.high
+    )
+    return "opposing_ahead" if target_crosses else "irrelevant"
+  if barrier.side == "neutral" and ahead:
+    return "opposing_ahead"
+  return "irrelevant"
+
+
+def resolve_guard_mode(cfg: Any) -> str:
+  mode = str(getattr(cfg, "auto_trade_structural_guard_mode", GUARD_MODE_BALANCED))
+  mode = mode.strip().lower()
+  return mode if mode in _GUARD_MODES else GUARD_MODE_BALANCED
+
+
+def classify_guard_severity(
+  guard: str,
+  condition: str,
+  reason: str,
+  *,
+  guard_mode: str,
+  hard_geometry: bool = False,
+) -> ExecutionGuardDecision:
+  """Map a detected structural condition to a typed, mode-aware outcome.
+
+  ``hard_geometry`` marks conditions with zero tradeable room by
+  construction (entry contained inside a barrier, not merely approaching
+  one) - these stay blocking outside ``observe`` even when the softer
+  ahead-of-entry/overlap/cooldown conditions have been downgraded to
+  telemetry, matching demo_eval's own "hard blocking remains only for
+  technical correctness" carve-out for genuinely zero-room geometry.
+  """
+  if guard_mode == GUARD_MODE_STRICT:
+    return ExecutionGuardDecision(
+      guard, OUTCOME_BLOCK, condition, reason, True,
+    )
+  if guard_mode == GUARD_MODE_OBSERVE:
+    outcome = OUTCOME_WAIT if hard_geometry else OUTCOME_ALLOW_WITH_WARNING
+    return ExecutionGuardDecision(
+      guard, outcome, condition, reason, False,
+    )
+  # balanced: only zero-room containment still blocks; buffer/ATR-based
+  # "ahead of entry" and other soft conditions become warnings.
+  if hard_geometry:
+    return ExecutionGuardDecision(
+      guard, OUTCOME_BLOCK, condition, reason, True,
+    )
+  return ExecutionGuardDecision(
+    guard, OUTCOME_ALLOW_WITH_WARNING, condition, reason, False,
+  )
 
 
 TIER_A = "A"
@@ -162,6 +348,29 @@ def risk_multiplier_for_tier(tier: str, cfg: Any | None = None, *, post_impulse:
   return max(0.0, mult)
 
 
+_FAMILY_MIN_DRIFT_SETTING = {
+  FAMILY_RANGE_REVERSION: "auto_trade_range_min_entry_drift_pips",
+  FAMILY_TREND_PULLBACK: "auto_trade_trend_min_entry_drift_pips",
+  FAMILY_BREAKOUT_RETEST: "auto_trade_trend_min_entry_drift_pips",
+  FAMILY_MOMENTUM_CONTINUATION: "auto_trade_trend_min_entry_drift_pips",
+  FAMILY_MAPPED_ZONE_REACTION: "auto_trade_map_min_entry_drift_pips",
+}
+_FAMILY_HARD_DRIFT_SETTING = {
+  FAMILY_RANGE_REVERSION: "auto_trade_range_hard_entry_drift_pips",
+  FAMILY_TREND_PULLBACK: "auto_trade_trend_hard_entry_drift_pips",
+  FAMILY_BREAKOUT_RETEST: "auto_trade_trend_hard_entry_drift_pips",
+  FAMILY_MOMENTUM_CONTINUATION: "auto_trade_trend_hard_entry_drift_pips",
+  FAMILY_MAPPED_ZONE_REACTION: "auto_trade_map_hard_entry_drift_pips",
+}
+_FAMILY_HARD_DRIFT_DEFAULT = {
+  FAMILY_RANGE_REVERSION: 20.0,
+  FAMILY_TREND_PULLBACK: 30.0,
+  FAMILY_BREAKOUT_RETEST: 30.0,
+  FAMILY_MOMENTUM_CONTINUATION: 30.0,
+  FAMILY_MAPPED_ZONE_REACTION: 20.0,
+}
+
+
 def max_entry_drift_pips(
   *,
   strategy: str,
@@ -170,24 +379,54 @@ def max_entry_drift_pips(
   remaining_target_room_pips: float | None,
   cfg: Any | None = None,
 ) -> tuple[float, dict[str, float]]:
-  """Strategy-aware drift: min(configured pips, ATR×mult, room×fraction)."""
+  """Strategy-aware drift tolerance for the gap between when a setup formed
+  and when the worker gets to evaluate it.
+
+  Root cause of the 23-25 Jul frequency collapse: the previous formula was
+  a bare min(configured, ATR x mult, room x 0.45) with no floor - on tight
+  XAU M1 ATR this could collapse the effective tolerance to 3-5 pips, less
+  than normal tick/poll latency, so a perfectly good reaction was routinely
+  discarded as "moved too far" before the worker ever saw it.
+
+  adaptive_floor = max(configured minimum, ATR-based drift) restores a
+  latency-realistic floor without removing protection: `room_cap` and the
+  strategy's own absolute hard cap still apply on top, so a setup whose
+  target room is genuinely consumed, or that has moved further than any
+  reasonable latency explains, is still capped/rejected.
+  """
   policy = policy_for(strategy, cfg)
+  family = strategy_family(strategy)
   pip = pip_size if pip_size > 0 else 0.1
-  atr_pips = (atr / pip) * policy.max_entry_drift_atr if atr > 0 else policy.max_entry_drift_pips
+  atr_pips = (atr / pip) * policy.max_entry_drift_atr if atr > 0 else 0.0
   configured = policy.max_entry_drift_pips
   if cfg is not None:
     configured = max(
       configured,
       float(getattr(cfg, "auto_trade_max_entry_distance_pips", configured)),
     )
-  room_cap = configured
-  if remaining_target_room_pips is not None and remaining_target_room_pips > 0:
-    room_cap = remaining_target_room_pips * 0.45
-  limit = min(configured, atr_pips, room_cap)
+  min_setting = _FAMILY_MIN_DRIFT_SETTING.get(family)
+  configured_minimum = (
+    float(getattr(cfg, min_setting, 0.0)) if cfg is not None and min_setting else 0.0
+  )
+  adaptive_floor = max(configured, configured_minimum, atr_pips)
+  room_cap = float("inf")
+  if remaining_target_room_pips is not None:
+    room_cap = max(0.0, remaining_target_room_pips)
+  hard_setting = _FAMILY_HARD_DRIFT_SETTING.get(family)
+  default_hard_cap = _FAMILY_HARD_DRIFT_DEFAULT.get(family, configured)
+  hard_cap = (
+    float(getattr(cfg, hard_setting, default_hard_cap))
+    if cfg is not None and hard_setting else configured
+  )
+  limit = min(adaptive_floor, room_cap, hard_cap)
   measured = {
     "configured_pips": round(configured, 3),
     "atr_pips": round(atr_pips, 3),
-    "room_cap_pips": round(room_cap, 3),
+    "adaptive_floor_pips": round(adaptive_floor, 3),
+    "room_cap_pips": (
+      round(room_cap, 3) if math.isfinite(room_cap) else -1.0
+    ),
+    "hard_cap_pips": round(hard_cap, 3),
     "effective_pips": round(max(0.0, limit), 3),
   }
   return max(0.0, limit), measured

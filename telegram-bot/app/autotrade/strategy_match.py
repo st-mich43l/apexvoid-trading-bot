@@ -50,6 +50,9 @@ class StrategyMatch:
   family: str = ""
   range_state: str | None = None
   routing_hint: str | None = None
+  structural_source: str = ""
+  zone_id: str | None = None
+  level_id: str | None = None
 
   @property
   def is_range_edge(self) -> bool:
@@ -125,6 +128,17 @@ class StrategyMatch:
         routing_hint=(
           None if payload.get("routing_hint") is None
           else str(payload["routing_hint"])
+        ),
+        structural_source=str(
+          payload.get("structural_source") or payload.get("strategy") or ""
+        ),
+        zone_id=(
+          None if payload.get("zone_id") is None
+          else str(payload["zone_id"])
+        ),
+        level_id=(
+          None if payload.get("level_id") is None
+          else str(payload["level_id"])
         ),
       )
     except (KeyError, TypeError, ValueError, json.JSONDecodeError):

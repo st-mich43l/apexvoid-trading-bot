@@ -338,6 +338,14 @@ def evaluate_market_map_strategy(
       *reaction_tags,
     ),
     target_price=float(market_map.eq) if counter_bias and market_map.eq is not None else None,
+    structural_source="market_map_zone",
+    zone_id=(
+      f"{symbol.upper()}:{direction}:{entry.lo:.5f}:{entry.hi:.5f}"
+    ),
+    level_id=(
+      f"{symbol.upper()}:{EXECUTION_TIMEFRAME}:level:"
+      f"{float(entry.lo if direction == 'SELL' else entry.hi):.5f}"
+    ),
   )
   return MarketMapStrategyDecision(
     "candidate",
