@@ -45,9 +45,15 @@ from app.autotrade.execution_policy import (
 )
 from app.autotrade.multi_match import (
   dedupe_matches,
+  deserialize_matches,
   select_primary,
   serialize_matches,
   strategy_matches_key,
+)
+from app.autotrade.lifecycle import emit_lifecycle, increment_metric
+from app.autotrade.range_context import (
+  range_context_source_key,
+  scanner_range_context,
 )
 from app.autotrade import units
 from app.autotrade.map_strategy import market_map_key
@@ -396,6 +402,43 @@ async def _sync_strategy_match(
 ) -> StrategyMatch | None:
   key = strategy_match_key(symbol)
   matches_key = strategy_matches_key(symbol)
+  structures = getattr(ctx, "structures", None)
+  indicators = getattr(ctx, "indicators", None)
+  structure = (
+    structures.get(tf.upper()) if isinstance(structures, dict) else None
+  )
+  indicator = (
+    indicators.get(tf.upper()) if isinstance(indicators, dict) else None
+  )
+  if (
+    structure is not None
+    and indicator is not None
+    and not indicator.atr.empty
+  ):
+    atr = float(indicator.atr.iloc[-1])
+    range_context = scanner_range_context(
+      symbol=symbol,
+      timeframe=tf,
+      structure=structure,
+      atr=atr,
+      pip_size=_pip_size(symbol),
+      generated_at=int(datetime.now(timezone.utc).timestamp()),
+      ttl=max(300, settings.auto_trade_strategy_match_max_age_seconds),
+    )
+    if range_context is not None:
+      await client.set(
+        range_context_source_key(symbol, "scanner"),
+        range_context.to_json(),
+        ex=max(60, range_context.expires_at - range_context.generated_at),
+      )
+      if range_context.lower_barrier.fallback:
+        await increment_metric(
+          client, "fallback_support_created", symbol=symbol,
+        )
+      if range_context.upper_barrier.fallback:
+        await increment_metric(
+          client, "fallback_resistance_created", symbol=symbol,
+        )
   if not settings.auto_trade_strategy_bridge_enabled:
     await client.delete(key)
     await client.delete(matches_key)
@@ -408,24 +451,103 @@ async def _sync_strategy_match(
     results,
   )
   if match is None:
-    await client.delete(key)
-    await client.delete(matches_key)
+    if not settings.auto_trade_multi_match_enabled:
+      await client.delete(key)
+      await client.delete(matches_key)
     if reason is not None:
       await _record_match_build_rejected(client, symbol, reason, measured)
+      if reason == "insufficient_target_room":
+        await increment_metric(
+          client, "insufficient_target_room", symbol=symbol,
+        )
+      await emit_lifecycle(
+        client,
+        "analysis_only",
+        symbol=symbol,
+        correlation_id=f"{symbol}:{tf}:{event_ts}",
+        timeframe=tf,
+        reason_code=reason,
+        message="detected structure is analysis-only",
+        measured=measured,
+      )
     return None
   await _record_match_build_outcome(client, symbol, match)
   ttl = max(60, match.expires_at - match.issued_at)
-  await client.set(key, match.to_json(), ex=ttl)
   all_matches = measured.get("all_matches") if isinstance(measured, dict) else None
-  if isinstance(all_matches, list) and all_matches:
-    top_n = max(1, int(getattr(settings, "scanner_top_n", 3)))
-    await client.set(
-      matches_key,
-      serialize_matches(all_matches[:top_n]),
-      ex=ttl,
+  current = (
+    deserialize_matches(await client.get(matches_key))
+    if settings.auto_trade_multi_match_enabled
+    else []
+  )
+  incoming = all_matches if isinstance(all_matches, list) and all_matches else [match]
+  now = int(datetime.now(timezone.utc).timestamp())
+  active = [item for item in current if item.expires_at >= now]
+  combined, events = dedupe_matches([*active, *incoming], atr=match.atr)
+  if not settings.auto_trade_track_all_structural_matches:
+    top_n = int(getattr(settings, "scanner_top_n", 3))
+    if top_n > 0:
+      combined = combined[:top_n]
+  primary = select_primary(combined) or match
+  await client.set(key, primary.to_json(), ex=ttl)
+  await client.set(matches_key, serialize_matches(combined), ex=ttl)
+  await increment_metric(
+    client,
+    "multi_match_count",
+    symbol=symbol,
+    dimensions={"count": str(len(combined))},
+  )
+  for tracked in incoming:
+    await emit_lifecycle(
+      client,
+      "detected",
+      symbol=symbol,
+      candidate_id=tracked.match_id,
+      match_id=tracked.match_id,
+      range_id=tracked.range_id,
+      strategy=tracked.strategy,
+      strategy_family=tracked.family,
+      direction=tracked.direction,
+      timeframe=tracked.source_tf,
+      entry_zone={"low": tracked.entry_low, "high": tracked.entry_high},
+      current_price=tracked.current_price,
+      target_plan=list(tracked.targets_pips),
+      message="structural opportunity detected",
     )
-  else:
-    await client.set(matches_key, serialize_matches([match]), ex=ttl)
+    await emit_lifecycle(
+      client,
+      "auto_ready",
+      symbol=symbol,
+      candidate_id=tracked.match_id,
+      match_id=tracked.match_id,
+      range_id=tracked.range_id,
+      strategy=tracked.strategy,
+      strategy_family=tracked.family,
+      direction=tracked.direction,
+      timeframe=tracked.source_tf,
+      entry_zone={"low": tracked.entry_low, "high": tracked.entry_high},
+      current_price=tracked.current_price,
+      target_plan=list(tracked.targets_pips),
+      message="strategy match is ready for execution routing",
+    )
+    await emit_lifecycle(
+      client,
+      "tracked",
+      symbol=symbol,
+      candidate_id=tracked.match_id,
+      match_id=tracked.match_id,
+      range_id=tracked.range_id,
+      strategy=tracked.strategy,
+      strategy_family=tracked.family,
+      direction=tracked.direction,
+      timeframe=tracked.source_tf,
+      entry_zone={"low": tracked.entry_low, "high": tracked.entry_high},
+      current_price=tracked.current_price,
+      target_plan=list(tracked.targets_pips),
+      message="strategy match retained in multi-match routing",
+    )
+  for event in events:
+    if event.get("event") == "merged_confluence":
+      await increment_metric(client, "duplicate_suppressed", symbol=symbol)
   log.info(
     "strategy match synced symbol=%s id=%s strategy=%s direction=%s "
     "tier=%s matches=%s",
@@ -579,6 +701,7 @@ def _format_detection(
   htf_order: list[str],
   also: list[DetectionResult] | None = None,
   market_map: MarketMap | None = None,
+  execution_match: StrategyMatch | None = None,
 ) -> str:
   stars = "⭐" * max(1, min(3, int(result.confluence)))
   direction_icon = "🟢" if result.direction.upper() == "BUY" else "🔴"
@@ -588,6 +711,13 @@ def _format_detection(
   ][:6 if result.setup in {"Box Breakout", "Range Edge Scalp"} else 2]
   lines = [
     f"🔎 <b>{escape(symbol)} {escape(tf)} · SETUP FORMING</b>",
+    (
+      "🟢 <b>AUTO READY</b> · candidate publication pending"
+      if settings.auto_trade_enabled and execution_match is not None
+      else "🔴 <b>AUTO BLOCKED</b> · no executable StrategyMatch"
+      if settings.auto_trade_enabled
+      else "🟡 <b>ANALYSIS ONLY</b> · autonomous execution disabled"
+    ),
     (
       f"{direction_icon} <b>{escape(result.direction)} · "
       f"{escape(result.setup)}</b> · {stars}"
@@ -803,7 +933,8 @@ def _digest_results(
       if result.mode not in {"with_trend", "range_scalp"}
     ])
   ordered = sorted(candidates, key=_result_rank)
-  return ordered[:max(1, settings.scanner_top_n)], conflicts
+  top_n = int(settings.scanner_top_n)
+  return (ordered if top_n <= 0 else ordered[:top_n]), conflicts
 
 
 def _conflict_record(
@@ -906,6 +1037,7 @@ async def _notify_digest_once(
   notify: NotifyFn,
   htf_order: list[str],
   market_map: MarketMap | None = None,
+  execution_match: StrategyMatch | None = None,
 ) -> list[DetectionResult]:
   if not results:
     return []
@@ -952,6 +1084,7 @@ async def _notify_digest_once(
       htf_order,
       claimed_results[1:],
       market_map,
+      execution_match,
     ),
     chat_id=settings.telegram_owner_id,
   )
@@ -1370,7 +1503,7 @@ async def _handle_event(
       continue
     detected.append(result)
   digest, conflicts = _digest_results(detected)
-  await _sync_strategy_match(
+  execution_match = await _sync_strategy_match(
     client,
     symbol,
     exec_tf,
@@ -1387,6 +1520,7 @@ async def _handle_event(
     notify,
     htf_order,
     current_map,
+    execution_match,
   )
   await _record_status(
     client,
@@ -1433,6 +1567,10 @@ async def scanner_loop() -> None:
         await _handle_event(message.get("data"), source=source, client=client)
       except Exception:
         log.exception("scanner tick failed")
+        try:
+          await increment_metric(client, "lifecycle_error")
+        except Exception:
+          log.exception("scanner lifecycle_error metric failed")
   finally:
     await pubsub.unsubscribe("bars:new")
     await pubsub.close()

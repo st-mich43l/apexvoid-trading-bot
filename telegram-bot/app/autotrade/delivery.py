@@ -16,6 +16,18 @@ from app.persistence.store import record_auto_trade_event
 from app.core.config import settings
 from app.bot.client import send_scanner_with_retry
 from app.autotrade.worker import regime_share_24h
+from app.autotrade.lifecycle import LIFECYCLE_STATES, emit_lifecycle
+from app.autotrade.multi_match import (
+  deserialize_matches,
+  strategy_matches_key,
+)
+from app.autotrade.range_context import (
+  RangeContext,
+  range_context_compare_key,
+  range_context_key,
+  range_context_source_key,
+)
+from app.autotrade.config_health import CONFIG_HEALTH_KEY, CTRADER_MANIFEST_KEY
 
 log = logging.getLogger(__name__)
 
@@ -39,6 +51,16 @@ _NOTIFY_TYPES = {
   "group_result",
   "warning",
   "error",
+  "candidate_published",
+  "order_submitted",
+  "order_accepted",
+  "managing",
+  "rejected",
+  "config_health",
+  "config_fatal",
+  "account_capability",
+  "range_flip_attempted",
+  "range_flip_filled",
 }
 
 _AUTO_NAME_RE = re.compile(r"(?i)\bauto[\s-]*(?:trade|trader)\b")
@@ -132,6 +154,7 @@ def _format_opened(
   range_box = re.search(r"(?i)range\s+([\d.,]+)-([\d.,]+)", details)
   lines = [
     "🤖 <b>ApexVoid Algo</b>",
+    "✅ <b>ORDER FILLED</b>",
     f"{side_icon} <b>XAU {direction.upper()} opened</b>",
     "",
     f"📍 Entry: <b>{escape(entry)}</b>",
@@ -249,6 +272,49 @@ def render_auto_trade_event(
   if event_type not in _NOTIFY_TYPES:
     return None
   message = _clean_message(event.get("message", ""))
+  if event_type in {
+    "candidate_published",
+    "order_submitted",
+    "order_accepted",
+    "rejected",
+    "managing",
+  }:
+    badge = {
+      "candidate_published": "🤖 <b>CANDIDATE PUBLISHED</b>",
+      "order_submitted": "📨 <b>ORDER SUBMITTED</b>",
+      "order_accepted": "✅ <b>ORDER ACCEPTED</b>",
+      "rejected": "⛔ <b>EXECUTOR REJECTED</b>",
+      "managing": "📈 <b>POSITION MANAGING</b>",
+    }[event_type]
+    lines = ["🤖 <b>ApexVoid Algo</b>", badge]
+    strategy = event.get("strategy") or event.get("setup")
+    if strategy:
+      lines.append(f"Strategy: <b>{escape(str(strategy))}</b>")
+    direction = event.get("direction")
+    if direction:
+      lines.append(f"Direction: <b>{escape(str(direction).upper())}</b>")
+    entry = event.get("entry_zone")
+    if isinstance(entry, dict):
+      try:
+        lines.append(
+          "Entry: <b>"
+          f"{float(entry['low']):,.2f}–{float(entry['high']):,.2f}</b>"
+        )
+      except (KeyError, TypeError, ValueError):
+        pass
+    range_id = event.get("range_id")
+    if range_id:
+      lines.append(f"Range: <code>{escape(str(range_id))}</code>")
+      lines.append("🔁 <b>OPPOSITE RANGE SIDE ARMED</b>")
+    profile_name = event.get("configuration_profile")
+    if profile_name:
+      lines.append(f"Profile: <b>{escape(str(profile_name))}</b>")
+    reason = event.get("reason_code")
+    if reason:
+      lines.append(f"Reason: <code>{escape(str(reason))}</code>")
+    elif message:
+      lines.append(escape(message))
+    return "\n".join(lines)
   if event_type == "opened":
     rendered = _format_opened(
       event,
@@ -269,16 +335,21 @@ def render_auto_trade_event(
   labels = {
     "ready": "✅ <b>Engine ready</b>",
     "dry_run": "🧪 <b>Simulation</b>",
-    "opened": "🟢 <b>Position opened</b>",
+    "opened": "✅ <b>ORDER FILLED</b> · <b>Position opened</b>",
     "add": "➕ <b>Scale-in filled</b>",
-    "zone_planned": "📐 <b>Entry plan ready</b>",
+    "zone_planned": "⌛ <b>WAITING FOR PRICE</b>",
     "zone_expired": "⌛ <b>Entry plan expired</b>",
     "take_profit": "🎯 <b>Take profit hit</b>",
     "stop_moved": "🛡 <b>Risk protected</b>",
-    "position_closed": "🏁 <b>Position closed</b>",
+    "position_closed": "🏁 <b>POSITION CLOSED</b>",
     "group_result": "📊 <b>Trade result</b>",
     "warning": "⚠️ <b>Warning</b>",
     "error": "⚠️ <b>Execution issue</b>",
+    "config_health": "⚙️ <b>Configuration health</b>",
+    "config_fatal": "⛔ <b>Fatal configuration</b>",
+    "account_capability": "🧾 <b>Account capability</b>",
+    "range_flip_attempted": "🔁 <b>Range flip attempted</b>",
+    "range_flip_filled": "✅ <b>Range flip completed</b>",
   }
   lines = ["🤖 <b>ApexVoid Algo</b>", labels[event_type]]
   if profile == "public":
@@ -471,6 +542,44 @@ async def auto_trade_status_text() -> str:
   group_count = int(float(stats.get("groups", "0")))
   with_adds = int(float(stats.get("with_adds", "0")))
   without_adds = int(float(stats.get("without_adds", "0")))
+  primary_symbol = next(
+    (
+      item.strip().upper()
+      for item in settings.auto_trade_symbols.split(",")
+      if item.strip()
+    ),
+    "XAU",
+  )
+  config_health = await _json_key(client, CONFIG_HEALTH_KEY)
+  ctrader_manifest = await _json_key(client, CTRADER_MANIFEST_KEY)
+  executor = await _json_key(
+    client, f"auto_trade:executor_snapshot:{primary_symbol}",
+  )
+  resolved_range = RangeContext.from_json(
+    await client.get(range_context_key(primary_symbol))
+  )
+  scanner_range = RangeContext.from_json(
+    await client.get(range_context_source_key(primary_symbol, "scanner"))
+  )
+  private_range = RangeContext.from_json(
+    await client.get(range_context_source_key(primary_symbol, "private"))
+  )
+  range_compare = await _json_key(
+    client, range_context_compare_key(primary_symbol),
+  )
+  active_matches = deserialize_matches(
+    await client.get(strategy_matches_key(primary_symbol))
+  )
+  metrics = {
+    str(key): int(value)
+    for key, value in (
+      await client.hgetall(f"auto_trade:metrics:{primary_symbol}")
+    ).items()
+  }
+  reject_summary = await _gate_reject_summary(client, primary_symbol)
+  last_lifecycle = await _json_key(
+    client, f"auto_trade:last_lifecycle:{primary_symbol}",
+  )
   mode = (
     "disabled"
     if not settings.auto_trade_enabled
@@ -576,14 +685,6 @@ async def auto_trade_status_text() -> str:
       "\nMarket context: "
       f"<b>{escape(current_regime.replace('_', ' '))}</b>"
       " <i>(telemetry only)</i>"
-    )
-    primary_symbol = next(
-      (
-        item.strip().upper()
-        for item in settings.auto_trade_symbols.split(",")
-        if item.strip()
-      ),
-      "XAU",
     )
     match_build_line = ""
     match_build_raw = await client.get(
@@ -691,6 +792,98 @@ async def auto_trade_status_text() -> str:
       f"{map_observability}"
       f"{regime_line}"
     )
+  account_mode = (
+    "demo" if bool((executor or {}).get("demo"))
+    else str((ctrader_manifest or {}).get("account_mode") or "unknown")
+  )
+  hedge_mode = (
+    "hedged" if bool((executor or {}).get("hedged"))
+    else "non-hedged"
+  )
+  config_state = str((config_health or {}).get("state") or "unknown")
+  config_fatal = (config_health or {}).get("fatal") or []
+  range_line = "none"
+  rail_line = "BUY unknown · SELL unknown"
+  barrier_line = "support 0 · resistance 0"
+  if resolved_range is not None:
+    range_line = (
+      f"{resolved_range.lower:,.2f}–{resolved_range.upper:,.2f} · "
+      f"{resolved_range.state} · {resolved_range.source}"
+    )
+    buy_state = await _range_side_state(
+      client, primary_symbol, resolved_range.range_id, "BUY",
+    )
+    sell_state = await _range_side_state(
+      client, primary_symbol, resolved_range.range_id, "SELL",
+    )
+    rail_line = f"BUY {buy_state} · SELL {sell_state}"
+    barrier_line = (
+      f"support {len(resolved_range.supports)} · "
+      f"resistance {len(resolved_range.resistances)}"
+    )
+  scanner_summary = (
+    "none"
+    if scanner_range is None
+    else f"{scanner_range.state} {scanner_range.lower:,.2f}–{scanner_range.upper:,.2f}"
+  )
+  private_summary = (
+    "none"
+    if private_range is None
+    else f"{private_range.state} {private_range.lower:,.2f}–{private_range.upper:,.2f}"
+  )
+  comparison = str(
+    (range_compare or {}).get("resolution") or "none"
+  )
+  positions = len((executor or {}).get("position_ids") or [])
+  pending = len((executor or {}).get("pending_order_ids") or [])
+  groups = len((executor or {}).get("group_ids") or [])
+  match_summary = " · ".join(
+    f"{item.strategy} {item.direction}"
+    for item in active_matches[:6]
+  ) or "none"
+  metric_summary = " · ".join(
+    f"{key}={value}"
+    for key, value in sorted(metrics.items())
+    if value
+  ) or "none"
+  lifecycle_summary = (
+    "none"
+    if not last_lifecycle
+    else " · ".join(
+      str(item)
+      for item in (
+        last_lifecycle.get("state"),
+        last_lifecycle.get("strategy"),
+        last_lifecycle.get("direction"),
+        last_lifecycle.get("reason_code"),
+      )
+      if item
+    )
+  )
+  health_detail = (
+    f" · fatal {escape(', '.join(str(item) for item in config_fatal))}"
+    if config_fatal else ""
+  )
+  operations = (
+    "\n\n⚙️ <b>Execution contract</b>"
+    f"\nProfile: <b>{escape(settings.auto_trade_profile)}</b>"
+    f"\nBroker account: <b>{escape(account_mode)} · {escape(hedge_mode)}</b>"
+    f"\nExecutor ready: <b>{bool((executor or {}).get('ready'))}</b>"
+    f"\nPython/C# config: <b>{escape(config_state)}</b>{health_detail}"
+    f"\nExposure policy: <b>{escape(str((executor or {}).get('exposure_policy') or 'unknown'))}</b>"
+    f"\nResolved range: <b>{escape(range_line)}</b>"
+    f"\nScanner range: <b>{escape(scanner_summary)}</b>"
+    f"\nPrivate range: <b>{escape(private_summary)}</b>"
+    f"\nResolution: <b>{escape(comparison)}</b>"
+    f"\nBarriers: <b>{escape(barrier_line)}</b>"
+    f"\nRails: <b>{escape(rail_line)}</b>"
+    f"\nTracked matches: <b>{len(active_matches)}</b> · {escape(match_summary)}"
+    f"\nOpen groups: <b>{groups}</b> · positions <b>{positions}</b> · "
+    f"pending <b>{pending}</b>"
+    f"\nMetrics: <code>{escape(metric_summary)}</code>"
+    f"\nReject counters: <code>{escape(reject_summary)}</code>"
+    f"\nLast lifecycle: <b>{escape(lifecycle_summary)}</b>"
+  )
   return (
     "🤖 <b>ApexVoid Algo</b>\n"
     f"Mode: <b>{escape(mode)}</b> · State: <b>{state}</b>\n"
@@ -699,7 +892,49 @@ async def auto_trade_status_text() -> str:
     f"\nMeasured groups: <b>{group_count}</b> · adds "
     f"<b>{with_adds}</b> · no adds <b>{without_adds}</b>"
     f"{strategy_lines}"
+    f"{operations}"
   )
+
+
+async def _json_key(client, key: str) -> dict:
+  raw = await client.get(key)
+  if not raw:
+    return {}
+  try:
+    value = json.loads(raw)
+  except (TypeError, ValueError, json.JSONDecodeError):
+    return {}
+  return value if isinstance(value, dict) else {}
+
+
+async def _range_side_state(
+  client,
+  symbol: str,
+  range_id: str,
+  direction: str,
+) -> str:
+  payload = await _json_key(
+    client,
+    f"auto_trade:range_side:{symbol}:{range_id}:{direction}",
+  )
+  return str(payload.get("state") or "ARMED").lower()
+
+
+async def _gate_reject_summary(client, symbol: str) -> str:
+  values: list[tuple[str, int]] = []
+  pattern = f"auto_trade:gate_reject:{symbol.upper()}:*"
+  async for raw_key in client.scan_iter(match=pattern):
+    key = raw_key.decode() if isinstance(raw_key, bytes) else str(raw_key)
+    try:
+      count = int(await client.hget(key, "count") or 0)
+    except (TypeError, ValueError):
+      count = 0
+    if count:
+      values.append((key.rsplit(":", 1)[-1], count))
+  return " · ".join(
+    f"{name}={count}"
+    for name, count in sorted(values, key=lambda item: (-item[1], item[0]))[:8]
+  ) or "none"
 
 
 async def _record_group_result(client, event: dict) -> None:
@@ -811,6 +1046,10 @@ async def _process_owner_entries(
       log.warning("Invalid auto-trade event %s: %s", entry_id, exc)
     else:
       await record_auto_trade_event(event)
+      # Current executors persist lifecycle before publishing this event.
+      # Keep the bridge only for events from an older executor.
+      if not event.get("lifecycle_id"):
+        await _record_lifecycle_event(client, event)
       await _record_group_result(client, event)
       await _deliver_auto_trade_event(
         client,
@@ -822,6 +1061,68 @@ async def _process_owner_entries(
     cursor = entry_id
     await client.set(_CURSOR_KEY, cursor)
   return cursor
+
+
+async def _record_lifecycle_event(client, event: dict) -> None:
+  state = str(event.get("state") or "")
+  if state not in LIFECYCLE_STATES:
+    state = {
+      "opened": "order_filled",
+      "add": "order_filled",
+      "take_profit": "partially_closed"
+      if int(event.get("remaining_volume") or 0) > 0 else "closed",
+      "position_closed": "closed",
+      "group_result": "closed",
+      "rejected": "rejected",
+      "zone_expired": "expired",
+      "error": "error",
+      "config_fatal": "error",
+    }.get(str(event.get("type") or ""), "")
+  if state not in LIFECYCLE_STATES:
+    return
+  position_id = event.get("position_id")
+  await emit_lifecycle(
+    client,
+    state,
+    symbol=str(event.get("symbol") or "XAU"),
+    candidate_id=event.get("candidate_id"),
+    correlation_id=event.get("lifecycle_id"),
+    match_id=event.get("match_id"),
+    range_id=event.get("range_id"),
+    group_id=event.get("group_id"),
+    strategy=event.get("setup") or event.get("strategy"),
+    strategy_family=event.get("strategy_family"),
+    direction=event.get("direction"),
+    timeframe=event.get("timeframe"),
+    entry_zone=event.get("entry_zone"),
+    current_price=event.get("price"),
+    target_plan=event.get("targets_pips"),
+    stop_plan={"stop_pips": event.get("stop_pips")}
+    if event.get("stop_pips") is not None else None,
+    position_ids=[] if position_id is None else [int(position_id)],
+    reason_code=event.get("reason_code"),
+    message=str(event.get("message") or ""),
+    account_type=event.get("account_type"),
+    broker=event.get("broker"),
+  )
+  if state == "order_filled":
+    await emit_lifecycle(
+      client,
+      "managing",
+      symbol=str(event.get("symbol") or "XAU"),
+      candidate_id=event.get("candidate_id"),
+      correlation_id=event.get("lifecycle_id"),
+      match_id=event.get("match_id"),
+      range_id=event.get("range_id"),
+      group_id=event.get("group_id"),
+      strategy=event.get("setup"),
+      strategy_family=event.get("strategy_family"),
+      direction=event.get("direction"),
+      position_ids=[] if position_id is None else [int(position_id)],
+      message="position is under independent group management",
+      account_type=event.get("account_type"),
+      broker=event.get("broker"),
+    )
 
 
 async def _auto_trade_owner_events_loop(*, chat_id: int) -> None:

@@ -29,6 +29,20 @@ from app.autotrade.strategy_match import (
   StrategyMatch,
   strategy_match_key,
 )
+from app.autotrade.multi_match import (
+  dedupe_matches,
+  deserialize_matches,
+  select_primary,
+  strategy_matches_key,
+)
+from app.autotrade.lifecycle import emit_lifecycle, increment_metric
+from app.autotrade.range_context import (
+  RangeContext,
+  private_range_context,
+  persist_range_resolution,
+  range_context_source_key,
+  resolve_range_context,
+)
 from app.autotrade.map_strategy import (
   MarketMap,
   MarketMapStrategyDecision,
@@ -147,6 +161,204 @@ async def _load_strategy_match(
     await client.delete(key)
     return None
   return match
+
+
+async def _load_strategy_matches(
+  client: Any,
+  symbol: str,
+) -> list[StrategyMatch]:
+  if not settings.auto_trade_strategy_bridge_enabled:
+    return []
+  if not settings.auto_trade_multi_match_enabled:
+    match = await _load_strategy_match(client, symbol)
+    return [] if match is None else [match]
+  raw = await client.get(strategy_matches_key(symbol))
+  matches = deserialize_matches(raw)
+  now = int(datetime.now(timezone.utc).timestamp())
+  active = [
+    match for match in matches
+    if match.symbol == symbol.upper() and now <= match.expires_at
+  ]
+  if len(active) != len(matches):
+    if active:
+      from app.autotrade.multi_match import serialize_matches
+      await client.set(
+        strategy_matches_key(symbol),
+        serialize_matches(active),
+        ex=max(60, max(item.expires_at for item in active) - now),
+      )
+    else:
+      await client.delete(strategy_matches_key(symbol))
+  if active:
+    return active
+  legacy = await _load_strategy_match(client, symbol)
+  return [] if legacy is None else [legacy]
+
+
+async def _resolve_worker_range(
+  client: Any,
+  *,
+  symbol: str,
+  frames: dict[str, Any],
+  private_decision: AutoScalpDecision,
+  spot: AutoTradeSpot | None,
+) -> tuple[AutoScalpDecision, RangeContext | None, dict[str, Any]]:
+  now = int(datetime.now(timezone.utc).timestamp())
+  m1 = frames.get(EXECUTION_TIMEFRAME)
+  atr = 0.0
+  if m1 is not None and not m1.empty:
+    series = atr_series(m1, max(2, settings.atr_length))
+    if not series.empty:
+      atr = float(series.iloc[-1])
+  scanner_context = RangeContext.from_json(
+    await client.get(range_context_source_key(symbol, "scanner"))
+  )
+  private_context = private_range_context(
+    symbol=symbol,
+    decision=private_decision,
+    atr=atr,
+    pip_size=units.pip_size(symbol),
+    generated_at=now,
+    ttl=max(300, settings.auto_trade_strategy_match_max_age_seconds),
+  )
+  resolved, comparison = resolve_range_context(
+    scanner_context,
+    private_context,
+    now=now,
+  )
+  await persist_range_resolution(
+    client,
+    symbol=symbol,
+    scanner=scanner_context,
+    private=private_context,
+    resolved=resolved,
+    comparison=comparison,
+  )
+  if comparison.get("disagreement"):
+    await increment_metric(client, "range_context_disagreement", symbol=symbol)
+  elif comparison.get("resolution") == "merged":
+    await increment_metric(client, "range_context_merged", symbol=symbol)
+  if resolved is not None:
+    private_decision = evaluate_auto_scalp_gate(
+      frames,
+      symbol=symbol,
+      spot_price=spot.price if spot is not None and spot.fresh else None,
+      range_context=resolved,
+    )
+    await _persist_range_side_states(
+      client,
+      symbol=symbol,
+      context=resolved,
+      decision=private_decision,
+    )
+  return private_decision, resolved, comparison
+
+
+async def _persist_range_side_states(
+  client: Any,
+  *,
+  symbol: str,
+  context: RangeContext,
+  decision: AutoScalpDecision,
+) -> None:
+  active = context.state in {
+    "provisional",
+    "confirmed",
+    "post_impulse",
+    "breakout_pending",
+  }
+  if not active and context.state not in {"broken", "retired"}:
+    return
+  now = int(datetime.now(timezone.utc).timestamp())
+  for direction, barrier in (
+    ("BUY", context.lower_barrier),
+    ("SELL", context.upper_barrier),
+  ):
+    side_key = (
+      f"auto_trade:range_side:{symbol.upper()}:{context.range_id}:"
+      f"{direction}"
+    )
+    existing = {}
+    existing_raw = await client.get(side_key)
+    if existing_raw:
+      try:
+        existing = json.loads(existing_raw)
+      except (TypeError, ValueError, json.JSONDecodeError):
+        existing = {}
+    state = "ARMED" if active else "INVALIDATED"
+    if active and decision.direction == direction:
+      state = (
+        "CONFIRMED"
+        if decision.state == "candidate"
+        else "EDGE_TOUCHED"
+        if decision.state == "waiting_rejection"
+          else state
+      )
+    if active and await client.exists(
+      _box_edge_key(symbol, context.range_id, direction)
+    ):
+      state = str(existing.get("state") or "CANDIDATE_PUBLISHED")
+    payload = {
+      "range_id": context.range_id,
+      "symbol": symbol.upper(),
+      "direction": direction,
+      "state": state,
+      "candidate_id": existing.get("candidate_id"),
+      "pending_order_ids": existing.get("pending_order_ids", []),
+      "position_ids": existing.get("position_ids", []),
+      "target_state": existing.get("target_state", "pending"),
+      "invalidation_state": (
+        None if active else context.invalidation_reason or context.state
+      ),
+      "last_trigger_bar": now,
+      "last_confirmed_touch": now if state == "CONFIRMED" else None,
+      "execution_count": int(existing.get("execution_count") or 0),
+      "barrier": {
+        "low": barrier.low,
+        "high": barrier.high,
+        "level": barrier.level,
+      },
+      "updated_at": now,
+    }
+    await client.set(
+      side_key,
+      json.dumps(payload, separators=(",", ":"), sort_keys=True),
+      ex=max(300, settings.auto_trade_box_retire_seconds),
+    )
+
+
+async def _mark_range_side_candidate(
+  client: Any,
+  *,
+  symbol: str,
+  range_id: str,
+  direction: str,
+  candidate_id: str,
+) -> None:
+  key = (
+    f"auto_trade:range_side:{symbol.upper()}:{range_id}:"
+    f"{direction.upper()}"
+  )
+  raw = await client.get(key)
+  try:
+    payload = json.loads(
+      raw.decode() if isinstance(raw, bytes) else str(raw)
+    ) if raw is not None else {}
+  except (TypeError, ValueError, json.JSONDecodeError):
+    payload = {}
+  payload.update({
+    "range_id": range_id,
+    "symbol": symbol.upper(),
+    "direction": direction.upper(),
+    "state": "CANDIDATE_PUBLISHED",
+    "candidate_id": candidate_id,
+    "updated_at": int(datetime.now(timezone.utc).timestamp()),
+  })
+  await client.set(
+    key,
+    json.dumps(payload, separators=(",", ":"), sort_keys=True),
+    ex=max(300, settings.auto_trade_box_retire_seconds),
+  )
 
 
 def _eq_exclusion_reason(
@@ -559,6 +771,25 @@ def _candidate_id(
   return hashlib.sha256(raw.encode("ascii")).hexdigest()
 
 
+def _group_id(*parts: object) -> str:
+  raw = "|".join(str(part) for part in parts if part is not None)
+  return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _strategy_group_id(match: StrategyMatch) -> str:
+  structural_key = (
+    match.range_id
+    or f"{match.key_level:.2f}:{match.entry_low:.2f}:{match.entry_high:.2f}"
+  )
+  return _group_id(
+    match.symbol,
+    match.family or match.strategy,
+    match.direction,
+    structural_key,
+    match.match_id,
+  )
+
+
 async def _publish_candidate(
   client: Any,
   symbol: str,
@@ -697,6 +928,14 @@ async def _publish_candidate(
   payload = {
     "version": 3,
     "candidate_id": candidate_id,
+    "group_id": _group_id(
+      symbol,
+      "range",
+      decision.box.box_id,
+      decision.direction,
+      candidate_id,
+    ),
+    "strategy_family": "range",
     "symbol": symbol.upper(),
     "timeframe": EXECUTION_TIMEFRAME,
     "setup": "Range Box Scalp",
@@ -752,6 +991,31 @@ async def _publish_candidate(
   except Exception:
     await client.delete(f"auto_trade:candidate:{candidate_id}")
     raise
+  await increment_metric(client, "candidate_published", symbol=symbol)
+  await emit_lifecycle(
+    client,
+    "candidate_published",
+    symbol=symbol,
+    candidate_id=candidate_id,
+    range_id=decision.box.box_id,
+    group_id=payload["group_id"],
+    strategy="Range Box Scalp",
+    strategy_family="range",
+    direction=decision.direction,
+    timeframe=EXECUTION_TIMEFRAME,
+    entry_zone=payload["entry_zone"],
+    current_price=spot.price,
+    target_plan=[decision.full_tp_pips],
+    message="private range candidate published to executor",
+    publish_status=True,
+  )
+  await _mark_range_side_candidate(
+    client,
+    symbol=symbol,
+    range_id=decision.box.box_id,
+    direction=decision.direction,
+    candidate_id=candidate_id,
+  )
   await client.set(
     _box_edge_key(symbol, decision.box.box_id, decision.direction),
     "1",
@@ -780,10 +1044,26 @@ async def _publish_strategy_match(
   market_map: MarketMap | None = None,
 ) -> str | None:
   """Publish a completed scanner strategy match without PA re-confirmation."""
+  if spot is None or not spot.fresh:
+    await emit_lifecycle(
+      client,
+      "waiting_for_price",
+      symbol=symbol,
+      candidate_id=match.match_id,
+      match_id=match.match_id,
+      range_id=match.range_id,
+      group_id=_strategy_group_id(match),
+      strategy=match.strategy,
+      strategy_family=match.family,
+      direction=match.direction,
+      timeframe=match.source_tf,
+      entry_zone={"low": match.entry_low, "high": match.entry_high},
+      reason_code="stale_or_missing_spot",
+      message="strategy match waits for a fresh cTrader quote",
+    )
+    return None
   if (
     not settings.auto_trade_enabled
-    or spot is None
-    or not spot.fresh
     or match.symbol != symbol.upper()
     or match.confluence < max(1, settings.auto_trade_min_confluence)
   ):
@@ -952,6 +1232,9 @@ async def _publish_strategy_match(
   payload = {
     "version": 3 if match.is_range_edge else 4,
     "candidate_id": candidate_id,
+    "match_id": match.match_id,
+    "group_id": _strategy_group_id(match),
+    "strategy_family": match.family or "scanner",
     "symbol": symbol.upper(),
     "timeframe": match.source_tf,
     "setup": setup,
@@ -994,6 +1277,33 @@ async def _publish_strategy_match(
   except Exception:
     await client.delete(f"auto_trade:candidate:{candidate_id}")
     raise
+  await increment_metric(client, "candidate_published", symbol=symbol)
+  await emit_lifecycle(
+    client,
+    "candidate_published",
+    symbol=symbol,
+    candidate_id=candidate_id,
+    match_id=match.match_id,
+    range_id=match.range_id,
+    group_id=payload["group_id"],
+    strategy=match.strategy,
+    strategy_family=payload["strategy_family"],
+    direction=match.direction,
+    timeframe=match.source_tf,
+    entry_zone=payload["entry_zone"],
+    current_price=spot.price,
+    target_plan=list(match.targets_pips),
+    message="strategy match candidate published to executor",
+    publish_status=True,
+  )
+  if match.is_range_edge and match.range_id is not None:
+    await _mark_range_side_candidate(
+      client,
+      symbol=symbol,
+      range_id=match.range_id,
+      direction=match.direction,
+      candidate_id=candidate_id,
+    )
   if consume_redis_match:
     await client.delete(strategy_match_key(symbol))
   if match.is_range_edge:
@@ -1169,6 +1479,13 @@ async def _publish_trend_candidate(
   payload = {
     "version": 3,
     "candidate_id": candidate_id,
+    "group_id": _group_id(
+      symbol,
+      "trend",
+      trend_decision.direction,
+      trend_decision.mode,
+    ),
+    "strategy_family": "trend",
     "symbol": symbol.upper(),
     "timeframe": EXECUTION_TIMEFRAME,
     "setup": _TREND_SETUP_LABELS[trend_decision.mode],
@@ -1214,6 +1531,23 @@ async def _publish_trend_candidate(
   except Exception:
     await client.delete(f"auto_trade:candidate:{candidate_id}")
     raise
+  await increment_metric(client, "candidate_published", symbol=symbol)
+  await emit_lifecycle(
+    client,
+    "candidate_published",
+    symbol=symbol,
+    candidate_id=candidate_id,
+    group_id=payload["group_id"],
+    strategy=payload["setup"],
+    strategy_family="trend",
+    direction=trend_decision.direction,
+    timeframe=EXECUTION_TIMEFRAME,
+    entry_zone=payload["entry_zone"],
+    current_price=spot.price,
+    target_plan=list(trend_decision.targets_pips),
+    message="private trend candidate published to executor",
+    publish_status=True,
+  )
   log.info(
     "auto-trend candidate published id=%s symbol=%s mode=%s direction=%s",
     candidate_id[:12],
@@ -1599,7 +1933,14 @@ async def _handle_event(
     symbol=symbol,
     spot_price=None if spot is None or not spot.fresh else spot.price,
   )
-  scanner_strategy_match = await _load_strategy_match(client, symbol)
+  private_decision, resolved_range, range_comparison = await _resolve_worker_range(
+    client,
+    symbol=symbol,
+    frames=frames,
+    private_decision=private_decision,
+    spot=spot,
+  )
+  scanner_strategy_matches = await _load_strategy_matches(client, symbol)
   cached_market_map = decode_market_map(
     await client.get(market_map_key(symbol))
   )
@@ -1622,13 +1963,23 @@ async def _handle_event(
     symbol,
     market_map_decision,
   )
-  strategy_match = (
-    scanner_strategy_match or market_map_decision.match
-  )
+  strategy_matches = list(scanner_strategy_matches)
+  if market_map_decision.match is not None:
+    strategy_matches.append(market_map_decision.match)
+  if settings.auto_trade_multi_match_enabled and strategy_matches:
+    strategy_matches, _ = dedupe_matches(
+      strategy_matches,
+      atr=strategy_matches[0].atr,
+    )
+  elif strategy_matches:
+    strategy_matches = [strategy_matches[0]]
+  strategy_match = select_primary(strategy_matches)
   decision = private_decision
   gate_source = (
-    "scanner_strategy_match"
-    if scanner_strategy_match is not None
+    "multi_strategy_match"
+    if len(strategy_matches) > 1
+    else "scanner_strategy_match"
+    if scanner_strategy_matches
     else "market_map_strategy"
     if market_map_decision.match is not None
     else "private_ohlc"
@@ -1650,7 +2001,7 @@ async def _handle_event(
       spot_price=None if spot is None or not spot.fresh else spot.price,
       cfg=settings,
     )
-    if strategy_match is None
+    if strategy_match is None or settings.auto_trade_multi_match_enabled
     else TrendDecision("no_setup")
   )
   closed_price = (
@@ -1665,22 +2016,29 @@ async def _handle_event(
     closed_price,
   )
   box_selected = (
-    strategy_match is None
-    and decision.state == "candidate"
+    decision.state == "candidate"
+    and (
+      strategy_match is None
+      or settings.auto_trade_multi_match_enabled
+    )
     # Box-scalp is a mean-reversion play on an actual consolidation; outside
     # chop it must lose the selection entirely (not just get rejected inside
     # _publish_candidate after already winning here), or trend_selected below
     # would wrongly stay False too and nothing would publish at all.
     and regime.state == "chop"
     and (
-      trend_decision.state != "candidate"
+      settings.auto_trade_multi_match_enabled
+      or trend_decision.state != "candidate"
       or decision.confluence >= trend_decision.confluence
     )
   )
   trend_selected = (
-    strategy_match is None
-    and trend_decision.state == "candidate"
-    and not box_selected
+    trend_decision.state == "candidate"
+    and (
+      strategy_match is None
+      or settings.auto_trade_multi_match_enabled
+    )
+    and (settings.auto_trade_multi_match_enabled or not box_selected)
   )
   scale_context = (
     build_auto_scale_context(
@@ -1699,21 +2057,25 @@ async def _handle_event(
   )
   htf_zones = _htf_zones(frames, settings)
   htf_levels = _htf_levels(frames, settings)
-  strategy_candidate_id = (
-    await _publish_strategy_match(
+  strategy_candidate_ids: list[str] = []
+  for routed_match in strategy_matches:
+    published = await _publish_strategy_match(
       client,
       symbol,
       spot,
-      strategy_match,
-      consume_redis_match=scanner_strategy_match is not None,
+      routed_match,
+      consume_redis_match=(
+        not settings.auto_trade_multi_match_enabled
+        and bool(scanner_strategy_matches)
+      ),
       match_source=gate_source,
       htf_zones=htf_zones,
       htf_levels=htf_levels,
       regime=regime,
       market_map=cached_market_map,
     )
-    if strategy_match is not None else None
-  )
+    if published is not None:
+      strategy_candidate_ids.append(published)
   box_candidate_id = (
     await _publish_candidate(
       client,
@@ -1747,7 +2109,12 @@ async def _handle_event(
   )
   if _has_overlapping_zones(cached_market_map):
     await client.incr(f"auto_trade:zone_overlap:{symbol.upper()}")
-  candidate_id = strategy_candidate_id or box_candidate_id or trend_candidate_id
+  candidate_ids = [
+    *strategy_candidate_ids,
+    *([box_candidate_id] if box_candidate_id is not None else []),
+    *([trend_candidate_id] if trend_candidate_id is not None else []),
+  ]
+  candidate_id = candidate_ids[0] if candidate_ids else None
   if candidate_id is None:
     if strategy_match is None and decision.state != "candidate":
       await _record_gate_reject(client, symbol, decision.state)
@@ -1769,6 +2136,32 @@ async def _handle_event(
     strategy_match=strategy_match,
     market_map_decision=market_map_decision,
   )
+  payload["tracked_strategy_matches"] = [
+    {
+      "id": item.match_id,
+      "strategy": item.strategy,
+      "family": item.family,
+      "direction": item.direction,
+      "range_id": item.range_id,
+    }
+    for item in strategy_matches
+  ]
+  payload["published_candidate_ids"] = candidate_ids
+  payload["resolved_range"] = (
+    None
+    if resolved_range is None
+    else {
+      "range_id": resolved_range.range_id,
+      "state": resolved_range.state,
+      "source": resolved_range.source,
+      "lower": resolved_range.lower,
+      "upper": resolved_range.upper,
+      "equilibrium": resolved_range.equilibrium,
+      "buy_rail": "armed",
+      "sell_rail": "armed",
+    }
+  )
+  payload["range_context_comparison"] = range_comparison
   encoded = json.dumps(payload, separators=(",", ":"), sort_keys=True)
   await client.set("auto_trade:last_gate", encoded)
   await client.set(f"auto_trade:last_gate:{symbol}", encoded)
@@ -1809,6 +2202,10 @@ async def auto_scalp_loop() -> None:
         await _handle_event(message.get("data"), source=source, client=client)
       except Exception:
         log.exception("ApexVoid Algo gate tick failed")
+        try:
+          await increment_metric(client, "lifecycle_error")
+        except Exception:
+          log.exception("ApexVoid Algo lifecycle_error metric failed")
   finally:
     await pubsub.unsubscribe("bars:new")
     await pubsub.close()
