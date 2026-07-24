@@ -48,13 +48,18 @@ class StrategyMatch:
 
   @property
   def is_range_edge(self) -> bool:
+    # full_take_profit_pips is selected upstream (see
+    # app.autotrade.range_targets.select_range_target) against the
+    # configured AUTO_TRADE_RANGE_TARGETS_PIPS ladder, not a fixed {50,70}
+    # pair - this contract only needs to know a target was actually chosen.
     return (
       self.strategy == "Range Edge Scalp"
       and self.strategy_mode == "range_scalp"
       and self.range_id is not None
       and self.range_low is not None
       and self.range_high is not None
-      and self.full_take_profit_pips in {50, 70}
+      and self.full_take_profit_pips is not None
+      and self.full_take_profit_pips > 0
     )
 
   def to_json(self) -> str:
@@ -155,7 +160,7 @@ def _valid_match(match: StrategyMatch) -> bool:
     all(value is not None and math.isfinite(value) for value in range_values)
     and match.range_id is not None
     and match.range_low < match.range_high
-    and match.full_take_profit_pips in {50, 70}
+    and match.full_take_profit_pips > 0
   )
   return (
     match.version == STRATEGY_MATCH_VERSION

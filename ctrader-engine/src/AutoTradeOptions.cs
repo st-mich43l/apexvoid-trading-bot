@@ -50,9 +50,27 @@ public sealed record AutoTradeOptions(
   decimal AddPullbackMinRetrace = 0.20m,
   decimal AddPullbackMaxRetrace = 0.70m,
   decimal AddMaxGroupRiskPct = 3.0m,
-  decimal AddSizeRatio = 0.5m
+  decimal AddSizeRatio = 0.5m,
+  IReadOnlyList<int>? RangeTargetsPips = null,
+  decimal RangeTpBufferPips = 5m
 )
 {
+  // Shared target-selection contract (app/autotrade/range_targets.py on the
+  // Python side, same AUTO_TRADE_RANGE_TARGETS_PIPS env var) - previously
+  // this executor independently hardcoded FullTakeProfitPips to exactly 50
+  // or 70, duplicating a policy Python already owned and drifting from it
+  // the moment the Python ladder changed. A null/empty override (e.g. a
+  // test fixture that never sets it) falls back to the same "30,40,50"
+  // default Python uses.
+  private static readonly IReadOnlyList<int> DefaultRangeTargetsPips =
+    new[] { 30, 40, 50 };
+
+  // Only a missing (null) override falls back to the default - an
+  // explicitly empty list is a misconfiguration and must fail Validate(),
+  // not be silently papered over.
+  public IReadOnlyList<int> EffectiveRangeTargetsPips =>
+    RangeTargetsPips ?? DefaultRangeTargetsPips;
+
   public static AutoTradeOptions FromEnvironment() => new(
     Enabled: Bool("AUTO_TRADE_ENABLED", false),
     DryRun: Bool("AUTO_TRADE_DRY_RUN", true),
@@ -104,7 +122,9 @@ public sealed record AutoTradeOptions(
     AddPullbackMinRetrace: Decimal("AUTO_TRADE_ADD_PULLBACK_MIN_RETRACE", 0.20m),
     AddPullbackMaxRetrace: Decimal("AUTO_TRADE_ADD_PULLBACK_MAX_RETRACE", 0.70m),
     AddMaxGroupRiskPct: Decimal("AUTO_TRADE_ADD_MAX_GROUP_RISK_PCT", 3.0m),
-    AddSizeRatio: Decimal("AUTO_TRADE_ADD_SIZE_RATIO", 0.5m)
+    AddSizeRatio: Decimal("AUTO_TRADE_ADD_SIZE_RATIO", 0.5m),
+    RangeTargetsPips: IntList("AUTO_TRADE_RANGE_TARGETS_PIPS", "30,40,50"),
+    RangeTpBufferPips: Decimal("AUTO_TRADE_RANGE_TP_BUFFER_PIPS", 5m)
   );
 
   public void Validate()
@@ -252,6 +272,18 @@ public sealed record AutoTradeOptions(
       throw new AutoTradeConfigurationException(
         "Auto trade disabled: AUTO_TRADE_TREND_STOP_MIN_PIPS/MAX_PIPS must be "
         + "positive and MIN must not exceed MAX"
+      );
+    }
+    if (
+      EffectiveRangeTargetsPips.Count == 0
+      || EffectiveRangeTargetsPips.Any(value => value <= 0)
+      || RangeTpBufferPips < 0
+    )
+    {
+      throw new AutoTradeConfigurationException(
+        "Auto trade disabled: AUTO_TRADE_RANGE_TARGETS_PIPS must contain "
+        + "positive values and AUTO_TRADE_RANGE_TP_BUFFER_PIPS must be "
+        + "non-negative"
       );
     }
   }
