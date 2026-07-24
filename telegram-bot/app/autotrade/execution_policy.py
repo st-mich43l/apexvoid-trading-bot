@@ -202,6 +202,12 @@ FAMILY_BREAKOUT_RETEST = "breakout_retest"
 FAMILY_MOMENTUM_CONTINUATION = "momentum_continuation"
 FAMILY_LIQUIDITY_REVERSAL = "liquidity_reversal"
 FAMILY_MAPPED_ZONE_REACTION = "mapped_zone_reaction"
+FAMILY_KEY_LEVEL = "key_level"
+FAMILY_SUPPLY_DEMAND = "supply_demand"
+FAMILY_SESSION_LEVEL = "session_level"
+FAMILY_TRENDLINE = "trendline"
+FAMILY_RANGE = "range"
+FAMILY_TREND = "trend"
 
 _STRATEGY_FAMILY = {
   "Range Edge Scalp": FAMILY_RANGE_REVERSION,
@@ -217,6 +223,11 @@ _STRATEGY_FAMILY = {
   "Mapped Zone Reaction": FAMILY_MAPPED_ZONE_REACTION,
   "Liquidity Sweep": FAMILY_LIQUIDITY_REVERSAL,
   "Snap-Back": FAMILY_LIQUIDITY_REVERSAL,
+  "Key Level Reaction": FAMILY_KEY_LEVEL,
+  "Demand Zone Reaction": FAMILY_SUPPLY_DEMAND,
+  "Supply Zone Reaction": FAMILY_SUPPLY_DEMAND,
+  "Session Level Reaction": FAMILY_SESSION_LEVEL,
+  "Trendline Reaction": FAMILY_TRENDLINE,
 }
 
 
@@ -259,6 +270,22 @@ _DEFAULT_POLICIES: dict[str, ExecutionPolicy] = {
     FAMILY_MAPPED_ZONE_REACTION, 2, 0.40, 10.0, 2.0, 0.6, 1.15, 1.0,
     "either", ("chop", "range", "trend", "breakout", "unknown"),
   ),
+  FAMILY_KEY_LEVEL: ExecutionPolicy(
+    FAMILY_KEY_LEVEL, 2, 0.50, 12.0, 1.5, 0.55, 1.15, 1.0,
+    "either", ("chop", "range", "trend", "breakout", "unknown"),
+  ),
+  FAMILY_SUPPLY_DEMAND: ExecutionPolicy(
+    FAMILY_SUPPLY_DEMAND, 2, 0.50, 12.0, 2.0, 0.55, 1.15, 1.0,
+    "either", ("chop", "range", "trend", "breakout", "unknown"),
+  ),
+  FAMILY_SESSION_LEVEL: ExecutionPolicy(
+    FAMILY_SESSION_LEVEL, 2, 0.50, 12.0, 1.5, 0.55, 1.15, 1.0,
+    "either", ("chop", "range", "trend", "breakout", "unknown"),
+  ),
+  FAMILY_TRENDLINE: ExecutionPolicy(
+    FAMILY_TRENDLINE, 2, 0.55, 14.0, 1.5, 0.55, 1.15, 1.0,
+    "either", ("chop", "range", "trend", "breakout", "unknown"),
+  ),
 }
 
 
@@ -288,6 +315,18 @@ def policy_for(strategy: str, cfg: Any | None = None) -> ExecutionPolicy:
     )),
     FAMILY_MAPPED_ZONE_REACTION: float(getattr(
       cfg, "auto_trade_map_max_entry_drift_atr", base.max_entry_drift_atr,
+    )),
+    FAMILY_KEY_LEVEL: float(getattr(
+      cfg, "auto_trade_map_max_entry_drift_atr", base.max_entry_drift_atr,
+    )),
+    FAMILY_SUPPLY_DEMAND: float(getattr(
+      cfg, "auto_trade_map_max_entry_drift_atr", base.max_entry_drift_atr,
+    )),
+    FAMILY_SESSION_LEVEL: float(getattr(
+      cfg, "auto_trade_map_max_entry_drift_atr", base.max_entry_drift_atr,
+    )),
+    FAMILY_TRENDLINE: float(getattr(
+      cfg, "auto_trade_trend_max_entry_drift_atr", base.max_entry_drift_atr,
     )),
   }
   return ExecutionPolicy(
@@ -354,6 +393,10 @@ _FAMILY_MIN_DRIFT_SETTING = {
   FAMILY_BREAKOUT_RETEST: "auto_trade_trend_min_entry_drift_pips",
   FAMILY_MOMENTUM_CONTINUATION: "auto_trade_trend_min_entry_drift_pips",
   FAMILY_MAPPED_ZONE_REACTION: "auto_trade_map_min_entry_drift_pips",
+  FAMILY_KEY_LEVEL: "auto_trade_map_min_entry_drift_pips",
+  FAMILY_SUPPLY_DEMAND: "auto_trade_map_min_entry_drift_pips",
+  FAMILY_SESSION_LEVEL: "auto_trade_map_min_entry_drift_pips",
+  FAMILY_TRENDLINE: "auto_trade_trend_min_entry_drift_pips",
 }
 _FAMILY_HARD_DRIFT_SETTING = {
   FAMILY_RANGE_REVERSION: "auto_trade_range_hard_entry_drift_pips",
@@ -361,6 +404,10 @@ _FAMILY_HARD_DRIFT_SETTING = {
   FAMILY_BREAKOUT_RETEST: "auto_trade_trend_hard_entry_drift_pips",
   FAMILY_MOMENTUM_CONTINUATION: "auto_trade_trend_hard_entry_drift_pips",
   FAMILY_MAPPED_ZONE_REACTION: "auto_trade_map_hard_entry_drift_pips",
+  FAMILY_KEY_LEVEL: "auto_trade_map_hard_entry_drift_pips",
+  FAMILY_SUPPLY_DEMAND: "auto_trade_map_hard_entry_drift_pips",
+  FAMILY_SESSION_LEVEL: "auto_trade_map_hard_entry_drift_pips",
+  FAMILY_TRENDLINE: "auto_trade_trend_hard_entry_drift_pips",
 }
 _FAMILY_HARD_DRIFT_DEFAULT = {
   FAMILY_RANGE_REVERSION: 20.0,
@@ -368,6 +415,10 @@ _FAMILY_HARD_DRIFT_DEFAULT = {
   FAMILY_BREAKOUT_RETEST: 30.0,
   FAMILY_MOMENTUM_CONTINUATION: 30.0,
   FAMILY_MAPPED_ZONE_REACTION: 20.0,
+  FAMILY_KEY_LEVEL: 20.0,
+  FAMILY_SUPPLY_DEMAND: 20.0,
+  FAMILY_SESSION_LEVEL: 20.0,
+  FAMILY_TRENDLINE: 30.0,
 }
 
 

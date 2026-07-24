@@ -4050,6 +4050,26 @@ public sealed class AutoTradeEngine(
       return "";
     }
     var value = setup.Split('·', 2)[0].Trim().ToLowerInvariant();
+    if (value.Contains("mapped"))
+    {
+      return "mapped_zone";
+    }
+    if (value.Contains("key level"))
+    {
+      return "key_level";
+    }
+    if (value.Contains("demand zone") || value.Contains("supply zone"))
+    {
+      return "supply_demand";
+    }
+    if (value.Contains("session level"))
+    {
+      return "session_level";
+    }
+    if (value.Contains("trendline"))
+    {
+      return "trendline";
+    }
     if (value.Contains("range"))
     {
       return "range";
@@ -4058,7 +4078,7 @@ public sealed class AutoTradeEngine(
     {
       return "trend";
     }
-    if (value.Contains("map") || value.Contains("zone"))
+    if (value.Contains("map"))
     {
       return "mapped_zone";
     }

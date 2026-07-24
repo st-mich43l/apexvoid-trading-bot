@@ -25,6 +25,14 @@ from app.analysis.structure import (
   swings,
 )
 from app.analysis.trendlines import Trendline, value_at
+from app.analysis.structural_reaction_support import (
+  bias_relationship,
+  evaluate_structural_reaction,
+  key_level_structural_id,
+  session_level_structural_id,
+  trendline_structural_id,
+  zone_structural_id,
+)
 from app.analysis.zones import score_zones
 
 _EPS = 1e-9
@@ -132,6 +140,12 @@ class DetectorSettings:
   regime_direction_lookback: int = 120
   regime_min_directional_swings: int = 3
   regime_min_displacement_atr: float = 4.0
+  structural_reaction_lookback_bars: int = 3
+  key_level_reaction_enabled: bool = True
+  demand_reaction_enabled: bool = True
+  supply_reaction_enabled: bool = True
+  session_level_reaction_enabled: bool = True
+  trendline_reaction_enabled: bool = True
 
   def analysis_settings(self) -> AnalysisSettings:
     return AnalysisSettings(
@@ -249,6 +263,24 @@ def detector_settings_from(config) -> DetectorSettings:
     regime_direction_lookback=config.auto_trade_regime_direction_lookback,
     regime_min_directional_swings=config.auto_trade_regime_min_directional_swings,
     regime_min_displacement_atr=config.auto_trade_regime_min_displacement_atr,
+    structural_reaction_lookback_bars=int(
+      getattr(config, "auto_trade_structural_reaction_lookback_bars", 3)
+    ),
+    key_level_reaction_enabled=bool(
+      getattr(config, "auto_trade_key_level_reaction_enabled", True)
+    ),
+    demand_reaction_enabled=bool(
+      getattr(config, "auto_trade_demand_reaction_enabled", True)
+    ),
+    supply_reaction_enabled=bool(
+      getattr(config, "auto_trade_supply_reaction_enabled", True)
+    ),
+    session_level_reaction_enabled=bool(
+      getattr(config, "auto_trade_session_level_reaction_enabled", True)
+    ),
+    trendline_reaction_enabled=bool(
+      getattr(config, "auto_trade_trendline_reaction_enabled", True)
+    ),
   )
 
 
@@ -280,6 +312,19 @@ class DetectionResult:
   reasons: list[str]
   mode: str = "with_trend"
   confirmation: str | None = None
+  # First-class structural identity (scanner reactions).
+  structural_source: str | None = None
+  structural_id: str | None = None
+  structural_low: float | None = None
+  structural_high: float | None = None
+  structural_timeframe: str | None = None
+  structural_kind: str | None = None
+  confirmation_type: str | None = None
+  confirmation_bar_ts: str | None = None
+  touch_bar_ts: str | None = None
+  source_touches: int | None = None
+  source_score: float | None = None
+  bias_relationship: str | None = None
 
 
 class SetupDetector(Protocol):
@@ -749,6 +794,19 @@ def _finish(
   include_score_reasons: bool = True,
   factors: ConfluenceFactors | None = None,
   confirmation: str | None = None,
+  *,
+  structural_source: str | None = None,
+  structural_id: str | None = None,
+  structural_low: float | None = None,
+  structural_high: float | None = None,
+  structural_timeframe: str | None = None,
+  structural_kind: str | None = None,
+  confirmation_type: str | None = None,
+  confirmation_bar_ts: str | None = None,
+  touch_bar_ts: str | None = None,
+  source_touches: int | None = None,
+  source_score: float | None = None,
+  bias_relationship: str | None = None,
 ) -> DetectionResult | None:
   if not _level_valid(level, price, direction):
     return None
@@ -778,6 +836,18 @@ def _finish(
     reasons=full_reasons,
     mode=mode,
     confirmation=confirmation,
+    structural_source=structural_source,
+    structural_id=structural_id,
+    structural_low=structural_low,
+    structural_high=structural_high,
+    structural_timeframe=structural_timeframe or ctx.tf,
+    structural_kind=structural_kind,
+    confirmation_type=confirmation_type or confirmation,
+    confirmation_bar_ts=confirmation_bar_ts,
+    touch_bar_ts=touch_bar_ts,
+    source_touches=source_touches,
+    source_score=source_score,
+    bias_relationship=bias_relationship,
   )
 
 
@@ -1792,7 +1862,472 @@ def _is_low_session_level(name: str) -> bool:
   return name.endswith("_L") or name in {"PDL", "PWL"}
 
 
+
+def _recent_choch_flag(
+  st: StructureSet,
+  direction: str,
+  bar_count: int,
+  settings: DetectorSettings,
+  lookback: int,
+) -> bool:
+  earliest = max(0, bar_count - max(1, lookback) - 1)
+  wanted = "up" if direction == "BUY" else "down"
+  return any(
+    item.kind == "CHoCH" and item.direction == wanted and item.index >= earliest
+    for item in st.breaks
+  )
+
+
+def _zone_grabs_for(
+  st: StructureSet,
+  zone: Zone,
+  direction: str,
+) -> list:
+  grab = _zone_grab(st, zone, direction)
+  return [grab] if grab is not None else []
+
+
+def _level_grabs_for(
+  st: StructureSet,
+  level: Level,
+  direction: str,
+) -> list:
+  grab = _level_grab(st, level, direction)
+  return [grab] if grab is not None else []
+
+
+def _structural_finish(
+  ctx: DetectionContext,
+  *,
+  setup: str,
+  direction: str,
+  level: float,
+  zone: Zone,
+  price: float,
+  atr: float,
+  reasons: list[str],
+  structural_source: str,
+  structural_id: str,
+  structural_low: float,
+  structural_high: float,
+  structural_kind: str,
+  confirmation,
+  source_touches: int | None = None,
+  source_score: float | None = None,
+  factors: ConfluenceFactors | None = None,
+) -> DetectionResult | None:
+  relationship = bias_relationship(ctx.htf_bias, direction)
+  full_reasons = [
+    f"HTF bias {ctx.htf_bias}",
+    *reasons,
+    confirmation.confirmation_type,
+    f"bias {relationship}",
+  ]
+  return _finish(
+    ctx,
+    setup,
+    direction,
+    level,
+    zone,
+    price,
+    atr,
+    full_reasons,
+    mode=relationship,
+    factors=factors,
+    confirmation=confirmation.confirmation_type,
+    structural_source=structural_source,
+    structural_id=structural_id,
+    structural_low=structural_low,
+    structural_high=structural_high,
+    structural_timeframe=ctx.tf,
+    structural_kind=structural_kind,
+    confirmation_type=confirmation.confirmation_type,
+    confirmation_bar_ts=confirmation.confirmation_bar_ts,
+    touch_bar_ts=confirmation.touch_bar_ts,
+    source_touches=source_touches,
+    source_score=source_score,
+    bias_relationship=relationship,
+  )
+
+
+def key_level_reaction(ctx: DetectionContext) -> DetectionResult | None:
+  if not ctx.settings.key_level_reaction_enabled:
+    return None
+  df, ind, st = _exec(ctx)
+  if len(df) < 3:
+    return None
+  price = _current_price(ctx, df)
+  atr = _atr(ind)
+  lookback = max(1, int(ctx.settings.structural_reaction_lookback_bars))
+  band = max(_EPS, ctx.settings.proximal_band_atr * max(0.0, atr))
+  min_touches = max(1, int(ctx.settings.key_level_min_touches))
+  best: DetectionResult | None = None
+  for level in sorted(st.levels, key=lambda item: abs(item.price - price)):
+    if level.touches < min_touches:
+      continue
+    # Broken-level retests belong to Break & Retest, not key-level reaction.
+    if any(
+      abs(float(item.level) - float(level.price)) <= max(level.band, band)
+      for item in st.breaks
+      if item.kind in {"BOS", "CHoCH"}
+    ):
+      # Only skip when the latest close is clearly beyond the level in break
+      # direction — unbroken reactions still trade here.
+      last_close = float(df.iloc[-1]["close"])
+      broken_up = last_close > level.price + max(level.band, band)
+      broken_down = last_close < level.price - max(level.band, band)
+      if broken_up or broken_down:
+        continue
+    zone_band = max(level.band, band)
+    # Prefer support/resistance from touches: lows act as support (BUY),
+    # highs as resistance (SELL). Kind strings vary; fall back to relative
+    # price when kind is generic.
+    kind = (level.kind or "reaction").casefold()
+    if "high" in kind or "resist" in kind:
+      direction = "SELL"
+    elif "low" in kind or "support" in kind:
+      direction = "BUY"
+    else:
+      direction = "BUY" if price >= level.price else "SELL"
+      # At the level itself, try both sides via confirmation.
+      for trial in ("BUY", "SELL"):
+        conf = evaluate_structural_reaction(
+          df,
+          direction=trial,
+          low=level.price - zone_band,
+          high=level.price + zone_band,
+          lookback_bars=lookback,
+          grabs=_level_grabs_for(st, level, trial),
+          has_choch=_recent_choch_flag(st, trial, len(df), ctx.settings, lookback),
+        )
+        if conf is None:
+          continue
+        zone = _pseudo_level_zone(
+          level.price, zone_band, trial, f"key {level.kind} x{level.touches}",
+        )
+        if not _entry_valid_for_settings(zone, price, atr, trial, ctx.settings):
+          continue
+        factors = ConfluenceFactors(
+          htf_aligned=ctx.htf_bias == _bias_for_direction(trial),
+          touches=level.touches,
+          wick_rejection=True,
+          structural_agreement=True,
+        )
+        candidate = _structural_finish(
+          ctx,
+          setup="Key Level Reaction",
+          direction=trial,
+          level=level.price,
+          zone=zone,
+          price=price,
+          atr=atr,
+          reasons=[
+            f"key {level.kind} {_number(level.price)} x{level.touches}",
+            f"touches {level.touches}",
+          ],
+          structural_source="key_level",
+          structural_id=key_level_structural_id(ctx.symbol, ctx.tf, level),
+          structural_low=level.price - zone_band,
+          structural_high=level.price + zone_band,
+          structural_kind=level.kind,
+          confirmation=conf,
+          source_touches=level.touches,
+          source_score=float(level.strength),
+          factors=factors,
+        )
+        if candidate is not None and (
+          best is None or candidate.confluence > best.confluence
+        ):
+          best = candidate
+      continue
+
+    conf = evaluate_structural_reaction(
+      df,
+      direction=direction,
+      low=level.price - zone_band,
+      high=level.price + zone_band,
+      lookback_bars=lookback,
+      grabs=_level_grabs_for(st, level, direction),
+      has_choch=_recent_choch_flag(st, direction, len(df), ctx.settings, lookback),
+    )
+    if conf is None:
+      continue
+    zone = _pseudo_level_zone(
+      level.price, zone_band, direction, f"key {level.kind} x{level.touches}",
+    )
+    if not _entry_valid_for_settings(zone, price, atr, direction, ctx.settings):
+      continue
+    factors = ConfluenceFactors(
+      htf_aligned=ctx.htf_bias == _bias_for_direction(direction),
+      touches=level.touches,
+      wick_rejection=True,
+      structural_agreement=True,
+    )
+    candidate = _structural_finish(
+      ctx,
+      setup="Key Level Reaction",
+      direction=direction,
+      level=level.price,
+      zone=zone,
+      price=price,
+      atr=atr,
+      reasons=[
+        f"key {level.kind} {_number(level.price)} x{level.touches}",
+        f"touches {level.touches}",
+      ],
+      structural_source="key_level",
+      structural_id=key_level_structural_id(ctx.symbol, ctx.tf, level),
+      structural_low=level.price - zone_band,
+      structural_high=level.price + zone_band,
+      structural_kind=level.kind,
+      confirmation=conf,
+      source_touches=level.touches,
+      source_score=float(level.strength),
+      factors=factors,
+    )
+    if candidate is not None and (
+      best is None or candidate.confluence > best.confluence
+    ):
+      best = candidate
+  return best
+
+
+def demand_zone_reaction(ctx: DetectionContext) -> DetectionResult | None:
+  if not ctx.settings.demand_reaction_enabled:
+    return None
+  return _sd_zone_reaction(ctx, side="demand", direction="BUY", setup="Demand Zone Reaction")
+
+
+def supply_zone_reaction(ctx: DetectionContext) -> DetectionResult | None:
+  if not ctx.settings.supply_reaction_enabled:
+    return None
+  return _sd_zone_reaction(ctx, side="supply", direction="SELL", setup="Supply Zone Reaction")
+
+
+def _sd_zone_reaction(
+  ctx: DetectionContext,
+  *,
+  side: str,
+  direction: str,
+  setup: str,
+) -> DetectionResult | None:
+  df, ind, st = _exec(ctx)
+  if len(df) < 3:
+    return None
+  price = _current_price(ctx, df)
+  atr = _atr(ind)
+  lookback = max(1, int(ctx.settings.structural_reaction_lookback_bars))
+  zones = [
+    zone for zone in [*st.zones, *st.order_blocks]
+    if zone.side == side and not zone.mitigated
+  ]
+  selected = _best_valid_zone(zones, price, atr, direction, ctx.settings)
+  if selected is None:
+    # Still allow touch within lookback even if proximal helper misses.
+    candidates = []
+    for zone in zones:
+      if not _entry_valid_for_settings(zone, price, atr, direction, ctx.settings):
+        continue
+      candidates.append(zone)
+    if not candidates:
+      return None
+    zone = min(candidates, key=lambda item: abs(((item.low + item.high) / 2) - price))
+  else:
+    zone, _proximal = selected
+
+  conf = evaluate_structural_reaction(
+    df,
+    direction=direction,
+    low=float(zone.low),
+    high=float(zone.high),
+    lookback_bars=lookback,
+    grabs=_zone_grabs_for(st, zone, direction),
+    has_choch=_recent_choch_flag(st, direction, len(df), ctx.settings, lookback),
+  )
+  if conf is None:
+    return None
+  factors = ConfluenceFactors(
+    htf_aligned=ctx.htf_bias == _bias_for_direction(direction),
+    touches=int(zone.touches),
+    wick_rejection=True,
+    structural_agreement=True,
+    displacement_grade=float(getattr(zone, "score", 0.0)) >= STAR_TWO_SCORE,
+  )
+  reasons = [
+    f"{side} zone {_number(zone.low)}-{_number(zone.high)}",
+    zone.source or side,
+  ]
+  if zone.touches:
+    reasons.append(f"touches {zone.touches}")
+  return _structural_finish(
+    ctx,
+    setup=setup,
+    direction=direction,
+    level=_zone_key(zone, price, direction),
+    zone=zone,
+    price=price,
+    atr=atr,
+    reasons=reasons,
+    structural_source="supply_demand",
+    structural_id=zone_structural_id(ctx.symbol, ctx.tf, zone),
+    structural_low=float(zone.low),
+    structural_high=float(zone.high),
+    structural_kind=side,
+    confirmation=conf,
+    source_touches=int(zone.touches),
+    source_score=float(getattr(zone, "score", 0.0)),
+    factors=factors,
+  )
+
+
+def session_level_reaction(ctx: DetectionContext) -> DetectionResult | None:
+  if not ctx.settings.session_level_reaction_enabled:
+    return None
+  df, ind, st = _exec(ctx)
+  if len(df) < 3:
+    return None
+  price = _current_price(ctx, df)
+  atr = _atr(ind)
+  lookback = max(1, int(ctx.settings.structural_reaction_lookback_bars))
+  band = max(_EPS, ctx.settings.proximal_band_atr * max(0.0, atr))
+  best: DetectionResult | None = None
+  for session in sorted(st.session_levels, key=lambda item: abs(item.price - price)):
+    if _is_high_session_level(session.name):
+      direction = "SELL"
+    elif _is_low_session_level(session.name):
+      direction = "BUY"
+    else:
+      continue
+    # Swept levels remain valid only with a confirmed reclaim.
+    conf = evaluate_structural_reaction(
+      df,
+      direction=direction,
+      low=session.price - band,
+      high=session.price + band,
+      lookback_bars=lookback,
+      grabs=[],
+      has_choch=_recent_choch_flag(st, direction, len(df), ctx.settings, lookback),
+    )
+    if conf is None:
+      continue
+    if session.swept and conf.confirmation_type not in {
+      "sweep_reclaim", "strong_reclaim", "rejection_choch",
+    }:
+      continue
+    zone = _pseudo_level_zone(session.price, band, direction, session.name)
+    if not _entry_valid_for_settings(zone, price, atr, direction, ctx.settings):
+      continue
+    factors = ConfluenceFactors(
+      htf_aligned=ctx.htf_bias == _bias_for_direction(direction),
+      touches=2,
+      wick_rejection=True,
+      structural_agreement=True,
+    )
+    candidate = _structural_finish(
+      ctx,
+      setup="Session Level Reaction",
+      direction=direction,
+      level=session.price,
+      zone=zone,
+      price=price,
+      atr=atr,
+      reasons=[f"session {session.name}", session.name],
+      structural_source="session_level",
+      structural_id=session_level_structural_id(ctx.symbol, ctx.tf, session),
+      structural_low=session.price - band,
+      structural_high=session.price + band,
+      structural_kind=session.name,
+      confirmation=conf,
+      source_touches=2,
+      factors=factors,
+    )
+    if candidate is not None and (
+      best is None or candidate.confluence > best.confluence
+    ):
+      best = candidate
+  return best
+
+
+def trendline_reaction(ctx: DetectionContext) -> DetectionResult | None:
+  if not ctx.settings.trendline_reaction_enabled:
+    return None
+  df, ind, st = _exec(ctx)
+  if len(df) < 3:
+    return None
+  price = _current_price(ctx, df)
+  atr = _atr(ind)
+  lookback = max(1, int(ctx.settings.structural_reaction_lookback_bars))
+  band = max(_EPS, ctx.settings.tl_tol_atr * max(0.0, atr))
+  min_touches = max(2, int(ctx.settings.tl_min_touches))
+  best: DetectionResult | None = None
+  for line in sorted(
+    st.trendlines,
+    key=lambda item: abs(value_at(item, len(df) - 1) - price),
+  ):
+    if line.broken or line.touches < min_touches:
+      continue
+    if line.kind == "support":
+      direction = "BUY"
+    elif line.kind == "resistance":
+      direction = "SELL"
+    else:
+      continue
+    line_price = value_at(line, len(df) - 1)
+    conf = evaluate_structural_reaction(
+      df,
+      direction=direction,
+      low=line_price - band,
+      high=line_price + band,
+      lookback_bars=lookback,
+      grabs=[],
+      has_choch=_recent_choch_flag(st, direction, len(df), ctx.settings, lookback),
+    )
+    if conf is None:
+      continue
+    reason = f"TL {line.kind} ×{line.touches}"
+    zone = _pseudo_level_zone(
+      line_price, band, direction, reason, source="trendline",
+    )
+    if not _entry_valid_for_settings(zone, price, atr, direction, ctx.settings):
+      continue
+    factors = ConfluenceFactors(
+      htf_aligned=ctx.htf_bias == _bias_for_direction(direction),
+      touches=line.touches,
+      wick_rejection=True,
+      structural_agreement=True,
+    )
+    candidate = _structural_finish(
+      ctx,
+      setup="Trendline Reaction",
+      direction=direction,
+      level=line_price,
+      zone=zone,
+      price=price,
+      atr=atr,
+      reasons=[reason, f"touches {line.touches}"],
+      structural_source="trendline",
+      structural_id=trendline_structural_id(ctx.symbol, ctx.tf, line),
+      structural_low=line_price - band,
+      structural_high=line_price + band,
+      structural_kind=line.kind,
+      confirmation=conf,
+      source_touches=line.touches,
+      factors=factors,
+    )
+    if candidate is not None and (
+      best is None or candidate.confluence > best.confluence
+    ):
+      best = candidate
+  return best
+
+
+
 DEFAULT_DETECTORS: tuple[SetupDetector, ...] = (
+  key_level_reaction,
+  demand_zone_reaction,
+  supply_zone_reaction,
+  session_level_reaction,
+  trendline_reaction,
   box_breakout,
   trend_pullback,
   break_retest,
@@ -1800,5 +2335,4 @@ DEFAULT_DETECTORS: tuple[SetupDetector, ...] = (
   momentum_ride,
   range_edge_scalp,
   fade_scalp,
-  zone_reaction,
 )

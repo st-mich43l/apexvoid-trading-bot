@@ -948,6 +948,52 @@ async def auto_trade_status_text() -> str:
           f"width <b>{map_filters.get('degenerate_width', 0)}</b> · "
           f"distance <b>{map_filters.get('distance', 0)}</b>"
         )
+    structural_lines = ""
+    structural_metric_names = (
+      ("key_level", "key_level_reaction_detected"),
+      ("demand", "demand_zone_reaction_detected"),
+      ("supply", "supply_zone_reaction_detected"),
+      ("session", "session_level_reaction_detected"),
+      ("trendline", "trendline_reaction_detected"),
+    )
+    structural_bits = [
+      f"{label} {metrics.get(metric, 0)}"
+      for label, metric in structural_metric_names
+      if metrics.get(metric, 0)
+    ]
+    if structural_bits or metrics.get("structural_reaction_match_built"):
+      structural_lines = (
+        "\nStructural reactions: "
+        + escape(" · ".join(structural_bits) if structural_bits else "none")
+        + (
+          f" · match {metrics.get('structural_reaction_match_built', 0)}"
+          f" · published {metrics.get('structural_reaction_candidate_published', 0)}"
+          f" · dup {metrics.get('structural_reaction_duplicate_suppressed', 0)}"
+        )
+      )
+      last_structural = next(
+        (
+          match for match in active_matches
+          if match.strategy in {
+            "Key Level Reaction",
+            "Demand Zone Reaction",
+            "Supply Zone Reaction",
+            "Session Level Reaction",
+            "Trendline Reaction",
+          }
+        ),
+        None,
+      )
+      if last_structural is not None:
+        sid = (last_structural.structural_zone_id or last_structural.zone_id or "")[:10]
+        structural_lines += (
+          "\nLast structural: "
+          f"<b>{escape(last_structural.strategy)}</b> "
+          f"{escape(last_structural.direction)} · "
+          f"{escape(last_structural.structural_source or '-')} · "
+          f"id {escape(sid)} · "
+          f"{escape(last_structural.reaction_type or '-')}"
+        )
     strategy_lines = (
       f"\nSelected strategy: <b>{escape(selected_text)}</b>"
       f"\nSource: <b>{escape(selection_source)}</b>"
@@ -957,6 +1003,7 @@ async def auto_trade_status_text() -> str:
       "\nPrivate strategies: "
       f"Range Box <b>{escape(box_state.replace('_', ' '))}</b> · "
       f"Trend <b>{escape(trend_state.replace('_', ' '))}</b>"
+      f"{structural_lines}"
       f"\nExecution: <b>{escape(execution_state.replace('_', ' '))}</b>"
       f"{escape(zone_text)}"
       f"{reason_line}"

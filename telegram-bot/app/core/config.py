@@ -293,6 +293,32 @@ class Settings(BaseSettings):
       "AUTO_TRADE_MAP_THESIS_LOCK_ENABLED",
     ),
   )
+  auto_trade_key_level_reaction_enabled: bool = Field(
+    default=True,
+    validation_alias=AliasChoices("AUTO_TRADE_KEY_LEVEL_REACTION_ENABLED"),
+  )
+  auto_trade_demand_reaction_enabled: bool = Field(
+    default=True,
+    validation_alias=AliasChoices("AUTO_TRADE_DEMAND_REACTION_ENABLED"),
+  )
+  auto_trade_supply_reaction_enabled: bool = Field(
+    default=True,
+    validation_alias=AliasChoices("AUTO_TRADE_SUPPLY_REACTION_ENABLED"),
+  )
+  auto_trade_session_level_reaction_enabled: bool = Field(
+    default=True,
+    validation_alias=AliasChoices("AUTO_TRADE_SESSION_LEVEL_REACTION_ENABLED"),
+  )
+  auto_trade_trendline_reaction_enabled: bool = Field(
+    default=True,
+    validation_alias=AliasChoices("AUTO_TRADE_TRENDLINE_REACTION_ENABLED"),
+  )
+  auto_trade_structural_reaction_lookback_bars: int = Field(
+    default=3,
+    validation_alias=AliasChoices(
+      "AUTO_TRADE_STRUCTURAL_REACTION_LOOKBACK_BARS",
+    ),
+  )
   # Reject collapsed map geometry before it can become the nearest target.
   # Both thresholds apply; the effective minimum is their maximum.
   auto_trade_map_zone_min_width_atr: float = 0.15
@@ -467,6 +493,12 @@ class Settings(BaseSettings):
       "auto_trade_breakout_enabled": True,
       "auto_trade_retest_enabled": True,
       "auto_trade_reaction_enabled": True,
+      "auto_trade_key_level_reaction_enabled": True,
+      "auto_trade_demand_reaction_enabled": True,
+      "auto_trade_supply_reaction_enabled": True,
+      "auto_trade_session_level_reaction_enabled": True,
+      "auto_trade_trendline_reaction_enabled": True,
+      "auto_trade_structural_reaction_lookback_bars": 3,
       "auto_trade_liquidity_reversal_enabled": True,
       "auto_trade_allow_counter_bias": True,
       "auto_trade_map_counter_bias_enabled": True,
@@ -512,6 +544,10 @@ class Settings(BaseSettings):
     }:
       raise ValueError(
         "AUTO_TRADE_STRUCTURAL_GUARD_MODE must be observe, balanced, or strict"
+      )
+    if int(self.auto_trade_structural_reaction_lookback_bars) < 1:
+      raise ValueError(
+        "AUTO_TRADE_STRUCTURAL_REACTION_LOOKBACK_BARS must be >= 1"
       )
     self.auto_trade_zone_reconcile_mode = (
       self.auto_trade_zone_reconcile_mode.strip().lower()

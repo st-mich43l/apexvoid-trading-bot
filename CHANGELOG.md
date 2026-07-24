@@ -11,6 +11,14 @@ dated section after deployment.
 
 ## Unreleased
 
+### Added
+
+- Promote Key Level, Demand/Supply Zone, Session Level, and Trendline reactions
+  to first-class executable scanner strategies (stable structural IDs, shared
+  closed-bar confirmation lookback, bias as context not a hard gate). Generic
+  `Zone Reaction` is removed from `DEFAULT_DETECTORS`. Mapped Zone remains
+  disabled (`AUTO_TRADE_MAPPED_ZONE_ENABLED=false`).
+
 ### Fixed
 
 - Algo `POSITION CLOSED` cards now include **Total net pips** (volume-weighted).
