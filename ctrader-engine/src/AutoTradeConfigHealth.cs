@@ -83,7 +83,12 @@ public static class AutoTradeConfigHealth
       BrokerReported: account.BrokerName,
       StructuralGuardMode: options.StructuralGuardMode,
       ZoneCooldownEnabled: options.ZoneCooldownEnabled,
-      ZoneReconcileMode: options.ZoneReconcileMode
+      ZoneReconcileMode: options.ZoneReconcileMode,
+      RangeBoxScaleOutEnabled: options.RangeBoxScaleOutEnabled,
+      RangeBoxScaleOutThresholdPips: options.RangeBoxScaleOutThresholdPips,
+      RangeBoxScaleOutTriggerPips: options.RangeBoxScaleOutTriggerPips,
+      RangeBoxScaleOutFraction: options.RangeBoxScaleOutFraction,
+      RangeBoxMoveSlToBeAfterScaleOut: options.RangeBoxMoveSlToBeAfterScaleOut
     );
   }
 
@@ -248,6 +253,36 @@ public static class AutoTradeConfigHealth
         root,
         "zone_reconcile_mode",
         current.ZoneReconcileMode,
+        warnings
+      );
+      CompareBool(
+        root,
+        "range_box_scale_out_enabled",
+        current.RangeBoxScaleOutEnabled,
+        warnings
+      );
+      CompareInt(
+        root,
+        "range_box_scale_out_threshold_pips",
+        current.RangeBoxScaleOutThresholdPips,
+        warnings
+      );
+      CompareInt(
+        root,
+        "range_box_scale_out_trigger_pips",
+        current.RangeBoxScaleOutTriggerPips,
+        warnings
+      );
+      CompareDecimal(
+        root,
+        "range_box_scale_out_fraction",
+        current.RangeBoxScaleOutFraction,
+        warnings
+      );
+      CompareBool(
+        root,
+        "range_box_move_sl_to_be_after_scale_out",
+        current.RangeBoxMoveSlToBeAfterScaleOut,
         warnings
       );
       if (!current.BrokerHedgingCapability)

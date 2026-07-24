@@ -372,6 +372,11 @@ class Settings(BaseSettings):
   # no executable candidate. C# must read this same env var - see
   # AutoTradeOptions.RangeTargetsPips.
   auto_trade_range_targets_pips: str = "20,30,40,50,70"
+  auto_trade_range_box_scale_out_enabled: bool = True
+  auto_trade_range_box_scale_out_threshold_pips: int = 70
+  auto_trade_range_box_scale_out_trigger_pips: int = 30
+  auto_trade_range_box_scale_out_fraction: float = 0.50
+  auto_trade_range_box_move_sl_to_be_after_scale_out: bool = False
   auto_trade_range_tp_buffer_pips: float = 3.0
   auto_trade_range_min_target_pips: float = 20.0
   auto_trade_range_min_rr: float = 1.10
@@ -548,6 +553,18 @@ class Settings(BaseSettings):
     if int(self.auto_trade_structural_reaction_lookback_bars) < 1:
       raise ValueError(
         "AUTO_TRADE_STRUCTURAL_REACTION_LOOKBACK_BARS must be >= 1"
+      )
+    if (
+      int(self.auto_trade_range_box_scale_out_threshold_pips) <= 0
+      or int(self.auto_trade_range_box_scale_out_trigger_pips) <= 0
+      or int(self.auto_trade_range_box_scale_out_trigger_pips)
+        >= int(self.auto_trade_range_box_scale_out_threshold_pips)
+      or float(self.auto_trade_range_box_scale_out_fraction) <= 0
+      or float(self.auto_trade_range_box_scale_out_fraction) >= 1
+    ):
+      raise ValueError(
+        "Range Box scale-out settings invalid: threshold > 0, trigger > 0, "
+        "trigger < threshold, and 0 < fraction < 1"
       )
     self.auto_trade_zone_reconcile_mode = (
       self.auto_trade_zone_reconcile_mode.strip().lower()
