@@ -279,7 +279,7 @@ def _format_take_profit(
     lines = [
       "🤖 <b>ApexVoid Algo</b>",
       f"✅ {seq}closed",
-      f"Net: <b>{format_signed_pips(net_pips)} pips</b>",
+      f"Total net: <b>{format_signed_pips(net_pips)} pips</b>",
     ]
   else:
     if (
@@ -292,8 +292,12 @@ def _format_take_profit(
     lines = [
       "🤖 <b>ApexVoid Algo</b>",
       f"🎯 {seq}{label.upper()} booked {booked_pct:.1f}%",
-      f"Realized: <b>{format_signed_pips(leg_realized)} pips</b>",
+      f"Leg: <b>{format_signed_pips(leg_realized)} pips</b>",
     ]
+    if net_pips is not None:
+      lines.append(
+        f"Net so far: <b>{format_signed_pips(net_pips)} pips</b>"
+      )
 
   if profile == "public":
     try:
@@ -319,11 +323,30 @@ def _format_group_result(event: dict, message: str) -> str:
     "",
   ]
   if net is not None:
-    lines.append(f"Net: <b>{format_signed_pips(net)} pips</b>")
+    lines.append(f"Total net: <b>{format_signed_pips(net)} pips</b>")
   else:
     cleaned = _MONEY_RE.sub("", message).strip(" ·")
     if cleaned:
       lines.append(escape(cleaned))
+  return "\n".join(lines)
+
+
+def _format_position_closed(event: dict, message: str) -> str:
+  net = _event_float(event, "group_realized_pips")
+  seq = _trade_seq_prefix(event)
+  lines = [
+    "🤖 <b>ApexVoid Algo</b>",
+    f"🏁 {seq}<b>POSITION CLOSED</b>",
+  ]
+  if net is not None:
+    lines.extend([
+      "",
+      f"Total net: <b>{format_signed_pips(net)} pips</b>",
+    ])
+  elif message:
+    cleaned = _MONEY_RE.sub("", message).strip(" ·")
+    if cleaned:
+      lines.extend(["", escape(cleaned)])
   return "\n".join(lines)
 
 
@@ -414,6 +437,8 @@ def render_auto_trade_event(
       return rendered
   if event_type == "group_result":
     return _format_group_result(event, message)
+  if event_type == "position_closed":
+    return _format_position_closed(event, message)
   labels = {
     "ready": "✅ <b>Engine ready</b>",
     "dry_run": "🧪 <b>Simulation</b>",

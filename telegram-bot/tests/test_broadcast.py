@@ -150,7 +150,7 @@ def test_public_close_pips_toggle_never_reveals_id(monkeypatch):
     "✅ closed — +70 pips win 💸"
   )
   assert trade_ops.render_result(result, "XAU", "vip") == (
-    "✅ #7 closed — net +70 pips 💸"
+    "✅ #7 closed — total net +70 pips 💸"
   )
 
   monkeypatch.setattr(trade_ops.settings, "public_show_pips", False)
@@ -159,7 +159,7 @@ def test_public_close_pips_toggle_never_reveals_id(monkeypatch):
   assert "#7" not in public
   assert "70" not in public
   assert trade_ops.render_result(result, "XAU", "vip") == (
-    "✅ #7 closed — net +70 pips 💸"
+    "✅ #7 closed — total net +70 pips 💸"
   )
 
 
@@ -219,7 +219,7 @@ def test_final_close_with_tp_number_labels_which_target_closed_it(monkeypatch):
   }
 
   assert trade_ops.render_result(result, "XAU", "vip") == (
-    "✅ #7 TP4 closed — net +570 pips 💸💸💸"
+    "✅ #7 TP4 closed — total net +570 pips 💸💸💸"
   )
   assert trade_ops.render_result(result, "XAU", "public") == (
     "✅ TP4 closed — +570 pips win 💸💸💸"
