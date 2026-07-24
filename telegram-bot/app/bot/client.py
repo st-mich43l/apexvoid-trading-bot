@@ -48,6 +48,7 @@ OWNER_COMMANDS = [
   BotCommand(command="auto_status", description="ApexVoid Algo status"),
   BotCommand(command="auto_pause", description="Pause ApexVoid Algo entries"),
   BotCommand(command="auto_resume", description="Resume ApexVoid Algo entries"),
+  BotCommand(command="auto_close_all", description="Flatten all algo positions"),
   BotCommand(command="trade_stats", description="[SYMBOL] [today|week|month]"),
   BotCommand(command="trade_pips", description="[SYMBOL] [period]"),
   BotCommand(command="help", description="Trade command reference"),
@@ -61,6 +62,7 @@ SCANNER_OWNER_COMMANDS = [
   BotCommand(command="auto_status", description="ApexVoid Algo status"),
   BotCommand(command="auto_pause", description="Pause ApexVoid Algo entries"),
   BotCommand(command="auto_resume", description="Resume ApexVoid Algo entries"),
+  BotCommand(command="auto_close_all", description="Flatten all algo positions"),
 ]
 
 _MAX_SEND_ATTEMPTS = 3
