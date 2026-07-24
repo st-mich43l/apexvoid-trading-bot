@@ -11,6 +11,19 @@ dated section after deployment.
 
 ## Unreleased
 
+### Fixed
+
+- Mapped Zone Reaction now executes each structural reaction sequence at most
+  once. Match/group identity derives from a stable `reaction_id` (symbol,
+  strategy, direction, structural zone, touch/confirmation bar timestamps,
+  reaction type) instead of the worker `event_ts` or spot-expanded entry
+  bands. Redis `auto_trade:reaction_claim:{reaction_id}` SET NX claims the
+  reaction across restarts; `same_thesis` and group IDs follow the reaction,
+  and the C# executor rejects `duplicate_reaction_active` without Telegram
+  spam. Zone coordinate jitter such as `4054.26–4062.31` vs `4054.08–4062.16`
+  resolves to one `structural_zone_id`. Keep
+  `AUTO_TRADE_MAPPED_ZONE_ENABLED=false` until verified on demo.
+
 ### Added
 
 - Added typed, source-aware structural guard decisions with

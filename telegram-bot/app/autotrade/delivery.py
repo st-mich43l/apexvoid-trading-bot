@@ -363,7 +363,18 @@ def render_auto_trade_event(
   event_type = str(event.get("type", ""))
   if event_type not in _NOTIFY_TYPES:
     return None
+  reason_code = str(event.get("reason_code") or event.get("reason") or "")
+  if reason_code in {
+    "duplicate_reaction_active",
+    "already_processed",
+    "already_processed:duplicate_reaction_active",
+  }:
+    return None
+  if "duplicate_reaction" in reason_code:
+    return None
   message = _clean_message(event.get("message", ""))
+  if "already_processed:duplicate_reaction_active" in message:
+    return None
   if event_type in {
     "candidate_published",
     "order_submitted",
@@ -1144,6 +1155,20 @@ async def _gate_reject_summary(client, symbol: str) -> str:
 async def _record_group_result(client, event: dict) -> None:
   if event.get("type") != "group_result":
     return
+  reaction_id = event.get("reaction_id")
+  if reaction_id:
+    from app.autotrade.reaction_identity import (
+      parse_reaction_claim,
+      reaction_claim_key,
+    )
+    key = reaction_claim_key(str(reaction_id))
+    existing = parse_reaction_claim(await client.get(key))
+    if existing is not None:
+      existing["state"] = "closed"
+      await client.set(
+        key,
+        json.dumps(existing, separators=(",", ":"), sort_keys=True),
+      )
   group_id = str(event.get("group_id") or "").strip()
   if not group_id:
     return

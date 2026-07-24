@@ -2902,6 +2902,58 @@ public sealed class AutoTradeEngineTests
   }
 
   [Fact]
+  public async Task MappedReactionDuplicateCandidateDoesNotSubmitSecondOrder()
+  {
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+    const string reaction = "reaction-shared-abc";
+    var first = StrategyMatchCandidateJson(
+      setup: "Mapped Zone Reaction",
+      candidate: 'm',
+      groupId: "mapped-group-1",
+      strategyFamily: "mapped_zone",
+      reactionId: reaction,
+      thesisId: "thesis-1",
+      zoneId: "zone-shared"
+    );
+    var second = StrategyMatchCandidateJson(
+      setup: "Mapped Zone Reaction",
+      candidate: 'n',
+      groupId: "mapped-group-1",
+      strategyFamily: "mapped_zone",
+      reactionId: reaction,
+      thesisId: "thesis-1",
+      zoneId: "zone-shared"
+    );
+    var store = new FakeAutoTradeStore(first);
+    store.Values[$"auto_trade:reaction_claim:{reaction}"] =
+      "{\"candidate_id\":\"" + new string('m', 64)
+      + "\",\"state\":\"claimed\",\"reaction_id\":\"" + reaction + "\"}";
+    store.EnqueueCandidate(second);
+    var client = new FakeTradingClient();
+    var engine = new AutoTradeEngine(
+      DemoEvalOptions(), store, () => Now, _ => { }
+    );
+    await engine.ObserveSpotAsync(
+      new SpotPrice("XAU", 4000.0m, 4000.2m, Now.ToUnixTimeSeconds()),
+      cts.Token
+    );
+
+    var run = engine.RunSessionAsync(client, Symbol, cts.Token);
+    await WaitUntilAsync(() => store.Cursor == "2-0");
+
+    Assert.Single(client.Orders);
+    Assert.Contains("executor_duplicate_reaction_rejected", store.Metrics);
+    Assert.DoesNotContain(
+      store.Events,
+      item => item.Type == "rejected"
+        && item.Message.Contains("duplicate_reaction_active")
+    );
+
+    cts.Cancel();
+    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+  }
+
+  [Fact]
   public async Task DemoEvalLiveAccountPublishesFatalAndNeverOrders()
   {
     using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
@@ -3226,11 +3278,15 @@ public sealed class AutoTradeEngineTests
     char candidate = 's',
     int[]? targetsPips = null,
     string? groupId = null,
-    string? strategyFamily = null
+    string? strategyFamily = null,
+    string? reactionId = null,
+    string? thesisId = null,
+    string? zoneId = null
   ) => JsonSerializer.Serialize(new
   {
     version = 4,
     candidate_id = new string(candidate, 64),
+    match_id = new string(candidate, 64),
     symbol = "XAU",
     timeframe = "M5",
     setup,
@@ -3251,6 +3307,10 @@ public sealed class AutoTradeEngineTests
     regime = "strategy_match",
     group_id = groupId,
     strategy_family = strategyFamily,
+    reaction_id = reactionId,
+    thesis_id = thesisId,
+    zone_id = zoneId,
+    structural_zone_id = zoneId,
   });
 
   private static string BoxCandidateJson(

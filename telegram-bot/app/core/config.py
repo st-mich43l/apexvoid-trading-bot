@@ -281,6 +281,10 @@ class Settings(BaseSettings):
       "AUTO_TRADE_MAP_REACTION_LOOKBACK_BARS",
     ),
   )
+  # Rearm a mapped zone only after the prior reaction group is terminal and
+  # price has left then re-touched with a newer confirmation.
+  auto_trade_map_reaction_rearm_bars: int = 3
+  auto_trade_map_reaction_rearm_atr: float = 0.50
   # Reject collapsed map geometry before it can become the nearest target.
   # Both thresholds apply; the effective minimum is their maximum.
   auto_trade_map_zone_min_width_atr: float = 0.15
