@@ -187,7 +187,9 @@ public sealed record TradeCandidate(
   string? RelationshipToBias = null,
   string? ReactionId = null,
   string? ThesisId = null,
-  string? StructuralZoneId = null
+  string? StructuralZoneId = null,
+  decimal? StructuralZoneLow = null,
+  decimal? StructuralZoneHigh = null
 );
 
 public sealed record TradeStreamEntry(
@@ -240,6 +242,15 @@ public sealed record AutoTradePositionState(
   string? StructuralSource = null,
   string? ReactionId = null,
   string? ThesisId = null
+);
+
+public sealed record RedisClaimPayload(
+  string? CandidateId = null,
+  string? State = null,
+  string? ReactionId = null,
+  string? ThesisId = null,
+  string? GroupId = null,
+  bool RearmReady = false
 );
 
 // One owner-override command for an already-armed/filled manual-algo
@@ -375,6 +386,7 @@ public sealed record AutoTradeConfigManifest(
   bool TrendEnabled = false,
   bool RangeEnabled = false,
   bool MappedZoneEnabled = false,
+  bool MapThesisLockEnabled = true,
   bool StrategyMatchEnabled = false,
   bool BreakoutEnabled = false,
   bool RetestEnabled = false,

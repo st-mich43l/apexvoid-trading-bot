@@ -70,6 +70,7 @@ public static class AutoTradeConfigHealth
       TrendEnabled: options.TrendEnabled,
       RangeEnabled: options.RangeEnabled,
       MappedZoneEnabled: options.MappedZoneEnabled,
+      MapThesisLockEnabled: options.MapThesisLockEnabled,
       StrategyMatchEnabled: options.StrategyMatchEnabled,
       BreakoutEnabled: options.BreakoutEnabled,
       RetestEnabled: options.RetestEnabled,
@@ -200,6 +201,12 @@ public static class AutoTradeConfigHealth
       CompareBool(root, "range_enabled", current.RangeEnabled, warnings);
       CompareBool(
         root, "mapped_zone_enabled", current.MappedZoneEnabled, warnings
+      );
+      CompareBool(
+        root,
+        "map_thesis_lock_enabled",
+        current.MapThesisLockEnabled,
+        warnings
       );
       CompareBool(
         root, "strategy_match_enabled", current.StrategyMatchEnabled, warnings
