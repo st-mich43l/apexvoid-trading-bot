@@ -13,6 +13,12 @@ dated section after deployment.
 
 ### Fixed
 
+- Telegram ApexVoid Algo cards now show only the essential trade lifecycle
+  (`order_filled` / opened, TP booked, risk protected, closed, group result,
+  executor rejects). Pre-fill noise (`candidate_published`, `order_submitted`,
+  `order_accepted`, `managing`, config/broker fatals) stays in Redis lifecycle
+  streams and metrics but is suppressed at the Telegram render boundary. Partial
+  TP cards no longer show remaining lot or volume lines.
 - Mapped Zone Reaction now executes each structural reaction sequence at most
   once. Match/group identity derives from a stable `reaction_id` (symbol,
   strategy, direction, structural zone, touch/confirmation bar timestamps,
