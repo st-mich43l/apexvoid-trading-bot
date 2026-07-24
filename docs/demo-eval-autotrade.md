@@ -29,6 +29,20 @@ AUTO_TRADE_LIQUIDITY_REVERSAL_ENABLED=true
 AUTO_TRADE_MULTI_MATCH_ENABLED=true
 AUTO_TRADE_ALLOW_COUNTER_BIAS=true
 AUTO_TRADE_TRACK_ALL_STRUCTURAL_MATCHES=true
+AUTO_TRADE_STRUCTURAL_GUARD_MODE=observe
+AUTO_TRADE_OPPOSING_BARRIER_VETO_ENABLED=false
+AUTO_TRADE_OVERLAP_VETO_ENABLED=false
+AUTO_TRADE_ZONE_COOLDOWN_ENABLED=false
+AUTO_TRADE_ZONE_RECONCILE_MODE=shadow
+AUTO_TRADE_RANGE_MIN_ENTRY_DRIFT_PIPS=10
+AUTO_TRADE_MAP_MIN_ENTRY_DRIFT_PIPS=10
+AUTO_TRADE_TREND_MIN_ENTRY_DRIFT_PIPS=15
+AUTO_TRADE_RANGE_MAX_ENTRY_DRIFT_ATR=1.0
+AUTO_TRADE_MAP_MAX_ENTRY_DRIFT_ATR=1.0
+AUTO_TRADE_TREND_MAX_ENTRY_DRIFT_ATR=1.5
+AUTO_TRADE_RANGE_HARD_ENTRY_DRIFT_PIPS=20
+AUTO_TRADE_MAP_HARD_ENTRY_DRIFT_PIPS=20
+AUTO_TRADE_TREND_HARD_ENTRY_DRIFT_PIPS=30
 AUTO_TRADE_CANDIDATE_STREAM=auto_trade:candidates
 AUTO_TRADE_EVENT_STREAM=auto_trade:events
 AUTO_TRADE_CANDIDATE_CONTRACT_VERSION=5
@@ -61,6 +75,12 @@ Owner `/algo` candidates bypass autonomous strategy selection and keep the
 entered SL/TP prices unchanged. Telegram first reports `ALGO REQUEST RECEIVED`
 and waits for the C# executor event before claiming a limit order, fill,
 dry-run or rejection.
+
+`observe` changes structural-quality guards into telemetry, target adjustment
+or a non-terminal wait. It does not weaken stale quote, malformed SL/TP,
+target-room, invalidation, duplicate, config, broker-connectivity or
+broker-confirmed-demo protections. `shadow` reconciliation computes comparison
+metrics while strategies continue to use the unreconciled zone set.
 
 ## Deploy
 
@@ -99,7 +119,10 @@ docker compose exec redis redis-cli GET auto_trade:executor_snapshot:XAU
 docker compose exec redis redis-cli GET auto_trade:range_context:XAU
 docker compose exec redis redis-cli GET auto_trade:range_context_compare:XAU
 docker compose exec redis redis-cli GET auto_trade:strategy_matches:XAU
+docker compose exec redis redis-cli GET auto_trade:last_guard:XAU
+docker compose exec redis redis-cli HGETALL auto_trade:zone_reconcile:XAU
 docker compose exec redis redis-cli HGETALL auto_trade:metrics:XAU
+docker compose exec redis redis-cli --scan --pattern 'auto_trade:guard_evaluation:XAU:*'
 docker compose exec redis redis-cli --scan --pattern 'auto_trade:evaluation:XAU:*'
 docker compose exec redis redis-cli XREVRANGE auto_trade:lifecycle_events + - COUNT 20
 docker compose exec redis redis-cli XREVRANGE auto_trade:events + - COUNT 20

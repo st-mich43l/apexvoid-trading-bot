@@ -29,6 +29,9 @@ AUTO_TRADE_ZONE_FILL_ENABLED
 AUTO_TRADE_MIN_CONFLUENCE
 AUTO_TRADE_REQUIRE_DEMO_ACCOUNT
 AUTO_TRADE_NON_HEDGED_OPPOSITE_POLICY
+AUTO_TRADE_STRUCTURAL_GUARD_MODE
+AUTO_TRADE_ZONE_COOLDOWN_ENABLED
+AUTO_TRADE_ZONE_RECONCILE_MODE
 ```
 
 Canonical manifest representation:
@@ -57,3 +60,30 @@ For non-hedged accounts,
 
 Non-hedged capability is visible as a warning and does not itself disable a
 demo executor.
+
+## Structural execution policy
+
+Python resolves the structural policy once from `AUTO_TRADE_PROFILE`; the C#
+manifest publishes the same resolved values:
+
+| Profile | Structural guard | Zone cooldown | Zone reconciliation |
+|---|---|---|---|
+| `demo_eval` | `observe` | disabled | `shadow` |
+| `conservative` | `balanced` | enabled | `enforce` |
+| non-demo/live-like | `strict` unless explicit | enabled | `enforce` unless explicit |
+
+Allowed values are:
+
+- `AUTO_TRADE_STRUCTURAL_GUARD_MODE=observe|balanced|strict`
+- `AUTO_TRADE_ZONE_RECONCILE_MODE=off|shadow|enforce`
+
+Structural guard and reconciliation-mode disagreement is warning-only in
+config health so an evaluation executor is not disabled by a presentation or
+shadow-policy mismatch. Existing fatal fields remain fatal. In particular,
+candidate contract, execution mode, Redis streams, symbol/pip contract and
+demo-account requirements still fail closed.
+
+`AUTO_TRADE_ZONE_COOLDOWN_ENABLED` controls Python enforcement. Even when
+enabled, only a Redis marker with `reason=stop_loss` and
+`confidence=confirmed` may block. `manual_close`, `external_close`,
+`reconciliation_unknown` and `take_profit` do not enforce a cooldown.
