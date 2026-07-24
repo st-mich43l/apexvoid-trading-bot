@@ -84,7 +84,8 @@ def select_range_target(
   When stop_pips is provided, also enforce minimum reward/risk so a tiny
   20-pip target is not selected into an oversized stop.
   """
-  ladder = configured_range_targets() if targets is None else targets
+  configured = configured_range_targets() if targets is None else targets
+  ladder = tuple(sorted(set(configured), reverse=True))
   buffer = range_tp_buffer_pips() if buffer_pips is None else buffer_pips
   rr_floor = range_min_rr() if min_rr is None else min_rr
   for target in ladder:

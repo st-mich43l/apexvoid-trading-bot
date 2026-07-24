@@ -790,6 +790,65 @@ def _strategy_group_id(match: StrategyMatch) -> str:
   )
 
 
+def _trend_group_id(
+  symbol: str,
+  decision: TrendDecision,
+) -> str:
+  return _group_id(
+    symbol.upper(),
+    "trend",
+    decision.direction.upper(),
+    decision.mode,
+    f"{decision.key_level:.5f}",
+    f"{decision.entry_zone[0]:.5f}",
+    f"{decision.entry_zone[1]:.5f}",
+  )
+
+
+def _strategy_mode_enabled(match: StrategyMatch) -> bool:
+  value = match.strategy.casefold()
+  if match.is_range_edge or "range" in value:
+    return settings.auto_trade_range_enabled
+  if "mapped" in value or match.family == "mapped_zone":
+    return settings.auto_trade_market_map_strategy_enabled
+  if "liquidity" in value or "sweep" in value:
+    return settings.auto_trade_liquidity_reversal_enabled
+  if "retest" in value:
+    return settings.auto_trade_retest_enabled
+  if "breakout" in value or "breakdown" in value:
+    return settings.auto_trade_breakout_enabled
+  if (
+    "reaction" in value
+    or "rejection" in value
+    or "supply" in value
+    or "demand" in value
+  ):
+    return settings.auto_trade_reaction_enabled
+  return settings.auto_trade_strategy_bridge_enabled
+
+
+def _trend_bias_metadata(
+  regime: RegimeInfo,
+  direction: str,
+) -> tuple[str, str]:
+  raw_bias = next(
+    (
+      reason.partition("=")[2].strip().casefold()
+      for reason in regime.reasons
+      if reason.startswith("htf_bias=")
+    ),
+    "range",
+  )
+  bias = {
+    "up": "bullish",
+    "down": "bearish",
+  }.get(raw_bias, "neutral")
+  if bias == "neutral":
+    return bias, "neutral"
+  local_bias = "bullish" if direction.upper() == "BUY" else "bearish"
+  return bias, "with_bias" if bias == local_bias else "counter_bias"
+
+
 async def _publish_candidate(
   client: Any,
   symbol: str,
@@ -806,6 +865,7 @@ async def _publish_candidate(
 ) -> str | None:
   if (
     not settings.auto_trade_enabled
+    or not settings.auto_trade_range_enabled
     or spot is None
     or not spot.fresh
     or decision.state != "candidate"
@@ -936,6 +996,10 @@ async def _publish_candidate(
       candidate_id,
     ),
     "strategy_family": "range",
+    "zone_id": f"{decision.box.box_id}:{decision.direction.upper()}",
+    "trigger_id": trigger_ts,
+    "parent_group_id": None,
+    "structural_source": "range_box_edge",
     "symbol": symbol.upper(),
     "timeframe": EXECUTION_TIMEFRAME,
     "setup": "Range Box Scalp",
@@ -960,6 +1024,8 @@ async def _publish_candidate(
     "sweep_low": decision.sweep_low,
     "sweep_high": decision.sweep_high,
     "regime": regime.state if regime is not None else "chop",
+    "bias": "neutral",
+    "relationship_to_bias": "neutral",
     "opposing_zone_low": None if opposing_zone is None else opposing_zone.low,
     "opposing_zone_high": None if opposing_zone is None else opposing_zone.high,
     "add_zone_side": None if opposing_zone is None else opposing_zone.side,
@@ -1064,6 +1130,7 @@ async def _publish_strategy_match(
     return None
   if (
     not settings.auto_trade_enabled
+    or not _strategy_mode_enabled(match)
     or match.symbol != symbol.upper()
     or match.confluence < max(1, settings.auto_trade_min_confluence)
   ):
@@ -1235,6 +1302,13 @@ async def _publish_strategy_match(
     "match_id": match.match_id,
     "group_id": _strategy_group_id(match),
     "strategy_family": match.family or "scanner",
+    "zone_id": (
+      match.range_id
+      or f"{match.key_level:.5f}:{match.entry_low:.5f}:{match.entry_high:.5f}"
+    ),
+    "trigger_id": match.event_ts,
+    "parent_group_id": None,
+    "structural_source": match.strategy,
     "symbol": symbol.upper(),
     "timeframe": match.source_tf,
     "setup": setup,
@@ -1266,6 +1340,16 @@ async def _publish_strategy_match(
     "range_high": match.range_high,
     "full_take_profit_pips": match.full_take_profit_pips,
     "regime": "strategy_match",
+    "bias": (
+      "bullish" if market_map is not None and market_map.bias == "up"
+      else "bearish" if market_map is not None and market_map.bias == "down"
+      else "neutral"
+    ),
+    "relationship_to_bias": (
+      "counter_bias" if "counter_bias" in match.tags
+      else "neutral" if market_map is None or market_map.bias == "range"
+      else "with_bias"
+    ),
   }
   try:
     await client.xadd(
@@ -1476,16 +1560,39 @@ async def _publish_trend_candidate(
     )
     if frames is not None else None
   )
+  group_id = _trend_group_id(symbol, trend_decision)
+  parent_group_id = None
+  raw_snapshot = await client.get(
+    f"auto_trade:executor_snapshot:{symbol.upper()}"
+  )
+  if raw_snapshot:
+    try:
+      snapshot = json.loads(
+        raw_snapshot.decode()
+        if isinstance(raw_snapshot, bytes)
+        else str(raw_snapshot)
+      )
+      if group_id[:10] in (snapshot.get("group_ids") or []):
+        parent_group_id = group_id
+    except (TypeError, ValueError, json.JSONDecodeError):
+      log.warning("Invalid executor snapshot while routing trend candidate")
+  bias, relationship_to_bias = _trend_bias_metadata(
+    regime,
+    trend_decision.direction,
+  )
   payload = {
     "version": 3,
     "candidate_id": candidate_id,
-    "group_id": _group_id(
-      symbol,
-      "trend",
-      trend_decision.direction,
-      trend_decision.mode,
-    ),
+    "group_id": group_id,
     "strategy_family": "trend",
+    "zone_id": (
+      f"{trend_decision.key_level:.5f}:"
+      f"{trend_decision.entry_zone[0]:.5f}:"
+      f"{trend_decision.entry_zone[1]:.5f}"
+    ),
+    "trigger_id": trigger_ts,
+    "parent_group_id": parent_group_id,
+    "structural_source": trend_decision.mode,
     "symbol": symbol.upper(),
     "timeframe": EXECUTION_TIMEFRAME,
     "setup": _TREND_SETUP_LABELS[trend_decision.mode],
@@ -1506,6 +1613,8 @@ async def _publish_trend_candidate(
     "structure_swing": trend_decision.structure_swing,
     "targets_pips": list(trend_decision.targets_pips),
     "regime": regime.state,
+    "bias": bias,
+    "relationship_to_bias": relationship_to_bias,
     "opposing_zone_low": None if opposing_zone is None else opposing_zone.low,
     "opposing_zone_high": None if opposing_zone is None else opposing_zone.high,
     "add_zone_side": None if opposing_zone is None else opposing_zone.side,

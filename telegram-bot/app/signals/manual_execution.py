@@ -3,12 +3,9 @@
 Two independent loops, both no-ops unless ``settings.manual_algo_enabled``:
 
 - ``bridge_intents_loop``: translates each published ``ManualTradeIntent``
-  (``app.signals.manual_intent``, PR 2) into a ``TradeCandidate``-shaped
-  payload and ``XADD``s it onto the SAME ``auto_trade:candidates`` stream the
-  autonomous box-scalp/trend/strategy-match engines already publish to, so a
-  manual-algo signal gets the entire existing gate/reject/sizing/execution
-  machinery in ``ctrader-engine`` for free. ``manual_trade:intents`` stays
-  the Python-side system of record; this bridge is its only consumer.
+  into the dedicated ``mode=manual_algo`` owner-execution contract. The C#
+  executor routes that mode before autonomous strategy, bias and scale-in
+  gates while retaining broker validation and candidate idempotency.
 - ``reconcile_events_loop``: reads ``auto_trade:events`` (the SAME stream
   ``app.autotrade.delivery``'s owner-DM loop reads — a second independent
   ``XREAD`` reader with its own cursor key is safe, there are no consumer
@@ -27,9 +24,6 @@ import asyncio
 import json
 import logging
 
-from app.analysis.math_utils import atr_series
-from app.analysis.ohlc_source import RedisOHLCSource
-from app.autotrade import worker
 from app.bot.client import send_scanner_with_retry
 from app.core.config import settings
 from app.persistence import redis_state
@@ -59,6 +53,76 @@ _FILL_EVENT_TYPE = "manual_opened"
 
 def _pending_close_key(position_id: int) -> str:
   return f"manual_trade:pending_close:{position_id}"
+
+
+def _price(value: object) -> str:
+  if value is None:
+    return "n/a"
+  return f"{float(value):,.2f}"
+
+
+def _target_text(event: dict) -> str:
+  targets = event.get("target_prices") or []
+  return " / ".join(_price(value) for value in targets) or "n/a"
+
+
+async def _send_executor_truth(text: str) -> None:
+  if settings.telegram_owner_id:
+    await send_scanner_with_retry(
+      text,
+      chat_id=settings.telegram_owner_id,
+    )
+
+
+async def _handle_limit_placed(event: dict) -> None:
+  candidate_id = str(event.get("candidate_id") or "")
+  if not candidate_id:
+    return
+  sig = await get_signal_by_execution_intent_id(candidate_id)
+  if sig is not None:
+    await set_execution_status(sig["id"], "pending")
+  entry_low = event.get("entry_low")
+  entry_high = event.get("entry_high")
+  entry = (
+    f"{_price(entry_low)}-{_price(entry_high)}"
+    if entry_low is not None and entry_high is not None
+    else _price(event.get("price"))
+  )
+  await _send_executor_truth(
+    "✅ <b>LIMIT ORDER PLACED</b>\n"
+    f"Direction: <b>{event.get('direction') or 'n/a'}</b>\n"
+    f"Entry: <code>{entry}</code>\n"
+    f"SL: <code>{_price(event.get('stop_loss'))}</code>\n"
+    f"TPs: <code>{_target_text(event)}</code>\n"
+    f"Order ID: <code>{event.get('order_id') or 'n/a'}</code>\n"
+    f"Candidate ID: <code>{candidate_id}</code>"
+  )
+
+
+async def _handle_execution_rejected(event: dict) -> None:
+  candidate_id = str(event.get("candidate_id") or "")
+  reason = str(event.get("reason_code") or "unknown_rejection")
+  if candidate_id:
+    sig = await get_signal_by_execution_intent_id(candidate_id)
+    if sig is not None:
+      await set_execution_status(sig["id"], "rejected", error=reason)
+  await _send_executor_truth(
+    "⛔ <b>ORDER REJECTED</b>\n"
+    f"Reason: <code>{reason}</code>\n"
+    "No broker order submitted"
+  )
+
+
+async def _handle_dry_run(event: dict) -> None:
+  candidate_id = str(event.get("candidate_id") or "")
+  if candidate_id:
+    sig = await get_signal_by_execution_intent_id(candidate_id)
+    if sig is not None:
+      await set_execution_status(sig["id"], "dry_run")
+  await _send_executor_truth(
+    "🧪 <b>DRY-RUN ONLY</b>\n"
+    "No broker order submitted"
+  )
 
 
 def _intent_to_candidate_payload(intent: ManualTradeIntent) -> dict:
@@ -99,7 +163,7 @@ def _intent_to_candidate_payload(intent: ManualTradeIntent) -> dict:
     "candidate_id": intent.intent_id,
     "symbol": "XAU",
     "timeframe": "M1",
-    "setup": "Manual Algo",
+    "setup": intent.setup_type or "Manual Algo",
     "mode": "manual_algo",
     "direction": intent.direction,
     "trigger_ts": str(intent.created_at),
@@ -117,66 +181,16 @@ def _intent_to_candidate_payload(intent: ManualTradeIntent) -> dict:
     "manual_stop_loss": intent.sl,
     "manual_expires_at": intent.expires_at,
     "targets_pips": targets_pips,
+    "manual_take_profits": list(intent.tps),
+    "group_id": intent.intent_id,
+    "strategy_family": "manual",
+    "zone_id": f"manual-zone:{intent.manual_signal_id}",
+    "trigger_id": intent.intent_id,
+    "parent_group_id": None,
+    "structural_source": "owner_instruction",
+    "bias": "neutral",
+    "relationship_to_bias": "neutral",
   }
-
-
-async def _warn_if_would_be_vetoed(
-  client,
-  intent: ManualTradeIntent,
-  reference_entry: float,
-) -> None:
-  """Manual /algo entries never go through worker.py's veto functions (they
-  bypass worker.py entirely, XADD-ing straight onto the candidate stream) -
-  that's a deliberate design choice, the owner's entry is a deliberate
-  choice too. But the owner should still be told when they're about to do
-  what the auto path would have refused, so this reuses worker.py's pure
-  veto-reason functions read-only, in a single pass, and only ever warns.
-  """
-  if not settings.telegram_owner_id:
-    return
-  try:
-    symbol = "XAU"
-    frames = await worker._load_frames(RedisOHLCSource(client), symbol)
-    m1 = frames.get("M1")
-    atr = None
-    if m1 is not None and not m1.empty:
-      atr_length = max(2, int(getattr(settings, "atr_length", 14)))
-      atr = float(atr_series(m1, atr_length).iloc[-1])
-    htf_zones = worker._htf_zones(frames, settings)
-    htf_levels = worker._htf_levels(frames, settings)
-    cached_market_map = worker.decode_market_map(
-      await client.get(worker.market_map_key(symbol))
-    )
-    reasons = []
-    barrier_reason = worker._opposing_barrier_reason(
-      intent.direction, reference_entry, atr, htf_zones, htf_levels,
-      settings.auto_trade_opposing_barrier_atr,
-    )
-    if barrier_reason is not None:
-      reasons.append(barrier_reason)
-    cooldown_reason = await worker._zone_cooldown_reason(
-      client, symbol, intent.direction, reference_entry, atr,
-      settings.auto_trade_zone_cooldown_atr,
-    )
-    if cooldown_reason is not None:
-      reasons.append(cooldown_reason)
-    overlap_reason = worker._overlapping_zone_conflict_reason(
-      reference_entry, cached_market_map,
-    )
-    if overlap_reason is not None:
-      reasons.append(overlap_reason)
-    if not reasons:
-      return
-    text = (
-      "⚠️ <b>Manual /algo entry warning</b>\n"
-      f"{intent.direction} {reference_entry:.2f} would be refused on the "
-      "auto path:\n" + "\n".join(f"• {reason}" for reason in reasons)
-    )
-    await send_scanner_with_retry(text, chat_id=settings.telegram_owner_id)
-  except Exception:
-    log.exception(
-      "manual-algo warning check failed for intent %s", intent.intent_id,
-    )
 
 
 async def _process_intent_entries(client, entries, *, cursor: str) -> str:
@@ -190,9 +204,6 @@ async def _process_intent_entries(client, entries, *, cursor: str) -> str:
         {"payload": json.dumps(candidate, separators=(",", ":"))},
         maxlen=max(100, settings.auto_trade_stream_maxlen),
         approximate=True,
-      )
-      await _warn_if_would_be_vetoed(
-        client, intent, float(candidate["current_price"]),
       )
     except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
       log.warning("Invalid manual trade intent %s: %s", entry_id, exc)
@@ -272,7 +283,7 @@ async def _handle_fill_event(
 ) -> None:
   from app.signals import trade_ops  # local import breaks the module cycle
 
-  if event.get("setup") != "Manual Algo":
+  if event.get("stream") != "algo_manual":
     return
   candidate_id = event.get("candidate_id")
   position_id = event.get("position_id")
@@ -293,6 +304,13 @@ async def _handle_fill_event(
     return
   await set_execution_fill(
     sig["id"], broker_position_id=int(position_id), broker_fill_price=float(price),
+  )
+  await _send_executor_truth(
+    "✅ <b>POSITION OPENED</b>\n"
+    f"Direction: <b>{event.get('direction') or sig.get('action')}</b>\n"
+    f"Fill price: <code>{_price(price)}</code>\n"
+    f"Volume: <code>{event.get('volume') or 'n/a'}</code>\n"
+    f"Position ID: <code>{position_id}</code>"
   )
   result = await trade_ops.do_active({"sid": sig["id"]})
   await trade_ops.post_result(result, sig.get("symbol", "XAU"))
@@ -464,6 +482,16 @@ async def _handle_event(
   positions: dict[int, int],
 ) -> None:
   event_type = event.get("type")
+  is_manual = event.get("stream") == "algo_manual"
+  if event_type == "manual_limit_placed" and is_manual:
+    await _handle_limit_placed(event)
+    return
+  if event_type == "dry_run" and is_manual:
+    await _handle_dry_run(event)
+    return
+  if event_type == "rejected" and is_manual:
+    await _handle_execution_rejected(event)
+    return
   if event_type == _FILL_EVENT_TYPE:
     await _handle_fill_event(event, positions)
     return

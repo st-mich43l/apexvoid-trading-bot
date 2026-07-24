@@ -5,7 +5,7 @@ from app.core.config import settings
 
 SYMBOLS = {
   "XAU": {
-    "pip": 0.1,
+    "pip": settings.auto_trade_xau_pip_size,
     "digits": 2,
   },
   # "US30": {"pip": 1.0, "digits": 1},

@@ -26,22 +26,19 @@ def same_thesis(left: StrategyMatch, right: StrategyMatch, *, atr: float) -> boo
     return False
   if left.event_ts != right.event_ts:
     return False
+  if left.strategy != right.strategy:
+    return False
   if left.family and right.family and left.family != right.family:
+    return False
+  if left.range_id != right.range_id:
     return False
   if left.targets_pips != right.targets_pips:
     return False
-  tol = max(atr * 0.35, 0.5) if atr > 0 else 0.5
-  overlap = (
-    min(left.entry_high, right.entry_high) - max(left.entry_low, right.entry_low)
+  return (
+    math.isclose(left.key_level, right.key_level, abs_tol=_EPS)
+    and math.isclose(left.entry_low, right.entry_low, abs_tol=_EPS)
+    and math.isclose(left.entry_high, right.entry_high, abs_tol=_EPS)
   )
-  width = max(
-    left.entry_high - left.entry_low,
-    right.entry_high - right.entry_low,
-    _EPS,
-  )
-  level_close = abs(left.key_level - right.key_level) <= tol
-  zone_overlap = overlap >= 0.45 * width
-  return level_close and zone_overlap
 
 
 def merge_confluence(primary: StrategyMatch, secondary: StrategyMatch) -> StrategyMatch:

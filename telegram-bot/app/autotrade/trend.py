@@ -87,9 +87,9 @@ def classify_regime(
   """Classify the current M1 regime as chop, trend, or breakout.
 
   Evaluation order: a fresh, accepted box break wins outright (breakout),
-  then a structurally-confirmed, HTF-aligned, ATR-expanding trend, else
-  chop. See module docstring for why this stays independent of the
-  scanner/detector stack while still reusing analysis primitives.
+  then a structurally-confirmed, ATR-expanding trend, else chop. HTF bias is
+  retained as alignment metadata; demo evaluation may execute a valid local
+  structure in either direction.
   """
   m1_raw = frames.get("M1")
   if m1_raw is None or m1_raw.empty:
@@ -167,7 +167,10 @@ def classify_regime(
   if m15 is not None and not m15.empty:
     htf_bias = analyze({"M15": m15}, htf_order=["M15"]).htf_bias
   htf_aligned = htf_bias == structure or htf_bias == "range"
-  if not htf_aligned:
+  if (
+    not htf_aligned
+    and not bool(getattr(cfg, "auto_trade_allow_counter_bias", False))
+  ):
     return _maybe_directional_trend(
       m1,
       swings,
@@ -189,7 +192,7 @@ def classify_regime(
       structure,
       bos_count,
       atr_ratio,
-      True,
+      htf_aligned,
       (
         f"atr_ratio {atr_ratio:.2f} < required {expansion_needed:.2f}",
       ),
@@ -197,11 +200,13 @@ def classify_regime(
     )
 
   return RegimeInfo(
-    "trend", structure, bos_count, atr_ratio, True, None,
+    "trend", structure, bos_count, atr_ratio, htf_aligned, None,
     (
       f"bos_count={bos_count}",
       f"range height {height:.1f} >= {min_height_atr:.2f}x ATR",
       f"htf_bias={htf_bias}",
+      "relationship_to_bias="
+      + ("with_bias" if htf_aligned else "counter_bias"),
       f"atr_ratio={atr_ratio:.2f}",
     ),
   )

@@ -382,9 +382,15 @@ def _exec(ctx: DetectionContext) -> tuple[pd.DataFrame, IndicatorSet, StructureS
 
 
 def _direction(ctx: DetectionContext) -> str | None:
-  if ctx.htf_bias == "up":
+  local_bias = ctx.structures[ctx.tf].bias
+  directional_bias = (
+    local_bias
+    if ctx.settings.allow_counter_trend and local_bias in {"up", "down"}
+    else ctx.htf_bias
+  )
+  if directional_bias == "up":
     return "BUY"
-  if ctx.htf_bias == "down":
+  if directional_bias == "down":
     return "SELL"
   return None
 
@@ -597,6 +603,8 @@ def _confirmation_direction(ctx: DetectionContext) -> str | None:
   direction = _direction(ctx)
   if direction is None:
     return None
+  if ctx.settings.allow_counter_trend:
+    return direction
   return direction if ctx.htf_bias == _bias_for_direction(direction) else None
 
 
@@ -827,10 +835,17 @@ def trend_pullback(ctx: DetectionContext) -> DetectionResult | None:
   if _in_chop(ctx):
     return None
   direction = _confirmation_direction(ctx)
+  htf_aligned = (
+    direction is not None
+    and ctx.htf_bias == _bias_for_direction(direction)
+  )
   if (
     direction is None
     or not _pd_gate(st, direction, ctx.settings)
-    or st.bias != ctx.htf_bias
+    or (
+      not ctx.settings.allow_counter_trend
+      and st.bias != ctx.htf_bias
+    )
     or not _rejection(df, direction)
   ):
     return None
@@ -852,6 +867,7 @@ def trend_pullback(ctx: DetectionContext) -> DetectionResult | None:
   level = _zone_key(zone, price, direction)
   reasons = [
     f"HTF bias {ctx.htf_bias}",
+    "with_bias" if htf_aligned else "counter_bias",
     "pullback into structure zone",
     "rejection at support" if direction == "BUY" else "rejection at supply",
   ]
@@ -859,7 +875,7 @@ def trend_pullback(ctx: DetectionContext) -> DetectionResult | None:
   if ctx.session_ok:
     reasons.append("session")
   factors = ConfluenceFactors(
-    htf_aligned=True,  # gated above via st.bias == ctx.htf_bias
+    htf_aligned=htf_aligned,
     touches=zone.touches,
     wick_rejection=True,  # gated above via _rejection(df, direction)
     session_context=ctx.session_ok,

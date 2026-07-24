@@ -309,21 +309,23 @@ def _select_reaction_detailed(
   cfg: Any = None,
   rendered_map: MarketMap | None = None,
 ) -> _ReactionSelection:
-  direction = "BUY" if market_map.bias == "up" else "SELL" if market_map.bias == "down" else None
-  if direction is None:
-    return _ReactionSelection(
-      None,
-      "waiting_for_bias",
-      ("Market Map HTF bias is range",),
-      len(market_map.entries),
-      (),
-      _filter_counts(side=len(market_map.entries)),
-    )
-  side = "buy" if direction == "BUY" else "sell"
-  counter_enabled = bool(
-    getattr(cfg, "auto_trade_map_counter_bias_enabled", False)
+  bias_side = (
+    "buy" if market_map.bias == "up"
+    else "sell" if market_map.bias == "down"
+    else None
   )
-  counter_side = "sell" if side == "buy" else "buy"
+  direction = (
+    "BUY/SELL"
+    if bias_side is None
+    else "BUY" if bias_side == "buy" else "SELL"
+  )
+  counter_enabled = bool(
+    getattr(
+      cfg,
+      "auto_trade_allow_counter_bias",
+      getattr(cfg, "auto_trade_map_counter_bias_enabled", False),
+    )
+  )
   counts = {
     "side": 0,
     "actionable": 0,
@@ -332,25 +334,19 @@ def _select_reaction_detailed(
   }
   candidates: list[tuple[MapEntry, str, bool]] = []
   for entry in market_map.entries:
-    aligned = entry.side == side
-    counter_bias = counter_enabled and entry.side == counter_side
-    if not aligned and not counter_bias:
+    counter_bias = bias_side is not None and entry.side != bias_side
+    if counter_bias and not counter_enabled:
       counts["side"] += 1
       continue
-    if aligned:
-      if not _semantic_actionable(entry):
-        counts["actionable"] += 1
-        continue
-      if not _actionable(entry, atr, cfg):
-        counts["degenerate_width"] += 1
-        continue
-    else:
-      if not _counter_bias_quality(entry, market_map, atr, cfg):
-        counts["actionable"] += 1
-        continue
-      if not _width_is_actionable(entry, atr, cfg, warn=True):
-        counts["degenerate_width"] += 1
-        continue
+    if not (
+      _semantic_actionable(entry)
+      or _counter_bias_quality(entry, market_map, atr, cfg)
+    ):
+      counts["actionable"] += 1
+      continue
+    if not _width_is_actionable(entry, atr, cfg, warn=True):
+      counts["degenerate_width"] += 1
+      continue
     candidate_direction = "BUY" if entry.side == "buy" else "SELL"
     candidates.append((entry, candidate_direction, counter_bias))
 

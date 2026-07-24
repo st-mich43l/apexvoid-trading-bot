@@ -146,7 +146,10 @@ def _band_dedup_key(symbol: str, result: DetectionResult) -> str:
     midpoint,
     settings.scanner_level_bucket,
   )
-  return f"scanner:alerted_band:{symbol}:{result.direction}:{bucket}"
+  return (
+    f"scanner:alerted_band:{symbol}:{result.direction}:"
+    f"{result.mode}:{result.setup}:{bucket}"
+  )
 
 
 def _configured_strategy_targets() -> tuple[int, ...]:
@@ -921,6 +924,9 @@ def _trusted_spot_values(
 def _digest_results(
   results: list[DetectionResult],
 ) -> tuple[list[DetectionResult], list[dict[str, Any]]]:
+  if settings.auto_trade_track_all_structural_matches:
+    candidates, conflicts = _suppress_overlaps(results)
+    return sorted(candidates, key=_result_rank), conflicts
   primary, primary_conflicts = _suppress_overlaps([
     result for result in results
     if result.mode in {"with_trend", "range_scalp"}
@@ -975,6 +981,8 @@ def _suppress_overlaps(
   for result in ordered:
     same_direction_duplicate = any(
       result.direction == kept.direction
+      and result.setup == kept.setup
+      and result.mode == kept.mode
       and _zone_overlap_ratio(result.entry_zone, kept.entry_zone) >= same_threshold
       for kept in selected
     )
@@ -982,7 +990,10 @@ def _suppress_overlaps(
       continue
     # `selected` is built in rank order, so the first opposing overlap found
     # is always the strongest (highest-ranked) survivor so far.
-    opposing = next(
+    opposing = None if (
+      settings.auto_trade_track_all_structural_matches
+      and settings.auto_trade_allow_counter_bias
+    ) else next(
       (
         kept for kept in selected
         if result.direction != kept.direction
@@ -1051,18 +1062,18 @@ async def _notify_digest_once(
     )
     return []
 
-  band_key = _band_dedup_key(symbol, results[0])
-  if await client.get(band_key) is not None:
-    log.debug(
-      "scanner detection suppressed by zone band TTL symbol=%s tf=%s key=%s",
-      symbol,
-      tf,
-      band_key,
-    )
-    return []
-
   claimed_results = []
   for result in results:
+    band_key = _band_dedup_key(symbol, result)
+    if await client.get(band_key) is not None:
+      log.debug(
+        "scanner detection suppressed by zone band TTL "
+        "symbol=%s tf=%s key=%s",
+        symbol,
+        tf,
+        band_key,
+      )
+      continue
     key = _dedup_key(symbol, tf, result)
     claimed = await client.set(
       key,
@@ -1074,7 +1085,12 @@ async def _notify_digest_once(
       claimed_results.append(result)
   if not claimed_results:
     return []
-  await client.set(band_key, "1", ex=settings.zone_alert_ttl)
+  for result in claimed_results:
+    await client.set(
+      _band_dedup_key(symbol, result),
+      "1",
+      ex=settings.zone_alert_ttl,
+    )
   await notify(
     _format_detection(
       symbol,

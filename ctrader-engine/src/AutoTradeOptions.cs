@@ -65,7 +65,23 @@ public sealed record AutoTradeOptions(
   bool TrackAllStructuralMatches = false,
   string RedisUrl = "redis://redis:6379/0",
   string CanonicalSymbol = "XAU",
-  int CandidateContractVersion = 4
+  int CandidateContractVersion = 5,
+  bool ManualAlgoEnabled = false,
+  bool TrendEnabled = false,
+  bool RangeEnabled = true,
+  bool MappedZoneEnabled = true,
+  bool StrategyMatchEnabled = true,
+  bool BreakoutEnabled = true,
+  bool RetestEnabled = true,
+  bool ReactionEnabled = true,
+  bool LiquidityReversalEnabled = true,
+  bool AllowCounterBias = true,
+  int CandidateStorageTtlSeconds = 86400,
+  IReadOnlyList<string>? Symbols = null,
+  int ConfigManifestVersion = 2,
+  string NonHedgedOppositePolicy = "reject",
+  IReadOnlyDictionary<string, string>? ConfigSources = null,
+  IReadOnlyList<string>? DeprecatedVariables = null
 )
 {
   // Shared target-selection contract (app/autotrade/range_targets.py on the
@@ -84,6 +100,14 @@ public sealed record AutoTradeOptions(
   public IReadOnlyList<int> EffectiveRangeTargetsPips =>
     RangeTargetsPips ?? DefaultRangeTargetsPips;
 
+  public IReadOnlyList<string> EffectiveSymbols =>
+    (Symbols ?? [CanonicalSymbol])
+      .Select(value => value.Trim().ToUpperInvariant())
+      .Where(value => value.Length > 0)
+      .Distinct(StringComparer.Ordinal)
+      .Order(StringComparer.Ordinal)
+      .ToArray();
+
   public ExposurePolicy ExposurePolicy => (
     AllowConcurrentStrategies,
     AllowHedgedXau
@@ -96,88 +120,228 @@ public sealed record AutoTradeOptions(
 
   public static AutoTradeOptions FromEnvironment()
   {
-    var profile = Env("AUTO_TRADE_PROFILE", "conservative").ToLowerInvariant();
+    var resolver = new EnvironmentResolver();
+    var profile = resolver.String(
+      "AUTO_TRADE_PROFILE",
+      "conservative"
+    ).ToLowerInvariant();
     var demoEval = profile == "demo_eval";
-    return new(
-    Enabled: Bool("AUTO_TRADE_ENABLED", false),
-    DryRun: Bool("AUTO_TRADE_DRY_RUN", true),
-    ExpectedBroker: Env("AUTO_TRADE_EXPECTED_BROKER", "fpmarkets"),
-    StopLossDistance: Decimal("AUTO_TRADE_SL_DISTANCE", 6.5m),
-    TargetsPips: IntList("AUTO_TRADE_TP_PIPS", "30,60,90,120,200"),
-    TargetWeights: IntList("AUTO_TRADE_TP_WEIGHTS", "20,20,20,20,20"),
-    BreakEvenBufferPips: Int("AUTO_TRADE_BE_BUFFER_PIPS", 3),
-    CandidateMaxAgeSeconds: Int("AUTO_TRADE_CANDIDATE_MAX_AGE", 90),
-    SpotMaxAgeSeconds: Int("AUTO_TRADE_SPOT_MAX_AGE", 5),
-    MaxSpreadPips: Int("AUTO_TRADE_MAX_SPREAD_PIPS", 5),
-    MaxEntryDistancePips: Int("AUTO_TRADE_MAX_ENTRY_DISTANCE_PIPS", 10),
-    MinConfluence: Int("AUTO_TRADE_MIN_CONFLUENCE", 2),
-    PollMilliseconds: Int("AUTO_TRADE_POLL_MS", 1000),
-    CandidateStream: Env("AUTO_TRADE_STREAM", "auto_trade:candidates"),
-    EventStream: Env("AUTO_TRADE_EVENT_STREAM", "auto_trade:events"),
-    Label: Env("AUTO_TRADE_LABEL", "apexvoid-auto"),
-    RequireDemoOnlyToken: Bool("AUTO_TRADE_REQUIRE_DEMO_ONLY_TOKEN", false),
-    RiskPercent: Decimal("AUTO_TRADE_RISK_PCT", 2m),
-    SizingMode: Env("AUTO_TRADE_SIZING_MODE", "min"),
-    PipValuePerLot: Decimal("AUTO_TRADE_PIP_VALUE_PER_LOT", 10m),
-    PipSize: Decimal("AUTO_TRADE_PIP_SIZE", 0.1m),
-    ContractSize: Decimal("AUTO_TRADE_CONTRACT_SIZE", 100m),
-    MaxTranches: Int("AUTO_TRADE_MAX_TRANCHES", 2),
-    AddRiskFraction: Decimal("AUTO_TRADE_ADD_RISK_FRACTION", 0.5m),
-    AddMaxAgeBars: Int("AUTO_TRADE_ADD_MAX_AGE_BARS", 3),
-    AddCooldownBars: Int("AUTO_TRADE_ADD_COOLDOWN_BARS", 3),
-    AddLevelBufferAtr: Decimal("AUTO_TRADE_ADD_LEVEL_BUFFER_ATR", 1m),
-    AddStopBufferAtr: Decimal("AUTO_TRADE_ADD_STOP_BUFFER_ATR", 0.3m),
-    AddMinStopPips: Int("AUTO_TRADE_ADD_MIN_STOP_PIPS", 30),
-    AddRequireRiskFree: Bool("AUTO_TRADE_ADD_REQUIRE_RISK_FREE", false),
-    ZoneFillEnabled: Bool("AUTO_TRADE_ZONE_FILL_ENABLED", false),
-    ZoneFillMinLots: Decimal("AUTO_TRADE_ZONE_FILL_MIN_LOTS", 0.09m),
-    ZoneFillMinAtr: Decimal("AUTO_TRADE_ZONE_FILL_MIN_ATR", 0.5m),
-    ZoneFillTtlBars: Int("AUTO_TRADE_ZONE_FILL_TTL_BARS", 3),
-    ZoneFillFallbackEnabled: Bool("AUTO_TRADE_ZONE_FILL_FALLBACK_ENABLED", true),
-    InsideZoneMarketEntryEnabled: Bool(
+    var profileSource = demoEval ? "profile_demo_eval" : "application_default";
+    var options = new AutoTradeOptions(
+    Enabled: resolver.Bool(
+      "AUTO_TRADE_ENABLED", demoEval, profileSource
+    ),
+    DryRun: resolver.Bool(
+      "AUTO_TRADE_DRY_RUN", !demoEval, profileSource
+    ),
+    ExpectedBroker: resolver.String(
+      "AUTO_TRADE_EXPECTED_BROKER", "fpmarkets"
+    ),
+    StopLossDistance: resolver.Decimal("AUTO_TRADE_SL_DISTANCE", 6.5m),
+    TargetsPips: resolver.IntList(
+      "AUTO_TRADE_TARGET_PLANS_PIPS",
+      "30,60,90,120,200",
+      "AUTO_TRADE_TP_PIPS"
+    ),
+    TargetWeights: resolver.IntList(
+      "AUTO_TRADE_TP_WEIGHTS", "20,20,20,20,20"
+    ),
+    BreakEvenBufferPips: resolver.Int("AUTO_TRADE_BE_BUFFER_PIPS", 3),
+    CandidateMaxAgeSeconds: resolver.Int(
+      "AUTO_TRADE_CANDIDATE_MAX_AGE_SECONDS",
+      demoEval ? 420 : 90,
+      profileSource,
+      "AUTO_TRADE_CANDIDATE_MAX_AGE"
+    ),
+    SpotMaxAgeSeconds: resolver.Int(
+      "AUTO_TRADE_SPOT_MAX_AGE_SECONDS",
+      5,
+      "application_default",
+      "AUTO_TRADE_SPOT_MAX_AGE"
+    ),
+    MaxSpreadPips: resolver.Int("AUTO_TRADE_MAX_SPREAD_PIPS", 5),
+    MaxEntryDistancePips: resolver.Int(
+      "AUTO_TRADE_MAX_ENTRY_DISTANCE_PIPS", 10
+    ),
+    MinConfluence: resolver.Int("AUTO_TRADE_MIN_CONFLUENCE", 2),
+    PollMilliseconds: resolver.Int("AUTO_TRADE_POLL_MS", 1000),
+    CandidateStream: resolver.String(
+      "AUTO_TRADE_CANDIDATE_STREAM",
+      "auto_trade:candidates",
+      "application_default",
+      "AUTO_TRADE_STREAM"
+    ),
+    EventStream: resolver.String(
+      "AUTO_TRADE_EVENT_STREAM", "auto_trade:events"
+    ),
+    Label: resolver.String("AUTO_TRADE_LABEL", "apexvoid-auto"),
+    RequireDemoOnlyToken: resolver.Bool(
+      "AUTO_TRADE_REQUIRE_DEMO_ONLY_TOKEN", false
+    ),
+    RiskPercent: resolver.Decimal("AUTO_TRADE_RISK_PCT", 2m),
+    SizingMode: resolver.String("AUTO_TRADE_SIZING_MODE", "min"),
+    PipValuePerLot: resolver.Decimal(
+      "AUTO_TRADE_PIP_VALUE_PER_LOT", 10m
+    ),
+    PipSize: resolver.Decimal(
+      "AUTO_TRADE_XAU_PIP_SIZE",
+      0.1m,
+      "application_default",
+      "AUTO_TRADE_PIP_SIZE"
+    ),
+    ContractSize: resolver.Decimal(
+      "AUTO_TRADE_XAU_CONTRACT_SIZE",
+      100m,
+      "application_default",
+      "AUTO_TRADE_CONTRACT_SIZE"
+    ),
+    MaxTranches: resolver.Int("AUTO_TRADE_MAX_TRANCHES", 2),
+    AddRiskFraction: resolver.Decimal(
+      "AUTO_TRADE_ADD_RISK_FRACTION", 0.5m
+    ),
+    AddMaxAgeBars: resolver.Int("AUTO_TRADE_ADD_MAX_AGE_BARS", 3),
+    AddCooldownBars: resolver.Int("AUTO_TRADE_ADD_COOLDOWN_BARS", 3),
+    AddLevelBufferAtr: resolver.Decimal(
+      "AUTO_TRADE_ADD_LEVEL_BUFFER_ATR", 1m
+    ),
+    AddStopBufferAtr: resolver.Decimal(
+      "AUTO_TRADE_ADD_STOP_BUFFER_ATR", 0.3m
+    ),
+    AddMinStopPips: resolver.Int("AUTO_TRADE_ADD_MIN_STOP_PIPS", 30),
+    AddRequireRiskFree: resolver.Bool(
+      "AUTO_TRADE_ADD_REQUIRE_RISK_FREE", false
+    ),
+    ZoneFillEnabled: resolver.Bool(
+      "AUTO_TRADE_ZONE_FILL_ENABLED", demoEval, profileSource
+    ),
+    ZoneFillMinLots: resolver.Decimal(
+      "AUTO_TRADE_ZONE_FILL_MIN_LOTS", 0.09m
+    ),
+    ZoneFillMinAtr: resolver.Decimal(
+      "AUTO_TRADE_ZONE_FILL_MIN_ATR", 0.5m
+    ),
+    ZoneFillTtlBars: resolver.Int("AUTO_TRADE_ZONE_FILL_TTL_BARS", 3),
+    ZoneFillFallbackEnabled: resolver.Bool(
+      "AUTO_TRADE_ZONE_FILL_FALLBACK_ENABLED", true
+    ),
+    InsideZoneMarketEntryEnabled: resolver.Bool(
       "AUTO_TRADE_INSIDE_ZONE_MARKET_ENTRY_ENABLED",
       true
     ),
-    BoxMinRiskReward: Decimal("AUTO_TRADE_BOX_MIN_RR", 1.25m),
-    TrendStopMinPips: Int("AUTO_TRADE_TREND_STOP_MIN_PIPS", 40),
-    TrendStopMaxPips: Int("AUTO_TRADE_TREND_STOP_MAX_PIPS", 65),
-    StopPushBeyondZone: Bool("AUTO_TRADE_STOP_PUSH_BEYOND_ZONE", true),
-    WickStopBufferAtr: Decimal("AUTO_TRADE_WICK_STOP_BUFFER_ATR", 0.15m),
-    RangeFlipEnabled: Bool("AUTO_TRADE_RANGE_FLIP_ENABLED", demoEval),
-    FlipExitBufferPips: Int("AUTO_TRADE_FLIP_EXIT_BUFFER_PIPS", 10),
-    FlipConfirmTimeoutSeconds: Int(
+    BoxMinRiskReward: resolver.Decimal("AUTO_TRADE_BOX_MIN_RR", 1.25m),
+    TrendStopMinPips: resolver.Int("AUTO_TRADE_TREND_STOP_MIN_PIPS", 40),
+    TrendStopMaxPips: resolver.Int("AUTO_TRADE_TREND_STOP_MAX_PIPS", 65),
+    StopPushBeyondZone: resolver.Bool(
+      "AUTO_TRADE_STOP_PUSH_BEYOND_ZONE", true
+    ),
+    WickStopBufferAtr: resolver.Decimal(
+      "AUTO_TRADE_WICK_STOP_BUFFER_ATR", 0.15m
+    ),
+    RangeFlipEnabled: resolver.Bool(
+      "AUTO_TRADE_RANGE_FLIP_ENABLED", demoEval, profileSource
+    ),
+    FlipExitBufferPips: resolver.Int(
+      "AUTO_TRADE_FLIP_EXIT_BUFFER_PIPS", 10
+    ),
+    FlipConfirmTimeoutSeconds: resolver.Int(
       "AUTO_TRADE_FLIP_CONFIRM_TIMEOUT_SECONDS",
       30
     ),
-    ZoneCooldownMinutes: Int("AUTO_TRADE_ZONE_COOLDOWN_MINUTES", 60),
-    AddPullbackEnabled: Bool("AUTO_TRADE_ADD_PULLBACK_ENABLED", false),
-    AddPullbackMinRetrace: Decimal("AUTO_TRADE_ADD_PULLBACK_MIN_RETRACE", 0.20m),
-    AddPullbackMaxRetrace: Decimal("AUTO_TRADE_ADD_PULLBACK_MAX_RETRACE", 0.70m),
-    AddMaxGroupRiskPct: Decimal("AUTO_TRADE_ADD_MAX_GROUP_RISK_PCT", 3.0m),
-    AddSizeRatio: Decimal("AUTO_TRADE_ADD_SIZE_RATIO", 0.5m),
-    RangeTargetsPips: IntList("AUTO_TRADE_RANGE_TARGETS_PIPS", "20,30,40,50,70"),
-    RangeTpBufferPips: Decimal("AUTO_TRADE_RANGE_TP_BUFFER_PIPS", 3m),
+    ZoneCooldownMinutes: resolver.Int(
+      "AUTO_TRADE_ZONE_COOLDOWN_MINUTES", 60
+    ),
+    AddPullbackEnabled: resolver.Bool(
+      "AUTO_TRADE_ADD_PULLBACK_ENABLED", false
+    ),
+    AddPullbackMinRetrace: resolver.Decimal(
+      "AUTO_TRADE_ADD_PULLBACK_MIN_RETRACE", 0.20m
+    ),
+    AddPullbackMaxRetrace: resolver.Decimal(
+      "AUTO_TRADE_ADD_PULLBACK_MAX_RETRACE", 0.70m
+    ),
+    AddMaxGroupRiskPct: resolver.Decimal(
+      "AUTO_TRADE_ADD_MAX_GROUP_RISK_PCT", 3.0m
+    ),
+    AddSizeRatio: resolver.Decimal("AUTO_TRADE_ADD_SIZE_RATIO", 0.5m),
+    RangeTargetsPips: resolver.IntList(
+      "AUTO_TRADE_RANGE_TARGETS_PIPS", "20,30,40,50,70"
+    ),
+    RangeTpBufferPips: resolver.Decimal(
+      "AUTO_TRADE_RANGE_TP_BUFFER_PIPS", 3m
+    ),
     Profile: profile,
-    RequireDemoAccount: Bool("AUTO_TRADE_REQUIRE_DEMO_ACCOUNT", true),
-    AllowConcurrentStrategies: Bool(
+    RequireDemoAccount: resolver.Bool(
+      "AUTO_TRADE_REQUIRE_DEMO_ACCOUNT", true, profileSource
+    ),
+    AllowConcurrentStrategies: resolver.Bool(
       "AUTO_TRADE_ALLOW_CONCURRENT_STRATEGIES",
-      demoEval
+      demoEval,
+      profileSource
     ),
-    AllowHedgedXau: Bool("AUTO_TRADE_ALLOW_HEDGED_XAU", demoEval),
-    RequireFlatForRange: Bool("AUTO_TRADE_REQUIRE_FLAT_FOR_RANGE", !demoEval),
-    RangeTwoSidedEnabled: Bool(
+    AllowHedgedXau: resolver.Bool(
+      "AUTO_TRADE_ALLOW_HEDGED_XAU", demoEval, profileSource
+    ),
+    RequireFlatForRange: resolver.Bool(
+      "AUTO_TRADE_REQUIRE_FLAT_FOR_RANGE", !demoEval, profileSource
+    ),
+    RangeTwoSidedEnabled: resolver.Bool(
       "AUTO_TRADE_RANGE_TWO_SIDED_ENABLED",
-      demoEval
+      demoEval,
+      profileSource
     ),
-    MultiMatchEnabled: Bool("AUTO_TRADE_MULTI_MATCH_ENABLED", demoEval),
-    TrackAllStructuralMatches: Bool(
+    MultiMatchEnabled: resolver.Bool(
+      "AUTO_TRADE_MULTI_MATCH_ENABLED", demoEval, profileSource
+    ),
+    TrackAllStructuralMatches: resolver.Bool(
       "AUTO_TRADE_TRACK_ALL_STRUCTURAL_MATCHES",
-      demoEval
+      demoEval,
+      profileSource
     ),
-    RedisUrl: Env("REDIS_URL", "redis://redis:6379/0"),
-    CanonicalSymbol: Env("AUTO_TRADE_CANONICAL_SYMBOL", "XAU").ToUpperInvariant(),
-    CandidateContractVersion: Int("AUTO_TRADE_CANDIDATE_CONTRACT_VERSION", 4)
+    RedisUrl: resolver.String("REDIS_URL", "redis://redis:6379/0"),
+    CanonicalSymbol: resolver.String(
+      "AUTO_TRADE_CANONICAL_SYMBOL", "XAU"
+    ).ToUpperInvariant(),
+    CandidateContractVersion: resolver.Int(
+      "AUTO_TRADE_CANDIDATE_CONTRACT_VERSION", 5
+    ),
+    ManualAlgoEnabled: resolver.Bool("MANUAL_ALGO_ENABLED", false),
+    TrendEnabled: resolver.Bool(
+      "AUTO_TRADE_TREND_ENABLED", demoEval, profileSource
+    ),
+    RangeEnabled: resolver.Bool("AUTO_TRADE_RANGE_ENABLED", true),
+    MappedZoneEnabled: resolver.Bool("AUTO_TRADE_MAPPED_ZONE_ENABLED", true),
+    StrategyMatchEnabled: resolver.Bool(
+      "AUTO_TRADE_STRATEGY_MATCH_ENABLED", true
+    ),
+    BreakoutEnabled: resolver.Bool("AUTO_TRADE_BREAKOUT_ENABLED", true),
+    RetestEnabled: resolver.Bool("AUTO_TRADE_RETEST_ENABLED", true),
+    ReactionEnabled: resolver.Bool("AUTO_TRADE_REACTION_ENABLED", true),
+    LiquidityReversalEnabled: resolver.Bool(
+      "AUTO_TRADE_LIQUIDITY_REVERSAL_ENABLED",
+      true
+    ),
+    AllowCounterBias: resolver.Bool(
+      "AUTO_TRADE_ALLOW_COUNTER_BIAS", demoEval, profileSource
+    ),
+    CandidateStorageTtlSeconds: resolver.Int(
+      "AUTO_TRADE_CANDIDATE_STORAGE_TTL_SECONDS",
+      demoEval ? 604800 : 86400,
+      profileSource,
+      "AUTO_TRADE_CANDIDATE_TTL"
+    ),
+    Symbols: resolver.StringList("AUTO_TRADE_SYMBOLS", "XAU"),
+    ConfigManifestVersion: 2,
+    NonHedgedOppositePolicy: resolver.String(
+      "AUTO_TRADE_NON_HEDGED_OPPOSITE_POLICY",
+      demoEval ? "broker_netting" : "reject",
+      profileSource
+    ).ToLowerInvariant()
   );
+    return options with
+    {
+      ConfigSources = resolver.Sources,
+      DeprecatedVariables = resolver.DeprecatedVariables,
+    };
   }
 
   public void Validate()
@@ -194,11 +358,16 @@ public sealed record AutoTradeOptions(
         "Auto trade disabled: demo_eval requires AUTO_TRADE_REQUIRE_DEMO_ACCOUNT=true"
       );
     }
-    if (CandidateContractVersion <= 0 || string.IsNullOrWhiteSpace(CanonicalSymbol))
+    if (
+      ConfigManifestVersion != 2
+      || CandidateContractVersion != 5
+      || string.IsNullOrWhiteSpace(CanonicalSymbol)
+      || EffectiveSymbols.Count == 0
+    )
     {
       throw new AutoTradeConfigurationException(
-        "Auto trade disabled: candidate contract version and canonical symbol "
-        + "must be configured"
+        "Auto trade disabled: config manifest version 2, candidate contract "
+        + "version 5, symbols, and canonical symbol must be configured"
       );
     }
     if (StopLossDistance <= 0 || StopLossDistance > 6.5m)
@@ -211,13 +380,14 @@ public sealed record AutoTradeOptions(
     if (TargetsPips.Count != 5 || TargetsPips.Any(value => value <= 0))
     {
       throw new AutoTradeConfigurationException(
-        "Auto trade disabled: AUTO_TRADE_TP_PIPS must contain five positive targets"
+        "Auto trade disabled: AUTO_TRADE_TARGET_PLANS_PIPS must contain "
+        + "five positive targets"
       );
     }
     if (!TargetsPips.SequenceEqual(TargetsPips.OrderBy(value => value)))
     {
       throw new AutoTradeConfigurationException(
-        "Auto trade disabled: AUTO_TRADE_TP_PIPS must be ascending"
+        "Auto trade disabled: AUTO_TRADE_TARGET_PLANS_PIPS must be ascending"
       );
     }
     if (
@@ -227,7 +397,7 @@ public sealed record AutoTradeOptions(
     )
     {
       throw new AutoTradeConfigurationException(
-        "Auto trade disabled: AUTO_TRADE_TP_WEIGHTS must match TP_PIPS, "
+        "Auto trade disabled: AUTO_TRADE_TP_WEIGHTS must match target plans, "
         + "contain positive values, and sum to 100"
       );
     }
@@ -254,8 +424,8 @@ public sealed record AutoTradeOptions(
     if (PipSize <= 0 || ContractSize <= 0)
     {
       throw new AutoTradeConfigurationException(
-        "Auto trade disabled: AUTO_TRADE_PIP_SIZE and "
-        + "AUTO_TRADE_CONTRACT_SIZE must be positive"
+        "Auto trade disabled: AUTO_TRADE_XAU_PIP_SIZE and "
+        + "AUTO_TRADE_XAU_CONTRACT_SIZE must be positive"
       );
     }
     var derivedPipValue = ContractSize * PipSize;
@@ -358,38 +528,209 @@ public sealed record AutoTradeOptions(
         + "non-negative"
       );
     }
+    if (
+      CandidateMaxAgeSeconds <= 0
+      || CandidateStorageTtlSeconds <= 0
+      || SpotMaxAgeSeconds <= 0
+    )
+    {
+      throw new AutoTradeConfigurationException(
+        "Auto trade disabled: candidate max age, candidate storage TTL, "
+        + "and spot max age must be positive"
+      );
+    }
+    if (
+      NonHedgedOppositePolicy is not "broker_netting"
+        and not "close_then_reverse"
+        and not "reject"
+    )
+    {
+      throw new AutoTradeConfigurationException(
+        "Auto trade disabled: AUTO_TRADE_NON_HEDGED_OPPOSITE_POLICY must be "
+        + "broker_netting, close_then_reverse, or reject"
+      );
+    }
   }
 
-  private static string Env(string key, string fallback)
+  private sealed class EnvironmentResolver
   {
-    var value = Environment.GetEnvironmentVariable(key);
-    return string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
-  }
+    private readonly Dictionary<string, string> _sources =
+      new(StringComparer.Ordinal);
+    private readonly HashSet<string> _deprecated =
+      new(StringComparer.Ordinal);
 
-  private static bool Bool(string key, bool fallback) =>
-    bool.TryParse(Environment.GetEnvironmentVariable(key), out var value)
-      ? value
-      : fallback;
+    public IReadOnlyDictionary<string, string> Sources =>
+      new Dictionary<string, string>(_sources, StringComparer.Ordinal);
 
-  private static int Int(string key, int fallback) =>
-    int.TryParse(
-      Environment.GetEnvironmentVariable(key),
-      NumberStyles.Integer,
-      CultureInfo.InvariantCulture,
-      out var value
-    ) ? value : fallback;
+    public IReadOnlyList<string> DeprecatedVariables =>
+      _deprecated.Order(StringComparer.Ordinal).ToArray();
 
-  private static decimal Decimal(string key, decimal fallback) =>
-    decimal.TryParse(
-      Environment.GetEnvironmentVariable(key),
-      NumberStyles.Number,
-      CultureInfo.InvariantCulture,
-      out var value
-    ) ? value : fallback;
+    public string String(
+      string canonical,
+      string fallback,
+      string fallbackSource = "application_default",
+      params string[] aliases
+    )
+    {
+      var explicitValue = Environment.GetEnvironmentVariable(canonical);
+      if (!string.IsNullOrWhiteSpace(explicitValue))
+      {
+        RecordDeprecatedAliases(aliases);
+        _sources[canonical] = "explicit_env";
+        return explicitValue.Trim();
+      }
+      foreach (var alias in aliases)
+      {
+        var legacyValue = Environment.GetEnvironmentVariable(alias);
+        if (string.IsNullOrWhiteSpace(legacyValue))
+        {
+          continue;
+        }
+        _deprecated.Add(alias);
+        _sources[canonical] = $"deprecated_env:{alias}";
+        return legacyValue.Trim();
+      }
+      _sources[canonical] = fallbackSource;
+      return fallback;
+    }
 
-  private static IReadOnlyList<int> IntList(string key, string fallback) =>
-    Env(key, fallback)
-      .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-      .Select(value => int.Parse(value, CultureInfo.InvariantCulture))
+    public bool Bool(
+      string canonical,
+      bool fallback,
+      string fallbackSource = "application_default",
+      params string[] aliases
+    )
+    {
+      var raw = String(
+        canonical,
+        fallback ? "true" : "false",
+        fallbackSource,
+        aliases
+      ).ToLowerInvariant();
+      return raw switch
+      {
+        "true" or "1" or "yes" => true,
+        "false" or "0" or "no" => false,
+        _ => throw Invalid(canonical, raw, "true,false,1,0,yes,no"),
+      };
+    }
+
+    public int Int(
+      string canonical,
+      int fallback,
+      string fallbackSource = "application_default",
+      params string[] aliases
+    )
+    {
+      var raw = String(
+        canonical,
+        fallback.ToString(CultureInfo.InvariantCulture),
+        fallbackSource,
+        aliases
+      );
+      if (
+        int.TryParse(
+          raw,
+          NumberStyles.Integer,
+          CultureInfo.InvariantCulture,
+          out var value
+        )
+      )
+      {
+        return value;
+      }
+      throw Invalid(canonical, raw, "an integer");
+    }
+
+    public decimal Decimal(
+      string canonical,
+      decimal fallback,
+      string fallbackSource = "application_default",
+      params string[] aliases
+    )
+    {
+      var raw = String(
+        canonical,
+        fallback.ToString(CultureInfo.InvariantCulture),
+        fallbackSource,
+        aliases
+      );
+      if (
+        decimal.TryParse(
+          raw,
+          NumberStyles.Number,
+          CultureInfo.InvariantCulture,
+          out var value
+        )
+      )
+      {
+        return value;
+      }
+      throw Invalid(canonical, raw, "a decimal number");
+    }
+
+    public IReadOnlyList<int> IntList(
+      string canonical,
+      string fallback,
+      params string[] aliases
+    )
+    {
+      var raw = String(
+        canonical,
+        fallback,
+        "application_default",
+        aliases
+      );
+      try
+      {
+        return raw
+          .Split(
+            ',',
+            StringSplitOptions.RemoveEmptyEntries
+              | StringSplitOptions.TrimEntries
+          )
+          .Select(value => int.Parse(value, CultureInfo.InvariantCulture))
+          .ToArray();
+      }
+      catch (FormatException)
+      {
+        throw Invalid(canonical, raw, "a comma-separated integer list");
+      }
+    }
+
+    public IReadOnlyList<string> StringList(
+      string canonical,
+      string fallback
+    ) => String(canonical, fallback)
+      .Split(
+        ',',
+        StringSplitOptions.RemoveEmptyEntries
+          | StringSplitOptions.TrimEntries
+      )
+      .Select(value => value.ToUpperInvariant())
+      .Distinct(StringComparer.Ordinal)
+      .Order(StringComparer.Ordinal)
       .ToArray();
+
+    private void RecordDeprecatedAliases(IEnumerable<string> aliases)
+    {
+      foreach (var alias in aliases)
+      {
+        if (!string.IsNullOrWhiteSpace(
+          Environment.GetEnvironmentVariable(alias)
+        ))
+        {
+          _deprecated.Add(alias);
+        }
+      }
+    }
+
+    private static AutoTradeConfigurationException Invalid(
+      string canonical,
+      string value,
+      string expected
+    ) => new(
+      $"Auto trade disabled: {canonical} value '{value}' must be {expected}"
+    );
+  }
 }

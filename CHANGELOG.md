@@ -13,6 +13,14 @@ dated section after deployment.
 
 ### Added
 
+- Added a dedicated owner `/algo` execution path that preserves the supplied
+  direction, entry zone, absolute SL, TP prices, setup and candidate/group
+  ownership. Manual orders may coexist with autonomous or opposite-direction
+  exposure on a broker-confirmed hedged demo account.
+- Added executor-truth Telegram states for manual requests (`LIMIT ORDER
+  PLACED`, `POSITION OPENED`, `DRY-RUN ONLY`, and machine-readable rejection)
+  plus fatal Python/C# config-manifest checks for execution mode and Redis
+  stream split-brain.
 - Added the explicit `demo_eval` auto-trade profile, independent hedged
   strategy/range groups, two-sided range rails, multi-match routing, unified
   scanner/private `RangeContext`, complete candidate lifecycle history, and
@@ -23,6 +31,21 @@ dated section after deployment.
 
 ### Changed
 
+- Python and C# now resolve one versioned auto-trade configuration contract
+  (manifest v2, candidate v5) from canonical environment names. Target/symbol
+  sets are canonical in manifests while range target selection remains
+  largest-fitting-first at runtime; execution max age and Redis storage TTL
+  are separate settings.
+- Executor readiness is published at `auto_trade:executor_readiness`.
+  Non-hedged demo capability and storage-TTL drift are warning-only, with an
+  explicit `AUTO_TRADE_NON_HEDGED_OPPOSITE_POLICY` for opposite exposure.
+- Demo evaluation treats HTF bias as scoring/reporting metadata. Valid local
+  BUY and SELL structures, including counter-bias mapped zones and trend
+  pullbacks, remain executable; all supported strategy modes are enabled and
+  tracked without a global top-1 bottleneck.
+- Initial strategy candidates always own independent groups. Only a trend
+  candidate carrying an explicit compatible `parent_group_id` can enter the
+  scale-in route.
 - Demo evaluation no longer requires flat bot-owned XAU exposure before a
   Range Box order. The former veto remains as
   `range_box_would_have_awaited_flat` counterfactual telemetry, while candidate
@@ -30,6 +53,16 @@ dated section after deployment.
 
 ### Fixed
 
+- Fixed semantically identical Python/C# target ladders (descending versus
+  ascending), numeric JSON forms, symbol ordering, FP Markets aliases, and
+  demo account aliases being treated as fatal configuration mismatches that
+  disabled all autonomous execution.
+- Fixed owner `/algo` orders being filtered by autonomous confluence, regime,
+  opposing-zone, exposure and scale-in gates, and fixed premature Telegram
+  acknowledgement before the cTrader executor confirmed broker action.
+- Fixed raw broker-name matching that rejected `FP Markets` when
+  `AUTO_TRADE_EXPECTED_BROKER=fpmarkets`; broker identities now ignore spacing,
+  punctuation and case.
 - Zone-fill no longer hard-rejects when price is already inside the entry zone
   (production: Breakout Continuation SELL ~4025.59 inside 4024.37–4027.45).
   Geometry-aware routing classifies `price_inside_zone` / `invalid_limit_side`

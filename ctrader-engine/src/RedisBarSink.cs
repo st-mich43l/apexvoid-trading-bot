@@ -793,6 +793,7 @@ internal sealed record RedisSpot(
 [JsonSerializable(typeof(RefreshTokenDocument))]
 [JsonSerializable(typeof(AutoTradeConfigManifest))]
 [JsonSerializable(typeof(AutoTradeConfigHealthDocument))]
+[JsonSerializable(typeof(AutoTradeExecutorReadiness))]
 [JsonSerializable(typeof(AutoTradeExecutorSnapshot))]
 [JsonSerializable(typeof(AutoTradeGroupPlan))]
 internal sealed partial class RedisJsonContext : JsonSerializerContext

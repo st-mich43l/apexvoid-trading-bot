@@ -27,7 +27,11 @@ from app.autotrade.range_context import (
   range_context_key,
   range_context_source_key,
 )
-from app.autotrade.config_health import CONFIG_HEALTH_KEY, CTRADER_MANIFEST_KEY
+from app.autotrade.config_health import (
+  CONFIG_HEALTH_KEY,
+  CTRADER_MANIFEST_KEY,
+  EXECUTOR_READINESS_KEY,
+)
 
 log = logging.getLogger(__name__)
 
@@ -460,7 +464,10 @@ async def _deliver_auto_trade_event(
   send=None,
 ) -> bool:
   event_type = str(event.get("type") or "")
-  if event.get("setup") == "Manual Algo":
+  if (
+    event.get("setup") == "Manual Algo"
+    or event.get("stream") == "algo_manual"
+  ):
     # Manual /algo signals already get their lifecycle update on the
     # VIP/public channel via app.signals.manual_execution's reconcile loop
     # (trade_ops.post_result -> broadcast.fanout_update) - the "opened"
@@ -551,6 +558,7 @@ async def auto_trade_status_text() -> str:
     "XAU",
   )
   config_health = await _json_key(client, CONFIG_HEALTH_KEY)
+  readiness = await _json_key(client, EXECUTOR_READINESS_KEY)
   ctrader_manifest = await _json_key(client, CTRADER_MANIFEST_KEY)
   executor = await _json_key(
     client, f"auto_trade:executor_snapshot:{primary_symbol}",
@@ -802,6 +810,10 @@ async def auto_trade_status_text() -> str:
   )
   config_state = str((config_health or {}).get("state") or "unknown")
   config_fatal = (config_health or {}).get("fatal") or []
+  executor_dry_run = (
+    (ctrader_manifest or {}).get("dry_run")
+    if ctrader_manifest is not None else "unknown"
+  )
   range_line = "none"
   rail_line = "BUY unknown · SELL unknown"
   barrier_line = "support 0 · resistance 0"
@@ -868,7 +880,9 @@ async def auto_trade_status_text() -> str:
     "\n\n⚙️ <b>Execution contract</b>"
     f"\nProfile: <b>{escape(settings.auto_trade_profile)}</b>"
     f"\nBroker account: <b>{escape(account_mode)} · {escape(hedge_mode)}</b>"
-    f"\nExecutor ready: <b>{bool((executor or {}).get('ready'))}</b>"
+    f"\nExecutor ready: <b>{bool((readiness or {}).get('ready'))}</b>"
+    f"\nPython dry-run: <b>{settings.auto_trade_dry_run}</b>"
+    f"\nExecutor dry-run: <b>{escape(str(executor_dry_run))}</b>"
     f"\nPython/C# config: <b>{escape(config_state)}</b>{health_detail}"
     f"\nExposure policy: <b>{escape(str((executor or {}).get('exposure_policy') or 'unknown'))}</b>"
     f"\nResolved range: <b>{escape(range_line)}</b>"
