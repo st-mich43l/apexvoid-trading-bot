@@ -143,7 +143,7 @@ def evaluate_market_map_strategy(
   now: int | None = None,
 ) -> MarketMapStrategyDecision:
   """Match an actionable mapped zone with a recent M1 rejection sequence."""
-  if not bool(getattr(cfg, "auto_trade_market_map_strategy_enabled", True)):
+  if not bool(getattr(cfg, "auto_trade_mapped_zone_enabled", True)):
     return MarketMapStrategyDecision("disabled")
   if spot_price is None or not math.isfinite(float(spot_price)):
     return MarketMapStrategyDecision("waiting_for_spot")

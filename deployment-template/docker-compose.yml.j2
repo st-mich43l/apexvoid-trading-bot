@@ -115,6 +115,8 @@ services:
       AUTO_TRADE_RANGE_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_RANGE_ENABLED | default('true') | string | to_json }}
       AUTO_TRADE_RANGE_TWO_SIDED_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_RANGE_TWO_SIDED_ENABLED | default(demo_eval_default) | string | to_json }}
       AUTO_TRADE_MAPPED_ZONE_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_MAPPED_ZONE_ENABLED | default('false') | string | to_json }}
+      AUTO_TRADE_EXECUTION_ZONE_MAX_WIDTH_ATR: {{ apexvoid_trading_bot_env.AUTO_TRADE_EXECUTION_ZONE_MAX_WIDTH_ATR | default('2.0') | string | to_json }}
+      AUTO_TRADE_EXECUTION_ZONE_MAX_WIDTH_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_EXECUTION_ZONE_MAX_WIDTH_PIPS | default('100') | string | to_json }}
       AUTO_TRADE_KEY_LEVEL_REACTION_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_KEY_LEVEL_REACTION_ENABLED | default('true') | string | to_json }}
       AUTO_TRADE_DEMAND_REACTION_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_DEMAND_REACTION_ENABLED | default('true') | string | to_json }}
       AUTO_TRADE_SUPPLY_REACTION_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_SUPPLY_REACTION_ENABLED | default('true') | string | to_json }}

@@ -177,9 +177,8 @@ def classify_guard_severity(
       guard, OUTCOME_BLOCK, condition, reason, True,
     )
   if guard_mode == GUARD_MODE_OBSERVE:
-    outcome = OUTCOME_WAIT if hard_geometry else OUTCOME_ALLOW_WITH_WARNING
     return ExecutionGuardDecision(
-      guard, outcome, condition, reason, False,
+      guard, OUTCOME_ALLOW_WITH_WARNING, condition, reason, False,
     )
   # balanced: only zero-room containment still blocks; buffer/ATR-based
   # "ahead of entry" and other soft conditions become warnings.

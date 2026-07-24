@@ -241,6 +241,14 @@ public sealed class StackExchangeRedisSeriesCommands :
   private readonly IConnectionMultiplexer _connection;
   private readonly IDatabase _db;
   private readonly ISubscriber _subscriber;
+  private const string CandidateClaimScript = """
+    local current = redis.call('GET', KEYS[1])
+    if (not current) or current == 'published' then
+      redis.call('SET', KEYS[1], 'processing', 'PX', ARGV[1])
+      return 1
+    end
+    return 0
+    """;
 
   private StackExchangeRedisSeriesCommands(IConnectionMultiplexer connection)
   {
@@ -366,15 +374,18 @@ public sealed class StackExchangeRedisSeriesCommands :
     )).Where(entry => !string.IsNullOrWhiteSpace(entry.Payload)).ToArray();
   }
 
-  public Task<bool> TryClaimCandidateAsync(
+  public async Task<bool> TryClaimCandidateAsync(
     string candidateId,
     CancellationToken cancellationToken
-  ) => _db.StringSetAsync(
-    CandidateKey(candidateId),
-    "processing",
-    TimeSpan.FromSeconds(30),
-    When.NotExists
-  );
+  )
+  {
+    var result = await _db.ScriptEvaluateAsync(
+      CandidateClaimScript,
+      [CandidateKey(candidateId)],
+      [30_000]
+    );
+    return (long)result == 1;
+  }
 
   public async Task<string?> GetCandidateStatusAsync(
     string candidateId,
