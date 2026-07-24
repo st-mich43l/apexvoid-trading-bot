@@ -13,6 +13,10 @@ dated section after deployment.
 
 ### Added
 
+- Owner DM `/auto_close_all confirm` flattens all open ApexVoid Algo broker
+  positions (and cancels pending labeled limits), pauses new entries, and
+  books **Total net** from the real broker close fill (not a stop estimate).
+
 - Range Box Scalp trades with Full TP **> 70** pips now scale out 50% at
   +30 pips from the broker fill, then ride the original Full TP for the
   remainder (`AUTO_TRADE_RANGE_BOX_SCALE_OUT_*`). Break-even stop move after
@@ -25,6 +29,11 @@ dated section after deployment.
   disabled (`AUTO_TRADE_MAPPED_ZONE_ENABLED=false`).
 
 ### Fixed
+
+- Owner `/trade_close` on a tracked algo position now drops Redis/engine
+  state immediately after the broker fill so reconcile cannot re-book the
+  same exit with a stop-loss estimate (duplicate POSITION CLOSED / wrong
+  Total net).
 
 - Algo `POSITION CLOSED` cards now include **Total net pips** (volume-weighted).
   Broker reconciliation closes also book the remaining volume into the weighted

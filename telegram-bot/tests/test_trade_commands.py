@@ -51,7 +51,7 @@ async def test_scoped_command_menu(monkeypatch):
     "trade_active", "trade_close", "trade_uncclose", "trade_tp",
     "trade_sl", "trade_cancel", "trade_delete",
     "trade_reopen", "trade_tag", "trade_untagged", "trade_note", "trade_review",
-    "trade_map", "auto_status", "auto_pause", "auto_resume",
+    "trade_map", "auto_status", "auto_pause", "auto_resume", "auto_close_all",
     "trade_stats", "trade_pips", "help",
   } | {"trade_open"}
 
@@ -73,6 +73,7 @@ async def test_signal_bot_exposes_public_start_and_owner_trade_map(monkeypatch):
     "auto_status",
     "auto_pause",
     "auto_resume",
+    "auto_close_all",
   ]
 
 
@@ -469,4 +470,5 @@ async def test_help_is_owner_only_and_documents_both_surfaces(monkeypatch):
   assert "/trade_close [SYMBOL]" in text
   assert "/trade_uncclose [SYMBOL]" in text
   assert "/trade_tp [SYMBOL]" in text
+  assert "/auto_close_all confirm" in text
   stranger.answer.assert_not_awaited()

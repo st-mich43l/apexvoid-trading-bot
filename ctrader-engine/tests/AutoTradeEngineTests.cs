@@ -2580,6 +2580,7 @@ public sealed class AutoTradeEngineTests
       position_id = positionId,
     }));
     await WaitForEventAsync(store, "manual_closed");
+    await WaitForEventAsync(store, "group_result");
 
     var close = Assert.Single(client.Closes);
     Assert.Equal(positionId, close.PositionId);
@@ -2589,6 +2590,76 @@ public sealed class AutoTradeEngineTests
     Assert.Equal(600, closed.Volume);
     Assert.Equal(0, closed.RemainingVolume);
     Assert.Equal("algo_manual", closed.Stream);
+    Assert.NotNull(closed.GroupRealizedPips);
+    Assert.Empty(store.Positions);
+    Assert.Contains(store.Events, item => item.Type == "group_result");
+
+    // Reconcile must not re-book the same exit with a stop estimate.
+    var before = store.Events.Count(item => item.Type == "position_closed");
+    await engine.ObserveSpotAsync(
+      new SpotPrice("XAU", 3990.0m, 3990.2m, now.ToUnixTimeSeconds()),
+      cts.Token
+    );
+    await Task.Delay(50);
+    Assert.Equal(
+      before,
+      store.Events.Count(item => item.Type == "position_closed")
+    );
+
+    cts.Cancel();
+    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+  }
+
+  [Fact]
+  public async Task CloseAllCommandFlattensTrackedPositionsUsingBrokerFillNet()
+  {
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+    var store = new FakeAutoTradeStore(BoxCandidateJson(
+      fullTpPips: 50,
+      timeframe: "M5"
+    ));
+    var client = new FakeTradingClient();
+    var engine = new AutoTradeEngine(
+      Options() with
+      {
+        RangeFlipEnabled = false,
+        RangeTargetsPips = [20, 30, 40, 50, 70],
+      },
+      store,
+      () => Now,
+      _ => { }
+    );
+    await engine.ObserveSpotAsync(
+      new SpotPrice("XAU", 4000.0m, 4000.2m, Now.ToUnixTimeSeconds()),
+      cts.Token
+    );
+    var run = engine.RunSessionAsync(client, Symbol, cts.Token);
+    await store.Ordered.Task.WaitAsync(TimeSpan.FromSeconds(2));
+    var state = Assert.Single(store.Positions.Values);
+    var entry = state.EntryPrice;
+
+    store.EnqueueCommand(JsonSerializer.Serialize(new { type = "close_all" }));
+    await WaitForEventAsync(store, "group_result");
+
+    Assert.Single(client.Closes);
+    Assert.Empty(store.Positions);
+    var closed = Assert.Single(
+      store.Events,
+      item => item.Type == "position_closed"
+    );
+    Assert.Equal(4013.2m, closed.Price);
+    Assert.Contains("owner flatten", closed.Message);
+    var expectedPips = (4013.2m - entry) / 0.1m;
+    Assert.Equal(expectedPips, closed.GroupRealizedPips);
+    var result = Assert.Single(
+      store.Events,
+      item => item.Type == "group_result"
+    );
+    Assert.Equal(expectedPips, result.GroupRealizedPips);
+    Assert.Contains(
+      store.Events,
+      item => item.Type == "owner_flatten" && item.Message.Contains("complete")
+    );
 
     cts.Cancel();
     await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
