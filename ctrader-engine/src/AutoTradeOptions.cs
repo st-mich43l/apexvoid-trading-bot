@@ -48,6 +48,7 @@ public sealed record AutoTradeOptions(
   int FlipExitBufferPips = 10,
   int FlipConfirmTimeoutSeconds = 30,
   int ZoneCooldownMinutes = 60,
+  bool ZoneCooldownEnabled = true,
   bool AddPullbackEnabled = false,
   decimal AddPullbackMinRetrace = 0.20m,
   decimal AddPullbackMaxRetrace = 0.70m,
@@ -81,7 +82,9 @@ public sealed record AutoTradeOptions(
   int ConfigManifestVersion = 2,
   string NonHedgedOppositePolicy = "reject",
   IReadOnlyDictionary<string, string>? ConfigSources = null,
-  IReadOnlyList<string>? DeprecatedVariables = null
+  IReadOnlyList<string>? DeprecatedVariables = null,
+  string StructuralGuardMode = "balanced",
+  string ZoneReconcileMode = "enforce"
 )
 {
   // Shared target-selection contract (app/autotrade/range_targets.py on the
@@ -127,6 +130,9 @@ public sealed record AutoTradeOptions(
     ).ToLowerInvariant();
     var demoEval = profile == "demo_eval";
     var profileSource = demoEval ? "profile_demo_eval" : "application_default";
+    var requireDemoAccount = resolver.Bool(
+      "AUTO_TRADE_REQUIRE_DEMO_ACCOUNT", true, profileSource
+    );
     var options = new AutoTradeOptions(
     Enabled: resolver.Bool(
       "AUTO_TRADE_ENABLED", demoEval, profileSource
@@ -250,6 +256,9 @@ public sealed record AutoTradeOptions(
     ZoneCooldownMinutes: resolver.Int(
       "AUTO_TRADE_ZONE_COOLDOWN_MINUTES", 60
     ),
+    ZoneCooldownEnabled: resolver.Bool(
+      "AUTO_TRADE_ZONE_COOLDOWN_ENABLED", !demoEval, profileSource
+    ),
     AddPullbackEnabled: resolver.Bool(
       "AUTO_TRADE_ADD_PULLBACK_ENABLED", false
     ),
@@ -270,9 +279,7 @@ public sealed record AutoTradeOptions(
       "AUTO_TRADE_RANGE_TP_BUFFER_PIPS", 3m
     ),
     Profile: profile,
-    RequireDemoAccount: resolver.Bool(
-      "AUTO_TRADE_REQUIRE_DEMO_ACCOUNT", true, profileSource
-    ),
+    RequireDemoAccount: requireDemoAccount,
     AllowConcurrentStrategies: resolver.Bool(
       "AUTO_TRADE_ALLOW_CONCURRENT_STRATEGIES",
       demoEval,
@@ -334,6 +341,16 @@ public sealed record AutoTradeOptions(
     NonHedgedOppositePolicy: resolver.String(
       "AUTO_TRADE_NON_HEDGED_OPPOSITE_POLICY",
       demoEval ? "broker_netting" : "reject",
+      profileSource
+    ).ToLowerInvariant(),
+    StructuralGuardMode: resolver.String(
+      "AUTO_TRADE_STRUCTURAL_GUARD_MODE",
+      demoEval ? "observe" : requireDemoAccount ? "balanced" : "strict",
+      profileSource
+    ).ToLowerInvariant(),
+    ZoneReconcileMode: resolver.String(
+      "AUTO_TRADE_ZONE_RECONCILE_MODE",
+      demoEval ? "shadow" : "enforce",
       profileSource
     ).ToLowerInvariant()
   );
@@ -548,6 +565,28 @@ public sealed record AutoTradeOptions(
       throw new AutoTradeConfigurationException(
         "Auto trade disabled: AUTO_TRADE_NON_HEDGED_OPPOSITE_POLICY must be "
         + "broker_netting, close_then_reverse, or reject"
+      );
+    }
+    if (
+      StructuralGuardMode is not "observe"
+        and not "balanced"
+        and not "strict"
+    )
+    {
+      throw new AutoTradeConfigurationException(
+        "Auto trade disabled: AUTO_TRADE_STRUCTURAL_GUARD_MODE must be "
+        + "observe, balanced, or strict"
+      );
+    }
+    if (
+      ZoneReconcileMode is not "off"
+        and not "shadow"
+        and not "enforce"
+    )
+    {
+      throw new AutoTradeConfigurationException(
+        "Auto trade disabled: AUTO_TRADE_ZONE_RECONCILE_MODE must be "
+        + "off, shadow, or enforce"
       );
     }
   }

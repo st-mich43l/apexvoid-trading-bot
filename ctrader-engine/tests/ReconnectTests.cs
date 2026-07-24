@@ -633,9 +633,7 @@ internal sealed class FaultAutoTradeStore : IAutoTradeStore
   public Task RecordZoneCooldownAsync(
     string symbol,
     string direction,
-    decimal entryPrice,
-    decimal stopPrice,
-    long closedAt,
+    ZoneCooldownRecord record,
     int ttlMinutes,
     CancellationToken cancellationToken
   ) => Task.CompletedTask;

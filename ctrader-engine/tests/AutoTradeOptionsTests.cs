@@ -203,6 +203,9 @@ public sealed class AutoTradeOptionsTests
       Assert.Equal(5, options.CandidateContractVersion);
       Assert.True(options.ZoneFillEnabled);
       Assert.Equal("broker_netting", options.NonHedgedOppositePolicy);
+      Assert.Equal("observe", options.StructuralGuardMode);
+      Assert.False(options.ZoneCooldownEnabled);
+      Assert.Equal("shadow", options.ZoneReconcileMode);
       Assert.Equal(ExposurePolicy.HedgedConcurrent, options.ExposurePolicy);
       options.Validate();
     }

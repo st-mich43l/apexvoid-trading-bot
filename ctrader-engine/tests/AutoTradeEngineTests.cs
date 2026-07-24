@@ -2457,11 +2457,10 @@ public sealed class AutoTradeEngineTests
   }
 
   [Fact]
-  public async Task ReconcileDetectedCloseRecordsZoneCooldown()
+  public async Task ReconcileDetectedCloseRecordsWarningOnlyCooldownMarker()
   {
-    // The engine cannot tell an SL hit from a manual close apart here - both
-    // look identical (a tracked position vanishes from the broker snapshot)
-    // - so per Fix 3's rule, this branch always records the cooldown marker.
+    // The engine cannot tell an SL hit from a manual close apart here, so it
+    // records evidence but must not claim a confirmed stop loss.
     using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
     var now = Now;
     var store = new FakeAutoTradeStore(CandidateJson());
@@ -2482,6 +2481,8 @@ public sealed class AutoTradeEngineTests
     var cooldown = Assert.Single(store.ZoneCooldowns);
     Assert.Equal(4000.2m, cooldown.EntryPrice);
     Assert.Equal(3993.7m, cooldown.StopPrice);
+    Assert.Equal("reconciliation_unknown", cooldown.Reason);
+    Assert.Equal("unconfirmed", cooldown.Confidence);
     Assert.Equal(("XAU", "BUY"), Assert.Single(store.ZoneCooldownDirections));
 
     cts.Cancel();
@@ -3781,14 +3782,12 @@ public sealed class AutoTradeEngineTests
     public Task RecordZoneCooldownAsync(
       string symbol,
       string direction,
-      decimal entryPrice,
-      decimal stopPrice,
-      long closedAt,
+      ZoneCooldownRecord record,
       int ttlMinutes,
       CancellationToken cancellationToken
     )
     {
-      ZoneCooldowns.Add(new ZoneCooldownRecord(entryPrice, stopPrice, closedAt));
+      ZoneCooldowns.Add(record);
       ZoneCooldownDirections.Add((symbol, direction));
       return Task.CompletedTask;
     }

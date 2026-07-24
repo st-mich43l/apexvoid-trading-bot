@@ -79,7 +79,10 @@ public static class AutoTradeConfigHealth
       NonHedgedOppositePolicy: options.NonHedgedOppositePolicy,
       DeprecatedVariables: options.DeprecatedVariables ?? [],
       ConfigSources: options.ConfigSources,
-      BrokerReported: account.BrokerName
+      BrokerReported: account.BrokerName,
+      StructuralGuardMode: options.StructuralGuardMode,
+      ZoneCooldownEnabled: options.ZoneCooldownEnabled,
+      ZoneReconcileMode: options.ZoneReconcileMode
     );
   }
 
@@ -220,6 +223,24 @@ public static class AutoTradeConfigHealth
         root,
         "non_hedged_opposite_policy",
         current.NonHedgedOppositePolicy,
+        warnings
+      );
+      CompareString(
+        root,
+        "structural_guard_mode",
+        current.StructuralGuardMode,
+        warnings
+      );
+      CompareBool(
+        root,
+        "zone_cooldown_enabled",
+        current.ZoneCooldownEnabled,
+        warnings
+      );
+      CompareString(
+        root,
+        "zone_reconcile_mode",
+        current.ZoneReconcileMode,
         warnings
       );
       if (!current.BrokerHedgingCapability)

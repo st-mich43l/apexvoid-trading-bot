@@ -249,19 +249,18 @@ public sealed record ManualTradeCommand(
   decimal? Frac = null
 );
 
-// Written when a tracked position vanishes from the broker's open-position
-// snapshot without the engine itself having closed it (see
-// AutoTradeEngine.cs's reconcile stale-position branch) - this is always
-// ambiguous (SL hit or manual close look identical), so it is written
-// unconditionally on every such close. A clean take-profit close never
-// reaches that branch (ProcessTargetsAsync untracks the position itself
-// first), so it never produces one of these. Read by worker.py before
-// publishing a new same-direction candidate near this price (Fix 3, 23 Jul
-// 2026 incident: a stopped-out zone was re-entered 15 minutes later).
+// Close-reason-aware marker read by worker.py.  Only reason=stop_loss with
+// confidence=confirmed is enforceable; reconciliation_unknown/manual/external
+// closes are warning-only and must not silently become a 60-minute veto.
 public sealed record ZoneCooldownRecord(
+  string Reason,
+  string Confidence,
   decimal EntryPrice,
   decimal StopPrice,
-  long ClosedAt
+  long ClosedAt,
+  string? GroupId = null,
+  string? ZoneId = null,
+  string? Strategy = null
 );
 
 public sealed record AutoTradeEvent(
@@ -378,7 +377,10 @@ public sealed record AutoTradeConfigManifest(
   string NonHedgedOppositePolicy = "reject",
   IReadOnlyList<string>? DeprecatedVariables = null,
   IReadOnlyDictionary<string, string>? ConfigSources = null,
-  string BrokerReported = ""
+  string BrokerReported = "",
+  string StructuralGuardMode = "balanced",
+  bool ZoneCooldownEnabled = true,
+  string ZoneReconcileMode = "enforce"
 );
 
 public sealed record AutoTradeConfigHealthDocument(
