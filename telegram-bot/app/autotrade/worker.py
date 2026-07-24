@@ -18,6 +18,7 @@ from typing import Any
 
 from app.persistence import redis_state
 from app.autotrade import units
+from app.autotrade.range_targets import configured_range_targets
 from app.autotrade.gate import (
   AutoScalpBox,
   AutoScalpDecision,
@@ -580,7 +581,6 @@ async def _publish_candidate(
     or decision.rail is None
     or decision.box is None
     or decision.direction is None
-    or decision.full_tp_pips not in {50, 70}
     or scale_context is None
     or decision.confluence < max(1, settings.auto_trade_min_confluence)
     # Box-scalp is a mean-reversion play on an actual consolidation - it must
@@ -591,6 +591,13 @@ async def _publish_candidate(
     # always passes it.
     or (regime is not None and regime.state != "chop")
   ):
+    return None
+  if decision.full_tp_pips not in configured_range_targets():
+    # gate.py already selected this via the shared range_targets ladder; a
+    # mismatch here means config drifted between the gate call and now, or
+    # a caller passed a stale decision - either way it must be traceable,
+    # not folded silently into the compound guard above.
+    await _record_gate_reject(client, symbol, "insufficient_target_room")
     return None
   entry_reference = spot.price
   eq_reason = _eq_exclusion_reason(

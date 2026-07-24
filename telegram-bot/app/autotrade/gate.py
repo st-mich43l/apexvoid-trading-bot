@@ -8,6 +8,7 @@ import math
 import pandas as pd
 
 from app.autotrade import units
+from app.autotrade.range_targets import select_range_target
 
 
 ATR_LENGTH = 14
@@ -31,8 +32,6 @@ BOX_MIN_WICK_FRACTION = 0.15
 BOX_MIN_BODY_FRACTION = 0.15
 BOX_BREAK_BUFFER_ATR = 0.12
 BOX_BREAK_M1_CLOSES = 2
-BOX_TP_BUFFER_PIPS = 5
-BOX_TP_CHOICES = (70, 50)
 MAX_ENTRY_DISTANCE_PIPS = 10
 _EPS = 1e-9
 
@@ -437,10 +436,7 @@ def _box_is_broken(
 
 
 def _full_tp_pips(room_pips: float) -> int | None:
-  for target in BOX_TP_CHOICES:
-    if room_pips + _EPS >= target + BOX_TP_BUFFER_PIPS:
-      return target
-  return None
+  return select_range_target(room_pips)
 
 
 def _rail_distance(rail: AutoScalpRail, price: float) -> float:

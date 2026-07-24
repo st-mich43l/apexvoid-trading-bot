@@ -241,6 +241,16 @@ class Settings(BaseSettings):
   # them. Kill switch so reconciliation can be disabled without a redeploy
   # if it trims a zone the strategy actually needed.
   auto_trade_zone_reconcile_enabled: bool = True
+  # Adaptive range-scalp target ladder (app/autotrade/range_targets.py) - the
+  # single source of truth for turning available room into a take-profit
+  # target. Previously hardcoded to {50,70} independently in four Python
+  # modules and once in the C# executor; any setup with 0-49 pips of room
+  # (the common case per the 23 Jul 09:00/11:00 incidents) silently produced
+  # no executable candidate. C# must read this same env var - see
+  # AutoTradeOptions.RangeTargetsPips.
+  auto_trade_range_targets_pips: str = "30,40,50"
+  auto_trade_range_tp_buffer_pips: float = 5.0
+  auto_trade_range_min_target_pips: float = 30.0
   # Directional override for chop→trend. Height/containment stay as the
   # primary chop tests; when enabled, a staircase of LH/LL or HH/HL pairs
   # with enough net ATR displacement reclassifies as trend. Ships dark —

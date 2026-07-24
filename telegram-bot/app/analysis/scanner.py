@@ -30,6 +30,7 @@ from app.analysis.market_map_delivery import cache_analysis
 from app.analysis.ohlc_source import RedisOHLCSource
 from app.analysis.structure import Zone
 from app.analysis.zones import ZONE_RECONCILED_TAG_PREFIX
+from app.autotrade.range_targets import select_range_target
 from app.autotrade.strategy_match import (
   STRATEGY_MATCH_VERSION,
   StrategyMatch,
@@ -39,7 +40,7 @@ from app.autotrade.strategy_match import (
 )
 from app.autotrade import units
 from app.autotrade.map_strategy import market_map_key
-from app.core.symbols import SYMBOLS, pip_for
+from app.core.symbols import SYMBOLS, canonical_symbol, pip_for
 from app.bot.client import send_scanner_with_retry
 
 log = logging.getLogger(__name__)
@@ -93,7 +94,7 @@ def _parse_bar_event(data: object) -> tuple[str, str, str] | None:
 
 
 def _price_text(value: float, symbol: str, *, grouped: bool = False) -> str:
-  digits = int(SYMBOLS.get(symbol.upper(), {}).get("digits", 2))
+  digits = int(SYMBOLS.get(canonical_symbol(symbol), {}).get("digits", 2))
   spec = f",.{digits}f" if grouped else f".{digits}f"
   return f"{value:{spec}}".rstrip("0").rstrip(".")
 
@@ -148,25 +149,30 @@ def _build_strategy_match(
   results: list[DetectionResult],
   *,
   now: int | None = None,
-) -> StrategyMatch | None:
+) -> tuple[StrategyMatch | None, str | None, dict[str, Any]]:
   """Transport the scanner's strongest completed strategy match to Algo.
 
   Detector output is already the strategy decision.  This function does not
   classify regime, require a particular setup name, or ask another timeframe
   to confirm the match again.
+
+  Returns (match, None, {}) on success, or (None, reason_code, measured) on
+  rejection - every exit point must be traceable, never a bare None (23 Jul
+  incident: 40-49 pip range-edge setups silently produced no StrategyMatch
+  at all, with zero record of why, while Telegram still showed the card).
   """
   if not results:
-    return None
+    return None, "no_detection_result", {}
   result = min(results, key=_result_rank)
   indicators = getattr(ctx, "indicators", None)
   if not isinstance(indicators, dict):
-    return None
+    return None, "missing_indicators", {}
   indicator = indicators.get(tf.upper())
   if indicator is None or indicator.atr.empty:
-    return None
+    return None, "missing_atr_series", {}
   atr = float(indicator.atr.iloc[-1])
   if not math.isfinite(atr) or atr <= 0:
-    return None
+    return None, "invalid_atr", {"atr": atr}
   issued_at = (
     int(datetime.now(timezone.utc).timestamp())
     if now is None else int(now)
@@ -188,7 +194,7 @@ def _build_strategy_match(
     )
     scalp_range = None if structure is None else structure.scalp_range
     if scalp_range is None:
-      return None
+      return None, "missing_scalp_range", {}
     range_low = float(scalp_range.lower.level)
     range_high = float(scalp_range.upper.level)
     room = (
@@ -197,13 +203,17 @@ def _build_strategy_match(
       else float(result.current_price) - range_low
     )
     room_pips = room / units.pip_size(symbol)
-    full_take_profit_pips = 70 if room_pips >= 70 else 50 if room_pips >= 50 else None
+    full_take_profit_pips = select_range_target(room_pips)
     if full_take_profit_pips is None:
-      return None
+      return None, "insufficient_target_room", {
+        "room_pips": round(room_pips, 1),
+        "range_low": range_low,
+        "range_high": range_high,
+      }
     targets_pips = (full_take_profit_pips,)
     range_id = strategy_range_id(symbol, range_low, range_high)
   if not targets_pips:
-    return None
+    return None, "empty_target_config", {}
   match_id = strategy_match_id(
     symbol,
     tf,
@@ -213,7 +223,7 @@ def _build_strategy_match(
     entry_low,
     entry_high,
   )
-  return StrategyMatch(
+  match = StrategyMatch(
     version=STRATEGY_MATCH_VERSION,
     match_id=match_id,
     symbol=symbol.upper(),
@@ -238,6 +248,63 @@ def _build_strategy_match(
     range_high=range_high,
     full_take_profit_pips=full_take_profit_pips,
   )
+  return match, None, {}
+
+
+async def _record_match_build_rejected(
+  client: Any,
+  symbol: str,
+  reason: str,
+  measured: dict[str, Any],
+) -> None:
+  """Persist why a detected setup never became an executable StrategyMatch.
+
+  Mirrors worker.py's _record_gate_reject key convention so operators check
+  one counter family (auto_trade:gate_reject:{symbol}:{reason}) regardless
+  of which stage rejected the setup, plus a last-outcome snapshot for
+  /auto_status - see auto_trade:last_match_build:{symbol}.
+  """
+  try:
+    await client.hincrby(
+      f"auto_trade:gate_reject:{symbol.upper()}:{reason}", "count", 1,
+    )
+    await client.set(
+      f"auto_trade:last_match_build:{symbol.upper()}",
+      json.dumps({
+        "stage": "match_build_rejected",
+        "reason": reason,
+        "measured": measured,
+        "checked_at": datetime.now(timezone.utc).isoformat(),
+      }, separators=(",", ":")),
+      ex=3600,
+    )
+  except Exception:
+    log.exception(
+      "match-build-rejected telemetry failed symbol=%s reason=%s",
+      symbol,
+      reason,
+    )
+
+
+async def _record_match_build_outcome(
+  client: Any,
+  symbol: str,
+  match: StrategyMatch,
+) -> None:
+  try:
+    await client.set(
+      f"auto_trade:last_match_build:{symbol.upper()}",
+      json.dumps({
+        "stage": "match_ready",
+        "strategy": match.strategy,
+        "direction": match.direction,
+        "full_take_profit_pips": match.full_take_profit_pips,
+        "checked_at": datetime.now(timezone.utc).isoformat(),
+      }, separators=(",", ":")),
+      ex=3600,
+    )
+  except Exception:
+    log.exception("match-build-outcome telemetry failed symbol=%s", symbol)
 
 
 async def _sync_strategy_match(
@@ -252,7 +319,7 @@ async def _sync_strategy_match(
   if not settings.auto_trade_strategy_bridge_enabled:
     await client.delete(key)
     return None
-  match = _build_strategy_match(
+  match, reason, measured = _build_strategy_match(
     symbol,
     tf,
     event_ts,
@@ -261,7 +328,10 @@ async def _sync_strategy_match(
   )
   if match is None:
     await client.delete(key)
+    if reason is not None:
+      await _record_match_build_rejected(client, symbol, reason, measured)
     return None
+  await _record_match_build_outcome(client, symbol, match)
   ttl = max(60, match.expires_at - match.issued_at)
   await client.set(key, match.to_json(), ex=ttl)
   log.info(

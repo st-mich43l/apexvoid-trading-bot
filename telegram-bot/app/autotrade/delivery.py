@@ -585,6 +585,37 @@ async def auto_trade_status_text() -> str:
       ),
       "XAU",
     )
+    match_build_line = ""
+    match_build_raw = await client.get(
+      f"auto_trade:last_match_build:{primary_symbol}"
+    )
+    if match_build_raw:
+      try:
+        match_build = json.loads(match_build_raw)
+        stage = str(match_build.get("stage") or "")
+        if stage == "match_build_rejected":
+          reason = str(match_build.get("reason") or "unknown")
+          measured = match_build.get("measured") or {}
+          detail = (
+            f" (room {measured['room_pips']} pips)"
+            if "room_pips" in measured
+            else ""
+          )
+          match_build_line = (
+            "\nStrategyMatch bridge: <b>blocked</b> - "
+            f"{escape(reason)}{escape(detail)}"
+          )
+        elif stage == "match_ready":
+          strategy = str(match_build.get("strategy") or "")
+          direction = str(match_build.get("direction") or "")
+          tp = match_build.get("full_take_profit_pips")
+          tp_text = f" · TP {int(tp)}p" if tp is not None else ""
+          match_build_line = (
+            "\nStrategyMatch bridge: <b>ready</b> - "
+            f"{escape(strategy)} {escape(direction)}{escape(tp_text)}"
+          )
+      except (TypeError, ValueError, json.JSONDecodeError):
+        pass
     try:
       shares = await regime_share_24h(client, primary_symbol)
     except Exception:
@@ -656,6 +687,7 @@ async def auto_trade_status_text() -> str:
       f"\nExecution: <b>{escape(execution_state.replace('_', ' '))}</b>"
       f"{escape(zone_text)}"
       f"{reason_line}"
+      f"{match_build_line}"
       f"{map_observability}"
       f"{regime_line}"
     )

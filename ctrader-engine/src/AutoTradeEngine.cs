@@ -560,7 +560,8 @@ public sealed class AutoTradeEngine(
         || candidate.RangeHigh is not decimal rangeHigh
         || rangeLow <= 0
         || rangeHigh <= rangeLow
-        || candidate.FullTakeProfitPips is not (50 or 70)
+        || candidate.FullTakeProfitPips is not int fullTakeProfitPips
+        || !options.EffectiveRangeTargetsPips.Contains(fullTakeProfitPips)
         || (
           !options.RangeFlipEnabled
           && rangeHigh - rangeLow
@@ -674,6 +675,11 @@ public sealed class AutoTradeEngine(
     );
     if (hasUnmanagedPosition || hasUnmanagedOrder)
     {
+      await store.IncrementGateRejectAsync(
+        candidate.Symbol,
+        "unmanaged_exposure",
+        cancellationToken
+      );
       return await RejectAsync(
         candidate,
         "unmanaged XAU position or pending order already open",
@@ -685,6 +691,19 @@ public sealed class AutoTradeEngine(
       && (_allSymbolPositions.Count > 0 || _allSymbolPendingOrders.Count > 0)
     )
     {
+      // Deliberately stricter than the unmanaged-exposure check above: a
+      // box-range-scalp candidate waits for the account to be fully flat
+      // even against the bot's OWN other strategies (Mapped Zone Reaction,
+      // Trend), not just outside positions. High-frequency strategies can
+      // starve box-scalp out entirely under this rule - see
+      // range_box_awaiting_flat in the reject counters, and treat a
+      // sustained high count as a signal to revisit this policy rather
+      // than a bug in this check itself.
+      await store.IncrementGateRejectAsync(
+        candidate.Symbol,
+        "range_box_awaiting_flat",
+        cancellationToken
+      );
       return await RejectAsync(
         candidate,
         "range-box scalp waits for flat XAU exposure",
