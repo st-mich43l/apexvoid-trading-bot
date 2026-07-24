@@ -1,10 +1,11 @@
 """M1 execution strategy for structural levels published by Market Map.
 
 Market Map is context, not a global gate.  This module promotes one mapped
-zone to an executable strategy only when the latest M1 candle actually touches
-and rejects it. HTF-aligned zones are the default; an opt-in counter-bias path
-adds stricter freshness, score, and structural-confluence rules. Display-only
-fallback levels (for example a lone round number) are never executable.
+zone to an executable strategy when a recent closed M1 sequence touches the
+zone and then rejects/reclaims it inside a configurable lookback. HTF-aligned
+zones are the default; an opt-in counter-bias path adds stricter freshness,
+score, and structural-confluence rules. Display-only fallback levels (for
+example a lone round number) are never executable.
 """
 
 from __future__ import annotations
@@ -94,11 +95,29 @@ class MarketMapStrategyDecision:
   filter_counts: tuple[tuple[str, int], ...] = ()
   track_limit: float | None = None
   execute_limit: float | None = None
+  map_id: str | None = None
+  touch_bar_ts: str | None = None
+  confirmation_bar_ts: str | None = None
+  reaction_age_bars: int | None = None
+  reaction_type: str | None = None
+
+
+@dataclass(frozen=True)
+class _ReactionHit:
+  entry: MapEntry
+  direction: str
+  entry_low: float
+  entry_high: float
+  counter_bias: bool
+  touch_bar_ts: str | None
+  confirmation_bar_ts: str | None
+  reaction_age_bars: int
+  reaction_type: str
 
 
 @dataclass(frozen=True)
 class _ReactionSelection:
-  selected: tuple[MapEntry, str, float, float, bool] | None
+  selected: _ReactionHit | None
   state: str
   reasons: tuple[str, ...]
   entries_seen: int
@@ -119,7 +138,7 @@ def evaluate_market_map_strategy(
   rendered_map: MarketMap | None = None,
   now: int | None = None,
 ) -> MarketMapStrategyDecision:
-  """Match an actionable mapped zone with an immediate M1 rejection."""
+  """Match an actionable mapped zone with a recent M1 rejection sequence."""
   if not bool(getattr(cfg, "auto_trade_market_map_strategy_enabled", True)):
     return MarketMapStrategyDecision("disabled")
   if spot_price is None or not math.isfinite(float(spot_price)):
@@ -133,6 +152,19 @@ def evaluate_market_map_strategy(
     return MarketMapStrategyDecision(
       "warming_up",
       ("waiting for the next structural M5 Market Map",),
+    )
+  map_id = str(getattr(market_map, "map_id", "") or "") or None
+  if (
+    rendered_map is not None
+    and map_id
+    and getattr(rendered_map, "map_id", None)
+    and rendered_map.map_id
+    and rendered_map.map_id != map_id
+  ):
+    log.warning(
+      "Market Map strategy/render map_id mismatch strategy=%s render=%s",
+      map_id,
+      rendered_map.map_id,
     )
 
   m1 = frames[EXECUTION_TIMEFRAME]
@@ -159,15 +191,40 @@ def evaluate_market_map_strategy(
       filter_counts=selection.filter_counts,
       track_limit=selection.track_limit,
       execute_limit=selection.execute_limit,
+      map_id=map_id,
     )
-  entry, direction, entry_low, entry_high, counter_bias = selection.selected
+  hit = selection.selected
+  entry = hit.entry
+  direction = hit.direction
+  entry_low = hit.entry_low
+  entry_high = hit.entry_high
+  counter_bias = hit.counter_bias
 
   pip_size = units.pip_size(symbol)
-  drift = _band_distance(float(spot_price), entry_low, entry_high) / pip_size
+  # Drift uses the mapped zone plus proximal tolerance (covers the rejection
+  # close) but not an unbounded expansion to wherever spot currently sits —
+  # otherwise 4059+ chase after a 4056 retest would always look like 0 drift.
+  proximal = max(
+    0.0,
+    float(getattr(cfg, "proximal_band_atr", 0.5)),
+  ) * atr
+  drift = _band_distance(
+    float(spot_price),
+    entry.lo - proximal,
+    entry.hi + proximal,
+  ) / pip_size
   drift_limit = max(
     0.0,
     float(getattr(cfg, "auto_trade_max_entry_distance_pips", 10)),
   )
+  atr_drift_limit = max(
+    0.0,
+    float(getattr(cfg, "auto_trade_map_max_entry_drift_atr", 0.40)),
+  ) * atr / pip_size
+  if atr_drift_limit > 0:
+    drift_limit = (
+      min(drift_limit, atr_drift_limit) if drift_limit > 0 else atr_drift_limit
+    )
   if drift > drift_limit:
     return MarketMapStrategyDecision(
       "entry_moved",
@@ -181,6 +238,11 @@ def evaluate_market_map_strategy(
       filter_counts=selection.filter_counts,
       track_limit=selection.track_limit,
       execute_limit=selection.execute_limit,
+      map_id=map_id,
+      touch_bar_ts=hit.touch_bar_ts,
+      confirmation_bar_ts=hit.confirmation_bar_ts,
+      reaction_age_bars=hit.reaction_age_bars,
+      reaction_type=hit.reaction_type,
     )
 
   issued_at = (
@@ -209,6 +271,11 @@ def evaluate_market_map_strategy(
       filter_counts=selection.filter_counts,
       track_limit=selection.track_limit,
       execute_limit=selection.execute_limit,
+      map_id=map_id,
+      touch_bar_ts=hit.touch_bar_ts,
+      confirmation_bar_ts=hit.confirmation_bar_ts,
+      reaction_age_bars=hit.reaction_age_bars,
+      reaction_type=hit.reaction_type,
     )
   strategy = "Mapped Zone Reaction"
   match_id = strategy_match_id(
@@ -222,6 +289,10 @@ def evaluate_market_map_strategy(
   )
   confluence = _confluence(entry, market_map)
   tag_text = " · ".join(entry.tags[:4])
+  reaction_label = (
+    f"M1 {hit.reaction_type} · age {hit.reaction_age_bars} bar"
+    f"{'s' if hit.reaction_age_bars != 1 else ''}"
+  )
   match_reasons = (
     (
       f"{market_map.bias_tf or 'HTF'} bias {market_map.bias} · counter_bias"
@@ -230,11 +301,15 @@ def evaluate_market_map_strategy(
     ),
     f"mapped {direction} zone {entry.lo:.2f}-{entry.hi:.2f}",
     *([tag_text] if tag_text else []),
-    "M1 touch + rejection",
+    reaction_label,
     *(
       [f"target capped at box EQ {market_map.eq:.2f}"]
       if counter_bias and market_map.eq is not None else []
     ),
+  )
+  reaction_tags = (
+    f"reaction:{hit.reaction_type}",
+    f"reaction_age:{hit.reaction_age_bars}",
   )
   match = StrategyMatch(
     version=STRATEGY_MATCH_VERSION,
@@ -258,7 +333,10 @@ def evaluate_market_map_strategy(
       float(entry.hi) if direction == "SELL" else float(entry.lo)
     ),
     targets_pips=targets,
-    tags=("counter_bias",) if counter_bias else (),
+    tags=(
+      *(("counter_bias",) if counter_bias else ()),
+      *reaction_tags,
+    ),
     target_price=float(market_map.eq) if counter_bias and market_map.eq is not None else None,
   )
   return MarketMapStrategyDecision(
@@ -271,6 +349,11 @@ def evaluate_market_map_strategy(
     selection.filter_counts,
     selection.track_limit,
     selection.execute_limit,
+    map_id,
+    hit.touch_bar_ts,
+    hit.confirmation_bar_ts,
+    hit.reaction_age_bars,
+    hit.reaction_type,
   )
 
 
@@ -292,10 +375,11 @@ def _select_reaction(
     cfg,
     rendered_map,
   )
-  selected = (
-    None
-    if result.selected is None
-    else result.selected[:4]
+  selected = None if result.selected is None else (
+    result.selected.entry,
+    result.selected.direction,
+    result.selected.entry_low,
+    result.selected.entry_high,
   )
   return selected, result.state, result.reasons
 
@@ -467,9 +551,18 @@ def _select_reaction_detailed(
     )
 
   for entry, candidate_direction, counter_bias in executable:
-    if not _touches(m1.iloc[-1], entry, tolerance):
+    reaction = _reaction_in_lookback(
+      m1,
+      entry,
+      candidate_direction,
+      atr,
+      tolerance,
+      cfg,
+      price,
+    )
+    if reaction is None:
       continue
-    if not _rejects(m1.iloc[-1], candidate_direction, atr):
+    if reaction.reaction_type == "touch_only":
       return _ReactionSelection(
         None,
         "waiting_for_reaction",
@@ -490,7 +583,17 @@ def _select_reaction_detailed(
     entry_low = float(min(entry.lo - tolerance, price))
     entry_high = float(max(entry.hi + tolerance, price))
     return _ReactionSelection(
-      (entry, candidate_direction, entry_low, entry_high, counter_bias),
+      _ReactionHit(
+        entry,
+        candidate_direction,
+        entry_low,
+        entry_high,
+        counter_bias,
+        reaction.touch_bar_ts,
+        reaction.confirmation_bar_ts,
+        reaction.reaction_age_bars,
+        reaction.reaction_type,
+      ),
       "candidate",
       (),
       len(market_map.entries),
@@ -672,9 +775,115 @@ def _render_divergence(
     candidate.side == entry.side
     and math.isclose(candidate.lo, entry.lo, abs_tol=1e-6)
     and math.isclose(candidate.hi, entry.hi, abs_tol=1e-6)
-    for candidate in rendered_map.entries
+    for candidate in [
+      *rendered_map.entries,
+      *getattr(rendered_map, "actionable_entries", []),
+    ]
   )
   return "" if present else " · ⚠ nearest band absent from rendered Market Map"
+
+
+@dataclass(frozen=True)
+class _LookbackReaction:
+  reaction_type: str
+  touch_bar_ts: str | None
+  confirmation_bar_ts: str | None
+  reaction_age_bars: int
+
+
+def _bar_ts(index_value: object) -> str | None:
+  if index_value is None:
+    return None
+  if hasattr(index_value, "isoformat"):
+    try:
+      return index_value.isoformat()
+    except (TypeError, ValueError):
+      return str(index_value)
+  return str(index_value)
+
+
+def _closes_away(
+  row: pd.Series,
+  entry: MapEntry,
+  direction: str,
+  tolerance: float,
+) -> bool:
+  close = float(row["close"])
+  if direction == "SELL":
+    return close < entry.lo - tolerance
+  return close > entry.hi + tolerance
+
+
+def _reaction_in_lookback(
+  m1: pd.DataFrame,
+  entry: MapEntry,
+  direction: str,
+  atr: float,
+  tolerance: float,
+  cfg: Any,
+  price: float,
+) -> _LookbackReaction | None:
+  lookback = max(
+    1,
+    int(getattr(cfg, "auto_trade_map_reaction_lookback_bars", 5)),
+  )
+  window = m1.tail(lookback)
+  if window.empty:
+    return None
+  touch_positions = [
+    offset
+    for offset in range(len(window))
+    if _touches(window.iloc[offset], entry, tolerance)
+  ]
+  if not touch_positions:
+    return None
+  # Prefer the most recent touch that still has a later confirmation.
+  for touch_pos in reversed(touch_positions):
+    touch_row = window.iloc[touch_pos]
+    touch_ts = _bar_ts(window.index[touch_pos])
+    age = len(window) - 1 - touch_pos
+    if age >= lookback:
+      continue
+    same_bar_reject = _rejects(touch_row, direction, atr)
+    if same_bar_reject:
+      return _LookbackReaction(
+        "rejection",
+        touch_ts,
+        touch_ts,
+        age,
+      )
+    for confirm_pos in range(touch_pos + 1, len(window)):
+      confirm_row = window.iloc[confirm_pos]
+      confirm_ts = _bar_ts(window.index[confirm_pos])
+      if _rejects(confirm_row, direction, atr):
+        return _LookbackReaction(
+          "rejection",
+          touch_ts,
+          confirm_ts,
+          age,
+        )
+      if _closes_away(confirm_row, entry, direction, tolerance):
+        reclaim = (
+          direction == "BUY"
+          and float(confirm_row["close"]) > entry.hi
+        ) or (
+          direction == "SELL"
+          and float(confirm_row["close"]) < entry.lo
+        )
+        return _LookbackReaction(
+          "reclaim" if reclaim else "close_away",
+          touch_ts,
+          confirm_ts,
+          age,
+        )
+  # Touched inside lookback but never confirmed.
+  last_touch = touch_positions[-1]
+  return _LookbackReaction(
+    "touch_only",
+    _bar_ts(window.index[last_touch]),
+    None,
+    len(window) - 1 - last_touch,
+  )
 
 
 def _touches(row: pd.Series, entry: MapEntry, tolerance: float) -> bool:

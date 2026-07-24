@@ -43,6 +43,16 @@ from app.autotrade.range_context import (
   range_context_source_key,
   resolve_range_context,
 )
+from app.autotrade.range_lifecycle import (
+  box_break_direction,
+  disarmed_side_payload,
+  load_breakout_retest_watch,
+  mark_range_retired,
+  persist_breakout_retest_watch,
+  range_is_retired,
+  retire_range_context,
+  status_label_for_retired,
+)
 from app.autotrade.map_strategy import (
   MarketMap,
   MarketMapStrategyDecision,
@@ -226,6 +236,67 @@ async def _resolve_worker_range(
     private_context,
     now=now,
   )
+  price = spot.price if spot is not None and spot.fresh else None
+  if (
+    private_decision.state == "box_broken"
+    and private_decision.box is not None
+    and price is not None
+  ):
+    direction = box_break_direction(private_decision, float(price))
+    if direction is not None:
+      base = private_context or resolved
+      if base is not None:
+        resolved = retire_range_context(
+          base,
+          direction=direction,
+          now=now,
+        )
+        comparison = {
+          **comparison,
+          "state": "retired",
+          "resolution": "accepted_structural_breakout",
+          "reason": resolved.invalidation_reason,
+        }
+        await mark_range_retired(
+          client,
+          symbol=symbol,
+          range_id=resolved.range_id,
+          ttl=settings.auto_trade_box_retire_seconds,
+        )
+        await persist_breakout_retest_watch(
+          client,
+          symbol=symbol,
+          range_id=resolved.range_id,
+          direction=direction,
+          lower=resolved.lower,
+          upper=resolved.upper,
+          ttl=settings.auto_trade_box_retire_seconds,
+        )
+        await _expire_range_matches(client, symbol, resolved.range_id)
+  elif resolved is not None and await range_is_retired(
+    client, symbol=symbol, range_id=resolved.range_id,
+  ):
+    watch = await load_breakout_retest_watch(client, symbol)
+    if watch and watch.get("direction") in {"BUY", "SELL"}:
+      direction = str(watch["direction"])
+    elif price is not None and math.isfinite(float(price)):
+      direction = (
+        "BUY" if float(price) >= resolved.upper else "SELL"
+      )
+    else:
+      direction = "BUY"
+    resolved = retire_range_context(
+      resolved,
+      direction=direction,
+      now=now,
+    )
+    comparison = {
+      **comparison,
+      "state": "retired",
+      "resolution": "accepted_structural_breakout",
+      "reason": resolved.invalidation_reason,
+    }
+
   await persist_range_resolution(
     client,
     symbol=symbol,
@@ -239,12 +310,13 @@ async def _resolve_worker_range(
   elif comparison.get("resolution") == "merged":
     await increment_metric(client, "range_context_merged", symbol=symbol)
   if resolved is not None:
-    private_decision = evaluate_auto_scalp_gate(
-      frames,
-      symbol=symbol,
-      spot_price=spot.price if spot is not None and spot.fresh else None,
-      range_context=resolved,
-    )
+    if resolved.state not in {"broken", "retired"}:
+      private_decision = evaluate_auto_scalp_gate(
+        frames,
+        symbol=symbol,
+        spot_price=spot.price if spot is not None and spot.fresh else None,
+        range_context=resolved,
+      )
     await _persist_range_side_states(
       client,
       symbol=symbol,
@@ -269,6 +341,34 @@ async def _persist_range_side_states(
   }
   if not active and context.state not in {"broken", "retired"}:
     return
+  # Broken/retired ranges must never keep armed rails.
+  if context.state in {"broken", "retired"}:
+    now = int(datetime.now(timezone.utc).timestamp())
+    for direction in ("BUY", "SELL"):
+      side_key = (
+        f"auto_trade:range_side:{symbol.upper()}:{context.range_id}:"
+        f"{direction}"
+      )
+      existing = {}
+      existing_raw = await client.get(side_key)
+      if existing_raw:
+        try:
+          existing = json.loads(existing_raw)
+        except (TypeError, ValueError, json.JSONDecodeError):
+          existing = {}
+      payload = disarmed_side_payload(
+        context=context,
+        direction=direction,
+        existing=existing,
+        now=now,
+      )
+      await client.set(
+        side_key,
+        json.dumps(payload, separators=(",", ":"), sort_keys=True),
+        ex=max(300, settings.auto_trade_box_retire_seconds),
+      )
+      await client.delete(_box_edge_key(symbol, context.range_id, direction))
+    return
   now = int(datetime.now(timezone.utc).timestamp())
   for direction, barrier in (
     ("BUY", context.lower_barrier),
@@ -285,8 +385,8 @@ async def _persist_range_side_states(
         existing = json.loads(existing_raw)
       except (TypeError, ValueError, json.JSONDecodeError):
         existing = {}
-    state = "ARMED" if active else "INVALIDATED"
-    if active and decision.direction == direction:
+    state = "ARMED"
+    if decision.direction == direction:
       state = (
         "CONFIRMED"
         if decision.state == "candidate"
@@ -294,7 +394,7 @@ async def _persist_range_side_states(
         if decision.state == "waiting_rejection"
           else state
       )
-    if active and await client.exists(
+    if await client.exists(
       _box_edge_key(symbol, context.range_id, direction)
     ):
       state = str(existing.get("state") or "CANDIDATE_PUBLISHED")
@@ -307,9 +407,7 @@ async def _persist_range_side_states(
       "pending_order_ids": existing.get("pending_order_ids", []),
       "position_ids": existing.get("position_ids", []),
       "target_state": existing.get("target_state", "pending"),
-      "invalidation_state": (
-        None if active else context.invalidation_reason or context.state
-      ),
+      "invalidation_state": None,
       "last_trigger_bar": now,
       "last_confirmed_touch": now if state == "CONFIRMED" else None,
       "execution_count": int(existing.get("execution_count") or 0),
@@ -325,6 +423,36 @@ async def _persist_range_side_states(
       json.dumps(payload, separators=(",", ":"), sort_keys=True),
       ex=max(300, settings.auto_trade_box_retire_seconds),
     )
+
+
+async def _expire_range_matches(
+  client: Any,
+  symbol: str,
+  range_id: str,
+) -> None:
+  matches = await _load_strategy_matches(client, symbol)
+  kept = [item for item in matches if item.range_id != range_id]
+  if len(kept) == len(matches):
+    return
+  if kept:
+    from app.autotrade.multi_match import serialize_matches
+    await client.set(
+      strategy_matches_key(symbol),
+      serialize_matches(kept),
+      ex=max(60, max(item.expires_at for item in kept) - int(
+        datetime.now(timezone.utc).timestamp()
+      )),
+    )
+  else:
+    await client.delete(strategy_matches_key(symbol))
+  legacy = await client.get(strategy_match_key(symbol))
+  if legacy:
+    try:
+      match = StrategyMatch.from_json(legacy)
+    except (TypeError, ValueError, json.JSONDecodeError, KeyError):
+      match = None
+    if match is not None and match.range_id == range_id:
+      await client.delete(strategy_match_key(symbol))
 
 
 async def _mark_range_side_candidate(
@@ -1771,6 +1899,8 @@ def _status_payload(
   gate_source: str = "private_ohlc",
   strategy_match: StrategyMatch | None = None,
   market_map_decision: MarketMapStrategyDecision | None = None,
+  breakout_retest: dict[str, Any] | None = None,
+  resolved_range: RangeContext | None = None,
 ) -> dict[str, Any]:
   rail = decision.rail
   target = decision.target
@@ -1792,7 +1922,24 @@ def _status_payload(
   state = decision.state
   direction = decision.direction
   reasons = decision.reasons
-  if strategy_match is not None:
+  if (
+    breakout_retest
+    and str(breakout_retest.get("state") or "") == "waiting"
+    and strategy_match is None
+    and candidate_id is None
+  ):
+    state = "breakout_retest_waiting"
+    direction = str(breakout_retest.get("direction") or direction or "")
+    zone_low = breakout_retest.get("zone_low")
+    zone_high = breakout_retest.get("zone_high")
+    reasons = (
+      (
+        f"breakout retest waiting at {float(zone_low):.2f}-{float(zone_high):.2f}",
+      )
+      if zone_low is not None and zone_high is not None
+      else ("breakout retest waiting",)
+    )
+  elif strategy_match is not None:
     state = "candidate" if candidate_id is not None else "strategy_match_waiting"
     direction = strategy_match.direction
     reasons = strategy_match.reasons
@@ -1807,6 +1954,7 @@ def _status_payload(
     market_map_decision is not None
     and market_map_decision.state != "candidate"
     and decision.state != "candidate"
+    and decision.state != "box_broken"
   ):
     state = market_map_decision.state
     reasons = market_map_decision.reasons
@@ -1824,9 +1972,17 @@ def _status_payload(
   elif decision.state == "candidate":
     selected_strategy = "Range Box Scalp"
     selected_timeframe = EXECUTION_TIMEFRAME
+  range_status = None
+  if resolved_range is not None:
+    range_status = (
+      status_label_for_retired(resolved_range)
+      if resolved_range.state == "retired"
+      else f"{resolved_range.state}"
+    )
   return {
     "state": state,
     "box_state": decision.state,
+    "range_status": range_status,
     "symbol": symbol,
     "tf": EXECUTION_TIMEFRAME,
     "event_ts": event_ts,
@@ -1900,6 +2056,21 @@ def _status_payload(
       if market_map_decision is None
       else market_map_decision.execute_limit
     ),
+    "market_map_id": (
+      None if market_map_decision is None else market_map_decision.map_id
+    ),
+    "market_map_reaction": (
+      None
+      if market_map_decision is None
+      or market_map_decision.reaction_type is None
+      else {
+        "touch_bar_ts": market_map_decision.touch_bar_ts,
+        "confirmation_bar_ts": market_map_decision.confirmation_bar_ts,
+        "reaction_age_bars": market_map_decision.reaction_age_bars,
+        "reaction_type": market_map_decision.reaction_type,
+      }
+    ),
+    "breakout_retest": breakout_retest,
     "selected_strategy": selected_strategy,
     "selected_timeframe": selected_timeframe,
     "selection_state": (
@@ -2244,6 +2415,8 @@ async def _handle_event(
     gate_source=gate_source,
     strategy_match=strategy_match,
     market_map_decision=market_map_decision,
+    breakout_retest=await load_breakout_retest_watch(client, symbol),
+    resolved_range=resolved_range,
   )
   payload["tracked_strategy_matches"] = [
     {

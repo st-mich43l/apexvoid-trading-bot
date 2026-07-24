@@ -33,6 +33,10 @@ from app.autotrade.range_context import (
   range_context_key,
   range_context_source_key,
 )
+from app.autotrade.range_lifecycle import (
+  load_breakout_retest_watch,
+  status_label_for_retired,
+)
 from app.autotrade.config_health import (
   CONFIG_HEALTH_KEY,
   CTRADER_MANIFEST_KEY,
@@ -784,22 +788,42 @@ async def auto_trade_status_text() -> str:
     match_build_raw = await client.get(
       f"auto_trade:last_match_build:{primary_symbol}"
     )
-    if match_build_raw:
+    breakout_watch = await load_breakout_retest_watch(client, primary_symbol)
+    if (
+      breakout_watch
+      and str(breakout_watch.get("state") or "") == "waiting"
+    ):
+      zone_low = breakout_watch.get("zone_low")
+      zone_high = breakout_watch.get("zone_high")
+      direction = str(breakout_watch.get("direction") or "")
+      zone_text = (
+        f" at {float(zone_low):,.2f}–{float(zone_high):,.2f}"
+        if zone_low is not None and zone_high is not None
+        else ""
+      )
+      match_build_line = (
+        "\nStrategyMatch bridge: <b>breakout-retest</b> - "
+        f"{escape(direction)} waiting{escape(zone_text)}"
+      )
+    elif match_build_raw:
       try:
         match_build = json.loads(match_build_raw)
         stage = str(match_build.get("stage") or "")
         if stage == "match_build_rejected":
           reason = str(match_build.get("reason") or "unknown")
-          measured = match_build.get("measured") or {}
-          detail = (
-            f" (room {measured['room_pips']} pips)"
-            if "room_pips" in measured
-            else ""
-          )
-          match_build_line = (
-            "\nStrategyMatch bridge: <b>blocked</b> - "
-            f"{escape(reason)}{escape(detail)}"
-          )
+          # Stale scanner "no_detection_result" must not hide an active
+          # breakout-retest handoff.
+          if reason != "no_detection_result" or not breakout_watch:
+            measured = match_build.get("measured") or {}
+            detail = (
+              f" (room {measured['room_pips']} pips)"
+              if "room_pips" in measured
+              else ""
+            )
+            match_build_line = (
+              "\nStrategyMatch bridge: <b>blocked</b> - "
+              f"{escape(reason)}{escape(detail)}"
+            )
         elif stage == "match_ready":
           strategy = str(match_build.get("strategy") or "")
           direction = str(match_build.get("direction") or "")
@@ -906,7 +930,8 @@ async def auto_trade_status_text() -> str:
   if resolved_range is not None:
     range_line = (
       f"{resolved_range.lower:,.2f}–{resolved_range.upper:,.2f} · "
-      f"{resolved_range.state} · {resolved_range.source}"
+      f"{status_label_for_retired(resolved_range) if resolved_range.state == 'retired' else resolved_range.state}"
+      f" · {resolved_range.source}"
     )
     buy_state = await _range_side_state(
       client, primary_symbol, resolved_range.range_id, "BUY",

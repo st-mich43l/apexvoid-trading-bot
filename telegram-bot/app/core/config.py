@@ -270,6 +270,14 @@ class Settings(BaseSettings):
   # produce an immediate market entry after M1 touch + rejection.
   auto_trade_map_track_distance_atr: float = 8.0
   auto_trade_map_execute_distance_atr: float = 1.5
+  # How many closed M1 bars to search for touch → rejection/reclaim memory.
+  # The latest bar does not need to be the touch bar.
+  auto_trade_map_reaction_lookback_bars: int = Field(
+    default=5,
+    validation_alias=AliasChoices(
+      "AUTO_TRADE_MAP_REACTION_LOOKBACK_BARS",
+    ),
+  )
   # Reject collapsed map geometry before it can become the nearest target.
   # Both thresholds apply; the effective minimum is their maximum.
   auto_trade_map_zone_min_width_atr: float = 0.15
