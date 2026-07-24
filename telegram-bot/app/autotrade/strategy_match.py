@@ -45,6 +45,11 @@ class StrategyMatch:
   full_take_profit_pips: int | None = None
   tags: tuple[str, ...] = ()
   target_price: float | None = None
+  tier: str = "A"
+  risk_multiplier: float = 1.0
+  family: str = ""
+  range_state: str | None = None
+  routing_hint: str | None = None
 
   @property
   def is_range_edge(self) -> bool:
@@ -53,8 +58,8 @@ class StrategyMatch:
     # configured AUTO_TRADE_RANGE_TARGETS_PIPS ladder, not a fixed {50,70}
     # pair - this contract only needs to know a target was actually chosen.
     return (
-      self.strategy == "Range Edge Scalp"
-      and self.strategy_mode == "range_scalp"
+      self.strategy in {"Range Edge Scalp", "One-Sided Range Reaction"}
+      and self.strategy_mode in {"range_scalp", "one_sided_range"}
       and self.range_id is not None
       and self.range_low is not None
       and self.range_high is not None
@@ -109,6 +114,17 @@ class StrategyMatch:
         target_price=(
           None if payload.get("target_price") is None
           else float(payload["target_price"])
+        ),
+        tier=str(payload.get("tier") or "A").upper(),
+        risk_multiplier=float(payload.get("risk_multiplier") or 1.0),
+        family=str(payload.get("family") or ""),
+        range_state=(
+          None if payload.get("range_state") is None
+          else str(payload["range_state"])
+        ),
+        routing_hint=(
+          None if payload.get("routing_hint") is None
+          else str(payload["routing_hint"])
         ),
       )
     except (KeyError, TypeError, ValueError, json.JSONDecodeError):
@@ -181,6 +197,9 @@ def _valid_match(match: StrategyMatch) -> bool:
       match.target_price is None
       or math.isfinite(match.target_price)
     )
+    and match.tier in {"A", "B", "C"}
+    and math.isfinite(match.risk_multiplier)
+    and match.risk_multiplier >= 0
     and valid_range
     and match.match_id == strategy_match_id(
       match.symbol,

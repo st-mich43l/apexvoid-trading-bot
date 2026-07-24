@@ -13,6 +13,37 @@ dated section after deployment.
 
 ### Fixed
 
+- Zone-fill no longer hard-rejects when price is already inside the entry zone
+  (production: Breakout Continuation SELL ~4025.59 inside 4024.37–4027.45).
+  Geometry-aware routing classifies `price_inside_zone` / `invalid_limit_side`
+  and falls back to `ProcessSingleInitialAsync` with reason
+  `zone-fill geometry invalid; single-entry fallback` when
+  `AUTO_TRADE_ZONE_FILL_FALLBACK_ENABLED=true` (default).
+- Support/resistance detection is symmetric with dynamic clustering, controlled
+  fallback barriers (`source=fallback_local_extreme`), and explicit range
+  states (`no_range` / `provisional_range` / `confirmed_range` /
+  `post_impulse_range` / `broken_range`). The previous 2-resistance/0-support
+  scanner shape now either produces a confirmed fallback support or a
+  machine-readable `missing_side_reason`.
+- Market Map execute distance gains a small configurable tolerance
+  (`AUTO_TRADE_MAP_EXECUTE_TOLERANCE_PIPS` / `_ATR`) so zones slightly outside
+  the raw ATR window still execute after unchanged M1 touch + rejection.
+- Entry drift is strategy-aware (range / trend / map ATR multipliers) instead of
+  a single universal pip gate.
+
+### Added
+
+- Multi-strategy match storage at `auto_trade:strategy_matches:{symbol}` while
+  preserving the legacy primary key `auto_trade:strategy_match:{symbol}`.
+  Same-thesis setups merge as confluence; distinct theses stay tracked.
+- Execution quality tiers A/B/C with risk multipliers
+  (`AUTO_TRADE_TIER_A/B_RISK_MULTIPLIER`, post-impulse and one-sided multipliers).
+  Tier B raises trade frequency at reduced risk; Tier C stays analysis-only.
+- Adaptive range target ladder default `20,30,40,50,70` with 3-pip buffer and
+  optional min RR (`AUTO_TRADE_RANGE_MIN_RR`).
+
+### Fixed
+
 - Regime classification no longer treats every narrow staircase step as chop.
   Height and containment tests stay as the primary chop signals; an additive
   directional override (LH/LL or HH/HL pairs over

@@ -248,9 +248,36 @@ class Settings(BaseSettings):
   # (the common case per the 23 Jul 09:00/11:00 incidents) silently produced
   # no executable candidate. C# must read this same env var - see
   # AutoTradeOptions.RangeTargetsPips.
-  auto_trade_range_targets_pips: str = "30,40,50"
-  auto_trade_range_tp_buffer_pips: float = 5.0
-  auto_trade_range_min_target_pips: float = 30.0
+  auto_trade_range_targets_pips: str = "20,30,40,50,70"
+  auto_trade_range_tp_buffer_pips: float = 3.0
+  auto_trade_range_min_target_pips: float = 20.0
+  auto_trade_range_min_rr: float = 1.10
+  # Structure-aware barrier / range controls.
+  scalp_barrier_fallback_enabled: bool = True
+  scalp_barrier_fallback_min_confirmations: int = 1
+  scalp_range_provisional_enabled: bool = True
+  scalp_post_impulse_range_enabled: bool = True
+  range_scalp_min_inside_closes: int = 3
+  range_scalp_max_edge_width_atr: float = 0.75
+  range_scalp_cluster_min_abs: float = 0.0
+  # Multi-strategy routing.
+  scanner_top_n: int = 3
+  auto_trade_max_tracked_candidates: int = 5
+  auto_trade_max_active_positions_per_symbol: int = 1
+  # Quality / risk tiers.
+  auto_trade_tier_a_risk_multiplier: float = 1.0
+  auto_trade_tier_b_risk_multiplier: float = 0.5
+  auto_trade_post_impulse_risk_multiplier: float = 0.5
+  auto_trade_one_sided_range_risk_multiplier: float = 0.5
+  # Map execute tolerance + strategy-aware drift.
+  auto_trade_map_execute_tolerance_pips: float = 3.0
+  auto_trade_map_execute_tolerance_atr: float = 0.15
+  auto_trade_range_max_entry_drift_atr: float = 0.35
+  auto_trade_trend_max_entry_drift_atr: float = 0.85
+  auto_trade_map_max_entry_drift_atr: float = 0.40
+  # Zone-fill geometry fallback (mirrored on C# AutoTradeOptions).
+  auto_trade_zone_fill_fallback_enabled: bool = True
+  auto_trade_inside_zone_market_entry_enabled: bool = True
   # Directional override for chop→trend. Height/containment stay as the
   # primary chop tests; when enabled, a staircase of LH/LL or HH/HL pairs
   # with enough net ATR displacement reclassifies as trend. Ships dark —

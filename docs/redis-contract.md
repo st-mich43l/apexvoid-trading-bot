@@ -134,9 +134,12 @@ XADD auto_trade:candidates MAXLEN ~ 1000 * payload <json>
 
 The private strategies read raw `bars:XAU:M1`, `bars:XAU:M5`,
 `bars:XAU:M15`, and `price:XAU:spot` data. The scanner bridge reads a
-short-lived typed match from `auto_trade:strategy_match:{symbol}`. It never
+short-lived typed match from `auto_trade:strategy_match:{symbol}` (primary)
+and the multi-match list from `auto_trade:strategy_matches:{symbol}`. It never
 parses Telegram text. Scanner detectors already decide which strategy matches;
 the worker does not reclassify it by regime or demand another M1/M5 signal.
+Candidate payloads include `tier`, `risk_multiplier`, `family`, and
+`range_state` for observability.
 
 Generic scanner matches become `auto_strategy_match` v4 candidates with their
 detector setup name, M5 source, structure stop context, and target ladder.

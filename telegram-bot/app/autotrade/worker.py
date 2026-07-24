@@ -889,16 +889,26 @@ async def _publish_strategy_match(
     else 0.0
   )
   distance_pips = distance / units.pip_size(symbol)
-  distance_limit = max(
-    0.0,
-    float(settings.auto_trade_max_entry_distance_pips),
+  from app.autotrade.execution_policy import max_entry_drift_pips
+  remaining_room = None
+  if match.full_take_profit_pips:
+    remaining_room = float(match.full_take_profit_pips)
+  distance_limit, drift_measured = max_entry_drift_pips(
+    strategy=match.strategy,
+    atr=float(match.atr),
+    pip_size=units.pip_size(symbol),
+    remaining_target_room_pips=remaining_room,
+    cfg=settings,
   )
   if distance_pips > distance_limit:
     log.info(
-      "strategy match skipped id=%s strategy=%s: entry moved %.1f pips",
+      "strategy match skipped id=%s strategy=%s: entry moved %.1f pips "
+      "(limit %.1f measured=%s)",
       match.match_id[:12],
       match.strategy,
       distance_pips,
+      distance_limit,
+      drift_measured,
     )
     if consume_redis_match:
       await client.delete(strategy_match_key(symbol))
@@ -964,6 +974,10 @@ async def _publish_strategy_match(
     "targets_pips": list(match.targets_pips),
     "strategy_tags": list(match.tags),
     "target_price": match.target_price,
+    "tier": match.tier,
+    "risk_multiplier": match.risk_multiplier,
+    "family": match.family,
+    "range_state": match.range_state,
     "range_id": match.range_id,
     "range_low": match.range_low,
     "range_high": match.range_high,
