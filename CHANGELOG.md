@@ -13,6 +13,10 @@ dated section after deployment.
 
 ### Added
 
+- Added typed, source-aware structural guard decisions with
+  `observe|balanced|strict` policy modes, per-outcome Redis counters,
+  `/auto_status` guard diagnostics, and non-destructive zone-reconciliation
+  shadow metrics.
 - Added a dedicated owner `/algo` execution path that preserves the supplied
   direction, entry zone, absolute SL, TP prices, setup and candidate/group
   ownership. Manual orders may coexist with autonomous or opposite-direction
@@ -53,6 +57,11 @@ dated section after deployment.
 
 ### Fixed
 
+- Fixed the post-23-Jul demo-evaluation frequency collapse: a strategy's own
+  key level/supply/demand source is no longer treated as an opposing barrier;
+  ambiguous overlaps and temporary drift retain their exact StrategyMatch;
+  counter-bias targets adapt around structure; and only confirmed stop-loss
+  closures may enforce a zone cooldown.
 - Fixed semantically identical Python/C# target ladders (descending versus
   ascending), numeric JSON forms, symbol ordering, FP Markets aliases, and
   demo account aliases being treated as fatal configuration mismatches that
