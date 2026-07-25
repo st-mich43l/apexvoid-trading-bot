@@ -57,6 +57,9 @@ from app.autotrade.multi_match import (
 from app.autotrade.lifecycle import emit_lifecycle, increment_metric
 from app.autotrade.route_outcome import record_route_outcome
 from app.autotrade.range_context import (
+  SCANNER_SNAPSHOT_TTL_SECONDS,
+  SCANNER_SOURCE_MAX_AGE_SECONDS,
+  persist_scanner_range_observation,
   range_context_source_key,
   scanner_range_context,
 )
@@ -487,14 +490,16 @@ async def _sync_strategy_match(
       atr=atr,
       pip_size=_pip_size(symbol),
       generated_at=int(datetime.now(timezone.utc).timestamp()),
-      ttl=max(300, settings.auto_trade_strategy_match_max_age_seconds),
+      ttl=SCANNER_SOURCE_MAX_AGE_SECONDS,
+    )
+    previous = await client.get(range_context_source_key(symbol, "scanner"))
+    await persist_scanner_range_observation(
+      client,
+      symbol=symbol,
+      context=range_context,
     )
     if range_context is not None:
-      await client.set(
-        range_context_source_key(symbol, "scanner"),
-        range_context.to_json(),
-        ex=max(60, range_context.expires_at - range_context.generated_at),
-      )
+      await increment_metric(client, "scanner_range_observed", symbol=symbol)
       if range_context.lower_barrier.fallback:
         await increment_metric(
           client, "fallback_support_created", symbol=symbol,
@@ -503,6 +508,17 @@ async def _sync_strategy_match(
         await increment_metric(
           client, "fallback_resistance_created", symbol=symbol,
         )
+    elif previous is not None:
+      await increment_metric(client, "scanner_range_withdrawn", symbol=symbol)
+  else:
+    previous = await client.get(range_context_source_key(symbol, "scanner"))
+    await persist_scanner_range_observation(
+      client,
+      symbol=symbol,
+      context=None,
+    )
+    if previous is not None:
+      await increment_metric(client, "scanner_range_withdrawn", symbol=symbol)
   if not settings.auto_trade_strategy_match_enabled:
     await client.delete(key)
     await client.delete(matches_key)
@@ -1325,8 +1341,16 @@ async def _record_status(
     },
   }
   encoded = json.dumps(payload, separators=(",", ":"), sort_keys=True)
-  await client.set("scanner:last_tick", encoded)
-  await client.set(f"scanner:last_tick:{symbol}:{tf}", encoded)
+  await client.set(
+    "scanner:last_tick",
+    encoded,
+    ex=SCANNER_SNAPSHOT_TTL_SECONDS,
+  )
+  await client.set(
+    f"scanner:last_tick:{symbol}:{tf}",
+    encoded,
+    ex=SCANNER_SNAPSHOT_TTL_SECONDS,
+  )
 
 
 # --- B5: per-detector reporting ---------------------------------------------

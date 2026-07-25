@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -17,6 +17,11 @@ ACTIVE_RANGE_STATES = {
   "post_impulse",
   "breakout_pending",
 }
+# Two completed bars plus a short grace for producer freshness.
+SCANNER_SOURCE_MAX_AGE_SECONDS = (2 * 5 * 60) + 60
+PRIVATE_SOURCE_MAX_AGE_SECONDS = (2 * 60) + 30
+SCANNER_SNAPSHOT_TTL_SECONDS = SCANNER_SOURCE_MAX_AGE_SECONDS
+WORKER_SNAPSHOT_TTL_SECONDS = PRIVATE_SOURCE_MAX_AGE_SECONDS
 _STATE_MAP = {
   "provisional_range": "provisional",
   "confirmed_range": "confirmed",
@@ -144,6 +149,167 @@ def range_context_compare_key(symbol: str) -> str:
   return f"auto_trade:range_context_compare:{symbol.upper()}"
 
 
+def source_max_age_seconds(source: str) -> int:
+  if source == "scanner":
+    return SCANNER_SOURCE_MAX_AGE_SECONDS
+  return PRIVATE_SOURCE_MAX_AGE_SECONDS
+
+
+def is_range_context_current(
+  context: RangeContext | None,
+  *,
+  now: int,
+  max_age_seconds: int,
+) -> bool:
+  if context is None or not context.valid:
+    return False
+  if context.generated_at > now:
+    return False
+  if context.expires_at < now:
+    return False
+  return (now - context.generated_at) <= max(1, int(max_age_seconds))
+
+
+def _source_observation(
+  context: RangeContext | None,
+  *,
+  now: int,
+  max_age_seconds: int,
+) -> dict[str, Any]:
+  if context is None:
+    return {"state": "absent"}
+  age = max(0, now - int(context.generated_at))
+  if is_range_context_current(
+    context,
+    now=now,
+    max_age_seconds=max_age_seconds,
+  ):
+    return {
+      "state": "current",
+      "age_seconds": age,
+      "range_id": context.range_id,
+      "range_state": context.state,
+      "lower": context.lower,
+      "upper": context.upper,
+      "quality": context.quality,
+    }
+  return {
+    "state": "stale",
+    "age_seconds": age,
+    "range_id": context.range_id,
+    "range_state": context.state,
+    "lower": context.lower,
+    "upper": context.upper,
+    "quality": context.quality,
+  }
+
+
+@dataclass(frozen=True)
+class RangeExecutionEligibility:
+  symbol: str
+  range_id: str | None
+  source: str | None
+  has_current_private_box: bool
+  has_current_resolved_range: bool
+  resolved_state: str | None
+  regime: str | None
+  box_decision_state: str
+  eligible: bool
+  reason_code: str
+  checked_at: int
+
+
+def evaluate_range_box_eligibility(
+  *,
+  symbol: str,
+  decision: Any,
+  private_context: RangeContext | None,
+  resolved: RangeContext | None,
+  regime_state: str | None,
+  now: int,
+  range_enabled: bool,
+) -> RangeExecutionEligibility:
+  box = getattr(decision, "box", None)
+  decision_state = str(getattr(decision, "state", "") or "")
+  private_current = is_range_context_current(
+    private_context,
+    now=now,
+    max_age_seconds=PRIVATE_SOURCE_MAX_AGE_SECONDS,
+  )
+  resolved_current = is_range_context_current(
+    resolved,
+    now=now,
+    max_age_seconds=max(
+      SCANNER_SOURCE_MAX_AGE_SECONDS,
+      PRIVATE_SOURCE_MAX_AGE_SECONDS,
+    ),
+  )
+  base = RangeExecutionEligibility(
+    symbol=symbol.upper(),
+    range_id=None if resolved is None else resolved.range_id,
+    source=None if resolved is None else resolved.source,
+    has_current_private_box=private_current and box is not None,
+    has_current_resolved_range=(
+      resolved_current
+      and resolved is not None
+      and resolved.state in ACTIVE_RANGE_STATES
+    ),
+    resolved_state=None if resolved is None else resolved.state,
+    regime=regime_state,
+    box_decision_state=decision_state,
+    eligible=False,
+    reason_code="no_private_box",
+    checked_at=now,
+  )
+  if not range_enabled:
+    return replace(base, reason_code="range_disabled")
+  if box is None or decision_state == "waiting_for_box":
+    return replace(base, reason_code="no_private_box")
+  if not private_current:
+    return replace(base, reason_code="private_range_stale")
+  if resolved is None or not resolved_current:
+    return replace(base, reason_code="no_resolved_range")
+  if resolved.state not in ACTIVE_RANGE_STATES:
+    return replace(
+      base,
+      reason_code=(
+        "range_retired"
+        if resolved.state in {"broken", "retired"}
+        else "range_not_active"
+      ),
+    )
+  if private_context is None or not _compatible(private_context, resolved):
+    return replace(base, reason_code="range_geometry_mismatch")
+  if regime_state != "chop":
+    return replace(base, reason_code="range_regime_not_chop")
+  if decision_state == "waiting_rejection":
+    return replace(base, reason_code="waiting_for_rejection")
+  if decision_state != "candidate":
+    if decision_state in {"waiting_for_touch", "waiting_touch"}:
+      return replace(base, reason_code="waiting_for_touch")
+    return replace(base, reason_code=decision_state or "waiting_for_touch")
+  return replace(base, eligible=True, reason_code="candidate_ready")
+
+
+def range_geometry_matches_match(
+  context: RangeContext,
+  *,
+  range_id: str | None,
+  range_low: float | None,
+  range_high: float | None,
+) -> bool:
+  if range_id and context.range_id == range_id:
+    return True
+  if range_low is None or range_high is None:
+    return False
+  width = max(context.width_price, float(range_high) - float(range_low))
+  tolerance = max(0.5, width * 0.25)
+  return (
+    abs(context.lower - float(range_low)) <= tolerance
+    and abs(context.upper - float(range_high)) <= tolerance
+  )
+
+
 def scanner_range_context(
   *,
   symbol: str,
@@ -241,22 +407,50 @@ def resolve_range_context(
   *,
   now: int,
 ) -> tuple[RangeContext | None, dict[str, Any]]:
+  scanner_obs = _source_observation(
+    scanner,
+    now=now,
+    max_age_seconds=SCANNER_SOURCE_MAX_AGE_SECONDS,
+  )
+  private_obs = _source_observation(
+    private,
+    now=now,
+    max_age_seconds=PRIVATE_SOURCE_MAX_AGE_SECONDS,
+  )
+  current_scanner = (
+    scanner if scanner_obs.get("state") == "current" else None
+  )
+  current_private = (
+    private if private_obs.get("state") == "current" else None
+  )
+  base_compare = {
+    "scanner": scanner_obs,
+    "private": private_obs,
+  }
+  stale_excluded = (
+    scanner_obs.get("state") == "stale"
+    or private_obs.get("state") == "stale"
+  )
   sources = [
-    item for item in (scanner, private)
-    if item is not None and item.expires_at >= now
+    item for item in (current_scanner, current_private)
+    if item is not None
   ]
   if not sources:
     return None, {
+      **base_compare,
       "state": "no_range",
       "resolution": "none",
       "disagreement": False,
+      "stale_source_excluded": stale_excluded,
     }
   if len(sources) == 1:
     selected = sources[0]
     return selected, {
+      **base_compare,
       "state": selected.state,
       "resolution": selected.source,
       "disagreement": False,
+      "stale_source_excluded": stale_excluded,
     }
   scanner_ctx, private_ctx = sources
   broken = [
@@ -270,6 +464,7 @@ def resolve_range_context(
       key=lambda item: (item.generated_at, item.quality),
     )
     return selected, {
+      **base_compare,
       "state": selected.state,
       "resolution": "accepted_structural_breakout",
       "disagreement": any(
@@ -277,8 +472,7 @@ def resolve_range_context(
       ),
       "reason": selected.invalidation_reason
       or "accepted_structural_breakout",
-      "scanner": _summary(scanner_ctx),
-      "private": _summary(private_ctx),
+      "stale_source_excluded": stale_excluded,
     }
   compatible = _compatible(scanner_ctx, private_ctx)
   if compatible:
@@ -337,11 +531,11 @@ def resolve_range_context(
       ttl=max(scanner_ctx.expires_at, private_ctx.expires_at) - now,
     )
     return merged, {
+      **base_compare,
       "state": merged.state,
       "resolution": "merged",
       "disagreement": False,
-      "scanner": _summary(scanner_ctx),
-      "private": _summary(private_ctx),
+      "stale_source_excluded": stale_excluded,
     }
   selected = max(
     sources,
@@ -352,13 +546,71 @@ def resolve_range_context(
     ),
   )
   return selected, {
+    **base_compare,
     "state": selected.state,
     "resolution": selected.source,
     "disagreement": True,
     "reason": "materially_incompatible_geometry",
-    "scanner": _summary(scanner_ctx),
-    "private": _summary(private_ctx),
+    "stale_source_excluded": stale_excluded,
   }
+
+
+async def persist_scanner_range_observation(
+  client: Any,
+  *,
+  symbol: str,
+  context: RangeContext | None,
+) -> None:
+  key = range_context_source_key(symbol, "scanner")
+  if context is None:
+    await client.delete(key)
+    return
+  await client.set(
+    key,
+    context.to_json(),
+    ex=max(60, context.expires_at - context.generated_at),
+  )
+
+
+async def persist_private_range_observation(
+  client: Any,
+  *,
+  symbol: str,
+  context: RangeContext | None,
+) -> None:
+  key = range_context_source_key(symbol, "private")
+  if context is None:
+    await client.delete(key)
+    return
+  await client.set(
+    key,
+    context.to_json(),
+    ex=max(60, context.expires_at - context.generated_at),
+  )
+
+
+async def persist_resolved_range(
+  client: Any,
+  *,
+  symbol: str,
+  resolved: RangeContext | None,
+  comparison: dict[str, Any],
+) -> None:
+  ttl = 900
+  if resolved is not None:
+    ttl = max(60, resolved.expires_at - resolved.generated_at)
+    await client.set(
+      range_context_key(symbol),
+      resolved.to_json(),
+      ex=ttl,
+    )
+  else:
+    await client.delete(range_context_key(symbol))
+  await client.set(
+    range_context_compare_key(symbol),
+    json.dumps(comparison, separators=(",", ":"), sort_keys=True),
+    ex=ttl,
+  )
 
 
 async def persist_range_resolution(
@@ -370,32 +622,19 @@ async def persist_range_resolution(
   resolved: RangeContext | None,
   comparison: dict[str, Any],
 ) -> None:
-  pipe = client.pipeline()
-  ttl = 900
-  if scanner is not None:
-    pipe.set(
-      range_context_source_key(symbol, "scanner"),
-      scanner.to_json(),
-      ex=max(60, scanner.expires_at - scanner.generated_at),
-    )
-  if private is not None:
-    pipe.set(
-      range_context_source_key(symbol, "private"),
-      private.to_json(),
-      ex=max(60, private.expires_at - private.generated_at),
-    )
-  if resolved is not None:
-    ttl = max(60, resolved.expires_at - resolved.generated_at)
-    pipe.set(range_context_key(symbol), resolved.to_json(), ex=ttl)
-  else:
-    pipe.delete(range_context_key(symbol))
-  pipe.set(
-    range_context_compare_key(symbol),
-    json.dumps(comparison, separators=(",", ":"), sort_keys=True),
-    ex=ttl,
-  )
-  await pipe.execute()
+  """Deprecated compatibility wrapper.
 
+  Source keys are producer-owned. Callers must persist scanner/private
+  observations through the dedicated helpers; this only writes resolved
+  and comparison keys.
+  """
+  del scanner, private
+  await persist_resolved_range(
+    client,
+    symbol=symbol,
+    resolved=resolved,
+    comparison=comparison,
+  )
 
 def _build_context(
   *,

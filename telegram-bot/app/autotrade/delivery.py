@@ -26,7 +26,11 @@ from app.autotrade.multi_match import (
   strategy_matches_key,
 )
 from app.autotrade.range_context import (
+  PRIVATE_SOURCE_MAX_AGE_SECONDS,
+  SCANNER_SOURCE_MAX_AGE_SECONDS,
+  WORKER_SNAPSHOT_TTL_SECONDS,
   RangeContext,
+  is_range_context_current,
   range_context_compare_key,
   range_context_key,
   range_context_source_key,
@@ -915,62 +919,86 @@ async def auto_trade_status_text() -> str:
     map_track_limit: float | None = None
     map_execute_limit: float | None = None
     raw = await client.get("auto_trade:last_gate")
+    gate_stale = False
     if raw:
       try:
         payload = json.loads(raw)
-        execution_state = str(payload.get("state") or execution_state)
-        box_state = str(payload.get("box_state") or box_state)
-        trend_state = str(payload.get("trend_state") or trend_state)
-        market_map_state = str(
-          payload.get("market_map_state") or market_map_state
-        )
-        current_regime = str(payload.get("regime") or current_regime)
-        if payload.get("market_map_entries_seen") is not None:
-          map_entries_seen = int(payload["market_map_entries_seen"])
-        if payload.get("market_map_entries_actionable") is not None:
-          map_entries_actionable = int(
-            payload["market_map_entries_actionable"]
+        checked_at = _snapshot_checked_at(payload.get("checked_at"))
+        now_ts = int(datetime.now(timezone.utc).timestamp())
+        if (
+          checked_at is not None
+          and now_ts - checked_at > WORKER_SNAPSHOT_TTL_SECONDS
+        ):
+          gate_stale = True
+          execution_state = (
+            "stale · last update "
+            f"{max(1, (now_ts - checked_at) // 60)} minutes ago"
           )
-        if isinstance(payload.get("market_map_top"), list):
-          map_top = [
-            item for item in payload["market_map_top"]
-            if isinstance(item, dict)
-          ][:3]
-        if isinstance(payload.get("market_map_filter_counts"), dict):
-          map_filters = {
-            str(key): int(value)
-            for key, value in payload["market_map_filter_counts"].items()
-          }
-        if payload.get("market_map_track_limit") is not None:
-          map_track_limit = float(payload["market_map_track_limit"])
-        if payload.get("market_map_execute_limit") is not None:
-          map_execute_limit = float(payload["market_map_execute_limit"])
-        reasons = payload.get("reasons")
-        if isinstance(reasons, list) and reasons:
-          selection_reason = str(reasons[-1])
-        selected = str(payload.get("selected_strategy") or "")
-        selected_tf = str(payload.get("selected_timeframe") or "")
-        direction = str(payload.get("direction") or "")
-        if selected:
-          selected_text = " · ".join(
-            item for item in (selected, direction, selected_tf) if item
+          metrics["range_status_stale_snapshot_suppressed"] = (
+            metrics.get("range_status_stale_snapshot_suppressed", 0) + 1
           )
-          source_name = str(payload.get("gate_source") or "")
-          selection_source = (
-            "scanner detector"
-            if source_name == "scanner_strategy_match"
-            else "Market Map + M1 reaction"
-            if source_name == "market_map_strategy"
-            else "private OHLC matcher"
+        else:
+          execution_state = str(payload.get("state") or execution_state)
+          box_state = str(payload.get("box_state") or box_state)
+          trend_state = str(payload.get("trend_state") or trend_state)
+          market_map_state = str(
+            payload.get("market_map_state") or market_map_state
           )
-        box = payload.get("box")
-        if isinstance(box, dict):
-          low = float(box["low"])
-          high = float(box["high"])
-          tp = payload.get("full_tp_pips")
-          zone_text = f" · box {low:,.2f}–{high:,.2f}"
-          if tp is not None:
-            zone_text += f" · full TP {int(tp)}p"
+          current_regime = str(payload.get("regime") or current_regime)
+          if payload.get("market_map_entries_seen") is not None:
+            map_entries_seen = int(payload["market_map_entries_seen"])
+          if payload.get("market_map_entries_actionable") is not None:
+            map_entries_actionable = int(
+              payload["market_map_entries_actionable"]
+            )
+          if isinstance(payload.get("market_map_top"), list):
+            map_top = [
+              item for item in payload["market_map_top"]
+              if isinstance(item, dict)
+            ][:3]
+          if isinstance(payload.get("market_map_filter_counts"), dict):
+            map_filters = {
+              str(key): int(value)
+              for key, value in payload["market_map_filter_counts"].items()
+            }
+          if payload.get("market_map_track_limit") is not None:
+            map_track_limit = float(payload["market_map_track_limit"])
+          if payload.get("market_map_execute_limit") is not None:
+            map_execute_limit = float(payload["market_map_execute_limit"])
+          reasons = payload.get("reasons")
+          if isinstance(reasons, list) and reasons:
+            selection_reason = str(reasons[-1])
+          selected = str(payload.get("selected_strategy") or "")
+          selected_tf = str(payload.get("selected_timeframe") or "")
+          direction = str(payload.get("direction") or "")
+          if selected:
+            selected_text = " · ".join(
+              item for item in (selected, direction, selected_tf) if item
+            )
+            source_name = str(payload.get("gate_source") or "")
+            selection_source = (
+              "scanner detector"
+              if source_name == "scanner_strategy_match"
+              else "Market Map + M1 reaction"
+              if source_name == "market_map_strategy"
+              else "private OHLC matcher"
+            )
+          box = payload.get("box")
+          if isinstance(box, dict):
+            low = float(box["low"])
+            high = float(box["high"])
+            tp = payload.get("full_tp_pips")
+            zone_text = f" · box {low:,.2f}–{high:,.2f}"
+            if tp is not None:
+              zone_text += f" · full TP {int(tp)}p"
+          eligibility = payload.get("box_eligibility")
+          if isinstance(eligibility, dict):
+            gate_label = (
+              "eligible"
+              if eligibility.get("eligible")
+              else f"ineligible · {eligibility.get('reason_code') or 'unknown'}"
+            )
+            selection_reason = selection_reason or gate_label
       except (KeyError, TypeError, ValueError, json.JSONDecodeError):
         pass
     scanner_state = "waiting for next M5 scan"
@@ -978,22 +1006,53 @@ async def auto_trade_status_text() -> str:
     if scanner_raw:
       try:
         scanner_payload = json.loads(scanner_raw)
-        detected = scanner_payload.get("detected")
-        count = len(detected) if isinstance(detected, list) else 0
-        scanner_state = (
-          f"{count} setup{'s' if count != 1 else ''} matched"
-          if count
-          else "no setup matched"
-        )
-        scalp = scanner_payload.get("scalp")
-        if isinstance(scalp, dict) and scalp.get("state"):
-          scanner_state += f" · range {str(scalp['state']).replace('_', ' ')}"
+        checked_at = _snapshot_checked_at(scanner_payload.get("checked_at"))
+        now_ts = int(datetime.now(timezone.utc).timestamp())
+        if (
+          checked_at is not None
+          and now_ts - checked_at > SCANNER_SOURCE_MAX_AGE_SECONDS
+        ):
+          scanner_state = (
+            "stale · last update "
+            f"{max(1, (now_ts - checked_at) // 60)} minutes ago"
+          )
+          metrics["range_status_stale_snapshot_suppressed"] = (
+            metrics.get("range_status_stale_snapshot_suppressed", 0) + 1
+          )
+        else:
+          detected = scanner_payload.get("detected")
+          count = len(detected) if isinstance(detected, list) else 0
+          scanner_state = (
+            f"{count} setup{'s' if count != 1 else ''} matched"
+            if count
+            else "no setup matched"
+          )
+          scalp = scanner_payload.get("scalp")
+          if isinstance(scalp, dict) and scalp.get("state"):
+            scanner_state += (
+              f" · range {str(scalp['state']).replace('_', ' ')}"
+            )
+      except (TypeError, ValueError, json.JSONDecodeError):
+        pass
+    now_ts = int(datetime.now(timezone.utc).timestamp())
+    box_gate = "ineligible · no_current_range"
+    if not gate_stale and raw:
+      try:
+        eligibility = json.loads(raw).get("box_eligibility")
+        if isinstance(eligibility, dict):
+          box_gate = (
+            "eligible"
+            if eligibility.get("eligible")
+            else (
+              "ineligible · "
+              f"{eligibility.get('reason_code') or 'no_current_range'}"
+            )
+          )
       except (TypeError, ValueError, json.JSONDecodeError):
         pass
     regime_line = (
-      "\nMarket context: "
-      f"<b>{escape(current_regime.replace('_', ' '))}</b>"
-      " <i>(telemetry only)</i>"
+      f"\nRegime: <b>{escape(current_regime.replace('_', ' '))}</b>"
+      f"\nRange execution gate: <b>{escape(box_gate)}</b>"
     )
     match_build_line = ""
     match_build_raw = await client.get(
@@ -1185,7 +1244,19 @@ async def auto_trade_status_text() -> str:
   range_line = "none"
   rail_line = "BUY unknown · SELL unknown"
   barrier_line = "support 0 · resistance 0"
-  if resolved_range is not None:
+  now_ts = int(datetime.now(timezone.utc).timestamp())
+  resolved_current = is_range_context_current(
+    resolved_range,
+    now=now_ts,
+    max_age_seconds=max(
+      SCANNER_SOURCE_MAX_AGE_SECONDS,
+      PRIVATE_SOURCE_MAX_AGE_SECONDS,
+    ),
+  )
+  if resolved_range is not None and (
+    resolved_range.state in {"retired", "broken"}
+    or resolved_current
+  ):
     range_line = (
       f"{resolved_range.lower:,.2f}–{resolved_range.upper:,.2f} · "
       f"{status_label_for_retired(resolved_range) if resolved_range.state == 'retired' else resolved_range.state}"
@@ -1202,18 +1273,40 @@ async def auto_trade_status_text() -> str:
       f"support {len(resolved_range.supports)} · "
       f"resistance {len(resolved_range.resistances)}"
     )
-  scanner_summary = (
-    "none"
-    if scanner_range is None
-    else f"{scanner_range.state} {scanner_range.lower:,.2f}–{scanner_range.upper:,.2f}"
+  elif resolved_range is not None:
+    range_line = (
+      "stale · "
+      f"{max(0, now_ts - resolved_range.generated_at)}s"
+    )
+  scanner_summary = _source_range_summary(
+    scanner_range,
+    now=now_ts,
+    max_age_seconds=SCANNER_SOURCE_MAX_AGE_SECONDS,
+    absent_label="no range",
   )
-  private_summary = (
-    "none"
-    if private_range is None
-    else f"{private_range.state} {private_range.lower:,.2f}–{private_range.upper:,.2f}"
+  private_summary = _source_range_summary(
+    private_range,
+    now=now_ts,
+    max_age_seconds=PRIVATE_SOURCE_MAX_AGE_SECONDS,
+    absent_label="no box",
   )
   comparison = str(
     (range_compare or {}).get("resolution") or "none"
+  )
+  scanner_age = (
+    "none"
+    if scanner_range is None
+    else f"{max(0, now_ts - scanner_range.generated_at)}s"
+  )
+  private_age = (
+    "none"
+    if private_range is None
+    else f"{max(0, now_ts - private_range.generated_at)}s"
+  )
+  resolved_age = (
+    "none"
+    if resolved_range is None
+    else f"{max(0, now_ts - resolved_range.generated_at)}s"
   )
   positions = len((executor or {}).get("position_ids") or [])
   pending = len((executor or {}).get("pending_order_ids") or [])
@@ -1354,6 +1447,9 @@ async def auto_trade_status_text() -> str:
     f"\nResolved range: <b>{escape(range_line)}</b>"
     f"\nScanner range: <b>{escape(scanner_summary)}</b>"
     f"\nPrivate range: <b>{escape(private_summary)}</b>"
+    f"\nScanner range age: <b>{escape(scanner_age)}</b>"
+    f"\nPrivate range age: <b>{escape(private_age)}</b>"
+    f"\nResolved range age: <b>{escape(resolved_age)}</b>"
     f"\nResolution: <b>{escape(comparison)}</b>"
     f"\nBarriers: <b>{escape(barrier_line)}</b>"
     f"\nRails: <b>{escape(rail_line)}</b>"
@@ -1391,6 +1487,41 @@ async def _json_key(client, key: str) -> dict:
   except (TypeError, ValueError, json.JSONDecodeError):
     return {}
   return value if isinstance(value, dict) else {}
+
+
+def _snapshot_checked_at(raw: object) -> int | None:
+  if raw is None:
+    return None
+  text = str(raw)
+  try:
+    if text.endswith("Z"):
+      text = text[:-1] + "+00:00"
+    return int(datetime.fromisoformat(text).timestamp())
+  except ValueError:
+    return None
+
+
+def _source_range_summary(
+  context: RangeContext | None,
+  *,
+  now: int,
+  max_age_seconds: int,
+  absent_label: str,
+) -> str:
+  if context is None:
+    return absent_label
+  if not is_range_context_current(
+    context,
+    now=now,
+    max_age_seconds=max_age_seconds,
+  ):
+    return f"stale · {max(0, now - context.generated_at)}s"
+  label = (
+    status_label_for_retired(context)
+    if context.state == "retired"
+    else context.state
+  )
+  return f"{label} {context.lower:,.2f}–{context.upper:,.2f}"
 
 
 async def _range_side_state(

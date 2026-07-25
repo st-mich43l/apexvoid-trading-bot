@@ -68,10 +68,19 @@ from app.autotrade.reaction_identity import (
   thesis_state_blocks_new_initial,
 )
 from app.autotrade.range_context import (
+  ACTIVE_RANGE_STATES,
+  PRIVATE_SOURCE_MAX_AGE_SECONDS,
+  SCANNER_SOURCE_MAX_AGE_SECONDS,
+  WORKER_SNAPSHOT_TTL_SECONDS,
   RangeContext,
+  RangeExecutionEligibility,
+  evaluate_range_box_eligibility,
+  is_range_context_current,
+  persist_private_range_observation,
+  persist_resolved_range,
   private_range_context,
-  persist_range_resolution,
   range_context_source_key,
+  range_geometry_matches_match,
   resolve_range_context,
 )
 from app.autotrade.range_lifecycle import (
@@ -361,8 +370,19 @@ async def _resolve_worker_range(
     series = atr_series(m1, max(2, settings.atr_length))
     if not series.empty:
       atr = float(series.iloc[-1])
-  scanner_context = RangeContext.from_json(
-    await client.get(range_context_source_key(symbol, "scanner"))
+  scanner_raw = await client.get(range_context_source_key(symbol, "scanner"))
+  scanner_context = RangeContext.from_json(scanner_raw)
+  if (
+    scanner_context is not None
+    and not is_range_context_current(
+      scanner_context,
+      now=now,
+      max_age_seconds=SCANNER_SOURCE_MAX_AGE_SECONDS,
+    )
+  ):
+    await increment_metric(client, "scanner_range_stale", symbol=symbol)
+  previous_private = await client.get(
+    range_context_source_key(symbol, "private")
   )
   private_context = private_range_context(
     symbol=symbol,
@@ -370,13 +390,28 @@ async def _resolve_worker_range(
     atr=atr,
     pip_size=units.pip_size(symbol),
     generated_at=now,
-    ttl=max(300, settings.auto_trade_strategy_match_max_age_seconds),
+    ttl=PRIVATE_SOURCE_MAX_AGE_SECONDS,
   )
+  await persist_private_range_observation(
+    client,
+    symbol=symbol,
+    context=private_context,
+  )
+  if private_context is not None:
+    await increment_metric(client, "private_range_observed", symbol=symbol)
+  elif previous_private is not None:
+    await increment_metric(client, "private_range_withdrawn", symbol=symbol)
   resolved, comparison = resolve_range_context(
     scanner_context,
     private_context,
     now=now,
   )
+  if comparison.get("stale_source_excluded"):
+    await increment_metric(
+      client,
+      "resolved_range_stale_source_excluded",
+      symbol=symbol,
+    )
   price = spot.price if spot is not None and spot.fresh else None
   if (
     private_decision.state == "box_broken"
@@ -438,14 +473,17 @@ async def _resolve_worker_range(
       "reason": resolved.invalidation_reason,
     }
 
-  await persist_range_resolution(
+  previous_resolved = await client.get(f"auto_trade:range_context:{symbol.upper()}")
+  await persist_resolved_range(
     client,
     symbol=symbol,
-    scanner=scanner_context,
-    private=private_context,
     resolved=resolved,
     comparison=comparison,
   )
+  if resolved is not None and previous_resolved is None:
+    await increment_metric(client, "resolved_range_created", symbol=symbol)
+  elif resolved is None and previous_resolved is not None:
+    await increment_metric(client, "resolved_range_deleted", symbol=symbol)
   if comparison.get("disagreement"):
     await increment_metric(client, "range_context_disagreement", symbol=symbol)
   elif comparison.get("resolution") == "merged":
@@ -457,6 +495,19 @@ async def _resolve_worker_range(
         symbol=symbol,
         spot_price=spot.price if spot is not None and spot.fresh else None,
         range_context=resolved,
+      )
+      private_context = private_range_context(
+        symbol=symbol,
+        decision=private_decision,
+        atr=atr,
+        pip_size=units.pip_size(symbol),
+        generated_at=now,
+        ttl=PRIVATE_SOURCE_MAX_AGE_SECONDS,
+      )
+      await persist_private_range_observation(
+        client,
+        symbol=symbol,
+        context=private_context,
       )
     await _persist_range_side_states(
       client,
@@ -2467,6 +2518,74 @@ async def _publish_strategy_match(
     assert match.range_id is not None
     assert match.range_low is not None
     assert match.range_high is not None
+    scanner_context = RangeContext.from_json(
+      await client.get(range_context_source_key(symbol, "scanner"))
+    )
+    now_ts = int(datetime.now(timezone.utc).timestamp())
+    if scanner_context is None:
+      await _consume_strategy_match(client, symbol, match)
+      await route(
+        "range_context",
+        "expired",
+        "range_context_withdrawn",
+        "scanner range source withdrawn after match build",
+        retained=False,
+      )
+      await increment_metric(
+        client, "range_edge_context_expired", symbol=symbol,
+      )
+      return None
+    if not is_range_context_current(
+      scanner_context,
+      now=now_ts,
+      max_age_seconds=SCANNER_SOURCE_MAX_AGE_SECONDS,
+    ):
+      if match.expires_at > now_ts:
+        await route(
+          "range_context",
+          "waiting",
+          "scanner_range_stale",
+          "scanner range source is stale; match retained",
+          measured={
+            "age_seconds": max(0, now_ts - scanner_context.generated_at),
+          },
+          retained=True,
+        )
+        await increment_metric(client, "scanner_range_stale", symbol=symbol)
+        return None
+      await _consume_strategy_match(client, symbol, match)
+      await route(
+        "range_context",
+        "expired",
+        "range_context_withdrawn",
+        "scanner range source stale beyond match TTL",
+        retained=False,
+      )
+      await increment_metric(
+        client, "range_edge_context_expired", symbol=symbol,
+      )
+      return None
+    if (
+      scanner_context.state not in ACTIVE_RANGE_STATES
+      or not range_geometry_matches_match(
+        scanner_context,
+        range_id=match.range_id,
+        range_low=match.range_low,
+        range_high=match.range_high,
+      )
+    ):
+      await _consume_strategy_match(client, symbol, match)
+      await route(
+        "range_context",
+        "expired",
+        "range_context_withdrawn",
+        "scanner range no longer matches this Range Edge thesis",
+        retained=False,
+      )
+      await increment_metric(
+        client, "range_edge_context_expired", symbol=symbol,
+      )
+      return None
     if await client.exists(_box_retired_key(symbol, match.range_id)):
       await _consume_strategy_match(client, symbol, match)
       await route(
@@ -3624,6 +3743,8 @@ def _status_payload(
   market_map_decision: MarketMapStrategyDecision | None = None,
   breakout_retest: dict[str, Any] | None = None,
   resolved_range: RangeContext | None = None,
+  box_eligibility: RangeExecutionEligibility | None = None,
+  box_candidate_id: str | None = None,
 ) -> dict[str, Any]:
   rail = decision.rail
   target = decision.target
@@ -3634,11 +3755,11 @@ def _status_payload(
     and trend_decision.state == "candidate"
     and (
       decision.state != "candidate"
-      # Box-scalp is not a real routing candidate outside chop (see
-      # box_selected in _handle_event) - telemetry must agree with what
-      # actually got published, or /auto_status would show "Range Box
-      # Scalp" selected while the trend candidate is what actually fired.
       or (regime is not None and regime.state != "chop")
+      or (
+        box_eligibility is not None
+        and not box_eligibility.eligible
+      )
       or trend_decision.confluence > decision.confluence
     )
   )
@@ -3683,18 +3804,39 @@ def _status_payload(
     reasons = market_map_decision.reasons
   selected_strategy = None
   selected_timeframe = None
-  if strategy_match is not None:
+  if strategy_match is not None and candidate_id is not None:
     selected_strategy = strategy_match.strategy
     selected_timeframe = strategy_match.source_tf
-  elif trend_routed and trend_decision is not None:
+  elif trend_routed and trend_decision is not None and candidate_id is not None:
     selected_strategy = _TREND_SETUP_LABELS.get(
       trend_decision.mode or "",
       "Trend Strategy",
     )
     selected_timeframe = EXECUTION_TIMEFRAME
-  elif decision.state == "candidate":
+  elif box_candidate_id is not None:
     selected_strategy = "Range Box Scalp"
     selected_timeframe = EXECUTION_TIMEFRAME
+  elif (
+    box_eligibility is not None
+    and box_eligibility.reason_code == "candidate_ready"
+    and box_candidate_id is None
+  ):
+    selected_strategy = "Range Box publish failed"
+    selected_timeframe = EXECUTION_TIMEFRAME
+  elif box_eligibility is not None and not box_eligibility.eligible:
+    if box_eligibility.reason_code in {
+      "waiting_for_touch",
+      "waiting_for_rejection",
+    }:
+      selected_strategy = (
+        f"Range Box waiting · {box_eligibility.reason_code}"
+      )
+      selected_timeframe = EXECUTION_TIMEFRAME
+    elif box_eligibility.has_current_private_box:
+      selected_strategy = (
+        f"Range Box ineligible · {box_eligibility.reason_code}"
+      )
+      selected_timeframe = EXECUTION_TIMEFRAME
   range_status = None
   if resolved_range is not None:
     range_status = (
@@ -4034,23 +4176,38 @@ async def _handle_event(
     decision,
     closed_price,
   )
+  box_eligibility = evaluate_range_box_eligibility(
+    symbol=symbol,
+    decision=decision,
+    private_context=RangeContext.from_json(
+      await client.get(range_context_source_key(symbol, "private"))
+    ),
+    resolved=resolved_range,
+    regime_state=regime.state,
+    now=int(datetime.now(timezone.utc).timestamp()),
+    range_enabled=bool(settings.auto_trade_range_enabled),
+  )
   box_selected = (
-    decision.state == "candidate"
+    box_eligibility.eligible
     and (
       strategy_match is None
       or settings.auto_trade_multi_match_enabled
     )
-    # Box-scalp is a mean-reversion play on an actual consolidation; outside
-    # chop it must lose the selection entirely (not just get rejected inside
-    # _publish_candidate after already winning here), or trend_selected below
-    # would wrongly stay False too and nothing would publish at all.
-    and regime.state == "chop"
     and (
       settings.auto_trade_multi_match_enabled
       or trend_decision.state != "candidate"
       or decision.confluence >= trend_decision.confluence
     )
   )
+  if box_eligibility.eligible:
+    await increment_metric(client, "range_box_eligible", symbol=symbol)
+  else:
+    await increment_metric(
+      client,
+      f"range_box_ineligible:{box_eligibility.reason_code}",
+      symbol=symbol,
+    )
+    await increment_metric(client, "range_box_ineligible", symbol=symbol)
   trend_selected = (
     trend_decision.state == "candidate"
     and (
@@ -4177,6 +4334,8 @@ async def _handle_event(
     market_map_decision=market_map_decision,
     breakout_retest=await load_breakout_retest_watch(client, symbol),
     resolved_range=resolved_range,
+    box_eligibility=box_eligibility,
+    box_candidate_id=box_candidate_id,
   )
   payload["tracked_strategy_matches"] = [
     {
@@ -4189,6 +4348,8 @@ async def _handle_event(
     for item in strategy_matches
   ]
   payload["published_candidate_ids"] = candidate_ids
+  payload["box_eligibility"] = asdict(box_eligibility)
+  payload["box_candidate_id"] = box_candidate_id
   payload["resolved_range"] = (
     None
     if resolved_range is None
@@ -4205,8 +4366,16 @@ async def _handle_event(
   )
   payload["range_context_comparison"] = range_comparison
   encoded = json.dumps(payload, separators=(",", ":"), sort_keys=True)
-  await client.set("auto_trade:last_gate", encoded)
-  await client.set(f"auto_trade:last_gate:{symbol}", encoded)
+  await client.set(
+    "auto_trade:last_gate",
+    encoded,
+    ex=WORKER_SNAPSHOT_TTL_SECONDS,
+  )
+  await client.set(
+    f"auto_trade:last_gate:{symbol}",
+    encoded,
+    ex=WORKER_SNAPSHOT_TTL_SECONDS,
+  )
   log.info(
     "ApexVoid Algo cycle symbol=%s source=%s state=%s trigger=%s "
     "direction=%s candidate=%s observed_regime=%s",
