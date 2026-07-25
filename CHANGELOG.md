@@ -12,6 +12,9 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- Require live producer-owned scanner/private range contexts for Range Box and
+  Range Edge; withdraw absent sources immediately, stop resolver TTL refresh of
+  source keys, and suppress stale scanner/worker status snapshots.
 - Make Forming Cards report `AUTO CHECKING`, `AUTO WAIT`, `AUTO BLOCKED`, and
   `AUTO READY` from persisted per-match route outcomes; `AUTO READY` is now
   emitted only after the candidate stream `XADD` succeeds.
