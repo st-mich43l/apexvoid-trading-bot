@@ -13,6 +13,8 @@ import hashlib
 import json
 import math
 
+from app.analysis.structural_reaction_support import structural_thesis_id
+
 
 STRATEGY_MATCH_VERSION = 1
 STRATEGY_MATCH_KEY_PREFIX = "auto_trade:strategy_match"
@@ -214,6 +216,33 @@ def strategy_range_id(symbol: str, lower: float, upper: float) -> str:
   return f"{symbol.lower()}-strategy-range-{lower:.2f}-{upper:.2f}"
 
 
+def _identity_ok(match: StrategyMatch) -> bool:
+  if match.reaction_id:
+    return match.match_id == match.reaction_id
+  structural_id = match.structural_zone_id or match.zone_id or match.level_id
+  if structural_id and match.structural_source:
+    expected = structural_thesis_id(
+      symbol=match.symbol,
+      strategy=match.strategy,
+      direction=match.direction,
+      structural_source=match.structural_source,
+      structural_id=structural_id,
+      touch_bar_ts=str(match.touch_bar_ts or ""),
+      confirmation_bar_ts=str(match.confirmation_bar_ts or ""),
+    )
+    if match.match_id == expected:
+      return True
+  return match.match_id == strategy_match_id(
+    match.symbol,
+    match.source_tf,
+    match.event_ts,
+    match.strategy,
+    match.direction,
+    match.entry_low,
+    match.entry_high,
+  )
+
+
 def _valid_match(match: StrategyMatch) -> bool:
   numeric = (
     match.key_level,
@@ -234,18 +263,7 @@ def _valid_match(match: StrategyMatch) -> bool:
     and match.range_low < match.range_high
     and match.full_take_profit_pips > 0
   )
-  if match.reaction_id:
-    identity_ok = match.match_id == match.reaction_id
-  else:
-    identity_ok = match.match_id == strategy_match_id(
-      match.symbol,
-      match.source_tf,
-      match.event_ts,
-      match.strategy,
-      match.direction,
-      match.entry_low,
-      match.entry_high,
-    )
+  identity_ok = _identity_ok(match)
   return (
     match.version == STRATEGY_MATCH_VERSION
     and bool(match.match_id)

@@ -11,6 +11,16 @@ dated section after deployment.
 
 ## Unreleased
 
+### Fixed
+- Make Forming Cards report `AUTO CHECKING`, `AUTO WAIT`, `AUTO BLOCKED`, and
+  `AUTO READY` from persisted per-match route outcomes; `AUTO READY` is now
+  emitted only after the candidate stream `XADD` succeeds.
+- Canonicalize StrategyMatch and Mapped Zone options, fail conflicting legacy
+  aliases, route every active multi-match independently, and allow C# to
+  atomically transition a publisher's `published` claim to `processing`.
+- Exclude oversized context-only supply/demand zones from execution barriers
+  while preserving them in the analysis pipeline.
+
 ### Added
 
 - Owner DM `/auto_close_all confirm` flattens all open ApexVoid Algo broker

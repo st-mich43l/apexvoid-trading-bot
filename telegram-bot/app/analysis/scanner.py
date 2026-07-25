@@ -55,6 +55,7 @@ from app.autotrade.multi_match import (
   strategy_matches_key,
 )
 from app.autotrade.lifecycle import emit_lifecycle, increment_metric
+from app.autotrade.route_outcome import record_route_outcome
 from app.autotrade.range_context import (
   range_context_source_key,
   scanner_range_context,
@@ -502,7 +503,7 @@ async def _sync_strategy_match(
         await increment_metric(
           client, "fallback_resistance_created", symbol=symbol,
         )
-  if not settings.auto_trade_strategy_bridge_enabled:
+  if not settings.auto_trade_strategy_match_enabled:
     await client.delete(key)
     await client.delete(matches_key)
     return None
@@ -582,21 +583,37 @@ async def _sync_strategy_match(
       target_plan=list(tracked.targets_pips),
       message="structural opportunity detected",
     )
-    await emit_lifecycle(
+    await record_route_outcome(
       client,
-      "auto_ready",
-      symbol=symbol,
-      candidate_id=tracked.match_id,
-      match_id=tracked.match_id,
-      range_id=tracked.range_id,
-      strategy=tracked.strategy,
-      strategy_family=tracked.family,
-      direction=tracked.direction,
-      timeframe=tracked.source_tf,
-      entry_zone={"low": tracked.entry_low, "high": tracked.entry_high},
-      current_price=tracked.current_price,
-      target_plan=list(tracked.targets_pips),
-      message="strategy match is ready for execution routing",
+      tracked,
+      stage="scanner",
+      status="detected",
+      reason_code="strategy_match_detected",
+      message="structural opportunity detected",
+      measured={
+        "spot_price": tracked.current_price,
+        "entry_low": tracked.entry_low,
+        "entry_high": tracked.entry_high,
+        "guard_mode": settings.auto_trade_structural_guard_mode,
+      },
+      retained=True,
+      publish_status=False,
+    )
+    await record_route_outcome(
+      client,
+      tracked,
+      stage="scanner",
+      status="checking",
+      reason_code="execution_preflight_pending",
+      message="worker execution preflight pending",
+      measured={
+        "spot_price": tracked.current_price,
+        "entry_low": tracked.entry_low,
+        "entry_high": tracked.entry_high,
+        "guard_mode": settings.auto_trade_structural_guard_mode,
+      },
+      retained=True,
+      publish_status=False,
     )
     await emit_lifecycle(
       client,
@@ -781,7 +798,7 @@ def _format_detection(
   lines = [
     f"🔎 <b>{escape(symbol)} {escape(tf)} · SETUP FORMING</b>",
     (
-      "🟢 <b>AUTO READY</b> · candidate publication pending"
+      "🟡 <b>AUTO CHECKING</b> · execution preflight pending"
       if settings.auto_trade_enabled and execution_match is not None
       else "🔴 <b>AUTO BLOCKED</b> · no executable StrategyMatch"
       if settings.auto_trade_enabled
@@ -1222,7 +1239,7 @@ async def _notify_digest_once(
         match_for_card = execution_match
       elif index == 0:
         match_for_card = execution_match
-    await notify(
+    sent = await notify(
       _format_detection(
         symbol,
         tf,
@@ -1235,6 +1252,12 @@ async def _notify_digest_once(
       ),
       chat_id=settings.telegram_owner_id,
     )
+    if match_for_card is not None and getattr(sent, "message_id", None):
+      await client.set(
+        f"auto_trade:forming_message:{match_for_card.match_id}",
+        str(sent.message_id),
+        ex=max(86400, settings.auto_trade_candidate_ttl),
+      )
   await _track_active_setups(client, symbol, tf, claimed_results)
   return claimed_results
 

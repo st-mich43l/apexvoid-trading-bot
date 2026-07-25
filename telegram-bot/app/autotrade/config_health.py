@@ -12,6 +12,10 @@ from urllib.parse import urlparse
 
 from app.autotrade.range_targets import configured_range_targets
 from app.core.config import settings
+from app.core.environment_options import (
+  canonical_option_health,
+  deprecated_option_warnings,
+)
 
 
 CONFIG_MANIFEST_VERSION = 2
@@ -32,6 +36,13 @@ _LEGACY_ENV_ALIASES = {
     "AUTO_TRADE_CANDIDATE_TTL",
   ),
   "AUTO_TRADE_SPOT_MAX_AGE_SECONDS": ("AUTO_TRADE_SPOT_MAX_AGE",),
+  "AUTO_TRADE_MAPPED_ZONE_ENABLED": (
+    "AUTO_TRADE_MARKET_MAP_STRATEGY_ENABLED",
+  ),
+  "AUTO_TRADE_STRATEGY_MATCH_ENABLED": (
+    "AUTO_TRADE_STRATEGY_BRIDGE_ENABLED",
+    "AUTO_TRADE_FORMING_GATE_ENABLED",
+  ),
 }
 
 _PROFILE_DEFAULT_FIELDS = {
@@ -49,6 +60,10 @@ _PROFILE_DEFAULT_FIELDS = {
   "AUTO_TRADE_STRUCTURAL_GUARD_MODE",
   "AUTO_TRADE_ZONE_COOLDOWN_ENABLED",
   "AUTO_TRADE_ZONE_RECONCILE_MODE",
+  "AUTO_TRADE_MAPPED_ZONE_ENABLED",
+  "AUTO_TRADE_STRATEGY_MATCH_ENABLED",
+  "AUTO_TRADE_EXECUTION_ZONE_MAX_WIDTH_ATR",
+  "AUTO_TRADE_EXECUTION_ZONE_MAX_WIDTH_PIPS",
 }
 
 _CANONICAL_ENV_NAMES = {
@@ -84,6 +99,15 @@ _CANONICAL_ENV_NAMES = {
   "AUTO_TRADE_RANGE_BOX_SCALE_OUT_TRIGGER_PIPS",
   "AUTO_TRADE_RANGE_BOX_SCALE_OUT_FRACTION",
   "AUTO_TRADE_RANGE_BOX_MOVE_SL_TO_BE_AFTER_SCALE_OUT",
+  "AUTO_TRADE_MAPPED_ZONE_ENABLED",
+  "AUTO_TRADE_STRATEGY_MATCH_ENABLED",
+  "AUTO_TRADE_KEY_LEVEL_REACTION_ENABLED",
+  "AUTO_TRADE_DEMAND_REACTION_ENABLED",
+  "AUTO_TRADE_SUPPLY_REACTION_ENABLED",
+  "AUTO_TRADE_SESSION_LEVEL_REACTION_ENABLED",
+  "AUTO_TRADE_TRENDLINE_REACTION_ENABLED",
+  "AUTO_TRADE_EXECUTION_ZONE_MAX_WIDTH_ATR",
+  "AUTO_TRADE_EXECUTION_ZONE_MAX_WIDTH_PIPS",
 }
 
 
@@ -130,10 +154,11 @@ def canonicalize_account_mode(value: Any) -> str:
 
 
 def deprecated_environment_variables() -> list[str]:
-  deprecated = []
+  deprecated = [
+    warning.removeprefix("deprecated_variable:")
+    for warning in deprecated_option_warnings()
+  ]
   for canonical, aliases in _LEGACY_ENV_ALIASES.items():
-    if os.getenv(canonical) is not None:
-      continue
     deprecated.extend(alias for alias in aliases if os.getenv(alias) is not None)
   return sorted(set(deprecated))
 
@@ -200,6 +225,17 @@ def python_manifest() -> dict[str, Any]:
   symbols = canonicalize_symbols(settings.auto_trade_symbols.split(","))
   now = datetime.now(timezone.utc)
   raw_broker = os.getenv("AUTO_TRADE_EXPECTED_BROKER", "")
+  required_strategy_options = {
+    "AUTO_TRADE_STRATEGY_MATCH_ENABLED",
+    "AUTO_TRADE_KEY_LEVEL_REACTION_ENABLED",
+    "AUTO_TRADE_DEMAND_REACTION_ENABLED",
+    "AUTO_TRADE_SUPPLY_REACTION_ENABLED",
+    "AUTO_TRADE_SESSION_LEVEL_REACTION_ENABLED",
+    "AUTO_TRADE_TRENDLINE_REACTION_ENABLED",
+    "AUTO_TRADE_EXECUTION_ZONE_MAX_WIDTH_ATR",
+    "AUTO_TRADE_EXECUTION_ZONE_MAX_WIDTH_PIPS",
+  }
+  sources = resolved_config_sources()
   return {
     "config_manifest_version": CONFIG_MANIFEST_VERSION,
     "service": "telegram-bot",
@@ -236,9 +272,15 @@ def python_manifest() -> dict[str, Any]:
     "zone_fill": settings.auto_trade_zone_fill_enabled,
     "trend_enabled": settings.auto_trade_trend_enabled,
     "range_enabled": settings.auto_trade_range_enabled,
-    "mapped_zone_enabled": settings.auto_trade_market_map_strategy_enabled,
+    "mapped_zone_enabled": settings.auto_trade_mapped_zone_enabled,
     "map_thesis_lock_enabled": settings.auto_trade_map_thesis_lock_enabled,
-    "strategy_match_enabled": settings.auto_trade_strategy_bridge_enabled,
+    "strategy_match_enabled": settings.auto_trade_strategy_match_enabled,
+    "execution_zone_max_width_atr": (
+      settings.auto_trade_execution_zone_max_width_atr
+    ),
+    "execution_zone_max_width_pips": (
+      settings.auto_trade_execution_zone_max_width_pips
+    ),
     "breakout_enabled": settings.auto_trade_breakout_enabled,
     "retest_enabled": settings.auto_trade_retest_enabled,
     "reaction_enabled": settings.auto_trade_reaction_enabled,
@@ -277,7 +319,13 @@ def python_manifest() -> dict[str, Any]:
       settings.auto_trade_candidate_contract_version
     ),
     "deprecated_variables": deprecated_environment_variables(),
-    "config_sources": resolved_config_sources(),
+    "canonical_options": canonical_option_health(),
+    "config_sources": sources,
+    "required_options_missing": sorted(
+      name
+      for name in required_strategy_options
+      if sources.get(name) == "application_default"
+    ),
     "generated_at": int(now.timestamp()),
     "generated_at_iso": now.isoformat(),
   }
@@ -308,6 +356,8 @@ def _canonical_field(field: str, value: Any) -> Any:
 
 
 def _different(field: str, left: Any, right: Any) -> bool:
+  if left is None and right is None:
+    return False
   left = _canonical_field(field, left)
   right = _canonical_field(field, right)
   if field in {
@@ -323,6 +373,8 @@ def _different(field: str, left: Any, right: Any) -> bool:
     "range_box_scale_out_threshold_pips",
     "range_box_scale_out_trigger_pips",
     "range_box_scale_out_fraction",
+    "execution_zone_max_width_atr",
+    "execution_zone_max_width_pips",
   }:
     return not _numeric_equal(left, right)
   return left != right
@@ -357,11 +409,17 @@ def compare_manifests(
     "candidate_execution_max_age_seconds",
     "spot_max_age_seconds",
     "require_demo_account",
+    "execution_zone_max_width_atr",
+    "execution_zone_max_width_pips",
   )
   fatal = [
     field for field in fatal_fields
     if _different(field, python.get(field), ctrader.get(field))
   ]
+  fatal.extend(
+    f"required_strategy_key_missing:{name}"
+    for name in python.get("required_options_missing") or []
+  )
   if (
     python.get("profile") == "demo_eval"
     and canonicalize_account_mode(ctrader.get("account_mode")) == "live"

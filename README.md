@@ -68,7 +68,7 @@ The bot talks to Telegram over **outbound long-polling only**, meaning it requir
 
 ### 🤖 ApexVoid Algo (demo)
 - Scanner detectors own complete strategy matching. With
-  `AUTO_TRADE_STRATEGY_BRIDGE_ENABLED=true`, the strongest completed M5 match
+  `AUTO_TRADE_STRATEGY_MATCH_ENABLED=true`, every independent completed M5 match
   is sent to ApexVoid Algo as typed data without parsing Telegram text or
   asking a private regime/M1 gate to confirm it again.
 - It builds a 60-bar M1 auction box only after repeated reactions at both
