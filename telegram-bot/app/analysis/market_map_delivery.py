@@ -112,10 +112,27 @@ async def send_current_market_map(
   return True
 
 
+def _xau_weekend_closed(now: datetime) -> bool:
+  """XAU approx weekend closure: Fri 21:00 UTC through Sun 22:00 UTC."""
+  now = now.astimezone(timezone.utc) if now.tzinfo else now.replace(
+    tzinfo=timezone.utc,
+  )
+  weekday = now.weekday()
+  if weekday == 4 and now.hour >= 21:
+    return True
+  if weekday == 5:
+    return True
+  if weekday == 6 and now.hour < 22:
+    return True
+  return False
+
+
 async def _market_map_scan_tick(now: datetime | None = None) -> bool:
   if not settings.map_session_send or not settings.telegram_owner_id:
     return False
   now = now.astimezone(timezone.utc) if now else datetime.now(timezone.utc)
+  if _xau_weekend_closed(now):
+    return False
   scan_key = _scan_bucket_key(now, settings.map_scan_interval_minutes)
   if await get_meta(_META_SCAN_KEY) == scan_key:
     return False
