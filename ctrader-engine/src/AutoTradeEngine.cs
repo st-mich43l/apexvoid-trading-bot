@@ -2302,12 +2302,21 @@ public sealed class AutoTradeEngine(
       targetModel: candidate.TargetModel,
       entryDistribution: "single"
     );
-    await SaveGroupPlanAsync(candidate, groupId, cancellationToken);
+    // Persist the resolved route and the exact ID that is about to be
+    // submitted before any broker side effect can occur.
+    var clientOrderId = $"{ClientOrderId(candidate.CandidateId)}-l1";
+    await SaveGroupPlanAsync(
+      candidate,
+      groupId,
+      cancellationToken,
+      streamEventId: _activeLease?.StreamEventId,
+      route: "single_limit",
+      clientOrderIds: [clientOrderId]
+    );
     if (!await EnsureBrokerLeaseAsync(cancellationToken))
     {
       throw new CandidateLeaseLostException(candidate.CandidateId);
     }
-    var clientOrderId = $"{ClientOrderId(candidate.CandidateId)}-l1";
     long orderId;
     using var brokerCts = CreateBrokerCancellation(cancellationToken);
     try
@@ -2575,7 +2584,19 @@ public sealed class AutoTradeEngine(
       "order_submitted",
       cancellationToken
     );
-    await SaveGroupPlanAsync(candidate, groupId, cancellationToken);
+    // The plan persists the route this executor actually resolved and the
+    // exact per-leg client order IDs it is about to submit - never the
+    // declared candidate route (which may be `either`).
+    await SaveGroupPlanAsync(
+      candidate,
+      groupId,
+      cancellationToken,
+      streamEventId: _activeLease?.StreamEventId,
+      route: "zone_split",
+      clientOrderIds: plan.Legs
+        .Select(leg => $"{ClientOrderId(candidate.CandidateId)}-z{leg.Leg}")
+        .ToArray()
+    );
     if (!await EnsureBrokerLeaseAsync(cancellationToken))
     {
       // The group plan stays: a successor or recovery run needs it to map
@@ -3036,12 +3057,20 @@ public sealed class AutoTradeEngine(
       barTs,
       expiresAt
     );
-    await SaveGroupPlanAsync(candidate, groupId, cancellationToken);
+    // Persist the exact ID actually sent to the broker for the manual limit.
+    var clientOrderId = ClientOrderId(candidate.CandidateId);
+    await SaveGroupPlanAsync(
+      candidate,
+      groupId,
+      cancellationToken,
+      streamEventId: _activeLease?.StreamEventId,
+      route: "manual_limit",
+      clientOrderIds: [clientOrderId]
+    );
     if (!await EnsureBrokerLeaseAsync(cancellationToken))
     {
       throw new CandidateLeaseLostException(candidate.CandidateId);
     }
-    var clientOrderId = ClientOrderId(candidate.CandidateId);
     long orderId;
     using var brokerCts = CreateBrokerCancellation(cancellationToken);
     try
@@ -3384,12 +3413,27 @@ public sealed class AutoTradeEngine(
       "order_submitted",
       cancellationToken
     );
+    var clientOrderId = ClientOrderId(candidate.CandidateId);
+    if (trancheIndex <= 1)
+    {
+      // Market submissions persist their resolved route and exact client
+      // order ID before the first broker side effect, exactly like the limit
+      // routes. Scale-in tranches reuse the initial tranche's identity and
+      // must not overwrite an existing plan.
+      await SaveGroupPlanAsync(
+        candidate,
+        groupId,
+        cancellationToken,
+        streamEventId: _activeLease?.StreamEventId,
+        route: "market",
+        clientOrderIds: [clientOrderId]
+      );
+    }
     if (!await EnsureBrokerLeaseAsync(cancellationToken))
     {
       throw new CandidateLeaseLostException(candidate.CandidateId);
     }
     TradeExecution execution;
-    var clientOrderId = ClientOrderId(candidate.CandidateId);
     using var brokerCts = CreateBrokerCancellation(cancellationToken);
     try
     {
@@ -5754,18 +5798,19 @@ public sealed class AutoTradeEngine(
     await DeleteGroupPlanAsync(groupId, cancellationToken);
   }
 
+  // The caller must pass the route it actually resolved and the exact client
+  // order IDs it is about to submit. The plan never re-derives an execution-
+  // critical identity from candidate declarations (which may be `either`).
   private async Task SaveGroupPlanAsync(
     TradeCandidate candidate,
     string groupId,
     CancellationToken cancellationToken,
-    string? streamEventId = null,
-    string? route = null,
-    IReadOnlyList<string>? clientOrderIds = null
+    string? streamEventId,
+    string route,
+    IReadOnlyList<string> clientOrderIds
   )
   {
-    var resolvedRoute = route
-      ?? candidate.PlannedExecutionRoute
-      ?? "market";
+    var resolvedRoute = route;
     var plan = new AutoTradeGroupPlan(
       candidate.CandidateId,
       groupId,
@@ -5791,8 +5836,7 @@ public sealed class AutoTradeEngine(
       candidate.AbsoluteTargetPrice,
       StreamEventId: streamEventId,
       Route: resolvedRoute,
-      ClientOrderIds: clientOrderIds
-        ?? BuildClientOrderIds(candidate, resolvedRoute),
+      ClientOrderIds: clientOrderIds,
       SubmittedAt: _clock().ToUnixTimeSeconds()
     );
     await store.SaveGroupPlanAsync(
@@ -6405,11 +6449,35 @@ public sealed class AutoTradeEngine(
       return claim.AdvancesCursor;
     }
     _activeLease = lease;
+    // The recovery heartbeat covers the entire operation: group-plan load,
+    // every broker snapshot, the delays between snapshots, and the final
+    // fenced mutation. While it renews, no second recovery worker can claim
+    // this candidate; when it loses ownership, all broker queries and delays
+    // are cancelled through the linked token.
+    await using var heartbeat = CandidateLeaseHeartbeat.Start(
+      store,
+      lease,
+      CandidateLeaseDuration,
+      cancellationToken,
+      CandidateHeartbeatInterval,
+      HeartbeatDelay,
+      (metric, token) => store.IncrementMetricAsync(
+        candidate.Symbol,
+        metric,
+        token
+      ),
+      _log
+    );
+    _heartbeat = heartbeat;
+    using var recoveryCts = CancellationTokenSource.CreateLinkedTokenSource(
+      cancellationToken,
+      heartbeat.OwnershipToken
+    );
     try
     {
       var disposition = await WithGateAsync(
-        () => RecoverBrokerOutcomeAsync(candidate, entry, cancellationToken),
-        cancellationToken
+        () => RecoverBrokerOutcomeAsync(candidate, entry, recoveryCts.Token),
+        recoveryCts.Token
       );
       // Adoption completes the candidate (cursor may advance on the next
       // terminal claim). Confirmed absence releases to retryable and holds
@@ -6417,14 +6485,45 @@ public sealed class AutoTradeEngine(
       return disposition is BrokerRecoveryDisposition.AdoptedPosition
         or BrokerRecoveryDisposition.AdoptedPendingOrder;
     }
+    catch (CandidateLeaseLostException)
+    {
+      // A successor owns recovery now. This worker must not release the
+      // record, delete the group plan, or count confirmation progress: it
+      // leaves everything for the current or next recovery owner.
+      await store.IncrementMetricAsync(
+        candidate.Symbol,
+        "broker_recovery_ownership_lost",
+        cancellationToken
+      );
+      _log(
+        $"auto-trade recovery ownership lost for {Short(candidate.CandidateId)}"
+      );
+      return false;
+    }
+    catch (OperationCanceledException) when (heartbeat.OwnershipLost)
+    {
+      await store.IncrementMetricAsync(
+        candidate.Symbol,
+        "broker_recovery_ownership_lost",
+        cancellationToken
+      );
+      _log(
+        $"auto-trade recovery ownership lost for {Short(candidate.CandidateId)}"
+      );
+      return false;
+    }
     catch (Exception exception) when (exception is not OperationCanceledException)
     {
       // Broker view is unusable: restore the recovery state rather than
-      // guessing that nothing was placed.
-      await MarkBrokerOutcomeUnknownAsync(
-        cancellationToken,
-        "reconciliation_failed"
-      );
+      // guessing that nothing was placed. Fenced, so a stale worker cannot
+      // overwrite a successor's record.
+      if (!heartbeat.OwnershipLost)
+      {
+        await MarkBrokerOutcomeUnknownAsync(
+          cancellationToken,
+          "reconciliation_failed"
+        );
+      }
       await store.IncrementMetricAsync(
         candidate.Symbol,
         "broker_recovery_still_unknown",
@@ -6439,6 +6538,7 @@ public sealed class AutoTradeEngine(
     finally
     {
       _activeLease = null;
+      _heartbeat = null;
     }
   }
 
@@ -6450,24 +6550,24 @@ public sealed class AutoTradeEngine(
   {
     var groupId = CandidateGroupId(candidate);
     var plan = await LoadGroupPlanAsync(groupId, cancellationToken);
-    var requiredConfirmations = Math.Max(2, options.BrokerAbsenceConfirmations);
-    var recheck = TimeSpan.FromSeconds(
-      Math.Max(0, options.BrokerAbsenceRecheckSeconds)
-    );
-    var deadline = _clock().AddSeconds(
-      Math.Max(1, options.BrokerRecoveryTimeoutSeconds)
-    );
-    var confirmations = plan?.AbsenceConfirmations ?? 0;
+    var requiredConfirmations = options.BrokerAbsenceConfirmations;
+    var recheck = TimeSpan.FromSeconds(options.BrokerAbsenceRecheckSeconds);
+    var deadline = _clock().AddSeconds(options.BrokerRecoveryTimeoutSeconds);
     var recoveryAttempt = (plan?.RecoveryAttempt ?? 0) + 1;
+    // Ensure deterministic identities survive even when the group plan was
+    // never written (legacy records) before the first broker side effect.
+    plan = await PersistRecoveryProgressAsync(
+      candidate,
+      entry,
+      plan,
+      recoveryAttempt,
+      cancellationToken
+    );
+    var delay = RecoveryDelay ?? ((wait, token) => Task.Delay(wait, token));
 
     while (_clock() <= deadline)
     {
       await ReconcileAsync(cancellationToken);
-      await store.IncrementMetricAsync(
-        candidate.Symbol,
-        "broker_recovery_direct_lookup",
-        cancellationToken
-      );
       var adopted = await TryAdoptBrokerOutcomeAsync(
         candidate,
         plan,
@@ -6476,10 +6576,16 @@ public sealed class AutoTradeEngine(
       if (adopted is BrokerRecoveryDisposition.AdoptedPosition
         or BrokerRecoveryDisposition.AdoptedPendingOrder)
       {
+        await store.ClearBrokerAbsenceProgressAsync(
+          candidate.CandidateId,
+          cancellationToken
+        );
         return adopted.Value;
       }
       if (adopted == BrokerRecoveryDisposition.Conflict)
       {
+        // Conflicting candidate-related broker objects block confirmation:
+        // absence progress is never advanced while they exist.
         await store.IncrementMetricAsync(
           candidate.Symbol,
           "broker_recovery_conflict",
@@ -6489,22 +6595,52 @@ public sealed class AutoTradeEngine(
         return BrokerRecoveryDisposition.Conflict;
       }
 
-      // Empty snapshot: never confirm absence from one look.
-      confirmations++;
+      // Empty snapshot: never confirm absence from one look, and never count
+      // a snapshot before the durable Redis-time interval has elapsed since
+      // the previously persisted confirmation.
       await store.IncrementMetricAsync(
         candidate.Symbol,
         "broker_recovery_empty_snapshot",
         cancellationToken
       );
-      plan = await PersistRecoveryProgressAsync(
-        candidate,
-        entry,
-        plan,
-        recoveryAttempt,
-        confirmations,
+      var progress = await store.TryRecordBrokerAbsenceCheckAsync(
+        candidate.CandidateId,
+        entry.Id,
+        _activeLease?.Token ?? "",
+        options.BrokerAbsenceRecheckSeconds,
+        TimeSpan.FromSeconds(Math.Max(300, options.CandidateStorageTtlSeconds)),
         cancellationToken
       );
-      if (confirmations >= requiredConfirmations)
+      if (progress is null)
+      {
+        // Fenced out: a successor recovery owner holds the record now. This
+        // worker must stop without counting, releasing or deleting anything.
+        throw new CandidateLeaseLostException(candidate.CandidateId);
+      }
+      if (!progress.Recorded)
+      {
+        await store.IncrementMetricAsync(
+          candidate.Symbol,
+          "broker_recovery_confirmation_deferred",
+          cancellationToken
+        );
+        var remaining = TimeSpan.FromSeconds(Math.Max(
+          1,
+          options.BrokerAbsenceRecheckSeconds - progress.SecondsSincePrevious
+        ));
+        if (_clock().Add(remaining) > deadline)
+        {
+          break;
+        }
+        await delay(remaining, cancellationToken);
+        continue;
+      }
+      await store.IncrementMetricAsync(
+        candidate.Symbol,
+        "broker_recovery_confirmation_recorded",
+        cancellationToken
+      );
+      if (progress.Confirmations >= requiredConfirmations)
       {
         await store.IncrementMetricAsync(
           candidate.Symbol,
@@ -6516,12 +6652,22 @@ public sealed class AutoTradeEngine(
           "broker_outcome_confirmed_absent",
           cancellationToken
         );
-        // Absence is proven: the group plan is no longer needed for adoption.
-        await DeleteGroupPlanAsync(groupId, cancellationToken);
-        await ReleaseActiveCandidateAsync(
+        // Fenced release first: only the current recovery owner may hand the
+        // candidate back. The group plan survives until the release succeeds.
+        if (!await ReleaseActiveCandidateAsync(
           cancellationToken,
           "broker_outcome_confirmed_absent"
+        ))
+        {
+          throw new CandidateLeaseLostException(candidate.CandidateId);
+        }
+        await store.ClearBrokerAbsenceProgressAsync(
+          candidate.CandidateId,
+          cancellationToken
         );
+        // Absence is durably proven: the group plan is no longer needed for
+        // adoption.
+        await DeleteGroupPlanAsync(groupId, cancellationToken);
         await store.IncrementMetricAsync(
           candidate.Symbol,
           "candidate_retry_waiting",
@@ -6533,7 +6679,6 @@ public sealed class AutoTradeEngine(
       {
         break;
       }
-      var delay = RecoveryDelay ?? ((wait, token) => Task.Delay(wait, token));
       await delay(recheck, cancellationToken);
     }
 
@@ -6542,10 +6687,21 @@ public sealed class AutoTradeEngine(
       "broker_recovery_still_unknown",
       cancellationToken
     );
+    // Timeout before quorum: the record stays recovery-required and the
+    // persisted confirmation progress remains for the next recovery attempt.
     await MarkBrokerOutcomeUnknownAsync(cancellationToken, "absence_quorum_pending");
     return BrokerRecoveryDisposition.StillUnknown;
   }
 
+  // Deterministic broker evidence classification for one reconciled snapshot.
+  // Matching priority:
+  //   1. exact broker ClientOrderId equality (direct lookup);
+  //   2. exact persisted client-order identity inside broker metadata
+  //      (comment / label);
+  //   3. legacy candidate-token fallback, only for objects that carry no
+  //      client-order identity at all.
+  // An object that references this candidate but carries a different exact
+  // client-order identity is a conflict, never an adoption and never absence.
   private async Task<BrokerRecoveryDisposition?> TryAdoptBrokerOutcomeAsync(
     TradeCandidate candidate,
     AutoTradeGroupPlan? plan,
@@ -6553,96 +6709,167 @@ public sealed class AutoTradeEngine(
   )
   {
     var candidateToken = CandidateToken(candidate.CandidateId);
-    var clientOrderIds = plan?.ClientOrderIds ?? [];
-    // Strongest evidence first: exact deterministic client order identity in
-    // comments / labels, then the shorter candidate token used historically.
-    TradingPosition? existingPosition = null;
-    foreach (var clientOrderId in clientOrderIds)
+    var expectedIds = plan?.ClientOrderIds is { Count: > 0 } persisted
+      ? persisted
+      : BuildClientOrderIds(candidate, plan?.Route);
+
+    var matchedPositions = new List<TradingPosition>();
+    var matchedPending = new List<TradingPendingOrder>();
+    var directMatches = 0;
+    var legacyMatches = 0;
+    var conflict = false;
+    var seenDirectIds = new HashSet<string>(StringComparer.Ordinal);
+
+    void Classify(
+      string clientOrderId,
+      string comment,
+      string label,
+      Action adopt
+    )
     {
-      existingPosition = _allSymbolPositions.FirstOrDefault(position =>
-        position.Comment.Contains(clientOrderId, StringComparison.Ordinal)
-        || position.Label.Contains(clientOrderId, StringComparison.Ordinal)
-      );
-      if (existingPosition is not null)
+      if (!string.IsNullOrEmpty(clientOrderId))
       {
-        break;
+        // The broker reports the exact identity: trust it exclusively.
+        if (expectedIds.Contains(clientOrderId, StringComparer.Ordinal))
+        {
+          if (!seenDirectIds.Add(clientOrderId))
+          {
+            // Duplicated leg identity: two broker objects claim the same
+            // deterministic client order ID.
+            conflict = true;
+            return;
+          }
+          directMatches++;
+          adopt();
+          return;
+        }
+        if (
+          comment.Contains(candidateToken, StringComparison.Ordinal)
+          || label.Contains(candidateToken, StringComparison.Ordinal)
+          || expectedIds.Any(id =>
+            comment.Contains(id, StringComparison.Ordinal)
+            || label.Contains(id, StringComparison.Ordinal))
+        )
+        {
+          // Candidate-related object with a different exact identity.
+          conflict = true;
+        }
+        return;
+      }
+      if (expectedIds.Any(id =>
+        comment.Contains(id, StringComparison.Ordinal)
+        || label.Contains(id, StringComparison.Ordinal)))
+      {
+        adopt();
+        return;
+      }
+      if (comment.Contains(candidateToken, StringComparison.Ordinal))
+      {
+        legacyMatches++;
+        adopt();
       }
     }
-    existingPosition ??= _allSymbolPositions.FirstOrDefault(position =>
-      position.Comment.Contains(candidateToken, StringComparison.Ordinal)
-    );
-    if (existingPosition is not null)
+
+    foreach (var position in _allSymbolPositions)
     {
-      await AdoptPositionAsync(existingPosition, cancellationToken);
-      await CompleteActiveCandidateAsync(
-        $"ordered:{existingPosition.PositionId}",
-        cancellationToken
+      var current = position;
+      Classify(
+        current.ClientOrderId,
+        current.Comment,
+        current.Label,
+        () => matchedPositions.Add(current)
       );
+    }
+    foreach (var order in _allSymbolPendingOrders)
+    {
+      var current = order;
+      Classify(
+        current.ClientOrderId,
+        current.Comment,
+        current.Label,
+        () => matchedPending.Add(current)
+      );
+    }
+
+    if (conflict)
+    {
+      return BrokerRecoveryDisposition.Conflict;
+    }
+    if (matchedPositions.Count == 0 && matchedPending.Count == 0)
+    {
+      return null;
+    }
+    if (directMatches > 0)
+    {
+      // Only an actual exact client-order-identity match counts as a direct
+      // lookup; metadata scans and legacy token fallbacks never do.
       await store.IncrementMetricAsync(
         candidate.Symbol,
-        "broker_outcome_adopted",
+        "broker_recovery_direct_lookup",
         cancellationToken
       );
+    }
+    if (legacyMatches > 0)
+    {
       await store.IncrementMetricAsync(
         candidate.Symbol,
-        "broker_duplicate_prevented",
+        "broker_recovery_legacy_token_lookup",
         cancellationToken
       );
+    }
+
+    // Adopt every valid known object: a partial zone outcome (one leg, or a
+    // filled leg plus a pending leg) is adopted as-is, never treated as
+    // absence and never re-submitted.
+    foreach (var position in matchedPositions)
+    {
+      await AdoptPositionAsync(position, cancellationToken);
+    }
+    var outcome = matchedPositions.Count > 0
+      ? $"ordered:{matchedPositions[0].PositionId}"
+      : $"ordered:{matchedPending[0].OrderId}";
+    if (!await CompleteActiveCandidateAsync(outcome, cancellationToken))
+    {
+      // A successor owns the candidate: the stale worker must not publish
+      // adoption events or advance anything.
+      throw new CandidateLeaseLostException(candidate.CandidateId);
+    }
+    await store.IncrementMetricAsync(
+      candidate.Symbol,
+      "broker_outcome_adopted",
+      cancellationToken
+    );
+    await store.IncrementMetricAsync(
+      candidate.Symbol,
+      "broker_duplicate_prevented",
+      cancellationToken
+    );
+    if (matchedPositions.Count > 0)
+    {
       await PublishAsync(
         "order_filled",
-        $"adopted existing position {existingPosition.PositionId} for candidate "
+        $"adopted existing position {matchedPositions[0].PositionId} for candidate "
         + Short(candidate.CandidateId),
         cancellationToken,
         candidate.CandidateId,
-        existingPosition.PositionId,
-        groupId: CandidateGroupId(candidate)
+        matchedPositions[0].PositionId,
+        groupId: CandidateGroupId(candidate),
+        pendingOrderIds: matchedPending.Count > 0
+          ? matchedPending.Select(order => order.OrderId).ToArray()
+          : null
       );
       return BrokerRecoveryDisposition.AdoptedPosition;
     }
-
-    TradingPendingOrder? existingPending = null;
-    foreach (var clientOrderId in clientOrderIds)
-    {
-      existingPending = _allSymbolPendingOrders.FirstOrDefault(order =>
-        order.Comment.Contains(clientOrderId, StringComparison.Ordinal)
-        || order.Label.Contains(clientOrderId, StringComparison.Ordinal)
-      );
-      if (existingPending is not null)
-      {
-        break;
-      }
-    }
-    existingPending ??= _allSymbolPendingOrders.FirstOrDefault(order =>
-      order.Comment.Contains(candidateToken, StringComparison.Ordinal)
+    await PublishAsync(
+      "order_accepted",
+      $"adopted existing pending order {matchedPending[0].OrderId} for candidate "
+      + Short(candidate.CandidateId),
+      cancellationToken,
+      candidate.CandidateId,
+      groupId: CandidateGroupId(candidate),
+      pendingOrderIds: matchedPending.Select(order => order.OrderId).ToArray()
     );
-    if (existingPending is not null)
-    {
-      await CompleteActiveCandidateAsync(
-        $"ordered:{existingPending.OrderId}",
-        cancellationToken
-      );
-      await store.IncrementMetricAsync(
-        candidate.Symbol,
-        "broker_outcome_adopted",
-        cancellationToken
-      );
-      await store.IncrementMetricAsync(
-        candidate.Symbol,
-        "broker_duplicate_prevented",
-        cancellationToken
-      );
-      await PublishAsync(
-        "order_accepted",
-        $"adopted existing pending order {existingPending.OrderId} for candidate "
-        + Short(candidate.CandidateId),
-        cancellationToken,
-        candidate.CandidateId,
-        groupId: CandidateGroupId(candidate),
-        pendingOrderIds: [existingPending.OrderId]
-      );
-      return BrokerRecoveryDisposition.AdoptedPendingOrder;
-    }
-    return null;
+    return BrokerRecoveryDisposition.AdoptedPendingOrder;
   }
 
   private async Task<AutoTradeGroupPlan> PersistRecoveryProgressAsync(
@@ -6650,7 +6877,6 @@ public sealed class AutoTradeEngine(
     TradeStreamEntry entry,
     AutoTradeGroupPlan? plan,
     int recoveryAttempt,
-    int absenceConfirmations,
     CancellationToken cancellationToken
   )
   {
@@ -6668,8 +6894,6 @@ public sealed class AutoTradeEngine(
     {
       StreamEventId = entry.Id,
       RecoveryAttempt = recoveryAttempt,
-      AbsenceConfirmations = absenceConfirmations,
-      LastAbsenceCheckAt = _clock().ToUnixTimeSeconds(),
       ClientOrderIds = plan?.ClientOrderIds
         ?? BuildClientOrderIds(candidate, plan?.Route),
     };

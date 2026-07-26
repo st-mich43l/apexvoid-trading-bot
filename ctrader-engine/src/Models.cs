@@ -78,7 +78,10 @@ public sealed record TradingPosition(
   decimal EntryPrice,
   decimal? StopLoss,
   string Label,
-  string Comment
+  string Comment,
+  // Exact deterministic client order identity, when the broker exposes it on
+  // the originating order. Empty when unavailable (legacy positions).
+  string ClientOrderId = ""
 );
 
 public sealed record MarketOrderRequest(
@@ -109,7 +112,10 @@ public sealed record TradingPendingOrder(
   long Volume,
   decimal LimitPrice,
   string Label,
-  string Comment
+  string Comment,
+  // Exact deterministic client order identity as reported by the broker.
+  // Empty when the broker did not echo one (legacy orders).
+  string ClientOrderId = ""
 );
 
 public sealed record TradingReconcileSnapshot(

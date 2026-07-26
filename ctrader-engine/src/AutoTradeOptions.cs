@@ -585,6 +585,39 @@ public sealed record AutoTradeOptions(
         + "confirmation timeout must be positive"
       );
     }
+    if (BrokerAbsenceConfirmations < 2)
+    {
+      throw new AutoTradeConfigurationException(
+        "Auto trade disabled: AUTO_TRADE_BROKER_ABSENCE_CONFIRMATIONS must be "
+        + "at least 2; a single broker snapshot never confirms absence"
+      );
+    }
+    if (BrokerAbsenceRecheckSeconds <= 0)
+    {
+      throw new AutoTradeConfigurationException(
+        "Auto trade disabled: AUTO_TRADE_BROKER_ABSENCE_RECHECK_SECONDS must "
+        + "be positive; a zero-second interval provides no visibility window"
+      );
+    }
+    if (BrokerRecoveryTimeoutSeconds <= 0)
+    {
+      throw new AutoTradeConfigurationException(
+        "Auto trade disabled: AUTO_TRADE_BROKER_RECOVERY_TIMEOUT_SECONDS must "
+        + "be positive"
+      );
+    }
+    if (
+      BrokerRecoveryTimeoutSeconds
+      < BrokerAbsenceRecheckSeconds * (BrokerAbsenceConfirmations - 1)
+    )
+    {
+      throw new AutoTradeConfigurationException(
+        "Auto trade disabled: AUTO_TRADE_BROKER_RECOVERY_TIMEOUT_SECONDS must "
+        + "cover AUTO_TRADE_BROKER_ABSENCE_RECHECK_SECONDS x "
+        + "(AUTO_TRADE_BROKER_ABSENCE_CONFIRMATIONS - 1) so the configured "
+        + "quorum is achievable"
+      );
+    }
     if (MinConfluence is < 1 or > 3)
     {
       throw new AutoTradeConfigurationException(
