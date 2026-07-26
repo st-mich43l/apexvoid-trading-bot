@@ -12,6 +12,32 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- Add a recovery-only `broker_reconciling` state: recovery claims never write
+  normal `processing`, an expired recovery lease stays recovery-required, and
+  a crashed recovery worker can never decay into a normal retry that places a
+  duplicate order. `broker_outcome_unknown` releases to `retryable_error`
+  only from the recovery-active state after the absence quorum.
+- Heartbeat the recovery lease across the whole broker reconciliation
+  (group-plan load, snapshots, delays, final fenced mutation); on ownership
+  loss the stale recovery worker stops without counting confirmations,
+  releasing the record or deleting the group plan.
+- Persist broker-absence confirmation progress durably in Redis with a
+  fenced, Redis-time-separated counter: an immediate process restart cannot
+  accelerate the quorum, stale recovery owners cannot increment it, and
+  progress survives recovery crashes. Validate quorum timing fatally at
+  startup (confirmations ≥ 2, positive recheck interval, timeout covering the
+  configured quorum).
+- Validate structured candidate execution records identically in Python, C#
+  and Redis Lua: explicit supported `version`, explicit known `state`, exact
+  identity — no defaults, no fallback to `published`, no legacy downgrade for
+  malformed JSON; publication reconciliation refuses restoration over them.
+- Persist the actually resolved execution route and the exact submitted
+  client order IDs in the group plan before the first broker side effect
+  (including `either` routes resolving to market/limit/zone), expose the
+  broker-echoed `ClientOrderId` on positions and pending orders, prioritise
+  exact client-order identity in recovery matching, treat mismatched exact
+  identities as conflicts, and adopt partial zone outcomes instead of
+  resubmitting or confirming absence.
 - Require consecutive broker absence confirmations (and deterministic client
   order identity) before releasing a recovery-required candidate for retry, so
   delayed broker visibility cannot create a duplicate order; expire
