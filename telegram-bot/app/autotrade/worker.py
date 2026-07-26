@@ -19,6 +19,14 @@ from typing import Any
 from app.persistence import redis_state
 from app.autotrade import units
 from app.autotrade.range_targets import configured_range_targets
+from app.autotrade.candidate_publish import (
+  candidate_key,
+  publish_candidate_atomic,
+)
+from app.autotrade.arbitration import (
+  ExecutionIntent,
+  arbitrate_execution_intents,
+)
 from app.autotrade.execution_policy import (
   GUARD_MODE_OBSERVE,
   GUARD_MODE_STRICT,
@@ -30,6 +38,7 @@ from app.autotrade.execution_policy import (
   StructuralSourceIdentity,
   classify_barrier_relationship,
   classify_guard_severity,
+  evaluate_execution_policy,
   max_entry_drift_pips,
   resolve_guard_mode,
 )
@@ -74,11 +83,13 @@ from app.autotrade.range_context import (
   WORKER_SNAPSHOT_TTL_SECONDS,
   RangeContext,
   RangeExecutionEligibility,
+  continue_range_episode,
   evaluate_range_box_eligibility,
   is_range_context_current,
   persist_private_range_observation,
   persist_resolved_range,
   private_range_context,
+  range_context_key,
   range_context_source_key,
   range_geometry_matches_match,
   resolve_range_context,
@@ -136,6 +147,22 @@ class AutoTradeSpot:
   price: float
   ts: int
   fresh: bool
+
+
+@dataclass(frozen=True)
+class PrivateRouteIdentity:
+  symbol: str
+  match_id: str
+  strategy: str
+  family: str
+  direction: str
+  structural_source: str
+  structural_zone_id: str
+  issued_at: int
+  expires_at: int
+  current_price: float | None
+  entry_low: float | None
+  entry_high: float | None
 
 
 @dataclass(frozen=True)
@@ -381,9 +408,10 @@ async def _resolve_worker_range(
     )
   ):
     await increment_metric(client, "scanner_range_stale", symbol=symbol)
-  previous_private = await client.get(
+  previous_private_raw = await client.get(
     range_context_source_key(symbol, "private")
   )
+  previous_private = RangeContext.from_json(previous_private_raw)
   private_context = private_range_context(
     symbol=symbol,
     decision=private_decision,
@@ -392,6 +420,19 @@ async def _resolve_worker_range(
     generated_at=now,
     ttl=PRIVATE_SOURCE_MAX_AGE_SECONDS,
   )
+  private_context = continue_range_episode(previous_private, private_context)
+  if (
+    private_context is not None
+    and private_decision.box is not None
+    and private_decision.box.box_id != private_context.range_id
+  ):
+    private_decision = replace(
+      private_decision,
+      box=replace(
+        private_decision.box,
+        box_id=private_context.range_id,
+      ),
+    )
   await persist_private_range_observation(
     client,
     symbol=symbol,
@@ -399,12 +440,19 @@ async def _resolve_worker_range(
   )
   if private_context is not None:
     await increment_metric(client, "private_range_observed", symbol=symbol)
-  elif previous_private is not None:
+  elif previous_private_raw is not None:
     await increment_metric(client, "private_range_withdrawn", symbol=symbol)
   resolved, comparison = resolve_range_context(
     scanner_context,
     private_context,
     now=now,
+  )
+  previous_resolved_raw = await client.get(range_context_key(symbol))
+  previous_resolved = RangeContext.from_json(previous_resolved_raw)
+  resolved = continue_range_episode(
+    previous_resolved,
+    resolved,
+    require_same_source=False,
   )
   if comparison.get("stale_source_excluded"):
     await increment_metric(
@@ -473,41 +521,33 @@ async def _resolve_worker_range(
       "reason": resolved.invalidation_reason,
     }
 
-  previous_resolved = await client.get(f"auto_trade:range_context:{symbol.upper()}")
+  # Persist only after the native private decision, source resolution and
+  # breakout retirement agree for this cycle.
   await persist_resolved_range(
     client,
     symbol=symbol,
     resolved=resolved,
     comparison=comparison,
   )
-  if resolved is not None and previous_resolved is None:
+  if resolved is not None and previous_resolved_raw is None:
     await increment_metric(client, "resolved_range_created", symbol=symbol)
-  elif resolved is None and previous_resolved is not None:
+  elif resolved is None and previous_resolved_raw is not None:
     await increment_metric(client, "resolved_range_deleted", symbol=symbol)
   if comparison.get("disagreement"):
     await increment_metric(client, "range_context_disagreement", symbol=symbol)
   elif comparison.get("resolution") == "merged":
     await increment_metric(client, "range_context_merged", symbol=symbol)
   if resolved is not None:
-    if resolved.state not in {"broken", "retired"}:
-      private_decision = evaluate_auto_scalp_gate(
-        frames,
-        symbol=symbol,
-        spot_price=spot.price if spot is not None and spot.fresh else None,
-        range_context=resolved,
-      )
-      private_context = private_range_context(
-        symbol=symbol,
-        decision=private_decision,
-        atr=atr,
-        pip_size=units.pip_size(symbol),
-        generated_at=now,
-        ttl=PRIVATE_SOURCE_MAX_AGE_SECONDS,
-      )
-      await persist_private_range_observation(
-        client,
-        symbol=symbol,
-        context=private_context,
+    # Resolution may contribute a canonical episode id, never geometry.
+    # Entry rails remain the ones produced by the native M1 detector.
+    if (
+      private_decision.box is not None
+      and private_context is not None
+      and resolved.state not in {"broken", "retired"}
+    ):
+      private_decision = replace(
+        private_decision,
+        box=replace(private_decision.box, box_id=resolved.range_id),
       )
     await _persist_range_side_states(
       client,
@@ -577,15 +617,28 @@ async def _persist_range_side_states(
         existing = json.loads(existing_raw)
       except (TypeError, ValueError, json.JSONDecodeError):
         existing = {}
+    pending_order_ids = list(existing.get("pending_order_ids") or [])
+    position_ids = list(existing.get("position_ids") or [])
+    candidate_id = existing.get("candidate_id")
+    existing_state = str(existing.get("state") or "").upper()
     state = "ARMED"
+    if position_ids:
+      state = "MANAGING"
+    elif pending_order_ids:
+      state = "ORDER_SUBMITTED"
+    elif candidate_id and existing_state not in {
+      "", "CLOSED", "REARMED", "REJECTED", "EXPIRED", "CANCELLED",
+    }:
+      state = existing_state
     if decision.direction == direction:
-      state = (
-        "CONFIRMED"
-        if decision.state == "candidate"
-        else "EDGE_TOUCHED"
-        if decision.state == "waiting_rejection"
-          else state
-      )
+      if state == "ARMED":
+        state = (
+          "CONFIRMED"
+          if decision.state == "candidate"
+          else "EDGE_TOUCHED"
+          if decision.state == "waiting_rejection"
+            else state
+        )
     if await client.exists(
       _box_edge_key(symbol, context.range_id, direction)
     ):
@@ -595,9 +648,9 @@ async def _persist_range_side_states(
       "symbol": symbol.upper(),
       "direction": direction,
       "state": state,
-      "candidate_id": existing.get("candidate_id"),
-      "pending_order_ids": existing.get("pending_order_ids", []),
-      "position_ids": existing.get("position_ids", []),
+      "candidate_id": candidate_id,
+      "pending_order_ids": pending_order_ids,
+      "position_ids": position_ids,
       "target_state": existing.get("target_state", "pending"),
       "invalidation_state": None,
       "last_trigger_bar": now,
@@ -615,6 +668,40 @@ async def _persist_range_side_states(
       json.dumps(payload, separators=(",", ":"), sort_keys=True),
       ex=max(300, settings.auto_trade_box_retire_seconds),
     )
+
+
+async def _range_side_has_active_ownership(
+  client: Any,
+  *,
+  symbol: str,
+  range_id: str,
+  direction: str,
+) -> bool:
+  raw = await client.get(
+    (
+      f"auto_trade:range_side:{symbol.upper()}:{range_id}:"
+      f"{direction.upper()}"
+    )
+  )
+  if not raw:
+    return False
+  try:
+    payload = json.loads(
+      raw.decode() if isinstance(raw, bytes) else str(raw)
+    )
+  except (TypeError, ValueError, json.JSONDecodeError):
+    return False
+  state = str(payload.get("state") or "").upper()
+  return bool(
+    payload.get("position_ids")
+    or payload.get("pending_order_ids")
+    or (
+      payload.get("candidate_id")
+      and state not in {
+        "", "CLOSED", "REARMED", "REJECTED", "EXPIRED", "CANCELLED",
+      }
+    )
+  )
 
 
 async def _expire_range_matches(
@@ -1428,12 +1515,12 @@ def _resolve_overlap_thesis(
     f"{demand_hit.lo:.2f}-{demand_hit.hi:.2f} and supply "
     f"{supply_hit.lo:.2f}-{supply_hit.hi:.2f}"
   )
-  strict_block = guard_mode == GUARD_MODE_STRICT
   if m1 is None or getattr(m1, "empty", True) or not atr or atr <= 0:
-    # No reaction data to resolve with - can't distinguish resolved from
-    # ambiguous, so treat it the same as a genuinely ambiguous overlap.
-    return GuardOutcome(
-      "overlap", OUTCOME_WAIT, "ambiguous_waiting_confirmation", reason, strict_block,
+    return classify_guard_severity(
+      "overlap",
+      "ambiguous_waiting_confirmation",
+      reason,
+      guard_mode=guard_mode,
     )
   tolerance = max(0.05, 0.5 * atr)
   own_entry = demand_hit if direction == "BUY" else supply_hit
@@ -1455,13 +1542,20 @@ def _resolve_overlap_thesis(
     opposite_reaction is not None
     and opposite_reaction.reaction_type in ("rejection", "reclaim")
   ):
-    return GuardOutcome(
-      "overlap", OUTCOME_WAIT, "opposing_zone_ahead",
-      f"{reason} - {opposite_direction} reaction confirmed instead of {direction}",
-      strict_block,
+    return classify_guard_severity(
+      "overlap",
+      "opposing_zone_ahead",
+      (
+        f"{reason} - {opposite_direction} reaction confirmed "
+        f"instead of {direction}"
+      ),
+      guard_mode=guard_mode,
     )
-  return GuardOutcome(
-    "overlap", OUTCOME_WAIT, "ambiguous_waiting_confirmation", reason, strict_block,
+  return classify_guard_severity(
+    "overlap",
+    "ambiguous_waiting_confirmation",
+    reason,
+    guard_mode=guard_mode,
   )
 
 
@@ -1639,6 +1733,90 @@ def _candidate_id(
 def _group_id(*parts: object) -> str:
   raw = "|".join(str(part) for part in parts if part is not None)
   return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _intent_freshness(raw: object, fallback: int = 0) -> float:
+  text = str(raw or "").strip()
+  if text:
+    try:
+      value = float(text)
+      return value / 1000 if value > 1e12 else value
+    except ValueError:
+      try:
+        return datetime.fromisoformat(
+          text.replace("Z", "+00:00")
+        ).timestamp()
+      except ValueError:
+        pass
+  return float(fallback)
+
+
+def _band_distance_pips(
+  price: float | None,
+  low: float,
+  high: float,
+  symbol: str,
+) -> float:
+  if price is None or low <= price <= high:
+    return 0.0
+  return (
+    min(abs(price - low), abs(price - high))
+    / units.pip_size(symbol)
+  )
+
+
+async def _record_private_route(
+  client: Any,
+  *,
+  symbol: str,
+  event_ts: str,
+  strategy: str,
+  family: str,
+  direction: str,
+  source: str,
+  structural_id: str,
+  entry_low: float,
+  entry_high: float,
+  spot_price: float | None,
+  status: str,
+  reason_code: str,
+  message: str,
+  candidate_id: str | None = None,
+  group_id: str | None = None,
+  retained: bool,
+) -> None:
+  now = int(datetime.now(timezone.utc).timestamp())
+  identity = PrivateRouteIdentity(
+    symbol=symbol.upper(),
+    match_id=_group_id(
+      symbol,
+      family,
+      direction,
+      structural_id,
+    ),
+    strategy=strategy,
+    family=family,
+    direction=direction.upper(),
+    structural_source=source,
+    structural_zone_id=structural_id,
+    issued_at=int(_intent_freshness(event_ts, now)),
+    expires_at=now + max(300, settings.auto_trade_candidate_ttl),
+    current_price=spot_price,
+    entry_low=entry_low,
+    entry_high=entry_high,
+  )
+  await record_route_outcome(
+    client,
+    identity,
+    stage="stream_publish" if candidate_id else "candidate_claim",
+    status=status,  # type: ignore[arg-type]
+    reason_code=reason_code,
+    message=message,
+    candidate_id=candidate_id,
+    group_id=group_id,
+    retained=retained,
+    publish_status=False,
+  )
 
 
 def _strategy_group_id(match: StrategyMatch, *, thesis_cycle: int = 1) -> str:
@@ -1998,14 +2176,14 @@ async def _publish_candidate(
   entry_reference = spot.price
   guard_mode = resolve_guard_mode(settings)
   if regime is not None and regime.state != "chop":
-    regime_outcome = classify_guard_severity(
+    regime_outcome = ExecutionGuardDecision(
       "regime",
+      "block",
       "range_edge_not_chop",
       (
-        f"range-box strategy evaluated while regime={regime.state}; "
-        "strategy geometry remains authoritative"
+        f"range-box strategy requires chop; regime={regime.state}"
       ),
-      guard_mode=guard_mode,
+      True,
     )
     await _record_guard_evaluation(
       client, symbol, regime_outcome,
@@ -2015,9 +2193,8 @@ async def _publish_candidate(
         f"range_box_edge {decision.rail.low:.2f}-{decision.rail.high:.2f}"
       ),
     )
-    if regime_outcome.hard_block:
-      await _record_gate_reject(client, symbol, "range_edge_not_chop")
-      return None
+    await _record_gate_reject(client, symbol, "range_edge_not_chop")
+    return None
   eq_reason = _eq_exclusion_reason(
     decision.box,
     entry_reference,
@@ -2208,14 +2385,6 @@ async def _publish_candidate(
 
   trigger_ts = str(event_ts or "")
   candidate_id = _candidate_id(symbol, trigger_ts, decision)
-  claimed = await client.set(
-    f"auto_trade:candidate:{candidate_id}",
-    "published",
-    ex=max(60, settings.auto_trade_candidate_ttl),
-    nx=True,
-  )
-  if not claimed:
-    return None
   payload = {
     "version": 3,
     "candidate_id": candidate_id,
@@ -2224,7 +2393,6 @@ async def _publish_candidate(
       "range",
       decision.box.box_id,
       decision.direction,
-      candidate_id,
     ),
     "strategy_family": "range",
     "zone_id": f"{decision.box.box_id}:{decision.direction.upper()}",
@@ -2305,16 +2473,16 @@ async def _publish_candidate(
       "extreme_ts": scale_context.extreme_ts,
       "rejection_confirmed": scale_context.rejection_confirmed,
     })
-  try:
-    await client.xadd(
-      settings.auto_trade_stream,
-      {"payload": json.dumps(payload, separators=(",", ":"))},
-      maxlen=max(100, settings.auto_trade_stream_maxlen),
-      approximate=True,
-    )
-  except Exception:
-    await client.delete(f"auto_trade:candidate:{candidate_id}")
-    raise
+  published, _executor_event_id = await publish_candidate_atomic(
+    client,
+    stream=settings.auto_trade_stream,
+    candidate_id=candidate_id,
+    payload=json.dumps(payload, separators=(",", ":")),
+    ttl=settings.auto_trade_candidate_ttl,
+    maxlen=settings.auto_trade_stream_maxlen,
+  )
+  if not published:
+    return None
   await increment_metric(client, "candidate_published", symbol=symbol)
   await emit_lifecycle(
     client,
@@ -2431,24 +2599,27 @@ async def _publish_strategy_match(
     await increment_metric(client, "strategy_match_waiting", symbol=symbol)
     return None
   if not settings.auto_trade_enabled:
+    await _consume_strategy_match(client, symbol, match)
     await route(
       "mode_check", "blocked", "auto_trade_disabled",
-      "autonomous execution is disabled", retained=True,
+      "autonomous execution is disabled", retained=False,
     )
     await increment_metric(client, "strategy_match_blocked", symbol=symbol)
     return None
   if not settings.auto_trade_strategy_match_enabled:
+    await _consume_strategy_match(client, symbol, match)
     await route(
       "mode_check", "blocked", "strategy_match_disabled",
       "new StrategyMatch routing is disabled; existing positions remain managed",
-      retained=True,
+      retained=False,
     )
     await increment_metric(client, "strategy_match_blocked", symbol=symbol)
     return None
   if not _strategy_mode_enabled(match):
+    await _consume_strategy_match(client, symbol, match)
     await route(
       "mode_check", "blocked", "strategy_disabled",
-      f"{match.strategy} execution is disabled", retained=True,
+      f"{match.strategy} execution is disabled", retained=False,
     )
     await increment_metric(client, "strategy_match_blocked", symbol=symbol)
     return None
@@ -2491,14 +2662,14 @@ async def _publish_strategy_match(
     # Sweep, Mapped Zone Reaction, ...) are trend/breakout-appropriate by
     # design and stay ungated here.
     if regime is not None and regime.state != "chop":
-      regime_outcome = classify_guard_severity(
+      regime_outcome = ExecutionGuardDecision(
         "regime",
+        "block",
         "range_edge_not_chop",
         (
-          f"range-edge strategy evaluated while regime={regime.state}; "
-          "strategy structure remains authoritative"
+          f"range-edge strategy requires chop; regime={regime.state}"
         ),
-        guard_mode=guard_mode,
+        True,
       )
       await _record_guard_evaluation(
         client, symbol, regime_outcome,
@@ -2506,15 +2677,14 @@ async def _publish_strategy_match(
         direction=match.direction,
         source_structure=source_summary,
       )
-      if regime_outcome.hard_block:
-        await _consume_strategy_match(client, symbol, match)
-        await _record_gate_reject(client, symbol, "range_edge_not_chop")
-        await route(
-          "mode_check", "blocked", "range_edge_not_chop",
-          regime_outcome.message, measured=regime_outcome.measured,
-          retained=False,
-        )
-        return None
+      await _consume_strategy_match(client, symbol, match)
+      await _record_gate_reject(client, symbol, "range_edge_not_chop")
+      await route(
+        "mode_check", "blocked", "range_edge_not_chop",
+        regime_outcome.message, measured=regime_outcome.measured,
+        retained=False,
+      )
+      return None
     assert match.range_id is not None
     assert match.range_low is not None
     assert match.range_high is not None
@@ -2635,6 +2805,32 @@ async def _publish_strategy_match(
     await increment_metric(
       client,
       f"{match.strategy.lower().replace(' ', '_')}_target_room_insufficient",
+      symbol=symbol,
+    )
+    return None
+
+  policy_evaluation = evaluate_execution_policy(
+    match,
+    spot_price=spot.price,
+    regime=None if regime is None else regime.state,
+    pip_size=units.pip_size(symbol),
+    cfg=settings,
+  )
+  if not policy_evaluation.allowed:
+    status = "blocked" if policy_evaluation.terminal else "waiting"
+    if policy_evaluation.terminal:
+      await _consume_strategy_match(client, symbol, match)
+    await route(
+      "policy",
+      status,
+      policy_evaluation.reason_code,
+      policy_evaluation.message,
+      measured=policy_evaluation.measured,
+      retained=not policy_evaluation.terminal,
+    )
+    await increment_metric(
+      client,
+      f"strategy_policy_{policy_evaluation.reason_code}",
       symbol=symbol,
     )
     return None
@@ -2800,9 +2996,9 @@ async def _publish_strategy_match(
     else 0.0
   )
   distance_pips = distance / units.pip_size(symbol)
-  remaining_room = None
-  if match.full_take_profit_pips:
-    remaining_room = float(match.full_take_profit_pips)
+  remaining_room = float(
+    policy_evaluation.measured.get("remaining_target_room_pips", 0.0)
+  )
   distance_limit, drift_measured = max_entry_drift_pips(
     strategy=match.strategy,
     atr=float(match.atr),
@@ -2915,7 +3111,7 @@ async def _publish_strategy_match(
       guarded.get("title", "high-impact event"),
     )
     await route(
-      "news", "blocked", "terminal_news_policy",
+      "news", "waiting", "news_window_active",
       f"high-impact event: {guarded.get('title', 'unknown')}",
       measured={"event": guarded.get("title")},
       retained=True,
@@ -3002,13 +3198,7 @@ async def _publish_strategy_match(
       await increment_metric(client, "mapped_reaction_rearmed", symbol=symbol)
 
   candidate_id = match.match_id
-  claimed = await client.set(
-    f"auto_trade:candidate:{candidate_id}",
-    "published",
-    ex=max(60, settings.auto_trade_candidate_ttl),
-    nx=True,
-  )
-  if not claimed:
+  if await client.exists(candidate_key(candidate_id)):
     if match.reaction_id:
       await increment_metric(
         client, "duplicate_reaction_suppressed", symbol=symbol,
@@ -3046,7 +3236,6 @@ async def _publish_strategy_match(
     # Persist for the whole group lifetime; do not expire with lookback.
     reaction_claimed = await client.set(claim_key, claim_body, nx=True)
     if not reaction_claimed:
-      await client.delete(f"auto_trade:candidate:{candidate_id}")
       await increment_metric(
         client, "duplicate_reaction_suppressed", symbol=symbol,
       )
@@ -3087,7 +3276,6 @@ async def _publish_strategy_match(
     )
     thesis_ok = await _acquire_thesis_claim(client, thesis_body, match.thesis_id)
     if not thesis_ok:
-      await client.delete(f"auto_trade:candidate:{candidate_id}")
       if match.reaction_id:
         await client.delete(reaction_claim_key(match.reaction_id))
       await increment_metric(
@@ -3109,12 +3297,10 @@ async def _publish_strategy_match(
   setup = (
     f"{match.strategy} · counter_bias"
     if "counter_bias" in match.tags
-    else "Range Box Scalp"
-    if match.is_range_edge
     else match.strategy
   )
   payload = {
-    "version": 3 if match.is_range_edge else 4,
+    "version": 4,
     "candidate_id": candidate_id,
     "match_id": match.match_id,
     "group_id": group_id,
@@ -3141,7 +3327,7 @@ async def _publish_strategy_match(
     "symbol": symbol.upper(),
     "timeframe": match.source_tf,
     "setup": setup,
-    "mode": "auto_box_scalp" if match.is_range_edge else "auto_strategy_match",
+    "mode": "auto_strategy_match",
     "signal_source": match_source,
     "source_strategy": match.strategy,
     "source_event_ts": match.event_ts,
@@ -3161,7 +3347,9 @@ async def _publish_strategy_match(
     "strategy_tags": list(match.tags),
     "target_price": match.target_price,
     "tier": match.tier,
-    "risk_multiplier": match.risk_multiplier,
+    "risk_multiplier": policy_evaluation.measured[
+      "effective_risk_multiplier"
+    ],
     "family": match.family,
     "range_state": match.range_state,
     "range_id": match.range_id,
@@ -3183,16 +3371,12 @@ async def _publish_strategy_match(
       cb_outcome.measured
       if cb_outcome.outcome == "adjust_target" else None
     ),
+    "order_type_preference": (
+      policy_evaluation.policy.order_type_preference
+      if policy_evaluation.policy is not None else "either"
+    ),
   }
-  try:
-    executor_event_id = await client.xadd(
-      settings.auto_trade_stream,
-      {"payload": json.dumps(payload, separators=(",", ":"))},
-      maxlen=max(100, settings.auto_trade_stream_maxlen),
-      approximate=True,
-    )
-  except Exception as exc:
-    await client.delete(f"auto_trade:candidate:{candidate_id}")
+  async def rollback_route_claims() -> None:
     if match.reaction_id and reaction_claim_created:
       reaction_key = reaction_claim_key(match.reaction_id)
       if reaction_claim_previous_raw is None:
@@ -3209,9 +3393,30 @@ async def _publish_strategy_match(
         await client.delete(thesis_key)
       else:
         await client.set(thesis_key, thesis_claim_previous_raw)
+
+  try:
+    published, executor_event_id = await publish_candidate_atomic(
+      client,
+      stream=settings.auto_trade_stream,
+      candidate_id=candidate_id,
+      payload=json.dumps(payload, separators=(",", ":")),
+      ttl=settings.auto_trade_candidate_ttl,
+      maxlen=settings.auto_trade_stream_maxlen,
+    )
+  except Exception as exc:
+    await rollback_route_claims()
     await route(
       "stream_publish", "waiting", "stream_publish_failed",
       f"candidate stream publish failed: {type(exc).__name__}",
+      retained=True,
+    )
+    return None
+  if not published:
+    await rollback_route_claims()
+    await route(
+      "candidate_claim", "duplicate_suppressed",
+      "duplicate_candidate",
+      "candidate ID is already atomically claimed",
       retained=True,
     )
     return None
@@ -3234,11 +3439,7 @@ async def _publish_strategy_match(
     retained=False,
     candidate_id=candidate_id,
     group_id=group_id,
-    executor_event_id=(
-      executor_event_id.decode()
-      if isinstance(executor_event_id, bytes)
-      else str(executor_event_id)
-    ),
+    executor_event_id=executor_event_id,
   )
   if match.strategy in {
     "Key Level Reaction",
@@ -3505,14 +3706,6 @@ async def _publish_trend_candidate(
 
   trigger_ts = str(event_ts or "")
   candidate_id = _trend_candidate_id(symbol, trigger_ts, trend_decision)
-  claimed = await client.set(
-    f"auto_trade:candidate:{candidate_id}",
-    "published",
-    ex=max(60, settings.auto_trade_candidate_ttl),
-    nx=True,
-  )
-  if not claimed:
-    return None
   # Scale-in add evaluation (ScaleInTriggerPlanner, ctrader-engine) needs
   # displacement/BOS/opposing-level context on trend candidates the same
   # way box-scalp candidates already carry it - this is the wiring gap that
@@ -3600,16 +3793,16 @@ async def _publish_trend_candidate(
       "extreme_ts": scale_context.extreme_ts,
       "rejection_confirmed": scale_context.rejection_confirmed,
     })
-  try:
-    await client.xadd(
-      settings.auto_trade_stream,
-      {"payload": json.dumps(payload, separators=(",", ":"))},
-      maxlen=max(100, settings.auto_trade_stream_maxlen),
-      approximate=True,
-    )
-  except Exception:
-    await client.delete(f"auto_trade:candidate:{candidate_id}")
-    raise
+  published, _executor_event_id = await publish_candidate_atomic(
+    client,
+    stream=settings.auto_trade_stream,
+    candidate_id=candidate_id,
+    payload=json.dumps(payload, separators=(",", ":")),
+    ttl=settings.auto_trade_candidate_ttl,
+    maxlen=settings.auto_trade_stream_maxlen,
+  )
+  if not published:
+    return None
   await increment_metric(client, "candidate_published", symbol=symbol)
   await emit_lifecycle(
     client,
@@ -3750,7 +3943,7 @@ def _status_payload(
   target = decision.target
   box = decision.box
   trend_routed = (
-    gate_source == "private_ohlc"
+    gate_source in {"private_ohlc", "private_trend"}
     and trend_decision is not None
     and trend_decision.state == "candidate"
     and (
@@ -4005,7 +4198,17 @@ async def _rearm_scanner_range_edges(
     crossed = (
       spot.price >= midpoint if direction == "BUY" else spot.price <= midpoint
     )
-    if direction in {"BUY", "SELL"} and crossed:
+    range_id = key.rsplit(":", 2)[-2]
+    owned = (
+      direction in {"BUY", "SELL"}
+      and await _range_side_has_active_ownership(
+        client,
+        symbol=symbol,
+        range_id=range_id,
+        direction=direction,
+      )
+    )
+    if direction in {"BUY", "SELL"} and crossed and not owned:
       await client.delete(key)
 
 
@@ -4021,9 +4224,21 @@ async def _apply_box_retirement(
   key = _box_retired_key(symbol, box.box_id)
   if price is not None and math.isfinite(price):
     midpoint = (box.lower.level + box.upper.level) / 2
-    if price >= midpoint:
+    buy_owned = await _range_side_has_active_ownership(
+      client,
+      symbol=symbol,
+      range_id=box.box_id,
+      direction="BUY",
+    )
+    sell_owned = await _range_side_has_active_ownership(
+      client,
+      symbol=symbol,
+      range_id=box.box_id,
+      direction="SELL",
+    )
+    if price >= midpoint and not buy_owned:
       await client.delete(_box_edge_key(symbol, box.box_id, "BUY"))
-    if price <= midpoint:
+    if price <= midpoint and not sell_owned:
       await client.delete(_box_edge_key(symbol, box.box_id, "SELL"))
   if decision.state == "box_broken":
     await client.set(
@@ -4037,6 +4252,24 @@ async def _apply_box_retirement(
       decision,
       state="box_retired",
       reasons=(*decision.reasons, "box already retired after breakout"),
+    )
+  if (
+    decision.state == "candidate"
+    and decision.direction is not None
+    and await _range_side_has_active_ownership(
+      client,
+      symbol=symbol,
+      range_id=box.box_id,
+      direction=decision.direction,
+    )
+  ):
+    return replace(
+      decision,
+      state="edge_owned",
+      reasons=(
+        *decision.reasons,
+        "range side already owned by candidate/order/position",
+      ),
     )
   if (
     decision.state == "candidate"
@@ -4076,7 +4309,9 @@ async def _handle_event(
   # Advance mapped thesis rearm tracking on every closed M1 before detection.
   try:
     from app.analysis.indicators import atr as atr_indicator
-    m1 = frames.get(EXECUTION_TIMEFRAME) or frames.get("M1")
+    m1 = frames.get(EXECUTION_TIMEFRAME)
+    if m1 is None:
+      m1 = frames.get("M1")
     if m1 is not None and len(m1) >= 15:
       atr_series = atr_indicator(m1, int(getattr(settings, "atr_length", 14)))
       atr_for_rearm = float(atr_series.iloc[-1])
@@ -4105,6 +4340,11 @@ async def _handle_event(
   cached_market_map = decode_market_map(
     await client.get(market_map_key(symbol))
   )
+  guard_market_map = (
+    cached_market_map
+    if settings.auto_trade_market_map_guard_enabled
+    else None
+  )
   displayed_market_map = decode_market_map(
     await client.get(market_map_display_key(symbol))
   )
@@ -4131,12 +4371,13 @@ async def _handle_event(
     strategy_matches, _ = dedupe_matches(
       strategy_matches,
       atr=strategy_matches[0].atr,
+      cfg=settings,
     )
   elif strategy_matches:
     strategy_matches = [strategy_matches[0]]
   strategy_match = select_primary(strategy_matches)
   decision = private_decision
-  gate_source = (
+  observed_gate_source = (
     "multi_strategy_match"
     if len(strategy_matches) > 1
     else "scanner_strategy_match"
@@ -4153,17 +4394,13 @@ async def _handle_event(
     await _maybe_flag_regime_alert(client, symbol, shares)
   except Exception:
     log.exception("regime instrumentation failed symbol=%s", symbol)
-  trend_decision = (
-    evaluate_trend_gate(
-      frames,
-      regime,
-      decision,
-      symbol=symbol,
-      spot_price=None if spot is None or not spot.fresh else spot.price,
-      cfg=settings,
-    )
-    if strategy_match is None or settings.auto_trade_multi_match_enabled
-    else TrendDecision("no_setup")
+  trend_decision = evaluate_trend_gate(
+    frames,
+    regime,
+    decision,
+    symbol=symbol,
+    spot_price=None if spot is None or not spot.fresh else spot.price,
+    cfg=settings,
   )
   closed_price = (
     float(frames[EXECUTION_TIMEFRAME]["close"].iloc[-1])
@@ -4187,18 +4424,7 @@ async def _handle_event(
     now=int(datetime.now(timezone.utc).timestamp()),
     range_enabled=bool(settings.auto_trade_range_enabled),
   )
-  box_selected = (
-    box_eligibility.eligible
-    and (
-      strategy_match is None
-      or settings.auto_trade_multi_match_enabled
-    )
-    and (
-      settings.auto_trade_multi_match_enabled
-      or trend_decision.state != "candidate"
-      or decision.confluence >= trend_decision.confluence
-    )
-  )
+  box_selected = box_eligibility.eligible
   if box_eligibility.eligible:
     await increment_metric(client, "range_box_eligible", symbol=symbol)
   else:
@@ -4208,14 +4434,7 @@ async def _handle_event(
       symbol=symbol,
     )
     await increment_metric(client, "range_box_ineligible", symbol=symbol)
-  trend_selected = (
-    trend_decision.state == "candidate"
-    and (
-      strategy_match is None
-      or settings.auto_trade_multi_match_enabled
-    )
-    and (settings.auto_trade_multi_match_enabled or not box_selected)
-  )
+  trend_selected = trend_decision.state == "candidate"
   scale_context = (
     build_auto_scale_context(
       frames,
@@ -4233,77 +4452,298 @@ async def _handle_event(
   )
   htf_zones = _htf_zones(frames, settings)
   htf_levels = _htf_levels(frames, settings)
-  strategy_candidate_ids: list[str] = []
+  spot_price = spot.price if spot is not None and spot.fresh else None
+  intents: list[ExecutionIntent] = []
+  intent_matches: dict[str, StrategyMatch] = {}
   for routed_match in strategy_matches:
-    route_lock = (
-      f"auto_trade:route_lock:{symbol.upper()}:{routed_match.match_id}"
+    intent_id = f"strategy:{routed_match.match_id}"
+    intent_matches[intent_id] = routed_match
+    intents.append(ExecutionIntent(
+      intent_id=intent_id,
+      source=(
+        "market_map_strategy"
+        if routed_match.strategy_mode == "mapped_zone_reaction"
+        else "scanner_strategy_match"
+      ),
+      strategy=routed_match.strategy,
+      direction=routed_match.direction,
+      confluence=routed_match.confluence,
+      tier=routed_match.tier,
+      freshness=_intent_freshness(
+        routed_match.confirmation_bar_ts or routed_match.event_ts,
+        routed_match.issued_at,
+      ),
+      distance_pips=_band_distance_pips(
+        spot_price,
+        routed_match.entry_low,
+        routed_match.entry_high,
+        symbol,
+      ),
+    ))
+  box_intent_id = None
+  if (
+    box_selected
+    and decision.box is not None
+    and decision.rail is not None
+    and decision.direction is not None
+  ):
+    box_intent_id = (
+      f"range:{decision.box.box_id}:{decision.direction.upper()}"
     )
-    locked = await client.set(route_lock, "1", nx=True, ex=30)
-    if not locked:
+    intents.append(ExecutionIntent(
+      intent_id=box_intent_id,
+      source="private_range",
+      strategy="Range Box Scalp",
+      direction=decision.direction.upper(),
+      confluence=decision.confluence,
+      tier="A" if decision.confluence >= 3 else "B",
+      freshness=_intent_freshness(event_ts, now_ts),
+      distance_pips=_band_distance_pips(
+        spot_price,
+        decision.rail.low,
+        decision.rail.high,
+        symbol,
+      ),
+    ))
+  trend_intent_id = None
+  if (
+    trend_selected
+    and trend_decision.direction is not None
+    and trend_decision.entry_zone is not None
+  ):
+    trend_intent_id = (
+      f"trend:{trend_decision.mode}:{trend_decision.direction}:"
+      f"{trend_decision.key_level}"
+    )
+    intents.append(ExecutionIntent(
+      intent_id=trend_intent_id,
+      source="private_trend",
+      strategy=_TREND_SETUP_LABELS.get(
+        trend_decision.mode or "",
+        "Trend Strategy",
+      ),
+      direction=trend_decision.direction.upper(),
+      confluence=trend_decision.confluence,
+      tier="A" if trend_decision.confluence >= 3 else "B",
+      freshness=_intent_freshness(event_ts, now_ts),
+      distance_pips=_band_distance_pips(
+        spot_price,
+        trend_decision.entry_zone[0],
+        trend_decision.entry_zone[1],
+        symbol,
+      ),
+    ))
+  arbitration = arbitrate_execution_intents(
+    intents,
+    conflict_margin=settings.scanner_conflict_margin,
+  )
+  strategy_candidate_ids: list[str] = []
+  box_candidate_id = None
+  trend_candidate_id = None
+  published_match: StrategyMatch | None = None
+  published_intent: ExecutionIntent | None = None
+  for intent in arbitration.ordered:
+    published = None
+    routed_match = intent_matches.get(intent.intent_id)
+    if routed_match is not None:
+      route_lock = (
+        f"auto_trade:route_lock:{symbol.upper()}:{routed_match.match_id}"
+      )
+      locked = await client.set(route_lock, "1", nx=True, ex=30)
+      if not locked:
+        await record_route_outcome(
+          client,
+          routed_match,
+          stage="candidate_claim",
+          status="waiting",
+          reason_code="route_evaluation_in_progress",
+          message="another worker is evaluating this exact match",
+          retained=True,
+          publish_status=False,
+        )
+        continue
+      try:
+        published = await _publish_strategy_match(
+          client,
+          symbol,
+          spot,
+          routed_match,
+          consume_redis_match=(
+            not settings.auto_trade_multi_match_enabled
+            and bool(scanner_strategy_matches)
+          ),
+          match_source=intent.source,
+          htf_zones=htf_zones,
+          htf_levels=htf_levels,
+          regime=regime,
+          market_map=guard_market_map,
+          frames=frames,
+        )
+      finally:
+        await client.delete(route_lock)
+      if published is not None:
+        strategy_candidate_ids.append(published)
+        published_match = routed_match
+    elif intent.intent_id == box_intent_id:
+      published = await _publish_candidate(
+        client,
+        symbol,
+        event_ts,
+        spot,
+        decision,
+        scale_context,
+        regime=regime,
+        htf_zones=htf_zones,
+        htf_levels=htf_levels,
+        gate_source="private_range",
+        market_map=guard_market_map,
+        frames=frames,
+      )
+      box_candidate_id = published
+    elif intent.intent_id == trend_intent_id:
+      published = await _publish_trend_candidate(
+        client,
+        symbol,
+        event_ts,
+        spot,
+        regime,
+        trend_decision,
+        htf_zones=htf_zones,
+        htf_levels=htf_levels,
+        market_map=guard_market_map,
+        frames=frames,
+      )
+      trend_candidate_id = published
+    if published is not None:
+      published_intent = intent
+      break
+  if published_intent is not None or not arbitration.ordered:
+    reason_code = (
+      "arbiter_cycle_winner"
+      if published_intent is not None
+      else arbitration.reason_code
+    )
+    for intent in intents:
+      routed_match = intent_matches.get(intent.intent_id)
+      if (
+        routed_match is None
+        or (
+          published_intent is not None
+          and intent.intent_id == published_intent.intent_id
+        )
+      ):
+        continue
       await record_route_outcome(
         client,
         routed_match,
         stage="candidate_claim",
         status="waiting",
-        reason_code="route_evaluation_in_progress",
-        message="another worker is evaluating this exact match",
+        reason_code=reason_code,
+        message=(
+          "another intent won this M1 execution cycle"
+          if published_intent is not None
+          else "opposite autonomous intents require a new confirmation"
+        ),
         retained=True,
         publish_status=False,
       )
-      continue
-    try:
-      published = await _publish_strategy_match(
-        client,
-        symbol,
-        spot,
-        routed_match,
-        consume_redis_match=(
-          not settings.auto_trade_multi_match_enabled
-          and bool(scanner_strategy_matches)
-        ),
-        match_source=gate_source,
-        htf_zones=htf_zones,
-        htf_levels=htf_levels,
-        regime=regime,
-        market_map=cached_market_map,
-        frames=frames,
-      )
-    finally:
-      await client.delete(route_lock)
-    if published is not None:
-      strategy_candidate_ids.append(published)
-  box_candidate_id = (
-    await _publish_candidate(
-      client,
-      symbol,
-      event_ts,
-      spot,
-      decision,
-      scale_context,
-      regime=regime,
-      htf_zones=htf_zones,
-      htf_levels=htf_levels,
-      gate_source=gate_source,
-      market_map=cached_market_map,
-      frames=frames,
+  if (
+    decision.box is not None
+    and decision.rail is not None
+    and decision.direction is not None
+    and (decision.state == "candidate" or box_eligibility.eligible)
+  ):
+    box_reason = (
+      "candidate_published"
+      if box_candidate_id is not None
+      else "arbiter_cycle_winner"
+      if published_intent is not None
+      else arbitration.reason_code
+      if not arbitration.ordered
+      else box_eligibility.reason_code
+      if not box_eligibility.eligible
+      else "private_range_publish_not_ready"
     )
-    if box_selected else None
-  )
-  trend_candidate_id = (
-    await _publish_trend_candidate(
+    await _record_private_route(
       client,
-      symbol,
-      event_ts,
-      spot,
-      regime,
-      trend_decision,
-      htf_zones=htf_zones,
-      htf_levels=htf_levels,
-      market_map=cached_market_map,
-      frames=frames,
+      symbol=symbol,
+      event_ts=event_ts,
+      strategy="Range Box Scalp",
+      family="range",
+      direction=decision.direction,
+      source="private_range",
+      structural_id=decision.box.box_id,
+      entry_low=decision.rail.low,
+      entry_high=decision.rail.high,
+      spot_price=spot_price,
+      status=(
+        "candidate_published"
+        if box_candidate_id is not None else "waiting"
+      ),
+      reason_code=box_reason,
+      message=(
+        "private range candidate published"
+        if box_candidate_id is not None
+        else "private range intent retained for a later M1 cycle"
+      ),
+      candidate_id=box_candidate_id,
+      group_id=(
+        None
+        if box_candidate_id is None
+        else _group_id(
+          symbol,
+          "range",
+          decision.box.box_id,
+          decision.direction,
+        )
+      ),
+      retained=box_candidate_id is None,
     )
-    if trend_selected else None
-  )
+  if (
+    trend_decision.state == "candidate"
+    and trend_decision.direction is not None
+    and trend_decision.entry_zone is not None
+    and trend_decision.mode is not None
+  ):
+    trend_reason = (
+      "candidate_published"
+      if trend_candidate_id is not None
+      else "arbiter_cycle_winner"
+      if published_intent is not None
+      else arbitration.reason_code
+      if not arbitration.ordered
+      else "private_trend_publish_not_ready"
+    )
+    await _record_private_route(
+      client,
+      symbol=symbol,
+      event_ts=event_ts,
+      strategy=_TREND_SETUP_LABELS[trend_decision.mode],
+      family="trend",
+      direction=trend_decision.direction,
+      source=trend_decision.mode,
+      structural_id=_trend_group_id(symbol, trend_decision),
+      entry_low=trend_decision.entry_zone[0],
+      entry_high=trend_decision.entry_zone[1],
+      spot_price=spot_price,
+      status=(
+        "candidate_published"
+        if trend_candidate_id is not None else "waiting"
+      ),
+      reason_code=trend_reason,
+      message=(
+        "private trend candidate published"
+        if trend_candidate_id is not None
+        else "private trend intent retained for a later M1 cycle"
+      ),
+      candidate_id=trend_candidate_id,
+      group_id=(
+        None
+        if trend_candidate_id is None
+        else _trend_group_id(symbol, trend_decision)
+      ),
+      retained=trend_candidate_id is None,
+    )
   if _has_overlapping_zones(cached_market_map):
     await client.incr(f"auto_trade:zone_overlap:{symbol.upper()}")
   candidate_ids = [
@@ -4312,6 +4752,16 @@ async def _handle_event(
     *([trend_candidate_id] if trend_candidate_id is not None else []),
   ]
   candidate_id = candidate_ids[0] if candidate_ids else None
+  gate_source = (
+    published_intent.source
+    if published_intent is not None
+    else observed_gate_source
+  )
+  status_strategy_match = (
+    published_match
+    if candidate_id is not None
+    else strategy_match
+  )
   if candidate_id is None:
     if strategy_match is None and decision.state != "candidate":
       await _record_gate_reject(client, symbol, decision.state)
@@ -4330,7 +4780,7 @@ async def _handle_event(
     regime=regime,
     trend_decision=trend_decision,
     gate_source=gate_source,
-    strategy_match=strategy_match,
+    strategy_match=status_strategy_match,
     market_map_decision=market_map_decision,
     breakout_retest=await load_breakout_retest_watch(client, symbol),
     resolved_range=resolved_range,
@@ -4348,6 +4798,19 @@ async def _handle_event(
     for item in strategy_matches
   ]
   payload["published_candidate_ids"] = candidate_ids
+  payload["arbitration"] = {
+    "reason_code": arbitration.reason_code,
+    "intent_count": len(intents),
+    "ordered_intent_ids": [
+      item.intent_id for item in arbitration.ordered
+    ],
+    "suppressed_intent_ids": [
+      item.intent_id for item in arbitration.suppressed
+    ],
+    "winner_intent_id": (
+      None if published_intent is None else published_intent.intent_id
+    ),
+  }
   payload["box_eligibility"] = asdict(box_eligibility)
   payload["box_candidate_id"] = box_candidate_id
   payload["resolved_range"] = (

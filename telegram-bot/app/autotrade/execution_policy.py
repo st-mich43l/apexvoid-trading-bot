@@ -207,6 +207,7 @@ FAMILY_SESSION_LEVEL = "session_level"
 FAMILY_TRENDLINE = "trendline"
 FAMILY_RANGE = "range"
 FAMILY_TREND = "trend"
+FAMILY_UNKNOWN = "unknown"
 
 _STRATEGY_FAMILY = {
   "Range Edge Scalp": FAMILY_RANGE_REVERSION,
@@ -242,6 +243,16 @@ class ExecutionPolicy:
   risk_multiplier: float
   order_type_preference: str  # limit | market | either
   permitted_regimes: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ExecutionPolicyEvaluation:
+  allowed: bool
+  reason_code: str
+  message: str
+  terminal: bool
+  measured: dict[str, Any]
+  policy: ExecutionPolicy | None = None
 
 
 _DEFAULT_POLICIES: dict[str, ExecutionPolicy] = {
@@ -289,14 +300,17 @@ _DEFAULT_POLICIES: dict[str, ExecutionPolicy] = {
 
 
 def strategy_family(strategy: str) -> str:
-  return _STRATEGY_FAMILY.get(strategy, FAMILY_TREND_PULLBACK)
+  # An unknown detector label is a contract error, not a trend pullback.
+  # Falling back here silently grants an unreviewed setup the pullback
+  # policy, including its drift and risk allowances.
+  return _STRATEGY_FAMILY.get(strategy, FAMILY_UNKNOWN)
 
 
 def policy_for(strategy: str, cfg: Any | None = None) -> ExecutionPolicy:
   family = strategy_family(strategy)
-  base = _DEFAULT_POLICIES.get(
-    family, _DEFAULT_POLICIES[FAMILY_TREND_PULLBACK],
-  )
+  if family == FAMILY_UNKNOWN:
+    raise ValueError(f"unknown execution strategy: {strategy}")
+  base = _DEFAULT_POLICIES[family]
   if cfg is None:
     return base
   drift_overrides = {
@@ -341,6 +355,155 @@ def policy_for(strategy: str, cfg: Any | None = None) -> ExecutionPolicy:
     risk_multiplier=base.risk_multiplier,
     order_type_preference=base.order_type_preference,
     permitted_regimes=base.permitted_regimes,
+  )
+
+
+def evaluate_execution_policy(
+  match: Any,
+  *,
+  spot_price: float,
+  regime: str | None,
+  pip_size: float,
+  cfg: Any | None = None,
+) -> ExecutionPolicyEvaluation:
+  """Enforce every declared setup policy before candidate publication."""
+  try:
+    policy = policy_for(str(getattr(match, "strategy", "")), cfg)
+  except ValueError as exc:
+    return ExecutionPolicyEvaluation(
+      False,
+      "unknown_strategy_policy",
+      str(exc),
+      True,
+      {},
+      None,
+    )
+  atr = float(getattr(match, "atr", 0.0) or 0.0)
+  low = float(getattr(match, "entry_low", 0.0))
+  high = float(getattr(match, "entry_high", 0.0))
+  direction = str(getattr(match, "direction", "")).upper()
+  pip = pip_size if pip_size > 0 else 0.1
+  confluence = int(getattr(match, "confluence", 0) or 0)
+  zone_width_atr = (
+    (high - low) / atr if atr > 0 and math.isfinite(atr) else float("inf")
+  )
+  targets = tuple(int(value) for value in getattr(match, "targets_pips", ()) or ())
+  target_price = getattr(match, "target_price", None)
+  if target_price is None and targets:
+    detected_price = float(getattr(match, "current_price", spot_price))
+    target_price = (
+      detected_price + max(targets) * pip
+      if direction == "BUY"
+      else detected_price - max(targets) * pip
+    )
+  remaining_price = 0.0
+  if target_price is not None and math.isfinite(float(target_price)):
+    remaining_price = (
+      float(target_price) - spot_price
+      if direction == "BUY"
+      else spot_price - float(target_price)
+    )
+  remaining_pips = max(0.0, remaining_price / pip)
+  remaining_room_atr = (
+    max(0.0, remaining_price) / atr
+    if atr > 0 and math.isfinite(atr) else 0.0
+  )
+  stop_price = abs(
+    spot_price - float(getattr(match, "structure_swing", spot_price))
+  )
+  reward_risk = (
+    max(0.0, remaining_price) / stop_price
+    if stop_price > 0 else 0.0
+  )
+  match_risk_multiplier = float(
+    getattr(match, "risk_multiplier", 1.0) or 1.0
+  )
+  effective_risk_multiplier = (
+    match_risk_multiplier * policy.risk_multiplier
+  )
+  normalized_regime = (
+    "range" if regime == "range"
+    else str(regime or "unknown").strip().lower()
+  )
+  measured = {
+    "policy_family": policy.family,
+    "confluence": confluence,
+    "min_confluence": policy.min_confluence,
+    "zone_width_atr": round(zone_width_atr, 4),
+    "max_zone_width_atr": policy.max_zone_width_atr,
+    "remaining_target_room_pips": round(remaining_pips, 3),
+    "remaining_target_room_atr": round(remaining_room_atr, 4),
+    "min_target_room_atr": policy.min_target_room_atr,
+    "reward_risk": round(reward_risk, 4),
+    "min_reward_risk": policy.min_reward_risk,
+    "policy_risk_multiplier": policy.risk_multiplier,
+    "match_risk_multiplier": match_risk_multiplier,
+    "effective_risk_multiplier": effective_risk_multiplier,
+    "order_type_preference": policy.order_type_preference,
+    "regime": normalized_regime or "unknown",
+    "permitted_regimes": list(policy.permitted_regimes),
+  }
+  if confluence < policy.min_confluence:
+    return ExecutionPolicyEvaluation(
+      False,
+      "policy_confluence_below_minimum",
+      f"confluence {confluence} below {policy.min_confluence}",
+      True,
+      measured,
+      policy,
+    )
+  if normalized_regime not in policy.permitted_regimes:
+    return ExecutionPolicyEvaluation(
+      False,
+      "policy_regime_not_permitted",
+      f"{match.strategy} does not permit regime {normalized_regime}",
+      False,
+      measured,
+      policy,
+    )
+  if zone_width_atr > policy.max_zone_width_atr:
+    return ExecutionPolicyEvaluation(
+      False,
+      "policy_zone_too_wide",
+      (
+        f"entry zone {zone_width_atr:.2f} ATR exceeds "
+        f"{policy.max_zone_width_atr:.2f} ATR"
+      ),
+      True,
+      measured,
+      policy,
+    )
+  if remaining_room_atr < policy.min_target_room_atr:
+    return ExecutionPolicyEvaluation(
+      False,
+      "policy_target_room_insufficient",
+      (
+        f"remaining target room {remaining_room_atr:.2f} ATR below "
+        f"{policy.min_target_room_atr:.2f} ATR"
+      ),
+      True,
+      measured,
+      policy,
+    )
+  if reward_risk < policy.min_reward_risk:
+    return ExecutionPolicyEvaluation(
+      False,
+      "policy_reward_risk_insufficient",
+      (
+        f"remaining reward/risk {reward_risk:.2f} below "
+        f"{policy.min_reward_risk:.2f}"
+      ),
+      True,
+      measured,
+      policy,
+    )
+  return ExecutionPolicyEvaluation(
+    True,
+    "policy_allowed",
+    "strategy execution policy passed",
+    False,
+    measured,
+    policy,
   )
 
 

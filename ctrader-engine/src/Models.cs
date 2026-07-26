@@ -189,7 +189,8 @@ public sealed record TradeCandidate(
   string? ThesisId = null,
   string? StructuralZoneId = null,
   decimal? StructuralZoneLow = null,
-  decimal? StructuralZoneHigh = null
+  decimal? StructuralZoneHigh = null,
+  string? OrderTypePreference = null
 );
 
 public sealed record TradeStreamEntry(
@@ -411,6 +412,7 @@ public sealed record AutoTradeConfigManifest(
   bool TrendEnabled = false,
   bool RangeEnabled = false,
   bool MappedZoneEnabled = false,
+  bool MarketMapGuardEnabled = false,
   bool MapThesisLockEnabled = true,
   bool StrategyMatchEnabled = false,
   bool BreakoutEnabled = false,

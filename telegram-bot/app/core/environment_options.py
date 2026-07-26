@@ -190,6 +190,11 @@ ENVIRONMENT_OPTION_CONTRACTS = (
     ("AUTO_TRADE_MARKET_MAP_STRATEGY_ENABLED",),
     parse_bool,
   ),
+  CanonicalEnvironmentOption(
+    "AUTO_TRADE_MARKET_MAP_GUARD_ENABLED",
+    (),
+    parse_bool,
+  ),
 )
 
 
@@ -233,4 +238,3 @@ def deprecated_option_warnings() -> list[str]:
     for option in RESOLVED_ENVIRONMENT_OPTIONS
     for warning in option.warnings
   })
-

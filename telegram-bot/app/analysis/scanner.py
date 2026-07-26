@@ -43,6 +43,7 @@ from app.analysis.structural_reaction_support import (
   structural_thesis_id,
 )
 from app.autotrade.execution_policy import (
+  FAMILY_UNKNOWN,
   classify_tier,
   risk_multiplier_for_tier,
   strategy_family,
@@ -59,6 +60,8 @@ from app.autotrade.route_outcome import record_route_outcome
 from app.autotrade.range_context import (
   SCANNER_SNAPSHOT_TTL_SECONDS,
   SCANNER_SOURCE_MAX_AGE_SECONDS,
+  RangeContext,
+  continue_range_episode,
   persist_scanner_range_observation,
   range_context_source_key,
   scanner_range_context,
@@ -212,7 +215,7 @@ def _build_strategy_match(
   if not built:
     return None, last_reason, last_measured
   atr = built[0].atr
-  deduped, _events = dedupe_matches(built, atr=atr)
+  deduped, _events = dedupe_matches(built, atr=atr, cfg=settings)
   primary = select_primary(deduped)
   if primary is None:
     return None, "all_matches_tier_c", {"count": len(built)}
@@ -298,6 +301,9 @@ def _build_one_strategy_match(
       range_id = strategy_range_id(symbol, range_low, range_high)
   if not targets_pips:
     return None, "empty_target_config", {}
+  family = strategy_family(result.setup)
+  if family == FAMILY_UNKNOWN:
+    return None, "unknown_strategy_policy", {"strategy": result.setup}
   tier = classify_tier(
     confluence=int(result.confluence),
     strategy=result.setup,
@@ -384,7 +390,7 @@ def _build_one_strategy_match(
     tags=tuple(tags),
     tier=tier,
     risk_multiplier=risk_mult,
-    family=strategy_family(result.setup),
+    family=family,
     range_state=range_state,
     structural_source=structural_source or result.setup,
     zone_id=zone_id,
@@ -477,6 +483,7 @@ async def _sync_strategy_match(
   indicator = (
     indicators.get(tf.upper()) if isinstance(indicators, dict) else None
   )
+  range_context = None
   if (
     structure is not None
     and indicator is not None
@@ -493,6 +500,10 @@ async def _sync_strategy_match(
       ttl=SCANNER_SOURCE_MAX_AGE_SECONDS,
     )
     previous = await client.get(range_context_source_key(symbol, "scanner"))
+    range_context = continue_range_episode(
+      RangeContext.from_json(previous),
+      range_context,
+    )
     await persist_scanner_range_observation(
       client,
       symbol=symbol,
@@ -551,6 +562,8 @@ async def _sync_strategy_match(
         measured=measured,
       )
     return None
+  if match.is_range_edge and range_context is not None:
+    match = replace(match, range_id=range_context.range_id)
   await _record_match_build_outcome(client, symbol, match)
   if match.strategy in STRUCTURAL_SETUPS or match.structural_source in {
     "key_level", "supply_demand", "session_level", "trendline",
@@ -566,9 +579,19 @@ async def _sync_strategy_match(
     else []
   )
   incoming = all_matches if isinstance(all_matches, list) and all_matches else [match]
+  if range_context is not None:
+    incoming = [
+      replace(item, range_id=range_context.range_id)
+      if item.is_range_edge else item
+      for item in incoming
+    ]
   now = int(datetime.now(timezone.utc).timestamp())
   active = [item for item in current if item.expires_at >= now]
-  combined, events = dedupe_matches([*active, *incoming], atr=match.atr)
+  combined, events = dedupe_matches(
+    [*active, *incoming],
+    atr=match.atr,
+    cfg=settings,
+  )
   if not settings.auto_trade_track_all_structural_matches:
     top_n = int(getattr(settings, "scanner_top_n", 3))
     if top_n > 0:
@@ -1615,6 +1638,21 @@ async def _handle_event(
     event_ts=event_ts,
   )
   if ctx is None:
+    await persist_scanner_range_observation(
+      client,
+      symbol=symbol,
+      context=None,
+    )
+    await client.set(
+      f"auto_trade:range_source_status:scanner:{symbol.upper()}",
+      json.dumps({
+        "state": "data_gap",
+        "reason": "missing_exec_frame",
+        "event_ts": event_ts,
+        "checked_at": datetime.now(timezone.utc).isoformat(),
+      }, separators=(",", ":"), sort_keys=True),
+      ex=SCANNER_SOURCE_MAX_AGE_SECONDS,
+    )
     await _record_status(
       client,
       symbol=symbol,

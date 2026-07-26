@@ -25,6 +25,7 @@ RouteStatus = Literal[
 RouteStage = Literal[
   "scanner",
   "mode_check",
+  "policy",
   "spot_check",
   "counter_bias",
   "opposing_barrier",
@@ -76,6 +77,26 @@ def last_route_outcome_key(symbol: str) -> str:
 
 def route_history_key(symbol: str) -> str:
   return f"auto_trade:route_history:{symbol.upper()}"
+
+
+def _material_measurement_changed(
+  previous: dict[str, Any],
+  current: dict[str, Any],
+) -> bool:
+  keys = set(previous) | set(current)
+  for key in keys:
+    left = previous.get(key)
+    right = current.get(key)
+    if left == right:
+      continue
+    if isinstance(left, (int, float)) and isinstance(right, (int, float)):
+      threshold = 1.0 if (
+        "pips" in key or "room" in key or "distance" in key
+      ) else 0.1 if "price" in key else 0.01
+      if abs(float(left) - float(right)) < threshold:
+        continue
+    return True
+  return False
 
 
 async def record_route_outcome(
@@ -132,16 +153,24 @@ async def record_route_outcome(
   previous_raw = await client.get(
     route_outcome_key(outcome.symbol, outcome.match_id)
   )
+  transition_changed = previous_raw is None
+  material_changed = False
   if previous_raw:
     try:
       previous = json.loads(
         previous_raw.decode()
         if isinstance(previous_raw, bytes) else str(previous_raw)
       )
-      if (
+      transition_changed = not (
         previous.get("status") == outcome.status
         and previous.get("reason_code") == outcome.reason_code
-      ):
+      )
+      if not transition_changed:
+        material_changed = _material_measurement_changed(
+          dict(previous.get("measured") or {}),
+          outcome.measured,
+        )
+      if not transition_changed and not material_changed:
         publish_status = False
     except (TypeError, ValueError, json.JSONDecodeError):
       pass
@@ -149,17 +178,28 @@ async def record_route_outcome(
     route_outcome_key(outcome.symbol, outcome.match_id), encoded, ex=ttl,
   )
   await client.set(last_route_outcome_key(outcome.symbol), encoded, ex=ttl)
-  await client.xadd(
-    route_history_key(outcome.symbol),
-    {"payload": encoded},
-    maxlen=1000,
-    approximate=True,
+  if transition_changed or material_changed:
+    await client.xadd(
+      route_history_key(outcome.symbol),
+      {"payload": encoded},
+      maxlen=1000,
+      approximate=True,
+    )
+  metric_claimed = await client.set(
+    (
+      f"auto_trade:route_metric:{outcome.symbol}:"
+      f"{outcome.match_id}:{status}"
+    ),
+    "1",
+    nx=True,
+    ex=ttl,
   )
-  await client.hincrby(
-    f"auto_trade:metrics:{outcome.symbol}",
-    f"strategy_match_{status}",
-    1,
-  )
+  if metric_claimed:
+    await client.hincrby(
+      f"auto_trade:metrics:{outcome.symbol}",
+      f"strategy_match_{status}",
+      1,
+    )
   if publish_status and status in {
     "waiting", "blocked", "candidate_published", "executor_rejected",
   }:
@@ -173,4 +213,3 @@ async def record_route_outcome(
       approximate=True,
     )
   return outcome
-

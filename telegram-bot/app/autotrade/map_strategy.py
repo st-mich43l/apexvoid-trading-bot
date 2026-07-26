@@ -25,6 +25,7 @@ from app.analysis.market_map import (
   market_map_from_payload,
 )
 from app.autotrade import units
+from app.autotrade.execution_policy import max_entry_drift_pips
 from app.autotrade.reaction_identity import (
   mapped_reaction_id,
   mapped_thesis_id,
@@ -217,18 +218,13 @@ def evaluate_market_map_strategy(
     entry.lo - proximal,
     entry.hi + proximal,
   ) / pip_size
-  drift_limit = max(
-    0.0,
-    float(getattr(cfg, "auto_trade_max_entry_distance_pips", 10)),
+  drift_limit, _drift_measured = max_entry_drift_pips(
+    strategy="Mapped Zone Reaction",
+    atr=atr,
+    pip_size=pip_size,
+    remaining_target_room_pips=None,
+    cfg=cfg,
   )
-  atr_drift_limit = max(
-    0.0,
-    float(getattr(cfg, "auto_trade_map_max_entry_drift_atr", 0.40)),
-  ) * atr / pip_size
-  if atr_drift_limit > 0:
-    drift_limit = (
-      min(drift_limit, atr_drift_limit) if drift_limit > 0 else atr_drift_limit
-    )
   if drift > drift_limit:
     return MarketMapStrategyDecision(
       "entry_moved",

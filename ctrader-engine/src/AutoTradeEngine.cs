@@ -826,6 +826,11 @@ public sealed class AutoTradeEngine(
     var trendCandidate = IsTrendCandidate(candidate);
     var strategyMatchCandidate = IsStrategyMatchCandidate(candidate);
     var manualAlgoCandidate = IsManualAlgoCandidate(candidate);
+    var orderTypePreference = (
+      candidate.OrderTypePreference ?? "either"
+    ).Trim().ToLowerInvariant();
+    var orderTypePreferenceSupported = orderTypePreference is
+      "either" or "market" or "limit";
     if (boxRangeScalp)
     {
       await store.IncrementMetricAsync(
@@ -857,6 +862,7 @@ public sealed class AutoTradeEngine(
       )
       || candidate.EntryZone is null
       || candidate.EntryZone.Low > candidate.EntryZone.High
+      || !orderTypePreferenceSupported
       || (
         !string.Equals(candidate.Direction, "BUY", StringComparison.OrdinalIgnoreCase)
         && !string.Equals(candidate.Direction, "SELL", StringComparison.OrdinalIgnoreCase)
@@ -1189,6 +1195,33 @@ public sealed class AutoTradeEngine(
     var candidateGroupId = CandidateGroupId(candidate);
     if (string.IsNullOrWhiteSpace(candidate.ParentGroupId))
     {
+      if (
+        !IsManualAlgoCandidate(candidate)
+        && (
+          _states.Values.Any(state =>
+            state.SymbolId == symbol.SymbolId
+            && state.Direction != direction
+            && string.IsNullOrWhiteSpace(state.ParentGroupId)
+          )
+          || _allSymbolPendingOrders.Any(order =>
+            order.SymbolId == symbol.SymbolId
+            && order.Label == options.Label
+            && order.Direction != direction
+          )
+        )
+      )
+      {
+        await store.IncrementMetricAsync(
+          candidate.Symbol,
+          "executor_opposite_initial_rejected",
+          cancellationToken
+        );
+        return await RejectAsync(
+          candidate,
+          "opposite autonomous initial group is already active",
+          cancellationToken
+        );
+      }
       if (await HasActiveDuplicateReactionAsync(candidate, cancellationToken))
       {
         await store.IncrementMetricAsync(
@@ -1222,6 +1255,28 @@ public sealed class AutoTradeEngine(
         _log(
           $"auto-trade candidate {Short(candidate.CandidateId)} "
           + "already_processed:active_thesis_group"
+        );
+        return true;
+      }
+      var activeForGroup = _states.Values.Any(state =>
+        state.SymbolId == symbol.SymbolId
+        && GroupId(state) == candidateGroupId
+      );
+      if (activeForGroup)
+      {
+        await store.IncrementMetricAsync(
+          candidate.Symbol,
+          "executor_duplicate_group_rejected",
+          cancellationToken
+        );
+        await store.CompleteCandidateAsync(
+          candidate.CandidateId,
+          "already_processed:active_initial_group",
+          cancellationToken
+        );
+        _log(
+          $"auto-trade candidate {Short(candidate.CandidateId)} "
+          + "already_processed:active_initial_group"
         );
         return true;
       }
@@ -1336,10 +1391,45 @@ public sealed class AutoTradeEngine(
     CancellationToken cancellationToken
   )
   {
+    var preference = (
+      candidate.OrderTypePreference ?? "either"
+    ).Trim().ToLowerInvariant();
+    if (preference == "market")
+    {
+      return await ProcessSingleInitialAsync(
+        candidate,
+        account,
+        direction,
+        expectedEntry,
+        stopPlan,
+        date,
+        routingReason: "execution policy: market",
+        cancellationToken: cancellationToken
+      );
+    }
+    if (
+      preference == "limit"
+      && (
+        !options.ZoneFillEnabled
+        || candidate.Atr is not decimal limitAtr
+        || !ZoneFillPlanner.Qualifies(
+          candidate.EntryZone,
+          limitAtr,
+          options.ZoneFillMinAtr
+        )
+      )
+    )
+    {
+      return await RejectAsync(
+        candidate,
+        "execution policy requires a limit-capable zone fill",
+        cancellationToken
+      );
+    }
     if (
       !IsBoxRangeScalp(candidate)
-      && !IsStrategyMatchCandidate(candidate)
-      && options.ZoneFillEnabled
+      && (!IsStrategyMatchCandidate(candidate) || preference == "limit")
+      && (options.ZoneFillEnabled || preference == "limit")
       && candidate.Atr is decimal atr
       && ZoneFillPlanner.Qualifies(
         candidate.EntryZone,

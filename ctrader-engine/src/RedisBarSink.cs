@@ -382,7 +382,10 @@ public sealed class StackExchangeRedisSeriesCommands :
     var result = await _db.ScriptEvaluateAsync(
       CandidateClaimScript,
       [CandidateKey(candidateId)],
-      [30_000]
+      // Broker acknowledgements and reconnect adoption can exceed 30s.
+      // Keep the processing lease beyond the normal broker-response window
+      // so a replay cannot create a second initial order.
+      [120_000]
     );
     return (long)result == 1;
   }

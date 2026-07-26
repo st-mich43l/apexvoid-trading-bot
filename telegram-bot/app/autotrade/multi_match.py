@@ -4,15 +4,57 @@ from __future__ import annotations
 
 import json
 import math
+from datetime import datetime
 from typing import Any, Iterable
 
-from app.autotrade.execution_policy import TIER_C, classify_tier
+from app.autotrade.execution_policy import (
+  TIER_C,
+  classify_tier,
+  risk_multiplier_for_tier,
+)
 from app.autotrade.strategy_match import StrategyMatch
 from app.analysis.structural_reaction_support import STRUCTURAL_SETUPS
 
 
 STRATEGY_MATCHES_KEY_PREFIX = "auto_trade:strategy_matches"
 _EPS = 1e-9
+
+
+def _freshness(match: StrategyMatch) -> float:
+  for raw in (
+    match.confirmation_bar_ts,
+    match.touch_bar_ts,
+    match.event_ts,
+  ):
+    if not raw:
+      continue
+    text = str(raw).strip()
+    try:
+      value = float(text)
+      if value > 1e12:
+        value /= 1000
+      return value
+    except ValueError:
+      try:
+        return datetime.fromisoformat(text.replace("Z", "+00:00")).timestamp()
+      except ValueError:
+        continue
+  return float(match.issued_at)
+
+
+def _zone_overlap_ratio(
+  left_low: float,
+  left_high: float,
+  right_low: float,
+  right_high: float,
+) -> float:
+  overlap = min(left_high, right_high) - max(left_low, right_low)
+  smaller = min(left_high - left_low, right_high - right_low)
+  if overlap <= 0:
+    return 0.0
+  if smaller <= _EPS:
+    return 1.0
+  return overlap / smaller
 
 
 def strategy_matches_key(symbol: str) -> str:
@@ -130,11 +172,12 @@ def same_thesis(left: StrategyMatch, right: StrategyMatch, *, atr: float) -> boo
   left_first = left.strategy in STRUCTURAL_SETUPS
   right_first = right.strategy in STRUCTURAL_SETUPS
   if left_first != right_first:
-    overlap = (
-      min(left.entry_high, right.entry_high) - max(left.entry_low, right.entry_low)
-    )
-    tol = max(atr * 0.25, 0.3) if atr > 0 and math.isfinite(atr) else 0.3
-    if overlap > tol:
+    if _zone_overlap_ratio(
+      left.entry_low,
+      left.entry_high,
+      right.entry_low,
+      right.entry_high,
+    ) >= 0.5:
       if left.confirmation_bar_ts and right.confirmation_bar_ts:
         return left.confirmation_bar_ts == right.confirmation_bar_ts
       return True
@@ -164,7 +207,12 @@ def _structural_strategy_rank(match: StrategyMatch) -> int:
   return 3
 
 
-def merge_confluence(primary: StrategyMatch, secondary: StrategyMatch) -> StrategyMatch:
+def merge_confluence(
+  primary: StrategyMatch,
+  secondary: StrategyMatch,
+  *,
+  cfg: Any | None = None,
+) -> StrategyMatch:
   reasons = tuple(dict.fromkeys([*primary.reasons, *secondary.reasons]))
   tags = tuple(dict.fromkeys([
     *primary.tags,
@@ -184,7 +232,12 @@ def merge_confluence(primary: StrategyMatch, secondary: StrategyMatch) -> Strate
   data["tags"] = list(tags)
   data["confluence"] = confluence
   data["tier"] = tier
-  data["risk_multiplier"] = primary.risk_multiplier
+  data["risk_multiplier"] = risk_multiplier_for_tier(
+    tier,
+    cfg,
+    post_impulse=bool(primary.range_state == "post_impulse_range"),
+    one_sided=bool(primary.strategy == "One-Sided Range Reaction"),
+  )
   merged = StrategyMatch.from_json(json.dumps(data, separators=(",", ":")))
   return merged or primary
 
@@ -193,13 +246,19 @@ def dedupe_matches(
   matches: Iterable[StrategyMatch],
   *,
   atr: float,
+  cfg: Any | None = None,
 ) -> tuple[list[StrategyMatch], list[dict[str, str]]]:
   """Keep distinct theses; merge same-thesis into the higher-quality match."""
   kept: list[StrategyMatch] = []
   events: list[dict[str, str]] = []
   for match in sorted(
     matches,
-    key=lambda item: (-item.confluence, item.strategy, item.direction),
+    key=lambda item: (
+      -_freshness(item),
+      -item.confluence,
+      item.strategy,
+      item.direction,
+    ),
   ):
     if (match.tier or "").upper() == TIER_C:
       events.append({
@@ -212,9 +271,15 @@ def dedupe_matches(
     for index, existing in enumerate(kept):
       if same_thesis(existing, match, atr=atr):
         primary, secondary = existing, match
-        if _structural_strategy_rank(match) < _structural_strategy_rank(existing):
+        if _freshness(match) > _freshness(existing):
           primary, secondary = match, existing
-        kept[index] = merge_confluence(primary, secondary)
+        elif (
+          _freshness(match) == _freshness(existing)
+          and _structural_strategy_rank(match)
+            < _structural_strategy_rank(existing)
+        ):
+          primary, secondary = match, existing
+        kept[index] = merge_confluence(primary, secondary, cfg=cfg)
         merged_into = existing.match_id
         break
     if merged_into is not None:
@@ -286,8 +351,10 @@ def select_primary(
 def zones_contradict(left: StrategyMatch, right: StrategyMatch, atr: float) -> bool:
   if left.direction == right.direction:
     return False
-  tol = max(atr * 0.25, 0.3) if atr > 0 and math.isfinite(atr) else 0.3
-  overlap = (
-    min(left.entry_high, right.entry_high) - max(left.entry_low, right.entry_low)
-  )
-  return overlap > tol
+  del atr
+  return _zone_overlap_ratio(
+    left.entry_low,
+    left.entry_high,
+    right.entry_low,
+    right.entry_high,
+  ) >= 0.5

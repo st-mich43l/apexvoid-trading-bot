@@ -12,6 +12,26 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- Make the autonomous execution pipeline single-winner and crash-safe: a
+  cross-engine arbiter now selects at most one same-direction initial intent
+  per M1 cycle, C# rejects opposite or already-active initial groups, candidate
+  claim plus stream append is atomic, and the processing lease is 120 seconds.
+- Keep Private Range producer-owned by its native M1 auction detector, resolve
+  and persist range context only after the final private observation, carry a
+  stable formation-episode ID across small rail drift, and prevent rail rearm
+  while a candidate, pending order, or position still owns that side.
+- Make `observe` overlap outcomes genuinely advisory, classify missing/invalid
+  price data as `data_gap`/`warming_up` instead of chop, enforce chop as a hard
+  Range Box/Range Edge eligibility contract, and enforce every declared
+  strategy execution-policy field before publication.
+- Prefer fresh structural matches over stale high-confluence duplicates,
+  tighten narrow-zone and cross-source range compatibility, derive risk from
+  the final tier, compute drift from remaining target room, and use the shared
+  strategy-aware drift contract for mapped entries.
+- Persist exact candidate-to-strategy attribution, symbol-specific status,
+  unique route-funnel metrics, material-only route history, private
+  range/trend route outcomes, and immediate scanner range withdrawal on a
+  missing M5 execution frame.
 - Require live producer-owned scanner/private range contexts for Range Box and
   Range Edge; withdraw absent sources immediately, stop resolver TTL refresh of
   source keys, and suppress stale scanner/worker status snapshots.
@@ -25,6 +45,10 @@ dated section after deployment.
   while preserving them in the analysis pipeline.
 
 ### Added
+
+- Added `AUTO_TRADE_MARKET_MAP_GUARD_ENABLED` so Market Map execution and its
+  overlap/barrier guard are independently controlled. If omitted, the guard
+  follows `AUTO_TRADE_MAPPED_ZONE_ENABLED`.
 
 - Owner DM `/auto_close_all confirm` flattens all open ApexVoid Algo broker
   positions (and cancels pending labeled limits), pauses new entries, and
@@ -94,10 +118,10 @@ dated section after deployment.
   PLACED`, `POSITION OPENED`, `DRY-RUN ONLY`, and machine-readable rejection)
   plus fatal Python/C# config-manifest checks for execution mode and Redis
   stream split-brain.
-- Added the explicit `demo_eval` auto-trade profile, independent hedged
-  strategy/range groups, two-sided range rails, multi-match routing, unified
-  scanner/private `RangeContext`, complete candidate lifecycle history, and
-  Python/C# startup contract health manifests.
+- Added the explicit `demo_eval` auto-trade profile, independent
+  same-direction strategy groups, two-sided range analysis, multi-match
+  tracking, unified scanner/private `RangeContext`, complete candidate
+  lifecycle history, and Python/C# startup contract health manifests.
 - Expanded `/auto_status` and execution Telegram cards with account capability,
   config health, resolved range/barriers, both rail states, active matches,
   strategy groups, counters, and real executor lifecycle badges.
@@ -114,15 +138,15 @@ dated section after deployment.
   explicit `AUTO_TRADE_NON_HEDGED_OPPOSITE_POLICY` for opposite exposure.
 - Demo evaluation treats HTF bias as scoring/reporting metadata. Valid local
   BUY and SELL structures, including counter-bias mapped zones and trend
-  pullbacks, remain executable; all supported strategy modes are enabled and
-  tracked without a global top-1 bottleneck.
+  pullbacks, remain executable and tracked; the cross-engine arbiter chooses
+  one direction and at most one initial publication per M1 cycle.
 - Initial strategy candidates always own independent groups. Only a trend
   candidate carrying an explicit compatible `parent_group_id` can enter the
   scale-in route.
-- Demo evaluation no longer requires flat bot-owned XAU exposure before a
-  Range Box order. The former veto remains as
-  `range_box_would_have_awaited_flat` counterfactual telemetry, while candidate
-  and pending-order deduplication is scoped to its strategy group.
+- Demo evaluation does not require flat bot-owned XAU exposure for a
+  same-direction initial group. Opposite autonomous initial exposure is
+  rejected before broker submission, while duplicate candidate, reaction,
+  thesis, group, and pending-order ownership remain independently enforced.
 
 ### Fixed
 

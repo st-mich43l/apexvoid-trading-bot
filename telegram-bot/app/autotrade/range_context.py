@@ -79,6 +79,10 @@ class RangeContext:
   quality: float = 0.0
   generated_at: int = 0
   expires_at: int = 0
+  # Stable ownership for one auction episode. ``generated_at`` is producer
+  # freshness and advances on every observation; it must not define identity.
+  episode_started_at: int = 0
+  episode_last_seen_at: int = 0
 
   def to_json(self) -> str:
     return json.dumps(asdict(self), separators=(",", ":"), sort_keys=True)
@@ -298,15 +302,42 @@ def range_geometry_matches_match(
   range_low: float | None,
   range_high: float | None,
 ) -> bool:
-  if range_id and context.range_id == range_id:
-    return True
   if range_low is None or range_high is None:
-    return False
-  width = max(context.width_price, float(range_high) - float(range_low))
-  tolerance = max(0.5, width * 0.25)
-  return (
-    abs(context.lower - float(range_low)) <= tolerance
-    and abs(context.upper - float(range_high)) <= tolerance
+    return bool(range_id and context.range_id == range_id)
+  return _geometry_compatible(
+    context.lower,
+    context.upper,
+    float(range_low),
+    float(range_high),
+    atr=_context_atr(context),
+  )
+
+
+def continue_range_episode(
+  previous: RangeContext | None,
+  current: RangeContext | None,
+  *,
+  require_same_source: bool = True,
+) -> RangeContext | None:
+  """Carry identity only while the same active auction geometry survives."""
+  if current is None:
+    return None
+  if (
+    previous is None
+    or previous.symbol != current.symbol
+    or (require_same_source and previous.source != current.source)
+    or previous.state not in ACTIVE_RANGE_STATES
+    or current.state not in ACTIVE_RANGE_STATES
+    or not _compatible(previous, current)
+  ):
+    return current
+  return replace(
+    current,
+    range_id=previous.range_id,
+    episode_started_at=(
+      previous.episode_started_at or previous.generated_at
+    ),
+    episode_last_seen_at=current.generated_at,
   )
 
 
@@ -358,8 +389,6 @@ def scanner_range_context(
     generated_at=generated_at,
     ttl=ttl,
   )
-
-
 def private_range_context(
   *,
   symbol: str,
@@ -374,7 +403,7 @@ def private_range_context(
     return None
   lower = _range_barrier(box.lower)
   upper = _range_barrier(box.upper)
-  return _build_context(
+  context = _build_context(
     symbol=symbol,
     state=(
       "broken" if getattr(decision, "state", "") == "box_broken"
@@ -399,6 +428,10 @@ def private_range_context(
     generated_at=generated_at,
     ttl=ttl,
   )
+  # The native detector already creates an immutable id for the first
+  # observed box. Use it as the episode id, then let
+  # ``continue_range_episode`` carry it across small rail changes.
+  return replace(context, range_id=str(box.box_id))
 
 
 def resolve_range_context(
@@ -529,6 +562,22 @@ def resolve_range_context(
       quality=scanner_ctx.quality + private_ctx.quality,
       generated_at=max(scanner_ctx.generated_at, private_ctx.generated_at),
       ttl=max(scanner_ctx.expires_at, private_ctx.expires_at) - now,
+      episode_seed=priority.range_id,
+    )
+    merged = replace(
+      merged,
+      range_id=priority.range_id,
+      episode_started_at=min(
+        value for value in (
+          scanner_ctx.episode_started_at or scanner_ctx.generated_at,
+          private_ctx.episode_started_at or private_ctx.generated_at,
+        )
+        if value > 0
+      ),
+      episode_last_seen_at=max(
+        scanner_ctx.generated_at,
+        private_ctx.generated_at,
+      ),
     )
     return merged, {
       **base_compare,
@@ -654,10 +703,13 @@ def _build_context(
   quality: float,
   generated_at: int,
   ttl: int,
+  episode_seed: str | None = None,
 ) -> RangeContext:
   width = upper.level - lower.level
   raw_id = (
     f"v{RANGE_CONTEXT_VERSION}|{symbol.upper()}|"
+    f"{source}|{execution_timeframe.upper()}|"
+    f"{episode_seed or generated_at}|"
     f"{lower.level:.2f}|{upper.level:.2f}"
   )
   range_id = hashlib.sha256(raw_id.encode("ascii")).hexdigest()[:24]
@@ -694,6 +746,8 @@ def _build_context(
     quality=quality,
     generated_at=generated_at,
     expires_at=generated_at + max(60, ttl),
+    episode_started_at=generated_at,
+    episode_last_seen_at=generated_at,
   )
 
 
@@ -741,13 +795,47 @@ def _merge_barrier(left: RangeBarrier, right: RangeBarrier) -> RangeBarrier:
 
 
 def _compatible(left: RangeContext, right: RangeContext) -> bool:
-  width = min(left.width_price, right.width_price)
-  if width <= 0:
+  atr_values = [
+    value for value in (_context_atr(left), _context_atr(right))
+    if value > 0
+  ]
+  return _geometry_compatible(
+    left.lower,
+    left.upper,
+    right.lower,
+    right.upper,
+    atr=min(atr_values) if atr_values else 0.0,
+  )
+
+
+def _context_atr(context: RangeContext) -> float:
+  if context.width_atr <= 0:
+    return 0.0
+  value = context.width_price / context.width_atr
+  return value if math.isfinite(value) and value > 0 else 0.0
+
+
+def _geometry_compatible(
+  left_low: float,
+  left_high: float,
+  right_low: float,
+  right_high: float,
+  *,
+  atr: float,
+) -> bool:
+  left_width = left_high - left_low
+  right_width = right_high - right_low
+  if min(left_width, right_width) <= 0:
     return False
-  tolerance = max(0.5, width * 0.25)
+  overlap = min(left_high, right_high) - max(left_low, right_low)
+  overlap_ratio = max(0.0, overlap) / min(left_width, right_width)
+  width = min(left_width, right_width)
+  atr_tolerance = atr * 0.35 if atr > 0 else width * 0.10
+  edge_tolerance = min(width * 0.15, max(0.10, atr_tolerance))
   return (
-    abs(left.lower - right.lower) <= tolerance
-    and abs(left.upper - right.upper) <= tolerance
+    overlap_ratio >= 0.80
+    and abs(left_low - right_low) <= edge_tolerance
+    and abs(left_high - right_high) <= edge_tolerance
   )
 
 
