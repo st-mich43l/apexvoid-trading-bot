@@ -45,6 +45,16 @@ public interface IRedisSeriesCommands
   );
 }
 
+// Snapshot of durable broker-absence confirmation progress. `Recorded` is
+// false when the snapshot arrived before the configured recheck interval had
+// elapsed on the authoritative clock.
+public sealed record BrokerAbsenceProgress(
+  bool Recorded,
+  int Confirmations,
+  long LastCheckAt,
+  long SecondsSincePrevious
+);
+
 public interface IAutoTradeStore
 {
   Task<string> GetCursorAsync(CancellationToken cancellationToken);
@@ -105,6 +115,23 @@ public interface IAutoTradeStore
     CancellationToken cancellationToken,
     string? lastError = null
   );
+  // Durable, fenced broker-absence confirmation progress. The increment is
+  // eligible only when the authoritative (Redis-time) interval since the
+  // previous persisted confirmation has elapsed. Null means the caller can no
+  // longer prove recovery ownership and must stop instead of counting.
+  Task<BrokerAbsenceProgress?> TryRecordBrokerAbsenceCheckAsync(
+    string candidateId,
+    string streamEventId,
+    string leaseToken,
+    int minIntervalSeconds,
+    TimeSpan ttl,
+    CancellationToken cancellationToken
+  ) => Task.FromResult<BrokerAbsenceProgress?>(null);
+  // Removes persisted absence progress after adoption or confirmed absence.
+  Task ClearBrokerAbsenceProgressAsync(
+    string candidateId,
+    CancellationToken cancellationToken
+  ) => Task.CompletedTask;
   // Administrative re-arm for executor-internal flip rendezvous records only.
   // Rejects anything whose outcome is not a `flip_pending:` marker so it can
   // never rewrite a real broker outcome.
@@ -577,6 +604,54 @@ public sealed class StackExchangeRedisSeriesCommands :
     lastError
   );
 
+  public async Task<BrokerAbsenceProgress?> TryRecordBrokerAbsenceCheckAsync(
+    string candidateId,
+    string streamEventId,
+    string leaseToken,
+    int minIntervalSeconds,
+    TimeSpan ttl,
+    CancellationToken cancellationToken
+  )
+  {
+    var result = await _db.ScriptEvaluateAsync(
+      CandidateExecutionScripts.RecordAbsenceCheck,
+      [CandidateKey(candidateId), RecoveryProgressKey(candidateId)],
+      [
+        streamEventId,
+        leaseToken,
+        candidateId,
+        minIntervalSeconds,
+        (long)Math.Max(60, ttl.TotalSeconds),
+      ]
+    );
+    if (result.IsNull || result.Resp2Type != ResultType.Array)
+    {
+      return null;
+    }
+    var items = (RedisResult[])result!;
+    if (items.Length < 4)
+    {
+      return null;
+    }
+    var code = (long)items[0];
+    if (code < 0)
+    {
+      // Fenced out: identity, token or recovery state no longer matches.
+      return null;
+    }
+    return new BrokerAbsenceProgress(
+      code == 1,
+      (int)(long)items[1],
+      (long)items[2],
+      (long)items[3]
+    );
+  }
+
+  public Task ClearBrokerAbsenceProgressAsync(
+    string candidateId,
+    CancellationToken cancellationToken
+  ) => _db.KeyDeleteAsync(RecoveryProgressKey(candidateId));
+
   public async Task<bool> OverrideFlipClaimAsync(
     string claimId,
     string outcome,
@@ -985,6 +1060,9 @@ public sealed class StackExchangeRedisSeriesCommands :
 
   private static string CandidateKey(string candidateId) =>
     $"auto_trade:candidate:{candidateId}";
+
+  private static string RecoveryProgressKey(string candidateId) =>
+    $"auto_trade:recovery_progress:{candidateId}";
 
   private static string PositionKey(long positionId) =>
     $"auto_trade:position:{positionId}";

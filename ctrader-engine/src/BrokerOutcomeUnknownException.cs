@@ -10,16 +10,23 @@ public sealed class BrokerOutcomeUnknownException : Exception
   public BrokerOutcomeUnknownException(
     string candidateId,
     string clientOrderId,
-    Exception? inner = null
+    Exception? inner = null,
+    bool leaseLostAfterBroker = false
   ) : base("broker outcome is unknown", inner)
   {
     CandidateId = candidateId;
     ClientOrderId = clientOrderId;
+    LeaseLostAfterBroker = leaseLostAfterBroker;
   }
 
   public string CandidateId { get; }
 
   public string ClientOrderId { get; }
+
+  // True only when the candidate lease was lost after a broker request may
+  // have begun. Distinct from a transport-level acknowledgement loss while
+  // the executor still owns the lease.
+  public bool LeaseLostAfterBroker { get; }
 }
 
 // Raised when a candidate execution record violates identity invariants (for
@@ -47,4 +54,15 @@ public enum BrokerSideEffectOutcome
   Rejected,
   Accepted,
   Unknown,
+}
+
+// Typed result of deterministic broker reconciliation for a recovery-required
+// candidate. A single empty snapshot is never ConfirmedAbsent.
+public enum BrokerRecoveryDisposition
+{
+  AdoptedPosition,
+  AdoptedPendingOrder,
+  ConfirmedAbsent,
+  StillUnknown,
+  Conflict,
 }

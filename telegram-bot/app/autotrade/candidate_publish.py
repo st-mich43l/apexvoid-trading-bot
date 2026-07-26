@@ -91,6 +91,7 @@ local known_states = {
   rejected = true,
   retryable_error = true,
   broker_outcome_unknown = true,
+  broker_reconciling = true,
   dry_run = true,
   flip_pending = true,
   integrity_error = true,
@@ -125,16 +126,25 @@ local function candidate_compatible(raw, candidate_id, event_id)
   local current_candidate = record['candidate_id']
   local current_event = record['stream_event_id']
   local current_state = record['state']
-  if type(current_candidate) == 'string'
-    and current_candidate ~= ''
-    and current_candidate ~= candidate_id then
+  -- Structured records must explicitly carry a supported version: a missing
+  -- or malformed version is never interpreted as version 1.
+  local version = tonumber(record['version'])
+  if version == nil or version ~= 1 then
     return false
   end
-  if type(current_event) == 'string'
-    and current_event ~= ''
-    and current_event ~= 'pending'
-    and event_id ~= ''
-    and current_event ~= event_id then
+  -- Structured records require exact identity. Missing fields are a conflict.
+  if type(current_candidate) ~= 'string' or current_candidate == '' then
+    return false
+  end
+  if type(current_event) ~= 'string' or current_event == '' then
+    return false
+  end
+  if current_candidate ~= candidate_id then
+    return false
+  end
+  -- `pending` is the mid-publish placeholder written before XADD assigns the
+  -- durable stream event id. It is non-empty identity, not a missing field.
+  if current_event ~= 'pending' and event_id ~= '' and current_event ~= event_id then
     return false
   end
   return type(current_state) == 'string' and known_states[current_state] == true

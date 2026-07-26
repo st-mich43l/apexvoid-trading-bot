@@ -33,6 +33,7 @@ public sealed class CandidateLeaseHeartbeat : IAsyncDisposable
   private readonly CancellationTokenSource _ownership = new();
   private Task _loop = Task.CompletedTask;
   private volatile bool _ownershipLost;
+  private int _ownershipLostFlag;
   private long _renewals;
   private bool _disposed;
 
@@ -196,12 +197,14 @@ public sealed class CandidateLeaseHeartbeat : IAsyncDisposable
 
   private async Task MarkLostAsync(string metric, CancellationToken cancellationToken)
   {
-    if (_ownershipLost)
+    // Ownership cancellation must not be blocked by metrics or by a session
+    // token that is already cancelled. Mark once, cancel first, then best-
+    // effort telemetry.
+    if (Interlocked.Exchange(ref _ownershipLostFlag, 1) == 1)
     {
       return;
     }
     _ownershipLost = true;
-    await SafeMetricAsync(metric, cancellationToken);
     try
     {
       await _ownership.CancelAsync();
@@ -209,6 +212,7 @@ public sealed class CandidateLeaseHeartbeat : IAsyncDisposable
     catch (ObjectDisposedException)
     {
     }
+    await SafeMetricAsync(metric, CancellationToken.None);
   }
 
   private async Task SafeMetricAsync(string metric, CancellationToken cancellationToken)

@@ -78,7 +78,10 @@ public sealed record TradingPosition(
   decimal EntryPrice,
   decimal? StopLoss,
   string Label,
-  string Comment
+  string Comment,
+  // Exact deterministic client order identity, when the broker exposes it on
+  // the originating order. Empty when unavailable (legacy positions).
+  string ClientOrderId = ""
 );
 
 public sealed record MarketOrderRequest(
@@ -109,7 +112,10 @@ public sealed record TradingPendingOrder(
   long Volume,
   decimal LimitPrice,
   string Label,
-  string Comment
+  string Comment,
+  // Exact deterministic client order identity as reported by the broker.
+  // Empty when the broker did not echo one (legacy orders).
+  string ClientOrderId = ""
 );
 
 public sealed record TradingReconcileSnapshot(
@@ -418,7 +424,16 @@ public sealed record AutoTradeGroupPlan(
   decimal? StructuralZoneHigh = null,
   decimal? RiskMultiplier = null,
   string? TargetModel = null,
-  decimal? AbsoluteTargetPrice = null
+  decimal? AbsoluteTargetPrice = null,
+  // Deterministic recovery identities. Retained until adoption or confirmed
+  // broker absence; never deleted after a single empty snapshot.
+  string? StreamEventId = null,
+  string? Route = null,
+  IReadOnlyList<string>? ClientOrderIds = null,
+  long? SubmittedAt = null,
+  int RecoveryAttempt = 0,
+  int AbsenceConfirmations = 0,
+  long? LastAbsenceCheckAt = null
 );
 
 public sealed record CanonicalConfigOption(

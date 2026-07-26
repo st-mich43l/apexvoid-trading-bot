@@ -14,6 +14,9 @@ public static class CandidateExecutionStates
   public const string DryRun = "dry_run";
   public const string RetryableError = "retryable_error";
   public const string BrokerOutcomeUnknown = "broker_outcome_unknown";
+  // Recovery-active ownership. Structurally separate from `processing` so a
+  // crashed recovery worker can never decay into a normal retry.
+  public const string BrokerReconciling = "broker_reconciling";
 
   // Explicit categories. Retryability is never inferred from an arbitrary
   // string: an unrecognised state is a conflict, not a retry.
@@ -24,7 +27,11 @@ public static class CandidateExecutionStates
     new HashSet<string>(StringComparer.Ordinal) { Published, RetryableError };
 
   public static readonly IReadOnlySet<string> RecoveryRequired =
-    new HashSet<string>(StringComparer.Ordinal) { BrokerOutcomeUnknown };
+    new HashSet<string>(StringComparer.Ordinal)
+    {
+      BrokerOutcomeUnknown,
+      BrokerReconciling,
+    };
 
   public static readonly IReadOnlySet<string> Terminal =
     new HashSet<string>(StringComparer.Ordinal)
@@ -48,8 +55,12 @@ public static class CandidateExecutionStates
       {
         BrokerOutcomeUnknown,
       },
-      [BrokerOutcomeUnknown] = new HashSet<string>(StringComparer.Ordinal)
+      // Only the recovery-active state may hand a candidate back for a normal
+      // retry, and only after broker absence quorum. `broker_outcome_unknown`
+      // itself must first be claimed by the recovery path.
+      [BrokerReconciling] = new HashSet<string>(StringComparer.Ordinal)
       {
+        BrokerOutcomeUnknown,
         RetryableError,
       },
     };
@@ -83,14 +94,15 @@ public static class CandidateExecutionStates
 public sealed record CandidateClaimPolicy(
   // Flip rendezvous keys re-arm after a rejected claim.
   bool AllowRejectedReclaim = false,
-  // Safe because the executor adopts any existing position or pending order
-  // carrying the deterministic candidate token before it places anything.
-  bool AllowBrokerSubmittingReclaim = true,
+  // Expired `broker_submitting` is recovery-required unless the caller is the
+  // dedicated recovery path: a broker side effect may already exist.
+  bool AllowBrokerSubmittingReclaim = false,
   // Only the broker-reconciliation path may take over an expired
-  // `broker_outcome_unknown` record.
+  // `broker_outcome_unknown` record (or an expired `broker_submitting`).
   bool AllowRecoveryAdoption = false
 )
 {
+  // Normal intake never reclaims broker-uncertain states.
   public static readonly CandidateClaimPolicy Default = new();
 
   public static readonly CandidateClaimPolicy FlipClaim = new(
@@ -139,9 +151,15 @@ public sealed record CandidateExecutionRecord(
   long UpdatedAt,
   int Version,
   int Attempt = 0,
-  string? LastError = null
+  string? LastError = null,
+  // True only for plain-string markers parsed during rolling deploy.
+  // Never inferred from empty identity on a structured JSON record.
+  [property: JsonIgnore]
+  bool IsLegacy = false
 )
 {
+  public const int SupportedVersion = 1;
+
   public string LegacyStatus
   {
     get
@@ -158,6 +176,10 @@ public sealed record CandidateExecutionRecord(
     LeaseExpiresAt is long expiresAt && expiresAt <= nowUnixSeconds;
 
   public bool IsTerminal => CandidateExecutionStates.IsTerminal(State);
+
+  public bool HasExactIdentity =>
+    !string.IsNullOrWhiteSpace(CandidateId)
+    && !string.IsNullOrWhiteSpace(StreamEventId);
 
   public static CandidateExecutionRecord Published(
     string candidateId,
@@ -214,7 +236,9 @@ public static class CandidateExecutionRecordParser
     }
     if (raw is "published" or "processing")
     {
-      return new CandidateExecutionRecord("", null, raw, null, null, null, 0, 1);
+      return new CandidateExecutionRecord(
+        "", null, raw, null, null, null, 0, 1, IsLegacy: true
+      );
     }
     if (raw == CandidateExecutionStates.DryRun)
     {
@@ -226,7 +250,8 @@ public static class CandidateExecutionRecordParser
         null,
         raw,
         0,
-        1
+        1,
+        IsLegacy: true
       );
     }
     if (raw.StartsWith("ordered:", StringComparison.Ordinal))
@@ -239,7 +264,8 @@ public static class CandidateExecutionRecordParser
         null,
         raw,
         0,
-        1
+        1,
+        IsLegacy: true
       );
     }
     if (raw.StartsWith("rejected:", StringComparison.Ordinal))
@@ -252,7 +278,8 @@ public static class CandidateExecutionRecordParser
         null,
         raw,
         0,
-        1
+        1,
+        IsLegacy: true
       );
     }
     if (raw.StartsWith("flip_pending:", StringComparison.Ordinal))
@@ -265,11 +292,75 @@ public static class CandidateExecutionRecordParser
         null,
         raw,
         0,
-        1
+        1,
+        IsLegacy: true
       );
     }
-    return JsonSerializer.Deserialize(raw, CandidateExecutionJsonContext.Default.CandidateExecutionRecord)
-      ?? throw new InvalidOperationException("candidate execution record is invalid");
+    ValidateStructuredSchema(raw);
+    var record = JsonSerializer.Deserialize(
+      raw,
+      CandidateExecutionJsonContext.Default.CandidateExecutionRecord
+    ) ?? throw new InvalidOperationException("candidate execution record is invalid");
+    // Structured JSON is never legacy, even when identity fields are missing.
+    return record with { IsLegacy = false };
+  }
+
+  // A structured record must explicitly carry a supported integer version, an
+  // identity field pair and a known state. Nothing is defaulted: source-
+  // generated deserialisation cannot distinguish a missing integer from zero,
+  // so the JSON is inspected before parsing. Malformed structured records
+  // fail closed identically in Python, C# and Redis Lua.
+  private static void ValidateStructuredSchema(string raw)
+  {
+    using var document = JsonDocument.Parse(raw);
+    var root = document.RootElement;
+    if (root.ValueKind != JsonValueKind.Object)
+    {
+      throw new InvalidOperationException(
+        "candidate execution record must be a JSON object"
+      );
+    }
+    if (
+      !root.TryGetProperty("version", out var version)
+      || version.ValueKind != JsonValueKind.Number
+      || !version.TryGetInt32(out var parsedVersion)
+      || parsedVersion != CandidateExecutionRecord.SupportedVersion
+    )
+    {
+      throw new InvalidOperationException(
+        "structured candidate execution record version must explicitly be "
+        + CandidateExecutionRecord.SupportedVersion.ToString()
+      );
+    }
+    if (
+      !root.TryGetProperty("candidate_id", out var candidateId)
+      || candidateId.ValueKind is not (JsonValueKind.String or JsonValueKind.Null)
+    )
+    {
+      throw new InvalidOperationException(
+        "structured candidate execution record requires candidate_id"
+      );
+    }
+    if (
+      !root.TryGetProperty("stream_event_id", out var streamEventId)
+      || streamEventId.ValueKind is not (JsonValueKind.String or JsonValueKind.Null)
+    )
+    {
+      throw new InvalidOperationException(
+        "structured candidate execution record requires stream_event_id"
+      );
+    }
+    if (
+      !root.TryGetProperty("state", out var state)
+      || state.ValueKind != JsonValueKind.String
+      || string.IsNullOrWhiteSpace(state.GetString())
+      || !CandidateExecutionStates.IsKnown(state.GetString())
+    )
+    {
+      throw new InvalidOperationException(
+        "structured candidate execution record requires a known state"
+      );
+    }
   }
 
   public static CandidateExecutionRecord? TryParse(string? raw)
@@ -318,18 +409,48 @@ public static class CandidateExecutionRecordParser
     string streamEventId
   )
   {
+    if (record.IsLegacy)
+    {
+      // Legacy plain markers carry no identity; rolling-deploy readers keep
+      // the restricted compatibility surface they already had.
+      if (!string.IsNullOrWhiteSpace(record.Outcome))
+      {
+        return record.Outcome.StartsWith("ordered:", StringComparison.Ordinal)
+          || record.Outcome.StartsWith("rejected:", StringComparison.Ordinal)
+          || record.Outcome.StartsWith("flip_pending:", StringComparison.Ordinal)
+          || record.Outcome.Equals(
+            CandidateExecutionStates.DryRun,
+            StringComparison.Ordinal
+          )
+          || record.Outcome.StartsWith(
+            "already_processed:",
+            StringComparison.Ordinal
+          );
+      }
+      return CandidateExecutionStates.IsKnown(record.State)
+        || record.State is "published" or "processing";
+    }
+    // Structured versioned records require exact identity. Missing fields are
+    // a conflict, never an implicit pass.
     if (
-      !string.IsNullOrWhiteSpace(record.CandidateId)
-      && !record.CandidateId.Equals(candidateId, StringComparison.Ordinal)
+      record.Version < 1
+      || record.Version > CandidateExecutionRecord.SupportedVersion
     )
     {
       return false;
     }
     if (
-      !string.IsNullOrWhiteSpace(record.StreamEventId)
-      && !string.IsNullOrWhiteSpace(streamEventId)
-      && !record.StreamEventId.Equals(streamEventId, StringComparison.Ordinal)
+      string.IsNullOrWhiteSpace(record.CandidateId)
+      || string.IsNullOrWhiteSpace(record.StreamEventId)
     )
+    {
+      return false;
+    }
+    if (!record.CandidateId.Equals(candidateId, StringComparison.Ordinal))
+    {
+      return false;
+    }
+    if (!record.StreamEventId.Equals(streamEventId, StringComparison.Ordinal))
     {
       return false;
     }
@@ -361,8 +482,10 @@ public static class CandidateExecutionRecordParser
   }
 }
 
+// Null fields are serialized explicitly so every structured record carries
+// the full schema (version, identity, state), exactly like the Lua and
+// Python writers. Strict readers require key presence.
 [JsonSourceGenerationOptions(
-  DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
   PropertyNamingPolicy = JsonKnownNamingPolicy.SnakeCaseLower
 )]
 [JsonSerializable(typeof(CandidateExecutionRecord))]

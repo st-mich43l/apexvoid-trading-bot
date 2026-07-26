@@ -33,9 +33,12 @@ public static class CandidateExecutionScripts
     }
     local RECOVERY = {
       broker_outcome_unknown = true,
+      broker_reconciling = true,
     }
     -- Lease-owned transitions that never finalise the candidate. Terminal
-    -- outcomes go through the complete script instead.
+    -- outcomes go through the complete script instead. Only the recovery-
+    -- active state may release to retryable_error: broker_outcome_unknown
+    -- must first be claimed by the recovery path.
     local ALLOWED_TRANSITIONS = {
       processing = {
         broker_submitting = true,
@@ -45,7 +48,8 @@ public static class CandidateExecutionScripts
       broker_submitting = {
         broker_outcome_unknown = true,
       },
-      broker_outcome_unknown = {
+      broker_reconciling = {
+        broker_outcome_unknown = true,
         retryable_error = true,
       },
     }
@@ -54,6 +58,7 @@ public static class CandidateExecutionScripts
       processing = { ordered = true, rejected = true, completed = true },
       broker_submitting = { ordered = true, rejected = true, completed = true },
       broker_outcome_unknown = { ordered = true, rejected = true, completed = true },
+      broker_reconciling = { ordered = true, rejected = true, completed = true },
     }
 
     local function now_seconds()
@@ -103,6 +108,12 @@ public static class CandidateExecutionScripts
         if state == nil then
           return legacy_record('__invalid__', nil)
         end
+        -- Structured records must carry an explicit supported version. A
+        -- missing or malformed version is never defaulted to 1.
+        local version = tonumber(nz(decoded.version))
+        if version == nil or version ~= 1 then
+          return legacy_record('__invalid__', nil)
+        end
         return {
           candidate_id = nz(decoded.candidate_id),
           stream_event_id = nz(decoded.stream_event_id),
@@ -113,7 +124,7 @@ public static class CandidateExecutionScripts
           last_error = nz(decoded.last_error),
           outcome = nz(decoded.outcome),
           updated_at = tonumber(nz(decoded.updated_at)) or 0,
-          version = tonumber(nz(decoded.version)) or 1,
+          version = version,
           legacy = false,
         }
       end
@@ -153,20 +164,34 @@ public static class CandidateExecutionScripts
       })
     end
 
-    -- Legacy records carry no identity, so a missing field cannot fail the
-    -- comparison during a rolling deploy. A present mismatch always fails.
+    -- Structured records require exact identity. Legacy plain markers carry
+    -- none and keep the restricted rolling-deploy compatibility surface.
     local function identity_matches(record, candidate_id, stream_event_id)
-      if record.candidate_id ~= nil and record.candidate_id ~= candidate_id then
+      if record.legacy then
+        if record.candidate_id ~= nil and record.candidate_id ~= candidate_id then
+          return false
+        end
+        if
+          record.stream_event_id ~= nil
+          and stream_event_id ~= ''
+          and record.stream_event_id ~= stream_event_id
+        then
+          return false
+        end
+        return true
+      end
+      if record.candidate_id == nil or record.candidate_id == '' then
         return false
       end
-      if
-        record.stream_event_id ~= nil
-        and stream_event_id ~= ''
-        and record.stream_event_id ~= stream_event_id
-      then
+      if record.stream_event_id == nil or record.stream_event_id == '' then
         return false
       end
-      return true
+      local version = tonumber(record.version) or 0
+      if version < 1 or version > 1 then
+        return false
+      end
+      return record.candidate_id == candidate_id
+        and record.stream_event_id == stream_event_id
     end
 
     -- Exact fencing: the record must still carry a lease token and it must be
@@ -238,22 +263,31 @@ public static class CandidateExecutionScripts
         then
           return {2, raw or ''}
         end
-        if
-          record.state == 'broker_submitting'
-          and not allow_broker_submitting_reclaim
-        then
-          return {4, raw or ''}
+        if record.state == 'broker_submitting' then
+          if not allow_broker_submitting_reclaim then
+            return {4, raw or ''}
+          end
+          -- A broker request may already have side effects: the reclaim is a
+          -- recovery acquisition, never a normal execution restart.
+          recovered_from = record.state
         end
       elseif not RETRYABLE[record.state] then
         return {5, raw or ''}
       end
     end
 
+    -- A recovery claim stays structurally recovery-owned. If this worker
+    -- crashes and its lease expires, the record remains recovery-required
+    -- instead of decaying into a reclaimable normal `processing`.
+    local claimed_state = 'processing'
+    if recovered_from ~= nil then
+      claimed_state = 'broker_reconciling'
+    end
     attempt = attempt + 1
     local claimed = encode_record({
       candidate_id = candidate_id,
       stream_event_id = (stream_event_id ~= '' and stream_event_id or nil),
-      state = 'processing',
+      state = claimed_state,
       lease_token = lease_token,
       lease_expires_at = now + math.floor(lease_ms / 1000),
       attempt = attempt,
@@ -376,6 +410,78 @@ public static class CandidateExecutionScripts
     record.updated_at = now
     redis.call('SET', KEYS[1], encode_record(record), 'EX', 604800)
     return 1
+    """;
+
+  // Durable, fenced, time-separated broker-absence confirmation progress.
+  // The eligibility decision uses Redis TIME - never the executor host clock -
+  // and only the current recovery owner (exact identity + lease token +
+  // `broker_reconciling` state) may increment the persisted count. A stale
+  // recovery worker gets a fencing failure instead of a counted snapshot.
+  // KEYS: 1 candidate record key, 2 absence progress key
+  // ARGV: 1 stream_event_id, 2 lease_token, 3 candidate_id,
+  //       4 min_interval_seconds, 5 ttl_seconds
+  // Returns {code, confirmations, last_check_at, seconds_since_previous}:
+  // code 1 = recorded, 0 = deferred (interval not reached), -1 = fenced out.
+  public static readonly string RecordAbsenceCheck = Prelude + """
+
+    local stream_event_id = ARGV[1]
+    local lease_token = ARGV[2]
+    local candidate_id = ARGV[3]
+    local min_interval = tonumber(ARGV[4])
+    local ttl_seconds = tonumber(ARGV[5])
+    local now = now_seconds()
+    local record = decode_record(redis.call('GET', KEYS[1]))
+    if record == nil or record.state == '__invalid__' then
+      return {-1, 0, 0, -1}
+    end
+    if not identity_matches(record, candidate_id, stream_event_id) then
+      return {-1, 0, 0, -1}
+    end
+    if not owns_lease(record, lease_token) then
+      return {-1, 0, 0, -1}
+    end
+    if record.state ~= 'broker_reconciling' then
+      return {-1, 0, 0, -1}
+    end
+    local confirmations = 0
+    local last_check_at = nil
+    local raw_progress = redis.call('GET', KEYS[2])
+    if raw_progress ~= false then
+      local ok, progress = pcall(cjson.decode, raw_progress)
+      if
+        ok
+        and type(progress) == 'table'
+        and progress.candidate_id == candidate_id
+        and progress.stream_event_id == stream_event_id
+      then
+        confirmations = tonumber(progress.confirmations) or 0
+        last_check_at = tonumber(progress.last_check_at)
+      end
+    end
+    if last_check_at ~= nil then
+      local elapsed = now - last_check_at
+      if elapsed < min_interval then
+        -- Too soon after the previous durable confirmation: an immediate
+        -- process restart must not accelerate the quorum.
+        return {0, confirmations, last_check_at, elapsed}
+      end
+      confirmations = confirmations + 1
+      redis.call('SET', KEYS[2], cjson.encode({
+        candidate_id = candidate_id,
+        stream_event_id = stream_event_id,
+        confirmations = confirmations,
+        last_check_at = now,
+      }), 'EX', ttl_seconds)
+      return {1, confirmations, now, elapsed}
+    end
+    confirmations = confirmations + 1
+    redis.call('SET', KEYS[2], cjson.encode({
+      candidate_id = candidate_id,
+      stream_event_id = stream_event_id,
+      confirmations = confirmations,
+      last_check_at = now,
+    }), 'EX', ttl_seconds)
+    return {1, confirmations, now, -1}
     """;
 
   // Administrative override for flip coordination keys only. Flip claims are

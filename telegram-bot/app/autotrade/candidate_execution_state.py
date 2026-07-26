@@ -15,6 +15,9 @@ STATE_COMPLETED = "completed"
 STATE_REJECTED = "rejected"
 STATE_RETRYABLE_ERROR = "retryable_error"
 STATE_BROKER_OUTCOME_UNKNOWN = "broker_outcome_unknown"
+# Recovery-active ownership: structurally separate from ``processing`` so a
+# crashed recovery worker can never decay into a normal retry.
+STATE_BROKER_RECONCILING = "broker_reconciling"
 STATE_DRY_RUN = "dry_run"
 STATE_FLIP_PENDING = "flip_pending"
 STATE_INTEGRITY_ERROR = "integrity_error"
@@ -28,6 +31,7 @@ EXECUTOR_COMPATIBLE_STATES = frozenset({
   STATE_REJECTED,
   STATE_RETRYABLE_ERROR,
   STATE_BROKER_OUTCOME_UNKNOWN,
+  STATE_BROKER_RECONCILING,
   STATE_DRY_RUN,
   STATE_FLIP_PENDING,
   STATE_INTEGRITY_ERROR,
@@ -38,7 +42,10 @@ RETRYABLE_STATES = frozenset({STATE_PUBLISHED, STATE_RETRYABLE_ERROR})
 
 # A broker request may have been accepted, so only deterministic broker
 # reconciliation may move the record on - never a plain retry.
-RECOVERY_REQUIRED_STATES = frozenset({STATE_BROKER_OUTCOME_UNKNOWN})
+RECOVERY_REQUIRED_STATES = frozenset({
+  STATE_BROKER_OUTCOME_UNKNOWN,
+  STATE_BROKER_RECONCILING,
+})
 
 TERMINAL_STATES = frozenset({
   STATE_ORDERED,
@@ -71,6 +78,9 @@ class CandidateExecutionRecord:
   # Written by the executor when it hands a candidate back for another attempt.
   attempt: int = 0
   last_error: str | None = None
+  # True only for plain-string markers. Never inferred from empty identity on
+  # a structured JSON record.
+  is_legacy: bool = False
 
   @property
   def legacy_status(self) -> str:
@@ -89,6 +99,10 @@ class CandidateExecutionRecord:
   @property
   def requires_recovery(self) -> bool:
     return self.state in RECOVERY_REQUIRED_STATES
+
+  @property
+  def has_exact_identity(self) -> bool:
+    return bool(self.candidate_id) and bool(self.stream_event_id)
 
 
 def _coerce_optional_str(value: Any) -> str | None:
@@ -118,6 +132,7 @@ def parse_candidate_execution_record(raw: str | bytes | None) -> CandidateExecut
       stream_event_id=None,
       state=text,
       updated_at=0,
+      is_legacy=True,
     )
 
   if ":" in text:
@@ -132,6 +147,7 @@ def parse_candidate_execution_record(raw: str | bytes | None) -> CandidateExecut
         state=state,
         outcome=text,
         updated_at=0,
+        is_legacy=True,
       )
     if prefix in EXECUTOR_COMPATIBLE_STATES:
       return CandidateExecutionRecord(
@@ -140,6 +156,7 @@ def parse_candidate_execution_record(raw: str | bytes | None) -> CandidateExecut
         state=prefix,
         outcome=text if remainder else None,
         updated_at=0,
+        is_legacy=True,
       )
 
   try:
@@ -149,20 +166,54 @@ def parse_candidate_execution_record(raw: str | bytes | None) -> CandidateExecut
   if not isinstance(parsed, dict):
     raise ValueError("candidate execution record must be a JSON object")
 
-  candidate_id = str(parsed.get("candidate_id") or "")
-  stream_event_id = _coerce_optional_str(parsed.get("stream_event_id"))
-  state = str(parsed.get("state") or STATE_PUBLISHED)
+  # A structured record never becomes legacy or defaults missing fields:
+  # version, identity and state must be explicitly present and valid. Legacy
+  # status is determined only by the original raw value being one of the
+  # supported plain-string markers handled above.
+  required = {"version", "candidate_id", "stream_event_id", "state"}
+  missing = required - parsed.keys()
+  if missing:
+    raise ValueError(
+      "structured candidate execution record is missing required fields: "
+      + ", ".join(sorted(missing))
+    )
+
+  version = parsed["version"]
+  if isinstance(version, bool) or not isinstance(version, int):
+    raise ValueError(
+      f"structured candidate execution record version must be an integer, "
+      f"got {version!r}"
+    )
+  if version != RECORD_VERSION:
+    raise ValueError(f"unsupported candidate execution record version: {version}")
+
+  raw_candidate_id = parsed["candidate_id"]
+  if raw_candidate_id is not None and not isinstance(raw_candidate_id, str):
+    raise ValueError("structured candidate_id must be a string")
+  raw_stream_event_id = parsed["stream_event_id"]
+  if raw_stream_event_id is not None and not isinstance(raw_stream_event_id, str):
+    raise ValueError("structured stream_event_id must be a string")
+
+  state = parsed["state"]
+  if not isinstance(state, str) or not state.strip():
+    raise ValueError("structured candidate execution record state is missing")
+  if state not in EXECUTOR_COMPATIBLE_STATES:
+    raise ValueError(f"unknown candidate execution record state: {state!r}")
+
+  # Empty identity parses (so callers can classify it) but is a structured
+  # conflict at compatibility time, never an implicit pass.
   return CandidateExecutionRecord(
-    candidate_id=candidate_id,
-    stream_event_id=stream_event_id,
+    candidate_id=raw_candidate_id or "",
+    stream_event_id=_coerce_optional_str(raw_stream_event_id),
     state=state,
     lease_token=_coerce_optional_str(parsed.get("lease_token")),
     lease_expires_at=_coerce_optional_int(parsed.get("lease_expires_at")),
     outcome=_coerce_optional_str(parsed.get("outcome")),
     updated_at=int(parsed.get("updated_at") or 0),
-    version=int(parsed.get("version") or RECORD_VERSION),
+    version=version,
     attempt=int(parsed.get("attempt") or 0),
     last_error=_coerce_optional_str(parsed.get("last_error")),
+    is_legacy=False,
   )
 
 
@@ -214,16 +265,34 @@ def candidate_record_compatible(
   candidate_id: str,
   stream_event_id: str,
 ) -> bool:
-  if record.candidate_id and record.candidate_id != candidate_id:
+  if record.is_legacy:
+    # Legacy plain markers carry no identity; keep the restricted rolling-
+    # deploy surface.
+    if record.state in LEGACY_PLAIN_STATES:
+      return True
+    if record.outcome and (
+      record.outcome.startswith("ordered:")
+      or record.outcome.startswith("rejected:")
+      or record.outcome.startswith("flip_pending:")
+    ):
+      return True
+    return record.state in EXECUTOR_COMPATIBLE_STATES
+
+  # Structured versioned records require exact identity. Missing fields are a
+  # conflict, never an implicit pass.
+  if record.version < 1 or record.version > RECORD_VERSION:
     return False
+  if not record.candidate_id or not record.stream_event_id:
+    return False
+  if record.candidate_id != candidate_id:
+    return False
+  # `pending` is the mid-publish placeholder before XADD assigns the durable
+  # stream event id. It is non-empty identity, not a missing field.
   if (
-    record.stream_event_id
-    and stream_event_id
+    record.stream_event_id != "pending"
     and record.stream_event_id != stream_event_id
   ):
     return False
-  if record.state in LEGACY_PLAIN_STATES:
-    return True
   if record.outcome and (
     record.outcome.startswith("ordered:")
     or record.outcome.startswith("rejected:")

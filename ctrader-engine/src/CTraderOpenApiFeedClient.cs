@@ -924,7 +924,11 @@ public sealed class CTraderOpenApiFeedClient : ICTraderFeedClient, ICTraderTrade
       data.Volume,
       Convert.ToDecimal(order.LimitPrice),
       data.Label,
-      data.Comment
+      data.Comment,
+      // The broker echoes the exact deterministic identity we submitted, so
+      // recovery can match by direct client-order lookup instead of comment
+      // substring scans.
+      order.HasClientOrderId ? order.ClientOrderId : ""
     );
   }
 
