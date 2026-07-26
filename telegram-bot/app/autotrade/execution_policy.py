@@ -450,15 +450,28 @@ def evaluate_execution_policy(
   # Policy is evaluated against the actual planned entry, not the detector
   # tick. A fill-relative ladder is anchored later to the broker fill and
   # therefore must never be converted into a detection-relative price here.
-  planned_entry = (
-    (
+  entry_distribution = (
+    policy.entry_distribution
+    if policy.entry_distribution != "either"
+    else "zone_split"
+    if policy.order_type_preference == "limit" and zone_width_atr >= 0.5
+    else "single"
+  )
+  planned_route = planned_execution_route(
+    order_type_preference=policy.order_type_preference,
+    entry_distribution=entry_distribution,
+  )
+  if planned_route == "zone_split":
+    # Proximal edge is the zone-fill reference, matching the C# executor.
+    planned_entry = high if direction == "BUY" else low
+  elif policy.order_type_preference == "limit":
+    planned_entry = (
       min(spot_price, high)
       if direction == "BUY"
       else max(spot_price, low)
     )
-    if policy.order_type_preference == "limit"
-    else spot_price
-  )
+  else:
+    planned_entry = spot_price
   ladder_room_price = max(targets) * pip if targets else 0.0
   absolute_room_price = 0.0
   if absolute_target is not None and math.isfinite(float(absolute_target)):
@@ -556,17 +569,15 @@ def evaluate_execution_policy(
     "range" if regime == "range"
     else str(regime or "unknown").strip().lower()
   )
-  entry_distribution = (
-    policy.entry_distribution
-    if policy.entry_distribution != "either"
-    else "zone_split"
-    if policy.order_type_preference == "limit" and zone_width_atr >= 0.5
-    else "single"
-  )
-  planned_route = planned_execution_route(
-    order_type_preference=policy.order_type_preference,
-    entry_distribution=entry_distribution,
-  )
+  planned_leg_entry_prices: list[float]
+  if planned_route == "single_limit":
+    planned_leg_entry_prices = [round(planned_entry, 6)]
+  elif planned_route == "zone_split":
+    proximal = high if direction == "BUY" else low
+    midpoint = round((low + high) / 2.0, 6)
+    planned_leg_entry_prices = [round(proximal, 6), midpoint]
+  else:
+    planned_leg_entry_prices = []
   measured = {
     "policy_family": policy.family,
     "confluence": confluence,
@@ -584,12 +595,7 @@ def evaluate_execution_policy(
     "order_type_preference": policy.order_type_preference,
     "entry_distribution": entry_distribution,
     "planned_execution_route": planned_route,
-    # Only a committed single-limit route has one deterministic leg price the
-    # executor can be held to. A zone split's leg prices depend on executor
-    # zone-fill sizing, and "either"/market routes are priced at the quote.
-    "planned_leg_entry_prices": (
-      [round(planned_entry, 6)] if planned_route == "single_limit" else []
-    ),
+    "planned_leg_entry_prices": planned_leg_entry_prices,
     "target_model": target_model,
     "target_reference_price": str(
       getattr(match, "target_reference_price", "broker_fill")
