@@ -18,6 +18,17 @@ GUARD_MODE_BALANCED = "balanced"
 GUARD_MODE_STRICT = "strict"
 _GUARD_MODES = (GUARD_MODE_OBSERVE, GUARD_MODE_BALANCED, GUARD_MODE_STRICT)
 
+# Version of the entry-plan contract (`planned_execution_route`,
+# `planned_entry_price`, `planned_leg_entry_prices`) shared with the executor.
+ENTRY_PLAN_VERSION = 1
+
+ROUTE_MARKET = "market"
+ROUTE_SINGLE_LIMIT = "single_limit"
+ROUTE_ZONE_SPLIT = "zone_split"
+# The policy allows either route: the executor picks deterministically and is
+# not held to one planned entry.
+ROUTE_EITHER = "either"
+
 OUTCOME_ALLOW = "allow"
 OUTCOME_ALLOW_WITH_WARNING = "allow_with_warning"
 OUTCOME_ADJUST_TARGET = "adjust_target"
@@ -368,6 +379,29 @@ def policy_for(strategy: str, cfg: Any | None = None) -> ExecutionPolicy:
   )
 
 
+def planned_execution_route(
+  *,
+  order_type_preference: str,
+  entry_distribution: str,
+) -> str:
+  """Route the executor must resolve to, using the same rules it applies.
+
+  Mirrors `AutoTradeEngine.ResolveExecutionRoute`: a market preference is a
+  market route, a limit preference resolves by distribution, and anything
+  uncommitted stays `either` so the executor is free to choose.
+  """
+  preference = (order_type_preference or "").strip().lower()
+  distribution = (entry_distribution or "").strip().lower()
+  if preference == "market":
+    return ROUTE_MARKET
+  if preference == "limit":
+    if distribution == "zone_split":
+      return ROUTE_ZONE_SPLIT
+    if distribution == "single":
+      return ROUTE_SINGLE_LIMIT
+  return ROUTE_EITHER
+
+
 def evaluate_execution_policy(
   match: Any,
   *,
@@ -522,6 +556,17 @@ def evaluate_execution_policy(
     "range" if regime == "range"
     else str(regime or "unknown").strip().lower()
   )
+  entry_distribution = (
+    policy.entry_distribution
+    if policy.entry_distribution != "either"
+    else "zone_split"
+    if policy.order_type_preference == "limit" and zone_width_atr >= 0.5
+    else "single"
+  )
+  planned_route = planned_execution_route(
+    order_type_preference=policy.order_type_preference,
+    entry_distribution=entry_distribution,
+  )
   measured = {
     "policy_family": policy.family,
     "confluence": confluence,
@@ -537,13 +582,13 @@ def evaluate_execution_policy(
     "match_risk_multiplier": match_risk_multiplier,
     "effective_risk_multiplier": effective_risk_multiplier,
     "order_type_preference": policy.order_type_preference,
-    "entry_distribution": (
-      policy.entry_distribution
-      if policy.entry_distribution != "either"
-      else "zone_split"
-      if policy.order_type_preference == "limit"
-      and zone_width_atr >= 0.5
-      else "single"
+    "entry_distribution": entry_distribution,
+    "planned_execution_route": planned_route,
+    # Only a committed single-limit route has one deterministic leg price the
+    # executor can be held to. A zone split's leg prices depend on executor
+    # zone-fill sizing, and "either"/market routes are priced at the quote.
+    "planned_leg_entry_prices": (
+      [round(planned_entry, 6)] if planned_route == "single_limit" else []
     ),
     "target_model": target_model,
     "target_reference_price": str(
@@ -552,6 +597,7 @@ def evaluate_execution_policy(
     "absolute_target_price": absolute_target,
     "planned_entry_price": round(planned_entry, 6),
     "planned_stop_error": stop_plan_error,
+    "entry_plan_version": ENTRY_PLAN_VERSION,
     "regime": normalized_regime or "unknown",
     "permitted_regimes": list(policy.permitted_regimes),
   }

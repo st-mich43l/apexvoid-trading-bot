@@ -44,13 +44,19 @@ public sealed class AutoTradeEngine(
   // Test seam so heartbeat behaviour is provable without wall-clock waits.
   internal Func<TimeSpan, CancellationToken, Task>? HeartbeatDelay { get; set; }
 
-  private enum ExecutionRoute
+  internal enum ExecutionRoute
   {
     Market,
     SingleLimit,
     ZoneSplit,
     ManualLimit,
   }
+
+  // Exposed so the shared Python/C# route fixture can be asserted directly.
+  internal static bool RouteInContract(
+    string declaredRoute,
+    ExecutionRoute resolved
+  ) => RouteSatisfiesContract(declaredRoute, resolved);
 
   private sealed record ExecutionRouteResolution(
     ExecutionRoute Route,
@@ -1845,16 +1851,24 @@ public sealed class AutoTradeEngine(
     CancellationToken cancellationToken
   )
   {
-    if (candidate.Version != 5 || IsManualAlgoCandidate(candidate))
+    if (IsManualAlgoCandidate(candidate))
     {
-      // Older in-flight candidates carry no entry plan; the stop contract
-      // check remains the only gate for them.
+      // A manual algo candidate carries the owner's own entry and stop, so the
+      // autonomous entry plan does not apply. Older autonomous candidates
+      // simply carry no plan fields and fall through as unvalidated.
       return null;
     }
-    if (
-      candidate.PlannedExecutionRoute is string declaredRoute
-      && !RouteSatisfiesContract(declaredRoute, route.Route)
-    )
+    var declaredRoute = (candidate.PlannedExecutionRoute ?? "")
+      .Trim()
+      .ToLowerInvariant();
+    if (declaredRoute is "" or "either")
+    {
+      // Python did not commit to one route, so it could not pin one planned
+      // entry either. Route and entry are unconstrained; the stop contract
+      // itself remains the gate.
+      return null;
+    }
+    if (!RouteSatisfiesContract(declaredRoute, route.Route))
     {
       await store.IncrementMetricAsync(
         candidate.Symbol,
@@ -1879,7 +1893,13 @@ public sealed class AutoTradeEngine(
       );
       return "final_stop_entry_drift_rejected";
     }
-    if (Math.Abs(plannedEntry - executableEntry) > Math.Max(tick, tolerance))
+    // Only a market route transacts at the quote, so only a market route may
+    // be judged against it. A limit route is expected to sit away from spot -
+    // that difference is the order, not drift.
+    if (
+      route.Route == ExecutionRoute.Market
+      && Math.Abs(plannedEntry - executableEntry) > Math.Max(tick, tolerance)
+    )
     {
       await store.IncrementMetricAsync(
         candidate.Symbol,
@@ -3968,6 +3988,7 @@ public sealed class AutoTradeEngine(
     }
     return OpposingZoneFingerprint(
       candidate.Symbol,
+      candidate.Timeframe,
       candidate.Direction,
       zoneLow,
       zoneHigh,
@@ -3976,8 +3997,12 @@ public sealed class AutoTradeEngine(
     );
   }
 
+  // Byte-for-byte identical to `opposing_zone_fingerprint` in
+  // telegram-bot/app/autotrade/protective_stop.py; the shared
+  // contracts/autotrade/final-stop-parity.json fixture pins both sides.
   internal static string OpposingZoneFingerprint(
     string symbol,
+    string timeframe,
     string direction,
     decimal zoneLow,
     decimal zoneHigh,
@@ -3985,13 +4010,30 @@ public sealed class AutoTradeEngine(
     string? source
   ) => string.Join(
     '|',
-    (symbol ?? "").ToUpperInvariant(),
-    (direction ?? "").ToUpperInvariant(),
-    zoneLow.ToString("0.#####", CultureInfo.InvariantCulture),
-    zoneHigh.ToString("0.#####", CultureInfo.InvariantCulture),
+    FingerprintText(symbol, upper: true),
+    FingerprintText(timeframe, upper: true),
+    // The opposing zone of a BUY sits below price and is therefore demand;
+    // Python names the zone's own side, not the trade direction.
+    ParseDirection(direction) == TradeDirection.Buy ? "demand" : "supply",
+    FingerprintNumber(zoneLow),
+    FingerprintNumber(zoneHigh),
     createdBarTs.ToString(CultureInfo.InvariantCulture),
-    string.IsNullOrWhiteSpace(source) ? "unknown" : source
+    FingerprintText(source, upper: false)
   );
+
+  private static string FingerprintText(string? value, bool upper)
+  {
+    var trimmed = (value ?? "").Trim();
+    if (trimmed.Length == 0)
+    {
+      return "unknown";
+    }
+    return upper ? trimmed.ToUpperInvariant() : trimmed.ToLowerInvariant();
+  }
+
+  private static string FingerprintNumber(decimal value) =>
+    decimal.Round(value, 5, MidpointRounding.ToEven)
+      .ToString("0.#####", CultureInfo.InvariantCulture);
 
   private decimal ResolveMinRewardRisk(TradeCandidate candidate) =>
     IsBoxRangeScalp(candidate)

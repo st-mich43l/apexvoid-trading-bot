@@ -51,6 +51,7 @@ from app.autotrade.execution_policy import (
   resolve_guard_mode,
   risk_multiplier_for_tier,
 )
+from app.autotrade.protective_stop import opposing_zone_fingerprint
 from app.autotrade.gate import (
   AutoScalpBox,
   AutoScalpDecision,
@@ -246,6 +247,12 @@ _STOP_CONTRACT_FIELDS = (
   "stop_adjustment_zone_id",
   "stop_adjustment_zone_low",
   "stop_adjustment_zone_high",
+  # Entry plan: the route and entry the stop above was priced against. The
+  # executor rejects route drift and material entry drift before submitting.
+  "planned_execution_route",
+  "planned_entry_price",
+  "planned_leg_entry_prices",
+  "entry_plan_version",
 )
 
 
@@ -1685,18 +1692,53 @@ def _resolve_overlap_thesis(
   )
 
 
+def _opposing_zone_identity(
+  zone: Zone,
+  *,
+  symbol: str,
+  timeframe: str,
+) -> str:
+  """Exact identity of the zone a stop may be pushed beyond.
+
+  Zone detectors carry no stored id, and ``zone.kind`` names the detector, not
+  the zone, so two different zones from one detector would share it. The
+  fingerprint therefore includes the zone's own geometry and provenance.
+  """
+  stored = getattr(zone, "zone_id", None)
+  if stored:
+    return str(stored)
+  created = getattr(zone, "created_ts", None)
+  return opposing_zone_fingerprint(
+    symbol=symbol,
+    timeframe=timeframe,
+    side=zone.side,
+    low=zone.low,
+    high=zone.high,
+    created_bar_ts=(
+      int(created.timestamp()) if created is not None else zone.origin_index
+    ),
+    source=zone.source or zone.kind,
+  )
+
+
 def _opposing_zone_policy_kwargs(
   zone: Zone | None,
   *,
   atr: float,
   pip_size: float,
+  symbol: str,
+  timeframe: str,
 ) -> dict[str, float | str | None]:
   if zone is None:
     return {}
   return {
     "opposing_zone_low": float(zone.low),
     "opposing_zone_high": float(zone.high),
-    "opposing_zone_id": getattr(zone, "zone_id", None) or zone.kind,
+    "opposing_zone_id": _opposing_zone_identity(
+      zone,
+      symbol=symbol,
+      timeframe=timeframe,
+    ),
   }
 
 
@@ -2572,6 +2614,8 @@ async def _publish_candidate(
       opposing_zone,
       atr=scale_context.atr,
       pip_size=units.pip_size(symbol),
+      symbol=symbol,
+      timeframe=EXECUTION_TIMEFRAME,
     ),
   )
   if not range_policy.allowed:
@@ -2658,6 +2702,13 @@ async def _publish_candidate(
     "relationship_to_bias": "neutral",
     "opposing_zone_low": None if opposing_zone is None else opposing_zone.low,
     "opposing_zone_high": None if opposing_zone is None else opposing_zone.high,
+    "opposing_zone_id": (
+      None if opposing_zone is None else _opposing_zone_identity(
+        opposing_zone,
+        symbol=symbol,
+        timeframe=EXECUTION_TIMEFRAME,
+      )
+    ),
     "add_zone_side": None if opposing_zone is None else opposing_zone.side,
     **_stop_contract_fields(range_policy.measured),
   }
@@ -3084,6 +3135,8 @@ async def _publish_strategy_match(
       strategy_opposing_zone,
       atr=match.atr,
       pip_size=units.pip_size(symbol),
+      symbol=symbol,
+      timeframe=match.source_tf,
     ),
   )
   if not policy_evaluation.allowed:
@@ -3627,6 +3680,13 @@ async def _publish_strategy_match(
     "opposing_zone_high": (
       None if strategy_opposing_zone is None else strategy_opposing_zone.high
     ),
+    "opposing_zone_id": (
+      None if strategy_opposing_zone is None else _opposing_zone_identity(
+        strategy_opposing_zone,
+        symbol=symbol,
+        timeframe=match.source_tf,
+      )
+    ),
     "add_zone_side": (
       None if strategy_opposing_zone is None else strategy_opposing_zone.side
     ),
@@ -3887,6 +3947,8 @@ async def _publish_trend_candidate(
       opposing_zone,
       atr=trend_decision.atr,
       pip_size=units.pip_size(symbol),
+      symbol=symbol,
+      timeframe=EXECUTION_TIMEFRAME,
     ),
   )
   if not trend_policy.allowed:
@@ -4133,6 +4195,13 @@ async def _publish_trend_candidate(
     "relationship_to_bias": relationship_to_bias,
     "opposing_zone_low": None if opposing_zone is None else opposing_zone.low,
     "opposing_zone_high": None if opposing_zone is None else opposing_zone.high,
+    "opposing_zone_id": (
+      None if opposing_zone is None else _opposing_zone_identity(
+        opposing_zone,
+        symbol=symbol,
+        timeframe=EXECUTION_TIMEFRAME,
+      )
+    ),
     "add_zone_side": None if opposing_zone is None else opposing_zone.side,
   }
   if scale_context is not None:

@@ -98,6 +98,35 @@ def decimal_value(value: Any, name: str) -> Decimal:
   return result
 
 
+def opposing_zone_fingerprint(
+  *,
+  symbol: str,
+  timeframe: str,
+  side: str,
+  low: Any,
+  high: Any,
+  created_bar_ts: Any,
+  source: str | None,
+) -> str:
+  """Deterministic identity for a zone that carries no stored id.
+
+  Two zones with identical edges but different origins must never be treated
+  as the same zone, so provenance (timeframe, side, creation bar and detector
+  source) is part of the identity, not just the geometry.
+  """
+  low_value = decimal_value(low, "opposing_zone_low")
+  high_value = decimal_value(high, "opposing_zone_high")
+  return "|".join((
+    (symbol or "").strip().upper() or "unknown",
+    (timeframe or "").strip().upper() or "unknown",
+    (side or "").strip().lower() or "unknown",
+    format(low_value.quantize(Decimal("0.00001")).normalize(), "f"),
+    format(high_value.quantize(Decimal("0.00001")).normalize(), "f"),
+    str(created_bar_ts if created_bar_ts is not None else 0),
+    (source or "").strip().lower() or "unknown",
+  ))
+
+
 def opposing_zone_context_from_values(
   *,
   opposing_zone_low: Any | None,
