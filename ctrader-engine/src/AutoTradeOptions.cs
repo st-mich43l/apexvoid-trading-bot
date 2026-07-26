@@ -46,6 +46,12 @@ public sealed record AutoTradeOptions(
   // How far the executable entry may drift from Python's planned entry before
   // the approved absolute stop is no longer trustworthy for this candidate.
   decimal EntryContractTolerancePips = 3m,
+  // Consecutive empty broker snapshots required before absence is confirmed.
+  int BrokerAbsenceConfirmations = 2,
+  // Minimum seconds between absence-confirmation snapshots.
+  int BrokerAbsenceRecheckSeconds = 3,
+  // Wall-clock budget for one recovery attempt before remaining StillUnknown.
+  int BrokerRecoveryTimeoutSeconds = 30,
   decimal WickStopBufferAtr = 0.15m,
   bool RangeFlipEnabled = false,
   int FlipExitBufferPips = 10,
@@ -260,6 +266,15 @@ public sealed record AutoTradeOptions(
     ),
     EntryContractTolerancePips: resolver.Decimal(
       "AUTO_TRADE_ENTRY_CONTRACT_TOLERANCE_PIPS", 3m
+    ),
+    BrokerAbsenceConfirmations: resolver.Int(
+      "AUTO_TRADE_BROKER_ABSENCE_CONFIRMATIONS", 2
+    ),
+    BrokerAbsenceRecheckSeconds: resolver.Int(
+      "AUTO_TRADE_BROKER_ABSENCE_RECHECK_SECONDS", 3
+    ),
+    BrokerRecoveryTimeoutSeconds: resolver.Int(
+      "AUTO_TRADE_BROKER_RECOVERY_TIMEOUT_SECONDS", 30
     ),
     WickStopBufferAtr: resolver.Decimal(
       "AUTO_TRADE_WICK_STOP_BUFFER_ATR", 0.15m

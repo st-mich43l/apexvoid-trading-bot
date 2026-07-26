@@ -418,7 +418,16 @@ public sealed record AutoTradeGroupPlan(
   decimal? StructuralZoneHigh = null,
   decimal? RiskMultiplier = null,
   string? TargetModel = null,
-  decimal? AbsoluteTargetPrice = null
+  decimal? AbsoluteTargetPrice = null,
+  // Deterministic recovery identities. Retained until adoption or confirmed
+  // broker absence; never deleted after a single empty snapshot.
+  string? StreamEventId = null,
+  string? Route = null,
+  IReadOnlyList<string>? ClientOrderIds = null,
+  long? SubmittedAt = null,
+  int RecoveryAttempt = 0,
+  int AbsenceConfirmations = 0,
+  long? LastAbsenceCheckAt = null
 );
 
 public sealed record CanonicalConfigOption(

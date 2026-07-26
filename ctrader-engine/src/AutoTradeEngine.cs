@@ -43,6 +43,8 @@ public sealed class AutoTradeEngine(
     CandidateLeaseDefaults.HeartbeatInterval;
   // Test seam so heartbeat behaviour is provable without wall-clock waits.
   internal Func<TimeSpan, CancellationToken, Task>? HeartbeatDelay { get; set; }
+  // Test seam for the delay between absence-confirmation broker snapshots.
+  internal Func<TimeSpan, CancellationToken, Task>? RecoveryDelay { get; set; }
 
   internal enum ExecutionRoute
   {
@@ -1850,7 +1852,8 @@ public sealed class AutoTradeEngine(
 
   // Phase 2 gate: the resolved route and entry must match what Python priced
   // the stop against, and the executable quote must not have drifted far
-  // enough to invalidate the approved absolute stop.
+  // enough to invalidate the approved absolute stop. Unknown route values
+  // fail closed; only an explicit `either` leaves the executor free to choose.
   private async Task<string?> ValidateEntryContractAsync(
     TradeCandidate candidate,
     ExecutionRouteResolution route,
@@ -1861,19 +1864,37 @@ public sealed class AutoTradeEngine(
   {
     if (IsManualAlgoCandidate(candidate))
     {
-      // A manual algo candidate carries the owner's own entry and stop, so the
-      // autonomous entry plan does not apply. Older autonomous candidates
-      // simply carry no plan fields and fall through as unvalidated.
       return null;
     }
-    var declaredRoute = (candidate.PlannedExecutionRoute ?? "")
-      .Trim()
-      .ToLowerInvariant();
-    if (declaredRoute is "" or "either")
+    var declaredRaw = candidate.PlannedExecutionRoute;
+    if (string.IsNullOrWhiteSpace(declaredRaw))
     {
-      // Python did not commit to one route, so it could not pin one planned
-      // entry either. Route and entry are unconstrained; the stop contract
-      // itself remains the gate.
+      // The entry-plan contract is opt-in via EntryPlanVersion. Older stop-plan
+      // v5 candidates (and earlier) may omit the route during rolling deploy.
+      if (candidate.EntryPlanVersion is null)
+      {
+        return null;
+      }
+      await store.IncrementMetricAsync(
+        candidate.Symbol,
+        "final_stop_entry_route_invalid",
+        cancellationToken
+      );
+      return "final_stop_entry_route_invalid";
+    }
+    if (!TryParseExecutionRouteContract(declaredRaw, out var declaredRoute))
+    {
+      await store.IncrementMetricAsync(
+        candidate.Symbol,
+        "final_stop_entry_route_invalid",
+        cancellationToken
+      );
+      return "final_stop_entry_route_invalid";
+    }
+    if (declaredRoute == PlannedExecutionRoute.Either)
+    {
+      // Python intentionally did not commit to one route. Stop contract fields
+      // remain the gate; an invalid route is never reinterpreted as either.
       return null;
     }
     if (!RouteSatisfiesContract(declaredRoute, route.Route))
@@ -1887,7 +1908,12 @@ public sealed class AutoTradeEngine(
     }
     if (candidate.PlannedEntryPrice is not decimal plannedEntry)
     {
-      return null;
+      await store.IncrementMetricAsync(
+        candidate.Symbol,
+        "final_stop_planned_entry_missing",
+        cancellationToken
+      );
+      return "final_stop_planned_entry_missing";
     }
     var tolerance = Math.Max(0m, options.EntryContractTolerancePips)
       * options.PipSize;
@@ -1901,9 +1927,6 @@ public sealed class AutoTradeEngine(
       );
       return "final_stop_entry_drift_rejected";
     }
-    // Only a market route transacts at the quote, so only a market route may
-    // be judged against it. A limit route is expected to sit away from spot -
-    // that difference is the order, not drift.
     if (
       route.Route == ExecutionRoute.Market
       && Math.Abs(plannedEntry - executableEntry) > Math.Max(tick, tolerance)
@@ -1916,22 +1939,123 @@ public sealed class AutoTradeEngine(
       );
       return "final_stop_entry_drift_rejected";
     }
+    if (declaredRoute == PlannedExecutionRoute.SingleLimit)
+    {
+      var legs = candidate.PlannedLegEntryPrices;
+      if (legs is null || legs.Count == 0)
+      {
+        await store.IncrementMetricAsync(
+          candidate.Symbol,
+          "final_stop_leg_entries_missing",
+          cancellationToken
+        );
+        return "final_stop_leg_entries_missing";
+      }
+      if (legs.Count != 1)
+      {
+        await store.IncrementMetricAsync(
+          candidate.Symbol,
+          "final_stop_leg_entry_count_mismatch",
+          cancellationToken
+        );
+        return "final_stop_leg_entry_count_mismatch";
+      }
+      if (Math.Abs(legs[0] - plannedEntry) > tick)
+      {
+        await store.IncrementMetricAsync(
+          candidate.Symbol,
+          "final_stop_leg_entry_mismatch",
+          cancellationToken
+        );
+        return "final_stop_leg_entry_mismatch";
+      }
+    }
+    if (declaredRoute == PlannedExecutionRoute.ZoneSplit)
+    {
+      var legs = candidate.PlannedLegEntryPrices;
+      if (legs is null || legs.Count == 0)
+      {
+        await store.IncrementMetricAsync(
+          candidate.Symbol,
+          "final_stop_leg_entries_missing",
+          cancellationToken
+        );
+        return "final_stop_leg_entries_missing";
+      }
+      if (legs.Count != 2)
+      {
+        await store.IncrementMetricAsync(
+          candidate.Symbol,
+          "final_stop_leg_entry_count_mismatch",
+          cancellationToken
+        );
+        return "final_stop_leg_entry_count_mismatch";
+      }
+      // Reference entry is the proximal leg; it must match the planned entry.
+      if (Math.Abs(legs[0] - plannedEntry) > tick)
+      {
+        await store.IncrementMetricAsync(
+          candidate.Symbol,
+          "final_stop_leg_entry_mismatch",
+          cancellationToken
+        );
+        return "final_stop_leg_entry_mismatch";
+      }
+    }
     return null;
   }
 
+  internal enum PlannedExecutionRoute
+  {
+    Market,
+    SingleLimit,
+    ZoneSplit,
+    Either,
+  }
+
+  private static bool TryParseExecutionRouteContract(
+    string? value,
+    out PlannedExecutionRoute route
+  )
+  {
+    switch ((value ?? "").Trim().ToLowerInvariant())
+    {
+      case "market":
+        route = PlannedExecutionRoute.Market;
+        return true;
+      case "single_limit":
+        route = PlannedExecutionRoute.SingleLimit;
+        return true;
+      case "zone_split":
+        route = PlannedExecutionRoute.ZoneSplit;
+        return true;
+      case "either":
+        route = PlannedExecutionRoute.Either;
+        return true;
+      default:
+        route = default;
+        return false;
+    }
+  }
+
+  private static bool RouteSatisfiesContract(
+    PlannedExecutionRoute declaredRoute,
+    ExecutionRoute resolved
+  ) => declaredRoute switch
+  {
+    PlannedExecutionRoute.Market => resolved == ExecutionRoute.Market,
+    PlannedExecutionRoute.SingleLimit => resolved == ExecutionRoute.SingleLimit,
+    PlannedExecutionRoute.ZoneSplit => resolved == ExecutionRoute.ZoneSplit,
+    PlannedExecutionRoute.Either => true,
+    _ => false,
+  };
+
+  // Kept for the shared Python/C# route fixture which asserts string routes.
   private static bool RouteSatisfiesContract(
     string declaredRoute,
     ExecutionRoute resolved
-  ) => declaredRoute.Trim().ToLowerInvariant() switch
-  {
-    "market" => resolved == ExecutionRoute.Market,
-    "single_limit" => resolved == ExecutionRoute.SingleLimit,
-    "zone_split" => resolved == ExecutionRoute.ZoneSplit,
-    // "either" means Python did not commit to one route, so any deterministic
-    // executor route is in contract.
-    "either" or "" => true,
-    _ => true,
-  };
+  ) => TryParseExecutionRouteContract(declaredRoute, out var parsed)
+    && RouteSatisfiesContract(parsed, resolved);
 
   private async Task<bool> ProcessSingleInitialAsync(
     TradeCandidate candidate,
@@ -2185,6 +2309,7 @@ public sealed class AutoTradeEngine(
     }
     var clientOrderId = $"{ClientOrderId(candidate.CandidateId)}-l1";
     long orderId;
+    using var brokerCts = CreateBrokerCancellation(cancellationToken);
     try
     {
       orderId = await RequireClient().PlaceLimitOrderAsync(
@@ -2198,18 +2323,17 @@ public sealed class AutoTradeEngine(
           BuildZoneComment(candidate.CandidateId, groupId, leg, barTs),
           clientOrderId
         ),
-        cancellationToken
+        brokerCts.Token
       );
     }
-    catch (Exception exception)
+    catch (Exception exception) when (
+      exception is not OperationCanceledException
+      || BrokerOwnershipCancelled()
+    )
     {
       // The request may have been accepted. Keep the group plan so the
       // deterministic client order ID can be adopted during reconciliation.
-      throw new BrokerOutcomeUnknownException(
-        candidate.CandidateId,
-        clientOrderId,
-        exception
-      );
+      throw ClassifyBrokerUncertainty(candidate, clientOrderId, exception);
     }
     await CompleteActiveCandidateAsync(
       $"ordered:{orderId}",
@@ -2354,6 +2478,39 @@ public sealed class AutoTradeEngine(
     {
       return await RejectAsync(candidate, exception.Message, cancellationToken);
     }
+    if (candidate.PlannedLegEntryPrices is { Count: > 0 } declaredLegs)
+    {
+      var tick = SymbolTick(symbol);
+      if (declaredLegs.Count != plan.Legs.Count)
+      {
+        await store.IncrementMetricAsync(
+          candidate.Symbol,
+          "final_stop_leg_entry_count_mismatch",
+          cancellationToken
+        );
+        return await RejectAsync(
+          candidate,
+          "final_stop_leg_entry_count_mismatch",
+          cancellationToken
+        );
+      }
+      for (var index = 0; index < plan.Legs.Count; index++)
+      {
+        if (Math.Abs(declaredLegs[index] - plan.Legs[index].LimitPrice) > tick)
+        {
+          await store.IncrementMetricAsync(
+            candidate.Symbol,
+            "final_stop_leg_entry_mismatch",
+            cancellationToken
+          );
+          return await RejectAsync(
+            candidate,
+            "final_stop_leg_entry_mismatch",
+            cancellationToken
+          );
+        }
+      }
+    }
     var groupId = CandidateGroupId(candidate);
     var barTs = candidate.BarTs ?? candidate.CreatedAt;
     if (options.DryRun)
@@ -2426,6 +2583,7 @@ public sealed class AutoTradeEngine(
       throw new CandidateLeaseLostException(candidate.CandidateId);
     }
     var legClientOrderId = ClientOrderId(candidate.CandidateId);
+    using var brokerCts = CreateBrokerCancellation(cancellationToken);
     try
     {
       foreach (var leg in plan.Legs)
@@ -2440,9 +2598,10 @@ public sealed class AutoTradeEngine(
           }
           // Legs are already live and belong to this candidate, but ownership
           // is gone: reconciliation must decide, not this executor.
-          throw new BrokerOutcomeUnknownException(
-            candidate.CandidateId,
-            $"{legClientOrderId}-z{leg.Leg}"
+          throw ClassifyBrokerUncertainty(
+            candidate,
+            $"{legClientOrderId}-z{leg.Leg}",
+            new CandidateLeaseLostException(candidate.CandidateId)
           );
         }
         var distance = Math.Abs(leg.LimitPrice - plan.StopLoss);
@@ -2464,14 +2623,15 @@ public sealed class AutoTradeEngine(
             comment,
             legClientOrderId
           ),
-          cancellationToken
+          brokerCts.Token
         );
         placed.Add(orderId);
       }
     }
     catch (Exception exception)
       when (exception is not BrokerOutcomeUnknownException
-        and not CandidateLeaseLostException)
+        and not CandidateLeaseLostException
+        && (exception is not OperationCanceledException || BrokerOwnershipCancelled()))
     {
       // A failed leg does not prove the request never arrived, so rollback is
       // restricted to order IDs the broker confirmed and the group plan is
@@ -2481,11 +2641,7 @@ public sealed class AutoTradeEngine(
         placed,
         cancellationToken
       );
-      throw new BrokerOutcomeUnknownException(
-        candidate.CandidateId,
-        legClientOrderId,
-        exception
-      );
+      throw ClassifyBrokerUncertainty(candidate, legClientOrderId, exception);
     }
     await CompleteActiveCandidateAsync(
       $"ordered:{string.Join(',', placed)}",
@@ -2885,7 +3041,9 @@ public sealed class AutoTradeEngine(
     {
       throw new CandidateLeaseLostException(candidate.CandidateId);
     }
+    var clientOrderId = ClientOrderId(candidate.CandidateId);
     long orderId;
+    using var brokerCts = CreateBrokerCancellation(cancellationToken);
     try
     {
       orderId = await RequireClient().PlaceLimitOrderAsync(
@@ -2897,18 +3055,17 @@ public sealed class AutoTradeEngine(
           decimal.ToInt64(manualStopPlan.Distance * 100_000m),
           options.Label,
           comment,
-          ClientOrderId(candidate.CandidateId)
+          clientOrderId
         ),
-        cancellationToken
+        brokerCts.Token
       );
     }
-    catch (Exception exception)
+    catch (Exception exception) when (
+      exception is not OperationCanceledException
+      || BrokerOwnershipCancelled()
+    )
     {
-      throw new BrokerOutcomeUnknownException(
-        candidate.CandidateId,
-        ClientOrderId(candidate.CandidateId),
-        exception
-      );
+      throw ClassifyBrokerUncertainty(candidate, clientOrderId, exception);
     }
     await CompleteActiveCandidateAsync(
       $"ordered:{orderId}",
@@ -3232,6 +3389,8 @@ public sealed class AutoTradeEngine(
       throw new CandidateLeaseLostException(candidate.CandidateId);
     }
     TradeExecution execution;
+    var clientOrderId = ClientOrderId(candidate.CandidateId);
+    using var brokerCts = CreateBrokerCancellation(cancellationToken);
     try
     {
       execution = await client.PlaceMarketOrderAsync(
@@ -3246,18 +3405,17 @@ public sealed class AutoTradeEngine(
           decimal.ToInt64(stopPlan.Distance * 100_000m),
           options.Label,
           comment,
-          ClientOrderId(candidate.CandidateId)
+          clientOrderId
         ),
-        cancellationToken
+        brokerCts.Token
       );
     }
-    catch (Exception exception)
+    catch (Exception exception) when (
+      exception is not OperationCanceledException
+      || BrokerOwnershipCancelled()
+    )
     {
-      throw new BrokerOutcomeUnknownException(
-        candidate.CandidateId,
-        ClientOrderId(candidate.CandidateId),
-        exception
-      );
+      throw ClassifyBrokerUncertainty(candidate, clientOrderId, exception);
     }
     await PublishAsync(
       "order_accepted",
@@ -5599,9 +5757,15 @@ public sealed class AutoTradeEngine(
   private async Task SaveGroupPlanAsync(
     TradeCandidate candidate,
     string groupId,
-    CancellationToken cancellationToken
+    CancellationToken cancellationToken,
+    string? streamEventId = null,
+    string? route = null,
+    IReadOnlyList<string>? clientOrderIds = null
   )
   {
+    var resolvedRoute = route
+      ?? candidate.PlannedExecutionRoute
+      ?? "market";
     var plan = new AutoTradeGroupPlan(
       candidate.CandidateId,
       groupId,
@@ -5624,7 +5788,12 @@ public sealed class AutoTradeEngine(
       candidate.StructuralZoneHigh,
       candidate.RiskMultiplier,
       candidate.TargetModel,
-      candidate.AbsoluteTargetPrice
+      candidate.AbsoluteTargetPrice,
+      StreamEventId: streamEventId,
+      Route: resolvedRoute,
+      ClientOrderIds: clientOrderIds
+        ?? BuildClientOrderIds(candidate, resolvedRoute),
+      SubmittedAt: _clock().ToUnixTimeSeconds()
     );
     await store.SaveGroupPlanAsync(
       plan,
@@ -5900,6 +6069,38 @@ public sealed class AutoTradeEngine(
     cancellationToken
   );
 
+  // Linked session + ownership token for broker calls that are safe to cancel
+  // before an authoritative response. Cancellation after submission may have
+  // begun never proves absence — callers classify that as outcome-unknown.
+  private CancellationTokenSource CreateBrokerCancellation(
+    CancellationToken sessionCancellationToken
+  )
+  {
+    if (_heartbeat is CandidateLeaseHeartbeat heartbeat)
+    {
+      return CancellationTokenSource.CreateLinkedTokenSource(
+        sessionCancellationToken,
+        heartbeat.OwnershipToken
+      );
+    }
+    return CancellationTokenSource.CreateLinkedTokenSource(sessionCancellationToken);
+  }
+
+  private bool BrokerOwnershipCancelled() =>
+    _heartbeat?.OwnershipLost == true
+    || (_heartbeat is not null && _heartbeat.OwnershipToken.IsCancellationRequested);
+
+  private BrokerOutcomeUnknownException ClassifyBrokerUncertainty(
+    TradeCandidate candidate,
+    string clientOrderId,
+    Exception? inner = null
+  ) => new(
+    candidate.CandidateId,
+    clientOrderId,
+    inner,
+    leaseLostAfterBroker: BrokerOwnershipCancelled()
+  );
+
   private async Task ReportLiveGrantsAsync(
     IReadOnlyList<TradingAccountGrant> grants,
     CancellationToken cancellationToken
@@ -6147,9 +6348,17 @@ public sealed class AutoTradeEngine(
     await MarkBrokerOutcomeUnknownAsync(cancellationToken, "broker_response_lost");
     await store.IncrementMetricAsync(
       candidate.Symbol,
-      "executor_lease_lost_after_broker",
+      "broker_response_unknown",
       cancellationToken
     );
+    if (exception.LeaseLostAfterBroker)
+    {
+      await store.IncrementMetricAsync(
+        candidate.Symbol,
+        "executor_lease_lost_after_broker",
+        cancellationToken
+      );
+    }
     _log(
       $"auto-trade candidate {Short(candidate.CandidateId)} broker outcome unknown "
       + $"for client order {exception.ClientOrderId}: {exception.InnerException?.Message}"
@@ -6165,9 +6374,9 @@ public sealed class AutoTradeEngine(
     return false;
   }
 
-  // Deterministic broker reconciliation for a `broker_outcome_unknown`
-  // candidate. Adoption or confirmed absence are the only two ways out; an
-  // ambiguous broker view leaves the record recovery-required.
+  // Deterministic broker reconciliation for a recovery-required candidate.
+  // Adoption or confirmed absence (via direct identity or absence quorum) are
+  // the only ways out; a single empty snapshot leaves the record unknown.
   private async Task<bool> ReconcileBrokerOutcomeAsync(
     TradeCandidate candidate,
     TradeStreamEntry entry,
@@ -6178,6 +6387,11 @@ public sealed class AutoTradeEngine(
     {
       return false;
     }
+    await store.IncrementMetricAsync(
+      candidate.Symbol,
+      "broker_recovery_started",
+      cancellationToken
+    );
     var claim = await store.TryClaimCandidateAsync(
       candidate.CandidateId,
       entry.Id,
@@ -6193,10 +6407,15 @@ public sealed class AutoTradeEngine(
     _activeLease = lease;
     try
     {
-      return await WithGateAsync(
-        () => AdoptOrDisproveBrokerOutcomeAsync(candidate, cancellationToken),
+      var disposition = await WithGateAsync(
+        () => RecoverBrokerOutcomeAsync(candidate, entry, cancellationToken),
         cancellationToken
       );
+      // Adoption completes the candidate (cursor may advance on the next
+      // terminal claim). Confirmed absence releases to retryable and holds
+      // the cursor for the retry. StillUnknown / Conflict hold the cursor.
+      return disposition is BrokerRecoveryDisposition.AdoptedPosition
+        or BrokerRecoveryDisposition.AdoptedPendingOrder;
     }
     catch (Exception exception) when (exception is not OperationCanceledException)
     {
@@ -6205,6 +6424,11 @@ public sealed class AutoTradeEngine(
       await MarkBrokerOutcomeUnknownAsync(
         cancellationToken,
         "reconciliation_failed"
+      );
+      await store.IncrementMetricAsync(
+        candidate.Symbol,
+        "broker_recovery_still_unknown",
+        cancellationToken
       );
       _log(
         $"auto-trade broker reconciliation failed for {Short(candidate.CandidateId)}: "
@@ -6218,14 +6442,133 @@ public sealed class AutoTradeEngine(
     }
   }
 
-  private async Task<bool> AdoptOrDisproveBrokerOutcomeAsync(
+  private async Task<BrokerRecoveryDisposition> RecoverBrokerOutcomeAsync(
     TradeCandidate candidate,
+    TradeStreamEntry entry,
     CancellationToken cancellationToken
   )
   {
-    await ReconcileAsync(cancellationToken);
+    var groupId = CandidateGroupId(candidate);
+    var plan = await LoadGroupPlanAsync(groupId, cancellationToken);
+    var requiredConfirmations = Math.Max(2, options.BrokerAbsenceConfirmations);
+    var recheck = TimeSpan.FromSeconds(
+      Math.Max(0, options.BrokerAbsenceRecheckSeconds)
+    );
+    var deadline = _clock().AddSeconds(
+      Math.Max(1, options.BrokerRecoveryTimeoutSeconds)
+    );
+    var confirmations = plan?.AbsenceConfirmations ?? 0;
+    var recoveryAttempt = (plan?.RecoveryAttempt ?? 0) + 1;
+
+    while (_clock() <= deadline)
+    {
+      await ReconcileAsync(cancellationToken);
+      await store.IncrementMetricAsync(
+        candidate.Symbol,
+        "broker_recovery_direct_lookup",
+        cancellationToken
+      );
+      var adopted = await TryAdoptBrokerOutcomeAsync(
+        candidate,
+        plan,
+        cancellationToken
+      );
+      if (adopted is BrokerRecoveryDisposition.AdoptedPosition
+        or BrokerRecoveryDisposition.AdoptedPendingOrder)
+      {
+        return adopted.Value;
+      }
+      if (adopted == BrokerRecoveryDisposition.Conflict)
+      {
+        await store.IncrementMetricAsync(
+          candidate.Symbol,
+          "broker_recovery_conflict",
+          cancellationToken
+        );
+        await MarkBrokerOutcomeUnknownAsync(cancellationToken, "recovery_conflict");
+        return BrokerRecoveryDisposition.Conflict;
+      }
+
+      // Empty snapshot: never confirm absence from one look.
+      confirmations++;
+      await store.IncrementMetricAsync(
+        candidate.Symbol,
+        "broker_recovery_empty_snapshot",
+        cancellationToken
+      );
+      plan = await PersistRecoveryProgressAsync(
+        candidate,
+        entry,
+        plan,
+        recoveryAttempt,
+        confirmations,
+        cancellationToken
+      );
+      if (confirmations >= requiredConfirmations)
+      {
+        await store.IncrementMetricAsync(
+          candidate.Symbol,
+          "broker_recovery_absence_confirmed",
+          cancellationToken
+        );
+        await store.IncrementMetricAsync(
+          candidate.Symbol,
+          "broker_outcome_confirmed_absent",
+          cancellationToken
+        );
+        // Absence is proven: the group plan is no longer needed for adoption.
+        await DeleteGroupPlanAsync(groupId, cancellationToken);
+        await ReleaseActiveCandidateAsync(
+          cancellationToken,
+          "broker_outcome_confirmed_absent"
+        );
+        await store.IncrementMetricAsync(
+          candidate.Symbol,
+          "candidate_retry_waiting",
+          cancellationToken
+        );
+        return BrokerRecoveryDisposition.ConfirmedAbsent;
+      }
+      if (_clock().Add(recheck) > deadline)
+      {
+        break;
+      }
+      var delay = RecoveryDelay ?? ((wait, token) => Task.Delay(wait, token));
+      await delay(recheck, cancellationToken);
+    }
+
+    await store.IncrementMetricAsync(
+      candidate.Symbol,
+      "broker_recovery_still_unknown",
+      cancellationToken
+    );
+    await MarkBrokerOutcomeUnknownAsync(cancellationToken, "absence_quorum_pending");
+    return BrokerRecoveryDisposition.StillUnknown;
+  }
+
+  private async Task<BrokerRecoveryDisposition?> TryAdoptBrokerOutcomeAsync(
+    TradeCandidate candidate,
+    AutoTradeGroupPlan? plan,
+    CancellationToken cancellationToken
+  )
+  {
     var candidateToken = CandidateToken(candidate.CandidateId);
-    var existingPosition = _allSymbolPositions.FirstOrDefault(position =>
+    var clientOrderIds = plan?.ClientOrderIds ?? [];
+    // Strongest evidence first: exact deterministic client order identity in
+    // comments / labels, then the shorter candidate token used historically.
+    TradingPosition? existingPosition = null;
+    foreach (var clientOrderId in clientOrderIds)
+    {
+      existingPosition = _allSymbolPositions.FirstOrDefault(position =>
+        position.Comment.Contains(clientOrderId, StringComparison.Ordinal)
+        || position.Label.Contains(clientOrderId, StringComparison.Ordinal)
+      );
+      if (existingPosition is not null)
+      {
+        break;
+      }
+    }
+    existingPosition ??= _allSymbolPositions.FirstOrDefault(position =>
       position.Comment.Contains(candidateToken, StringComparison.Ordinal)
     );
     if (existingPosition is not null)
@@ -6254,9 +6597,22 @@ public sealed class AutoTradeEngine(
         existingPosition.PositionId,
         groupId: CandidateGroupId(candidate)
       );
-      return true;
+      return BrokerRecoveryDisposition.AdoptedPosition;
     }
-    var existingPending = _allSymbolPendingOrders.FirstOrDefault(order =>
+
+    TradingPendingOrder? existingPending = null;
+    foreach (var clientOrderId in clientOrderIds)
+    {
+      existingPending = _allSymbolPendingOrders.FirstOrDefault(order =>
+        order.Comment.Contains(clientOrderId, StringComparison.Ordinal)
+        || order.Label.Contains(clientOrderId, StringComparison.Ordinal)
+      );
+      if (existingPending is not null)
+      {
+        break;
+      }
+    }
+    existingPending ??= _allSymbolPendingOrders.FirstOrDefault(order =>
       order.Comment.Contains(candidateToken, StringComparison.Ordinal)
     );
     if (existingPending is not null)
@@ -6284,31 +6640,65 @@ public sealed class AutoTradeEngine(
         groupId: CandidateGroupId(candidate),
         pendingOrderIds: [existingPending.OrderId]
       );
-      return true;
+      return BrokerRecoveryDisposition.AdoptedPendingOrder;
     }
-    // The broker view is authoritative and holds nothing for this candidate,
-    // so the request definitely had no side effect and a retry is safe. This
-    // is also the only point where the group plan may be dropped: it is no
-    // longer needed to map deterministic client order IDs to broker state.
-    await store.IncrementMetricAsync(
-      candidate.Symbol,
-      "broker_outcome_confirmed_absent",
+    return null;
+  }
+
+  private async Task<AutoTradeGroupPlan> PersistRecoveryProgressAsync(
+    TradeCandidate candidate,
+    TradeStreamEntry entry,
+    AutoTradeGroupPlan? plan,
+    int recoveryAttempt,
+    int absenceConfirmations,
+    CancellationToken cancellationToken
+  )
+  {
+    var groupId = CandidateGroupId(candidate);
+    var updated = (plan ?? new AutoTradeGroupPlan(
+      candidate.CandidateId,
+      groupId,
+      candidate.MatchId,
+      candidate.StrategyFamily,
+      candidate.RangeId,
+      candidate.Setup,
+      candidate.Direction,
+      _clock().ToUnixTimeSeconds()
+    )) with
+    {
+      StreamEventId = entry.Id,
+      RecoveryAttempt = recoveryAttempt,
+      AbsenceConfirmations = absenceConfirmations,
+      LastAbsenceCheckAt = _clock().ToUnixTimeSeconds(),
+      ClientOrderIds = plan?.ClientOrderIds
+        ?? BuildClientOrderIds(candidate, plan?.Route),
+    };
+    await store.SaveGroupPlanAsync(
+      updated,
+      TimeSpan.FromSeconds(Math.Max(300, options.CandidateStorageTtlSeconds)),
       cancellationToken
     );
-    await MaybeDeleteGroupPlanAsync(
-      CandidateGroupId(candidate),
-      cancellationToken
-    );
-    await ReleaseActiveCandidateAsync(
-      cancellationToken,
-      "broker_outcome_confirmed_absent"
-    );
-    await store.IncrementMetricAsync(
-      candidate.Symbol,
-      "candidate_retry_waiting",
-      cancellationToken
-    );
-    return false;
+    return updated;
+  }
+
+  private static IReadOnlyList<string> BuildClientOrderIds(
+    TradeCandidate candidate,
+    string? route
+  )
+  {
+    var root = ClientOrderId(candidate.CandidateId);
+    var normalized = (route ?? candidate.PlannedExecutionRoute ?? "")
+      .Trim()
+      .ToLowerInvariant();
+    if (normalized == "zone_split")
+    {
+      return [$"{root}-z1", $"{root}-z2"];
+    }
+    if (normalized is "single_limit" or "limit")
+    {
+      return [$"{root}-l1"];
+    }
+    return [root];
   }
 
   private async Task<bool> RejectAsync(
