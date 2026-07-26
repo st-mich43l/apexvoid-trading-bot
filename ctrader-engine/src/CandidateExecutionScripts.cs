@@ -103,6 +103,10 @@ public static class CandidateExecutionScripts
         if state == nil then
           return legacy_record('__invalid__', nil)
         end
+        local version = tonumber(nz(decoded.version)) or 1
+        if version < 1 or version > 1 then
+          return legacy_record('__invalid__', nil)
+        end
         return {
           candidate_id = nz(decoded.candidate_id),
           stream_event_id = nz(decoded.stream_event_id),
@@ -113,7 +117,7 @@ public static class CandidateExecutionScripts
           last_error = nz(decoded.last_error),
           outcome = nz(decoded.outcome),
           updated_at = tonumber(nz(decoded.updated_at)) or 0,
-          version = tonumber(nz(decoded.version)) or 1,
+          version = version,
           legacy = false,
         }
       end
@@ -153,20 +157,34 @@ public static class CandidateExecutionScripts
       })
     end
 
-    -- Legacy records carry no identity, so a missing field cannot fail the
-    -- comparison during a rolling deploy. A present mismatch always fails.
+    -- Structured records require exact identity. Legacy plain markers carry
+    -- none and keep the restricted rolling-deploy compatibility surface.
     local function identity_matches(record, candidate_id, stream_event_id)
-      if record.candidate_id ~= nil and record.candidate_id ~= candidate_id then
+      if record.legacy then
+        if record.candidate_id ~= nil and record.candidate_id ~= candidate_id then
+          return false
+        end
+        if
+          record.stream_event_id ~= nil
+          and stream_event_id ~= ''
+          and record.stream_event_id ~= stream_event_id
+        then
+          return false
+        end
+        return true
+      end
+      if record.candidate_id == nil or record.candidate_id == '' then
         return false
       end
-      if
-        record.stream_event_id ~= nil
-        and stream_event_id ~= ''
-        and record.stream_event_id ~= stream_event_id
-      then
+      if record.stream_event_id == nil or record.stream_event_id == '' then
         return false
       end
-      return true
+      local version = tonumber(record.version) or 0
+      if version < 1 or version > 1 then
+        return false
+      end
+      return record.candidate_id == candidate_id
+        and record.stream_event_id == stream_event_id
     end
 
     -- Exact fencing: the record must still carry a lease token and it must be
