@@ -59,11 +59,14 @@ public interface IAutoTradeStore
     int count,
     CancellationToken cancellationToken
   );
-  Task<CandidateExecutionLease?> TryClaimCandidateAsync(
+  // Returns a typed disposition. Callers must never infer retryability or
+  // cursor advancement from a status string.
+  Task<CandidateClaimResult> TryClaimCandidateAsync(
     string candidateId,
     string streamEventId,
     TimeSpan leaseDuration,
-    CancellationToken cancellationToken
+    CancellationToken cancellationToken,
+    CandidateClaimPolicy? policy = null
   );
   Task<bool> RenewCandidateLeaseAsync(
     string candidateId,
@@ -77,13 +80,18 @@ public interface IAutoTradeStore
     string streamEventId,
     string leaseToken,
     string newState,
-    CancellationToken cancellationToken
+    CancellationToken cancellationToken,
+    string? lastError = null
   );
   Task<string?> GetCandidateStatusAsync(
     string candidateId,
     CancellationToken cancellationToken
   );
-  Task CompleteCandidateAsync(
+  Task<CandidateExecutionRecord?> GetCandidateRecordAsync(
+    string candidateId,
+    CancellationToken cancellationToken
+  ) => Task.FromResult<CandidateExecutionRecord?>(null);
+  Task<bool> CompleteCandidateAsync(
     string candidateId,
     string streamEventId,
     string leaseToken,
@@ -94,8 +102,17 @@ public interface IAutoTradeStore
     string candidateId,
     string streamEventId,
     string leaseToken,
-    CancellationToken cancellationToken
+    CancellationToken cancellationToken,
+    string? lastError = null
   );
+  // Administrative re-arm for executor-internal flip rendezvous records only.
+  // Rejects anything whose outcome is not a `flip_pending:` marker so it can
+  // never rewrite a real broker outcome.
+  Task<bool> OverrideFlipClaimAsync(
+    string claimId,
+    string outcome,
+    CancellationToken cancellationToken
+  ) => Task.FromResult(false);
   Task SavePositionAsync(
     AutoTradePositionState state,
     CancellationToken cancellationToken
@@ -273,223 +290,6 @@ public sealed class StackExchangeRedisSeriesCommands :
   private readonly IConnectionMultiplexer _connection;
   private readonly IDatabase _db;
   private readonly ISubscriber _subscriber;
-  private const string CandidateAcquireScript = """
-    local current = redis.call('GET', KEYS[1])
-    local stream_event_id = ARGV[1]
-    local lease_ms = tonumber(ARGV[2])
-    local lease_token = ARGV[3]
-    local now = tonumber(ARGV[4])
-    local candidate_id = ARGV[5]
-    local expires_at = now + math.floor(lease_ms / 1000)
-
-    local function build_record(state, token, exp, outcome)
-      local outcome_json = 'null'
-      if outcome then
-        outcome_json = '"' .. outcome .. '"'
-      end
-      local token_json = 'null'
-      if token then
-        token_json = '"' .. token .. '"'
-      end
-      local exp_json = 'null'
-      if exp then
-        exp_json = tostring(exp)
-      end
-      local event_json = 'null'
-      if stream_event_id ~= '' then
-        event_json = '"' .. stream_event_id .. '"'
-      end
-      return '{"candidate_id":"' .. candidate_id .. '","stream_event_id":'
-        .. event_json .. ',"state":"' .. state .. '","lease_token":'
-        .. token_json .. ',"lease_expires_at":' .. exp_json
-        .. ',"outcome":' .. outcome_json .. ',"updated_at":' .. now
-        .. ',"version":1}'
-    end
-
-    local function claimable(raw)
-      if not raw then
-        return true
-      end
-      if raw == 'published' then
-        return true
-      end
-      -- Legacy plain `processing` remains owned while the Redis TTL holds.
-      if raw == 'processing' then
-        return false
-      end
-      if string.sub(raw, 1, 7) == 'ordered' or string.sub(raw, 1, 9) == 'rejected:'
-        or raw == 'dry_run' then
-        return false
-      end
-      if string.sub(candidate_id, 1, 5) == 'flip:' then
-        if string.sub(raw, 1, 13) == 'flip_pending:' then
-          return false
-        end
-        local flip_outcome = string.match(raw, '"outcome"%s*:%s*"([^"]+)"')
-        if flip_outcome and string.sub(flip_outcome, 1, 13) == 'flip_pending:' then
-          return false
-        end
-        if string.sub(raw, 1, 9) == 'rejected:' then
-          return true
-        end
-        if flip_outcome and string.sub(flip_outcome, 1, 9) == 'rejected:' then
-          return true
-        end
-      end
-      local state = string.match(raw, '"state"%s*:%s*"([^"]+)"')
-      local token = string.match(raw, '"lease_token"%s*:%s*"([^"]+)"')
-      local exp = tonumber(string.match(raw, '"lease_expires_at"%s*:%s*(%d+)'))
-      local event_id = string.match(raw, '"stream_event_id"%s*:%s*"([^"]+)"')
-      if state == 'published' then
-        if stream_event_id ~= '' and event_id and event_id ~= stream_event_id then
-          return false
-        end
-        return true
-      end
-      if state == 'processing' or state == 'broker_submitting' then
-        if exp and exp <= now then
-          if stream_event_id ~= '' and event_id and event_id ~= stream_event_id then
-            return false
-          end
-          return true
-        end
-      end
-      return false
-    end
-
-    if not claimable(current) then
-      return {0, current or ''}
-    end
-
-    local record = build_record('processing', lease_token, expires_at, nil)
-    redis.call('SET', KEYS[1], record, 'PX', lease_ms)
-    return {1, record}
-    """;
-
-  private const string CandidateRenewScript = """
-    local current = redis.call('GET', KEYS[1])
-    if not current then
-      return 0
-    end
-    local stream_event_id = ARGV[1]
-    local lease_token = ARGV[2]
-    local lease_ms = tonumber(ARGV[3])
-    local now = tonumber(ARGV[4])
-    local candidate_id = ARGV[5]
-    local expires_at = now + math.floor(lease_ms / 1000)
-    local state = string.match(current, '"state"%s*:%s*"([^"]+)"')
-    local token = string.match(current, '"lease_token"%s*:%s*"([^"]+)"')
-    local event_id = string.match(current, '"stream_event_id"%s*:%s*"([^"]+)"')
-    if token ~= lease_token then
-      return 0
-    end
-    if stream_event_id ~= '' and event_id and event_id ~= stream_event_id then
-      return 0
-    end
-    if state ~= 'processing' and state ~= 'broker_submitting' then
-      return 0
-    end
-    local record = '{"candidate_id":"' .. candidate_id
-      .. '","stream_event_id":'
-      .. (stream_event_id ~= '' and ('"' .. stream_event_id .. '"') or 'null')
-      .. ',"state":"' .. state .. '","lease_token":"' .. lease_token
-      .. '","lease_expires_at":' .. expires_at
-      .. ',"outcome":null,"updated_at":' .. now .. ',"version":1}'
-    redis.call('SET', KEYS[1], record, 'PX', lease_ms)
-    return 1
-    """;
-
-  private const string CandidateTransitionScript = """
-    local current = redis.call('GET', KEYS[1])
-    if not current then
-      return 0
-    end
-    local stream_event_id = ARGV[1]
-    local lease_token = ARGV[2]
-    local new_state = ARGV[3]
-    local now = tonumber(ARGV[4])
-    local candidate_id = ARGV[5]
-    local lease_ms = tonumber(ARGV[6])
-    local token = string.match(current, '"lease_token"%s*:%s*"([^"]+)"')
-    local event_id = string.match(current, '"stream_event_id"%s*:%s*"([^"]+)"')
-    if token ~= lease_token then
-      return 0
-    end
-    if stream_event_id ~= '' and event_id and event_id ~= stream_event_id then
-      return 0
-    end
-    local record = '{"candidate_id":"' .. candidate_id
-      .. '","stream_event_id":'
-      .. (stream_event_id ~= '' and ('"' .. stream_event_id .. '"') or 'null')
-      .. ',"state":"' .. new_state .. '","lease_token":"' .. lease_token
-      .. '","lease_expires_at":'
-      .. tostring(now + math.floor(lease_ms / 1000))
-      .. ',"outcome":null,"updated_at":' .. now .. ',"version":1}'
-    redis.call('SET', KEYS[1], record, 'PX', lease_ms)
-    return 1
-    """;
-
-  private const string CandidateCompleteScript = """
-    local current = redis.call('GET', KEYS[1])
-    if not current then
-      return 0
-    end
-    local stream_event_id = ARGV[1]
-    local lease_token = ARGV[2]
-    local outcome = ARGV[3]
-    local now = tonumber(ARGV[4])
-    local candidate_id = ARGV[5]
-    local token = string.match(current, '"lease_token"%s*:%s*"([^"]+)"')
-    local event_id = string.match(current, '"stream_event_id"%s*:%s*"([^"]+)"')
-    if token and token ~= lease_token then
-      return 0
-    end
-    if stream_event_id ~= '' and event_id and event_id ~= stream_event_id then
-      return 0
-    end
-    local state = 'completed'
-    if string.sub(outcome, 1, 8) == 'ordered:' then
-      state = 'ordered'
-    elseif string.sub(outcome, 1, 9) == 'rejected:' then
-      state = 'rejected'
-    elseif string.sub(outcome, 1, 13) == 'flip_pending:' then
-      state = 'completed'
-    end
-    local record = '{"candidate_id":"' .. candidate_id
-      .. '","stream_event_id":'
-      .. (stream_event_id ~= '' and ('"' .. stream_event_id .. '"') or 'null')
-      .. ',"state":"' .. state .. '","lease_token":null,"lease_expires_at":null,"outcome":"'
-      .. outcome .. '","updated_at":' .. now .. ',"version":1}'
-    redis.call('SET', KEYS[1], record, 'EX', 604800)
-    return 1
-    """;
-
-  private const string CandidateReleaseScript = """
-    local current = redis.call('GET', KEYS[1])
-    if not current then
-      return 0
-    end
-    local stream_event_id = ARGV[1]
-    local lease_token = ARGV[2]
-    local now = tonumber(ARGV[3])
-    local candidate_id = ARGV[4]
-    local token = string.match(current, '"lease_token"%s*:%s*"([^"]+)"')
-    local event_id = string.match(current, '"stream_event_id"%s*:%s*"([^"]+)"')
-    if token ~= lease_token then
-      return 0
-    end
-    if stream_event_id ~= '' and event_id and event_id ~= stream_event_id then
-      return 0
-    end
-    local record = '{"candidate_id":"' .. candidate_id
-      .. '","stream_event_id":'
-      .. (stream_event_id ~= '' and ('"' .. stream_event_id .. '"') or 'null')
-      .. ',"state":"retryable_error","lease_token":null,"lease_expires_at":null,"outcome":null,"updated_at":'
-      .. now .. ',"version":1}'
-    redis.call('SET', KEYS[1], record, 'EX', 604800)
-    return 1
-    """;
-
   private StackExchangeRedisSeriesCommands(IConnectionMultiplexer connection)
   {
     _connection = connection;
@@ -614,43 +414,68 @@ public sealed class StackExchangeRedisSeriesCommands :
     )).Where(entry => !string.IsNullOrWhiteSpace(entry.Payload)).ToArray();
   }
 
-  public async Task<CandidateExecutionLease?> TryClaimCandidateAsync(
+  public async Task<CandidateClaimResult> TryClaimCandidateAsync(
     string candidateId,
     string streamEventId,
     TimeSpan leaseDuration,
-    CancellationToken cancellationToken
+    CancellationToken cancellationToken,
+    CandidateClaimPolicy? policy = null
   )
   {
-    var token = Guid.NewGuid().ToString("N");
-    var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+    var effectivePolicy = policy ?? CandidateClaimPolicy.Default;
+    var token = NewLeaseToken();
     var result = await _db.ScriptEvaluateAsync(
-      CandidateAcquireScript,
+      CandidateExecutionScripts.Acquire,
       [CandidateKey(candidateId)],
       [
         streamEventId,
         (long)leaseDuration.TotalMilliseconds,
         token,
-        now,
         candidateId,
+        effectivePolicy.AllowRejectedReclaim ? "1" : "0",
+        effectivePolicy.AllowBrokerSubmittingReclaim ? "1" : "0",
+        effectivePolicy.AllowRecoveryAdoption ? "1" : "0",
       ]
     );
     if (result.IsNull || result.Resp2Type != ResultType.Array)
     {
-      return null;
+      return CandidateClaimResult.Conflict();
     }
     var items = (RedisResult[])result!;
-    if (items.Length < 2 || (long)items[0] != 1)
+    if (items.Length < 2)
     {
-      return null;
+      return CandidateClaimResult.Conflict();
     }
+    var code = (long)items[0];
+    var raw = items[1].ToString();
+    var record = CandidateExecutionRecordParser.TryParse(raw);
+    if (code != CandidateExecutionScripts.AcquireClaimed)
+    {
+      return new CandidateClaimResult(
+        code switch
+        {
+          CandidateExecutionScripts.AcquireActiveElsewhere =>
+            CandidateClaimDisposition.ActiveElsewhere,
+          CandidateExecutionScripts.AcquireTerminal =>
+            CandidateClaimDisposition.Terminal,
+          CandidateExecutionScripts.AcquireRecoveryRequired =>
+            CandidateClaimDisposition.RecoveryRequired,
+          _ => CandidateClaimDisposition.Conflict,
+        },
+        null,
+        record
+      );
+    }
+    // Expiry comes from the record Redis just wrote, so the lease window is
+    // anchored on server time rather than this host's clock.
     var expiresAt = DateTimeOffset.FromUnixTimeSeconds(
-      now + (long)leaseDuration.TotalSeconds
+      record?.LeaseExpiresAt
+        ?? DateTimeOffset.UtcNow.Add(leaseDuration).ToUnixTimeSeconds()
     );
-    return new CandidateExecutionLease(
-      candidateId,
-      streamEventId,
-      token,
-      expiresAt
+    return new CandidateClaimResult(
+      CandidateClaimDisposition.Claimed,
+      new CandidateExecutionLease(candidateId, streamEventId, token, expiresAt),
+      record
     );
   }
 
@@ -662,15 +487,13 @@ public sealed class StackExchangeRedisSeriesCommands :
     CancellationToken cancellationToken
   )
   {
-    var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
     var result = await _db.ScriptEvaluateAsync(
-      CandidateRenewScript,
+      CandidateExecutionScripts.Renew,
       [CandidateKey(candidateId)],
       [
         streamEventId,
         leaseToken,
         (long)leaseDuration.TotalMilliseconds,
-        now,
         candidateId,
       ]
     );
@@ -682,20 +505,20 @@ public sealed class StackExchangeRedisSeriesCommands :
     string streamEventId,
     string leaseToken,
     string newState,
-    CancellationToken cancellationToken
+    CancellationToken cancellationToken,
+    string? lastError = null
   )
   {
-    var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
     var result = await _db.ScriptEvaluateAsync(
-      CandidateTransitionScript,
+      CandidateExecutionScripts.Transition,
       [CandidateKey(candidateId)],
       [
         streamEventId,
         leaseToken,
         newState,
-        now,
         candidateId,
-        (long)TimeSpan.FromMinutes(2).TotalMilliseconds,
+        (long)CandidateLeaseWindow.TotalMilliseconds,
+        lastError ?? "",
       ]
     );
     return (long)result == 1;
@@ -712,7 +535,18 @@ public sealed class StackExchangeRedisSeriesCommands :
       : null;
   }
 
-  public async Task CompleteCandidateAsync(
+  public async Task<CandidateExecutionRecord?> GetCandidateRecordAsync(
+    string candidateId,
+    CancellationToken cancellationToken
+  )
+  {
+    var value = await _db.StringGetAsync(CandidateKey(candidateId));
+    return value.HasValue
+      ? CandidateExecutionRecordParser.TryParse(value.ToString())
+      : null;
+  }
+
+  public async Task<bool> CompleteCandidateAsync(
     string candidateId,
     string streamEventId,
     string leaseToken,
@@ -720,28 +554,50 @@ public sealed class StackExchangeRedisSeriesCommands :
     CancellationToken cancellationToken
   )
   {
-    var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-    await _db.ScriptEvaluateAsync(
-      CandidateCompleteScript,
+    var result = await _db.ScriptEvaluateAsync(
+      CandidateExecutionScripts.Complete,
       [CandidateKey(candidateId)],
-      [streamEventId, leaseToken, outcome, now, candidateId]
+      [streamEventId, leaseToken, outcome, candidateId]
     );
+    return (long)result == 1;
   }
 
   public async Task<bool> ReleaseCandidateAsync(
     string candidateId,
     string streamEventId,
     string leaseToken,
+    CancellationToken cancellationToken,
+    string? lastError = null
+  ) => await TransitionCandidateStateAsync(
+    candidateId,
+    streamEventId,
+    leaseToken,
+    CandidateExecutionStates.RetryableError,
+    cancellationToken,
+    lastError
+  );
+
+  public async Task<bool> OverrideFlipClaimAsync(
+    string claimId,
+    string outcome,
     CancellationToken cancellationToken
   )
   {
-    var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
     var result = await _db.ScriptEvaluateAsync(
-      CandidateReleaseScript,
-      [CandidateKey(candidateId)],
-      [streamEventId, leaseToken, now, candidateId]
+      CandidateExecutionScripts.OverrideFlipClaim,
+      [CandidateKey(claimId)],
+      [outcome, claimId]
     );
     return (long)result == 1;
+  }
+
+  private static TimeSpan CandidateLeaseWindow => CandidateLeaseDefaults.LeaseWindow;
+
+  private static string NewLeaseToken()
+  {
+    Span<byte> buffer = stackalloc byte[24];
+    System.Security.Cryptography.RandomNumberGenerator.Fill(buffer);
+    return Convert.ToHexString(buffer).ToLowerInvariant();
   }
 
   public async Task SavePositionAsync(
