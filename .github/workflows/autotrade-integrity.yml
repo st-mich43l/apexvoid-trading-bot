@@ -131,7 +131,10 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: docker compose config
-        run: docker compose config -q
+        run: |
+          # Compose references `.env` for local overrides; CI has none.
+          touch .env
+          docker compose config -q
 
       - name: git diff --check
         run: git diff --check
