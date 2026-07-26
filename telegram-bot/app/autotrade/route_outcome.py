@@ -174,6 +174,17 @@ async def record_route_outcome(
     terminal_reason_code = previous.get("terminal_reason_code")
     if status in {"blocked", "expired", "executor_rejected"}:
       terminal_reason_code = reason_code
+    elif status in {
+      "checking",
+      "waiting",
+      "candidate_published",
+      "executor_received",
+      "order_submitted",
+      "order_filled",
+    }:
+      # Current snapshots describe current truth. The append-only route
+      # history still retains the earlier terminal transition.
+      terminal_reason_code = None
   outcome = StrategyRouteOutcome(
     version=2,
     symbol=str(getattr(match, "symbol", "")).upper(),

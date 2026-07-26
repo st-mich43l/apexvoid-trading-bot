@@ -66,7 +66,7 @@ public sealed record AutoTradeOptions(
   bool TrackAllStructuralMatches = false,
   string RedisUrl = "redis://redis:6379/0",
   string CanonicalSymbol = "XAU",
-  int CandidateContractVersion = 5,
+  int CandidateContractVersion = 6,
   bool ManualAlgoEnabled = false,
   bool TrendEnabled = false,
   bool RangeEnabled = true,
@@ -324,7 +324,7 @@ public sealed record AutoTradeOptions(
       "AUTO_TRADE_CANONICAL_SYMBOL", "XAU"
     ).ToUpperInvariant(),
     CandidateContractVersion: resolver.Int(
-      "AUTO_TRADE_CANDIDATE_CONTRACT_VERSION", 5
+      "AUTO_TRADE_CANDIDATE_CONTRACT_VERSION", 6
     ),
     ManualAlgoEnabled: resolver.Bool("MANUAL_ALGO_ENABLED", false),
     TrendEnabled: resolver.Bool(
@@ -425,14 +425,14 @@ public sealed record AutoTradeOptions(
     }
     if (
       ConfigManifestVersion != 2
-      || CandidateContractVersion != 5
+      || CandidateContractVersion != 6
       || string.IsNullOrWhiteSpace(CanonicalSymbol)
       || EffectiveSymbols.Count == 0
     )
     {
       throw new AutoTradeConfigurationException(
         "Auto trade disabled: config manifest version 2, candidate contract "
-        + "version 5, symbols, and canonical symbol must be configured"
+        + "version 6, symbols, and canonical symbol must be configured"
       );
     }
     if (StopLossDistance <= 0 || StopLossDistance > 6.5m)

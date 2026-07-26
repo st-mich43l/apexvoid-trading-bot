@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace ApexVoid.CTraderFeed;
 
 public sealed record RawTrendbar(
@@ -195,7 +197,20 @@ public sealed record TradeCandidate(
   decimal? RiskMultiplier = null,
   string? TargetModel = null,
   decimal? AbsoluteTargetPrice = null,
-  string? TargetReferencePrice = null
+  string? TargetReferencePrice = null,
+  [property: JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
+  decimal? PlannedStopEntryPrice = null,
+  [property: JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
+  decimal? PlannedStopPrice = null,
+  [property: JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
+  decimal? PlannedStopDistance = null,
+  [property: JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
+  decimal? PlannedStopPips = null,
+  [property: JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
+  decimal? PlannedStopRawPrice = null,
+  bool? PlannedStopClamped = null,
+  string? StopSource = null,
+  int? StopPlanVersion = null
 );
 
 public sealed record TradeStreamEntry(
@@ -448,6 +463,12 @@ public sealed record AutoTradeConfigManifest(
   bool RangeBoxMoveSlToBeAfterScaleOut = false,
   decimal ExecutionZoneMaxWidthAtr = 2.0m,
   decimal ExecutionZoneMaxWidthPips = 100m,
+  decimal StructureStopBufferAtr = 0.3m,
+  int OrdinaryStopMinPips = 30,
+  decimal OrdinaryStopMaxDistance = 6.5m,
+  decimal WickStopBufferAtr = 0.15m,
+  int TrendStopMinPips = 40,
+  int TrendStopMaxPips = 65,
   IReadOnlyList<CanonicalConfigOption>? CanonicalOptions = null
 );
 

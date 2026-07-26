@@ -20,13 +20,17 @@ from app.persistence import redis_state
 from app.autotrade import units
 from app.autotrade.range_targets import configured_range_targets
 from app.autotrade.candidate_publish import (
+  acquire_owned_lock,
   autonomous_cycle_owner_key,
   candidate_key,
   explicit_test_fallback_enabled,
   publish_candidate_atomic,
+  publish_ranked_cycle,
+  release_owned_lock,
 )
 from app.autotrade.arbitration import (
   ArbitrationResult,
+  CandidatePublicationResult,
   ExecutionPreflightDecision,
   ExecutionIntent,
   arbitrate_preflight_decisions,
@@ -65,7 +69,7 @@ from app.autotrade.multi_match import (
   strategy_matches_key,
 )
 from app.autotrade.lifecycle import emit_lifecycle, increment_metric
-from app.autotrade.route_outcome import record_route_outcome
+from app.autotrade.route_outcome import record_route_outcome, route_outcome_key
 from app.autotrade.reaction_identity import (
   THESIS_CLAIM_ACQUIRE_LUA,
   ACTIVE_THESIS_STATES,
@@ -152,6 +156,28 @@ class AutoTradeSpot:
   price: float
   ts: int
   fresh: bool
+  bid: float | None = None
+  ask: float | None = None
+
+  def executable_price(self, direction: str) -> float:
+    if direction.upper() == "BUY" and self.ask is not None:
+      return self.ask
+    if direction.upper() == "SELL" and self.bid is not None:
+      return self.bid
+    return self.price
+
+
+def _executable_spot_price(spot: Any, direction: str) -> float:
+  """Return the side-aware quote while tolerating legacy test snapshots."""
+  resolver = getattr(spot, "executable_price", None)
+  if callable(resolver):
+    return float(resolver(direction))
+  quote = (
+    getattr(spot, "ask", None)
+    if direction.upper() == "BUY"
+    else getattr(spot, "bid", None)
+  )
+  return float(spot.price if quote is None else quote)
 
 
 @dataclass(frozen=True)
@@ -186,6 +212,8 @@ class PrivatePolicySubject:
   target_reference_price: str = "broker_fill"
   target_price: float | None = None
   absolute_target_price: float | None = None
+  sweep_low: float | None = None
+  sweep_high: float | None = None
 
 
 @dataclass(frozen=True)
@@ -198,6 +226,26 @@ class ExecutionZoneClassification:
   execution_grade: bool
   context_only: bool
   invalid_geometry: bool
+
+
+_STOP_CONTRACT_FIELDS = (
+  "planned_stop_entry_price",
+  "planned_stop_price",
+  "planned_stop_distance",
+  "planned_stop_pips",
+  "planned_stop_raw_price",
+  "planned_stop_clamped",
+  "stop_source",
+  "stop_plan_version",
+)
+
+
+def _stop_contract_fields(measured: dict[str, Any]) -> dict[str, Any]:
+  return {
+    name: measured[name]
+    for name in _STOP_CONTRACT_FIELDS
+    if name in measured
+  }
 
 
 def classify_execution_zone(
@@ -283,6 +331,8 @@ async def _load_spot(client: Any, symbol: str) -> AutoTradeSpot | None:
     price=price,
     ts=ts,
     fresh=0 <= now - ts <= max(1, settings.auto_trade_spot_max_age),
+    bid=bid,
+    ask=ask,
   )
 
 
@@ -2472,8 +2522,36 @@ async def _publish_candidate(
   trigger_ts = str(event_ts or "")
   candidate_id = _candidate_id(symbol, trigger_ts, decision)
   range_tier = "A" if decision.confluence >= 3 else "B"
+  range_policy = evaluate_execution_policy(
+    PrivatePolicySubject(
+      strategy="Range Box Scalp",
+      direction=decision.direction.upper(),
+      entry_low=decision.rail.low,
+      entry_high=decision.rail.high,
+      current_price=spot.price,
+      confluence=decision.confluence,
+      atr=scale_context.atr,
+      structure_swing=scale_context.structure_swing,
+      targets_pips=(
+        (int(decision.full_tp_pips),)
+        if decision.full_tp_pips is not None else ()
+      ),
+      risk_multiplier=risk_multiplier_for_tier(range_tier, settings),
+      sweep_low=decision.sweep_low,
+      sweep_high=decision.sweep_high,
+    ),
+    spot_price=_executable_spot_price(spot, decision.direction),
+    regime=regime.state if regime is not None else "chop",
+    pip_size=units.pip_size(symbol),
+    cfg=settings,
+  )
+  if not range_policy.allowed:
+    await _record_gate_reject(
+      client, symbol, range_policy.reason_code,
+    )
+    return None
   payload = {
-    "version": 3,
+    "version": 5,
     "candidate_id": candidate_id,
     "group_id": _group_id(
       symbol,
@@ -2552,6 +2630,7 @@ async def _publish_candidate(
     "opposing_zone_low": None if opposing_zone is None else opposing_zone.low,
     "opposing_zone_high": None if opposing_zone is None else opposing_zone.high,
     "add_zone_side": None if opposing_zone is None else opposing_zone.side,
+    **_stop_contract_fields(range_policy.measured),
   }
   if scale_context is not None:
     payload.update({
@@ -2965,7 +3044,7 @@ async def _publish_strategy_match(
 
   policy_evaluation = evaluate_execution_policy(
     match,
-    spot_price=spot.price,
+    spot_price=_executable_spot_price(spot, match.direction),
     regime=None if regime is None else regime.state,
     pip_size=units.pip_size(symbol),
     cfg=settings,
@@ -3420,7 +3499,7 @@ async def _publish_strategy_match(
     else match.strategy
   )
   payload = {
-    "version": 4,
+    "version": 5,
     "candidate_id": candidate_id,
     "match_id": match.match_id,
     "group_id": group_id,
@@ -3505,6 +3584,7 @@ async def _publish_strategy_match(
     "entry_distribution": policy_evaluation.measured.get(
       "entry_distribution", "single",
     ),
+    **_stop_contract_fields(policy_evaluation.measured),
   }
 
   try:
@@ -3749,7 +3829,7 @@ async def _publish_trend_candidate(
   )
   trend_policy = evaluate_execution_policy(
     trend_policy_subject,
-    spot_price=spot.price,
+    spot_price=_executable_spot_price(spot, trend_decision.direction),
     regime=regime.state,
     pip_size=units.pip_size(symbol),
     cfg=settings,
@@ -3950,7 +4030,7 @@ async def _publish_trend_candidate(
     trend_decision.direction,
   )
   payload = {
-    "version": 3,
+    "version": 5,
     "candidate_id": candidate_id,
     "group_id": group_id,
     "strategy_family": "trend",
@@ -3996,6 +4076,7 @@ async def _publish_trend_candidate(
     "entry_distribution": trend_policy.measured.get(
       "entry_distribution", "single",
     ),
+    **_stop_contract_fields(trend_policy.measured),
     "regime": regime.state,
     "bias": bias,
     "relationship_to_bias": relationship_to_bias,
@@ -4639,6 +4720,39 @@ def _arbitration_followup(
   return status, reason_code, message
 
 
+async def _strategy_publication_result(
+  client: Any,
+  match: StrategyMatch,
+  candidate_id: str | None,
+) -> CandidatePublicationResult:
+  """Translate the legacy publisher return into a fallback-safe result."""
+  if candidate_id is not None:
+    return CandidatePublicationResult.published(candidate_id)
+  raw = await client.get(route_outcome_key(match.symbol, match.match_id))
+  try:
+    snapshot = json.loads(
+      raw.decode() if isinstance(raw, bytes) else str(raw)
+    ) if raw else {}
+  except (TypeError, ValueError, json.JSONDecodeError):
+    snapshot = {}
+  status = str(snapshot.get("status") or "")
+  reason = str(snapshot.get("reason_code") or "publication_unavailable")
+  retained = snapshot.get("retained")
+  if status in {"blocked", "expired"} and retained is False:
+    return CandidatePublicationResult.terminal_reject(reason)
+  if reason == "duplicate_candidate":
+    return CandidatePublicationResult.blocked("duplicate_candidate", reason)
+  if reason == "duplicate_reaction":
+    return CandidatePublicationResult.blocked("duplicate_reaction", reason)
+  if reason.startswith("duplicate_thesis") or reason == "same_thesis_group_active":
+    return CandidatePublicationResult.blocked("duplicate_thesis", reason)
+  if reason in {"cycle_conflict", "conflict"}:
+    return CandidatePublicationResult.blocked("cycle_conflict", reason)
+  return CandidatePublicationResult.blocked(
+    "publication_unavailable", reason,
+  )
+
+
 async def _group_is_active(
   client: Any,
   symbol: str,
@@ -4694,7 +4808,10 @@ async def _common_preflight(
     )
   policy = evaluate_execution_policy(
     subject,
-    spot_price=spot.price,
+    spot_price=_executable_spot_price(
+      spot,
+      str(getattr(subject, "direction", intent.direction))
+    ),
     regime=None if regime is None else regime.state,
     pip_size=units.pip_size(intent.symbol),
     cfg=settings,
@@ -5603,6 +5720,8 @@ async def _handle_event(
         if decision.full_tp_pips is not None else ()
       ),
       risk_multiplier=risk_multiplier_for_tier(range_tier, settings),
+      sweep_low=decision.sweep_low,
+      sweep_high=decision.sweep_high,
     )
     intent = ExecutionIntent(
       intent_id=box_intent_id,
@@ -5866,9 +5985,19 @@ async def _handle_event(
   published_match: StrategyMatch | None = None
   published_intent: ExecutionIntent | None = None
   attempted_intent_ids: set[str] = set()
-  for intent in arbitration.ordered:
+  cycle_id = str(event_ts or "")
+
+  async def publish_ranked_intent(
+    intent: ExecutionIntent,
+  ) -> CandidatePublicationResult:
+    nonlocal box_candidate_id
+    nonlocal trend_candidate_id
+    nonlocal published_match
+    nonlocal published_intent
+
     attempted_intent_ids.add(intent.intent_id)
     published = None
+    publication_result: CandidatePublicationResult | None = None
     preflight = preflight_by_id[intent.intent_id]
     routed_match = intent_matches.get(intent.intent_id)
     if isinstance(preflight.subject, StrategyMatch):
@@ -5877,8 +6006,10 @@ async def _handle_event(
       route_lock = (
         f"auto_trade:route_lock:{symbol.upper()}:{routed_match.match_id}"
       )
-      locked = await client.set(route_lock, "1", nx=True, ex=30)
-      if not locked:
+      route_lock_token = await acquire_owned_lock(
+        client, route_lock, ttl=30,
+      )
+      if route_lock_token is None:
         await record_route_outcome(
           client,
           routed_match,
@@ -5889,7 +6020,10 @@ async def _handle_event(
           retained=True,
           publish_status=False,
         )
-        continue
+        publication_result = CandidatePublicationResult.blocked(
+          "route_in_progress",
+        )
+        return publication_result
       try:
         published = await _publish_strategy_match(
           client,
@@ -5909,7 +6043,7 @@ async def _handle_event(
           cycle_id=str(event_ts or ""),
         )
       finally:
-        await client.delete(route_lock)
+        await release_owned_lock(client, route_lock, route_lock_token)
       if published is not None:
         strategy_candidate_ids.append(published)
         published_match = routed_match
@@ -5930,6 +6064,9 @@ async def _handle_event(
           signal_source=intent.source,
           publish_status=False,
         )
+      publication_result = await _strategy_publication_result(
+        client, routed_match, published,
+      )
     elif intent.intent_id == box_intent_id:
       published = await _publish_candidate(
         client,
@@ -5946,6 +6083,11 @@ async def _handle_event(
         frames=frames,
       )
       box_candidate_id = published
+      publication_result = (
+        CandidatePublicationResult.published(published)
+        if published is not None
+        else CandidatePublicationResult.blocked("publication_unavailable")
+      )
     elif intent.intent_id == trend_intent_id:
       published = await _publish_trend_candidate(
         client,
@@ -5960,9 +6102,98 @@ async def _handle_event(
         frames=frames,
       )
       trend_candidate_id = published
-    if published is not None:
+      publication_result = (
+        CandidatePublicationResult.published(published)
+        if published is not None
+        else CandidatePublicationResult.blocked("publication_unavailable")
+      )
+    if publication_result is None:
+      publication_result = CandidatePublicationResult.blocked(
+        "publication_unavailable",
+      )
+    if publication_result.candidate_id is not None:
       published_intent = intent
-      break
+    return publication_result
+
+  cycle_publication_result: CandidatePublicationResult | None = None
+  if arbitration.ordered:
+    cycle_publication_result = await publish_ranked_cycle(
+      client,
+      symbol=symbol,
+      cycle_id=cycle_id,
+      ordered=arbitration.ordered,
+      publisher=publish_ranked_intent,
+    )
+    if (
+      not attempted_intent_ids
+      and cycle_publication_result.status
+        in {"route_in_progress", "cycle_conflict"}
+    ):
+      top = arbitration.ordered[0]
+      attempted_intent_ids.add(top.intent_id)
+      routed_top = intent_matches.get(top.intent_id)
+      status = (
+        "waiting"
+        if cycle_publication_result.status == "route_in_progress"
+        else "duplicate_suppressed"
+      )
+      reason_code = (
+        "route_evaluation_in_progress"
+        if cycle_publication_result.status == "route_in_progress"
+        else "cycle_conflict"
+      )
+      message = (
+        "another worker owns publication arbitration for this cycle"
+        if cycle_publication_result.status == "route_in_progress"
+        else "this closed-bar cycle already has a publication owner"
+      )
+      existing_cycle_owner = await client.get(
+        autonomous_cycle_owner_key(symbol, cycle_id)
+      )
+      winner_intent_id = (
+        existing_cycle_owner.decode()
+        if isinstance(existing_cycle_owner, bytes)
+        else str(existing_cycle_owner)
+        if existing_cycle_owner is not None
+        else None
+      )
+      if routed_top is not None:
+        await record_route_outcome(
+          client,
+          routed_top,
+          stage="candidate_claim",
+          status=status,  # type: ignore[arg-type]
+          reason_code=reason_code,
+          message=message,
+          retained=True,
+          winner_intent_id=winner_intent_id,
+          publish_status=False,
+        )
+      else:
+        top_preflight = preflight_by_id[top.intent_id]
+        await _record_private_route(
+          client,
+          symbol=symbol,
+          event_ts=event_ts,
+          strategy=top.strategy,
+          family=top.family,
+          direction=top.direction,
+          source=top.source,
+          structural_id=top.structural_id,
+          entry_low=top.entry_low,
+          entry_high=top.entry_high,
+          spot_price=spot_price,
+          status=status,
+          reason_code=reason_code,
+          message=message,
+          group_id=top.proposed_group_id,
+          retained=True,
+          stage="candidate_claim",
+          measured=top_preflight.measured,
+          preflight_reason_code=top_preflight.reason_code,
+          arbitration_reason_code=reason_code,
+          winner_intent_id=winner_intent_id,
+        )
   executable_ids = {
     item.intent.intent_id
     for item in preflight_decisions

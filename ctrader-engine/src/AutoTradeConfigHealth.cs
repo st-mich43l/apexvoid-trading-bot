@@ -93,6 +93,12 @@ public static class AutoTradeConfigHealth
       RangeBoxMoveSlToBeAfterScaleOut: options.RangeBoxMoveSlToBeAfterScaleOut,
       ExecutionZoneMaxWidthAtr: options.ExecutionZoneMaxWidthAtr,
       ExecutionZoneMaxWidthPips: options.ExecutionZoneMaxWidthPips,
+      StructureStopBufferAtr: options.AddStopBufferAtr,
+      OrdinaryStopMinPips: options.AddMinStopPips,
+      OrdinaryStopMaxDistance: options.StopLossDistance,
+      WickStopBufferAtr: options.WickStopBufferAtr,
+      TrendStopMinPips: options.TrendStopMinPips,
+      TrendStopMaxPips: options.TrendStopMaxPips,
       CanonicalOptions:
       [
         CanonicalOption(
@@ -223,6 +229,42 @@ public static class AutoTradeConfigHealth
           fatal
         );
       }
+      CompareDecimal(
+        root,
+        "structure_stop_buffer_atr",
+        current.StructureStopBufferAtr,
+        fatal
+      );
+      CompareInt(
+        root,
+        "ordinary_stop_min_pips",
+        current.OrdinaryStopMinPips,
+        fatal
+      );
+      CompareDecimal(
+        root,
+        "ordinary_stop_max_distance",
+        current.OrdinaryStopMaxDistance,
+        fatal
+      );
+      CompareDecimal(
+        root,
+        "wick_stop_buffer_atr",
+        current.WickStopBufferAtr,
+        fatal
+      );
+      CompareInt(
+        root,
+        "trend_stop_min_pips",
+        current.TrendStopMinPips,
+        fatal
+      );
+      CompareInt(
+        root,
+        "trend_stop_max_pips",
+        current.TrendStopMaxPips,
+        fatal
+      );
       CompareInt(
         root,
         "candidate_execution_max_age_seconds",

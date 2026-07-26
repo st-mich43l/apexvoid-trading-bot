@@ -6,6 +6,12 @@ from dataclasses import dataclass, field
 import math
 from typing import Any
 
+from app.autotrade.protective_stop import (
+  ProtectiveStopError,
+  plan_protective_stop,
+  stop_bounds_for_strategy,
+)
+
 GUARD_MODE_OBSERVE = "observe"
 GUARD_MODE_BALANCED = "balanced"
 GUARD_MODE_STRICT = "strict"
@@ -436,12 +442,42 @@ def evaluate_execution_policy(
     max(0.0, remaining_price) / atr
     if atr > 0 and math.isfinite(atr) else 0.0
   )
-  stop_price = abs(
-    planned_entry - float(getattr(match, "structure_swing", planned_entry))
-  )
+  stop_plan = None
+  stop_plan_error: str | None = None
+  try:
+    minimum_stop_pips, maximum_stop_pips = stop_bounds_for_strategy(
+      strategy=str(getattr(match, "strategy", "")),
+      pip_size=pip,
+      cfg=cfg,
+    )
+    sweep_extreme = getattr(
+      match,
+      "sweep_low" if direction == "BUY" else "sweep_high",
+      None,
+    )
+    stop_plan = plan_protective_stop(
+      direction=direction,
+      entry_price=planned_entry,
+      structure_swing=getattr(match, "structure_swing", None),
+      atr=atr,
+      structure_buffer_atr=getattr(
+        cfg, "auto_trade_add_stop_buffer_atr", 0.3,
+      ),
+      sweep_extreme=sweep_extreme,
+      wick_buffer_atr=getattr(
+        cfg, "auto_trade_wick_stop_buffer_atr", 0.15,
+      ),
+      minimum_stop_pips=minimum_stop_pips,
+      maximum_stop_pips=maximum_stop_pips,
+      pip_size=pip,
+      digits=int(getattr(cfg, "auto_trade_xau_price_digits", 2)),
+    )
+  except ProtectiveStopError as exc:
+    stop_plan_error = str(exc)
   reward_risk = (
-    max(0.0, remaining_price) / stop_price
-    if stop_price > 0 else 0.0
+    max(0.0, remaining_pips) / float(stop_plan.stop_pips)
+    if stop_plan is not None and stop_plan.stop_pips > 0
+    else 0.0
   )
   raw_risk_multiplier = getattr(match, "risk_multiplier", 1.0)
   match_risk_multiplier = float(
@@ -483,9 +519,16 @@ def evaluate_execution_policy(
     ),
     "absolute_target_price": absolute_target,
     "planned_entry_price": round(planned_entry, 6),
+    "planned_stop_error": stop_plan_error,
     "regime": normalized_regime or "unknown",
     "permitted_regimes": list(policy.permitted_regimes),
   }
+  if stop_plan is not None:
+    measured.update(stop_plan.candidate_fields(
+      entry_price=stop_plan.stop_price + stop_plan.distance
+      if direction == "BUY"
+      else stop_plan.stop_price - stop_plan.distance,
+    ))
   if (
     direction not in {"BUY", "SELL"}
     or not all(math.isfinite(value) for value in (spot_price, low, high))
@@ -497,6 +540,19 @@ def evaluate_execution_policy(
       False,
       "invalid_execution_geometry",
       "entry zone, direction, spot, or ATR is invalid",
+      True,
+      measured,
+      policy,
+    )
+  if stop_plan is None:
+    return ExecutionPolicyEvaluation(
+      False,
+      (
+        "stop_exceeds_envelope_after_wick"
+        if stop_plan_error == "stop_exceeds_envelope_after_wick"
+        else "protective_stop_unavailable"
+      ),
+      stop_plan_error or "protective stop could not be planned",
       True,
       measured,
       policy,

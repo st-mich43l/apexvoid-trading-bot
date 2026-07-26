@@ -134,12 +134,15 @@ services:
       AUTO_TRADE_ALLOW_COUNTER_BIAS: {{ apexvoid_trading_bot_env.AUTO_TRADE_ALLOW_COUNTER_BIAS | default(demo_eval_default) | string | to_json }}
       AUTO_TRADE_TRACK_ALL_STRUCTURAL_MATCHES: {{ apexvoid_trading_bot_env.AUTO_TRADE_TRACK_ALL_STRUCTURAL_MATCHES | default(demo_eval_default) | string | to_json }}
       MANUAL_ALGO_ENABLED: {{ apexvoid_trading_bot_env.MANUAL_ALGO_ENABLED | default('false') | string | to_json }}
-      AUTO_TRADE_CANDIDATE_CONTRACT_VERSION: {{ apexvoid_trading_bot_env.AUTO_TRADE_CANDIDATE_CONTRACT_VERSION | default('5') | string | to_json }}
+      AUTO_TRADE_CANDIDATE_CONTRACT_VERSION: {{ apexvoid_trading_bot_env.AUTO_TRADE_CANDIDATE_CONTRACT_VERSION | default('6') | string | to_json }}
       AUTO_TRADE_SYMBOLS: {{ apexvoid_trading_bot_env.AUTO_TRADE_SYMBOLS | default('XAU') | string | to_json }}
       AUTO_TRADE_CANONICAL_SYMBOL: {{ apexvoid_trading_bot_env.AUTO_TRADE_CANONICAL_SYMBOL | default('XAU') | string | to_json }}
       AUTO_TRADE_REQUIRE_DEMO_ONLY_TOKEN: {{ apexvoid_trading_bot_env.AUTO_TRADE_REQUIRE_DEMO_ONLY_TOKEN | default('false') | string | to_json }}
       AUTO_TRADE_EXPECTED_BROKER: {{ apexvoid_trading_bot_env.AUTO_TRADE_EXPECTED_BROKER | default('fpmarkets') | string | to_json }}
       AUTO_TRADE_SL_DISTANCE: {{ apexvoid_trading_bot_env.AUTO_TRADE_SL_DISTANCE | default('6.5') | string | to_json }}
+      AUTO_TRADE_ADD_STOP_BUFFER_ATR: {{ apexvoid_trading_bot_env.AUTO_TRADE_ADD_STOP_BUFFER_ATR | default('0.3') | string | to_json }}
+      AUTO_TRADE_ADD_MIN_STOP_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_ADD_MIN_STOP_PIPS | default('30') | string | to_json }}
+      AUTO_TRADE_WICK_STOP_BUFFER_ATR: {{ apexvoid_trading_bot_env.AUTO_TRADE_WICK_STOP_BUFFER_ATR | default('0.15') | string | to_json }}
       AUTO_TRADE_RISK_PCT: {{ apexvoid_trading_bot_env.AUTO_TRADE_RISK_PCT | default('2.0') | string | to_json }}
       AUTO_TRADE_SIZING_MODE: {{ apexvoid_trading_bot_env.AUTO_TRADE_SIZING_MODE | default('table') | string | to_json }}
       AUTO_TRADE_XAU_PIP_SIZE: {{ apexvoid_trading_bot_env.AUTO_TRADE_XAU_PIP_SIZE | default('0.1') | string | to_json }}

@@ -65,6 +65,12 @@ _PROFILE_DEFAULT_FIELDS = {
   "AUTO_TRADE_STRATEGY_MATCH_ENABLED",
   "AUTO_TRADE_EXECUTION_ZONE_MAX_WIDTH_ATR",
   "AUTO_TRADE_EXECUTION_ZONE_MAX_WIDTH_PIPS",
+  "AUTO_TRADE_ADD_STOP_BUFFER_ATR",
+  "AUTO_TRADE_ADD_MIN_STOP_PIPS",
+  "AUTO_TRADE_SL_DISTANCE",
+  "AUTO_TRADE_WICK_STOP_BUFFER_ATR",
+  "AUTO_TRADE_TREND_STOP_MIN_PIPS",
+  "AUTO_TRADE_TREND_STOP_MAX_PIPS",
 }
 
 _CANONICAL_ENV_NAMES = {
@@ -109,6 +115,12 @@ _CANONICAL_ENV_NAMES = {
   "AUTO_TRADE_TRENDLINE_REACTION_ENABLED",
   "AUTO_TRADE_EXECUTION_ZONE_MAX_WIDTH_ATR",
   "AUTO_TRADE_EXECUTION_ZONE_MAX_WIDTH_PIPS",
+  "AUTO_TRADE_ADD_STOP_BUFFER_ATR",
+  "AUTO_TRADE_ADD_MIN_STOP_PIPS",
+  "AUTO_TRADE_SL_DISTANCE",
+  "AUTO_TRADE_WICK_STOP_BUFFER_ATR",
+  "AUTO_TRADE_TREND_STOP_MIN_PIPS",
+  "AUTO_TRADE_TREND_STOP_MAX_PIPS",
 }
 
 
@@ -255,6 +267,12 @@ def python_manifest() -> dict[str, Any]:
     "canonical_symbol": settings.auto_trade_canonical_symbol.upper(),
     "pip_size": settings.auto_trade_xau_pip_size,
     "contract_size": settings.auto_trade_contract_size,
+    "structure_stop_buffer_atr": settings.auto_trade_add_stop_buffer_atr,
+    "ordinary_stop_min_pips": settings.auto_trade_add_min_stop_pips,
+    "ordinary_stop_max_distance": settings.auto_trade_sl_distance,
+    "wick_stop_buffer_atr": settings.auto_trade_wick_stop_buffer_atr,
+    "trend_stop_min_pips": settings.auto_trade_trend_stop_min_pips,
+    "trend_stop_max_pips": settings.auto_trade_trend_stop_max_pips,
     "target_plans": _int_values(settings.auto_trade_tp_pips),
     "range_target_plans": canonicalize_int_set(
       configured_range_targets()
@@ -379,6 +397,12 @@ def _different(field: str, left: Any, right: Any) -> bool:
     "range_box_scale_out_fraction",
     "execution_zone_max_width_atr",
     "execution_zone_max_width_pips",
+    "structure_stop_buffer_atr",
+    "ordinary_stop_min_pips",
+    "ordinary_stop_max_distance",
+    "wick_stop_buffer_atr",
+    "trend_stop_min_pips",
+    "trend_stop_max_pips",
   }:
     return not _numeric_equal(left, right)
   return left != right
@@ -415,6 +439,12 @@ def compare_manifests(
     "require_demo_account",
     "execution_zone_max_width_atr",
     "execution_zone_max_width_pips",
+    "structure_stop_buffer_atr",
+    "ordinary_stop_min_pips",
+    "ordinary_stop_max_distance",
+    "wick_stop_buffer_atr",
+    "trend_stop_min_pips",
+    "trend_stop_max_pips",
   )
   fatal = [
     field for field in fatal_fields

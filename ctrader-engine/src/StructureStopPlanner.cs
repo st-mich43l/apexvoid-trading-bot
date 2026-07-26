@@ -5,7 +5,8 @@ public sealed record StructureStopPlan(
   decimal Distance,
   decimal StopPips,
   decimal RawStopLoss,
-  bool Clamped
+  bool Clamped,
+  string Source = "structure"
 );
 
 public static class StructureStopPlanner
@@ -40,6 +41,7 @@ public static class StructureStopPlanner
     var rawStop = direction == TradeDirection.Buy
       ? structureSwing - bufferAtr * atr
       : structureSwing + bufferAtr * atr;
+    var source = "structure";
     if (sweepExtreme is decimal sweep)
     {
       if (sweep <= 0)
@@ -62,9 +64,14 @@ public static class StructureStopPlanner
       {
         throw new VolumePlanningException("stop_exceeds_envelope_after_wick");
       }
-      rawStop = direction == TradeDirection.Buy
+      var selectedStop = direction == TradeDirection.Buy
         ? Math.Min(rawStop, wickStop)
         : Math.Max(rawStop, wickStop);
+      if (selectedStop == wickStop)
+      {
+        source = selectedStop == rawStop ? "structure_and_wick" : "wick";
+      }
+      rawStop = selectedStop;
     }
     var rawDistance = direction == TradeDirection.Buy
       ? entryPrice - rawStop
@@ -97,7 +104,8 @@ public static class StructureStopPlanner
       distance,
       stopPips,
       rawStop,
-      stopPips != rawPips
+      stopPips != rawPips,
+      source
     );
   }
 }

@@ -3,7 +3,51 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
+
+
+PublicationStatus = Literal[
+  "published",
+  "duplicate_candidate",
+  "route_in_progress",
+  "cycle_conflict",
+  "duplicate_reaction",
+  "duplicate_thesis",
+  "terminal_reject",
+  "publication_unavailable",
+]
+
+
+@dataclass(frozen=True)
+class CandidatePublicationResult:
+  """Typed outcome controlling ranked-intent fallback.
+
+  Only ``terminal_reject`` is allowed to expose a lower-ranked intent. Every
+  ownership/concurrency/availability result preserves the selected route's
+  priority for the current cycle.
+  """
+
+  candidate_id: str | None
+  status: PublicationStatus
+  terminal: bool
+  blocks_lower_ranked_intents: bool
+  reason_code: str | None = None
+
+  @classmethod
+  def published(cls, candidate_id: str) -> "CandidatePublicationResult":
+    return cls(candidate_id, "published", False, True, "candidate_published")
+
+  @classmethod
+  def terminal_reject(cls, reason_code: str) -> "CandidatePublicationResult":
+    return cls(None, "terminal_reject", True, False, reason_code)
+
+  @classmethod
+  def blocked(
+    cls,
+    status: PublicationStatus,
+    reason_code: str | None = None,
+  ) -> "CandidatePublicationResult":
+    return cls(None, status, False, True, reason_code or status)
 
 
 @dataclass(frozen=True)
