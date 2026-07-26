@@ -1412,6 +1412,14 @@ public sealed class AutoTradeEngine(
           cancellationToken
         );
       }
+      else if (exception.Message == "final_stop_zone_identity_mismatch")
+      {
+        await store.IncrementMetricAsync(
+          candidate.Symbol,
+          "final_stop_zone_identity_mismatch",
+          cancellationToken
+        );
+      }
       return await RejectAsync(candidate, exception.Message, cancellationToken);
     }
     // The approved absolute stop must still be on the losing side of the price
@@ -3610,10 +3618,13 @@ public sealed class AutoTradeEngine(
         recomputed.Adjustment,
         StringComparison.Ordinal
       )
-      || !AdjustmentZoneMatches(candidate, recomputed, symbol)
     )
     {
       throw new VolumePlanningException("final_protective_stop_contract_mismatch");
+    }
+    if (!AdjustmentZoneMatches(candidate, recomputed, symbol))
+    {
+      throw new VolumePlanningException("final_stop_zone_identity_mismatch");
     }
     if (
       !PlansMatchWithinTolerance(
@@ -3637,10 +3648,13 @@ public sealed class AutoTradeEngine(
         executorPlan.Adjustment,
         StringComparison.Ordinal
       )
-      || !AdjustmentZoneMatches(candidate, executorPlan, symbol)
     )
     {
       throw new VolumePlanningException("final_protective_stop_contract_mismatch");
+    }
+    if (!AdjustmentZoneMatches(candidate, executorPlan, symbol))
+    {
+      throw new VolumePlanningException("final_stop_zone_identity_mismatch");
     }
   }
 
