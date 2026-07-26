@@ -226,7 +226,17 @@ public sealed record TradeCandidate(
   [property: JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
   decimal? StopAdjustmentZoneLow = null,
   [property: JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
-  decimal? StopAdjustmentZoneHigh = null
+  decimal? StopAdjustmentZoneHigh = null,
+  // Exact identity of the opposing zone Python evaluated. Required whenever
+  // the stop was pushed beyond that zone.
+  string? OpposingZoneId = null,
+  // Route Python resolved and the entry it priced the stop against. The
+  // executor rejects route drift and material entry drift before submitting.
+  string? PlannedExecutionRoute = null,
+  [property: JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
+  decimal? PlannedEntryPrice = null,
+  IReadOnlyList<decimal>? PlannedLegEntryPrices = null,
+  int? EntryPlanVersion = null
 );
 
 public sealed record TradeStreamEntry(

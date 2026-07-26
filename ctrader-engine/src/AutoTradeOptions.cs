@@ -43,6 +43,9 @@ public sealed record AutoTradeOptions(
   int TrendStopMinPips = 40,
   int TrendStopMaxPips = 65,
   bool StopPushBeyondZone = true,
+  // How far the executable entry may drift from Python's planned entry before
+  // the approved absolute stop is no longer trustworthy for this candidate.
+  decimal EntryContractTolerancePips = 3m,
   decimal WickStopBufferAtr = 0.15m,
   bool RangeFlipEnabled = false,
   int FlipExitBufferPips = 10,
@@ -254,6 +257,9 @@ public sealed record AutoTradeOptions(
     TrendStopMaxPips: resolver.Int("AUTO_TRADE_TREND_STOP_MAX_PIPS", 65),
     StopPushBeyondZone: resolver.Bool(
       "AUTO_TRADE_STOP_PUSH_BEYOND_ZONE", true
+    ),
+    EntryContractTolerancePips: resolver.Decimal(
+      "AUTO_TRADE_ENTRY_CONTRACT_TOLERANCE_PIPS", 3m
     ),
     WickStopBufferAtr: resolver.Decimal(
       "AUTO_TRADE_WICK_STOP_BUFFER_ATR", 0.15m

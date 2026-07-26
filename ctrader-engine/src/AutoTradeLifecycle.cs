@@ -46,12 +46,26 @@ public static class AutoTradeLifecycle
       ["order_filled"] = 60,
       ["managing"] = 70,
       ["partially_closed"] = 80,
+      // Recovery states rank below `executor_received` so a retry advancing to
+      // any real execution state is never treated as a backward transition.
+      ["retryable_error"] = 5,
+      ["broker_outcome_unknown"] = 45,
       ["closed"] = 100,
       ["rejected"] = 100,
       ["expired"] = 100,
       ["cancelled"] = 100,
       ["invalidated"] = 100,
       ["error"] = 100,
+      ["integrity_error"] = 100,
+    };
+
+  // Nonterminal states a candidate can occupy while it waits for a retry or a
+  // broker reconciliation. Later execution states must remain reachable.
+  private static readonly HashSet<string> NonTerminalRecoveryStates =
+    new(StringComparer.OrdinalIgnoreCase)
+    {
+      "retryable_error",
+      "broker_outcome_unknown",
     };
 
   public static LifecycleTransition? TransitionForEvent(
@@ -74,7 +88,18 @@ public static class AutoTradeLifecycle
     "zone_expired" or "manual_expired" => new(true, "expired", true),
     "manual_cancelled" or "cancelled" => new(true, "cancelled", true),
     "invalidated" => new(true, "invalidated", true),
-    "error" or "manual_command_error" or "config_fatal" => new(true, "error", true),
+    // A retryable operational error is not a failed trade: the candidate can
+    // still be reclaimed and reach order_filled.
+    "candidate_retryable_error" => new(true, "retryable_error", false),
+    "candidate_lease_lost" => new(false, null, false),
+    // The broker may hold an order. Recovery-required, never terminal.
+    "broker_outcome_unknown" => new(true, "broker_outcome_unknown", false),
+    // Identity invariants were violated: block further execution.
+    "candidate_integrity_error" => new(true, "integrity_error", true),
+    "candidate_terminal_error" => new(true, "error", true),
+    "manual_command_error" or "config_fatal" => new(true, "error", true),
+    // `service_error` and any unmapped type are telemetry only: they append
+    // history and never create or mutate candidate lifecycle state.
     _ => null,
   };
 
@@ -165,13 +190,20 @@ public static class AutoTradeLifecycle
     StateRecordVersion
   );
 
+  public static bool IsNonTerminalRecoveryState(string? state) =>
+    state is not null && NonTerminalRecoveryStates.Contains(state);
+
   private static bool IsTerminal(string state) =>
-    state.Equals("closed", StringComparison.OrdinalIgnoreCase)
-    || state.Equals("rejected", StringComparison.OrdinalIgnoreCase)
-    || state.Equals("expired", StringComparison.OrdinalIgnoreCase)
-    || state.Equals("cancelled", StringComparison.OrdinalIgnoreCase)
-    || state.Equals("invalidated", StringComparison.OrdinalIgnoreCase)
-    || state.Equals("error", StringComparison.OrdinalIgnoreCase);
+    !NonTerminalRecoveryStates.Contains(state)
+    && (
+      state.Equals("closed", StringComparison.OrdinalIgnoreCase)
+      || state.Equals("rejected", StringComparison.OrdinalIgnoreCase)
+      || state.Equals("expired", StringComparison.OrdinalIgnoreCase)
+      || state.Equals("cancelled", StringComparison.OrdinalIgnoreCase)
+      || state.Equals("invalidated", StringComparison.OrdinalIgnoreCase)
+      || state.Equals("error", StringComparison.OrdinalIgnoreCase)
+      || state.Equals("integrity_error", StringComparison.OrdinalIgnoreCase)
+    );
 
   private static int Rank(string state) =>
     StateRank.TryGetValue(state, out var rank) ? rank : 0;
@@ -182,6 +214,16 @@ public static class AutoTradeLifecycle
       ("executor_received", "order_filled") => true,
       ("order_submitted", "order_filled") => true,
       ("order_accepted", "order_filled") => true,
+      // A candidate parked in a nonterminal recovery state is still live: a
+      // reclaimed retry re-enters the execution sequence from the start, and
+      // broker adoption jumps straight to accepted/filled. Neither is a
+      // backward transition, so rank must not veto them.
+      (var currentState, _) when IsNonTerminalRecoveryState(currentState) => true,
+      // A live candidate may always fall back into a recovery state; only a
+      // terminal lifecycle refuses to reopen.
+      (var currentState, var targetState)
+        when IsNonTerminalRecoveryState(targetState)
+          && !IsTerminal(currentState) => true,
       (var currentState, "managing")
         when !IsTerminal(currentState)
           && Rank(currentState) < Rank("managing") => true,
