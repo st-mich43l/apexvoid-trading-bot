@@ -12,6 +12,17 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- Require consecutive broker absence confirmations (and deterministic client
+  order identity) before releasing a recovery-required candidate for retry, so
+  delayed broker visibility cannot create a duplicate order; expire
+  `broker_submitting` into recovery rather than normal reclaim.
+- Fail closed on unknown planned execution routes and incomplete planned entry
+  / leg-entry contracts before any broker mutation.
+- Require exact `candidate_id` and `stream_event_id` on structured execution
+  records in Redis Lua, Python reconciliation, and C# parsers (legacy plain
+  markers stay conservatively compatible).
+- Cancel lease-ownership tokens before best-effort heartbeat metrics, and
+  separate `broker_response_unknown` from `executor_lease_lost_after_broker`.
 - Make retryable candidates reclaimable with a typed claim disposition so a
   failed attempt can be retried without advancing the stream cursor, and keep
   `broker_outcome_unknown` out of the normal retry path until deterministic
