@@ -51,6 +51,7 @@ from app.autotrade.execution_policy import (
   resolve_guard_mode,
   risk_multiplier_for_tier,
 )
+from app.autotrade.protective_stop import opposing_zone_fingerprint
 from app.autotrade.gate import (
   AutoScalpBox,
   AutoScalpDecision,
@@ -237,6 +238,21 @@ _STOP_CONTRACT_FIELDS = (
   "planned_stop_clamped",
   "stop_source",
   "stop_plan_version",
+  "planned_base_stop_price",
+  "planned_base_stop_pips",
+  "planned_final_stop_price",
+  "planned_final_stop_distance",
+  "planned_final_stop_pips",
+  "stop_adjustment",
+  "stop_adjustment_zone_id",
+  "stop_adjustment_zone_low",
+  "stop_adjustment_zone_high",
+  # Entry plan: the route and entry the stop above was priced against. The
+  # executor rejects route drift and material entry drift before submitting.
+  "planned_execution_route",
+  "planned_entry_price",
+  "planned_leg_entry_prices",
+  "entry_plan_version",
 )
 
 
@@ -1676,6 +1692,57 @@ def _resolve_overlap_thesis(
   )
 
 
+def _opposing_zone_identity(
+  zone: Zone,
+  *,
+  symbol: str,
+  timeframe: str,
+) -> str:
+  """Exact identity of the zone a stop may be pushed beyond.
+
+  Zone detectors carry no stored id, and the detector name identifies the
+  detector rather than the zone, so two different zones from one detector
+  would share it. The fingerprint therefore includes the zone's own geometry
+  and provenance, and the executor derives the same string.
+  """
+  stored = getattr(zone, "zone_id", None)
+  if stored:
+    return str(stored)
+  created = getattr(zone, "created_ts", None)
+  return opposing_zone_fingerprint(
+    symbol=symbol,
+    timeframe=timeframe,
+    side=zone.side,
+    low=zone.low,
+    high=zone.high,
+    created_bar_ts=(
+      int(created.timestamp()) if created is not None else zone.origin_index
+    ),
+    source=zone.source or getattr(zone, "kind", "") or "zone",
+  )
+
+
+def _opposing_zone_policy_kwargs(
+  zone: Zone | None,
+  *,
+  atr: float,
+  pip_size: float,
+  symbol: str,
+  timeframe: str,
+) -> dict[str, float | str | None]:
+  if zone is None:
+    return {}
+  return {
+    "opposing_zone_low": float(zone.low),
+    "opposing_zone_high": float(zone.high),
+    "opposing_zone_id": _opposing_zone_identity(
+      zone,
+      symbol=symbol,
+      timeframe=timeframe,
+    ),
+  }
+
+
 def _nearest_directional_zone(
   direction: str,
   entry_reference: float,
@@ -2544,6 +2611,13 @@ async def _publish_candidate(
     regime=regime.state if regime is not None else "chop",
     pip_size=units.pip_size(symbol),
     cfg=settings,
+    **_opposing_zone_policy_kwargs(
+      opposing_zone,
+      atr=scale_context.atr,
+      pip_size=units.pip_size(symbol),
+      symbol=symbol,
+      timeframe=EXECUTION_TIMEFRAME,
+    ),
   )
   if not range_policy.allowed:
     await _record_gate_reject(
@@ -2629,6 +2703,13 @@ async def _publish_candidate(
     "relationship_to_bias": "neutral",
     "opposing_zone_low": None if opposing_zone is None else opposing_zone.low,
     "opposing_zone_high": None if opposing_zone is None else opposing_zone.high,
+    "opposing_zone_id": (
+      None if opposing_zone is None else _opposing_zone_identity(
+        opposing_zone,
+        symbol=symbol,
+        timeframe=EXECUTION_TIMEFRAME,
+      )
+    ),
     "add_zone_side": None if opposing_zone is None else opposing_zone.side,
     **_stop_contract_fields(range_policy.measured),
   }
@@ -3042,12 +3123,22 @@ async def _publish_strategy_match(
     )
     return None
 
+  strategy_opposing_zone = _nearest_directional_zone(
+    match.direction, spot.price, htf_zones or [],
+  )
   policy_evaluation = evaluate_execution_policy(
     match,
     spot_price=_executable_spot_price(spot, match.direction),
     regime=None if regime is None else regime.state,
     pip_size=units.pip_size(symbol),
     cfg=settings,
+    **_opposing_zone_policy_kwargs(
+      strategy_opposing_zone,
+      atr=match.atr,
+      pip_size=units.pip_size(symbol),
+      symbol=symbol,
+      timeframe=match.source_tf,
+    ),
   )
   if not policy_evaluation.allowed:
     status = "blocked" if policy_evaluation.terminal else "waiting"
@@ -3584,6 +3675,22 @@ async def _publish_strategy_match(
     "entry_distribution": policy_evaluation.measured.get(
       "entry_distribution", "single",
     ),
+    "opposing_zone_low": (
+      None if strategy_opposing_zone is None else strategy_opposing_zone.low
+    ),
+    "opposing_zone_high": (
+      None if strategy_opposing_zone is None else strategy_opposing_zone.high
+    ),
+    "opposing_zone_id": (
+      None if strategy_opposing_zone is None else _opposing_zone_identity(
+        strategy_opposing_zone,
+        symbol=symbol,
+        timeframe=match.source_tf,
+      )
+    ),
+    "add_zone_side": (
+      None if strategy_opposing_zone is None else strategy_opposing_zone.side
+    ),
     **_stop_contract_fields(policy_evaluation.measured),
   }
 
@@ -3802,6 +3909,10 @@ async def _publish_trend_candidate(
 
   trend_setup = _TREND_SETUP_LABELS[trend_decision.mode]
   trend_tier = "A" if trend_decision.confluence >= 3 else "B"
+  entry_reference = spot.price
+  opposing_zone = _nearest_directional_zone(
+    trend_decision.direction, entry_reference, htf_zones or [],
+  )
   absolute_target = (
     max(trend_decision.target_prices)
     if trend_decision.direction == "BUY" and trend_decision.target_prices
@@ -3833,6 +3944,13 @@ async def _publish_trend_candidate(
     regime=regime.state,
     pip_size=units.pip_size(symbol),
     cfg=settings,
+    **_opposing_zone_policy_kwargs(
+      opposing_zone,
+      atr=trend_decision.atr,
+      pip_size=units.pip_size(symbol),
+      symbol=symbol,
+      timeframe=EXECUTION_TIMEFRAME,
+    ),
   )
   if not trend_policy.allowed:
     await _record_private_route(
@@ -3854,10 +3972,6 @@ async def _publish_trend_candidate(
     )
     return None
 
-  entry_reference = spot.price
-  opposing_zone = _nearest_directional_zone(
-    trend_decision.direction, entry_reference, htf_zones or [],
-  )
   guard_mode = resolve_guard_mode(settings)
   if settings.auto_trade_htf_veto_enabled:
     veto_reason = _htf_veto_reason(
@@ -4082,6 +4196,13 @@ async def _publish_trend_candidate(
     "relationship_to_bias": relationship_to_bias,
     "opposing_zone_low": None if opposing_zone is None else opposing_zone.low,
     "opposing_zone_high": None if opposing_zone is None else opposing_zone.high,
+    "opposing_zone_id": (
+      None if opposing_zone is None else _opposing_zone_identity(
+        opposing_zone,
+        symbol=symbol,
+        timeframe=EXECUTION_TIMEFRAME,
+      )
+    ),
     "add_zone_side": None if opposing_zone is None else opposing_zone.side,
   }
   if scale_context is not None:

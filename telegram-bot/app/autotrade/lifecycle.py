@@ -34,6 +34,25 @@ LIFECYCLE_STATES = (
 )
 
 
+def parse_lifecycle_state(raw: str | bytes | None) -> str | None:
+  if raw is None:
+    return None
+  if isinstance(raw, bytes):
+    raw = raw.decode()
+  text = str(raw).strip()
+  if not text:
+    return None
+  if text.startswith("{"):
+    try:
+      parsed = json.loads(text)
+    except json.JSONDecodeError:
+      return text
+    if isinstance(parsed, dict):
+      state = parsed.get("state")
+      return None if state is None else str(state)
+  return text
+
+
 def lifecycle_key(candidate_id: str) -> str:
   return f"auto_trade:lifecycle:{candidate_id}"
 
@@ -69,9 +88,7 @@ async def emit_lifecycle(
     raise ValueError(f"unsupported lifecycle state: {state}")
   candidate = candidate_id or match_id or correlation_id or "service"
   state_key = f"auto_trade:lifecycle_state:{candidate}"
-  previous = await client.get(state_key)
-  if isinstance(previous, bytes):
-    previous = previous.decode()
+  previous = parse_lifecycle_state(await client.get(state_key))
   now = datetime.now(timezone.utc)
   event = {
     "lifecycle_id": uuid.uuid4().hex,

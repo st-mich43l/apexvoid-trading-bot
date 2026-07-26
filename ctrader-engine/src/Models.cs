@@ -210,7 +210,33 @@ public sealed record TradeCandidate(
   decimal? PlannedStopRawPrice = null,
   bool? PlannedStopClamped = null,
   string? StopSource = null,
-  int? StopPlanVersion = null
+  int? StopPlanVersion = null,
+  [property: JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
+  decimal? PlannedBaseStopPrice = null,
+  [property: JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
+  decimal? PlannedBaseStopPips = null,
+  [property: JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
+  decimal? PlannedFinalStopPrice = null,
+  [property: JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
+  decimal? PlannedFinalStopDistance = null,
+  [property: JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
+  decimal? PlannedFinalStopPips = null,
+  string? StopAdjustment = null,
+  string? StopAdjustmentZoneId = null,
+  [property: JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
+  decimal? StopAdjustmentZoneLow = null,
+  [property: JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
+  decimal? StopAdjustmentZoneHigh = null,
+  // Exact identity of the opposing zone Python evaluated. Required whenever
+  // the stop was pushed beyond that zone.
+  string? OpposingZoneId = null,
+  // Route Python resolved and the entry it priced the stop against. The
+  // executor rejects route drift and material entry drift before submitting.
+  string? PlannedExecutionRoute = null,
+  [property: JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
+  decimal? PlannedEntryPrice = null,
+  IReadOnlyList<decimal>? PlannedLegEntryPrices = null,
+  int? EntryPlanVersion = null
 );
 
 public sealed record TradeStreamEntry(
@@ -366,7 +392,8 @@ public sealed record AutoTradeEvent(
   string? ThesisId = null,
   decimal? RiskMultiplier = null,
   string? TargetModel = null,
-  string? EntryDistribution = null
+  string? EntryDistribution = null,
+  bool MutatesLifecycle = false
 );
 
 public sealed record AutoTradeGroupPlan(

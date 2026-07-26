@@ -1,0 +1,241 @@
+"""Structured Redis candidate execution records with legacy string support."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+import json
+import time
+from typing import Any
+
+STATE_PUBLISHED = "published"
+STATE_PROCESSING = "processing"
+STATE_BROKER_SUBMITTING = "broker_submitting"
+STATE_ORDERED = "ordered"
+STATE_COMPLETED = "completed"
+STATE_REJECTED = "rejected"
+STATE_RETRYABLE_ERROR = "retryable_error"
+STATE_BROKER_OUTCOME_UNKNOWN = "broker_outcome_unknown"
+STATE_DRY_RUN = "dry_run"
+STATE_FLIP_PENDING = "flip_pending"
+STATE_INTEGRITY_ERROR = "integrity_error"
+
+EXECUTOR_COMPATIBLE_STATES = frozenset({
+  STATE_PUBLISHED,
+  STATE_PROCESSING,
+  STATE_BROKER_SUBMITTING,
+  STATE_ORDERED,
+  STATE_COMPLETED,
+  STATE_REJECTED,
+  STATE_RETRYABLE_ERROR,
+  STATE_BROKER_OUTCOME_UNKNOWN,
+  STATE_DRY_RUN,
+  STATE_FLIP_PENDING,
+  STATE_INTEGRITY_ERROR,
+})
+
+# The executor may hand a candidate back for a later attempt from these states.
+RETRYABLE_STATES = frozenset({STATE_PUBLISHED, STATE_RETRYABLE_ERROR})
+
+# A broker request may have been accepted, so only deterministic broker
+# reconciliation may move the record on - never a plain retry.
+RECOVERY_REQUIRED_STATES = frozenset({STATE_BROKER_OUTCOME_UNKNOWN})
+
+TERMINAL_STATES = frozenset({
+  STATE_ORDERED,
+  STATE_COMPLETED,
+  STATE_REJECTED,
+  STATE_DRY_RUN,
+  STATE_FLIP_PENDING,
+  STATE_INTEGRITY_ERROR,
+})
+
+LEGACY_PLAIN_STATES = frozenset({
+  STATE_PUBLISHED,
+  STATE_PROCESSING,
+  "dry_run",
+})
+
+RECORD_VERSION = 1
+
+
+@dataclass(frozen=True)
+class CandidateExecutionRecord:
+  candidate_id: str
+  stream_event_id: str | None
+  state: str
+  lease_token: str | None = None
+  lease_expires_at: int | None = None
+  outcome: str | None = None
+  updated_at: int = 0
+  version: int = RECORD_VERSION
+  # Written by the executor when it hands a candidate back for another attempt.
+  attempt: int = 0
+  last_error: str | None = None
+
+  @property
+  def legacy_status(self) -> str:
+    if self.outcome:
+      return self.outcome
+    return self.state
+
+  @property
+  def is_terminal(self) -> bool:
+    return self.state in TERMINAL_STATES
+
+  @property
+  def is_retryable(self) -> bool:
+    return self.state in RETRYABLE_STATES
+
+  @property
+  def requires_recovery(self) -> bool:
+    return self.state in RECOVERY_REQUIRED_STATES
+
+
+def _coerce_optional_str(value: Any) -> str | None:
+  if value is None:
+    return None
+  text = str(value).strip()
+  return text or None
+
+
+def _coerce_optional_int(value: Any) -> int | None:
+  if value is None or value == "":
+    return None
+  return int(value)
+
+
+def parse_candidate_execution_record(raw: str | bytes | None) -> CandidateExecutionRecord:
+  """Parse structured JSON or legacy plain candidate markers."""
+  if raw is None:
+    raise ValueError("candidate execution record is missing")
+  text = raw.decode() if isinstance(raw, bytes) else str(raw)
+  if not text:
+    raise ValueError("candidate execution record is empty")
+
+  if text in LEGACY_PLAIN_STATES:
+    return CandidateExecutionRecord(
+      candidate_id="",
+      stream_event_id=None,
+      state=text,
+      updated_at=0,
+    )
+
+  if ":" in text:
+    prefix, _, remainder = text.partition(":")
+    if prefix in {STATE_ORDERED, STATE_REJECTED} or prefix == "flip_pending":
+      state = STATE_ORDERED if prefix == STATE_ORDERED else STATE_REJECTED
+      if prefix == "flip_pending":
+        state = STATE_COMPLETED
+      return CandidateExecutionRecord(
+        candidate_id="",
+        stream_event_id=None,
+        state=state,
+        outcome=text,
+        updated_at=0,
+      )
+    if prefix in EXECUTOR_COMPATIBLE_STATES:
+      return CandidateExecutionRecord(
+        candidate_id="",
+        stream_event_id=None,
+        state=prefix,
+        outcome=text if remainder else None,
+        updated_at=0,
+      )
+
+  try:
+    parsed = json.loads(text)
+  except (TypeError, ValueError, json.JSONDecodeError) as exc:
+    raise ValueError(f"unsupported candidate execution record: {text!r}") from exc
+  if not isinstance(parsed, dict):
+    raise ValueError("candidate execution record must be a JSON object")
+
+  candidate_id = str(parsed.get("candidate_id") or "")
+  stream_event_id = _coerce_optional_str(parsed.get("stream_event_id"))
+  state = str(parsed.get("state") or STATE_PUBLISHED)
+  return CandidateExecutionRecord(
+    candidate_id=candidate_id,
+    stream_event_id=stream_event_id,
+    state=state,
+    lease_token=_coerce_optional_str(parsed.get("lease_token")),
+    lease_expires_at=_coerce_optional_int(parsed.get("lease_expires_at")),
+    outcome=_coerce_optional_str(parsed.get("outcome")),
+    updated_at=int(parsed.get("updated_at") or 0),
+    version=int(parsed.get("version") or RECORD_VERSION),
+    attempt=int(parsed.get("attempt") or 0),
+    last_error=_coerce_optional_str(parsed.get("last_error")),
+  )
+
+
+def serialize_candidate_execution_record(
+  *,
+  candidate_id: str,
+  stream_event_id: str | None,
+  state: str,
+  lease_token: str | None = None,
+  lease_expires_at: int | None = None,
+  outcome: str | None = None,
+  updated_at: int | None = None,
+  version: int = RECORD_VERSION,
+  attempt: int = 0,
+  last_error: str | None = None,
+) -> str:
+  payload = {
+    "candidate_id": candidate_id,
+    "stream_event_id": stream_event_id,
+    "state": state,
+    "lease_token": lease_token,
+    "lease_expires_at": lease_expires_at,
+    "outcome": outcome,
+    "updated_at": updated_at if updated_at is not None else int(time.time()),
+    "version": version,
+    "attempt": attempt,
+    "last_error": last_error,
+  }
+  return json.dumps(payload, separators=(",", ":"), sort_keys=True)
+
+
+def published_candidate_record(
+  *,
+  candidate_id: str,
+  stream_event_id: str,
+  updated_at: int | None = None,
+) -> str:
+  return serialize_candidate_execution_record(
+    candidate_id=candidate_id,
+    stream_event_id=stream_event_id,
+    state=STATE_PUBLISHED,
+    updated_at=updated_at,
+  )
+
+
+def candidate_record_compatible(
+  record: CandidateExecutionRecord,
+  *,
+  candidate_id: str,
+  stream_event_id: str,
+) -> bool:
+  if record.candidate_id and record.candidate_id != candidate_id:
+    return False
+  if (
+    record.stream_event_id
+    and stream_event_id
+    and record.stream_event_id != stream_event_id
+  ):
+    return False
+  if record.state in LEGACY_PLAIN_STATES:
+    return True
+  if record.outcome and (
+    record.outcome.startswith("ordered:")
+    or record.outcome.startswith("rejected:")
+    or record.outcome.startswith("flip_pending:")
+  ):
+    return True
+  return record.state in EXECUTOR_COMPATIBLE_STATES
+
+
+def candidate_record_is_progressed(record: CandidateExecutionRecord) -> bool:
+  if record.state not in {STATE_PUBLISHED} and record.state in EXECUTOR_COMPATIBLE_STATES:
+    return record.state != STATE_PUBLISHED
+  if record.outcome:
+    return True
+  return record.state in {STATE_PROCESSING, "dry_run"}

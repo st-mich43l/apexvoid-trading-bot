@@ -1,17 +1,75 @@
 namespace ApexVoid.CTraderFeed;
 
+public sealed record OpposingZoneStopContext(
+  string? ZoneId,
+  decimal Low,
+  decimal High,
+  bool ExecutionGrade,
+  bool PushBeyondZone,
+  decimal BufferAtr
+);
+
 public sealed record StructureStopPlan(
   decimal StopLoss,
   decimal Distance,
   decimal StopPips,
   decimal RawStopLoss,
   bool Clamped,
-  string Source = "structure"
+  string Source = "structure",
+  decimal? BaseStopLoss = null,
+  decimal? BaseStopPips = null,
+  string Adjustment = "none",
+  string? AdjustmentZoneId = null,
+  decimal? AdjustmentZoneLow = null,
+  decimal? AdjustmentZoneHigh = null,
+  int Version = 1
 );
 
 public static class StructureStopPlanner
 {
+  public const int StopPlanVersion = 2;
+
   public static StructureStopPlan Plan(
+    TradeDirection direction,
+    decimal entryPrice,
+    decimal structureSwing,
+    decimal atr,
+    decimal bufferAtr,
+    decimal? sweepExtreme,
+    decimal wickBufferAtr,
+    int minimumStopPips,
+    int maximumStopPips,
+    decimal pipSize,
+    SymbolInfo symbol,
+    OpposingZoneStopContext? opposingZone = null
+  )
+  {
+    var basePlan = PlanBase(
+      direction,
+      entryPrice,
+      structureSwing,
+      atr,
+      bufferAtr,
+      sweepExtreme,
+      wickBufferAtr,
+      minimumStopPips,
+      maximumStopPips,
+      pipSize,
+      symbol
+    );
+    return ApplyOpposingZoneAdjustment(
+      basePlan,
+      direction,
+      entryPrice,
+      opposingZone,
+      atr,
+      maximumStopPips,
+      pipSize,
+      symbol
+    );
+  }
+
+  public static StructureStopPlan PlanBase(
     TradeDirection direction,
     decimal entryPrice,
     decimal structureSwing,
@@ -105,7 +163,85 @@ public static class StructureStopPlanner
       stopPips,
       rawStop,
       stopPips != rawPips,
-      source
+      source,
+      stopLoss,
+      stopPips
     );
+  }
+
+  public static StructureStopPlan ApplyOpposingZoneAdjustment(
+    StructureStopPlan basePlan,
+    TradeDirection direction,
+    decimal entryPrice,
+    OpposingZoneStopContext? opposingZone,
+    decimal atr,
+    int maximumStopPips,
+    decimal pipSize,
+    SymbolInfo symbol
+  )
+  {
+    var baseStopLoss = basePlan.BaseStopLoss ?? basePlan.StopLoss;
+    var baseStopPips = basePlan.BaseStopPips ?? basePlan.StopPips;
+    if (opposingZone is null || !opposingZone.ExecutionGrade)
+    {
+      return basePlan with
+      {
+        BaseStopLoss = baseStopLoss,
+        BaseStopPips = baseStopPips,
+        Version = StopPlanVersion,
+      };
+    }
+    if (baseStopLoss < opposingZone.Low || baseStopLoss > opposingZone.High)
+    {
+      return basePlan with
+      {
+        BaseStopLoss = baseStopLoss,
+        BaseStopPips = baseStopPips,
+        Version = StopPlanVersion,
+      };
+    }
+    if (!opposingZone.PushBeyondZone)
+    {
+      throw new VolumePlanningException("stop_inside_opposing_zone");
+    }
+    var buffer = opposingZone.BufferAtr * atr;
+    var pushedStop = direction == TradeDirection.Buy
+      ? opposingZone.Low - buffer
+      : opposingZone.High + buffer;
+    pushedStop = decimal.Round(
+      pushedStop,
+      symbol.Digits,
+      MidpointRounding.AwayFromZero
+    );
+    var pushedDistance = Math.Abs(entryPrice - pushedStop);
+    if (
+      direction == TradeDirection.Buy
+        ? pushedStop >= entryPrice
+        : pushedStop <= entryPrice
+    )
+    {
+      throw new VolumePlanningException(
+        "Opposing-zone push is not on the losing side of entry"
+      );
+    }
+    var pushedPips = pushedDistance / pipSize;
+    if (pushedPips > maximumStopPips)
+    {
+      throw new VolumePlanningException("stop_inside_opposing_zone");
+    }
+    return basePlan with
+    {
+      StopLoss = pushedStop,
+      Distance = pushedDistance,
+      StopPips = pushedPips,
+      BaseStopLoss = baseStopLoss,
+      BaseStopPips = baseStopPips,
+      Clamped = true,
+      Adjustment = "opposing_zone_push",
+      AdjustmentZoneId = opposingZone.ZoneId,
+      AdjustmentZoneLow = opposingZone.Low,
+      AdjustmentZoneHigh = opposingZone.High,
+      Version = StopPlanVersion,
+    };
   }
 }

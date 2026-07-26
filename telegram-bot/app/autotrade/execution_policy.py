@@ -8,6 +8,7 @@ from typing import Any
 
 from app.autotrade.protective_stop import (
   ProtectiveStopError,
+  opposing_zone_context_from_values,
   plan_protective_stop,
   stop_bounds_for_strategy,
 )
@@ -16,6 +17,17 @@ GUARD_MODE_OBSERVE = "observe"
 GUARD_MODE_BALANCED = "balanced"
 GUARD_MODE_STRICT = "strict"
 _GUARD_MODES = (GUARD_MODE_OBSERVE, GUARD_MODE_BALANCED, GUARD_MODE_STRICT)
+
+# Version of the entry-plan contract (`planned_execution_route`,
+# `planned_entry_price`, `planned_leg_entry_prices`) shared with the executor.
+ENTRY_PLAN_VERSION = 1
+
+ROUTE_MARKET = "market"
+ROUTE_SINGLE_LIMIT = "single_limit"
+ROUTE_ZONE_SPLIT = "zone_split"
+# The policy allows either route: the executor picks deterministically and is
+# not held to one planned entry.
+ROUTE_EITHER = "either"
 
 OUTCOME_ALLOW = "allow"
 OUTCOME_ALLOW_WITH_WARNING = "allow_with_warning"
@@ -367,6 +379,29 @@ def policy_for(strategy: str, cfg: Any | None = None) -> ExecutionPolicy:
   )
 
 
+def planned_execution_route(
+  *,
+  order_type_preference: str,
+  entry_distribution: str,
+) -> str:
+  """Route the executor must resolve to, using the same rules it applies.
+
+  Mirrors `AutoTradeEngine.ResolveExecutionRoute`: a market preference is a
+  market route, a limit preference resolves by distribution, and anything
+  uncommitted stays `either` so the executor is free to choose.
+  """
+  preference = (order_type_preference or "").strip().lower()
+  distribution = (entry_distribution or "").strip().lower()
+  if preference == "market":
+    return ROUTE_MARKET
+  if preference == "limit":
+    if distribution == "zone_split":
+      return ROUTE_ZONE_SPLIT
+    if distribution == "single":
+      return ROUTE_SINGLE_LIMIT
+  return ROUTE_EITHER
+
+
 def evaluate_execution_policy(
   match: Any,
   *,
@@ -374,6 +409,9 @@ def evaluate_execution_policy(
   regime: str | None,
   pip_size: float,
   cfg: Any | None = None,
+  opposing_zone_low: float | None = None,
+  opposing_zone_high: float | None = None,
+  opposing_zone_id: str | None = None,
 ) -> ExecutionPolicyEvaluation:
   """Enforce every declared setup policy before candidate publication."""
   try:
@@ -455,6 +493,33 @@ def evaluate_execution_policy(
       "sweep_low" if direction == "BUY" else "sweep_high",
       None,
     )
+    zone_low = (
+      opposing_zone_low
+      if opposing_zone_low is not None
+      else getattr(match, "opposing_zone_low", None)
+    )
+    zone_high = (
+      opposing_zone_high
+      if opposing_zone_high is not None
+      else getattr(match, "opposing_zone_high", None)
+    )
+    zone_id = (
+      opposing_zone_id
+      if opposing_zone_id is not None
+      else getattr(match, "opposing_zone_id", None)
+      or getattr(match, "zone_id", None)
+    )
+    opposing_zone = opposing_zone_context_from_values(
+      opposing_zone_low=zone_low,
+      opposing_zone_high=zone_high,
+      opposing_zone_id=(
+        str(zone_id) if zone_id is not None else None
+      ),
+      direction=direction,
+      atr=atr,
+      pip_size=pip,
+      cfg=cfg,
+    )
     stop_plan = plan_protective_stop(
       direction=direction,
       entry_price=planned_entry,
@@ -471,12 +536,13 @@ def evaluate_execution_policy(
       maximum_stop_pips=maximum_stop_pips,
       pip_size=pip,
       digits=int(getattr(cfg, "auto_trade_xau_price_digits", 2)),
+      opposing_zone=opposing_zone,
     )
   except ProtectiveStopError as exc:
     stop_plan_error = str(exc)
   reward_risk = (
-    max(0.0, remaining_pips) / float(stop_plan.stop_pips)
-    if stop_plan is not None and stop_plan.stop_pips > 0
+    max(0.0, remaining_pips) / float(stop_plan.final_stop_pips)
+    if stop_plan is not None and stop_plan.final_stop_pips > 0
     else 0.0
   )
   raw_risk_multiplier = getattr(match, "risk_multiplier", 1.0)
@@ -489,6 +555,17 @@ def evaluate_execution_policy(
   normalized_regime = (
     "range" if regime == "range"
     else str(regime or "unknown").strip().lower()
+  )
+  entry_distribution = (
+    policy.entry_distribution
+    if policy.entry_distribution != "either"
+    else "zone_split"
+    if policy.order_type_preference == "limit" and zone_width_atr >= 0.5
+    else "single"
+  )
+  planned_route = planned_execution_route(
+    order_type_preference=policy.order_type_preference,
+    entry_distribution=entry_distribution,
   )
   measured = {
     "policy_family": policy.family,
@@ -505,13 +582,13 @@ def evaluate_execution_policy(
     "match_risk_multiplier": match_risk_multiplier,
     "effective_risk_multiplier": effective_risk_multiplier,
     "order_type_preference": policy.order_type_preference,
-    "entry_distribution": (
-      policy.entry_distribution
-      if policy.entry_distribution != "either"
-      else "zone_split"
-      if policy.order_type_preference == "limit"
-      and zone_width_atr >= 0.5
-      else "single"
+    "entry_distribution": entry_distribution,
+    "planned_execution_route": planned_route,
+    # Only a committed single-limit route has one deterministic leg price the
+    # executor can be held to. A zone split's leg prices depend on executor
+    # zone-fill sizing, and "either"/market routes are priced at the quote.
+    "planned_leg_entry_prices": (
+      [round(planned_entry, 6)] if planned_route == "single_limit" else []
     ),
     "target_model": target_model,
     "target_reference_price": str(
@@ -520,15 +597,12 @@ def evaluate_execution_policy(
     "absolute_target_price": absolute_target,
     "planned_entry_price": round(planned_entry, 6),
     "planned_stop_error": stop_plan_error,
+    "entry_plan_version": ENTRY_PLAN_VERSION,
     "regime": normalized_regime or "unknown",
     "permitted_regimes": list(policy.permitted_regimes),
   }
   if stop_plan is not None:
-    measured.update(stop_plan.candidate_fields(
-      entry_price=stop_plan.stop_price + stop_plan.distance
-      if direction == "BUY"
-      else stop_plan.stop_price - stop_plan.distance,
-    ))
+    measured.update(stop_plan.candidate_fields(entry_price=stop_plan.entry_price))
   if (
     direction not in {"BUY", "SELL"}
     or not all(math.isfinite(value) for value in (spot_price, low, high))
@@ -550,6 +624,8 @@ def evaluate_execution_policy(
       (
         "stop_exceeds_envelope_after_wick"
         if stop_plan_error == "stop_exceeds_envelope_after_wick"
+        else "stop_inside_opposing_zone"
+        if stop_plan_error == "stop_inside_opposing_zone"
         else "protective_stop_unavailable"
       ),
       stop_plan_error or "protective stop could not be planned",

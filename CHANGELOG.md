@@ -12,6 +12,35 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- Make retryable candidates reclaimable with a typed claim disposition so a
+  failed attempt can be retried without advancing the stream cursor, and keep
+  `broker_outcome_unknown` out of the normal retry path until deterministic
+  broker reconciliation adopts or disproves the order.
+- Fence every lease-owned mutation on exact candidate, stream-event and lease
+  token identity (a missing token never authorises completion), keep terminal
+  records immutable, and heartbeat the lease through long broker calls so a
+  successor cannot claim mid-placement.
+- Resolve the execution route and planned entry before validating the final
+  stop; publish the same planned entry from Python; preserve the approved
+  absolute stop after fill slippage; require an exact opposing-zone identity
+  for pushed stops; and keep retryable / broker-unknown lifecycle states
+  nonterminal so a successful retry is not refused as a backward transition.
+- Decode structured candidate records with `cjson` during publication
+  reconciliation, recognise every executor state, and refuse unknown legacy
+  markers instead of treating them as retryable.
+- Enforce a shared final protective-stop contract (`stop_plan_version=2`) so
+  Python-approved final stop equals C# validated stop equals broker stop;
+  fold opposing-zone push into the planner and reject
+  `final_protective_stop_contract_mismatch` before any broker mutation.
+- Replace scalar candidate markers with structured execution records and
+  two-phase all-or-nothing publication reconciliation that preserves executor
+  progress (`processing`/`ordered`/…) without partial ownership restores.
+- Fence executor claims with token-owned renewable leases so stale workers
+  cannot renew, transition, complete, release, or submit for a successor;
+  mark post-broker uncertainty as `broker_outcome_unknown`.
+- Separate lifecycle history from lifecycle transitions: telemetry and
+  unknown events no longer default to `managing` or write
+  `lifecycle_state:service`.
 - Preserve ranked-intent priority under concurrent delivery with a token-owned
   cycle arbitration lock, typed publication outcomes, and terminal-only
   fallback; make the Redis stream authoritative and reconcile orphan

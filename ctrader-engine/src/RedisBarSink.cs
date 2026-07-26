@@ -59,20 +59,60 @@ public interface IAutoTradeStore
     int count,
     CancellationToken cancellationToken
   );
-  Task<bool> TryClaimCandidateAsync(
+  // Returns a typed disposition. Callers must never infer retryability or
+  // cursor advancement from a status string.
+  Task<CandidateClaimResult> TryClaimCandidateAsync(
     string candidateId,
+    string streamEventId,
+    TimeSpan leaseDuration,
+    CancellationToken cancellationToken,
+    CandidateClaimPolicy? policy = null
+  );
+  Task<bool> RenewCandidateLeaseAsync(
+    string candidateId,
+    string streamEventId,
+    string leaseToken,
+    TimeSpan leaseDuration,
     CancellationToken cancellationToken
+  );
+  Task<bool> TransitionCandidateStateAsync(
+    string candidateId,
+    string streamEventId,
+    string leaseToken,
+    string newState,
+    CancellationToken cancellationToken,
+    string? lastError = null
   );
   Task<string?> GetCandidateStatusAsync(
     string candidateId,
     CancellationToken cancellationToken
   );
-  Task CompleteCandidateAsync(
+  Task<CandidateExecutionRecord?> GetCandidateRecordAsync(
     string candidateId,
+    CancellationToken cancellationToken
+  ) => Task.FromResult<CandidateExecutionRecord?>(null);
+  Task<bool> CompleteCandidateAsync(
+    string candidateId,
+    string streamEventId,
+    string leaseToken,
     string outcome,
     CancellationToken cancellationToken
   );
-  Task ReleaseCandidateAsync(string candidateId, CancellationToken cancellationToken);
+  Task<bool> ReleaseCandidateAsync(
+    string candidateId,
+    string streamEventId,
+    string leaseToken,
+    CancellationToken cancellationToken,
+    string? lastError = null
+  );
+  // Administrative re-arm for executor-internal flip rendezvous records only.
+  // Rejects anything whose outcome is not a `flip_pending:` marker so it can
+  // never rewrite a real broker outcome.
+  Task<bool> OverrideFlipClaimAsync(
+    string claimId,
+    string outcome,
+    CancellationToken cancellationToken
+  ) => Task.FromResult(false);
   Task SavePositionAsync(
     AutoTradePositionState state,
     CancellationToken cancellationToken
@@ -250,15 +290,6 @@ public sealed class StackExchangeRedisSeriesCommands :
   private readonly IConnectionMultiplexer _connection;
   private readonly IDatabase _db;
   private readonly ISubscriber _subscriber;
-  private const string CandidateClaimScript = """
-    local current = redis.call('GET', KEYS[1])
-    if (not current) or current == 'published' then
-      redis.call('SET', KEYS[1], 'processing', 'PX', ARGV[1])
-      return 1
-    end
-    return 0
-    """;
-
   private StackExchangeRedisSeriesCommands(IConnectionMultiplexer connection)
   {
     _connection = connection;
@@ -383,18 +414,112 @@ public sealed class StackExchangeRedisSeriesCommands :
     )).Where(entry => !string.IsNullOrWhiteSpace(entry.Payload)).ToArray();
   }
 
-  public async Task<bool> TryClaimCandidateAsync(
+  public async Task<CandidateClaimResult> TryClaimCandidateAsync(
     string candidateId,
+    string streamEventId,
+    TimeSpan leaseDuration,
+    CancellationToken cancellationToken,
+    CandidateClaimPolicy? policy = null
+  )
+  {
+    var effectivePolicy = policy ?? CandidateClaimPolicy.Default;
+    var token = NewLeaseToken();
+    var result = await _db.ScriptEvaluateAsync(
+      CandidateExecutionScripts.Acquire,
+      [CandidateKey(candidateId)],
+      [
+        streamEventId,
+        (long)leaseDuration.TotalMilliseconds,
+        token,
+        candidateId,
+        effectivePolicy.AllowRejectedReclaim ? "1" : "0",
+        effectivePolicy.AllowBrokerSubmittingReclaim ? "1" : "0",
+        effectivePolicy.AllowRecoveryAdoption ? "1" : "0",
+      ]
+    );
+    if (result.IsNull || result.Resp2Type != ResultType.Array)
+    {
+      return CandidateClaimResult.Conflict();
+    }
+    var items = (RedisResult[])result!;
+    if (items.Length < 2)
+    {
+      return CandidateClaimResult.Conflict();
+    }
+    var code = (long)items[0];
+    var raw = items[1].ToString();
+    var record = CandidateExecutionRecordParser.TryParse(raw);
+    if (code != CandidateExecutionScripts.AcquireClaimed)
+    {
+      return new CandidateClaimResult(
+        code switch
+        {
+          CandidateExecutionScripts.AcquireActiveElsewhere =>
+            CandidateClaimDisposition.ActiveElsewhere,
+          CandidateExecutionScripts.AcquireTerminal =>
+            CandidateClaimDisposition.Terminal,
+          CandidateExecutionScripts.AcquireRecoveryRequired =>
+            CandidateClaimDisposition.RecoveryRequired,
+          _ => CandidateClaimDisposition.Conflict,
+        },
+        null,
+        record
+      );
+    }
+    // Expiry comes from the record Redis just wrote, so the lease window is
+    // anchored on server time rather than this host's clock.
+    var expiresAt = DateTimeOffset.FromUnixTimeSeconds(
+      record?.LeaseExpiresAt
+        ?? DateTimeOffset.UtcNow.Add(leaseDuration).ToUnixTimeSeconds()
+    );
+    return new CandidateClaimResult(
+      CandidateClaimDisposition.Claimed,
+      new CandidateExecutionLease(candidateId, streamEventId, token, expiresAt),
+      record
+    );
+  }
+
+  public async Task<bool> RenewCandidateLeaseAsync(
+    string candidateId,
+    string streamEventId,
+    string leaseToken,
+    TimeSpan leaseDuration,
     CancellationToken cancellationToken
   )
   {
     var result = await _db.ScriptEvaluateAsync(
-      CandidateClaimScript,
+      CandidateExecutionScripts.Renew,
       [CandidateKey(candidateId)],
-      // Broker acknowledgements and reconnect adoption can exceed 30s.
-      // Keep the processing lease beyond the normal broker-response window
-      // so a replay cannot create a second initial order.
-      [120_000]
+      [
+        streamEventId,
+        leaseToken,
+        (long)leaseDuration.TotalMilliseconds,
+        candidateId,
+      ]
+    );
+    return (long)result == 1;
+  }
+
+  public async Task<bool> TransitionCandidateStateAsync(
+    string candidateId,
+    string streamEventId,
+    string leaseToken,
+    string newState,
+    CancellationToken cancellationToken,
+    string? lastError = null
+  )
+  {
+    var result = await _db.ScriptEvaluateAsync(
+      CandidateExecutionScripts.Transition,
+      [CandidateKey(candidateId)],
+      [
+        streamEventId,
+        leaseToken,
+        newState,
+        candidateId,
+        (long)CandidateLeaseWindow.TotalMilliseconds,
+        lastError ?? "",
+      ]
     );
     return (long)result == 1;
   }
@@ -405,23 +530,75 @@ public sealed class StackExchangeRedisSeriesCommands :
   )
   {
     var value = await _db.StringGetAsync(CandidateKey(candidateId));
-    return value.HasValue ? value.ToString() : null;
+    return value.HasValue
+      ? CandidateExecutionRecordParser.LegacyStatus(value.ToString())
+      : null;
   }
 
-  public Task CompleteCandidateAsync(
+  public async Task<CandidateExecutionRecord?> GetCandidateRecordAsync(
     string candidateId,
+    CancellationToken cancellationToken
+  )
+  {
+    var value = await _db.StringGetAsync(CandidateKey(candidateId));
+    return value.HasValue
+      ? CandidateExecutionRecordParser.TryParse(value.ToString())
+      : null;
+  }
+
+  public async Task<bool> CompleteCandidateAsync(
+    string candidateId,
+    string streamEventId,
+    string leaseToken,
     string outcome,
     CancellationToken cancellationToken
-  ) => _db.StringSetAsync(
-    CandidateKey(candidateId),
-    outcome,
-    TimeSpan.FromDays(7)
+  )
+  {
+    var result = await _db.ScriptEvaluateAsync(
+      CandidateExecutionScripts.Complete,
+      [CandidateKey(candidateId)],
+      [streamEventId, leaseToken, outcome, candidateId]
+    );
+    return (long)result == 1;
+  }
+
+  public async Task<bool> ReleaseCandidateAsync(
+    string candidateId,
+    string streamEventId,
+    string leaseToken,
+    CancellationToken cancellationToken,
+    string? lastError = null
+  ) => await TransitionCandidateStateAsync(
+    candidateId,
+    streamEventId,
+    leaseToken,
+    CandidateExecutionStates.RetryableError,
+    cancellationToken,
+    lastError
   );
 
-  public Task ReleaseCandidateAsync(
-    string candidateId,
+  public async Task<bool> OverrideFlipClaimAsync(
+    string claimId,
+    string outcome,
     CancellationToken cancellationToken
-  ) => _db.KeyDeleteAsync(CandidateKey(candidateId));
+  )
+  {
+    var result = await _db.ScriptEvaluateAsync(
+      CandidateExecutionScripts.OverrideFlipClaim,
+      [CandidateKey(claimId)],
+      [outcome, claimId]
+    );
+    return (long)result == 1;
+  }
+
+  private static TimeSpan CandidateLeaseWindow => CandidateLeaseDefaults.LeaseWindow;
+
+  private static string NewLeaseToken()
+  {
+    Span<byte> buffer = stackalloc byte[24];
+    System.Security.Cryptography.RandomNumberGenerator.Fill(buffer);
+    return Convert.ToHexString(buffer).ToLowerInvariant();
+  }
 
   public async Task SavePositionAsync(
     AutoTradePositionState state,
@@ -599,23 +776,42 @@ public sealed class StackExchangeRedisSeriesCommands :
     CancellationToken cancellationToken
   )
   {
-    var owner = tradeEvent.CandidateId
-      ?? tradeEvent.GroupId
-      ?? tradeEvent.CorrelationId
-      ?? "service";
+    var owner = tradeEvent.CandidateId ?? tradeEvent.GroupId;
     var payload = System.Text.Json.JsonSerializer.Serialize(
       tradeEvent,
       RedisJsonContext.Default.AutoTradeEvent
     );
-    var historyKey = $"auto_trade:lifecycle:{owner}";
-    await _db.ListRightPushAsync(historyKey, payload);
-    await _db.ListTrimAsync(historyKey, -100, -1);
-    await _db.KeyExpireAsync(historyKey, TimeSpan.FromDays(7));
-    await _db.StringSetAsync(
-      $"auto_trade:lifecycle_state:{owner}",
-      tradeEvent.State ?? "managing",
-      TimeSpan.FromDays(7)
-    );
+    if (!string.IsNullOrWhiteSpace(owner))
+    {
+      var historyKey = $"auto_trade:lifecycle:{owner}";
+      await _db.ListRightPushAsync(historyKey, payload);
+      await _db.ListTrimAsync(historyKey, -100, -1);
+      await _db.KeyExpireAsync(historyKey, TimeSpan.FromDays(7));
+    }
+    if (
+      tradeEvent.MutatesLifecycle
+      && !string.IsNullOrWhiteSpace(owner)
+      && !string.IsNullOrWhiteSpace(tradeEvent.State)
+    )
+    {
+      var transition = AutoTradeLifecycle.TransitionForEvent(
+        tradeEvent.Type,
+        tradeEvent.RemainingVolume
+      );
+      var record = AutoTradeLifecycle.BuildStateRecord(
+        tradeEvent,
+        owner,
+        transition?.Terminal ?? false
+      );
+      await _db.StringSetAsync(
+        $"auto_trade:lifecycle_state:{owner}",
+        System.Text.Json.JsonSerializer.Serialize(
+          record,
+          RedisJsonContext.Default.AutoTradeLifecycleStateRecord
+        ),
+        TimeSpan.FromDays(7)
+      );
+    }
     await _db.StringSetAsync(
       $"auto_trade:last_lifecycle:{tradeEvent.Symbol.ToUpperInvariant()}",
       payload
@@ -630,7 +826,10 @@ public sealed class StackExchangeRedisSeriesCommands :
       maxLength: 5000,
       useApproximateMaxLength: true
     );
-    await RecordEvaluationDimensionsAsync(tradeEvent);
+    if (tradeEvent.MutatesLifecycle)
+    {
+      await RecordEvaluationDimensionsAsync(tradeEvent);
+    }
   }
 
   private async Task RecordEvaluationDimensionsAsync(
@@ -785,7 +984,7 @@ public sealed class StackExchangeRedisSeriesCommands :
   }
 
   private static string CandidateKey(string candidateId) =>
-    $"auto_trade:executor:candidate:{candidateId}";
+    $"auto_trade:candidate:{candidateId}";
 
   private static string PositionKey(long positionId) =>
     $"auto_trade:position:{positionId}";
@@ -838,6 +1037,7 @@ internal sealed record RedisSpot(
 [JsonSerializable(typeof(AutoTradeExecutorSnapshot))]
 [JsonSerializable(typeof(AutoTradeGroupPlan))]
 [JsonSerializable(typeof(RedisClaimPayload))]
+[JsonSerializable(typeof(AutoTradeLifecycleStateRecord))]
 internal sealed partial class RedisJsonContext : JsonSerializerContext
 {
 }

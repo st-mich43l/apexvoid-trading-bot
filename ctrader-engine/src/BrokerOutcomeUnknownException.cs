@@ -1,0 +1,50 @@
+namespace ApexVoid.CTraderFeed;
+
+// Raised when a broker request may have been accepted but the executor never
+// received an authoritative answer. This is distinct from a confirmed
+// rejection and from a pre-submit failure: a blind retry could duplicate a
+// live order, so the candidate must stay in `broker_outcome_unknown` until
+// deterministic reconciliation adopts or disproves the order.
+public sealed class BrokerOutcomeUnknownException : Exception
+{
+  public BrokerOutcomeUnknownException(
+    string candidateId,
+    string clientOrderId,
+    Exception? inner = null
+  ) : base("broker outcome is unknown", inner)
+  {
+    CandidateId = candidateId;
+    ClientOrderId = clientOrderId;
+  }
+
+  public string CandidateId { get; }
+
+  public string ClientOrderId { get; }
+}
+
+// Raised when a candidate execution record violates identity invariants (for
+// example a foreign candidate ID or an unparseable record). Intake stops
+// rather than guessing whether the candidate is retryable.
+public sealed class CandidateIntegrityException : Exception
+{
+  public CandidateIntegrityException(string candidateId, string reason)
+    : base($"candidate {candidateId} integrity error: {reason}")
+  {
+    CandidateId = candidateId;
+    Reason = reason;
+  }
+
+  public string CandidateId { get; }
+
+  public string Reason { get; }
+}
+
+// How a candidate's broker interaction ended. Only `Rejected` is terminal and
+// cursor-advancing; `Unknown` always routes into reconciliation.
+public enum BrokerSideEffectOutcome
+{
+  NotAttempted,
+  Rejected,
+  Accepted,
+  Unknown,
+}
