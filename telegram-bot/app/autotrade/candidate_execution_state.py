@@ -15,6 +15,9 @@ STATE_COMPLETED = "completed"
 STATE_REJECTED = "rejected"
 STATE_RETRYABLE_ERROR = "retryable_error"
 STATE_BROKER_OUTCOME_UNKNOWN = "broker_outcome_unknown"
+# Recovery-active ownership: structurally separate from ``processing`` so a
+# crashed recovery worker can never decay into a normal retry.
+STATE_BROKER_RECONCILING = "broker_reconciling"
 STATE_DRY_RUN = "dry_run"
 STATE_FLIP_PENDING = "flip_pending"
 STATE_INTEGRITY_ERROR = "integrity_error"
@@ -28,6 +31,7 @@ EXECUTOR_COMPATIBLE_STATES = frozenset({
   STATE_REJECTED,
   STATE_RETRYABLE_ERROR,
   STATE_BROKER_OUTCOME_UNKNOWN,
+  STATE_BROKER_RECONCILING,
   STATE_DRY_RUN,
   STATE_FLIP_PENDING,
   STATE_INTEGRITY_ERROR,
@@ -38,7 +42,10 @@ RETRYABLE_STATES = frozenset({STATE_PUBLISHED, STATE_RETRYABLE_ERROR})
 
 # A broker request may have been accepted, so only deterministic broker
 # reconciliation may move the record on - never a plain retry.
-RECOVERY_REQUIRED_STATES = frozenset({STATE_BROKER_OUTCOME_UNKNOWN})
+RECOVERY_REQUIRED_STATES = frozenset({
+  STATE_BROKER_OUTCOME_UNKNOWN,
+  STATE_BROKER_RECONCILING,
+})
 
 TERMINAL_STATES = frozenset({
   STATE_ORDERED,
@@ -159,15 +166,45 @@ def parse_candidate_execution_record(raw: str | bytes | None) -> CandidateExecut
   if not isinstance(parsed, dict):
     raise ValueError("candidate execution record must be a JSON object")
 
-  version = int(parsed.get("version") or RECORD_VERSION)
-  if version < 1 or version > RECORD_VERSION:
+  # A structured record never becomes legacy or defaults missing fields:
+  # version, identity and state must be explicitly present and valid. Legacy
+  # status is determined only by the original raw value being one of the
+  # supported plain-string markers handled above.
+  required = {"version", "candidate_id", "stream_event_id", "state"}
+  missing = required - parsed.keys()
+  if missing:
+    raise ValueError(
+      "structured candidate execution record is missing required fields: "
+      + ", ".join(sorted(missing))
+    )
+
+  version = parsed["version"]
+  if isinstance(version, bool) or not isinstance(version, int):
+    raise ValueError(
+      f"structured candidate execution record version must be an integer, "
+      f"got {version!r}"
+    )
+  if version != RECORD_VERSION:
     raise ValueError(f"unsupported candidate execution record version: {version}")
-  candidate_id = str(parsed.get("candidate_id") or "")
-  stream_event_id = _coerce_optional_str(parsed.get("stream_event_id"))
-  state = str(parsed.get("state") or STATE_PUBLISHED)
+
+  raw_candidate_id = parsed["candidate_id"]
+  if raw_candidate_id is not None and not isinstance(raw_candidate_id, str):
+    raise ValueError("structured candidate_id must be a string")
+  raw_stream_event_id = parsed["stream_event_id"]
+  if raw_stream_event_id is not None and not isinstance(raw_stream_event_id, str):
+    raise ValueError("structured stream_event_id must be a string")
+
+  state = parsed["state"]
+  if not isinstance(state, str) or not state.strip():
+    raise ValueError("structured candidate execution record state is missing")
+  if state not in EXECUTOR_COMPATIBLE_STATES:
+    raise ValueError(f"unknown candidate execution record state: {state!r}")
+
+  # Empty identity parses (so callers can classify it) but is a structured
+  # conflict at compatibility time, never an implicit pass.
   return CandidateExecutionRecord(
-    candidate_id=candidate_id,
-    stream_event_id=stream_event_id,
+    candidate_id=raw_candidate_id or "",
+    stream_event_id=_coerce_optional_str(raw_stream_event_id),
     state=state,
     lease_token=_coerce_optional_str(parsed.get("lease_token")),
     lease_expires_at=_coerce_optional_int(parsed.get("lease_expires_at")),

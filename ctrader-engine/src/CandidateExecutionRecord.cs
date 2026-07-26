@@ -14,6 +14,9 @@ public static class CandidateExecutionStates
   public const string DryRun = "dry_run";
   public const string RetryableError = "retryable_error";
   public const string BrokerOutcomeUnknown = "broker_outcome_unknown";
+  // Recovery-active ownership. Structurally separate from `processing` so a
+  // crashed recovery worker can never decay into a normal retry.
+  public const string BrokerReconciling = "broker_reconciling";
 
   // Explicit categories. Retryability is never inferred from an arbitrary
   // string: an unrecognised state is a conflict, not a retry.
@@ -24,7 +27,11 @@ public static class CandidateExecutionStates
     new HashSet<string>(StringComparer.Ordinal) { Published, RetryableError };
 
   public static readonly IReadOnlySet<string> RecoveryRequired =
-    new HashSet<string>(StringComparer.Ordinal) { BrokerOutcomeUnknown };
+    new HashSet<string>(StringComparer.Ordinal)
+    {
+      BrokerOutcomeUnknown,
+      BrokerReconciling,
+    };
 
   public static readonly IReadOnlySet<string> Terminal =
     new HashSet<string>(StringComparer.Ordinal)
@@ -48,8 +55,12 @@ public static class CandidateExecutionStates
       {
         BrokerOutcomeUnknown,
       },
-      [BrokerOutcomeUnknown] = new HashSet<string>(StringComparer.Ordinal)
+      // Only the recovery-active state may hand a candidate back for a normal
+      // retry, and only after broker absence quorum. `broker_outcome_unknown`
+      // itself must first be claimed by the recovery path.
+      [BrokerReconciling] = new HashSet<string>(StringComparer.Ordinal)
       {
+        BrokerOutcomeUnknown,
         RetryableError,
       },
     };
@@ -285,12 +296,71 @@ public static class CandidateExecutionRecordParser
         IsLegacy: true
       );
     }
+    ValidateStructuredSchema(raw);
     var record = JsonSerializer.Deserialize(
       raw,
       CandidateExecutionJsonContext.Default.CandidateExecutionRecord
     ) ?? throw new InvalidOperationException("candidate execution record is invalid");
     // Structured JSON is never legacy, even when identity fields are missing.
     return record with { IsLegacy = false };
+  }
+
+  // A structured record must explicitly carry a supported integer version, an
+  // identity field pair and a known state. Nothing is defaulted: source-
+  // generated deserialisation cannot distinguish a missing integer from zero,
+  // so the JSON is inspected before parsing. Malformed structured records
+  // fail closed identically in Python, C# and Redis Lua.
+  private static void ValidateStructuredSchema(string raw)
+  {
+    using var document = JsonDocument.Parse(raw);
+    var root = document.RootElement;
+    if (root.ValueKind != JsonValueKind.Object)
+    {
+      throw new InvalidOperationException(
+        "candidate execution record must be a JSON object"
+      );
+    }
+    if (
+      !root.TryGetProperty("version", out var version)
+      || version.ValueKind != JsonValueKind.Number
+      || !version.TryGetInt32(out var parsedVersion)
+      || parsedVersion != CandidateExecutionRecord.SupportedVersion
+    )
+    {
+      throw new InvalidOperationException(
+        "structured candidate execution record version must explicitly be "
+        + CandidateExecutionRecord.SupportedVersion.ToString()
+      );
+    }
+    if (
+      !root.TryGetProperty("candidate_id", out var candidateId)
+      || candidateId.ValueKind is not (JsonValueKind.String or JsonValueKind.Null)
+    )
+    {
+      throw new InvalidOperationException(
+        "structured candidate execution record requires candidate_id"
+      );
+    }
+    if (
+      !root.TryGetProperty("stream_event_id", out var streamEventId)
+      || streamEventId.ValueKind is not (JsonValueKind.String or JsonValueKind.Null)
+    )
+    {
+      throw new InvalidOperationException(
+        "structured candidate execution record requires stream_event_id"
+      );
+    }
+    if (
+      !root.TryGetProperty("state", out var state)
+      || state.ValueKind != JsonValueKind.String
+      || string.IsNullOrWhiteSpace(state.GetString())
+      || !CandidateExecutionStates.IsKnown(state.GetString())
+    )
+    {
+      throw new InvalidOperationException(
+        "structured candidate execution record requires a known state"
+      );
+    }
   }
 
   public static CandidateExecutionRecord? TryParse(string? raw)
@@ -412,8 +482,10 @@ public static class CandidateExecutionRecordParser
   }
 }
 
+// Null fields are serialized explicitly so every structured record carries
+// the full schema (version, identity, state), exactly like the Lua and
+// Python writers. Strict readers require key presence.
 [JsonSourceGenerationOptions(
-  DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
   PropertyNamingPolicy = JsonKnownNamingPolicy.SnakeCaseLower
 )]
 [JsonSerializable(typeof(CandidateExecutionRecord))]

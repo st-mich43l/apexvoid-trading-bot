@@ -91,6 +91,7 @@ local known_states = {
   rejected = true,
   retryable_error = true,
   broker_outcome_unknown = true,
+  broker_reconciling = true,
   dry_run = true,
   flip_pending = true,
   integrity_error = true,
@@ -125,15 +126,17 @@ local function candidate_compatible(raw, candidate_id, event_id)
   local current_candidate = record['candidate_id']
   local current_event = record['stream_event_id']
   local current_state = record['state']
-  local version = tonumber(record['version']) or 1
+  -- Structured records must explicitly carry a supported version: a missing
+  -- or malformed version is never interpreted as version 1.
+  local version = tonumber(record['version'])
+  if version == nil or version ~= 1 then
+    return false
+  end
   -- Structured records require exact identity. Missing fields are a conflict.
   if type(current_candidate) ~= 'string' or current_candidate == '' then
     return false
   end
   if type(current_event) ~= 'string' or current_event == '' then
-    return false
-  end
-  if version < 1 or version > 1 then
     return false
   end
   if current_candidate ~= candidate_id then
