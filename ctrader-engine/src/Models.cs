@@ -210,7 +210,23 @@ public sealed record TradeCandidate(
   decimal? PlannedStopRawPrice = null,
   bool? PlannedStopClamped = null,
   string? StopSource = null,
-  int? StopPlanVersion = null
+  int? StopPlanVersion = null,
+  [property: JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
+  decimal? PlannedBaseStopPrice = null,
+  [property: JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
+  decimal? PlannedBaseStopPips = null,
+  [property: JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
+  decimal? PlannedFinalStopPrice = null,
+  [property: JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
+  decimal? PlannedFinalStopDistance = null,
+  [property: JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
+  decimal? PlannedFinalStopPips = null,
+  string? StopAdjustment = null,
+  string? StopAdjustmentZoneId = null,
+  [property: JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
+  decimal? StopAdjustmentZoneLow = null,
+  [property: JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
+  decimal? StopAdjustmentZoneHigh = null
 );
 
 public sealed record TradeStreamEntry(
@@ -366,7 +382,8 @@ public sealed record AutoTradeEvent(
   string? ThesisId = null,
   decimal? RiskMultiplier = null,
   string? TargetModel = null,
-  string? EntryDistribution = null
+  string? EntryDistribution = null,
+  bool MutatesLifecycle = false
 );
 
 public sealed record AutoTradeGroupPlan(

@@ -59,8 +59,24 @@ public interface IAutoTradeStore
     int count,
     CancellationToken cancellationToken
   );
-  Task<bool> TryClaimCandidateAsync(
+  Task<CandidateExecutionLease?> TryClaimCandidateAsync(
     string candidateId,
+    string streamEventId,
+    TimeSpan leaseDuration,
+    CancellationToken cancellationToken
+  );
+  Task<bool> RenewCandidateLeaseAsync(
+    string candidateId,
+    string streamEventId,
+    string leaseToken,
+    TimeSpan leaseDuration,
+    CancellationToken cancellationToken
+  );
+  Task<bool> TransitionCandidateStateAsync(
+    string candidateId,
+    string streamEventId,
+    string leaseToken,
+    string newState,
     CancellationToken cancellationToken
   );
   Task<string?> GetCandidateStatusAsync(
@@ -69,10 +85,17 @@ public interface IAutoTradeStore
   );
   Task CompleteCandidateAsync(
     string candidateId,
+    string streamEventId,
+    string leaseToken,
     string outcome,
     CancellationToken cancellationToken
   );
-  Task ReleaseCandidateAsync(string candidateId, CancellationToken cancellationToken);
+  Task<bool> ReleaseCandidateAsync(
+    string candidateId,
+    string streamEventId,
+    string leaseToken,
+    CancellationToken cancellationToken
+  );
   Task SavePositionAsync(
     AutoTradePositionState state,
     CancellationToken cancellationToken
@@ -250,13 +273,221 @@ public sealed class StackExchangeRedisSeriesCommands :
   private readonly IConnectionMultiplexer _connection;
   private readonly IDatabase _db;
   private readonly ISubscriber _subscriber;
-  private const string CandidateClaimScript = """
+  private const string CandidateAcquireScript = """
     local current = redis.call('GET', KEYS[1])
-    if (not current) or current == 'published' then
-      redis.call('SET', KEYS[1], 'processing', 'PX', ARGV[1])
-      return 1
+    local stream_event_id = ARGV[1]
+    local lease_ms = tonumber(ARGV[2])
+    local lease_token = ARGV[3]
+    local now = tonumber(ARGV[4])
+    local candidate_id = ARGV[5]
+    local expires_at = now + math.floor(lease_ms / 1000)
+
+    local function build_record(state, token, exp, outcome)
+      local outcome_json = 'null'
+      if outcome then
+        outcome_json = '"' .. outcome .. '"'
+      end
+      local token_json = 'null'
+      if token then
+        token_json = '"' .. token .. '"'
+      end
+      local exp_json = 'null'
+      if exp then
+        exp_json = tostring(exp)
+      end
+      local event_json = 'null'
+      if stream_event_id ~= '' then
+        event_json = '"' .. stream_event_id .. '"'
+      end
+      return '{"candidate_id":"' .. candidate_id .. '","stream_event_id":'
+        .. event_json .. ',"state":"' .. state .. '","lease_token":'
+        .. token_json .. ',"lease_expires_at":' .. exp_json
+        .. ',"outcome":' .. outcome_json .. ',"updated_at":' .. now
+        .. ',"version":1}'
     end
-    return 0
+
+    local function claimable(raw)
+      if not raw then
+        return true
+      end
+      if raw == 'published' then
+        return true
+      end
+      -- Legacy plain `processing` remains owned while the Redis TTL holds.
+      if raw == 'processing' then
+        return false
+      end
+      if string.sub(raw, 1, 7) == 'ordered' or string.sub(raw, 1, 9) == 'rejected:'
+        or raw == 'dry_run' then
+        return false
+      end
+      if string.sub(candidate_id, 1, 5) == 'flip:' then
+        if string.sub(raw, 1, 13) == 'flip_pending:' then
+          return false
+        end
+        local flip_outcome = string.match(raw, '"outcome"%s*:%s*"([^"]+)"')
+        if flip_outcome and string.sub(flip_outcome, 1, 13) == 'flip_pending:' then
+          return false
+        end
+        if string.sub(raw, 1, 9) == 'rejected:' then
+          return true
+        end
+        if flip_outcome and string.sub(flip_outcome, 1, 9) == 'rejected:' then
+          return true
+        end
+      end
+      local state = string.match(raw, '"state"%s*:%s*"([^"]+)"')
+      local token = string.match(raw, '"lease_token"%s*:%s*"([^"]+)"')
+      local exp = tonumber(string.match(raw, '"lease_expires_at"%s*:%s*(%d+)'))
+      local event_id = string.match(raw, '"stream_event_id"%s*:%s*"([^"]+)"')
+      if state == 'published' then
+        if stream_event_id ~= '' and event_id and event_id ~= stream_event_id then
+          return false
+        end
+        return true
+      end
+      if state == 'processing' or state == 'broker_submitting' then
+        if exp and exp <= now then
+          if stream_event_id ~= '' and event_id and event_id ~= stream_event_id then
+            return false
+          end
+          return true
+        end
+      end
+      return false
+    end
+
+    if not claimable(current) then
+      return {0, current or ''}
+    end
+
+    local record = build_record('processing', lease_token, expires_at, nil)
+    redis.call('SET', KEYS[1], record, 'PX', lease_ms)
+    return {1, record}
+    """;
+
+  private const string CandidateRenewScript = """
+    local current = redis.call('GET', KEYS[1])
+    if not current then
+      return 0
+    end
+    local stream_event_id = ARGV[1]
+    local lease_token = ARGV[2]
+    local lease_ms = tonumber(ARGV[3])
+    local now = tonumber(ARGV[4])
+    local candidate_id = ARGV[5]
+    local expires_at = now + math.floor(lease_ms / 1000)
+    local state = string.match(current, '"state"%s*:%s*"([^"]+)"')
+    local token = string.match(current, '"lease_token"%s*:%s*"([^"]+)"')
+    local event_id = string.match(current, '"stream_event_id"%s*:%s*"([^"]+)"')
+    if token ~= lease_token then
+      return 0
+    end
+    if stream_event_id ~= '' and event_id and event_id ~= stream_event_id then
+      return 0
+    end
+    if state ~= 'processing' and state ~= 'broker_submitting' then
+      return 0
+    end
+    local record = '{"candidate_id":"' .. candidate_id
+      .. '","stream_event_id":'
+      .. (stream_event_id ~= '' and ('"' .. stream_event_id .. '"') or 'null')
+      .. ',"state":"' .. state .. '","lease_token":"' .. lease_token
+      .. '","lease_expires_at":' .. expires_at
+      .. ',"outcome":null,"updated_at":' .. now .. ',"version":1}'
+    redis.call('SET', KEYS[1], record, 'PX', lease_ms)
+    return 1
+    """;
+
+  private const string CandidateTransitionScript = """
+    local current = redis.call('GET', KEYS[1])
+    if not current then
+      return 0
+    end
+    local stream_event_id = ARGV[1]
+    local lease_token = ARGV[2]
+    local new_state = ARGV[3]
+    local now = tonumber(ARGV[4])
+    local candidate_id = ARGV[5]
+    local lease_ms = tonumber(ARGV[6])
+    local token = string.match(current, '"lease_token"%s*:%s*"([^"]+)"')
+    local event_id = string.match(current, '"stream_event_id"%s*:%s*"([^"]+)"')
+    if token ~= lease_token then
+      return 0
+    end
+    if stream_event_id ~= '' and event_id and event_id ~= stream_event_id then
+      return 0
+    end
+    local record = '{"candidate_id":"' .. candidate_id
+      .. '","stream_event_id":'
+      .. (stream_event_id ~= '' and ('"' .. stream_event_id .. '"') or 'null')
+      .. ',"state":"' .. new_state .. '","lease_token":"' .. lease_token
+      .. '","lease_expires_at":'
+      .. tostring(now + math.floor(lease_ms / 1000))
+      .. ',"outcome":null,"updated_at":' .. now .. ',"version":1}'
+    redis.call('SET', KEYS[1], record, 'PX', lease_ms)
+    return 1
+    """;
+
+  private const string CandidateCompleteScript = """
+    local current = redis.call('GET', KEYS[1])
+    if not current then
+      return 0
+    end
+    local stream_event_id = ARGV[1]
+    local lease_token = ARGV[2]
+    local outcome = ARGV[3]
+    local now = tonumber(ARGV[4])
+    local candidate_id = ARGV[5]
+    local token = string.match(current, '"lease_token"%s*:%s*"([^"]+)"')
+    local event_id = string.match(current, '"stream_event_id"%s*:%s*"([^"]+)"')
+    if token and token ~= lease_token then
+      return 0
+    end
+    if stream_event_id ~= '' and event_id and event_id ~= stream_event_id then
+      return 0
+    end
+    local state = 'completed'
+    if string.sub(outcome, 1, 8) == 'ordered:' then
+      state = 'ordered'
+    elseif string.sub(outcome, 1, 9) == 'rejected:' then
+      state = 'rejected'
+    elseif string.sub(outcome, 1, 13) == 'flip_pending:' then
+      state = 'completed'
+    end
+    local record = '{"candidate_id":"' .. candidate_id
+      .. '","stream_event_id":'
+      .. (stream_event_id ~= '' and ('"' .. stream_event_id .. '"') or 'null')
+      .. ',"state":"' .. state .. '","lease_token":null,"lease_expires_at":null,"outcome":"'
+      .. outcome .. '","updated_at":' .. now .. ',"version":1}'
+    redis.call('SET', KEYS[1], record, 'EX', 604800)
+    return 1
+    """;
+
+  private const string CandidateReleaseScript = """
+    local current = redis.call('GET', KEYS[1])
+    if not current then
+      return 0
+    end
+    local stream_event_id = ARGV[1]
+    local lease_token = ARGV[2]
+    local now = tonumber(ARGV[3])
+    local candidate_id = ARGV[4]
+    local token = string.match(current, '"lease_token"%s*:%s*"([^"]+)"')
+    local event_id = string.match(current, '"stream_event_id"%s*:%s*"([^"]+)"')
+    if token ~= lease_token then
+      return 0
+    end
+    if stream_event_id ~= '' and event_id and event_id ~= stream_event_id then
+      return 0
+    end
+    local record = '{"candidate_id":"' .. candidate_id
+      .. '","stream_event_id":'
+      .. (stream_event_id ~= '' and ('"' .. stream_event_id .. '"') or 'null')
+      .. ',"state":"retryable_error","lease_token":null,"lease_expires_at":null,"outcome":null,"updated_at":'
+      .. now .. ',"version":1}'
+    redis.call('SET', KEYS[1], record, 'EX', 604800)
+    return 1
     """;
 
   private StackExchangeRedisSeriesCommands(IConnectionMultiplexer connection)
@@ -383,18 +614,89 @@ public sealed class StackExchangeRedisSeriesCommands :
     )).Where(entry => !string.IsNullOrWhiteSpace(entry.Payload)).ToArray();
   }
 
-  public async Task<bool> TryClaimCandidateAsync(
+  public async Task<CandidateExecutionLease?> TryClaimCandidateAsync(
     string candidateId,
+    string streamEventId,
+    TimeSpan leaseDuration,
     CancellationToken cancellationToken
   )
   {
+    var token = Guid.NewGuid().ToString("N");
+    var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
     var result = await _db.ScriptEvaluateAsync(
-      CandidateClaimScript,
+      CandidateAcquireScript,
       [CandidateKey(candidateId)],
-      // Broker acknowledgements and reconnect adoption can exceed 30s.
-      // Keep the processing lease beyond the normal broker-response window
-      // so a replay cannot create a second initial order.
-      [120_000]
+      [
+        streamEventId,
+        (long)leaseDuration.TotalMilliseconds,
+        token,
+        now,
+        candidateId,
+      ]
+    );
+    if (result.IsNull || result.Resp2Type != ResultType.Array)
+    {
+      return null;
+    }
+    var items = (RedisResult[])result!;
+    if (items.Length < 2 || (long)items[0] != 1)
+    {
+      return null;
+    }
+    var expiresAt = DateTimeOffset.FromUnixTimeSeconds(
+      now + (long)leaseDuration.TotalSeconds
+    );
+    return new CandidateExecutionLease(
+      candidateId,
+      streamEventId,
+      token,
+      expiresAt
+    );
+  }
+
+  public async Task<bool> RenewCandidateLeaseAsync(
+    string candidateId,
+    string streamEventId,
+    string leaseToken,
+    TimeSpan leaseDuration,
+    CancellationToken cancellationToken
+  )
+  {
+    var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+    var result = await _db.ScriptEvaluateAsync(
+      CandidateRenewScript,
+      [CandidateKey(candidateId)],
+      [
+        streamEventId,
+        leaseToken,
+        (long)leaseDuration.TotalMilliseconds,
+        now,
+        candidateId,
+      ]
+    );
+    return (long)result == 1;
+  }
+
+  public async Task<bool> TransitionCandidateStateAsync(
+    string candidateId,
+    string streamEventId,
+    string leaseToken,
+    string newState,
+    CancellationToken cancellationToken
+  )
+  {
+    var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+    var result = await _db.ScriptEvaluateAsync(
+      CandidateTransitionScript,
+      [CandidateKey(candidateId)],
+      [
+        streamEventId,
+        leaseToken,
+        newState,
+        now,
+        candidateId,
+        (long)TimeSpan.FromMinutes(2).TotalMilliseconds,
+      ]
     );
     return (long)result == 1;
   }
@@ -405,23 +707,42 @@ public sealed class StackExchangeRedisSeriesCommands :
   )
   {
     var value = await _db.StringGetAsync(CandidateKey(candidateId));
-    return value.HasValue ? value.ToString() : null;
+    return value.HasValue
+      ? CandidateExecutionRecordParser.LegacyStatus(value.ToString())
+      : null;
   }
 
-  public Task CompleteCandidateAsync(
+  public async Task CompleteCandidateAsync(
     string candidateId,
+    string streamEventId,
+    string leaseToken,
     string outcome,
     CancellationToken cancellationToken
-  ) => _db.StringSetAsync(
-    CandidateKey(candidateId),
-    outcome,
-    TimeSpan.FromDays(7)
-  );
+  )
+  {
+    var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+    await _db.ScriptEvaluateAsync(
+      CandidateCompleteScript,
+      [CandidateKey(candidateId)],
+      [streamEventId, leaseToken, outcome, now, candidateId]
+    );
+  }
 
-  public Task ReleaseCandidateAsync(
+  public async Task<bool> ReleaseCandidateAsync(
     string candidateId,
+    string streamEventId,
+    string leaseToken,
     CancellationToken cancellationToken
-  ) => _db.KeyDeleteAsync(CandidateKey(candidateId));
+  )
+  {
+    var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+    var result = await _db.ScriptEvaluateAsync(
+      CandidateReleaseScript,
+      [CandidateKey(candidateId)],
+      [streamEventId, leaseToken, now, candidateId]
+    );
+    return (long)result == 1;
+  }
 
   public async Task SavePositionAsync(
     AutoTradePositionState state,
@@ -599,23 +920,42 @@ public sealed class StackExchangeRedisSeriesCommands :
     CancellationToken cancellationToken
   )
   {
-    var owner = tradeEvent.CandidateId
-      ?? tradeEvent.GroupId
-      ?? tradeEvent.CorrelationId
-      ?? "service";
+    var owner = tradeEvent.CandidateId ?? tradeEvent.GroupId;
     var payload = System.Text.Json.JsonSerializer.Serialize(
       tradeEvent,
       RedisJsonContext.Default.AutoTradeEvent
     );
-    var historyKey = $"auto_trade:lifecycle:{owner}";
-    await _db.ListRightPushAsync(historyKey, payload);
-    await _db.ListTrimAsync(historyKey, -100, -1);
-    await _db.KeyExpireAsync(historyKey, TimeSpan.FromDays(7));
-    await _db.StringSetAsync(
-      $"auto_trade:lifecycle_state:{owner}",
-      tradeEvent.State ?? "managing",
-      TimeSpan.FromDays(7)
-    );
+    if (!string.IsNullOrWhiteSpace(owner))
+    {
+      var historyKey = $"auto_trade:lifecycle:{owner}";
+      await _db.ListRightPushAsync(historyKey, payload);
+      await _db.ListTrimAsync(historyKey, -100, -1);
+      await _db.KeyExpireAsync(historyKey, TimeSpan.FromDays(7));
+    }
+    if (
+      tradeEvent.MutatesLifecycle
+      && !string.IsNullOrWhiteSpace(owner)
+      && !string.IsNullOrWhiteSpace(tradeEvent.State)
+    )
+    {
+      var transition = AutoTradeLifecycle.TransitionForEvent(
+        tradeEvent.Type,
+        tradeEvent.RemainingVolume
+      );
+      var record = AutoTradeLifecycle.BuildStateRecord(
+        tradeEvent,
+        owner,
+        transition?.Terminal ?? false
+      );
+      await _db.StringSetAsync(
+        $"auto_trade:lifecycle_state:{owner}",
+        System.Text.Json.JsonSerializer.Serialize(
+          record,
+          RedisJsonContext.Default.AutoTradeLifecycleStateRecord
+        ),
+        TimeSpan.FromDays(7)
+      );
+    }
     await _db.StringSetAsync(
       $"auto_trade:last_lifecycle:{tradeEvent.Symbol.ToUpperInvariant()}",
       payload
@@ -630,7 +970,10 @@ public sealed class StackExchangeRedisSeriesCommands :
       maxLength: 5000,
       useApproximateMaxLength: true
     );
-    await RecordEvaluationDimensionsAsync(tradeEvent);
+    if (tradeEvent.MutatesLifecycle)
+    {
+      await RecordEvaluationDimensionsAsync(tradeEvent);
+    }
   }
 
   private async Task RecordEvaluationDimensionsAsync(
@@ -785,7 +1128,7 @@ public sealed class StackExchangeRedisSeriesCommands :
   }
 
   private static string CandidateKey(string candidateId) =>
-    $"auto_trade:executor:candidate:{candidateId}";
+    $"auto_trade:candidate:{candidateId}";
 
   private static string PositionKey(long positionId) =>
     $"auto_trade:position:{positionId}";
@@ -838,6 +1181,7 @@ internal sealed record RedisSpot(
 [JsonSerializable(typeof(AutoTradeExecutorSnapshot))]
 [JsonSerializable(typeof(AutoTradeGroupPlan))]
 [JsonSerializable(typeof(RedisClaimPayload))]
+[JsonSerializable(typeof(AutoTradeLifecycleStateRecord))]
 internal sealed partial class RedisJsonContext : JsonSerializerContext
 {
 }

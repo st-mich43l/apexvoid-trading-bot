@@ -186,6 +186,7 @@ class Settings(BaseSettings):
   auto_trade_canonical_symbol: str = "XAU"
   auto_trade_sl_distance: float = 6.5
   auto_trade_add_stop_buffer_atr: float = 0.3
+  auto_trade_stop_push_beyond_zone: bool = True
   auto_trade_add_min_stop_pips: int = 30
   auto_trade_wick_stop_buffer_atr: float = 0.15
   auto_trade_trend_stop_min_pips: int = 40

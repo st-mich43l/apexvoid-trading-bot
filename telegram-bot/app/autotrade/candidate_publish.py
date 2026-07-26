@@ -6,9 +6,11 @@ from dataclasses import dataclass
 import json
 import logging
 import secrets
+import time
 from typing import Any, Iterator
 
 from app.autotrade.arbitration import CandidatePublicationResult, ExecutionIntent
+from app.autotrade.candidate_execution_state import published_candidate_record
 
 
 log = logging.getLogger(__name__)
@@ -42,7 +44,11 @@ end
 local event_id = redis.call(
   'XADD', KEYS[2], 'MAXLEN', '~', ARGV[2], '*', 'payload', ARGV[3]
 )
-redis.call('SET', KEYS[1], 'published', 'EX', ARGV[1])
+local published = '{"candidate_id":"' .. ARGV[13] .. '","stream_event_id":"'
+  .. event_id .. '","state":"published","lease_token":null,'
+  .. '"lease_expires_at":null,"outcome":null,"updated_at":'
+  .. ARGV[14] .. ',"version":1}'
+redis.call('SET', KEYS[1], published, 'EX', ARGV[1])
 redis.call('SET', KEYS[3], event_id, 'EX', ARGV[1])
 if KEYS[4] ~= '' then
   if tonumber(ARGV[10]) > 0 then
@@ -76,39 +82,100 @@ return 0
 """
 
 _RECONCILE_PUBLICATION_LUA = """
-local function restore(key, expected, value, ttl)
+local function candidate_compatible(raw, candidate_id, event_id)
+  if raw == false then
+    return true
+  end
+  if raw == 'published' or raw == 'processing' or raw == 'dry_run' then
+    return true
+  end
+  if string.sub(raw, 1, 8) == 'ordered:' then
+    return true
+  end
+  if string.sub(raw, 1, 9) == 'rejected:' then
+    return true
+  end
+  if string.sub(raw, 1, 13) == 'flip_pending:' then
+    return true
+  end
+  local current_candidate = string.match(raw, '"candidate_id"%s*:%s*"([^"]+)"')
+  local current_event = string.match(raw, '"stream_event_id"%s*:%s*"([^"]+)"')
+  local current_state = string.match(raw, '"state"%s*:%s*"([^"]+)"')
+  if current_candidate and current_candidate ~= candidate_id then
+    return false
+  end
+  if current_event and event_id ~= '' and current_event ~= event_id then
+    return false
+  end
+  if current_state == 'published'
+    or current_state == 'processing'
+    or current_state == 'broker_submitting'
+    or current_state == 'ordered'
+    or current_state == 'completed'
+    or current_state == 'rejected'
+    or current_state == 'retryable_error'
+    or current_state == 'broker_outcome_unknown' then
+    return true
+  end
+  return false
+end
+
+local function validate_claim(key, expected, value, actual)
   if key == '' then
     return true
   end
-  local current = redis.call('GET', key)
-  if current ~= false and current ~= expected and current ~= value then
-    return false
+  if actual == false then
+    return true
   end
-  if current == false or (current == expected and current ~= value) then
-    if tonumber(ttl) > 0 then
-      redis.call('SET', key, value, 'EX', ttl)
-    else
-      redis.call('SET', key, value)
-    end
+  if actual == expected or actual == value then
+    return true
+  end
+  return false
+end
+
+local candidate_id = ARGV[12]
+local event_id = ARGV[2]
+local published = ARGV[13]
+
+local candidate_current = redis.call('GET', KEYS[1])
+if not candidate_compatible(candidate_current, candidate_id, event_id) then
+  return 2
+end
+if not validate_claim(KEYS[2], event_id, event_id, redis.call('GET', KEYS[2])) then
+  return 2
+end
+if not validate_claim(KEYS[3], ARGV[3], ARGV[4], redis.call('GET', KEYS[3])) then
+  return 2
+end
+if not validate_claim(KEYS[4], ARGV[6], ARGV[7], redis.call('GET', KEYS[4])) then
+  return 2
+end
+if not validate_claim(KEYS[5], ARGV[9], ARGV[10], redis.call('GET', KEYS[5])) then
+  return 2
+end
+
+local function restore_missing(key, value, ttl)
+  if key == '' then
+    return true
+  end
+  if redis.call('GET', key) ~= false then
+    return true
+  end
+  if tonumber(ttl) > 0 then
+    redis.call('SET', key, value, 'EX', ttl)
+  else
+    redis.call('SET', key, value)
   end
   return true
 end
 
-if not restore(KEYS[1], 'published', 'published', ARGV[1]) then
-  return 2
+if candidate_current == false then
+  redis.call('SET', KEYS[1], published, 'EX', ARGV[1])
 end
-if not restore(KEYS[2], ARGV[2], ARGV[2], ARGV[1]) then
-  return 2
-end
-if not restore(KEYS[3], ARGV[3], ARGV[4], ARGV[5]) then
-  return 2
-end
-if not restore(KEYS[4], ARGV[6], ARGV[7], ARGV[8]) then
-  return 2
-end
-if not restore(KEYS[5], ARGV[9], ARGV[10], ARGV[11]) then
-  return 2
-end
+restore_missing(KEYS[2], event_id, ARGV[1])
+restore_missing(KEYS[3], ARGV[4], ARGV[5])
+restore_missing(KEYS[4], ARGV[7], ARGV[8])
+restore_missing(KEYS[5], ARGV[10], ARGV[11])
 return 1
 """
 
@@ -322,6 +389,7 @@ async def publish_candidate_atomic(
     ownership_ttl=int(ownership_ttl),
   )
   payload = _payload_with_publication_ownership(payload, recovery)
+  updated_at = int(time.time())
   try:
     result = await client.eval(
       _PUBLISH_CANDIDATE_LUA,
@@ -344,6 +412,8 @@ async def publish_candidate_atomic(
       int(reaction_ttl),
       int(thesis_ttl),
       int(ownership_ttl),
+      candidate_id,
+      updated_at,
     )
     if isinstance(result, (list, tuple)) and result:
       try:
@@ -480,7 +550,16 @@ async def publish_candidate_atomic(
         await rollback_claims()
         return AtomicPublishResult(False, conflict_status, None)
     claimed_keys.append((claim_key, normalized, int(prior_ttl)))
-  claimed = await client.set(key, "published", ex=ttl, nx=True)
+  claimed = await client.set(
+    key,
+    published_candidate_record(
+      candidate_id=candidate_id,
+      stream_event_id="pending",
+      updated_at=int(time.time()),
+    ),
+    ex=ttl,
+    nx=True,
+  )
   if not claimed:
     await rollback_claims()
     return AtomicPublishResult(False, "duplicate_candidate", None)
@@ -495,6 +574,15 @@ async def publish_candidate_atomic(
       raw_event_id.decode()
       if isinstance(raw_event_id, bytes)
       else str(raw_event_id)
+    )
+    await client.set(
+      key,
+      published_candidate_record(
+        candidate_id=candidate_id,
+        stream_event_id=event_id,
+        updated_at=int(time.time()),
+      ),
+      ex=ttl,
     )
     await client.set(event_key, event_id, ex=ttl)
     return AtomicPublishResult(True, "published", event_id)
@@ -600,6 +688,12 @@ async def reconcile_candidate_publication(
       ownership.expected_ownership_payload,
       ownership.ownership_payload,
       ownership.ownership_ttl,
+      ownership.candidate_id,
+      published_candidate_record(
+        candidate_id=ownership.candidate_id,
+        stream_event_id=event_id,
+        updated_at=int(time.time()),
+      ),
     )
   except Exception:
     await _mark_atomic_readiness(

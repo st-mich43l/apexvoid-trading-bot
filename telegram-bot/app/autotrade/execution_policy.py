@@ -8,6 +8,7 @@ from typing import Any
 
 from app.autotrade.protective_stop import (
   ProtectiveStopError,
+  opposing_zone_context_from_values,
   plan_protective_stop,
   stop_bounds_for_strategy,
 )
@@ -374,6 +375,9 @@ def evaluate_execution_policy(
   regime: str | None,
   pip_size: float,
   cfg: Any | None = None,
+  opposing_zone_low: float | None = None,
+  opposing_zone_high: float | None = None,
+  opposing_zone_id: str | None = None,
 ) -> ExecutionPolicyEvaluation:
   """Enforce every declared setup policy before candidate publication."""
   try:
@@ -455,6 +459,33 @@ def evaluate_execution_policy(
       "sweep_low" if direction == "BUY" else "sweep_high",
       None,
     )
+    zone_low = (
+      opposing_zone_low
+      if opposing_zone_low is not None
+      else getattr(match, "opposing_zone_low", None)
+    )
+    zone_high = (
+      opposing_zone_high
+      if opposing_zone_high is not None
+      else getattr(match, "opposing_zone_high", None)
+    )
+    zone_id = (
+      opposing_zone_id
+      if opposing_zone_id is not None
+      else getattr(match, "opposing_zone_id", None)
+      or getattr(match, "zone_id", None)
+    )
+    opposing_zone = opposing_zone_context_from_values(
+      opposing_zone_low=zone_low,
+      opposing_zone_high=zone_high,
+      opposing_zone_id=(
+        str(zone_id) if zone_id is not None else None
+      ),
+      direction=direction,
+      atr=atr,
+      pip_size=pip,
+      cfg=cfg,
+    )
     stop_plan = plan_protective_stop(
       direction=direction,
       entry_price=planned_entry,
@@ -471,12 +502,13 @@ def evaluate_execution_policy(
       maximum_stop_pips=maximum_stop_pips,
       pip_size=pip,
       digits=int(getattr(cfg, "auto_trade_xau_price_digits", 2)),
+      opposing_zone=opposing_zone,
     )
   except ProtectiveStopError as exc:
     stop_plan_error = str(exc)
   reward_risk = (
-    max(0.0, remaining_pips) / float(stop_plan.stop_pips)
-    if stop_plan is not None and stop_plan.stop_pips > 0
+    max(0.0, remaining_pips) / float(stop_plan.final_stop_pips)
+    if stop_plan is not None and stop_plan.final_stop_pips > 0
     else 0.0
   )
   raw_risk_multiplier = getattr(match, "risk_multiplier", 1.0)
@@ -524,11 +556,7 @@ def evaluate_execution_policy(
     "permitted_regimes": list(policy.permitted_regimes),
   }
   if stop_plan is not None:
-    measured.update(stop_plan.candidate_fields(
-      entry_price=stop_plan.stop_price + stop_plan.distance
-      if direction == "BUY"
-      else stop_plan.stop_price - stop_plan.distance,
-    ))
+    measured.update(stop_plan.candidate_fields(entry_price=stop_plan.entry_price))
   if (
     direction not in {"BUY", "SELL"}
     or not all(math.isfinite(value) for value in (spot_price, low, high))
@@ -550,6 +578,8 @@ def evaluate_execution_policy(
       (
         "stop_exceeds_envelope_after_wick"
         if stop_plan_error == "stop_exceeds_envelope_after_wick"
+        else "stop_inside_opposing_zone"
+        if stop_plan_error == "stop_inside_opposing_zone"
         else "protective_stop_unavailable"
       ),
       stop_plan_error or "protective stop could not be planned",

@@ -237,6 +237,15 @@ _STOP_CONTRACT_FIELDS = (
   "planned_stop_clamped",
   "stop_source",
   "stop_plan_version",
+  "planned_base_stop_price",
+  "planned_base_stop_pips",
+  "planned_final_stop_price",
+  "planned_final_stop_distance",
+  "planned_final_stop_pips",
+  "stop_adjustment",
+  "stop_adjustment_zone_id",
+  "stop_adjustment_zone_low",
+  "stop_adjustment_zone_high",
 )
 
 
@@ -1676,6 +1685,21 @@ def _resolve_overlap_thesis(
   )
 
 
+def _opposing_zone_policy_kwargs(
+  zone: Zone | None,
+  *,
+  atr: float,
+  pip_size: float,
+) -> dict[str, float | str | None]:
+  if zone is None:
+    return {}
+  return {
+    "opposing_zone_low": float(zone.low),
+    "opposing_zone_high": float(zone.high),
+    "opposing_zone_id": getattr(zone, "zone_id", None) or zone.kind,
+  }
+
+
 def _nearest_directional_zone(
   direction: str,
   entry_reference: float,
@@ -2544,6 +2568,11 @@ async def _publish_candidate(
     regime=regime.state if regime is not None else "chop",
     pip_size=units.pip_size(symbol),
     cfg=settings,
+    **_opposing_zone_policy_kwargs(
+      opposing_zone,
+      atr=scale_context.atr,
+      pip_size=units.pip_size(symbol),
+    ),
   )
   if not range_policy.allowed:
     await _record_gate_reject(
@@ -3042,12 +3071,20 @@ async def _publish_strategy_match(
     )
     return None
 
+  strategy_opposing_zone = _nearest_directional_zone(
+    match.direction, spot.price, htf_zones or [],
+  )
   policy_evaluation = evaluate_execution_policy(
     match,
     spot_price=_executable_spot_price(spot, match.direction),
     regime=None if regime is None else regime.state,
     pip_size=units.pip_size(symbol),
     cfg=settings,
+    **_opposing_zone_policy_kwargs(
+      strategy_opposing_zone,
+      atr=match.atr,
+      pip_size=units.pip_size(symbol),
+    ),
   )
   if not policy_evaluation.allowed:
     status = "blocked" if policy_evaluation.terminal else "waiting"
@@ -3584,6 +3621,15 @@ async def _publish_strategy_match(
     "entry_distribution": policy_evaluation.measured.get(
       "entry_distribution", "single",
     ),
+    "opposing_zone_low": (
+      None if strategy_opposing_zone is None else strategy_opposing_zone.low
+    ),
+    "opposing_zone_high": (
+      None if strategy_opposing_zone is None else strategy_opposing_zone.high
+    ),
+    "add_zone_side": (
+      None if strategy_opposing_zone is None else strategy_opposing_zone.side
+    ),
     **_stop_contract_fields(policy_evaluation.measured),
   }
 
@@ -3802,6 +3848,10 @@ async def _publish_trend_candidate(
 
   trend_setup = _TREND_SETUP_LABELS[trend_decision.mode]
   trend_tier = "A" if trend_decision.confluence >= 3 else "B"
+  entry_reference = spot.price
+  opposing_zone = _nearest_directional_zone(
+    trend_decision.direction, entry_reference, htf_zones or [],
+  )
   absolute_target = (
     max(trend_decision.target_prices)
     if trend_decision.direction == "BUY" and trend_decision.target_prices
@@ -3833,6 +3883,11 @@ async def _publish_trend_candidate(
     regime=regime.state,
     pip_size=units.pip_size(symbol),
     cfg=settings,
+    **_opposing_zone_policy_kwargs(
+      opposing_zone,
+      atr=trend_decision.atr,
+      pip_size=units.pip_size(symbol),
+    ),
   )
   if not trend_policy.allowed:
     await _record_private_route(
@@ -3854,10 +3909,6 @@ async def _publish_trend_candidate(
     )
     return None
 
-  entry_reference = spot.price
-  opposing_zone = _nearest_directional_zone(
-    trend_decision.direction, entry_reference, htf_zones or [],
-  )
   guard_mode = resolve_guard_mode(settings)
   if settings.auto_trade_htf_veto_enabled:
     veto_reason = _htf_veto_reason(

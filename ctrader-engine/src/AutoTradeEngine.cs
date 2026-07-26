@@ -35,6 +35,8 @@ public sealed class AutoTradeEngine(
   private bool _accountSupportsHedging;
   private volatile bool _ready;
   private volatile bool _disabled;
+  private CandidateExecutionLease? _activeLease;
+  private static readonly TimeSpan CandidateLeaseDuration = TimeSpan.FromMinutes(2);
 
   private sealed record StructuralRouteIdentity(
     string? StructuralSource,
@@ -359,7 +361,22 @@ public sealed class AutoTradeEngine(
       reactionId: candidate.ReactionId,
       thesisId: candidate.ThesisId
     );
-    if (!await store.TryClaimCandidateAsync(candidate.CandidateId, cancellationToken))
+    var lease = await store.TryClaimCandidateAsync(
+      candidate.CandidateId,
+      entry.Id,
+      CandidateLeaseDuration,
+      cancellationToken
+    );
+    if (
+      lease is null
+      || !await store.RenewCandidateLeaseAsync(
+        lease.CandidateId,
+        lease.StreamEventId,
+        lease.Token,
+        CandidateLeaseDuration,
+        cancellationToken
+      )
+    )
     {
       var status = await store.GetCandidateStatusAsync(
         candidate.CandidateId,
@@ -372,6 +389,7 @@ public sealed class AutoTradeEngine(
       );
       return !string.Equals(status, "processing", StringComparison.Ordinal);
     }
+    _activeLease = lease;
     try
     {
       var advance = await WithGateAsync(
@@ -386,12 +404,12 @@ public sealed class AutoTradeEngine(
     }
     catch (AutoTradeConfigurationException)
     {
-      await store.ReleaseCandidateAsync(candidate.CandidateId, cancellationToken);
+      await ReleaseActiveCandidateAsync(cancellationToken);
       throw;
     }
     catch (Exception exception) when (exception is not OperationCanceledException)
     {
-      await store.ReleaseCandidateAsync(candidate.CandidateId, cancellationToken);
+      await ReleaseActiveCandidateAsync(cancellationToken);
       await store.IncrementMetricAsync(
         candidate.Symbol,
         "lifecycle_error",
@@ -411,6 +429,10 @@ public sealed class AutoTradeEngine(
         );
       }
       return false;
+    }
+    finally
+    {
+      _activeLease = null;
     }
   }
 
@@ -1095,8 +1117,7 @@ public sealed class AutoTradeEngine(
       if (existing is not null)
       {
         await AdoptPositionAsync(existing, cancellationToken);
-        await store.CompleteCandidateAsync(
-          candidate.CandidateId,
+        await CompleteActiveCandidateAsync(
           $"ordered:{existing.PositionId}",
           cancellationToken
         );
@@ -1111,8 +1132,7 @@ public sealed class AutoTradeEngine(
     );
     if (existingPending is not null)
     {
-      await store.CompleteCandidateAsync(
-        candidate.CandidateId,
+      await CompleteActiveCandidateAsync(
         $"ordered:{existingPending.OrderId}",
         cancellationToken
       );
@@ -1221,46 +1241,15 @@ public sealed class AutoTradeEngine(
           cancellationToken
         );
       }
-      return await RejectAsync(candidate, exception.Message, cancellationToken);
-    }
-    // An explicitly linked trend candidate may use a pullback stop rather
-    // than this initial structure stop, so its opposing-zone guard belongs
-    // to ProcessAddAsync after the add mode is selected.
-    var deferStopGuardToAddPath = !string.IsNullOrWhiteSpace(
-      candidate.ParentGroupId
-    );
-    if (!deferStopGuardToAddPath)
-    {
-      var (guardedStopPlan, stopRejectReason, stopNotice) = ApplyOpposingZoneGuard(
-        candidate,
-        direction,
-        expectedEntry,
-        stopPlan,
-        symbol
-      );
-      if (stopRejectReason is not null)
+      else if (exception.Message == "stop_inside_opposing_zone")
       {
         await store.IncrementGateRejectAsync(
           candidate.Symbol,
           "stop_in_opposing_zone",
           cancellationToken
         );
-        return await RejectAsync(candidate, stopRejectReason, cancellationToken);
       }
-      stopPlan = guardedStopPlan;
-      if (stopNotice is not null)
-      {
-        await PublishAsync(
-          "warning",
-          stopNotice,
-          cancellationToken,
-          candidate.CandidateId,
-          setup: candidate.Setup,
-          regime: candidate.Regime,
-          confluence: candidate.Confluence,
-          stopPips: stopPlan.StopPips
-        );
-      }
+      return await RejectAsync(candidate, exception.Message, cancellationToken);
     }
     decimal? boxTargetPips = null;
     if (boxRangeScalp)
@@ -1275,13 +1264,23 @@ public sealed class AutoTradeEngine(
       }
     }
     if (
-      boxTargetPips is decimal rewardPips
-      && rewardPips / stopPlan.StopPips < options.BoxMinRiskReward
+      !IsManualAlgoCandidate(candidate)
+      && string.IsNullOrWhiteSpace(candidate.ParentGroupId)
+      && !ValidateInitialRewardRisk(
+        candidate,
+        direction,
+        expectedEntry,
+        stopPlan,
+        boxTargetPips
+      )
     )
     {
+      var minRewardRisk = ResolveMinRewardRisk(candidate);
       return await RejectAsync(
         candidate,
-        $"range-box reward/risk below {options.BoxMinRiskReward:0.##}",
+        boxRangeScalp
+          ? $"range-box reward/risk below {options.BoxMinRiskReward:0.##}"
+          : $"reward/risk below {minRewardRisk:0.##}",
         cancellationToken
       );
     }
@@ -1323,8 +1322,7 @@ public sealed class AutoTradeEngine(
           "executor_duplicate_reaction_rejected",
           cancellationToken
         );
-        await store.CompleteCandidateAsync(
-          candidate.CandidateId,
+        await CompleteActiveCandidateAsync(
           "already_processed:duplicate_reaction_active",
           cancellationToken
         );
@@ -1341,8 +1339,7 @@ public sealed class AutoTradeEngine(
           "executor_duplicate_thesis_rejected",
           cancellationToken
         );
-        await store.CompleteCandidateAsync(
-          candidate.CandidateId,
+        await CompleteActiveCandidateAsync(
           "already_processed:active_thesis_group",
           cancellationToken
         );
@@ -1363,8 +1360,7 @@ public sealed class AutoTradeEngine(
           "executor_duplicate_group_rejected",
           cancellationToken
         );
-        await store.CompleteCandidateAsync(
-          candidate.CandidateId,
+        await CompleteActiveCandidateAsync(
           "already_processed:active_initial_group",
           cancellationToken
         );
@@ -1845,6 +1841,10 @@ public sealed class AutoTradeEngine(
       entryDistribution: "single"
     );
     await SaveGroupPlanAsync(candidate, groupId, cancellationToken);
+    if (!await EnsureBrokerLeaseAsync(cancellationToken))
+    {
+      return await RejectAsync(candidate, "candidate lease lost", cancellationToken);
+    }
     long orderId;
     try
     {
@@ -1864,11 +1864,11 @@ public sealed class AutoTradeEngine(
     }
     catch
     {
+      await MarkBrokerOutcomeUnknownAsync(CancellationToken.None);
       await DeleteGroupPlanAsync(groupId, CancellationToken.None);
       throw;
     }
-    await store.CompleteCandidateAsync(
-      candidate.CandidateId,
+    await CompleteActiveCandidateAsync(
       $"ordered:{orderId}",
       cancellationToken
     );
@@ -2112,6 +2112,11 @@ public sealed class AutoTradeEngine(
       cancellationToken
     );
     await SaveGroupPlanAsync(candidate, groupId, cancellationToken);
+    if (!await EnsureBrokerLeaseAsync(cancellationToken))
+    {
+      await DeleteGroupPlanAsync(groupId, CancellationToken.None);
+      return await RejectAsync(candidate, "candidate lease lost", cancellationToken);
+    }
     try
     {
       foreach (var leg in plan.Legs)
@@ -2141,6 +2146,7 @@ public sealed class AutoTradeEngine(
     }
     catch
     {
+      await MarkBrokerOutcomeUnknownAsync(CancellationToken.None);
       try
       {
         await RollbackZoneFillAsync(
@@ -2155,8 +2161,7 @@ public sealed class AutoTradeEngine(
       }
       throw;
     }
-    await store.CompleteCandidateAsync(
-      candidate.CandidateId,
+    await CompleteActiveCandidateAsync(
       $"ordered:{string.Join(',', placed)}",
       cancellationToken
     );
@@ -2486,6 +2491,10 @@ public sealed class AutoTradeEngine(
       expiresAt
     );
     await SaveGroupPlanAsync(candidate, groupId, cancellationToken);
+    if (!await EnsureBrokerLeaseAsync(cancellationToken))
+    {
+      return await RejectAsync(candidate, "candidate lease lost", cancellationToken);
+    }
     long orderId;
     try
     {
@@ -2505,11 +2514,11 @@ public sealed class AutoTradeEngine(
     }
     catch
     {
+      await MarkBrokerOutcomeUnknownAsync(CancellationToken.None);
       await DeleteGroupPlanAsync(groupId, CancellationToken.None);
       throw;
     }
-    await store.CompleteCandidateAsync(
-      candidate.CandidateId,
+    await CompleteActiveCandidateAsync(
       $"ordered:{orderId}",
       cancellationToken
     );
@@ -2609,25 +2618,7 @@ public sealed class AutoTradeEngine(
     {
       rawStopPlan = stopPlan;
     }
-    var (guardedStopPlan, stopRejectReason, stopNotice) = ApplyOpposingZoneGuard(
-      candidate, direction, expectedEntry, rawStopPlan, symbol
-    );
-    if (stopRejectReason is not null)
-    {
-      await store.IncrementAddRejectAsync(
-        candidate.Symbol, mode, "stop_in_opposing_zone", cancellationToken
-      );
-      return await RejectAsync(candidate, stopRejectReason, cancellationToken);
-    }
-    stopPlan = guardedStopPlan;
-    if (stopNotice is not null)
-    {
-      await PublishAsync(
-        "warning", stopNotice, cancellationToken, candidate.CandidateId,
-        setup: candidate.Setup, regime: candidate.Regime,
-        confluence: candidate.Confluence, stopPips: stopPlan.StopPips
-      );
-    }
+    stopPlan = rawStopPlan;
     var groupBooked = GroupBookedPnl(group);
     // AUTO_TRADE_ADD_SIZE_RATIO only constrains pullback tranches - momentum
     // keeps ScaleInPlanner's existing exposure/risk/add-cap sizing exactly
@@ -2844,6 +2835,10 @@ public sealed class AutoTradeEngine(
       "order_submitted",
       cancellationToken
     );
+    if (!await EnsureBrokerLeaseAsync(cancellationToken))
+    {
+      return await RejectAsync(candidate, "candidate lease lost", cancellationToken);
+    }
     var execution = await client.PlaceMarketOrderAsync(
       new MarketOrderRequest(
         RequireSymbol().SymbolId,
@@ -2982,8 +2977,7 @@ public sealed class AutoTradeEngine(
       direction,
       cancellationToken
     );
-    await store.CompleteCandidateAsync(
-      candidate.CandidateId,
+    await CompleteActiveCandidateAsync(
       $"ordered:{state.PositionId}",
       cancellationToken
     );
@@ -3065,13 +3059,14 @@ public sealed class AutoTradeEngine(
       minimumStopPips,
       maximumStopPips,
       options.PipSize,
-      symbol
+      symbol,
+      BuildOpposingZoneContext(candidate)
     );
     ValidateProtectiveStopContract(candidate, plan, entryPrice, symbol);
     return plan;
   }
 
-  private static void ValidateProtectiveStopContract(
+  private void ValidateProtectiveStopContract(
     TradeCandidate candidate,
     StructureStopPlan executorPlan,
     decimal executorEntryPrice,
@@ -3082,6 +3077,16 @@ public sealed class AutoTradeEngine(
     // Older in-flight v3/v4 events remain executable during a rolling deploy.
     if (candidate.Version != 5 || IsManualAlgoCandidate(candidate))
     {
+      return;
+    }
+    if (candidate.StopPlanVersion == 2)
+    {
+      ValidateFinalProtectiveStopContract(
+        candidate,
+        executorPlan,
+        executorEntryPrice,
+        symbol
+      );
       return;
     }
     if (
@@ -3097,30 +3102,206 @@ public sealed class AutoTradeEngine(
     {
       throw new VolumePlanningException("protective_stop_contract_mismatch");
     }
+    if (!PlansMatchWithinTolerance(
+      plannedEntry,
+      plannedStop,
+      plannedDistance,
+      plannedPips,
+      plannedRaw,
+      plannedClamped,
+      plannedSource,
+      executorPlan,
+      executorEntryPrice,
+      symbol
+    ))
+    {
+      throw new VolumePlanningException("protective_stop_contract_mismatch");
+    }
+  }
+
+  private void ValidateFinalProtectiveStopContract(
+    TradeCandidate candidate,
+    StructureStopPlan executorPlan,
+    decimal executorEntryPrice,
+    SymbolInfo symbol
+  )
+  {
+    if (
+      candidate.PlannedStopEntryPrice is not decimal plannedEntry
+      || candidate.PlannedBaseStopPrice is not decimal plannedBaseStop
+      || candidate.PlannedBaseStopPips is not decimal plannedBasePips
+      || candidate.PlannedFinalStopPrice is not decimal plannedFinalStop
+      || candidate.PlannedFinalStopDistance is not decimal plannedFinalDistance
+      || candidate.PlannedFinalStopPips is not decimal plannedFinalPips
+      || candidate.PlannedStopRawPrice is not decimal plannedRaw
+      || candidate.PlannedStopClamped is not bool plannedClamped
+      || candidate.StopSource is not string plannedSource
+      || candidate.StopAdjustment is not string plannedAdjustment
+    )
+    {
+      throw new VolumePlanningException("final_protective_stop_contract_mismatch");
+    }
+    var recomputed = RecomputeStructureStopPlan(candidate, executorEntryPrice, symbol);
+    if (
+      !PlansMatchWithinTolerance(
+        plannedEntry,
+        plannedFinalStop,
+        plannedFinalDistance,
+        plannedFinalPips,
+        plannedRaw,
+        plannedClamped || plannedAdjustment == "opposing_zone_push",
+        plannedSource,
+        recomputed,
+        executorEntryPrice,
+        symbol
+      )
+      || Math.Abs(plannedBaseStop - (recomputed.BaseStopLoss ?? recomputed.StopLoss))
+        > SymbolTick(symbol)
+      || Math.Abs(plannedBasePips - (recomputed.BaseStopPips ?? recomputed.StopPips))
+        > PipTolerance(recomputed, symbol)
+      || !string.Equals(
+        plannedAdjustment,
+        recomputed.Adjustment,
+        StringComparison.Ordinal
+      )
+      || !AdjustmentZoneMatches(candidate, recomputed)
+    )
+    {
+      throw new VolumePlanningException("final_protective_stop_contract_mismatch");
+    }
+    if (
+      !PlansMatchWithinTolerance(
+        plannedEntry,
+        plannedFinalStop,
+        plannedFinalDistance,
+        plannedFinalPips,
+        plannedRaw,
+        plannedClamped || plannedAdjustment == "opposing_zone_push",
+        plannedSource,
+        executorPlan,
+        executorEntryPrice,
+        symbol
+      )
+      || Math.Abs((executorPlan.BaseStopLoss ?? executorPlan.StopLoss) - plannedBaseStop)
+        > SymbolTick(symbol)
+      || Math.Abs((executorPlan.BaseStopPips ?? executorPlan.StopPips) - plannedBasePips)
+        > PipTolerance(executorPlan, symbol)
+      || !string.Equals(
+        plannedAdjustment,
+        executorPlan.Adjustment,
+        StringComparison.Ordinal
+      )
+      || !AdjustmentZoneMatches(candidate, executorPlan)
+    )
+    {
+      throw new VolumePlanningException("final_protective_stop_contract_mismatch");
+    }
+  }
+
+  private StructureStopPlan RecomputeStructureStopPlan(
+    TradeCandidate candidate,
+    decimal entryPrice,
+    SymbolInfo symbol
+  )
+  {
+    if (candidate.Atr is not decimal atr || candidate.StructureSwing is not decimal swing)
+    {
+      throw new VolumePlanningException(
+        "structure context unavailable on candidate"
+      );
+    }
+    var direction = ParseDirection(candidate.Direction);
+    var (minimumStopPips, maximumStopPips) = StopPipsBounds(candidate);
+    return StructureStopPlanner.Plan(
+      direction,
+      entryPrice,
+      swing,
+      atr,
+      options.AddStopBufferAtr,
+      direction == TradeDirection.Buy ? candidate.SweepLow : candidate.SweepHigh,
+      options.WickStopBufferAtr,
+      minimumStopPips,
+      maximumStopPips,
+      options.PipSize,
+      symbol,
+      BuildOpposingZoneContext(candidate)
+    );
+  }
+
+  private static bool AdjustmentZoneMatches(
+    TradeCandidate candidate,
+    StructureStopPlan plan
+  )
+  {
+    if (plan.Adjustment == "none")
+    {
+      return candidate.StopAdjustment == "none";
+    }
+    if (
+      candidate.StopAdjustmentZoneLow != plan.AdjustmentZoneLow
+      || candidate.StopAdjustmentZoneHigh != plan.AdjustmentZoneHigh
+    )
+    {
+      return false;
+    }
+    if (
+      candidate.StopAdjustmentZoneId is string candidateZoneId
+      && plan.AdjustmentZoneId is string planZoneId
+    )
+    {
+      return string.Equals(
+        candidateZoneId,
+        planZoneId,
+        StringComparison.Ordinal
+      );
+    }
+    return true;
+  }
+
+  private static decimal SymbolTick(SymbolInfo symbol)
+  {
     var tick = 1m;
     for (var index = 0; index < symbol.Digits; index++)
     {
       tick /= 10m;
     }
-    var pipTolerance = tick / Math.Max(0.00000001m, executorPlan.Distance == 0m
+    return tick;
+  }
+
+  private static decimal PipTolerance(StructureStopPlan plan, SymbolInfo symbol)
+  {
+    var tick = SymbolTick(symbol);
+    return tick / Math.Max(0.00000001m, plan.Distance == 0m
       ? tick
-      : executorPlan.Distance / executorPlan.StopPips);
-    if (
-      Math.Abs(plannedEntry - executorEntryPrice) > tick
-      || Math.Abs(plannedStop - executorPlan.StopLoss) > tick
-      || Math.Abs(plannedDistance - executorPlan.Distance) > tick
-      || Math.Abs(plannedPips - executorPlan.StopPips) > pipTolerance
-      || Math.Abs(plannedRaw - executorPlan.RawStopLoss) > tick
-      || plannedClamped != executorPlan.Clamped
-      || !string.Equals(
+      : plan.Distance / plan.StopPips);
+  }
+
+  private static bool PlansMatchWithinTolerance(
+    decimal plannedEntry,
+    decimal plannedStop,
+    decimal plannedDistance,
+    decimal plannedPips,
+    decimal plannedRaw,
+    bool plannedClamped,
+    string plannedSource,
+    StructureStopPlan executorPlan,
+    decimal executorEntryPrice,
+    SymbolInfo symbol
+  )
+  {
+    var tick = SymbolTick(symbol);
+    var pipTolerance = PipTolerance(executorPlan, symbol);
+    return Math.Abs(plannedEntry - executorEntryPrice) <= tick
+      && Math.Abs(plannedStop - executorPlan.StopLoss) <= tick
+      && Math.Abs(plannedDistance - executorPlan.Distance) <= tick
+      && Math.Abs(plannedPips - executorPlan.StopPips) <= pipTolerance
+      && Math.Abs(plannedRaw - executorPlan.RawStopLoss) <= tick
+      && plannedClamped == executorPlan.Clamped
+      && string.Equals(
         plannedSource,
         executorPlan.Source,
         StringComparison.Ordinal
-      )
-    )
-    {
-      throw new VolumePlanningException("protective_stop_contract_mismatch");
-    }
+      );
   }
 
   // P5: a pullback add's stop must sit beyond the retrace extreme, not
@@ -3172,7 +3353,26 @@ public sealed class AutoTradeEngine(
         $"pullback stop {stopPips:0.#}p exceeds {maximumStopPips}p envelope"
       );
     }
-    return new StructureStopPlan(stopLoss, distance, stopPips, rawStop, false);
+    var basePlan = new StructureStopPlan(
+      stopLoss,
+      distance,
+      stopPips,
+      rawStop,
+      false,
+      "structure",
+      stopLoss,
+      stopPips
+    );
+    return StructureStopPlanner.ApplyOpposingZoneAdjustment(
+      basePlan,
+      direction,
+      entryPrice,
+      BuildOpposingZoneContext(candidate),
+      atr,
+      maximumStopPips,
+      options.PipSize,
+      symbol
+    );
   }
 
   // The owner's exact entered stop, never a re-derived structure stop -
@@ -3271,32 +3471,18 @@ public sealed class AutoTradeEngine(
         ))
       );
 
-  // A stop must sit beyond the nearest opposing HTF supply/demand zone, never
-  // inside it - the 22 Jul 2026 incident's SL sat inside the very supply zone
-  // the SELL was meant to fade, killing the position before its own thesis
-  // could be tested. `candidate.OpposingZoneLow/High` are attached by
-  // worker.py from the same HTF veto lookup as the A3 supply/demand check.
-  private (
-    StructureStopPlan Plan,
-    string? RejectReason,
-    string? Notice
-  ) ApplyOpposingZoneGuard(
-    TradeCandidate candidate,
-    TradeDirection direction,
-    decimal entryPrice,
-    StructureStopPlan stopPlan,
-    SymbolInfo symbol
-  )
+  private OpposingZoneStopContext? BuildOpposingZoneContext(TradeCandidate candidate)
   {
     if (
       candidate.OpposingZoneLow is not decimal zoneLow
       || candidate.OpposingZoneHigh is not decimal zoneHigh
     )
     {
-      return (stopPlan, null, null);
+      return null;
     }
     var zoneWidth = zoneHigh - zoneLow;
     var atr = candidate.Atr ?? 0m;
+    var executionGrade = true;
     if (zoneWidth > 0m)
     {
       var widthPips = zoneWidth / options.PipSize;
@@ -3311,54 +3497,90 @@ public sealed class AutoTradeEngine(
           + $"{zoneLow:0.####}-{zoneHigh:0.####} "
           + $"({widthPips:0.#}p / {widthAtr:0.##} ATR)"
         );
-        return (stopPlan, null, null);
+        executionGrade = false;
       }
     }
-    if (stopPlan.StopLoss < zoneLow || stopPlan.StopLoss > zoneHigh)
-    {
-      return (stopPlan, null, null);
-    }
-    var zoneDescription =
-      $"stop {stopPlan.StopLoss:0.####} inside opposing zone "
-      + $"{zoneLow:0.####}-{zoneHigh:0.####}";
-    if (!options.StopPushBeyondZone)
-    {
-      _log($"auto-trade stop rejected: {zoneDescription}");
-      return (stopPlan, zoneDescription, null);
-    }
-    var buffer = options.AddStopBufferAtr * atr;
-    var pushedStop = direction == TradeDirection.Buy
-      ? zoneLow - buffer
-      : zoneHigh + buffer;
-    pushedStop = decimal.Round(
-      pushedStop,
-      symbol.Digits,
-      MidpointRounding.AwayFromZero
+    return new OpposingZoneStopContext(
+      null,
+      zoneLow,
+      zoneHigh,
+      executionGrade,
+      options.StopPushBeyondZone,
+      options.AddStopBufferAtr
     );
-    var pushedDistance = Math.Abs(entryPrice - pushedStop);
-    var pushedPips = pushedDistance / options.PipSize;
-    var (_, maximumStopPips) = StopPipsBounds(candidate);
-    if (pushedPips > maximumStopPips)
+  }
+
+  private decimal ResolveMinRewardRisk(TradeCandidate candidate) =>
+    IsBoxRangeScalp(candidate)
+      ? options.BoxMinRiskReward
+      : candidate.Setup switch
+      {
+        "Range Edge Scalp" or "One-Sided Range Reaction" or "Fade Scalp"
+          or "Zone Reaction" or "Chop Zone Reaction" => 1.10m,
+        "Break & Retest" or "Box Breakout" => 1.20m,
+        _ => 1.15m,
+      };
+
+  private bool ValidateInitialRewardRisk(
+    TradeCandidate candidate,
+    TradeDirection direction,
+    decimal entryPrice,
+    StructureStopPlan stopPlan,
+    decimal? boxTargetPips
+  )
+  {
+    if (stopPlan.StopPips <= 0m)
     {
-      var rejectReason =
-        $"{zoneDescription} - pushing beyond it would need {pushedPips:0.#}p, "
-        + $"over the {maximumStopPips}p max";
-      _log($"auto-trade stop rejected: {rejectReason}");
-      return (stopPlan, rejectReason, null);
+      return false;
     }
-    _log(
-      $"auto-trade stop pushed beyond opposing zone: {zoneDescription} -> "
-      + $"{pushedStop:0.####} ({pushedPips:0.#}p)"
-    );
-    var pushedPlan = new StructureStopPlan(
-      pushedStop,
-      pushedDistance,
-      pushedPips,
-      stopPlan.RawStopLoss,
-      true,
-      stopPlan.Source
-    );
-    return (pushedPlan, null, null);
+    var rewardPips = boxTargetPips ?? RemainingRewardPips(candidate, direction, entryPrice);
+    if (rewardPips <= 0m)
+    {
+      // Legacy Auto Range Scalp uses engine-managed ladder targets that are
+      // not present on the candidate payload. Measure RR against that ladder
+      // rather than inventing a false reject.
+      if (
+        !UsesCandidateTargetPlan(candidate)
+        && !IsBoxRangeScalp(candidate)
+        && options.TargetsPips.Count > 0
+      )
+      {
+        rewardPips = options.TargetsPips.Max();
+      }
+      else
+      {
+        return false;
+      }
+    }
+    return rewardPips / stopPlan.StopPips >= ResolveMinRewardRisk(candidate);
+  }
+
+  private decimal RemainingRewardPips(
+    TradeCandidate candidate,
+    TradeDirection direction,
+    decimal entryPrice
+  )
+  {
+    var targetModel = (candidate.TargetModel ?? "fill_relative").Trim().ToLowerInvariant();
+    decimal ladderRoom = 0m;
+    if (candidate.TargetsPips is { Count: > 0 } targets)
+    {
+      ladderRoom = targets.Max() * options.PipSize;
+    }
+    decimal absoluteRoom = 0m;
+    if (candidate.AbsoluteTargetPrice is decimal absoluteTarget)
+    {
+      absoluteRoom = direction == TradeDirection.Buy
+        ? absoluteTarget - entryPrice
+        : entryPrice - absoluteTarget;
+    }
+    var remainingPrice = targetModel switch
+    {
+      "absolute" => absoluteRoom,
+      "hybrid" => Math.Min(ladderRoom, absoluteRoom),
+      _ => ladderRoom,
+    };
+    return Math.Max(0m, remainingPrice / options.PipSize);
   }
 
   private ScaleInTriggerResult ValidateAddTriggers(
@@ -3590,11 +3812,7 @@ public sealed class AutoTradeEngine(
     string? stream = null
   )
   {
-    await store.CompleteCandidateAsync(
-      candidate.CandidateId,
-      "dry_run",
-      cancellationToken
-    );
+    await CompleteActiveCandidateAsync("dry_run", cancellationToken);
     await PublishAsync(
       "dry_run",
       message,
@@ -5164,6 +5382,83 @@ public sealed class AutoTradeEngine(
     }
   }
 
+  private async Task<bool> RenewActiveLeaseAsync(CancellationToken cancellationToken)
+  {
+    if (_activeLease is null)
+    {
+      return false;
+    }
+    return await store.RenewCandidateLeaseAsync(
+      _activeLease.CandidateId,
+      _activeLease.StreamEventId,
+      _activeLease.Token,
+      CandidateLeaseDuration,
+      cancellationToken
+    );
+  }
+
+  private async Task<bool> EnsureBrokerLeaseAsync(CancellationToken cancellationToken)
+  {
+    if (_activeLease is null || !await RenewActiveLeaseAsync(cancellationToken))
+    {
+      return false;
+    }
+    return await store.TransitionCandidateStateAsync(
+      _activeLease.CandidateId,
+      _activeLease.StreamEventId,
+      _activeLease.Token,
+      CandidateExecutionStates.BrokerSubmitting,
+      cancellationToken
+    );
+  }
+
+  private Task CompleteActiveCandidateAsync(
+    string outcome,
+    CancellationToken cancellationToken
+  )
+  {
+    if (_activeLease is null)
+    {
+      return Task.CompletedTask;
+    }
+    return store.CompleteCandidateAsync(
+      _activeLease.CandidateId,
+      _activeLease.StreamEventId,
+      _activeLease.Token,
+      outcome,
+      cancellationToken
+    );
+  }
+
+  private Task<bool> ReleaseActiveCandidateAsync(CancellationToken cancellationToken)
+  {
+    if (_activeLease is null)
+    {
+      return Task.FromResult(false);
+    }
+    return store.ReleaseCandidateAsync(
+      _activeLease.CandidateId,
+      _activeLease.StreamEventId,
+      _activeLease.Token,
+      cancellationToken
+    );
+  }
+
+  private Task MarkBrokerOutcomeUnknownAsync(CancellationToken cancellationToken)
+  {
+    if (_activeLease is null)
+    {
+      return Task.CompletedTask;
+    }
+    return store.TransitionCandidateStateAsync(
+      _activeLease.CandidateId,
+      _activeLease.StreamEventId,
+      _activeLease.Token,
+      CandidateExecutionStates.BrokerOutcomeUnknown,
+      cancellationToken
+    );
+  }
+
   private async Task<bool> RejectAsync(
     TradeCandidate candidate,
     string reason,
@@ -5175,8 +5470,7 @@ public sealed class AutoTradeEngine(
       "executor_rejected",
       cancellationToken
     );
-    await store.CompleteCandidateAsync(
-      candidate.CandidateId,
+    await CompleteActiveCandidateAsync(
       $"rejected:{reason}",
       cancellationToken
     );
@@ -5258,22 +5552,65 @@ public sealed class AutoTradeEngine(
     string? entryDistribution = null
   )
   {
-    var state = LifecycleState(type, remainingVolume);
-    var owner = candidateId ?? groupId ?? "service";
-    string? previousState = null;
-    try
-    {
-      previousState = await store.GetValueAsync(
-        $"auto_trade:lifecycle_state:{owner}",
-        cancellationToken
-      );
-    }
-    catch (Exception exception) when (
-      exception is not OperationCanceledException
+    var transition = LifecycleTransitionForEvent(type, remainingVolume);
+    var owner = candidateId ?? groupId;
+    string? currentState = null;
+    if (
+      !string.IsNullOrWhiteSpace(owner)
+      && transition?.MutatesCurrentState == true
     )
     {
-      _log($"auto-trade lifecycle state read failed: {exception.Message}");
+      try
+      {
+        var raw = await store.GetValueAsync(
+          $"auto_trade:lifecycle_state:{owner}",
+          cancellationToken
+        );
+        currentState = AutoTradeLifecycle.ParseState(raw);
+      }
+      catch (Exception exception) when (
+        exception is not OperationCanceledException
+      )
+      {
+        _log($"auto-trade lifecycle state read failed: {exception.Message}");
+      }
     }
+
+    string? appliedState = null;
+    var mutatesLifecycle = false;
+    var telemetryNoTransition = transition is null;
+    var invalidTransition = false;
+    var recoveryTransition = false;
+    if (
+      transition?.MutatesCurrentState == true
+      && !string.IsNullOrWhiteSpace(owner)
+    )
+    {
+      var evaluation = AutoTradeLifecycle.EvaluateTransition(
+        currentState,
+        transition,
+        type
+      );
+      switch (evaluation.Outcome)
+      {
+        case LifecycleTransitionOutcome.Applied:
+          appliedState = evaluation.AppliedState;
+          mutatesLifecycle = true;
+          break;
+        case LifecycleTransitionOutcome.Recovery:
+          appliedState = evaluation.AppliedState;
+          mutatesLifecycle = true;
+          recoveryTransition = true;
+          break;
+        case LifecycleTransitionOutcome.Duplicate:
+          appliedState = transition.State;
+          break;
+        case LifecycleTransitionOutcome.Invalid:
+          invalidTransition = true;
+          break;
+      }
+    }
+
     if (
       !string.IsNullOrWhiteSpace(candidateId)
       && _routeIdentityByCandidate.TryGetValue(candidateId, out var remembered)
@@ -5314,7 +5651,7 @@ public sealed class AutoTradeEngine(
       direction,
       remainingVolume,
       lifecycleId,
-      state,
+      appliedState,
       reasonCode,
       matchId,
       rangeId,
@@ -5323,7 +5660,7 @@ public sealed class AutoTradeEngine(
       _account?.AccountType,
       _account?.BrokerName,
       candidateId ?? groupId ?? lifecycleId,
-      previousState,
+      currentState,
       pendingOrderIds,
       orderId,
       stopLoss,
@@ -5340,7 +5677,8 @@ public sealed class AutoTradeEngine(
       thesisId,
       riskMultiplier,
       targetModel,
-      entryDistribution
+      entryDistribution,
+      mutatesLifecycle
     );
     await store.PublishAutoTradeEventAsync(
       options.EventStream,
@@ -5350,30 +5688,51 @@ public sealed class AutoTradeEngine(
     try
     {
       await store.RecordLifecycleEventAsync(tradeEvent, cancellationToken);
+      if (telemetryNoTransition)
+      {
+        await store.IncrementMetricAsync(
+          RequireSymbolOrDefault(),
+          "lifecycle_telemetry_no_transition",
+          cancellationToken
+        );
+      }
+      if (invalidTransition)
+      {
+        await store.IncrementMetricAsync(
+          RequireSymbolOrDefault(),
+          "lifecycle_invalid_transition",
+          cancellationToken
+        );
+      }
+      if (recoveryTransition)
+      {
+        await store.IncrementMetricAsync(
+          RequireSymbolOrDefault(),
+          "lifecycle_recovery_transition",
+          cancellationToken
+        );
+      }
       if (
-        !string.IsNullOrWhiteSpace(rangeId)
+        mutatesLifecycle
+        && !string.IsNullOrWhiteSpace(appliedState)
+        && !string.IsNullOrWhiteSpace(rangeId)
         && !string.IsNullOrWhiteSpace(direction)
       )
       {
-        var railState = state switch
+        var railState = AutoTradeLifecycle.RangeSideStateFor(appliedState);
+        if (railState is not null)
         {
-          "order_submitted" or "order_accepted" => "ORDER_SUBMITTED",
-          "order_filled" => "ORDER_FILLED",
-          "managing" or "partially_closed" => "MANAGING",
-          "closed" => "CLOSED",
-          "rejected" or "expired" or "cancelled" => "REARMED",
-          _ => state.ToUpperInvariant(),
-        };
-        await store.UpdateRangeSideStateAsync(
-          RequireSymbolOrDefault(),
-          rangeId,
-          direction,
-          railState,
-          candidateId,
-          positionId,
-          pendingOrderIds,
-          cancellationToken
-        );
+          await store.UpdateRangeSideStateAsync(
+            RequireSymbolOrDefault(),
+            rangeId,
+            direction,
+            railState,
+            candidateId,
+            positionId,
+            pendingOrderIds,
+            cancellationToken
+          );
+        }
       }
     }
     catch (Exception exception) when (
@@ -5398,29 +5757,10 @@ public sealed class AutoTradeEngine(
     }
   }
 
-  private static string LifecycleState(string type, long? remainingVolume) =>
-    type switch
-    {
-      "ready" => "auto_ready",
-      "dry_run" => "order_planned",
-      "executor_received" => "executor_received",
-      "routing_selected" => "routing_selected",
-      "order_planned" => "order_planned",
-      "order_submitted" => "order_submitted",
-      "order_accepted" => "order_accepted",
-      "opened" or "manual_opened" or "add" => "order_filled",
-      "managing" => "managing",
-      "zone_planned" or "manual_planned" => "waiting_for_price",
-      "take_profit" when remainingVolume is > 0 => "partially_closed",
-      "take_profit" => "closed",
-      "position_closed" or "manual_closed" or "group_result" => "closed",
-      "rejected" => "rejected",
-      "zone_expired" or "manual_expired" => "expired",
-      "manual_cancelled" or "cancelled" => "cancelled",
-      "invalidated" => "invalidated",
-      "error" or "manual_command_error" or "config_fatal" => "error",
-      _ => "managing",
-    };
+  private static LifecycleTransition? LifecycleTransitionForEvent(
+    string type,
+    long? remainingVolume
+  ) => AutoTradeLifecycle.TransitionForEvent(type, remainingVolume);
 
   private async Task WithGateAsync(
     Func<Task> action,
@@ -5635,7 +5975,13 @@ public sealed class AutoTradeEngine(
       || _clock().ToUnixTimeSeconds() >= expiresAt
     )
     {
-      await store.ReleaseCandidateAsync(claimId, cancellationToken);
+      await store.CompleteCandidateAsync(
+        claimId,
+        "",
+        "",
+        "rejected:flip_expired",
+        cancellationToken
+      );
       return false;
     }
     return !fields[1].Equals(candidate.Direction, StringComparison.OrdinalIgnoreCase);
@@ -5651,7 +5997,13 @@ public sealed class AutoTradeEngine(
     {
       return false;
     }
-    if (!await store.TryClaimCandidateAsync(claimId, cancellationToken))
+    var lease = await store.TryClaimCandidateAsync(
+      claimId,
+      "",
+      CandidateLeaseDuration,
+      cancellationToken
+    );
+    if (lease is null)
     {
       return false;
     }
@@ -5660,6 +6012,8 @@ public sealed class AutoTradeEngine(
       + options.FlipConfirmTimeoutSeconds;
     await store.CompleteCandidateAsync(
       claimId,
+      "",
+      lease.Token,
       $"flip_pending:{direction}:{expiresAt}",
       cancellationToken
     );
@@ -5674,7 +6028,13 @@ public sealed class AutoTradeEngine(
     var claimId = FlipClaimId(state);
     if (claimId is not null)
     {
-      await store.ReleaseCandidateAsync(claimId, cancellationToken);
+      await store.CompleteCandidateAsync(
+        claimId,
+        "",
+        "",
+        "rejected:flip_released",
+        cancellationToken
+      );
     }
   }
 

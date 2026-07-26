@@ -12,6 +12,19 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- Enforce a shared final protective-stop contract (`stop_plan_version=2`) so
+  Python-approved final stop equals C# validated stop equals broker stop;
+  fold opposing-zone push into the planner and reject
+  `final_protective_stop_contract_mismatch` before any broker mutation.
+- Replace scalar candidate markers with structured execution records and
+  two-phase all-or-nothing publication reconciliation that preserves executor
+  progress (`processing`/`ordered`/…) without partial ownership restores.
+- Fence executor claims with token-owned renewable leases so stale workers
+  cannot renew, transition, complete, release, or submit for a successor;
+  mark post-broker uncertainty as `broker_outcome_unknown`.
+- Separate lifecycle history from lifecycle transitions: telemetry and
+  unknown events no longer default to `managing` or write
+  `lifecycle_state:service`.
 - Preserve ranked-intent priority under concurrent delivery with a token-owned
   cycle arbitration lock, typed publication outcomes, and terminal-only
   fallback; make the Redis stream authoritative and reconcile orphan
