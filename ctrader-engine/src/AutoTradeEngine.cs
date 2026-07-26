@@ -516,6 +516,9 @@ public sealed class AutoTradeEngine(
     _allSymbolPendingOrders = _allSymbolPendingOrders
       .Where(item => item.OrderId != target.OrderId)
       .ToArray();
+    var cancelledGroupId = ParseManualExpiry(target.Comment)?.GroupId
+      ?? ParseZoneComment(target.Comment)?.GroupId;
+    await MaybeDeleteGroupPlanAsync(cancelledGroupId, cancellationToken);
     await PublishAsync(
       "manual_cancelled",
       $"manual algo limit {target.OrderId} cancelled by owner",
@@ -638,6 +641,12 @@ public sealed class AutoTradeEngine(
         .Where(item => item.OrderId != order.OrderId)
         .ToArray();
       var manual = ParseManualExpiry(order.Comment);
+      var pendingGroupId = manual?.GroupId
+        ?? ParseZoneComment(order.Comment)?.GroupId;
+      await MaybeDeleteGroupPlanAsync(
+        pendingGroupId,
+        cancellationToken
+      );
       await PublishAsync(
         "manual_cancelled",
         $"pending order {order.OrderId} cancelled by owner flatten",
@@ -774,6 +783,7 @@ public sealed class AutoTradeEngine(
         groupInitialVolume: groupInitialVolume,
         lotSize: symbol.LotSize
       );
+      await MaybeDeleteGroupPlanAsync(groupId, cancellationToken);
     }
   }
 
@@ -1780,7 +1790,6 @@ public sealed class AutoTradeEngine(
     }
     var groupId = CandidateGroupId(candidate);
     var barTs = candidate.BarTs ?? candidate.CreatedAt;
-    await SaveGroupPlanAsync(candidate, groupId, cancellationToken);
     if (options.DryRun)
     {
       return await CompleteDryRunAsync(
@@ -1835,19 +1844,29 @@ public sealed class AutoTradeEngine(
       targetModel: candidate.TargetModel,
       entryDistribution: "single"
     );
-    var orderId = await RequireClient().PlaceLimitOrderAsync(
-      new LimitOrderRequest(
-        symbol.SymbolId,
-        direction,
-        sizing.Volume,
-        limitPrice.Value,
-        decimal.ToInt64(Math.Abs(limitPrice.Value - stopLoss) * 100_000m),
-        options.Label,
-        BuildZoneComment(candidate.CandidateId, groupId, leg, barTs),
-        $"{ClientOrderId(candidate.CandidateId)}-l1"
-      ),
-      cancellationToken
-    );
+    await SaveGroupPlanAsync(candidate, groupId, cancellationToken);
+    long orderId;
+    try
+    {
+      orderId = await RequireClient().PlaceLimitOrderAsync(
+        new LimitOrderRequest(
+          symbol.SymbolId,
+          direction,
+          sizing.Volume,
+          limitPrice.Value,
+          decimal.ToInt64(Math.Abs(limitPrice.Value - stopLoss) * 100_000m),
+          options.Label,
+          BuildZoneComment(candidate.CandidateId, groupId, leg, barTs),
+          $"{ClientOrderId(candidate.CandidateId)}-l1"
+        ),
+        cancellationToken
+      );
+    }
+    catch
+    {
+      await DeleteGroupPlanAsync(groupId, CancellationToken.None);
+      throw;
+    }
     await store.CompleteCandidateAsync(
       candidate.CandidateId,
       $"ordered:{orderId}",
@@ -2030,7 +2049,6 @@ public sealed class AutoTradeEngine(
     }
     var groupId = CandidateGroupId(candidate);
     var barTs = candidate.BarTs ?? candidate.CreatedAt;
-    await SaveGroupPlanAsync(candidate, groupId, cancellationToken);
     if (options.DryRun)
     {
       return await CompleteDryRunAsync(
@@ -2093,6 +2111,7 @@ public sealed class AutoTradeEngine(
       "order_submitted",
       cancellationToken
     );
+    await SaveGroupPlanAsync(candidate, groupId, cancellationToken);
     try
     {
       foreach (var leg in plan.Legs)
@@ -2122,11 +2141,18 @@ public sealed class AutoTradeEngine(
     }
     catch
     {
-      await RollbackZoneFillAsync(
-        candidate.CandidateId,
-        placed,
-        cancellationToken
-      );
+      try
+      {
+        await RollbackZoneFillAsync(
+          candidate.CandidateId,
+          placed,
+          cancellationToken
+        );
+      }
+      finally
+      {
+        await DeleteGroupPlanAsync(groupId, CancellationToken.None);
+      }
       throw;
     }
     await store.CompleteCandidateAsync(
@@ -2449,7 +2475,6 @@ public sealed class AutoTradeEngine(
         cancellationToken
       );
     }
-    await SaveGroupPlanAsync(candidate, groupId, cancellationToken);
     var comment = BuildManualComment(
       candidate.CandidateId,
       groupId,
@@ -2460,19 +2485,29 @@ public sealed class AutoTradeEngine(
       barTs,
       expiresAt
     );
-    var orderId = await RequireClient().PlaceLimitOrderAsync(
-      new LimitOrderRequest(
-        symbol.SymbolId,
-        direction,
-        sizing.Volume,
-        limitPrice,
-        decimal.ToInt64(manualStopPlan.Distance * 100_000m),
-        options.Label,
-        comment,
-        ClientOrderId(candidate.CandidateId)
-      ),
-      cancellationToken
-    );
+    await SaveGroupPlanAsync(candidate, groupId, cancellationToken);
+    long orderId;
+    try
+    {
+      orderId = await RequireClient().PlaceLimitOrderAsync(
+        new LimitOrderRequest(
+          symbol.SymbolId,
+          direction,
+          sizing.Volume,
+          limitPrice,
+          decimal.ToInt64(manualStopPlan.Distance * 100_000m),
+          options.Label,
+          comment,
+          ClientOrderId(candidate.CandidateId)
+        ),
+        cancellationToken
+      );
+    }
+    catch
+    {
+      await DeleteGroupPlanAsync(groupId, CancellationToken.None);
+      throw;
+    }
     await store.CompleteCandidateAsync(
       candidate.CandidateId,
       $"ordered:{orderId}",
@@ -3019,7 +3054,7 @@ public sealed class AutoTradeEngine(
       );
     }
     var (minimumStopPips, maximumStopPips) = StopPipsBounds(candidate);
-    return StructureStopPlanner.Plan(
+    var plan = StructureStopPlanner.Plan(
       direction,
       entryPrice,
       swing,
@@ -3032,6 +3067,60 @@ public sealed class AutoTradeEngine(
       options.PipSize,
       symbol
     );
+    ValidateProtectiveStopContract(candidate, plan, entryPrice, symbol);
+    return plan;
+  }
+
+  private static void ValidateProtectiveStopContract(
+    TradeCandidate candidate,
+    StructureStopPlan executorPlan,
+    decimal executorEntryPrice,
+    SymbolInfo symbol
+  )
+  {
+    // Candidate v5 is the first schema that requires the Python stop plan.
+    // Older in-flight v3/v4 events remain executable during a rolling deploy.
+    if (candidate.Version != 5 || IsManualAlgoCandidate(candidate))
+    {
+      return;
+    }
+    if (
+      candidate.StopPlanVersion != 1
+      || candidate.PlannedStopEntryPrice is not decimal plannedEntry
+      || candidate.PlannedStopPrice is not decimal plannedStop
+      || candidate.PlannedStopDistance is not decimal plannedDistance
+      || candidate.PlannedStopPips is not decimal plannedPips
+      || candidate.PlannedStopRawPrice is not decimal plannedRaw
+      || candidate.PlannedStopClamped is not bool plannedClamped
+      || candidate.StopSource is not string plannedSource
+    )
+    {
+      throw new VolumePlanningException("protective_stop_contract_mismatch");
+    }
+    var tick = 1m;
+    for (var index = 0; index < symbol.Digits; index++)
+    {
+      tick /= 10m;
+    }
+    var pipTolerance = tick / Math.Max(0.00000001m, executorPlan.Distance == 0m
+      ? tick
+      : executorPlan.Distance / executorPlan.StopPips);
+    if (
+      Math.Abs(plannedEntry - executorEntryPrice) > tick
+      || Math.Abs(plannedStop - executorPlan.StopLoss) > tick
+      || Math.Abs(plannedDistance - executorPlan.Distance) > tick
+      || Math.Abs(plannedPips - executorPlan.StopPips) > pipTolerance
+      || Math.Abs(plannedRaw - executorPlan.RawStopLoss) > tick
+      || plannedClamped != executorPlan.Clamped
+      || !string.Equals(
+        plannedSource,
+        executorPlan.Source,
+        StringComparison.Ordinal
+      )
+    )
+    {
+      throw new VolumePlanningException("protective_stop_contract_mismatch");
+    }
   }
 
   // P5: a pullback add's stop must sit beyond the retrace extreme, not
@@ -3266,7 +3355,8 @@ public sealed class AutoTradeEngine(
       pushedDistance,
       pushedPips,
       stopPlan.RawStopLoss,
-      true
+      true,
+      stopPlan.Source
     );
     return (pushedPlan, null, null);
   }
@@ -3880,6 +3970,7 @@ public sealed class AutoTradeEngine(
               groupInitialVolume: groupInitialVolume,
               lotSize: symbol.LotSize
             );
+            await MaybeDeleteGroupPlanAsync(groupId, cancellationToken);
           }
           break;
         }
@@ -4018,6 +4109,10 @@ public sealed class AutoTradeEngine(
         strategyFamily: plan?.StrategyFamily,
         pendingOrderIds: PendingOrderIdsForGroup(zone.Value.GroupId)
       );
+      await MaybeDeleteGroupPlanAsync(
+        zone.Value.GroupId,
+        cancellationToken
+      );
     }
     foreach (var order in _allSymbolPendingOrders.ToArray())
     {
@@ -4043,6 +4138,10 @@ public sealed class AutoTradeEngine(
         groupId: manual.Value.GroupId,
         trancheIndex: 1,
         hadAdds: false
+      );
+      await MaybeDeleteGroupPlanAsync(
+        manual.Value.GroupId,
+        cancellationToken
       );
     }
     var botPositions = _allSymbolPositions
@@ -4116,6 +4215,7 @@ public sealed class AutoTradeEngine(
             direction: DirectionLabel(state.Direction),
             groupInitialVolume: initialVolume
           );
+          await MaybeDeleteGroupPlanAsync(groupId, cancellationToken);
         }
         // A broker snapshot disappearance is ambiguous: it can be SL,
         // manual close, external close, or a reconciliation gap.  The Open
@@ -4425,9 +4525,23 @@ public sealed class AutoTradeEngine(
         order.OrderId,
         cancellationToken
       );
+      _allSymbolPendingOrders = _allSymbolPendingOrders
+        .Where(item => item.OrderId != order.OrderId)
+        .ToArray();
+      await MaybeDeleteGroupPlanAsync(
+        ParseManualExpiry(order.Comment)?.GroupId
+          ?? ParseZoneComment(order.Comment)?.GroupId,
+        cancellationToken
+      );
     }
     foreach (var position in oppositePositions)
     {
+      var terminalGroupId = _states.TryGetValue(
+        position.PositionId,
+        out var ownedState
+      )
+        ? GroupId(ownedState)
+        : null;
       await RequireClient().ClosePositionAsync(
         position.PositionId,
         position.Volume,
@@ -4435,6 +4549,7 @@ public sealed class AutoTradeEngine(
       );
       _states.Remove(position.PositionId);
       await store.DeletePositionAsync(position.PositionId, cancellationToken);
+      await MaybeDeleteGroupPlanAsync(terminalGroupId, cancellationToken);
     }
     await store.IncrementMetricAsync(
       candidate.Symbol,
@@ -4708,6 +4823,22 @@ public sealed class AutoTradeEngine(
       .ToArray();
   }
 
+  private async Task MaybeDeleteGroupPlanAsync(
+    string? groupId,
+    CancellationToken cancellationToken
+  )
+  {
+    if (
+      string.IsNullOrWhiteSpace(groupId)
+      || _states.Values.Any(state => GroupId(state) == groupId)
+      || PendingOrderIdsForGroup(groupId).Count > 0
+    )
+    {
+      return;
+    }
+    await DeleteGroupPlanAsync(groupId, cancellationToken);
+  }
+
   private async Task SaveGroupPlanAsync(
     TradeCandidate candidate,
     string groupId,
@@ -4738,15 +4869,20 @@ public sealed class AutoTradeEngine(
       candidate.TargetModel,
       candidate.AbsoluteTargetPrice
     );
-    await store.SetValueAsync(
-      $"auto_trade:group_plan:{groupId}",
-      JsonSerializer.Serialize(
-        plan,
-        RedisJsonContext.Default.AutoTradeGroupPlan
-      ),
+    await store.SaveGroupPlanAsync(
+      plan,
+      TimeSpan.FromSeconds(Math.Max(
+        300,
+        options.CandidateStorageTtlSeconds
+      )),
       cancellationToken
     );
   }
+
+  private Task DeleteGroupPlanAsync(
+    string groupId,
+    CancellationToken cancellationToken
+  ) => store.DeleteGroupPlanAsync(groupId, cancellationToken);
 
   private async Task<AutoTradeGroupPlan?> LoadGroupPlanAsync(
     string groupId,
@@ -5335,7 +5471,7 @@ public sealed class AutoTradeEngine(
         : throw new InvalidOperationException($"Unsupported direction {value}");
 
   private static bool IsBoxRangeScalp(TradeCandidate candidate) =>
-    candidate.Version == 3
+    candidate.Version is 3 or 5
     && candidate.Timeframe is not null
     && (
       candidate.Timeframe.Equals("M1", StringComparison.OrdinalIgnoreCase)
@@ -5384,13 +5520,13 @@ public sealed class AutoTradeEngine(
     && string.IsNullOrWhiteSpace(state.ParentGroupId);
 
   private static bool IsTrendCandidate(TradeCandidate candidate) =>
-    candidate.Version == 3
+    candidate.Version is 3 or 5
     && candidate.Timeframe.Equals("M1", StringComparison.OrdinalIgnoreCase)
     && candidate.Mode is "auto_trend_pullback" or "auto_trend_breakout"
       or "auto_box_breakout";
 
   private static bool IsStrategyMatchCandidate(TradeCandidate candidate) =>
-    candidate.Version == 4
+    candidate.Version is 4 or 5
     && candidate.Timeframe is not null
     && (
       candidate.Timeframe.Equals("M1", StringComparison.OrdinalIgnoreCase)

@@ -126,6 +126,15 @@ public interface IAutoTradeStore
     string key,
     CancellationToken cancellationToken
   ) => Task.FromResult<string?>(null);
+  Task SaveGroupPlanAsync(
+    AutoTradeGroupPlan plan,
+    TimeSpan ttl,
+    CancellationToken cancellationToken
+  );
+  Task DeleteGroupPlanAsync(
+    string groupId,
+    CancellationToken cancellationToken
+  );
   Task IncrementMetricAsync(
     string symbol,
     string metric,
@@ -556,6 +565,24 @@ public sealed class StackExchangeRedisSeriesCommands :
     var value = await _db.StringGetAsync(key);
     return value.HasValue ? value.ToString() : null;
   }
+
+  public Task SaveGroupPlanAsync(
+    AutoTradeGroupPlan plan,
+    TimeSpan ttl,
+    CancellationToken cancellationToken
+  ) => _db.StringSetAsync(
+    $"auto_trade:group_plan:{plan.GroupId}",
+    System.Text.Json.JsonSerializer.Serialize(
+      plan,
+      RedisJsonContext.Default.AutoTradeGroupPlan
+    ),
+    ttl
+  );
+
+  public Task DeleteGroupPlanAsync(
+    string groupId,
+    CancellationToken cancellationToken
+  ) => _db.KeyDeleteAsync($"auto_trade:group_plan:{groupId}");
 
   public Task IncrementMetricAsync(
     string symbol,

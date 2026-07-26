@@ -5,7 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 import json
 import logging
+import secrets
 from typing import Any, Iterator
+
+from app.autotrade.arbitration import CandidatePublicationResult, ExecutionIntent
 
 
 log = logging.getLogger(__name__)
@@ -65,6 +68,88 @@ end
 return {1, event_id}
 """
 
+_COMPARE_AND_DELETE_LUA = """
+if redis.call('GET', KEYS[1]) == ARGV[1] then
+  return redis.call('DEL', KEYS[1])
+end
+return 0
+"""
+
+_RECONCILE_PUBLICATION_LUA = """
+local function restore(key, expected, value, ttl)
+  if key == '' then
+    return true
+  end
+  local current = redis.call('GET', key)
+  if current ~= false and current ~= expected and current ~= value then
+    return false
+  end
+  if current == false or (current == expected and current ~= value) then
+    if tonumber(ttl) > 0 then
+      redis.call('SET', key, value, 'EX', ttl)
+    else
+      redis.call('SET', key, value)
+    end
+  end
+  return true
+end
+
+if not restore(KEYS[1], 'published', 'published', ARGV[1]) then
+  return 2
+end
+if not restore(KEYS[2], ARGV[2], ARGV[2], ARGV[1]) then
+  return 2
+end
+if not restore(KEYS[3], ARGV[3], ARGV[4], ARGV[5]) then
+  return 2
+end
+if not restore(KEYS[4], ARGV[6], ARGV[7], ARGV[8]) then
+  return 2
+end
+if not restore(KEYS[5], ARGV[9], ARGV[10], ARGV[11]) then
+  return 2
+end
+return 1
+"""
+
+
+@dataclass(frozen=True)
+class PublicationOwnership:
+  """Claims required to reconstruct one authoritative stream publication."""
+
+  candidate_id: str
+  candidate_ttl: int
+  reaction_key: str = ""
+  reaction_payload: str = ""
+  expected_reaction_payload: str = ""
+  reaction_ttl: int = 0
+  thesis_key: str = ""
+  thesis_payload: str = ""
+  expected_thesis_payload: str = ""
+  thesis_ttl: int = 0
+  ownership_key: str = ""
+  ownership_payload: str = ""
+  expected_ownership_payload: str = ""
+  ownership_ttl: int = 0
+
+  def to_dict(self) -> dict[str, Any]:
+    return {
+      "candidate_id": self.candidate_id,
+      "candidate_ttl": self.candidate_ttl,
+      "reaction_key": self.reaction_key,
+      "reaction_payload": self.reaction_payload,
+      "expected_reaction_payload": self.expected_reaction_payload,
+      "reaction_ttl": self.reaction_ttl,
+      "thesis_key": self.thesis_key,
+      "thesis_payload": self.thesis_payload,
+      "expected_thesis_payload": self.expected_thesis_payload,
+      "thesis_ttl": self.thesis_ttl,
+      "ownership_key": self.ownership_key,
+      "ownership_payload": self.ownership_payload,
+      "expected_ownership_payload": self.expected_ownership_payload,
+      "ownership_ttl": self.ownership_ttl,
+    }
+
 
 @dataclass(frozen=True)
 class AtomicPublishResult:
@@ -97,6 +182,58 @@ def candidate_stream_event_key(candidate_id: str) -> str:
 
 def autonomous_cycle_owner_key(symbol: str, cycle_id: str) -> str:
   return f"auto_trade:cycle_owner:{symbol.upper()}:{cycle_id}"
+
+
+def cycle_route_lock_key(symbol: str, cycle_id: str) -> str:
+  return f"auto_trade:cycle_route_lock:{symbol.upper()}:{cycle_id}"
+
+
+async def acquire_owned_lock(
+  client: Any,
+  key: str,
+  *,
+  ttl: int,
+) -> str | None:
+  """Acquire a Redis lock whose token proves release ownership."""
+  token = secrets.token_urlsafe(24)
+  acquired = await client.set(key, token, nx=True, ex=max(1, int(ttl)))
+  return token if acquired else None
+
+
+async def release_owned_lock(client: Any, key: str, token: str) -> bool:
+  """Release only the lock instance acquired by ``token``.
+
+  If scripting is unavailable, fail closed and let the TTL expire. A plain
+  DELETE could remove a successor's lock after this owner's TTL elapsed.
+  """
+  try:
+    result = await client.eval(_COMPARE_AND_DELETE_LUA, 1, key, token)
+    return int(result or 0) == 1
+  except Exception:
+    if not explicit_test_fallback_enabled(client):
+      log.exception("unable to compare-and-delete Redis lock %s", key)
+      return False
+    current = await client.get(key)
+    normalized = current.decode() if isinstance(current, bytes) else current
+    if normalized != token:
+      return False
+    await client.delete(key)
+    return True
+
+
+def _payload_with_publication_ownership(
+  payload: str,
+  ownership: PublicationOwnership,
+) -> str:
+  """Embed recovery inputs in the authoritative stream event."""
+  try:
+    parsed = json.loads(payload)
+  except (TypeError, ValueError, json.JSONDecodeError):
+    parsed = {"raw_payload": payload}
+  if not isinstance(parsed, dict):
+    parsed = {"candidate_payload": parsed}
+  parsed["_publication_ownership"] = ownership.to_dict()
+  return json.dumps(parsed, separators=(",", ":"), sort_keys=True)
 
 
 def explicit_test_fallback_enabled(client: Any) -> bool:
@@ -168,6 +305,23 @@ async def publish_candidate_atomic(
   ownership_key = ownership_key or ""
   ownership_payload = ownership_payload or ""
   expected_ownership_payload = expected_ownership_payload or ""
+  recovery = PublicationOwnership(
+    candidate_id=candidate_id,
+    candidate_ttl=ttl,
+    reaction_key=reaction_key,
+    reaction_payload=reaction_payload,
+    expected_reaction_payload=expected_reaction_payload,
+    reaction_ttl=int(reaction_ttl),
+    thesis_key=thesis_key,
+    thesis_payload=thesis_payload,
+    expected_thesis_payload=expected_thesis_payload,
+    thesis_ttl=int(thesis_ttl),
+    ownership_key=ownership_key,
+    ownership_payload=ownership_payload,
+    expected_ownership_payload=expected_ownership_payload,
+    ownership_ttl=int(ownership_ttl),
+  )
+  payload = _payload_with_publication_ownership(payload, recovery)
   try:
     result = await client.eval(
       _PUBLISH_CANDIDATE_LUA,
@@ -192,7 +346,29 @@ async def publish_candidate_atomic(
       int(ownership_ttl),
     )
     if isinstance(result, (list, tuple)) and result:
-      code = int(result[0] or 0)
+      try:
+        code = int(result[0] or 0)
+      except (TypeError, ValueError):
+        recovered = await reconcile_candidate_publication(
+          client,
+          stream=stream,
+          candidate_id=candidate_id,
+        )
+        if recovered.published:
+          await _mark_atomic_readiness(
+            client,
+            ready=True,
+            reason_code="atomic_publication_reconciled",
+          )
+          return recovered
+        await _mark_atomic_readiness(
+          client,
+          ready=False,
+          reason_code="atomic_publish_invalid_response",
+        )
+        return AtomicPublishResult(
+          False, "atomic_publish_unavailable", None,
+        )
       raw_event_id = result[1] if len(result) > 1 else None
       event_id = (
         raw_event_id.decode()
@@ -222,6 +398,18 @@ async def publish_candidate_atomic(
         "atomic candidate publication unavailable: %s",
         type(exc).__name__,
       )
+      recovered = await reconcile_candidate_publication(
+        client,
+        stream=stream,
+        candidate_id=candidate_id,
+      )
+      if recovered.published:
+        await _mark_atomic_readiness(
+          client,
+          ready=True,
+          reason_code="atomic_publication_reconciled",
+        )
+        return recovered
       await _mark_atomic_readiness(
         client,
         ready=False,
@@ -314,3 +502,158 @@ async def publish_candidate_atomic(
     await client.delete(key, event_key)
     await rollback_claims()
     raise
+
+
+async def reconcile_candidate_publication(
+  client: Any,
+  *,
+  stream: str,
+  event_id: str | None = None,
+  candidate_id: str | None = None,
+) -> AtomicPublishResult:
+  """Rebuild markers/claims from one authoritative stream event.
+
+  The function never calls XADD. It exists because Redis Lua is isolated,
+  not transactional with rollback: a runtime error after XADD can leave a
+  durable stream event without its secondary indexes.
+  """
+  if event_id is not None:
+    try:
+      entries = await client.xrange(stream, min=event_id, max=event_id)
+    except TypeError:
+      entries = await client.xrange(stream, event_id, event_id)
+  else:
+    try:
+      recent = await client.xrevrange(stream, count=500)
+    except Exception:
+      recent = []
+    entries = []
+    for candidate_event_id, fields in recent:
+      raw = fields.get("payload") or fields.get(b"payload")
+      if isinstance(raw, bytes):
+        raw = raw.decode()
+      try:
+        body = json.loads(str(raw))
+      except (TypeError, ValueError, json.JSONDecodeError):
+        continue
+      if str(body.get("candidate_id") or "") == str(candidate_id or ""):
+        event_id = (
+          candidate_event_id.decode()
+          if isinstance(candidate_event_id, bytes)
+          else str(candidate_event_id)
+        )
+        entries = [(candidate_event_id, fields)]
+        break
+  if not entries:
+    return AtomicPublishResult(False, "orphan_event_missing", None)
+  assert event_id is not None
+  _, fields = entries[0]
+  raw_payload = fields.get("payload") or fields.get(b"payload")
+  if isinstance(raw_payload, bytes):
+    raw_payload = raw_payload.decode()
+  try:
+    payload = json.loads(str(raw_payload))
+    raw_ownership = payload["_publication_ownership"]
+    ownership = PublicationOwnership(
+      candidate_id=str(raw_ownership["candidate_id"]),
+      candidate_ttl=max(60, int(raw_ownership["candidate_ttl"])),
+      reaction_key=str(raw_ownership.get("reaction_key") or ""),
+      reaction_payload=str(raw_ownership.get("reaction_payload") or ""),
+      expected_reaction_payload=str(
+        raw_ownership.get("expected_reaction_payload") or ""
+      ),
+      reaction_ttl=int(raw_ownership.get("reaction_ttl") or 0),
+      thesis_key=str(raw_ownership.get("thesis_key") or ""),
+      thesis_payload=str(raw_ownership.get("thesis_payload") or ""),
+      expected_thesis_payload=str(
+        raw_ownership.get("expected_thesis_payload") or ""
+      ),
+      thesis_ttl=int(raw_ownership.get("thesis_ttl") or 0),
+      ownership_key=str(raw_ownership.get("ownership_key") or ""),
+      ownership_payload=str(raw_ownership.get("ownership_payload") or ""),
+      expected_ownership_payload=str(
+        raw_ownership.get("expected_ownership_payload") or ""
+      ),
+      ownership_ttl=int(raw_ownership.get("ownership_ttl") or 0),
+    )
+  except (
+    KeyError, TypeError, ValueError, json.JSONDecodeError,
+  ):
+    return AtomicPublishResult(False, "orphan_metadata_invalid", event_id)
+  try:
+    result = await client.eval(
+      _RECONCILE_PUBLICATION_LUA,
+      5,
+      candidate_key(ownership.candidate_id),
+      candidate_stream_event_key(ownership.candidate_id),
+      ownership.reaction_key,
+      ownership.thesis_key,
+      ownership.ownership_key,
+      ownership.candidate_ttl,
+      event_id,
+      ownership.expected_reaction_payload,
+      ownership.reaction_payload,
+      ownership.reaction_ttl,
+      ownership.expected_thesis_payload,
+      ownership.thesis_payload,
+      ownership.thesis_ttl,
+      ownership.expected_ownership_payload,
+      ownership.ownership_payload,
+      ownership.ownership_ttl,
+    )
+  except Exception:
+    await _mark_atomic_readiness(
+      client,
+      ready=False,
+      reason_code="publication_reconciliation_unavailable",
+    )
+    return AtomicPublishResult(
+      False, "publication_reconciliation_unavailable", event_id,
+    )
+  if int(result or 0) != 1:
+    return AtomicPublishResult(False, "reconciliation_conflict", event_id)
+  return AtomicPublishResult(True, "reconciled", event_id)
+
+
+async def publish_ranked_cycle(
+  client: Any,
+  *,
+  symbol: str,
+  cycle_id: str,
+  ordered: tuple[ExecutionIntent, ...],
+  publisher: Any,
+  lock_ttl: int = 30,
+) -> CandidatePublicationResult:
+  """Coordinate ranked publication under one closed-bar cycle lock.
+
+  ``publisher`` receives one intent and returns
+  :class:`CandidatePublicationResult`. Fallback occurs only after its
+  explicit terminal-reject result.
+  """
+  if not ordered:
+    return CandidatePublicationResult.blocked(
+      "publication_unavailable", "no_executable_intent",
+    )
+  owner_key = autonomous_cycle_owner_key(symbol, cycle_id)
+  if await client.get(owner_key) is not None:
+    return CandidatePublicationResult.blocked("cycle_conflict")
+  lock_key = cycle_route_lock_key(symbol, cycle_id)
+  token = await acquire_owned_lock(client, lock_key, ttl=lock_ttl)
+  if token is None:
+    return CandidatePublicationResult.blocked("route_in_progress")
+  try:
+    # Re-check after acquisition: a publisher may have completed between the
+    # optimistic owner read and lock acquisition.
+    if await client.get(owner_key) is not None:
+      return CandidatePublicationResult.blocked("cycle_conflict")
+    last_terminal: CandidatePublicationResult | None = None
+    for intent in ordered:
+      result = await publisher(intent)
+      if result.candidate_id is not None or result.blocks_lower_ranked_intents:
+        return result
+      last_terminal = result
+    return last_terminal or CandidatePublicationResult.blocked(
+      "publication_unavailable",
+    )
+  finally:
+    await release_owned_lock(client, lock_key, token)

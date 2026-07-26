@@ -12,6 +12,16 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- Preserve ranked-intent priority under concurrent delivery with a token-owned
+  cycle arbitration lock, typed publication outcomes, and terminal-only
+  fallback; make the Redis stream authoritative and reconcile orphan
+  candidate/reaction/thesis/cycle claims without another `XADD`.
+- Evaluate Python reward/risk against the same Decimal protective-stop plan as
+  the C# executor, carry candidate stop-plan v1 in contract v6, and reject
+  cross-service differences beyond one symbol tick.
+- Bound Redis group plans with lifecycle TTLs and remove them after rejection,
+  dry-run, rollback, cancellation, range flip, full TP, or terminal closure;
+  clear stale terminal reasons when a route later recovers.
 - Finish the autonomous execution-integrity pipeline: every scanner/private
   intent now passes side-effect-free typed preflight before arbitration, one
   initial owns each closed M1 cycle atomically, exact preflight/arbitration/
@@ -57,6 +67,10 @@ dated section after deployment.
   while preserving them in the analysis pipeline.
 
 ### Added
+
+- Added real-Redis production-Lua concurrency/orphan-recovery tests, shared
+  Python/C# stop-plan parity fixtures, and pending-fill restart/terminal-plan
+  cleanup regressions.
 
 - Added `AUTO_TRADE_MARKET_MAP_GUARD_ENABLED` so Market Map execution and its
   overlap/barrier guard are independently controlled. If omitted, the guard

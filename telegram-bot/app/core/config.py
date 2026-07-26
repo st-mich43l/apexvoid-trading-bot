@@ -182,8 +182,15 @@ class Settings(BaseSettings):
   auto_trade_reaction_enabled: bool = True
   auto_trade_liquidity_reversal_enabled: bool = True
   auto_trade_allow_counter_bias: bool = True
-  auto_trade_candidate_contract_version: int = 5
+  auto_trade_candidate_contract_version: int = 6
   auto_trade_canonical_symbol: str = "XAU"
+  auto_trade_sl_distance: float = 6.5
+  auto_trade_add_stop_buffer_atr: float = 0.3
+  auto_trade_add_min_stop_pips: int = 30
+  auto_trade_wick_stop_buffer_atr: float = 0.15
+  auto_trade_trend_stop_min_pips: int = 40
+  auto_trade_trend_stop_max_pips: int = 65
+  auto_trade_xau_price_digits: int = 2
   auto_trade_xau_pip_size: float = Field(
     default=0.1,
     validation_alias=AliasChoices(
