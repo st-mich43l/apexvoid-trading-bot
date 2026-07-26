@@ -184,6 +184,11 @@ services:
       AUTO_TRADE_FLIP_CONFIRM_TIMEOUT_SECONDS: {{ apexvoid_trading_bot_env.AUTO_TRADE_FLIP_CONFIRM_TIMEOUT_SECONDS | default('30') | string | to_json }}
       AUTO_TRADE_TREND_STOP_MIN_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_TREND_STOP_MIN_PIPS | default('40') | string | to_json }}
       AUTO_TRADE_TREND_STOP_MAX_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_TREND_STOP_MAX_PIPS | default('65') | string | to_json }}
+      AUTO_TRADE_ENTRY_CONTRACT_TOLERANCE_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_ENTRY_CONTRACT_TOLERANCE_PIPS | default('3') | string | to_json }}
+      AUTO_TRADE_STOP_PUSH_BEYOND_ZONE: {{ apexvoid_trading_bot_env.AUTO_TRADE_STOP_PUSH_BEYOND_ZONE | default('true') | string | to_json }}
+      AUTO_TRADE_BROKER_ABSENCE_CONFIRMATIONS: {{ apexvoid_trading_bot_env.AUTO_TRADE_BROKER_ABSENCE_CONFIRMATIONS | default('2') | string | to_json }}
+      AUTO_TRADE_BROKER_ABSENCE_RECHECK_SECONDS: {{ apexvoid_trading_bot_env.AUTO_TRADE_BROKER_ABSENCE_RECHECK_SECONDS | default('3') | string | to_json }}
+      AUTO_TRADE_BROKER_RECOVERY_TIMEOUT_SECONDS: {{ apexvoid_trading_bot_env.AUTO_TRADE_BROKER_RECOVERY_TIMEOUT_SECONDS | default('30') | string | to_json }}
     volumes:
       - ./data/ctrader-token:/var/lib/apexvoid
     healthcheck:
