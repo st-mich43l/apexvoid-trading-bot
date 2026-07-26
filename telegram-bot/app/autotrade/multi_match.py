@@ -67,6 +67,10 @@ def same_thesis(left: StrategyMatch, right: StrategyMatch, *, atr: float) -> boo
     return False
   if left.symbol != right.symbol:
     return False
+  # Stable detector identity wins over mutable event payload fields. A replay
+  # may refresh timestamps/geometry but is never independent confluence.
+  if left.match_id == right.match_id:
+    return True
   left_sid_early = left.structural_zone_id or left.zone_id
   right_sid_early = right.structural_zone_id or right.zone_id
   first_vs_wrapper = (
@@ -213,14 +217,30 @@ def merge_confluence(
   *,
   cfg: Any | None = None,
 ) -> StrategyMatch:
+  same_match_replay = primary.match_id == secondary.match_id
   reasons = tuple(dict.fromkeys([*primary.reasons, *secondary.reasons]))
   tags = tuple(dict.fromkeys([
     *primary.tags,
     *secondary.tags,
-    f"confluence:{secondary.strategy}",
+    *(
+      ()
+      if same_match_replay
+      else (
+        f"confluence:{secondary.strategy}",
+        f"contributor:{primary.match_id}",
+        f"contributor:{secondary.match_id}",
+      )
+    ),
   ]))
-  confluence = max(primary.confluence, secondary.confluence) + (
-    1 if secondary.confluence >= primary.confluence else 0
+  # A replay/update of one detector match is not independent evidence. Keep
+  # the strongest already-assembled score so a fresh replay cannot erase
+  # legitimate contributors, but never award its own +1.
+  confluence = (
+    max(primary.confluence, secondary.confluence)
+    if same_match_replay
+    else max(primary.confluence, secondary.confluence) + (
+      1 if secondary.confluence >= primary.confluence else 0
+    )
   )
   tier = classify_tier(
     confluence=confluence,
@@ -285,7 +305,11 @@ def dedupe_matches(
     if merged_into is not None:
       events.append({
         "match_id": match.match_id,
-        "event": "merged_confluence",
+        "event": (
+          "replay_updated"
+          if match.match_id == merged_into
+          else "merged_confluence"
+        ),
         "into": merged_into,
       })
       continue

@@ -978,6 +978,22 @@ async def auto_trade_status_text() -> str:
           selected = str(payload.get("selected_strategy") or "")
           selected_tf = str(payload.get("selected_timeframe") or "")
           direction = str(payload.get("direction") or "")
+          published_candidate = payload.get("published_candidate")
+          if isinstance(published_candidate, dict):
+            selected = str(
+              published_candidate.get("source_strategy") or selected
+            )
+            selected_tf = str(
+              published_candidate.get("timeframe") or selected_tf
+            )
+            direction = str(
+              published_candidate.get("direction") or direction
+            )
+            exact_source = str(
+              published_candidate.get("signal_source") or ""
+            )
+            if exact_source:
+              payload["gate_source"] = exact_source
           if selected:
             selected_text = " · ".join(
               item for item in (selected, direction, selected_tf) if item

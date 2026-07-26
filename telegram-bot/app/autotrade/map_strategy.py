@@ -357,6 +357,21 @@ def evaluate_market_map_strategy(
       *reaction_tags,
     ),
     target_price=float(market_map.eq) if counter_bias and market_map.eq is not None else None,
+    target_model=(
+      "hybrid"
+      if counter_bias and market_map.eq is not None
+      else "fill_relative"
+    ),
+    target_reference_price=(
+      "planned_entry"
+      if counter_bias and market_map.eq is not None
+      else "broker_fill"
+    ),
+    absolute_target_price=(
+      float(market_map.eq)
+      if counter_bias and market_map.eq is not None
+      else None
+    ),
     family="mapped_zone",
     structural_source="market_map_zone",
     zone_id=zone_structural_id,

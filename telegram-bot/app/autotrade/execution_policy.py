@@ -210,6 +210,7 @@ FAMILY_TREND = "trend"
 FAMILY_UNKNOWN = "unknown"
 
 _STRATEGY_FAMILY = {
+  "Range Box Scalp": FAMILY_RANGE_REVERSION,
   "Range Edge Scalp": FAMILY_RANGE_REVERSION,
   "One-Sided Range Reaction": FAMILY_RANGE_REVERSION,
   "Fade Scalp": FAMILY_RANGE_REVERSION,
@@ -243,6 +244,7 @@ class ExecutionPolicy:
   risk_multiplier: float
   order_type_preference: str  # limit | market | either
   permitted_regimes: tuple[str, ...]
+  entry_distribution: str = "either"  # single | zone_split | either
 
 
 @dataclass(frozen=True)
@@ -355,6 +357,7 @@ def policy_for(strategy: str, cfg: Any | None = None) -> ExecutionPolicy:
     risk_multiplier=base.risk_multiplier,
     order_type_preference=base.order_type_preference,
     permitted_regimes=base.permitted_regimes,
+    entry_distribution=base.entry_distribution,
   )
 
 
@@ -388,35 +391,61 @@ def evaluate_execution_policy(
     (high - low) / atr if atr > 0 and math.isfinite(atr) else float("inf")
   )
   targets = tuple(int(value) for value in getattr(match, "targets_pips", ()) or ())
-  target_price = getattr(match, "target_price", None)
-  if target_price is None and targets:
-    detected_price = float(getattr(match, "current_price", spot_price))
-    target_price = (
-      detected_price + max(targets) * pip
-      if direction == "BUY"
-      else detected_price - max(targets) * pip
+  target_model = str(
+    getattr(match, "target_model", "") or (
+      "hybrid"
+      if getattr(match, "target_price", None) is not None and targets
+      else "absolute"
+      if getattr(match, "target_price", None) is not None
+      else "fill_relative"
     )
-  remaining_price = 0.0
-  if target_price is not None and math.isfinite(float(target_price)):
-    remaining_price = (
-      float(target_price) - spot_price
+  ).strip().lower()
+  absolute_target = getattr(match, "absolute_target_price", None)
+  if absolute_target is None:
+    absolute_target = getattr(match, "target_price", None)
+  # Policy is evaluated against the actual planned entry, not the detector
+  # tick. A fill-relative ladder is anchored later to the broker fill and
+  # therefore must never be converted into a detection-relative price here.
+  planned_entry = (
+    (
+      min(spot_price, high)
       if direction == "BUY"
-      else spot_price - float(target_price)
+      else max(spot_price, low)
     )
+    if policy.order_type_preference == "limit"
+    else spot_price
+  )
+  ladder_room_price = max(targets) * pip if targets else 0.0
+  absolute_room_price = 0.0
+  if absolute_target is not None and math.isfinite(float(absolute_target)):
+    absolute_room_price = (
+      float(absolute_target) - planned_entry
+      if direction == "BUY"
+      else planned_entry - float(absolute_target)
+    )
+  if target_model == "fill_relative":
+    remaining_price = ladder_room_price
+  elif target_model == "absolute":
+    remaining_price = absolute_room_price
+  elif target_model == "hybrid":
+    remaining_price = min(ladder_room_price, absolute_room_price)
+  else:
+    remaining_price = -1.0
   remaining_pips = max(0.0, remaining_price / pip)
   remaining_room_atr = (
     max(0.0, remaining_price) / atr
     if atr > 0 and math.isfinite(atr) else 0.0
   )
   stop_price = abs(
-    spot_price - float(getattr(match, "structure_swing", spot_price))
+    planned_entry - float(getattr(match, "structure_swing", planned_entry))
   )
   reward_risk = (
     max(0.0, remaining_price) / stop_price
     if stop_price > 0 else 0.0
   )
+  raw_risk_multiplier = getattr(match, "risk_multiplier", 1.0)
   match_risk_multiplier = float(
-    getattr(match, "risk_multiplier", 1.0) or 1.0
+    1.0 if raw_risk_multiplier is None else raw_risk_multiplier
   )
   effective_risk_multiplier = (
     match_risk_multiplier * policy.risk_multiplier
@@ -440,9 +469,80 @@ def evaluate_execution_policy(
     "match_risk_multiplier": match_risk_multiplier,
     "effective_risk_multiplier": effective_risk_multiplier,
     "order_type_preference": policy.order_type_preference,
+    "entry_distribution": (
+      policy.entry_distribution
+      if policy.entry_distribution != "either"
+      else "zone_split"
+      if policy.order_type_preference == "limit"
+      and zone_width_atr >= 0.5
+      else "single"
+    ),
+    "target_model": target_model,
+    "target_reference_price": str(
+      getattr(match, "target_reference_price", "broker_fill")
+    ),
+    "absolute_target_price": absolute_target,
+    "planned_entry_price": round(planned_entry, 6),
     "regime": normalized_regime or "unknown",
     "permitted_regimes": list(policy.permitted_regimes),
   }
+  if (
+    direction not in {"BUY", "SELL"}
+    or not all(math.isfinite(value) for value in (spot_price, low, high))
+    or low > high
+    or not math.isfinite(atr)
+    or atr <= 0
+  ):
+    return ExecutionPolicyEvaluation(
+      False,
+      "invalid_execution_geometry",
+      "entry zone, direction, spot, or ATR is invalid",
+      True,
+      measured,
+      policy,
+    )
+  if (
+    not math.isfinite(effective_risk_multiplier)
+    or effective_risk_multiplier <= 0
+    or effective_risk_multiplier > 1.0
+  ):
+    return ExecutionPolicyEvaluation(
+      False,
+      "invalid_risk_multiplier",
+      "effective autonomous risk multiplier must be within (0, 1]",
+      True,
+      measured,
+      policy,
+    )
+  if target_model not in {"absolute", "fill_relative", "hybrid"}:
+    return ExecutionPolicyEvaluation(
+      False,
+      "invalid_target_model",
+      f"unsupported target model {target_model}",
+      True,
+      measured,
+      policy,
+    )
+  if target_model in {"absolute", "hybrid"} and (
+    absolute_target is None or absolute_room_price <= 0
+  ):
+    return ExecutionPolicyEvaluation(
+      False,
+      "invalid_absolute_target_geometry",
+      "absolute structural target is not ahead of the planned entry",
+      True,
+      measured,
+      policy,
+    )
+  if target_model in {"fill_relative", "hybrid"} and not targets:
+    return ExecutionPolicyEvaluation(
+      False,
+      "invalid_fill_relative_targets",
+      "fill-relative target model requires a positive pip ladder",
+      True,
+      measured,
+      policy,
+    )
   if confluence < policy.min_confluence:
     return ExecutionPolicyEvaluation(
       False,

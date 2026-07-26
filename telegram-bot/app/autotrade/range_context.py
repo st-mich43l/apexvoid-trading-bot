@@ -431,7 +431,16 @@ def private_range_context(
   # The native detector already creates an immutable id for the first
   # observed box. Use it as the episode id, then let
   # ``continue_range_episode`` carry it across small rail changes.
-  return replace(context, range_id=str(box.box_id))
+  return replace(
+    context,
+    range_id=str(box.box_id),
+    episode_started_at=int(
+      getattr(box, "formation_start_ts", 0) or generated_at
+    ),
+    episode_last_seen_at=int(
+      getattr(box, "formation_end_ts", 0) or generated_at
+    ),
+  )
 
 
 def resolve_range_context(

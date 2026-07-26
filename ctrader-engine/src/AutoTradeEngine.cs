@@ -831,6 +831,66 @@ public sealed class AutoTradeEngine(
     ).Trim().ToLowerInvariant();
     var orderTypePreferenceSupported = orderTypePreference is
       "either" or "market" or "limit";
+    var entryDistribution = (
+      candidate.EntryDistribution
+      ?? (manualAlgoCandidate ? "single" : "either")
+    ).Trim().ToLowerInvariant();
+    var entryDistributionSupported = entryDistribution is
+      "single" or "zone_split" or "either";
+    var targetModel = (
+      candidate.TargetModel
+      ?? (candidate.AbsoluteTargetPrice is null ? "fill_relative" : "hybrid")
+    ).Trim().ToLowerInvariant();
+    var targetModelSupported = targetModel is
+      "absolute" or "fill_relative" or "hybrid";
+    // Tier risk belongs to the autonomous initial candidate. Pullback adds
+    // inherit the already-sized parent group's contract and must not apply
+    // (or require) the multiplier a second time.
+    var autonomousRiskValid = manualAlgoCandidate
+      || !string.IsNullOrWhiteSpace(candidate.ParentGroupId)
+      || (
+      candidate.RiskMultiplier is decimal autonomousMultiplier
+      && autonomousMultiplier > 0m
+      && autonomousMultiplier <= 1m
+      );
+    if (!orderTypePreferenceSupported)
+    {
+      return await RejectAsync(
+        candidate,
+        "unsupported order_type_preference",
+        cancellationToken
+      );
+    }
+    if (!entryDistributionSupported)
+    {
+      return await RejectAsync(
+        candidate,
+        "unsupported entry_distribution",
+        cancellationToken
+      );
+    }
+    if (!targetModelSupported)
+    {
+      return await RejectAsync(
+        candidate,
+        "unsupported target_model",
+        cancellationToken
+      );
+    }
+    if (!autonomousRiskValid)
+    {
+      return await RejectAsync(
+        candidate,
+        "invalid autonomous risk_multiplier",
+        cancellationToken
+      );
+    }
+    candidate = candidate with
+    {
+      OrderTypePreference = orderTypePreference,
+      EntryDistribution = entryDistribution,
+      TargetModel = targetModel,
+    };
     if (boxRangeScalp)
     {
       await store.IncrementMetricAsync(
@@ -862,7 +922,6 @@ public sealed class AutoTradeEngine(
       )
       || candidate.EntryZone is null
       || candidate.EntryZone.Low > candidate.EntryZone.High
-      || !orderTypePreferenceSupported
       || (
         !string.Equals(candidate.Direction, "BUY", StringComparison.OrdinalIgnoreCase)
         && !string.Equals(candidate.Direction, "SELL", StringComparison.OrdinalIgnoreCase)
@@ -883,7 +942,10 @@ public sealed class AutoTradeEngine(
       direction: candidate.Direction,
       matchId: candidate.MatchId,
       rangeId: candidate.RangeId,
-      strategyFamily: candidate.StrategyFamily
+      strategyFamily: candidate.StrategyFamily,
+      riskMultiplier: candidate.RiskMultiplier,
+      targetModel: candidate.TargetModel,
+      entryDistribution: candidate.EntryDistribution
     );
     if (
       boxRangeScalp
@@ -924,6 +986,28 @@ public sealed class AutoTradeEngine(
       return await RejectAsync(
         candidate,
         "invalid strategy candidate contract",
+        cancellationToken
+      );
+    }
+    if (
+      !manualAlgoCandidate
+      && (targetModel is "absolute" or "hybrid")
+      && (
+        candidate.AbsoluteTargetPrice is not decimal absoluteTarget
+        || (
+          candidate.Direction.Equals("BUY", StringComparison.OrdinalIgnoreCase)
+          && absoluteTarget <= candidate.EntryZone.Low
+        )
+        || (
+          candidate.Direction.Equals("SELL", StringComparison.OrdinalIgnoreCase)
+          && absoluteTarget >= candidate.EntryZone.High
+        )
+      )
+    )
+    {
+      return await RejectAsync(
+        candidate,
+        "invalid absolute target geometry",
         cancellationToken
       );
     }
@@ -1394,8 +1478,19 @@ public sealed class AutoTradeEngine(
     var preference = (
       candidate.OrderTypePreference ?? "either"
     ).Trim().ToLowerInvariant();
+    var distribution = (
+      candidate.EntryDistribution ?? "single"
+    ).Trim().ToLowerInvariant();
     if (preference == "market")
     {
+      if (distribution == "zone_split")
+      {
+        return await RejectAsync(
+          candidate,
+          "market order cannot use zone_split entry distribution",
+          cancellationToken
+        );
+      }
       return await ProcessSingleInitialAsync(
         candidate,
         account,
@@ -1407,35 +1502,47 @@ public sealed class AutoTradeEngine(
         cancellationToken: cancellationToken
       );
     }
+    var splitQualified = (
+      options.ZoneFillEnabled
+      && candidate.Atr is decimal limitAtr
+      && ZoneFillPlanner.Qualifies(
+        candidate.EntryZone,
+        limitAtr,
+        options.ZoneFillMinAtr
+      )
+    );
     if (
       preference == "limit"
       && (
-        !options.ZoneFillEnabled
-        || candidate.Atr is not decimal limitAtr
-        || !ZoneFillPlanner.Qualifies(
-          candidate.EntryZone,
-          limitAtr,
-          options.ZoneFillMinAtr
-        )
+        distribution == "single"
+        || (distribution == "either" && !splitQualified)
       )
     )
     {
+      return await ProcessSingleLimitInitialAsync(
+        candidate,
+        account,
+        direction,
+        expectedEntry,
+        stopPlan,
+        date,
+        cancellationToken
+      );
+    }
+    if (distribution == "zone_split" && !splitQualified)
+    {
       return await RejectAsync(
         candidate,
-        "execution policy requires a limit-capable zone fill",
+        "execution policy requires unavailable zone_split limit capability",
         cancellationToken
       );
     }
     if (
       !IsBoxRangeScalp(candidate)
-      && (!IsStrategyMatchCandidate(candidate) || preference == "limit")
-      && (options.ZoneFillEnabled || preference == "limit")
-      && candidate.Atr is decimal atr
-      && ZoneFillPlanner.Qualifies(
-        candidate.EntryZone,
-        atr,
-        options.ZoneFillMinAtr
-      )
+      && distribution != "single"
+      && (!IsStrategyMatchCandidate(candidate) || preference == "limit"
+        || distribution == "zone_split")
+      && splitQualified
     )
     {
       return await ProcessZoneFillAsync(
@@ -1494,7 +1601,7 @@ public sealed class AutoTradeEngine(
     {
       sizing = VolumePlanner.SizeInitial(
         account.Balance,
-        options.RiskPercent,
+        EffectiveInitialRiskPercent(candidate),
         options.SizingMode,
         stopPlan.StopPips,
         options.PipValuePerLot,
@@ -1518,7 +1625,7 @@ public sealed class AutoTradeEngine(
       {
         sizing = VolumePlanner.SizeInitial(
           account.Balance,
-          options.RiskPercent,
+          EffectiveInitialRiskPercent(candidate),
           options.SizingMode,
           stopPlan.StopPips,
           options.PipValuePerLot,
@@ -1614,6 +1721,160 @@ public sealed class AutoTradeEngine(
     );
   }
 
+  private async Task<bool> ProcessSingleLimitInitialAsync(
+    TradeCandidate candidate,
+    TradingAccountSnapshot account,
+    TradeDirection direction,
+    decimal expectedEntry,
+    StructureStopPlan _,
+    DateOnly date,
+    CancellationToken cancellationToken
+  )
+  {
+    var symbol = RequireSymbol();
+    var geometry = ClassifyEntryGeometry(
+      candidate.EntryZone,
+      direction,
+      expectedEntry
+    );
+    var limitPrice = SelectValidSideProximal(
+      candidate.EntryZone,
+      direction,
+      expectedEntry,
+      geometry,
+      insideZoneMarketEntryEnabled: false
+    );
+    if (limitPrice is null)
+    {
+      return await RejectAsync(
+        candidate,
+        "required single limit is not on the valid broker side",
+        cancellationToken
+      );
+    }
+    StructureStopPlan stopPlan;
+    InitialSizingResult sizing;
+    var targets = UsesCandidateTargetPlan(candidate)
+      ? candidate.TargetsPips!
+      : options.TargetsPips;
+    var weights = UsesCandidateTargetPlan(candidate)
+      ? EqualWeights(targets.Count)
+      : options.TargetWeights;
+    try
+    {
+      stopPlan = StructureStop(candidate, direction, limitPrice.Value, symbol);
+      sizing = VolumePlanner.SizeInitial(
+        account.Balance,
+        EffectiveInitialRiskPercent(candidate),
+        options.SizingMode,
+        stopPlan.StopPips,
+        options.PipValuePerLot,
+        symbol,
+        targets,
+        weights
+      );
+    }
+    catch (VolumePlanningException exception)
+    {
+      return await RejectAsync(candidate, exception.Message, cancellationToken);
+    }
+    var groupId = CandidateGroupId(candidate);
+    var barTs = candidate.BarTs ?? candidate.CreatedAt;
+    await SaveGroupPlanAsync(candidate, groupId, cancellationToken);
+    if (options.DryRun)
+    {
+      return await CompleteDryRunAsync(
+        candidate,
+        $"single limit · {sizing.Lots:N2} lots at {limitPrice.Value:N2} · "
+          + $"SL {stopPlan.StopPips:N0}p · {sizing.BindingTerm}",
+        sizing.Volume,
+        limitPrice.Value,
+        cancellationToken
+      );
+    }
+    if (await store.IsPausedAsync(cancellationToken))
+    {
+      return await RejectAsync(candidate, "executor paused", cancellationToken);
+    }
+    await ReconcileAsync(cancellationToken);
+    if (!CanOpenNewGroup(direction))
+    {
+      return await RejectAsync(
+        candidate,
+        "XAU exposure policy changed before single limit order",
+        cancellationToken
+      );
+    }
+    var leg = new ZoneFillLegPlan(
+      1,
+      limitPrice.Value,
+      sizing.Volume,
+      sizing.TargetPlan
+    );
+    var stopLoss = direction == TradeDirection.Buy
+      ? limitPrice.Value - stopPlan.Distance
+      : limitPrice.Value + stopPlan.Distance;
+    stopLoss = decimal.Round(
+      stopLoss,
+      symbol.Digits,
+      MidpointRounding.AwayFromZero
+    );
+    await PublishAsync(
+      "order_submitted",
+      $"{candidate.Setup} {candidate.Direction} single limit submitted",
+      cancellationToken,
+      candidate.CandidateId,
+      volume: sizing.Volume,
+      price: limitPrice.Value,
+      groupId: groupId,
+      setup: candidate.Setup,
+      direction: candidate.Direction,
+      matchId: candidate.MatchId,
+      strategyFamily: candidate.StrategyFamily,
+      riskMultiplier: candidate.RiskMultiplier,
+      targetModel: candidate.TargetModel,
+      entryDistribution: "single"
+    );
+    var orderId = await RequireClient().PlaceLimitOrderAsync(
+      new LimitOrderRequest(
+        symbol.SymbolId,
+        direction,
+        sizing.Volume,
+        limitPrice.Value,
+        decimal.ToInt64(Math.Abs(limitPrice.Value - stopLoss) * 100_000m),
+        options.Label,
+        BuildZoneComment(candidate.CandidateId, groupId, leg, barTs),
+        $"{ClientOrderId(candidate.CandidateId)}-l1"
+      ),
+      cancellationToken
+    );
+    await store.CompleteCandidateAsync(
+      candidate.CandidateId,
+      $"ordered:{orderId}",
+      cancellationToken
+    );
+    await store.IncrementDailyTradeCountAsync(date, cancellationToken);
+    await PublishAsync(
+      "order_accepted",
+      $"broker accepted single limit order {orderId}",
+      cancellationToken,
+      candidate.CandidateId,
+      volume: sizing.Volume,
+      price: limitPrice.Value,
+      groupId: groupId,
+      setup: candidate.Setup,
+      direction: candidate.Direction,
+      matchId: candidate.MatchId,
+      strategyFamily: candidate.StrategyFamily,
+      pendingOrderIds: [orderId],
+      riskMultiplier: candidate.RiskMultiplier,
+      targetModel: candidate.TargetModel,
+      entryDistribution: "single"
+    );
+    await ReconcileAsync(cancellationToken);
+    return true;
+  }
+
   private async Task<bool> ProcessZoneFillAsync(
     TradeCandidate candidate,
     TradingAccountSnapshot account,
@@ -1668,18 +1929,24 @@ public sealed class AutoTradeEngine(
     }
     StructureStopPlan zoneStopPlan;
     InitialSizingResult sizing;
+    var zoneTargets = UsesCandidateTargetPlan(candidate)
+      ? candidate.TargetsPips!
+      : options.TargetsPips;
+    var zoneWeights = UsesCandidateTargetPlan(candidate)
+      ? EqualWeights(zoneTargets.Count)
+      : options.TargetWeights;
     try
     {
       zoneStopPlan = StructureStop(candidate, direction, proximal.Value, symbol);
       sizing = VolumePlanner.SizeInitial(
         account.Balance,
-        options.RiskPercent,
+        EffectiveInitialRiskPercent(candidate),
         options.SizingMode,
         zoneStopPlan.StopPips,
         options.PipValuePerLot,
         symbol,
-        options.TargetsPips,
-        options.TargetWeights
+        zoneTargets,
+        zoneWeights
       );
     }
     catch (VolumePlanningException exception)
@@ -1753,8 +2020,8 @@ public sealed class AutoTradeEngine(
         stopLoss,
         sizing.Volume,
         symbol,
-        options.TargetsPips,
-        options.TargetWeights
+        zoneTargets,
+        zoneWeights
       );
     }
     catch (VolumePlanningException exception)
@@ -1800,7 +2067,10 @@ public sealed class AutoTradeEngine(
       direction: candidate.Direction,
       matchId: candidate.MatchId,
       rangeId: candidate.RangeId,
-      strategyFamily: candidate.StrategyFamily
+      strategyFamily: candidate.StrategyFamily,
+      riskMultiplier: candidate.RiskMultiplier,
+      targetModel: candidate.TargetModel,
+      entryDistribution: candidate.EntryDistribution
     );
     await PublishAsync(
       "order_submitted",
@@ -1813,7 +2083,10 @@ public sealed class AutoTradeEngine(
       direction: candidate.Direction,
       matchId: candidate.MatchId,
       rangeId: candidate.RangeId,
-      strategyFamily: candidate.StrategyFamily
+      strategyFamily: candidate.StrategyFamily,
+      riskMultiplier: candidate.RiskMultiplier,
+      targetModel: candidate.TargetModel,
+      entryDistribution: candidate.EntryDistribution
     );
     await store.IncrementMetricAsync(
       candidate.Symbol,
@@ -2509,7 +2782,10 @@ public sealed class AutoTradeEngine(
       direction: DirectionLabel(direction),
       matchId: candidate.MatchId,
       rangeId: candidate.RangeId,
-      strategyFamily: candidate.StrategyFamily
+      strategyFamily: candidate.StrategyFamily,
+      riskMultiplier: trancheIndex == 1 ? candidate.RiskMultiplier : null,
+      targetModel: candidate.TargetModel,
+      entryDistribution: candidate.EntryDistribution
     );
     await PublishAsync(
       "order_submitted",
@@ -2523,7 +2799,10 @@ public sealed class AutoTradeEngine(
       direction: DirectionLabel(direction),
       matchId: candidate.MatchId,
       rangeId: candidate.RangeId,
-      strategyFamily: candidate.StrategyFamily
+      strategyFamily: candidate.StrategyFamily,
+      riskMultiplier: trancheIndex == 1 ? candidate.RiskMultiplier : null,
+      targetModel: candidate.TargetModel,
+      entryDistribution: candidate.EntryDistribution
     );
     await store.IncrementMetricAsync(
       candidate.Symbol,
@@ -2556,7 +2835,10 @@ public sealed class AutoTradeEngine(
       direction: DirectionLabel(direction),
       matchId: candidate.MatchId,
       rangeId: candidate.RangeId,
-      strategyFamily: candidate.StrategyFamily
+      strategyFamily: candidate.StrategyFamily,
+      riskMultiplier: trancheIndex == 1 ? candidate.RiskMultiplier : null,
+      targetModel: candidate.TargetModel,
+      entryDistribution: candidate.EntryDistribution
     );
     var fill = execution.ExecutionPrice > 0
       ? execution.ExecutionPrice
@@ -2586,6 +2868,15 @@ public sealed class AutoTradeEngine(
           MidpointRounding.AwayFromZero
         ))
         .ToArray();
+    }
+    else if (UsesCandidateTargetPlan(candidate))
+    {
+      targetPrices = BuildAutonomousTargetPrices(
+        candidate,
+        direction,
+        fill,
+        targetPlan.TargetsPips
+      );
     }
     var state = new AutoTradePositionState(
       candidate.CandidateId,
@@ -2638,7 +2929,10 @@ public sealed class AutoTradeEngine(
       ThesisId: candidate.ThesisId,
       StructuralZoneId: candidate.StructuralZoneId,
       StructuralZoneLow: candidate.StructuralZoneLow,
-      StructuralZoneHigh: candidate.StructuralZoneHigh
+      StructuralZoneHigh: candidate.StructuralZoneHigh,
+      RiskMultiplier: candidate.RiskMultiplier,
+      TargetModel: candidate.TargetModel,
+      AbsoluteTargetPrice: candidate.AbsoluteTargetPrice
     );
     _states[state.PositionId] = state;
     await PropagateGroupMetadataAsync(state, cancellationToken);
@@ -2684,7 +2978,10 @@ public sealed class AutoTradeEngine(
       direction: DirectionLabel(direction),
       matchId: candidate.MatchId,
       rangeId: candidate.RangeId,
-      strategyFamily: state.StrategyFamily
+      strategyFamily: state.StrategyFamily,
+      riskMultiplier: trancheIndex == 1 ? candidate.RiskMultiplier : null,
+      targetModel: candidate.TargetModel,
+      entryDistribution: candidate.EntryDistribution
     );
     await PublishAsync(
       "managing",
@@ -2700,7 +2997,10 @@ public sealed class AutoTradeEngine(
       direction: DirectionLabel(direction),
       matchId: candidate.MatchId,
       rangeId: candidate.RangeId,
-      strategyFamily: state.StrategyFamily
+      strategyFamily: state.StrategyFamily,
+      riskMultiplier: trancheIndex == 1 ? candidate.RiskMultiplier : null,
+      targetModel: candidate.TargetModel,
+      entryDistribution: candidate.EntryDistribution
     );
     return true;
   }
@@ -3947,13 +4247,26 @@ public sealed class AutoTradeEngine(
           RangeId = plan.RangeId,
           MatchId = plan.MatchId,
           StrategyFamily = plan.StrategyFamily,
-          TargetPrices = plan.TargetPrices,
+          TargetPrices = plan.TargetPrices ?? (
+            plan.TargetModel is null
+              ? null
+              : BuildAutonomousTargetPrices(
+                plan.TargetModel,
+                plan.AbsoluteTargetPrice,
+                state.Direction,
+                state.EntryPrice,
+                state.TargetsPips
+              )
+          ),
           ZoneId = plan.ZoneId,
           TriggerId = plan.TriggerId,
           ParentGroupId = plan.ParentGroupId,
           StructuralSource = plan.StructuralSource,
           ReactionId = plan.ReactionId,
           ThesisId = plan.ThesisId,
+          RiskMultiplier = plan.RiskMultiplier,
+          TargetModel = plan.TargetModel,
+          AbsoluteTargetPrice = plan.AbsoluteTargetPrice,
         };
       }
     }
@@ -4420,7 +4733,10 @@ public sealed class AutoTradeEngine(
       candidate.ThesisId,
       candidate.StructuralZoneId,
       candidate.StructuralZoneLow,
-      candidate.StructuralZoneHigh
+      candidate.StructuralZoneHigh,
+      candidate.RiskMultiplier,
+      candidate.TargetModel,
+      candidate.AbsoluteTargetPrice
     );
     await store.SetValueAsync(
       $"auto_trade:group_plan:{groupId}",
@@ -4800,7 +5116,10 @@ public sealed class AutoTradeEngine(
     string? zoneId = null,
     string? structuralZoneId = null,
     string? reactionId = null,
-    string? thesisId = null
+    string? thesisId = null,
+    decimal? riskMultiplier = null,
+    string? targetModel = null,
+    string? entryDistribution = null
   )
   {
     var state = LifecycleState(type, remainingVolume);
@@ -4882,7 +5201,10 @@ public sealed class AutoTradeEngine(
       zoneId,
       structuralZoneId,
       reactionId,
-      thesisId
+      thesisId,
+      riskMultiplier,
+      targetModel,
+      entryDistribution
     );
     await store.PublishAutoTradeEventAsync(
       options.EventStream,
@@ -5080,6 +5402,12 @@ public sealed class AutoTradeEngine(
   private static bool IsManualAlgoCandidate(TradeCandidate candidate) =>
     candidate.Mode == "manual_algo";
 
+  private decimal EffectiveInitialRiskPercent(TradeCandidate candidate)
+  {
+    var multiplier = candidate.RiskMultiplier ?? 1m;
+    return options.RiskPercent * multiplier;
+  }
+
   // On larger manual /algo positions the first booking should stay a
   // consistent ~0.05 lots rather than a proportional share that keeps
   // growing with account size - see VolumePlanner.FixFirstLegVolume.
@@ -5246,6 +5574,54 @@ public sealed class AutoTradeEngine(
       ? state.EntryPrice + targetPips * options.PipSize
       : state.EntryPrice - targetPips * options.PipSize
   );
+
+  private IReadOnlyList<decimal> BuildAutonomousTargetPrices(
+    TradeCandidate candidate,
+    TradeDirection direction,
+    decimal brokerFill,
+    IReadOnlyList<int> targetsPips
+  ) => BuildAutonomousTargetPrices(
+    candidate.TargetModel,
+    candidate.AbsoluteTargetPrice,
+    direction,
+    brokerFill,
+    targetsPips
+  );
+
+  private IReadOnlyList<decimal> BuildAutonomousTargetPrices(
+    string? targetModel,
+    decimal? absoluteTargetPrice,
+    TradeDirection direction,
+    decimal brokerFill,
+    IReadOnlyList<int> targetsPips
+  )
+  {
+    var symbol = RequireSymbol();
+    var model = (
+      targetModel
+      ?? (absoluteTargetPrice is null ? "fill_relative" : "hybrid")
+    ).Trim().ToLowerInvariant();
+    var cap = absoluteTargetPrice;
+    return targetsPips.Select(pips =>
+    {
+      var fillRelative = direction == TradeDirection.Buy
+        ? brokerFill + pips * options.PipSize
+        : brokerFill - pips * options.PipSize;
+      var target = model switch
+      {
+        "absolute" when cap is decimal absolute => absolute,
+        "hybrid" when cap is decimal absolute => direction == TradeDirection.Buy
+          ? Math.Min(fillRelative, absolute)
+          : Math.Max(fillRelative, absolute),
+        _ => fillRelative,
+      };
+      return decimal.Round(
+        target,
+        symbol.Digits,
+        MidpointRounding.AwayFromZero
+      );
+    }).ToArray();
+  }
 
   private static int TargetOrdinal(AutoTradePositionState state, int index) =>
     state.TargetOrdinals is { } ordinals && index < ordinals.Count

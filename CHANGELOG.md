@@ -12,6 +12,18 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- Finish the autonomous execution-integrity pipeline: every scanner/private
+  intent now passes side-effect-free typed preflight before arbitration, one
+  initial owns each closed M1 cycle atomically, exact preflight/arbitration/
+  publication evidence is retained, and production Redis scripting fails
+  closed without orphan candidate/reaction/thesis claims.
+- Carry tier risk into every C# autonomous initial sizing path, separate order
+  type from entry distribution, compute fill-relative targets from broker
+  fills, enforce absolute/hybrid structural targets, and preserve exact manual
+  `/algo` TP prices through reconciliation.
+- Stop same-match replay from inflating confluence, make private range IDs
+  formation-episode aware, render real range-side ownership state, and
+  attribute status to the exact candidate/strategy that published.
 - Make the autonomous execution pipeline single-winner and crash-safe: a
   cross-engine arbiter now selects at most one same-direction initial intent
   per M1 cycle, C# rejects opposite or already-active initial groups, candidate

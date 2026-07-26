@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
 import math
 
 import pandas as pd
@@ -33,6 +34,7 @@ BOX_MIN_BODY_FRACTION = 0.15
 BOX_BREAK_BUFFER_ATR = 0.12
 BOX_BREAK_M1_CLOSES = 2
 MAX_ENTRY_DISTANCE_PIPS = 10
+BOX_DETECTOR_VERSION = 2
 _EPS = 1e-9
 
 
@@ -56,6 +58,9 @@ class AutoScalpBox:
   width_pips: float
   inside_ratio: float = 0.0
   efficiency: float = 0.0
+  formation_start_ts: int = 0
+  formation_end_ts: int = 0
+  detector_version: int = BOX_DETECTOR_VERSION
 
 
 @dataclass(frozen=True)
@@ -402,14 +407,37 @@ def _m1_consolidation_box(
   bucket = 10 * pip_size
   low_bucket = round(lower_level / bucket)
   high_bucket = round(upper_level / bucket)
+  formation_start_ts = _index_timestamp(history.index[0])
+  formation_end_ts = _index_timestamp(history.index[-1])
+  box_id = (
+    f"v{BOX_DETECTOR_VERSION}|{symbol.upper()}|"
+    f"{formation_start_ts}|{formation_end_ts}|"
+    f"{low_bucket}|{high_bucket}"
+  )
   return AutoScalpBox(
-    f"{symbol.lower()}-{low_bucket}-{high_bucket}",
+    box_id,
     lower,
     upper,
     width_pips,
     inside_ratio,
     efficiency,
+    formation_start_ts,
+    formation_end_ts,
+    BOX_DETECTOR_VERSION,
   )
+
+
+def _index_timestamp(value: object) -> int:
+  """Stable formation identity for DatetimeIndex and integer test bars."""
+  if isinstance(value, (int, float)):
+    return int(value)
+  try:
+    timestamp = pd.Timestamp(value)
+    if timestamp.tzinfo is None:
+      timestamp = timestamp.tz_localize("UTC")
+    return int(timestamp.timestamp())
+  except (TypeError, ValueError, OverflowError):
+    return int(hashlib.sha256(str(value).encode()).hexdigest()[:8], 16)
 
 
 def _touch_episodes(flags: pd.Series) -> int:

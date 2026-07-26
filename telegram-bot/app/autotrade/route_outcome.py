@@ -20,6 +20,7 @@ RouteStatus = Literal[
   "order_filled",
   "expired",
   "duplicate_suppressed",
+  "arbitration_suppressed",
 ]
 
 RouteStage = Literal[
@@ -34,8 +35,11 @@ RouteStage = Literal[
   "entry_invalidation",
   "entry_drift",
   "news",
+  "range_context",
   "candidate_claim",
   "stream_publish",
+  "preflight",
+  "arbitration",
   "executor",
   "broker",
 ]
@@ -62,6 +66,14 @@ class StrategyRouteOutcome:
   candidate_id: str | None = None
   group_id: str | None = None
   executor_event_id: str | None = None
+  preflight_reason_code: str | None = None
+  arbitration_reason_code: str | None = None
+  publication_reason_code: str | None = None
+  terminal_reason_code: str | None = None
+  current_stage: str | None = None
+  retained: bool | None = None
+  winner_intent_id: str | None = None
+  signal_source: str | None = None
 
   def to_json(self) -> str:
     return json.dumps(asdict(self), separators=(",", ":"), sort_keys=True)
@@ -112,6 +124,12 @@ async def record_route_outcome(
   group_id: str | None = None,
   executor_event_id: str | None = None,
   retained: bool | None = None,
+  preflight_reason_code: str | None = None,
+  arbitration_reason_code: str | None = None,
+  publication_reason_code: str | None = None,
+  terminal_reason_code: str | None = None,
+  winner_intent_id: str | None = None,
+  signal_source: str | None = None,
   publish_status: bool = True,
 ) -> StrategyRouteOutcome:
   now = int(datetime.now(timezone.utc).timestamp())
@@ -121,8 +139,43 @@ async def record_route_outcome(
   details.setdefault("spot_price", getattr(match, "current_price", None))
   details.setdefault("entry_low", getattr(match, "entry_low", None))
   details.setdefault("entry_high", getattr(match, "entry_high", None))
+  key = route_outcome_key(
+    str(getattr(match, "symbol", "")).upper(),
+    str(getattr(match, "match_id", "")),
+  )
+  previous_raw = await client.get(key)
+  previous: dict[str, Any] = {}
+  if previous_raw:
+    try:
+      previous = json.loads(
+        previous_raw.decode()
+        if isinstance(previous_raw, bytes) else str(previous_raw)
+      )
+    except (TypeError, ValueError, json.JSONDecodeError):
+      previous = {}
+  preflight_stages = {
+    "mode_check", "policy", "spot_check", "counter_bias",
+    "opposing_barrier", "overlap", "cooldown", "entry_invalidation",
+    "entry_drift", "news", "range_context", "preflight",
+  }
+  if preflight_reason_code is None:
+    preflight_reason_code = previous.get("preflight_reason_code")
+    if stage in preflight_stages:
+      preflight_reason_code = reason_code
+  if arbitration_reason_code is None:
+    arbitration_reason_code = previous.get("arbitration_reason_code")
+    if stage == "arbitration":
+      arbitration_reason_code = reason_code
+  if publication_reason_code is None:
+    publication_reason_code = previous.get("publication_reason_code")
+    if stage in {"candidate_claim", "stream_publish"}:
+      publication_reason_code = reason_code
+  if terminal_reason_code is None:
+    terminal_reason_code = previous.get("terminal_reason_code")
+    if status in {"blocked", "expired", "executor_rejected"}:
+      terminal_reason_code = reason_code
   outcome = StrategyRouteOutcome(
-    version=1,
+    version=2,
     symbol=str(getattr(match, "symbol", "")).upper(),
     match_id=str(getattr(match, "match_id", "")),
     strategy=str(getattr(match, "strategy", "")),
@@ -144,26 +197,30 @@ async def record_route_outcome(
     detected_at=int(getattr(match, "issued_at", 0) or now),
     checked_at=now,
     expires_at=int(getattr(match, "expires_at", 0) or now),
-    candidate_id=candidate_id,
-    group_id=group_id,
-    executor_event_id=executor_event_id,
+    candidate_id=candidate_id or previous.get("candidate_id"),
+    group_id=group_id or previous.get("group_id"),
+    executor_event_id=(
+      executor_event_id or previous.get("executor_event_id")
+    ),
+    preflight_reason_code=preflight_reason_code,
+    arbitration_reason_code=arbitration_reason_code,
+    publication_reason_code=publication_reason_code,
+    terminal_reason_code=terminal_reason_code,
+    current_stage=stage,
+    retained=retained,
+    winner_intent_id=winner_intent_id or previous.get("winner_intent_id"),
+    signal_source=signal_source or previous.get("signal_source"),
   )
   encoded = outcome.to_json()
   ttl = max(300, outcome.expires_at - now, 86400)
-  previous_raw = await client.get(
-    route_outcome_key(outcome.symbol, outcome.match_id)
-  )
   transition_changed = previous_raw is None
   material_changed = False
   if previous_raw:
     try:
-      previous = json.loads(
-        previous_raw.decode()
-        if isinstance(previous_raw, bytes) else str(previous_raw)
-      )
       transition_changed = not (
         previous.get("status") == outcome.status
         and previous.get("reason_code") == outcome.reason_code
+        and previous.get("current_stage") == outcome.current_stage
       )
       if not transition_changed:
         material_changed = _material_measurement_changed(
@@ -175,7 +232,7 @@ async def record_route_outcome(
     except (TypeError, ValueError, json.JSONDecodeError):
       pass
   await client.set(
-    route_outcome_key(outcome.symbol, outcome.match_id), encoded, ex=ttl,
+    key, encoded, ex=ttl,
   )
   await client.set(last_route_outcome_key(outcome.symbol), encoded, ex=ttl)
   if transition_changed or material_changed:
