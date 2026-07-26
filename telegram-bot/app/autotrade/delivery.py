@@ -918,7 +918,9 @@ async def auto_trade_status_text() -> str:
     map_filters: dict[str, int] = {}
     map_track_limit: float | None = None
     map_execute_limit: float | None = None
-    raw = await client.get("auto_trade:last_gate")
+    raw = await client.get(
+      f"auto_trade:last_gate:{primary_symbol}"
+    )
     gate_stale = False
     if raw:
       try:
@@ -936,6 +938,11 @@ async def auto_trade_status_text() -> str:
           )
           metrics["range_status_stale_snapshot_suppressed"] = (
             metrics.get("range_status_stale_snapshot_suppressed", 0) + 1
+          )
+          await client.hincrby(
+            f"auto_trade:metrics:{primary_symbol}",
+            "range_status_stale_snapshot_suppressed",
+            1,
           )
         else:
           execution_state = str(payload.get("state") or execution_state)
@@ -971,6 +978,22 @@ async def auto_trade_status_text() -> str:
           selected = str(payload.get("selected_strategy") or "")
           selected_tf = str(payload.get("selected_timeframe") or "")
           direction = str(payload.get("direction") or "")
+          published_candidate = payload.get("published_candidate")
+          if isinstance(published_candidate, dict):
+            selected = str(
+              published_candidate.get("source_strategy") or selected
+            )
+            selected_tf = str(
+              published_candidate.get("timeframe") or selected_tf
+            )
+            direction = str(
+              published_candidate.get("direction") or direction
+            )
+            exact_source = str(
+              published_candidate.get("signal_source") or ""
+            )
+            if exact_source:
+              payload["gate_source"] = exact_source
           if selected:
             selected_text = " · ".join(
               item for item in (selected, direction, selected_tf) if item
@@ -978,9 +1001,16 @@ async def auto_trade_status_text() -> str:
             source_name = str(payload.get("gate_source") or "")
             selection_source = (
               "scanner detector"
-              if source_name == "scanner_strategy_match"
+              if source_name in {
+                "scanner_strategy_match",
+                "multi_strategy_match",
+              }
               else "Market Map + M1 reaction"
               if source_name == "market_map_strategy"
+              else "private M1 range engine"
+              if source_name == "private_range"
+              else "private M1 trend engine"
+              if source_name == "private_trend"
               else "private OHLC matcher"
             )
           box = payload.get("box")
@@ -1002,7 +1032,10 @@ async def auto_trade_status_text() -> str:
       except (KeyError, TypeError, ValueError, json.JSONDecodeError):
         pass
     scanner_state = "waiting for next M5 scan"
-    scanner_raw = await client.get("scanner:last_tick")
+    scanner_raw = await client.get(
+      f"scanner:last_tick:{primary_symbol}:"
+      f"{settings.scanner_exec_tf.upper()}"
+    )
     if scanner_raw:
       try:
         scanner_payload = json.loads(scanner_raw)
@@ -1018,6 +1051,11 @@ async def auto_trade_status_text() -> str:
           )
           metrics["range_status_stale_snapshot_suppressed"] = (
             metrics.get("range_status_stale_snapshot_suppressed", 0) + 1
+          )
+          await client.hincrby(
+            f"auto_trade:metrics:{primary_symbol}",
+            "range_status_stale_snapshot_suppressed",
+            1,
           )
         else:
           detected = scanner_payload.get("detected")

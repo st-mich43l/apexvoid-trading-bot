@@ -61,6 +61,7 @@ _PROFILE_DEFAULT_FIELDS = {
   "AUTO_TRADE_ZONE_COOLDOWN_ENABLED",
   "AUTO_TRADE_ZONE_RECONCILE_MODE",
   "AUTO_TRADE_MAPPED_ZONE_ENABLED",
+  "AUTO_TRADE_MARKET_MAP_GUARD_ENABLED",
   "AUTO_TRADE_STRATEGY_MATCH_ENABLED",
   "AUTO_TRADE_EXECUTION_ZONE_MAX_WIDTH_ATR",
   "AUTO_TRADE_EXECUTION_ZONE_MAX_WIDTH_PIPS",
@@ -273,6 +274,9 @@ def python_manifest() -> dict[str, Any]:
     "trend_enabled": settings.auto_trade_trend_enabled,
     "range_enabled": settings.auto_trade_range_enabled,
     "mapped_zone_enabled": settings.auto_trade_mapped_zone_enabled,
+    "market_map_guard_enabled": (
+      settings.auto_trade_market_map_guard_enabled
+    ),
     "map_thesis_lock_enabled": settings.auto_trade_map_thesis_lock_enabled,
     "strategy_match_enabled": settings.auto_trade_strategy_match_enabled,
     "execution_zone_max_width_atr": (

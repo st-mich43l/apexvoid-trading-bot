@@ -71,6 +71,7 @@ public static class AutoTradeConfigHealth
       TrendEnabled: options.TrendEnabled,
       RangeEnabled: options.RangeEnabled,
       MappedZoneEnabled: options.MappedZoneEnabled,
+      MarketMapGuardEnabled: options.MarketMapGuardEnabled,
       MapThesisLockEnabled: options.MapThesisLockEnabled,
       StrategyMatchEnabled: options.StrategyMatchEnabled,
       BreakoutEnabled: options.BreakoutEnabled,
@@ -99,6 +100,12 @@ public static class AutoTradeConfigHealth
           "AUTO_TRADE_MAPPED_ZONE_ENABLED",
           options.MappedZoneEnabled ? "true" : "false",
           ["AUTO_TRADE_MARKET_MAP_STRATEGY_ENABLED"]
+        ),
+        CanonicalOption(
+          options,
+          "AUTO_TRADE_MARKET_MAP_GUARD_ENABLED",
+          options.MarketMapGuardEnabled ? "true" : "false",
+          []
         ),
         CanonicalOption(
           options,
@@ -272,6 +279,12 @@ public static class AutoTradeConfigHealth
       CompareBool(root, "range_enabled", current.RangeEnabled, warnings);
       CompareBool(
         root, "mapped_zone_enabled", current.MappedZoneEnabled, warnings
+      );
+      CompareBool(
+        root,
+        "market_map_guard_enabled",
+        current.MarketMapGuardEnabled,
+        warnings
       );
       CompareBool(
         root,

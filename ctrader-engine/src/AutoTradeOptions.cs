@@ -71,6 +71,7 @@ public sealed record AutoTradeOptions(
   bool TrendEnabled = false,
   bool RangeEnabled = true,
   bool MappedZoneEnabled = true,
+  bool MarketMapGuardEnabled = true,
   bool MapThesisLockEnabled = true,
   bool StrategyMatchEnabled = true,
   bool BreakoutEnabled = true,
@@ -140,6 +141,12 @@ public sealed record AutoTradeOptions(
     var profileSource = demoEval ? "profile_demo_eval" : "application_default";
     var requireDemoAccount = resolver.Bool(
       "AUTO_TRADE_REQUIRE_DEMO_ACCOUNT", true, profileSource
+    );
+    var mappedZoneEnabled = resolver.Bool(
+      "AUTO_TRADE_MAPPED_ZONE_ENABLED",
+      true,
+      "application_default",
+      "AUTO_TRADE_MARKET_MAP_STRATEGY_ENABLED"
     );
     var options = new AutoTradeOptions(
     Enabled: resolver.Bool(
@@ -324,11 +331,10 @@ public sealed record AutoTradeOptions(
       "AUTO_TRADE_TREND_ENABLED", demoEval, profileSource
     ),
     RangeEnabled: resolver.Bool("AUTO_TRADE_RANGE_ENABLED", true),
-    MappedZoneEnabled: resolver.Bool(
-      "AUTO_TRADE_MAPPED_ZONE_ENABLED",
-      true,
-      "application_default",
-      "AUTO_TRADE_MARKET_MAP_STRATEGY_ENABLED"
+    MappedZoneEnabled: mappedZoneEnabled,
+    MarketMapGuardEnabled: resolver.Bool(
+      "AUTO_TRADE_MARKET_MAP_GUARD_ENABLED",
+      mappedZoneEnabled
     ),
     MapThesisLockEnabled: resolver.Bool(
       "AUTO_TRADE_MAP_THESIS_LOCK_ENABLED",

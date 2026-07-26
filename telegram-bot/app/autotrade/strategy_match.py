@@ -65,6 +65,11 @@ class StrategyMatch:
   touch_bar_ts: str | None = None
   confirmation_bar_ts: str | None = None
   reaction_type: str | None = None
+  # Explicit execution target semantics. ``targets_pips`` are always
+  # fill-relative; ``absolute_target_price`` is a structural cap/target.
+  target_model: str = "fill_relative"
+  target_reference_price: str = "broker_fill"
+  absolute_target_price: float | None = None
 
   @property
   def is_range_edge(self) -> bool:
@@ -184,6 +189,32 @@ class StrategyMatch:
           None if payload.get("reaction_type") is None
           else str(payload["reaction_type"])
         ),
+        target_model=str(
+          payload.get("target_model")
+          or (
+            "hybrid"
+            if payload.get("target_price") is not None
+            and payload.get("targets_pips")
+            else "absolute"
+            if payload.get("target_price") is not None
+            else "fill_relative"
+          )
+        ).lower(),
+        target_reference_price=str(
+          payload.get("target_reference_price")
+          or (
+            "planned_entry"
+            if payload.get("target_price") is not None
+            else "broker_fill"
+          )
+        ).lower(),
+        absolute_target_price=(
+          float(payload["absolute_target_price"])
+          if payload.get("absolute_target_price") is not None
+          else float(payload["target_price"])
+          if payload.get("target_price") is not None
+          else None
+        ),
       )
     except (KeyError, TypeError, ValueError, json.JSONDecodeError):
       return None
@@ -282,6 +313,14 @@ def _valid_match(match: StrategyMatch) -> bool:
     and (
       match.target_price is None
       or math.isfinite(match.target_price)
+    )
+    and match.target_model in {"absolute", "fill_relative", "hybrid"}
+    and match.target_reference_price in {
+      "detection", "planned_entry", "broker_fill", "structural_level",
+    }
+    and (
+      match.absolute_target_price is None
+      or math.isfinite(match.absolute_target_price)
     )
     and match.tier in {"A", "B", "C"}
     and math.isfinite(match.risk_multiplier)

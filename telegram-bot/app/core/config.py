@@ -270,6 +270,9 @@ class Settings(BaseSettings):
       "AUTO_TRADE_MARKET_MAP_STRATEGY_ENABLED",
     ),
   )
+  # Independent context guard. When omitted it follows mapped-zone execution,
+  # making an explicitly disabled Market Map execution route neutral.
+  auto_trade_market_map_guard_enabled: bool = True
   # Tracking vs execution reach for mapped reactions. Zones inside the track
   # window are reported as the working target; only the execute window may
   # produce an immediate market entry after M1 touch + rejection.
@@ -486,6 +489,7 @@ class Settings(BaseSettings):
         "AUTO_TRADE_PROFILE=demo_eval requires "
         "AUTO_TRADE_REQUIRE_DEMO_ACCOUNT=true"
       )
+    explicitly_set = set(self.model_fields_set)
     demo_defaults = {
       "auto_trade_enabled": True,
       "auto_trade_dry_run": False,
@@ -500,6 +504,7 @@ class Settings(BaseSettings):
       "auto_trade_track_all_structural_matches": True,
       "auto_trade_trend_enabled": True,
       "auto_trade_mapped_zone_enabled": True,
+      "auto_trade_market_map_guard_enabled": True,
       "auto_trade_strategy_match_enabled": True,
       "auto_trade_breakout_enabled": True,
       "auto_trade_retest_enabled": True,
@@ -536,15 +541,18 @@ class Settings(BaseSettings):
       "scanner_top_n": 0,
     }
     if profile == "demo_eval":
-      explicitly_set = self.model_fields_set
       for field_name, value in demo_defaults.items():
         if field_name not in explicitly_set:
           setattr(self, field_name, value)
     elif (
       not self.auto_trade_require_demo_account
-      and "auto_trade_structural_guard_mode" not in self.model_fields_set
+      and "auto_trade_structural_guard_mode" not in explicitly_set
     ):
       self.auto_trade_structural_guard_mode = "strict"
+    if "auto_trade_market_map_guard_enabled" not in explicitly_set:
+      self.auto_trade_market_map_guard_enabled = (
+        self.auto_trade_mapped_zone_enabled
+      )
     self.auto_trade_structural_guard_mode = (
       self.auto_trade_structural_guard_mode.strip().lower()
     )

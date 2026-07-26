@@ -52,7 +52,8 @@ _EPS = 1e-9
 
 @dataclass(frozen=True)
 class RegimeInfo:
-  state: str                    # "chop" | "trend" | "breakout"
+  # "chop" | "trend" | "breakout" | "warming_up" | "data_gap"
+  state: str
   direction: str | None         # "up" | "down" | None (price-action vocabulary)
   bos_count: int
   atr_ratio: float
@@ -93,16 +94,28 @@ def classify_regime(
   """
   m1_raw = frames.get("M1")
   if m1_raw is None or m1_raw.empty:
-    return RegimeInfo("chop", None, 0, 0.0, False, None, ("missing M1 frame",))
+    return RegimeInfo(
+      "data_gap", None, 0, 0.0, False, None, ("missing M1 frame",),
+    )
   m1 = _clean(m1_raw)
   if len(m1) < BOX_LOOKBACK_FOR_HEIGHT + 1:
-    return RegimeInfo("chop", None, 0, 0.0, False, None, ("insufficient M1 history",))
+    return RegimeInfo(
+      "warming_up",
+      None,
+      0,
+      0.0,
+      False,
+      None,
+      ("insufficient M1 history",),
+    )
 
   atr_length = max(2, int(getattr(cfg, "atr_length", 14)))
   atr_series_full = atr_series(m1, atr_length)
   atr = float(atr_series_full.iloc[-1])
   if not math.isfinite(atr) or atr <= _EPS:
-    return RegimeInfo("chop", None, 0, 0.0, False, None, ("invalid atr",))
+    return RegimeInfo(
+      "data_gap", None, 0, 0.0, False, None, ("invalid atr",),
+    )
 
   breakout = _classify_breakout(m1, box_decision, atr, atr_series_full, cfg)
   if breakout is not None:
@@ -256,7 +269,7 @@ def _maybe_directional_trend(
     direction,
     bos_count,
     atr_ratio,
-    True,
+    htf_aligned,
     None,
     (
       (
@@ -264,6 +277,8 @@ def _maybe_directional_trend(
         f"net {net_displacement:.1f} ATR over {lookback} bars"
       ),
       f"  [{chop_reasons[0]} would have said chop]",
+      "relationship_to_bias="
+      + ("with_bias" if htf_aligned else "unconfirmed_or_counter_bias"),
     ),
   )
 

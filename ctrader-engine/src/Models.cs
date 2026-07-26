@@ -189,7 +189,13 @@ public sealed record TradeCandidate(
   string? ThesisId = null,
   string? StructuralZoneId = null,
   decimal? StructuralZoneLow = null,
-  decimal? StructuralZoneHigh = null
+  decimal? StructuralZoneHigh = null,
+  string? OrderTypePreference = null,
+  string? EntryDistribution = null,
+  decimal? RiskMultiplier = null,
+  string? TargetModel = null,
+  decimal? AbsoluteTargetPrice = null,
+  string? TargetReferencePrice = null
 );
 
 public sealed record TradeStreamEntry(
@@ -249,7 +255,10 @@ public sealed record AutoTradePositionState(
   long? RangeBoxScaleOutAt = null,
   string? StructuralZoneId = null,
   decimal? StructuralZoneLow = null,
-  decimal? StructuralZoneHigh = null
+  decimal? StructuralZoneHigh = null,
+  decimal? RiskMultiplier = null,
+  string? TargetModel = null,
+  decimal? AbsoluteTargetPrice = null
 );
 
 public sealed record RedisClaimPayload(
@@ -339,7 +348,10 @@ public sealed record AutoTradeEvent(
   string? ZoneId = null,
   string? StructuralZoneId = null,
   string? ReactionId = null,
-  string? ThesisId = null
+  string? ThesisId = null,
+  decimal? RiskMultiplier = null,
+  string? TargetModel = null,
+  string? EntryDistribution = null
 );
 
 public sealed record AutoTradeGroupPlan(
@@ -361,7 +373,10 @@ public sealed record AutoTradeGroupPlan(
   string? ThesisId = null,
   string? StructuralZoneId = null,
   decimal? StructuralZoneLow = null,
-  decimal? StructuralZoneHigh = null
+  decimal? StructuralZoneHigh = null,
+  decimal? RiskMultiplier = null,
+  string? TargetModel = null,
+  decimal? AbsoluteTargetPrice = null
 );
 
 public sealed record CanonicalConfigOption(
@@ -411,6 +426,7 @@ public sealed record AutoTradeConfigManifest(
   bool TrendEnabled = false,
   bool RangeEnabled = false,
   bool MappedZoneEnabled = false,
+  bool MarketMapGuardEnabled = false,
   bool MapThesisLockEnabled = true,
   bool StrategyMatchEnabled = false,
   bool BreakoutEnabled = false,
