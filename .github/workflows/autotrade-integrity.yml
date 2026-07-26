@@ -1,0 +1,137 @@
+name: Autotrade Integrity
+
+# Required PR validation for execution-critical autotrade paths.
+# Failures must fail the workflow; Redis integration tests must not skip.
+
+on:
+  pull_request:
+    paths:
+      - "telegram-bot/**"
+      - "ctrader-engine/**"
+      - "contracts/autotrade/**"
+      - "docker-compose.yml"
+      - ".github/workflows/autotrade-integrity.yml"
+
+jobs:
+  python:
+    name: Python autotrade suite
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: apexvoid
+          POSTGRES_PASSWORD: apexvoid
+          POSTGRES_DB: signals
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd "pg_isready -U apexvoid -d signals"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: |
+            telegram-bot/requirements.txt
+            telegram-bot/requirements-dev.txt
+
+      - name: Install dependencies
+        working-directory: telegram-bot
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Run pytest
+        working-directory: telegram-bot
+        env:
+          REAL_REDIS_URL: redis://127.0.0.1:6379/15
+          DATABASE_URL: postgresql://apexvoid:apexvoid@127.0.0.1:55432/signals
+          PYTHONPATH: .
+        run: |
+          set -euo pipefail
+          pytest -q --junitxml=pytest-results.xml
+          # Real Redis fencing tests must execute, not skip.
+          pytest -q \
+            tests/test_candidate_execution_state.py \
+            tests/test_candidate_publish_real_redis.py \
+            tests/test_execution_pipeline_integrity.py \
+            -rs --junitxml=pytest-redis-focus.xml | tee redis-focus.txt
+          if grep -E 'SKIPPED \[' redis-focus.txt; then
+            echo "Focused Redis/integrity tests reported skips" >&2
+            exit 1
+          fi
+
+      - name: Upload Python test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-pytest-results
+          path: telegram-bot/pytest-results.xml
+
+  csharp:
+    name: C# autotrade suite
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Build
+        working-directory: ctrader-engine
+        run: dotnet build src/CTraderFeed.csproj --nologo
+
+      - name: Test
+        working-directory: ctrader-engine
+        env:
+          REAL_REDIS_URL: redis://127.0.0.1:6379/15
+        run: |
+          dotnet test tests/CTraderFeed.Tests.csproj --nologo \
+            --logger "trx;LogFileName=csharp-results.trx" \
+            --results-directory TestResults
+
+      - name: Upload C# test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: csharp-test-results
+          path: ctrader-engine/TestResults
+
+  repo-checks:
+    name: Repository checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: docker compose config
+        run: docker compose config -q
+
+      - name: git diff --check
+        run: git diff --check
