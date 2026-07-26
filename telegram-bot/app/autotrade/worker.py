@@ -1700,9 +1700,10 @@ def _opposing_zone_identity(
 ) -> str:
   """Exact identity of the zone a stop may be pushed beyond.
 
-  Zone detectors carry no stored id, and ``zone.kind`` names the detector, not
-  the zone, so two different zones from one detector would share it. The
-  fingerprint therefore includes the zone's own geometry and provenance.
+  Zone detectors carry no stored id, and the detector name identifies the
+  detector rather than the zone, so two different zones from one detector
+  would share it. The fingerprint therefore includes the zone's own geometry
+  and provenance, and the executor derives the same string.
   """
   stored = getattr(zone, "zone_id", None)
   if stored:
@@ -1717,7 +1718,7 @@ def _opposing_zone_identity(
     created_bar_ts=(
       int(created.timestamp()) if created is not None else zone.origin_index
     ),
-    source=zone.source or zone.kind,
+    source=zone.source or getattr(zone, "kind", "") or "zone",
   )
 
 

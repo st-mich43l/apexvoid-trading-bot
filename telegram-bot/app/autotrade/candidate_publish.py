@@ -82,6 +82,20 @@ return 0
 """
 
 _RECONCILE_PUBLICATION_LUA = """
+local known_states = {
+  published = true,
+  processing = true,
+  broker_submitting = true,
+  ordered = true,
+  completed = true,
+  rejected = true,
+  retryable_error = true,
+  broker_outcome_unknown = true,
+  dry_run = true,
+  flip_pending = true,
+  integrity_error = true,
+}
+
 local function candidate_compatible(raw, candidate_id, event_id)
   if raw == false then
     return true
@@ -98,26 +112,32 @@ local function candidate_compatible(raw, candidate_id, event_id)
   if string.sub(raw, 1, 13) == 'flip_pending:' then
     return true
   end
-  local current_candidate = string.match(raw, '"candidate_id"%s*:%s*"([^"]+)"')
-  local current_event = string.match(raw, '"stream_event_id"%s*:%s*"([^"]+)"')
-  local current_state = string.match(raw, '"state"%s*:%s*"([^"]+)"')
-  if current_candidate and current_candidate ~= candidate_id then
+  if string.sub(raw, 1, 1) ~= '{' then
+    -- An unrecognised legacy marker is never assumed to be retryable.
     return false
   end
-  if current_event and event_id ~= '' and current_event ~= event_id then
+  -- Structured records are decoded, never pattern-matched: an id or error
+  -- string carrying JSON punctuation must not be able to fake a field.
+  local ok, record = pcall(cjson.decode, raw)
+  if not ok or type(record) ~= 'table' then
     return false
   end
-  if current_state == 'published'
-    or current_state == 'processing'
-    or current_state == 'broker_submitting'
-    or current_state == 'ordered'
-    or current_state == 'completed'
-    or current_state == 'rejected'
-    or current_state == 'retryable_error'
-    or current_state == 'broker_outcome_unknown' then
-    return true
+  local current_candidate = record['candidate_id']
+  local current_event = record['stream_event_id']
+  local current_state = record['state']
+  if type(current_candidate) == 'string'
+    and current_candidate ~= ''
+    and current_candidate ~= candidate_id then
+    return false
   end
-  return false
+  if type(current_event) == 'string'
+    and current_event ~= ''
+    and current_event ~= 'pending'
+    and event_id ~= ''
+    and current_event ~= event_id then
+    return false
+  end
+  return type(current_state) == 'string' and known_states[current_state] == true
 end
 
 local function validate_claim(key, expected, value, actual)

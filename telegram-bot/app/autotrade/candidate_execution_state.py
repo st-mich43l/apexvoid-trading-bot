@@ -15,6 +15,9 @@ STATE_COMPLETED = "completed"
 STATE_REJECTED = "rejected"
 STATE_RETRYABLE_ERROR = "retryable_error"
 STATE_BROKER_OUTCOME_UNKNOWN = "broker_outcome_unknown"
+STATE_DRY_RUN = "dry_run"
+STATE_FLIP_PENDING = "flip_pending"
+STATE_INTEGRITY_ERROR = "integrity_error"
 
 EXECUTOR_COMPATIBLE_STATES = frozenset({
   STATE_PUBLISHED,
@@ -25,6 +28,25 @@ EXECUTOR_COMPATIBLE_STATES = frozenset({
   STATE_REJECTED,
   STATE_RETRYABLE_ERROR,
   STATE_BROKER_OUTCOME_UNKNOWN,
+  STATE_DRY_RUN,
+  STATE_FLIP_PENDING,
+  STATE_INTEGRITY_ERROR,
+})
+
+# The executor may hand a candidate back for a later attempt from these states.
+RETRYABLE_STATES = frozenset({STATE_PUBLISHED, STATE_RETRYABLE_ERROR})
+
+# A broker request may have been accepted, so only deterministic broker
+# reconciliation may move the record on - never a plain retry.
+RECOVERY_REQUIRED_STATES = frozenset({STATE_BROKER_OUTCOME_UNKNOWN})
+
+TERMINAL_STATES = frozenset({
+  STATE_ORDERED,
+  STATE_COMPLETED,
+  STATE_REJECTED,
+  STATE_DRY_RUN,
+  STATE_FLIP_PENDING,
+  STATE_INTEGRITY_ERROR,
 })
 
 LEGACY_PLAIN_STATES = frozenset({
@@ -46,12 +68,27 @@ class CandidateExecutionRecord:
   outcome: str | None = None
   updated_at: int = 0
   version: int = RECORD_VERSION
+  # Written by the executor when it hands a candidate back for another attempt.
+  attempt: int = 0
+  last_error: str | None = None
 
   @property
   def legacy_status(self) -> str:
     if self.outcome:
       return self.outcome
     return self.state
+
+  @property
+  def is_terminal(self) -> bool:
+    return self.state in TERMINAL_STATES
+
+  @property
+  def is_retryable(self) -> bool:
+    return self.state in RETRYABLE_STATES
+
+  @property
+  def requires_recovery(self) -> bool:
+    return self.state in RECOVERY_REQUIRED_STATES
 
 
 def _coerce_optional_str(value: Any) -> str | None:
@@ -124,6 +161,8 @@ def parse_candidate_execution_record(raw: str | bytes | None) -> CandidateExecut
     outcome=_coerce_optional_str(parsed.get("outcome")),
     updated_at=int(parsed.get("updated_at") or 0),
     version=int(parsed.get("version") or RECORD_VERSION),
+    attempt=int(parsed.get("attempt") or 0),
+    last_error=_coerce_optional_str(parsed.get("last_error")),
   )
 
 
@@ -137,6 +176,8 @@ def serialize_candidate_execution_record(
   outcome: str | None = None,
   updated_at: int | None = None,
   version: int = RECORD_VERSION,
+  attempt: int = 0,
+  last_error: str | None = None,
 ) -> str:
   payload = {
     "candidate_id": candidate_id,
@@ -147,6 +188,8 @@ def serialize_candidate_execution_record(
     "outcome": outcome,
     "updated_at": updated_at if updated_at is not None else int(time.time()),
     "version": version,
+    "attempt": attempt,
+    "last_error": last_error,
   }
   return json.dumps(payload, separators=(",", ":"), sort_keys=True)
 
