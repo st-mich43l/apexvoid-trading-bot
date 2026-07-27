@@ -11,6 +11,12 @@ dated section after deployment.
 
 ## Unreleased
 
+### Changed
+- Scale-in adds (momentum and pullback) share the same volume-split cap:
+  each tranche is limited to `AUTO_TRADE_ADD_SIZE_RATIO` (default `0.5`) of the
+  initial tranche size, in addition to exposure/risk/add-cap ceilings. Python
+  mirror: `app.autotrade.scale_in_sizing`.
+
 ### Fixed
 - Block opposite-direction autonomous initial groups before stop/route planning:
   worker preflight rejects with `opposite_initial_group_active` when a tracked
@@ -384,9 +390,9 @@ dated section after deployment.
   (`AUTO_TRADE_ADD_MAX_GROUP_RISK_PCT`, default `3.0`) is enforced on top
   of the existing budget-based sizing check, since a pullback add's own
   stop isn't guaranteed to sit in profit the way the initial tranche's
-  does. Every pullback tranche is also capped at
+  does.   Every scale-in tranche (momentum and pullback) is capped at
   `AUTO_TRADE_ADD_SIZE_RATIO` (default `0.5`) of the initial tranche's own
-  size — momentum's existing sizing is unchanged. Every rejection now
+  size on top of exposure/risk/add-cap ceilings. Every rejection now
   names both the mode evaluated and the specific condition
   (`auto_trade:add_reject:{symbol}:{mode}:{condition}`), and each tranche
   is tagged `add_momentum`/`add_pullback` in its order message and

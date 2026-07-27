@@ -3225,14 +3225,7 @@ public sealed class AutoTradeEngine(
     }
     stopPlan = rawStopPlan;
     var groupBooked = GroupBookedPnl(group);
-    // AUTO_TRADE_ADD_SIZE_RATIO only constrains pullback tranches - momentum
-    // keeps ScaleInPlanner's existing exposure/risk/add-cap sizing exactly
-    // as before (byte-identical, proven by
-    // MomentumContinuationOpensIndependentSecondTranche's fixed 600-volume
-    // add-cap-bound expectation).
-    var initialTrancheLots = mode == "add_pullback"
-      ? InitialTrancheVolume(group) / (decimal)symbol.LotSize
-      : (decimal?)null;
+    var initialTrancheLots = InitialTrancheVolume(group) / (decimal)symbol.LotSize;
     var decision = ScaleInPlanner.Plan(
       account.Balance,
       options.RiskPercent,
