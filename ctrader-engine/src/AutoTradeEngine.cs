@@ -5380,6 +5380,55 @@ public sealed class AutoTradeEngine(
     var trackedIds = await store.GetTrackedPositionIdsAsync(cancellationToken);
     foreach (var stale in trackedIds.Where(id => !openIds.Contains(id)))
     {
+      // A single missing broker snapshot is only "suspected" missing, not
+      // confirmed closed - a transient reconcile gap must never delete an
+      // open position's tracking. Require at least
+      // options.PositionMissingConfirmations independent snapshots, each
+      // separated by at least options.PositionMissingRecheckSeconds on the
+      // executor clock, before terminalising. This does not apply to a
+      // close the engine itself submitted and got a confirmed broker
+      // response for - those paths remove _states/store directly and never
+      // reach this reconcile-driven stale-detection loop.
+      var missingNow = _clock().ToUnixTimeSeconds();
+      var missing = await store.GetPositionMissingAsync(stale, cancellationToken);
+      if (
+        missing is not null
+        && missingNow - missing.LastCheckedAt < options.PositionMissingRecheckSeconds
+      )
+      {
+        continue;
+      }
+      var confirmations = (missing?.Confirmations ?? 0) + 1;
+      if (confirmations < options.PositionMissingConfirmations)
+      {
+        await store.SavePositionMissingAsync(
+          stale,
+          missing is null
+            ? new PositionMissingRecord(confirmations, missingNow, missingNow)
+            : missing with { Confirmations = confirmations, LastCheckedAt = missingNow },
+          cancellationToken
+        );
+        await store.IncrementMetricAsync(
+          RequireSymbol().RedisSymbol,
+          "position_missing_snapshot_suspected",
+          cancellationToken
+        );
+        _log(
+          $"auto-trade position_missing_snapshot_suspected position_id={stale}"
+            + $" confirmations={confirmations}"
+        );
+        continue;
+      }
+      await store.ClearPositionMissingAsync(stale, cancellationToken);
+      await store.IncrementMetricAsync(
+        RequireSymbol().RedisSymbol,
+        "position_missing_snapshot_confirmed",
+        cancellationToken
+      );
+      _log(
+        $"auto-trade position_missing_snapshot_confirmed position_id={stale}"
+          + $" confirmations={confirmations}"
+      );
       var state = _states.GetValueOrDefault(stale)
         ?? await store.GetPositionAsync(stale, cancellationToken);
       _states.Remove(stale);
@@ -5537,6 +5586,24 @@ public sealed class AutoTradeEngine(
     CancellationToken cancellationToken
   )
   {
+    // A position present in this snapshot clears any missing-confirmation
+    // progress from an earlier reconcile pass that briefly did not see it.
+    if (
+      await store.GetPositionMissingAsync(position.PositionId, cancellationToken)
+        is not null
+    )
+    {
+      await store.ClearPositionMissingAsync(position.PositionId, cancellationToken);
+      await store.IncrementMetricAsync(
+        RequireSymbol().RedisSymbol,
+        "position_missing_snapshot_recovered",
+        cancellationToken
+      );
+      _log(
+        "auto-trade position_missing_snapshot_recovered "
+          + $"position_id={position.PositionId}"
+      );
+    }
     var stored = await store.GetPositionAsync(position.PositionId, cancellationToken);
     var parsed = stored is null ? ParseComment(position) : null;
     var state = stored ?? parsed;

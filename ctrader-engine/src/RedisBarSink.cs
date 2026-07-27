@@ -152,6 +152,23 @@ public interface IAutoTradeStore
     CancellationToken cancellationToken
   );
   Task DeletePositionAsync(long positionId, CancellationToken cancellationToken);
+  // Durable missing-snapshot confirmation progress (see PositionMissingRecord)
+  // - survives executor restart so a redeploy mid-confirmation does not reset
+  // a position to "never seen missing" and does not accidentally terminalise
+  // it early either.
+  Task<PositionMissingRecord?> GetPositionMissingAsync(
+    long positionId,
+    CancellationToken cancellationToken
+  ) => Task.FromResult<PositionMissingRecord?>(null);
+  Task SavePositionMissingAsync(
+    long positionId,
+    PositionMissingRecord record,
+    CancellationToken cancellationToken
+  ) => Task.CompletedTask;
+  Task ClearPositionMissingAsync(
+    long positionId,
+    CancellationToken cancellationToken
+  ) => Task.CompletedTask;
   Task<long> GetDailyTradeCountAsync(
     DateOnly date,
     CancellationToken cancellationToken
@@ -724,6 +741,38 @@ public sealed class StackExchangeRedisSeriesCommands :
     await _db.SetRemoveAsync(TrackedPositionsKey, positionId);
   }
 
+  public async Task<PositionMissingRecord?> GetPositionMissingAsync(
+    long positionId,
+    CancellationToken cancellationToken
+  )
+  {
+    var value = await _db.StringGetAsync(PositionMissingKey(positionId));
+    return value.HasValue
+      ? System.Text.Json.JsonSerializer.Deserialize(
+        value.ToString(),
+        RedisJsonContext.Default.PositionMissingRecord
+      )
+      : null;
+  }
+
+  public Task SavePositionMissingAsync(
+    long positionId,
+    PositionMissingRecord record,
+    CancellationToken cancellationToken
+  ) => _db.StringSetAsync(
+    PositionMissingKey(positionId),
+    System.Text.Json.JsonSerializer.Serialize(
+      record,
+      RedisJsonContext.Default.PositionMissingRecord
+    ),
+    TimeSpan.FromDays(1)
+  );
+
+  public Task ClearPositionMissingAsync(
+    long positionId,
+    CancellationToken cancellationToken
+  ) => _db.KeyDeleteAsync(PositionMissingKey(positionId));
+
   public async Task<long> GetDailyTradeCountAsync(
     DateOnly date,
     CancellationToken cancellationToken
@@ -1067,6 +1116,9 @@ public sealed class StackExchangeRedisSeriesCommands :
   private static string PositionKey(long positionId) =>
     $"auto_trade:position:{positionId}";
 
+  private static string PositionMissingKey(long positionId) =>
+    $"auto_trade:position_missing:{positionId}";
+
   private const string TrackedPositionsKey = "auto_trade:positions";
 
   private static string DailyKey(DateOnly date) =>
@@ -1117,6 +1169,7 @@ internal sealed record RedisSpot(
 [JsonSerializable(typeof(RedisClaimPayload))]
 [JsonSerializable(typeof(AutoTradeLifecycleStateRecord))]
 [JsonSerializable(typeof(TradePlan))]
+[JsonSerializable(typeof(PositionMissingRecord))]
 internal sealed partial class RedisJsonContext : JsonSerializerContext
 {
 }

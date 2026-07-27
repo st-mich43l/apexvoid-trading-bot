@@ -556,3 +556,15 @@ public sealed record AutoTradeExecutorSnapshot(
   IReadOnlyList<string> GroupIds,
   long UpdatedAt
 );
+
+// Durable, restart-surviving confirmation progress for a tracked position
+// that a broker snapshot did not report. A single missing snapshot is never
+// enough to terminalise a position - it must be independently confirmed
+// missing across at least AutoTradeOptions.PositionMissingConfirmations
+// reconcile passes, each separated by at least
+// AutoTradeOptions.PositionMissingRecheckSeconds.
+public sealed record PositionMissingRecord(
+  int Confirmations,
+  long FirstMissingAt,
+  long LastCheckedAt
+);
