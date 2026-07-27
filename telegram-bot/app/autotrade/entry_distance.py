@@ -1,7 +1,7 @@
 """Canonical executor entry-distance gate shared with the C# engine.
 
 Adaptive strategy drift (observation tolerance) is a separate concept and must
-never authorise AUTO READY. Only this hard cap may.
+never authorise Algo bot READY. Only this hard cap may.
 """
 
 from __future__ import annotations

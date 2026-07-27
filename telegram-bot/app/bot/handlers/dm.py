@@ -91,11 +91,11 @@ _HELP_TEXT = """<b>Trade controls</b>
 <code>/trade_note [SYMBOL] #id &lt;text&gt;</code>
 <code>/trade_review [SYMBOL] #id</code>
 <code>/trade_map [SYMBOL]</code>
-<code>/auto_status</code>
+<code>/algo_status</code>
 <code>/scan_report [SYMBOL] [hours]</code>
-<code>/auto_pause</code>
-<code>/auto_resume</code>
-<code>/auto_close_all confirm</code>
+<code>/algo_pause</code>
+<code>/algo_resume</code>
+<code>/algo_close_all confirm</code>
 <code>/trade_stats [SYMBOL] [today|week|month]</code>
 <code>/trade_pips [SYMBOL] [today|yesterday|week|last week]</code>"""
 
@@ -176,11 +176,30 @@ async def handle_start(msg: Message) -> None:
   await msg.answer(_WELCOME_TEXT)
 
 
-@router.message(Command("auto_status"), F.chat.type == "private")
+@router.message(Command("algo_status", "auto_status"), F.chat.type == "private")
 async def handle_auto_status(msg: Message) -> None:
   if not _is_owner(msg):
     return
-  await msg.answer(await auto_trade_status_text())
+  try:
+    text = await auto_trade_status_text()
+  except Exception:
+    log.exception("algo_status failed")
+    await msg.answer(
+      "⚠️ <b>Algo bot status unavailable</b>\n"
+      "Status build failed — check bot logs / Redis connectivity."
+    )
+    return
+  # Telegram hard limit is 4096; clip before send so status never goes silent.
+  if len(text) > 4000:
+    text = text[:3990] + "\n… (truncated)"
+  try:
+    await msg.answer(text)
+  except Exception:
+    log.exception("algo_status send failed")
+    await msg.answer(
+      "⚠️ <b>Algo bot status send failed</b>\n"
+      "Telegram rejected the status card. Try again shortly."
+    )
 
 
 @router.message(Command("scan_report"), F.chat.type == "private")
@@ -202,40 +221,46 @@ async def handle_scan_report(msg: Message) -> None:
   await msg.answer(scanner.format_scan_report(rows, symbol, tf, hours))
 
 
-@router.message(Command("auto_pause"), F.chat.type == "private")
+@router.message(Command("algo_pause", "auto_pause"), F.chat.type == "private")
 async def handle_auto_pause(msg: Message) -> None:
   if not _is_owner(msg):
     return
   await set_auto_trade_paused(True)
-  await msg.answer("⏸ <b>ApexVoid Algo paused</b>\nNo new entries will be opened.")
+  await msg.answer("⏸ <b>Algo bot paused</b>\nNo new entries will be opened.")
 
 
-@router.message(Command("auto_resume"), F.chat.type == "private")
+@router.message(Command("algo_resume", "auto_resume"), F.chat.type == "private")
 async def handle_auto_resume(msg: Message) -> None:
   if not _is_owner(msg):
     return
   await set_auto_trade_paused(False)
-  await msg.answer("▶️ <b>ApexVoid Algo resumed</b>\nNew qualified entries are enabled.")
+  await msg.answer("▶️ <b>Algo bot resumed</b>\nNew qualified entries are enabled.")
 
 
-@router.message(Command("auto_close_all"), F.chat.type == "private")
+@router.message(Command("algo_close_all", "auto_close_all"), F.chat.type == "private")
 async def handle_auto_close_all(msg: Message) -> None:
   if not _is_owner(msg):
     return
   args = _command_args(msg).strip().lower()
   if args and args != "confirm":
     await msg.answer(
-      "Usage: <code>/auto_close_all</code> then "
-      "<code>/auto_close_all confirm</code>"
+      "Usage: <code>/algo_close_all</code> then "
+      "<code>/algo_close_all confirm</code>"
     )
     return
   if args != "confirm":
-    status = await auto_trade_status_text()
+    try:
+      status = await auto_trade_status_text()
+      if len(status) > 2500:
+        status = status[:2490] + "\n… (truncated)"
+    except Exception:
+      log.exception("algo_close_all status preview failed")
+      status = "<i>status preview unavailable</i>"
     await msg.answer(
-      "⚠️ <b>Flatten ApexVoid Algo?</b>\n"
+      "⚠️ <b>Flatten Algo bot?</b>\n"
       "This market-closes every open algo position and cancels pending "
       "limits. Total net uses the real broker fill.\n\n"
-      "Send <code>/auto_close_all confirm</code> to proceed.\n\n"
+      "Send <code>/algo_close_all confirm</code> to proceed.\n\n"
       f"{status}"
     )
     return

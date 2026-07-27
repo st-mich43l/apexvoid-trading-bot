@@ -405,11 +405,11 @@ def _format_strategy_route(event: dict) -> str | None:
   status = str(event.get("status") or "")
   reason_code = str(event.get("reason_code") or "")
   if status == "candidate_published":
-    headline = "🟢 <b>AUTO READY</b> · candidate published"
+    headline = "🟢 <b>Algo bot READY</b> · candidate published"
   elif status == "waiting":
-    headline = "🟠 <b>AUTO WAIT</b>"
+    headline = "🟠 <b>Algo bot WAIT</b>"
   elif status in {"blocked", "executor_rejected"}:
-    headline = "🔴 <b>AUTO BLOCKED</b>"
+    headline = "🔴 <b>Algo bot BLOCKED</b>"
   else:
     return None
   measured = event.get("measured") or {}
@@ -1620,8 +1620,11 @@ async def auto_trade_status_text() -> str:
     f"\nZone reconcile: <code>{escape(reconcile_summary)}</code>"
     f"\nLast lifecycle: <b>{escape(lifecycle_summary)}</b>"
   )
-  return (
-    "🤖 <b>ApexVoid Algo</b>\n"
+  # Telegram hard-caps messages at 4096 characters. Metric dumps can exceed
+  # that in a busy demo session and Telegram then rejects the whole reply —
+  # which looks like /algo_status "does nothing". Clip before return.
+  text = (
+    "🤖 <b>Algo bot</b>\n"
     f"Mode: <b>{escape(mode)}</b> · State: <b>{state}</b>\n"
     f"Open positions: <b>{position_count}</b>\n"
     f"Trades today: <b>{daily}</b> · <b>unlimited</b>"
@@ -1630,6 +1633,10 @@ async def auto_trade_status_text() -> str:
     f"{strategy_lines}"
     f"{operations}"
   )
+  if len(text) <= 4000:
+    return text
+  return text[:3990].rstrip() + "\n… (truncated)"
+
 
 
 async def _json_key(client, key: str) -> dict:

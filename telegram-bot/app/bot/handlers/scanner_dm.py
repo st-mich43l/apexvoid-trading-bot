@@ -26,21 +26,21 @@ async def handle_trade_map(msg: Message) -> None:
   await deliver_trade_map(msg)
 
 
-@router.message(Command("auto_status"), F.chat.type == "private")
+@router.message(Command("algo_status", "auto_status"), F.chat.type == "private")
 async def handle_auto_status(msg: Message) -> None:
   await deliver_auto_status(msg)
 
 
-@router.message(Command("auto_pause"), F.chat.type == "private")
+@router.message(Command("algo_pause", "auto_pause"), F.chat.type == "private")
 async def handle_auto_pause(msg: Message) -> None:
   await deliver_auto_pause(msg)
 
 
-@router.message(Command("auto_resume"), F.chat.type == "private")
+@router.message(Command("algo_resume", "auto_resume"), F.chat.type == "private")
 async def handle_auto_resume(msg: Message) -> None:
   await deliver_auto_resume(msg)
 
 
-@router.message(Command("auto_close_all"), F.chat.type == "private")
+@router.message(Command("algo_close_all", "auto_close_all"), F.chat.type == "private")
 async def handle_auto_close_all(msg: Message) -> None:
   await deliver_auto_close_all(msg)
