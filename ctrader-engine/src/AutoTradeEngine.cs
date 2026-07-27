@@ -1396,7 +1396,13 @@ public sealed class AutoTradeEngine(
     StructureStopPlan stopPlan;
     try
     {
-      stopPlan = StructureStop(candidate, direction, plannedEntry, symbol);
+      stopPlan = StructureStop(
+        candidate,
+        direction,
+        plannedEntry,
+        symbol,
+        route.Route
+      );
     }
     catch (VolumePlanningException exception)
     {
@@ -1426,22 +1432,30 @@ public sealed class AutoTradeEngine(
       }
       return await RejectAsync(candidate, exception.Message, cancellationToken);
     }
+    await ObserveMarketStopContractRecomputeAsync(
+      candidate,
+      route.Route,
+      plannedEntry,
+      cancellationToken
+    );
     // The approved absolute stop must still be on the losing side of the price
     // the broker can actually transact at, whatever the route.
     if (
-      direction == TradeDirection.Buy
-        ? stopPlan.StopLoss >= expectedEntry
-        : stopPlan.StopLoss <= expectedEntry
+      FinalStopSideRejection(
+        direction,
+        stopPlan.StopLoss,
+        expectedEntry
+      ) is { } stopSideRejection
     )
     {
       await store.IncrementMetricAsync(
         candidate.Symbol,
-        "final_stop_entry_drift_rejected",
+        stopSideRejection.Metric,
         cancellationToken
       );
       return await RejectAsync(
         candidate,
-        "final_stop_not_on_losing_side_of_executable_entry",
+        stopSideRejection.Reason,
         cancellationToken
       );
     }
@@ -1852,10 +1866,10 @@ public sealed class AutoTradeEngine(
     );
   }
 
-  // Phase 2 gate: the resolved route and entry must match what Python priced
-  // the stop against, and the executable quote must not have drifted far
-  // enough to invalidate the approved absolute stop. Unknown route values
-  // fail closed; only an explicit `either` leaves the executor free to choose.
+  // Phase 2 gate: resting entries must match the fixed price Python planned.
+  // A market entry is the live quote and remains bounded by ValidateQuote's
+  // entry-zone distance cap. Unknown route values fail closed; only an
+  // explicit `either` leaves the executor free to choose.
   private async Task<string?> ValidateEntryContractAsync(
     TradeCandidate candidate,
     ExecutionRouteResolution route,
@@ -1934,7 +1948,11 @@ public sealed class AutoTradeEngine(
     var tolerance = Math.Max(0m, options.EntryContractTolerancePips)
       * options.PipSize;
     var tick = SymbolTick(symbol);
-    if (Math.Abs(plannedEntry - route.PlannedEntryPrice) > Math.Max(tick, tolerance))
+    var driftBudget = Math.Max(tick, tolerance);
+    if (
+      EntryIsResting(route.Route)
+      && Math.Abs(plannedEntry - route.PlannedEntryPrice) > driftBudget
+    )
     {
       await store.IncrementMetricAsync(
         candidate.Symbol,
@@ -1945,15 +1963,14 @@ public sealed class AutoTradeEngine(
     }
     if (
       route.Route == ExecutionRoute.Market
-      && Math.Abs(plannedEntry - executableEntry) > Math.Max(tick, tolerance)
+      && Math.Abs(plannedEntry - executableEntry) > driftBudget
     )
     {
       await store.IncrementMetricAsync(
         candidate.Symbol,
-        "final_stop_entry_drift_rejected",
+        "entry_contract_market_drift_observed",
         cancellationToken
       );
-      return "final_stop_entry_drift_rejected";
     }
     if (declaredRoute == PlannedExecutionRoute.SingleLimit)
     {
@@ -2745,7 +2762,13 @@ public sealed class AutoTradeEngine(
     StructureStopPlan fallbackStopPlan;
     try
     {
-      fallbackStopPlan = StructureStop(candidate, direction, expectedEntry, symbol);
+      fallbackStopPlan = StructureStop(
+        candidate,
+        direction,
+        expectedEntry,
+        symbol,
+        ExecutionRoute.Market
+      );
     }
     catch (VolumePlanningException exception)
     {
@@ -2756,6 +2779,12 @@ public sealed class AutoTradeEngine(
       );
       return await RejectAsync(candidate, exception.Message, cancellationToken);
     }
+    await ObserveMarketStopContractRecomputeAsync(
+      candidate,
+      ExecutionRoute.Market,
+      expectedEntry,
+      cancellationToken
+    );
     return await ProcessSingleInitialAsync(
       candidate,
       account,
@@ -3712,7 +3741,8 @@ public sealed class AutoTradeEngine(
     TradeCandidate candidate,
     TradeDirection direction,
     decimal entryPrice,
-    SymbolInfo symbol
+    SymbolInfo symbol,
+    ExecutionRoute route
   )
   {
     if (candidate.Atr is not decimal atr || candidate.StructureSwing is not decimal swing)
@@ -3736,7 +3766,13 @@ public sealed class AutoTradeEngine(
       symbol,
       BuildOpposingZoneContext(candidate)
     );
-    ValidateProtectiveStopContract(candidate, plan, entryPrice, symbol);
+    ValidateProtectiveStopContract(
+      candidate,
+      plan,
+      entryPrice,
+      symbol,
+      route
+    );
     return plan;
   }
 
@@ -3744,7 +3780,8 @@ public sealed class AutoTradeEngine(
     TradeCandidate candidate,
     StructureStopPlan executorPlan,
     decimal executorEntryPrice,
-    SymbolInfo symbol
+    SymbolInfo symbol,
+    ExecutionRoute route
   )
   {
     // Candidate v5 is the first schema that requires the Python stop plan.
@@ -3759,7 +3796,8 @@ public sealed class AutoTradeEngine(
         candidate,
         executorPlan,
         executorEntryPrice,
-        symbol
+        symbol,
+        route
       );
       return;
     }
@@ -3776,18 +3814,29 @@ public sealed class AutoTradeEngine(
     {
       throw new VolumePlanningException("protective_stop_contract_mismatch");
     }
-    if (!PlansMatchWithinTolerance(
-      plannedEntry,
-      plannedStop,
-      plannedDistance,
-      plannedPips,
-      plannedRaw,
-      plannedClamped,
-      plannedSource,
-      executorPlan,
-      executorEntryPrice,
-      symbol
-    ))
+    if (
+      EntryIsResting(route)
+        ? !PlansMatchWithinTolerance(
+          plannedEntry,
+          plannedStop,
+          plannedDistance,
+          plannedPips,
+          plannedRaw,
+          plannedClamped,
+          plannedSource,
+          executorPlan,
+          executorEntryPrice,
+          symbol
+        )
+        : !LegacyStructuralStopIdentityMatches(
+          plannedStop,
+          plannedRaw,
+          plannedClamped,
+          plannedSource,
+          executorPlan,
+          symbol
+        )
+    )
     {
       throw new VolumePlanningException("protective_stop_contract_mismatch");
     }
@@ -3797,7 +3846,8 @@ public sealed class AutoTradeEngine(
     TradeCandidate candidate,
     StructureStopPlan executorPlan,
     decimal executorEntryPrice,
-    SymbolInfo symbol
+    SymbolInfo symbol,
+    ExecutionRoute route
   )
   {
     if (
@@ -3815,6 +3865,28 @@ public sealed class AutoTradeEngine(
     {
       throw new VolumePlanningException("final_protective_stop_contract_mismatch");
     }
+    if (!EntryIsResting(route))
+    {
+      if (!StructuralStopIdentityMatches(
+        plannedRaw,
+        plannedBaseStop,
+        plannedClamped,
+        plannedSource,
+        plannedAdjustment,
+        executorPlan,
+        symbol
+      ))
+      {
+        throw new VolumePlanningException(
+          "final_protective_stop_contract_mismatch"
+        );
+      }
+      if (!AdjustmentZoneMatches(candidate, executorPlan, symbol))
+      {
+        throw new VolumePlanningException("final_stop_zone_identity_mismatch");
+      }
+      return;
+    }
     var recomputed = RecomputeStructureStopPlan(candidate, executorEntryPrice, symbol);
     if (
       !PlansMatchWithinTolerance(
@@ -3829,15 +3901,17 @@ public sealed class AutoTradeEngine(
         executorEntryPrice,
         symbol
       )
-      || Math.Abs(plannedBaseStop - (recomputed.BaseStopLoss ?? recomputed.StopLoss))
-        > SymbolTick(symbol)
+      || !StructuralStopIdentityMatches(
+        plannedRaw,
+        plannedBaseStop,
+        plannedClamped,
+        plannedSource,
+        plannedAdjustment,
+        recomputed,
+        symbol
+      )
       || Math.Abs(plannedBasePips - (recomputed.BaseStopPips ?? recomputed.StopPips))
         > PipTolerance(recomputed, symbol)
-      || !string.Equals(
-        plannedAdjustment,
-        recomputed.Adjustment,
-        StringComparison.Ordinal
-      )
     )
     {
       throw new VolumePlanningException("final_protective_stop_contract_mismatch");
@@ -3859,15 +3933,17 @@ public sealed class AutoTradeEngine(
         executorEntryPrice,
         symbol
       )
-      || Math.Abs((executorPlan.BaseStopLoss ?? executorPlan.StopLoss) - plannedBaseStop)
-        > SymbolTick(symbol)
+      || !StructuralStopIdentityMatches(
+        plannedRaw,
+        plannedBaseStop,
+        plannedClamped,
+        plannedSource,
+        plannedAdjustment,
+        executorPlan,
+        symbol
+      )
       || Math.Abs((executorPlan.BaseStopPips ?? executorPlan.StopPips) - plannedBasePips)
         > PipTolerance(executorPlan, symbol)
-      || !string.Equals(
-        plannedAdjustment,
-        executorPlan.Adjustment,
-        StringComparison.Ordinal
-      )
     )
     {
       throw new VolumePlanningException("final_protective_stop_contract_mismatch");
@@ -3876,6 +3952,35 @@ public sealed class AutoTradeEngine(
     {
       throw new VolumePlanningException("final_stop_zone_identity_mismatch");
     }
+  }
+
+  private async Task ObserveMarketStopContractRecomputeAsync(
+    TradeCandidate candidate,
+    ExecutionRoute route,
+    decimal executorEntryPrice,
+    CancellationToken cancellationToken
+  )
+  {
+    if (
+      route != ExecutionRoute.Market
+      || candidate.Version != 5
+      || IsManualAlgoCandidate(candidate)
+      || candidate.PlannedStopEntryPrice is not decimal plannedEntry
+    )
+    {
+      return;
+    }
+    var tolerance = Math.Max(0m, options.EntryContractTolerancePips)
+      * options.PipSize;
+    if (Math.Abs(plannedEntry - executorEntryPrice) <= tolerance)
+    {
+      return;
+    }
+    await store.IncrementMetricAsync(
+      candidate.Symbol,
+      "stop_contract_market_entry_recomputed",
+      cancellationToken
+    );
   }
 
   private StructureStopPlan RecomputeStructureStopPlan(
@@ -3978,6 +4083,75 @@ public sealed class AutoTradeEngine(
     return tick / Math.Max(0.00000001m, plan.Distance == 0m
       ? tick
       : plan.Distance / plan.StopPips);
+  }
+
+  private static bool EntryIsResting(ExecutionRoute route) =>
+    route is ExecutionRoute.SingleLimit or ExecutionRoute.ZoneSplit;
+
+  internal static (string Metric, string Reason)? FinalStopSideRejection(
+    TradeDirection direction,
+    decimal stopLoss,
+    decimal executableEntry
+  )
+  {
+    var onLosingSide = direction == TradeDirection.Buy
+      ? stopLoss < executableEntry
+      : stopLoss > executableEntry;
+    return onLosingSide
+      ? null
+      : (
+        "final_stop_not_on_losing_side",
+        "final_stop_not_on_losing_side_of_executable_entry"
+      );
+  }
+
+  private static bool LegacyStructuralStopIdentityMatches(
+    decimal plannedStop,
+    decimal plannedRaw,
+    bool plannedClamped,
+    string plannedSource,
+    StructureStopPlan executorPlan,
+    SymbolInfo symbol
+  )
+  {
+    var tick = SymbolTick(symbol);
+    return Math.Abs(plannedStop - executorPlan.StopLoss) <= tick
+      && Math.Abs(plannedRaw - executorPlan.RawStopLoss) <= tick
+      && plannedClamped == executorPlan.Clamped
+      && string.Equals(
+        plannedSource,
+        executorPlan.Source,
+        StringComparison.Ordinal
+      );
+  }
+
+  private static bool StructuralStopIdentityMatches(
+    decimal plannedRaw,
+    decimal plannedBaseStop,
+    bool plannedClamped,
+    string plannedSource,
+    string plannedAdjustment,
+    StructureStopPlan executorPlan,
+    SymbolInfo symbol
+  )
+  {
+    var tick = SymbolTick(symbol);
+    return Math.Abs(plannedRaw - executorPlan.RawStopLoss) <= tick
+      && Math.Abs(
+        plannedBaseStop - (executorPlan.BaseStopLoss ?? executorPlan.StopLoss)
+      ) <= tick
+      && string.Equals(
+        plannedSource,
+        executorPlan.Source,
+        StringComparison.Ordinal
+      )
+      && (plannedClamped || plannedAdjustment == "opposing_zone_push")
+        == executorPlan.Clamped
+      && string.Equals(
+        plannedAdjustment,
+        executorPlan.Adjustment,
+        StringComparison.Ordinal
+      );
   }
 
   private static bool PlansMatchWithinTolerance(
@@ -4397,7 +4571,13 @@ public sealed class AutoTradeEngine(
       initialStates.All(state => (
         state.NextTargetIndex >= 1
         && state.CurrentStopLoss is decimal initialStop
-        && AtLeastBreakeven(state.Direction, state.EntryPrice, initialStop)
+        && StopTrailPlanner.IsAtLeastProtectedBreakeven(
+          state.Direction,
+          state.EntryPrice,
+          initialStop,
+          symbol,
+          options.BreakEvenBufferTicks
+        )
       )),
       group.All(state => state.CurrentStopLoss is not null),
       group.All(state => GroupId(state) == groupId && state.Direction == direction),
@@ -4501,12 +4681,6 @@ public sealed class AutoTradeEngine(
 
   private static decimal WeightedPips(decimal pipVolume, long initialVolume) =>
     initialVolume > 0 ? pipVolume / initialVolume : 0m;
-
-  private static bool AtLeastBreakeven(
-    TradeDirection direction,
-    decimal entry,
-    decimal stop
-  ) => direction == TradeDirection.Buy ? stop >= entry : stop <= entry;
 
   private static string GroupId(AutoTradePositionState state) =>
     string.IsNullOrWhiteSpace(state.GroupId)
