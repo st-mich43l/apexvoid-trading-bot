@@ -40,6 +40,11 @@ _REGIME_ALERT_PENDING_PREFIX = "auto_trade:regime_alert_pending:"
 _REGIME_ALERT_SENT_TTL = 86400
 _TRADE_MESSAGE_TTL = 7 * 24 * 3600
 _FULL_TP_RESULT_TTL = 24 * 3600
+_FORMING_REPLY_TYPES = frozenset({
+  "strategy_route",
+  "opened",
+  "rejected",
+})
 # Lifecycle/event types that stay in Redis + metrics + /auto_status but must
 # never become Telegram cards. Keep emission paths intact.
 TELEGRAM_SILENT_LIFECYCLE_TYPES = frozenset({
@@ -665,6 +670,10 @@ def render_auto_trade_event(
   return "\n".join(lines)
 
 
+def _forming_message_key(match_id: str) -> str:
+  return f"auto_trade:forming_message:{match_id}"
+
+
 def _message_key(profile: DeliveryProfile, position_id: int) -> str:
   prefix = "auto_trade:msg" if profile == "internal" else "auto_trade:public_msg"
   return f"{prefix}:{position_id}"
@@ -707,6 +716,30 @@ def _is_bad_reply_target(error: TelegramBadRequest) -> bool:
   ) or "message to be replied" in reason
 
 
+def _event_match_id(event: dict) -> str:
+  return str(event.get("match_id") or event.get("candidate_id") or "").strip()
+
+
+async def _forming_reply_message_id(
+  client,
+  event: dict,
+) -> tuple[int | None, str]:
+  match_id = _event_match_id(event)
+  if not match_id:
+    return None, "event has no match id"
+  key = _forming_message_key(match_id)
+  raw = await client.get(key)
+  if not raw:
+    return None, f"stored forming message is missing or expired ({key})"
+  try:
+    message_id = int(raw)
+  except (TypeError, ValueError):
+    return None, f"invalid cached message id in {key}"
+  if message_id > 0:
+    return message_id, ""
+  return None, f"invalid cached message id in {key}"
+
+
 async def _reply_message_id(
   client,
   event: dict,
@@ -731,6 +764,26 @@ async def _reply_message_id(
       return message_id, ""
     return None, f"invalid cached message id in {key}"
   return None, "stored order message is missing or expired"
+
+
+async def _resolve_reply_message_id(
+  client,
+  event: dict,
+  profile: DeliveryProfile,
+) -> tuple[int | None, str]:
+  event_type = str(event.get("type") or "")
+  if event_type in _FORMING_REPLY_TYPES:
+    forming_reply, reason = await _forming_reply_message_id(client, event)
+    if forming_reply is not None:
+      return forming_reply, ""
+    if event_type in {"strategy_route", "opened", "rejected"}:
+      return None, reason
+  if event_type == "opened":
+    return None, "opened has no reply anchor"
+  position_id = event.get("position_id")
+  if position_id is not None:
+    return await _reply_message_id(client, event, profile)
+  return None, "event has no reply anchor"
 
 
 async def _remember_trade_message(
@@ -854,24 +907,26 @@ async def _deliver_auto_trade_event(
     return False
   send = send or send_scanner_with_retry
   position_id = event.get("position_id")
-  reply_to = None
-  if event_type != "opened" and position_id is not None:
-    reply_to, reason = await _reply_message_id(client, event, profile)
-    if reply_to is None:
-      log.info(
-        "Auto-trade reply unavailable for position %s (%s): %s; sending standalone",
-        position_id,
-        profile,
-        reason,
-      )
+  match_id = _event_match_id(event)
+  reply_to, reason = await _resolve_reply_message_id(client, event, profile)
+  if reply_to is None and (
+    event_type in _FORMING_REPLY_TYPES
+    or (event_type != "opened" and position_id is not None)
+  ):
+    log.info(
+      "Auto-trade reply unavailable for %s (%s): %s; sending standalone",
+      match_id or position_id or event_type,
+      profile,
+      reason,
+    )
   try:
     sent = await send(text, reply_to=reply_to, chat_id=chat_id)
   except TelegramBadRequest as error:
     if reply_to is None or not _is_bad_reply_target(error):
       raise
     log.info(
-      "Auto-trade reply rejected for position %s (%s): %s; retrying standalone",
-      position_id,
+      "Auto-trade reply rejected for %s (%s): %s; retrying standalone",
+      match_id or position_id or event_type,
       profile,
       error,
     )
