@@ -26,9 +26,10 @@ public sealed class AutoTradeEngine(
   private readonly object _reportLock = new();
   private readonly Func<DateTimeOffset> _clock = clock ?? (() => DateTimeOffset.UtcNow);
   private readonly Action<string> _log = log ?? Log;
+  private long _spotSequence;
+  private SpotPrice? _lastSpot;
   private ICTraderTradeClient? _client;
   private SymbolInfo? _symbol;
-  private SpotPrice? _lastSpot;
   private IReadOnlyList<TradingPosition> _allSymbolPositions = [];
   private IReadOnlyList<TradingPendingOrder> _allSymbolPendingOrders = [];
   private TradingAccountSnapshot? _account;
@@ -336,6 +337,7 @@ public sealed class AutoTradeEngine(
     CancellationToken cancellationToken
   )
   {
+    _spotSequence++;
     _lastSpot = spot;
     if (!_ready || options.DryRun || !Enabled)
     {
@@ -1893,6 +1895,20 @@ public sealed class AutoTradeEngine(
     }
     if (declaredRoute == PlannedExecutionRoute.Either)
     {
+      // Strict entry/stop-plan contracts must commit to an explicit route.
+      // Legacy candidates without those versions may still leave `either` open.
+      if (
+        candidate.EntryPlanVersion is >= 1
+        && candidate.StopPlanVersion is >= 2
+      )
+      {
+        await store.IncrementMetricAsync(
+          candidate.Symbol,
+          "final_stop_entry_route_invalid",
+          cancellationToken
+        );
+        return "final_stop_entry_route_invalid";
+      }
       // Python intentionally did not commit to one route. Stop contract fields
       // remain the gate; an invalid route is never reinterpreted as either.
       return null;
@@ -3618,7 +3634,9 @@ public sealed class AutoTradeEngine(
       StructuralZoneHigh: candidate.StructuralZoneHigh,
       RiskMultiplier: candidate.RiskMultiplier,
       TargetModel: candidate.TargetModel,
-      AbsoluteTargetPrice: candidate.AbsoluteTargetPrice
+      AbsoluteTargetPrice: candidate.AbsoluteTargetPrice,
+      FillSourceQuoteTimestamp: _lastSpot?.Timestamp ?? now,
+      FillSourceQuoteSequence: _spotSequence
     );
     _states[state.PositionId] = state;
     await PropagateGroupMetadataAsync(state, cancellationToken);
@@ -4612,11 +4630,24 @@ public sealed class AutoTradeEngine(
     var distancePips = distance / options.PipSize;
     if (distancePips > options.MaxEntryDistancePips)
     {
+      var publicationDistance = candidate.CurrentPrice < candidate.EntryZone.Low
+        ? candidate.EntryZone.Low - candidate.CurrentPrice
+        : candidate.CurrentPrice > candidate.EntryZone.High
+          ? candidate.CurrentPrice - candidate.EntryZone.High
+          : 0m;
+      var publicationDistancePips = publicationDistance / options.PipSize;
       throw new CandidateRejectedException(
-        $"entry distance rejected: entry={entry:0.00} "
+        $"entry distance rejected: direction={candidate.Direction} "
+          + $"entry={entry:0.00} "
           + $"zone={candidate.EntryZone.Low:0.00}-{candidate.EntryZone.High:0.00} "
           + $"raw={distance:0.00} pip={options.PipSize} -> "
           + $"{distancePips:0.0} pips, cap {options.MaxEntryDistancePips:0.0}"
+          + (
+            publicationDistance > 0m
+              ? $"; publication={candidate.CurrentPrice:0.00} "
+                + $"publication_pips={publicationDistancePips:0.0}"
+              : ""
+          )
       );
     }
     return quote;
@@ -4656,6 +4687,32 @@ public sealed class AutoTradeEngine(
         var targetOrdinal = TargetOrdinal(state, completedTargetIndex);
         var targetPips = state.TargetsPips[state.NextTargetIndex];
         var target = TargetPrice(state, targetPips, completedTargetIndex);
+        // Event ordering: never evaluate targets on the fill-source quote.
+        // Sequence advances on every ObserveSpot; equals fill sequence means
+        // this is still the pre-fill (or same) quote generation. After restart
+        // hydrated positions use FillSourceQuoteSequence=0 so the first live
+        // quote is eligible.
+        if (_spotSequence <= state.FillSourceQuoteSequence)
+        {
+          await store.IncrementMetricAsync(
+            symbol.RedisSymbol,
+            "stale_fill_quote_target_suppressed",
+            cancellationToken
+          );
+          break;
+        }
+        if (
+          state.FillSourceQuoteTimestamp > 0
+          && spot.Timestamp < state.FillSourceQuoteTimestamp
+        )
+        {
+          await store.IncrementMetricAsync(
+            symbol.RedisSymbol,
+            "stale_fill_quote_target_suppressed",
+            cancellationToken
+          );
+          break;
+        }
         var exitQuote = state.Direction == TradeDirection.Buy ? spot.Bid : spot.Ask;
         var hit = state.Direction == TradeDirection.Buy
           ? exitQuote >= target
@@ -5004,6 +5061,7 @@ public sealed class AutoTradeEngine(
     }
     var moveMessage = $"🛡 ApexVoid Algo stop → {move.StopLoss:N2} ({move.Label}) "
       + $"· position {state.PositionId}";
+    var previousStop = state.CurrentStopLoss;
     await PublishAsync(
       "stop_moved",
       moveMessage,
@@ -5017,7 +5075,11 @@ public sealed class AutoTradeEngine(
       matchId: state.MatchId,
       rangeId: state.RangeId,
       strategyFamily: state.StrategyFamily,
-      direction: DirectionLabel(state.Direction)
+      direction: DirectionLabel(state.Direction),
+      remainingVolume: state.RemainingVolume,
+      stopLoss: previousStop,
+      entryLow: state.EntryPrice,
+      entryHigh: state.EntryPrice
     );
     return state with { CurrentStopLoss = move.StopLoss };
   }
@@ -7573,6 +7635,9 @@ public sealed class AutoTradeEngine(
       ?? (absoluteTargetPrice is null ? "fill_relative" : "hybrid")
     ).Trim().ToLowerInvariant();
     var cap = absoluteTargetPrice;
+    var fallback = (options.PostFillTargetFallback ?? "fill_relative")
+      .Trim()
+      .ToLowerInvariant();
     return targetsPips.Select(pips =>
     {
       var fillRelative = direction == TradeDirection.Buy
@@ -7586,6 +7651,15 @@ public sealed class AutoTradeEngine(
           : Math.Max(fillRelative, absolute),
         _ => fillRelative,
       };
+      var profitable = direction == TradeDirection.Buy
+        ? target > brokerFill
+        : target < brokerFill;
+      if (!profitable)
+      {
+        target = fallback == "management_hold"
+          ? fillRelative
+          : fillRelative;
+      }
       return decimal.Round(
         target,
         symbol.Digits,

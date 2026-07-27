@@ -328,18 +328,22 @@ def _format_take_profit(
       f"Total net: <b>{format_signed_pips(net_pips)} pips</b>",
     ]
   else:
+    lines = [
+      "🤖 <b>ApexVoid Algo</b>",
+    ]
     if (
       initial_volume is None
       or initial_volume <= 0
       or remaining_volume is None
     ):
-      return None
-    booked_pct = volume_percent(closed_volume, initial_volume)
-    lines = [
-      "🤖 <b>ApexVoid Algo</b>",
-      f"🎯 {seq}{label.upper()} booked {booked_pct:.1f}%",
-      f"Leg: <b>{format_signed_pips(leg_realized)} pips</b>",
-    ]
+      lines.append(
+        f"🎯 {seq}{label.upper()} booked · "
+        f"closed volume <b>{closed_volume:.0f}</b>"
+      )
+    else:
+      booked_pct = volume_percent(closed_volume, initial_volume)
+      lines.append(f"🎯 {seq}{label.upper()} booked {booked_pct:.1f}%")
+    lines.append(f"Leg: <b>{format_signed_pips(leg_realized)} pips</b>")
     if net_pips is not None:
       lines.append(
         f"Net so far: <b>{format_signed_pips(net_pips)} pips</b>"
@@ -398,6 +402,7 @@ def _format_position_closed(event: dict, message: str) -> str:
 
 def _format_strategy_route(event: dict) -> str | None:
   status = str(event.get("status") or "")
+  reason_code = str(event.get("reason_code") or "")
   if status == "candidate_published":
     headline = "🟢 <b>AUTO READY</b> · candidate published"
   elif status == "waiting":
@@ -415,21 +420,69 @@ def _format_strategy_route(event: dict) -> str | None:
     headline,
     f"{direction} · <b>{strategy}</b>",
     "",
-    f"Reason: {reason}",
   ]
-  distance = measured.get("distance_pips")
-  limit = measured.get("adaptive_limit_pips")
-  if distance is not None:
-    drift = f"Drift: <b>{float(distance):.1f}p</b>"
-    if limit is not None:
-      drift += f" · limit {float(limit):.1f}p"
-    lines.append(drift)
+  zone_low = measured.get("entry_low")
+  zone_high = measured.get("entry_high")
+  zone_text = None
+  if zone_low is not None and zone_high is not None:
+    zone_text = f"{float(zone_low):,.2f}–{float(zone_high):,.2f}"
+
+  if status == "candidate_published":
+    route = measured.get("planned_execution_route")
+    planned_entry = measured.get("planned_entry_price")
+    executor_distance = measured.get("executor_distance_pips")
+    executor_limit = measured.get("executor_limit_pips")
+    if route:
+      lines.append(f"Route: <b>{escape(str(route))}</b>")
+    if planned_entry is not None:
+      lines.append(f"Planned entry: <b>{float(planned_entry):,.2f}</b>")
+    if zone_text:
+      lines.append(f"Zone: <b>{zone_text}</b>")
+    if executor_distance is not None:
+      lines.append(
+        f"Executor distance: <b>{float(executor_distance):.1f}p</b>"
+      )
+    if executor_limit is not None:
+      lines.append(
+        f"Executor limit: <b>{float(executor_limit):.1f}p</b>"
+      )
+  elif (
+    status == "waiting"
+    and reason_code == "executor_entry_envelope_exceeded"
+  ):
+    quote = measured.get("executor_quote")
+    distance = measured.get("executor_distance_pips")
+    executor_limit = measured.get("executor_limit_pips")
+    if quote is not None:
+      lines.append(f"Quote: <b>{float(quote):,.2f}</b>")
+    if zone_text:
+      lines.append(f"Zone: <b>{zone_text}</b>")
+    if distance is not None:
+      lines.append(f"Distance: <b>{float(distance):.1f}p</b>")
+    if executor_limit is not None:
+      lines.append(
+        f"Executor limit: <b>{float(executor_limit):.1f}p</b>"
+      )
+    lines.append("Setup retained")
+  else:
+    lines.append(f"Reason: {reason}")
+    distance = measured.get("distance_pips")
+    limit = measured.get("adaptive_limit_pips")
+    if distance is not None:
+      drift = f"Drift: <b>{float(distance):.1f}p</b>"
+      if limit is not None:
+        drift += f" · limit {float(limit):.1f}p"
+      lines.append(drift)
   if status == "blocked" and measured.get("available_room_pips") is not None:
     lines.append(
       f"Room: {float(measured['available_room_pips']):.0f}p · "
       f"minimum target: {float(measured.get('minimum_target_pips', 0)):.0f}p"
     )
-  if status == "waiting" and event.get("expires_at"):
+  if (
+    status == "waiting"
+    and reason_code != "executor_entry_envelope_exceeded"
+    and event.get("expires_at")
+  ):
     lines.append(f"Match retained until: <code>{event['expires_at']}</code>")
   return "\n".join(lines)
 
@@ -450,15 +503,56 @@ def _format_stop_moved(
   profile: DeliveryProfile,
 ) -> str | None:
   match = _STOP_RE.match(message)
-  if match is None:
-    return None
-  stop, label = match.groups()
+  label = None
+  stop = None
+  if match is not None:
+    stop, label = match.groups()
+  new_sl = _event_float(
+    event,
+    "new_stop",
+    "stop_price",
+    "price",
+  )
+  if new_sl is None and stop is not None:
+    try:
+      new_sl = float(str(stop).replace(",", ""))
+    except (TypeError, ValueError):
+      new_sl = None
+  previous_sl = _event_float(event, "previous_stop", "previous_sl", "stop_loss")
+  entry = _event_float(
+    event, "entry_price", "fill_price", "entry", "entry_low",
+  )
+  mode = event.get("mode") or event.get("stop_mode") or label
+  direction = str(event.get("direction") or "").strip().upper() or None
+  tp1_confirmed = event.get("trigger_tp1_broker_confirmed")
+  if tp1_confirmed is None:
+    tp1_confirmed = event.get("tp1_broker_confirmed")
+
   lines = [
     "🤖 <b>ApexVoid Algo</b>",
     "🛡 <b>Risk protected</b>",
     "",
-    f"SL moved to <b>{escape(stop)}</b> · {escape(label)}",
   ]
+  if direction:
+    lines.append(f"Direction: <b>{escape(direction)}</b>")
+  if entry is not None:
+    lines.append(f"Entry: <b>{entry:,.2f}</b>")
+  if previous_sl is not None:
+    lines.append(f"Previous SL: <b>{previous_sl:,.2f}</b>")
+  if new_sl is not None:
+    lines.append(f"New SL: <b>{new_sl:,.2f}</b>")
+  elif stop:
+    lines.append(f"SL moved to <b>{escape(stop)}</b>")
+  if mode:
+    lines.append(f"Mode: <b>{escape(str(mode))}</b>")
+  if tp1_confirmed is not None:
+    confirmed = "yes" if bool(tp1_confirmed) else "no"
+    lines.append(f"Trigger TP1 broker-confirmed: <b>{confirmed}</b>")
+  if len(lines) <= 3:
+    if stop and label:
+      lines.append(f"SL moved to <b>{escape(stop)}</b> · {escape(label)}")
+    else:
+      return None
   return "\n".join(lines)
 
 
@@ -594,6 +688,10 @@ def tp_message_key(profile: DeliveryProfile, position_id: int) -> str:
 
 def _full_tp_result_key(profile: DeliveryProfile, group_id: str) -> str:
   return f"auto_trade:full_tp_result:{profile}:{group_id}"
+
+
+def _telegram_terminal_key(profile: DeliveryProfile, group_id: str) -> str:
+  return f"auto_trade:telegram_terminal:{profile}:{group_id}"
 
 
 def _is_full_take_profit(event: dict) -> bool:
@@ -741,12 +839,18 @@ async def _deliver_auto_trade_event(
     # for a signal they typed themselves.
     return False
   group_id = str(event.get("group_id") or "").strip()
-  if (
-    event_type == "group_result"
-    and group_id
-    and await client.exists(_full_tp_result_key(profile, group_id))
-  ):
-    return False
+  if group_id and await client.exists(_full_tp_result_key(profile, group_id)):
+    if event_type in {"group_result", "position_closed"}:
+      return False
+  if event_type in {"group_result", "position_closed"} and group_id:
+    claimed = await client.set(
+      _telegram_terminal_key(profile, group_id),
+      event_type,
+      nx=True,
+      ex=_TRADE_MESSAGE_TTL,
+    )
+    if not claimed:
+      return False
   text = render_auto_trade_event(event, profile=profile)
   if not text:
     return False

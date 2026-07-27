@@ -35,6 +35,7 @@ from app.autotrade.arbitration import (
   ExecutionIntent,
   arbitrate_preflight_decisions,
 )
+from app.autotrade.entry_distance import measure_entry_distance
 from app.autotrade.execution_policy import (
   GUARD_MODE_OBSERVE,
   GUARD_MODE_STRICT,
@@ -179,6 +180,26 @@ def _executable_spot_price(spot: Any, direction: str) -> float:
     else getattr(spot, "bid", None)
   )
   return float(spot.price if quote is None else quote)
+
+
+def _measure_executor_entry_distance(
+  *,
+  direction: str,
+  spot: AutoTradeSpot,
+  zone_low: float,
+  zone_high: float,
+  symbol: str,
+):
+  return measure_entry_distance(
+    direction=direction,
+    bid=getattr(spot, "bid", None),
+    ask=getattr(spot, "ask", None),
+    zone_low=zone_low,
+    zone_high=zone_high,
+    pip_size=units.pip_size(symbol),
+    cap_pips=settings.auto_trade_max_entry_distance_pips,
+    mid_fallback=getattr(spot, "price", None),
+  )
 
 
 @dataclass(frozen=True)
@@ -3126,9 +3147,11 @@ async def _publish_strategy_match(
   strategy_opposing_zone = _nearest_directional_zone(
     match.direction, spot.price, htf_zones or [],
   )
+  executable_quote = _executable_spot_price(spot, match.direction)
   policy_evaluation = evaluate_execution_policy(
     match,
-    spot_price=_executable_spot_price(spot, match.direction),
+    spot_price=spot.price,
+    executable_quote=executable_quote,
     regime=None if regime is None else regime.state,
     pip_size=units.pip_size(symbol),
     cfg=settings,
@@ -3414,6 +3437,41 @@ async def _publish_strategy_match(
       retained=True,
     )
     return None
+  executor_measurement = _measure_executor_entry_distance(
+    direction=match.direction,
+    spot=spot,
+    zone_low=match.entry_low,
+    zone_high=match.entry_high,
+    symbol=symbol,
+  )
+  if not executor_measurement.within_cap:
+    await route(
+      "entry_distance",
+      "waiting",
+      "executor_entry_envelope_exceeded",
+      (
+        f"executor quote {float(executor_measurement.executable_quote):.2f} "
+        f"is {float(executor_measurement.distance_pips):.1f}p outside entry "
+        f"zone (executor limit "
+        f"{float(executor_measurement.cap_pips):.1f}p)"
+      ),
+      measured={
+        **executor_measurement.as_measured(),
+        "entry_low": match.entry_low,
+        "entry_high": match.entry_high,
+        "spot_price": spot.price,
+        "bid": spot.bid,
+        "ask": spot.ask,
+      },
+      retained=True,
+    )
+    await increment_metric(
+      client, "publication_entry_distance_wait", symbol=symbol,
+    )
+    return None
+  await increment_metric(
+    client, "publication_entry_distance_passed", symbol=symbol,
+  )
   now = int(datetime.now(timezone.utc).timestamp())
   try:
     guarded = await event_in_window(
@@ -3762,10 +3820,27 @@ async def _publish_strategy_match(
   await increment_metric(
     client, "strategy_match_candidate_published", symbol=symbol,
   )
+  publish_executor_measurement = _measure_executor_entry_distance(
+    direction=match.direction,
+    spot=spot,
+    zone_low=match.entry_low,
+    zone_high=match.entry_high,
+    symbol=symbol,
+  )
   await route(
     "stream_publish", "candidate_published", "candidate_published",
     "candidate published to executor stream",
     measured={
+      **{
+        key: policy_evaluation.measured[key]
+        for key in (
+          "planned_execution_route",
+          "planned_entry_price",
+          "order_type_preference",
+        )
+        if key in policy_evaluation.measured
+      },
+      **publish_executor_measurement.as_measured(),
       "distance_price": round(distance, 6),
       "distance_pips": round(distance_pips, 3),
       "adaptive_limit_pips": round(distance_limit, 3),
@@ -4927,12 +5002,12 @@ async def _common_preflight(
       message="intent waits for a fresh cTrader quote",
       subject=subject,
     )
+  direction_for_quote = str(getattr(subject, "direction", intent.direction))
+  executable_quote = _executable_spot_price(spot, direction_for_quote)
   policy = evaluate_execution_policy(
     subject,
-    spot_price=_executable_spot_price(
-      spot,
-      str(getattr(subject, "direction", intent.direction))
-    ),
+    spot_price=spot.price,
+    executable_quote=executable_quote,
     regime=None if regime is None else regime.state,
     pip_size=units.pip_size(intent.symbol),
     cfg=settings,
@@ -5191,6 +5266,38 @@ async def _common_preflight(
         **policy.measured,
         **drift,
         "distance_pips": round(distance_pips, 3),
+      },
+      policy=policy.policy,
+      subject=subject,
+    )
+  executor_measurement = _measure_executor_entry_distance(
+    direction=direction,
+    spot=spot,
+    zone_low=entry_low,
+    zone_high=entry_high,
+    symbol=intent.symbol,
+  )
+  if not executor_measurement.within_cap:
+    return _preflight_decision(
+      intent,
+      executable=False,
+      terminal=False,
+      stage="entry_distance",
+      reason_code="executor_entry_envelope_exceeded",
+      message=(
+        f"executor quote {float(executor_measurement.executable_quote):.2f} "
+        f"is {float(executor_measurement.distance_pips):.1f}p outside entry "
+        f"zone (executor limit "
+        f"{float(executor_measurement.cap_pips):.1f}p)"
+      ),
+      measured={
+        **policy.measured,
+        **executor_measurement.as_measured(),
+        "entry_low": entry_low,
+        "entry_high": entry_high,
+        "spot_price": spot.price,
+        "bid": spot.bid,
+        "ask": spot.ask,
       },
       policy=policy.policy,
       subject=subject,

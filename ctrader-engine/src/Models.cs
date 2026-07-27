@@ -305,7 +305,9 @@ public sealed record AutoTradePositionState(
   decimal? StructuralZoneHigh = null,
   decimal? RiskMultiplier = null,
   string? TargetModel = null,
-  decimal? AbsoluteTargetPrice = null
+  decimal? AbsoluteTargetPrice = null,
+  long FillSourceQuoteTimestamp = 0,
+  long FillSourceQuoteSequence = 0
 );
 
 public sealed record RedisClaimPayload(
@@ -511,7 +513,14 @@ public sealed record AutoTradeConfigManifest(
   decimal WickStopBufferAtr = 0.15m,
   int TrendStopMinPips = 40,
   int TrendStopMaxPips = 65,
-  IReadOnlyList<CanonicalConfigOption>? CanonicalOptions = null
+  IReadOnlyList<CanonicalConfigOption>? CanonicalOptions = null,
+  int PriceDigits = 2,
+  decimal MaxEntryDistancePips = 10m,
+  decimal EntryContractTolerancePips = 3m,
+  int BreakEvenBufferPips = 6,
+  int EntryPlanVersion = 1,
+  int StopPlanVersion = 2,
+  string PostFillTargetFallback = "fill_relative"
 );
 
 public sealed record AutoTradeConfigHealthDocument(

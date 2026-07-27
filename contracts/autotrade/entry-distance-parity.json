@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "description": "Shared executor entry-distance gate parity cases. Mirrors AutoTradeEngine live-quote distance math and AUTO_TRADE_MAX_ENTRY_DISTANCE_PIPS.",
+  "pip_size": "0.1",
+  "cap_pips": "10",
+  "cases": [
+    {
+      "name": "scenario_a_buy_15_6p",
+      "direction": "BUY",
+      "zone_low": "4094.52",
+      "zone_high": "4100.12",
+      "bid": "4101.58",
+      "ask": "4101.68",
+      "expected_executable_quote": "4101.68",
+      "expected_distance_pips": "15.6",
+      "expected_rejected": true
+    },
+    {
+      "name": "scenario_b_sell_20_6p",
+      "direction": "SELL",
+      "zone_low": "4088.50",
+      "zone_high": "4091.25",
+      "bid": "4086.44",
+      "ask": "4086.54",
+      "expected_executable_quote": "4086.44",
+      "expected_distance_pips": "20.6",
+      "expected_rejected": true
+    }
+  ]
+}

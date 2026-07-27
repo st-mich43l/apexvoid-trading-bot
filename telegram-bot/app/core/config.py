@@ -239,6 +239,24 @@ class Settings(BaseSettings):
   )
   auto_trade_min_confluence: int = 2
   auto_trade_max_entry_distance_pips: float = 10.0
+  auto_trade_entry_contract_tolerance_pips: float = Field(
+    default=3.0,
+    validation_alias=AliasChoices(
+      "AUTO_TRADE_ENTRY_CONTRACT_TOLERANCE_PIPS",
+    ),
+  )
+  auto_trade_be_buffer_pips: int = Field(
+    default=6,
+    validation_alias=AliasChoices(
+      "AUTO_TRADE_BE_BUFFER_PIPS",
+    ),
+  )
+  auto_trade_post_fill_target_fallback: str = Field(
+    default="fill_relative",
+    validation_alias=AliasChoices(
+      "AUTO_TRADE_POST_FILL_TARGET_FALLBACK",
+    ),
+  )
   auto_trade_news_guard_minutes: int = 30
   auto_trade_box_retire_seconds: int = 14400
   auto_trade_tp_pips: str = Field(
@@ -249,6 +267,12 @@ class Settings(BaseSettings):
     ),
   )
   auto_trade_zone_fill_enabled: bool = False
+  auto_trade_zone_fill_min_atr: float = Field(
+    default=0.5,
+    validation_alias=AliasChoices(
+      "AUTO_TRADE_ZONE_FILL_MIN_ATR",
+    ),
+  )
   auto_trade_non_hedged_opposite_policy: str = "reject"
   # Scanner detectors already own the complete strategy match.  The bridge
   # transports that typed decision to the executor without another regime or

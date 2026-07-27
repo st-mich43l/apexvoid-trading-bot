@@ -12,6 +12,19 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- Align autonomous publication with the executor entry-distance hard cap
+  (`AUTO_TRADE_MAX_ENTRY_DISTANCE_PIPS`): adaptive strategy drift stays an
+  observation tolerance, AUTO READY / candidate XADD require the executor
+  envelope, and outside-cap setups emit AUTO WAIT while remaining retained.
+- Resolve concrete execution routes (`market` / `single_limit` / `zone_split`)
+  before protective-stop planning for Key Level, Trendline, and other
+  reaction families so strict stop contracts no longer publish unresolved
+  `either` and mismatch at the executor.
+- Move protected stops to BE+6 profitable pips after broker-confirmed TP1
+  (`AUTO_TRADE_BE_BUFFER_PIPS=6`), anchored to the actual fill (SELL
+  `4112.04` → `4111.44`); suppress target evaluation on pre-fill quotes;
+  enrich stop-moved Telegram cards with TP trigger context; deliver one
+  canonical terminal Telegram result per trade group.
 - Add a recovery-only `broker_reconciling` state: recovery claims never write
   normal `processing`, an expired recovery lease stays recovery-required, and
   a crashed recovery worker can never decay into a normal retry that places a

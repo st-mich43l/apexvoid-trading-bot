@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 import math
 from typing import Any
 
+from app.autotrade.execution_route import resolve_execution_route_plan
 from app.autotrade.protective_stop import (
   ProtectiveStopError,
   opposing_zone_context_from_values,
@@ -278,7 +279,7 @@ class ExecutionPolicyEvaluation:
 _DEFAULT_POLICIES: dict[str, ExecutionPolicy] = {
   FAMILY_RANGE_REVERSION: ExecutionPolicy(
     FAMILY_RANGE_REVERSION, 2, 0.35, 8.0, 1.0, 0.5, 1.10, 1.0,
-    "either", ("chop", "range", "unknown"),
+    "market", ("chop", "range", "unknown"),
   ),
   FAMILY_TREND_PULLBACK: ExecutionPolicy(
     FAMILY_TREND_PULLBACK, 2, 0.75, 15.0, 2.0, 0.6, 1.15, 1.0,
@@ -286,7 +287,7 @@ _DEFAULT_POLICIES: dict[str, ExecutionPolicy] = {
   ),
   FAMILY_BREAKOUT_RETEST: ExecutionPolicy(
     FAMILY_BREAKOUT_RETEST, 2, 0.85, 18.0, 2.5, 0.7, 1.20, 1.0,
-    "either", ("trend", "breakout", "unknown"),
+    "market", ("trend", "breakout", "unknown"),
   ),
   FAMILY_MOMENTUM_CONTINUATION: ExecutionPolicy(
     FAMILY_MOMENTUM_CONTINUATION, 2, 1.0, 20.0, 3.0, 0.8, 1.15, 1.0,
@@ -294,27 +295,29 @@ _DEFAULT_POLICIES: dict[str, ExecutionPolicy] = {
   ),
   FAMILY_LIQUIDITY_REVERSAL: ExecutionPolicy(
     FAMILY_LIQUIDITY_REVERSAL, 2, 0.45, 10.0, 1.5, 0.55, 1.15, 0.75,
-    "either", ("chop", "range", "trend", "unknown"),
+    "market", ("chop", "range", "trend", "unknown"),
   ),
   FAMILY_MAPPED_ZONE_REACTION: ExecutionPolicy(
     FAMILY_MAPPED_ZONE_REACTION, 2, 0.40, 10.0, 2.0, 0.6, 1.15, 1.0,
-    "either", ("chop", "range", "trend", "breakout", "unknown"),
+    "market", ("chop", "range", "trend", "breakout", "unknown"),
   ),
+  # Strict stop contracts require a concrete route. Reaction families execute
+  # at the touch with a market fill — never publish unresolved `either`.
   FAMILY_KEY_LEVEL: ExecutionPolicy(
     FAMILY_KEY_LEVEL, 2, 0.50, 12.0, 1.5, 0.55, 1.15, 1.0,
-    "either", ("chop", "range", "trend", "breakout", "unknown"),
+    "market", ("chop", "range", "trend", "breakout", "unknown"),
   ),
   FAMILY_SUPPLY_DEMAND: ExecutionPolicy(
     FAMILY_SUPPLY_DEMAND, 2, 0.50, 12.0, 2.0, 0.55, 1.15, 1.0,
-    "either", ("chop", "range", "trend", "breakout", "unknown"),
+    "market", ("chop", "range", "trend", "breakout", "unknown"),
   ),
   FAMILY_SESSION_LEVEL: ExecutionPolicy(
     FAMILY_SESSION_LEVEL, 2, 0.50, 12.0, 1.5, 0.55, 1.15, 1.0,
-    "either", ("chop", "range", "trend", "breakout", "unknown"),
+    "market", ("chop", "range", "trend", "breakout", "unknown"),
   ),
   FAMILY_TRENDLINE: ExecutionPolicy(
     FAMILY_TRENDLINE, 2, 0.55, 14.0, 1.5, 0.55, 1.15, 1.0,
-    "either", ("chop", "range", "trend", "breakout", "unknown"),
+    "market", ("chop", "range", "trend", "breakout", "unknown"),
   ),
 }
 
@@ -383,12 +386,12 @@ def planned_execution_route(
   *,
   order_type_preference: str,
   entry_distribution: str,
+  allow_either: bool = True,
 ) -> str:
-  """Route the executor must resolve to, using the same rules it applies.
+  """Legacy route-name helper for parity fixtures and non-strict candidates.
 
-  Mirrors `AutoTradeEngine.ResolveExecutionRoute`: a market preference is a
-  market route, a limit preference resolves by distribution, and anything
-  uncommitted stays `either` so the executor is free to choose.
+  Strict autonomous publication must use resolve_execution_route_plan so
+  `either` is resolved to a concrete route before stop planning.
   """
   preference = (order_type_preference or "").strip().lower()
   distribution = (entry_distribution or "").strip().lower()
@@ -399,7 +402,9 @@ def planned_execution_route(
       return ROUTE_ZONE_SPLIT
     if distribution == "single":
       return ROUTE_SINGLE_LIMIT
-  return ROUTE_EITHER
+  if allow_either:
+    return ROUTE_EITHER
+  return ROUTE_MARKET
 
 
 def evaluate_execution_policy(
@@ -412,6 +417,7 @@ def evaluate_execution_policy(
   opposing_zone_low: float | None = None,
   opposing_zone_high: float | None = None,
   opposing_zone_id: str | None = None,
+  executable_quote: float | None = None,
 ) -> ExecutionPolicyEvaluation:
   """Enforce every declared setup policy before candidate publication."""
   try:
@@ -457,21 +463,48 @@ def evaluate_execution_policy(
     if policy.order_type_preference == "limit" and zone_width_atr >= 0.5
     else "single"
   )
-  planned_route = planned_execution_route(
+  quote = float(
+    spot_price if executable_quote is None else executable_quote
+  )
+  digits = int(getattr(cfg, "auto_trade_xau_price_digits", 2) or 2)
+  route_plan = resolve_execution_route_plan(
+    direction=direction,
     order_type_preference=policy.order_type_preference,
     entry_distribution=entry_distribution,
+    executable_quote=quote,
+    zone_low=low,
+    zone_high=high,
+    atr=atr,
+    zone_fill_enabled=bool(
+      getattr(cfg, "auto_trade_zone_fill_enabled", False)
+    ),
+    zone_fill_min_atr=float(
+      getattr(cfg, "auto_trade_zone_fill_min_atr", 0.5) or 0.5
+    ),
+    inside_zone_market_entry_enabled=bool(
+      getattr(cfg, "auto_trade_inside_zone_market_entry_enabled", True)
+    ),
+    zone_fill_fallback_enabled=bool(
+      getattr(cfg, "auto_trade_zone_fill_fallback_enabled", True)
+    ),
+    digits=digits,
+    allow_either=False,
   )
-  if planned_route == "zone_split":
-    # Proximal edge is the zone-fill reference, matching the C# executor.
-    planned_entry = high if direction == "BUY" else low
-  elif policy.order_type_preference == "limit":
-    planned_entry = (
-      min(spot_price, high)
-      if direction == "BUY"
-      else max(spot_price, low)
+  if not route_plan.valid:
+    return ExecutionPolicyEvaluation(
+      False,
+      "execution_route_unresolved",
+      route_plan.reject_reason or "execution route could not be resolved",
+      True,
+      {
+        "order_type_preference": policy.order_type_preference,
+        "entry_distribution": entry_distribution,
+        "routing_reason": route_plan.routing_reason,
+      },
+      policy,
     )
-  else:
-    planned_entry = spot_price
+  planned_route = route_plan.route
+  planned_entry = float(route_plan.planned_entry_price)
   ladder_room_price = max(targets) * pip if targets else 0.0
   absolute_room_price = 0.0
   if absolute_target is not None and math.isfinite(float(absolute_target)):
@@ -570,7 +603,11 @@ def evaluate_execution_policy(
     else str(regime or "unknown").strip().lower()
   )
   planned_leg_entry_prices: list[float]
-  if planned_route == "single_limit":
+  if route_plan.planned_leg_entry_prices:
+    planned_leg_entry_prices = [
+      round(float(price), 6) for price in route_plan.planned_leg_entry_prices
+    ]
+  elif planned_route == "single_limit":
     planned_leg_entry_prices = [round(planned_entry, 6)]
   elif planned_route == "zone_split":
     proximal = high if direction == "BUY" else low
@@ -596,6 +633,7 @@ def evaluate_execution_policy(
     "entry_distribution": entry_distribution,
     "planned_execution_route": planned_route,
     "planned_leg_entry_prices": planned_leg_entry_prices,
+    "routing_reason": route_plan.routing_reason,
     "target_model": target_model,
     "target_reference_price": str(
       getattr(match, "target_reference_price", "broker_fill")
@@ -850,11 +888,9 @@ def max_entry_drift_pips(
   pip = pip_size if pip_size > 0 else 0.1
   atr_pips = (atr / pip) * policy.max_entry_drift_atr if atr > 0 else 0.0
   configured = policy.max_entry_drift_pips
-  if cfg is not None:
-    configured = max(
-      configured,
-      float(getattr(cfg, "auto_trade_max_entry_distance_pips", configured)),
-    )
+  # Do NOT fold AUTO_TRADE_MAX_ENTRY_DISTANCE_PIPS into adaptive drift.
+  # Adaptive drift is observation tolerance; executor distance is a separate
+  # hard publication gate (see entry_distance.measure_entry_distance).
   min_setting = _FAMILY_MIN_DRIFT_SETTING.get(family)
   configured_minimum = (
     float(getattr(cfg, min_setting, 0.0)) if cfg is not None and min_setting else 0.0
