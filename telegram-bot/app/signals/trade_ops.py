@@ -449,10 +449,9 @@ def render_result(
     seq = f"#{_display_seq(result['row'])} " if tier == "vip" else ""
     if result.get("pending"):
       return f"⏳ {seq}stop-loss move requested — awaiting broker confirmation"
-    suffix = " (BE)" if result["is_be"] else ""
     return (
       f"🛡 {seq}move SL to "
-      f"{_price(result['price'], symbol)}{suffix}"
+      f"{_price(result['price'], symbol)}"
     )
   if action == "close":
     row = result["row"]

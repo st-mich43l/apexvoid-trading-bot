@@ -495,69 +495,25 @@ def _format_stop_moved(
   message: str,
   profile: DeliveryProfile,
 ) -> str | None:
-  match = _STOP_RE.match(message)
-  label = None
-  stop = None
-  if match is not None:
-    stop, label = match.groups()
   new_sl = _event_float(
     event,
     "new_stop",
     "stop_price",
     "price",
   )
-  if new_sl is None and stop is not None:
-    try:
-      new_sl = float(str(stop).replace(",", ""))
-    except (TypeError, ValueError):
-      new_sl = None
-  previous_sl = _event_float(event, "previous_stop", "previous_sl", "stop_loss")
-  entry = _event_float(
-    event, "entry_price", "fill_price", "entry", "entry_low",
-  )
-  mode = event.get("mode") or event.get("stop_mode") or label
-  if mode and "tick" not in str(mode).lower() and str(mode).upper().startswith("BE+"):
-    mode = f"{mode} ticks"
-  buffer_price = _event_float(event, "buffer_price", "be_buffer_price")
-  if buffer_price is None and entry is not None and new_sl is not None:
-    buffer_price = abs(new_sl - entry)
-  direction = str(event.get("direction") or "").strip().upper() or None
-  tp1_confirmed = event.get("trigger_tp1_broker_confirmed")
-  if tp1_confirmed is None:
-    tp1_confirmed = event.get("tp1_broker_confirmed")
-  if tp1_confirmed is None and mode and "BE+" in str(mode).upper():
-    tp1_confirmed = True
-
-  lines = [
+  if new_sl is None:
+    match = _STOP_RE.match(message)
+    if match is not None:
+      try:
+        new_sl = float(str(match.group(1)).replace(",", ""))
+      except (TypeError, ValueError):
+        new_sl = None
+  if new_sl is None:
+    return None
+  return "\n".join([
     "🤖 <b>ApexVoid Algo</b>",
-    "🛡 <b>Risk protected</b>",
-    "",
-  ]
-  if direction:
-    lines.append(f"Direction: <b>{escape(direction)}</b>")
-  if entry is not None:
-    lines.append(f"Entry: <b>{entry:,.2f}</b>")
-  if previous_sl is not None:
-    lines.append(f"Previous SL: <b>{previous_sl:,.2f}</b>")
-  if new_sl is not None:
-    lines.append(f"New SL: <b>{new_sl:,.2f}</b>")
-  elif stop:
-    lines.append(f"SL moved to <b>{escape(stop)}</b>")
-  if mode:
-    lines.append(f"Mode: <b>{escape(str(mode))}</b>")
-  if buffer_price is not None:
-    lines.append(f"Buffer: <b>{buffer_price:,.2f}</b>")
-  if tp1_confirmed is not None:
-    confirmed = "yes" if bool(tp1_confirmed) else "no"
-    lines.append(f"Trigger TP1 broker-confirmed: <b>{confirmed}</b>")
-  if len(lines) <= 3:
-    if stop and label:
-      lines.append(f"SL moved to <b>{escape(stop)}</b> · {escape(label)}")
-    elif message:
-      lines.append(escape(message))
-    else:
-      return None
-  return "\n".join(lines)
+    f"🛡 move SL to <b>{new_sl:,.2f}</b>",
+  ])
 
 
 def render_auto_trade_event(
