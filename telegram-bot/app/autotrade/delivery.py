@@ -397,7 +397,10 @@ def _format_strategy_route(event: dict) -> str | None:
   status = str(event.get("status") or "")
   reason_code = str(event.get("reason_code") or "")
   if status == "candidate_published":
-    headline = "🟢 <b>Algo bot READY</b> · candidate published"
+    # "READY" is reserved for the executor accepting and arming a plan
+    # (see docs/adr-trade-plan-v7-boundary.md) - Python publishing a
+    # candidate is not that, so this must not read "ready".
+    headline = "🟢 <b>Algo bot PLAN PUBLISHED</b>"
   elif status == "waiting":
     headline = "🟠 <b>Algo bot WAIT</b>"
   elif status in {"blocked", "executor_rejected"}:
