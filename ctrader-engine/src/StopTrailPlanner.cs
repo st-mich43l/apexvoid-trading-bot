@@ -35,9 +35,11 @@ public static class StopTrailPlanner
     {
       var tickSize = RequireTickSize(symbol);
       bufferPrice = breakEvenBufferTicks * tickSize;
+      // BE buffer stays on the adverse side of fill (spread cushion), not
+      // locked profitable ticks: BUY = entry - N ticks, SELL = entry + N ticks.
       desired = state.Direction == TradeDirection.Buy
-        ? state.EntryPrice + bufferPrice.Value
-        : state.EntryPrice - bufferPrice.Value;
+        ? state.EntryPrice - bufferPrice.Value
+        : state.EntryPrice + bufferPrice.Value;
       label = $"BE+{breakEvenBufferTicks} ticks";
     }
     else

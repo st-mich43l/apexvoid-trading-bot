@@ -14,11 +14,11 @@ dated section after deployment.
 ### Fixed
 - Correct ApexVoid Algo break-even protection to **BE+6 broker ticks**
   (`AUTO_TRADE_BE_BUFFER_TICKS=6` × tick `0.01` = **0.06** price), not
-  6 trading pips × `pip_size=0.1` (= 0.60). BUY `4087.66` → `4087.72`;
-  SELL `4112.04` → `4111.98`. Config health compares `break_even_buffer_ticks`
-  and `symbol_tick_size`; Telegram Risk Protected cards report `BE+6 ticks`
-  and `Buffer: 0.06`. Deprecated `AUTO_TRADE_BE_BUFFER_PIPS` is read as a
-  tick count only.
+  6 trading pips × `pip_size=0.1` (= 0.60). Buffer stays on the adverse side
+  of fill: BUY `4087.66` → `4087.60`; SELL `4087.66` → `4087.72`. Config
+  health compares `break_even_buffer_ticks` and `symbol_tick_size`; Telegram
+  Risk Protected cards report `BE+6 ticks` and `Buffer: 0.06`. Deprecated
+  `AUTO_TRADE_BE_BUFFER_PIPS` is read as a tick count only.
 - Align autonomous publication with the executor entry-distance hard cap
   (`AUTO_TRADE_MAX_ENTRY_DISTANCE_PIPS`): adaptive strategy drift stays an
   observation tolerance, AUTO READY / candidate XADD require the executor
