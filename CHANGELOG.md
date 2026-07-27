@@ -18,6 +18,10 @@ dated section after deployment.
   before route resolution so rejections no longer surface as misleading
   `final_protective_stop_contract_mismatch` when e.g. SELL is open and BUY is
   attempted.
+- Suppress redundant `SETUP INVALIDATED` owner alerts after autonomous entry:
+  only Telegram forming cards are tracked (not every claimed detection),
+  overlapping setups share one level-band watch, open same-direction positions
+  silence further invalidation pings, and `opened` clears the watch state.
 - Decouple `SETUP FORMING` card volume from the execution digest: advisory
   cards are capped by `SCANNER_CARD_TOP_N` (default `2`), always suppress
   overlapping opposing directions, and deduplicate structural reactions by a

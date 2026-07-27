@@ -718,7 +718,30 @@ _ACTIVE_SETUP_TTL_SECONDS = 4 * 3600
 _INVALIDATION_BREAK_BUFFER_ATR = 0.1
 
 
-def _active_setup_key(
+def _active_setup_band_key(
+  symbol: str,
+  tf: str,
+  result: DetectionResult,
+) -> str:
+  low = float(result.entry_zone.low)
+  high = float(result.entry_zone.high)
+  midpoint = (
+    (low + high) / 2
+    if math.isfinite(low) and math.isfinite(high) and high > low
+    else float(result.key_level)
+  )
+  bucket = _level_bucket(
+    symbol,
+    midpoint,
+    settings.scanner_level_bucket,
+  )
+  return (
+    f"scanner:setup:active_band:{symbol.upper()}:{tf.upper()}:"
+    f"{result.direction.upper()}:{bucket}"
+  )
+
+
+def _legacy_active_setup_key(
   symbol: str,
   tf: str,
   setup: str,
@@ -726,6 +749,105 @@ def _active_setup_key(
 ) -> str:
   slug = setup.lower().replace(" ", "_")
   return f"scanner:setup:active:{symbol.upper()}:{tf.upper()}:{slug}:{direction.upper()}"
+
+
+# Backward-compatible alias for tests and one-off cleanup.
+_active_setup_key = _legacy_active_setup_key
+
+
+def _normalize_trade_direction(value: object) -> str | None:
+  if value is None:
+    return None
+  if isinstance(value, int):
+    if value == 0:
+      return "BUY"
+    if value == 1:
+      return "SELL"
+    return None
+  text = str(value).strip().upper()
+  if text in {"BUY", "B", "0"}:
+    return "BUY"
+  if text in {"SELL", "S", "1"}:
+    return "SELL"
+  return None
+
+
+async def _autonomous_direction_active(
+  client: Any,
+  symbol: str,
+  direction: str,
+) -> bool:
+  raw_ids = await client.smembers("auto_trade:positions")
+  if not raw_ids:
+    return False
+  wanted = _normalize_trade_direction(direction)
+  if wanted is None:
+    return False
+  for raw_id in raw_ids:
+    token = raw_id.decode() if isinstance(raw_id, bytes) else str(raw_id)
+    try:
+      position_id = int(token)
+    except (TypeError, ValueError):
+      continue
+    raw = await client.get(f"auto_trade:position:{position_id}")
+    if not raw:
+      continue
+    try:
+      payload = json.loads(
+        raw.decode() if isinstance(raw, bytes) else str(raw)
+      )
+    except (TypeError, ValueError, json.JSONDecodeError):
+      continue
+    if not isinstance(payload, dict):
+      continue
+    if str(payload.get("symbol") or symbol).upper() != symbol.upper():
+      continue
+    if str(payload.get("parent_group_id") or "").strip():
+      continue
+    remaining = payload.get("remaining_volume")
+    if remaining is not None:
+      try:
+        if int(remaining) <= 0:
+          continue
+      except (TypeError, ValueError):
+        pass
+    pos_dir = _normalize_trade_direction(payload.get("direction"))
+    if pos_dir == wanted:
+      return True
+  return False
+
+
+async def clear_active_setup_tracking(
+  client: Any,
+  symbol: str,
+  *,
+  tf: str | None = None,
+  direction: str | None = None,
+) -> None:
+  """Drop invalidation watch state once a setup is entered or no longer relevant."""
+  symbol_token = symbol.upper()
+  if tf:
+    patterns = (
+      f"scanner:setup:active_band:{symbol_token}:{tf.upper()}:*",
+      f"scanner:setup:active:{symbol_token}:{tf.upper()}:*",
+    )
+  else:
+    patterns = (
+      f"scanner:setup:active_band:{symbol_token}:*",
+      f"scanner:setup:active:{symbol_token}:*",
+    )
+  wanted = str(direction or "").upper() or None
+  for pattern in patterns:
+    async for key in client.scan_iter(match=pattern):
+      key_text = key.decode() if isinstance(key, bytes) else str(key)
+      if wanted:
+        parts = key_text.split(":")
+        if ":active_band:" in key_text:
+          if len(parts) < 2 or parts[-2] != wanted:
+            continue
+        elif parts[-1] != wanted:
+          continue
+      await client.delete(key)
 
 
 async def _track_active_setups(
@@ -743,9 +865,12 @@ async def _track_active_setups(
       "confluence": result.confluence,
     }, separators=(",", ":"))
     await client.set(
-      _active_setup_key(symbol, tf, result.setup, result.direction),
+      _active_setup_band_key(symbol, tf, result),
       payload,
       ex=_ACTIVE_SETUP_TTL_SECONDS,
+    )
+    await client.delete(
+      _legacy_active_setup_key(symbol, tf, result.setup, result.direction),
     )
 
 
@@ -759,6 +884,31 @@ def _format_invalidation(state: dict[str, Any], symbol: str, tf: str) -> str:
     f"{escape(direction)} · {escape(setup)} · zone "
     f"{_zone_text(Zone(low, high, 'demand' if direction == 'BUY' else 'supply'), symbol)} "
     "no longer holds - structure broke through it."
+  )
+
+
+def _invalidation_states_overlap(
+  left: dict[str, Any],
+  right: dict[str, Any],
+) -> bool:
+  if str(left.get("direction") or "").upper() != str(right.get("direction") or "").upper():
+    return False
+  try:
+    first = Zone(
+      float(left["zone_low"]),
+      float(left["zone_high"]),
+      "demand",
+    )
+    second = Zone(
+      float(right["zone_low"]),
+      float(right["zone_high"]),
+      "demand",
+    )
+  except (KeyError, TypeError, ValueError):
+    return False
+  return _zone_overlap_ratio(first, second) >= max(
+    0.0,
+    settings.alert_overlap_suppress,
   )
 
 
@@ -776,30 +926,49 @@ async def _check_setup_invalidations(
   if not math.isfinite(close):
     return
   buffer = max(0.0, _INVALIDATION_BREAK_BUFFER_ATR) * max(0.0, atr)
-  pattern = f"scanner:setup:active:{symbol.upper()}:{tf.upper()}:*"
-  async for key in client.scan_iter(match=pattern):
-    raw = await client.get(key)
-    if not raw:
-      continue
-    try:
-      state = json.loads(raw)
-    except (TypeError, json.JSONDecodeError):
-      continue
-    direction = state.get("direction")
-    try:
-      zone_low = float(state["zone_low"])
-      zone_high = float(state["zone_high"])
-    except (KeyError, TypeError, ValueError):
+  patterns = (
+    f"scanner:setup:active_band:{symbol.upper()}:{tf.upper()}:*",
+    f"scanner:setup:active:{symbol.upper()}:{tf.upper()}:*",
+  )
+  broken: list[dict[str, Any]] = []
+  for pattern in patterns:
+    async for key in client.scan_iter(match=pattern):
+      raw = await client.get(key)
+      if not raw:
+        continue
+      try:
+        state = json.loads(raw)
+      except (TypeError, json.JSONDecodeError):
+        continue
+      direction = state.get("direction")
+      try:
+        zone_low = float(state["zone_low"])
+        zone_high = float(state["zone_high"])
+      except (KeyError, TypeError, ValueError):
+        await client.delete(key)
+        continue
+      invalidated = (
+        close > zone_high + buffer if direction == "SELL"
+        else close < zone_low - buffer if direction == "BUY"
+        else False
+      )
+      if not invalidated:
+        continue
       await client.delete(key)
+      broken.append(state)
+  if not broken:
+    return
+  notified: list[dict[str, Any]] = []
+  for state in broken:
+    direction = str(state.get("direction") or "")
+    if await _autonomous_direction_active(client, symbol, direction):
       continue
-    invalidated = (
-      close > zone_high + buffer if direction == "SELL"
-      else close < zone_low - buffer if direction == "BUY"
-      else False
-    )
-    if not invalidated:
+    if any(
+      _invalidation_states_overlap(state, existing)
+      for existing in notified
+    ):
       continue
-    await client.delete(key)
+    notified.append(state)
     if settings.telegram_owner_id:
       await notify(
         _format_invalidation(state, symbol, tf),
@@ -1381,7 +1550,7 @@ async def _notify_digest_once(
         str(sent.message_id),
         ex=max(86400, settings.auto_trade_candidate_ttl),
       )
-  await _track_active_setups(client, symbol, tf, claimed_results)
+  await _track_active_setups(client, symbol, tf, cards)
   return cards
 
 
