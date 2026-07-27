@@ -49,7 +49,36 @@ dated section after deployment.
   initial tranche size, in addition to exposure/risk/add-cap ceilings. Python
   mirror: `app.autotrade.scale_in_sizing`.
 
+### Added
+- `AUTO_TRADE_POSITION_MISSING_CONFIRMATIONS` (default `2`) and
+  `AUTO_TRADE_POSITION_MISSING_RECHECK_SECONDS` (default `3`): a tracked
+  position missing from one broker reconcile snapshot is only "suspected"
+  missing and stays fully tracked until independently confirmed absent
+  across this many time-separated snapshots.
+
 ### Fixed
+- Break-even buffer direction: `StopTrailPlanner.ProtectedBreakevenStop` had
+  BUY/SELL swapped (adverse-side cushion instead of profit-side protection),
+  moving a SELL entry 4100.74 BE+6 stop to 4100.80 instead of the correct
+  4100.68. Corrected to BUY entry+buffer / SELL entry-buffer; never-worsens-
+  an-existing-stop behavior unchanged.
+- Independent autonomous strategy groups on a non-hedged (netting) broker
+  account now fail closed before broker submission
+  (`independent_strategy_requires_hedged_account`) instead of silently
+  collapsing into the existing net position and blending two strategies'
+  SL/TP - previously only opposite-direction groups were rejected, so two
+  same-direction independent strategies (the incident: Trendline Reaction
+  and Key Level Reaction, both SELL) could both be admitted.
+- `ReconcileAsync` no longer deletes a tracked position's state and
+  publishes `position_closed` after a single broker snapshot omits it;
+  absence must now be independently confirmed across
+  `AUTO_TRADE_POSITION_MISSING_CONFIRMATIONS` time-separated snapshots
+  first (`position_missing_snapshot_suspected` /
+  `_confirmed` / `_recovered`).
+- Added a fatal-event guard (`broker_position_identity_group_conflict`) if
+  the broker ever returns an already-tracked PositionId for a distinct
+  independent group, so the existing group's state cannot be silently
+  overwritten and no further autonomous groups are admitted until resolved.
 - Block opposite-direction autonomous initial groups before stop/route planning:
   worker preflight rejects with `opposite_initial_group_active` when a tracked
   initial position exists on the other side; the C# executor runs the same guard
