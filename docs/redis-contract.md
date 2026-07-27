@@ -214,3 +214,27 @@ from the general bot. Order message IDs are cached for seven days under
 `auto_trade:msg:{position_id}` (plus group namespaces) so TP, stop, close, and
 scale-in updates reply to their trade root. A missing or rejected Telegram
 reply target falls back to a standalone card.
+
+## TradePlan V7 Stream (execution:*)
+
+Deliberately a separate namespace from `auto_trade:*` above - see
+`docs/adr-trade-plan-v7-boundary.md`. A TradePlan V7 must never be
+reinterpreted as a V6 `TradeCandidate` or vice versa, so the two contracts
+never share a key prefix or a stream.
+
+```text
+execution:trade_plans          XADD stream of published TradePlan V7 JSON
+execution:plan:{plan_id}       full plan JSON, TTL = max(60, expires_at - created_at)
+execution:plan_owner:{plan_id} written by whichever side claims the plan for execution
+execution:plan_state:{plan_id} "published" | "armed" | ... lifecycle state
+execution:plan_event:{plan_id} per-plan event history
+```
+
+Phase 1 (current) only implements `execution:trade_plans` and
+`execution:plan:{plan_id}`/`execution:plan_state:{plan_id}`
+(`app/autotrade/trade_plan_stream.py`). `execution:plan_owner:{plan_id}` and
+`execution:plan_event:{plan_id}` are reserved names, written starting in the
+phase that adds real plan-claiming (C# `TradePlanExecutionEngine`) and setup
+lifecycle history respectively. Publishing to this stream has no broker
+execution side effect until `AUTO_TRADE_CONTRACT_MODE` is `v7_primary` or
+`v7_only`.

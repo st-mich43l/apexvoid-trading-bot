@@ -11,7 +11,39 @@ dated section after deployment.
 
 ## Unreleased
 
+### Added
+- TradePlan V7 contract (`contracts/autotrade/trade-plan-v7.json`, Python
+  `app/autotrade/trade_plan.py`, C# `TradePlanV7.cs`): a single absolute stop
+  and a concrete entry instruction (market_watch/single_limit/limit_ladder)
+  declared entirely by Python, replacing the V6 `Planned*`/`stop_adjustment*`
+  field family that let both services compute a stop and compare. See
+  `docs/adr-trade-plan-v7-boundary.md`.
+- `AUTO_TRADE_CONTRACT_MODE` (`legacy_v6` default / `shadow_v7` /
+  `v7_primary` / `v7_only`) as a new fatal field in the existing Python<->C#
+  config-health handshake, alongside `trade_plan_version` and
+  `trade_plan_stream`.
+- `execution:trade_plans` Redis stream and `execution:plan:{plan_id}` /
+  `execution:plan_state:{plan_id}` keys, isolated from `auto_trade:*`.
+- Python setup lifecycle state machine (`app/autotrade/setup_lifecycle.py`,
+  `analysis:setup:{setup_id}`) and a `TradePlan` builder from an
+  already-confirmed `StrategyMatch` (`app/autotrade/trade_plan_builder.py`).
+- C# `TradePlanExecutionEngine` (mechanical entry/volume/target/break-even
+  decision logic only, not yet wired to broker order submission) plus a
+  dependency-boundary test suite proving it never references
+  `StructureStopPlanner`, `ResolveExecutionRoute`, or the other legacy
+  dual-planning symbols.
+- No behavior change from any of the above by default (`AUTO_TRADE_CONTRACT_MODE`
+  defaults to `legacy_v6` everywhere); V7 is not yet published, consumed, or
+  used to place any order.
+
 ### Changed
+- `map_strategy.py` selects mapped zones from `market_map.actionable_entries`
+  (the uncapped structural pool) instead of `market_map.entries` (the
+  Telegram-display-capped list), so the per-side display cap can no longer
+  silently determine which structural zone is reachable for execution.
+- Auto-trade Telegram cards no longer say "Algo bot READY" when Python
+  merely publishes a V6 candidate; that headline is now "Algo bot PLAN
+  PUBLISHED" - READY is reserved for the executor actually arming a plan.
 - Scale-in adds (momentum and pullback) share the same volume-split cap:
   each tranche is limited to `AUTO_TRADE_ADD_SIZE_RATIO` (default `0.5`) of the
   initial tranche size, in addition to exposure/risk/add-cap ceilings. Python

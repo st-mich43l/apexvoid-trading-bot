@@ -148,7 +148,10 @@ public static class AutoTradeConfigHealth
       SymbolTickSize: StopTrailPlanner.RequireTickSize(symbol),
       EntryPlanVersion: 1,
       StopPlanVersion: 3,
-      PostFillTargetFallback: options.PostFillTargetFallback
+      PostFillTargetFallback: options.PostFillTargetFallback,
+      ContractMode: options.ContractMode,
+      TradePlanVersion: TradePlanContract.Version,
+      TradePlanStream: options.TradePlanStream
     );
   }
 
@@ -257,6 +260,20 @@ public static class AutoTradeConfigHealth
         current.CandidateContractVersion,
         fatal
       );
+      if (root.TryGetProperty("contract_mode", out _))
+      {
+        CompareString(root, "contract_mode", current.ContractMode, fatal);
+      }
+      if (root.TryGetProperty("trade_plan_version", out _))
+      {
+        CompareInt(root, "trade_plan_version", current.TradePlanVersion, fatal);
+      }
+      if (root.TryGetProperty("trade_plan_stream", out _))
+      {
+        CompareString(
+          root, "trade_plan_stream", current.TradePlanStream, fatal
+        );
+      }
       CompareIntList(root, "target_plans", current.TargetPlans, fatal);
       CompareIntList(
         root,

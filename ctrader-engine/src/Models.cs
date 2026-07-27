@@ -521,7 +521,10 @@ public sealed record AutoTradeConfigManifest(
   decimal SymbolTickSize = 0.01m,
   int EntryPlanVersion = 1,
   int StopPlanVersion = 3,
-  string PostFillTargetFallback = "fill_relative"
+  string PostFillTargetFallback = "fill_relative",
+  string ContractMode = "legacy_v6",
+  int TradePlanVersion = TradePlanContract.Version,
+  string TradePlanStream = "execution:trade_plans"
 );
 
 public sealed record AutoTradeConfigHealthDocument(

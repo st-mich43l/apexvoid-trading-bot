@@ -466,7 +466,15 @@ def _select_reaction_detailed(
     "distance": 0,
   }
   candidates: list[tuple[MapEntry, str, bool]] = []
-  for entry in market_map.entries:
+  # Selection must run over the uncapped structural pool, not the
+  # Telegram-display-capped `entries` list - otherwise a genuinely
+  # structural zone that lost the per-side display ranking (or a
+  # round-number display fallback that never should have been executable)
+  # can silently change which zone gets traded. Falls back to `entries`
+  # only for a MarketMap deserialized from a pre-actionable_entries cached
+  # payload (see market_map_from_payload), never in a freshly built map.
+  structural_pool = market_map.actionable_entries or market_map.entries
+  for entry in structural_pool:
     counter_bias = bias_side is not None and entry.side != bias_side
     if counter_bias and not counter_enabled:
       counts["side"] += 1
@@ -769,7 +777,9 @@ def _has_nearby_trendline_level(
   atr: float,
 ) -> bool:
   prefix = "tl support" if zone.side == "buy" else "tl resistance"
-  for entry in market_map.entries:
+  # Same rationale as the selection loop above: a corroborating trendline
+  # must not be missed just because Telegram's display cap dropped it.
+  for entry in market_map.actionable_entries or market_map.entries:
     if entry is zone or entry.tier != "level" or entry.side != zone.side:
       continue
     if not any(tag.casefold().startswith(prefix) for tag in entry.tags):

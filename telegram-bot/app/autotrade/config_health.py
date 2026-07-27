@@ -11,11 +11,15 @@ from typing import Any, Iterable
 from urllib.parse import urlparse
 
 from app.autotrade.range_targets import configured_range_targets
+from app.autotrade.trade_plan import TRADE_PLAN_VERSION
 from app.core.config import settings
 from app.core.environment_options import (
   canonical_option_health,
   deprecated_option_warnings,
 )
+
+
+CONTRACT_MODES = ("legacy_v6", "shadow_v7", "v7_primary", "v7_only")
 
 
 CONFIG_MANIFEST_VERSION = 2
@@ -355,6 +359,9 @@ def python_manifest() -> dict[str, Any]:
     "candidate_contract_version": (
       settings.auto_trade_candidate_contract_version
     ),
+    "contract_mode": settings.auto_trade_contract_mode,
+    "trade_plan_version": TRADE_PLAN_VERSION,
+    "trade_plan_stream": settings.auto_trade_trade_plan_stream,
     "deprecated_variables": deprecated_environment_variables(),
     "canonical_options": canonical_option_health(),
     "config_sources": sources,
@@ -413,6 +420,7 @@ def _different(field: str, left: Any, right: Any) -> bool:
     "spot_max_age_seconds",
     "min_confluence",
     "candidate_contract_version",
+    "trade_plan_version",
     "config_manifest_version",
     "range_box_scale_out_threshold_pips",
     "range_box_scale_out_trigger_pips",
@@ -460,6 +468,9 @@ def compare_manifests(
     "stop_plan_version",
     "contract_size",
     "candidate_contract_version",
+    "contract_mode",
+    "trade_plan_version",
+    "trade_plan_stream",
     "target_plans",
     "range_target_plans",
     "range_tp_buffer",
