@@ -5503,16 +5503,55 @@ public sealed class AutoTradeEngine(
           : state.InitialVolume;
         // Broker snapshot disappearance does not expose the true fill. Use the
         // last known protective stop (or entry) to book the remaining volume
-        // into the volume-weighted net so Telegram can show Total net pips.
+        // into the volume-weighted pip total.
         var exitEstimate = state.CurrentStopLoss ?? state.EntryPrice;
         var remainingVolume = Math.Max(0, state.RemainingVolume);
         var pipVolume = state.GroupRealizedPipVolume
           + SignedPips(state, exitEstimate) * remainingVolume;
         var terminalGroupPips = WeightedPips(pipVolume, initialVolume);
         var groupId = GroupId(state);
+        // Best-effort: was this the broker-attached SL/TP order, or a
+        // manual/external order (almost certainly the owner closing it
+        // directly on the platform)? See
+        // CTraderOpenApiFeedClient.DeterminePositionCloseReasonAsync.
+        var closeReason = PositionCloseReason.Unknown;
+        try
+        {
+          closeReason = await client.DeterminePositionCloseReasonAsync(
+            stale,
+            missingNow,
+            cancellationToken
+          );
+        }
+        catch (OperationCanceledException)
+        {
+          throw;
+        }
+        catch (Exception exception)
+        {
+          _log(
+            $"auto-trade position_close_reason_lookup_failed position_id={stale}: "
+              + exception.Message
+          );
+        }
+        var (closeMessage, closeReasonCode) = closeReason switch
+        {
+          PositionCloseReason.StopLossOrTakeProfit => (
+            "position closed at broker: stop loss / take profit",
+            "stop_loss_or_take_profit"
+          ),
+          PositionCloseReason.ManualOrExternalOrder => (
+            "position closed at broker: manual or external order",
+            "manual_or_external_close"
+          ),
+          _ => (
+            "position is no longer open at broker (reason unconfirmed)",
+            (string?)null
+          ),
+        };
         await PublishAsync(
           "position_closed",
-          "position is no longer open at broker (SL or manual close)",
+          closeMessage,
           cancellationToken,
           state.CandidateId,
           stale,
@@ -5525,6 +5564,7 @@ public sealed class AutoTradeEngine(
           stopPips: InitialStopPips(state),
           stream: ExecutionStream(state),
           direction: DirectionLabel(state.Direction),
+          reasonCode: closeReasonCode,
           matchId: state.MatchId,
           rangeId: state.RangeId,
           strategyFamily: state.StrategyFamily,

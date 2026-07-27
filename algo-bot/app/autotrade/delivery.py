@@ -355,12 +355,21 @@ def _format_group_result(event: dict, message: str) -> str | None:
   return None
 
 
+_CLOSE_REASON_LABELS = {
+  "stop_loss_or_take_profit": "🎯 Closed by broker SL/TP",
+  "manual_or_external_close": "✋ Closed manually on platform",
+}
+
+
 def _format_position_closed(event: dict, message: str) -> str:
   seq = _trade_seq_prefix(event)
   lines = [
     "🤖 <b>ApexVoid Algo</b>",
     f"🏁 {seq}<b>POSITION CLOSED</b>",
   ]
+  reason_label = _CLOSE_REASON_LABELS.get(str(event.get("reason_code") or ""))
+  if reason_label:
+    lines.append(reason_label)
   cleaned = _MONEY_RE.sub("", message).strip(" ·") if message else ""
   if cleaned:
     lines.extend(["", escape(cleaned)])

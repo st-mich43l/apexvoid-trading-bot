@@ -483,6 +483,71 @@ public sealed class CTraderOpenApiFeedClient : ICTraderFeedClient, ICTraderTrade
     return ToTradeExecution(response);
   }
 
+  // Looks up the deal that closed positionId, then the order behind that
+  // deal, to classify whether a broker-attached SL/TP order triggered the
+  // close or a plain market/limit/stop order did (almost certainly the
+  // owner closing manually on the platform, since this executor's own
+  // ClosePositionAsync never reaches this fallback classification path -
+  // see AutoTradeEngine.ReconcileAsync). Best-effort: any lookup failure
+  // (no deals found, order not found in the bracket window, request
+  // timeout) returns Unknown rather than throwing, matching this whole
+  // reconcile path's existing "we cannot always tell" philosophy.
+  public async Task<PositionCloseReason> DeterminePositionCloseReasonAsync(
+    long positionId,
+    long approximateCloseTimestamp,
+    CancellationToken cancellationToken
+  )
+  {
+    try
+    {
+      var approximateCloseMs = approximateCloseTimestamp * 1000L;
+      var dealsResponse = await SendAndWaitAsync<ProtoOADealListByPositionIdRes>(
+        new ProtoOADealListByPositionIdReq
+        {
+          CtidTraderAccountId = options.AccountId,
+          PositionId = positionId,
+          FromTimestamp = approximateCloseMs - (long)TimeSpan.FromMinutes(15).TotalMilliseconds,
+          ToTimestamp = approximateCloseMs + (long)TimeSpan.FromMinutes(1).TotalMilliseconds,
+        },
+        res => res.CtidTraderAccountId == options.AccountId,
+        cancellationToken
+      );
+      var closingDeal = dealsResponse.Deal
+        .Where(deal => deal.PositionId == positionId && deal.ClosePositionDetail is not null)
+        .OrderByDescending(deal => deal.ExecutionTimestamp)
+        .FirstOrDefault();
+      if (closingDeal is null)
+      {
+        return PositionCloseReason.Unknown;
+      }
+      var bracketStart = closingDeal.ExecutionTimestamp - 5_000;
+      var bracketEnd = closingDeal.ExecutionTimestamp + 5_000;
+      var ordersResponse = await SendAndWaitAsync<ProtoOAOrderListRes>(
+        new ProtoOAOrderListReq
+        {
+          CtidTraderAccountId = options.AccountId,
+          FromTimestamp = bracketStart,
+          ToTimestamp = bracketEnd,
+        },
+        res => res.CtidTraderAccountId == options.AccountId,
+        cancellationToken
+      );
+      var closingOrder = ordersResponse.Order
+        .FirstOrDefault(order => order.OrderId == closingDeal.OrderId);
+      if (closingOrder is null)
+      {
+        return PositionCloseReason.Unknown;
+      }
+      return closingOrder.OrderType == ProtoOAOrderType.StopLossTakeProfit
+        ? PositionCloseReason.StopLossOrTakeProfit
+        : PositionCloseReason.ManualOrExternalOrder;
+    }
+    catch (Exception exception) when (exception is not OperationCanceledException)
+    {
+      return PositionCloseReason.Unknown;
+    }
+  }
+
   public async Task<IReadOnlyList<RawTrendbar>> GetTrendbarsAsync(
     SymbolInfo symbol,
     string timeframe,
