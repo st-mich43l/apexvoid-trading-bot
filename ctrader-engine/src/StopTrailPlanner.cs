@@ -1,6 +1,10 @@
 namespace ApexVoid.CTraderFeed;
 
-public sealed record StopTrailMove(decimal StopLoss, string Label);
+public sealed record StopTrailMove(
+  decimal StopLoss,
+  string Label,
+  decimal? BufferPrice = null
+);
 
 public static class StopTrailPlanner
 {
@@ -9,7 +13,7 @@ public static class StopTrailPlanner
     int completedTargetIndex,
     SymbolInfo symbol,
     decimal pipSize,
-    int breakEvenBufferPips
+    int breakEvenBufferTicks
   )
   {
     if (
@@ -24,17 +28,33 @@ public static class StopTrailPlanner
     {
       return null;
     }
-    var trailTargetOrdinal = completedTargetOrdinal - 2;
-    var offsetPips = completedTargetOrdinal == 1
-      ? breakEvenBufferPips
-      : TargetPips(state, trailTargetOrdinal);
-    if (offsetPips is null)
+    decimal desired;
+    string label;
+    decimal? bufferPrice = null;
+    if (completedTargetOrdinal == 1)
     {
-      return null;
+      var tickSize = RequireTickSize(symbol);
+      bufferPrice = breakEvenBufferTicks * tickSize;
+      // BE buffer stays on the adverse side of fill (spread cushion), not
+      // locked profitable ticks: BUY = entry - N ticks, SELL = entry + N ticks.
+      desired = state.Direction == TradeDirection.Buy
+        ? state.EntryPrice - bufferPrice.Value
+        : state.EntryPrice + bufferPrice.Value;
+      label = $"BE+{breakEvenBufferTicks} ticks";
     }
-    var desired = state.Direction == TradeDirection.Buy
-      ? state.EntryPrice + offsetPips.Value * pipSize
-      : state.EntryPrice - offsetPips.Value * pipSize;
+    else
+    {
+      var trailTargetOrdinal = completedTargetOrdinal - 2;
+      var offsetPips = TargetPips(state, trailTargetOrdinal);
+      if (offsetPips is null)
+      {
+        return null;
+      }
+      desired = state.Direction == TradeDirection.Buy
+        ? state.EntryPrice + offsetPips.Value * pipSize
+        : state.EntryPrice - offsetPips.Value * pipSize;
+      label = $"TP{trailTargetOrdinal}";
+    }
     desired = decimal.Round(desired, symbol.Digits, MidpointRounding.AwayFromZero);
     if (
       state.CurrentStopLoss is decimal current
@@ -43,10 +63,29 @@ public static class StopTrailPlanner
     {
       return null;
     }
-    var label = completedTargetOrdinal == 1
-      ? $"BE+{breakEvenBufferPips}"
-      : $"TP{trailTargetOrdinal}";
-    return new StopTrailMove(desired, label);
+    return new StopTrailMove(desired, label, bufferPrice);
+  }
+
+  public static decimal RequireTickSize(SymbolInfo symbol)
+  {
+    if (symbol.Digits < 0)
+    {
+      throw new InvalidOperationException(
+        $"Symbol {symbol.CTraderSymbol} has invalid digits {symbol.Digits}"
+      );
+    }
+    var tick = 1m;
+    for (var index = 0; index < symbol.Digits; index++)
+    {
+      tick /= 10m;
+    }
+    if (tick <= 0)
+    {
+      throw new InvalidOperationException(
+        $"Symbol {symbol.CTraderSymbol} tick size {tick} is not positive"
+      );
+    }
+    return tick;
   }
 
   private static int TargetOrdinal(AutoTradePositionState state, int index) =>

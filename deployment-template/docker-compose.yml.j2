@@ -150,7 +150,7 @@ services:
       AUTO_TRADE_PIP_VALUE_PER_LOT: {{ apexvoid_trading_bot_env.AUTO_TRADE_PIP_VALUE_PER_LOT | default('10.0') | string | to_json }}
       AUTO_TRADE_TARGET_PLANS_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_TARGET_PLANS_PIPS | default('30,60,90,120,200') | string | to_json }}
       AUTO_TRADE_TP_WEIGHTS: {{ apexvoid_trading_bot_env.AUTO_TRADE_TP_WEIGHTS | default('20,20,20,20,20') | string | to_json }}
-      AUTO_TRADE_BE_BUFFER_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_BE_BUFFER_PIPS | default('6') | string | to_json }}
+      AUTO_TRADE_BE_BUFFER_TICKS: {{ apexvoid_trading_bot_env.AUTO_TRADE_BE_BUFFER_TICKS | default(apexvoid_trading_bot_env.AUTO_TRADE_BE_BUFFER_PIPS | default('6')) | string | to_json }}
       AUTO_TRADE_POST_FILL_TARGET_FALLBACK: {{ apexvoid_trading_bot_env.AUTO_TRADE_POST_FILL_TARGET_FALLBACK | default('fill_relative') | string | to_json }}
       AUTO_TRADE_CANDIDATE_MAX_AGE_SECONDS: {{ apexvoid_trading_bot_env.AUTO_TRADE_CANDIDATE_MAX_AGE_SECONDS | default('420') | string | to_json }}
       AUTO_TRADE_CANDIDATE_STORAGE_TTL_SECONDS: {{ apexvoid_trading_bot_env.AUTO_TRADE_CANDIDATE_STORAGE_TTL_SECONDS | default('604800') | string | to_json }}

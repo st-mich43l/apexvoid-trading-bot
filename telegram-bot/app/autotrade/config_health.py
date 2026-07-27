@@ -43,6 +43,9 @@ _LEGACY_ENV_ALIASES = {
     "AUTO_TRADE_STRATEGY_BRIDGE_ENABLED",
     "AUTO_TRADE_FORMING_GATE_ENABLED",
   ),
+  "AUTO_TRADE_BE_BUFFER_TICKS": (
+    "AUTO_TRADE_BE_BUFFER_PIPS",
+  ),
 }
 
 _PROFILE_DEFAULT_FIELDS = {
@@ -271,10 +274,13 @@ def python_manifest() -> dict[str, Any]:
     "entry_contract_tolerance_pips": (
       settings.auto_trade_entry_contract_tolerance_pips
     ),
-    "break_even_buffer_pips": settings.auto_trade_be_buffer_pips,
+    "break_even_buffer_ticks": settings.auto_trade_be_buffer_ticks,
+    "symbol_tick_size": float(
+      Decimal("1") / (Decimal("10") ** int(settings.auto_trade_xau_price_digits))
+    ),
     "post_fill_target_fallback": settings.auto_trade_post_fill_target_fallback,
     "entry_plan_version": 1,
-    "stop_plan_version": 2,
+    "stop_plan_version": 3,
     "contract_size": settings.auto_trade_contract_size,
     "structure_stop_buffer_atr": settings.auto_trade_add_stop_buffer_atr,
     "ordinary_stop_min_pips": settings.auto_trade_add_min_stop_pips,
@@ -396,7 +402,8 @@ def _different(field: str, left: Any, right: Any) -> bool:
     "price_digits",
     "max_entry_distance_pips",
     "entry_contract_tolerance_pips",
-    "break_even_buffer_pips",
+    "break_even_buffer_ticks",
+    "symbol_tick_size",
     "entry_plan_version",
     "stop_plan_version",
     "contract_size",
@@ -447,7 +454,8 @@ def compare_manifests(
     "price_digits",
     "max_entry_distance_pips",
     "entry_contract_tolerance_pips",
-    "break_even_buffer_pips",
+    "break_even_buffer_ticks",
+    "symbol_tick_size",
     "entry_plan_version",
     "stop_plan_version",
     "contract_size",

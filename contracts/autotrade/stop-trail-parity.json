@@ -1,26 +1,47 @@
 {
-  "version": 1,
-  "description": "Shared stop-trail break-even buffer parity cases. Consumed by ctrader-engine/tests/StopTrailPlannerTests.cs so BE+6 trailing matches deployment defaults.",
+  "version": 2,
+  "description": "Shared stop-trail break-even buffer parity. BE+6 ticks × tick_size 0.01 = 0.06 price offset on the adverse side of fill (BUY entry-0.06, SELL entry+0.06). Not trading pips × 0.1.",
   "symbol": "XAU",
-  "pip_size": "0.1",
+  "tick_size": "0.01",
   "digits": 2,
-  "break_even_buffer_pips": 6,
+  "break_even_buffer_ticks": 6,
+  "pip_size": "0.1",
   "cases": [
     {
-      "name": "sell_be_plus_6",
-      "direction": "SELL",
-      "entry_price": "4112.04",
+      "name": "buy_4087_66",
+      "direction": "BUY",
+      "entry_price": "4087.66",
       "completed_target_index": 0,
-      "expected_stop": "4111.44",
-      "expected_label": "BE+6"
+      "expected_stop": "4087.60",
+      "expected_label": "BE+6 ticks",
+      "expected_offset": "0.06"
     },
     {
-      "name": "buy_be_plus_6",
+      "name": "sell_4087_66",
+      "direction": "SELL",
+      "entry_price": "4087.66",
+      "completed_target_index": 0,
+      "expected_stop": "4087.72",
+      "expected_label": "BE+6 ticks",
+      "expected_offset": "0.06"
+    },
+    {
+      "name": "buy_4112_04",
       "direction": "BUY",
       "entry_price": "4112.04",
       "completed_target_index": 0,
-      "expected_stop": "4112.64",
-      "expected_label": "BE+6"
+      "expected_stop": "4111.98",
+      "expected_label": "BE+6 ticks",
+      "expected_offset": "0.06"
+    },
+    {
+      "name": "sell_4112_04",
+      "direction": "SELL",
+      "entry_price": "4112.04",
+      "completed_target_index": 0,
+      "expected_stop": "4112.10",
+      "expected_label": "BE+6 ticks",
+      "expected_offset": "0.06"
     }
   ]
 }

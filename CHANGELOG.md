@@ -12,6 +12,13 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- Correct ApexVoid Algo break-even protection to **BE+6 broker ticks**
+  (`AUTO_TRADE_BE_BUFFER_TICKS=6` × tick `0.01` = **0.06** price), not
+  6 trading pips × `pip_size=0.1` (= 0.60). Buffer stays on the adverse side
+  of fill: BUY `4087.66` → `4087.60`; SELL `4087.66` → `4087.72`. Config
+  health compares `break_even_buffer_ticks` and `symbol_tick_size`; Telegram
+  Risk Protected cards report `BE+6 ticks` and `Buffer: 0.06`. Deprecated
+  `AUTO_TRADE_BE_BUFFER_PIPS` is read as a tick count only.
 - Align autonomous publication with the executor entry-distance hard cap
   (`AUTO_TRADE_MAX_ENTRY_DISTANCE_PIPS`): adaptive strategy drift stays an
   observation tolerance, AUTO READY / candidate XADD require the executor
@@ -20,11 +27,9 @@ dated section after deployment.
   before protective-stop planning for Key Level, Trendline, and other
   reaction families so strict stop contracts no longer publish unresolved
   `either` and mismatch at the executor.
-- Move protected stops to BE+6 profitable pips after broker-confirmed TP1
-  (`AUTO_TRADE_BE_BUFFER_PIPS=6`), anchored to the actual fill (SELL
-  `4112.04` → `4111.44`); suppress target evaluation on pre-fill quotes;
-  enrich stop-moved Telegram cards with TP trigger context; deliver one
-  canonical terminal Telegram result per trade group.
+- Suppress target evaluation on pre-fill quotes; enrich stop-moved Telegram
+  cards with TP trigger context; deliver one canonical terminal Telegram
+  result per trade group.
 - Add a recovery-only `broker_reconciling` state: recovery claims never write
   normal `processing`, an expired recovery lease stays recovery-required, and
   a crashed recovery worker can never decay into a normal retry that places a

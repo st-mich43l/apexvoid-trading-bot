@@ -1,4 +1,5 @@
 from typing import Optional
+import os
 from pydantic import AliasChoices, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -245,10 +246,11 @@ class Settings(BaseSettings):
       "AUTO_TRADE_ENTRY_CONTRACT_TOLERANCE_PIPS",
     ),
   )
-  auto_trade_be_buffer_pips: int = Field(
+  auto_trade_be_buffer_ticks: int = Field(
     default=6,
     validation_alias=AliasChoices(
-      "AUTO_TRADE_BE_BUFFER_PIPS",
+      "AUTO_TRADE_BE_BUFFER_TICKS",
+      "AUTO_TRADE_BE_BUFFER_PIPS",  # deprecated: value is tick count, not pips
     ),
   )
   auto_trade_post_fill_target_fallback: str = Field(
@@ -644,6 +646,23 @@ class Settings(BaseSettings):
       raise ValueError(
         "AUTO_TRADE_NON_HEDGED_OPPOSITE_POLICY must be "
         "broker_netting, close_then_reverse, or reject"
+      )
+    ticks_raw = os.environ.get("AUTO_TRADE_BE_BUFFER_TICKS")
+    pips_raw = os.environ.get("AUTO_TRADE_BE_BUFFER_PIPS")
+    if (
+      ticks_raw is not None
+      and pips_raw is not None
+      and ticks_raw.strip() != pips_raw.strip()
+    ):
+      raise ValueError(
+        "AUTO_TRADE_BE_BUFFER_TICKS and AUTO_TRADE_BE_BUFFER_PIPS conflict; "
+        "remove the deprecated PIPS variable or set both to the same tick count"
+      )
+    if int(self.auto_trade_be_buffer_ticks) < 0 or int(
+      self.auto_trade_be_buffer_ticks
+    ) >= 1000:
+      raise ValueError(
+        "AUTO_TRADE_BE_BUFFER_TICKS must be non-negative and below 1000"
       )
     return self
 

@@ -3954,15 +3954,23 @@ public sealed class AutoTradeEngine(
       && Math.Abs(candidateHigh - planHigh) <= tick;
   }
 
-  private static decimal SymbolTick(SymbolInfo symbol)
+  private static bool IsBrokerStopDistanceRejection(Exception exception)
   {
-    var tick = 1m;
-    for (var index = 0; index < symbol.Digits; index++)
+    var message = exception.Message;
+    if (string.IsNullOrWhiteSpace(message))
     {
-      tick /= 10m;
+      return false;
     }
-    return tick;
+    var lower = message.ToLowerInvariant();
+    return lower.Contains("distance")
+      || lower.Contains("freeze")
+      || lower.Contains("too close")
+      || lower.Contains("minimum")
+      || lower.Contains("stop level");
   }
+
+  private static decimal SymbolTick(SymbolInfo symbol) =>
+    StopTrailPlanner.RequireTickSize(symbol);
 
   private static decimal PipTolerance(StructureStopPlan plan, SymbolInfo symbol)
   {
@@ -5016,7 +5024,7 @@ public sealed class AutoTradeEngine(
       completedTargetIndex,
       symbol,
       options.PipSize,
-      options.BreakEvenBufferPips
+      options.BreakEvenBufferTicks
     );
     if (move is null)
     {
@@ -5033,6 +5041,44 @@ public sealed class AutoTradeEngine(
     catch (OperationCanceledException)
     {
       throw;
+    }
+    catch (Exception exception) when (IsBrokerStopDistanceRejection(exception))
+    {
+      var deferMessage = $"🛡 ApexVoid Algo stop deferred → {move.StopLoss:N2} "
+        + $"({move.Label}) · position {state.PositionId}: broker distance/freeze";
+      _log($"auto-trade {deferMessage}: {exception.Message}");
+      try
+      {
+        await PublishAsync(
+          "warning",
+          deferMessage,
+          cancellationToken,
+          state.CandidateId,
+          state.PositionId,
+          price: move.StopLoss,
+          groupId: GroupId(state),
+          trancheIndex: state.TrancheIndex,
+          hadAdds: state.HadAdds,
+          matchId: state.MatchId,
+          rangeId: state.RangeId,
+          strategyFamily: state.StrategyFamily,
+          direction: DirectionLabel(state.Direction),
+          remainingVolume: state.RemainingVolume,
+          stopLoss: state.CurrentStopLoss,
+          entryLow: state.EntryPrice,
+          entryHigh: state.EntryPrice,
+          reasonCode: "be_buffer_stop_deferred_broker_distance"
+        );
+      }
+      catch (Exception publishException) when (
+        publishException is not OperationCanceledException
+      )
+      {
+        _log(
+          $"auto-trade stop-defer warning failed: {publishException.Message}"
+        );
+      }
+      return state;
     }
     catch (Exception exception)
     {
@@ -5059,8 +5105,13 @@ public sealed class AutoTradeEngine(
       }
       return state;
     }
-    var moveMessage = $"🛡 ApexVoid Algo stop → {move.StopLoss:N2} ({move.Label}) "
-      + $"· position {state.PositionId}";
+    var moveMessage = $"🛡 ApexVoid Algo stop → {move.StopLoss:N2} ({move.Label})"
+      + (
+        move.BufferPrice is decimal buffer
+          ? $" · buffer {buffer:0.00}"
+          : ""
+      )
+      + $" · position {state.PositionId}";
     var previousStop = state.CurrentStopLoss;
     await PublishAsync(
       "stop_moved",
