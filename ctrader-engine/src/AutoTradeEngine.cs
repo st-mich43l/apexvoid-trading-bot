@@ -5501,23 +5501,15 @@ public sealed class AutoTradeEngine(
         var initialVolume = state.GroupInitialVolume > 0
           ? state.GroupInitialVolume
           : state.InitialVolume;
-        // Broker snapshot disappearance does not expose the true fill. Use the
-        // last known protective stop (or entry) to book the remaining volume
-        // into the volume-weighted pip total.
-        var exitEstimate = state.CurrentStopLoss ?? state.EntryPrice;
-        var remainingVolume = Math.Max(0, state.RemainingVolume);
-        var pipVolume = state.GroupRealizedPipVolume
-          + SignedPips(state, exitEstimate) * remainingVolume;
-        var terminalGroupPips = WeightedPips(pipVolume, initialVolume);
-        var groupId = GroupId(state);
         // Best-effort: was this the broker-attached SL/TP order, or a
         // manual/external order (almost certainly the owner closing it
-        // directly on the platform)? See
+        // directly on the platform)? Also recovers the closing deal's real
+        // execution price when found. See
         // CTraderOpenApiFeedClient.DeterminePositionCloseReasonAsync.
-        var closeReason = PositionCloseReason.Unknown;
+        var closeLookup = new PositionCloseLookup(PositionCloseReason.Unknown);
         try
         {
-          closeReason = await client.DeterminePositionCloseReasonAsync(
+          closeLookup = await client.DeterminePositionCloseReasonAsync(
             stale,
             missingNow,
             cancellationToken
@@ -5534,6 +5526,19 @@ public sealed class AutoTradeEngine(
               + exception.Message
           );
         }
+        var closeReason = closeLookup.Reason;
+        // Broker snapshot disappearance does not expose the true fill by
+        // itself - fall back to the last known protective stop (or entry) to
+        // book the remaining volume into the volume-weighted pip total,
+        // unless the lookup above recovered the real closing deal price.
+        var exitEstimate = closeLookup.ExecutionPrice
+          ?? state.CurrentStopLoss
+          ?? state.EntryPrice;
+        var remainingVolume = Math.Max(0, state.RemainingVolume);
+        var pipVolume = state.GroupRealizedPipVolume
+          + SignedPips(state, exitEstimate) * remainingVolume;
+        var terminalGroupPips = WeightedPips(pipVolume, initialVolume);
+        var groupId = GroupId(state);
         var (closeMessage, closeReasonCode) = closeReason switch
         {
           PositionCloseReason.StopLossOrTakeProfit => (

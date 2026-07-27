@@ -79,6 +79,15 @@ public enum PositionCloseReason
   ManualOrExternalOrder,
 }
 
+// Result of a best-effort close-reason lookup: the classification plus, when
+// the closing deal was found, its real broker execution price - so a
+// confirmed-missing position can report the true fill instead of falling
+// back to the last known stop/entry price.
+public sealed record PositionCloseLookup(
+  PositionCloseReason Reason,
+  decimal? ExecutionPrice = null
+);
+
 public sealed record TradingAccountSnapshot(
   long AccountId,
   bool IsLive,

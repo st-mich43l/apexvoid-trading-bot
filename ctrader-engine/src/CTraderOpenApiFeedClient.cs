@@ -488,11 +488,13 @@ public sealed class CTraderOpenApiFeedClient : ICTraderFeedClient, ICTraderTrade
   // close or a plain market/limit/stop order did (almost certainly the
   // owner closing manually on the platform, since this executor's own
   // ClosePositionAsync never reaches this fallback classification path -
-  // see AutoTradeEngine.ReconcileAsync). Best-effort: any lookup failure
-  // (no deals found, order not found in the bracket window, request
-  // timeout) returns Unknown rather than throwing, matching this whole
-  // reconcile path's existing "we cannot always tell" philosophy.
-  public async Task<PositionCloseReason> DeterminePositionCloseReasonAsync(
+  // see AutoTradeEngine.ReconcileAsync). Also returns the closing deal's real
+  // ExecutionPrice when found, so the caller can report the true fill
+  // instead of the last-known-stop fallback estimate. Best-effort: any
+  // lookup failure (no deals found, order not found in the bracket window,
+  // request timeout) returns Unknown/no-price rather than throwing, matching
+  // this whole reconcile path's existing "we cannot always tell" philosophy.
+  public async Task<PositionCloseLookup> DeterminePositionCloseReasonAsync(
     long positionId,
     long approximateCloseTimestamp,
     CancellationToken cancellationToken
@@ -518,8 +520,9 @@ public sealed class CTraderOpenApiFeedClient : ICTraderFeedClient, ICTraderTrade
         .FirstOrDefault();
       if (closingDeal is null)
       {
-        return PositionCloseReason.Unknown;
+        return new PositionCloseLookup(PositionCloseReason.Unknown);
       }
+      var executionPrice = Convert.ToDecimal(closingDeal.ExecutionPrice);
       var bracketStart = closingDeal.ExecutionTimestamp - 5_000;
       var bracketEnd = closingDeal.ExecutionTimestamp + 5_000;
       var ordersResponse = await SendAndWaitAsync<ProtoOAOrderListRes>(
@@ -536,15 +539,16 @@ public sealed class CTraderOpenApiFeedClient : ICTraderFeedClient, ICTraderTrade
         .FirstOrDefault(order => order.OrderId == closingDeal.OrderId);
       if (closingOrder is null)
       {
-        return PositionCloseReason.Unknown;
+        return new PositionCloseLookup(PositionCloseReason.Unknown, executionPrice);
       }
-      return closingOrder.OrderType == ProtoOAOrderType.StopLossTakeProfit
+      var reason = closingOrder.OrderType == ProtoOAOrderType.StopLossTakeProfit
         ? PositionCloseReason.StopLossOrTakeProfit
         : PositionCloseReason.ManualOrExternalOrder;
+      return new PositionCloseLookup(reason, executionPrice);
     }
     catch (Exception exception) when (exception is not OperationCanceledException)
     {
-      return PositionCloseReason.Unknown;
+      return new PositionCloseLookup(PositionCloseReason.Unknown);
     }
   }
 
