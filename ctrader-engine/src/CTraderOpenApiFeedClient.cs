@@ -496,6 +496,7 @@ public sealed class CTraderOpenApiFeedClient : ICTraderFeedClient, ICTraderTrade
   // this whole reconcile path's existing "we cannot always tell" philosophy.
   public async Task<PositionCloseLookup> DeterminePositionCloseReasonAsync(
     long positionId,
+    long openedAtTimestamp,
     long approximateCloseTimestamp,
     CancellationToken cancellationToken
   )
@@ -503,12 +504,26 @@ public sealed class CTraderOpenApiFeedClient : ICTraderFeedClient, ICTraderTrade
     try
     {
       var approximateCloseMs = approximateCloseTimestamp * 1000L;
+      var defaultLookbackMs = (long)TimeSpan.FromMinutes(15).TotalMilliseconds;
+      var maxLookbackMs = (long)TimeSpan.FromDays(7).TotalMilliseconds;
+      // A missed reconcile window (eg. a redeploy gap between the position's
+      // last known activity and the next confirmed-missing check) can leave
+      // the true close far earlier than a fixed window before confirmation -
+      // reach back to when the position actually opened, capped so a single
+      // request can never span an unbounded amount of history.
+      var openedAtMs = openedAtTimestamp > 0 ? openedAtTimestamp * 1000L : 0L;
+      var fromTimestamp = Math.Max(
+        approximateCloseMs - maxLookbackMs,
+        openedAtMs > 0
+          ? Math.Min(openedAtMs, approximateCloseMs - defaultLookbackMs)
+          : approximateCloseMs - defaultLookbackMs
+      );
       var dealsResponse = await SendAndWaitAsync<ProtoOADealListByPositionIdRes>(
         new ProtoOADealListByPositionIdReq
         {
           CtidTraderAccountId = options.AccountId,
           PositionId = positionId,
-          FromTimestamp = approximateCloseMs - (long)TimeSpan.FromMinutes(15).TotalMilliseconds,
+          FromTimestamp = fromTimestamp,
           ToTimestamp = approximateCloseMs + (long)TimeSpan.FromMinutes(1).TotalMilliseconds,
         },
         res => res.CtidTraderAccountId == options.AccountId,

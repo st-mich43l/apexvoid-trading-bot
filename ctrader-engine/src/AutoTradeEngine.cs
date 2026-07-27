@@ -5511,6 +5511,7 @@ public sealed class AutoTradeEngine(
         {
           closeLookup = await client.DeterminePositionCloseReasonAsync(
             stale,
+            state.OpenedAt,
             missingNow,
             cancellationToken
           );
