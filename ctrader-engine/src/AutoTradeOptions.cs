@@ -102,7 +102,8 @@ public sealed record AutoTradeOptions(
   decimal RangeBoxScaleOutFraction = 0.50m,
   bool RangeBoxMoveSlToBeAfterScaleOut = false,
   decimal ExecutionZoneMaxWidthAtr = 2.0m,
-  decimal ExecutionZoneMaxWidthPips = 100m
+  decimal ExecutionZoneMaxWidthPips = 100m,
+  string PostFillTargetFallback = "fill_relative"
 )
 {
   // Shared target-selection contract (app/autotrade/range_targets.py on the
@@ -176,7 +177,7 @@ public sealed record AutoTradeOptions(
     TargetWeights: resolver.IntList(
       "AUTO_TRADE_TP_WEIGHTS", "20,20,20,20,20"
     ),
-    BreakEvenBufferPips: resolver.Int("AUTO_TRADE_BE_BUFFER_PIPS", 3),
+    BreakEvenBufferPips: resolver.Int("AUTO_TRADE_BE_BUFFER_PIPS", 6),
     CandidateMaxAgeSeconds: resolver.Int(
       "AUTO_TRADE_CANDIDATE_MAX_AGE_SECONDS",
       demoEval ? 420 : 90,
@@ -421,7 +422,11 @@ public sealed record AutoTradeOptions(
     ),
     ExecutionZoneMaxWidthPips: resolver.Decimal(
       "AUTO_TRADE_EXECUTION_ZONE_MAX_WIDTH_PIPS", 100m
-    )
+    ),
+    PostFillTargetFallback: resolver.String(
+      "AUTO_TRADE_POST_FILL_TARGET_FALLBACK",
+      "fill_relative"
+    ).Trim().ToLowerInvariant()
   );
   return options with
   {

@@ -134,7 +134,14 @@ public static class AutoTradeConfigHealth
           options.ExecutionZoneMaxWidthPips.ToString(CultureInfo.InvariantCulture),
           []
         ),
-      ]
+      ],
+      PriceDigits: symbol.Digits,
+      MaxEntryDistancePips: options.MaxEntryDistancePips,
+      EntryContractTolerancePips: options.EntryContractTolerancePips,
+      BreakEvenBufferPips: options.BreakEvenBufferPips,
+      EntryPlanVersion: 1,
+      StopPlanVersion: 2,
+      PostFillTargetFallback: options.PostFillTargetFallback
     );
   }
 
@@ -195,6 +202,45 @@ public static class AutoTradeConfigHealth
       );
       CompareDecimal(root, "pip_size", current.PipSize, fatal);
       CompareDecimal(root, "contract_size", current.ContractSize, fatal);
+      if (root.TryGetProperty("max_entry_distance_pips", out _))
+      {
+        CompareDecimal(
+          root,
+          "max_entry_distance_pips",
+          current.MaxEntryDistancePips,
+          fatal
+        );
+      }
+      if (root.TryGetProperty("break_even_buffer_pips", out _))
+      {
+        CompareInt(
+          root,
+          "break_even_buffer_pips",
+          current.BreakEvenBufferPips,
+          fatal
+        );
+      }
+      if (root.TryGetProperty("entry_contract_tolerance_pips", out _))
+      {
+        CompareDecimal(
+          root,
+          "entry_contract_tolerance_pips",
+          current.EntryContractTolerancePips,
+          fatal
+        );
+      }
+      if (root.TryGetProperty("price_digits", out _))
+      {
+        CompareInt(root, "price_digits", current.PriceDigits, fatal);
+      }
+      if (root.TryGetProperty("entry_plan_version", out _))
+      {
+        CompareInt(root, "entry_plan_version", current.EntryPlanVersion, fatal);
+      }
+      if (root.TryGetProperty("stop_plan_version", out _))
+      {
+        CompareInt(root, "stop_plan_version", current.StopPlanVersion, fatal);
+      }
       CompareInt(
         root,
         "candidate_contract_version",
