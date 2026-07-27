@@ -11,6 +11,7 @@ from typing import Literal
 from aiogram.exceptions import TelegramBadRequest
 
 from app.analysis.scanner import clear_active_setup_tracking
+from app.autotrade import units
 from app.autotrade.volume_pips import (
   format_signed_pips,
   volume_percent,
