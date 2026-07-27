@@ -12,6 +12,11 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- Decouple `SETUP FORMING` card volume from the execution digest: advisory
+  cards are capped by `SCANNER_CARD_TOP_N` (default `2`), always suppress
+  overlapping opposing directions, and deduplicate structural reactions by a
+  stable level bucket instead of their jittering execution `structural_id`.
+  Candidate tracking and publication remain unchanged.
 - Align the C# scale-in eligibility gate with the adverse-side
   protected-breakeven stop produced after TP1. Momentum and pullback adds now
   accept the configured BUY `entry - buffer` / SELL `entry + buffer`
@@ -170,6 +175,11 @@ dated section after deployment.
   while preserving them in the analysis pipeline.
 
 ### Added
+
+- Add opt-in `SCANNER_GATE_*` M5/M15 structure filters for round-number-only
+  anchors, exhausted levels, and low-confluence counter-bias reactions inside
+  ranges. All filters default off; enabled rejects are removed consistently
+  from cards and execution and recorded as `structure_gated`.
 
 - Added real-Redis production-Lua concurrency/orphan-recovery tests, shared
   Python/C# stop-plan parity fixtures, and pending-fill restart/terminal-plan

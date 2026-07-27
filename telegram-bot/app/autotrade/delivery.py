@@ -19,29 +19,15 @@ from app.persistence import redis_state
 from app.persistence.store import record_auto_trade_event
 from app.core.config import settings
 from app.bot.client import send_scanner_with_retry
-from app.autotrade.worker import regime_share_24h
 from app.autotrade.lifecycle import LIFECYCLE_STATES, emit_lifecycle
-from app.autotrade.multi_match import (
-  deserialize_matches,
-  strategy_matches_key,
-)
 from app.autotrade.range_context import (
-  PRIVATE_SOURCE_MAX_AGE_SECONDS,
-  SCANNER_SOURCE_MAX_AGE_SECONDS,
   WORKER_SNAPSHOT_TTL_SECONDS,
-  RangeContext,
-  is_range_context_current,
-  range_context_compare_key,
-  range_context_key,
-  range_context_source_key,
 )
 from app.autotrade.range_lifecycle import (
   load_breakout_retest_watch,
-  status_label_for_retired,
 )
 from app.autotrade.config_health import (
   CONFIG_HEALTH_KEY,
-  CTRADER_MANIFEST_KEY,
   EXECUTOR_READINESS_KEY,
 )
 
@@ -913,6 +899,7 @@ async def _deliver_auto_trade_event(
 
 
 async def auto_trade_status_text() -> str:
+  """Compact owner status — essentials only (Telegram 4096-safe)."""
   client = redis_state.get_client()
   paused = await client.get(_PAUSED_KEY) == "1"
   date_key = datetime.now(timezone.utc).strftime("%Y%m%d")
@@ -920,14 +907,6 @@ async def auto_trade_status_text() -> str:
   position_count = 0
   async for _ in client.scan_iter(match="auto_trade:position:*"):
     position_count += 1
-  raw_stats = await client.hgetall(_STATS_KEY)
-  stats = {
-    str(key): str(value)
-    for key, value in raw_stats.items()
-  }
-  group_count = int(float(stats.get("groups", "0")))
-  with_adds = int(float(stats.get("with_adds", "0")))
-  without_adds = int(float(stats.get("without_adds", "0")))
   primary_symbol = next(
     (
       item.strip().upper()
@@ -938,77 +917,6 @@ async def auto_trade_status_text() -> str:
   )
   config_health = await _json_key(client, CONFIG_HEALTH_KEY)
   readiness = await _json_key(client, EXECUTOR_READINESS_KEY)
-  ctrader_manifest = await _json_key(client, CTRADER_MANIFEST_KEY)
-  executor = await _json_key(
-    client, f"auto_trade:executor_snapshot:{primary_symbol}",
-  )
-  resolved_range = RangeContext.from_json(
-    await client.get(range_context_key(primary_symbol))
-  )
-  scanner_range = RangeContext.from_json(
-    await client.get(range_context_source_key(primary_symbol, "scanner"))
-  )
-  private_range = RangeContext.from_json(
-    await client.get(range_context_source_key(primary_symbol, "private"))
-  )
-  range_compare = await _json_key(
-    client, range_context_compare_key(primary_symbol),
-  )
-  active_matches = deserialize_matches(
-    await client.get(strategy_matches_key(primary_symbol))
-  )
-  metrics = {
-    str(key): int(value)
-    for key, value in (
-      await client.hgetall(f"auto_trade:metrics:{primary_symbol}")
-    ).items()
-  }
-  thesis_lines: list[str] = []
-  try:
-    from app.autotrade.reaction_identity import parse_thesis_claim
-    async for raw_key in client.scan_iter(
-      match="auto_trade:thesis_claim:*", count=20,
-    ):
-      key = raw_key.decode() if isinstance(raw_key, bytes) else str(raw_key)
-      claim = parse_thesis_claim(await client.get(key))
-      if claim is None:
-        continue
-      if str(claim.get("symbol") or "").upper() != primary_symbol.upper():
-        continue
-      tid = str(claim.get("thesis_id") or "")[:10]
-      zid = str(claim.get("structural_zone_id") or "")[:10]
-      rid = str(claim.get("active_reaction_id") or "")[:10]
-      gid = str(claim.get("group_id") or "")[:10]
-      state = str(claim.get("state") or "-")
-      outside = int(claim.get("outside_bar_count") or 0)
-      required = int(
-        getattr(settings, "auto_trade_map_reaction_rearm_bars", 3)
-      )
-      rearm = "yes" if claim.get("rearm_ready") else "no"
-      thesis_lines.append(
-        f"{tid}/{zid} · {state} · rx={rid} · grp={gid} · "
-        f"out={outside}/{required} · rearm={rearm}"
-      )
-      if len(thesis_lines) >= 3:
-        break
-  except Exception:
-    thesis_lines = []
-  reject_summary = await _gate_reject_summary(client, primary_symbol)
-  last_lifecycle = await _json_key(
-    client, f"auto_trade:last_lifecycle:{primary_symbol}",
-  )
-  last_guard = await _json_key(
-    client, f"auto_trade:last_guard:{primary_symbol}",
-  )
-  last_route = await _json_key(
-    client, f"auto_trade:last_route_outcome:{primary_symbol}",
-  )
-  reconcile_raw = await client.hgetall(
-    f"auto_trade:zone_reconcile:{primary_symbol}",
-  )
-  reconcile = {
-    str(key): str(value) for key, value in reconcile_raw.items()
-  }
   mode = (
     "disabled"
     if not settings.auto_trade_enabled
@@ -1017,27 +925,12 @@ async def auto_trade_status_text() -> str:
     else "demo trading"
   )
   state = "paused" if paused else "running"
-  strategy_lines = ""
+  selected_text = "none"
+  execution_state = "-"
+  why = ""
   if settings.auto_trade_enabled:
-    execution_state = "waiting for M1 close"
-    zone_text = ""
-    selected_text = "none"
-    selection_source = "none"
-    selection_reason = ""
-    box_state = "waiting"
-    trend_state = "waiting"
-    market_map_state = "waiting"
-    current_regime = "unknown"
-    map_entries_seen: int | None = None
-    map_entries_actionable: int | None = None
-    map_top: list[dict] = []
-    map_filters: dict[str, int] = {}
-    map_track_limit: float | None = None
-    map_execute_limit: float | None = None
-    raw = await client.get(
-      f"auto_trade:last_gate:{primary_symbol}"
-    )
-    gate_stale = False
+    execution_state = "waiting"
+    raw = await client.get(f"auto_trade:last_gate:{primary_symbol}")
     if raw:
       try:
         payload = json.loads(raw)
@@ -1047,168 +940,31 @@ async def auto_trade_status_text() -> str:
           checked_at is not None
           and now_ts - checked_at > WORKER_SNAPSHOT_TTL_SECONDS
         ):
-          gate_stale = True
           execution_state = (
-            "stale · last update "
-            f"{max(1, (now_ts - checked_at) // 60)} minutes ago"
-          )
-          metrics["range_status_stale_snapshot_suppressed"] = (
-            metrics.get("range_status_stale_snapshot_suppressed", 0) + 1
-          )
-          await client.hincrby(
-            f"auto_trade:metrics:{primary_symbol}",
-            "range_status_stale_snapshot_suppressed",
-            1,
+            "stale · "
+            f"{max(1, (now_ts - checked_at) // 60)}m ago"
           )
         else:
-          execution_state = str(payload.get("state") or execution_state)
-          box_state = str(payload.get("box_state") or box_state)
-          trend_state = str(payload.get("trend_state") or trend_state)
-          market_map_state = str(
-            payload.get("market_map_state") or market_map_state
-          )
-          current_regime = str(payload.get("regime") or current_regime)
-          if payload.get("market_map_entries_seen") is not None:
-            map_entries_seen = int(payload["market_map_entries_seen"])
-          if payload.get("market_map_entries_actionable") is not None:
-            map_entries_actionable = int(
-              payload["market_map_entries_actionable"]
-            )
-          if isinstance(payload.get("market_map_top"), list):
-            map_top = [
-              item for item in payload["market_map_top"]
-              if isinstance(item, dict)
-            ][:3]
-          if isinstance(payload.get("market_map_filter_counts"), dict):
-            map_filters = {
-              str(key): int(value)
-              for key, value in payload["market_map_filter_counts"].items()
-            }
-          if payload.get("market_map_track_limit") is not None:
-            map_track_limit = float(payload["market_map_track_limit"])
-          if payload.get("market_map_execute_limit") is not None:
-            map_execute_limit = float(payload["market_map_execute_limit"])
-          reasons = payload.get("reasons")
-          if isinstance(reasons, list) and reasons:
-            selection_reason = str(reasons[-1])
+          execution_state = str(
+            payload.get("state") or execution_state
+          ).replace("_", " ")
           selected = str(payload.get("selected_strategy") or "")
           selected_tf = str(payload.get("selected_timeframe") or "")
           direction = str(payload.get("direction") or "")
-          published_candidate = payload.get("published_candidate")
-          if isinstance(published_candidate, dict):
-            selected = str(
-              published_candidate.get("source_strategy") or selected
-            )
-            selected_tf = str(
-              published_candidate.get("timeframe") or selected_tf
-            )
-            direction = str(
-              published_candidate.get("direction") or direction
-            )
-            exact_source = str(
-              published_candidate.get("signal_source") or ""
-            )
-            if exact_source:
-              payload["gate_source"] = exact_source
+          published = payload.get("published_candidate")
+          if isinstance(published, dict):
+            selected = str(published.get("source_strategy") or selected)
+            selected_tf = str(published.get("timeframe") or selected_tf)
+            direction = str(published.get("direction") or direction)
           if selected:
             selected_text = " · ".join(
               item for item in (selected, direction, selected_tf) if item
             )
-            source_name = str(payload.get("gate_source") or "")
-            selection_source = (
-              "scanner detector"
-              if source_name in {
-                "scanner_strategy_match",
-                "multi_strategy_match",
-              }
-              else "Market Map + M1 reaction"
-              if source_name == "market_map_strategy"
-              else "private M1 range engine"
-              if source_name == "private_range"
-              else "private M1 trend engine"
-              if source_name == "private_trend"
-              else "private OHLC matcher"
-            )
-          box = payload.get("box")
-          if isinstance(box, dict):
-            low = float(box["low"])
-            high = float(box["high"])
-            tp = payload.get("full_tp_pips")
-            zone_text = f" · box {low:,.2f}–{high:,.2f}"
-            if tp is not None:
-              zone_text += f" · full TP {int(tp)}p"
-          eligibility = payload.get("box_eligibility")
-          if isinstance(eligibility, dict):
-            gate_label = (
-              "eligible"
-              if eligibility.get("eligible")
-              else f"ineligible · {eligibility.get('reason_code') or 'unknown'}"
-            )
-            selection_reason = selection_reason or gate_label
+          reasons = payload.get("reasons")
+          if isinstance(reasons, list) and reasons and selected_text == "none":
+            why = str(reasons[-1])
       except (KeyError, TypeError, ValueError, json.JSONDecodeError):
         pass
-    scanner_state = "waiting for next M5 scan"
-    scanner_raw = await client.get(
-      f"scanner:last_tick:{primary_symbol}:"
-      f"{settings.scanner_exec_tf.upper()}"
-    )
-    if scanner_raw:
-      try:
-        scanner_payload = json.loads(scanner_raw)
-        checked_at = _snapshot_checked_at(scanner_payload.get("checked_at"))
-        now_ts = int(datetime.now(timezone.utc).timestamp())
-        if (
-          checked_at is not None
-          and now_ts - checked_at > SCANNER_SOURCE_MAX_AGE_SECONDS
-        ):
-          scanner_state = (
-            "stale · last update "
-            f"{max(1, (now_ts - checked_at) // 60)} minutes ago"
-          )
-          metrics["range_status_stale_snapshot_suppressed"] = (
-            metrics.get("range_status_stale_snapshot_suppressed", 0) + 1
-          )
-          await client.hincrby(
-            f"auto_trade:metrics:{primary_symbol}",
-            "range_status_stale_snapshot_suppressed",
-            1,
-          )
-        else:
-          detected = scanner_payload.get("detected")
-          count = len(detected) if isinstance(detected, list) else 0
-          scanner_state = (
-            f"{count} setup{'s' if count != 1 else ''} matched"
-            if count
-            else "no setup matched"
-          )
-          scalp = scanner_payload.get("scalp")
-          if isinstance(scalp, dict) and scalp.get("state"):
-            scanner_state += (
-              f" · range {str(scalp['state']).replace('_', ' ')}"
-            )
-      except (TypeError, ValueError, json.JSONDecodeError):
-        pass
-    now_ts = int(datetime.now(timezone.utc).timestamp())
-    box_gate = "ineligible · no_current_range"
-    if not gate_stale and raw:
-      try:
-        eligibility = json.loads(raw).get("box_eligibility")
-        if isinstance(eligibility, dict):
-          box_gate = (
-            "eligible"
-            if eligibility.get("eligible")
-            else (
-              "ineligible · "
-              f"{eligibility.get('reason_code') or 'no_current_range'}"
-            )
-          )
-      except (TypeError, ValueError, json.JSONDecodeError):
-        pass
-    regime_line = (
-      f"\nRegime: <b>{escape(current_regime.replace('_', ' '))}</b>"
-      f"\nRange execution gate: <b>{escape(box_gate)}</b>"
-    )
-    match_build_line = ""
     match_build_raw = await client.get(
       f"auto_trade:last_match_build:{primary_symbol}"
     )
@@ -1216,426 +972,38 @@ async def auto_trade_status_text() -> str:
     if (
       breakout_watch
       and str(breakout_watch.get("state") or "") == "waiting"
+      and selected_text == "none"
     ):
-      zone_low = breakout_watch.get("zone_low")
-      zone_high = breakout_watch.get("zone_high")
       direction = str(breakout_watch.get("direction") or "")
-      zone_text = (
-        f" at {float(zone_low):,.2f}–{float(zone_high):,.2f}"
-        if zone_low is not None and zone_high is not None
-        else ""
-      )
-      match_build_line = (
-        "\nStrategyMatch bridge: <b>breakout-retest</b> - "
-        f"{escape(direction)} waiting{escape(zone_text)}"
-      )
-    elif match_build_raw:
+      why = f"breakout-retest {direction}".strip()
+    elif match_build_raw and selected_text == "none" and not why:
       try:
         match_build = json.loads(match_build_raw)
         stage = str(match_build.get("stage") or "")
         if stage == "match_build_rejected":
           reason = str(match_build.get("reason") or "unknown")
-          # Stale scanner "no_detection_result" must not hide an active
-          # breakout-retest handoff.
           if reason != "no_detection_result" or not breakout_watch:
-            measured = match_build.get("measured") or {}
-            detail = (
-              f" (room {measured['room_pips']} pips)"
-              if "room_pips" in measured
-              else ""
-            )
-            match_build_line = (
-              "\nStrategyMatch bridge: <b>blocked</b> - "
-              f"{escape(reason)}{escape(detail)}"
-            )
+            why = reason
         elif stage == "match_ready":
           strategy = str(match_build.get("strategy") or "")
           direction = str(match_build.get("direction") or "")
-          tp = match_build.get("full_take_profit_pips")
-          tp_text = f" · TP {int(tp)}p" if tp is not None else ""
-          match_build_line = (
-            "\nStrategyMatch bridge: <b>ready</b> - "
-            f"{escape(strategy)} {escape(direction)}{escape(tp_text)}"
-          )
+          why = f"ready · {strategy} {direction}".strip(" ·")
       except (TypeError, ValueError, json.JSONDecodeError):
         pass
-    try:
-      shares = await regime_share_24h(client, primary_symbol)
-    except Exception:
-      shares = None
-    if shares is not None:
-      regime_line += (
-        "\nContext (24h): chop "
-        f"<b>{shares.get('chop', 0.0):.0%}</b> · trend "
-        f"<b>{shares.get('trend', 0.0):.0%}</b> · breakout "
-        f"<b>{shares.get('breakout', 0.0):.0%}</b>"
-      )
-    reason_line = (
-      f"\nWhy no order: {escape(selection_reason)}"
-      if selected_text == "none" and selection_reason else
-      f"\nWhy: {escape(selection_reason)}" if selection_reason else ""
-    )
-    map_observability = ""
-    if map_entries_seen is not None and map_entries_actionable is not None:
-      map_observability = (
-        f"\nMap entries: <b>{map_entries_seen}</b> seen · "
-        f"<b>{map_entries_actionable}</b> actionable"
-      )
-      nearest: list[str] = []
-      for item in map_top:
-        try:
-          side = str(item["side"]).upper()
-          low = float(item["lo"])
-          high = float(item["hi"])
-          distance = float(item.get("distance") or 0)
-        except (KeyError, TypeError, ValueError):
-          continue
-        if distance <= 0:
-          location = "inside"
-        elif (
-          map_track_limit is not None
-          and map_execute_limit is not None
-          and distance <= map_track_limit
-        ):
-          location = (
-            f"{distance:.1f} away · tracked, "
-            f"execute within {map_execute_limit:.1f}"
-          )
-        else:
-          location = f"{distance:.1f} away"
-        nearest.append(
-          f"{side} {low:,.2f}–{high:,.2f} ({location})"
-        )
-      if nearest:
-        map_observability += (
-          "\nMap nearest: " + escape(" · ".join(nearest))
-        )
-      if map_filters:
-        map_observability += (
-          "\nMap filters: "
-          f"side <b>{map_filters.get('side', 0)}</b> · "
-          f"actionable <b>{map_filters.get('actionable', 0)}</b> · "
-          f"width <b>{map_filters.get('degenerate_width', 0)}</b> · "
-          f"distance <b>{map_filters.get('distance', 0)}</b>"
-        )
-    structural_lines = ""
-    structural_metric_names = (
-      ("key_level", "key_level_reaction_detected"),
-      ("demand", "demand_zone_reaction_detected"),
-      ("supply", "supply_zone_reaction_detected"),
-      ("session", "session_level_reaction_detected"),
-      ("trendline", "trendline_reaction_detected"),
-    )
-    structural_bits = [
-      f"{label} {metrics.get(metric, 0)}"
-      for label, metric in structural_metric_names
-      if metrics.get(metric, 0)
-    ]
-    if structural_bits or metrics.get("structural_reaction_match_built"):
-      structural_lines = (
-        "\nStructural reactions: "
-        + escape(" · ".join(structural_bits) if structural_bits else "none")
-        + (
-          f" · match {metrics.get('structural_reaction_match_built', 0)}"
-          f" · published {metrics.get('structural_reaction_candidate_published', 0)}"
-          f" · dup {metrics.get('structural_reaction_duplicate_suppressed', 0)}"
-        )
-      )
-      last_structural = next(
-        (
-          match for match in active_matches
-          if match.strategy in {
-            "Key Level Reaction",
-            "Demand Zone Reaction",
-            "Supply Zone Reaction",
-            "Session Level Reaction",
-            "Trendline Reaction",
-          }
-        ),
-        None,
-      )
-      if last_structural is not None:
-        sid = (last_structural.structural_zone_id or last_structural.zone_id or "")[:10]
-        structural_lines += (
-          "\nLast structural: "
-          f"<b>{escape(last_structural.strategy)}</b> "
-          f"{escape(last_structural.direction)} · "
-          f"{escape(last_structural.structural_source or '-')} · "
-          f"id {escape(sid)} · "
-          f"{escape(last_structural.reaction_type or '-')}"
-        )
-    strategy_lines = (
-      f"\nSelected strategy: <b>{escape(selected_text)}</b>"
-      f"\nSource: <b>{escape(selection_source)}</b>"
-      f"\nScanner M5: <b>{escape(scanner_state)}</b>"
-      "\nMarket Map strategy: "
-      f"<b>{escape(market_map_state.replace('_', ' '))}</b>"
-      "\nPrivate strategies: "
-      f"Range Box <b>{escape(box_state.replace('_', ' '))}</b> · "
-      f"Trend <b>{escape(trend_state.replace('_', ' '))}</b>"
-      f"{structural_lines}"
-      f"\nExecution: <b>{escape(execution_state.replace('_', ' '))}</b>"
-      f"{escape(zone_text)}"
-      f"{reason_line}"
-      f"{match_build_line}"
-      f"{map_observability}"
-      f"{regime_line}"
-    )
-  account_mode = (
-    "demo" if bool((executor or {}).get("demo"))
-    else str((ctrader_manifest or {}).get("account_mode") or "unknown")
-  )
-  hedge_mode = (
-    "hedged" if bool((executor or {}).get("hedged"))
-    else "non-hedged"
-  )
   config_state = str((config_health or {}).get("state") or "unknown")
-  config_fatal = (config_health or {}).get("fatal") or []
-  executor_dry_run = (
-    (ctrader_manifest or {}).get("dry_run")
-    if ctrader_manifest is not None else "unknown"
-  )
-  range_line = "none"
-  rail_line = "BUY unknown · SELL unknown"
-  barrier_line = "support 0 · resistance 0"
-  now_ts = int(datetime.now(timezone.utc).timestamp())
-  resolved_current = is_range_context_current(
-    resolved_range,
-    now=now_ts,
-    max_age_seconds=max(
-      SCANNER_SOURCE_MAX_AGE_SECONDS,
-      PRIVATE_SOURCE_MAX_AGE_SECONDS,
-    ),
-  )
-  if resolved_range is not None and (
-    resolved_range.state in {"retired", "broken"}
-    or resolved_current
-  ):
-    range_line = (
-      f"{resolved_range.lower:,.2f}–{resolved_range.upper:,.2f} · "
-      f"{status_label_for_retired(resolved_range) if resolved_range.state == 'retired' else resolved_range.state}"
-      f" · {resolved_range.source}"
-    )
-    buy_state = await _range_side_state(
-      client, primary_symbol, resolved_range.range_id, "BUY",
-    )
-    sell_state = await _range_side_state(
-      client, primary_symbol, resolved_range.range_id, "SELL",
-    )
-    rail_line = f"BUY {buy_state} · SELL {sell_state}"
-    barrier_line = (
-      f"support {len(resolved_range.supports)} · "
-      f"resistance {len(resolved_range.resistances)}"
-    )
-  elif resolved_range is not None:
-    range_line = (
-      "stale · "
-      f"{max(0, now_ts - resolved_range.generated_at)}s"
-    )
-  scanner_summary = _source_range_summary(
-    scanner_range,
-    now=now_ts,
-    max_age_seconds=SCANNER_SOURCE_MAX_AGE_SECONDS,
-    absent_label="no range",
-  )
-  private_summary = _source_range_summary(
-    private_range,
-    now=now_ts,
-    max_age_seconds=PRIVATE_SOURCE_MAX_AGE_SECONDS,
-    absent_label="no box",
-  )
-  comparison = str(
-    (range_compare or {}).get("resolution") or "none"
-  )
-  scanner_age = (
-    "none"
-    if scanner_range is None
-    else f"{max(0, now_ts - scanner_range.generated_at)}s"
-  )
-  private_age = (
-    "none"
-    if private_range is None
-    else f"{max(0, now_ts - private_range.generated_at)}s"
-  )
-  resolved_age = (
-    "none"
-    if resolved_range is None
-    else f"{max(0, now_ts - resolved_range.generated_at)}s"
-  )
-  positions = len((executor or {}).get("position_ids") or [])
-  pending = len((executor or {}).get("pending_order_ids") or [])
-  groups = len((executor or {}).get("group_ids") or [])
-  match_summary = " · ".join(
-    f"{item.strategy} {item.direction}"
-    for item in active_matches[:6]
-  ) or "none"
-  metric_summary = " · ".join(
-    f"{key}={value}"
-    for key, value in sorted(metrics.items())
-    if value
-  ) or "none"
-  lifecycle_summary = (
-    "none"
-    if not last_lifecycle
-    else " · ".join(
-      str(item)
-      for item in (
-        last_lifecycle.get("state"),
-        last_lifecycle.get("strategy"),
-        last_lifecycle.get("direction"),
-        last_lifecycle.get("reason_code"),
-      )
-      if item
-    )
-  )
-  guard_summary = "none"
-  if last_guard:
-    measured = last_guard.get("measured") or {}
-    room = measured.get("available_room_pips")
-    drift = measured.get("effective_pips")
-    original_target = measured.get("original_target")
-    adjustment = measured.get("adjusted_target")
-    barrier_price = measured.get("barrier_price")
-    opposing = last_guard.get("opposing_structure") or {}
-    opposing_summary = ""
-    if isinstance(opposing, dict) and opposing:
-      opposing_name = (
-        opposing.get("level_kind")
-        or opposing.get("side")
-        or opposing.get("source_type")
-        or "structure"
-      )
-      opposing_summary = (
-        f"opposing {opposing_name} "
-        f"{opposing.get('low')}-{opposing.get('high')}"
-      )
-    detail = " · ".join(
-      item for item in (
-        f"room {room}p" if room is not None else "",
-        f"drift {drift}p" if drift is not None else "",
-        (
-          f"target {original_target}→{adjustment}"
-          if adjustment is not None and original_target is not None
-          else f"target {adjustment}"
-          if adjustment is not None else ""
-        ),
-        f"barrier {barrier_price}" if barrier_price is not None else "",
-      )
-      if item
-    )
-    guard_summary = " · ".join(
-      item for item in (
-        str(last_guard.get("strategy") or ""),
-        str(last_guard.get("direction") or ""),
-        str(last_guard.get("guard") or ""),
-        str(last_guard.get("outcome") or ""),
-        str(last_guard.get("reason") or ""),
-        f"hard block={bool(last_guard.get('hard_block'))}",
-        f"source={last_guard.get('source_structure')}"
-        if last_guard.get("source_structure") else "",
-        opposing_summary,
-        detail,
-        f"at={last_guard.get('updated_at')}"
-        if last_guard.get("updated_at") else "",
-      )
-      if item
-    )
-  route_summary = "none"
-  if last_route:
-    measured = last_route.get("measured") or {}
-    checked_at = int(last_route.get("checked_at") or 0)
-    age = max(
-      0,
-      int(datetime.now(timezone.utc).timestamp()) - checked_at,
-    ) if checked_at else 0
-    route_summary = " · ".join(
-      item for item in (
-        str(last_route.get("strategy") or ""),
-        str(last_route.get("direction") or ""),
-        f"id {str(last_route.get('match_id') or '')[:10]}",
-        str(last_route.get("status") or ""),
-        str(last_route.get("stage") or ""),
-        str(last_route.get("reason_code") or ""),
-        (
-          f"drift {float(measured['distance_pips']):.1f}p"
-          if measured.get("distance_pips") is not None else ""
-        ),
-        f"guard {measured.get('guard_mode')}"
-        if measured.get("guard_mode") else "",
-        f"candidate {str(last_route.get('candidate_id') or '')[:10]}"
-        if last_route.get("candidate_id") else "",
-        f"age {age}s",
-        "retained" if measured.get("match_retained") else "consumed",
-      )
-      if item
-    )
-  reconcile_summary = (
-    "none"
-    if not reconcile else
-    " · ".join(
-      f"{name}={reconcile.get(name, '0')}"
-      for name in (
-        "mode",
-        "zones_input",
-        "zones_shadow_output",
-        "zones_trimmed",
-        "zones_dropped",
-        "candidate_difference_count",
-      )
-    )
-  )
-  health_detail = (
-    f" · fatal {escape(', '.join(str(item) for item in config_fatal))}"
-    if config_fatal else ""
-  )
-  operations = (
-    "\n\n⚙️ <b>Execution contract</b>"
-    f"\nProfile: <b>{escape(settings.auto_trade_profile)}</b>"
-    f"\nStructural guards: <b>{escape(settings.auto_trade_structural_guard_mode)}</b>"
-    f"\nBroker account: <b>{escape(account_mode)} · {escape(hedge_mode)}</b>"
-    f"\nExecutor ready: <b>{bool((readiness or {}).get('ready'))}</b>"
-    f"\nPython dry-run: <b>{settings.auto_trade_dry_run}</b>"
-    f"\nExecutor dry-run: <b>{escape(str(executor_dry_run))}</b>"
-    f"\nPython/C# config: <b>{escape(config_state)}</b>{health_detail}"
-    f"\nExposure policy: <b>{escape(str((executor or {}).get('exposure_policy') or 'unknown'))}</b>"
-    f"\nResolved range: <b>{escape(range_line)}</b>"
-    f"\nScanner range: <b>{escape(scanner_summary)}</b>"
-    f"\nPrivate range: <b>{escape(private_summary)}</b>"
-    f"\nScanner range age: <b>{escape(scanner_age)}</b>"
-    f"\nPrivate range age: <b>{escape(private_age)}</b>"
-    f"\nResolved range age: <b>{escape(resolved_age)}</b>"
-    f"\nResolution: <b>{escape(comparison)}</b>"
-    f"\nBarriers: <b>{escape(barrier_line)}</b>"
-    f"\nRails: <b>{escape(rail_line)}</b>"
-    f"\nTracked matches: <b>{len(active_matches)}</b> · {escape(match_summary)}"
-    f"\nOpen groups: <b>{groups}</b> · positions <b>{positions}</b> · "
-    f"pending <b>{pending}</b>"
-    f"{chr(10)}Mapped thesis: <b>"
-    f"{escape(chr(10).join(thesis_lines) if thesis_lines else 'none')}</b>"
-    f"\nMetrics: <code>{escape(metric_summary)}</code>"
-    f"\nReject counters: <code>{escape(reject_summary)}</code>"
-    f"\nLatest strategy route: <b>{escape(route_summary)}</b>"
-    f"\nWatchers: <b>{escape(match_build_line.strip() or 'none')}</b>"
-    f"\nLast execution guard: <b>{escape(guard_summary)}</b>"
-    f"\nZone reconcile: <code>{escape(reconcile_summary)}</code>"
-    f"\nLast lifecycle: <b>{escape(lifecycle_summary)}</b>"
-  )
-  # Telegram hard-caps messages at 4096 characters. Metric dumps can exceed
-  # that in a busy demo session and Telegram then rejects the whole reply —
-  # which looks like /algo_status "does nothing". Clip before return.
-  text = (
-    "🤖 <b>Algo bot</b>\n"
-    f"Mode: <b>{escape(mode)}</b> · State: <b>{state}</b>\n"
-    f"Open positions: <b>{position_count}</b>\n"
-    f"Trades today: <b>{daily}</b> · <b>unlimited</b>"
-    f"\nMeasured groups: <b>{group_count}</b> · adds "
-    f"<b>{with_adds}</b> · no adds <b>{without_adds}</b>"
-    f"{strategy_lines}"
-    f"{operations}"
-  )
-  if len(text) <= 4000:
-    return text
-  return text[:3990].rstrip() + "\n… (truncated)"
+  ready = bool((readiness or {}).get("ready"))
+  lines = [
+    "🤖 <b>Algo bot</b>",
+    f"{escape(mode)} · <b>{state}</b>",
+    f"Open <b>{position_count}</b> · today <b>{daily}</b>",
+    f"{escape(selected_text)} · {escape(execution_state)}",
+    f"Config <b>{escape(config_state)}</b> · ready <b>{ready}</b>",
+  ]
+  if why:
+    lines.append(f"Why: {escape(why)}")
+  return "\n".join(lines)
+
+
 
 
 
@@ -1660,59 +1028,6 @@ def _snapshot_checked_at(raw: object) -> int | None:
     return int(datetime.fromisoformat(text).timestamp())
   except ValueError:
     return None
-
-
-def _source_range_summary(
-  context: RangeContext | None,
-  *,
-  now: int,
-  max_age_seconds: int,
-  absent_label: str,
-) -> str:
-  if context is None:
-    return absent_label
-  if not is_range_context_current(
-    context,
-    now=now,
-    max_age_seconds=max_age_seconds,
-  ):
-    return f"stale · {max(0, now - context.generated_at)}s"
-  label = (
-    status_label_for_retired(context)
-    if context.state == "retired"
-    else context.state
-  )
-  return f"{label} {context.lower:,.2f}–{context.upper:,.2f}"
-
-
-async def _range_side_state(
-  client,
-  symbol: str,
-  range_id: str,
-  direction: str,
-) -> str:
-  payload = await _json_key(
-    client,
-    f"auto_trade:range_side:{symbol}:{range_id}:{direction}",
-  )
-  return str(payload.get("state") or "ARMED").lower()
-
-
-async def _gate_reject_summary(client, symbol: str) -> str:
-  values: list[tuple[str, int]] = []
-  pattern = f"auto_trade:gate_reject:{symbol.upper()}:*"
-  async for raw_key in client.scan_iter(match=pattern):
-    key = raw_key.decode() if isinstance(raw_key, bytes) else str(raw_key)
-    try:
-      count = int(await client.hget(key, "count") or 0)
-    except (TypeError, ValueError):
-      count = 0
-    if count:
-      values.append((key.rsplit(":", 1)[-1], count))
-  return " · ".join(
-    f"{name}={count}"
-    for name, count in sorted(values, key=lambda item: (-item[1], item[0]))[:8]
-  ) or "none"
 
 
 async def _record_group_result(client, event: dict) -> None:
