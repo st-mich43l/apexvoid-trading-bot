@@ -189,6 +189,18 @@ class Settings(BaseSettings):
   auto_trade_add_stop_buffer_atr: float = 0.3
   auto_trade_stop_push_beyond_zone: bool = True
   auto_trade_add_min_stop_pips: int = 30
+  auto_trade_max_tranches: int = Field(
+    default=2,
+    validation_alias=AliasChoices("AUTO_TRADE_MAX_TRANCHES"),
+  )
+  auto_trade_add_risk_fraction: float = Field(
+    default=0.5,
+    validation_alias=AliasChoices("AUTO_TRADE_ADD_RISK_FRACTION"),
+  )
+  auto_trade_add_size_ratio: float = Field(
+    default=0.5,
+    validation_alias=AliasChoices("AUTO_TRADE_ADD_SIZE_RATIO"),
+  )
   auto_trade_wick_stop_buffer_atr: float = 0.15
   auto_trade_trend_stop_min_pips: int = 40
   auto_trade_trend_stop_max_pips: int = 65
