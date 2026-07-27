@@ -1368,6 +1368,14 @@ public sealed class AutoTradeEngine(
         cancellationToken
       );
     }
+    if (await TryRejectIndependentGroupOnNonHedgedAccountAsync(
+      candidate,
+      symbol,
+      cancellationToken
+    ))
+    {
+      return true;
+    }
     if (await TryRejectOppositeInitialGroupAsync(
       candidate,
       direction,
@@ -5670,6 +5678,73 @@ public sealed class AutoTradeEngine(
         targetPrices: state.TargetPrices
       );
     }
+  }
+
+  /// <summary>
+  /// Independent strategies cannot safely retain independent SL/TP plans
+  /// when the broker represents them as one net position. On a non-hedged
+  /// (netting) account, a second autonomous initial group - same direction
+  /// or opposite - collapses into the existing net position at the broker,
+  /// silently merging two strategies' SL/TP/tracking into one. Fail closed
+  /// before any broker submission rather than letting CanOpenNewGroup's
+  /// broker_netting compatibility path (intended for controlled
+  /// opposite-direction flip/net behavior) admit a second independent
+  /// initial group. Legacy explicitly linked scale-ins (ParentGroupId
+  /// present) are unaffected - they already share the parent's broker
+  /// position by design and go through ValidateAddTriggers instead.
+  /// </summary>
+  private async Task<bool> TryRejectIndependentGroupOnNonHedgedAccountAsync(
+    TradeCandidate candidate,
+    SymbolInfo symbol,
+    CancellationToken cancellationToken
+  )
+  {
+    if (
+      _accountSupportsHedging
+      || !string.IsNullOrWhiteSpace(candidate.ParentGroupId)
+      || IsManualAlgoCandidate(candidate)
+    )
+    {
+      return false;
+    }
+    var activePositions = _allSymbolPositions
+      .Where(position => position.SymbolId == symbol.SymbolId && position.Label == options.Label)
+      .ToArray();
+    var activeOrders = _allSymbolPendingOrders
+      .Where(order => order.SymbolId == symbol.SymbolId && order.Label == options.Label)
+      .ToArray();
+    if (activePositions.Length == 0 && activeOrders.Length == 0)
+    {
+      return false;
+    }
+    var activePositionIds = activePositions
+      .Select(position => position.PositionId)
+      .ToArray();
+    var activeGroupIds = _states.Values
+      .Where(state => activePositionIds.Contains(state.PositionId))
+      .Select(GroupId)
+      .Distinct()
+      .ToArray();
+    _log(
+      "auto-trade independent_group_rejected_non_hedged"
+        + $" account_type={_account?.AccountType ?? "unknown"}"
+        + $" broker_hedging_capability={_accountSupportsHedging}"
+        + $" incoming_candidate_id={Short(candidate.CandidateId)}"
+        + $" incoming_group_id={CandidateGroupId(candidate)}"
+        + $" active_position_ids=[{string.Join(",", activePositionIds)}]"
+        + $" active_group_ids=[{string.Join(",", activeGroupIds)}]"
+        + " reason=independent_strategy_requires_hedged_account"
+    );
+    await store.IncrementMetricAsync(
+      candidate.Symbol,
+      "independent_group_rejected_non_hedged",
+      cancellationToken
+    );
+    return await RejectAsync(
+      candidate,
+      "independent_strategy_requires_hedged_account",
+      cancellationToken
+    );
   }
 
   private async Task<bool> TryRejectOppositeInitialGroupAsync(
