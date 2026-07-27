@@ -1,6 +1,6 @@
 {
-  "version": 2,
-  "description": "Shared stop-trail break-even buffer parity. BE+6 ticks × tick_size 0.01 = 0.06 price offset on the adverse side of fill (BUY entry-0.06, SELL entry+0.06). Not trading pips × 0.1.",
+  "version": 3,
+  "description": "Shared stop-trail break-even buffer parity. BE+6 ticks x tick_size 0.01 = 0.06 price offset, applied on the PROFIT side of the broker-confirmed fill (BUY entry+0.06, SELL entry-0.06) - locked-in profit protection, not an adverse-side spread cushion. Not trading pips x 0.1.",
   "symbol": "XAU",
   "tick_size": "0.01",
   "digits": 2,
@@ -12,7 +12,7 @@
       "direction": "BUY",
       "entry_price": "4087.66",
       "completed_target_index": 0,
-      "expected_stop": "4087.60",
+      "expected_stop": "4087.72",
       "expected_label": "BE+6 ticks",
       "expected_offset": "0.06"
     },
@@ -21,7 +21,7 @@
       "direction": "SELL",
       "entry_price": "4087.66",
       "completed_target_index": 0,
-      "expected_stop": "4087.72",
+      "expected_stop": "4087.60",
       "expected_label": "BE+6 ticks",
       "expected_offset": "0.06"
     },
@@ -30,7 +30,7 @@
       "direction": "BUY",
       "entry_price": "4112.04",
       "completed_target_index": 0,
-      "expected_stop": "4111.98",
+      "expected_stop": "4112.10",
       "expected_label": "BE+6 ticks",
       "expected_offset": "0.06"
     },
@@ -39,7 +39,16 @@
       "direction": "SELL",
       "entry_price": "4112.04",
       "completed_target_index": 0,
-      "expected_stop": "4112.10",
+      "expected_stop": "4111.98",
+      "expected_label": "BE+6 ticks",
+      "expected_offset": "0.06"
+    },
+    {
+      "name": "sell_4100_74",
+      "direction": "SELL",
+      "entry_price": "4100.74",
+      "completed_target_index": 0,
+      "expected_stop": "4100.68",
       "expected_label": "BE+6 ticks",
       "expected_offset": "0.06"
     }

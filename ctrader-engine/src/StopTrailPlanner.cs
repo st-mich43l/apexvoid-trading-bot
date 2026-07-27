@@ -79,10 +79,13 @@ public static class StopTrailPlanner
       throw new ArgumentOutOfRangeException(nameof(breakEvenBufferTicks));
     }
     var buffer = breakEvenBufferTicks * RequireTickSize(symbol);
-    // The buffer is an adverse-side spread cushion, not locked profit.
+    // Profit-side protection: the stop moves past entry by the buffer, in
+    // the direction that locks in a small amount of profit rather than
+    // merely covering the spread. BUY moves the stop above entry, SELL
+    // moves it below entry.
     var stop = direction == TradeDirection.Buy
-      ? entry - buffer
-      : entry + buffer;
+      ? entry + buffer
+      : entry - buffer;
     return decimal.Round(stop, symbol.Digits, MidpointRounding.AwayFromZero);
   }
 
