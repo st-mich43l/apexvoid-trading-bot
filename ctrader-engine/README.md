@@ -66,7 +66,7 @@ AUTO_TRADE_XAU_CONTRACT_SIZE=100
 AUTO_TRADE_PIP_VALUE_PER_LOT=10.0
 AUTO_TRADE_TARGET_PLANS_PIPS=30,60,90,120,200
 AUTO_TRADE_TP_WEIGHTS=20,20,20,20,20
-AUTO_TRADE_BE_BUFFER_PIPS=6
+AUTO_TRADE_BE_BUFFER_TICKS=6
 AUTO_TRADE_CANDIDATE_MAX_AGE_SECONDS=420
 AUTO_TRADE_CANDIDATE_STORAGE_TTL_SECONDS=604800
 AUTO_TRADE_SPOT_MAX_AGE_SECONDS=5
@@ -187,8 +187,8 @@ single market-entry path. The code fallback remains disabled by default.
 Weighted partial closes use `30/60/90/120/200` pips. A `0.02`-lot position
 exits at TP1 and TP3, `0.03`
 uses TP1-TP3, `0.04` uses TP1-TP4, and positions from `0.05` use all five.
-TP1 moves the stop to `BE+3`, TP2 keeps that stop unchanged, TP3 moves it to
-TP1, and TP4 moves it to TP2.
+TP1 moves the stop to `BE+6 ticks` (0.06 price on XAU digits=2), TP2 keeps
+that stop unchanged, TP3 moves it to TP1, and TP4 moves it to TP2.
 Existing positions retain the targets, TP ordinals, and slices encoded in their
 original cTrader comment.
 

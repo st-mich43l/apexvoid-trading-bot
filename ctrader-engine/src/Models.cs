@@ -517,9 +517,10 @@ public sealed record AutoTradeConfigManifest(
   int PriceDigits = 2,
   decimal MaxEntryDistancePips = 10m,
   decimal EntryContractTolerancePips = 3m,
-  int BreakEvenBufferPips = 6,
+  int BreakEvenBufferTicks = 6,
+  decimal SymbolTickSize = 0.01m,
   int EntryPlanVersion = 1,
-  int StopPlanVersion = 2,
+  int StopPlanVersion = 3,
   string PostFillTargetFallback = "fill_relative"
 );
 

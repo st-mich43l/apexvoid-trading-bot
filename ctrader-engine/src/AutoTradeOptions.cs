@@ -9,7 +9,7 @@ public sealed record AutoTradeOptions(
   decimal StopLossDistance,
   IReadOnlyList<int> TargetsPips,
   IReadOnlyList<int> TargetWeights,
-  int BreakEvenBufferPips,
+  int BreakEvenBufferTicks,
   int CandidateMaxAgeSeconds,
   int SpotMaxAgeSeconds,
   int MaxSpreadPips,
@@ -177,7 +177,12 @@ public sealed record AutoTradeOptions(
     TargetWeights: resolver.IntList(
       "AUTO_TRADE_TP_WEIGHTS", "20,20,20,20,20"
     ),
-    BreakEvenBufferPips: resolver.Int("AUTO_TRADE_BE_BUFFER_PIPS", 6),
+    BreakEvenBufferTicks: resolver.Int(
+      "AUTO_TRADE_BE_BUFFER_TICKS",
+      6,
+      "application_default",
+      "AUTO_TRADE_BE_BUFFER_PIPS"
+    ),
     CandidateMaxAgeSeconds: resolver.Int(
       "AUTO_TRADE_CANDIDATE_MAX_AGE_SECONDS",
       demoEval ? 420 : 90,
@@ -428,10 +433,21 @@ public sealed record AutoTradeOptions(
       "fill_relative"
     ).Trim().ToLowerInvariant()
   );
+  var deprecated = resolver.DeprecatedVariables.ToList();
+  if (deprecated.Contains("AUTO_TRADE_BE_BUFFER_PIPS", StringComparer.Ordinal))
+  {
+    deprecated.Add(
+      "AUTO_TRADE_BE_BUFFER_PIPS is deprecated; numeric value is interpreted "
+      + "as tick count — use AUTO_TRADE_BE_BUFFER_TICKS"
+    );
+  }
   return options with
   {
     ConfigSources = resolver.Sources,
-    DeprecatedVariables = resolver.DeprecatedVariables,
+    DeprecatedVariables = deprecated
+      .Distinct(StringComparer.Ordinal)
+      .Order(StringComparer.Ordinal)
+      .ToArray(),
   };
   }
 
@@ -492,11 +508,11 @@ public sealed record AutoTradeOptions(
         + "contain positive values, and sum to 100"
       );
     }
-    if (BreakEvenBufferPips < 0 || BreakEvenBufferPips >= TargetsPips[0])
+    if (BreakEvenBufferTicks < 0 || BreakEvenBufferTicks >= 1000)
     {
       throw new AutoTradeConfigurationException(
-        "Auto trade disabled: AUTO_TRADE_BE_BUFFER_PIPS must be non-negative "
-        + "and below TP1"
+        "Auto trade disabled: AUTO_TRADE_BE_BUFFER_TICKS must be non-negative "
+        + "and below 1000"
       );
     }
     if (RiskPercent is < 0.1m or > 10m || PipValuePerLot <= 0)

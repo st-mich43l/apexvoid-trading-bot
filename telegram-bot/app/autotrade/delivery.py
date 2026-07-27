@@ -106,7 +106,8 @@ _TP_RE = re.compile(
 )
 _MONEY_RE = re.compile(r"\$|USD|EUR|GBP|balance|equity|brokerNetProfit", re.I)
 _STOP_RE = re.compile(
-  r"(?i)^🛡\s+(?:ApexVoid Algo|Auto[\s-]*(?:trade|trader))\s+stop\s+→\s+"
+  r"(?i)^🛡\s+(?:ApexVoid Algo|Algo bot|Auto[\s-]*(?:trade|trader))\s+"
+  r"stop\s+(?:→|->)\s+"
   r"([\d.,]+)\s+\(([^)]+)\)(?:\s*·\s*position\s+\d+)?$"
 )
 _LOT_TEXT_RE = re.compile(r"(?i)(?<!\w)<?[\d.,]+>?\s+lots?\b")
@@ -523,10 +524,17 @@ def _format_stop_moved(
     event, "entry_price", "fill_price", "entry", "entry_low",
   )
   mode = event.get("mode") or event.get("stop_mode") or label
+  if mode and "tick" not in str(mode).lower() and str(mode).upper().startswith("BE+"):
+    mode = f"{mode} ticks"
+  buffer_price = _event_float(event, "buffer_price", "be_buffer_price")
+  if buffer_price is None and entry is not None and new_sl is not None:
+    buffer_price = abs(new_sl - entry)
   direction = str(event.get("direction") or "").strip().upper() or None
   tp1_confirmed = event.get("trigger_tp1_broker_confirmed")
   if tp1_confirmed is None:
     tp1_confirmed = event.get("tp1_broker_confirmed")
+  if tp1_confirmed is None and mode and "BE+" in str(mode).upper():
+    tp1_confirmed = True
 
   lines = [
     "🤖 <b>ApexVoid Algo</b>",
@@ -545,12 +553,16 @@ def _format_stop_moved(
     lines.append(f"SL moved to <b>{escape(stop)}</b>")
   if mode:
     lines.append(f"Mode: <b>{escape(str(mode))}</b>")
+  if buffer_price is not None:
+    lines.append(f"Buffer: <b>{buffer_price:,.2f}</b>")
   if tp1_confirmed is not None:
     confirmed = "yes" if bool(tp1_confirmed) else "no"
     lines.append(f"Trigger TP1 broker-confirmed: <b>{confirmed}</b>")
   if len(lines) <= 3:
     if stop and label:
       lines.append(f"SL moved to <b>{escape(stop)}</b> · {escape(label)}")
+    elif message:
+      lines.append(escape(message))
     else:
       return None
   return "\n".join(lines)

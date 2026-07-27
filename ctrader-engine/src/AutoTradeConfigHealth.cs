@@ -134,13 +134,20 @@ public static class AutoTradeConfigHealth
           options.ExecutionZoneMaxWidthPips.ToString(CultureInfo.InvariantCulture),
           []
         ),
+        CanonicalOption(
+          options,
+          "AUTO_TRADE_BE_BUFFER_TICKS",
+          options.BreakEvenBufferTicks.ToString(CultureInfo.InvariantCulture),
+          ["AUTO_TRADE_BE_BUFFER_PIPS"]
+        ),
       ],
       PriceDigits: symbol.Digits,
       MaxEntryDistancePips: options.MaxEntryDistancePips,
       EntryContractTolerancePips: options.EntryContractTolerancePips,
-      BreakEvenBufferPips: options.BreakEvenBufferPips,
+      BreakEvenBufferTicks: options.BreakEvenBufferTicks,
+      SymbolTickSize: StopTrailPlanner.RequireTickSize(symbol),
       EntryPlanVersion: 1,
-      StopPlanVersion: 2,
+      StopPlanVersion: 3,
       PostFillTargetFallback: options.PostFillTargetFallback
     );
   }
@@ -211,15 +218,18 @@ public static class AutoTradeConfigHealth
           fatal
         );
       }
-      if (root.TryGetProperty("break_even_buffer_pips", out _))
-      {
-        CompareInt(
-          root,
-          "break_even_buffer_pips",
-          current.BreakEvenBufferPips,
-          fatal
-        );
-      }
+      CompareInt(
+        root,
+        "break_even_buffer_ticks",
+        current.BreakEvenBufferTicks,
+        fatal
+      );
+      CompareDecimal(
+        root,
+        "symbol_tick_size",
+        current.SymbolTickSize,
+        fatal
+      );
       if (root.TryGetProperty("entry_contract_tolerance_pips", out _))
       {
         CompareDecimal(
