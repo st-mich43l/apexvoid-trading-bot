@@ -6,7 +6,7 @@ name: Autotrade Integrity
 on:
   pull_request:
     paths:
-      - "telegram-bot/**"
+      - "algo-bot/**"
       - "ctrader-engine/**"
       - "contracts/autotrade/**"
       - "docker-compose.yml"
@@ -47,18 +47,18 @@ jobs:
           python-version: "3.13"
           cache: pip
           cache-dependency-path: |
-            telegram-bot/requirements.txt
-            telegram-bot/requirements-dev.txt
+            algo-bot/requirements.txt
+            algo-bot/requirements-dev.txt
 
       - name: Install dependencies
-        working-directory: telegram-bot
+        working-directory: algo-bot
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install -r requirements-dev.txt
 
       - name: Run pytest
-        working-directory: telegram-bot
+        working-directory: algo-bot
         env:
           REAL_REDIS_URL: redis://127.0.0.1:6379/15
           DATABASE_URL: postgresql://apexvoid:apexvoid@127.0.0.1:55432/signals
@@ -82,7 +82,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: python-pytest-results
-          path: telegram-bot/pytest-results.xml
+          path: algo-bot/pytest-results.xml
 
   csharp:
     name: C# autotrade suite

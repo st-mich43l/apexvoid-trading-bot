@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "description": "Shared TradePlan V7 fixture. Consumed by telegram-bot/tests/test_trade_plan_v7_contract.py and ctrader-engine/tests/TradePlanV7ContractTests.cs so the Python model and the C# model are held to one table. Python is the only side that builds a plan; C# only parses and validates it, so 'valid' cases must round-trip and 'invalid' cases must fail identically on both sides.",
+  "description": "Shared TradePlan V7 fixture. Consumed by algo-bot/tests/test_trade_plan_v7_contract.py and ctrader-engine/tests/TradePlanV7ContractTests.cs so the Python model and the C# model are held to one table. Python is the only side that builds a plan; C# only parses and validates it, so 'valid' cases must round-trip and 'invalid' cases must fail identically on both sides.",
   "valid_plans": [
     {
       "name": "market_watch_buy",

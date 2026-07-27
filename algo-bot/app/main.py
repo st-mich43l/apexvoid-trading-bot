@@ -37,7 +37,7 @@ async def main() -> None:
   config_health = await publish_python_manifest(redis_state.get_client())
   manifest = python_manifest()
   log.info(
-    "AUTO-TRADE CONFIG service=telegram-bot profile=%s enabled=%s "
+    "AUTO-TRADE CONFIG service=algo-bot profile=%s enabled=%s "
     "dry_run=%s candidate_stream=%s event_stream=%s symbols=%s "
     "targets=%s range_targets=%s candidate_max_age=%s "
     "candidate_storage_ttl=%s range_flip=%s two_sided=%s concurrent=%s "

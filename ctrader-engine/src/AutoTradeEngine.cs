@@ -4460,7 +4460,7 @@ public sealed class AutoTradeEngine(
   }
 
   // Byte-for-byte identical to `opposing_zone_fingerprint` in
-  // telegram-bot/app/autotrade/protective_stop.py; the shared
+  // algo-bot/app/autotrade/protective_stop.py; the shared
   // contracts/autotrade/final-stop-parity.json fixture pins both sides.
   internal static string OpposingZoneFingerprint(
     string symbol,
