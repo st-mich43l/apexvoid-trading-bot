@@ -45,10 +45,10 @@ OWNER_COMMANDS = [
   BotCommand(command="trade_note", description="[SYMBOL] #id text"),
   BotCommand(command="trade_review", description="[SYMBOL] #id"),
   BotCommand(command="trade_map", description="[SYMBOL] — current market map"),
-  BotCommand(command="auto_status", description="ApexVoid Algo status"),
-  BotCommand(command="auto_pause", description="Pause ApexVoid Algo entries"),
-  BotCommand(command="auto_resume", description="Resume ApexVoid Algo entries"),
-  BotCommand(command="auto_close_all", description="Flatten all algo positions"),
+  BotCommand(command="algo_status", description="Algo bot status"),
+  BotCommand(command="algo_pause", description="Pause Algo bot entries"),
+  BotCommand(command="algo_resume", description="Resume Algo bot entries"),
+  BotCommand(command="algo_close_all", description="Flatten all Algo bot positions"),
   BotCommand(command="trade_stats", description="[SYMBOL] [today|week|month]"),
   BotCommand(command="trade_pips", description="[SYMBOL] [period]"),
   BotCommand(command="help", description="Trade command reference"),
@@ -59,10 +59,10 @@ SCANNER_PUBLIC_COMMANDS = [
 SCANNER_OWNER_COMMANDS = [
   *SCANNER_PUBLIC_COMMANDS,
   BotCommand(command="trade_map", description="[SYMBOL] — current market map"),
-  BotCommand(command="auto_status", description="ApexVoid Algo status"),
-  BotCommand(command="auto_pause", description="Pause ApexVoid Algo entries"),
-  BotCommand(command="auto_resume", description="Resume ApexVoid Algo entries"),
-  BotCommand(command="auto_close_all", description="Flatten all algo positions"),
+  BotCommand(command="algo_status", description="Algo bot status"),
+  BotCommand(command="algo_pause", description="Pause Algo bot entries"),
+  BotCommand(command="algo_resume", description="Resume Algo bot entries"),
+  BotCommand(command="algo_close_all", description="Flatten all Algo bot positions"),
 ]
 
 _MAX_SEND_ATTEMPTS = 3

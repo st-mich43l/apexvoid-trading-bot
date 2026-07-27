@@ -25,6 +25,9 @@ dated section after deployment.
   envelope, and outside-cap setups emit Algo bot WAIT while remaining retained.
 - Rename Telegram route cards from AUTO READY/WAIT/BLOCKED/CHECKING to
   Algo bot READY/WAIT/BLOCKED/CHECKING.
+- Rename owner Telegram menu commands from `/auto_*` to `/algo_*` (legacy
+  `/auto_*` aliases remain), and make `/algo_status` report failures instead of
+  failing silently when the status card errors or exceeds Telegram's length limit.
 - Resolve concrete execution routes (`market` / `single_limit` / `zone_split`)
   before protective-stop planning for Key Level, Trendline, and other
   reaction families so strict stop contracts no longer publish unresolved
