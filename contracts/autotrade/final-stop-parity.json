@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "description": "Shared final-stop and entry-route parity cases. Consumed by telegram-bot/tests/test_protective_stop_parity.py and ctrader-engine/tests/StopContractParityTests.cs so both implementations are held to one table.",
+  "description": "Shared final-stop and entry-route parity cases. Consumed by algo-bot/tests/test_protective_stop_parity.py and ctrader-engine/tests/StopContractParityTests.cs so both implementations are held to one table.",
   "symbol": "XAU",
   "pip_size": "0.1",
   "digits": 2,

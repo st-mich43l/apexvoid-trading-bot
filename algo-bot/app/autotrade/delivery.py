@@ -308,49 +308,39 @@ def _format_take_profit(
   leg_realized = _event_float(event, "leg_realized_pips")
   if leg_realized is None:
     leg_realized = float(message_pips)
-  net_pips = _event_float(event, "group_realized_pips")
-  if net_pips is None:
-    net_pips = leg_realized
   seq = _trade_seq_prefix(event)
   is_final = full or (remaining_volume is not None and remaining_volume <= 0)
 
+  # Only the TP level that just fired is reported - no running/total net
+  # pip aggregation, here or anywhere else in this module (see
+  # _format_group_result and _format_position_closed).
+  lines = [
+    "🤖 <b>ApexVoid Algo</b>",
+  ]
   if is_final:
-    lines = [
-      "🤖 <b>ApexVoid Algo</b>",
-      f"✅ {seq}closed",
-      f"Total net: <b>{format_signed_pips(net_pips)} pips</b>",
-    ]
+    lines.append(f"✅ {seq}{label.upper()} closed")
+  elif (
+    initial_volume is None
+    or initial_volume <= 0
+    or remaining_volume is None
+  ):
+    lines.append(
+      f"🎯 {seq}{label.upper()} booked · "
+      f"closed volume <b>{closed_volume:.0f}</b>"
+    )
   else:
-    lines = [
-      "🤖 <b>ApexVoid Algo</b>",
-    ]
-    if (
-      initial_volume is None
-      or initial_volume <= 0
-      or remaining_volume is None
-    ):
-      lines.append(
-        f"🎯 {seq}{label.upper()} booked · "
-        f"closed volume <b>{closed_volume:.0f}</b>"
-      )
-    else:
-      booked_pct = volume_percent(closed_volume, initial_volume)
-      lines.append(f"🎯 {seq}{label.upper()} booked {booked_pct:.1f}%")
-    lines.append(f"Leg: <b>{format_signed_pips(leg_realized)} pips</b>")
-    if net_pips is not None:
-      lines.append(
-        f"Net so far: <b>{format_signed_pips(net_pips)} pips</b>"
-      )
+    booked_pct = volume_percent(closed_volume, initial_volume)
+    lines.append(f"🎯 {seq}{label.upper()} booked {booked_pct:.1f}%")
+  lines.append(f"Leg: <b>{format_signed_pips(leg_realized)} pips</b>")
 
   if profile == "public":
     try:
       stop_pips = float(event.get("stop_pips"))
     except (TypeError, ValueError):
       stop_pips = 0.0
-    display_pips = net_pips if is_final else leg_realized
     if stop_pips > 0:
       lines.append(
-        f"📐 Result: <b>{display_pips / stop_pips:+.2f}R</b>"
+        f"📐 Result: <b>{leg_realized / stop_pips:+.2f}R</b>"
       )
   text = "\n".join(lines)
   if _MONEY_RE.search(text):
@@ -358,38 +348,31 @@ def _format_take_profit(
   return text
 
 
-def _format_group_result(event: dict, message: str) -> str:
-  net = _event_float(event, "group_realized_pips")
-  lines = [
-    "🤖 <b>ApexVoid Algo</b>",
-    "📊 <b>Trade result</b>",
-    "",
-  ]
-  if net is not None:
-    lines.append(f"Total net: <b>{format_signed_pips(net)} pips</b>")
-  else:
-    cleaned = _MONEY_RE.sub("", message).strip(" ·")
-    if cleaned:
-      lines.append(escape(cleaned))
-  return "\n".join(lines)
+def _format_group_result(event: dict, message: str) -> str | None:
+  # This card's entire content used to be the net-pip summary; per current
+  # policy (no net-pip aggregation anywhere), it no longer fires at all -
+  # each TP/close event already reported its own leg pips when it happened.
+  return None
+
+
+_CLOSE_REASON_LABELS = {
+  "stop_loss_or_take_profit": "🎯 Closed by broker SL/TP",
+  "manual_or_external_close": "✋ Closed manually on platform",
+}
 
 
 def _format_position_closed(event: dict, message: str) -> str:
-  net = _event_float(event, "group_realized_pips")
   seq = _trade_seq_prefix(event)
   lines = [
     "🤖 <b>ApexVoid Algo</b>",
     f"🏁 {seq}<b>POSITION CLOSED</b>",
   ]
-  if net is not None:
-    lines.extend([
-      "",
-      f"Total net: <b>{format_signed_pips(net)} pips</b>",
-    ])
-  elif message:
-    cleaned = _MONEY_RE.sub("", message).strip(" ·")
-    if cleaned:
-      lines.extend(["", escape(cleaned)])
+  reason_label = _CLOSE_REASON_LABELS.get(str(event.get("reason_code") or ""))
+  if reason_label:
+    lines.append(reason_label)
+  cleaned = _MONEY_RE.sub("", message).strip(" ·") if message else ""
+  if cleaned:
+    lines.extend(["", escape(cleaned)])
   return "\n".join(lines)
 
 

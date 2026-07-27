@@ -154,7 +154,7 @@ apexvoid-trading-bot/
 ├── README.md                 📖 this file
 ├── docs/                     📚 detailed documentation
 ├── ctrader-engine/           📊 .NET: cTrader Open API feed + auto-trade execution
-└── telegram-bot/             🤖 the Telegram bot application
+└── algo-bot/                 🤖 the Algo bot application (Telegram delivery + trade planning)
     ├── Dockerfile
     ├── requirements.txt
     ├── scripts/               🧰 one-off/manual utility scripts

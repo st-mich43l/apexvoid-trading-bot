@@ -258,7 +258,7 @@ def python_manifest() -> dict[str, Any]:
   sources = resolved_config_sources()
   return {
     "config_manifest_version": CONFIG_MANIFEST_VERSION,
-    "service": "telegram-bot",
+    "service": "algo-bot",
     "service_version": os.getenv("SERVICE_VERSION", "dev"),
     "git_sha": os.getenv("GIT_SHA", "unknown"),
     "profile": settings.auto_trade_profile,

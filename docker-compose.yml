@@ -99,7 +99,7 @@ services:
     # but destroying both requires manual cTrader Playground re-authorisation.
 
   bot:
-    build: ./telegram-bot
+    build: ./algo-bot
     image: apexvoid-trading-bot:latest
     container_name: apexvoid-trading-bot
     restart: unless-stopped

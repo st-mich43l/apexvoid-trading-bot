@@ -58,6 +58,36 @@ public enum TradeDirection
   Sell,
 }
 
+// What actually closed a position that disappeared from a broker reconcile
+// snapshot. Determined (when possible) from the closing order's OrderType
+// via ProtoOADealListByPositionIdReq + ProtoOAOrderListReq - see
+// CTraderOpenApiFeedClient.DeterminePositionCloseReasonAsync. A position
+// closed by our own ClosePositionAsync never reaches this classification;
+// it already knows its own close reason from the direct broker response.
+public enum PositionCloseReason
+{
+  // Deal/order history was unavailable, ambiguous, or the lookup failed -
+  // the same "we cannot tell" state this code path has always reported.
+  Unknown,
+  // The closing order's type was StopLossTakeProfit - the broker-attached
+  // SL/TP order triggered the close, not a manual action.
+  StopLossOrTakeProfit,
+  // The closing order was a plain Market/Limit/Stop/StopLimit order that
+  // was not part of any order this executor placed - almost certainly the
+  // owner (or another API client) closing the position directly on the
+  // broker platform.
+  ManualOrExternalOrder,
+}
+
+// Result of a best-effort close-reason lookup: the classification plus, when
+// the closing deal was found, its real broker execution price - so a
+// confirmed-missing position can report the true fill instead of falling
+// back to the last known stop/entry price.
+public sealed record PositionCloseLookup(
+  PositionCloseReason Reason,
+  decimal? ExecutionPrice = null
+);
+
 public sealed record TradingAccountSnapshot(
   long AccountId,
   bool IsLive,

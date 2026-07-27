@@ -51,4 +51,17 @@ public interface ICTraderTradeClient
     long volume,
     CancellationToken cancellationToken
   );
+
+  // Best-effort classification of why a position that vanished from a
+  // reconcile snapshot actually closed (broker-attached SL/TP vs a manual
+  // or external order), plus the real execution price when the closing deal
+  // was found - see PositionCloseLookup. Defaults to Unknown/no-price so
+  // callers (and the FakeTradingClient test double) never have to opt in
+  // just to keep compiling; a client that cannot look this up should
+  // simply not override it.
+  Task<PositionCloseLookup> DeterminePositionCloseReasonAsync(
+    long positionId,
+    long approximateCloseTimestamp,
+    CancellationToken cancellationToken
+  ) => Task.FromResult(new PositionCloseLookup(PositionCloseReason.Unknown));
 }
