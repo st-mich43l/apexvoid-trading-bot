@@ -4571,7 +4571,13 @@ public sealed class AutoTradeEngine(
       initialStates.All(state => (
         state.NextTargetIndex >= 1
         && state.CurrentStopLoss is decimal initialStop
-        && AtLeastBreakeven(state.Direction, state.EntryPrice, initialStop)
+        && StopTrailPlanner.IsAtLeastProtectedBreakeven(
+          state.Direction,
+          state.EntryPrice,
+          initialStop,
+          symbol,
+          options.BreakEvenBufferTicks
+        )
       )),
       group.All(state => state.CurrentStopLoss is not null),
       group.All(state => GroupId(state) == groupId && state.Direction == direction),
@@ -4675,12 +4681,6 @@ public sealed class AutoTradeEngine(
 
   private static decimal WeightedPips(decimal pipVolume, long initialVolume) =>
     initialVolume > 0 ? pipVolume / initialVolume : 0m;
-
-  private static bool AtLeastBreakeven(
-    TradeDirection direction,
-    decimal entry,
-    decimal stop
-  ) => direction == TradeDirection.Buy ? stop >= entry : stop <= entry;
 
   private static string GroupId(AutoTradePositionState state) =>
     string.IsNullOrWhiteSpace(state.GroupId)

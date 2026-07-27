@@ -35,11 +35,12 @@ public static class StopTrailPlanner
     {
       var tickSize = RequireTickSize(symbol);
       bufferPrice = breakEvenBufferTicks * tickSize;
-      // BE buffer stays on the adverse side of fill (spread cushion), not
-      // locked profitable ticks: BUY = entry - N ticks, SELL = entry + N ticks.
-      desired = state.Direction == TradeDirection.Buy
-        ? state.EntryPrice - bufferPrice.Value
-        : state.EntryPrice + bufferPrice.Value;
+      desired = ProtectedBreakevenStop(
+        state.Direction,
+        state.EntryPrice,
+        symbol,
+        breakEvenBufferTicks
+      );
       label = $"BE+{breakEvenBufferTicks} ticks";
     }
     else
@@ -64,6 +65,44 @@ public static class StopTrailPlanner
       return null;
     }
     return new StopTrailMove(desired, label, bufferPrice);
+  }
+
+  public static decimal ProtectedBreakevenStop(
+    TradeDirection direction,
+    decimal entry,
+    SymbolInfo symbol,
+    int breakEvenBufferTicks
+  )
+  {
+    if (breakEvenBufferTicks < 0)
+    {
+      throw new ArgumentOutOfRangeException(nameof(breakEvenBufferTicks));
+    }
+    var buffer = breakEvenBufferTicks * RequireTickSize(symbol);
+    // The buffer is an adverse-side spread cushion, not locked profit.
+    var stop = direction == TradeDirection.Buy
+      ? entry - buffer
+      : entry + buffer;
+    return decimal.Round(stop, symbol.Digits, MidpointRounding.AwayFromZero);
+  }
+
+  public static bool IsAtLeastProtectedBreakeven(
+    TradeDirection direction,
+    decimal entry,
+    decimal stop,
+    SymbolInfo symbol,
+    int breakEvenBufferTicks
+  )
+  {
+    var threshold = ProtectedBreakevenStop(
+      direction,
+      entry,
+      symbol,
+      breakEvenBufferTicks
+    );
+    return direction == TradeDirection.Buy
+      ? stop >= threshold
+      : stop <= threshold;
   }
 
   public static decimal RequireTickSize(SymbolInfo symbol)

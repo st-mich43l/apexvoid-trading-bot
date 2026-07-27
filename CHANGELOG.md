@@ -12,6 +12,10 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- Align the C# scale-in eligibility gate with the adverse-side
+  protected-breakeven stop produced after TP1. Momentum and pullback adds now
+  accept the configured BUY `entry - buffer` / SELL `entry + buffer`
+  threshold while still rejecting stops even one tick less protected.
 - Make protective-stop contracts route-aware: market candidates validate the
   entry-independent raw/base stop, source, adjustment, clamp, and zone identity
   while trading the stop recomputed at the live entry; resting
