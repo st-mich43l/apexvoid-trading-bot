@@ -35,6 +35,11 @@ dated section after deployment.
 - No behavior change from any of the above by default (`AUTO_TRADE_CONTRACT_MODE`
   defaults to `legacy_v6` everywhere); V7 is not yet published, consumed, or
   used to place any order.
+- `AUTO_TRADE_POSITION_MISSING_CONFIRMATIONS` (default `2`) and
+  `AUTO_TRADE_POSITION_MISSING_RECHECK_SECONDS` (default `3`): a tracked
+  position missing from one broker reconcile snapshot is only "suspected"
+  missing and stays fully tracked until independently confirmed absent
+  across this many time-separated snapshots.
 
 ### Changed
 - `map_strategy.py` selects mapped zones from `market_map.actionable_entries`
@@ -48,13 +53,6 @@ dated section after deployment.
   each tranche is limited to `AUTO_TRADE_ADD_SIZE_RATIO` (default `0.5`) of the
   initial tranche size, in addition to exposure/risk/add-cap ceilings. Python
   mirror: `app.autotrade.scale_in_sizing`.
-
-### Added
-- `AUTO_TRADE_POSITION_MISSING_CONFIRMATIONS` (default `2`) and
-  `AUTO_TRADE_POSITION_MISSING_RECHECK_SECONDS` (default `3`): a tracked
-  position missing from one broker reconcile snapshot is only "suspected"
-  missing and stays fully tracked until independently confirmed absent
-  across this many time-separated snapshots.
 
 ### Fixed
 - Break-even buffer direction: `StopTrailPlanner.ProtectedBreakevenStop` had
