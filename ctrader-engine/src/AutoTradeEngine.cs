@@ -36,6 +36,13 @@ public sealed class AutoTradeEngine(
   private bool _accountSupportsHedging;
   private volatile bool _ready;
   private volatile bool _disabled;
+  // Set when the broker returns an already-tracked PositionId for what
+  // should be a distinct independent group (see the PlaceTrancheAsync
+  // conflict check). Unlike _disabled, this only blocks new autonomous
+  // initial submissions - existing tracked positions (including both sides
+  // of the conflict) keep being reconciled and managed, since neither can
+  // be safely assumed closed.
+  private volatile bool _positionIdentityConflict;
   private CandidateExecutionLease? _activeLease;
   private CandidateLeaseHeartbeat? _heartbeat;
   private static readonly TimeSpan CandidateLeaseDuration =
@@ -1365,6 +1372,23 @@ public sealed class AutoTradeEngine(
         direction,
         expectedEntry,
         date,
+        cancellationToken
+      );
+    }
+    if (
+      _positionIdentityConflict
+      && string.IsNullOrWhiteSpace(candidate.ParentGroupId)
+      && !IsManualAlgoCandidate(candidate)
+    )
+    {
+      await store.IncrementMetricAsync(
+        candidate.Symbol,
+        "executor_position_identity_conflict_active",
+        cancellationToken
+      );
+      return await RejectAsync(
+        candidate,
+        "broker_position_identity_group_conflict",
         cancellationToken
       );
     }
@@ -3650,6 +3674,45 @@ public sealed class AutoTradeEngine(
       FillSourceQuoteTimestamp: _lastSpot?.Timestamp ?? now,
       FillSourceQuoteSequence: _spotSequence
     );
+    if (
+      _states.TryGetValue(state.PositionId, out var existingState)
+      && GroupId(existingState) != GroupId(state)
+    )
+    {
+      // The broker returned an already-tracked PositionId for what should
+      // be a distinct independent group - this must never silently become
+      // a scale-in of the existing group, and the existing group's state
+      // must not be overwritten. The broker fill already happened and
+      // cannot be undone here; all that can be done is preserve what is
+      // already tracked, refuse to claim the new fill is safely managed,
+      // and stop admitting further autonomous initial groups until a human
+      // reconciles the conflict.
+      _positionIdentityConflict = true;
+      await store.IncrementMetricAsync(
+        candidate.Symbol,
+        "position_state_conflict",
+        cancellationToken
+      );
+      _log(
+        "auto-trade broker_position_identity_group_conflict "
+          + $"position_id={state.PositionId} "
+          + $"existing_group_id={GroupId(existingState)} "
+          + $"incoming_group_id={GroupId(state)} "
+          + $"incoming_candidate_id={Short(candidate.CandidateId)}"
+      );
+      await PublishAsync(
+        "error",
+        $"broker_position_identity_group_conflict: position {state.PositionId} "
+          + $"is already tracked under group {GroupId(existingState)}; cannot "
+          + $"adopt the new fill for group {GroupId(state)}",
+        cancellationToken,
+        candidate.CandidateId,
+        state.PositionId,
+        groupId: GroupId(state),
+        reasonCode: "broker_position_identity_group_conflict"
+      );
+      return true;
+    }
     _states[state.PositionId] = state;
     await PropagateGroupMetadataAsync(state, cancellationToken);
     await store.SavePositionAsync(state, cancellationToken);
