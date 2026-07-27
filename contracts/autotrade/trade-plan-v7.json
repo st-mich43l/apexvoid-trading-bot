@@ -1,0 +1,284 @@
+{
+  "version": 1,
+  "description": "Shared TradePlan V7 fixture. Consumed by telegram-bot/tests/test_trade_plan_v7_contract.py and ctrader-engine/tests/TradePlanV7ContractTests.cs so the Python model and the C# model are held to one table. Python is the only side that builds a plan; C# only parses and validates it, so 'valid' cases must round-trip and 'invalid' cases must fail identically on both sides.",
+  "valid_plans": [
+    {
+      "name": "market_watch_buy",
+      "plan": {
+        "version": 7,
+        "plan_id": "plan-001",
+        "thesis_id": "thesis-001",
+        "setup_id": "setup-001",
+        "symbol": "XAU",
+        "created_at": 1720000000,
+        "expires_at": 1720003600,
+        "analysis": {
+          "strategy": "Trend Pullback",
+          "strategy_family": "trend_pullback",
+          "direction": "BUY",
+          "context_timeframes": ["M30", "M15"],
+          "formation_timeframe": "M15",
+          "confirmation_timeframe": "M5",
+          "formation_bar_ts": 1719999000,
+          "confirmation_bar_ts": 1719999600,
+          "score": 0.82,
+          "confluence": 3,
+          "bias": "up",
+          "regime": "trend",
+          "reasons": ["htf_uptrend", "demand_reaction"],
+          "tags": []
+        },
+        "source_structure": {
+          "structure_id": "demand:M15:4088.10:4090.00:1719990000",
+          "kind": "demand",
+          "timeframe": "M15",
+          "low": "4088.10",
+          "high": "4090.00",
+          "invalidation_price": "4081.80"
+        },
+        "entry": {
+          "type": "market_watch",
+          "zone_low": "4088.10",
+          "zone_high": "4090.00",
+          "activation": "quote_inside_zone",
+          "price_side": "ask",
+          "max_spread_ticks": 8,
+          "max_slippage_ticks": 10,
+          "expires_at": 1720003600,
+          "legs": []
+        },
+        "stop": {
+          "type": "absolute",
+          "price": "4081.80",
+          "source": "structural_invalidation",
+          "structure_id": "demand:M15:4088.10:4090.00:1719990000",
+          "reason": "below distal edge plus Python-defined buffer"
+        },
+        "targets": [
+          {"target_id": "TP1", "type": "absolute", "price": "4096.00", "close_ratio": "0.40"},
+          {"target_id": "TP2", "type": "absolute", "price": "4104.00", "close_ratio": "0.35"},
+          {"target_id": "TP3", "type": "absolute", "price": "4115.00", "close_ratio": "0.25"}
+        ],
+        "risk": {
+          "risk_percent": "1.0",
+          "risk_multiplier": "1.0",
+          "max_volume": 1000,
+          "max_group_risk_percent": "2.0"
+        },
+        "management": {
+          "be_after_target_id": "TP1",
+          "be_buffer_ticks": 6,
+          "never_worsen_stop": true
+        },
+        "execution_policy": {
+          "allow_market": true,
+          "allow_limit": false,
+          "allow_partial_fill": true,
+          "cancel_on_expiry": true
+        },
+        "provenance": {
+          "analysis_engine_version": "v7.0.0",
+          "market_map_id": "map-2024-07-03-001",
+          "config_fingerprint": "abc123"
+        }
+      }
+    },
+    {
+      "name": "single_limit_sell",
+      "plan": {
+        "version": 7,
+        "plan_id": "plan-002",
+        "thesis_id": "thesis-002",
+        "setup_id": "setup-002",
+        "symbol": "XAU",
+        "created_at": 1720000000,
+        "expires_at": 1720003600,
+        "analysis": {
+          "strategy": "Break & Retest",
+          "strategy_family": "break_retest",
+          "direction": "SELL",
+          "context_timeframes": ["M30"],
+          "formation_timeframe": "M15",
+          "confirmation_timeframe": "M5",
+          "formation_bar_ts": 1719999000,
+          "confirmation_bar_ts": 1719999600,
+          "score": 0.71,
+          "confluence": 2,
+          "bias": "down",
+          "regime": "trend",
+          "reasons": ["broken_support_retest"],
+          "tags": []
+        },
+        "source_structure": {
+          "structure_id": "supply:M15:4110.00:4112.00:1719990000",
+          "kind": "supply",
+          "timeframe": "M15",
+          "low": "4110.00",
+          "high": "4112.00",
+          "invalidation_price": "4118.50"
+        },
+        "entry": {
+          "type": "single_limit",
+          "zone_low": "4110.00",
+          "zone_high": "4112.00",
+          "order_price": "4111.20",
+          "expires_at": 1720003600,
+          "legs": []
+        },
+        "stop": {
+          "type": "absolute",
+          "price": "4118.50",
+          "source": "structural_invalidation",
+          "structure_id": "supply:M15:4110.00:4112.00:1719990000",
+          "reason": "above distal edge plus Python-defined buffer"
+        },
+        "targets": [
+          {"target_id": "TP1", "type": "absolute", "price": "4102.00", "close_ratio": "0.5"},
+          {"target_id": "TP2", "type": "absolute", "price": "4092.00", "close_ratio": "0.5"}
+        ],
+        "risk": {
+          "risk_percent": "1.0",
+          "risk_multiplier": "1.0",
+          "max_volume": 1000,
+          "max_group_risk_percent": "2.0"
+        },
+        "management": {
+          "be_after_target_id": "TP1",
+          "be_buffer_ticks": 6,
+          "never_worsen_stop": true
+        },
+        "execution_policy": {
+          "allow_market": false,
+          "allow_limit": true,
+          "allow_partial_fill": true,
+          "cancel_on_expiry": true
+        },
+        "provenance": {
+          "analysis_engine_version": "v7.0.0",
+          "market_map_id": "map-2024-07-03-002",
+          "config_fingerprint": "abc123"
+        }
+      }
+    },
+    {
+      "name": "limit_ladder_buy",
+      "plan": {
+        "version": 7,
+        "plan_id": "plan-003",
+        "thesis_id": "thesis-003",
+        "setup_id": "setup-003",
+        "symbol": "XAU",
+        "created_at": 1720000000,
+        "expires_at": 1720003600,
+        "analysis": {
+          "strategy": "Structural Zone Reaction",
+          "strategy_family": "structural_zone",
+          "direction": "BUY",
+          "context_timeframes": ["M30", "M15"],
+          "formation_timeframe": "M15",
+          "confirmation_timeframe": "M5",
+          "formation_bar_ts": 1719999000,
+          "confirmation_bar_ts": 1719999600,
+          "score": 0.65,
+          "confluence": 2,
+          "bias": "up",
+          "regime": "range",
+          "reasons": ["demand_zone_ladder_fill"],
+          "tags": []
+        },
+        "source_structure": {
+          "structure_id": "demand:M15:4085.00:4089.50:1719990000",
+          "kind": "demand",
+          "timeframe": "M15",
+          "low": "4085.00",
+          "high": "4089.50",
+          "invalidation_price": "4079.00"
+        },
+        "entry": {
+          "type": "limit_ladder",
+          "zone_low": "4085.00",
+          "zone_high": "4089.50",
+          "expires_at": 1720003600,
+          "legs": [
+            {"leg_id": "L1", "price": "4089.50", "volume_ratio": "0.60"},
+            {"leg_id": "L2", "price": "4085.00", "volume_ratio": "0.40"}
+          ]
+        },
+        "stop": {
+          "type": "absolute",
+          "price": "4079.00",
+          "source": "structural_invalidation",
+          "structure_id": "demand:M15:4085.00:4089.50:1719990000",
+          "reason": "below distal edge plus Python-defined buffer"
+        },
+        "targets": [
+          {"target_id": "TP1", "type": "absolute", "price": "4097.00", "close_ratio": "1.0"}
+        ],
+        "risk": {
+          "risk_percent": "0.75",
+          "risk_multiplier": "1.0",
+          "max_volume": 800,
+          "max_group_risk_percent": "2.0"
+        },
+        "management": {
+          "be_after_target_id": null,
+          "be_buffer_ticks": 6,
+          "never_worsen_stop": true
+        },
+        "execution_policy": {
+          "allow_market": false,
+          "allow_limit": true,
+          "allow_partial_fill": true,
+          "cancel_on_expiry": true
+        },
+        "provenance": {
+          "analysis_engine_version": "v7.0.0",
+          "market_map_id": "map-2024-07-03-003",
+          "config_fingerprint": "abc123"
+        }
+      }
+    }
+  ],
+  "invalid_plans": [
+    {
+      "name": "wrong_version_rejected",
+      "error": "unsupported TradePlan version",
+      "plan_overrides": {"base": "market_watch_buy", "version": 6}
+    },
+    {
+      "name": "buy_stop_above_entry_rejected",
+      "error": "BUY stop.price must be below every entry price",
+      "plan_overrides": {"base": "market_watch_buy", "stop.price": "4089.00"}
+    },
+    {
+      "name": "sell_stop_below_entry_rejected",
+      "error": "SELL stop.price must be above every entry price",
+      "plan_overrides": {"base": "single_limit_sell", "stop.price": "4105.00"}
+    },
+    {
+      "name": "buy_targets_out_of_order_rejected",
+      "error": "BUY targets must be ordered",
+      "plan_overrides": {"base": "market_watch_buy", "targets.1.price": "4093.00"}
+    },
+    {
+      "name": "buy_target_inside_entry_zone_rejected",
+      "error": "BUY targets must all be above the entry zone",
+      "plan_overrides": {"base": "market_watch_buy", "targets.0.price": "4089.00"}
+    },
+    {
+      "name": "ladder_legs_not_summing_to_one_rejected",
+      "error": "volume_ratio must sum to 1.0",
+      "plan_overrides": {"base": "limit_ladder_buy", "entry.legs.0.volume_ratio": "0.50"}
+    },
+    {
+      "name": "single_limit_missing_order_price_rejected",
+      "error": "single_limit entry requires order_price",
+      "plan_overrides": {"base": "single_limit_sell", "entry.order_price": null}
+    },
+    {
+      "name": "be_target_id_not_declared_rejected",
+      "error": "is not one of the declared targets",
+      "plan_overrides": {"base": "market_watch_buy", "management.be_after_target_id": "TP9"}
+    }
+  ]
+}
