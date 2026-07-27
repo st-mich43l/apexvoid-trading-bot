@@ -236,6 +236,19 @@ class Settings(BaseSettings):
   )
   auto_trade_event_stream: str = "auto_trade:events"
   auto_trade_stream_maxlen: int = 1000
+  # TradePlan V7 migration mode. See docs/adr-trade-plan-v7-boundary.md.
+  # legacy_v6: V6 TradeCandidate path only, V7 disabled.
+  # shadow_v7: V7 plans published and validated by C#, no orders placed.
+  # v7_primary: V7 places orders, V6 remains a controlled fallback.
+  # v7_only: V6 candidates are rejected outright.
+  auto_trade_contract_mode: str = Field(
+    default="legacy_v6",
+    validation_alias=AliasChoices("AUTO_TRADE_CONTRACT_MODE"),
+  )
+  auto_trade_trade_plan_stream: str = Field(
+    default="execution:trade_plans",
+    validation_alias=AliasChoices("AUTO_TRADE_TRADE_PLAN_STREAM"),
+  )
   auto_trade_candidate_ttl: int = Field(
     default=86400,
     validation_alias=AliasChoices(
@@ -682,6 +695,16 @@ class Settings(BaseSettings):
     ) >= 1000:
       raise ValueError(
         "AUTO_TRADE_BE_BUFFER_TICKS must be non-negative and below 1000"
+      )
+    if self.auto_trade_contract_mode not in {
+      "legacy_v6",
+      "shadow_v7",
+      "v7_primary",
+      "v7_only",
+    }:
+      raise ValueError(
+        "AUTO_TRADE_CONTRACT_MODE must be legacy_v6, shadow_v7, v7_primary, "
+        "or v7_only"
       )
     return self
 

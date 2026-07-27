@@ -76,6 +76,12 @@ public sealed record AutoTradeOptions(
   string RedisUrl = "redis://redis:6379/0",
   string CanonicalSymbol = "XAU",
   int CandidateContractVersion = 6,
+  // TradePlan V7 migration mode. Must match Python's AUTO_TRADE_CONTRACT_MODE
+  // exactly (checked in AutoTradeConfigHealth) - see
+  // docs/adr-trade-plan-v7-boundary.md. legacy_v6 | shadow_v7 | v7_primary |
+  // v7_only.
+  string ContractMode = "legacy_v6",
+  string TradePlanStream = "execution:trade_plans",
   bool ManualAlgoEnabled = false,
   bool TrendEnabled = false,
   bool RangeEnabled = true,
@@ -353,6 +359,12 @@ public sealed record AutoTradeOptions(
     CandidateContractVersion: resolver.Int(
       "AUTO_TRADE_CANDIDATE_CONTRACT_VERSION", 6
     ),
+    ContractMode: resolver.String(
+      "AUTO_TRADE_CONTRACT_MODE", "legacy_v6"
+    ).ToLowerInvariant(),
+    TradePlanStream: resolver.String(
+      "AUTO_TRADE_TRADE_PLAN_STREAM", "execution:trade_plans"
+    ),
     ManualAlgoEnabled: resolver.Bool("MANUAL_ALGO_ENABLED", false),
     TrendEnabled: resolver.Bool(
       "AUTO_TRADE_TREND_ENABLED", demoEval, profileSource
@@ -475,6 +487,14 @@ public sealed record AutoTradeOptions(
       throw new AutoTradeConfigurationException(
         "Auto trade disabled: config manifest version 2, candidate contract "
         + "version 6, symbols, and canonical symbol must be configured"
+      );
+    }
+    if (ContractMode is not "legacy_v6" and not "shadow_v7"
+      and not "v7_primary" and not "v7_only")
+    {
+      throw new AutoTradeConfigurationException(
+        "Auto trade disabled: AUTO_TRADE_CONTRACT_MODE must be legacy_v6, "
+        + "shadow_v7, v7_primary, or v7_only"
       );
     }
     if (StopLossDistance <= 0 || StopLossDistance > 6.5m)
