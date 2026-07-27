@@ -259,7 +259,7 @@ async def handle_auto_close_all(msg: Message) -> None:
     await msg.answer(
       "⚠️ <b>Flatten Algo bot?</b>\n"
       "This market-closes every open algo position and cancels pending "
-      "limits. Total net uses the real broker fill.\n\n"
+      "limits.\n\n"
       "Send <code>/algo_close_all confirm</code> to proceed.\n\n"
       f"{status}"
     )
@@ -269,8 +269,8 @@ async def handle_auto_close_all(msg: Message) -> None:
   await msg.answer(
     "🧹 <b>Flatten requested</b>\n"
     "New entries paused. Closing open positions at market — "
-    "POSITION CLOSED / Trade result cards show volume-weighted "
-    "<b>Total net</b> from the broker fill."
+    "each position gets its own POSITION CLOSED card from the "
+    "broker fill."
   )
 
 
