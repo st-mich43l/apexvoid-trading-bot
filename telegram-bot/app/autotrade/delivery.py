@@ -405,11 +405,11 @@ def _format_strategy_route(event: dict) -> str | None:
   status = str(event.get("status") or "")
   reason_code = str(event.get("reason_code") or "")
   if status == "candidate_published":
-    headline = "🟢 <b>AUTO READY</b> · candidate published"
+    headline = "🟢 <b>Algo bot READY</b> · candidate published"
   elif status == "waiting":
-    headline = "🟠 <b>AUTO WAIT</b>"
+    headline = "🟠 <b>Algo bot WAIT</b>"
   elif status in {"blocked", "executor_rejected"}:
-    headline = "🔴 <b>AUTO BLOCKED</b>"
+    headline = "🔴 <b>Algo bot BLOCKED</b>"
   else:
     return None
   measured = event.get("measured") or {}

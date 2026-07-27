@@ -837,9 +837,9 @@ def _format_detection(
   lines = [
     f"🔎 <b>{escape(symbol)} {escape(tf)} · SETUP FORMING</b>",
     (
-      "🟡 <b>AUTO CHECKING</b> · execution preflight pending"
+      "🟡 <b>Algo bot CHECKING</b> · execution preflight pending"
       if settings.auto_trade_enabled and execution_match is not None
-      else "🔴 <b>AUTO BLOCKED</b> · no executable StrategyMatch"
+      else "🔴 <b>Algo bot BLOCKED</b> · no executable StrategyMatch"
       if settings.auto_trade_enabled
       else "🟡 <b>ANALYSIS ONLY</b> · autonomous execution disabled"
     ),

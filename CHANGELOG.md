@@ -21,8 +21,10 @@ dated section after deployment.
   `AUTO_TRADE_BE_BUFFER_PIPS` is read as a tick count only.
 - Align autonomous publication with the executor entry-distance hard cap
   (`AUTO_TRADE_MAX_ENTRY_DISTANCE_PIPS`): adaptive strategy drift stays an
-  observation tolerance, AUTO READY / candidate XADD require the executor
-  envelope, and outside-cap setups emit AUTO WAIT while remaining retained.
+  observation tolerance, Algo bot READY / candidate XADD require the executor
+  envelope, and outside-cap setups emit Algo bot WAIT while remaining retained.
+- Rename Telegram route cards from AUTO READY/WAIT/BLOCKED/CHECKING to
+  Algo bot READY/WAIT/BLOCKED/CHECKING.
 - Resolve concrete execution routes (`market` / `single_limit` / `zone_split`)
   before protective-stop planning for Key Level, Trendline, and other
   reaction families so strict stop contracts no longer publish unresolved
