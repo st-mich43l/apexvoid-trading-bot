@@ -142,6 +142,13 @@ services:
       AUTO_TRADE_SL_DISTANCE: {{ apexvoid_trading_bot_env.AUTO_TRADE_SL_DISTANCE | default('6.5') | string | to_json }}
       AUTO_TRADE_ADD_STOP_BUFFER_ATR: {{ apexvoid_trading_bot_env.AUTO_TRADE_ADD_STOP_BUFFER_ATR | default('0.3') | string | to_json }}
       AUTO_TRADE_ADD_MIN_STOP_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_ADD_MIN_STOP_PIPS | default('30') | string | to_json }}
+      AUTO_TRADE_MAX_TRANCHES: {{ apexvoid_trading_bot_env.AUTO_TRADE_MAX_TRANCHES | default('2') | string | to_json }}
+      AUTO_TRADE_ADD_RISK_FRACTION: {{ apexvoid_trading_bot_env.AUTO_TRADE_ADD_RISK_FRACTION | default('0.5') | string | to_json }}
+      AUTO_TRADE_ADD_SIZE_RATIO: {{ apexvoid_trading_bot_env.AUTO_TRADE_ADD_SIZE_RATIO | default('0.5') | string | to_json }}
+      AUTO_TRADE_ADD_MAX_AGE_BARS: {{ apexvoid_trading_bot_env.AUTO_TRADE_ADD_MAX_AGE_BARS | default('3') | string | to_json }}
+      AUTO_TRADE_ADD_COOLDOWN_BARS: {{ apexvoid_trading_bot_env.AUTO_TRADE_ADD_COOLDOWN_BARS | default('3') | string | to_json }}
+      AUTO_TRADE_ADD_LEVEL_BUFFER_ATR: {{ apexvoid_trading_bot_env.AUTO_TRADE_ADD_LEVEL_BUFFER_ATR | default('1.0') | string | to_json }}
+      AUTO_TRADE_ADD_REQUIRE_RISK_FREE: {{ apexvoid_trading_bot_env.AUTO_TRADE_ADD_REQUIRE_RISK_FREE | default('false') | string | to_json }}
       AUTO_TRADE_WICK_STOP_BUFFER_ATR: {{ apexvoid_trading_bot_env.AUTO_TRADE_WICK_STOP_BUFFER_ATR | default('0.15') | string | to_json }}
       AUTO_TRADE_RISK_PCT: {{ apexvoid_trading_bot_env.AUTO_TRADE_RISK_PCT | default('2.0') | string | to_json }}
       AUTO_TRADE_SIZING_MODE: {{ apexvoid_trading_bot_env.AUTO_TRADE_SIZING_MODE | default('table') | string | to_json }}
