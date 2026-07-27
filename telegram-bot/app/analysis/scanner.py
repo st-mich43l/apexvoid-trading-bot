@@ -75,6 +75,16 @@ log = logging.getLogger(__name__)
 
 NotifyFn = Callable[..., Awaitable[Any]]
 
+_STRUCTURAL_REASON_RE = re.compile(
+  r"(?<![a-z0-9])(?:ob|fvg|breaker|sweep|demand|supply|swing|zone)"
+  r"(?![a-z0-9])",
+  re.IGNORECASE,
+)
+_COUNTER_BIAS_RANGE_STATES = {
+  "provisional_range",
+  "post_impulse_range",
+}
+
 
 class SpotSnapshot:
   def __init__(self, price: float, ts: int, fresh: bool) -> None:
@@ -158,9 +168,21 @@ def _dedup_key(symbol: str, tf: str, result: DetectionResult) -> str:
 
 def _band_dedup_key(symbol: str, result: DetectionResult) -> str:
   if result.structural_id:
+    low = float(result.entry_zone.low)
+    high = float(result.entry_zone.high)
+    midpoint = (
+      (low + high) / 2
+      if math.isfinite(low) and math.isfinite(high) and high > low
+      else float(result.key_level)
+    )
+    bucket = _level_bucket(
+      symbol,
+      midpoint,
+      settings.scanner_level_bucket,
+    )
     return (
       f"scanner:alerted_band:{symbol}:{result.direction}:"
-      f"{result.structural_source or result.setup}:{result.structural_id}"
+      f"{result.structural_source or result.setup}:{bucket}"
     )
   midpoint = (result.entry_zone.low + result.entry_zone.high) / 2
   bucket = _level_bucket(
@@ -1092,6 +1114,57 @@ def _digest_results(
   return (ordered if top_n <= 0 else ordered[:top_n]), conflicts
 
 
+def _structure_card_gate(
+  result: DetectionResult,
+  ctx: DetectionContext,
+) -> str | None:
+  if (
+    settings.scanner_gate_require_structural_anchor
+    and (result.structural_kind or "").casefold() == "round"
+    and not any(_STRUCTURAL_REASON_RE.search(reason) for reason in result.reasons)
+  ):
+    return "round_without_structural_anchor"
+
+  maximum_touches = int(settings.scanner_gate_max_source_touches)
+  if (
+    maximum_touches > 0
+    and int(result.source_touches or 0) >= maximum_touches
+  ):
+    return "source_level_exhausted"
+
+  counter_bias = any(
+    str(value or "").casefold() == "counter_bias"
+    for value in (result.mode, result.bias_relationship)
+  )
+  if (
+    settings.scanner_gate_suppress_counter_bias_in_range
+    and counter_bias
+  ):
+    structures = getattr(ctx, "structures", None)
+    structure = (
+      structures.get(str(getattr(ctx, "tf", "")).upper())
+      if isinstance(structures, dict)
+      else None
+    )
+    scalp_range = getattr(structure, "scalp_range", None)
+    range_state = str(getattr(scalp_range, "state", "")).casefold()
+    regime = getattr(ctx, "regime", None)
+    fading_edge = (
+      range_state in _COUNTER_BIAS_RANGE_STATES
+      or str(getattr(regime, "kind", "")).casefold() == "chop"
+    )
+    minimum_confluence = int(
+      settings.scanner_gate_counter_bias_min_confluence
+    )
+    if (
+      fading_edge
+      and result.confluence < minimum_confluence
+    ):
+      return "low_confluence_counter_bias_in_range"
+
+  return None
+
+
 def _conflict_record(
   stronger: DetectionResult,
   weaker: DetectionResult,
@@ -1114,6 +1187,8 @@ def _conflict_record(
 
 def _suppress_overlaps(
   results: list[DetectionResult],
+  *,
+  force_opposing_suppression: bool = False,
 ) -> tuple[list[DetectionResult], list[dict[str, Any]]]:
   """Same-direction overlap is a duplicate - keep the higher-ranked, drop the
   other. Opposite-direction overlap is a contradiction: two credible,
@@ -1151,10 +1226,12 @@ def _suppress_overlaps(
       continue
     # `selected` is built in rank order, so the first opposing overlap found
     # is always the strongest (highest-ranked) survivor so far.
-    opposing = None if (
-      settings.auto_trade_track_all_structural_matches
+    preserve_opposing = (
+      not force_opposing_suppression
+      and settings.auto_trade_track_all_structural_matches
       and settings.auto_trade_allow_counter_bias
-    ) else next(
+    )
+    opposing = None if preserve_opposing else next(
       (
         kept for kept in selected
         if result.direction != kept.direction
@@ -1261,12 +1338,19 @@ async def _notify_digest_once(
       "1",
       ex=settings.zone_alert_ttl,
     )
+  card_candidates, _ = _suppress_overlaps(
+    claimed_results,
+    force_opposing_suppression=True,
+  )
   structural = [
-    item for item in claimed_results if item.setup in STRUCTURAL_SETUPS
+    item for item in card_candidates if item.setup in STRUCTURAL_SETUPS
   ]
-  cards = structural or claimed_results[:1]
+  cards = sorted(structural or card_candidates[:1], key=_result_rank)
+  card_top_n = int(settings.scanner_card_top_n)
+  if card_top_n > 0:
+    cards = cards[:card_top_n]
   for index, result in enumerate(cards):
-    also = claimed_results[1:] if not structural and index == 0 else []
+    also = card_candidates[1:] if not structural and index == 0 else []
     match_for_card = None
     if execution_match is not None:
       if execution_match.strategy == result.setup:
@@ -1298,7 +1382,7 @@ async def _notify_digest_once(
         ex=max(86400, settings.auto_trade_candidate_ttl),
       )
   await _track_active_setups(client, symbol, tf, claimed_results)
-  return claimed_results
+  return cards
 
 
 async def _record_status(
@@ -1314,6 +1398,7 @@ async def _record_status(
   market_map: MarketMap | None = None,
   scalp: dict[str, Any] | None = None,
   conflicts: list[dict[str, Any]] | None = None,
+  structure_gated: list[tuple[DetectionResult, str]] | None = None,
 ) -> None:
   map_counts = {
     "buys": len(market_map.buys) if market_map is not None else 0,
@@ -1349,6 +1434,14 @@ async def _record_status(
       for item in detected
     ],
     "conflicts": conflicts or [],
+    "structure_gated": [
+      {
+        "setup": item.setup,
+        "direction": item.direction,
+        "reason": reason,
+      }
+      for item, reason in structure_gated or []
+    ],
     "sent": len(sent),
     "map": map_counts,
     "map_summary": (
@@ -1397,8 +1490,9 @@ async def _append_detect_log(
   detected: list[DetectionResult],
   sent: list[DetectionResult],
   conflicts: list[dict[str, Any]],
+  structure_gated: list[tuple[DetectionResult, str]] | None = None,
 ) -> None:
-  if not detected:
+  if not detected and not structure_gated:
     return
   sent_keys = {(item.setup, item.direction) for item in sent}
   conflict_keys = {
@@ -1407,19 +1501,31 @@ async def _append_detect_log(
     for side in (record["a"], record["b"])
   }
   entries = []
-  for item in detected:
+  gated_reasons = {
+    id(item): reason for item, reason in structure_gated or []
+  }
+  logged_results = [
+    *detected,
+    *[item for item, _ in structure_gated or []],
+  ]
+  for item in logged_results:
     detection_key = (item.setup, item.direction)
-    if detection_key in sent_keys:
+    if id(item) in gated_reasons:
+      outcome = "structure_gated"
+    elif detection_key in sent_keys:
       outcome = "sent"
     elif detection_key in conflict_keys:
       outcome = "dropped_conflict"
     else:
       outcome = "suppressed_duplicate"
-    entries.append({
+    entry = {
       "setup": item.setup,
       "confluence": item.confluence,
       "outcome": outcome,
-    })
+    }
+    if id(item) in gated_reasons:
+      entry["reason"] = gated_reasons[id(item)]
+    entries.append(entry)
   record = json.dumps({
     "recorded_at": datetime.now(timezone.utc).timestamp(),
     "entries": entries,
@@ -1459,6 +1565,7 @@ async def scan_report(
         "sent": 0.0,
         "suppressed_duplicate": 0.0,
         "dropped_conflict": 0.0,
+        "structure_gated": 0.0,
       })
       row["fires"] += 1
       row["confluence_sum"] += float(entry.get("confluence", 0))
@@ -1472,6 +1579,7 @@ async def scan_report(
       "sent": row["sent"],
       "suppressed_duplicate": row["suppressed_duplicate"],
       "dropped_conflict": row["dropped_conflict"],
+      "structure_gated": row["structure_gated"],
     }
     for setup, row in totals.items()
   }
@@ -1494,7 +1602,8 @@ def format_scan_report(
       f"<b>{escape(setup)}</b> · fires {int(row['fires'])} · "
       f"avg {row['mean_confluence']:.1f}★ · sent {int(row['sent'])} · "
       f"dup {int(row['suppressed_duplicate'])} · "
-      f"conflict {int(row['dropped_conflict'])}"
+      f"conflict {int(row['dropped_conflict'])} · "
+      f"gated {int(row['structure_gated'])}"
     )
   return "\n".join(lines)
 
@@ -1764,11 +1873,11 @@ async def _handle_event(
             lookback,
           )
   detected = []
+  structure_gated: list[tuple[DetectionResult, str]] = []
   for detector in detectors or DEFAULT_DETECTORS:
     result = detector(ctx)
     if result is None:
       continue
-    detected.append(result)
     metric_name = {
       "Key Level Reaction": "key_level_reaction_detected",
       "Demand Zone Reaction": "demand_zone_reaction_detected",
@@ -1778,6 +1887,21 @@ async def _handle_event(
     }.get(result.setup)
     if metric_name:
       await increment_metric(client, metric_name, symbol=symbol)
+    gate_reason = _structure_card_gate(result, ctx)
+    if gate_reason is not None:
+      structure_gated.append((result, gate_reason))
+      await increment_metric(client, "structure_gated", symbol=symbol)
+      log.info(
+        "scanner result structure-gated symbol=%s tf=%s setup=%s "
+        "direction=%s reason=%s",
+        symbol,
+        exec_tf,
+        result.setup,
+        result.direction,
+        gate_reason,
+      )
+      continue
+    detected.append(result)
   digest, conflicts = _digest_results(detected)
   execution_match = await _sync_strategy_match(
     client,
@@ -1810,8 +1934,17 @@ async def _handle_event(
     market_map=current_map,
     scalp=_scalp_status(ctx),
     conflicts=conflicts,
+    structure_gated=structure_gated,
   )
-  await _append_detect_log(client, symbol, exec_tf, detected, sent, conflicts)
+  await _append_detect_log(
+    client,
+    symbol,
+    exec_tf,
+    detected,
+    sent,
+    conflicts,
+    structure_gated,
+  )
   return sent
 
 

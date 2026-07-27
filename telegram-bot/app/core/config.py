@@ -433,6 +433,13 @@ class Settings(BaseSettings):
   range_scalp_cluster_min_abs: float = 0.0
   # Multi-strategy routing.
   scanner_top_n: int = 3
+  # Advisory FORMING-card controls are independent from the execution digest.
+  scanner_card_top_n: int = 2
+  # Optional M5/M15 structure-quality gate. All filters ship disabled.
+  scanner_gate_require_structural_anchor: bool = False
+  scanner_gate_max_source_touches: int = 0
+  scanner_gate_suppress_counter_bias_in_range: bool = False
+  scanner_gate_counter_bias_min_confluence: int = 3
   auto_trade_max_tracked_candidates: int = 5
   auto_trade_max_active_positions_per_symbol: int = 1
   # Quality / risk tiers.
