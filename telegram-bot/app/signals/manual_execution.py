@@ -424,6 +424,45 @@ async def _handle_manual_sl_moved(event: dict, signal_id: int) -> None:
   await trade_ops.post_result(result, (sig or {}).get("symbol", "XAU"))
 
 
+def _stop_move_is_breakeven(sig: dict, new_sl: float, event: dict) -> bool:
+  message = str(event.get("message") or "")
+  if "BE" in message.upper():
+    return True
+  entry = sig.get("entry")
+  if entry is None:
+    return False
+  entry_end = sig.get("entry_end")
+  if entry_end is None:
+    entry_end = entry
+  entry_reference = (float(entry) + float(entry_end)) / 2
+  from app.core.symbols import pip_for
+
+  pip = pip_for(sig.get("symbol", "XAU"))
+  return abs(new_sl - entry_reference) <= pip * 2
+
+
+async def _handle_stop_moved(event: dict, signal_id: int) -> None:
+  """Automatic broker stop trail (e.g. BE after TP1) for manual-algo fills.
+
+  Owner-initiated /trade_sl publishes ``manual_sl_moved`` instead; both paths
+  must fan out through ``trade_ops.post_result`` because delivery.py suppresses
+  manual-algo ``stop_moved`` events to avoid duplicate owner DMs.
+  """
+  from app.signals import trade_ops
+
+  price = event.get("price")
+  if price is None:
+    log.error("stop_moved event missing price for signal %s", signal_id)
+    return
+  sig = await get_manual_signal(signal_id)
+  if sig is None:
+    return
+  new_sl = float(price)
+  is_be = _stop_move_is_breakeven(sig, new_sl, event)
+  result = await trade_ops._execute_sl(signal_id, new_sl, is_be=is_be)
+  await trade_ops.post_result(result, sig.get("symbol", "XAU"))
+
+
 async def _handle_manual_cancelled(event: dict) -> None:
   from app.signals import trade_ops
 
@@ -505,8 +544,10 @@ async def _handle_event(
     await _handle_command_error(event, positions)
     return
   if event_type == "stop_moved":
-    # Informational only - no manual_signals mutation, the existing
-    # trailing-stop technique (StopTrailPlanner) needs nothing from here.
+    signal_id = await _resolve_signal_id(event, positions)
+    if signal_id is None:
+      return  # autonomous position; delivery.py owns channel fan-out
+    await _handle_stop_moved(event, signal_id)
     return
   signal_id = await _resolve_signal_id(event, positions)
   if signal_id is None:
