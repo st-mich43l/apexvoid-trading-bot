@@ -12,6 +12,16 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- Make protective-stop contracts route-aware: market candidates validate the
+  entry-independent raw/base stop, source, adjustment, clamp, and zone identity
+  while trading the stop recomputed at the live entry; resting
+  `single_limit`/`zone_split` contracts retain strict entry, distance, and pip
+  equality. This prevents normal publish-to-fill drift from causing
+  `final_protective_stop_contract_mismatch`.
+- Make entry contracts route-aware: market candidates observe publish-to-fill
+  drift without rejecting it while the existing 10-pip entry-zone cap remains
+  the chase guard; resting entries remain strict. Correct the losing-side stop
+  metric to `final_stop_not_on_losing_side`.
 - Correct ApexVoid Algo break-even protection to **BE+6 broker ticks**
   (`AUTO_TRADE_BE_BUFFER_TICKS=6` × tick `0.01` = **0.06** price), not
   6 trading pips × `pip_size=0.1` (= 0.60). Buffer stays on the adverse side
