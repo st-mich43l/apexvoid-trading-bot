@@ -12,6 +12,12 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- Block opposite-direction autonomous initial groups before stop/route planning:
+  worker preflight rejects with `opposite_initial_group_active` when a tracked
+  initial position exists on the other side; the C# executor runs the same guard
+  before route resolution so rejections no longer surface as misleading
+  `final_protective_stop_contract_mismatch` when e.g. SELL is open and BUY is
+  attempted.
 - Decouple `SETUP FORMING` card volume from the execution digest: advisory
   cards are capped by `SCANNER_CARD_TOP_N` (default `2`), always suppress
   overlapping opposing directions, and deduplicate structural reactions by a

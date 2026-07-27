@@ -1368,6 +1368,15 @@ public sealed class AutoTradeEngine(
         cancellationToken
       );
     }
+    if (await TryRejectOppositeInitialGroupAsync(
+      candidate,
+      direction,
+      symbol,
+      cancellationToken
+    ))
+    {
+      return true;
+    }
     // Route first: the protective-stop contract is only meaningful against the
     // entry the executor will actually use, so the route and its planned entry
     // are resolved before any stop is computed or validated.
@@ -1496,33 +1505,6 @@ public sealed class AutoTradeEngine(
     var candidateGroupId = CandidateGroupId(candidate);
     if (string.IsNullOrWhiteSpace(candidate.ParentGroupId))
     {
-      if (
-        !IsManualAlgoCandidate(candidate)
-        && (
-          _states.Values.Any(state =>
-            state.SymbolId == symbol.SymbolId
-            && state.Direction != direction
-            && string.IsNullOrWhiteSpace(state.ParentGroupId)
-          )
-          || _allSymbolPendingOrders.Any(order =>
-            order.SymbolId == symbol.SymbolId
-            && order.Label == options.Label
-            && order.Direction != direction
-          )
-        )
-      )
-      {
-        await store.IncrementMetricAsync(
-          candidate.Symbol,
-          "executor_opposite_initial_rejected",
-          cancellationToken
-        );
-        return await RejectAsync(
-          candidate,
-          "opposite autonomous initial group is already active",
-          cancellationToken
-        );
-      }
       if (await HasActiveDuplicateReactionAsync(candidate, cancellationToken))
       {
         await store.IncrementMetricAsync(
@@ -5695,6 +5677,47 @@ public sealed class AutoTradeEngine(
         targetPrices: state.TargetPrices
       );
     }
+  }
+
+  private async Task<bool> TryRejectOppositeInitialGroupAsync(
+    TradeCandidate candidate,
+    TradeDirection direction,
+    SymbolInfo symbol,
+    CancellationToken cancellationToken
+  )
+  {
+    if (
+      !string.IsNullOrWhiteSpace(candidate.ParentGroupId)
+      || IsManualAlgoCandidate(candidate)
+    )
+    {
+      return false;
+    }
+    if (
+      !_states.Values.Any(state =>
+        state.SymbolId == symbol.SymbolId
+        && state.Direction != direction
+        && string.IsNullOrWhiteSpace(state.ParentGroupId)
+      )
+      && !_allSymbolPendingOrders.Any(order =>
+        order.SymbolId == symbol.SymbolId
+        && order.Label == options.Label
+        && order.Direction != direction
+      )
+    )
+    {
+      return false;
+    }
+    await store.IncrementMetricAsync(
+      candidate.Symbol,
+      "executor_opposite_initial_rejected",
+      cancellationToken
+    );
+    return await RejectAsync(
+      candidate,
+      "opposite autonomous initial group is already active",
+      cancellationToken
+    );
   }
 
   private bool CanOpenNewGroup(TradeDirection direction)
