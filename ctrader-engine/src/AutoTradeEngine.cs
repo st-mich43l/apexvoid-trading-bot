@@ -36,6 +36,13 @@ public sealed class AutoTradeEngine(
   private bool _accountSupportsHedging;
   private volatile bool _ready;
   private volatile bool _disabled;
+  // Set when the broker returns an already-tracked PositionId for what
+  // should be a distinct independent group (see the PlaceTrancheAsync
+  // conflict check). Unlike _disabled, this only blocks new autonomous
+  // initial submissions - existing tracked positions (including both sides
+  // of the conflict) keep being reconciled and managed, since neither can
+  // be safely assumed closed.
+  private volatile bool _positionIdentityConflict;
   private CandidateExecutionLease? _activeLease;
   private CandidateLeaseHeartbeat? _heartbeat;
   private static readonly TimeSpan CandidateLeaseDuration =
@@ -1367,6 +1374,31 @@ public sealed class AutoTradeEngine(
         date,
         cancellationToken
       );
+    }
+    if (
+      _positionIdentityConflict
+      && string.IsNullOrWhiteSpace(candidate.ParentGroupId)
+      && !IsManualAlgoCandidate(candidate)
+    )
+    {
+      await store.IncrementMetricAsync(
+        candidate.Symbol,
+        "executor_position_identity_conflict_active",
+        cancellationToken
+      );
+      return await RejectAsync(
+        candidate,
+        "broker_position_identity_group_conflict",
+        cancellationToken
+      );
+    }
+    if (await TryRejectIndependentGroupOnNonHedgedAccountAsync(
+      candidate,
+      symbol,
+      cancellationToken
+    ))
+    {
+      return true;
     }
     if (await TryRejectOppositeInitialGroupAsync(
       candidate,
@@ -3642,6 +3674,45 @@ public sealed class AutoTradeEngine(
       FillSourceQuoteTimestamp: _lastSpot?.Timestamp ?? now,
       FillSourceQuoteSequence: _spotSequence
     );
+    if (
+      _states.TryGetValue(state.PositionId, out var existingState)
+      && GroupId(existingState) != GroupId(state)
+    )
+    {
+      // The broker returned an already-tracked PositionId for what should
+      // be a distinct independent group - this must never silently become
+      // a scale-in of the existing group, and the existing group's state
+      // must not be overwritten. The broker fill already happened and
+      // cannot be undone here; all that can be done is preserve what is
+      // already tracked, refuse to claim the new fill is safely managed,
+      // and stop admitting further autonomous initial groups until a human
+      // reconciles the conflict.
+      _positionIdentityConflict = true;
+      await store.IncrementMetricAsync(
+        candidate.Symbol,
+        "position_state_conflict",
+        cancellationToken
+      );
+      _log(
+        "auto-trade broker_position_identity_group_conflict "
+          + $"position_id={state.PositionId} "
+          + $"existing_group_id={GroupId(existingState)} "
+          + $"incoming_group_id={GroupId(state)} "
+          + $"incoming_candidate_id={Short(candidate.CandidateId)}"
+      );
+      await PublishAsync(
+        "error",
+        $"broker_position_identity_group_conflict: position {state.PositionId} "
+          + $"is already tracked under group {GroupId(existingState)}; cannot "
+          + $"adopt the new fill for group {GroupId(state)}",
+        cancellationToken,
+        candidate.CandidateId,
+        state.PositionId,
+        groupId: GroupId(state),
+        reasonCode: "broker_position_identity_group_conflict"
+      );
+      return true;
+    }
     _states[state.PositionId] = state;
     await PropagateGroupMetadataAsync(state, cancellationToken);
     await store.SavePositionAsync(state, cancellationToken);
@@ -5372,6 +5443,55 @@ public sealed class AutoTradeEngine(
     var trackedIds = await store.GetTrackedPositionIdsAsync(cancellationToken);
     foreach (var stale in trackedIds.Where(id => !openIds.Contains(id)))
     {
+      // A single missing broker snapshot is only "suspected" missing, not
+      // confirmed closed - a transient reconcile gap must never delete an
+      // open position's tracking. Require at least
+      // options.PositionMissingConfirmations independent snapshots, each
+      // separated by at least options.PositionMissingRecheckSeconds on the
+      // executor clock, before terminalising. This does not apply to a
+      // close the engine itself submitted and got a confirmed broker
+      // response for - those paths remove _states/store directly and never
+      // reach this reconcile-driven stale-detection loop.
+      var missingNow = _clock().ToUnixTimeSeconds();
+      var missing = await store.GetPositionMissingAsync(stale, cancellationToken);
+      if (
+        missing is not null
+        && missingNow - missing.LastCheckedAt < options.PositionMissingRecheckSeconds
+      )
+      {
+        continue;
+      }
+      var confirmations = (missing?.Confirmations ?? 0) + 1;
+      if (confirmations < options.PositionMissingConfirmations)
+      {
+        await store.SavePositionMissingAsync(
+          stale,
+          missing is null
+            ? new PositionMissingRecord(confirmations, missingNow, missingNow)
+            : missing with { Confirmations = confirmations, LastCheckedAt = missingNow },
+          cancellationToken
+        );
+        await store.IncrementMetricAsync(
+          RequireSymbol().RedisSymbol,
+          "position_missing_snapshot_suspected",
+          cancellationToken
+        );
+        _log(
+          $"auto-trade position_missing_snapshot_suspected position_id={stale}"
+            + $" confirmations={confirmations}"
+        );
+        continue;
+      }
+      await store.ClearPositionMissingAsync(stale, cancellationToken);
+      await store.IncrementMetricAsync(
+        RequireSymbol().RedisSymbol,
+        "position_missing_snapshot_confirmed",
+        cancellationToken
+      );
+      _log(
+        $"auto-trade position_missing_snapshot_confirmed position_id={stale}"
+          + $" confirmations={confirmations}"
+      );
       var state = _states.GetValueOrDefault(stale)
         ?? await store.GetPositionAsync(stale, cancellationToken);
       _states.Remove(stale);
@@ -5529,6 +5649,24 @@ public sealed class AutoTradeEngine(
     CancellationToken cancellationToken
   )
   {
+    // A position present in this snapshot clears any missing-confirmation
+    // progress from an earlier reconcile pass that briefly did not see it.
+    if (
+      await store.GetPositionMissingAsync(position.PositionId, cancellationToken)
+        is not null
+    )
+    {
+      await store.ClearPositionMissingAsync(position.PositionId, cancellationToken);
+      await store.IncrementMetricAsync(
+        RequireSymbol().RedisSymbol,
+        "position_missing_snapshot_recovered",
+        cancellationToken
+      );
+      _log(
+        "auto-trade position_missing_snapshot_recovered "
+          + $"position_id={position.PositionId}"
+      );
+    }
     var stored = await store.GetPositionAsync(position.PositionId, cancellationToken);
     var parsed = stored is null ? ParseComment(position) : null;
     var state = stored ?? parsed;
@@ -5670,6 +5808,73 @@ public sealed class AutoTradeEngine(
         targetPrices: state.TargetPrices
       );
     }
+  }
+
+  /// <summary>
+  /// Independent strategies cannot safely retain independent SL/TP plans
+  /// when the broker represents them as one net position. On a non-hedged
+  /// (netting) account, a second autonomous initial group - same direction
+  /// or opposite - collapses into the existing net position at the broker,
+  /// silently merging two strategies' SL/TP/tracking into one. Fail closed
+  /// before any broker submission rather than letting CanOpenNewGroup's
+  /// broker_netting compatibility path (intended for controlled
+  /// opposite-direction flip/net behavior) admit a second independent
+  /// initial group. Legacy explicitly linked scale-ins (ParentGroupId
+  /// present) are unaffected - they already share the parent's broker
+  /// position by design and go through ValidateAddTriggers instead.
+  /// </summary>
+  private async Task<bool> TryRejectIndependentGroupOnNonHedgedAccountAsync(
+    TradeCandidate candidate,
+    SymbolInfo symbol,
+    CancellationToken cancellationToken
+  )
+  {
+    if (
+      _accountSupportsHedging
+      || !string.IsNullOrWhiteSpace(candidate.ParentGroupId)
+      || IsManualAlgoCandidate(candidate)
+    )
+    {
+      return false;
+    }
+    var activePositions = _allSymbolPositions
+      .Where(position => position.SymbolId == symbol.SymbolId && position.Label == options.Label)
+      .ToArray();
+    var activeOrders = _allSymbolPendingOrders
+      .Where(order => order.SymbolId == symbol.SymbolId && order.Label == options.Label)
+      .ToArray();
+    if (activePositions.Length == 0 && activeOrders.Length == 0)
+    {
+      return false;
+    }
+    var activePositionIds = activePositions
+      .Select(position => position.PositionId)
+      .ToArray();
+    var activeGroupIds = _states.Values
+      .Where(state => activePositionIds.Contains(state.PositionId))
+      .Select(GroupId)
+      .Distinct()
+      .ToArray();
+    _log(
+      "auto-trade independent_group_rejected_non_hedged"
+        + $" account_type={_account?.AccountType ?? "unknown"}"
+        + $" broker_hedging_capability={_accountSupportsHedging}"
+        + $" incoming_candidate_id={Short(candidate.CandidateId)}"
+        + $" incoming_group_id={CandidateGroupId(candidate)}"
+        + $" active_position_ids=[{string.Join(",", activePositionIds)}]"
+        + $" active_group_ids=[{string.Join(",", activeGroupIds)}]"
+        + " reason=independent_strategy_requires_hedged_account"
+    );
+    await store.IncrementMetricAsync(
+      candidate.Symbol,
+      "independent_group_rejected_non_hedged",
+      cancellationToken
+    );
+    return await RejectAsync(
+      candidate,
+      "independent_strategy_requires_hedged_account",
+      cancellationToken
+    );
   }
 
   private async Task<bool> TryRejectOppositeInitialGroupAsync(

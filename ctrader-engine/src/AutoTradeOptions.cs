@@ -109,7 +109,15 @@ public sealed record AutoTradeOptions(
   bool RangeBoxMoveSlToBeAfterScaleOut = false,
   decimal ExecutionZoneMaxWidthAtr = 2.0m,
   decimal ExecutionZoneMaxWidthPips = 100m,
-  string PostFillTargetFallback = "fill_relative"
+  string PostFillTargetFallback = "fill_relative",
+  // A tracked position missing from a single broker reconcile snapshot is
+  // only "suspected" missing, not closed - it must be independently
+  // confirmed absent across this many reconcile passes, each separated by
+  // at least PositionMissingRecheckSeconds, before ReconcileAsync
+  // terminalises it. See docs on the incident this guards against: a
+  // transient reconcile gap must never delete an open position's tracking.
+  int PositionMissingConfirmations = 2,
+  int PositionMissingRecheckSeconds = 3
 )
 {
   // Shared target-selection contract (app/autotrade/range_targets.py on the
@@ -443,7 +451,13 @@ public sealed record AutoTradeOptions(
     PostFillTargetFallback: resolver.String(
       "AUTO_TRADE_POST_FILL_TARGET_FALLBACK",
       "fill_relative"
-    ).Trim().ToLowerInvariant()
+    ).Trim().ToLowerInvariant(),
+    PositionMissingConfirmations: resolver.Int(
+      "AUTO_TRADE_POSITION_MISSING_CONFIRMATIONS", 2
+    ),
+    PositionMissingRecheckSeconds: resolver.Int(
+      "AUTO_TRADE_POSITION_MISSING_RECHECK_SECONDS", 3
+    )
   );
   var deprecated = resolver.DeprecatedVariables.ToList();
   if (deprecated.Contains("AUTO_TRADE_BE_BUFFER_PIPS", StringComparer.Ordinal))
@@ -502,6 +516,20 @@ public sealed record AutoTradeOptions(
       throw new AutoTradeConfigurationException(
         "Auto trade disabled: AUTO_TRADE_SL_DISTANCE must be greater than zero "
         + "and at most 6.5"
+      );
+    }
+    if (PositionMissingConfirmations < 1)
+    {
+      throw new AutoTradeConfigurationException(
+        "Auto trade disabled: AUTO_TRADE_POSITION_MISSING_CONFIRMATIONS "
+        + "must be at least 1"
+      );
+    }
+    if (PositionMissingRecheckSeconds < 1)
+    {
+      throw new AutoTradeConfigurationException(
+        "Auto trade disabled: AUTO_TRADE_POSITION_MISSING_RECHECK_SECONDS "
+        + "must be at least 1"
       );
     }
     if (TargetsPips.Count != 5 || TargetsPips.Any(value => value <= 0))
