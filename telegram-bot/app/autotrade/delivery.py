@@ -10,7 +10,7 @@ from typing import Literal
 
 from aiogram.exceptions import TelegramBadRequest
 
-from app.autotrade import units
+from app.analysis.scanner import clear_active_setup_tracking
 from app.autotrade.volume_pips import (
   format_signed_pips,
   volume_percent,
@@ -874,6 +874,14 @@ async def _deliver_auto_trade_event(
   send=None,
 ) -> bool:
   event_type = str(event.get("type") or "")
+  if event_type == "opened":
+    symbol = str(event.get("symbol") or "XAU")
+    direction = str(event.get("direction") or "").upper()
+    await clear_active_setup_tracking(
+      client,
+      symbol,
+      direction=direction or None,
+    )
   if profile == "internal":
     await _correlate_strategy_route(client, event)
   if (

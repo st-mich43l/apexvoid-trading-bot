@@ -4969,6 +4969,73 @@ async def _group_is_active(
   return group_id in tokens or group_id[:10] in tokens
 
 
+def _normalize_trade_direction(value: object) -> str | None:
+  if value is None:
+    return None
+  if isinstance(value, int):
+    if value == 0:
+      return "BUY"
+    if value == 1:
+      return "SELL"
+    return None
+  text = str(value).strip().upper()
+  if text in {"BUY", "B", "0"}:
+    return "BUY"
+  if text in {"SELL", "S", "1"}:
+    return "SELL"
+  return None
+
+
+async def _load_tracked_position_states(client: Any) -> list[dict[str, Any]]:
+  raw_ids = await client.smembers("auto_trade:positions")
+  if not raw_ids:
+    return []
+  positions: list[dict[str, Any]] = []
+  for raw_id in raw_ids:
+    token = raw_id.decode() if isinstance(raw_id, bytes) else str(raw_id)
+    try:
+      position_id = int(token)
+    except (TypeError, ValueError):
+      continue
+    raw = await client.get(f"auto_trade:position:{position_id}")
+    if not raw:
+      continue
+    try:
+      payload = json.loads(
+        raw.decode() if isinstance(raw, bytes) else str(raw)
+      )
+    except (TypeError, ValueError, json.JSONDecodeError):
+      continue
+    if isinstance(payload, dict):
+      positions.append(payload)
+  return positions
+
+
+async def _active_opposite_initial_group(
+  client: Any,
+  *,
+  direction: str,
+) -> dict[str, Any] | None:
+  """Mirror the C# executor guard for opposite autonomous initial groups."""
+  wanted = str(direction or "").upper()
+  if wanted not in {"BUY", "SELL"}:
+    return None
+  opposite = "SELL" if wanted == "BUY" else "BUY"
+  for payload in await _load_tracked_position_states(client):
+    if str(payload.get("parent_group_id") or "").strip():
+      continue
+    remaining = payload.get("remaining_volume")
+    if remaining is not None:
+      try:
+        if int(remaining) <= 0:
+          continue
+      except (TypeError, ValueError):
+        pass
+    if _normalize_trade_direction(payload.get("direction")) == opposite:
+      return payload
+  return None
+
+
 async def _common_preflight(
   client: Any,
   intent: ExecutionIntent,
@@ -5002,6 +5069,26 @@ async def _common_preflight(
       message="intent waits for a fresh cTrader quote",
       subject=subject,
     )
+  if intent.is_initial:
+    opposing = await _active_opposite_initial_group(
+      client,
+      direction=intent.direction,
+    )
+    if opposing is not None:
+      return _preflight_decision(
+        intent,
+        executable=False,
+        terminal=True,
+        stage="candidate_claim",
+        reason_code="opposite_initial_group_active",
+        message="opposite autonomous initial group is already active",
+        measured={
+          "active_direction": _normalize_trade_direction(opposing.get("direction")),
+          "active_group_id": opposing.get("group_id"),
+          "active_position_id": opposing.get("position_id"),
+        },
+        subject=subject,
+      )
   direction_for_quote = str(getattr(subject, "direction", intent.direction))
   executable_quote = _executable_spot_price(spot, direction_for_quote)
   policy = evaluate_execution_policy(
@@ -6178,7 +6265,7 @@ async def _handle_event(
         retained=not preflight.terminal,
         preflight_reason_code=preflight.reason_code,
         signal_source=intent.source,
-        publish_status=False,
+        publish_status=preflight.terminal and not preflight.executable,
       )
       if preflight.terminal:
         await _consume_strategy_match(client, symbol, routed_match)
