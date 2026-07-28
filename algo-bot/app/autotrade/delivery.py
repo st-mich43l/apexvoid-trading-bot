@@ -380,6 +380,15 @@ def _format_position_closed(event: dict, message: str) -> str:
   cleaned = _MONEY_RE.sub("", message).strip(" ·") if message else ""
   if cleaned:
     lines.extend(["", escape(cleaned)])
+  # Earlier TP legs on this group each already posted their own card with
+  # their own leg pips (see _format_take_profit) - this is the only place
+  # that recaps the group's final blended result, so a close that followed
+  # one or more partial TPs (e.g. SL hit after being moved to BE/TP2/TP3)
+  # doesn't read as a bare, unexplained "position closed" with no result.
+  if event.get("previous_state") == "partially_closed":
+    group_realized = _event_float(event, "group_realized_pips")
+    if group_realized is not None:
+      lines.append(f"Total: <b>{format_signed_pips(group_realized)} pips</b>")
   return "\n".join(lines)
 
 
