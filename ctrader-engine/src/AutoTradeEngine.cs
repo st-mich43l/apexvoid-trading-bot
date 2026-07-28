@@ -4796,19 +4796,22 @@ public sealed class AutoTradeEngine(
     return Math.Max(achieved, SignedPips(state, exitEstimate));
   }
 
-  // True when at least one TP was booked and the exit sits on the current
-  // protective stop (BE / trailed TP) within a small pip tolerance.
+  // True when the exit sits on the protective stop (initial or trailed)
+  // within a small pip tolerance. Covers both a clean SL out before any
+  // TP and a BE/trail stop-out after booked targets — otherwise ordinary
+  // broker SL hits read as "reason unconfirmed" when OrderType lookup fails.
   private bool LooksLikeProtectiveStopHit(
     AutoTradePositionState state,
     decimal exitEstimate
   )
   {
-    if (state.NextTargetIndex <= 0 || state.CurrentStopLoss is not decimal stop)
+    var stop = state.CurrentStopLoss ?? state.InitialStopLoss;
+    if (stop is not decimal stopPrice)
     {
       return false;
     }
     var tolerance = Math.Max(options.PipSize, 2m * options.PipSize);
-    return Math.Abs(exitEstimate - stop) <= tolerance;
+    return Math.Abs(exitEstimate - stopPrice) <= tolerance;
   }
 
   private static string GroupId(AutoTradePositionState state) =>
@@ -5618,11 +5621,11 @@ public sealed class AutoTradeEngine(
         var exitEstimate = closeLookup.ExecutionPrice
           ?? state.CurrentStopLoss
           ?? state.EntryPrice;
-        // After one or more TPs the protective stop has been trailed (BE /
-        // prior TP). If the position then vanishes with an exit at that
-        // stop, treat it as a broker SL/TP hit even when the order-list
-        // lookup could not confirm OrderType - otherwise operators see
-        // "reason unconfirmed" for a normal BE stop-out.
+        // If the position vanishes with an exit at the protective stop
+        // (initial SL or trailed BE/prior-TP), treat it as a broker SL/TP
+        // hit even when the order-list lookup could not confirm OrderType —
+        // otherwise operators see "reason unconfirmed" for ordinary stop-outs
+        // (full SL before any TP, or BE after booked targets).
         if (
           closeReason == PositionCloseReason.Unknown
           && LooksLikeProtectiveStopHit(state, exitEstimate)
