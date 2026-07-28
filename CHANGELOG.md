@@ -55,11 +55,12 @@ dated section after deployment.
   mirror: `app.autotrade.scale_in_sizing`.
 
 ### Fixed
-- After booked TPs, a BE/protective-stop exit that reconcile discovers without
-  a confirmed OrderType no longer shows `reason unconfirmed` with a diluted
-  volume-weighted Total (e.g. TP2 ~60p then BE residual → `+22.8`). Close
-  reason is inferred as broker SL/TP when exit sits on the trailed stop, and
-  Total / `group_realized_pips` reports the highest target reached (TP2 = 60).
+- Broker SL/TP exits discovered by reconcile without a confirmed OrderType no
+  longer show `reason unconfirmed`. Close reason is inferred when the exit
+  sits on the protective stop — both a clean full SL before any TP and a BE
+  stop-out after booked targets. After booked TPs, Total /
+  `group_realized_pips` reports the highest target reached (e.g. TP2 = 60)
+  instead of a volume-weighted blend diluted by the BE residual (~22.8).
 - Manual / algo / algo_manual journal history and `/trade_stats` now record
   the highest TP/pips hit (`legs_achieved_pips`), not a volume-fraction or
   lot-weighted net that dilutes booked targets with a later BE residual.

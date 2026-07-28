@@ -19,7 +19,7 @@ from app.core.environment_options import (
 )
 
 
-CONTRACT_MODES = ("legacy_v6", "shadow_v7", "v7_primary", "v7_only")
+CONTRACT_MODES = ("v7_only",)
 
 
 CONFIG_MANIFEST_VERSION = 2

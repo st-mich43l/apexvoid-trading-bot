@@ -558,7 +558,7 @@ public sealed record AutoTradeConfigManifest(
   int EntryPlanVersion = 1,
   int StopPlanVersion = 3,
   string PostFillTargetFallback = "fill_relative",
-  string ContractMode = "legacy_v6",
+  string ContractMode = "v7_only",
   int TradePlanVersion = TradePlanContract.Version,
   string TradePlanStream = "execution:trade_plans"
 );

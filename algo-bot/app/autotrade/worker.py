@@ -3940,7 +3940,6 @@ async def _publish_strategy_match(
   return candidate_id
 
 
-_V7_ACTIVE_MODES = ("shadow_v7", "v7_primary", "v7_only")
 _V7_MAX_VOLUME_DEFAULT = 100_000
 
 
@@ -3997,14 +3996,10 @@ async def _publish_trade_plan_v7(
   the originating task explicitly name as something worker.py must not own
   on the V7 path; targets_pips is used exactly as scanner.py decided it.
 
-  Returns the published plan_id, or None if not published (contract mode
-  off, thesis already claimed by another setup, or a guard/policy
-  rejection - always recorded via _record_v7_build_rejected, never a bare
-  silent return).
+  Returns the published plan_id, or None if not published (thesis already
+  claimed by another setup, or a guard/policy rejection - always recorded
+  via _record_v7_build_rejected, never a bare silent return).
   """
-  contract_mode = str(settings.auto_trade_contract_mode or "legacy_v6")
-  if contract_mode not in _V7_ACTIVE_MODES:
-    return None
   if spot is None or not spot.fresh:
     return None
   if not match.thesis_id:
@@ -6582,6 +6577,12 @@ async def _handle_event(
         )
         return publication_result
       try:
+        # V7 is the sole autonomous order path, per
+        # docs/adr-trade-plan-v7-boundary.md - the V6 candidate path is
+        # removed entirely for autonomous publication (not gated behind a
+        # mode) so a confirmed setup can never arm both a V7 plan and a V6
+        # candidate for the same thesis. Existing open V6 positions are
+        # untouched; this only blocks new autonomous publication.
         await _publish_trade_plan_v7(
           client,
           symbol,
@@ -6591,33 +6592,7 @@ async def _handle_event(
           htf_levels=htf_levels,
           regime=regime,
         )
-        if str(settings.auto_trade_contract_mode or "legacy_v6") == "v7_only":
-          # V7 is the sole autonomous order path in this mode - no new V6
-          # candidate may be published, per docs/adr-trade-plan-v7-boundary.md.
-          # Existing open V6 positions are untouched; this only blocks new
-          # autonomous publication.
-          await _record_gate_reject(
-            client, symbol, "legacy_candidate_disabled_in_v7_only",
-          )
-          published = None
-        else:
-          published = await _publish_strategy_match(
-            client,
-            symbol,
-            spot,
-            routed_match,
-            consume_redis_match=(
-              not settings.auto_trade_multi_match_enabled
-              and bool(scanner_strategy_matches)
-            ),
-            match_source=intent.source,
-            htf_zones=htf_zones,
-            htf_levels=htf_levels,
-            regime=regime,
-            market_map=guard_market_map,
-            frames=frames,
-            cycle_id=str(event_ts or ""),
-          )
+        published = None
       finally:
         await release_owned_lock(client, route_lock, route_lock_token)
       if published is not None:
@@ -6644,30 +6619,11 @@ async def _handle_event(
         client, routed_match, published,
       )
     elif intent.intent_id == box_intent_id:
-      if str(settings.auto_trade_contract_mode or "legacy_v6") == "v7_only":
-        # Private M1 range gate is a V6-only autonomous detector (Section A/L
-        # of the V7 cutover) - it never feeds scanner.py's setup lifecycle,
-        # so it has no V7 equivalent and must not publish new candidates
-        # once V7 is the sole autonomous path.
-        await _record_gate_reject(
-          client, symbol, "legacy_candidate_disabled_in_v7_only",
-        )
-        published = None
-      else:
-        published = await _publish_candidate(
-          client,
-          symbol,
-          event_ts,
-          spot,
-          decision,
-          scale_context,
-          regime=regime,
-          htf_zones=htf_zones,
-          htf_levels=htf_levels,
-          gate_source="private_range",
-          market_map=guard_market_map,
-          frames=frames,
-        )
+      # Private M1 range gate is a V6-only autonomous detector (Section A/L
+      # of the V7 cutover) - it never feeds scanner.py's setup lifecycle, so
+      # it has no V7 equivalent and must not publish new autonomous
+      # candidates now that V7 is the sole autonomous path.
+      published = None
       box_candidate_id = published
       publication_result = (
         CandidatePublicationResult.published(published)
@@ -6675,26 +6631,11 @@ async def _handle_event(
         else CandidatePublicationResult.blocked("publication_unavailable")
       )
     elif intent.intent_id == trend_intent_id:
-      if str(settings.auto_trade_contract_mode or "legacy_v6") == "v7_only":
-        # Private trend detector (trend.py) is likewise V6-only autonomous
-        # analysis, parallel to (not fed by) scanner.py - see Section A/L.
-        await _record_gate_reject(
-          client, symbol, "legacy_candidate_disabled_in_v7_only",
-        )
-        published = None
-      else:
-        published = await _publish_trend_candidate(
-          client,
-          symbol,
-          event_ts,
-          spot,
-          regime,
-          trend_decision,
-          htf_zones=htf_zones,
-          htf_levels=htf_levels,
-          market_map=guard_market_map,
-          frames=frames,
-        )
+      # Private trend detector (trend.py) is likewise V6-only autonomous
+      # analysis, parallel to (not fed by) scanner.py - see Section A/L. It
+      # must not publish new autonomous candidates now that V7 is the sole
+      # autonomous path.
+      published = None
       trend_candidate_id = published
       publication_result = (
         CandidatePublicationResult.published(published)
