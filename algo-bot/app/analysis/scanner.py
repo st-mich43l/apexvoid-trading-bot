@@ -57,15 +57,19 @@ from app.autotrade.multi_match import (
   strategy_matches_key,
 )
 from app.autotrade.setup_lifecycle import (
+  ARMED_WAITING_TRIGGER,
   CONFIRMED,
   DISCOVERED,
   FORMING,
+  INVALIDATED,
   TOUCHED,
   WATCHING,
   SetupLifecycleError,
   create_setup,
+  load_setup,
   transition_setup,
 )
+from app.autotrade.setup_card import kill_setup_card
 
 _PRE_CONFIRMED_CHAIN = (DISCOVERED, WATCHING, TOUCHED, FORMING, CONFIRMED)
 from app.autotrade.lifecycle import emit_lifecycle, increment_metric
@@ -82,7 +86,12 @@ from app.autotrade.range_context import (
 from app.autotrade import units
 from app.autotrade.map_strategy import market_map_display_key, market_map_key
 from app.core.symbols import SYMBOLS, canonical_symbol, pip_for
-from app.bot.client import send_scanner_with_retry
+from app.bot.client import (
+  delete_scanner_message,
+  edit_scanner_message_text,
+  send_scanner_with_retry,
+)
+from app.autotrade.setup_card import post_or_edit_forming_card
 
 log = logging.getLogger(__name__)
 
@@ -935,14 +944,22 @@ async def _track_active_setups(
   symbol: str,
   tf: str,
   sent: list[DetectionResult],
+  match_ids_by_card: dict[int, str] | None = None,
 ) -> None:
-  for result in sent:
+  match_ids_by_card = match_ids_by_card or {}
+  for index, result in enumerate(sent):
     payload = json.dumps({
       "setup": result.setup,
       "direction": result.direction,
       "zone_low": result.entry_zone.low,
       "zone_high": result.entry_zone.high,
       "confluence": result.confluence,
+      # One forming card per setup (P4): carried through so
+      # _check_setup_invalidations can delete this setup's card instead of
+      # posting a standalone "SETUP INVALIDATED" message, for setups that
+      # have a live setup_lifecycle record. None for setups that never
+      # produced an execution match - unchanged legacy behavior for those.
+      "match_id": match_ids_by_card.get(index),
     }, separators=(",", ":"))
     await client.set(
       _active_setup_band_key(symbol, tf, result),
@@ -1049,7 +1066,31 @@ async def _check_setup_invalidations(
     ):
       continue
     notified.append(state)
-    if settings.telegram_owner_id:
+    match_id = str(state.get("match_id") or "").strip()
+    setup_record = await load_setup(client, match_id) if match_id else None
+    if setup_record is not None and setup_record.state in (
+      CONFIRMED, ARMED_WAITING_TRIGGER,
+    ):
+      # One forming card per setup (P4): a setup still waiting to publish
+      # gets its card deleted, not a standalone "SETUP INVALIDATED"
+      # message - never re-carded afterwards. A setup that has ALREADY
+      # published a plan (PLAN_BUILT/PLAN_PUBLISHED/ARMED) is left alone
+      # entirely here - it may have a live position, and its card is still
+      # the anchor future FILLED/SL-moved/closed replies thread to.
+      try:
+        await transition_setup(
+          client, match_id, INVALIDATED, reason_code="structure_broke",
+        )
+        await kill_setup_card(
+          client, match_id, reason_code="structure_broke",
+          delete_fn=delete_scanner_message, edit_fn=edit_scanner_message_text,
+        )
+      except SetupLifecycleError:
+        log.exception(
+          "scanner could not invalidate setup symbol=%s tf=%s match_id=%s",
+          symbol, tf, match_id,
+        )
+    elif settings.telegram_owner_id:
       await notify(
         _format_invalidation(state, symbol, tf),
         chat_id=settings.telegram_owner_id,
@@ -1545,6 +1586,7 @@ async def _notify_digest_once(
   htf_order: list[str],
   market_map: MarketMap | None = None,
   execution_match: StrategyMatch | None = None,
+  edit: NotifyFn | None = None,
 ) -> list[DetectionResult]:
   if not results:
     return []
@@ -1598,6 +1640,7 @@ async def _notify_digest_once(
   card_top_n = int(settings.scanner_card_top_n)
   if card_top_n > 0:
     cards = cards[:card_top_n]
+  match_ids_by_card: dict[int, str] = {}
   for index, result in enumerate(cards):
     also = card_candidates[1:] if not structural and index == 0 else []
     match_for_card = None
@@ -1611,26 +1654,33 @@ async def _notify_digest_once(
         match_for_card = execution_match
       elif index == 0:
         match_for_card = execution_match
-    sent = await notify(
-      _format_detection(
-        symbol,
-        tf,
-        ctx,
-        result,
-        htf_order,
-        also,
-        market_map,
-        match_for_card,
-      ),
-      chat_id=settings.telegram_owner_id,
+    text = _format_detection(
+      symbol,
+      tf,
+      ctx,
+      result,
+      htf_order,
+      also,
+      market_map,
+      match_for_card,
     )
-    if match_for_card is not None and getattr(sent, "message_id", None):
-      await client.set(
-        f"auto_trade:forming_message:{match_for_card.match_id}",
-        str(sent.message_id),
-        ex=max(86400, settings.auto_trade_candidate_ttl),
+    if match_for_card is not None:
+      # One forming card per setup (P4): re-detection of the same setup_id
+      # edits its existing card instead of posting a new one, and a
+      # terminal (rejected/invalidated/expired) setup is never re-carded -
+      # both enforced inside post_or_edit_forming_card.
+      await post_or_edit_forming_card(
+        client,
+        match_for_card.match_id,
+        text,
+        chat_id=settings.telegram_owner_id,
+        send_fn=notify,
+        edit_fn=edit or edit_scanner_message_text,
       )
-  await _track_active_setups(client, symbol, tf, cards)
+      match_ids_by_card[index] = match_for_card.match_id
+    else:
+      await notify(text, chat_id=settings.telegram_owner_id)
+  await _track_active_setups(client, symbol, tf, cards, match_ids_by_card)
   return cards
 
 
@@ -1974,6 +2024,7 @@ async def _handle_event(
   client: Any | None = None,
   detectors: Iterable[SetupDetector] | None = None,
   notify: NotifyFn | None = None,
+  edit: NotifyFn | None = None,
 ) -> list[DetectionResult]:
   parsed = _parse_bar_event(data)
   if parsed is None:
@@ -1988,6 +2039,7 @@ async def _handle_event(
 
   client = client or redis_state.get_client()
   notify = notify or send_scanner_with_retry
+  edit = edit or edit_scanner_message_text
   htf_order = _htf_tfs()
   ctx, frames = await _load_market_context_for_symbol(
     symbol,
@@ -2170,6 +2222,7 @@ async def _handle_event(
     htf_order,
     current_map,
     execution_match,
+    edit,
   )
   await _record_status(
     client,

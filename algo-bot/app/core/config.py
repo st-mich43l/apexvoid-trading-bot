@@ -373,6 +373,10 @@ class Settings(BaseSettings):
   )
   m1_trigger_wick_fraction: float = 0.5
   m1_trigger_strong_close_pct: float = 0.2
+  # One forming card per setup (P4): lifecycle updates thread as replies to
+  # it, and it is deleted (never a "rejected" message) on terminal.
+  delivery_thread_lifecycle: bool = True
+  delivery_delete_on_terminal: bool = True
   auto_trade_key_level_reaction_enabled: bool = Field(
     default=True,
     validation_alias=AliasChoices("AUTO_TRADE_KEY_LEVEL_REACTION_ENABLED"),

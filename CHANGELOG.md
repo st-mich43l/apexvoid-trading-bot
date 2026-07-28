@@ -88,6 +88,25 @@ dated section after deployment.
   `"range"` state) until H1 has at least 50 closed bars, instead of
   silently falling back to M15/M5-only bias while H1 warms up after a
   fresh subscribe or a redeploy gap.
+- Setup delivery is now one forming card per setup (anchored to
+  `setup_lifecycle.py`'s `setup_id`, stored at `auto_trade:forming_message:
+  {setup_id}` alongside its chat id) with a reply-threaded lifecycle:
+  `plan_armed`/`order_filled`/`take_profit`/`stop_moved`/`position_closed`
+  reply directly to the card instead of scattering standalone messages
+  (`delivery_thread_lifecycle`, default on). Re-detection of the same setup
+  edits the existing card (`app/autotrade/setup_card.py`) rather than
+  posting a new one. Rejected, invalidated and expired setups have their
+  card deleted and produce no message at all - no more "EXECUTOR REJECTED"/
+  "SETUP INVALIDATED" spam - and are never re-carded afterwards
+  (`delivery_delete_on_terminal`, default on; falls back to editing the card
+  to a neutral terminal state if Telegram's deletion window has passed).
+  New `ARMED_WAITING_TRIGGER` setups expire via their own `expires_at` if
+  the M1 trigger never fires; a build rejection after the trigger fires, and
+  a scanner-detected structure invalidation for a still-waiting setup, both
+  route through the same delete-the-card path instead of a "rejected"
+  card. A position with no `setup_lifecycle` record (eg. an older V6
+  position) is unaffected - lifecycle replies fall back to the pre-P4
+  position-id reply chain exactly as before.
 
 ### Removed
 - The private M1 range gate (`app/autotrade/gate.py`) and the M1
