@@ -1,31 +1,38 @@
-"""Build TradePlan V7 from an already-confirmed StrategyMatch (Phase 2).
+"""Build TradePlan V7 from an already-confirmed StrategyMatch.
 
 Per docs/adr-trade-plan-v7-boundary.md, this is a pure translation, not a
 second decision: `StrategyMatch` already carries Python's confirmed
 strategy/direction/entry-zone/structural-invalidation-price/target-pip-ladder
 (the scanner "owns the complete price-action decision", per
-strategy_match.py's own docstring). This module only reshapes that already-
-decided data into the V7 contract shape - it does not classify regime,
-resolve a route, or compute a stop; `stop.price` is exactly
-`match.structure_swing`, the same structural swing price the scanner already
-used to confirm the setup.
+strategy_match.py's own docstring). This module reshapes that already-decided
+data into the V7 contract shape by calling the SAME `evaluate_execution_policy`
+function the V6 path already uses for route/stop planning
+(app/autotrade/execution_policy.py) - it does not classify regime, resolve a
+route from scratch, or compute a stop independently. `entry.type` is whatever
+`evaluate_execution_policy` resolved (market_watch/single_limit/limit_ladder),
+`stop.price` is exactly the Python-planned protective stop, `analysis.bias`/
+`analysis.regime`/`source_structure.kind` are the real values captured on the
+StrategyMatch at detection time (see strategy_match.py's structural_kind/
+structural_timeframe/htf_bias/regime_kind fields) - never derived from
+direction.
 
-Not yet wired into worker.py's live publish path - callers use this
-explicitly (initially: shadow-mode comparison and tests). Wiring this into
-production candidate publishing is a later phase, gated by
-AUTO_TRADE_CONTRACT_MODE.
+Wired into worker.py's live publish path behind AUTO_TRADE_CONTRACT_MODE
+(app/autotrade/worker.py::_publish_trade_plan_v7).
 """
 
 from __future__ import annotations
 
 from decimal import Decimal, ROUND_HALF_UP
-from typing import Sequence
+from typing import Any, Sequence
 
+from app.analysis.structural_reaction_support import v7_thesis_id
+from app.autotrade.execution_policy import evaluate_execution_policy
 from app.autotrade.strategy_match import StrategyMatch
 from app.autotrade.trade_plan import (
   TradePlan,
   TradePlanAnalysis,
   TradePlanEntry,
+  TradePlanEntryLeg,
   TradePlanError,
   TradePlanExecutionPolicy,
   TradePlanManagement,
@@ -35,6 +42,21 @@ from app.autotrade.trade_plan import (
   TradePlanStop,
   TradePlanTarget,
 )
+
+
+class TradePlanBuildRejected(Exception):
+  """Raised when the underlying execution-policy evaluation blocks a plan.
+
+  Carries the same reason_code/message the V6 path already surfaces for the
+  identical check, so operators diagnosing "why didn't this become a plan"
+  see one consistent vocabulary regardless of contract mode.
+  """
+
+  def __init__(self, reason_code: str, message: str, measured: dict[str, Any]):
+    super().__init__(message)
+    self.reason_code = reason_code
+    self.message = message
+    self.measured = measured
 
 
 def _parse_bar_ts(event_ts: str, fallback: int) -> int:
@@ -57,39 +79,167 @@ def _equal_close_ratios(count: int) -> tuple[Decimal, ...]:
   return tuple(ratios)
 
 
+def _build_entry(
+  *,
+  route: str,
+  direction: str,
+  match: StrategyMatch,
+  measured: dict[str, Any],
+  expires_at: int,
+  max_spread_ticks: int,
+  max_slippage_ticks: int,
+) -> TradePlanEntry:
+  if route == "market":
+    return TradePlanEntry(
+      type="market_watch",
+      expires_at=expires_at,
+      zone_low=Decimal(str(match.entry_low)),
+      zone_high=Decimal(str(match.entry_high)),
+      activation="quote_inside_zone",
+      price_side="ask" if direction == "BUY" else "bid",
+      max_spread_ticks=max_spread_ticks,
+      max_slippage_ticks=max_slippage_ticks,
+    )
+  if route == "single_limit":
+    return TradePlanEntry(
+      type="single_limit",
+      expires_at=expires_at,
+      order_price=Decimal(str(measured["planned_entry_price"])),
+      max_spread_ticks=max_spread_ticks,
+      max_slippage_ticks=max_slippage_ticks,
+    )
+  if route == "zone_split":
+    leg_prices = measured.get("planned_leg_entry_prices") or []
+    if not leg_prices:
+      raise TradePlanBuildRejected(
+        "empty_ladder_legs",
+        "zone_split route resolved with no leg prices",
+        measured,
+      )
+    ratio = (Decimal("1") / len(leg_prices)).quantize(
+      Decimal("0.0001"), rounding=ROUND_HALF_UP,
+    )
+    ratios = [ratio] * len(leg_prices)
+    ratios[-1] += Decimal("1") - ratio * len(leg_prices)
+    legs = tuple(
+      TradePlanEntryLeg(
+        leg_id=f"L{index + 1}",
+        price=Decimal(str(price)),
+        volume_ratio=leg_ratio,
+      )
+      for index, (price, leg_ratio) in enumerate(zip(leg_prices, ratios))
+    )
+    return TradePlanEntry(
+      type="limit_ladder",
+      expires_at=expires_at,
+      legs=legs,
+      max_spread_ticks=max_spread_ticks,
+      max_slippage_ticks=max_slippage_ticks,
+    )
+  raise TradePlanBuildRejected(
+    "unresolved_execution_route",
+    f"execution policy resolved an unsupported route: {route!r}",
+    measured,
+  )
+
+
 def build_trade_plan_from_strategy_match(
   match: StrategyMatch,
   *,
   plan_id: str,
   setup_id: str,
+  thesis_id: str,
   pip_size: Decimal,
-  entry_reference_price: Decimal,
-  price_side: str,
+  spot_price: float,
+  regime: str | None,
+  cfg: Any | None = None,
+  opposing_zone_low: float | None = None,
+  opposing_zone_high: float | None = None,
+  opposing_zone_id: str | None = None,
+  executable_quote: float | None = None,
   max_volume: int,
-  activation: str = "quote_inside_zone",
   max_spread_ticks: int = 8,
   max_slippage_ticks: int = 10,
   be_after_target_index: int = 0,
   be_buffer_ticks: int = 6,
-  risk_percent: Decimal = Decimal("1.0"),
-  risk_multiplier: Decimal | None = None,
   max_group_risk_percent: Decimal = Decimal("2.0"),
   close_ratios: Sequence[Decimal] | None = None,
-  score: float = 0.0,
   analysis_engine_version: str = "",
   market_map_id: str = "",
   config_fingerprint: str = "",
 ) -> TradePlan:
+  """Translate a CONFIRMED StrategyMatch into a TradePlan V7.
+
+  Raises TradePlanBuildRejected if the shared execution-policy evaluation
+  (the same gate the V6 path already applies) blocks this match - the
+  caller (worker.py) is expected to record the reason_code the same way it
+  already does for V6 gate rejections, never let this raise past a bare
+  `except Exception: pass`.
+  """
   if not match.targets_pips:
-    raise TradePlanError(
-      f"StrategyMatch {match.match_id!r} has no targets_pips to build "
-      "TradePlan targets from",
+    raise TradePlanBuildRejected(
+      "empty_target_config",
+      f"StrategyMatch {match.match_id!r} has no targets_pips",
+      {},
     )
-  if price_side not in ("bid", "ask"):
-    raise TradePlanError(f"price_side must be 'bid' or 'ask': {price_side!r}")
+  if not match.structural_zone_id:
+    # Fail closed rather than fall back to match_id: match_id (and the V6
+    # structural_thesis_id it's derived from) is re-hashed on every new
+    # confirmation timestamp, so using it as a V7 thesis_id would silently
+    # let repeated confirmations of the same structure each look like a
+    # brand new thesis - exactly what claim_active_thesis exists to
+    # prevent. See app.analysis.structural_reaction_support.v7_thesis_id.
+    raise TradePlanBuildRejected(
+      "missing_stable_thesis_id",
+      f"StrategyMatch {match.match_id!r} has no structural_zone_id to "
+      "build a stable V7 thesis identity from",
+      {},
+    )
+  if not match.structural_kind:
+    raise TradePlanBuildRejected(
+      "missing_structural_kind",
+      f"StrategyMatch {match.match_id!r} has no structural_kind",
+      {},
+    )
+  if not match.htf_bias:
+    raise TradePlanBuildRejected(
+      "missing_htf_bias",
+      f"StrategyMatch {match.match_id!r} has no htf_bias captured at "
+      "detection time",
+      {},
+    )
 
   direction = match.direction
-  sign = Decimal("1") if direction == "BUY" else Decimal("-1")
+  pip = float(pip_size)
+
+  evaluation = evaluate_execution_policy(
+    match,
+    spot_price=spot_price,
+    regime=regime,
+    pip_size=pip,
+    cfg=cfg,
+    opposing_zone_low=opposing_zone_low,
+    opposing_zone_high=opposing_zone_high,
+    opposing_zone_id=opposing_zone_id,
+    executable_quote=executable_quote,
+  )
+  if not evaluation.allowed:
+    raise TradePlanBuildRejected(
+      evaluation.reason_code, evaluation.message, evaluation.measured,
+    )
+  measured = evaluation.measured
+  if measured.get("planned_stop_error"):
+    raise TradePlanBuildRejected(
+      "protective_stop_unavailable",
+      str(measured["planned_stop_error"]),
+      measured,
+    )
+  if "planned_stop_price" not in measured:
+    raise TradePlanBuildRejected(
+      "protective_stop_unavailable",
+      "execution policy evaluation produced no protective stop",
+      measured,
+    )
 
   ratios = (
     tuple(Decimal(str(r)) for r in close_ratios)
@@ -97,70 +247,76 @@ def build_trade_plan_from_strategy_match(
     else _equal_close_ratios(len(match.targets_pips))
   )
   if len(ratios) != len(match.targets_pips):
-    raise TradePlanError(
+    raise TradePlanBuildRejected(
+      "target_ratio_mismatch",
       f"close_ratios length {len(ratios)} does not match targets_pips "
       f"length {len(match.targets_pips)}",
+      measured,
     )
 
+  entry_reference = Decimal(str(measured["planned_entry_price"]))
+  sign = Decimal("1") if direction == "BUY" else Decimal("-1")
   targets = tuple(
     TradePlanTarget(
       target_id=f"TP{index + 1}",
       type="absolute",
-      price=entry_reference_price + sign * (Decimal(pips) * pip_size),
+      price=entry_reference + sign * (Decimal(pips) * pip_size),
       close_ratio=ratio,
     )
     for index, (pips, ratio) in enumerate(zip(match.targets_pips, ratios))
   )
 
-  structure_id = (
-    match.zone_id or match.level_id or match.reaction_id or match.match_id
+  formation_bar_ts = _parse_bar_ts(
+    str(match.touch_bar_ts or match.event_ts), match.issued_at,
   )
-  formation_bar_ts = _parse_bar_ts(match.event_ts, match.issued_at)
+  confirmation_bar_ts = _parse_bar_ts(
+    str(match.confirmation_bar_ts or match.event_ts), match.issued_at,
+  )
 
   analysis = TradePlanAnalysis(
     strategy=match.strategy,
     strategy_family=match.family or match.strategy_mode,
     direction=direction,
     context_timeframes=(match.source_tf,),
-    formation_timeframe=match.source_tf,
+    formation_timeframe=match.structural_timeframe or match.source_tf,
     confirmation_timeframe=match.source_tf,
     formation_bar_ts=formation_bar_ts,
-    confirmation_bar_ts=formation_bar_ts,
-    score=score,
+    confirmation_bar_ts=confirmation_bar_ts,
+    score=float(match.confluence),
     confluence=match.confluence,
-    bias="up" if direction == "BUY" else "down",
-    regime=match.range_state or "trend",
+    bias=match.htf_bias,
+    regime=match.regime_kind or regime or "unknown",
     reasons=match.reasons,
     tags=match.tags,
   )
 
   source_structure = TradePlanSourceStructure(
-    structure_id=structure_id,
-    kind="demand" if direction == "BUY" else "supply",
-    timeframe=match.source_tf,
-    low=Decimal(str(match.entry_low)),
-    high=Decimal(str(match.entry_high)),
+    structure_id=match.structural_zone_id,
+    kind=match.structural_kind,
+    timeframe=match.structural_timeframe or match.source_tf,
+    low=Decimal(str(match.structural_zone_low or match.entry_low)),
+    high=Decimal(str(match.structural_zone_high or match.entry_high)),
     invalidation_price=Decimal(str(match.structure_swing)),
   )
 
-  entry = TradePlanEntry(
-    type="market_watch",
+  entry = _build_entry(
+    route=str(measured["planned_execution_route"]),
+    direction=direction,
+    match=match,
+    measured=measured,
     expires_at=match.expires_at,
-    zone_low=Decimal(str(match.entry_low)),
-    zone_high=Decimal(str(match.entry_high)),
-    activation=activation,
-    price_side=price_side,
     max_spread_ticks=max_spread_ticks,
     max_slippage_ticks=max_slippage_ticks,
   )
 
   stop = TradePlanStop(
     type="absolute",
-    price=Decimal(str(match.structure_swing)),
-    source="structural_invalidation",
-    structure_id=structure_id,
-    reason="StrategyMatch.structure_swing, the same structural swing "
-    "price the scanner used to confirm this setup",
+    price=Decimal(str(measured["planned_stop_price"])),
+    source=str(measured.get("stop_source", "protective_stop_plan")),
+    structure_id=match.structural_zone_id,
+    reason="app.autotrade.execution_policy.evaluate_execution_policy "
+    "-> app.autotrade.protective_stop.plan_protective_stop, the same "
+    "computation the V6 path already applies to this match",
   )
 
   management = TradePlanManagement(
@@ -170,19 +326,17 @@ def build_trade_plan_from_strategy_match(
   )
 
   risk = TradePlanRisk(
-    risk_percent=risk_percent,
-    risk_multiplier=(
-      risk_multiplier
-      if risk_multiplier is not None
-      else Decimal(str(match.risk_multiplier))
-    ),
+    risk_percent=Decimal("1.0"),
+    risk_multiplier=Decimal(str(measured.get(
+      "effective_risk_multiplier", match.risk_multiplier,
+    ))),
     max_volume=max_volume,
     max_group_risk_percent=max_group_risk_percent,
   )
 
   plan = TradePlan(
     plan_id=plan_id,
-    thesis_id=match.thesis_id or match.match_id,
+    thesis_id=thesis_id,
     setup_id=setup_id,
     symbol=match.symbol,
     created_at=match.issued_at,
@@ -195,8 +349,8 @@ def build_trade_plan_from_strategy_match(
     risk=risk,
     management=management,
     execution_policy=TradePlanExecutionPolicy(
-      allow_market=True,
-      allow_limit=False,
+      allow_market=entry.type == "market_watch",
+      allow_limit=entry.type in {"single_limit", "limit_ladder"},
       allow_partial_fill=True,
       cancel_on_expiry=True,
     ),

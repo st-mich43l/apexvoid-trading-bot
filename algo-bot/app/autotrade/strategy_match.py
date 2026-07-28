@@ -70,6 +70,16 @@ class StrategyMatch:
   target_model: str = "fill_relative"
   target_reference_price: str = "broker_fill"
   absolute_target_price: float | None = None
+  # Real analysis context for TradePlan V7 (app/autotrade/trade_plan_builder.py)
+  # - populated from the DetectionResult/DetectionContext that produced this
+  # match so the builder never has to derive bias/kind/timeframe from
+  # direction (BUY => demand, BUY => bias up are exactly the forbidden
+  # shortcuts per docs/adr-trade-plan-v7-boundary.md). Additive, defaulted
+  # fields so older cached matches still round-trip.
+  structural_kind: str | None = None
+  structural_timeframe: str | None = None
+  htf_bias: str = ""
+  regime_kind: str = ""
 
   @property
   def is_range_edge(self) -> bool:
@@ -215,6 +225,16 @@ class StrategyMatch:
           if payload.get("target_price") is not None
           else None
         ),
+        structural_kind=(
+          None if payload.get("structural_kind") is None
+          else str(payload["structural_kind"])
+        ),
+        structural_timeframe=(
+          None if payload.get("structural_timeframe") is None
+          else str(payload["structural_timeframe"])
+        ),
+        htf_bias=str(payload.get("htf_bias") or ""),
+        regime_kind=str(payload.get("regime_kind") or ""),
       )
     except (KeyError, TypeError, ValueError, json.JSONDecodeError):
       return None

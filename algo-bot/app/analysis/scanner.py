@@ -41,6 +41,7 @@ from app.autotrade.strategy_match import (
 from app.analysis.structural_reaction_support import (
   STRUCTURAL_SETUPS,
   structural_thesis_id,
+  v7_thesis_id,
 )
 from app.autotrade.execution_policy import (
   FAMILY_UNKNOWN,
@@ -55,6 +56,18 @@ from app.autotrade.multi_match import (
   serialize_matches,
   strategy_matches_key,
 )
+from app.autotrade.setup_lifecycle import (
+  CONFIRMED,
+  DISCOVERED,
+  FORMING,
+  TOUCHED,
+  WATCHING,
+  SetupLifecycleError,
+  create_setup,
+  transition_setup,
+)
+
+_PRE_CONFIRMED_CHAIN = (DISCOVERED, WATCHING, TOUCHED, FORMING, CONFIRMED)
 from app.autotrade.lifecycle import emit_lifecycle, increment_metric
 from app.autotrade.route_outcome import record_route_outcome
 from app.autotrade.range_context import (
@@ -427,6 +440,10 @@ def _build_one_strategy_match(
     touch_bar_ts=result.touch_bar_ts,
     confirmation_bar_ts=result.confirmation_bar_ts,
     reaction_type=result.confirmation_type or result.confirmation,
+    structural_kind=result.structural_kind,
+    structural_timeframe=result.structural_timeframe,
+    htf_bias=str(getattr(ctx, "htf_bias", "") or ""),
+    regime_kind=str(getattr(getattr(ctx, "regime", None), "kind", "") or ""),
   )
   return match, None, {}
 
@@ -485,6 +502,65 @@ async def _record_match_build_outcome(
     )
   except Exception:
     log.exception("match-build-outcome telemetry failed symbol=%s", symbol)
+
+
+async def _advance_setup_to_confirmed(
+  client: Any,
+  match: StrategyMatch,
+  symbol: str,
+  tf: str,
+) -> tuple[str, str] | None:
+  """Run a successfully-built match through setup_lifecycle up to CONFIRMED.
+
+  Scanner detection is synchronous - by the time `_build_one_strategy_match`
+  returns a match, the underlying detector has already validated touch,
+  formation, and confirmation in one pass (touch_bar_ts/confirmation_bar_ts/
+  confirmation_type are already set). setup_lifecycle.py's value here isn't
+  re-discovering those states over multiple bars; it's a durable, idempotent
+  record of "this exact detection instance has already reached CONFIRMED",
+  so a repeated scan of the same event (or the same structure re-confirming
+  on a later bar) can never re-emit a FORMING card or silently create a
+  second thesis. Returns (setup_id, thesis_id), or None if this match has no
+  stable structural identity to build a setup/thesis from (analysis-only
+  detections - e.g. round-number fallbacks - never enter the lifecycle at
+  all, matching "missing_stable_thesis_id fails closed" for the plan
+  builder downstream).
+  """
+  if not match.structural_zone_id or not match.family:
+    return None
+  thesis_id = v7_thesis_id(
+    symbol=symbol,
+    strategy_family=match.family,
+    direction=match.direction,
+    structural_id=match.structural_zone_id,
+  )
+  setup_id = match.match_id
+  record, _created = await create_setup(
+    client,
+    setup_id=setup_id,
+    thesis_id=thesis_id,
+    symbol=symbol,
+    source_structure_id=match.structural_zone_id,
+    formation_timeframe=match.structural_timeframe or tf,
+    expires_at=match.expires_at,
+  )
+  if record.state not in _PRE_CONFIRMED_CHAIN:
+    # Already advanced past CONFIRMED (or terminal) - a repeated scan of the
+    # same detection instance must not attempt to move it "backwards".
+    return setup_id, thesis_id
+  start = _PRE_CONFIRMED_CHAIN.index(record.state)
+  try:
+    for state in _PRE_CONFIRMED_CHAIN[start + 1:]:
+      record, _changed = await transition_setup(
+        client, setup_id, state, reason_code="scanner_detection",
+      )
+  except SetupLifecycleError:
+    log.exception(
+      "setup lifecycle advance failed symbol=%s setup_id=%s state=%s",
+      symbol, setup_id, record.state,
+    )
+    return None
+  return setup_id, thesis_id
 
 
 async def _sync_strategy_match(
@@ -586,6 +662,10 @@ async def _sync_strategy_match(
     return None
   if match.is_range_edge and range_context is not None:
     match = replace(match, range_id=range_context.range_id)
+  lifecycle_ids = await _advance_setup_to_confirmed(client, match, symbol, tf)
+  if lifecycle_ids is not None:
+    _setup_id, thesis_id = lifecycle_ids
+    match = replace(match, thesis_id=thesis_id)
   await _record_match_build_outcome(client, symbol, match)
   if match.strategy in STRUCTURAL_SETUPS or match.structural_source in {
     "key_level", "supply_demand", "session_level", "trendline",
