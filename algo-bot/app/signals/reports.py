@@ -93,7 +93,7 @@ def _round_lines(signal: dict, index: int) -> list[str]:
       f"{_number(signal['entry'])}–{_number(entry_end)}"
     ),
     f"  🛡 {_number(signal['sl'])} · TP {tp_text or '—'}",
-    f"  Legs: {leg_text} → net {net_text}",
+    f"  Legs: {leg_text} → achieved {net_text}",
     (
       f"  Setup: {setup} · {_stars(signal.get('confluence'))} · "
       f"R:R plan {planned_text} · realized {realized_text}"

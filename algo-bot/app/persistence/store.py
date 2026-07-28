@@ -32,6 +32,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 from app.core.config import settings
 from app.core.symbols import pip_for
+from app.signals.pips_format import legs_achieved_pips
 
 log = logging.getLogger(__name__)
 
@@ -666,20 +667,20 @@ async def _record_auto_trade_result(event: dict) -> None:
         "FROM auto_trade_fills WHERE group_id = $1",
         group_id,
       )
-      weighted = 0.0
-      total_volume = 0
+      # Highest signed move from any fill entry to the exit — never a
+      # volume-weighted lot net, which dilutes booked TPs with BE residual.
+      peak = None
       for row in fills:
         if row["entry_price"] is None:
           continue
-        volume = int(row["volume"] or 1)
         move = float(exit_price) - float(row["entry_price"])
         if str(row["direction"]).upper() == "SELL":
           move = -move
-        weighted += move / pip_for(row["symbol"] or "XAU") * volume
-        total_volume += volume
-      if not total_volume:
+        pips = move / pip_for(row["symbol"] or "XAU")
+        peak = pips if peak is None else max(peak, pips)
+      if peak is None:
         return
-      result_pips = weighted / total_volume
+      result_pips = peak
     if result_pips is None:
       return
     await db.execute(
@@ -1089,19 +1090,20 @@ async def close_leg(
       now = int(time.time())
       legs.append({"frac": close_frac, "pips": pips, "ts": now})
       new_remaining = 1.0 - sum(float(leg["frac"]) for leg in legs)
-      net_so_far = round(
-        sum(float(leg["frac"]) * int(leg["pips"]) for leg in legs)
-      )
+      # Journal /trade_stats uses the highest TP/pips reached, not a
+      # volume-fraction weighted blend that dilutes booked targets with a
+      # later BE residual.
+      achieved = legs_achieved_pips(legs)
       if new_remaining <= _LEG_EPSILON:
         await db.execute(
           "UPDATE manual_signals SET status = 'closed', result_pips = $1, "
           "closed_at = $2, legs = $3 WHERE id = $4 AND status = 'open'",
-          net_so_far, now, json.dumps(legs), row_id,
+          achieved, now, json.dumps(legs), row_id,
         )
         return {
           **result_base,
           "closed": True,
-          "net": net_so_far,
+          "net": achieved,
           "remaining": 0.0,
           "frac": close_frac,
         }
@@ -1114,7 +1116,7 @@ async def close_leg(
     return {
       **result_base,
       "closed": False,
-      "net": net_so_far,
+      "net": achieved,
       "remaining": new_remaining,
       "frac": close_frac,
     }
