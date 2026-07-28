@@ -26,6 +26,17 @@ public sealed class AutoTradeEngine(
   private readonly object _reportLock = new();
   private readonly Func<DateTimeOffset> _clock = clock ?? (() => DateTimeOffset.UtcNow);
   private readonly Action<string> _log = log ?? Log;
+  // TradePlan V7 broker-execution runtime (docs/adr-trade-plan-v7-boundary.md) -
+  // composed into this engine's own session loop (see PollTradePlansAsync)
+  // rather than given a separate RunSessionAsync/reconcile/heartbeat of its
+  // own, so it shares this engine's readiness/gate machinery instead of
+  // duplicating it. Deliberately a distinct class in its own source file so
+  // TradePlanExecutionEngineDependencyTests can scan every V7 file for
+  // forbidden analysis/route/stop symbols without tripping over this file's
+  // legitimate V6 use of them elsewhere.
+  private readonly TradePlanRuntime _tradePlanRuntime = new(
+    options, store, clock ?? (() => DateTimeOffset.UtcNow), log ?? Log
+  );
   private long _spotSequence;
   private SpotPrice? _lastSpot;
   private ICTraderTradeClient? _client;
@@ -230,6 +241,15 @@ public sealed class AutoTradeEngine(
           );
           commandCursor = commandEntry.Id;
           await store.SetCommandCursorAsync(commandCursor, cancellationToken);
+        }
+        if (options.ContractMode != "legacy_v6")
+        {
+          await WithGateAsync(
+            () => _tradePlanRuntime.PollAsync(
+              _client!, symbol, _lastSpot, cancellationToken
+            ),
+            cancellationToken
+          );
         }
         var entries = await store.ReadCandidatesAsync(
           options.CandidateStream,
