@@ -236,13 +236,15 @@ class Settings(BaseSettings):
   )
   auto_trade_event_stream: str = "auto_trade:events"
   auto_trade_stream_maxlen: int = 1000
-  # TradePlan V7 migration mode. See docs/adr-trade-plan-v7-boundary.md.
-  # legacy_v6: V6 TradeCandidate path only, V7 disabled.
-  # shadow_v7: V7 plans published and validated by C#, no orders placed.
-  # v7_primary: V7 places orders, V6 remains a controlled fallback.
-  # v7_only: V6 candidates are rejected outright.
+  # Cross-service contract handshake. See docs/adr-trade-plan-v7-boundary.md.
+  # "v7_only" is the sole autonomous contract - algo-bot publishes only
+  # TradePlan V7 (never a V6 TradeCandidate) for autonomous order creation,
+  # unconditionally. The field stays a string (not a bool) so Python and
+  # C# keep comparing an explicit, fatal-on-mismatch handshake value rather
+  # than an implicit default; manual /algo candidates and open V6 position
+  # management are unaffected by this value.
   auto_trade_contract_mode: str = Field(
-    default="legacy_v6",
+    default="v7_only",
     validation_alias=AliasChoices("AUTO_TRADE_CONTRACT_MODE"),
   )
   auto_trade_trade_plan_stream: str = Field(
@@ -696,15 +698,10 @@ class Settings(BaseSettings):
       raise ValueError(
         "AUTO_TRADE_BE_BUFFER_TICKS must be non-negative and below 1000"
       )
-    if self.auto_trade_contract_mode not in {
-      "legacy_v6",
-      "shadow_v7",
-      "v7_primary",
-      "v7_only",
-    }:
+    if self.auto_trade_contract_mode != "v7_only":
       raise ValueError(
-        "AUTO_TRADE_CONTRACT_MODE must be legacy_v6, shadow_v7, v7_primary, "
-        "or v7_only"
+        "AUTO_TRADE_CONTRACT_MODE must be v7_only - it is the sole "
+        "autonomous contract"
       )
     return self
 
