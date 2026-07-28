@@ -64,6 +64,9 @@ from app.autotrade.strategy_match import (
   StrategyMatch,
   strategy_match_key,
 )
+from app.autotrade.structural_target_room import (
+  evaluate_structural_target_room,
+)
 from app.autotrade.multi_match import (
   dedupe_matches,
   deserialize_matches,
@@ -4047,10 +4050,10 @@ async def _publish_trade_plan_v7(
   guard functions the V6 path already calls (opposing barrier, zone
   cooldown, overlapping-zone veto) - these are Python-side risk checks with
   no C#-side duplicate, not the dual-planning anti-pattern the ADR is
-  about. _adapt_counter_bias_target is deliberately NOT called here - it is
-  the "target adaptation" ownership docs/adr-trade-plan-v7-boundary.md and
-  the originating task explicitly name as something worker.py must not own
-  on the V7 path; targets_pips is used exactly as scanner.py decided it.
+  about. _adapt_counter_bias_target is deliberately NOT called here. The
+  scanner-owned target ladder is only revalidated with the shared pure
+  structural-target-room helper against the latest Market Map; this is a
+  final stale-context safety check, not a second strategy planner.
 
   M1 candlestick trigger (P3): a CONFIRMED setup does not publish on this
   call - it moves to ARMED_WAITING_TRIGGER and returns None. Only once this
@@ -4147,9 +4150,67 @@ async def _publish_trade_plan_v7(
   if trigger is None:
     return None
 
+  entry_reference = _executable_spot_price(spot, match.direction)
+  target_room = evaluate_structural_target_room(
+    direction=match.direction,
+    planned_entry_price=entry_reference,
+    candidate_entry_low=match.entry_low,
+    candidate_entry_high=match.entry_high,
+    configured_target_pips=match.targets_pips,
+    actionable_entries=(
+      ()
+      if market_map is None
+      else tuple(getattr(market_map, "actionable_entries", ()) or ())
+    ),
+    atr=match.atr,
+    pip_size=units.pip_size(symbol),
+    barrier_buffer_atr=float(settings.auto_trade_opposing_barrier_atr),
+  )
+  if not target_room.allowed:
+    await _record_v7_build_rejected(
+      client,
+      symbol,
+      match,
+      target_room.reason_code,
+      target_room.message,
+      target_room.measured,
+    )
+    try:
+      await transition_setup(
+        client,
+        setup_id,
+        INVALIDATED,
+        reason_code=f"v7_{target_room.reason_code}",
+      )
+    except SetupLifecycleError:
+      log.exception(
+        "v7 setup could not invalidate after target-room rejection "
+        "symbol=%s setup_id=%s",
+        symbol,
+        setup_id,
+      )
+    await emit_lifecycle(
+      client,
+      INVALIDATED,
+      symbol=symbol,
+      match_id=setup_id,
+      correlation_id=setup_id,
+      timeframe=match.source_tf,
+      reason_code=f"v7_{target_room.reason_code}",
+      message=target_room.message,
+      measured=target_room.measured,
+      publish_status=True,
+    )
+    return None
+  match_for_plan = (
+    replace(match, targets_pips=target_room.fitted_targets_pips)
+    if target_room.opposing_entry is not None
+    else match
+  )
+
   zone_claim_id = _resolve_match_confluence_claim_id(
     symbol,
-    match,
+    match_for_plan,
     market_map,
   )
   if zone_claim_id is not None:
@@ -4181,23 +4242,27 @@ async def _publish_trade_plan_v7(
     )
     return None
 
-  entry_reference = _executable_spot_price(spot, match.direction)
   strategy_opposing_zone = _nearest_directional_zone(
-    match.direction, spot.price, htf_zones or [],
+    match_for_plan.direction, spot.price, htf_zones or [],
   )
   guard_mode = resolve_guard_mode(settings)
   source = _structural_source_identity(
-    strategy=match.strategy,
-    family=match.family,
-    structural_source=match.structural_source or match.strategy,
-    low=match.entry_low,
-    high=match.entry_high,
-    key_level=match.key_level,
-    zone_id=match.zone_id,
-    level_id=match.level_id,
+    strategy=match_for_plan.strategy,
+    family=match_for_plan.family,
+    structural_source=(
+      match_for_plan.structural_source or match_for_plan.strategy
+    ),
+    low=match_for_plan.entry_low,
+    high=match_for_plan.entry_high,
+    key_level=match_for_plan.key_level,
+    zone_id=match_for_plan.zone_id,
+    level_id=match_for_plan.level_id,
   )
   barrier_outcome = _opposing_barrier_decision(
-    match.direction, spot.price, match.target_price, match.atr,
+    match_for_plan.direction,
+    spot.price,
+    match_for_plan.target_price,
+    match_for_plan.atr,
     htf_zones or [], htf_levels or [],
     settings.auto_trade_opposing_barrier_atr,
     source=source,
@@ -4247,8 +4312,8 @@ async def _publish_trade_plan_v7(
   )
   try:
     plan = build_trade_plan_from_strategy_match(
-      match,
-      plan_id=_v7_plan_id(match),
+      match_for_plan,
+      plan_id=_v7_plan_id(match_for_plan),
       setup_id=setup_id,
       thesis_id=match.thesis_id,
       pip_size=Decimal(str(units.pip_size(symbol))),
@@ -4268,8 +4333,21 @@ async def _publish_trade_plan_v7(
     )
   except TradePlanBuildRejected as exc:
     await _release_claims()
+    rejection_measured = {
+      **(
+        target_room.measured
+        if target_room.opposing_entry is not None
+        else {}
+      ),
+      **exc.measured,
+    }
     await _record_v7_build_rejected(
-      client, symbol, match, exc.reason_code, exc.message, exc.measured,
+      client,
+      symbol,
+      match,
+      exc.reason_code,
+      exc.message,
+      rejection_measured,
     )
     # A build rejection at this point (the M1 trigger already fired) means
     # this specific match structurally cannot become a plan - a data
@@ -4324,10 +4402,10 @@ async def _publish_trade_plan_v7(
   # computed is kept rather than failing the whole publish over it.
   try:
     trigger_stop = plan_protective_stop(
-      direction=match.direction,
+      direction=match_for_plan.direction,
       entry_price=Decimal(str(entry_reference)),
-      structure_swing=match.structure_swing,
-      atr=match.atr,
+      structure_swing=match_for_plan.structure_swing,
+      atr=match_for_plan.atr,
       structure_buffer_atr=getattr(settings, "auto_trade_add_stop_buffer_atr", 0.3),
       sweep_extreme=trigger.wick_extreme,
       wick_buffer_atr=getattr(settings, "auto_trade_wick_stop_buffer_atr", 0.15),
@@ -6752,7 +6830,10 @@ async def _handle_event(
           htf_levels=htf_levels,
           regime=regime,
           frames=frames,
-          market_map=guard_market_map,
+          # Final structural geometry is a correctness boundary, not an
+          # optional soft guard. Use the canonical cached Market Map even
+          # when the legacy guard toggle is disabled.
+          market_map=cached_market_map,
         )
         published = None
       finally:

@@ -19,6 +19,10 @@ from app.analysis.detectors import (
   build_context,
   detector_settings_from,
 )
+from app.analysis.actionability import (
+  ActionabilityDecision,
+  resolve_actionability,
+)
 from app.analysis.market_map import (
   MarketMap,
   build_map,
@@ -359,6 +363,18 @@ def _build_one_strategy_match(
         }
       targets_pips = (full_take_profit_pips,)
       range_id = strategy_range_id(symbol, range_low, range_high)
+  if result.target_cap_pips is not None:
+    target_cap = float(result.target_cap_pips)
+    targets_pips = tuple(
+      target for target in targets_pips
+      if float(target) <= target_cap + 1e-9
+    )
+    if not targets_pips:
+      return None, "opposing_barrier_no_target", {
+        "effective_target_pips": target_cap,
+      }
+    if full_take_profit_pips is not None:
+      full_take_profit_pips = max(targets_pips)
   if not targets_pips:
     return None, "empty_target_config", {}
   family = strategy_family(result.setup)
@@ -1513,15 +1529,12 @@ def _merge_detection_confluence(
       score=zone.score,
       score_reasons=score_reasons,
     )
-    distinct_members = len(provenance)
     merged = replace(
       representative,
       entry_zone=merged_entry,
-      confluence=(
-        int(zone.confluence)
-        if distinct_members > 1
-        else int(representative.confluence)
-      ),
+      # Detector quality and structural diversity are separate dimensions.
+      # Tags explain provenance; their count must not overwrite setup quality.
+      confluence=max(int(result.confluence) for _index, result in group),
       reasons=reasons,
       structural_id=zone.zone_id,
       structural_low=zone.low,
@@ -1570,7 +1583,10 @@ def _reward_risk_pre_gate(
     pip_size=_pip_size(symbol),
     cfg=settings,
   )
-  measured = dict(evaluation.measured)
+  measured = {
+    **(result.target_room_measured or {}),
+    **dict(evaluation.measured),
+  }
   reward_risk = measured.get("reward_risk")
   policy = evaluation.policy
   if (
@@ -1586,6 +1602,49 @@ def _reward_risk_pre_gate(
   return (
     math.isfinite(value) and value >= float(policy.min_reward_risk),
     measured,
+  )
+
+
+def _annotate_actionability_geometry(
+  symbol: str,
+  tf: str,
+  event_ts: str,
+  ctx: DetectionContext,
+  result: DetectionResult,
+) -> DetectionResult:
+  """Attach the same planned entry and targets later consumed by policy."""
+  if not result.structural_id and result.setup not in STRUCTURAL_SETUPS:
+    return result
+  match, _reason, _measured = _build_one_strategy_match(
+    symbol,
+    tf,
+    event_ts,
+    ctx,
+    result,
+  )
+  if match is None:
+    return replace(
+      result,
+      planned_entry_price=float(result.current_price),
+      provisional_targets_pips=_configured_strategy_targets(),
+    )
+  regime = str(getattr(getattr(ctx, "regime", None), "kind", "") or "")
+  evaluation = evaluate_execution_policy(
+    match,
+    spot_price=match.current_price,
+    regime=regime or None,
+    pip_size=_pip_size(symbol),
+    cfg=settings,
+  )
+  planned_entry = evaluation.measured.get("planned_entry_price")
+  try:
+    planned_entry_price = float(planned_entry)
+  except (TypeError, ValueError):
+    planned_entry_price = float(match.current_price)
+  return replace(
+    result,
+    planned_entry_price=planned_entry_price,
+    provisional_targets_pips=tuple(match.targets_pips),
   )
 
 
@@ -1688,8 +1747,6 @@ def _conflict_record(
 
 def _suppress_overlaps(
   results: list[DetectionResult],
-  *,
-  force_opposing_suppression: bool = False,
 ) -> tuple[list[DetectionResult], list[dict[str, Any]]]:
   """Same-direction overlap is a duplicate - keep the higher-ranked, drop the
   other. Opposite-direction overlap is a contradiction: two credible,
@@ -1727,12 +1784,7 @@ def _suppress_overlaps(
       continue
     # `selected` is built in rank order, so the first opposing overlap found
     # is always the strongest (highest-ranked) survivor so far.
-    preserve_opposing = (
-      not force_opposing_suppression
-      and settings.auto_trade_track_all_structural_matches
-      and settings.auto_trade_allow_counter_bias
-    )
-    opposing = None if preserve_opposing else next(
+    opposing = next(
       (
         kept for kept in selected
         if result.direction != kept.direction
@@ -1847,10 +1899,7 @@ async def _notify_digest_once(
     # the card layer must not merge or silently discard either one.
     card_candidates = claimed_results
   else:
-    card_candidates, _ = _suppress_overlaps(
-      claimed_results,
-      force_opposing_suppression=True,
-    )
+    card_candidates, _ = _suppress_overlaps(claimed_results)
   structural = [
     item for item in card_candidates if item.setup in STRUCTURAL_SETUPS
   ]
@@ -1935,6 +1984,10 @@ async def _record_status(
   detected: list[DetectionResult],
   sent: list[DetectionResult],
   status: str,
+  actionable: list[DetectionResult] | None = None,
+  actionability_gated: list[
+    tuple[DetectionResult, ActionabilityDecision]
+  ] | None = None,
   market_map: MarketMap | None = None,
   scalp: dict[str, Any] | None = None,
   conflicts: list[dict[str, Any]] | None = None,
@@ -1948,6 +2001,27 @@ async def _record_status(
     "sells": len(market_map.sells) if market_map is not None else 0,
     "majors": len(market_map.majors) if market_map is not None else 0,
   }
+  observed_payload = [
+    {
+      "setup": item.setup,
+      "mode": item.mode,
+      "direction": item.direction,
+      "key_level": item.key_level,
+      "entry_zone": {
+        "low": item.entry_zone.low,
+        "high": item.entry_zone.high,
+        "score": getattr(item.entry_zone, "score", 0.0),
+        "score_reasons": list(
+          getattr(item.entry_zone, "score_reasons", []) or []
+        ),
+      },
+      "current_price": item.current_price,
+      "confluence": item.confluence,
+      "confirmation": item.confirmation,
+    }
+    for item in detected
+  ]
+  actionable_results = detected if actionable is None else actionable
   payload = {
     "status": status,
     "symbol": symbol,
@@ -1958,23 +2032,41 @@ async def _record_status(
       name: len(frame)
       for name, frame in sorted(frames.items())
     },
-    "detected": [
+    # `detected` is the backward-compatible alias. New consumers should use
+    # the explicit observation/actionability fields.
+    "detected": observed_payload,
+    "observed": observed_payload,
+    "observed_count": len(detected),
+    "actionable": [
       {
         "setup": item.setup,
-        "mode": item.mode,
         "direction": item.direction,
-        "key_level": item.key_level,
-        "entry_zone": {
-          "low": item.entry_zone.low,
-          "high": item.entry_zone.high,
-          "score": getattr(item.entry_zone, "score", 0.0),
-          "score_reasons": list(getattr(item.entry_zone, "score_reasons", []) or []),
-        },
-        "current_price": item.current_price,
         "confluence": item.confluence,
-        "confirmation": item.confirmation,
+        "target_cap_pips": item.target_cap_pips,
       }
-      for item in detected
+      for item in actionable_results
+    ],
+    "actionable_count": len(actionable_results),
+    "actionability_gated": [
+      {
+        "setup": item.setup,
+        "direction": item.direction,
+        "reason_code": decision.reason_code,
+        "hard_block": decision.hard_block,
+        "measured": decision.measured,
+        "opposing_entry": (
+          None
+          if decision.opposing_entry is None
+          else {
+            "side": decision.opposing_entry.side,
+            "low": decision.opposing_entry.lo,
+            "high": decision.opposing_entry.hi,
+            "tier": decision.opposing_entry.tier,
+            "tags": list(decision.opposing_entry.tags),
+          }
+        ),
+      }
+      for item, decision in actionability_gated or []
     ],
     "conflicts": conflicts or [],
     "structure_gated": [
@@ -2035,6 +2127,17 @@ def _detect_log_key(symbol: str, tf: str) -> str:
   return f"scanner:detect_log:{symbol.upper()}:{tf.upper()}"
 
 
+def _telemetry_result_key(result: DetectionResult) -> tuple[Any, ...]:
+  return (
+    result.setup,
+    result.direction,
+    result.structural_id,
+    result.confluence_zone_id,
+    round(float(result.entry_zone.low), 8),
+    round(float(result.entry_zone.high), 8),
+  )
+
+
 async def _append_detect_log(
   client: Any,
   symbol: str,
@@ -2046,8 +2149,16 @@ async def _append_detect_log(
   eligibility_gated: list[
     tuple[DetectionResult, str, dict[str, Any]]
   ] | None = None,
+  actionability_gated: list[
+    tuple[DetectionResult, ActionabilityDecision]
+  ] | None = None,
 ) -> None:
-  if not detected and not structure_gated and not eligibility_gated:
+  if (
+    not detected
+    and not structure_gated
+    and not eligibility_gated
+    and not actionability_gated
+  ):
     return
   sent_keys = {(item.setup, item.direction) for item in sent}
   conflict_keys = {
@@ -2057,24 +2168,39 @@ async def _append_detect_log(
   }
   entries = []
   gated_reasons = {
-    id(item): reason for item, reason in structure_gated or []
+    _telemetry_result_key(item): reason
+    for item, reason in structure_gated or []
   }
   eligibility_reasons = {
-    id(item): reason for item, reason, _measured in eligibility_gated or []
+    _telemetry_result_key(item): reason
+    for item, reason, _measured in eligibility_gated or []
   }
+  actionability_decisions = {
+    _telemetry_result_key(item): decision
+    for item, decision in actionability_gated or []
+  }
+  detected_keys = {_telemetry_result_key(item) for item in detected}
   logged_results = [
     *detected,
     *[item for item, _ in structure_gated or []],
     *[
       item for item, _reason, _measured in eligibility_gated or []
-      if all(id(item) != id(existing) for existing in detected)
+      if _telemetry_result_key(item) not in detected_keys
+    ],
+    *[
+      item for item, _decision in actionability_gated or []
+      if _telemetry_result_key(item) not in detected_keys
     ],
   ]
   for item in logged_results:
     detection_key = (item.setup, item.direction)
-    if id(item) in eligibility_reasons:
-      outcome = eligibility_reasons[id(item)]
-    elif id(item) in gated_reasons:
+    telemetry_key = _telemetry_result_key(item)
+    actionability = actionability_decisions.get(telemetry_key)
+    if actionability is not None:
+      outcome = "actionability_gated"
+    elif telemetry_key in eligibility_reasons:
+      outcome = eligibility_reasons[telemetry_key]
+    elif telemetry_key in gated_reasons:
       outcome = "structure_gated"
     elif detection_key in sent_keys:
       outcome = "sent"
@@ -2084,13 +2210,17 @@ async def _append_detect_log(
       outcome = "suppressed_duplicate"
     entry = {
       "setup": item.setup,
+      "direction": item.direction,
       "confluence": item.confluence,
       "outcome": outcome,
     }
-    if id(item) in eligibility_reasons:
-      entry["reason"] = eligibility_reasons[id(item)]
-    elif id(item) in gated_reasons:
-      entry["reason"] = gated_reasons[id(item)]
+    if actionability is not None:
+      entry["reason"] = actionability.reason_code
+      entry["measured"] = actionability.measured
+    elif telemetry_key in eligibility_reasons:
+      entry["reason"] = eligibility_reasons[telemetry_key]
+    elif telemetry_key in gated_reasons:
+      entry["reason"] = gated_reasons[telemetry_key]
     entries.append(entry)
   record = json.dumps({
     "recorded_at": datetime.now(timezone.utc).timestamp(),
@@ -2440,7 +2570,7 @@ async def _handle_event(
             regime.height_atr,
             lookback,
           )
-  detected = []
+  raw_detector_results = []
   structure_gated: list[tuple[DetectionResult, str]] = []
   for detector in detectors or DEFAULT_DETECTORS:
     result = detector(ctx)
@@ -2469,18 +2599,52 @@ async def _handle_event(
         gate_reason,
       )
       continue
-    detected.append(result)
-  detected = _merge_detection_confluence(
+    raw_detector_results.append(result)
+  observed_results = _merge_detection_confluence(
     symbol,
     exec_tf,
-    detected,
+    raw_detector_results,
     atr=invalidation_atr,
   )
+  observed_results = [
+    _annotate_actionability_geometry(
+      symbol,
+      exec_tf,
+      event_ts,
+      ctx,
+      result,
+    )
+    for result in observed_results
+  ]
+  actionability = resolve_actionability(
+    symbol=symbol,
+    observed_results=observed_results,
+    market_map=current_map,
+    context=ctx,
+    atr=invalidation_atr,
+    pip_size=_pip_size(symbol),
+    cfg=settings,
+  )
+  actionable_results = list(actionability.actionable)
+  actionability_gated = list(actionability.gated)
+  for result, decision in actionability_gated:
+    await increment_metric(client, "scanner_actionability_gated", symbol=symbol)
+    await increment_metric(client, decision.reason_code, symbol=symbol)
+    log.info(
+      "scanner result actionability-gated symbol=%s tf=%s setup=%s "
+      "direction=%s reason=%s measured=%s",
+      symbol,
+      exec_tf,
+      result.setup,
+      result.direction,
+      decision.reason_code,
+      decision.measured,
+    )
   eligibility_gated: list[
     tuple[DetectionResult, str, dict[str, Any]]
   ] = []
-  eligible_detected = []
-  for result in detected:
+  reward_risk_eligible_results = []
+  for result in actionable_results:
     eligible, measured = _reward_risk_pre_gate(
       symbol,
       exec_tf,
@@ -2489,21 +2653,30 @@ async def _handle_event(
       result,
     )
     if eligible:
-      eligible_detected.append(result)
+      reward_risk_eligible_results.append(result)
       continue
-    eligibility_gated.append((result, "rr_pre_gate", measured))
-    await increment_metric(client, "rr_pre_gate", symbol=symbol)
+    reason = (
+      "opposing_barrier_rr_insufficient"
+      if result.target_cap_pips is not None
+      else "rr_pre_gate"
+    )
+    eligibility_gated.append((result, reason, measured))
+    await increment_metric(client, reason, symbol=symbol)
     log.info(
       "scanner result eligibility-gated symbol=%s tf=%s setup=%s "
-      "direction=%s reason=rr_pre_gate reward_risk=%s minimum=%s",
+      "direction=%s reason=%s reward_risk=%s minimum=%s",
       symbol,
       exec_tf,
       result.setup,
       result.direction,
+      reason,
       measured.get("reward_risk"),
       measured.get("min_reward_risk"),
     )
-  digest, conflicts = _digest_results(eligible_detected)
+  digest, digest_conflicts = _digest_results(
+    reward_risk_eligible_results,
+  )
+  conflicts = [*actionability.conflicts, *digest_conflicts]
   execution_match = await _sync_strategy_match(
     client,
     symbol,
@@ -2536,9 +2709,11 @@ async def _handle_event(
     tf=exec_tf,
     event_ts=event_ts,
     frames=frames,
-    detected=detected,
+    detected=observed_results,
     sent=sent,
     status="ok",
+    actionable=actionable_results,
+    actionability_gated=actionability_gated,
     market_map=current_map,
     scalp=_scalp_status(ctx),
     conflicts=conflicts,
@@ -2549,11 +2724,12 @@ async def _handle_event(
     client,
     symbol,
     exec_tf,
-    detected,
+    observed_results,
     sent,
     conflicts,
     structure_gated,
     eligibility_gated,
+    actionability_gated,
   )
   return sent
 
