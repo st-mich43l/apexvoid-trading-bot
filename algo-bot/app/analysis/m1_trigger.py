@@ -19,6 +19,8 @@ from typing import Any
 
 import pandas as pd
 
+from app.autotrade.execution_confirmation import parse_bar_timestamp
+
 
 ALL_PATTERNS = (
   "wick_rejection",
@@ -65,6 +67,15 @@ def _geometry(bar: pd.Series) -> _BarGeometry | None:
   return _BarGeometry(o, h, l, c, range_, body, upper_wick, lower_wick)
 
 
+def _intersects_zone(
+  geo: _BarGeometry,
+  *,
+  zone_low: float,
+  zone_high: float,
+) -> bool:
+  return geo.low <= zone_high and geo.high >= zone_low
+
+
 def enabled_patterns(cfg: Any) -> set[str]:
   raw = str(getattr(cfg, "m1_trigger_patterns", ",".join(ALL_PATTERNS)) or "")
   configured = {item.strip() for item in raw.split(",") if item.strip()}
@@ -76,9 +87,6 @@ def _wick_rejection(
   zone_low: float, zone_high: float, cfg: Any,
 ) -> M1TriggerResult | None:
   wick_fraction = float(getattr(cfg, "m1_trigger_wick_fraction", 0.5))
-  touches_zone = geo.low <= zone_high and geo.high >= zone_low
-  if not touches_zone:
-    return None
   if direction == "BUY":
     if geo.close <= zone_high or geo.lower_wick / geo.range_ < wick_fraction:
       return None
@@ -203,8 +211,7 @@ def _hammer(
   bar: pd.Series, geo: _BarGeometry, *, direction: str,
   zone_low: float, zone_high: float, cfg: Any,
 ) -> M1TriggerResult | None:
-  touches_zone = geo.low <= zone_high and geo.high >= zone_low
-  if not touches_zone or geo.body / geo.range_ > _HAMMER_BODY_FRACTION:
+  if geo.body / geo.range_ > _HAMMER_BODY_FRACTION:
     return None
   if direction == "BUY":
     if (
@@ -247,6 +254,53 @@ _DETECTORS = {
 }
 
 
+def _evaluate_bar(
+  bar: pd.Series,
+  *,
+  prior: pd.Series | None,
+  zone_low: float,
+  zone_high: float,
+  key_level: float,
+  direction: str,
+  cfg: Any,
+) -> M1TriggerResult | None:
+  geo = _geometry(bar)
+  if geo is None or not _intersects_zone(
+    geo,
+    zone_low=zone_low,
+    zone_high=zone_high,
+  ):
+    return None
+  patterns = enabled_patterns(cfg)
+  for pattern in ALL_PATTERNS:
+    if pattern not in patterns:
+      continue
+    detector = _DETECTORS[pattern]
+    result = detector(
+      bar,
+      geo,
+      prior,
+      direction,
+      zone_low,
+      zone_high,
+      key_level,
+      cfg,
+    )
+    if result is not None:
+      return result
+  return None
+
+
+def _bar_is_closed(bar: pd.Series) -> bool:
+  """Frames from RedisOHLCSource are closed-only; honour explicit flags too."""
+  if "closed" not in bar.index:
+    return True
+  value = bar.get("closed")
+  if value is None or pd.isna(value):
+    return True
+  return bool(value)
+
+
 def evaluate_m1_trigger(
   m1: pd.DataFrame,
   *,
@@ -270,16 +324,99 @@ def evaluate_m1_trigger(
   if direction not in {"BUY", "SELL"}:
     return None
   bar = m1.iloc[-1]
-  geo = _geometry(bar)
-  if geo is None:
+  if not _bar_is_closed(bar):
     return None
   prior = m1.iloc[-2] if len(m1) >= 2 else None
-  patterns = enabled_patterns(cfg)
-  for pattern in ALL_PATTERNS:
-    if pattern not in patterns:
+  if prior is not None and not _bar_is_closed(prior):
+    prior = None
+  return _evaluate_bar(
+    bar,
+    prior=prior,
+    zone_low=zone_low,
+    zone_high=zone_high,
+    key_level=key_level,
+    direction=direction,
+    cfg=cfg,
+  )
+
+
+def evaluate_m1_trigger_window(
+  m1: pd.DataFrame,
+  *,
+  zone_low: float,
+  zone_high: float,
+  key_level: float,
+  direction: str,
+  earliest_bar_ts: int,
+  after_bar_ts: int | None,
+  cfg: Any = None,
+) -> M1TriggerResult | None:
+  """Return the earliest unprocessed closed trigger in the current episode."""
+  if m1 is None or m1.empty:
+    return None
+  side = str(direction).upper()
+  if side not in {"BUY", "SELL"}:
+    return None
+  earliest = int(earliest_bar_ts)
+  after = None if after_bar_ts is None else int(after_bar_ts)
+  timestamps = [parse_bar_timestamp(index) for index in m1.index]
+  for position, bar_ts in enumerate(timestamps):
+    if bar_ts is None or bar_ts < earliest:
       continue
-    detector = _DETECTORS[pattern]
-    result = detector(bar, geo, prior, direction, zone_low, zone_high, key_level, cfg)
+    if after is not None and bar_ts <= after:
+      continue
+    bar = m1.iloc[position]
+    if not _bar_is_closed(bar):
+      continue
+    prior = None
+    if position > 0:
+      prior_ts = timestamps[position - 1]
+      prior_bar = m1.iloc[position - 1]
+      if (
+        prior_ts is not None
+        and prior_ts >= earliest
+        and _bar_is_closed(prior_bar)
+      ):
+        prior = prior_bar
+    result = _evaluate_bar(
+      bar,
+      prior=prior,
+      zone_low=zone_low,
+      zone_high=zone_high,
+      key_level=key_level,
+      direction=side,
+      cfg=cfg,
+    )
     if result is not None:
-      return result
+      return M1TriggerResult(
+        pattern=result.pattern,
+        direction=result.direction,
+        wick_extreme=result.wick_extreme,
+        bar_ts=bar_ts,
+        message=result.message,
+      )
   return None
+
+
+def latest_eligible_m1_bar_ts(
+  m1: pd.DataFrame | None,
+  *,
+  earliest_bar_ts: int,
+  after_bar_ts: int | None,
+) -> int | None:
+  """Newest closed bar timestamp eligible for the current episode."""
+  if m1 is None or m1.empty:
+    return None
+  earliest = int(earliest_bar_ts)
+  after = None if after_bar_ts is None else int(after_bar_ts)
+  latest = None
+  for position, index in enumerate(m1.index):
+    bar_ts = parse_bar_timestamp(index)
+    if bar_ts is None or bar_ts < earliest:
+      continue
+    if after is not None and bar_ts <= after:
+      continue
+    if not _bar_is_closed(m1.iloc[position]):
+      continue
+    latest = bar_ts
+  return latest

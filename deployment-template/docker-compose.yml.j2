@@ -10,6 +10,9 @@
 {% set structural_guard_default = 'observe' if auto_trade_profile == 'demo_eval' else ('balanced' if require_demo == 'true' else 'strict') %}
 {% set zone_cooldown_default = 'false' if auto_trade_profile == 'demo_eval' else 'true' %}
 {% set zone_reconcile_default = 'shadow' if auto_trade_profile == 'demo_eval' else 'enforce' %}
+{% set execution_defaults = {
+  'AUTO_TRADE_RETEST_TRIGGER_VALIDITY_BARS': '2'
+} %}
 {% set demo_execution_defaults = {
   'AUTO_TRADE_STRUCTURAL_GUARD_MODE': 'observe',
   'AUTO_TRADE_OPPOSING_BARRIER_VETO_ENABLED': 'false',
@@ -26,7 +29,7 @@
   'AUTO_TRADE_MAP_HARD_ENTRY_DRIFT_PIPS': '20',
   'AUTO_TRADE_TREND_HARD_ENTRY_DRIFT_PIPS': '30'
 } if auto_trade_profile == 'demo_eval' else {} %}
-{% set resolved_bot_env = demo_execution_defaults | combine(apexvoid_trading_bot_env) %}
+{% set resolved_bot_env = execution_defaults | combine(demo_execution_defaults) | combine(apexvoid_trading_bot_env) %}
 name: apexvoid-trading-bot
 
 services:

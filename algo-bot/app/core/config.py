@@ -373,6 +373,14 @@ class Settings(BaseSettings):
   )
   m1_trigger_wick_fraction: float = 0.5
   m1_trigger_strong_close_pct: float = 0.2
+  # A retest trigger may authorize execution only for this many subsequent
+  # M1 bars. It never carries across a zone exit/re-entry episode.
+  auto_trade_retest_trigger_validity_bars: int = Field(
+    default=2,
+    validation_alias=AliasChoices(
+      "AUTO_TRADE_RETEST_TRIGGER_VALIDITY_BARS",
+    ),
+  )
   # One forming card per setup (P4): lifecycle updates thread as replies to
   # it, and it is deleted (never a "rejected" message) on terminal.
   delivery_thread_lifecycle: bool = True
@@ -653,6 +661,10 @@ class Settings(BaseSettings):
     if int(self.auto_trade_structural_reaction_lookback_bars) < 1:
       raise ValueError(
         "AUTO_TRADE_STRUCTURAL_REACTION_LOOKBACK_BARS must be >= 1"
+      )
+    if not 1 <= int(self.auto_trade_retest_trigger_validity_bars) <= 5:
+      raise ValueError(
+        "AUTO_TRADE_RETEST_TRIGGER_VALIDITY_BARS must be between 1 and 5"
       )
     if (
       self.auto_trade_execution_zone_max_width_atr <= 0

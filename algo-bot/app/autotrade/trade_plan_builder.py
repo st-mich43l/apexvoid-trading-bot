@@ -167,6 +167,10 @@ def build_trade_plan_from_strategy_match(
   analysis_engine_version: str = "",
   market_map_id: str = "",
   config_fingerprint: str = "",
+  confirmation_source: str = "",
+  execution_confirmation_bar_ts: int | None = None,
+  zone_episode_id: str | None = None,
+  trigger_wick_extreme: float | None = None,
 ) -> TradePlan:
   """Translate a CONFIRMED StrategyMatch into a TradePlan V7.
 
@@ -222,6 +226,7 @@ def build_trade_plan_from_strategy_match(
     opposing_zone_high=opposing_zone_high,
     opposing_zone_id=opposing_zone_id,
     executable_quote=executable_quote,
+    trigger_wick_extreme=trigger_wick_extreme,
   )
   if not evaluation.allowed:
     raise TradePlanBuildRejected(
@@ -312,11 +317,19 @@ def build_trade_plan_from_strategy_match(
   stop = TradePlanStop(
     type="absolute",
     price=Decimal(str(measured["planned_stop_price"])),
-    source=str(measured.get("stop_source", "protective_stop_plan")),
+    source=(
+      "m1_trigger_wick"
+      if trigger_wick_extreme is not None
+      else "m5_structure"
+      if confirmation_source == "m5_authoritative"
+      else str(measured.get("stop_source", "protective_stop_plan"))
+    ),
     structure_id=match.structural_zone_id,
-    reason="app.autotrade.execution_policy.evaluate_execution_policy "
-    "-> app.autotrade.protective_stop.plan_protective_stop, the same "
-    "computation the V6 path already applies to this match",
+    reason=(
+      f"execution confirmation={confirmation_source or 'legacy_m1'}; "
+      "app.autotrade.execution_policy.evaluate_execution_policy -> "
+      "app.autotrade.protective_stop.plan_protective_stop"
+    ),
   )
 
   management = TradePlanManagement(
@@ -358,6 +371,9 @@ def build_trade_plan_from_strategy_match(
       analysis_engine_version=analysis_engine_version,
       market_map_id=market_map_id,
       config_fingerprint=config_fingerprint,
+      confirmation_source=confirmation_source,
+      confirmation_bar_ts=execution_confirmation_bar_ts,
+      zone_episode_id=zone_episode_id,
     ),
   )
   plan.validate()

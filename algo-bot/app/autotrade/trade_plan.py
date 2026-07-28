@@ -421,12 +421,18 @@ class TradePlanProvenance:
   analysis_engine_version: str
   market_map_id: str
   config_fingerprint: str
+  confirmation_source: str = ""
+  confirmation_bar_ts: int | None = None
+  zone_episode_id: str | None = None
 
   def to_dict(self) -> dict:
     return {
       "analysis_engine_version": self.analysis_engine_version,
       "market_map_id": self.market_map_id,
       "config_fingerprint": self.config_fingerprint,
+      "confirmation_source": self.confirmation_source,
+      "confirmation_bar_ts": self.confirmation_bar_ts,
+      "zone_episode_id": self.zone_episode_id,
     }
 
   @classmethod
@@ -435,6 +441,17 @@ class TradePlanProvenance:
       analysis_engine_version=str(data.get("analysis_engine_version", "")),
       market_map_id=str(data.get("market_map_id", "")),
       config_fingerprint=str(data.get("config_fingerprint", "")),
+      confirmation_source=str(data.get("confirmation_source", "")),
+      confirmation_bar_ts=(
+        None
+        if data.get("confirmation_bar_ts") is None
+        else int(data["confirmation_bar_ts"])
+      ),
+      zone_episode_id=(
+        None
+        if data.get("zone_episode_id") is None
+        else str(data["zone_episode_id"])
+      ),
     )
 
 

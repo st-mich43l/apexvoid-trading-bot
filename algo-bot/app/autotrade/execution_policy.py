@@ -416,6 +416,7 @@ def evaluate_execution_policy(
   opposing_zone_high: float | None = None,
   opposing_zone_id: str | None = None,
   executable_quote: float | None = None,
+  trigger_wick_extreme: float | None = None,
 ) -> ExecutionPolicyEvaluation:
   """Enforce every declared setup policy before candidate publication."""
   try:
@@ -532,10 +533,14 @@ def evaluate_execution_policy(
       pip_size=pip,
       cfg=cfg,
     )
-    sweep_extreme = getattr(
-      match,
-      "sweep_low" if direction == "BUY" else "sweep_high",
-      None,
+    sweep_extreme = (
+      trigger_wick_extreme
+      if trigger_wick_extreme is not None
+      else getattr(
+        match,
+        "sweep_low" if direction == "BUY" else "sweep_high",
+        None,
+      )
     )
     zone_low = (
       opposing_zone_low
