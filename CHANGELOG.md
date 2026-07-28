@@ -55,6 +55,11 @@ dated section after deployment.
   mirror: `app.autotrade.scale_in_sizing`.
 
 ### Fixed
+- After booked TPs, a BE/protective-stop exit that reconcile discovers without
+  a confirmed OrderType no longer shows `reason unconfirmed` with a diluted
+  volume-weighted Total (e.g. TP2 ~60p then BE residual → `+22.8`). Close
+  reason is inferred as broker SL/TP when exit sits on the trailed stop, and
+  Total / `group_realized_pips` reports the highest target reached (TP2 = 60).
 - Break-even buffer direction: `StopTrailPlanner.ProtectedBreakevenStop` had
   BUY/SELL swapped (adverse-side cushion instead of profit-side protection),
   moving a SELL entry 4100.74 BE+6 stop to 4100.80 instead of the correct

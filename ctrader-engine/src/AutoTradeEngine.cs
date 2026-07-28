@@ -4760,6 +4760,57 @@ public sealed class AutoTradeEngine(
   private static decimal WeightedPips(decimal pipVolume, long initialVolume) =>
     initialVolume > 0 ? pipVolume / initialVolume : 0m;
 
+  // Highest plan target that already booked (TP1/TP2/...). Null when the
+  // runner never reached a managed target - callers then keep weighted net.
+  private static decimal? AchievedTargetPips(AutoTradePositionState state)
+  {
+    if (state.NextTargetIndex <= 0 || state.TargetsPips.Count == 0)
+    {
+      return null;
+    }
+    var index = Math.Min(state.NextTargetIndex, state.TargetsPips.Count) - 1;
+    return state.TargetsPips[index];
+  }
+
+  // Close-card / group_result total: prefer the highest target reached over
+  // a volume-weighted blend that mixes booked TPs with a later BE residual.
+  // If the final exit itself printed higher than that target (manual/trail
+  // beyond the last booked TP), keep the higher exit leg.
+  private decimal TerminalAchievedPips(
+    AutoTradePositionState state,
+    decimal exitEstimate,
+    long remainingVolume,
+    decimal pipVolume,
+    long initialVolume
+  )
+  {
+    var weighted = WeightedPips(pipVolume, initialVolume);
+    if (AchievedTargetPips(state) is not decimal achieved || achieved <= 0)
+    {
+      return weighted;
+    }
+    if (remainingVolume <= 0)
+    {
+      return achieved;
+    }
+    return Math.Max(achieved, SignedPips(state, exitEstimate));
+  }
+
+  // True when at least one TP was booked and the exit sits on the current
+  // protective stop (BE / trailed TP) within a small pip tolerance.
+  private bool LooksLikeProtectiveStopHit(
+    AutoTradePositionState state,
+    decimal exitEstimate
+  )
+  {
+    if (state.NextTargetIndex <= 0 || state.CurrentStopLoss is not decimal stop)
+    {
+      return false;
+    }
+    var tolerance = Math.Max(options.PipSize, 2m * options.PipSize);
+    return Math.Abs(exitEstimate - stop) <= tolerance;
+  }
+
   private static string GroupId(AutoTradePositionState state) =>
     string.IsNullOrWhiteSpace(state.GroupId)
       ? GroupToken(state.CandidateId)
@@ -5567,10 +5618,32 @@ public sealed class AutoTradeEngine(
         var exitEstimate = closeLookup.ExecutionPrice
           ?? state.CurrentStopLoss
           ?? state.EntryPrice;
+        // After one or more TPs the protective stop has been trailed (BE /
+        // prior TP). If the position then vanishes with an exit at that
+        // stop, treat it as a broker SL/TP hit even when the order-list
+        // lookup could not confirm OrderType - otherwise operators see
+        // "reason unconfirmed" for a normal BE stop-out.
+        if (
+          closeReason == PositionCloseReason.Unknown
+          && LooksLikeProtectiveStopHit(state, exitEstimate)
+        )
+        {
+          closeReason = PositionCloseReason.StopLossOrTakeProfit;
+        }
         var remainingVolume = Math.Max(0, state.RemainingVolume);
         var pipVolume = state.GroupRealizedPipVolume
           + SignedPips(state, exitEstimate) * remainingVolume;
-        var terminalGroupPips = WeightedPips(pipVolume, initialVolume);
+        // Total on the close card is the highest target reached (e.g. TP2
+        // = 60), not the volume-weighted blend that dilutes booked TPs
+        // with a later BE residual. Fall back to weighted only when no
+        // target was booked yet (pure SL / full one-shot close).
+        var terminalGroupPips = TerminalAchievedPips(
+          state,
+          exitEstimate,
+          remainingVolume,
+          pipVolume,
+          initialVolume
+        );
         var groupId = GroupId(state);
         var (closeMessage, closeReasonCode) = closeReason switch
         {
