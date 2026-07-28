@@ -26,6 +26,17 @@ public sealed class AutoTradeEngine(
   private readonly object _reportLock = new();
   private readonly Func<DateTimeOffset> _clock = clock ?? (() => DateTimeOffset.UtcNow);
   private readonly Action<string> _log = log ?? Log;
+  // TradePlan V7 broker-execution runtime (docs/adr-trade-plan-v7-boundary.md) -
+  // composed into this engine's own session loop (see PollTradePlansAsync)
+  // rather than given a separate RunSessionAsync/reconcile/heartbeat of its
+  // own, so it shares this engine's readiness/gate machinery instead of
+  // duplicating it. Deliberately a distinct class in its own source file so
+  // TradePlanExecutionEngineDependencyTests can scan every V7 file for
+  // forbidden analysis/route/stop symbols without tripping over this file's
+  // legitimate V6 use of them elsewhere.
+  private readonly TradePlanRuntime _tradePlanRuntime = new(
+    options, store, clock ?? (() => DateTimeOffset.UtcNow), log ?? Log
+  );
   private long _spotSequence;
   private SpotPrice? _lastSpot;
   private ICTraderTradeClient? _client;
@@ -230,6 +241,15 @@ public sealed class AutoTradeEngine(
           );
           commandCursor = commandEntry.Id;
           await store.SetCommandCursorAsync(commandCursor, cancellationToken);
+        }
+        if (options.ContractMode != "legacy_v6")
+        {
+          await WithGateAsync(
+            () => _tradePlanRuntime.PollAsync(
+              _client!, symbol, _lastSpot, cancellationToken
+            ),
+            cancellationToken
+          );
         }
         var entries = await store.ReadCandidatesAsync(
           options.CandidateStream,
@@ -1007,6 +1027,18 @@ public sealed class AutoTradeEngine(
     var trendCandidate = IsTrendCandidate(candidate);
     var strategyMatchCandidate = IsStrategyMatchCandidate(candidate);
     var manualAlgoCandidate = IsManualAlgoCandidate(candidate);
+    if (options.ContractMode == "v7_only" && !manualAlgoCandidate)
+    {
+      // V7 is the sole autonomous order path in this mode - reject any new
+      // V6 autonomous candidate before planning or broker calls, as
+      // defense-in-depth alongside Python no longer publishing them (see
+      // docs/adr-trade-plan-v7-boundary.md Section L). Manual /algo
+      // candidates are explicitly exempt - they are the owner's direct
+      // decision, not autonomous analysis output.
+      return await RejectAsync(
+        candidate, "legacy_candidate_disabled_in_v7_only", cancellationToken
+      );
+    }
     var orderTypePreference = (
       candidate.OrderTypePreference ?? "either"
     ).Trim().ToLowerInvariant();

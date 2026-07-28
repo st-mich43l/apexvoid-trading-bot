@@ -63,6 +63,37 @@ public interface IAutoTradeStore
   // it never collides with the candidate-stream cursor above.
   Task<string> GetCommandCursorAsync(CancellationToken cancellationToken);
   Task SetCommandCursorAsync(string cursor, CancellationToken cancellationToken);
+  // Dedicated cursor for the `execution:trade_plans` (TradePlan V7) stream -
+  // an entirely separate namespace from the V6 candidate stream above, so a
+  // V7 read can never advance (or be advanced by) the V6 cursor.
+  Task<string> GetTradePlanCursorAsync(CancellationToken cancellationToken) =>
+    Task.FromResult("0-0");
+  Task SetTradePlanCursorAsync(string cursor, CancellationToken cancellationToken) =>
+    Task.CompletedTask;
+  // Generic string get/set/delete - used by the V7 runtime for plan/position
+  // state that doesn't fit the V6 candidate-lease vocabulary. Default no-ops
+  // so existing IAutoTradeStore fakes that predate TradePlan V7 keep
+  // compiling; TradePlanRuntimeTests uses a fake that overrides these for
+  // real in-memory behavior.
+  Task<string?> GetStringAsync(string key, CancellationToken cancellationToken) =>
+    Task.FromResult<string?>(null);
+  Task SetStringAsync(
+    string key,
+    string value,
+    CancellationToken cancellationToken
+  ) => Task.CompletedTask;
+  Task DeleteStringAsync(string key, CancellationToken cancellationToken) =>
+    Task.CompletedTask;
+  // Atomic SETNX-with-TTL claim - the only primitive the V7 runtime needs
+  // for "at most one executor instance ever arms/submits this plan_id",
+  // mirroring the exactly-once intent of the V6 candidate lease without
+  // reusing its candidate_id/stream_event_id-shaped Lua machinery.
+  Task<bool> TryClaimStringAsync(
+    string key,
+    string value,
+    TimeSpan ttl,
+    CancellationToken cancellationToken
+  ) => Task.FromResult(false);
   Task<IReadOnlyList<TradeStreamEntry>> ReadCandidatesAsync(
     string stream,
     string afterId,
@@ -426,6 +457,13 @@ public sealed class StackExchangeRedisSeriesCommands :
     CancellationToken cancellationToken
   ) => _db.KeyDeleteAsync(key);
 
+  public async Task<bool> TryClaimStringAsync(
+    string key,
+    string value,
+    TimeSpan ttl,
+    CancellationToken cancellationToken
+  ) => await _db.StringSetAsync(key, value, ttl, When.NotExists);
+
   public async Task<string> GetCursorAsync(CancellationToken cancellationToken)
   {
     var value = await _db.StringGetAsync("auto_trade:cursor");
@@ -434,6 +472,15 @@ public sealed class StackExchangeRedisSeriesCommands :
 
   public Task SetCursorAsync(string cursor, CancellationToken cancellationToken) =>
     _db.StringSetAsync("auto_trade:cursor", cursor);
+
+  public async Task<string> GetTradePlanCursorAsync(CancellationToken cancellationToken)
+  {
+    var value = await _db.StringGetAsync("execution:trade_plan_cursor");
+    return value.HasValue ? value.ToString() : "0-0";
+  }
+
+  public Task SetTradePlanCursorAsync(string cursor, CancellationToken cancellationToken) =>
+    _db.StringSetAsync("execution:trade_plan_cursor", cursor);
 
   public async Task<string> GetCommandCursorAsync(CancellationToken cancellationToken)
   {

@@ -431,7 +431,13 @@ public sealed record AutoTradeEvent(
   decimal? RiskMultiplier = null,
   string? TargetModel = null,
   string? EntryDistribution = null,
-  bool MutatesLifecycle = false
+  bool MutatesLifecycle = false,
+  // TradePlan V7 events only (docs/adr-trade-plan-v7-boundary.md Section M):
+  // CandidateId carries plan_id, MatchId carries setup_id, ThesisId carries
+  // thesis_id (all already-existing fields, reused rather than duplicated).
+  // EntryType is the one genuinely new label V7 needs (market_watch/
+  // single_limit/limit_ladder has no V6 analogue).
+  string? EntryType = null
 );
 
 public sealed record AutoTradeGroupPlan(

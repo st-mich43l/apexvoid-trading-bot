@@ -251,15 +251,16 @@ async def _maybe_defer_cancel_to_broker(
   sid: int,
   reply_to: int | None,
 ) -> dict | None:
-  """Only an ARMED (not yet filled) manual algo signal defers here - once
-  filled, /trade_cancel is not a broker verb (the position is open; the
-  owner wants /trade_close instead), so a filled/error/cancelled signal
-  falls through unchanged.
+  """Only a PENDING (broker-confirmed live limit order, not yet filled)
+  manual algo signal defers here - once filled, /trade_cancel is not a
+  broker verb (the position is open; the owner wants /trade_close
+  instead), so a requested/filled/error/cancelled signal falls through
+  unchanged.
   """
   full = await get_manual_signal(sid)
   if full is None or full.get("execution_mode") != "algo":
     return None
-  if full.get("execution_status") != "armed":
+  if full.get("execution_status") != "pending":
     return None
   intent_id = full.get("execution_intent_id")
   if not intent_id:

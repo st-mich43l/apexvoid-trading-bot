@@ -535,6 +535,10 @@ public sealed class CTraderOpenApiFeedClient : ICTraderFeedClient, ICTraderTrade
         .FirstOrDefault();
       if (closingDeal is null)
       {
+        Log(
+          $"position_close_reason_unknown position_id={positionId} "
+            + $"reason=no_closing_deal_found window={fromTimestamp}-{approximateCloseMs}"
+        );
         return new PositionCloseLookup(PositionCloseReason.Unknown);
       }
       var executionPrice = Convert.ToDecimal(closingDeal.ExecutionPrice);
@@ -550,10 +554,25 @@ public sealed class CTraderOpenApiFeedClient : ICTraderFeedClient, ICTraderTrade
         res => res.CtidTraderAccountId == options.AccountId,
         cancellationToken
       );
+      // Prefer an exact OrderId match (the deal's own backing order); if the
+      // historical order list doesn't surface that exact id (broker OMS
+      // quirks around auto-generated SL/TP execution orders), fall back to
+      // the most recent order in the bracket window still tagged with this
+      // position - PositionId/OrderType survive even when OrderId doesn't
+      // line up, and are the next-strongest correlation available.
       var closingOrder = ordersResponse.Order
-        .FirstOrDefault(order => order.OrderId == closingDeal.OrderId);
+        .FirstOrDefault(order => order.OrderId == closingDeal.OrderId)
+        ?? ordersResponse.Order
+          .Where(order => order.HasPositionId && order.PositionId == positionId)
+          .OrderByDescending(order => order.UtcLastUpdateTimestamp)
+          .FirstOrDefault();
       if (closingOrder is null)
       {
+        Log(
+          $"position_close_reason_unknown position_id={positionId} "
+            + $"reason=closing_order_not_found order_id={closingDeal.OrderId} "
+            + $"bracket={bracketStart}-{bracketEnd}"
+        );
         return new PositionCloseLookup(PositionCloseReason.Unknown, executionPrice);
       }
       var reason = closingOrder.OrderType == ProtoOAOrderType.StopLossTakeProfit
@@ -563,6 +582,10 @@ public sealed class CTraderOpenApiFeedClient : ICTraderFeedClient, ICTraderTrade
     }
     catch (Exception exception) when (exception is not OperationCanceledException)
     {
+      Log(
+        $"position_close_reason_lookup_failed position_id={positionId}: "
+          + exception.Message
+      );
       return new PositionCloseLookup(PositionCloseReason.Unknown);
     }
   }

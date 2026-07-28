@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timezone
+from decimal import Decimal
 import hashlib
 import json
 import logging
@@ -71,6 +72,22 @@ from app.autotrade.multi_match import (
   strategy_matches_key,
 )
 from app.autotrade.lifecycle import emit_lifecycle, increment_metric
+from app.analysis.structural_reaction_support import v7_thesis_id
+from app.autotrade.setup_lifecycle import (
+  CONFIRMED,
+  PLAN_BUILT,
+  PLAN_PUBLISHED,
+  SetupLifecycleError,
+  claim_active_thesis,
+  load_setup,
+  release_active_thesis,
+  transition_setup,
+)
+from app.autotrade.trade_plan_builder import (
+  TradePlanBuildRejected,
+  build_trade_plan_from_strategy_match,
+)
+from app.autotrade.trade_plan_stream import publish_trade_plan
 from app.autotrade.route_outcome import record_route_outcome, route_outcome_key
 from app.autotrade.reaction_identity import (
   THESIS_CLAIM_ACQUIRE_LUA,
@@ -3923,6 +3940,231 @@ async def _publish_strategy_match(
   return candidate_id
 
 
+_V7_ACTIVE_MODES = ("shadow_v7", "v7_primary", "v7_only")
+_V7_MAX_VOLUME_DEFAULT = 100_000
+
+
+def _v7_plan_id(match: StrategyMatch) -> str:
+  return f"v7:{match.match_id}"
+
+
+async def _record_v7_build_rejected(
+  client: Any,
+  symbol: str,
+  match: StrategyMatch,
+  reason_code: str,
+  message: str,
+  measured: dict[str, Any],
+) -> None:
+  await _record_gate_reject(client, symbol, f"v7_{reason_code}")
+  await emit_lifecycle(
+    client,
+    "rejected",
+    symbol=symbol,
+    correlation_id=match.match_id,
+    timeframe=match.source_tf,
+    reason_code=reason_code,
+    message=message,
+    measured=measured,
+  )
+  log.info(
+    "v7 plan build rejected symbol=%s match_id=%s reason=%s message=%s",
+    symbol, match.match_id[:12], reason_code, message,
+  )
+
+
+async def _publish_trade_plan_v7(
+  client: Any,
+  symbol: str,
+  spot: AutoTradeSpot | None,
+  match: StrategyMatch,
+  *,
+  htf_zones: list[Zone] | None = None,
+  htf_levels: list[Level] | None = None,
+  regime: RegimeInfo | None = None,
+) -> str | None:
+  """Build and publish a TradePlan V7 from an already-CONFIRMED match.
+
+  Deliberately separate from _publish_strategy_match (the V6 path) rather
+  than sharing its body: V6's function is full of V6-only concerns
+  (candidate_id/group_id shaping, ZoneFillPlanner routing, ...) that must
+  not leak into the V7 contract. What IS shared are the same quality/safety
+  guard functions the V6 path already calls (opposing barrier, zone
+  cooldown, overlapping-zone veto) - these are Python-side risk checks with
+  no C#-side duplicate, not the dual-planning anti-pattern the ADR is
+  about. _adapt_counter_bias_target is deliberately NOT called here - it is
+  the "target adaptation" ownership docs/adr-trade-plan-v7-boundary.md and
+  the originating task explicitly name as something worker.py must not own
+  on the V7 path; targets_pips is used exactly as scanner.py decided it.
+
+  Returns the published plan_id, or None if not published (contract mode
+  off, thesis already claimed by another setup, or a guard/policy
+  rejection - always recorded via _record_v7_build_rejected, never a bare
+  silent return).
+  """
+  contract_mode = str(settings.auto_trade_contract_mode or "legacy_v6")
+  if contract_mode not in _V7_ACTIVE_MODES:
+    return None
+  if spot is None or not spot.fresh:
+    return None
+  if not match.thesis_id:
+    await _record_v7_build_rejected(
+      client, symbol, match, "missing_stable_thesis_id",
+      "match has no thesis_id - setup_lifecycle wiring did not attach one",
+      {},
+    )
+    return None
+
+  setup_id = match.match_id
+  setup_record = await load_setup(client, setup_id)
+  if setup_record is None or setup_record.state != CONFIRMED:
+    await _record_v7_build_rejected(
+      client, symbol, match, "setup_not_confirmed",
+      f"setup {setup_id!r} is not in CONFIRMED state "
+      f"({setup_record.state if setup_record else 'missing'})",
+      {},
+    )
+    return None
+
+  claimed = await claim_active_thesis(
+    client, symbol=symbol, thesis_id=match.thesis_id, setup_id=setup_id,
+  )
+  if not claimed:
+    await _record_v7_build_rejected(
+      client, symbol, match, "thesis_already_owned",
+      f"thesis {match.thesis_id!r} is already owned by a different setup - "
+      "one active thesis may own at most one autonomous initial plan",
+      {},
+    )
+    return None
+
+  entry_reference = _executable_spot_price(spot, match.direction)
+  strategy_opposing_zone = _nearest_directional_zone(
+    match.direction, spot.price, htf_zones or [],
+  )
+  guard_mode = resolve_guard_mode(settings)
+  source = _structural_source_identity(
+    strategy=match.strategy,
+    family=match.family,
+    structural_source=match.structural_source or match.strategy,
+    low=match.entry_low,
+    high=match.entry_high,
+    key_level=match.key_level,
+    zone_id=match.zone_id,
+    level_id=match.level_id,
+  )
+  barrier_outcome = _opposing_barrier_decision(
+    match.direction, spot.price, match.target_price, match.atr,
+    htf_zones or [], htf_levels or [],
+    settings.auto_trade_opposing_barrier_atr,
+    source=source,
+    guard_mode=guard_mode,
+  )
+  if barrier_outcome.hard_block:
+    await release_active_thesis(
+      client, symbol=symbol, thesis_id=match.thesis_id, setup_id=setup_id,
+    )
+    await _record_v7_build_rejected(
+      client, symbol, match, barrier_outcome.reason_code,
+      barrier_outcome.message, barrier_outcome.measured,
+    )
+    return None
+
+  cooldown_reason = await _zone_cooldown_reason(
+    client, symbol, match.direction, spot.price,
+    match.atr, settings.auto_trade_zone_cooldown_atr,
+  )
+  if cooldown_reason is not None:
+    await release_active_thesis(
+      client, symbol=symbol, thesis_id=match.thesis_id, setup_id=setup_id,
+    )
+    await _record_v7_build_rejected(
+      client, symbol, match, "zone_cooldown", cooldown_reason, {},
+    )
+    return None
+
+  overlap_reason = _overlapping_zone_conflict_reason(entry_reference, None)
+  if overlap_reason is not None:
+    await release_active_thesis(
+      client, symbol=symbol, thesis_id=match.thesis_id, setup_id=setup_id,
+    )
+    await _record_v7_build_rejected(
+      client, symbol, match, "overlapping_zone_conflict", overlap_reason, {},
+    )
+    return None
+
+  opposing_zone_low = (
+    strategy_opposing_zone.low if strategy_opposing_zone is not None else None
+  )
+  opposing_zone_high = (
+    strategy_opposing_zone.high if strategy_opposing_zone is not None else None
+  )
+  try:
+    plan = build_trade_plan_from_strategy_match(
+      match,
+      plan_id=_v7_plan_id(match),
+      setup_id=setup_id,
+      thesis_id=match.thesis_id,
+      pip_size=Decimal(str(units.pip_size(symbol))),
+      spot_price=spot.price,
+      regime=None if regime is None else regime.state,
+      cfg=settings,
+      opposing_zone_low=opposing_zone_low,
+      opposing_zone_high=opposing_zone_high,
+      opposing_zone_id=(
+        None if strategy_opposing_zone is None
+        else getattr(strategy_opposing_zone, "id", None)
+      ),
+      executable_quote=entry_reference,
+      max_volume=int(getattr(
+        settings, "auto_trade_v7_max_volume", _V7_MAX_VOLUME_DEFAULT,
+      )),
+    )
+  except TradePlanBuildRejected as exc:
+    await release_active_thesis(
+      client, symbol=symbol, thesis_id=match.thesis_id, setup_id=setup_id,
+    )
+    await _record_v7_build_rejected(
+      client, symbol, match, exc.reason_code, exc.message, exc.measured,
+    )
+    return None
+
+  try:
+    await transition_setup(client, setup_id, PLAN_BUILT, reason_code="v7_builder")
+    await publish_trade_plan(client, plan)
+    await transition_setup(
+      client, setup_id, PLAN_PUBLISHED, reason_code="v7_stream_publish",
+    )
+  except SetupLifecycleError:
+    log.exception(
+      "v7 plan published but setup lifecycle transition failed "
+      "symbol=%s setup_id=%s plan_id=%s",
+      symbol, setup_id, plan.plan_id,
+    )
+  await increment_metric(client, "v7_plan_published", symbol=symbol)
+  await emit_lifecycle(
+    client,
+    "candidate_published",
+    symbol=symbol,
+    correlation_id=setup_id,
+    timeframe=match.source_tf,
+    reason_code="",
+    message=f"TradePlan V7 published: {match.strategy} {match.direction}",
+    measured={
+      "plan_id": plan.plan_id,
+      "thesis_id": plan.thesis_id,
+      "entry_type": plan.entry.type,
+      "stop_price": str(plan.stop.price),
+      "targets": [str(target.price) for target in plan.targets],
+    },
+  )
+  log.info(
+    "v7 plan published id=%s symbol=%s strategy=%s direction=%s entry_type=%s",
+    plan.plan_id, symbol, match.strategy, match.direction, plan.entry.type,
+  )
+  return plan.plan_id
+
+
 _TREND_SETUP_LABELS = {
   "pullback": "Trend Pullback",
   "breakout_continuation": "Breakout Continuation",
@@ -6340,23 +6582,42 @@ async def _handle_event(
         )
         return publication_result
       try:
-        published = await _publish_strategy_match(
+        await _publish_trade_plan_v7(
           client,
           symbol,
           spot,
           routed_match,
-          consume_redis_match=(
-            not settings.auto_trade_multi_match_enabled
-            and bool(scanner_strategy_matches)
-          ),
-          match_source=intent.source,
           htf_zones=htf_zones,
           htf_levels=htf_levels,
           regime=regime,
-          market_map=guard_market_map,
-          frames=frames,
-          cycle_id=str(event_ts or ""),
         )
+        if str(settings.auto_trade_contract_mode or "legacy_v6") == "v7_only":
+          # V7 is the sole autonomous order path in this mode - no new V6
+          # candidate may be published, per docs/adr-trade-plan-v7-boundary.md.
+          # Existing open V6 positions are untouched; this only blocks new
+          # autonomous publication.
+          await _record_gate_reject(
+            client, symbol, "legacy_candidate_disabled_in_v7_only",
+          )
+          published = None
+        else:
+          published = await _publish_strategy_match(
+            client,
+            symbol,
+            spot,
+            routed_match,
+            consume_redis_match=(
+              not settings.auto_trade_multi_match_enabled
+              and bool(scanner_strategy_matches)
+            ),
+            match_source=intent.source,
+            htf_zones=htf_zones,
+            htf_levels=htf_levels,
+            regime=regime,
+            market_map=guard_market_map,
+            frames=frames,
+            cycle_id=str(event_ts or ""),
+          )
       finally:
         await release_owned_lock(client, route_lock, route_lock_token)
       if published is not None:
@@ -6383,20 +6644,30 @@ async def _handle_event(
         client, routed_match, published,
       )
     elif intent.intent_id == box_intent_id:
-      published = await _publish_candidate(
-        client,
-        symbol,
-        event_ts,
-        spot,
-        decision,
-        scale_context,
-        regime=regime,
-        htf_zones=htf_zones,
-        htf_levels=htf_levels,
-        gate_source="private_range",
-        market_map=guard_market_map,
-        frames=frames,
-      )
+      if str(settings.auto_trade_contract_mode or "legacy_v6") == "v7_only":
+        # Private M1 range gate is a V6-only autonomous detector (Section A/L
+        # of the V7 cutover) - it never feeds scanner.py's setup lifecycle,
+        # so it has no V7 equivalent and must not publish new candidates
+        # once V7 is the sole autonomous path.
+        await _record_gate_reject(
+          client, symbol, "legacy_candidate_disabled_in_v7_only",
+        )
+        published = None
+      else:
+        published = await _publish_candidate(
+          client,
+          symbol,
+          event_ts,
+          spot,
+          decision,
+          scale_context,
+          regime=regime,
+          htf_zones=htf_zones,
+          htf_levels=htf_levels,
+          gate_source="private_range",
+          market_map=guard_market_map,
+          frames=frames,
+        )
       box_candidate_id = published
       publication_result = (
         CandidatePublicationResult.published(published)
@@ -6404,18 +6675,26 @@ async def _handle_event(
         else CandidatePublicationResult.blocked("publication_unavailable")
       )
     elif intent.intent_id == trend_intent_id:
-      published = await _publish_trend_candidate(
-        client,
-        symbol,
-        event_ts,
-        spot,
-        regime,
-        trend_decision,
-        htf_zones=htf_zones,
-        htf_levels=htf_levels,
-        market_map=guard_market_map,
-        frames=frames,
-      )
+      if str(settings.auto_trade_contract_mode or "legacy_v6") == "v7_only":
+        # Private trend detector (trend.py) is likewise V6-only autonomous
+        # analysis, parallel to (not fed by) scanner.py - see Section A/L.
+        await _record_gate_reject(
+          client, symbol, "legacy_candidate_disabled_in_v7_only",
+        )
+        published = None
+      else:
+        published = await _publish_trend_candidate(
+          client,
+          symbol,
+          event_ts,
+          spot,
+          regime,
+          trend_decision,
+          htf_zones=htf_zones,
+          htf_levels=htf_levels,
+          market_map=guard_market_map,
+          frames=frames,
+        )
       trend_candidate_id = published
       publication_result = (
         CandidatePublicationResult.published(published)
