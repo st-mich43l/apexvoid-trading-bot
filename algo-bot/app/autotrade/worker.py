@@ -3984,6 +3984,48 @@ async def _record_v7_build_rejected(
   )
 
 
+def _resolve_match_confluence_claim_id(
+  symbol: str,
+  match: StrategyMatch,
+  market_map: Any | None,
+) -> str | None:
+  """Use scanner's merged zone identity; resolve only for legacy matches."""
+  if match.confluence_zone_id:
+    return match.confluence_zone_id
+  if market_map is None:
+    return None
+  other_members = [
+    ConfluenceMember(
+      member_id=f"{getattr(entry, 'tier', 'entry')}:{entry.lo:.5f}:{entry.hi:.5f}",
+      side=entry.side,
+      low=float(entry.lo),
+      high=float(entry.hi),
+      kind=next(
+        (tag for tag in entry.tags if tag.casefold() in {
+          "demand", "supply", "ob", "fvg", "breaker",
+        }),
+        entry.tier,
+      ),
+      score=float(entry.score),
+    )
+    for entry in getattr(market_map, "actionable_entries", None) or []
+  ]
+  return resolve_confluence_zone_id(
+    match.entry_low,
+    match.entry_high,
+    "buy" if match.direction == "BUY" else "sell",
+    match.tags or (match.structural_kind or "candidate",),
+    other_members=other_members,
+    symbol=symbol,
+    atr=match.atr,
+    pip_size=units.pip_size(symbol),
+    source_tf=match.source_tf,
+    max_width=float(getattr(settings, "zone_merge_max_width", 3.0)),
+    gap=float(getattr(settings, "zone_merge_gap", 1.0)),
+    candidate_id=match.match_id,
+  )
+
+
 async def _publish_trade_plan_v7(
   client: Any,
   symbol: str,
@@ -4105,37 +4147,12 @@ async def _publish_trade_plan_v7(
   if trigger is None:
     return None
 
-  zone_claim_id: str | None = None
-  if market_map is not None:
-    other_members = [
-      ConfluenceMember(
-        member_id=f"{getattr(entry, 'tier', 'entry')}:{entry.lo:.5f}:{entry.hi:.5f}",
-        side=entry.side,
-        low=float(entry.lo),
-        high=float(entry.hi),
-        kind=next(
-          (tag for tag in entry.tags if tag.casefold() in {
-            "demand", "supply", "ob", "fvg", "breaker",
-          }),
-          entry.tier,
-        ),
-        score=float(entry.score),
-      )
-      for entry in getattr(market_map, "actionable_entries", None) or []
-    ]
-    zone_claim_id = resolve_confluence_zone_id(
-      match.entry_low, match.entry_high,
-      "buy" if match.direction == "BUY" else "sell",
-      match.tags or (match.structural_kind or "candidate",),
-      other_members=other_members,
-      symbol=symbol,
-      atr=match.atr,
-      pip_size=units.pip_size(symbol),
-      source_tf=match.source_tf,
-      max_width=float(getattr(settings, "zone_merge_max_width", 3.0)),
-      gap=float(getattr(settings, "zone_merge_gap", 1.0)),
-      candidate_id=setup_id,
-    )
+  zone_claim_id = _resolve_match_confluence_claim_id(
+    symbol,
+    match,
+    market_map,
+  )
+  if zone_claim_id is not None:
     zone_claimed = await claim_confluence_zone(
       client, zone_id=zone_claim_id, owner_id=setup_id,
     )
@@ -4259,14 +4276,26 @@ async def _publish_trade_plan_v7(
     # problem with the match itself, not a transient market condition -
     # so, unlike the soft/retryable guards above (barrier/cooldown/overlap,
     # which release their claims precisely so a LATER re-evaluation can
-    # retry), this setup is genuinely done. worker.py never imports
-    # app.bot.client directly - emitting "invalidated" with
-    # publish_status=True is what reaches delivery.py's auto_trade:events
-    # consumer, which deletes the forming card and posts nothing
-    # (_CARD_TERMINAL_TYPES) rather than a "rejected" message.
+    # retry), this setup is genuinely done. A trigger-anchored R/R failure
+    # expires under the M1-trigger lifecycle; other build failures
+    # invalidate. Both terminal events reach delivery.py, which deletes the
+    # forming card and posts nothing (_CARD_TERMINAL_TYPES).
+    terminal_state = (
+      EXPIRED
+      if exc.reason_code == "policy_reward_risk_insufficient"
+      else INVALIDATED
+    )
+    lifecycle_reason = (
+      "m1_trigger_expired"
+      if terminal_state == EXPIRED
+      else f"v7_{exc.reason_code}"
+    )
     try:
       await transition_setup(
-        client, setup_id, INVALIDATED, reason_code=f"v7_{exc.reason_code}",
+        client,
+        setup_id,
+        terminal_state,
+        reason_code=lifecycle_reason,
       )
     except SetupLifecycleError:
       log.exception(
@@ -4275,12 +4304,12 @@ async def _publish_trade_plan_v7(
       )
     await emit_lifecycle(
       client,
-      INVALIDATED,
+      terminal_state,
       symbol=symbol,
       match_id=setup_id,
       correlation_id=setup_id,
       timeframe=match.source_tf,
-      reason_code=exc.reason_code,
+      reason_code=lifecycle_reason,
       message=exc.message,
       publish_status=True,
     )

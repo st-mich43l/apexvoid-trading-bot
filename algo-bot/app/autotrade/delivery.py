@@ -90,6 +90,15 @@ TELEGRAM_SILENT_LIFECYCLE_TYPES = frozenset({
   "configuration_health",
   "config_health",
 })
+# Preflight route outcomes remain in Redis, route history, metrics, and
+# /auto_status, but are operator diagnostics rather than Telegram content.
+# The forming card already communicates that Algo is checking the setup;
+# only a successfully published route should add a route reply.
+_TELEGRAM_SILENT_STRATEGY_ROUTE_STATUSES = frozenset({
+  "waiting",
+  "blocked",
+  "executor_rejected",
+})
 _NOTIFY_TYPES = {
   "ready",
   "dry_run",
@@ -423,22 +432,15 @@ def _format_position_closed(event: dict, message: str) -> str:
 
 def _format_strategy_route(event: dict) -> str | None:
   status = str(event.get("status") or "")
-  reason_code = str(event.get("reason_code") or "")
-  if status == "candidate_published":
-    # "READY" is reserved for the executor accepting and arming a plan
-    # (see docs/adr-trade-plan-v7-boundary.md) - Python publishing a
-    # candidate is not that, so this must not read "ready".
-    headline = "🟢 <b>Algo bot PLAN PUBLISHED</b>"
-  elif status == "waiting":
-    headline = "🟠 <b>Algo bot WAIT</b>"
-  elif status in {"blocked", "executor_rejected"}:
-    headline = "🔴 <b>Algo bot BLOCKED</b>"
-  else:
+  if status != "candidate_published":
     return None
+  # "READY" is reserved for the executor accepting and arming a plan
+  # (see docs/adr-trade-plan-v7-boundary.md) - Python publishing a
+  # candidate is not that, so this must not read "ready".
+  headline = "🟢 <b>Algo bot PLAN PUBLISHED</b>"
   measured = event.get("measured") or {}
   strategy = escape(str(event.get("strategy") or "StrategyMatch"))
   direction = escape(str(event.get("direction") or ""))
-  reason = escape(str(event.get("message") or event.get("reason_code") or ""))
   lines = [
     "🤖 <b>ApexVoid Algo</b>",
     headline,
@@ -451,63 +453,24 @@ def _format_strategy_route(event: dict) -> str | None:
   if zone_low is not None and zone_high is not None:
     zone_text = f"{float(zone_low):,.2f}–{float(zone_high):,.2f}"
 
-  if status == "candidate_published":
-    route = measured.get("planned_execution_route")
-    planned_entry = measured.get("planned_entry_price")
-    executor_distance = measured.get("executor_distance_pips")
-    executor_limit = measured.get("executor_limit_pips")
-    if route:
-      lines.append(f"Route: <b>{escape(str(route))}</b>")
-    if planned_entry is not None:
-      lines.append(f"Planned entry: <b>{float(planned_entry):,.2f}</b>")
-    if zone_text:
-      lines.append(f"Zone: <b>{zone_text}</b>")
-    if executor_distance is not None:
-      lines.append(
-        f"Executor distance: <b>{float(executor_distance):.1f}p</b>"
-      )
-    if executor_limit is not None:
-      lines.append(
-        f"Executor limit: <b>{float(executor_limit):.1f}p</b>"
-      )
-  elif (
-    status == "waiting"
-    and reason_code == "executor_entry_envelope_exceeded"
-  ):
-    quote = measured.get("executor_quote")
-    distance = measured.get("executor_distance_pips")
-    executor_limit = measured.get("executor_limit_pips")
-    if quote is not None:
-      lines.append(f"Quote: <b>{float(quote):,.2f}</b>")
-    if zone_text:
-      lines.append(f"Zone: <b>{zone_text}</b>")
-    if distance is not None:
-      lines.append(f"Distance: <b>{float(distance):.1f}p</b>")
-    if executor_limit is not None:
-      lines.append(
-        f"Executor limit: <b>{float(executor_limit):.1f}p</b>"
-      )
-    lines.append("Setup retained")
-  else:
-    lines.append(f"Reason: {reason}")
-    distance = measured.get("distance_pips")
-    limit = measured.get("adaptive_limit_pips")
-    if distance is not None:
-      drift = f"Drift: <b>{float(distance):.1f}p</b>"
-      if limit is not None:
-        drift += f" · limit {float(limit):.1f}p"
-      lines.append(drift)
-  if status == "blocked" and measured.get("available_room_pips") is not None:
+  route = measured.get("planned_execution_route")
+  planned_entry = measured.get("planned_entry_price")
+  executor_distance = measured.get("executor_distance_pips")
+  executor_limit = measured.get("executor_limit_pips")
+  if route:
+    lines.append(f"Route: <b>{escape(str(route))}</b>")
+  if planned_entry is not None:
+    lines.append(f"Planned entry: <b>{float(planned_entry):,.2f}</b>")
+  if zone_text:
+    lines.append(f"Zone: <b>{zone_text}</b>")
+  if executor_distance is not None:
     lines.append(
-      f"Room: {float(measured['available_room_pips']):.0f}p · "
-      f"minimum target: {float(measured.get('minimum_target_pips', 0)):.0f}p"
+      f"Executor distance: <b>{float(executor_distance):.1f}p</b>"
     )
-  if (
-    status == "waiting"
-    and reason_code != "executor_entry_envelope_exceeded"
-    and event.get("expires_at")
-  ):
-    lines.append(f"Match retained until: <code>{event['expires_at']}</code>")
+  if executor_limit is not None:
+    lines.append(
+      f"Executor limit: <b>{float(executor_limit):.1f}p</b>"
+    )
   return "\n".join(lines)
 
 
@@ -556,6 +519,12 @@ def render_auto_trade_event(
     raise ValueError(f"Unknown auto-trade delivery profile: {profile}")
   event_type = str(event.get("type", ""))
   if event_type in TELEGRAM_SILENT_LIFECYCLE_TYPES:
+    return None
+  if (
+    event_type == "strategy_route"
+    and str(event.get("status") or "")
+      in _TELEGRAM_SILENT_STRATEGY_ROUTE_STATUSES
+  ):
     return None
   if event_type not in _NOTIFY_TYPES:
     return None

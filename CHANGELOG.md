@@ -124,6 +124,26 @@ dated section after deployment.
   longer construct an `ExecutionIntent`.
 
 ### Fixed
+- Keep preflight strategy-route diagnostics (`waiting`, `blocked`, and
+  `executor_rejected`) in Redis/history/metrics but make them Telegram-silent,
+  removing standalone `Algo bot BLOCKED` cards for invalid stop geometry,
+  regime mismatch, entry drift/hard-cap, and equivalent execution vetoes.
+  Analysis cards without an executable match now use a neutral
+  `ANALYSIS ONLY` label instead of presenting another blocked alert.
+- Suppress the scanner's remaining legacy standalone `SETUP INVALIDATED`
+  Telegram fallback. Broken structures now only retire scanner watch state;
+  lifecycle-backed setups still transition terminal and have their forming
+  card deleted, while detections without a setup record remain log-only.
+- Wire `merge_confluence_zones` into scanner detection and forming-card
+  identity: co-located same-side key-level / demand / supply / OB / FVG /
+  breaker detections now share the merged zone id, union tags, one setup,
+  one forming card, and the exact same execution claim instead of producing
+  duplicate detector cards before the existing one-order-per-zone guard.
+- Move the shared execution-policy reward/risk check into setup eligibility:
+  setups below their family's `min_reward_risk` are recorded as
+  `rr_pre_gate` but never confirm or form a card. The plan-build R/R check
+  remains authoritative after the M1 trigger; a late failure expires and
+  silently deletes the forming card instead of posting BLOCKED spam.
 - Broker SL/TP exits discovered by reconcile without a confirmed OrderType no
   longer show `reason unconfirmed`. Close reason is inferred when the exit
   sits on the protective stop — both a clean full SL before any TP and a BE

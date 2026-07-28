@@ -29,6 +29,11 @@ from app.analysis.market_map import (
 from app.analysis.market_map_delivery import cache_analysis
 from app.analysis.ohlc_source import RedisOHLCSource
 from app.analysis.structure import Zone
+from app.analysis.confluence_zone import (
+  ConfluenceMember,
+  confluence_setup_id,
+  merge_confluence_zones,
+)
 from app.analysis.zones import ZONE_RECONCILED_TAG_PREFIX
 from app.autotrade.range_targets import select_range_target
 from app.autotrade.strategy_match import (
@@ -46,6 +51,7 @@ from app.analysis.structural_reaction_support import (
 from app.autotrade.execution_policy import (
   FAMILY_UNKNOWN,
   classify_tier,
+  evaluate_execution_policy,
   risk_multiplier_for_tier,
   strategy_family,
 )
@@ -174,6 +180,11 @@ def _level_bucket(symbol: str, level: float, bucket_pips: int) -> str:
 
 
 def _dedup_key(symbol: str, tf: str, result: DetectionResult) -> str:
+  if result.confluence_zone_id:
+    return (
+      f"scanner:alerted:{symbol}:{tf}:confluence:"
+      f"{result.direction}:{result.confluence_zone_id}"
+    )
   if result.structural_id:
     return (
       f"scanner:alerted:{symbol}:{tf}:{result.setup}:"
@@ -189,6 +200,11 @@ def _dedup_key(symbol: str, tf: str, result: DetectionResult) -> str:
 
 
 def _band_dedup_key(symbol: str, result: DetectionResult) -> str:
+  if result.confluence_zone_id:
+    return (
+      f"scanner:alerted_band:{symbol}:{result.direction}:"
+      f"confluence:{result.confluence_zone_id}"
+    )
   if result.structural_id:
     low = float(result.entry_zone.low)
     high = float(result.entry_zone.high)
@@ -369,7 +385,14 @@ def _build_one_strategy_match(
   )
   structural_source = result.structural_source or ""
   structural_id = result.structural_id
-  if structural_id:
+  if result.confluence_zone_id:
+    match_id = confluence_setup_id(
+      result.confluence_zone_id,
+      direction,
+    )
+    zone_id = result.confluence_zone_id
+    level_id = result.confluence_zone_id
+  elif structural_id:
     match_id = structural_thesis_id(
       symbol=symbol,
       strategy=result.setup,
@@ -399,8 +422,10 @@ def _build_one_strategy_match(
       f"{symbol.upper()}:{tf.upper()}:level:{float(result.key_level):.5f}"
     )
   tags = []
-  if result.structural_kind:
-    tags.append(f"kind:{result.structural_kind}")
+  structural_tags = result.confluence_tags or (
+    (result.structural_kind,) if result.structural_kind else ()
+  )
+  tags.extend(f"kind:{item}" for item in structural_tags)
   if result.bias_relationship:
     tags.append(f"bias:{result.bias_relationship}")
   if result.confirmation_type or result.confirmation:
@@ -438,6 +463,7 @@ def _build_one_strategy_match(
     range_state=range_state,
     structural_source=structural_source or result.setup,
     zone_id=zone_id,
+    confluence_zone_id=result.confluence_zone_id,
     level_id=level_id,
     structural_zone_id=structural_id,
     structural_zone_low=(
@@ -669,20 +695,6 @@ async def _sync_strategy_match(
         measured=measured,
       )
     return None
-  if match.is_range_edge and range_context is not None:
-    match = replace(match, range_id=range_context.range_id)
-  lifecycle_ids = await _advance_setup_to_confirmed(client, match, symbol, tf)
-  if lifecycle_ids is not None:
-    _setup_id, thesis_id = lifecycle_ids
-    match = replace(match, thesis_id=thesis_id)
-  await _record_match_build_outcome(client, symbol, match)
-  if match.strategy in STRUCTURAL_SETUPS or match.structural_source in {
-    "key_level", "supply_demand", "session_level", "trendline",
-  }:
-    await increment_metric(
-      client, "structural_reaction_match_built", symbol=symbol,
-    )
-  ttl = max(60, match.expires_at - match.issued_at)
   all_matches = measured.get("all_matches") if isinstance(measured, dict) else None
   current = (
     deserialize_matches(await client.get(matches_key))
@@ -696,6 +708,25 @@ async def _sync_strategy_match(
       if item.is_range_edge else item
       for item in incoming
     ]
+  lifecycle_ready = []
+  for item in incoming:
+    lifecycle_ids = await _advance_setup_to_confirmed(
+      client,
+      item,
+      symbol,
+      tf,
+    )
+    if lifecycle_ids is not None:
+      _setup_id, thesis_id = lifecycle_ids
+      item = replace(item, thesis_id=thesis_id)
+    lifecycle_ready.append(item)
+    if item.strategy in STRUCTURAL_SETUPS or item.structural_source in {
+      "key_level", "supply_demand", "session_level", "trendline",
+    }:
+      await increment_metric(
+        client, "structural_reaction_match_built", symbol=symbol,
+      )
+  incoming = lifecycle_ready
   now = int(datetime.now(timezone.utc).timestamp())
   active = [item for item in current if item.expires_at >= now]
   combined, events = dedupe_matches(
@@ -708,6 +739,8 @@ async def _sync_strategy_match(
     if top_n > 0:
       combined = combined[:top_n]
   primary = select_primary(combined) or match
+  await _record_match_build_outcome(client, symbol, primary)
+  ttl = max(60, primary.expires_at - primary.issued_at)
   await client.set(key, primary.to_json(), ex=ttl)
   await client.set(matches_key, serialize_matches(combined), ex=ttl)
   await increment_metric(
@@ -788,13 +821,13 @@ async def _sync_strategy_match(
     "strategy match synced symbol=%s id=%s strategy=%s direction=%s "
     "tier=%s matches=%s",
     symbol,
-    match.match_id[:12],
-    match.strategy,
-    match.direction,
-    match.tier,
+    primary.match_id[:12],
+    primary.strategy,
+    primary.direction,
+    primary.tier,
     measured.get("matches", 1) if isinstance(measured, dict) else 1,
   )
-  return match
+  return primary
 
 
 # --- B3: setup invalidation --------------------------------------------------
@@ -956,9 +989,9 @@ async def _track_active_setups(
       "confluence": result.confluence,
       # One forming card per setup (P4): carried through so
       # _check_setup_invalidations can delete this setup's card instead of
-      # posting a standalone "SETUP INVALIDATED" message, for setups that
-      # have a live setup_lifecycle record. None for setups that never
-      # produced an execution match - unchanged legacy behavior for those.
+      # posting a standalone notification. None for setups that never
+      # produced an execution match; those are silently retired from scanner
+      # watch state and remain visible only in logs/telemetry.
       "match_id": match_ids_by_card.get(index),
     }, separators=(",", ":"))
     await client.set(
@@ -971,50 +1004,12 @@ async def _track_active_setups(
     )
 
 
-def _format_invalidation(state: dict[str, Any], symbol: str, tf: str) -> str:
-  direction = str(state.get("direction", ""))
-  setup = str(state.get("setup", "setup"))
-  low = float(state.get("zone_low", 0.0))
-  high = float(state.get("zone_high", 0.0))
-  return (
-    f"⌛ <b>{escape(symbol)} {escape(tf)} · SETUP INVALIDATED</b>\n"
-    f"{escape(direction)} · {escape(setup)} · zone "
-    f"{_zone_text(Zone(low, high, 'demand' if direction == 'BUY' else 'supply'), symbol)} "
-    "no longer holds - structure broke through it."
-  )
-
-
-def _invalidation_states_overlap(
-  left: dict[str, Any],
-  right: dict[str, Any],
-) -> bool:
-  if str(left.get("direction") or "").upper() != str(right.get("direction") or "").upper():
-    return False
-  try:
-    first = Zone(
-      float(left["zone_low"]),
-      float(left["zone_high"]),
-      "demand",
-    )
-    second = Zone(
-      float(right["zone_low"]),
-      float(right["zone_high"]),
-      "demand",
-    )
-  except (KeyError, TypeError, ValueError):
-    return False
-  return _zone_overlap_ratio(first, second) >= max(
-    0.0,
-    settings.alert_overlap_suppress,
-  )
-
-
 async def _check_setup_invalidations(
   client: Any,
   symbol: str,
   tf: str,
   df: Any,
-  notify: NotifyFn,
+  _notify: NotifyFn,
   atr: float,
 ) -> None:
   if df.empty:
@@ -1055,25 +1050,18 @@ async def _check_setup_invalidations(
       broken.append(state)
   if not broken:
     return
-  notified: list[dict[str, Any]] = []
   for state in broken:
     direction = str(state.get("direction") or "")
     if await _autonomous_direction_active(client, symbol, direction):
       continue
-    if any(
-      _invalidation_states_overlap(state, existing)
-      for existing in notified
-    ):
-      continue
-    notified.append(state)
     match_id = str(state.get("match_id") or "").strip()
     setup_record = await load_setup(client, match_id) if match_id else None
     if setup_record is not None and setup_record.state in (
       CONFIRMED, ARMED_WAITING_TRIGGER,
     ):
       # One forming card per setup (P4): a setup still waiting to publish
-      # gets its card deleted, not a standalone "SETUP INVALIDATED"
-      # message - never re-carded afterwards. A setup that has ALREADY
+      # gets its card deleted without a standalone Telegram notification and
+      # is never re-carded afterwards. A setup that has ALREADY
       # published a plan (PLAN_BUILT/PLAN_PUBLISHED/ARMED) is left alone
       # entirely here - it may have a live position, and its card is still
       # the anchor future FILLED/SL-moved/closed replies thread to.
@@ -1090,10 +1078,16 @@ async def _check_setup_invalidations(
           "scanner could not invalidate setup symbol=%s tf=%s match_id=%s",
           symbol, tf, match_id,
         )
-    elif settings.telegram_owner_id:
-      await notify(
-        _format_invalidation(state, symbol, tf),
-        chat_id=settings.telegram_owner_id,
+    else:
+      log.info(
+        "scanner setup silently retired symbol=%s tf=%s setup=%s "
+        "direction=%s match_id=%s lifecycle_state=%s reason=structure_broke",
+        symbol,
+        tf,
+        state.get("setup") or "setup",
+        direction or "unknown",
+        match_id or "none",
+        getattr(setup_record, "state", "none"),
       )
 
 
@@ -1142,6 +1136,14 @@ def _format_detection(
 ) -> str:
   stars = "⭐" * max(1, min(3, int(result.confluence)))
   direction_icon = "🟢" if result.direction.upper() == "BUY" else "🔴"
+  confluence_label = " + ".join(
+    _confluence_tag_label(tag) for tag in result.confluence_tags
+  )
+  setup_label = (
+    f"{confluence_label} · {result.setup}"
+    if len(result.confluence_tags) > 1
+    else result.setup
+  )
   extra_reasons = [
     reason for reason in result.reasons
     if not reason.lower().startswith("htf bias")
@@ -1151,13 +1153,13 @@ def _format_detection(
     (
       "🟡 <b>Algo bot CHECKING</b> · execution preflight pending"
       if settings.auto_trade_enabled and execution_match is not None
-      else "🔴 <b>Algo bot BLOCKED</b> · no executable StrategyMatch"
+      else "🟡 <b>ANALYSIS ONLY</b> · no executable StrategyMatch"
       if settings.auto_trade_enabled
       else "🟡 <b>ANALYSIS ONLY</b> · autonomous execution disabled"
     ),
     (
       f"{direction_icon} <b>{escape(result.direction)} · "
-      f"{escape(result.setup)}</b> · {stars}"
+      f"{escape(setup_label)}</b> · {stars}"
     ),
   ]
   if result.mode == "range_scalp":
@@ -1177,7 +1179,11 @@ def _format_detection(
     lines.append(
       f"🧱 <b>Structural source:</b> {escape(result.structural_source)}"
     )
-  if result.structural_kind:
+  if result.confluence_tags:
+    lines.append(
+      f"🏷️ <b>Identity:</b> {escape(confluence_label)}"
+    )
+  elif result.structural_kind:
     lines.append(
       f"🏷️ <b>Identity:</b> {escape(str(result.structural_kind))}"
     )
@@ -1297,6 +1303,21 @@ def _compact_setup(setup: str) -> str:
   return setup.replace(" & ", "&").replace(" ", "")
 
 
+def _confluence_tag_label(tag: str) -> str:
+  labels = {
+    "key_level": "Key Level",
+    "demand": "Demand",
+    "supply": "Supply",
+    "ob": "OB",
+    "fvg": "FVG",
+    "breaker": "Breaker",
+    "session_level": "Session Level",
+    "trendline": "Trendline",
+  }
+  normalized = str(tag).casefold()
+  return labels.get(normalized, normalized.replace("_", " ").title())
+
+
 async def _load_frames(
   source: RedisOHLCSource,
   symbol: str,
@@ -1376,6 +1397,196 @@ def _trusted_spot_values(
     )
     return None, None
   return spot.price, spot.ts
+
+
+def _confluence_member_kind(result: DetectionResult) -> str:
+  source = str(result.structural_source or "").casefold()
+  kind = re.sub(
+    r"[^a-z0-9]+",
+    "_",
+    str(result.structural_kind or "").casefold(),
+  ).strip("_")
+  if source == "key_level":
+    return "key_level"
+  if source == "supply_demand":
+    if kind in {"demand", "supply", "ob", "fvg", "breaker"}:
+      return kind
+    return "demand" if result.direction.upper() == "BUY" else "supply"
+  if source in {"session_level", "trendline"}:
+    return source
+  return kind or source or re.sub(
+    r"[^a-z0-9]+",
+    "_",
+    result.setup.casefold(),
+  ).strip("_")
+
+
+def _confluence_member_band(
+  symbol: str,
+  result: DetectionResult,
+) -> tuple[float, float]:
+  low = float(result.entry_zone.low)
+  high = float(result.entry_zone.high)
+  if math.isfinite(low) and math.isfinite(high) and high > low:
+    return low, high
+  digits = int(SYMBOLS.get(canonical_symbol(symbol), {}).get("digits", 2))
+  tick = 10 ** -max(0, digits)
+  level = float(result.key_level)
+  return level - tick, level + tick
+
+
+def _merge_detection_confluence(
+  symbol: str,
+  tf: str,
+  results: list[DetectionResult],
+  *,
+  atr: float,
+) -> list[DetectionResult]:
+  """Collapse same-side structural detector results before digest/cards."""
+  indexed_structural = [
+    (index, result)
+    for index, result in enumerate(results)
+    if result.structural_id
+    and result.direction.upper() in {"BUY", "SELL"}
+  ]
+  if not indexed_structural:
+    return list(results)
+
+  members = []
+  for _index, result in indexed_structural:
+    low, high = _confluence_member_band(symbol, result)
+    members.append(ConfluenceMember(
+      member_id=str(result.structural_id),
+      side="buy" if result.direction.upper() == "BUY" else "sell",
+      low=low,
+      high=high,
+      kind=_confluence_member_kind(result),
+      score=float(result.confluence),
+    ))
+
+  zones = merge_confluence_zones(
+    members,
+    symbol=symbol,
+    atr=atr,
+    pip_size=_pip_size(symbol),
+    source_tf=tf,
+    max_width=float(settings.zone_merge_max_width),
+    gap=float(settings.zone_merge_gap),
+  )
+  merged_by_index: list[tuple[int, DetectionResult]] = []
+  consumed: set[int] = set()
+  for zone in zones:
+    provenance = set(zone.provenance)
+    group = [
+      (index, result)
+      for index, result in indexed_structural
+      if str(result.structural_id) in provenance
+      and (
+        (result.direction.upper() == "BUY" and zone.side == "buy")
+        or (result.direction.upper() == "SELL" and zone.side == "sell")
+      )
+    ]
+    if not group:
+      continue
+    representative = min(
+      (result for _index, result in group),
+      key=_result_rank,
+    )
+    reasons = list(dict.fromkeys(
+      reason
+      for _index, result in group
+      for reason in result.reasons
+    ))
+    score_reasons = list(dict.fromkeys(
+      reason
+      for _index, result in group
+      for reason in (
+        getattr(result.entry_zone, "score_reasons", None) or []
+      )
+    ))
+    merged_entry = replace(
+      representative.entry_zone,
+      bottom=zone.low,
+      top=zone.high,
+      side="demand" if zone.side == "buy" else "supply",
+      sources=list(zone.tags),
+      score=zone.score,
+      score_reasons=score_reasons,
+    )
+    distinct_members = len(provenance)
+    merged = replace(
+      representative,
+      entry_zone=merged_entry,
+      confluence=(
+        int(zone.confluence)
+        if distinct_members > 1
+        else int(representative.confluence)
+      ),
+      reasons=reasons,
+      structural_id=zone.zone_id,
+      structural_low=zone.low,
+      structural_high=zone.high,
+      source_score=zone.score,
+      confluence_zone_id=zone.zone_id,
+      confluence_tags=zone.tags,
+    )
+    first_index = min(index for index, _result in group)
+    merged_by_index.append((first_index, merged))
+    consumed.update(index for index, _result in group)
+
+  merged_by_index.extend(
+    (index, result)
+    for index, result in enumerate(results)
+    if index not in consumed
+  )
+  return [
+    result
+    for _index, result in sorted(merged_by_index, key=lambda item: item[0])
+  ]
+
+
+def _reward_risk_pre_gate(
+  symbol: str,
+  tf: str,
+  event_ts: str,
+  ctx: DetectionContext,
+  result: DetectionResult,
+) -> tuple[bool, dict[str, Any]]:
+  """Apply only the shared policy's provisional R/R check before lifecycle."""
+  match, _reason, _measured = _build_one_strategy_match(
+    symbol,
+    tf,
+    event_ts,
+    ctx,
+    result,
+  )
+  if match is None:
+    return True, {}
+  regime = str(getattr(getattr(ctx, "regime", None), "kind", "") or "")
+  evaluation = evaluate_execution_policy(
+    match,
+    spot_price=match.current_price,
+    regime=regime or None,
+    pip_size=_pip_size(symbol),
+    cfg=settings,
+  )
+  measured = dict(evaluation.measured)
+  reward_risk = measured.get("reward_risk")
+  policy = evaluation.policy
+  if (
+    policy is None
+    or reward_risk is None
+    or measured.get("planned_stop_price") is None
+  ):
+    return True, measured
+  try:
+    value = float(reward_risk)
+  except (TypeError, ValueError):
+    return True, measured
+  return (
+    math.isfinite(value) and value >= float(policy.min_reward_risk),
+    measured,
+  )
 
 
 def _is_digest_primary(result: DetectionResult) -> bool:
@@ -1587,6 +1798,7 @@ async def _notify_digest_once(
   market_map: MarketMap | None = None,
   execution_match: StrategyMatch | None = None,
   edit: NotifyFn | None = None,
+  execution_matches: Iterable[StrategyMatch] | None = None,
 ) -> list[DetectionResult]:
   if not results:
     return []
@@ -1629,10 +1841,16 @@ async def _notify_digest_once(
       "1",
       ex=settings.zone_alert_ttl,
     )
-  card_candidates, _ = _suppress_overlaps(
-    claimed_results,
-    force_opposing_suppression=True,
-  )
+  if all(result.confluence_zone_id for result in claimed_results):
+    # Opposing sides have distinct merged zone/setup identities. Detection
+    # digest policy has already resolved whether both belong in this bar;
+    # the card layer must not merge or silently discard either one.
+    card_candidates = claimed_results
+  else:
+    card_candidates, _ = _suppress_overlaps(
+      claimed_results,
+      force_opposing_suppression=True,
+    )
   structural = [
     item for item in card_candidates if item.setup in STRUCTURAL_SETUPS
   ]
@@ -1640,20 +1858,43 @@ async def _notify_digest_once(
   card_top_n = int(settings.scanner_card_top_n)
   if card_top_n > 0:
     cards = cards[:card_top_n]
+  match_pool = list(execution_matches or [])
+  if (
+    execution_match is not None
+    and all(item.match_id != execution_match.match_id for item in match_pool)
+  ):
+    match_pool.append(execution_match)
   match_ids_by_card: dict[int, str] = {}
   for index, result in enumerate(cards):
     also = card_candidates[1:] if not structural and index == 0 else []
     match_for_card = None
-    if execution_match is not None:
-      if execution_match.strategy == result.setup:
-        match_for_card = execution_match
-      elif (
-        result.structural_id
-        and execution_match.structural_zone_id == result.structural_id
-      ):
-        match_for_card = execution_match
-      elif index == 0:
-        match_for_card = execution_match
+    if result.confluence_zone_id:
+      match_for_card = next(
+        (
+          item for item in match_pool
+          if item.confluence_zone_id == result.confluence_zone_id
+          and item.direction == result.direction.upper()
+        ),
+        None,
+      )
+    if match_for_card is None and not result.confluence_zone_id:
+      match_for_card = next(
+        (
+          item for item in match_pool
+          if item.strategy == result.setup
+          or (
+            result.structural_id
+            and item.structural_zone_id == result.structural_id
+          )
+        ),
+        None,
+      )
+    if (
+      match_for_card is None
+      and not result.confluence_zone_id
+      and index == 0
+    ):
+      match_for_card = execution_match
     text = _format_detection(
       symbol,
       tf,
@@ -1698,6 +1939,9 @@ async def _record_status(
   scalp: dict[str, Any] | None = None,
   conflicts: list[dict[str, Any]] | None = None,
   structure_gated: list[tuple[DetectionResult, str]] | None = None,
+  eligibility_gated: list[
+    tuple[DetectionResult, str, dict[str, Any]]
+  ] | None = None,
 ) -> None:
   map_counts = {
     "buys": len(market_map.buys) if market_map is not None else 0,
@@ -1740,6 +1984,15 @@ async def _record_status(
         "reason": reason,
       }
       for item, reason in structure_gated or []
+    ],
+    "eligibility_gated": [
+      {
+        "setup": item.setup,
+        "direction": item.direction,
+        "reason": reason,
+        "measured": measured,
+      }
+      for item, reason, measured in eligibility_gated or []
     ],
     "sent": len(sent),
     "map": map_counts,
@@ -1790,8 +2043,11 @@ async def _append_detect_log(
   sent: list[DetectionResult],
   conflicts: list[dict[str, Any]],
   structure_gated: list[tuple[DetectionResult, str]] | None = None,
+  eligibility_gated: list[
+    tuple[DetectionResult, str, dict[str, Any]]
+  ] | None = None,
 ) -> None:
-  if not detected and not structure_gated:
+  if not detected and not structure_gated and not eligibility_gated:
     return
   sent_keys = {(item.setup, item.direction) for item in sent}
   conflict_keys = {
@@ -1803,13 +2059,22 @@ async def _append_detect_log(
   gated_reasons = {
     id(item): reason for item, reason in structure_gated or []
   }
+  eligibility_reasons = {
+    id(item): reason for item, reason, _measured in eligibility_gated or []
+  }
   logged_results = [
     *detected,
     *[item for item, _ in structure_gated or []],
+    *[
+      item for item, _reason, _measured in eligibility_gated or []
+      if all(id(item) != id(existing) for existing in detected)
+    ],
   ]
   for item in logged_results:
     detection_key = (item.setup, item.direction)
-    if id(item) in gated_reasons:
+    if id(item) in eligibility_reasons:
+      outcome = eligibility_reasons[id(item)]
+    elif id(item) in gated_reasons:
       outcome = "structure_gated"
     elif detection_key in sent_keys:
       outcome = "sent"
@@ -1822,7 +2087,9 @@ async def _append_detect_log(
       "confluence": item.confluence,
       "outcome": outcome,
     }
-    if id(item) in gated_reasons:
+    if id(item) in eligibility_reasons:
+      entry["reason"] = eligibility_reasons[id(item)]
+    elif id(item) in gated_reasons:
       entry["reason"] = gated_reasons[id(item)]
     entries.append(entry)
   record = json.dumps({
@@ -2203,7 +2470,40 @@ async def _handle_event(
       )
       continue
     detected.append(result)
-  digest, conflicts = _digest_results(detected)
+  detected = _merge_detection_confluence(
+    symbol,
+    exec_tf,
+    detected,
+    atr=invalidation_atr,
+  )
+  eligibility_gated: list[
+    tuple[DetectionResult, str, dict[str, Any]]
+  ] = []
+  eligible_detected = []
+  for result in detected:
+    eligible, measured = _reward_risk_pre_gate(
+      symbol,
+      exec_tf,
+      event_ts,
+      ctx,
+      result,
+    )
+    if eligible:
+      eligible_detected.append(result)
+      continue
+    eligibility_gated.append((result, "rr_pre_gate", measured))
+    await increment_metric(client, "rr_pre_gate", symbol=symbol)
+    log.info(
+      "scanner result eligibility-gated symbol=%s tf=%s setup=%s "
+      "direction=%s reason=rr_pre_gate reward_risk=%s minimum=%s",
+      symbol,
+      exec_tf,
+      result.setup,
+      result.direction,
+      measured.get("reward_risk"),
+      measured.get("min_reward_risk"),
+    )
+  digest, conflicts = _digest_results(eligible_detected)
   execution_match = await _sync_strategy_match(
     client,
     symbol,
@@ -2211,6 +2511,11 @@ async def _handle_event(
     event_ts,
     ctx,
     digest,
+  )
+  execution_matches = (
+    deserialize_matches(await client.get(strategy_matches_key(symbol)))
+    if execution_match is not None
+    else []
   )
   sent = await _notify_digest_once(
     client,
@@ -2220,9 +2525,10 @@ async def _handle_event(
     digest,
     notify,
     htf_order,
-    current_map,
-    execution_match,
-    edit,
+    market_map=current_map,
+    execution_match=execution_match,
+    edit=edit,
+    execution_matches=execution_matches,
   )
   await _record_status(
     client,
@@ -2237,6 +2543,7 @@ async def _handle_event(
     scalp=_scalp_status(ctx),
     conflicts=conflicts,
     structure_gated=structure_gated,
+    eligibility_gated=eligibility_gated,
   )
   await _append_detect_log(
     client,
@@ -2246,6 +2553,7 @@ async def _handle_event(
     sent,
     conflicts,
     structure_gated,
+    eligibility_gated,
   )
   return sent
 

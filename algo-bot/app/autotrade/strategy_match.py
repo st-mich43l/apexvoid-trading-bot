@@ -13,6 +13,7 @@ import hashlib
 import json
 import math
 
+from app.analysis.confluence_zone import confluence_setup_id
 from app.analysis.structural_reaction_support import structural_thesis_id
 
 
@@ -54,6 +55,9 @@ class StrategyMatch:
   routing_hint: str | None = None
   structural_source: str = ""
   zone_id: str | None = None
+  # Scanner-side merged confluence identity. When present, setup/card/order
+  # all claim this exact zone rather than independently re-resolving it.
+  confluence_zone_id: str | None = None
   level_id: str | None = None
   # Stable Mapped Zone Reaction identity (additive; absent on older matches).
   reaction_id: str | None = None
@@ -163,6 +167,10 @@ class StrategyMatch:
           None if payload.get("zone_id") is None
           else str(payload["zone_id"])
         ),
+        confluence_zone_id=(
+          None if payload.get("confluence_zone_id") is None
+          else str(payload["confluence_zone_id"])
+        ),
         level_id=(
           None if payload.get("level_id") is None
           else str(payload["level_id"])
@@ -270,6 +278,11 @@ def strategy_range_id(symbol: str, lower: float, upper: float) -> str:
 def _identity_ok(match: StrategyMatch) -> bool:
   if match.reaction_id:
     return match.match_id == match.reaction_id
+  if match.confluence_zone_id:
+    return match.match_id == confluence_setup_id(
+      match.confluence_zone_id,
+      match.direction,
+    )
   structural_id = match.structural_zone_id or match.zone_id or match.level_id
   if structural_id and match.structural_source:
     expected = structural_thesis_id(
