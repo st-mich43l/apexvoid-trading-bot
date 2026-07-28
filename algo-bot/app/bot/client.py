@@ -179,3 +179,29 @@ async def send_sticker(
 
 async def delete_message(chat_id: int | str, message_id: int) -> None:
   await bot.delete_message(int(chat_id), int(message_id))
+
+
+async def edit_scanner_message_text(
+  chat_id: int | str,
+  message_id: int,
+  text: str,
+  reply_markup: InlineKeyboardMarkup | None = None,
+) -> Message:
+  """Edit a message the scanner bot itself sent (forming cards)."""
+  return await scanner_bot.edit_message_text(
+    chat_id=chat_id,
+    message_id=int(message_id),
+    text=text,
+    reply_markup=reply_markup,
+  )
+
+
+async def delete_scanner_message(chat_id: int | str, message_id: int) -> None:
+  """Delete a message the scanner bot itself sent (forming cards).
+
+  Telegram only lets the sending bot (or a channel admin) delete a message -
+  forming cards go out via scanner_bot (send_scanner_with_retry), so this is
+  a distinct function from delete_message (which uses the main `bot` and is
+  for messages `bot` itself sent, eg. broadcast.py's signal posts).
+  """
+  await scanner_bot.delete_message(int(chat_id), int(message_id))

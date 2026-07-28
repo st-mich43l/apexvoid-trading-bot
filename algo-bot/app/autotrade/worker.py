@@ -76,6 +76,8 @@ from app.analysis.structural_reaction_support import v7_thesis_id
 from app.autotrade.setup_lifecycle import (
   ARMED_WAITING_TRIGGER,
   CONFIRMED,
+  EXPIRED,
+  INVALIDATED,
   PLAN_BUILT,
   PLAN_PUBLISHED,
   SetupLifecycleError,
@@ -4059,8 +4061,36 @@ async def _publish_trade_plan_v7(
       )
     return None
 
-  # setup_record.state == ARMED_WAITING_TRIGGER: re-evaluate every cycle -
-  # no trigger yet is the ordinary "keep waiting" outcome, not a rejection.
+  # setup_record.state == ARMED_WAITING_TRIGGER: expire it if the M1
+  # trigger never fired before the match's own expiry (P4's "EXPIRED
+  # (market_watch never triggered)"). worker.py never imports app.bot.client
+  # directly (see test_worker_source_has_no_direct_scanner_market_map_or_
+  # telegram_import) - emitting "expired" with publish_status=True is what
+  # reaches delivery.py's auto_trade:events consumer, which deletes the
+  # forming card and posts nothing (_CARD_TERMINAL_TYPES).
+  now_ts = int(datetime.now(timezone.utc).timestamp())
+  if match.expires_at and now_ts >= int(match.expires_at):
+    try:
+      await transition_setup(client, setup_id, EXPIRED, reason_code="m1_trigger_expired")
+    except SetupLifecycleError:
+      log.exception(
+        "v7 setup could not expire symbol=%s setup_id=%s", symbol, setup_id,
+      )
+    await emit_lifecycle(
+      client,
+      EXPIRED,
+      symbol=symbol,
+      match_id=setup_id,
+      correlation_id=setup_id,
+      timeframe=match.source_tf,
+      reason_code="m1_trigger_expired",
+      message="M1 trigger never fired before the plan's own expiry",
+      publish_status=True,
+    )
+    return None
+
+  # Re-evaluate every cycle otherwise - no trigger yet is the ordinary
+  # "keep waiting" outcome, not a rejection.
   m1 = None if frames is None else frames.get("M1")
   trigger = None
   if m1 is not None and not getattr(m1, "empty", False):
@@ -4223,6 +4253,36 @@ async def _publish_trade_plan_v7(
     await _release_claims()
     await _record_v7_build_rejected(
       client, symbol, match, exc.reason_code, exc.message, exc.measured,
+    )
+    # A build rejection at this point (the M1 trigger already fired) means
+    # this specific match structurally cannot become a plan - a data
+    # problem with the match itself, not a transient market condition -
+    # so, unlike the soft/retryable guards above (barrier/cooldown/overlap,
+    # which release their claims precisely so a LATER re-evaluation can
+    # retry), this setup is genuinely done. worker.py never imports
+    # app.bot.client directly - emitting "invalidated" with
+    # publish_status=True is what reaches delivery.py's auto_trade:events
+    # consumer, which deletes the forming card and posts nothing
+    # (_CARD_TERMINAL_TYPES) rather than a "rejected" message.
+    try:
+      await transition_setup(
+        client, setup_id, INVALIDATED, reason_code=f"v7_{exc.reason_code}",
+      )
+    except SetupLifecycleError:
+      log.exception(
+        "v7 setup could not invalidate after build rejection "
+        "symbol=%s setup_id=%s", symbol, setup_id,
+      )
+    await emit_lifecycle(
+      client,
+      INVALIDATED,
+      symbol=symbol,
+      match_id=setup_id,
+      correlation_id=setup_id,
+      timeframe=match.source_tf,
+      reason_code=exc.reason_code,
+      message=exc.message,
+      publish_status=True,
     )
     return None
 

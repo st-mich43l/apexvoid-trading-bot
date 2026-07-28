@@ -19,7 +19,16 @@ from app.autotrade.volume_pips import (
 from app.persistence import redis_state
 from app.persistence.store import record_auto_trade_event
 from app.core.config import settings
-from app.bot.client import send_scanner_with_retry
+from app.bot.client import (
+  delete_scanner_message,
+  edit_scanner_message_text,
+  send_scanner_with_retry,
+)
+from app.autotrade.setup_card import (
+  forming_message_key as _setup_card_forming_message_key,
+  kill_setup_card,
+  load_forming_card,
+)
 from app.autotrade.lifecycle import LIFECYCLE_STATES, emit_lifecycle
 from app.autotrade.range_context import (
   WORKER_SNAPSHOT_TTL_SECONDS,
@@ -41,10 +50,30 @@ _REGIME_ALERT_PENDING_PREFIX = "auto_trade:regime_alert_pending:"
 _REGIME_ALERT_SENT_TTL = 86400
 _TRADE_MESSAGE_TTL = 7 * 24 * 3600
 _FULL_TP_RESULT_TTL = 24 * 3600
+# event types that go standalone (never even try to reply) if the forming
+# card is missing/expired - as opposed to _FORMING_REPLY_PREFERRED_TYPES
+# below, which fall back to the older position_id reply chain instead.
 _FORMING_REPLY_TYPES = frozenset({
   "strategy_route",
   "opened",
+})
+# One forming card per setup (P4): these lifecycle types thread directly to
+# the setup's forming card when one exists, same as _FORMING_REPLY_TYPES -
+# but fall back to the pre-P4 position_id-based reply chain (_reply_message_id)
+# rather than going standalone, since a position with no setup_lifecycle
+# record (eg. an older V6 position) still needs its existing thread to work.
+_FORMING_REPLY_PREFERRED_TYPES = frozenset({
+  "stop_moved",
+  "take_profit",
+  "position_closed",
+})
+# "rejected"/"invalidated"/"expired" never reach render/send at all - see
+# _deliver_auto_trade_event, which deletes the forming card and returns
+# early instead. No card, no reply anchor, no message.
+_CARD_TERMINAL_TYPES = frozenset({
   "rejected",
+  "invalidated",
+  "expired",
 })
 # Lifecycle/event types that stay in Redis + metrics + /auto_status but must
 # never become Telegram cards. Keep emission paths intact.
@@ -546,32 +575,12 @@ def render_auto_trade_event(
     return None
   if "already_processed:active_thesis_group" in message:
     return None
-  if event_type == "rejected":
-    lines = [
-      "🤖 <b>ApexVoid Algo</b>",
-      "⛔ <b>EXECUTOR REJECTED</b>",
-    ]
-    strategy = event.get("strategy") or event.get("setup")
-    if strategy:
-      lines.append(f"Strategy: <b>{escape(str(strategy))}</b>")
-    direction = event.get("direction")
-    if direction:
-      lines.append(f"Direction: <b>{escape(str(direction).upper())}</b>")
-    entry = event.get("entry_zone")
-    if isinstance(entry, dict):
-      try:
-        lines.append(
-          "Entry: <b>"
-          f"{float(entry['low']):,.2f}–{float(entry['high']):,.2f}</b>"
-        )
-      except (KeyError, TypeError, ValueError):
-        pass
-    reason = event.get("reason_code")
-    if reason:
-      lines.append(f"Reason: <code>{escape(str(reason))}</code>")
-    elif message:
-      lines.append(escape(message))
-    return "\n".join(lines)
+  if event_type in _CARD_TERMINAL_TYPES:
+    # One forming card per setup (P4): rejected/invalidated/expired never
+    # become a card - _deliver_auto_trade_event deletes the forming card
+    # (kill_setup_card) instead and returns before ever calling this
+    # function's send path. No "EXECUTOR REJECTED" text, no notification.
+    return None
   if event_type == "opened":
     rendered = _format_opened(
       event,
@@ -640,7 +649,11 @@ def render_auto_trade_event(
 
 
 def _forming_message_key(match_id: str) -> str:
-  return f"auto_trade:forming_message:{match_id}"
+  # Delegates to setup_card so scanner.py (which writes the card) and this
+  # module (which threads replies to it / deletes it) always agree on the
+  # exact same Redis key - match_id and setup_lifecycle's setup_id are the
+  # same identifier (setup_id = StrategyMatch.match_id, see worker.py).
+  return _setup_card_forming_message_key(match_id)
 
 
 def _message_key(profile: DeliveryProfile, position_id: int) -> str:
@@ -696,17 +709,11 @@ async def _forming_reply_message_id(
   match_id = _event_match_id(event)
   if not match_id:
     return None, "event has no match id"
-  key = _forming_message_key(match_id)
-  raw = await client.get(key)
-  if not raw:
+  card = await load_forming_card(client, match_id)
+  if card is None:
+    key = _forming_message_key(match_id)
     return None, f"stored forming message is missing or expired ({key})"
-  try:
-    message_id = int(raw)
-  except (TypeError, ValueError):
-    return None, f"invalid cached message id in {key}"
-  if message_id > 0:
-    return message_id, ""
-  return None, f"invalid cached message id in {key}"
+  return card["message_id"], ""
 
 
 async def _reply_message_id(
@@ -741,14 +748,18 @@ async def _resolve_reply_message_id(
   profile: DeliveryProfile,
 ) -> tuple[int | None, str]:
   event_type = str(event.get("type") or "")
-  if event_type in _FORMING_REPLY_TYPES:
+  thread_to_card = (
+    settings.delivery_thread_lifecycle
+    and (event_type in _FORMING_REPLY_TYPES or event_type in _FORMING_REPLY_PREFERRED_TYPES)
+  )
+  if thread_to_card:
     forming_reply, reason = await _forming_reply_message_id(client, event)
     if forming_reply is not None:
       return forming_reply, ""
-    if event_type in {"strategy_route", "opened", "rejected"}:
+    if event_type in _FORMING_REPLY_TYPES:
       return None, reason
-  if event_type == "opened":
-    return None, "opened has no reply anchor"
+    # _FORMING_REPLY_PREFERRED_TYPES: no card found - fall through below to
+    # the pre-P4 position_id reply chain instead of going standalone.
   position_id = event.get("position_id")
   if position_id is not None:
     return await _reply_message_id(client, event, profile)
@@ -843,6 +854,22 @@ async def _deliver_auto_trade_event(
   send=None,
 ) -> bool:
   event_type = str(event.get("type") or "")
+  if event_type in _CARD_TERMINAL_TYPES:
+    # One forming card per setup (P4): reject/invalidate/expire deletes the
+    # card and posts nothing - never a bare "EXECUTOR REJECTED" message.
+    # Forming cards are internal/owner-chat only today (see setup_card.py),
+    # so this only needs to run once, not once per delivery profile.
+    if profile == "internal":
+      match_id = _event_match_id(event)
+      if match_id:
+        await kill_setup_card(
+          client,
+          match_id,
+          reason_code=str(event.get("reason_code") or event_type),
+          delete_fn=delete_scanner_message,
+          edit_fn=edit_scanner_message_text,
+        )
+    return False
   if event_type == "opened":
     symbol = str(event.get("symbol") or "XAU")
     direction = str(event.get("direction") or "").upper()
