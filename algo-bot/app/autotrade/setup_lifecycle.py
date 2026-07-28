@@ -10,13 +10,11 @@ producing a TradePlan, and a setup already past CONFIRMED can never
 transition back to it - that is what stops "old confirmations creating new
 plans repeatedly" and what stops repeated scanner evaluations from emitting
 a new FORMING Telegram card every detector cycle (see `transition_setup`'s
-``changed`` return value). CONFIRMED itself does not yet mean "publish": a
-setup moves to ARMED_WAITING_TRIGGER first and stays there, re-evaluated
-every closed M1 bar, until the M1 candlestick trigger (P3,
-`app/analysis/m1_trigger.py`) fires - only then does it reach PLAN_BUILT/
-PLAN_PUBLISHED. This is what keeps the C# executor mechanical: the
-candlestick decision already happened here, before the plan was ever
-published.
+``changed`` return value). CONFIRMED always passes through
+ARMED_WAITING_TRIGGER for lifecycle compatibility. An authoritative scanner
+M5 reaction may continue to PLAN_BUILT in that same worker call while the
+executable quote remains in-zone; a later retest stays armed until a fresh
+episode-scoped M1 trigger fires. This keeps the C# executor mechanical.
 
 Storage: `analysis:setup:{setup_id}` (see docs/redis-contract.md).
 """
@@ -34,9 +32,9 @@ WATCHING = "watching"
 TOUCHED = "touched"
 FORMING = "forming"
 CONFIRMED = "confirmed"
-# M1 candlestick trigger (P3): a CONFIRMED setup at a merged zone waits here
-# until a qualifying M1 candle prints. No executable TradePlan exists yet -
-# see worker.py::_publish_trade_plan_v7 and app/analysis/m1_trigger.py.
+# Execution timing state: every CONFIRMED setup passes through this node.
+# Scanner-authoritative reactions may continue onward in the same worker call;
+# retests and non-reaction strategies wait here for their required M1 timing.
 ARMED_WAITING_TRIGGER = "armed_waiting_trigger"
 PLAN_BUILT = "plan_built"
 PLAN_PUBLISHED = "plan_published"

@@ -12,6 +12,10 @@ dated section after deployment.
 ## Unreleased
 
 ### Added
+- Restart-safe reaction execution state at
+  `auto_trade:execution_confirmation:{setup_id}`, including deterministic
+  retest episode ids, side-aware zone evidence, consumed M1 timestamps and a
+  bounded two-bar retest-trigger validity window.
 - TradePlan V7 contract (`contracts/autotrade/trade-plan-v7.json`, Python
   `app/autotrade/trade_plan.py`, C# `TradePlanV7.cs`): a single absolute stop
   and a concrete entry instruction (market_watch/single_limit/limit_ladder)
@@ -124,6 +128,13 @@ dated section after deployment.
   longer construct an `ExecutionIntent`.
 
 ### Fixed
+- Scanner-confirmed structural reactions no longer lose valid entries to a
+  forced arm-only worker cycle. In-zone M5 confirmations now run final V7
+  preflight and publication in the same call; reactions that already left the
+  zone wait for a new retest and an episode-scoped closed M1 trigger. M1
+  evaluation now scans every eligible unprocessed bar and applies one common
+  zone-intersection gate to all six candle patterns, preventing stale triggers
+  from authorizing a later retest.
 - Separate scanner observations from actionable setups before lifecycle
   creation. Opposing cross-side reactions now resolve deterministically,
   ambiguous generic key levels remain analysis-only, and the nearest

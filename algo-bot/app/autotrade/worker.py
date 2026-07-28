@@ -67,6 +67,27 @@ from app.autotrade.strategy_match import (
 from app.autotrade.structural_target_room import (
   evaluate_structural_target_room,
 )
+from app.autotrade.execution_confirmation import (
+  EXPIRED as CONFIRMATION_EXPIRED,
+  IMMEDIATE_CONFIRMATION,
+  IN_ZONE_WAITING_M1,
+  INVALIDATED as CONFIRMATION_INVALIDATED,
+  M1_RETEST,
+  M5_AUTHORITATIVE,
+  PUBLISHED as CONFIRMATION_PUBLISHED,
+  TRIGGER_PRICE_LEFT_ZONE,
+  TRIGGER_READY,
+  WAITING_RETEST,
+  ExecutionConfirmation,
+  ExecutionConfirmationState,
+  confirmation_policy_for,
+  deterministic_episode_id,
+  executable_quote_in_zone,
+  load_execution_confirmation,
+  new_state,
+  parse_bar_timestamp,
+  save_execution_confirmation,
+)
 from app.autotrade.multi_match import (
   dedupe_matches,
   deserialize_matches,
@@ -89,15 +110,16 @@ from app.autotrade.setup_lifecycle import (
   release_active_thesis,
   transition_setup,
 )
-from app.analysis.m1_trigger import evaluate_m1_trigger
+from app.analysis.m1_trigger import (
+  evaluate_m1_trigger_window,
+  latest_eligible_m1_bar_ts,
+)
 from app.analysis.confluence_zone import (
   ConfluenceMember,
   claim_confluence_zone,
   release_confluence_zone,
   resolve_confluence_zone_id,
 )
-from app.autotrade.protective_stop import ProtectiveStopError, plan_protective_stop
-from app.autotrade.trade_plan import TradePlanError
 from app.autotrade.trade_plan_builder import (
   TradePlanBuildRejected,
   build_trade_plan_from_strategy_match,
@@ -3987,6 +4009,84 @@ async def _record_v7_build_rejected(
   )
 
 
+async def _persist_v7_confirmation_phase(
+  client: Any,
+  symbol: str,
+  match: StrategyMatch,
+  state: ExecutionConfirmationState,
+  *,
+  reason_code: str,
+  message: str,
+  evidence: Any | None,
+  metric: str | None = None,
+  status: str = "waiting",
+) -> None:
+  await save_execution_confirmation(
+    client,
+    state,
+    expires_at=match.expires_at,
+  )
+  if metric is not None:
+    await increment_metric(client, metric, symbol=symbol)
+  measured = {
+    "setup_id": match.match_id,
+    "match_id": match.match_id,
+    "phase": state.phase,
+    "episode_id": state.episode_id,
+    "confirmation_source": state.trigger_source,
+    "trigger_bar_ts": state.trigger_bar_ts,
+    "last_evaluated_m1_ts": state.last_evaluated_m1_ts,
+    "zone_entered_at": state.zone_entered_at,
+    "zone_exited_at": state.zone_exited_at,
+    "zone_low": match.entry_low,
+    "zone_high": match.entry_high,
+  }
+  if evidence is not None:
+    measured.update({
+      "executable_quote": evidence.executable_quote,
+      "quote_side": evidence.quote_side,
+      "quote_inside_zone": evidence.inside,
+      "distance_to_zone": evidence.distance_to_zone,
+      "distance_pips": evidence.distance_pips,
+      "tolerance_price": evidence.tolerance_price,
+    })
+  await record_route_outcome(
+    client,
+    match,
+    stage="preflight",
+    status=status,
+    reason_code=reason_code,
+    message=message,
+    measured=measured,
+    retained=status != "candidate_published",
+    publication_reason_code=(
+      reason_code if status == "candidate_published" else None
+    ),
+    publish_status=False,
+  )
+  log.info(
+    "v7 execution confirmation symbol=%s setup_id=%s match_id=%s "
+    "direction=%s phase=%s executable_quote=%s quote_side=%s "
+    "zone_low=%.5f zone_high=%.5f episode_id=%s "
+    "confirmation_source=%s trigger_bar_ts=%s last_evaluated_m1_ts=%s "
+    "reason_code=%s",
+    symbol,
+    match.match_id,
+    match.match_id,
+    match.direction,
+    state.phase,
+    None if evidence is None else evidence.executable_quote,
+    None if evidence is None else evidence.quote_side,
+    match.entry_low,
+    match.entry_high,
+    state.episode_id,
+    state.trigger_source,
+    state.trigger_bar_ts,
+    state.last_evaluated_m1_ts,
+    reason_code,
+  )
+
+
 def _resolve_match_confluence_claim_id(
   symbol: str,
   match: StrategyMatch,
@@ -4055,15 +4155,11 @@ async def _publish_trade_plan_v7(
   structural-target-room helper against the latest Market Map; this is a
   final stale-context safety check, not a second strategy planner.
 
-  M1 candlestick trigger (P3): a CONFIRMED setup does not publish on this
-  call - it moves to ARMED_WAITING_TRIGGER and returns None. Only once this
-  function is called again for the SAME setup while it is
-  ARMED_WAITING_TRIGGER, and the latest closed M1 bar in `frames["M1"]`
-  qualifies under app.analysis.m1_trigger, does it proceed to build/publish -
-  with the stop re-anchored to the trigger candle's wick extreme. This is
-  what keeps the C# executor mechanical: the candlestick decision already
-  happened here, before the plan was ever published, and `market_watch` is a
-  plain quote-in-zone gate to the executor.
+  Structural reactions with complete scanner M5 confirmation may continue
+  through final preflight in this same call while the side-aware executable
+  quote remains in the entry zone. If price already left, a persisted retest
+  episode requires a fresh in-zone closed M1 trigger. Non-reaction strategies
+  retain their existing M1-trigger requirement.
 
   Returns the published plan_id, or None if not published (still waiting for
   an M1 trigger, thesis/zone already claimed by another setup, or a
@@ -4072,6 +4168,16 @@ async def _publish_trade_plan_v7(
   yet" wait which is not a rejection).
   """
   if spot is None or not spot.fresh:
+    await record_route_outcome(
+      client,
+      match,
+      stage="spot_check",
+      status="waiting",
+      reason_code="stale_spot",
+      message="fresh bid/ask snapshot is required for execution confirmation",
+      retained=True,
+      publish_status=False,
+    )
     return None
   if not match.thesis_id:
     await _record_v7_build_rejected(
@@ -4083,6 +4189,10 @@ async def _publish_trade_plan_v7(
 
   setup_id = match.match_id
   setup_record = await load_setup(client, setup_id)
+  if setup_record is not None and setup_record.state in (
+    PLAN_BUILT, PLAN_PUBLISHED,
+  ):
+    return None
   if setup_record is None or setup_record.state not in (
     CONFIRMED, ARMED_WAITING_TRIGGER,
   ):
@@ -4094,32 +4204,53 @@ async def _publish_trade_plan_v7(
     )
     return None
 
-  if setup_record.state == CONFIRMED:
-    try:
-      await transition_setup(
-        client, setup_id, ARMED_WAITING_TRIGGER, reason_code="m1_trigger_wait",
-      )
-    except SetupLifecycleError:
-      log.exception(
-        "v7 setup could not arm for M1 trigger symbol=%s setup_id=%s",
-        symbol, setup_id,
-      )
-    return None
-
-  # setup_record.state == ARMED_WAITING_TRIGGER: expire it if the M1
-  # trigger never fired before the match's own expiry (P4's "EXPIRED
-  # (market_watch never triggered)"). worker.py never imports app.bot.client
-  # directly (see test_worker_source_has_no_direct_scanner_market_map_or_
-  # telegram_import) - emitting "expired" with publish_status=True is what
-  # reaches delivery.py's auto_trade:events consumer, which deletes the
-  # forming card and posts nothing (_CARD_TERMINAL_TYPES).
   now_ts = int(datetime.now(timezone.utc).timestamp())
+  quote_ts = int(getattr(spot, "ts", 0) or now_ts)
+  policy = confirmation_policy_for(match)
+  pip_size = units.pip_size(symbol)
+  evidence = executable_quote_in_zone(
+    match.direction,
+    getattr(spot, "bid", None),
+    getattr(spot, "ask", None),
+    match.entry_low,
+    match.entry_high,
+    max(
+      0.0,
+      float(settings.auto_trade_entry_contract_tolerance_pips) * pip_size,
+    ),
+    pip_size=pip_size,
+  )
+
   if match.expires_at and now_ts >= int(match.expires_at):
     try:
-      await transition_setup(client, setup_id, EXPIRED, reason_code="m1_trigger_expired")
+      await transition_setup(
+        client,
+        setup_id,
+        EXPIRED,
+        reason_code=(
+          "confirmation_expired"
+          if policy.reaction_family else "m1_trigger_expired"
+        ),
+      )
     except SetupLifecycleError:
       log.exception(
-        "v7 setup could not expire symbol=%s setup_id=%s", symbol, setup_id,
+        "v7 setup could not expire symbol=%s setup_id=%s",
+        symbol, setup_id,
+      )
+    if policy.reaction_family:
+      await _persist_v7_confirmation_phase(
+        client,
+        symbol,
+        match,
+        new_state(
+          setup_id,
+          CONFIRMATION_EXPIRED,
+          now=now_ts,
+        ),
+        reason_code="confirmation_expired",
+        message="setup confirmation expired before execution",
+        evidence=evidence,
+        status="expired",
       )
     await emit_lifecycle(
       client,
@@ -4128,41 +4259,536 @@ async def _publish_trade_plan_v7(
       match_id=setup_id,
       correlation_id=setup_id,
       timeframe=match.source_tf,
-      reason_code="m1_trigger_expired",
-      message="M1 trigger never fired before the plan's own expiry",
+      reason_code=(
+        "confirmation_expired"
+        if policy.reaction_family else "m1_trigger_expired"
+      ),
+      message="setup confirmation expired before execution",
       publish_status=True,
     )
     return None
 
-  # Re-evaluate every cycle otherwise - no trigger yet is the ordinary
-  # "keep waiting" outcome, not a rejection.
-  m1 = None if frames is None else frames.get("M1")
-  trigger = None
-  if m1 is not None and not getattr(m1, "empty", False):
-    trigger = evaluate_m1_trigger(
-      m1,
-      zone_low=match.entry_low,
-      zone_high=match.entry_high,
-      key_level=match.key_level,
-      direction=match.direction,
-      cfg=settings,
+  invalidation_quote = (
+    evidence.executable_quote
+    if evidence.executable_quote is not None else float(spot.price)
+  )
+  structure_invalidated = (
+    match.direction == "BUY" and invalidation_quote < match.structure_swing
+    or match.direction == "SELL" and invalidation_quote > match.structure_swing
+  )
+  if structure_invalidated:
+    try:
+      await transition_setup(
+        client,
+        setup_id,
+        INVALIDATED,
+        reason_code="structure_invalidated_before_entry",
+      )
+    except SetupLifecycleError:
+      log.exception(
+        "v7 setup could not invalidate symbol=%s setup_id=%s",
+        symbol,
+        setup_id,
+      )
+    if policy.reaction_family:
+      await _persist_v7_confirmation_phase(
+        client,
+        symbol,
+        match,
+        new_state(
+          setup_id,
+          CONFIRMATION_INVALIDATED,
+          now=now_ts,
+        ),
+        reason_code="structure_invalidated_before_entry",
+        message="structure invalidated before an executable entry",
+        evidence=evidence,
+        status="blocked",
+      )
+    await emit_lifecycle(
+      client,
+      INVALIDATED,
+      symbol=symbol,
+      match_id=setup_id,
+      correlation_id=setup_id,
+      timeframe=match.source_tf,
+      reason_code="structure_invalidated_before_entry",
+      message="structure invalidated before an executable entry",
+      publish_status=True,
     )
-  if trigger is None:
+    return None
+
+  if policy.reaction_family and not policy.metadata_valid:
+    await _record_v7_build_rejected(
+      client,
+      symbol,
+      match,
+      "confirmation_metadata_missing",
+      "scanner reaction is missing authoritative confirmation metadata",
+      {
+        "touch_bar_ts": match.touch_bar_ts,
+        "confirmation_bar_ts": match.confirmation_bar_ts,
+        "reaction_type": match.reaction_type,
+        "structural_zone_id": match.structural_zone_id,
+      },
+    )
+    try:
+      await transition_setup(
+        client,
+        setup_id,
+        INVALIDATED,
+        reason_code="confirmation_metadata_missing",
+      )
+    except SetupLifecycleError:
+      log.exception(
+        "v7 setup could not invalidate missing confirmation metadata "
+        "symbol=%s setup_id=%s",
+        symbol,
+        setup_id,
+      )
+    await _persist_v7_confirmation_phase(
+      client,
+      symbol,
+      match,
+      new_state(
+        setup_id,
+        CONFIRMATION_INVALIDATED,
+        now=now_ts,
+      ),
+      reason_code="confirmation_metadata_missing",
+      message="scanner reaction is missing authoritative confirmation metadata",
+      evidence=evidence,
+      status="blocked",
+    )
+    return None
+
+  confirmation: ExecutionConfirmation | None = None
+  trigger = None
+  execution_state = await load_execution_confirmation(client, setup_id)
+  confirmation_boundary = (
+    parse_bar_timestamp(match.confirmation_bar_ts)
+    or int(match.issued_at)
+  )
+
+  if setup_record.state == CONFIRMED:
+    try:
+      setup_record, _changed = await transition_setup(
+        client,
+        setup_id,
+        ARMED_WAITING_TRIGGER,
+        reason_code=(
+          "reaction_confirmation_handoff"
+          if policy.reaction_family else "m1_trigger_wait"
+        ),
+      )
+    except SetupLifecycleError:
+      log.exception(
+        "v7 setup could not arm symbol=%s setup_id=%s",
+        symbol,
+        setup_id,
+      )
+      return None
+
+    if not policy.reaction_family:
+      return None
+    if evidence.inside:
+      episode_id = deterministic_episode_id(
+        setup_id,
+        match.direction,
+        match.entry_low,
+        match.entry_high,
+        confirmation_boundary,
+      )
+      execution_state = new_state(
+        setup_id,
+        IMMEDIATE_CONFIRMATION,
+        now=now_ts,
+        episode_id=episode_id,
+        zone_entered_at=quote_ts,
+        last_inside_at=quote_ts,
+        trigger_bar_ts=confirmation_boundary,
+        trigger_source=M5_AUTHORITATIVE,
+        trigger_consumed=True,
+      )
+      await _persist_v7_confirmation_phase(
+        client,
+        symbol,
+        match,
+        execution_state,
+        reason_code="m5_confirmation_quote_inside",
+        message="M5 reaction confirmed while executable quote remains in zone",
+        evidence=evidence,
+        metric="reaction_m5_immediate_eligible",
+        status="checking",
+      )
+      confirmation = ExecutionConfirmation(
+        source=M5_AUTHORITATIVE,
+        pattern=match.reaction_type,
+        bar_ts=confirmation_boundary,
+        wick_extreme=None,
+        zone_episode_id=episode_id,
+        message="scanner M5 reaction confirmation is authoritative",
+      )
+    else:
+      execution_state = new_state(
+        setup_id,
+        WAITING_RETEST,
+        now=now_ts,
+        zone_exited_at=quote_ts,
+      )
+      await _persist_v7_confirmation_phase(
+        client,
+        symbol,
+        match,
+        execution_state,
+        reason_code="waiting_retest",
+        message="confirmed reaction left the entry zone; waiting for a new retest",
+        evidence=evidence,
+        metric="reaction_waiting_retest",
+      )
+      return None
+
+  m1 = None if frames is None else frames.get("M1")
+  if (
+    policy.reaction_family
+    and setup_record.state == ARMED_WAITING_TRIGGER
+    and confirmation is None
+  ):
+    if execution_state is None:
+      # Upgrade-safe fail closed: an already-armed setup from the pre-episode
+      # runtime cannot reuse its old confirmation. Treat the next in-zone
+      # observation as a brand-new retest episode.
+      execution_state = new_state(
+        setup_id,
+        WAITING_RETEST,
+        now=now_ts,
+        zone_exited_at=quote_ts if not evidence.inside else None,
+      )
+
+    if execution_state.phase == CONFIRMATION_PUBLISHED:
+      return None
+
+    if execution_state.phase == IMMEDIATE_CONFIRMATION:
+      if evidence.inside:
+        confirmation = ExecutionConfirmation(
+          source=M5_AUTHORITATIVE,
+          pattern=match.reaction_type,
+          bar_ts=confirmation_boundary,
+          wick_extreme=None,
+          zone_episode_id=str(execution_state.episode_id),
+          message="scanner M5 reaction confirmation is authoritative",
+        )
+      else:
+        execution_state = new_state(
+          setup_id,
+          WAITING_RETEST,
+          now=now_ts,
+          episode_id=execution_state.episode_id,
+          zone_entered_at=execution_state.zone_entered_at,
+          zone_exited_at=quote_ts,
+          last_inside_at=execution_state.last_inside_at,
+          trigger_bar_ts=execution_state.trigger_bar_ts,
+          trigger_pattern=execution_state.trigger_pattern,
+          trigger_source=execution_state.trigger_source,
+          trigger_consumed=True,
+        )
+        await _persist_v7_confirmation_phase(
+          client,
+          symbol,
+          match,
+          execution_state,
+          reason_code="waiting_retest",
+          message="executable quote left before immediate publication",
+          evidence=evidence,
+          metric="reaction_waiting_retest",
+        )
+        return None
+
+    if (
+      confirmation is None
+      and execution_state.phase in {
+        WAITING_RETEST,
+        TRIGGER_PRICE_LEFT_ZONE,
+      }
+    ):
+      if not evidence.inside:
+        if execution_state.zone_exited_at != quote_ts:
+          execution_state = new_state(
+            setup_id,
+            execution_state.phase,
+            now=now_ts,
+            episode_id=execution_state.episode_id,
+            zone_entered_at=execution_state.zone_entered_at,
+            zone_exited_at=quote_ts,
+            last_inside_at=execution_state.last_inside_at,
+            last_evaluated_m1_ts=execution_state.last_evaluated_m1_ts,
+            trigger_bar_ts=execution_state.trigger_bar_ts,
+            trigger_pattern=execution_state.trigger_pattern,
+            trigger_source=execution_state.trigger_source,
+            trigger_consumed=execution_state.trigger_consumed,
+          )
+          await save_execution_confirmation(
+            client,
+            execution_state,
+            expires_at=match.expires_at,
+          )
+        return None
+      episode_id = deterministic_episode_id(
+        setup_id,
+        match.direction,
+        match.entry_low,
+        match.entry_high,
+        quote_ts,
+      )
+      execution_state = new_state(
+        setup_id,
+        IN_ZONE_WAITING_M1,
+        now=now_ts,
+        episode_id=episode_id,
+        zone_entered_at=quote_ts,
+        last_inside_at=quote_ts,
+      )
+      await _persist_v7_confirmation_phase(
+        client,
+        symbol,
+        match,
+        execution_state,
+        reason_code="waiting_m1_retest",
+        message="new retest episode entered the zone; waiting for fresh M1",
+        evidence=evidence,
+        metric="reaction_zone_episode_started",
+      )
+
+    if confirmation is None and execution_state.phase in {
+      IN_ZONE_WAITING_M1,
+      TRIGGER_READY,
+    }:
+      episode_start = max(
+        int(execution_state.zone_entered_at or quote_ts),
+        confirmation_boundary + 1,
+      )
+      trigger = (
+        None
+        if m1 is None or getattr(m1, "empty", False)
+        else evaluate_m1_trigger_window(
+          m1,
+          zone_low=match.entry_low,
+          zone_high=match.entry_high,
+          key_level=match.key_level,
+          direction=match.direction,
+          earliest_bar_ts=episode_start,
+          after_bar_ts=execution_state.last_evaluated_m1_ts,
+          cfg=settings,
+        )
+      )
+      latest_evaluated = latest_eligible_m1_bar_ts(
+        m1,
+        earliest_bar_ts=episode_start,
+        after_bar_ts=execution_state.last_evaluated_m1_ts,
+      )
+      if trigger is None:
+        if evidence.inside:
+          execution_state = new_state(
+            setup_id,
+            IN_ZONE_WAITING_M1,
+            now=now_ts,
+            episode_id=execution_state.episode_id,
+            zone_entered_at=execution_state.zone_entered_at,
+            last_inside_at=quote_ts,
+            last_evaluated_m1_ts=(
+              latest_evaluated
+              if latest_evaluated is not None
+              else execution_state.last_evaluated_m1_ts
+            ),
+          )
+          await _persist_v7_confirmation_phase(
+            client,
+            symbol,
+            match,
+            execution_state,
+            reason_code="waiting_m1_retest",
+            message="retest remains in zone; waiting for fresh M1 confirmation",
+            evidence=evidence,
+          )
+        else:
+          execution_state = new_state(
+            setup_id,
+            WAITING_RETEST,
+            now=now_ts,
+            episode_id=execution_state.episode_id,
+            zone_entered_at=execution_state.zone_entered_at,
+            zone_exited_at=quote_ts,
+            last_inside_at=execution_state.last_inside_at,
+            last_evaluated_m1_ts=(
+              latest_evaluated
+              if latest_evaluated is not None
+              else execution_state.last_evaluated_m1_ts
+            ),
+          )
+          await _persist_v7_confirmation_phase(
+            client,
+            symbol,
+            match,
+            execution_state,
+            reason_code="retest_episode_ended",
+            message="quote left the zone before a valid M1 trigger",
+            evidence=evidence,
+          )
+        return None
+
+      trigger_bar_ts = int(trigger.bar_ts)
+      validity_bars = max(
+        1,
+        int(getattr(settings, "auto_trade_retest_trigger_validity_bars", 2)),
+      )
+      trigger_deadline = trigger_bar_ts + 60 + validity_bars * 60
+      if quote_ts > trigger_deadline:
+        execution_state = new_state(
+          setup_id,
+          IN_ZONE_WAITING_M1 if evidence.inside else WAITING_RETEST,
+          now=now_ts,
+          episode_id=execution_state.episode_id,
+          zone_entered_at=execution_state.zone_entered_at,
+          zone_exited_at=None if evidence.inside else quote_ts,
+          last_inside_at=quote_ts if evidence.inside else execution_state.last_inside_at,
+          last_evaluated_m1_ts=trigger_bar_ts,
+          trigger_bar_ts=trigger_bar_ts,
+          trigger_pattern=trigger.pattern,
+          trigger_source=M1_RETEST,
+          trigger_consumed=True,
+        )
+        await _persist_v7_confirmation_phase(
+          client,
+          symbol,
+          match,
+          execution_state,
+          reason_code="stale_m1_trigger_ignored",
+          message="M1 retest trigger exceeded its execution validity window",
+          evidence=evidence,
+          metric="reaction_stale_m1_ignored",
+        )
+        return None
+      if not evidence.inside:
+        execution_state = new_state(
+          setup_id,
+          TRIGGER_PRICE_LEFT_ZONE,
+          now=now_ts,
+          episode_id=execution_state.episode_id,
+          zone_entered_at=execution_state.zone_entered_at,
+          zone_exited_at=quote_ts,
+          last_inside_at=execution_state.last_inside_at,
+          last_evaluated_m1_ts=trigger_bar_ts,
+          trigger_bar_ts=trigger_bar_ts,
+          trigger_pattern=trigger.pattern,
+          trigger_source=M1_RETEST,
+          trigger_consumed=True,
+        )
+        await _persist_v7_confirmation_phase(
+          client,
+          symbol,
+          match,
+          execution_state,
+          reason_code="trigger_price_left_zone",
+          message="M1 trigger closed but executable quote already left the zone",
+          evidence=evidence,
+          metric="reaction_trigger_price_left_zone",
+        )
+        return None
+      execution_state = new_state(
+        setup_id,
+        TRIGGER_READY,
+        now=now_ts,
+        episode_id=execution_state.episode_id,
+        zone_entered_at=execution_state.zone_entered_at,
+        last_inside_at=quote_ts,
+        last_evaluated_m1_ts=trigger_bar_ts,
+        trigger_bar_ts=trigger_bar_ts,
+        trigger_pattern=trigger.pattern,
+        trigger_source=M1_RETEST,
+        trigger_consumed=True,
+      )
+      await _persist_v7_confirmation_phase(
+        client,
+        symbol,
+        match,
+        execution_state,
+        reason_code="m1_retest_triggered",
+        message="fresh in-zone M1 trigger accepted for current retest episode",
+        evidence=evidence,
+        metric="reaction_m1_trigger_found",
+        status="checking",
+      )
+      confirmation = ExecutionConfirmation(
+        source=M1_RETEST,
+        pattern=trigger.pattern,
+        bar_ts=trigger_bar_ts,
+        wick_extreme=trigger.wick_extreme,
+        zone_episode_id=str(execution_state.episode_id),
+        message=trigger.message,
+      )
+
+  if not policy.reaction_family:
+    if setup_record.state != ARMED_WAITING_TRIGGER:
+      return None
+    trigger = (
+      None
+      if m1 is None or getattr(m1, "empty", False)
+      else evaluate_m1_trigger_window(
+        m1,
+        zone_low=match.entry_low,
+        zone_high=match.entry_high,
+        key_level=match.key_level,
+        direction=match.direction,
+        earliest_bar_ts=confirmation_boundary,
+        after_bar_ts=None,
+        cfg=settings,
+      )
+    )
+    if trigger is None:
+      return None
+    trigger_bar_ts = int(trigger.bar_ts)
+    confirmation = ExecutionConfirmation(
+      source=M1_RETEST,
+      pattern=trigger.pattern,
+      bar_ts=trigger_bar_ts,
+      wick_extreme=trigger.wick_extreme,
+      zone_episode_id=deterministic_episode_id(
+        setup_id,
+        match.direction,
+        match.entry_low,
+        match.entry_high,
+        confirmation_boundary,
+      ),
+      message=trigger.message,
+    )
+
+  if confirmation is None:
     return None
 
   entry_reference = _executable_spot_price(spot, match.direction)
+  execution_match = match
+  if policy.reaction_family and confirmation.source == M1_RETEST:
+    validity_bars = max(
+      1,
+      int(getattr(settings, "auto_trade_retest_trigger_validity_bars", 2)),
+    )
+    trigger_expiry = confirmation.bar_ts + 60 + validity_bars * 60
+    execution_match = replace(
+      match,
+      expires_at=min(int(match.expires_at), trigger_expiry),
+    )
   target_room = evaluate_structural_target_room(
-    direction=match.direction,
+    direction=execution_match.direction,
     planned_entry_price=entry_reference,
-    candidate_entry_low=match.entry_low,
-    candidate_entry_high=match.entry_high,
-    configured_target_pips=match.targets_pips,
+    candidate_entry_low=execution_match.entry_low,
+    candidate_entry_high=execution_match.entry_high,
+    configured_target_pips=execution_match.targets_pips,
     actionable_entries=(
       ()
       if market_map is None
       else tuple(getattr(market_map, "actionable_entries", ()) or ())
     ),
-    atr=match.atr,
+    atr=execution_match.atr,
     pip_size=units.pip_size(symbol),
     barrier_buffer_atr=float(settings.auto_trade_opposing_barrier_atr),
   )
@@ -4203,9 +4829,12 @@ async def _publish_trade_plan_v7(
     )
     return None
   match_for_plan = (
-    replace(match, targets_pips=target_room.fitted_targets_pips)
+    replace(
+      execution_match,
+      targets_pips=target_room.fitted_targets_pips,
+    )
     if target_room.opposing_entry is not None
-    else match
+    else execution_match
   )
 
   zone_claim_id = _resolve_match_confluence_claim_id(
@@ -4327,6 +4956,10 @@ async def _publish_trade_plan_v7(
         else getattr(strategy_opposing_zone, "id", None)
       ),
       executable_quote=entry_reference,
+      confirmation_source=confirmation.source,
+      execution_confirmation_bar_ts=confirmation.bar_ts,
+      zone_episode_id=confirmation.zone_episode_id,
+      trigger_wick_extreme=confirmation.wick_extreme,
       max_volume=int(getattr(
         settings, "auto_trade_v7_max_volume", _V7_MAX_VOLUME_DEFAULT,
       )),
@@ -4364,7 +4997,11 @@ async def _publish_trade_plan_v7(
       else INVALIDATED
     )
     lifecycle_reason = (
-      "m1_trigger_expired"
+      (
+        "m1_trigger_expired"
+        if confirmation.source == M1_RETEST
+        else "confirmation_expired"
+      )
       if terminal_state == EXPIRED
       else f"v7_{exc.reason_code}"
     )
@@ -4391,48 +5028,31 @@ async def _publish_trade_plan_v7(
       message=exc.message,
       publish_status=True,
     )
-    return None
-
-  # The declared V7 stop must be anchored to the trigger candle, not the raw
-  # zone: reuse the exact wick_stop_buffer computation the V6 path already
-  # applies (app.autotrade.protective_stop.plan_protective_stop), fed the
-  # trigger candle's wick extreme as sweep_extreme. Best-effort - if the
-  # trigger's wick extreme cannot produce a valid stop (eg. it would sit on
-  # the wrong side of entry), the zone-derived stop the builder already
-  # computed is kept rather than failing the whole publish over it.
-  try:
-    trigger_stop = plan_protective_stop(
-      direction=match_for_plan.direction,
-      entry_price=Decimal(str(entry_reference)),
-      structure_swing=match_for_plan.structure_swing,
-      atr=match_for_plan.atr,
-      structure_buffer_atr=getattr(settings, "auto_trade_add_stop_buffer_atr", 0.3),
-      sweep_extreme=trigger.wick_extreme,
-      wick_buffer_atr=getattr(settings, "auto_trade_wick_stop_buffer_atr", 0.15),
-      minimum_stop_pips=1,
-      maximum_stop_pips=100000,
-      pip_size=units.pip_size(symbol),
-      digits=int(getattr(settings, "auto_trade_xau_price_digits", 2)),
-    )
-    plan = replace(
-      plan,
-      stop=replace(
-        plan.stop,
-        price=trigger_stop.final_stop_price,
-        source="m1_trigger_wick",
-        reason=(
-          f"M1 {trigger.pattern} trigger at {trigger.wick_extreme:.2f} "
-          f"({trigger.message})"
+    if policy.reaction_family:
+      await _persist_v7_confirmation_phase(
+        client,
+        symbol,
+        match,
+        new_state(
+          setup_id,
+          (
+            CONFIRMATION_EXPIRED
+            if terminal_state == EXPIRED
+            else CONFIRMATION_INVALIDATED
+          ),
+          now=now_ts,
+          episode_id=confirmation.zone_episode_id,
+          trigger_bar_ts=confirmation.bar_ts,
+          trigger_pattern=confirmation.pattern,
+          trigger_source=confirmation.source,
+          trigger_consumed=True,
         ),
-      ),
-    )
-    plan.validate()
-  except (ProtectiveStopError, TradePlanError) as exc:
-    log.info(
-      "v7 trigger-anchored stop unavailable, keeping zone-derived stop "
-      "symbol=%s setup_id=%s error=%s",
-      symbol, setup_id, exc,
-    )
+        reason_code=lifecycle_reason,
+        message=exc.message,
+        evidence=evidence,
+        status="expired" if terminal_state == EXPIRED else "blocked",
+      )
+    return None
 
   try:
     await transition_setup(client, setup_id, PLAN_BUILT, reason_code="v7_builder")
@@ -4445,6 +5065,40 @@ async def _publish_trade_plan_v7(
       "v7 plan published but setup lifecycle transition failed "
       "symbol=%s setup_id=%s plan_id=%s",
       symbol, setup_id, plan.plan_id,
+    )
+  if policy.reaction_family:
+    published_state = new_state(
+      setup_id,
+      CONFIRMATION_PUBLISHED,
+      now=now_ts,
+      episode_id=confirmation.zone_episode_id,
+      zone_entered_at=(
+        None if execution_state is None else execution_state.zone_entered_at
+      ),
+      last_inside_at=quote_ts,
+      last_evaluated_m1_ts=(
+        None if execution_state is None
+        else execution_state.last_evaluated_m1_ts
+      ),
+      trigger_bar_ts=confirmation.bar_ts,
+      trigger_pattern=confirmation.pattern,
+      trigger_source=confirmation.source,
+      trigger_consumed=True,
+    )
+    await _persist_v7_confirmation_phase(
+      client,
+      symbol,
+      match,
+      published_state,
+      reason_code=(
+        "m5_confirmation_quote_inside"
+        if confirmation.source == M5_AUTHORITATIVE
+        else "m1_retest_triggered"
+      ),
+      message="TradePlan V7 published in the confirmation worker cycle",
+      evidence=evidence,
+      metric="reaction_plan_published_same_cycle",
+      status="candidate_published",
     )
   await increment_metric(client, "v7_plan_published", symbol=symbol)
   await emit_lifecycle(
@@ -4461,6 +5115,9 @@ async def _publish_trade_plan_v7(
       "entry_type": plan.entry.type,
       "stop_price": str(plan.stop.price),
       "targets": [str(target.price) for target in plan.targets],
+      "confirmation_source": confirmation.source,
+      "confirmation_bar_ts": confirmation.bar_ts,
+      "zone_episode_id": confirmation.zone_episode_id,
     },
   )
   log.info(
@@ -6178,6 +6835,58 @@ async def _preflight_strategy_intent(
       market_map=market_map,
       frames=frames,
     )
+  handoff_policy = confirmation_policy_for(match)
+  handoff_evidence = executable_quote_in_zone(
+    match.direction,
+    spot.bid,
+    spot.ask,
+    match.entry_low,
+    match.entry_high,
+    max(
+      0.0,
+      float(settings.auto_trade_entry_contract_tolerance_pips)
+      * units.pip_size(intent.symbol),
+    ),
+    pip_size=units.pip_size(intent.symbol),
+  )
+  handoff_quote = handoff_evidence.executable_quote
+  handoff_invalidated = (
+    handoff_quote is not None
+    and (
+      match.direction == "BUY" and handoff_quote < match.structure_swing
+      or match.direction == "SELL" and handoff_quote > match.structure_swing
+    )
+  )
+  if (
+    handoff_policy.m5_authoritative
+    and not handoff_evidence.inside
+    and not handoff_invalidated
+    and (
+      not match.expires_at
+      or int(datetime.now(timezone.utc).timestamp()) < int(match.expires_at)
+    )
+  ):
+    # An out-of-zone reaction is not executable, but the orchestrator must
+    # still advance its confirmation handoff once so Python can persist
+    # WAITING_RETEST. Keep it out of arbitration: a waiting reaction must not
+    # suppress a genuinely executable intent on the other side.
+    return _preflight_decision(
+      intent,
+      executable=False,
+      terminal=False,
+      stage="preflight",
+      reason_code="reaction_confirmation_handoff",
+      message="reaction requires persisted waiting-retest handoff",
+      measured={
+        "executable_quote": handoff_evidence.executable_quote,
+        "quote_side": handoff_evidence.quote_side,
+        "quote_inside_zone": handoff_evidence.inside,
+        "distance_pips": handoff_evidence.distance_pips,
+        "entry_low": match.entry_low,
+        "entry_high": match.entry_high,
+      },
+      subject=match,
+    )
   adapted, counter_bias = _adapt_counter_bias_target(
     match,
     spot.price,
@@ -6769,6 +7478,39 @@ async def _handle_event(
           preflight.reason_code if preflight.terminal else None
         ),
       )
+
+  # Waiting reactions are intentionally absent from executable arbitration,
+  # but still need one locked lifecycle pass to persist WAITING_RETEST. This
+  # call cannot publish while the side-aware quote is outside the zone.
+  for preflight in preflight_decisions:
+    if preflight.reason_code != "reaction_confirmation_handoff":
+      continue
+    routed_match = intent_matches.get(preflight.intent.intent_id)
+    if routed_match is None:
+      continue
+    route_lock = (
+      f"auto_trade:route_lock:{symbol.upper()}:{routed_match.match_id}"
+    )
+    route_lock_token = await acquire_owned_lock(
+      client, route_lock, ttl=30,
+    )
+    if route_lock_token is None:
+      continue
+    try:
+      await _publish_trade_plan_v7(
+        client,
+        symbol,
+        spot,
+        routed_match,
+        htf_zones=htf_zones,
+        htf_levels=htf_levels,
+        regime=regime,
+        frames=frames,
+        market_map=cached_market_map,
+      )
+    finally:
+      await release_owned_lock(client, route_lock, route_lock_token)
+
   strategy_candidate_ids: list[str] = []
   box_candidate_id = None
   trend_candidate_id = None

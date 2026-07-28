@@ -137,7 +137,9 @@ The private strategies read raw `bars:XAU:M1`, `bars:XAU:M5`,
 short-lived typed match from `auto_trade:strategy_match:{symbol}` (primary)
 and the multi-match list from `auto_trade:strategy_matches:{symbol}`. It never
 parses Telegram text. Scanner detectors already decide which strategy matches;
-the worker does not reclassify it by regime or demand another M1/M5 signal.
+the worker does not reclassify it by regime or demand another setup
+confirmation. When a confirmed reaction has already left its entry zone, the
+worker may require a fresh, episode-scoped M1 timing trigger on a later retest.
 Candidate payloads include `tier`, `risk_multiplier`, `family`, and
 `range_state` for observability.
 
@@ -207,6 +209,22 @@ Executor lifecycle events are appended as JSON payloads to
 initial `stop_pips`; open events also carry the broker-valid `targets_pips`
 ladder used by that position, so delivery never reconstructs risk from a
 global default.
+
+Scanner-confirmed reaction execution timing is persisted independently from
+the setup lifecycle:
+
+```text
+SETEX auto_trade:execution_confirmation:{setup_id} <ttl> <json>
+```
+
+The JSON records `phase`, deterministic `episode_id`, zone entry/exit
+timestamps, the last evaluated closed M1 timestamp, and consumed trigger
+evidence. Phases cover immediate M5 authority, waiting for a retest, waiting
+for an in-zone M1 trigger, trigger acceptance/miss, publication, expiry, and
+invalidation. TTL is at least the setup lifecycle retention. BUY membership
+uses executable ask and SELL membership uses executable bid; midpoint is never
+execution evidence. This key is Python-owned restart state and is not consumed
+by Telegram or used by C# for price-action analysis.
 
 The dedicated signal bot sends full operational cards only to the configured
 owner DM. `SIGNAL_PUBLIC_CHANNEL_ID` remains exclusively for manual broadcasts
