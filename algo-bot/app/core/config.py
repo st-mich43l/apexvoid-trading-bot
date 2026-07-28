@@ -359,6 +359,20 @@ class Settings(BaseSettings):
       "AUTO_TRADE_MAP_THESIS_LOCK_ENABLED",
     ),
   )
+  # Confluence-merge zone (P3): co-located structures (key level, demand/
+  # supply, order block, FVG, breaker) within this gap or overlapping merge
+  # into one ConfluenceZone, capped at this total width - one zone, one
+  # order, instead of several strategies each ordering on the same band.
+  zone_merge_max_width: float = 3.0
+  zone_merge_gap: float = 1.0
+  # M1 candlestick trigger (P3): once a setup is CONFIRMED on M5 at a zone,
+  # the executable TradePlan is published only when a qualifying M1 candle
+  # prints at that zone - M1 is a trigger, never a setup source (P2).
+  m1_trigger_patterns: str = (
+    "wick_rejection,body_close,strong_close,pin_bar,engulfing,hammer"
+  )
+  m1_trigger_wick_fraction: float = 0.5
+  m1_trigger_strong_close_pct: float = 0.2
   auto_trade_key_level_reaction_enabled: bool = Field(
     default=True,
     validation_alias=AliasChoices("AUTO_TRADE_KEY_LEVEL_REACTION_ENABLED"),
