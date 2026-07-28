@@ -181,7 +181,7 @@ def analyze(
     tf: _analyze_tf(df, settings, weekly_levels)
     for tf, df in frames.items()
   }
-  htf_order = htf_order or ["M30", "M15"]
+  htf_order = htf_order or ["H1", "M15"]
   per_tf = _apply_mtf_zone_scores(per_tf, settings)
   return AnalysisContext(
     frames={tf.upper(): df for tf, df in df_by_tf.items()},

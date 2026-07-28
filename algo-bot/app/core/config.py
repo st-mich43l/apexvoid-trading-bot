@@ -84,7 +84,7 @@ class Settings(BaseSettings):
   scanner_enabled: bool = False
   scanner_symbols: str = "XAU"
   scanner_exec_tf: str = "M5"
-  scanner_htf: str = "M30,M15"
+  scanner_htf: str = "H1,M15"
   scanner_telegram_bot_token: Optional[str] = None
   scanner_window: int = 500
   scanner_alert_ttl: int = 7200

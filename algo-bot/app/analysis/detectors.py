@@ -332,6 +332,16 @@ class SetupDetector(Protocol):
     ...
 
 
+# The top structural-context timeframe (htf_order's primary entry - H1 for
+# the scanner's own scanner_htf="H1,M15") needs enough closed bars before its
+# swing/structure read is trustworthy. Fewer than this and _htf_bias() would
+# just be guessing from noise, so bias must fail closed to "unknown" (not
+# "up"/"down", and deliberately distinct from the legitimate "range" state)
+# until warmup completes - setups gated on ctx.htf_bias == "up"/"down" then
+# correctly do not form. ~50 H1 closes is a little over two days of data.
+_MIN_PRIMARY_HTF_WARMUP_BARS = 50
+
+
 def build_context(
   symbol: str,
   tf: str,
@@ -345,13 +355,18 @@ def build_context(
     for name, df in frames.items()
   }
   structure_sets = _structure_sets_from_analysis(analysis_ctx.per_tf)
+  htf_bias = analysis_ctx.htf_bias
+  if htf_order:
+    primary_df = frames.get(htf_order[0].upper())
+    if primary_df is None or len(primary_df) < _MIN_PRIMARY_HTF_WARMUP_BARS:
+      htf_bias = "unknown"
   return DetectionContext(
     symbol=symbol,
     tf=tf,
     frames=frames,
     indicators=indicator_sets,
     structures=structure_sets,
-    htf_bias=analysis_ctx.htf_bias,
+    htf_bias=htf_bias,
     settings=settings,
     regime=_exec_regime(analysis_ctx, tf),
     analysis=analysis_ctx,

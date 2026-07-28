@@ -10,6 +10,7 @@ public static class TimeframeCodec
     ["M5"] = 5 * 60,
     ["M15"] = 15 * 60,
     ["M30"] = 30 * 60,
+    ["H1"] = 60 * 60,
   };
 
   public static IReadOnlyList<string> ParseList(string value) =>
@@ -28,7 +29,7 @@ public static class TimeframeCodec
     throw new ArgumentOutOfRangeException(
       nameof(code),
       code,
-      "Only M1, M5, M15 and M30 are supported by this feed."
+      "Only M1, M5, M15, M30 and H1 are supported by this feed."
     );
   }
 
@@ -39,6 +40,7 @@ public static class TimeframeCodec
       "M5" => ProtoOATrendbarPeriod.M5,
       "M15" => ProtoOATrendbarPeriod.M15,
       "M30" => ProtoOATrendbarPeriod.M30,
+      "H1" => ProtoOATrendbarPeriod.H1,
       _ => throw new ArgumentOutOfRangeException(nameof(code), code, null)
     };
 
@@ -49,6 +51,7 @@ public static class TimeframeCodec
       ProtoOATrendbarPeriod.M5 => "M5",
       ProtoOATrendbarPeriod.M15 => "M15",
       ProtoOATrendbarPeriod.M30 => "M30",
+      ProtoOATrendbarPeriod.H1 => "H1",
       _ => period.ToString().ToUpperInvariant()
     };
 }

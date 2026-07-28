@@ -53,6 +53,31 @@ dated section after deployment.
   each tranche is limited to `AUTO_TRADE_ADD_SIZE_RATIO` (default `0.5`) of the
   initial tranche size, in addition to exposure/risk/add-cap ceilings. Python
   mirror: `app.autotrade.scale_in_sizing`.
+- HTF analysis context moved from M30 to H1: the stack is now a single
+  H1->M15->M5 source. `CTRADER_TIMEFRAMES` default is `M1,M5,M15,H1`
+  (`ctrader-engine` subscribes and backfills H1 directly from cTrader,
+  `TimeframeCodec` gained an `H1` mapping); `scanner_htf` default is
+  `H1,M15`. M5 remains the setup formation/confirmation timeframe,
+  unchanged. `detectors.build_context` now fails HTF bias closed to
+  `"unknown"` (not `"up"`/`"down"`, and distinct from the legitimate
+  `"range"` state) until H1 has at least 50 closed bars, instead of
+  silently falling back to M15/M5-only bias while H1 warms up after a
+  fresh subscribe or a redeploy gap.
+
+### Removed
+- The private M1 range gate (`app/autotrade/gate.py`) and the M1
+  mapped-zone reaction (`map_strategy.py::_select_reaction_detailed`'s M1
+  touch/rejection detector) no longer originate trade candidates - M1 is
+  retained only as input for a future entry trigger, not as an autonomous
+  setup source. The M1-reaction path's live-quote zone-widening
+  (`entry_low = min(entry.lo - tolerance, price)`) is removed with it.
+  Market Map's structural pool (`actionable_entries`) is unchanged and
+  still reachable via `_select_reaction_detailed`, which now only ever
+  reports the nearest tracked/executable zone (`waiting_for_touch`) rather
+  than promoting one to a `StrategyMatch`. `evaluate_auto_scalp_gate` and
+  `evaluate_range_box_eligibility` are still called for regime
+  classification and status telemetry respectively, but their output can no
+  longer construct an `ExecutionIntent`.
 
 ### Fixed
 - Broker SL/TP exits discovered by reconcile without a confirmed OrderType no

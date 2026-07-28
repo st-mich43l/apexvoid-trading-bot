@@ -1,17 +1,22 @@
-"""M1 execution strategy for structural levels published by Market Map.
+"""Structural levels published by Market Map, and the M1 reaction helpers
+shared by other guards.
 
-Market Map is context, not a global gate.  This module promotes one mapped
-zone to an executable strategy when a recent closed M1 sequence touches the
-zone and then rejects/reclaims it inside a configurable lookback. HTF-aligned
-zones are the default; an opt-in counter-bias path adds stricter freshness,
-score, and structural-confluence rules. Display-only fallback levels (for
-example a lone round number) are never executable.
+Market Map is context, not a global gate. `_select_reaction_detailed` reports
+the nearest actionable mapped zone (HTF-aligned by default; an opt-in
+counter-bias path adds stricter freshness, score, and structural-confluence
+rules; display-only fallback levels such as a lone round number are never
+executable) but no longer promotes any zone to a trade candidate on its own
+- the M1 touch/rejection reaction detector that used to do that is retired
+as a setup source (H1->M15->M5 single-analysis-source cutover, P2). M1 is
+still read here: `_reaction_in_lookback`/`_touches`/`_rejects` remain, since
+`worker.py`'s overlap-thesis guard and `scale_context.py` still use them to
+disambiguate an already-formed candidate's direction, which is a distinct
+concern from originating a setup.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
 import logging
 import math
 from typing import Any
@@ -24,17 +29,7 @@ from app.analysis.market_map import (
   MarketMap,
   market_map_from_payload,
 )
-from app.autotrade import units
-from app.autotrade.execution_policy import max_entry_drift_pips
-from app.autotrade.reaction_identity import (
-  mapped_reaction_id,
-  mapped_thesis_id,
-  structural_zone_id,
-)
-from app.autotrade.strategy_match import (
-  STRATEGY_MATCH_VERSION,
-  StrategyMatch,
-)
+from app.autotrade.strategy_match import StrategyMatch
 
 
 EXECUTION_TIMEFRAME = "M1"
@@ -143,7 +138,12 @@ def evaluate_market_map_strategy(
   rendered_map: MarketMap | None = None,
   now: int | None = None,
 ) -> MarketMapStrategyDecision:
-  """Match an actionable mapped zone with a recent M1 rejection sequence."""
+  """Report the nearest actionable mapped zone; never itself promotes one to
+  a trade candidate. The M1 touch/rejection reaction detector that used to
+  do that is retired as a setup source (H1->M15->M5 single-analysis-source
+  cutover, P2) - Market Map stays a structure snapshot for whatever consumes
+  it next (the M1 candlestick trigger, P3).
+  """
   if not bool(getattr(cfg, "auto_trade_mapped_zone_enabled", True)):
     return MarketMapStrategyDecision("disabled")
   if spot_price is None or not math.isfinite(float(spot_price)):
@@ -187,222 +187,20 @@ def evaluate_market_map_strategy(
     cfg,
     rendered_map,
   )
-  if selection.selected is None:
-    return MarketMapStrategyDecision(
-      selection.state,
-      selection.reasons,
-      entries_seen=selection.entries_seen,
-      actionable_entries=selection.actionable_entries,
-      filter_counts=selection.filter_counts,
-      track_limit=selection.track_limit,
-      execute_limit=selection.execute_limit,
-      map_id=map_id,
-    )
-  hit = selection.selected
-  entry = hit.entry
-  direction = hit.direction
-  entry_low = hit.entry_low
-  entry_high = hit.entry_high
-  counter_bias = hit.counter_bias
-
-  pip_size = units.pip_size(symbol)
-  # Drift uses the mapped zone plus proximal tolerance (covers the rejection
-  # close) but not an unbounded expansion to wherever spot currently sits —
-  # otherwise 4059+ chase after a 4056 retest would always look like 0 drift.
-  proximal = max(
-    0.0,
-    float(getattr(cfg, "proximal_band_atr", 0.5)),
-  ) * atr
-  drift = _band_distance(
-    float(spot_price),
-    entry.lo - proximal,
-    entry.hi + proximal,
-  ) / pip_size
-  drift_limit, _drift_measured = max_entry_drift_pips(
-    strategy="Mapped Zone Reaction",
-    atr=atr,
-    pip_size=pip_size,
-    remaining_target_room_pips=None,
-    cfg=cfg,
-  )
-  if drift > drift_limit:
-    return MarketMapStrategyDecision(
-      "entry_moved",
-      (
-        f"M1 rejected mapped {direction} zone but moved {drift:.1f} pips "
-        f"beyond the {drift_limit:.1f}-pip execution limit",
-      ),
-      mapped_zone=(entry.lo, entry.hi),
-      entries_seen=selection.entries_seen,
-      actionable_entries=selection.actionable_entries,
-      filter_counts=selection.filter_counts,
-      track_limit=selection.track_limit,
-      execute_limit=selection.execute_limit,
-      map_id=map_id,
-      touch_bar_ts=hit.touch_bar_ts,
-      confirmation_bar_ts=hit.confirmation_bar_ts,
-      reaction_age_bars=hit.reaction_age_bars,
-      reaction_type=hit.reaction_type,
-    )
-
-  issued_at = (
-    int(datetime.now(timezone.utc).timestamp())
-    if now is None else int(now)
-  )
-  ttl = max(
-    60,
-    int(getattr(cfg, "auto_trade_strategy_match_max_age_seconds", 420)),
-  )
-  targets = (
-    _counter_bias_targets(cfg, symbol, direction, float(spot_price), market_map.eq)
-    if counter_bias else _targets(cfg)
-  )
-  if not targets:
-    return MarketMapStrategyDecision(
-      "invalid_targets",
-      (
-        "counter-bias target is not ahead at box EQ"
-        if counter_bias
-        else "ApexVoid Algo has no configured profit targets",
-      ),
-      mapped_zone=(entry.lo, entry.hi),
-      entries_seen=selection.entries_seen,
-      actionable_entries=selection.actionable_entries,
-      filter_counts=selection.filter_counts,
-      track_limit=selection.track_limit,
-      execute_limit=selection.execute_limit,
-      map_id=map_id,
-      touch_bar_ts=hit.touch_bar_ts,
-      confirmation_bar_ts=hit.confirmation_bar_ts,
-      reaction_age_bars=hit.reaction_age_bars,
-      reaction_type=hit.reaction_type,
-    )
-  strategy = "Mapped Zone Reaction"
-  pip_size = units.pip_size(symbol)
-  zone_structural_id = structural_zone_id(
-    symbol,
-    direction,
-    float(entry.lo),
-    float(entry.hi),
-    atr=atr,
-    pip_size=pip_size,
-    tags=entry.tags,
-    source_tf=getattr(market_map, "source_timeframe", None) or "M5",
-  )
-  reaction_id = mapped_reaction_id(
-    symbol=symbol,
-    strategy=strategy,
-    direction=direction,
-    structural_zone_id=zone_structural_id,
-    touch_bar_ts=str(hit.touch_bar_ts),
-    confirmation_bar_ts=str(hit.confirmation_bar_ts),
-    reaction_type=str(hit.reaction_type),
-  )
-  thesis_id = mapped_thesis_id(
-    symbol=symbol,
-    strategy=strategy,
-    direction=direction,
-    structural_zone_id=zone_structural_id,
-  )
-  # Mapped reactions identity from the reaction sequence, never the worker tick.
-  match_id = reaction_id
-  confluence = _confluence(entry, market_map)
-  tag_text = " · ".join(entry.tags[:4])
-  reaction_label = (
-    f"M1 {hit.reaction_type} · age {hit.reaction_age_bars} bar"
-    f"{'s' if hit.reaction_age_bars != 1 else ''}"
-  )
-  match_reasons = (
-    (
-      f"{market_map.bias_tf or 'HTF'} bias {market_map.bias} · counter_bias"
-      if counter_bias
-      else f"{market_map.bias_tf or 'HTF'} bias {market_map.bias}"
-    ),
-    f"mapped {direction} zone {entry.lo:.2f}-{entry.hi:.2f}",
-    *([tag_text] if tag_text else []),
-    reaction_label,
-    *(
-      [f"target capped at box EQ {market_map.eq:.2f}"]
-      if counter_bias and market_map.eq is not None else []
-    ),
-  )
-  reaction_tags = (
-    f"reaction:{hit.reaction_type}",
-    f"reaction_age:{hit.reaction_age_bars}",
-  )
-  match = StrategyMatch(
-    version=STRATEGY_MATCH_VERSION,
-    match_id=match_id,
-    symbol=symbol.upper(),
-    source_tf=EXECUTION_TIMEFRAME,
-    event_ts=str(event_ts),
-    issued_at=issued_at,
-    expires_at=issued_at + ttl,
-    strategy=strategy,
-    strategy_mode="mapped_zone_reaction",
-    direction=direction,
-    key_level=float(entry.lo if direction == "SELL" else entry.hi),
-    entry_low=entry_low,
-    entry_high=entry_high,
-    current_price=float(spot_price),
-    confluence=confluence,
-    reasons=match_reasons,
-    atr=atr,
-    structure_swing=(
-      float(entry.hi) if direction == "SELL" else float(entry.lo)
-    ),
-    targets_pips=targets,
-    tags=(
-      *(("counter_bias",) if counter_bias else ()),
-      *reaction_tags,
-    ),
-    target_price=float(market_map.eq) if counter_bias and market_map.eq is not None else None,
-    target_model=(
-      "hybrid"
-      if counter_bias and market_map.eq is not None
-      else "fill_relative"
-    ),
-    target_reference_price=(
-      "planned_entry"
-      if counter_bias and market_map.eq is not None
-      else "broker_fill"
-    ),
-    absolute_target_price=(
-      float(market_map.eq)
-      if counter_bias and market_map.eq is not None
-      else None
-    ),
-    family="mapped_zone",
-    structural_source="market_map_zone",
-    zone_id=zone_structural_id,
-    level_id=(
-      f"{symbol.upper()}:{EXECUTION_TIMEFRAME}:level:"
-      f"{float(entry.lo if direction == 'SELL' else entry.hi):.5f}"
-    ),
-    reaction_id=reaction_id,
-    thesis_id=thesis_id,
-    structural_zone_id=zone_structural_id,
-    structural_zone_low=float(entry.lo),
-    structural_zone_high=float(entry.hi),
-    touch_bar_ts=str(hit.touch_bar_ts),
-    confirmation_bar_ts=str(hit.confirmation_bar_ts),
-    reaction_type=str(hit.reaction_type),
-  )
+  # selection.selected is always None now: _select_reaction_detailed no
+  # longer has any mechanism to promote a tracked zone to a hit (the M1
+  # reaction detector that used to do that is removed - see its docstring).
+  # This function therefore only ever reports the nearest tracked/executable
+  # zone; it never itself produces a StrategyMatch/candidate.
   return MarketMapStrategyDecision(
-    "candidate",
-    match_reasons,
-    match,
-    (entry.lo, entry.hi),
-    selection.entries_seen,
-    selection.actionable_entries,
-    selection.filter_counts,
-    selection.track_limit,
-    selection.execute_limit,
-    map_id,
-    hit.touch_bar_ts,
-    hit.confirmation_bar_ts,
-    hit.reaction_age_bars,
-    hit.reaction_type,
+    selection.state,
+    selection.reasons,
+    entries_seen=selection.entries_seen,
+    actionable_entries=selection.actionable_entries,
+    filter_counts=selection.filter_counts,
+    track_limit=selection.track_limit,
+    execute_limit=selection.execute_limit,
+    map_id=map_id,
   )
 
 
@@ -607,59 +405,14 @@ def _select_reaction_detailed(
       effective_execute_limit,
     )
 
-  for entry, candidate_direction, counter_bias in executable:
-    reaction = _reaction_in_lookback(
-      m1,
-      entry,
-      candidate_direction,
-      atr,
-      tolerance,
-      cfg,
-      price,
-    )
-    if reaction is None:
-      continue
-    if reaction.reaction_type == "touch_only":
-      return _ReactionSelection(
-        None,
-        "waiting_for_reaction",
-        (
-          f"price touched mapped {candidate_direction} zone "
-          f"{entry.lo:.2f}-{entry.hi:.2f}; waiting for M1 rejection"
-          f"{_filter_summary(counts)}",
-        ),
-        len(market_map.entries),
-        tuple(actionable),
-        _filter_counts(**counts),
-        track_limit,
-        effective_execute_limit,
-      )
-    # The executable band includes the rejection close. Waiting for M1 to
-    # confirm necessarily means entry happens after price leaves the raw HTF
-    # zone; the structure stop remains anchored beyond the mapped zone.
-    entry_low = float(min(entry.lo - tolerance, price))
-    entry_high = float(max(entry.hi + tolerance, price))
-    return _ReactionSelection(
-      _ReactionHit(
-        entry,
-        candidate_direction,
-        entry_low,
-        entry_high,
-        counter_bias,
-        reaction.touch_bar_ts,
-        reaction.confirmation_bar_ts,
-        reaction.reaction_age_bars,
-        reaction.reaction_type,
-      ),
-      "candidate",
-      (),
-      len(market_map.entries),
-      tuple(actionable),
-      _filter_counts(**counts),
-      track_limit,
-      effective_execute_limit,
-    )
-
+  # The M1 touch/rejection reaction detector (and the live-quote zone
+  # widening it fed - entry_low/entry_high used to fold `price` into the
+  # executable band) is retired as a setup source (H1->M15->M5 single-
+  # analysis-source cutover, P2): a mapped zone being within execute range no
+  # longer, by itself or via an M1 confirmation, produces a "candidate".
+  # Market Map's structural pool stays the execution source of zones for
+  # whatever consumes it next (the M1 candlestick trigger, P3) - this
+  # function only ever reports the nearest tracked/executable zone now.
   nearest, nearest_direction, _ = executable[0]
   distance = _band_distance(price, nearest.lo, nearest.hi)
   divergence = _render_divergence(nearest, rendered_map)
@@ -669,7 +422,7 @@ def _select_reaction_detailed(
     (
       f"nearest mapped {nearest_direction} zone {nearest.lo:.2f}-{nearest.hi:.2f} "
       f"({distance:.1f} away · tracked, execute within {effective_execute_limit:.1f}); "
-      f"waiting for M1 touch"
+      f"no entry trigger source configured"
       f"{divergence}{_filter_summary(counts)}",
     ),
     len(market_map.entries),
@@ -963,44 +716,6 @@ def _rejects(row: pd.Series, direction: str, atr: float) -> bool:
   if direction == "SELL":
     return high - close >= minimum and close <= low + 0.6 * candle_range
   return close - low >= minimum and close >= high - 0.6 * candle_range
-
-
-def _confluence(entry: MapEntry, market_map: MarketMap) -> int:
-  tags = {tag.lower() for tag in entry.tags}
-  score = 2  # structural map zone + M1 rejection
-  if entry.tier == "major" or "fresh" in tags:
-    score += 1
-  if market_map.bias in {"up", "down"}:
-    score += 1
-  return min(3, score)
-
-
-def _targets(cfg: Any) -> tuple[int, ...]:
-  values = {
-    int(item.strip())
-    for item in str(getattr(cfg, "auto_trade_tp_pips", "")).split(",")
-    if item.strip().isdigit() and int(item.strip()) > 0
-  }
-  return tuple(sorted(values))
-
-
-def _counter_bias_targets(
-  cfg: Any,
-  symbol: str,
-  direction: str,
-  price: float,
-  eq: float | None,
-) -> tuple[int, ...]:
-  if eq is None or not math.isfinite(eq):
-    return ()
-  room = eq - price if direction == "BUY" else price - eq
-  cap = int(math.floor(room / units.pip_size(symbol) + 1e-9))
-  if cap <= 0:
-    return ()
-  configured = _targets(cfg)
-  if not configured:
-    return ()
-  return tuple(sorted({min(target, cap) for target in configured}))
 
 
 def _last_positive(values: pd.Series) -> float | None:
