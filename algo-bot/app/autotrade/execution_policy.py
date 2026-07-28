@@ -186,11 +186,13 @@ def classify_guard_severity(
 
   ``hard_geometry`` marks conditions with zero tradeable room by
   construction (entry contained inside a barrier, not merely approaching
-  one) - these stay blocking outside ``observe`` even when the softer
-  ahead-of-entry/overlap/cooldown conditions have been downgraded to
-  telemetry, matching demo_eval's own "hard blocking remains only for
-  technical correctness" carve-out for genuinely zero-room geometry.
+  one). These stay blocking in every mode; observe only downgrades softer
+  ahead-of-entry/overlap/cooldown conditions to telemetry.
   """
+  if hard_geometry:
+    return ExecutionGuardDecision(
+      guard, OUTCOME_BLOCK, condition, reason, True,
+    )
   if guard_mode == GUARD_MODE_STRICT:
     return ExecutionGuardDecision(
       guard, OUTCOME_BLOCK, condition, reason, True,
@@ -199,12 +201,8 @@ def classify_guard_severity(
     return ExecutionGuardDecision(
       guard, OUTCOME_ALLOW_WITH_WARNING, condition, reason, False,
     )
-  # balanced: only zero-room containment still blocks; buffer/ATR-based
-  # "ahead of entry" and other soft conditions become warnings.
-  if hard_geometry:
-    return ExecutionGuardDecision(
-      guard, OUTCOME_BLOCK, condition, reason, True,
-    )
+  # balanced: buffer/ATR-based "ahead of entry" and other soft conditions
+  # become warnings. Hard zero-room geometry already returned above.
   return ExecutionGuardDecision(
     guard, OUTCOME_ALLOW_WITH_WARNING, condition, reason, False,
   )

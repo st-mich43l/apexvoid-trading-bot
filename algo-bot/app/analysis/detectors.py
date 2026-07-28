@@ -8,6 +8,14 @@ import pandas as pd
 
 from app.analysis.engine import AnalysisContext, AnalysisSettings, Regime, analyze
 from app.analysis.indicators import atr as atr_indicator
+from app.analysis.key_level_role import (
+  ROLE_AMBIGUOUS,
+  ROLE_BROKEN_RESISTANCE,
+  ROLE_BROKEN_SUPPORT,
+  ROLE_RESISTANCE,
+  ROLE_SUPPORT,
+  classify_key_level_role,
+)
 from app.analysis.types import DealingRange, Grab, Pool, SessionLevel
 from app.analysis.regime import BoxBreak, displacement_grade
 from app.analysis.scalp_ranges import ScalpBarrier, ScalpRange
@@ -330,6 +338,13 @@ class DetectionResult:
   # existing construction and behavior.
   confluence_zone_id: str | None = None
   confluence_tags: tuple[str, ...] = ()
+  # Pure pre-lifecycle actionability annotations. They never create state;
+  # scanner fills planned entry/targets before cross-side resolution.
+  key_level_role: str | None = None
+  planned_entry_price: float | None = None
+  provisional_targets_pips: tuple[int, ...] = ()
+  target_cap_pips: float | None = None
+  target_room_measured: dict[str, object] | None = None
 
 
 class SetupDetector(Protocol):
@@ -1985,130 +2000,86 @@ def key_level_reaction(ctx: DetectionContext) -> DetectionResult | None:
   for level in sorted(st.levels, key=lambda item: abs(item.price - price)):
     if level.touches < min_touches:
       continue
-    # Broken-level retests belong to Break & Retest, not key-level reaction.
-    if any(
-      abs(float(item.level) - float(level.price)) <= max(level.band, band)
-      for item in st.breaks
-      if item.kind in {"BOS", "CHoCH"}
-    ):
-      # Only skip when the latest close is clearly beyond the level in break
-      # direction — unbroken reactions still trade here.
-      last_close = float(df.iloc[-1]["close"])
-      broken_up = last_close > level.price + max(level.band, band)
-      broken_down = last_close < level.price - max(level.band, band)
-      if broken_up or broken_down:
-        continue
     zone_band = max(level.band, band)
-    # Prefer support/resistance from touches: lows act as support (BUY),
-    # highs as resistance (SELL). Kind strings vary; fall back to relative
-    # price when kind is generic.
-    kind = (level.kind or "reaction").casefold()
-    if "high" in kind or "resist" in kind:
-      direction = "SELL"
-    elif "low" in kind or "support" in kind:
-      direction = "BUY"
-    else:
-      direction = "BUY" if price >= level.price else "SELL"
-      # At the level itself, try both sides via confirmation.
-      for trial in ("BUY", "SELL"):
-        conf = evaluate_structural_reaction(
-          df,
-          direction=trial,
-          low=level.price - zone_band,
-          high=level.price + zone_band,
-          lookback_bars=lookback,
-          grabs=_level_grabs_for(st, level, trial),
-          has_choch=_recent_choch_flag(st, trial, len(df), ctx.settings, lookback),
-        )
-        if conf is None:
-          continue
-        zone = _pseudo_level_zone(
-          level.price, zone_band, trial, f"key {level.kind} x{level.touches}",
-        )
-        if not _entry_valid_for_settings(zone, price, atr, trial, ctx.settings):
-          continue
-        factors = ConfluenceFactors(
-          htf_aligned=ctx.htf_bias == _bias_for_direction(trial),
-          touches=level.touches,
-          wick_rejection=True,
-          structural_agreement=True,
-        )
-        candidate = _structural_finish(
-          ctx,
-          setup="Key Level Reaction",
-          direction=trial,
-          level=level.price,
-          zone=zone,
-          price=price,
-          atr=atr,
-          reasons=[
-            f"key {level.kind} {_number(level.price)} x{level.touches}",
-            f"touches {level.touches}",
-          ],
-          structural_source="key_level",
-          structural_id=key_level_structural_id(ctx.symbol, ctx.tf, level),
-          structural_low=level.price - zone_band,
-          structural_high=level.price + zone_band,
-          structural_kind=level.kind,
-          confirmation=conf,
-          source_touches=level.touches,
-          source_score=float(level.strength),
-          factors=factors,
-        )
-        if candidate is not None and (
-          best is None or candidate.confluence > best.confluence
-        ):
-          best = candidate
+    role = classify_key_level_role(
+      kind=level.kind,
+      level_price=level.price,
+      band_low=level.price - zone_band,
+      band_high=level.price + zone_band,
+      closed_bars=df,
+      breakout_accept_bars=ctx.settings.breakout_accept_bars,
+    ).role
+    # Accepted role flips are owned by Break & Retest. They cannot be
+    # reinterpreted as an ordinary reaction in the opposite direction.
+    if role in {ROLE_BROKEN_SUPPORT, ROLE_BROKEN_RESISTANCE}:
       continue
-
-    conf = evaluate_structural_reaction(
-      df,
-      direction=direction,
-      low=level.price - zone_band,
-      high=level.price + zone_band,
-      lookback_bars=lookback,
-      grabs=_level_grabs_for(st, level, direction),
-      has_choch=_recent_choch_flag(st, direction, len(df), ctx.settings, lookback),
+    directions = (
+      ("BUY",)
+      if role == ROLE_SUPPORT
+      else ("SELL",)
+      if role == ROLE_RESISTANCE
+      # Keep ambiguous local reactions as observations for replay/telemetry.
+      # The actionability boundary rejects them before lifecycle creation.
+      else ("BUY", "SELL")
     )
-    if conf is None:
-      continue
-    zone = _pseudo_level_zone(
-      level.price, zone_band, direction, f"key {level.kind} x{level.touches}",
-    )
-    if not _entry_valid_for_settings(zone, price, atr, direction, ctx.settings):
-      continue
-    factors = ConfluenceFactors(
-      htf_aligned=ctx.htf_bias == _bias_for_direction(direction),
-      touches=level.touches,
-      wick_rejection=True,
-      structural_agreement=True,
-    )
-    candidate = _structural_finish(
-      ctx,
-      setup="Key Level Reaction",
-      direction=direction,
-      level=level.price,
-      zone=zone,
-      price=price,
-      atr=atr,
-      reasons=[
-        f"key {level.kind} {_number(level.price)} x{level.touches}",
-        f"touches {level.touches}",
-      ],
-      structural_source="key_level",
-      structural_id=key_level_structural_id(ctx.symbol, ctx.tf, level),
-      structural_low=level.price - zone_band,
-      structural_high=level.price + zone_band,
-      structural_kind=level.kind,
-      confirmation=conf,
-      source_touches=level.touches,
-      source_score=float(level.strength),
-      factors=factors,
-    )
-    if candidate is not None and (
-      best is None or candidate.confluence > best.confluence
-    ):
-      best = candidate
+    for direction in directions:
+      conf = evaluate_structural_reaction(
+        df,
+        direction=direction,
+        low=level.price - zone_band,
+        high=level.price + zone_band,
+        lookback_bars=lookback,
+        grabs=_level_grabs_for(st, level, direction),
+        has_choch=_recent_choch_flag(
+          st, direction, len(df), ctx.settings, lookback,
+        ),
+      )
+      if conf is None:
+        continue
+      zone = _pseudo_level_zone(
+        level.price,
+        zone_band,
+        direction,
+        f"key {level.kind} x{level.touches}",
+      )
+      if not _entry_valid_for_settings(
+        zone, price, atr, direction, ctx.settings,
+      ):
+        continue
+      factors = ConfluenceFactors(
+        htf_aligned=ctx.htf_bias == _bias_for_direction(direction),
+        touches=level.touches,
+        wick_rejection=True,
+        structural_agreement=True,
+      )
+      candidate = _structural_finish(
+        ctx,
+        setup="Key Level Reaction",
+        direction=direction,
+        level=level.price,
+        zone=zone,
+        price=price,
+        atr=atr,
+        reasons=[
+          f"key {level.kind} {_number(level.price)} x{level.touches}",
+          f"touches {level.touches}",
+        ],
+        structural_source="key_level",
+        structural_id=key_level_structural_id(ctx.symbol, ctx.tf, level),
+        structural_low=level.price - zone_band,
+        structural_high=level.price + zone_band,
+        structural_kind=level.kind,
+        confirmation=conf,
+        source_touches=level.touches,
+        source_score=float(level.strength),
+        factors=factors,
+      )
+      if candidate is not None:
+        candidate = replace(candidate, key_level_role=role)
+      if candidate is not None and (
+        best is None or candidate.confluence > best.confluence
+      ):
+        best = candidate
   return best
 
 

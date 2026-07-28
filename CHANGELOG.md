@@ -124,6 +124,18 @@ dated section after deployment.
   longer construct an `ExecutionIntent`.
 
 ### Fixed
+- Separate scanner observations from actionable setups before lifecycle
+  creation. Opposing cross-side reactions now resolve deterministically,
+  ambiguous generic key levels remain analysis-only, and the nearest
+  opposing `MarketMap.actionable_entries` barrier caps target room before
+  reward/risk evaluation. Invalid or zero-room geometry blocks in observe,
+  balanced, strict, conservative and demo-eval modes; the worker repeats the
+  same pure geometry check before final TradePlan V7 publication. Raw
+  observations and measured rejection reasons remain available in scanner
+  status, detect logs and metrics without creating a forming card.
+- Preserve detector quality when same-side structural detections merge:
+  merged quality is now the strongest member's `confluence`, while
+  `confluence_tags` remains the separate structural-diversity dimension.
 - Keep preflight strategy-route diagnostics (`waiting`, `blocked`, and
   `executor_rejected`) in Redis/history/metrics but make them Telegram-silent,
   removing standalone `Algo bot BLOCKED` cards for invalid stop geometry,
