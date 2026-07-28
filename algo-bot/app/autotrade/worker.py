@@ -160,7 +160,7 @@ from app.analysis.swings import find_swings
 
 log = logging.getLogger(__name__)
 EXECUTION_TIMEFRAME = "M1"
-CONTEXT_TIMEFRAMES = ("M5", "M15", "M30")
+CONTEXT_TIMEFRAMES = ("M5", "M15", "H1")
 # Matches trend.py's own HTF-bias definition (classify_regime uses M15 too).
 _HTF_TIMEFRAME = "M15"
 # Regime instrumentation: rolling 24h chop/trend/breakout share per symbol,
@@ -6222,87 +6222,15 @@ async def _handle_event(
     )
     intents.append(intent)
     intent_subjects[intent_id] = routed_match
+  # The private M1 range gate (gate.py) is retired as an autonomous setup
+  # source (H1->M15->M5 single-analysis-source cutover, P2) - M1 no longer
+  # originates trade candidates on its own. evaluate_auto_scalp_gate/
+  # evaluate_range_box_eligibility above are still called because `decision`
+  # also feeds classify_regime's breakout classifier (a distinct, still-valid
+  # concern) and box_eligibility still feeds status/telemetry payloads below;
+  # box_intent_id staying permanently None is what guarantees this gate can
+  # never construct an ExecutionIntent, so it emits no setups.
   box_intent_id = None
-  if (
-    decision.box is not None
-    and decision.rail is not None
-    and decision.direction is not None
-    and decision.state in {"candidate", "target_blocked", "entry_moved"}
-  ):
-    box_intent_id = (
-      f"range:{decision.box.box_id}:{decision.direction.upper()}"
-    )
-    box_group_id = _group_id(
-      symbol,
-      "range",
-      decision.box.box_id,
-      decision.direction,
-    )
-    box_candidate_identity = _candidate_id(symbol, str(event_ts or ""), decision)
-    range_tier = "A" if decision.confluence >= 3 else "B"
-    range_atr = (
-      scale_context.atr
-      if scale_context is not None
-      else max(
-        units.pip_size(symbol),
-        decision.box.width_pips * units.pip_size(symbol) / 60,
-      )
-    )
-    range_subject = PrivatePolicySubject(
-      strategy="Range Box Scalp",
-      direction=decision.direction.upper(),
-      entry_low=decision.rail.low,
-      entry_high=decision.rail.high,
-      current_price=spot_price or decision.rail.level,
-      confluence=max(1, decision.confluence),
-      atr=range_atr,
-      structure_swing=float(
-        scale_context.structure_swing
-        if scale_context is not None
-        else decision.sweep_low
-        if decision.direction.upper() == "BUY" and decision.sweep_low is not None
-        else decision.sweep_high
-        if decision.direction.upper() == "SELL" and decision.sweep_high is not None
-        else decision.rail.low - units.pip_size(symbol)
-        if decision.direction.upper() == "BUY"
-        else decision.rail.high + units.pip_size(symbol)
-      ),
-      targets_pips=(
-        (int(decision.full_tp_pips),)
-        if decision.full_tp_pips is not None else ()
-      ),
-      risk_multiplier=risk_multiplier_for_tier(range_tier, settings),
-      sweep_low=decision.sweep_low,
-      sweep_high=decision.sweep_high,
-    )
-    intent = ExecutionIntent(
-      intent_id=box_intent_id,
-      source="private_range",
-      strategy="Range Box Scalp",
-      direction=decision.direction.upper(),
-      confluence=decision.confluence,
-      tier=range_tier,
-      freshness=_intent_freshness(event_ts, now_ts),
-      distance_pips=_band_distance_pips(
-        spot_price,
-        decision.rail.low,
-        decision.rail.high,
-        symbol,
-      ),
-      symbol=symbol.upper(),
-      timeframe=EXECUTION_TIMEFRAME,
-      family="range_reversion",
-      entry_low=decision.rail.low,
-      entry_high=decision.rail.high,
-      structural_id=decision.box.box_id,
-      match_id=box_candidate_identity,
-      current_price=spot_price,
-      targets_pips=range_subject.targets_pips,
-      proposed_group_id=box_group_id,
-      cycle_id=str(event_ts or ""),
-    )
-    intents.append(intent)
-    intent_subjects[box_intent_id] = range_subject
   trend_intent_id = None
   if (
     trend_selected
