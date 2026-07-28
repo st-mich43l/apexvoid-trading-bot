@@ -60,6 +60,9 @@ dated section after deployment.
   volume-weighted Total (e.g. TP2 ~60p then BE residual → `+22.8`). Close
   reason is inferred as broker SL/TP when exit sits on the trailed stop, and
   Total / `group_realized_pips` reports the highest target reached (TP2 = 60).
+- Manual / algo / algo_manual journal history and `/trade_stats` now record
+  the highest TP/pips hit (`legs_achieved_pips`), not a volume-fraction or
+  lot-weighted net that dilutes booked targets with a later BE residual.
 - Break-even buffer direction: `StopTrailPlanner.ProtectedBreakevenStop` had
   BUY/SELL swapped (adverse-side cushion instead of profit-side protection),
   moving a SELL entry 4100.74 BE+6 stop to 4100.80 instead of the correct

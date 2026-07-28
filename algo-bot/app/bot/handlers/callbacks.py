@@ -91,7 +91,7 @@ async def handle_close_book(cb: CallbackQuery) -> None:
     net = row["net"]
     sign = "+" if net >= 0 else "-"
     await cb.message.edit_text(
-      f"{base}\n\n✅ <b>Closed</b> · total net <b>{sign}{abs(net)} pips</b>",
+      f"{base}\n\n✅ <b>Closed</b> · achieved <b>{sign}{abs(net)} pips</b>",
       reply_markup=None,
     )
     await cb.answer("Closed")
@@ -99,7 +99,7 @@ async def handle_close_book(cb: CallbackQuery) -> None:
     rem_pct = round(row["remaining"] * 100)
     net_so_far = row.get("net")
     net_part = (
-      f" · net so far <b>{net_so_far:+d}</b>"
+      f" · peaked <b>{net_so_far:+d}</b>"
       if isinstance(net_so_far, int)
       else ""
     )

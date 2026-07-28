@@ -72,11 +72,25 @@ def sl_result_pips(sig: dict, fill_price: float) -> int:
   return signed_result_pips(sig, fill)
 
 
-def legs_net_pips(legs: list[dict]) -> int:
-  """Volume-fraction weighted net across booked close legs."""
+def legs_achieved_pips(legs: list[dict]) -> int:
+  """Highest TP/pips reached across booked legs (not volume-weighted).
+
+  Partial TPs followed by a BE/SL residual must not dilute the journal
+  result — a trade that booked +60 then stopped at BE reports +60, not a
+  lot-weighted ~22. Pure losses (no positive leg) use the final exit.
+  """
   if not legs:
     return 0
-  return round(sum(float(leg["frac"]) * int(leg["pips"]) for leg in legs))
+  values = [int(leg["pips"]) for leg in legs]
+  peak = max(values)
+  if peak > 0:
+    return peak
+  return values[-1]
+
+
+def legs_net_pips(legs: list[dict]) -> int:
+  """Deprecated alias — history uses achieved TP/pips, not lot-weighted net."""
+  return legs_achieved_pips(legs)
 
 
 def wing_icons(pips: int) -> str:

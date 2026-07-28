@@ -490,7 +490,7 @@ def render_result(
       sign = "+" if net >= 0 else ""
       suffix = _win_wings(net) if net > 0 else ""
       return (
-        f"{icon} {seq}{tp_label}closed — total net {sign}{net} pips{suffix}"
+        f"{icon} {seq}{tp_label}closed — achieved {sign}{net} pips{suffix}"
       )
     if tier == "public" and not settings.public_show_pips:
       return f"🎯 {tp_label}partial booked"
@@ -498,7 +498,7 @@ def render_result(
     remaining = int(round(row["remaining"] * 100))
     net_so_far = row.get("net")
     net_part = (
-      f" · net so far {net_so_far:+d}"
+      f" · peaked {net_so_far:+d}"
       if isinstance(net_so_far, int)
       else ""
     )
