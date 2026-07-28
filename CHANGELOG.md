@@ -40,6 +40,31 @@ dated section after deployment.
   position missing from one broker reconcile snapshot is only "suspected"
   missing and stays fully tracked until independently confirmed absent
   across this many time-separated snapshots.
+- Confluence-merge zone (`app/analysis/confluence_zone.py`): co-located/
+  nearby key level, demand/supply, order block, FVG and breaker structures
+  (overlapping, or gap `<= zone_merge_gap`, default `1.0`) collapse into one
+  `ConfluenceZone` capped at `zone_merge_max_width` (default `3.0` price
+  units) carrying the union of their tags and a stable id (bucketed
+  mid/width + sorted tags, mirroring `structural_zone_id`'s scheme). Same
+  directional role only - a demand and a supply at the same price never
+  merge. `resolve_confluence_zone_id`/`claim_confluence_zone` key a new,
+  independent SETNX claim on the merged zone + direction so a second
+  strategy resolving onto an already-claimed zone is rejected
+  (`zone_already_claimed`) rather than producing a second plan; wired into
+  `worker.py::_publish_trade_plan_v7` alongside the existing thesis claim.
+- `m1_trigger` (`app/analysis/m1_trigger.py`): once a setup is CONFIRMED on
+  M5 at a zone, it now waits in a new `ARMED_WAITING_TRIGGER` lifecycle
+  state (`app/autotrade/setup_lifecycle.py`) until a qualifying M1 candle
+  prints - wick rejection, body close, strong close, pin bar, engulfing, or
+  hammer/shooting star (`m1_trigger_patterns`, default all six enabled;
+  `m1_trigger_wick_fraction` default `0.5`; `m1_trigger_strong_close_pct`
+  default `0.2`). The executable TradePlan V7 is published only at the
+  moment the trigger fires, with the stop re-anchored to the trigger
+  candle's wick extreme (reusing the existing `wick_stop_buffer` computation
+  via `plan_protective_stop`) instead of the raw zone. M1 is a trigger here,
+  never a setup source - the C# executor's `market_watch` entry
+  (`EvaluateMarketWatch`) is unchanged and still evaluates only quote-in-zone;
+  no candlestick logic crosses into ctrader-engine.
 
 ### Changed
 - `map_strategy.py` selects mapped zones from `market_map.actionable_entries`

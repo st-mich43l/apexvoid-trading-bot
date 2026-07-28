@@ -74,6 +74,7 @@ from app.autotrade.multi_match import (
 from app.autotrade.lifecycle import emit_lifecycle, increment_metric
 from app.analysis.structural_reaction_support import v7_thesis_id
 from app.autotrade.setup_lifecycle import (
+  ARMED_WAITING_TRIGGER,
   CONFIRMED,
   PLAN_BUILT,
   PLAN_PUBLISHED,
@@ -83,6 +84,15 @@ from app.autotrade.setup_lifecycle import (
   release_active_thesis,
   transition_setup,
 )
+from app.analysis.m1_trigger import evaluate_m1_trigger
+from app.analysis.confluence_zone import (
+  ConfluenceMember,
+  claim_confluence_zone,
+  release_confluence_zone,
+  resolve_confluence_zone_id,
+)
+from app.autotrade.protective_stop import ProtectiveStopError, plan_protective_stop
+from app.autotrade.trade_plan import TradePlanError
 from app.autotrade.trade_plan_builder import (
   TradePlanBuildRejected,
   build_trade_plan_from_strategy_match,
@@ -3981,6 +3991,8 @@ async def _publish_trade_plan_v7(
   htf_zones: list[Zone] | None = None,
   htf_levels: list[Level] | None = None,
   regime: RegimeInfo | None = None,
+  frames: dict[str, Any] | None = None,
+  market_map: Any | None = None,
 ) -> str | None:
   """Build and publish a TradePlan V7 from an already-CONFIRMED match.
 
@@ -3996,9 +4008,21 @@ async def _publish_trade_plan_v7(
   the originating task explicitly name as something worker.py must not own
   on the V7 path; targets_pips is used exactly as scanner.py decided it.
 
-  Returns the published plan_id, or None if not published (thesis already
-  claimed by another setup, or a guard/policy rejection - always recorded
-  via _record_v7_build_rejected, never a bare silent return).
+  M1 candlestick trigger (P3): a CONFIRMED setup does not publish on this
+  call - it moves to ARMED_WAITING_TRIGGER and returns None. Only once this
+  function is called again for the SAME setup while it is
+  ARMED_WAITING_TRIGGER, and the latest closed M1 bar in `frames["M1"]`
+  qualifies under app.analysis.m1_trigger, does it proceed to build/publish -
+  with the stop re-anchored to the trigger candle's wick extreme. This is
+  what keeps the C# executor mechanical: the candlestick decision already
+  happened here, before the plan was ever published, and `market_watch` is a
+  plain quote-in-zone gate to the executor.
+
+  Returns the published plan_id, or None if not published (still waiting for
+  an M1 trigger, thesis/zone already claimed by another setup, or a
+  guard/policy rejection - always recorded via _record_v7_build_rejected,
+  never a bare silent return, except the ordinary "still armed, no trigger
+  yet" wait which is not a rejection).
   """
   if spot is None or not spot.fresh:
     return None
@@ -4012,7 +4036,9 @@ async def _publish_trade_plan_v7(
 
   setup_id = match.match_id
   setup_record = await load_setup(client, setup_id)
-  if setup_record is None or setup_record.state != CONFIRMED:
+  if setup_record is None or setup_record.state not in (
+    CONFIRMED, ARMED_WAITING_TRIGGER,
+  ):
     await _record_v7_build_rejected(
       client, symbol, match, "setup_not_confirmed",
       f"setup {setup_id!r} is not in CONFIRMED state "
@@ -4021,10 +4047,85 @@ async def _publish_trade_plan_v7(
     )
     return None
 
+  if setup_record.state == CONFIRMED:
+    try:
+      await transition_setup(
+        client, setup_id, ARMED_WAITING_TRIGGER, reason_code="m1_trigger_wait",
+      )
+    except SetupLifecycleError:
+      log.exception(
+        "v7 setup could not arm for M1 trigger symbol=%s setup_id=%s",
+        symbol, setup_id,
+      )
+    return None
+
+  # setup_record.state == ARMED_WAITING_TRIGGER: re-evaluate every cycle -
+  # no trigger yet is the ordinary "keep waiting" outcome, not a rejection.
+  m1 = None if frames is None else frames.get("M1")
+  trigger = None
+  if m1 is not None and not getattr(m1, "empty", False):
+    trigger = evaluate_m1_trigger(
+      m1,
+      zone_low=match.entry_low,
+      zone_high=match.entry_high,
+      key_level=match.key_level,
+      direction=match.direction,
+      cfg=settings,
+    )
+  if trigger is None:
+    return None
+
+  zone_claim_id: str | None = None
+  if market_map is not None:
+    other_members = [
+      ConfluenceMember(
+        member_id=f"{getattr(entry, 'tier', 'entry')}:{entry.lo:.5f}:{entry.hi:.5f}",
+        side=entry.side,
+        low=float(entry.lo),
+        high=float(entry.hi),
+        kind=next(
+          (tag for tag in entry.tags if tag.casefold() in {
+            "demand", "supply", "ob", "fvg", "breaker",
+          }),
+          entry.tier,
+        ),
+        score=float(entry.score),
+      )
+      for entry in getattr(market_map, "actionable_entries", None) or []
+    ]
+    zone_claim_id = resolve_confluence_zone_id(
+      match.entry_low, match.entry_high,
+      "buy" if match.direction == "BUY" else "sell",
+      match.tags or (match.structural_kind or "candidate",),
+      other_members=other_members,
+      symbol=symbol,
+      atr=match.atr,
+      pip_size=units.pip_size(symbol),
+      source_tf=match.source_tf,
+      max_width=float(getattr(settings, "zone_merge_max_width", 3.0)),
+      gap=float(getattr(settings, "zone_merge_gap", 1.0)),
+      candidate_id=setup_id,
+    )
+    zone_claimed = await claim_confluence_zone(
+      client, zone_id=zone_claim_id, owner_id=setup_id,
+    )
+    if not zone_claimed:
+      await _record_v7_build_rejected(
+        client, symbol, match, "zone_already_claimed",
+        f"merged confluence zone {zone_claim_id!r} is already owned by a "
+        "different setup - one merged zone may own at most one order",
+        {"zone_id": zone_claim_id},
+      )
+      return None
+
   claimed = await claim_active_thesis(
     client, symbol=symbol, thesis_id=match.thesis_id, setup_id=setup_id,
   )
   if not claimed:
+    if zone_claim_id is not None:
+      await release_confluence_zone(
+        client, zone_id=zone_claim_id, owner_id=setup_id,
+      )
     await _record_v7_build_rejected(
       client, symbol, match, "thesis_already_owned",
       f"thesis {match.thesis_id!r} is already owned by a different setup - "
@@ -4055,10 +4156,17 @@ async def _publish_trade_plan_v7(
     source=source,
     guard_mode=guard_mode,
   )
-  if barrier_outcome.hard_block:
+  async def _release_claims() -> None:
     await release_active_thesis(
       client, symbol=symbol, thesis_id=match.thesis_id, setup_id=setup_id,
     )
+    if zone_claim_id is not None:
+      await release_confluence_zone(
+        client, zone_id=zone_claim_id, owner_id=setup_id,
+      )
+
+  if barrier_outcome.hard_block:
+    await _release_claims()
     await _record_v7_build_rejected(
       client, symbol, match, barrier_outcome.reason_code,
       barrier_outcome.message, barrier_outcome.measured,
@@ -4070,9 +4178,7 @@ async def _publish_trade_plan_v7(
     match.atr, settings.auto_trade_zone_cooldown_atr,
   )
   if cooldown_reason is not None:
-    await release_active_thesis(
-      client, symbol=symbol, thesis_id=match.thesis_id, setup_id=setup_id,
-    )
+    await _release_claims()
     await _record_v7_build_rejected(
       client, symbol, match, "zone_cooldown", cooldown_reason, {},
     )
@@ -4080,9 +4186,7 @@ async def _publish_trade_plan_v7(
 
   overlap_reason = _overlapping_zone_conflict_reason(entry_reference, None)
   if overlap_reason is not None:
-    await release_active_thesis(
-      client, symbol=symbol, thesis_id=match.thesis_id, setup_id=setup_id,
-    )
+    await _release_claims()
     await _record_v7_build_rejected(
       client, symbol, match, "overlapping_zone_conflict", overlap_reason, {},
     )
@@ -4116,13 +4220,52 @@ async def _publish_trade_plan_v7(
       )),
     )
   except TradePlanBuildRejected as exc:
-    await release_active_thesis(
-      client, symbol=symbol, thesis_id=match.thesis_id, setup_id=setup_id,
-    )
+    await _release_claims()
     await _record_v7_build_rejected(
       client, symbol, match, exc.reason_code, exc.message, exc.measured,
     )
     return None
+
+  # The declared V7 stop must be anchored to the trigger candle, not the raw
+  # zone: reuse the exact wick_stop_buffer computation the V6 path already
+  # applies (app.autotrade.protective_stop.plan_protective_stop), fed the
+  # trigger candle's wick extreme as sweep_extreme. Best-effort - if the
+  # trigger's wick extreme cannot produce a valid stop (eg. it would sit on
+  # the wrong side of entry), the zone-derived stop the builder already
+  # computed is kept rather than failing the whole publish over it.
+  try:
+    trigger_stop = plan_protective_stop(
+      direction=match.direction,
+      entry_price=Decimal(str(entry_reference)),
+      structure_swing=match.structure_swing,
+      atr=match.atr,
+      structure_buffer_atr=getattr(settings, "auto_trade_add_stop_buffer_atr", 0.3),
+      sweep_extreme=trigger.wick_extreme,
+      wick_buffer_atr=getattr(settings, "auto_trade_wick_stop_buffer_atr", 0.15),
+      minimum_stop_pips=1,
+      maximum_stop_pips=100000,
+      pip_size=units.pip_size(symbol),
+      digits=int(getattr(settings, "auto_trade_xau_price_digits", 2)),
+    )
+    plan = replace(
+      plan,
+      stop=replace(
+        plan.stop,
+        price=trigger_stop.final_stop_price,
+        source="m1_trigger_wick",
+        reason=(
+          f"M1 {trigger.pattern} trigger at {trigger.wick_extreme:.2f} "
+          f"({trigger.message})"
+        ),
+      ),
+    )
+    plan.validate()
+  except (ProtectiveStopError, TradePlanError) as exc:
+    log.info(
+      "v7 trigger-anchored stop unavailable, keeping zone-derived stop "
+      "symbol=%s setup_id=%s error=%s",
+      symbol, setup_id, exc,
+    )
 
   try:
     await transition_setup(client, setup_id, PLAN_BUILT, reason_code="v7_builder")
@@ -6519,6 +6662,8 @@ async def _handle_event(
           htf_zones=htf_zones,
           htf_levels=htf_levels,
           regime=regime,
+          frames=frames,
+          market_map=guard_market_map,
         )
         published = None
       finally:
