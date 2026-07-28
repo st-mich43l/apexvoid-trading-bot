@@ -325,6 +325,11 @@ class DetectionResult:
   source_touches: int | None = None
   source_score: float | None = None
   bias_relationship: str | None = None
+  # Detection/card identity after same-side structural members are merged.
+  # Additive so direct detector tests and non-structural setups keep their
+  # existing construction and behavior.
+  confluence_zone_id: str | None = None
+  confluence_tags: tuple[str, ...] = ()
 
 
 class SetupDetector(Protocol):

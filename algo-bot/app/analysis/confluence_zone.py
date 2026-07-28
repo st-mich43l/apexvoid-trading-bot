@@ -107,6 +107,13 @@ def confluence_zone_id(
   )
 
 
+def confluence_setup_id(zone_id: str, direction: str) -> str:
+  """Stable setup identity shared by every detector in one merged zone."""
+  return _sha(
+    f"confluence-setup|{zone_id}|{direction.upper()}"
+  )[:32]
+
+
 def _overlaps_or_within_gap(
   a_low: float, a_high: float, b_low: float, b_high: float, gap: float,
 ) -> bool:
