@@ -420,7 +420,11 @@ public sealed class TradePlanRuntime(
     await PersistStateAsync(pendingState, cancellationToken);
     log($"v7 limit order(s) submitted id={plan.PlanId} legs={legs.Length}");
     await PublishEventAsync(
-      "order_submitted",
+      // "order_submitted" is already claimed by the V6 lifecycle as an
+      // always-silent event type (never a Telegram card) - v7_ prefixed so
+      // this V7 limit/ladder submission gets its own, visible ORDER
+      // SUBMITTED card instead of silently colliding with that.
+      "v7_order_submitted",
       $"ORDER SUBMITTED {plan.Analysis.Direction} {legs.Length} leg(s)",
       plan,
       cancellationToken,

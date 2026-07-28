@@ -86,6 +86,13 @@ _NOTIFY_TYPES = {
   "account_capability",
   "range_flip_attempted",
   "range_flip_filled",
+  # TradePlan V7 (docs/adr-trade-plan-v7-boundary.md Section M).
+  "plan_armed",
+  "v7_order_submitted",
+  "order_filled",
+  "tp_booked",
+  "sl_moved",
+  "plan_rejected",
 }
 
 _AUTO_NAME_RE = re.compile(r"(?i)\bauto[\s-]*(?:trade|trader)\b")
@@ -599,6 +606,16 @@ def render_auto_trade_event(
     "account_capability": "🧾 <b>Account capability</b>",
     "range_flip_attempted": "🔁 <b>Range flip attempted</b>",
     "range_flip_filled": "✅ <b>Range flip completed</b>",
+    # TradePlan V7 (docs/adr-trade-plan-v7-boundary.md Section M) - distinct
+    # wording from the V6 labels above so a published plan is never
+    # confused with a merely-confirmed setup ("Do not say READY when
+    # Python only publishes a plan").
+    "plan_armed": "🎯 <b>PLAN ARMED</b>",
+    "v7_order_submitted": "📤 <b>ORDER SUBMITTED</b>",
+    "order_filled": "✅ <b>ORDER FILLED</b>",
+    "tp_booked": "🎯 <b>TP BOOKED</b>",
+    "sl_moved": "🛡 <b>SL MOVED</b>",
+    "plan_rejected": "⛔ <b>PLAN REJECTED</b>",
   }
   lines = ["🤖 <b>ApexVoid Algo</b>", labels[event_type]]
   if profile == "public":
