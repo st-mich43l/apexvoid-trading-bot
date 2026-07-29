@@ -4419,6 +4419,21 @@ async def _publish_trade_plan_v7(
       CANCELLED,
       reason_code="v7_plan_build_incomplete",
     )
+    # No other caller reaches this branch, so nothing else will ever clear
+    # the forming card for it - publish_status=True routes this through
+    # delivery.py's _CARD_TERMINAL_TYPES handling (kill_setup_card), which
+    # keeps worker.py itself free of any direct Telegram dependency.
+    await emit_lifecycle(
+      client,
+      CANCELLED,
+      symbol=match.symbol,
+      match_id=match.match_id,
+      correlation_id=match.match_id,
+      timeframe=match.source_tf,
+      reason_code="v7_plan_build_incomplete",
+      message="TradePlan V7 build left incomplete across a restart/crash",
+      publish_status=True,
+    )
     return None
   if spot is None or not spot.fresh:
     await record_route_outcome(
@@ -4640,6 +4655,17 @@ async def _publish_trade_plan_v7(
       message="scanner reaction is missing authoritative confirmation metadata",
       evidence=evidence,
       status="blocked",
+    )
+    await emit_lifecycle(
+      client,
+      INVALIDATED,
+      symbol=symbol,
+      match_id=setup_id,
+      correlation_id=setup_id,
+      timeframe=match.source_tf,
+      reason_code="confirmation_metadata_missing",
+      message="scanner reaction is missing authoritative confirmation metadata",
+      publish_status=True,
     )
     return None
 
@@ -7938,6 +7964,22 @@ async def _handle_event(
               next_state,
               reason_code=preflight.reason_code,
             )
+            # This path had no emit_lifecycle call to ride downstream on
+            # (unlike the other terminal transitions in this module), so
+            # nothing ever cleared the card for this failure - publish one
+            # now, gated on the transition actually succeeding, so
+            # delivery.py's _CARD_TERMINAL_TYPES handling picks it up.
+            await emit_lifecycle(
+              client,
+              next_state,
+              symbol=routed_match.symbol,
+              match_id=routed_match.match_id,
+              correlation_id=routed_match.match_id,
+              timeframe=routed_match.source_tf,
+              reason_code=preflight.reason_code,
+              message=preflight.message,
+              publish_status=True,
+            )
           except SetupLifecycleError:
             log.exception(
               "terminal preflight lifecycle transition failed "
@@ -8572,6 +8614,16 @@ async def _process_strategy_match_ready_entry(
           EXPIRED,
           reason_code="strategy_match_ready_expired",
         )
+        await emit_lifecycle(
+          client,
+          EXPIRED,
+          symbol=event.symbol,
+          match_id=event.setup_id,
+          correlation_id=event.setup_id,
+          reason_code="strategy_match_ready_expired",
+          message="durable ready event expired before the worker consumed it",
+          publish_status=True,
+        )
       except SetupLifecycleError:
         log.exception(
           "ready event expiry transition failed setup_id=%s",
@@ -8607,6 +8659,16 @@ async def _process_strategy_match_ready_entry(
           event.setup_id,
           INVALIDATED,
           reason_code="strategy_match_ready_contract_mismatch",
+        )
+        await emit_lifecycle(
+          client,
+          INVALIDATED,
+          symbol=event.symbol,
+          match_id=event.setup_id,
+          correlation_id=event.setup_id,
+          reason_code="strategy_match_ready_contract_mismatch",
+          message="ready event contract no longer matches the canonical match",
+          publish_status=True,
         )
       except SetupLifecycleError:
         log.exception(

@@ -68,13 +68,17 @@ _FORMING_REPLY_PREFERRED_TYPES = frozenset({
   "take_profit",
   "position_closed",
 })
-# "rejected"/"invalidated"/"expired" never reach render/send at all - see
-# _deliver_auto_trade_event, which deletes the forming card and returns
-# early instead. No card, no reply anchor, no message.
+# "rejected"/"invalidated"/"expired"/"cancelled" never reach render/send at
+# all - see _deliver_auto_trade_event, which deletes the forming card and
+# returns early instead. No card, no reply anchor, no message. "cancelled"
+# is setup_lifecycle's fourth terminal state (eg. a plan build left
+# incomplete across a restart) - it belongs here for the same reason the
+# other three do, closing what was previously a silent orphan-card gap.
 _CARD_TERMINAL_TYPES = frozenset({
   "rejected",
   "invalidated",
   "expired",
+  "cancelled",
 })
 # Lifecycle/event types that stay in Redis + metrics + /auto_status but must
 # never become Telegram cards. Keep emission paths intact.
