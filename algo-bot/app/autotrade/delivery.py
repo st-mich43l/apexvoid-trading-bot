@@ -31,6 +31,7 @@ from app.autotrade.setup_card import (
   load_forming_card,
 )
 from app.autotrade.lifecycle import LIFECYCLE_STATES, emit_lifecycle
+from app.autotrade.strategy_match_ready import load_ready_consumer_health
 from app.autotrade.range_context import (
   WORKER_SNAPSHOT_TTL_SECONDS,
 )
@@ -1049,6 +1050,20 @@ async def auto_trade_status_text() -> str:
   ]
   if why:
     lines.append(f"Why: {escape(why)}")
+  if settings.auto_trade_enabled:
+    # P0-11: a card sitting at "waiting for retest" and a genuinely dead
+    # ready-event consumer look identical from selected_text/execution_state
+    # alone - surface the consumer's own health so the owner can tell
+    # "nothing to do right now" apart from "nothing will ever advance."
+    consumer_health = await load_ready_consumer_health(client)
+    consumer_state = str((consumer_health or {}).get("state") or "unknown")
+    if consumer_state in {"degraded_retrying", "fatal"}:
+      lines.append(
+        f"⚠️ Ready consumer <b>{escape(consumer_state)}</b> "
+        f"(retry {int((consumer_health or {}).get('retry_count') or 0)})"
+      )
+    elif consumer_state == "unknown":
+      lines.append("⚠️ Ready consumer health unknown")
   return "\n".join(lines)
 
 

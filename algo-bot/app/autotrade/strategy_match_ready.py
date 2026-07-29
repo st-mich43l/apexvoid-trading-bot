@@ -255,6 +255,67 @@ async def ensure_ready_group(client: Any) -> None:
       raise
 
 
+# P0-11: distinct from any per-event metric - a single durable snapshot of
+# "is the consumer that turns ready events into worker action even
+# running," so /auto_status can tell "genuinely nothing to do right now"
+# apart from "this consumer is down and nothing will ever advance."
+READY_CONSUMER_HEALTH_KEY = "auto_trade:strategy_match_ready_consumer_health"
+READY_CONSUMER_HEALTH_TTL_SECONDS = 300
+
+
+async def save_ready_consumer_health(
+  client: Any,
+  *,
+  state: str,
+  consumer: str,
+  last_success_at: int | None = None,
+  last_event_id: str | None = None,
+  pending_recovered: int | None = None,
+  retry_count: int = 0,
+  last_error: str | None = None,
+) -> None:
+  existing = await load_ready_consumer_health(client) or {}
+  payload = {
+    "state": state,
+    "consumer": consumer,
+    "group": READY_GROUP,
+    "stream": READY_STREAM,
+    "last_success_at": (
+      last_success_at
+      if last_success_at is not None
+      else existing.get("last_success_at")
+    ),
+    "last_event_id": (
+      last_event_id
+      if last_event_id is not None
+      else existing.get("last_event_id")
+    ),
+    "pending_recovered": (
+      pending_recovered
+      if pending_recovered is not None
+      else existing.get("pending_recovered")
+    ),
+    "retry_count": retry_count,
+    "last_error": last_error,
+    "updated_at": int(time.time()),
+  }
+  await client.set(
+    READY_CONSUMER_HEALTH_KEY,
+    json.dumps(payload, separators=(",", ":"), sort_keys=True),
+    ex=READY_CONSUMER_HEALTH_TTL_SECONDS,
+  )
+
+
+async def load_ready_consumer_health(client: Any) -> dict[str, Any] | None:
+  raw = await client.get(READY_CONSUMER_HEALTH_KEY)
+  if not raw:
+    return None
+  try:
+    return json.loads(_text(raw))
+  except (TypeError, ValueError, json.JSONDecodeError):
+    return None
+
+
 async def load_canonical_match(
   client: Any,
   event: StrategyMatchReadyEvent,

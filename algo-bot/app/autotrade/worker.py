@@ -11,6 +11,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timezone
 from decimal import Decimal
+import asyncio
 import hashlib
 import json
 import logging
@@ -125,6 +126,7 @@ from app.autotrade.strategy_match_ready import (
   ensure_ready_group,
   load_canonical_match,
   ready_consumer_name,
+  save_ready_consumer_health,
   save_ready_snapshot,
 )
 from app.analysis.m1_trigger import (
@@ -8838,37 +8840,96 @@ async def _recover_unfinished_strategy_matches(
         )
 
 
+_READY_CONSUMER_BASE_BACKOFF_SECONDS = 1.0
+_READY_CONSUMER_MAX_BACKOFF_SECONDS = 30.0
+
+
 async def strategy_match_ready_loop() -> None:
-  """Durably wake the worker when Scanner confirms an executable match."""
+  """Durably wake the worker when Scanner confirms an executable match.
+
+  P0-11: ensure_ready_group and the startup reconciliation used to run
+  with no retry boundary around them - a transient Redis error at process
+  start (a connection blip during a rolling deploy) permanently killed
+  this fire-and-forget task for the rest of the process's life, since
+  nothing supervises it. The whole body now lives inside a bounded-backoff
+  supervisor loop, and health is persisted at every state change so
+  /auto_status can tell "the consumer is down" apart from "genuinely
+  nothing to do right now."
+  """
   if not settings.auto_trade_enabled:
     return
   client = redis_state.get_client()
   source = RedisOHLCSource(client)
   consumer = ready_consumer_name()
-  await ensure_ready_group(client)
-  try:
-    await _recover_unfinished_strategy_matches(client)
-  except Exception:
-    log.exception("strategy-match ready startup reconciliation failed")
-  log.info(
-    "ApexVoid Algo consuming durable strategy matches stream=%s group=%s",
-    READY_STREAM,
-    READY_GROUP,
-  )
+  retry_count = 0
+
   while True:
+    await save_ready_consumer_health(
+      client, state="starting", consumer=consumer, retry_count=retry_count,
+    )
     try:
-      consumed = await _consume_strategy_match_ready_once(
-        client=client,
-        source=source,
-        consumer=consumer,
-        block_ms=5_000,
-        recover_pending=True,
+      await ensure_ready_group(client)
+      try:
+        await _recover_unfinished_strategy_matches(client)
+      except Exception:
+        log.exception("strategy-match ready startup reconciliation failed")
+      await save_ready_consumer_health(
+        client, state="ready", consumer=consumer, retry_count=0,
       )
-      if not consumed:
-        continue
-    except Exception:
-      log.exception("strategy-match ready event failed; left pending for retry")
-      await increment_metric(client, "strategy_match_ready_failed")
+      log.info(
+        "ApexVoid Algo consuming durable strategy matches stream=%s group=%s",
+        READY_STREAM,
+        READY_GROUP,
+      )
+      retry_count = 0
+      while True:
+        try:
+          consumed = await _consume_strategy_match_ready_once(
+            client=client,
+            source=source,
+            consumer=consumer,
+            block_ms=5_000,
+            recover_pending=True,
+          )
+          if consumed:
+            await save_ready_consumer_health(
+              client, state="ready", consumer=consumer,
+              last_success_at=int(datetime.now(timezone.utc).timestamp()),
+              retry_count=0,
+            )
+          else:
+            continue
+        except Exception as exc:
+          log.exception(
+            "strategy-match ready event failed; left pending for retry",
+          )
+          await increment_metric(client, "strategy_match_ready_failed")
+          # A single event's processing failure is retried in place (it
+          # stays pending in the consumer group), not fatal to the
+          # consumer itself - degraded, matching P0-11/P1-6's fatal-vs-
+          # degraded distinction for transient per-event failures.
+          await save_ready_consumer_health(
+            client, state="degraded_retrying", consumer=consumer,
+            retry_count=retry_count, last_error=str(exc)[:500],
+          )
+    except asyncio.CancelledError:
+      raise
+    except Exception as exc:
+      retry_count += 1
+      backoff = min(
+        _READY_CONSUMER_MAX_BACKOFF_SECONDS,
+        _READY_CONSUMER_BASE_BACKOFF_SECONDS * (2 ** min(retry_count, 5)),
+      )
+      log.exception(
+        "strategy-match ready consumer setup failed, retrying in %.1fs "
+        "(attempt %d)",
+        backoff, retry_count,
+      )
+      await save_ready_consumer_health(
+        client, state="degraded_retrying", consumer=consumer,
+        retry_count=retry_count, last_error=str(exc)[:500],
+      )
+      await asyncio.sleep(backoff)
 
 
 async def auto_scalp_loop() -> None:
