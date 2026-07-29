@@ -165,6 +165,9 @@ def _intent_to_candidate_payload(intent: ManualTradeIntent) -> dict:
     "timeframe": "M1",
     "setup": intent.setup_type or "Manual Algo",
     "mode": "manual_algo",
+    # Owner-authored /algo orders bypass scanner/analysis policy by contract.
+    # The executor still applies broker-mechanical checks.
+    "bypass_analysis_gates": True,
     "direction": intent.direction,
     "trigger_ts": str(intent.created_at),
     "created_at": intent.created_at,

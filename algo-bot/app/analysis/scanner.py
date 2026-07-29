@@ -2196,7 +2196,7 @@ async def _append_detect_log(
     detection_key = (item.setup, item.direction)
     telemetry_key = _telemetry_result_key(item)
     actionability = actionability_decisions.get(telemetry_key)
-    if actionability is not None:
+    if actionability is not None and actionability.hard_block:
       outcome = "actionability_gated"
     elif telemetry_key in eligibility_reasons:
       outcome = eligibility_reasons[telemetry_key]
@@ -2204,6 +2204,8 @@ async def _append_detect_log(
       outcome = "structure_gated"
     elif detection_key in sent_keys:
       outcome = "sent"
+    elif actionability is not None:
+      outcome = "actionability_observed"
     elif detection_key in conflict_keys:
       outcome = "dropped_conflict"
     else:
@@ -2626,13 +2628,21 @@ async def _handle_event(
     cfg=settings,
   )
   actionable_results = list(actionability.actionable)
-  actionability_gated = list(actionability.gated)
-  for result, decision in actionability_gated:
-    await increment_metric(client, "scanner_actionability_gated", symbol=symbol)
+  actionability_decisions = list(actionability.decisions)
+  for result, decision in actionability_decisions:
+    await increment_metric(
+      client,
+      (
+        "scanner_actionability_gated"
+        if decision.hard_block else "scanner_actionability_observed"
+      ),
+      symbol=symbol,
+    )
     await increment_metric(client, decision.reason_code, symbol=symbol)
     log.info(
-      "scanner result actionability-gated symbol=%s tf=%s setup=%s "
+      "scanner result actionability-%s symbol=%s tf=%s setup=%s "
       "direction=%s reason=%s measured=%s",
+      "gated" if decision.hard_block else "observed",
       symbol,
       exec_tf,
       result.setup,
@@ -2713,7 +2723,7 @@ async def _handle_event(
     sent=sent,
     status="ok",
     actionable=actionable_results,
-    actionability_gated=actionability_gated,
+    actionability_gated=actionability_decisions,
     market_map=current_map,
     scalp=_scalp_status(ctx),
     conflicts=conflicts,
@@ -2729,7 +2739,7 @@ async def _handle_event(
     conflicts,
     structure_gated,
     eligibility_gated,
-    actionability_gated,
+    actionability_decisions,
   )
   return sent
 

@@ -68,6 +68,7 @@ from app.autotrade.structural_target_room import (
   evaluate_structural_target_room,
 )
 from app.autotrade.execution_confirmation import (
+  DISTANCE_PROXIMITY,
   EXPIRED as CONFIRMATION_EXPIRED,
   IMMEDIATE_CONFIRMATION,
   IN_ZONE_WAITING_M1,
@@ -83,6 +84,7 @@ from app.autotrade.execution_confirmation import (
   confirmation_policy_for,
   deterministic_episode_id,
   executable_quote_in_zone,
+  executable_within_distance,
   load_execution_confirmation,
   new_state,
   parse_bar_timestamp,
@@ -699,6 +701,28 @@ async def _resolve_worker_range(
     await increment_metric(client, "resolved_range_deleted", symbol=symbol)
   if comparison.get("disagreement"):
     await increment_metric(client, "range_context_disagreement", symbol=symbol)
+    disagreement_hard = bool(
+      settings.range_context_disagreement_gate_enabled
+    )
+    await increment_metric(
+      client,
+      (
+        "range_context_disagreement_gated"
+        if disagreement_hard else "range_context_disagreement_observed"
+      ),
+      symbol=symbol,
+    )
+    if disagreement_hard and private_decision.state == "candidate":
+      private_decision = replace(
+        private_decision,
+        state="range_context_disagreement",
+        direction=None,
+        trigger=None,
+        reasons=(
+          *private_decision.reasons,
+          "scanner/private range context disagreement gated by policy",
+        ),
+      )
   elif comparison.get("resolution") == "merged":
     await increment_metric(client, "range_context_merged", symbol=symbol)
   if resolved is not None:
@@ -4123,7 +4147,7 @@ def _resolve_match_confluence_claim_id(
     atr=match.atr,
     pip_size=units.pip_size(symbol),
     source_tf=match.source_tf,
-    max_width=float(getattr(settings, "zone_merge_max_width", 3.0)),
+    max_width=float(getattr(settings, "zone_merge_max_width", 6.0)),
     gap=float(getattr(settings, "zone_merge_gap", 1.0)),
     candidate_id=match.match_id,
   )
@@ -4155,17 +4179,15 @@ async def _publish_trade_plan_v7(
   structural-target-room helper against the latest Market Map; this is a
   final stale-context safety check, not a second strategy planner.
 
-  Structural reactions with complete scanner M5 confirmation may continue
-  through final preflight in this same call while the side-aware executable
-  quote remains in the entry zone. If price already left, a persisted retest
-  episode requires a fresh in-zone closed M1 trigger. Non-reaction strategies
-  retain their existing M1-trigger requirement.
+  A formed setup may continue through final preflight when the side-aware
+  executable quote is inside or within the configured distance envelope.
+  Far setups persist WAITING_RETEST until price returns. A fresh M1 pattern
+  can anchor the stop wick, but proximity alone authorizes publication.
 
-  Returns the published plan_id, or None if not published (still waiting for
-  an M1 trigger, thesis/zone already claimed by another setup, or a
+  Returns the published plan_id, or None if not published (still outside the
+  distance envelope, thesis/zone already claimed by another setup, or a
   guard/policy rejection - always recorded via _record_v7_build_rejected,
-  never a bare silent return, except the ordinary "still armed, no trigger
-  yet" wait which is not a rejection).
+  never a bare silent return, except the ordinary retained retest wait).
   """
   if spot is None or not spot.fresh:
     await record_route_outcome(
@@ -4219,6 +4241,10 @@ async def _publish_trade_plan_v7(
       float(settings.auto_trade_entry_contract_tolerance_pips) * pip_size,
     ),
     pip_size=pip_size,
+  )
+  execution_eligible = executable_within_distance(
+    evidence,
+    settings.auto_trade_execute_max_distance_pips,
   )
 
   if match.expires_at and now_ts >= int(match.expires_at):
@@ -4390,8 +4416,25 @@ async def _publish_trade_plan_v7(
       return None
 
     if not policy.reaction_family:
-      return None
-    if evidence.inside:
+      if not execution_eligible:
+        execution_state = new_state(
+          setup_id,
+          WAITING_RETEST,
+          now=now_ts,
+          zone_exited_at=quote_ts,
+        )
+        await _persist_v7_confirmation_phase(
+          client,
+          symbol,
+          match,
+          execution_state,
+          reason_code="waiting_retest_distance",
+          message="formed setup is outside the executable distance envelope",
+          evidence=evidence,
+          metric="setup_waiting_retest_distance",
+        )
+        return None
+    elif execution_eligible:
       episode_id = deterministic_episode_id(
         setup_id,
         match.direction,
@@ -4401,33 +4444,22 @@ async def _publish_trade_plan_v7(
       )
       execution_state = new_state(
         setup_id,
-        IMMEDIATE_CONFIRMATION,
+        IN_ZONE_WAITING_M1,
         now=now_ts,
         episode_id=episode_id,
-        zone_entered_at=quote_ts,
+        zone_entered_at=confirmation_boundary,
         last_inside_at=quote_ts,
-        trigger_bar_ts=confirmation_boundary,
-        trigger_source=M5_AUTHORITATIVE,
-        trigger_consumed=True,
       )
       await _persist_v7_confirmation_phase(
         client,
         symbol,
         match,
         execution_state,
-        reason_code="m5_confirmation_quote_inside",
-        message="M5 reaction confirmed while executable quote remains in zone",
+        reason_code="distance_execution_eligible",
+        message="formed reaction is within execution distance; M1 is optional",
         evidence=evidence,
         metric="reaction_m5_immediate_eligible",
         status="checking",
-      )
-      confirmation = ExecutionConfirmation(
-        source=M5_AUTHORITATIVE,
-        pattern=match.reaction_type,
-        bar_ts=confirmation_boundary,
-        wick_extreme=None,
-        zone_episode_id=episode_id,
-        message="scanner M5 reaction confirmation is authoritative",
       )
     else:
       execution_state = new_state(
@@ -4441,8 +4473,8 @@ async def _publish_trade_plan_v7(
         symbol,
         match,
         execution_state,
-        reason_code="waiting_retest",
-        message="confirmed reaction left the entry zone; waiting for a new retest",
+        reason_code="waiting_retest_distance",
+        message="confirmed reaction is outside the executable distance envelope",
         evidence=evidence,
         metric="reaction_waiting_retest",
       )
@@ -4455,21 +4487,20 @@ async def _publish_trade_plan_v7(
     and confirmation is None
   ):
     if execution_state is None:
-      # Upgrade-safe fail closed: an already-armed setup from the pre-episode
-      # runtime cannot reuse its old confirmation. Treat the next in-zone
-      # observation as a brand-new retest episode.
+      # Upgrade-safe: an already-armed setup from the pre-episode runtime
+      # starts a new distance-based retest observation.
       execution_state = new_state(
         setup_id,
         WAITING_RETEST,
         now=now_ts,
-        zone_exited_at=quote_ts if not evidence.inside else None,
+        zone_exited_at=quote_ts if not execution_eligible else None,
       )
 
     if execution_state.phase == CONFIRMATION_PUBLISHED:
       return None
 
     if execution_state.phase == IMMEDIATE_CONFIRMATION:
-      if evidence.inside:
+      if execution_eligible:
         confirmation = ExecutionConfirmation(
           source=M5_AUTHORITATIVE,
           pattern=match.reaction_type,
@@ -4511,7 +4542,7 @@ async def _publish_trade_plan_v7(
         TRIGGER_PRICE_LEFT_ZONE,
       }
     ):
-      if not evidence.inside:
+      if not execution_eligible:
         if execution_state.zone_exited_at != quote_ts:
           execution_state = new_state(
             setup_id,
@@ -4554,7 +4585,7 @@ async def _publish_trade_plan_v7(
         match,
         execution_state,
         reason_code="waiting_m1_retest",
-        message="new retest episode entered the zone; waiting for fresh M1",
+        message="retest entered execution distance; checking optional M1",
         evidence=evidence,
         metric="reaction_zone_episode_started",
       )
@@ -4587,54 +4618,48 @@ async def _publish_trade_plan_v7(
         after_bar_ts=execution_state.last_evaluated_m1_ts,
       )
       if trigger is None:
-        if evidence.inside:
-          execution_state = new_state(
-            setup_id,
-            IN_ZONE_WAITING_M1,
-            now=now_ts,
-            episode_id=execution_state.episode_id,
-            zone_entered_at=execution_state.zone_entered_at,
-            last_inside_at=quote_ts,
-            last_evaluated_m1_ts=(
-              latest_evaluated
-              if latest_evaluated is not None
-              else execution_state.last_evaluated_m1_ts
-            ),
-          )
-          await _persist_v7_confirmation_phase(
-            client,
-            symbol,
-            match,
-            execution_state,
-            reason_code="waiting_m1_retest",
-            message="retest remains in zone; waiting for fresh M1 confirmation",
-            evidence=evidence,
-          )
-        else:
-          execution_state = new_state(
-            setup_id,
-            WAITING_RETEST,
-            now=now_ts,
-            episode_id=execution_state.episode_id,
-            zone_entered_at=execution_state.zone_entered_at,
-            zone_exited_at=quote_ts,
-            last_inside_at=execution_state.last_inside_at,
-            last_evaluated_m1_ts=(
-              latest_evaluated
-              if latest_evaluated is not None
-              else execution_state.last_evaluated_m1_ts
-            ),
-          )
-          await _persist_v7_confirmation_phase(
-            client,
-            symbol,
-            match,
-            execution_state,
-            reason_code="retest_episode_ended",
-            message="quote left the zone before a valid M1 trigger",
-            evidence=evidence,
-          )
-        return None
+        confirmation_source = (
+          M5_AUTHORITATIVE
+          if policy.reaction_family else DISTANCE_PROXIMITY
+        )
+        trigger = ExecutionConfirmation(
+          source=confirmation_source,
+          pattern=match.reaction_type,
+          bar_ts=quote_ts,
+          wick_extreme=None,
+          zone_episode_id=str(execution_state.episode_id or ""),
+          message="distance proximity authorized execution without M1",
+        )
+        execution_state = new_state(
+          setup_id,
+          TRIGGER_READY,
+          now=now_ts,
+          episode_id=execution_state.episode_id,
+          zone_entered_at=execution_state.zone_entered_at,
+          last_inside_at=quote_ts,
+          last_evaluated_m1_ts=(
+            latest_evaluated
+            if latest_evaluated is not None
+            else execution_state.last_evaluated_m1_ts
+          ),
+          trigger_bar_ts=quote_ts,
+          trigger_pattern=match.reaction_type,
+          trigger_source=confirmation_source,
+          trigger_consumed=True,
+        )
+        await _persist_v7_confirmation_phase(
+          client,
+          symbol,
+          match,
+          execution_state,
+          reason_code="distance_execution_eligible",
+          message="quote entered the executable distance envelope; M1 optional",
+          evidence=evidence,
+          metric="reaction_distance_execution_eligible",
+          status="checking",
+        )
+      else:
+        confirmation_source = M1_RETEST
 
       trigger_bar_ts = int(trigger.bar_ts)
       validity_bars = max(
@@ -4645,16 +4670,19 @@ async def _publish_trade_plan_v7(
       if quote_ts > trigger_deadline:
         execution_state = new_state(
           setup_id,
-          IN_ZONE_WAITING_M1 if evidence.inside else WAITING_RETEST,
+          IN_ZONE_WAITING_M1 if execution_eligible else WAITING_RETEST,
           now=now_ts,
           episode_id=execution_state.episode_id,
           zone_entered_at=execution_state.zone_entered_at,
-          zone_exited_at=None if evidence.inside else quote_ts,
-          last_inside_at=quote_ts if evidence.inside else execution_state.last_inside_at,
+          zone_exited_at=None if execution_eligible else quote_ts,
+          last_inside_at=(
+            quote_ts
+            if execution_eligible else execution_state.last_inside_at
+          ),
           last_evaluated_m1_ts=trigger_bar_ts,
           trigger_bar_ts=trigger_bar_ts,
           trigger_pattern=trigger.pattern,
-          trigger_source=M1_RETEST,
+          trigger_source=confirmation_source,
           trigger_consumed=True,
         )
         await _persist_v7_confirmation_phase(
@@ -4667,8 +4695,20 @@ async def _publish_trade_plan_v7(
           evidence=evidence,
           metric="reaction_stale_m1_ignored",
         )
-        return None
-      if not evidence.inside:
+        confirmation_source = (
+          M5_AUTHORITATIVE
+          if policy.reaction_family else DISTANCE_PROXIMITY
+        )
+        trigger = ExecutionConfirmation(
+          source=confirmation_source,
+          pattern=match.reaction_type,
+          bar_ts=quote_ts,
+          wick_extreme=None,
+          zone_episode_id=str(execution_state.episode_id or ""),
+          message="stale M1 ignored; distance proximity authorized execution",
+        )
+        trigger_bar_ts = quote_ts
+      if not execution_eligible:
         execution_state = new_state(
           setup_id,
           TRIGGER_PRICE_LEFT_ZONE,
@@ -4680,7 +4720,7 @@ async def _publish_trade_plan_v7(
           last_evaluated_m1_ts=trigger_bar_ts,
           trigger_bar_ts=trigger_bar_ts,
           trigger_pattern=trigger.pattern,
-          trigger_source=M1_RETEST,
+          trigger_source=confirmation_source,
           trigger_consumed=True,
         )
         await _persist_v7_confirmation_phase(
@@ -4704,7 +4744,7 @@ async def _publish_trade_plan_v7(
         last_evaluated_m1_ts=trigger_bar_ts,
         trigger_bar_ts=trigger_bar_ts,
         trigger_pattern=trigger.pattern,
-        trigger_source=M1_RETEST,
+        trigger_source=confirmation_source,
         trigger_consumed=True,
       )
       await _persist_v7_confirmation_phase(
@@ -4712,14 +4752,26 @@ async def _publish_trade_plan_v7(
         symbol,
         match,
         execution_state,
-        reason_code="m1_retest_triggered",
-        message="fresh in-zone M1 trigger accepted for current retest episode",
+        reason_code=(
+          "m1_retest_triggered"
+          if confirmation_source == M1_RETEST
+          else "distance_execution_eligible"
+        ),
+        message=(
+          "fresh in-zone M1 trigger accepted for current retest episode"
+          if confirmation_source == M1_RETEST
+          else "distance proximity authorized execution without M1"
+        ),
         evidence=evidence,
-        metric="reaction_m1_trigger_found",
+        metric=(
+          "reaction_m1_trigger_found"
+          if confirmation_source == M1_RETEST
+          else "reaction_distance_confirmation_ready"
+        ),
         status="checking",
       )
       confirmation = ExecutionConfirmation(
-        source=M1_RETEST,
+        source=confirmation_source,
         pattern=trigger.pattern,
         bar_ts=trigger_bar_ts,
         wick_extreme=trigger.wick_extreme,
@@ -4727,8 +4779,29 @@ async def _publish_trade_plan_v7(
         message=trigger.message,
       )
 
-  if not policy.reaction_family:
+  if not policy.reaction_family and confirmation is None:
     if setup_record.state != ARMED_WAITING_TRIGGER:
+      return None
+    if not execution_eligible:
+      execution_state = new_state(
+        setup_id,
+        WAITING_RETEST,
+        now=now_ts,
+        episode_id=(
+          None if execution_state is None else execution_state.episode_id
+        ),
+        zone_exited_at=quote_ts,
+      )
+      await _persist_v7_confirmation_phase(
+        client,
+        symbol,
+        match,
+        execution_state,
+        reason_code="waiting_retest_distance",
+        message="formed setup is outside the executable distance envelope",
+        evidence=evidence,
+        metric="setup_waiting_retest_distance",
+      )
       return None
     trigger = (
       None
@@ -4744,22 +4817,59 @@ async def _publish_trade_plan_v7(
         cfg=settings,
       )
     )
-    if trigger is None:
-      return None
-    trigger_bar_ts = int(trigger.bar_ts)
+    trigger_bar_ts = quote_ts if trigger is None else int(trigger.bar_ts)
+    validity_bars = max(
+      1,
+      int(getattr(settings, "auto_trade_retest_trigger_validity_bars", 2)),
+    )
+    trigger_is_fresh = bool(
+      trigger is not None
+      and quote_ts <= trigger_bar_ts + 60 + validity_bars * 60
+    )
+    source = M1_RETEST if trigger_is_fresh else DISTANCE_PROXIMITY
+    episode_id = deterministic_episode_id(
+      setup_id,
+      match.direction,
+      match.entry_low,
+      match.entry_high,
+      confirmation_boundary,
+    )
     confirmation = ExecutionConfirmation(
-      source=M1_RETEST,
-      pattern=trigger.pattern,
+      source=source,
+      pattern=None if not trigger_is_fresh else trigger.pattern,
       bar_ts=trigger_bar_ts,
-      wick_extreme=trigger.wick_extreme,
-      zone_episode_id=deterministic_episode_id(
-        setup_id,
-        match.direction,
-        match.entry_low,
-        match.entry_high,
-        confirmation_boundary,
+      wick_extreme=None if not trigger_is_fresh else trigger.wick_extreme,
+      zone_episode_id=episode_id,
+      message=(
+        "distance proximity authorized execution without M1"
+        if not trigger_is_fresh else trigger.message
       ),
-      message=trigger.message,
+    )
+    execution_state = new_state(
+      setup_id,
+      TRIGGER_READY,
+      now=now_ts,
+      episode_id=episode_id,
+      zone_entered_at=quote_ts,
+      last_inside_at=quote_ts,
+      trigger_bar_ts=trigger_bar_ts,
+      trigger_pattern=confirmation.pattern,
+      trigger_source=source,
+      trigger_consumed=True,
+    )
+    await _persist_v7_confirmation_phase(
+      client,
+      symbol,
+      match,
+      execution_state,
+      reason_code=(
+        "m1_soft_confirmation"
+        if trigger_is_fresh else "distance_execution_eligible"
+      ),
+      message=confirmation.message,
+      evidence=evidence,
+      metric="setup_distance_execution_eligible",
+      status="checking",
     )
 
   if confirmation is None:
@@ -5066,40 +5176,39 @@ async def _publish_trade_plan_v7(
       "symbol=%s setup_id=%s plan_id=%s",
       symbol, setup_id, plan.plan_id,
     )
-  if policy.reaction_family:
-    published_state = new_state(
-      setup_id,
-      CONFIRMATION_PUBLISHED,
-      now=now_ts,
-      episode_id=confirmation.zone_episode_id,
-      zone_entered_at=(
-        None if execution_state is None else execution_state.zone_entered_at
-      ),
-      last_inside_at=quote_ts,
-      last_evaluated_m1_ts=(
-        None if execution_state is None
-        else execution_state.last_evaluated_m1_ts
-      ),
-      trigger_bar_ts=confirmation.bar_ts,
-      trigger_pattern=confirmation.pattern,
-      trigger_source=confirmation.source,
-      trigger_consumed=True,
-    )
-    await _persist_v7_confirmation_phase(
-      client,
-      symbol,
-      match,
-      published_state,
-      reason_code=(
-        "m5_confirmation_quote_inside"
-        if confirmation.source == M5_AUTHORITATIVE
-        else "m1_retest_triggered"
-      ),
-      message="TradePlan V7 published in the confirmation worker cycle",
-      evidence=evidence,
-      metric="reaction_plan_published_same_cycle",
-      status="candidate_published",
-    )
+  published_state = new_state(
+    setup_id,
+    CONFIRMATION_PUBLISHED,
+    now=now_ts,
+    episode_id=confirmation.zone_episode_id,
+    zone_entered_at=(
+      None if execution_state is None else execution_state.zone_entered_at
+    ),
+    last_inside_at=quote_ts,
+    last_evaluated_m1_ts=(
+      None if execution_state is None
+      else execution_state.last_evaluated_m1_ts
+    ),
+    trigger_bar_ts=confirmation.bar_ts,
+    trigger_pattern=confirmation.pattern,
+    trigger_source=confirmation.source,
+    trigger_consumed=True,
+  )
+  await _persist_v7_confirmation_phase(
+    client,
+    symbol,
+    match,
+    published_state,
+    reason_code=(
+      "m1_soft_confirmation"
+      if confirmation.source == M1_RETEST
+      else "distance_execution_eligible"
+    ),
+    message="TradePlan V7 published in the distance-eligible worker cycle",
+    evidence=evidence,
+    metric="distance_eligible_plan_published",
+    status="candidate_published",
+  )
   await increment_metric(client, "v7_plan_published", symbol=symbol)
   await emit_lifecycle(
     client,
@@ -6859,17 +6968,20 @@ async def _preflight_strategy_intent(
   )
   if (
     handoff_policy.m5_authoritative
-    and not handoff_evidence.inside
+    and not executable_within_distance(
+      handoff_evidence,
+      settings.auto_trade_execute_max_distance_pips,
+    )
     and not handoff_invalidated
     and (
       not match.expires_at
       or int(datetime.now(timezone.utc).timestamp()) < int(match.expires_at)
     )
   ):
-    # An out-of-zone reaction is not executable, but the orchestrator must
-    # still advance its confirmation handoff once so Python can persist
-    # WAITING_RETEST. Keep it out of arbitration: a waiting reaction must not
-    # suppress a genuinely executable intent on the other side.
+    # A far reaction is not executable, but the orchestrator must still
+    # advance its handoff once so Python can persist WAITING_RETEST. Keep it
+    # out of arbitration: a waiting reaction must not suppress an executable
+    # intent on the other side.
     return _preflight_decision(
       intent,
       executable=False,

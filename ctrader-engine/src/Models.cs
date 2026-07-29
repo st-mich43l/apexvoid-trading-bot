@@ -200,6 +200,7 @@ public sealed record TradeCandidate(
   decimal? OpposingZoneHigh = null,
   decimal? ManualStopLoss = null,
   long? ManualExpiresAt = null,
+  bool BypassAnalysisGates = false,
   decimal? SweepLow = null,
   decimal? SweepHigh = null,
   // Pullback scale-in add (ScaleInTriggerPlanner P1-P4) - see scale_context.py.
@@ -551,7 +552,7 @@ public sealed record AutoTradeConfigManifest(
   int TrendStopMaxPips = 65,
   IReadOnlyList<CanonicalConfigOption>? CanonicalOptions = null,
   int PriceDigits = 2,
-  decimal MaxEntryDistancePips = 10m,
+  decimal MaxEntryDistancePips = 40m,
   decimal EntryContractTolerancePips = 3m,
   int BreakEvenBufferTicks = 6,
   decimal SymbolTickSize = 0.01m,
