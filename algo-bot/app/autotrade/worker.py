@@ -350,6 +350,28 @@ def terminal_state_for_preflight_failure(
   return INVALIDATED
 
 
+def parse_cycle_owner_intent_id(raw: Any) -> str | None:
+  """P1-5: extract intent_id from a publish_ranked_cycle owner record.
+
+  publish_ranked_cycle stores the cycle owner as a JSON object
+  ({symbol, cycle_id, intent_id, setup_id, plan_id, published_at}) - the
+  raw JSON blob itself is never a valid winner_intent_id. A legacy or
+  malformed value (predating the JSON payload, or a decode failure) falls
+  back to the raw text unchanged, so any old data already written stays
+  readable rather than becoming None.
+  """
+  if raw is None:
+    return None
+  text = raw.decode() if isinstance(raw, bytes) else str(raw)
+  try:
+    payload = json.loads(text)
+  except (TypeError, ValueError, json.JSONDecodeError):
+    return text
+  if isinstance(payload, dict) and payload.get("intent_id"):
+    return str(payload["intent_id"])
+  return text
+
+
 def _executable_spot_price(spot: Any, direction: str) -> float:
   """Return the side-aware quote while tolerating legacy test snapshots."""
   resolver = getattr(spot, "executable_price", None)
@@ -8220,13 +8242,7 @@ async def _handle_event(
       existing_cycle_owner = await client.get(
         autonomous_cycle_owner_key(symbol, cycle_id)
       )
-      winner_intent_id = (
-        existing_cycle_owner.decode()
-        if isinstance(existing_cycle_owner, bytes)
-        else str(existing_cycle_owner)
-        if existing_cycle_owner is not None
-        else None
-      )
+      winner_intent_id = parse_cycle_owner_intent_id(existing_cycle_owner)
       if routed_top is not None:
         await record_route_outcome(
           client,
