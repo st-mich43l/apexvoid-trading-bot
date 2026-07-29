@@ -125,6 +125,48 @@ class SetupLifecycleError(ValueError):
   """An illegal transition or an operation on an unknown setup_id."""
 
 
+class SetupTransitionConflict(SetupLifecycleError):
+  """P0-3: another writer already moved this setup off the state this
+  caller read, so the transition this caller computed no longer applies.
+
+  A subclass of SetupLifecycleError so every existing `except
+  SetupLifecycleError:` call site (there are over a dozen in worker.py
+  alone) keeps working unchanged - "someone else already handled this
+  setup" was already treated as non-fatal everywhere. Callers that want to
+  distinguish a genuine race from an illegal transition can still catch
+  this subclass specifically.
+  """
+
+
+# P0-3: KEYS[1] = setup_key(setup_id). ARGV[1] = the source state this
+# caller observed when it decided to make this transition. ARGV[2] = the
+# target state. ARGV[3] = the fully-merged new record JSON (state,
+# updated_at and any field_updates already applied). ARGV[4] = TTL seconds.
+# Returns {outcome, actual_current_state} where outcome is "changed",
+# "already_at_target", "conflict", or "missing" - the whole
+# read-compare-write happens inside Redis, so two callers racing the same
+# setup_id can never both believe their stale read is still current.
+_TRANSITION_LUA = """
+local current = redis.call('GET', KEYS[1])
+if not current then
+  return {'missing', ''}
+end
+local ok, decoded = pcall(cjson.decode, current)
+if not ok or type(decoded) ~= 'table' then
+  return {'missing', ''}
+end
+local current_state = tostring(decoded['state'] or '')
+if current_state == ARGV[2] then
+  return {'already_at_target', current_state}
+end
+if current_state ~= ARGV[1] then
+  return {'conflict', current_state}
+end
+redis.call('SET', KEYS[1], ARGV[3], 'EX', ARGV[4])
+return {'changed', current_state}
+"""
+
+
 def setup_key(setup_id: str) -> str:
   return f"analysis:setup:{setup_id}"
 
@@ -329,8 +371,60 @@ async def transition_setup(
     updated_at=int(time.time()),
     **field_updates,
   )
-  await _save(client, updated)
-  return updated, True
+  payload = json.dumps(updated.to_dict(), separators=(",", ":"))
+  ttl = _ttl_for(updated)
+  try:
+    outcome, actual_state = await client.eval(
+      _TRANSITION_LUA,
+      1,
+      setup_key(setup_id),
+      record.state,
+      new_state,
+      payload,
+      ttl,
+    )
+  except Exception:
+    if not getattr(client, "_apexvoid_allow_non_atomic_test_fallback", False):
+      raise
+    # fakeredis (used across the test suite) has no Lua/EVAL support -
+    # fall back to a best-effort read-compare-write. Production always
+    # takes the real Lua path above and fails closed if EVAL is
+    # unavailable, so this fallback only ever runs under test.
+    current = await load_setup(client, setup_id)
+    if current is None:
+      raise SetupLifecycleError(
+        f"transition_setup: unknown setup_id {setup_id!r}",
+      ) from None
+    if current.state == new_state:
+      return current, False
+    if current.state != record.state:
+      raise SetupTransitionConflict(
+        f"transition_setup: {setup_id!r} moved to {current.state!r} "
+        f"(expected {record.state!r}) before this "
+        f"{record.state!r}->{new_state!r} transition could apply"
+        + (f" ({reason_code})" if reason_code else ""),
+      )
+    await _save(client, updated)
+    return updated, True
+
+  if outcome == "changed":
+    await _sync_expiry_index(client, updated)
+    return updated, True
+  if outcome == "already_at_target":
+    current = await load_setup(client, setup_id)
+    return current if current is not None else updated, False
+  if outcome == "missing":
+    raise SetupLifecycleError(
+      f"transition_setup: unknown setup_id {setup_id!r}",
+    )
+  # outcome == "conflict": another writer already moved this setup off
+  # record.state - never silently overwrite whatever it wrote instead.
+  raise SetupTransitionConflict(
+    f"transition_setup: {setup_id!r} moved to {actual_state!r} "
+    f"(expected {record.state!r}) before this "
+    f"{record.state!r}->{new_state!r} transition could apply"
+    + (f" ({reason_code})" if reason_code else ""),
+  )
 
 
 # P1-2: once a plan has been built off this setup, a late sweeper pass must
