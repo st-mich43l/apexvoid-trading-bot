@@ -93,11 +93,12 @@ class Settings(BaseSettings):
   zone_alert_ttl: int = 14400
   scanner_confluence_floor: int = 2
   alert_overlap_suppress: float = 0.5
-  # Opposite-direction, overlapping detections are a contradiction, not a
-  # duplicate. Above this overlap ratio, the weaker one only survives if its
-  # confluence trails by less than SCANNER_CONFLICT_MARGIN - otherwise both
-  # are dropped and the conflict is recorded (see scanner.py::_suppress_overlaps).
-  scanner_conflict_overlap: float = 0.5
+  # P0 zone/M1 simplification: BUY and SELL bands form one contested
+  # corridor - never two independent opportunities, and never resolved by
+  # picking whichever has the higher confluence score - whenever they
+  # overlap at all, or their nearest edges sit within this many ATRs of
+  # each other. See actionability.py::resolve_actionability.
+  contested_corridor_gap_atr: float = 0.5
   scanner_conflict_margin: float = 1.0
   spot_fresh_secs: int = 30
   spot_max_deviation_pct: float = 2.0

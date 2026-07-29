@@ -1945,18 +1945,22 @@ def _conflict_record(
 def _suppress_overlaps(
   results: list[DetectionResult],
 ) -> tuple[list[DetectionResult], list[dict[str, Any]]]:
-  """Same-direction overlap is a duplicate - keep the higher-ranked, drop the
-  other. Opposite-direction overlap is a contradiction: two credible,
-  contradictory readings mean the market is undecided, so unless the
-  higher-ranked result's confluence decisively beats the other's, both are
-  dropped rather than shipping either as a coin flip.
+  """Same-direction overlap is a duplicate - keep the higher-ranked, drop
+  the other.
+
+  P0 zone/M1 simplification: this used to ALSO re-run its own opposing-
+  direction confluence-margin tiebreak here, duplicating (with a slightly
+  different overlap-ratio implementation) what
+  actionability.py::resolve_actionability's contested-corridor rule
+  already resolved earlier in the same request - by the time results
+  reach this function they have already survived that check, so a second,
+  independent cross-side gate here could only ever produce a different
+  answer than the authoritative one upstream. Deleted, not duplicated.
   """
   ordered = sorted(results, key=_result_rank)
   selected: list[DetectionResult] = []
   conflicts: list[dict[str, Any]] = []
   same_threshold = max(0.0, settings.alert_overlap_suppress)
-  conflict_threshold = max(0.0, settings.scanner_conflict_overlap)
-  margin = max(0.0, settings.scanner_conflict_margin)
   for result in ordered:
     same_direction_duplicate = any(
       result.direction == kept.direction
@@ -1978,24 +1982,6 @@ def _suppress_overlaps(
       for kept in selected
     )
     if same_direction_duplicate:
-      continue
-    # `selected` is built in rank order, so the first opposing overlap found
-    # is always the strongest (highest-ranked) survivor so far.
-    opposing = next(
-      (
-        kept for kept in selected
-        if result.direction != kept.direction
-        and _zone_overlap_ratio(result.entry_zone, kept.entry_zone)
-          >= conflict_threshold
-      ),
-      None,
-    )
-    if opposing is not None:
-      if opposing.confluence - result.confluence >= margin:
-        conflicts.append(_conflict_record(opposing, result, "stronger_kept"))
-        continue
-      selected.remove(opposing)
-      conflicts.append(_conflict_record(opposing, result, "both_dropped"))
       continue
     selected.append(result)
   return selected, conflicts
