@@ -267,15 +267,8 @@ class Settings(BaseSettings):
     ),
   )
   auto_trade_min_confluence: int = 2
-  # Planner authorization and executor drift protection intentionally share
-  # the same default envelope. A formed setup inside this distance may execute
-  # without waiting for a candlestick pattern.
-  auto_trade_execute_max_distance_pips: float = Field(
-    default=40.0,
-    validation_alias=AliasChoices(
-      "AUTO_TRADE_EXECUTE_MAX_DISTANCE_PIPS",
-    ),
-  )
+  # Mechanical last-mile anti-chase ceiling. Strategy authorization uses the
+  # scanner entry zone plus AUTO_TRADE_ENTRY_CONTRACT_TOLERANCE_PIPS.
   auto_trade_max_entry_distance_pips: float = 40.0
   auto_trade_entry_contract_tolerance_pips: float = Field(
     default=3.0,
@@ -682,17 +675,9 @@ class Settings(BaseSettings):
       raise ValueError(
         "AUTO_TRADE_RETEST_TRIGGER_VALIDITY_BARS must be between 1 and 5"
       )
-    if (
-      self.auto_trade_execute_max_distance_pips <= 0
-      or self.auto_trade_max_entry_distance_pips <= 0
-      or not math.isclose(
-        self.auto_trade_execute_max_distance_pips,
-        self.auto_trade_max_entry_distance_pips,
-      )
-    ):
+    if self.auto_trade_max_entry_distance_pips <= 0:
       raise ValueError(
-        "AUTO_TRADE_EXECUTE_MAX_DISTANCE_PIPS and "
-        "AUTO_TRADE_MAX_ENTRY_DISTANCE_PIPS must be equal and positive"
+        "AUTO_TRADE_MAX_ENTRY_DISTANCE_PIPS must be positive"
       )
     if (
       self.auto_trade_execution_zone_max_width_atr <= 0

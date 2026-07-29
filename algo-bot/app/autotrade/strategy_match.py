@@ -14,6 +14,7 @@ import json
 import math
 
 from app.analysis.confluence_zone import confluence_setup_id
+from app.analysis.execution_eligibility import ExecutionEligibility
 from app.analysis.structural_reaction_support import structural_thesis_id
 
 
@@ -84,6 +85,7 @@ class StrategyMatch:
   structural_timeframe: str | None = None
   htf_bias: str = ""
   regime_kind: str = ""
+  execution_eligibility: ExecutionEligibility | None = None
 
   @property
   def is_range_edge(self) -> bool:
@@ -243,6 +245,9 @@ class StrategyMatch:
         ),
         htf_bias=str(payload.get("htf_bias") or ""),
         regime_kind=str(payload.get("regime_kind") or ""),
+        execution_eligibility=ExecutionEligibility.from_dict(
+          payload.get("execution_eligibility"),
+        ),
       )
     except (KeyError, TypeError, ValueError, json.JSONDecodeError):
       return None

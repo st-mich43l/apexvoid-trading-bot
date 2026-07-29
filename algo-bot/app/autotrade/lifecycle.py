@@ -15,6 +15,7 @@ LIFECYCLE_STATES = (
   "analysis_only",
   "auto_ready",
   "tracked",
+  "setup_status",
   "waiting_for_price",
   "candidate_published",
   "executor_received",

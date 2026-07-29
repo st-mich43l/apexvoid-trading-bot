@@ -134,6 +134,29 @@ async def record_route_outcome(
 ) -> StrategyRouteOutcome:
   now = int(datetime.now(timezone.utc).timestamp())
   details = dict(measured or {})
+  setup_id = str(getattr(match, "match_id", ""))
+  ready_raw = await client.get(
+    f"auto_trade:strategy_match_ready:last:{setup_id}",
+  )
+  if ready_raw:
+    try:
+      ready = json.loads(
+        ready_raw.decode() if isinstance(ready_raw, bytes) else str(ready_raw),
+      )
+      for name in (
+        "event_id",
+        "setup_id",
+        "match_id",
+        "scanner_event_ts",
+        "ready_event_ts",
+        "worker_received_ts",
+        "market_map_id",
+        "recovery",
+      ):
+        if name in ready:
+          details.setdefault(name, ready[name])
+    except (TypeError, ValueError, json.JSONDecodeError):
+      pass
   if retained is not None:
     details["match_retained"] = retained
   details.setdefault("spot_price", getattr(match, "current_price", None))

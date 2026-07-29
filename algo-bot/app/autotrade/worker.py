@@ -68,7 +68,6 @@ from app.autotrade.structural_target_room import (
   evaluate_structural_target_room,
 )
 from app.autotrade.execution_confirmation import (
-  DISTANCE_PROXIMITY,
   EXPIRED as CONFIRMATION_EXPIRED,
   IMMEDIATE_CONFIRMATION,
   IN_ZONE_WAITING_M1,
@@ -84,7 +83,6 @@ from app.autotrade.execution_confirmation import (
   confirmation_policy_for,
   deterministic_episode_id,
   executable_quote_in_zone,
-  executable_within_distance,
   load_execution_confirmation,
   new_state,
   parse_bar_timestamp,
@@ -106,11 +104,25 @@ from app.autotrade.setup_lifecycle import (
   INVALIDATED,
   PLAN_BUILT,
   PLAN_PUBLISHED,
+  READY_EVENT_ENQUEUED,
+  TERMINAL_STATES,
+  WORKER_ACKNOWLEDGED,
   SetupLifecycleError,
+  active_thesis_key,
   claim_active_thesis,
   load_setup,
   release_active_thesis,
   transition_setup,
+)
+from app.autotrade.strategy_match_ready import (
+  READY_GROUP,
+  READY_STREAM,
+  StrategyMatchReadyEvent,
+  enqueue_strategy_match_ready,
+  ensure_ready_group,
+  load_canonical_match,
+  ready_consumer_name,
+  save_ready_snapshot,
 )
 from app.analysis.m1_trigger import (
   evaluate_m1_trigger_window,
@@ -126,8 +138,12 @@ from app.autotrade.trade_plan_builder import (
   TradePlanBuildRejected,
   build_trade_plan_from_strategy_match,
 )
-from app.autotrade.trade_plan_stream import publish_trade_plan
+from app.autotrade.trade_plan_stream import (
+  publish_trade_plan,
+  read_plan_state,
+)
 from app.autotrade.route_outcome import record_route_outcome, route_outcome_key
+from app.autotrade.setup_card import save_forming_card_status
 from app.autotrade.reaction_identity import (
   THESIS_CLAIM_ACQUIRE_LUA,
   ACTIVE_THESIS_STATES,
@@ -4033,6 +4049,50 @@ async def _record_v7_build_rejected(
   )
 
 
+async def _emit_setup_card_status(
+  client: Any,
+  match: StrategyMatch,
+  *,
+  status_line: str,
+  reason_code: str,
+  message: str,
+  measured: dict[str, Any] | None = None,
+) -> None:
+  await save_forming_card_status(
+    client,
+    match.match_id,
+    status_line,
+  )
+  await emit_lifecycle(
+    client,
+    "setup_status",
+    symbol=match.symbol,
+    correlation_id=match.match_id,
+    match_id=match.match_id,
+    strategy=match.strategy,
+    strategy_family=match.family,
+    direction=match.direction,
+    timeframe=match.source_tf,
+    reason_code=reason_code,
+    message=message,
+    measured={
+      "status_line": status_line,
+      "setup_id": match.match_id,
+      "match_id": match.match_id,
+      "scanner_event_ts": match.event_ts,
+      "entry_low": match.entry_low,
+      "entry_high": match.entry_high,
+      "market_map_id": (
+        ""
+        if match.execution_eligibility is None
+        else match.execution_eligibility.market_map_id
+      ),
+      **(measured or {}),
+    },
+    publish_status=True,
+  )
+
+
 async def _persist_v7_confirmation_phase(
   client: Any,
   symbol: str,
@@ -4088,6 +4148,40 @@ async def _persist_v7_confirmation_phase(
     ),
     publish_status=False,
   )
+  if state.phase in {CONFIRMATION_EXPIRED, CONFIRMATION_INVALIDATED}:
+    pass
+  elif state.phase in {WAITING_RETEST, TRIGGER_PRICE_LEFT_ZONE}:
+    await _emit_setup_card_status(
+      client,
+      match,
+      status_line=(
+        "🟠 <b>WAITING RETEST</b> · executable quote is outside "
+        "the confirmed entry zone"
+      ),
+      reason_code=reason_code,
+      message=message,
+      measured=measured,
+    )
+  elif state.phase == CONFIRMATION_PUBLISHED:
+    await _emit_setup_card_status(
+      client,
+      match,
+      status_line=(
+        "🟢 <b>PLAN PUBLISHED</b> · TradePlan V7 sent to executor"
+      ),
+      reason_code=reason_code,
+      message=message,
+      measured=measured,
+    )
+  else:
+    await _emit_setup_card_status(
+      client,
+      match,
+      status_line="🟡 <b>PREFLIGHT</b> · dynamic execution checks in progress",
+      reason_code=reason_code,
+      message=message,
+      measured=measured,
+    )
   log.info(
     "v7 execution confirmation symbol=%s setup_id=%s match_id=%s "
     "direction=%s phase=%s executable_quote=%s quote_side=%s "
@@ -4179,13 +4273,14 @@ async def _publish_trade_plan_v7(
   structural-target-room helper against the latest Market Map; this is a
   final stale-context safety check, not a second strategy planner.
 
-  A formed setup may continue through final preflight when the side-aware
-  executable quote is inside or within the configured distance envelope.
-  Far setups persist WAITING_RETEST until price returns. A fresh M1 pattern
-  can anchor the stop wick, but proximity alone authorizes publication.
+  A formed setup may continue through final preflight only while the
+  side-aware executable quote is inside the scanner's raw entry zone plus
+  the configured spread tolerance. Outside setups persist WAITING_RETEST
+  until price returns. A fresh M1 pattern can refine timing and stop
+  anchoring, but distance outside the entry contract never authorizes entry.
 
   Returns the published plan_id, or None if not published (still outside the
-  distance envelope, thesis/zone already claimed by another setup, or a
+  entry contract, thesis/zone already claimed by another setup, or a
   guard/policy rejection - always recorded via _record_v7_build_rejected,
   never a bare silent return, except the ordinary retained retest wait).
   """
@@ -4211,12 +4306,53 @@ async def _publish_trade_plan_v7(
 
   setup_id = match.match_id
   setup_record = await load_setup(client, setup_id)
-  if setup_record is not None and setup_record.state in (
-    PLAN_BUILT, PLAN_PUBLISHED,
-  ):
+  if setup_record is not None and setup_record.state == PLAN_PUBLISHED:
     return None
+  if (
+    setup_record is not None
+    and setup_record.state == PLAN_BUILT
+    and await read_plan_state(client, _v7_plan_id(match)) == "published"
+  ):
+    await transition_setup(
+      client,
+      setup_id,
+      PLAN_PUBLISHED,
+      reason_code="v7_publish_reconciled",
+    )
+    return _v7_plan_id(match)
+  if setup_record is not None and setup_record.state in (
+    CONFIRMED, READY_EVENT_ENQUEUED,
+  ):
+    try:
+      setup_record, _changed = await transition_setup(
+        client,
+        setup_id,
+        WORKER_ACKNOWLEDGED,
+        reason_code="worker_strategy_match_acknowledged",
+      )
+      await increment_metric(
+        client,
+        "worker_setup_acknowledged",
+        symbol=symbol,
+      )
+      await _emit_setup_card_status(
+        client,
+        match,
+        status_line=(
+          "🟡 <b>PREFLIGHT</b> · dynamic execution checks in progress"
+        ),
+        reason_code="worker_strategy_match_acknowledged",
+        message="worker acknowledged the durable strategy match",
+      )
+    except SetupLifecycleError:
+      log.exception(
+        "v7 setup acknowledgement failed symbol=%s setup_id=%s",
+        symbol,
+        setup_id,
+      )
+      return None
   if setup_record is None or setup_record.state not in (
-    CONFIRMED, ARMED_WAITING_TRIGGER,
+    WORKER_ACKNOWLEDGED, ARMED_WAITING_TRIGGER, PLAN_BUILT,
   ):
     await _record_v7_build_rejected(
       client, symbol, match, "setup_not_confirmed",
@@ -4242,10 +4378,7 @@ async def _publish_trade_plan_v7(
     ),
     pip_size=pip_size,
   )
-  execution_eligible = executable_within_distance(
-    evidence,
-    settings.auto_trade_execute_max_distance_pips,
-  )
+  execution_eligible = evidence.inside
 
   if match.expires_at and now_ts >= int(match.expires_at):
     try:
@@ -4396,7 +4529,7 @@ async def _publish_trade_plan_v7(
     or int(match.issued_at)
   )
 
-  if setup_record.state == CONFIRMED:
+  if setup_record.state == WORKER_ACKNOWLEDGED:
     try:
       setup_record, _changed = await transition_setup(
         client,
@@ -4416,25 +4549,13 @@ async def _publish_trade_plan_v7(
       return None
 
     if not policy.reaction_family:
-      if not execution_eligible:
-        execution_state = new_state(
-          setup_id,
-          WAITING_RETEST,
-          now=now_ts,
-          zone_exited_at=quote_ts,
-        )
-        await _persist_v7_confirmation_phase(
-          client,
-          symbol,
-          match,
-          execution_state,
-          reason_code="waiting_retest_distance",
-          message="formed setup is outside the executable distance envelope",
-          evidence=evidence,
-          metric="setup_waiting_retest_distance",
-        )
-        return None
+      return None
     elif execution_eligible:
+      await increment_metric(
+        client,
+        "reaction_immediate_zone_eligible",
+        symbol=symbol,
+      )
       episode_id = deterministic_episode_id(
         setup_id,
         match.direction,
@@ -4455,8 +4576,8 @@ async def _publish_trade_plan_v7(
         symbol,
         match,
         execution_state,
-        reason_code="distance_execution_eligible",
-        message="formed reaction is within execution distance; M1 is optional",
+        reason_code="entry_contract_satisfied",
+        message="formed reaction is inside its entry zone; M1 is optional",
         evidence=evidence,
         metric="reaction_m5_immediate_eligible",
         status="checking",
@@ -4473,8 +4594,8 @@ async def _publish_trade_plan_v7(
         symbol,
         match,
         execution_state,
-        reason_code="waiting_retest_distance",
-        message="confirmed reaction is outside the executable distance envelope",
+        reason_code="waiting_retest_entry_zone",
+        message="confirmed reaction is outside its executable entry zone",
         evidence=evidence,
         metric="reaction_waiting_retest",
       )
@@ -4483,12 +4604,12 @@ async def _publish_trade_plan_v7(
   m1 = None if frames is None else frames.get("M1")
   if (
     policy.reaction_family
-    and setup_record.state == ARMED_WAITING_TRIGGER
+    and setup_record.state in {ARMED_WAITING_TRIGGER, PLAN_BUILT}
     and confirmation is None
   ):
     if execution_state is None:
       # Upgrade-safe: an already-armed setup from the pre-episode runtime
-      # starts a new distance-based retest observation.
+      # starts a new quote-in-zone retest observation.
       execution_state = new_state(
         setup_id,
         WAITING_RETEST,
@@ -4589,6 +4710,11 @@ async def _publish_trade_plan_v7(
         evidence=evidence,
         metric="reaction_zone_episode_started",
       )
+      await increment_metric(
+        client,
+        "reaction_zone_reentered",
+        symbol=symbol,
+      )
 
     if confirmation is None and execution_state.phase in {
       IN_ZONE_WAITING_M1,
@@ -4618,17 +4744,14 @@ async def _publish_trade_plan_v7(
         after_bar_ts=execution_state.last_evaluated_m1_ts,
       )
       if trigger is None:
-        confirmation_source = (
-          M5_AUTHORITATIVE
-          if policy.reaction_family else DISTANCE_PROXIMITY
-        )
+        confirmation_source = M5_AUTHORITATIVE
         trigger = ExecutionConfirmation(
           source=confirmation_source,
           pattern=match.reaction_type,
           bar_ts=quote_ts,
           wick_extreme=None,
           zone_episode_id=str(execution_state.episode_id or ""),
-          message="distance proximity authorized execution without M1",
+          message="entry-zone presence authorized execution without M1",
         )
         execution_state = new_state(
           setup_id,
@@ -4652,10 +4775,10 @@ async def _publish_trade_plan_v7(
           symbol,
           match,
           execution_state,
-          reason_code="distance_execution_eligible",
-          message="quote entered the executable distance envelope; M1 optional",
+          reason_code="entry_contract_satisfied",
+          message="quote entered the executable entry zone; M1 optional",
           evidence=evidence,
-          metric="reaction_distance_execution_eligible",
+          metric="reaction_entry_contract_satisfied",
           status="checking",
         )
       else:
@@ -4695,17 +4818,14 @@ async def _publish_trade_plan_v7(
           evidence=evidence,
           metric="reaction_stale_m1_ignored",
         )
-        confirmation_source = (
-          M5_AUTHORITATIVE
-          if policy.reaction_family else DISTANCE_PROXIMITY
-        )
+        confirmation_source = M5_AUTHORITATIVE
         trigger = ExecutionConfirmation(
           source=confirmation_source,
           pattern=match.reaction_type,
           bar_ts=quote_ts,
           wick_extreme=None,
           zone_episode_id=str(execution_state.episode_id or ""),
-          message="stale M1 ignored; distance proximity authorized execution",
+          message="stale M1 ignored; entry-zone presence authorized execution",
         )
         trigger_bar_ts = quote_ts
       if not execution_eligible:
@@ -4755,18 +4875,18 @@ async def _publish_trade_plan_v7(
         reason_code=(
           "m1_retest_triggered"
           if confirmation_source == M1_RETEST
-          else "distance_execution_eligible"
+          else "entry_contract_satisfied"
         ),
         message=(
           "fresh in-zone M1 trigger accepted for current retest episode"
           if confirmation_source == M1_RETEST
-          else "distance proximity authorized execution without M1"
+          else "entry-zone presence authorized execution without M1"
         ),
         evidence=evidence,
         metric=(
           "reaction_m1_trigger_found"
           if confirmation_source == M1_RETEST
-          else "reaction_distance_confirmation_ready"
+          else "reaction_entry_contract_ready"
         ),
         status="checking",
       )
@@ -4780,28 +4900,7 @@ async def _publish_trade_plan_v7(
       )
 
   if not policy.reaction_family and confirmation is None:
-    if setup_record.state != ARMED_WAITING_TRIGGER:
-      return None
-    if not execution_eligible:
-      execution_state = new_state(
-        setup_id,
-        WAITING_RETEST,
-        now=now_ts,
-        episode_id=(
-          None if execution_state is None else execution_state.episode_id
-        ),
-        zone_exited_at=quote_ts,
-      )
-      await _persist_v7_confirmation_phase(
-        client,
-        symbol,
-        match,
-        execution_state,
-        reason_code="waiting_retest_distance",
-        message="formed setup is outside the executable distance envelope",
-        evidence=evidence,
-        metric="setup_waiting_retest_distance",
-      )
+    if setup_record.state not in {ARMED_WAITING_TRIGGER, PLAN_BUILT}:
       return None
     trigger = (
       None
@@ -4817,16 +4916,9 @@ async def _publish_trade_plan_v7(
         cfg=settings,
       )
     )
-    trigger_bar_ts = quote_ts if trigger is None else int(trigger.bar_ts)
-    validity_bars = max(
-      1,
-      int(getattr(settings, "auto_trade_retest_trigger_validity_bars", 2)),
-    )
-    trigger_is_fresh = bool(
-      trigger is not None
-      and quote_ts <= trigger_bar_ts + 60 + validity_bars * 60
-    )
-    source = M1_RETEST if trigger_is_fresh else DISTANCE_PROXIMITY
+    if trigger is None:
+      return None
+    trigger_bar_ts = int(trigger.bar_ts)
     episode_id = deterministic_episode_id(
       setup_id,
       match.direction,
@@ -4835,15 +4927,12 @@ async def _publish_trade_plan_v7(
       confirmation_boundary,
     )
     confirmation = ExecutionConfirmation(
-      source=source,
-      pattern=None if not trigger_is_fresh else trigger.pattern,
+      source=M1_RETEST,
+      pattern=trigger.pattern,
       bar_ts=trigger_bar_ts,
-      wick_extreme=None if not trigger_is_fresh else trigger.wick_extreme,
+      wick_extreme=trigger.wick_extreme,
       zone_episode_id=episode_id,
-      message=(
-        "distance proximity authorized execution without M1"
-        if not trigger_is_fresh else trigger.message
-      ),
+      message=trigger.message,
     )
     execution_state = new_state(
       setup_id,
@@ -4854,7 +4943,7 @@ async def _publish_trade_plan_v7(
       last_inside_at=quote_ts,
       trigger_bar_ts=trigger_bar_ts,
       trigger_pattern=confirmation.pattern,
-      trigger_source=source,
+      trigger_source=M1_RETEST,
       trigger_consumed=True,
     )
     await _persist_v7_confirmation_phase(
@@ -4862,13 +4951,10 @@ async def _publish_trade_plan_v7(
       symbol,
       match,
       execution_state,
-      reason_code=(
-        "m1_soft_confirmation"
-        if trigger_is_fresh else "distance_execution_eligible"
-      ),
+      reason_code="m1_triggered",
       message=confirmation.message,
       evidence=evidence,
-      metric="setup_distance_execution_eligible",
+      metric="setup_m1_trigger_found",
       status="checking",
     )
 
@@ -4903,20 +4989,80 @@ async def _publish_trade_plan_v7(
     barrier_buffer_atr=float(settings.auto_trade_opposing_barrier_atr),
   )
   if not target_room.allowed:
+    eligibility = match.execution_eligibility
+    scanner_map_id = (
+      "" if eligibility is None else eligibility.market_map_id
+    )
+    current_map_id = str(getattr(market_map, "map_id", "") or "")
+    planned_entry = (
+      entry_reference
+      if eligibility is None
+      else eligibility.planned_entry_price
+    )
+    scanner_opposing = (
+      None if eligibility is None else eligibility.opposing_entry
+    )
+    worker_opposing = target_room.opposing_entry
+    opposing_changed = (
+      (scanner_opposing is None) != (worker_opposing is None)
+      or (
+        scanner_opposing is not None
+        and worker_opposing is not None
+        and (
+          not math.isclose(
+            float(scanner_opposing.get("low")),
+            float(getattr(worker_opposing, "lo")),
+          )
+          or not math.isclose(
+            float(scanner_opposing.get("high")),
+            float(getattr(worker_opposing, "hi")),
+          )
+        )
+      )
+    )
+    context_changed = bool(
+      scanner_map_id != current_map_id
+      or opposing_changed
+      or not math.isclose(
+        float(planned_entry),
+        float(entry_reference),
+        abs_tol=max(units.pip_size(symbol), 1e-9),
+      )
+    )
+    rejection_reason = (
+      "context_changed_target_room"
+      if context_changed
+      else "static_contract_violation_target_room"
+    )
+    rejection_measured = {
+      **target_room.measured,
+      "scanner_market_map_id": scanner_map_id,
+      "current_market_map_id": current_map_id,
+      "scanner_planned_entry_price": planned_entry,
+      "worker_entry_price": entry_reference,
+      "underlying_reason_code": target_room.reason_code,
+    }
+    if context_changed:
+      await increment_metric(
+        client,
+        "context_changed_revalidation_blocked",
+        symbol=symbol,
+        dimensions={"reason": rejection_reason},
+      )
     await _record_v7_build_rejected(
       client,
       symbol,
       match,
-      target_room.reason_code,
+      rejection_reason,
       target_room.message,
-      target_room.measured,
+      rejection_measured,
     )
     try:
       await transition_setup(
         client,
         setup_id,
         INVALIDATED,
-        reason_code=f"v7_{target_room.reason_code}",
+        reason_code=rejection_reason,
       )
     except SetupLifecycleError:
       log.exception(
@@ -4932,9 +5078,9 @@ async def _publish_trade_plan_v7(
       match_id=setup_id,
       correlation_id=setup_id,
       timeframe=match.source_tf,
-      reason_code=f"v7_{target_room.reason_code}",
+      reason_code=rejection_reason,
       message=target_room.message,
-      measured=target_room.measured,
+      measured=rejection_measured,
       publish_status=True,
     )
     return None
@@ -5165,7 +5311,13 @@ async def _publish_trade_plan_v7(
     return None
 
   try:
-    await transition_setup(client, setup_id, PLAN_BUILT, reason_code="v7_builder")
+    if setup_record.state != PLAN_BUILT:
+      await transition_setup(
+        client,
+        setup_id,
+        PLAN_BUILT,
+        reason_code="v7_builder",
+      )
     await publish_trade_plan(client, plan)
     await transition_setup(
       client, setup_id, PLAN_PUBLISHED, reason_code="v7_stream_publish",
@@ -5202,14 +5354,24 @@ async def _publish_trade_plan_v7(
     reason_code=(
       "m1_soft_confirmation"
       if confirmation.source == M1_RETEST
-      else "distance_execution_eligible"
+      else "entry_contract_satisfied"
     ),
-    message="TradePlan V7 published in the distance-eligible worker cycle",
+    message="TradePlan V7 published inside the executable entry contract",
     evidence=evidence,
-    metric="distance_eligible_plan_published",
+    metric="entry_contract_plan_published",
     status="candidate_published",
   )
   await increment_metric(client, "v7_plan_published", symbol=symbol)
+  if policy.reaction_family:
+    await increment_metric(
+      client,
+      (
+        "reaction_m1_stop_refinement_used"
+        if confirmation.source == M1_RETEST
+        else "reaction_non_m1_stop_used"
+      ),
+      symbol=symbol,
+    )
   await emit_lifecycle(
     client,
     "candidate_published",
@@ -6879,6 +7041,32 @@ async def _preflight_strategy_intent(
       message="intent symbol does not match worker symbol",
       subject=match,
     )
+  if intent.source == "scanner_strategy_match":
+    eligibility = match.execution_eligibility
+    if eligibility is None:
+      return _preflight_decision(
+        intent,
+        executable=False,
+        terminal=True,
+        stage="static_eligibility",
+        reason_code="static_eligibility_missing",
+        message="scanner match has no authoritative static eligibility",
+        subject=match,
+      )
+    if not eligibility.allowed:
+      return _preflight_decision(
+        intent,
+        executable=False,
+        terminal=True,
+        stage="static_eligibility",
+        reason_code="static_eligibility_contract_violation",
+        message="analysis-only scanner result reached the executable store",
+        measured={
+          "scanner_reason_code": eligibility.reason_code,
+          "market_map_id": eligibility.market_map_id,
+        },
+        subject=match,
+      )
   if match.confluence < max(1, settings.auto_trade_min_confluence):
     return _preflight_decision(
       intent,
@@ -6968,17 +7156,15 @@ async def _preflight_strategy_intent(
   )
   if (
     handoff_policy.m5_authoritative
-    and not executable_within_distance(
-      handoff_evidence,
-      settings.auto_trade_execute_max_distance_pips,
-    )
+    and not handoff_evidence.inside
     and not handoff_invalidated
     and (
       not match.expires_at
       or int(datetime.now(timezone.utc).timestamp()) < int(match.expires_at)
     )
   ):
-    # A far reaction is not executable, but the orchestrator must still
+    # An out-of-zone reaction is not executable, but the orchestrator must
+    # still
     # advance its handoff once so Python can persist WAITING_RETEST. Keep it
     # out of arbitration: a waiting reaction must not suppress an executable
     # intent on the other side.
@@ -6988,7 +7174,7 @@ async def _preflight_strategy_intent(
       terminal=False,
       stage="preflight",
       reason_code="reaction_confirmation_handoff",
-      message="reaction requires persisted waiting-retest handoff",
+      message="reaction is outside its entry contract and must wait",
       measured={
         "executable_quote": handoff_evidence.executable_quote,
         "quote_side": handoff_evidence.quote_side,
@@ -7137,6 +7323,7 @@ async def _handle_event(
   *,
   source: RedisOHLCSource | None = None,
   client: Any | None = None,
+  ready_match_id: str | None = None,
 ) -> AutoScalpDecision | None:
   parsed = _parse_bar_event(data)
   if parsed is None:
@@ -7181,6 +7368,11 @@ async def _handle_event(
     spot=spot,
   )
   scanner_strategy_matches = await _load_strategy_matches(client, symbol)
+  if ready_match_id is not None:
+    scanner_strategy_matches = [
+      item for item in scanner_strategy_matches
+      if item.match_id == ready_match_id
+    ]
   cached_market_map = decode_market_map(
     await client.get(market_map_key(symbol))
   )
@@ -7209,7 +7401,7 @@ async def _handle_event(
     market_map_decision,
   )
   strategy_matches = list(scanner_strategy_matches)
-  if market_map_decision.match is not None:
+  if ready_match_id is None and market_map_decision.match is not None:
     strategy_matches.append(market_map_decision.match)
   if settings.auto_trade_multi_match_enabled and strategy_matches:
     strategy_matches, _ = dedupe_matches(
@@ -7278,7 +7470,9 @@ async def _handle_event(
       symbol=symbol,
     )
     await increment_metric(client, "range_box_ineligible", symbol=symbol)
-  trend_selected = trend_decision.state == "candidate"
+  trend_selected = (
+    ready_match_id is None and trend_decision.state == "candidate"
+  )
   scale_context = (
     build_auto_scale_context(
       frames,
@@ -7564,6 +7758,23 @@ async def _handle_event(
         publish_status=preflight.terminal and not preflight.executable,
       )
       if preflight.terminal:
+        setup = await load_setup(client, routed_match.match_id)
+        if setup is not None and setup.state not in TERMINAL_STATES:
+          try:
+            await transition_setup(
+              client,
+              routed_match.match_id,
+              INVALIDATED,
+              reason_code=preflight.reason_code,
+            )
+          except SetupLifecycleError:
+            log.exception(
+              "terminal preflight lifecycle transition failed "
+              "symbol=%s setup_id=%s reason=%s",
+              symbol,
+              routed_match.match_id,
+              preflight.reason_code,
+            )
         await _consume_strategy_match(client, symbol, routed_match)
     else:
       await _record_private_route(
@@ -8128,6 +8339,281 @@ async def _handle_event(
     regime.state,
   )
   return decision
+
+
+async def _process_strategy_match_ready_entry(
+  client: Any,
+  stream_id: object,
+  fields: dict[object, object],
+  *,
+  source: RedisOHLCSource | None,
+) -> bool:
+  event = StrategyMatchReadyEvent.from_fields(fields)
+  if event is None:
+    await client.xack(READY_STREAM, READY_GROUP, stream_id)
+    await increment_metric(client, "strategy_match_ready_invalid")
+    return True
+
+  await increment_metric(
+    client,
+    "strategy_match_ready_received",
+    symbol=event.symbol,
+    dimensions={"recovery": str(event.recovery).lower()},
+  )
+  setup = await load_setup(client, event.setup_id)
+  now = int(datetime.now(timezone.utc).timestamp())
+  await save_ready_snapshot(
+    client,
+    event,
+    worker_received_at=now,
+  )
+  if setup is not None and setup.state in TERMINAL_STATES:
+    await client.xack(READY_STREAM, READY_GROUP, stream_id)
+    await increment_metric(
+      client,
+      "strategy_match_ready_acked_terminal",
+      symbol=event.symbol,
+    )
+    return True
+  if setup is not None and setup.state == PLAN_PUBLISHED:
+    await client.xack(READY_STREAM, READY_GROUP, stream_id)
+    await increment_metric(
+      client,
+      "strategy_match_ready_acked_existing_plan",
+      symbol=event.symbol,
+    )
+    return True
+  if now >= event.expires_at:
+    if setup is not None and setup.state not in TERMINAL_STATES:
+      try:
+        await transition_setup(
+          client,
+          event.setup_id,
+          EXPIRED,
+          reason_code="strategy_match_ready_expired",
+        )
+      except SetupLifecycleError:
+        log.exception(
+          "ready event expiry transition failed setup_id=%s",
+          event.setup_id,
+        )
+    await client.xack(READY_STREAM, READY_GROUP, stream_id)
+    await increment_metric(
+      client,
+      "strategy_match_ready_acked_expired",
+      symbol=event.symbol,
+    )
+    return True
+
+  match = await load_canonical_match(client, event)
+  if match is None:
+    await increment_metric(
+      client,
+      "strategy_match_ready_canonical_missing",
+      symbol=event.symbol,
+    )
+    return False
+  if (
+    match.symbol != event.symbol
+    or match.match_id != event.match_id
+    or match.direction != event.direction
+    or match.entry_low != event.entry_low
+    or match.entry_high != event.entry_high
+  ):
+    if setup is not None and setup.state not in TERMINAL_STATES:
+      try:
+        await transition_setup(
+          client,
+          event.setup_id,
+          INVALIDATED,
+          reason_code="strategy_match_ready_contract_mismatch",
+        )
+      except SetupLifecycleError:
+        log.exception(
+          "ready event mismatch transition failed setup_id=%s",
+          event.setup_id,
+        )
+    await client.xack(READY_STREAM, READY_GROUP, stream_id)
+    await increment_metric(
+      client,
+      "strategy_match_ready_contract_mismatch",
+      symbol=event.symbol,
+    )
+    return True
+
+  await _handle_event(
+    f"{event.symbol}:{EXECUTION_TIMEFRAME}:{event.scanner_event_ts}",
+    source=source,
+    client=client,
+    ready_match_id=event.match_id,
+  )
+  setup = await load_setup(client, event.setup_id)
+  durable = bool(
+    setup is not None
+    and setup.state in {
+      ARMED_WAITING_TRIGGER,
+      PLAN_PUBLISHED,
+      *TERMINAL_STATES,
+    }
+  )
+  if not durable:
+    return False
+  await client.xack(READY_STREAM, READY_GROUP, stream_id)
+  await increment_metric(
+    client,
+    "strategy_match_ready_acked",
+    symbol=event.symbol,
+    dimensions={"state": setup.state},
+  )
+  return True
+
+
+async def _consume_strategy_match_ready_once(
+  *,
+  client: Any | None = None,
+  source: RedisOHLCSource | None = None,
+  consumer: str | None = None,
+  block_ms: int = 0,
+  recover_pending: bool = False,
+  pending_min_idle_ms: int = 30_000,
+) -> bool:
+  """Consume at most one durable Scanner -> Worker wake-up."""
+  client = client or redis_state.get_client()
+  source = source or RedisOHLCSource(client)
+  consumer = consumer or ready_consumer_name()
+  await ensure_ready_group(client)
+  entries: list[tuple[object, dict[object, object]]] = []
+  if recover_pending:
+    claimed = await client.xautoclaim(
+      READY_STREAM,
+      READY_GROUP,
+      consumer,
+      min_idle_time=max(0, pending_min_idle_ms),
+      start_id="0-0",
+      count=1,
+    )
+    if len(claimed) >= 2:
+      entries = list(claimed[1])
+  if not entries:
+    read_kwargs = {"count": 1}
+    if block_ms > 0:
+      read_kwargs["block"] = block_ms
+    streams = await client.xreadgroup(
+      READY_GROUP,
+      consumer,
+      {READY_STREAM: ">"},
+      **read_kwargs,
+    )
+    if streams:
+      entries = list(streams[0][1])
+  if not entries:
+    return False
+  stream_id, fields = entries[0]
+  return await _process_strategy_match_ready_entry(
+    client,
+    stream_id,
+    fields,
+    source=source,
+  )
+
+
+async def _recover_unfinished_strategy_matches(
+  client: Any,
+) -> None:
+  now = int(datetime.now(timezone.utc).timestamp())
+  for symbol in _symbols():
+    for match in await _load_strategy_matches(client, symbol):
+      setup = await load_setup(client, match.match_id)
+      if (
+        setup is None
+        or setup.state not in {
+          CONFIRMED,
+          READY_EVENT_ENQUEUED,
+          WORKER_ACKNOWLEDGED,
+          ARMED_WAITING_TRIGGER,
+          PLAN_BUILT,
+        }
+        or match.expires_at <= now
+      ):
+        continue
+      plan_state = await read_plan_state(client, _v7_plan_id(match))
+      if plan_state == "published":
+        if setup.state == PLAN_BUILT:
+          try:
+            await transition_setup(
+              client,
+              match.match_id,
+              PLAN_PUBLISHED,
+              reason_code="v7_publish_reconciled",
+            )
+          except SetupLifecycleError:
+            log.exception(
+              "startup plan reconciliation failed setup_id=%s",
+              match.match_id,
+            )
+        continue
+      if match.thesis_id:
+        owner = await client.get(
+          active_thesis_key(symbol, str(match.thesis_id)),
+        )
+        if owner is not None:
+          owner_id = owner.decode() if isinstance(owner, bytes) else str(owner)
+          if owner_id != match.match_id:
+            await increment_metric(
+              client,
+              "strategy_match_ready_recovery_owner_blocked",
+              symbol=symbol,
+            )
+            continue
+      stream_id = await enqueue_strategy_match_ready(
+        client,
+        match,
+        market_map_id=(
+          ""
+          if match.execution_eligibility is None
+          else match.execution_eligibility.market_map_id
+        ),
+        recovery=True,
+      )
+      if stream_id is not None:
+        await increment_metric(
+          client,
+          "strategy_match_ready_pending_recovered",
+          symbol=symbol,
+        )
+
+
+async def strategy_match_ready_loop() -> None:
+  """Durably wake the worker when Scanner confirms an executable match."""
+  if not settings.auto_trade_enabled:
+    return
+  client = redis_state.get_client()
+  source = RedisOHLCSource(client)
+  consumer = ready_consumer_name()
+  await ensure_ready_group(client)
+  try:
+    await _recover_unfinished_strategy_matches(client)
+  except Exception:
+    log.exception("strategy-match ready startup reconciliation failed")
+  log.info(
+    "ApexVoid Algo consuming durable strategy matches stream=%s group=%s",
+    READY_STREAM,
+    READY_GROUP,
+  )
+  while True:
+    try:
+      consumed = await _consume_strategy_match_ready_once(
+        client=client,
+        source=source,
+        consumer=consumer,
+        block_ms=5_000,
+        recover_pending=True,
+      )
+      if not consumed:
+        continue
+    except Exception:
+      log.exception("strategy-match ready event failed; left pending for retry")
+      await increment_metric(client, "strategy_match_ready_failed")
 
 
 async def auto_scalp_loop() -> None:

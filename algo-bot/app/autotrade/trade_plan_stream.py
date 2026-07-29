@@ -25,6 +25,18 @@ from app.autotrade.trade_plan import TradePlan
 from app.core.config import settings
 
 
+_PUBLISH_PLAN_LUA = """
+if redis.call('EXISTS', KEYS[1]) == 1 then
+  return 'existing'
+end
+redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[2])
+redis.call('SET', KEYS[2], 'published', 'EX', ARGV[2])
+return redis.call(
+  'XADD', KEYS[3], 'MAXLEN', '~', ARGV[3], '*', 'payload', ARGV[1]
+)
+"""
+
+
 def plan_key(plan_id: str) -> str:
   return f"execution:plan:{plan_id}"
 
@@ -51,15 +63,46 @@ async def publish_trade_plan(client: Any, plan: TradePlan) -> str:
   payload = json.dumps(plan.to_dict(), separators=(",", ":"))
   ttl = max(60, plan.expires_at - plan.created_at)
 
-  event_id = await client.xadd(
-    settings.auto_trade_trade_plan_stream,
-    {"payload": payload},
-    maxlen=max(100, settings.auto_trade_stream_maxlen),
-    approximate=True,
+  key = plan_key(plan.plan_id)
+  state_key = plan_state_key(plan.plan_id)
+  stream = settings.auto_trade_trade_plan_stream
+  maxlen = max(100, settings.auto_trade_stream_maxlen)
+  try:
+    event_id = await client.eval(
+      _PUBLISH_PLAN_LUA,
+      3,
+      key,
+      state_key,
+      stream,
+      payload,
+      ttl,
+      maxlen,
+    )
+  except Exception:
+    if not getattr(
+      client,
+      "_apexvoid_allow_non_atomic_test_fallback",
+      False,
+    ):
+      raise
+    if await client.exists(key):
+      return "existing"
+    pipe = client.pipeline(transaction=True)
+    pipe.set(key, payload, ex=ttl)
+    pipe.set(state_key, "published", ex=ttl)
+    pipe.xadd(
+      stream,
+      {"payload": payload},
+      maxlen=maxlen,
+      approximate=True,
+    )
+    results = await pipe.execute()
+    event_id = results[-1]
+  return (
+    event_id.decode()
+    if isinstance(event_id, bytes)
+    else str(event_id)
   )
-  await client.set(plan_key(plan.plan_id), payload, ex=ttl)
-  await client.set(plan_state_key(plan.plan_id), "published", ex=ttl)
-  return event_id
 
 
 async def read_trade_plan(client: Any, plan_id: str) -> TradePlan | None:

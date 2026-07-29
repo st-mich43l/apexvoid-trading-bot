@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+import math
 from typing import Any, Sequence
 
 from app.analysis.detectors import DetectionResult
@@ -174,17 +175,47 @@ def resolve_actionability(
   gated: dict[int, ActionabilityDecision] = {}
   decisions: dict[int, list[ActionabilityDecision]] = {}
   conflicts: list[dict[str, Any]] = []
-  actionability_hard = bool(
-    getattr(cfg, "scanner_actionability_gate_enabled", False)
-  )
-  role_ambiguity_hard = bool(
-    getattr(cfg, "key_level_role_ambiguity_gate_enabled", False)
-  )
 
   def record(index: int, decision: ActionabilityDecision) -> None:
     decisions.setdefault(index, []).append(decision)
     if decision.hard_block:
       gated[index] = decision
+
+  def price(value: object) -> float:
+    try:
+      return float(value)
+    except (TypeError, ValueError):
+      return float("nan")
+
+  for index, result in enumerate(observed):
+    planned_entry = (
+      result.planned_entry_price
+      if result.planned_entry_price is not None
+      else result.current_price
+    )
+    values = {
+      "entry_low": price(result.entry_zone.low),
+      "entry_high": price(result.entry_zone.high),
+      "planned_entry_price": price(planned_entry),
+      "current_price": price(result.current_price),
+      "key_level": price(result.key_level),
+    }
+    if (
+      result.direction.upper() not in {"BUY", "SELL"}
+      or not all(math.isfinite(value) and value > 0 for value in values.values())
+      or values["entry_high"] <= values["entry_low"]
+    ):
+      record(index, _decision(
+        "invalid_geometry",
+        "setup has invalid direction or non-positive/non-finite price geometry",
+        {
+          "direction": result.direction,
+          **{
+            name: value if math.isfinite(value) else None
+            for name, value in values.items()
+          },
+        },
+      ))
 
   for index, result in enumerate(observed):
     if _structural(result) and market_map is None:
@@ -192,7 +223,6 @@ def resolve_actionability(
         "opposing_context_unavailable",
         "current Market Map context is unavailable",
         {"symbol": symbol, "htf_bias": getattr(context, "htf_bias", None)},
-        hard_block=actionability_hard,
       ))
 
   threshold = max(0.0, float(getattr(cfg, "scanner_conflict_overlap", 0.5)))
@@ -294,7 +324,6 @@ def resolve_actionability(
           room.reason_code,
           room.message,
           measured,
-          hard_block=actionability_hard,
           opposing_entry=room.opposing_entry,
         )
         record(index, decision)
@@ -317,7 +346,6 @@ def resolve_actionability(
           "key_level": float(result.key_level),
           "htf_bias": getattr(context, "htf_bias", None),
         },
-        hard_block=role_ambiguity_hard,
       )
       record(index, decision)
       if decision.hard_block:
@@ -327,7 +355,6 @@ def resolve_actionability(
         "key_level_role_flip_requires_retest",
         "accepted level break belongs to Break & Retest",
         {"key_level_role": role, "key_level": float(result.key_level)},
-        hard_block=actionability_hard,
       )
       record(index, decision)
       if decision.hard_block:
@@ -343,7 +370,6 @@ def resolve_actionability(
           "key_level_role": role,
           "direction": result.direction.upper(),
         },
-        hard_block=actionability_hard,
       )
       record(index, decision)
       if decision.hard_block:
@@ -357,7 +383,6 @@ def resolve_actionability(
         "counter_bias_disabled",
         "counter-bias setup is disabled by policy",
         {"htf_bias": getattr(context, "htf_bias", None)},
-        hard_block=actionability_hard,
       )
       record(index, decision)
       if decision.hard_block:

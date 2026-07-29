@@ -23,6 +23,12 @@ from app.analysis.actionability import (
   ActionabilityDecision,
   resolve_actionability,
 )
+from app.analysis.execution_eligibility import (
+  ANALYSIS_ONLY,
+  EXECUTION_ELIGIBILITY_VERSION,
+  STATIC_ELIGIBLE,
+  ExecutionEligibility,
+)
 from app.analysis.market_map import (
   MarketMap,
   build_map,
@@ -72,6 +78,7 @@ from app.autotrade.setup_lifecycle import (
   DISCOVERED,
   FORMING,
   INVALIDATED,
+  READY_EVENT_ENQUEUED,
   TOUCHED,
   WATCHING,
   SetupLifecycleError,
@@ -79,6 +86,7 @@ from app.autotrade.setup_lifecycle import (
   load_setup,
   transition_setup,
 )
+from app.autotrade.strategy_match_ready import enqueue_strategy_match_ready
 from app.autotrade.setup_card import kill_setup_card
 
 _PRE_CONFIRMED_CHAIN = (DISCOVERED, WATCHING, TOUCHED, FORMING, CONFIRMED)
@@ -495,6 +503,7 @@ def _build_one_strategy_match(
     structural_timeframe=result.structural_timeframe,
     htf_bias=str(getattr(ctx, "htf_bias", "") or ""),
     regime_kind=str(getattr(getattr(ctx, "regime", None), "kind", "") or ""),
+    execution_eligibility=result.execution_eligibility,
   )
   return match, None, {}
 
@@ -621,6 +630,8 @@ async def _sync_strategy_match(
   event_ts: str,
   ctx: DetectionContext,
   results: list[DetectionResult],
+  *,
+  require_static_eligibility: bool = False,
 ) -> StrategyMatch | None:
   key = strategy_match_key(symbol)
   matches_key = strategy_matches_key(symbol)
@@ -683,12 +694,20 @@ async def _sync_strategy_match(
     await client.delete(key)
     await client.delete(matches_key)
     return None
+  executable_results = (
+    [
+      result for result in results
+      if result.execution_eligibility is not None
+      and result.execution_eligibility.allowed
+    ]
+    if require_static_eligibility else results
+  )
   match, reason, measured = _build_strategy_match(
     symbol,
     tf,
     event_ts,
     ctx,
-    results,
+    executable_results,
   )
   if match is None:
     if not settings.auto_trade_multi_match_enabled:
@@ -765,7 +784,51 @@ async def _sync_strategy_match(
     symbol=symbol,
     dimensions={"count": str(len(combined))},
   )
+  canonical_ids = {item.match_id for item in combined}
   for tracked in incoming:
+    if tracked.match_id not in canonical_ids:
+      continue
+    if (
+      tracked.execution_eligibility is None
+      or not tracked.execution_eligibility.allowed
+    ):
+      continue
+    setup_record = await load_setup(client, tracked.match_id)
+    if setup_record is not None and setup_record.state == CONFIRMED:
+      ready_event_id = await enqueue_strategy_match_ready(
+        client,
+        tracked,
+        market_map_id=(
+          ""
+          if tracked.execution_eligibility is None
+          else tracked.execution_eligibility.market_map_id
+        ),
+      )
+      if ready_event_id is not None:
+        latest_setup = await load_setup(client, tracked.match_id)
+        if latest_setup is not None and latest_setup.state == CONFIRMED:
+          await transition_setup(
+            client,
+            tracked.match_id,
+            READY_EVENT_ENQUEUED,
+            reason_code="strategy_match_ready_enqueued",
+          )
+        await record_route_outcome(
+          client,
+          tracked,
+          stage="scanner",
+          status="queued",
+          reason_code="strategy_match_ready_enqueued",
+          message="durable worker-ready event persisted",
+          measured={
+            "ready_event_id": ready_event_id,
+            "scanner_event_ts": tracked.event_ts,
+            "entry_low": tracked.entry_low,
+            "entry_high": tracked.entry_high,
+          },
+          retained=True,
+          publish_status=False,
+        )
     await emit_lifecycle(
       client,
       "detected",
@@ -1167,11 +1230,18 @@ def _format_detection(
   lines = [
     f"🔎 <b>{escape(symbol)} {escape(tf)} · SETUP FORMING</b>",
     (
-      "🟡 <b>Algo bot CHECKING</b> · execution preflight pending"
-      if settings.auto_trade_enabled and execution_match is not None
-      else "🟡 <b>ANALYSIS ONLY</b> · no executable StrategyMatch"
+      "🟡 <b>QUEUED</b> · worker acknowledgement pending"
+      if (
+        settings.auto_trade_enabled
+        and execution_match is not None
+        and (
+          result.execution_eligibility is None
+          or result.execution_eligibility.allowed
+        )
+      )
+      else "🔵 <b>ANALYSIS ONLY</b> · no executable StrategyMatch"
       if settings.auto_trade_enabled
-      else "🟡 <b>ANALYSIS ONLY</b> · autonomous execution disabled"
+      else "🔵 <b>ANALYSIS ONLY</b> · autonomous execution disabled"
     ),
     (
       f"{direction_icon} <b>{escape(result.direction)} · "
@@ -1566,7 +1636,7 @@ def _reward_risk_pre_gate(
   result: DetectionResult,
 ) -> tuple[bool, dict[str, Any]]:
   """Apply only the shared policy's provisional R/R check before lifecycle."""
-  match, _reason, _measured = _build_one_strategy_match(
+  match, reason, build_measured = _build_one_strategy_match(
     symbol,
     tf,
     event_ts,
@@ -1574,7 +1644,24 @@ def _reward_risk_pre_gate(
     result,
   )
   if match is None:
-    return True, {}
+    measured = {
+      **build_measured,
+      "static_rejection_reason": reason or "match_build_failed",
+    }
+    static_build_blocks = {
+      "tier_c_analysis_only",
+      "insufficient_target_room",
+      "opposing_barrier_no_target",
+      "empty_target_config",
+      "unknown_strategy_policy",
+    }
+    if reason in static_build_blocks:
+      return False, measured
+    # Incomplete analysis context (for example ATR warmup) prevents match
+    # construction but remains visible as a non-executable observation.
+    measured["static_rejection_reason"] = None
+    measured["match_build_observation"] = reason or "match_build_failed"
+    return True, measured
   regime = str(getattr(getattr(ctx, "regime", None), "kind", "") or "")
   evaluation = evaluate_execution_policy(
     match,
@@ -1602,6 +1689,70 @@ def _reward_risk_pre_gate(
   return (
     math.isfinite(value) and value >= float(policy.min_reward_risk),
     measured,
+  )
+
+
+def _static_execution_eligibility(
+  result: DetectionResult,
+  market_map: MarketMap | None,
+  *,
+  allowed: bool,
+  reason_code: str,
+  message: str,
+  measured: dict[str, Any],
+  hard_block: bool,
+) -> ExecutionEligibility:
+  def number(name: str) -> float | None:
+    try:
+      value = float(measured[name])
+    except (KeyError, TypeError, ValueError):
+      return None
+    return value if math.isfinite(value) else None
+
+  fitted = tuple(result.provisional_targets_pips)
+  if result.target_cap_pips is not None:
+    fitted = tuple(
+      target for target in fitted
+      if target <= float(result.target_cap_pips) + 1e-9
+    )
+  opposing = None
+  if measured.get("opposing_low") is not None:
+    opposing = {
+      "low": measured.get("opposing_low"),
+      "high": measured.get("opposing_high"),
+      "tier": measured.get("opposing_tier"),
+      "tags": measured.get("opposing_tags") or [],
+    }
+  return ExecutionEligibility(
+    version=EXECUTION_ELIGIBILITY_VERSION,
+    allowed=allowed,
+    state=STATIC_ELIGIBLE if allowed else ANALYSIS_ONLY,
+    reason_code=reason_code,
+    message=message,
+    hard_block=hard_block,
+    direction=result.direction.upper(),
+    entry_low=float(result.entry_zone.low),
+    entry_high=float(result.entry_zone.high),
+    planned_entry_price=float(
+      result.planned_entry_price
+      if result.planned_entry_price is not None
+      else result.current_price
+    ),
+    fitted_targets_pips=fitted,
+    effective_target_pips=(
+      float(result.target_cap_pips)
+      if result.target_cap_pips is not None
+      else number("effective_target_pips")
+    ),
+    reward_risk=number("reward_risk"),
+    minimum_reward_risk=number("min_reward_risk"),
+    opposing_entry=opposing,
+    opposing_room_pips=number("room_pips"),
+    key_level_role=result.key_level_role,
+    bias_relationship=result.bias_relationship or result.mode,
+    market_map_id="" if market_map is None else market_map.map_id,
+    calculated_at=int(datetime.now(timezone.utc).timestamp()),
+    measured=dict(measured),
   )
 
 
@@ -2629,6 +2780,12 @@ async def _handle_event(
   )
   actionable_results = list(actionability.actionable)
   actionability_decisions = list(actionability.decisions)
+  public_results_by_key = {
+    _telemetry_result_key(result): result for result in observed_results
+  }
+  displayed_by_key = {
+    _telemetry_result_key(result): result for result in observed_results
+  }
   for result, decision in actionability_decisions:
     await increment_metric(
       client,
@@ -2650,6 +2807,20 @@ async def _handle_event(
       decision.reason_code,
       decision.measured,
     )
+    if decision.hard_block:
+      blocked = replace(
+        result,
+        execution_eligibility=_static_execution_eligibility(
+          result,
+          current_map,
+          allowed=False,
+          reason_code=decision.reason_code,
+          message=decision.message,
+          measured=decision.measured,
+          hard_block=True,
+        ),
+      )
+      displayed_by_key[_telemetry_result_key(result)] = blocked
   eligibility_gated: list[
     tuple[DetectionResult, str, dict[str, Any]]
   ] = []
@@ -2662,15 +2833,75 @@ async def _handle_event(
       ctx,
       result,
     )
-    if eligible:
-      reward_risk_eligible_results.append(result)
+    build_observation = measured.get("match_build_observation")
+    if build_observation:
+      blocked = replace(
+        result,
+        execution_eligibility=_static_execution_eligibility(
+          result,
+          current_map,
+          allowed=False,
+          reason_code=str(build_observation),
+          message="analysis context cannot construct an executable match",
+          measured=measured,
+          hard_block=True,
+        ),
+      )
+      # Keep observations in the normal digest so card capping/dedup remains
+      # unchanged. _sync_strategy_match filters on eligibility.allowed.
+      reward_risk_eligible_results.append(blocked)
+      displayed_by_key[_telemetry_result_key(result)] = blocked
+      await increment_metric(
+        client,
+        "static_eligibility_blocked",
+        symbol=symbol,
+        dimensions={"reason": str(build_observation)},
+      )
       continue
-    reason = (
-      "opposing_barrier_rr_insufficient"
-      if result.target_cap_pips is not None
-      else "rr_pre_gate"
+    if eligible:
+      ready = replace(
+        result,
+        execution_eligibility=_static_execution_eligibility(
+          result,
+          current_map,
+          allowed=True,
+          reason_code="static_eligibility_passed",
+          message="scanner static execution eligibility passed",
+          measured=measured,
+          hard_block=False,
+        ),
+      )
+      reward_risk_eligible_results.append(ready)
+      displayed_by_key[_telemetry_result_key(result)] = ready
+      continue
+    reason = str(
+      measured.get("static_rejection_reason")
+      or (
+        "opposing_barrier_rr_insufficient"
+        if result.target_cap_pips is not None
+        else "rr_pre_gate"
+      )
     )
     eligibility_gated.append((result, reason, measured))
+    displayed_by_key[_telemetry_result_key(result)] = replace(
+      result,
+      execution_eligibility=_static_execution_eligibility(
+        result,
+        current_map,
+        allowed=False,
+        reason_code=reason,
+        message=(
+          "setup is statically analysis-only"
+          if measured.get("static_rejection_reason")
+          else "provisional reward/risk is below the strategy minimum"
+        ),
+        measured=measured,
+        hard_block=True,
+      ),
+    )
+    await increment_metric(
+      client, "static_eligibility_blocked", symbol=symbol,
+    )
     await increment_metric(client, reason, symbol=symbol)
     log.info(
       "scanner result eligibility-gated symbol=%s tf=%s setup=%s "
@@ -2683,6 +2914,17 @@ async def _handle_event(
       measured.get("reward_risk"),
       measured.get("min_reward_risk"),
     )
+  for _result, decision in actionability.gated:
+    await increment_metric(
+      client,
+      "static_eligibility_blocked",
+      symbol=symbol,
+      dimensions={"reason": decision.reason_code},
+    )
+  observed_results = [
+    displayed_by_key.get(_telemetry_result_key(result), result)
+    for result in observed_results
+  ]
   digest, digest_conflicts = _digest_results(
     reward_risk_eligible_results,
   )
@@ -2694,18 +2936,25 @@ async def _handle_event(
     event_ts,
     ctx,
     digest,
+    require_static_eligibility=True,
   )
   execution_matches = (
     deserialize_matches(await client.get(strategy_matches_key(symbol)))
     if execution_match is not None
     else []
   )
+  analysis_only_results = [
+    displayed_by_key.get(_telemetry_result_key(result), result)
+    for result, decision in actionability.gated
+    if decision.hard_block
+  ]
+  notification_results = digest or analysis_only_results
   sent = await _notify_digest_once(
     client,
     symbol,
     exec_tf,
     ctx,
-    digest,
+    notification_results,
     notify,
     htf_order,
     market_map=current_map,
@@ -2713,6 +2962,10 @@ async def _handle_event(
     edit=edit,
     execution_matches=execution_matches,
   )
+  public_sent = [
+    public_results_by_key.get(_telemetry_result_key(result), result)
+    for result in sent
+  ]
   await _record_status(
     client,
     symbol=symbol,
@@ -2720,7 +2973,7 @@ async def _handle_event(
     event_ts=event_ts,
     frames=frames,
     detected=observed_results,
-    sent=sent,
+    sent=public_sent,
     status="ok",
     actionable=actionable_results,
     actionability_gated=actionability_decisions,
@@ -2735,13 +2988,13 @@ async def _handle_event(
     symbol,
     exec_tf,
     observed_results,
-    sent,
+    public_sent,
     conflicts,
     structure_gated,
     eligibility_gated,
     actionability_decisions,
   )
-  return sent
+  return public_sent
 
 
 async def scanner_loop() -> None:
