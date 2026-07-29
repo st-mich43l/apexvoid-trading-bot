@@ -417,6 +417,18 @@ def _build_one_strategy_match(
     )
     zone_id = result.confluence_zone_id
     level_id = result.confluence_zone_id
+  elif range_id is not None:
+    # Range Edge Scalp has no structural_id/confluence_zone_id (it isn't
+    # zone-reaction evidence), so it used to fall all the way through to
+    # strategy_match_id below - which, unlike confluence_setup_id, DOES
+    # fold in event_ts, making the edge's identity re-roll every bar
+    # instead of staying stable for "one range episode owns both edges,
+    # one setup per edge" (range_id itself is already stable: just
+    # symbol + range bounds, no timestamp - reuse confluence_setup_id's
+    # hash shape rather than inventing a second one).
+    match_id = confluence_setup_id(range_id, direction)
+    zone_id = range_id
+    level_id = range_id
   elif structural_id:
     match_id = structural_thesis_id(
       symbol=symbol,
