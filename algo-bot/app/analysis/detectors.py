@@ -33,6 +33,7 @@ from app.analysis.structure import (
   swings,
 )
 from app.analysis.trendlines import Trendline, value_at
+from app.analysis.execution_eligibility import ExecutionEligibility
 from app.analysis.structural_reaction_support import (
   bias_relationship,
   evaluate_structural_reaction,
@@ -345,6 +346,7 @@ class DetectionResult:
   provisional_targets_pips: tuple[int, ...] = ()
   target_cap_pips: float | None = None
   target_room_measured: dict[str, object] | None = None
+  execution_eligibility: ExecutionEligibility | None = None
 
 
 class SetupDetector(Protocol):

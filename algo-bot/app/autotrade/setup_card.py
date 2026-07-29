@@ -37,8 +37,45 @@ def forming_message_key(setup_id: str) -> str:
   return f"auto_trade:forming_message:{setup_id}"
 
 
+def forming_status_key(setup_id: str) -> str:
+  return f"auto_trade:forming_status:{setup_id}"
+
+
+def apply_forming_card_status(text: str, status_line: str) -> str:
+  lines = text.splitlines()
+  if len(lines) < 2 or not status_line:
+    return text
+  lines[1] = status_line
+  return "\n".join(lines)
+
+
+async def save_forming_card_status(
+  client,
+  setup_id: str,
+  status_line: str,
+  *,
+  ttl: int | None = None,
+) -> None:
+  await client.set(
+    forming_status_key(setup_id),
+    status_line,
+    ex=ttl or max(86400, settings.auto_trade_candidate_ttl),
+  )
+
+
+async def load_forming_card_status(
+  client,
+  setup_id: str,
+) -> str | None:
+  raw = await client.get(forming_status_key(setup_id))
+  if raw is None:
+    return None
+  text = raw.decode() if isinstance(raw, bytes) else str(raw)
+  return text or None
+
+
 async def load_forming_card(client, setup_id: str) -> dict | None:
-  """Returns {"chat_id": int, "message_id": int}, or None if unknown."""
+  """Return the card address and cached text, or None if unknown."""
   raw = await client.get(forming_message_key(setup_id))
   if not raw:
     return None
@@ -63,6 +100,7 @@ async def load_forming_card(client, setup_id: str) -> dict | None:
     return {
       "chat_id": data.get("chat_id") or settings.telegram_owner_id,
       "message_id": int(message_id),
+      "text": str(data.get("text") or ""),
     }
   except (TypeError, ValueError):
     return None
@@ -74,20 +112,25 @@ async def save_forming_card(
   *,
   chat_id: int,
   message_id: int,
+  text: str = "",
   ttl: int | None = None,
 ) -> None:
   effective_ttl = ttl or max(86400, settings.auto_trade_candidate_ttl)
   await client.set(
     forming_message_key(setup_id),
     json.dumps(
-      {"chat_id": chat_id, "message_id": message_id}, separators=(",", ":"),
+      {"chat_id": chat_id, "message_id": message_id, "text": text},
+      separators=(",", ":"),
     ),
     ex=effective_ttl,
   )
 
 
 async def clear_forming_card(client, setup_id: str) -> None:
-  await client.delete(forming_message_key(setup_id))
+  await client.delete(
+    forming_message_key(setup_id),
+    forming_status_key(setup_id),
+  )
 
 
 async def is_setup_terminal(client, setup_id: str) -> bool:
@@ -114,10 +157,21 @@ async def post_or_edit_forming_card(
   """
   if await is_setup_terminal(client, setup_id):
     return None
+  current_status = await load_forming_card_status(client, setup_id)
+  if current_status is not None:
+    text = apply_forming_card_status(text, current_status)
   existing = await load_forming_card(client, setup_id)
   if existing is not None:
     try:
       await edit_fn(existing["chat_id"], existing["message_id"], text)
+      await save_forming_card(
+        client,
+        setup_id,
+        chat_id=existing["chat_id"],
+        message_id=existing["message_id"],
+        text=text,
+        ttl=ttl,
+      )
       return existing["message_id"]
     except TelegramBadRequest:
       log.info(
@@ -128,9 +182,45 @@ async def post_or_edit_forming_card(
   sent = await send_fn(text, chat_id=chat_id)
   message_id = int(sent.message_id)
   await save_forming_card(
-    client, setup_id, chat_id=chat_id, message_id=message_id, ttl=ttl,
+    client,
+    setup_id,
+    chat_id=chat_id,
+    message_id=message_id,
+    text=text,
+    ttl=ttl,
   )
   return message_id
+
+
+async def edit_forming_card_status(
+  client,
+  setup_id: str,
+  status_line: str,
+  *,
+  edit_fn: EditFn,
+) -> bool:
+  """Replace only the lifecycle line on the setup's existing card."""
+  await save_forming_card_status(client, setup_id, status_line)
+  card = await load_forming_card(client, setup_id)
+  if card is None or not card.get("text"):
+    return False
+  text = apply_forming_card_status(str(card["text"]), status_line)
+  try:
+    await edit_fn(card["chat_id"], card["message_id"], text)
+  except TelegramBadRequest:
+    log.info(
+      "forming card status edit failed setup_id=%s", setup_id,
+      exc_info=True,
+    )
+    return False
+  await save_forming_card(
+    client,
+    setup_id,
+    chat_id=card["chat_id"],
+    message_id=card["message_id"],
+    text=text,
+  )
+  return True
 
 
 def _terminal_card_text(reason_code: str) -> str:
@@ -156,6 +246,7 @@ async def kill_setup_card(
     return
   card = await load_forming_card(client, setup_id)
   if card is None:
+    await clear_forming_card(client, setup_id)
     return
   try:
     await delete_fn(card["chat_id"], card["message_id"])

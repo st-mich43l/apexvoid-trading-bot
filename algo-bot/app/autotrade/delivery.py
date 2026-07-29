@@ -25,6 +25,7 @@ from app.bot.client import (
   send_scanner_with_retry,
 )
 from app.autotrade.setup_card import (
+  edit_forming_card_status,
   forming_message_key as _setup_card_forming_message_key,
   kill_setup_card,
   load_forming_card,
@@ -823,6 +824,19 @@ async def _deliver_auto_trade_event(
   send=None,
 ) -> bool:
   event_type = str(event.get("type") or "")
+  if event_type == "setup_status":
+    if profile != "internal":
+      return False
+    match_id = _event_match_id(event)
+    status_line = str((event.get("measured") or {}).get("status_line") or "")
+    if not match_id or not status_line:
+      return False
+    return await edit_forming_card_status(
+      client,
+      match_id,
+      status_line,
+      edit_fn=edit_scanner_message_text,
+    )
   if event_type in _CARD_TERMINAL_TYPES:
     # One forming card per setup (P4): reject/invalidate/expire deletes the
     # card and posts nothing - never a bare "EXECUTOR REJECTED" message.

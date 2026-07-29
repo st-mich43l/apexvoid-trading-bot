@@ -4,17 +4,17 @@ This is a distinct state machine from `app/autotrade/lifecycle.py`'s
 `LIFECYCLE_STATES`, which tracks V6 execution progress
 (order_planned/order_submitted/managing/...). This module tracks the
 *analysis* side: whether a structural reaction is still being watched,
-forming, confirmed, or has already produced a plan. Per
-docs/adr-trade-plan-v7-boundary.md, only a CONFIRMED setup may begin
-producing a TradePlan, and a setup already past CONFIRMED can never
+forming, confirmed, acknowledged by the worker, or has produced a plan. Per
+docs/adr-trade-plan-v7-boundary.md, a CONFIRMED setup must pass through the
+durable READY_EVENT_ENQUEUED and WORKER_ACKNOWLEDGED handoff before it can
+begin producing a TradePlan. A setup already past CONFIRMED can never
 transition back to it - that is what stops "old confirmations creating new
 plans repeatedly" and what stops repeated scanner evaluations from emitting
 a new FORMING Telegram card every detector cycle (see `transition_setup`'s
-``changed`` return value). CONFIRMED always passes through
-ARMED_WAITING_TRIGGER for lifecycle compatibility. A formed setup may continue
-to PLAN_BUILT when its executable quote is within the configured distance
-envelope; farther setups remain armed for a retest. Episode-scoped M1 evidence
-is optional and only refines timing/stop anchoring. The C# executor stays
+``changed`` return value). Scanner-confirmed reaction setups may continue to
+PLAN_BUILT when their executable quote is inside the raw entry zone plus
+spread tolerance; farther reactions remain armed for a retest. Non-reaction
+families retain their required M1 timing contract. The C# executor stays
 mechanical.
 
 Storage: `analysis:setup:{setup_id}` (see docs/redis-contract.md).
@@ -33,6 +33,8 @@ WATCHING = "watching"
 TOUCHED = "touched"
 FORMING = "forming"
 CONFIRMED = "confirmed"
+READY_EVENT_ENQUEUED = "ready_event_enqueued"
+WORKER_ACKNOWLEDGED = "worker_acknowledged"
 # Execution timing state: every CONFIRMED setup passes through this node.
 # Scanner-authoritative reactions may continue onward in the same worker call;
 # retests and non-reaction strategies wait here for their required M1 timing.
@@ -51,6 +53,8 @@ SETUP_STATES = (
   TOUCHED,
   FORMING,
   CONFIRMED,
+  READY_EVENT_ENQUEUED,
+  WORKER_ACKNOWLEDGED,
   ARMED_WAITING_TRIGGER,
   PLAN_BUILT,
   PLAN_PUBLISHED,
@@ -68,18 +72,33 @@ ANALYSIS_ONLY_STATES = frozenset({DISCOVERED, WATCHING, TOUCHED, FORMING})
 
 TERMINAL_STATES = frozenset({CANCELLED, INVALIDATED, EXPIRED, CONSUMED})
 
-# Only CONFIRMED may lead to PLAN_BUILT - this is the one edge that lets a
-# setup start producing a TradePlan. Every terminal state has no outgoing
-# edges: reaching CANCELLED/INVALIDATED/EXPIRED/CONSUMED through the normal
-# graph is final. Rearming (INVALIDATED/EXPIRED -> DISCOVERED) is
-# deliberately not an edge here - it requires calling `rearm_setup`
-# explicitly with a documented condition, never a plain `transition_setup`.
+# Only the durable CONFIRMED -> READY_EVENT_ENQUEUED ->
+# WORKER_ACKNOWLEDGED -> ARMED_WAITING_TRIGGER chain may lead to PLAN_BUILT.
+# Every terminal state has no outgoing edges. Rearming
+# (INVALIDATED/EXPIRED -> DISCOVERED) is deliberately not an edge here - it
+# requires `rearm_setup` with a documented condition.
 _TRANSITIONS: dict[str, frozenset[str]] = {
   DISCOVERED: frozenset({WATCHING, INVALIDATED, EXPIRED}),
   WATCHING: frozenset({TOUCHED, INVALIDATED, EXPIRED}),
   TOUCHED: frozenset({FORMING, WATCHING, INVALIDATED, EXPIRED}),
   FORMING: frozenset({CONFIRMED, WATCHING, INVALIDATED, EXPIRED}),
-  CONFIRMED: frozenset({ARMED_WAITING_TRIGGER, INVALIDATED, EXPIRED}),
+  CONFIRMED: frozenset({
+    READY_EVENT_ENQUEUED,
+    WORKER_ACKNOWLEDGED,
+    ARMED_WAITING_TRIGGER,
+    INVALIDATED,
+    EXPIRED,
+  }),
+  READY_EVENT_ENQUEUED: frozenset({
+    WORKER_ACKNOWLEDGED,
+    INVALIDATED,
+    EXPIRED,
+  }),
+  WORKER_ACKNOWLEDGED: frozenset({
+    ARMED_WAITING_TRIGGER,
+    INVALIDATED,
+    EXPIRED,
+  }),
   ARMED_WAITING_TRIGGER: frozenset({PLAN_BUILT, INVALIDATED, EXPIRED}),
   PLAN_BUILT: frozenset({PLAN_PUBLISHED, CANCELLED}),
   PLAN_PUBLISHED: frozenset({ARMED, CANCELLED, EXPIRED}),

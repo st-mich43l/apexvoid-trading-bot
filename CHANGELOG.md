@@ -12,6 +12,19 @@ dated section after deployment.
 ## Unreleased
 
 ### Added
+- Durable Scanner -> Worker handoff on Redis Stream
+  `auto_trade:strategy_match_ready` (schema v1, `algo-worker` consumer group)
+  with duplicate suppression, pending-entry recovery, canonical
+  `StrategyMatch` reload, startup reconciliation, and no-op acknowledgement
+  for terminal or already-published setups.
+- Typed scanner `ExecutionEligibility` contract. Invalid geometry, opposing
+  target room, ambiguous cross-side structure, key-role mismatch, broken
+  support/resistance routing, disabled counter-bias, tier C, and provisional
+  R/R failures remain auditable analysis-only observations but cannot create
+  an executable match, setup lifecycle, or queued card.
+- Truthful one-card lifecycle snapshots: `QUEUED`, `PREFLIGHT`,
+  `WAITING RETEST`, and `PLAN PUBLISHED`, including ready-event, scanner, and
+  worker timestamps plus quote/zone evidence in route telemetry.
 - Restart-safe reaction execution state at
   `auto_trade:execution_confirmation:{setup_id}`, including deterministic
   retest episode ids, side-aware zone evidence, consumed M1 timestamps and a
@@ -59,16 +72,21 @@ dated section after deployment.
 - `m1_trigger` (`app/analysis/m1_trigger.py`) supplies optional timing evidence
   for a setup already confirmed on M5: wick rejection, body close, strong
   close, pin bar, engulfing, or hammer/shooting star can re-anchor the stop to
-  the trigger wick. Distance eligibility does not require a qualifying M1
-  candle, and no candlestick logic crosses into `ctrader-engine`.
+  the trigger wick. Scanner-confirmed reactions do not require a qualifying
+  M1 candle while their executable quote is inside the confirmed zone;
+  non-reaction families retain their M1 timing policy. No candlestick logic
+  crosses into `ctrader-engine`.
 
 ### Changed
-- Execution is distance-based: a formed setup publishes immediately when the
-  side-aware executable quote is inside or within
-  `AUTO_TRADE_EXECUTE_MAX_DISTANCE_PIPS` (default `40`), and persists
-  `WAITING_RETEST` only while farther away. M1 is a soft timing/stop-anchor
-  input, no longer a publication precondition; the Python/C# executor cap
-  `AUTO_TRADE_MAX_ENTRY_DISTANCE_PIPS` now shares the same `40`-pip envelope.
+- Scanner-confirmed reactions publish in the durable worker attempt only when
+  BUY ask or SELL bid is inside the raw entry zone plus contract tolerance.
+  Nearby price outside the zone remains `WAITING_RETEST`; same-cycle zone
+  re-entry does not require M1, while non-reaction strategies keep their
+  family-specific M1 requirement. `AUTO_TRADE_MAX_ENTRY_DISTANCE_PIPS`
+  remains only a mechanical executor anti-chase ceiling.
+- TradePlan V7 persistence is atomic: deterministic plan key, published state,
+  and stream event are committed by one Redis Lua operation, so concurrent
+  M1/ready events and crash retries cannot publish two initial plans.
 - Confluence merge width is now `6` price units. The #140 actionability,
   key-level ambiguity, and range-context disagreement policies observe by
   default behind explicit flags, so same-side merged structures continue to
@@ -107,14 +125,17 @@ dated section after deployment.
   (`delivery_delete_on_terminal`, default on; falls back to editing the card
   to a neutral terminal state if Telegram's deletion window has passed).
   New `ARMED_WAITING_TRIGGER` setups expire via their own `expires_at` if
-  price never enters the executable distance envelope; a build rejection
-  after distance/M1 confirmation and a scanner-detected invalidation for a
+  price never enters the executable entry zone; a build rejection after
+  zone/M1 confirmation and a scanner-detected invalidation for a
   still-waiting setup both route through the same delete-the-card path
   instead of a "rejected" card. A position with no `setup_lifecycle` record
   (eg. an older V6 position) is unaffected - lifecycle replies fall back to
   the pre-P4 position-id reply chain exactly as before.
 
 ### Removed
+- Remove `AUTO_TRADE_EXECUTE_MAX_DISTANCE_PIPS` and `distance_proximity` as
+  positive execution authorization. Distance remains telemetry/ranking only
+  and cannot publish outside a strategy entry zone.
 - The private M1 range gate (`app/autotrade/gate.py`) and the M1
   mapped-zone reaction (`map_strategy.py::_select_reaction_detailed`'s M1
   touch/rejection detector) no longer originate trade candidates - M1 is
@@ -137,7 +158,7 @@ dated section after deployment.
 - Scanner-confirmed structural reactions no longer lose valid entries to a
   forced arm-only worker cycle. In-zone M5 confirmations now run final V7
   preflight and publication in the same call; reactions outside the execution
-  envelope wait for a distance-based retest. Optional M1 evaluation scans every
+  zone wait for a side-aware quote retest. Optional M1 evaluation scans every
   eligible unprocessed bar and applies one common zone-intersection gate to all
   six candle patterns, preventing stale triggers from anchoring a later entry.
 - Separate scanner observations from actionable setups before lifecycle
@@ -170,7 +191,7 @@ dated section after deployment.
 - Move the shared execution-policy reward/risk check into setup eligibility:
   setups below their family's `min_reward_risk` are recorded as
   `rr_pre_gate` but never confirm or form a card. The plan-build R/R check
-  remains authoritative after distance eligibility and optional M1 timing;
+  remains authoritative after quote-in-zone eligibility and optional M1 timing;
   a late failure expires and silently deletes the forming card instead of
   posting BLOCKED spam.
 - Broker SL/TP exits discovered by reconcile without a confirmed OrderType no
