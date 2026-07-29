@@ -2129,6 +2129,20 @@ async def _notify_digest_once(
       and index == 0
     ):
       match_for_card = execution_match
+    # Non-negotiable Telegram requirement: a result without a resolvable
+    # canonical StrategyMatch must never reach notify()/
+    # post_or_edit_forming_card() - not even as a MARKET OBSERVATION/
+    # ANALYSIS ONLY card.
+    if match_for_card is None:
+      log.info(
+        "scanner card suppressed: no executable StrategyMatch "
+        "symbol=%s tf=%s setup=%s direction=%s",
+        symbol,
+        tf,
+        result.setup,
+        result.direction,
+      )
+      continue
     text = _format_detection(
       symbol,
       tf,
@@ -2139,23 +2153,20 @@ async def _notify_digest_once(
       market_map,
       match_for_card,
     )
-    if match_for_card is not None:
-      # One forming card per setup (P4): re-detection of the same setup_id
-      # edits its existing card instead of posting a new one, and a
-      # terminal (rejected/invalidated/expired) setup is never re-carded -
-      # both enforced inside post_or_edit_forming_card.
-      await post_or_edit_forming_card(
-        client,
-        match_for_card.match_id,
-        text,
-        chat_id=settings.telegram_owner_id,
-        send_fn=notify,
-        edit_fn=edit or edit_scanner_message_text,
-        delete_fn=delete_scanner_message,
-      )
-      match_ids_by_card[index] = match_for_card.match_id
-    else:
-      await notify(text, chat_id=settings.telegram_owner_id)
+    # One forming card per setup (P4): re-detection of the same setup_id
+    # edits its existing card instead of posting a new one, and a terminal
+    # (rejected/invalidated/expired) setup is never re-carded - both
+    # enforced inside post_or_edit_forming_card.
+    await post_or_edit_forming_card(
+      client,
+      match_for_card.match_id,
+      text,
+      chat_id=settings.telegram_owner_id,
+      send_fn=notify,
+      edit_fn=edit or edit_scanner_message_text,
+      delete_fn=delete_scanner_message,
+    )
+    match_ids_by_card[index] = match_for_card.match_id
   await _track_active_setups(client, symbol, tf, cards, match_ids_by_card)
   return cards
 
@@ -2981,18 +2992,20 @@ async def _handle_event(
     if execution_match is not None
     else []
   )
-  analysis_only_results = [
-    displayed_by_key.get(_telemetry_result_key(result), result)
-    for result, decision in actionability.gated
-    if decision.hard_block
-  ]
-  notification_results = digest or analysis_only_results
+  # Non-negotiable Telegram requirement: an observation with no executable
+  # StrategyMatch must never reach Telegram, in any form. There used to be a
+  # `notification_results = digest or analysis_only_results` fallback here
+  # that substituted hard-blocked/gated results (ANALYSIS ONLY / MARKET
+  # OBSERVATION cards) whenever `digest` was empty - deleted, not
+  # weakened. Analysis-only observations remain fully visible in
+  # telemetry/scan reports/metrics via observed_results/actionability
+  # below; they are simply never candidates for a Telegram send.
   sent = await _notify_digest_once(
     client,
     symbol,
     exec_tf,
     ctx,
-    notification_results,
+    digest,
     notify,
     htf_order,
     market_map=current_map,
