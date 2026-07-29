@@ -59,6 +59,23 @@ def _zone_overlap_ratio(first: DetectionResult, second: DetectionResult) -> floa
   return overlap / smaller if smaller > 0 else 1.0
 
 
+def _zone_gap(first: DetectionResult, second: DetectionResult) -> float:
+  """Distance between the nearest edges of two bands - 0.0 if they overlap
+  (including merely touching, eg. one band's high == the other's low).
+  """
+  overlap = (
+    min(first.entry_zone.high, second.entry_zone.high)
+    - max(first.entry_zone.low, second.entry_zone.low)
+  )
+  if overlap >= 0:
+    return 0.0
+  return (
+    second.entry_zone.low - first.entry_zone.high
+    if second.entry_zone.low > first.entry_zone.high
+    else first.entry_zone.low - second.entry_zone.high
+  )
+
+
 def _band_overlap(
   first_low: float,
   first_high: float,
@@ -225,8 +242,16 @@ def resolve_actionability(
         {"symbol": symbol, "htf_bias": getattr(context, "htf_bias", None)},
       ))
 
-  threshold = max(0.0, float(getattr(cfg, "scanner_conflict_overlap", 0.5)))
-  margin = max(0.0, float(getattr(cfg, "scanner_conflict_margin", 1.0)))
+  # P0 zone/M1 simplification: a contested corridor is one simple
+  # structural rule, not a confluence-margin tiebreak. BUY and SELL bands
+  # that overlap at all, or whose nearest edges sit within
+  # contested_corridor_gap_atr ATRs of each other, are never independent
+  # opportunities and never resolved by picking whichever scored higher -
+  # both are always suppressed until price action itself resolves the
+  # corridor (a range validates into distinct edges, price accepts
+  # outside it, one side is structurally invalidated, or a fresh
+  # liquidity sweep + reclaim creates a directional setup elsewhere).
+  gap_threshold = max(0.0, float(getattr(cfg, "contested_corridor_gap_atr", 0.5))) * max(0.0, atr)
   for first_index, first in enumerate(observed):
     if first_index in gated:
       continue
@@ -238,53 +263,27 @@ def resolve_actionability(
       second = observed[second_index]
       if first.direction.upper() == second.direction.upper():
         continue
-      overlap = _zone_overlap_ratio(first, second)
-      map_conflict = _map_conflict(first, second, entries)
-      # Same-side results have already merged. Only a genuine overlapping
-      # BUY/SELL geometry may hard-gate; distant map context is observation.
-      if overlap < threshold:
+      gap = _zone_gap(first, second)
+      if gap > gap_threshold:
         continue
-      difference = float(first.confluence) - float(second.confluence)
-      if abs(difference) < margin:
-        measured = {
-          "entry_overlap_ratio": overlap,
-          "map_structure_conflict": map_conflict,
-          "quality_margin": abs(difference),
-          "required_margin": margin,
-        }
-        conflict_decision = _decision(
-          "opposing_conflict_ambiguous",
-          "opposing structural observations overlap without a decisive side",
-          measured,
-        )
-        record(first_index, conflict_decision)
-        record(second_index, conflict_decision)
-        stronger, weaker = first, second
-        outcome = "both_dropped"
-      else:
-        winner_index, loser_index = (
-          (first_index, second_index)
-          if difference > 0
-          else (second_index, first_index)
-        )
-        stronger = observed[winner_index]
-        weaker = observed[loser_index]
-        record(loser_index, _decision(
-          "opposing_conflict_weaker",
-          "opposing structural observation lost the quality margin",
-          {
-            "entry_overlap_ratio": overlap,
-            "map_structure_conflict": map_conflict,
-            "quality_margin": abs(difference),
-            "required_margin": margin,
-            "winner_direction": stronger.direction,
-          },
-        ))
-        outcome = "stronger_kept"
+      map_conflict = _map_conflict(first, second, entries)
+      measured = {
+        "entry_overlap_ratio": _zone_overlap_ratio(first, second),
+        "nearest_gap": gap,
+        "gap_threshold": gap_threshold,
+        "map_structure_conflict": map_conflict,
+      }
+      conflict_decision = _decision(
+        "contested_corridor",
+        "opposing structural bands form one contested corridor",
+        measured,
+      )
+      record(first_index, conflict_decision)
+      record(second_index, conflict_decision)
       conflicts.append({
-        "outcome": outcome,
-        "a": _result_payload(stronger),
-        "b": _result_payload(weaker),
+        "outcome": "contested_corridor",
+        "a": _result_payload(first),
+        "b": _result_payload(second),
       })
 
   actionable: list[DetectionResult] = []

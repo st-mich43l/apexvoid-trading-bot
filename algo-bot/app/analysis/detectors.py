@@ -2015,15 +2015,29 @@ def key_level_reaction(ctx: DetectionContext) -> DetectionResult | None:
     # reinterpreted as an ordinary reaction in the opposite direction.
     if role in {ROLE_BROKEN_SUPPORT, ROLE_BROKEN_RESISTANCE}:
       continue
-    directions = (
-      ("BUY",)
-      if role == ROLE_SUPPORT
-      else ("SELL",)
-      if role == ROLE_RESISTANCE
-      # Keep ambiguous local reactions as observations for replay/telemetry.
-      # The actionability boundary rejects them before lifecycle creation.
-      else ("BUY", "SELL")
-    )
+    band_low = level.price - zone_band
+    band_high = level.price + zone_band
+    if role == ROLE_SUPPORT:
+      directions = ("BUY",)
+    elif role == ROLE_RESISTANCE:
+      directions = ("SELL",)
+    elif price > band_high:
+      # No explicit kind/breakout evidence either way (ROLE_AMBIGUOUS), but
+      # the level sits below current price - deterministic support
+      # hypothesis, not a confluence-margin guess.
+      directions = ("BUY",)
+    elif price < band_low:
+      # Level sits above current price - deterministic resistance
+      # hypothesis.
+      directions = ("SELL",)
+    else:
+      # Price is inside the level's own band - direction must come from
+      # which side actually confirms an M5 reaction, never a raw-
+      # confluence tiebreak. If both directions independently confirm,
+      # that is a genuine contradiction, not a coin flip: the collection
+      # loop below discards this level entirely rather than picking one.
+      directions = ("BUY", "SELL")
+    confirmed_here: list[DetectionResult] = []
     for direction in directions:
       conf = evaluate_structural_reaction(
         df,
@@ -2078,10 +2092,18 @@ def key_level_reaction(ctx: DetectionContext) -> DetectionResult | None:
       )
       if candidate is not None:
         candidate = replace(candidate, key_level_role=role)
-      if candidate is not None and (
-        best is None or candidate.confluence > best.confluence
-      ):
-        best = candidate
+        confirmed_here.append(candidate)
+    if len(confirmed_here) != 1:
+      # Zero confirmations: nothing to keep. Two confirmations (only
+      # reachable from the "price inside the band" branch above): both
+      # sides independently confirmed a reaction off the same level in the
+      # same bar - a genuine contradiction, not something a confluence-
+      # score tiebreak should silently resolve. Neither survives; this
+      # level produces no opportunity until price action resolves it.
+      continue
+    candidate = confirmed_here[0]
+    if best is None or candidate.confluence > best.confluence:
+      best = candidate
   return best
 
 
@@ -2315,17 +2337,20 @@ def trendline_reaction(ctx: DetectionContext) -> DetectionResult | None:
 
 
 
+# P0 zone/M1 simplification: exactly three live setup families -
+# key_level_reaction/demand_zone_reaction/supply_zone_reaction fold into
+# the "Zone Reaction" family (key level, supply/demand, order block, and
+# FVG are evidence tags on these, not separate strategies -
+# app/analysis/detectors.py's own zone/OB/FVG inputs are already merged
+# this way, see _sd_zone_reaction), range_edge_scalp is the "Range Edge
+# Scalp" family. session_level_reaction/trendline_reaction/box_breakout/
+# trend_pullback/break_retest/snap_back/momentum_ride/fade_scalp are
+# deliberately NOT registered here - their code remains defined above for
+# replay compatibility only (see docs/p0-simple-zone-m1-baseline-map.md
+# section 4), they must never produce a live StrategyMatch/card/plan.
 DEFAULT_DETECTORS: tuple[SetupDetector, ...] = (
   key_level_reaction,
   demand_zone_reaction,
   supply_zone_reaction,
-  session_level_reaction,
-  trendline_reaction,
-  box_breakout,
-  trend_pullback,
-  break_retest,
-  snap_back,
-  momentum_ride,
   range_edge_scalp,
-  fade_scalp,
 )

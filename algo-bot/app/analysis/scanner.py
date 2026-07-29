@@ -417,6 +417,18 @@ def _build_one_strategy_match(
     )
     zone_id = result.confluence_zone_id
     level_id = result.confluence_zone_id
+  elif range_id is not None:
+    # Range Edge Scalp has no structural_id/confluence_zone_id (it isn't
+    # zone-reaction evidence), so it used to fall all the way through to
+    # strategy_match_id below - which, unlike confluence_setup_id, DOES
+    # fold in event_ts, making the edge's identity re-roll every bar
+    # instead of staying stable for "one range episode owns both edges,
+    # one setup per edge" (range_id itself is already stable: just
+    # symbol + range bounds, no timestamp - reuse confluence_setup_id's
+    # hash shape rather than inventing a second one).
+    match_id = confluence_setup_id(range_id, direction)
+    zone_id = range_id
+    level_id = range_id
   elif structural_id:
     match_id = structural_thesis_id(
       symbol=symbol,
@@ -1933,18 +1945,22 @@ def _conflict_record(
 def _suppress_overlaps(
   results: list[DetectionResult],
 ) -> tuple[list[DetectionResult], list[dict[str, Any]]]:
-  """Same-direction overlap is a duplicate - keep the higher-ranked, drop the
-  other. Opposite-direction overlap is a contradiction: two credible,
-  contradictory readings mean the market is undecided, so unless the
-  higher-ranked result's confluence decisively beats the other's, both are
-  dropped rather than shipping either as a coin flip.
+  """Same-direction overlap is a duplicate - keep the higher-ranked, drop
+  the other.
+
+  P0 zone/M1 simplification: this used to ALSO re-run its own opposing-
+  direction confluence-margin tiebreak here, duplicating (with a slightly
+  different overlap-ratio implementation) what
+  actionability.py::resolve_actionability's contested-corridor rule
+  already resolved earlier in the same request - by the time results
+  reach this function they have already survived that check, so a second,
+  independent cross-side gate here could only ever produce a different
+  answer than the authoritative one upstream. Deleted, not duplicated.
   """
   ordered = sorted(results, key=_result_rank)
   selected: list[DetectionResult] = []
   conflicts: list[dict[str, Any]] = []
   same_threshold = max(0.0, settings.alert_overlap_suppress)
-  conflict_threshold = max(0.0, settings.scanner_conflict_overlap)
-  margin = max(0.0, settings.scanner_conflict_margin)
   for result in ordered:
     same_direction_duplicate = any(
       result.direction == kept.direction
@@ -1966,24 +1982,6 @@ def _suppress_overlaps(
       for kept in selected
     )
     if same_direction_duplicate:
-      continue
-    # `selected` is built in rank order, so the first opposing overlap found
-    # is always the strongest (highest-ranked) survivor so far.
-    opposing = next(
-      (
-        kept for kept in selected
-        if result.direction != kept.direction
-        and _zone_overlap_ratio(result.entry_zone, kept.entry_zone)
-          >= conflict_threshold
-      ),
-      None,
-    )
-    if opposing is not None:
-      if opposing.confluence - result.confluence >= margin:
-        conflicts.append(_conflict_record(opposing, result, "stronger_kept"))
-        continue
-      selected.remove(opposing)
-      conflicts.append(_conflict_record(opposing, result, "both_dropped"))
       continue
     selected.append(result)
   return selected, conflicts
@@ -2129,6 +2127,20 @@ async def _notify_digest_once(
       and index == 0
     ):
       match_for_card = execution_match
+    # Non-negotiable Telegram requirement: a result without a resolvable
+    # canonical StrategyMatch must never reach notify()/
+    # post_or_edit_forming_card() - not even as a MARKET OBSERVATION/
+    # ANALYSIS ONLY card.
+    if match_for_card is None:
+      log.info(
+        "scanner card suppressed: no executable StrategyMatch "
+        "symbol=%s tf=%s setup=%s direction=%s",
+        symbol,
+        tf,
+        result.setup,
+        result.direction,
+      )
+      continue
     text = _format_detection(
       symbol,
       tf,
@@ -2139,23 +2151,20 @@ async def _notify_digest_once(
       market_map,
       match_for_card,
     )
-    if match_for_card is not None:
-      # One forming card per setup (P4): re-detection of the same setup_id
-      # edits its existing card instead of posting a new one, and a
-      # terminal (rejected/invalidated/expired) setup is never re-carded -
-      # both enforced inside post_or_edit_forming_card.
-      await post_or_edit_forming_card(
-        client,
-        match_for_card.match_id,
-        text,
-        chat_id=settings.telegram_owner_id,
-        send_fn=notify,
-        edit_fn=edit or edit_scanner_message_text,
-        delete_fn=delete_scanner_message,
-      )
-      match_ids_by_card[index] = match_for_card.match_id
-    else:
-      await notify(text, chat_id=settings.telegram_owner_id)
+    # One forming card per setup (P4): re-detection of the same setup_id
+    # edits its existing card instead of posting a new one, and a terminal
+    # (rejected/invalidated/expired) setup is never re-carded - both
+    # enforced inside post_or_edit_forming_card.
+    await post_or_edit_forming_card(
+      client,
+      match_for_card.match_id,
+      text,
+      chat_id=settings.telegram_owner_id,
+      send_fn=notify,
+      edit_fn=edit or edit_scanner_message_text,
+      delete_fn=delete_scanner_message,
+    )
+    match_ids_by_card[index] = match_for_card.match_id
   await _track_active_setups(client, symbol, tf, cards, match_ids_by_card)
   return cards
 
@@ -2981,18 +2990,20 @@ async def _handle_event(
     if execution_match is not None
     else []
   )
-  analysis_only_results = [
-    displayed_by_key.get(_telemetry_result_key(result), result)
-    for result, decision in actionability.gated
-    if decision.hard_block
-  ]
-  notification_results = digest or analysis_only_results
+  # Non-negotiable Telegram requirement: an observation with no executable
+  # StrategyMatch must never reach Telegram, in any form. There used to be a
+  # `notification_results = digest or analysis_only_results` fallback here
+  # that substituted hard-blocked/gated results (ANALYSIS ONLY / MARKET
+  # OBSERVATION cards) whenever `digest` was empty - deleted, not
+  # weakened. Analysis-only observations remain fully visible in
+  # telemetry/scan reports/metrics via observed_results/actionability
+  # below; they are simply never candidates for a Telegram send.
   sent = await _notify_digest_once(
     client,
     symbol,
     exec_tf,
     ctx,
-    notification_results,
+    digest,
     notify,
     htf_order,
     market_map=current_map,
