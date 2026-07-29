@@ -160,6 +160,11 @@ dated section after deployment.
   longer construct an `ExecutionIntent`.
 
 ### Fixed
+- cTrader now verifies the configured market-data account broker before
+  symbol resolution, historical backfill or live subscription. A token that
+  also grants an IC Markets account can no longer silently feed IC bars while
+  the executor is configured for FP Markets; feed and execution both use the
+  configured FP Markets account.
 - Restore end-to-end V7 runtime consistency: Python no longer discards a
   successful `_publish_trade_plan_v7` result, published setups reconcile
   instead of re-entering preflight/invalidation, and terminal lifecycle

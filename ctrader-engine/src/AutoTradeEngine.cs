@@ -6712,10 +6712,7 @@ public sealed class AutoTradeEngine(
     }
     if (
       !string.IsNullOrWhiteSpace(options.ExpectedBroker)
-      && !NormalizeBrokerIdentity(account.BrokerName).Contains(
-        NormalizeBrokerIdentity(options.ExpectedBroker),
-        StringComparison.Ordinal
-      )
+      && !BrokerIdentity.Matches(account.BrokerName, options.ExpectedBroker)
     )
     {
       throw new AutoTradeConfigurationException(
@@ -6724,10 +6721,6 @@ public sealed class AutoTradeEngine(
       );
     }
   }
-
-  private static string NormalizeBrokerIdentity(string value) => string.Concat(
-    value.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant)
-  );
 
   private ExposurePolicy EffectiveExposurePolicy()
   {

@@ -99,6 +99,7 @@ services:
       CTRADER_ACCESS_TOKEN: {{ apexvoid_trading_bot_env.CTRADER_ACCESS_TOKEN | mandatory | string | to_json }}
       CTRADER_REFRESH_TOKEN: {{ apexvoid_trading_bot_env.CTRADER_REFRESH_TOKEN | mandatory | string | to_json }}
       CTRADER_ACCOUNT_ID: {{ apexvoid_trading_bot_env.CTRADER_ACCOUNT_ID | mandatory | string | to_json }}
+      CTRADER_EXPECTED_BROKER: {{ apexvoid_trading_bot_env.CTRADER_EXPECTED_BROKER | default('fpmarkets') | string | to_json }}
       CTRADER_HOST: {{ apexvoid_trading_bot_env.CTRADER_HOST | default('demo.ctraderapi.com') | string | to_json }}
       CTRADER_PORT: {{ apexvoid_trading_bot_env.CTRADER_PORT | default('5035') | string | to_json }}
       CTRADER_SYMBOL: {{ apexvoid_trading_bot_env.CTRADER_SYMBOL | default('XAUUSD') | string | to_json }}
