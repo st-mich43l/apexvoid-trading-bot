@@ -4827,11 +4827,24 @@ async def _publish_trade_plan_v7(
             trigger_source=execution_state.trigger_source,
             trigger_consumed=execution_state.trigger_consumed,
           )
-          await save_execution_confirmation(
-            client,
-            execution_state,
-            expires_at=match.expires_at,
-          )
+        # P0-8: this cycle's preflight pass already wrote the transient
+        # "reaction_confirmation_handoff" reason into route_outcome before
+        # this function ever ran - _preflight_decision's handoff branch
+        # fires every cycle a reaction stays outside its zone, but this
+        # function (the intended correction) previously only re-persisted
+        # waiting_retest_entry_zone on the one-time WORKER_ACKNOWLEDGED
+        # transition tick. Every later cycle left the stale handoff reason
+        # as the permanent last word in route_outcome. Re-persist here
+        # every cycle so the durable reason always wins back.
+        await _persist_v7_confirmation_phase(
+          client,
+          symbol,
+          match,
+          execution_state,
+          reason_code="waiting_retest_entry_zone",
+          message="confirmed reaction is outside its executable entry zone",
+          evidence=evidence,
+        )
         return None
       episode_id = deterministic_episode_id(
         setup_id,
