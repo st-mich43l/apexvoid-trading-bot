@@ -18,6 +18,7 @@ from app.analysis.scanner import scanner_loop
 from app.analysis.market_map_delivery import market_map_scan_loop
 from app.autotrade.delivery import auto_trade_events_loop
 from app.autotrade.setup_expiry_sweeper import setup_expiry_sweeper_loop
+from app.autotrade.startup_reconciliation import reconcile_startup_state
 from app.autotrade.worker import auto_scalp_loop, strategy_match_ready_loop
 from app.autotrade.config_health import (
   python_manifest,
@@ -64,6 +65,11 @@ async def main() -> None:
     manifest["config_sources"],
     config_health["state"],
   )
+  if settings.auto_trade_enabled:
+    # P0-10: repair pre-existing orphaned/stale state before any background
+    # task (sweeper, delivery, worker) starts reading it, so nothing races
+    # a still-in-progress reconciliation pass.
+    await reconcile_startup_state(redis_state.get_client())
   await setup_commands(bot)
   scanner_polling = None
   if (
