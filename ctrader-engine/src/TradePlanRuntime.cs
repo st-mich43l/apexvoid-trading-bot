@@ -43,6 +43,165 @@ public sealed record TradePlanRuntimeState(
   bool BreakEvenApplied = false
 );
 
+public sealed record TradePlanRejectionRecord(
+  string StreamId,
+  string? PlanId,
+  string ExceptionType,
+  string ReasonCode,
+  int? SchemaVersion,
+  string Message,
+  long RejectedAt
+);
+
+public sealed record TradePlanExecutorAcknowledgement(
+  string PlanId,
+  string State,
+  long UpdatedAt,
+  string Executor,
+  string? StreamId = null,
+  string? ReasonCode = null
+);
+
+[JsonSourceGenerationOptions(
+  PropertyNamingPolicy = JsonKnownNamingPolicy.SnakeCaseLower,
+  PropertyNameCaseInsensitive = true,
+  GenerationMode = JsonSourceGenerationMode.Metadata
+)]
+[JsonSerializable(typeof(TradePlan))]
+[JsonSerializable(typeof(TradePlanRejectionRecord))]
+[JsonSerializable(typeof(TradePlanExecutorAcknowledgement))]
+internal sealed partial class AutoTradeJsonContext : JsonSerializerContext;
+
+[JsonSourceGenerationOptions(
+  PropertyNameCaseInsensitive = true,
+  UseStringEnumConverter = true,
+  GenerationMode = JsonSourceGenerationMode.Metadata
+)]
+[JsonSerializable(typeof(TradePlanRuntimeState))]
+internal sealed partial class TradePlanStateJsonContext : JsonSerializerContext;
+
+public static class TradePlanJson
+{
+  private const string SelfTestPayload = """
+  {
+    "version":7,
+    "plan_id":"v7:self-test",
+    "thesis_id":"self-test-thesis",
+    "setup_id":"self-test-setup",
+    "symbol":"XAU",
+    "created_at":1719999600,
+    "expires_at":2000000000,
+    "analysis":{
+      "strategy":"Contract Self Test",
+      "strategy_family":"contract",
+      "direction":"BUY",
+      "context_timeframes":["M15"],
+      "formation_timeframe":"M5",
+      "confirmation_timeframe":"M1",
+      "formation_bar_ts":1719999300,
+      "confirmation_bar_ts":1719999600,
+      "score":3.0,
+      "confluence":3,
+      "bias":"up",
+      "regime":"trend",
+      "reasons":[],
+      "tags":[]
+    },
+    "source_structure":{
+      "structure_id":"self-test-zone",
+      "kind":"demand",
+      "timeframe":"M5",
+      "low":"4088.10",
+      "high":"4090.00",
+      "invalidation_price":"4082.50"
+    },
+    "entry":{
+      "type":"market_watch",
+      "expires_at":2000000000,
+      "zone_low":"4088.10",
+      "zone_high":"4090.00",
+      "activation":"quote_inside_zone",
+      "price_side":"ask",
+      "max_spread_ticks":8,
+      "max_slippage_ticks":10,
+      "legs":[]
+    },
+    "stop":{
+      "type":"absolute",
+      "price":"4082.50",
+      "source":"structure",
+      "structure_id":"self-test-zone",
+      "reason":"contract self test"
+    },
+    "targets":[
+      {
+        "target_id":"TP1",
+        "type":"absolute",
+        "price":"4096.00",
+        "close_ratio":"1.0"
+      }
+    ],
+    "risk":{
+      "risk_percent":"1.0",
+      "risk_multiplier":"1.0",
+      "max_volume":100000,
+      "max_group_risk_percent":"2.0"
+    },
+    "management":{
+      "be_after_target_id":null,
+      "be_buffer_ticks":6,
+      "never_worsen_stop":true
+    },
+    "execution_policy":{
+      "allow_market":true,
+      "allow_limit":false,
+      "allow_partial_fill":true,
+      "cancel_on_expiry":true
+    },
+    "provenance":{
+      "analysis_engine_version":"self-test",
+      "market_map_id":"",
+      "config_fingerprint":""
+    }
+  }
+  """;
+
+  public static TradePlan DeserializePlan(string json) =>
+    JsonSerializer.Deserialize(json, AutoTradeJsonContext.Default.TradePlan)
+    ?? throw new TradePlanContractException("null plan payload");
+
+  public static string SerializeState(TradePlanRuntimeState state) =>
+    JsonSerializer.Serialize(
+      state,
+      TradePlanStateJsonContext.Default.TradePlanRuntimeState
+    );
+
+  public static TradePlanRuntimeState? DeserializeState(string json) =>
+    JsonSerializer.Deserialize(
+      json,
+      TradePlanStateJsonContext.Default.TradePlanRuntimeState
+    );
+
+  public static string SerializeRejection(TradePlanRejectionRecord rejection) =>
+    JsonSerializer.Serialize(
+      rejection,
+      AutoTradeJsonContext.Default.TradePlanRejectionRecord
+    );
+
+  public static string SerializeAcknowledgement(
+    TradePlanExecutorAcknowledgement acknowledgement
+  ) => JsonSerializer.Serialize(
+    acknowledgement,
+    AutoTradeJsonContext.Default.TradePlanExecutorAcknowledgement
+  );
+
+  public static void AssertContractAvailable()
+  {
+    var plan = DeserializePlan(SelfTestPayload);
+    TradePlanValidator.Validate(plan);
+  }
+}
+
 public sealed class TradePlanRuntime(
   AutoTradeOptions options,
   IAutoTradeStore store,
@@ -50,22 +209,20 @@ public sealed class TradePlanRuntime(
   Action<string> log
 )
 {
-  private static readonly JsonSerializerOptions PlanJsonOptions = new()
-  {
-    PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-  };
-
-  private static readonly JsonSerializerOptions StateJsonOptions = new()
-  {
-    Converters = { new JsonStringEnumConverter() },
-  };
-
   private readonly Dictionary<string, TradePlan> _plansById = new();
   private readonly Dictionary<string, TradePlanRuntimeState> _statesById = new();
   private bool _restored;
 
   private static string PlanClaimKey(string planId) => $"execution:plan_claim:{planId}";
   private static string PlanStateKey(string planId) => $"execution:plan_runtime:{planId}";
+  private static string PlanRecoveryKey(string planId) =>
+    $"execution:plan_recovery:{planId}";
+  private static string PlanExecutorStateKey(string planId) =>
+    $"execution:plan_state:{planId}";
+  private static string PlanAcknowledgementKey(string planId) =>
+    $"execution:plan_ack:{planId}";
+  private static string PlanRejectionKey(string streamId) =>
+    $"execution:plan_rejection:{streamId}";
   private static string TrackedPlansKey() => "execution:trade_plan_runtime_ids";
 
   public IReadOnlyCollection<TradePlanRuntimeState> TrackedStates => _statesById.Values;
@@ -112,22 +269,22 @@ public sealed class TradePlanRuntime(
       {
         continue;
       }
-      var state = JsonSerializer.Deserialize<TradePlanRuntimeState>(
-        stateJson, StateJsonOptions
-      );
+      var state = TradePlanJson.DeserializeState(stateJson);
       if (state is null || state.Stage == TradePlanRuntimeStage.Closed)
       {
         continue;
       }
       _statesById[planId] = state;
       var planJson = await store.GetStringAsync(
+        PlanRecoveryKey(planId), cancellationToken
+      ) ?? await store.GetStringAsync(
         TradePlanStreamKeys.PlanKey(planId), cancellationToken
       );
       if (!string.IsNullOrWhiteSpace(planJson))
       {
         try
         {
-          var plan = JsonSerializer.Deserialize<TradePlan>(planJson, PlanJsonOptions);
+          var plan = TradePlanJson.DeserializePlan(planJson);
           if (plan is not null)
           {
             _plansById[planId] = plan;
@@ -150,7 +307,7 @@ public sealed class TradePlanRuntime(
     _statesById[state.PlanId] = state;
     await store.SetStringAsync(
       PlanStateKey(state.PlanId),
-      JsonSerializer.Serialize(state, StateJsonOptions),
+      TradePlanJson.SerializeState(state),
       cancellationToken
     );
     var raw = await store.GetStringAsync(TrackedPlansKey(), cancellationToken);
@@ -170,6 +327,7 @@ public sealed class TradePlanRuntime(
     _plansById.Remove(planId);
     _statesById.Remove(planId);
     await store.DeleteStringAsync(PlanStateKey(planId), cancellationToken);
+    await store.DeleteStringAsync(PlanRecoveryKey(planId), cancellationToken);
     var raw = await store.GetStringAsync(TrackedPlansKey(), cancellationToken);
     if (string.IsNullOrWhiteSpace(raw))
     {
@@ -189,60 +347,244 @@ public sealed class TradePlanRuntime(
     );
     foreach (var entry in entries)
     {
-      cursor = entry.Id;
-      TradePlan plan;
       try
       {
-        plan = JsonSerializer.Deserialize<TradePlan>(entry.Payload, PlanJsonOptions)
-          ?? throw new TradePlanContractException("null plan payload");
-        TradePlanValidator.Validate(plan);
+        await ProcessTradePlanEntryAsync(entry, cancellationToken);
+        await store.SetTradePlanCursorAsync(entry.Id, cancellationToken);
       }
-      catch (Exception exception) when (
-        exception is TradePlanContractException or JsonException
-      )
+      catch (OperationCanceledException)
       {
-        log($"v7 plan rejected: invalid contract - {exception.Message}");
-        continue;
+        throw;
       }
-      var claimed = await store.TryClaimStringAsync(
-        PlanClaimKey(plan.PlanId),
-        options.Label,
-        TimeSpan.FromHours(24),
+      catch (Exception exception)
+      {
+        log(
+          "auto_trade_plan_retry "
+          + $"stream_id={entry.Id} exception={exception.GetType().Name} "
+          + $"message={exception.Message}"
+        );
+        return;
+      }
+    }
+  }
+
+  private async Task ProcessTradePlanEntryAsync(
+    TradeStreamEntry entry,
+    CancellationToken cancellationToken
+  )
+  {
+    log($"auto_trade_plan_received stream_id={entry.Id}");
+    TradePlan plan;
+    try
+    {
+      plan = TradePlanJson.DeserializePlan(entry.Payload);
+      TradePlanValidator.Validate(plan);
+    }
+    catch (Exception exception) when (
+      exception is TradePlanContractException
+        or JsonException
+        or InvalidOperationException
+        or NullReferenceException
+        or ArgumentException
+    )
+    {
+      var (planId, version) = ExtractPlanIdentity(entry.Payload);
+      await PersistRejectionAsync(
+        entry.Id,
+        planId,
+        version,
+        exception,
         cancellationToken
       );
-      if (!claimed)
+      log(
+        "auto_trade_plan_rejected "
+        + $"stream_id={entry.Id} plan_id={planId ?? "-"} "
+        + $"reason_code=invalid_contract exception={exception.GetType().Name}"
+      );
+      return;
+    }
+    log(
+      "auto_trade_plan_deserialized "
+      + $"stream_id={entry.Id} plan_id={plan.PlanId} version={plan.Version}"
+    );
+    var claimed = await store.TryClaimStringAsync(
+      PlanClaimKey(plan.PlanId),
+      options.Label,
+      TimeSpan.FromHours(24),
+      cancellationToken
+    );
+    if (!claimed)
+    {
+      var owner = await store.GetStringAsync(
+        PlanClaimKey(plan.PlanId), cancellationToken
+      );
+      if (owner != options.Label)
       {
-        continue;
+        await PersistPlanExecutionStateAsync(
+          plan.PlanId,
+          "received",
+          entry.Id,
+          cancellationToken
+        );
+        log(
+          "auto_trade_plan_duplicate "
+          + $"stream_id={entry.Id} plan_id={plan.PlanId}"
+        );
+        return;
       }
-      _plansById[plan.PlanId] = plan;
-      // Persist the runtime's own copy of the plan JSON, independent of
-      // Python's execution:plan:{plan_id} TTL - restart recovery must not
-      // depend on that key still existing by the time this executor
-      // restarts.
-      await store.SetStringAsync(
-        TradePlanStreamKeys.PlanKey(plan.PlanId), entry.Payload, cancellationToken
-      );
-      var state = new TradePlanRuntimeState(
-        plan.PlanId,
-        plan.ThesisId,
-        plan.SetupId,
-        plan.Symbol,
-        plan.Analysis.Direction,
-        plan.Entry.Type,
-        TradePlanRuntimeStage.Armed,
-        CurrentStop: plan.Stop.Price
-      );
-      await PersistStateAsync(state, cancellationToken);
-      log($"v7 plan armed id={plan.PlanId} entry_type={plan.Entry.Type}");
-      await PublishEventAsync(
-        "plan_armed",
-        $"PLAN ARMED {plan.Analysis.Strategy} {plan.Analysis.Direction} "
-        + $"({plan.Entry.Type})",
-        plan,
-        cancellationToken
+    }
+    _plansById[plan.PlanId] = plan;
+    // Keep the executor recovery copy independent of Python's payload TTL.
+    await store.SetStringAsync(
+      PlanRecoveryKey(plan.PlanId), entry.Payload, cancellationToken
+    );
+    var state = new TradePlanRuntimeState(
+      plan.PlanId,
+      plan.ThesisId,
+      plan.SetupId,
+      plan.Symbol,
+      plan.Analysis.Direction,
+      plan.Entry.Type,
+      TradePlanRuntimeStage.Armed,
+      CurrentStop: plan.Stop.Price
+    );
+    await PersistStateAsync(state, cancellationToken);
+    await PersistPlanExecutionStateAsync(
+      plan.PlanId,
+      "armed",
+      entry.Id,
+      cancellationToken
+    );
+    log(
+      "auto_trade_plan_armed "
+      + $"stream_id={entry.Id} plan_id={plan.PlanId} "
+      + $"entry_type={plan.Entry.Type}"
+    );
+    await PublishEventAsync(
+      "plan_armed",
+      $"PLAN ARMED {plan.Analysis.Strategy} {plan.Analysis.Direction} "
+      + $"({plan.Entry.Type})",
+      plan,
+      cancellationToken
+    );
+  }
+
+  private async Task PersistPlanExecutionStateAsync(
+    string planId,
+    string state,
+    string? streamId,
+    CancellationToken cancellationToken,
+    string? reasonCode = null
+  )
+  {
+    var current = await store.GetStringAsync(
+      PlanExecutorStateKey(planId), cancellationToken
+    );
+    if (
+      current is not null
+      && PlanStatePriority(current) > PlanStatePriority(state)
+    )
+    {
+      return;
+    }
+    await store.SetStringAsync(
+      PlanExecutorStateKey(planId), state, cancellationToken
+    );
+    await store.SetStringAsync(
+      PlanAcknowledgementKey(planId),
+      TradePlanJson.SerializeAcknowledgement(
+        new TradePlanExecutorAcknowledgement(
+          planId,
+          state,
+          clock().ToUnixTimeSeconds(),
+          options.Label,
+          streamId,
+          reasonCode
+        )
+      ),
+      cancellationToken
+    );
+  }
+
+  private static int PlanStatePriority(string state) => state switch
+  {
+    "published" => 10,
+    "received" => 20,
+    "armed" => 30,
+    "submitted" => 40,
+    "filled" => 50,
+    "managing" => 60,
+    "completed" => 100,
+    "rejected" or "cancelled" or "expired" => 100,
+    _ => 0,
+  };
+
+  private async Task PersistRejectionAsync(
+    string streamId,
+    string? planId,
+    int? version,
+    Exception exception,
+    CancellationToken cancellationToken
+  )
+  {
+    var record = new TradePlanRejectionRecord(
+      streamId,
+      planId,
+      exception.GetType().Name,
+      "invalid_contract",
+      version,
+      exception.Message,
+      clock().ToUnixTimeSeconds()
+    );
+    await store.SetStringAsync(
+      PlanRejectionKey(streamId),
+      TradePlanJson.SerializeRejection(record),
+      cancellationToken
+    );
+    if (!string.IsNullOrWhiteSpace(planId))
+    {
+      await PersistPlanExecutionStateAsync(
+        planId,
+        "rejected",
+        streamId,
+        cancellationToken,
+        "invalid_contract"
       );
     }
-    await store.SetTradePlanCursorAsync(cursor, cancellationToken);
+    await store.PublishAutoTradeEventAsync(
+      options.EventStream,
+      new AutoTradeEvent(
+        "plan_rejected",
+        record.RejectedAt,
+        $"TradePlan V7 rejected: {record.Message}",
+        "UNKNOWN",
+        CandidateId: planId,
+        ReasonCode: record.ReasonCode,
+        Stream: streamId
+      ),
+      cancellationToken
+    );
+  }
+
+  private static (string? PlanId, int? Version) ExtractPlanIdentity(string payload)
+  {
+    try
+    {
+      using var document = JsonDocument.Parse(payload);
+      var root = document.RootElement;
+      var planId = root.TryGetProperty("plan_id", out var id)
+        ? id.GetString()
+        : null;
+      int? version = root.TryGetProperty("version", out var schema)
+        && schema.TryGetInt32(out var parsed)
+          ? parsed
+          : null;
+      return (planId, version);
+    }
+    catch (JsonException)
+    {
+      return (null, null);
+    }
   }
 
   private Task PublishEventAsync(
@@ -302,6 +644,13 @@ public sealed class TradePlanRuntime(
       );
       if (decision.RejectReason == "plan_expired")
       {
+        await PersistPlanExecutionStateAsync(
+          plan.PlanId,
+          "expired",
+          null,
+          cancellationToken,
+          "plan_expired"
+        );
         await ForgetPlanAsync(state.PlanId, cancellationToken);
         log($"v7 plan expired id={state.PlanId}");
         continue;
@@ -368,8 +717,12 @@ public sealed class TradePlanRuntime(
         RemainingVolume = execution.ExecutedVolume,
       };
       await PersistStateAsync(next, cancellationToken);
+      await PersistPlanExecutionStateAsync(
+        plan.PlanId, "filled", null, cancellationToken
+      );
       log(
-        $"v7 order submitted id={plan.PlanId} position={execution.PositionId} "
+        $"auto_trade_plan_submitted plan_id={plan.PlanId} "
+        + $"position={execution.PositionId} "
         + $"price={execution.ExecutionPrice}"
       );
       await PublishEventAsync(
@@ -418,7 +771,12 @@ public sealed class TradePlanRuntime(
       RemainingVolume = volumePlan.TotalVolume,
     };
     await PersistStateAsync(pendingState, cancellationToken);
-    log($"v7 limit order(s) submitted id={plan.PlanId} legs={legs.Length}");
+    await PersistPlanExecutionStateAsync(
+      plan.PlanId, "submitted", null, cancellationToken
+    );
+    log(
+      $"auto_trade_plan_submitted plan_id={plan.PlanId} legs={legs.Length}"
+    );
     await PublishEventAsync(
       // "order_submitted" is already claimed by the V6 lifecycle as an
       // always-silent event type (never a Telegram card) - v7_ prefixed so
@@ -511,9 +869,15 @@ public sealed class TradePlanRuntime(
         await PersistStateAsync(state, cancellationToken);
         if (remaining <= 0)
         {
+          await PersistPlanExecutionStateAsync(
+            plan.PlanId, "completed", null, cancellationToken
+          );
           await ForgetPlanAsync(state.PlanId, cancellationToken);
           continue;
         }
+        await PersistPlanExecutionStateAsync(
+          plan.PlanId, "managing", null, cancellationToken
+        );
       }
       if (
         !state.BreakEvenApplied

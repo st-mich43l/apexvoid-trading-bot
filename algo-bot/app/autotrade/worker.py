@@ -98,8 +98,11 @@ from app.autotrade.multi_match import (
 from app.autotrade.lifecycle import emit_lifecycle, increment_metric
 from app.analysis.structural_reaction_support import v7_thesis_id
 from app.autotrade.setup_lifecycle import (
+  ARMED,
   ARMED_WAITING_TRIGGER,
+  CANCELLED,
   CONFIRMED,
+  CONSUMED,
   EXPIRED,
   INVALIDATED,
   PLAN_BUILT,
@@ -139,6 +142,7 @@ from app.autotrade.trade_plan_builder import (
   build_trade_plan_from_strategy_match,
 )
 from app.autotrade.trade_plan_stream import (
+  plan_key,
   publish_trade_plan,
   read_plan_state,
 )
@@ -239,6 +243,109 @@ class AutoTradeSpot:
     if direction.upper() == "SELL" and self.bid is not None:
       return self.bid
     return self.price
+
+
+_ACTIVE_V7_PLAN_STATES = frozenset({
+  "published",
+  "received",
+  "armed",
+  "submitted",
+  "filled",
+  "managing",
+  "completed",
+})
+_TERMINAL_V7_PLAN_STATES = frozenset({
+  "rejected",
+  "cancelled",
+  "expired",
+})
+_POST_PUBLICATION_SETUP_STATES = frozenset({
+  PLAN_PUBLISHED,
+  ARMED,
+  CONSUMED,
+})
+
+
+@dataclass(frozen=True)
+class ExistingV7State:
+  plan_id: str
+  setup_state: str | None
+  plan_state: str | None
+  plan_exists: bool
+  already_published: bool
+  already_terminal: bool
+  owner_matches: bool
+
+
+async def resolve_existing_v7_state(
+  client: Any,
+  match: StrategyMatch,
+  *,
+  cycle_id: str | None = None,
+) -> ExistingV7State:
+  """Resolve one setup's durable V7 truth before any dynamic preflight."""
+  plan_id = _v7_plan_id(match)
+  setup = await load_setup(client, match.match_id)
+  plan_state = await read_plan_state(client, plan_id)
+  plan_exists = bool(await client.exists(plan_key(plan_id)))
+  owner_matches = False
+  if cycle_id:
+    raw_owner = await client.get(
+      autonomous_cycle_owner_key(match.symbol, cycle_id)
+    )
+    if raw_owner is not None:
+      text = (
+        raw_owner.decode()
+        if isinstance(raw_owner, bytes)
+        else str(raw_owner)
+      )
+      try:
+        owner = json.loads(text)
+      except (TypeError, ValueError, json.JSONDecodeError):
+        owner = {"intent_id": text}
+      owner_matches = bool(
+        isinstance(owner, dict)
+        and (
+          owner.get("plan_id") == plan_id
+          or owner.get("setup_id") == match.match_id
+          or owner.get("intent_id") == f"strategy:{match.match_id}"
+        )
+      )
+  setup_state = None if setup is None else setup.state
+  already_published = bool(
+    setup_state in _POST_PUBLICATION_SETUP_STATES
+    or plan_state in _ACTIVE_V7_PLAN_STATES
+    or (
+      setup_state == PLAN_BUILT
+      and (plan_exists or plan_state is not None)
+    )
+  )
+  return ExistingV7State(
+    plan_id=plan_id,
+    setup_state=setup_state,
+    plan_state=plan_state,
+    plan_exists=plan_exists,
+    already_published=already_published,
+    already_terminal=bool(
+      setup_state in TERMINAL_STATES
+      or plan_state in _TERMINAL_V7_PLAN_STATES
+      or plan_state == "completed"
+    ),
+    owner_matches=owner_matches,
+  )
+
+
+def terminal_state_for_preflight_failure(
+  current_state: str,
+) -> str | None:
+  """Map a preflight failure without allowing post-plan invalidation."""
+  if current_state == PLAN_BUILT:
+    return CANCELLED
+  if current_state in _POST_PUBLICATION_SETUP_STATES:
+    return None
+  if current_state in TERMINAL_STATES:
+    return None
+  return INVALIDATED
 
 
 def _executable_spot_price(spot: Any, direction: str) -> float:
@@ -4284,6 +4391,35 @@ async def _publish_trade_plan_v7(
   guard/policy rejection - always recorded via _record_v7_build_rejected,
   never a bare silent return, except the ordinary retained retest wait).
   """
+  existing = await resolve_existing_v7_state(client, match)
+  if existing.already_terminal:
+    return existing.plan_id if existing.plan_exists else None
+  if existing.already_published:
+    if existing.setup_state == PLAN_BUILT:
+      await transition_setup(
+        client,
+        match.match_id,
+        PLAN_PUBLISHED,
+        reason_code="v7_publish_reconciled",
+      )
+    await _emit_setup_card_status(
+      client,
+      match,
+      status_line=(
+        "🟢 <b>PLAN PUBLISHED</b> · TradePlan V7 sent to executor"
+      ),
+      reason_code="v7_publish_reconciled",
+      message="durable TradePlan V7 publication reconciled",
+    )
+    return existing.plan_id
+  if existing.setup_state == PLAN_BUILT:
+    await transition_setup(
+      client,
+      match.match_id,
+      CANCELLED,
+      reason_code="v7_plan_build_incomplete",
+    )
+    return None
   if spot is None or not spot.fresh:
     await record_route_outcome(
       client,
@@ -4306,20 +4442,6 @@ async def _publish_trade_plan_v7(
 
   setup_id = match.match_id
   setup_record = await load_setup(client, setup_id)
-  if setup_record is not None and setup_record.state == PLAN_PUBLISHED:
-    return None
-  if (
-    setup_record is not None
-    and setup_record.state == PLAN_BUILT
-    and await read_plan_state(client, _v7_plan_id(match)) == "published"
-  ):
-    await transition_setup(
-      client,
-      setup_id,
-      PLAN_PUBLISHED,
-      reason_code="v7_publish_reconciled",
-    )
-    return _v7_plan_id(match)
   if setup_record is not None and setup_record.state in (
     CONFIRMED, READY_EVENT_ENQUEUED,
   ):
@@ -6399,6 +6521,15 @@ async def _strategy_publication_result(
   """Translate the legacy publisher return into a fallback-safe result."""
   if candidate_id is not None:
     return CandidatePublicationResult.published(candidate_id)
+  existing = await resolve_existing_v7_state(client, match)
+  if existing.already_terminal:
+    return CandidatePublicationResult.terminal_reject(
+      existing.plan_state
+      or existing.setup_state
+      or "existing_v7_terminal"
+    )
+  if existing.already_published:
+    return CandidatePublicationResult.published(existing.plan_id)
   raw = await client.get(route_outcome_key(match.symbol, match.match_id))
   try:
     snapshot = json.loads(
@@ -7011,6 +7142,41 @@ async def _preflight_strategy_intent(
   market_map: MarketMap | None,
   frames: dict[str, Any],
 ) -> ExecutionPreflightDecision:
+  existing = await resolve_existing_v7_state(
+    client,
+    match,
+    cycle_id=intent.cycle_id,
+  )
+  if existing.already_terminal:
+    return _preflight_decision(
+      intent,
+      executable=False,
+      terminal=True,
+      stage="publication_reconciliation",
+      reason_code=(
+        existing.plan_state
+        or existing.setup_state
+        or "existing_v7_terminal"
+      ),
+      message="durable V7 lifecycle is already terminal",
+      measured={"plan_id": existing.plan_id},
+      subject=match,
+    )
+  if existing.already_published:
+    return _preflight_decision(
+      intent,
+      executable=True,
+      terminal=False,
+      stage="publication_reconciliation",
+      reason_code="existing_v7_plan",
+      message="durable TradePlan V7 already exists",
+      measured={
+        "plan_id": existing.plan_id,
+        "plan_state": existing.plan_state,
+        "setup_state": existing.setup_state,
+      },
+      subject=match,
+    )
   if not settings.auto_trade_strategy_match_enabled:
     return _preflight_decision(
       intent,
@@ -7759,12 +7925,17 @@ async def _handle_event(
       )
       if preflight.terminal:
         setup = await load_setup(client, routed_match.match_id)
-        if setup is not None and setup.state not in TERMINAL_STATES:
+        next_state = (
+          None
+          if setup is None
+          else terminal_state_for_preflight_failure(setup.state)
+        )
+        if setup is not None and next_state is not None:
           try:
             await transition_setup(
               client,
               routed_match.match_id,
-              INVALIDATED,
+              next_state,
               reason_code=preflight.reason_code,
             )
           except SetupLifecycleError:
@@ -7886,7 +8057,7 @@ async def _handle_event(
         # mode) so a confirmed setup can never arm both a V7 plan and a V6
         # candidate for the same thesis. Existing open V6 positions are
         # untouched; this only blocks new autonomous publication.
-        await _publish_trade_plan_v7(
+        published = await _publish_trade_plan_v7(
           client,
           symbol,
           spot,
@@ -7900,7 +8071,6 @@ async def _handle_event(
           # when the legacy guard toggle is disabled.
           market_map=cached_market_map,
         )
-        published = None
       finally:
         await release_owned_lock(client, route_lock, route_lock_token)
       if published is not None:
@@ -8367,19 +8537,29 @@ async def _process_strategy_match_ready_entry(
     event,
     worker_received_at=now,
   )
+  canonical = await load_canonical_match(client, event)
+  existing = (
+    None
+    if canonical is None
+    else await resolve_existing_v7_state(
+      client,
+      canonical,
+      cycle_id=str(event.scanner_event_ts or ""),
+    )
+  )
+  if existing is not None and existing.already_published:
+    await client.xack(READY_STREAM, READY_GROUP, stream_id)
+    await increment_metric(
+      client,
+      "strategy_match_ready_acked_existing_plan",
+      symbol=event.symbol,
+    )
+    return True
   if setup is not None and setup.state in TERMINAL_STATES:
     await client.xack(READY_STREAM, READY_GROUP, stream_id)
     await increment_metric(
       client,
       "strategy_match_ready_acked_terminal",
-      symbol=event.symbol,
-    )
-    return True
-  if setup is not None and setup.state == PLAN_PUBLISHED:
-    await client.xack(READY_STREAM, READY_GROUP, stream_id)
-    await increment_metric(
-      client,
-      "strategy_match_ready_acked_existing_plan",
       symbol=event.symbol,
     )
     return True
@@ -8405,7 +8585,7 @@ async def _process_strategy_match_ready_entry(
     )
     return True
 
-  match = await load_canonical_match(client, event)
+  match = canonical
   if match is None:
     await increment_metric(
       client,

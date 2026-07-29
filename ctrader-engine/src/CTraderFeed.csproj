@@ -7,7 +7,10 @@
     <AssemblyName>ctrader-feed</AssemblyName>
     <RootNamespace>ApexVoid.CTraderFeed</RootNamespace>
     <InvariantGlobalization>true</InvariantGlobalization>
-    <PublishSingleFile>true</PublishSingleFile>
+    <!-- Native AOT already emits one native executable; PublishSingleFile is
+         mutually exclusive with PublishAot. The Docker non-AOT fallback
+         explicitly overrides this back to true. -->
+    <PublishSingleFile>false</PublishSingleFile>
     <PublishTrimmed>true</PublishTrimmed>
     <PublishAot>true</PublishAot>
     <SelfContained>true</SelfContained>

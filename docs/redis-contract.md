@@ -241,18 +241,36 @@ reinterpreted as a V6 `TradeCandidate` or vice versa, so the two contracts
 never share a key prefix or a stream.
 
 ```text
-execution:trade_plans          XADD stream of published TradePlan V7 JSON
-execution:plan:{plan_id}       full plan JSON, TTL = max(60, expires_at - created_at)
-execution:plan_owner:{plan_id} written by whichever side claims the plan for execution
-execution:plan_state:{plan_id} "published" | "armed" | ... lifecycle state
-execution:plan_event:{plan_id} per-plan event history
+execution:trade_plans              XADD stream of published TradePlan V7 JSON
+execution:plan:{plan_id}           Python plan JSON, short TTL from plan expiry
+execution:plan_dedup:{plan_id}     publication tombstone, seven-day default TTL
+execution:plan_state:{plan_id}     monotonic mechanical state
+execution:plan_claim:{plan_id}     executor claim, 24-hour TTL
+execution:plan_runtime:{plan_id}   C# open runtime state
+execution:plan_recovery:{plan_id}  C# recovery copy while runtime state is open
+execution:plan_ack:{plan_id}       latest structured executor acknowledgement
+execution:plan_rejection:{id}      durable malformed/unsupported stream record
+execution:trade_plan_runtime_ids   tracked C# runtime plan IDs
+execution:trade_plan_cursor        last durably handled stream ID
 ```
 
-Phase 1 (current) only implements `execution:trade_plans` and
-`execution:plan:{plan_id}`/`execution:plan_state:{plan_id}`
-(`app/autotrade/trade_plan_stream.py`). `execution:plan_owner:{plan_id}` and
-`execution:plan_event:{plan_id}` are reserved names, written starting in the
-phase that adds real plan-claiming (C# `TradePlanExecutionEngine`) and setup
-lifecycle history respectively. Publishing to this stream has no broker
-execution side effect until `AUTO_TRADE_CONTRACT_MODE` is `v7_primary` or
-`v7_only`.
+Python atomically checks/sets the dedup tombstone, writes the short-lived plan
+payload and `published` state, then appends exactly one stream entry. The
+tombstone TTL is `max(24h, AUTO_TRADE_CANDIDATE_STORAGE_TTL_SECONDS)`, seven
+days by default, so deleting or expiring the payload cannot re-publish the same
+deterministic plan ID. Existing pre-tombstone payloads are backfilled on retry.
+
+C# reads after its durable cursor. A valid plan is source-generated JSON
+deserialized, validated, claimed, persisted as runtime/recovery state, and
+marked `armed` before the cursor advances. A malformed plan is stored under
+`execution:plan_rejection:{stream_id}` and publishes `plan_rejected` before
+the cursor advances. A transient Redis or broker error leaves the cursor
+unchanged for retry. Duplicate claims reconcile the existing state and never
+submit another order.
+
+The scalar plan state is the cross-language lifecycle projection:
+`published`, `received`, `armed`, `submitted`, `filled`, `managing`,
+`completed`, `rejected`, `cancelled`, or `expired`. The acknowledgement key
+adds executor timestamp, stream ID, executor label, and optional reason code.
+C# recovery payloads use their own key so they do not extend Python's plan
+payload TTL. Recovery/runtime keys are removed when execution becomes terminal.

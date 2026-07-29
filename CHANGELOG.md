@@ -12,6 +12,9 @@ dated section after deployment.
 ## Unreleased
 
 ### Added
+- Source-generated System.Text.Json metadata and a production-path startup
+  contract self-test for TradePlan V7, plus durable C# executor
+  acknowledgements and per-stream rejection records.
 - Durable Scanner -> Worker handoff on Redis Stream
   `auto_trade:strategy_match_ready` (schema v1, `algo-worker` consumer group)
   with duplicate suppression, pending-entry recovery, canonical
@@ -78,6 +81,12 @@ dated section after deployment.
   crosses into `ctrader-engine`.
 
 ### Changed
+- V7 publication now retains a seven-day TTL-bound dedup tombstone and a full
+  symbol/cycle owner record. The C# executor keeps its restart payload under a
+  separate recovery key, preserving the Python plan payload's short TTL.
+- Setup-card status is now a typed, atomic, monotonic Redis state. Delayed
+  scanner/worker events cannot regress `PLAN PUBLISHED` to queued, preflight,
+  or waiting-retest.
 - Scanner-confirmed reactions publish in the durable worker attempt only when
   BUY ask or SELL bid is inside the raw entry zone plus contract tolerance.
   Nearby price outside the zone remains `WAITING_RETEST`; same-cycle zone
@@ -151,6 +160,20 @@ dated section after deployment.
   longer construct an `ExecutionIntent`.
 
 ### Fixed
+- Restore end-to-end V7 runtime consistency: Python no longer discards a
+  successful `_publish_trade_plan_v7` result, published setups reconcile
+  instead of re-entering preflight/invalidation, and terminal lifecycle
+  failures map explicitly without permitting `PLAN_PUBLISHED -> INVALIDATED`.
+- Scanner execution eligibility now honors the complete policy result,
+  including `allowed`, exact reason, hard-block status, and measured evidence;
+  denied setups remain analysis-only even when their provisional R/R passes.
+- C# TradePlan consumption no longer depends on reflection-disabled JSON
+  overloads. Malformed plans are durably rejected per message, transient
+  failures retain the stream cursor for retry, and later valid plans continue
+  through the same consumer session.
+- Identical Telegram setup-card edits are local no-ops, and Telegram's
+  `message is not modified` response is treated as success without traceback,
+  fallback card creation, or retry storms.
 - Manual `/algo` envelopes now carry an explicit
   `bypass_analysis_gates=true` contract and bypass scanner arbitration,
   confirmation, R/R, barrier, cooldown, and overlap analysis while retaining

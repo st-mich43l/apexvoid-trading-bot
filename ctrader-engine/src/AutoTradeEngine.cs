@@ -45,6 +45,8 @@ public sealed class AutoTradeEngine(
   private IReadOnlyList<TradingPendingOrder> _allSymbolPendingOrders = [];
   private TradingAccountSnapshot? _account;
   private bool _accountSupportsHedging;
+  private int _tradePlanConsumerFailures;
+  private DateTimeOffset _tradePlanConsumerRetryAt = DateTimeOffset.MinValue;
   private volatile bool _ready;
   private volatile bool _disabled;
   // Set when the broker returns an already-tracked PositionId for what
@@ -176,6 +178,21 @@ public sealed class AutoTradeEngine(
         );
       }
       _log(VolumePlanner.SizingDiagnostic(account.Balance, options));
+      try
+      {
+        TradePlanJson.AssertContractAvailable();
+        _log("V7 JSON contract self-test passed");
+      }
+      catch (Exception exception)
+      {
+        _log(
+          "V7 JSON contract self-test failed: "
+          + $"{exception.GetType().Name}: {exception.Message}"
+        );
+        throw new AutoTradeConfigurationException(
+          "Auto trade disabled: V7 JSON contract metadata is unavailable"
+        );
+      }
       await ReconcileAsync(cancellationToken);
       _ready = true;
       await PublishReadinessAsync(
@@ -245,7 +262,7 @@ public sealed class AutoTradeEngine(
         if (options.ContractMode != "legacy_v6")
         {
           await WithGateAsync(
-            () => _tradePlanRuntime.PollAsync(
+            () => PollTradePlansSafelyAsync(
               _client!, symbol, _lastSpot, cancellationToken
             ),
             cancellationToken
@@ -358,6 +375,53 @@ public sealed class AutoTradeEngine(
     string message,
     CancellationToken cancellationToken
   ) => PublishAsync(kind, message, cancellationToken);
+
+  private async Task PollTradePlansSafelyAsync(
+    ICTraderTradeClient client,
+    SymbolInfo symbol,
+    SpotPrice? spot,
+    CancellationToken cancellationToken
+  )
+  {
+    if (_clock() < _tradePlanConsumerRetryAt)
+    {
+      return;
+    }
+    try
+    {
+      await _tradePlanRuntime.PollAsync(
+        client, symbol, spot, cancellationToken
+      );
+      if (_tradePlanConsumerFailures > 0)
+      {
+        _log(
+          "auto_trade_consumer_recovered "
+          + $"attempts={_tradePlanConsumerFailures}"
+        );
+      }
+      _tradePlanConsumerFailures = 0;
+      _tradePlanConsumerRetryAt = DateTimeOffset.MinValue;
+    }
+    catch (OperationCanceledException)
+    {
+      throw;
+    }
+    catch (Exception exception)
+    {
+      _tradePlanConsumerFailures++;
+      var delayMs = Math.Min(
+        5_000,
+        100 * (1 << Math.Min(5, _tradePlanConsumerFailures - 1))
+      );
+      _tradePlanConsumerRetryAt = _clock().AddMilliseconds(delayMs);
+      _log(
+        "auto_trade_consumer_restarting "
+        + $"attempt={_tradePlanConsumerFailures} delay_ms={delayMs} "
+        + $"exception={exception.GetType().Name} "
+        + $"message={exception.Message}"
+      );
+    }
+  }
 
   public async Task ObserveSpotAsync(
     SpotPrice spot,

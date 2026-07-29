@@ -845,38 +845,44 @@ async def _sync_strategy_match(
       target_plan=list(tracked.targets_pips),
       message="structural opportunity detected",
     )
-    await record_route_outcome(
-      client,
-      tracked,
-      stage="scanner",
-      status="detected",
-      reason_code="strategy_match_detected",
-      message="structural opportunity detected",
-      measured={
-        "spot_price": tracked.current_price,
-        "entry_low": tracked.entry_low,
-        "entry_high": tracked.entry_high,
-        "guard_mode": settings.auto_trade_structural_guard_mode,
-      },
-      retained=True,
-      publish_status=False,
+    latest_setup = await load_setup(client, tracked.match_id)
+    worker_owns_status = bool(
+      latest_setup is not None
+      and latest_setup.state not in _PRE_CONFIRMED_CHAIN
     )
-    await record_route_outcome(
-      client,
-      tracked,
-      stage="scanner",
-      status="checking",
-      reason_code="execution_preflight_pending",
-      message="worker execution preflight pending",
-      measured={
-        "spot_price": tracked.current_price,
-        "entry_low": tracked.entry_low,
-        "entry_high": tracked.entry_high,
-        "guard_mode": settings.auto_trade_structural_guard_mode,
-      },
-      retained=True,
-      publish_status=False,
-    )
+    if not worker_owns_status:
+      await record_route_outcome(
+        client,
+        tracked,
+        stage="scanner",
+        status="detected",
+        reason_code="strategy_match_detected",
+        message="structural opportunity detected",
+        measured={
+          "spot_price": tracked.current_price,
+          "entry_low": tracked.entry_low,
+          "entry_high": tracked.entry_high,
+          "guard_mode": settings.auto_trade_structural_guard_mode,
+        },
+        retained=True,
+        publish_status=False,
+      )
+      await record_route_outcome(
+        client,
+        tracked,
+        stage="scanner",
+        status="checking",
+        reason_code="execution_preflight_pending",
+        message="worker execution preflight pending",
+        measured={
+          "spot_price": tracked.current_price,
+          "entry_low": tracked.entry_low,
+          "entry_high": tracked.entry_high,
+          "guard_mode": settings.auto_trade_structural_guard_mode,
+        },
+        retained=True,
+        publish_status=False,
+      )
     await emit_lifecycle(
       client,
       "tracked",
@@ -1213,6 +1219,14 @@ def _format_detection(
   market_map: MarketMap | None = None,
   execution_match: StrategyMatch | None = None,
 ) -> str:
+  executable = bool(
+    settings.auto_trade_enabled
+    and execution_match is not None
+    and (
+      result.execution_eligibility is None
+      or result.execution_eligibility.allowed
+    )
+  )
   stars = "⭐" * max(1, min(3, int(result.confluence)))
   direction_icon = "🟢" if result.direction.upper() == "BUY" else "🔴"
   confluence_label = " + ".join(
@@ -1228,17 +1242,14 @@ def _format_detection(
     if not reason.lower().startswith("htf bias")
   ][:6 if result.setup in {"Box Breakout", "Range Edge Scalp"} else 2]
   lines = [
-    f"🔎 <b>{escape(symbol)} {escape(tf)} · SETUP FORMING</b>",
+    (
+      f"🔎 <b>{escape(symbol)} {escape(tf)} · SETUP FORMING</b>"
+      if executable
+      else f"🔵 <b>{escape(symbol)} {escape(tf)} · MARKET OBSERVATION</b>"
+    ),
     (
       "🟡 <b>QUEUED</b> · worker acknowledgement pending"
-      if (
-        settings.auto_trade_enabled
-        and execution_match is not None
-        and (
-          result.execution_eligibility is None
-          or result.execution_eligibility.allowed
-        )
-      )
+      if executable
       else "🔵 <b>ANALYSIS ONLY</b> · no executable StrategyMatch"
       if settings.auto_trade_enabled
       else "🔵 <b>ANALYSIS ONLY</b> · autonomous execution disabled"
@@ -1248,6 +1259,16 @@ def _format_detection(
       f"{escape(setup_label)}</b> · {stars}"
     ),
   ]
+  if (
+    not executable
+    and result.execution_eligibility is not None
+    and result.execution_eligibility.reason_code
+  ):
+    lines.append(
+      "<b>Reason:</b> "
+      f"{escape(result.execution_eligibility.reason_code)} · "
+      f"{escape(result.execution_eligibility.message)}"
+    )
   if result.mode == "range_scalp":
     lines.append("↔️ <b>Mode:</b> RANGE SCALP · two-sided local range")
   elif result.mode == "counter_bias":
@@ -1326,14 +1347,15 @@ def _format_detection(
       f"{escape(_zone_text(extra.entry_zone, symbol, grouped=True))} "
       f"{extra_stars}"
     )
-  draft = _copy_draft(symbol, result)
-  if draft:
+  draft = _copy_draft(symbol, result) if executable else None
+  if draft is not None:
     lines.extend([
       "",
       "📋 <b>Copy draft</b> <i>· fill SL/TP</i>",
       f"<code>{escape(draft)}</code>",
     ])
-  lines.append("→ Review confirmation, SL &amp; TP before posting.")
+  if executable:
+    lines.append("→ Review confirmation, SL &amp; TP before posting.")
   return "\n".join(lines)
 
 
@@ -1673,7 +1695,12 @@ def _reward_risk_pre_gate(
   measured = {
     **(result.target_room_measured or {}),
     **dict(evaluation.measured),
+    "policy_reason_code": evaluation.reason_code,
+    "policy_message": evaluation.message,
+    "policy_hard_block": bool(evaluation.terminal),
   }
+  if not evaluation.allowed:
+    return False, measured
   reward_risk = measured.get("reward_risk")
   policy = evaluation.policy
   if (
@@ -2876,6 +2903,7 @@ async def _handle_event(
       continue
     reason = str(
       measured.get("static_rejection_reason")
+      or measured.get("policy_reason_code")
       or (
         "opposing_barrier_rr_insufficient"
         if result.target_cap_pips is not None
@@ -2893,10 +2921,12 @@ async def _handle_event(
         message=(
           "setup is statically analysis-only"
           if measured.get("static_rejection_reason")
+          else str(measured.get("policy_message"))
+          if measured.get("policy_reason_code")
           else "provisional reward/risk is below the strategy minimum"
         ),
         measured=measured,
-        hard_block=True,
+        hard_block=bool(measured.get("policy_hard_block", True)),
       ),
     )
     await increment_metric(
