@@ -27,6 +27,17 @@ import json
 import time
 from typing import Any, Mapping
 
+# P0-1: business expiry (the setup's own expires_at) must never be conflated
+# with Redis key TTL (data retention). Before this, _ttl_for set the key's
+# TTL to roughly expires_at-now - once nothing touched the record again
+# after the setup silently passed its business expiry, Redis could delete
+# the canonical record at almost exactly the moment it should have
+# transitioned to EXPIRED, with no terminal lifecycle event, no card
+# deletion, and no audit trail. These two constants keep the record
+# readable well past both business expiry and terminal transition.
+SETUP_AUDIT_RETENTION_SECONDS = 24 * 3600
+TERMINAL_SETUP_RETENTION_SECONDS = 24 * 3600
+
 
 DISCOVERED = "discovered"
 WATCHING = "watching"
@@ -126,6 +137,10 @@ def watchlist_key() -> str:
   return "analysis:watchlist"
 
 
+def setup_expiry_index_key() -> str:
+  return "analysis:setup_expiry"
+
+
 @dataclass(frozen=True)
 class SetupRecord:
   setup_id: str
@@ -185,10 +200,39 @@ class SetupRecord:
 
 
 def _ttl_for(record: SetupRecord) -> int:
-  now = int(time.time())
-  if record.expires_at is not None and record.expires_at > now:
-    return max(60, record.expires_at - now)
+  """P0-1: audit-retention TTL, never the raw distance to business expiry.
+
+  Terminal records get a flat retention window (they will never be touched
+  again, so there is no "distance to expiry" to add). Active records with a
+  known expires_at get retention measured FROM that expiry, so the record
+  outlives its own business deadline by a full audit window regardless of
+  whether anything writes to it again. Records with no expires_at (existing
+  data predating this field, or setups that never got one) keep the old
+  flat fallback - explicitly still supported, not a migration requirement.
+  """
+  if record.state in TERMINAL_STATES:
+    return TERMINAL_SETUP_RETENTION_SECONDS
+  if record.expires_at is not None:
+    now = int(time.time())
+    return max(
+      SETUP_AUDIT_RETENTION_SECONDS,
+      record.expires_at - now + SETUP_AUDIT_RETENTION_SECONDS,
+    )
   return 86400
+
+
+async def _sync_expiry_index(client: Any, record: SetupRecord) -> None:
+  """P0-2: keep analysis:setup_expiry in lockstep with the canonical record.
+
+  A terminal record is removed from the index (the sweeper must never look
+  at it again); an active record with an expires_at is (re)scored; an
+  active record with no expires_at was never indexed and stays that way.
+  """
+  key = setup_expiry_index_key()
+  if record.state in TERMINAL_STATES or record.expires_at is None:
+    await client.zrem(key, record.setup_id)
+    return
+  await client.zadd(key, {record.setup_id: record.expires_at})
 
 
 async def _save(client: Any, record: SetupRecord) -> None:
@@ -197,6 +241,7 @@ async def _save(client: Any, record: SetupRecord) -> None:
     json.dumps(record.to_dict(), separators=(",", ":")),
     ex=_ttl_for(record),
   )
+  await _sync_expiry_index(client, record)
 
 
 async def load_setup(client: Any, setup_id: str) -> SetupRecord | None:
@@ -314,6 +359,12 @@ async def rearm_setup(
     record,
     state=DISCOVERED,
     invalidation_condition=None,
+    # The old expires_at belonged to the terminal instance being rearmed
+    # from; carrying it forward would re-add this setup_id to
+    # analysis:setup_expiry with a stale (often already-past) score and the
+    # sweeper would immediately re-expire it. A fresh expires_at is set the
+    # next time this setup transitions forward (e.g. into CONFIRMED).
+    expires_at=None,
     updated_at=int(time.time()),
   )
   await _save(client, updated)
