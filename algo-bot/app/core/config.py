@@ -1,4 +1,5 @@
 from typing import Optional
+import math
 import os
 from pydantic import AliasChoices, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -266,7 +267,16 @@ class Settings(BaseSettings):
     ),
   )
   auto_trade_min_confluence: int = 2
-  auto_trade_max_entry_distance_pips: float = 10.0
+  # Planner authorization and executor drift protection intentionally share
+  # the same default envelope. A formed setup inside this distance may execute
+  # without waiting for a candlestick pattern.
+  auto_trade_execute_max_distance_pips: float = Field(
+    default=40.0,
+    validation_alias=AliasChoices(
+      "AUTO_TRADE_EXECUTE_MAX_DISTANCE_PIPS",
+    ),
+  )
+  auto_trade_max_entry_distance_pips: float = 40.0
   auto_trade_entry_contract_tolerance_pips: float = Field(
     default=3.0,
     validation_alias=AliasChoices(
@@ -363,11 +373,17 @@ class Settings(BaseSettings):
   # supply, order block, FVG, breaker) within this gap or overlapping merge
   # into one ConfluenceZone, capped at this total width - one zone, one
   # order, instead of several strategies each ordering on the same band.
-  zone_merge_max_width: float = 3.0
+  zone_merge_max_width: float = 6.0
   zone_merge_gap: float = 1.0
-  # M1 candlestick trigger (P3): once a setup is CONFIRMED on M5 at a zone,
-  # the executable TradePlan is published only when a qualifying M1 candle
-  # prints at that zone - M1 is a trigger, never a setup source (P2).
+  # Actionability remains observable by default. Only a genuine overlapping
+  # BUY/SELL conflict is always hard; operators may re-enable the broader
+  # #140 policy and key-level ambiguity drops independently.
+  scanner_actionability_gate_enabled: bool = False
+  key_level_role_ambiguity_gate_enabled: bool = False
+  range_context_disagreement_gate_enabled: bool = False
+  # M1 candlestick patterns are optional timing evidence for an already
+  # formed setup. A fresh pattern can anchor the stop wick, but distance alone
+  # authorizes publication.
   m1_trigger_patterns: str = (
     "wick_rejection,body_close,strong_close,pin_bar,engulfing,hammer"
   )
@@ -665,6 +681,18 @@ class Settings(BaseSettings):
     if not 1 <= int(self.auto_trade_retest_trigger_validity_bars) <= 5:
       raise ValueError(
         "AUTO_TRADE_RETEST_TRIGGER_VALIDITY_BARS must be between 1 and 5"
+      )
+    if (
+      self.auto_trade_execute_max_distance_pips <= 0
+      or self.auto_trade_max_entry_distance_pips <= 0
+      or not math.isclose(
+        self.auto_trade_execute_max_distance_pips,
+        self.auto_trade_max_entry_distance_pips,
+      )
+    ):
+      raise ValueError(
+        "AUTO_TRADE_EXECUTE_MAX_DISTANCE_PIPS and "
+        "AUTO_TRADE_MAX_ENTRY_DISTANCE_PIPS must be equal and positive"
       )
     if (
       self.auto_trade_execution_zone_max_width_atr <= 0

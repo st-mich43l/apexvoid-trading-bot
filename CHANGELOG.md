@@ -47,7 +47,7 @@ dated section after deployment.
 - Confluence-merge zone (`app/analysis/confluence_zone.py`): co-located/
   nearby key level, demand/supply, order block, FVG and breaker structures
   (overlapping, or gap `<= zone_merge_gap`, default `1.0`) collapse into one
-  `ConfluenceZone` capped at `zone_merge_max_width` (default `3.0` price
+  `ConfluenceZone` capped at `zone_merge_max_width` (default `6.0` price
   units) carrying the union of their tags and a stable id (bucketed
   mid/width + sorted tags, mirroring `structural_zone_id`'s scheme). Same
   directional role only - a demand and a supply at the same price never
@@ -56,21 +56,23 @@ dated section after deployment.
   strategy resolving onto an already-claimed zone is rejected
   (`zone_already_claimed`) rather than producing a second plan; wired into
   `worker.py::_publish_trade_plan_v7` alongside the existing thesis claim.
-- `m1_trigger` (`app/analysis/m1_trigger.py`): once a setup is CONFIRMED on
-  M5 at a zone, it now waits in a new `ARMED_WAITING_TRIGGER` lifecycle
-  state (`app/autotrade/setup_lifecycle.py`) until a qualifying M1 candle
-  prints - wick rejection, body close, strong close, pin bar, engulfing, or
-  hammer/shooting star (`m1_trigger_patterns`, default all six enabled;
-  `m1_trigger_wick_fraction` default `0.5`; `m1_trigger_strong_close_pct`
-  default `0.2`). The executable TradePlan V7 is published only at the
-  moment the trigger fires, with the stop re-anchored to the trigger
-  candle's wick extreme (reusing the existing `wick_stop_buffer` computation
-  via `plan_protective_stop`) instead of the raw zone. M1 is a trigger here,
-  never a setup source - the C# executor's `market_watch` entry
-  (`EvaluateMarketWatch`) is unchanged and still evaluates only quote-in-zone;
-  no candlestick logic crosses into ctrader-engine.
+- `m1_trigger` (`app/analysis/m1_trigger.py`) supplies optional timing evidence
+  for a setup already confirmed on M5: wick rejection, body close, strong
+  close, pin bar, engulfing, or hammer/shooting star can re-anchor the stop to
+  the trigger wick. Distance eligibility does not require a qualifying M1
+  candle, and no candlestick logic crosses into `ctrader-engine`.
 
 ### Changed
+- Execution is distance-based: a formed setup publishes immediately when the
+  side-aware executable quote is inside or within
+  `AUTO_TRADE_EXECUTE_MAX_DISTANCE_PIPS` (default `40`), and persists
+  `WAITING_RETEST` only while farther away. M1 is a soft timing/stop-anchor
+  input, no longer a publication precondition; the Python/C# executor cap
+  `AUTO_TRADE_MAX_ENTRY_DISTANCE_PIPS` now shares the same `40`-pip envelope.
+- Confluence merge width is now `6` price units. The #140 actionability,
+  key-level ambiguity, and range-context disagreement policies observe by
+  default behind explicit flags, so same-side merged structures continue to
+  setup confirmation; genuinely overlapping BUY/SELL structures still gate.
 - `map_strategy.py` selects mapped zones from `market_map.actionable_entries`
   (the uncapped structural pool) instead of `market_map.entries` (the
   Telegram-display-capped list), so the per-side display cap can no longer
@@ -105,12 +107,12 @@ dated section after deployment.
   (`delivery_delete_on_terminal`, default on; falls back to editing the card
   to a neutral terminal state if Telegram's deletion window has passed).
   New `ARMED_WAITING_TRIGGER` setups expire via their own `expires_at` if
-  the M1 trigger never fires; a build rejection after the trigger fires, and
-  a scanner-detected structure invalidation for a still-waiting setup, both
-  route through the same delete-the-card path instead of a "rejected"
-  card. A position with no `setup_lifecycle` record (eg. an older V6
-  position) is unaffected - lifecycle replies fall back to the pre-P4
-  position-id reply chain exactly as before.
+  price never enters the executable distance envelope; a build rejection
+  after distance/M1 confirmation and a scanner-detected invalidation for a
+  still-waiting setup both route through the same delete-the-card path
+  instead of a "rejected" card. A position with no `setup_lifecycle` record
+  (eg. an older V6 position) is unaffected - lifecycle replies fall back to
+  the pre-P4 position-id reply chain exactly as before.
 
 ### Removed
 - The private M1 range gate (`app/autotrade/gate.py`) and the M1
@@ -128,13 +130,16 @@ dated section after deployment.
   longer construct an `ExecutionIntent`.
 
 ### Fixed
+- Manual `/algo` envelopes now carry an explicit
+  `bypass_analysis_gates=true` contract and bypass scanner arbitration,
+  confirmation, R/R, barrier, cooldown, and overlap analysis while retaining
+  executor broker-mechanical safety.
 - Scanner-confirmed structural reactions no longer lose valid entries to a
   forced arm-only worker cycle. In-zone M5 confirmations now run final V7
-  preflight and publication in the same call; reactions that already left the
-  zone wait for a new retest and an episode-scoped closed M1 trigger. M1
-  evaluation now scans every eligible unprocessed bar and applies one common
-  zone-intersection gate to all six candle patterns, preventing stale triggers
-  from authorizing a later retest.
+  preflight and publication in the same call; reactions outside the execution
+  envelope wait for a distance-based retest. Optional M1 evaluation scans every
+  eligible unprocessed bar and applies one common zone-intersection gate to all
+  six candle patterns, preventing stale triggers from anchoring a later entry.
 - Separate scanner observations from actionable setups before lifecycle
   creation. Opposing cross-side reactions now resolve deterministically,
   ambiguous generic key levels remain analysis-only, and the nearest
@@ -165,8 +170,9 @@ dated section after deployment.
 - Move the shared execution-policy reward/risk check into setup eligibility:
   setups below their family's `min_reward_risk` are recorded as
   `rr_pre_gate` but never confirm or form a card. The plan-build R/R check
-  remains authoritative after the M1 trigger; a late failure expires and
-  silently deletes the forming card instead of posting BLOCKED spam.
+  remains authoritative after distance eligibility and optional M1 timing;
+  a late failure expires and silently deletes the forming card instead of
+  posting BLOCKED spam.
 - Broker SL/TP exits discovered by reconcile without a confirmed OrderType no
   longer show `reason unconfirmed`. Close reason is inferred when the exit
   sits on the protective stop — both a clean full SL before any TP and a BE

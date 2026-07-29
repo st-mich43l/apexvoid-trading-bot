@@ -1232,6 +1232,14 @@ public sealed class AutoTradeEngine(
         cancellationToken
       );
     }
+    if (manualAlgoCandidate && !candidate.BypassAnalysisGates)
+    {
+      return await RejectAsync(
+        candidate,
+        "manual_algo_bypass_contract_missing",
+        cancellationToken
+      );
+    }
     if (
       manualAlgoCandidate
       && (

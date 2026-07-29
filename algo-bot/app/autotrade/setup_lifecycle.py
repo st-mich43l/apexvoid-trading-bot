@@ -11,10 +11,11 @@ transition back to it - that is what stops "old confirmations creating new
 plans repeatedly" and what stops repeated scanner evaluations from emitting
 a new FORMING Telegram card every detector cycle (see `transition_setup`'s
 ``changed`` return value). CONFIRMED always passes through
-ARMED_WAITING_TRIGGER for lifecycle compatibility. An authoritative scanner
-M5 reaction may continue to PLAN_BUILT in that same worker call while the
-executable quote remains in-zone; a later retest stays armed until a fresh
-episode-scoped M1 trigger fires. This keeps the C# executor mechanical.
+ARMED_WAITING_TRIGGER for lifecycle compatibility. A formed setup may continue
+to PLAN_BUILT when its executable quote is within the configured distance
+envelope; farther setups remain armed for a retest. Episode-scoped M1 evidence
+is optional and only refines timing/stop anchoring. The C# executor stays
+mechanical.
 
 Storage: `analysis:setup:{setup_id}` (see docs/redis-contract.md).
 """

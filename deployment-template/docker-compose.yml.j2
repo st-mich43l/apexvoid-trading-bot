@@ -11,7 +11,14 @@
 {% set zone_cooldown_default = 'false' if auto_trade_profile == 'demo_eval' else 'true' %}
 {% set zone_reconcile_default = 'shadow' if auto_trade_profile == 'demo_eval' else 'enforce' %}
 {% set execution_defaults = {
-  'AUTO_TRADE_RETEST_TRIGGER_VALIDITY_BARS': '2'
+  'AUTO_TRADE_RETEST_TRIGGER_VALIDITY_BARS': '2',
+  'AUTO_TRADE_EXECUTE_MAX_DISTANCE_PIPS': '40',
+  'AUTO_TRADE_MAX_ENTRY_DISTANCE_PIPS': '40',
+  'ZONE_MERGE_MAX_WIDTH': '6',
+  'ZONE_MERGE_GAP': '1',
+  'SCANNER_ACTIONABILITY_GATE_ENABLED': 'false',
+  'KEY_LEVEL_ROLE_AMBIGUITY_GATE_ENABLED': 'false',
+  'RANGE_CONTEXT_DISAGREEMENT_GATE_ENABLED': 'false'
 } %}
 {% set demo_execution_defaults = {
   'AUTO_TRADE_STRUCTURAL_GUARD_MODE': 'observe',
@@ -166,7 +173,7 @@ services:
       AUTO_TRADE_CANDIDATE_STORAGE_TTL_SECONDS: {{ apexvoid_trading_bot_env.AUTO_TRADE_CANDIDATE_STORAGE_TTL_SECONDS | default('604800') | string | to_json }}
       AUTO_TRADE_SPOT_MAX_AGE_SECONDS: {{ apexvoid_trading_bot_env.AUTO_TRADE_SPOT_MAX_AGE_SECONDS | default('5') | string | to_json }}
       AUTO_TRADE_MAX_SPREAD_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_MAX_SPREAD_PIPS | default('5') | string | to_json }}
-      AUTO_TRADE_MAX_ENTRY_DISTANCE_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_MAX_ENTRY_DISTANCE_PIPS | default('10') | string | to_json }}
+      AUTO_TRADE_MAX_ENTRY_DISTANCE_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_MAX_ENTRY_DISTANCE_PIPS | default('40') | string | to_json }}
       AUTO_TRADE_BOX_MIN_RR: {{ apexvoid_trading_bot_env.AUTO_TRADE_BOX_MIN_RR | default('1.25') | string | to_json }}
       AUTO_TRADE_MIN_CONFLUENCE: {{ apexvoid_trading_bot_env.AUTO_TRADE_MIN_CONFLUENCE | default('2') | string | to_json }}
       AUTO_TRADE_POLL_MS: {{ apexvoid_trading_bot_env.AUTO_TRADE_POLL_MS | default('1000') | string | to_json }}

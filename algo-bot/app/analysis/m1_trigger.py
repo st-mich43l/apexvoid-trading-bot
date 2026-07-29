@@ -1,15 +1,14 @@
 """M1 candlestick trigger (Codex Prompt P3, Part 2).
 
-Once a setup is confirmed on M5 at a `ConfluenceZone`, the entry fires only
-when a qualifying M1 candle prints at the zone. M1 is a trigger here, never a
-setup source (that role was removed from M1 entirely in P2) - this module
-only ever answers "did the already-decided zone/direction just get a
-qualifying M1 candle", it never proposes a zone or a direction of its own.
+Once a setup is confirmed on M5 at a `ConfluenceZone`, a qualifying M1 candle
+can refine timing and anchor the stop wick. M1 is optional evidence here,
+never a setup source (that role was removed from M1 entirely in P2) - this
+module only answers whether the already-decided zone/direction just printed a
+qualifying candle; it never proposes a zone or direction of its own.
 
 Boundary rule: algo-bot is the only place candlestick patterns are
-evaluated. The C# executor's `market_watch` entry stays mechanical
-(quote-in-zone -> submit market) - the trigger decision already happened
-here, before the plan was ever published (see worker.py::_publish_trade_plan_v7).
+evaluated. The C# executor's `market_watch` entry stays mechanical; optional
+candlestick evidence is evaluated here before publication.
 """
 
 from __future__ import annotations

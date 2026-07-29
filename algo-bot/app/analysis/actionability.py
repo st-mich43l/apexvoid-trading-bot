@@ -36,6 +36,7 @@ class ActionabilityResolution:
   observed: tuple[DetectionResult, ...]
   actionable: tuple[DetectionResult, ...]
   gated: tuple[tuple[DetectionResult, ActionabilityDecision], ...]
+  decisions: tuple[tuple[DetectionResult, ActionabilityDecision], ...]
   conflicts: tuple[dict[str, Any], ...]
 
 
@@ -120,13 +121,14 @@ def _decision(
   message: str,
   measured: dict[str, Any],
   *,
+  hard_block: bool = True,
   opposing_entry: MapEntry | None = None,
 ) -> ActionabilityDecision:
   return ActionabilityDecision(
-    False,
+    not hard_block,
     reason_code,
     message,
-    True,
+    hard_block,
     measured,
     opposing_entry,
   )
@@ -170,15 +172,28 @@ def resolve_actionability(
   observed = tuple(observed_results)
   entries = () if market_map is None else tuple(market_map.actionable_entries)
   gated: dict[int, ActionabilityDecision] = {}
+  decisions: dict[int, list[ActionabilityDecision]] = {}
   conflicts: list[dict[str, Any]] = []
+  actionability_hard = bool(
+    getattr(cfg, "scanner_actionability_gate_enabled", False)
+  )
+  role_ambiguity_hard = bool(
+    getattr(cfg, "key_level_role_ambiguity_gate_enabled", False)
+  )
+
+  def record(index: int, decision: ActionabilityDecision) -> None:
+    decisions.setdefault(index, []).append(decision)
+    if decision.hard_block:
+      gated[index] = decision
 
   for index, result in enumerate(observed):
     if _structural(result) and market_map is None:
-      gated[index] = _decision(
+      record(index, _decision(
         "opposing_context_unavailable",
         "current Market Map context is unavailable",
         {"symbol": symbol, "htf_bias": getattr(context, "htf_bias", None)},
-      )
+        hard_block=actionability_hard,
+      ))
 
   threshold = max(0.0, float(getattr(cfg, "scanner_conflict_overlap", 0.5)))
   margin = max(0.0, float(getattr(cfg, "scanner_conflict_margin", 1.0)))
@@ -195,7 +210,9 @@ def resolve_actionability(
         continue
       overlap = _zone_overlap_ratio(first, second)
       map_conflict = _map_conflict(first, second, entries)
-      if overlap < threshold and not map_conflict:
+      # Same-side results have already merged. Only a genuine overlapping
+      # BUY/SELL geometry may hard-gate; distant map context is observation.
+      if overlap < threshold:
         continue
       difference = float(first.confluence) - float(second.confluence)
       if abs(difference) < margin:
@@ -205,12 +222,13 @@ def resolve_actionability(
           "quality_margin": abs(difference),
           "required_margin": margin,
         }
-        gated[first_index] = _decision(
+        conflict_decision = _decision(
           "opposing_conflict_ambiguous",
           "opposing structural observations overlap without a decisive side",
           measured,
         )
-        gated[second_index] = gated[first_index]
+        record(first_index, conflict_decision)
+        record(second_index, conflict_decision)
         stronger, weaker = first, second
         outcome = "both_dropped"
       else:
@@ -221,7 +239,7 @@ def resolve_actionability(
         )
         stronger = observed[winner_index]
         weaker = observed[loser_index]
-        gated[loser_index] = _decision(
+        record(loser_index, _decision(
           "opposing_conflict_weaker",
           "opposing structural observation lost the quality margin",
           {
@@ -231,7 +249,7 @@ def resolve_actionability(
             "required_margin": margin,
             "winner_direction": stronger.direction,
           },
-        )
+        ))
         outcome = "stronger_kept"
       conflicts.append({
         "outcome": outcome,
@@ -272,13 +290,16 @@ def resolve_actionability(
         "bias_relationship": result.bias_relationship or result.mode,
       }
       if not room.allowed:
-        gated[index] = _decision(
+        decision = _decision(
           room.reason_code,
           room.message,
           measured,
+          hard_block=actionability_hard,
           opposing_entry=room.opposing_entry,
         )
-        continue
+        record(index, decision)
+        if decision.hard_block:
+          continue
       if room.opposing_entry is not None:
         result = replace(
           result,
@@ -288,7 +309,7 @@ def resolve_actionability(
 
     role = _key_level_role(result, context, cfg)
     if role == ROLE_AMBIGUOUS:
-      gated[index] = _decision(
+      decision = _decision(
         "key_level_role_ambiguous",
         "generic key level has no accepted support/resistance role",
         {
@@ -296,44 +317,61 @@ def resolve_actionability(
           "key_level": float(result.key_level),
           "htf_bias": getattr(context, "htf_bias", None),
         },
+        hard_block=role_ambiguity_hard,
       )
-      continue
+      record(index, decision)
+      if decision.hard_block:
+        continue
     if role in {ROLE_BROKEN_SUPPORT, ROLE_BROKEN_RESISTANCE}:
-      gated[index] = _decision(
+      decision = _decision(
         "key_level_role_flip_requires_retest",
         "accepted level break belongs to Break & Retest",
         {"key_level_role": role, "key_level": float(result.key_level)},
+        hard_block=actionability_hard,
       )
-      continue
+      record(index, decision)
+      if decision.hard_block:
+        continue
     if (
       role == ROLE_SUPPORT and result.direction.upper() != "BUY"
       or role == ROLE_RESISTANCE and result.direction.upper() != "SELL"
     ):
-      gated[index] = _decision(
+      decision = _decision(
         "key_level_role_direction_mismatch",
         "Key Level Reaction direction conflicts with the classified role",
         {
           "key_level_role": role,
           "direction": result.direction.upper(),
         },
+        hard_block=actionability_hard,
       )
-      continue
+      record(index, decision)
+      if decision.hard_block:
+        continue
     if (
       str(result.bias_relationship or result.mode).casefold()
       == "counter_bias"
       and not bool(getattr(cfg, "auto_trade_allow_counter_bias", False))
     ):
-      gated[index] = _decision(
+      decision = _decision(
         "counter_bias_disabled",
         "counter-bias setup is disabled by policy",
         {"htf_bias": getattr(context, "htf_bias", None)},
+        hard_block=actionability_hard,
       )
-      continue
+      record(index, decision)
+      if decision.hard_block:
+        continue
     actionable.append(result)
 
   return ActionabilityResolution(
     observed,
     tuple(actionable),
     tuple((observed[index], gated[index]) for index in sorted(gated)),
+    tuple(
+      (observed[index], decision)
+      for index in sorted(decisions)
+      for decision in decisions[index]
+    ),
     tuple(conflicts),
   )

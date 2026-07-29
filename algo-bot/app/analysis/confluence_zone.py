@@ -130,7 +130,7 @@ def merge_confluence_zones(
   atr: float,
   pip_size: float,
   source_tf: str = "M5",
-  max_width: float = 3.0,
+  max_width: float = 6.0,
   gap: float = 1.0,
 ) -> list[ConfluenceZone]:
   """Collapse overlapping/nearby same-side members into ConfluenceZones.
@@ -207,7 +207,7 @@ def resolve_confluence_zone_id(
   atr: float,
   pip_size: float,
   source_tf: str = "M5",
-  max_width: float = 3.0,
+  max_width: float = 6.0,
   gap: float = 1.0,
   candidate_id: str = "candidate",
 ) -> str:

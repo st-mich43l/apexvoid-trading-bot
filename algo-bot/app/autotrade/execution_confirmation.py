@@ -1,8 +1,8 @@
-"""Persisted confirmation-to-execution handoff for TradePlan V7 reactions.
+"""Persisted distance-based execution handoff for TradePlan V7 setups.
 
 The scanner owns setup confirmation. This module owns only the execution
-timing that follows it: side-aware quote eligibility, retest episode identity,
-and restart-safe consumption of M1 trigger bars.
+timing that follows it: side-aware quote distance, retest state, and optional
+M1 timing evidence.
 """
 
 from __future__ import annotations
@@ -38,6 +38,7 @@ EXECUTION_CONFIRMATION_PHASES = frozenset({
 
 M5_AUTHORITATIVE = "m5_authoritative"
 M1_RETEST = "m1_retest"
+DISTANCE_PROXIMITY = "distance_proximity"
 
 _REACTION_STRATEGIES = frozenset({
   "Key Level Reaction",
@@ -235,11 +236,11 @@ def confirmation_policy_for(match: Any) -> ConfirmationPolicy:
     return ConfirmationPolicy(
       m5_authoritative=False,
       m1_required_on_retest=False,
-      allow_same_cycle_publish=False,
+      allow_same_cycle_publish=True,
       require_quote_inside_zone=False,
       reaction_family=False,
       metadata_valid=True,
-      reason_code="non_reaction_m1_required",
+      reason_code="distance_proximity",
     )
 
   reaction_type = str(getattr(match, "reaction_type", "") or "").casefold()
@@ -258,9 +259,9 @@ def confirmation_policy_for(match: Any) -> ConfirmationPolicy:
   )
   return ConfirmationPolicy(
     m5_authoritative=metadata_valid,
-    m1_required_on_retest=True,
+    m1_required_on_retest=False,
     allow_same_cycle_publish=metadata_valid,
-    require_quote_inside_zone=True,
+    require_quote_inside_zone=False,
     reaction_family=True,
     metadata_valid=metadata_valid,
     reason_code=(
@@ -325,6 +326,25 @@ def executable_quote_in_zone(
       if pip > 0 and math.isfinite(pip) else None
     ),
     tolerance_price=tolerance_price,
+  )
+
+
+def executable_within_distance(
+  evidence: ExecutableZoneEvidence,
+  max_distance_pips: float,
+) -> bool:
+  """Whether a side-aware quote is close enough to execute the formed setup."""
+  distance = evidence.distance_pips
+  try:
+    limit = float(max_distance_pips)
+  except (TypeError, ValueError):
+    return False
+  return bool(
+    distance is not None
+    and math.isfinite(distance)
+    and math.isfinite(limit)
+    and limit >= 0
+    and distance <= limit
   )
 
 
