@@ -333,6 +333,49 @@ async def transition_setup(
   return updated, True
 
 
+# P1-2: once a plan has been built off this setup, a late sweeper pass must
+# never retroactively expire it "as unexecuted" - PLAN_BUILT has no EXPIRED
+# edge at all (see _TRANSITIONS above, an attempted transition raises), and
+# PLAN_PUBLISHED/ARMED *do* still carry an EXPIRED edge for other legitimate
+# callers (eg. an explicit cancel-on-broker-rejection path), but the sweeper
+# specifically must treat all three as "publication won" and leave them
+# alone - the executor's own lifecycle now owns what happens next.
+PUBLICATION_WON_STATES = frozenset({PLAN_BUILT, PLAN_PUBLISHED, ARMED})
+
+
+async def expire_setup(
+  client: Any,
+  setup_id: str,
+  *,
+  reason_code: str = "setup_expired_before_execution",
+) -> tuple[SetupRecord | None, str]:
+  """P0-1: the sweeper's only entry point for moving a setup to EXPIRED.
+
+  Idempotent and safe to call from multiple concurrent sweeper workers -
+  the actual state change still goes through transition_setup, so a setup
+  already EXPIRED (raced by another worker, or already terminal for any
+  other reason) is simply reported back rather than re-transitioned.
+
+  Returns (record, outcome):
+  - record is None only for "missing" (no canonical record for this
+    setup_id - a stale/orphan analysis:setup_expiry member).
+  - outcome is one of "transitioned", "already_terminal",
+    "publication_won" (P1-2 - PLAN_BUILT/PLAN_PUBLISHED/ARMED must not be
+    expired here), or "missing".
+  """
+  record = await load_setup(client, setup_id)
+  if record is None:
+    return None, "missing"
+  if record.state in TERMINAL_STATES:
+    return record, "already_terminal"
+  if record.state in PUBLICATION_WON_STATES:
+    return record, "publication_won"
+  updated, changed = await transition_setup(
+    client, setup_id, EXPIRED, reason_code=reason_code,
+  )
+  return updated, "transitioned" if changed else "already_terminal"
+
+
 async def rearm_setup(
   client: Any,
   setup_id: str,

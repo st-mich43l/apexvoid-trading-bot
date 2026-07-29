@@ -17,6 +17,7 @@ from app.signals.weekly_report import weekly_report_loop
 from app.analysis.scanner import scanner_loop
 from app.analysis.market_map_delivery import market_map_scan_loop
 from app.autotrade.delivery import auto_trade_events_loop
+from app.autotrade.setup_expiry_sweeper import setup_expiry_sweeper_loop
 from app.autotrade.worker import auto_scalp_loop, strategy_match_ready_loop
 from app.autotrade.config_health import (
   python_manifest,
@@ -82,6 +83,7 @@ async def main() -> None:
   asyncio.create_task(scanner_loop())
   asyncio.create_task(auto_scalp_loop())
   asyncio.create_task(strategy_match_ready_loop())
+  asyncio.create_task(setup_expiry_sweeper_loop())
   asyncio.create_task(market_map_scan_loop())
   asyncio.create_task(auto_trade_events_loop())
   asyncio.create_task(bridge_intents_loop())
