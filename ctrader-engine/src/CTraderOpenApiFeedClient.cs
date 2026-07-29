@@ -15,6 +15,7 @@ public sealed class CTraderOpenApiFeedClient : ICTraderFeedClient, ICTraderTrade
   private readonly SingleFlightOperation _refreshSingleFlight = new();
   private readonly List<IDisposable> _subscriptions = [];
   private readonly RefreshTokenState _tokens;
+  private readonly AccessTokenRequestGate _authenticatedRequests;
   private readonly TokenEventNotifier _tokenEvents;
   private readonly Func<DateTimeOffset> _clock;
   private readonly object _spotSubscriptionLock = new();
@@ -45,6 +46,10 @@ public sealed class CTraderOpenApiFeedClient : ICTraderFeedClient, ICTraderTrade
       refreshTokenStore,
       notify: notify,
       notifications: _tokenEvents
+    );
+    _authenticatedRequests = new AccessTokenRequestGate(
+      _requestLock,
+      () => _tokens.AccessToken
     );
   }
 
@@ -876,24 +881,30 @@ public sealed class CTraderOpenApiFeedClient : ICTraderFeedClient, ICTraderTrade
   private Task<ProtoOAAccountAuthRes> AuthorizeAccountAsync(
     long accountId,
     CancellationToken cancellationToken
-  ) => SendAndWaitAsync<ProtoOAAccountAuthRes>(
-    new ProtoOAAccountAuthReq
-    {
-      CtidTraderAccountId = accountId,
-      AccessToken = _tokens.AccessToken,
-    },
-    response => response.CtidTraderAccountId == accountId,
+  ) => _authenticatedRequests.RunAsync(
+    accessToken => SendAndWaitLockedAsync<ProtoOAAccountAuthRes>(
+      new ProtoOAAccountAuthReq
+      {
+        CtidTraderAccountId = accountId,
+        AccessToken = accessToken,
+      },
+      response => response.CtidTraderAccountId == accountId,
+      cancellationToken
+    ),
     cancellationToken
   );
 
   private Task<ProtoOAGetAccountListByAccessTokenRes> GetGrantedAccountsAsync(
     CancellationToken cancellationToken
-  ) => SendAndWaitAsync<ProtoOAGetAccountListByAccessTokenRes>(
-    new ProtoOAGetAccountListByAccessTokenReq
-    {
-      AccessToken = _tokens.AccessToken,
-    },
-    _ => true,
+  ) => _authenticatedRequests.RunAsync(
+    accessToken => SendAndWaitLockedAsync<ProtoOAGetAccountListByAccessTokenRes>(
+      new ProtoOAGetAccountListByAccessTokenReq
+      {
+        AccessToken = accessToken,
+      },
+      _ => true,
+      cancellationToken
+    ),
     cancellationToken
   );
 

@@ -196,23 +196,40 @@ public sealed class FeedRunner(
     }
   }
 
-  private static async Task RunAutoTradeSafelyAsync(
+  private async Task RunAutoTradeSafelyAsync(
     AutoTradeEngine autoTrade,
     ICTraderFeedClient client,
     SymbolInfo symbol,
     CancellationToken cancellationToken
   )
   {
-    try
+    var failures = 0;
+    while (!cancellationToken.IsCancellationRequested && autoTrade.Enabled)
     {
-      await autoTrade.RunSessionAsync(client, symbol, cancellationToken);
-    }
-    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-    {
-    }
-    catch (Exception exception)
-    {
-      await ReportAutoTradeFaultAsync(autoTrade, exception);
+      try
+      {
+        await autoTrade.RunSessionAsync(client, symbol, cancellationToken);
+        return;
+      }
+      catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+      {
+        return;
+      }
+      catch (Exception exception)
+      {
+        await ReportAutoTradeFaultAsync(autoTrade, exception);
+        if (!autoTrade.Enabled)
+        {
+          return;
+        }
+        failures++;
+        var wait = Backoff(failures);
+        Log(
+          $"auto-trade session retrying after transient failure in "
+          + $"{wait.TotalSeconds:N0}s"
+        );
+        await Delay(wait, cancellationToken);
+      }
     }
   }
 

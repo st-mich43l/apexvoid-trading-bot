@@ -11,6 +11,13 @@ dated section after deployment.
 
 ## Unreleased
 
+### Fixed
+- Serialized cTrader access-token reads with account-list/account-auth requests,
+  preventing startup health checks from queuing a stale token while proactive
+  refresh rotates it and then failing auto-trade with
+  `CH_ACCESS_TOKEN_INVALID`; transient auto-trade session faults now retry
+  inside the still-healthy feed session instead of leaving execution stopped.
+
 ### Added
 - Source-generated System.Text.Json metadata and a production-path startup
   contract self-test for TradePlan V7, plus durable C# executor
