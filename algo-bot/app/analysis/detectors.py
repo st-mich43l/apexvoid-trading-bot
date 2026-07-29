@@ -2337,17 +2337,20 @@ def trendline_reaction(ctx: DetectionContext) -> DetectionResult | None:
 
 
 
+# P0 zone/M1 simplification: exactly three live setup families -
+# key_level_reaction/demand_zone_reaction/supply_zone_reaction fold into
+# the "Zone Reaction" family (key level, supply/demand, order block, and
+# FVG are evidence tags on these, not separate strategies -
+# app/analysis/detectors.py's own zone/OB/FVG inputs are already merged
+# this way, see _sd_zone_reaction), range_edge_scalp is the "Range Edge
+# Scalp" family. session_level_reaction/trendline_reaction/box_breakout/
+# trend_pullback/break_retest/snap_back/momentum_ride/fade_scalp are
+# deliberately NOT registered here - their code remains defined above for
+# replay compatibility only (see docs/p0-simple-zone-m1-baseline-map.md
+# section 4), they must never produce a live StrategyMatch/card/plan.
 DEFAULT_DETECTORS: tuple[SetupDetector, ...] = (
   key_level_reaction,
   demand_zone_reaction,
   supply_zone_reaction,
-  session_level_reaction,
-  trendline_reaction,
-  box_breakout,
-  trend_pullback,
-  break_retest,
-  snap_back,
-  momentum_ride,
   range_edge_scalp,
-  fade_scalp,
 )
