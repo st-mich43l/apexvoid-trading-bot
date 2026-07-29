@@ -55,7 +55,28 @@ public sealed class FeedRunner(
         $"connecting to {options.Host}:{options.Port} account={options.AccountId} symbol={options.CTraderSymbol} timeframes={string.Join(",", options.Timeframes)}"
       );
       await client.ConnectAndAuthorizeAsync(cancellationToken);
-      Log("authorized cTrader session");
+      var feedAccount = await client.GetFeedAccountAsync(cancellationToken);
+      if (feedAccount.AccountId != options.AccountId)
+      {
+        throw new InvalidOperationException(
+          $"cTrader feed account mismatch: configured {options.AccountId}, "
+          + $"authorized {feedAccount.AccountId}"
+        );
+      }
+      if (!BrokerIdentity.Matches(
+        feedAccount.BrokerName,
+        options.ExpectedBroker
+      ))
+      {
+        throw new InvalidOperationException(
+          $"cTrader feed broker {feedAccount.BrokerName} does not match "
+          + $"CTRADER_EXPECTED_BROKER={options.ExpectedBroker}"
+        );
+      }
+      Log(
+        $"authorized cTrader session account={feedAccount.AccountId} "
+        + $"broker={feedAccount.BrokerName}"
+      );
       LogTokenStatus(client.TokenStatus);
       var symbol = await client.ResolveSymbolAsync(cancellationToken);
       Log(

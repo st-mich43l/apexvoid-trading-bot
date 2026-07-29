@@ -551,12 +551,7 @@ public static class AutoTradeConfigHealth
     .ToArray();
 
   private static string CanonicalBroker(string value)
-  {
-    var compact = NormalizeIdentity(value);
-    return compact is "fpmarkets" or "fpmarketssc"
-      ? "fpmarkets"
-      : compact;
-  }
+    => BrokerIdentity.Canonical(value);
 
   private static string NormalizeIdentity(string value) => string.Concat(
     value.Trim().ToLowerInvariant().Where(char.IsLetterOrDigit)

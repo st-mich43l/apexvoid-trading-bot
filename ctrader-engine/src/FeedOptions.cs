@@ -21,7 +21,8 @@ public sealed record FeedOptions(
   string RefreshTokenFile,
   TimeSpan RequestTimeout,
   TimeSpan TokenRefreshLead,
-  TimeSpan TokenCheckInterval
+  TimeSpan TokenCheckInterval,
+  string ExpectedBroker = "fpmarkets"
 )
 {
   public static FeedOptions FromEnvironment()
@@ -55,6 +56,10 @@ public sealed record FeedOptions(
       ),
       TokenCheckInterval: TimeSpan.FromHours(
         double.Parse(Env("CTRADER_TOKEN_CHECK_INTERVAL_HOURS", "6"))
+      ),
+      ExpectedBroker: Env(
+        "CTRADER_EXPECTED_BROKER",
+        Env("AUTO_TRADE_EXPECTED_BROKER", "fpmarkets")
       )
     );
   }

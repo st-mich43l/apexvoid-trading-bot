@@ -33,6 +33,7 @@ CTRADER_CLIENT_SECRET=
 CTRADER_ACCESS_TOKEN=
 CTRADER_REFRESH_TOKEN=
 CTRADER_ACCOUNT_ID=
+CTRADER_EXPECTED_BROKER=fpmarkets
 ```
 
 Optional defaults:
@@ -129,6 +130,10 @@ the host is changed. It also requires a Hedged account and a broker name
 matching `AUTO_TRADE_EXPECTED_BROKER`.
 Broker matching normalizes case, spaces and punctuation, so `fpmarkets`,
 `FPMarkets` and `FP Markets` identify the same broker.
+The feed checks `CTRADER_EXPECTED_BROKER` immediately after account
+authorization and before symbol resolution, backfill or live subscription.
+This prevents an access token that grants multiple brokers from silently
+feeding bars from a non-execution account.
 Set `AUTO_TRADE_REQUIRE_DEMO_ONLY_TOKEN=true` to disable execution whenever the
 token grants any live account, even when the selected account is demo.
 Token rotation persists the new refresh token and re-authorizes the configured

@@ -1,19 +1,12 @@
 """execution:trade_plans stream plumbing for TradePlan V7.
 
-Phase 1 of the V7 migration (docs/adr-trade-plan-v7-boundary.md): publishing
-here has no broker execution side effect. C# does not consume this stream
-for order placement until AUTO_TRADE_CONTRACT_MODE reaches v7_primary; under
-shadow_v7 it parses and validates published plans but places no orders.
-
 Key namespace (kept separate from the V6 auto_trade:* namespace so the two
 contracts never collide or get silently reinterpreted as each other):
 
   execution:trade_plans          - XADD stream of published TradePlan V7 JSON
   execution:plan:{plan_id}       - full plan JSON, TTL-bound
-  execution:plan_owner:{plan_id} - written by whichever side claims the plan
-                                    for execution (Phase 3, not written here)
+  execution:plan_dedup:{plan_id} - longer-lived publication tombstone
   execution:plan_state:{plan_id} - "published" | "armed" | ... lifecycle state
-  execution:plan_event:{plan_id} - per-plan event history (Phase 2+)
 """
 
 from __future__ import annotations
@@ -26,9 +19,14 @@ from app.core.config import settings
 
 
 _PUBLISH_PLAN_LUA = """
-if redis.call('EXISTS', KEYS[1]) == 1 then
+if redis.call('EXISTS', KEYS[4]) == 1 then
   return 'existing'
 end
+if redis.call('EXISTS', KEYS[1]) == 1 then
+  redis.call('SET', KEYS[4], '1', 'EX', ARGV[4])
+  return 'existing'
+end
+redis.call('SET', KEYS[4], '1', 'EX', ARGV[4])
 redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[2])
 redis.call('SET', KEYS[2], 'published', 'EX', ARGV[2])
 return redis.call(
@@ -53,6 +51,10 @@ def plan_event_key(plan_id: str) -> str:
   return f"execution:plan_event:{plan_id}"
 
 
+def plan_dedup_key(plan_id: str) -> str:
+  return f"execution:plan_dedup:{plan_id}"
+
+
 async def publish_trade_plan(client: Any, plan: TradePlan) -> str:
   """XADD a validated TradePlan V7 onto execution:trade_plans.
 
@@ -65,18 +67,22 @@ async def publish_trade_plan(client: Any, plan: TradePlan) -> str:
 
   key = plan_key(plan.plan_id)
   state_key = plan_state_key(plan.plan_id)
+  dedup_key = plan_dedup_key(plan.plan_id)
+  dedup_ttl = max(86400, int(settings.auto_trade_candidate_ttl))
   stream = settings.auto_trade_trade_plan_stream
   maxlen = max(100, settings.auto_trade_stream_maxlen)
   try:
     event_id = await client.eval(
       _PUBLISH_PLAN_LUA,
-      3,
+      4,
       key,
       state_key,
       stream,
+      dedup_key,
       payload,
       ttl,
       maxlen,
+      dedup_ttl,
     )
   except Exception:
     if not getattr(
@@ -85,9 +91,12 @@ async def publish_trade_plan(client: Any, plan: TradePlan) -> str:
       False,
     ):
       raise
-    if await client.exists(key):
+    if await client.exists(dedup_key) or await client.exists(key):
+      if not await client.exists(dedup_key):
+        await client.set(dedup_key, "1", ex=dedup_ttl)
       return "existing"
     pipe = client.pipeline(transaction=True)
+    pipe.set(dedup_key, "1", ex=dedup_ttl)
     pipe.set(key, payload, ex=ttl)
     pipe.set(state_key, "published", ex=ttl)
     pipe.xadd(

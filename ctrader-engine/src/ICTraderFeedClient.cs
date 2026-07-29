@@ -7,6 +7,9 @@ public interface ICTraderFeedClient : IAsyncDisposable
 
   Task ConnectAndAuthorizeAsync(CancellationToken cancellationToken);
   Task RefreshTokenAsync(CancellationToken cancellationToken);
+  Task<TradingAccountSnapshot> GetFeedAccountAsync(
+    CancellationToken cancellationToken
+  );
   Task<SymbolInfo> ResolveSymbolAsync(CancellationToken cancellationToken);
 
   Task<IReadOnlyList<RawTrendbar>> GetTrendbarsAsync(

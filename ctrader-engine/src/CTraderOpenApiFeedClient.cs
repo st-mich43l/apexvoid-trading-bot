@@ -86,6 +86,10 @@ public sealed class CTraderOpenApiFeedClient : ICTraderFeedClient, ICTraderTrade
   public Task RefreshTokenAsync(CancellationToken cancellationToken) =>
     _refreshSingleFlight.RunAsync(RefreshTokenCoreAsync, cancellationToken);
 
+  public Task<TradingAccountSnapshot> GetFeedAccountAsync(
+    CancellationToken cancellationToken
+  ) => GetTradingAccountAsync(cancellationToken);
+
   private async Task RefreshTokenCoreAsync(CancellationToken cancellationToken)
   {
     if (string.IsNullOrWhiteSpace(_tokens.RefreshToken))
