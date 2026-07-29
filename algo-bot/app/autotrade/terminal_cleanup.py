@@ -10,14 +10,24 @@ snapshot, or a stuck reconciliation marker behind.
 Coverage note (explicit, not silently claimed complete): this coordinator
 clears the Telegram forming card, the reconciliation-pending marker, the
 execution-confirmation transient key, the analysis:setup_expiry index
-membership, the route-outcome terminal snapshot, and emits the terminal
-lifecycle event. It does NOT yet release a held confluence-zone claim, an
-active-thesis claim, ready-event recovery state, or remove a stale
-StrategyMatch from scanner-side active collections - those need call-site
--specific context (which zone/thesis was claimed, which StrategyMatch
-object) that a setup_id-only coordinator does not have visibility into on
-its own. Callers that hold that context should still release it themselves
-after calling this.
+membership, the route-outcome terminal snapshot, the active-thesis claim,
+and emits the terminal lifecycle event. It does NOT release a held
+confluence-zone claim, ready-event recovery state, or remove a stale
+StrategyMatch from scanner-side active collections:
+- The confluence-zone claim key is derived at claim time from
+  (symbol, match, market_map) via _resolve_match_confluence_claim_id
+  (worker.py) - it is never persisted onto the canonical SetupRecord, so a
+  setup_id-only coordinator has no way to recompute which zone_id to
+  release without either a schema change or a reverse-lookup key that
+  does not exist today. The active-thesis claim IS releasable here
+  because SetupRecord already carries symbol/thesis_id directly.
+- Ready-event recovery state and stale StrategyMatch removal need the
+  specific StrategyMatch/market-map context call sites that already hold
+  it, not a setup_id alone.
+Callers that hold that context should still release it themselves after
+calling this - see worker.py's own _release_claims() at the point a
+confluence-zone claim is taken, which already does this correctly for
+that one call site.
 """
 
 from __future__ import annotations
@@ -30,7 +40,12 @@ from app.autotrade.execution_confirmation import execution_confirmation_key
 from app.autotrade.lifecycle import emit_lifecycle
 from app.autotrade.route_outcome import record_route_outcome
 from app.autotrade.setup_card import kill_setup_card
-from app.autotrade.setup_lifecycle import TERMINAL_STATES, load_setup, setup_expiry_index_key
+from app.autotrade.setup_lifecycle import (
+  TERMINAL_STATES,
+  load_setup,
+  release_active_thesis,
+  setup_expiry_index_key,
+)
 from app.bot.client import delete_scanner_message, edit_scanner_message_text
 
 log = logging.getLogger("bot")
@@ -87,6 +102,15 @@ async def finalize_terminal_setup(
   )
   await client.delete(execution_confirmation_key(setup_id))
   await client.zrem(setup_expiry_index_key(), setup_id)
+  # Safe unconditionally: reaching a terminal state here means this setup
+  # never had a plan published (PLAN_PUBLISHED/ARMED are not terminal -
+  # see setup_lifecycle.PUBLICATION_WON_STATES), so it never carried live
+  # broker exposure that would make releasing its thesis claim unsafe.
+  # release_active_thesis is itself a no-op if this setup never held the
+  # claim in the first place.
+  await release_active_thesis(
+    client, symbol=record.symbol, thesis_id=record.thesis_id, setup_id=setup_id,
+  )
 
   shim = types.SimpleNamespace(
     match_id=setup_id,
