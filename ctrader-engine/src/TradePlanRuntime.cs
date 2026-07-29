@@ -432,6 +432,30 @@ public sealed class TradePlanRuntime(
         );
         return;
       }
+      // P1-3: the claim already belongs to THIS executor - by construction
+      // that only happens when we already began processing this exact
+      // plan_id at least once before (a redelivered/retried stream entry,
+      // eg. after a restart re-reads from an earlier cursor). Falling
+      // through to the fresh-arm path below used to unconditionally
+      // overwrite whatever real progress had already happened (a
+      // submitted/filled order) with a brand-new Armed state and
+      // re-publish "plan_armed" - risking a duplicate broker submission.
+      // A duplicate claim must never look like a normal re-arm: reconcile
+      // against whatever evidence exists (in-memory state first, durable
+      // Redis state second) and never proceed past this point regardless
+      // of what is found - there is no legitimate first-time-arm scenario
+      // once we already own this claim.
+      var evidenceStage = _statesById.TryGetValue(plan.PlanId, out var existingState)
+        ? existingState.Stage.ToString()
+        : await store.GetStringAsync(PlanStateKey(plan.PlanId), cancellationToken)
+          is { } restoredJson
+          ? TradePlanJson.DeserializeState(restoredJson)?.Stage.ToString() ?? "unknown"
+          : "no_evidence_forgotten";
+      log(
+        "auto_trade_plan_duplicate_claim_reconciled "
+        + $"stream_id={entry.Id} plan_id={plan.PlanId} stage={evidenceStage}"
+      );
+      return;
     }
     _plansById[plan.PlanId] = plan;
     // Keep the executor recovery copy independent of Python's payload TTL.

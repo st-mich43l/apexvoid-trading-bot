@@ -11,6 +11,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timezone
 from decimal import Decimal
+import asyncio
 import hashlib
 import json
 import logging
@@ -125,6 +126,7 @@ from app.autotrade.strategy_match_ready import (
   ensure_ready_group,
   load_canonical_match,
   ready_consumer_name,
+  save_ready_consumer_health,
   save_ready_snapshot,
 )
 from app.analysis.m1_trigger import (
@@ -346,6 +348,28 @@ def terminal_state_for_preflight_failure(
   if current_state in TERMINAL_STATES:
     return None
   return INVALIDATED
+
+
+def parse_cycle_owner_intent_id(raw: Any) -> str | None:
+  """P1-5: extract intent_id from a publish_ranked_cycle owner record.
+
+  publish_ranked_cycle stores the cycle owner as a JSON object
+  ({symbol, cycle_id, intent_id, setup_id, plan_id, published_at}) - the
+  raw JSON blob itself is never a valid winner_intent_id. A legacy or
+  malformed value (predating the JSON payload, or a decode failure) falls
+  back to the raw text unchanged, so any old data already written stays
+  readable rather than becoming None.
+  """
+  if raw is None:
+    return None
+  text = raw.decode() if isinstance(raw, bytes) else str(raw)
+  try:
+    payload = json.loads(text)
+  except (TypeError, ValueError, json.JSONDecodeError):
+    return text
+  if isinstance(payload, dict) and payload.get("intent_id"):
+    return str(payload["intent_id"])
+  return text
 
 
 def _executable_spot_price(spot: Any, direction: str) -> float:
@@ -4419,6 +4443,21 @@ async def _publish_trade_plan_v7(
       CANCELLED,
       reason_code="v7_plan_build_incomplete",
     )
+    # No other caller reaches this branch, so nothing else will ever clear
+    # the forming card for it - publish_status=True routes this through
+    # delivery.py's _CARD_TERMINAL_TYPES handling (kill_setup_card), which
+    # keeps worker.py itself free of any direct Telegram dependency.
+    await emit_lifecycle(
+      client,
+      CANCELLED,
+      symbol=match.symbol,
+      match_id=match.match_id,
+      correlation_id=match.match_id,
+      timeframe=match.source_tf,
+      reason_code="v7_plan_build_incomplete",
+      message="TradePlan V7 build left incomplete across a restart/crash",
+      publish_status=True,
+    )
     return None
   if spot is None or not spot.fresh:
     await record_route_outcome(
@@ -4641,6 +4680,17 @@ async def _publish_trade_plan_v7(
       evidence=evidence,
       status="blocked",
     )
+    await emit_lifecycle(
+      client,
+      INVALIDATED,
+      symbol=symbol,
+      match_id=setup_id,
+      correlation_id=setup_id,
+      timeframe=match.source_tf,
+      reason_code="confirmation_metadata_missing",
+      message="scanner reaction is missing authoritative confirmation metadata",
+      publish_status=True,
+    )
     return None
 
   confirmation: ExecutionConfirmation | None = None
@@ -4801,11 +4851,24 @@ async def _publish_trade_plan_v7(
             trigger_source=execution_state.trigger_source,
             trigger_consumed=execution_state.trigger_consumed,
           )
-          await save_execution_confirmation(
-            client,
-            execution_state,
-            expires_at=match.expires_at,
-          )
+        # P0-8: this cycle's preflight pass already wrote the transient
+        # "reaction_confirmation_handoff" reason into route_outcome before
+        # this function ever ran - _preflight_decision's handoff branch
+        # fires every cycle a reaction stays outside its zone, but this
+        # function (the intended correction) previously only re-persisted
+        # waiting_retest_entry_zone on the one-time WORKER_ACKNOWLEDGED
+        # transition tick. Every later cycle left the stale handoff reason
+        # as the permanent last word in route_outcome. Re-persist here
+        # every cycle so the durable reason always wins back.
+        await _persist_v7_confirmation_phase(
+          client,
+          symbol,
+          match,
+          execution_state,
+          reason_code="waiting_retest_entry_zone",
+          message="confirmed reaction is outside its executable entry zone",
+          evidence=evidence,
+        )
         return None
       episode_id = deterministic_episode_id(
         setup_id,
@@ -7938,6 +8001,22 @@ async def _handle_event(
               next_state,
               reason_code=preflight.reason_code,
             )
+            # This path had no emit_lifecycle call to ride downstream on
+            # (unlike the other terminal transitions in this module), so
+            # nothing ever cleared the card for this failure - publish one
+            # now, gated on the transition actually succeeding, so
+            # delivery.py's _CARD_TERMINAL_TYPES handling picks it up.
+            await emit_lifecycle(
+              client,
+              next_state,
+              symbol=routed_match.symbol,
+              match_id=routed_match.match_id,
+              correlation_id=routed_match.match_id,
+              timeframe=routed_match.source_tf,
+              reason_code=preflight.reason_code,
+              message=preflight.message,
+              publish_status=True,
+            )
           except SetupLifecycleError:
             log.exception(
               "terminal preflight lifecycle transition failed "
@@ -8163,13 +8242,7 @@ async def _handle_event(
       existing_cycle_owner = await client.get(
         autonomous_cycle_owner_key(symbol, cycle_id)
       )
-      winner_intent_id = (
-        existing_cycle_owner.decode()
-        if isinstance(existing_cycle_owner, bytes)
-        else str(existing_cycle_owner)
-        if existing_cycle_owner is not None
-        else None
-      )
+      winner_intent_id = parse_cycle_owner_intent_id(existing_cycle_owner)
       if routed_top is not None:
         await record_route_outcome(
           client,
@@ -8572,6 +8645,16 @@ async def _process_strategy_match_ready_entry(
           EXPIRED,
           reason_code="strategy_match_ready_expired",
         )
+        await emit_lifecycle(
+          client,
+          EXPIRED,
+          symbol=event.symbol,
+          match_id=event.setup_id,
+          correlation_id=event.setup_id,
+          reason_code="strategy_match_ready_expired",
+          message="durable ready event expired before the worker consumed it",
+          publish_status=True,
+        )
       except SetupLifecycleError:
         log.exception(
           "ready event expiry transition failed setup_id=%s",
@@ -8607,6 +8690,16 @@ async def _process_strategy_match_ready_entry(
           event.setup_id,
           INVALIDATED,
           reason_code="strategy_match_ready_contract_mismatch",
+        )
+        await emit_lifecycle(
+          client,
+          INVALIDATED,
+          symbol=event.symbol,
+          match_id=event.setup_id,
+          correlation_id=event.setup_id,
+          reason_code="strategy_match_ready_contract_mismatch",
+          message="ready event contract no longer matches the canonical match",
+          publish_status=True,
         )
       except SetupLifecycleError:
         log.exception(
@@ -8763,37 +8856,96 @@ async def _recover_unfinished_strategy_matches(
         )
 
 
+_READY_CONSUMER_BASE_BACKOFF_SECONDS = 1.0
+_READY_CONSUMER_MAX_BACKOFF_SECONDS = 30.0
+
+
 async def strategy_match_ready_loop() -> None:
-  """Durably wake the worker when Scanner confirms an executable match."""
+  """Durably wake the worker when Scanner confirms an executable match.
+
+  P0-11: ensure_ready_group and the startup reconciliation used to run
+  with no retry boundary around them - a transient Redis error at process
+  start (a connection blip during a rolling deploy) permanently killed
+  this fire-and-forget task for the rest of the process's life, since
+  nothing supervises it. The whole body now lives inside a bounded-backoff
+  supervisor loop, and health is persisted at every state change so
+  /auto_status can tell "the consumer is down" apart from "genuinely
+  nothing to do right now."
+  """
   if not settings.auto_trade_enabled:
     return
   client = redis_state.get_client()
   source = RedisOHLCSource(client)
   consumer = ready_consumer_name()
-  await ensure_ready_group(client)
-  try:
-    await _recover_unfinished_strategy_matches(client)
-  except Exception:
-    log.exception("strategy-match ready startup reconciliation failed")
-  log.info(
-    "ApexVoid Algo consuming durable strategy matches stream=%s group=%s",
-    READY_STREAM,
-    READY_GROUP,
-  )
+  retry_count = 0
+
   while True:
+    await save_ready_consumer_health(
+      client, state="starting", consumer=consumer, retry_count=retry_count,
+    )
     try:
-      consumed = await _consume_strategy_match_ready_once(
-        client=client,
-        source=source,
-        consumer=consumer,
-        block_ms=5_000,
-        recover_pending=True,
+      await ensure_ready_group(client)
+      try:
+        await _recover_unfinished_strategy_matches(client)
+      except Exception:
+        log.exception("strategy-match ready startup reconciliation failed")
+      await save_ready_consumer_health(
+        client, state="ready", consumer=consumer, retry_count=0,
       )
-      if not consumed:
-        continue
-    except Exception:
-      log.exception("strategy-match ready event failed; left pending for retry")
-      await increment_metric(client, "strategy_match_ready_failed")
+      log.info(
+        "ApexVoid Algo consuming durable strategy matches stream=%s group=%s",
+        READY_STREAM,
+        READY_GROUP,
+      )
+      retry_count = 0
+      while True:
+        try:
+          consumed = await _consume_strategy_match_ready_once(
+            client=client,
+            source=source,
+            consumer=consumer,
+            block_ms=5_000,
+            recover_pending=True,
+          )
+          if consumed:
+            await save_ready_consumer_health(
+              client, state="ready", consumer=consumer,
+              last_success_at=int(datetime.now(timezone.utc).timestamp()),
+              retry_count=0,
+            )
+          else:
+            continue
+        except Exception as exc:
+          log.exception(
+            "strategy-match ready event failed; left pending for retry",
+          )
+          await increment_metric(client, "strategy_match_ready_failed")
+          # A single event's processing failure is retried in place (it
+          # stays pending in the consumer group), not fatal to the
+          # consumer itself - degraded, matching P0-11/P1-6's fatal-vs-
+          # degraded distinction for transient per-event failures.
+          await save_ready_consumer_health(
+            client, state="degraded_retrying", consumer=consumer,
+            retry_count=retry_count, last_error=str(exc)[:500],
+          )
+    except asyncio.CancelledError:
+      raise
+    except Exception as exc:
+      retry_count += 1
+      backoff = min(
+        _READY_CONSUMER_MAX_BACKOFF_SECONDS,
+        _READY_CONSUMER_BASE_BACKOFF_SECONDS * (2 ** min(retry_count, 5)),
+      )
+      log.exception(
+        "strategy-match ready consumer setup failed, retrying in %.1fs "
+        "(attempt %d)",
+        backoff, retry_count,
+      )
+      await save_ready_consumer_health(
+        client, state="degraded_retrying", consumer=consumer,
+        retry_count=retry_count, last_error=str(exc)[:500],
+      )
+      await asyncio.sleep(backoff)
 
 
 async def auto_scalp_loop() -> None:

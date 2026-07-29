@@ -359,13 +359,25 @@ public sealed class AutoTradeEngine(
       exception.Message,
       cancellationToken
     );
-    var fatal = exception is AutoTradeConfigurationException
+    // P1-6: only a genuine config/contract incompatibility is fatal - it
+    // sets _disabled above, which stops FeedRunner.RunAutoTradeSafelyAsync's
+    // retry loop for good. Any other exception here (Redis/network/broker)
+    // is actively being retried by that same loop - publishing "fatal" for
+    // it would be a lie the moment the very next retry succeeds, and
+    // /auto_status would keep reporting a dead executor that is, in fact,
+    // about to recover. Everything else reads as degraded_retrying.
+    var isConfigurationFault = exception is AutoTradeConfigurationException;
+    var state = isConfigurationFault ? "fatal" : "degraded_retrying";
+    var fatal = isConfigurationFault
       ? new[] { "service_initialization" }
+      : Array.Empty<string>();
+    var warnings = isConfigurationFault
+      ? Array.Empty<string>()
       : new[] { "broker_or_redis_connection" };
     await PublishReadinessAsync(
       false,
-      "fatal",
-      new AutoTradeConfigHealthResult("fatal", fatal, []),
+      state,
+      new AutoTradeConfigHealthResult(state, fatal, warnings),
       cancellationToken
     );
   }

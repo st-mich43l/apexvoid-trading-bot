@@ -27,6 +27,17 @@ import json
 import time
 from typing import Any, Mapping
 
+# P0-1: business expiry (the setup's own expires_at) must never be conflated
+# with Redis key TTL (data retention). Before this, _ttl_for set the key's
+# TTL to roughly expires_at-now - once nothing touched the record again
+# after the setup silently passed its business expiry, Redis could delete
+# the canonical record at almost exactly the moment it should have
+# transitioned to EXPIRED, with no terminal lifecycle event, no card
+# deletion, and no audit trail. These two constants keep the record
+# readable well past both business expiry and terminal transition.
+SETUP_AUDIT_RETENTION_SECONDS = 24 * 3600
+TERMINAL_SETUP_RETENTION_SECONDS = 24 * 3600
+
 
 DISCOVERED = "discovered"
 WATCHING = "watching"
@@ -114,6 +125,48 @@ class SetupLifecycleError(ValueError):
   """An illegal transition or an operation on an unknown setup_id."""
 
 
+class SetupTransitionConflict(SetupLifecycleError):
+  """P0-3: another writer already moved this setup off the state this
+  caller read, so the transition this caller computed no longer applies.
+
+  A subclass of SetupLifecycleError so every existing `except
+  SetupLifecycleError:` call site (there are over a dozen in worker.py
+  alone) keeps working unchanged - "someone else already handled this
+  setup" was already treated as non-fatal everywhere. Callers that want to
+  distinguish a genuine race from an illegal transition can still catch
+  this subclass specifically.
+  """
+
+
+# P0-3: KEYS[1] = setup_key(setup_id). ARGV[1] = the source state this
+# caller observed when it decided to make this transition. ARGV[2] = the
+# target state. ARGV[3] = the fully-merged new record JSON (state,
+# updated_at and any field_updates already applied). ARGV[4] = TTL seconds.
+# Returns {outcome, actual_current_state} where outcome is "changed",
+# "already_at_target", "conflict", or "missing" - the whole
+# read-compare-write happens inside Redis, so two callers racing the same
+# setup_id can never both believe their stale read is still current.
+_TRANSITION_LUA = """
+local current = redis.call('GET', KEYS[1])
+if not current then
+  return {'missing', ''}
+end
+local ok, decoded = pcall(cjson.decode, current)
+if not ok or type(decoded) ~= 'table' then
+  return {'missing', ''}
+end
+local current_state = tostring(decoded['state'] or '')
+if current_state == ARGV[2] then
+  return {'already_at_target', current_state}
+end
+if current_state ~= ARGV[1] then
+  return {'conflict', current_state}
+end
+redis.call('SET', KEYS[1], ARGV[3], 'EX', ARGV[4])
+return {'changed', current_state}
+"""
+
+
 def setup_key(setup_id: str) -> str:
   return f"analysis:setup:{setup_id}"
 
@@ -124,6 +177,10 @@ def active_thesis_key(symbol: str, thesis_id: str) -> str:
 
 def watchlist_key() -> str:
   return "analysis:watchlist"
+
+
+def setup_expiry_index_key() -> str:
+  return "analysis:setup_expiry"
 
 
 @dataclass(frozen=True)
@@ -185,10 +242,39 @@ class SetupRecord:
 
 
 def _ttl_for(record: SetupRecord) -> int:
-  now = int(time.time())
-  if record.expires_at is not None and record.expires_at > now:
-    return max(60, record.expires_at - now)
+  """P0-1: audit-retention TTL, never the raw distance to business expiry.
+
+  Terminal records get a flat retention window (they will never be touched
+  again, so there is no "distance to expiry" to add). Active records with a
+  known expires_at get retention measured FROM that expiry, so the record
+  outlives its own business deadline by a full audit window regardless of
+  whether anything writes to it again. Records with no expires_at (existing
+  data predating this field, or setups that never got one) keep the old
+  flat fallback - explicitly still supported, not a migration requirement.
+  """
+  if record.state in TERMINAL_STATES:
+    return TERMINAL_SETUP_RETENTION_SECONDS
+  if record.expires_at is not None:
+    now = int(time.time())
+    return max(
+      SETUP_AUDIT_RETENTION_SECONDS,
+      record.expires_at - now + SETUP_AUDIT_RETENTION_SECONDS,
+    )
   return 86400
+
+
+async def _sync_expiry_index(client: Any, record: SetupRecord) -> None:
+  """P0-2: keep analysis:setup_expiry in lockstep with the canonical record.
+
+  A terminal record is removed from the index (the sweeper must never look
+  at it again); an active record with an expires_at is (re)scored; an
+  active record with no expires_at was never indexed and stays that way.
+  """
+  key = setup_expiry_index_key()
+  if record.state in TERMINAL_STATES or record.expires_at is None:
+    await client.zrem(key, record.setup_id)
+    return
+  await client.zadd(key, {record.setup_id: record.expires_at})
 
 
 async def _save(client: Any, record: SetupRecord) -> None:
@@ -197,6 +283,7 @@ async def _save(client: Any, record: SetupRecord) -> None:
     json.dumps(record.to_dict(), separators=(",", ":")),
     ex=_ttl_for(record),
   )
+  await _sync_expiry_index(client, record)
 
 
 async def load_setup(client: Any, setup_id: str) -> SetupRecord | None:
@@ -284,8 +371,103 @@ async def transition_setup(
     updated_at=int(time.time()),
     **field_updates,
   )
-  await _save(client, updated)
-  return updated, True
+  payload = json.dumps(updated.to_dict(), separators=(",", ":"))
+  ttl = _ttl_for(updated)
+  try:
+    outcome, actual_state = await client.eval(
+      _TRANSITION_LUA,
+      1,
+      setup_key(setup_id),
+      record.state,
+      new_state,
+      payload,
+      ttl,
+    )
+  except Exception:
+    if not getattr(client, "_apexvoid_allow_non_atomic_test_fallback", False):
+      raise
+    # fakeredis (used across the test suite) has no Lua/EVAL support -
+    # fall back to a best-effort read-compare-write. Production always
+    # takes the real Lua path above and fails closed if EVAL is
+    # unavailable, so this fallback only ever runs under test.
+    current = await load_setup(client, setup_id)
+    if current is None:
+      raise SetupLifecycleError(
+        f"transition_setup: unknown setup_id {setup_id!r}",
+      ) from None
+    if current.state == new_state:
+      return current, False
+    if current.state != record.state:
+      raise SetupTransitionConflict(
+        f"transition_setup: {setup_id!r} moved to {current.state!r} "
+        f"(expected {record.state!r}) before this "
+        f"{record.state!r}->{new_state!r} transition could apply"
+        + (f" ({reason_code})" if reason_code else ""),
+      )
+    await _save(client, updated)
+    return updated, True
+
+  if outcome == "changed":
+    await _sync_expiry_index(client, updated)
+    return updated, True
+  if outcome == "already_at_target":
+    current = await load_setup(client, setup_id)
+    return current if current is not None else updated, False
+  if outcome == "missing":
+    raise SetupLifecycleError(
+      f"transition_setup: unknown setup_id {setup_id!r}",
+    )
+  # outcome == "conflict": another writer already moved this setup off
+  # record.state - never silently overwrite whatever it wrote instead.
+  raise SetupTransitionConflict(
+    f"transition_setup: {setup_id!r} moved to {actual_state!r} "
+    f"(expected {record.state!r}) before this "
+    f"{record.state!r}->{new_state!r} transition could apply"
+    + (f" ({reason_code})" if reason_code else ""),
+  )
+
+
+# P1-2: once a plan has been built off this setup, a late sweeper pass must
+# never retroactively expire it "as unexecuted" - PLAN_BUILT has no EXPIRED
+# edge at all (see _TRANSITIONS above, an attempted transition raises), and
+# PLAN_PUBLISHED/ARMED *do* still carry an EXPIRED edge for other legitimate
+# callers (eg. an explicit cancel-on-broker-rejection path), but the sweeper
+# specifically must treat all three as "publication won" and leave them
+# alone - the executor's own lifecycle now owns what happens next.
+PUBLICATION_WON_STATES = frozenset({PLAN_BUILT, PLAN_PUBLISHED, ARMED})
+
+
+async def expire_setup(
+  client: Any,
+  setup_id: str,
+  *,
+  reason_code: str = "setup_expired_before_execution",
+) -> tuple[SetupRecord | None, str]:
+  """P0-1: the sweeper's only entry point for moving a setup to EXPIRED.
+
+  Idempotent and safe to call from multiple concurrent sweeper workers -
+  the actual state change still goes through transition_setup, so a setup
+  already EXPIRED (raced by another worker, or already terminal for any
+  other reason) is simply reported back rather than re-transitioned.
+
+  Returns (record, outcome):
+  - record is None only for "missing" (no canonical record for this
+    setup_id - a stale/orphan analysis:setup_expiry member).
+  - outcome is one of "transitioned", "already_terminal",
+    "publication_won" (P1-2 - PLAN_BUILT/PLAN_PUBLISHED/ARMED must not be
+    expired here), or "missing".
+  """
+  record = await load_setup(client, setup_id)
+  if record is None:
+    return None, "missing"
+  if record.state in TERMINAL_STATES:
+    return record, "already_terminal"
+  if record.state in PUBLICATION_WON_STATES:
+    return record, "publication_won"
+  updated, changed = await transition_setup(
+    client, setup_id, EXPIRED, reason_code=reason_code,
+  )
+  return updated, "transitioned" if changed else "already_terminal"
 
 
 async def rearm_setup(
@@ -314,6 +496,12 @@ async def rearm_setup(
     record,
     state=DISCOVERED,
     invalidation_condition=None,
+    # The old expires_at belonged to the terminal instance being rearmed
+    # from; carrying it forward would re-add this setup_id to
+    # analysis:setup_expiry with a stale (often already-past) score and the
+    # sweeper would immediately re-expire it. A fresh expires_at is set the
+    # next time this setup transitions forward (e.g. into CONFIRMED).
+    expires_at=None,
     updated_at=int(time.time()),
   )
   await _save(client, updated)

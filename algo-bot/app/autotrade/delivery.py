@@ -31,6 +31,7 @@ from app.autotrade.setup_card import (
   load_forming_card,
 )
 from app.autotrade.lifecycle import LIFECYCLE_STATES, emit_lifecycle
+from app.autotrade.strategy_match_ready import load_ready_consumer_health
 from app.autotrade.range_context import (
   WORKER_SNAPSHOT_TTL_SECONDS,
 )
@@ -68,13 +69,17 @@ _FORMING_REPLY_PREFERRED_TYPES = frozenset({
   "take_profit",
   "position_closed",
 })
-# "rejected"/"invalidated"/"expired" never reach render/send at all - see
-# _deliver_auto_trade_event, which deletes the forming card and returns
-# early instead. No card, no reply anchor, no message.
+# "rejected"/"invalidated"/"expired"/"cancelled" never reach render/send at
+# all - see _deliver_auto_trade_event, which deletes the forming card and
+# returns early instead. No card, no reply anchor, no message. "cancelled"
+# is setup_lifecycle's fourth terminal state (eg. a plan build left
+# incomplete across a restart) - it belongs here for the same reason the
+# other three do, closing what was previously a silent orphan-card gap.
 _CARD_TERMINAL_TYPES = frozenset({
   "rejected",
   "invalidated",
   "expired",
+  "cancelled",
 })
 # Lifecycle/event types that stay in Redis + metrics + /auto_status but must
 # never become Telegram cards. Keep emission paths intact.
@@ -835,6 +840,8 @@ async def _deliver_auto_trade_event(
       client,
       match_id,
       status_line,
+      reason_code=str(event.get("reason_code") or ""),
+      event_id=str(event.get("lifecycle_id") or "") or None,
       edit_fn=edit_scanner_message_text,
     )
   if event_type in _CARD_TERMINAL_TYPES:
@@ -1043,6 +1050,20 @@ async def auto_trade_status_text() -> str:
   ]
   if why:
     lines.append(f"Why: {escape(why)}")
+  if settings.auto_trade_enabled:
+    # P0-11: a card sitting at "waiting for retest" and a genuinely dead
+    # ready-event consumer look identical from selected_text/execution_state
+    # alone - surface the consumer's own health so the owner can tell
+    # "nothing to do right now" apart from "nothing will ever advance."
+    consumer_health = await load_ready_consumer_health(client)
+    consumer_state = str((consumer_health or {}).get("state") or "unknown")
+    if consumer_state in {"degraded_retrying", "fatal"}:
+      lines.append(
+        f"⚠️ Ready consumer <b>{escape(consumer_state)}</b> "
+        f"(retry {int((consumer_health or {}).get('retry_count') or 0)})"
+      )
+    elif consumer_state == "unknown":
+      lines.append("⚠️ Ready consumer health unknown")
   return "\n".join(lines)
 
 

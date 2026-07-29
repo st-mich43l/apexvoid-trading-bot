@@ -81,6 +81,7 @@ from app.autotrade.setup_lifecycle import (
   READY_EVENT_ENQUEUED,
   TOUCHED,
   WATCHING,
+  WORKER_ACKNOWLEDGED,
   SetupLifecycleError,
   create_setup,
   load_setup,
@@ -1142,14 +1143,20 @@ async def _check_setup_invalidations(
     match_id = str(state.get("match_id") or "").strip()
     setup_record = await load_setup(client, match_id) if match_id else None
     if setup_record is not None and setup_record.state in (
-      CONFIRMED, ARMED_WAITING_TRIGGER,
+      CONFIRMED, READY_EVENT_ENQUEUED, WORKER_ACKNOWLEDGED,
+      ARMED_WAITING_TRIGGER,
     ):
       # One forming card per setup (P4): a setup still waiting to publish
       # gets its card deleted without a standalone Telegram notification and
-      # is never re-carded afterwards. A setup that has ALREADY
-      # published a plan (PLAN_BUILT/PLAN_PUBLISHED/ARMED) is left alone
-      # entirely here - it may have a live position, and its card is still
-      # the anchor future FILLED/SL-moved/closed replies thread to.
+      # is never re-carded afterwards. This covers the full durable
+      # CONFIRMED -> READY_EVENT_ENQUEUED -> WORKER_ACKNOWLEDGED ->
+      # ARMED_WAITING_TRIGGER handoff window (P1-1) - a setup can sit in
+      # any of these for real wall-clock time waiting on the worker/ready-
+      # stream round trip, and structure can break while it waits. A setup
+      # that has ALREADY published a plan (PLAN_BUILT/PLAN_PUBLISHED/ARMED)
+      # is left alone entirely here - it may have a live position, and its
+      # card is still the anchor future FILLED/SL-moved/closed replies
+      # thread to.
       try:
         await transition_setup(
           client, match_id, INVALIDATED, reason_code="structure_broke",
@@ -2144,6 +2151,7 @@ async def _notify_digest_once(
         chat_id=settings.telegram_owner_id,
         send_fn=notify,
         edit_fn=edit or edit_scanner_message_text,
+        delete_fn=delete_scanner_message,
       )
       match_ids_by_card[index] = match_for_card.match_id
     else:
