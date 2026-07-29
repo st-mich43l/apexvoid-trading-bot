@@ -19,15 +19,28 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
 
 from aiogram.exceptions import TelegramBadRequest
 
+from app.autotrade.setup_execution_aggregate import (
+  resolve_setup_execution_aggregate,
+)
 from app.autotrade.setup_lifecycle import TERMINAL_STATES, load_setup
 from app.core.config import settings
 
 log = logging.getLogger(__name__)
+
+# P0-6: a durable status write (save_forming_card_status/edit_forming_card_status)
+# can arrive before the card itself has been created (the scanner send and the
+# worker's status write race - see docs). Rather than silently dropping the
+# visual update (and letting the delivery cursor advance past it), stash a
+# reconciliation intent here; post_or_edit_forming_card applies and clears it
+# the moment the card actually exists. TTL only needs to outlive the
+# scanner/Telegram race window, not the setup itself.
+_RECONCILE_PENDING_TTL_SECONDS = 900
 
 SendFn = Callable[..., Awaitable[Any]]
 EditFn = Callable[[int, int, str], Awaitable[Any]]
@@ -114,6 +127,69 @@ def forming_message_key(setup_id: str) -> str:
 
 def forming_status_key(setup_id: str) -> str:
   return f"auto_trade:forming_status:{setup_id}"
+
+
+def forming_reconcile_pending_key(setup_id: str) -> str:
+  return f"auto_trade:forming_reconcile_pending:{setup_id}"
+
+
+async def save_forming_reconcile_pending(
+  client,
+  setup_id: str,
+  *,
+  status_line: str,
+  priority: int,
+  reason_code: str,
+  event_id: str | None = None,
+) -> None:
+  """P0-6: record that a status write arrived with no card to apply to yet.
+
+  Idempotent - a later call for the same setup_id simply overwrites with
+  the freshest requested state (created_at is preserved from any existing
+  marker so the TTL reflects when reconciliation was FIRST requested, not
+  each individual retry).
+  """
+  key = forming_reconcile_pending_key(setup_id)
+  now = int(time.time())
+  existing_created_at = now
+  raw = await client.get(key)
+  if raw:
+    try:
+      existing = json.loads(raw.decode() if isinstance(raw, bytes) else str(raw))
+      if isinstance(existing, dict) and existing.get("created_at"):
+        existing_created_at = int(existing["created_at"])
+    except (TypeError, ValueError, json.JSONDecodeError):
+      pass
+  payload = json.dumps(
+    {
+      "version": 1,
+      "setup_id": setup_id,
+      "requested_state": _infer_status_state(status_line),
+      "status_line": status_line,
+      "priority": priority,
+      "reason_code": reason_code,
+      "event_id": event_id,
+      "created_at": existing_created_at,
+      "updated_at": now,
+    },
+    separators=(",", ":"),
+  )
+  await client.set(key, payload, ex=_RECONCILE_PENDING_TTL_SECONDS)
+
+
+async def load_forming_reconcile_pending(client, setup_id: str) -> dict | None:
+  raw = await client.get(forming_reconcile_pending_key(setup_id))
+  if not raw:
+    return None
+  try:
+    data = json.loads(raw.decode() if isinstance(raw, bytes) else str(raw))
+  except (TypeError, ValueError, json.JSONDecodeError):
+    return None
+  return data if isinstance(data, dict) else None
+
+
+async def clear_forming_reconcile_pending(client, setup_id: str) -> None:
+  await client.delete(forming_reconcile_pending_key(setup_id))
 
 
 def apply_forming_card_status(text: str, status_line: str) -> str:
@@ -273,6 +349,7 @@ async def clear_forming_card(client, setup_id: str) -> None:
   await client.delete(
     forming_message_key(setup_id),
     forming_status_key(setup_id),
+    forming_reconcile_pending_key(setup_id),
   )
 
 
@@ -289,14 +366,25 @@ async def post_or_edit_forming_card(
   chat_id: int,
   send_fn: SendFn,
   edit_fn: EditFn,
+  delete_fn: DeleteFn | None = None,
   ttl: int | None = None,
 ) -> int | None:
   """Post the forming card once per setup_id; every later call edits it.
 
+  P0-4/P0-5: the setup's canonical/status state can change WHILE send_fn or
+  edit_fn is awaiting Telegram - after the round-trip completes, this always
+  re-reads canonical + status state and reconciles
+  (reconcile_forming_card_after_send) before returning, rather than trusting
+  the `text` computed before the send. `delete_fn` is optional only for
+  backward compatibility with callers that cannot yet delete (it is
+  required for the terminal-during-send branch to actually remove the
+  message rather than merely neutralizing it via edit).
+
   Returns the card's message_id, or None if the setup is already terminal
   (a rejected/invalidated/expired setup is never re-carded, checked here so
-  every caller gets this guard for free) or Telegram would not accept the
-  edit and a fresh send also failed.
+  every caller gets this guard for free - and re-checked again after the
+  send/edit completes) or Telegram would not accept the edit and a fresh
+  send also failed.
   """
   if await is_setup_terminal(client, setup_id):
     return None
@@ -304,46 +392,190 @@ async def post_or_edit_forming_card(
   if current_status is not None:
     text = apply_forming_card_status(text, current_status)
   existing = await load_forming_card(client, setup_id)
+  message_id: int | None = None
+  resolved_chat_id = chat_id
   if existing is not None:
     if existing.get("text") == text:
-      return existing["message_id"]
-    try:
-      await edit_fn(existing["chat_id"], existing["message_id"], text)
-      await save_forming_card(
-        client,
-        setup_id,
-        chat_id=existing["chat_id"],
-        message_id=existing["message_id"],
-        text=text,
-        ttl=ttl,
-      )
-      return existing["message_id"]
-    except TelegramBadRequest as exc:
-      if "message is not modified" in str(exc).casefold():
-        await save_forming_card(
-          client,
-          setup_id,
-          chat_id=existing["chat_id"],
-          message_id=existing["message_id"],
-          text=text,
-          ttl=ttl,
-        )
-        return existing["message_id"]
-      log.info(
-        "forming card edit failed setup_id=%s, sending a fresh one instead",
-        setup_id,
-      )
-  sent = await send_fn(text, chat_id=chat_id)
-  message_id = int(sent.message_id)
+      message_id = existing["message_id"]
+      resolved_chat_id = existing["chat_id"]
+    else:
+      log.info("forming_card_send_started setup_id=%s mode=edit", setup_id)
+      try:
+        await edit_fn(existing["chat_id"], existing["message_id"], text)
+        message_id = existing["message_id"]
+        resolved_chat_id = existing["chat_id"]
+      except TelegramBadRequest as exc:
+        if "message is not modified" in str(exc).casefold():
+          message_id = existing["message_id"]
+          resolved_chat_id = existing["chat_id"]
+        else:
+          log.info(
+            "forming card edit failed setup_id=%s, sending a fresh one instead",
+            setup_id,
+          )
+  if message_id is None:
+    log.info("forming_card_send_started setup_id=%s mode=send", setup_id)
+    sent = await send_fn(text, chat_id=chat_id)
+    message_id = int(sent.message_id)
+    resolved_chat_id = chat_id
+  # Persist identity immediately (P0-4 item 4) before any further
+  # reconciliation, so a crash here still leaves the card discoverable.
   await save_forming_card(
     client,
     setup_id,
-    chat_id=chat_id,
+    chat_id=resolved_chat_id,
     message_id=message_id,
     text=text,
     ttl=ttl,
   )
+  return await reconcile_forming_card_after_send(
+    client,
+    setup_id,
+    chat_id=resolved_chat_id,
+    message_id=message_id,
+    originally_sent_text=text,
+    edit_fn=edit_fn,
+    delete_fn=delete_fn,
+  )
+
+
+async def reconcile_forming_card_after_send(
+  client,
+  setup_id: str,
+  *,
+  chat_id: int,
+  message_id: int,
+  originally_sent_text: str,
+  edit_fn: EditFn,
+  delete_fn: DeleteFn | None = None,
+) -> int | None:
+  """P0-4/P0-5: re-read canonical + status state after a Telegram round-trip.
+
+  Closes the exact race the owner reported in production: scanner reads
+  QUEUED, calls Telegram send, the send is in flight, the worker persists a
+  newer status (or the setup goes terminal) while waiting - by the time
+  send_fn/edit_fn returns, `originally_sent_text` may already be stale, or
+  the card may no longer be allowed to exist at all. Re-checks terminal
+  state TWICE (before AND after the reconciliation edit) to close the
+  second race window where terminal transition happens during the repair
+  edit itself. Never creates a second card - always operates on the
+  already-sent/edited message_id.
+  """
+  if await is_setup_terminal(client, setup_id):
+    log.info(
+      "forming_card_terminal_during_send setup_id=%s stage=post_send",
+      setup_id,
+    )
+    await _delete_or_neutralize(
+      client, setup_id, chat_id=chat_id, message_id=message_id,
+      edit_fn=edit_fn, delete_fn=delete_fn,
+    )
+    return None
+
+  reconciled_text = originally_sent_text
+  latest_status = await load_forming_card_status_snapshot(client, setup_id)
+  if latest_status is not None:
+    candidate_text = apply_forming_card_status(
+      originally_sent_text, latest_status.status_line,
+    )
+    if candidate_text != originally_sent_text:
+      log.info(
+        "forming_card_status_changed_during_send setup_id=%s state=%s",
+        setup_id, latest_status.state,
+      )
+      try:
+        await edit_fn(chat_id, message_id, candidate_text)
+        reconciled_text = candidate_text
+        log.info(
+          "forming_card_reconciled_after_send setup_id=%s state=%s",
+          setup_id, latest_status.state,
+        )
+      except TelegramBadRequest as exc:
+        if "message is not modified" in str(exc).casefold():
+          reconciled_text = candidate_text
+        else:
+          log.info(
+            "forming card post-send status reconcile failed setup_id=%s "
+            "error=%s",
+            setup_id, exc,
+          )
+      await save_forming_card(
+        client, setup_id, chat_id=chat_id, message_id=message_id,
+        text=reconciled_text,
+      )
+
+  # Second race window (spec item 8): terminal transition could have landed
+  # exactly during the reconciliation edit above.
+  if await is_setup_terminal(client, setup_id):
+    log.info(
+      "forming_card_terminal_during_send setup_id=%s stage=post_reconcile",
+      setup_id,
+    )
+    await _delete_or_neutralize(
+      client, setup_id, chat_id=chat_id, message_id=message_id,
+      edit_fn=edit_fn, delete_fn=delete_fn,
+    )
+    return None
+
+  pending = await load_forming_reconcile_pending(client, setup_id)
+  if pending is not None:
+    pending_line = str(pending.get("status_line") or "")
+    if pending_line and pending_line != reconciled_text:
+      applied_text = apply_forming_card_status(reconciled_text, pending_line)
+      if applied_text != reconciled_text:
+        try:
+          await edit_fn(chat_id, message_id, applied_text)
+          reconciled_text = applied_text
+        except TelegramBadRequest as exc:
+          if "message is not modified" in str(exc).casefold():
+            reconciled_text = applied_text
+          else:
+            log.info(
+              "forming card pending-marker reconcile failed setup_id=%s "
+              "error=%s",
+              setup_id, exc,
+            )
+        await save_forming_card(
+          client, setup_id, chat_id=chat_id, message_id=message_id,
+          text=reconciled_text,
+        )
+    await clear_forming_reconcile_pending(client, setup_id)
+    log.info("forming_card_projection_repaired setup_id=%s", setup_id)
+
   return message_id
+
+
+async def _delete_or_neutralize(
+  client,
+  setup_id: str,
+  *,
+  chat_id: int,
+  message_id: int,
+  edit_fn: EditFn,
+  delete_fn: DeleteFn | None,
+) -> None:
+  deleted = False
+  if delete_fn is not None:
+    try:
+      await delete_fn(chat_id, message_id)
+      deleted = True
+    except TelegramBadRequest:
+      log.info(
+        "forming card delete failed during send-race cleanup setup_id=%s, "
+        "editing to terminal state instead",
+        setup_id,
+        exc_info=True,
+      )
+  if not deleted:
+    try:
+      await edit_fn(chat_id, message_id, _terminal_card_text(""))
+    except TelegramBadRequest:
+      log.exception(
+        "forming card terminal edit also failed during send-race cleanup "
+        "setup_id=%s",
+        setup_id,
+      )
+  await clear_forming_card(client, setup_id)
 
 
 async def edit_forming_card_status(
@@ -352,9 +584,20 @@ async def edit_forming_card_status(
   status_line: str,
   *,
   state: str | None = None,
+  reason_code: str = "",
+  event_id: str | None = None,
   edit_fn: EditFn,
-) -> bool:
-  """Replace only the lifecycle line on the setup's existing card."""
+) -> bool | str:
+  """Replace only the lifecycle line on the setup's existing card.
+
+  Returns True (applied), False (a real delivery failure), or the string
+  "pending_card_creation" (P0-6: the durable status was saved, but no card
+  exists yet to visually reflect it - a reconciliation marker was stashed
+  instead of silently dropping the update; post_or_edit_forming_card applies
+  it the moment the card is created). None of these block the caller's
+  delivery cursor - see delivery.py's _process_owner_entries, which never
+  inspects this return value.
+  """
   changed = await save_forming_card_status(
     client,
     setup_id,
@@ -367,7 +610,22 @@ async def edit_forming_card_status(
       return True
   card = await load_forming_card(client, setup_id)
   if card is None or not card.get("text"):
-    return False
+    if await is_setup_terminal(client, setup_id):
+      # A terminal setup is never re-carded (P0-5) - no point stashing a
+      # marker post_or_edit_forming_card will just refuse to apply anyway.
+      return False
+    resolved_priority = CARD_STATUS_PRIORITY.get(
+      state or _infer_status_state(status_line), 0,
+    )
+    await save_forming_reconcile_pending(
+      client,
+      setup_id,
+      status_line=status_line,
+      priority=resolved_priority,
+      reason_code=reason_code,
+      event_id=event_id,
+    )
+    return "pending_card_creation"
   text = apply_forming_card_status(str(card["text"]), status_line)
   if text == card["text"]:
     return True
@@ -442,3 +700,56 @@ async def kill_setup_card(
         "forming card terminal edit also failed setup_id=%s", setup_id,
       )
   await clear_forming_card(client, setup_id)
+
+
+async def assert_or_repair_forming_projection(
+  client,
+  setup_id: str,
+  *,
+  edit_fn: EditFn,
+) -> bool:
+  """P0-7: cross-check the aggregate's effective status against the
+  durable forming-status snapshot and the cached card text's lifecycle
+  line, repairing only the status line (never the setup body) when they
+  disagree.
+
+  Returns True if a repair was made, False if everything already agreed
+  (or there is nothing to repair - no card, or the setup is terminal).
+  """
+  aggregate = await resolve_setup_execution_aggregate(client, setup_id)
+  if aggregate.terminal or aggregate.status_line is None:
+    return False
+  card = await load_forming_card(client, setup_id)
+  if card is None or not card.get("text"):
+    return False
+  snapshot = await load_forming_card_status_snapshot(client, setup_id)
+  cached_line = str(card["text"]).splitlines()[1] if len(
+    str(card["text"]).splitlines(),
+  ) > 1 else ""
+  if (
+    snapshot is not None
+    and snapshot.status_line == aggregate.status_line
+    and cached_line == aggregate.status_line
+  ):
+    return False
+  await save_forming_card_status(client, setup_id, aggregate.status_line)
+  repaired_text = apply_forming_card_status(
+    str(card["text"]), aggregate.status_line,
+  )
+  if repaired_text == card["text"]:
+    return False
+  try:
+    await edit_fn(card["chat_id"], card["message_id"], repaired_text)
+  except TelegramBadRequest as exc:
+    if "message is not modified" not in str(exc).casefold():
+      log.info(
+        "forming card projection repair failed setup_id=%s error=%s",
+        setup_id, exc,
+      )
+      return False
+  await save_forming_card(
+    client, setup_id, chat_id=card["chat_id"], message_id=card["message_id"],
+    text=repaired_text,
+  )
+  log.info("forming_card_projection_repaired setup_id=%s", setup_id)
+  return True

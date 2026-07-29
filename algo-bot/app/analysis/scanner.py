@@ -2144,6 +2144,7 @@ async def _notify_digest_once(
         chat_id=settings.telegram_owner_id,
         send_fn=notify,
         edit_fn=edit or edit_scanner_message_text,
+        delete_fn=delete_scanner_message,
       )
       match_ids_by_card[index] = match_for_card.match_id
     else:

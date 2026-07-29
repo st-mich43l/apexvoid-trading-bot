@@ -835,6 +835,8 @@ async def _deliver_auto_trade_event(
       client,
       match_id,
       status_line,
+      reason_code=str(event.get("reason_code") or ""),
+      event_id=str(event.get("lifecycle_id") or "") or None,
       edit_fn=edit_scanner_message_text,
     )
   if event_type in _CARD_TERMINAL_TYPES:
