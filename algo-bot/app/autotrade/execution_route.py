@@ -125,6 +125,21 @@ def resolve_execution_route_plan(
     if low <= quote <= high
     else "below" if quote < low else "above"
   )
+  # A resting limit at the raw zone edge only makes sense while price has
+  # not reached it yet - once price has already traded through the near
+  # edge (geometry inside/overshot), that price sits on the wrong side of
+  # the market for a limit order to rest there (a SELL limit below the
+  # current quote, or a BUY limit above it, is not a valid resting order).
+  # Snap the anchor to the current quote in that case so leg 1 fills as an
+  # immediate/marketable entry instead of a stuck, unplaceable order.
+  if inside_zone_market_entry_enabled:
+    scale_entry_anchor = (
+      (min(quote, high) if geometry != "above" else proximal)
+      if side == "BUY"
+      else (max(quote, low) if geometry != "below" else proximal)
+    )
+  else:
+    scale_entry_anchor = proximal
 
   if preference == "market":
     if distribution in {"zone_split", "zone_scale"}:
@@ -171,8 +186,8 @@ def resolve_execution_route_plan(
         )
       if distribution == "zone_scale":
         legs = _scale_ladder_legs(
-          side=side, low=low, high=high, proximal=proximal, atr=atr,
-          scale_step_atr=scale_step_atr, digits=digits,
+          side=side, low=low, high=high, proximal=scale_entry_anchor,
+          atr=atr, scale_step_atr=scale_step_atr, digits=digits,
         )
         return ExecutionRoutePlan(
           ROUTE_ZONE_SPLIT,
@@ -224,7 +239,7 @@ def resolve_execution_route_plan(
   if split_ok and distribution in {"zone_split", "zone_scale", "either", ""}:
     if distribution == "zone_scale":
       legs = _scale_ladder_legs(
-        side=side, low=low, high=high, proximal=proximal, atr=atr,
+        side=side, low=low, high=high, proximal=scale_entry_anchor, atr=atr,
         scale_step_atr=scale_step_atr, digits=digits,
       )
       return ExecutionRoutePlan(
