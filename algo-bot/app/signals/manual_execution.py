@@ -88,15 +88,16 @@ async def _handle_limit_placed(event: dict) -> None:
     if entry_low is not None and entry_high is not None
     else _price(event.get("price"))
   )
-  await _send_executor_truth(
-    "✅ <b>LIMIT ORDER PLACED</b>\n"
-    f"Direction: <b>{event.get('direction') or 'n/a'}</b>\n"
-    f"Entry: <code>{entry}</code>\n"
-    f"SL: <code>{_price(event.get('stop_loss'))}</code>\n"
-    f"TPs: <code>{_target_text(event)}</code>\n"
-    f"Order ID: <code>{event.get('order_id') or 'n/a'}</code>\n"
-    f"Candidate ID: <code>{candidate_id}</code>"
-  )
+  if settings.manual_algo_owner_execution_dm_enabled:
+    await _send_executor_truth(
+      "✅ <b>LIMIT ORDER PLACED</b>\n"
+      f"Direction: <b>{event.get('direction') or 'n/a'}</b>\n"
+      f"Entry: <code>{entry}</code>\n"
+      f"SL: <code>{_price(event.get('stop_loss'))}</code>\n"
+      f"TPs: <code>{_target_text(event)}</code>\n"
+      f"Order ID: <code>{event.get('order_id') or 'n/a'}</code>\n"
+      f"Candidate ID: <code>{candidate_id}</code>"
+    )
 
 
 async def _handle_execution_rejected(event: dict) -> None:
@@ -308,13 +309,18 @@ async def _handle_fill_event(
   await set_execution_fill(
     sig["id"], broker_position_id=int(position_id), broker_fill_price=float(price),
   )
-  await _send_executor_truth(
-    "✅ <b>POSITION OPENED</b>\n"
-    f"Direction: <b>{event.get('direction') or sig.get('action')}</b>\n"
-    f"Fill price: <code>{_price(price)}</code>\n"
-    f"Volume: <code>{event.get('volume') or 'n/a'}</code>\n"
-    f"Position ID: <code>{position_id}</code>"
-  )
+  if settings.manual_algo_owner_execution_dm_enabled:
+    await _send_executor_truth(
+      "✅ <b>POSITION OPENED</b>\n"
+      f"Direction: <b>{event.get('direction') or sig.get('action')}</b>\n"
+      f"Fill price: <code>{_price(price)}</code>\n"
+      f"Volume: <code>{event.get('volume') or 'n/a'}</code>\n"
+      f"Position ID: <code>{position_id}</code>"
+    )
+  # The real, subscriber-facing "🟢 active — order filled" update is what
+  # this call posts to the VIP/public channel(s) - that already tells the
+  # owner (a member of their own VIP channel) the position is live, so no
+  # separate owner-only DM is needed on top of it.
   result = await trade_ops.do_active({"sid": sig["id"]})
   await trade_ops.post_result(result, sig.get("symbol", "XAU"))
 
