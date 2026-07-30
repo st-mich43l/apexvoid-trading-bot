@@ -2145,6 +2145,7 @@ async def _notify_digest_once(
   ):
     match_pool.append(execution_match)
   match_ids_by_card: dict[int, str] = {}
+  sent_results: list[DetectionResult] = []
   for index, result in enumerate(cards):
     also = card_candidates[1:] if not structural and index == 0 else []
     match_for_card = None
@@ -2199,6 +2200,13 @@ async def _notify_digest_once(
       market_map,
       match_for_card,
     )
+    if not text:
+      # A resolvable match with nothing card-worthy to show yet (e.g. the
+      # ZoneWatch cutover deliberately renders "" for anything not yet
+      # published - see _format_detection_cutover). Not the same as
+      # "suppressed: no executable StrategyMatch" above; this candidate IS
+      # tracked, it just has no card to send right now.
+      continue
     # One forming card per setup (P4): re-detection of the same setup_id
     # edits its existing card instead of posting a new one, and a terminal
     # (rejected/invalidated/expired) setup is never re-carded - both
@@ -2213,8 +2221,17 @@ async def _notify_digest_once(
       delete_fn=delete_scanner_message,
     )
     match_ids_by_card[index] = match_for_card.match_id
+    sent_results.append(result)
   await _track_active_setups(client, symbol, tf, cards, match_ids_by_card)
-  return cards
+  # Only results that actually reached post_or_edit_forming_card count as
+  # "sent" - the old `return cards` returned every card candidate
+  # unconditionally, including ones the loop above explicitly skipped via
+  # `continue` (no resolvable StrategyMatch). Downstream telemetry
+  # (_record_status's `sent`, the detect_log's outcome="sent") took that at
+  # face value, so a candidate that was never carded - never watched, never
+  # published, never actually shown to the owner - still showed up logged
+  # as delivered.
+  return sent_results
 
 
 async def _record_status(
