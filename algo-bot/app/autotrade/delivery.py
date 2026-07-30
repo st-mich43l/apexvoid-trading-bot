@@ -95,6 +95,13 @@ TELEGRAM_SILENT_LIFECYCLE_TYPES = frozenset({
   "executor_readiness_fatal",
   "configuration_health",
   "config_health",
+  # "PLAN ARMED" as a separate, user-visible idle-waiting phase is exactly
+  # what the direct-publish model must not show - the plan card already
+  # says PLAN PUBLISHED; the executor arming it is mechanical detail with
+  # no separate lifecycle stage the owner needs to see, and treating it as
+  # one invited reading a stuck ARMED card as "still waiting" right when
+  # the plan is (or should be) about to fill or expire.
+  "plan_armed",
 })
 # Preflight route outcomes remain in Redis, route history, metrics, and
 # /auto_status, but are operator diagnostics rather than Telegram content.

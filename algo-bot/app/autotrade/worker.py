@@ -5423,6 +5423,7 @@ async def _publish_trade_plan_v7(
       max_volume=int(getattr(
         settings, "auto_trade_v7_max_volume", _V7_MAX_VOLUME_DEFAULT,
       )),
+      now_ts=now_ts,
     )
   except TradePlanBuildRejected as exc:
     await _release_claims()
