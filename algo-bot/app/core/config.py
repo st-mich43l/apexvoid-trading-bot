@@ -532,12 +532,17 @@ class Settings(BaseSettings):
   # default False until each is individually re-verified against the
   # current band-kind/canonical-family pipeline (see
   # DetectorSettings.box_breakout_enabled et al. for why).
+  #
+  # 2026-07-31: trend_pullback/snap_back/fade_scalp retrofitted onto the
+  # shared evaluate_structural_reaction confirmation path and re-enabled
+  # (see DetectorSettings for the full reasoning). box_breakout/
+  # break_retest/momentum_ride remain replay-only.
   auto_trade_box_breakout_enabled: bool = Field(
     default=False,
     validation_alias=AliasChoices("AUTO_TRADE_BOX_BREAKOUT_ENABLED"),
   )
   auto_trade_trend_pullback_enabled: bool = Field(
-    default=False,
+    default=True,
     validation_alias=AliasChoices("AUTO_TRADE_TREND_PULLBACK_ENABLED"),
   )
   auto_trade_break_retest_enabled: bool = Field(
@@ -549,11 +554,11 @@ class Settings(BaseSettings):
     validation_alias=AliasChoices("AUTO_TRADE_MOMENTUM_RIDE_ENABLED"),
   )
   auto_trade_snap_back_enabled: bool = Field(
-    default=False,
+    default=True,
     validation_alias=AliasChoices("AUTO_TRADE_SNAP_BACK_ENABLED"),
   )
   auto_trade_fade_scalp_enabled: bool = Field(
-    default=False,
+    default=True,
     validation_alias=AliasChoices("AUTO_TRADE_FADE_SCALP_ENABLED"),
   )
   auto_trade_structural_reaction_lookback_bars: int = Field(

@@ -97,6 +97,25 @@ def key_level_structural_id(
   )
 
 
+def equal_level_structural_id(
+  symbol: str,
+  timeframe: str,
+  level: Level,
+) -> str:
+  """Equal-highs/equal-lows liquidity pool identity (Fade Scalp).
+
+  Tagged distinctly from key_level_structural_id so an equal-level pool at
+  the same price as an unrelated key level never collides in identity.
+  """
+  return structural_hash(
+    symbol.upper(),
+    timeframe.upper(),
+    "equal_level",
+    level.kind,
+    f"{round(float(level.price), 2):.2f}",
+  )
+
+
 def session_level_structural_id(
   symbol: str,
   timeframe: str,
