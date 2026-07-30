@@ -695,7 +695,39 @@ public sealed class TradePlanRuntime(
         );
         continue;
       }
-      await SubmitEntryAsync(client, symbol, plan, state, cancellationToken);
+      try
+      {
+        await SubmitEntryAsync(client, symbol, plan, state, cancellationToken);
+      }
+      catch (Exception exception) when (
+        exception is VolumePlanningException or TradePlanContractException
+      )
+      {
+        // A sizing failure (e.g. risk-based volume too small to split
+        // across a limit_ladder's declared legs) means this specific plan
+        // can never execute as configured - it is not transient. Left
+        // unhandled, this would escape EvaluateArmedPlansAsync/PollAsync and
+        // get caught only by the top-level consumer retry loop, which
+        // reprocesses the same Armed plan (still ShouldSubmit) every
+        // attempt - an infinite crash loop that blocks every other plan and
+        // symbol from ever polling. Reject just this plan and move on
+        // instead.
+        await PersistPlanExecutionStateAsync(
+          plan.PlanId, "rejected", null, cancellationToken,
+          $"sizing_failed:{exception.GetType().Name}"
+        );
+        await PublishEventAsync(
+          "plan_rejected",
+          $"TradePlan V7 rejected: {exception.Message}",
+          plan,
+          cancellationToken
+        );
+        await ForgetPlanAsync(state.PlanId, cancellationToken);
+        log(
+          $"v7 plan sizing rejected id={state.PlanId} "
+          + $"exception={exception.GetType().Name} message={exception.Message}"
+        );
+      }
     }
   }
 
