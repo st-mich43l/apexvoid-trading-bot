@@ -642,6 +642,13 @@ class Settings(BaseSettings):
   manual_algo_enabled: bool = False
   manual_algo_dry_run: bool = True
   manual_algo_risk_pct: float = 2.0
+  # Owner-only debug DMs ("LIMIT ORDER PLACED"/"POSITION OPENED") duplicate
+  # the real VIP/public channel update trade_ops.post_result already posts
+  # for the same fill - the executor mechanically monitors/enters the
+  # resting order on its own, so these are noise, not signal. Off by
+  # default; flip on if the owner ever wants the raw executor-truth pings
+  # back without a code change.
+  manual_algo_owner_execution_dm_enabled: bool = False
   manual_trade_intent_stream: str = "manual_trade:intents"
   manual_trade_intent_stream_maxlen: int = 1000
   # Consumed by this PR's bridge/reconcile loops (app.signals.manual_execution)

@@ -5520,7 +5520,8 @@ public sealed class AutoTradeEngine(
       remainingVolume: state.RemainingVolume,
       stopLoss: previousStop,
       entryLow: state.EntryPrice,
-      entryHigh: state.EntryPrice
+      entryHigh: state.EntryPrice,
+      stream: ExecutionStream(state)
     );
     return state with { CurrentStopLoss = move.StopLoss };
   }
