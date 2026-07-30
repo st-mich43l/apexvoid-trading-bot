@@ -19,6 +19,7 @@ from app.analysis.market_map import MapEntry, MarketMap
 from app.analysis.structural_reaction_support import STRUCTURAL_SETUPS
 from app.autotrade.structural_target_room import (
   evaluate_structural_target_room,
+  filter_displaced_opposing_entries,
 )
 
 
@@ -132,6 +133,35 @@ def _result_payload(result: DetectionResult) -> dict[str, Any]:
     "entry_low": float(result.entry_zone.low),
     "entry_high": float(result.entry_zone.high),
   }
+
+
+def _entries_excluding_displaced_barriers(
+  entries: Sequence[MapEntry],
+  *,
+  result: DetectionResult,
+  context: Any,
+  cfg: Any,
+) -> Sequence[MapEntry]:
+  """See structural_target_room.filter_displaced_opposing_entries: excludes
+  an opposing barrier the candidate's own recent execution-tf closes have
+  already closed decisively beyond, rather than hard-blocking on a barrier
+  price has already broken while its own (possibly slower/HTF)
+  classification hasn't caught up.
+  """
+  lookback = max(
+    0, int(getattr(cfg, "auto_trade_displacement_override_lookback_bars", 0)),
+  )
+  if lookback <= 0:
+    return entries
+  frames = getattr(context, "frames", None)
+  tf = getattr(context, "tf", None)
+  frame = frames.get(tf) if isinstance(frames, dict) and tf else None
+  if frame is None or frame.empty or "close" not in frame.columns:
+    return entries
+  recent_closes = tuple(float(value) for value in frame["close"].tail(lookback))
+  return filter_displaced_opposing_entries(
+    entries, direction=result.direction, recent_closes=recent_closes,
+  )
 
 
 def _decision(
@@ -296,6 +326,9 @@ def resolve_actionability(
     result = original
     targets = tuple(result.provisional_targets_pips)
     if targets:
+      room_entries = _entries_excluding_displaced_barriers(
+        entries, result=result, context=context, cfg=cfg,
+      )
       room = evaluate_structural_target_room(
         direction=result.direction,
         planned_entry_price=(
@@ -306,7 +339,7 @@ def resolve_actionability(
         candidate_entry_low=float(result.entry_zone.low),
         candidate_entry_high=float(result.entry_zone.high),
         configured_target_pips=targets,
-        actionable_entries=entries,
+        actionable_entries=room_entries,
         atr=atr,
         pip_size=pip_size,
         barrier_buffer_atr=float(

@@ -67,6 +67,7 @@ from app.autotrade.strategy_match import (
 )
 from app.autotrade.structural_target_room import (
   evaluate_structural_target_room,
+  filter_displaced_opposing_entries,
 )
 from app.autotrade.execution_confirmation import (
   EXPIRED as CONFIRMATION_EXPIRED,
@@ -5162,17 +5163,31 @@ async def _publish_trade_plan_v7(
       match,
       expires_at=min(int(match.expires_at), trigger_expiry),
     )
+  room_entries = (
+    ()
+    if market_map is None
+    else tuple(getattr(market_map, "actionable_entries", ()) or ())
+  )
+  displacement_lookback = max(
+    0, int(getattr(settings, "auto_trade_displacement_override_lookback_bars", 0)),
+  )
+  if displacement_lookback > 0 and frames is not None:
+    room_frame = frames.get(execution_match.source_tf)
+    if room_frame is not None and not room_frame.empty and "close" in room_frame.columns:
+      room_entries = filter_displaced_opposing_entries(
+        room_entries,
+        direction=execution_match.direction,
+        recent_closes=tuple(
+          float(value) for value in room_frame["close"].tail(displacement_lookback)
+        ),
+      )
   target_room = evaluate_structural_target_room(
     direction=execution_match.direction,
     planned_entry_price=entry_reference,
     candidate_entry_low=execution_match.entry_low,
     candidate_entry_high=execution_match.entry_high,
     configured_target_pips=execution_match.targets_pips,
-    actionable_entries=(
-      ()
-      if market_map is None
-      else tuple(getattr(market_map, "actionable_entries", ()) or ())
-    ),
+    actionable_entries=room_entries,
     atr=execution_match.atr,
     pip_size=units.pip_size(symbol),
     barrier_buffer_atr=float(settings.auto_trade_opposing_barrier_atr),
