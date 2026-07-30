@@ -8,7 +8,7 @@ It never parses rendered Telegram text or imports scanner detector functions.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, replace
+from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, timezone
 from decimal import Decimal
 import asyncio
@@ -211,7 +211,7 @@ from app.autotrade.trend import (
 )
 from app.core.config import settings
 from app.persistence.store import event_in_window
-from app.analysis.ohlc_source import RedisOHLCSource
+from app.analysis.ohlc_source import RedisOHLCSource, window_for_timeframe
 from app.analysis.math_utils import atr_series
 from app.analysis.types import Level, Zone
 from app.analysis.zones import displacement, mark_mitigation, supply_demand
@@ -541,11 +541,15 @@ async def _load_frames(
   source: RedisOHLCSource,
   symbol: str,
   *,
-  window: int = 240,
+  window: int | None = None,
 ) -> dict[str, Any]:
   frames: dict[str, Any] = {}
   for timeframe in (EXECUTION_TIMEFRAME, *CONTEXT_TIMEFRAMES):
-    frame = await source.window(symbol, timeframe, window)
+    count = (
+      max(50, int(window)) if window is not None
+      else window_for_timeframe(timeframe)
+    )
+    frame = await source.window(symbol, timeframe, count)
     if not frame.empty:
       frames[timeframe] = frame
   return frames
@@ -8584,6 +8588,146 @@ async def _handle_event(
   return decision
 
 
+PUBLISH_STATUS_PUBLISHED = "published"
+PUBLISH_STATUS_REMAINED_WATCHING = "remained_watching"
+PUBLISH_STATUS_INVALIDATED = "invalidated"
+PUBLISH_STATUS_REJECTED = "rejected"
+PUBLISH_STATUS_DUPLICATE_RECONCILED = "duplicate_reconciled"
+
+
+@dataclass(frozen=True)
+class PublishResult:
+  """Outcome of one deterministic try_publish_executable_signal() pass.
+
+  ``status`` is one of the PUBLISH_STATUS_* constants above. ``measured``
+  carries whatever telemetry the underlying evaluation produced (route
+  outcome style); it is best-effort and may be empty when the setup never
+  reached a stage that records measurements.
+  """
+
+  status: str
+  plan_id: str
+  reason_code: str
+  zone_id: str
+  setup_id: str
+  measured: Mapping[str, Any] = field(default_factory=dict)
+  executable_quote: float | None = None
+  quote_side: str | None = None
+
+
+async def try_publish_executable_signal(
+  client: Any,
+  match: StrategyMatch,
+  *,
+  symbol: str,
+  event_ts: str | None = None,
+  source: RedisOHLCSource | None = None,
+) -> PublishResult:
+  """The one authoritative CONFIRMED-zone -> TradePlan V7 pass (ADR P0).
+
+  Runs the exact same evaluation `_handle_event` already performs for a
+  durable ready-stream wake-up (reload canonical setup, validate state,
+  validate a fresh side-aware quote, validate quote-in-zone, validate any
+  required M1 trigger, build+publish TradePlan V7 atomically) but does it
+  synchronously, in the caller's own processing cycle, instead of via a
+  Redis stream round-trip to a separate consumer task. Callers that already
+  know a match is CONFIRMED and structurally eligible (the scanner, right
+  after confirming it) should call this directly; a match that is not yet
+  executable simply comes back ``remained_watching`` and the caller falls
+  back to the durable `auto_trade:strategy_match_ready` queue for later
+  retries (still required for waiting-retest/M1-trigger semantics).
+
+  Never raises for an ordinary rejection/wait outcome - only reraises on an
+  unexpected internal failure, matching every other entry point in this
+  module.
+  """
+  setup_id = match.match_id
+  zone_id = str(match.confluence_zone_id or match.structural_zone_id or "")
+  plan_id = _v7_plan_id(match)
+  bar_event = f"{symbol}:{EXECUTION_TIMEFRAME}:{event_ts or match.event_ts}"
+
+  await _handle_event(bar_event, source=source, client=client, ready_match_id=setup_id)
+
+  plan_state = await read_plan_state(client, plan_id)
+  setup_after = await load_setup(client, setup_id)
+  measured: dict[str, Any] = {}
+  raw_route = await client.get(route_outcome_key(symbol, setup_id))
+  if raw_route:
+    try:
+      route_payload = json.loads(
+        raw_route.decode() if isinstance(raw_route, bytes) else raw_route,
+      )
+    except (TypeError, ValueError, json.JSONDecodeError):
+      route_payload = {}
+    if isinstance(route_payload, dict):
+      measured = route_payload.get("measured") or {}
+      reason_code = str(route_payload.get("reason_code") or "")
+    else:
+      reason_code = ""
+  else:
+    reason_code = ""
+
+  spot = await _load_spot(client, symbol)
+  executable_quote: float | None = None
+  quote_side: str | None = None
+  if spot is not None and spot.fresh:
+    quote_side = "ask" if match.direction == "BUY" else "bid"
+    executable_quote = spot.ask if match.direction == "BUY" else spot.bid
+
+  if plan_state == "published":
+    return PublishResult(
+      status=PUBLISH_STATUS_PUBLISHED,
+      plan_id=plan_id,
+      reason_code=reason_code or "candidate_published",
+      zone_id=zone_id,
+      setup_id=setup_id,
+      measured=measured,
+      executable_quote=executable_quote,
+      quote_side=quote_side,
+    )
+  if setup_after is None:
+    return PublishResult(
+      status=PUBLISH_STATUS_REJECTED,
+      plan_id=plan_id,
+      reason_code="setup_missing",
+      zone_id=zone_id,
+      setup_id=setup_id,
+      measured=measured,
+    )
+  if setup_after.state == INVALIDATED:
+    return PublishResult(
+      status=PUBLISH_STATUS_INVALIDATED,
+      plan_id=plan_id,
+      reason_code=reason_code or "structure_invalidated",
+      zone_id=zone_id,
+      setup_id=setup_id,
+      measured=measured,
+      executable_quote=executable_quote,
+      quote_side=quote_side,
+    )
+  if setup_after.state in TERMINAL_STATES:
+    return PublishResult(
+      status=PUBLISH_STATUS_REJECTED,
+      plan_id=plan_id,
+      reason_code=reason_code or setup_after.state,
+      zone_id=zone_id,
+      setup_id=setup_id,
+      measured=measured,
+      executable_quote=executable_quote,
+      quote_side=quote_side,
+    )
+  return PublishResult(
+    status=PUBLISH_STATUS_REMAINED_WATCHING,
+    plan_id=plan_id,
+    reason_code=reason_code or "zone_watching_retest",
+    zone_id=zone_id,
+    setup_id=setup_id,
+    measured=measured,
+    executable_quote=executable_quote,
+    quote_side=quote_side,
+  )
+
+
 async def _process_strategy_match_ready_entry(
   client: Any,
   stream_id: object,
@@ -8721,10 +8865,21 @@ async def _process_strategy_match_ready_entry(
     ready_match_id=event.match_id,
   )
   setup = await load_setup(client, event.setup_id)
+  # P0 root-cause fix: ARMED_WAITING_TRIGGER is NOT a publication outcome -
+  # per setup_lifecycle.py's own docstring, it is exactly the node where a
+  # retest/M1 timing wait begins. Acking here (as this used to) permanently
+  # removes the one durable wake-up for a setup that has not produced a
+  # TradePlan yet; the only remaining re-drive was non-durable Redis
+  # Pub/Sub ("bars:new"), which silently drops a setup that misses a tick
+  # (deploy/restart/network blip) - the setup then ages out via the expiry
+  # sweeper with no TradePlan ever built. Leaving the entry unacked keeps it
+  # pending in the consumer group; the caller's periodic xautoclaim
+  # (recover_pending=True, min_idle_time=30s) durably re-drives this exact
+  # setup on its own schedule regardless of pub/sub delivery, until it
+  # actually reaches PLAN_PUBLISHED or a terminal state.
   durable = bool(
     setup is not None
     and setup.state in {
-      ARMED_WAITING_TRIGGER,
       PLAN_PUBLISHED,
       *TERMINAL_STATES,
     }

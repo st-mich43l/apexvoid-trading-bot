@@ -37,12 +37,13 @@ from app.analysis.market_map import (
   rail_reference,
 )
 from app.analysis.market_map_delivery import cache_analysis
-from app.analysis.ohlc_source import RedisOHLCSource
+from app.analysis.ohlc_source import RedisOHLCSource, window_for_timeframe
 from app.analysis.structure import Zone
 from app.analysis.confluence_zone import (
   ConfluenceMember,
   confluence_setup_id,
   merge_confluence_zones,
+  validate_zone_width,
 )
 from app.analysis.zones import ZONE_RECONCILED_TAG_PREFIX
 from app.autotrade.range_targets import select_range_target
@@ -89,6 +90,7 @@ from app.autotrade.setup_lifecycle import (
 )
 from app.autotrade.strategy_match_ready import enqueue_strategy_match_ready
 from app.autotrade.setup_card import kill_setup_card
+from app.autotrade import worker as autotrade_worker
 
 _PRE_CONFIRMED_CHAIN = (DISCOVERED, WATCHING, TOUCHED, FORMING, CONFIRMED)
 from app.autotrade.lifecycle import emit_lifecycle, increment_metric
@@ -808,6 +810,21 @@ async def _sync_strategy_match(
       continue
     setup_record = await load_setup(client, tracked.match_id)
     if setup_record is not None and setup_record.state == CONFIRMED:
+      if settings.auto_trade_direct_publish_enabled:
+        direct_result = await autotrade_worker.try_publish_executable_signal(
+          client,
+          tracked,
+          symbol=symbol,
+          event_ts=tracked.event_ts,
+        )
+        if (
+          direct_result.status
+          != autotrade_worker.PUBLISH_STATUS_REMAINED_WATCHING
+        ):
+          # Already resolved synchronously in this same scanner cycle
+          # (published, invalidated, or rejected) - never touch the
+          # durable ready-stream for an outcome that is already final.
+          continue
       ready_event_id = await enqueue_strategy_match_ready(
         client,
         tracked,
@@ -1453,8 +1470,11 @@ async def _load_frames(
   window: int | None = None,
 ) -> dict[str, Any]:
   frames = {}
-  count = max(50, int(window or settings.scanner_window))
   for tf in _all_tfs(exec_tf, htf_order):
+    count = (
+      max(50, int(window)) if window is not None
+      else window_for_timeframe(tf)
+    )
     df = await source.window(symbol, tf, count)
     if not df.empty:
       frames[tf] = df
@@ -1655,8 +1675,36 @@ def _merge_detection_confluence(
       confluence_tags=zone.tags,
     )
     first_index = min(index for index, _result in group)
-    merged_by_index.append((first_index, merged))
     consumed.update(index for index, _result in group)
+    if settings.scanner_zone_width_gate_enabled:
+      raw_low = representative.structural_low
+      raw_high = representative.structural_high
+      if raw_low is None or raw_high is None:
+        raw_low = getattr(representative.entry_zone, "bottom", zone.low)
+        raw_high = getattr(representative.entry_zone, "top", zone.high)
+      is_major = (
+        str(representative.structural_timeframe or "").upper() == "H1"
+      )
+      width_result = validate_zone_width(
+        raw_width=float(raw_high) - float(raw_low),
+        merged_width=zone.high - zone.low,
+        merge_sources=zone.tags,
+        is_major=is_major,
+      )
+      if not width_result.eligible:
+        log.info(
+          "confluence zone rejected by XAU width contract symbol=%s tf=%s "
+          "reason=%s raw_width=%.3f merged_width=%.3f min=%.3f max=%.3f "
+          "sources=%s",
+          symbol, tf, width_result.rejection_reason,
+          width_result.raw_zone_width, width_result.merged_zone_width,
+          width_result.min_required_width, width_result.max_allowed_width,
+          ",".join(width_result.merge_sources),
+        )
+        # Fails closed: a zone rejected for width is dropped entirely, not
+        # left to fall through as its unmerged individual members.
+        continue
+    merged_by_index.append((first_index, merged))
 
   merged_by_index.extend(
     (index, result)

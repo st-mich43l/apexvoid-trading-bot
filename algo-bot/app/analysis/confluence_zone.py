@@ -19,6 +19,8 @@ import hashlib
 from dataclasses import dataclass
 from typing import Any, Iterable, Sequence
 
+from app.core.config import settings
+
 CONFLUENCE_ZONE_CLAIM_KEY_PREFIX = "auto_trade:confluence_zone_claim"
 
 # Same directional-role vocabulary reaction_identity.py already folds into a
@@ -36,6 +38,87 @@ _MERGEABLE_KINDS = frozenset({
 
 def _sha(raw: str) -> str:
   return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+ZONE_TOO_NARROW = "zone_too_narrow"
+ZONE_TOO_WIDE = "zone_too_wide"
+
+
+@dataclass(frozen=True)
+class ZoneWidthResult:
+  """Section 4 XAU zone-width contract telemetry, in actual price units.
+
+  ``raw_zone_width`` is the width of the single strongest structural member
+  before any merge; ``merged_zone_width`` is the final band width after
+  same-side confluence merging. A zone is eligible only when the merged
+  width lands inside [min_required_width, max_allowed_width] - a weak,
+  isolated narrow level is never artificially stretched to pass, and an
+  excessively wide band is rejected rather than silently kept.
+  """
+
+  eligible: bool
+  raw_zone_width: float
+  merged_zone_width: float
+  min_required_width: float
+  max_allowed_width: float
+  merge_sources: tuple[str, ...]
+  rejection_reason: str | None
+
+
+def validate_zone_width(
+  *,
+  raw_width: float,
+  merged_width: float,
+  merge_sources: Iterable[str],
+  is_major: bool = False,
+  min_width: float | None = None,
+  preferred_max_width: float | None = None,
+  major_max_width: float | None = None,
+) -> ZoneWidthResult:
+  """Apply the configured XAU_ZONE_*_WIDTH_PRICE contract to one zone.
+
+  ``is_major`` (typically an H1-sourced zone) uses the wider
+  ``major_max_width`` ceiling instead of the normal ``preferred_max_width``
+  cap - a major H1 supply/demand band is allowed to be wider than a normal
+  M5/M15 zone without being rejected as "too broad". Callers on the hot
+  scanner path should leave the *_width kwargs unset so this always reads
+  the live settings; the explicit parameters exist so tests (and any
+  offline width-audit tooling) can probe the contract without monkeypatching
+  global settings.
+  """
+  resolved_min = float(
+    min_width if min_width is not None else settings.xau_zone_min_width_price
+  )
+  resolved_max = float(
+    (
+      major_max_width
+      if major_max_width is not None
+      else settings.xau_major_zone_max_width_price
+    )
+    if is_major
+    else (
+      preferred_max_width
+      if preferred_max_width is not None
+      else settings.xau_zone_preferred_max_width_price
+    )
+  )
+  sources = tuple(merge_sources)
+  width = max(0.0, float(merged_width))
+  if width < resolved_min:
+    reason = ZONE_TOO_NARROW
+  elif width > resolved_max:
+    reason = ZONE_TOO_WIDE
+  else:
+    reason = None
+  return ZoneWidthResult(
+    eligible=reason is None,
+    raw_zone_width=max(0.0, float(raw_width)),
+    merged_zone_width=width,
+    min_required_width=resolved_min,
+    max_allowed_width=resolved_max,
+    merge_sources=sources,
+    rejection_reason=reason,
+  )
 
 
 @dataclass(frozen=True)
