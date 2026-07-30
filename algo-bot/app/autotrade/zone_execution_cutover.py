@@ -467,15 +467,20 @@ async def _evaluate_record(
   if match is None:
     return None
   if record.grade == GRADE_B:
+    # M1 refines entry timing/anchor when a qualifying candle is already
+    # there - it must never be a requirement to publish at all. A zone the
+    # system has already decided is executable (quote inside, grade B or
+    # better) does not stop being executable just because no M1 pattern has
+    # printed yet; gating on that turned "confirm the entry timing" into
+    # "confirm whether to enter", which is not M1's job.
     trigger = await _m1_trigger_for_zone(client, record)
-    if trigger is None:
-      return None
-    match = replace(
-      match,
-      confirmation_bar_ts=str(int(trigger.bar_ts)),
-      reaction_type=str(trigger.pattern),
-      touch_bar_ts=str(record.zone_entered_at or int(trigger.bar_ts)),
-    )
+    if trigger is not None:
+      match = replace(
+        match,
+        confirmation_bar_ts=str(int(trigger.bar_ts)),
+        reaction_type=str(trigger.pattern),
+        touch_bar_ts=str(record.zone_entered_at or int(trigger.bar_ts)),
+      )
   return await _activate_match(client, record, match, event_ts=event_ts)
 
 
@@ -582,15 +587,17 @@ async def _sync_strategy_match_cutover(
     if not evidence.inside or record.state == EXHAUSTED:
       continue
     if record.grade == GRADE_B:
+      # Same reasoning as _evaluate_record below: M1 refines entry
+      # timing/anchor, it must never gate whether an already-executable
+      # zone gets to publish at all.
       trigger = await _m1_trigger_for_zone(client, record)
-      if trigger is None:
-        continue
-      match = replace(
-        match,
-        confirmation_bar_ts=str(int(trigger.bar_ts)),
-        reaction_type=str(trigger.pattern),
-        touch_bar_ts=str(record.zone_entered_at or int(trigger.bar_ts)),
-      )
+      if trigger is not None:
+        match = replace(
+          match,
+          confirmation_bar_ts=str(int(trigger.bar_ts)),
+          reaction_type=str(trigger.pattern),
+          touch_bar_ts=str(record.zone_entered_at or int(trigger.bar_ts)),
+        )
     ready.append((0 if record.grade == GRADE_A else 1, record, match))
 
   if not ready:
@@ -603,12 +610,21 @@ async def _sync_strategy_match_cutover(
 
 
 def _format_detection_cutover(*args: Any, **kwargs: Any) -> str:
-  text = _ORIGINAL_FORMAT(*args, **kwargs)
   execution_match = kwargs.get("execution_match")
   if execution_match is None and len(args) >= 8:
     execution_match = args[7]
   if execution_match is None or execution_match.match_id not in _PUBLISHED_SETUP_IDS:
-    return text
+    # A ZoneWatch not yet published has nothing to show: there is no
+    # worker acknowledging it, no preflight, no armed-waiting-trigger queue
+    # under the cutover - it is either silently watching_retest/evaluating
+    # or it does not exist as a card-worthy thing yet. The old formatter's
+    # "SETUP FORMING"/"QUEUED - worker acknowledgement pending" text
+    # describes a pipeline stage that no longer runs for this path; sending
+    # it is not cautious, it is just wrong. Suppress the card entirely -
+    # _notify_digest_once skips post_or_edit_forming_card on empty text -
+    # and let the first real card be PLAN PUBLISHED.
+    return ""
+  text = _ORIGINAL_FORMAT(*args, **kwargs)
   return text.replace(
     "🟡 <b>QUEUED</b> · worker acknowledgement pending",
     "🟢 <b>PLAN PUBLISHED</b> · TradePlan V7 sent to executor",

@@ -2200,6 +2200,13 @@ async def _notify_digest_once(
       market_map,
       match_for_card,
     )
+    if not text:
+      # A resolvable match with nothing card-worthy to show yet (e.g. the
+      # ZoneWatch cutover deliberately renders "" for anything not yet
+      # published - see _format_detection_cutover). Not the same as
+      # "suppressed: no executable StrategyMatch" above; this candidate IS
+      # tracked, it just has no card to send right now.
+      continue
     # One forming card per setup (P4): re-detection of the same setup_id
     # edits its existing card instead of posting a new one, and a terminal
     # (rejected/invalidated/expired) setup is never re-carded - both
