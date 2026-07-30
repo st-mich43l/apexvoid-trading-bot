@@ -40,7 +40,9 @@ from app.analysis.market_map_delivery import cache_analysis
 from app.analysis.ohlc_source import RedisOHLCSource, window_for_timeframe
 from app.analysis.structure import Zone
 from app.analysis.confluence_zone import (
+  BandKind,
   ConfluenceMember,
+  classify_band_kind,
   confluence_setup_id,
   merge_confluence_zones,
   validate_zone_width,
@@ -1676,7 +1678,8 @@ def _merge_detection_confluence(
     )
     first_index = min(index for index, _result in group)
     consumed.update(index for index, _result in group)
-    if settings.scanner_zone_width_gate_enabled:
+    band_kind = classify_band_kind(representative.structural_source)
+    if settings.scanner_zone_width_gate_enabled and band_kind == BandKind.STRUCTURAL_ZONE:
       raw_low = representative.structural_low
       raw_high = representative.structural_high
       if raw_low is None or raw_high is None:
