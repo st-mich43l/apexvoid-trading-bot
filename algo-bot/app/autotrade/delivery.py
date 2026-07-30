@@ -948,7 +948,7 @@ async def _deliver_auto_trade_event(
 
 
 async def auto_trade_status_text() -> str:
-  """Compact owner status — essentials only (Telegram 4096-safe)."""
+  """Compact owner status — a few operator details, Telegram 4096-safe."""
   client = redis_state.get_client()
   paused = await client.get(_PAUSED_KEY) == "1"
   date_key = datetime.now(timezone.utc).strftime("%Y%m%d")
@@ -966,6 +966,12 @@ async def auto_trade_status_text() -> str:
   )
   config_health = await _json_key(client, CONFIG_HEALTH_KEY)
   readiness = await _json_key(client, EXECUTOR_READINESS_KEY)
+  executor = await _json_key(
+    client, f"auto_trade:executor_snapshot:{primary_symbol}"
+  )
+  last_route = await _json_key(
+    client, f"auto_trade:last_route_outcome:{primary_symbol}"
+  )
   mode = (
     "disabled"
     if not settings.auto_trade_enabled
@@ -974,9 +980,15 @@ async def auto_trade_status_text() -> str:
     else "demo trading"
   )
   state = "paused" if paused else "running"
+  profile = str(
+    (config_health or {}).get("profile")
+    or settings.auto_trade_profile
+    or "conservative"
+  )
   selected_text = "none"
   execution_state = "-"
   why = ""
+  regime = ""
   if settings.auto_trade_enabled:
     execution_state = "waiting"
     raw = await client.get(f"auto_trade:last_gate:{primary_symbol}")
@@ -1012,6 +1024,7 @@ async def auto_trade_status_text() -> str:
           reasons = payload.get("reasons")
           if isinstance(reasons, list) and reasons and selected_text == "none":
             why = str(reasons[-1])
+          regime = str(payload.get("regime") or "").strip()
       except (KeyError, TypeError, ValueError, json.JSONDecodeError):
         pass
     match_build_raw = await client.get(
@@ -1041,13 +1054,21 @@ async def auto_trade_status_text() -> str:
         pass
   config_state = str((config_health or {}).get("state") or "unknown")
   ready = bool((readiness or {}).get("ready"))
+  group_ids = executor.get("group_ids") if isinstance(executor, dict) else None
+  group_count = len(group_ids) if isinstance(group_ids, list) else 0
   lines = [
     "🤖 <b>Algo bot</b>",
-    f"{escape(mode)} · <b>{state}</b>",
-    f"Open <b>{position_count}</b> · today <b>{daily}</b>",
+    f"{escape(mode)} · <b>{state}</b> · {escape(profile)}",
+    f"Open <b>{position_count}</b> · groups <b>{group_count}</b> · today <b>{daily}</b>",
     f"{escape(selected_text)} · {escape(execution_state)}",
-    f"Config <b>{escape(config_state)}</b> · ready <b>{ready}</b>",
   ]
+  health_bits = [f"Config <b>{escape(config_state)}</b>", f"ready <b>{ready}</b>"]
+  if regime:
+    health_bits.insert(0, f"Regime <b>{escape(regime)}</b>")
+  lines.append(" · ".join(health_bits))
+  route_line = _compact_route_line(last_route)
+  if route_line:
+    lines.append(f"Route: {escape(route_line)}")
   if why:
     lines.append(f"Why: {escape(why)}")
   if settings.auto_trade_enabled:
@@ -1064,7 +1085,25 @@ async def auto_trade_status_text() -> str:
       )
     elif consumer_state == "unknown":
       lines.append("⚠️ Ready consumer health unknown")
-  return "\n".join(lines)
+  text = "\n".join(lines)
+  # Soft budget for the owner DM; hard clip stays in the handler at 4000.
+  if len(text) > 1200:
+    text = text[:1190] + "\n…"
+  return text
+
+
+def _compact_route_line(route: dict) -> str:
+  if not route:
+    return ""
+  strategy = str(route.get("strategy") or "").strip()
+  status = str(route.get("status") or "").replace("_", " ").strip()
+  reason = str(
+    route.get("reason_code") or route.get("preflight_reason_code") or ""
+  ).strip()
+  bits = [item for item in (strategy, status) if item]
+  if reason and reason.replace("_", " ") not in status:
+    bits.append(reason[:48])
+  return " · ".join(bits)
 
 
 

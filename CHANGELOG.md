@@ -88,6 +88,9 @@ dated section after deployment.
   crosses into `ctrader-engine`.
 
 ### Changed
+- `/algo_status` adds compact profile, open group count, observed regime, and
+  last route (strategy · status · reason) while staying well under Telegram's
+  text limit (soft budget ~1200 chars; handler still hard-clips at 4000).
 - V7 publication now retains a seven-day TTL-bound dedup tombstone and a full
   symbol/cycle owner record. The C# executor keeps its restart payload under a
   separate recovery key, preserving the Python plan payload's short TTL.
