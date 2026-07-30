@@ -225,6 +225,9 @@ async def _evaluate(
   Returns ``True`` when the signal has hit its stop and no further bars should
   be evaluated for it. Accounting remains owner-confirmed through the alert's
   pre-filled close button.
+
+  Broker-managed ``algo_armed`` signals skip TP and SL advisories — those
+  lifecycle updates come from the executor — and only emit runner hints.
   """
   # A stopped-out trade is done: stop all further alerts until the SL flag is
   # cleared (e.g. the stop is manually moved via clear_sl_alert).
@@ -233,6 +236,16 @@ async def _evaluate(
 
   seq = sig.get("daily_seq") or sig["id"]
   is_buy = sig["action"] == "BUY"
+
+  # Broker-managed /algo positions already carry a real stop on cTrader.
+  # After TP1 the engine moves that stop to BE; an M1 candle that still
+  # wicked through the entry zone would then trip this advisory SL path and
+  # spam a VIP "NEAR SL" close button while price is still at TP — owner
+  # clicks it thinking BE hit, and the residual closes manually. Real SL /
+  # BE exits for algo arrive via manual_execution from broker events.
+  if sig.get("algo_armed"):
+    await _maybe_alert_runner(sig, bar, progress, seq, is_buy)
+    return False
 
   sl_hit = bar["low"] <= sig["sl"] if is_buy else bar["high"] >= sig["sl"]
   if sl_hit:
@@ -254,9 +267,6 @@ async def _evaluate(
 
   # Sequential TPs: only alert TP(n) once every earlier TP has been alerted.
   tps = sig["tps"]
-  if sig.get("algo_armed"):
-    await _maybe_alert_runner(sig, bar, progress, seq, is_buy)
-    return False
   while progress["tp"] < len(tps):
     idx = progress["tp"]
     tp = tps[idx]
