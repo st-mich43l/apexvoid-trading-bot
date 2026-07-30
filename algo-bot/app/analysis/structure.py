@@ -129,19 +129,62 @@ def is_break(df: pd.DataFrame, level: float | Level) -> str | None:
   return None
 
 
-def find_retest(df: pd.DataFrame, level: float | Level) -> Zone | None:
+def _last_consecutive_break_index(
+  closes: list[float],
+  price: float,
+  required: int,
+  *,
+  above: bool,
+) -> int | None:
+  """Index where the most recent run of ``required`` consecutive closes
+  beyond ``price`` first reached that length (i.e. the bar that actually
+  completes the break, not merely a single close beyond the level).
+  """
+  run = 0
+  last: int | None = None
+  for i, close in enumerate(closes):
+    beyond = close > price if above else close < price
+    if beyond:
+      run += 1
+      if run == required:
+        last = i
+    else:
+      run = 0
+  return last
+
+
+def find_retest(
+  df: pd.DataFrame,
+  level: float | Level,
+  *,
+  min_consecutive_closes: int = 1,
+) -> Zone | None:
+  """Find a retest of ``level`` after it breaks.
+
+  ``min_consecutive_closes`` requires that many consecutive closed bars
+  beyond the level before it counts as broken - a single-bar close is not,
+  by itself, a structural break (see key_level_role.classify_key_level_role,
+  which uses the exact same requirement via breakout_accept_bars). Callers
+  that need find_retest's break criterion to agree with that classification
+  - so a level can never fall through the gap between "still support/
+  resistance" and "broken, defer to Break & Retest" - should pass the same
+  breakout_accept_bars value here.
+  """
   if len(df) < 3:
     return None
   price = level.price if isinstance(level, Level) else float(level)
   tolerance = _tol(df)
-  closes = df["close"].astype(float)
+  closes_series = df["close"].astype(float)
+  closes = closes_series.tolist()
+  required = max(1, int(min_consecutive_closes))
+  up_break = _last_consecutive_break_index(closes, price, required, above=True)
+  down_break = _last_consecutive_break_index(closes, price, required, above=False)
   break_idx: int | None = None
   direction: str | None = None
-  for i in range(1, len(df) - 1):
-    if closes.iloc[i - 1] <= price < closes.iloc[i]:
-      break_idx, direction = i, "buy"
-    elif closes.iloc[i - 1] >= price > closes.iloc[i]:
-      break_idx, direction = i, "sell"
+  if up_break is not None and (down_break is None or up_break > down_break):
+    break_idx, direction = up_break, "buy"
+  elif down_break is not None:
+    break_idx, direction = down_break, "sell"
   if break_idx is None or direction is None:
     return None
   for i in range(break_idx + 1, len(df)):

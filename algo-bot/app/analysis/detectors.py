@@ -1044,7 +1044,11 @@ def break_retest(ctx: DetectionContext) -> DetectionResult | None:
   for level in levels:
     if not _level_valid(level.price, price, direction):
       continue
-    zone = find_retest(df, level.price)
+    zone = find_retest(
+      df,
+      level.price,
+      min_consecutive_closes=ctx.settings.breakout_accept_bars,
+    )
     if zone is None:
       continue
     if direction == "BUY" and zone.kind != "retest_support":
@@ -1987,6 +1991,42 @@ def _structural_finish(
   )
 
 
+def _opposing_zone_contradicts(
+  st: StructureSet,
+  *,
+  band_low: float,
+  band_high: float,
+  naive_side: str,
+) -> Zone | None:
+  """A real, unmitigated opposing-side zone overlapping this level's own
+  band contradicts the naive price-position guess below.
+
+  key_levels() (levels.py) only ever produces kind="reaction"/"round" -
+  never an explicit support/resistance label - so classify_key_level_role
+  almost always falls through to "price above the level -> assume
+  support -> BUY, price below -> assume resistance -> SELL" with no
+  awareness of nearby structure at all. A supply/breaker zone sitting
+  right at a level the naive guess called "support" means that guess is
+  likely wrong. Don't flip the direction outright (a coin flip is not
+  better than the current one) - just stop foreclosing the side that
+  actually matches the zone, and let evaluate_structural_reaction (via
+  the existing "try both, keep only if exactly one confirms" mechanism a
+  few lines below) decide from real price action either way. The returned
+  zone's own bounds - not just the level's narrow band - are what price
+  actually has to react off of, so callers widen the reaction window to
+  cover it: a plain bool here would leave the entry-validity check
+  comparing price against the tiny level band and rejecting every
+  contradicting-direction candidate outright.
+  """
+  opposing_side = "supply" if naive_side == "demand" else "demand"
+  for zone in (*st.zones, *st.order_blocks):
+    if zone.side != opposing_side or zone.mitigated:
+      continue
+    if zone.low <= band_high and zone.high >= band_low:
+      return zone
+  return None
+
+
 def key_level_reaction(ctx: DetectionContext) -> DetectionResult | None:
   if not ctx.settings.key_level_reaction_enabled:
     return None
@@ -2017,6 +2057,10 @@ def key_level_reaction(ctx: DetectionContext) -> DetectionResult | None:
       continue
     band_low = level.price - zone_band
     band_high = level.price + zone_band
+    react_low = band_low
+    react_high = band_high
+    contra_direction: str | None = None
+    contra_level: float | None = None
     if role == ROLE_SUPPORT:
       directions = ("BUY",)
     elif role == ROLE_RESISTANCE:
@@ -2024,12 +2068,41 @@ def key_level_reaction(ctx: DetectionContext) -> DetectionResult | None:
     elif price > band_high:
       # No explicit kind/breakout evidence either way (ROLE_AMBIGUOUS), but
       # the level sits below current price - deterministic support
-      # hypothesis, not a confluence-margin guess.
-      directions = ("BUY",)
+      # hypothesis, not a confluence-margin guess. Unless a real opposing
+      # (supply) zone overlaps this same band - then that hypothesis is
+      # contradicted by actual structure, not just a guess this detector
+      # should override on its own. Widen the reaction window to the
+      # opposing zone's own bounds too, and treat that zone's own edge -
+      # not this key level's price, which sits below current price by
+      # definition here - as the structural level a SELL is reacting off
+      # of: _level_valid/_entry_valid both require the level/zone to be
+      # at-or-above price for a SELL, which the original (lower) level
+      # can never satisfy once price has already moved above it.
+      opposing = _opposing_zone_contradicts(
+        st, band_low=band_low, band_high=band_high, naive_side="demand",
+      )
+      if opposing is not None:
+        directions = ("BUY", "SELL")
+        react_low = min(band_low, opposing.low)
+        react_high = max(band_high, opposing.high)
+        contra_direction = "SELL"
+        contra_level = opposing.high
+      else:
+        directions = ("BUY",)
     elif price < band_low:
       # Level sits above current price - deterministic resistance
-      # hypothesis.
-      directions = ("SELL",)
+      # hypothesis, same caveat mirrored for an opposing demand zone.
+      opposing = _opposing_zone_contradicts(
+        st, band_low=band_low, band_high=band_high, naive_side="supply",
+      )
+      if opposing is not None:
+        directions = ("SELL", "BUY")
+        react_low = min(band_low, opposing.low)
+        react_high = max(band_high, opposing.high)
+        contra_direction = "BUY"
+        contra_level = opposing.low
+      else:
+        directions = ("SELL",)
     else:
       # Price is inside the level's own band - direction must come from
       # which side actually confirms an M5 reaction, never a raw-
@@ -2039,11 +2112,14 @@ def key_level_reaction(ctx: DetectionContext) -> DetectionResult | None:
       directions = ("BUY", "SELL")
     confirmed_here: list[DetectionResult] = []
     for direction in directions:
+      level_price = (
+        contra_level if direction == contra_direction else level.price
+      )
       conf = evaluate_structural_reaction(
         df,
         direction=direction,
-        low=level.price - zone_band,
-        high=level.price + zone_band,
+        low=react_low,
+        high=react_high,
         lookback_bars=lookback,
         grabs=_level_grabs_for(st, level, direction),
         has_choch=_recent_choch_flag(
@@ -2052,11 +2128,13 @@ def key_level_reaction(ctx: DetectionContext) -> DetectionResult | None:
       )
       if conf is None:
         continue
-      zone = _pseudo_level_zone(
-        level.price,
-        zone_band,
-        direction,
-        f"key {level.kind} x{level.touches}",
+      zone = Zone(
+        react_low,
+        react_high,
+        _BUY_ZONE_SIDE if direction == "BUY" else "supply",
+        source="level",
+        score=STAR_TWO_SCORE,
+        score_reasons=[f"key {level.kind} x{level.touches}"],
       )
       if not _entry_valid_for_settings(
         zone, price, atr, direction, ctx.settings,
@@ -2072,7 +2150,7 @@ def key_level_reaction(ctx: DetectionContext) -> DetectionResult | None:
         ctx,
         setup="Key Level Reaction",
         direction=direction,
-        level=level.price,
+        level=level_price,
         zone=zone,
         price=price,
         atr=atr,
@@ -2082,8 +2160,8 @@ def key_level_reaction(ctx: DetectionContext) -> DetectionResult | None:
         ],
         structural_source="key_level",
         structural_id=key_level_structural_id(ctx.symbol, ctx.tf, level),
-        structural_low=level.price - zone_band,
-        structural_high=level.price + zone_band,
+        structural_low=react_low,
+        structural_high=react_high,
         structural_kind=level.kind,
         confirmation=conf,
         source_touches=level.touches,

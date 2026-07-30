@@ -246,7 +246,7 @@ public sealed class TradePlanRuntime(
       await RestoreAsync(cancellationToken);
       _restored = true;
     }
-    await ReadAndArmNewPlansAsync(cancellationToken);
+    await ReadAndArmNewPlansAsync(client, symbol, cancellationToken);
     if (quote is null)
     {
       return;
@@ -339,7 +339,11 @@ public sealed class TradePlanRuntime(
     await store.SetStringAsync(TrackedPlansKey(), string.Join(',', ids), cancellationToken);
   }
 
-  private async Task ReadAndArmNewPlansAsync(CancellationToken cancellationToken)
+  private async Task ReadAndArmNewPlansAsync(
+    ICTraderTradeClient client,
+    SymbolInfo symbol,
+    CancellationToken cancellationToken
+  )
   {
     var cursor = await store.GetTradePlanCursorAsync(cancellationToken);
     var entries = await store.ReadCandidatesAsync(
@@ -349,7 +353,7 @@ public sealed class TradePlanRuntime(
     {
       try
       {
-        await ProcessTradePlanEntryAsync(entry, cancellationToken);
+        await ProcessTradePlanEntryAsync(entry, client, symbol, cancellationToken);
         await store.SetTradePlanCursorAsync(entry.Id, cancellationToken);
       }
       catch (OperationCanceledException)
@@ -370,6 +374,8 @@ public sealed class TradePlanRuntime(
 
   private async Task ProcessTradePlanEntryAsync(
     TradeStreamEntry entry,
+    ICTraderTradeClient client,
+    SymbolInfo symbol,
     CancellationToken cancellationToken
   )
   {
@@ -454,6 +460,40 @@ public sealed class TradePlanRuntime(
       log(
         "auto_trade_plan_duplicate_claim_reconciled "
         + $"stream_id={entry.Id} plan_id={plan.PlanId} stage={evidenceStage}"
+      );
+      return;
+    }
+    // Size against the live account before ever announcing PLAN ARMED. A
+    // sizing failure here is not transient (identical guard exists in
+    // EvaluateArmedPlansAsync/SubmitEntryAsync, for when balance/risk drift
+    // between now and actual submission) - arming a plan that can never be
+    // sized, only to reject it a moment later, produced a nonsensical
+    // PLAN ARMED -> PLAN REJECTED flip within the same poll cycle.
+    try
+    {
+      var account = await client.GetTradingAccountAsync(cancellationToken);
+      TradePlanExecutionEngine.CalculateVolume(
+        plan, account.Balance, options.PipSize, options.PipValuePerLot, symbol
+      );
+    }
+    catch (Exception exception) when (
+      exception is VolumePlanningException or TradePlanContractException
+    )
+    {
+      await PersistPlanExecutionStateAsync(
+        plan.PlanId, "rejected", entry.Id, cancellationToken,
+        $"sizing_failed:{exception.GetType().Name}"
+      );
+      await PublishEventAsync(
+        "plan_rejected",
+        $"TradePlan V7 rejected: {exception.Message}",
+        plan,
+        cancellationToken
+      );
+      log(
+        $"v7 plan sizing rejected pre-arm id={plan.PlanId} "
+        + $"stream_id={entry.Id} "
+        + $"exception={exception.GetType().Name} message={exception.Message}"
       );
       return;
     }
