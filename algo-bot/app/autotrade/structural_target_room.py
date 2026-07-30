@@ -38,6 +38,46 @@ def _overlap(
   return overlap, ratio
 
 
+def filter_displaced_opposing_entries(
+  entries: Iterable[Any],
+  *,
+  direction: str,
+  recent_closes: Iterable[float],
+) -> list[Any]:
+  """Drop opposing-side entries that recent price action has already
+  decisively closed beyond, in the candidate's own direction.
+
+  An opposing zone's own classification (e.g. an H1 breaker/flip) can lag
+  real price by up to a full HTF bar - _breaker_violation (zones.py)
+  requires a confirmed close beyond the zone before relabeling it, which is
+  the right caution against flipping on a mere wick, but it means a zone
+  can still show up here as an unbroken barrier minutes after the
+  candidate's own execution timeframe has already closed decisively
+  through it. Applying the exact same confirmed-close standard directly
+  against the candidate's own recent closes - not waiting on the barrier's
+  own reclassification - recognizes a displacement that has already
+  happened instead of treating a barrier as live once it no longer is.
+  Only genuinely CLOSED beyond the far edge counts; a wick alone does not.
+  """
+  side = direction.upper()
+  closes = [float(value) for value in recent_closes if math.isfinite(value)]
+  opposing_side = "sell" if side == "BUY" else "buy"
+  kept: list[Any] = []
+  for entry in entries:
+    if str(getattr(entry, "side", "")).casefold() != opposing_side:
+      kept.append(entry)
+      continue
+    low = float(getattr(entry, "lo"))
+    high = float(getattr(entry, "hi"))
+    displaced = any(
+      (side == "BUY" and close > high) or (side == "SELL" and close < low)
+      for close in closes
+    )
+    if not displaced:
+      kept.append(entry)
+  return kept
+
+
 def _nearest_opposing(
   direction: str,
   planned_entry: float,

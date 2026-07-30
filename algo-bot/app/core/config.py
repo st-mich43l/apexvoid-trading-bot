@@ -561,6 +561,15 @@ class Settings(BaseSettings):
   # be disabled independently if it proves too strict.
   auto_trade_opposing_barrier_veto_enabled: bool = True
   auto_trade_opposing_barrier_atr: float = 0.5
+  # An opposing barrier's own classification (e.g. an H1 breaker/flip) can
+  # lag real price by up to a full HTF bar - the barrier can already be
+  # decisively closed-through on the execution timeframe while it still
+  # shows up here as unbroken. When the most recent N closed execution-tf
+  # bars include a confirmed close beyond the barrier in the candidate's
+  # own direction, that barrier is excluded from the opposing-room check
+  # entirely rather than hard-blocking on a barrier price has already
+  # broken. 0 disables the override (barriers are never excluded this way).
+  auto_trade_displacement_override_lookback_bars: int = 3
   # Post-stop-out cooldown (23 Jul 2026 incident: a stopped-out zone was
   # re-entered same-direction 15 minutes later at essentially the same
   # price). The TTL itself lives on the C# side (AUTO_TRADE_ZONE_COOLDOWN_
