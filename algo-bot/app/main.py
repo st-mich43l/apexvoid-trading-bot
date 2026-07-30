@@ -20,6 +20,11 @@ from app.autotrade.delivery import auto_trade_events_loop
 from app.autotrade.setup_expiry_sweeper import setup_expiry_sweeper_loop
 from app.autotrade.startup_reconciliation import reconcile_startup_state
 from app.autotrade.worker import auto_scalp_loop, strategy_match_ready_loop
+from app.autotrade.zone_execution_cutover import (
+  install_zone_execution_cutover,
+  zone_watch_execution_loop,
+)
+from app.autotrade.direct_publish_same_cycle import install_same_cycle_publish_retry
 from app.autotrade.config_health import (
   python_manifest,
   publish_python_manifest,
@@ -35,6 +40,11 @@ log = logging.getLogger("bot")
 
 
 async def main() -> None:
+  # Scanner and worker are already imported above. Install the retained-zone
+  # cutover before any background task starts so every live scanner cycle uses
+  # ZoneWatch and direct publication from its first event.
+  install_zone_execution_cutover()
+  install_same_cycle_publish_retry()
   await init_db()
   config_health = await publish_python_manifest(redis_state.get_client())
   manifest = python_manifest()
@@ -66,9 +76,8 @@ async def main() -> None:
     config_health["state"],
   )
   if settings.auto_trade_enabled:
-    # P0-10: repair pre-existing orphaned/stale state before any background
-    # task (sweeper, delivery, worker) starts reading it, so nothing races
-    # a still-in-progress reconciliation pass.
+    # Repair pre-existing orphaned/stale state before any background task
+    # starts reading it, so nothing races startup reconciliation.
     await reconcile_startup_state(redis_state.get_client())
   await setup_commands(bot)
   scanner_polling = None
@@ -87,7 +96,10 @@ async def main() -> None:
   asyncio.create_task(calendar_sync_loop())
   asyncio.create_task(weekly_report_loop())
   asyncio.create_task(scanner_loop())
+  asyncio.create_task(zone_watch_execution_loop())
   asyncio.create_task(auto_scalp_loop())
+  # Kept for emergency fallback and pre-cutover legacy events. Normal zone
+  # waiting no longer writes to this stream.
   asyncio.create_task(strategy_match_ready_loop())
   asyncio.create_task(setup_expiry_sweeper_loop())
   asyncio.create_task(market_map_scan_loop())
@@ -101,12 +113,7 @@ async def main() -> None:
       "Set it to enable the DM interface."
     )
   log.info("Starting Telegram polling")
-  # Long-polling is outbound-only — no inbound webhook server is required.
-  # start_polling installs its own SIGINT/SIGTERM handlers and closes the
-  # bot session on shutdown.
   try:
-    # callback_query is required for the inline Close buttons on TP alerts;
-    # without it Telegram never delivers button presses.
     await dp.start_polling(
       bot,
       allowed_updates=["channel_post", "message", "callback_query"],
