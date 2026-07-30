@@ -35,12 +35,18 @@ public sealed record TradePlanRuntimeState(
   string EntryType,
   TradePlanRuntimeStage Stage,
   long? PositionId = null,
-  long? PendingOrderId = null,
+  IReadOnlyList<long>? PendingOrderIds = null,
   decimal? EntryFillPrice = null,
   long RemainingVolume = 0,
   decimal CurrentStop = 0,
   int NextTargetIndex = 0,
-  bool BreakEvenApplied = false
+  bool BreakEvenApplied = false,
+  // How many of Entry.Legs (or the single single_limit leg) have already
+  // been submitted to the broker and durably recorded here. Resuming from
+  // this index - instead of always restarting the ladder at leg 0 - is what
+  // stops a mid-ladder broker error from resubmitting an already-accepted
+  // leg on the next poll (see SubmitEntryAsync).
+  int SubmittedLegCount = 0
 );
 
 public sealed record TradePlanRejectionRecord(
@@ -737,7 +743,9 @@ public sealed class TradePlanRuntime(
       }
       try
       {
-        await SubmitEntryAsync(client, symbol, plan, state, cancellationToken);
+        await SubmitEntryAsync(
+          client, symbol, plan, state, quote, cancellationToken
+        );
       }
       catch (Exception exception) when (
         exception is VolumePlanningException or TradePlanContractException
@@ -779,6 +787,7 @@ public sealed class TradePlanRuntime(
     SymbolInfo symbol,
     TradePlan plan,
     TradePlanRuntimeState state,
+    SpotPrice quote,
     CancellationToken cancellationToken
   )
   {
@@ -789,7 +798,6 @@ public sealed class TradePlanRuntime(
     var direction = plan.Analysis.Direction == "BUY"
       ? TradeDirection.Buy
       : TradeDirection.Sell;
-    var comment = $"v7|{plan.PlanId}|{plan.ThesisId}";
 
     if (plan.Entry.Type == TradePlanContract.EntryTypeMarketWatch)
     {
@@ -800,7 +808,7 @@ public sealed class TradePlanRuntime(
           volumePlan.TotalVolume,
           RelativeStopLoss(plan, symbol),
           options.Label,
-          comment,
+          $"v7|{plan.PlanId}|{plan.ThesisId}",
           plan.PlanId
         ),
         cancellationToken
@@ -811,6 +819,7 @@ public sealed class TradePlanRuntime(
         PositionId = execution.PositionId,
         EntryFillPrice = execution.ExecutionPrice,
         RemainingVolume = execution.ExecutedVolume,
+        SubmittedLegCount = 1,
       };
       await PersistStateAsync(next, cancellationToken);
       await PersistPlanExecutionStateAsync(
@@ -835,55 +844,141 @@ public sealed class TradePlanRuntime(
     }
 
     // single_limit and limit_ladder: submit every declared leg at its exact
-    // price - never a different price the executor picks. Fill/position
-    // ownership is reconciled from the pending-order comment (ParsePlanId).
+    // price - never a different price the executor picks.
     var legs = plan.Entry.Type == TradePlanContract.EntryTypeSingleLimit
       ? new[] { (plan.Entry.OrderPrice!.Value, volumePlan.TotalVolume) }
       : plan.Entry.Legs!
         .Zip(volumePlan.Slices, (leg, slice) => (leg.Price, slice.Volume))
         .ToArray();
-    long? firstOrderId = null;
-    foreach (var (price, volume) in legs)
+
+    // Resume from the first leg not yet durably recorded as submitted -
+    // never restart the ladder at leg 0. Without this, a broker rejection
+    // on leg 2+ (see the ClientOrderId note below) throws before the old
+    // code ever persisted Stage=Submitted, so the plan stayed Armed and the
+    // next poll resubmitted leg 1 even though the broker had already
+    // accepted it.
+    var positionId = state.PositionId;
+    var entryFillPrice = state.EntryFillPrice;
+    var filledVolume = state.RemainingVolume;
+    var pendingOrderIds = new List<long>(state.PendingOrderIds ?? []);
+    for (var index = state.SubmittedLegCount; index < legs.Length; index++)
     {
-      var orderId = await client.PlaceLimitOrderAsync(
-        new LimitOrderRequest(
-          symbol.SymbolId,
-          direction,
-          volume,
-          price,
-          RelativeStopLoss(plan, symbol),
-          options.Label,
-          comment,
-          plan.PlanId
-        ),
-        cancellationToken
-      );
-      firstOrderId ??= orderId;
+      var (price, volume) = legs[index];
+      // Every leg used to share one plan-wide comment/ClientOrderId. cTrader
+      // rejects a second order submitted with a ClientOrderId it has
+      // already seen, so leg 2+ of any ladder always failed here - one leg
+      // per plan, never reused across legs, but still deterministic so a
+      // genuine duplicate resubmission of the SAME leg is still caught by
+      // the broker instead of double-ordering it.
+      var legComment = $"v7|{plan.PlanId}|{plan.ThesisId}|{index}";
+      var legClientOrderId = $"{plan.PlanId}:{index}";
+      // A resting limit is only valid on the correct side of the live
+      // market (SELL limit price >= current bid, BUY limit price <=
+      // current ask). Detection latency and DCA-ladder anchoring can both
+      // produce a leg priced at-or-through the live quote by the time this
+      // actually reaches the broker - submitting that as a limit either
+      // gets rejected outright or, if accepted, is really a marketable
+      // order masquerading as a resting one. Submit it as an actual market
+      // order instead so entry is guaranteed rather than left stuck.
+      var marketable = direction == TradeDirection.Buy
+        ? price >= quote.Ask
+        : price <= quote.Bid;
+      if (marketable)
+      {
+        var execution = await client.PlaceMarketOrderAsync(
+          new MarketOrderRequest(
+            symbol.SymbolId,
+            direction,
+            volume,
+            RelativeStopLoss(plan, symbol),
+            options.Label,
+            legComment,
+            legClientOrderId
+          ),
+          cancellationToken
+        );
+        positionId ??= execution.PositionId;
+        entryFillPrice ??= execution.ExecutionPrice;
+        filledVolume += execution.ExecutedVolume;
+      }
+      else
+      {
+        var orderId = await client.PlaceLimitOrderAsync(
+          new LimitOrderRequest(
+            symbol.SymbolId,
+            direction,
+            volume,
+            price,
+            RelativeStopLoss(plan, symbol),
+            options.Label,
+            legComment,
+            legClientOrderId
+          ),
+          cancellationToken
+        );
+        pendingOrderIds.Add(orderId);
+      }
+      // Persist after EVERY leg, not once at the end - this is what makes a
+      // mid-ladder broker error resumable instead of resubmission-prone.
+      // Stage deliberately stays Armed until every leg has been attempted:
+      // EvaluateArmedPlansAsync only re-evaluates Stage==Armed plans, so
+      // flipping Stage away mid-ladder would strand any remaining legs -
+      // the next poll would never come back to finish submitting them.
+      state = state with
+      {
+        PositionId = positionId,
+        EntryFillPrice = entryFillPrice,
+        RemainingVolume = filledVolume,
+        PendingOrderIds = pendingOrderIds,
+        SubmittedLegCount = index + 1,
+      };
+      await PersistStateAsync(state, cancellationToken);
     }
-    var pendingState = state with
+    state = state with
     {
-      Stage = TradePlanRuntimeStage.Submitted,
-      PendingOrderId = firstOrderId,
-      RemainingVolume = volumePlan.TotalVolume,
+      Stage = positionId is not null
+        ? TradePlanRuntimeStage.Open
+        : TradePlanRuntimeStage.Submitted,
     };
-    await PersistStateAsync(pendingState, cancellationToken);
+    await PersistStateAsync(state, cancellationToken);
     await PersistPlanExecutionStateAsync(
-      plan.PlanId, "submitted", null, cancellationToken
+      plan.PlanId,
+      pendingOrderIds.Count == 0 ? "filled" : "submitted",
+      null,
+      cancellationToken
     );
     log(
-      $"auto_trade_plan_submitted plan_id={plan.PlanId} legs={legs.Length}"
+      $"auto_trade_plan_submitted plan_id={plan.PlanId} legs={legs.Length} "
+      + $"filled_volume={filledVolume} pending_legs={pendingOrderIds.Count}"
     );
-    await PublishEventAsync(
-      // "order_submitted" is already claimed by the V6 lifecycle as an
-      // always-silent event type (never a Telegram card) - v7_ prefixed so
-      // this V7 limit/ladder submission gets its own, visible ORDER
-      // SUBMITTED card instead of silently colliding with that.
-      "v7_order_submitted",
-      $"ORDER SUBMITTED {plan.Analysis.Direction} {legs.Length} leg(s)",
-      plan,
-      cancellationToken,
-      volume: volumePlan.TotalVolume
-    );
+    if (filledVolume > 0)
+    {
+      await PublishEventAsync(
+        "order_filled",
+        $"ORDER FILLED {plan.Analysis.Direction} {filledVolume} "
+        + $"@ {entryFillPrice}",
+        plan,
+        cancellationToken,
+        positionId: positionId,
+        price: entryFillPrice,
+        volume: filledVolume
+      );
+    }
+    if (pendingOrderIds.Count > 0)
+    {
+      await PublishEventAsync(
+        // "order_submitted" is already claimed by the V6 lifecycle as an
+        // always-silent event type (never a Telegram card) - v7_ prefixed so
+        // this V7 limit/ladder submission gets its own, visible ORDER
+        // SUBMITTED card instead of silently colliding with that.
+        "v7_order_submitted",
+        $"ORDER SUBMITTED {plan.Analysis.Direction} {pendingOrderIds.Count} "
+        + $"leg(s) pending",
+        plan,
+        cancellationToken,
+        volume: volumePlan.TotalVolume - filledVolume
+      );
+    }
   }
 
   private static long RelativeStopLoss(TradePlan plan, SymbolInfo symbol)

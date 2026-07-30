@@ -152,6 +152,24 @@ class ConfluenceZone:
   score: float = 0.0
 
 
+def _stable_atr(atr: float, pip_size: float) -> float:
+  # Mirrors reaction_identity.py's _stable_atr exactly (see _bucket below).
+  #
+  # Bucket size must not drift with ordinary ATR noise - live ATR is a
+  # rolling per-bar indicator that fluctuates constantly even when the
+  # underlying zone hasn't moved at all. Bug found live: the same real
+  # $4077-4081 SELL key-level band rehashed into a brand-new zone_id ~10
+  # times in one hour purely because ATR ticked across the fractional
+  # threshold that changes bucket size (atr=1.0 and atr=5 already produce
+  # different zone_ids for an identical band) - each rehash reset touch
+  # count to zero and the zone never survived long enough to execute.
+  # Quantizing ATR into a coarse step before it can affect bucket size means
+  # the grid only moves on a genuine regime-scale ATR change, not routine
+  # bar-to-bar noise.
+  step = max(float(pip_size) * 40.0, 4.0)
+  return round(max(0.0, float(atr)) / step) * step
+
+
 def _bucket(mid: float, *, atr: float, pip_size: float) -> float:
   # Mirrors reaction_identity.py's canonicalize_zone_bucket exactly, so a
   # merged zone's identity survives the same bar-to-bar coordinate jitter a
@@ -167,7 +185,9 @@ def _bucket(mid: float, *, atr: float, pip_size: float) -> float:
   # band are the same trade idea regardless of the merged band's exact
   # measured width from one scan to the next - only where it sits matters
   # for identity.
-  bucket = max(float(pip_size) * 10.0, max(0.0, float(atr)) * 0.25, 1.0)
+  bucket = max(
+    float(pip_size) * 10.0, _stable_atr(atr, pip_size) * 0.25, 1.0,
+  )
   return round(mid / bucket) * bucket
 
 
