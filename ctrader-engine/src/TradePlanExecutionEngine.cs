@@ -17,6 +17,13 @@ public sealed record TradePlanEntryDecision(
     RejectReason is null && Action != TradePlanEntryAction.Wait;
 }
 
+// TargetId holds a TP target_id for... actually never a TP target_id in
+// practice (see CalculateVolume) - it holds an entry LegId for
+// limit_ladder entries, the only case Slices is ever populated/consumed
+// (TradePlanRuntime.SubmitEntryAsync zips it against plan.Entry.Legs).
+// TP-target close volume is computed live from RemainingVolume at each
+// target hit (see TradePlanRuntime.ManageOpenPositionsAsync) and never
+// reads Slices - so Slices must never be sized off plan.Targets.
 public sealed record TradePlanVolumeSlice(string TargetId, long Volume);
 
 public sealed record TradePlanVolumePlan(
@@ -106,8 +113,18 @@ public static class TradePlanExecutionEngine
   /// Sizes volume purely from the plan's own risk contract and the live
   /// account balance - never from a structural stop distance C# derived
   /// itself, since the stop distance here is |entry - plan.Stop.Price| and
-  /// plan.Stop.Price is Python's exact declared value. Slices proportional
-  /// to each target's close_ratio using the existing broker-step-aware
+  /// plan.Stop.Price is Python's exact declared value. For a limit_ladder
+  /// entry, Slices are proportional to each entry LEG's own declared
+  /// VolumeRatio (e.g. the 70/30 DCA split from the zone-scale ladder) -
+  /// never to plan.Targets.CloseRatio, which is a wholly separate TP-exit
+  /// split that TradePlanRuntime.ManageOpenPositionsAsync already computes
+  /// live from RemainingVolume at each target hit. Sizing entry legs off
+  /// the TP count/weights instead used to both misapply the entry split
+  /// (silently, whenever it happened not to throw) and, whenever a plan
+  /// declared more TP targets than the sized volume had broker-steps for,
+  /// throw unconditionally - even for a plain market_watch entry that never
+  /// reads Slices at all - crashing the whole poll loop on a plan that
+  /// could otherwise execute fine. Uses the existing broker-step-aware
   /// VolumePlanner.SplitWeighted (purely mechanical broker-unit math,
   /// shared with the V6 path - not analysis).
   /// </summary>
@@ -149,18 +166,30 @@ public static class TradePlanExecutionEngine
       );
     }
 
+    if (plan.Entry.Type != TradePlanContract.EntryTypeLimitLadder)
+    {
+      // market_watch and single_limit submit the full volume as one order
+      // (TotalVolume) - no per-slice split exists to compute.
+      return new TradePlanVolumePlan(volume, Array.Empty<TradePlanVolumeSlice>());
+    }
+    var legs = plan.Entry.Legs ?? Array.Empty<TradePlanEntryLeg>();
+    if (legs.Count == 0)
+    {
+      throw new TradePlanContractException(
+        "limit_ladder entry requires at least one leg"
+      );
+    }
     // SplitWeighted takes positive integer weights, not fractional ratios -
-    // scale close_ratio (e.g. 0.40) up by a fixed factor to preserve
+    // scale volume_ratio (e.g. 0.70) up by a fixed factor to preserve
     // relative proportions without floating-point drift.
-    var weights = plan.Targets
-      .Select(target => Math.Max(1, decimal.ToInt32(target.CloseRatio * 10_000m)))
+    var weights = legs
+      .Select(leg => Math.Max(1, decimal.ToInt32(leg.VolumeRatio * 10_000m)))
       .ToArray();
     var slices = VolumePlanner.SplitWeighted(volume, symbol, weights);
     return new TradePlanVolumePlan(
       volume,
-      plan.Targets
-        .Zip(slices, (target, sliceVolume) =>
-          new TradePlanVolumeSlice(target.TargetId, sliceVolume))
+      legs
+        .Zip(slices, (leg, sliceVolume) => new TradePlanVolumeSlice(leg.LegId, sliceVolume))
         .ToArray()
     );
   }
