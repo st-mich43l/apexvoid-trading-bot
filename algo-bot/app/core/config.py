@@ -88,6 +88,31 @@ class Settings(BaseSettings):
   scanner_htf: str = "H1,M15"
   scanner_telegram_bot_token: Optional[str] = None
   scanner_window: int = 500
+  # refactor/p0-direct-zone-signal-execution: per-timeframe closed-bar
+  # lookback for zone/key-level discovery. Before this, every timeframe
+  # (H1 down to M1) fetched the same flat `scanner_window` bar count, which
+  # under-fetches M5 (needs the deepest history to find durable supply/
+  # demand and order-block evidence) and over-fetches M1 (timing/trigger
+  # only, never a source of a primary key level). Defaults sit inside the
+  # XAU-appropriate ranges documented in docs/. `window_for_timeframe()`
+  # is the single place that resolves a timeframe string to its bar count -
+  # detectors must never hardcode a lookback count themselves.
+  xau_lookback_h1_bars: int = Field(
+    default=400,
+    validation_alias=AliasChoices("XAU_LOOKBACK_H1_BARS"),
+  )
+  xau_lookback_m15_bars: int = Field(
+    default=650,
+    validation_alias=AliasChoices("XAU_LOOKBACK_M15_BARS"),
+  )
+  xau_lookback_m5_bars: int = Field(
+    default=1000,
+    validation_alias=AliasChoices("XAU_LOOKBACK_M5_BARS"),
+  )
+  xau_lookback_m1_bars: int = Field(
+    default=150,
+    validation_alias=AliasChoices("XAU_LOOKBACK_M1_BARS"),
+  )
   scanner_alert_ttl: int = 7200
   scanner_level_bucket: int = 20
   zone_alert_ttl: int = 14400
@@ -326,6 +351,19 @@ class Settings(BaseSettings):
       "AUTO_TRADE_FORMING_MAX_AGE_SECONDS",
     ),
   )
+  # refactor/p0-direct-zone-signal-execution: a match that is already
+  # execution-eligible the instant the scanner confirms it (quote already
+  # inside the entry zone, or an authoritative M5 reaction) is evaluated and
+  # published synchronously in the scanner's own confirmation cycle instead
+  # of being handed off through auto_trade:strategy_match_ready and waiting
+  # for a separate worker consumer tick. A match that is NOT yet executable
+  # still falls back to the durable ready-stream queue for retest/M1-trigger
+  # waiting. Kept as a settings flag (default on) so a rollout can disable
+  # the direct path without a code change if it needs to.
+  auto_trade_direct_publish_enabled: bool = Field(
+    default=True,
+    validation_alias=AliasChoices("AUTO_TRADE_DIRECT_PUBLISH_ENABLED"),
+  )
   # Executes only structural Market Map zones (never display-only round-number
   # fallbacks) after the latest M1 candle touches and rejects the zone.
   auto_trade_mapped_zone_enabled: bool = Field(
@@ -369,6 +407,44 @@ class Settings(BaseSettings):
   # order, instead of several strategies each ordering on the same band.
   zone_merge_max_width: float = 6.0
   zone_merge_gap: float = 1.0
+  # refactor/p0-direct-zone-signal-execution: explicit XAU zone-width
+  # contract, expressed in actual XAU price units (never pips/digits). A
+  # normal tradable zone must land in [MIN_WIDTH, MAJOR_MAX_WIDTH]; anything
+  # tighter is rejected as too narrow (a 0.5-price isolated level, not a
+  # tradable band) rather than artificially stretched, and anything wider
+  # than the major-zone ceiling is either trimmed to real structural
+  # boundaries or rejected as too broad. PREFERRED_MIN/MAX describe the
+  # sweet spot for a normal (non-major-H1) zone; MAJOR_MAX_WIDTH gives H1
+  # zones a wider validated ceiling instead of forcing the same cap onto
+  # every timeframe.
+  xau_zone_min_width_price: float = Field(
+    default=3.0,
+    validation_alias=AliasChoices("XAU_ZONE_MIN_WIDTH_PRICE"),
+  )
+  xau_zone_preferred_min_width_price: float = Field(
+    default=3.0,
+    validation_alias=AliasChoices("XAU_ZONE_PREFERRED_MIN_WIDTH_PRICE"),
+  )
+  xau_zone_preferred_max_width_price: float = Field(
+    default=6.0,
+    validation_alias=AliasChoices("XAU_ZONE_PREFERRED_MAX_WIDTH_PRICE"),
+  )
+  xau_major_zone_max_width_price: float = Field(
+    default=10.0,
+    validation_alias=AliasChoices("XAU_MAJOR_ZONE_MAX_WIDTH_PRICE"),
+  )
+  # refactor/p0-direct-zone-signal-execution: enforce the XAU zone-width
+  # contract (xau_zone_min_width_price / xau_major_zone_max_width_price) as
+  # a hard reject on the scanner's confluence-merge path. Off by default -
+  # the width contract itself (validate_zone_width in confluence_zone.py)
+  # is fully implemented and unit-tested independent of this flag; rollout
+  # of the live scanner gate is deliberately staged behind this switch so
+  # existing zone-width telemetry can be audited before any zone starts
+  # being dropped for width in production.
+  scanner_zone_width_gate_enabled: bool = Field(
+    default=False,
+    validation_alias=AliasChoices("SCANNER_ZONE_WIDTH_GATE_ENABLED"),
+  )
   # Actionability remains observable by default. Only a genuine overlapping
   # BUY/SELL conflict is always hard; operators may re-enable the broader
   # #140 policy and key-level ambiguity drops independently.
@@ -675,6 +751,27 @@ class Settings(BaseSettings):
     if not 1 <= int(self.auto_trade_retest_trigger_validity_bars) <= 5:
       raise ValueError(
         "AUTO_TRADE_RETEST_TRIGGER_VALIDITY_BARS must be between 1 and 5"
+      )
+    for lookback_name in (
+      "xau_lookback_h1_bars",
+      "xau_lookback_m15_bars",
+      "xau_lookback_m5_bars",
+      "xau_lookback_m1_bars",
+    ):
+      if int(getattr(self, lookback_name)) < 50:
+        raise ValueError(
+          f"{lookback_name.upper()} must be >= 50 closed bars"
+        )
+    if not (
+      0
+      < self.xau_zone_min_width_price
+      <= self.xau_zone_preferred_min_width_price
+      <= self.xau_zone_preferred_max_width_price
+      <= self.xau_major_zone_max_width_price
+    ):
+      raise ValueError(
+        "XAU zone-width settings must satisfy 0 < MIN_WIDTH <= "
+        "PREFERRED_MIN_WIDTH <= PREFERRED_MAX_WIDTH <= MAJOR_MAX_WIDTH"
       )
     if self.auto_trade_max_entry_distance_pips <= 0:
       raise ValueError(
