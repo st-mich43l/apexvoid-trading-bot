@@ -336,9 +336,15 @@ def render_market_map(
     "BUY",
     *_render_side(market_map.buys, market_map.price),
   ]
-  actionable_now = _actionable_now_lines(market_map)
-  if actionable_now:
-    lines.extend(["", "⚡ ACTIONABLE NOW", *actionable_now])
+  beyond_cap = _beyond_display_cap_lines(market_map)
+  if beyond_cap:
+    # These bands only ended up here because the per-side display cap
+    # (MAP_TAG_LIMIT/entries slicing above) dropped them from SELL/BUY -
+    # not because price is anywhere near them. "ACTIONABLE NOW" read as "you
+    # can enter this right now" to anyone reading the card, when a listed
+    # band can sit tens of price units away from current price. Label what
+    # this section actually is instead of what it sounds like.
+    lines.extend(["", "⚡ ALSO QUALIFIES (beyond display cap)", *beyond_cap])
   if market_map.map_id:
     lines.append("")
     lines.append(f"map_id {market_map.map_id}")
@@ -948,7 +954,7 @@ def _entry_in_list(entry: MapEntry, entries: list[MapEntry]) -> bool:
   )
 
 
-def _actionable_now_lines(market_map: MarketMap) -> list[str]:
+def _beyond_display_cap_lines(market_map: MarketMap) -> list[str]:
   """Render actionable bands dropped only by display capping."""
   lines: list[str] = []
   for entry in market_map.actionable_entries:
