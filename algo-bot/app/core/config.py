@@ -597,6 +597,14 @@ class Settings(BaseSettings):
   # be disabled independently if it proves too strict.
   auto_trade_opposing_barrier_veto_enabled: bool = True
   auto_trade_opposing_barrier_atr: float = 0.5
+  # 2026-07-31: three same-evening incidents (15.18/15.2/19.9 pips of real
+  # buffered room, all rejected outright for falling short of the smallest
+  # *configured* target, 30 pips). A genuine minimum-viability floor,
+  # independent of the configured ladder - when nothing on the ladder fits
+  # but real room still clears this, the trade is allowed with its own
+  # (smaller) achievable room as the target instead of being thrown away.
+  # 0 restores the old all-or-nothing behavior.
+  auto_trade_min_capped_target_pips: float = 15.0
   # An opposing barrier's own classification (e.g. an H1 breaker/flip) can
   # lag real price by up to a full HTF bar - the barrier can already be
   # decisively closed-through on the execution timeframe while it still

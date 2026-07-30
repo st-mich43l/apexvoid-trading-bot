@@ -5191,6 +5191,7 @@ async def _publish_trade_plan_v7(
     atr=execution_match.atr,
     pip_size=units.pip_size(symbol),
     barrier_buffer_atr=float(settings.auto_trade_opposing_barrier_atr),
+    min_capped_target_pips=float(settings.auto_trade_min_capped_target_pips),
   )
   if not target_room.allowed:
     eligibility = match.execution_eligibility

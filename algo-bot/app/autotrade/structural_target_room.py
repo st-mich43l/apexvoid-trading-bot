@@ -135,8 +135,19 @@ def evaluate_structural_target_room(
   atr: float,
   pip_size: float,
   barrier_buffer_atr: float,
+  min_capped_target_pips: float = 0.0,
 ) -> StructuralTargetRoomDecision:
-  """Cap reachable target room at the nearest opposing actionable entry."""
+  """Cap reachable target room at the nearest opposing actionable entry.
+
+  min_capped_target_pips (2026-07-31, three same-evening incidents:
+  15.18/15.2/19.9 pips of real buffered room all rejected outright for
+  falling short of the smallest *configured* target, 30 pips) is a
+  genuine minimum-viability floor, independent of the configured ladder:
+  when none of the configured targets fit but buffered room still clears
+  this floor, the trade is allowed with its own real (smaller) room as
+  the target instead of being thrown away. 0.0 (the default) preserves
+  the old all-or-nothing behavior for any caller that doesn't opt in.
+  """
   side = str(direction).upper()
   planned = float(planned_entry_price)
   low = min(float(candidate_entry_low), float(candidate_entry_high))
@@ -268,6 +279,23 @@ def evaluate_structural_target_room(
     )
   fitted = tuple(target for target in targets if target <= room_pips)
   if not fitted:
+    floor = max(0.0, float(min_capped_target_pips))
+    if floor > 0 and room_pips >= floor:
+      capped_target = float(math.floor(room_pips))
+      return StructuralTargetRoomDecision(
+        True,
+        "opposing_barrier_target_capped_below_ladder",
+        "no configured target fits, but real buffered room clears the "
+        "minimum viable target",
+        False,
+        {
+          **measured,
+          "effective_target_pips": capped_target,
+        },
+        opposing_entry=barrier,
+        fitted_targets_pips=(int(capped_target),),
+        effective_target_pips=capped_target,
+      )
     return StructuralTargetRoomDecision(
       False,
       "opposing_barrier_no_target",

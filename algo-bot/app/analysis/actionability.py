@@ -402,6 +402,9 @@ def resolve_actionability(
         barrier_buffer_atr=float(
           getattr(cfg, "auto_trade_opposing_barrier_atr", 0.5)
         ),
+        min_capped_target_pips=float(
+          getattr(cfg, "auto_trade_min_capped_target_pips", 15.0)
+        ),
       )
       measured = {
         **room.measured,
