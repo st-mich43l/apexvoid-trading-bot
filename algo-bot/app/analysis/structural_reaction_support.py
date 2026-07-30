@@ -18,6 +18,7 @@ CONFIRM_WICK_REJECTION = "wick_rejection"
 CONFIRM_SWEEP_RECLAIM = "sweep_reclaim"
 CONFIRM_REJECTION_CHOCH = "rejection_choch"
 CONFIRM_STRONG_RECLAIM = "strong_reclaim"
+CONFIRM_ENGULFING = "engulfing"
 
 STRUCTURAL_SETUPS = frozenset({
   "Key Level Reaction",
@@ -230,6 +231,39 @@ def strong_reclaim_on_bar(
   return swept and reclaimed
 
 
+def engulfing_on_bar(
+  row: pd.Series,
+  prior_row: pd.Series,
+  direction: str,
+) -> bool:
+  """Bullish/bearish engulfing: this bar's body fully engulfs the prior
+  bar's body, closing in the reaction direction.
+
+  A slow multi-hour grind at a zone often never produces a single dramatic
+  rejection wick (what wick_rejection_on_bar/strong_reclaim_on_bar require)
+  even after repeated genuine touches - small-bodied consolidation candles
+  absorbing at the level, then one decisive engulfing candle, is the
+  textbook confirmation for exactly that shape of reaction. Already
+  implemented and tested for M1 execution timing
+  (app.analysis.m1_trigger._engulfing); mirrored here, without the M1
+  config dependency, as a first-class M5 structural reaction confirmation
+  - additive only, checked after every existing (stricter) pattern.
+  """
+  open_ = float(row["open"])
+  close = float(row["close"])
+  prior_open = float(prior_row["open"])
+  prior_close = float(prior_row["close"])
+  body_low = min(open_, close)
+  body_high = max(open_, close)
+  prior_low = min(prior_open, prior_close)
+  prior_high = max(prior_open, prior_close)
+  if body_low > prior_low or body_high < prior_high:
+    return False
+  if direction == "BUY":
+    return close > open_
+  return close < open_
+
+
 def evaluate_structural_reaction(
   df: pd.DataFrame,
   *,
@@ -284,6 +318,11 @@ def evaluate_structural_reaction(
       confirmation = CONFIRM_STRONG_RECLAIM
     elif wick_rejection_on_bar(row, side):
       confirmation = CONFIRM_WICK_REJECTION
+    elif (
+      confirm_index > 0
+      and engulfing_on_bar(row, df.iloc[confirm_index - 1], side)
+    ):
+      confirmation = CONFIRM_ENGULFING
 
     if confirmation is None:
       continue
