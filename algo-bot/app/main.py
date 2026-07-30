@@ -24,7 +24,11 @@ from app.autotrade.zone_execution_cutover import (
   install_zone_execution_cutover,
   zone_watch_execution_loop,
 )
-from app.autotrade.direct_publish_same_cycle import install_same_cycle_publish_retry
+from app.autotrade.zone_execution_runtime import uninstall_zone_execution_cutover
+from app.autotrade.direct_publish_same_cycle import (
+  install_same_cycle_publish_retry,
+  uninstall_same_cycle_publish_retry,
+)
 from app.autotrade.config_health import (
   python_manifest,
   publish_python_manifest,
@@ -125,6 +129,10 @@ async def main() -> None:
     await scanner_bot.session.close()
     await redis_state.close_client()
     await close_pool()
+    # Production normally exits the process here. Bounded app-lifecycle tests
+    # continue in the same interpreter, so restore patched module globals.
+    uninstall_same_cycle_publish_retry()
+    uninstall_zone_execution_cutover()
 
 
 if __name__ == "__main__":
