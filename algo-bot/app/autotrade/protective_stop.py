@@ -435,13 +435,28 @@ def plan_protective_stop(
   )
 
 
+_REACTION_FAMILY_STRATEGIES = {
+  "Key Level Reaction",
+  "Demand Zone Reaction",
+  "Supply Zone Reaction",
+  "Session Level Reaction",
+  "Trendline Reaction",
+}
+
+
 def stop_bounds_for_strategy(
   *,
   strategy: str,
   pip_size: Any,
   cfg: Any | None,
 ) -> tuple[int, int]:
-  """Use the same candidate family split as C# ``StopPipsBounds``."""
+  """Use the same candidate family split as C# ``StopPipsBounds``.
+
+  The zone-scale reaction families are a narrower-structure trade than
+  trend-following - give them their own (tighter) envelope instead of
+  falling through to the trend bounds, so a genuinely tight structure/wick
+  stop isn't forced wider than the zone it was actually computed from.
+  """
   if str(strategy) == "Range Box Scalp":
     minimum = int(getattr(cfg, "auto_trade_add_min_stop_pips", 30))
     sl_distance = decimal_value(
@@ -451,6 +466,11 @@ def stop_bounds_for_strategy(
     pip = decimal_value(pip_size, "pip_size")
     maximum = int(sl_distance // pip)
     return minimum, maximum
+  if str(strategy) in _REACTION_FAMILY_STRATEGIES:
+    return (
+      int(getattr(cfg, "auto_trade_reaction_stop_min_pips", 20)),
+      int(getattr(cfg, "auto_trade_reaction_stop_max_pips", 60)),
+    )
   return (
     int(getattr(cfg, "auto_trade_trend_stop_min_pips", 40)),
     int(getattr(cfg, "auto_trade_trend_stop_max_pips", 65)),
