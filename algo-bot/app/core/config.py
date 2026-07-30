@@ -580,7 +580,7 @@ class Settings(BaseSettings):
   auto_trade_range_box_move_sl_to_be_after_scale_out: bool = False
   auto_trade_range_tp_buffer_pips: float = 3.0
   auto_trade_range_min_target_pips: float = 20.0
-  auto_trade_range_min_rr: float = 1.10
+  auto_trade_range_min_rr: float = 1.00
   # Structure-aware barrier / range controls.
   scalp_barrier_fallback_enabled: bool = True
   scalp_barrier_fallback_min_confirmations: int = 1
