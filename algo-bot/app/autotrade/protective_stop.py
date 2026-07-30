@@ -453,9 +453,12 @@ def stop_bounds_for_strategy(
   """Use the same candidate family split as C# ``StopPipsBounds``.
 
   The zone-scale reaction families are a narrower-structure trade than
-  trend-following - give them their own (tighter) envelope instead of
-  falling through to the trend bounds, so a genuinely tight structure/wick
-  stop isn't forced wider than the zone it was actually computed from.
+  trend-following - give them their own, lower floor instead of falling
+  through to the trend minimum, so a genuinely tight structure/wick stop
+  isn't forced wider than the zone it was actually computed from. The
+  ceiling matches the trend family's rather than also being lowered - a
+  live regression showed the opposing-zone stop push (below) sometimes
+  legitimately needs that much room to clear a real opposing zone.
   """
   if str(strategy) == "Range Box Scalp":
     minimum = int(getattr(cfg, "auto_trade_add_min_stop_pips", 30))
@@ -469,7 +472,7 @@ def stop_bounds_for_strategy(
   if str(strategy) in _REACTION_FAMILY_STRATEGIES:
     return (
       int(getattr(cfg, "auto_trade_reaction_stop_min_pips", 20)),
-      int(getattr(cfg, "auto_trade_reaction_stop_max_pips", 60)),
+      int(getattr(cfg, "auto_trade_reaction_stop_max_pips", 65)),
     )
   return (
     int(getattr(cfg, "auto_trade_trend_stop_min_pips", 40)),

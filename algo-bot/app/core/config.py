@@ -237,9 +237,15 @@ class Settings(BaseSettings):
   # bounds above - a genuinely tight, structure/wick-computed stop (e.g.
   # a 3-point zone with a stop just beyond it) was forced out to at least
   # auto_trade_trend_stop_min_pips=40 regardless, widening the stop and
-  # dragging reward:risk down for no structural reason.
+  # dragging reward:risk down for no structural reason. Only the floor is
+  # lowered - the ceiling stays matched to the trend family's, since the
+  # opposing-zone stop push (protective_stop.py:_apply_opposing_zone_push)
+  # sometimes legitimately needs that much room to clear a real opposing
+  # zone; a live regression showed a valid SELL rejected with
+  # stop_inside_opposing_zone once this was tightened to 60 - it needed
+  # the room the 65 ceiling already provided.
   auto_trade_reaction_stop_min_pips: int = 20
-  auto_trade_reaction_stop_max_pips: int = 60
+  auto_trade_reaction_stop_max_pips: int = 65
   auto_trade_xau_price_digits: int = 2
   auto_trade_xau_pip_size: float = Field(
     default=0.1,
