@@ -1044,7 +1044,11 @@ def break_retest(ctx: DetectionContext) -> DetectionResult | None:
   for level in levels:
     if not _level_valid(level.price, price, direction):
       continue
-    zone = find_retest(df, level.price)
+    zone = find_retest(
+      df,
+      level.price,
+      min_consecutive_closes=ctx.settings.breakout_accept_bars,
+    )
     if zone is None:
       continue
     if direction == "BUY" and zone.kind != "retest_support":

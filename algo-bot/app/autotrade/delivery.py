@@ -1092,6 +1092,16 @@ async def auto_trade_status_text() -> str:
   return text
 
 
+# preflight_reason_code lingers as whatever the last preflight-stage event
+# recorded (route_outcome.py) - once a candidate clears every preflight
+# check, that's "preflight_allowed"/"preflight_allowed_parent_group", and
+# it then sits there as the displayed "why" on every later status check
+# even though it explains nothing (it means "passed", not "here's what
+# happened or why"). Never show a pass-through code as if it were a
+# reason.
+_NON_REASON_ROUTE_CODES = {"preflight_allowed", "preflight_allowed_parent_group"}
+
+
 def _compact_route_line(route: dict) -> str:
   if not route:
     return ""
@@ -1101,7 +1111,11 @@ def _compact_route_line(route: dict) -> str:
     route.get("reason_code") or route.get("preflight_reason_code") or ""
   ).strip()
   bits = [item for item in (strategy, status) if item]
-  if reason and reason.replace("_", " ") not in status:
+  if (
+    reason
+    and reason not in _NON_REASON_ROUTE_CODES
+    and reason.replace("_", " ") not in status
+  ):
     bits.append(reason[:48])
   return " · ".join(bits)
 
