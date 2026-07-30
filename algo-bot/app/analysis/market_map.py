@@ -261,6 +261,7 @@ def build_map(ctx_or_per_tf, price: float, cfg) -> MarketMap:
         price,
       )
     capped.extend(_rank_entries(selected, price)[:max_per_side])
+  capped = _resolve_cross_side_overlaps(capped)
 
   regime = getattr(ctx_or_per_tf, "regime", None)
   dealing_range = getattr(ctx_or_per_tf, "dealing_range", None)
@@ -848,6 +849,58 @@ def _rank_entries(entries, price: float) -> list[MapEntry]:
       tuple(tag.casefold() for tag in entry.tags),
     ),
   )
+
+
+_CROSS_SIDE_OVERLAP_RATIO = 0.5
+# Same circuit-breaker philosophy as zones.py's reconcile_opposing (learned
+# from the 22 Jul zone-reconcile regression): never let one pass strip more
+# than a third of the capped card, fail open (return input unchanged)
+# instead of risking a runaway cascade emptying a side of the map.
+_CROSS_SIDE_MAX_DROP_FRACTION = 0.34
+
+
+def _entry_overlap_ratio(first: MapEntry, second: MapEntry) -> float:
+  overlap = max(0.0, min(first.hi, second.hi) - max(first.lo, second.lo))
+  width = max(0.0, first.hi - first.lo)
+  if width <= 0:
+    return 1.0 if overlap > 0 else 0.0
+  return overlap / width
+
+
+def _resolve_cross_side_overlaps(entries: list[MapEntry]) -> list[MapEntry]:
+  """Drop the weaker of two opposing-side entries that substantially
+  overlap the same price band.
+
+  Each side is ranked and capped independently (see the per-side loop
+  above), so nothing ever checked whether the resulting BUY and SELL lists
+  contradict each other - a demand zone and a supply zone a few points
+  apart both read as live, actionable structure on the same card, which is
+  just confusing noise, not two real opportunities. Keep whichever ranks
+  better (tier, then score - the same ordering _rank_entries already
+  uses) and drop the other.
+  """
+  drop: set[int] = set()
+  for i, first in enumerate(entries):
+    if i in drop:
+      continue
+    for j in range(i + 1, len(entries)):
+      if j in drop or entries[j].side == first.side:
+        continue
+      second = entries[j]
+      ratio = max(
+        _entry_overlap_ratio(first, second),
+        _entry_overlap_ratio(second, first),
+      )
+      if ratio < _CROSS_SIDE_OVERLAP_RATIO:
+        continue
+      first_key = (_TIER_RANK[first.tier], first.score)
+      second_key = (_TIER_RANK[second.tier], second.score)
+      drop.add(j if first_key >= second_key else i)
+      if i in drop:
+        break
+  if not entries or len(drop) / len(entries) > _CROSS_SIDE_MAX_DROP_FRACTION:
+    return entries
+  return [entry for index, entry in enumerate(entries) if index not in drop]
 
 
 _ACTIONABLE_MAP_TAGS = {

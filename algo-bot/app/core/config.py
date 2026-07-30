@@ -231,6 +231,15 @@ class Settings(BaseSettings):
   auto_trade_wick_stop_buffer_atr: float = 0.15
   auto_trade_trend_stop_min_pips: int = 40
   auto_trade_trend_stop_max_pips: int = 65
+  # The 4 zone-scale reaction families (Key Level/Demand/Supply/Session
+  # Level/Trendline Reaction) trade off a narrower structural zone than
+  # trend-following setups and previously fell through to the trend
+  # bounds above - a genuinely tight, structure/wick-computed stop (e.g.
+  # a 3-point zone with a stop just beyond it) was forced out to at least
+  # auto_trade_trend_stop_min_pips=40 regardless, widening the stop and
+  # dragging reward:risk down for no structural reason.
+  auto_trade_reaction_stop_min_pips: int = 20
+  auto_trade_reaction_stop_max_pips: int = 60
   auto_trade_xau_price_digits: int = 2
   auto_trade_xau_pip_size: float = Field(
     default=0.1,
@@ -580,7 +589,7 @@ class Settings(BaseSettings):
   auto_trade_range_box_move_sl_to_be_after_scale_out: bool = False
   auto_trade_range_tp_buffer_pips: float = 3.0
   auto_trade_range_min_target_pips: float = 20.0
-  auto_trade_range_min_rr: float = 1.10
+  auto_trade_range_min_rr: float = 1.00
   # Structure-aware barrier / range controls.
   scalp_barrier_fallback_enabled: bool = True
   scalp_barrier_fallback_min_confirmations: int = 1

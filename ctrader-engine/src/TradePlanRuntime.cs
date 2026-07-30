@@ -963,6 +963,47 @@ public sealed class TradePlanRuntime(
           );
         }
       }
+      // Beyond break-even, the stop must keep ratcheting as later targets
+      // close - otherwise a position that ran all the way to TP3/TP4/TP5
+      // sits protected at nothing more than BE forever, and a full reversal
+      // afterward gives back every pip those later targets banked. Trail to
+      // the target two levels behind the one that just closed (never the
+      // one just passed - that leaves no room for a normal pullback between
+      // levels): after TP3 closes, protect TP1's price; after TP4, TP2's;
+      // and so on. Mirrors StopTrailPlanner.Plan's V6 ratchet (same "-2"
+      // lag), reworked for V7's absolute per-target prices instead of V6's
+      // entry-relative pip ladder - this runtime never had an equivalent
+      // step of its own.
+      var trailToIndex = state.NextTargetIndex - 3;
+      if (trailToIndex >= 0 && trailToIndex < plan.Targets.Count)
+      {
+        var desired = decimal.Round(
+          plan.Targets[trailToIndex].Price, symbol.Digits, MidpointRounding.AwayFromZero
+        );
+        var improves = plan.Analysis.Direction == "BUY"
+          ? desired > state.CurrentStop
+          : desired < state.CurrentStop;
+        if (improves)
+        {
+          await client.AmendPositionStopLossAsync(
+            state.PositionId!.Value, desired, cancellationToken
+          );
+          state = state with { CurrentStop = desired };
+          await PersistStateAsync(state, cancellationToken);
+          log(
+            $"v7 stop trailed id={plan.PlanId} stop={desired} "
+            + $"to_target={plan.Targets[trailToIndex].TargetId}"
+          );
+          await PublishEventAsync(
+            "sl_moved",
+            $"SL MOVED to {desired} (trail {plan.Targets[trailToIndex].TargetId})",
+            plan,
+            cancellationToken,
+            positionId: state.PositionId,
+            price: desired
+          );
+        }
+      }
     }
   }
 

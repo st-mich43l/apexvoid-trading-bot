@@ -222,6 +222,15 @@ def _analyze_tf(
     settings.momentum_body_frac,
   )
   sd_zones = supply_demand(df, legs)
+  # A plain supply/demand zone is exactly as violable as an order block - a
+  # demand zone price later closes decisively below is no longer demand, it's
+  # broken structure that should act as supply on any later retest from
+  # below (and vice versa). breaker_blocks already implements this "closed
+  # through -> dead + flipped" rule generically (see _breaker_violation) and
+  # was only ever wired to order_blocks; apply it here too so a stale,
+  # already-broken zone never keeps opposing trades in its original,
+  # long-since-invalidated direction.
+  sd_zones = breaker_blocks(sd_zones, df)
   ob_zones = order_blocks(df, legs, breaks, settings.zone_width)
   ob_zones = breaker_blocks(ob_zones, df)
   flip = flip_zones(levels, breaks)
