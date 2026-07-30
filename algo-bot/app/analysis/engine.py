@@ -286,11 +286,26 @@ def _analyze_tf(
   )
   if reconcile_mode in {"shadow", "enforce"}:
     reconcile_stats: dict = {}
-    reconciled = reconcile_opposing(
-      zones,
+    # 2026-07-31: reconcile_opposing's circuit breaker (see zones.py's
+    # ZONE_RECONCILE_MAX_FRACTION) was aborting on nearly every call in
+    # production - replaying real live OHLC showed why: of a typical
+    # ~69-zone set, only ~2 were still unmitigated (live). The other ~67
+    # were historical zones price had already traded through - two dead,
+    # long-since-irrelevant zones on opposite sides overlapping is normal
+    # and expected over hundreds of bars, not a sign of a broken zone map,
+    # but it was counted the same as a live conflict and tripped the
+    # breaker on effectively every pass. Reconcile only the zones that are
+    # still live; mitigated zones pass through untouched (nothing here
+    # ever prunes them - detectors already filter zone.mitigated
+    # themselves) and never count toward the circuit breaker's fraction.
+    live_zones = [zone for zone in zones if not zone.mitigated]
+    mitigated_zones = [zone for zone in zones if zone.mitigated]
+    reconciled_live = reconcile_opposing(
+      live_zones,
       min(0.3 * atr_scalar(atr), ZONE_MIN_WIDTH),
       stats=reconcile_stats,
     )
+    reconciled = [*reconciled_live, *mitigated_zones]
     zone_reconcile_dropped = reconcile_stats.get("dropped", 0)
     zone_reconcile_aborted = reconcile_stats.get("aborted", False)
     zone_reconcile_shadow_output = len(reconciled)
