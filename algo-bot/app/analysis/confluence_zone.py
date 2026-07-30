@@ -60,7 +60,9 @@ class BandKind:
   BREAKOUT_RETEST_BAND = "breakout_retest_band"
 
 
-_LEVEL_BAND_SOURCES = frozenset({"key_level", "session_level", "trendline"})
+_LEVEL_BAND_SOURCES = frozenset({
+  "key_level", "session_level", "trendline", "liquidity_pool",
+})
 _RANGE_EDGE_BAND_SOURCES = frozenset({"range", "range_edge", "range_scalp"})
 _BREAKOUT_RETEST_BAND_SOURCES = frozenset({"box_breakout", "breakout_retest"})
 

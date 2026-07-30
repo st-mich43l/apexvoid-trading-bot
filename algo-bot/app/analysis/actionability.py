@@ -164,6 +164,62 @@ def _entries_excluding_displaced_barriers(
   )
 
 
+_ZONE_TRIM_EPS = 1e-9
+
+
+def _trim_zone_against_overlapping_barrier(
+  result: DetectionResult,
+  entries: Sequence[MapEntry],
+) -> DetectionResult:
+  """Recovery mission (2026-07-31): a partially-overlapping opposing
+  barrier used to hard-reject the whole candidate (opposing_entry_overlap)
+  even when most of the candidate's own zone was clean, untouched room -
+  entering at the zone's own proximal edge just happened to land in the
+  sliver that overlapped (2026-07-30 incident: entry zone overlapped an
+  opposing supply zone by 7.4%, killing a setup with 92.6% clean room
+  below it). Trim the candidate down to its own non-overlapping portion
+  first; only a full overlap (the opposing structure consumes the entire
+  candidate zone) has nothing left to trim into, and falls through to the
+  existing opposing_entry_overlap/opposing_entry_contained rejection
+  unchanged. Downstream width/room/R:R checks still judge whether what
+  remains is actually tradeable - this only stops a non-overlapping
+  majority of a zone from being thrown away over a small overlapping
+  edge. Does not specially optimize the rarer case of an opposing zone
+  sitting fully inside (not at an edge of) the candidate zone - only the
+  demonstrated edge-overlap shape.
+  """
+  side = "buy" if result.direction.upper() == "BUY" else "sell"
+  opposing_side = "sell" if side == "buy" else "buy"
+  low = float(result.entry_zone.low)
+  high = float(result.entry_zone.high)
+  trimmed = False
+  for entry in entries:
+    if str(getattr(entry, "side", "")).casefold() != opposing_side:
+      continue
+    entry_low = float(getattr(entry, "lo"))
+    entry_high = float(getattr(entry, "hi"))
+    if min(high, entry_high) - max(low, entry_low) <= 0:
+      continue
+    if side == "buy":
+      candidate_high = min(high, entry_low)
+      if candidate_high - low <= _ZONE_TRIM_EPS:
+        continue
+      high = candidate_high
+    else:
+      candidate_low = max(low, entry_high)
+      if high - candidate_low <= _ZONE_TRIM_EPS:
+        continue
+      low = candidate_low
+    trimmed = True
+  if not trimmed:
+    return result
+  new_zone = replace(result.entry_zone, bottom=low, top=high)
+  planned = result.planned_entry_price
+  if planned is not None:
+    planned = min(max(float(planned), low), high)
+  return replace(result, entry_zone=new_zone, planned_entry_price=planned)
+
+
 def _decision(
   reason_code: str,
   message: str,
@@ -329,6 +385,7 @@ def resolve_actionability(
       room_entries = _entries_excluding_displaced_barriers(
         entries, result=result, context=context, cfg=cfg,
       )
+      result = _trim_zone_against_overlapping_barrier(result, room_entries)
       room = evaluate_structural_target_room(
         direction=result.direction,
         planned_entry_price=(

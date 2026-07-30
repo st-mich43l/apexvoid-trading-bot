@@ -36,6 +36,7 @@ from app.analysis.trendlines import Trendline, value_at
 from app.analysis.execution_eligibility import ExecutionEligibility
 from app.analysis.structural_reaction_support import (
   bias_relationship,
+  equal_level_structural_id,
   evaluate_structural_reaction,
   key_level_structural_id,
   session_level_structural_id,
@@ -163,16 +164,27 @@ class DetectorSettings:
   # default False - reusing existing code, unlike key_level/demand/supply/
   # session_level/trendline (which already went through structural
   # confirmation via evaluate_structural_reaction), these use bespoke
-  # confirmation logic (_range_edge_confirmation/_counter_confirmation or
-  # none) that has not been re-verified against the current pipeline (band-
-  # kind classification, canonical family merge). Flip on only after that
-  # verification, one at a time.
+  # confirmation logic that has not been re-verified against the current
+  # pipeline (band-kind classification, canonical family merge).
+  #
+  # 2026-07-31: trend_pullback/snap_back/fade_scalp retrofitted onto the
+  # shared evaluate_structural_reaction path (they already had a real M5
+  # rejection/reaction gate, just never populated the confirmation
+  # metadata the legacy pipeline needs to treat M1 as optional instead of
+  # a hard, unconditional gate) and re-enabled below. box_breakout/
+  # break_retest/momentum_ride remain replay-only: box_breakout/
+  # break_retest's own bespoke confirmation may legitimately need M1 as
+  # the real entry trigger (same as Range Edge Scalp - unverified either
+  # way), and momentum_ride is a continuation/impulse entry that the
+  # legacy pipeline's M1 gate (which only recognizes reversal-shaped
+  # patterns at a zone edge) would almost never confirm at all if enabled
+  # as-is.
   box_breakout_enabled: bool = False
-  trend_pullback_enabled: bool = False
+  trend_pullback_enabled: bool = True
   break_retest_enabled: bool = False
   momentum_ride_enabled: bool = False
-  snap_back_enabled: bool = False
-  fade_scalp_enabled: bool = False
+  snap_back_enabled: bool = True
+  fade_scalp_enabled: bool = True
 
   def analysis_settings(self) -> AnalysisSettings:
     return AnalysisSettings(
@@ -975,6 +987,17 @@ def _nearest_session_tp(
 
 
 def trend_pullback(ctx: DetectionContext) -> DetectionResult | None:
+  """Recovery mission (2026-07-31): retrofitted onto the shared
+  evaluate_structural_reaction confirmation path (same as demand/supply
+  zone reactions - it draws from the identical st.zones/order_blocks
+  pool), replacing the old bespoke _rejection(df, direction) check. That
+  bespoke check never populated structural_id/touch_bar_ts/
+  confirmation_bar_ts, which the legacy worker.py execution pipeline
+  requires to treat M1 as optional (confirmation_policy_for.metadata_valid)
+  - without it every setup would sit hard-gated behind an M1 pattern with
+  no fallback, the same "M1 confirms everything" bug already fixed for
+  the other reaction detectors.
+  """
   df, ind, st = _exec(ctx)
   if len(df) < 5:
     return None
@@ -992,11 +1015,11 @@ def trend_pullback(ctx: DetectionContext) -> DetectionResult | None:
       not ctx.settings.allow_counter_trend
       and st.bias != ctx.htf_bias
     )
-    or not _rejection(df, direction)
   ):
     return None
   price = _current_price(ctx, df)
   atr = _atr(ind)
+  lookback = max(1, int(ctx.settings.structural_reaction_lookback_bars))
   selected = _best_valid_zone(
     [
       zone for zone in _candidate_zones(st, direction)
@@ -1010,12 +1033,21 @@ def trend_pullback(ctx: DetectionContext) -> DetectionResult | None:
   if selected is None:
     return None
   zone, proximal = selected
+  conf = evaluate_structural_reaction(
+    df,
+    direction=direction,
+    low=float(zone.low),
+    high=float(zone.high),
+    lookback_bars=lookback,
+    grabs=_zone_grabs_for(st, zone, direction),
+    has_choch=_recent_choch_flag(st, direction, len(df), ctx.settings, lookback),
+  )
+  if conf is None:
+    return None
   level = _zone_key(zone, price, direction)
   reasons = [
-    f"HTF bias {ctx.htf_bias}",
     "with_bias" if htf_aligned else "counter_bias",
     "pullback into structure zone",
-    "rejection at support" if direction == "BUY" else "rejection at supply",
   ]
   reasons = _add_proximal_reason(reasons, proximal)
   if ctx.session_ok:
@@ -1023,12 +1055,27 @@ def trend_pullback(ctx: DetectionContext) -> DetectionResult | None:
   factors = ConfluenceFactors(
     htf_aligned=htf_aligned,
     touches=zone.touches,
-    wick_rejection=True,  # gated above via _rejection(df, direction)
+    wick_rejection=True,
     session_context=ctx.session_ok,
     structural_agreement=True,  # zone drawn from structural swing zones
   )
-  return _finish(
-    ctx, "Trend Pullback", direction, level, zone, price, atr, reasons,
+  return _structural_finish(
+    ctx,
+    setup="Trend Pullback",
+    direction=direction,
+    level=level,
+    zone=zone,
+    price=price,
+    atr=atr,
+    reasons=reasons,
+    structural_source="supply_demand",
+    structural_id=zone_structural_id(ctx.symbol, ctx.tf, zone),
+    structural_low=float(zone.low),
+    structural_high=float(zone.high),
+    structural_kind="demand" if direction == "BUY" else "supply",
+    confirmation=conf,
+    source_touches=int(zone.touches),
+    source_score=float(getattr(zone, "score", 0.0)),
     factors=factors,
   )
 
@@ -1288,20 +1335,26 @@ def _box_tp1_reason(
 
 
 def snap_back(ctx: DetectionContext) -> DetectionResult | None:
+  """Recovery mission (2026-07-31): retrofitted onto the shared
+  evaluate_structural_reaction confirmation path, same reasoning as
+  trend_pullback above - the old bespoke _rejection(df, direction) check
+  never populated structural_id/touch_bar_ts/confirmation_bar_ts, which
+  the legacy worker.py pipeline needs to treat M1 as optional rather than
+  a hard, unconditional gate.
+  """
   df, ind, st = _exec(ctx)
   if len(df) < 5:
     return None
   direction = _confirmation_direction(ctx)
-  if (
-    direction is None
-    or not _pd_gate(st, direction, ctx.settings)
-    or not _rejection(df, direction)
-  ):
+  if direction is None or not _pd_gate(st, direction, ctx.settings):
     return None
   price = _current_price(ctx, df)
   atr = _atr(ind)
   zones = _candidate_zones(st, direction)
   selected = _best_valid_zone(zones, price, atr, direction, ctx.settings)
+  structural_source = "supply_demand"
+  structural_kind = "demand" if direction == "BUY" else "supply"
+  structural_id_value: str | None = None
   level = None
   proximal = False
   touches = 0
@@ -1312,6 +1365,7 @@ def snap_back(ctx: DetectionContext) -> DetectionResult | None:
     level = _zone_key(zone, price, direction)
     touches = zone.touches
     structural_agreement = True  # zone drawn from structural swing zones
+    structural_id_value = zone_structural_id(ctx.symbol, ctx.tf, zone)
   else:
     nearest = _nearest_level(st.levels, price, direction)
     if nearest is None:
@@ -1320,27 +1374,56 @@ def snap_back(ctx: DetectionContext) -> DetectionResult | None:
     distance = _zone_distance(zone, price, direction)
     level = nearest.price
     touches = nearest.touches
+    structural_source = "key_level"
+    structural_kind = nearest.kind
+    structural_id_value = key_level_structural_id(ctx.symbol, ctx.tf, nearest)
   if distance < atr * ctx.settings.snap_atr_mult:
     return None
   grab = _zone_grab(st, zone, direction)
   if grab is None or grab.grade not in {"A", "B"}:
     return None
+  lookback = max(1, int(ctx.settings.structural_reaction_lookback_bars))
+  conf = evaluate_structural_reaction(
+    df,
+    direction=direction,
+    low=float(zone.low),
+    high=float(zone.high),
+    lookback_bars=lookback,
+    grabs=[grab],
+    has_choch=_recent_choch_flag(st, direction, len(df), ctx.settings, lookback),
+  )
+  if conf is None:
+    return None
   reasons = [
-    f"HTF bias {ctx.htf_bias}",
     "ATR extension",
-    "reversal rejection",
     f"sweep {grab.grade}",
   ]
   reasons = _add_proximal_reason(reasons, proximal)
   factors = ConfluenceFactors(
     htf_aligned=ctx.htf_bias == _bias_for_direction(direction),
     touches=touches,
-    wick_rejection=True,  # gated above via _rejection(df, direction)
+    wick_rejection=True,
     displacement_grade=grab.grade == "A",
     structural_agreement=structural_agreement,
   )
-  return _finish(
-    ctx, "Snap-Back", direction, level, zone, price, atr, reasons, factors=factors,
+  return _structural_finish(
+    ctx,
+    setup="Snap-Back",
+    direction=direction,
+    level=level,
+    zone=zone,
+    price=price,
+    atr=atr,
+    reasons=reasons,
+    structural_source=structural_source,
+    structural_id=structural_id_value,
+    structural_low=float(zone.low),
+    structural_high=float(zone.high),
+    structural_kind=structural_kind,
+    confirmation=conf,
+    source_touches=touches,
+    source_score=float(getattr(zone, "score", 0.0)),
+    factors=factors,
   )
 
 
@@ -1552,18 +1635,24 @@ def _micro_choch(df: pd.DataFrame, direction: str, bars: int) -> bool:
 
 
 def fade_scalp(ctx: DetectionContext) -> DetectionResult | None:
+  """Recovery mission (2026-07-31): retrofitted onto the shared
+  evaluate_structural_reaction confirmation path, same reasoning as
+  trend_pullback/snap_back above. Fade Scalp's family (range_reversion)
+  is shared with Range Edge Scalp, whose hard M1 requirement is
+  intentional (no separate M5 reaction exists for that setup) - so this
+  detector is registered under _REACTION_STRATEGIES individually rather
+  than by family, to give it the M1-optional treatment without touching
+  Range Edge Scalp's.
+  """
   df, ind, st = _exec(ctx)
   if len(df) < 5:
     return None
   direction = _confirmation_direction(ctx)
-  if (
-    direction is None
-    or not _pd_gate(st, direction, ctx.settings)
-    or not _rejection(df, direction)
-  ):
+  if direction is None or not _pd_gate(st, direction, ctx.settings):
     return None
   price = _current_price(ctx, df)
   atr = _atr(ind)
+  lookback = max(1, int(ctx.settings.structural_reaction_lookback_bars))
   desired_kind = "equal_low" if direction == "BUY" else "equal_high"
   for level in st.equal_levels:
     if level.kind != desired_kind:
@@ -1574,10 +1663,19 @@ def fade_scalp(ctx: DetectionContext) -> DetectionResult | None:
     zone = entry_zone(df, level.price, direction)
     if _in_chop(ctx) and (grab.grade != "A" or not _chop_edge_ok(ctx, zone, direction)):
       continue
+    conf = evaluate_structural_reaction(
+      df,
+      direction=direction,
+      low=float(zone.low),
+      high=float(zone.high),
+      lookback_bars=lookback,
+      grabs=[grab],
+      has_choch=_recent_choch_flag(st, direction, len(df), ctx.settings, lookback),
+    )
+    if conf is None:
+      continue
     reasons = [
-      f"HTF bias {ctx.htf_bias}",
       "equal level sweep",
-      "liquidity rejection",
       f"sweep {grab.grade}",
     ]
     range_reason = _chop_range_reason(ctx)
@@ -1586,11 +1684,26 @@ def fade_scalp(ctx: DetectionContext) -> DetectionResult | None:
     factors = ConfluenceFactors(
       htf_aligned=ctx.htf_bias == _bias_for_direction(direction),
       touches=level.touches,
-      wick_rejection=True,  # gated above via _rejection(df, direction)
+      wick_rejection=True,
       displacement_grade=grab.grade == "A",
     )
-    result = _finish(
-      ctx, "Fade Scalp", direction, level.price, zone, price, atr, reasons,
+    result = _structural_finish(
+      ctx,
+      setup="Fade Scalp",
+      direction=direction,
+      level=level.price,
+      zone=zone,
+      price=price,
+      atr=atr,
+      reasons=reasons,
+      structural_source="liquidity_pool",
+      structural_id=equal_level_structural_id(ctx.symbol, ctx.tf, level),
+      structural_low=float(zone.low),
+      structural_high=float(zone.high),
+      structural_kind=level.kind,
+      confirmation=conf,
+      source_touches=level.touches,
+      source_score=float(getattr(zone, "score", 0.0)),
       factors=factors,
     )
     if result is not None:
@@ -2538,35 +2651,24 @@ LIVE_DETECTOR_REGISTRY: tuple[DetectorRegistration, ...] = (
   DetectorRegistration(
     "trend_pullback", trend_pullback, FAMILY_TREND_PULLBACK,
     lambda cfg: cfg.trend_pullback_enabled,
-    replay_only_reason=(
-      "structural retest vs. continuation split (mission section 3) not "
-      "yet implemented - would need to route into either BREAKOUT_RETEST "
-      "or MOMENTUM_CONTINUATION depending on entry shape"
-    ),
   ),
   DetectorRegistration(
     "momentum_ride", momentum_ride, FAMILY_MOMENTUM_CONTINUATION,
     lambda cfg: cfg.momentum_ride_enabled,
     replay_only_reason=(
-      "not yet re-verified against band-kind classification and canonical "
-      "MOMENTUM_CONTINUATION family merge"
+      "impulse/continuation entry, not a reversal - the legacy pipeline's "
+      "M1 gate only recognizes reversal-shaped patterns at a zone edge and "
+      "would almost never confirm this shape if enabled as-is; needs its "
+      "own continuation-pattern M1 check before going live"
     ),
   ),
   DetectorRegistration(
     "snap_back", snap_back, FAMILY_LIQUIDITY_REVERSAL,
     lambda cfg: cfg.snap_back_enabled,
-    replay_only_reason=(
-      "not yet re-verified against band-kind classification and canonical "
-      "LIQUIDITY_REVERSAL family merge"
-    ),
   ),
   DetectorRegistration(
     "fade_scalp", fade_scalp, FAMILY_LIQUIDITY_REVERSAL,
     lambda cfg: cfg.fade_scalp_enabled,
-    replay_only_reason=(
-      "not yet re-verified against band-kind classification and canonical "
-      "LIQUIDITY_REVERSAL family merge"
-    ),
   ),
 )
 

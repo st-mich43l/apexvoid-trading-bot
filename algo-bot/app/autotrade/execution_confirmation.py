@@ -48,6 +48,12 @@ _REACTION_STRATEGIES = frozenset({
   "Mapped Zone Reaction",
   "Liquidity Sweep",
   "Snap-Back",
+  # Fade Scalp's family (range_reversion) is shared with Range Edge Scalp,
+  # whose hard M1 requirement is intentional (no separate M5 reaction
+  # exists for that setup) - registered here individually, by strategy
+  # name, so it gets the M1-optional treatment without touching Range Edge
+  # Scalp's family-level classification.
+  "Fade Scalp",
 })
 _REACTION_FAMILIES = frozenset({
   "key_level",
@@ -56,6 +62,7 @@ _REACTION_FAMILIES = frozenset({
   "trendline",
   "mapped_zone_reaction",
   "liquidity_reversal",
+  "trend_pullback",
 })
 _AUTHORITATIVE_REACTIONS = frozenset({
   "rejection_choch",
@@ -66,6 +73,13 @@ _AUTHORITATIVE_REACTIONS = frozenset({
   # names used these two equivalent values.
   "rejection",
   "reclaim",
+  # evaluate_structural_reaction's lowest-priority pattern (checked only
+  # after every stricter one fails to match) - omitted here originally,
+  # which meant any live reaction detector whose confirmation happened to
+  # resolve as an engulfing candle got silently auto-invalidated as
+  # "confirmation_metadata_missing" despite being a real, shared-path
+  # confirmation.
+  "engulfing",
 })
 
 
