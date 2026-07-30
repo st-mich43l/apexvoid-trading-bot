@@ -525,6 +525,37 @@ class Settings(BaseSettings):
     default=True,
     validation_alias=AliasChoices("AUTO_TRADE_TRENDLINE_REACTION_ENABLED"),
   )
+  # Recovery mission (2026-07-30): live around 2026-07-28, dropped from
+  # DEFAULT_DETECTORS during the P0 zone/M1 simplification with no
+  # individual enable flag of their own. Registered in
+  # detectors.LIVE_DETECTOR_REGISTRY with an explicit replay-only reason;
+  # default False until each is individually re-verified against the
+  # current band-kind/canonical-family pipeline (see
+  # DetectorSettings.box_breakout_enabled et al. for why).
+  auto_trade_box_breakout_enabled: bool = Field(
+    default=False,
+    validation_alias=AliasChoices("AUTO_TRADE_BOX_BREAKOUT_ENABLED"),
+  )
+  auto_trade_trend_pullback_enabled: bool = Field(
+    default=False,
+    validation_alias=AliasChoices("AUTO_TRADE_TREND_PULLBACK_ENABLED"),
+  )
+  auto_trade_break_retest_enabled: bool = Field(
+    default=False,
+    validation_alias=AliasChoices("AUTO_TRADE_BREAK_RETEST_ENABLED"),
+  )
+  auto_trade_momentum_ride_enabled: bool = Field(
+    default=False,
+    validation_alias=AliasChoices("AUTO_TRADE_MOMENTUM_RIDE_ENABLED"),
+  )
+  auto_trade_snap_back_enabled: bool = Field(
+    default=False,
+    validation_alias=AliasChoices("AUTO_TRADE_SNAP_BACK_ENABLED"),
+  )
+  auto_trade_fade_scalp_enabled: bool = Field(
+    default=False,
+    validation_alias=AliasChoices("AUTO_TRADE_FADE_SCALP_ENABLED"),
+  )
   auto_trade_structural_reaction_lookback_bars: int = Field(
     default=3,
     validation_alias=AliasChoices(

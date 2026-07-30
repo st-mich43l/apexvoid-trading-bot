@@ -24,7 +24,12 @@ import math
 import time
 from typing import Any
 
-from app.analysis.confluence_zone import confluence_zone_id, validate_zone_width
+from app.analysis.confluence_zone import (
+  BandKind,
+  classify_band_kind,
+  confluence_zone_id,
+  validate_zone_width,
+)
 from app.analysis.m1_trigger import evaluate_m1_trigger_window, latest_eligible_m1_bar_ts
 from app.analysis.ohlc_source import RedisOHLCSource, window_for_timeframe
 from app.autotrade.execution_confirmation import executable_quote_in_zone
@@ -189,11 +194,17 @@ async def _record_width_telemetry(
     else float(raw_high) - float(raw_low)
   )
   tags = tuple(getattr(result, "confluence_tags", None) or ())
+  band_kind = classify_band_kind(getattr(result, "structural_source", None))
   width = validate_zone_width(
     raw_width=raw_width,
     merged_width=high - low,
     merge_sources=tags,
     is_major=source_tf.upper() == "H1",
+    # Section 4: a level/range-edge/breakout-retest band is a tolerance
+    # around a price or an already-validated barrier, not a merged
+    # structural zone - it must never be rejected only for being narrower
+    # than XAU_ZONE_MIN_WIDTH_PRICE.
+    min_width=0.0 if band_kind != BandKind.STRUCTURAL_ZONE else None,
   )
   payload = {
     "symbol": symbol.upper(),
@@ -228,8 +239,18 @@ async def _record_width_telemetry(
     )
   except Exception:
     log.exception("zone width metric failed symbol=%s zone_id=%s", symbol, zone_id)
-  # The cutover makes the width contract canonical.  The old scanner flag is
-  # retained only for rollback compatibility in the legacy merge path.
+  # Telemetry above is recorded unconditionally regardless of outcome - it
+  # stays useful even when this check cannot itself reject anything. A
+  # level/range-edge/breakout-retest band is never rejectable on width at
+  # all (min_width=0.0 above already guarantees width.eligible for those).
+  # A genuine STRUCTURAL_ZONE candidate additionally requires
+  # scanner_zone_width_gate_enabled to be true before its own width result
+  # can actually reject it - SCANNER_ZONE_WIDTH_GATE_ENABLED=false must
+  # disable structural width rejection everywhere, not only on the legacy
+  # scanner merge path (this function used to enforce the contract as
+  # unconditionally canonical, silently ignoring that flag).
+  if band_kind == BandKind.STRUCTURAL_ZONE and not settings.scanner_zone_width_gate_enabled:
+    return True
   return bool(width.eligible)
 
 

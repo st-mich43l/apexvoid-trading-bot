@@ -44,6 +44,45 @@ ZONE_TOO_NARROW = "zone_too_narrow"
 ZONE_TOO_WIDE = "zone_too_wide"
 
 
+class BandKind:
+  """Section 4: the XAU_ZONE_MIN_WIDTH_PRICE structural-zone contract must
+  not be applied to every reaction band uniformly. A key level, session
+  high/low, or trendline reaction is a tolerance band around one price -
+  it has no real "structural boundaries" the way a merged supply/demand/
+  order-block/FVG zone does, so judging it by the same 3.0-price minimum
+  either kills a genuinely valid narrow level or forces the detector to
+  fabricate a wider band that misrepresents where the level actually is.
+  """
+
+  STRUCTURAL_ZONE = "structural_zone"
+  LEVEL_BAND = "level_band"
+  RANGE_EDGE_BAND = "range_edge_band"
+  BREAKOUT_RETEST_BAND = "breakout_retest_band"
+
+
+_LEVEL_BAND_SOURCES = frozenset({"key_level", "session_level", "trendline"})
+_RANGE_EDGE_BAND_SOURCES = frozenset({"range", "range_edge", "range_scalp"})
+_BREAKOUT_RETEST_BAND_SOURCES = frozenset({"box_breakout", "breakout_retest"})
+
+
+def classify_band_kind(structural_source: str | None) -> str:
+  """Map a DetectionResult's structural_source to its BandKind.
+
+  Anything not recognized as a level/range-edge/breakout-retest source
+  falls through to STRUCTURAL_ZONE (today: "supply_demand", covering
+  demand/supply/OB/FVG/breaker evidence) - the conservative default, since
+  that is the one kind of band the 3.0-price minimum is actually meant for.
+  """
+  source = str(structural_source or "").casefold()
+  if source in _LEVEL_BAND_SOURCES:
+    return BandKind.LEVEL_BAND
+  if source in _RANGE_EDGE_BAND_SOURCES:
+    return BandKind.RANGE_EDGE_BAND
+  if source in _BREAKOUT_RETEST_BAND_SOURCES:
+    return BandKind.BREAKOUT_RETEST_BAND
+  return BandKind.STRUCTURAL_ZONE
+
+
 @dataclass(frozen=True)
 class ZoneWidthResult:
   """Section 4 XAU zone-width contract telemetry, in actual price units.

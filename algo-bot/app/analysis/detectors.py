@@ -155,6 +155,24 @@ class DetectorSettings:
   supply_reaction_enabled: bool = True
   session_level_reaction_enabled: bool = True
   trendline_reaction_enabled: bool = True
+  # Recovery mission (2026-07-30): these six sources were live around
+  # 2026-07-28 and were deliberately dropped from DEFAULT_DETECTORS during
+  # the P0 zone/M1 simplification without their own enable flags, leaving
+  # no way to bring any one of them back individually. Registered in
+  # LIVE_DETECTOR_REGISTRY below with an explicit replay_only_reason and
+  # default False - reusing existing code, unlike key_level/demand/supply/
+  # session_level/trendline (which already went through structural
+  # confirmation via evaluate_structural_reaction), these use bespoke
+  # confirmation logic (_range_edge_confirmation/_counter_confirmation or
+  # none) that has not been re-verified against the current pipeline (band-
+  # kind classification, canonical family merge). Flip on only after that
+  # verification, one at a time.
+  box_breakout_enabled: bool = False
+  trend_pullback_enabled: bool = False
+  break_retest_enabled: bool = False
+  momentum_ride_enabled: bool = False
+  snap_back_enabled: bool = False
+  fade_scalp_enabled: bool = False
 
   def analysis_settings(self) -> AnalysisSettings:
     return AnalysisSettings(
@@ -289,6 +307,24 @@ def detector_settings_from(config) -> DetectorSettings:
     ),
     trendline_reaction_enabled=bool(
       getattr(config, "auto_trade_trendline_reaction_enabled", True)
+    ),
+    box_breakout_enabled=bool(
+      getattr(config, "auto_trade_box_breakout_enabled", False)
+    ),
+    trend_pullback_enabled=bool(
+      getattr(config, "auto_trade_trend_pullback_enabled", False)
+    ),
+    break_retest_enabled=bool(
+      getattr(config, "auto_trade_break_retest_enabled", False)
+    ),
+    momentum_ride_enabled=bool(
+      getattr(config, "auto_trade_momentum_ride_enabled", False)
+    ),
+    snap_back_enabled=bool(
+      getattr(config, "auto_trade_snap_back_enabled", False)
+    ),
+    fade_scalp_enabled=bool(
+      getattr(config, "auto_trade_fade_scalp_enabled", False)
     ),
   )
 
@@ -2415,20 +2451,169 @@ def trendline_reaction(ctx: DetectionContext) -> DetectionResult | None:
 
 
 
-# P0 zone/M1 simplification: exactly three live setup families -
-# key_level_reaction/demand_zone_reaction/supply_zone_reaction fold into
-# the "Zone Reaction" family (key level, supply/demand, order block, and
-# FVG are evidence tags on these, not separate strategies -
-# app/analysis/detectors.py's own zone/OB/FVG inputs are already merged
-# this way, see _sd_zone_reaction), range_edge_scalp is the "Range Edge
-# Scalp" family. session_level_reaction/trendline_reaction/box_breakout/
-# trend_pullback/break_retest/snap_back/momentum_ride/fade_scalp are
-# deliberately NOT registered here - their code remains defined above for
-# replay compatibility only (see docs/p0-simple-zone-m1-baseline-map.md
-# section 4), they must never produce a live StrategyMatch/card/plan.
-DEFAULT_DETECTORS: tuple[SetupDetector, ...] = (
-  key_level_reaction,
-  demand_zone_reaction,
-  supply_zone_reaction,
-  range_edge_scalp,
+# Canonical execution families a detector's evidence maps into. Local
+# string constants (not imported from app.autotrade.execution_policy's
+# FAMILY_* constants of the same values) - detectors.py is a pure analysis
+# module with no app.autotrade dependency today, and this registry must not
+# introduce one.
+FAMILY_KEY_LEVEL = "key_level"
+FAMILY_SUPPLY_DEMAND = "supply_demand"
+FAMILY_SESSION_LEVEL = "session_level"
+FAMILY_TRENDLINE = "trendline"
+FAMILY_RANGE_REVERSION = "range_reversion"
+FAMILY_BREAKOUT_RETEST = "breakout_retest"
+FAMILY_TREND_PULLBACK = "trend_pullback"
+FAMILY_MOMENTUM_CONTINUATION = "momentum_continuation"
+FAMILY_LIQUIDITY_REVERSAL = "liquidity_reversal"
+
+
+@dataclass(frozen=True)
+class DetectorRegistration:
+  """One live-or-replay-only detector source and how it is governed.
+
+  ``enabled`` is evaluated against a DetectorSettings instance (the same
+  per-request settings object every detector already receives as
+  ``ctx.settings``), not the raw app config - keeps this module's existing
+  decoupling from app.core.config intact. ``replay_only_reason`` must be
+  set whenever ``enabled`` can ever be False for the current default
+  settings, so a disabled source is always visibly explained rather than
+  silently missing (recovery mission requirement: "No enabled detector may
+  exist as replay-only without an explicit config switch stating that it
+  is replay-only").
+  """
+
+  name: str
+  detector: SetupDetector
+  canonical_family: str
+  enabled: Callable[["DetectorSettings"], bool]
+  replay_only_reason: str | None = None
+
+
+# Deterministic order: this is the exact order detectors run in and the
+# exact order DEFAULT_DETECTORS is built in when every entry is enabled.
+LIVE_DETECTOR_REGISTRY: tuple[DetectorRegistration, ...] = (
+  DetectorRegistration(
+    "key_level_reaction", key_level_reaction, FAMILY_KEY_LEVEL,
+    lambda cfg: cfg.key_level_reaction_enabled,
+  ),
+  DetectorRegistration(
+    "demand_zone_reaction", demand_zone_reaction, FAMILY_SUPPLY_DEMAND,
+    lambda cfg: cfg.demand_reaction_enabled,
+  ),
+  DetectorRegistration(
+    "supply_zone_reaction", supply_zone_reaction, FAMILY_SUPPLY_DEMAND,
+    lambda cfg: cfg.supply_reaction_enabled,
+  ),
+  DetectorRegistration(
+    "session_level_reaction", session_level_reaction, FAMILY_SESSION_LEVEL,
+    lambda cfg: cfg.session_level_reaction_enabled,
+  ),
+  DetectorRegistration(
+    "trendline_reaction", trendline_reaction, FAMILY_TRENDLINE,
+    lambda cfg: cfg.trendline_reaction_enabled,
+  ),
+  DetectorRegistration(
+    "range_edge_scalp", range_edge_scalp, FAMILY_RANGE_REVERSION,
+    lambda cfg: cfg.range_scalp_enabled,
+  ),
+  DetectorRegistration(
+    "box_breakout", box_breakout, FAMILY_BREAKOUT_RETEST,
+    lambda cfg: cfg.box_breakout_enabled,
+    replay_only_reason=(
+      "uses its own box-consolidation confirmation, not the shared "
+      "evaluate_structural_reaction path every live zone-reaction detector "
+      "uses - not yet re-verified against band-kind classification and "
+      "canonical BREAKOUT_RETEST family merge"
+    ),
+  ),
+  DetectorRegistration(
+    "break_retest", break_retest, FAMILY_BREAKOUT_RETEST,
+    lambda cfg: cfg.break_retest_enabled,
+    replay_only_reason=(
+      "same bespoke confirmation path as box_breakout - not yet "
+      "re-verified against band-kind classification and canonical "
+      "BREAKOUT_RETEST family merge"
+    ),
+  ),
+  DetectorRegistration(
+    "trend_pullback", trend_pullback, FAMILY_TREND_PULLBACK,
+    lambda cfg: cfg.trend_pullback_enabled,
+    replay_only_reason=(
+      "structural retest vs. continuation split (mission section 3) not "
+      "yet implemented - would need to route into either BREAKOUT_RETEST "
+      "or MOMENTUM_CONTINUATION depending on entry shape"
+    ),
+  ),
+  DetectorRegistration(
+    "momentum_ride", momentum_ride, FAMILY_MOMENTUM_CONTINUATION,
+    lambda cfg: cfg.momentum_ride_enabled,
+    replay_only_reason=(
+      "not yet re-verified against band-kind classification and canonical "
+      "MOMENTUM_CONTINUATION family merge"
+    ),
+  ),
+  DetectorRegistration(
+    "snap_back", snap_back, FAMILY_LIQUIDITY_REVERSAL,
+    lambda cfg: cfg.snap_back_enabled,
+    replay_only_reason=(
+      "not yet re-verified against band-kind classification and canonical "
+      "LIQUIDITY_REVERSAL family merge"
+    ),
+  ),
+  DetectorRegistration(
+    "fade_scalp", fade_scalp, FAMILY_LIQUIDITY_REVERSAL,
+    lambda cfg: cfg.fade_scalp_enabled,
+    replay_only_reason=(
+      "not yet re-verified against band-kind classification and canonical "
+      "LIQUIDITY_REVERSAL family merge"
+    ),
+  ),
+)
+
+
+def build_default_detectors(
+  settings: "DetectorSettings",
+) -> tuple[SetupDetector, ...]:
+  """The live detector tuple for the given settings, derived from
+  LIVE_DETECTOR_REGISTRY so configuration and the live registry cannot
+  silently disagree - a detector enabled in configuration is present here;
+  one that isn't is either genuinely disabled or explicitly documented
+  above as replay_only.
+  """
+  return tuple(
+    registration.detector
+    for registration in LIVE_DETECTOR_REGISTRY
+    if registration.enabled(settings)
+  )
+
+
+def live_detector_report(
+  settings: "DetectorSettings",
+) -> tuple[dict[str, object], ...]:
+  """One row per registry entry - enabled state, canonical family, and (for
+  anything disabled) why. Used for startup logging and the funnel report;
+  never silently omits a registered source.
+  """
+  return tuple(
+    {
+      "name": registration.name,
+      "canonical_family": registration.canonical_family,
+      "enabled": registration.enabled(settings),
+      "replay_only_reason": (
+        None if registration.enabled(settings)
+        else registration.replay_only_reason
+      ),
+    }
+    for registration in LIVE_DETECTOR_REGISTRY
+  )
+
+
+# Computed once at import time from DetectorSettings' own defaults (which
+# match today's production config exactly: the five already-live sources
+# plus range_edge_scalp are enabled, the six 2026-07-28 sources are
+# registered but off pending re-verification - see DetectorSettings'
+# comment above). app/analysis/scanner.py reads this as a plain module
+# attribute (`detectors or DEFAULT_DETECTORS`), so it must stay a tuple.
+DEFAULT_DETECTORS: tuple[SetupDetector, ...] = build_default_detectors(
+  DetectorSettings()
 )

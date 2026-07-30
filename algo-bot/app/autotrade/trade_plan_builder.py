@@ -179,6 +179,7 @@ def build_trade_plan_from_strategy_match(
   execution_confirmation_bar_ts: int | None = None,
   zone_episode_id: str | None = None,
   trigger_wick_extreme: float | None = None,
+  now_ts: int | None = None,
 ) -> TradePlan:
   """Translate a CONFIRMED StrategyMatch into a TradePlan V7.
 
@@ -187,6 +188,20 @@ def build_trade_plan_from_strategy_match(
   caller (worker.py) is expected to record the reason_code the same way it
   already does for V6 gate rejections, never let this raise past a bare
   `except Exception: pass`.
+
+  ``now_ts`` re-anchors the published plan's entry/plan expiry to actual
+  publication time. Live incident: match.expires_at is set once, when the
+  underlying StrategyMatch was first built - a setup that then sat in
+  WAITING_RETEST/IN_ZONE_WAITING_M1 for several minutes before its retest
+  and M1 confirmation finally completed could still be under
+  match.expires_at at publish time (the earlier expiry pre-check in
+  _publish_trade_plan_v7 passes), but with almost none of its original TTL
+  actually left - the plan reached the C# executor seconds before that
+  stale deadline and expired without ever getting a chance to submit,
+  despite the executable quote already being inside the zone at
+  publication. The published plan's own window must start fresh from when
+  it was actually published, not inherit whatever was left of the
+  original match's clock.
   """
   if not match.targets_pips:
     raise TradePlanBuildRejected(
@@ -279,6 +294,11 @@ def build_trade_plan_from_strategy_match(
     for index, (pips, ratio) in enumerate(zip(match.targets_pips, ratios))
   )
 
+  ttl_seconds = max(60, int(match.expires_at) - int(match.issued_at))
+  published_expires_at = (
+    int(match.expires_at) if now_ts is None else int(now_ts) + ttl_seconds
+  )
+
   formation_bar_ts = _parse_bar_ts(
     str(match.touch_bar_ts or match.event_ts), match.issued_at,
   )
@@ -317,7 +337,7 @@ def build_trade_plan_from_strategy_match(
     direction=direction,
     match=match,
     measured=measured,
-    expires_at=match.expires_at,
+    expires_at=published_expires_at,
     max_spread_ticks=max_spread_ticks,
     max_slippage_ticks=max_slippage_ticks,
   )
@@ -361,7 +381,7 @@ def build_trade_plan_from_strategy_match(
     setup_id=setup_id,
     symbol=match.symbol,
     created_at=match.issued_at,
-    expires_at=match.expires_at,
+    expires_at=published_expires_at,
     analysis=analysis,
     source_structure=source_structure,
     entry=entry,
