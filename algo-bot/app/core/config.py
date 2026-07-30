@@ -209,17 +209,7 @@ class Settings(BaseSettings):
   auto_trade_retest_enabled: bool = True
   auto_trade_reaction_enabled: bool = True
   auto_trade_liquidity_reversal_enabled: bool = True
-  # Key Level/Demand Zone/Supply Zone/Session Level/Trendline Reaction
-  # (STRUCTURAL_SETUPS) derive direction purely from structural evidence -
-  # a level's role, a supply/demand zone, a session level, a trendline -
-  # never from HTF bias itself (see ConfluenceFactors.htf_aligned in each
-  # detector: bias only ever adjusted the confluence score, never gated
-  # the direction). Owner's call: that structural evidence alone is not
-  # sufficient reason to trade against a directional HTF bias for these
-  # families - actionability.py's counter_bias_disabled hard-block (scoped
-  # to exactly these 5 setups via _structural()/STRUCTURAL_SETUPS) now
-  # actually fires instead of being permanently inert.
-  auto_trade_allow_counter_bias: bool = False
+  auto_trade_allow_counter_bias: bool = True
   auto_trade_candidate_contract_version: int = 6
   auto_trade_canonical_symbol: str = "XAU"
   auto_trade_sl_distance: float = 6.5
@@ -747,7 +737,7 @@ class Settings(BaseSettings):
       "auto_trade_trendline_reaction_enabled": True,
       "auto_trade_structural_reaction_lookback_bars": 3,
       "auto_trade_liquidity_reversal_enabled": True,
-      "auto_trade_allow_counter_bias": False,
+      "auto_trade_allow_counter_bias": True,
       "auto_trade_map_counter_bias_enabled": True,
       "auto_trade_zone_fill_enabled": True,
       "auto_trade_structural_guard_mode": "observe",
