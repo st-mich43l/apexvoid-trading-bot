@@ -26,6 +26,12 @@ class ExecutionRoutePlan:
   routing_reason: str
   valid: bool
   reject_reason: str | None = None
+  # DCA-into-zone scale ladder (owner spec): first leg fills at the
+  # proximal edge with the larger share; the remaining share only fills at
+  # a further, momentum-confirmed price deeper into the zone. Empty for any
+  # non-scaled route (market/single_limit) - trade_plan_builder falls back
+  # to an equal split across whatever legs it does have in that case.
+  planned_leg_volume_ratios: tuple[float, ...] = ()
 
 
 def _round_price(value: float, digits: int) -> float:
@@ -49,6 +55,35 @@ def zone_split_qualifies(
   return width >= max(0.0, zone_fill_min_atr) * atr
 
 
+def _scale_ladder_legs(
+  *,
+  side: str,
+  low: float,
+  high: float,
+  proximal: float,
+  atr: float,
+  scale_step_atr: float,
+  digits: int,
+) -> tuple[float, float]:
+  """DCA-into-zone ladder (owner spec): leg 2 sits one momentum-confirmed
+  step deeper into the zone than the proximal edge, capped at the far edge
+  so it never falls outside the confirmed zone. A resting limit order at
+  this price only fills if price actually travels there - "momentum
+  confirmed" falls naturally out of it being a real limit order, no
+  separate live momentum check is needed.
+  """
+  far = low if side == "BUY" else high
+  step_price = max(0.0, scale_step_atr) * max(0.0, atr)
+  if side == "BUY":
+    second_leg = max(far, proximal - step_price)
+  else:
+    second_leg = min(far, proximal + step_price)
+  return (
+    _round_price(proximal, digits),
+    _round_price(second_leg, digits),
+  )
+
+
 def resolve_execution_route_plan(
   *,
   direction: str,
@@ -64,6 +99,8 @@ def resolve_execution_route_plan(
   zone_fill_fallback_enabled: bool = True,
   digits: int = 2,
   allow_either: bool = False,
+  scale_first_leg_fraction: float = 0.70,
+  scale_step_atr: float = 0.5,
 ) -> ExecutionRoutePlan:
   """Resolve a concrete route mirroring AutoTradeEngine.ResolveExecutionRoute."""
   preference = (order_type_preference or "").strip().lower()
@@ -81,6 +118,8 @@ def resolve_execution_route_plan(
   )
   proximal = high if side == "BUY" else low
   midpoint = _round_price((low + high) / 2.0, digits)
+  first_leg_fraction = min(1.0, max(0.0, scale_first_leg_fraction))
+  leg_ratios = (first_leg_fraction, round(1.0 - first_leg_fraction, 6))
   geometry = (
     "inside"
     if low <= quote <= high
@@ -88,15 +127,15 @@ def resolve_execution_route_plan(
   )
 
   if preference == "market":
-    if distribution == "zone_split":
+    if distribution in {"zone_split", "zone_scale"}:
       return ExecutionRoutePlan(
         ROUTE_ZONE_SPLIT,
         quote,
         (),
         geometry,
-        "market cannot use zone_split",
+        f"market cannot use {distribution}",
         False,
-        "market order cannot use zone_split entry distribution",
+        f"market order cannot use {distribution} entry distribution",
       )
     return ExecutionRoutePlan(
       ROUTE_MARKET,
@@ -108,7 +147,9 @@ def resolve_execution_route_plan(
     )
 
   if preference == "limit":
-    if distribution == "zone_split" or (distribution == "either" and split_ok):
+    if distribution in {"zone_split", "zone_scale"} or (
+      distribution == "either" and split_ok
+    ):
       if not split_ok:
         if zone_fill_fallback_enabled:
           return ExecutionRoutePlan(
@@ -127,6 +168,20 @@ def resolve_execution_route_plan(
           "zone_split required but unqualified",
           False,
           "execution policy requires unavailable zone_split limit capability",
+        )
+      if distribution == "zone_scale":
+        legs = _scale_ladder_legs(
+          side=side, low=low, high=high, proximal=proximal, atr=atr,
+          scale_step_atr=scale_step_atr, digits=digits,
+        )
+        return ExecutionRoutePlan(
+          ROUTE_ZONE_SPLIT,
+          legs[0],
+          legs,
+          geometry,
+          "execution policy: DCA zone scale",
+          True,
+          planned_leg_volume_ratios=leg_ratios,
         )
       legs = (_round_price(proximal, digits), midpoint)
       return ExecutionRoutePlan(
@@ -166,7 +221,21 @@ def resolve_execution_route_plan(
       "legacy uncommitted either",
       True,
     )
-  if split_ok and distribution in {"zone_split", "either", ""}:
+  if split_ok and distribution in {"zone_split", "zone_scale", "either", ""}:
+    if distribution == "zone_scale":
+      legs = _scale_ladder_legs(
+        side=side, low=low, high=high, proximal=proximal, atr=atr,
+        scale_step_atr=scale_step_atr, digits=digits,
+      )
+      return ExecutionRoutePlan(
+        ROUTE_ZONE_SPLIT,
+        legs[0],
+        legs,
+        geometry,
+        "resolved either → DCA zone scale",
+        True,
+        planned_leg_volume_ratios=leg_ratios,
+      )
     legs = (_round_price(proximal, digits), midpoint)
     return ExecutionRoutePlan(
       ROUTE_ZONE_SPLIT,
@@ -175,6 +244,7 @@ def resolve_execution_route_plan(
       geometry,
       "resolved either → zone split",
       True,
+      planned_leg_volume_ratios=leg_ratios,
     )
   return ExecutionRoutePlan(
     ROUTE_MARKET,
@@ -184,12 +254,3 @@ def resolve_execution_route_plan(
     "resolved either → market",
     True,
   )
-
-
-def prefer_market_for_reaction_family(family: str) -> bool:
-  return family in {
-    "key_level",
-    "trendline",
-    "mapped_zone_reaction",
-    "session_level",
-  }
