@@ -337,18 +337,29 @@ def resolve_actionability(
 
     role = _key_level_role(result, context, cfg)
     if role == ROLE_AMBIGUOUS:
-      decision = _decision(
+      # P0 zone/M1 simplification: this used to hard-block every ambiguous-
+      # role Key Level Reaction outright. key_level_reaction() (detectors.py)
+      # no longer emits a genuinely-undecided result for an ambiguous role -
+      # it deterministically resolves to exactly one direction (price
+      # below/above the level, or whichever single side actually confirms a
+      # reaction when price sits inside the level's own band) and discards
+      # the level entirely if that resolution fails. A result reaching this
+      # point already represents a principled decision, not a coin flip -
+      # hard-blocking it here duplicated work already done upstream and
+      # rejected every one of those decisions regardless. Record for
+      # telemetry only; never send to Telegram as a bare "ambiguous" reason
+      # per the spec, but never hard-block either.
+      record(index, _decision(
         "key_level_role_ambiguous",
-        "generic key level has no accepted support/resistance role",
+        "generic key level has no explicit support/resistance role "
+        "(direction already resolved deterministically upstream)",
         {
           "key_level_role": role,
           "key_level": float(result.key_level),
           "htf_bias": getattr(context, "htf_bias", None),
         },
-      )
-      record(index, decision)
-      if decision.hard_block:
-        continue
+        hard_block=False,
+      ))
     if role in {ROLE_BROKEN_SUPPORT, ROLE_BROKEN_RESISTANCE}:
       decision = _decision(
         "key_level_role_flip_requires_retest",
