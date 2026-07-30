@@ -299,23 +299,32 @@ _DEFAULT_POLICIES: dict[str, ExecutionPolicy] = {
     FAMILY_MAPPED_ZONE_REACTION, 2, 0.40, 10.0, 2.0, 0.6, 1.15, 1.0,
     "market", ("chop", "range", "trend", "breakout", "unknown"),
   ),
-  # Strict stop contracts require a concrete route. Reaction families execute
-  # at the touch with a market fill — never publish unresolved `either`.
+  # Strict stop contracts require a concrete route. Reaction families use a
+  # DCA-into-zone scale ladder (owner spec, 2026-07): leg 1 (the configured
+  # first-leg fraction, default 70%) fills at the zone's proximal edge; the
+  # remainder only fills at a further, momentum-confirmed price deeper into
+  # the zone (a real resting limit order - it fills only if price actually
+  # travels there). A zone too narrow to qualify for the ladder falls back
+  # to a single entry at the computed price, same as before.
   FAMILY_KEY_LEVEL: ExecutionPolicy(
     FAMILY_KEY_LEVEL, 2, 0.50, 12.0, 1.5, 0.55, 1.15, 1.0,
-    "market", ("chop", "range", "trend", "breakout", "unknown"),
+    "limit", ("chop", "range", "trend", "breakout", "unknown"),
+    entry_distribution="zone_scale",
   ),
   FAMILY_SUPPLY_DEMAND: ExecutionPolicy(
     FAMILY_SUPPLY_DEMAND, 2, 0.50, 12.0, 2.0, 0.55, 1.15, 1.0,
-    "market", ("chop", "range", "trend", "breakout", "unknown"),
+    "limit", ("chop", "range", "trend", "breakout", "unknown"),
+    entry_distribution="zone_scale",
   ),
   FAMILY_SESSION_LEVEL: ExecutionPolicy(
     FAMILY_SESSION_LEVEL, 2, 0.50, 12.0, 1.5, 0.55, 1.15, 1.0,
-    "market", ("chop", "range", "trend", "breakout", "unknown"),
+    "limit", ("chop", "range", "trend", "breakout", "unknown"),
+    entry_distribution="zone_scale",
   ),
   FAMILY_TRENDLINE: ExecutionPolicy(
     FAMILY_TRENDLINE, 2, 0.55, 14.0, 1.5, 0.55, 1.15, 1.0,
-    "market", ("chop", "range", "trend", "breakout", "unknown"),
+    "limit", ("chop", "range", "trend", "breakout", "unknown"),
+    entry_distribution="zone_scale",
   ),
 }
 
@@ -396,7 +405,7 @@ def planned_execution_route(
   if preference == "market":
     return ROUTE_MARKET
   if preference == "limit":
-    if distribution == "zone_split":
+    if distribution in {"zone_split", "zone_scale"}:
       return ROUTE_ZONE_SPLIT
     if distribution == "single":
       return ROUTE_SINGLE_LIMIT
@@ -488,6 +497,12 @@ def evaluate_execution_policy(
     ),
     digits=digits,
     allow_either=False,
+    scale_first_leg_fraction=float(
+      getattr(cfg, "auto_trade_zone_scale_first_leg_fraction", 0.70) or 0.70
+    ),
+    scale_step_atr=float(
+      getattr(cfg, "auto_trade_zone_scale_step_atr", 0.5) or 0.5
+    ),
   )
   if not route_plan.valid:
     return ExecutionPolicyEvaluation(
@@ -636,6 +651,9 @@ def evaluate_execution_policy(
     "entry_distribution": entry_distribution,
     "planned_execution_route": planned_route,
     "planned_leg_entry_prices": planned_leg_entry_prices,
+    "planned_leg_volume_ratios": [
+      round(float(ratio), 6) for ratio in route_plan.planned_leg_volume_ratios
+    ],
     "routing_reason": route_plan.routing_reason,
     "target_model": target_model,
     "target_reference_price": str(

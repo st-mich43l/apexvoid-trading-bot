@@ -331,6 +331,25 @@ class Settings(BaseSettings):
       "AUTO_TRADE_ZONE_FILL_MIN_ATR",
     ),
   )
+  # DCA-into-zone scale ladder (owner spec): leg 1 fills at the zone's
+  # proximal edge with this fraction of volume; the remainder only fills at
+  # a further, momentum-confirmed price scale_step_atr*ATR deeper into the
+  # zone (a real resting limit order - it only fills if price actually
+  # travels there, so "momentum confirmed" needs no separate live check).
+  # Only takes effect when the strategy's execution policy prefers "limit"
+  # and the zone qualifies for zone_split (auto_trade_zone_fill_enabled +
+  # auto_trade_zone_fill_min_atr); narrower zones fall back to a single
+  # entry at the computed price, same as before.
+  auto_trade_zone_scale_first_leg_fraction: float = Field(
+    default=0.70,
+    validation_alias=AliasChoices(
+      "AUTO_TRADE_ZONE_SCALE_FIRST_LEG_FRACTION",
+    ),
+  )
+  auto_trade_zone_scale_step_atr: float = Field(
+    default=0.5,
+    validation_alias=AliasChoices("AUTO_TRADE_ZONE_SCALE_STEP_ATR"),
+  )
   auto_trade_non_hedged_opposite_policy: str = "reject"
   # Scanner detectors already own the complete strategy match.  The bridge
   # transports that typed decision to the executor without another regime or

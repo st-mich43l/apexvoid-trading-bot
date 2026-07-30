@@ -152,14 +152,23 @@ class ConfluenceZone:
   score: float = 0.0
 
 
-def _bucket(mid: float, width: float, *, atr: float, pip_size: float) -> tuple[float, float]:
+def _bucket(mid: float, *, atr: float, pip_size: float) -> float:
   # Mirrors reaction_identity.py's canonicalize_zone_bucket exactly, so a
   # merged zone's identity survives the same bar-to-bar coordinate jitter a
   # single structure's structural_zone_id already tolerates.
+  #
+  # Width is deliberately NOT part of this identity (bug found live: two
+  # detections of literally the same resistance band measured 5.45 and 5.57
+  # wide - both round to the same 1.0-unit mid bucket, but 5.45 and 5.57
+  # straddle the width bucket's own rounding boundary at 5.5, so the old
+  # width_bucket differed by a full unit between them and produced two
+  # different zone_ids for one structural area, each publishing its own
+  # TradePlan). Two overlapping/co-located structures merging into the same
+  # band are the same trade idea regardless of the merged band's exact
+  # measured width from one scan to the next - only where it sits matters
+  # for identity.
   bucket = max(float(pip_size) * 10.0, max(0.0, float(atr)) * 0.25, 1.0)
-  mid_bucket = round(mid / bucket) * bucket
-  width_bucket = round(width / bucket) * bucket
-  return mid_bucket, width_bucket
+  return round(mid / bucket) * bucket
 
 
 def confluence_zone_id(
@@ -173,20 +182,21 @@ def confluence_zone_id(
   pip_size: float,
   source_tf: str = "M5",
 ) -> str:
-  """Stable id for a merged band: bucketed mid/width + sorted tag union.
+  """Stable id for a merged band: bucketed mid + sorted tag union.
 
-  Deliberately independent of any single member's 5dp boundary or which
-  specific members happen to be present - two overlapping structures that
-  merge into the same band always produce the same id regardless of merge
-  order, member count, or per-bar jitter in each member's own coordinates.
+  Deliberately independent of any single member's 5dp boundary, exact
+  measured width, or which specific members happen to be present - two
+  overlapping structures that merge into the same band always produce the
+  same id regardless of merge order, member count, or per-bar jitter in
+  each member's own coordinates (including jitter in the merged band's
+  measured width - see _bucket's docstring).
   """
   mid = (float(low) + float(high)) / 2.0
-  width = max(0.0, float(high) - float(low))
-  mid_bucket, width_bucket = _bucket(mid, width, atr=atr, pip_size=pip_size)
+  mid_bucket = _bucket(mid, atr=atr, pip_size=pip_size)
   tag_text = ",".join(sorted({str(tag).casefold() for tag in tags}))
   return _sha(
     f"cz|{symbol.upper()}|{side.lower()}|{source_tf.upper()}|"
-    f"{mid_bucket:.2f}|{width_bucket:.2f}|{tag_text}"
+    f"{mid_bucket:.2f}|{tag_text}"
   )
 
 

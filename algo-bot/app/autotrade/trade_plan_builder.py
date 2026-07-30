@@ -116,11 +116,19 @@ def _build_entry(
         "zone_split route resolved with no leg prices",
         measured,
       )
-    ratio = (Decimal("1") / len(leg_prices)).quantize(
-      Decimal("0.0001"), rounding=ROUND_HALF_UP,
-    )
-    ratios = [ratio] * len(leg_prices)
-    ratios[-1] += Decimal("1") - ratio * len(leg_prices)
+    custom_ratios = measured.get("planned_leg_volume_ratios") or []
+    if custom_ratios and len(custom_ratios) == len(leg_prices):
+      # DCA-into-zone scale ladder (owner spec): execution_route.py already
+      # computed the exact first-leg/remainder split - use it verbatim
+      # rather than the equal-split default below.
+      ratios = [Decimal(str(value)) for value in custom_ratios]
+      ratios[-1] += Decimal("1") - sum(ratios)
+    else:
+      ratio = (Decimal("1") / len(leg_prices)).quantize(
+        Decimal("0.0001"), rounding=ROUND_HALF_UP,
+      )
+      ratios = [ratio] * len(leg_prices)
+      ratios[-1] += Decimal("1") - ratio * len(leg_prices)
     legs = tuple(
       TradePlanEntryLeg(
         leg_id=f"L{index + 1}",

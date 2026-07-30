@@ -69,14 +69,19 @@ def canonicalize_zone_bucket(
   *,
   atr: float,
   pip_size: float,
-) -> tuple[float, float]:
-  """Bucket mid/width so minor map jitter shares one structural identity."""
-  width = max(0.0, float(hi) - float(lo))
+) -> float:
+  """Bucket mid so minor map jitter shares one structural identity.
+
+  Width is deliberately NOT part of this bucket (mirrors the fix in
+  app.analysis.confluence_zone._bucket): two detections of the same
+  structural area measured a few tenths of a price unit apart in width can
+  straddle the width bucket's own rounding boundary and produce two
+  different ids for one zone, each publishing its own TradePlan. Only
+  location (the bucketed mid) determines identity here.
+  """
   mid = (float(lo) + float(hi)) / 2.0
   bucket = max(float(pip_size) * 10.0, max(0.0, float(atr)) * 0.25, 1.0)
-  mid_bucket = round(mid / bucket) * bucket
-  width_bucket = round(width / bucket) * bucket
-  return mid_bucket, width_bucket
+  return round(mid / bucket) * bucket
 
 
 def structural_zone_id(
@@ -99,7 +104,7 @@ def structural_zone_id(
       return _sha(
         f"sz|{symbol.upper()}|{side}|{source_tf.upper()}|{sources}"
       )
-  mid_b, width_b = canonicalize_zone_bucket(lo, hi, atr=atr, pip_size=pip_size)
+  mid_b = canonicalize_zone_bucket(lo, hi, atr=atr, pip_size=pip_size)
   structural = ",".join(
     sorted({
       str(tag).casefold()
@@ -109,7 +114,7 @@ def structural_zone_id(
   )
   return _sha(
     f"sz|{symbol.upper()}|{side}|{source_tf.upper()}|"
-    f"{mid_b:.2f}|{width_b:.2f}|{structural}"
+    f"{mid_b:.2f}|{structural}"
   )
 
 
