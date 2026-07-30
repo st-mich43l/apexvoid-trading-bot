@@ -48,7 +48,16 @@ ACTIVE_WATCHLIST_GRADES = frozenset({GRADE_A, GRADE_B})
 
 ZONE_WATCH_VERSION = 2
 ZONE_WATCH_RETENTION_SECONDS = 7 * 24 * 3600
-_EXHAUST_AFTER_TOUCHES = 3
+# Pure touch-count safety net only - a zone retested this many times without
+# ever cleanly breaking or filling is probably stale. The primary exhaustion
+# signal is a decisive break (see record_zone_presence's decisive_break
+# param): a zone that keeps producing valid bounces off its near edge is
+# doing exactly what a working supply/demand zone is supposed to do, and
+# touch count alone used to hard-exhaust it after 3 retests regardless of
+# whether every one of them held - killing setups that were still working
+# (2026-07-28 incident: a zone that would have hit full target got
+# permanently EXHAUSTED after its 3rd valid retest).
+_EXHAUST_AFTER_STALE_TOUCHES = 6
 _DOWNGRADE_AFTER_TOUCHES = 2
 _MAX_CAS_RETRIES = 12
 
@@ -356,7 +365,13 @@ def grade_for_touch_count(
   *,
   htf_evidence: bool = False,
 ) -> tuple[str, bool]:
-  if touch_count >= _EXHAUST_AFTER_TOUCHES and not htf_evidence:
+  """Confidence downgrade plus the stale-touch exhaustion safety net.
+
+  This alone must never be the primary way a zone gets exhausted - see the
+  decisive_break param on record_zone_presence/record_zone_touch for the
+  real "this zone actually failed" signal.
+  """
+  if touch_count >= _EXHAUST_AFTER_STALE_TOUCHES and not htf_evidence:
     return current_grade, True
   if touch_count >= _DOWNGRADE_AFTER_TOUCHES and current_grade == GRADE_A:
     return GRADE_B, False
@@ -375,8 +390,17 @@ async def record_zone_presence(
   inside: bool,
   now: int | None = None,
   htf_evidence: bool = False,
+  decisive_break: bool = False,
 ) -> tuple[ZoneWatch, bool]:
-  """Record outside/inside transitions; one visit increments one touch only."""
+  """Record outside/inside transitions; one visit increments one touch only.
+
+  decisive_break marks an exit (inside -> outside) where price closed
+  beyond the zone's far/invalidating edge rather than bouncing back out
+  the near edge it approached from - the only case that exhausts the zone
+  immediately, independent of touch_count. A valid bounce (decisive_break
+  False) never exhausts a zone on its own; see _EXHAUST_AFTER_STALE_TOUCHES
+  for the separate count-based safety net.
+  """
   ts = int(now if now is not None else time.time())
 
   def apply(record: ZoneWatch) -> tuple[ZoneWatch, bool]:
@@ -408,9 +432,10 @@ async def record_zone_presence(
     if not record.inside:
       state = WATCHING_RETEST if record.state == DISCOVERED else record.state
       return replace(record, state=state, updated_at=ts), False
+    exhausted_by_break = decisive_break and not htf_evidence
     return replace(
       record,
-      state=WATCHING_RETEST,
+      state=EXHAUSTED if exhausted_by_break else WATCHING_RETEST,
       inside=False,
       zone_exited_at=ts,
       updated_at=ts,
@@ -426,7 +451,11 @@ async def record_zone_touch(
   now: int | None = None,
   htf_evidence: bool = False,
 ) -> ZoneWatch:
-  """Compatibility API for an explicitly deduplicated retest touch."""
+  """Compatibility API for an explicitly deduplicated retest touch.
+
+  Has no price evidence of its own, so it can only ever exhaust a zone via
+  the count-based stale-touch safety net - never via decisive_break.
+  """
   ts = int(now if now is not None else time.time())
 
   def apply(record: ZoneWatch) -> tuple[ZoneWatch, None]:

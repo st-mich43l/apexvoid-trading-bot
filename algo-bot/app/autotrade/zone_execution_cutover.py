@@ -176,6 +176,22 @@ def _quote_evidence(
   )
 
 
+def _decisive_break(record: ZoneWatch, evidence: Any) -> bool:
+  """True when price closed beyond the zone's far/invalidating edge.
+
+  BUY (demand) is approached from above and fails by closing below `low`;
+  SELL (supply) is approached from below and fails by closing above
+  `high`. Exiting back out the *near* edge (a bounce) is not a break - see
+  zone_watch.record_zone_presence's decisive_break param.
+  """
+  price = evidence.executable_quote
+  if price is None:
+    return False
+  if str(record.direction).upper() == "BUY":
+    return price < record.low
+  return price > record.high
+
+
 async def _record_width_telemetry(
   client: Any,
   *,
@@ -383,7 +399,13 @@ async def _activate_match(
     return None
   evidence = _quote_evidence(record, quote)
   if not evidence.inside:
-    await record_zone_presence(client, record.zone_id, inside=False, now=now)
+    await record_zone_presence(
+      client,
+      record.zone_id,
+      inside=False,
+      now=now,
+      decisive_break=_decisive_break(record, evidence),
+    )
     return None
   match = replace(
     match,
@@ -481,6 +503,7 @@ async def _evaluate_record(
     inside=evidence.inside,
     now=quote[2],
     htf_evidence=record.source_timeframe in {"H1", "M15"},
+    decisive_break=_decisive_break(record, evidence),
   )
   if not evidence.inside or record.state == EXHAUSTED:
     return None
@@ -604,6 +627,7 @@ async def _sync_strategy_match_cutover(
       inside=evidence.inside,
       now=quote[2],
       htf_evidence=source_tf in {"H1", "M15"},
+      decisive_break=_decisive_break(record, evidence),
     )
     if not evidence.inside or record.state == EXHAUSTED:
       continue
