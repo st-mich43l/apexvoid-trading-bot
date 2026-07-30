@@ -63,6 +63,18 @@ def _sha(raw: str) -> str:
   return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
+def _stable_atr(atr: float, pip_size: float) -> float:
+  """Mirrors app.analysis.confluence_zone._stable_atr exactly.
+
+  Quantizes ATR into a coarse step before it can affect bucket size, so the
+  bucket grid only moves on a genuine regime-scale ATR change rather than
+  routine bar-to-bar noise in a rolling per-bar indicator - see the fuller
+  explanation and the live incident this fixed in confluence_zone.py.
+  """
+  step = max(float(pip_size) * 40.0, 4.0)
+  return round(max(0.0, float(atr)) / step) * step
+
+
 def canonicalize_zone_bucket(
   lo: float,
   hi: float,
@@ -80,7 +92,9 @@ def canonicalize_zone_bucket(
   location (the bucketed mid) determines identity here.
   """
   mid = (float(lo) + float(hi)) / 2.0
-  bucket = max(float(pip_size) * 10.0, max(0.0, float(atr)) * 0.25, 1.0)
+  bucket = max(
+    float(pip_size) * 10.0, _stable_atr(atr, pip_size) * 0.25, 1.0,
+  )
   return round(mid / bucket) * bucket
 
 
