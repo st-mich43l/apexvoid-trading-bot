@@ -62,6 +62,7 @@ from app.analysis.structural_reaction_support import (
   v7_thesis_id,
 )
 from app.autotrade.execution_policy import (
+  FAMILY_RANGE_REVERSION,
   FAMILY_UNKNOWN,
   classify_tier,
   evaluate_execution_policy,
@@ -419,6 +420,7 @@ def _build_one_strategy_match(
     settings,
     post_impulse=post_impulse,
     one_sided=one_sided,
+    range_scalp=(family == FAMILY_RANGE_REVERSION),
   )
   structural_source = result.structural_source or ""
   structural_id = result.structural_id

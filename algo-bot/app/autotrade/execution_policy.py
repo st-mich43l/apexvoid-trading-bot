@@ -13,7 +13,8 @@ from app.autotrade.protective_stop import (
   opposing_zone_context_measured,
   plan_group_protective_stop,
   plan_protective_stop,
-  stop_bounds_for_strategy,
+  primary_tp_pips_from_match,
+  stop_bounds_for_reaction_room,
 )
 
 GUARD_MODE_OBSERVE = "observe"
@@ -656,10 +657,24 @@ def evaluate_execution_policy(
   stop_plan = None
   stop_plan_error: str | None = None
   stop_plan_error_measured: dict[str, Any] = {}
+  stop_bounds_measured: dict[str, Any] = {}
   opposing_zone = None
   try:
-    minimum_stop_pips, maximum_stop_pips = stop_bounds_for_strategy(
-      strategy=str(getattr(match, "strategy", "")),
+    strategy_name = str(getattr(match, "strategy", ""))
+    # Prefer effective remaining room (fitted / hybrid-capped) over the raw
+    # ladder max so reaction SL tracks what the trade can actually reach.
+    primary_tp = (
+      remaining_pips
+      if remaining_pips > 0
+      else primary_tp_pips_from_match(match)
+    )
+    (
+      minimum_stop_pips,
+      maximum_stop_pips,
+      stop_bounds_measured,
+    ) = stop_bounds_for_reaction_room(
+      strategy=strategy_name,
+      primary_tp_pips=primary_tp,
       pip_size=pip,
       cfg=cfg,
     )
@@ -816,6 +831,7 @@ def evaluate_execution_policy(
     "permitted_regimes": list(policy.permitted_regimes),
     "structure_swing": getattr(match, "structure_swing", None),
     **opposing_zone_context_measured(opposing_zone),
+    **stop_bounds_measured,
     **stop_plan_error_measured,
   }
   if stop_plan is not None:
@@ -858,12 +874,27 @@ def evaluate_execution_policy(
   if (
     not math.isfinite(effective_risk_multiplier)
     or effective_risk_multiplier <= 0
-    or effective_risk_multiplier > 1.0
   ):
     return ExecutionPolicyEvaluation(
       False,
       "invalid_risk_multiplier",
-      "effective autonomous risk multiplier must be within (0, 1]",
+      "effective autonomous risk multiplier must be within (0, max]",
+      True,
+      measured,
+      policy,
+    )
+  max_risk_multiplier = 1.0
+  if policy.family == FAMILY_RANGE_REVERSION:
+    max_risk_multiplier = float(
+      getattr(cfg, "auto_trade_range_max_risk_multiplier", 2.0) or 2.0
+    )
+    if not math.isfinite(max_risk_multiplier) or max_risk_multiplier <= 0:
+      max_risk_multiplier = 2.0
+  if effective_risk_multiplier > max_risk_multiplier:
+    return ExecutionPolicyEvaluation(
+      False,
+      "invalid_risk_multiplier",
+      "effective autonomous risk multiplier must be within (0, max]",
       True,
       measured,
       policy,
@@ -979,13 +1010,20 @@ def classify_tier(
   return TIER_C
 
 
-def risk_multiplier_for_tier(tier: str, cfg: Any | None = None, *, post_impulse: bool = False, one_sided: bool = False) -> float:
+def risk_multiplier_for_tier(tier: str, cfg: Any | None = None, *, post_impulse: bool = False, one_sided: bool = False, range_scalp: bool = False) -> float:
   tier = (tier or TIER_C).upper()
   a = float(getattr(cfg, "auto_trade_tier_a_risk_multiplier", 1.0) if cfg else 1.0)
   b = float(getattr(cfg, "auto_trade_tier_b_risk_multiplier", 0.5) if cfg else 0.5)
   c = float(getattr(cfg, "auto_trade_tier_c_risk_multiplier", b) if cfg else b)
   post = float(getattr(cfg, "auto_trade_post_impulse_risk_multiplier", 0.5) if cfg else 0.5)
   onesided = float(getattr(cfg, "auto_trade_one_sided_range_risk_multiplier", 0.5) if cfg else 0.5)
+  if range_scalp and tier == TIER_A:
+    # Thin-room scalp frequency: allow up to 2× base size on A-quality setups.
+    a = float(
+      getattr(cfg, "auto_trade_range_max_risk_multiplier", 2.0) if cfg else 2.0
+    )
+    if not math.isfinite(a) or a <= 0:
+      a = 2.0
   if tier == TIER_A:
     mult = a
   elif tier == TIER_B:

@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+import math
 from typing import Any
 
-from app.autotrade.strategy_taxonomy import REACTION_STRATEGIES
+from app.autotrade.strategy_taxonomy import RANGE_STRATEGIES, REACTION_STRATEGIES
 
 
 STOP_PLAN_VERSION = 2
@@ -563,10 +564,125 @@ def plan_protective_stop(
   )
 
 
-# Exact Reaction-family names only (see strategy_taxonomy). Demand/Supply
-# Zone Reaction stay Zone-family and share the trend 40–60 envelope via the
-# default path below — they must not be grouped as Reaction here.
+# Exact Reaction-family names only (see strategy_taxonomy). Zone / Demand /
+# Supply are an independent supply_demand family — they must not share this
+# room-synced stop path.
 _REACTION_FAMILY_STRATEGIES = REACTION_STRATEGIES
+
+# Taxonomy reaction only: Key / Session / Trendline. SL tracks room-capped TP.
+_ROOM_SYNCED_STOP_STRATEGIES = frozenset(REACTION_STRATEGIES)
+
+# Range scalp family: thin room (15/20) tracks TP; independent of reaction.
+_SCALP_ROOM_SYNCED_STOP_STRATEGIES = frozenset(RANGE_STRATEGIES)
+
+
+def uses_reaction_room_stop(strategy: str) -> bool:
+  return str(strategy or "") in _ROOM_SYNCED_STOP_STRATEGIES
+
+
+def uses_scalp_room_stop(strategy: str) -> bool:
+  return str(strategy or "") in _SCALP_ROOM_SYNCED_STOP_STRATEGIES
+
+
+def primary_tp_pips_from_match(match: Any) -> float | None:
+  """Largest positive target (or target_cap) used to sync reaction SL."""
+  targets = tuple(
+    float(value)
+    for value in (getattr(match, "targets_pips", None) or ())
+    if value is not None
+  )
+  positive = [value for value in targets if math.isfinite(value) and value > 0]
+  if positive:
+    return max(positive)
+  cap = getattr(match, "target_cap_pips", None)
+  if cap is None:
+    return None
+  try:
+    value = float(cap)
+  except (TypeError, ValueError):
+    return None
+  return value if math.isfinite(value) and value > 0 else None
+
+
+def stop_bounds_for_reaction_room(
+  *,
+  strategy: str,
+  primary_tp_pips: float | int | None,
+  pip_size: Any,
+  cfg: Any | None,
+) -> tuple[int, int, dict[str, Any]]:
+  """Pin reaction/scalp SL envelope to room-synced primary TP (≈1:1).
+
+  Returns ``(minimum_stop_pips, maximum_stop_pips, measured)``. When primary
+  TP is missing, falls back to the strategy envelope. Zone / Demand / Supply
+  never use this path (independent family).
+  """
+  fallback = stop_bounds_for_strategy(
+    strategy=strategy, pip_size=pip_size, cfg=cfg,
+  )
+  is_reaction = uses_reaction_room_stop(strategy)
+  is_scalp = uses_scalp_room_stop(strategy)
+  if not is_reaction and not is_scalp:
+    return (
+      fallback[0],
+      fallback[1],
+      {
+        "stop_bounds_source": "strategy_default",
+        "primary_tp_pips": None,
+        "desired_stop_pips": None,
+      },
+    )
+  try:
+    primary = float(primary_tp_pips) if primary_tp_pips is not None else 0.0
+  except (TypeError, ValueError):
+    primary = 0.0
+  if not math.isfinite(primary) or primary <= 0:
+    return (
+      fallback[0],
+      fallback[1],
+      {
+        "stop_bounds_source": "legacy_envelope",
+        "primary_tp_pips": None,
+        "desired_stop_pips": None,
+      },
+    )
+  if is_scalp:
+    min_rr = float(
+      getattr(cfg, "auto_trade_range_min_rr", 1.0) or 1.0
+    )
+    floor_pips = int(
+      getattr(cfg, "auto_trade_range_room_stop_floor_pips", 15) or 15
+    )
+    # Prefer Range Box max (sl_distance) when present; else trend cap.
+    cap_pips = int(fallback[1]) if fallback[1] > 0 else 60
+    source = "scalp_room"
+  else:
+    min_rr = float(
+      getattr(cfg, "auto_trade_reaction_room_stop_min_rr", 1.0) or 1.0
+    )
+    floor_pips = int(
+      getattr(cfg, "auto_trade_reaction_room_stop_floor_pips", 20) or 20
+    )
+    cap_pips = int(getattr(cfg, "auto_trade_trend_stop_max_pips", 60) or 60)
+    source = "reaction_room"
+  if not math.isfinite(min_rr) or min_rr <= 0:
+    min_rr = 1.0
+  floor_pips = max(1, floor_pips)
+  cap_pips = max(floor_pips, cap_pips)
+  desired = max(floor_pips, int(math.ceil(primary / min_rr)))
+  minimum = min(desired, cap_pips)
+  maximum = max(minimum, min(cap_pips, desired))
+  measured: dict[str, Any] = {
+    "stop_bounds_source": source,
+    "primary_tp_pips": round(primary, 3),
+    "desired_stop_pips": desired,
+  }
+  if is_scalp:
+    measured["range_room_stop_floor_pips"] = floor_pips
+  else:
+    measured["reaction_room_stop_min_rr"] = min_rr
+    measured["reaction_room_stop_floor_pips"] = floor_pips
+  return minimum, maximum, measured
 
 
 def volume_weighted_reference_entry(
@@ -839,9 +955,9 @@ def stop_bounds_for_strategy(
 ) -> tuple[int, int]:
   """Owner group envelope 40–60 for trend and zone-scale reaction families.
 
-  ``AUTO_TRADE_REACTION_STOP_*`` keys remain for compatibility but are unused
-  on the zone-scale path — reaction families share the trend 40–60 envelope
-  (max 60, not the legacy 65).
+  Prefer ``stop_bounds_for_reaction_room`` when a room-capped primary TP is
+  known — that path pins SL to ≈TP (floor 20 / cap 60) instead of forcing 40.
+  ``AUTO_TRADE_REACTION_STOP_*`` keys remain for compatibility.
   """
   if str(strategy) == "Range Box Scalp":
     minimum = int(getattr(cfg, "auto_trade_add_min_stop_pips", 30))
@@ -852,8 +968,8 @@ def stop_bounds_for_strategy(
     pip = decimal_value(pip_size, "pip_size")
     maximum = int(sl_distance // pip)
     return minimum, maximum
-  # Reaction families previously used a tighter 20–65 band; the owner group
-  # stop contract applies the same 40–60 envelope as trend families.
+  # Reaction taxonomy fallback when room TP is unavailable. Zone / Demand /
+  # Supply use the same numeric envelope as an independent family default.
   if str(strategy) in _REACTION_FAMILY_STRATEGIES:
     return (
       int(getattr(cfg, "auto_trade_trend_stop_min_pips", 40)),

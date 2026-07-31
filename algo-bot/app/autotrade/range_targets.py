@@ -11,10 +11,10 @@ from app.core.config import settings
 
 _EPS = 1e-9
 
-DEFAULT_RANGE_TARGETS_PIPS: tuple[int, ...] = (70, 50, 40, 30, 20)
+DEFAULT_RANGE_TARGETS_PIPS: tuple[int, ...] = (70, 50, 40, 30, 20, 15)
 DEFAULT_RANGE_TP_BUFFER_PIPS = 3.0
-DEFAULT_RANGE_MIN_TARGET_PIPS = 20.0
-DEFAULT_RANGE_MIN_RR = 1.10
+DEFAULT_RANGE_MIN_TARGET_PIPS = 15.0
+DEFAULT_RANGE_MIN_RR = 1.00
 
 
 def configured_range_targets() -> tuple[int, ...]:

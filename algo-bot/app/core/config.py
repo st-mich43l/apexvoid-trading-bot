@@ -259,10 +259,22 @@ class Settings(BaseSettings):
   auto_trade_wick_stop_buffer_atr: float = 0.15
   auto_trade_trend_stop_min_pips: int = 40
   auto_trade_trend_stop_max_pips: int = 60
+  # Reaction taxonomy SL tracks room-capped primary TP (≈1:1).
+  # Floor keeps a minimum distance; hard cap reuses trend_stop_max (60).
+  # Zone / Demand / Supply are independent and do NOT use these knobs.
+  auto_trade_reaction_room_stop_min_rr: float = Field(
+    default=1.0,
+    validation_alias=AliasChoices("AUTO_TRADE_REACTION_ROOM_STOP_MIN_RR"),
+  )
+  auto_trade_reaction_room_stop_floor_pips: int = Field(
+    default=20,
+    validation_alias=AliasChoices(
+      "AUTO_TRADE_REACTION_ROOM_STOP_FLOOR_PIPS",
+    ),
+  )
   # Deprecated for the zone-scale owner path: reaction families now share
-  # the trend 40–60 group envelope. Keys remain so older env files still
-  # parse; stop_bounds_for_strategy ignores them for Key Level / Demand /
-  # Supply / Session / Trendline Reaction.
+  # the trend 40–60 group envelope when room TP is missing. Keys remain so
+  # older env files still parse.
   auto_trade_reaction_stop_min_pips: int = 40
   auto_trade_reaction_stop_max_pips: int = 60
   auto_trade_sizing_mode: str = Field(
@@ -724,15 +736,29 @@ class Settings(BaseSettings):
   # (the common case per the 23 Jul 09:00/11:00 incidents) silently produced
   # no executable candidate. C# must read this same env var - see
   # AutoTradeOptions.RangeTargetsPips.
-  auto_trade_range_targets_pips: str = "20,30,40,50,70"
+  auto_trade_range_targets_pips: str = "15,20,30,40,50,70"
   auto_trade_range_box_scale_out_enabled: bool = True
   auto_trade_range_box_scale_out_threshold_pips: int = 70
   auto_trade_range_box_scale_out_trigger_pips: int = 30
   auto_trade_range_box_scale_out_fraction: float = 0.50
   auto_trade_range_box_move_sl_to_be_after_scale_out: bool = False
   auto_trade_range_tp_buffer_pips: float = 3.0
-  auto_trade_range_min_target_pips: float = 20.0
+  auto_trade_range_min_target_pips: float = 15.0
   auto_trade_range_min_rr: float = 1.00
+  # Scalp SL tracks thin room (15/20); independent of reaction room knobs.
+  auto_trade_range_room_stop_floor_pips: int = Field(
+    default=15,
+    validation_alias=AliasChoices(
+      "AUTO_TRADE_RANGE_ROOM_STOP_FLOOR_PIPS",
+    ),
+  )
+  # Allow up to 2× base size on range_reversion (frequency / thin-room scalp).
+  auto_trade_range_max_risk_multiplier: float = Field(
+    default=2.0,
+    validation_alias=AliasChoices(
+      "AUTO_TRADE_RANGE_MAX_RISK_MULTIPLIER",
+    ),
+  )
   # Structure-aware barrier / range controls.
   scalp_barrier_fallback_enabled: bool = True
   scalp_barrier_fallback_min_confirmations: int = 1
