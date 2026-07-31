@@ -596,7 +596,14 @@ public sealed class CTraderOpenApiFeedClient : ICTraderFeedClient, ICTraderTrade
         );
         return new PositionCloseLookup(PositionCloseReason.Unknown, executionPrice);
       }
-      var reason = closingOrder.OrderType == ProtoOAOrderType.StopLossTakeProfit
+      // Broker-attached SL/TP orders use StopLossTakeProfit. Margin/equity
+      // stop-outs often arrive as Market orders with IsStopOut=true — treat
+      // both as protective closes so V7 group tracking does not stall in
+      // recovery_required for ordinary stop hits.
+      var isProtective =
+        closingOrder.OrderType == ProtoOAOrderType.StopLossTakeProfit
+        || (closingOrder.HasIsStopOut && closingOrder.IsStopOut);
+      var reason = isProtective
         ? PositionCloseReason.StopLossOrTakeProfit
         : PositionCloseReason.ManualOrExternalOrder;
       return new PositionCloseLookup(reason, executionPrice);

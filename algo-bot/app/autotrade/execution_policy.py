@@ -37,6 +37,54 @@ OUTCOME_ADJUST_TARGET = "adjust_target"
 OUTCOME_WAIT = "wait"
 OUTCOME_BLOCK = "block"
 
+# Preference / quality signals that must never terminal-reject or consume a
+# setup. They stay on the measured payload for ranking and ops telemetry.
+PREFERENCE_TELEMETRY_REASONS = frozenset({
+  "policy_regime_not_permitted",
+  "policy_reward_risk_insufficient",
+  "policy_confluence_below_minimum",
+  "policy_zone_too_wide",
+  "policy_target_room_insufficient",
+  "tier_c_analysis_only",
+  "all_matches_tier_c",
+  "insufficient_target_room",
+  "zone_width_contract_rejected",
+  "zone_too_wide",
+  "zone_too_narrow",
+  "source_level_exhausted",
+  "round_without_structural_anchor",
+  "low_confluence_counter_bias_in_range",
+  "counter_bias_disabled",
+  "counter_bias_target_barrier",
+  "target_room_insufficient",
+  "context_degraded",
+  "contested_corridor",
+  "nearby_opposing_structure",
+  "htf_veto",
+  "opposing_barrier",
+  "opposing_barrier_no_target",
+  "opposing_major_no_room",
+  "opposing_entry_overlap",
+  "opposing_entry_contained",
+  "entry_inside_opposing_zone",
+  "opposing_ahead",
+  "overlap_veto",
+  "overlapping_zone_conflict",
+  "ambiguous_waiting_confirmation",
+  "opposing_zone_ahead",
+  "zone_cooldown",
+  "m1_trigger_wait",
+  "m1_trigger_expired",
+  "news_window_active",
+  "news_guard_unavailable",
+  "rr_pre_gate",
+  "opposing_barrier_rr_insufficient",
+})
+
+
+def is_preference_telemetry(reason_code: str | None) -> bool:
+  return str(reason_code or "").strip() in PREFERENCE_TELEMETRY_REASONS
+
 
 @dataclass(frozen=True)
 class StructuralBarrier:
@@ -185,11 +233,13 @@ def classify_guard_severity(
 ) -> ExecutionGuardDecision:
   """Map a detected structural condition to a typed, mode-aware outcome.
 
-  ``hard_geometry`` marks conditions with zero tradeable room by
-  construction (entry contained inside a barrier, not merely approaching
-  one). These stay blocking in every mode; observe only downgrades softer
-  ahead-of-entry/overlap/cooldown conditions to telemetry.
+  Preference / quality signals are always telemetry. ``hard_geometry`` marks
+  true zero-room contract failures that are not on the preference list.
   """
+  if is_preference_telemetry(condition):
+    return ExecutionGuardDecision(
+      guard, OUTCOME_ALLOW_WITH_WARNING, condition, reason, False,
+    )
   if hard_geometry:
     return ExecutionGuardDecision(
       guard, OUTCOME_BLOCK, condition, reason, True,
@@ -273,6 +323,29 @@ class ExecutionPolicyEvaluation:
   terminal: bool
   measured: dict[str, Any]
   policy: ExecutionPolicy | None = None
+
+
+def preference_allow(
+  reason_code: str,
+  message: str,
+  measured: dict[str, Any],
+  policy: ExecutionPolicy | None = None,
+) -> ExecutionPolicyEvaluation:
+  """Record a preference miss without denying publication."""
+  payload = {
+    **dict(measured),
+    "preference_telemetry": True,
+    "preference_reason_code": reason_code,
+    "preference_message": message,
+  }
+  return ExecutionPolicyEvaluation(
+    True,
+    reason_code,
+    message,
+    False,
+    payload,
+    policy,
+  )
 
 
 _DEFAULT_POLICIES: dict[str, ExecutionPolicy] = {
@@ -800,58 +873,50 @@ def evaluate_execution_policy(
       measured,
       policy,
     )
+  preference_notes: list[dict[str, str]] = []
   if confluence < policy.min_confluence:
-    return ExecutionPolicyEvaluation(
-      False,
-      "policy_confluence_below_minimum",
-      f"confluence {confluence} below {policy.min_confluence}",
-      True,
-      measured,
-      policy,
-    )
+    preference_notes.append({
+      "reason_code": "policy_confluence_below_minimum",
+      "message": f"confluence {confluence} below {policy.min_confluence}",
+    })
   if normalized_regime not in policy.permitted_regimes:
-    return ExecutionPolicyEvaluation(
-      False,
-      "policy_regime_not_permitted",
-      f"{match.strategy} does not permit regime {normalized_regime}",
-      False,
-      measured,
-      policy,
-    )
+    preference_notes.append({
+      "reason_code": "policy_regime_not_permitted",
+      "message": f"{match.strategy} does not permit regime {normalized_regime}",
+    })
   if zone_width_atr > policy.max_zone_width_atr:
-    return ExecutionPolicyEvaluation(
-      False,
-      "policy_zone_too_wide",
-      (
+    preference_notes.append({
+      "reason_code": "policy_zone_too_wide",
+      "message": (
         f"entry zone {zone_width_atr:.2f} ATR exceeds "
         f"{policy.max_zone_width_atr:.2f} ATR"
       ),
-      True,
-      measured,
-      policy,
-    )
+    })
   if remaining_room_atr < policy.min_target_room_atr:
-    return ExecutionPolicyEvaluation(
-      False,
-      "policy_target_room_insufficient",
-      (
+    preference_notes.append({
+      "reason_code": "policy_target_room_insufficient",
+      "message": (
         f"remaining target room {remaining_room_atr:.2f} ATR below "
         f"{policy.min_target_room_atr:.2f} ATR"
       ),
-      True,
-      measured,
-      policy,
-    )
+    })
   if reward_risk < policy.min_reward_risk:
-    return ExecutionPolicyEvaluation(
-      False,
-      "policy_reward_risk_insufficient",
-      (
+    preference_notes.append({
+      "reason_code": "policy_reward_risk_insufficient",
+      "message": (
         f"remaining reward/risk {reward_risk:.2f} below "
         f"{policy.min_reward_risk:.2f}"
       ),
-      True,
-      measured,
+    })
+  if preference_notes:
+    primary = preference_notes[0]
+    return preference_allow(
+      primary["reason_code"],
+      primary["message"],
+      {
+        **measured,
+        "preference_notes": preference_notes,
+      },
       policy,
     )
   return ExecutionPolicyEvaluation(
@@ -873,7 +938,7 @@ def classify_tier(
   post_impulse: bool = False,
   one_sided: bool = False,
 ) -> str:
-  """Tier A = full risk, Tier B = reduced risk, Tier C = analysis only."""
+  """Tier A = full risk, Tier B = reduced risk, Tier C = preference telemetry."""
   family = strategy_family(strategy)
   if confluence < 1:
     return TIER_C
@@ -892,13 +957,18 @@ def classify_tier(
 
 def risk_multiplier_for_tier(tier: str, cfg: Any | None = None, *, post_impulse: bool = False, one_sided: bool = False) -> float:
   tier = (tier or TIER_C).upper()
-  if tier == TIER_C:
-    return 0.0
   a = float(getattr(cfg, "auto_trade_tier_a_risk_multiplier", 1.0) if cfg else 1.0)
   b = float(getattr(cfg, "auto_trade_tier_b_risk_multiplier", 0.5) if cfg else 0.5)
+  c = float(getattr(cfg, "auto_trade_tier_c_risk_multiplier", b) if cfg else b)
   post = float(getattr(cfg, "auto_trade_post_impulse_risk_multiplier", 0.5) if cfg else 0.5)
   onesided = float(getattr(cfg, "auto_trade_one_sided_range_risk_multiplier", 0.5) if cfg else 0.5)
-  mult = a if tier == TIER_A else b
+  if tier == TIER_A:
+    mult = a
+  elif tier == TIER_B:
+    mult = b
+  else:
+    # Tier C remains executable with reduced size; quality is telemetry.
+    mult = max(0.25, min(b, c))
   if post_impulse:
     mult = min(mult, post)
   if one_sided:
