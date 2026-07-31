@@ -442,8 +442,18 @@ public sealed class TradePlanRuntime(
   private static string FormatEventPrice(decimal? price, SymbolInfo symbol) =>
     price is decimal value ? FormatEventPrice(value, symbol) : "?";
 
-  private static string FormatEventLot(long volumeUnits) =>
-    volumeUnits.ToString(CultureInfo.InvariantCulture);
+  private static string FormatEventLot(long volumeUnits, SymbolInfo symbol)
+  {
+    // Owner Telegram cards must show strategy lots (0.08), never raw cTrader
+    // volume units (800 when LotSize=10000).
+    if (symbol.LotSize <= 0)
+    {
+      return volumeUnits.ToString(CultureInfo.InvariantCulture);
+    }
+    var lots = (decimal)volumeUnits / symbol.LotSize;
+    var text = lots.ToString("0.########", CultureInfo.InvariantCulture);
+    return string.IsNullOrWhiteSpace(text) ? "0" : text;
+  }
 
   private bool LooksLikeProtectiveStopHit(
     TradePlan plan,
@@ -1293,7 +1303,7 @@ public sealed class TradePlanRuntime(
       await PublishEventAsync(
         "order_filled",
         $"ORDER FILLED {plan.Analysis.Direction} "
-        + $"lot={FormatEventLot(execution.ExecutedVolume)} "
+        + $"lot={FormatEventLot(execution.ExecutedVolume, symbol)} "
         + $"@ {FormatEventPrice(execution.ExecutionPrice, symbol)}",
         plan,
         cancellationToken,
@@ -1505,7 +1515,7 @@ public sealed class TradePlanRuntime(
       await PublishEventAsync(
         "order_filled",
         $"ENTRY GROUP FULLY FILLED {plan.Analysis.Direction} "
-        + $"lot={FormatEventLot(filledVolume)} "
+        + $"lot={FormatEventLot(filledVolume, symbol)} "
         + $"weighted={FormatEventPrice(state.GroupWeightedFillPrice, symbol)}",
         plan,
         cancellationToken,
@@ -1528,7 +1538,7 @@ public sealed class TradePlanRuntime(
         .ToArray();
       await PublishEventAsync(
         "order_filled",
-        $"ENTRY {string.Join("/", filledLegs)} FILLED lot={FormatEventLot(filledVolume)} "
+        $"ENTRY {string.Join("/", filledLegs)} FILLED lot={FormatEventLot(filledVolume, symbol)} "
         + $"@ {FormatEventPrice(state.GroupWeightedFillPrice, symbol)}; "
         + $"{string.Join("/", pendingLegs)} still pending",
         plan,
@@ -1684,7 +1694,7 @@ public sealed class TradePlanRuntime(
           await PublishEventAsync(
             "order_filled",
             $"ENTRY GROUP FULLY FILLED {plan.Analysis.Direction} "
-            + $"lot={FormatEventLot(state.TotalFilledVolume)} "
+            + $"lot={FormatEventLot(state.TotalFilledVolume, symbol)} "
             + $"weighted={FormatEventPrice(state.GroupWeightedFillPrice, symbol)}",
             plan,
             cancellationToken,
@@ -1712,7 +1722,7 @@ public sealed class TradePlanRuntime(
           await PublishEventAsync(
             "order_filled",
             $"ENTRY {string.Join("/", filledLegs)} FILLED "
-            + $"lot={FormatEventLot(state.TotalFilledVolume)} "
+            + $"lot={FormatEventLot(state.TotalFilledVolume, symbol)} "
             + $"@ {FormatEventPrice(state.GroupWeightedFillPrice, symbol)}; "
             + $"{string.Join("/", pendingLegs)} still pending",
             plan,
@@ -1874,7 +1884,7 @@ public sealed class TradePlanRuntime(
             lastExecution = execution;
             closedTotal += execution.ExecutedVolume;
             perLegCloses.Add(
-              $"{openLegs[i].LegId} lot={FormatEventLot(execution.ExecutedVolume)}"
+              $"{openLegs[i].LegId} lot={FormatEventLot(execution.ExecutedVolume, symbol)}"
             );
             var idx = legs.FindIndex(leg => leg.LegId == openLegs[i].LegId);
             if (idx >= 0)
@@ -1926,7 +1936,7 @@ public sealed class TradePlanRuntime(
         {
           tpMessage =
             $"TP COMPLETED {target.TargetId} closed {string.Join(" ", perLegCloses)} "
-            + $"remaining lot={FormatEventLot(remainingAfter)} "
+            + $"remaining lot={FormatEventLot(remainingAfter, symbol)} "
             + $"({openCount}/{Math.Max(totalLegs, 1)})";
         }
         await PublishEventAsync(

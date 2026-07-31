@@ -1,8 +1,8 @@
 """Active open-trade exposure gates for new autonomous plans.
 
 When an order is already active:
-- opposing direction within ``min_price_separation`` of the active fill is
-  blocked (SELL @ 4063 → BUY only at <= 4048 when separation is 15)
+- opposing direction within ``min_price_separation`` (absolute |Δprice|) is
+  blocked (SELL @ 4063 → BUY blocked between 4048 and 4078 when separation is 15)
 - same-direction opportunity is allowed at 60% size on a single leg only
 """
 
@@ -81,12 +81,22 @@ def _as_float(value: object) -> float | None:
   return number
 
 
+def _payload_get(payload: dict[str, Any], *keys: str) -> Any:
+  """Read snake_case or PascalCase Redis JSON keys."""
+  for key in keys:
+    if key in payload and payload[key] is not None:
+      return payload[key]
+  return None
+
+
 def _payload_entry_price(payload: dict[str, Any]) -> float | None:
   for key in (
     "entry_price",
-    "group_weighted_fill_price",
     "EntryPrice",
+    "group_weighted_fill_price",
     "GroupWeightedFillPrice",
+    "entry_fill_price",
+    "EntryFillPrice",
   ):
     price = _as_float(payload.get(key))
     if price is not None and price > 0:
@@ -95,7 +105,12 @@ def _payload_entry_price(payload: dict[str, Any]) -> float | None:
 
 
 def _payload_remaining(payload: dict[str, Any]) -> float | None:
-  for key in ("remaining_volume", "RemainingVolume", "total_filled_volume"):
+  for key in (
+    "remaining_volume",
+    "RemainingVolume",
+    "total_filled_volume",
+    "TotalFilledVolume",
+  ):
     if key not in payload:
       continue
     value = _as_float(payload.get(key))
@@ -105,7 +120,7 @@ def _payload_remaining(payload: dict[str, Any]) -> float | None:
 
 
 def _is_scale_in_child(payload: dict[str, Any]) -> bool:
-  parent = payload.get("parent_group_id") or payload.get("ParentGroupId")
+  parent = _payload_get(payload, "parent_group_id", "ParentGroupId")
   return bool(str(parent or "").strip())
 
 
@@ -142,7 +157,9 @@ async def _load_v6_position_exposures(client: Any) -> list[ActiveExposure]:
     remaining = _payload_remaining(payload)
     if remaining is not None and remaining <= 0:
       continue
-    direction = normalize_direction(payload.get("direction"))
+    direction = normalize_direction(
+      _payload_get(payload, "direction", "Direction")
+    )
     entry = _payload_entry_price(payload)
     if direction is None or entry is None:
       continue
@@ -150,7 +167,9 @@ async def _load_v6_position_exposures(client: Any) -> list[ActiveExposure]:
       direction=direction,
       entry_price=entry,
       source="v6_position",
-      group_id=str(payload.get("group_id") or "") or None,
+      group_id=str(
+        _payload_get(payload, "group_id", "GroupId") or ""
+      ) or None,
       position_id=position_id,
       remaining_volume=remaining,
     ))
@@ -176,21 +195,35 @@ async def _load_v7_plan_exposures(client: Any) -> list[ActiveExposure]:
       continue
     if not isinstance(payload, dict):
       continue
-    stage = str(payload.get("stage") or "")
-    group_stage = str(payload.get("group_stage") or "")
+    # TradePlanStateJsonContext serializes PascalCase property names
+    # (Stage/GroupStage/Direction) with string enums — accept both shapes.
+    stage = str(_payload_get(payload, "stage", "Stage") or "")
+    group_stage = str(_payload_get(payload, "group_stage", "GroupStage") or "")
     if stage not in _OPEN_V7_STAGES and group_stage not in _OPEN_V7_GROUP_STAGES:
       continue
     remaining = _payload_remaining(payload)
     if remaining is not None and remaining <= 0:
       continue
     # Still-open means at least one filled/remaining lot or submitted legs.
-    filled = _as_float(payload.get("total_filled_volume")) or 0.0
+    filled = _as_float(
+      _payload_get(payload, "total_filled_volume", "TotalFilledVolume")
+    ) or 0.0
     if filled <= 0 and (remaining is None or remaining <= 0):
       continue
-    direction = normalize_direction(payload.get("direction"))
+    direction = normalize_direction(
+      _payload_get(payload, "direction", "Direction")
+    )
     entry = (
-      _as_float(payload.get("group_weighted_fill_price"))
-      or _as_float(payload.get("entry_fill_price"))
+      _as_float(
+        _payload_get(
+          payload,
+          "group_weighted_fill_price",
+          "GroupWeightedFillPrice",
+        )
+      )
+      or _as_float(
+        _payload_get(payload, "entry_fill_price", "EntryFillPrice")
+      )
     )
     if direction is None or entry is None or entry <= 0:
       continue
@@ -198,8 +231,12 @@ async def _load_v7_plan_exposures(client: Any) -> list[ActiveExposure]:
       direction=direction,
       entry_price=float(entry),
       source="v7_plan",
-      plan_id=str(payload.get("plan_id") or plan_id),
-      group_id=str(payload.get("setup_id") or "") or None,
+      plan_id=str(
+        _payload_get(payload, "plan_id", "PlanId") or plan_id
+      ),
+      group_id=str(
+        _payload_get(payload, "setup_id", "SetupId") or ""
+      ) or None,
       remaining_volume=remaining if remaining is not None else filled,
     ))
   return out
@@ -223,54 +260,28 @@ def evaluate_entry_against_exposure(
   for active in exposures:
     if active.direction != opposite:
       continue
-    if wanted == "BUY":
-      # Active SELL @ P → BUY only at <= P - separation
-      allowed_max = active.entry_price - separation
-      if entry_price > allowed_max:
-        return ExposureDecision(
-          block=True,
-          reason_code="opposing_active_too_close",
-          message=(
-            f"BUY entry {entry_price:.2f} is within {separation:.0f} of "
-            f"active SELL @ {active.entry_price:.2f}; buy only at "
-            f"<= {allowed_max:.2f}"
-          ),
-          measured={
-            "active_direction": active.direction,
-            "active_entry_price": active.entry_price,
-            "candidate_entry_price": entry_price,
-            "min_price_separation": separation,
-            "allowed_entry_max": allowed_max,
-            "active_source": active.source,
-            "active_plan_id": active.plan_id,
-            "active_group_id": active.group_id,
-            "active_position_id": active.position_id,
-          },
-        )
-    else:
-      # Active BUY @ P → SELL only at >= P + separation
-      allowed_min = active.entry_price + separation
-      if entry_price < allowed_min:
-        return ExposureDecision(
-          block=True,
-          reason_code="opposing_active_too_close",
-          message=(
-            f"SELL entry {entry_price:.2f} is within {separation:.0f} of "
-            f"active BUY @ {active.entry_price:.2f}; sell only at "
-            f">= {allowed_min:.2f}"
-          ),
-          measured={
-            "active_direction": active.direction,
-            "active_entry_price": active.entry_price,
-            "candidate_entry_price": entry_price,
-            "min_price_separation": separation,
-            "allowed_entry_min": allowed_min,
-            "active_source": active.source,
-            "active_plan_id": active.plan_id,
-            "active_group_id": active.group_id,
-            "active_position_id": active.position_id,
-          },
-        )
+    distance = abs(float(entry_price) - float(active.entry_price))
+    if distance < separation:
+      return ExposureDecision(
+        block=True,
+        reason_code="opposing_active_too_close",
+        message=(
+          f"{wanted} entry {entry_price:.2f} is only {distance:.2f} from "
+          f"active {active.direction} @ {active.entry_price:.2f}; "
+          f"require >= {separation:.0f} price separation"
+        ),
+        measured={
+          "active_direction": active.direction,
+          "active_entry_price": active.entry_price,
+          "candidate_entry_price": entry_price,
+          "price_distance": distance,
+          "min_price_separation": separation,
+          "active_source": active.source,
+          "active_plan_id": active.plan_id,
+          "active_group_id": active.group_id,
+          "active_position_id": active.position_id,
+        },
+      )
 
   same = [item for item in exposures if item.direction == wanted]
   if not same:
