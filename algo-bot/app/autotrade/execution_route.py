@@ -11,10 +11,36 @@ from dataclasses import dataclass
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Any
 
+from app.autotrade.strategy_taxonomy import (
+  REACTION_STRATEGIES,
+  is_reaction_strategy,
+)
+
 ROUTE_MARKET = "market"
 ROUTE_SINGLE_LIMIT = "single_limit"
 ROUTE_ZONE_SPLIT = "zone_split"
+ROUTE_MARKET_WITH_LIMIT_SCALE = "market_with_limit_scale"
 ROUTE_EITHER = "either"
+
+# Key Level / Session / Trendline only — Demand/Supply keep zone_scale → limit_ladder.
+REACTION_MARKET_SCALE_STRATEGIES = REACTION_STRATEGIES
+REACTION_MARKET_SCALE_FAMILIES = frozenset({
+  "key_level",
+  "session_level",
+  "trendline",
+})
+
+
+def reaction_market_scale_eligible(
+  *,
+  strategy: str | None = None,
+  strategy_family: str | None = None,
+) -> bool:
+  if strategy and is_reaction_strategy(strategy):
+    return True
+  if strategy_family and strategy_family in REACTION_MARKET_SCALE_FAMILIES:
+    return True
+  return False
 
 
 @dataclass(frozen=True)
@@ -101,6 +127,13 @@ def resolve_execution_route_plan(
   allow_either: bool = False,
   scale_first_leg_fraction: float = 0.70,
   scale_step_atr: float = 0.5,
+  reaction_scale_enabled: bool = False,
+  reaction_market_fraction: float = 0.70,
+  reaction_scale_fraction: float = 0.30,
+  reaction_scale_step_atr: float | None = None,
+  reaction_scale_invalid_policy: str = "single_market",
+  strategy: str | None = None,
+  strategy_family: str | None = None,
 ) -> ExecutionRoutePlan:
   """Resolve a concrete route mirroring AutoTradeEngine.ResolveExecutionRoute."""
   preference = (order_type_preference or "").strip().lower()
@@ -141,7 +174,81 @@ def resolve_execution_route_plan(
   else:
     scale_entry_anchor = proximal
 
+  reaction_scale_ok = (
+    reaction_scale_enabled
+    and reaction_market_scale_eligible(
+      strategy=strategy, strategy_family=strategy_family,
+    )
+    and distribution in {"zone_scale", "reaction_scale", "either", ""}
+  )
+  reaction_step = (
+    scale_step_atr if reaction_scale_step_atr is None else reaction_scale_step_atr
+  )
+  reaction_market_frac = min(1.0, max(0.0, reaction_market_fraction))
+  reaction_scale_frac = min(1.0, max(0.0, reaction_scale_fraction))
+  if abs(reaction_market_frac + reaction_scale_frac - 1.0) > 1e-6:
+    reaction_scale_frac = round(1.0 - reaction_market_frac, 6)
+  reaction_ratios = (reaction_market_frac, reaction_scale_frac)
+
+  def _market_with_limit_scale_plan() -> ExecutionRoutePlan | None:
+    if not reaction_scale_ok:
+      return None
+    if not split_ok:
+      policy = (reaction_scale_invalid_policy or "single_market").strip().lower()
+      if policy == "single_market" or zone_fill_fallback_enabled:
+        return ExecutionRoutePlan(
+          ROUTE_MARKET,
+          _round_price(quote, digits),
+          (),
+          geometry,
+          "reaction scale unqualified; single market fallback",
+          True,
+        )
+      return ExecutionRoutePlan(
+        ROUTE_MARKET_WITH_LIMIT_SCALE,
+        quote,
+        (),
+        geometry,
+        "reaction scale required but unqualified",
+        False,
+        "execution policy requires unavailable market_with_limit_scale",
+      )
+    # Confirmed in-zone (or zone-scale reaction selected): L1 market at live
+    # quote, L2 resting limit one step deeper into the zone.
+    l2_anchor = scale_entry_anchor if geometry == "inside" else proximal
+    legs = _scale_ladder_legs(
+      side=side, low=low, high=high, proximal=l2_anchor,
+      atr=atr, scale_step_atr=reaction_step, digits=digits,
+    )
+    # L1 reference price is the live quote (not a limit); L2 is deeper limit.
+    l1_price = _round_price(quote, digits)
+    l2_price = legs[1]
+    if l1_price == l2_price:
+      policy = (reaction_scale_invalid_policy or "single_market").strip().lower()
+      if policy == "single_market":
+        return ExecutionRoutePlan(
+          ROUTE_MARKET,
+          l1_price,
+          (),
+          geometry,
+          "reaction scale L2 coincides with L1; single market fallback",
+          True,
+        )
+    return ExecutionRoutePlan(
+      ROUTE_MARKET_WITH_LIMIT_SCALE,
+      l1_price,
+      (l1_price, l2_price),
+      geometry,
+      "execution policy: reaction market_with_limit_scale",
+      True,
+      planned_leg_volume_ratios=reaction_ratios,
+    )
+
   if preference == "market":
+    if reaction_scale_ok and (geometry == "inside" or split_ok):
+      scaled = _market_with_limit_scale_plan()
+      if scaled is not None:
+        return scaled
     if distribution in {"zone_split", "zone_scale"}:
       return ExecutionRoutePlan(
         ROUTE_ZONE_SPLIT,
@@ -162,6 +269,12 @@ def resolve_execution_route_plan(
     )
 
   if preference == "limit":
+    if reaction_scale_ok and (geometry == "inside" or distribution in {
+      "zone_scale", "reaction_scale", "either", "",
+    }):
+      scaled = _market_with_limit_scale_plan()
+      if scaled is not None:
+        return scaled
     if distribution in {"zone_split", "zone_scale"} or (
       distribution == "either" and split_ok
     ):
@@ -236,6 +349,10 @@ def resolve_execution_route_plan(
       "legacy uncommitted either",
       True,
     )
+  if reaction_scale_ok and (geometry == "inside" or split_ok):
+    scaled = _market_with_limit_scale_plan()
+    if scaled is not None:
+      return scaled
   if split_ok and distribution in {"zone_split", "zone_scale", "either", ""}:
     if distribution == "zone_scale":
       legs = _scale_ladder_legs(

@@ -125,6 +125,20 @@ def forming_message_key(setup_id: str) -> str:
   return f"auto_trade:forming_message:{setup_id}"
 
 
+def telegram_root_message_key(setup_id: str) -> str:
+  """Durable setup_id → root_message_id mapping for one-root-card replies."""
+  return f"auto_trade:telegram_root:{setup_id}"
+
+
+def should_delete_root_on_terminal() -> bool:
+  """Respect single-root-card delete flag when that mode is enabled."""
+  if bool(getattr(settings, "auto_trade_telegram_single_root_card", False)):
+    return bool(
+      getattr(settings, "auto_trade_telegram_delete_root_on_terminal", False)
+    )
+  return bool(settings.delivery_delete_on_terminal)
+
+
 def forming_status_key(setup_id: str) -> str:
   return f"auto_trade:forming_status:{setup_id}"
 
@@ -335,14 +349,49 @@ async def save_forming_card(
   ttl: int | None = None,
 ) -> None:
   effective_ttl = ttl or max(86400, settings.auto_trade_candidate_ttl)
+  payload = json.dumps(
+    {"chat_id": chat_id, "message_id": message_id, "text": text},
+    separators=(",", ":"),
+  )
   await client.set(
     forming_message_key(setup_id),
+    payload,
+    ex=effective_ttl,
+  )
+  # Explicit setup_id → root_message_id mapping for one-root-card replies.
+  await client.set(
+    telegram_root_message_key(setup_id),
     json.dumps(
-      {"chat_id": chat_id, "message_id": message_id, "text": text},
+      {
+        "chat_id": chat_id,
+        "root_message_id": message_id,
+        "updated_at": int(time.time()),
+      },
       separators=(",", ":"),
     ),
     ex=effective_ttl,
   )
+
+
+async def load_telegram_root_message_id(client, setup_id: str) -> int | None:
+  raw = await client.get(telegram_root_message_key(setup_id))
+  if raw is None:
+    card = await load_forming_card(client, setup_id)
+    if card is None:
+      return None
+    try:
+      return int(card["message_id"])
+    except (KeyError, TypeError, ValueError):
+      return None
+  text = raw.decode() if isinstance(raw, bytes) else str(raw)
+  try:
+    data = json.loads(text)
+    return int(data["root_message_id"])
+  except (TypeError, ValueError, json.JSONDecodeError, KeyError):
+    try:
+      return int(text)
+    except (TypeError, ValueError):
+      return None
 
 
 async def clear_forming_card(client, setup_id: str) -> None:
@@ -350,6 +399,7 @@ async def clear_forming_card(client, setup_id: str) -> None:
     forming_message_key(setup_id),
     forming_status_key(setup_id),
     forming_reconcile_pending_key(setup_id),
+    telegram_root_message_key(setup_id),
   )
 
 
@@ -669,19 +719,42 @@ async def kill_setup_card(
   delete_fn: DeleteFn,
   edit_fn: EditFn,
 ) -> None:
-  """Delete the forming card on reject/invalidate/expire - post nothing.
+  """Close the forming/root card on reject/invalidate/expire.
 
-  Falls back to editing the card to a neutral, non-actionable terminal state
-  if the delete itself fails (eg. Telegram's deletion window has passed),
-  rather than leaving a stale actionable-looking card in the chat.
+  Default single-root mode retains the Telegram message (edit to a neutral
+  terminal line) so Fill/TP/BE/SL replies can still thread to it. Explicit
+  delete-root mode removes the Telegram message as before.
   """
-  if not settings.delivery_delete_on_terminal:
-    await clear_forming_card(client, setup_id)
-    return
   card = await load_forming_card(client, setup_id)
   if card is None:
     await clear_forming_card(client, setup_id)
     return
+
+  if not should_delete_root_on_terminal():
+    try:
+      await edit_fn(
+        card["chat_id"], card["message_id"], _terminal_card_text(reason_code),
+      )
+    except TelegramBadRequest:
+      log.info(
+        "forming card terminal edit failed setup_id=%s reason=%s",
+        setup_id, reason_code,
+        exc_info=True,
+      )
+    # Keep forming_message + telegram_root mapping for reply threading.
+    await save_forming_card(
+      client,
+      setup_id,
+      chat_id=int(card["chat_id"]),
+      message_id=int(card["message_id"]),
+      text=_terminal_card_text(reason_code),
+    )
+    await client.delete(
+      forming_status_key(setup_id),
+      forming_reconcile_pending_key(setup_id),
+    )
+    return
+
   try:
     await delete_fn(card["chat_id"], card["message_id"])
   except TelegramBadRequest:

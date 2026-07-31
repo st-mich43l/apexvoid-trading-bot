@@ -36,19 +36,21 @@ from app.autotrade.execution_confirmation import executable_quote_in_zone
 from app.autotrade.multi_match import dedupe_matches, serialize_matches, strategy_matches_key
 from app.autotrade.strategy_match import StrategyMatch, strategy_match_key
 from app.autotrade.strategy_match_ready import enqueue_strategy_match_ready
+from app.autotrade.strategy_taxonomy import is_reaction_strategy
 from app.autotrade.zone_watch import (
   DISCOVERED,
-  EVALUATING,
-  EXHAUSTED,
   GRADE_A,
   GRADE_B,
   INVALIDATED,
+  LOCKED_ZONE_WATCH_STATES,
+  PUBLISHED_LOCKED,
   TERMINAL_ZONE_WATCH_STATES,
   WATCHING_RETEST,
   ZoneWatch,
   discover_zone_watch,
   list_active_zone_watches,
   load_zone_watch,
+  lock_zone_watch_published,
   mark_m1_evaluated,
   record_zone_presence,
   transition_zone_watch,
@@ -421,23 +423,32 @@ async def _activate_match(
     event_ts=event_ts,
   )
   if result.status in {
+    worker.PUBLISH_STATUS_EXECUTION_HANDOFF_CREATED,
     worker.PUBLISH_STATUS_PUBLISHED,
     worker.PUBLISH_STATUS_DUPLICATE_RECONCILED,
   }:
     _PUBLISHED_SETUP_IDS.add(match.match_id)
     latest = await load_zone_watch(client, record.zone_id)
-    if latest is not None and latest.state not in TERMINAL_ZONE_WATCH_STATES:
-      await transition_zone_watch(
+    if latest is not None and latest.state not in (
+      TERMINAL_ZONE_WATCH_STATES | LOCKED_ZONE_WATCH_STATES
+    ):
+      await lock_zone_watch_published(
         client,
         record.zone_id,
-        EXHAUSTED,
-        reason_code="candidate_published",
+        plan_id=result.plan_id,
+        reason_code=result.reason_code or "execution_handoff_created",
       )
+    elif latest is not None and latest.state == PUBLISHED_LOCKED:
+      pass  # already locked for this episode
     return match
 
   if result.reason_code == "direct_publish_failed_durable_fallback":
-    # Exceptional fallback only. Normal retest waiting never creates a ready
-    # event because it never reaches setup creation.
+    # Reaction strategies never use the ready stream once executable —
+    # leave them watching and retry on the next M1/quote cycle.
+    if is_reaction_strategy(match.strategy):
+      await record_zone_presence(client, record.zone_id, inside=False, now=now)
+      return None
+    # Exceptional fallback only for non-reaction workflows.
     stream_id = await enqueue_strategy_match_ready(client, match, recovery=True)
     if stream_id is not None:
       return match
@@ -491,7 +502,7 @@ async def _evaluate_record(
   *,
   event_ts: str,
 ) -> StrategyMatch | None:
-  if record.state in TERMINAL_ZONE_WATCH_STATES:
+  if record.state in TERMINAL_ZONE_WATCH_STATES | LOCKED_ZONE_WATCH_STATES:
     return None
   quote = await _load_quote(client, record.symbol)
   if quote is None:
@@ -505,7 +516,10 @@ async def _evaluate_record(
     htf_evidence=record.source_timeframe in {"H1", "M15"},
     decisive_break=_decisive_break(record, evidence),
   )
-  if not evidence.inside or record.state == EXHAUSTED:
+  if (
+    not evidence.inside
+    or record.state in TERMINAL_ZONE_WATCH_STATES | LOCKED_ZONE_WATCH_STATES
+  ):
     return None
   match = await _load_candidate(client, record.zone_id)
   if match is None:
@@ -629,7 +643,10 @@ async def _sync_strategy_match_cutover(
       htf_evidence=source_tf in {"H1", "M15"},
       decisive_break=_decisive_break(record, evidence),
     )
-    if not evidence.inside or record.state == EXHAUSTED:
+    if (
+      not evidence.inside
+      or record.state in TERMINAL_ZONE_WATCH_STATES | LOCKED_ZONE_WATCH_STATES
+    ):
       continue
     if record.grade == GRADE_B:
       # Same reasoning as _evaluate_record below: M1 refines entry

@@ -20,6 +20,12 @@ namespace ApexVoid.CTraderFeed;
 
 public enum TradePlanRuntimeStage
 {
+  // Waiting for activation (e.g. market_watch quote not yet in zone) or
+  // finishing a mid-ladder submit after a partial broker failure.
+  Received,
+  Submitting,
+  // Legacy: older persisted JSON may still deserialize as Armed. Treated
+  // like Received/Submitting for evaluate-and-submit; new writes never use it.
   Armed,
   Submitted,
   PartiallyOpen,
@@ -313,6 +319,8 @@ public static class TradePlanJson
       if (
         stage is TradePlanRuntimeStage.Submitted
           or TradePlanRuntimeStage.Armed
+          or TradePlanRuntimeStage.Received
+          or TradePlanRuntimeStage.Submitting
       )
       {
         stage = TradePlanRuntimeStage.FullyOpen;
@@ -443,11 +451,11 @@ public sealed class TradePlanRuntime(
   public IReadOnlyCollection<TradePlanRuntimeState> TrackedStates => _statesById.Values;
 
   /// <summary>
-  /// One poll cycle: recover state on first call, claim+arm any newly
-  /// published plans, evaluate armed plans against the live quote, and
-  /// manage every open position's targets/stop/BE. Call once per
-  /// AutoTradeEngine.RunSessionAsync loop iteration - see
-  /// AutoTradeEngine.PollTradePlansAsync.
+  /// One poll cycle: recover state on first call, claim any newly published
+  /// plans and attempt L1+L2 submission in the same cycle when executable,
+  /// finish any remaining Received/Submitting/Armed work, then reconcile and
+  /// manage open positions. Call once per AutoTradeEngine.RunSessionAsync
+  /// loop iteration - see AutoTradeEngine.PollTradePlansAsync.
   /// </summary>
   public async Task PollAsync(
     ICTraderTradeClient client,
@@ -466,7 +474,7 @@ public sealed class TradePlanRuntime(
     {
       return;
     }
-    await EvaluateArmedPlansAsync(client, symbol, quote, cancellationToken);
+    await EvaluatePendingEntryPlansAsync(client, symbol, quote, cancellationToken);
     await ReconcileSubmittedLegsAsync(client, symbol, cancellationToken);
     await ManageOpenPositionsAsync(client, symbol, quote, cancellationToken);
   }
@@ -635,7 +643,9 @@ public sealed class TradePlanRuntime(
     {
       try
       {
-        await ProcessTradePlanEntryAsync(entry, client, symbol, cancellationToken);
+        await ProcessTradePlanEntryAsync(
+          entry, client, symbol, cancellationToken
+        );
         await store.SetTradePlanCursorAsync(entry.Id, cancellationToken);
       }
       catch (OperationCanceledException)
@@ -724,15 +734,13 @@ public sealed class TradePlanRuntime(
       // that only happens when we already began processing this exact
       // plan_id at least once before (a redelivered/retried stream entry,
       // eg. after a restart re-reads from an earlier cursor). Falling
-      // through to the fresh-arm path below used to unconditionally
+      // through to the fresh-receive path below used to unconditionally
       // overwrite whatever real progress had already happened (a
-      // submitted/filled order) with a brand-new Armed state and
-      // re-publish "plan_armed" - risking a duplicate broker submission.
-      // A duplicate claim must never look like a normal re-arm: reconcile
-      // against whatever evidence exists (in-memory state first, durable
-      // Redis state second) and never proceed past this point regardless
-      // of what is found - there is no legitimate first-time-arm scenario
-      // once we already own this claim.
+      // submitted/filled order) with a brand-new Received state and
+      // risk a duplicate broker submission. A duplicate claim must never
+      // look like a normal re-receive: reconcile against whatever evidence
+      // exists (in-memory state first, durable Redis state second) and
+      // never proceed past this point regardless of what is found.
       var evidenceStage = _statesById.TryGetValue(plan.PlanId, out var existingState)
         ? existingState.Stage.ToString()
         : await store.GetStringAsync(PlanStateKey(plan.PlanId), cancellationToken)
@@ -745,17 +753,14 @@ public sealed class TradePlanRuntime(
       );
       return;
     }
-    // Size against the live account before ever announcing PLAN ARMED. A
-    // sizing failure here is not transient (identical guard exists in
-    // EvaluateArmedPlansAsync/SubmitEntryAsync, for when balance/risk drift
-    // between now and actual submission) - arming a plan that can never be
-    // sized, only to reject it a moment later, produced a nonsensical
-    // PLAN ARMED -> PLAN REJECTED flip within the same poll cycle.
+    // Size against the live account before announcing receipt. A sizing
+    // failure here is not transient (identical guard exists in
+    // EvaluatePendingEntryPlansAsync/SubmitEntryAsync).
     try
     {
       var equity = await ResolveEquityForSizingAsync(client, cancellationToken);
       log(
-        $"v7 sizing pre-arm id={plan.PlanId} {EquityResolver.FormatTelemetry(equity)}"
+        $"v7 sizing pre-submit id={plan.PlanId} {EquityResolver.FormatTelemetry(equity)}"
       );
       TradePlanExecutionEngine.CalculateVolume(
         plan, equity, options.PipSize, options.PipValuePerLot, symbol
@@ -776,7 +781,7 @@ public sealed class TradePlanRuntime(
         cancellationToken
       );
       log(
-        $"v7 plan sizing rejected pre-arm id={plan.PlanId} "
+        $"v7 plan sizing rejected pre-submit id={plan.PlanId} "
         + $"stream_id={entry.Id} "
         + $"exception={exception.GetType().Name} message={exception.Message}"
       );
@@ -794,28 +799,25 @@ public sealed class TradePlanRuntime(
       plan.Symbol,
       plan.Analysis.Direction,
       plan.Entry.Type,
-      TradePlanRuntimeStage.Armed,
-      CurrentStop: plan.Stop.Price
+      TradePlanRuntimeStage.Received,
+      CurrentStop: plan.Stop.Price,
+      GroupStage: TradePlanGroupStages.Received
     );
     await PersistStateAsync(state, cancellationToken);
     await PersistPlanExecutionStateAsync(
       plan.PlanId,
-      "armed",
+      "received",
       entry.Id,
       cancellationToken
     );
     log(
-      "auto_trade_plan_armed "
+      "auto_trade_plan_received_ready "
       + $"stream_id={entry.Id} plan_id={plan.PlanId} "
       + $"entry_type={plan.Entry.Type}"
     );
-    await PublishEventAsync(
-      "plan_armed",
-      $"PLAN ARMED {plan.Analysis.Strategy} {plan.Analysis.Direction} "
-      + $"({plan.Entry.Type})",
-      plan,
-      cancellationToken
-    );
+    // Submission happens in EvaluatePendingEntryPlansAsync on this same
+    // PollAsync cycle (after the stream-read loop) so broker errors still
+    // surface to the caller instead of being swallowed as stream retries.
   }
 
   private async Task PersistPlanExecutionStateAsync(
@@ -1040,94 +1042,117 @@ public sealed class TradePlanRuntime(
     );
   }
 
-  private async Task EvaluateArmedPlansAsync(
+  private async Task EvaluatePendingEntryPlansAsync(
     ICTraderTradeClient client,
     SymbolInfo symbol,
     SpotPrice quote,
     CancellationToken cancellationToken
   )
   {
-    foreach (var state in _statesById.Values.Where(
-      s => s.Stage == TradePlanRuntimeStage.Armed
-    ).ToArray())
+    foreach (var state in _statesById.Values.Where(IsPendingEntryStage).ToArray())
     {
       if (!_plansById.TryGetValue(state.PlanId, out var plan))
       {
         continue;
       }
-      var now = clock().ToUnixTimeSeconds();
-      var spreadTicks = StopTrailPlanner.RequireTickSize(symbol) > 0
-        ? (quote.Ask - quote.Bid) / StopTrailPlanner.RequireTickSize(symbol)
-        : 0m;
-      var decision = TradePlanExecutionEngine.EvaluateEntry(
-        plan, quote.Bid, quote.Ask, spreadTicks, now
+      await TrySubmitReceivedPlanAsync(
+        client, symbol, plan, state, quote, cancellationToken
       );
-      if (decision.RejectReason == "plan_expired")
-      {
-        await PersistPlanExecutionStateAsync(
-          plan.PlanId,
-          "expired",
-          null,
-          cancellationToken,
-          "plan_expired"
-        );
-        await ForgetPlanAsync(state.PlanId, cancellationToken);
-        log($"v7 plan expired id={state.PlanId}");
-        continue;
-      }
-      if (!decision.ShouldSubmit)
-      {
-        continue;
-      }
-      if (!ShouldSubmitOrders)
-      {
-        // shadow_v7 (or DryRun): the plan is valid and would have fired,
-        // but per docs/adr-trade-plan-v7-boundary.md shadow mode "places no
-        // orders from it". Left Armed so the next poll re-evaluates it -
-        // this is intentionally not a terminal state, since shadow mode is
-        // observing what V7 *would* do, not executing a one-shot decision.
-        log(
-          $"v7 shadow: would submit id={plan.PlanId} entry_type={plan.Entry.Type}"
-        );
-        continue;
-      }
-      try
-      {
-        await SubmitEntryAsync(
-          client, symbol, plan, state, quote, cancellationToken
-        );
-      }
-      catch (Exception exception) when (
-        exception is VolumePlanningException or TradePlanContractException
-      )
-      {
-        // A sizing failure (e.g. risk-based volume too small to split
-        // across a limit_ladder's declared legs) means this specific plan
-        // can never execute as configured - it is not transient. Left
-        // unhandled, this would escape EvaluateArmedPlansAsync/PollAsync and
-        // get caught only by the top-level consumer retry loop, which
-        // reprocesses the same Armed plan (still ShouldSubmit) every
-        // attempt - an infinite crash loop that blocks every other plan and
-        // symbol from ever polling. Reject just this plan and move on
-        // instead.
-        await PersistPlanExecutionStateAsync(
-          plan.PlanId, "rejected", null, cancellationToken,
-          $"sizing_failed:{exception.GetType().Name}"
-        );
-        await PublishEventAsync(
-          "plan_rejected",
-          $"TradePlan V7 rejected: {exception.Message}",
-          plan,
-          cancellationToken
-        );
-        await ForgetPlanAsync(state.PlanId, cancellationToken);
-        log(
-          $"v7 plan sizing rejected id={state.PlanId} "
-          + $"exception={exception.GetType().Name} message={exception.Message}"
-        );
-      }
     }
   }
+
+  private static bool IsPendingEntryStage(TradePlanRuntimeState state) =>
+    state.Stage is TradePlanRuntimeStage.Received
+      or TradePlanRuntimeStage.Submitting
+      or TradePlanRuntimeStage.Armed;
+
+  private async Task TrySubmitReceivedPlanAsync(
+    ICTraderTradeClient client,
+    SymbolInfo symbol,
+    TradePlan plan,
+    TradePlanRuntimeState state,
+    SpotPrice quote,
+    CancellationToken cancellationToken
+  )
+  {
+    // Re-read from the map in case a same-poll submit already progressed.
+    if (
+      !_statesById.TryGetValue(state.PlanId, out var latest)
+      || !IsPendingEntryStage(latest)
+    )
+    {
+      return;
+    }
+    state = latest;
+    var now = clock().ToUnixTimeSeconds();
+    var spreadTicks = StopTrailPlanner.RequireTickSize(symbol) > 0
+      ? (quote.Ask - quote.Bid) / StopTrailPlanner.RequireTickSize(symbol)
+      : 0m;
+    var decision = TradePlanExecutionEngine.EvaluateEntry(
+      plan, quote.Bid, quote.Ask, spreadTicks, now
+    );
+    if (decision.RejectReason == "plan_expired")
+    {
+      await PersistPlanExecutionStateAsync(
+        plan.PlanId,
+        "expired",
+        null,
+        cancellationToken,
+        "plan_expired"
+      );
+      await ForgetPlanAsync(state.PlanId, cancellationToken);
+      log($"v7 plan expired id={state.PlanId}");
+      return;
+    }
+    if (!decision.ShouldSubmit)
+    {
+      return;
+    }
+    if (!ShouldSubmitOrders)
+    {
+      // shadow_v7 (or DryRun): the plan is valid and would have fired,
+      // but per docs/adr-trade-plan-v7-boundary.md shadow mode "places no
+      // orders from it". Left Received so the next poll re-evaluates it.
+      log(
+        $"v7 shadow: would submit id={plan.PlanId} entry_type={plan.Entry.Type}"
+      );
+      return;
+    }
+    try
+    {
+      await SubmitEntryAsync(
+        client, symbol, plan, state, quote, cancellationToken
+      );
+    }
+    catch (Exception exception) when (
+      exception is VolumePlanningException or TradePlanContractException
+    )
+    {
+      await PersistPlanExecutionStateAsync(
+        plan.PlanId, "rejected", null, cancellationToken,
+        $"sizing_failed:{exception.GetType().Name}"
+      );
+      await PublishEventAsync(
+        "plan_rejected",
+        $"TradePlan V7 rejected: {exception.Message}",
+        plan,
+        cancellationToken
+      );
+      await ForgetPlanAsync(state.PlanId, cancellationToken);
+      log(
+        $"v7 plan sizing rejected id={state.PlanId} "
+        + $"exception={exception.GetType().Name} message={exception.Message}"
+      );
+    }
+  }
+
+  // Kept for older call sites / migration docs; forwards to the pending-entry path.
+  private Task EvaluateArmedPlansAsync(
+    ICTraderTradeClient client,
+    SymbolInfo symbol,
+    SpotPrice quote,
+    CancellationToken cancellationToken
+  ) => EvaluatePendingEntryPlansAsync(client, symbol, quote, cancellationToken);
 
   private bool ShouldSubmitOrders =>
     options.ContractMode is "v7_primary" or "v7_only" && !options.DryRun;
@@ -1229,9 +1254,40 @@ public sealed class TradePlanRuntime(
       return;
     }
 
-    // single_limit and limit_ladder: submit every declared leg at its exact
-    // price - never a different price the executor picks.
+    // single_limit, limit_ladder, market_with_limit_scale: submit every
+    // declared leg. Explicit order_type (market_with_limit_scale, or
+    // limit_ladder legs that declare one) bypasses marketable-limit
+    // detection — L1 market / L2 limit must place exactly those order types.
     var declaredLegs = BuildDeclaredLegs(plan, volumePlan, symbol);
+    if (
+      plan.Entry.Type == TradePlanContract.EntryTypeMarketWithLimitScale
+      && declaredLegs.Count == 1
+      && (plan.Entry.Legs?.Count ?? 0) > 1
+    )
+    {
+      // Split collapsed (undersized volume). single_market policy → 100% L1 market.
+      if (
+        !string.Equals(
+          options.ReactionScaleInvalidPolicy,
+          "single_market",
+          StringComparison.OrdinalIgnoreCase
+        )
+      )
+      {
+        throw new TradePlanContractException(
+          "market_with_limit_scale volume cannot cover both legs"
+        );
+      }
+      declaredLegs =
+      [
+        declaredLegs[0] with
+        {
+          OrderType = TradePlanContract.OrderTypeMarket,
+          Ratio = 1m,
+        },
+      ];
+    }
+
     var runtimeLegs = new List<TradePlanLegRuntimeState>(state.Legs ?? []);
     EnsurePlannedLegs(runtimeLegs, declaredLegs, plan);
 
@@ -1269,12 +1325,10 @@ public sealed class TradePlanRuntime(
       var legClientOrderId = TradePlanV7Ownership.FormatClientOrderId(
         plan.PlanId, declared.LegId
       );
-      var marketable = direction == TradeDirection.Buy
-        ? declared.Price >= quote.Ask
-        : declared.Price <= quote.Bid;
-      // Marketable legs use the live executable quote for relative SL;
+      var useMarket = ResolveLegUsesMarket(declared, direction, quote);
+      // Market legs use the live executable quote for relative SL;
       // resting limits use their declared limit price.
-      var relativeEntry = marketable
+      var relativeEntry = useMarket
         ? (direction == TradeDirection.Buy ? quote.Ask : quote.Bid)
         : declared.Price;
       var relativeStop = TradePlanJson.RelativeStopLossForEntry(
@@ -1282,7 +1336,7 @@ public sealed class TradePlanRuntime(
       );
 
       TradePlanLegRuntimeState updatedLeg;
-      if (marketable)
+      if (useMarket)
       {
         var execution = await client.PlaceMarketOrderAsync(
           new MarketOrderRequest(
@@ -1351,10 +1405,10 @@ public sealed class TradePlanRuntime(
           TotalIntendedVolume = declaredLegs.Sum(leg => leg.Volume),
           GroupAbsoluteStop = absoluteStop,
           CurrentStop = absoluteStop,
-          // Stay Armed until every declared leg has been attempted so the
-          // next poll can finish a mid-ladder failure.
+          // Stay Submitting until every declared leg has been attempted so
+          // the next poll can finish a mid-ladder failure.
           Stage = index + 1 < declaredLegs.Count
-            ? TradePlanRuntimeStage.Armed
+            ? TradePlanRuntimeStage.Submitting
             : DeriveRuntimeStage(runtimeLegs),
           GroupStage = index + 1 < declaredLegs.Count
             ? TradePlanGroupStages.Submitting
@@ -2335,14 +2389,17 @@ public sealed class TradePlanRuntime(
       GroupWeightedFillPrice = weighted ?? state.GroupWeightedFillPrice,
       PositionId = positionId,
       PendingOrderIds = pending.Length > 0 ? pending : state.PendingOrderIds,
-      // Preserve Armed while a mid-ladder submit is still in progress so
-      // EvaluateArmedPlansAsync keeps finishing remaining legs.
-      Stage = state.Stage == TradePlanRuntimeStage.Armed
-        ? TradePlanRuntimeStage.Armed
+      // Preserve Submitting while a mid-ladder submit is still in progress so
+      // EvaluatePendingEntryPlansAsync keeps finishing remaining legs.
+      // Legacy Armed mid-ladder states migrate to Submitting on write.
+      Stage = state.Stage is TradePlanRuntimeStage.Submitting
+          or TradePlanRuntimeStage.Armed
+        ? TradePlanRuntimeStage.Submitting
         : DeriveRuntimeStage(legs),
       GroupStage = state.GroupStage == TradePlanGroupStages.RecoveryRequired
         ? state.GroupStage
-        : state.Stage == TradePlanRuntimeStage.Armed
+        : state.Stage is TradePlanRuntimeStage.Submitting
+            or TradePlanRuntimeStage.Armed
           ? TradePlanGroupStages.Submitting
           : DeriveGroupStage(legs),
     };
@@ -2406,8 +2463,41 @@ public sealed class TradePlanRuntime(
     decimal Price,
     decimal Ratio,
     long Volume,
-    decimal Lots
+    decimal Lots,
+    string? OrderType = null
   );
+
+  private static bool ResolveLegUsesMarket(
+    DeclaredLeg declared,
+    TradeDirection direction,
+    SpotPrice quote
+  )
+  {
+    if (
+      string.Equals(
+        declared.OrderType,
+        TradePlanContract.OrderTypeMarket,
+        StringComparison.OrdinalIgnoreCase
+      )
+    )
+    {
+      return true;
+    }
+    if (
+      string.Equals(
+        declared.OrderType,
+        TradePlanContract.OrderTypeLimit,
+        StringComparison.OrdinalIgnoreCase
+      )
+    )
+    {
+      return false;
+    }
+    // limit_ladder without explicit order_type: marketable-limit detection.
+    return direction == TradeDirection.Buy
+      ? declared.Price >= quote.Ask
+      : declared.Price <= quote.Bid;
+  }
 
   private static IReadOnlyList<DeclaredLeg> BuildDeclaredLegs(
     TradePlan plan,
@@ -2424,21 +2514,39 @@ public sealed class TradePlanRuntime(
           plan.Entry.OrderPrice!.Value,
           1m,
           volumePlan.TotalVolume,
-          volumePlan.TotalVolume / (decimal)symbol.LotSize
+          volumePlan.TotalVolume / (decimal)symbol.LotSize,
+          TradePlanContract.OrderTypeLimit
         ),
       ];
     }
     var planLegs = plan.Entry.Legs ?? [];
+    // market_with_limit_scale defaults: L1 market, L2+ limit when omitted.
     return planLegs
+      .Select((leg, index) => (leg, index))
       .Zip(
         volumePlan.Slices,
-        (leg, slice) => new DeclaredLeg(
-          string.IsNullOrWhiteSpace(leg.LegId) ? slice.TargetId : leg.LegId,
-          leg.Price,
-          leg.VolumeRatio,
-          slice.Volume,
-          slice.Volume / (decimal)symbol.LotSize
-        )
+        (pair, slice) =>
+        {
+          var (leg, index) = pair;
+          var orderType = leg.OrderType;
+          if (
+            string.IsNullOrWhiteSpace(orderType)
+            && plan.Entry.Type == TradePlanContract.EntryTypeMarketWithLimitScale
+          )
+          {
+            orderType = index == 0
+              ? TradePlanContract.OrderTypeMarket
+              : TradePlanContract.OrderTypeLimit;
+          }
+          return new DeclaredLeg(
+            string.IsNullOrWhiteSpace(leg.LegId) ? slice.TargetId : leg.LegId,
+            leg.Price,
+            leg.VolumeRatio,
+            slice.Volume,
+            slice.Volume / (decimal)symbol.LotSize,
+            orderType
+          );
+        }
       )
       .Select((leg, index) =>
         string.IsNullOrWhiteSpace(leg.LegId)

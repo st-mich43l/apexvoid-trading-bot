@@ -17,12 +17,17 @@ public static class TradePlanContract
   public const string EntryTypeMarketWatch = "market_watch";
   public const string EntryTypeSingleLimit = "single_limit";
   public const string EntryTypeLimitLadder = "limit_ladder";
+  public const string EntryTypeMarketWithLimitScale = "market_with_limit_scale";
+
+  public const string OrderTypeMarket = "market";
+  public const string OrderTypeLimit = "limit";
 
   public static readonly IReadOnlyList<string> EntryTypes = new[]
   {
     EntryTypeMarketWatch,
     EntryTypeSingleLimit,
     EntryTypeLimitLadder,
+    EntryTypeMarketWithLimitScale,
   };
 }
 
@@ -65,7 +70,11 @@ public sealed record TradePlanEntryLeg(
   [property: JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
   decimal Price,
   [property: JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
-  decimal VolumeRatio
+  decimal VolumeRatio,
+  // Optional: "market" | "limit". When set, SubmitEntryAsync places that
+  // order type explicitly (market_with_limit_scale L1 must be market).
+  // When null, limit_ladder keeps marketable-limit detection.
+  string? OrderType = null
 );
 
 public sealed record TradePlanEntry(
@@ -110,6 +119,8 @@ public sealed record TradePlanEntry(
       }
       return new[] { OrderPrice.Value };
     }
+    // market_with_limit_scale and limit_ladder: leg prices are references
+    // (market L1 uses live quote at submit; price is for stop-side checks).
     return (Legs ?? Array.Empty<TradePlanEntryLeg>())
       .Select(leg => leg.Price)
       .ToArray();
@@ -310,7 +321,8 @@ public static class TradePlanValidator
     if (!TradePlanContract.EntryTypes.Contains(entry.Type))
     {
       throw new TradePlanContractException(
-        $"entry.type must be one of market_watch/single_limit/limit_ladder: {entry.Type}"
+        "entry.type must be one of market_watch/single_limit/limit_ladder/"
+        + $"market_with_limit_scale: {entry.Type}"
       );
     }
 
@@ -342,21 +354,60 @@ public static class TradePlanValidator
         );
       }
     }
-    else if (entry.Type == TradePlanContract.EntryTypeLimitLadder)
+    else if (
+      entry.Type is TradePlanContract.EntryTypeLimitLadder
+        or TradePlanContract.EntryTypeMarketWithLimitScale
+    )
     {
       var legs = entry.Legs ?? Array.Empty<TradePlanEntryLeg>();
       if (legs.Count == 0)
       {
         throw new TradePlanContractException(
-          "limit_ladder entry requires at least one leg"
+          $"{entry.Type} entry requires at least one leg"
         );
       }
       var totalRatio = legs.Sum(leg => leg.VolumeRatio);
       if (Math.Abs(totalRatio - 1.0m) > 0.0001m)
       {
         throw new TradePlanContractException(
-          $"limit_ladder entry.legs volume_ratio must sum to 1.0, got {totalRatio}"
+          $"{entry.Type} entry.legs volume_ratio must sum to 1.0, got {totalRatio}"
         );
+      }
+      foreach (var leg in legs)
+      {
+        if (
+          leg.OrderType is not null
+          && leg.OrderType is not TradePlanContract.OrderTypeMarket
+            and not TradePlanContract.OrderTypeLimit
+        )
+        {
+          throw new TradePlanContractException(
+            $"entry.legs[].order_type must be market or limit: {leg.OrderType}"
+          );
+        }
+      }
+      if (entry.Type == TradePlanContract.EntryTypeMarketWithLimitScale)
+      {
+        if (legs.Count < 2)
+        {
+          throw new TradePlanContractException(
+            "market_with_limit_scale entry requires at least two legs"
+          );
+        }
+        var first = legs[0].OrderType ?? TradePlanContract.OrderTypeMarket;
+        var second = legs[1].OrderType ?? TradePlanContract.OrderTypeLimit;
+        if (first != TradePlanContract.OrderTypeMarket)
+        {
+          throw new TradePlanContractException(
+            "market_with_limit_scale L1 order_type must be market"
+          );
+        }
+        if (second != TradePlanContract.OrderTypeLimit)
+        {
+          throw new TradePlanContractException(
+            "market_with_limit_scale L2 order_type must be limit"
+          );
+        }
       }
     }
   }

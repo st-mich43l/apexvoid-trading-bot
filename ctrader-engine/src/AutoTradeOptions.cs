@@ -134,7 +134,15 @@ public sealed record AutoTradeOptions(
   // cancel = cancel remaining pending entry legs before TP1/BE/trail/
   // manual close/terminal invalidation. keep = leave them resting
   // (requires stop sync; not fully implemented for future fills).
-  string UnfilledLegAfterTpPolicy = "cancel"
+  string UnfilledLegAfterTpPolicy = "cancel",
+  // Reaction Key/Session/Trendline market_with_limit_scale: L1 market
+  // fraction + L2 deeper-limit fraction. InvalidPolicy=single_market
+  // collapses to 100% L1 market when two valid legs cannot be formed.
+  decimal ReactionMarketFraction = 0.70m,
+  decimal ReactionScaleFraction = 0.30m,
+  bool ReactionScaleEnabled = true,
+  string ReactionScaleInvalidPolicy = "single_market",
+  decimal ReactionScaleStepAtr = 0.50m
 )
 {
   // Shared target-selection contract (app/autotrade/range_targets.py on the
@@ -486,7 +494,22 @@ public sealed record AutoTradeOptions(
     ),
     UnfilledLegAfterTpPolicy: resolver.String(
       "AUTO_TRADE_UNFILLED_LEG_AFTER_TP_POLICY", "cancel"
-    ).Trim().ToLowerInvariant()
+    ).Trim().ToLowerInvariant(),
+    ReactionMarketFraction: resolver.Decimal(
+      "AUTO_TRADE_REACTION_MARKET_FRACTION", 0.70m
+    ),
+    ReactionScaleFraction: resolver.Decimal(
+      "AUTO_TRADE_REACTION_SCALE_FRACTION", 0.30m
+    ),
+    ReactionScaleEnabled: resolver.Bool(
+      "AUTO_TRADE_REACTION_SCALE_ENABLED", true
+    ),
+    ReactionScaleInvalidPolicy: resolver.String(
+      "AUTO_TRADE_REACTION_SCALE_INVALID_POLICY", "single_market"
+    ).Trim().ToLowerInvariant(),
+    ReactionScaleStepAtr: resolver.Decimal(
+      "AUTO_TRADE_REACTION_SCALE_STEP_ATR", 0.50m
+    )
   );
   var deprecated = resolver.DeprecatedVariables.ToList();
   if (deprecated.Contains("AUTO_TRADE_BE_BUFFER_PIPS", StringComparer.Ordinal))
@@ -641,6 +664,30 @@ public sealed record AutoTradeOptions(
       throw new AutoTradeConfigurationException(
         "Auto trade disabled: AUTO_TRADE_ZONE_SCALE_UNDERSIZED_POLICY "
         + "must be single_entry or reject"
+      );
+    }
+    if (ReactionScaleInvalidPolicy is not "single_market" and not "reject")
+    {
+      throw new AutoTradeConfigurationException(
+        "Auto trade disabled: AUTO_TRADE_REACTION_SCALE_INVALID_POLICY "
+        + "must be single_market or reject"
+      );
+    }
+    if (
+      ReactionMarketFraction <= 0
+      || ReactionScaleFraction <= 0
+      || Math.Abs(ReactionMarketFraction + ReactionScaleFraction - 1m) > 0.0001m
+    )
+    {
+      throw new AutoTradeConfigurationException(
+        "Auto trade disabled: AUTO_TRADE_REACTION_MARKET_FRACTION + "
+        + "AUTO_TRADE_REACTION_SCALE_FRACTION must be positive and sum to 1.0"
+      );
+    }
+    if (ReactionScaleStepAtr < 0)
+    {
+      throw new AutoTradeConfigurationException(
+        "Auto trade disabled: AUTO_TRADE_REACTION_SCALE_STEP_ATR must be >= 0"
       );
     }
 

@@ -380,6 +380,28 @@ class Settings(BaseSettings):
     default=0.5,
     validation_alias=AliasChoices("AUTO_TRADE_ZONE_SCALE_STEP_ATR"),
   )
+  # Key Level / Session / Trendline reaction: L1 market + L2 deeper limit.
+  # Demand/Supply Zone Reaction intentionally do NOT use this route.
+  auto_trade_reaction_market_fraction: float = Field(
+    default=0.70,
+    validation_alias=AliasChoices("AUTO_TRADE_REACTION_MARKET_FRACTION"),
+  )
+  auto_trade_reaction_scale_fraction: float = Field(
+    default=0.30,
+    validation_alias=AliasChoices("AUTO_TRADE_REACTION_SCALE_FRACTION"),
+  )
+  auto_trade_reaction_scale_enabled: bool = Field(
+    default=True,
+    validation_alias=AliasChoices("AUTO_TRADE_REACTION_SCALE_ENABLED"),
+  )
+  auto_trade_reaction_scale_invalid_policy: str = Field(
+    default="single_market",
+    validation_alias=AliasChoices("AUTO_TRADE_REACTION_SCALE_INVALID_POLICY"),
+  )
+  auto_trade_reaction_scale_step_atr: float = Field(
+    default=0.50,
+    validation_alias=AliasChoices("AUTO_TRADE_REACTION_SCALE_STEP_ATR"),
+  )
   auto_trade_non_hedged_opposite_policy: str = "reject"
   # Scanner detectors already own the complete strategy match.  The bridge
   # transports that typed decision to the executor without another regime or
@@ -520,6 +542,20 @@ class Settings(BaseSettings):
   # it, and it is deleted (never a "rejected" message) on terminal.
   delivery_thread_lifecycle: bool = True
   delivery_delete_on_terminal: bool = True
+  # Mission P0 one-root-card: one setup → one Telegram root; progress edits
+  # the root and chronological events reply to it. When enabled, terminal
+  # deletion follows AUTO_TRADE_TELEGRAM_DELETE_ROOT_ON_TERMINAL instead of
+  # the legacy delivery_delete_on_terminal default.
+  auto_trade_telegram_single_root_card: bool = Field(
+    default=True,
+    validation_alias=AliasChoices("AUTO_TRADE_TELEGRAM_SINGLE_ROOT_CARD"),
+  )
+  auto_trade_telegram_delete_root_on_terminal: bool = Field(
+    default=False,
+    validation_alias=AliasChoices(
+      "AUTO_TRADE_TELEGRAM_DELETE_ROOT_ON_TERMINAL",
+    ),
+  )
   auto_trade_key_level_reaction_enabled: bool = Field(
     default=True,
     validation_alias=AliasChoices("AUTO_TRADE_KEY_LEVEL_REACTION_ENABLED"),
@@ -930,6 +966,30 @@ class Settings(BaseSettings):
       raise ValueError(
         "AUTO_TRADE_NON_HEDGED_OPPOSITE_POLICY must be "
         "broker_netting, close_then_reverse, or reject"
+      )
+    self.auto_trade_reaction_scale_invalid_policy = (
+      self.auto_trade_reaction_scale_invalid_policy.strip().lower()
+    )
+    if self.auto_trade_reaction_scale_invalid_policy not in {
+      "single_market",
+      "reject",
+    }:
+      raise ValueError(
+        "AUTO_TRADE_REACTION_SCALE_INVALID_POLICY must be "
+        "single_market or reject"
+      )
+    if (
+      float(self.auto_trade_reaction_market_fraction) <= 0
+      or float(self.auto_trade_reaction_scale_fraction) <= 0
+      or abs(
+        float(self.auto_trade_reaction_market_fraction)
+        + float(self.auto_trade_reaction_scale_fraction)
+        - 1.0
+      ) > 1e-6
+    ):
+      raise ValueError(
+        "AUTO_TRADE_REACTION_MARKET_FRACTION + "
+        "AUTO_TRADE_REACTION_SCALE_FRACTION must be positive and sum to 1.0"
       )
     ticks_raw = os.environ.get("AUTO_TRADE_BE_BUFFER_TICKS")
     pips_raw = os.environ.get("AUTO_TRADE_BE_BUFFER_PIPS")

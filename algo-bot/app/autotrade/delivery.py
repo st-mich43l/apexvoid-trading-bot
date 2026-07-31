@@ -29,6 +29,7 @@ from app.autotrade.setup_card import (
   forming_message_key as _setup_card_forming_message_key,
   kill_setup_card,
   load_forming_card,
+  load_telegram_root_message_id,
 )
 from app.autotrade.lifecycle import LIFECYCLE_STATES, emit_lifecycle
 from app.autotrade.strategy_match_ready import load_ready_consumer_health
@@ -68,6 +69,11 @@ _FORMING_REPLY_PREFERRED_TYPES = frozenset({
   "stop_moved",
   "take_profit",
   "position_closed",
+  "order_filled",
+  "tp_booked",
+  "sl_moved",
+  "v7_order_submitted",
+  "plan_rejected",
 })
 # "rejected"/"invalidated"/"expired"/"cancelled" never reach render/send at
 # all - see _deliver_auto_trade_event, which deletes the forming card and
@@ -102,6 +108,9 @@ TELEGRAM_SILENT_LIFECYCLE_TYPES = frozenset({
   # one invited reading a stuck ARMED card as "still waiting" right when
   # the plan is (or should be) about to fill or expire.
   "plan_armed",
+  # Generic "plan published" / Redis write is not a user-facing lifecycle
+  # card under one-root-card mode — progress edits the root instead.
+  "plan_published",
 })
 # Preflight route outcomes remain in Redis, route history, metrics, and
 # /auto_status, but are operator diagnostics rather than Telegram content.
@@ -701,11 +710,64 @@ async def _forming_reply_message_id(
   match_id = _event_match_id(event)
   if not match_id:
     return None, "event has no match id"
+  root_id = await load_telegram_root_message_id(client, match_id)
+  if root_id is not None and root_id > 0:
+    return root_id, ""
   card = await load_forming_card(client, match_id)
   if card is None:
     key = _forming_message_key(match_id)
     return None, f"stored forming message is missing or expired ({key})"
   return card["message_id"], ""
+
+
+async def _apply_zone_watch_outcome_from_event(client, event: dict) -> None:
+  """Map fill/reject/expiry Telegram events onto ZoneWatch consume/rearm."""
+  event_type = str(event.get("type") or "")
+  zone_id = str(
+    event.get("zone_id")
+    or (event.get("measured") or {}).get("zone_id")
+    or event.get("confluence_zone_id")
+    or ""
+  ).strip()
+  if not zone_id:
+    return
+  plan_id = str(
+    event.get("candidate_id") or event.get("plan_id") or event.get("group_id") or ""
+  ).strip() or None
+  reason = str(event.get("reason_code") or event_type)
+  try:
+    from app.autotrade.zone_watch import apply_zone_watch_plan_outcome
+
+    if event_type in {"order_filled", "opened"}:
+      await apply_zone_watch_plan_outcome(
+        client,
+        zone_id,
+        outcome="fill",
+        reason_code=reason,
+        plan_id=plan_id,
+      )
+    elif event_type in {"plan_rejected", "rejected"}:
+      await apply_zone_watch_plan_outcome(
+        client,
+        zone_id,
+        outcome="reject",
+        reason_code=reason,
+        plan_id=plan_id,
+      )
+    elif event_type in {"expired", "cancelled"}:
+      await apply_zone_watch_plan_outcome(
+        client,
+        zone_id,
+        outcome=event_type,
+        reason_code=reason,
+        plan_id=plan_id,
+      )
+  except Exception:
+    log.exception(
+      "zone watch outcome apply failed type=%s zone_id=%s",
+      event_type,
+      zone_id,
+    )
 
 
 async def _reply_message_id(
@@ -887,6 +949,7 @@ async def _deliver_auto_trade_event(
     )
   if profile == "internal":
     await _correlate_strategy_route(client, event)
+    await _apply_zone_watch_outcome_from_event(client, event)
   if (
     event.get("setup") == "Manual Algo"
     or event.get("stream") == "algo_manual"

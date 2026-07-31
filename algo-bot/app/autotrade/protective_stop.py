@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Any
 
+from app.autotrade.strategy_taxonomy import REACTION_STRATEGIES
+
 
 STOP_PLAN_VERSION = 2
 
@@ -438,13 +440,10 @@ def plan_protective_stop(
   )
 
 
-_REACTION_FAMILY_STRATEGIES = {
-  "Key Level Reaction",
-  "Demand Zone Reaction",
-  "Supply Zone Reaction",
-  "Session Level Reaction",
-  "Trendline Reaction",
-}
+# Exact Reaction-family names only (see strategy_taxonomy). Demand/Supply
+# Zone Reaction stay Zone-family and share the trend 40–60 envelope via the
+# default path below — they must not be grouped as Reaction here.
+_REACTION_FAMILY_STRATEGIES = REACTION_STRATEGIES
 
 
 def volume_weighted_reference_entry(

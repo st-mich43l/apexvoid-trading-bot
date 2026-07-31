@@ -21,24 +21,42 @@ from typing import Any, Awaitable, Callable, Mapping, Sequence, TypeVar
 DISCOVERED = "discovered"
 WATCHING_RETEST = "watching_retest"
 EVALUATING = "evaluating"
+PUBLISHED_LOCKED = "published_locked"
+CONSUMED = "consumed"
 INVALIDATED = "invalidated"
-EXHAUSTED = "exhausted"
+EXPIRED = "expired"
+# Backward-compat alias: pre-v3 code/tests used EXHAUSTED for terminal
+# structural exhaustion. Mission names that state EXPIRED.
+EXHAUSTED = EXPIRED
 
 ZONE_WATCH_STATES = (
   DISCOVERED,
   WATCHING_RETEST,
   EVALUATING,
+  PUBLISHED_LOCKED,
+  CONSUMED,
   INVALIDATED,
-  EXHAUSTED,
+  EXPIRED,
 )
-TERMINAL_ZONE_WATCH_STATES = frozenset({INVALIDATED, EXHAUSTED})
+TERMINAL_ZONE_WATCH_STATES = frozenset({INVALIDATED, EXPIRED, CONSUMED})
+# Duplicate-prevention lock while a TradePlan exists for the current episode.
+# Not user-facing; not actively watchable for a new handoff.
+LOCKED_ZONE_WATCH_STATES = frozenset({PUBLISHED_LOCKED})
 
 _TRANSITIONS: dict[str, frozenset[str]] = {
-  DISCOVERED: frozenset({WATCHING_RETEST, EVALUATING, INVALIDATED, EXHAUSTED}),
-  WATCHING_RETEST: frozenset({EVALUATING, INVALIDATED, EXHAUSTED}),
-  EVALUATING: frozenset({WATCHING_RETEST, INVALIDATED, EXHAUSTED}),
+  DISCOVERED: frozenset({WATCHING_RETEST, EVALUATING, INVALIDATED, EXPIRED}),
+  WATCHING_RETEST: frozenset({
+    EVALUATING, PUBLISHED_LOCKED, INVALIDATED, EXPIRED,
+  }),
+  EVALUATING: frozenset({
+    WATCHING_RETEST, PUBLISHED_LOCKED, INVALIDATED, EXPIRED,
+  }),
+  PUBLISHED_LOCKED: frozenset({
+    CONSUMED, WATCHING_RETEST, INVALIDATED, EXPIRED,
+  }),
+  CONSUMED: frozenset(),
   INVALIDATED: frozenset(),
-  EXHAUSTED: frozenset(),
+  EXPIRED: frozenset(),
 }
 
 GRADE_A = "A"
@@ -46,18 +64,11 @@ GRADE_B = "B"
 GRADE_C = "C"
 ACTIVE_WATCHLIST_GRADES = frozenset({GRADE_A, GRADE_B})
 
-ZONE_WATCH_VERSION = 2
+ZONE_WATCH_VERSION = 3
 ZONE_WATCH_RETENTION_SECONDS = 7 * 24 * 3600
-# Pure touch-count safety net only - a zone retested this many times without
-# ever cleanly breaking or filling is probably stale. The primary exhaustion
-# signal is a decisive break (see record_zone_presence's decisive_break
-# param): a zone that keeps producing valid bounces off its near edge is
-# doing exactly what a working supply/demand zone is supposed to do, and
-# touch count alone used to hard-exhaust it after 3 retests regardless of
-# whether every one of them held - killing setups that were still working
-# (2026-07-28 incident: a zone that would have hit full target got
-# permanently EXHAUSTED after its 3rd valid retest).
-_EXHAUST_AFTER_STALE_TOUCHES = 6
+# Touch count may downgrade confidence (A→B) but must never terminally
+# consume or expire a structurally valid zone. Kept as a soft telemetry
+# threshold only for callers that still want "many retests" signals.
 _DOWNGRADE_AFTER_TOUCHES = 2
 _MAX_CAS_RETRIES = 12
 
@@ -115,6 +126,8 @@ class ZoneWatch:
   zone_entered_at: int | None = None
   zone_exited_at: int | None = None
   last_evaluated_m1_ts: int | None = None
+  last_plan_id: str | None = None
+  last_rearm_reason: str | None = None
 
   def to_dict(self) -> dict[str, Any]:
     return {
@@ -146,11 +159,17 @@ class ZoneWatch:
       "zone_entered_at": self.zone_entered_at,
       "zone_exited_at": self.zone_exited_at,
       "last_evaluated_m1_ts": self.last_evaluated_m1_ts,
+      "last_plan_id": self.last_plan_id,
+      "last_rearm_reason": self.last_rearm_reason,
     }
 
   @classmethod
   def from_dict(cls, data: Mapping[str, Any]) -> "ZoneWatch":
     now = int(time.time())
+    raw_state = str(data.get("state") or DISCOVERED)
+    # Migrate pre-v3 "exhausted" payloads onto the mission EXPIRED name.
+    if raw_state == "exhausted":
+      raw_state = EXPIRED
     return cls(
       version=int(data.get("version", ZONE_WATCH_VERSION)),
       zone_id=str(data["zone_id"]),
@@ -170,7 +189,7 @@ class ZoneWatch:
       last_confirmed_at=int(data.get("last_confirmed_at", now)),
       last_touch_at=_optional_int(data.get("last_touch_at")),
       invalidation_price=_optional_float(data.get("invalidation_price")),
-      state=str(data.get("state") or DISCOVERED),
+      state=raw_state,
       market_map_id=str(data.get("market_map_id") or ""),
       structure_signature=str(data.get("structure_signature") or ""),
       updated_at=int(data.get("updated_at", now)),
@@ -180,6 +199,14 @@ class ZoneWatch:
       zone_entered_at=_optional_int(data.get("zone_entered_at")),
       zone_exited_at=_optional_int(data.get("zone_exited_at")),
       last_evaluated_m1_ts=_optional_int(data.get("last_evaluated_m1_ts")),
+      last_plan_id=(
+        None if data.get("last_plan_id") is None else str(data["last_plan_id"])
+      ),
+      last_rearm_reason=(
+        None
+        if data.get("last_rearm_reason") is None
+        else str(data["last_rearm_reason"])
+      ),
     )
 
 
@@ -212,15 +239,33 @@ async def _cas_save(
   *,
   expected_revision: int,
 ) -> bool:
-  result = await client.eval(
-    _CAS_SAVE_LUA,
-    1,
-    zone_watch_key(record.zone_id),
-    expected_revision,
-    _payload(record),
-    ZONE_WATCH_RETENTION_SECONDS,
-  )
-  return int(result) == 1
+  try:
+    result = await client.eval(
+      _CAS_SAVE_LUA,
+      1,
+      zone_watch_key(record.zone_id),
+      expected_revision,
+      _payload(record),
+      ZONE_WATCH_RETENTION_SECONDS,
+    )
+    return int(result) == 1
+  except Exception:
+    if not getattr(client, "_apexvoid_allow_non_atomic_test_fallback", False):
+      raise
+    # fakeredis has no Lua/EVAL - best-effort compare-and-set for tests only.
+    current = await load_zone_watch(client, record.zone_id)
+    if expected_revision < 0:
+      if current is not None:
+        return False
+    else:
+      if current is None or current.revision != expected_revision:
+        return False
+    await client.set(
+      zone_watch_key(record.zone_id),
+      _payload(record),
+      ex=ZONE_WATCH_RETENTION_SECONDS,
+    )
+    return True
 
 
 T = TypeVar("T")
@@ -365,14 +410,13 @@ def grade_for_touch_count(
   *,
   htf_evidence: bool = False,
 ) -> tuple[str, bool]:
-  """Confidence downgrade plus the stale-touch exhaustion safety net.
+  """Confidence downgrade only — never a terminal exhaustion signal.
 
-  This alone must never be the primary way a zone gets exhausted - see the
-  decisive_break param on record_zone_presence/record_zone_touch for the
-  real "this zone actually failed" signal.
+  ``htf_evidence`` is retained for call-site compatibility; touch count alone
+  must not kill a structurally valid zone (mission §7). The second return
+  value is always False.
   """
-  if touch_count >= _EXHAUST_AFTER_STALE_TOUCHES and not htf_evidence:
-    return current_grade, True
+  del htf_evidence  # retained for API compatibility
   if touch_count >= _DOWNGRADE_AFTER_TOUCHES and current_grade == GRADE_A:
     return GRADE_B, False
   return current_grade, False
@@ -396,29 +440,30 @@ async def record_zone_presence(
 
   decisive_break marks an exit (inside -> outside) where price closed
   beyond the zone's far/invalidating edge rather than bouncing back out
-  the near edge it approached from - the only case that exhausts the zone
-  immediately, independent of touch_count. A valid bounce (decisive_break
-  False) never exhausts a zone on its own; see _EXHAUST_AFTER_STALE_TOUCHES
-  for the separate count-based safety net.
+  the near edge it approached from - that structurally invalidates the
+  zone. A valid bounce never terminals a zone on touch count alone.
   """
   ts = int(now if now is not None else time.time())
 
   def apply(record: ZoneWatch) -> tuple[ZoneWatch, bool]:
     if record.state in TERMINAL_ZONE_WATCH_STATES:
       return record, False
+    if record.state in LOCKED_ZONE_WATCH_STATES:
+      # Handoff already published; presence updates wait for executor outcome.
+      return record, False
     if inside:
       if record.inside:
         state = EVALUATING if record.state == WATCHING_RETEST else record.state
         return replace(record, state=state, updated_at=ts), False
       count = record.touch_count + 1
-      next_grade, exhausted = grade_for_touch_count(
+      next_grade, _never_exhaust = grade_for_touch_count(
         count,
         record.grade,
         htf_evidence=htf_evidence,
       )
       return replace(
         record,
-        state=EXHAUSTED if exhausted else EVALUATING,
+        state=EVALUATING,
         grade=next_grade,
         touch_count=count,
         last_touch_at=ts,
@@ -432,10 +477,20 @@ async def record_zone_presence(
     if not record.inside:
       state = WATCHING_RETEST if record.state == DISCOVERED else record.state
       return replace(record, state=state, updated_at=ts), False
-    exhausted_by_break = decisive_break and not htf_evidence
+    # Closed-bar structural break → INVALIDATED. Live wick alone must not
+    # reach here as decisive_break (callers own that evidence gate).
+    if decisive_break and not htf_evidence:
+      return replace(
+        record,
+        state=INVALIDATED,
+        inside=False,
+        zone_exited_at=ts,
+        invalidation_price=record.invalidation_price,
+        updated_at=ts,
+      ), True
     return replace(
       record,
-      state=EXHAUSTED if exhausted_by_break else WATCHING_RETEST,
+      state=WATCHING_RETEST,
       inside=False,
       zone_exited_at=ts,
       updated_at=ts,
@@ -453,14 +508,15 @@ async def record_zone_touch(
 ) -> ZoneWatch:
   """Compatibility API for an explicitly deduplicated retest touch.
 
-  Has no price evidence of its own, so it can only ever exhaust a zone via
-  the count-based stale-touch safety net - never via decisive_break.
+  Touch count alone never terminals the zone — only grade may downgrade.
   """
   ts = int(now if now is not None else time.time())
 
   def apply(record: ZoneWatch) -> tuple[ZoneWatch, None]:
+    if record.state in TERMINAL_ZONE_WATCH_STATES | LOCKED_ZONE_WATCH_STATES:
+      return record, None
     count = record.touch_count + 1
-    grade, exhausted = grade_for_touch_count(
+    grade, _never_exhaust = grade_for_touch_count(
       count,
       record.grade,
       htf_evidence=htf_evidence,
@@ -470,16 +526,144 @@ async def record_zone_touch(
       touch_count=count,
       grade=grade,
       last_touch_at=ts,
-      state=(
-        EXHAUSTED
-        if exhausted and record.state not in TERMINAL_ZONE_WATCH_STATES
-        else record.state
-      ),
       updated_at=ts,
     ), None
 
   updated, _ = await _mutate(client, zone_id, apply)
   return updated
+
+
+async def lock_zone_watch_published(
+  client: Any,
+  zone_id: str,
+  *,
+  plan_id: str,
+  reason_code: str = "execution_handoff_created",
+) -> ZoneWatch:
+  """Successful TradePlan handoff → PUBLISHED_LOCKED (duplicate prevention)."""
+  updated, _ = await transition_zone_watch(
+    client,
+    zone_id,
+    PUBLISHED_LOCKED,
+    reason_code=reason_code,
+    last_plan_id=str(plan_id),
+    last_rearm_reason=None,
+  )
+  return updated
+
+
+async def consume_zone_watch(
+  client: Any,
+  zone_id: str,
+  *,
+  reason_code: str = "broker_fill",
+  plan_id: str | None = None,
+) -> ZoneWatch:
+  """First confirmed broker fill consumes the thesis for this episode."""
+  fields: dict[str, Any] = {}
+  if plan_id is not None:
+    fields["last_plan_id"] = str(plan_id)
+  updated, _ = await transition_zone_watch(
+    client,
+    zone_id,
+    CONSUMED,
+    reason_code=reason_code,
+    **fields,
+  )
+  return updated
+
+
+async def rearm_zone_watch(
+  client: Any,
+  zone_id: str,
+  *,
+  reason_code: str,
+  new_episode: bool = False,
+  now: int | None = None,
+) -> ZoneWatch:
+  """PUBLISHED_LOCKED → WATCHING_RETEST when structure is still valid.
+
+  Used for broker reject / plan expiry / no-fill / cancel-before-fill.
+  Retains last_plan_id for audit. Optionally starts a new episode when
+  price has exited and re-entered.
+  """
+  if not reason_code:
+    raise ZoneWatchError("rearm_zone_watch requires a non-empty reason_code")
+  ts = int(now if now is not None else time.time())
+
+  def apply(record: ZoneWatch) -> tuple[ZoneWatch, bool]:
+    if record.state == WATCHING_RETEST and record.last_rearm_reason == reason_code:
+      return record, False
+    if record.state != PUBLISHED_LOCKED:
+      raise ZoneWatchError(
+        f"illegal zone watch rearm from {record.state!r} for {zone_id!r} "
+        f"({reason_code})"
+      )
+    episode = record.episode_id
+    touch = record.touch_count
+    entered = record.zone_entered_at
+    if new_episode:
+      touch = record.touch_count  # preserve count; episode identity rotates
+      entered = ts
+      episode = _episode_id(zone_id, ts, touch)
+    return replace(
+      record,
+      state=WATCHING_RETEST,
+      inside=False if new_episode else record.inside,
+      episode_id=episode,
+      zone_entered_at=entered,
+      last_rearm_reason=reason_code,
+      updated_at=ts,
+    ), True
+
+  updated, _ = await _mutate(client, zone_id, apply)
+  return updated
+
+
+async def apply_zone_watch_plan_outcome(
+  client: Any,
+  zone_id: str,
+  *,
+  outcome: str,
+  reason_code: str = "",
+  plan_id: str | None = None,
+) -> ZoneWatch | None:
+  """Map executor/broker outcomes onto ZoneWatch lock/consume/rearm.
+
+  ``outcome`` is one of: fill | reject | expired | cancelled | no_fill.
+  Returns None when the zone is missing or the outcome does not apply.
+  """
+  record = await load_zone_watch(client, zone_id)
+  if record is None:
+    return None
+  normalized = str(outcome or "").strip().lower()
+  if normalized in {"fill", "filled", "order_filled", "opened"}:
+    if record.state != PUBLISHED_LOCKED:
+      return record
+    return await consume_zone_watch(
+      client,
+      zone_id,
+      reason_code=reason_code or "broker_fill",
+      plan_id=plan_id,
+    )
+  if normalized in {
+    "reject",
+    "rejected",
+    "plan_rejected",
+    "expired",
+    "cancelled",
+    "no_fill",
+    "no-fill",
+  }:
+    if record.state != PUBLISHED_LOCKED:
+      return record
+    return await rearm_zone_watch(
+      client,
+      zone_id,
+      reason_code=reason_code or f"plan_outcome_{normalized}",
+      new_episode=False,
+    )
+  return record
 
 
 async def mark_m1_evaluated(
@@ -527,4 +711,5 @@ def is_actively_watchable(record: ZoneWatch) -> bool:
   return (
     record.grade in ACTIVE_WATCHLIST_GRADES
     and record.state not in TERMINAL_ZONE_WATCH_STATES
+    and record.state not in LOCKED_ZONE_WATCH_STATES
   )
