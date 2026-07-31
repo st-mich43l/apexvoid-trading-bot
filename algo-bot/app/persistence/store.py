@@ -569,20 +569,61 @@ async def get_pips_records(
 async def record_auto_trade_event(event: dict) -> None:
   """Persist fill attribution and terminal broker results idempotently."""
   event_type = str(event.get("type") or "")
-  if event_type in {"opened", "add", "manual_opened"}:
+  if event_type in {"opened", "add", "manual_opened", "order_filled"}:
     await _record_auto_trade_fill(event)
   elif event_type in {"group_result", "position_closed", "manual_closed"}:
     await _record_auto_trade_result(event)
 
 
+def _resolve_auto_trade_stream(event: dict) -> str:
+  stream = str(event.get("stream") or "").strip()
+  if stream in {"algo_auto", "algo_manual"}:
+    return stream
+  # V7 TradePlan events omit stream; attribute them as autonomous algo.
+  candidate = str(event.get("candidate_id") or "")
+  group_id = str(event.get("group_id") or "")
+  if candidate.startswith("v7:") or group_id.startswith("v7:"):
+    return "algo_auto"
+  setup = str(event.get("setup") or "").strip().lower()
+  if setup == "manual algo":
+    return "algo_manual"
+  if event.get("position_id") is not None and (
+    event.get("setup") or event.get("direction")
+  ):
+    return "algo_auto"
+  return stream
+
+
+def _resolve_fill_stop_pips(event: dict, symbol: str) -> float | None:
+  raw = event.get("stop_pips")
+  if raw is not None:
+    try:
+      value = float(raw)
+    except (TypeError, ValueError):
+      value = None
+    else:
+      if value > 0:
+        return value
+  stop_loss = event.get("stop_loss")
+  entry = event.get("price")
+  if stop_loss is None or entry is None:
+    return None
+  try:
+    return abs(float(entry) - float(stop_loss)) / pip_for(symbol)
+  except (TypeError, ValueError, ZeroDivisionError):
+    return None
+
+
 async def _record_auto_trade_fill(event: dict) -> None:
   position_id = event.get("position_id")
-  stream = str(event.get("stream") or "").strip()
+  stream = _resolve_auto_trade_stream(event)
   if position_id is None or stream not in {"algo_auto", "algo_manual"}:
     return
   group_id = str(event.get("group_id") or position_id)
   trade_key = f"algo:{group_id}"
   candidate_id = str(event.get("candidate_id") or "")
+  symbol = str(event.get("symbol") or "XAU").upper()
+  stop_pips = _resolve_fill_stop_pips(event, symbol)
   async with _connect() as db:
     if stream == "algo_manual" and candidate_id:
       signal_id = await db.fetchval(
@@ -616,8 +657,8 @@ async def _record_auto_trade_fill(event: dict) -> None:
         volume = COALESCE(excluded.volume, auto_trade_fills.volume)
       """,
       int(position_id), group_id, trade_key, stream,
-      str(event.get("symbol") or "XAU").upper(), event.get("setup"),
-      event.get("direction"), event.get("price"), event.get("stop_pips"),
+      symbol, event.get("setup"),
+      event.get("direction"), event.get("price"), stop_pips,
       event.get("volume"), int(event.get("timestamp") or time.time()),
     )
 

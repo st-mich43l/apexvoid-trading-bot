@@ -474,10 +474,13 @@ public sealed class TradePlanRuntime(
     }
     // Mirror V6 AutoTradeEngine: when deal history cannot confirm OrderType
     // but the exit prints at the protective stop, treat it as an SL/TP hit
-    // so ordinary stop-outs do not stall in recovery_required.
+    // so ordinary stop-outs do not stall in recovery_required. Prefer the
+    // deal fill when present; otherwise use the live group stop (BE/trail).
+    var exit = lookup.ExecutionPrice
+      ?? (state.CurrentStop != 0 ? state.CurrentStop : null);
     if (
-      lookup.ExecutionPrice is decimal exit
-      && LooksLikeProtectiveStopHit(plan, state, exit)
+      exit is decimal exitPrice
+      && LooksLikeProtectiveStopHit(plan, state, exitPrice)
     )
     {
       return PositionCloseReason.StopLossOrTakeProfit;
@@ -1085,6 +1088,7 @@ public sealed class TradePlanRuntime(
         TargetPips: targetPips,
         Volume: volume,
         StopLoss: plan.Stop.Price,
+        Stream: "algo_auto",
         GroupId: plan.PlanId,
         PreviousState: previousState,
         State: state,
@@ -1869,7 +1873,9 @@ public sealed class TradePlanRuntime(
             );
             lastExecution = execution;
             closedTotal += execution.ExecutedVolume;
-            perLegCloses.Add($"{openLegs[i].LegId}={execution.ExecutedVolume}");
+            perLegCloses.Add(
+              $"{openLegs[i].LegId} lot={FormatEventLot(execution.ExecutedVolume)}"
+            );
             var idx = legs.FindIndex(leg => leg.LegId == openLegs[i].LegId);
             if (idx >= 0)
             {
@@ -1907,12 +1913,22 @@ public sealed class TradePlanRuntime(
         var totalLegs = legs.Count(leg => leg.BrokerPositionId is not null);
         log(
           $"v7 target hit id={plan.PlanId} target={target.TargetId} "
-          + $"volume={closedTotal} remaining={remainingAfter}"
+          + $"lot={closedTotal} remaining={remainingAfter}"
         );
-        var tpMessage = remainingAfter <= 0
-          ? $"TP1 COMPLETED {target.TargetId} closed {string.Join(" ", perLegCloses)}; PLAN CLOSED"
-          : $"TP1 COMPLETED {target.TargetId} closed {string.Join(" ", perLegCloses)} "
-            + $"remaining={remainingAfter} ({openCount}/{Math.Max(totalLegs, 1)})";
+        string tpMessage;
+        if (remainingAfter <= 0)
+        {
+          // Final close: report highest TP archived only — no per-leg dump.
+          tpMessage =
+            $"PLAN CLOSED · highest TP archived {target.TargetId}";
+        }
+        else
+        {
+          tpMessage =
+            $"TP COMPLETED {target.TargetId} closed {string.Join(" ", perLegCloses)} "
+            + $"remaining lot={FormatEventLot(remainingAfter)} "
+            + $"({openCount}/{Math.Max(totalLegs, 1)})";
+        }
         await PublishEventAsync(
           remainingAfter <= 0 ? "position_closed" : "tp_booked",
           tpMessage,
@@ -1929,18 +1945,6 @@ public sealed class TradePlanRuntime(
             : TradePlanGroupStages.PartiallyClosed,
           remainingVolume: remainingAfter
         );
-        if (remainingAfter <= 0)
-        {
-          await PublishEventAsync(
-            "position_closed",
-            "PLAN CLOSED",
-            plan,
-            cancellationToken,
-            positionId: state.PositionId,
-            eventKey: "plan_closed",
-            state: TradePlanGroupStages.Closed
-          );
-        }
         state = AggregateState(
           state with
           {
@@ -2225,10 +2229,20 @@ public sealed class TradePlanRuntime(
         }
       );
       await PersistStateAsync(next, cancellationToken);
-      var slMessage = exitHint is decimal exit
-        ? $"GROUP STOP LOSS ({closedCount}/{Math.Max(totalTracked, 1)}) "
-          + $"@ {FormatEventPrice(exit, symbol)}"
-        : $"GROUP STOP LOSS ({closedCount}/{Math.Max(totalTracked, 1)})";
+      var highestTp = HighestArchivedTargetId(plan, state);
+      string slMessage;
+      if (highestTp is not null)
+      {
+        slMessage = exitHint is decimal exitPrice
+          ? $"PLAN CLOSED · highest TP archived {highestTp} · @ {FormatEventPrice(exitPrice, symbol)}"
+          : $"PLAN CLOSED · highest TP archived {highestTp}";
+      }
+      else
+      {
+        slMessage = exitHint is decimal exitPrice
+          ? $"PLAN CLOSED · no TP archived · @ {FormatEventPrice(exitPrice, symbol)}"
+          : "PLAN CLOSED · no TP archived";
+      }
       await PublishEventAsync(
         "position_closed",
         slMessage,
@@ -2237,15 +2251,6 @@ public sealed class TradePlanRuntime(
         positionId: state.PositionId,
         price: exitHint,
         eventKey: "group_stop_loss",
-        state: TradePlanGroupStages.Closed
-      );
-      await PublishEventAsync(
-        "position_closed",
-        "PLAN CLOSED",
-        plan,
-        cancellationToken,
-        positionId: state.PositionId,
-        eventKey: "plan_closed",
         state: TradePlanGroupStages.Closed
       );
       await PersistPlanExecutionStateAsync(
@@ -2710,6 +2715,23 @@ public sealed class TradePlanRuntime(
       }
     }
     return -1;
+  }
+
+  /// <summary>
+  /// Highest take-profit already booked before this close.
+  /// NextTargetIndex is the next target to hit, so archived count is that index.
+  /// </summary>
+  private static string? HighestArchivedTargetId(
+    TradePlan plan,
+    TradePlanRuntimeState state
+  )
+  {
+    if (state.NextTargetIndex <= 0 || plan.Targets.Count == 0)
+    {
+      return null;
+    }
+    var index = Math.Min(state.NextTargetIndex, plan.Targets.Count) - 1;
+    return plan.Targets[index].TargetId;
   }
 }
 

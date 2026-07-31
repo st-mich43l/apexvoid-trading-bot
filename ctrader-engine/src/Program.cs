@@ -11,6 +11,8 @@ public static class Program
       return HealthFile.Check(path, TimeSpan.FromMinutes(10));
     }
 
+    DailyFileLog.Install();
+
     var resetTokenCache = args.Contains(
       "--reset-token-cache",
       StringComparer.OrdinalIgnoreCase

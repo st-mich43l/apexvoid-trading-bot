@@ -524,20 +524,9 @@ public sealed class CTraderOpenApiFeedClient : ICTraderFeedClient, ICTraderTrade
   {
     try
     {
-      var approximateCloseMs = approximateCloseTimestamp * 1000L;
-      var defaultLookbackMs = (long)TimeSpan.FromMinutes(15).TotalMilliseconds;
-      var maxLookbackMs = (long)TimeSpan.FromDays(7).TotalMilliseconds;
-      // A missed reconcile window (eg. a redeploy gap between the position's
-      // last known activity and the next confirmed-missing check) can leave
-      // the true close far earlier than a fixed window before confirmation -
-      // reach back to when the position actually opened, capped so a single
-      // request can never span an unbounded amount of history.
-      var openedAtMs = openedAtTimestamp > 0 ? openedAtTimestamp * 1000L : 0L;
-      var fromTimestamp = Math.Max(
-        approximateCloseMs - maxLookbackMs,
-        openedAtMs > 0
-          ? Math.Min(openedAtMs, approximateCloseMs - defaultLookbackMs)
-          : approximateCloseMs - defaultLookbackMs
+      var (fromTimestamp, toTimestamp) = BuildDealListWindow(
+        openedAtTimestamp,
+        approximateCloseTimestamp
       );
       var dealsResponse = await SendAndWaitAsync<ProtoOADealListByPositionIdRes>(
         new ProtoOADealListByPositionIdReq
@@ -545,7 +534,7 @@ public sealed class CTraderOpenApiFeedClient : ICTraderFeedClient, ICTraderTrade
           CtidTraderAccountId = options.AccountId,
           PositionId = positionId,
           FromTimestamp = fromTimestamp,
-          ToTimestamp = approximateCloseMs + (long)TimeSpan.FromMinutes(1).TotalMilliseconds,
+          ToTimestamp = toTimestamp,
         },
         res => res.CtidTraderAccountId == options.AccountId,
         cancellationToken
@@ -558,13 +547,20 @@ public sealed class CTraderOpenApiFeedClient : ICTraderFeedClient, ICTraderTrade
       {
         Log(
           $"position_close_reason_unknown position_id={positionId} "
-            + $"reason=no_closing_deal_found window={fromTimestamp}-{approximateCloseMs}"
+            + $"reason=no_closing_deal_found window={fromTimestamp}-{toTimestamp}"
         );
         return new PositionCloseLookup(PositionCloseReason.Unknown);
       }
       var executionPrice = Convert.ToDecimal(closingDeal.ExecutionPrice);
-      var bracketStart = closingDeal.ExecutionTimestamp - 5_000;
-      var bracketEnd = closingDeal.ExecutionTimestamp + 5_000;
+      var bracketStart = Math.Max(0L, closingDeal.ExecutionTimestamp - 5_000);
+      var bracketEnd = Math.Min(
+        MaxUnixMs,
+        closingDeal.ExecutionTimestamp + 5_000
+      );
+      if (bracketEnd <= bracketStart)
+      {
+        bracketEnd = Math.Min(MaxUnixMs, bracketStart + 10_000);
+      }
       var ordersResponse = await SendAndWaitAsync<ProtoOAOrderListRes>(
         new ProtoOAOrderListReq
         {
@@ -616,6 +612,58 @@ public sealed class CTraderOpenApiFeedClient : ICTraderFeedClient, ICTraderTrade
       );
       return new PositionCloseLookup(PositionCloseReason.Unknown);
     }
+  }
+
+  // cTrader rejects DealList/OrderList windows with INCORRECT_BOUNDARIES when
+  // from/to are inverted, negative, past the 2038 cap, or (for several list
+  // APIs) wider than one week. Keep every close-reason lookup inside that box.
+  internal const long MaxUnixMs = 2_147_483_646_000L;
+  internal static readonly long MaxDealListWindowMs =
+    (long)TimeSpan.FromDays(7).TotalMilliseconds - 60_000L;
+
+  internal static long ToUnixMilliseconds(long timestamp)
+  {
+    if (timestamp <= 0)
+    {
+      return 0;
+    }
+    // Values beyond year ~2286 in seconds are almost certainly already ms.
+    return timestamp > 10_000_000_000L ? timestamp : timestamp * 1000L;
+  }
+
+  internal static (long FromTimestamp, long ToTimestamp) BuildDealListWindow(
+    long openedAtTimestamp,
+    long approximateCloseTimestamp
+  )
+  {
+    var approximateCloseMs = ToUnixMilliseconds(approximateCloseTimestamp);
+    if (approximateCloseMs <= 0)
+    {
+      approximateCloseMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+    }
+    var openedAtMs = ToUnixMilliseconds(openedAtTimestamp);
+    var defaultLookbackMs = (long)TimeSpan.FromMinutes(15).TotalMilliseconds;
+    var toTimestamp = Math.Min(
+      MaxUnixMs,
+      approximateCloseMs + (long)TimeSpan.FromMinutes(1).TotalMilliseconds
+    );
+    var preferredFrom = openedAtMs > 0
+      ? Math.Min(openedAtMs, approximateCloseMs - defaultLookbackMs)
+      : approximateCloseMs - defaultLookbackMs;
+    var fromTimestamp = Math.Max(0L, preferredFrom);
+    if (toTimestamp - fromTimestamp > MaxDealListWindowMs)
+    {
+      fromTimestamp = Math.Max(0L, toTimestamp - MaxDealListWindowMs);
+    }
+    if (fromTimestamp >= toTimestamp)
+    {
+      fromTimestamp = Math.Max(0L, toTimestamp - defaultLookbackMs);
+    }
+    if (fromTimestamp >= toTimestamp)
+    {
+      fromTimestamp = Math.Max(0L, toTimestamp - 1_000L);
+    }
+    return (fromTimestamp, toTimestamp);
   }
 
   public async Task<IReadOnlyList<RawTrendbar>> GetTrendbarsAsync(

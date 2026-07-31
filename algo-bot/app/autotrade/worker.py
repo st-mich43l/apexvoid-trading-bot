@@ -56,6 +56,11 @@ from app.autotrade.execution_policy import (
   resolve_guard_mode,
   risk_multiplier_for_tier,
 )
+from app.autotrade.active_exposure import (
+  apply_same_direction_stack_sizing,
+  evaluate_entry_against_exposure,
+  load_active_exposures,
+)
 from app.autotrade.protective_stop import opposing_zone_fingerprint
 from app.autotrade.gate import (
   AutoScalpBox,
@@ -4162,9 +4167,26 @@ async def _record_v7_build_rejected(
     message=message,
     measured=measured,
   )
+  stop_detail = measured.get("stop_reject_detail")
+  stop_zone = None
+  zone_low = measured.get("stop_side_opposing_zone_low")
+  zone_high = measured.get("stop_side_opposing_zone_high")
+  if zone_low is not None and zone_high is not None:
+    stop_zone = f"{zone_low}-{zone_high}"
   log.info(
-    "v7 plan build rejected symbol=%s match_id=%s reason=%s message=%s",
-    symbol, match.match_id[:12], reason_code, message,
+    "v7 plan build rejected symbol=%s match_id=%s reason=%s message=%s "
+    "stop_detail=%s base_stop=%s pushed_stop=%s stop_zone=%s "
+    "max_pips=%s over_envelope_pips=%s",
+    symbol,
+    match.match_id[:12],
+    reason_code,
+    message,
+    stop_detail,
+    measured.get("planned_base_stop_price"),
+    measured.get("planned_pushed_stop_price"),
+    stop_zone,
+    measured.get("stop_max_envelope_pips"),
+    measured.get("pushed_over_envelope_pips"),
   )
 
 
@@ -5234,11 +5256,50 @@ async def _publish_trade_plan_v7(
     )
     # Overlap veto is preference telemetry — continue to publish.
 
+  exposures = await load_active_exposures(client)
+  exposure = evaluate_entry_against_exposure(
+    direction=match_for_plan.direction,
+    entry_price=float(entry_reference),
+    exposures=exposures,
+    min_price_separation=float(
+      getattr(settings, "auto_trade_opposing_active_min_price", 15.0)
+    ),
+    same_direction_size_fraction=float(
+      getattr(settings, "auto_trade_same_direction_stack_size_fraction", 0.60)
+    ),
+  )
+  if exposure.block:
+    await _release_claims()
+    await _record_v7_build_rejected(
+      client,
+      symbol,
+      match,
+      str(exposure.reason_code or "opposing_active_too_close"),
+      exposure.message,
+      dict(exposure.measured or {}),
+    )
+    return None
+  same_direction_stack = bool(exposure.same_direction_stack)
+  if same_direction_stack:
+    log.info(
+      "v7 same-direction stack symbol=%s match_id=%s %s",
+      symbol,
+      match.match_id[:12],
+      exposure.message,
+    )
+
   opposing_zone_low = (
     strategy_opposing_zone.low if strategy_opposing_zone is not None else None
   )
   opposing_zone_high = (
     strategy_opposing_zone.high if strategy_opposing_zone is not None else None
+  )
+  opposing_kwargs = _opposing_zone_policy_kwargs(
+    strategy_opposing_zone,
+    atr=float(match_for_plan.atr),
+    pip_size=float(units.pip_size(symbol)),
+    symbol=symbol,
+    timeframe=str(match_for_plan.source_tf or "M5"),
   )
   try:
     plan = build_trade_plan_from_strategy_match(
@@ -5250,12 +5311,13 @@ async def _publish_trade_plan_v7(
       spot_price=spot.price,
       regime=None if regime is None else regime.state,
       cfg=settings,
-      opposing_zone_low=opposing_zone_low,
-      opposing_zone_high=opposing_zone_high,
-      opposing_zone_id=(
-        None if strategy_opposing_zone is None
-        else getattr(strategy_opposing_zone, "id", None)
+      opposing_zone_low=opposing_kwargs.get(
+        "opposing_zone_low", opposing_zone_low,
       ),
+      opposing_zone_high=opposing_kwargs.get(
+        "opposing_zone_high", opposing_zone_high,
+      ),
+      opposing_zone_id=opposing_kwargs.get("opposing_zone_id"),
       executable_quote=entry_reference,
       confirmation_source=confirmation.source,
       execution_confirmation_bar_ts=confirmation.bar_ts,
@@ -5265,6 +5327,10 @@ async def _publish_trade_plan_v7(
         settings, "auto_trade_v7_max_volume", _V7_MAX_VOLUME_DEFAULT,
       )),
       now_ts=now_ts,
+      same_direction_stack=same_direction_stack,
+      same_direction_size_fraction=float(
+        getattr(settings, "auto_trade_same_direction_stack_size_fraction", 0.60)
+      ),
     )
   except TradePlanBuildRejected as exc:
     await _release_claims()
@@ -6636,26 +6702,6 @@ async def _common_preflight(
       message="intent waits for a fresh cTrader quote",
       subject=subject,
     )
-  if intent.is_initial:
-    opposing = await _active_opposite_initial_group(
-      client,
-      direction=intent.direction,
-    )
-    if opposing is not None:
-      return _preflight_decision(
-        intent,
-        executable=False,
-        terminal=True,
-        stage="candidate_claim",
-        reason_code="opposite_initial_group_active",
-        message="opposite autonomous initial group is already active",
-        measured={
-          "active_direction": _normalize_trade_direction(opposing.get("direction")),
-          "active_group_id": opposing.get("group_id"),
-          "active_position_id": opposing.get("position_id"),
-        },
-        subject=subject,
-      )
   direction_for_quote = str(getattr(subject, "direction", intent.direction))
   executable_quote = _executable_spot_price(spot, direction_for_quote)
   policy = evaluate_execution_policy(
@@ -6666,6 +6712,60 @@ async def _common_preflight(
     pip_size=units.pip_size(intent.symbol),
     cfg=settings,
   )
+  policy_measured = dict(policy.measured)
+  if intent.is_initial:
+    exposures = await load_active_exposures(client)
+    entry_low = getattr(subject, "entry_low", None)
+    entry_high = getattr(subject, "entry_high", None)
+    entry_reference = float(
+      policy_measured.get("planned_entry_price")
+      or getattr(subject, "current_price", None)
+      or spot.price
+      or 0
+    )
+    try:
+      if entry_low is not None and entry_high is not None:
+        entry_reference = float(
+          policy_measured.get("planned_entry_price")
+          or ((float(entry_low) + float(entry_high)) / 2.0)
+        )
+    except (TypeError, ValueError):
+      pass
+    exposure = evaluate_entry_against_exposure(
+      direction=intent.direction,
+      entry_price=float(entry_reference or 0),
+      exposures=exposures,
+      min_price_separation=float(
+        getattr(settings, "auto_trade_opposing_active_min_price", 15.0)
+      ),
+      same_direction_size_fraction=float(
+        getattr(settings, "auto_trade_same_direction_stack_size_fraction", 0.60)
+      ),
+    )
+    if exposure.block:
+      return _preflight_decision(
+        intent,
+        executable=False,
+        terminal=True,
+        stage="candidate_claim",
+        reason_code=str(exposure.reason_code or "opposing_active_too_close"),
+        message=exposure.message,
+        measured={
+          **policy_measured,
+          **(exposure.measured or {}),
+        },
+        policy=policy.policy,
+        subject=subject,
+      )
+    if exposure.same_direction_stack:
+      policy_measured = apply_same_direction_stack_sizing(
+        policy_measured,
+        size_fraction=float(
+          getattr(settings, "auto_trade_same_direction_stack_size_fraction", 0.60)
+        ),
+      )
+      policy_measured.update(exposure.measured or {})
+  policy = replace(policy, measured=policy_measured)
   if not policy.allowed:
     return _preflight_decision(
       intent,
@@ -6674,7 +6774,7 @@ async def _common_preflight(
       stage="policy",
       reason_code=policy.reason_code,
       message=policy.message,
-      measured=policy.measured,
+      measured=policy_measured,
       policy=policy.policy,
       subject=subject,
     )

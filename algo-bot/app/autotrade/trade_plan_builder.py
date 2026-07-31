@@ -237,6 +237,8 @@ def build_trade_plan_from_strategy_match(
   trigger_wick_extreme: float | None = None,
   now_ts: int | None = None,
   approved_measured: Mapping[str, Any] | None = None,
+  same_direction_stack: bool = False,
+  same_direction_size_fraction: float = 0.60,
 ) -> TradePlan:
   """Translate a CONFIRMED StrategyMatch into a TradePlan V7.
 
@@ -318,10 +320,25 @@ def build_trade_plan_from_strategy_match(
     # on the measured payload and never deny publication. Hard contract
     # failures (missing route/stop) still reject below.
     measured = dict(evaluation.measured)
+  if same_direction_stack:
+    from app.autotrade.active_exposure import apply_same_direction_stack_sizing
+
+    measured = apply_same_direction_stack_sizing(
+      measured,
+      size_fraction=same_direction_size_fraction,
+    )
   if measured.get("planned_stop_error"):
+    stop_error = str(measured["planned_stop_error"])
+    known_stop_errors = {
+      "stop_exceeds_envelope_after_wick",
+      "stop_exceeds_max_envelope",
+      "stop_inside_opposing_zone",
+      "stop_inside_entry_zone",
+      "stop_not_beyond_planned_entries",
+    }
     raise TradePlanBuildRejected(
-      "protective_stop_unavailable",
-      str(measured["planned_stop_error"]),
+      stop_error if stop_error in known_stop_errors else "protective_stop_unavailable",
+      stop_error,
       measured,
     )
   if "planned_stop_price" not in measured:

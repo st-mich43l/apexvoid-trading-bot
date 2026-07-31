@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import json
 import logging
 from zoneinfo import ZoneInfo
 
@@ -20,7 +21,7 @@ from app.analysis.market_map import (
   render_market_map,
 )
 from app.core.symbols import SYMBOLS
-from app.bot.client import send_scanner_with_retry
+from app.bot.client import delete_scanner_message, send_scanner_with_retry
 from app.autotrade.map_strategy import market_map_display_key
 
 log = logging.getLogger(__name__)
@@ -28,6 +29,7 @@ log = logging.getLogger(__name__)
 _META_SCAN_KEY = "last_map_scan"
 _META_MAP_PREFIX = "last_market_map"
 _LOOP_INTERVAL_SECONDS = 60
+_MARKET_MAP_TELEGRAM_TTL_SECONDS = 7 * 24 * 3600
 
 
 @dataclass(frozen=True)
@@ -58,6 +60,10 @@ def cache_analysis(
 
 def clear_market_map_cache() -> None:
   _cache.clear()
+
+
+def market_map_telegram_key(symbol: str) -> str:
+  return f"auto_trade:market_map_telegram:{symbol.upper()}"
 
 
 async def get_current_market_map(symbol: str) -> MarketMap | None:
@@ -107,7 +113,7 @@ async def send_current_market_map(
   local_tz = ZoneInfo(settings.seq_reset_tz)
   display_now = now.astimezone(local_tz) if now else datetime.now(local_tz)
   text = render_market_map(market_map, symbol, display_now, settings)
-  await send_scanner_with_retry(text, chat_id=settings.telegram_owner_id)
+  await _replace_owner_market_map_message(symbol, text)
   await _remember_displayed_map(symbol, market_map)
   return True
 
@@ -156,7 +162,7 @@ async def _market_map_scan_tick(now: datetime | None = None) -> bool:
       continue
     display_now = now.astimezone(ZoneInfo(settings.seq_reset_tz))
     text = render_market_map(market_map, symbol, display_now, settings)
-    await send_scanner_with_retry(text, chat_id=settings.telegram_owner_id)
+    await _replace_owner_market_map_message(symbol, text)
     await _remember_displayed_map(symbol, market_map)
     await set_meta(payload_key, market_map_payload(market_map))
     sent = True
@@ -178,6 +184,59 @@ async def market_map_scan_loop() -> None:
     except Exception:
       log.exception("Market Map periodic delivery failed")
     await asyncio.sleep(_LOOP_INTERVAL_SECONDS)
+
+
+async def _replace_owner_market_map_message(symbol: str, text: str) -> None:
+  """Send the latest owner map and delete the previous Telegram message."""
+  chat_id = int(settings.telegram_owner_id)
+  client = redis_state.get_client()
+  key = market_map_telegram_key(symbol)
+  previous = await _load_market_map_telegram(client, key)
+  if previous is not None:
+    try:
+      await delete_scanner_message(previous["chat_id"], previous["message_id"])
+    except Exception:
+      log.info(
+        "previous market map delete failed symbol=%s chat_id=%s message_id=%s",
+        symbol,
+        previous["chat_id"],
+        previous["message_id"],
+        exc_info=True,
+      )
+  sent = await send_scanner_with_retry(text, chat_id=chat_id)
+  await client.set(
+    key,
+    json.dumps(
+      {
+        "chat_id": chat_id,
+        "message_id": int(sent.message_id),
+        "updated_at": int(datetime.now(timezone.utc).timestamp()),
+      },
+      separators=(",", ":"),
+    ),
+    ex=_MARKET_MAP_TELEGRAM_TTL_SECONDS,
+  )
+
+
+async def _load_market_map_telegram(client, key: str) -> dict | None:
+  raw = await client.get(key)
+  if not raw:
+    return None
+  text = raw.decode() if isinstance(raw, bytes) else str(raw)
+  try:
+    data = json.loads(text)
+  except (TypeError, ValueError, json.JSONDecodeError):
+    return None
+  if not isinstance(data, dict):
+    return None
+  try:
+    chat_id = int(data["chat_id"])
+    message_id = int(data["message_id"])
+  except (KeyError, TypeError, ValueError):
+    return None
+  if message_id <= 0:
+    return None
+  return {"chat_id": chat_id, "message_id": message_id}
 
 
 async def _remember_displayed_map(
