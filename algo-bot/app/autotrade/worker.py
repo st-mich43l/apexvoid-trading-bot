@@ -65,6 +65,7 @@ from app.autotrade.strategy_match import (
   StrategyMatch,
   strategy_match_key,
 )
+from app.autotrade.strategy_taxonomy import is_reaction_strategy
 from app.autotrade.structural_target_room import (
   evaluate_structural_target_room,
   filter_displaced_opposing_entries,
@@ -4084,14 +4085,8 @@ async def _publish_strategy_match(
     group_id=group_id,
     executor_event_id=executor_event_id,
   )
-  if match.strategy in {
-    "Key Level Reaction",
-    "Demand Zone Reaction",
-    "Supply Zone Reaction",
-    "Session Level Reaction",
-    "Trendline Reaction",
-  } or match.family in {
-    "key_level", "supply_demand", "session_level", "trendline",
+  if is_reaction_strategy(match.strategy) or match.family in {
+    "key_level", "session_level", "trendline",
   }:
     await increment_metric(
       client, "structural_reaction_candidate_published", symbol=symbol,
@@ -8605,7 +8600,9 @@ async def _handle_event(
   return decision
 
 
-PUBLISH_STATUS_PUBLISHED = "published"
+PUBLISH_STATUS_EXECUTION_HANDOFF_CREATED = "execution_handoff_created"
+# Compat alias — older call sites / tests still reference PUBLISHED.
+PUBLISH_STATUS_PUBLISHED = PUBLISH_STATUS_EXECUTION_HANDOFF_CREATED
 PUBLISH_STATUS_REMAINED_WATCHING = "remained_watching"
 PUBLISH_STATUS_INVALIDATED = "invalidated"
 PUBLISH_STATUS_REJECTED = "rejected"
@@ -8692,10 +8689,38 @@ async def try_publish_executable_signal(
     executable_quote = spot.ask if match.direction == "BUY" else spot.bid
 
   if plan_state == "published":
+    zone_id_for_lock = zone_id
+    if zone_id_for_lock:
+      try:
+        from app.autotrade.zone_watch import (
+          LOCKED_ZONE_WATCH_STATES,
+          TERMINAL_ZONE_WATCH_STATES,
+          load_zone_watch,
+          lock_zone_watch_published,
+        )
+
+        latest = await load_zone_watch(client, zone_id_for_lock)
+        if (
+          latest is not None
+          and latest.state not in TERMINAL_ZONE_WATCH_STATES
+          and latest.state not in LOCKED_ZONE_WATCH_STATES
+        ):
+          await lock_zone_watch_published(
+            client,
+            zone_id_for_lock,
+            plan_id=plan_id,
+            reason_code=reason_code or "execution_handoff_created",
+          )
+      except Exception:
+        log.exception(
+          "zone watch publish lock failed zone_id=%s plan_id=%s",
+          zone_id_for_lock,
+          plan_id,
+        )
     return PublishResult(
-      status=PUBLISH_STATUS_PUBLISHED,
+      status=PUBLISH_STATUS_EXECUTION_HANDOFF_CREATED,
       plan_id=plan_id,
-      reason_code=reason_code or "candidate_published",
+      reason_code=reason_code or "execution_handoff_created",
       zone_id=zone_id,
       setup_id=setup_id,
       measured=measured,

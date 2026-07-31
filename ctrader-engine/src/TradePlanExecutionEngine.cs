@@ -76,6 +76,8 @@ public static class TradePlanExecutionEngine
         new TradePlanEntryDecision(TradePlanEntryAction.SubmitLimit),
       TradePlanContract.EntryTypeLimitLadder =>
         new TradePlanEntryDecision(TradePlanEntryAction.SubmitLadder),
+      TradePlanContract.EntryTypeMarketWithLimitScale =>
+        new TradePlanEntryDecision(TradePlanEntryAction.SubmitLadder),
       _ => new TradePlanEntryDecision(TradePlanEntryAction.Wait, "unknown_entry_type"),
     };
   }
@@ -202,7 +204,10 @@ public static class TradePlanExecutionEngine
       );
     }
 
-    if (plan.Entry.Type != TradePlanContract.EntryTypeLimitLadder)
+    if (
+      plan.Entry.Type is not TradePlanContract.EntryTypeLimitLadder
+        and not TradePlanContract.EntryTypeMarketWithLimitScale
+    )
     {
       // market_watch and single_limit submit the full volume as one order
       // (TotalVolume) - no per-slice split exists to compute.
@@ -212,7 +217,7 @@ public static class TradePlanExecutionEngine
     if (legs.Count == 0)
     {
       throw new TradePlanContractException(
-        "limit_ladder entry requires at least one leg"
+        $"{plan.Entry.Type} entry requires at least one leg"
       );
     }
     IReadOnlyList<decimal> ratios =

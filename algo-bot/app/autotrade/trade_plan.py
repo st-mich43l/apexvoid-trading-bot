@@ -26,7 +26,17 @@ TRADE_PLAN_VERSION = 7
 ENTRY_TYPE_MARKET_WATCH = "market_watch"
 ENTRY_TYPE_SINGLE_LIMIT = "single_limit"
 ENTRY_TYPE_LIMIT_LADDER = "limit_ladder"
-ENTRY_TYPES = (ENTRY_TYPE_MARKET_WATCH, ENTRY_TYPE_SINGLE_LIMIT, ENTRY_TYPE_LIMIT_LADDER)
+ENTRY_TYPE_MARKET_WITH_LIMIT_SCALE = "market_with_limit_scale"
+ENTRY_TYPES = (
+  ENTRY_TYPE_MARKET_WATCH,
+  ENTRY_TYPE_SINGLE_LIMIT,
+  ENTRY_TYPE_LIMIT_LADDER,
+  ENTRY_TYPE_MARKET_WITH_LIMIT_SCALE,
+)
+
+ORDER_TYPE_MARKET = "market"
+ORDER_TYPE_LIMIT = "limit"
+ORDER_TYPES = (ORDER_TYPE_MARKET, ORDER_TYPE_LIMIT)
 
 DIRECTIONS = ("BUY", "SELL")
 
@@ -160,23 +170,38 @@ class TradePlanEntryLeg:
   leg_id: str
   price: Decimal
   volume_ratio: Decimal
+  # Optional: "market" | "limit". Required semantically for
+  # market_with_limit_scale (L1 market, L2 limit). Omitted on classic
+  # limit_ladder legs so the executor may use marketable-limit detection.
+  order_type: str | None = None
 
   def to_dict(self) -> dict:
-    return {
+    payload = {
       "leg_id": self.leg_id,
       "price": str(self.price),
       "volume_ratio": str(self.volume_ratio),
     }
+    if self.order_type is not None:
+      payload["order_type"] = self.order_type
+    return payload
 
   @classmethod
   def from_dict(cls, data: Mapping[str, Any]) -> "TradePlanEntryLeg":
     ratio = _decimal(_require(data, "volume_ratio"), "entry.legs[].volume_ratio")
     if ratio <= 0:
       raise TradePlanError(f"entry.legs[].volume_ratio must be positive: {ratio}")
+    order_type = data.get("order_type")
+    if order_type is not None:
+      order_type = str(order_type)
+      if order_type not in ORDER_TYPES:
+        raise TradePlanError(
+          f"entry.legs[].order_type must be one of {ORDER_TYPES}: {order_type!r}",
+        )
     return cls(
       leg_id=str(_require(data, "leg_id")),
       price=_decimal(_require(data, "price"), "entry.legs[].price"),
       volume_ratio=ratio,
+      order_type=order_type,
     )
 
 
@@ -242,6 +267,27 @@ class TradePlanEntry:
       if abs(total_ratio - Decimal("1")) > Decimal("0.0001"):
         raise TradePlanError(
           f"limit_ladder entry.legs volume_ratio must sum to 1.0, got {total_ratio}",
+        )
+    elif entry_type == ENTRY_TYPE_MARKET_WITH_LIMIT_SCALE:
+      if len(legs) < 2:
+        raise TradePlanError(
+          "market_with_limit_scale entry requires at least two legs",
+        )
+      total_ratio = sum(leg.volume_ratio for leg in legs)
+      if abs(total_ratio - Decimal("1")) > Decimal("0.0001"):
+        raise TradePlanError(
+          "market_with_limit_scale entry.legs volume_ratio must sum to 1.0, "
+          f"got {total_ratio}",
+        )
+      first_type = legs[0].order_type or ORDER_TYPE_MARKET
+      second_type = legs[1].order_type or ORDER_TYPE_LIMIT
+      if first_type != ORDER_TYPE_MARKET:
+        raise TradePlanError(
+          "market_with_limit_scale L1 order_type must be market",
+        )
+      if second_type != ORDER_TYPE_LIMIT:
+        raise TradePlanError(
+          "market_with_limit_scale L2 order_type must be limit",
         )
 
     return cls(

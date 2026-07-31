@@ -23,17 +23,22 @@ Wired into worker.py's live publish path behind AUTO_TRADE_CONTRACT_MODE
 from __future__ import annotations
 
 from decimal import Decimal, ROUND_HALF_UP
-from typing import Any, Sequence
+from typing import Any, Mapping, Sequence
 
 from app.analysis.structural_reaction_support import v7_thesis_id
 from app.autotrade.execution_policy import evaluate_execution_policy
 from app.autotrade.strategy_match import StrategyMatch
 from app.autotrade.trade_plan import (
+  ENTRY_TYPE_LIMIT_LADDER,
+  ENTRY_TYPE_MARKET_WATCH,
+  ENTRY_TYPE_MARKET_WITH_LIMIT_SCALE,
+  ENTRY_TYPE_SINGLE_LIMIT,
+  ORDER_TYPE_LIMIT,
+  ORDER_TYPE_MARKET,
   TradePlan,
   TradePlanAnalysis,
   TradePlanEntry,
   TradePlanEntryLeg,
-  TradePlanError,
   TradePlanExecutionPolicy,
   TradePlanManagement,
   TradePlanProvenance,
@@ -80,6 +85,18 @@ def _equal_close_ratios(count: int) -> tuple[Decimal, ...]:
   return tuple(ratios)
 
 
+def _is_approved_policy_measured(measured: Mapping[str, Any]) -> bool:
+  """True when measured already carries a final execution-policy decision."""
+  if not measured:
+    return False
+  if measured.get("planned_stop_error"):
+    return False
+  has_stop = measured.get("planned_stop_price") is not None
+  has_route = bool(measured.get("planned_execution_route"))
+  has_entry = measured.get("planned_entry_price") is not None
+  return bool(has_stop and (has_route or has_entry))
+
+
 def _build_entry(
   *,
   route: str,
@@ -92,7 +109,7 @@ def _build_entry(
 ) -> TradePlanEntry:
   if route == "market":
     return TradePlanEntry(
-      type="market_watch",
+      type=ENTRY_TYPE_MARKET_WATCH,
       expires_at=expires_at,
       zone_low=Decimal(str(match.entry_low)),
       zone_high=Decimal(str(match.entry_high)),
@@ -103,9 +120,47 @@ def _build_entry(
     )
   if route == "single_limit":
     return TradePlanEntry(
-      type="single_limit",
+      type=ENTRY_TYPE_SINGLE_LIMIT,
       expires_at=expires_at,
       order_price=Decimal(str(measured["planned_entry_price"])),
+      max_spread_ticks=max_spread_ticks,
+      max_slippage_ticks=max_slippage_ticks,
+    )
+  if route == "market_with_limit_scale":
+    leg_prices = measured.get("planned_leg_entry_prices") or []
+    if len(leg_prices) < 2:
+      raise TradePlanBuildRejected(
+        "empty_reaction_scale_legs",
+        "market_with_limit_scale route resolved with fewer than two leg prices",
+        measured,
+      )
+    custom_ratios = measured.get("planned_leg_volume_ratios") or []
+    if custom_ratios and len(custom_ratios) == len(leg_prices):
+      ratios = [Decimal(str(value)) for value in custom_ratios]
+      ratios[-1] += Decimal("1") - sum(ratios)
+    else:
+      ratios = [Decimal("0.70"), Decimal("0.30")]
+      if len(leg_prices) != 2:
+        ratio = (Decimal("1") / len(leg_prices)).quantize(
+          Decimal("0.0001"), rounding=ROUND_HALF_UP,
+        )
+        ratios = [ratio] * len(leg_prices)
+        ratios[-1] += Decimal("1") - ratio * len(leg_prices)
+    legs = tuple(
+      TradePlanEntryLeg(
+        leg_id=f"L{index + 1}",
+        price=Decimal(str(price)),
+        volume_ratio=leg_ratio,
+        order_type=ORDER_TYPE_MARKET if index == 0 else ORDER_TYPE_LIMIT,
+      )
+      for index, (price, leg_ratio) in enumerate(zip(leg_prices, ratios))
+    )
+    return TradePlanEntry(
+      type=ENTRY_TYPE_MARKET_WITH_LIMIT_SCALE,
+      expires_at=expires_at,
+      zone_low=Decimal(str(match.entry_low)),
+      zone_high=Decimal(str(match.entry_high)),
+      legs=legs,
       max_spread_ticks=max_spread_ticks,
       max_slippage_ticks=max_slippage_ticks,
     )
@@ -139,7 +194,7 @@ def _build_entry(
       for index, (price, leg_ratio) in enumerate(zip(leg_prices, ratios))
     )
     return TradePlanEntry(
-      type="limit_ladder",
+      type=ENTRY_TYPE_LIMIT_LADDER,
       expires_at=expires_at,
       legs=legs,
       max_spread_ticks=max_spread_ticks,
@@ -181,6 +236,7 @@ def build_trade_plan_from_strategy_match(
   zone_episode_id: str | None = None,
   trigger_wick_extreme: float | None = None,
   now_ts: int | None = None,
+  approved_measured: Mapping[str, Any] | None = None,
 ) -> TradePlan:
   """Translate a CONFIRMED StrategyMatch into a TradePlan V7.
 
@@ -189,6 +245,10 @@ def build_trade_plan_from_strategy_match(
   caller (worker.py) is expected to record the reason_code the same way it
   already does for V6 gate rejections, never let this raise past a bare
   `except Exception: pass`.
+
+  When ``approved_measured`` already carries a final policy decision
+  (planned stop + route/entry), this function translates that decision and
+  does not re-run ``evaluate_execution_policy``.
 
   ``now_ts`` re-anchors the published plan's entry/plan expiry to actual
   publication time. Live incident: match.expires_at is set once, when the
@@ -240,23 +300,27 @@ def build_trade_plan_from_strategy_match(
   direction = match.direction
   pip = float(pip_size)
 
-  evaluation = evaluate_execution_policy(
-    match,
-    spot_price=spot_price,
-    regime=regime,
-    pip_size=pip,
-    cfg=cfg,
-    opposing_zone_low=opposing_zone_low,
-    opposing_zone_high=opposing_zone_high,
-    opposing_zone_id=opposing_zone_id,
-    executable_quote=executable_quote,
-    trigger_wick_extreme=trigger_wick_extreme,
-  )
-  if not evaluation.allowed:
-    raise TradePlanBuildRejected(
-      evaluation.reason_code, evaluation.message, evaluation.measured,
+  evaluation = None
+  if approved_measured is not None and _is_approved_policy_measured(approved_measured):
+    measured = dict(approved_measured)
+  else:
+    evaluation = evaluate_execution_policy(
+      match,
+      spot_price=spot_price,
+      regime=regime,
+      pip_size=pip,
+      cfg=cfg,
+      opposing_zone_low=opposing_zone_low,
+      opposing_zone_high=opposing_zone_high,
+      opposing_zone_id=opposing_zone_id,
+      executable_quote=executable_quote,
+      trigger_wick_extreme=trigger_wick_extreme,
     )
-  measured = evaluation.measured
+    if not evaluation.allowed:
+      raise TradePlanBuildRejected(
+        evaluation.reason_code, evaluation.message, evaluation.measured,
+      )
+    measured = evaluation.measured
   if measured.get("planned_stop_error"):
     raise TradePlanBuildRejected(
       "protective_stop_unavailable",
@@ -377,7 +441,9 @@ def build_trade_plan_from_strategy_match(
   )
 
   first_leg_fraction = Decimal(str(
-    getattr(cfg, "auto_trade_zone_scale_first_leg_fraction", 0.70) or 0.70
+    getattr(cfg, "auto_trade_reaction_market_fraction", None)
+    or getattr(cfg, "auto_trade_zone_scale_first_leg_fraction", 0.70)
+    or 0.70
   ))
   if entry.legs:
     leg_ratios = tuple(leg.volume_ratio for leg in entry.legs)
@@ -407,8 +473,14 @@ def build_trade_plan_from_strategy_match(
     risk=risk,
     management=management,
     execution_policy=TradePlanExecutionPolicy(
-      allow_market=entry.type == "market_watch",
-      allow_limit=entry.type in {"single_limit", "limit_ladder"},
+      allow_market=entry.type in {
+        ENTRY_TYPE_MARKET_WATCH, ENTRY_TYPE_MARKET_WITH_LIMIT_SCALE,
+      },
+      allow_limit=entry.type in {
+        ENTRY_TYPE_SINGLE_LIMIT,
+        ENTRY_TYPE_LIMIT_LADDER,
+        ENTRY_TYPE_MARKET_WITH_LIMIT_SCALE,
+      },
       allow_partial_fill=True,
       cancel_on_expiry=True,
     ),

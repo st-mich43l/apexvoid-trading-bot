@@ -300,13 +300,11 @@ _DEFAULT_POLICIES: dict[str, ExecutionPolicy] = {
     FAMILY_MAPPED_ZONE_REACTION, 2, 0.40, 10.0, 2.0, 0.6, 1.15, 1.0,
     "market", ("chop", "range", "trend", "breakout", "unknown"),
   ),
-  # Strict stop contracts require a concrete route. Reaction families use a
-  # DCA-into-zone scale ladder (owner spec, 2026-07): leg 1 (the configured
-  # first-leg fraction, default 70%) fills at the zone's proximal edge; the
-  # remainder only fills at a further, momentum-confirmed price deeper into
-  # the zone (a real resting limit order - it fills only if price actually
-  # travels there). A zone too narrow to qualify for the ladder falls back
-  # to a single entry at the computed price, same as before.
+  # Strict stop contracts require a concrete route. Key/Session/Trendline
+  # reaction families use market_with_limit_scale (L1 market 70% + L2 deeper
+  # limit 30%) when AUTO_TRADE_REACTION_SCALE_ENABLED. Demand/Supply keep the
+  # classic DCA limit_ladder zone_scale path and must not auto-select
+  # market_with_limit_scale.
   FAMILY_KEY_LEVEL: ExecutionPolicy(
     FAMILY_KEY_LEVEL, 2, 0.50, 12.0, 1.5, 0.55, 1.15, 1.0,
     "limit", ("chop", "range", "trend", "breakout", "unknown"),
@@ -503,6 +501,29 @@ def evaluate_execution_policy(
     ),
     scale_step_atr=float(
       getattr(cfg, "auto_trade_zone_scale_step_atr", 0.5) or 0.5
+    ),
+    reaction_scale_enabled=bool(
+      getattr(cfg, "auto_trade_reaction_scale_enabled", True)
+    ),
+    reaction_market_fraction=float(
+      getattr(cfg, "auto_trade_reaction_market_fraction", 0.70) or 0.70
+    ),
+    reaction_scale_fraction=float(
+      getattr(cfg, "auto_trade_reaction_scale_fraction", 0.30) or 0.30
+    ),
+    reaction_scale_step_atr=float(
+      getattr(cfg, "auto_trade_reaction_scale_step_atr", 0.5) or 0.5
+    ),
+    reaction_scale_invalid_policy=str(
+      getattr(
+        cfg, "auto_trade_reaction_scale_invalid_policy", "single_market",
+      ) or "single_market"
+    ),
+    strategy=str(getattr(match, "strategy", "") or ""),
+    strategy_family=str(
+      getattr(match, "family", None)
+      or getattr(match, "strategy_family", None)
+      or strategy_family(str(getattr(match, "strategy", "") or ""))
     ),
   )
   if not route_plan.valid:

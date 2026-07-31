@@ -91,6 +91,7 @@ from app.autotrade.setup_lifecycle import (
   transition_setup,
 )
 from app.autotrade.strategy_match_ready import enqueue_strategy_match_ready
+from app.autotrade.strategy_taxonomy import is_reaction_strategy
 from app.autotrade.setup_card import kill_setup_card
 from app.autotrade import worker as autotrade_worker
 
@@ -827,6 +828,15 @@ async def _sync_strategy_match(
           # (published, invalidated, or rejected) - never touch the
           # durable ready-stream for an outcome that is already final.
           continue
+        # Reaction strategies: never fall back to strategy_match_ready.
+        # Remained watching means retest/M1 timing still owns the zone;
+        # the next quote/M1 cycle retries direct publish.
+        if is_reaction_strategy(tracked.strategy):
+          continue
+      elif is_reaction_strategy(tracked.strategy):
+        # Direct publish disabled but still must not enqueue ready for
+        # the reaction family — remain analysis-only until enabled.
+        continue
       ready_event_id = await enqueue_strategy_match_ready(
         client,
         tracked,
@@ -1748,6 +1758,8 @@ def _reward_risk_pre_gate(
       "unknown_strategy_policy",
     }
     if reason in static_build_blocks:
+      # Truly unconstructable — retain as a hard observation block.
+      measured["match_build_observation"] = reason or "match_build_failed"
       return False, measured
     # Incomplete analysis context (for example ATR warmup) prevents match
     # construction but remains visible as a non-executable observation.
@@ -1770,6 +1782,8 @@ def _reward_risk_pre_gate(
     "policy_hard_block": bool(evaluation.terminal),
   }
   if not evaluation.allowed:
+    # Provisional policy denial is measured for ranking/telemetry only —
+    # never a scanner terminal reject. Final policy owns the decision.
     return False, measured
   reward_risk = measured.get("reward_risk")
   policy = evaluation.policy
@@ -2995,31 +3009,35 @@ async def _handle_event(
         else "rr_pre_gate"
       )
     )
-    eligibility_gated.append((result, reason, measured))
-    displayed_by_key[_telemetry_result_key(result)] = replace(
+    # Estimated R/R / provisional policy is telemetry only — never a
+    # terminal scanner hard-block. Final policy owns the execution decision.
+    watchable = replace(
       result,
       execution_eligibility=_static_execution_eligibility(
         result,
         current_map,
-        allowed=False,
+        allowed=True,
         reason_code=reason,
         message=(
-          "setup is statically analysis-only"
-          if measured.get("static_rejection_reason")
-          else str(measured.get("policy_message"))
-          if measured.get("policy_reason_code")
-          else "provisional reward/risk is below the strategy minimum"
+          "estimated reward/risk or provisional policy observed; "
+          "retained for watch / final policy"
         ),
-        measured=measured,
-        hard_block=bool(measured.get("policy_hard_block", True)),
+        measured={
+          **measured,
+          "rr_pre_gate_observation": True,
+          "estimated_eligible": False,
+        },
+        hard_block=False,
       ),
     )
+    reward_risk_eligible_results.append(watchable)
+    displayed_by_key[_telemetry_result_key(result)] = watchable
     await increment_metric(
-      client, "static_eligibility_blocked", symbol=symbol,
+      client, "static_eligibility_observed", symbol=symbol,
     )
     await increment_metric(client, reason, symbol=symbol)
     log.info(
-      "scanner result eligibility-gated symbol=%s tf=%s setup=%s "
+      "scanner result rr-pre-gate-observed symbol=%s tf=%s setup=%s "
       "direction=%s reason=%s reward_risk=%s minimum=%s",
       symbol,
       exec_tf,
