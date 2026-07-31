@@ -42,6 +42,7 @@ from app.autotrade.execution_policy import (
   GUARD_MODE_OBSERVE,
   GUARD_MODE_STRICT,
   OUTCOME_ALLOW,
+  OUTCOME_ALLOW_WITH_WARNING,
   OUTCOME_WAIT,
   ExecutionGuardDecision,
   GuardOutcome,
@@ -50,6 +51,7 @@ from app.autotrade.execution_policy import (
   classify_barrier_relationship,
   classify_guard_severity,
   evaluate_execution_policy,
+  is_preference_telemetry,
   max_entry_drift_pips,
   resolve_guard_mode,
   risk_multiplier_for_tier,
@@ -102,7 +104,6 @@ from app.autotrade.lifecycle import emit_lifecycle, increment_metric
 from app.analysis.structural_reaction_support import v7_thesis_id
 from app.autotrade.setup_lifecycle import (
   ARMED,
-  ARMED_WAITING_TRIGGER,
   CANCELLED,
   CONFIRMED,
   CONSUMED,
@@ -110,13 +111,13 @@ from app.autotrade.setup_lifecycle import (
   INVALIDATED,
   PLAN_BUILT,
   PLAN_PUBLISHED,
-  READY_EVENT_ENQUEUED,
   TERMINAL_STATES,
-  WORKER_ACKNOWLEDGED,
   SetupLifecycleError,
   active_thesis_key,
   claim_active_thesis,
+  is_publishable_setup_state,
   load_setup,
+  normalize_setup_state,
   release_active_thesis,
   transition_setup,
 )
@@ -151,7 +152,7 @@ from app.autotrade.trade_plan_stream import (
   read_plan_state,
 )
 from app.autotrade.route_outcome import record_route_outcome, route_outcome_key
-from app.autotrade.setup_card import save_forming_card_status
+from app.autotrade.setup_card import save_forming_card_status, edit_forming_card_stop
 from app.autotrade.reaction_identity import (
   THESIS_CLAIM_ACQUIRE_LUA,
   ACTIVE_THESIS_STATES,
@@ -1708,16 +1709,17 @@ def _adapt_counter_bias_target(
   if fitted is None:
     return match, GuardOutcome(
       "counter_bias",
-      "block",
+      OUTCOME_ALLOW_WITH_WARNING,
       "target_room_insufficient",
       (
-        f"counter-bias target blocked before EQ {target:.2f} by {description}: "
+        f"counter-bias target preference before EQ {target:.2f} by {description}: "
         f"room {room_pips:.1f}p does not fit the smallest configured target "
         f"({min(match.targets_pips) if match.targets_pips else 0}p)"
       ),
-      True,
+      False,
       measured={
         "target_outcome": "target_room_insufficient",
+        "preference_telemetry": True,
         "available_room_pips": round(room_pips, 1),
         "minimum_target_pips": (
           min(match.targets_pips)
@@ -3379,6 +3381,7 @@ async def _publish_strategy_match(
     match.direction, spot.price, htf_zones or [],
   )
   executable_quote = _executable_spot_price(spot, match.direction)
+  # Geometry measurement only — never a worker publication gate.
   policy_evaluation = evaluate_execution_policy(
     match,
     spot_price=spot.price,
@@ -3394,25 +3397,6 @@ async def _publish_strategy_match(
       timeframe=match.source_tf,
     ),
   )
-  if not policy_evaluation.allowed:
-    status = "blocked" if policy_evaluation.terminal else "waiting"
-    if policy_evaluation.terminal:
-      await _consume_strategy_match(client, symbol, match)
-    await route(
-      "policy",
-      status,
-      policy_evaluation.reason_code,
-      policy_evaluation.message,
-      measured=policy_evaluation.measured,
-      retained=not policy_evaluation.terminal,
-    )
-    await increment_metric(
-      client,
-      f"strategy_policy_{policy_evaluation.reason_code}",
-      symbol=symbol,
-    )
-    return None
-
   if (
     settings.auto_trade_opposing_barrier_veto_enabled
     or guard_mode == GUARD_MODE_OBSERVE
@@ -3718,18 +3702,22 @@ async def _publish_strategy_match(
     return None
   if guarded is not None:
     log.info(
-      "strategy match blocked by news symbol=%s strategy=%s event=%s",
+      "strategy match news-window preference observed symbol=%s "
+      "strategy=%s event=%s",
       symbol,
       match.strategy,
       guarded.get("title", "high-impact event"),
     )
     await route(
-      "news", "waiting", "news_window_active",
-      f"high-impact event: {guarded.get('title', 'unknown')}",
-      measured={"event": guarded.get("title")},
+      "news", "observed", "news_window_active",
+      f"high-impact event preference: {guarded.get('title', 'unknown')}",
+      measured={
+        "event": guarded.get("title"),
+        "preference_telemetry": True,
+      },
       retained=True,
     )
-    return None
+    # News window is preference telemetry — do not refuse publication.
 
   thesis_cycle = 1
   thesis_claim_existing: dict[str, Any] | None = None
@@ -4294,25 +4282,12 @@ async def _persist_v7_confirmation_phase(
       measured=measured,
     )
   elif state.phase == CONFIRMATION_PUBLISHED:
-    await _emit_setup_card_status(
-      client,
-      match,
-      status_line=(
-        "🟢 <b>PLAN PUBLISHED</b> · TradePlan V7 sent to executor"
-      ),
-      reason_code=reason_code,
-      message=message,
-      measured=measured,
-    )
+    # Standalone PLAN PUBLISHED status removed — root card already owns the
+    # published state via lifecycle/edit path.
+    pass
   else:
-    await _emit_setup_card_status(
-      client,
-      match,
-      status_line="🟡 <b>PREFLIGHT</b> · dynamic execution checks in progress",
-      reason_code=reason_code,
-      message=message,
-      measured=measured,
-    )
+    # PREFLIGHT lifecycle card status removed from the architecture.
+    pass
   log.info(
     "v7 execution confirmation symbol=%s setup_id=%s match_id=%s "
     "direction=%s phase=%s executable_quote=%s quote_side=%s "
@@ -4426,15 +4401,7 @@ async def _publish_trade_plan_v7(
         PLAN_PUBLISHED,
         reason_code="v7_publish_reconciled",
       )
-    await _emit_setup_card_status(
-      client,
-      match,
-      status_line=(
-        "🟢 <b>PLAN PUBLISHED</b> · TradePlan V7 sent to executor"
-      ),
-      reason_code="v7_publish_reconciled",
-      message="durable TradePlan V7 publication reconciled",
-    )
+    # No standalone PLAN PUBLISHED card status — root card owns updates.
     return existing.plan_id
   if existing.setup_state == PLAN_BUILT:
     await transition_setup(
@@ -4481,47 +4448,18 @@ async def _publish_trade_plan_v7(
 
   setup_id = match.match_id
   setup_record = await load_setup(client, setup_id)
-  if setup_record is not None and setup_record.state in (
-    CONFIRMED, READY_EVENT_ENQUEUED,
-  ):
-    try:
-      setup_record, _changed = await transition_setup(
-        client,
-        setup_id,
-        WORKER_ACKNOWLEDGED,
-        reason_code="worker_strategy_match_acknowledged",
-      )
-      await increment_metric(
-        client,
-        "worker_setup_acknowledged",
-        symbol=symbol,
-      )
-      await _emit_setup_card_status(
-        client,
-        match,
-        status_line=(
-          "🟡 <b>PREFLIGHT</b> · dynamic execution checks in progress"
-        ),
-        reason_code="worker_strategy_match_acknowledged",
-        message="worker acknowledged the durable strategy match",
-      )
-    except SetupLifecycleError:
-      log.exception(
-        "v7 setup acknowledgement failed symbol=%s setup_id=%s",
-        symbol,
-        setup_id,
-      )
-      return None
-  if setup_record is None or setup_record.state not in (
-    WORKER_ACKNOWLEDGED, ARMED_WAITING_TRIGGER, PLAN_BUILT,
-  ):
+  if setup_record is None or not is_publishable_setup_state(setup_record.state):
     await _record_v7_build_rejected(
       client, symbol, match, "setup_not_confirmed",
-      f"setup {setup_id!r} is not in CONFIRMED state "
+      f"setup {setup_id!r} is not in a publishable state "
       f"({setup_record.state if setup_record else 'missing'})",
       {},
     )
     return None
+  # Legacy ACK/ARMED Redis nodes are publishable as CONFIRMED; never write
+  # those states from new code.
+  if normalize_setup_state(setup_record.state) == CONFIRMED:
+    setup_record = replace(setup_record, state=CONFIRMED)
 
   now_ts = int(datetime.now(timezone.utc).timestamp())
   quote_ts = int(getattr(spot, "ts", 0) or now_ts)
@@ -4701,60 +4639,14 @@ async def _publish_trade_plan_v7(
     or int(match.issued_at)
   )
 
-  if setup_record.state == WORKER_ACKNOWLEDGED:
-    try:
-      setup_record, _changed = await transition_setup(
-        client,
-        setup_id,
-        ARMED_WAITING_TRIGGER,
-        reason_code=(
-          "reaction_confirmation_handoff"
-          if policy.reaction_family else "m1_trigger_wait"
-        ),
-      )
-    except SetupLifecycleError:
-      log.exception(
-        "v7 setup could not arm symbol=%s setup_id=%s",
-        symbol,
-        setup_id,
-      )
-      return None
-
-    if not policy.reaction_family:
-      return None
-    elif execution_eligible:
-      await increment_metric(
-        client,
-        "reaction_immediate_zone_eligible",
-        symbol=symbol,
-      )
-      episode_id = deterministic_episode_id(
-        setup_id,
-        match.direction,
-        match.entry_low,
-        match.entry_high,
-        confirmation_boundary,
-      )
-      execution_state = new_state(
-        setup_id,
-        IN_ZONE_WAITING_M1,
-        now=now_ts,
-        episode_id=episode_id,
-        zone_entered_at=confirmation_boundary,
-        last_inside_at=quote_ts,
-      )
-      await _persist_v7_confirmation_phase(
-        client,
-        symbol,
-        match,
-        execution_state,
-        reason_code="entry_contract_satisfied",
-        message="formed reaction is inside its entry zone; M1 is optional",
-        evidence=evidence,
-        metric="reaction_m5_immediate_eligible",
-        status="checking",
-      )
-    else:
+  # WORKER_ACKNOWLEDGED / ARMED_WAITING_TRIGGER removed. CONFIRMED setups
+  # either wait for retest (outside zone) or continue with zone-presence
+  # confirmation (inside zone). M1 is optional preference telemetry.
+  if (
+    normalize_setup_state(setup_record.state) == CONFIRMED
+    and confirmation is None
+  ):
+    if not execution_eligible:
       execution_state = new_state(
         setup_id,
         WAITING_RETEST,
@@ -4767,20 +4659,50 @@ async def _publish_trade_plan_v7(
         match,
         execution_state,
         reason_code="waiting_retest_entry_zone",
-        message="confirmed reaction is outside its executable entry zone",
+        message="confirmed setup is outside its executable entry zone",
         evidence=evidence,
-        metric="reaction_waiting_retest",
+        metric="waiting_retest",
       )
       return None
+    await increment_metric(
+      client,
+      "zone_presence_immediate_eligible",
+      symbol=symbol,
+    )
+    episode_id = deterministic_episode_id(
+      setup_id,
+      match.direction,
+      match.entry_low,
+      match.entry_high,
+      confirmation_boundary,
+    )
+    execution_state = new_state(
+      setup_id,
+      IN_ZONE_WAITING_M1,
+      now=now_ts,
+      episode_id=episode_id,
+      zone_entered_at=confirmation_boundary,
+      last_inside_at=quote_ts,
+    )
+    await _persist_v7_confirmation_phase(
+      client,
+      symbol,
+      match,
+      execution_state,
+      reason_code="entry_contract_satisfied",
+      message="formed setup is inside its entry zone; M1 is optional",
+      evidence=evidence,
+      metric="zone_presence_immediate_eligible",
+      status="checking",
+    )
 
   m1 = None if frames is None else frames.get("M1")
   if (
-    policy.reaction_family
-    and setup_record.state in {ARMED_WAITING_TRIGGER, PLAN_BUILT}
+    normalize_setup_state(setup_record.state) in {CONFIRMED, PLAN_BUILT}
     and confirmation is None
   ):
     if execution_state is None:
-      # Upgrade-safe: an already-armed setup from the pre-episode runtime
+      # Upgrade-safe: an already-confirmed setup from the pre-episode runtime
       # starts a new quote-in-zone retest observation.
       execution_state = new_state(
         setup_id,
@@ -4824,7 +4746,7 @@ async def _publish_trade_plan_v7(
           reason_code="waiting_retest",
           message="executable quote left before immediate publication",
           evidence=evidence,
-          metric="reaction_waiting_retest",
+          metric="waiting_retest",
         )
         return None
 
@@ -4851,22 +4773,13 @@ async def _publish_trade_plan_v7(
             trigger_source=execution_state.trigger_source,
             trigger_consumed=execution_state.trigger_consumed,
           )
-        # P0-8: this cycle's preflight pass already wrote the transient
-        # "reaction_confirmation_handoff" reason into route_outcome before
-        # this function ever ran - _preflight_decision's handoff branch
-        # fires every cycle a reaction stays outside its zone, but this
-        # function (the intended correction) previously only re-persisted
-        # waiting_retest_entry_zone on the one-time WORKER_ACKNOWLEDGED
-        # transition tick. Every later cycle left the stale handoff reason
-        # as the permanent last word in route_outcome. Re-persist here
-        # every cycle so the durable reason always wins back.
         await _persist_v7_confirmation_phase(
           client,
           symbol,
           match,
           execution_state,
           reason_code="waiting_retest_entry_zone",
-          message="confirmed reaction is outside its executable entry zone",
+          message="confirmed setup is outside its executable entry zone",
           evidence=evidence,
         )
         return None
@@ -4893,11 +4806,11 @@ async def _publish_trade_plan_v7(
         reason_code="waiting_m1_retest",
         message="retest entered execution distance; checking optional M1",
         evidence=evidence,
-        metric="reaction_zone_episode_started",
+        metric="zone_episode_started",
       )
       await increment_metric(
         client,
-        "reaction_zone_reentered",
+        "zone_reentered",
         symbol=symbol,
       )
 
@@ -5084,9 +4997,18 @@ async def _publish_trade_plan_v7(
         message=trigger.message,
       )
 
-  if not policy.reaction_family and confirmation is None:
-    if setup_record.state not in {ARMED_WAITING_TRIGGER, PLAN_BUILT}:
+  if confirmation is None:
+    # M1 pattern is preference telemetry. Zone presence alone authorizes
+    # publication for every family once the entry contract is satisfied.
+    if not execution_eligible:
       return None
+    episode_id = deterministic_episode_id(
+      setup_id,
+      match.direction,
+      match.entry_low,
+      match.entry_high,
+      confirmation_boundary,
+    )
     trigger = (
       None
       if m1 is None or getattr(m1, "empty", False)
@@ -5101,24 +5023,24 @@ async def _publish_trade_plan_v7(
         cfg=settings,
       )
     )
-    if trigger is None:
-      return None
-    trigger_bar_ts = int(trigger.bar_ts)
-    episode_id = deterministic_episode_id(
-      setup_id,
-      match.direction,
-      match.entry_low,
-      match.entry_high,
-      confirmation_boundary,
-    )
-    confirmation = ExecutionConfirmation(
-      source=M1_RETEST,
-      pattern=trigger.pattern,
-      bar_ts=trigger_bar_ts,
-      wick_extreme=trigger.wick_extreme,
-      zone_episode_id=episode_id,
-      message=trigger.message,
-    )
+    if trigger is not None:
+      confirmation = ExecutionConfirmation(
+        source=M1_RETEST,
+        pattern=trigger.pattern,
+        bar_ts=int(trigger.bar_ts),
+        wick_extreme=trigger.wick_extreme,
+        zone_episode_id=episode_id,
+        message=trigger.message,
+      )
+    else:
+      confirmation = ExecutionConfirmation(
+        source=M5_AUTHORITATIVE,
+        pattern=match.reaction_type,
+        bar_ts=confirmation_boundary,
+        wick_extreme=None,
+        zone_episode_id=episode_id,
+        message="entry-zone presence authorized execution without M1",
+      )
     execution_state = new_state(
       setup_id,
       TRIGGER_READY,
@@ -5126,9 +5048,9 @@ async def _publish_trade_plan_v7(
       episode_id=episode_id,
       zone_entered_at=quote_ts,
       last_inside_at=quote_ts,
-      trigger_bar_ts=trigger_bar_ts,
+      trigger_bar_ts=confirmation.bar_ts,
       trigger_pattern=confirmation.pattern,
-      trigger_source=M1_RETEST,
+      trigger_source=confirmation.source,
       trigger_consumed=True,
     )
     await _persist_v7_confirmation_phase(
@@ -5136,15 +5058,12 @@ async def _publish_trade_plan_v7(
       symbol,
       match,
       execution_state,
-      reason_code="m1_triggered",
+      reason_code="entry_contract_satisfied",
       message=confirmation.message,
       evidence=evidence,
-      metric="setup_m1_trigger_found",
+      metric="setup_zone_presence_ready",
       status="checking",
     )
-
-  if confirmation is None:
-    return None
 
   entry_reference = _executable_spot_price(spot, match.direction)
   execution_match = match
@@ -5189,105 +5108,31 @@ async def _publish_trade_plan_v7(
     min_capped_target_pips=float(settings.auto_trade_min_capped_target_pips),
   )
   if not target_room.allowed:
-    eligibility = match.execution_eligibility
-    scanner_map_id = (
-      "" if eligibility is None else eligibility.market_map_id
-    )
-    current_map_id = str(getattr(market_map, "map_id", "") or "")
-    planned_entry = (
-      entry_reference
-      if eligibility is None
-      else eligibility.planned_entry_price
-    )
-    scanner_opposing = (
-      None if eligibility is None else eligibility.opposing_entry
-    )
-    worker_opposing = target_room.opposing_entry
-    opposing_changed = (
-      (scanner_opposing is None) != (worker_opposing is None)
-      or (
-        scanner_opposing is not None
-        and worker_opposing is not None
-        and (
-          not math.isclose(
-            float(scanner_opposing.get("low")),
-            float(getattr(worker_opposing, "lo")),
-          )
-          or not math.isclose(
-            float(scanner_opposing.get("high")),
-            float(getattr(worker_opposing, "hi")),
-          )
-        )
-      )
-    )
-    context_changed = bool(
-      scanner_map_id != current_map_id
-      or opposing_changed
-      or not math.isclose(
-        float(planned_entry),
-        float(entry_reference),
-        abs_tol=max(units.pip_size(symbol), 1e-9),
-      )
-    )
-    rejection_reason = (
-      "context_changed_target_room"
-      if context_changed
-      else "static_contract_violation_target_room"
-    )
-    rejection_measured = {
-      **target_room.measured,
-      "scanner_market_map_id": scanner_map_id,
-      "current_market_map_id": current_map_id,
-      "scanner_planned_entry_price": planned_entry,
-      "worker_entry_price": entry_reference,
-      "underlying_reason_code": target_room.reason_code,
-    }
-    if context_changed:
-      await increment_metric(
-        client,
-        "context_changed_revalidation_blocked",
-        symbol=symbol,
-        dimensions={"reason": rejection_reason},
-      )
-    await _record_v7_build_rejected(
-      client,
+    # Target-room / opposing-structure preference is telemetry only —
+    # never invalidate or refuse publication. Cap targets when fitted
+    # room exists; otherwise keep the declared ladder.
+    log.info(
+      "v7 target-room preference observed symbol=%s match_id=%s "
+      "reason=%s message=%s",
       symbol,
-      match,
-      rejection_reason,
+      match.match_id[:12],
+      target_room.reason_code,
       target_room.message,
-      rejection_measured,
     )
-    try:
-      await transition_setup(
-        client,
-        setup_id,
-        INVALIDATED,
-        reason_code=rejection_reason,
-      )
-    except SetupLifecycleError:
-      log.exception(
-        "v7 setup could not invalidate after target-room rejection "
-        "symbol=%s setup_id=%s",
-        symbol,
-        setup_id,
-      )
-    await emit_lifecycle(
+    await increment_metric(
       client,
-      INVALIDATED,
+      "target_room_preference_observed",
       symbol=symbol,
-      match_id=setup_id,
-      correlation_id=setup_id,
-      timeframe=match.source_tf,
-      reason_code=rejection_reason,
-      message=target_room.message,
-      measured=rejection_measured,
-      publish_status=True,
+      dimensions={"reason": str(target_room.reason_code or "unknown")},
     )
-    return None
   match_for_plan = (
     replace(
       execution_match,
-      targets_pips=target_room.fitted_targets_pips,
+      targets_pips=(
+        target_room.fitted_targets_pips
+        if target_room.fitted_targets_pips
+        else execution_match.targets_pips
+      ),
     )
     if target_room.opposing_entry is not None
     else execution_match
@@ -5375,19 +5220,19 @@ async def _publish_trade_plan_v7(
     match.atr, settings.auto_trade_zone_cooldown_atr,
   )
   if cooldown_reason is not None:
-    await _release_claims()
-    await _record_v7_build_rejected(
-      client, symbol, match, "zone_cooldown", cooldown_reason, {},
+    log.info(
+      "v7 zone_cooldown preference observed symbol=%s reason=%s",
+      symbol, cooldown_reason,
     )
-    return None
+    # Zone cooldown is preference telemetry — continue to publish.
 
   overlap_reason = _overlapping_zone_conflict_reason(entry_reference, None)
   if overlap_reason is not None:
-    await _release_claims()
-    await _record_v7_build_rejected(
-      client, symbol, match, "overlapping_zone_conflict", overlap_reason, {},
+    log.info(
+      "v7 overlap preference observed symbol=%s reason=%s",
+      symbol, overlap_reason,
     )
-    return None
+    # Overlap veto is preference telemetry — continue to publish.
 
   opposing_zone_low = (
     strategy_opposing_zone.low if strategy_opposing_zone is not None else None
@@ -5512,7 +5357,26 @@ async def _publish_trade_plan_v7(
     return None
 
   try:
-    if setup_record.state != PLAN_BUILT:
+    setup_live = await load_setup(client, setup_id)
+    if setup_live is None or setup_live.state in TERMINAL_STATES:
+      await _release_claims()
+      log.info(
+        "v7 publish aborted: setup is terminal symbol=%s setup_id=%s "
+        "state=%s plan_id=%s",
+        symbol,
+        setup_id,
+        None if setup_live is None else setup_live.state,
+        plan.plan_id,
+      )
+      return None
+    if setup_live.state in {PLAN_PUBLISHED, ARMED}:
+      log.info(
+        "v7 publish skipped: setup already published symbol=%s "
+        "setup_id=%s state=%s plan_id=%s",
+        symbol, setup_id, setup_live.state, plan.plan_id,
+      )
+      return plan.plan_id
+    if setup_live.state != PLAN_BUILT:
       await transition_setup(
         client,
         setup_id,
@@ -5525,10 +5389,12 @@ async def _publish_trade_plan_v7(
     )
   except SetupLifecycleError:
     log.exception(
-      "v7 plan published but setup lifecycle transition failed "
-      "symbol=%s setup_id=%s plan_id=%s",
+      "v7 plan publish blocked by setup lifecycle symbol=%s "
+      "setup_id=%s plan_id=%s",
       symbol, setup_id, plan.plan_id,
     )
+    await _release_claims()
+    return None
   published_state = new_state(
     setup_id,
     CONFIRMATION_PUBLISHED,
@@ -5592,6 +5458,22 @@ async def _publish_trade_plan_v7(
       "zone_episode_id": confirmation.zone_episode_id,
     },
   )
+  try:
+    from app.bot.client import edit_scanner_message_text
+
+    await edit_forming_card_stop(
+      client,
+      setup_id,
+      float(plan.stop.price),
+      digits=int(getattr(settings, "auto_trade_xau_price_digits", 2)),
+      edit_fn=edit_scanner_message_text,
+    )
+  except Exception:
+    log.exception(
+      "v7 forming card stop refresh failed setup_id=%s plan_id=%s",
+      setup_id,
+      plan.plan_id,
+    )
   log.info(
     "v7 plan published id=%s symbol=%s strategy=%s direction=%s entry_type=%s",
     plan.plan_id, symbol, match.strategy, match.direction, plan.entry.type,
@@ -7095,14 +6977,18 @@ async def _common_preflight(
   if guarded is not None:
     return _preflight_decision(
       intent,
-      executable=False,
+      executable=True,
       terminal=False,
       stage="news",
       reason_code="news_window_active",
-      message=f"high-impact event: {guarded.get('title', 'unknown')}",
+      message=(
+        f"high-impact event preference observed: "
+        f"{guarded.get('title', 'unknown')}"
+      ),
       measured={
         **policy.measured,
         "event": guarded.get("title"),
+        "preference_telemetry": True,
       },
       policy=policy.policy,
       subject=subject,
@@ -8996,13 +8882,7 @@ async def _recover_unfinished_strategy_matches(
       setup = await load_setup(client, match.match_id)
       if (
         setup is None
-        or setup.state not in {
-          CONFIRMED,
-          READY_EVENT_ENQUEUED,
-          WORKER_ACKNOWLEDGED,
-          ARMED_WAITING_TRIGGER,
-          PLAN_BUILT,
-        }
+        or not is_publishable_setup_state(setup.state)
         or match.expires_at <= now
       ):
         continue

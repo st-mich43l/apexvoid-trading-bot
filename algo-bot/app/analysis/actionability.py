@@ -146,15 +146,10 @@ _UNIVERSAL_HARD_BLOCK_REASONS = frozenset({
   "invalid_geometry",
 })
 
-# Documented hard conflicts when SCANNER_ACTIONABILITY_GATE_ENABLED=true.
+# Only true invalid geometry stays gated. Preference / quality conflicts
+# (corridor, room, overlap, map absence, counter-bias, etc.) are telemetry.
 _GATED_HARD_BLOCK_REASONS = frozenset({
   "invalid_geometry",
-  "contested_corridor",
-  "opposing_major_no_room",
-  "opposing_entry_overlap",
-  "opposing_entry_contained",
-  "opposing_barrier_no_target",
-  "insufficient_target_room",
 })
 
 
@@ -459,6 +454,7 @@ def resolve_actionability(
         "contested_corridor",
         "executable quote or proposed entry conflicts with opposing band",
         measured,
+        hard_block=False,
       )
       record(first_index, conflict_decision)
       record(second_index, conflict_decision)
@@ -513,10 +509,10 @@ def resolve_actionability(
           room.message,
           measured,
           opposing_entry=room.opposing_entry,
+          hard_block=False,
         )
         record(index, decision)
-        # Keep the (possibly trimmed) result so gate=false can still
-        # retain it after demoting contextual hard blocks.
+        # Keep the (possibly trimmed) result; room preference is telemetry.
         processed[index] = result
         if decision.hard_block:
           continue
@@ -587,6 +583,7 @@ def resolve_actionability(
         "counter_bias_disabled",
         "counter-bias setup is disabled by policy",
         {"htf_bias": getattr(context, "htf_bias", None)},
+        hard_block=False,
       )
       record(index, decision)
       if decision.hard_block:

@@ -283,10 +283,10 @@ def dedupe_matches(
     if (match.tier or "").upper() == TIER_C:
       events.append({
         "match_id": match.match_id,
-        "event": "detector_not_matched",
+        "event": "preference_telemetry",
         "reason": "tier_c_analysis_only",
       })
-      continue
+      # Tier C is preference telemetry — keep the match executable.
     merged_into = None
     for index, existing in enumerate(kept):
       if same_thesis(existing, match, atr=atr):

@@ -72,7 +72,6 @@ _FORMING_REPLY_PREFERRED_TYPES = frozenset({
   "order_filled",
   "tp_booked",
   "sl_moved",
-  "v7_order_submitted",
   "plan_rejected",
 })
 # "rejected"/"invalidated"/"expired"/"cancelled" never reach render/send at
@@ -111,6 +110,7 @@ TELEGRAM_SILENT_LIFECYCLE_TYPES = frozenset({
   # Generic "plan published" / Redis write is not a user-facing lifecycle
   # card under one-root-card mode — progress edits the root instead.
   "plan_published",
+  "v7_order_submitted",
 })
 # Preflight route outcomes remain in Redis, route history, metrics, and
 # /auto_status, but are operator diagnostics rather than Telegram content.
@@ -148,7 +148,6 @@ _NOTIFY_TYPES = {
   "range_flip_filled",
   # TradePlan V7 (docs/adr-trade-plan-v7-boundary.md Section M).
   "plan_armed",
-  "v7_order_submitted",
   "order_filled",
   "tp_booked",
   "sl_moved",
@@ -156,7 +155,6 @@ _NOTIFY_TYPES = {
 }
 
 _V7_NOTIFY_DEDUP_TYPES = frozenset({
-  "v7_order_submitted",
   "order_filled",
   "tp_booked",
   "sl_moved",
@@ -181,13 +179,42 @@ _STOP_RE = re.compile(
 )
 _LOT_TEXT_RE = re.compile(r"(?i)(?<!\w)<?[\d.,]+>?\s+lots?\b")
 _POSITION_TEXT_RE = re.compile(r"(?i)\bposition\s*[:#]?\s*\d+\b")
+_VOLUME_LABEL_RE = re.compile(r"(?i)\bvolume\s*=")
+_WEIGHTED_EQ_RE = re.compile(
+  r"(?i)\bweighted\s*=\s*([0-9]+(?:\.[0-9]+)?)"
+)
+_AT_PRICE_RE = re.compile(
+  r"(?i)(@\s*)([0-9]+(?:\.[0-9]+)?)"
+)
 
 DeliveryProfile = Literal["internal", "public"]
+
+
+def _format_event_price(raw: str, *, digits: int | None = None) -> str:
+  try:
+    value = float(raw)
+  except (TypeError, ValueError):
+    return raw
+  precision = digits
+  if precision is None:
+    precision = int(getattr(settings, "auto_trade_xau_price_digits", 2))
+  return f"{value:.{max(0, precision)}f}"
 
 
 def _clean_message(value: object) -> str:
   text = _AUTO_NAME_RE.sub("ApexVoid Algo", str(value or ""))
   text = _POSITION_TEXT_RE.sub("", text)
+  # Owner-facing fill lines: broker volume units are labeled lot=, and
+  # weighted/@ prices must not dump Decimal noise.
+  text = _VOLUME_LABEL_RE.sub("lot=", text)
+  text = _WEIGHTED_EQ_RE.sub(
+    lambda match: f"weighted={_format_event_price(match.group(1))}",
+    text,
+  )
+  text = _AT_PRICE_RE.sub(
+    lambda match: f"{match.group(1)}{_format_event_price(match.group(2))}",
+    text,
+  )
   text = re.sub(r"\s*·\s*(?=·|$)", "", text)
   return text.strip(" ·")
 
@@ -630,7 +657,6 @@ def render_auto_trade_event(
     # confused with a merely-confirmed setup ("Do not say READY when
     # Python only publishes a plan").
     "plan_armed": "🎯 <b>PLAN ARMED</b>",
-    "v7_order_submitted": "📤 <b>ORDERS SUBMITTED</b>",
     "order_filled": "✅ <b>ORDER FILLED</b>",
     "tp_booked": "🎯 <b>TP COMPLETED</b>",
     "sl_moved": "🛡 <b>GROUP SL MOVED</b>",
@@ -700,7 +726,22 @@ def _is_bad_reply_target(error: TelegramBadRequest) -> bool:
 
 
 def _event_match_id(event: dict) -> str:
-  return str(event.get("match_id") or event.get("candidate_id") or "").strip()
+  """Resolve the setup/forming-card id for reply/edit threading.
+
+  TradePlan V7 events carry ``match_id`` = setup_id and ``candidate_id`` /
+  ``group_id`` = ``v7:{setup_id}``. Prefer the real setup id; when only a
+  plan id is present, strip the ``v7:`` prefix so we still find the root
+  card instead of falling back to a standalone message.
+  """
+  for key in ("match_id", "setup_id"):
+    value = str(event.get(key) or "").strip()
+    if value:
+      return value[3:] if value.startswith("v7:") else value
+  for key in ("candidate_id", "plan_id", "group_id", "correlation_id"):
+    value = str(event.get(key) or "").strip()
+    if value.startswith("v7:") and len(value) > 3:
+      return value[3:]
+  return str(event.get("candidate_id") or "").strip()
 
 
 async def _forming_reply_message_id(
@@ -1003,9 +1044,27 @@ async def _deliver_auto_trade_event(
   send = send or send_scanner_with_retry
   position_id = event.get("position_id")
   match_id = _event_match_id(event)
+  # Keep the root setup card status in sync for fills so the owner always
+  # sees progress on the original message, then thread the detail as a reply.
+  if (
+    profile == "internal"
+    and event_type == "order_filled"
+    and match_id
+  ):
+    fill_message = _clean_message(event.get("message", "")) or "order filled"
+    await edit_forming_card_status(
+      client,
+      match_id,
+      f"✅ <b>ORDER FILLED</b> · {escape(fill_message)}",
+      state="order_filled",
+      reason_code=str(event.get("reason_code") or "order_filled"),
+      event_id=str(event.get("lifecycle_id") or "") or None,
+      edit_fn=edit_scanner_message_text,
+    )
   reply_to, reason = await _resolve_reply_message_id(client, event, profile)
   if reply_to is None and (
     event_type in _FORMING_REPLY_TYPES
+    or event_type in _FORMING_REPLY_PREFERRED_TYPES
     or (event_type != "opened" and position_id is not None)
   ):
     log.info(

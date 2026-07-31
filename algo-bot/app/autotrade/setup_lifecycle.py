@@ -4,18 +4,10 @@ This is a distinct state machine from `app/autotrade/lifecycle.py`'s
 `LIFECYCLE_STATES`, which tracks V6 execution progress
 (order_planned/order_submitted/managing/...). This module tracks the
 *analysis* side: whether a structural reaction is still being watched,
-forming, confirmed, acknowledged by the worker, or has produced a plan. Per
-docs/adr-trade-plan-v7-boundary.md, a CONFIRMED setup must pass through the
-durable READY_EVENT_ENQUEUED and WORKER_ACKNOWLEDGED handoff before it can
-begin producing a TradePlan. A setup already past CONFIRMED can never
-transition back to it - that is what stops "old confirmations creating new
-plans repeatedly" and what stops repeated scanner evaluations from emitting
-a new FORMING Telegram card every detector cycle (see `transition_setup`'s
-``changed`` return value). Scanner-confirmed reaction setups may continue to
-PLAN_BUILT when their executable quote is inside the raw entry zone plus
-spread tolerance; farther reactions remain armed for a retest. Non-reaction
-families retain their required M1 timing contract. The C# executor stays
-mechanical.
+forming, confirmed, or has produced a plan. A CONFIRMED setup publishes
+directly to PLAN_BUILT when its executable quote is inside the entry
+contract; otherwise it remains CONFIRMED while waiting for retest. The C#
+executor stays mechanical.
 
 Storage: `analysis:setup:{setup_id}` (see docs/redis-contract.md).
 """
@@ -44,11 +36,10 @@ WATCHING = "watching"
 TOUCHED = "touched"
 FORMING = "forming"
 CONFIRMED = "confirmed"
+# Legacy Redis values only — never written by new code. Mapped to CONFIRMED
+# for publish eligibility via normalize_setup_state().
 READY_EVENT_ENQUEUED = "ready_event_enqueued"
 WORKER_ACKNOWLEDGED = "worker_acknowledged"
-# Execution timing state: every CONFIRMED setup passes through this node.
-# Scanner-authoritative reactions may continue onward in the same worker call;
-# retests and non-reaction strategies wait here for their required M1 timing.
 ARMED_WAITING_TRIGGER = "armed_waiting_trigger"
 PLAN_BUILT = "plan_built"
 PLAN_PUBLISHED = "plan_published"
@@ -64,9 +55,6 @@ SETUP_STATES = (
   TOUCHED,
   FORMING,
   CONFIRMED,
-  READY_EVENT_ENQUEUED,
-  WORKER_ACKNOWLEDGED,
-  ARMED_WAITING_TRIGGER,
   PLAN_BUILT,
   PLAN_PUBLISHED,
   ARMED,
@@ -76,6 +64,12 @@ SETUP_STATES = (
   CONSUMED,
 )
 
+_LEGACY_PRE_PLAN_STATES = frozenset({
+  READY_EVENT_ENQUEUED,
+  WORKER_ACKNOWLEDGED,
+  ARMED_WAITING_TRIGGER,
+})
+
 # Analysis-only states: a setup here has never produced a TradePlan and
 # never directly causes execution. Mirrors the ADR's split between the
 # analysis/watchlist flow and the confirmed execution-plan flow.
@@ -83,42 +77,38 @@ ANALYSIS_ONLY_STATES = frozenset({DISCOVERED, WATCHING, TOUCHED, FORMING})
 
 TERMINAL_STATES = frozenset({CANCELLED, INVALIDATED, EXPIRED, CONSUMED})
 
-# Only the durable CONFIRMED -> READY_EVENT_ENQUEUED ->
-# WORKER_ACKNOWLEDGED -> ARMED_WAITING_TRIGGER chain may lead to PLAN_BUILT.
-# Every terminal state has no outgoing edges. Rearming
-# (INVALIDATED/EXPIRED -> DISCOVERED) is deliberately not an edge here - it
-# requires `rearm_setup` with a documented condition.
+# CONFIRMED publishes directly to PLAN_BUILT. Legacy pre-plan nodes may
+# still advance to PLAN_BUILT so in-flight Redis records can finish.
 _TRANSITIONS: dict[str, frozenset[str]] = {
   DISCOVERED: frozenset({WATCHING, INVALIDATED, EXPIRED}),
   WATCHING: frozenset({TOUCHED, INVALIDATED, EXPIRED}),
   TOUCHED: frozenset({FORMING, WATCHING, INVALIDATED, EXPIRED}),
   FORMING: frozenset({CONFIRMED, WATCHING, INVALIDATED, EXPIRED}),
-  CONFIRMED: frozenset({
-    READY_EVENT_ENQUEUED,
-    WORKER_ACKNOWLEDGED,
-    ARMED_WAITING_TRIGGER,
-    INVALIDATED,
-    EXPIRED,
-  }),
-  READY_EVENT_ENQUEUED: frozenset({
-    WORKER_ACKNOWLEDGED,
-    INVALIDATED,
-    EXPIRED,
-  }),
-  WORKER_ACKNOWLEDGED: frozenset({
-    ARMED_WAITING_TRIGGER,
-    INVALIDATED,
-    EXPIRED,
-  }),
+  CONFIRMED: frozenset({PLAN_BUILT, INVALIDATED, EXPIRED}),
+  READY_EVENT_ENQUEUED: frozenset({PLAN_BUILT, INVALIDATED, EXPIRED}),
+  WORKER_ACKNOWLEDGED: frozenset({PLAN_BUILT, INVALIDATED, EXPIRED}),
   ARMED_WAITING_TRIGGER: frozenset({PLAN_BUILT, INVALIDATED, EXPIRED}),
   PLAN_BUILT: frozenset({PLAN_PUBLISHED, CANCELLED}),
-  PLAN_PUBLISHED: frozenset({ARMED, CANCELLED, EXPIRED}),
+  PLAN_PUBLISHED: frozenset({ARMED, CANCELLED, EXPIRED, CONSUMED}),
   ARMED: frozenset({CONSUMED, CANCELLED, EXPIRED}),
   CANCELLED: frozenset(),
   INVALIDATED: frozenset(),
   EXPIRED: frozenset(),
   CONSUMED: frozenset(),
 }
+
+
+def normalize_setup_state(state: str | None) -> str:
+  """Map legacy handoff nodes onto the live CONFIRMED publishable state."""
+  value = str(state or "")
+  if value in _LEGACY_PRE_PLAN_STATES:
+    return CONFIRMED
+  return value
+
+
+def is_publishable_setup_state(state: str | None) -> bool:
+  normalized = normalize_setup_state(state)
+  return normalized in {CONFIRMED, PLAN_BUILT}
 
 
 class SetupLifecycleError(ValueError):

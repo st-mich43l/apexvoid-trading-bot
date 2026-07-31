@@ -1,10 +1,8 @@
-"""Complete the first-call arm handoff for fresh B-grade M1 signals.
+"""Same-cycle direct publish helper.
 
-Legacy non-reaction execution intentionally returned after moving a setup from
-WORKER_ACKNOWLEDGED to ARMED_WAITING_TRIGGER. ZoneWatch has already supplied a
-fresh, episode-scoped M1 trigger before setup creation, so that forced future
-cycle is no longer valid. This adapter performs one bounded second evaluation
-in the same await chain and never loops.
+WORKER_ACKNOWLEDGED / ARMED_WAITING_TRIGGER handoffs are removed. Direct
+publish evaluates once per call; this adapter remains as a no-op install
+point for ZoneWatch cutover wiring.
 """
 
 from __future__ import annotations
@@ -27,52 +25,10 @@ def install_same_cycle_publish_retry() -> None:
 
   _ORIGINAL_SAFE_DIRECT = cutover._safe_direct_publish
   _ORIGINAL_WORKER_DIRECT = worker.try_publish_executable_signal
-  original = _ORIGINAL_SAFE_DIRECT
-
-  async def same_cycle_publish(
-    client: Any,
-    match: Any,
-    *,
-    symbol: str,
-    event_ts: str | None = None,
-    source: Any | None = None,
-  ):
-    result = await original(
-      client,
-      match,
-      symbol=symbol,
-      event_ts=event_ts,
-      source=source,
-    )
-    fresh_b_trigger = bool(
-      match.strategy == "Range Edge Scalp"
-      and match.reaction_type
-      and match.confirmation_bar_ts
-    )
-    if (
-      not fresh_b_trigger
-      or result.status != worker.PUBLISH_STATUS_REMAINED_WATCHING
-      or result.reason_code == "direct_publish_failed_durable_fallback"
-    ):
-      return result
-
-    existing = await worker.resolve_existing_v7_state(client, match)
-    if existing.already_published or existing.already_terminal:
-      return result
-
-    # First pass performed the legacy ACK -> ARMED_WAITING_TRIGGER transition.
-    # The second pass consumes the already-supplied current-episode M1 trigger
-    # and publishes immediately. Exactly one bounded retry is permitted.
-    return await original(
-      client,
-      match,
-      symbol=symbol,
-      event_ts=event_ts,
-      source=source,
-    )
-
-  cutover._safe_direct_publish = same_cycle_publish
-  worker.try_publish_executable_signal = same_cycle_publish
+  # Identity wrappers keep the cutover install/uninstall contract intact
+  # without reintroducing ACK -> ARMED same-cycle retries.
+  cutover._safe_direct_publish = _ORIGINAL_SAFE_DIRECT
+  worker.try_publish_executable_signal = _ORIGINAL_WORKER_DIRECT
   _INSTALLED = True
 
 
@@ -89,6 +45,6 @@ def uninstall_same_cycle_publish_retry() -> None:
     cutover._safe_direct_publish = _ORIGINAL_SAFE_DIRECT
   if _ORIGINAL_WORKER_DIRECT is not None:
     worker.try_publish_executable_signal = _ORIGINAL_WORKER_DIRECT
+  _INSTALLED = False
   _ORIGINAL_SAFE_DIRECT = None
   _ORIGINAL_WORKER_DIRECT = None
-  _INSTALLED = False

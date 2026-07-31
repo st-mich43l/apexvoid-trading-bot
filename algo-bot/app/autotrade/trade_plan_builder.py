@@ -240,15 +240,14 @@ def build_trade_plan_from_strategy_match(
 ) -> TradePlan:
   """Translate a CONFIRMED StrategyMatch into a TradePlan V7.
 
-  Raises TradePlanBuildRejected if the shared execution-policy evaluation
-  (the same gate the V6 path already applies) blocks this match - the
-  caller (worker.py) is expected to record the reason_code the same way it
-  already does for V6 gate rejections, never let this raise past a bare
-  `except Exception: pass`.
+  Raises TradePlanBuildRejected only for hard contract failures (missing
+  thesis identity, empty targets, unresolved route, or unavailable stop).
+  Preference / quality signals are recorded on the measured payload and
+  never deny publication.
 
-  When ``approved_measured`` already carries a final policy decision
-  (planned stop + route/entry), this function translates that decision and
-  does not re-run ``evaluate_execution_policy``.
+  When ``approved_measured`` already carries planned stop + route/entry,
+  this function translates that decision and does not re-run geometry
+  planning.
 
   ``now_ts`` re-anchors the published plan's entry/plan expiry to actual
   publication time. Live incident: match.expires_at is set once, when the
@@ -300,7 +299,6 @@ def build_trade_plan_from_strategy_match(
   direction = match.direction
   pip = float(pip_size)
 
-  evaluation = None
   if approved_measured is not None and _is_approved_policy_measured(approved_measured):
     measured = dict(approved_measured)
   else:
@@ -316,11 +314,10 @@ def build_trade_plan_from_strategy_match(
       executable_quote=executable_quote,
       trigger_wick_extreme=trigger_wick_extreme,
     )
-    if not evaluation.allowed:
-      raise TradePlanBuildRejected(
-        evaluation.reason_code, evaluation.message, evaluation.measured,
-      )
-    measured = evaluation.measured
+    # Builder plans geometry/stop/route only. Preference misses are telemetry
+    # on the measured payload and never deny publication. Hard contract
+    # failures (missing route/stop) still reject below.
+    measured = dict(evaluation.measured)
   if measured.get("planned_stop_error"):
     raise TradePlanBuildRejected(
       "protective_stop_unavailable",
@@ -330,7 +327,13 @@ def build_trade_plan_from_strategy_match(
   if "planned_stop_price" not in measured:
     raise TradePlanBuildRejected(
       "protective_stop_unavailable",
-      "execution policy evaluation produced no protective stop",
+      "execution geometry produced no protective stop",
+      measured,
+    )
+  if not measured.get("planned_execution_route"):
+    raise TradePlanBuildRejected(
+      "execution_route_unresolved",
+      "execution route could not be resolved",
       measured,
     )
 

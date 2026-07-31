@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -24,9 +25,6 @@ public enum TradePlanRuntimeStage
   // finishing a mid-ladder submit after a partial broker failure.
   Received,
   Submitting,
-  // Legacy: older persisted JSON may still deserialize as Armed. Treated
-  // like Received/Submitting for evaluate-and-submit; new writes never use it.
-  Armed,
   Submitted,
   PartiallyOpen,
   FullyOpen,
@@ -269,8 +267,13 @@ public static class TradePlanJson
 
   public static TradePlanRuntimeState? DeserializeState(string json)
   {
+    // Completely remove Armed from the runtime: rewrite legacy persisted
+    // snapshots before enum deserialization.
+    var normalized = json
+      .Replace("\"Stage\":\"Armed\"", "\"Stage\":\"Received\"", StringComparison.Ordinal)
+      .Replace("\"stage\":\"Armed\"", "\"stage\":\"Received\"", StringComparison.Ordinal);
     var state = JsonSerializer.Deserialize(
-      json,
+      normalized,
       TradePlanStateJsonContext.Default.TradePlanRuntimeState
     );
     return state is null ? null : MigrateRuntimeState(state);
@@ -318,7 +321,6 @@ public static class TradePlanJson
       ));
       if (
         stage is TradePlanRuntimeStage.Submitted
-          or TradePlanRuntimeStage.Armed
           or TradePlanRuntimeStage.Received
           or TradePlanRuntimeStage.Submitting
       )
@@ -433,6 +435,56 @@ public sealed class TradePlanRuntime(
   private readonly Dictionary<string, TradePlanRuntimeState> _statesById = new();
   private bool _restored;
 
+  private static string FormatEventPrice(decimal price, SymbolInfo symbol) =>
+    decimal.Round(price, symbol.Digits, MidpointRounding.AwayFromZero)
+      .ToString($"F{Math.Max(0, symbol.Digits)}", CultureInfo.InvariantCulture);
+
+  private static string FormatEventPrice(decimal? price, SymbolInfo symbol) =>
+    price is decimal value ? FormatEventPrice(value, symbol) : "?";
+
+  private static string FormatEventLot(long volumeUnits) =>
+    volumeUnits.ToString(CultureInfo.InvariantCulture);
+
+  private bool LooksLikeProtectiveStopHit(
+    TradePlan plan,
+    TradePlanRuntimeState state,
+    decimal exitEstimate
+  )
+  {
+    var stop =
+      state.CurrentStop != 0 ? state.CurrentStop
+      : state.GroupAbsoluteStop ?? plan.Stop.Price;
+    if (stop <= 0)
+    {
+      return false;
+    }
+    var tolerance = Math.Max(options.PipSize, 2m * options.PipSize);
+    return Math.Abs(exitEstimate - stop) <= tolerance;
+  }
+
+  private PositionCloseReason ClassifyCloseReason(
+    TradePlan plan,
+    TradePlanRuntimeState state,
+    PositionCloseLookup lookup
+  )
+  {
+    if (lookup.Reason != PositionCloseReason.Unknown)
+    {
+      return lookup.Reason;
+    }
+    // Mirror V6 AutoTradeEngine: when deal history cannot confirm OrderType
+    // but the exit prints at the protective stop, treat it as an SL/TP hit
+    // so ordinary stop-outs do not stall in recovery_required.
+    if (
+      lookup.ExecutionPrice is decimal exit
+      && LooksLikeProtectiveStopHit(plan, state, exit)
+    )
+    {
+      return PositionCloseReason.StopLossOrTakeProfit;
+    }
+    return PositionCloseReason.Unknown;
+  }
+
   private static string PlanClaimKey(string planId) => $"execution:plan_claim:{planId}";
   private static string PlanStateKey(string planId) => $"execution:plan_runtime:{planId}";
   private static string PlanRecoveryKey(string planId) =>
@@ -453,7 +505,7 @@ public sealed class TradePlanRuntime(
   /// <summary>
   /// One poll cycle: recover state on first call, claim any newly published
   /// plans and attempt L1+L2 submission in the same cycle when executable,
-  /// finish any remaining Received/Submitting/Armed work, then reconcile and
+  /// finish any remaining Received/Submitting work, then reconcile and
   /// manage open positions. Call once per AutoTradeEngine.RunSessionAsync
   /// loop iteration - see AutoTradeEngine.PollTradePlansAsync.
   /// </summary>
@@ -1063,8 +1115,7 @@ public sealed class TradePlanRuntime(
 
   private static bool IsPendingEntryStage(TradePlanRuntimeState state) =>
     state.Stage is TradePlanRuntimeStage.Received
-      or TradePlanRuntimeStage.Submitting
-      or TradePlanRuntimeStage.Armed;
+      or TradePlanRuntimeStage.Submitting;
 
   private async Task TrySubmitReceivedPlanAsync(
     ICTraderTradeClient client,
@@ -1146,13 +1197,7 @@ public sealed class TradePlanRuntime(
     }
   }
 
-  // Kept for older call sites / migration docs; forwards to the pending-entry path.
-  private Task EvaluateArmedPlansAsync(
-    ICTraderTradeClient client,
-    SymbolInfo symbol,
-    SpotPrice quote,
-    CancellationToken cancellationToken
-  ) => EvaluatePendingEntryPlansAsync(client, symbol, quote, cancellationToken);
+  // EvaluateArmedPlansAsync removed — Armed is not part of the runtime.
 
   private bool ShouldSubmitOrders =>
     options.ContractMode is "v7_primary" or "v7_only" && !options.DryRun;
@@ -1243,8 +1288,9 @@ public sealed class TradePlanRuntime(
       );
       await PublishEventAsync(
         "order_filled",
-        $"ORDER FILLED {plan.Analysis.Direction} {execution.ExecutedVolume} "
-        + $"@ {execution.ExecutionPrice}",
+        $"ORDER FILLED {plan.Analysis.Direction} "
+        + $"lot={FormatEventLot(execution.ExecutedVolume)} "
+        + $"@ {FormatEventPrice(execution.ExecutionPrice, symbol)}",
         plan,
         cancellationToken,
         positionId: execution.PositionId,
@@ -1455,7 +1501,8 @@ public sealed class TradePlanRuntime(
       await PublishEventAsync(
         "order_filled",
         $"ENTRY GROUP FULLY FILLED {plan.Analysis.Direction} "
-        + $"volume={filledVolume} weighted={state.GroupWeightedFillPrice}",
+        + $"lot={FormatEventLot(filledVolume)} "
+        + $"weighted={FormatEventPrice(state.GroupWeightedFillPrice, symbol)}",
         plan,
         cancellationToken,
         positionId: state.PositionId,
@@ -1477,8 +1524,8 @@ public sealed class TradePlanRuntime(
         .ToArray();
       await PublishEventAsync(
         "order_filled",
-        $"ENTRY {string.Join("/", filledLegs)} FILLED volume={filledVolume} "
-        + $"@ {state.GroupWeightedFillPrice}; "
+        $"ENTRY {string.Join("/", filledLegs)} FILLED lot={FormatEventLot(filledVolume)} "
+        + $"@ {FormatEventPrice(state.GroupWeightedFillPrice, symbol)}; "
         + $"{string.Join("/", pendingLegs)} still pending",
         plan,
         cancellationToken,
@@ -1633,8 +1680,8 @@ public sealed class TradePlanRuntime(
           await PublishEventAsync(
             "order_filled",
             $"ENTRY GROUP FULLY FILLED {plan.Analysis.Direction} "
-            + $"volume={state.TotalFilledVolume} "
-            + $"weighted={state.GroupWeightedFillPrice}",
+            + $"lot={FormatEventLot(state.TotalFilledVolume)} "
+            + $"weighted={FormatEventPrice(state.GroupWeightedFillPrice, symbol)}",
             plan,
             cancellationToken,
             positionId: state.PositionId,
@@ -1661,7 +1708,8 @@ public sealed class TradePlanRuntime(
           await PublishEventAsync(
             "order_filled",
             $"ENTRY {string.Join("/", filledLegs)} FILLED "
-            + $"volume={state.TotalFilledVolume}; "
+            + $"lot={FormatEventLot(state.TotalFilledVolume)} "
+            + $"@ {FormatEventPrice(state.GroupWeightedFillPrice, symbol)}; "
             + $"{string.Join("/", pendingLegs)} still pending",
             plan,
             cancellationToken,
@@ -1699,7 +1747,7 @@ public sealed class TradePlanRuntime(
       }
 
       var missingHandled = await ClassifyMissingLegsAsync(
-        client, plan, state, byId, cancellationToken
+        client, symbol, plan, state, byId, cancellationToken
       );
       if (missingHandled is not null)
       {
@@ -1753,15 +1801,55 @@ public sealed class TradePlanRuntime(
         {
           continue;
         }
+        // Recalculate from the live filled remainder only — cancelled
+        // unfilled L2/etc. must not keep the original ladder total in the
+        // close math. Then snap to broker StepVolume.
         var groupRemaining = openLegs.Sum(leg => leg.RemainingVolume);
-        var closeVolume = decimal.ToInt64(
+        var isFinalTarget = state.NextTargetIndex >= plan.Targets.Count - 1;
+        var desiredClose = decimal.ToInt64(
           groupRemaining * target.CloseRatio / remainingTargetsSum
         );
-        closeVolume = Math.Min(closeVolume, groupRemaining);
-        var allocations = AllocateProRata(
-          openLegs.Select(leg => leg.RemainingVolume).ToArray(),
-          closeVolume
+        var closeVolume = VolumePlanner.PlanPartialCloseVolume(
+          groupRemaining,
+          desiredClose,
+          symbol,
+          isFinalTarget
         );
+        if (closeVolume <= 0)
+        {
+          // Cannot book a broker-valid partial against the filled remainder
+          // (e.g. one StepVolume position vs a 20% TP). Ride to the final
+          // target instead of spamming TRADING_BAD_VOLUME every poll.
+          log(
+            $"v7 target partial skipped id={plan.PlanId} "
+            + $"target={target.TargetId} remaining={groupRemaining} "
+            + $"desired={desiredClose} step={symbol.StepVolume} "
+            + "reason=not_step_aligned_after_unfilled_cancel"
+          );
+          state = AggregateState(
+            state with { NextTargetIndex = plan.Targets.Count - 1 }
+          );
+          await PersistStateAsync(state, cancellationToken);
+          continue;
+        }
+        var allocations = VolumePlanner.AllocateProRataStepped(
+          openLegs.Select(leg => leg.RemainingVolume).ToArray(),
+          closeVolume,
+          symbol
+        );
+        if (allocations.Sum() <= 0)
+        {
+          log(
+            $"v7 target partial skipped id={plan.PlanId} "
+            + $"target={target.TargetId} remaining={groupRemaining} "
+            + "reason=stepped_allocation_empty"
+          );
+          state = AggregateState(
+            state with { NextTargetIndex = plan.Targets.Count - 1 }
+          );
+          await PersistStateAsync(state, cancellationToken);
+          continue;
+        }
         var closedTotal = 0L;
         var allSucceeded = true;
         TradeExecution? lastExecution = null;
@@ -2009,6 +2097,7 @@ public sealed class TradePlanRuntime(
 
   private async Task<TradePlanRuntimeState?> ClassifyMissingLegsAsync(
     ICTraderTradeClient client,
+    SymbolInfo symbol,
     TradePlan plan,
     TradePlanRuntimeState state,
     Dictionary<long, TradingPosition> byId,
@@ -2030,7 +2119,7 @@ public sealed class TradePlanRuntime(
     }
 
     var now = clock().ToUnixTimeSeconds();
-    var reasons = new List<(TradePlanLegRuntimeState Leg, PositionCloseReason Reason)>();
+    var reasons = new List<(TradePlanLegRuntimeState Leg, PositionCloseReason Reason, decimal? ExitPrice)>();
     foreach (var leg in missing)
     {
       var openedAt = leg.FilledAt ?? leg.SubmittedAt ?? now - 3600;
@@ -2040,7 +2129,8 @@ public sealed class TradePlanRuntime(
         now,
         cancellationToken
       );
-      reasons.Add((leg, lookup.Reason));
+      var reason = ClassifyCloseReason(plan, state, lookup);
+      reasons.Add((leg, reason, lookup.ExecutionPrice));
       var idx = legs.FindIndex(item => item.LegId == leg.LegId);
       if (idx >= 0)
       {
@@ -2048,7 +2138,7 @@ public sealed class TradePlanRuntime(
         {
           RemainingVolume = 0,
           Stage = TradePlanLegStages.Closed,
-          LastError = lookup.Reason.ToString(),
+          LastError = reason.ToString(),
         };
       }
     }
@@ -2076,10 +2166,17 @@ public sealed class TradePlanRuntime(
         }
       );
       await PersistStateAsync(next, cancellationToken);
+      var unknownBits = reasons
+        .Where(r => r.Reason == PositionCloseReason.Unknown)
+        .Select(r =>
+          r.ExitPrice is decimal exit
+            ? $"{r.Leg.LegId}@{FormatEventPrice(exit, symbol)}"
+            : r.Leg.LegId
+        );
       await PublishEventAsync(
         "warning",
         $"GROUP RECOVERY REQUIRED unknown close on "
-        + $"{string.Join(",", reasons.Where(r => r.Reason == PositionCloseReason.Unknown).Select(r => r.Leg.LegId))}",
+        + $"{string.Join(",", unknownBits)}",
         plan,
         cancellationToken,
         positionId: state.PositionId,
@@ -2115,6 +2212,9 @@ public sealed class TradePlanRuntime(
 
     if (allMissingAreSl && stillOpen == 0)
     {
+      var exitHint = reasons
+        .Select(item => item.ExitPrice)
+        .FirstOrDefault(price => price is not null);
       var next = AggregateState(
         state with
         {
@@ -2125,12 +2225,17 @@ public sealed class TradePlanRuntime(
         }
       );
       await PersistStateAsync(next, cancellationToken);
+      var slMessage = exitHint is decimal exit
+        ? $"GROUP STOP LOSS ({closedCount}/{Math.Max(totalTracked, 1)}) "
+          + $"@ {FormatEventPrice(exit, symbol)}"
+        : $"GROUP STOP LOSS ({closedCount}/{Math.Max(totalTracked, 1)})";
       await PublishEventAsync(
         "position_closed",
-        $"GROUP STOP LOSS ({closedCount}/{Math.Max(totalTracked, 1)})",
+        slMessage,
         plan,
         cancellationToken,
         positionId: state.PositionId,
+        price: exitHint,
         eventKey: "group_stop_loss",
         state: TradePlanGroupStages.Closed
       );
@@ -2391,15 +2496,12 @@ public sealed class TradePlanRuntime(
       PendingOrderIds = pending.Length > 0 ? pending : state.PendingOrderIds,
       // Preserve Submitting while a mid-ladder submit is still in progress so
       // EvaluatePendingEntryPlansAsync keeps finishing remaining legs.
-      // Legacy Armed mid-ladder states migrate to Submitting on write.
       Stage = state.Stage is TradePlanRuntimeStage.Submitting
-          or TradePlanRuntimeStage.Armed
         ? TradePlanRuntimeStage.Submitting
         : DeriveRuntimeStage(legs),
       GroupStage = state.GroupStage == TradePlanGroupStages.RecoveryRequired
         ? state.GroupStage
         : state.Stage is TradePlanRuntimeStage.Submitting
-            or TradePlanRuntimeStage.Armed
           ? TradePlanGroupStages.Submitting
           : DeriveGroupStage(legs),
     };
@@ -2596,32 +2698,6 @@ public sealed class TradePlanRuntime(
     {
       legs[idx] = updated with { Revision = legs[idx].Revision + 1 };
     }
-  }
-
-  private static long[] AllocateProRata(long[] remaining, long closeVolume)
-  {
-    var total = remaining.Sum();
-    if (total <= 0 || closeVolume <= 0)
-    {
-      return new long[remaining.Length];
-    }
-    var raw = remaining
-      .Select(volume => (long)Math.Floor(closeVolume * (decimal)volume / total))
-      .ToArray();
-    var allocated = raw.Sum();
-    var leftover = closeVolume - allocated;
-    for (var i = 0; leftover > 0 && i < raw.Length; i++)
-    {
-      var room = remaining[i] - raw[i];
-      if (room <= 0)
-      {
-        continue;
-      }
-      var add = Math.Min(room, leftover);
-      raw[i] += add;
-      leftover -= add;
-    }
-    return raw;
   }
 
   private static int IndexOfTarget(TradePlan plan, string targetId)

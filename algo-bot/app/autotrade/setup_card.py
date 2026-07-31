@@ -19,6 +19,8 @@ from __future__ import annotations
 
 import json
 import logging
+import math
+import re
 import time
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
@@ -54,6 +56,7 @@ CARD_STATUS_PRIORITY = {
   "trigger_ready": 40,
   "plan_published": 100,
   "executor_armed": 120,
+  "order_filled": 150,
   "terminal": 200,
 }
 
@@ -68,7 +71,9 @@ if current then
     current_line = tostring(decoded['status_line'] or '')
   else
     current_line = current
-    if string.find(current, 'PLAN PUBLISHED', 1, true) then
+    if string.find(current, 'ORDER FILLED', 1, true) then
+      current_priority = 150
+    elseif string.find(current, 'PLAN PUBLISHED', 1, true) then
       current_priority = 100
     elseif string.find(current, 'WAITING RETEST', 1, true) then
       current_priority = 30
@@ -102,6 +107,8 @@ class FormingCardStatus:
 
 def _infer_status_state(status_line: str) -> str:
   upper = status_line.upper()
+  if "ORDER FILLED" in upper:
+    return "order_filled"
   if "EXECUTOR ARMED" in upper:
     return "executor_armed"
   if "PLAN PUBLISHED" in upper:
@@ -119,6 +126,56 @@ def _infer_status_state(status_line: str) -> str:
   if "CLOSED" in upper or "TERMINAL" in upper:
     return "terminal"
   return "analysis_only"
+
+
+def apply_forming_card_stop(text: str, stop_price: float, *, digits: int = 2) -> str:
+  """Insert or replace the Trade-area Stop line and copy-draft SL value."""
+  if not text or not math.isfinite(stop_price):
+    return text
+  stop_text = f"{stop_price:,.{digits}f}"
+  plain_stop = f"{stop_price:.{digits}f}"
+  lines = text.splitlines()
+  stop_line = f"• <b>Stop:</b> <b>{stop_text}</b>"
+  inserted = False
+  out: list[str] = []
+  for line in lines:
+    stripped = line.strip()
+    if stripped.startswith("• <b>Stop:</b>"):
+      out.append(stop_line)
+      inserted = True
+      continue
+    out.append(line)
+    if (
+      not inserted
+      and stripped.startswith("• <b>Key level:</b>")
+    ):
+      out.append(stop_line)
+      inserted = True
+  if not inserted:
+    # Fall back: place before Context / Copy draft sections.
+    rebuilt: list[str] = []
+    placed = False
+    for line in out:
+      if (
+        not placed
+        and (
+          "🧭 <b>Context</b>" in line
+          or "📋 <b>Copy draft</b>" in line
+        )
+      ):
+        rebuilt.append(stop_line)
+        placed = True
+      rebuilt.append(line)
+    out = rebuilt if placed else [*out, stop_line]
+
+  draft_re = re.compile(
+    r"(gold\s+(?:buy|sell)\s+entry zone\s*\([^)]+\)\s*/\s*sl\s+)(\S+)",
+    re.IGNORECASE,
+  )
+  return "\n".join(
+    draft_re.sub(rf"\g<1>{plain_stop}", line) if "gold " in line.lower() else line
+    for line in out
+  )
 
 
 def forming_message_key(setup_id: str) -> str:
@@ -693,6 +750,51 @@ async def edit_forming_card_status(
       return True
     log.info(
       "forming card status edit failed setup_id=%s error=%s",
+      setup_id,
+      exc,
+    )
+    return False
+  await save_forming_card(
+    client,
+    setup_id,
+    chat_id=card["chat_id"],
+    message_id=card["message_id"],
+    text=text,
+  )
+  return True
+
+
+async def edit_forming_card_stop(
+  client,
+  setup_id: str,
+  stop_price: float,
+  *,
+  digits: int = 2,
+  edit_fn: EditFn,
+) -> bool:
+  """Patch the root card Trade-area Stop line and copy-draft SL."""
+  card = await load_forming_card(client, setup_id)
+  if card is None or not card.get("text"):
+    return False
+  text = apply_forming_card_stop(
+    str(card["text"]), float(stop_price), digits=digits,
+  )
+  if text == card["text"]:
+    return True
+  try:
+    await edit_fn(card["chat_id"], card["message_id"], text)
+  except TelegramBadRequest as exc:
+    if "message is not modified" in str(exc).casefold():
+      await save_forming_card(
+        client,
+        setup_id,
+        chat_id=card["chat_id"],
+        message_id=card["message_id"],
+        text=text,
+      )
+      return True
+    log.info(
+      "forming card stop edit failed setup_id=%s error=%s",
       setup_id,
       exc,
     )

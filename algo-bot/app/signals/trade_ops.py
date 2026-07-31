@@ -555,6 +555,14 @@ async def post_result(result: dict, symbol: str) -> str:
     else result["sid"]
   )
   sig = await get_manual_signal(signal_id)
+  # Algo-manual cancel is broker-lifecycle bookkeeping — never fan out a
+  # channel card. Owner command replies still get the rendered text.
+  if (
+    result["action"] == "cancel"
+    and sig is not None
+    and str(sig.get("execution_mode") or "").casefold() == "algo"
+  ):
+    return text
   if (
     result["action"] == "close"
     and result.get("row", {}).get("error")

@@ -76,22 +76,18 @@ from app.autotrade.multi_match import (
   strategy_matches_key,
 )
 from app.autotrade.setup_lifecycle import (
-  ARMED_WAITING_TRIGGER,
   CONFIRMED,
   DISCOVERED,
   FORMING,
   INVALIDATED,
-  READY_EVENT_ENQUEUED,
   TOUCHED,
   WATCHING,
-  WORKER_ACKNOWLEDGED,
   SetupLifecycleError,
   create_setup,
+  is_publishable_setup_state,
   load_setup,
   transition_setup,
 )
-from app.autotrade.strategy_match_ready import enqueue_strategy_match_ready
-from app.autotrade.strategy_taxonomy import is_reaction_strategy
 from app.autotrade.setup_card import kill_setup_card
 from app.autotrade import worker as autotrade_worker
 
@@ -370,12 +366,18 @@ def _build_one_strategy_match(
       room_pips = room / units.pip_size(symbol)
       full_take_profit_pips = select_range_target(room_pips)
       if full_take_profit_pips is None:
-        return None, "insufficient_target_room", {
-          "room_pips": round(room_pips, 1),
-          "range_low": range_low,
-          "range_high": range_high,
-        }
-      targets_pips = (full_take_profit_pips,)
+        # Target-room preference is telemetry; fall through to configured
+        # strategy targets instead of refusing the match.
+        targets_pips = _configured_strategy_targets()
+        if not targets_pips:
+          return None, "empty_target_config", {
+            "room_pips": round(room_pips, 1),
+            "preference_telemetry": True,
+            "preference_reason_code": "insufficient_target_room",
+          }
+        full_take_profit_pips = max(targets_pips)
+      else:
+        targets_pips = (full_take_profit_pips,)
       range_id = strategy_range_id(symbol, range_low, range_high)
   if result.target_cap_pips is not None:
     target_cap = float(result.target_cap_pips)
@@ -384,9 +386,15 @@ def _build_one_strategy_match(
       if float(target) <= target_cap + 1e-9
     )
     if not targets_pips:
-      return None, "opposing_barrier_no_target", {
-        "effective_target_pips": target_cap,
-      }
+      # Opposing-barrier room preference: keep configured ladder and tag
+      # the observation rather than refusing to build a match.
+      targets_pips = _configured_strategy_targets()
+      if not targets_pips:
+        return None, "empty_target_config", {
+          "effective_target_pips": target_cap,
+          "preference_telemetry": True,
+          "preference_reason_code": "opposing_barrier_no_target",
+        }
     if full_take_profit_pips is not None:
       full_take_profit_pips = max(targets_pips)
   if not targets_pips:
@@ -403,10 +411,9 @@ def _build_one_strategy_match(
     one_sided=one_sided,
   )
   if tier == "C":
-    return None, "tier_c_analysis_only", {
-      "strategy": result.setup,
-      "confluence": int(result.confluence),
-    }
+    # Tier C is preference telemetry — still construct an executable match
+    # with reduced risk sizing rather than dropping the setup.
+    pass
   risk_mult = risk_multiplier_for_tier(
     tier,
     settings,
@@ -828,49 +835,13 @@ async def _sync_strategy_match(
           # (published, invalidated, or rejected) - never touch the
           # durable ready-stream for an outcome that is already final.
           continue
-        # Reaction strategies: never fall back to strategy_match_ready.
-        # Remained watching means retest/M1 timing still owns the zone;
-        # the next quote/M1 cycle retries direct publish.
-        if is_reaction_strategy(tracked.strategy):
-          continue
-      elif is_reaction_strategy(tracked.strategy):
-        # Direct publish disabled but still must not enqueue ready for
-        # the reaction family — remain analysis-only until enabled.
+        # READY queue removed for executable setups. Remained watching
+        # means retest/M1 timing still owns the zone; the next quote/M1
+        # cycle retries direct publish without strategy_match_ready.
         continue
-      ready_event_id = await enqueue_strategy_match_ready(
-        client,
-        tracked,
-        market_map_id=(
-          ""
-          if tracked.execution_eligibility is None
-          else tracked.execution_eligibility.market_map_id
-        ),
-      )
-      if ready_event_id is not None:
-        latest_setup = await load_setup(client, tracked.match_id)
-        if latest_setup is not None and latest_setup.state == CONFIRMED:
-          await transition_setup(
-            client,
-            tracked.match_id,
-            READY_EVENT_ENQUEUED,
-            reason_code="strategy_match_ready_enqueued",
-          )
-        await record_route_outcome(
-          client,
-          tracked,
-          stage="scanner",
-          status="queued",
-          reason_code="strategy_match_ready_enqueued",
-          message="durable worker-ready event persisted",
-          measured={
-            "ready_event_id": ready_event_id,
-            "scanner_event_ts": tracked.event_ts,
-            "entry_low": tracked.entry_low,
-            "entry_high": tracked.entry_high,
-          },
-          retained=True,
-          publish_status=False,
-        )
+      # Direct publish disabled: still do not enqueue READY for executable
+      # setups — remain analysis-only until direct publish is enabled.
+      continue
     await emit_lifecycle(
       client,
       "detected",
@@ -1183,21 +1154,12 @@ async def _check_setup_invalidations(
       continue
     match_id = str(state.get("match_id") or "").strip()
     setup_record = await load_setup(client, match_id) if match_id else None
-    if setup_record is not None and setup_record.state in (
-      CONFIRMED, READY_EVENT_ENQUEUED, WORKER_ACKNOWLEDGED,
-      ARMED_WAITING_TRIGGER,
-    ):
-      # One forming card per setup (P4): a setup still waiting to publish
-      # gets its card deleted without a standalone Telegram notification and
-      # is never re-carded afterwards. This covers the full durable
-      # CONFIRMED -> READY_EVENT_ENQUEUED -> WORKER_ACKNOWLEDGED ->
-      # ARMED_WAITING_TRIGGER handoff window (P1-1) - a setup can sit in
-      # any of these for real wall-clock time waiting on the worker/ready-
-      # stream round trip, and structure can break while it waits. A setup
-      # that has ALREADY published a plan (PLAN_BUILT/PLAN_PUBLISHED/ARMED)
-      # is left alone entirely here - it may have a live position, and its
-      # card is still the anchor future FILLED/SL-moved/closed replies
-      # thread to.
+    if setup_record is not None and is_publishable_setup_state(setup_record.state):
+      # One forming card per setup (P4): a CONFIRMED setup still waiting to
+      # publish (including legacy ACK/ARMED Redis nodes) gets its card
+      # deleted without a standalone Telegram notification and is never
+      # re-carded afterwards. A setup that has ALREADY published a plan
+      # (PLAN_BUILT/PLAN_PUBLISHED/ARMED) is left alone entirely here.
       try:
         await transition_setup(
           client, match_id, INVALIDATED, reason_code="structure_broke",
@@ -1241,8 +1203,41 @@ def _zone_text(zone: Zone, symbol: str, *, grouped: bool = False) -> str:
   )
 
 
-def _copy_draft(symbol: str, result: DetectionResult) -> str | None:
-  """Build an editable one-line command without inventing SL/TP levels."""
+def _planned_stop_price(
+  result: DetectionResult,
+  execution_match: StrategyMatch | None = None,
+) -> float | None:
+  """Best available planned SL for the setup card / copy draft."""
+  sources = []
+  if result.execution_eligibility is not None:
+    sources.append(result.execution_eligibility)
+  if (
+    execution_match is not None
+    and execution_match.execution_eligibility is not None
+  ):
+    sources.append(execution_match.execution_eligibility)
+  for eligibility in sources:
+    measured = eligibility.measured or {}
+    raw = measured.get("planned_stop_price")
+    if raw is None:
+      raw = measured.get("planned_final_stop_price")
+    if raw is None:
+      continue
+    try:
+      value = float(raw)
+    except (TypeError, ValueError):
+      continue
+    if math.isfinite(value):
+      return value
+  return None
+
+
+def _copy_draft(
+  symbol: str,
+  result: DetectionResult,
+  execution_match: StrategyMatch | None = None,
+) -> str | None:
+  """Build an editable one-line command; include planned SL when known."""
   if symbol.upper() != "XAU":
     return None
   setup = re.sub(r"[^a-z0-9]+", "-", result.setup.lower()).strip("-")
@@ -1251,9 +1246,16 @@ def _copy_draft(symbol: str, result: DetectionResult) -> str | None:
     f"{_price_text(result.entry_zone.low, symbol)}-"
     f"{_price_text(result.entry_zone.high, symbol)}"
   )
+  planned_stop = _planned_stop_price(result, execution_match)
+  sl_text = (
+    _price_text(planned_stop, symbol)
+    if planned_stop is not None
+    else "SL"
+  )
+
   return (
     f"gold {result.direction.lower()} entry zone ({entry}) "
-    f"/ sl SL / tp TP1/TP2/TP3 / setup {setup} {grade}"
+    f"/ sl {sl_text} / tp TP1/TP2/TP3 / setup {setup} {grade}"
   )
 
 
@@ -1363,6 +1365,14 @@ def _format_detection(
       "• <b>Key level:</b> "
       f"<b>{_price_text(result.key_level, symbol, grouped=True)}</b>"
     ),
+  ])
+  planned_stop = _planned_stop_price(result, execution_match)
+  if planned_stop is not None:
+    lines.append(
+      "• <b>Stop:</b> "
+      f"<b>{_price_text(planned_stop, symbol, grouped=True)}</b>"
+    )
+  lines.extend([
     "",
     "🧭 <b>Context</b>",
     f"• <b>HTF bias:</b> {escape(_htf_bias_text(ctx, htf_order))}",
@@ -1395,11 +1405,18 @@ def _format_detection(
       f"{escape(_zone_text(extra.entry_zone, symbol, grouped=True))} "
       f"{extra_stars}"
     )
-  draft = _copy_draft(symbol, result) if executable else None
+  draft = (
+    _copy_draft(symbol, result, execution_match) if executable else None
+  )
   if draft is not None:
+    draft_hint = (
+      "📋 <b>Copy draft</b>"
+      if _planned_stop_price(result, execution_match) is not None
+      else "📋 <b>Copy draft</b> <i>· fill SL/TP</i>"
+    )
     lines.extend([
       "",
-      "📋 <b>Copy draft</b> <i>· fill SL/TP</i>",
+      draft_hint,
       f"<code>{escape(draft)}</code>",
     ])
   if executable:
@@ -1706,7 +1723,7 @@ def _merge_detection_confluence(
       )
       if not width_result.eligible:
         log.info(
-          "confluence zone rejected by XAU width contract symbol=%s tf=%s "
+          "confluence zone width preference observed symbol=%s tf=%s "
           "reason=%s raw_width=%.3f merged_width=%.3f min=%.3f max=%.3f "
           "sources=%s",
           symbol, tf, width_result.rejection_reason,
@@ -1714,9 +1731,7 @@ def _merge_detection_confluence(
           width_result.min_required_width, width_result.max_allowed_width,
           ",".join(width_result.merge_sources),
         )
-        # Fails closed: a zone rejected for width is dropped entirely, not
-        # left to fall through as its unmerged individual members.
-        continue
+        # Zone-width quality is preference telemetry — keep the merged zone.
     merged_by_index.append((first_index, merged))
 
   merged_by_index.extend(
@@ -1737,7 +1752,13 @@ def _reward_risk_pre_gate(
   ctx: DetectionContext,
   result: DetectionResult,
 ) -> tuple[bool, dict[str, Any]]:
-  """Apply only the shared policy's provisional R/R check before lifecycle."""
+  """Legacy hook retained for tests — always non-blocking telemetry.
+
+  Scanner reward/risk pre-gate and scanner-side final execution-policy
+  publication denial are removed from the architecture. Geometry annotation
+  still uses policy for planned entry; publication ownership stays with the
+  worker/builder path.
+  """
   match, reason, build_measured = _build_one_strategy_match(
     symbol,
     tf,
@@ -1745,26 +1766,17 @@ def _reward_risk_pre_gate(
     ctx,
     result,
   )
+  measured = {
+    **(result.target_room_measured or {}),
+    **build_measured,
+    "preference_telemetry": True,
+  }
   if match is None:
-    measured = {
-      **build_measured,
-      "static_rejection_reason": reason or "match_build_failed",
-    }
-    static_build_blocks = {
-      "tier_c_analysis_only",
-      "insufficient_target_room",
-      "opposing_barrier_no_target",
-      "empty_target_config",
-      "unknown_strategy_policy",
-    }
-    if reason in static_build_blocks:
-      # Truly unconstructable — retain as a hard observation block.
-      measured["match_build_observation"] = reason or "match_build_failed"
-      return False, measured
-    # Incomplete analysis context (for example ATR warmup) prevents match
-    # construction but remains visible as a non-executable observation.
-    measured["static_rejection_reason"] = None
     measured["match_build_observation"] = reason or "match_build_failed"
+    measured["static_rejection_reason"] = None
+    # Only unconstructable contracts remain non-eligible.
+    if reason in {"empty_target_config", "unknown_strategy_policy", "invalid_atr", "missing_atr_series", "missing_indicators"}:
+      return False, measured
     return True, measured
   regime = str(getattr(getattr(ctx, "regime", None), "kind", "") or "")
   evaluation = evaluate_execution_policy(
@@ -1774,33 +1786,13 @@ def _reward_risk_pre_gate(
     pip_size=_pip_size(symbol),
     cfg=settings,
   )
-  measured = {
-    **(result.target_room_measured or {}),
-    **dict(evaluation.measured),
-    "policy_reason_code": evaluation.reason_code,
-    "policy_message": evaluation.message,
-    "policy_hard_block": bool(evaluation.terminal),
-  }
-  if not evaluation.allowed:
-    # Provisional policy denial is measured for ranking/telemetry only —
-    # never a scanner terminal reject. Final policy owns the decision.
-    return False, measured
-  reward_risk = measured.get("reward_risk")
-  policy = evaluation.policy
-  if (
-    policy is None
-    or reward_risk is None
-    or measured.get("planned_stop_price") is None
-  ):
-    return True, measured
-  try:
-    value = float(reward_risk)
-  except (TypeError, ValueError):
-    return True, measured
-  return (
-    math.isfinite(value) and value >= float(policy.min_reward_risk),
-    measured,
-  )
+  measured.update(dict(evaluation.measured))
+  measured["policy_reason_code"] = evaluation.reason_code
+  measured["policy_message"] = evaluation.message
+  measured["policy_hard_block"] = False
+  if not evaluation.allowed and not evaluation.terminal:
+    measured["preference_reason_code"] = evaluation.reason_code
+  return True, measured
 
 
 def _static_execution_eligibility(
@@ -2868,16 +2860,17 @@ async def _handle_event(
     if gate_reason is not None:
       structure_gated.append((result, gate_reason))
       await increment_metric(client, "structure_gated", symbol=symbol)
+      await increment_metric(client, "structure_preference_observed", symbol=symbol)
       log.info(
-        "scanner result structure-gated symbol=%s tf=%s setup=%s "
-        "direction=%s reason=%s",
+        "scanner result structure-preference-observed symbol=%s tf=%s "
+        "setup=%s direction=%s reason=%s",
         symbol,
         exec_tf,
         result.setup,
         result.direction,
         gate_reason,
       )
-      continue
+      # Preference telemetry only — still feed the detector result forward.
     raw_detector_results.append(result)
   observed_results = _merge_detection_confluence(
     symbol,

@@ -431,6 +431,111 @@ public static class VolumePlanner
       + $"→ table {tableLots:0.00} lots · risk {riskLots:0.00} lots";
   }
 
+  /// <summary>
+  /// Choose a broker-valid close volume for a partial TP against the
+  /// currently remaining filled volume (after cancelled unfilled legs are
+  /// removed). Desired size is snapped down to StepVolume. When a valid
+  /// partial would leave unsellable dust, the entire remaining is closed.
+  /// Returns 0 when no broker-valid partial exists and this is not the
+  /// final target — callers should skip ahead to the last target.
+  /// </summary>
+  public static long PlanPartialCloseVolume(
+    long remainingVolume,
+    long desiredClose,
+    SymbolInfo symbol,
+    bool isFinalTarget
+  )
+  {
+    if (remainingVolume <= 0)
+    {
+      return 0;
+    }
+    if (isFinalTarget || desiredClose >= remainingVolume)
+    {
+      return remainingVolume;
+    }
+    if (desiredClose <= 0)
+    {
+      return 0;
+    }
+    if (symbol.StepVolume <= 0 || symbol.MinVolume <= 0)
+    {
+      return Math.Min(desiredClose, remainingVolume);
+    }
+
+    var close = Math.Min(desiredClose, remainingVolume);
+    close = close / symbol.StepVolume * symbol.StepVolume;
+    if (close < symbol.MinVolume)
+    {
+      // Not enough for a broker-valid partial. Only a single-step position
+      // can exit here (full close); otherwise leave for a later full TP.
+      return remainingVolume <= symbol.MinVolume ? remainingVolume : 0;
+    }
+
+    var leftover = remainingVolume - close;
+    if (leftover == 0)
+    {
+      return close;
+    }
+    if (leftover < symbol.MinVolume || leftover % symbol.StepVolume != 0)
+    {
+      // Dust / misaligned remainder — book the whole remaining now.
+      return remainingVolume;
+    }
+    return close;
+  }
+
+  /// <summary>
+  /// Pro-rata allocate a step-aligned close volume across open legs. Each
+  /// slice and the leftover redistribution stay on StepVolume boundaries.
+  /// </summary>
+  public static long[] AllocateProRataStepped(
+    long[] remaining,
+    long closeVolume,
+    SymbolInfo symbol
+  )
+  {
+    var total = remaining.Sum();
+    if (total <= 0 || closeVolume <= 0)
+    {
+      return new long[remaining.Length];
+    }
+    closeVolume = Math.Min(closeVolume, total);
+    var step = Math.Max(1L, symbol.StepVolume);
+    if (closeVolume % step != 0)
+    {
+      closeVolume = closeVolume / step * step;
+    }
+    if (closeVolume <= 0)
+    {
+      return new long[remaining.Length];
+    }
+
+    var raw = remaining
+      .Select(volume =>
+      {
+        var ideal = (long)Math.Floor(closeVolume * (decimal)volume / total);
+        return ideal / step * step;
+      })
+      .ToArray();
+    var allocated = raw.Sum();
+    var leftover = closeVolume - allocated;
+    for (var i = 0; leftover >= step && i < raw.Length; i++)
+    {
+      var room = remaining[i] - raw[i];
+      var add = Math.Min(room / step * step, leftover / step * step);
+      if (add <= 0)
+      {
+        continue;
+      }
+      raw[i] += add;
+      leftover -= add;
+    }
+    // Any leftover that still cannot be placed step-wise on a single leg is
+    // dropped — better to under-close than send TRADING_BAD_VOLUME.
+    return raw;
+  }
+
   private static long MinimumStepsPerClose(SymbolInfo symbol) => Math.Max(
     1,
     (symbol.MinVolume + symbol.StepVolume - 1) / symbol.StepVolume
