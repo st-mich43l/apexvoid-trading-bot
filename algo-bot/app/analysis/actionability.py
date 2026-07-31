@@ -226,27 +226,43 @@ def _entries_excluding_displaced_barriers(
   result: DetectionResult,
   context: Any,
   cfg: Any,
-) -> Sequence[MapEntry]:
+) -> tuple[Sequence[MapEntry], dict[str, Any]]:
   """See structural_target_room.filter_displaced_opposing_entries: excludes
   an opposing barrier the candidate's own recent execution-tf closes have
   already closed decisively beyond, rather than hard-blocking on a barrier
   price has already broken while its own (possibly slower/HTF)
   classification hasn't caught up.
+
+  Uses authoritative recent *closed* prices (frame close column), never
+  intrabar highs/lows. Returns (filtered_entries, displacement_state).
   """
   lookback = max(
     0, int(getattr(cfg, "auto_trade_displacement_override_lookback_bars", 0)),
   )
   if lookback <= 0:
-    return entries
+    return entries, {"applied": False, "lookback_bars": 0}
   frames = getattr(context, "frames", None)
   tf = getattr(context, "tf", None)
   frame = frames.get(tf) if isinstance(frames, dict) and tf else None
   if frame is None or frame.empty or "close" not in frame.columns:
-    return entries
+    return entries, {
+      "applied": False,
+      "lookback_bars": lookback,
+      "reason": "no_closed_bars",
+    }
   recent_closes = tuple(float(value) for value in frame["close"].tail(lookback))
-  return filter_displaced_opposing_entries(
+  before = len(tuple(entries))
+  filtered = filter_displaced_opposing_entries(
     entries, direction=result.direction, recent_closes=recent_closes,
   )
+  return filtered, {
+    "applied": True,
+    "lookback_bars": lookback,
+    "recent_closes": list(recent_closes),
+    "entries_before": before,
+    "entries_after": len(filtered),
+    "dropped": before - len(filtered),
+  }
 
 
 _ZONE_TRIM_EPS = 1e-9
@@ -483,7 +499,7 @@ def resolve_actionability(
     result = original
     targets = tuple(result.provisional_targets_pips)
     if targets:
-      room_entries = _entries_excluding_displaced_barriers(
+      room_entries, displacement_state = _entries_excluding_displaced_barriers(
         entries, result=result, context=context, cfg=cfg,
       )
       result = _trim_zone_against_overlapping_barrier(result, room_entries)
@@ -509,6 +525,7 @@ def resolve_actionability(
         execution_cost_pips=float(
           getattr(cfg, "auto_trade_execution_cost_pips", 1.0)
         ),
+        displacement_state=displacement_state,
       )
       measured = {
         **room.measured,

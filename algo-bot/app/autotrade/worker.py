@@ -5107,16 +5107,36 @@ async def _publish_trade_plan_v7(
   displacement_lookback = max(
     0, int(getattr(settings, "auto_trade_displacement_override_lookback_bars", 0)),
   )
+  displacement_state: dict[str, object] = {
+    "applied": False,
+    "lookback_bars": displacement_lookback,
+  }
   if displacement_lookback > 0 and frames is not None:
     room_frame = frames.get(execution_match.source_tf)
     if room_frame is not None and not room_frame.empty and "close" in room_frame.columns:
+      recent_closes = tuple(
+        float(value) for value in room_frame["close"].tail(displacement_lookback)
+      )
+      before = len(room_entries)
       room_entries = filter_displaced_opposing_entries(
         room_entries,
         direction=execution_match.direction,
-        recent_closes=tuple(
-          float(value) for value in room_frame["close"].tail(displacement_lookback)
-        ),
+        recent_closes=recent_closes,
       )
+      displacement_state = {
+        "applied": True,
+        "lookback_bars": displacement_lookback,
+        "recent_closes": list(recent_closes),
+        "entries_before": before,
+        "entries_after": len(room_entries),
+        "dropped": before - len(room_entries),
+      }
+    else:
+      displacement_state = {
+        "applied": False,
+        "lookback_bars": displacement_lookback,
+        "reason": "no_closed_bars",
+      }
   target_room = evaluate_structural_target_room(
     direction=execution_match.direction,
     planned_entry_price=entry_reference,
@@ -5129,6 +5149,7 @@ async def _publish_trade_plan_v7(
     barrier_buffer_atr=float(settings.auto_trade_opposing_barrier_atr),
     min_capped_target_pips=float(settings.auto_trade_min_capped_target_pips),
     execution_cost_pips=float(settings.auto_trade_execution_cost_pips),
+    displacement_state=displacement_state,
   )
   if not target_room.allowed:
     # Hard reject structural conflicts (e.g. SELL entry inside demand /

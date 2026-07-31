@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import logging
 import math
 from typing import Any, Iterable
+
+log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -63,6 +66,7 @@ def filter_displaced_opposing_entries(
   closes = [float(value) for value in recent_closes if math.isfinite(value)]
   opposing_side = "sell" if side == "BUY" else "buy"
   kept: list[Any] = []
+  dropped: list[tuple[float, float]] = []
   for entry in entries:
     if str(getattr(entry, "side", "")).casefold() != opposing_side:
       kept.append(entry)
@@ -73,8 +77,20 @@ def filter_displaced_opposing_entries(
       (side == "BUY" and close > high) or (side == "SELL" and close < low)
       for close in closes
     )
-    if not displaced:
+    if displaced:
+      dropped.append((low, high))
+    else:
       kept.append(entry)
+  log_fn = log.info if dropped else log.debug
+  log_fn(
+    "structural_target_room displacement direction=%s closes=%s "
+    "kept=%s dropped=%s dropped_bounds=%s",
+    side,
+    closes,
+    len(kept),
+    len(dropped),
+    [(round(lo, 6), round(hi, 6)) for lo, hi in dropped],
+  )
   return kept
 
 
@@ -105,17 +121,17 @@ def _nearest_opposing(
       if direction == "BUY"
       else planned_entry - high
     )
-    contains = (
-      low <= planned_entry <= high
-      or bool(getattr(entry, "contains_price", False))
-    )
+    # contains_price means market spot is inside the map entry — not that the
+    # planned execution entry is geometrically contained. Ranking / hard-block
+    # must only use planned-entry geometry.
+    planned_entry_contained = low <= planned_entry <= high
     tier_rank = {
       "major": 0,
       "zone": 1,
       "level": 2,
     }.get(str(getattr(entry, "tier", "")).casefold(), 3)
     relevant.append((
-      0.0 if contains or overlaps_candidate else max(0.0, raw_room),
+      0.0 if planned_entry_contained or overlaps_candidate else max(0.0, raw_room),
       tier_rank,
       abs(raw_room),
       low,
@@ -137,6 +153,7 @@ def evaluate_structural_target_room(
   barrier_buffer_atr: float,
   min_capped_target_pips: float = 0.0,
   execution_cost_pips: float = 0.0,
+  displacement_state: dict[str, Any] | None = None,
 ) -> StructuralTargetRoomDecision:
   """Cap reachable target room at the nearest opposing actionable entry.
 
@@ -144,6 +161,16 @@ def evaluate_structural_target_room(
   the opposing structure, or raw geometric room <= 0. The ATR barrier buffer
   is preference for TP sizing — it must not invent a hard reject when raw
   room is still positive.
+
+  Market Map ``contains_price`` is telemetry only: it describes whether the
+  *current market price* sits inside a map entry, not whether the planned
+  execution entry is contained.
+
+  Candidate-band overlap without planned-entry containment is allow-with-
+  warning plus optional target cap — never a hard structural reject.
+
+  Callers must apply ``filter_displaced_opposing_entries`` on authoritative
+  recent closed bars before passing ``actionable_entries``.
 
   execution_cost_pips is the hard viability floor for a capped target (spread
   / slippage). A capped target must never exceed usable buffered room and
@@ -193,8 +220,17 @@ def evaluate_structural_target_room(
     "execution_cost_pips": cost,
     "min_capped_target_pips": preference_floor,
   }
+  if displacement_state:
+    base_measured["displacement_state"] = dict(displacement_state)
   if barrier is None:
     effective = float(max(targets)) if targets else None
+    log.debug(
+      "structural_target_room allowed=true reason=no_opposing_barrier "
+      "direction=%s planned_entry=%s displacement=%s",
+      side,
+      planned,
+      displacement_state,
+    )
     return StructuralTargetRoomDecision(
       True,
       "no_opposing_barrier",
@@ -226,10 +262,8 @@ def evaluate_structural_target_room(
   raw_room_pips = raw_room / pip
   room_pips = buffered_room / pip
   room_atr = buffered_room / atr if atr > 0 else 0.0
-  contained = (
-    opposing_low <= planned <= opposing_high
-    or bool(getattr(barrier, "contains_price", False))
-  )
+  planned_entry_contained = opposing_low <= planned <= opposing_high
+  market_price_contained = bool(getattr(barrier, "contains_price", False))
   tier = str(getattr(barrier, "tier", "") or "")
   tags = [str(tag) for tag in getattr(barrier, "tags", ()) or ()]
   measured = {
@@ -238,9 +272,10 @@ def evaluate_structural_target_room(
     "opposing_high": opposing_high,
     "opposing_tier": tier,
     "opposing_tags": tags,
-    "opposing_contains_price": bool(
-      getattr(barrier, "contains_price", False)
-    ),
+    "planned_entry_contained": planned_entry_contained,
+    "market_price_contained": market_price_contained,
+    # Legacy alias — market-map contains_price telemetry only.
+    "opposing_contains_price": market_price_contained,
     "entry_overlap_price": round(overlap_price, 6),
     "entry_overlap_ratio": round(overlap_ratio, 6),
     "raw_room_price": round(raw_room, 6),
@@ -250,9 +285,34 @@ def evaluate_structural_target_room(
     "room_pips": round(room_pips, 3),
     "room_atr": round(room_atr, 4),
   }
-  if contained:
+
+  def _log_decision(decision: StructuralTargetRoomDecision) -> StructuralTargetRoomDecision:
+    log.info(
+      "structural_target_room allowed=%s hard_block=%s reason=%s "
+      "direction=%s planned_entry=%s opposing_low=%s opposing_high=%s "
+      "planned_entry_contained=%s market_price_contained=%s "
+      "overlap_price=%s overlap_ratio=%s raw_room=%s buffered_room=%s "
+      "displacement=%s",
+      decision.allowed,
+      decision.hard_block,
+      decision.reason_code,
+      side,
+      planned,
+      opposing_low,
+      opposing_high,
+      planned_entry_contained,
+      market_price_contained,
+      round(overlap_price, 6),
+      round(overlap_ratio, 6),
+      round(raw_room, 6),
+      round(buffered_room, 6),
+      displacement_state,
+    )
+    return decision
+
+  if planned_entry_contained:
     # Prefer opposing_entry_overlap when the planned entry sits in the
-    # candidate∩opposing intersection; otherwise contained (flag / engulfed).
+    # candidate∩opposing intersection; otherwise contained (engulfed).
     overlap_low = max(low, opposing_low)
     overlap_high = min(high, opposing_high)
     planned_in_overlap = (
@@ -264,7 +324,7 @@ def evaluate_structural_target_room(
       if planned_in_overlap
       else "opposing_entry_contained"
     )
-    return StructuralTargetRoomDecision(
+    return _log_decision(StructuralTargetRoomDecision(
       False,
       reason,
       (
@@ -275,7 +335,7 @@ def evaluate_structural_target_room(
       True,
       measured,
       opposing_entry=barrier,
-    )
+    ))
   # Hard structural: no raw geometric room. Buffer must not invent this.
   if raw_room <= 0:
     reason = (
@@ -283,7 +343,7 @@ def evaluate_structural_target_room(
       if tier.casefold() == "major"
       else "opposing_barrier_no_target"
     )
-    return StructuralTargetRoomDecision(
+    return _log_decision(StructuralTargetRoomDecision(
       False,
       reason,
       (
@@ -294,12 +354,16 @@ def evaluate_structural_target_room(
       True,
       measured,
       opposing_entry=barrier,
-    )
+    ))
+
+  # Band overlap without planned-entry containment: allow + optional TP cap.
+  if overlap_price > 0:
+    measured["band_overlap_without_planned_containment"] = True
 
   # Usable TP room is buffer-aware but never negative for sizing.
   usable_pips = max(0.0, room_pips)
   if usable_pips < cost:
-    return StructuralTargetRoomDecision(
+    return _log_decision(StructuralTargetRoomDecision(
       False,
       "execution_cost_insufficient_room",
       "buffered target room does not clear the execution-cost floor",
@@ -310,12 +374,12 @@ def evaluate_structural_target_room(
         "effective_target_pips": None,
       },
       opposing_entry=barrier,
-    )
+    ))
 
   fitted = tuple(target for target in targets if target <= usable_pips)
   if fitted:
     effective = float(max(fitted))
-    return StructuralTargetRoomDecision(
+    return _log_decision(StructuralTargetRoomDecision(
       True,
       "opposing_barrier_target_capped",
       "configured target ladder capped before opposing structure",
@@ -329,12 +393,12 @@ def evaluate_structural_target_room(
       opposing_entry=barrier,
       fitted_targets_pips=fitted,
       effective_target_pips=effective,
-    )
+    ))
 
   # Cap to real usable room — never invent pips above room (no max(1.0, …)).
   capped_target = float(math.floor(usable_pips))
   if capped_target < cost or capped_target <= 0:
-    return StructuralTargetRoomDecision(
+    return _log_decision(StructuralTargetRoomDecision(
       False,
       "execution_cost_insufficient_room",
       "no integer target clears the execution-cost floor inside usable room",
@@ -345,7 +409,7 @@ def evaluate_structural_target_room(
         "effective_target_pips": None,
       },
       opposing_entry=barrier,
-    )
+    ))
   reason = (
     "opposing_barrier_target_capped_below_ladder"
     if preference_floor > 0 and capped_target < preference_floor
@@ -353,7 +417,7 @@ def evaluate_structural_target_room(
     if targets
     else "opposing_barrier_target_capped_below_ladder"
   )
-  return StructuralTargetRoomDecision(
+  return _log_decision(StructuralTargetRoomDecision(
     True,
     reason,
     "no configured target fits; capping to real buffered room",
@@ -367,4 +431,4 @@ def evaluate_structural_target_room(
     opposing_entry=barrier,
     fitted_targets_pips=(int(capped_target),),
     effective_target_pips=capped_target,
-  )
+  ))
