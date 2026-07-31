@@ -611,10 +611,6 @@ _TP_BOOKED_RE = re.compile(
   r"(?:;\s*PLAN\s+CLOSED)?"
   r"(?:\s+\((?P<open>\d+)/(?P<total>\d+)\))?\s*$"
 )
-_TP_LEG_LOT_RE = re.compile(r"(?i)\b(L\d+)\s+lot\s*=\s*([0-9]+(?:\.[0-9]+)?)")
-_TP_REMAINING_LOT_RE = re.compile(
-  r"(?i)\bremaining\s+lot\s*=\s*([0-9]+(?:\.[0-9]+)?)"
-)
 _SL_MOVED_RE = re.compile(
   r"(?i)^(?:GROUP\s+)?SL\s+MOVED(?:\s+TO\s+BE|\s+to)?\s*"
   r"(?P<price>[0-9]+(?:\.[0-9]+)?)"
@@ -623,17 +619,11 @@ _SL_MOVED_RE = re.compile(
 
 
 def _format_tp_booked(event: dict, message: str) -> str | None:
-  """Rich TP archive card — target, per-leg lots, remaining, plan state."""
+  """Rich TP archive card — target + fill only (no per-leg / remaining dump)."""
   cleaned = _clean_message(message)
   match = _TP_BOOKED_RE.match(cleaned)
   target = match.group("target").upper() if match else None
-  body = match.group("body").strip() if match else cleaned
-  open_count = match.group("open") if match else None
-  total_count = match.group("total") if match else None
   plan_closed = "PLAN CLOSED" in cleaned.upper()
-  legs = _TP_LEG_LOT_RE.findall(body or cleaned)
-  remaining_match = _TP_REMAINING_LOT_RE.search(body or cleaned)
-  remaining = remaining_match.group(1) if remaining_match else None
   price = event.get("price")
   try:
     price_text = (
@@ -649,24 +639,13 @@ def _format_tp_booked(event: dict, message: str) -> str | None:
   ]
   if price_text:
     lines.append(f"💰 Fill: <b>{escape(price_text)}</b>")
-  if legs:
-    leg_bits = " · ".join(
-      f"{escape(leg)} <b>{escape(lot)}</b>" for leg, lot in legs
-    )
-    lines.append(f"📦 Closed: {leg_bits}")
-  if remaining is not None and not plan_closed:
-    lines.append(f"📉 Remaining: <b>{escape(remaining)}</b> lot")
-  if open_count and total_count:
-    lines.append(
-      f"🧩 Legs open: <b>{escape(open_count)}/{escape(total_count)}</b>"
-    )
   if plan_closed:
     lines.append("🏁 <b>PLAN CLOSED</b> · all targets booked")
   attribution = _attribution_line(event)
   if attribution:
     lines.append(attribution)
-  # Fall back to the cleaned engine line when we could not parse structure.
-  if not legs and not target and cleaned:
+  # Fall back to the cleaned engine line when we could not parse a target.
+  if not target and cleaned and not plan_closed:
     lines.extend(["", escape(cleaned)])
   return "\n".join(lines)
 
