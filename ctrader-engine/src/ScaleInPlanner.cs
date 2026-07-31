@@ -59,7 +59,7 @@ public static class ScaleInPlanner
       return Reject("add sizing inputs are invalid");
     }
     var budget = balance * riskPercent / 100m;
-    var tableLots = VolumePlanner.LotsForBalance(balance);
+    var tableLots = VolumePlanner.LotsForEquity(balance);
     var openLots = openTranches.Sum(item => Lots(item.RemainingVolume, symbol));
     var stopPnl = openTranches.Sum(item => StopPnl(
       item,

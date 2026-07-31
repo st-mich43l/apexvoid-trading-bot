@@ -44,7 +44,7 @@ public static class VolumePlanner
     }
     var budget = balance * riskPercent / 100m;
     var riskLots = budget / (stopPips * pipValuePerLot);
-    var tableLots = LotsForBalance(balance);
+    var tableLots = LotsForEquity(balance);
     if (tableLots <= 0)
     {
       throw new VolumePlanningException(
@@ -53,7 +53,7 @@ public static class VolumePlanner
     }
     var rawLots = sizingMode switch
     {
-      "table" => tableLots,
+      "table" or "equity_table" => tableLots,
       "risk" => riskLots,
       _ => Math.Min(riskLots, tableLots),
     };
@@ -85,26 +85,32 @@ public static class VolumePlanner
     );
   }
 
-  public static decimal LotsForBalance(decimal balance)
+  /// <summary>
+  /// Owner equity → lot table (owner_equity_v1). Bands are equity dollars;
+  /// result is rounded AwayFromZero to two decimal places (lot cents), not
+  /// floored — e.g. equity 1300 → raw 0.108 → 0.11.
+  /// </summary>
+  public static decimal LotsForEquity(decimal equity)
   {
-    if (balance < 200m)
+    if (equity < 200m)
     {
       return 0m;
     }
     // The upward discontinuities at band boundaries are intentional.
-    var rawLots = balance switch
+    var rawLots = equity switch
     {
       >= 5_000m => 0.30m,
-      >= 3_000m => 0.25m + (balance - 3_000m) * 0.05m / 2_000m,
+      >= 3_000m => 0.25m + (equity - 3_000m) * 0.05m / 2_000m,
       >= 2_000m => 0.15m,
-      >= 1_000m => 0.09m + (balance - 1_000m) * 0.06m / 1_000m,
+      >= 1_000m => 0.09m + (equity - 1_000m) * 0.06m / 1_000m,
       >= 900m => 0.06m,
-      _ => 0.02m + (balance - 200m) * 0.04m / 700m,
+      _ => 0.02m + (equity - 200m) * 0.04m / 700m,
     };
-    // Snap currency-cent band endpoints to their intended lot-cent anchor.
-    rawLots = decimal.Round(rawLots, 5, MidpointRounding.AwayFromZero);
-    return decimal.Floor(rawLots * 100m) / 100m;
+    return decimal.Round(rawLots, 2, MidpointRounding.AwayFromZero);
   }
+
+  [Obsolete("Use LotsForEquity — sizing is equity-based, not balance-based.")]
+  public static decimal LotsForBalance(decimal balance) => LotsForEquity(balance);
 
   public static long VolumeForLots(decimal lots, SymbolInfo symbol)
   {
@@ -267,6 +273,124 @@ public static class VolumePlanner
   }
 
   /// <summary>
+  /// Splits an entry volume across legs by fractional ratios, preferring the
+  /// step-aligned allocation closest to the declared ratios. Unlike
+  /// <see cref="SplitWeighted"/> (largest-remainder on integer weights), this
+  /// rounds the first-leg ideal in lot space AwayFromZero to 2dp then aligns
+  /// to the broker step — e.g. 0.11 lots at 70/30 → 0.08 + 0.03, not 0.07 + 0.04.
+  /// </summary>
+  public static IReadOnlyList<long> SplitEntryVolume(
+    long totalVolume,
+    SymbolInfo symbol,
+    IReadOnlyList<decimal> ratios
+  )
+  {
+    if (
+      totalVolume <= 0
+      || symbol.StepVolume <= 0
+      || symbol.MinVolume <= 0
+      || symbol.LotSize <= 0
+      || totalVolume % symbol.StepVolume != 0
+    )
+    {
+      throw new VolumePlanningException("Position volume is not broker-step aligned");
+    }
+    if (ratios.Count == 0 || ratios.Any(ratio => ratio <= 0))
+    {
+      throw new VolumePlanningException("Entry ratios must all be positive");
+    }
+    var ratioSum = ratios.Sum();
+    if (Math.Abs(ratioSum - 1m) > 0.0001m)
+    {
+      throw new VolumePlanningException(
+        $"Entry ratios must sum to 1.0, got {ratioSum}"
+      );
+    }
+    if (ratios.Count == 1)
+    {
+      return new[] { totalVolume };
+    }
+
+    var minimumSteps = MinimumStepsPerClose(symbol);
+    var totalSteps = totalVolume / symbol.StepVolume;
+    var requiredSteps = checked(minimumSteps * ratios.Count);
+    if (totalSteps < requiredSteps)
+    {
+      // Not enough volume for every leg at broker minimum — collapse to a
+      // single entry so callers can still submit the sized total.
+      return new[] { totalVolume };
+    }
+
+    var totalLots = totalVolume / (decimal)symbol.LotSize;
+    var slices = new long[ratios.Count];
+    long allocated = 0;
+    for (var index = 0; index < ratios.Count - 1; index++)
+    {
+      var idealLots = decimal.Round(
+        totalLots * ratios[index],
+        2,
+        MidpointRounding.AwayFromZero
+      );
+      var raw = decimal.ToInt64(
+        decimal.Round(idealLots * symbol.LotSize, 0, MidpointRounding.AwayFromZero)
+      );
+      var stepped = raw / symbol.StepVolume * symbol.StepVolume;
+      slices[index] = stepped;
+      allocated += stepped;
+    }
+    slices[^1] = totalVolume - allocated;
+
+    // Feasibility: every leg must meet MinVolume. Walk one step at a time
+    // toward a feasible split while staying as close as possible to the
+    // rounded ratio allocation.
+    for (var pass = 0; pass < ratios.Count * 4; pass++)
+    {
+      var shortIndex = -1;
+      for (var index = 0; index < slices.Length; index++)
+      {
+        if (slices[index] < symbol.MinVolume)
+        {
+          shortIndex = index;
+          break;
+        }
+      }
+      if (shortIndex < 0)
+      {
+        break;
+      }
+      var donor = -1;
+      var bestExtra = long.MinValue;
+      for (var index = 0; index < slices.Length; index++)
+      {
+        if (index == shortIndex)
+        {
+          continue;
+        }
+        var extra = slices[index] - symbol.MinVolume;
+        if (extra >= symbol.StepVolume && extra > bestExtra)
+        {
+          bestExtra = extra;
+          donor = index;
+        }
+      }
+      if (donor < 0)
+      {
+        return new[] { totalVolume };
+      }
+      slices[donor] -= symbol.StepVolume;
+      slices[shortIndex] += symbol.StepVolume;
+    }
+
+    if (slices.Any(slice => slice < symbol.MinVolume) || slices.Sum() != totalVolume)
+    {
+      throw new VolumePlanningException(
+        "Unable to split entry volume into broker-valid legs near the declared ratios"
+      );
+    }
+    return slices;
+  }
+
+  /// <summary>
   /// Derives the broker-reported pip size for diagnostics only. Price-to-pip
   /// conversions must use the configured AutoTradeOptions.PipSize value.
   /// </summary>
@@ -300,7 +424,7 @@ public static class VolumePlanner
     AutoTradeOptions options
   )
   {
-    var tableLots = LotsForBalance(balance);
+    var tableLots = LotsForEquity(balance);
     var riskLots = balance * options.RiskPercent / 100m
       / (options.TrendStopMaxPips * options.PipValuePerLot);
     return $"sizing: mode={options.SizingMode} balance={balance:0.00} "

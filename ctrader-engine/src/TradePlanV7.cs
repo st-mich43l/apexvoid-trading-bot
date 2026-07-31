@@ -163,6 +163,14 @@ public sealed record TradePlanProvenance(
   string ConfigFingerprint
 );
 
+public sealed record TradePlanSizing(
+  string Mode,
+  string TableVersion,
+  string EntryDistribution,
+  [property: JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
+  IReadOnlyList<decimal>? LegRatios = null
+);
+
 public sealed record TradePlan(
   int Version,
   string PlanId,
@@ -179,7 +187,8 @@ public sealed record TradePlan(
   TradePlanRisk Risk,
   TradePlanManagement Management,
   TradePlanExecutionPolicy ExecutionPolicy,
-  TradePlanProvenance Provenance
+  TradePlanProvenance Provenance,
+  TradePlanSizing? Sizing = null
 );
 
 // Execution-safety shape validation only. This is deliberately the ONLY

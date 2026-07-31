@@ -146,6 +146,16 @@ _NOTIFY_TYPES = {
   "plan_rejected",
 }
 
+_V7_NOTIFY_DEDUP_TYPES = frozenset({
+  "v7_order_submitted",
+  "order_filled",
+  "tp_booked",
+  "sl_moved",
+  "position_closed",
+  "plan_rejected",
+  "warning",
+})
+
 _AUTO_NAME_RE = re.compile(r"(?i)\bauto[\s-]*(?:trade|trader)\b")
 _OPENED_RE = re.compile(
   r"(?i)^(BUY|SELL)\s+([\d.,]+)\s+lots?\s+filled\s+([\d.,]+),\s*"
@@ -611,10 +621,10 @@ def render_auto_trade_event(
     # confused with a merely-confirmed setup ("Do not say READY when
     # Python only publishes a plan").
     "plan_armed": "🎯 <b>PLAN ARMED</b>",
-    "v7_order_submitted": "📤 <b>ORDER SUBMITTED</b>",
+    "v7_order_submitted": "📤 <b>ORDERS SUBMITTED</b>",
     "order_filled": "✅ <b>ORDER FILLED</b>",
-    "tp_booked": "🎯 <b>TP BOOKED</b>",
-    "sl_moved": "🛡 <b>SL MOVED</b>",
+    "tp_booked": "🎯 <b>TP COMPLETED</b>",
+    "sl_moved": "🛡 <b>GROUP SL MOVED</b>",
     "plan_rejected": "⛔ <b>PLAN REJECTED</b>",
   }
   lines = ["🤖 <b>ApexVoid Algo</b>", labels[event_type]]
@@ -903,6 +913,27 @@ async def _deliver_auto_trade_event(
     )
     if not claimed:
       return False
+  if event_type in _V7_NOTIFY_DEDUP_TYPES:
+    plan_id = str(
+      event.get("candidate_id") or event.get("group_id") or ""
+    ).strip()
+    if plan_id:
+      event_key = str(
+        event.get("reason_code")
+        or event.get("lifecycle_id")
+        or f"{event_type}:{event.get('message') or ''}"
+      ).strip()
+      # Prefer a stable key when the engine already stamped one into message
+      # prefixes; fall back to type+message hash for durability across restarts.
+      dedup_key = f"auto_trade:v7_notify:{plan_id}:{event_type}:{hash(event_key) & 0xffffffff:x}"
+      claimed = await client.set(
+        dedup_key,
+        "1",
+        nx=True,
+        ex=_TRADE_MESSAGE_TTL,
+      )
+      if not claimed:
+        return False
   text = render_auto_trade_event(event, profile=profile)
   if not text:
     return False

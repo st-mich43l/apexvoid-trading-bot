@@ -141,6 +141,10 @@ public static class StructureStopPlanner
       );
     }
     var rawPips = rawDistance / pipSize;
+    // V6 StructureStopPlanner still clamps into the envelope (historical
+    // contract used by AutoTradeEngine). The V7/zone-scale group path rejects
+    // over-max in Python plan_group_protective_stop instead of pulling the
+    // stop inward before structural invalidation.
     var stopPips = Math.Clamp(
       rawPips,
       Convert.ToDecimal(minimumStopPips),

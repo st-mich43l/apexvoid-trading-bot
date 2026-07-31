@@ -300,6 +300,15 @@ public sealed class CTraderOpenApiFeedClient : ICTraderFeedClient, ICTraderTrade
     {
       divisor *= 10m;
     }
+    var balance = trader.Balance / divisor;
+    // OpenAPI.Net 1.4.4's ProtoOATrader has no Equity / UnrealizedNetProfit
+    // field (Equity exists only on ProtoOADepositWithdraw history rows).
+    // Temporary fallback: Equity = Balance marked as balance_proxy so
+    // EquityResolver refuses to size against Balance while exposure exists.
+    // Fake/test clients must set Equity independently (non-proxy source).
+    // ProtoOAPosition also has no NetProfit; TradingPosition.NetProfit stays
+    // null on the live path until a broker equity/PnL source is wired.
+    var equity = balance;
     return new TradingAccountSnapshot(
       checked((long)account.CtidTraderAccountId),
       account.IsLive,
@@ -307,7 +316,10 @@ public sealed class CTraderOpenApiFeedClient : ICTraderFeedClient, ICTraderTrade
       trader.AccessRights.ToString(),
       trader.AccountType.ToString(),
       trader.BrokerName,
-      trader.Balance / divisor
+      balance,
+      equity,
+      DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+      EquitySource: EquityResolver.SourceBalanceProxy
     );
   }
 

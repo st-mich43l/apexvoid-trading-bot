@@ -151,7 +151,13 @@ public static class AutoTradeConfigHealth
       PostFillTargetFallback: options.PostFillTargetFallback,
       ContractMode: options.ContractMode,
       TradePlanVersion: TradePlanContract.Version,
-      TradePlanStream: options.TradePlanStream
+      TradePlanStream: options.TradePlanStream,
+      SizingMode: options.SizingMode,
+      EquityTableVersion: options.EquityTableVersion,
+      ZoneScaleUndersizedPolicy: options.ZoneScaleUndersizedPolicy,
+      GroupCloseAllocation: options.GroupCloseAllocation,
+      UnfilledLegAfterTpPolicy: options.UnfilledLegAfterTpPolicy,
+      EntryLegRatios: "0.70,0.30"
     );
   }
 
@@ -273,6 +279,44 @@ public static class AutoTradeConfigHealth
         CompareString(
           root, "trade_plan_stream", current.TradePlanStream, fatal
         );
+      }
+      if (root.TryGetProperty("sizing_mode", out _))
+      {
+        CompareString(root, "sizing_mode", current.SizingMode, fatal);
+      }
+      if (root.TryGetProperty("equity_table_version", out _))
+      {
+        CompareString(
+          root, "equity_table_version", current.EquityTableVersion, fatal
+        );
+      }
+      if (root.TryGetProperty("zone_scale_undersized_policy", out _))
+      {
+        CompareString(
+          root,
+          "zone_scale_undersized_policy",
+          current.ZoneScaleUndersizedPolicy,
+          fatal
+        );
+      }
+      if (root.TryGetProperty("group_close_allocation", out _))
+      {
+        CompareString(
+          root, "group_close_allocation", current.GroupCloseAllocation, fatal
+        );
+      }
+      if (root.TryGetProperty("unfilled_leg_after_tp_policy", out _))
+      {
+        CompareString(
+          root,
+          "unfilled_leg_after_tp_policy",
+          current.UnfilledLegAfterTpPolicy,
+          fatal
+        );
+      }
+      if (root.TryGetProperty("entry_leg_ratios", out _))
+      {
+        CompareString(root, "entry_leg_ratios", current.EntryLegRatios, fatal);
       }
       CompareIntList(root, "target_plans", current.TargetPlans, fatal);
       CompareIntList(

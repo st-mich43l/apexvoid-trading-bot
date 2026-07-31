@@ -235,6 +235,9 @@ def _plan_base_stop(
       "Structure invalidation is not on the losing side of entry"
     )
   raw_pips = raw_distance / pip
+  # V6 / PlanBase parity with StructureStopPlanner: clamp into the
+  # [min, max] envelope. Zone-scale group stops use plan_group_protective_stop
+  # which rejects over-max instead of pulling the stop inward.
   stop_pips = min(
     max(raw_pips, Decimal(minimum_stop_pips)),
     Decimal(maximum_stop_pips),
@@ -444,21 +447,279 @@ _REACTION_FAMILY_STRATEGIES = {
 }
 
 
+def volume_weighted_reference_entry(
+  leg_prices: Any,
+  leg_volumes: Any,
+) -> Decimal:
+  """Group reference entry from planned prices and resolved leg volumes.
+
+  Uses actual broker-step volumes (e.g. 0.08/0.03 → 8/11 and 3/11), not the
+  ideal declared ratios before rounding.
+  """
+  prices = [decimal_value(price, "planned_leg_price") for price in leg_prices]
+  volumes = [
+    decimal_value(volume, "resolved_leg_volume") for volume in leg_volumes
+  ]
+  if not prices or len(prices) != len(volumes):
+    raise ProtectiveStopError(
+      "weighted reference requires matching leg prices and volumes",
+    )
+  if any(volume <= 0 for volume in volumes):
+    raise ProtectiveStopError("resolved leg volumes must be positive")
+  total = sum(volumes)
+  weighted = sum(price * volume for price, volume in zip(prices, volumes))
+  return weighted / total
+
+
+def resolve_entry_leg_lots(
+  total_lots: Any,
+  ratios: Any,
+  *,
+  step_lots: Any = Decimal("0.01"),
+) -> tuple[Decimal, ...]:
+  """Mirror C# ``VolumePlanner.SplitEntryVolume`` in lot space.
+
+  AwayFromZero 2dp round on the first N-1 legs, remainder on the last — so
+  0.11 at 70/30 resolves to 0.08 + 0.03 (weights 8/11, 3/11).
+  """
+  total = decimal_value(total_lots, "total_lots")
+  step = decimal_value(step_lots, "step_lots")
+  ratio_values = [decimal_value(ratio, "leg_ratio") for ratio in ratios]
+  if total <= 0 or step <= 0 or not ratio_values:
+    raise ProtectiveStopError("entry lot split inputs are invalid")
+  if any(ratio <= 0 for ratio in ratio_values):
+    raise ProtectiveStopError("entry ratios must all be positive")
+  ratio_sum = sum(ratio_values)
+  if abs(ratio_sum - Decimal("1")) > Decimal("0.0001"):
+    raise ProtectiveStopError("entry ratios must sum to 1.0")
+  if len(ratio_values) == 1:
+    return (total.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP),)
+
+  lot_quantum = Decimal("0.01")
+  slices: list[Decimal] = []
+  allocated = Decimal("0")
+  for ratio in ratio_values[:-1]:
+    # C#: Round(totalLots * ratio, 2, AwayFromZero); with step 0.01 that
+    # lot-cent value is already broker-step aligned.
+    ideal = (total * ratio).quantize(lot_quantum, rounding=ROUND_HALF_UP)
+    slices.append(ideal)
+    allocated += ideal
+  slices.append(total - allocated)
+  if any(slice_lots < step for slice_lots in slices):
+    raise ProtectiveStopError(
+      "resolved entry legs fall below broker step",
+    )
+  if sum(slices) != total:
+    raise ProtectiveStopError("resolved entry legs do not sum to total lots")
+  return tuple(slices)
+
+
+def plan_group_protective_stop(
+  *,
+  direction: str,
+  entry_zone_low: Any,
+  entry_zone_high: Any,
+  planned_leg_prices: Any,
+  resolved_leg_volumes: Any,
+  structure_swing: Any,
+  atr: Any,
+  structure_buffer_atr: Any,
+  sweep_extreme: Any | None,
+  wick_buffer_atr: Any,
+  minimum_stop_pips: int,
+  maximum_stop_pips: int,
+  pip_size: Any,
+  digits: int,
+  opposing_zone: OpposingZoneStopContext | None = None,
+) -> FinalProtectiveStopPlan:
+  """One absolute group stop from structure/zone geometry.
+
+  The stop price itself is absolute (one shared level for every entry leg) —
+  e.g. entries 4108 / 4105 share SL 4103. It must clear zone edge, every
+  planned entry, structural swing and sweep extreme, and must never remain
+  inside the source entry zone.
+
+  ``resolved_leg_volumes`` are relative weights only (declared ratios or
+  broker lots) used to measure the 40–60 pip envelope from a group reference
+  entry. They must not invent an absolute stop from assumed equity/lots.
+  """
+  direction = str(direction).upper()
+  zone_low = decimal_value(entry_zone_low, "entry_zone_low")
+  zone_high = decimal_value(entry_zone_high, "entry_zone_high")
+  if zone_low <= 0 or zone_high <= 0 or zone_low >= zone_high:
+    raise ProtectiveStopError("entry zone geometry is invalid")
+  prices = [
+    decimal_value(price, "planned_leg_price") for price in planned_leg_prices
+  ]
+  if not prices:
+    raise ProtectiveStopError("group stop requires planned leg prices")
+  reference = volume_weighted_reference_entry(prices, resolved_leg_volumes)
+  swing = decimal_value(structure_swing, "structure_swing")
+  atr_value = decimal_value(atr, "atr")
+  structure_buffer = decimal_value(
+    structure_buffer_atr, "structure_buffer_atr",
+  )
+  wick_buffer = decimal_value(wick_buffer_atr, "wick_buffer_atr")
+  pip = decimal_value(pip_size, "pip_size")
+  if (
+    direction not in {"BUY", "SELL"}
+    or reference <= 0
+    or swing <= 0
+    or atr_value <= 0
+    or structure_buffer < 0
+    or wick_buffer < 0
+    or minimum_stop_pips <= 0
+    or maximum_stop_pips < minimum_stop_pips
+    or pip <= 0
+    or digits < 0
+  ):
+    raise ProtectiveStopError("Structure-stop inputs are invalid")
+
+  structural = (
+    swing - structure_buffer * atr_value
+    if direction == "BUY"
+    else swing + structure_buffer * atr_value
+  )
+  source = "structure"
+  if sweep_extreme is not None:
+    sweep = decimal_value(sweep_extreme, "sweep_extreme")
+    if sweep <= 0:
+      raise ProtectiveStopError("Sweep extreme is invalid")
+    wick_stop = (
+      sweep - wick_buffer * atr_value
+      if direction == "BUY"
+      else sweep + wick_buffer * atr_value
+    )
+    wick_distance = (
+      reference - wick_stop
+      if direction == "BUY"
+      else wick_stop - reference
+    )
+    if wick_distance <= 0:
+      raise ProtectiveStopError(
+        "Sweep invalidation is not on the losing side of entry"
+      )
+    if wick_distance / pip > Decimal(maximum_stop_pips):
+      raise ProtectiveStopError("stop_exceeds_envelope_after_wick")
+    selected = min(structural, wick_stop) if direction == "BUY" else max(
+      structural, wick_stop,
+    )
+    if selected == wick_stop and selected != structural:
+      source = "wick"
+    elif selected == wick_stop:
+      source = "structure_and_wick"
+    structural = selected
+
+  tick = Decimal(1).scaleb(-digits)
+  # Clearance floors: stop must sit strictly outside the source zone and
+  # beyond every planned entry, in addition to structural/wick invalidation.
+  if direction == "BUY":
+    clearance_edge = min(zone_low, min(prices)) - tick
+    raw_stop = min(structural, clearance_edge)
+  else:
+    clearance_edge = max(zone_high, max(prices)) + tick
+    raw_stop = max(structural, clearance_edge)
+
+  raw_distance = (
+    reference - raw_stop if direction == "BUY" else raw_stop - reference
+  )
+  if raw_distance <= 0:
+    raise ProtectiveStopError(
+      "Structure invalidation is not on the losing side of entry"
+    )
+  raw_pips = raw_distance / pip
+  if raw_pips > Decimal(maximum_stop_pips):
+    raise ProtectiveStopError("stop_exceeds_max_envelope")
+  stop_pips = max(raw_pips, Decimal(minimum_stop_pips))
+  distance = stop_pips * pip
+  stop_price = (
+    reference - distance if direction == "BUY" else reference + distance
+  )
+  stop_price = stop_price.quantize(tick, rounding=ROUND_HALF_UP)
+  # Expanding to the floor must still clear zone + entries.
+  if direction == "BUY":
+    if stop_price >= zone_low:
+      raise ProtectiveStopError("stop_inside_entry_zone")
+    if any(stop_price >= price for price in prices):
+      raise ProtectiveStopError("stop_not_beyond_planned_entries")
+  else:
+    if stop_price <= zone_high:
+      raise ProtectiveStopError("stop_inside_entry_zone")
+    if any(stop_price <= price for price in prices):
+      raise ProtectiveStopError("stop_not_beyond_planned_entries")
+  distance = abs(reference - stop_price)
+  stop_pips = distance / pip
+  if stop_pips > Decimal(maximum_stop_pips):
+    raise ProtectiveStopError("stop_exceeds_max_envelope")
+  clamped = stop_pips != raw_pips
+  base_plan = FinalProtectiveStopPlan(
+    entry_price=reference,
+    base_stop_price=stop_price,
+    base_stop_pips=stop_pips,
+    final_stop_price=stop_price,
+    final_stop_distance=distance,
+    final_stop_pips=stop_pips,
+    raw_stop_price=raw_stop,
+    clamped=clamped,
+    source=source,
+    adjustment="none",
+    adjustment_zone_id=None,
+    adjustment_zone_low=None,
+    adjustment_zone_high=None,
+  )
+  if opposing_zone is None:
+    return base_plan
+  (
+    final_stop_price,
+    final_distance,
+    final_stop_pips,
+    adjustment,
+    adjustment_zone_id,
+    adjustment_zone_low,
+    adjustment_zone_high,
+  ) = _apply_opposing_zone_push(
+    direction=direction,
+    entry=reference,
+    base_stop_price=stop_price,
+    base_stop_pips=stop_pips,
+    opposing_zone=opposing_zone,
+    atr_value=atr_value,
+    maximum_stop_pips=maximum_stop_pips,
+    pip=pip,
+    digits=digits,
+  )
+  if direction == "BUY" and final_stop_price >= zone_low:
+    raise ProtectiveStopError("stop_inside_entry_zone")
+  if direction == "SELL" and final_stop_price <= zone_high:
+    raise ProtectiveStopError("stop_inside_entry_zone")
+  return FinalProtectiveStopPlan(
+    entry_price=reference,
+    base_stop_price=stop_price,
+    base_stop_pips=stop_pips,
+    final_stop_price=final_stop_price,
+    final_stop_distance=final_distance,
+    final_stop_pips=final_stop_pips,
+    raw_stop_price=raw_stop,
+    clamped=clamped,
+    source=source,
+    adjustment=adjustment,
+    adjustment_zone_id=adjustment_zone_id,
+    adjustment_zone_low=adjustment_zone_low,
+    adjustment_zone_high=adjustment_zone_high,
+  )
+
+
 def stop_bounds_for_strategy(
   *,
   strategy: str,
   pip_size: Any,
   cfg: Any | None,
 ) -> tuple[int, int]:
-  """Use the same candidate family split as C# ``StopPipsBounds``.
+  """Owner group envelope 40–60 for trend and zone-scale reaction families.
 
-  The zone-scale reaction families are a narrower-structure trade than
-  trend-following - give them their own, lower floor instead of falling
-  through to the trend minimum, so a genuinely tight structure/wick stop
-  isn't forced wider than the zone it was actually computed from. The
-  ceiling matches the trend family's rather than also being lowered - a
-  live regression showed the opposing-zone stop push (below) sometimes
-  legitimately needs that much room to clear a real opposing zone.
+  ``AUTO_TRADE_REACTION_STOP_*`` keys remain for compatibility but are unused
+  on the zone-scale path — reaction families share the trend 40–60 envelope
+  (max 60, not the legacy 65).
   """
   if str(strategy) == "Range Box Scalp":
     minimum = int(getattr(cfg, "auto_trade_add_min_stop_pips", 30))
@@ -469,12 +730,14 @@ def stop_bounds_for_strategy(
     pip = decimal_value(pip_size, "pip_size")
     maximum = int(sl_distance // pip)
     return minimum, maximum
+  # Reaction families previously used a tighter 20–65 band; the owner group
+  # stop contract applies the same 40–60 envelope as trend families.
   if str(strategy) in _REACTION_FAMILY_STRATEGIES:
     return (
-      int(getattr(cfg, "auto_trade_reaction_stop_min_pips", 20)),
-      int(getattr(cfg, "auto_trade_reaction_stop_max_pips", 65)),
+      int(getattr(cfg, "auto_trade_trend_stop_min_pips", 40)),
+      int(getattr(cfg, "auto_trade_trend_stop_max_pips", 60)),
     )
   return (
     int(getattr(cfg, "auto_trade_trend_stop_min_pips", 40)),
-    int(getattr(cfg, "auto_trade_trend_stop_max_pips", 65)),
+    int(getattr(cfg, "auto_trade_trend_stop_max_pips", 60)),
   )

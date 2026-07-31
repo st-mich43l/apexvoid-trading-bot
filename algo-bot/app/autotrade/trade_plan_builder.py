@@ -38,6 +38,7 @@ from app.autotrade.trade_plan import (
   TradePlanManagement,
   TradePlanProvenance,
   TradePlanRisk,
+  TradePlanSizing,
   TradePlanSourceStructure,
   TradePlanStop,
   TradePlanTarget,
@@ -375,6 +376,22 @@ def build_trade_plan_from_strategy_match(
     max_group_risk_percent=max_group_risk_percent,
   )
 
+  first_leg_fraction = Decimal(str(
+    getattr(cfg, "auto_trade_zone_scale_first_leg_fraction", 0.70) or 0.70
+  ))
+  if entry.legs:
+    leg_ratios = tuple(leg.volume_ratio for leg in entry.legs)
+  else:
+    remainder = Decimal("1") - first_leg_fraction
+    leg_ratios = (first_leg_fraction, remainder)
+  entry_distribution = str(measured.get("entry_distribution") or "zone_scale")
+  sizing = TradePlanSizing(
+    mode="equity_table",
+    table_version="owner_equity_v1",
+    entry_distribution=entry_distribution,
+    leg_ratios=leg_ratios,
+  )
+
   plan = TradePlan(
     plan_id=plan_id,
     thesis_id=thesis_id,
@@ -403,6 +420,7 @@ def build_trade_plan_from_strategy_match(
       confirmation_bar_ts=execution_confirmation_bar_ts,
       zone_episode_id=zone_episode_id,
     ),
+    sizing=sizing,
   )
   plan.validate()
   return plan

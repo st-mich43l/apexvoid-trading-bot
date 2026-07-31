@@ -362,6 +362,16 @@ def python_manifest() -> dict[str, Any]:
     "contract_mode": settings.auto_trade_contract_mode,
     "trade_plan_version": TRADE_PLAN_VERSION,
     "trade_plan_stream": settings.auto_trade_trade_plan_stream,
+    "sizing_mode": settings.auto_trade_sizing_mode,
+    "equity_table_version": settings.auto_trade_equity_table_version,
+    "zone_scale_undersized_policy": (
+      settings.auto_trade_zone_scale_undersized_policy
+    ),
+    "group_close_allocation": settings.auto_trade_group_close_allocation,
+    "unfilled_leg_after_tp_policy": (
+      settings.auto_trade_unfilled_leg_after_tp_policy
+    ),
+    "entry_leg_ratios": "0.70,0.30",
     "deprecated_variables": deprecated_environment_variables(),
     "canonical_options": canonical_option_health(),
     "config_sources": sources,
@@ -471,6 +481,12 @@ def compare_manifests(
     "contract_mode",
     "trade_plan_version",
     "trade_plan_stream",
+    "sizing_mode",
+    "equity_table_version",
+    "zone_scale_undersized_policy",
+    "group_close_allocation",
+    "unfilled_leg_after_tp_policy",
+    "entry_leg_ratios",
     "target_plans",
     "range_target_plans",
     "range_tp_buffer",

@@ -230,22 +230,37 @@ class Settings(BaseSettings):
   )
   auto_trade_wick_stop_buffer_atr: float = 0.15
   auto_trade_trend_stop_min_pips: int = 40
-  auto_trade_trend_stop_max_pips: int = 65
-  # The 4 zone-scale reaction families (Key Level/Demand/Supply/Session
-  # Level/Trendline Reaction) trade off a narrower structural zone than
-  # trend-following setups and previously fell through to the trend
-  # bounds above - a genuinely tight, structure/wick-computed stop (e.g.
-  # a 3-point zone with a stop just beyond it) was forced out to at least
-  # auto_trade_trend_stop_min_pips=40 regardless, widening the stop and
-  # dragging reward:risk down for no structural reason. Only the floor is
-  # lowered - the ceiling stays matched to the trend family's, since the
-  # opposing-zone stop push (protective_stop.py:_apply_opposing_zone_push)
-  # sometimes legitimately needs that much room to clear a real opposing
-  # zone; a live regression showed a valid SELL rejected with
-  # stop_inside_opposing_zone once this was tightened to 60 - it needed
-  # the room the 65 ceiling already provided.
-  auto_trade_reaction_stop_min_pips: int = 20
-  auto_trade_reaction_stop_max_pips: int = 65
+  auto_trade_trend_stop_max_pips: int = 60
+  # Deprecated for the zone-scale owner path: reaction families now share
+  # the trend 40–60 group envelope. Keys remain so older env files still
+  # parse; stop_bounds_for_strategy ignores them for Key Level / Demand /
+  # Supply / Session / Trendline Reaction.
+  auto_trade_reaction_stop_min_pips: int = 40
+  auto_trade_reaction_stop_max_pips: int = 60
+  auto_trade_sizing_mode: str = Field(
+    default="equity_table",
+    validation_alias=AliasChoices("AUTO_TRADE_SIZING_MODE"),
+  )
+  auto_trade_equity_table_version: str = Field(
+    default="owner_equity_v1",
+    validation_alias=AliasChoices("AUTO_TRADE_EQUITY_TABLE_VERSION"),
+  )
+  auto_trade_zone_scale_undersized_policy: str = Field(
+    default="single_entry",
+    validation_alias=AliasChoices(
+      "AUTO_TRADE_ZONE_SCALE_UNDERSIZED_POLICY",
+    ),
+  )
+  auto_trade_group_close_allocation: str = Field(
+    default="pro_rata",
+    validation_alias=AliasChoices("AUTO_TRADE_GROUP_CLOSE_ALLOCATION"),
+  )
+  auto_trade_unfilled_leg_after_tp_policy: str = Field(
+    default="cancel",
+    validation_alias=AliasChoices(
+      "AUTO_TRADE_UNFILLED_LEG_AFTER_TP_POLICY",
+    ),
+  )
   auto_trade_xau_price_digits: int = 2
   auto_trade_xau_pip_size: float = Field(
     default=0.1,

@@ -370,6 +370,36 @@ class TradePlanRisk:
 
 
 @dataclass(frozen=True)
+class TradePlanSizing:
+  mode: str
+  table_version: str
+  entry_distribution: str
+  leg_ratios: tuple[Decimal, ...] = ()
+
+  def to_dict(self) -> dict:
+    return {
+      "mode": self.mode,
+      "table_version": self.table_version,
+      "entry_distribution": self.entry_distribution,
+      "leg_ratios": [str(ratio) for ratio in self.leg_ratios],
+    }
+
+  @classmethod
+  def from_dict(cls, data: Mapping[str, Any]) -> "TradePlanSizing":
+    mode = str(_require(data, "mode"))
+    ratios = tuple(
+      _decimal(value, "sizing.leg_ratios[]")
+      for value in data.get("leg_ratios") or ()
+    )
+    return cls(
+      mode=mode,
+      table_version=str(_require(data, "table_version")),
+      entry_distribution=str(_require(data, "entry_distribution")),
+      leg_ratios=ratios,
+    )
+
+
+@dataclass(frozen=True)
 class TradePlanManagement:
   be_after_target_id: str | None
   be_buffer_ticks: int
@@ -473,9 +503,10 @@ class TradePlan:
   execution_policy: TradePlanExecutionPolicy
   provenance: TradePlanProvenance
   version: int = TRADE_PLAN_VERSION
+  sizing: TradePlanSizing | None = None
 
   def to_dict(self) -> dict:
-    return {
+    payload = {
       "version": self.version,
       "plan_id": self.plan_id,
       "thesis_id": self.thesis_id,
@@ -493,6 +524,9 @@ class TradePlan:
       "execution_policy": self.execution_policy.to_dict(),
       "provenance": self.provenance.to_dict(),
     }
+    if self.sizing is not None:
+      payload["sizing"] = self.sizing.to_dict()
+    return payload
 
   @classmethod
   def from_dict(cls, data: Mapping[str, Any]) -> "TradePlan":
@@ -501,6 +535,7 @@ class TradePlan:
       raise TradePlanError(
         f"unsupported TradePlan version {version}, expected {TRADE_PLAN_VERSION}",
       )
+    sizing_data = data.get("sizing")
     plan = cls(
       version=version,
       plan_id=str(_require(data, "plan_id")),
@@ -524,6 +559,9 @@ class TradePlan:
         data.get("execution_policy") or {},
       ),
       provenance=TradePlanProvenance.from_dict(data.get("provenance") or {}),
+      sizing=(
+        None if sizing_data is None else TradePlanSizing.from_dict(sizing_data)
+      ),
     )
     plan.validate()
     return plan

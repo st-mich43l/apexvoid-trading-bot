@@ -10,6 +10,7 @@ from app.autotrade.execution_route import resolve_execution_route_plan
 from app.autotrade.protective_stop import (
   ProtectiveStopError,
   opposing_zone_context_from_values,
+  plan_group_protective_stop,
   plan_protective_stop,
   stop_bounds_for_strategy,
 )
@@ -584,24 +585,57 @@ def evaluate_execution_policy(
       pip_size=pip,
       cfg=cfg,
     )
-    stop_plan = plan_protective_stop(
-      direction=direction,
-      entry_price=planned_entry,
-      structure_swing=getattr(match, "structure_swing", None),
-      atr=atr,
-      structure_buffer_atr=getattr(
-        cfg, "auto_trade_add_stop_buffer_atr", 0.3,
-      ),
-      sweep_extreme=sweep_extreme,
-      wick_buffer_atr=getattr(
-        cfg, "auto_trade_wick_stop_buffer_atr", 0.15,
-      ),
-      minimum_stop_pips=minimum_stop_pips,
-      maximum_stop_pips=maximum_stop_pips,
-      pip_size=pip,
-      digits=int(getattr(cfg, "auto_trade_xau_price_digits", 2)),
-      opposing_zone=opposing_zone,
+    digits = int(getattr(cfg, "auto_trade_xau_price_digits", 2))
+    structure_buffer_atr = getattr(
+      cfg, "auto_trade_add_stop_buffer_atr", 0.3,
     )
+    wick_buffer_atr = getattr(
+      cfg, "auto_trade_wick_stop_buffer_atr", 0.15,
+    )
+    leg_prices = list(route_plan.planned_leg_entry_prices or ())
+    leg_ratios = list(route_plan.planned_leg_volume_ratios or ())
+    use_group_stop = (
+      entry_distribution == "zone_scale"
+      and len(leg_prices) >= 2
+      and len(leg_ratios) == len(leg_prices)
+    )
+    if use_group_stop:
+      # Absolute group SL is structural (one price beyond zone/entries/swing).
+      # Envelope distance uses declared leg ratios as relative weights only —
+      # never a fake planning total lots. Live equity sizes broker volume later
+      # in C#; it must not reshape the published absolute stop.
+      stop_plan = plan_group_protective_stop(
+        direction=direction,
+        entry_zone_low=low,
+        entry_zone_high=high,
+        planned_leg_prices=leg_prices,
+        resolved_leg_volumes=leg_ratios,
+        structure_swing=getattr(match, "structure_swing", None),
+        atr=atr,
+        structure_buffer_atr=structure_buffer_atr,
+        sweep_extreme=sweep_extreme,
+        wick_buffer_atr=wick_buffer_atr,
+        minimum_stop_pips=minimum_stop_pips,
+        maximum_stop_pips=maximum_stop_pips,
+        pip_size=pip,
+        digits=digits,
+        opposing_zone=opposing_zone,
+      )
+    else:
+      stop_plan = plan_protective_stop(
+        direction=direction,
+        entry_price=planned_entry,
+        structure_swing=getattr(match, "structure_swing", None),
+        atr=atr,
+        structure_buffer_atr=structure_buffer_atr,
+        sweep_extreme=sweep_extreme,
+        wick_buffer_atr=wick_buffer_atr,
+        minimum_stop_pips=minimum_stop_pips,
+        maximum_stop_pips=maximum_stop_pips,
+        pip_size=pip,
+        digits=digits,
+        opposing_zone=opposing_zone,
+      )
   except ProtectiveStopError as exc:
     stop_plan_error = str(exc)
   reward_risk = (
@@ -684,13 +718,18 @@ def evaluate_execution_policy(
       policy,
     )
   if stop_plan is None:
+    known_stop_errors = {
+      "stop_exceeds_envelope_after_wick",
+      "stop_exceeds_max_envelope",
+      "stop_inside_opposing_zone",
+      "stop_inside_entry_zone",
+      "stop_not_beyond_planned_entries",
+    }
     return ExecutionPolicyEvaluation(
       False,
       (
-        "stop_exceeds_envelope_after_wick"
-        if stop_plan_error == "stop_exceeds_envelope_after_wick"
-        else "stop_inside_opposing_zone"
-        if stop_plan_error == "stop_inside_opposing_zone"
+        stop_plan_error
+        if stop_plan_error in known_stop_errors
         else "protective_stop_unavailable"
       ),
       stop_plan_error or "protective stop could not be planned",

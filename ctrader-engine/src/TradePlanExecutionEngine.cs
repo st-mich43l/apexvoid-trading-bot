@@ -110,59 +110,95 @@ public static class TradePlanExecutionEngine
   }
 
   /// <summary>
-  /// Sizes volume purely from the plan's own risk contract and the live
-  /// account balance - never from a structural stop distance C# derived
-  /// itself, since the stop distance here is |entry - plan.Stop.Price| and
-  /// plan.Stop.Price is Python's exact declared value. For a limit_ladder
-  /// entry, Slices are proportional to each entry LEG's own declared
-  /// VolumeRatio (e.g. the 70/30 DCA split from the zone-scale ladder) -
-  /// never to plan.Targets.CloseRatio, which is a wholly separate TP-exit
-  /// split that TradePlanRuntime.ManageOpenPositionsAsync already computes
-  /// live from RemainingVolume at each target hit. Sizing entry legs off
-  /// the TP count/weights instead used to both misapply the entry split
-  /// (silently, whenever it happened not to throw) and, whenever a plan
-  /// declared more TP targets than the sized volume had broker-steps for,
-  /// throw unconditionally - even for a plain market_watch entry that never
-  /// reads Slices at all - crashing the whole poll loop on a plan that
-  /// could otherwise execute fine. Uses the existing broker-step-aware
-  /// VolumePlanner.SplitWeighted (purely mechanical broker-unit math,
-  /// shared with the V6 path - not analysis).
+  /// Sizes volume from the plan's sizing contract and the live account
+  /// snapshot. When sizing.mode=equity_table, volume comes from
+  /// VolumePlanner.LotsForEquity(resolvedEquity) and RiskPercent is ignored.
+  /// Plans without a sizing contract are rejected
+  /// (legacy_v7_sizing_contract_missing). For a limit_ladder entry, Slices
+  /// are proportional to each entry LEG's own declared VolumeRatio (or
+  /// sizing.leg_ratios when present) via SplitEntryVolume — never to
+  /// plan.Targets.CloseRatio.
   /// </summary>
   public static TradePlanVolumePlan CalculateVolume(
     TradePlan plan,
-    decimal accountBalance,
+    TradingAccountSnapshot account,
+    decimal pipSize,
+    decimal pipValuePerLot,
+    SymbolInfo symbol
+  ) => CalculateVolume(
+    plan,
+    EquityResolver.Resolve(account, openPositionCount: 0, pendingOrderCount: 0),
+    pipSize,
+    pipValuePerLot,
+    symbol
+  );
+
+  /// <summary>
+  /// Sizes from an already-resolved equity figure (arm/submit paths that
+  /// know live open/pending exposure must Resolve first).
+  /// </summary>
+  public static TradePlanVolumePlan CalculateVolume(
+    TradePlan plan,
+    EquityResolution equity,
     decimal pipSize,
     decimal pipValuePerLot,
     SymbolInfo symbol
   )
   {
-    if (accountBalance <= 0 || pipSize <= 0 || pipValuePerLot <= 0)
+    if (equity.Equity <= 0)
     {
       throw new TradePlanContractException(
-        "account balance, pip size, and pip value must be positive"
+        "account equity/balance must be positive"
       );
     }
-    var entryPrices = plan.Entry.EntryPrices();
-    var entryReference = plan.Analysis.Direction == "BUY"
-      ? entryPrices.Min()
-      : entryPrices.Max();
-    var stopDistance = Math.Abs(entryReference - plan.Stop.Price);
-    if (stopDistance <= 0)
+    if (pipSize <= 0 || pipValuePerLot <= 0)
     {
-      throw new TradePlanContractException("stop distance must be positive");
+      throw new TradePlanContractException(
+        "pip size and pip value must be positive"
+      );
     }
-    var stopPips = stopDistance / pipSize;
-    var riskAmount =
-      accountBalance * plan.Risk.RiskPercent / 100m * plan.Risk.RiskMultiplier;
-    var riskLots = riskAmount / (stopPips * pipValuePerLot);
-    var maxVolumeLots = symbol.LotSize > 0 ? (decimal)plan.Risk.MaxVolume / symbol.LotSize : 0m;
-    var cappedLots = Math.Min(riskLots, maxVolumeLots);
-    var volume = VolumePlanner.VolumeForLots(cappedLots, symbol);
+    if (plan.Sizing is null)
+    {
+      throw new TradePlanContractException("legacy_v7_sizing_contract_missing");
+    }
+    if (plan.Sizing.Mode != "equity_table")
+    {
+      throw new TradePlanContractException(
+        $"unsupported sizing mode '{plan.Sizing.Mode}'"
+      );
+    }
+
+    var tableLots = VolumePlanner.LotsForEquity(equity.Equity);
+    if (tableLots <= 0)
+    {
+      throw new TradePlanContractException(
+        $"equity {equity.Equity:N2} is below the $200 equity sizing floor"
+      );
+    }
+    var maxVolumeLots = symbol.LotSize > 0
+      ? (decimal)plan.Risk.MaxVolume / symbol.LotSize
+      : 0m;
+    // MaxVolume is a hard ceiling: never silently Min() the owner table lots
+    // down (e.g. 0.11 → smaller). Python publishes a large broker-style
+    // max_volume that the table already fits; a tighter ceiling rejects.
+    if (maxVolumeLots > 0m && tableLots > maxVolumeLots)
+    {
+      throw new TradePlanContractException("equity_table_above_broker_maximum");
+    }
+    if (
+      symbol.MaxVolume > 0
+      && symbol.LotSize > 0
+      && tableLots * symbol.LotSize > symbol.MaxVolume
+    )
+    {
+      throw new TradePlanContractException("equity_table_above_broker_maximum");
+    }
+    var volume = VolumePlanner.VolumeForLots(tableLots, symbol);
     if (volume <= 0)
     {
       throw new TradePlanContractException(
-        $"risk-based sizing produced a non-tradeable volume "
-        + $"(risk lots={riskLots:0.####}, plan max_volume lots={maxVolumeLots:0.####})"
+        $"equity-table sizing produced a non-tradeable volume "
+        + $"(table lots={tableLots:0.####}, plan max_volume lots={maxVolumeLots:0.####})"
       );
     }
 
@@ -179,13 +215,27 @@ public static class TradePlanExecutionEngine
         "limit_ladder entry requires at least one leg"
       );
     }
-    // SplitWeighted takes positive integer weights, not fractional ratios -
-    // scale volume_ratio (e.g. 0.70) up by a fixed factor to preserve
-    // relative proportions without floating-point drift.
-    var weights = legs
-      .Select(leg => Math.Max(1, decimal.ToInt32(leg.VolumeRatio * 10_000m)))
-      .ToArray();
-    var slices = VolumePlanner.SplitWeighted(volume, symbol, weights);
+    IReadOnlyList<decimal> ratios =
+      plan.Sizing.LegRatios is { Count: > 0 } sizingRatios
+        ? sizingRatios
+        : legs.Select(leg => leg.VolumeRatio).ToArray();
+    if (ratios.Count != legs.Count)
+    {
+      throw new TradePlanContractException(
+        $"sizing.leg_ratios count {ratios.Count} does not match entry legs {legs.Count}"
+      );
+    }
+    var slices = VolumePlanner.SplitEntryVolume(volume, symbol, ratios);
+    if (slices.Count == 1 && legs.Count > 1)
+    {
+      // Split collapsed to a single entry — attach the full volume to the
+      // first leg so SubmitEntryAsync still has one slice per submitted order
+      // path decision; callers treating Count==1 as single_entry can detect it.
+      return new TradePlanVolumePlan(
+        volume,
+        new[] { new TradePlanVolumeSlice(legs[0].LegId, volume) }
+      );
+    }
     return new TradePlanVolumePlan(
       volume,
       legs

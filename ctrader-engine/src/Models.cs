@@ -95,7 +95,16 @@ public sealed record TradingAccountSnapshot(
   string AccessRights,
   string AccountType,
   string BrokerName,
-  decimal Balance
+  decimal Balance,
+  decimal Equity,
+  // Unix seconds when this snapshot was taken. 0 in fixtures that do not
+  // model freshness.
+  long SnapshotTimestamp = 0,
+  // How Equity was obtained. Live OpenAPI ProtoOATrader has no Equity
+  // field, so CTraderOpenApiFeedClient copies Balance into Equity and
+  // marks this "balance_proxy". Tests set Equity independently (leave
+  // blank or use "broker"/"test") so EquityResolver treats it as real.
+  string EquitySource = ""
 );
 
 public sealed record TradingAccountGrant(long AccountId, bool IsLive);
@@ -111,7 +120,12 @@ public sealed record TradingPosition(
   string Comment,
   // Exact deterministic client order identity, when the broker exposes it on
   // the originating order. Empty when unavailable (legacy positions).
-  string ClientOrderId = ""
+  string ClientOrderId = "",
+  // Unrealized net profit in account currency when the broker/reconcile
+  // path exposes it. ProtoOAPosition in OpenAPI.Net 1.4.4 does not carry
+  // NetProfit/Unrealized; live mapping leaves this null. Fake/test clients
+  // may set it so EquityResolver can use balance_plus_unrealized.
+  decimal? NetProfit = null
 );
 
 public sealed record MarketOrderRequest(
@@ -549,7 +563,7 @@ public sealed record AutoTradeConfigManifest(
   decimal OrdinaryStopMaxDistance = 6.5m,
   decimal WickStopBufferAtr = 0.15m,
   int TrendStopMinPips = 40,
-  int TrendStopMaxPips = 65,
+  int TrendStopMaxPips = 60,
   IReadOnlyList<CanonicalConfigOption>? CanonicalOptions = null,
   int PriceDigits = 2,
   decimal MaxEntryDistancePips = 40m,
@@ -561,7 +575,13 @@ public sealed record AutoTradeConfigManifest(
   string PostFillTargetFallback = "fill_relative",
   string ContractMode = "v7_only",
   int TradePlanVersion = TradePlanContract.Version,
-  string TradePlanStream = "execution:trade_plans"
+  string TradePlanStream = "execution:trade_plans",
+  string SizingMode = "equity_table",
+  string EquityTableVersion = "owner_equity_v1",
+  string ZoneScaleUndersizedPolicy = "single_entry",
+  string GroupCloseAllocation = "pro_rata",
+  string UnfilledLegAfterTpPolicy = "cancel",
+  string EntryLegRatios = "0.70,0.30"
 );
 
 public sealed record AutoTradeConfigHealthDocument(

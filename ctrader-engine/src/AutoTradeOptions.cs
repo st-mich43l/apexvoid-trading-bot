@@ -41,7 +41,7 @@ public sealed record AutoTradeOptions(
   bool InsideZoneMarketEntryEnabled = true,
   decimal BoxMinRiskReward = 1.25m,
   int TrendStopMinPips = 40,
-  int TrendStopMaxPips = 65,
+  int TrendStopMaxPips = 60,
   bool StopPushBeyondZone = true,
   // How far the executable entry may drift from Python's planned entry before
   // the approved absolute stop is no longer trustworthy for this candidate.
@@ -127,7 +127,14 @@ public sealed record AutoTradeOptions(
   // terminalises it. See docs on the incident this guards against: a
   // transient reconcile gap must never delete an open position's tracking.
   int PositionMissingConfirmations = 2,
-  int PositionMissingRecheckSeconds = 3
+  int PositionMissingRecheckSeconds = 3,
+  string EquityTableVersion = "owner_equity_v1",
+  string ZoneScaleUndersizedPolicy = "single_entry",
+  string GroupCloseAllocation = "pro_rata",
+  // cancel = cancel remaining pending entry legs before TP1/BE/trail/
+  // manual close/terminal invalidation. keep = leave them resting
+  // (requires stop sync; not fully implemented for future fills).
+  string UnfilledLegAfterTpPolicy = "cancel"
 )
 {
   // Shared target-selection contract (app/autotrade/range_targets.py on the
@@ -239,7 +246,7 @@ public sealed record AutoTradeOptions(
       "AUTO_TRADE_REQUIRE_DEMO_ONLY_TOKEN", false
     ),
     RiskPercent: resolver.Decimal("AUTO_TRADE_RISK_PCT", 2m),
-    SizingMode: resolver.String("AUTO_TRADE_SIZING_MODE", "min"),
+    SizingMode: resolver.String("AUTO_TRADE_SIZING_MODE", "equity_table"),
     PipValuePerLot: resolver.Decimal(
       "AUTO_TRADE_PIP_VALUE_PER_LOT", 10m
     ),
@@ -290,7 +297,7 @@ public sealed record AutoTradeOptions(
     ),
     BoxMinRiskReward: resolver.Decimal("AUTO_TRADE_BOX_MIN_RR", 1.25m),
     TrendStopMinPips: resolver.Int("AUTO_TRADE_TREND_STOP_MIN_PIPS", 40),
-    TrendStopMaxPips: resolver.Int("AUTO_TRADE_TREND_STOP_MAX_PIPS", 65),
+    TrendStopMaxPips: resolver.Int("AUTO_TRADE_TREND_STOP_MAX_PIPS", 60),
     StopPushBeyondZone: resolver.Bool(
       "AUTO_TRADE_STOP_PUSH_BEYOND_ZONE", true
     ),
@@ -467,7 +474,19 @@ public sealed record AutoTradeOptions(
     ),
     PositionMissingRecheckSeconds: resolver.Int(
       "AUTO_TRADE_POSITION_MISSING_RECHECK_SECONDS", 3
-    )
+    ),
+    EquityTableVersion: resolver.String(
+      "AUTO_TRADE_EQUITY_TABLE_VERSION", "owner_equity_v1"
+    ),
+    ZoneScaleUndersizedPolicy: resolver.String(
+      "AUTO_TRADE_ZONE_SCALE_UNDERSIZED_POLICY", "single_entry"
+    ),
+    GroupCloseAllocation: resolver.String(
+      "AUTO_TRADE_GROUP_CLOSE_ALLOCATION", "pro_rata"
+    ),
+    UnfilledLegAfterTpPolicy: resolver.String(
+      "AUTO_TRADE_UNFILLED_LEG_AFTER_TP_POLICY", "cancel"
+    ).Trim().ToLowerInvariant()
   );
   var deprecated = resolver.DeprecatedVariables.ToList();
   if (deprecated.Contains("AUTO_TRADE_BE_BUFFER_PIPS", StringComparer.Ordinal))
@@ -591,13 +610,40 @@ public sealed record AutoTradeOptions(
         "Auto trade disabled: risk percent must be 0.1-10 and pip value positive"
       );
     }
-    if (SizingMode is not "min" and not "table" and not "risk")
+    if (SizingMode is not "min" and not "table" and not "risk" and not "equity_table")
     {
       throw new AutoTradeConfigurationException(
         "Auto trade disabled: AUTO_TRADE_SIZING_MODE must be one of "
-        + "min, table, risk"
+        + "min, table, risk, equity_table"
       );
     }
+    if (string.IsNullOrWhiteSpace(EquityTableVersion))
+    {
+      throw new AutoTradeConfigurationException(
+        "Auto trade disabled: AUTO_TRADE_EQUITY_TABLE_VERSION must be set"
+      );
+    }
+    if (GroupCloseAllocation is not "pro_rata")
+    {
+      throw new AutoTradeConfigurationException(
+        "Auto trade disabled: AUTO_TRADE_GROUP_CLOSE_ALLOCATION must be pro_rata"
+      );
+    }
+    if (UnfilledLegAfterTpPolicy is not "cancel" and not "keep")
+    {
+      throw new AutoTradeConfigurationException(
+        "Auto trade disabled: AUTO_TRADE_UNFILLED_LEG_AFTER_TP_POLICY "
+        + "must be cancel or keep"
+      );
+    }
+    if (ZoneScaleUndersizedPolicy is not "single_entry" and not "reject")
+    {
+      throw new AutoTradeConfigurationException(
+        "Auto trade disabled: AUTO_TRADE_ZONE_SCALE_UNDERSIZED_POLICY "
+        + "must be single_entry or reject"
+      );
+    }
+
     if (PipSize <= 0 || ContractSize <= 0)
     {
       throw new AutoTradeConfigurationException(
