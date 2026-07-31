@@ -821,9 +821,17 @@ async def edit_forming_card_stop(
   return True
 
 
-def _terminal_card_text(reason_code: str) -> str:
+def _terminal_status_line(reason_code: str) -> str:
   reason = (reason_code or "closed").strip().replace("_", " ")
-  return f"🤖 <b>ApexVoid Algo</b>\n· <i>{reason}</i>"
+  return f"❌ <b>TERMINAL</b> · {reason}"
+
+
+def _terminal_card_text(reason_code: str, existing_text: str | None = None) -> str:
+  """Edit status line only — keep root body for audit / reply context."""
+  status = _terminal_status_line(reason_code)
+  if existing_text and existing_text.strip():
+    return apply_forming_card_status(existing_text, status)
+  return f"🤖 <b>ApexVoid Algo</b>\n{status}"
 
 
 async def kill_setup_card(
@@ -845,7 +853,7 @@ async def kill_setup_card(
     await clear_forming_card(client, setup_id)
     return
 
-  terminal = _terminal_card_text(reason_code)
+  terminal = _terminal_card_text(reason_code, str(card.get("text") or ""))
   if not should_delete_root_on_terminal():
     try:
       await edit_fn(card["chat_id"], card["message_id"], terminal)

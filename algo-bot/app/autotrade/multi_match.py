@@ -13,7 +13,10 @@ from app.autotrade.execution_policy import (
   risk_multiplier_for_tier,
 )
 from app.autotrade.strategy_match import StrategyMatch
-from app.analysis.structural_reaction_support import STRUCTURAL_SETUPS
+from app.analysis.structural_reaction_support import (
+  STRUCTURAL_SETUPS,
+  canonical_structural_setup,
+)
 
 
 STRATEGY_MATCHES_KEY_PREFIX = "auto_trade:strategy_matches"
@@ -71,13 +74,19 @@ def same_thesis(left: StrategyMatch, right: StrategyMatch, *, atr: float) -> boo
   # may refresh timestamps/geometry but is never independent confluence.
   if left.match_id == right.match_id:
     return True
+  left_setup = canonical_structural_setup(left.strategy)
+  right_setup = canonical_structural_setup(right.strategy)
   left_sid_early = left.structural_zone_id or left.zone_id
   right_sid_early = right.structural_zone_id or right.zone_id
+  zone_alias_pair = (
+    left_setup == "Zone Reaction" and right_setup == "Zone Reaction"
+  )
   first_vs_wrapper = (
     (left.strategy in STRUCTURAL_SETUPS) != (right.strategy in STRUCTURAL_SETUPS)
   )
   cross_structural = bool(
-    first_vs_wrapper
+    zone_alias_pair
+    or first_vs_wrapper
     or (
       left_sid_early
       and right_sid_early
@@ -94,7 +103,7 @@ def same_thesis(left: StrategyMatch, right: StrategyMatch, *, atr: float) -> boo
       )
     )
   )
-  if left.strategy != right.strategy and not cross_structural:
+  if left_setup != right_setup and not cross_structural:
     return False
   if (
     left.family and right.family and left.family != right.family
@@ -172,6 +181,20 @@ def same_thesis(left: StrategyMatch, right: StrategyMatch, *, atr: float) -> boo
       )
     return True
 
+  # Legacy Zone Reaction aliases without a shared structural id: overlapping
+  # entry (+ shared confirmation when present) is still one thesis.
+  if zone_alias_pair and left.strategy != right.strategy:
+    if _zone_overlap_ratio(
+      left.entry_low,
+      left.entry_high,
+      right.entry_low,
+      right.entry_high,
+    ) >= 0.5:
+      if left.confirmation_bar_ts and right.confirmation_bar_ts:
+        return left.confirmation_bar_ts == right.confirmation_bar_ts
+      return True
+    return False
+
   # Wrapper vs first-class: overlapping entry + shared confirmation is one thesis.
   left_first = left.strategy in STRUCTURAL_SETUPS
   right_first = right.strategy in STRUCTURAL_SETUPS
@@ -206,7 +229,7 @@ def _structural_strategy_rank(match: StrategyMatch) -> int:
     return 0
   if match.strategy == "Break & Retest":
     return 1
-  if match.strategy in {"Trend Pullback", "Range Edge Scalp", "Fade Scalp", "Zone Reaction"}:
+  if match.strategy in {"Trend Pullback", "Range Edge Scalp", "Fade Scalp"}:
     return 2
   return 3
 

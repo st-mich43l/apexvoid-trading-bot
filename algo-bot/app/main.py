@@ -24,11 +24,12 @@ from app.autotrade.stats_ingestion import (
 )
 from app.autotrade.setup_expiry_sweeper import setup_expiry_sweeper_loop
 from app.autotrade.startup_reconciliation import reconcile_startup_state
-from app.autotrade.worker import auto_scalp_loop
+from app.autotrade.worker import auto_scalp_loop, configure_forming_card_edit_fn
 from app.autotrade.zone_execution_cutover import (
   install_zone_execution_cutover,
   zone_watch_execution_loop,
 )
+from app.bot.client import edit_scanner_message_text
 from app.autotrade.zone_execution_runtime import uninstall_zone_execution_cutover
 from app.autotrade.direct_publish_same_cycle import (
   install_same_cycle_publish_retry,
@@ -70,6 +71,8 @@ async def main() -> None:
   # ZoneWatch and direct publication from its first event.
   install_zone_execution_cutover()
   install_same_cycle_publish_retry()
+  # Composition-root Telegram edit callback — worker never imports bot.client.
+  configure_forming_card_edit_fn(edit_scanner_message_text)
   await init_db()
   # Compose can report Redis healthy then briefly drop DNS while recreating the
   # container; wait for a real PING before anything else touches the client.

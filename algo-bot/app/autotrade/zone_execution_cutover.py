@@ -11,6 +11,12 @@ function boundary without duplicating detector logic:
 
 The old ready stream remains an emergency durable fallback only when an
 unexpected direct-publication exception occurs after setup creation.
+
+Architecture follow-up (out of scope for the Minimal worker DI pass): this
+cutover still lazy-imports private ``app.analysis.scanner`` helpers for match
+persist/sync and monkeypatches ``worker.try_publish_executable_signal``. Peel
+those scanner couplings into an injected publication / match-sync seam later;
+do not reintroduce scanner imports into ``worker.py``.
 """
 
 from __future__ import annotations
