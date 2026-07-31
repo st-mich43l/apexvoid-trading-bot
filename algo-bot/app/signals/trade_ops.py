@@ -428,7 +428,7 @@ def render_result(
   if action == "cancel":
     seq = f"#{_display_seq(result['row'])} " if tier == "vip" else ""
     if result.get("pending"):
-      return f"⏳ {seq}cancel requested — awaiting broker confirmation"
+      return f"⏳ {seq}cancel requested"
     return f"❌ {seq}cancelled"
   if action == "delete":
     seq = f"#{result['seq']} " if tier == "vip" else ""
@@ -449,7 +449,7 @@ def render_result(
   if action == "sl":
     seq = f"#{_display_seq(result['row'])} " if tier == "vip" else ""
     if result.get("pending"):
-      return f"⏳ {seq}stop-loss move requested — awaiting broker confirmation"
+      return f"⏳ {seq}stop-loss move requested"
     return (
       f"🛡 {seq}move SL to "
       f"{_price(result['price'], symbol)}"
@@ -462,7 +462,7 @@ def render_result(
       else ""
     )
     if result.get("pending"):
-      return f"⏳ {seq}close requested — awaiting broker confirmation"
+      return f"⏳ {seq}close requested"
     if row.get("error") == "exceeds_remaining":
       remaining = int(round(row["remaining"] * 100))
       return f"⚠️ {seq}only has {remaining}% remaining to close"
@@ -555,14 +555,6 @@ async def post_result(result: dict, symbol: str) -> str:
     else result["sid"]
   )
   sig = await get_manual_signal(signal_id)
-  # Algo-manual cancel is broker-lifecycle bookkeeping — never fan out a
-  # channel card. Owner command replies still get the rendered text.
-  if (
-    result["action"] == "cancel"
-    and sig is not None
-    and str(sig.get("execution_mode") or "").casefold() == "algo"
-  ):
-    return text
   if (
     result["action"] == "close"
     and result.get("row", {}).get("error")

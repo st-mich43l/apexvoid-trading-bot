@@ -12,6 +12,18 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- Scanner observations without a canonical executable match no longer reserve
+  the four-hour Telegram band dedup and suppress the forming card when that
+  same structure later becomes executable.
+- `/trade_stats` now ingests autonomous and manual Algo results through an
+  independent durable cursor and backfills retained executor events at
+  startup, instead of depending on the owner Telegram delivery cursor.
+- Broker-confirmed `/trade_cancel` results now reply to every persisted VIP
+  and public signal post; manual Algo request/override acknowledgements no
+  longer show redundant waiting/awaiting text.
+- TradePlan V7 TP and close events now carry and display the achieved pip count,
+  and stats preserve the highest archived TP rather than understating a trade
+  after its residual exits at BE or SL.
 - Serialized cTrader access-token reads with account-list/account-auth requests,
   preventing startup health checks from queuing a stale token while proactive
   refresh rotates it and then failing auto-trade with

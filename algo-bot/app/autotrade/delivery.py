@@ -17,7 +17,6 @@ from app.autotrade.volume_pips import (
   volume_percent,
 )
 from app.persistence import redis_state
-from app.persistence.store import record_auto_trade_event
 from app.core.config import settings
 from app.bot.client import (
   delete_scanner_message,
@@ -525,8 +524,15 @@ def _format_position_closed(event: dict, message: str) -> str:
   no_tp = _NO_TP_ARCHIVED_RE.search(cleaned) if cleaned else None
   # Close card: highest TP archived only — never dump per-leg lot detail.
   if highest is not None:
+    archived_pips = _event_float(event, "target_pips")
+    pips_suffix = (
+      ""
+      if archived_pips is None
+      else f" · {format_signed_pips(abs(archived_pips))} pips"
+    )
     lines.append(
-      f"Highest TP archived: <b>{escape(highest.group('target').upper())}</b>"
+      f"Highest TP archived: <b>{escape(highest.group('target').upper())}"
+      f"{pips_suffix}</b>"
     )
     at = _PLAN_CLOSED_AT_RE.search(cleaned)
     if at is not None:
@@ -639,6 +645,11 @@ def _format_tp_booked(event: dict, message: str) -> str | None:
   ]
   if price_text:
     lines.append(f"💰 Fill: <b>{escape(price_text)}</b>")
+  archived_pips = _event_float(event, "target_pips")
+  if archived_pips is not None:
+    lines.append(
+      f"✅ Achieved: <b>{format_signed_pips(abs(archived_pips))} pips</b>"
+    )
   if plan_closed:
     lines.append("🏁 <b>PLAN CLOSED</b> · all targets booked")
   attribution = _attribution_line(event)
@@ -1619,7 +1630,6 @@ async def _process_owner_entries(
     except (KeyError, TypeError, json.JSONDecodeError) as exc:
       log.warning("Invalid auto-trade event %s: %s", entry_id, exc)
     else:
-      await record_auto_trade_event(event)
       # Current executors persist lifecycle before publishing this event.
       # Keep the bridge only for events from an older executor.
       if not event.get("lifecycle_id"):

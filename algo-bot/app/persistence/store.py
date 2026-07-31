@@ -697,6 +697,20 @@ async def _record_auto_trade_result(event: dict) -> None:
     ):
       return
     result_pips = event.get("group_realized_pips")
+    if (
+      result_pips is None
+      and event.get("target_pips") is not None
+      and "highest tp archived" in str(event.get("message") or "").casefold()
+    ):
+      # V7 reports the highest booked target explicitly. Preserve achieved
+      # pips even when the residual later exits at BE/SL and would otherwise
+      # make close-price reconstruction understate the trade.
+      try:
+        archived_pips = float(event["target_pips"])
+      except (TypeError, ValueError):
+        archived_pips = None
+      if archived_pips is not None:
+        result_pips = abs(archived_pips)
     if result_pips is None and event.get("type") in {
       "position_closed", "manual_closed",
     }:

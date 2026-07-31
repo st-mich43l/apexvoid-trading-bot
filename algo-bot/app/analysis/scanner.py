@@ -1211,11 +1211,9 @@ def _planned_stop_price(
   sources = []
   if result.execution_eligibility is not None:
     sources.append(result.execution_eligibility)
-  if (
-    execution_match is not None
-    and execution_match.execution_eligibility is not None
-  ):
-    sources.append(execution_match.execution_eligibility)
+  match_eligibility = getattr(execution_match, "execution_eligibility", None)
+  if match_eligibility is not None:
+    sources.append(match_eligibility)
   for eligibility in sources:
     measured = eligibility.measured or {}
     raw = measured.get("planned_stop_price")
@@ -2104,59 +2102,20 @@ async def _notify_digest_once(
     )
     return []
 
-  claimed_results = []
-  for result in results:
-    band_key = _band_dedup_key(symbol, result)
-    if await client.get(band_key) is not None:
-      log.debug(
-        "scanner detection suppressed by zone band TTL "
-        "symbol=%s tf=%s key=%s",
-        symbol,
-        tf,
-        band_key,
-      )
-      continue
-    key = _dedup_key(symbol, tf, result)
-    claimed = await client.set(
-      key,
-      "1",
-      ex=settings.scanner_alert_ttl,
-      nx=True,
-    )
-    if claimed:
-      claimed_results.append(result)
-  if not claimed_results:
-    return []
-  for result in claimed_results:
-    await client.set(
-      _band_dedup_key(symbol, result),
-      "1",
-      ex=settings.zone_alert_ttl,
-    )
-  if all(result.confluence_zone_id for result in claimed_results):
-    # Opposing sides have distinct merged zone/setup identities. Detection
-    # digest policy has already resolved whether both belong in this bar;
-    # the card layer must not merge or silently discard either one.
-    card_candidates = claimed_results
-  else:
-    card_candidates, _ = _suppress_overlaps(claimed_results)
-  structural = [
-    item for item in card_candidates if item.setup in STRUCTURAL_SETUPS
-  ]
-  cards = sorted(structural or card_candidates[:1], key=_result_rank)
-  card_top_n = int(settings.scanner_card_top_n)
-  if card_top_n > 0:
-    cards = cards[:card_top_n]
+  # Resolve the canonical executable identity BEFORE reserving notification
+  # dedup. Previously a detector observation could claim the four-hour band
+  # key here, fail to resolve a StrategyMatch below, and silently burn the
+  # future forming card. If that same structure became executable later, the
+  # worker could publish/fill it while Telegram remained permanently cardless.
   match_pool = list(execution_matches or [])
   if (
     execution_match is not None
     and all(item.match_id != execution_match.match_id for item in match_pool)
   ):
     match_pool.append(execution_match)
-  match_ids_by_card: dict[int, str] = {}
-  sent_results: list[DetectionResult] = []
-  for index, result in enumerate(cards):
-    also = card_candidates[1:] if not structural and index == 0 else []
+  matchable_results: list[DetectionResult] = []
+  matches_by_result: dict[int, StrategyMatch] = {}
+  for result_index, result in enumerate(results):
     match_for_card = None
     if result.confluence_zone_id:
       match_for_card = next(
@@ -2182,13 +2141,9 @@ async def _notify_digest_once(
     if (
       match_for_card is None
       and not result.confluence_zone_id
-      and index == 0
+      and result_index == 0
     ):
       match_for_card = execution_match
-    # Non-negotiable Telegram requirement: a result without a resolvable
-    # canonical StrategyMatch must never reach notify()/
-    # post_or_edit_forming_card() - not even as a MARKET OBSERVATION/
-    # ANALYSIS ONLY card.
     if match_for_card is None:
       log.info(
         "scanner card suppressed: no executable StrategyMatch "
@@ -2198,6 +2153,65 @@ async def _notify_digest_once(
         result.setup,
         result.direction,
       )
+      continue
+    matchable_results.append(result)
+    matches_by_result[id(result)] = match_for_card
+
+  available_results = []
+  for result in matchable_results:
+    band_key = _band_dedup_key(symbol, result)
+    if await client.get(band_key) is not None:
+      log.debug(
+        "scanner detection suppressed by zone band TTL "
+        "symbol=%s tf=%s key=%s",
+        symbol,
+        tf,
+        band_key,
+      )
+      continue
+    available_results.append(result)
+  if not available_results:
+    return []
+  if all(result.confluence_zone_id for result in available_results):
+    # Opposing sides have distinct merged zone/setup identities. Detection
+    # digest policy has already resolved whether both belong in this bar;
+    # the card layer must not merge or silently discard either one.
+    card_candidates = available_results
+  else:
+    card_candidates, _ = _suppress_overlaps(available_results)
+  structural = [
+    item for item in card_candidates if item.setup in STRUCTURAL_SETUPS
+  ]
+  cards = sorted(structural or card_candidates[:1], key=_result_rank)
+  card_top_n = int(settings.scanner_card_top_n)
+  if card_top_n > 0:
+    cards = cards[:card_top_n]
+  match_ids_by_card: dict[int, str] = {}
+  sent_results: list[DetectionResult] = []
+  for index, result in enumerate(cards):
+    also = card_candidates[1:] if not structural and index == 0 else []
+    match_for_card = matches_by_result[id(result)]
+    # Reserve dedup only for a card that survived match resolution, overlap
+    # suppression and the card cap. A failed/terminal send releases both
+    # reservations so a later executable scan can repair the missing root.
+    band_key = _band_dedup_key(symbol, result)
+    band_claimed = await client.set(
+      band_key,
+      "1",
+      ex=settings.zone_alert_ttl,
+      nx=True,
+    )
+    if not band_claimed:
+      continue
+    dedup_key = _dedup_key(symbol, tf, result)
+    dedup_claimed = await client.set(
+      dedup_key,
+      "1",
+      ex=settings.scanner_alert_ttl,
+      nx=True,
+    )
+    if not dedup_claimed:
+      await client.delete(band_key)
       continue
     text = _format_detection(
       symbol,
@@ -2215,20 +2229,28 @@ async def _notify_digest_once(
       # published - see _format_detection_cutover). Not the same as
       # "suppressed: no executable StrategyMatch" above; this candidate IS
       # tracked, it just has no card to send right now.
+      await client.delete(dedup_key, band_key)
       continue
     # One forming card per setup (P4): re-detection of the same setup_id
     # edits its existing card instead of posting a new one, and a terminal
     # (rejected/invalidated/expired) setup is never re-carded - both
     # enforced inside post_or_edit_forming_card.
-    await post_or_edit_forming_card(
-      client,
-      match_for_card.match_id,
-      text,
-      chat_id=settings.telegram_owner_id,
-      send_fn=notify,
-      edit_fn=edit or edit_scanner_message_text,
-      delete_fn=delete_scanner_message,
-    )
+    try:
+      message_id = await post_or_edit_forming_card(
+        client,
+        match_for_card.match_id,
+        text,
+        chat_id=settings.telegram_owner_id,
+        send_fn=notify,
+        edit_fn=edit or edit_scanner_message_text,
+        delete_fn=delete_scanner_message,
+      )
+    except Exception:
+      await client.delete(dedup_key, band_key)
+      raise
+    if message_id is None:
+      await client.delete(dedup_key, band_key)
+      continue
     match_ids_by_card[index] = match_for_card.match_id
     sent_results.append(result)
   await _track_active_setups(client, symbol, tf, cards, match_ids_by_card)

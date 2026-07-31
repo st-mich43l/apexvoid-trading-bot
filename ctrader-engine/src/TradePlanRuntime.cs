@@ -1946,6 +1946,7 @@ public sealed class TradePlanRuntime(
           cancellationToken,
           positionId: state.PositionId,
           price: lastExecution?.ExecutionPrice,
+          targetPips: ArchivedTargetPips(plan, state, target.TargetId),
           volume: closedTotal,
           eventKey: remainingAfter <= 0
             ? $"tp_completed_{target.TargetId}_closed"
@@ -2240,6 +2241,9 @@ public sealed class TradePlanRuntime(
       );
       await PersistStateAsync(next, cancellationToken);
       var highestTp = HighestArchivedTargetId(plan, state);
+      var highestTpPips = highestTp is null
+        ? null
+        : ArchivedTargetPips(plan, state, highestTp);
       string slMessage;
       if (highestTp is not null)
       {
@@ -2260,6 +2264,7 @@ public sealed class TradePlanRuntime(
         cancellationToken,
         positionId: state.PositionId,
         price: exitHint,
+        targetPips: highestTpPips,
         eventKey: "group_stop_loss",
         state: TradePlanGroupStages.Closed
       );
@@ -2742,6 +2747,36 @@ public sealed class TradePlanRuntime(
     }
     var index = Math.Min(state.NextTargetIndex, plan.Targets.Count) - 1;
     return plan.Targets[index].TargetId;
+  }
+
+  private int? ArchivedTargetPips(
+    TradePlan plan,
+    TradePlanRuntimeState state,
+    string targetId
+  )
+  {
+    var weightedFill = state.GroupWeightedFillPrice ?? state.EntryFillPrice;
+    if (
+      options.PipSize <= 0
+      || weightedFill is not decimal fillPrice
+      || fillPrice <= 0
+    )
+    {
+      return null;
+    }
+    var index = IndexOfTarget(plan, targetId);
+    if (index < 0)
+    {
+      return null;
+    }
+    var distance = decimal.Abs(
+      plan.Targets[index].Price - fillPrice
+    );
+    return decimal.ToInt32(decimal.Round(
+      distance / options.PipSize,
+      0,
+      MidpointRounding.AwayFromZero
+    ));
   }
 }
 
