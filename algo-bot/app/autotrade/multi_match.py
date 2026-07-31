@@ -8,9 +8,11 @@ from datetime import datetime
 from typing import Any, Iterable
 
 from app.autotrade.execution_policy import (
+  FAMILY_RANGE_REVERSION,
   TIER_C,
   classify_tier,
   risk_multiplier_for_tier,
+  strategy_family,
 )
 from app.autotrade.strategy_match import StrategyMatch
 from app.analysis.structural_reaction_support import (
@@ -280,6 +282,9 @@ def merge_confluence(
     cfg,
     post_impulse=bool(primary.range_state == "post_impulse_range"),
     one_sided=bool(primary.strategy == "One-Sided Range Reaction"),
+    range_scalp=(
+      strategy_family(primary.strategy) == FAMILY_RANGE_REVERSION
+    ),
   )
   merged = StrategyMatch.from_json(json.dumps(data, separators=(",", ":")))
   return merged or primary

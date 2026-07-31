@@ -2873,7 +2873,9 @@ async def _publish_candidate(
         (int(decision.full_tp_pips),)
         if decision.full_tp_pips is not None else ()
       ),
-      risk_multiplier=risk_multiplier_for_tier(range_tier, settings),
+      risk_multiplier=risk_multiplier_for_tier(
+        range_tier, settings, range_scalp=True,
+      ),
       sweep_low=decision.sweep_low,
       sweep_high=decision.sweep_high,
     ),
@@ -2928,6 +2930,7 @@ async def _publish_candidate(
     "risk_multiplier": risk_multiplier_for_tier(
       range_tier,
       settings,
+      range_scalp=True,
     ),
     "reasons": list(decision.reasons),
     "range_id": decision.box.box_id,
