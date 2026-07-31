@@ -5130,23 +5130,25 @@ async def _publish_trade_plan_v7(
     min_capped_target_pips=float(settings.auto_trade_min_capped_target_pips),
   )
   if not target_room.allowed:
-    # Target-room / opposing-structure preference is telemetry only —
-    # never invalidate or refuse publication. Cap targets when fitted
-    # room exists; otherwise keep the declared ladder.
-    log.info(
-      "v7 target-room preference observed symbol=%s match_id=%s "
-      "reason=%s message=%s",
+    # Hard reject structural conflicts (e.g. SELL entry inside demand /
+    # opposing_entry_contained). Preference-only demotion previously let
+    # those plans publish and hedge the correct side.
+    await _record_v7_build_rejected(
+      client,
       symbol,
-      match.match_id[:12],
-      target_room.reason_code,
-      target_room.message,
+      match,
+      str(target_room.reason_code or "opposing_structure_blocked"),
+      target_room.message
+      or "planned entry conflicts with opposing actionable structure",
+      dict(target_room.measured or {}),
     )
     await increment_metric(
       client,
-      "target_room_preference_observed",
+      "target_room_rejected",
       symbol=symbol,
       dimensions={"reason": str(target_room.reason_code or "unknown")},
     )
+    return None
   match_for_plan = (
     replace(
       execution_match,
