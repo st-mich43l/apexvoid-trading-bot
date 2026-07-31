@@ -35,8 +35,9 @@ x-auto-trade-environment: &auto-trade-environment
   AUTO_TRADE_CANONICAL_SYMBOL: ${AUTO_TRADE_CANONICAL_SYMBOL:-XAU}
   AUTO_TRADE_XAU_PIP_SIZE: ${AUTO_TRADE_XAU_PIP_SIZE:-0.1}
   AUTO_TRADE_XAU_CONTRACT_SIZE: ${AUTO_TRADE_XAU_CONTRACT_SIZE:-100}
-  # Five rungs required by C#. First rung 20 = thin-room special ops; max stays 200.
-  AUTO_TRADE_TARGET_PLANS_PIPS: ${AUTO_TRADE_TARGET_PLANS_PIPS:-20,30,60,90,200}
+  # Five-rung strategy ladder (unchanged). Thin ~20p room is special-ops via
+  # structural_target_room cap (min_capped_target), not a ladder rung.
+  AUTO_TRADE_TARGET_PLANS_PIPS: ${AUTO_TRADE_TARGET_PLANS_PIPS:-30,60,90,120,200}
   AUTO_TRADE_RANGE_TARGETS_PIPS: ${AUTO_TRADE_RANGE_TARGETS_PIPS:-15,20,30,40,50,70}
   AUTO_TRADE_RANGE_MIN_TARGET_PIPS: ${AUTO_TRADE_RANGE_MIN_TARGET_PIPS:-15}
   AUTO_TRADE_RANGE_MIN_RR: ${AUTO_TRADE_RANGE_MIN_RR:-1.0}

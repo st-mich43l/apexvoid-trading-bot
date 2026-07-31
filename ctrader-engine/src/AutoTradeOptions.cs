@@ -210,7 +210,7 @@ public sealed record AutoTradeOptions(
     StopLossDistance: resolver.Decimal("AUTO_TRADE_SL_DISTANCE", 6.5m),
     TargetsPips: resolver.IntList(
       "AUTO_TRADE_TARGET_PLANS_PIPS",
-      "20,30,60,90,200",
+      "30,60,90,120,200",
       "AUTO_TRADE_TP_PIPS"
     ),
     TargetWeights: resolver.IntList(

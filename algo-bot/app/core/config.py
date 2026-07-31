@@ -388,7 +388,7 @@ class Settings(BaseSettings):
   auto_trade_news_guard_minutes: int = 30
   auto_trade_box_retire_seconds: int = 14400
   auto_trade_tp_pips: str = Field(
-    default="20,30,60,90,200",
+    default="30,60,90,120,200",
     validation_alias=AliasChoices(
       "AUTO_TRADE_TARGET_PLANS_PIPS",
       "AUTO_TRADE_TP_PIPS",
