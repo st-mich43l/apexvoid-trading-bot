@@ -56,6 +56,14 @@ if _log_info.get("file"):
   )
 
 
+def _spawn_supervised(name: str, factory) -> asyncio.Task:
+  """Background Redis consumers must survive Compose recreate DNS blips."""
+  return asyncio.create_task(
+    redis_state.run_supervised(name, factory),
+    name=name,
+  )
+
+
 async def main() -> None:
   # Scanner and worker are already imported above. Install the retained-zone
   # cutover before any background task starts so every live scanner cycle uses
@@ -63,6 +71,9 @@ async def main() -> None:
   install_zone_execution_cutover()
   install_same_cycle_publish_retry()
   await init_db()
+  # Compose can report Redis healthy then briefly drop DNS while recreating the
+  # container; wait for a real PING before anything else touches the client.
+  await redis_state.wait_until_ready()
   config_health = await publish_python_manifest(redis_state.get_client())
   manifest = python_manifest()
   log.info(
@@ -113,21 +124,21 @@ async def main() -> None:
       handle_signals=False,
       close_bot_session=False,
     ))
-  asyncio.create_task(watcher_loop())
-  asyncio.create_task(calendar_sync_loop())
-  asyncio.create_task(weekly_report_loop())
-  asyncio.create_task(scanner_loop())
-  asyncio.create_task(zone_watch_execution_loop())
-  asyncio.create_task(auto_scalp_loop())
+  _spawn_supervised("watcher_loop", watcher_loop)
+  _spawn_supervised("calendar_sync_loop", calendar_sync_loop)
+  _spawn_supervised("weekly_report_loop", weekly_report_loop)
+  _spawn_supervised("scanner_loop", scanner_loop)
+  _spawn_supervised("zone_watch_execution_loop", zone_watch_execution_loop)
+  _spawn_supervised("auto_scalp_loop", auto_scalp_loop)
   # Kept for emergency fallback and pre-cutover legacy events. Normal zone
   # waiting no longer writes to this stream.
-  asyncio.create_task(strategy_match_ready_loop())
-  asyncio.create_task(setup_expiry_sweeper_loop())
-  asyncio.create_task(market_map_scan_loop())
-  asyncio.create_task(auto_trade_events_loop())
-  asyncio.create_task(auto_trade_stats_ingestion_loop())
-  asyncio.create_task(bridge_intents_loop())
-  asyncio.create_task(reconcile_events_loop())
+  _spawn_supervised("strategy_match_ready_loop", strategy_match_ready_loop)
+  _spawn_supervised("setup_expiry_sweeper_loop", setup_expiry_sweeper_loop)
+  _spawn_supervised("market_map_scan_loop", market_map_scan_loop)
+  _spawn_supervised("auto_trade_events_loop", auto_trade_events_loop)
+  _spawn_supervised("auto_trade_stats_ingestion_loop", auto_trade_stats_ingestion_loop)
+  _spawn_supervised("bridge_intents_loop", bridge_intents_loop)
+  _spawn_supervised("reconcile_events_loop", reconcile_events_loop)
   log.info("DB ready (PostgreSQL)")
   if not settings.telegram_owner_id:
     log.warning(
