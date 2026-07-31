@@ -91,7 +91,7 @@ async def _arm_algo_intent(signal_id: int, signal: dict) -> str:
     log.exception("Failed to arm algo execution for signal #%d", signal_id)
     await set_execution_status(signal_id, "error", error=str(exc))
     return "⚠️ Algo arm failed — signal posted notify-only"
-  return "📨 ALGO REQUEST RECEIVED\nWaiting for executor confirmation"
+  return "📨 ALGO REQUEST RECEIVED"
 
 
 @router.message(F.chat.type == "private", F.text)

@@ -18,6 +18,10 @@ from app.signals.weekly_report import weekly_report_loop
 from app.analysis.scanner import scanner_loop
 from app.analysis.market_map_delivery import market_map_scan_loop
 from app.autotrade.delivery import auto_trade_events_loop
+from app.autotrade.stats_ingestion import (
+  auto_trade_stats_ingestion_loop,
+  backfill_retained_auto_trade_stats,
+)
 from app.autotrade.setup_expiry_sweeper import setup_expiry_sweeper_loop
 from app.autotrade.startup_reconciliation import reconcile_startup_state
 from app.autotrade.worker import auto_scalp_loop, strategy_match_ready_loop
@@ -92,6 +96,10 @@ async def main() -> None:
     # Repair pre-existing orphaned/stale state before any background task
     # starts reading it, so nothing races startup reconciliation.
     await reconcile_startup_state(redis_state.get_client())
+  # Accounting has its own cursor and must be ready before Telegram accepts
+  # /trade_stats. Startup also catches up retained events after the durable
+  # cursor, including when autonomous execution is currently switched off.
+  await backfill_retained_auto_trade_stats(redis_state.get_client())
   await setup_commands(bot)
   scanner_polling = None
   if (
@@ -117,6 +125,7 @@ async def main() -> None:
   asyncio.create_task(setup_expiry_sweeper_loop())
   asyncio.create_task(market_map_scan_loop())
   asyncio.create_task(auto_trade_events_loop())
+  asyncio.create_task(auto_trade_stats_ingestion_loop())
   asyncio.create_task(bridge_intents_loop())
   asyncio.create_task(reconcile_events_loop())
   log.info("DB ready (PostgreSQL)")
