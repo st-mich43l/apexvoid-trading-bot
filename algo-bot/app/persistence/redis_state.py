@@ -61,25 +61,37 @@ def get_client() -> redis.Redis:
 
 
 def is_transient_redis_error(exc: BaseException) -> bool:
-  """True for connection/DNS/timeout failures that justify a Redis reset."""
-  if isinstance(exc, _REDIS_RETRY_ERRORS):
+  """True for Redis connection/DNS failures that justify a client reset.
+
+  Intentionally narrow: bare ``timeout`` in an unrelated exception message
+  (broker fill, statement lock, schema validation) must NOT be treated as a
+  Redis blip — those stay fatal so the supervisor does not poison siblings.
+  """
+  if isinstance(exc, (RedisConnectionError, RedisTimeoutError)):
     return True
-  # redis-py sometimes wraps gaierror/ConnectionReset inside ConnectionError
-  # already covered above; also accept nested causes.
   cause = getattr(exc, "__cause__", None)
-  if cause is not None and isinstance(cause, _REDIS_RETRY_ERRORS):
+  if isinstance(cause, (RedisConnectionError, RedisTimeoutError)):
     return True
-  text = str(exc).casefold()
-  markers = (
-    "name or service not known",
-    "connection closed",
-    "connection refused",
-    "connection reset",
-    "timed out",
-    "timeout",
-    "server closed the connection",
-  )
-  return any(marker in text for marker in markers)
+  # OSError/TimeoutError only when the message is clearly a Redis transport
+  # failure (DNS/connect), not a generic application timeout.
+  if isinstance(exc, (OSError, TimeoutError)) or (
+    cause is not None and isinstance(cause, (OSError, TimeoutError))
+  ):
+    text = str(exc).casefold()
+    if cause is not None:
+      text = f"{text} {str(cause).casefold()}"
+    redis_transport = (
+      "name or service not known",
+      "connection refused",
+      "connection reset",
+      "connection closed",
+      "server closed the connection",
+      "error -2 connecting to redis",
+      "connecting to redis",
+    )
+    if any(marker in text for marker in redis_transport):
+      return True
+  return False
 
 
 def component_health_key(name: str) -> str:
@@ -93,7 +105,11 @@ async def publish_component_health(
   error: str | None = None,
   retry_count: int = 0,
 ) -> None:
-  """Persist per-loop health for /algo_status (ready|degraded_retrying|fatal)."""
+  """Persist per-loop health for /algo_status (ready|degraded_retrying|fatal).
+
+  ``fatal`` is written without TTL so it cannot silently expire; ready and
+  degraded_retrying keep a rolling TTL.
+  """
   payload = {
     "component": component,
     "state": state,
@@ -102,13 +118,48 @@ async def publish_component_health(
     "updated_at": int(time.time()),
   }
   try:
-    await get_client().set(
-      component_health_key(component),
-      json.dumps(payload, separators=(",", ":")),
-      ex=_COMPONENT_HEALTH_TTL,
-    )
+    key = component_health_key(component)
+    body = json.dumps(payload, separators=(",", ":"))
+    if state == "fatal":
+      await get_client().set(key, body)
+    else:
+      await get_client().set(key, body, ex=_COMPONENT_HEALTH_TTL)
   except Exception:
     log.exception("component health publish failed component=%s", component)
+
+
+_FATAL_ALERT_DEDUP_PREFIX = "auto_trade:component_fatal_alert:"
+
+
+async def _alert_owner_component_fatal(
+  *,
+  component: str,
+  error: str,
+) -> None:
+  """DM the owner once per component when a supervised loop goes fatal."""
+  owner_id = getattr(settings, "telegram_owner_id", None)
+  if not owner_id:
+    return
+  client = get_client()
+  dedup_key = f"{_FATAL_ALERT_DEDUP_PREFIX}{component}"
+  try:
+    claimed = await client.set(dedup_key, "1", nx=True)
+  except Exception:
+    log.exception("fatal alert dedup failed component=%s", component)
+    claimed = True
+  if not claimed:
+    return
+  text = (
+    f"⚠️ <b>Algo component fatal</b>\n"
+    f"<code>{component}</code>\n"
+    f"{(error or 'unknown')[:400]}"
+  )
+  try:
+    from app.bot.client import send_scanner_with_retry
+
+    await send_scanner_with_retry(text, chat_id=int(owner_id))
+  except Exception:
+    log.exception("fatal owner alert failed component=%s", component)
 
 
 async def load_component_health(component: str) -> dict | None:
@@ -254,6 +305,7 @@ async def run_supervised(
         error=str(exc),
         retry_count=retry_count,
       )
+      await _alert_owner_component_fatal(component=name, error=str(exc))
       raise
 
 

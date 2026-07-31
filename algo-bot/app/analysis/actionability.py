@@ -158,6 +158,7 @@ _GATED_HARD_BLOCK_REASONS = frozenset({
   "opposing_major_no_room",
   "opposing_barrier_no_target",
   "entry_inside_opposing_zone",
+  "execution_cost_insufficient_room",
 })
 
 
@@ -504,6 +505,9 @@ def resolve_actionability(
         ),
         min_capped_target_pips=float(
           getattr(cfg, "auto_trade_min_capped_target_pips", 15.0)
+        ),
+        execution_cost_pips=float(
+          getattr(cfg, "auto_trade_execution_cost_pips", 1.0)
         ),
       )
       measured = {

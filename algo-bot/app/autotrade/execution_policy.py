@@ -91,6 +91,7 @@ HARD_STRUCTURAL_TARGET_ROOM_REASONS = frozenset({
   "opposing_barrier_no_target",
   "entry_inside_opposing_zone",
   "invalid_target_room_geometry",
+  "execution_cost_insufficient_room",
 })
 
 

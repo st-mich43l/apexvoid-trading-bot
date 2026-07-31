@@ -41,10 +41,6 @@ M1_RETEST = "m1_retest"
 
 _REACTION_STRATEGIES = frozenset({
   "Key Level Reaction",
-  "Zone Reaction",
-  # Legacy labels:
-  "Demand Zone Reaction",
-  "Supply Zone Reaction",
   "Session Level Reaction",
   "Trendline Reaction",
   "Mapped Zone Reaction",
@@ -61,6 +57,9 @@ _CONTINUATION_STRATEGIES = frozenset({
   "Momentum Ride",
   "Breakout Continuation",
 })
+# Confirmation policy families (M5-authoritative / M1-optional). Zone
+# Reaction lives in supply_demand here for confirmation mechanics only —
+# product taxonomy keeps it in ZONE_STRATEGIES, not REACTION_STRATEGIES.
 _REACTION_FAMILIES = frozenset({
   "key_level",
   "supply_demand",
