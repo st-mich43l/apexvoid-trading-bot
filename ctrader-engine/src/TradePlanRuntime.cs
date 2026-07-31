@@ -806,7 +806,7 @@ public sealed class TradePlanRuntime(
           symbol.SymbolId,
           direction,
           volumePlan.TotalVolume,
-          RelativeStopLoss(plan, symbol),
+          RelativeStopLoss(plan),
           options.Label,
           $"v7|{plan.PlanId}|{plan.ThesisId}",
           plan.PlanId
@@ -890,7 +890,7 @@ public sealed class TradePlanRuntime(
             symbol.SymbolId,
             direction,
             volume,
-            RelativeStopLoss(plan, symbol),
+            RelativeStopLoss(plan),
             options.Label,
             legComment,
             legClientOrderId
@@ -909,7 +909,7 @@ public sealed class TradePlanRuntime(
             direction,
             volume,
             price,
-            RelativeStopLoss(plan, symbol),
+            RelativeStopLoss(plan),
             options.Label,
             legComment,
             legClientOrderId
@@ -981,13 +981,21 @@ public sealed class TradePlanRuntime(
     }
   }
 
-  private static long RelativeStopLoss(TradePlan plan, SymbolInfo symbol)
+  // cTrader's ProtoOANewOrderReq.RelativeStopLoss is a fixed-point distance
+  // scaled by 100,000 regardless of the symbol's own digit count - NOT a
+  // tick count. The V6 path (AutoTradeEngine.cs, e.g. PlaceLimitOrderAsync
+  // call sites) already does this correctly
+  // (decimal.ToInt64(distance * 100_000m)); this used to divide by the
+  // symbol's tick size instead, which for a 2-digit symbol like XAU sent a
+  // relative stop loss roughly 1000x smaller than the broker expected -
+  // the exact cause of the "Relative stop loss has invalid precision"
+  // crash loop.
+  private static long RelativeStopLoss(TradePlan plan)
   {
-    var tick = StopTrailPlanner.RequireTickSize(symbol);
     var entryReference = plan.Analysis.Direction == "BUY"
       ? plan.Entry.EntryPrices().Min()
       : plan.Entry.EntryPrices().Max();
-    return decimal.ToInt64(Math.Abs(entryReference - plan.Stop.Price) / tick);
+    return decimal.ToInt64(Math.Abs(entryReference - plan.Stop.Price) * 100_000m);
   }
 
   private async Task ManageOpenPositionsAsync(
