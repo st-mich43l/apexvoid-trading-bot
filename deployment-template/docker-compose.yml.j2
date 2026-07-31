@@ -19,6 +19,11 @@
   'KEY_LEVEL_ROLE_AMBIGUITY_GATE_ENABLED': 'false',
   'RANGE_CONTEXT_DISAGREEMENT_GATE_ENABLED': 'false'
 } %}
+{% set logging_defaults = {
+  'LOG_DIR': '/var/log/apexvoid',
+  'LOG_RETENTION_DAYS': '14',
+  'LOG_FILE_ENABLED': 'true'
+} %}
 {% set demo_execution_defaults = {
   'AUTO_TRADE_STRUCTURAL_GUARD_MODE': 'observe',
   'AUTO_TRADE_OPPOSING_BARRIER_VETO_ENABLED': 'false',
@@ -35,7 +40,8 @@
   'AUTO_TRADE_MAP_HARD_ENTRY_DRIFT_PIPS': '20',
   'AUTO_TRADE_TREND_HARD_ENTRY_DRIFT_PIPS': '30'
 } if auto_trade_profile == 'demo_eval' else {} %}
-{% set resolved_bot_env = execution_defaults | combine(demo_execution_defaults) | combine(apexvoid_trading_bot_env) %}
+{# Vault LOG_* must not also be emitted after this loop — duplicate YAML keys break compose. #}
+{% set resolved_bot_env = execution_defaults | combine(demo_execution_defaults) | combine(logging_defaults) | combine(apexvoid_trading_bot_env) %}
 name: apexvoid-trading-bot
 
 services:
@@ -86,9 +92,6 @@ services:
 {% for key, value in resolved_bot_env.items() %}
       {{ key }}: {{ value | to_json }}
 {% endfor %}
-      LOG_DIR: {{ apexvoid_trading_bot_env.LOG_DIR | default('/var/log/apexvoid') | string | to_json }}
-      LOG_RETENTION_DAYS: {{ apexvoid_trading_bot_env.LOG_RETENTION_DAYS | default('14') | string | to_json }}
-      LOG_FILE_ENABLED: {{ apexvoid_trading_bot_env.LOG_FILE_ENABLED | default('true') | string | to_json }}
 
   ctrader-engine:
     image: "{{ registry_namespace }}/apexvoid-ctrader-engine:{{ image_tag }}"
