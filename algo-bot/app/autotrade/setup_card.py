@@ -937,27 +937,64 @@ async def assert_or_repair_forming_projection(
 
 PLAN_PUBLISHED_STATUS_LINE = STATUS_LINE_BY_PROJECTION_STATE["plan_published"]
 
+_CONFLUENCE_TAG_LABELS = {
+  "key_level": "Key Level",
+  "demand": "Demand",
+  "supply": "Supply",
+  "ob": "OB",
+  "fvg": "FVG",
+  "breaker": "Breaker",
+  "session_level": "Session Level",
+  "trendline": "Trendline",
+}
+
+
+def _tag_label(tag: str) -> str:
+  normalized = str(tag).casefold()
+  return _CONFLUENCE_TAG_LABELS.get(
+    normalized,
+    normalized.replace("_", " ").title(),
+  )
+
+
+def _price_text(value: float) -> str:
+  return f"{float(value):,.2f}"
+
 
 def format_plan_published_root_card(
   match: StrategyMatch,
   *,
   stop_price: float | None = None,
 ) -> str:
-  """Compact first root card for ZoneWatch direct-publish (no prior FORMING).
+  """PLAN PUBLISHED root card with scanner-style trade/context detail.
 
-  Includes a Stop line so later BE / trailing SL edits (edit_forming_card_stop)
-  and TP/SL reply threading keep working on the same Telegram message_id
-  stored in forming_message / telegram_root. No manual copy-draft — cards are
-  algo-auto only.
+  Includes bias / structure / trade area / context / stop when available on
+  the StrategyMatch. No copy-draft. Stop stays editable for BE / trailing.
   """
   direction = str(match.direction or "").upper()
   direction_icon = "🟢" if direction == "BUY" else "🔴"
   stars = "⭐" * max(1, min(3, int(match.confluence or 1)))
-  zone = f"{float(match.entry_low):,.2f}–{float(match.entry_high):,.2f}"
-  if stop_price is not None and math.isfinite(float(stop_price)):
-    stop_line = f"• <b>Stop:</b> <b>{float(stop_price):,.2f}</b>"
-  else:
-    stop_line = "• <b>Stop:</b> <b>SL</b>"
+  tags = tuple(match.tags or ())
+  confluence_label = " + ".join(_tag_label(tag) for tag in tags)
+  setup_label = (
+    f"{confluence_label} · {match.strategy}"
+    if len(tags) > 1
+    else str(match.strategy)
+  )
+  mode = str(match.strategy_mode or "").strip()
+  identity = confluence_label or (
+    _tag_label(match.structural_kind) if match.structural_kind else ""
+  )
+  confirmation = str(match.reaction_type or "").strip()
+  source_tf = str(
+    match.structural_timeframe or match.source_tf or ""
+  ).strip().upper()
+  htf_bias = str(match.htf_bias or "").strip()
+  extra_reasons = [
+    reason for reason in (match.reasons or ())
+    if reason and not str(reason).lower().startswith("htf bias")
+  ][:2]
+
   lines = [
     (
       f"🔎 <b>{escape(str(match.symbol))} "
@@ -968,14 +1005,56 @@ def format_plan_published_root_card(
     ),
     (
       f"{direction_icon} <b>{escape(direction)} · "
-      f"{escape(str(match.strategy))}</b> · {stars}"
+      f"{escape(setup_label)}</b> · {stars}"
     ),
-    f"• <b>Entry zone:</b> <b>{zone}</b>",
-    f"• <b>Key level:</b> <b>{float(match.key_level):,.2f}</b>",
-    stop_line,
-    "",
-    "→ Executor owns mechanical entry and risk enforcement.",
   ]
+  if mode == "range_scalp":
+    lines.append("↔️ <b>Mode:</b> RANGE SCALP · two-sided local range")
+  elif mode == "counter_bias":
+    lines.append("⚠️ <b>Bias:</b> counter_bias")
+  elif mode in {"with_bias", "neutral"}:
+    lines.append(f"🧭 <b>Bias:</b> {escape(mode)}")
+  elif mode and mode != "with_trend":
+    label = (
+      "reaction scalp" if mode == "counter_reaction" else "counter swing"
+    )
+    lines.append(f"⚠️ <b>Mode:</b> Counter-trend · {label}")
+  if match.structural_source:
+    lines.append(
+      f"🧱 <b>Structural source:</b> {escape(str(match.structural_source))}"
+    )
+  if identity:
+    lines.append(f"🏷️ <b>Identity:</b> {escape(identity)}")
+  if confirmation:
+    lines.append(f"✅ <b>Confirmation:</b> {escape(confirmation)}")
+  if source_tf:
+    lines.append(f"⏱ <b>Source TF:</b> {escape(source_tf)}")
+
+  lines.extend([
+    "",
+    "📍 <b>Trade area</b>",
+    (
+      "• <b>Price now:</b> "
+      f"<b>{_price_text(match.current_price)}</b> <i>(live)</i>"
+    ),
+    (
+      "• <b>Entry zone:</b> "
+      f"<b>{_price_text(match.entry_low)}–{_price_text(match.entry_high)}</b>"
+    ),
+    f"• <b>Key level:</b> <b>{_price_text(match.key_level)}</b>",
+  ])
+  if stop_price is not None and math.isfinite(float(stop_price)):
+    lines.append(f"• <b>Stop:</b> <b>{_price_text(float(stop_price))}</b>")
+  else:
+    lines.append("• <b>Stop:</b> <b>SL</b>")
+
+  lines.extend(["", "🧭 <b>Context</b>"])
+  if htf_bias:
+    lines.append(f"• <b>HTF bias:</b> {escape(htf_bias)}")
+  elif mode:
+    lines.append(f"• <b>HTF bias:</b> {escape(mode)}")
+  lines.extend(f"• {escape(str(reason))}" for reason in extra_reasons)
+  lines.append("→ Executor owns mechanical entry and risk enforcement.")
   return "\n".join(lines)
 
 
