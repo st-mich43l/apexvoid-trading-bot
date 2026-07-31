@@ -182,12 +182,17 @@ _POSITION_TEXT_RE = re.compile(r"(?i)\bposition\s*[:#]?\s*\d+\b")
 _VOLUME_LABEL_RE = re.compile(r"(?i)\bvolume\s*=")
 _REMAINING_LABEL_RE = re.compile(r"(?i)\bremaining\s*=")
 _LEG_VOLUME_RE = re.compile(r"(?i)\b(L\d+)\s*=")
+_LOT_EQ_RE = re.compile(
+  r"(?i)\b((?:remaining\s+)?lot=)([0-9]+(?:\.[0-9]+)?)"
+)
 _WEIGHTED_EQ_RE = re.compile(
   r"(?i)\bweighted\s*=\s*([0-9]+(?:\.[0-9]+)?)"
 )
 _AT_PRICE_RE = re.compile(
   r"(?i)(@\s*)([0-9]+(?:\.[0-9]+)?)"
 )
+# cTrader XAU LotSize is typically 10_000 volume units per 1.0 lot.
+_DEFAULT_BROKER_LOT_SIZE = 10_000.0
 
 DeliveryProfile = Literal["internal", "public"]
 
@@ -203,6 +208,31 @@ def _format_event_price(raw: str, *, digits: int | None = None) -> str:
   return f"{value:.{max(0, precision)}f}"
 
 
+def _broker_lot_size() -> float:
+  raw = getattr(settings, "auto_trade_broker_lot_size", None)
+  try:
+    value = float(raw) if raw is not None else _DEFAULT_BROKER_LOT_SIZE
+  except (TypeError, ValueError):
+    value = _DEFAULT_BROKER_LOT_SIZE
+  return value if value > 0 else _DEFAULT_BROKER_LOT_SIZE
+
+
+def _format_message_lot(raw: str) -> str:
+  """Render strategy lots; convert whole broker volume units when needed."""
+  from app.autotrade.volume_pips import broker_volume_to_lots, format_lots
+
+  try:
+    value = float(raw)
+  except (TypeError, ValueError):
+    return raw
+  lot_size = _broker_lot_size()
+  # Legacy / mislabeled lines still carry raw units (800 → 0.08). Already-
+  # converted lots (0.08) stay untouched.
+  if value >= 100 and abs(value - round(value)) < 1e-9:
+    value = broker_volume_to_lots(value, lot_size)
+  return format_lots(value)
+
+
 def _clean_message(value: object) -> str:
   text = _AUTO_NAME_RE.sub("ApexVoid Algo", str(value or ""))
   text = _POSITION_TEXT_RE.sub("", text)
@@ -211,6 +241,10 @@ def _clean_message(value: object) -> str:
   text = _VOLUME_LABEL_RE.sub("lot=", text)
   text = _REMAINING_LABEL_RE.sub("remaining lot=", text)
   text = _LEG_VOLUME_RE.sub(r"\1 lot=", text)
+  text = _LOT_EQ_RE.sub(
+    lambda match: f"{match.group(1)}{_format_message_lot(match.group(2))}",
+    text,
+  )
   text = _WEIGHTED_EQ_RE.sub(
     lambda match: f"weighted={_format_event_price(match.group(1))}",
     text,
