@@ -172,17 +172,13 @@ class DetectorSettings:
   # rejection/reaction gate, just never populated the confirmation
   # metadata the legacy pipeline needs to treat M1 as optional instead of
   # a hard, unconditional gate) and re-enabled below. box_breakout/
-  # break_retest/momentum_ride remain replay-only: box_breakout/
-  # break_retest's own bespoke confirmation may legitimately need M1 as
-  # the real entry trigger (same as Range Edge Scalp - unverified either
-  # way), and momentum_ride is a continuation/impulse entry that the
-  # legacy pipeline's M1 gate (which only recognizes reversal-shaped
-  # patterns at a zone edge) would almost never confirm at all if enabled
-  # as-is.
+  # break_retest remain replay-only (bespoke confirmation still unverified).
+  # momentum_ride is live: impulse/continuation with its own confirmation
+  # policy (not the reversal-shaped M1 gate).
   box_breakout_enabled: bool = False
   trend_pullback_enabled: bool = True
   break_retest_enabled: bool = False
-  momentum_ride_enabled: bool = False
+  momentum_ride_enabled: bool = True
   snap_back_enabled: bool = True
   fade_scalp_enabled: bool = True
 
@@ -2337,13 +2333,15 @@ def key_level_reaction(ctx: DetectionContext) -> DetectionResult | None:
 def demand_zone_reaction(ctx: DetectionContext) -> DetectionResult | None:
   if not ctx.settings.demand_reaction_enabled:
     return None
-  return _sd_zone_reaction(ctx, side="demand", direction="BUY", setup="Demand Zone Reaction")
+  # Display name is zone-only (BUY/SELL carries the side). Legacy
+  # "Demand Zone Reaction" remains accepted in taxonomy/policy maps.
+  return _sd_zone_reaction(ctx, side="demand", direction="BUY", setup="Zone Reaction")
 
 
 def supply_zone_reaction(ctx: DetectionContext) -> DetectionResult | None:
   if not ctx.settings.supply_reaction_enabled:
     return None
-  return _sd_zone_reaction(ctx, side="supply", direction="SELL", setup="Supply Zone Reaction")
+  return _sd_zone_reaction(ctx, side="supply", direction="SELL", setup="Zone Reaction")
 
 
 def _sd_zone_reaction(
@@ -2655,12 +2653,6 @@ LIVE_DETECTOR_REGISTRY: tuple[DetectorRegistration, ...] = (
   DetectorRegistration(
     "momentum_ride", momentum_ride, FAMILY_MOMENTUM_CONTINUATION,
     lambda cfg: cfg.momentum_ride_enabled,
-    replay_only_reason=(
-      "impulse/continuation entry, not a reversal - the legacy pipeline's "
-      "M1 gate only recognizes reversal-shaped patterns at a zone edge and "
-      "would almost never confirm this shape if enabled as-is; needs its "
-      "own continuation-pattern M1 check before going live"
-    ),
   ),
   DetectorRegistration(
     "snap_back", snap_back, FAMILY_LIQUIDITY_REVERSAL,

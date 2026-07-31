@@ -11,6 +11,8 @@ REACTION_STRATEGIES = frozenset({
 ZONE_STRATEGIES = frozenset({
   "Demand Zone",
   "Supply Zone",
+  # Canonical live name (side is BUY/SELL, not the strategy label):
+  "Zone Reaction",
   # production legacy names that must remain Zone-family, NOT Reaction:
   "Demand Zone Reaction",
   "Supply Zone Reaction",
@@ -26,7 +28,6 @@ RANGE_STRATEGIES = frozenset({
   "Range Edge Scalp",
   "One-Sided Range Reaction",
   "Fade Scalp",
-  "Zone Reaction",
   "Chop Zone Reaction",
 })
 

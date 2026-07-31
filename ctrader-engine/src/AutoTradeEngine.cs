@@ -6673,7 +6673,11 @@ public sealed class AutoTradeEngine(
     {
       return "key_level";
     }
-    if (value.Contains("demand zone") || value.Contains("supply zone"))
+    if (
+      value.Contains("demand zone")
+      || value.Contains("supply zone")
+      || value == "zone reaction"
+    )
     {
       return "supply_demand";
     }
