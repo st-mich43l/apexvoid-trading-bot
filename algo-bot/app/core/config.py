@@ -431,7 +431,7 @@ class Settings(BaseSettings):
     validation_alias=AliasChoices("AUTO_TRADE_REACTION_SCALE_FRACTION"),
   )
   auto_trade_reaction_scale_enabled: bool = Field(
-    default=True,
+    default=False,
     validation_alias=AliasChoices("AUTO_TRADE_REACTION_SCALE_ENABLED"),
   )
   auto_trade_reaction_scale_invalid_policy: str = Field(

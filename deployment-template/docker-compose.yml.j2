@@ -183,7 +183,11 @@ services:
       AUTO_TRADE_ZONE_FILL_TTL_BARS: {{ apexvoid_trading_bot_env.AUTO_TRADE_ZONE_FILL_TTL_BARS | default('3') | string | to_json }}
       AUTO_TRADE_ZONE_FILL_FALLBACK_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_ZONE_FILL_FALLBACK_ENABLED | default('true') | string | to_json }}
       AUTO_TRADE_INSIDE_ZONE_MARKET_ENTRY_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_INSIDE_ZONE_MARKET_ENTRY_ENABLED | default('true') | string | to_json }}
-      AUTO_TRADE_RANGE_TARGETS_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_RANGE_TARGETS_PIPS | default('20,30,40,50,70') | string | to_json }}
+      AUTO_TRADE_RANGE_TARGETS_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_RANGE_TARGETS_PIPS | default('15,20,30,40,50,70') | string | to_json }}
+      AUTO_TRADE_RANGE_MIN_TARGET_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_RANGE_MIN_TARGET_PIPS | default('15') | string | to_json }}
+      AUTO_TRADE_RANGE_MIN_RR: {{ apexvoid_trading_bot_env.AUTO_TRADE_RANGE_MIN_RR | default('1.0') | string | to_json }}
+      AUTO_TRADE_RANGE_ROOM_STOP_FLOOR_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_RANGE_ROOM_STOP_FLOOR_PIPS | default('15') | string | to_json }}
+      AUTO_TRADE_RANGE_MAX_RISK_MULTIPLIER: {{ apexvoid_trading_bot_env.AUTO_TRADE_RANGE_MAX_RISK_MULTIPLIER | default('2.0') | string | to_json }}
       AUTO_TRADE_RANGE_BOX_SCALE_OUT_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_RANGE_BOX_SCALE_OUT_ENABLED | default('true') | string | to_json }}
       AUTO_TRADE_RANGE_BOX_SCALE_OUT_THRESHOLD_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_RANGE_BOX_SCALE_OUT_THRESHOLD_PIPS | default('70') | string | to_json }}
       AUTO_TRADE_RANGE_BOX_SCALE_OUT_TRIGGER_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_RANGE_BOX_SCALE_OUT_TRIGGER_PIPS | default('30') | string | to_json }}
@@ -199,6 +203,13 @@ services:
       AUTO_TRADE_FLIP_CONFIRM_TIMEOUT_SECONDS: {{ apexvoid_trading_bot_env.AUTO_TRADE_FLIP_CONFIRM_TIMEOUT_SECONDS | default('30') | string | to_json }}
       AUTO_TRADE_TREND_STOP_MIN_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_TREND_STOP_MIN_PIPS | default('40') | string | to_json }}
       AUTO_TRADE_TREND_STOP_MAX_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_TREND_STOP_MAX_PIPS | default('60') | string | to_json }}
+      AUTO_TRADE_REACTION_ROOM_STOP_MIN_RR: {{ apexvoid_trading_bot_env.AUTO_TRADE_REACTION_ROOM_STOP_MIN_RR | default('1.0') | string | to_json }}
+      AUTO_TRADE_REACTION_ROOM_STOP_FLOOR_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_REACTION_ROOM_STOP_FLOOR_PIPS | default('20') | string | to_json }}
+      AUTO_TRADE_REACTION_MARKET_FRACTION: {{ apexvoid_trading_bot_env.AUTO_TRADE_REACTION_MARKET_FRACTION | default('0.70') | string | to_json }}
+      AUTO_TRADE_REACTION_SCALE_FRACTION: {{ apexvoid_trading_bot_env.AUTO_TRADE_REACTION_SCALE_FRACTION | default('0.30') | string | to_json }}
+      AUTO_TRADE_REACTION_SCALE_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_REACTION_SCALE_ENABLED | default('false') | string | to_json }}
+      AUTO_TRADE_REACTION_SCALE_INVALID_POLICY: {{ apexvoid_trading_bot_env.AUTO_TRADE_REACTION_SCALE_INVALID_POLICY | default('single_market') | string | to_json }}
+      AUTO_TRADE_REACTION_SCALE_STEP_ATR: {{ apexvoid_trading_bot_env.AUTO_TRADE_REACTION_SCALE_STEP_ATR | default('0.50') | string | to_json }}
       AUTO_TRADE_ENTRY_CONTRACT_TOLERANCE_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_ENTRY_CONTRACT_TOLERANCE_PIPS | default('3') | string | to_json }}
       AUTO_TRADE_STOP_PUSH_BEYOND_ZONE: {{ apexvoid_trading_bot_env.AUTO_TRADE_STOP_PUSH_BEYOND_ZONE | default('true') | string | to_json }}
       AUTO_TRADE_BROKER_ABSENCE_CONFIRMATIONS: {{ apexvoid_trading_bot_env.AUTO_TRADE_BROKER_ABSENCE_CONFIRMATIONS | default('2') | string | to_json }}
