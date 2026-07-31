@@ -101,6 +101,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+      start_period: 10s
     # No ports exposed — only the bot on the internal network reaches it.
 
   redis:
@@ -115,31 +116,13 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+      start_period: 5s
     # redisdata holds the rotated live cTrader refresh token; each rotation
     # invalidates the previous token. The host file mirror recovers Redis loss,
     # but destroying both requires manual cTrader Playground re-authorisation.
 
-  bot:
-    build: ./algo-bot
-    image: apexvoid-trading-bot:latest
-    container_name: apexvoid-trading-bot
-    restart: unless-stopped
-    env_file: .env
-    environment:
-      <<: *auto-trade-environment
-      LOG_DIR: ${LOG_DIR:-/var/log/apexvoid}
-      LOG_RETENTION_DAYS: ${LOG_RETENTION_DAYS:-14}
-      LOG_FILE_ENABLED: ${LOG_FILE_ENABLED:-true}
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    volumes:
-      - ./data:/data   # calendar cache (ff_*.json) still persists here
-      - ./logs/algo-bot:/var/log/apexvoid
-    # No ports exposed — the bot uses outbound Telegram long-polling only.
-
+  # Startup order (Compose waits on health, not just process start):
+  #   postgres + redis → ctrader-engine → bot
   ctrader-engine:
     build: ./ctrader-engine
     image: apexvoid-ctrader-engine:latest
@@ -160,10 +143,35 @@ services:
       - ./logs/ctrader-engine:/var/log/apexvoid
     healthcheck:
       test: ["CMD", "/app/ctrader-feed", "--healthcheck"]
-      interval: 30s
+      interval: 15s
       timeout: 5s
-      retries: 3
+      retries: 8
+      # Broker connect + historical backfill write the first heartbeat.
+      start_period: 120s
     # No ports exposed — outbound cTrader TLS + internal Redis only.
+
+  bot:
+    build: ./algo-bot
+    image: apexvoid-trading-bot:latest
+    container_name: apexvoid-trading-bot
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      <<: *auto-trade-environment
+      LOG_DIR: ${LOG_DIR:-/var/log/apexvoid}
+      LOG_RETENTION_DAYS: ${LOG_RETENTION_DAYS:-14}
+      LOG_FILE_ENABLED: ${LOG_FILE_ENABLED:-true}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      ctrader-engine:
+        condition: service_healthy
+    volumes:
+      - ./data:/data   # calendar cache (ff_*.json) still persists here
+      - ./logs/algo-bot:/var/log/apexvoid
+    # No ports exposed — the bot uses outbound Telegram long-polling only.
 
 volumes:
   pgdata:

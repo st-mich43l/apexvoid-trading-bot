@@ -60,6 +60,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+      start_period: 10s
 
   redis:
     image: redis:7-alpine
@@ -73,26 +74,10 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+      start_period: 5s
 
-  bot:
-    image: "{{ registry_namespace }}/apexvoid-trading-bot:{{ image_tag }}"
-    container_name: apexvoid-trading-bot
-    restart: unless-stopped
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    # Calendar cache (ff_*.json) still persists here; signals live in Postgres.
-    # Service-rotated daily logs (TimedRotatingFileHandler) on the host.
-    volumes:
-      - ./data:/data
-      - ./logs/algo-bot:/var/log/apexvoid
-    environment:
-{% for key, value in resolved_bot_env.items() %}
-      {{ key }}: {{ value | to_json }}
-{% endfor %}
-
+  # Startup order (Compose waits on health, not just process start):
+  #   postgres + redis → ctrader-engine → bot
   ctrader-engine:
     image: "{{ registry_namespace }}/apexvoid-ctrader-engine:{{ image_tag }}"
     container_name: apexvoid-ctrader-engine
@@ -227,9 +212,32 @@ services:
       - ./logs/ctrader-engine:/var/log/apexvoid
     healthcheck:
       test: ["CMD", "/app/ctrader-feed", "--healthcheck"]
-      interval: 30s
+      interval: 15s
       timeout: 5s
-      retries: 3
+      retries: 8
+      # Broker connect + historical backfill write the first heartbeat.
+      start_period: 120s
+
+  bot:
+    image: "{{ registry_namespace }}/apexvoid-trading-bot:{{ image_tag }}"
+    container_name: apexvoid-trading-bot
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      ctrader-engine:
+        condition: service_healthy
+    # Calendar cache (ff_*.json) still persists here; signals live in Postgres.
+    # Service-rotated daily logs (TimedRotatingFileHandler) on the host.
+    volumes:
+      - ./data:/data
+      - ./logs/algo-bot:/var/log/apexvoid
+    environment:
+{% for key, value in resolved_bot_env.items() %}
+      {{ key }}: {{ value | to_json }}
+{% endfor %}
 
 volumes:
   pgdata:
