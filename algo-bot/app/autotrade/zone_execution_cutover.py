@@ -310,6 +310,31 @@ async def _persist_match(client: Any, match: StrategyMatch) -> StrategyMatch:
   return match
 
 
+def _published_result_statuses():
+  from app.autotrade import worker
+
+  return frozenset({
+    worker.PUBLISH_STATUS_EXECUTION_HANDOFF_CREATED,
+    worker.PUBLISH_STATUS_PUBLISHED,
+    worker.PUBLISH_STATUS_DUPLICATE_RECONCILED,
+  })
+
+
+async def _ensure_published_root_card(client: Any, match: StrategyMatch) -> None:
+  """Create PLAN PUBLISHED root card when cutover skipped SETUP FORMING."""
+  try:
+    from app.autotrade.setup_card import ensure_plan_published_root_card
+
+    await ensure_plan_published_root_card(client, match)
+  except Exception:
+    # Publication must not roll back because Telegram carding failed.
+    log.exception(
+      "plan_published_root_card_ensure_failed setup_id=%s symbol=%s",
+      match.match_id,
+      match.symbol,
+    )
+
+
 async def _safe_direct_publish(
   client: Any,
   match: StrategyMatch,
@@ -320,6 +345,8 @@ async def _safe_direct_publish(
 ):
   """Reconcile all active plan states and fail over instead of stranding."""
   from app.autotrade import worker
+
+  published_statuses = _published_result_statuses()
 
   try:
     result = await _ORIGINAL_DIRECT_PUBLISH(
@@ -338,6 +365,7 @@ async def _safe_direct_publish(
     existing = await worker.resolve_existing_v7_state(client, match)
     if existing.already_published:
       _PUBLISHED_SETUP_IDS.add(match.match_id)
+      await _ensure_published_root_card(client, match)
       return worker.PublishResult(
         status=worker.PUBLISH_STATUS_DUPLICATE_RECONCILED,
         plan_id=existing.plan_id,
@@ -358,6 +386,7 @@ async def _safe_direct_publish(
   existing = await worker.resolve_existing_v7_state(client, match)
   if existing.already_published:
     _PUBLISHED_SETUP_IDS.add(match.match_id)
+    await _ensure_published_root_card(client, match)
     status = (
       worker.PUBLISH_STATUS_PUBLISHED
       if result.status == worker.PUBLISH_STATUS_PUBLISHED
@@ -377,6 +406,9 @@ async def _safe_direct_publish(
       executable_quote=result.executable_quote,
       quote_side=result.quote_side,
     )
+  if result.status in published_statuses:
+    _PUBLISHED_SETUP_IDS.add(match.match_id)
+    await _ensure_published_root_card(client, match)
   return result
 
 
@@ -691,6 +723,8 @@ def _format_detection_cutover(*args: Any, **kwargs: Any) -> str:
     "🟡 <b>QUEUED</b> · worker acknowledgement pending",
     "🟢 <b>PLAN PUBLISHED</b> · TradePlan V7 sent to executor",
   ).replace(
+    # Legacy pre-algo-only footer; scanner no longer emits this, but keep
+    # the rewrite so any retained cached formatter text stays consistent.
     "→ Review confirmation, SL &amp; TP before posting.",
     "→ Executor owns mechanical entry and risk enforcement.",
   )

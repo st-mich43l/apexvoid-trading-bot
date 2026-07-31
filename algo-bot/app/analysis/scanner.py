@@ -1403,22 +1403,8 @@ def _format_detection(
       f"{escape(_zone_text(extra.entry_zone, symbol, grouped=True))} "
       f"{extra_stars}"
     )
-  draft = (
-    _copy_draft(symbol, result, execution_match) if executable else None
-  )
-  if draft is not None:
-    draft_hint = (
-      "📋 <b>Copy draft</b>"
-      if _planned_stop_price(result, execution_match) is not None
-      else "📋 <b>Copy draft</b> <i>· fill SL/TP</i>"
-    )
-    lines.extend([
-      "",
-      draft_hint,
-      f"<code>{escape(draft)}</code>",
-    ])
   if executable:
-    lines.append("→ Review confirmation, SL &amp; TP before posting.")
+    lines.append("→ Executor owns mechanical entry and risk enforcement.")
   return "\n".join(lines)
 
 

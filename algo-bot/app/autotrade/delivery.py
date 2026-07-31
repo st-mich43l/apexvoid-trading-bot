@@ -25,6 +25,7 @@ from app.bot.client import (
 )
 from app.autotrade.setup_card import (
   edit_forming_card_status,
+  edit_forming_card_stop,
   forming_message_key as _setup_card_forming_message_key,
   kill_setup_card,
   load_forming_card,
@@ -505,6 +506,9 @@ _HIGHEST_TP_ARCHIVED_RE = re.compile(
   r"(?i)highest\s+TP\s+archived\s+(?P<target>TP\d+)"
 )
 _NO_TP_ARCHIVED_RE = re.compile(r"(?i)\bno\s+TP\s+archived\b")
+_LOSING_PIPS_RE = re.compile(
+  r"(?i)\blosing\s+(?P<pips>-?\d+(?:\.\d+)?)\s*pips?\b"
+)
 _PLAN_CLOSED_AT_RE = re.compile(
   r"(?i)@\s*(?P<price>[0-9]+(?:\.[0-9]+)?)"
 )
@@ -539,6 +543,18 @@ def _format_position_closed(event: dict, message: str) -> str:
       lines.append(f"@ <b>{escape(at.group('price'))}</b>")
   elif no_tp is not None:
     lines.append("Highest TP archived: <b>none</b>")
+    losing = _event_float(event, "group_realized_pips", "leg_realized_pips")
+    if losing is None and cleaned:
+      losing_match = _LOSING_PIPS_RE.search(cleaned)
+      if losing_match is not None:
+        try:
+          losing = float(losing_match.group("pips"))
+        except (TypeError, ValueError):
+          losing = None
+    if losing is not None and losing < 0:
+      lines.append(f"❌ Losing: <b>{format_signed_pips(losing)} pips</b>")
+    elif losing is not None and losing == 0:
+      lines.append("➖ Result: <b>0 pips (BE)</b>")
     at = _PLAN_CLOSED_AT_RE.search(cleaned)
     if at is not None:
       lines.append(f"@ <b>{escape(at.group('price'))}</b>")
@@ -553,6 +569,15 @@ def _format_position_closed(event: dict, message: str) -> str:
     group_realized = _event_float(event, "group_realized_pips")
     if group_realized is not None:
       lines.append(f"Total: <b>{format_signed_pips(group_realized)} pips</b>")
+  elif (
+    no_tp is None
+    and highest is None
+    and str(event.get("reason_code") or "") == "stop_loss_or_take_profit"
+  ):
+    # One-shot SL before any TP: surface the loss instead of a bare close.
+    group_realized = _event_float(event, "group_realized_pips", "leg_realized_pips")
+    if group_realized is not None and group_realized < 0:
+      lines.append(f"❌ Losing: <b>{format_signed_pips(group_realized)} pips</b>")
   return "\n".join(lines)
 
 
@@ -1245,6 +1270,31 @@ async def _deliver_auto_trade_event(
       edit_fn=edit_scanner_message_text,
     )
     root_edited = edit_result is not False
+  # Trailing / BE stop moves: patch the root Stop line, then reply-thread
+  # the compact "move SL to …" notify onto the same forming card.
+  if profile == "internal" and match_id and event_type == "stop_moved":
+    new_sl = _event_float(event, "new_stop", "stop_price", "price")
+    if new_sl is None:
+      stop_match = _STOP_RE.match(_clean_message(event.get("message", "")))
+      if stop_match is not None:
+        try:
+          new_sl = float(str(stop_match.group(1)).replace(",", ""))
+        except (TypeError, ValueError):
+          new_sl = None
+    if new_sl is not None:
+      try:
+        await edit_forming_card_stop(
+          client,
+          match_id,
+          float(new_sl),
+          digits=int(getattr(settings, "auto_trade_xau_price_digits", 2)),
+          edit_fn=edit_scanner_message_text,
+        )
+      except Exception:
+        log.exception(
+          "forming card stop patch failed on stop_moved setup_id=%s",
+          match_id,
+        )
   reply_to, reason = await _resolve_reply_message_id(client, event, profile)
   if reply_to is None and (
     event_type in _FORMING_REPLY_TYPES

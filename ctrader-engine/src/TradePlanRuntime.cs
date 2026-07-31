@@ -1031,7 +1031,8 @@ public sealed class TradePlanRuntime(
     string? eventKey = null,
     string? previousState = null,
     string? state = null,
-    long? remainingVolume = null
+    long? remainingVolume = null,
+    decimal? groupRealizedPips = null
   ) => PublishEventCoreAsync(
     type,
     message,
@@ -1044,7 +1045,8 @@ public sealed class TradePlanRuntime(
     eventKey,
     previousState,
     state,
-    remainingVolume
+    remainingVolume,
+    groupRealizedPips
   );
 
   private async Task PublishEventCoreAsync(
@@ -1059,7 +1061,8 @@ public sealed class TradePlanRuntime(
     string? eventKey,
     string? previousState,
     string? state,
-    long? remainingVolume
+    long? remainingVolume,
+    decimal? groupRealizedPips
   )
   {
     if (!string.IsNullOrWhiteSpace(eventKey))
@@ -1102,7 +1105,11 @@ public sealed class TradePlanRuntime(
         GroupId: plan.PlanId,
         PreviousState: previousState,
         State: state,
-        RemainingVolume: remainingVolume
+        RemainingVolume: remainingVolume,
+        GroupRealizedPips: groupRealizedPips,
+        ReasonCode: eventKey == "group_stop_loss"
+          ? "stop_loss_or_take_profit"
+          : null
       ),
       cancellationToken
     );
@@ -2244,12 +2251,23 @@ public sealed class TradePlanRuntime(
       var highestTpPips = highestTp is null
         ? null
         : ArchivedTargetPips(plan, state, highestTp);
+      int? realizedPips = null;
+      if (highestTp is null && exitHint is decimal slExit)
+      {
+        realizedPips = SignedExitPips(plan, state, slExit);
+      }
       string slMessage;
       if (highestTp is not null)
       {
         slMessage = exitHint is decimal exitPrice
           ? $"PLAN CLOSED · highest TP archived {highestTp} · @ {FormatEventPrice(exitPrice, symbol)}"
           : $"PLAN CLOSED · highest TP archived {highestTp}";
+      }
+      else if (realizedPips is int lossPips && lossPips < 0)
+      {
+        slMessage = exitHint is decimal exitPrice
+          ? $"PLAN CLOSED · no TP archived · losing {lossPips} pips · @ {FormatEventPrice(exitPrice, symbol)}"
+          : $"PLAN CLOSED · no TP archived · losing {lossPips} pips";
       }
       else
       {
@@ -2266,7 +2284,8 @@ public sealed class TradePlanRuntime(
         price: exitHint,
         targetPips: highestTpPips,
         eventKey: "group_stop_loss",
-        state: TradePlanGroupStages.Closed
+        state: TradePlanGroupStages.Closed,
+        groupRealizedPips: realizedPips
       );
       await PersistPlanExecutionStateAsync(
         plan.PlanId, "completed", null, cancellationToken, "group_stop_loss"
@@ -2774,6 +2793,36 @@ public sealed class TradePlanRuntime(
     );
     return decimal.ToInt32(decimal.Round(
       distance / options.PipSize,
+      0,
+      MidpointRounding.AwayFromZero
+    ));
+  }
+
+  private int? SignedExitPips(
+    TradePlan plan,
+    TradePlanRuntimeState state,
+    decimal exitPrice
+  )
+  {
+    var weightedFill = state.GroupWeightedFillPrice ?? state.EntryFillPrice;
+    if (
+      options.PipSize <= 0
+      || weightedFill is not decimal fillPrice
+      || fillPrice <= 0
+    )
+    {
+      return null;
+    }
+    var buy = string.Equals(
+      plan.Analysis.Direction,
+      "BUY",
+      StringComparison.OrdinalIgnoreCase
+    );
+    var raw = buy
+      ? (exitPrice - fillPrice) / options.PipSize
+      : (fillPrice - exitPrice) / options.PipSize;
+    return decimal.ToInt32(decimal.Round(
+      raw,
       0,
       MidpointRounding.AwayFromZero
     ));

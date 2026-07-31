@@ -23,14 +23,17 @@ import math
 import re
 import time
 from dataclasses import dataclass
+from html import escape
 from typing import Any, Awaitable, Callable
 
 from aiogram.exceptions import TelegramBadRequest
 
 from app.autotrade.setup_execution_aggregate import (
+  STATUS_LINE_BY_PROJECTION_STATE,
   resolve_setup_execution_aggregate,
 )
 from app.autotrade.setup_lifecycle import TERMINAL_STATES, load_setup
+from app.autotrade.strategy_match import StrategyMatch
 from app.core.config import settings
 
 log = logging.getLogger(__name__)
@@ -930,3 +933,242 @@ async def assert_or_repair_forming_projection(
   )
   log.info("forming_card_projection_repaired setup_id=%s", setup_id)
   return True
+
+
+PLAN_PUBLISHED_STATUS_LINE = STATUS_LINE_BY_PROJECTION_STATE["plan_published"]
+
+_CONFLUENCE_TAG_LABELS = {
+  "key_level": "Key Level",
+  "demand": "Demand",
+  "supply": "Supply",
+  "ob": "OB",
+  "fvg": "FVG",
+  "breaker": "Breaker",
+  "session_level": "Session Level",
+  "trendline": "Trendline",
+}
+
+
+def _tag_label(tag: str) -> str:
+  normalized = str(tag).casefold()
+  return _CONFLUENCE_TAG_LABELS.get(
+    normalized,
+    normalized.replace("_", " ").title(),
+  )
+
+
+def _price_text(value: float) -> str:
+  return f"{float(value):,.2f}"
+
+
+def format_plan_published_root_card(
+  match: StrategyMatch,
+  *,
+  stop_price: float | None = None,
+) -> str:
+  """PLAN PUBLISHED root card with scanner-style trade/context detail.
+
+  Includes bias / structure / trade area / context / stop when available on
+  the StrategyMatch. No copy-draft. Stop stays editable for BE / trailing.
+  """
+  direction = str(match.direction or "").upper()
+  direction_icon = "🟢" if direction == "BUY" else "🔴"
+  stars = "⭐" * max(1, min(3, int(match.confluence or 1)))
+  tags = tuple(match.tags or ())
+  confluence_label = " + ".join(_tag_label(tag) for tag in tags)
+  setup_label = (
+    f"{confluence_label} · {match.strategy}"
+    if len(tags) > 1
+    else str(match.strategy)
+  )
+  mode = str(match.strategy_mode or "").strip()
+  identity = confluence_label or (
+    _tag_label(match.structural_kind) if match.structural_kind else ""
+  )
+  confirmation = str(match.reaction_type or "").strip()
+  source_tf = str(
+    match.structural_timeframe or match.source_tf or ""
+  ).strip().upper()
+  htf_bias = str(match.htf_bias or "").strip()
+  extra_reasons = [
+    reason for reason in (match.reasons or ())
+    if reason and not str(reason).lower().startswith("htf bias")
+  ][:2]
+
+  lines = [
+    (
+      f"🔎 <b>{escape(str(match.symbol))} "
+      f"{escape(str(match.source_tf))} · SETUP FORMING</b>"
+    ),
+    PLAN_PUBLISHED_STATUS_LINE or (
+      "🟢 <b>PLAN PUBLISHED</b> · TradePlan V7 sent to executor"
+    ),
+    (
+      f"{direction_icon} <b>{escape(direction)} · "
+      f"{escape(setup_label)}</b> · {stars}"
+    ),
+  ]
+  if mode == "range_scalp":
+    lines.append("↔️ <b>Mode:</b> RANGE SCALP · two-sided local range")
+  elif mode == "counter_bias":
+    lines.append("⚠️ <b>Bias:</b> counter_bias")
+  elif mode in {"with_bias", "neutral"}:
+    lines.append(f"🧭 <b>Bias:</b> {escape(mode)}")
+  elif mode and mode != "with_trend":
+    label = (
+      "reaction scalp" if mode == "counter_reaction" else "counter swing"
+    )
+    lines.append(f"⚠️ <b>Mode:</b> Counter-trend · {label}")
+  if match.structural_source:
+    lines.append(
+      f"🧱 <b>Structural source:</b> {escape(str(match.structural_source))}"
+    )
+  if identity:
+    lines.append(f"🏷️ <b>Identity:</b> {escape(identity)}")
+  if confirmation:
+    lines.append(f"✅ <b>Confirmation:</b> {escape(confirmation)}")
+  if source_tf:
+    lines.append(f"⏱ <b>Source TF:</b> {escape(source_tf)}")
+
+  lines.extend([
+    "",
+    "📍 <b>Trade area</b>",
+    (
+      "• <b>Price now:</b> "
+      f"<b>{_price_text(match.current_price)}</b> <i>(live)</i>"
+    ),
+    (
+      "• <b>Entry zone:</b> "
+      f"<b>{_price_text(match.entry_low)}–{_price_text(match.entry_high)}</b>"
+    ),
+    f"• <b>Key level:</b> <b>{_price_text(match.key_level)}</b>",
+  ])
+  if stop_price is not None and math.isfinite(float(stop_price)):
+    lines.append(f"• <b>Stop:</b> <b>{_price_text(float(stop_price))}</b>")
+  else:
+    lines.append("• <b>Stop:</b> <b>SL</b>")
+
+  lines.extend(["", "🧭 <b>Context</b>"])
+  if htf_bias:
+    lines.append(f"• <b>HTF bias:</b> {escape(htf_bias)}")
+  elif mode:
+    lines.append(f"• <b>HTF bias:</b> {escape(mode)}")
+  lines.extend(f"• {escape(str(reason))}" for reason in extra_reasons)
+  lines.append("→ Executor owns mechanical entry and risk enforcement.")
+  return "\n".join(lines)
+
+
+async def _published_plan_stop_price(client, match: StrategyMatch) -> float | None:
+  """Best-effort stop from the just-published TradePlan V7 (if present)."""
+  try:
+    from app.autotrade.setup_execution_aggregate import v7_plan_id
+    from app.autotrade.trade_plan_stream import read_trade_plan
+
+    plan = await read_trade_plan(client, v7_plan_id(match.match_id))
+  except Exception:
+    log.exception(
+      "plan_published_root_card_stop_lookup_failed setup_id=%s",
+      match.match_id,
+    )
+    return None
+  if plan is None or plan.stop is None:
+    return None
+  try:
+    return float(plan.stop.price)
+  except (TypeError, ValueError):
+    return None
+
+
+async def ensure_plan_published_root_card(
+  client,
+  match: StrategyMatch,
+  *,
+  chat_id: int | None = None,
+  send_fn: SendFn | None = None,
+  edit_fn: EditFn | None = None,
+  delete_fn: DeleteFn | None = None,
+) -> int | None:
+  """Ensure the PLAN PUBLISHED root card exists after direct publication.
+
+  ZoneWatch cutover suppresses SETUP FORMING until publish, then expects the
+  first card to be PLAN PUBLISHED via scanner notify. Direct publish from the
+  M1 ZoneWatch loop never calls that notify path, so without this ensure the
+  owner can trade a setup with no Telegram root card at all — and later
+  take_profit / stop_moved / position_closed replies have nothing to thread to.
+  """
+  owner_id = chat_id if chat_id is not None else settings.telegram_owner_id
+  if not owner_id:
+    log.info(
+      "plan_published_root_card_skipped setup_id=%s reason=telegram_owner_id_unset",
+      match.match_id,
+    )
+    return None
+
+  status_line = PLAN_PUBLISHED_STATUS_LINE or (
+    "🟢 <b>PLAN PUBLISHED</b> · TradePlan V7 sent to executor"
+  )
+  from app.bot.client import (
+    delete_scanner_message,
+    edit_scanner_message_text,
+    send_scanner_with_retry,
+  )
+
+  resolved_edit = edit_fn or edit_scanner_message_text
+  resolved_send = send_fn or send_scanner_with_retry
+  resolved_delete = delete_fn or delete_scanner_message
+  stop_price = await _published_plan_stop_price(client, match)
+
+  existing = await load_forming_card(client, match.match_id)
+  if existing is not None:
+    await edit_forming_card_status(
+      client,
+      match.match_id,
+      status_line,
+      state="plan_published",
+      reason_code="plan_published",
+      edit_fn=resolved_edit,
+    )
+    if stop_price is not None:
+      await edit_forming_card_stop(
+        client,
+        match.match_id,
+        stop_price,
+        digits=int(getattr(settings, "auto_trade_xau_price_digits", 2)),
+        edit_fn=resolved_edit,
+      )
+    return int(existing["message_id"])
+
+  message_id = await post_or_edit_forming_card(
+    client,
+    match.match_id,
+    format_plan_published_root_card(match, stop_price=stop_price),
+    chat_id=int(owner_id),
+    send_fn=resolved_send,
+    edit_fn=resolved_edit,
+    delete_fn=resolved_delete,
+  )
+  if message_id is None:
+    return None
+  await save_forming_card_status(
+    client,
+    match.match_id,
+    status_line,
+    state="plan_published",
+  )
+  # Worker may have called edit_forming_card_stop during publish before this
+  # card existed; re-apply so BE / trailing SL patches start from a real Stop.
+  if stop_price is not None:
+    await edit_forming_card_stop(
+      client,
+      match.match_id,
+      stop_price,
+      digits=int(getattr(settings, "auto_trade_xau_price_digits", 2)),
+      edit_fn=resolved_edit,
+    )
+  log.info(
+    "plan_published_root_card_created setup_id=%s message_id=%s "
+    "reply_anchor=forming_message+telegram_root",
+    match.match_id,
+    message_id,
+  )
+  return message_id
