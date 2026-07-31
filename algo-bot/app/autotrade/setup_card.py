@@ -23,14 +23,17 @@ import math
 import re
 import time
 from dataclasses import dataclass
+from html import escape
 from typing import Any, Awaitable, Callable
 
 from aiogram.exceptions import TelegramBadRequest
 
 from app.autotrade.setup_execution_aggregate import (
+  STATUS_LINE_BY_PROJECTION_STATE,
   resolve_setup_execution_aggregate,
 )
 from app.autotrade.setup_lifecycle import TERMINAL_STATES, load_setup
+from app.autotrade.strategy_match import StrategyMatch
 from app.core.config import settings
 
 log = logging.getLogger(__name__)
@@ -930,3 +933,163 @@ async def assert_or_repair_forming_projection(
   )
   log.info("forming_card_projection_repaired setup_id=%s", setup_id)
   return True
+
+
+PLAN_PUBLISHED_STATUS_LINE = STATUS_LINE_BY_PROJECTION_STATE["plan_published"]
+
+
+def format_plan_published_root_card(
+  match: StrategyMatch,
+  *,
+  stop_price: float | None = None,
+) -> str:
+  """Compact first root card for ZoneWatch direct-publish (no prior FORMING).
+
+  Includes a Stop line so later BE / trailing SL edits (edit_forming_card_stop)
+  and TP/SL reply threading keep working on the same Telegram message_id
+  stored in forming_message / telegram_root. No manual copy-draft — cards are
+  algo-auto only.
+  """
+  direction = str(match.direction or "").upper()
+  direction_icon = "🟢" if direction == "BUY" else "🔴"
+  stars = "⭐" * max(1, min(3, int(match.confluence or 1)))
+  zone = f"{float(match.entry_low):,.2f}–{float(match.entry_high):,.2f}"
+  if stop_price is not None and math.isfinite(float(stop_price)):
+    stop_line = f"• <b>Stop:</b> <b>{float(stop_price):,.2f}</b>"
+  else:
+    stop_line = "• <b>Stop:</b> <b>SL</b>"
+  lines = [
+    (
+      f"🔎 <b>{escape(str(match.symbol))} "
+      f"{escape(str(match.source_tf))} · SETUP FORMING</b>"
+    ),
+    PLAN_PUBLISHED_STATUS_LINE or (
+      "🟢 <b>PLAN PUBLISHED</b> · TradePlan V7 sent to executor"
+    ),
+    (
+      f"{direction_icon} <b>{escape(direction)} · "
+      f"{escape(str(match.strategy))}</b> · {stars}"
+    ),
+    f"• <b>Entry zone:</b> <b>{zone}</b>",
+    f"• <b>Key level:</b> <b>{float(match.key_level):,.2f}</b>",
+    stop_line,
+    "",
+    "→ Executor owns mechanical entry and risk enforcement.",
+  ]
+  return "\n".join(lines)
+
+
+async def _published_plan_stop_price(client, match: StrategyMatch) -> float | None:
+  """Best-effort stop from the just-published TradePlan V7 (if present)."""
+  try:
+    from app.autotrade.setup_execution_aggregate import v7_plan_id
+    from app.autotrade.trade_plan_stream import read_trade_plan
+
+    plan = await read_trade_plan(client, v7_plan_id(match.match_id))
+  except Exception:
+    log.exception(
+      "plan_published_root_card_stop_lookup_failed setup_id=%s",
+      match.match_id,
+    )
+    return None
+  if plan is None or plan.stop is None:
+    return None
+  try:
+    return float(plan.stop.price)
+  except (TypeError, ValueError):
+    return None
+
+
+async def ensure_plan_published_root_card(
+  client,
+  match: StrategyMatch,
+  *,
+  chat_id: int | None = None,
+  send_fn: SendFn | None = None,
+  edit_fn: EditFn | None = None,
+  delete_fn: DeleteFn | None = None,
+) -> int | None:
+  """Ensure the PLAN PUBLISHED root card exists after direct publication.
+
+  ZoneWatch cutover suppresses SETUP FORMING until publish, then expects the
+  first card to be PLAN PUBLISHED via scanner notify. Direct publish from the
+  M1 ZoneWatch loop never calls that notify path, so without this ensure the
+  owner can trade a setup with no Telegram root card at all — and later
+  take_profit / stop_moved / position_closed replies have nothing to thread to.
+  """
+  owner_id = chat_id if chat_id is not None else settings.telegram_owner_id
+  if not owner_id:
+    log.info(
+      "plan_published_root_card_skipped setup_id=%s reason=telegram_owner_id_unset",
+      match.match_id,
+    )
+    return None
+
+  status_line = PLAN_PUBLISHED_STATUS_LINE or (
+    "🟢 <b>PLAN PUBLISHED</b> · TradePlan V7 sent to executor"
+  )
+  from app.bot.client import (
+    delete_scanner_message,
+    edit_scanner_message_text,
+    send_scanner_with_retry,
+  )
+
+  resolved_edit = edit_fn or edit_scanner_message_text
+  resolved_send = send_fn or send_scanner_with_retry
+  resolved_delete = delete_fn or delete_scanner_message
+  stop_price = await _published_plan_stop_price(client, match)
+
+  existing = await load_forming_card(client, match.match_id)
+  if existing is not None:
+    await edit_forming_card_status(
+      client,
+      match.match_id,
+      status_line,
+      state="plan_published",
+      reason_code="plan_published",
+      edit_fn=resolved_edit,
+    )
+    if stop_price is not None:
+      await edit_forming_card_stop(
+        client,
+        match.match_id,
+        stop_price,
+        digits=int(getattr(settings, "auto_trade_xau_price_digits", 2)),
+        edit_fn=resolved_edit,
+      )
+    return int(existing["message_id"])
+
+  message_id = await post_or_edit_forming_card(
+    client,
+    match.match_id,
+    format_plan_published_root_card(match, stop_price=stop_price),
+    chat_id=int(owner_id),
+    send_fn=resolved_send,
+    edit_fn=resolved_edit,
+    delete_fn=resolved_delete,
+  )
+  if message_id is None:
+    return None
+  await save_forming_card_status(
+    client,
+    match.match_id,
+    status_line,
+    state="plan_published",
+  )
+  # Worker may have called edit_forming_card_stop during publish before this
+  # card existed; re-apply so BE / trailing SL patches start from a real Stop.
+  if stop_price is not None:
+    await edit_forming_card_stop(
+      client,
+      match.match_id,
+      stop_price,
+      digits=int(getattr(settings, "auto_trade_xau_price_digits", 2)),
+      edit_fn=resolved_edit,
+    )
+  log.info(
+    "plan_published_root_card_created setup_id=%s message_id=%s "
+    "reply_anchor=forming_message+telegram_root",
+    match.match_id,
+    message_id,
+  )
+  return message_id

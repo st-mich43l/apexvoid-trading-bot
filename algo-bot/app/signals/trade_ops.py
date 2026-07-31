@@ -489,6 +489,8 @@ def render_result(
       icon = "✅" if net >= 0 else "🛑"
       sign = "+" if net >= 0 else ""
       suffix = _win_wings(net) if net > 0 else ""
+      if net < 0:
+        return f"{icon} {seq}{tp_label}closed — losing {net} pips"
       return (
         f"{icon} {seq}{tp_label}closed — achieved {sign}{net} pips{suffix}"
       )
