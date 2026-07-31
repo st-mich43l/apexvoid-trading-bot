@@ -9,6 +9,7 @@ pattern used for the asyncpg pool in ``store.py``.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import time
 from collections.abc import Awaitable, Callable
@@ -32,6 +33,8 @@ _CURSOR_TTL = 2 * 24 * 3600
 _client: redis.Redis | None = None
 
 _REDIS_RETRY_ERRORS = (RedisConnectionError, RedisTimeoutError, OSError, TimeoutError)
+_COMPONENT_HEALTH_TTL = 24 * 3600
+_STABLE_RUNTIME_RESET_SECONDS = 60.0
 
 
 def _build_client() -> redis.Redis:
@@ -55,6 +58,85 @@ def _get_client() -> redis.Redis:
 def get_client() -> redis.Redis:
   """Shared Redis client for transient bot state and bar-feed consumers."""
   return _get_client()
+
+
+def is_transient_redis_error(exc: BaseException) -> bool:
+  """True for connection/DNS/timeout failures that justify a Redis reset."""
+  if isinstance(exc, _REDIS_RETRY_ERRORS):
+    return True
+  # redis-py sometimes wraps gaierror/ConnectionReset inside ConnectionError
+  # already covered above; also accept nested causes.
+  cause = getattr(exc, "__cause__", None)
+  if cause is not None and isinstance(cause, _REDIS_RETRY_ERRORS):
+    return True
+  text = str(exc).casefold()
+  markers = (
+    "name or service not known",
+    "connection closed",
+    "connection refused",
+    "connection reset",
+    "timed out",
+    "timeout",
+    "server closed the connection",
+  )
+  return any(marker in text for marker in markers)
+
+
+def component_health_key(name: str) -> str:
+  return f"auto_trade:component_health:{name}"
+
+
+async def publish_component_health(
+  *,
+  component: str,
+  state: str,
+  error: str | None = None,
+  retry_count: int = 0,
+) -> None:
+  """Persist per-loop health for /algo_status (ready|degraded_retrying|fatal)."""
+  payload = {
+    "component": component,
+    "state": state,
+    "retry_count": int(retry_count),
+    "error": (error or "")[:500] or None,
+    "updated_at": int(time.time()),
+  }
+  try:
+    await get_client().set(
+      component_health_key(component),
+      json.dumps(payload, separators=(",", ":")),
+      ex=_COMPONENT_HEALTH_TTL,
+    )
+  except Exception:
+    log.exception("component health publish failed component=%s", component)
+
+
+async def load_component_health(component: str) -> dict | None:
+  raw = await get_client().get(component_health_key(component))
+  if not raw:
+    return None
+  try:
+    payload = json.loads(raw)
+  except (TypeError, ValueError, json.JSONDecodeError):
+    return None
+  return payload if isinstance(payload, dict) else None
+
+
+async def list_fatal_components() -> list[dict]:
+  """Return component health payloads currently marked fatal."""
+  client = get_client()
+  out: list[dict] = []
+  async for key in client.scan_iter(match="auto_trade:component_health:*"):
+    raw = await client.get(key)
+    if not raw:
+      continue
+    try:
+      payload = json.loads(raw)
+    except (TypeError, ValueError, json.JSONDecodeError):
+      continue
+    if isinstance(payload, dict) and payload.get("state") == "fatal":
+      out.append(payload)
+  return out
 
 
 async def close_client() -> None:
@@ -114,30 +196,65 @@ async def run_supervised(
   factory: Callable[[], Awaitable[None]],
   *,
   max_backoff_seconds: float = 60.0,
+  stable_runtime_reset_seconds: float = _STABLE_RUNTIME_RESET_SECONDS,
 ) -> None:
-  """Run a background coroutine, restarting after Redis/runtime disconnects.
+  """Supervise a background loop: Redis blips retry; programming bugs are fatal.
 
-  Fire-and-forget tasks that subscribe to Redis die permanently on a Compose
-  recreate blip (``Name or service not known`` / connection closed). This
-  supervisor recreates the client and restarts with bounded exponential
-  backoff. Clean returns (feature disabled) are not restarted.
+  Transient Redis failures reset the shared client and retry with backoff.
+  Backoff resets after a stable run longer than ``stable_runtime_reset_seconds``.
+  Any other exception publishes ``fatal`` component health and re-raises so the
+  task dies instead of infinitely restarting and poisoning sibling loops.
+  Clean returns (feature disabled) are not restarted.
   """
   backoff = 1.0
+  retry_count = 0
   while True:
+    started = time.monotonic()
     try:
+      await publish_component_health(
+        component=name, state="ready", retry_count=0,
+      )
       await factory()
       return
     except asyncio.CancelledError:
       raise
-    except Exception:
+    except Exception as exc:
+      runtime = time.monotonic() - started
+      if is_transient_redis_error(exc):
+        if runtime >= stable_runtime_reset_seconds:
+          backoff = 1.0
+          retry_count = 0
+        retry_count += 1
+        log.exception(
+          "%s redis transient failure; resetting client, retry in %.1fs "
+          "(attempt %d, ran %.1fs)",
+          name,
+          backoff,
+          retry_count,
+          runtime,
+        )
+        await publish_component_health(
+          component=name,
+          state="degraded_retrying",
+          error=str(exc),
+          retry_count=retry_count,
+        )
+        await reset_client()
+        await asyncio.sleep(backoff)
+        backoff = min(max_backoff_seconds, backoff * 2)
+        continue
       log.exception(
-        "%s crashed; restarting in %.1fs after redis client reset",
+        "%s fatal non-redis failure; stopping component (ran %.1fs)",
         name,
-        backoff,
+        runtime,
       )
-      await reset_client()
-      await asyncio.sleep(backoff)
-      backoff = min(max_backoff_seconds, backoff * 2)
+      await publish_component_health(
+        component=name,
+        state="fatal",
+        error=str(exc),
+        retry_count=retry_count,
+      )
+      raise
 
 
 def _cursor_key(symbol: str) -> str:

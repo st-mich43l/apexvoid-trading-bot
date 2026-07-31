@@ -144,12 +144,20 @@ def _executable_conflict(a: DetectionResult, b: DetectionResult) -> bool:
 # Reasons that remain hard blocks even when the actionability gate is off.
 _UNIVERSAL_HARD_BLOCK_REASONS = frozenset({
   "invalid_geometry",
+  "invalid_target_room_geometry",
 })
 
-# Only true invalid geometry stays gated. Preference / quality conflicts
-# (corridor, room, overlap, map absence, counter-bias, etc.) are telemetry.
+# Structural zero-room / entry-inside conflicts hard-gate when the
+# actionability gate is on. Soft preference (ladder fit, low room, nearby
+# barrier with clear entry) stays telemetry + TP cap via structural_target_room.
 _GATED_HARD_BLOCK_REASONS = frozenset({
   "invalid_geometry",
+  "invalid_target_room_geometry",
+  "opposing_entry_contained",
+  "opposing_entry_overlap",
+  "opposing_major_no_room",
+  "opposing_barrier_no_target",
+  "entry_inside_opposing_zone",
 })
 
 
@@ -509,13 +517,21 @@ def resolve_actionability(
           room.message,
           measured,
           opposing_entry=room.opposing_entry,
-          hard_block=False,
+          hard_block=bool(room.hard_block),
         )
         record(index, decision)
-        # Keep the (possibly trimmed) result; room preference is telemetry.
         processed[index] = result
         if decision.hard_block:
           continue
+      elif room.reason_code not in {"", "no_opposing_barrier"}:
+        # Positive room with preference signal (capped ladder, low room).
+        record(index, _decision(
+          room.reason_code,
+          room.message,
+          measured,
+          opposing_entry=room.opposing_entry,
+          hard_block=False,
+        ))
       if room.opposing_entry is not None:
         result = replace(
           result,

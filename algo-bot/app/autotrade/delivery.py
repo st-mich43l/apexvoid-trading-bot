@@ -1,6 +1,7 @@
 """Owner controls and Telegram delivery for cTrader auto-trade events."""
 
 import asyncio
+import hashlib
 import json
 import logging
 import re
@@ -32,7 +33,6 @@ from app.autotrade.setup_card import (
   load_telegram_root_message_id,
 )
 from app.autotrade.lifecycle import LIFECYCLE_STATES, emit_lifecycle
-from app.autotrade.strategy_match_ready import load_ready_consumer_health
 from app.autotrade.range_context import (
   WORKER_SNAPSHOT_TTL_SECONDS,
 )
@@ -1740,8 +1740,11 @@ async def _deliver_auto_trade_event(
         or f"{event_type}:{event.get('message') or ''}"
       ).strip()
       # Prefer a stable key when the engine already stamped one into message
-      # prefixes; fall back to type+message hash for durability across restarts.
-      dedup_key = f"auto_trade:v7_notify:{plan_id}:{event_type}:{hash(event_key) & 0xffffffff:x}"
+      # prefixes; fall back to type+message digest for durability across
+      # restarts. Use sha256 (not Python's salted hash()) so dedup survives
+      # process restarts and matches across workers.
+      digest = hashlib.sha256(event_key.encode("utf-8")).hexdigest()[:16]
+      dedup_key = f"auto_trade:v7_notify:{plan_id}:{event_type}:{digest}"
       claimed = await client.set(
         dedup_key,
         "1",
@@ -1942,19 +1945,18 @@ async def auto_trade_status_text() -> str:
   if why:
     lines.append(f"Why: {escape(why)}")
   if settings.auto_trade_enabled:
-    # P0-11: a card sitting at "waiting for retest" and a genuinely dead
-    # ready-event consumer look identical from selected_text/execution_state
-    # alone - surface the consumer's own health so the owner can tell
-    # "nothing to do right now" apart from "nothing will ever advance."
-    consumer_health = await load_ready_consumer_health(client)
-    consumer_state = str((consumer_health or {}).get("state") or "unknown")
-    if consumer_state in {"degraded_retrying", "fatal"}:
-      lines.append(
-        f"⚠️ Ready consumer <b>{escape(consumer_state)}</b> "
-        f"(retry {int((consumer_health or {}).get('retry_count') or 0)})"
-      )
-    elif consumer_state == "unknown":
-      lines.append("⚠️ Ready consumer health unknown")
+    # Supervisor marks programming bugs as fatal (Redis blips stay retrying).
+    try:
+      fatals = await redis_state.list_fatal_components()
+    except Exception:
+      log.exception("algo_status fatal component scan failed")
+      fatals = []
+    for item in fatals[:3]:
+      name = escape(str(item.get("component") or "component"))
+      err = escape(str(item.get("error") or "fatal")[:80])
+      lines.append(f"⚠️ <b>{name}</b> fatal · {err}")
+    if len(fatals) > 3:
+      lines.append(f"+{len(fatals) - 3} more fatal components")
   text = "\n".join(lines)
   # Soft budget for the owner DM; hard clip stays in the handler at 4000.
   if len(text) > 1500:

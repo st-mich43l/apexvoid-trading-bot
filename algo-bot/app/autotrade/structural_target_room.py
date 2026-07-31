@@ -242,10 +242,27 @@ def evaluate_structural_target_room(
     "room_atr": round(room_atr, 4),
   }
   if contained:
+    # Prefer opposing_entry_overlap when the planned entry sits in the
+    # candidate∩opposing intersection; otherwise contained (flag / engulfed).
+    overlap_low = max(low, opposing_low)
+    overlap_high = min(high, opposing_high)
+    planned_in_overlap = (
+      overlap_price > 0
+      and overlap_low <= planned <= overlap_high
+    )
+    reason = (
+      "opposing_entry_overlap"
+      if planned_in_overlap
+      else "opposing_entry_contained"
+    )
     return StructuralTargetRoomDecision(
       False,
-      "opposing_entry_contained",
-      "planned entry is inside an opposing actionable structure",
+      reason,
+      (
+        "planned entry sits inside an opposing-structure overlap"
+        if reason == "opposing_entry_overlap"
+        else "planned entry is inside an opposing actionable structure"
+      ),
       True,
       measured,
       opposing_entry=barrier,
@@ -259,15 +276,8 @@ def evaluate_structural_target_room(
       measured,
       opposing_entry=barrier,
     )
-  if overlap_price > 0:
-    return StructuralTargetRoomDecision(
-      False,
-      "opposing_entry_overlap",
-      "candidate entry band overlaps an opposing actionable structure",
-      True,
-      measured,
-      opposing_entry=barrier,
-    )
+  # Band overlap alone is preference + TP cap below. Planned entry inside
+  # the opposing structure is already hard-blocked as opposing_entry_contained.
   if buffered_room <= 0:
     return StructuralTargetRoomDecision(
       False,
@@ -279,33 +289,30 @@ def evaluate_structural_target_room(
     )
   fitted = tuple(target for target in targets if target <= room_pips)
   if not fitted:
+    # Positive room but configured ladder does not fit: cap TP to real room
+    # (telemetry), do not hard-reject.
+    capped_target = max(1.0, float(math.floor(room_pips)))
     floor = max(0.0, float(min_capped_target_pips))
-    if floor > 0 and room_pips >= floor:
-      capped_target = float(math.floor(room_pips))
-      return StructuralTargetRoomDecision(
-        True,
-        "opposing_barrier_target_capped_below_ladder",
-        "no configured target fits, but real buffered room clears the "
-        "minimum viable target",
-        False,
-        {
-          **measured,
-          "effective_target_pips": capped_target,
-        },
-        opposing_entry=barrier,
-        fitted_targets_pips=(int(capped_target),),
-        effective_target_pips=capped_target,
-      )
+    reason = (
+      "opposing_barrier_target_capped_below_ladder"
+      if floor > 0 and room_pips < floor
+      else "configured_ladder_does_not_fit"
+      if targets
+      else "opposing_barrier_target_capped_below_ladder"
+    )
     return StructuralTargetRoomDecision(
-      False,
-      "opposing_barrier_no_target",
-      "no configured target fits before the opposing structure",
       True,
+      reason,
+      "no configured target fits; capping to real buffered room",
+      False,
       {
         **measured,
-        "effective_target_pips": None,
+        "effective_target_pips": capped_target,
+        "preference_telemetry": True,
       },
       opposing_entry=barrier,
+      fitted_targets_pips=(int(capped_target),),
+      effective_target_pips=capped_target,
     )
   effective = float(max(fitted))
   return StructuralTargetRoomDecision(
@@ -316,6 +323,7 @@ def evaluate_structural_target_room(
     {
       **measured,
       "effective_target_pips": effective,
+      "preference_telemetry": True,
     },
     opposing_entry=barrier,
     fitted_targets_pips=fitted,
