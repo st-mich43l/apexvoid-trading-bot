@@ -2,6 +2,7 @@ import asyncio
 import logging
 
 from app.core.config import settings
+from app.core.logging_setup import configure_logging
 from app.bot.wiring import (
   bot,
   dp,
@@ -36,11 +37,19 @@ from app.autotrade.config_health import (
 from app.signals.manual_execution import bridge_intents_loop, reconcile_events_loop
 from app.persistence import redis_state
 
-logging.basicConfig(
+_log_info = configure_logging(
   level=settings.log_level,
-  format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+  log_dir=settings.log_dir,
+  retention_days=settings.log_retention_days,
+  enable_file=settings.log_file_enabled,
 )
 log = logging.getLogger("bot")
+if _log_info.get("file"):
+  log.info(
+    "file logging enabled path=%s retention_days=%s",
+    _log_info["file"],
+    _log_info["retention_days"],
+  )
 
 
 async def main() -> None:

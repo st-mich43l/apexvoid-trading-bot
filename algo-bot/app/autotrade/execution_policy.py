@@ -10,6 +10,7 @@ from app.autotrade.execution_route import resolve_execution_route_plan
 from app.autotrade.protective_stop import (
   ProtectiveStopError,
   opposing_zone_context_from_values,
+  opposing_zone_context_measured,
   plan_group_protective_stop,
   plan_protective_stop,
   stop_bounds_for_strategy,
@@ -637,6 +638,8 @@ def evaluate_execution_policy(
   )
   stop_plan = None
   stop_plan_error: str | None = None
+  stop_plan_error_measured: dict[str, Any] = {}
+  opposing_zone = None
   try:
     minimum_stop_pips, maximum_stop_pips = stop_bounds_for_strategy(
       strategy=str(getattr(match, "strategy", "")),
@@ -732,6 +735,7 @@ def evaluate_execution_policy(
       )
   except ProtectiveStopError as exc:
     stop_plan_error = str(exc)
+    stop_plan_error_measured = dict(getattr(exc, "measured", None) or {})
   reward_risk = (
     max(0.0, remaining_pips) / float(stop_plan.final_stop_pips)
     if stop_plan is not None and stop_plan.final_stop_pips > 0
@@ -793,6 +797,9 @@ def evaluate_execution_policy(
     "entry_plan_version": ENTRY_PLAN_VERSION,
     "regime": normalized_regime or "unknown",
     "permitted_regimes": list(policy.permitted_regimes),
+    "structure_swing": getattr(match, "structure_swing", None),
+    **opposing_zone_context_measured(opposing_zone),
+    **stop_plan_error_measured,
   }
   if stop_plan is not None:
     measured.update(stop_plan.candidate_fields(entry_price=stop_plan.entry_price))

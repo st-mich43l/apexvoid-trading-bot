@@ -57,6 +57,8 @@ CARD_STATUS_PRIORITY = {
   "plan_published": 100,
   "executor_armed": 120,
   "order_filled": 150,
+  "sl_moved": 155,
+  "tp_booked": 160,
   "terminal": 200,
 }
 

@@ -11,6 +11,7 @@ A weekly sanity pass takes under a minute:
 cd ~/apexvoid-trading-bot
 docker compose ps                          # 'bot' is Up
 docker compose logs --tail=50 bot          # any ERROR lines?
+tail -n 50 logs/algo-bot/algo-bot.log      # host-mounted daily log
 df -h /                                     # free space
 free -h                                     # RAM not pinned
 ```
@@ -19,14 +20,24 @@ Then DM the bot `active` — a reply confirms the poll loop is alive.
 
 ## Log Access
 
-Docker's `json-file` driver (configure `max-size`/`max-file` in
-`/etc/docker/daemon.json` to bound volume) captures stdout:
+Each service writes and rotates its own daily log files on the host. Stdout
+still feeds `docker compose logs`.
 
 ```bash
-docker compose logs -f bot            # live tail
-docker compose logs --tail=200 bot    # last N lines
-docker compose logs --since 2h bot    # since a time
+# Live docker stream (unchanged)
+docker compose logs -f bot
+docker compose logs -f ctrader-engine
+
+# Host-mounted rotated files (service-managed)
+tail -f logs/algo-bot/algo-bot.log
+tail -f logs/ctrader-engine/ctrader-engine.log
+ls logs/algo-bot/          # algo-bot.log, algo-bot.log.YYYY-MM-DD, …
+ls logs/ctrader-engine/    # ctrader-engine.log, ctrader-engine.log.YYYY-MM-DD, …
 ```
+
+Rotation is done **inside the process** at local midnight (Python
+`TimedRotatingFileHandler`, C# `DailyFileLog`). Default retention is 14 days
+(`LOG_RETENTION_DAYS`). No host `logrotate` job is required.
 
 ## Backups
 

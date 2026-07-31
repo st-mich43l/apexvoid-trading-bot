@@ -180,6 +180,8 @@ _STOP_RE = re.compile(
 _LOT_TEXT_RE = re.compile(r"(?i)(?<!\w)<?[\d.,]+>?\s+lots?\b")
 _POSITION_TEXT_RE = re.compile(r"(?i)\bposition\s*[:#]?\s*\d+\b")
 _VOLUME_LABEL_RE = re.compile(r"(?i)\bvolume\s*=")
+_REMAINING_LABEL_RE = re.compile(r"(?i)\bremaining\s*=")
+_LEG_VOLUME_RE = re.compile(r"(?i)\b(L\d+)\s*=")
 _WEIGHTED_EQ_RE = re.compile(
   r"(?i)\bweighted\s*=\s*([0-9]+(?:\.[0-9]+)?)"
 )
@@ -204,9 +206,11 @@ def _format_event_price(raw: str, *, digits: int | None = None) -> str:
 def _clean_message(value: object) -> str:
   text = _AUTO_NAME_RE.sub("ApexVoid Algo", str(value or ""))
   text = _POSITION_TEXT_RE.sub("", text)
-  # Owner-facing fill lines: broker volume units are labeled lot=, and
+  # Owner-facing fill/TP lines: broker volume units are labeled lot=, and
   # weighted/@ prices must not dump Decimal noise.
   text = _VOLUME_LABEL_RE.sub("lot=", text)
+  text = _REMAINING_LABEL_RE.sub("remaining lot=", text)
+  text = _LEG_VOLUME_RE.sub(r"\1 lot=", text)
   text = _WEIGHTED_EQ_RE.sub(
     lambda match: f"weighted={_format_event_price(match.group(1))}",
     text,
@@ -464,6 +468,14 @@ _CLOSE_REASON_LABELS = {
   "manual_or_external_close": "✋ Closed manually on platform",
 }
 
+_HIGHEST_TP_ARCHIVED_RE = re.compile(
+  r"(?i)highest\s+TP\s+archived\s+(?P<target>TP\d+)"
+)
+_NO_TP_ARCHIVED_RE = re.compile(r"(?i)\bno\s+TP\s+archived\b")
+_PLAN_CLOSED_AT_RE = re.compile(
+  r"(?i)@\s*(?P<price>[0-9]+(?:\.[0-9]+)?)"
+)
+
 
 def _format_position_closed(event: dict, message: str) -> str:
   seq = _trade_seq_prefix(event)
@@ -475,7 +487,22 @@ def _format_position_closed(event: dict, message: str) -> str:
   if reason_label:
     lines.append(reason_label)
   cleaned = _MONEY_RE.sub("", message).strip(" ·") if message else ""
-  if cleaned:
+  highest = _HIGHEST_TP_ARCHIVED_RE.search(cleaned) if cleaned else None
+  no_tp = _NO_TP_ARCHIVED_RE.search(cleaned) if cleaned else None
+  # Close card: highest TP archived only — never dump per-leg lot detail.
+  if highest is not None:
+    lines.append(
+      f"Highest TP archived: <b>{escape(highest.group('target').upper())}</b>"
+    )
+    at = _PLAN_CLOSED_AT_RE.search(cleaned)
+    if at is not None:
+      lines.append(f"@ <b>{escape(at.group('price'))}</b>")
+  elif no_tp is not None:
+    lines.append("Highest TP archived: <b>none</b>")
+    at = _PLAN_CLOSED_AT_RE.search(cleaned)
+    if at is not None:
+      lines.append(f"@ <b>{escape(at.group('price'))}</b>")
+  elif cleaned and " lot=" not in cleaned.lower():
     lines.extend(["", escape(cleaned)])
   # Earlier TP legs on this group each already posted their own card with
   # their own leg pips (see _format_take_profit) - this is the only place
@@ -541,6 +568,112 @@ def _format_owner_flatten(event: dict, message: str) -> str:
     "",
     body,
   ])
+
+
+_TP_BOOKED_RE = re.compile(
+  r"(?i)^(?:TP(?:1)?\s+)?COMPLETED\s+"
+  r"(?P<target>TP\d+)\s+closed\s+"
+  r"(?P<body>.*?)"
+  r"(?:;\s*PLAN\s+CLOSED)?"
+  r"(?:\s+\((?P<open>\d+)/(?P<total>\d+)\))?\s*$"
+)
+_TP_LEG_LOT_RE = re.compile(r"(?i)\b(L\d+)\s+lot\s*=\s*([0-9]+(?:\.[0-9]+)?)")
+_TP_REMAINING_LOT_RE = re.compile(
+  r"(?i)\bremaining\s+lot\s*=\s*([0-9]+(?:\.[0-9]+)?)"
+)
+_SL_MOVED_RE = re.compile(
+  r"(?i)^(?:GROUP\s+)?SL\s+MOVED(?:\s+TO\s+BE|\s+to)?\s*"
+  r"(?P<price>[0-9]+(?:\.[0-9]+)?)"
+  r"(?:\s*\((?P<details>[^)]*)\))?\s*$"
+)
+
+
+def _format_tp_booked(event: dict, message: str) -> str | None:
+  """Rich TP archive card — target, per-leg lots, remaining, plan state."""
+  cleaned = _clean_message(message)
+  match = _TP_BOOKED_RE.match(cleaned)
+  target = match.group("target").upper() if match else None
+  body = match.group("body").strip() if match else cleaned
+  open_count = match.group("open") if match else None
+  total_count = match.group("total") if match else None
+  plan_closed = "PLAN CLOSED" in cleaned.upper()
+  legs = _TP_LEG_LOT_RE.findall(body or cleaned)
+  remaining_match = _TP_REMAINING_LOT_RE.search(body or cleaned)
+  remaining = remaining_match.group(1) if remaining_match else None
+  price = event.get("price")
+  try:
+    price_text = (
+      None if price is None else _format_event_price(str(price))
+    )
+  except Exception:
+    price_text = None
+
+  lines = [
+    "🤖 <b>ApexVoid Algo</b>",
+    f"🎯 <b>TP COMPLETED</b>"
+    + (f" · <b>{escape(target)}</b>" if target else ""),
+  ]
+  if price_text:
+    lines.append(f"💰 Fill: <b>{escape(price_text)}</b>")
+  if legs:
+    leg_bits = " · ".join(
+      f"{escape(leg)} <b>{escape(lot)}</b>" for leg, lot in legs
+    )
+    lines.append(f"📦 Closed: {leg_bits}")
+  if remaining is not None and not plan_closed:
+    lines.append(f"📉 Remaining: <b>{escape(remaining)}</b> lot")
+  if open_count and total_count:
+    lines.append(
+      f"🧩 Legs open: <b>{escape(open_count)}/{escape(total_count)}</b>"
+    )
+  if plan_closed:
+    lines.append("🏁 <b>PLAN CLOSED</b> · all targets booked")
+  attribution = _attribution_line(event)
+  if attribution:
+    lines.append(attribution)
+  # Fall back to the cleaned engine line when we could not parse structure.
+  if not legs and not target and cleaned:
+    lines.extend(["", escape(cleaned)])
+  return "\n".join(lines)
+
+
+def _format_sl_moved(event: dict, message: str) -> str | None:
+  """Rich group stop-move card — BE / trail target with price."""
+  cleaned = _clean_message(message)
+  match = _SL_MOVED_RE.match(cleaned)
+  price = None
+  details = ""
+  if match is not None:
+    price = match.group("price")
+    details = str(match.group("details") or "").strip()
+  if price is None:
+    price_val = _event_float(event, "price", "stop_price", "new_stop")
+    if price_val is not None:
+      price = _format_event_price(str(price_val))
+  upper = cleaned.upper()
+  if "TO BE" in upper or upper.startswith("GROUP SL MOVED TO BE"):
+    kind = "Break-even"
+    icon = "🔐"
+  elif "TRAIL" in upper:
+    kind = "Trail"
+    icon = "🛰️"
+  else:
+    kind = "Stop update"
+    icon = "🛡"
+  lines = [
+    "🤖 <b>ApexVoid Algo</b>",
+    f"{icon} <b>GROUP SL MOVED</b> · {escape(kind)}",
+  ]
+  if price is not None:
+    lines.append(f"🛡 New SL: <b>{escape(str(price))}</b>")
+  if details:
+    lines.append(f"📎 {escape(details)}")
+  elif cleaned and price is None:
+    lines.extend(["", escape(cleaned)])
+  attribution = _attribution_line(event)
+  if attribution:
+    lines.append(attribution)
+  return "\n".join(lines)
 
 
 def _format_stop_moved(
@@ -634,6 +767,14 @@ def render_auto_trade_event(
     return _format_strategy_route(event)
   if event_type == "owner_flatten":
     return _format_owner_flatten(event, message)
+  if event_type == "tp_booked":
+    rendered = _format_tp_booked(event, message)
+    if rendered:
+      return rendered
+  if event_type == "sl_moved":
+    rendered = _format_sl_moved(event, message)
+    if rendered:
+      return rendered
   labels = {
     "ready": "✅ <b>Engine ready</b>",
     "dry_run": "🧪 <b>Simulation</b>",
@@ -751,14 +892,21 @@ async def _forming_reply_message_id(
   match_id = _event_match_id(event)
   if not match_id:
     return None, "event has no match id"
+  # Prefer the live forming card address over telegram_root — root can go
+  # stale if the card was re-posted while the root key lagged behind.
+  card = await load_forming_card(client, match_id)
+  if card is not None:
+    try:
+      message_id = int(card["message_id"])
+    except (KeyError, TypeError, ValueError):
+      message_id = 0
+    if message_id > 0:
+      return message_id, ""
   root_id = await load_telegram_root_message_id(client, match_id)
   if root_id is not None and root_id > 0:
     return root_id, ""
-  card = await load_forming_card(client, match_id)
-  if card is None:
-    key = _forming_message_key(match_id)
-    return None, f"stored forming message is missing or expired ({key})"
-  return card["message_id"], ""
+  key = _forming_message_key(match_id)
+  return None, f"stored forming message is missing or expired ({key})"
 
 
 async def _apply_zone_watch_outcome_from_event(client, event: dict) -> None:
@@ -1044,23 +1192,35 @@ async def _deliver_auto_trade_event(
   send = send or send_scanner_with_retry
   position_id = event.get("position_id")
   match_id = _event_match_id(event)
-  # Keep the root setup card status in sync for fills so the owner always
-  # sees progress on the original message, then thread the detail as a reply.
+  root_edited = False
+  # Keep the root setup card status in sync for fills/TP/SL so the owner
+  # always sees progress on the original message, then thread the detail
+  # as a reply (never a duplicate standalone when the root already has it).
   if (
     profile == "internal"
-    and event_type == "order_filled"
     and match_id
+    and event_type in {"order_filled", "tp_booked", "sl_moved"}
   ):
-    fill_message = _clean_message(event.get("message", "")) or "order filled"
-    await edit_forming_card_status(
+    status_message = _clean_message(event.get("message", "")) or event_type
+    if event_type == "order_filled":
+      status_line = f"✅ <b>ORDER FILLED</b> · {escape(status_message)}"
+      status_state = "order_filled"
+    elif event_type == "tp_booked":
+      status_line = f"🎯 <b>TP COMPLETED</b> · {escape(status_message)}"
+      status_state = "tp_booked"
+    else:
+      status_line = f"🛡 <b>GROUP SL MOVED</b> · {escape(status_message)}"
+      status_state = "sl_moved"
+    edit_result = await edit_forming_card_status(
       client,
       match_id,
-      f"✅ <b>ORDER FILLED</b> · {escape(fill_message)}",
-      state="order_filled",
-      reason_code=str(event.get("reason_code") or "order_filled"),
+      status_line,
+      state=status_state,
+      reason_code=str(event.get("reason_code") or event_type),
       event_id=str(event.get("lifecycle_id") or "") or None,
       edit_fn=edit_scanner_message_text,
     )
+    root_edited = edit_result is not False
   reply_to, reason = await _resolve_reply_message_id(client, event, profile)
   if reply_to is None and (
     event_type in _FORMING_REPLY_TYPES
@@ -1068,24 +1228,34 @@ async def _deliver_auto_trade_event(
     or (event_type != "opened" and position_id is not None)
   ):
     log.info(
-      "Auto-trade reply unavailable for %s (%s): %s; sending standalone",
+      "Auto-trade reply unavailable for %s (%s): %s; %s",
       match_id or position_id or event_type,
       profile,
       reason,
+      "card already updated — skipping standalone"
+      if root_edited
+      else "sending standalone",
     )
+    if root_edited and event_type in {"order_filled", "tp_booked", "sl_moved"}:
+      return True
   try:
     sent = await send(text, reply_to=reply_to, chat_id=chat_id)
   except TelegramBadRequest as error:
     if reply_to is None or not _is_bad_reply_target(error):
       raise
     log.info(
-      "Auto-trade reply rejected for %s (%s): %s; retrying standalone",
+      "Auto-trade reply rejected for %s (%s): %s; %s",
       match_id or position_id or event_type,
       profile,
       error,
+      "card already updated — skipping standalone"
+      if root_edited
+      else "retrying standalone",
     )
+    if root_edited and event_type in {"order_filled", "tp_booked", "sl_moved"}:
+      return True
     sent = await send(text, reply_to=None, chat_id=chat_id)
-  if event_type in {"opened", "add"}:
+  if event_type in {"opened", "add", "order_filled"}:
     await _remember_trade_message(
       client,
       event,

@@ -77,14 +77,18 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    # No .env — all environment declared here (values from the vaulted dict).
+    # Calendar cache (ff_*.json) still persists here; signals live in Postgres.
+    # Service-rotated daily logs (TimedRotatingFileHandler) on the host.
+    volumes:
+      - ./data:/data
+      - ./logs/algo-bot:/var/log/apexvoid
     environment:
 {% for key, value in resolved_bot_env.items() %}
       {{ key }}: {{ value | to_json }}
 {% endfor %}
-    # Calendar cache (ff_*.json) still persists here; signals live in Postgres.
-    volumes:
-      - ./data:/data
+      LOG_DIR: {{ apexvoid_trading_bot_env.LOG_DIR | default('/var/log/apexvoid') | string | to_json }}
+      LOG_RETENTION_DAYS: {{ apexvoid_trading_bot_env.LOG_RETENTION_DAYS | default('14') | string | to_json }}
+      LOG_FILE_ENABLED: {{ apexvoid_trading_bot_env.LOG_FILE_ENABLED | default('true') | string | to_json }}
 
   ctrader-engine:
     image: "{{ registry_namespace }}/apexvoid-ctrader-engine:{{ image_tag }}"
@@ -211,8 +215,13 @@ services:
       AUTO_TRADE_BROKER_ABSENCE_CONFIRMATIONS: {{ apexvoid_trading_bot_env.AUTO_TRADE_BROKER_ABSENCE_CONFIRMATIONS | default('2') | string | to_json }}
       AUTO_TRADE_BROKER_ABSENCE_RECHECK_SECONDS: {{ apexvoid_trading_bot_env.AUTO_TRADE_BROKER_ABSENCE_RECHECK_SECONDS | default('3') | string | to_json }}
       AUTO_TRADE_BROKER_RECOVERY_TIMEOUT_SECONDS: {{ apexvoid_trading_bot_env.AUTO_TRADE_BROKER_RECOVERY_TIMEOUT_SECONDS | default('30') | string | to_json }}
+      LOG_DIR: {{ apexvoid_trading_bot_env.LOG_DIR | default('/var/log/apexvoid') | string | to_json }}
+      LOG_RETENTION_DAYS: {{ apexvoid_trading_bot_env.LOG_RETENTION_DAYS | default('14') | string | to_json }}
+      LOG_FILE_ENABLED: {{ apexvoid_trading_bot_env.LOG_FILE_ENABLED | default('true') | string | to_json }}
+      LOG_FILE_NAME: {{ apexvoid_trading_bot_env.CTRADER_LOG_FILE_NAME | default('ctrader-engine.log') | string | to_json }}
     volumes:
       - ./data/ctrader-token:/var/lib/apexvoid
+      - ./logs/ctrader-engine:/var/log/apexvoid
     healthcheck:
       test: ["CMD", "/app/ctrader-feed", "--healthcheck"]
       interval: 30s

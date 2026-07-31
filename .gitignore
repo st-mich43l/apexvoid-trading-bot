@@ -225,6 +225,11 @@ __marimo__/
 data/ctrader-token/
 # Local database data + legacy SQLite files/backups
 data/
+# Service-rotated daily logs (host bind mounts)
+logs/**
+!logs/**/.gitkeep
+!logs/algo-bot/
+!logs/ctrader-engine/
 pgdata/
 *.db
 *.bak

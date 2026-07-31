@@ -26,6 +26,18 @@ class Settings(BaseSettings):
     validation_alias=AliasChoices("DATABASE_URL", "POSTGRES_DSN"),
   )
   log_level: str = "INFO"
+  log_dir: str = Field(
+    default="/var/log/apexvoid",
+    validation_alias=AliasChoices("LOG_DIR", "APEXVOID_LOG_DIR"),
+  )
+  log_retention_days: int = Field(
+    default=14,
+    validation_alias=AliasChoices("LOG_RETENTION_DAYS", "APEXVOID_LOG_RETENTION_DAYS"),
+  )
+  log_file_enabled: bool = Field(
+    default=True,
+    validation_alias=AliasChoices("LOG_FILE_ENABLED", "APEXVOID_LOG_FILE_ENABLED"),
+  )
   telegram_owner_id: Optional[int] = None  # your Telegram user ID — only this user can DM the bot
   signal_public_channel_id: Optional[int] = Field(
     default=None,
@@ -199,6 +211,22 @@ class Settings(BaseSettings):
   auto_trade_require_demo_account: bool = True
   auto_trade_allow_concurrent_strategies: bool = False
   auto_trade_allow_hedged_xau: bool = False
+  # When an order is active, opposing entries closer than this absolute price
+  # distance are blocked (SELL @ 4063 → BUY only at <= 4048 when 15).
+  auto_trade_opposing_active_min_price: float = Field(
+    default=15.0,
+    validation_alias=AliasChoices(
+      "AUTO_TRADE_OPPOSING_ACTIVE_MIN_PRICE",
+    ),
+  )
+  # Same-direction stack while another order is active: size fraction and
+  # force a single-leg entry (no L1/L2 ladder).
+  auto_trade_same_direction_stack_size_fraction: float = Field(
+    default=0.60,
+    validation_alias=AliasChoices(
+      "AUTO_TRADE_SAME_DIRECTION_STACK_SIZE_FRACTION",
+    ),
+  )
   auto_trade_require_flat_for_range: bool = True
   auto_trade_range_two_sided_enabled: bool = False
   auto_trade_range_flip_enabled: bool = False

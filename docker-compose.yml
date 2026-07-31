@@ -125,6 +125,9 @@ services:
     env_file: .env
     environment:
       <<: *auto-trade-environment
+      LOG_DIR: ${LOG_DIR:-/var/log/apexvoid}
+      LOG_RETENTION_DAYS: ${LOG_RETENTION_DAYS:-14}
+      LOG_FILE_ENABLED: ${LOG_FILE_ENABLED:-true}
     depends_on:
       postgres:
         condition: service_healthy
@@ -132,6 +135,7 @@ services:
         condition: service_healthy
     volumes:
       - ./data:/data   # calendar cache (ff_*.json) still persists here
+      - ./logs/algo-bot:/var/log/apexvoid
     # No ports exposed — the bot uses outbound Telegram long-polling only.
 
   ctrader-engine:
@@ -142,11 +146,16 @@ services:
     env_file: .env
     environment:
       <<: *auto-trade-environment
+      LOG_DIR: ${LOG_DIR:-/var/log/apexvoid}
+      LOG_RETENTION_DAYS: ${LOG_RETENTION_DAYS:-14}
+      LOG_FILE_ENABLED: ${LOG_FILE_ENABLED:-true}
+      LOG_FILE_NAME: ${CTRADER_LOG_FILE_NAME:-ctrader-engine.log}
     depends_on:
       redis:
         condition: service_healthy
     volumes:
       - ./data/ctrader-token:/var/lib/apexvoid
+      - ./logs/ctrader-engine:/var/log/apexvoid
     healthcheck:
       test: ["CMD", "/app/ctrader-feed", "--healthcheck"]
       interval: 30s

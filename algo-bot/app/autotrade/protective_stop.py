@@ -13,7 +13,21 @@ STOP_PLAN_VERSION = 2
 
 
 class ProtectiveStopError(ValueError):
-  """A stop cannot be constructed under the shared execution contract."""
+  """A stop cannot be constructed under the shared execution contract.
+
+  Optional ``measured`` carries diagnostic fields for reject telemetry
+  (lifecycle / forming-card evidence) without changing the error message
+  string that C# parity and callers match on.
+  """
+
+  def __init__(
+    self,
+    message: str,
+    *,
+    measured: dict[str, Any] | None = None,
+  ) -> None:
+    super().__init__(message)
+    self.measured: dict[str, Any] = dict(measured or {})
 
 
 @dataclass(frozen=True)
@@ -254,6 +268,79 @@ def _plan_base_stop(
   return stop_price, distance, stop_pips, raw_stop, clamped, source
 
 
+def opposing_zone_context_measured(
+  opposing_zone: OpposingZoneStopContext | None,
+) -> dict[str, Any]:
+  """Stop-side opposing zone fields (distinct from target-room opposing_*)."""
+  if opposing_zone is None:
+    return {
+      "stop_side_opposing_zone_id": None,
+      "stop_side_opposing_zone_low": None,
+      "stop_side_opposing_zone_high": None,
+      "stop_side_opposing_execution_grade": None,
+      "stop_side_opposing_push_beyond_zone": None,
+      "stop_side_opposing_buffer_atr": None,
+    }
+  return {
+    "stop_side_opposing_zone_id": opposing_zone.zone_id,
+    "stop_side_opposing_zone_low": float(opposing_zone.low),
+    "stop_side_opposing_zone_high": float(opposing_zone.high),
+    "stop_side_opposing_execution_grade": bool(opposing_zone.execution_grade),
+    "stop_side_opposing_push_beyond_zone": bool(
+      opposing_zone.push_beyond_zone
+    ),
+    "stop_side_opposing_buffer_atr": float(opposing_zone.buffer_atr),
+  }
+
+
+def _stop_inside_opposing_zone_error(
+  *,
+  detail: str,
+  direction: str,
+  entry: Decimal,
+  base_stop_price: Decimal,
+  base_stop_pips: Decimal,
+  opposing_zone: OpposingZoneStopContext,
+  atr_value: Decimal,
+  maximum_stop_pips: int,
+  pip: Decimal,
+  digits: int,
+  pushed_stop_price: Decimal | None = None,
+  pushed_stop_pips: Decimal | None = None,
+) -> ProtectiveStopError:
+  buffer = opposing_zone.buffer_atr * atr_value
+  quantum = Decimal(1).scaleb(-digits)
+  measured: dict[str, Any] = {
+    **opposing_zone_context_measured(opposing_zone),
+    "planned_stop_error": "stop_inside_opposing_zone",
+    "stop_reject_detail": detail,
+    "planned_stop_entry_price": format(entry, "f"),
+    "planned_base_stop_price": format(base_stop_price, "f"),
+    "planned_base_stop_pips": format(base_stop_pips, "f"),
+    "stop_max_envelope_pips": int(maximum_stop_pips),
+    "stop_push_buffer_price": float(buffer),
+    "atr": float(atr_value),
+    "direction": direction,
+  }
+  if pushed_stop_price is not None:
+    measured["planned_pushed_stop_price"] = format(
+      pushed_stop_price.quantize(quantum, rounding=ROUND_HALF_UP), "f",
+    )
+  if pushed_stop_pips is not None:
+    measured["planned_pushed_stop_pips"] = format(pushed_stop_pips, "f")
+    measured["pushed_over_envelope_pips"] = format(
+      pushed_stop_pips - Decimal(maximum_stop_pips), "f",
+    )
+  # How far base stop sits inside the zone (toward the far edge).
+  if direction == "BUY":
+    inside = base_stop_price - opposing_zone.low
+  else:
+    inside = opposing_zone.high - base_stop_price
+  measured["base_stop_inside_zone_price"] = float(inside)
+  measured["base_stop_inside_zone_pips"] = float(inside / pip) if pip > 0 else None
+  return ProtectiveStopError("stop_inside_opposing_zone", measured=measured)
+
+
 def _apply_opposing_zone_push(
   *,
   direction: str,
@@ -298,7 +385,18 @@ def _apply_opposing_zone_push(
       None,
     )
   if not opposing_zone.push_beyond_zone:
-    raise ProtectiveStopError("stop_inside_opposing_zone")
+    raise _stop_inside_opposing_zone_error(
+      detail="push_disabled",
+      direction=direction,
+      entry=entry,
+      base_stop_price=base_stop_price,
+      base_stop_pips=base_stop_pips,
+      opposing_zone=opposing_zone,
+      atr_value=atr_value,
+      maximum_stop_pips=maximum_stop_pips,
+      pip=pip,
+      digits=digits,
+    )
   buffer = opposing_zone.buffer_atr * atr_value
   pushed_stop = (
     opposing_zone.low - buffer
@@ -310,15 +408,40 @@ def _apply_opposing_zone_push(
   final_distance = abs(entry - final_stop_price)
   if direction == "BUY" and final_stop_price >= entry:
     raise ProtectiveStopError(
-      "Opposing-zone push is not on the losing side of entry"
+      "Opposing-zone push is not on the losing side of entry",
+      measured={
+        **opposing_zone_context_measured(opposing_zone),
+        "planned_base_stop_price": format(base_stop_price, "f"),
+        "planned_pushed_stop_price": format(final_stop_price, "f"),
+        "stop_reject_detail": "pushed_not_losing_side",
+      },
     )
   if direction == "SELL" and final_stop_price <= entry:
     raise ProtectiveStopError(
-      "Opposing-zone push is not on the losing side of entry"
+      "Opposing-zone push is not on the losing side of entry",
+      measured={
+        **opposing_zone_context_measured(opposing_zone),
+        "planned_base_stop_price": format(base_stop_price, "f"),
+        "planned_pushed_stop_price": format(final_stop_price, "f"),
+        "stop_reject_detail": "pushed_not_losing_side",
+      },
     )
   final_stop_pips = final_distance / pip
   if final_stop_pips > Decimal(maximum_stop_pips):
-    raise ProtectiveStopError("stop_inside_opposing_zone")
+    raise _stop_inside_opposing_zone_error(
+      detail="pushed_exceeds_max_envelope",
+      direction=direction,
+      entry=entry,
+      base_stop_price=base_stop_price,
+      base_stop_pips=base_stop_pips,
+      opposing_zone=opposing_zone,
+      atr_value=atr_value,
+      maximum_stop_pips=maximum_stop_pips,
+      pip=pip,
+      digits=digits,
+      pushed_stop_price=final_stop_price,
+      pushed_stop_pips=final_stop_pips,
+    )
   return (
     final_stop_price,
     final_distance,
