@@ -678,12 +678,17 @@ class Settings(BaseSettings):
   auto_trade_opposing_barrier_atr: float = 0.5
   # 2026-07-31: three same-evening incidents (15.18/15.2/19.9 pips of real
   # buffered room, all rejected outright for falling short of the smallest
-  # *configured* target, 30 pips). A genuine minimum-viability floor,
-  # independent of the configured ladder - when nothing on the ladder fits
-  # but real room still clears this, the trade is allowed with its own
-  # (smaller) achievable room as the target instead of being thrown away.
-  # 0 restores the old all-or-nothing behavior.
+  # *configured* target, 30 pips). Preference telemetry floor — when nothing
+  # on the ladder fits but real room still clears the execution-cost floor,
+  # the trade is allowed with its own (smaller) achievable room as the
+  # target. 0 disables the preference signal.
   auto_trade_min_capped_target_pips: float = 15.0
+  # Hard viability floor for capped targets (spread / slippage). A capped
+  # target must clear this and must never exceed usable buffered room.
+  auto_trade_execution_cost_pips: float = Field(
+    default=1.0,
+    validation_alias=AliasChoices("AUTO_TRADE_EXECUTION_COST_PIPS"),
+  )
   # An opposing barrier's own classification (e.g. an H1 breaker/flip) can
   # lag real price by up to a full HTF bar - the barrier can already be
   # decisively closed-through on the execution timeframe while it still

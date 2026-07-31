@@ -200,12 +200,12 @@ def telegram_root_message_key(setup_id: str) -> str:
 
 
 def should_delete_root_on_terminal() -> bool:
-  """Respect single-root-card delete flag when that mode is enabled."""
-  if bool(getattr(settings, "auto_trade_telegram_single_root_card", False)):
-    return bool(
-      getattr(settings, "auto_trade_telegram_delete_root_on_terminal", False)
-    )
-  return bool(settings.delivery_delete_on_terminal)
+  """Reject/expire/invalidate always retain the root card (edit, never delete).
+
+  Single-root mode and the legacy delivery flag both used to allow delete;
+  that orphaned reply threads and hid the terminal reason from the owner.
+  """
+  return False
 
 
 def forming_status_key(setup_id: str) -> str:
@@ -821,8 +821,17 @@ async def edit_forming_card_stop(
   return True
 
 
-def _terminal_card_text(reason_code: str) -> str:
-  return "🤖 <b>ApexVoid Algo</b>\n· <i>setup closed</i>"
+def _terminal_status_line(reason_code: str) -> str:
+  reason = (reason_code or "closed").strip().replace("_", " ")
+  return f"❌ <b>TERMINAL</b> · {reason}"
+
+
+def _terminal_card_text(reason_code: str, existing_text: str | None = None) -> str:
+  """Edit status line only — keep root body for audit / reply context."""
+  status = _terminal_status_line(reason_code)
+  if existing_text and existing_text.strip():
+    return apply_forming_card_status(existing_text, status)
+  return f"🤖 <b>ApexVoid Algo</b>\n{status}"
 
 
 async def kill_setup_card(
@@ -835,20 +844,19 @@ async def kill_setup_card(
 ) -> None:
   """Close the forming/root card on reject/invalidate/expire.
 
-  Default single-root mode retains the Telegram message (edit to a neutral
-  terminal line) so Fill/TP/BE/SL replies can still thread to it. Explicit
-  delete-root mode removes the Telegram message as before.
+  Always retains the Telegram message (edit to a terminal line) so
+  Fill/TP/BE/SL replies can still thread to it. Delete is intentionally
+  disabled — see should_delete_root_on_terminal().
   """
   card = await load_forming_card(client, setup_id)
   if card is None:
     await clear_forming_card(client, setup_id)
     return
 
+  terminal = _terminal_card_text(reason_code, str(card.get("text") or ""))
   if not should_delete_root_on_terminal():
     try:
-      await edit_fn(
-        card["chat_id"], card["message_id"], _terminal_card_text(reason_code),
-      )
+      await edit_fn(card["chat_id"], card["message_id"], terminal)
     except TelegramBadRequest:
       log.info(
         "forming card terminal edit failed setup_id=%s reason=%s",
@@ -861,7 +869,7 @@ async def kill_setup_card(
       setup_id,
       chat_id=int(card["chat_id"]),
       message_id=int(card["message_id"]),
-      text=_terminal_card_text(reason_code),
+      text=terminal,
     )
     await client.delete(
       forming_status_key(setup_id),
@@ -869,6 +877,7 @@ async def kill_setup_card(
     )
     return
 
+  # Legacy delete path retained for tests that force-delete via monkeypatch.
   try:
     await delete_fn(card["chat_id"], card["message_id"])
   except TelegramBadRequest:
@@ -879,9 +888,7 @@ async def kill_setup_card(
       exc_info=True,
     )
     try:
-      await edit_fn(
-        card["chat_id"], card["message_id"], _terminal_card_text(reason_code),
-      )
+      await edit_fn(card["chat_id"], card["message_id"], terminal)
     except TelegramBadRequest:
       log.exception(
         "forming card terminal edit also failed setup_id=%s", setup_id,

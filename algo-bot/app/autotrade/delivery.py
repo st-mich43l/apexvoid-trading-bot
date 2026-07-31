@@ -1,6 +1,7 @@
 """Owner controls and Telegram delivery for cTrader auto-trade events."""
 
 import asyncio
+import hashlib
 import json
 import logging
 import re
@@ -32,7 +33,6 @@ from app.autotrade.setup_card import (
   load_telegram_root_message_id,
 )
 from app.autotrade.lifecycle import LIFECYCLE_STATES, emit_lifecycle
-from app.autotrade.strategy_match_ready import load_ready_consumer_health
 from app.autotrade.range_context import (
   WORKER_SNAPSHOT_TTL_SECONDS,
 )
@@ -960,8 +960,18 @@ def _split_manage_fill_and_tps(text: str) -> tuple[str, list[str]]:
   """Split stored manage body into fill header + accumulated TP/close lines."""
   fill_lines: list[str] = []
   append_lines: list[str] = []
+
+  def _is_append(line: str) -> bool:
+    stripped = line.lstrip("• ").strip()
+    return (
+      stripped.startswith("🎯")
+      or stripped.startswith("🏁")
+      or line.startswith("🎯 ·")
+      or line.startswith("🏁 ·")
+    )
+
   for line in text.splitlines():
-    if line.startswith("🎯 ·") or line.startswith("🏁 ·"):
+    if _is_append(line):
       append_lines.append(line)
     elif append_lines:
       # Keep stray lines after TP/close with the append block.
@@ -975,17 +985,16 @@ def _format_order_filled_manage_body(event: dict) -> str:
   cleaned = _clean_message(event.get("message", "")) or "order filled"
   return "\n".join([
     "🤖 <b>ApexVoid Algo</b>",
-    "✅ <b>ORDER FILLED</b>",
-    "",
-    escape(cleaned),
+    "• ✅ <b>ORDER FILLED</b>",
+    f"• {escape(cleaned)}",
   ])
 
 
 def _format_tp_compact_line(event: dict, message: str) -> str | None:
-  """Single-line TP archive for the manage reply.
+  """One bullet row per TP; stack a new row only when another TP hits.
 
   Exact owner format::
-    🎯 · TP1 · 💰 Fill: 4029.98 · ✅ Achieved: +41.0 pips
+    • 🎯 TP1 · 💰 Fill: 4029.98 · ✅ Achieved: +41.0 pips
   """
   cleaned = _clean_message(message)
   match = _TP_BOOKED_RE.match(cleaned)
@@ -1003,7 +1012,7 @@ def _format_tp_compact_line(event: dict, message: str) -> str | None:
       target = highest.group("target").upper()
   if not target:
     return None
-  parts = [f"🎯 · {escape(target)}"]
+  parts = [f"🎯 {escape(target)}"]
   price = event.get("price")
   try:
     if price is not None:
@@ -1024,7 +1033,7 @@ def _format_tp_compact_line(event: dict, message: str) -> str | None:
     parts.append(
       f"✅ Achieved: {format_signed_pips(abs(archived_pips))} pips"
     )
-  return " · ".join(parts)
+  return "• " + " · ".join(parts)
 
 
 _ARCHIVED_PIPS_SUFFIX_RE = re.compile(
@@ -1047,52 +1056,59 @@ def _manage_has_tp_target(text: str, target: str) -> bool:
   """True when manage body already has a compact line for this TP level."""
   needle = target.upper()
   for line in text.splitlines():
-    if not line.startswith("🎯 ·"):
+    stripped = line.lstrip("• ").strip()
+    if not (
+      stripped.startswith("🎯 ·")
+      or stripped.startswith("🎯 ")
+      or line.startswith("🎯 ·")
+    ):
       continue
-    # Matches both "🎯 · TP1 · …" and legacy "🎯 · <b>TP1</b> · …".
+    # Matches "• 🎯 TP1", "🎯 · TP1 · …", and legacy "🎯 · <b>TP1</b> · …".
     if (
-      f"· {needle} ·" in line
-      or f"· <b>{needle}</b> ·" in line
-      or line.rstrip().endswith(needle)
-      or line.rstrip().endswith(f"<b>{needle}</b>")
+      f"🎯 {needle}" in stripped
+      or f"🎯 · {needle}" in stripped
+      or f"· {needle} ·" in stripped
+      or f"· <b>{needle}</b> ·" in stripped
+      or stripped.rstrip().endswith(needle)
+      or stripped.rstrip().endswith(f"<b>{needle}</b>")
     ):
       return True
   return False
 
 
 def _format_position_closed_compact_line(event: dict, message: str) -> str:
-  """Close trailer for the manage reply — TP archive lives on 🎯 lines."""
-  parts = ["🏁 · POSITION CLOSED"]
+  """Close trailer for the manage reply — one bullet row per field."""
+  lines = ["• 🏁 POSITION CLOSED"]
   cleaned = _MONEY_RE.sub("", message).strip(" ·") if message else ""
   highest = _HIGHEST_TP_ARCHIVED_RE.search(cleaned) if cleaned else None
   no_tp = _NO_TP_ARCHIVED_RE.search(cleaned) if cleaned else None
   if highest is not None:
-    # Highest level is already on a 🎯 · TPn line; only add exit price here.
+    # Highest level is already on a 🎯 line; only add exit price here.
     at = _PLAN_CLOSED_AT_RE.search(cleaned)
     if at is not None:
-      parts.append(f"@ {escape(at.group('price'))}")
+      lines.append(f"• @ {escape(at.group('price'))}")
   elif no_tp is not None:
-    parts.append("🛡 SL")
+    lines.append("• 🛡 SL")
     losing = _resolve_no_tp_loss_pips(event, cleaned)
     if losing is not None and losing < 0:
-      parts.append(f"❌ Losing: {format_signed_pips(losing)} pips")
+      lines.append(f"• ❌ Losing: {format_signed_pips(losing)} pips")
     elif losing is not None and losing == 0:
-      parts.append("➖ Result: 0 pips (BE)")
+      lines.append("• ➖ Result: 0 pips (BE)")
     at = _PLAN_CLOSED_AT_RE.search(cleaned)
     if at is not None:
-      parts.append(f"@ {escape(at.group('price'))}")
+      lines.append(f"• @ {escape(at.group('price'))}")
   else:
     reason_label = _CLOSE_REASON_LABELS.get(str(event.get("reason_code") or ""))
     if reason_label and reason_label != _CLOSE_REASON_LABELS["stop_loss_or_take_profit"]:
-      parts.append(reason_label)
+      lines.append(f"• {reason_label}")
     elif str(event.get("reason_code") or "") == "stop_loss_or_take_profit":
-      parts.append("🛡 SL")
+      lines.append("• 🛡 SL")
     group_realized = _resolve_no_tp_loss_pips(event, cleaned)
     if group_realized is not None and group_realized < 0:
-      parts.append(f"❌ Losing: {format_signed_pips(group_realized)} pips")
+      lines.append(f"• ❌ Losing: {format_signed_pips(group_realized)} pips")
     elif group_realized is not None:
-      parts.append(f"Total: {format_signed_pips(group_realized)} pips")
-  return " · ".join(parts)
+      lines.append(f"• Total: {format_signed_pips(group_realized)} pips")
+  return "\n".join(lines)
 
 
 def _format_be_trail_head_status(event: dict, message: str) -> tuple[str, str, float | None]:
@@ -1148,17 +1164,8 @@ async def _deliver_compact_order_filled(
   chat_id: int,
   send,
 ) -> bool:
-  status_message = _clean_message(event.get("message", "")) or "order filled"
-  status_line = f"✅ <b>ORDER FILLED</b> · {escape(status_message)}"
-  await edit_forming_card_status(
-    client,
-    match_id,
-    status_line,
-    state="order_filled",
-    reason_code=str(event.get("reason_code") or "order_filled"),
-    event_id=str(event.get("lifecycle_id") or "") or None,
-    edit_fn=edit_scanner_message_text,
-  )
+  # Fill details live only on the manage reply — do not put ORDER FILLED
+  # on the forming-card head (keeps SETUP FORMING / PLAN PUBLISHED clean).
   body = _format_order_filled_manage_body(event)
   manage_id, manage_text = await _load_manage_message(client, match_id)
   if manage_id is not None and manage_text:
@@ -1191,7 +1198,7 @@ async def _deliver_compact_order_filled(
   except TelegramBadRequest as error:
     if reply_to is not None and _is_bad_reply_target(error):
       log.info(
-        "Auto-trade manage reply rejected for %s: %s; card already updated",
+        "Auto-trade manage reply rejected for %s: %s; skipping standalone",
         match_id,
         error,
       )
@@ -1236,7 +1243,7 @@ async def _deliver_compact_tp_booked(
       )
   stub = "\n".join([
     "🤖 <b>ApexVoid Algo</b>",
-    "✅ <b>ORDER FILLED</b>",
+    "• ✅ <b>ORDER FILLED</b>",
     "",
     line,
   ])
@@ -1283,13 +1290,13 @@ async def _deliver_compact_position_closed(
       target = highest.group("target").upper() if highest else None
       if target and not _manage_has_tp_target(text, target):
         text = f"{text}\n{tp_line}"
-    if "🏁 ·" not in text or "POSITION CLOSED" not in text:
+    if "POSITION CLOSED" not in text:
       text = f"{text}\n{close_line}"
     return text
 
   manage_id, manage_text = await _load_manage_message(client, match_id)
   if manage_id is not None and manage_text:
-    if "🏁 ·" in manage_text and "POSITION CLOSED" in manage_text:
+    if "POSITION CLOSED" in manage_text:
       return True
     new_text = _compose(manage_text)
     try:
@@ -1306,7 +1313,7 @@ async def _deliver_compact_position_closed(
       )
   stub = _compose("\n".join([
     "🤖 <b>ApexVoid Algo</b>",
-    "✅ <b>ORDER FILLED</b>",
+    "• ✅ <b>ORDER FILLED</b>",
     "",
   ]))
   reply_to, _ = await _resolve_reply_message_id(client, event, "internal")
@@ -1740,8 +1747,11 @@ async def _deliver_auto_trade_event(
         or f"{event_type}:{event.get('message') or ''}"
       ).strip()
       # Prefer a stable key when the engine already stamped one into message
-      # prefixes; fall back to type+message hash for durability across restarts.
-      dedup_key = f"auto_trade:v7_notify:{plan_id}:{event_type}:{hash(event_key) & 0xffffffff:x}"
+      # prefixes; fall back to type+message digest for durability across
+      # restarts. Use sha256 (not Python's salted hash()) so dedup survives
+      # process restarts and matches across workers.
+      digest = hashlib.sha256(event_key.encode("utf-8")).hexdigest()[:16]
+      dedup_key = f"auto_trade:v7_notify:{plan_id}:{event_type}:{digest}"
       claimed = await client.set(
         dedup_key,
         "1",
@@ -1942,19 +1952,18 @@ async def auto_trade_status_text() -> str:
   if why:
     lines.append(f"Why: {escape(why)}")
   if settings.auto_trade_enabled:
-    # P0-11: a card sitting at "waiting for retest" and a genuinely dead
-    # ready-event consumer look identical from selected_text/execution_state
-    # alone - surface the consumer's own health so the owner can tell
-    # "nothing to do right now" apart from "nothing will ever advance."
-    consumer_health = await load_ready_consumer_health(client)
-    consumer_state = str((consumer_health or {}).get("state") or "unknown")
-    if consumer_state in {"degraded_retrying", "fatal"}:
-      lines.append(
-        f"⚠️ Ready consumer <b>{escape(consumer_state)}</b> "
-        f"(retry {int((consumer_health or {}).get('retry_count') or 0)})"
-      )
-    elif consumer_state == "unknown":
-      lines.append("⚠️ Ready consumer health unknown")
+    # Supervisor marks programming bugs as fatal (Redis blips stay retrying).
+    try:
+      fatals = await redis_state.list_fatal_components()
+    except Exception:
+      log.exception("algo_status fatal component scan failed")
+      fatals = []
+    for item in fatals[:3]:
+      name = escape(str(item.get("component") or "component"))
+      err = escape(str(item.get("error") or "fatal")[:80])
+      lines.append(f"⚠️ <b>{name}</b> fatal · {err}")
+    if len(fatals) > 3:
+      lines.append(f"+{len(fatals) - 3} more fatal components")
   text = "\n".join(lines)
   # Soft budget for the owner DM; hard clip stays in the handler at 4000.
   if len(text) > 1500:

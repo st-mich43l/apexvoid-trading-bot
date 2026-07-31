@@ -41,10 +41,6 @@ M1_RETEST = "m1_retest"
 
 _REACTION_STRATEGIES = frozenset({
   "Key Level Reaction",
-  "Zone Reaction",
-  # Legacy labels:
-  "Demand Zone Reaction",
-  "Supply Zone Reaction",
   "Session Level Reaction",
   "Trendline Reaction",
   "Mapped Zone Reaction",
@@ -61,15 +57,25 @@ _CONTINUATION_STRATEGIES = frozenset({
   "Momentum Ride",
   "Breakout Continuation",
 })
-_REACTION_FAMILIES = frozenset({
+# Product Reaction taxonomy is only Key/Session/Trendline (see
+# strategy_taxonomy.REACTION_STRATEGIES). Confirmation mechanics below are
+# M5-authoritative / M1-optional — not product "Reaction" naming.
+_M5_AUTHORITATIVE_REACTION_FAMILIES = frozenset({
   "key_level",
-  "supply_demand",
   "session_level",
   "trendline",
   "mapped_zone_reaction",
   "liquidity_reversal",
   "trend_pullback",
 })
+# Zone setups (family supply_demand) share the same confirmation timing
+# contract but must not live under a Reaction-named set.
+_ZONE_CONFIRMATION_FAMILIES = frozenset({
+  "supply_demand",
+})
+_M5_AUTHORITATIVE_FAMILIES = (
+  _M5_AUTHORITATIVE_REACTION_FAMILIES | _ZONE_CONFIRMATION_FAMILIES
+)
 _AUTHORITATIVE_REACTIONS = frozenset({
   "rejection_choch",
   "sweep_reclaim",
@@ -262,8 +268,12 @@ def confirmation_policy_for(match: Any) -> ConfirmationPolicy:
       metadata_valid=True,
       reason_code="momentum_continuation",
     )
-  reaction_family = strategy in _REACTION_STRATEGIES or family in _REACTION_FAMILIES
-  if not reaction_family:
+  # reaction_family here means "M5-authoritative confirmation contract",
+  # including Zone (supply_demand) — not product taxonomy Reaction.
+  m5_authoritative_family = (
+    strategy in _REACTION_STRATEGIES or family in _M5_AUTHORITATIVE_FAMILIES
+  )
+  if not m5_authoritative_family:
     return ConfirmationPolicy(
       m5_authoritative=False,
       m1_required_on_retest=False,

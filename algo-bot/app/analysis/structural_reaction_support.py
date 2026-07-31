@@ -30,7 +30,19 @@ STRUCTURAL_SETUPS = frozenset({
   "Trendline Reaction",
 })
 
+_ZONE_REACTION_ALIASES = frozenset({
+  "Zone Reaction",
+  "Demand Zone Reaction",
+  "Supply Zone Reaction",
+})
+
 _EPS = 1e-12
+
+
+def canonical_structural_setup(setup: str) -> str:
+  """Map legacy Demand/Supply Zone Reaction labels to canonical Zone Reaction."""
+  key = str(setup or "")
+  return "Zone Reaction" if key in _ZONE_REACTION_ALIASES else key
 
 
 @dataclass(frozen=True)
@@ -163,7 +175,7 @@ def structural_thesis_id(
   return structural_hash(
     f"v{version}",
     symbol.upper(),
-    strategy,
+    canonical_structural_setup(strategy),
     direction.upper(),
     structural_source,
     structural_id,

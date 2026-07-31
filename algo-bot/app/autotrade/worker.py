@@ -16,7 +16,7 @@ import hashlib
 import json
 import logging
 import math
-from typing import Any
+from typing import Any, Awaitable, Callable
 
 from app.persistence import redis_state
 from app.autotrade import units
@@ -237,6 +237,17 @@ _HTF_TIMEFRAME = "M15"
 _REGIME_HISTORY_WINDOW_SECONDS = 24 * 3600
 _REGIME_HISTORY_TTL_SECONDS = 26 * 3600
 _REGIME_ALERT_COOLDOWN_SECONDS = 24 * 3600
+
+# Injected at composition root (main/delivery). Worker must never import
+# app.bot.client — architecture-guard regression enforces this.
+FormingCardEditFn = Callable[[int, int, str], Awaitable[Any]]
+_forming_card_edit_fn: FormingCardEditFn | None = None
+
+
+def configure_forming_card_edit_fn(edit_fn: FormingCardEditFn | None) -> None:
+  """Wire Telegram forming-card edits without importing bot.client here."""
+  global _forming_card_edit_fn
+  _forming_card_edit_fn = edit_fn
 
 
 @dataclass(frozen=True)
@@ -5107,16 +5118,36 @@ async def _publish_trade_plan_v7(
   displacement_lookback = max(
     0, int(getattr(settings, "auto_trade_displacement_override_lookback_bars", 0)),
   )
+  displacement_state: dict[str, object] = {
+    "applied": False,
+    "lookback_bars": displacement_lookback,
+  }
   if displacement_lookback > 0 and frames is not None:
     room_frame = frames.get(execution_match.source_tf)
     if room_frame is not None and not room_frame.empty and "close" in room_frame.columns:
+      recent_closes = tuple(
+        float(value) for value in room_frame["close"].tail(displacement_lookback)
+      )
+      before = len(room_entries)
       room_entries = filter_displaced_opposing_entries(
         room_entries,
         direction=execution_match.direction,
-        recent_closes=tuple(
-          float(value) for value in room_frame["close"].tail(displacement_lookback)
-        ),
+        recent_closes=recent_closes,
       )
+      displacement_state = {
+        "applied": True,
+        "lookback_bars": displacement_lookback,
+        "recent_closes": list(recent_closes),
+        "entries_before": before,
+        "entries_after": len(room_entries),
+        "dropped": before - len(room_entries),
+      }
+    else:
+      displacement_state = {
+        "applied": False,
+        "lookback_bars": displacement_lookback,
+        "reason": "no_closed_bars",
+      }
   target_room = evaluate_structural_target_room(
     direction=execution_match.direction,
     planned_entry_price=entry_reference,
@@ -5128,6 +5159,8 @@ async def _publish_trade_plan_v7(
     pip_size=units.pip_size(symbol),
     barrier_buffer_atr=float(settings.auto_trade_opposing_barrier_atr),
     min_capped_target_pips=float(settings.auto_trade_min_capped_target_pips),
+    execution_cost_pips=float(settings.auto_trade_execution_cost_pips),
+    displacement_state=displacement_state,
   )
   if not target_room.allowed:
     # Hard reject structural conflicts (e.g. SELL entry inside demand /
@@ -5527,15 +5560,15 @@ async def _publish_trade_plan_v7(
     },
   )
   try:
-    from app.bot.client import edit_scanner_message_text
-
-    await edit_forming_card_stop(
-      client,
-      setup_id,
-      float(plan.stop.price),
-      digits=int(getattr(settings, "auto_trade_xau_price_digits", 2)),
-      edit_fn=edit_scanner_message_text,
-    )
+    edit_fn = _forming_card_edit_fn
+    if edit_fn is not None:
+      await edit_forming_card_stop(
+        client,
+        setup_id,
+        float(plan.stop.price),
+        digits=int(getattr(settings, "auto_trade_xau_price_digits", 2)),
+        edit_fn=edit_fn,
+      )
   except Exception:
     log.exception(
       "v7 forming card stop refresh failed setup_id=%s plan_id=%s",

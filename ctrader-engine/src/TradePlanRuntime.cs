@@ -744,13 +744,13 @@ public sealed class TradePlanRuntime(
       TradePlanValidator.Validate(plan);
     }
     catch (Exception exception) when (
-      exception is TradePlanContractException
-        or JsonException
-        or InvalidOperationException
-        or NullReferenceException
-        or ArgumentException
+      exception is not OperationCanceledException
     )
     {
+      // Any deserialize/validate failure is a durable contract reject.
+      // Narrow filters previously missed source-gen NotSupportedException /
+      // FormatException and let PollAsync's outer catch abort the batch,
+      // poisoning the next valid stream item until restart.
       var (planId, version) = ExtractPlanIdentity(entry.Payload);
       await PersistRejectionAsync(
         entry.Id,

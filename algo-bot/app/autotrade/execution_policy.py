@@ -40,6 +40,8 @@ OUTCOME_BLOCK = "block"
 
 # Preference / quality signals that must never terminal-reject or consume a
 # setup. They stay on the measured payload for ranking and ops telemetry.
+# Structural zero-room / entry-inside conflicts are NOT listed here — those
+# hard-block via evaluate_structural_target_room + worker.
 PREFERENCE_TELEMETRY_REASONS = frozenset({
   "policy_regime_not_permitted",
   "policy_reward_risk_insufficient",
@@ -63,11 +65,6 @@ PREFERENCE_TELEMETRY_REASONS = frozenset({
   "nearby_opposing_structure",
   "htf_veto",
   "opposing_barrier",
-  "opposing_barrier_no_target",
-  "opposing_major_no_room",
-  "opposing_entry_overlap",
-  "opposing_entry_contained",
-  "entry_inside_opposing_zone",
   "opposing_ahead",
   "overlap_veto",
   "overlapping_zone_conflict",
@@ -80,11 +77,30 @@ PREFERENCE_TELEMETRY_REASONS = frozenset({
   "news_guard_unavailable",
   "rr_pre_gate",
   "opposing_barrier_rr_insufficient",
+  # Positive room but ladder prefers more — cap TP, do not reject:
+  "opposing_barrier_target_capped",
+  "opposing_barrier_target_capped_below_ladder",
+  "configured_ladder_does_not_fit",
+})
+
+# True structural conflicts — must hard-block publication.
+HARD_STRUCTURAL_TARGET_ROOM_REASONS = frozenset({
+  "opposing_entry_contained",
+  "opposing_entry_overlap",
+  "opposing_major_no_room",
+  "opposing_barrier_no_target",
+  "entry_inside_opposing_zone",
+  "invalid_target_room_geometry",
+  "execution_cost_insufficient_room",
 })
 
 
 def is_preference_telemetry(reason_code: str | None) -> bool:
   return str(reason_code or "").strip() in PREFERENCE_TELEMETRY_REASONS
+
+
+def is_hard_structural_target_room(reason_code: str | None) -> bool:
+  return str(reason_code or "").strip() in HARD_STRUCTURAL_TARGET_ROOM_REASONS
 
 
 @dataclass(frozen=True)
