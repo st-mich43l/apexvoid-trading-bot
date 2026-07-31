@@ -153,7 +153,7 @@ public sealed record AutoTradeOptions(
   // test fixture that never sets it) falls back to the same "30,40,50"
   // default Python uses.
   private static readonly IReadOnlyList<int> DefaultRangeTargetsPips =
-    new[] { 20, 30, 40, 50, 70 };
+    new[] { 15, 20, 30, 40, 50, 70 };
 
   // Only a missing (null) override falls back to the default - an
   // explicitly empty list is a misconfiguration and must fail Validate(),
@@ -210,7 +210,7 @@ public sealed record AutoTradeOptions(
     StopLossDistance: resolver.Decimal("AUTO_TRADE_SL_DISTANCE", 6.5m),
     TargetsPips: resolver.IntList(
       "AUTO_TRADE_TARGET_PLANS_PIPS",
-      "30,60,90,120,200",
+      "20,30,40,50,70",
       "AUTO_TRADE_TP_PIPS"
     ),
     TargetWeights: resolver.IntList(
@@ -354,7 +354,7 @@ public sealed record AutoTradeOptions(
     ),
     AddSizeRatio: resolver.Decimal("AUTO_TRADE_ADD_SIZE_RATIO", 0.5m),
     RangeTargetsPips: resolver.IntList(
-      "AUTO_TRADE_RANGE_TARGETS_PIPS", "20,30,40,50,70"
+      "AUTO_TRADE_RANGE_TARGETS_PIPS", "15,20,30,40,50,70"
     ),
     RangeTpBufferPips: resolver.Decimal(
       "AUTO_TRADE_RANGE_TP_BUFFER_PIPS", 3m
@@ -502,7 +502,7 @@ public sealed record AutoTradeOptions(
       "AUTO_TRADE_REACTION_SCALE_FRACTION", 0.30m
     ),
     ReactionScaleEnabled: resolver.Bool(
-      "AUTO_TRADE_REACTION_SCALE_ENABLED", true
+      "AUTO_TRADE_REACTION_SCALE_ENABLED", false
     ),
     ReactionScaleInvalidPolicy: resolver.String(
       "AUTO_TRADE_REACTION_SCALE_INVALID_POLICY", "single_market"
