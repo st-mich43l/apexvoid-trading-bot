@@ -2857,6 +2857,7 @@ async def _handle_event(
       continue
     metric_name = {
       "Key Level Reaction": "key_level_reaction_detected",
+      "Zone Reaction": "zone_reaction_detected",
       "Demand Zone Reaction": "demand_zone_reaction_detected",
       "Supply Zone Reaction": "supply_zone_reaction_detected",
       "Session Level Reaction": "session_level_reaction_detected",

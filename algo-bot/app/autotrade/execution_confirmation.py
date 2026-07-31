@@ -41,6 +41,8 @@ M1_RETEST = "m1_retest"
 
 _REACTION_STRATEGIES = frozenset({
   "Key Level Reaction",
+  "Zone Reaction",
+  # Legacy labels:
   "Demand Zone Reaction",
   "Supply Zone Reaction",
   "Session Level Reaction",
@@ -54,6 +56,10 @@ _REACTION_STRATEGIES = frozenset({
   # name, so it gets the M1-optional treatment without touching Range Edge
   # Scalp's family-level classification.
   "Fade Scalp",
+})
+_CONTINUATION_STRATEGIES = frozenset({
+  "Momentum Ride",
+  "Breakout Continuation",
 })
 _REACTION_FAMILIES = frozenset({
   "key_level",
@@ -244,6 +250,18 @@ def parse_bar_timestamp(value: Any) -> int | None:
 def confirmation_policy_for(match: Any) -> ConfirmationPolicy:
   strategy = str(getattr(match, "strategy", "") or "")
   family = str(getattr(match, "family", "") or "").casefold()
+  if strategy in _CONTINUATION_STRATEGIES or family == "momentum_continuation":
+    # Impulse/continuation is confirmed by the detector itself (strong body
+    # break). Do not force the reversal-shaped zone-edge M1 gate.
+    return ConfirmationPolicy(
+      m5_authoritative=True,
+      m1_required_on_retest=False,
+      allow_same_cycle_publish=True,
+      require_quote_inside_zone=False,
+      reaction_family=False,
+      metadata_valid=True,
+      reason_code="momentum_continuation",
+    )
   reaction_family = strategy in _REACTION_STRATEGIES or family in _REACTION_FAMILIES
   if not reaction_family:
     return ConfirmationPolicy(

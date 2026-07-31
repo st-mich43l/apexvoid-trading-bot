@@ -283,7 +283,6 @@ _STRATEGY_FAMILY = {
   "Range Edge Scalp": FAMILY_RANGE_REVERSION,
   "One-Sided Range Reaction": FAMILY_RANGE_REVERSION,
   "Fade Scalp": FAMILY_RANGE_REVERSION,
-  "Zone Reaction": FAMILY_RANGE_REVERSION,
   "Chop Zone Reaction": FAMILY_RANGE_REVERSION,
   "Trend Pullback": FAMILY_TREND_PULLBACK,
   "Break & Retest": FAMILY_BREAKOUT_RETEST,
@@ -294,6 +293,8 @@ _STRATEGY_FAMILY = {
   "Liquidity Sweep": FAMILY_LIQUIDITY_REVERSAL,
   "Snap-Back": FAMILY_LIQUIDITY_REVERSAL,
   "Key Level Reaction": FAMILY_KEY_LEVEL,
+  "Zone Reaction": FAMILY_SUPPLY_DEMAND,
+  # Legacy display names (kept for open plans / historical events):
   "Demand Zone Reaction": FAMILY_SUPPLY_DEMAND,
   "Supply Zone Reaction": FAMILY_SUPPLY_DEMAND,
   "Session Level Reaction": FAMILY_SESSION_LEVEL,

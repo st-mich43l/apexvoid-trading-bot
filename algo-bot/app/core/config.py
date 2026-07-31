@@ -409,7 +409,7 @@ class Settings(BaseSettings):
     validation_alias=AliasChoices("AUTO_TRADE_ZONE_SCALE_STEP_ATR"),
   )
   # Key Level / Session / Trendline reaction: L1 market + L2 deeper limit.
-  # Demand/Supply Zone Reaction intentionally do NOT use this route.
+  # Zone Reaction (demand/supply sides) intentionally do NOT use this route.
   auto_trade_reaction_market_fraction: float = Field(
     default=0.70,
     validation_alias=AliasChoices("AUTO_TRADE_REACTION_MARKET_FRACTION"),
@@ -615,7 +615,7 @@ class Settings(BaseSettings):
   # 2026-07-31: trend_pullback/snap_back/fade_scalp retrofitted onto the
   # shared evaluate_structural_reaction confirmation path and re-enabled
   # (see DetectorSettings for the full reasoning). box_breakout/
-  # break_retest/momentum_ride remain replay-only.
+  # break_retest remain replay-only. momentum_ride is live.
   auto_trade_box_breakout_enabled: bool = Field(
     default=False,
     validation_alias=AliasChoices("AUTO_TRADE_BOX_BREAKOUT_ENABLED"),
@@ -629,7 +629,7 @@ class Settings(BaseSettings):
     validation_alias=AliasChoices("AUTO_TRADE_BREAK_RETEST_ENABLED"),
   )
   auto_trade_momentum_ride_enabled: bool = Field(
-    default=False,
+    default=True,
     validation_alias=AliasChoices("AUTO_TRADE_MOMENTUM_RIDE_ENABLED"),
   )
   auto_trade_snap_back_enabled: bool = Field(

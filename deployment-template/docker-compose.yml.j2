@@ -123,6 +123,7 @@ services:
       AUTO_TRADE_KEY_LEVEL_REACTION_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_KEY_LEVEL_REACTION_ENABLED | default('true') | string | to_json }}
       AUTO_TRADE_DEMAND_REACTION_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_DEMAND_REACTION_ENABLED | default('true') | string | to_json }}
       AUTO_TRADE_SUPPLY_REACTION_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_SUPPLY_REACTION_ENABLED | default('true') | string | to_json }}
+      AUTO_TRADE_MOMENTUM_RIDE_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_MOMENTUM_RIDE_ENABLED | default('true') | string | to_json }}
       AUTO_TRADE_SESSION_LEVEL_REACTION_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_SESSION_LEVEL_REACTION_ENABLED | default('true') | string | to_json }}
       AUTO_TRADE_TRENDLINE_REACTION_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_TRENDLINE_REACTION_ENABLED | default('true') | string | to_json }}
       AUTO_TRADE_STRUCTURAL_REACTION_LOOKBACK_BARS: {{ apexvoid_trading_bot_env.AUTO_TRADE_STRUCTURAL_REACTION_LOOKBACK_BARS | default('3') | string | to_json }}
