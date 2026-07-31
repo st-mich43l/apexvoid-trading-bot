@@ -2234,9 +2234,20 @@ public sealed class TradePlanRuntime(
 
     if (allMissingAreSl && stillOpen == 0)
     {
-      var exitHint = reasons
+      var highestTp = HighestArchivedTargetId(plan, state);
+      var highestTpPips = highestTp is null
+        ? null
+        : ArchivedTargetPips(plan, state, highestTp);
+      // Broker deal lookup sometimes omits ExecutionPrice; for a full SL
+      // with no archived TP, the plan stop is the best exit estimate so
+      // Python /trade_stats still receives signed losing pips.
+      decimal? exitHint = reasons
         .Select(item => item.ExitPrice)
         .FirstOrDefault(price => price is not null);
+      if (exitHint is null && highestTp is null && plan.Stop.Price > 0)
+      {
+        exitHint = plan.Stop.Price;
+      }
       var next = AggregateState(
         state with
         {
@@ -2247,10 +2258,6 @@ public sealed class TradePlanRuntime(
         }
       );
       await PersistStateAsync(next, cancellationToken);
-      var highestTp = HighestArchivedTargetId(plan, state);
-      var highestTpPips = highestTp is null
-        ? null
-        : ArchivedTargetPips(plan, state, highestTp);
       int? realizedPips = null;
       if (highestTp is null && exitHint is decimal slExit)
       {
