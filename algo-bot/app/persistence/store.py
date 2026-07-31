@@ -24,6 +24,7 @@ manual_signals
 """
 
 import json
+import re
 import time
 import asyncpg
 import logging
@@ -697,10 +698,26 @@ async def _record_auto_trade_result(event: dict) -> None:
     ):
       return
     result_pips = event.get("group_realized_pips")
+    message = str(event.get("message") or "")
+    message_cf = message.casefold()
+    no_tp_archived = "no tp archived" in message_cf
+    highest_tp_archived = "highest tp archived" in message_cf
+    if result_pips is None and no_tp_archived:
+      # Loss path only: SL with zero TPs booked. Never invent a loss from a
+      # residual BE/SL exit after a booked TP.
+      losing_match = re.search(
+        r"losing\s+(-?\d+(?:\.\d+)?)\s*pips?",
+        message_cf,
+      )
+      if losing_match is not None:
+        try:
+          result_pips = float(losing_match.group(1))
+        except (TypeError, ValueError):
+          result_pips = None
     if (
       result_pips is None
       and event.get("target_pips") is not None
-      and "highest tp archived" in str(event.get("message") or "").casefold()
+      and highest_tp_archived
     ):
       # V7 reports the highest booked target explicitly. Preserve achieved
       # pips even when the residual later exits at BE/SL and would otherwise
@@ -714,30 +731,53 @@ async def _record_auto_trade_result(event: dict) -> None:
     if result_pips is None and event.get("type") in {
       "position_closed", "manual_closed",
     }:
-      exit_price = event.get("price")
-      if exit_price is None:
-        return
       fills = await db.fetch(
-        "SELECT symbol, direction, entry_price, volume "
+        "SELECT symbol, direction, entry_price, volume, stop_pips "
         "FROM auto_trade_fills WHERE group_id = $1",
         group_id,
       )
-      # Highest signed move from any fill entry to the exit — never a
-      # volume-weighted lot net, which dilutes booked TPs with BE residual.
-      peak = None
-      for row in fills:
-        if row["entry_price"] is None:
-          continue
-        move = float(exit_price) - float(row["entry_price"])
-        if str(row["direction"]).upper() == "SELL":
-          move = -move
-        pips = move / pip_for(row["symbol"] or "XAU")
-        peak = pips if peak is None else max(peak, pips)
-      if peak is None:
-        return
-      result_pips = peak
+      exit_price = event.get("price")
+      if exit_price is not None:
+        # Highest signed move from any fill entry to the exit — never a
+        # volume-weighted lot net, which dilutes booked TPs with BE residual.
+        peak = None
+        for row in fills:
+          if row["entry_price"] is None:
+            continue
+          move = float(exit_price) - float(row["entry_price"])
+          if str(row["direction"]).upper() == "SELL":
+            move = -move
+          pips = move / pip_for(row["symbol"] or "XAU")
+          peak = pips if peak is None else max(peak, pips)
+        if peak is not None:
+          if highest_tp_archived:
+            # Booked TP already happened — residual exit must not flip this
+            # into a loss. Keep positive/zero peak only as a last resort.
+            if peak >= 0:
+              result_pips = peak
+          elif no_tp_archived or not highest_tp_archived:
+            result_pips = peak
+      if result_pips is None and no_tp_archived:
+        # Full SL, no broker exit price: approximate from planned stop.
+        stops = [
+          float(row["stop_pips"])
+          for row in fills
+          if row["stop_pips"] is not None and float(row["stop_pips"]) > 0
+        ]
+        if stops:
+          result_pips = -sum(stops) / len(stops)
     if result_pips is None:
       return
+    # Loss only for SL with no TP archived. A residual BE/SL after a booked
+    # TP must never flip the trade into a loser in /trade_stats.
+    if float(result_pips) < 0 and highest_tp_archived:
+      if event.get("target_pips") is not None:
+        try:
+          result_pips = abs(float(event["target_pips"]))
+        except (TypeError, ValueError):
+          return
+      else:
+        return
     await db.execute(
       """
       INSERT INTO auto_trade_results (

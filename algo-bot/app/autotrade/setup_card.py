@@ -141,17 +141,24 @@ def apply_forming_card_stop(text: str, stop_price: float, *, digits: int = 2) ->
   plain_stop = f"{stop_price:.{digits}f}"
   lines = text.splitlines()
   stop_line = f"• <b>Stop:</b> <b>{stop_text}</b>"
+  has_stop = any(
+    line.strip().startswith("• <b>Stop:</b>") for line in lines
+  )
   inserted = False
   out: list[str] = []
   for line in lines:
     stripped = line.strip()
     if stripped.startswith("• <b>Stop:</b>"):
-      out.append(stop_line)
-      inserted = True
+      # Replace every existing Stop line with one canonical value; skip
+      # duplicates so Trade area never shows Stop twice.
+      if not inserted:
+        out.append(stop_line)
+        inserted = True
       continue
     out.append(line)
     if (
-      not inserted
+      not has_stop
+      and not inserted
       and stripped.startswith("• <b>Key level:</b>")
     ):
       out.append(stop_line)

@@ -514,15 +514,46 @@ _PLAN_CLOSED_AT_RE = re.compile(
 )
 
 
+def _resolve_no_tp_loss_pips(event: dict, cleaned: str) -> float | None:
+  """Net pips for an SL close that never archived a TP."""
+  losing = _event_float(event, "group_realized_pips", "leg_realized_pips")
+  if losing is None and cleaned:
+    losing_match = _LOSING_PIPS_RE.search(cleaned)
+    if losing_match is not None:
+      try:
+        losing = float(losing_match.group("pips"))
+      except (TypeError, ValueError):
+        losing = None
+  if losing is not None:
+    return losing
+  # Broker deal gaps often omit group_realized_pips + exit price. Fall back
+  # to planned stop distance so the owner still sees a net loss.
+  stop_pips = _event_float(event, "stop_pips")
+  if stop_pips is not None and stop_pips > 0:
+    return -abs(stop_pips)
+  exit_price = _event_float(event, "price")
+  entry = _event_float(event, "entry_price", "weighted_entry", "fill_price")
+  stop_loss = _event_float(event, "stop_loss", "stop_price", "new_stop")
+  direction = str(event.get("direction") or "").upper()
+  ref_exit = exit_price if exit_price is not None else stop_loss
+  if entry is None or ref_exit is None or not direction:
+    return None
+  try:
+    from app.core.symbols import pip_for
+    move = float(ref_exit) - float(entry)
+    if direction == "SELL":
+      move = -move
+    return move / pip_for(str(event.get("symbol") or "XAU"))
+  except Exception:
+    return None
+
+
 def _format_position_closed(event: dict, message: str) -> str:
   seq = _trade_seq_prefix(event)
   lines = [
     "🤖 <b>ApexVoid Algo</b>",
     f"🏁 {seq}<b>POSITION CLOSED</b>",
   ]
-  reason_label = _CLOSE_REASON_LABELS.get(str(event.get("reason_code") or ""))
-  if reason_label:
-    lines.append(reason_label)
   cleaned = _MONEY_RE.sub("", message).strip(" ·") if message else ""
   highest = _HIGHEST_TP_ARCHIVED_RE.search(cleaned) if cleaned else None
   no_tp = _NO_TP_ARCHIVED_RE.search(cleaned) if cleaned else None
@@ -542,15 +573,9 @@ def _format_position_closed(event: dict, message: str) -> str:
     if at is not None:
       lines.append(f"@ <b>{escape(at.group('price'))}</b>")
   elif no_tp is not None:
-    lines.append("Highest TP archived: <b>none</b>")
-    losing = _event_float(event, "group_realized_pips", "leg_realized_pips")
-    if losing is None and cleaned:
-      losing_match = _LOSING_PIPS_RE.search(cleaned)
-      if losing_match is not None:
-        try:
-          losing = float(losing_match.group("pips"))
-        except (TypeError, ValueError):
-          losing = None
+    # Full SL before any TP — say SL, never the ambiguous "broker SL/TP".
+    lines.append("🛡 <b>SL</b>")
+    losing = _resolve_no_tp_loss_pips(event, cleaned)
     if losing is not None and losing < 0:
       lines.append(f"❌ Losing: <b>{format_signed_pips(losing)} pips</b>")
     elif losing is not None and losing == 0:
@@ -558,8 +583,19 @@ def _format_position_closed(event: dict, message: str) -> str:
     at = _PLAN_CLOSED_AT_RE.search(cleaned)
     if at is not None:
       lines.append(f"@ <b>{escape(at.group('price'))}</b>")
-  elif cleaned and " lot=" not in cleaned.lower():
-    lines.extend(["", escape(cleaned)])
+  else:
+    reason = str(event.get("reason_code") or "")
+    losing = _resolve_no_tp_loss_pips(event, cleaned)
+    if reason == "stop_loss_or_take_profit" and losing is not None and losing < 0:
+      # One-shot SL without the V7 "no TP archived" phrasing.
+      lines.append("🛡 <b>SL</b>")
+      lines.append(f"❌ Losing: <b>{format_signed_pips(losing)} pips</b>")
+    else:
+      reason_label = _CLOSE_REASON_LABELS.get(reason)
+      if reason_label:
+        lines.append(reason_label)
+      if cleaned and " lot=" not in cleaned.lower():
+        lines.extend(["", escape(cleaned)])
   # Earlier TP legs on this group each already posted their own card with
   # their own leg pips (see _format_take_profit) - this is the only place
   # that recaps the group's final blended result, so a close that followed
@@ -569,15 +605,6 @@ def _format_position_closed(event: dict, message: str) -> str:
     group_realized = _event_float(event, "group_realized_pips")
     if group_realized is not None:
       lines.append(f"Total: <b>{format_signed_pips(group_realized)} pips</b>")
-  elif (
-    no_tp is None
-    and highest is None
-    and str(event.get("reason_code") or "") == "stop_loss_or_take_profit"
-  ):
-    # One-shot SL before any TP: surface the loss instead of a bare close.
-    group_realized = _event_float(event, "group_realized_pips", "leg_realized_pips")
-    if group_realized is not None and group_realized < 0:
-      lines.append(f"❌ Losing: <b>{format_signed_pips(group_realized)} pips</b>")
   return "\n".join(lines)
 
 
@@ -677,9 +704,6 @@ def _format_tp_booked(event: dict, message: str) -> str | None:
     )
   if plan_closed:
     lines.append("🏁 <b>PLAN CLOSED</b> · all targets booked")
-  attribution = _attribution_line(event)
-  if attribution:
-    lines.append(attribution)
   # Fall back to the cleaned engine line when we could not parse a target.
   if not target and cleaned and not plan_closed:
     lines.extend(["", escape(cleaned)])
@@ -719,9 +743,6 @@ def _format_sl_moved(event: dict, message: str) -> str | None:
     lines.append(f"📎 {escape(details)}")
   elif cleaned and price is None:
     lines.extend(["", escape(cleaned)])
-  attribution = _attribution_line(event)
-  if attribution:
-    lines.append(attribution)
   return "\n".join(lines)
 
 
@@ -890,6 +911,500 @@ def _group_message_key(profile: DeliveryProfile, group_id: str) -> str:
 def tp_message_key(profile: DeliveryProfile, position_id: int) -> str:
   prefix = "auto_trade:tp_msg" if profile == "internal" else "auto_trade:public_tp_msg"
   return f"{prefix}:{position_id}"
+
+
+def _manage_msg_key(match_id: str) -> str:
+  return f"auto_trade:manage_msg:{match_id}"
+
+
+def _manage_text_key(match_id: str) -> str:
+  return f"auto_trade:manage_text:{match_id}"
+
+
+async def _save_manage_message(
+  client,
+  match_id: str,
+  *,
+  message_id: int,
+  text: str,
+) -> None:
+  pipe = client.pipeline()
+  pipe.set(_manage_msg_key(match_id), str(int(message_id)), ex=_TRADE_MESSAGE_TTL)
+  pipe.set(_manage_text_key(match_id), text, ex=_TRADE_MESSAGE_TTL)
+  await pipe.execute()
+
+
+async def _load_manage_message(
+  client,
+  match_id: str,
+) -> tuple[int | None, str | None]:
+  raw_id, raw_text = await client.mget(
+    _manage_msg_key(match_id),
+    _manage_text_key(match_id),
+  )
+  message_id: int | None = None
+  if raw_id:
+    try:
+      message_id = int(raw_id)
+    except (TypeError, ValueError):
+      message_id = None
+  text = None if raw_text is None else (
+    raw_text.decode() if isinstance(raw_text, bytes) else str(raw_text)
+  )
+  if message_id is not None and message_id <= 0:
+    message_id = None
+  return message_id, text
+
+
+def _split_manage_fill_and_tps(text: str) -> tuple[str, list[str]]:
+  """Split stored manage body into fill header + accumulated TP/close lines."""
+  fill_lines: list[str] = []
+  append_lines: list[str] = []
+  for line in text.splitlines():
+    if line.startswith("🎯 ·") or line.startswith("🏁 ·"):
+      append_lines.append(line)
+    elif append_lines:
+      # Keep stray lines after TP/close with the append block.
+      append_lines.append(line)
+    else:
+      fill_lines.append(line)
+  return "\n".join(fill_lines).rstrip(), append_lines
+
+
+def _format_order_filled_manage_body(event: dict) -> str:
+  cleaned = _clean_message(event.get("message", "")) or "order filled"
+  return "\n".join([
+    "🤖 <b>ApexVoid Algo</b>",
+    "✅ <b>ORDER FILLED</b>",
+    "",
+    escape(cleaned),
+  ])
+
+
+def _format_tp_compact_line(event: dict, message: str) -> str | None:
+  """Single-line TP archive for the manage reply.
+
+  Exact owner format::
+    🎯 · TP1 · 💰 Fill: 4029.98 · ✅ Achieved: +41.0 pips
+  """
+  cleaned = _clean_message(message)
+  match = _TP_BOOKED_RE.match(cleaned)
+  target = match.group("target").upper() if match else None
+  if target is None:
+    tp_match = _TP_RE.match(cleaned)
+    if tp_match is not None:
+      target = tp_match.group(1).upper()
+      if target == "FULL TP":
+        target = "FULL"
+  if not target:
+    # Final target hit closes as position_closed (no separate tp_booked).
+    highest = _HIGHEST_TP_ARCHIVED_RE.search(cleaned)
+    if highest is not None:
+      target = highest.group("target").upper()
+  if not target:
+    return None
+  parts = [f"🎯 · {escape(target)}"]
+  price = event.get("price")
+  try:
+    if price is not None:
+      parts.append(f"💰 Fill: {escape(_format_event_price(str(price)))}")
+  except Exception:
+    pass
+  archived_pips = _event_float(event, "target_pips", "leg_realized_pips")
+  if archived_pips is None and match is None:
+    tp_match = _TP_RE.match(cleaned)
+    if tp_match is not None:
+      try:
+        archived_pips = float(tp_match.group(2))
+      except (TypeError, ValueError):
+        archived_pips = None
+  if archived_pips is None:
+    archived_pips = _archived_pips_from_close_message(cleaned)
+  if archived_pips is not None:
+    parts.append(
+      f"✅ Achieved: {format_signed_pips(abs(archived_pips))} pips"
+    )
+  return " · ".join(parts)
+
+
+_ARCHIVED_PIPS_SUFFIX_RE = re.compile(
+  r"(?i)highest\s+TP\s+archived\s+TP\d+"
+  r"(?:\s*·\s*(?P<pips>[+-]?\d+(?:\.\d+)?)\s*pips?)?"
+)
+
+
+def _archived_pips_from_close_message(cleaned: str) -> float | None:
+  match = _ARCHIVED_PIPS_SUFFIX_RE.search(cleaned)
+  if match is None or match.group("pips") is None:
+    return None
+  try:
+    return float(match.group("pips"))
+  except (TypeError, ValueError):
+    return None
+
+
+def _manage_has_tp_target(text: str, target: str) -> bool:
+  """True when manage body already has a compact line for this TP level."""
+  needle = target.upper()
+  for line in text.splitlines():
+    if not line.startswith("🎯 ·"):
+      continue
+    # Matches both "🎯 · TP1 · …" and legacy "🎯 · <b>TP1</b> · …".
+    if (
+      f"· {needle} ·" in line
+      or f"· <b>{needle}</b> ·" in line
+      or line.rstrip().endswith(needle)
+      or line.rstrip().endswith(f"<b>{needle}</b>")
+    ):
+      return True
+  return False
+
+
+def _format_position_closed_compact_line(event: dict, message: str) -> str:
+  """Close trailer for the manage reply — TP archive lives on 🎯 lines."""
+  parts = ["🏁 · POSITION CLOSED"]
+  cleaned = _MONEY_RE.sub("", message).strip(" ·") if message else ""
+  highest = _HIGHEST_TP_ARCHIVED_RE.search(cleaned) if cleaned else None
+  no_tp = _NO_TP_ARCHIVED_RE.search(cleaned) if cleaned else None
+  if highest is not None:
+    # Highest level is already on a 🎯 · TPn line; only add exit price here.
+    at = _PLAN_CLOSED_AT_RE.search(cleaned)
+    if at is not None:
+      parts.append(f"@ {escape(at.group('price'))}")
+  elif no_tp is not None:
+    parts.append("🛡 SL")
+    losing = _resolve_no_tp_loss_pips(event, cleaned)
+    if losing is not None and losing < 0:
+      parts.append(f"❌ Losing: {format_signed_pips(losing)} pips")
+    elif losing is not None and losing == 0:
+      parts.append("➖ Result: 0 pips (BE)")
+    at = _PLAN_CLOSED_AT_RE.search(cleaned)
+    if at is not None:
+      parts.append(f"@ {escape(at.group('price'))}")
+  else:
+    reason_label = _CLOSE_REASON_LABELS.get(str(event.get("reason_code") or ""))
+    if reason_label and reason_label != _CLOSE_REASON_LABELS["stop_loss_or_take_profit"]:
+      parts.append(reason_label)
+    elif str(event.get("reason_code") or "") == "stop_loss_or_take_profit":
+      parts.append("🛡 SL")
+    group_realized = _resolve_no_tp_loss_pips(event, cleaned)
+    if group_realized is not None and group_realized < 0:
+      parts.append(f"❌ Losing: {format_signed_pips(group_realized)} pips")
+    elif group_realized is not None:
+      parts.append(f"Total: {format_signed_pips(group_realized)} pips")
+  return " · ".join(parts)
+
+
+def _format_be_trail_head_status(event: dict, message: str) -> tuple[str, str, float | None]:
+  """Short forming-card head line + optional stop price for BE/trail."""
+  cleaned = _clean_message(message)
+  match = _SL_MOVED_RE.match(cleaned)
+  price_text = None
+  details = ""
+  if match is not None:
+    price_text = match.group("price")
+    details = str(match.group("details") or "").strip()
+  price_val = _event_float(event, "price", "stop_price", "new_stop")
+  if price_text is None and price_val is not None:
+    price_text = _format_event_price(str(price_val))
+  if price_val is None and price_text is not None:
+    try:
+      price_val = float(str(price_text).replace(",", ""))
+    except (TypeError, ValueError):
+      price_val = None
+  if price_val is None:
+    stop_match = _STOP_RE.match(cleaned)
+    if stop_match is not None:
+      try:
+        price_val = float(str(stop_match.group(1)).replace(",", ""))
+        price_text = _format_event_price(str(price_val))
+      except (TypeError, ValueError):
+        pass
+  upper = cleaned.upper()
+  if "TO BE" in upper or "BREAK" in upper or upper.startswith("GROUP SL MOVED TO BE"):
+    kind = "BE"
+    icon = "🔐"
+    state = "sl_moved"
+  elif "TRAIL" in upper or "trail" in details.lower():
+    kind = "Trail"
+    icon = "🛰️"
+    state = "sl_moved"
+  else:
+    kind = "Stop"
+    icon = "🛡"
+    state = "sl_moved"
+  if price_text:
+    status = f"{icon} <b>{escape(kind)}</b> · {escape(str(price_text))}"
+  else:
+    status = f"{icon} <b>{escape(kind)}</b>"
+  return status, state, price_val
+
+
+async def _deliver_compact_order_filled(
+  client,
+  event: dict,
+  *,
+  match_id: str,
+  chat_id: int,
+  send,
+) -> bool:
+  status_message = _clean_message(event.get("message", "")) or "order filled"
+  status_line = f"✅ <b>ORDER FILLED</b> · {escape(status_message)}"
+  await edit_forming_card_status(
+    client,
+    match_id,
+    status_line,
+    state="order_filled",
+    reason_code=str(event.get("reason_code") or "order_filled"),
+    event_id=str(event.get("lifecycle_id") or "") or None,
+    edit_fn=edit_scanner_message_text,
+  )
+  body = _format_order_filled_manage_body(event)
+  manage_id, manage_text = await _load_manage_message(client, match_id)
+  if manage_id is not None and manage_text:
+    _, tp_lines = _split_manage_fill_and_tps(manage_text)
+    new_text = body
+    if tp_lines:
+      new_text = f"{body}\n" + "\n".join(tp_lines)
+    try:
+      await edit_scanner_message_text(chat_id, manage_id, new_text)
+      await _save_manage_message(
+        client, match_id, message_id=manage_id, text=new_text,
+      )
+      await _remember_trade_message(client, event, "internal", manage_id)
+      return True
+    except Exception:
+      log.exception(
+        "manage fill edit failed setup_id=%s message_id=%s",
+        match_id,
+        manage_id,
+      )
+  reply_to, reason = await _resolve_reply_message_id(client, event, "internal")
+  if reply_to is None:
+    log.info(
+      "Auto-trade manage reply unavailable for %s: %s; sending standalone",
+      match_id,
+      reason,
+    )
+  try:
+    sent = await send(body, reply_to=reply_to, chat_id=chat_id)
+  except TelegramBadRequest as error:
+    if reply_to is not None and _is_bad_reply_target(error):
+      log.info(
+        "Auto-trade manage reply rejected for %s: %s; card already updated",
+        match_id,
+        error,
+      )
+      return True
+    raise
+  message_id = int(sent.message_id)
+  await _save_manage_message(
+    client, match_id, message_id=message_id, text=body,
+  )
+  await _remember_trade_message(client, event, "internal", message_id)
+  return True
+
+
+async def _deliver_compact_tp_booked(
+  client,
+  event: dict,
+  *,
+  match_id: str,
+  chat_id: int,
+  send,
+) -> bool | None:
+  message = str(event.get("message") or "")
+  line = _format_tp_compact_line(event, message)
+  if line is None:
+    return None
+  manage_id, manage_text = await _load_manage_message(client, match_id)
+  if manage_id is not None and manage_text:
+    if line in manage_text:
+      return True
+    new_text = f"{manage_text.rstrip()}\n{line}"
+    try:
+      await edit_scanner_message_text(chat_id, manage_id, new_text)
+      await _save_manage_message(
+        client, match_id, message_id=manage_id, text=new_text,
+      )
+      return True
+    except Exception:
+      log.exception(
+        "manage TP edit failed setup_id=%s message_id=%s",
+        match_id,
+        manage_id,
+      )
+  stub = "\n".join([
+    "🤖 <b>ApexVoid Algo</b>",
+    "✅ <b>ORDER FILLED</b>",
+    "",
+    line,
+  ])
+  reply_to, _ = await _resolve_reply_message_id(client, event, "internal")
+  try:
+    sent = await send(stub, reply_to=reply_to, chat_id=chat_id)
+  except TelegramBadRequest as error:
+    if reply_to is not None and _is_bad_reply_target(error):
+      log.info(
+        "Auto-trade TP fallback reply rejected for %s: %s; skipping",
+        match_id,
+        error,
+      )
+      return True
+    raise
+  message_id = int(sent.message_id)
+  await _save_manage_message(
+    client, match_id, message_id=message_id, text=stub,
+  )
+  return True
+
+
+async def _deliver_compact_position_closed(
+  client,
+  event: dict,
+  *,
+  match_id: str,
+  chat_id: int,
+  send,
+) -> bool:
+  """Append close into the manage reply under the forming card.
+
+  Final target hits emit position_closed without a separate tp_booked, so
+  this path also appends the archived TP compact line when missing.
+  """
+  message = str(event.get("message") or "")
+  close_line = _format_position_closed_compact_line(event, message)
+  tp_line = _format_tp_compact_line(event, message)
+
+  def _compose(base: str) -> str:
+    text = base.rstrip()
+    if tp_line:
+      highest = _HIGHEST_TP_ARCHIVED_RE.search(message)
+      target = highest.group("target").upper() if highest else None
+      if target and not _manage_has_tp_target(text, target):
+        text = f"{text}\n{tp_line}"
+    if "🏁 ·" not in text or "POSITION CLOSED" not in text:
+      text = f"{text}\n{close_line}"
+    return text
+
+  manage_id, manage_text = await _load_manage_message(client, match_id)
+  if manage_id is not None and manage_text:
+    if "🏁 ·" in manage_text and "POSITION CLOSED" in manage_text:
+      return True
+    new_text = _compose(manage_text)
+    try:
+      await edit_scanner_message_text(chat_id, manage_id, new_text)
+      await _save_manage_message(
+        client, match_id, message_id=manage_id, text=new_text,
+      )
+      return True
+    except Exception:
+      log.exception(
+        "manage close edit failed setup_id=%s message_id=%s",
+        match_id,
+        manage_id,
+      )
+  stub = _compose("\n".join([
+    "🤖 <b>ApexVoid Algo</b>",
+    "✅ <b>ORDER FILLED</b>",
+    "",
+  ]))
+  reply_to, _ = await _resolve_reply_message_id(client, event, "internal")
+  try:
+    sent = await send(stub, reply_to=reply_to, chat_id=chat_id)
+  except TelegramBadRequest as error:
+    if reply_to is not None and _is_bad_reply_target(error):
+      log.info(
+        "Auto-trade close fallback reply rejected for %s: %s; skipping",
+        match_id,
+        error,
+      )
+      return True
+    raise
+  message_id = int(sent.message_id)
+  await _save_manage_message(
+    client, match_id, message_id=message_id, text=stub,
+  )
+  return True
+
+
+async def _deliver_compact_be_trail(
+  client,
+  event: dict,
+  *,
+  match_id: str,
+) -> bool:
+  """Update forming-card head + Stop only; never send a BE/trail reply."""
+  event_type = str(event.get("type") or "")
+  message = str(event.get("message") or "")
+  status_line, state, price_val = _format_be_trail_head_status(event, message)
+  if price_val is None:
+    price_val = _event_float(event, "new_stop", "stop_price", "price")
+  edit_result = await edit_forming_card_status(
+    client,
+    match_id,
+    status_line,
+    state=state,
+    reason_code=str(event.get("reason_code") or event_type),
+    event_id=str(event.get("lifecycle_id") or "") or None,
+    edit_fn=edit_scanner_message_text,
+  )
+  if price_val is not None:
+    try:
+      await edit_forming_card_stop(
+        client,
+        match_id,
+        float(price_val),
+        digits=int(getattr(settings, "auto_trade_xau_price_digits", 2)),
+        edit_fn=edit_scanner_message_text,
+      )
+    except Exception:
+      log.exception(
+        "forming card stop patch failed on %s setup_id=%s",
+        event_type,
+        match_id,
+      )
+  if edit_result is False:
+    log.info(
+      "BE/trail head update skipped setup_id=%s type=%s (no reply)",
+      match_id,
+      event_type,
+    )
+  return True
+
+
+async def _deliver_compact_manage(
+  client,
+  event: dict,
+  *,
+  chat_id: int,
+  send,
+) -> bool | None:
+  """Owner-chat compact path for fill / TP / BE-trail lifecycle events.
+
+  Returns True/False when handled; None to fall through to generic delivery.
+  """
+  event_type = str(event.get("type") or "")
+  match_id = _event_match_id(event)
+  if not match_id:
+    return None
+  if event_type == "order_filled":
+    return await _deliver_compact_order_filled(
+      client, event, match_id=match_id, chat_id=chat_id, send=send,
+    )
+  if event_type in {"tp_booked", "take_profit"}:
+    return await _deliver_compact_tp_booked(
+      client, event, match_id=match_id, chat_id=chat_id, send=send,
+    )
+  if event_type == "position_closed":
+    return await _deliver_compact_position_closed(
+      client, event, match_id=match_id, chat_id=chat_id, send=send,
+    )
+  if event_type in {"sl_moved", "stop_moved"}:
+    return await _deliver_compact_be_trail(
+      client, event, match_id=match_id,
+    )
+  return None
 
 
 def _full_tp_result_key(profile: DeliveryProfile, group_id: str) -> str:
@@ -1235,66 +1750,22 @@ async def _deliver_auto_trade_event(
       )
       if not claimed:
         return False
+  send = send or send_scanner_with_retry
+  if profile == "internal":
+    compact = await _deliver_compact_manage(
+      client,
+      event,
+      chat_id=chat_id,
+      send=send,
+    )
+    if compact is not None:
+      return compact
   text = render_auto_trade_event(event, profile=profile)
   if not text:
     return False
-  send = send or send_scanner_with_retry
   position_id = event.get("position_id")
   match_id = _event_match_id(event)
   root_edited = False
-  # Keep the root setup card status in sync for fills/TP/SL so the owner
-  # always sees progress on the original message, then thread the detail
-  # as a reply (never a duplicate standalone when the root already has it).
-  if (
-    profile == "internal"
-    and match_id
-    and event_type in {"order_filled", "tp_booked", "sl_moved"}
-  ):
-    status_message = _clean_message(event.get("message", "")) or event_type
-    if event_type == "order_filled":
-      status_line = f"✅ <b>ORDER FILLED</b> · {escape(status_message)}"
-      status_state = "order_filled"
-    elif event_type == "tp_booked":
-      status_line = f"🎯 <b>TP COMPLETED</b> · {escape(status_message)}"
-      status_state = "tp_booked"
-    else:
-      status_line = f"🛡 <b>GROUP SL MOVED</b> · {escape(status_message)}"
-      status_state = "sl_moved"
-    edit_result = await edit_forming_card_status(
-      client,
-      match_id,
-      status_line,
-      state=status_state,
-      reason_code=str(event.get("reason_code") or event_type),
-      event_id=str(event.get("lifecycle_id") or "") or None,
-      edit_fn=edit_scanner_message_text,
-    )
-    root_edited = edit_result is not False
-  # Trailing / BE stop moves: patch the root Stop line, then reply-thread
-  # the compact "move SL to …" notify onto the same forming card.
-  if profile == "internal" and match_id and event_type == "stop_moved":
-    new_sl = _event_float(event, "new_stop", "stop_price", "price")
-    if new_sl is None:
-      stop_match = _STOP_RE.match(_clean_message(event.get("message", "")))
-      if stop_match is not None:
-        try:
-          new_sl = float(str(stop_match.group(1)).replace(",", ""))
-        except (TypeError, ValueError):
-          new_sl = None
-    if new_sl is not None:
-      try:
-        await edit_forming_card_stop(
-          client,
-          match_id,
-          float(new_sl),
-          digits=int(getattr(settings, "auto_trade_xau_price_digits", 2)),
-          edit_fn=edit_scanner_message_text,
-        )
-      except Exception:
-        log.exception(
-          "forming card stop patch failed on stop_moved setup_id=%s",
-          match_id,
-        )
   reply_to, reason = await _resolve_reply_message_id(client, event, profile)
   if reply_to is None and (
     event_type in _FORMING_REPLY_TYPES
@@ -1302,32 +1773,22 @@ async def _deliver_auto_trade_event(
     or (event_type != "opened" and position_id is not None)
   ):
     log.info(
-      "Auto-trade reply unavailable for %s (%s): %s; %s",
+      "Auto-trade reply unavailable for %s (%s): %s; sending standalone",
       match_id or position_id or event_type,
       profile,
       reason,
-      "card already updated — skipping standalone"
-      if root_edited
-      else "sending standalone",
     )
-    if root_edited and event_type in {"order_filled", "tp_booked", "sl_moved"}:
-      return True
   try:
     sent = await send(text, reply_to=reply_to, chat_id=chat_id)
   except TelegramBadRequest as error:
     if reply_to is None or not _is_bad_reply_target(error):
       raise
     log.info(
-      "Auto-trade reply rejected for %s (%s): %s; %s",
+      "Auto-trade reply rejected for %s (%s): %s; retrying standalone",
       match_id or position_id or event_type,
       profile,
       error,
-      "card already updated — skipping standalone"
-      if root_edited
-      else "retrying standalone",
     )
-    if root_edited and event_type in {"order_filled", "tp_booked", "sl_moved"}:
-      return True
     sent = await send(text, reply_to=None, chat_id=chat_id)
   if event_type in {"opened", "add", "order_filled"}:
     await _remember_trade_message(
