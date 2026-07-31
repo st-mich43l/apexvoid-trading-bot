@@ -1925,12 +1925,17 @@ async def auto_trade_status_text() -> str:
     "🤖 <b>Algo bot</b>",
     f"{escape(mode)} · <b>{state}</b> · {escape(profile)}",
     f"Open <b>{position_count}</b> · groups <b>{group_count}</b> · today <b>{daily}</b>",
-    f"{escape(selected_text)} · {escape(execution_state)}",
   ]
+  today_line = await _today_algo_scorecard_line()
+  if today_line:
+    lines.append(today_line)
+  lines.append(f"{escape(selected_text)} · {escape(execution_state)}")
   health_bits = [f"Config <b>{escape(config_state)}</b>", f"ready <b>{ready}</b>"]
   if regime:
     health_bits.insert(0, f"Regime <b>{escape(regime)}</b>")
   lines.append(" · ".join(health_bits))
+  open_book = await _open_v7_book_lines(client)
+  lines.extend(open_book)
   route_line = _compact_route_line(last_route)
   if route_line:
     lines.append(f"Route: {escape(route_line)}")
@@ -1952,9 +1957,102 @@ async def auto_trade_status_text() -> str:
       lines.append("⚠️ Ready consumer health unknown")
   text = "\n".join(lines)
   # Soft budget for the owner DM; hard clip stays in the handler at 4000.
-  if len(text) > 1200:
-    text = text[:1190] + "\n…"
+  if len(text) > 1500:
+    text = text[:1490] + "\n…"
   return text
+
+
+async def _today_algo_scorecard_line() -> str | None:
+  """Today's algo_auto W/L/net from the same records as /trade_stats."""
+  try:
+    from app.persistence.store import get_pips_records
+    from app.signals.parsing import _stats_range
+    from app.signals.reports import _signed_p, build_stats
+
+    start_ts, end_ts = _stats_range("today")
+    records = await get_pips_records(start_ts, end_ts)
+    stats = build_stats(
+      records,
+      [],
+      settings.seq_reset_tz,
+      settings.session_asia_start,
+      settings.session_london_start,
+      settings.session_ny_start,
+    )
+  except Exception:
+    log.exception("algo_status today scorecard failed")
+    return None
+  algo = (stats.get("by_stream") or {}).get("algo_auto") or {}
+  trades = int(algo.get("trades") or 0)
+  if trades <= 0:
+    return None
+  wins = int(algo.get("wins") or 0)
+  losses = int(algo.get("losses") or 0)
+  net = algo.get("total_pips") or 0
+  return (
+    f"Today · <b>{wins}W/{losses}L</b> · net <b>{escape(_signed_p(net))}</b>"
+  )
+
+
+async def _open_v7_book_lines(client, *, limit: int = 3) -> list[str]:
+  """Compact open V7 plan lines: direction · setup · stage."""
+  try:
+    from app.autotrade.active_exposure import load_active_exposures
+    from app.autotrade.trade_plan_stream import read_trade_plan
+  except Exception:
+    log.exception("algo_status open-book import failed")
+    return []
+  try:
+    exposures = await load_active_exposures(client)
+  except Exception:
+    log.exception("algo_status open-book load failed")
+    return []
+  v7 = [item for item in exposures if item.source == "v7_plan" and item.plan_id]
+  if not v7:
+    return []
+  lines: list[str] = []
+  for item in v7[: max(1, limit)]:
+    setup = "plan"
+    stage_label = "open"
+    try:
+      plan = await read_trade_plan(client, str(item.plan_id))
+      if plan is not None and plan.analysis.strategy:
+        setup = str(plan.analysis.strategy)
+    except Exception:
+      log.exception(
+        "algo_status open-book plan read failed plan_id=%s",
+        item.plan_id,
+      )
+    try:
+      raw = await client.get(f"execution:plan_runtime:{item.plan_id}")
+      if raw:
+        payload = json.loads(
+          raw.decode() if isinstance(raw, bytes) else str(raw)
+        )
+        if isinstance(payload, dict):
+          group_stage = str(
+            payload.get("group_stage") or payload.get("GroupStage") or ""
+          )
+          stage = str(payload.get("stage") or payload.get("Stage") or "")
+          stage_label = (group_stage or stage or "open").replace("_", " ")
+          be = payload.get("break_even_applied")
+          if be is None:
+            be = payload.get("BreakEvenApplied")
+          if be is True:
+            stage_label = f"{stage_label} · BE".strip(" ·")
+    except Exception:
+      log.exception(
+        "algo_status open-book runtime read failed plan_id=%s",
+        item.plan_id,
+      )
+    lines.append(
+      f"Open: <b>{escape(item.direction)}</b> · "
+      f"{escape(setup)} · {escape(stage_label)}"
+    )
+  extra = len(v7) - limit
+  if extra > 0:
+    lines.append(f"+{extra} more")
+  return lines
 
 
 # preflight_reason_code lingers as whatever the last preflight-stage event
