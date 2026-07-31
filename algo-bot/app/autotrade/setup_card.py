@@ -857,12 +857,14 @@ async def kill_setup_card(
   if not should_delete_root_on_terminal():
     try:
       await edit_fn(card["chat_id"], card["message_id"], terminal)
-    except TelegramBadRequest:
-      log.info(
-        "forming card terminal edit failed setup_id=%s reason=%s",
-        setup_id, reason_code,
-        exc_info=True,
-      )
+    except TelegramBadRequest as exc:
+      # Already terminal with the same text — treat as success (no traceback).
+      if "message is not modified" not in str(exc).casefold():
+        log.info(
+          "forming card terminal edit failed setup_id=%s reason=%s",
+          setup_id, reason_code,
+          exc_info=True,
+        )
     # Keep forming_message + telegram_root mapping for reply threading.
     await save_forming_card(
       client,
@@ -889,10 +891,11 @@ async def kill_setup_card(
     )
     try:
       await edit_fn(card["chat_id"], card["message_id"], terminal)
-    except TelegramBadRequest:
-      log.exception(
-        "forming card terminal edit also failed setup_id=%s", setup_id,
-      )
+    except TelegramBadRequest as exc:
+      if "message is not modified" not in str(exc).casefold():
+        log.exception(
+          "forming card terminal edit also failed setup_id=%s", setup_id,
+        )
   await clear_forming_card(client, setup_id)
 
 
