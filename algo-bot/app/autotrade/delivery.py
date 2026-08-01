@@ -26,7 +26,6 @@ from app.bot.client import (
 )
 from app.autotrade.setup_card import (
   edit_forming_card_status,
-  edit_forming_card_stop,
   forming_message_key as _setup_card_forming_message_key,
   kill_setup_card,
   load_forming_card,
@@ -966,6 +965,12 @@ def _split_manage_fill_and_tps(text: str) -> tuple[str, list[str]]:
     return (
       stripped.startswith("🎯")
       or stripped.startswith("🏁")
+      or stripped.startswith("🔐")
+      or stripped.startswith("🛰️")
+      or (
+        stripped.startswith("🛡")
+        and ("<b>Stop</b>" in stripped or stripped.startswith("🛡 <b>Stop</b>"))
+      )
       or line.startswith("🎯 ·")
       or line.startswith("🏁 ·")
     )
@@ -985,16 +990,16 @@ def _format_order_filled_manage_body(event: dict) -> str:
   cleaned = _clean_message(event.get("message", "")) or "order filled"
   return "\n".join([
     "🤖 <b>ApexVoid Algo</b>",
-    "• ✅ <b>ORDER FILLED</b>",
+    "✅ <b>ORDER FILLED</b>",
     f"• {escape(cleaned)}",
   ])
 
 
 def _format_tp_compact_line(event: dict, message: str) -> str | None:
-  """One bullet row per TP; stack a new row only when another TP hits.
+  """One row per TP; stack a new row only when another TP hits.
 
   Exact owner format::
-    • 🎯 TP1 · 💰 Fill: 4029.98 · ✅ Achieved: +41.0 pips
+    🎯 TP1 · 💰 Fill: 4029.98 · ✅ Achieved: +41.0 pips
   """
   cleaned = _clean_message(message)
   match = _TP_BOOKED_RE.match(cleaned)
@@ -1033,7 +1038,7 @@ def _format_tp_compact_line(event: dict, message: str) -> str | None:
     parts.append(
       f"✅ Achieved: {format_signed_pips(abs(archived_pips))} pips"
     )
-  return "• " + " · ".join(parts)
+  return " · ".join(parts)
 
 
 _ARCHIVED_PIPS_SUFFIX_RE = re.compile(
@@ -1077,8 +1082,8 @@ def _manage_has_tp_target(text: str, target: str) -> bool:
 
 
 def _format_position_closed_compact_line(event: dict, message: str) -> str:
-  """Close trailer for the manage reply — one bullet row per field."""
-  lines = ["• 🏁 POSITION CLOSED"]
+  """Close trailer for the manage reply — icon rows without leading bullets."""
+  lines = ["🏁 POSITION CLOSED"]
   cleaned = _MONEY_RE.sub("", message).strip(" ·") if message else ""
   highest = _HIGHEST_TP_ARCHIVED_RE.search(cleaned) if cleaned else None
   no_tp = _NO_TP_ARCHIVED_RE.search(cleaned) if cleaned else None
@@ -1088,31 +1093,31 @@ def _format_position_closed_compact_line(event: dict, message: str) -> str:
     if at is not None:
       lines.append(f"• @ {escape(at.group('price'))}")
   elif no_tp is not None:
-    lines.append("• 🛡 SL")
+    lines.append("🛡 SL")
     losing = _resolve_no_tp_loss_pips(event, cleaned)
     if losing is not None and losing < 0:
-      lines.append(f"• ❌ Losing: {format_signed_pips(losing)} pips")
+      lines.append(f"❌ Losing: {format_signed_pips(losing)} pips")
     elif losing is not None and losing == 0:
-      lines.append("• ➖ Result: 0 pips (BE)")
+      lines.append("➖ Result: 0 pips (BE)")
     at = _PLAN_CLOSED_AT_RE.search(cleaned)
     if at is not None:
       lines.append(f"• @ {escape(at.group('price'))}")
   else:
     reason_label = _CLOSE_REASON_LABELS.get(str(event.get("reason_code") or ""))
     if reason_label and reason_label != _CLOSE_REASON_LABELS["stop_loss_or_take_profit"]:
-      lines.append(f"• {reason_label}")
+      lines.append(reason_label)
     elif str(event.get("reason_code") or "") == "stop_loss_or_take_profit":
-      lines.append("• 🛡 SL")
+      lines.append("🛡 SL")
     group_realized = _resolve_no_tp_loss_pips(event, cleaned)
     if group_realized is not None and group_realized < 0:
-      lines.append(f"• ❌ Losing: {format_signed_pips(group_realized)} pips")
+      lines.append(f"❌ Losing: {format_signed_pips(group_realized)} pips")
     elif group_realized is not None:
       lines.append(f"• Total: {format_signed_pips(group_realized)} pips")
   return "\n".join(lines)
 
 
 def _format_be_trail_head_status(event: dict, message: str) -> tuple[str, str, float | None]:
-  """Short forming-card head line + optional stop price for BE/trail."""
+  """Short BE/trail manage-reply line + optional stop price."""
   cleaned = _clean_message(message)
   match = _SL_MOVED_RE.match(cleaned)
   price_text = None
@@ -1154,6 +1159,34 @@ def _format_be_trail_head_status(event: dict, message: str) -> tuple[str, str, f
   else:
     status = f"{icon} <b>{escape(kind)}</b>"
   return status, state, price_val
+
+
+def _is_manage_be_trail_line(line: str) -> bool:
+  stripped = line.lstrip("• ").strip()
+  return (
+    stripped.startswith("🔐")
+    or stripped.startswith("🛰️")
+    or (
+      stripped.startswith("🛡")
+      and ("<b>Stop</b>" in stripped or stripped.startswith("🛡 <b>Stop</b>"))
+    )
+  )
+
+
+def _upsert_manage_be_trail_line(text: str, trail_line: str) -> str:
+  """Replace prior BE/Trail/Stop status line, else append."""
+  out: list[str] = []
+  replaced = False
+  for line in text.splitlines():
+    if _is_manage_be_trail_line(line):
+      if not replaced:
+        out.append(trail_line)
+        replaced = True
+      continue
+    out.append(line)
+  if not replaced:
+    out.append(trail_line)
+  return "\n".join(out)
 
 
 async def _deliver_compact_order_filled(
@@ -1313,7 +1346,7 @@ async def _deliver_compact_position_closed(
       )
   stub = _compose("\n".join([
     "🤖 <b>ApexVoid Algo</b>",
-    "• ✅ <b>ORDER FILLED</b>",
+    "✅ <b>ORDER FILLED</b>",
     "",
   ]))
   reply_to, _ = await _resolve_reply_message_id(client, event, "internal")
@@ -1340,43 +1373,61 @@ async def _deliver_compact_be_trail(
   event: dict,
   *,
   match_id: str,
+  chat_id: int,
+  send,
 ) -> bool:
-  """Update forming-card head + Stop only; never send a BE/trail reply."""
-  event_type = str(event.get("type") or "")
+  """Update manage reply with BE/Trail; leave Trade-area Stop on the root card."""
   message = str(event.get("message") or "")
-  status_line, state, price_val = _format_be_trail_head_status(event, message)
-  if price_val is None:
-    price_val = _event_float(event, "new_stop", "stop_price", "price")
-  edit_result = await edit_forming_card_status(
-    client,
-    match_id,
-    status_line,
-    state=state,
-    reason_code=str(event.get("reason_code") or event_type),
-    event_id=str(event.get("lifecycle_id") or "") or None,
-    edit_fn=edit_scanner_message_text,
-  )
-  if price_val is not None:
+  status_line, _state, _price_val = _format_be_trail_head_status(event, message)
+
+  manage_id, manage_text = await _load_manage_message(client, match_id)
+  if manage_id is not None and manage_text:
+    new_text = _upsert_manage_be_trail_line(manage_text, status_line)
     try:
-      await edit_forming_card_stop(
-        client,
-        match_id,
-        float(price_val),
-        digits=int(getattr(settings, "auto_trade_xau_price_digits", 2)),
-        edit_fn=edit_scanner_message_text,
+      await edit_scanner_message_text(chat_id, manage_id, new_text)
+      await _save_manage_message(
+        client, match_id, message_id=manage_id, text=new_text,
       )
     except Exception:
       log.exception(
-        "forming card stop patch failed on %s setup_id=%s",
-        event_type,
+        "manage BE/trail edit failed setup_id=%s message_id=%s",
         match_id,
+        manage_id,
       )
-  if edit_result is False:
-    log.info(
-      "BE/trail head update skipped setup_id=%s type=%s (no reply)",
-      match_id,
-      event_type,
-    )
+  else:
+    body = "\n".join([
+      "🤖 <b>ApexVoid Algo</b>",
+      status_line,
+    ])
+    reply_to, reason = await _resolve_reply_message_id(client, event, "internal")
+    if reply_to is None:
+      log.info(
+        "Auto-trade BE/trail reply unavailable for %s: %s; skipping",
+        match_id,
+        reason,
+      )
+    else:
+      try:
+        sent = await send(body, reply_to=reply_to, chat_id=chat_id)
+        message_id = int(sent.message_id)
+        await _save_manage_message(
+          client, match_id, message_id=message_id, text=body,
+        )
+        await _remember_trade_message(client, event, "internal", message_id)
+      except TelegramBadRequest as error:
+        if reply_to is not None and _is_bad_reply_target(error):
+          log.info(
+            "Auto-trade BE/trail reply rejected for %s: %s; skipping",
+            match_id,
+            error,
+          )
+        else:
+          raise
+      except Exception:
+        log.exception(
+          "manage BE/trail send failed setup_id=%s",
+          match_id,
+        )
   return True
 
 
@@ -1409,7 +1460,7 @@ async def _deliver_compact_manage(
     )
   if event_type in {"sl_moved", "stop_moved"}:
     return await _deliver_compact_be_trail(
-      client, event, match_id=match_id,
+      client, event, match_id=match_id, chat_id=chat_id, send=send,
     )
   return None
 

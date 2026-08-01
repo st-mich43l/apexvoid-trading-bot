@@ -954,25 +954,6 @@ async def assert_or_repair_forming_projection(
 
 PLAN_PUBLISHED_STATUS_LINE = STATUS_LINE_BY_PROJECTION_STATE["plan_published"]
 
-_CONFLUENCE_TAG_LABELS = {
-  "key_level": "Key Level",
-  "demand": "Demand",
-  "supply": "Supply",
-  "ob": "OB",
-  "fvg": "FVG",
-  "breaker": "Breaker",
-  "session_level": "Session Level",
-  "trendline": "Trendline",
-}
-
-
-def _tag_label(tag: str) -> str:
-  normalized = str(tag).casefold()
-  return _CONFLUENCE_TAG_LABELS.get(
-    normalized,
-    normalized.replace("_", " ").title(),
-  )
-
 
 def _price_text(value: float) -> str:
   return f"{float(value):,.2f}"
@@ -986,22 +967,14 @@ def format_plan_published_root_card(
   """PLAN PUBLISHED root card with scanner-style trade/context detail.
 
   Includes bias / structure / trade area / context / stop when available on
-  the StrategyMatch. No copy-draft. Stop stays editable for BE / trailing.
+  the StrategyMatch. No copy-draft. Trade-area Stop is the published plan
+  stop and is not rewritten on BE / trailing updates.
   """
   direction = str(match.direction or "").upper()
   direction_icon = "🟢" if direction == "BUY" else "🔴"
   stars = "⭐" * max(1, min(3, int(match.confluence or 1)))
-  tags = tuple(match.tags or ())
-  confluence_label = " + ".join(_tag_label(tag) for tag in tags)
-  setup_label = (
-    f"{confluence_label} · {match.strategy}"
-    if len(tags) > 1
-    else str(match.strategy)
-  )
+  setup_label = str(match.strategy or "").strip() or "Setup"
   mode = str(match.strategy_mode or "").strip()
-  identity = confluence_label or (
-    _tag_label(match.structural_kind) if match.structural_kind else ""
-  )
   confirmation = str(match.reaction_type or "").strip()
   source_tf = str(
     match.structural_timeframe or match.source_tf or ""
@@ -1040,8 +1013,6 @@ def format_plan_published_root_card(
     lines.append(
       f"🧱 <b>Structural source:</b> {escape(str(match.structural_source))}"
     )
-  if identity:
-    lines.append(f"🏷️ <b>Identity:</b> {escape(identity)}")
   if confirmation:
     lines.append(f"✅ <b>Confirmation:</b> {escape(confirmation)}")
   if source_tf:
