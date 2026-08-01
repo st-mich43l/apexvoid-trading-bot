@@ -54,6 +54,15 @@ def is_range_strategy(name: str) -> bool:
   return str(name or "") in RANGE_STRATEGIES
 
 
+def bypasses_opposing_structure_gates(name: str) -> bool:
+  """Range/scalp may enter inside HTF opposing structure.
+
+  Native range room (select_range_target / EQ room, typically ≥20p ladder
+  fit) remains the room gate — HTF opposing containment does not veto.
+  """
+  return is_range_strategy(name)
+
+
 def canonical_family(name: str) -> str:
   """Classify by exact registered name only — never by substring."""
   key = str(name or "")
