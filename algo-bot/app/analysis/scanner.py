@@ -1279,14 +1279,7 @@ def _format_detection(
   )
   stars = "⭐" * max(1, min(3, int(result.confluence)))
   direction_icon = "🟢" if result.direction.upper() == "BUY" else "🔴"
-  confluence_label = " + ".join(
-    _confluence_tag_label(tag) for tag in result.confluence_tags
-  )
-  setup_label = (
-    f"{confluence_label} · {result.setup}"
-    if len(result.confluence_tags) > 1
-    else result.setup
-  )
+  setup_label = str(result.setup or "").strip() or "Setup"
   extra_reasons = [
     reason for reason in result.reasons
     if not reason.lower().startswith("htf bias")
@@ -1335,14 +1328,6 @@ def _format_detection(
   if result.structural_source:
     lines.append(
       f"🧱 <b>Structural source:</b> {escape(result.structural_source)}"
-    )
-  if result.confluence_tags:
-    lines.append(
-      f"🏷️ <b>Identity:</b> {escape(confluence_label)}"
-    )
-  elif result.structural_kind:
-    lines.append(
-      f"🏷️ <b>Identity:</b> {escape(str(result.structural_kind))}"
     )
   if result.confirmation_type or result.confirmation:
     lines.append(
@@ -1460,21 +1445,6 @@ def _tf_seconds(tf: str) -> int:
 
 def _compact_setup(setup: str) -> str:
   return setup.replace(" & ", "&").replace(" ", "")
-
-
-def _confluence_tag_label(tag: str) -> str:
-  labels = {
-    "key_level": "Key Level",
-    "demand": "Demand",
-    "supply": "Supply",
-    "ob": "OB",
-    "fvg": "FVG",
-    "breaker": "Breaker",
-    "session_level": "Session Level",
-    "trendline": "Trendline",
-  }
-  normalized = str(tag).casefold()
-  return labels.get(normalized, normalized.replace("_", " ").title())
 
 
 async def _load_frames(
