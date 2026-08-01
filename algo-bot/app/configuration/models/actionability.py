@@ -34,6 +34,9 @@ class ActionabilityCounterBiasConfig(FrozenConfigModel):
       ContextDefault(DefaultContext.CTRADER_FROM_ENVIRONMENT, False),
     ),
     validation_summary='Pydantic required/type coercion only; EnvironmentResolver.Bool + AutoTradeOptions.Validate',
+    evidence_notes=(
+      'Python schema default is true while cTrader FromEnvironment defaults false; unresolved.',
+    ),
   )
   map_counter_bias_min_confluence: int = config_field(2,
     item_id='python.settings.auto_trade_map_counter_bias_min_confluence',
@@ -144,6 +147,9 @@ class ActionabilityGatesConfig(FrozenConfigModel):
       ContextDefault(DefaultContext.CTRADER_FROM_ENVIRONMENT, True),
     ),
     validation_summary='Pydantic type coercion + Settings cross-field model validator; EnvironmentResolver.Bool + AutoTradeOptions.Validate',
+    evidence_notes=(
+      'Direct demo_eval inherits mapped-zone true; root Compose demo_eval injects false.',
+    ),
   )
   max_entry_atr: float = config_field(2.0,
     item_id='python.settings.max_entry_atr',

@@ -1,0 +1,36 @@
+{
+  "catalog_version": 1,
+  "count": 4,
+  "properties": [
+    {
+      "property_name": "signal_vip_channel_id",
+      "return_type": "int",
+      "source_path": "delivery.telegram.telegram_channel_id",
+      "source_property": null,
+      "transformation": "identity"
+    },
+    {
+      "property_name": "telegram_chat_id",
+      "return_type": "str",
+      "source_path": "delivery.telegram.telegram_channel_id",
+      "source_property": null,
+      "transformation": "str(value)"
+    },
+    {
+      "property_name": "xau_public_channel_id",
+      "return_type": "Optional[int]",
+      "source_path": "delivery.telegram.signal_public_channel_id",
+      "source_property": null,
+      "transformation": "identity"
+    },
+    {
+      "property_name": "xau_vip_channel_id",
+      "return_type": "int",
+      "source_path": null,
+      "source_property": "signal_vip_channel_id",
+      "transformation": "identity"
+    }
+  ],
+  "source_fingerprint_sha256": "5001f967384dd74f709d75b714cc03b2576b900ef0b9861aa77b25ff80e29094",
+  "source_model": "app.configuration.models.root.ApexVoidConfig"
+}

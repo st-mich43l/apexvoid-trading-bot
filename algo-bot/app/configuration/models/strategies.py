@@ -691,6 +691,9 @@ class StrategiesMappedZoneConfig(FrozenConfigModel):
       ContextDefault(DefaultContext.CTRADER_FROM_ENVIRONMENT, True),
     ),
     validation_summary='Pydantic type coercion + Settings cross-field model validator; EnvironmentResolver.Bool + AutoTradeOptions.Validate',
+    evidence_notes=(
+      'Direct demo_eval resolves true while root Compose demo_eval injects false.',
+    ),
   )
 
 

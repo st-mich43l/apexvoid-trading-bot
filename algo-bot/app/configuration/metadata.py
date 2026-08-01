@@ -116,6 +116,7 @@ class ConfigMetadata:
   default_contexts: tuple[ContextDefault, ...] = ()
   allowed_values: tuple[Any, ...] = ()
   validation_summary: str | None = None
+  evidence_notes: tuple[str, ...] = ()
   catalog_version: int = 1
   introduced_in: str = "config-catalog-v1"
   deprecated: bool = False
@@ -213,6 +214,7 @@ def config_field(
   default_contexts: tuple[ContextDefault, ...] = (),
   allowed_values: tuple[Any, ...] = (),
   validation_summary: str | None = None,
+  evidence_notes: tuple[str, ...] = (),
   catalog_version: int = 1,
   introduced_in: str = "config-catalog-v1",
   deprecated: bool = False,
@@ -257,6 +259,7 @@ def config_field(
     default_contexts=default_contexts,
     allowed_values=allowed_values,
     validation_summary=validation_summary,
+    evidence_notes=evidence_notes,
     catalog_version=catalog_version,
     introduced_in=introduced_in,
     deprecated=deprecated,

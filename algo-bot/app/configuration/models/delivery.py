@@ -182,7 +182,7 @@ class DeliveryTelegramConfig(FrozenConfigModel):
     ),
     validation_summary='Pydantic type coercion + Settings cross-field model validator',
   )
-  telegram_owner_id: int | None = config_field('123456789',
+  telegram_owner_id: int | None = config_field(None,
     item_id='python.settings.telegram_owner_id',
     legacy_attr='telegram_owner_id',
     env='TELEGRAM_OWNER_ID',
@@ -193,7 +193,7 @@ class DeliveryTelegramConfig(FrozenConfigModel):
     risk=RiskClassification.DELIVERY,
     description='Legacy telegram_owner_id configuration mapped to delivery.telegram.telegram_owner_id.',
     default_contexts=(
-      ContextDefault(DefaultContext.PYTHON_SCHEMA, '123456789'),
+      ContextDefault(DefaultContext.PYTHON_SCHEMA, None),
     ),
     validation_summary='Pydantic required/type coercion only',
   )

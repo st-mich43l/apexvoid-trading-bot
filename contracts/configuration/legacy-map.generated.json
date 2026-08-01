@@ -1,0 +1,2538 @@
+{
+  "catalog_version": 1,
+  "count": 316,
+  "entries": [
+    {
+      "item_id": "python.settings.alert_overlap_suppress",
+      "legacy_attr": "alert_overlap_suppress",
+      "path": "analysis.measurements.alert_overlap_suppress",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.allow_counter_trend",
+      "legacy_attr": "allow_counter_trend",
+      "path": "strategies.counter_trend.allow_counter_trend",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.anthropic_api_key",
+      "legacy_attr": "anthropic_api_key",
+      "path": "delivery.presentation.anthropic_api_key",
+      "required": false,
+      "type": "Optional[str]"
+    },
+    {
+      "item_id": "python.settings.atr_length",
+      "legacy_attr": "atr_length",
+      "path": "analysis.atr.length",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.auto_book_bare_pips",
+      "legacy_attr": "auto_book_bare_pips",
+      "path": "delivery.presentation.auto_book_bare_pips",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.auto_trade_add_min_stop_pips",
+      "legacy_attr": "auto_trade_add_min_stop_pips",
+      "path": "execution.scaling.add.min_stop_pips",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.auto_trade_add_risk_fraction",
+      "legacy_attr": "auto_trade_add_risk_fraction",
+      "path": "risk.sizing.add_risk_fraction",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.auto_trade_add_size_ratio",
+      "legacy_attr": "auto_trade_add_size_ratio",
+      "path": "execution.scaling.add.size_ratio",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.auto_trade_add_stop_buffer_atr",
+      "legacy_attr": "auto_trade_add_stop_buffer_atr",
+      "path": "execution.scaling.add.stop_buffer_atr",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.auto_trade_allow_concurrent_strategies",
+      "legacy_attr": "auto_trade_allow_concurrent_strategies",
+      "path": "risk.exposure.allow_concurrent_strategies",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.auto_trade_allow_counter_bias",
+      "legacy_attr": "auto_trade_allow_counter_bias",
+      "path": "actionability.counter_bias.allowed",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.auto_trade_allow_hedged_xau",
+      "legacy_attr": "auto_trade_allow_hedged_xau",
+      "path": "risk.exposure.allow_hedged_xau",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.auto_trade_be_buffer_ticks",
+      "legacy_attr": "auto_trade_be_buffer_ticks",
+      "path": "execution.stops.be_buffer_ticks",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.auto_trade_box_breakout_enabled",
+      "legacy_attr": "auto_trade_box_breakout_enabled",
+      "path": "strategies.selection.box_breakout_enabled",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.auto_trade_box_retire_seconds",
+      "legacy_attr": "auto_trade_box_retire_seconds",
+      "path": "lifecycle.range_box.retirement_seconds",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.auto_trade_break_retest_enabled",
+      "legacy_attr": "auto_trade_break_retest_enabled",
+      "path": "strategies.breakout.break_retest_enabled",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.auto_trade_breakout_enabled",
+      "legacy_attr": "auto_trade_breakout_enabled",
+      "path": "strategies.breakout.breakout_enabled",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.auto_trade_candidate_contract_version",
+      "legacy_attr": "auto_trade_candidate_contract_version",
+      "path": "contract.versions.candidate",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.auto_trade_candidate_max_age_seconds",
+      "legacy_attr": "auto_trade_candidate_max_age_seconds",
+      "path": "lifecycle.candidate.execution_maximum_age_seconds",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.auto_trade_candidate_ttl",
+      "legacy_attr": "auto_trade_candidate_ttl",
+      "path": "lifecycle.candidate.storage_ttl_seconds",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.auto_trade_canonical_symbol",
+      "legacy_attr": "auto_trade_canonical_symbol",
+      "path": "contract.instrument.canonical_symbol",
+      "required": false,
+      "type": "str"
+    },
+    {
+      "item_id": "python.settings.auto_trade_contract_mode",
+      "legacy_attr": "auto_trade_contract_mode",
+      "path": "contract.mode",
+      "required": false,
+      "type": "str"
+    },
+    {
+      "item_id": "python.settings.auto_trade_contract_size",
+      "legacy_attr": "auto_trade_contract_size",
+      "path": "contract.instrument.contract_units_per_lot",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.auto_trade_demand_reaction_enabled",
+      "legacy_attr": "auto_trade_demand_reaction_enabled",
+      "path": "strategies.reaction.demand.enabled",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.auto_trade_direct_publish_enabled",
+      "legacy_attr": "auto_trade_direct_publish_enabled",
+      "path": "runtime.auto_trade.direct_publish_enabled",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.auto_trade_displacement_override_lookback_bars",
+      "legacy_attr": "auto_trade_displacement_override_lookback_bars",
+      "path": "execution.policy.displacement_override_lookback_bars",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.auto_trade_dry_run",
+      "legacy_attr": "auto_trade_dry_run",
+      "path": "runtime.auto_trade.dry_run",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.auto_trade_edge_proximity_atr",
+      "legacy_attr": "auto_trade_edge_proximity_atr",
+      "path": "actionability.gates.edge_proximity_atr",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.auto_trade_enabled",
+      "legacy_attr": "auto_trade_enabled",
+      "path": "runtime.auto_trade.enabled",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.auto_trade_entry_contract_tolerance_pips",
+      "legacy_attr": "auto_trade_entry_contract_tolerance_pips",
+      "path": "execution.entry.contract_tolerance_pips",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.auto_trade_eq_exclusion_fraction",
+      "legacy_attr": "auto_trade_eq_exclusion_fraction",
+      "path": "actionability.gates.eq_exclusion_fraction",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.auto_trade_equity_table_version",
+      "legacy_attr": "auto_trade_equity_table_version",
+      "path": "risk.sizing.equity_table_version",
+      "required": false,
+      "type": "str"
+    },
+    {
+      "item_id": "python.settings.auto_trade_event_stream",
+      "legacy_attr": "auto_trade_event_stream",
+      "path": "contract.streams.events",
+      "required": false,
+      "type": "str"
+    },
+    {
+      "item_id": "python.settings.auto_trade_execution_cost_pips",
+      "legacy_attr": "auto_trade_execution_cost_pips",
+      "path": "execution.policy.execution_cost_pips",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.auto_trade_execution_zone_max_width_atr",
+      "legacy_attr": "auto_trade_execution_zone_max_width_atr",
+      "path": "execution.policy.execution_zone_max_width_atr",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.auto_trade_execution_zone_max_width_pips",
+      "legacy_attr": "auto_trade_execution_zone_max_width_pips",
+      "path": "execution.policy.execution_zone_max_width_pips",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.auto_trade_fade_scalp_enabled",
+      "legacy_attr": "auto_trade_fade_scalp_enabled",
+      "path": "strategies.scalp.fade_scalp_enabled",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.auto_trade_group_close_allocation",
+      "legacy_attr": "auto_trade_group_close_allocation",
+      "path": "execution.policy.group_close_allocation",
+      "required": false,
+      "type": "str"
+    },
+    {
+      "item_id": "python.settings.auto_trade_htf_veto_enabled",
+      "legacy_attr": "auto_trade_htf_veto_enabled",
+      "path": "actionability.gates.htf_veto_enabled",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.auto_trade_inside_zone_market_entry_enabled",
+      "legacy_attr": "auto_trade_inside_zone_market_entry_enabled",
+      "path": "execution.entry.inside_zone_market_entry_enabled",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.auto_trade_key_level_reaction_enabled",
+      "legacy_attr": "auto_trade_key_level_reaction_enabled",
+      "path": "strategies.reaction.key_level.enabled",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.auto_trade_liquidity_reversal_enabled",
+      "legacy_attr": "auto_trade_liquidity_reversal_enabled",
+      "path": "strategies.reaction.liquidity_reversal.enabled",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.auto_trade_map_counter_bias_enabled",
+      "legacy_attr": "auto_trade_map_counter_bias_enabled",
+      "path": "strategies.mapped_zone.counter_bias_enabled",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.auto_trade_map_counter_bias_min_confluence",
+      "legacy_attr": "auto_trade_map_counter_bias_min_confluence",
+      "path": "actionability.counter_bias.map_counter_bias_min_confluence",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.auto_trade_map_counter_bias_min_score",
+      "legacy_attr": "auto_trade_map_counter_bias_min_score",
+      "path": "execution.mapped_zone.counter_bias_min_score",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.auto_trade_map_execute_distance_atr",
+      "legacy_attr": "auto_trade_map_execute_distance_atr",
+      "path": "execution.mapped_zone.execute_distance_atr",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.auto_trade_map_execute_tolerance_atr",
+      "legacy_attr": "auto_trade_map_execute_tolerance_atr",
+      "path": "execution.mapped_zone.execute_tolerance_atr",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.auto_trade_map_execute_tolerance_pips",
+      "legacy_attr": "auto_trade_map_execute_tolerance_pips",
+      "path": "execution.mapped_zone.execute_tolerance_pips",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.auto_trade_map_hard_entry_drift_pips",
+      "legacy_attr": "auto_trade_map_hard_entry_drift_pips",
+      "path": "execution.mapped_zone.hard_entry_drift_pips",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.auto_trade_map_max_entry_drift_atr",
+      "legacy_attr": "auto_trade_map_max_entry_drift_atr",
+      "path": "execution.mapped_zone.max_entry_drift_atr",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.auto_trade_map_min_entry_drift_pips",
+      "legacy_attr": "auto_trade_map_min_entry_drift_pips",
+      "path": "execution.mapped_zone.min_entry_drift_pips",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.auto_trade_map_reaction_lookback_bars",
+      "legacy_attr": "auto_trade_map_reaction_lookback_bars",
+      "path": "execution.mapped_zone.reaction_lookback_bars",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.auto_trade_map_reaction_rearm_atr",
+      "legacy_attr": "auto_trade_map_reaction_rearm_atr",
+      "path": "lifecycle.mapped_zone.reaction_rearm_atr",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.auto_trade_map_reaction_rearm_bars",
+      "legacy_attr": "auto_trade_map_reaction_rearm_bars",
+      "path": "lifecycle.mapped_zone.reaction_rearm_bars",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.auto_trade_map_thesis_lock_enabled",
+      "legacy_attr": "auto_trade_map_thesis_lock_enabled",
+      "path": "execution.mapped_zone.thesis_lock_enabled",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.auto_trade_map_track_distance_atr",
+      "legacy_attr": "auto_trade_map_track_distance_atr",
+      "path": "execution.mapped_zone.track_distance_atr",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.auto_trade_map_zone_min_width_abs",
+      "legacy_attr": "auto_trade_map_zone_min_width_abs",
+      "path": "execution.mapped_zone.zone_min_width_abs",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.auto_trade_map_zone_min_width_atr",
+      "legacy_attr": "auto_trade_map_zone_min_width_atr",
+      "path": "execution.mapped_zone.zone_min_width_atr",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.auto_trade_mapped_zone_enabled",
+      "legacy_attr": "auto_trade_mapped_zone_enabled",
+      "path": "strategies.mapped_zone.enabled",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.auto_trade_market_map_guard_enabled",
+      "legacy_attr": "auto_trade_market_map_guard_enabled",
+      "path": "actionability.gates.market_map_guard_enabled",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.auto_trade_max_active_positions_per_symbol",
+      "legacy_attr": "auto_trade_max_active_positions_per_symbol",
+      "path": "risk.position_limits.maximum_per_symbol",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.auto_trade_max_entry_distance_pips",
+      "legacy_attr": "auto_trade_max_entry_distance_pips",
+      "path": "execution.entry.maximum_chase_distance_pips",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.auto_trade_max_tracked_candidates",
+      "legacy_attr": "auto_trade_max_tracked_candidates",
+      "path": "risk.position_limits.max_tracked_candidates",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.auto_trade_max_tranches",
+      "legacy_attr": "auto_trade_max_tranches",
+      "path": "execution.policy.max_tranches",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.auto_trade_min_capped_target_pips",
+      "legacy_attr": "auto_trade_min_capped_target_pips",
+      "path": "actionability.target_room.minimum_capped_target_pips",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.auto_trade_min_confluence",
+      "legacy_attr": "auto_trade_min_confluence",
+      "path": "actionability.gates.min_confluence",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.auto_trade_momentum_ride_enabled",
+      "legacy_attr": "auto_trade_momentum_ride_enabled",
+      "path": "strategies.selection.momentum_ride_enabled",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.auto_trade_multi_match_enabled",
+      "legacy_attr": "auto_trade_multi_match_enabled",
+      "path": "strategies.matching.multiple_matches_enabled",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.auto_trade_news_guard_minutes",
+      "legacy_attr": "auto_trade_news_guard_minutes",
+      "path": "actionability.gates.news_guard_minutes",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.auto_trade_non_hedged_opposite_policy",
+      "legacy_attr": "auto_trade_non_hedged_opposite_policy",
+      "path": "risk.exposure.non_hedged_opposite_policy",
+      "required": false,
+      "type": "str"
+    },
+    {
+      "item_id": "python.settings.auto_trade_one_sided_range_risk_multiplier",
+      "legacy_attr": "auto_trade_one_sided_range_risk_multiplier",
+      "path": "risk.sizing.one_sided_range_risk_multiplier",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.auto_trade_opposing_active_min_price",
+      "legacy_attr": "auto_trade_opposing_active_min_price",
+      "path": "risk.exposure.opposing_minimum_separation_price",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.auto_trade_opposing_barrier_atr",
+      "legacy_attr": "auto_trade_opposing_barrier_atr",
+      "path": "actionability.target_room.barrier_buffer_atr",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.auto_trade_opposing_barrier_veto_enabled",
+      "legacy_attr": "auto_trade_opposing_barrier_veto_enabled",
+      "path": "actionability.gates.opposing_barrier_veto_enabled",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.auto_trade_overlap_veto_enabled",
+      "legacy_attr": "auto_trade_overlap_veto_enabled",
+      "path": "actionability.overlapping_zones.veto_enabled",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.auto_trade_post_fill_target_fallback",
+      "legacy_attr": "auto_trade_post_fill_target_fallback",
+      "path": "execution.targeting.post_fill_target_fallback",
+      "required": false,
+      "type": "str"
+    },
+    {
+      "item_id": "python.settings.auto_trade_post_impulse_risk_multiplier",
+      "legacy_attr": "auto_trade_post_impulse_risk_multiplier",
+      "path": "risk.sizing.post_impulse_risk_multiplier",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.auto_trade_profile",
+      "legacy_attr": "auto_trade_profile",
+      "path": "runtime.profile",
+      "required": false,
+      "type": "str"
+    },
+    {
+      "item_id": "python.settings.auto_trade_range_box_move_sl_to_be_after_scale_out",
+      "legacy_attr": "auto_trade_range_box_move_sl_to_be_after_scale_out",
+      "path": "execution.range.box_move_sl_to_be_after_scale_out",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.auto_trade_range_box_scale_out_enabled",
+      "legacy_attr": "auto_trade_range_box_scale_out_enabled",
+      "path": "strategies.range_reversion.box_scale_out_enabled",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.auto_trade_range_box_scale_out_fraction",
+      "legacy_attr": "auto_trade_range_box_scale_out_fraction",
+      "path": "execution.range.box_scale_out_fraction",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.auto_trade_range_box_scale_out_threshold_pips",
+      "legacy_attr": "auto_trade_range_box_scale_out_threshold_pips",
+      "path": "execution.range.box_scale_out_threshold_pips",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.auto_trade_range_box_scale_out_trigger_pips",
+      "legacy_attr": "auto_trade_range_box_scale_out_trigger_pips",
+      "path": "execution.range.box_scale_out_trigger_pips",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.auto_trade_range_enabled",
+      "legacy_attr": "auto_trade_range_enabled",
+      "path": "strategies.range_reversion.enabled",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.auto_trade_range_flip_enabled",
+      "legacy_attr": "auto_trade_range_flip_enabled",
+      "path": "strategies.range_reversion.flip_enabled",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.auto_trade_range_hard_entry_drift_pips",
+      "legacy_attr": "auto_trade_range_hard_entry_drift_pips",
+      "path": "execution.range.hard_entry_drift_pips",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.auto_trade_range_max_entry_drift_atr",
+      "legacy_attr": "auto_trade_range_max_entry_drift_atr",
+      "path": "execution.range.max_entry_drift_atr",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.auto_trade_range_max_risk_multiplier",
+      "legacy_attr": "auto_trade_range_max_risk_multiplier",
+      "path": "risk.sizing.range_max_risk_multiplier",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.auto_trade_range_min_entry_drift_pips",
+      "legacy_attr": "auto_trade_range_min_entry_drift_pips",
+      "path": "execution.range.min_entry_drift_pips",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.auto_trade_range_min_rr",
+      "legacy_attr": "auto_trade_range_min_rr",
+      "path": "execution.range.min_rr",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.auto_trade_range_min_target_pips",
+      "legacy_attr": "auto_trade_range_min_target_pips",
+      "path": "execution.range.min_target_pips",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.auto_trade_range_room_stop_floor_pips",
+      "legacy_attr": "auto_trade_range_room_stop_floor_pips",
+      "path": "execution.range.room_stop_floor_pips",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.auto_trade_range_targets_pips",
+      "legacy_attr": "auto_trade_range_targets_pips",
+      "path": "execution.targeting.range_ladder_pips",
+      "required": false,
+      "type": "str"
+    },
+    {
+      "item_id": "python.settings.auto_trade_range_tp_buffer_pips",
+      "legacy_attr": "auto_trade_range_tp_buffer_pips",
+      "path": "execution.range.tp_buffer_pips",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.auto_trade_range_two_sided_enabled",
+      "legacy_attr": "auto_trade_range_two_sided_enabled",
+      "path": "strategies.range_reversion.two_sided_enabled",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.auto_trade_reaction_enabled",
+      "legacy_attr": "auto_trade_reaction_enabled",
+      "path": "strategies.reaction.enabled",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.auto_trade_reaction_market_fraction",
+      "legacy_attr": "auto_trade_reaction_market_fraction",
+      "path": "execution.reaction.market_fraction",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.auto_trade_reaction_room_stop_floor_pips",
+      "legacy_attr": "auto_trade_reaction_room_stop_floor_pips",
+      "path": "execution.stops.reaction.room_floor_pips",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.auto_trade_reaction_room_stop_min_rr",
+      "legacy_attr": "auto_trade_reaction_room_stop_min_rr",
+      "path": "execution.reaction.room_stop_min_rr",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.auto_trade_reaction_scale_enabled",
+      "legacy_attr": "auto_trade_reaction_scale_enabled",
+      "path": "strategies.reaction.scale_enabled",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.auto_trade_reaction_scale_fraction",
+      "legacy_attr": "auto_trade_reaction_scale_fraction",
+      "path": "execution.reaction.scale_fraction",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.auto_trade_reaction_scale_invalid_policy",
+      "legacy_attr": "auto_trade_reaction_scale_invalid_policy",
+      "path": "execution.reaction.scale_invalid_policy",
+      "required": false,
+      "type": "str"
+    },
+    {
+      "item_id": "python.settings.auto_trade_reaction_scale_step_atr",
+      "legacy_attr": "auto_trade_reaction_scale_step_atr",
+      "path": "execution.reaction.scale_step_atr",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.auto_trade_reaction_stop_max_pips",
+      "legacy_attr": "auto_trade_reaction_stop_max_pips",
+      "path": "execution.reaction.stop_max_pips",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.auto_trade_reaction_stop_min_pips",
+      "legacy_attr": "auto_trade_reaction_stop_min_pips",
+      "path": "execution.reaction.stop_min_pips",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.auto_trade_regime_direction_enabled",
+      "legacy_attr": "auto_trade_regime_direction_enabled",
+      "path": "execution.regime.direction_enabled",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.auto_trade_regime_direction_lookback",
+      "legacy_attr": "auto_trade_regime_direction_lookback",
+      "path": "execution.regime.direction_lookback",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.auto_trade_regime_min_directional_swings",
+      "legacy_attr": "auto_trade_regime_min_directional_swings",
+      "path": "execution.regime.min_directional_swings",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.auto_trade_regime_min_displacement_atr",
+      "legacy_attr": "auto_trade_regime_min_displacement_atr",
+      "path": "execution.regime.min_displacement_atr",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.auto_trade_require_demo_account",
+      "legacy_attr": "auto_trade_require_demo_account",
+      "path": "contract.account.require_demo",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.auto_trade_require_flat_for_range",
+      "legacy_attr": "auto_trade_require_flat_for_range",
+      "path": "risk.exposure.require_flat_for_range",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.auto_trade_retest_enabled",
+      "legacy_attr": "auto_trade_retest_enabled",
+      "path": "strategies.selection.retest_enabled",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.auto_trade_retest_trigger_validity_bars",
+      "legacy_attr": "auto_trade_retest_trigger_validity_bars",
+      "path": "lifecycle.retest.trigger_validity_bars",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.auto_trade_same_direction_stack_size_fraction",
+      "legacy_attr": "auto_trade_same_direction_stack_size_fraction",
+      "path": "risk.position_limits.same_direction_stack_size_fraction",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.auto_trade_session_level_reaction_enabled",
+      "legacy_attr": "auto_trade_session_level_reaction_enabled",
+      "path": "strategies.reaction.session_level.enabled",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.auto_trade_sizing_mode",
+      "legacy_attr": "auto_trade_sizing_mode",
+      "path": "risk.sizing.mode",
+      "required": false,
+      "type": "str"
+    },
+    {
+      "item_id": "python.settings.auto_trade_sl_distance",
+      "legacy_attr": "auto_trade_sl_distance",
+      "path": "execution.stops.sl_distance",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.auto_trade_snap_back_enabled",
+      "legacy_attr": "auto_trade_snap_back_enabled",
+      "path": "strategies.selection.snap_back_enabled",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.auto_trade_spot_max_age",
+      "legacy_attr": "auto_trade_spot_max_age",
+      "path": "market_data.spot.maximum_age_seconds",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.auto_trade_stop_push_beyond_zone",
+      "legacy_attr": "auto_trade_stop_push_beyond_zone",
+      "path": "execution.stops.stop_push_beyond_zone",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.auto_trade_strategy_match_enabled",
+      "legacy_attr": "auto_trade_strategy_match_enabled",
+      "path": "runtime.auto_trade.strategy_match_enabled",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.auto_trade_strategy_match_max_age_seconds",
+      "legacy_attr": "auto_trade_strategy_match_max_age_seconds",
+      "path": "lifecycle.strategy_match.maximum_age_seconds",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.auto_trade_stream",
+      "legacy_attr": "auto_trade_stream",
+      "path": "contract.streams.candidates",
+      "required": false,
+      "type": "str"
+    },
+    {
+      "item_id": "python.settings.auto_trade_stream_maxlen",
+      "legacy_attr": "auto_trade_stream_maxlen",
+      "path": "contract.streams.candidate_maximum_length",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.auto_trade_structural_guard_mode",
+      "legacy_attr": "auto_trade_structural_guard_mode",
+      "path": "actionability.structural_guard.guard_mode",
+      "required": false,
+      "type": "str"
+    },
+    {
+      "item_id": "python.settings.auto_trade_structural_reaction_lookback_bars",
+      "legacy_attr": "auto_trade_structural_reaction_lookback_bars",
+      "path": "execution.policy.structural_reaction_lookback_bars",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.auto_trade_supply_reaction_enabled",
+      "legacy_attr": "auto_trade_supply_reaction_enabled",
+      "path": "strategies.reaction.supply.enabled",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.auto_trade_symbols",
+      "legacy_attr": "auto_trade_symbols",
+      "path": "contract.instrument.symbols",
+      "required": false,
+      "type": "str"
+    },
+    {
+      "item_id": "python.settings.auto_trade_telegram_delete_root_on_terminal",
+      "legacy_attr": "auto_trade_telegram_delete_root_on_terminal",
+      "path": "delivery.telegram.delete_root_on_terminal",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.auto_trade_telegram_single_root_card",
+      "legacy_attr": "auto_trade_telegram_single_root_card",
+      "path": "delivery.telegram.single_root_card",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.auto_trade_tier_a_risk_multiplier",
+      "legacy_attr": "auto_trade_tier_a_risk_multiplier",
+      "path": "risk.tiers.a_multiplier",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.auto_trade_tier_b_risk_multiplier",
+      "legacy_attr": "auto_trade_tier_b_risk_multiplier",
+      "path": "risk.tiers.b_multiplier",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.auto_trade_tp_pips",
+      "legacy_attr": "auto_trade_tp_pips",
+      "path": "execution.targeting.default_ladder_pips",
+      "required": false,
+      "type": "str"
+    },
+    {
+      "item_id": "python.settings.auto_trade_track_all_structural_matches",
+      "legacy_attr": "auto_trade_track_all_structural_matches",
+      "path": "strategies.matching.track_all_structural_matches",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.auto_trade_trade_plan_stream",
+      "legacy_attr": "auto_trade_trade_plan_stream",
+      "path": "contract.streams.trade_plans",
+      "required": false,
+      "type": "str"
+    },
+    {
+      "item_id": "python.settings.auto_trade_trend_enabled",
+      "legacy_attr": "auto_trade_trend_enabled",
+      "path": "strategies.trend.enabled",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.auto_trade_trend_hard_entry_drift_pips",
+      "legacy_attr": "auto_trade_trend_hard_entry_drift_pips",
+      "path": "execution.trend.hard_entry_drift_pips",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.auto_trade_trend_max_entry_drift_atr",
+      "legacy_attr": "auto_trade_trend_max_entry_drift_atr",
+      "path": "execution.trend.max_entry_drift_atr",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.auto_trade_trend_min_entry_drift_pips",
+      "legacy_attr": "auto_trade_trend_min_entry_drift_pips",
+      "path": "execution.trend.min_entry_drift_pips",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.auto_trade_trend_pullback_enabled",
+      "legacy_attr": "auto_trade_trend_pullback_enabled",
+      "path": "strategies.trend.pullback_enabled",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.auto_trade_trend_stop_max_pips",
+      "legacy_attr": "auto_trade_trend_stop_max_pips",
+      "path": "execution.trend.stop_max_pips",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.auto_trade_trend_stop_min_pips",
+      "legacy_attr": "auto_trade_trend_stop_min_pips",
+      "path": "execution.stops.trend.minimum_pips",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.auto_trade_trendline_reaction_enabled",
+      "legacy_attr": "auto_trade_trendline_reaction_enabled",
+      "path": "strategies.reaction.trendline.enabled",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.auto_trade_unfilled_leg_after_tp_policy",
+      "legacy_attr": "auto_trade_unfilled_leg_after_tp_policy",
+      "path": "execution.targeting.unfilled_leg_after_tp_policy",
+      "required": false,
+      "type": "str"
+    },
+    {
+      "item_id": "python.settings.auto_trade_wick_stop_buffer_atr",
+      "legacy_attr": "auto_trade_wick_stop_buffer_atr",
+      "path": "execution.stops.wick_stop_buffer_atr",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.auto_trade_xau_pip_size",
+      "legacy_attr": "auto_trade_xau_pip_size",
+      "path": "contract.instrument.pip_size",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.auto_trade_xau_price_digits",
+      "legacy_attr": "auto_trade_xau_price_digits",
+      "path": "contract.instrument.price_digits",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.auto_trade_zone_cooldown_atr",
+      "legacy_attr": "auto_trade_zone_cooldown_atr",
+      "path": "lifecycle.zone.cooldown_atr",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.auto_trade_zone_cooldown_enabled",
+      "legacy_attr": "auto_trade_zone_cooldown_enabled",
+      "path": "lifecycle.zone.cooldown_enabled",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.auto_trade_zone_fill_enabled",
+      "legacy_attr": "auto_trade_zone_fill_enabled",
+      "path": "execution.zone_scaling.fill_enabled",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.auto_trade_zone_fill_fallback_enabled",
+      "legacy_attr": "auto_trade_zone_fill_fallback_enabled",
+      "path": "execution.zone_scaling.fill_fallback_enabled",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.auto_trade_zone_fill_min_atr",
+      "legacy_attr": "auto_trade_zone_fill_min_atr",
+      "path": "execution.zone_scaling.fill_min_atr",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.auto_trade_zone_reconcile_enabled",
+      "legacy_attr": "auto_trade_zone_reconcile_enabled",
+      "path": "actionability.zone_reconciliation.enabled",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.auto_trade_zone_reconcile_mode",
+      "legacy_attr": "auto_trade_zone_reconcile_mode",
+      "path": "actionability.zone_reconciliation.mode",
+      "required": false,
+      "type": "str"
+    },
+    {
+      "item_id": "python.settings.auto_trade_zone_scale_first_leg_fraction",
+      "legacy_attr": "auto_trade_zone_scale_first_leg_fraction",
+      "path": "execution.zone_scaling.first_leg_fraction",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.auto_trade_zone_scale_step_atr",
+      "legacy_attr": "auto_trade_zone_scale_step_atr",
+      "path": "execution.zone_scaling.scale_step_atr",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.auto_trade_zone_scale_undersized_policy",
+      "legacy_attr": "auto_trade_zone_scale_undersized_policy",
+      "path": "execution.zone_scaling.scale_undersized_policy",
+      "required": false,
+      "type": "str"
+    },
+    {
+      "item_id": "python.settings.breakout_accept_bars",
+      "legacy_attr": "breakout_accept_bars",
+      "path": "analysis.breakout.accept_bars",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.breakout_buffer_atr",
+      "legacy_attr": "breakout_buffer_atr",
+      "path": "analysis.breakout.buffer_atr",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.breakout_max_age_bars",
+      "legacy_attr": "breakout_max_age_bars",
+      "path": "analysis.breakout.max_age_bars",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.calendar_currencies",
+      "legacy_attr": "calendar_currencies",
+      "path": "market_data.calendar.currencies",
+      "required": false,
+      "type": "str"
+    },
+    {
+      "item_id": "python.settings.calendar_enabled",
+      "legacy_attr": "calendar_enabled",
+      "path": "market_data.calendar.enabled",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.calendar_feed_nextweek",
+      "legacy_attr": "calendar_feed_nextweek",
+      "path": "market_data.calendar.feed_nextweek",
+      "required": false,
+      "type": "str"
+    },
+    {
+      "item_id": "python.settings.calendar_feed_thisweek",
+      "legacy_attr": "calendar_feed_thisweek",
+      "path": "market_data.calendar.feed_thisweek",
+      "required": false,
+      "type": "str"
+    },
+    {
+      "item_id": "python.settings.calendar_user_agent",
+      "legacy_attr": "calendar_user_agent",
+      "path": "market_data.calendar.user_agent",
+      "required": false,
+      "type": "str"
+    },
+    {
+      "item_id": "python.settings.chop_edge_frac",
+      "legacy_attr": "chop_edge_frac",
+      "path": "analysis.regime.chop.edge_frac",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.chop_filter_enabled",
+      "legacy_attr": "chop_filter_enabled",
+      "path": "analysis.regime.chop.filter_enabled",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.chop_lookback",
+      "legacy_attr": "chop_lookback",
+      "path": "analysis.regime.chop.lookback",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.chop_range_atr",
+      "legacy_attr": "chop_range_atr",
+      "path": "analysis.regime.chop.range_atr",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.coil_contract",
+      "legacy_attr": "coil_contract",
+      "path": "analysis.measurements.coil_contract",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.contested_corridor_gap_atr",
+      "legacy_attr": "contested_corridor_gap_atr",
+      "path": "actionability.contested_corridor.gap_atr",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.counter_extreme_pd",
+      "legacy_attr": "counter_extreme_pd",
+      "path": "strategies.counter_trend.extreme_pd",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.counter_level_min_touches",
+      "legacy_attr": "counter_level_min_touches",
+      "path": "strategies.counter_trend.level_min_touches",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.counter_min_zone_score",
+      "legacy_attr": "counter_min_zone_score",
+      "path": "strategies.counter_trend.min_zone_score",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.daily_rollover_utc_hour",
+      "legacy_attr": "daily_rollover_utc_hour",
+      "path": "market_data.sessions.daily_rollover_utc_hour",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.database_url",
+      "legacy_attr": "database_url",
+      "path": "bootstrap.postgres.url",
+      "required": false,
+      "type": "str"
+    },
+    {
+      "item_id": "python.settings.delivery_delete_on_terminal",
+      "legacy_attr": "delivery_delete_on_terminal",
+      "path": "delivery.lifecycle.delete_on_terminal",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.delivery_thread_lifecycle",
+      "legacy_attr": "delivery_thread_lifecycle",
+      "path": "delivery.lifecycle.thread_lifecycle",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.displacement_atr_mult",
+      "legacy_attr": "displacement_atr_mult",
+      "path": "analysis.displacement.atr_mult",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.eq_band",
+      "legacy_attr": "eq_band",
+      "path": "analysis.measurements.eq_band",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.equal_tol_atr",
+      "legacy_attr": "equal_tol_atr",
+      "path": "analysis.levels.equal_tol_atr",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.event_guard_hours",
+      "legacy_attr": "event_guard_hours",
+      "path": "market_data.calendar.event_guard_hours",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.inducement_band_atr",
+      "legacy_attr": "inducement_band_atr",
+      "path": "analysis.measurements.inducement_band_atr",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.key_level_min_touches",
+      "legacy_attr": "key_level_min_touches",
+      "path": "analysis.levels.minimum_key_touches",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.key_level_role_ambiguity_gate_enabled",
+      "legacy_attr": "key_level_role_ambiguity_gate_enabled",
+      "path": "actionability.key_level_role.enabled",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.level_cluster_atr",
+      "legacy_attr": "level_cluster_atr",
+      "path": "analysis.levels.level_cluster_atr",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.log_dir",
+      "legacy_attr": "log_dir",
+      "path": "bootstrap.logging.directory",
+      "required": false,
+      "type": "str"
+    },
+    {
+      "item_id": "python.settings.log_file_enabled",
+      "legacy_attr": "log_file_enabled",
+      "path": "bootstrap.logging.file_enabled",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.log_level",
+      "legacy_attr": "log_level",
+      "path": "bootstrap.logging.level",
+      "required": false,
+      "type": "str"
+    },
+    {
+      "item_id": "python.settings.log_retention_days",
+      "legacy_attr": "log_retention_days",
+      "path": "bootstrap.logging.retention_days",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.m1_trigger_patterns",
+      "legacy_attr": "m1_trigger_patterns",
+      "path": "analysis.triggers.m1.patterns",
+      "required": false,
+      "type": "str"
+    },
+    {
+      "item_id": "python.settings.m1_trigger_strong_close_pct",
+      "legacy_attr": "m1_trigger_strong_close_pct",
+      "path": "analysis.triggers.m1.strong_close_pct",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.m1_trigger_wick_fraction",
+      "legacy_attr": "m1_trigger_wick_fraction",
+      "path": "analysis.triggers.m1.wick_fraction",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.manual_algo_dry_run",
+      "legacy_attr": "manual_algo_dry_run",
+      "path": "manual_algo.runtime.dry_run",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.manual_algo_enabled",
+      "legacy_attr": "manual_algo_enabled",
+      "path": "manual_algo.runtime.enabled",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.manual_algo_owner_execution_dm_enabled",
+      "legacy_attr": "manual_algo_owner_execution_dm_enabled",
+      "path": "manual_algo.runtime.owner_execution_dm_enabled",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.manual_algo_risk_pct",
+      "legacy_attr": "manual_algo_risk_pct",
+      "path": "manual_algo.sizing.risk_percent",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.manual_trade_command_stream",
+      "legacy_attr": "manual_trade_command_stream",
+      "path": "manual_algo.streams.manual_trade_command_stream",
+      "required": false,
+      "type": "str"
+    },
+    {
+      "item_id": "python.settings.manual_trade_command_stream_maxlen",
+      "legacy_attr": "manual_trade_command_stream_maxlen",
+      "path": "manual_algo.streams.manual_trade_command_stream_maxlen",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.manual_trade_intent_stream",
+      "legacy_attr": "manual_trade_intent_stream",
+      "path": "manual_algo.streams.intents",
+      "required": false,
+      "type": "str"
+    },
+    {
+      "item_id": "python.settings.manual_trade_intent_stream_maxlen",
+      "legacy_attr": "manual_trade_intent_stream_maxlen",
+      "path": "manual_algo.streams.manual_trade_intent_stream_maxlen",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.map_band_max_atr",
+      "legacy_attr": "map_band_max_atr",
+      "path": "analysis.market_map.band_max_atr",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.map_change_min",
+      "legacy_attr": "map_change_min",
+      "path": "analysis.market_map.change_min",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.map_fallback_radius",
+      "legacy_attr": "map_fallback_radius",
+      "path": "analysis.market_map.fallback_radius_price",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.map_major_score",
+      "legacy_attr": "map_major_score",
+      "path": "analysis.market_map.major_score",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.map_max_distance_atr",
+      "legacy_attr": "map_max_distance_atr",
+      "path": "analysis.market_map.max_distance_atr",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.map_max_per_side",
+      "legacy_attr": "map_max_per_side",
+      "path": "analysis.market_map.max_per_side",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.map_max_touches",
+      "legacy_attr": "map_max_touches",
+      "path": "analysis.market_map.max_touches",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.map_min_level_touches",
+      "legacy_attr": "map_min_level_touches",
+      "path": "analysis.market_map.min_level_touches",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.map_min_per_side",
+      "legacy_attr": "map_min_per_side",
+      "path": "analysis.market_map.min_per_side",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.map_min_zone_score",
+      "legacy_attr": "map_min_zone_score",
+      "path": "analysis.market_map.min_zone_score",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.map_scalp_radius",
+      "legacy_attr": "map_scalp_radius",
+      "path": "analysis.market_map.scalp_radius_price",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.map_scan_interval_minutes",
+      "legacy_attr": "map_scan_interval_minutes",
+      "path": "analysis.market_map.scan_interval_minutes",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.map_session_send",
+      "legacy_attr": "map_session_send",
+      "path": "delivery.market_map.session_send",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.max_entry_atr",
+      "legacy_attr": "max_entry_atr",
+      "path": "actionability.gates.max_entry_atr",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.max_merged_zone_atr",
+      "legacy_attr": "max_merged_zone_atr",
+      "path": "analysis.measurements.max_merged_zone_atr",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.max_zone_width_atr",
+      "legacy_attr": "max_zone_width_atr",
+      "path": "analysis.zones.discovery.maximum_width_atr",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.momentum_body_frac",
+      "legacy_attr": "momentum_body_frac",
+      "path": "analysis.momentum.body_frac",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.momentum_lookback",
+      "legacy_attr": "momentum_lookback",
+      "path": "analysis.momentum.lookback",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.news_brief_hour",
+      "legacy_attr": "news_brief_hour",
+      "path": "market_data.calendar.news_brief_hour",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.news_guard_block",
+      "legacy_attr": "news_guard_block",
+      "path": "market_data.calendar.news_guard_block",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.oil_keywords",
+      "legacy_attr": "oil_keywords",
+      "path": "market_data.calendar.oil_keywords",
+      "required": false,
+      "type": "str"
+    },
+    {
+      "item_id": "python.settings.proximal_band_atr",
+      "legacy_attr": "proximal_band_atr",
+      "path": "actionability.gates.proximal_band_atr",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.public_show_pips",
+      "legacy_attr": "public_show_pips",
+      "path": "delivery.telegram.public_show_pips",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.range_context_disagreement_gate_enabled",
+      "legacy_attr": "range_context_disagreement_gate_enabled",
+      "path": "actionability.gates.range_context_disagreement_gate_enabled",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.range_lookback",
+      "legacy_attr": "range_lookback",
+      "path": "analysis.ranges.lookback",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.range_scalp_allow_rejection_only",
+      "legacy_attr": "range_scalp_allow_rejection_only",
+      "path": "strategies.range_reversion.range_edge.allow_rejection_only",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.range_scalp_break_closes",
+      "legacy_attr": "range_scalp_break_closes",
+      "path": "strategies.range_reversion.range_edge.break_closes",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.range_scalp_cluster_atr",
+      "legacy_attr": "range_scalp_cluster_atr",
+      "path": "strategies.range_reversion.range_edge.cluster_atr",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.range_scalp_cluster_min_abs",
+      "legacy_attr": "range_scalp_cluster_min_abs",
+      "path": "strategies.range_reversion.range_edge.cluster_min_abs",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.range_scalp_enabled",
+      "legacy_attr": "range_scalp_enabled",
+      "path": "strategies.range_reversion.range_edge.enabled",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.range_scalp_entry_tol_atr",
+      "legacy_attr": "range_scalp_entry_tol_atr",
+      "path": "strategies.range_reversion.range_edge.entry_tol_atr",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.range_scalp_lookback",
+      "legacy_attr": "range_scalp_lookback",
+      "path": "strategies.range_reversion.range_edge.lookback",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.range_scalp_max_edge_width_atr",
+      "legacy_attr": "range_scalp_max_edge_width_atr",
+      "path": "strategies.range_reversion.range_edge.max_edge_width_atr",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.range_scalp_max_width_atr",
+      "legacy_attr": "range_scalp_max_width_atr",
+      "path": "strategies.range_reversion.range_edge.max_width_atr",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.range_scalp_min_inside_closes",
+      "legacy_attr": "range_scalp_min_inside_closes",
+      "path": "strategies.range_reversion.range_edge.min_inside_closes",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.range_scalp_min_room_atr",
+      "legacy_attr": "range_scalp_min_room_atr",
+      "path": "strategies.range_reversion.range_edge.min_room_atr",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.range_scalp_min_touches",
+      "legacy_attr": "range_scalp_min_touches",
+      "path": "strategies.range_reversion.range_edge.min_touches",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.range_scalp_min_wick_frac",
+      "legacy_attr": "range_scalp_min_wick_frac",
+      "path": "strategies.range_reversion.range_edge.min_wick_frac",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.range_scalp_min_wick_rejections",
+      "legacy_attr": "range_scalp_min_wick_rejections",
+      "path": "strategies.range_reversion.range_edge.min_wick_rejections",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.range_scalp_min_width_atr",
+      "legacy_attr": "range_scalp_min_width_atr",
+      "path": "strategies.range_reversion.range_edge.min_width_atr",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.reaction_max_atr",
+      "legacy_attr": "reaction_max_atr",
+      "path": "analysis.reactions.max_atr",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.redis_url",
+      "legacy_attr": "redis_url",
+      "path": "bootstrap.redis.url",
+      "required": false,
+      "type": "str"
+    },
+    {
+      "item_id": "python.settings.regime_chop_alert_share",
+      "legacy_attr": "regime_chop_alert_share",
+      "path": "analysis.measurements.regime_chop_alert_share",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.round_step",
+      "legacy_attr": "round_step",
+      "path": "analysis.levels.round_step",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.scalp_barrier_fallback_enabled",
+      "legacy_attr": "scalp_barrier_fallback_enabled",
+      "path": "strategies.scalp.scalp_barrier_fallback_enabled",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.scalp_barrier_fallback_min_confirmations",
+      "legacy_attr": "scalp_barrier_fallback_min_confirmations",
+      "path": "strategies.scalp.scalp_barrier_fallback_min_confirmations",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.scalp_post_impulse_range_enabled",
+      "legacy_attr": "scalp_post_impulse_range_enabled",
+      "path": "strategies.scalp.scalp_post_impulse_range_enabled",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.scalp_range_provisional_enabled",
+      "legacy_attr": "scalp_range_provisional_enabled",
+      "path": "strategies.scalp.scalp_range_provisional_enabled",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.scanner_actionability_gate_enabled",
+      "legacy_attr": "scanner_actionability_gate_enabled",
+      "path": "actionability.scanner_gates.actionability_gate_enabled",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.scanner_alert_ttl",
+      "legacy_attr": "scanner_alert_ttl",
+      "path": "market_data.scanner.alert_ttl",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.scanner_card_top_n",
+      "legacy_attr": "scanner_card_top_n",
+      "path": "delivery.scanner_cards.maximum_cards",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.scanner_conflict_margin",
+      "legacy_attr": "scanner_conflict_margin",
+      "path": "actionability.scanner_gates.conflict_margin",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.scanner_confluence_floor",
+      "legacy_attr": "scanner_confluence_floor",
+      "path": "market_data.scanner.confluence_floor",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.scanner_enabled",
+      "legacy_attr": "scanner_enabled",
+      "path": "runtime.scanner.enabled",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.scanner_exec_tf",
+      "legacy_attr": "scanner_exec_tf",
+      "path": "market_data.scanner.execution_timeframe",
+      "required": false,
+      "type": "str"
+    },
+    {
+      "item_id": "python.settings.scanner_gate_counter_bias_min_confluence",
+      "legacy_attr": "scanner_gate_counter_bias_min_confluence",
+      "path": "actionability.counter_bias.minimum_confluence",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.scanner_gate_max_source_touches",
+      "legacy_attr": "scanner_gate_max_source_touches",
+      "path": "actionability.structural_anchor.maximum_source_touches",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.scanner_gate_require_structural_anchor",
+      "legacy_attr": "scanner_gate_require_structural_anchor",
+      "path": "actionability.structural_anchor.required",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.scanner_gate_suppress_counter_bias_in_range",
+      "legacy_attr": "scanner_gate_suppress_counter_bias_in_range",
+      "path": "actionability.counter_bias.suppress_in_range",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.scanner_htf",
+      "legacy_attr": "scanner_htf",
+      "path": "market_data.scanner.htf",
+      "required": false,
+      "type": "str"
+    },
+    {
+      "item_id": "python.settings.scanner_level_bucket",
+      "legacy_attr": "scanner_level_bucket",
+      "path": "market_data.scanner.level_bucket_pips",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.scanner_symbols",
+      "legacy_attr": "scanner_symbols",
+      "path": "market_data.scanner.symbols",
+      "required": false,
+      "type": "str"
+    },
+    {
+      "item_id": "python.settings.scanner_telegram_bot_token",
+      "legacy_attr": "scanner_telegram_bot_token",
+      "path": "delivery.telegram.scanner_telegram_bot_token",
+      "required": false,
+      "type": "Optional[str]"
+    },
+    {
+      "item_id": "python.settings.scanner_top_n",
+      "legacy_attr": "scanner_top_n",
+      "path": "delivery.scanner_cards.top_n",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.scanner_window",
+      "legacy_attr": "scanner_window",
+      "path": "market_data.scanner.window",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.scanner_zone_width_gate_enabled",
+      "legacy_attr": "scanner_zone_width_gate_enabled",
+      "path": "actionability.scanner_gates.zone_width_gate_enabled",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.seq_reset_tz",
+      "legacy_attr": "seq_reset_tz",
+      "path": "delivery.presentation.seq_reset_tz",
+      "required": false,
+      "type": "str"
+    },
+    {
+      "item_id": "python.settings.session_asia_start",
+      "legacy_attr": "session_asia_start",
+      "path": "market_data.sessions.asia_start",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.session_london_start",
+      "legacy_attr": "session_london_start",
+      "path": "market_data.sessions.london_start",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.session_ny_start",
+      "legacy_attr": "session_ny_start",
+      "path": "market_data.sessions.ny_start",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.signal_public_channel_id",
+      "legacy_attr": "signal_public_channel_id",
+      "path": "delivery.telegram.signal_public_channel_id",
+      "required": false,
+      "type": "Optional[int]"
+    },
+    {
+      "item_id": "python.settings.spot_fresh_secs",
+      "legacy_attr": "spot_fresh_secs",
+      "path": "market_data.spot.fresh_secs",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.spot_max_deviation_pct",
+      "legacy_attr": "spot_max_deviation_pct",
+      "path": "market_data.spot.max_deviation_pct",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.strict_pd_gate",
+      "legacy_attr": "strict_pd_gate",
+      "path": "analysis.measurements.strict_pd_gate",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.sweep_body_frac",
+      "legacy_attr": "sweep_body_frac",
+      "path": "analysis.liquidity.sweep.body_frac",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.sweep_react_bars",
+      "legacy_attr": "sweep_react_bars",
+      "path": "analysis.liquidity.sweep.react_bars",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.swing_fractal_n",
+      "legacy_attr": "swing_fractal_n",
+      "path": "analysis.swings.fractal_size",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.telegram_bot_token",
+      "legacy_attr": "telegram_bot_token",
+      "path": "bootstrap.telegram.bot_token",
+      "required": true,
+      "type": "str"
+    },
+    {
+      "item_id": "python.settings.telegram_channel_id",
+      "legacy_attr": "telegram_channel_id",
+      "path": "delivery.telegram.telegram_channel_id",
+      "required": true,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.telegram_owner_id",
+      "legacy_attr": "telegram_owner_id",
+      "path": "delivery.telegram.telegram_owner_id",
+      "required": false,
+      "type": "Optional[int]"
+    },
+    {
+      "item_id": "python.settings.tiingo_api_key",
+      "legacy_attr": "tiingo_api_key",
+      "path": "market_data.tiingo.api_key",
+      "required": false,
+      "type": "Optional[str]"
+    },
+    {
+      "item_id": "python.settings.tl_max_slope_atr",
+      "legacy_attr": "tl_max_slope_atr",
+      "path": "analysis.trendlines.maximum_slope_atr",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.tl_min_touches",
+      "legacy_attr": "tl_min_touches",
+      "path": "analysis.trendlines.minimum_touches",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.tl_tol_atr",
+      "legacy_attr": "tl_tol_atr",
+      "path": "analysis.trendlines.tolerance_atr",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.tp_min_spacing_atr",
+      "legacy_attr": "tp_min_spacing_atr",
+      "path": "analysis.measurements.tp_min_spacing_atr",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.track_interval",
+      "legacy_attr": "track_interval",
+      "path": "market_data.watcher.interval_seconds",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.trend_allow_chase",
+      "legacy_attr": "trend_allow_chase",
+      "path": "strategies.trend.allow_chase",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.trend_atr_baseline_bars",
+      "legacy_attr": "trend_atr_baseline_bars",
+      "path": "strategies.trend.atr_baseline_bars",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.trend_atr_expansion",
+      "legacy_attr": "trend_atr_expansion",
+      "path": "strategies.trend.atr_expansion_multiplier",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.trend_breakout_accept_bars",
+      "legacy_attr": "trend_breakout_accept_bars",
+      "path": "strategies.trend.breakout_accept_bars",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.trend_breakout_max_age_bars",
+      "legacy_attr": "trend_breakout_max_age_bars",
+      "path": "strategies.trend.breakout_max_age_bars",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.trend_breakout_min_room_pips",
+      "legacy_attr": "trend_breakout_min_room_pips",
+      "path": "strategies.trend.breakout_min_room_pips",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.trend_level_buffer_atr",
+      "legacy_attr": "trend_level_buffer_atr",
+      "path": "strategies.trend.level_buffer_atr",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.trend_min_bos",
+      "legacy_attr": "trend_min_bos",
+      "path": "strategies.trend.minimum_bos",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.trend_min_height_atr",
+      "legacy_attr": "trend_min_height_atr",
+      "path": "strategies.trend.min_height_atr",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.watcher_ctrader_stale_seconds",
+      "legacy_attr": "watcher_ctrader_stale_seconds",
+      "path": "market_data.watcher.ctrader_stale_seconds",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.weekly_report_dow",
+      "legacy_attr": "weekly_report_dow",
+      "path": "delivery.reports.weekly.day_of_week",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.weekly_report_enabled",
+      "legacy_attr": "weekly_report_enabled",
+      "path": "delivery.reports.weekly.enabled",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.weekly_report_hour",
+      "legacy_attr": "weekly_report_hour",
+      "path": "delivery.reports.weekly.utc_hour",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.weekly_report_skip_empty",
+      "legacy_attr": "weekly_report_skip_empty",
+      "path": "delivery.reports.weekly.skip_empty",
+      "required": false,
+      "type": "bool"
+    },
+    {
+      "item_id": "python.settings.xau_lookback_h1_bars",
+      "legacy_attr": "xau_lookback_h1_bars",
+      "path": "market_data.lookbacks.h1_bars",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.xau_lookback_m15_bars",
+      "legacy_attr": "xau_lookback_m15_bars",
+      "path": "market_data.lookbacks.m15_bars",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.xau_lookback_m1_bars",
+      "legacy_attr": "xau_lookback_m1_bars",
+      "path": "market_data.lookbacks.m1_bars",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.xau_lookback_m5_bars",
+      "legacy_attr": "xau_lookback_m5_bars",
+      "path": "market_data.lookbacks.m5_bars",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.xau_major_zone_max_width_price",
+      "legacy_attr": "xau_major_zone_max_width_price",
+      "path": "analysis.zones.symbol_contract.major_maximum_width_price",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.xau_zone_min_width_price",
+      "legacy_attr": "xau_zone_min_width_price",
+      "path": "analysis.zones.symbol_contract.minimum_width_price",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.xau_zone_preferred_max_width_price",
+      "legacy_attr": "xau_zone_preferred_max_width_price",
+      "path": "analysis.zones.symbol_contract.preferred_maximum_width_price",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.xau_zone_preferred_min_width_price",
+      "legacy_attr": "xau_zone_preferred_min_width_price",
+      "path": "analysis.zones.symbol_contract.preferred_minimum_width_price",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.zigzag_atr_mult",
+      "legacy_attr": "zigzag_atr_mult",
+      "path": "analysis.swings.zigzag.atr_mult",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.zigzag_pct",
+      "legacy_attr": "zigzag_pct",
+      "path": "analysis.swings.zigzag.pct",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.zone_alert_ttl",
+      "legacy_attr": "zone_alert_ttl",
+      "path": "analysis.zones.alert_ttl",
+      "required": false,
+      "type": "int"
+    },
+    {
+      "item_id": "python.settings.zone_merge_gap",
+      "legacy_attr": "zone_merge_gap",
+      "path": "analysis.zones.confluence.merge_gap_price",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.zone_merge_max_width",
+      "legacy_attr": "zone_merge_max_width",
+      "path": "analysis.zones.merge_max_width",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.zone_merge_overlap",
+      "legacy_attr": "zone_merge_overlap",
+      "path": "analysis.zones.merge_overlap",
+      "required": false,
+      "type": "float"
+    },
+    {
+      "item_id": "python.settings.zone_width",
+      "legacy_attr": "zone_width",
+      "path": "analysis.zones.width",
+      "required": false,
+      "type": "str"
+    }
+  ],
+  "map": {
+    "alert_overlap_suppress": "analysis.measurements.alert_overlap_suppress",
+    "allow_counter_trend": "strategies.counter_trend.allow_counter_trend",
+    "anthropic_api_key": "delivery.presentation.anthropic_api_key",
+    "atr_length": "analysis.atr.length",
+    "auto_book_bare_pips": "delivery.presentation.auto_book_bare_pips",
+    "auto_trade_add_min_stop_pips": "execution.scaling.add.min_stop_pips",
+    "auto_trade_add_risk_fraction": "risk.sizing.add_risk_fraction",
+    "auto_trade_add_size_ratio": "execution.scaling.add.size_ratio",
+    "auto_trade_add_stop_buffer_atr": "execution.scaling.add.stop_buffer_atr",
+    "auto_trade_allow_concurrent_strategies": "risk.exposure.allow_concurrent_strategies",
+    "auto_trade_allow_counter_bias": "actionability.counter_bias.allowed",
+    "auto_trade_allow_hedged_xau": "risk.exposure.allow_hedged_xau",
+    "auto_trade_be_buffer_ticks": "execution.stops.be_buffer_ticks",
+    "auto_trade_box_breakout_enabled": "strategies.selection.box_breakout_enabled",
+    "auto_trade_box_retire_seconds": "lifecycle.range_box.retirement_seconds",
+    "auto_trade_break_retest_enabled": "strategies.breakout.break_retest_enabled",
+    "auto_trade_breakout_enabled": "strategies.breakout.breakout_enabled",
+    "auto_trade_candidate_contract_version": "contract.versions.candidate",
+    "auto_trade_candidate_max_age_seconds": "lifecycle.candidate.execution_maximum_age_seconds",
+    "auto_trade_candidate_ttl": "lifecycle.candidate.storage_ttl_seconds",
+    "auto_trade_canonical_symbol": "contract.instrument.canonical_symbol",
+    "auto_trade_contract_mode": "contract.mode",
+    "auto_trade_contract_size": "contract.instrument.contract_units_per_lot",
+    "auto_trade_demand_reaction_enabled": "strategies.reaction.demand.enabled",
+    "auto_trade_direct_publish_enabled": "runtime.auto_trade.direct_publish_enabled",
+    "auto_trade_displacement_override_lookback_bars": "execution.policy.displacement_override_lookback_bars",
+    "auto_trade_dry_run": "runtime.auto_trade.dry_run",
+    "auto_trade_edge_proximity_atr": "actionability.gates.edge_proximity_atr",
+    "auto_trade_enabled": "runtime.auto_trade.enabled",
+    "auto_trade_entry_contract_tolerance_pips": "execution.entry.contract_tolerance_pips",
+    "auto_trade_eq_exclusion_fraction": "actionability.gates.eq_exclusion_fraction",
+    "auto_trade_equity_table_version": "risk.sizing.equity_table_version",
+    "auto_trade_event_stream": "contract.streams.events",
+    "auto_trade_execution_cost_pips": "execution.policy.execution_cost_pips",
+    "auto_trade_execution_zone_max_width_atr": "execution.policy.execution_zone_max_width_atr",
+    "auto_trade_execution_zone_max_width_pips": "execution.policy.execution_zone_max_width_pips",
+    "auto_trade_fade_scalp_enabled": "strategies.scalp.fade_scalp_enabled",
+    "auto_trade_group_close_allocation": "execution.policy.group_close_allocation",
+    "auto_trade_htf_veto_enabled": "actionability.gates.htf_veto_enabled",
+    "auto_trade_inside_zone_market_entry_enabled": "execution.entry.inside_zone_market_entry_enabled",
+    "auto_trade_key_level_reaction_enabled": "strategies.reaction.key_level.enabled",
+    "auto_trade_liquidity_reversal_enabled": "strategies.reaction.liquidity_reversal.enabled",
+    "auto_trade_map_counter_bias_enabled": "strategies.mapped_zone.counter_bias_enabled",
+    "auto_trade_map_counter_bias_min_confluence": "actionability.counter_bias.map_counter_bias_min_confluence",
+    "auto_trade_map_counter_bias_min_score": "execution.mapped_zone.counter_bias_min_score",
+    "auto_trade_map_execute_distance_atr": "execution.mapped_zone.execute_distance_atr",
+    "auto_trade_map_execute_tolerance_atr": "execution.mapped_zone.execute_tolerance_atr",
+    "auto_trade_map_execute_tolerance_pips": "execution.mapped_zone.execute_tolerance_pips",
+    "auto_trade_map_hard_entry_drift_pips": "execution.mapped_zone.hard_entry_drift_pips",
+    "auto_trade_map_max_entry_drift_atr": "execution.mapped_zone.max_entry_drift_atr",
+    "auto_trade_map_min_entry_drift_pips": "execution.mapped_zone.min_entry_drift_pips",
+    "auto_trade_map_reaction_lookback_bars": "execution.mapped_zone.reaction_lookback_bars",
+    "auto_trade_map_reaction_rearm_atr": "lifecycle.mapped_zone.reaction_rearm_atr",
+    "auto_trade_map_reaction_rearm_bars": "lifecycle.mapped_zone.reaction_rearm_bars",
+    "auto_trade_map_thesis_lock_enabled": "execution.mapped_zone.thesis_lock_enabled",
+    "auto_trade_map_track_distance_atr": "execution.mapped_zone.track_distance_atr",
+    "auto_trade_map_zone_min_width_abs": "execution.mapped_zone.zone_min_width_abs",
+    "auto_trade_map_zone_min_width_atr": "execution.mapped_zone.zone_min_width_atr",
+    "auto_trade_mapped_zone_enabled": "strategies.mapped_zone.enabled",
+    "auto_trade_market_map_guard_enabled": "actionability.gates.market_map_guard_enabled",
+    "auto_trade_max_active_positions_per_symbol": "risk.position_limits.maximum_per_symbol",
+    "auto_trade_max_entry_distance_pips": "execution.entry.maximum_chase_distance_pips",
+    "auto_trade_max_tracked_candidates": "risk.position_limits.max_tracked_candidates",
+    "auto_trade_max_tranches": "execution.policy.max_tranches",
+    "auto_trade_min_capped_target_pips": "actionability.target_room.minimum_capped_target_pips",
+    "auto_trade_min_confluence": "actionability.gates.min_confluence",
+    "auto_trade_momentum_ride_enabled": "strategies.selection.momentum_ride_enabled",
+    "auto_trade_multi_match_enabled": "strategies.matching.multiple_matches_enabled",
+    "auto_trade_news_guard_minutes": "actionability.gates.news_guard_minutes",
+    "auto_trade_non_hedged_opposite_policy": "risk.exposure.non_hedged_opposite_policy",
+    "auto_trade_one_sided_range_risk_multiplier": "risk.sizing.one_sided_range_risk_multiplier",
+    "auto_trade_opposing_active_min_price": "risk.exposure.opposing_minimum_separation_price",
+    "auto_trade_opposing_barrier_atr": "actionability.target_room.barrier_buffer_atr",
+    "auto_trade_opposing_barrier_veto_enabled": "actionability.gates.opposing_barrier_veto_enabled",
+    "auto_trade_overlap_veto_enabled": "actionability.overlapping_zones.veto_enabled",
+    "auto_trade_post_fill_target_fallback": "execution.targeting.post_fill_target_fallback",
+    "auto_trade_post_impulse_risk_multiplier": "risk.sizing.post_impulse_risk_multiplier",
+    "auto_trade_profile": "runtime.profile",
+    "auto_trade_range_box_move_sl_to_be_after_scale_out": "execution.range.box_move_sl_to_be_after_scale_out",
+    "auto_trade_range_box_scale_out_enabled": "strategies.range_reversion.box_scale_out_enabled",
+    "auto_trade_range_box_scale_out_fraction": "execution.range.box_scale_out_fraction",
+    "auto_trade_range_box_scale_out_threshold_pips": "execution.range.box_scale_out_threshold_pips",
+    "auto_trade_range_box_scale_out_trigger_pips": "execution.range.box_scale_out_trigger_pips",
+    "auto_trade_range_enabled": "strategies.range_reversion.enabled",
+    "auto_trade_range_flip_enabled": "strategies.range_reversion.flip_enabled",
+    "auto_trade_range_hard_entry_drift_pips": "execution.range.hard_entry_drift_pips",
+    "auto_trade_range_max_entry_drift_atr": "execution.range.max_entry_drift_atr",
+    "auto_trade_range_max_risk_multiplier": "risk.sizing.range_max_risk_multiplier",
+    "auto_trade_range_min_entry_drift_pips": "execution.range.min_entry_drift_pips",
+    "auto_trade_range_min_rr": "execution.range.min_rr",
+    "auto_trade_range_min_target_pips": "execution.range.min_target_pips",
+    "auto_trade_range_room_stop_floor_pips": "execution.range.room_stop_floor_pips",
+    "auto_trade_range_targets_pips": "execution.targeting.range_ladder_pips",
+    "auto_trade_range_tp_buffer_pips": "execution.range.tp_buffer_pips",
+    "auto_trade_range_two_sided_enabled": "strategies.range_reversion.two_sided_enabled",
+    "auto_trade_reaction_enabled": "strategies.reaction.enabled",
+    "auto_trade_reaction_market_fraction": "execution.reaction.market_fraction",
+    "auto_trade_reaction_room_stop_floor_pips": "execution.stops.reaction.room_floor_pips",
+    "auto_trade_reaction_room_stop_min_rr": "execution.reaction.room_stop_min_rr",
+    "auto_trade_reaction_scale_enabled": "strategies.reaction.scale_enabled",
+    "auto_trade_reaction_scale_fraction": "execution.reaction.scale_fraction",
+    "auto_trade_reaction_scale_invalid_policy": "execution.reaction.scale_invalid_policy",
+    "auto_trade_reaction_scale_step_atr": "execution.reaction.scale_step_atr",
+    "auto_trade_reaction_stop_max_pips": "execution.reaction.stop_max_pips",
+    "auto_trade_reaction_stop_min_pips": "execution.reaction.stop_min_pips",
+    "auto_trade_regime_direction_enabled": "execution.regime.direction_enabled",
+    "auto_trade_regime_direction_lookback": "execution.regime.direction_lookback",
+    "auto_trade_regime_min_directional_swings": "execution.regime.min_directional_swings",
+    "auto_trade_regime_min_displacement_atr": "execution.regime.min_displacement_atr",
+    "auto_trade_require_demo_account": "contract.account.require_demo",
+    "auto_trade_require_flat_for_range": "risk.exposure.require_flat_for_range",
+    "auto_trade_retest_enabled": "strategies.selection.retest_enabled",
+    "auto_trade_retest_trigger_validity_bars": "lifecycle.retest.trigger_validity_bars",
+    "auto_trade_same_direction_stack_size_fraction": "risk.position_limits.same_direction_stack_size_fraction",
+    "auto_trade_session_level_reaction_enabled": "strategies.reaction.session_level.enabled",
+    "auto_trade_sizing_mode": "risk.sizing.mode",
+    "auto_trade_sl_distance": "execution.stops.sl_distance",
+    "auto_trade_snap_back_enabled": "strategies.selection.snap_back_enabled",
+    "auto_trade_spot_max_age": "market_data.spot.maximum_age_seconds",
+    "auto_trade_stop_push_beyond_zone": "execution.stops.stop_push_beyond_zone",
+    "auto_trade_strategy_match_enabled": "runtime.auto_trade.strategy_match_enabled",
+    "auto_trade_strategy_match_max_age_seconds": "lifecycle.strategy_match.maximum_age_seconds",
+    "auto_trade_stream": "contract.streams.candidates",
+    "auto_trade_stream_maxlen": "contract.streams.candidate_maximum_length",
+    "auto_trade_structural_guard_mode": "actionability.structural_guard.guard_mode",
+    "auto_trade_structural_reaction_lookback_bars": "execution.policy.structural_reaction_lookback_bars",
+    "auto_trade_supply_reaction_enabled": "strategies.reaction.supply.enabled",
+    "auto_trade_symbols": "contract.instrument.symbols",
+    "auto_trade_telegram_delete_root_on_terminal": "delivery.telegram.delete_root_on_terminal",
+    "auto_trade_telegram_single_root_card": "delivery.telegram.single_root_card",
+    "auto_trade_tier_a_risk_multiplier": "risk.tiers.a_multiplier",
+    "auto_trade_tier_b_risk_multiplier": "risk.tiers.b_multiplier",
+    "auto_trade_tp_pips": "execution.targeting.default_ladder_pips",
+    "auto_trade_track_all_structural_matches": "strategies.matching.track_all_structural_matches",
+    "auto_trade_trade_plan_stream": "contract.streams.trade_plans",
+    "auto_trade_trend_enabled": "strategies.trend.enabled",
+    "auto_trade_trend_hard_entry_drift_pips": "execution.trend.hard_entry_drift_pips",
+    "auto_trade_trend_max_entry_drift_atr": "execution.trend.max_entry_drift_atr",
+    "auto_trade_trend_min_entry_drift_pips": "execution.trend.min_entry_drift_pips",
+    "auto_trade_trend_pullback_enabled": "strategies.trend.pullback_enabled",
+    "auto_trade_trend_stop_max_pips": "execution.trend.stop_max_pips",
+    "auto_trade_trend_stop_min_pips": "execution.stops.trend.minimum_pips",
+    "auto_trade_trendline_reaction_enabled": "strategies.reaction.trendline.enabled",
+    "auto_trade_unfilled_leg_after_tp_policy": "execution.targeting.unfilled_leg_after_tp_policy",
+    "auto_trade_wick_stop_buffer_atr": "execution.stops.wick_stop_buffer_atr",
+    "auto_trade_xau_pip_size": "contract.instrument.pip_size",
+    "auto_trade_xau_price_digits": "contract.instrument.price_digits",
+    "auto_trade_zone_cooldown_atr": "lifecycle.zone.cooldown_atr",
+    "auto_trade_zone_cooldown_enabled": "lifecycle.zone.cooldown_enabled",
+    "auto_trade_zone_fill_enabled": "execution.zone_scaling.fill_enabled",
+    "auto_trade_zone_fill_fallback_enabled": "execution.zone_scaling.fill_fallback_enabled",
+    "auto_trade_zone_fill_min_atr": "execution.zone_scaling.fill_min_atr",
+    "auto_trade_zone_reconcile_enabled": "actionability.zone_reconciliation.enabled",
+    "auto_trade_zone_reconcile_mode": "actionability.zone_reconciliation.mode",
+    "auto_trade_zone_scale_first_leg_fraction": "execution.zone_scaling.first_leg_fraction",
+    "auto_trade_zone_scale_step_atr": "execution.zone_scaling.scale_step_atr",
+    "auto_trade_zone_scale_undersized_policy": "execution.zone_scaling.scale_undersized_policy",
+    "breakout_accept_bars": "analysis.breakout.accept_bars",
+    "breakout_buffer_atr": "analysis.breakout.buffer_atr",
+    "breakout_max_age_bars": "analysis.breakout.max_age_bars",
+    "calendar_currencies": "market_data.calendar.currencies",
+    "calendar_enabled": "market_data.calendar.enabled",
+    "calendar_feed_nextweek": "market_data.calendar.feed_nextweek",
+    "calendar_feed_thisweek": "market_data.calendar.feed_thisweek",
+    "calendar_user_agent": "market_data.calendar.user_agent",
+    "chop_edge_frac": "analysis.regime.chop.edge_frac",
+    "chop_filter_enabled": "analysis.regime.chop.filter_enabled",
+    "chop_lookback": "analysis.regime.chop.lookback",
+    "chop_range_atr": "analysis.regime.chop.range_atr",
+    "coil_contract": "analysis.measurements.coil_contract",
+    "contested_corridor_gap_atr": "actionability.contested_corridor.gap_atr",
+    "counter_extreme_pd": "strategies.counter_trend.extreme_pd",
+    "counter_level_min_touches": "strategies.counter_trend.level_min_touches",
+    "counter_min_zone_score": "strategies.counter_trend.min_zone_score",
+    "daily_rollover_utc_hour": "market_data.sessions.daily_rollover_utc_hour",
+    "database_url": "bootstrap.postgres.url",
+    "delivery_delete_on_terminal": "delivery.lifecycle.delete_on_terminal",
+    "delivery_thread_lifecycle": "delivery.lifecycle.thread_lifecycle",
+    "displacement_atr_mult": "analysis.displacement.atr_mult",
+    "eq_band": "analysis.measurements.eq_band",
+    "equal_tol_atr": "analysis.levels.equal_tol_atr",
+    "event_guard_hours": "market_data.calendar.event_guard_hours",
+    "inducement_band_atr": "analysis.measurements.inducement_band_atr",
+    "key_level_min_touches": "analysis.levels.minimum_key_touches",
+    "key_level_role_ambiguity_gate_enabled": "actionability.key_level_role.enabled",
+    "level_cluster_atr": "analysis.levels.level_cluster_atr",
+    "log_dir": "bootstrap.logging.directory",
+    "log_file_enabled": "bootstrap.logging.file_enabled",
+    "log_level": "bootstrap.logging.level",
+    "log_retention_days": "bootstrap.logging.retention_days",
+    "m1_trigger_patterns": "analysis.triggers.m1.patterns",
+    "m1_trigger_strong_close_pct": "analysis.triggers.m1.strong_close_pct",
+    "m1_trigger_wick_fraction": "analysis.triggers.m1.wick_fraction",
+    "manual_algo_dry_run": "manual_algo.runtime.dry_run",
+    "manual_algo_enabled": "manual_algo.runtime.enabled",
+    "manual_algo_owner_execution_dm_enabled": "manual_algo.runtime.owner_execution_dm_enabled",
+    "manual_algo_risk_pct": "manual_algo.sizing.risk_percent",
+    "manual_trade_command_stream": "manual_algo.streams.manual_trade_command_stream",
+    "manual_trade_command_stream_maxlen": "manual_algo.streams.manual_trade_command_stream_maxlen",
+    "manual_trade_intent_stream": "manual_algo.streams.intents",
+    "manual_trade_intent_stream_maxlen": "manual_algo.streams.manual_trade_intent_stream_maxlen",
+    "map_band_max_atr": "analysis.market_map.band_max_atr",
+    "map_change_min": "analysis.market_map.change_min",
+    "map_fallback_radius": "analysis.market_map.fallback_radius_price",
+    "map_major_score": "analysis.market_map.major_score",
+    "map_max_distance_atr": "analysis.market_map.max_distance_atr",
+    "map_max_per_side": "analysis.market_map.max_per_side",
+    "map_max_touches": "analysis.market_map.max_touches",
+    "map_min_level_touches": "analysis.market_map.min_level_touches",
+    "map_min_per_side": "analysis.market_map.min_per_side",
+    "map_min_zone_score": "analysis.market_map.min_zone_score",
+    "map_scalp_radius": "analysis.market_map.scalp_radius_price",
+    "map_scan_interval_minutes": "analysis.market_map.scan_interval_minutes",
+    "map_session_send": "delivery.market_map.session_send",
+    "max_entry_atr": "actionability.gates.max_entry_atr",
+    "max_merged_zone_atr": "analysis.measurements.max_merged_zone_atr",
+    "max_zone_width_atr": "analysis.zones.discovery.maximum_width_atr",
+    "momentum_body_frac": "analysis.momentum.body_frac",
+    "momentum_lookback": "analysis.momentum.lookback",
+    "news_brief_hour": "market_data.calendar.news_brief_hour",
+    "news_guard_block": "market_data.calendar.news_guard_block",
+    "oil_keywords": "market_data.calendar.oil_keywords",
+    "proximal_band_atr": "actionability.gates.proximal_band_atr",
+    "public_show_pips": "delivery.telegram.public_show_pips",
+    "range_context_disagreement_gate_enabled": "actionability.gates.range_context_disagreement_gate_enabled",
+    "range_lookback": "analysis.ranges.lookback",
+    "range_scalp_allow_rejection_only": "strategies.range_reversion.range_edge.allow_rejection_only",
+    "range_scalp_break_closes": "strategies.range_reversion.range_edge.break_closes",
+    "range_scalp_cluster_atr": "strategies.range_reversion.range_edge.cluster_atr",
+    "range_scalp_cluster_min_abs": "strategies.range_reversion.range_edge.cluster_min_abs",
+    "range_scalp_enabled": "strategies.range_reversion.range_edge.enabled",
+    "range_scalp_entry_tol_atr": "strategies.range_reversion.range_edge.entry_tol_atr",
+    "range_scalp_lookback": "strategies.range_reversion.range_edge.lookback",
+    "range_scalp_max_edge_width_atr": "strategies.range_reversion.range_edge.max_edge_width_atr",
+    "range_scalp_max_width_atr": "strategies.range_reversion.range_edge.max_width_atr",
+    "range_scalp_min_inside_closes": "strategies.range_reversion.range_edge.min_inside_closes",
+    "range_scalp_min_room_atr": "strategies.range_reversion.range_edge.min_room_atr",
+    "range_scalp_min_touches": "strategies.range_reversion.range_edge.min_touches",
+    "range_scalp_min_wick_frac": "strategies.range_reversion.range_edge.min_wick_frac",
+    "range_scalp_min_wick_rejections": "strategies.range_reversion.range_edge.min_wick_rejections",
+    "range_scalp_min_width_atr": "strategies.range_reversion.range_edge.min_width_atr",
+    "reaction_max_atr": "analysis.reactions.max_atr",
+    "redis_url": "bootstrap.redis.url",
+    "regime_chop_alert_share": "analysis.measurements.regime_chop_alert_share",
+    "round_step": "analysis.levels.round_step",
+    "scalp_barrier_fallback_enabled": "strategies.scalp.scalp_barrier_fallback_enabled",
+    "scalp_barrier_fallback_min_confirmations": "strategies.scalp.scalp_barrier_fallback_min_confirmations",
+    "scalp_post_impulse_range_enabled": "strategies.scalp.scalp_post_impulse_range_enabled",
+    "scalp_range_provisional_enabled": "strategies.scalp.scalp_range_provisional_enabled",
+    "scanner_actionability_gate_enabled": "actionability.scanner_gates.actionability_gate_enabled",
+    "scanner_alert_ttl": "market_data.scanner.alert_ttl",
+    "scanner_card_top_n": "delivery.scanner_cards.maximum_cards",
+    "scanner_conflict_margin": "actionability.scanner_gates.conflict_margin",
+    "scanner_confluence_floor": "market_data.scanner.confluence_floor",
+    "scanner_enabled": "runtime.scanner.enabled",
+    "scanner_exec_tf": "market_data.scanner.execution_timeframe",
+    "scanner_gate_counter_bias_min_confluence": "actionability.counter_bias.minimum_confluence",
+    "scanner_gate_max_source_touches": "actionability.structural_anchor.maximum_source_touches",
+    "scanner_gate_require_structural_anchor": "actionability.structural_anchor.required",
+    "scanner_gate_suppress_counter_bias_in_range": "actionability.counter_bias.suppress_in_range",
+    "scanner_htf": "market_data.scanner.htf",
+    "scanner_level_bucket": "market_data.scanner.level_bucket_pips",
+    "scanner_symbols": "market_data.scanner.symbols",
+    "scanner_telegram_bot_token": "delivery.telegram.scanner_telegram_bot_token",
+    "scanner_top_n": "delivery.scanner_cards.top_n",
+    "scanner_window": "market_data.scanner.window",
+    "scanner_zone_width_gate_enabled": "actionability.scanner_gates.zone_width_gate_enabled",
+    "seq_reset_tz": "delivery.presentation.seq_reset_tz",
+    "session_asia_start": "market_data.sessions.asia_start",
+    "session_london_start": "market_data.sessions.london_start",
+    "session_ny_start": "market_data.sessions.ny_start",
+    "signal_public_channel_id": "delivery.telegram.signal_public_channel_id",
+    "spot_fresh_secs": "market_data.spot.fresh_secs",
+    "spot_max_deviation_pct": "market_data.spot.max_deviation_pct",
+    "strict_pd_gate": "analysis.measurements.strict_pd_gate",
+    "sweep_body_frac": "analysis.liquidity.sweep.body_frac",
+    "sweep_react_bars": "analysis.liquidity.sweep.react_bars",
+    "swing_fractal_n": "analysis.swings.fractal_size",
+    "telegram_bot_token": "bootstrap.telegram.bot_token",
+    "telegram_channel_id": "delivery.telegram.telegram_channel_id",
+    "telegram_owner_id": "delivery.telegram.telegram_owner_id",
+    "tiingo_api_key": "market_data.tiingo.api_key",
+    "tl_max_slope_atr": "analysis.trendlines.maximum_slope_atr",
+    "tl_min_touches": "analysis.trendlines.minimum_touches",
+    "tl_tol_atr": "analysis.trendlines.tolerance_atr",
+    "tp_min_spacing_atr": "analysis.measurements.tp_min_spacing_atr",
+    "track_interval": "market_data.watcher.interval_seconds",
+    "trend_allow_chase": "strategies.trend.allow_chase",
+    "trend_atr_baseline_bars": "strategies.trend.atr_baseline_bars",
+    "trend_atr_expansion": "strategies.trend.atr_expansion_multiplier",
+    "trend_breakout_accept_bars": "strategies.trend.breakout_accept_bars",
+    "trend_breakout_max_age_bars": "strategies.trend.breakout_max_age_bars",
+    "trend_breakout_min_room_pips": "strategies.trend.breakout_min_room_pips",
+    "trend_level_buffer_atr": "strategies.trend.level_buffer_atr",
+    "trend_min_bos": "strategies.trend.minimum_bos",
+    "trend_min_height_atr": "strategies.trend.min_height_atr",
+    "watcher_ctrader_stale_seconds": "market_data.watcher.ctrader_stale_seconds",
+    "weekly_report_dow": "delivery.reports.weekly.day_of_week",
+    "weekly_report_enabled": "delivery.reports.weekly.enabled",
+    "weekly_report_hour": "delivery.reports.weekly.utc_hour",
+    "weekly_report_skip_empty": "delivery.reports.weekly.skip_empty",
+    "xau_lookback_h1_bars": "market_data.lookbacks.h1_bars",
+    "xau_lookback_m15_bars": "market_data.lookbacks.m15_bars",
+    "xau_lookback_m1_bars": "market_data.lookbacks.m1_bars",
+    "xau_lookback_m5_bars": "market_data.lookbacks.m5_bars",
+    "xau_major_zone_max_width_price": "analysis.zones.symbol_contract.major_maximum_width_price",
+    "xau_zone_min_width_price": "analysis.zones.symbol_contract.minimum_width_price",
+    "xau_zone_preferred_max_width_price": "analysis.zones.symbol_contract.preferred_maximum_width_price",
+    "xau_zone_preferred_min_width_price": "analysis.zones.symbol_contract.preferred_minimum_width_price",
+    "zigzag_atr_mult": "analysis.swings.zigzag.atr_mult",
+    "zigzag_pct": "analysis.swings.zigzag.pct",
+    "zone_alert_ttl": "analysis.zones.alert_ttl",
+    "zone_merge_gap": "analysis.zones.confluence.merge_gap_price",
+    "zone_merge_max_width": "analysis.zones.merge_max_width",
+    "zone_merge_overlap": "analysis.zones.merge_overlap",
+    "zone_width": "analysis.zones.width"
+  },
+  "source_fingerprint_sha256": "5001f967384dd74f709d75b714cc03b2576b900ef0b9861aa77b25ff80e29094",
+  "source_model": "app.configuration.models.root.ApexVoidConfig"
+}

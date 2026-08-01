@@ -144,6 +144,9 @@ class ManualAlgoStreamsConfig(FrozenConfigModel):
       ContextDefault(DefaultContext.CTRADER_FROM_ENVIRONMENT, 'manual_trade:commands'),
     ),
     validation_summary='Pydantic required/type coercion only',
+    evidence_notes=(
+      'Python exposes the stream through Settings while the executor also owns a direct command-stream binding.',
+    ),
   )
   manual_trade_command_stream_maxlen: int = config_field(1000,
     item_id='python.settings.manual_trade_command_stream_maxlen',

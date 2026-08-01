@@ -60,6 +60,9 @@ class MarketDataCtraderFeedConfig(FrozenConfigModel):
       ContextDefault(DefaultContext.CTRADER_FROM_ENVIRONMENT, 'bars:new'),
     ),
     validation_summary='FeedOptions.Env',
+    evidence_notes=(
+      'Feed option is configurable while the Python bars consumer contract is not a legacy Settings field.',
+    ),
   )
   bars_window_max: int = config_field(1500,
     item_id='ctrader.env.BARS_WINDOW_MAX',
@@ -106,7 +109,7 @@ class MarketDataCtraderFeedConfig(FrozenConfigModel):
     ),
     validation_summary='FeedOptions.Env',
   )
-  timeframes: list[str] = config_field('M1,M5,M15,H1',
+  timeframes: list[str] = config_field(['M1', 'M5', 'M15', 'H1'],
     item_id='ctrader.env.CTRADER_TIMEFRAMES',
     legacy_attr=None,
     env='CTRADER_TIMEFRAMES',
@@ -117,9 +120,12 @@ class MarketDataCtraderFeedConfig(FrozenConfigModel):
     risk=RiskClassification.INFRASTRUCTURE,
     description='cTrader runtime option CTRADER_TIMEFRAMES mapped to market_data.ctrader_feed.timeframes.',
     default_contexts=(
-      ContextDefault(DefaultContext.CTRADER_FROM_ENVIRONMENT, 'M1,M5,M15,H1'),
+      ContextDefault(DefaultContext.CTRADER_FROM_ENVIRONMENT, ['M1', 'M5', 'M15', 'H1']),
     ),
     validation_summary='FeedOptions.Env',
+    evidence_notes=(
+      'C# schema defaults M1,M5,M15,H1; deployment profile values remain separate evidence.',
+    ),
   )
 
 

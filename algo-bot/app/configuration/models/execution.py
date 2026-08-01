@@ -495,7 +495,7 @@ class ExecutionTargetingConfig(FrozenConfigModel):
     ),
     validation_summary='Pydantic required/type coercion only; EnvironmentResolver.IntList + AutoTradeOptions.Validate',
   )
-  tp_weights: list[int] = config_field('20,20,20,20,20',
+  tp_weights: list[int] = config_field([20, 20, 20, 20, 20],
     item_id='ctrader.env.AUTO_TRADE_TP_WEIGHTS',
     legacy_attr=None,
     env='AUTO_TRADE_TP_WEIGHTS',
@@ -506,7 +506,7 @@ class ExecutionTargetingConfig(FrozenConfigModel):
     risk=RiskClassification.EXECUTION_SAFETY,
     description='cTrader runtime option AUTO_TRADE_TP_WEIGHTS mapped to execution.targeting.tp_weights.',
     default_contexts=(
-      ContextDefault(DefaultContext.CTRADER_FROM_ENVIRONMENT, '20,20,20,20,20'),
+      ContextDefault(DefaultContext.CTRADER_FROM_ENVIRONMENT, [20, 20, 20, 20, 20]),
     ),
     validation_summary='EnvironmentResolver.IntList + AutoTradeOptions.Validate',
   )

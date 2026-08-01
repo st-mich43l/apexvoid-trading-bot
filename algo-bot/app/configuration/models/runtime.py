@@ -1,6 +1,7 @@
 """Complete inactive runtime configuration domain."""
 
 from pydantic import Field
+from pydantic import field_validator
 
 from app.configuration.metadata import ConfigKind
 from app.configuration.metadata import ConfigOwner
@@ -125,5 +126,11 @@ class RuntimeConfig(FrozenConfigModel):
     ),
     allowed_values=('conservative', 'demo_eval'),
     validation_summary='Pydantic type coercion + Settings cross-field model validator; EnvironmentResolver.String + AutoTradeOptions.Validate',
+    pattern='^(conservative|demo_eval)$',
   )
   scanner: RuntimeScannerConfig = Field(default_factory=RuntimeScannerConfig)
+
+  @field_validator("profile", mode="before")
+  @classmethod
+  def normalize_profile(cls, value):
+    return value.strip().lower() if isinstance(value, str) else value
