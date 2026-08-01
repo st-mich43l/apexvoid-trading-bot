@@ -72,7 +72,10 @@ from app.autotrade.strategy_match import (
   StrategyMatch,
   strategy_match_key,
 )
-from app.autotrade.strategy_taxonomy import is_reaction_strategy
+from app.autotrade.strategy_taxonomy import (
+  bypasses_opposing_structure_gates,
+  is_reaction_strategy,
+)
 from app.autotrade.structural_target_room import (
   evaluate_structural_target_room,
   filter_displaced_opposing_entries,
@@ -2751,45 +2754,8 @@ async def _publish_candidate(
         await _record_gate_reject(client, symbol, "htf_veto")
         return None
   m1 = (frames or {}).get("M1") if frames is not None else None
-  if (
-    settings.auto_trade_opposing_barrier_veto_enabled
-    or guard_mode == GUARD_MODE_OBSERVE
-  ):
-    source = _structural_source_identity(
-      strategy="Range Box Scalp",
-      family="range",
-      structural_source="range_box_edge",
-      low=decision.rail.low,
-      high=decision.rail.high,
-      key_level=decision.rail.level,
-      zone_id=f"{decision.box.box_id}:{decision.direction.upper()}",
-    )
-    barrier_outcome = _opposing_barrier_decision(
-      decision.direction, entry_reference, None, scale_context.atr,
-      htf_zones or [], htf_levels or [],
-      settings.auto_trade_opposing_barrier_atr,
-      source=source,
-      guard_mode=guard_mode,
-    )
-    if barrier_outcome.reason_code != "no_opposing_barrier":
-      await _record_guard_evaluation(
-        client, symbol, barrier_outcome,
-        strategy="Range Box Scalp",
-        direction=decision.direction,
-        source_structure="range_box_edge",
-      )
-      log.info(
-        "auto-scalp candidate %s symbol=%s reason=%s",
-        "blocked" if barrier_outcome.hard_block else barrier_outcome.outcome,
-        symbol, barrier_outcome.message,
-      )
-    if barrier_outcome.hard_block:
-      await _record_gate_reject(
-        client, symbol, barrier_outcome.reason_code,
-      )
-      return None
-    if barrier_outcome.outcome == OUTCOME_WAIT:
-      return None
+  # Range/scalp may enter inside HTF opposing structure; native range room
+  # (select_range_target / EQ room) remains the room gate.
   cooldown_reason = await _zone_cooldown_reason(
     client, symbol, decision.direction, entry_reference,
     scale_context.atr, settings.auto_trade_zone_cooldown_atr,
@@ -3417,8 +3383,11 @@ async def _publish_strategy_match(
     ),
   )
   if (
-    settings.auto_trade_opposing_barrier_veto_enabled
-    or guard_mode == GUARD_MODE_OBSERVE
+    not bypasses_opposing_structure_gates(match.strategy)
+    and (
+      settings.auto_trade_opposing_barrier_veto_enabled
+      or guard_mode == GUARD_MODE_OBSERVE
+    )
   ):
     source = _structural_source_identity(
       strategy=match.strategy,
@@ -5115,7 +5084,10 @@ async def _publish_trade_plan_v7(
     )
   room_entries = (
     ()
-    if market_map is None
+    if (
+      market_map is None
+      or bypasses_opposing_structure_gates(execution_match.strategy)
+    )
     else tuple(getattr(market_map, "actionable_entries", ()) or ())
   )
   displacement_lookback = max(
@@ -5267,7 +5239,10 @@ async def _publish_trade_plan_v7(
         client, zone_id=zone_claim_id, owner_id=setup_id,
       )
 
-  if barrier_outcome.hard_block:
+  if (
+    barrier_outcome.hard_block
+    and not bypasses_opposing_structure_gates(match_for_plan.strategy)
+  ):
     await _release_claims()
     await _record_v7_build_rejected(
       client, symbol, match, barrier_outcome.reason_code,
