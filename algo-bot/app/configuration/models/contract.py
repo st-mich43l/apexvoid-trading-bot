@@ -31,12 +31,12 @@ class ContractVersionsConfig(FrozenConfigModel):
 class InstrumentContractConfig(FrozenConfigModel):
   pip_size: float = config_field(
     0.1,
-    legacy_attr="auto_trade_pip_size",
+    legacy_attr="auto_trade_xau_pip_size",
     env="AUTO_TRADE_XAU_PIP_SIZE",
     aliases=("AUTO_TRADE_PIP_SIZE",),
     owner=ConfigOwner.SHARED,
     reload=ReloadPolicy.RESTART,
-    unit=ConfigUnit.PRICE,
+    unit=ConfigUnit.PIPS,
     risk=RiskClassification.CROSS_SERVICE_CONTRACT,
     shared_with_ctrader=True,
     mismatch_policy=MismatchPolicy.FATAL,

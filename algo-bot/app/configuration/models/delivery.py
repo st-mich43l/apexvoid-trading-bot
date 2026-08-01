@@ -16,7 +16,7 @@ class WeeklyReportConfig(FrozenConfigModel):
     legacy_attr="weekly_report_enabled",
     env="WEEKLY_REPORT_ENABLED",
     owner=ConfigOwner.PYTHON,
-    reload=ReloadPolicy.NEXT_WORKER_CYCLE,
+    reload=ReloadPolicy.IMMEDIATE,
     unit=ConfigUnit.BOOLEAN,
     risk=RiskClassification.DELIVERY,
     description="Weekly performance report switch.",

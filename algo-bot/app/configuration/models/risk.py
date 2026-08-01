@@ -1,5 +1,7 @@
 """Sizing and exposure model shells."""
 
+from decimal import Decimal
+
 from pydantic import Field
 
 from app.configuration.metadata import ConfigOwner
@@ -11,15 +13,14 @@ from app.configuration.models.base import FrozenConfigModel
 
 
 class SizingConfig(FrozenConfigModel):
-  base_risk_percent: float = config_field(
-    2.0,
-    legacy_attr="auto_trade_risk_pct",
+  risk_pct: Decimal = config_field(
+    Decimal("2"),
+    legacy_attr=None,
     env="AUTO_TRADE_RISK_PCT",
-    owner=ConfigOwner.SHARED,
+    owner=ConfigOwner.CTRADER,
     reload=ReloadPolicy.NEW_SETUP_ONLY,
     unit=ConfigUnit.PERCENT,
     risk=RiskClassification.BROKER_ACCOUNT_SAFETY,
-    shared_with_ctrader=True,
     description="Base account-equity risk percentage.",
   )
 

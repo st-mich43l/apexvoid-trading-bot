@@ -17,7 +17,7 @@ class AtrConfig(FrozenConfigModel):
     env="ATR_LENGTH",
     owner=ConfigOwner.PYTHON,
     reload=ReloadPolicy.NEXT_SCANNER_CYCLE,
-    unit=ConfigUnit.BARS,
+    unit=ConfigUnit.ATR,
     risk=RiskClassification.ANALYSIS_BEHAVIOR,
     description="ATR rolling window length.",
   )

@@ -17,7 +17,7 @@ class ManualAlgoRuntimeConfig(FrozenConfigModel):
     legacy_attr="manual_algo_enabled",
     env="MANUAL_ALGO_ENABLED",
     owner=ConfigOwner.SHARED,
-    reload=ReloadPolicy.RESTART,
+    reload=ReloadPolicy.NEW_SETUP_ONLY,
     unit=ConfigUnit.BOOLEAN,
     risk=RiskClassification.EXECUTION_SAFETY,
     shared_with_ctrader=True,

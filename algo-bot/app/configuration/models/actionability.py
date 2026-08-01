@@ -12,21 +12,21 @@ from app.configuration.models.base import FrozenConfigModel
 
 class StructuralAnchorConfig(FrozenConfigModel):
   required: bool = config_field(
-    True,
+    False,
     legacy_attr="scanner_gate_require_structural_anchor",
     env="SCANNER_GATE_REQUIRE_STRUCTURAL_ANCHOR",
     owner=ConfigOwner.PYTHON,
-    reload=ReloadPolicy.NEXT_SCANNER_CYCLE,
+    reload=ReloadPolicy.NEW_SETUP_ONLY,
     unit=ConfigUnit.BOOLEAN,
     risk=RiskClassification.EXECUTION_SAFETY,
     description="Require a structural anchor before actionability.",
   )
   maximum_source_touches: int = config_field(
-    4,
+    0,
     legacy_attr="scanner_gate_max_source_touches",
     env="SCANNER_GATE_MAX_SOURCE_TOUCHES",
     owner=ConfigOwner.PYTHON,
-    reload=ReloadPolicy.NEXT_SCANNER_CYCLE,
+    reload=ReloadPolicy.NEW_SETUP_ONLY,
     unit=ConfigUnit.COUNT,
     risk=RiskClassification.EXECUTION_SAFETY,
     description="Maximum source-zone touches accepted by the gate.",

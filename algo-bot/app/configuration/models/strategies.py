@@ -4,6 +4,7 @@ from pydantic import Field
 
 from app.configuration.metadata import ConfigOwner
 from app.configuration.metadata import ConfigUnit
+from app.configuration.metadata import MismatchPolicy
 from app.configuration.metadata import ReloadPolicy
 from app.configuration.metadata import RiskClassification
 from app.configuration.metadata import config_field
@@ -20,6 +21,7 @@ class TrendStrategyConfig(FrozenConfigModel):
     unit=ConfigUnit.BOOLEAN,
     risk=RiskClassification.STRATEGY_BEHAVIOR,
     shared_with_ctrader=True,
+    mismatch_policy=MismatchPolicy.WARNING,
     description="Trend strategy enablement.",
   )
   minimum_bos: int = config_field(
@@ -27,7 +29,7 @@ class TrendStrategyConfig(FrozenConfigModel):
     legacy_attr="trend_min_bos",
     env="TREND_MIN_BOS",
     owner=ConfigOwner.PYTHON,
-    reload=ReloadPolicy.NEXT_SCANNER_CYCLE,
+    reload=ReloadPolicy.NEW_SETUP_ONLY,
     unit=ConfigUnit.COUNT,
     risk=RiskClassification.STRATEGY_BEHAVIOR,
     description="Minimum break-of-structure count for trend qualification.",
