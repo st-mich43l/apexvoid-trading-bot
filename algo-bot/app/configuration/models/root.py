@@ -1,4 +1,4 @@
-"""Inactive grouped root model for Phase 2A."""
+"""Complete canonical grouped schema; inactive until a later phase."""
 
 from pydantic import Field
 
@@ -30,5 +30,5 @@ class ApexVoidConfig(FrozenConfigModel):
   execution: ExecutionConfig = Field(default_factory=ExecutionConfig)
   risk: RiskConfig = Field(default_factory=RiskConfig)
   lifecycle: LifecycleConfig = Field(default_factory=LifecycleConfig)
-  delivery: DeliveryConfig = Field(default_factory=DeliveryConfig)
+  delivery: DeliveryConfig
   manual_algo: ManualAlgoConfig = Field(default_factory=ManualAlgoConfig)
