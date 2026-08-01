@@ -12,6 +12,7 @@ from app.configuration.models.base import FrozenConfigModel
 
 class TelegramBootstrapConfig(FrozenConfigModel):
   bot_token: str = config_field(
+    item_id="python.settings.telegram_bot_token",
     legacy_attr="telegram_bot_token",
     env="TELEGRAM_BOT_TOKEN",
     owner=ConfigOwner.PYTHON,
@@ -26,6 +27,7 @@ class TelegramBootstrapConfig(FrozenConfigModel):
 class CTraderConnectionConfig(FrozenConfigModel):
   host: str = config_field(
     "demo.ctraderapi.com",
+    item_id="ctrader.env.CTRADER_HOST",
     legacy_attr=None,
     env="CTRADER_HOST",
     owner=ConfigOwner.CTRADER,
@@ -36,6 +38,7 @@ class CTraderConnectionConfig(FrozenConfigModel):
   )
   port: int = config_field(
     5035,
+    item_id="ctrader.env.CTRADER_PORT",
     legacy_attr=None,
     env="CTRADER_PORT",
     owner=ConfigOwner.CTRADER,

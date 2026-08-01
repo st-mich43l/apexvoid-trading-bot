@@ -15,6 +15,7 @@ from app.configuration.models.base import FrozenConfigModel
 class SizingConfig(FrozenConfigModel):
   risk_pct: Decimal = config_field(
     Decimal("2"),
+    item_id="ctrader.env.AUTO_TRADE_RISK_PCT",
     legacy_attr=None,
     env="AUTO_TRADE_RISK_PCT",
     owner=ConfigOwner.CTRADER,

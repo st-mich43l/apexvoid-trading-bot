@@ -13,6 +13,7 @@ from app.configuration.models.base import FrozenConfigModel
 class WeeklyReportConfig(FrozenConfigModel):
   enabled: bool = config_field(
     True,
+    item_id="python.settings.weekly_report_enabled",
     legacy_attr="weekly_report_enabled",
     env="WEEKLY_REPORT_ENABLED",
     owner=ConfigOwner.PYTHON,

@@ -13,6 +13,7 @@ from app.configuration.models.base import FrozenConfigModel
 class CTraderFeedConfig(FrozenConfigModel):
   symbol: str = config_field(
     "XAUUSD",
+    item_id="ctrader.env.CTRADER_SYMBOL",
     legacy_attr=None,
     env="CTRADER_SYMBOL",
     owner=ConfigOwner.CTRADER,
@@ -23,6 +24,7 @@ class CTraderFeedConfig(FrozenConfigModel):
   )
   backfill_bars: int = config_field(
     1500,
+    item_id="ctrader.env.CTRADER_BACKFILL_BARS",
     legacy_attr=None,
     env="CTRADER_BACKFILL_BARS",
     owner=ConfigOwner.CTRADER,
@@ -36,6 +38,7 @@ class CTraderFeedConfig(FrozenConfigModel):
 class CalendarConfig(FrozenConfigModel):
   enabled: bool = config_field(
     True,
+    item_id="python.settings.calendar_enabled",
     legacy_attr="calendar_enabled",
     env="CALENDAR_ENABLED",
     owner=ConfigOwner.PYTHON,

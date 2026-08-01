@@ -14,6 +14,7 @@ from app.configuration.models.base import FrozenConfigModel
 class ManualAlgoRuntimeConfig(FrozenConfigModel):
   enabled: bool = config_field(
     False,
+    item_id="python.settings.manual_algo_enabled",
     legacy_attr="manual_algo_enabled",
     env="MANUAL_ALGO_ENABLED",
     owner=ConfigOwner.SHARED,

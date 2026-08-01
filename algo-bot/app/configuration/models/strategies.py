@@ -14,6 +14,7 @@ from app.configuration.models.base import FrozenConfigModel
 class TrendStrategyConfig(FrozenConfigModel):
   enabled: bool = config_field(
     False,
+    item_id="python.settings.auto_trade_trend_enabled",
     legacy_attr="auto_trade_trend_enabled",
     env="AUTO_TRADE_TREND_ENABLED",
     owner=ConfigOwner.SHARED,
@@ -26,6 +27,7 @@ class TrendStrategyConfig(FrozenConfigModel):
   )
   minimum_bos: int = config_field(
     2,
+    item_id="python.settings.trend_min_bos",
     legacy_attr="trend_min_bos",
     env="TREND_MIN_BOS",
     owner=ConfigOwner.PYTHON,

@@ -15,6 +15,7 @@ from app.configuration.models.base import FrozenConfigModel
 class ContractVersionsConfig(FrozenConfigModel):
   trade_plan: int = config_field(
     7,
+    item_id="hardcoded.contract.trade_plan_version",
     legacy_attr=None,
     env=None,
     owner=ConfigOwner.SHARED,
@@ -31,6 +32,7 @@ class ContractVersionsConfig(FrozenConfigModel):
 class InstrumentContractConfig(FrozenConfigModel):
   pip_size: float = config_field(
     0.1,
+    item_id="python.settings.auto_trade_xau_pip_size",
     legacy_attr="auto_trade_xau_pip_size",
     env="AUTO_TRADE_XAU_PIP_SIZE",
     aliases=("AUTO_TRADE_PIP_SIZE",),

@@ -13,6 +13,7 @@ from app.configuration.models.base import FrozenConfigModel
 class StructuralAnchorConfig(FrozenConfigModel):
   required: bool = config_field(
     False,
+    item_id="python.settings.scanner_gate_require_structural_anchor",
     legacy_attr="scanner_gate_require_structural_anchor",
     env="SCANNER_GATE_REQUIRE_STRUCTURAL_ANCHOR",
     owner=ConfigOwner.PYTHON,
@@ -23,6 +24,7 @@ class StructuralAnchorConfig(FrozenConfigModel):
   )
   maximum_source_touches: int = config_field(
     0,
+    item_id="python.settings.scanner_gate_max_source_touches",
     legacy_attr="scanner_gate_max_source_touches",
     env="SCANNER_GATE_MAX_SOURCE_TOUCHES",
     owner=ConfigOwner.PYTHON,

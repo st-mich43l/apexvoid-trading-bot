@@ -14,6 +14,7 @@ from app.configuration.models.base import FrozenConfigModel
 class AutoTradeRuntimeConfig(FrozenConfigModel):
   enabled: bool = config_field(
     False,
+    item_id="python.settings.auto_trade_enabled",
     legacy_attr="auto_trade_enabled",
     env="AUTO_TRADE_ENABLED",
     owner=ConfigOwner.SHARED,
@@ -26,6 +27,7 @@ class AutoTradeRuntimeConfig(FrozenConfigModel):
   )
   dry_run: bool = config_field(
     True,
+    item_id="python.settings.auto_trade_dry_run",
     legacy_attr="auto_trade_dry_run",
     env="AUTO_TRADE_DRY_RUN",
     owner=ConfigOwner.SHARED,
@@ -41,6 +43,7 @@ class AutoTradeRuntimeConfig(FrozenConfigModel):
 class ScannerRuntimeConfig(FrozenConfigModel):
   enabled: bool = config_field(
     False,
+    item_id="python.settings.scanner_enabled",
     legacy_attr="scanner_enabled",
     env="SCANNER_ENABLED",
     owner=ConfigOwner.PYTHON,
@@ -54,6 +57,7 @@ class ScannerRuntimeConfig(FrozenConfigModel):
 class RuntimeConfig(FrozenConfigModel):
   profile: str = config_field(
     "conservative",
+    item_id="python.settings.auto_trade_profile",
     legacy_attr="auto_trade_profile",
     env="AUTO_TRADE_PROFILE",
     owner=ConfigOwner.SHARED,

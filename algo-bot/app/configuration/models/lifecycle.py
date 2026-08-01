@@ -14,6 +14,7 @@ from app.configuration.models.base import FrozenConfigModel
 class CandidateLifecycleConfig(FrozenConfigModel):
   execution_maximum_age_seconds: int = config_field(
     90,
+    item_id="python.settings.auto_trade_candidate_max_age_seconds",
     legacy_attr="auto_trade_candidate_max_age_seconds",
     env="AUTO_TRADE_CANDIDATE_MAX_AGE_SECONDS",
     aliases=("AUTO_TRADE_CANDIDATE_MAX_AGE",),
@@ -27,6 +28,7 @@ class CandidateLifecycleConfig(FrozenConfigModel):
   )
   storage_ttl_seconds: int = config_field(
     86400,
+    item_id="python.settings.auto_trade_candidate_ttl",
     legacy_attr="auto_trade_candidate_ttl",
     env="AUTO_TRADE_CANDIDATE_STORAGE_TTL_SECONDS",
     aliases=("AUTO_TRADE_CANDIDATE_TTL",),

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+from decimal import Decimal
 from enum import StrEnum
 from typing import Any, TypeVar
 
@@ -81,13 +82,27 @@ class ConfigKind(StrEnum):
   ALGORITHM_CONSTANT = "algorithm_constant"
 
 
+class DefaultContext(StrEnum):
+  PYTHON_SCHEMA = "python_schema"
+  CTRADER_FROM_ENVIRONMENT = "ctrader_from_environment"
+  CTRADER_CONSTRUCTOR = "ctrader_constructor"
+
+
+@dataclass(frozen=True)
+class ContextDefault:
+  context: DefaultContext
+  value: Any
+
+
 @dataclass(frozen=True)
 class ConfigMetadata:
+  item_id: str
   legacy_attr: str | None
   canonical_env: str | None
   deprecated_aliases: tuple[str, ...]
   owner: ConfigOwner
   reload_policy: ReloadPolicy
+  runtime_reload_policy: ReloadPolicy
   unit: ConfigUnit
   risk_classification: RiskClassification
   kind: ConfigKind
@@ -98,6 +113,9 @@ class ConfigMetadata:
   shared_with_ctrader: bool
   mismatch_policy: MismatchPolicy
   description: str
+  default_contexts: tuple[ContextDefault, ...] = ()
+  allowed_values: tuple[Any, ...] = ()
+  validation_summary: str | None = None
   catalog_version: int = 1
   introduced_in: str = "config-catalog-v1"
   deprecated: bool = False
@@ -105,6 +123,8 @@ class ConfigMetadata:
   terminal_deprecation_reason: str | None = None
 
   def __post_init__(self) -> None:
+    if not self.item_id:
+      raise ValueError("item_id must be non-empty")
     expected = {
       ConfigKind.CONFIGURABLE: (True, False, False),
       ConfigKind.PROTOCOL_CONSTANT: (False, True, False),
@@ -127,6 +147,13 @@ class ConfigMetadata:
       raise ValueError(
         "deprecated metadata requires replacement_path or terminal reason"
       )
+    contexts = tuple(item.context for item in self.default_contexts)
+    if len(contexts) != len(set(contexts)):
+      raise ValueError("default contexts must be unique")
+    if self.secret and any(
+      item.value != "<redacted>" for item in self.default_contexts
+    ):
+      raise ValueError("secret context defaults must be redacted")
 
   def as_dict(self) -> dict[str, Any]:
     """Return stable JSON-compatible metadata in declaration order."""
@@ -136,20 +163,46 @@ class ConfigMetadata:
         values[key] = value.value
       elif isinstance(value, tuple):
         values[key] = list(value)
+    values["default_contexts"] = [
+      {
+        "context": item.context.value,
+        "value": "<redacted>" if self.secret else _json_value(item.value),
+      }
+      for item in self.default_contexts
+    ]
+    values["allowed_values"] = [
+      _json_value(value) for value in self.allowed_values
+    ]
     return values
 
 
 T = TypeVar("T")
 
 
+def _json_value(value: Any) -> Any:
+  if isinstance(value, StrEnum):
+    return value.value
+  if isinstance(value, Decimal):
+    return str(value)
+  if isinstance(value, tuple):
+    return [_json_value(item) for item in value]
+  if isinstance(value, list):
+    return [_json_value(item) for item in value]
+  if isinstance(value, dict):
+    return {str(key): _json_value(item) for key, item in value.items()}
+  return value
+
+
 def config_field(
   default: T | Any = PydanticUndefined,
   *,
+  item_id: str,
   legacy_attr: str | None,
   env: str | None,
   aliases: tuple[str, ...] = (),
   owner: ConfigOwner,
   reload: ReloadPolicy,
+  runtime_reload: ReloadPolicy | None = None,
   unit: ConfigUnit,
   risk: RiskClassification,
   kind: ConfigKind = ConfigKind.CONFIGURABLE,
@@ -157,20 +210,40 @@ def config_field(
   shared_with_ctrader: bool = False,
   mismatch_policy: MismatchPolicy = MismatchPolicy.NOT_REPORTED,
   description: str,
+  default_contexts: tuple[ContextDefault, ...] = (),
+  allowed_values: tuple[Any, ...] = (),
+  validation_summary: str | None = None,
   catalog_version: int = 1,
   introduced_in: str = "config-catalog-v1",
   deprecated: bool = False,
   replacement_path: str | None = None,
   terminal_deprecation_reason: str | None = None,
+  ge: int | float | Decimal | None = None,
+  gt: int | float | Decimal | None = None,
+  le: int | float | Decimal | None = None,
+  lt: int | float | Decimal | None = None,
+  min_length: int | None = None,
+  max_length: int | None = None,
+  pattern: str | None = None,
 ) -> Any:
   """Declare one field and its catalog metadata in the same location."""
   configurable = kind is ConfigKind.CONFIGURABLE
   metadata = ConfigMetadata(
+    item_id=item_id,
     legacy_attr=legacy_attr,
     canonical_env=env,
     deprecated_aliases=aliases,
     owner=owner,
     reload_policy=reload,
+    runtime_reload_policy=(
+      runtime_reload
+      if runtime_reload is not None
+      else (
+        ReloadPolicy.RESTART
+        if kind is ConfigKind.CONFIGURABLE
+        else ReloadPolicy.CODE_RELEASE
+      )
+    ),
     unit=unit,
     risk_classification=risk,
     kind=kind,
@@ -181,6 +254,9 @@ def config_field(
     shared_with_ctrader=shared_with_ctrader,
     mismatch_policy=mismatch_policy,
     description=description,
+    default_contexts=default_contexts,
+    allowed_values=allowed_values,
+    validation_summary=validation_summary,
     catalog_version=catalog_version,
     introduced_in=introduced_in,
     deprecated=deprecated,
@@ -194,5 +270,12 @@ def config_field(
     default,
     validation_alias=validation_alias,
     description=description,
+    ge=ge,
+    gt=gt,
+    le=le,
+    lt=lt,
+    min_length=min_length,
+    max_length=max_length,
+    pattern=pattern,
     json_schema_extra={"apexvoid_config": metadata.as_dict()},
   )

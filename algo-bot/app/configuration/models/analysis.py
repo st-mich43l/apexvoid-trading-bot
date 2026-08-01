@@ -13,6 +13,7 @@ from app.configuration.models.base import FrozenConfigModel
 class AtrConfig(FrozenConfigModel):
   length: int = config_field(
     14,
+    item_id="python.settings.atr_length",
     legacy_attr="atr_length",
     env="ATR_LENGTH",
     owner=ConfigOwner.PYTHON,
@@ -26,6 +27,7 @@ class AtrConfig(FrozenConfigModel):
 class TrendlineConfig(FrozenConfigModel):
   minimum_touches: int = config_field(
     3,
+    item_id="python.settings.tl_min_touches",
     legacy_attr="tl_min_touches",
     env="TL_MIN_TOUCHES",
     owner=ConfigOwner.PYTHON,

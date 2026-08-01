@@ -14,6 +14,7 @@ from app.configuration.models.base import FrozenConfigModel
 class EntryConfig(FrozenConfigModel):
   contract_tolerance_pips: float = config_field(
     3.0,
+    item_id="python.settings.auto_trade_entry_contract_tolerance_pips",
     legacy_attr="auto_trade_entry_contract_tolerance_pips",
     env="AUTO_TRADE_ENTRY_CONTRACT_TOLERANCE_PIPS",
     owner=ConfigOwner.SHARED,
@@ -29,6 +30,7 @@ class EntryConfig(FrozenConfigModel):
 class TargetingConfig(FrozenConfigModel):
   default_ladder_pips: str = config_field(
     "30,60,90,120,200",
+    item_id="python.settings.auto_trade_tp_pips",
     legacy_attr="auto_trade_tp_pips",
     env="AUTO_TRADE_TARGET_PLANS_PIPS",
     aliases=("AUTO_TRADE_TP_PIPS",),
