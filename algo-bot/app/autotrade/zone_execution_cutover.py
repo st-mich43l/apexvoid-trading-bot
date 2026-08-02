@@ -453,7 +453,9 @@ async def _activate_match(
   match = replace(
     match,
     issued_at=now,
-    expires_at=now + max(60, int(settings.auto_trade_strategy_match_max_age_seconds)),
+    expires_at=now + max(
+      60, int(runtime_config.lifecycle.strategy_match.maximum_age_seconds),
+    ),
     current_price=float(evidence.executable_quote or match.current_price),
   )
   match = await _persist_match(client, match)

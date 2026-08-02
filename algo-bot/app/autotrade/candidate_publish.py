@@ -11,7 +11,7 @@ from typing import Any, Iterator
 
 from app.autotrade.arbitration import CandidatePublicationResult, ExecutionIntent
 from app.autotrade.candidate_execution_state import published_candidate_record
-from app.core.config import settings
+from app.core.config import runtime_config, settings
 
 
 log = logging.getLogger(__name__)
@@ -786,7 +786,9 @@ async def publish_ranked_cycle(
         await client.set(
           owner_key,
           json.dumps(owner, separators=(",", ":"), sort_keys=True),
-          ex=max(86400, settings.auto_trade_candidate_ttl),
+          ex=max(
+            86400, runtime_config.lifecycle.candidate.storage_ttl_seconds,
+          ),
           nx=True,
         )
         return result

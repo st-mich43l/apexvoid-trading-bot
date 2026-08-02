@@ -297,9 +297,11 @@ def python_manifest() -> dict[str, Any]:
       configured_range_targets()
     ),
     "range_tp_buffer": settings.auto_trade_range_tp_buffer_pips,
-    "candidate_storage_ttl_seconds": settings.auto_trade_candidate_ttl,
+    "candidate_storage_ttl_seconds": (
+      runtime_config.lifecycle.candidate.storage_ttl_seconds
+    ),
     "candidate_execution_max_age_seconds": (
-      settings.auto_trade_candidate_max_age_seconds
+      runtime_config.lifecycle.candidate.execution_maximum_age_seconds
     ),
     "spot_max_age_seconds": runtime_config.market_data.spot.maximum_age_seconds,
     "range_flip": runtime_config.strategies.range_reversion.flip_enabled,
@@ -343,7 +345,7 @@ def python_manifest() -> dict[str, Any]:
     "structural_guard_mode": (
       runtime_config.actionability.structural_guard.guard_mode
     ),
-    "zone_cooldown_enabled": settings.auto_trade_zone_cooldown_enabled,
+    "zone_cooldown_enabled": runtime_config.lifecycle.zone.cooldown_enabled,
     "zone_reconcile_mode": runtime_config.actionability.zone_reconciliation.mode,
     "range_box_scale_out_enabled": (
       runtime_config.strategies.range_reversion.box_scale_out_enabled

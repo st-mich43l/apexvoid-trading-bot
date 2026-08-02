@@ -826,7 +826,7 @@ async def _resolve_worker_range(
           client,
           symbol=symbol,
           range_id=resolved.range_id,
-          ttl=settings.auto_trade_box_retire_seconds,
+          ttl=runtime_config.lifecycle.range_box.retirement_seconds,
         )
         await persist_breakout_retest_watch(
           client,
@@ -835,7 +835,7 @@ async def _resolve_worker_range(
           direction=direction,
           lower=resolved.lower,
           upper=resolved.upper,
-          ttl=settings.auto_trade_box_retire_seconds,
+          ttl=runtime_config.lifecycle.range_box.retirement_seconds,
         )
         await _expire_range_matches(client, symbol, resolved.range_id)
   elif resolved is not None and await range_is_retired(
@@ -960,7 +960,7 @@ async def _persist_range_side_states(
       await client.set(
         side_key,
         json.dumps(payload, separators=(",", ":"), sort_keys=True),
-        ex=max(300, settings.auto_trade_box_retire_seconds),
+        ex=max(300, runtime_config.lifecycle.range_box.retirement_seconds),
       )
       await client.delete(_box_edge_key(symbol, context.range_id, direction))
     return
@@ -1029,7 +1029,7 @@ async def _persist_range_side_states(
     await client.set(
       side_key,
       json.dumps(payload, separators=(",", ":"), sort_keys=True),
-      ex=max(300, settings.auto_trade_box_retire_seconds),
+      ex=max(300, runtime_config.lifecycle.range_box.retirement_seconds),
     )
 
 
@@ -1168,7 +1168,7 @@ async def _mark_range_side_candidate(
   await client.set(
     key,
     json.dumps(payload, separators=(",", ":"), sort_keys=True),
-    ex=max(300, settings.auto_trade_box_retire_seconds),
+    ex=max(300, runtime_config.lifecycle.range_box.retirement_seconds),
   )
 
 
@@ -1817,7 +1817,7 @@ async def _zone_cooldown_reason(
   don't destroy the opportunity").
   """
   if (
-    not settings.auto_trade_zone_cooldown_enabled
+    not runtime_config.lifecycle.zone.cooldown_enabled
     or not atr or atr <= 0 or cooldown_atr <= 0
   ):
     return None
@@ -2267,7 +2267,9 @@ async def _record_private_route(
     structural_source=source,
     structural_zone_id=structural_id,
     issued_at=int(_intent_freshness(event_ts, now)),
-    expires_at=now + max(300, settings.auto_trade_candidate_ttl),
+    expires_at=(
+      now + max(300, runtime_config.lifecycle.candidate.storage_ttl_seconds)
+    ),
     current_price=spot_price,
     entry_low=entry_low,
     entry_high=entry_high,
@@ -2444,8 +2446,8 @@ async def _advance_mapped_thesis_rearms(
   except Exception:
     return
   now = int(datetime.now(timezone.utc).timestamp())
-  rearm_atr = float(getattr(settings, "auto_trade_map_reaction_rearm_atr", 0.5))
-  rearm_bars = int(getattr(settings, "auto_trade_map_reaction_rearm_bars", 3))
+  rearm_atr = float(runtime_config.lifecycle.mapped_zone.reaction_rearm_atr)
+  rearm_bars = int(runtime_config.lifecycle.mapped_zone.reaction_rearm_bars)
   pattern = "auto_trade:thesis_claim:*"
   async for raw_key in client.scan_iter(match=pattern, count=50):
     key = raw_key.decode() if isinstance(raw_key, bytes) else str(raw_key)
@@ -2760,7 +2762,7 @@ async def _publish_candidate(
   # (select_range_target / EQ room) remains the room gate.
   cooldown_reason = await _zone_cooldown_reason(
     client, symbol, decision.direction, entry_reference,
-    scale_context.atr, settings.auto_trade_zone_cooldown_atr,
+    scale_context.atr, runtime_config.lifecycle.zone.cooldown_atr,
   )
   if cooldown_reason is not None:
     cooldown_outcome = classify_guard_severity(
@@ -2976,11 +2978,11 @@ async def _publish_candidate(
     stream=settings.auto_trade_stream,
     candidate_id=candidate_id,
     payload=json.dumps(payload, separators=(",", ":")),
-    ttl=settings.auto_trade_candidate_ttl,
+    ttl=runtime_config.lifecycle.candidate.storage_ttl_seconds,
     maxlen=settings.auto_trade_stream_maxlen,
     ownership_key=autonomous_cycle_owner_key(symbol, trigger_ts),
     ownership_payload=candidate_id,
-    ownership_ttl=settings.auto_trade_candidate_ttl,
+    ownership_ttl=runtime_config.lifecycle.candidate.storage_ttl_seconds,
     allow_non_atomic_test_fallback=explicit_test_fallback_enabled(client),
   )
   published, executor_event_id = publish_result
@@ -3065,7 +3067,7 @@ async def _publish_candidate(
   await client.set(
     _box_edge_key(symbol, decision.box.box_id, decision.direction),
     "1",
-    ex=max(300, settings.auto_trade_box_retire_seconds),
+    ex=max(300, runtime_config.lifecycle.range_box.retirement_seconds),
   )
   log.info(
     "auto-scalp candidate published id=%s symbol=%s direction=%s",
@@ -3443,7 +3445,7 @@ async def _publish_strategy_match(
 
   cooldown_reason = await _zone_cooldown_reason(
     client, symbol, match.direction, spot.price,
-    match.atr, settings.auto_trade_zone_cooldown_atr,
+    match.atr, runtime_config.lifecycle.zone.cooldown_atr,
   )
   if cooldown_reason is not None:
     cooldown_outcome = classify_guard_severity(
@@ -3723,8 +3725,12 @@ async def _publish_strategy_match(
         new_confirmation_ts=str(match.confirmation_bar_ts or ""),
         price=float(spot.price),
         atr=float(match.atr),
-        rearm_atr=float(getattr(settings, "auto_trade_map_reaction_rearm_atr", 0.5)),
-        rearm_bars=int(getattr(settings, "auto_trade_map_reaction_rearm_bars", 3)),
+        rearm_atr=float(
+          runtime_config.lifecycle.mapped_zone.reaction_rearm_atr
+        ),
+        rearm_bars=int(
+          runtime_config.lifecycle.mapped_zone.reaction_rearm_bars
+        ),
       )
       if not decision.allowed:
         await increment_metric(
@@ -3969,7 +3975,7 @@ async def _publish_strategy_match(
       stream=settings.auto_trade_stream,
       candidate_id=candidate_id,
       payload=json.dumps(payload, separators=(",", ":")),
-      ttl=settings.auto_trade_candidate_ttl,
+      ttl=runtime_config.lifecycle.candidate.storage_ttl_seconds,
       maxlen=settings.auto_trade_stream_maxlen,
       reaction_key=(
         reaction_claim_key(match.reaction_id)
@@ -3996,7 +4002,7 @@ async def _publish_strategy_match(
         if cycle_id else None
       ),
       ownership_payload=candidate_id,
-      ownership_ttl=settings.auto_trade_candidate_ttl,
+      ownership_ttl=runtime_config.lifecycle.candidate.storage_ttl_seconds,
       allow_non_atomic_test_fallback=explicit_test_fallback_enabled(client),
     )
   except Exception as exc:
@@ -4116,7 +4122,7 @@ async def _publish_strategy_match(
         "direction": match.direction,
         "midpoint": (match.range_low + match.range_high) / 2,
       }, separators=(",", ":")),
-      ex=max(300, settings.auto_trade_box_retire_seconds),
+      ex=max(300, runtime_config.lifecycle.range_box.retirement_seconds),
     )
   log.info(
     "strategy candidate published id=%s symbol=%s strategy=%s direction=%s",
@@ -4894,7 +4900,7 @@ async def _publish_trade_plan_v7(
       trigger_bar_ts = int(trigger.bar_ts)
       validity_bars = max(
         1,
-        int(getattr(settings, "auto_trade_retest_trigger_validity_bars", 2)),
+        int(runtime_config.lifecycle.retest.trigger_validity_bars),
       )
       trigger_deadline = trigger_bar_ts + 60 + validity_bars * 60
       if quote_ts > trigger_deadline:
@@ -5079,7 +5085,7 @@ async def _publish_trade_plan_v7(
   if policy.reaction_family and confirmation.source == M1_RETEST:
     validity_bars = max(
       1,
-      int(getattr(settings, "auto_trade_retest_trigger_validity_bars", 2)),
+      int(runtime_config.lifecycle.retest.trigger_validity_bars),
     )
     trigger_expiry = confirmation.bar_ts + 60 + validity_bars * 60
     execution_match = replace(
@@ -5260,7 +5266,7 @@ async def _publish_trade_plan_v7(
 
   cooldown_reason = await _zone_cooldown_reason(
     client, symbol, match.direction, spot.price,
-    match.atr, settings.auto_trade_zone_cooldown_atr,
+    match.atr, runtime_config.lifecycle.zone.cooldown_atr,
   )
   if cooldown_reason is not None:
     log.info(
@@ -5762,7 +5768,7 @@ async def _publish_trend_candidate(
       return None
   cooldown_reason = await _zone_cooldown_reason(
     client, symbol, trend_decision.direction, entry_reference,
-    trend_decision.atr, settings.auto_trade_zone_cooldown_atr,
+    trend_decision.atr, runtime_config.lifecycle.zone.cooldown_atr,
   )
   if cooldown_reason is not None:
     cooldown_outcome = classify_guard_severity(
@@ -5943,14 +5949,14 @@ async def _publish_trend_candidate(
     stream=settings.auto_trade_stream,
     candidate_id=candidate_id,
     payload=json.dumps(payload, separators=(",", ":")),
-    ttl=settings.auto_trade_candidate_ttl,
+    ttl=runtime_config.lifecycle.candidate.storage_ttl_seconds,
     maxlen=settings.auto_trade_stream_maxlen,
     ownership_key=(
       autonomous_cycle_owner_key(symbol, trigger_ts)
       if parent_group_id is None else None
     ),
     ownership_payload=candidate_id,
-    ownership_ttl=settings.auto_trade_candidate_ttl,
+    ownership_ttl=runtime_config.lifecycle.candidate.storage_ttl_seconds,
     allow_non_atomic_test_fallback=explicit_test_fallback_enabled(client),
   )
   published, executor_event_id = publish_result
@@ -6450,7 +6456,7 @@ async def _apply_box_retirement(
     await client.set(
       key,
       "1",
-      ex=max(300, settings.auto_trade_box_retire_seconds),
+      ex=max(300, runtime_config.lifecycle.range_box.retirement_seconds),
     )
     return decision
   if decision.state == "candidate" and await client.exists(key):
@@ -6960,7 +6966,7 @@ async def _common_preflight(
     direction,
     spot.price,
     atr,
-    settings.auto_trade_zone_cooldown_atr,
+    runtime_config.lifecycle.zone.cooldown_atr,
   )
   if cooldown is not None:
     severity = classify_guard_severity(
@@ -7471,10 +7477,10 @@ async def _preflight_strategy_intent(
         price=float(spot.price),
         atr=float(match.atr),
         rearm_atr=float(
-          getattr(settings, "auto_trade_map_reaction_rearm_atr", 0.5)
+          runtime_config.lifecycle.mapped_zone.reaction_rearm_atr
         ),
         rearm_bars=int(
-          getattr(settings, "auto_trade_map_reaction_rearm_bars", 3)
+          runtime_config.lifecycle.mapped_zone.reaction_rearm_bars
         ),
       )
       if not thesis_decision.allowed:

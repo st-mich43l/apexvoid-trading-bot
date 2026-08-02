@@ -293,7 +293,9 @@ async def save_forming_card_status(
 ) -> bool:
   state = state or _infer_status_state(status_line)
   priority = CARD_STATUS_PRIORITY.get(state, 0)
-  effective_ttl = ttl or max(86400, settings.auto_trade_candidate_ttl)
+  effective_ttl = ttl or max(
+    86400, runtime_config.lifecycle.candidate.storage_ttl_seconds,
+  )
   payload = json.dumps(
     {
       "state": state,
@@ -423,7 +425,9 @@ async def save_forming_card(
   text: str = "",
   ttl: int | None = None,
 ) -> None:
-  effective_ttl = ttl or max(86400, settings.auto_trade_candidate_ttl)
+  effective_ttl = ttl or max(
+    86400, runtime_config.lifecycle.candidate.storage_ttl_seconds,
+  )
   payload = json.dumps(
     {"chat_id": chat_id, "message_id": message_id, "text": text},
     separators=(",", ":"),

@@ -324,7 +324,9 @@ def _build_one_strategy_match(
     int(datetime.now(timezone.utc).timestamp())
     if now is None else int(now)
   )
-  ttl = max(60, int(settings.auto_trade_strategy_match_max_age_seconds))
+  ttl = max(
+    60, int(runtime_config.lifecycle.strategy_match.maximum_age_seconds),
+  )
   entry_low = float(result.entry_zone.low)
   entry_high = float(result.entry_zone.high)
   direction = result.direction.upper()
@@ -2756,7 +2758,7 @@ async def _handle_event(
     map_payload = market_map_payload(current_map)
     map_ttl = max(
       900,
-      int(settings.auto_trade_strategy_match_max_age_seconds) * 2,
+      int(runtime_config.lifecycle.strategy_match.maximum_age_seconds) * 2,
     )
     await client.set(
       market_map_key(symbol),

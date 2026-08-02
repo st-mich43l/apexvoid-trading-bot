@@ -15,7 +15,7 @@ import json
 from typing import Any
 
 from app.autotrade.trade_plan import TradePlan
-from app.core.config import settings
+from app.core.config import runtime_config, settings
 
 
 _PUBLISH_PLAN_LUA = """
@@ -68,7 +68,9 @@ async def publish_trade_plan(client: Any, plan: TradePlan) -> str:
   key = plan_key(plan.plan_id)
   state_key = plan_state_key(plan.plan_id)
   dedup_key = plan_dedup_key(plan.plan_id)
-  dedup_ttl = max(86400, int(settings.auto_trade_candidate_ttl))
+  dedup_ttl = max(
+    86400, int(runtime_config.lifecycle.candidate.storage_ttl_seconds),
+  )
   stream = settings.auto_trade_trade_plan_stream
   maxlen = max(100, settings.auto_trade_stream_maxlen)
   try:
