@@ -220,7 +220,7 @@ from app.autotrade.trend import (
   classify_regime,
   evaluate_trend_gate,
 )
-from app.core.config import settings
+from app.core.config import runtime_config, settings
 from app.persistence.store import event_in_window
 from app.analysis.ohlc_source import RedisOHLCSource, window_for_timeframe
 from app.analysis.math_utils import atr_series
@@ -596,7 +596,9 @@ async def _load_spot(client: Any, symbol: str) -> AutoTradeSpot | None:
   return AutoTradeSpot(
     price=price,
     ts=ts,
-    fresh=0 <= now - ts <= max(1, settings.auto_trade_spot_max_age),
+    fresh=0 <= now - ts <= max(
+      1, runtime_config.market_data.spot.maximum_age_seconds,
+    ),
     bid=bid,
     ask=ask,
   )

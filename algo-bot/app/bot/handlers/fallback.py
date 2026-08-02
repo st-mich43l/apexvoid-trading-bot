@@ -11,7 +11,7 @@ from aiogram.types import Message
 
 from app.signals.broadcast import broadcast_entry
 from app.autotrade.config_health import CONFIG_HEALTH_KEY
-from app.core.config import settings
+from app.core.config import runtime_config, settings
 from app.persistence import redis_state
 from app.persistence.store import (
   event_in_window,
@@ -111,9 +111,9 @@ async def handle_private_signal(msg: Message) -> None:
   now = int(time.time())
   event = await event_in_window(
     now,
-    int(settings.event_guard_hours * 3600),
+    int(runtime_config.market_data.calendar.event_guard_hours * 3600),
   )
-  if event and settings.news_guard_block:
+  if event and runtime_config.market_data.calendar.news_guard_block:
     await msg.answer(
       f"⚠️ Signal not posted: {escape(event['title'])} "
       f"{_event_guard_timing(event['ts_utc'], now)} — expect volatility"
@@ -179,13 +179,13 @@ async def _handle_pips(msg: Message, text: str, has_photo: bool) -> None:
 
 @router.channel_post(F.photo)
 async def handle_profit_screenshot(msg: Message) -> None:
-  if not settings.auto_book_bare_pips:
+  if not runtime_config.delivery.presentation.auto_book_bare_pips:
     return
   await _handle_pips(msg, msg.caption or "", has_photo=True)
 
 
 @router.channel_post(F.text)
 async def handle_profit_text(msg: Message) -> None:
-  if not settings.auto_book_bare_pips:
+  if not runtime_config.delivery.presentation.auto_book_bare_pips:
     return
   await _handle_pips(msg, msg.text or "", has_photo=False)

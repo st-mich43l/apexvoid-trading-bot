@@ -12,7 +12,7 @@ from urllib.parse import urlparse
 
 from app.autotrade.range_targets import configured_range_targets
 from app.autotrade.trade_plan import TRADE_PLAN_VERSION
-from app.core.config import settings
+from app.core.config import runtime_config, settings
 from app.core.environment_options import (
   canonical_option_health,
   deprecated_option_warnings,
@@ -241,7 +241,7 @@ def _int_values(raw: str) -> list[int]:
 
 
 def python_manifest() -> dict[str, Any]:
-  fingerprint, database = _redis_identity(settings.redis_url)
+  fingerprint, database = _redis_identity(runtime_config.bootstrap.redis.url)
   symbols = canonicalize_symbols(settings.auto_trade_symbols.split(","))
   now = datetime.now(timezone.utc)
   raw_broker = os.getenv("AUTO_TRADE_EXPECTED_BROKER", "")
@@ -301,7 +301,7 @@ def python_manifest() -> dict[str, Any]:
     "candidate_execution_max_age_seconds": (
       settings.auto_trade_candidate_max_age_seconds
     ),
-    "spot_max_age_seconds": settings.auto_trade_spot_max_age,
+    "spot_max_age_seconds": runtime_config.market_data.spot.maximum_age_seconds,
     "range_flip": settings.auto_trade_range_flip_enabled,
     "two_sided_range": settings.auto_trade_range_two_sided_enabled,
     "concurrent_strategies": settings.auto_trade_allow_concurrent_strategies,

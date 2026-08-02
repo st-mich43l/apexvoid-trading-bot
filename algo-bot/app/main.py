@@ -1,7 +1,11 @@
 import asyncio
 import logging
 
-from app.core.config import active_configuration_startup_message, settings
+from app.core.config import (
+  active_configuration_startup_message,
+  runtime_config,
+  settings,
+)
 from app.core.logging_setup import configure_logging
 from app.bot.wiring import (
   bot,
@@ -43,10 +47,10 @@ from app.signals.manual_execution import bridge_intents_loop, reconcile_events_l
 from app.persistence import redis_state
 
 _log_info = configure_logging(
-  level=settings.log_level,
-  log_dir=settings.log_dir,
-  retention_days=settings.log_retention_days,
-  enable_file=settings.log_file_enabled,
+  level=runtime_config.bootstrap.logging.level,
+  log_dir=runtime_config.bootstrap.logging.directory,
+  retention_days=runtime_config.bootstrap.logging.retention_days,
+  enable_file=runtime_config.bootstrap.logging.file_enabled,
 )
 log = logging.getLogger("bot")
 log.info(active_configuration_startup_message())
@@ -118,8 +122,9 @@ async def main() -> None:
   await setup_commands(bot)
   scanner_polling = None
   if (
-    settings.scanner_telegram_bot_token
-    and settings.scanner_telegram_bot_token != settings.telegram_bot_token
+    runtime_config.delivery.telegram.scanner_telegram_bot_token
+    and runtime_config.delivery.telegram.scanner_telegram_bot_token
+    != runtime_config.bootstrap.telegram.bot_token
   ):
     await setup_scanner_commands(scanner_bot)
     scanner_polling = asyncio.create_task(scanner_dp.start_polling(
@@ -143,7 +148,7 @@ async def main() -> None:
   _spawn_supervised("bridge_intents_loop", bridge_intents_loop)
   _spawn_supervised("reconcile_events_loop", reconcile_events_loop)
   log.info("DB ready (PostgreSQL)")
-  if not settings.telegram_owner_id:
+  if not runtime_config.delivery.telegram.telegram_owner_id:
     log.warning(
       "TELEGRAM_OWNER_ID not set — owner-only DM commands are DISABLED. "
       "Set it to enable the DM interface."

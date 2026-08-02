@@ -31,6 +31,13 @@ dated section after deployment.
   inside the still-healthy feed session instead of leaving execution stopped.
 
 ### Added
+- Authority-neutral grouped `runtime_config` reads for bootstrap, logging,
+  Telegram/delivery, calendar, weekly reports, watcher, and OHLC consumers.
+  Legacy authority now exposes an immutable legacy-backed canonical view while
+  canonical authority exposes the validated Python model; generated AST and
+  reverse-map guards prove all 127 eligible reads migrated with value/type
+  parity, while the default remains `legacy` and rollback remains independent
+  of canonical loading.
 - Selectable canonical Python configuration authority behind the restart-only
   `APEXVOID_CONFIG_AUTHORITY` loader control. The default remains `legacy`;
   explicit `canonical` validates a frozen 387-leaf Python/shared projection,

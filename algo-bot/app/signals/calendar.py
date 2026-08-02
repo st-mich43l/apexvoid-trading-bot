@@ -14,7 +14,7 @@ from zoneinfo import ZoneInfo
 
 import aiohttp
 
-from app.core.config import settings
+from app.core.config import runtime_config, settings
 from app.persistence.store import (
   events_between,
   get_meta,
@@ -132,9 +132,14 @@ def _valid_feed_root(payload: Any) -> bool:
 def _filter_events(rows: list[dict]) -> list[dict]:
   currencies = {
     value.upper()
-    for value in _configured_values(settings.calendar_currencies)
+    for value in _configured_values(
+      runtime_config.market_data.calendar.currencies
+    )
   }
-  oil_keywords = _configured_values(settings.oil_keywords, lowercase=True)
+  oil_keywords = _configured_values(
+    runtime_config.market_data.calendar.oil_keywords,
+    lowercase=True,
+  )
   return [
     row for row in rows
     if row["impact"] == "High" and (
@@ -148,7 +153,9 @@ async def _fetch_feed(url: str, cache_path: Path) -> Any | None:
   """Fetch and cache one JSON feed, preserving the prior cache on failure."""
   try:
     timeout = aiohttp.ClientTimeout(total=15)
-    headers = {"User-Agent": settings.calendar_user_agent}
+    headers = {
+      "User-Agent": runtime_config.market_data.calendar.user_agent
+    }
     async with aiohttp.ClientSession(
       timeout=timeout,
       headers=headers,
@@ -223,7 +230,10 @@ def _local_day_window(now: datetime) -> tuple[int, int]:
 
 
 def _is_oil_event(event: dict) -> bool:
-  keywords = _configured_values(settings.oil_keywords, lowercase=True)
+  keywords = _configured_values(
+    runtime_config.market_data.calendar.oil_keywords,
+    lowercase=True,
+  )
   return any(keyword in event["title"].lower() for keyword in keywords)
 
 
@@ -259,7 +269,7 @@ async def _post_brief(now: datetime) -> None:
   start, end = _local_day_window(now)
   text = _format_brief(
     await events_between(start, end),
-    ZoneInfo(settings.seq_reset_tz),
+    ZoneInfo(runtime_config.delivery.presentation.seq_reset_tz),
   )
   if text is not None:
     for target in channels_for("XAU", "both"):
@@ -271,16 +281,22 @@ async def _post_brief(now: datetime) -> None:
 
 
 async def _sync_day(now: datetime | None = None) -> None:
-  tz = ZoneInfo(settings.seq_reset_tz)
+  tz = ZoneInfo(runtime_config.delivery.presentation.seq_reset_tz)
   now = now.astimezone(tz) if now else datetime.now(tz)
   day = now.date().isoformat()
   if await get_meta("last_sync_date") != day:
     payloads = []
     feeds = [
-      (settings.calendar_feed_thisweek, _CACHE_THISWEEK),
+      (
+        runtime_config.market_data.calendar.feed_thisweek,
+        _CACHE_THISWEEK,
+      ),
     ]
     if now.weekday() >= 3:
-      feeds.append((settings.calendar_feed_nextweek, _CACHE_NEXTWEEK))
+      feeds.append((
+        runtime_config.market_data.calendar.feed_nextweek,
+        _CACHE_NEXTWEEK,
+      ))
     can_fetch = await get_meta("last_fetch_date") != day
     if can_fetch:
       # Reserve before I/O so a crash/restart cannot over-fetch today.
@@ -306,15 +322,15 @@ async def _sync_day(now: datetime | None = None) -> None:
 
 async def calendar_sync_loop() -> None:
   """Run at most one calendar sync per local day at the configured hour."""
-  if not settings.calendar_enabled:
+  if not runtime_config.market_data.calendar.enabled:
     log.info("Economic calendar disabled")
     return
   while True:
     try:
-      tz = ZoneInfo(settings.seq_reset_tz)
+      tz = ZoneInfo(runtime_config.delivery.presentation.seq_reset_tz)
       now = datetime.now(tz)
       target = now.replace(
-        hour=settings.news_brief_hour,
+        hour=runtime_config.market_data.calendar.news_brief_hour,
         minute=0,
         second=0,
         microsecond=0,

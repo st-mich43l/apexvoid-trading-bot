@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 
 import aiohttp
 
-from app.core.config import settings
+from app.core.config import runtime_config
 
 log = logging.getLogger(__name__)
 
@@ -21,7 +21,7 @@ async def get_xau_price(session: aiohttp.ClientSession) -> float | None:
     async with session.get(
       _PRICE_URL,
       params={"tickers": "xauusd"},
-      headers={"Authorization": f"Token {settings.tiingo_api_key}"},
+      headers={"Authorization": f"Token {runtime_config.market_data.tiingo.api_key}"},
       timeout=timeout,
     ) as response:
       if response.status == 429:
@@ -69,7 +69,7 @@ async def get_xau_bars(
         "startDate": start_date,
         "format": "csv",
       },
-      headers={"Authorization": f"Token {settings.tiingo_api_key}"},
+      headers={"Authorization": f"Token {runtime_config.market_data.tiingo.api_key}"},
       timeout=timeout,
     ) as response:
       if response.status == 429:

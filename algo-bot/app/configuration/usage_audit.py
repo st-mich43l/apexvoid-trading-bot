@@ -34,6 +34,7 @@ class LegacyUsage:
   classification: UsageClassification
   detail: str
   dynamic_names: tuple[str, ...] = ()
+  canonical_path: str | None = None
 
   def as_dict(self) -> dict[str, object]:
     result = asdict(self)
@@ -50,6 +51,9 @@ _BUCKETS = (
   "method_calls",
   "introspection",
   "type_dependencies",
+  "canonical_reads",
+  "canonical_writes",
+  "canonical_deletions",
 )
 _INTROSPECTION = {"getattr", "hasattr", "setattr", "delattr", "vars", "dir", "repr", "isinstance", "type"}
 
@@ -86,9 +90,19 @@ def _python_files(repository_root: Path) -> tuple[Path, ...]:
 
 
 class _FileAuditor(ast.NodeVisitor):
-  def __init__(self, *, relative: Path, source: str, supported: set[str]):
+  def __init__(
+    self,
+    *,
+    relative: Path,
+    source: str,
+    supported: set[str],
+    canonical_paths: set[tuple[str, ...]],
+    legacy_backed_paths: set[tuple[str, ...]],
+  ):
     self.relative = relative
     self.supported = supported
+    self.canonical_paths = canonical_paths
+    self.legacy_backed_paths = legacy_backed_paths
     self.tree = ast.parse(source, filename=relative.as_posix())
     self.parents = {
       child: parent
@@ -98,6 +112,7 @@ class _FileAuditor(ast.NodeVisitor):
     self.settings_names: set[str] = set()
     self.settings_classes: set[str] = set()
     self.config_modules: set[str] = set()
+    self.runtime_config_names: set[str] = set()
     self.domains: dict[str, set[str]] = {}
     self.rows: list[tuple[str, LegacyUsage]] = []
     self._discover_imports_and_domains()
@@ -112,6 +127,8 @@ class _FileAuditor(ast.NodeVisitor):
               self.settings_names.add(local)
             elif alias.name == "Settings":
               self.settings_classes.add(local)
+            elif alias.name in {"runtime_config", "active_config"}:
+              self.runtime_config_names.add(local)
         elif node.module == "app.core" and any(
           alias.name == "config" for alias in node.names
         ):
@@ -224,6 +241,16 @@ class _FileAuditor(ast.NodeVisitor):
       return node.attr == "Settings"
     return False
 
+  def _canonical_path(self, node: ast.AST) -> tuple[str, ...] | None:
+    parts = []
+    current = node
+    while isinstance(current, ast.Attribute):
+      parts.append(current.attr)
+      current = current.value
+    if not isinstance(current, ast.Name) or current.id not in self.runtime_config_names:
+      return None
+    return tuple(reversed(parts))
+
   def _classification(self, *, operation: str, supported: bool) -> UsageClassification:
     section = _section(self.relative)
     if section == "tests":
@@ -232,7 +259,14 @@ class _FileAuditor(ast.NodeVisitor):
       return UsageClassification.LEGACY_INTERNAL_ONLY
     if self.relative.as_posix().startswith("algo-bot/app/configuration/"):
       return UsageClassification.LEGACY_INTERNAL_ONLY
-    if operation in {"attribute_write", "attribute_delete", "setattr", "delattr"}:
+    if operation in {
+      "attribute_write",
+      "attribute_delete",
+      "canonical_write",
+      "canonical_delete",
+      "setattr",
+      "delattr",
+    }:
       return UsageClassification.UNSAFE_MUTATION
     if supported:
       return UsageClassification.FACADE_SUPPORTED
@@ -250,6 +284,7 @@ class _FileAuditor(ast.NodeVisitor):
     supported: bool,
     detail: str,
     dynamic_names: Iterable[str] = (),
+    canonical_path: tuple[str, ...] | None = None,
   ) -> None:
     self.rows.append((bucket, LegacyUsage(
       path=self.relative.as_posix(),
@@ -260,10 +295,54 @@ class _FileAuditor(ast.NodeVisitor):
       classification=self._classification(operation=operation, supported=supported),
       detail=detail,
       dynamic_names=tuple(sorted(dynamic_names)),
+      canonical_path=(".".join(canonical_path) if canonical_path else None),
     )))
 
   def visit_Attribute(self, node: ast.Attribute) -> None:
-    if self._is_settings_ref(node.value):
+    canonical_path = self._canonical_path(node)
+    parent = self.parents.get(node)
+    if (
+      canonical_path is not None
+      and canonical_path not in self.canonical_paths
+      and isinstance(parent, ast.Call)
+      and parent.func is node
+      and canonical_path[:-1] in self.canonical_paths
+    ):
+      canonical_path = canonical_path[:-1]
+    is_outermost_canonical = canonical_path is not None and not (
+      isinstance(parent, ast.Attribute) and parent.value is node
+    )
+    if is_outermost_canonical:
+      exists = canonical_path in self.canonical_paths
+      legacy_backed = canonical_path in self.legacy_backed_paths
+      if isinstance(node.ctx, ast.Store):
+        bucket = "canonical_writes"
+        operation = "canonical_write"
+        detail = "nested runtime configuration assignment"
+        supported = False
+      elif isinstance(node.ctx, ast.Del):
+        bucket = "canonical_deletions"
+        operation = "canonical_delete"
+        detail = "nested runtime configuration deletion"
+        supported = False
+      else:
+        bucket = "canonical_reads"
+        operation = "canonical_read"
+        detail = (
+          "direct legacy-backed canonical nested read"
+          if legacy_backed else "canonical nested read without direct legacy ownership"
+        )
+        supported = exists and legacy_backed
+      self._add(
+        bucket,
+        node,
+        operation=operation,
+        attribute=None,
+        supported=supported,
+        detail=detail,
+        canonical_path=canonical_path,
+      )
+    elif self._is_settings_ref(node.value):
       parent = self.parents.get(node)
       if isinstance(parent, ast.Call) and parent.func is node:
         self._add(
@@ -393,6 +472,13 @@ class _FileAuditor(ast.NodeVisitor):
 
 def audit_legacy_settings_usage(repository_root: Path) -> dict[str, object]:
   supported = _legacy_names()
+  entries = iter_catalog_entries()
+  canonical_paths = {tuple(entry.path.split(".")) for entry in entries}
+  legacy_backed_paths = {
+    tuple(entry.path.split("."))
+    for entry in entries
+    if entry.legacy_attr is not None
+  }
   sections = {
     section: {bucket: [] for bucket in _BUCKETS}
     for section in _SECTIONS
@@ -404,6 +490,8 @@ def audit_legacy_settings_usage(repository_root: Path) -> dict[str, object]:
       relative=relative,
       source=path.read_text(encoding="utf-8"),
       supported=supported,
+      canonical_paths=canonical_paths,
+      legacy_backed_paths=legacy_backed_paths,
     )
     section = _section(relative)
     for bucket, usage in auditor.run():

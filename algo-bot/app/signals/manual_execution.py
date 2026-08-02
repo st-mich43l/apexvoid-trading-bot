@@ -25,7 +25,7 @@ import json
 import logging
 
 from app.bot.client import send_scanner_with_retry
-from app.core.config import settings
+from app.core.config import runtime_config, settings
 from app.persistence import redis_state
 from app.persistence.store import (
   get_manual_signal,
@@ -67,10 +67,10 @@ def _target_text(event: dict) -> str:
 
 
 async def _send_executor_truth(text: str) -> None:
-  if settings.telegram_owner_id:
+  if runtime_config.delivery.telegram.telegram_owner_id:
     await send_scanner_with_retry(
       text,
-      chat_id=settings.telegram_owner_id,
+      chat_id=runtime_config.delivery.telegram.telegram_owner_id,
     )
 
 

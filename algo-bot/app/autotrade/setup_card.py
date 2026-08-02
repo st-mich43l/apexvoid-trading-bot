@@ -34,7 +34,7 @@ from app.autotrade.setup_execution_aggregate import (
 )
 from app.autotrade.setup_lifecycle import TERMINAL_STATES, load_setup
 from app.autotrade.strategy_match import StrategyMatch
-from app.core.config import settings
+from app.core.config import runtime_config, settings
 
 log = logging.getLogger(__name__)
 
@@ -392,7 +392,10 @@ async def load_forming_card(client, setup_id: str) -> dict | None:
     # either, so this branch also catches that case). Still usable against
     # the default owner chat every existing card was sent to.
     try:
-      return {"chat_id": settings.telegram_owner_id, "message_id": int(text)}
+      return {
+        "chat_id": runtime_config.delivery.telegram.telegram_owner_id,
+        "message_id": int(text),
+      }
     except (TypeError, ValueError):
       return None
   message_id = data.get("message_id")
@@ -400,7 +403,10 @@ async def load_forming_card(client, setup_id: str) -> dict | None:
     return None
   try:
     return {
-      "chat_id": data.get("chat_id") or settings.telegram_owner_id,
+      "chat_id": (
+        data.get("chat_id")
+        or runtime_config.delivery.telegram.telegram_owner_id
+      ),
       "message_id": int(message_id),
       "text": str(data.get("text") or ""),
     }
@@ -1084,7 +1090,11 @@ async def ensure_plan_published_root_card(
   owner can trade a setup with no Telegram root card at all — and later
   take_profit / stop_moved / position_closed replies have nothing to thread to.
   """
-  owner_id = chat_id if chat_id is not None else settings.telegram_owner_id
+  owner_id = (
+    chat_id
+    if chat_id is not None
+    else runtime_config.delivery.telegram.telegram_owner_id
+  )
   if not owner_id:
     log.info(
       "plan_published_root_card_skipped setup_id=%s reason=telegram_owner_id_unset",

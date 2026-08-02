@@ -18,7 +18,7 @@ from app.autotrade.volume_pips import (
   volume_percent,
 )
 from app.persistence import redis_state
-from app.core.config import settings
+from app.core.config import runtime_config, settings
 from app.bot.client import (
   delete_scanner_message,
   edit_scanner_message_text,
@@ -1614,7 +1614,7 @@ async def _resolve_reply_message_id(
 ) -> tuple[int | None, str]:
   event_type = str(event.get("type") or "")
   thread_to_card = (
-    settings.delivery_thread_lifecycle
+    runtime_config.delivery.lifecycle.thread_lifecycle
     and (event_type in _FORMING_REPLY_TYPES or event_type in _FORMING_REPLY_PREFERRED_TYPES)
   )
   if thread_to_card:
@@ -2034,10 +2034,10 @@ async def _today_algo_scorecard_line() -> str | None:
     stats = build_stats(
       records,
       [],
-      settings.seq_reset_tz,
-      settings.session_asia_start,
-      settings.session_london_start,
-      settings.session_ny_start,
+      runtime_config.delivery.presentation.seq_reset_tz,
+      runtime_config.market_data.sessions.asia_start,
+      runtime_config.market_data.sessions.london_start,
+      runtime_config.market_data.sessions.ny_start,
     )
   except Exception:
     log.exception("algo_status today scorecard failed")
@@ -2281,8 +2281,11 @@ async def _check_regime_alerts(client) -> None:
       f"chop {chop:.0%} · trend {trend:.0%} · breakout {breakout:.0%} "
       "over the trailing 24h. Trend/breakout thresholds may need tuning."
     )
-    if settings.telegram_owner_id:
-      await send_scanner_with_retry(text, chat_id=settings.telegram_owner_id)
+    if runtime_config.delivery.telegram.telegram_owner_id:
+      await send_scanner_with_retry(
+        text,
+        chat_id=runtime_config.delivery.telegram.telegram_owner_id,
+      )
 
 
 async def _process_owner_entries(
@@ -2421,6 +2424,11 @@ async def _auto_trade_owner_events_loop(*, chat_id: int) -> None:
 
 
 async def auto_trade_events_loop() -> None:
-  if not settings.auto_trade_enabled or not settings.telegram_owner_id:
+  if (
+    not settings.auto_trade_enabled
+    or not runtime_config.delivery.telegram.telegram_owner_id
+  ):
     return
-  await _auto_trade_owner_events_loop(chat_id=settings.telegram_owner_id)
+  await _auto_trade_owner_events_loop(
+    chat_id=runtime_config.delivery.telegram.telegram_owner_id
+  )

@@ -3,7 +3,7 @@
 import time
 from html import escape
 
-from app.core.config import settings
+from app.core.config import runtime_config, settings
 from app.persistence.store import (
   cancel_manual_signal,
   close_leg,
@@ -440,7 +440,10 @@ def render_result(
     return f"♻️ {seq}restored — trade still running{suffix}"
   if action == "tp":
     seq = f"#{result['seq']} " if tier == "vip" else ""
-    if tier == "public" and not settings.public_show_pips:
+    if (
+      tier == "public"
+      and not runtime_config.delivery.telegram.public_show_pips
+    ):
       return f"🎯 TP{result['tp_number']} hit"
     return (
       f"🎯 {seq}TP{result['tp_number']} "
@@ -474,14 +477,14 @@ def render_result(
         if net > 0:
           detail = (
             f"+{net} pips win{_win_wings(net)}"
-            if settings.public_show_pips
+            if runtime_config.delivery.telegram.public_show_pips
             else "win"
           )
           return f"✅ {tp_label}closed — {detail}"
         if net < 0:
           detail = (
             f"{net} pips loss"
-            if settings.public_show_pips
+            if runtime_config.delivery.telegram.public_show_pips
             else "loss"
           )
           return f"🛑 {tp_label}closed — {detail}"
@@ -494,7 +497,10 @@ def render_result(
       return (
         f"{icon} {seq}{tp_label}closed — achieved {sign}{net} pips{suffix}"
       )
-    if tier == "public" and not settings.public_show_pips:
+    if (
+      tier == "public"
+      and not runtime_config.delivery.telegram.public_show_pips
+    ):
       return f"🎯 {tp_label}partial booked"
     booked = int(round(row["frac"] * 100))
     remaining = int(round(row["remaining"] * 100))

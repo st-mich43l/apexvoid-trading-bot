@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 from zoneinfo import ZoneInfo
 
-from app.core.config import settings
+from app.core.config import runtime_config
 from app.persistence.store import get_all_signals, get_open_signals, get_signal_by_post
 from app.core.symbols import SYMBOLS, channel_for_symbol
 
@@ -182,7 +182,7 @@ def _period_range(period: str) -> tuple[int, int]:
 
 
 def _stats_range(period: str) -> tuple[int, int]:
-  tz = ZoneInfo(settings.seq_reset_tz)
+  tz = ZoneInfo(runtime_config.delivery.presentation.seq_reset_tz)
   now = datetime.now(tz)
   today = now.replace(hour=0, minute=0, second=0, microsecond=0)
   if period == "today":
@@ -197,15 +197,23 @@ def _stats_range(period: str) -> tuple[int, int]:
 
 
 def _is_owner(msg) -> bool:
-  if not settings.telegram_owner_id:
+  if not runtime_config.delivery.telegram.telegram_owner_id:
     return False
-  return msg.from_user is not None and msg.from_user.id == settings.telegram_owner_id
+  return (
+    msg.from_user is not None
+    and msg.from_user.id
+    == runtime_config.delivery.telegram.telegram_owner_id
+  )
 
 
 def _is_owner_cb(cb) -> bool:
-  if not settings.telegram_owner_id:
+  if not runtime_config.delivery.telegram.telegram_owner_id:
     return False
-  return cb.from_user is not None and cb.from_user.id == settings.telegram_owner_id
+  return (
+    cb.from_user is not None
+    and cb.from_user.id
+    == runtime_config.delivery.telegram.telegram_owner_id
+  )
 
 
 def _command_args(msg) -> str:
@@ -229,7 +237,7 @@ def _seq_token(value: str) -> int | None:
 
 
 def _today_str() -> str:
-  tz = ZoneInfo(settings.seq_reset_tz)
+  tz = ZoneInfo(runtime_config.delivery.presentation.seq_reset_tz)
   return datetime.now(tz).date().isoformat()
 
 

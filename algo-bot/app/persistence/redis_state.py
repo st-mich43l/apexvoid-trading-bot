@@ -20,7 +20,7 @@ from redis.backoff import ExponentialBackoff
 from redis.exceptions import ConnectionError as RedisConnectionError
 from redis.exceptions import TimeoutError as RedisTimeoutError
 
-from app.core.config import settings
+from app.core.config import runtime_config
 
 log = logging.getLogger(__name__)
 
@@ -39,7 +39,7 @@ _STABLE_RUNTIME_RESET_SECONDS = 60.0
 
 def _build_client() -> redis.Redis:
   return redis.Redis.from_url(
-    settings.redis_url,
+    runtime_config.bootstrap.redis.url,
     decode_responses=True,
     socket_connect_timeout=5.0,
     health_check_interval=30,
@@ -137,7 +137,7 @@ async def _alert_owner_component_fatal(
   error: str,
 ) -> None:
   """DM the owner once per component when a supervised loop goes fatal."""
-  owner_id = getattr(settings, "telegram_owner_id", None)
+  owner_id = runtime_config.delivery.telegram.telegram_owner_id
   if not owner_id:
     return
   client = get_client()
@@ -230,7 +230,7 @@ async def wait_until_ready(*, timeout_seconds: float = 120.0) -> None:
     if time.monotonic() >= deadline:
       raise RuntimeError(
         f"redis not ready within {timeout_seconds:.0f}s "
-        f"(url={settings.redis_url})"
+        f"(url={runtime_config.bootstrap.redis.url})"
       ) from last_error
     log.warning(
       "redis not ready (%s); retrying in %.1fs",
