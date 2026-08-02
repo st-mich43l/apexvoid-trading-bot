@@ -324,7 +324,9 @@ def _build_one_strategy_match(
     int(datetime.now(timezone.utc).timestamp())
     if now is None else int(now)
   )
-  ttl = max(60, int(settings.auto_trade_strategy_match_max_age_seconds))
+  ttl = max(
+    60, int(runtime_config.lifecycle.strategy_match.maximum_age_seconds),
+  )
   entry_low = float(result.entry_zone.low)
   entry_high = float(result.entry_zone.high)
   direction = result.direction.upper()
@@ -737,7 +739,7 @@ async def _sync_strategy_match(
     executable_results,
   )
   if match is None:
-    if not settings.auto_trade_multi_match_enabled:
+    if not runtime_config.strategies.matching.multiple_matches_enabled:
       await client.delete(key)
       await client.delete(matches_key)
     if reason is not None:
@@ -760,7 +762,7 @@ async def _sync_strategy_match(
   all_matches = measured.get("all_matches") if isinstance(measured, dict) else None
   current = (
     deserialize_matches(await client.get(matches_key))
-    if settings.auto_trade_multi_match_enabled
+    if runtime_config.strategies.matching.multiple_matches_enabled
     else []
   )
   incoming = all_matches if isinstance(all_matches, list) and all_matches else [match]
@@ -796,7 +798,7 @@ async def _sync_strategy_match(
     atr=match.atr,
     cfg=settings,
   )
-  if not settings.auto_trade_track_all_structural_matches:
+  if not runtime_config.strategies.matching.track_all_structural_matches:
     top_n = int(runtime_config.delivery.scanner_cards.top_n)
     if top_n > 0:
       combined = combined[:top_n]
@@ -877,7 +879,7 @@ async def _sync_strategy_match(
           "spot_price": tracked.current_price,
           "entry_low": tracked.entry_low,
           "entry_high": tracked.entry_high,
-          "guard_mode": settings.auto_trade_structural_guard_mode,
+          "guard_mode": runtime_config.actionability.structural_guard.guard_mode,
         },
         retained=True,
         publish_status=False,
@@ -893,7 +895,7 @@ async def _sync_strategy_match(
           "spot_price": tracked.current_price,
           "entry_low": tracked.entry_low,
           "entry_high": tracked.entry_high,
-          "guard_mode": settings.auto_trade_structural_guard_mode,
+          "guard_mode": runtime_config.actionability.structural_guard.guard_mode,
         },
         retained=True,
         publish_status=False,
@@ -1602,8 +1604,8 @@ def _merge_detection_confluence(
     atr=atr,
     pip_size=_pip_size(symbol),
     source_tf=tf,
-    max_width=float(settings.zone_merge_max_width),
-    gap=float(settings.zone_merge_gap),
+    max_width=float(runtime_config.analysis.zones.merge_max_width),
+    gap=float(runtime_config.analysis.zones.confluence.merge_gap_price),
   )
   merged_by_index: list[tuple[int, DetectionResult]] = []
   consumed: set[int] = set()
@@ -1662,7 +1664,10 @@ def _merge_detection_confluence(
     first_index = min(index for index, _result in group)
     consumed.update(index for index, _result in group)
     band_kind = classify_band_kind(representative.structural_source)
-    if settings.scanner_zone_width_gate_enabled and band_kind == BandKind.STRUCTURAL_ZONE:
+    if (
+      runtime_config.actionability.scanner_gates.zone_width_gate_enabled
+      and band_kind == BandKind.STRUCTURAL_ZONE
+    ):
       raw_low = representative.structural_low
       raw_high = representative.structural_high
       if raw_low is None or raw_high is None:
@@ -1867,7 +1872,7 @@ def _is_digest_primary(result: DetectionResult) -> bool:
 def _digest_results(
   results: list[DetectionResult],
 ) -> tuple[list[DetectionResult], list[dict[str, Any]]]:
-  if settings.auto_trade_track_all_structural_matches:
+  if runtime_config.strategies.matching.track_all_structural_matches:
     candidates, conflicts = _suppress_overlaps(results)
     return sorted(candidates, key=_result_rank), conflicts
   primary, primary_conflicts = _suppress_overlaps([
@@ -1889,13 +1894,15 @@ def _structure_card_gate(
   ctx: DetectionContext,
 ) -> str | None:
   if (
-    settings.scanner_gate_require_structural_anchor
+    runtime_config.actionability.structural_anchor.required
     and (result.structural_kind or "").casefold() == "round"
     and not any(_STRUCTURAL_REASON_RE.search(reason) for reason in result.reasons)
   ):
     return "round_without_structural_anchor"
 
-  maximum_touches = int(settings.scanner_gate_max_source_touches)
+  maximum_touches = int(
+    runtime_config.actionability.structural_anchor.maximum_source_touches
+  )
   if (
     maximum_touches > 0
     and int(result.source_touches or 0) >= maximum_touches
@@ -1907,7 +1914,7 @@ def _structure_card_gate(
     for value in (result.mode, result.bias_relationship)
   )
   if (
-    settings.scanner_gate_suppress_counter_bias_in_range
+    runtime_config.actionability.counter_bias.suppress_in_range
     and counter_bias
   ):
     structures = getattr(ctx, "structures", None)
@@ -1924,7 +1931,7 @@ def _structure_card_gate(
       or str(getattr(regime, "kind", "")).casefold() == "chop"
     )
     minimum_confluence = int(
-      settings.scanner_gate_counter_bias_min_confluence
+      runtime_config.actionability.counter_bias.minimum_confluence
     )
     if (
       fading_edge
@@ -1973,7 +1980,9 @@ def _suppress_overlaps(
   ordered = sorted(results, key=_result_rank)
   selected: list[DetectionResult] = []
   conflicts: list[dict[str, Any]] = []
-  same_threshold = max(0.0, settings.alert_overlap_suppress)
+  same_threshold = max(
+    0.0, runtime_config.analysis.measurements.alert_overlap_suppress,
+  )
   for result in ordered:
     same_direction_duplicate = any(
       result.direction == kept.direction
@@ -2156,7 +2165,7 @@ async def _notify_digest_once(
     band_claimed = await client.set(
       band_key,
       "1",
-      ex=settings.zone_alert_ttl,
+      ex=runtime_config.analysis.zones.alert_ttl,
       nx=True,
     )
     if not band_claimed:
@@ -2749,7 +2758,7 @@ async def _handle_event(
     map_payload = market_map_payload(current_map)
     map_ttl = max(
       900,
-      int(settings.auto_trade_strategy_match_max_age_seconds) * 2,
+      int(runtime_config.lifecycle.strategy_match.maximum_age_seconds) * 2,
     )
     await client.set(
       market_map_key(symbol),
@@ -2773,7 +2782,7 @@ async def _handle_event(
       await client.hset(
         f"auto_trade:zone_reconcile:{symbol.upper()}",
         mapping={
-          "mode": settings.auto_trade_zone_reconcile_mode,
+          "mode": runtime_config.actionability.zone_reconciliation.mode,
           "zones_input": getattr(
             exec_analysis, "zone_reconcile_input", 0,
           ),

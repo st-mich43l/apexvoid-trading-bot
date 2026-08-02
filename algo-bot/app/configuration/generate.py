@@ -24,6 +24,9 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 CATALOG_VERSION = 1
 SOURCE_MODEL = "app.configuration.models.root.ApexVoidConfig"
 PHASE_2E_ROOTS = frozenset({"bootstrap", "delivery", "market_data"})
+PHASE_2F_ROOTS = frozenset({
+  "actionability", "analysis", "lifecycle", "strategies",
+})
 
 
 def _json_bytes(value: Any) -> bytes:
@@ -249,6 +252,233 @@ def _python_projection_artifact(
   }
 
 
+def _phase2f_behavior_boundary(path: str | None) -> str:
+  if path is None:
+    return "TELEMETRY_ONLY"
+  if path.startswith("analysis.market_map"):
+    return "MARKET_MAP"
+  if path.startswith("analysis.zones"):
+    return "ZONE_CONSTRUCTION"
+  if path.startswith("analysis"):
+    return "DETECTION"
+  if path.startswith("strategies"):
+    return "STRATEGY_SELECTION"
+  if path.startswith("actionability.target_room"):
+    return "TARGET_ROOM"
+  if path.startswith((
+    "actionability.structural_anchor",
+    "actionability.structural_guard",
+    "actionability.overlapping_zones",
+    "actionability.zone_reconciliation",
+  )):
+    return "STRUCTURAL_GUARD"
+  if path.startswith("actionability"):
+    return "ACTIONABILITY"
+  if path.startswith("lifecycle.zone"):
+    return "COOLDOWN"
+  if path.startswith("lifecycle.range_box"):
+    return "RETIREMENT"
+  if path.startswith("lifecycle.mapped_zone"):
+    return "REARM"
+  if path.startswith((
+    "lifecycle.candidate", "lifecycle.strategy_match", "lifecycle.retest",
+  )):
+    return "EXPIRY"
+  if path.startswith("lifecycle.reconciliation"):
+    return "RECONCILIATION"
+  return "TELEMETRY_ONLY"
+
+
+_PHASE2F_TEST_COVERAGE = {
+  "DETECTION": "test_detectors.py",
+  "ZONE_CONSTRUCTION": "test_zone_width_contract.py; test_confluence_zone.py",
+  "MARKET_MAP": "test_market_map.py",
+  "STRATEGY_SELECTION": "test_strategy_match.py; test_structure_aware_autotrade.py",
+  "ACTIONABILITY": "test_scanner_actionability.py",
+  "TARGET_ROOM": "test_scanner_actionability.py; test_worker_veto_regression_replay.py",
+  "STRUCTURAL_GUARD": "test_scanner_actionability.py; test_zone_width_contract.py",
+  "COOLDOWN": "test_worker_veto_regression_replay.py; test_auto_scalp_worker.py",
+  "EXPIRY": "test_setup_expiry_sweeper.py; test_strategy_match_ready_handoff.py",
+  "RETIREMENT": "test_map_reaction_range_retirement.py",
+  "REARM": "test_mapped_thesis_lock.py; test_setup_expiry_sweeper.py",
+  "RECONCILIATION": "test_startup_reconciliation.py",
+  "TELEMETRY_ONLY": "configuration usage-audit guards",
+}
+
+
+def _consumer_migration_phase2f_artifact(
+  entries: tuple[CatalogEntry, ...],
+  fingerprint: str,
+  usage: dict[str, object],
+) -> dict[str, Any]:
+  """Render the Phase 2F trading-consumer migration ledger from AST facts."""
+  direct_paths = {
+    entry.legacy_attr: entry.path
+    for entry in entries
+    if entry.legacy_attr is not None
+  }
+  reverse_paths = {path: attribute for attribute, path in direct_paths.items()}
+  derived_paths = {
+    item.property_name: item.source_path
+    for item in DERIVED_LEGACY_PROPERTIES
+  }
+  rows: list[dict[str, Any]] = []
+
+  def add_row(
+    item: dict[str, Any],
+    *,
+    legacy_attribute: str | None,
+    canonical_path: str | None,
+    classification: str,
+    status: str,
+    support: bool,
+    reason: str | None,
+  ) -> None:
+    parts = canonical_path.split(".") if canonical_path else []
+    boundary = _phase2f_behavior_boundary(canonical_path)
+    rows.append({
+      "file": item["path"],
+      "line": item["line"],
+      "legacy_attribute": legacy_attribute,
+      "canonical_path": canonical_path,
+      "root_domain": parts[0] if parts else None,
+      "subdomain": parts[1] if len(parts) > 1 else None,
+      "authority_neutral_support": support,
+      "migration_classification": classification,
+      "migration_status": status,
+      "deferred_reason": reason,
+      "behavior_boundary": boundary,
+      "targeted_test_coverage": _PHASE2F_TEST_COVERAGE[boundary],
+    })
+
+  production = usage["production"]
+  for item in production["canonical_reads"]:
+    path = item["canonical_path"]
+    root = path.split(".", 1)[0]
+    if root not in PHASE_2F_ROOTS:
+      continue
+    attribute = reverse_paths.get(path)
+    add_row(
+      item,
+      legacy_attribute=attribute,
+      canonical_path=path,
+      classification=(
+        "PHASE_2F_MIGRATE" if attribute is not None else "UNKNOWN_BLOCKER"
+      ),
+      status="migrated" if attribute is not None else "blocked",
+      support=attribute is not None,
+      reason=(
+        None if attribute is not None
+        else "canonical Phase 2F read lacks direct legacy ownership"
+      ),
+    )
+
+  def add_legacy_read(item: dict[str, Any], attribute: str) -> None:
+    path = direct_paths.get(attribute)
+    if path is not None:
+      root = path.split(".", 1)[0]
+      if root in PHASE_2F_ROOTS:
+        classification = "PHASE_2F_MIGRATE"
+        status = "pending"
+        reason = None
+      elif root == "runtime":
+        classification = "RUNTIME_DEFER"
+        status = "deferred"
+        reason = "runtime-root migration is explicitly deferred to Phase 2G"
+      else:
+        classification = "PHASE_2G_DEFER"
+        status = "deferred"
+        reason = f"canonical root {root} is explicitly deferred to Phase 2G"
+      add_row(
+        item,
+        legacy_attribute=attribute,
+        canonical_path=path,
+        classification=classification,
+        status=status,
+        support=True,
+        reason=reason,
+      )
+      return
+    derived_path = derived_paths.get(attribute)
+    add_row(
+      item,
+      legacy_attribute=attribute,
+      canonical_path=derived_path,
+      classification=(
+        "DERIVED_COMPATIBILITY_DEFER"
+        if derived_path else "NON_LEGACY_CANONICAL_DEFER"
+      ),
+      status="deferred",
+      support=False,
+      reason=(
+        "legacy property is derived rather than directly owned"
+        if derived_path else
+        "optional compatibility attribute has no typed-catalog canonical path"
+      ),
+    )
+
+  for item in production["attribute_reads"]:
+    add_legacy_read(item, item["attribute"])
+  for item in production["introspection"]:
+    names = item["dynamic_names"] or (
+      [item["attribute"]] if item["attribute"] is not None else []
+    )
+    for attribute in names:
+      add_legacy_read(item, attribute)
+
+  rows.sort(key=lambda item: (
+    item["file"],
+    item["line"],
+    item["legacy_attribute"] or "",
+    item["canonical_path"] or "",
+  ))
+  migrated = sum(item["migration_status"] == "migrated" for item in rows)
+  eligible_remaining = sum(
+    item["migration_classification"] == "PHASE_2F_MIGRATE"
+    and item["migration_status"] != "migrated"
+    for item in rows
+  )
+  deferred = sum(item["migration_status"] == "deferred" for item in rows)
+  unknown = sum(
+    item["migration_classification"] == "UNKNOWN_BLOCKER" for item in rows
+  )
+  roots = {
+    root: {
+      "eligible_before": sum(
+        item["root_domain"] == root
+        and item["migration_classification"] == "PHASE_2F_MIGRATE"
+        for item in rows
+      ),
+      "migrated": sum(
+        item["root_domain"] == root
+        and item["migration_status"] == "migrated"
+        for item in rows
+      ),
+      "remaining": sum(
+        item["root_domain"] == root
+        and item["migration_classification"] == "PHASE_2F_MIGRATE"
+        and item["migration_status"] != "migrated"
+        for item in rows
+      ),
+    }
+    for root in sorted(PHASE_2F_ROOTS)
+  }
+  return {
+    **_header(fingerprint),
+    "phase": "2F",
+    "candidate_roots": sorted(PHASE_2F_ROOTS),
+    "counts": {
+      "eligible_production_reads_before": migrated + eligible_remaining,
+      "migrated_reads": migrated,
+      "eligible_reads_remaining": eligible_remaining,
+      "deferred_reads": deferred,
+      "unknown_blockers": unknown,
+    },
+    "root_counts": roots,
+    "reads": rows,
+  }
+
+
 def _consumer_migration_artifact(
   entries: tuple[CatalogEntry, ...],
   fingerprint: str,
@@ -296,7 +526,9 @@ def _consumer_migration_artifact(
     path = item["canonical_path"]
     root = path.split(".", 1)[0]
     legacy_attribute = reverse_paths.get(path)
-    if root in PHASE_2E_ROOTS and legacy_attribute is not None:
+    if root not in PHASE_2E_ROOTS:
+      continue
+    if legacy_attribute is not None:
       add_row(
         item,
         legacy_attribute=legacy_attribute,
@@ -581,6 +813,10 @@ def render_artifacts() -> dict[Path, bytes]:
       _json_bytes(usage),
     Path("contracts/configuration/consumer-migration-phase-2e.generated.json"):
       _json_bytes(_consumer_migration_artifact(entries, fingerprint, usage)),
+    Path("contracts/configuration/consumer-migration-phase-2f.generated.json"):
+      _json_bytes(_consumer_migration_phase2f_artifact(
+        entries, fingerprint, usage,
+      )),
     Path("algo-bot/app/configuration/generated/__init__.py"):
       _generated_package_init(),
     Path("algo-bot/app/configuration/generated/legacy_access.py"):

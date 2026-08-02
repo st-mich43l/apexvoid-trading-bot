@@ -649,7 +649,7 @@ async def _load_strategy_matches(
 ) -> list[StrategyMatch]:
   if not settings.auto_trade_strategy_match_enabled:
     return []
-  if not settings.auto_trade_multi_match_enabled:
+  if not runtime_config.strategies.matching.multiple_matches_enabled:
     match = await _load_strategy_match(client, symbol)
     return [] if match is None else [match]
   raw = await client.get(strategy_matches_key(symbol))
@@ -735,7 +735,7 @@ async def _resolve_worker_range(
   m1 = frames.get(EXECUTION_TIMEFRAME)
   atr = 0.0
   if m1 is not None and not m1.empty:
-    series = atr_series(m1, max(2, settings.atr_length))
+    series = atr_series(m1, max(2, runtime_config.analysis.atr.length))
     if not series.empty:
       atr = float(series.iloc[-1])
   scanner_raw = await client.get(range_context_source_key(symbol, "scanner"))
@@ -826,7 +826,7 @@ async def _resolve_worker_range(
           client,
           symbol=symbol,
           range_id=resolved.range_id,
-          ttl=settings.auto_trade_box_retire_seconds,
+          ttl=runtime_config.lifecycle.range_box.retirement_seconds,
         )
         await persist_breakout_retest_watch(
           client,
@@ -835,7 +835,7 @@ async def _resolve_worker_range(
           direction=direction,
           lower=resolved.lower,
           upper=resolved.upper,
-          ttl=settings.auto_trade_box_retire_seconds,
+          ttl=runtime_config.lifecycle.range_box.retirement_seconds,
         )
         await _expire_range_matches(client, symbol, resolved.range_id)
   elif resolved is not None and await range_is_retired(
@@ -877,7 +877,7 @@ async def _resolve_worker_range(
   if comparison.get("disagreement"):
     await increment_metric(client, "range_context_disagreement", symbol=symbol)
     disagreement_hard = bool(
-      settings.range_context_disagreement_gate_enabled
+      runtime_config.actionability.gates.range_context_disagreement_gate_enabled
     )
     await increment_metric(
       client,
@@ -960,7 +960,7 @@ async def _persist_range_side_states(
       await client.set(
         side_key,
         json.dumps(payload, separators=(",", ":"), sort_keys=True),
-        ex=max(300, settings.auto_trade_box_retire_seconds),
+        ex=max(300, runtime_config.lifecycle.range_box.retirement_seconds),
       )
       await client.delete(_box_edge_key(symbol, context.range_id, direction))
     return
@@ -1029,7 +1029,7 @@ async def _persist_range_side_states(
     await client.set(
       side_key,
       json.dumps(payload, separators=(",", ":"), sort_keys=True),
-      ex=max(300, settings.auto_trade_box_retire_seconds),
+      ex=max(300, runtime_config.lifecycle.range_box.retirement_seconds),
     )
 
 
@@ -1168,7 +1168,7 @@ async def _mark_range_side_candidate(
   await client.set(
     key,
     json.dumps(payload, separators=(",", ":"), sort_keys=True),
-    ex=max(300, settings.auto_trade_box_retire_seconds),
+    ex=max(300, runtime_config.lifecycle.range_box.retirement_seconds),
   )
 
 
@@ -1817,7 +1817,7 @@ async def _zone_cooldown_reason(
   don't destroy the opportunity").
   """
   if (
-    not settings.auto_trade_zone_cooldown_enabled
+    not runtime_config.lifecycle.zone.cooldown_enabled
     or not atr or atr <= 0 or cooldown_atr <= 0
   ):
     return None
@@ -2267,7 +2267,9 @@ async def _record_private_route(
     structural_source=source,
     structural_zone_id=structural_id,
     issued_at=int(_intent_freshness(event_ts, now)),
-    expires_at=now + max(300, settings.auto_trade_candidate_ttl),
+    expires_at=(
+      now + max(300, runtime_config.lifecycle.candidate.storage_ttl_seconds)
+    ),
     current_price=spot_price,
     entry_low=entry_low,
     entry_high=entry_high,
@@ -2444,8 +2446,8 @@ async def _advance_mapped_thesis_rearms(
   except Exception:
     return
   now = int(datetime.now(timezone.utc).timestamp())
-  rearm_atr = float(getattr(settings, "auto_trade_map_reaction_rearm_atr", 0.5))
-  rearm_bars = int(getattr(settings, "auto_trade_map_reaction_rearm_bars", 3))
+  rearm_atr = float(runtime_config.lifecycle.mapped_zone.reaction_rearm_atr)
+  rearm_bars = int(runtime_config.lifecycle.mapped_zone.reaction_rearm_bars)
   pattern = "auto_trade:thesis_claim:*"
   async for raw_key in client.scan_iter(match=pattern, count=50):
     key = raw_key.decode() if isinstance(raw_key, bytes) else str(raw_key)
@@ -2561,36 +2563,34 @@ def _strategy_mode_enabled(match: StrategyMatch) -> bool:
   value = match.strategy.casefold()
   family = (match.family or "").casefold()
   if match.is_range_edge or family in {"range", "range_reversion"}:
-    return settings.auto_trade_range_enabled
+    return runtime_config.strategies.range_reversion.enabled
   if "mapped" in value or family in {"mapped_zone", "mapped_zone_reaction"}:
-    return settings.auto_trade_mapped_zone_enabled
+    return runtime_config.strategies.mapped_zone.enabled
   if family == "key_level" or value == "key level reaction":
-    return bool(getattr(settings, "auto_trade_key_level_reaction_enabled", True))
+    return runtime_config.strategies.reaction.key_level.enabled
   if family == "supply_demand" or value in {
     "demand zone reaction", "supply zone reaction",
   }:
     if "demand" in value:
-      return bool(getattr(settings, "auto_trade_demand_reaction_enabled", True))
-    return bool(getattr(settings, "auto_trade_supply_reaction_enabled", True))
+      return runtime_config.strategies.reaction.demand.enabled
+    return runtime_config.strategies.reaction.supply.enabled
   if family == "session_level" or value == "session level reaction":
-    return bool(
-      getattr(settings, "auto_trade_session_level_reaction_enabled", True)
-    )
+    return runtime_config.strategies.reaction.session_level.enabled
   if family == "trendline" or value == "trendline reaction":
-    return bool(getattr(settings, "auto_trade_trendline_reaction_enabled", True))
+    return runtime_config.strategies.reaction.trendline.enabled
   if "liquidity" in value or "sweep" in value or family == "liquidity_reversal":
-    return settings.auto_trade_liquidity_reversal_enabled
+    return runtime_config.strategies.reaction.liquidity_reversal.enabled
   if "retest" in value or family == "breakout_retest":
-    return settings.auto_trade_retest_enabled
+    return runtime_config.strategies.selection.retest_enabled
   if "breakout" in value or "breakdown" in value:
-    return settings.auto_trade_breakout_enabled
+    return runtime_config.strategies.breakout.breakout_enabled
   if (
     "reaction" in value
     or "rejection" in value
     or "supply" in value
     or "demand" in value
   ):
-    return settings.auto_trade_reaction_enabled
+    return runtime_config.strategies.reaction.enabled
   return settings.auto_trade_strategy_match_enabled
 
 
@@ -2633,7 +2633,7 @@ async def _publish_candidate(
 ) -> str | None:
   if (
     not settings.auto_trade_enabled
-    or not settings.auto_trade_range_enabled
+    or not runtime_config.strategies.range_reversion.enabled
     or spot is None
     or not spot.fresh
     or decision.state != "candidate"
@@ -2641,7 +2641,9 @@ async def _publish_candidate(
     or decision.box is None
     or decision.direction is None
     or scale_context is None
-    or decision.confluence < max(1, settings.auto_trade_min_confluence)
+    or decision.confluence < max(
+      1, runtime_config.actionability.gates.min_confluence,
+    )
   ):
     return None
   if decision.full_tp_pips not in configured_range_targets():
@@ -2676,7 +2678,7 @@ async def _publish_candidate(
   eq_reason = _eq_exclusion_reason(
     decision.box,
     entry_reference,
-    settings.auto_trade_eq_exclusion_fraction,
+    runtime_config.actionability.gates.eq_exclusion_fraction,
   )
   if eq_reason is not None:
     eq_outcome = classify_guard_severity(
@@ -2704,7 +2706,7 @@ async def _publish_candidate(
     decision.rail,
     entry_reference,
     scale_context.atr,
-    settings.auto_trade_edge_proximity_atr,
+    runtime_config.actionability.gates.edge_proximity_atr,
   )
   if edge_reason is not None:
     edge_outcome = classify_guard_severity(
@@ -2731,7 +2733,7 @@ async def _publish_candidate(
   opposing_zone = _nearest_directional_zone(
     decision.direction, entry_reference, htf_zones or [],
   )
-  if settings.auto_trade_htf_veto_enabled:
+  if runtime_config.actionability.gates.htf_veto_enabled:
     veto_reason = _htf_veto_reason(decision.direction, entry_reference, opposing_zone)
     if veto_reason is not None:
       veto_outcome = classify_guard_severity(
@@ -2760,7 +2762,7 @@ async def _publish_candidate(
   # (select_range_target / EQ room) remains the room gate.
   cooldown_reason = await _zone_cooldown_reason(
     client, symbol, decision.direction, entry_reference,
-    scale_context.atr, settings.auto_trade_zone_cooldown_atr,
+    scale_context.atr, runtime_config.lifecycle.zone.cooldown_atr,
   )
   if cooldown_reason is not None:
     cooldown_outcome = classify_guard_severity(
@@ -2782,7 +2784,7 @@ async def _publish_candidate(
       await _record_gate_reject(client, symbol, "zone_cooldown")
       return None
   if (
-    settings.auto_trade_overlap_veto_enabled
+    runtime_config.actionability.overlapping_zones.veto_enabled
     or guard_mode == GUARD_MODE_OBSERVE
   ):
     overlap_outcome = _resolve_overlap_thesis(
@@ -2811,7 +2813,7 @@ async def _publish_candidate(
   try:
     guarded = await event_in_window(
       now,
-      max(0, settings.auto_trade_news_guard_minutes) * 60,
+      max(0, runtime_config.actionability.gates.news_guard_minutes) * 60,
     )
   except Exception:
     log.exception("auto-scalp candidate blocked: news guard unavailable")
@@ -2911,8 +2913,8 @@ async def _publish_candidate(
         int(decision.full_tp_pips),
       ]
       if (
-        settings.auto_trade_range_box_scale_out_enabled
-        and not settings.auto_trade_range_flip_enabled
+        runtime_config.strategies.range_reversion.box_scale_out_enabled
+        and not runtime_config.strategies.range_reversion.flip_enabled
         and decision.full_tp_pips is not None
         and int(decision.full_tp_pips)
           > int(settings.auto_trade_range_box_scale_out_threshold_pips)
@@ -2929,8 +2931,8 @@ async def _publish_candidate(
     "scale_out_fraction": (
       float(settings.auto_trade_range_box_scale_out_fraction)
       if (
-        settings.auto_trade_range_box_scale_out_enabled
-        and not settings.auto_trade_range_flip_enabled
+        runtime_config.strategies.range_reversion.box_scale_out_enabled
+        and not runtime_config.strategies.range_reversion.flip_enabled
         and decision.full_tp_pips is not None
         and int(decision.full_tp_pips)
           > int(settings.auto_trade_range_box_scale_out_threshold_pips)
@@ -2976,11 +2978,11 @@ async def _publish_candidate(
     stream=settings.auto_trade_stream,
     candidate_id=candidate_id,
     payload=json.dumps(payload, separators=(",", ":")),
-    ttl=settings.auto_trade_candidate_ttl,
+    ttl=runtime_config.lifecycle.candidate.storage_ttl_seconds,
     maxlen=settings.auto_trade_stream_maxlen,
     ownership_key=autonomous_cycle_owner_key(symbol, trigger_ts),
     ownership_payload=candidate_id,
-    ownership_ttl=settings.auto_trade_candidate_ttl,
+    ownership_ttl=runtime_config.lifecycle.candidate.storage_ttl_seconds,
     allow_non_atomic_test_fallback=explicit_test_fallback_enabled(client),
   )
   published, executor_event_id = publish_result
@@ -3065,7 +3067,7 @@ async def _publish_candidate(
   await client.set(
     _box_edge_key(symbol, decision.box.box_id, decision.direction),
     "1",
-    ex=max(300, settings.auto_trade_box_retire_seconds),
+    ex=max(300, runtime_config.lifecycle.range_box.retirement_seconds),
   )
   log.info(
     "auto-scalp candidate published id=%s symbol=%s direction=%s",
@@ -3187,16 +3189,18 @@ async def _publish_strategy_match(
     await _consume_strategy_match(client, symbol, match)
     await increment_metric(client, "strategy_match_blocked", symbol=symbol)
     return None
-  if match.confluence < max(1, settings.auto_trade_min_confluence):
+  if match.confluence < max(1, runtime_config.actionability.gates.min_confluence):
     await route(
       "mode_check", "blocked", "confluence_below_minimum",
       (
         f"confluence {match.confluence} below minimum "
-        f"{max(1, settings.auto_trade_min_confluence)}"
+        f"{max(1, runtime_config.actionability.gates.min_confluence)}"
       ),
       measured={
         "confluence": match.confluence,
-        "minimum_confluence": max(1, settings.auto_trade_min_confluence),
+        "minimum_confluence": max(
+          1, runtime_config.actionability.gates.min_confluence,
+        ),
       },
       retained=False,
     )
@@ -3387,7 +3391,7 @@ async def _publish_strategy_match(
   if (
     not bypasses_opposing_structure_gates(match.strategy)
     and (
-      settings.auto_trade_opposing_barrier_veto_enabled
+      runtime_config.actionability.gates.opposing_barrier_veto_enabled
       or guard_mode == GUARD_MODE_OBSERVE
     )
   ):
@@ -3404,7 +3408,7 @@ async def _publish_strategy_match(
     barrier_outcome = _opposing_barrier_decision(
       match.direction, spot.price, match.target_price, match.atr,
       htf_zones or [], htf_levels or [],
-      settings.auto_trade_opposing_barrier_atr,
+      runtime_config.actionability.target_room.barrier_buffer_atr,
       source=source,
       guard_mode=guard_mode,
     )
@@ -3441,7 +3445,7 @@ async def _publish_strategy_match(
 
   cooldown_reason = await _zone_cooldown_reason(
     client, symbol, match.direction, spot.price,
-    match.atr, settings.auto_trade_zone_cooldown_atr,
+    match.atr, runtime_config.lifecycle.zone.cooldown_atr,
   )
   if cooldown_reason is not None:
     cooldown_outcome = classify_guard_severity(
@@ -3469,7 +3473,7 @@ async def _publish_strategy_match(
       return None
 
   if (
-    settings.auto_trade_overlap_veto_enabled
+    runtime_config.actionability.overlapping_zones.veto_enabled
     or guard_mode == GUARD_MODE_OBSERVE
   ):
     overlap_outcome = _resolve_overlap_thesis(
@@ -3681,7 +3685,7 @@ async def _publish_strategy_match(
   try:
     guarded = await event_in_window(
       now,
-      max(0, settings.auto_trade_news_guard_minutes) * 60,
+      max(0, runtime_config.actionability.gates.news_guard_minutes) * 60,
     )
   except Exception:
     log.exception("strategy match blocked: news guard unavailable")
@@ -3721,8 +3725,12 @@ async def _publish_strategy_match(
         new_confirmation_ts=str(match.confirmation_bar_ts or ""),
         price=float(spot.price),
         atr=float(match.atr),
-        rearm_atr=float(getattr(settings, "auto_trade_map_reaction_rearm_atr", 0.5)),
-        rearm_bars=int(getattr(settings, "auto_trade_map_reaction_rearm_bars", 3)),
+        rearm_atr=float(
+          runtime_config.lifecycle.mapped_zone.reaction_rearm_atr
+        ),
+        rearm_bars=int(
+          runtime_config.lifecycle.mapped_zone.reaction_rearm_bars
+        ),
       )
       if not decision.allowed:
         await increment_metric(
@@ -3967,7 +3975,7 @@ async def _publish_strategy_match(
       stream=settings.auto_trade_stream,
       candidate_id=candidate_id,
       payload=json.dumps(payload, separators=(",", ":")),
-      ttl=settings.auto_trade_candidate_ttl,
+      ttl=runtime_config.lifecycle.candidate.storage_ttl_seconds,
       maxlen=settings.auto_trade_stream_maxlen,
       reaction_key=(
         reaction_claim_key(match.reaction_id)
@@ -3994,7 +4002,7 @@ async def _publish_strategy_match(
         if cycle_id else None
       ),
       ownership_payload=candidate_id,
-      ownership_ttl=settings.auto_trade_candidate_ttl,
+      ownership_ttl=runtime_config.lifecycle.candidate.storage_ttl_seconds,
       allow_non_atomic_test_fallback=explicit_test_fallback_enabled(client),
     )
   except Exception as exc:
@@ -4114,7 +4122,7 @@ async def _publish_strategy_match(
         "direction": match.direction,
         "midpoint": (match.range_low + match.range_high) / 2,
       }, separators=(",", ":")),
-      ex=max(300, settings.auto_trade_box_retire_seconds),
+      ex=max(300, runtime_config.lifecycle.range_box.retirement_seconds),
     )
   log.info(
     "strategy candidate published id=%s symbol=%s strategy=%s direction=%s",
@@ -4354,8 +4362,8 @@ def _resolve_match_confluence_claim_id(
     atr=match.atr,
     pip_size=units.pip_size(symbol),
     source_tf=match.source_tf,
-    max_width=float(getattr(settings, "zone_merge_max_width", 6.0)),
-    gap=float(getattr(settings, "zone_merge_gap", 1.0)),
+    max_width=float(runtime_config.analysis.zones.merge_max_width),
+    gap=float(runtime_config.analysis.zones.confluence.merge_gap_price),
     candidate_id=match.match_id,
   )
 
@@ -4892,7 +4900,7 @@ async def _publish_trade_plan_v7(
       trigger_bar_ts = int(trigger.bar_ts)
       validity_bars = max(
         1,
-        int(getattr(settings, "auto_trade_retest_trigger_validity_bars", 2)),
+        int(runtime_config.lifecycle.retest.trigger_validity_bars),
       )
       trigger_deadline = trigger_bar_ts + 60 + validity_bars * 60
       if quote_ts > trigger_deadline:
@@ -5077,7 +5085,7 @@ async def _publish_trade_plan_v7(
   if policy.reaction_family and confirmation.source == M1_RETEST:
     validity_bars = max(
       1,
-      int(getattr(settings, "auto_trade_retest_trigger_validity_bars", 2)),
+      int(runtime_config.lifecycle.retest.trigger_validity_bars),
     )
     trigger_expiry = confirmation.bar_ts + 60 + validity_bars * 60
     execution_match = replace(
@@ -5134,8 +5142,12 @@ async def _publish_trade_plan_v7(
     actionable_entries=room_entries,
     atr=execution_match.atr,
     pip_size=units.pip_size(symbol),
-    barrier_buffer_atr=float(settings.auto_trade_opposing_barrier_atr),
-    min_capped_target_pips=float(settings.auto_trade_min_capped_target_pips),
+    barrier_buffer_atr=float(
+      runtime_config.actionability.target_room.barrier_buffer_atr
+    ),
+    min_capped_target_pips=float(
+      runtime_config.actionability.target_room.minimum_capped_target_pips
+    ),
     execution_cost_pips=float(settings.auto_trade_execution_cost_pips),
     displacement_state=displacement_state,
   )
@@ -5228,7 +5240,7 @@ async def _publish_trade_plan_v7(
     match_for_plan.target_price,
     match_for_plan.atr,
     htf_zones or [], htf_levels or [],
-    settings.auto_trade_opposing_barrier_atr,
+    runtime_config.actionability.target_room.barrier_buffer_atr,
     source=source,
     guard_mode=guard_mode,
   )
@@ -5254,7 +5266,7 @@ async def _publish_trade_plan_v7(
 
   cooldown_reason = await _zone_cooldown_reason(
     client, symbol, match.direction, spot.price,
-    match.atr, settings.auto_trade_zone_cooldown_atr,
+    match.atr, runtime_config.lifecycle.zone.cooldown_atr,
   )
   if cooldown_reason is not None:
     log.info(
@@ -5605,7 +5617,7 @@ async def _publish_trend_candidate(
 ) -> str | None:
   if (
     not settings.auto_trade_enabled
-    or not settings.auto_trade_trend_enabled
+    or not runtime_config.strategies.trend.enabled
     or spot is None
     or not spot.fresh
     or regime.state not in ("trend", "breakout")
@@ -5617,7 +5629,9 @@ async def _publish_trend_candidate(
     or trend_decision.atr is None
     or trend_decision.structure_swing is None
     or not trend_decision.targets_pips
-    or trend_decision.confluence < max(1, settings.auto_trade_min_confluence)
+    or trend_decision.confluence < max(
+      1, runtime_config.actionability.gates.min_confluence,
+    )
   ):
     return None
 
@@ -5687,7 +5701,7 @@ async def _publish_trend_candidate(
     return None
 
   guard_mode = resolve_guard_mode(settings)
-  if settings.auto_trade_htf_veto_enabled:
+  if runtime_config.actionability.gates.htf_veto_enabled:
     veto_reason = _htf_veto_reason(
       trend_decision.direction, entry_reference, opposing_zone,
     )
@@ -5715,7 +5729,7 @@ async def _publish_trend_candidate(
         return None
   trend_m1 = (frames or {}).get("M1") if frames is not None else None
   if (
-    settings.auto_trade_opposing_barrier_veto_enabled
+    runtime_config.actionability.gates.opposing_barrier_veto_enabled
     or guard_mode == GUARD_MODE_OBSERVE
   ):
     source = _structural_source_identity(
@@ -5729,7 +5743,7 @@ async def _publish_trend_candidate(
     barrier_outcome = _opposing_barrier_decision(
       trend_decision.direction, entry_reference, None, trend_decision.atr,
       htf_zones or [], htf_levels or [],
-      settings.auto_trade_opposing_barrier_atr,
+      runtime_config.actionability.target_room.barrier_buffer_atr,
       source=source,
       guard_mode=guard_mode,
     )
@@ -5754,7 +5768,7 @@ async def _publish_trend_candidate(
       return None
   cooldown_reason = await _zone_cooldown_reason(
     client, symbol, trend_decision.direction, entry_reference,
-    trend_decision.atr, settings.auto_trade_zone_cooldown_atr,
+    trend_decision.atr, runtime_config.lifecycle.zone.cooldown_atr,
   )
   if cooldown_reason is not None:
     cooldown_outcome = classify_guard_severity(
@@ -5776,7 +5790,7 @@ async def _publish_trend_candidate(
       await _record_gate_reject(client, symbol, "zone_cooldown")
       return None
   if (
-    settings.auto_trade_overlap_veto_enabled
+    runtime_config.actionability.overlapping_zones.veto_enabled
     or guard_mode == GUARD_MODE_OBSERVE
   ):
     overlap_outcome = _resolve_overlap_thesis(
@@ -5805,7 +5819,7 @@ async def _publish_trend_candidate(
   try:
     guarded = await event_in_window(
       now,
-      max(0, settings.auto_trade_news_guard_minutes) * 60,
+      max(0, runtime_config.actionability.gates.news_guard_minutes) * 60,
     )
   except Exception:
     log.exception("auto-trend candidate blocked: news guard unavailable")
@@ -5935,14 +5949,14 @@ async def _publish_trend_candidate(
     stream=settings.auto_trade_stream,
     candidate_id=candidate_id,
     payload=json.dumps(payload, separators=(",", ":")),
-    ttl=settings.auto_trade_candidate_ttl,
+    ttl=runtime_config.lifecycle.candidate.storage_ttl_seconds,
     maxlen=settings.auto_trade_stream_maxlen,
     ownership_key=(
       autonomous_cycle_owner_key(symbol, trigger_ts)
       if parent_group_id is None else None
     ),
     ownership_payload=candidate_id,
-    ownership_ttl=settings.auto_trade_candidate_ttl,
+    ownership_ttl=runtime_config.lifecycle.candidate.storage_ttl_seconds,
     allow_non_atomic_test_fallback=explicit_test_fallback_enabled(client),
   )
   published, executor_event_id = publish_result
@@ -6095,7 +6109,10 @@ async def _maybe_flag_regime_alert(
   """
   if not shares:
     return
-  threshold = max(0.0, min(1.0, float(settings.regime_chop_alert_share)))
+  threshold = max(
+    0.0,
+    min(1.0, float(runtime_config.analysis.measurements.regime_chop_alert_share)),
+  )
   chop_share = shares.get("chop", 0.0)
   if chop_share <= threshold:
     return
@@ -6178,7 +6195,7 @@ def _status_payload(
   elif trend_routed and trend_decision is not None:
     state = (
       trend_decision.state
-      if settings.auto_trade_trend_enabled
+      if runtime_config.strategies.trend.enabled
       else "trend_disabled"
     )
     direction = trend_decision.direction
@@ -6439,7 +6456,7 @@ async def _apply_box_retirement(
     await client.set(
       key,
       "1",
-      ex=max(300, settings.auto_trade_box_retire_seconds),
+      ex=max(300, runtime_config.lifecycle.range_box.retirement_seconds),
     )
     return decision
   if decision.state == "candidate" and await client.exists(key):
@@ -6887,7 +6904,7 @@ async def _common_preflight(
     zone_id=str(getattr(subject, "zone_id", "") or "") or None,
     level_id=str(getattr(subject, "level_id", "") or "") or None,
   )
-  if settings.auto_trade_htf_veto_enabled:
+  if runtime_config.actionability.gates.htf_veto_enabled:
     opposing_zone = _nearest_directional_zone(
       direction,
       spot.price,
@@ -6915,7 +6932,7 @@ async def _common_preflight(
         )
       warnings.append("htf_veto")
   if (
-    settings.auto_trade_opposing_barrier_veto_enabled
+    runtime_config.actionability.gates.opposing_barrier_veto_enabled
     or guard_mode == GUARD_MODE_OBSERVE
   ):
     barrier = _opposing_barrier_decision(
@@ -6925,7 +6942,7 @@ async def _common_preflight(
       atr,
       htf_zones,
       htf_levels,
-      settings.auto_trade_opposing_barrier_atr,
+      runtime_config.actionability.target_room.barrier_buffer_atr,
       source=source,
       guard_mode=guard_mode,
     )
@@ -6949,7 +6966,7 @@ async def _common_preflight(
     direction,
     spot.price,
     atr,
-    settings.auto_trade_zone_cooldown_atr,
+    runtime_config.lifecycle.zone.cooldown_atr,
   )
   if cooldown is not None:
     severity = classify_guard_severity(
@@ -6973,7 +6990,7 @@ async def _common_preflight(
       )
     warnings.append("zone_cooldown")
   if (
-    settings.auto_trade_overlap_veto_enabled
+    runtime_config.actionability.overlapping_zones.veto_enabled
     or guard_mode == GUARD_MODE_OBSERVE
   ):
     overlap = _resolve_overlap_thesis(
@@ -7075,7 +7092,7 @@ async def _common_preflight(
   try:
     guarded = await event_in_window(
       now,
-      max(0, settings.auto_trade_news_guard_minutes) * 60,
+      max(0, runtime_config.actionability.gates.news_guard_minutes) * 60,
     )
   except Exception:
     return _preflight_decision(
@@ -7313,7 +7330,7 @@ async def _preflight_strategy_intent(
         },
         subject=match,
       )
-  if match.confluence < max(1, settings.auto_trade_min_confluence):
+  if match.confluence < max(1, runtime_config.actionability.gates.min_confluence):
     return _preflight_decision(
       intent,
       executable=False,
@@ -7460,10 +7477,10 @@ async def _preflight_strategy_intent(
         price=float(spot.price),
         atr=float(match.atr),
         rearm_atr=float(
-          getattr(settings, "auto_trade_map_reaction_rearm_atr", 0.5)
+          runtime_config.lifecycle.mapped_zone.reaction_rearm_atr
         ),
         rearm_bars=int(
-          getattr(settings, "auto_trade_map_reaction_rearm_bars", 3)
+          runtime_config.lifecycle.mapped_zone.reaction_rearm_bars
         ),
       )
       if not thesis_decision.allowed:
@@ -7590,7 +7607,7 @@ async def _handle_event(
     if m1 is None:
       m1 = frames.get("M1")
     if m1 is not None and len(m1) >= 15:
-      atr_series = atr_indicator(m1, int(getattr(settings, "atr_length", 14)))
+      atr_series = atr_indicator(m1, int(runtime_config.analysis.atr.length))
       atr_for_rearm = float(atr_series.iloc[-1])
       if math.isfinite(atr_for_rearm) and atr_for_rearm > 0:
         await _advance_mapped_thesis_rearms(
@@ -7624,7 +7641,7 @@ async def _handle_event(
   )
   guard_market_map = (
     cached_market_map
-    if settings.auto_trade_market_map_guard_enabled
+    if runtime_config.actionability.gates.market_map_guard_enabled
     else None
   )
   displayed_market_map = decode_market_map(
@@ -7649,7 +7666,7 @@ async def _handle_event(
   strategy_matches = list(scanner_strategy_matches)
   if ready_match_id is None and market_map_decision.match is not None:
     strategy_matches.append(market_map_decision.match)
-  if settings.auto_trade_multi_match_enabled and strategy_matches:
+  if runtime_config.strategies.matching.multiple_matches_enabled and strategy_matches:
     strategy_matches, _ = dedupe_matches(
       strategy_matches,
       atr=strategy_matches[0].atr,
@@ -7704,7 +7721,7 @@ async def _handle_event(
     resolved=resolved_range,
     regime_state=regime.state,
     now=int(datetime.now(timezone.utc).timestamp()),
-    range_enabled=bool(settings.auto_trade_range_enabled),
+    range_enabled=bool(runtime_config.strategies.range_reversion.enabled),
   )
   box_selected = box_eligibility.eligible
   if box_eligibility.eligible:
@@ -7909,7 +7926,7 @@ async def _handle_event(
       eligibility_reason = None
       enabled = True
       if intent.source == "private_range":
-        enabled = bool(settings.auto_trade_range_enabled)
+        enabled = bool(runtime_config.strategies.range_reversion.enabled)
         eligibility_reason = (
           None
           if box_eligibility.eligible
@@ -7937,7 +7954,7 @@ async def _handle_event(
               _eq_exclusion_reason(
                 decision.box,
                 spot.price,
-                settings.auto_trade_eq_exclusion_fraction,
+                runtime_config.actionability.gates.eq_exclusion_fraction,
               ),
             ),
             (
@@ -7946,7 +7963,7 @@ async def _handle_event(
                 decision.rail,
                 spot.price,
                 scale_context.atr,
-                settings.auto_trade_edge_proximity_atr,
+                runtime_config.actionability.gates.edge_proximity_atr,
               ),
             ),
           ):
@@ -7962,7 +7979,7 @@ async def _handle_event(
               eligibility_reason = guard_name
               break
       elif intent.source == "private_trend":
-        enabled = bool(settings.auto_trade_trend_enabled)
+        enabled = bool(runtime_config.strategies.trend.enabled)
         if regime.state not in {"trend", "breakout"}:
           eligibility_reason = "trend_regime_not_permitted"
       preflight = await _preflight_private_intent(
@@ -7984,7 +8001,7 @@ async def _handle_event(
   }
   arbitration = arbitrate_preflight_decisions(
     preflight_decisions,
-    conflict_margin=settings.scanner_conflict_margin,
+    conflict_margin=runtime_config.actionability.scanner_gates.conflict_margin,
   )
   for preflight in preflight_decisions:
     intent = preflight.intent

@@ -31,6 +31,13 @@ dated section after deployment.
   inside the still-healthy feed session instead of leaving execution stopped.
 
 ### Added
+- Authority-neutral grouped `runtime_config` reads for all 140 eligible
+  analysis, strategy, actionability, and lifecycle production call-sites.
+  Generated Phase 2F inventory and AST guards enforce zero remaining or
+  dynamic legacy reads, while process-isolated parity covers exact values,
+  types, truthiness, and representative decision snapshots under both legacy
+  and canonical authority. Trading behavior, ENV/Compose, execution, risk,
+  contract, C#, and the default `legacy` authority remain unchanged.
 - Authority-neutral grouped `runtime_config` reads for bootstrap, logging,
   Telegram/delivery, calendar, weekly reports, watcher, and OHLC consumers.
   Legacy authority now exposes an immutable legacy-backed canonical view while

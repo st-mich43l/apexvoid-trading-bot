@@ -19,7 +19,7 @@ import hashlib
 from dataclasses import dataclass
 from typing import Any, Iterable, Sequence
 
-from app.core.config import settings
+from app.core.config import runtime_config
 
 CONFLUENCE_ZONE_CLAIM_KEY_PREFIX = "auto_trade:confluence_zone_claim"
 
@@ -128,19 +128,21 @@ def validate_zone_width(
   global settings.
   """
   resolved_min = float(
-    min_width if min_width is not None else settings.xau_zone_min_width_price
+    min_width
+    if min_width is not None
+    else runtime_config.analysis.zones.symbol_contract.minimum_width_price
   )
   resolved_max = float(
     (
       major_max_width
       if major_max_width is not None
-      else settings.xau_major_zone_max_width_price
+      else runtime_config.analysis.zones.symbol_contract.major_maximum_width_price
     )
     if is_major
     else (
       preferred_max_width
       if preferred_max_width is not None
-      else settings.xau_zone_preferred_max_width_price
+      else runtime_config.analysis.zones.symbol_contract.preferred_maximum_width_price
     )
   )
   sources = tuple(merge_sources)

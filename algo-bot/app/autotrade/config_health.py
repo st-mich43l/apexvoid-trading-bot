@@ -297,22 +297,26 @@ def python_manifest() -> dict[str, Any]:
       configured_range_targets()
     ),
     "range_tp_buffer": settings.auto_trade_range_tp_buffer_pips,
-    "candidate_storage_ttl_seconds": settings.auto_trade_candidate_ttl,
+    "candidate_storage_ttl_seconds": (
+      runtime_config.lifecycle.candidate.storage_ttl_seconds
+    ),
     "candidate_execution_max_age_seconds": (
-      settings.auto_trade_candidate_max_age_seconds
+      runtime_config.lifecycle.candidate.execution_maximum_age_seconds
     ),
     "spot_max_age_seconds": runtime_config.market_data.spot.maximum_age_seconds,
-    "range_flip": settings.auto_trade_range_flip_enabled,
-    "two_sided_range": settings.auto_trade_range_two_sided_enabled,
+    "range_flip": runtime_config.strategies.range_reversion.flip_enabled,
+    "two_sided_range": (
+      runtime_config.strategies.range_reversion.two_sided_enabled
+    ),
     "concurrent_strategies": settings.auto_trade_allow_concurrent_strategies,
     "hedging_policy": settings.auto_trade_allow_hedged_xau,
     "broker_hedging_capability": None,
     "zone_fill": settings.auto_trade_zone_fill_enabled,
-    "trend_enabled": settings.auto_trade_trend_enabled,
-    "range_enabled": settings.auto_trade_range_enabled,
-    "mapped_zone_enabled": settings.auto_trade_mapped_zone_enabled,
+    "trend_enabled": runtime_config.strategies.trend.enabled,
+    "range_enabled": runtime_config.strategies.range_reversion.enabled,
+    "mapped_zone_enabled": runtime_config.strategies.mapped_zone.enabled,
     "market_map_guard_enabled": (
-      settings.auto_trade_market_map_guard_enabled
+      runtime_config.actionability.gates.market_map_guard_enabled
     ),
     "map_thesis_lock_enabled": settings.auto_trade_map_thesis_lock_enabled,
     "strategy_match_enabled": settings.auto_trade_strategy_match_enabled,
@@ -322,14 +326,14 @@ def python_manifest() -> dict[str, Any]:
     "execution_zone_max_width_pips": (
       settings.auto_trade_execution_zone_max_width_pips
     ),
-    "breakout_enabled": settings.auto_trade_breakout_enabled,
-    "retest_enabled": settings.auto_trade_retest_enabled,
-    "reaction_enabled": settings.auto_trade_reaction_enabled,
+    "breakout_enabled": runtime_config.strategies.breakout.breakout_enabled,
+    "retest_enabled": runtime_config.strategies.selection.retest_enabled,
+    "reaction_enabled": runtime_config.strategies.reaction.enabled,
     "liquidity_reversal_enabled": (
-      settings.auto_trade_liquidity_reversal_enabled
+      runtime_config.strategies.reaction.liquidity_reversal.enabled
     ),
-    "allow_counter_bias": settings.auto_trade_allow_counter_bias,
-    "min_confluence": settings.auto_trade_min_confluence,
+    "allow_counter_bias": runtime_config.actionability.counter_bias.allowed,
+    "min_confluence": runtime_config.actionability.gates.min_confluence,
     "account_mode": "demo"
     if settings.auto_trade_require_demo_account else "live",
     "require_demo_account": settings.auto_trade_require_demo_account,
@@ -338,11 +342,13 @@ def python_manifest() -> dict[str, Any]:
     "non_hedged_opposite_policy": (
       settings.auto_trade_non_hedged_opposite_policy
     ),
-    "structural_guard_mode": settings.auto_trade_structural_guard_mode,
-    "zone_cooldown_enabled": settings.auto_trade_zone_cooldown_enabled,
-    "zone_reconcile_mode": settings.auto_trade_zone_reconcile_mode,
+    "structural_guard_mode": (
+      runtime_config.actionability.structural_guard.guard_mode
+    ),
+    "zone_cooldown_enabled": runtime_config.lifecycle.zone.cooldown_enabled,
+    "zone_reconcile_mode": runtime_config.actionability.zone_reconciliation.mode,
     "range_box_scale_out_enabled": (
-      settings.auto_trade_range_box_scale_out_enabled
+      runtime_config.strategies.range_reversion.box_scale_out_enabled
     ),
     "range_box_scale_out_threshold_pips": (
       settings.auto_trade_range_box_scale_out_threshold_pips

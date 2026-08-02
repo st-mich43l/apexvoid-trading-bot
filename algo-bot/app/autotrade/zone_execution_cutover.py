@@ -273,7 +273,10 @@ async def _record_width_telemetry(
   # disable structural width rejection everywhere, not only on the legacy
   # scanner merge path (this function used to enforce the contract as
   # unconditionally canonical, silently ignoring that flag).
-  if band_kind == BandKind.STRUCTURAL_ZONE and not settings.scanner_zone_width_gate_enabled:
+  if (
+    band_kind == BandKind.STRUCTURAL_ZONE
+    and not runtime_config.actionability.scanner_gates.zone_width_gate_enabled
+  ):
     return True
   return bool(width.eligible)
 
@@ -450,7 +453,9 @@ async def _activate_match(
   match = replace(
     match,
     issued_at=now,
-    expires_at=now + max(60, int(settings.auto_trade_strategy_match_max_age_seconds)),
+    expires_at=now + max(
+      60, int(runtime_config.lifecycle.strategy_match.maximum_age_seconds),
+    ),
     current_price=float(evidence.executable_quote or match.current_price),
   )
   match = await _persist_match(client, match)
