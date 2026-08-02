@@ -11,6 +11,7 @@
 {% set zone_cooldown_default = 'false' if auto_trade_profile == 'demo_eval' else 'true' %}
 {% set zone_reconcile_default = 'shadow' if auto_trade_profile == 'demo_eval' else 'enforce' %}
 {% set execution_defaults = {
+  'APEXVOID_CONFIG_AUTHORITY': 'legacy',
   'AUTO_TRADE_RETEST_TRIGGER_VALIDITY_BARS': '2',
   'AUTO_TRADE_MAX_ENTRY_DISTANCE_PIPS': '40',
   'ZONE_MERGE_MAX_WIDTH': '6',
