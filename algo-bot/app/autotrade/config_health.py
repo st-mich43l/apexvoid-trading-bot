@@ -301,7 +301,7 @@ def python_manifest() -> dict[str, Any]:
     "candidate_execution_max_age_seconds": (
       settings.auto_trade_candidate_max_age_seconds
     ),
-    "spot_max_age_seconds": settings.auto_trade_spot_max_age,
+    "spot_max_age_seconds": runtime_config.market_data.spot.maximum_age_seconds,
     "range_flip": settings.auto_trade_range_flip_enabled,
     "two_sided_range": settings.auto_trade_range_two_sided_enabled,
     "concurrent_strategies": settings.auto_trade_allow_concurrent_strategies,

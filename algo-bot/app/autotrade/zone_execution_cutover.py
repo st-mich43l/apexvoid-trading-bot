@@ -61,7 +61,7 @@ from app.autotrade.zone_watch import (
   record_zone_presence,
   transition_zone_watch,
 )
-from app.core.config import settings
+from app.core.config import runtime_config, settings
 from app.persistence import redis_state
 
 
@@ -156,7 +156,7 @@ async def _load_quote(client: Any, symbol: str) -> tuple[float, float, int] | No
     return None
   if not all(math.isfinite(value) and value > 0 for value in (bid, ask)):
     return None
-  if _now() - ts > max(0, int(settings.spot_fresh_secs)):
+  if _now() - ts > max(0, int(runtime_config.market_data.spot.fresh_secs)):
     return None
   return bid, ask, ts
 

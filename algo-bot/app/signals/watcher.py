@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 import aiohttp
 
-from app.core.config import settings
+from app.core.config import runtime_config, settings
 from app.autotrade.delivery import tp_message_key
 from app.bot.client import send_scanner_with_retry
 from app.signals.broadcast import fanout_update
@@ -101,16 +101,16 @@ def _render_level_alert(
     if kind == "TP":
       return (
         f"🎯 {key} +{pips} pips {wing_icons(pips)}"
-        if settings.public_show_pips
+        if runtime_config.delivery.telegram.public_show_pips
         else "🎯 TP hit"
       )
     if kind == "RUNNER":
       return (
         f"🚀 runner +{pips} pips {wing_icons(pips)}"
-        if settings.public_show_pips
+        if runtime_config.delivery.telegram.public_show_pips
         else "🚀 runner"
       )
-    if not settings.public_show_pips:
+    if not runtime_config.delivery.telegram.public_show_pips:
       return "🛡 SL hit"
     if pips < 0:
       return f"🛡 SL ({pips} pips)"
@@ -197,7 +197,7 @@ async def _maybe_alert_runner(
     await send_scanner_with_retry(
       _render_level_alert("vip", "RUNNER", "RUNNER", seq, touch, pips),
       reply_to=int(reply_to),
-      chat_id=settings.telegram_owner_id,
+      chat_id=runtime_config.delivery.telegram.telegram_owner_id,
       reply_markup=build_tp_close_kb(sig["id"], len(tps), pips),
     )
   else:
@@ -335,7 +335,7 @@ async def _ctrader_bars() -> list[dict] | None:
 
 def _bars_are_fresh(bars: list[dict]) -> bool:
   age = datetime.now(timezone.utc).timestamp() - _bar_epoch(bars[-1]["date"])
-  return age <= settings.watcher_ctrader_stale_seconds
+  return age <= runtime_config.market_data.watcher.ctrader_stale_seconds
 
 
 async def _load_bars(session: aiohttp.ClientSession) -> list[dict] | None:
@@ -399,7 +399,7 @@ async def watcher_loop() -> None:
   as a fallback when that feed is missing or stale, so the loop runs even
   without TIINGO_API_KEY configured -- it just has no fallback for a gap.
   """
-  if not settings.tiingo_api_key:
+  if not runtime_config.market_data.tiingo.api_key:
     log.info("Price watcher fallback disabled: TIINGO_API_KEY not set")
 
   async with aiohttp.ClientSession() as session:
@@ -408,4 +408,4 @@ async def watcher_loop() -> None:
         await _watcher_tick(session)
       except Exception:
         log.exception("watcher tick failed")
-      await asyncio.sleep(settings.track_interval)
+      await asyncio.sleep(runtime_config.market_data.watcher.interval_seconds)

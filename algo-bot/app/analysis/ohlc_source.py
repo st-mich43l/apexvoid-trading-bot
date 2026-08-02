@@ -5,7 +5,7 @@ from typing import Any
 
 import pandas as pd
 
-from app.core.config import settings
+from app.core.config import runtime_config, settings
 from app.persistence import redis_state
 from app.core.symbols import SYMBOLS
 
@@ -14,11 +14,11 @@ def _bar_key(symbol: str, tf: str) -> str:
   return f"bars:{symbol.upper()}:{tf.upper()}"
 
 
-_LOOKBACK_SETTING_BY_TF = {
-  "H1": "xau_lookback_h1_bars",
-  "M15": "xau_lookback_m15_bars",
-  "M5": "xau_lookback_m5_bars",
-  "M1": "xau_lookback_m1_bars",
+_LOOKBACK_BY_TF = {
+  "H1": lambda: runtime_config.market_data.lookbacks.h1_bars,
+  "M15": lambda: runtime_config.market_data.lookbacks.m15_bars,
+  "M5": lambda: runtime_config.market_data.lookbacks.m5_bars,
+  "M1": lambda: runtime_config.market_data.lookbacks.m1_bars,
 }
 
 
@@ -27,14 +27,15 @@ def window_for_timeframe(tf: str, *, default: int | None = None) -> int:
 
   The single place that resolves a timeframe string to a bar count -
   detectors and callers must never hardcode a per-timeframe lookback
-  themselves. Falls back to `default` (or `settings.scanner_window`) for any
+  themselves. Falls back to `default` (or the canonical scanner window) for any
   timeframe with no dedicated XAU_LOOKBACK_*_BARS setting (e.g. a symbol
   extension that hasn't been given its own lookback tuning yet).
   """
-  setting_name = _LOOKBACK_SETTING_BY_TF.get(tf.upper())
-  if setting_name is not None:
-    return max(50, int(getattr(settings, setting_name)))
-  return max(50, int(default if default is not None else settings.scanner_window))
+  lookback = _LOOKBACK_BY_TF.get(tf.upper())
+  if lookback is not None:
+    return max(50, int(lookback()))
+  fallback = runtime_config.market_data.scanner.window
+  return max(50, int(default if default is not None else fallback))
 
 
 def _legacy_price_factor(symbol: str) -> float:

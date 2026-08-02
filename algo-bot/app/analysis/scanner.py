@@ -797,7 +797,7 @@ async def _sync_strategy_match(
     cfg=settings,
   )
   if not settings.auto_trade_track_all_structural_matches:
-    top_n = int(getattr(settings, "scanner_top_n", 3))
+    top_n = int(runtime_config.delivery.scanner_cards.top_n)
     if top_n > 0:
       combined = combined[:top_n]
   primary = select_primary(combined) or match
