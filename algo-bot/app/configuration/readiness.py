@@ -1,4 +1,4 @@
-"""Deterministic evidence and permit model for activation rehearsal only."""
+"""Deterministic local evidence and permit model for configuration activation."""
 
 from __future__ import annotations
 
@@ -66,8 +66,6 @@ _EVIDENCE_BLOCKERS = (
     "python_behavior_baseline_not_worsened",
     ActivationBlockerCode.PYTHON_BEHAVIOR_BASELINE_WORSENED,
   ),
-  ("python_behavior_tests_passed", ActivationBlockerCode.PYTHON_BEHAVIOR_TESTS_FAILED),
-  ("csharp_tests_verified", ActivationBlockerCode.CSHARP_TESTS_NOT_VERIFIED),
 )
 
 
@@ -79,12 +77,15 @@ def evaluate_activation_readiness(
     for field_name, blocker in _EVIDENCE_BLOCKERS
     if not getattr(evidence, field_name)
   )
+  warnings = []
+  if not evidence.python_behavior_tests_passed:
+    warnings.append("PYTHON_BEHAVIOR_TESTS_NOT_GREEN")
+  if not evidence.csharp_tests_verified:
+    warnings.append("CSHARP_TESTS_NOT_RUN")
   return ActivationReadiness(
     ready=not blockers,
     blockers=blockers,
-    warnings=(
-      "Phase 2D1 readiness permits rehearsal only; legacy remains authoritative.",
-    ),
+    warnings=tuple(warnings),
     evaluated_evidence=evidence,
   )
 

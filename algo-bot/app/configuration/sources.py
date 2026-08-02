@@ -49,11 +49,13 @@ def _iter_field_specs(
       yield from _iter_field_specs(annotation, path)
 
 
-def field_specs() -> dict[str, FieldSpec]:
-  fields = dict(_iter_field_specs(ApexVoidConfig))
+def field_specs(
+  model: type[BaseModel] = ApexVoidConfig,
+) -> dict[str, FieldSpec]:
+  fields = dict(_iter_field_specs(model))
   return {
     entry.path: FieldSpec(entry=entry, field=fields[entry.path])
-    for entry in iter_catalog_entries()
+    for entry in iter_catalog_entries(model)
   }
 
 

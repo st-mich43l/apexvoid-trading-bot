@@ -1,10 +1,22 @@
 from typing import Optional
+from dataclasses import dataclass
 import math
 import os
 from pydantic import AliasChoices, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.core.environment_options import RESOLVED_ENVIRONMENT_OPTIONS
+from app.configuration.bootstrap_authority import (
+  RuntimeConfigurationAuthority,
+  runtime_configuration_authority,
+)
+from app.configuration.generated.legacy_access import (
+  DERIVED_LEGACY_PROPERTIES,
+  DIRECT_LEGACY_PATHS,
+)
+from app.configuration.python_loader import load_python_canonical_settings
+from app.configuration.python_sources import load_python_runtime_source_bundle
+from app.configuration.fingerprints import catalog_fingerprint
 
 
 class Settings(BaseSettings):
@@ -1092,4 +1104,62 @@ class Settings(BaseSettings):
     return self.signal_public_channel_id
 
 
-settings = Settings()
+@dataclass(frozen=True, slots=True)
+class _ActiveConfiguration:
+  authority: RuntimeConfigurationAuthority
+  settings: object
+  catalog_fingerprint: str
+  profile: str | None
+
+
+def _build_active_configuration(
+  authority: RuntimeConfigurationAuthority,
+) -> _ActiveConfiguration:
+  if authority is RuntimeConfigurationAuthority.LEGACY:
+    legacy = Settings()
+    return _ActiveConfiguration(
+      authority=authority,
+      settings=legacy,
+      catalog_fingerprint=catalog_fingerprint(),
+      profile=legacy.auto_trade_profile,
+    )
+  source_bundle = load_python_runtime_source_bundle(Settings.model_config)
+  result = load_python_canonical_settings(source_bundle)
+  return _ActiveConfiguration(
+    authority=authority,
+    settings=result.facade,
+    catalog_fingerprint=result.catalog_fingerprint,
+    profile=result.profile,
+  )
+
+
+def build_active_settings() -> object:
+  """Construct settings for the authority selected by the current process."""
+  return _build_active_configuration(runtime_configuration_authority()).settings
+
+
+_ACTIVE_CONFIGURATION = _build_active_configuration(
+  runtime_configuration_authority()
+)
+settings = _ACTIVE_CONFIGURATION.settings
+
+
+def active_configuration_authority() -> RuntimeConfigurationAuthority:
+  return _ACTIVE_CONFIGURATION.authority
+
+
+def active_configuration_catalog_fingerprint() -> str:
+  return _ACTIVE_CONFIGURATION.catalog_fingerprint
+
+
+def active_configuration_startup_message() -> str:
+  authority = active_configuration_authority()
+  if authority is RuntimeConfigurationAuthority.LEGACY:
+    return "configuration_authority=legacy"
+  return (
+    "configuration_authority=canonical "
+    f"configuration_profile={_ACTIVE_CONFIGURATION.profile} "
+    f"configuration_catalog_fingerprint={_ACTIVE_CONFIGURATION.catalog_fingerprint} "
+    f"configuration_facade_fields={len(DIRECT_LEGACY_PATHS)} "
+    f"configuration_derived_fields={len(DERIVED_LEGACY_PROPERTIES)}"
+  )

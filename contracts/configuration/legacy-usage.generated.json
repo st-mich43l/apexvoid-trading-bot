@@ -3059,7 +3059,7 @@
         "column": 5,
         "detail": "direct Settings attribute read",
         "dynamic_names": [],
-        "line": 109,
+        "line": 110,
         "operation": "attribute_read",
         "path": "algo-bot/app/main.py"
       },
@@ -3069,7 +3069,7 @@
         "column": 4,
         "detail": "direct Settings attribute read",
         "dynamic_names": [],
-        "line": 120,
+        "line": 121,
         "operation": "attribute_read",
         "path": "algo-bot/app/main.py"
       },
@@ -3079,7 +3079,7 @@
         "column": 8,
         "detail": "direct Settings attribute read",
         "dynamic_names": [],
-        "line": 121,
+        "line": 122,
         "operation": "attribute_read",
         "path": "algo-bot/app/main.py"
       },
@@ -3089,7 +3089,7 @@
         "column": 47,
         "detail": "direct Settings attribute read",
         "dynamic_names": [],
-        "line": 121,
+        "line": 122,
         "operation": "attribute_read",
         "path": "algo-bot/app/main.py"
       },
@@ -3099,7 +3099,7 @@
         "column": 9,
         "detail": "direct Settings attribute read",
         "dynamic_names": [],
-        "line": 145,
+        "line": 146,
         "operation": "attribute_read",
         "path": "algo-bot/app/main.py"
       },
@@ -4625,7 +4625,7 @@
     "method_calls": [],
     "type_dependencies": []
   },
-  "source_fingerprint": "012f42ec3aaf21d736f8073d8d798481c7ab0e3a55e33b569097f0919fb820f6",
+  "source_fingerprint": "37dfe941609e8a98bd10902154559a71bb9230b04d7590f18d0f794894c3b1fd",
   "tests": {
     "attribute_deletions": [],
     "attribute_reads": [
@@ -5123,7 +5123,7 @@
         "column": 9,
         "detail": "isinstance on Settings",
         "dynamic_names": [],
-        "line": 57,
+        "line": 59,
         "operation": "isinstance",
         "path": "algo-bot/tests/test_config_activation_architecture.py"
       },
@@ -5133,7 +5133,7 @@
         "column": 9,
         "detail": "type on Settings",
         "dynamic_names": [],
-        "line": 58,
+        "line": 60,
         "operation": "type",
         "path": "algo-bot/tests/test_config_activation_architecture.py"
       },
@@ -5153,7 +5153,7 @@
         "column": 11,
         "detail": "legacy Settings instance passed as a structural dependency",
         "dynamic_names": [],
-        "line": 62,
+        "line": 80,
         "operation": "pass_settings",
         "path": "algo-bot/tests/test_config_authority.py"
       },
@@ -5163,7 +5163,7 @@
         "column": 11,
         "detail": "legacy Settings instance passed as a structural dependency",
         "dynamic_names": [],
-        "line": 73,
+        "line": 91,
         "operation": "pass_settings",
         "path": "algo-bot/tests/test_config_authority.py"
       },
@@ -5173,9 +5173,19 @@
         "column": 11,
         "detail": "legacy Settings instance passed as a structural dependency",
         "dynamic_names": [],
-        "line": 85,
+        "line": 103,
         "operation": "pass_settings",
         "path": "algo-bot/tests/test_config_authority.py"
+      },
+      {
+        "attribute": null,
+        "classification": "test_only_adaptation",
+        "column": 11,
+        "detail": "local legacy Settings construction",
+        "dynamic_names": [],
+        "line": 38,
+        "operation": "construct_settings",
+        "path": "algo-bot/tests/test_config_python_loader.py"
       },
       {
         "attribute": null,

@@ -2,12 +2,9 @@
 
 from __future__ import annotations
 
-from hashlib import sha256
-import json
-
 from pydantic import ValidationError
 
-from app.configuration.catalog import iter_catalog_entries
+from app.configuration.fingerprints import catalog_fingerprint
 from app.configuration.models.root import ApexVoidConfig
 from app.configuration.profiles import get_profile
 from app.configuration.profiles import profile_fingerprint
@@ -15,20 +12,6 @@ from app.configuration.resolver import resolve_configuration
 from app.configuration.source_types import ConfigurationSourceBundle
 from app.configuration.source_types import ShadowLoadResult
 from app.configuration.source_types import ShadowLoadStatus
-
-
-def catalog_fingerprint() -> str:
-  payload = (
-    json.dumps(
-      [entry.as_dict() for entry in iter_catalog_entries()],
-      indent=2,
-      sort_keys=True,
-      ensure_ascii=False,
-      separators=(",", ": "),
-    )
-    + "\n"
-  ).encode("utf-8")
-  return sha256(payload).hexdigest()
 
 
 def _safe_validation_errors(error: ValidationError) -> tuple[str, ...]:
