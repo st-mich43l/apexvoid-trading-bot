@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from pydantic import BaseModel
 from pydantic_core import PydanticUndefined
 
 from app.configuration.compatibility_rules import apply_compatibility_rules
@@ -17,6 +18,7 @@ from app.configuration.source_types import SourceKind
 from app.configuration.sources import FieldSpec
 from app.configuration.sources import field_specs
 from app.configuration.sources import resolve_source_layer
+from app.configuration.models.root import ApexVoidConfig
 
 
 _LAYERS = (
@@ -78,6 +80,7 @@ def resolve_configuration(
   process_environment: Mapping[str, str],
   dotenv_values: Mapping[str, str | None],
   file_secret_values: Mapping[str, str],
+  model: type[BaseModel] = ApexVoidConfig,
 ) -> ResolvedConfiguration:
   """Resolve explicit mappings without reading dotenv or process state."""
   bundle = ConfigurationSourceBundle(
@@ -86,7 +89,7 @@ def resolve_configuration(
     dotenv_values=dict(dotenv_values),
     file_secret_values=dict(file_secret_values),
   )
-  specs = field_specs()
+  specs = field_specs(model)
   profile, profile_conflicts = _profile_name(specs["runtime.profile"], bundle)
   selected_profile = get_profile(profile)
   values: dict[str, object] = {}
@@ -115,6 +118,8 @@ def resolve_configuration(
     )
 
   for assignment in selected_profile.assignments:
+    if assignment.path not in specs:
+      continue
     spec = specs[assignment.path]
     previous = traces[assignment.path]
     histories[assignment.path].append(

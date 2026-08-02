@@ -1,20 +1,20 @@
-"""Inactive, read-only compatibility facade over canonical configuration."""
+"""Read-only compatibility facade over canonical configuration."""
 
 from __future__ import annotations
 
 from app.configuration.generated.legacy_access import DERIVED_LEGACY_PROPERTIES
 from app.configuration.generated.legacy_access import DIRECT_LEGACY_PATHS
-from app.configuration.models.root import ApexVoidConfig
+from pydantic import BaseModel
 
 
-def _path_value(config: ApexVoidConfig, path: tuple[str, ...]) -> object:
+def _path_value(config: BaseModel, path: tuple[str, ...]) -> object:
   value: object = config
   for part in path:
     value = getattr(value, part)
   return value
 
 
-def _derived_value(config: ApexVoidConfig, name: str) -> object:
+def _derived_value(config: BaseModel, name: str) -> object:
   """Apply only the four catalogued, reviewed legacy transformations."""
   telegram = config.delivery.telegram
   if name == "signal_vip_channel_id":
@@ -33,7 +33,7 @@ class CanonicalSettingsFacade:
 
   __slots__ = ("_config",)
 
-  def __init__(self, config: ApexVoidConfig) -> None:
+  def __init__(self, config: BaseModel) -> None:
     object.__setattr__(self, "_config", config)
 
   def __getattr__(self, name: str) -> object:
@@ -68,7 +68,7 @@ class CanonicalSettingsFacade:
     )
 
   @property
-  def canonical_config(self) -> ApexVoidConfig:
+  def canonical_config(self) -> BaseModel:
     return self._config
 
   def get_legacy_value(self, name: str) -> object:
