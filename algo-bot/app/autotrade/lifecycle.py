@@ -124,9 +124,15 @@ async def emit_lifecycle(
   pipe = client.pipeline()
   pipe.rpush(lifecycle_key(candidate), encoded)
   pipe.ltrim(lifecycle_key(candidate), -100, -1)
-  ttl = max(86400, runtime_config.lifecycle.candidate.storage_ttl_seconds)
-  pipe.expire(lifecycle_key(candidate), ttl)
-  pipe.set(state_key, state, ex=ttl)
+  pipe.expire(
+    lifecycle_key(candidate),
+    max(86400, runtime_config.lifecycle.candidate.storage_ttl_seconds),
+  )
+  pipe.set(
+    state_key,
+    state,
+    ex=max(86400, runtime_config.lifecycle.candidate.storage_ttl_seconds),
+  )
   pipe.set(f"auto_trade:last_lifecycle:{symbol.upper()}", encoded)
   pipe.xadd(
     "auto_trade:lifecycle_events",
