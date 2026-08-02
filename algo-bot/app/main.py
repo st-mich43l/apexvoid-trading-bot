@@ -1,7 +1,11 @@
 import asyncio
 import logging
 
-from app.core.config import active_configuration_startup_message, settings
+from app.core.config import (
+  active_configuration_startup_message,
+  runtime_config,
+  settings,
+)
 from app.core.logging_setup import configure_logging
 from app.bot.wiring import (
   bot,
@@ -43,10 +47,10 @@ from app.signals.manual_execution import bridge_intents_loop, reconcile_events_l
 from app.persistence import redis_state
 
 _log_info = configure_logging(
-  level=settings.log_level,
-  log_dir=settings.log_dir,
-  retention_days=settings.log_retention_days,
-  enable_file=settings.log_file_enabled,
+  level=runtime_config.bootstrap.logging.level,
+  log_dir=runtime_config.bootstrap.logging.directory,
+  retention_days=runtime_config.bootstrap.logging.retention_days,
+  enable_file=runtime_config.bootstrap.logging.file_enabled,
 )
 log = logging.getLogger("bot")
 log.info(active_configuration_startup_message())

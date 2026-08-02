@@ -1,7 +1,8 @@
 """
 store.py — PostgreSQL persistence layer for the XAU Signal bot.
 
-The database is reached through ``settings.database_url`` (an asyncpg/libpq DSN,
+The database is reached through the canonical bootstrap Postgres URL (an
+asyncpg/libpq DSN,
 default ``postgresql://apexvoid:apexvoid@localhost:5432/signals``). A single
 lazily-created connection pool is shared across all asyncio tasks; every helper
 acquires a connection for the duration of its work and releases it back.
@@ -31,7 +32,7 @@ import logging
 from contextlib import asynccontextmanager
 from datetime import datetime
 from zoneinfo import ZoneInfo
-from app.core.config import settings
+from app.core.config import runtime_config, settings
 from app.core.symbols import pip_for
 from app.signals.pips_format import legs_achieved_pips
 
@@ -48,7 +49,7 @@ async def _get_pool() -> asyncpg.Pool:
   global _pool
   if _pool is None:
     _pool = await asyncpg.create_pool(
-      settings.database_url,
+      runtime_config.bootstrap.postgres.url,
       min_size=1,
       max_size=10,
       command_timeout=30,
