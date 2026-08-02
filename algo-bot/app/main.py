@@ -1,7 +1,7 @@
 import asyncio
 import logging
 
-from app.core.config import settings
+from app.core.config import active_configuration_startup_message, settings
 from app.core.logging_setup import configure_logging
 from app.bot.wiring import (
   bot,
@@ -49,6 +49,7 @@ _log_info = configure_logging(
   enable_file=settings.log_file_enabled,
 )
 log = logging.getLogger("bot")
+log.info(active_configuration_startup_message())
 if _log_info.get("file"):
   log.info(
     "file logging enabled path=%s retention_days=%s",

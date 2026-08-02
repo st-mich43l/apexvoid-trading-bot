@@ -5,6 +5,17 @@ from pydantic import AliasChoices, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.core.environment_options import RESOLVED_ENVIRONMENT_OPTIONS
+from app.configuration.bootstrap_authority import (
+  RuntimeConfigurationAuthority,
+  runtime_configuration_authority,
+)
+from app.configuration.generated.legacy_access import (
+  DERIVED_LEGACY_PROPERTIES,
+  DIRECT_LEGACY_PATHS,
+)
+from app.configuration.python_loader import load_python_canonical_settings
+from app.configuration.python_sources import load_python_runtime_source_bundle
+from app.configuration.shadow_loader import catalog_fingerprint
 
 
 class Settings(BaseSettings):
@@ -1092,4 +1103,37 @@ class Settings(BaseSettings):
     return self.signal_public_channel_id
 
 
-settings = Settings()
+def build_active_settings(
+  authority: RuntimeConfigurationAuthority | None = None,
+) -> object:
+  """Construct the one authority selected for this process startup."""
+  selected = authority or runtime_configuration_authority()
+  if selected is RuntimeConfigurationAuthority.LEGACY:
+    return Settings()
+  source_bundle = load_python_runtime_source_bundle(Settings.model_config)
+  return load_python_canonical_settings(source_bundle).facade
+
+
+_ACTIVE_CONFIGURATION_AUTHORITY = runtime_configuration_authority()
+settings = build_active_settings(_ACTIVE_CONFIGURATION_AUTHORITY)
+
+
+def active_configuration_authority() -> RuntimeConfigurationAuthority:
+  return _ACTIVE_CONFIGURATION_AUTHORITY
+
+
+def active_configuration_catalog_fingerprint() -> str:
+  return catalog_fingerprint()
+
+
+def active_configuration_startup_message() -> str:
+  authority = active_configuration_authority()
+  if authority is RuntimeConfigurationAuthority.LEGACY:
+    return "configuration_authority=legacy"
+  return (
+    "configuration_authority=canonical "
+    f"configuration_profile={settings.auto_trade_profile} "
+    f"configuration_catalog_fingerprint={catalog_fingerprint()} "
+    f"configuration_facade_fields={len(DIRECT_LEGACY_PATHS)} "
+    f"configuration_derived_fields={len(DERIVED_LEGACY_PROPERTIES)}"
+  )
