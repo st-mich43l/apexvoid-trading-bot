@@ -1,4 +1,4 @@
-"""Frozen grouped configuration shells; inactive in application startup."""
+"""Complete frozen configuration schema; inactive in application startup."""
 
 from app.configuration.models.root import ApexVoidConfig
 

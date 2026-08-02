@@ -1,0 +1,118 @@
+{
+  "catalog_version": 1,
+  "count": 10,
+  "items": [
+    {
+      "description": "Config-like hardcoded value proposed at contract.keys.config_health.",
+      "item_id": "hardcoded.contract.config_health_key",
+      "mismatch_policy": "not_reported",
+      "owner": "shared",
+      "path": "contract.keys.config_health",
+      "shared_with_ctrader": true,
+      "type": "str",
+      "unit": "identifier",
+      "value": "auto_trade:config_health"
+    },
+    {
+      "description": "Config-like hardcoded value proposed at contract.keys.ctrader_manifest.",
+      "item_id": "hardcoded.contract.ctrader_manifest_key",
+      "mismatch_policy": "not_reported",
+      "owner": "shared",
+      "path": "contract.keys.ctrader_manifest",
+      "shared_with_ctrader": true,
+      "type": "str",
+      "unit": "identifier",
+      "value": "auto_trade:config_manifest:ctrader"
+    },
+    {
+      "description": "Config-like hardcoded value proposed at contract.keys.executor_readiness.",
+      "item_id": "hardcoded.contract.executor_readiness_key",
+      "mismatch_policy": "not_reported",
+      "owner": "shared",
+      "path": "contract.keys.executor_readiness",
+      "shared_with_ctrader": true,
+      "type": "str",
+      "unit": "identifier",
+      "value": "auto_trade:executor_readiness"
+    },
+    {
+      "description": "Config-like hardcoded value proposed at contract.keys.python_manifest.",
+      "item_id": "hardcoded.contract.python_manifest_key",
+      "mismatch_policy": "not_reported",
+      "owner": "shared",
+      "path": "contract.keys.python_manifest",
+      "shared_with_ctrader": true,
+      "type": "str",
+      "unit": "identifier",
+      "value": "auto_trade:config_manifest:python"
+    },
+    {
+      "description": "Config-like hardcoded value proposed at contract.keys.tracked_positions.",
+      "item_id": "hardcoded.contract.tracked_positions_key",
+      "mismatch_policy": "not_reported",
+      "owner": "shared",
+      "path": "contract.keys.tracked_positions",
+      "shared_with_ctrader": true,
+      "type": "str",
+      "unit": "identifier",
+      "value": "auto_trade:positions"
+    },
+    {
+      "description": "Config-like hardcoded value proposed at contract.streams.strategy_match_ready.",
+      "item_id": "hardcoded.contract.strategy_match_ready_stream",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "contract.streams.strategy_match_ready",
+      "shared_with_ctrader": false,
+      "type": "str",
+      "unit": "identifier",
+      "value": "auto_trade:strategy_match_ready"
+    },
+    {
+      "description": "Config-like hardcoded value proposed at contract.versions.config_manifest.",
+      "item_id": "hardcoded.contract.config_manifest_version",
+      "mismatch_policy": "fatal",
+      "owner": "shared",
+      "path": "contract.versions.config_manifest",
+      "shared_with_ctrader": true,
+      "type": "int",
+      "unit": "version",
+      "value": 2
+    },
+    {
+      "description": "Config-like hardcoded value proposed at contract.versions.entry_plan.",
+      "item_id": "hardcoded.contract.entry_plan_version",
+      "mismatch_policy": "fatal",
+      "owner": "shared",
+      "path": "contract.versions.entry_plan",
+      "shared_with_ctrader": true,
+      "type": "int",
+      "unit": "version",
+      "value": 1
+    },
+    {
+      "description": "Config-like hardcoded value proposed at contract.versions.stop_plan.",
+      "item_id": "hardcoded.contract.stop_plan_version",
+      "mismatch_policy": "fatal",
+      "owner": "shared",
+      "path": "contract.versions.stop_plan",
+      "shared_with_ctrader": true,
+      "type": "int",
+      "unit": "version",
+      "value": 3
+    },
+    {
+      "description": "Config-like hardcoded value proposed at contract.versions.trade_plan.",
+      "item_id": "hardcoded.contract.trade_plan_version",
+      "mismatch_policy": "fatal",
+      "owner": "shared",
+      "path": "contract.versions.trade_plan",
+      "shared_with_ctrader": true,
+      "type": "int",
+      "unit": "version",
+      "value": 7
+    }
+  ],
+  "source_fingerprint_sha256": "5001f967384dd74f709d75b714cc03b2576b900ef0b9861aa77b25ff80e29094",
+  "source_model": "app.configuration.models.root.ApexVoidConfig"
+}

@@ -1,10 +1,13 @@
-"""Cross-service interpretation and protocol model shells."""
+"""Complete inactive contract configuration domain."""
 
 from pydantic import Field
+from pydantic import field_validator
 
 from app.configuration.metadata import ConfigKind
 from app.configuration.metadata import ConfigOwner
 from app.configuration.metadata import ConfigUnit
+from app.configuration.metadata import ContextDefault
+from app.configuration.metadata import DefaultContext
 from app.configuration.metadata import MismatchPolicy
 from app.configuration.metadata import ReloadPolicy
 from app.configuration.metadata import RiskClassification
@@ -12,42 +15,406 @@ from app.configuration.metadata import config_field
 from app.configuration.models.base import FrozenConfigModel
 
 
-class ContractVersionsConfig(FrozenConfigModel):
-  trade_plan: int = config_field(
-    7,
+class ContractAccountConfig(FrozenConfigModel):
+  expected_broker: str = config_field('fpmarkets',
+    item_id='ctrader.env.AUTO_TRADE_EXPECTED_BROKER',
+    legacy_attr=None,
+    env='AUTO_TRADE_EXPECTED_BROKER',
+    aliases=('CTRADER_EXPECTED_BROKER',),
+    owner=ConfigOwner.SHARED,
+    reload=ReloadPolicy.RESTART,
+    runtime_reload=ReloadPolicy.RESTART,
+    unit=ConfigUnit.STRING,
+    risk=RiskClassification.CROSS_SERVICE_CONTRACT,
+    shared_with_ctrader=True,
+    mismatch_policy=MismatchPolicy.WARNING,
+    description='cTrader runtime option AUTO_TRADE_EXPECTED_BROKER mapped to contract.account.expected_broker.',
+    default_contexts=(
+      ContextDefault(DefaultContext.CTRADER_FROM_ENVIRONMENT, 'fpmarkets'),
+    ),
+    validation_summary='EnvironmentResolver.String + AutoTradeOptions.Validate',
+  )
+  require_demo: bool = config_field(True,
+    item_id='python.settings.auto_trade_require_demo_account',
+    legacy_attr='auto_trade_require_demo_account',
+    env='AUTO_TRADE_REQUIRE_DEMO_ACCOUNT',
+    owner=ConfigOwner.SHARED,
+    reload=ReloadPolicy.RESTART,
+    runtime_reload=ReloadPolicy.RESTART,
+    unit=ConfigUnit.BOOLEAN,
+    risk=RiskClassification.CROSS_SERVICE_CONTRACT,
+    shared_with_ctrader=True,
+    mismatch_policy=MismatchPolicy.FATAL,
+    description='Legacy auto_trade_require_demo_account configuration mapped to contract.account.require_demo.',
+    default_contexts=(
+      ContextDefault(DefaultContext.PYTHON_SCHEMA, True),
+      ContextDefault(DefaultContext.CTRADER_FROM_ENVIRONMENT, True),
+    ),
+    validation_summary='Pydantic type coercion + Settings cross-field model validator; EnvironmentResolver.Bool + AutoTradeOptions.Validate',
+  )
+
+
+class ContractKeysConfig(FrozenConfigModel):
+  config_health: str = config_field('auto_trade:config_health',
+    item_id='hardcoded.contract.config_health_key',
     legacy_attr=None,
     env=None,
     owner=ConfigOwner.SHARED,
     reload=ReloadPolicy.CODE_RELEASE,
+    runtime_reload=ReloadPolicy.CODE_RELEASE,
+    unit=ConfigUnit.IDENTIFIER,
+    risk=RiskClassification.CROSS_SERVICE_CONTRACT,
+    kind=ConfigKind.PROTOCOL_CONSTANT,
+    shared_with_ctrader=True,
+    description='Config-like hardcoded value proposed at contract.keys.config_health.',
+    validation_summary='none; source constant',
+  )
+  ctrader_manifest: str = config_field('auto_trade:config_manifest:ctrader',
+    item_id='hardcoded.contract.ctrader_manifest_key',
+    legacy_attr=None,
+    env=None,
+    owner=ConfigOwner.SHARED,
+    reload=ReloadPolicy.CODE_RELEASE,
+    runtime_reload=ReloadPolicy.CODE_RELEASE,
+    unit=ConfigUnit.IDENTIFIER,
+    risk=RiskClassification.CROSS_SERVICE_CONTRACT,
+    kind=ConfigKind.PROTOCOL_CONSTANT,
+    shared_with_ctrader=True,
+    description='Config-like hardcoded value proposed at contract.keys.ctrader_manifest.',
+    validation_summary='none; source constant',
+  )
+  executor_readiness: str = config_field('auto_trade:executor_readiness',
+    item_id='hardcoded.contract.executor_readiness_key',
+    legacy_attr=None,
+    env=None,
+    owner=ConfigOwner.SHARED,
+    reload=ReloadPolicy.CODE_RELEASE,
+    runtime_reload=ReloadPolicy.CODE_RELEASE,
+    unit=ConfigUnit.IDENTIFIER,
+    risk=RiskClassification.CROSS_SERVICE_CONTRACT,
+    kind=ConfigKind.PROTOCOL_CONSTANT,
+    shared_with_ctrader=True,
+    description='Config-like hardcoded value proposed at contract.keys.executor_readiness.',
+    validation_summary='none; source constant',
+  )
+  python_manifest: str = config_field('auto_trade:config_manifest:python',
+    item_id='hardcoded.contract.python_manifest_key',
+    legacy_attr=None,
+    env=None,
+    owner=ConfigOwner.SHARED,
+    reload=ReloadPolicy.CODE_RELEASE,
+    runtime_reload=ReloadPolicy.CODE_RELEASE,
+    unit=ConfigUnit.IDENTIFIER,
+    risk=RiskClassification.CROSS_SERVICE_CONTRACT,
+    kind=ConfigKind.PROTOCOL_CONSTANT,
+    shared_with_ctrader=True,
+    description='Config-like hardcoded value proposed at contract.keys.python_manifest.',
+    validation_summary='none; source constant',
+  )
+  tracked_positions: str = config_field('auto_trade:positions',
+    item_id='hardcoded.contract.tracked_positions_key',
+    legacy_attr=None,
+    env=None,
+    owner=ConfigOwner.SHARED,
+    reload=ReloadPolicy.CODE_RELEASE,
+    runtime_reload=ReloadPolicy.CODE_RELEASE,
+    unit=ConfigUnit.IDENTIFIER,
+    risk=RiskClassification.CROSS_SERVICE_CONTRACT,
+    kind=ConfigKind.PROTOCOL_CONSTANT,
+    shared_with_ctrader=True,
+    description='Config-like hardcoded value proposed at contract.keys.tracked_positions.',
+    validation_summary='none; source constant',
+  )
+
+
+class ContractVersionsConfig(FrozenConfigModel):
+  candidate: int = config_field(6,
+    item_id='python.settings.auto_trade_candidate_contract_version',
+    legacy_attr='auto_trade_candidate_contract_version',
+    env='AUTO_TRADE_CANDIDATE_CONTRACT_VERSION',
+    owner=ConfigOwner.SHARED,
+    reload=ReloadPolicy.RESTART,
+    runtime_reload=ReloadPolicy.RESTART,
+    unit=ConfigUnit.VERSION,
+    risk=RiskClassification.CROSS_SERVICE_CONTRACT,
+    shared_with_ctrader=True,
+    mismatch_policy=MismatchPolicy.FATAL,
+    description='Legacy auto_trade_candidate_contract_version configuration mapped to contract.versions.candidate.',
+    default_contexts=(
+      ContextDefault(DefaultContext.PYTHON_SCHEMA, 6),
+      ContextDefault(DefaultContext.CTRADER_FROM_ENVIRONMENT, 6),
+    ),
+    validation_summary='Pydantic required/type coercion only; EnvironmentResolver.Int + AutoTradeOptions.Validate',
+  )
+  config_manifest: int = config_field(2,
+    item_id='hardcoded.contract.config_manifest_version',
+    legacy_attr=None,
+    env=None,
+    owner=ConfigOwner.SHARED,
+    reload=ReloadPolicy.CODE_RELEASE,
+    runtime_reload=ReloadPolicy.CODE_RELEASE,
     unit=ConfigUnit.VERSION,
     risk=RiskClassification.CROSS_SERVICE_CONTRACT,
     kind=ConfigKind.PROTOCOL_CONSTANT,
     shared_with_ctrader=True,
     mismatch_policy=MismatchPolicy.FATAL,
-    description="TradePlan protocol version implemented by both services.",
+    description='Config-like hardcoded value proposed at contract.versions.config_manifest.',
+    validation_summary='none; source constant',
+  )
+  entry_plan: int = config_field(1,
+    item_id='hardcoded.contract.entry_plan_version',
+    legacy_attr=None,
+    env=None,
+    owner=ConfigOwner.SHARED,
+    reload=ReloadPolicy.CODE_RELEASE,
+    runtime_reload=ReloadPolicy.CODE_RELEASE,
+    unit=ConfigUnit.VERSION,
+    risk=RiskClassification.CROSS_SERVICE_CONTRACT,
+    kind=ConfigKind.PROTOCOL_CONSTANT,
+    shared_with_ctrader=True,
+    mismatch_policy=MismatchPolicy.FATAL,
+    description='Config-like hardcoded value proposed at contract.versions.entry_plan.',
+    validation_summary='none; source constant',
+  )
+  stop_plan: int = config_field(3,
+    item_id='hardcoded.contract.stop_plan_version',
+    legacy_attr=None,
+    env=None,
+    owner=ConfigOwner.SHARED,
+    reload=ReloadPolicy.CODE_RELEASE,
+    runtime_reload=ReloadPolicy.CODE_RELEASE,
+    unit=ConfigUnit.VERSION,
+    risk=RiskClassification.CROSS_SERVICE_CONTRACT,
+    kind=ConfigKind.PROTOCOL_CONSTANT,
+    shared_with_ctrader=True,
+    mismatch_policy=MismatchPolicy.FATAL,
+    description='Config-like hardcoded value proposed at contract.versions.stop_plan.',
+    validation_summary='none; source constant',
+  )
+  trade_plan: int = config_field(7,
+    item_id='hardcoded.contract.trade_plan_version',
+    legacy_attr=None,
+    env=None,
+    owner=ConfigOwner.SHARED,
+    reload=ReloadPolicy.CODE_RELEASE,
+    runtime_reload=ReloadPolicy.CODE_RELEASE,
+    unit=ConfigUnit.VERSION,
+    risk=RiskClassification.CROSS_SERVICE_CONTRACT,
+    kind=ConfigKind.PROTOCOL_CONSTANT,
+    shared_with_ctrader=True,
+    mismatch_policy=MismatchPolicy.FATAL,
+    description='Config-like hardcoded value proposed at contract.versions.trade_plan.',
+    validation_summary='none; source constant',
   )
 
 
-class InstrumentContractConfig(FrozenConfigModel):
-  pip_size: float = config_field(
-    0.1,
-    legacy_attr="auto_trade_pip_size",
-    env="AUTO_TRADE_XAU_PIP_SIZE",
-    aliases=("AUTO_TRADE_PIP_SIZE",),
+class ContractStreamsConfig(FrozenConfigModel):
+  candidate_maximum_length: int = config_field(1000,
+    item_id='python.settings.auto_trade_stream_maxlen',
+    legacy_attr='auto_trade_stream_maxlen',
+    env='AUTO_TRADE_STREAM_MAXLEN',
+    owner=ConfigOwner.PYTHON,
+    reload=ReloadPolicy.RESTART,
+    runtime_reload=ReloadPolicy.RESTART,
+    unit=ConfigUnit.COUNT,
+    risk=RiskClassification.CROSS_SERVICE_CONTRACT,
+    description='Legacy auto_trade_stream_maxlen configuration mapped to contract.streams.candidate_maximum_length.',
+    default_contexts=(
+      ContextDefault(DefaultContext.PYTHON_SCHEMA, 1000),
+    ),
+    validation_summary='Pydantic required/type coercion only',
+  )
+  candidates: str = config_field('auto_trade:candidates',
+    item_id='python.settings.auto_trade_stream',
+    legacy_attr='auto_trade_stream',
+    env='AUTO_TRADE_CANDIDATE_STREAM',
+    aliases=('AUTO_TRADE_STREAM',),
     owner=ConfigOwner.SHARED,
     reload=ReloadPolicy.RESTART,
-    unit=ConfigUnit.PRICE,
+    runtime_reload=ReloadPolicy.RESTART,
+    unit=ConfigUnit.IDENTIFIER,
     risk=RiskClassification.CROSS_SERVICE_CONTRACT,
     shared_with_ctrader=True,
     mismatch_policy=MismatchPolicy.FATAL,
-    description="Absolute XAU price represented by one configured pip.",
+    description='Legacy auto_trade_stream configuration mapped to contract.streams.candidates.',
+    default_contexts=(
+      ContextDefault(DefaultContext.PYTHON_SCHEMA, 'auto_trade:candidates'),
+      ContextDefault(DefaultContext.CTRADER_FROM_ENVIRONMENT, 'auto_trade:candidates'),
+    ),
+    validation_summary='Pydantic required/type coercion only; EnvironmentResolver.String + AutoTradeOptions.Validate',
+  )
+  events: str = config_field('auto_trade:events',
+    item_id='python.settings.auto_trade_event_stream',
+    legacy_attr='auto_trade_event_stream',
+    env='AUTO_TRADE_EVENT_STREAM',
+    owner=ConfigOwner.SHARED,
+    reload=ReloadPolicy.RESTART,
+    runtime_reload=ReloadPolicy.RESTART,
+    unit=ConfigUnit.IDENTIFIER,
+    risk=RiskClassification.CROSS_SERVICE_CONTRACT,
+    shared_with_ctrader=True,
+    mismatch_policy=MismatchPolicy.FATAL,
+    description='Legacy auto_trade_event_stream configuration mapped to contract.streams.events.',
+    default_contexts=(
+      ContextDefault(DefaultContext.PYTHON_SCHEMA, 'auto_trade:events'),
+      ContextDefault(DefaultContext.CTRADER_FROM_ENVIRONMENT, 'auto_trade:events'),
+    ),
+    validation_summary='Pydantic required/type coercion only; EnvironmentResolver.String + AutoTradeOptions.Validate',
+  )
+  strategy_match_ready: str = config_field('auto_trade:strategy_match_ready',
+    item_id='hardcoded.contract.strategy_match_ready_stream',
+    legacy_attr=None,
+    env=None,
+    owner=ConfigOwner.PYTHON,
+    reload=ReloadPolicy.CODE_RELEASE,
+    runtime_reload=ReloadPolicy.CODE_RELEASE,
+    unit=ConfigUnit.IDENTIFIER,
+    risk=RiskClassification.CROSS_SERVICE_CONTRACT,
+    kind=ConfigKind.PROTOCOL_CONSTANT,
+    description='Config-like hardcoded value proposed at contract.streams.strategy_match_ready.',
+    validation_summary='none; source constant',
+  )
+  trade_plans: str = config_field('execution:trade_plans',
+    item_id='python.settings.auto_trade_trade_plan_stream',
+    legacy_attr='auto_trade_trade_plan_stream',
+    env='AUTO_TRADE_TRADE_PLAN_STREAM',
+    owner=ConfigOwner.SHARED,
+    reload=ReloadPolicy.RESTART,
+    runtime_reload=ReloadPolicy.RESTART,
+    unit=ConfigUnit.IDENTIFIER,
+    risk=RiskClassification.CROSS_SERVICE_CONTRACT,
+    shared_with_ctrader=True,
+    mismatch_policy=MismatchPolicy.FATAL,
+    description='Legacy auto_trade_trade_plan_stream configuration mapped to contract.streams.trade_plans.',
+    default_contexts=(
+      ContextDefault(DefaultContext.PYTHON_SCHEMA, 'execution:trade_plans'),
+      ContextDefault(DefaultContext.CTRADER_FROM_ENVIRONMENT, 'execution:trade_plans'),
+    ),
+    validation_summary='Pydantic required/type coercion only; EnvironmentResolver.String + AutoTradeOptions.Validate',
+  )
+
+
+class ContractInstrumentConfig(FrozenConfigModel):
+  canonical_symbol: str = config_field('XAU',
+    item_id='python.settings.auto_trade_canonical_symbol',
+    legacy_attr='auto_trade_canonical_symbol',
+    env='AUTO_TRADE_CANONICAL_SYMBOL',
+    owner=ConfigOwner.SHARED,
+    reload=ReloadPolicy.RESTART,
+    runtime_reload=ReloadPolicy.RESTART,
+    unit=ConfigUnit.IDENTIFIER,
+    risk=RiskClassification.CROSS_SERVICE_CONTRACT,
+    shared_with_ctrader=True,
+    mismatch_policy=MismatchPolicy.FATAL,
+    description='Legacy auto_trade_canonical_symbol configuration mapped to contract.instrument.canonical_symbol.',
+    default_contexts=(
+      ContextDefault(DefaultContext.PYTHON_SCHEMA, 'XAU'),
+      ContextDefault(DefaultContext.CTRADER_FROM_ENVIRONMENT, 'XAU'),
+    ),
+    validation_summary='Pydantic required/type coercion only; EnvironmentResolver.String + AutoTradeOptions.Validate',
+  )
+  contract_units_per_lot: float = config_field(100.0,
+    item_id='python.settings.auto_trade_contract_size',
+    legacy_attr='auto_trade_contract_size',
+    env='AUTO_TRADE_XAU_CONTRACT_SIZE',
+    aliases=('AUTO_TRADE_CONTRACT_SIZE',),
+    owner=ConfigOwner.SHARED,
+    reload=ReloadPolicy.RESTART,
+    runtime_reload=ReloadPolicy.RESTART,
+    unit=ConfigUnit.CONTRACT_UNITS_PER_LOT,
+    risk=RiskClassification.CROSS_SERVICE_CONTRACT,
+    shared_with_ctrader=True,
+    mismatch_policy=MismatchPolicy.FATAL,
+    description='Legacy auto_trade_contract_size configuration mapped to contract.instrument.contract_units_per_lot.',
+    default_contexts=(
+      ContextDefault(DefaultContext.PYTHON_SCHEMA, 100.0),
+      ContextDefault(DefaultContext.CTRADER_FROM_ENVIRONMENT, 100),
+    ),
+    validation_summary='Pydantic required/type coercion only; EnvironmentResolver.Decimal + AutoTradeOptions.Validate',
+  )
+  pip_size: float = config_field(0.1,
+    item_id='python.settings.auto_trade_xau_pip_size',
+    legacy_attr='auto_trade_xau_pip_size',
+    env='AUTO_TRADE_XAU_PIP_SIZE',
+    aliases=('AUTO_TRADE_PIP_SIZE',),
+    owner=ConfigOwner.SHARED,
+    reload=ReloadPolicy.RESTART,
+    runtime_reload=ReloadPolicy.RESTART,
+    unit=ConfigUnit.PIPS,
+    risk=RiskClassification.CROSS_SERVICE_CONTRACT,
+    shared_with_ctrader=True,
+    mismatch_policy=MismatchPolicy.FATAL,
+    description='Legacy auto_trade_xau_pip_size configuration mapped to contract.instrument.pip_size.',
+    default_contexts=(
+      ContextDefault(DefaultContext.PYTHON_SCHEMA, 0.1),
+      ContextDefault(DefaultContext.CTRADER_FROM_ENVIRONMENT, 0.1),
+    ),
+    validation_summary='Pydantic required/type coercion only; EnvironmentResolver.Decimal + AutoTradeOptions.Validate',
+  )
+  price_digits: int = config_field(2,
+    item_id='python.settings.auto_trade_xau_price_digits',
+    legacy_attr='auto_trade_xau_price_digits',
+    env='AUTO_TRADE_XAU_PRICE_DIGITS',
+    owner=ConfigOwner.PYTHON,
+    reload=ReloadPolicy.RESTART,
+    runtime_reload=ReloadPolicy.RESTART,
+    unit=ConfigUnit.COUNT,
+    risk=RiskClassification.CROSS_SERVICE_CONTRACT,
+    description='Legacy auto_trade_xau_price_digits configuration mapped to contract.instrument.price_digits.',
+    default_contexts=(
+      ContextDefault(DefaultContext.PYTHON_SCHEMA, 2),
+    ),
+    validation_summary='Pydantic required/type coercion only',
+  )
+  symbols: str = config_field('XAU',
+    item_id='python.settings.auto_trade_symbols',
+    legacy_attr='auto_trade_symbols',
+    env='AUTO_TRADE_SYMBOLS',
+    owner=ConfigOwner.SHARED,
+    reload=ReloadPolicy.RESTART,
+    runtime_reload=ReloadPolicy.RESTART,
+    unit=ConfigUnit.IDENTIFIER,
+    risk=RiskClassification.CROSS_SERVICE_CONTRACT,
+    shared_with_ctrader=True,
+    mismatch_policy=MismatchPolicy.FATAL,
+    description='Legacy auto_trade_symbols configuration mapped to contract.instrument.symbols.',
+    default_contexts=(
+      ContextDefault(DefaultContext.PYTHON_SCHEMA, 'XAU'),
+      ContextDefault(DefaultContext.CTRADER_FROM_ENVIRONMENT, 'XAU'),
+    ),
+    validation_summary='Pydantic required/type coercion only; EnvironmentResolver.StringList + AutoTradeOptions.Validate',
   )
 
 
 class ContractConfig(FrozenConfigModel):
-  versions: ContractVersionsConfig = Field(
-    default_factory=ContractVersionsConfig,
+  account: ContractAccountConfig = Field(default_factory=ContractAccountConfig)
+  instrument: ContractInstrumentConfig = Field(default_factory=ContractInstrumentConfig)
+  keys: ContractKeysConfig = Field(default_factory=ContractKeysConfig)
+  mode: str = config_field('v7_only',
+    item_id='python.settings.auto_trade_contract_mode',
+    legacy_attr='auto_trade_contract_mode',
+    env='AUTO_TRADE_CONTRACT_MODE',
+    owner=ConfigOwner.SHARED,
+    reload=ReloadPolicy.RESTART,
+    runtime_reload=ReloadPolicy.RESTART,
+    unit=ConfigUnit.ENUM,
+    risk=RiskClassification.CROSS_SERVICE_CONTRACT,
+    shared_with_ctrader=True,
+    mismatch_policy=MismatchPolicy.FATAL,
+    description='Legacy auto_trade_contract_mode configuration mapped to contract.mode.',
+    default_contexts=(
+      ContextDefault(DefaultContext.PYTHON_SCHEMA, 'v7_only'),
+      ContextDefault(DefaultContext.CTRADER_FROM_ENVIRONMENT, 'v7_only'),
+      ContextDefault(DefaultContext.CTRADER_CONSTRUCTOR, 'legacy_v6'),
+    ),
+    allowed_values=('v7_only',),
+    validation_summary='Pydantic type coercion + Settings cross-field model validator; EnvironmentResolver.String + AutoTradeOptions.Validate',
+    pattern='^v7_only$',
   )
-  instrument: InstrumentContractConfig = Field(
-    default_factory=InstrumentContractConfig,
-  )
+
+  @field_validator("mode", mode="before")
+  @classmethod
+  def normalize_mode(cls, value):
+    return value.strip().lower() if isinstance(value, str) else value
+  streams: ContractStreamsConfig = Field(default_factory=ContractStreamsConfig)
+  versions: ContractVersionsConfig = Field(default_factory=ContractVersionsConfig)

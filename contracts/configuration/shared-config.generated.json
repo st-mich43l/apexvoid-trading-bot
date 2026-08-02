@@ -1,0 +1,2968 @@
+{
+  "catalog_version": 1,
+  "count": 95,
+  "items": [
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_ALLOW_COUNTER_BIAS",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": false,
+      "ctrader_type": "bool",
+      "default_conflict": true,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": true
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": false
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [
+        "Python schema default is true while cTrader FromEnvironment defaults false; unresolved."
+      ],
+      "item_id": "python.settings.auto_trade_allow_counter_bias",
+      "kind": "configurable",
+      "known_conflict": true,
+      "mismatch_policy": "warning",
+      "path": "actionability.counter_bias.allowed",
+      "python_schema_default": true,
+      "python_type": "bool",
+      "secret": false,
+      "unit": "boolean",
+      "validation_summary": "Pydantic required/type coercion only; EnvironmentResolver.Bool + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_MARKET_MAP_GUARD_ENABLED",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": true,
+      "ctrader_type": "bool",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": true
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": true
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [
+        "Direct demo_eval inherits mapped-zone true; root Compose demo_eval injects false."
+      ],
+      "item_id": "python.settings.auto_trade_market_map_guard_enabled",
+      "kind": "configurable",
+      "known_conflict": false,
+      "mismatch_policy": "not_reported",
+      "path": "actionability.gates.market_map_guard_enabled",
+      "python_schema_default": true,
+      "python_type": "bool",
+      "secret": false,
+      "unit": "boolean",
+      "validation_summary": "Pydantic type coercion + Settings cross-field model validator; EnvironmentResolver.Bool + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_MIN_CONFLUENCE",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": 2,
+      "ctrader_type": "int",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 2
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": 2
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_min_confluence",
+      "kind": "configurable",
+      "known_conflict": true,
+      "mismatch_policy": "warning",
+      "path": "actionability.gates.min_confluence",
+      "python_schema_default": 2,
+      "python_type": "int",
+      "secret": false,
+      "unit": "count",
+      "validation_summary": "Pydantic required/type coercion only; EnvironmentResolver.Int + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [
+        "observe",
+        "balanced",
+        "strict"
+      ],
+      "canonical_env": "AUTO_TRADE_STRUCTURAL_GUARD_MODE",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": "balanced",
+      "ctrader_type": "string",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": "balanced"
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": "balanced"
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_structural_guard_mode",
+      "kind": "configurable",
+      "known_conflict": true,
+      "mismatch_policy": "warning",
+      "path": "actionability.structural_guard.guard_mode",
+      "python_schema_default": "balanced",
+      "python_type": "str",
+      "secret": false,
+      "unit": "enum",
+      "validation_summary": "Pydantic type coercion + Settings cross-field model validator; EnvironmentResolver.String + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [
+        "off",
+        "shadow",
+        "enforce"
+      ],
+      "canonical_env": "AUTO_TRADE_ZONE_RECONCILE_MODE",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": "enforce",
+      "ctrader_type": "string",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": "enforce"
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": "enforce"
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_zone_reconcile_mode",
+      "kind": "configurable",
+      "known_conflict": true,
+      "mismatch_policy": "warning",
+      "path": "actionability.zone_reconciliation.mode",
+      "python_schema_default": "enforce",
+      "python_type": "str",
+      "secret": false,
+      "unit": "enum",
+      "validation_summary": "Pydantic type coercion + Settings cross-field model validator; EnvironmentResolver.String + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "GIT_SHA",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": "unknown",
+      "ctrader_type": "string",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "ctrader_from_environment",
+          "value": "unknown"
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "environment.GIT_SHA",
+      "kind": "configurable",
+      "known_conflict": true,
+      "mismatch_policy": "warning",
+      "path": "bootstrap.build.git_sha",
+      "python_schema_default": null,
+      "python_type": "string",
+      "secret": false,
+      "unit": "string",
+      "validation_summary": "direct environment read or deployment parser"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "LOG_DIR",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": "/var/log/apexvoid",
+      "ctrader_type": "string",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": "/var/log/apexvoid"
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": "/var/log/apexvoid"
+        }
+      ],
+      "deprecated_aliases": [
+        "APEXVOID_LOG_DIR"
+      ],
+      "evidence_notes": [],
+      "item_id": "python.settings.log_dir",
+      "kind": "configurable",
+      "known_conflict": false,
+      "mismatch_policy": "not_reported",
+      "path": "bootstrap.logging.directory",
+      "python_schema_default": "/var/log/apexvoid",
+      "python_type": "str",
+      "secret": false,
+      "unit": "path",
+      "validation_summary": "Pydantic required/type coercion only; DailyFileLog direct environment parser + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "LOG_FILE_ENABLED",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": true,
+      "ctrader_type": "bool",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": true
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": true
+        }
+      ],
+      "deprecated_aliases": [
+        "APEXVOID_LOG_FILE_ENABLED"
+      ],
+      "evidence_notes": [],
+      "item_id": "python.settings.log_file_enabled",
+      "kind": "configurable",
+      "known_conflict": false,
+      "mismatch_policy": "not_reported",
+      "path": "bootstrap.logging.file_enabled",
+      "python_schema_default": true,
+      "python_type": "bool",
+      "secret": false,
+      "unit": "boolean",
+      "validation_summary": "Pydantic required/type coercion only; DailyFileLog direct environment parser + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "LOG_RETENTION_DAYS",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": 14,
+      "ctrader_type": "int",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 14
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": 14
+        }
+      ],
+      "deprecated_aliases": [
+        "APEXVOID_LOG_RETENTION_DAYS"
+      ],
+      "evidence_notes": [],
+      "item_id": "python.settings.log_retention_days",
+      "kind": "configurable",
+      "known_conflict": false,
+      "mismatch_policy": "not_reported",
+      "path": "bootstrap.logging.retention_days",
+      "python_schema_default": 14,
+      "python_type": "int",
+      "secret": false,
+      "unit": "days",
+      "validation_summary": "Pydantic required/type coercion only; DailyFileLog direct environment parser + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "REDIS_URL",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": "redis://redis:6379/0",
+      "ctrader_type": "string",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": "redis://redis:6379/0"
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": "redis://redis:6379/0"
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "python.settings.redis_url",
+      "kind": "configurable",
+      "known_conflict": false,
+      "mismatch_policy": "fatal",
+      "path": "bootstrap.redis.url",
+      "python_schema_default": "redis://redis:6379/0",
+      "python_type": "str",
+      "secret": false,
+      "unit": "url",
+      "validation_summary": "Pydantic required/type coercion only; EnvironmentResolver.String + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_EXPECTED_BROKER",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": "fpmarkets",
+      "ctrader_type": "string",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "ctrader_from_environment",
+          "value": "fpmarkets"
+        }
+      ],
+      "deprecated_aliases": [
+        "CTRADER_EXPECTED_BROKER"
+      ],
+      "evidence_notes": [],
+      "item_id": "ctrader.env.AUTO_TRADE_EXPECTED_BROKER",
+      "kind": "configurable",
+      "known_conflict": true,
+      "mismatch_policy": "warning",
+      "path": "contract.account.expected_broker",
+      "python_schema_default": null,
+      "python_type": "string",
+      "secret": false,
+      "unit": "string",
+      "validation_summary": "EnvironmentResolver.String + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_REQUIRE_DEMO_ACCOUNT",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": true,
+      "ctrader_type": "bool",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": true
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": true
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_require_demo_account",
+      "kind": "configurable",
+      "known_conflict": false,
+      "mismatch_policy": "fatal",
+      "path": "contract.account.require_demo",
+      "python_schema_default": true,
+      "python_type": "bool",
+      "secret": false,
+      "unit": "boolean",
+      "validation_summary": "Pydantic type coercion + Settings cross-field model validator; EnvironmentResolver.Bool + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_CANONICAL_SYMBOL",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": "XAU",
+      "ctrader_type": "string",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": "XAU"
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": "XAU"
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_canonical_symbol",
+      "kind": "configurable",
+      "known_conflict": false,
+      "mismatch_policy": "fatal",
+      "path": "contract.instrument.canonical_symbol",
+      "python_schema_default": "XAU",
+      "python_type": "str",
+      "secret": false,
+      "unit": "identifier",
+      "validation_summary": "Pydantic required/type coercion only; EnvironmentResolver.String + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_XAU_CONTRACT_SIZE",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": 100,
+      "ctrader_type": "decimal",
+      "default_conflict": true,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 100.0
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": 100
+        }
+      ],
+      "deprecated_aliases": [
+        "AUTO_TRADE_CONTRACT_SIZE"
+      ],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_contract_size",
+      "kind": "configurable",
+      "known_conflict": false,
+      "mismatch_policy": "fatal",
+      "path": "contract.instrument.contract_units_per_lot",
+      "python_schema_default": 100.0,
+      "python_type": "float",
+      "secret": false,
+      "unit": "contract_units_per_lot",
+      "validation_summary": "Pydantic required/type coercion only; EnvironmentResolver.Decimal + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_XAU_PIP_SIZE",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": 0.1,
+      "ctrader_type": "decimal",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 0.1
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": 0.1
+        }
+      ],
+      "deprecated_aliases": [
+        "AUTO_TRADE_PIP_SIZE"
+      ],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_xau_pip_size",
+      "kind": "configurable",
+      "known_conflict": false,
+      "mismatch_policy": "fatal",
+      "path": "contract.instrument.pip_size",
+      "python_schema_default": 0.1,
+      "python_type": "float",
+      "secret": false,
+      "unit": "pips",
+      "validation_summary": "Pydantic required/type coercion only; EnvironmentResolver.Decimal + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_SYMBOLS",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": "XAU",
+      "ctrader_type": "IReadOnlyList<string>",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": "XAU"
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": "XAU"
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_symbols",
+      "kind": "configurable",
+      "known_conflict": false,
+      "mismatch_policy": "fatal",
+      "path": "contract.instrument.symbols",
+      "python_schema_default": "XAU",
+      "python_type": "str",
+      "secret": false,
+      "unit": "identifier",
+      "validation_summary": "Pydantic required/type coercion only; EnvironmentResolver.StringList + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": null,
+      "configurable": false,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": null,
+      "ctrader_type": "string",
+      "default_conflict": false,
+      "default_contexts": [],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "hardcoded.contract.config_health_key",
+      "kind": "protocol_constant",
+      "known_conflict": false,
+      "mismatch_policy": "not_reported",
+      "path": "contract.keys.config_health",
+      "python_schema_default": null,
+      "python_type": "str",
+      "secret": false,
+      "unit": "identifier",
+      "validation_summary": "none; source constant"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": null,
+      "configurable": false,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": null,
+      "ctrader_type": "string",
+      "default_conflict": false,
+      "default_contexts": [],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "hardcoded.contract.ctrader_manifest_key",
+      "kind": "protocol_constant",
+      "known_conflict": false,
+      "mismatch_policy": "not_reported",
+      "path": "contract.keys.ctrader_manifest",
+      "python_schema_default": null,
+      "python_type": "str",
+      "secret": false,
+      "unit": "identifier",
+      "validation_summary": "none; source constant"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": null,
+      "configurable": false,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": null,
+      "ctrader_type": "string",
+      "default_conflict": false,
+      "default_contexts": [],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "hardcoded.contract.executor_readiness_key",
+      "kind": "protocol_constant",
+      "known_conflict": false,
+      "mismatch_policy": "not_reported",
+      "path": "contract.keys.executor_readiness",
+      "python_schema_default": null,
+      "python_type": "str",
+      "secret": false,
+      "unit": "identifier",
+      "validation_summary": "none; source constant"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": null,
+      "configurable": false,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": null,
+      "ctrader_type": "string",
+      "default_conflict": false,
+      "default_contexts": [],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "hardcoded.contract.python_manifest_key",
+      "kind": "protocol_constant",
+      "known_conflict": false,
+      "mismatch_policy": "not_reported",
+      "path": "contract.keys.python_manifest",
+      "python_schema_default": null,
+      "python_type": "str",
+      "secret": false,
+      "unit": "identifier",
+      "validation_summary": "none; source constant"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": null,
+      "configurable": false,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": null,
+      "ctrader_type": "string",
+      "default_conflict": false,
+      "default_contexts": [],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "hardcoded.contract.tracked_positions_key",
+      "kind": "protocol_constant",
+      "known_conflict": false,
+      "mismatch_policy": "not_reported",
+      "path": "contract.keys.tracked_positions",
+      "python_schema_default": null,
+      "python_type": "str",
+      "secret": false,
+      "unit": "identifier",
+      "validation_summary": "none; source constant"
+    },
+    {
+      "allowed_values": [
+        "v7_only"
+      ],
+      "canonical_env": "AUTO_TRADE_CONTRACT_MODE",
+      "configurable": true,
+      "ctrader_constructor_default": "legacy_v6",
+      "ctrader_from_environment_default": "v7_only",
+      "ctrader_type": "string",
+      "default_conflict": true,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": "v7_only"
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": "v7_only"
+        },
+        {
+          "context": "ctrader_constructor",
+          "value": "legacy_v6"
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_contract_mode",
+      "kind": "configurable",
+      "known_conflict": false,
+      "mismatch_policy": "fatal",
+      "path": "contract.mode",
+      "python_schema_default": "v7_only",
+      "python_type": "str",
+      "secret": false,
+      "unit": "enum",
+      "validation_summary": "Pydantic type coercion + Settings cross-field model validator; EnvironmentResolver.String + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_CANDIDATE_STREAM",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": "auto_trade:candidates",
+      "ctrader_type": "string",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": "auto_trade:candidates"
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": "auto_trade:candidates"
+        }
+      ],
+      "deprecated_aliases": [
+        "AUTO_TRADE_STREAM"
+      ],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_stream",
+      "kind": "configurable",
+      "known_conflict": false,
+      "mismatch_policy": "fatal",
+      "path": "contract.streams.candidates",
+      "python_schema_default": "auto_trade:candidates",
+      "python_type": "str",
+      "secret": false,
+      "unit": "identifier",
+      "validation_summary": "Pydantic required/type coercion only; EnvironmentResolver.String + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_EVENT_STREAM",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": "auto_trade:events",
+      "ctrader_type": "string",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": "auto_trade:events"
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": "auto_trade:events"
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_event_stream",
+      "kind": "configurable",
+      "known_conflict": false,
+      "mismatch_policy": "fatal",
+      "path": "contract.streams.events",
+      "python_schema_default": "auto_trade:events",
+      "python_type": "str",
+      "secret": false,
+      "unit": "identifier",
+      "validation_summary": "Pydantic required/type coercion only; EnvironmentResolver.String + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_TRADE_PLAN_STREAM",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": "execution:trade_plans",
+      "ctrader_type": "string",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": "execution:trade_plans"
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": "execution:trade_plans"
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_trade_plan_stream",
+      "kind": "configurable",
+      "known_conflict": false,
+      "mismatch_policy": "fatal",
+      "path": "contract.streams.trade_plans",
+      "python_schema_default": "execution:trade_plans",
+      "python_type": "str",
+      "secret": false,
+      "unit": "identifier",
+      "validation_summary": "Pydantic required/type coercion only; EnvironmentResolver.String + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_CANDIDATE_CONTRACT_VERSION",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": 6,
+      "ctrader_type": "int",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 6
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": 6
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_candidate_contract_version",
+      "kind": "configurable",
+      "known_conflict": false,
+      "mismatch_policy": "fatal",
+      "path": "contract.versions.candidate",
+      "python_schema_default": 6,
+      "python_type": "int",
+      "secret": false,
+      "unit": "version",
+      "validation_summary": "Pydantic required/type coercion only; EnvironmentResolver.Int + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": null,
+      "configurable": false,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": null,
+      "ctrader_type": "int",
+      "default_conflict": false,
+      "default_contexts": [],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "hardcoded.contract.config_manifest_version",
+      "kind": "protocol_constant",
+      "known_conflict": false,
+      "mismatch_policy": "fatal",
+      "path": "contract.versions.config_manifest",
+      "python_schema_default": null,
+      "python_type": "int",
+      "secret": false,
+      "unit": "version",
+      "validation_summary": "none; source constant"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": null,
+      "configurable": false,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": null,
+      "ctrader_type": "int",
+      "default_conflict": false,
+      "default_contexts": [],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "hardcoded.contract.entry_plan_version",
+      "kind": "protocol_constant",
+      "known_conflict": false,
+      "mismatch_policy": "fatal",
+      "path": "contract.versions.entry_plan",
+      "python_schema_default": null,
+      "python_type": "int",
+      "secret": false,
+      "unit": "version",
+      "validation_summary": "none; source constant"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": null,
+      "configurable": false,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": null,
+      "ctrader_type": "int",
+      "default_conflict": false,
+      "default_contexts": [],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "hardcoded.contract.stop_plan_version",
+      "kind": "protocol_constant",
+      "known_conflict": false,
+      "mismatch_policy": "fatal",
+      "path": "contract.versions.stop_plan",
+      "python_schema_default": null,
+      "python_type": "int",
+      "secret": false,
+      "unit": "version",
+      "validation_summary": "none; source constant"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": null,
+      "configurable": false,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": null,
+      "ctrader_type": "int",
+      "default_conflict": false,
+      "default_contexts": [],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "hardcoded.contract.trade_plan_version",
+      "kind": "protocol_constant",
+      "known_conflict": false,
+      "mismatch_policy": "fatal",
+      "path": "contract.versions.trade_plan",
+      "python_schema_default": null,
+      "python_type": "int",
+      "secret": false,
+      "unit": "version",
+      "validation_summary": "none; source constant"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_ENTRY_CONTRACT_TOLERANCE_PIPS",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": 3,
+      "ctrader_type": "decimal",
+      "default_conflict": true,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 3.0
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": 3
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_entry_contract_tolerance_pips",
+      "kind": "configurable",
+      "known_conflict": false,
+      "mismatch_policy": "fatal",
+      "path": "execution.entry.contract_tolerance_pips",
+      "python_schema_default": 3.0,
+      "python_type": "float",
+      "secret": false,
+      "unit": "pips",
+      "validation_summary": "Pydantic required/type coercion only; EnvironmentResolver.Decimal + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_INSIDE_ZONE_MARKET_ENTRY_ENABLED",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": true,
+      "ctrader_type": "bool",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": true
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": true
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_inside_zone_market_entry_enabled",
+      "kind": "configurable",
+      "known_conflict": false,
+      "mismatch_policy": "not_reported",
+      "path": "execution.entry.inside_zone_market_entry_enabled",
+      "python_schema_default": true,
+      "python_type": "bool",
+      "secret": false,
+      "unit": "boolean",
+      "validation_summary": "Pydantic required/type coercion only; EnvironmentResolver.Bool + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_MAX_ENTRY_DISTANCE_PIPS",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": 40,
+      "ctrader_type": "int",
+      "default_conflict": true,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 40.0
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": 40
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_max_entry_distance_pips",
+      "kind": "configurable",
+      "known_conflict": false,
+      "mismatch_policy": "fatal",
+      "path": "execution.entry.maximum_chase_distance_pips",
+      "python_schema_default": 40.0,
+      "python_type": "float",
+      "secret": false,
+      "unit": "pips",
+      "validation_summary": "Pydantic type coercion + Settings cross-field model validator; EnvironmentResolver.Int + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_MAP_THESIS_LOCK_ENABLED",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": true,
+      "ctrader_type": "bool",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": true
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": true
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_map_thesis_lock_enabled",
+      "kind": "configurable",
+      "known_conflict": true,
+      "mismatch_policy": "warning",
+      "path": "execution.mapped_zone.thesis_lock_enabled",
+      "python_schema_default": true,
+      "python_type": "bool",
+      "secret": false,
+      "unit": "boolean",
+      "validation_summary": "Pydantic required/type coercion only; EnvironmentResolver.Bool + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_EXECUTION_ZONE_MAX_WIDTH_ATR",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": 2.0,
+      "ctrader_type": "decimal",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 2.0
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": 2.0
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_execution_zone_max_width_atr",
+      "kind": "configurable",
+      "known_conflict": false,
+      "mismatch_policy": "fatal",
+      "path": "execution.policy.execution_zone_max_width_atr",
+      "python_schema_default": 2.0,
+      "python_type": "float",
+      "secret": false,
+      "unit": "atr",
+      "validation_summary": "Pydantic type coercion + Settings cross-field model validator; EnvironmentResolver.Decimal + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_EXECUTION_ZONE_MAX_WIDTH_PIPS",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": 100,
+      "ctrader_type": "decimal",
+      "default_conflict": true,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 100.0
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": 100
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_execution_zone_max_width_pips",
+      "kind": "configurable",
+      "known_conflict": false,
+      "mismatch_policy": "fatal",
+      "path": "execution.policy.execution_zone_max_width_pips",
+      "python_schema_default": 100.0,
+      "python_type": "float",
+      "secret": false,
+      "unit": "pips",
+      "validation_summary": "Pydantic type coercion + Settings cross-field model validator; EnvironmentResolver.Decimal + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_GROUP_CLOSE_ALLOCATION",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": "pro_rata",
+      "ctrader_type": "string",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": "pro_rata"
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": "pro_rata"
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_group_close_allocation",
+      "kind": "configurable",
+      "known_conflict": false,
+      "mismatch_policy": "fatal",
+      "path": "execution.policy.group_close_allocation",
+      "python_schema_default": "pro_rata",
+      "python_type": "str",
+      "secret": false,
+      "unit": "string",
+      "validation_summary": "Pydantic required/type coercion only; EnvironmentResolver.String + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_MAX_TRANCHES",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": 2,
+      "ctrader_type": "int",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 2
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": 2
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_max_tranches",
+      "kind": "configurable",
+      "known_conflict": false,
+      "mismatch_policy": "not_reported",
+      "path": "execution.policy.max_tranches",
+      "python_schema_default": 2,
+      "python_type": "int",
+      "secret": false,
+      "unit": "count",
+      "validation_summary": "Pydantic required/type coercion only; EnvironmentResolver.Int + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_RANGE_BOX_MOVE_SL_TO_BE_AFTER_SCALE_OUT",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": false,
+      "ctrader_type": "bool",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": false
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": false
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_range_box_move_sl_to_be_after_scale_out",
+      "kind": "configurable",
+      "known_conflict": true,
+      "mismatch_policy": "warning",
+      "path": "execution.range.box_move_sl_to_be_after_scale_out",
+      "python_schema_default": false,
+      "python_type": "bool",
+      "secret": false,
+      "unit": "boolean",
+      "validation_summary": "Pydantic required/type coercion only; EnvironmentResolver.Bool + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_RANGE_BOX_SCALE_OUT_FRACTION",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": 0.5,
+      "ctrader_type": "decimal",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 0.5
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": 0.5
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_range_box_scale_out_fraction",
+      "kind": "configurable",
+      "known_conflict": true,
+      "mismatch_policy": "warning",
+      "path": "execution.range.box_scale_out_fraction",
+      "python_schema_default": 0.5,
+      "python_type": "float",
+      "secret": false,
+      "unit": "fraction",
+      "validation_summary": "Pydantic type coercion + Settings cross-field model validator; EnvironmentResolver.Decimal + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_RANGE_BOX_SCALE_OUT_THRESHOLD_PIPS",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": 70,
+      "ctrader_type": "int",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 70
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": 70
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_range_box_scale_out_threshold_pips",
+      "kind": "configurable",
+      "known_conflict": true,
+      "mismatch_policy": "warning",
+      "path": "execution.range.box_scale_out_threshold_pips",
+      "python_schema_default": 70,
+      "python_type": "int",
+      "secret": false,
+      "unit": "pips",
+      "validation_summary": "Pydantic type coercion + Settings cross-field model validator; EnvironmentResolver.Int + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_RANGE_BOX_SCALE_OUT_TRIGGER_PIPS",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": 30,
+      "ctrader_type": "int",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 30
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": 30
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_range_box_scale_out_trigger_pips",
+      "kind": "configurable",
+      "known_conflict": true,
+      "mismatch_policy": "warning",
+      "path": "execution.range.box_scale_out_trigger_pips",
+      "python_schema_default": 30,
+      "python_type": "int",
+      "secret": false,
+      "unit": "pips",
+      "validation_summary": "Pydantic type coercion + Settings cross-field model validator; EnvironmentResolver.Int + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_RANGE_TP_BUFFER_PIPS",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": 3,
+      "ctrader_type": "decimal",
+      "default_conflict": true,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 3.0
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": 3
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_range_tp_buffer_pips",
+      "kind": "configurable",
+      "known_conflict": false,
+      "mismatch_policy": "fatal",
+      "path": "execution.range.tp_buffer_pips",
+      "python_schema_default": 3.0,
+      "python_type": "float",
+      "secret": false,
+      "unit": "pips",
+      "validation_summary": "Pydantic required/type coercion only; EnvironmentResolver.Decimal + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_REACTION_MARKET_FRACTION",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": 0.7,
+      "ctrader_type": "decimal",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 0.7
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": 0.7
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_reaction_market_fraction",
+      "kind": "configurable",
+      "known_conflict": false,
+      "mismatch_policy": "not_reported",
+      "path": "execution.reaction.market_fraction",
+      "python_schema_default": 0.7,
+      "python_type": "float",
+      "secret": false,
+      "unit": "fraction",
+      "validation_summary": "Pydantic type coercion + Settings cross-field model validator; EnvironmentResolver.Decimal + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_REACTION_SCALE_FRACTION",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": 0.3,
+      "ctrader_type": "decimal",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 0.3
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": 0.3
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_reaction_scale_fraction",
+      "kind": "configurable",
+      "known_conflict": false,
+      "mismatch_policy": "not_reported",
+      "path": "execution.reaction.scale_fraction",
+      "python_schema_default": 0.3,
+      "python_type": "float",
+      "secret": false,
+      "unit": "fraction",
+      "validation_summary": "Pydantic type coercion + Settings cross-field model validator; EnvironmentResolver.Decimal + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [
+        "single_market",
+        "reject"
+      ],
+      "canonical_env": "AUTO_TRADE_REACTION_SCALE_INVALID_POLICY",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": "single_market",
+      "ctrader_type": "string",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": "single_market"
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": "single_market"
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_reaction_scale_invalid_policy",
+      "kind": "configurable",
+      "known_conflict": false,
+      "mismatch_policy": "not_reported",
+      "path": "execution.reaction.scale_invalid_policy",
+      "python_schema_default": "single_market",
+      "python_type": "str",
+      "secret": false,
+      "unit": "enum",
+      "validation_summary": "Pydantic type coercion + Settings cross-field model validator; EnvironmentResolver.String + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_REACTION_SCALE_STEP_ATR",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": 0.5,
+      "ctrader_type": "decimal",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 0.5
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": 0.5
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_reaction_scale_step_atr",
+      "kind": "configurable",
+      "known_conflict": false,
+      "mismatch_policy": "not_reported",
+      "path": "execution.reaction.scale_step_atr",
+      "python_schema_default": 0.5,
+      "python_type": "float",
+      "secret": false,
+      "unit": "atr",
+      "validation_summary": "Pydantic required/type coercion only; EnvironmentResolver.Decimal + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_ADD_MIN_STOP_PIPS",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": 30,
+      "ctrader_type": "int",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 30
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": 30
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_add_min_stop_pips",
+      "kind": "configurable",
+      "known_conflict": false,
+      "mismatch_policy": "fatal",
+      "path": "execution.scaling.add.min_stop_pips",
+      "python_schema_default": 30,
+      "python_type": "int",
+      "secret": false,
+      "unit": "pips",
+      "validation_summary": "Pydantic required/type coercion only; EnvironmentResolver.Int + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_ADD_SIZE_RATIO",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": 0.5,
+      "ctrader_type": "decimal",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 0.5
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": 0.5
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_add_size_ratio",
+      "kind": "configurable",
+      "known_conflict": false,
+      "mismatch_policy": "not_reported",
+      "path": "execution.scaling.add.size_ratio",
+      "python_schema_default": 0.5,
+      "python_type": "float",
+      "secret": false,
+      "unit": "fraction",
+      "validation_summary": "Pydantic required/type coercion only; EnvironmentResolver.Decimal + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_ADD_STOP_BUFFER_ATR",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": 0.3,
+      "ctrader_type": "decimal",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 0.3
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": 0.3
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_add_stop_buffer_atr",
+      "kind": "configurable",
+      "known_conflict": false,
+      "mismatch_policy": "fatal",
+      "path": "execution.scaling.add.stop_buffer_atr",
+      "python_schema_default": 0.3,
+      "python_type": "float",
+      "secret": false,
+      "unit": "atr",
+      "validation_summary": "Pydantic required/type coercion only; EnvironmentResolver.Decimal + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_BE_BUFFER_TICKS",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": 6,
+      "ctrader_type": "int",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 6
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": 6
+        }
+      ],
+      "deprecated_aliases": [
+        "AUTO_TRADE_BE_BUFFER_PIPS"
+      ],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_be_buffer_ticks",
+      "kind": "configurable",
+      "known_conflict": false,
+      "mismatch_policy": "fatal",
+      "path": "execution.stops.be_buffer_ticks",
+      "python_schema_default": 6,
+      "python_type": "int",
+      "secret": false,
+      "unit": "ticks",
+      "validation_summary": "Pydantic type coercion + Settings cross-field model validator; EnvironmentResolver.Int + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_SL_DISTANCE",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": 6.5,
+      "ctrader_type": "decimal",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 6.5
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": 6.5
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_sl_distance",
+      "kind": "configurable",
+      "known_conflict": false,
+      "mismatch_policy": "fatal",
+      "path": "execution.stops.sl_distance",
+      "python_schema_default": 6.5,
+      "python_type": "float",
+      "secret": false,
+      "unit": "price",
+      "validation_summary": "Pydantic required/type coercion only; EnvironmentResolver.Decimal + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_STOP_PUSH_BEYOND_ZONE",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": true,
+      "ctrader_type": "bool",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": true
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": true
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_stop_push_beyond_zone",
+      "kind": "configurable",
+      "known_conflict": false,
+      "mismatch_policy": "not_reported",
+      "path": "execution.stops.stop_push_beyond_zone",
+      "python_schema_default": true,
+      "python_type": "bool",
+      "secret": false,
+      "unit": "boolean",
+      "validation_summary": "Pydantic required/type coercion only; EnvironmentResolver.Bool + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_TREND_STOP_MIN_PIPS",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": 40,
+      "ctrader_type": "int",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 40
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": 40
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_trend_stop_min_pips",
+      "kind": "configurable",
+      "known_conflict": false,
+      "mismatch_policy": "fatal",
+      "path": "execution.stops.trend.minimum_pips",
+      "python_schema_default": 40,
+      "python_type": "int",
+      "secret": false,
+      "unit": "pips",
+      "validation_summary": "Pydantic required/type coercion only; EnvironmentResolver.Int + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_WICK_STOP_BUFFER_ATR",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": 0.15,
+      "ctrader_type": "decimal",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 0.15
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": 0.15
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_wick_stop_buffer_atr",
+      "kind": "configurable",
+      "known_conflict": false,
+      "mismatch_policy": "fatal",
+      "path": "execution.stops.wick_stop_buffer_atr",
+      "python_schema_default": 0.15,
+      "python_type": "float",
+      "secret": false,
+      "unit": "atr",
+      "validation_summary": "Pydantic required/type coercion only; EnvironmentResolver.Decimal + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_TARGET_PLANS_PIPS",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": "30,60,90,120,200",
+      "ctrader_type": "IReadOnlyList<int>",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": "30,60,90,120,200"
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": "30,60,90,120,200"
+        }
+      ],
+      "deprecated_aliases": [
+        "AUTO_TRADE_TP_PIPS"
+      ],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_tp_pips",
+      "kind": "configurable",
+      "known_conflict": false,
+      "mismatch_policy": "fatal",
+      "path": "execution.targeting.default_ladder_pips",
+      "python_schema_default": "30,60,90,120,200",
+      "python_type": "str",
+      "secret": false,
+      "unit": "pips",
+      "validation_summary": "Pydantic required/type coercion only; EnvironmentResolver.IntList + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_POST_FILL_TARGET_FALLBACK",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": "fill_relative",
+      "ctrader_type": "string",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": "fill_relative"
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": "fill_relative"
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_post_fill_target_fallback",
+      "kind": "configurable",
+      "known_conflict": false,
+      "mismatch_policy": "not_reported",
+      "path": "execution.targeting.post_fill_target_fallback",
+      "python_schema_default": "fill_relative",
+      "python_type": "str",
+      "secret": false,
+      "unit": "string",
+      "validation_summary": "Pydantic required/type coercion only; EnvironmentResolver.String + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_RANGE_TARGETS_PIPS",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": "15,20,30,40,50,70",
+      "ctrader_type": "IReadOnlyList<int>",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": "15,20,30,40,50,70"
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": "15,20,30,40,50,70"
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_range_targets_pips",
+      "kind": "configurable",
+      "known_conflict": false,
+      "mismatch_policy": "fatal",
+      "path": "execution.targeting.range_ladder_pips",
+      "python_schema_default": "15,20,30,40,50,70",
+      "python_type": "str",
+      "secret": false,
+      "unit": "pips",
+      "validation_summary": "Pydantic required/type coercion only; EnvironmentResolver.IntList + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_UNFILLED_LEG_AFTER_TP_POLICY",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": "cancel",
+      "ctrader_type": "string",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": "cancel"
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": "cancel"
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_unfilled_leg_after_tp_policy",
+      "kind": "configurable",
+      "known_conflict": false,
+      "mismatch_policy": "fatal",
+      "path": "execution.targeting.unfilled_leg_after_tp_policy",
+      "python_schema_default": "cancel",
+      "python_type": "str",
+      "secret": false,
+      "unit": "enum",
+      "validation_summary": "Pydantic required/type coercion only; EnvironmentResolver.String + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_TREND_STOP_MAX_PIPS",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": 60,
+      "ctrader_type": "int",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 60
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": 60
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_trend_stop_max_pips",
+      "kind": "configurable",
+      "known_conflict": false,
+      "mismatch_policy": "fatal",
+      "path": "execution.trend.stop_max_pips",
+      "python_schema_default": 60,
+      "python_type": "int",
+      "secret": false,
+      "unit": "pips",
+      "validation_summary": "Pydantic required/type coercion only; EnvironmentResolver.Int + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_ZONE_FILL_ENABLED",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": false,
+      "ctrader_type": "bool",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": false
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": false
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_zone_fill_enabled",
+      "kind": "configurable",
+      "known_conflict": true,
+      "mismatch_policy": "warning",
+      "path": "execution.zone_scaling.fill_enabled",
+      "python_schema_default": false,
+      "python_type": "bool",
+      "secret": false,
+      "unit": "boolean",
+      "validation_summary": "Pydantic required/type coercion only; EnvironmentResolver.Bool + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_ZONE_FILL_FALLBACK_ENABLED",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": true,
+      "ctrader_type": "bool",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": true
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": true
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_zone_fill_fallback_enabled",
+      "kind": "configurable",
+      "known_conflict": false,
+      "mismatch_policy": "not_reported",
+      "path": "execution.zone_scaling.fill_fallback_enabled",
+      "python_schema_default": true,
+      "python_type": "bool",
+      "secret": false,
+      "unit": "boolean",
+      "validation_summary": "Pydantic required/type coercion only; EnvironmentResolver.Bool + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_ZONE_FILL_MIN_ATR",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": 0.5,
+      "ctrader_type": "decimal",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 0.5
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": 0.5
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_zone_fill_min_atr",
+      "kind": "configurable",
+      "known_conflict": false,
+      "mismatch_policy": "not_reported",
+      "path": "execution.zone_scaling.fill_min_atr",
+      "python_schema_default": 0.5,
+      "python_type": "float",
+      "secret": false,
+      "unit": "atr",
+      "validation_summary": "Pydantic required/type coercion only; EnvironmentResolver.Decimal + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_ZONE_SCALE_UNDERSIZED_POLICY",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": "single_entry",
+      "ctrader_type": "string",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": "single_entry"
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": "single_entry"
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_zone_scale_undersized_policy",
+      "kind": "configurable",
+      "known_conflict": false,
+      "mismatch_policy": "fatal",
+      "path": "execution.zone_scaling.scale_undersized_policy",
+      "python_schema_default": "single_entry",
+      "python_type": "str",
+      "secret": false,
+      "unit": "enum",
+      "validation_summary": "Pydantic required/type coercion only; EnvironmentResolver.String + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_CANDIDATE_MAX_AGE_SECONDS",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": 90,
+      "ctrader_type": "int",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 90
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": 90
+        }
+      ],
+      "deprecated_aliases": [
+        "AUTO_TRADE_CANDIDATE_MAX_AGE"
+      ],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_candidate_max_age_seconds",
+      "kind": "configurable",
+      "known_conflict": false,
+      "mismatch_policy": "fatal",
+      "path": "lifecycle.candidate.execution_maximum_age_seconds",
+      "python_schema_default": 90,
+      "python_type": "int",
+      "secret": false,
+      "unit": "seconds",
+      "validation_summary": "Pydantic required/type coercion only; EnvironmentResolver.Int + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_CANDIDATE_STORAGE_TTL_SECONDS",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": 86400,
+      "ctrader_type": "int",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 86400
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": 86400
+        }
+      ],
+      "deprecated_aliases": [
+        "AUTO_TRADE_CANDIDATE_TTL"
+      ],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_candidate_ttl",
+      "kind": "configurable",
+      "known_conflict": true,
+      "mismatch_policy": "warning",
+      "path": "lifecycle.candidate.storage_ttl_seconds",
+      "python_schema_default": 86400,
+      "python_type": "int",
+      "secret": false,
+      "unit": "seconds",
+      "validation_summary": "Pydantic required/type coercion only; EnvironmentResolver.Int + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_ZONE_COOLDOWN_ENABLED",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": true,
+      "ctrader_type": "bool",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": true
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": true
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_zone_cooldown_enabled",
+      "kind": "configurable",
+      "known_conflict": true,
+      "mismatch_policy": "warning",
+      "path": "lifecycle.zone.cooldown_enabled",
+      "python_schema_default": true,
+      "python_type": "bool",
+      "secret": false,
+      "unit": "boolean",
+      "validation_summary": "Pydantic required/type coercion only; EnvironmentResolver.Bool + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "MANUAL_ALGO_ENABLED",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": false,
+      "ctrader_type": "bool",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": false
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": false
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "python.settings.manual_algo_enabled",
+      "kind": "configurable",
+      "known_conflict": true,
+      "mismatch_policy": "warning",
+      "path": "manual_algo.runtime.enabled",
+      "python_schema_default": false,
+      "python_type": "bool",
+      "secret": false,
+      "unit": "boolean",
+      "validation_summary": "Pydantic required/type coercion only; EnvironmentResolver.Bool + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "MANUAL_TRADE_COMMAND_STREAM",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": "manual_trade:commands",
+      "ctrader_type": "string",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": "manual_trade:commands"
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": "manual_trade:commands"
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [
+        "Python exposes the stream through Settings while the executor also owns a direct command-stream binding."
+      ],
+      "item_id": "python.settings.manual_trade_command_stream",
+      "kind": "configurable",
+      "known_conflict": false,
+      "mismatch_policy": "not_reported",
+      "path": "manual_algo.streams.manual_trade_command_stream",
+      "python_schema_default": "manual_trade:commands",
+      "python_type": "str",
+      "secret": false,
+      "unit": "identifier",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "BARS_CHANNEL",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": "bars:new",
+      "ctrader_type": "string",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "ctrader_from_environment",
+          "value": "bars:new"
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [
+        "Feed option is configurable while the Python bars consumer contract is not a legacy Settings field."
+      ],
+      "item_id": "ctrader.env.BARS_CHANNEL",
+      "kind": "configurable",
+      "known_conflict": false,
+      "mismatch_policy": "not_reported",
+      "path": "market_data.ctrader_feed.bars_channel",
+      "python_schema_default": null,
+      "python_type": "string",
+      "secret": false,
+      "unit": "string",
+      "validation_summary": "FeedOptions.Env"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_SPOT_MAX_AGE_SECONDS",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": 5,
+      "ctrader_type": "int",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 5
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": 5
+        }
+      ],
+      "deprecated_aliases": [
+        "AUTO_TRADE_SPOT_MAX_AGE"
+      ],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_spot_max_age",
+      "kind": "configurable",
+      "known_conflict": false,
+      "mismatch_policy": "fatal",
+      "path": "market_data.spot.maximum_age_seconds",
+      "python_schema_default": 5,
+      "python_type": "int",
+      "secret": false,
+      "unit": "seconds",
+      "validation_summary": "Pydantic required/type coercion only; EnvironmentResolver.Int + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_ALLOW_CONCURRENT_STRATEGIES",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": false,
+      "ctrader_type": "bool",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": false
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": false
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_allow_concurrent_strategies",
+      "kind": "configurable",
+      "known_conflict": true,
+      "mismatch_policy": "warning",
+      "path": "risk.exposure.allow_concurrent_strategies",
+      "python_schema_default": false,
+      "python_type": "bool",
+      "secret": false,
+      "unit": "boolean",
+      "validation_summary": "Pydantic required/type coercion only; EnvironmentResolver.Bool + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_ALLOW_HEDGED_XAU",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": false,
+      "ctrader_type": "bool",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": false
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": false
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_allow_hedged_xau",
+      "kind": "configurable",
+      "known_conflict": true,
+      "mismatch_policy": "warning",
+      "path": "risk.exposure.allow_hedged_xau",
+      "python_schema_default": false,
+      "python_type": "bool",
+      "secret": false,
+      "unit": "boolean",
+      "validation_summary": "Pydantic required/type coercion only; EnvironmentResolver.Bool + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [
+        "broker_netting",
+        "close_then_reverse",
+        "reject"
+      ],
+      "canonical_env": "AUTO_TRADE_NON_HEDGED_OPPOSITE_POLICY",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": "reject",
+      "ctrader_type": "string",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": "reject"
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": "reject"
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_non_hedged_opposite_policy",
+      "kind": "configurable",
+      "known_conflict": true,
+      "mismatch_policy": "warning",
+      "path": "risk.exposure.non_hedged_opposite_policy",
+      "python_schema_default": "reject",
+      "python_type": "str",
+      "secret": false,
+      "unit": "enum",
+      "validation_summary": "Pydantic type coercion + Settings cross-field model validator; EnvironmentResolver.String + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_REQUIRE_FLAT_FOR_RANGE",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": true,
+      "ctrader_type": "bool",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": true
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": true
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_require_flat_for_range",
+      "kind": "configurable",
+      "known_conflict": false,
+      "mismatch_policy": "not_reported",
+      "path": "risk.exposure.require_flat_for_range",
+      "python_schema_default": true,
+      "python_type": "bool",
+      "secret": false,
+      "unit": "boolean",
+      "validation_summary": "Pydantic required/type coercion only; EnvironmentResolver.Bool + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_ADD_RISK_FRACTION",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": 0.5,
+      "ctrader_type": "decimal",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 0.5
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": 0.5
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_add_risk_fraction",
+      "kind": "configurable",
+      "known_conflict": false,
+      "mismatch_policy": "not_reported",
+      "path": "risk.sizing.add_risk_fraction",
+      "python_schema_default": 0.5,
+      "python_type": "float",
+      "secret": false,
+      "unit": "fraction",
+      "validation_summary": "Pydantic required/type coercion only; EnvironmentResolver.Decimal + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_EQUITY_TABLE_VERSION",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": "owner_equity_v1",
+      "ctrader_type": "string",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": "owner_equity_v1"
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": "owner_equity_v1"
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_equity_table_version",
+      "kind": "configurable",
+      "known_conflict": false,
+      "mismatch_policy": "fatal",
+      "path": "risk.sizing.equity_table_version",
+      "python_schema_default": "owner_equity_v1",
+      "python_type": "str",
+      "secret": false,
+      "unit": "string",
+      "validation_summary": "Pydantic required/type coercion only; EnvironmentResolver.String + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_SIZING_MODE",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": "equity_table",
+      "ctrader_type": "string",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": "equity_table"
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": "equity_table"
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_sizing_mode",
+      "kind": "configurable",
+      "known_conflict": false,
+      "mismatch_policy": "fatal",
+      "path": "risk.sizing.mode",
+      "python_schema_default": "equity_table",
+      "python_type": "str",
+      "secret": false,
+      "unit": "enum",
+      "validation_summary": "Pydantic required/type coercion only; EnvironmentResolver.String + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_DRY_RUN",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": true,
+      "ctrader_type": "bool",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": true
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": true
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_dry_run",
+      "kind": "configurable",
+      "known_conflict": false,
+      "mismatch_policy": "fatal",
+      "path": "runtime.auto_trade.dry_run",
+      "python_schema_default": true,
+      "python_type": "bool",
+      "secret": false,
+      "unit": "boolean",
+      "validation_summary": "Pydantic required/type coercion only; EnvironmentResolver.Bool + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_ENABLED",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": false,
+      "ctrader_type": "bool",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": false
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": false
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_enabled",
+      "kind": "configurable",
+      "known_conflict": false,
+      "mismatch_policy": "fatal",
+      "path": "runtime.auto_trade.enabled",
+      "python_schema_default": false,
+      "python_type": "bool",
+      "secret": false,
+      "unit": "boolean",
+      "validation_summary": "Pydantic required/type coercion only; EnvironmentResolver.Bool + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_STRATEGY_MATCH_ENABLED",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": true,
+      "ctrader_type": "bool",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": true
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": true
+        }
+      ],
+      "deprecated_aliases": [
+        "AUTO_TRADE_STRATEGY_BRIDGE_ENABLED",
+        "AUTO_TRADE_FORMING_GATE_ENABLED"
+      ],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_strategy_match_enabled",
+      "kind": "configurable",
+      "known_conflict": true,
+      "mismatch_policy": "warning",
+      "path": "runtime.auto_trade.strategy_match_enabled",
+      "python_schema_default": true,
+      "python_type": "bool",
+      "secret": false,
+      "unit": "boolean",
+      "validation_summary": "Pydantic required/type coercion only; EnvironmentResolver.Bool + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [
+        "conservative",
+        "demo_eval"
+      ],
+      "canonical_env": "AUTO_TRADE_PROFILE",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": "conservative",
+      "ctrader_type": "string",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": "conservative"
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": "conservative"
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_profile",
+      "kind": "configurable",
+      "known_conflict": true,
+      "mismatch_policy": "warning",
+      "path": "runtime.profile",
+      "python_schema_default": "conservative",
+      "python_type": "str",
+      "secret": false,
+      "unit": "enum",
+      "validation_summary": "Pydantic type coercion + Settings cross-field model validator; EnvironmentResolver.String + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_BREAKOUT_ENABLED",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": true,
+      "ctrader_type": "bool",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": true
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": true
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_breakout_enabled",
+      "kind": "configurable",
+      "known_conflict": true,
+      "mismatch_policy": "warning",
+      "path": "strategies.breakout.breakout_enabled",
+      "python_schema_default": true,
+      "python_type": "bool",
+      "secret": false,
+      "unit": "boolean",
+      "validation_summary": "Pydantic required/type coercion only; EnvironmentResolver.Bool + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_MAPPED_ZONE_ENABLED",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": true,
+      "ctrader_type": "bool",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": true
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": true
+        }
+      ],
+      "deprecated_aliases": [
+        "AUTO_TRADE_MARKET_MAP_STRATEGY_ENABLED"
+      ],
+      "evidence_notes": [
+        "Direct demo_eval resolves true while root Compose demo_eval injects false."
+      ],
+      "item_id": "python.settings.auto_trade_mapped_zone_enabled",
+      "kind": "configurable",
+      "known_conflict": true,
+      "mismatch_policy": "warning",
+      "path": "strategies.mapped_zone.enabled",
+      "python_schema_default": true,
+      "python_type": "bool",
+      "secret": false,
+      "unit": "boolean",
+      "validation_summary": "Pydantic type coercion + Settings cross-field model validator; EnvironmentResolver.Bool + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_MULTI_MATCH_ENABLED",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": false,
+      "ctrader_type": "bool",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": false
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": false
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_multi_match_enabled",
+      "kind": "configurable",
+      "known_conflict": false,
+      "mismatch_policy": "not_reported",
+      "path": "strategies.matching.multiple_matches_enabled",
+      "python_schema_default": false,
+      "python_type": "bool",
+      "secret": false,
+      "unit": "boolean",
+      "validation_summary": "Pydantic required/type coercion only; EnvironmentResolver.Bool + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_TRACK_ALL_STRUCTURAL_MATCHES",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": false,
+      "ctrader_type": "bool",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": false
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": false
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_track_all_structural_matches",
+      "kind": "configurable",
+      "known_conflict": false,
+      "mismatch_policy": "not_reported",
+      "path": "strategies.matching.track_all_structural_matches",
+      "python_schema_default": false,
+      "python_type": "bool",
+      "secret": false,
+      "unit": "boolean",
+      "validation_summary": "Pydantic required/type coercion only; EnvironmentResolver.Bool + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_RANGE_BOX_SCALE_OUT_ENABLED",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": true,
+      "ctrader_type": "bool",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": true
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": true
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_range_box_scale_out_enabled",
+      "kind": "configurable",
+      "known_conflict": true,
+      "mismatch_policy": "warning",
+      "path": "strategies.range_reversion.box_scale_out_enabled",
+      "python_schema_default": true,
+      "python_type": "bool",
+      "secret": false,
+      "unit": "boolean",
+      "validation_summary": "Pydantic required/type coercion only; EnvironmentResolver.Bool + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_RANGE_ENABLED",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": true,
+      "ctrader_type": "bool",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": true
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": true
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_range_enabled",
+      "kind": "configurable",
+      "known_conflict": true,
+      "mismatch_policy": "warning",
+      "path": "strategies.range_reversion.enabled",
+      "python_schema_default": true,
+      "python_type": "bool",
+      "secret": false,
+      "unit": "boolean",
+      "validation_summary": "Pydantic required/type coercion only; EnvironmentResolver.Bool + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_RANGE_FLIP_ENABLED",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": false,
+      "ctrader_type": "bool",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": false
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": false
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_range_flip_enabled",
+      "kind": "configurable",
+      "known_conflict": true,
+      "mismatch_policy": "warning",
+      "path": "strategies.range_reversion.flip_enabled",
+      "python_schema_default": false,
+      "python_type": "bool",
+      "secret": false,
+      "unit": "boolean",
+      "validation_summary": "Pydantic required/type coercion only; EnvironmentResolver.Bool + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_RANGE_TWO_SIDED_ENABLED",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": false,
+      "ctrader_type": "bool",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": false
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": false
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_range_two_sided_enabled",
+      "kind": "configurable",
+      "known_conflict": true,
+      "mismatch_policy": "warning",
+      "path": "strategies.range_reversion.two_sided_enabled",
+      "python_schema_default": false,
+      "python_type": "bool",
+      "secret": false,
+      "unit": "boolean",
+      "validation_summary": "Pydantic required/type coercion only; EnvironmentResolver.Bool + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_REACTION_ENABLED",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": true,
+      "ctrader_type": "bool",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": true
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": true
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_reaction_enabled",
+      "kind": "configurable",
+      "known_conflict": true,
+      "mismatch_policy": "warning",
+      "path": "strategies.reaction.enabled",
+      "python_schema_default": true,
+      "python_type": "bool",
+      "secret": false,
+      "unit": "boolean",
+      "validation_summary": "Pydantic required/type coercion only; EnvironmentResolver.Bool + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_LIQUIDITY_REVERSAL_ENABLED",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": true,
+      "ctrader_type": "bool",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": true
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": true
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_liquidity_reversal_enabled",
+      "kind": "configurable",
+      "known_conflict": true,
+      "mismatch_policy": "warning",
+      "path": "strategies.reaction.liquidity_reversal.enabled",
+      "python_schema_default": true,
+      "python_type": "bool",
+      "secret": false,
+      "unit": "boolean",
+      "validation_summary": "Pydantic required/type coercion only; EnvironmentResolver.Bool + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_REACTION_SCALE_ENABLED",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": false,
+      "ctrader_type": "bool",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": false
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": false
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_reaction_scale_enabled",
+      "kind": "configurable",
+      "known_conflict": false,
+      "mismatch_policy": "not_reported",
+      "path": "strategies.reaction.scale_enabled",
+      "python_schema_default": false,
+      "python_type": "bool",
+      "secret": false,
+      "unit": "boolean",
+      "validation_summary": "Pydantic required/type coercion only; EnvironmentResolver.Bool + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_RETEST_ENABLED",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": true,
+      "ctrader_type": "bool",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": true
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": true
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_retest_enabled",
+      "kind": "configurable",
+      "known_conflict": true,
+      "mismatch_policy": "warning",
+      "path": "strategies.selection.retest_enabled",
+      "python_schema_default": true,
+      "python_type": "bool",
+      "secret": false,
+      "unit": "boolean",
+      "validation_summary": "Pydantic required/type coercion only; EnvironmentResolver.Bool + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_TREND_ENABLED",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": false,
+      "ctrader_type": "bool",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": false
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": false
+        }
+      ],
+      "deprecated_aliases": [],
+      "evidence_notes": [],
+      "item_id": "python.settings.auto_trade_trend_enabled",
+      "kind": "configurable",
+      "known_conflict": true,
+      "mismatch_policy": "warning",
+      "path": "strategies.trend.enabled",
+      "python_schema_default": false,
+      "python_type": "bool",
+      "secret": false,
+      "unit": "boolean",
+      "validation_summary": "Pydantic required/type coercion only; EnvironmentResolver.Bool + AutoTradeOptions.Validate"
+    }
+  ],
+  "known_conflict_count": 30,
+  "preserved_evidence": [
+    {
+      "item_id": "python.settings.auto_trade_allow_counter_bias",
+      "notes": [
+        "Python schema default is true while cTrader FromEnvironment defaults false; unresolved."
+      ],
+      "path": "actionability.counter_bias.allowed"
+    },
+    {
+      "item_id": "python.settings.auto_trade_market_map_guard_enabled",
+      "notes": [
+        "Direct demo_eval inherits mapped-zone true; root Compose demo_eval injects false."
+      ],
+      "path": "actionability.gates.market_map_guard_enabled"
+    },
+    {
+      "item_id": "python.settings.manual_trade_command_stream",
+      "notes": [
+        "Python exposes the stream through Settings while the executor also owns a direct command-stream binding."
+      ],
+      "path": "manual_algo.streams.manual_trade_command_stream"
+    },
+    {
+      "item_id": "ctrader.env.BARS_CHANNEL",
+      "notes": [
+        "Feed option is configurable while the Python bars consumer contract is not a legacy Settings field."
+      ],
+      "path": "market_data.ctrader_feed.bars_channel"
+    },
+    {
+      "item_id": "ctrader.env.CTRADER_TIMEFRAMES",
+      "notes": [
+        "C# schema defaults M1,M5,M15,H1; deployment profile values remain separate evidence."
+      ],
+      "path": "market_data.ctrader_feed.timeframes"
+    },
+    {
+      "item_id": "python.settings.auto_trade_mapped_zone_enabled",
+      "notes": [
+        "Direct demo_eval resolves true while root Compose demo_eval injects false."
+      ],
+      "path": "strategies.mapped_zone.enabled"
+    }
+  ],
+  "source_fingerprint_sha256": "5001f967384dd74f709d75b714cc03b2576b900ef0b9861aa77b25ff80e29094",
+  "source_model": "app.configuration.models.root.ApexVoidConfig"
+}
