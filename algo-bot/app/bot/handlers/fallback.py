@@ -111,9 +111,9 @@ async def handle_private_signal(msg: Message) -> None:
   now = int(time.time())
   event = await event_in_window(
     now,
-    int(settings.event_guard_hours * 3600),
+    int(runtime_config.market_data.calendar.event_guard_hours * 3600),
   )
-  if event and settings.news_guard_block:
+  if event and runtime_config.market_data.calendar.news_guard_block:
     await msg.answer(
       f"⚠️ Signal not posted: {escape(event['title'])} "
       f"{_event_guard_timing(event['ts_utc'], now)} — expect volatility"

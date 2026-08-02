@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from html import escape
 from zoneinfo import ZoneInfo
 
-from app.core.config import settings
+from app.core.config import runtime_config, settings
 from app.persistence.store import (
   get_all_signals,
   get_meta,
@@ -179,11 +179,11 @@ async def _send_recap(text: str, channel_id: int) -> None:
 
 
 async def _weekly_report_tick(now: datetime | None = None) -> bool:
-  tz = ZoneInfo(settings.seq_reset_tz)
+  tz = ZoneInfo(runtime_config.delivery.presentation.seq_reset_tz)
   now = now.astimezone(tz) if now else datetime.now(tz)
   if (
-    now.weekday() != settings.weekly_report_dow
-    or now.hour < settings.weekly_report_hour
+    now.weekday() != runtime_config.delivery.reports.weekly.day_of_week
+    or now.hour < runtime_config.delivery.reports.weekly.utc_hour
   ):
     return False
 
@@ -198,15 +198,15 @@ async def _weekly_report_tick(now: datetime | None = None) -> bool:
       int(end.timestamp()) - 1,
       symbol,
     )
-    if not records and settings.weekly_report_skip_empty:
+    if not records and runtime_config.delivery.reports.weekly.skip_empty:
       continue
     stats = build_stats(
       records,
       await get_all_signals(symbol),
-      settings.seq_reset_tz,
-      settings.session_asia_start,
-      settings.session_london_start,
-      settings.session_ny_start,
+      runtime_config.delivery.presentation.seq_reset_tz,
+      runtime_config.market_data.sessions.asia_start,
+      runtime_config.market_data.sessions.london_start,
+      runtime_config.market_data.sessions.ny_start,
     )
     text = format_weekly_recap(stats, symbol, start, end)
     for target in channels_for(symbol, "vip"):
@@ -218,7 +218,7 @@ async def _weekly_report_tick(now: datetime | None = None) -> bool:
 
 async def weekly_report_loop() -> None:
   """Check every 30 minutes and post at most once per closed week."""
-  if not settings.weekly_report_enabled:
+  if not runtime_config.delivery.reports.weekly.enabled:
     log.info("Weekly performance recap disabled")
     return
   while True:
