@@ -16,7 +16,7 @@ from app.configuration.generated.legacy_access import (
 )
 from app.configuration.python_loader import load_python_canonical_settings
 from app.configuration.python_sources import load_python_runtime_source_bundle
-from app.configuration.shadow_loader import catalog_fingerprint
+from app.configuration.fingerprints import catalog_fingerprint
 
 
 class Settings(BaseSettings):

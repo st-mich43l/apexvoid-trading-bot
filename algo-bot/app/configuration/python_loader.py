@@ -9,10 +9,10 @@ from pydantic import ValidationError
 from app.configuration.authority import ConfigurationAuthority
 from app.configuration.catalog import iter_catalog_entries
 from app.configuration.facade import CanonicalSettingsFacade
+from app.configuration.fingerprints import catalog_fingerprint
 from app.configuration.models.python_runtime import PythonRuntimeConfig
 from app.configuration.profiles import get_profile, profile_fingerprint
 from app.configuration.resolver import resolve_configuration
-from app.configuration.shadow_loader import catalog_fingerprint
 from app.configuration.source_types import ConfigurationSourceBundle
 from app.configuration.source_types import ResolutionTrace
 from app.configuration.source_types import ResolutionWarning
