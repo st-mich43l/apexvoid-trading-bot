@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from pydantic import ValidationError
 
 from app.configuration.authority import ConfigurationAuthority
+from app.configuration.catalog import iter_catalog_entries
 from app.configuration.facade import CanonicalSettingsFacade
 from app.configuration.models.python_runtime import PythonRuntimeConfig
 from app.configuration.profiles import get_profile, profile_fingerprint
@@ -69,6 +70,17 @@ def load_python_canonical_settings(
   source_bundle: ConfigurationSourceBundle,
 ) -> PythonCanonicalLoadResult:
   """Resolve the Python projection and fail without constructing legacy state."""
+  full_entries = iter_catalog_entries()
+  projected_entries = iter_catalog_entries(PythonRuntimeConfig)
+  expected_paths = {
+    entry.path for entry in full_entries if entry.owner in {"python", "shared"}
+  }
+  actual_paths = {entry.path for entry in projected_entries}
+  if actual_paths != expected_paths:
+    raise CanonicalConfigurationError(
+      category="catalog_projection_mismatch",
+      path="<projection>",
+    )
   resolved = resolve_configuration(
     init_values=source_bundle.init_values,
     process_environment=source_bundle.process_environment,
@@ -94,7 +106,7 @@ def load_python_canonical_settings(
     raise CanonicalConfigurationError(
       category="validation_error",
       path=_validation_location(exc),
-    ) from exc
+    ) from None
   return PythonCanonicalLoadResult(
     config=config,
     facade=CanonicalSettingsFacade(config),
@@ -105,4 +117,3 @@ def load_python_canonical_settings(
     warnings=resolved.warnings,
     provenance=resolved.trace,
   )
-

@@ -9,7 +9,7 @@ from typing import Mapping
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-  from app.configuration.models.root import ApexVoidConfig
+  from pydantic import BaseModel
 
 
 class SourceKind(StrEnum):
@@ -108,7 +108,7 @@ class ResolvedConfiguration:
 
 @dataclass(frozen=True, slots=True)
 class ShadowLoadResult:
-  config: "ApexVoidConfig | None" = field(default=None, repr=False)
+  config: "BaseModel | None" = field(default=None, repr=False)
   profile: str = "conservative"
   status: ShadowLoadStatus = ShadowLoadStatus.INVALID
   trace: ResolutionTrace = field(default_factory=lambda: ResolutionTrace(()))

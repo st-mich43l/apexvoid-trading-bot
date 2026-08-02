@@ -1,4 +1,5 @@
 from typing import Optional
+from dataclasses import dataclass
 import math
 import os
 from pydantic import AliasChoices, Field, model_validator
@@ -1103,27 +1104,52 @@ class Settings(BaseSettings):
     return self.signal_public_channel_id
 
 
-def build_active_settings(
-  authority: RuntimeConfigurationAuthority | None = None,
-) -> object:
-  """Construct the one authority selected for this process startup."""
-  selected = authority or runtime_configuration_authority()
-  if selected is RuntimeConfigurationAuthority.LEGACY:
-    return Settings()
+@dataclass(frozen=True, slots=True)
+class _ActiveConfiguration:
+  authority: RuntimeConfigurationAuthority
+  settings: object
+  catalog_fingerprint: str
+  profile: str | None
+
+
+def _build_active_configuration(
+  authority: RuntimeConfigurationAuthority,
+) -> _ActiveConfiguration:
+  if authority is RuntimeConfigurationAuthority.LEGACY:
+    legacy = Settings()
+    return _ActiveConfiguration(
+      authority=authority,
+      settings=legacy,
+      catalog_fingerprint=catalog_fingerprint(),
+      profile=legacy.auto_trade_profile,
+    )
   source_bundle = load_python_runtime_source_bundle(Settings.model_config)
-  return load_python_canonical_settings(source_bundle).facade
+  result = load_python_canonical_settings(source_bundle)
+  return _ActiveConfiguration(
+    authority=authority,
+    settings=result.facade,
+    catalog_fingerprint=result.catalog_fingerprint,
+    profile=result.profile,
+  )
 
 
-_ACTIVE_CONFIGURATION_AUTHORITY = runtime_configuration_authority()
-settings = build_active_settings(_ACTIVE_CONFIGURATION_AUTHORITY)
+def build_active_settings() -> object:
+  """Construct settings for the authority selected by the current process."""
+  return _build_active_configuration(runtime_configuration_authority()).settings
+
+
+_ACTIVE_CONFIGURATION = _build_active_configuration(
+  runtime_configuration_authority()
+)
+settings = _ACTIVE_CONFIGURATION.settings
 
 
 def active_configuration_authority() -> RuntimeConfigurationAuthority:
-  return _ACTIVE_CONFIGURATION_AUTHORITY
+  return _ACTIVE_CONFIGURATION.authority
 
 
 def active_configuration_catalog_fingerprint() -> str:
-  return catalog_fingerprint()
+  return _ACTIVE_CONFIGURATION.catalog_fingerprint
 
 
 def active_configuration_startup_message() -> str:
@@ -1132,8 +1158,8 @@ def active_configuration_startup_message() -> str:
     return "configuration_authority=legacy"
   return (
     "configuration_authority=canonical "
-    f"configuration_profile={settings.auto_trade_profile} "
-    f"configuration_catalog_fingerprint={catalog_fingerprint()} "
+    f"configuration_profile={_ACTIVE_CONFIGURATION.profile} "
+    f"configuration_catalog_fingerprint={_ACTIVE_CONFIGURATION.catalog_fingerprint} "
     f"configuration_facade_fields={len(DIRECT_LEGACY_PATHS)} "
     f"configuration_derived_fields={len(DERIVED_LEGACY_PROPERTIES)}"
   )
