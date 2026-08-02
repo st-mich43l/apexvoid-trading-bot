@@ -273,7 +273,10 @@ async def _record_width_telemetry(
   # disable structural width rejection everywhere, not only on the legacy
   # scanner merge path (this function used to enforce the contract as
   # unconditionally canonical, silently ignoring that flag).
-  if band_kind == BandKind.STRUCTURAL_ZONE and not settings.scanner_zone_width_gate_enabled:
+  if (
+    band_kind == BandKind.STRUCTURAL_ZONE
+    and not runtime_config.actionability.scanner_gates.zone_width_gate_enabled
+  ):
     return True
   return bool(width.eligible)
 

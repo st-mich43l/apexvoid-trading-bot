@@ -877,7 +877,7 @@ async def _resolve_worker_range(
   if comparison.get("disagreement"):
     await increment_metric(client, "range_context_disagreement", symbol=symbol)
     disagreement_hard = bool(
-      settings.range_context_disagreement_gate_enabled
+      runtime_config.actionability.gates.range_context_disagreement_gate_enabled
     )
     await increment_metric(
       client,
@@ -2639,7 +2639,9 @@ async def _publish_candidate(
     or decision.box is None
     or decision.direction is None
     or scale_context is None
-    or decision.confluence < max(1, settings.auto_trade_min_confluence)
+    or decision.confluence < max(
+      1, runtime_config.actionability.gates.min_confluence,
+    )
   ):
     return None
   if decision.full_tp_pips not in configured_range_targets():
@@ -2674,7 +2676,7 @@ async def _publish_candidate(
   eq_reason = _eq_exclusion_reason(
     decision.box,
     entry_reference,
-    settings.auto_trade_eq_exclusion_fraction,
+    runtime_config.actionability.gates.eq_exclusion_fraction,
   )
   if eq_reason is not None:
     eq_outcome = classify_guard_severity(
@@ -2702,7 +2704,7 @@ async def _publish_candidate(
     decision.rail,
     entry_reference,
     scale_context.atr,
-    settings.auto_trade_edge_proximity_atr,
+    runtime_config.actionability.gates.edge_proximity_atr,
   )
   if edge_reason is not None:
     edge_outcome = classify_guard_severity(
@@ -2729,7 +2731,7 @@ async def _publish_candidate(
   opposing_zone = _nearest_directional_zone(
     decision.direction, entry_reference, htf_zones or [],
   )
-  if settings.auto_trade_htf_veto_enabled:
+  if runtime_config.actionability.gates.htf_veto_enabled:
     veto_reason = _htf_veto_reason(decision.direction, entry_reference, opposing_zone)
     if veto_reason is not None:
       veto_outcome = classify_guard_severity(
@@ -2780,7 +2782,7 @@ async def _publish_candidate(
       await _record_gate_reject(client, symbol, "zone_cooldown")
       return None
   if (
-    settings.auto_trade_overlap_veto_enabled
+    runtime_config.actionability.overlapping_zones.veto_enabled
     or guard_mode == GUARD_MODE_OBSERVE
   ):
     overlap_outcome = _resolve_overlap_thesis(
@@ -2809,7 +2811,7 @@ async def _publish_candidate(
   try:
     guarded = await event_in_window(
       now,
-      max(0, settings.auto_trade_news_guard_minutes) * 60,
+      max(0, runtime_config.actionability.gates.news_guard_minutes) * 60,
     )
   except Exception:
     log.exception("auto-scalp candidate blocked: news guard unavailable")
@@ -3185,16 +3187,18 @@ async def _publish_strategy_match(
     await _consume_strategy_match(client, symbol, match)
     await increment_metric(client, "strategy_match_blocked", symbol=symbol)
     return None
-  if match.confluence < max(1, settings.auto_trade_min_confluence):
+  if match.confluence < max(1, runtime_config.actionability.gates.min_confluence):
     await route(
       "mode_check", "blocked", "confluence_below_minimum",
       (
         f"confluence {match.confluence} below minimum "
-        f"{max(1, settings.auto_trade_min_confluence)}"
+        f"{max(1, runtime_config.actionability.gates.min_confluence)}"
       ),
       measured={
         "confluence": match.confluence,
-        "minimum_confluence": max(1, settings.auto_trade_min_confluence),
+        "minimum_confluence": max(
+          1, runtime_config.actionability.gates.min_confluence,
+        ),
       },
       retained=False,
     )
@@ -3385,7 +3389,7 @@ async def _publish_strategy_match(
   if (
     not bypasses_opposing_structure_gates(match.strategy)
     and (
-      settings.auto_trade_opposing_barrier_veto_enabled
+      runtime_config.actionability.gates.opposing_barrier_veto_enabled
       or guard_mode == GUARD_MODE_OBSERVE
     )
   ):
@@ -3402,7 +3406,7 @@ async def _publish_strategy_match(
     barrier_outcome = _opposing_barrier_decision(
       match.direction, spot.price, match.target_price, match.atr,
       htf_zones or [], htf_levels or [],
-      settings.auto_trade_opposing_barrier_atr,
+      runtime_config.actionability.target_room.barrier_buffer_atr,
       source=source,
       guard_mode=guard_mode,
     )
@@ -3467,7 +3471,7 @@ async def _publish_strategy_match(
       return None
 
   if (
-    settings.auto_trade_overlap_veto_enabled
+    runtime_config.actionability.overlapping_zones.veto_enabled
     or guard_mode == GUARD_MODE_OBSERVE
   ):
     overlap_outcome = _resolve_overlap_thesis(
@@ -3679,7 +3683,7 @@ async def _publish_strategy_match(
   try:
     guarded = await event_in_window(
       now,
-      max(0, settings.auto_trade_news_guard_minutes) * 60,
+      max(0, runtime_config.actionability.gates.news_guard_minutes) * 60,
     )
   except Exception:
     log.exception("strategy match blocked: news guard unavailable")
@@ -5132,8 +5136,12 @@ async def _publish_trade_plan_v7(
     actionable_entries=room_entries,
     atr=execution_match.atr,
     pip_size=units.pip_size(symbol),
-    barrier_buffer_atr=float(settings.auto_trade_opposing_barrier_atr),
-    min_capped_target_pips=float(settings.auto_trade_min_capped_target_pips),
+    barrier_buffer_atr=float(
+      runtime_config.actionability.target_room.barrier_buffer_atr
+    ),
+    min_capped_target_pips=float(
+      runtime_config.actionability.target_room.minimum_capped_target_pips
+    ),
     execution_cost_pips=float(settings.auto_trade_execution_cost_pips),
     displacement_state=displacement_state,
   )
@@ -5226,7 +5234,7 @@ async def _publish_trade_plan_v7(
     match_for_plan.target_price,
     match_for_plan.atr,
     htf_zones or [], htf_levels or [],
-    settings.auto_trade_opposing_barrier_atr,
+    runtime_config.actionability.target_room.barrier_buffer_atr,
     source=source,
     guard_mode=guard_mode,
   )
@@ -5615,7 +5623,9 @@ async def _publish_trend_candidate(
     or trend_decision.atr is None
     or trend_decision.structure_swing is None
     or not trend_decision.targets_pips
-    or trend_decision.confluence < max(1, settings.auto_trade_min_confluence)
+    or trend_decision.confluence < max(
+      1, runtime_config.actionability.gates.min_confluence,
+    )
   ):
     return None
 
@@ -5685,7 +5695,7 @@ async def _publish_trend_candidate(
     return None
 
   guard_mode = resolve_guard_mode(settings)
-  if settings.auto_trade_htf_veto_enabled:
+  if runtime_config.actionability.gates.htf_veto_enabled:
     veto_reason = _htf_veto_reason(
       trend_decision.direction, entry_reference, opposing_zone,
     )
@@ -5713,7 +5723,7 @@ async def _publish_trend_candidate(
         return None
   trend_m1 = (frames or {}).get("M1") if frames is not None else None
   if (
-    settings.auto_trade_opposing_barrier_veto_enabled
+    runtime_config.actionability.gates.opposing_barrier_veto_enabled
     or guard_mode == GUARD_MODE_OBSERVE
   ):
     source = _structural_source_identity(
@@ -5727,7 +5737,7 @@ async def _publish_trend_candidate(
     barrier_outcome = _opposing_barrier_decision(
       trend_decision.direction, entry_reference, None, trend_decision.atr,
       htf_zones or [], htf_levels or [],
-      settings.auto_trade_opposing_barrier_atr,
+      runtime_config.actionability.target_room.barrier_buffer_atr,
       source=source,
       guard_mode=guard_mode,
     )
@@ -5774,7 +5784,7 @@ async def _publish_trend_candidate(
       await _record_gate_reject(client, symbol, "zone_cooldown")
       return None
   if (
-    settings.auto_trade_overlap_veto_enabled
+    runtime_config.actionability.overlapping_zones.veto_enabled
     or guard_mode == GUARD_MODE_OBSERVE
   ):
     overlap_outcome = _resolve_overlap_thesis(
@@ -5803,7 +5813,7 @@ async def _publish_trend_candidate(
   try:
     guarded = await event_in_window(
       now,
-      max(0, settings.auto_trade_news_guard_minutes) * 60,
+      max(0, runtime_config.actionability.gates.news_guard_minutes) * 60,
     )
   except Exception:
     log.exception("auto-trend candidate blocked: news guard unavailable")
@@ -6888,7 +6898,7 @@ async def _common_preflight(
     zone_id=str(getattr(subject, "zone_id", "") or "") or None,
     level_id=str(getattr(subject, "level_id", "") or "") or None,
   )
-  if settings.auto_trade_htf_veto_enabled:
+  if runtime_config.actionability.gates.htf_veto_enabled:
     opposing_zone = _nearest_directional_zone(
       direction,
       spot.price,
@@ -6916,7 +6926,7 @@ async def _common_preflight(
         )
       warnings.append("htf_veto")
   if (
-    settings.auto_trade_opposing_barrier_veto_enabled
+    runtime_config.actionability.gates.opposing_barrier_veto_enabled
     or guard_mode == GUARD_MODE_OBSERVE
   ):
     barrier = _opposing_barrier_decision(
@@ -6926,7 +6936,7 @@ async def _common_preflight(
       atr,
       htf_zones,
       htf_levels,
-      settings.auto_trade_opposing_barrier_atr,
+      runtime_config.actionability.target_room.barrier_buffer_atr,
       source=source,
       guard_mode=guard_mode,
     )
@@ -6974,7 +6984,7 @@ async def _common_preflight(
       )
     warnings.append("zone_cooldown")
   if (
-    settings.auto_trade_overlap_veto_enabled
+    runtime_config.actionability.overlapping_zones.veto_enabled
     or guard_mode == GUARD_MODE_OBSERVE
   ):
     overlap = _resolve_overlap_thesis(
@@ -7076,7 +7086,7 @@ async def _common_preflight(
   try:
     guarded = await event_in_window(
       now,
-      max(0, settings.auto_trade_news_guard_minutes) * 60,
+      max(0, runtime_config.actionability.gates.news_guard_minutes) * 60,
     )
   except Exception:
     return _preflight_decision(
@@ -7314,7 +7324,7 @@ async def _preflight_strategy_intent(
         },
         subject=match,
       )
-  if match.confluence < max(1, settings.auto_trade_min_confluence):
+  if match.confluence < max(1, runtime_config.actionability.gates.min_confluence):
     return _preflight_decision(
       intent,
       executable=False,
@@ -7625,7 +7635,7 @@ async def _handle_event(
   )
   guard_market_map = (
     cached_market_map
-    if settings.auto_trade_market_map_guard_enabled
+    if runtime_config.actionability.gates.market_map_guard_enabled
     else None
   )
   displayed_market_map = decode_market_map(
@@ -7938,7 +7948,7 @@ async def _handle_event(
               _eq_exclusion_reason(
                 decision.box,
                 spot.price,
-                settings.auto_trade_eq_exclusion_fraction,
+                runtime_config.actionability.gates.eq_exclusion_fraction,
               ),
             ),
             (
@@ -7947,7 +7957,7 @@ async def _handle_event(
                 decision.rail,
                 spot.price,
                 scale_context.atr,
-                settings.auto_trade_edge_proximity_atr,
+                runtime_config.actionability.gates.edge_proximity_atr,
               ),
             ),
           ):
@@ -7985,7 +7995,7 @@ async def _handle_event(
   }
   arbitration = arbitrate_preflight_decisions(
     preflight_decisions,
-    conflict_margin=settings.scanner_conflict_margin,
+    conflict_margin=runtime_config.actionability.scanner_gates.conflict_margin,
   )
   for preflight in preflight_decisions:
     intent = preflight.intent

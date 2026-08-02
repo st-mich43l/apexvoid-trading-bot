@@ -877,7 +877,7 @@ async def _sync_strategy_match(
           "spot_price": tracked.current_price,
           "entry_low": tracked.entry_low,
           "entry_high": tracked.entry_high,
-          "guard_mode": settings.auto_trade_structural_guard_mode,
+          "guard_mode": runtime_config.actionability.structural_guard.guard_mode,
         },
         retained=True,
         publish_status=False,
@@ -893,7 +893,7 @@ async def _sync_strategy_match(
           "spot_price": tracked.current_price,
           "entry_low": tracked.entry_low,
           "entry_high": tracked.entry_high,
-          "guard_mode": settings.auto_trade_structural_guard_mode,
+          "guard_mode": runtime_config.actionability.structural_guard.guard_mode,
         },
         retained=True,
         publish_status=False,
@@ -1662,7 +1662,10 @@ def _merge_detection_confluence(
     first_index = min(index for index, _result in group)
     consumed.update(index for index, _result in group)
     band_kind = classify_band_kind(representative.structural_source)
-    if settings.scanner_zone_width_gate_enabled and band_kind == BandKind.STRUCTURAL_ZONE:
+    if (
+      runtime_config.actionability.scanner_gates.zone_width_gate_enabled
+      and band_kind == BandKind.STRUCTURAL_ZONE
+    ):
       raw_low = representative.structural_low
       raw_high = representative.structural_high
       if raw_low is None or raw_high is None:
@@ -1889,13 +1892,15 @@ def _structure_card_gate(
   ctx: DetectionContext,
 ) -> str | None:
   if (
-    settings.scanner_gate_require_structural_anchor
+    runtime_config.actionability.structural_anchor.required
     and (result.structural_kind or "").casefold() == "round"
     and not any(_STRUCTURAL_REASON_RE.search(reason) for reason in result.reasons)
   ):
     return "round_without_structural_anchor"
 
-  maximum_touches = int(settings.scanner_gate_max_source_touches)
+  maximum_touches = int(
+    runtime_config.actionability.structural_anchor.maximum_source_touches
+  )
   if (
     maximum_touches > 0
     and int(result.source_touches or 0) >= maximum_touches
@@ -1907,7 +1912,7 @@ def _structure_card_gate(
     for value in (result.mode, result.bias_relationship)
   )
   if (
-    settings.scanner_gate_suppress_counter_bias_in_range
+    runtime_config.actionability.counter_bias.suppress_in_range
     and counter_bias
   ):
     structures = getattr(ctx, "structures", None)
@@ -1924,7 +1929,7 @@ def _structure_card_gate(
       or str(getattr(regime, "kind", "")).casefold() == "chop"
     )
     minimum_confluence = int(
-      settings.scanner_gate_counter_bias_min_confluence
+      runtime_config.actionability.counter_bias.minimum_confluence
     )
     if (
       fading_edge
@@ -2775,7 +2780,7 @@ async def _handle_event(
       await client.hset(
         f"auto_trade:zone_reconcile:{symbol.upper()}",
         mapping={
-          "mode": settings.auto_trade_zone_reconcile_mode,
+          "mode": runtime_config.actionability.zone_reconciliation.mode,
           "zones_input": getattr(
             exec_analysis, "zone_reconcile_input", 0,
           ),

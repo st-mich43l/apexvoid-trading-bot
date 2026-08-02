@@ -314,7 +314,7 @@ def python_manifest() -> dict[str, Any]:
     "range_enabled": runtime_config.strategies.range_reversion.enabled,
     "mapped_zone_enabled": runtime_config.strategies.mapped_zone.enabled,
     "market_map_guard_enabled": (
-      settings.auto_trade_market_map_guard_enabled
+      runtime_config.actionability.gates.market_map_guard_enabled
     ),
     "map_thesis_lock_enabled": settings.auto_trade_map_thesis_lock_enabled,
     "strategy_match_enabled": settings.auto_trade_strategy_match_enabled,
@@ -330,8 +330,8 @@ def python_manifest() -> dict[str, Any]:
     "liquidity_reversal_enabled": (
       runtime_config.strategies.reaction.liquidity_reversal.enabled
     ),
-    "allow_counter_bias": settings.auto_trade_allow_counter_bias,
-    "min_confluence": settings.auto_trade_min_confluence,
+    "allow_counter_bias": runtime_config.actionability.counter_bias.allowed,
+    "min_confluence": runtime_config.actionability.gates.min_confluence,
     "account_mode": "demo"
     if settings.auto_trade_require_demo_account else "live",
     "require_demo_account": settings.auto_trade_require_demo_account,
@@ -340,9 +340,11 @@ def python_manifest() -> dict[str, Any]:
     "non_hedged_opposite_policy": (
       settings.auto_trade_non_hedged_opposite_policy
     ),
-    "structural_guard_mode": settings.auto_trade_structural_guard_mode,
+    "structural_guard_mode": (
+      runtime_config.actionability.structural_guard.guard_mode
+    ),
     "zone_cooldown_enabled": settings.auto_trade_zone_cooldown_enabled,
-    "zone_reconcile_mode": settings.auto_trade_zone_reconcile_mode,
+    "zone_reconcile_mode": runtime_config.actionability.zone_reconciliation.mode,
     "range_box_scale_out_enabled": (
       runtime_config.strategies.range_reversion.box_scale_out_enabled
     ),
