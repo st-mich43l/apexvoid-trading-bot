@@ -1602,8 +1602,8 @@ def _merge_detection_confluence(
     atr=atr,
     pip_size=_pip_size(symbol),
     source_tf=tf,
-    max_width=float(settings.zone_merge_max_width),
-    gap=float(settings.zone_merge_gap),
+    max_width=float(runtime_config.analysis.zones.merge_max_width),
+    gap=float(runtime_config.analysis.zones.confluence.merge_gap_price),
   )
   merged_by_index: list[tuple[int, DetectionResult]] = []
   consumed: set[int] = set()
@@ -1973,7 +1973,9 @@ def _suppress_overlaps(
   ordered = sorted(results, key=_result_rank)
   selected: list[DetectionResult] = []
   conflicts: list[dict[str, Any]] = []
-  same_threshold = max(0.0, settings.alert_overlap_suppress)
+  same_threshold = max(
+    0.0, runtime_config.analysis.measurements.alert_overlap_suppress,
+  )
   for result in ordered:
     same_direction_duplicate = any(
       result.direction == kept.direction
@@ -2156,7 +2158,7 @@ async def _notify_digest_once(
     band_claimed = await client.set(
       band_key,
       "1",
-      ex=settings.zone_alert_ttl,
+      ex=runtime_config.analysis.zones.alert_ttl,
       nx=True,
     )
     if not band_claimed:

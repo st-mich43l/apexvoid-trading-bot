@@ -144,7 +144,9 @@ async def _market_map_scan_tick(now: datetime | None = None) -> bool:
   now = now.astimezone(timezone.utc) if now else datetime.now(timezone.utc)
   if _xau_weekend_closed(now):
     return False
-  scan_key = _scan_bucket_key(now, settings.map_scan_interval_minutes)
+  scan_key = _scan_bucket_key(
+    now, runtime_config.analysis.market_map.scan_interval_minutes,
+  )
   if await get_meta(_META_SCAN_KEY) == scan_key:
     return False
 
@@ -160,7 +162,7 @@ async def _market_map_scan_tick(now: datetime | None = None) -> bool:
     if not map_materially_changed(
       previous,
       market_map,
-      settings.map_change_min,
+      runtime_config.analysis.market_map.change_min,
     ):
       if previous is not None:
         await _remember_displayed_map(symbol, previous)
@@ -252,7 +254,7 @@ async def _remember_displayed_map(
 ) -> None:
   ttl = max(
     3600,
-    max(1, int(settings.map_scan_interval_minutes)) * 120,
+    max(1, int(runtime_config.analysis.market_map.scan_interval_minutes)) * 120,
   )
   await redis_state.get_client().set(
     market_map_display_key(symbol),

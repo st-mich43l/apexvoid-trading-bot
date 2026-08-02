@@ -735,7 +735,7 @@ async def _resolve_worker_range(
   m1 = frames.get(EXECUTION_TIMEFRAME)
   atr = 0.0
   if m1 is not None and not m1.empty:
-    series = atr_series(m1, max(2, settings.atr_length))
+    series = atr_series(m1, max(2, runtime_config.analysis.atr.length))
     if not series.empty:
       atr = float(series.iloc[-1])
   scanner_raw = await client.get(range_context_source_key(symbol, "scanner"))
@@ -4354,8 +4354,8 @@ def _resolve_match_confluence_claim_id(
     atr=match.atr,
     pip_size=units.pip_size(symbol),
     source_tf=match.source_tf,
-    max_width=float(getattr(settings, "zone_merge_max_width", 6.0)),
-    gap=float(getattr(settings, "zone_merge_gap", 1.0)),
+    max_width=float(runtime_config.analysis.zones.merge_max_width),
+    gap=float(runtime_config.analysis.zones.confluence.merge_gap_price),
     candidate_id=match.match_id,
   )
 
@@ -6095,7 +6095,10 @@ async def _maybe_flag_regime_alert(
   """
   if not shares:
     return
-  threshold = max(0.0, min(1.0, float(settings.regime_chop_alert_share)))
+  threshold = max(
+    0.0,
+    min(1.0, float(runtime_config.analysis.measurements.regime_chop_alert_share)),
+  )
   chop_share = shares.get("chop", 0.0)
   if chop_share <= threshold:
     return
@@ -7590,7 +7593,7 @@ async def _handle_event(
     if m1 is None:
       m1 = frames.get("M1")
     if m1 is not None and len(m1) >= 15:
-      atr_series = atr_indicator(m1, int(getattr(settings, "atr_length", 14)))
+      atr_series = atr_indicator(m1, int(runtime_config.analysis.atr.length))
       atr_for_rearm = float(atr_series.iloc[-1])
       if math.isfinite(atr_for_rearm) and atr_for_rearm > 0:
         await _advance_mapped_thesis_rearms(
