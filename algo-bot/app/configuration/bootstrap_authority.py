@@ -36,4 +36,3 @@ def resolve_runtime_configuration_authority(
 def runtime_configuration_authority() -> RuntimeConfigurationAuthority:
   """Thin process-startup adapter over the pure authority parser."""
   return resolve_runtime_configuration_authority(os.environ)
-

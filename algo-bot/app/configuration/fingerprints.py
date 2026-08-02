@@ -18,4 +18,3 @@ def catalog_fingerprint() -> str:
     + "\n"
   ).encode("utf-8")
   return sha256(payload).hexdigest()
-

@@ -34,4 +34,3 @@ def load_python_runtime_source_bundle(
     # precedence and future reviewed adoption.
     file_secret_values={},
   )
-

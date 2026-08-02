@@ -81,4 +81,3 @@ PythonRuntimeConfig = cast(
 PythonRuntimeConfig.__doc__ = (
   "Frozen canonical root containing Python-owned and shared fields only."
 )
-

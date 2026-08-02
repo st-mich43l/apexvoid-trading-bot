@@ -31,6 +31,12 @@ dated section after deployment.
   inside the still-healthy feed session instead of leaving execution stopped.
 
 ### Added
+- Selectable canonical Python configuration authority behind the restart-only
+  `APEXVOID_CONFIG_AUTHORITY` loader control. The default remains `legacy`;
+  explicit `canonical` validates a frozen 387-leaf Python/shared projection,
+  exposes the existing 316-field/four-property facade, excludes 50
+  cTrader-only fields, fails closed, emits secret-safe startup diagnostics,
+  and supports deterministic restart rollback.
 - Non-authoritative Phase 2D1 configuration activation rehearsal: an
   AST-backed legacy `Settings` usage inventory, generated immutable Python
   access map, read-only 316-field/four-property canonical facade, local-only
