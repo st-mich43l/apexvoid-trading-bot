@@ -17,6 +17,7 @@ from app.configuration.generated.legacy_access import (
 from app.configuration.python_loader import load_python_canonical_settings
 from app.configuration.python_sources import load_python_runtime_source_bundle
 from app.configuration.fingerprints import catalog_fingerprint
+from app.configuration.legacy_canonical_view import LegacyCanonicalConfigView
 
 
 class Settings(BaseSettings):
@@ -1108,6 +1109,7 @@ class Settings(BaseSettings):
 class _ActiveConfiguration:
   authority: RuntimeConfigurationAuthority
   settings: object
+  runtime_config: object
   catalog_fingerprint: str
   profile: str | None
 
@@ -1120,6 +1122,7 @@ def _build_active_configuration(
     return _ActiveConfiguration(
       authority=authority,
       settings=legacy,
+      runtime_config=LegacyCanonicalConfigView(legacy),
       catalog_fingerprint=catalog_fingerprint(),
       profile=legacy.auto_trade_profile,
     )
@@ -1128,6 +1131,7 @@ def _build_active_configuration(
   return _ActiveConfiguration(
     authority=authority,
     settings=result.facade,
+    runtime_config=result.config,
     catalog_fingerprint=result.catalog_fingerprint,
     profile=result.profile,
   )
@@ -1142,6 +1146,7 @@ _ACTIVE_CONFIGURATION = _build_active_configuration(
   runtime_configuration_authority()
 )
 settings = _ACTIVE_CONFIGURATION.settings
+runtime_config = _ACTIVE_CONFIGURATION.runtime_config
 
 
 def active_configuration_authority() -> RuntimeConfigurationAuthority:
