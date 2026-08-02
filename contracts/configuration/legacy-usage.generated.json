@@ -4615,7 +4615,7 @@
     "method_calls": [],
     "type_dependencies": []
   },
-  "source_fingerprint": "74627aa68da4ed4c5af3d7ffe858b72882a10c94aead816cb0b85f4493b4c25c",
+  "source_fingerprint": "ed738451b89e9f330d62e03001c301fa9c613b3bb128d16d9d9f168666bcfa1b",
   "tests": {
     "attribute_deletions": [],
     "attribute_reads": [
@@ -5106,6 +5106,46 @@
         "line": 115,
         "operation": "settings_class_attribute",
         "path": "algo-bot/tests/config_characterization.py"
+      },
+      {
+        "attribute": null,
+        "classification": "test_only_adaptation",
+        "column": 9,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 34,
+        "operation": "pass_settings",
+        "path": "algo-bot/tests/test_config_activation_readiness.py"
+      },
+      {
+        "attribute": null,
+        "classification": "test_only_adaptation",
+        "column": 11,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 62,
+        "operation": "pass_settings",
+        "path": "algo-bot/tests/test_config_authority.py"
+      },
+      {
+        "attribute": null,
+        "classification": "test_only_adaptation",
+        "column": 11,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 73,
+        "operation": "pass_settings",
+        "path": "algo-bot/tests/test_config_authority.py"
+      },
+      {
+        "attribute": null,
+        "classification": "test_only_adaptation",
+        "column": 11,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 85,
+        "operation": "pass_settings",
+        "path": "algo-bot/tests/test_config_authority.py"
       },
       {
         "attribute": null,
