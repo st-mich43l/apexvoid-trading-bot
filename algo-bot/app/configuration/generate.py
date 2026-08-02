@@ -23,6 +23,7 @@ from app.configuration.models.python_runtime import PythonRuntimeConfig
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 CATALOG_VERSION = 1
 SOURCE_MODEL = "app.configuration.models.root.ApexVoidConfig"
+PHASE_2E_ROOTS = frozenset({"bootstrap", "delivery", "market_data"})
 
 
 def _json_bytes(value: Any) -> bytes:
@@ -248,6 +249,154 @@ def _python_projection_artifact(
   }
 
 
+def _consumer_migration_artifact(
+  entries: tuple[CatalogEntry, ...],
+  fingerprint: str,
+  usage: dict[str, object],
+) -> dict[str, Any]:
+  """Render the Phase 2E operational-read migration ledger from AST facts."""
+  direct_paths = {
+    entry.legacy_attr: entry.path
+    for entry in entries
+    if entry.legacy_attr is not None
+  }
+  reverse_paths = {path: attribute for attribute, path in direct_paths.items()}
+  derived_paths = {
+    item.property_name: item.source_path
+    for item in DERIVED_LEGACY_PROPERTIES
+  }
+  rows: list[dict[str, Any]] = []
+
+  def add_row(
+    item: dict[str, Any],
+    *,
+    legacy_attribute: str | None,
+    canonical_path: str | None,
+    classification: str,
+    status: str,
+    support: bool,
+    reason: str | None,
+  ) -> None:
+    parts = canonical_path.split(".") if canonical_path else []
+    rows.append({
+      "file": item["path"],
+      "line": item["line"],
+      "legacy_attribute": legacy_attribute,
+      "canonical_path": canonical_path,
+      "root_domain": parts[0] if parts else None,
+      "subdomain": parts[1] if len(parts) > 1 else None,
+      "migration_classification": classification,
+      "migration_status": status,
+      "authority_neutral_support": support,
+      "deferred_reason": reason,
+    })
+
+  production = usage["production"]
+  for item in production["canonical_reads"]:
+    path = item["canonical_path"]
+    root = path.split(".", 1)[0]
+    legacy_attribute = reverse_paths.get(path)
+    if root in PHASE_2E_ROOTS and legacy_attribute is not None:
+      add_row(
+        item,
+        legacy_attribute=legacy_attribute,
+        canonical_path=path,
+        classification="PHASE_2E_MIGRATE",
+        status="migrated",
+        support=True,
+        reason=None,
+      )
+    else:
+      add_row(
+        item,
+        legacy_attribute=legacy_attribute,
+        canonical_path=path,
+        classification="UNKNOWN_BLOCKER",
+        status="blocked",
+        support=False,
+        reason="canonical production read is outside the supported Phase 2E policy",
+      )
+
+  def add_legacy_read(item: dict[str, Any], attribute: str) -> None:
+    path = direct_paths.get(attribute)
+    if path is not None:
+      root = path.split(".", 1)[0]
+      if root in PHASE_2E_ROOTS:
+        add_row(
+          item,
+          legacy_attribute=attribute,
+          canonical_path=path,
+          classification="PHASE_2E_MIGRATE",
+          status="pending",
+          support=True,
+          reason=None,
+        )
+      else:
+        add_row(
+          item,
+          legacy_attribute=attribute,
+          canonical_path=path,
+          classification="PHASE_2F_DEFER",
+          status="deferred",
+          support=True,
+          reason=f"canonical root {root} is outside Phase 2E scope",
+        )
+      return
+    derived_path = derived_paths.get(attribute)
+    add_row(
+      item,
+      legacy_attribute=attribute,
+      canonical_path=derived_path,
+      classification="NON_LEGACY_CANONICAL_DEFER",
+      status="deferred",
+      support=False,
+      reason=(
+        "legacy property is derived rather than directly owned"
+        if derived_path else
+        "optional compatibility attribute has no typed-catalog canonical path"
+      ),
+    )
+
+  for item in production["attribute_reads"]:
+    add_legacy_read(item, item["attribute"])
+  for item in production["introspection"]:
+    names = item["dynamic_names"] or (
+      [item["attribute"]] if item["attribute"] is not None else []
+    )
+    for attribute in names:
+      add_legacy_read(item, attribute)
+
+  rows.sort(key=lambda item: (
+    item["file"],
+    item["line"],
+    item["legacy_attribute"] or "",
+    item["canonical_path"] or "",
+  ))
+  migrated = sum(item["migration_status"] == "migrated" for item in rows)
+  eligible_remaining = sum(
+    item["migration_classification"] == "PHASE_2E_MIGRATE"
+    and item["migration_status"] != "migrated"
+    for item in rows
+  )
+  deferred = sum(item["migration_status"] == "deferred" for item in rows)
+  unknown = sum(
+    item["migration_classification"] == "UNKNOWN_BLOCKER" for item in rows
+  )
+  return {
+    **_header(fingerprint),
+    "phase": "2E",
+    "candidate_roots": sorted(PHASE_2E_ROOTS),
+    "counts": {
+      "eligible_production_reads_before": migrated + eligible_remaining,
+      "migrated_reads": migrated,
+      "eligible_reads_remaining": eligible_remaining,
+      "deferred_reads": deferred,
+      "unknown_blockers": unknown,
+    },
+    "reads": rows,
+  }
+
+
 def _markdown(
   entries: tuple[CatalogEntry, ...],
   fingerprint: str,
@@ -410,6 +559,7 @@ def _legacy_access_python(
 def render_artifacts() -> dict[Path, bytes]:
   entries = iter_catalog_entries()
   fingerprint = _fingerprint(entries)
+  usage = audit_legacy_settings_usage(REPOSITORY_ROOT)
   return {
     Path("contracts/configuration/config-catalog.generated.json"):
       _json_bytes(_catalog_artifact(entries, fingerprint)),
@@ -428,7 +578,9 @@ def render_artifacts() -> dict[Path, bytes]:
     Path("docs/configuration/config-catalog.generated.md"):
       _markdown(entries, fingerprint),
     Path("contracts/configuration/legacy-usage.generated.json"):
-      _json_bytes(audit_legacy_settings_usage(REPOSITORY_ROOT)),
+      _json_bytes(usage),
+    Path("contracts/configuration/consumer-migration-phase-2e.generated.json"):
+      _json_bytes(_consumer_migration_artifact(entries, fingerprint, usage)),
     Path("algo-bot/app/configuration/generated/__init__.py"):
       _generated_package_init(),
     Path("algo-bot/app/configuration/generated/legacy_access.py"):

@@ -3,7 +3,7 @@
 import time
 from html import escape
 
-from app.core.config import runtime_config
+from app.core.config import runtime_config, settings
 from app.persistence.store import (
   cancel_manual_signal,
   close_leg,
