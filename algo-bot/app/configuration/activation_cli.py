@@ -36,11 +36,10 @@ def _legacy_settings(
   # offline CLI only, expose explicitly supplied dotenv values during import.
   with patch.dict(os.environ, dotenv_environment, clear=False):
     from app.core import config as active_config
-    from app.core.config import Settings
   values: dict[str, object] = {"_env_file": env_file}
   if profile is not None:
     values["auto_trade_profile"] = profile
-  return Settings(**values), active_config.settings
+  return active_config.Settings(**values), active_config.settings
 
 
 def _report(result, *, csharp_status: str) -> dict[str, Any]:

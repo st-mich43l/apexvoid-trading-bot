@@ -4590,7 +4590,7 @@
         "column": 9,
         "detail": "local legacy Settings construction",
         "dynamic_names": [],
-        "line": 43,
+        "line": 42,
         "operation": "construct_settings",
         "path": "algo-bot/app/configuration/activation_cli.py"
       }
@@ -4625,7 +4625,7 @@
     "method_calls": [],
     "type_dependencies": []
   },
-  "source_fingerprint": "0b89428b804961fe2787610232c26ba3b083bad5e18fbd5acbf265f622da0e84",
+  "source_fingerprint": "012f42ec3aaf21d736f8073d8d798481c7ab0e3a55e33b569097f0919fb820f6",
   "tests": {
     "attribute_deletions": [],
     "attribute_reads": [
@@ -5116,6 +5116,26 @@
         "line": 115,
         "operation": "settings_class_attribute",
         "path": "algo-bot/tests/config_characterization.py"
+      },
+      {
+        "attribute": null,
+        "classification": "test_only_adaptation",
+        "column": 9,
+        "detail": "isinstance on Settings",
+        "dynamic_names": [],
+        "line": 57,
+        "operation": "isinstance",
+        "path": "algo-bot/tests/test_config_activation_architecture.py"
+      },
+      {
+        "attribute": null,
+        "classification": "test_only_adaptation",
+        "column": 9,
+        "detail": "type on Settings",
+        "dynamic_names": [],
+        "line": 58,
+        "operation": "type",
+        "path": "algo-bot/tests/test_config_activation_architecture.py"
       },
       {
         "attribute": null,

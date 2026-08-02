@@ -132,8 +132,7 @@ class _FileAuditor(ast.NodeVisitor):
           if isinstance(target, ast.Name):
             if self._is_settings_ref(value) or (
               isinstance(value, ast.Call)
-              and isinstance(value.func, ast.Name)
-              and value.func.id in self.settings_classes
+              and self._is_settings_constructor(value.func)
             ):
               self.settings_names.add(target.id)
             if domain:
@@ -205,6 +204,16 @@ class _FileAuditor(ast.NodeVisitor):
       ):
         return True
     return False
+
+  def _is_settings_constructor(self, node: ast.AST) -> bool:
+    if isinstance(node, ast.Name):
+      return node.id in self.settings_classes
+    return (
+      isinstance(node, ast.Attribute)
+      and node.attr == "Settings"
+      and isinstance(node.value, ast.Name)
+      and node.value.id in self.config_modules
+    )
 
   def _is_settings_annotation(self, node: ast.AST | None) -> bool:
     if isinstance(node, ast.Name):
@@ -311,7 +320,7 @@ class _FileAuditor(ast.NodeVisitor):
 
   def visit_Call(self, node: ast.Call) -> None:
     function_name = node.func.id if isinstance(node.func, ast.Name) else None
-    if function_name in self.settings_classes:
+    if self._is_settings_constructor(node.func):
       self._add(
         "type_dependencies", node, operation="construct_settings",
         attribute=None, supported=False,
