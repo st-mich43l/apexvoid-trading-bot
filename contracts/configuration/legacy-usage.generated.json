@@ -1,0 +1,5572 @@
+{
+  "activation_blockers": [],
+  "production": {
+    "attribute_deletions": [],
+    "attribute_reads": [
+      {
+        "attribute": "xau_zone_min_width_price",
+        "classification": "facade_supported",
+        "column": 44,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 131,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/analysis/confluence_zone.py"
+      },
+      {
+        "attribute": "xau_major_zone_max_width_price",
+        "classification": "facade_supported",
+        "column": 11,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 137,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/analysis/confluence_zone.py"
+      },
+      {
+        "attribute": "xau_zone_preferred_max_width_price",
+        "classification": "facade_supported",
+        "column": 11,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 143,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/analysis/confluence_zone.py"
+      },
+      {
+        "attribute": "scanner_exec_tf",
+        "classification": "facade_supported",
+        "column": 32,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 79,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/analysis/market_map_delivery.py"
+      },
+      {
+        "attribute": "seq_reset_tz",
+        "classification": "facade_supported",
+        "column": 22,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 99,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/analysis/market_map_delivery.py"
+      },
+      {
+        "attribute": "telegram_owner_id",
+        "classification": "facade_supported",
+        "column": 9,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 108,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/analysis/market_map_delivery.py"
+      },
+      {
+        "attribute": "seq_reset_tz",
+        "classification": "facade_supported",
+        "column": 22,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 113,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/analysis/market_map_delivery.py"
+      },
+      {
+        "attribute": "map_session_send",
+        "classification": "facade_supported",
+        "column": 9,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 137,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/analysis/market_map_delivery.py"
+      },
+      {
+        "attribute": "telegram_owner_id",
+        "classification": "facade_supported",
+        "column": 42,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 137,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/analysis/market_map_delivery.py"
+      },
+      {
+        "attribute": "map_scan_interval_minutes",
+        "classification": "facade_supported",
+        "column": 35,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 142,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/analysis/market_map_delivery.py"
+      },
+      {
+        "attribute": "map_change_min",
+        "classification": "facade_supported",
+        "column": 6,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 158,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/analysis/market_map_delivery.py"
+      },
+      {
+        "attribute": "seq_reset_tz",
+        "classification": "facade_supported",
+        "column": 42,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 163,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/analysis/market_map_delivery.py"
+      },
+      {
+        "attribute": "map_session_send",
+        "classification": "facade_supported",
+        "column": 9,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 176,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/analysis/market_map_delivery.py"
+      },
+      {
+        "attribute": "telegram_owner_id",
+        "classification": "facade_supported",
+        "column": 16,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 191,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/analysis/market_map_delivery.py"
+      },
+      {
+        "attribute": "map_scan_interval_minutes",
+        "classification": "facade_supported",
+        "column": 15,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 248,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/analysis/market_map_delivery.py"
+      },
+      {
+        "attribute": "scanner_symbols",
+        "classification": "facade_supported",
+        "column": 16,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 270,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/analysis/market_map_delivery.py"
+      },
+      {
+        "attribute": "scanner_window",
+        "classification": "facade_supported",
+        "column": 57,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 37,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/analysis/ohlc_source.py"
+      },
+      {
+        "attribute": "scanner_symbols",
+        "classification": "facade_supported",
+        "column": 18,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 148,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/analysis/scanner.py"
+      },
+      {
+        "attribute": "scanner_htf",
+        "classification": "facade_supported",
+        "column": 14,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 152,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/analysis/scanner.py"
+      },
+      {
+        "attribute": "scanner_level_bucket",
+        "classification": "facade_supported",
+        "column": 4,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 212,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/analysis/scanner.py"
+      },
+      {
+        "attribute": "scanner_level_bucket",
+        "classification": "facade_supported",
+        "column": 6,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 234,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/analysis/scanner.py"
+      },
+      {
+        "attribute": "scanner_level_bucket",
+        "classification": "facade_supported",
+        "column": 4,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 244,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/analysis/scanner.py"
+      },
+      {
+        "attribute": "auto_trade_tp_pips",
+        "classification": "facade_supported",
+        "column": 16,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 255,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/analysis/scanner.py"
+      },
+      {
+        "attribute": "auto_trade_strategy_match_max_age_seconds",
+        "classification": "facade_supported",
+        "column": 20,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 327,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/analysis/scanner.py"
+      },
+      {
+        "attribute": "auto_trade_strategy_match_enabled",
+        "classification": "facade_supported",
+        "column": 9,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 720,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/analysis/scanner.py"
+      },
+      {
+        "attribute": "auto_trade_multi_match_enabled",
+        "classification": "facade_supported",
+        "column": 11,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 740,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/analysis/scanner.py"
+      },
+      {
+        "attribute": "auto_trade_multi_match_enabled",
+        "classification": "facade_supported",
+        "column": 7,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 763,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/analysis/scanner.py"
+      },
+      {
+        "attribute": "auto_trade_track_all_structural_matches",
+        "classification": "facade_supported",
+        "column": 9,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 799,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/analysis/scanner.py"
+      },
+      {
+        "attribute": "auto_trade_direct_publish_enabled",
+        "classification": "facade_supported",
+        "column": 9,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 825,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/analysis/scanner.py"
+      },
+      {
+        "attribute": "auto_trade_structural_guard_mode",
+        "classification": "facade_supported",
+        "column": 24,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 880,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/analysis/scanner.py"
+      },
+      {
+        "attribute": "auto_trade_structural_guard_mode",
+        "classification": "facade_supported",
+        "column": 24,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 896,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/analysis/scanner.py"
+      },
+      {
+        "attribute": "scanner_level_bucket",
+        "classification": "facade_supported",
+        "column": 4,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 958,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/analysis/scanner.py"
+      },
+      {
+        "attribute": "auto_trade_enabled",
+        "classification": "facade_supported",
+        "column": 4,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 1273,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/analysis/scanner.py"
+      },
+      {
+        "attribute": "auto_trade_enabled",
+        "classification": "facade_supported",
+        "column": 9,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 1297,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/analysis/scanner.py"
+      },
+      {
+        "attribute": "spot_fresh_secs",
+        "classification": "facade_supported",
+        "column": 29,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 1486,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/analysis/scanner.py"
+      },
+      {
+        "attribute": "spot_max_deviation_pct",
+        "classification": "facade_supported",
+        "column": 18,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 1514,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/analysis/scanner.py"
+      },
+      {
+        "attribute": "spot_max_deviation_pct",
+        "classification": "facade_supported",
+        "column": 6,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 1528,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/analysis/scanner.py"
+      },
+      {
+        "attribute": "zone_merge_max_width",
+        "classification": "facade_supported",
+        "column": 20,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 1605,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/analysis/scanner.py"
+      },
+      {
+        "attribute": "zone_merge_gap",
+        "classification": "facade_supported",
+        "column": 14,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 1606,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/analysis/scanner.py"
+      },
+      {
+        "attribute": "scanner_zone_width_gate_enabled",
+        "classification": "facade_supported",
+        "column": 7,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 1665,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/analysis/scanner.py"
+      },
+      {
+        "attribute": "auto_trade_track_all_structural_matches",
+        "classification": "facade_supported",
+        "column": 5,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 1870,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/analysis/scanner.py"
+      },
+      {
+        "attribute": "scanner_top_n",
+        "classification": "facade_supported",
+        "column": 14,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 1883,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/analysis/scanner.py"
+      },
+      {
+        "attribute": "scanner_gate_require_structural_anchor",
+        "classification": "facade_supported",
+        "column": 4,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 1892,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/analysis/scanner.py"
+      },
+      {
+        "attribute": "scanner_gate_max_source_touches",
+        "classification": "facade_supported",
+        "column": 24,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 1898,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/analysis/scanner.py"
+      },
+      {
+        "attribute": "scanner_gate_suppress_counter_bias_in_range",
+        "classification": "facade_supported",
+        "column": 4,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 1910,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/analysis/scanner.py"
+      },
+      {
+        "attribute": "scanner_gate_counter_bias_min_confluence",
+        "classification": "facade_supported",
+        "column": 6,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 1927,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/analysis/scanner.py"
+      },
+      {
+        "attribute": "alert_overlap_suppress",
+        "classification": "facade_supported",
+        "column": 28,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 1976,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/analysis/scanner.py"
+      },
+      {
+        "attribute": "telegram_owner_id",
+        "classification": "facade_supported",
+        "column": 9,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 2053,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/analysis/scanner.py"
+      },
+      {
+        "attribute": "scanner_card_top_n",
+        "classification": "facade_supported",
+        "column": 19,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 2144,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/analysis/scanner.py"
+      },
+      {
+        "attribute": "zone_alert_ttl",
+        "classification": "facade_supported",
+        "column": 9,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 2159,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/analysis/scanner.py"
+      },
+      {
+        "attribute": "scanner_alert_ttl",
+        "classification": "facade_supported",
+        "column": 9,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 2168,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/analysis/scanner.py"
+      },
+      {
+        "attribute": "telegram_owner_id",
+        "classification": "facade_supported",
+        "column": 16,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 2201,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/analysis/scanner.py"
+      },
+      {
+        "attribute": "scanner_exec_tf",
+        "classification": "facade_supported",
+        "column": 24,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 2636,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/analysis/scanner.py"
+      },
+      {
+        "attribute": "scanner_exec_tf",
+        "classification": "facade_supported",
+        "column": 12,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 2681,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/analysis/scanner.py"
+      },
+      {
+        "attribute": "auto_trade_strategy_match_max_age_seconds",
+        "classification": "facade_supported",
+        "column": 10,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 2750,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/analysis/scanner.py"
+      },
+      {
+        "attribute": "auto_trade_zone_reconcile_mode",
+        "classification": "facade_supported",
+        "column": 18,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 2774,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/analysis/scanner.py"
+      },
+      {
+        "attribute": "scanner_enabled",
+        "classification": "facade_supported",
+        "column": 9,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 3111,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/analysis/scanner.py"
+      },
+      {
+        "attribute": "telegram_owner_id",
+        "classification": "facade_supported",
+        "column": 9,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 3114,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/analysis/scanner.py"
+      },
+      {
+        "attribute": "scanner_exec_tf",
+        "classification": "facade_supported",
+        "column": 4,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 3126,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/analysis/scanner.py"
+      },
+      {
+        "attribute": "telegram_owner_id",
+        "classification": "facade_supported",
+        "column": 26,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 3127,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/analysis/scanner.py"
+      },
+      {
+        "attribute": "auto_trade_candidate_ttl",
+        "classification": "facade_supported",
+        "column": 24,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 789,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/candidate_publish.py"
+      },
+      {
+        "attribute": "auto_trade_profile",
+        "classification": "facade_supported",
+        "column": 6,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 199,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "auto_trade_profile",
+        "classification": "facade_supported",
+        "column": 9,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 212,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "redis_url",
+        "classification": "facade_supported",
+        "column": 42,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 244,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "auto_trade_symbols",
+        "classification": "facade_supported",
+        "column": 33,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 245,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "auto_trade_profile",
+        "classification": "facade_supported",
+        "column": 15,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 264,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "auto_trade_enabled",
+        "classification": "facade_supported",
+        "column": 26,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 265,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "auto_trade_dry_run",
+        "classification": "facade_supported",
+        "column": 15,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 266,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "manual_algo_enabled",
+        "classification": "facade_supported",
+        "column": 27,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 267,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "manual_algo_dry_run",
+        "classification": "facade_supported",
+        "column": 27,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 268,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "auto_trade_stream",
+        "classification": "facade_supported",
+        "column": 24,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 271,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "auto_trade_event_stream",
+        "classification": "facade_supported",
+        "column": 20,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 272,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "auto_trade_canonical_symbol",
+        "classification": "facade_supported",
+        "column": 24,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 274,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "auto_trade_xau_pip_size",
+        "classification": "facade_supported",
+        "column": 16,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 275,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "auto_trade_xau_price_digits",
+        "classification": "facade_supported",
+        "column": 20,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 276,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "auto_trade_max_entry_distance_pips",
+        "classification": "facade_supported",
+        "column": 31,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 277,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "auto_trade_entry_contract_tolerance_pips",
+        "classification": "facade_supported",
+        "column": 6,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 279,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "auto_trade_be_buffer_ticks",
+        "classification": "facade_supported",
+        "column": 31,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 281,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "auto_trade_xau_price_digits",
+        "classification": "facade_supported",
+        "column": 43,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 283,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "auto_trade_post_fill_target_fallback",
+        "classification": "facade_supported",
+        "column": 33,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 285,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "auto_trade_contract_size",
+        "classification": "facade_supported",
+        "column": 21,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 288,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "auto_trade_add_stop_buffer_atr",
+        "classification": "facade_supported",
+        "column": 33,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 289,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "auto_trade_add_min_stop_pips",
+        "classification": "facade_supported",
+        "column": 30,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 290,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "auto_trade_sl_distance",
+        "classification": "facade_supported",
+        "column": 34,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 291,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "auto_trade_wick_stop_buffer_atr",
+        "classification": "facade_supported",
+        "column": 28,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 292,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "auto_trade_trend_stop_min_pips",
+        "classification": "facade_supported",
+        "column": 27,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 293,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "auto_trade_trend_stop_max_pips",
+        "classification": "facade_supported",
+        "column": 27,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 294,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "auto_trade_tp_pips",
+        "classification": "facade_supported",
+        "column": 32,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 295,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "auto_trade_range_tp_buffer_pips",
+        "classification": "facade_supported",
+        "column": 23,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 299,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "auto_trade_candidate_ttl",
+        "classification": "facade_supported",
+        "column": 37,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 300,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "auto_trade_candidate_max_age_seconds",
+        "classification": "facade_supported",
+        "column": 6,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 302,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "auto_trade_spot_max_age",
+        "classification": "facade_supported",
+        "column": 28,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 304,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "auto_trade_range_flip_enabled",
+        "classification": "facade_supported",
+        "column": 18,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 305,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "auto_trade_range_two_sided_enabled",
+        "classification": "facade_supported",
+        "column": 23,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 306,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "auto_trade_allow_concurrent_strategies",
+        "classification": "facade_supported",
+        "column": 29,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 307,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "auto_trade_allow_hedged_xau",
+        "classification": "facade_supported",
+        "column": 22,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 308,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "auto_trade_zone_fill_enabled",
+        "classification": "facade_supported",
+        "column": 17,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 310,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "auto_trade_trend_enabled",
+        "classification": "facade_supported",
+        "column": 21,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 311,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "auto_trade_range_enabled",
+        "classification": "facade_supported",
+        "column": 21,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 312,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "auto_trade_mapped_zone_enabled",
+        "classification": "facade_supported",
+        "column": 27,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 313,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "auto_trade_market_map_guard_enabled",
+        "classification": "facade_supported",
+        "column": 6,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 315,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "auto_trade_map_thesis_lock_enabled",
+        "classification": "facade_supported",
+        "column": 31,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 317,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "auto_trade_strategy_match_enabled",
+        "classification": "facade_supported",
+        "column": 30,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 318,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "auto_trade_execution_zone_max_width_atr",
+        "classification": "facade_supported",
+        "column": 6,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 320,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "auto_trade_execution_zone_max_width_pips",
+        "classification": "facade_supported",
+        "column": 6,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 323,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "auto_trade_breakout_enabled",
+        "classification": "facade_supported",
+        "column": 24,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 325,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "auto_trade_retest_enabled",
+        "classification": "facade_supported",
+        "column": 22,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 326,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "auto_trade_reaction_enabled",
+        "classification": "facade_supported",
+        "column": 24,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 327,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "auto_trade_liquidity_reversal_enabled",
+        "classification": "facade_supported",
+        "column": 6,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 329,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "auto_trade_allow_counter_bias",
+        "classification": "facade_supported",
+        "column": 26,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 331,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "auto_trade_min_confluence",
+        "classification": "facade_supported",
+        "column": 22,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 332,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "auto_trade_require_demo_account",
+        "classification": "facade_supported",
+        "column": 7,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 334,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "auto_trade_require_demo_account",
+        "classification": "facade_supported",
+        "column": 28,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 335,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "auto_trade_non_hedged_opposite_policy",
+        "classification": "facade_supported",
+        "column": 6,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 339,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "auto_trade_structural_guard_mode",
+        "classification": "facade_supported",
+        "column": 29,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 341,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "auto_trade_zone_cooldown_enabled",
+        "classification": "facade_supported",
+        "column": 29,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 342,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "auto_trade_zone_reconcile_mode",
+        "classification": "facade_supported",
+        "column": 27,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 343,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "auto_trade_range_box_scale_out_enabled",
+        "classification": "facade_supported",
+        "column": 6,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 345,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "auto_trade_range_box_scale_out_threshold_pips",
+        "classification": "facade_supported",
+        "column": 6,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 348,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "auto_trade_range_box_scale_out_trigger_pips",
+        "classification": "facade_supported",
+        "column": 6,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 351,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "auto_trade_range_box_scale_out_fraction",
+        "classification": "facade_supported",
+        "column": 6,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 354,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "auto_trade_range_box_move_sl_to_be_after_scale_out",
+        "classification": "facade_supported",
+        "column": 6,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 357,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "auto_trade_candidate_contract_version",
+        "classification": "facade_supported",
+        "column": 6,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 360,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "auto_trade_contract_mode",
+        "classification": "facade_supported",
+        "column": 21,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 362,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "auto_trade_trade_plan_stream",
+        "classification": "facade_supported",
+        "column": 25,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 364,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "auto_trade_sizing_mode",
+        "classification": "facade_supported",
+        "column": 19,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 365,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "auto_trade_equity_table_version",
+        "classification": "facade_supported",
+        "column": 28,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 366,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "auto_trade_zone_scale_undersized_policy",
+        "classification": "facade_supported",
+        "column": 6,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 368,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "auto_trade_group_close_allocation",
+        "classification": "facade_supported",
+        "column": 30,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 370,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "auto_trade_unfilled_leg_after_tp_policy",
+        "classification": "facade_supported",
+        "column": 6,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 372,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "auto_trade_profile",
+        "classification": "facade_supported",
+        "column": 15,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 605,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "auto_trade_event_stream",
+        "classification": "facade_supported",
+        "column": 4,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 611,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "auto_trade_profile",
+        "classification": "facade_supported",
+        "column": 17,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 616,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "auto_trade_stream_maxlen",
+        "classification": "facade_supported",
+        "column": 20,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 619,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/config_health.py"
+      },
+      {
+        "attribute": "delivery_thread_lifecycle",
+        "classification": "facade_supported",
+        "column": 4,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 1617,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/delivery.py"
+      },
+      {
+        "attribute": "auto_trade_symbols",
+        "classification": "facade_supported",
+        "column": 18,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 1888,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/delivery.py"
+      },
+      {
+        "attribute": "auto_trade_enabled",
+        "classification": "facade_supported",
+        "column": 11,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 1903,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/delivery.py"
+      },
+      {
+        "attribute": "auto_trade_dry_run",
+        "classification": "facade_supported",
+        "column": 7,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 1905,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/delivery.py"
+      },
+      {
+        "attribute": "auto_trade_profile",
+        "classification": "facade_supported",
+        "column": 7,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 1911,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/delivery.py"
+      },
+      {
+        "attribute": "auto_trade_enabled",
+        "classification": "facade_supported",
+        "column": 5,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 1918,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/delivery.py"
+      },
+      {
+        "attribute": "auto_trade_enabled",
+        "classification": "facade_supported",
+        "column": 5,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 2005,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/delivery.py"
+      },
+      {
+        "attribute": "seq_reset_tz",
+        "classification": "facade_supported",
+        "column": 6,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 2037,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/delivery.py"
+      },
+      {
+        "attribute": "session_asia_start",
+        "classification": "facade_supported",
+        "column": 6,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 2038,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/delivery.py"
+      },
+      {
+        "attribute": "session_london_start",
+        "classification": "facade_supported",
+        "column": 6,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 2039,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/delivery.py"
+      },
+      {
+        "attribute": "session_ny_start",
+        "classification": "facade_supported",
+        "column": 6,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 2040,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/delivery.py"
+      },
+      {
+        "attribute": "telegram_owner_id",
+        "classification": "facade_supported",
+        "column": 7,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 2284,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/delivery.py"
+      },
+      {
+        "attribute": "telegram_owner_id",
+        "classification": "facade_supported",
+        "column": 50,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 2285,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/delivery.py"
+      },
+      {
+        "attribute": "auto_trade_event_stream",
+        "classification": "facade_supported",
+        "column": 6,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 2386,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/delivery.py"
+      },
+      {
+        "attribute": "auto_trade_event_stream",
+        "classification": "facade_supported",
+        "column": 9,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 2401,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/delivery.py"
+      },
+      {
+        "attribute": "auto_trade_enabled",
+        "classification": "facade_supported",
+        "column": 9,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 2424,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/delivery.py"
+      },
+      {
+        "attribute": "telegram_owner_id",
+        "classification": "facade_supported",
+        "column": 44,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 2424,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/delivery.py"
+      },
+      {
+        "attribute": "telegram_owner_id",
+        "classification": "facade_supported",
+        "column": 46,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 2426,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/delivery.py"
+      },
+      {
+        "attribute": "auto_trade_profile",
+        "classification": "facade_supported",
+        "column": 29,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 118,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/lifecycle.py"
+      },
+      {
+        "attribute": "auto_trade_candidate_ttl",
+        "classification": "facade_supported",
+        "column": 51,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 127,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/lifecycle.py"
+      },
+      {
+        "attribute": "auto_trade_candidate_ttl",
+        "classification": "facade_supported",
+        "column": 43,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 128,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/lifecycle.py"
+      },
+      {
+        "attribute": "auto_trade_event_stream",
+        "classification": "facade_supported",
+        "column": 6,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 163,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/lifecycle.py"
+      },
+      {
+        "attribute": "auto_trade_stream_maxlen",
+        "classification": "facade_supported",
+        "column": 22,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 168,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/lifecycle.py"
+      },
+      {
+        "attribute": "auto_trade_candidate_ttl",
+        "classification": "facade_supported",
+        "column": 36,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 296,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/setup_card.py"
+      },
+      {
+        "attribute": "telegram_owner_id",
+        "classification": "facade_supported",
+        "column": 25,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 395,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/setup_card.py"
+      },
+      {
+        "attribute": "telegram_owner_id",
+        "classification": "facade_supported",
+        "column": 40,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 403,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/setup_card.py"
+      },
+      {
+        "attribute": "auto_trade_candidate_ttl",
+        "classification": "facade_supported",
+        "column": 36,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 420,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/setup_card.py"
+      },
+      {
+        "attribute": "telegram_owner_id",
+        "classification": "facade_supported",
+        "column": 49,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 1087,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/setup_card.py"
+      },
+      {
+        "attribute": "auto_trade_enabled",
+        "classification": "facade_supported",
+        "column": 9,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 97,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/setup_expiry_sweeper.py"
+      },
+      {
+        "attribute": "auto_trade_event_stream",
+        "classification": "facade_supported",
+        "column": 4,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 57,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/stats_ingestion.py"
+      },
+      {
+        "attribute": "auto_trade_event_stream",
+        "classification": "facade_supported",
+        "column": 9,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 85,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/stats_ingestion.py"
+      },
+      {
+        "attribute": "auto_trade_stream_maxlen",
+        "classification": "facade_supported",
+        "column": 26,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 229,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/strategy_match_ready.py"
+      },
+      {
+        "attribute": "auto_trade_candidate_ttl",
+        "classification": "facade_supported",
+        "column": 29,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 71,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/trade_plan_stream.py"
+      },
+      {
+        "attribute": "auto_trade_trade_plan_stream",
+        "classification": "facade_supported",
+        "column": 11,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 72,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/trade_plan_stream.py"
+      },
+      {
+        "attribute": "auto_trade_stream_maxlen",
+        "classification": "facade_supported",
+        "column": 20,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 73,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/trade_plan_stream.py"
+      },
+      {
+        "attribute": "auto_trade_max_entry_distance_pips",
+        "classification": "facade_supported",
+        "column": 13,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 425,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_symbols",
+        "classification": "facade_supported",
+        "column": 16,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 549,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_spot_max_age",
+        "classification": "facade_supported",
+        "column": 34,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 599,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_strategy_match_enabled",
+        "classification": "facade_supported",
+        "column": 9,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 609,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_strategy_match_enabled",
+        "classification": "facade_supported",
+        "column": 9,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 648,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_multi_match_enabled",
+        "classification": "facade_supported",
+        "column": 9,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 650,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "atr_length",
+        "classification": "facade_supported",
+        "column": 35,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 736,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_box_retire_seconds",
+        "classification": "facade_supported",
+        "column": 14,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 827,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_box_retire_seconds",
+        "classification": "facade_supported",
+        "column": 14,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 836,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "range_context_disagreement_gate_enabled",
+        "classification": "facade_supported",
+        "column": 6,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 878,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_box_retire_seconds",
+        "classification": "facade_supported",
+        "column": 20,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 961,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_box_retire_seconds",
+        "classification": "facade_supported",
+        "column": 18,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 1030,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_box_retire_seconds",
+        "classification": "facade_supported",
+        "column": 16,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 1169,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_zone_cooldown_enabled",
+        "classification": "facade_supported",
+        "column": 8,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 1818,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_candidate_ttl",
+        "classification": "facade_supported",
+        "column": 30,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 2268,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_canonical_symbol",
+        "classification": "facade_supported",
+        "column": 61,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 2495,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_range_enabled",
+        "classification": "facade_supported",
+        "column": 11,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 2562,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_mapped_zone_enabled",
+        "classification": "facade_supported",
+        "column": 11,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 2564,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_liquidity_reversal_enabled",
+        "classification": "facade_supported",
+        "column": 11,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 2580,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_retest_enabled",
+        "classification": "facade_supported",
+        "column": 11,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 2582,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_breakout_enabled",
+        "classification": "facade_supported",
+        "column": 11,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 2584,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_reaction_enabled",
+        "classification": "facade_supported",
+        "column": 11,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 2591,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_strategy_match_enabled",
+        "classification": "facade_supported",
+        "column": 9,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 2592,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_enabled",
+        "classification": "facade_supported",
+        "column": 8,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 2633,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_range_enabled",
+        "classification": "facade_supported",
+        "column": 11,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 2634,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_min_confluence",
+        "classification": "facade_supported",
+        "column": 36,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 2642,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_eq_exclusion_fraction",
+        "classification": "facade_supported",
+        "column": 4,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 2677,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_edge_proximity_atr",
+        "classification": "facade_supported",
+        "column": 4,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 2705,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_htf_veto_enabled",
+        "classification": "facade_supported",
+        "column": 5,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 2732,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_zone_cooldown_atr",
+        "classification": "facade_supported",
+        "column": 23,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 2761,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_overlap_veto_enabled",
+        "classification": "facade_supported",
+        "column": 4,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 2783,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_news_guard_minutes",
+        "classification": "facade_supported",
+        "column": 13,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 2812,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_range_box_scale_out_trigger_pips",
+        "classification": "facade_supported",
+        "column": 12,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 2908,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_range_box_scale_out_enabled",
+        "classification": "facade_supported",
+        "column": 8,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 2912,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_range_flip_enabled",
+        "classification": "facade_supported",
+        "column": 16,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 2913,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_range_box_scale_out_threshold_pips",
+        "classification": "facade_supported",
+        "column": 16,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 2916,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_range_box_scale_out_fraction",
+        "classification": "facade_supported",
+        "column": 12,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 2928,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_range_box_scale_out_enabled",
+        "classification": "facade_supported",
+        "column": 8,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 2930,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_range_flip_enabled",
+        "classification": "facade_supported",
+        "column": 16,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 2931,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_range_box_scale_out_threshold_pips",
+        "classification": "facade_supported",
+        "column": 16,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 2934,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_stream",
+        "classification": "facade_supported",
+        "column": 11,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 2974,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_candidate_ttl",
+        "classification": "facade_supported",
+        "column": 8,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 2977,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_stream_maxlen",
+        "classification": "facade_supported",
+        "column": 11,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 2978,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_candidate_ttl",
+        "classification": "facade_supported",
+        "column": 18,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 2981,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_box_retire_seconds",
+        "classification": "facade_supported",
+        "column": 16,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 3066,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_enabled",
+        "classification": "facade_supported",
+        "column": 9,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 3154,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_strategy_match_enabled",
+        "classification": "facade_supported",
+        "column": 9,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 3162,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_min_confluence",
+        "classification": "facade_supported",
+        "column": 31,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 3188,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_min_confluence",
+        "classification": "facade_supported",
+        "column": 18,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 3193,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_min_confluence",
+        "classification": "facade_supported",
+        "column": 37,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 3197,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_opposing_barrier_veto_enabled",
+        "classification": "facade_supported",
+        "column": 6,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 3388,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_opposing_barrier_atr",
+        "classification": "facade_supported",
+        "column": 6,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 3405,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_zone_cooldown_atr",
+        "classification": "facade_supported",
+        "column": 15,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 3442,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_overlap_veto_enabled",
+        "classification": "facade_supported",
+        "column": 4,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 3470,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_news_guard_minutes",
+        "classification": "facade_supported",
+        "column": 13,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 3682,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_stream",
+        "classification": "facade_supported",
+        "column": 13,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 3965,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_candidate_ttl",
+        "classification": "facade_supported",
+        "column": 10,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 3968,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_stream_maxlen",
+        "classification": "facade_supported",
+        "column": 13,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 3969,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_candidate_ttl",
+        "classification": "facade_supported",
+        "column": 20,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 3995,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_box_retire_seconds",
+        "classification": "facade_supported",
+        "column": 18,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 4115,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_entry_contract_tolerance_pips",
+        "classification": "facade_supported",
+        "column": 12,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 4481,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_opposing_barrier_atr",
+        "classification": "facade_supported",
+        "column": 29,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 5135,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_min_capped_target_pips",
+        "classification": "facade_supported",
+        "column": 33,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 5136,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_execution_cost_pips",
+        "classification": "facade_supported",
+        "column": 30,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 5137,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_opposing_barrier_atr",
+        "classification": "facade_supported",
+        "column": 4,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 5229,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_zone_cooldown_atr",
+        "classification": "facade_supported",
+        "column": 15,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 5255,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_enabled",
+        "classification": "facade_supported",
+        "column": 8,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 5605,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_trend_enabled",
+        "classification": "facade_supported",
+        "column": 11,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 5606,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_min_confluence",
+        "classification": "facade_supported",
+        "column": 42,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 5618,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_htf_veto_enabled",
+        "classification": "facade_supported",
+        "column": 5,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 5688,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_opposing_barrier_veto_enabled",
+        "classification": "facade_supported",
+        "column": 4,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 5716,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_opposing_barrier_atr",
+        "classification": "facade_supported",
+        "column": 6,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 5730,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_zone_cooldown_atr",
+        "classification": "facade_supported",
+        "column": 24,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 5755,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_overlap_veto_enabled",
+        "classification": "facade_supported",
+        "column": 4,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 5777,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_news_guard_minutes",
+        "classification": "facade_supported",
+        "column": 13,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 5806,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_stream",
+        "classification": "facade_supported",
+        "column": 11,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 5933,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_candidate_ttl",
+        "classification": "facade_supported",
+        "column": 8,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 5936,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_stream_maxlen",
+        "classification": "facade_supported",
+        "column": 11,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 5937,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_candidate_ttl",
+        "classification": "facade_supported",
+        "column": 18,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 5943,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "regime_chop_alert_share",
+        "classification": "facade_supported",
+        "column": 38,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 6096,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_trend_enabled",
+        "classification": "facade_supported",
+        "column": 9,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 6179,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_box_retire_seconds",
+        "classification": "facade_supported",
+        "column": 18,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 6440,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_enabled",
+        "classification": "facade_supported",
+        "column": 9,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 6698,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_zone_fill_enabled",
+        "classification": "facade_supported",
+        "column": 12,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 6806,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_htf_veto_enabled",
+        "classification": "facade_supported",
+        "column": 5,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 6888,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_opposing_barrier_veto_enabled",
+        "classification": "facade_supported",
+        "column": 4,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 6916,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_opposing_barrier_atr",
+        "classification": "facade_supported",
+        "column": 6,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 6926,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_zone_cooldown_atr",
+        "classification": "facade_supported",
+        "column": 4,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 6950,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_overlap_veto_enabled",
+        "classification": "facade_supported",
+        "column": 4,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 6974,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_news_guard_minutes",
+        "classification": "facade_supported",
+        "column": 13,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 7076,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_strategy_match_enabled",
+        "classification": "facade_supported",
+        "column": 9,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 7258,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_min_confluence",
+        "classification": "facade_supported",
+        "column": 31,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 7314,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_entry_contract_tolerance_pips",
+        "classification": "facade_supported",
+        "column": 12,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 7388,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_market_map_guard_enabled",
+        "classification": "facade_supported",
+        "column": 7,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 7625,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_multi_match_enabled",
+        "classification": "facade_supported",
+        "column": 5,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 7650,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_range_enabled",
+        "classification": "facade_supported",
+        "column": 23,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 7705,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_range_enabled",
+        "classification": "facade_supported",
+        "column": 23,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 7910,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_eq_exclusion_fraction",
+        "classification": "facade_supported",
+        "column": 16,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 7938,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_edge_proximity_atr",
+        "classification": "facade_supported",
+        "column": 16,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 7947,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_trend_enabled",
+        "classification": "facade_supported",
+        "column": 23,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 7963,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "scanner_conflict_margin",
+        "classification": "facade_supported",
+        "column": 20,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 7985,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_enabled",
+        "classification": "facade_supported",
+        "column": 9,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 9065,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_enabled",
+        "classification": "facade_supported",
+        "column": 9,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 9143,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_strategy_match_enabled",
+        "classification": "facade_supported",
+        "column": 4,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 9158,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "spot_fresh_secs",
+        "classification": "facade_supported",
+        "column": 30,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 159,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/zone_execution_cutover.py"
+      },
+      {
+        "attribute": "auto_trade_entry_contract_tolerance_pips",
+        "classification": "facade_supported",
+        "column": 10,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 174,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/zone_execution_cutover.py"
+      },
+      {
+        "attribute": "scanner_zone_width_gate_enabled",
+        "classification": "facade_supported",
+        "column": 51,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 276,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/zone_execution_cutover.py"
+      },
+      {
+        "attribute": "auto_trade_strategy_match_max_age_seconds",
+        "classification": "facade_supported",
+        "column": 33,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 453,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/zone_execution_cutover.py"
+      },
+      {
+        "attribute": "auto_trade_enabled",
+        "classification": "facade_supported",
+        "column": 9,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 754,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/autotrade/zone_execution_cutover.py"
+      },
+      {
+        "attribute": "telegram_bot_token",
+        "classification": "facade_supported",
+        "column": 8,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 23,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/bot/client.py"
+      },
+      {
+        "attribute": "scanner_telegram_bot_token",
+        "classification": "facade_supported",
+        "column": 8,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 27,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/bot/client.py"
+      },
+      {
+        "attribute": "telegram_bot_token",
+        "classification": "facade_supported",
+        "column": 47,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 27,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/bot/client.py"
+      },
+      {
+        "attribute": "telegram_owner_id",
+        "classification": "facade_supported",
+        "column": 5,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 76,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/bot/client.py"
+      },
+      {
+        "attribute": "telegram_owner_id",
+        "classification": "facade_supported",
+        "column": 40,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 79,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/bot/client.py"
+      },
+      {
+        "attribute": "telegram_owner_id",
+        "classification": "facade_supported",
+        "column": 5,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 88,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/bot/client.py"
+      },
+      {
+        "attribute": "telegram_owner_id",
+        "classification": "facade_supported",
+        "column": 40,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 91,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/bot/client.py"
+      },
+      {
+        "attribute": "telegram_channel_id",
+        "classification": "facade_supported",
+        "column": 27,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 137,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/bot/client.py"
+      },
+      {
+        "attribute": "scanner_symbols",
+        "classification": "facade_supported",
+        "column": 22,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 211,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/bot/handlers/dm.py"
+      },
+      {
+        "attribute": "scanner_exec_tf",
+        "classification": "facade_supported",
+        "column": 7,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 218,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/bot/handlers/dm.py"
+      },
+      {
+        "attribute": "seq_reset_tz",
+        "classification": "facade_supported",
+        "column": 16,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 628,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/bot/handlers/dm.py"
+      },
+      {
+        "attribute": "seq_reset_tz",
+        "classification": "facade_supported",
+        "column": 4,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 704,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/bot/handlers/dm.py"
+      },
+      {
+        "attribute": "session_asia_start",
+        "classification": "facade_supported",
+        "column": 4,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 705,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/bot/handlers/dm.py"
+      },
+      {
+        "attribute": "session_london_start",
+        "classification": "facade_supported",
+        "column": 4,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 706,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/bot/handlers/dm.py"
+      },
+      {
+        "attribute": "session_ny_start",
+        "classification": "facade_supported",
+        "column": 4,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 707,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/bot/handlers/dm.py"
+      },
+      {
+        "attribute": "manual_algo_enabled",
+        "classification": "facade_supported",
+        "column": 9,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 68,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/bot/handlers/fallback.py"
+      },
+      {
+        "attribute": "event_guard_hours",
+        "classification": "facade_supported",
+        "column": 8,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 114,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/bot/handlers/fallback.py"
+      },
+      {
+        "attribute": "news_guard_block",
+        "classification": "facade_supported",
+        "column": 15,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 116,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/bot/handlers/fallback.py"
+      },
+      {
+        "attribute": "auto_book_bare_pips",
+        "classification": "facade_supported",
+        "column": 9,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 182,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/bot/handlers/fallback.py"
+      },
+      {
+        "attribute": "auto_book_bare_pips",
+        "classification": "facade_supported",
+        "column": 9,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 189,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/bot/handlers/fallback.py"
+      },
+      {
+        "attribute": "auto_trade_xau_pip_size",
+        "classification": "facade_supported",
+        "column": 11,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 8,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/core/symbols.py"
+      },
+      {
+        "attribute": "signal_vip_channel_id",
+        "classification": "facade_supported",
+        "column": 18,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 34,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/core/symbols.py"
+      },
+      {
+        "attribute": "signal_public_channel_id",
+        "classification": "facade_supported",
+        "column": 18,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 39,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/core/symbols.py"
+      },
+      {
+        "attribute": "log_level",
+        "classification": "facade_supported",
+        "column": 8,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 46,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/main.py"
+      },
+      {
+        "attribute": "log_dir",
+        "classification": "facade_supported",
+        "column": 10,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 47,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/main.py"
+      },
+      {
+        "attribute": "log_retention_days",
+        "classification": "facade_supported",
+        "column": 17,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 48,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/main.py"
+      },
+      {
+        "attribute": "log_file_enabled",
+        "classification": "facade_supported",
+        "column": 14,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 49,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/main.py"
+      },
+      {
+        "attribute": "auto_trade_enabled",
+        "classification": "facade_supported",
+        "column": 5,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 109,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/main.py"
+      },
+      {
+        "attribute": "scanner_telegram_bot_token",
+        "classification": "facade_supported",
+        "column": 4,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 120,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/main.py"
+      },
+      {
+        "attribute": "scanner_telegram_bot_token",
+        "classification": "facade_supported",
+        "column": 8,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 121,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/main.py"
+      },
+      {
+        "attribute": "telegram_bot_token",
+        "classification": "facade_supported",
+        "column": 47,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 121,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/main.py"
+      },
+      {
+        "attribute": "telegram_owner_id",
+        "classification": "facade_supported",
+        "column": 9,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 145,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/main.py"
+      },
+      {
+        "attribute": "redis_url",
+        "classification": "facade_supported",
+        "column": 4,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 42,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/persistence/redis_state.py"
+      },
+      {
+        "attribute": "redis_url",
+        "classification": "facade_supported",
+        "column": 16,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 233,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/persistence/redis_state.py"
+      },
+      {
+        "attribute": "database_url",
+        "classification": "facade_supported",
+        "column": 6,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 51,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/persistence/store.py"
+      },
+      {
+        "attribute": "seq_reset_tz",
+        "classification": "facade_supported",
+        "column": 16,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 83,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/persistence/store.py"
+      },
+      {
+        "attribute": "signal_vip_channel_id",
+        "classification": "facade_supported",
+        "column": 6,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 308,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/persistence/store.py"
+      },
+      {
+        "attribute": "signal_vip_channel_id",
+        "classification": "facade_supported",
+        "column": 16,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 883,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/persistence/store.py"
+      },
+      {
+        "attribute": "calendar_currencies",
+        "classification": "facade_supported",
+        "column": 36,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 135,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/signals/calendar.py"
+      },
+      {
+        "attribute": "oil_keywords",
+        "classification": "facade_supported",
+        "column": 36,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 137,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/signals/calendar.py"
+      },
+      {
+        "attribute": "calendar_user_agent",
+        "classification": "facade_supported",
+        "column": 29,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 151,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/signals/calendar.py"
+      },
+      {
+        "attribute": "oil_keywords",
+        "classification": "facade_supported",
+        "column": 32,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 226,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/signals/calendar.py"
+      },
+      {
+        "attribute": "seq_reset_tz",
+        "classification": "facade_supported",
+        "column": 13,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 262,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/signals/calendar.py"
+      },
+      {
+        "attribute": "seq_reset_tz",
+        "classification": "facade_supported",
+        "column": 16,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 274,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/signals/calendar.py"
+      },
+      {
+        "attribute": "calendar_feed_thisweek",
+        "classification": "facade_supported",
+        "column": 7,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 280,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/signals/calendar.py"
+      },
+      {
+        "attribute": "calendar_feed_nextweek",
+        "classification": "facade_supported",
+        "column": 20,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 283,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/signals/calendar.py"
+      },
+      {
+        "attribute": "calendar_enabled",
+        "classification": "facade_supported",
+        "column": 9,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 309,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/signals/calendar.py"
+      },
+      {
+        "attribute": "seq_reset_tz",
+        "classification": "facade_supported",
+        "column": 20,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 314,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/signals/calendar.py"
+      },
+      {
+        "attribute": "news_brief_hour",
+        "classification": "facade_supported",
+        "column": 13,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 317,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/signals/calendar.py"
+      },
+      {
+        "attribute": "anthropic_api_key",
+        "classification": "facade_supported",
+        "column": 9,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 335,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/signals/chart_analysis.py"
+      },
+      {
+        "attribute": "anthropic_api_key",
+        "classification": "facade_supported",
+        "column": 44,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 356,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/signals/chart_analysis.py"
+      },
+      {
+        "attribute": "telegram_owner_id",
+        "classification": "facade_supported",
+        "column": 5,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 70,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/signals/manual_execution.py"
+      },
+      {
+        "attribute": "telegram_owner_id",
+        "classification": "facade_supported",
+        "column": 14,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 73,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/signals/manual_execution.py"
+      },
+      {
+        "attribute": "manual_algo_owner_execution_dm_enabled",
+        "classification": "facade_supported",
+        "column": 5,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 91,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/signals/manual_execution.py"
+      },
+      {
+        "attribute": "auto_trade_stream",
+        "classification": "facade_supported",
+        "column": 8,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 207,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/signals/manual_execution.py"
+      },
+      {
+        "attribute": "auto_trade_stream_maxlen",
+        "classification": "facade_supported",
+        "column": 24,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 209,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/signals/manual_execution.py"
+      },
+      {
+        "attribute": "manual_algo_enabled",
+        "classification": "facade_supported",
+        "column": 9,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 220,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/signals/manual_execution.py"
+      },
+      {
+        "attribute": "manual_trade_intent_stream",
+        "classification": "facade_supported",
+        "column": 36,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 225,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/signals/manual_execution.py"
+      },
+      {
+        "attribute": "manual_trade_intent_stream",
+        "classification": "facade_supported",
+        "column": 9,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 233,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/signals/manual_execution.py"
+      },
+      {
+        "attribute": "manual_algo_owner_execution_dm_enabled",
+        "classification": "facade_supported",
+        "column": 5,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 312,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/signals/manual_execution.py"
+      },
+      {
+        "attribute": "manual_algo_enabled",
+        "classification": "facade_supported",
+        "column": 9,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 602,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/signals/manual_execution.py"
+      },
+      {
+        "attribute": "auto_trade_event_stream",
+        "classification": "facade_supported",
+        "column": 36,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 607,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/signals/manual_execution.py"
+      },
+      {
+        "attribute": "auto_trade_event_stream",
+        "classification": "facade_supported",
+        "column": 9,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 616,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/signals/manual_execution.py"
+      },
+      {
+        "attribute": "manual_trade_command_stream",
+        "classification": "facade_supported",
+        "column": 4,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 637,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/signals/manual_execution.py"
+      },
+      {
+        "attribute": "manual_trade_command_stream_maxlen",
+        "classification": "facade_supported",
+        "column": 20,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 639,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/signals/manual_execution.py"
+      },
+      {
+        "attribute": "manual_trade_intent_stream",
+        "classification": "facade_supported",
+        "column": 4,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 84,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/signals/manual_intent.py"
+      },
+      {
+        "attribute": "manual_trade_intent_stream_maxlen",
+        "classification": "facade_supported",
+        "column": 20,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 86,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/signals/manual_intent.py"
+      },
+      {
+        "attribute": "seq_reset_tz",
+        "classification": "facade_supported",
+        "column": 16,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 185,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/signals/parsing.py"
+      },
+      {
+        "attribute": "telegram_owner_id",
+        "classification": "facade_supported",
+        "column": 9,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 200,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/signals/parsing.py"
+      },
+      {
+        "attribute": "telegram_owner_id",
+        "classification": "facade_supported",
+        "column": 59,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 202,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/signals/parsing.py"
+      },
+      {
+        "attribute": "telegram_owner_id",
+        "classification": "facade_supported",
+        "column": 9,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 206,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/signals/parsing.py"
+      },
+      {
+        "attribute": "telegram_owner_id",
+        "classification": "facade_supported",
+        "column": 57,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 208,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/signals/parsing.py"
+      },
+      {
+        "attribute": "seq_reset_tz",
+        "classification": "facade_supported",
+        "column": 16,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 232,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/signals/parsing.py"
+      },
+      {
+        "attribute": "tiingo_api_key",
+        "classification": "facade_supported",
+        "column": 41,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 24,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/signals/price.py"
+      },
+      {
+        "attribute": "tiingo_api_key",
+        "classification": "facade_supported",
+        "column": 41,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 72,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/signals/price.py"
+      },
+      {
+        "attribute": "public_show_pips",
+        "classification": "facade_supported",
+        "column": 32,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 443,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/signals/trade_ops.py"
+      },
+      {
+        "attribute": "public_show_pips",
+        "classification": "facade_supported",
+        "column": 15,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 477,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/signals/trade_ops.py"
+      },
+      {
+        "attribute": "public_show_pips",
+        "classification": "facade_supported",
+        "column": 15,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 484,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/signals/trade_ops.py"
+      },
+      {
+        "attribute": "public_show_pips",
+        "classification": "facade_supported",
+        "column": 32,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 497,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/signals/trade_ops.py"
+      },
+      {
+        "attribute": "public_show_pips",
+        "classification": "facade_supported",
+        "column": 11,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 104,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/signals/watcher.py"
+      },
+      {
+        "attribute": "public_show_pips",
+        "classification": "facade_supported",
+        "column": 11,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 110,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/signals/watcher.py"
+      },
+      {
+        "attribute": "public_show_pips",
+        "classification": "facade_supported",
+        "column": 11,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 113,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/signals/watcher.py"
+      },
+      {
+        "attribute": "telegram_owner_id",
+        "classification": "facade_supported",
+        "column": 14,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 200,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/signals/watcher.py"
+      },
+      {
+        "attribute": "watcher_ctrader_stale_seconds",
+        "classification": "facade_supported",
+        "column": 16,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 338,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/signals/watcher.py"
+      },
+      {
+        "attribute": "tiingo_api_key",
+        "classification": "facade_supported",
+        "column": 9,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 402,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/signals/watcher.py"
+      },
+      {
+        "attribute": "track_interval",
+        "classification": "facade_supported",
+        "column": 26,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 411,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/signals/watcher.py"
+      },
+      {
+        "attribute": "seq_reset_tz",
+        "classification": "facade_supported",
+        "column": 16,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 182,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/signals/weekly_report.py"
+      },
+      {
+        "attribute": "weekly_report_dow",
+        "classification": "facade_supported",
+        "column": 21,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 185,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/signals/weekly_report.py"
+      },
+      {
+        "attribute": "weekly_report_hour",
+        "classification": "facade_supported",
+        "column": 18,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 186,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/signals/weekly_report.py"
+      },
+      {
+        "attribute": "weekly_report_skip_empty",
+        "classification": "facade_supported",
+        "column": 23,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 201,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/signals/weekly_report.py"
+      },
+      {
+        "attribute": "seq_reset_tz",
+        "classification": "facade_supported",
+        "column": 6,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 206,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/signals/weekly_report.py"
+      },
+      {
+        "attribute": "session_asia_start",
+        "classification": "facade_supported",
+        "column": 6,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 207,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/signals/weekly_report.py"
+      },
+      {
+        "attribute": "session_london_start",
+        "classification": "facade_supported",
+        "column": 6,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 208,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/signals/weekly_report.py"
+      },
+      {
+        "attribute": "session_ny_start",
+        "classification": "facade_supported",
+        "column": 6,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 209,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/signals/weekly_report.py"
+      },
+      {
+        "attribute": "weekly_report_enabled",
+        "classification": "facade_supported",
+        "column": 9,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 221,
+        "operation": "attribute_read",
+        "path": "algo-bot/app/signals/weekly_report.py"
+      }
+    ],
+    "attribute_writes": [],
+    "introspection": [
+      {
+        "attribute": null,
+        "classification": "facade_supported",
+        "column": 23,
+        "detail": "restricted dynamic legacy name",
+        "dynamic_names": [
+          "xau_lookback_h1_bars",
+          "xau_lookback_m15_bars",
+          "xau_lookback_m1_bars",
+          "xau_lookback_m5_bars"
+        ],
+        "line": 36,
+        "operation": "getattr",
+        "path": "algo-bot/app/analysis/ohlc_source.py"
+      },
+      {
+        "attribute": "scanner_top_n",
+        "classification": "facade_supported",
+        "column": 16,
+        "detail": "getattr on Settings",
+        "dynamic_names": [],
+        "line": 800,
+        "operation": "getattr",
+        "path": "algo-bot/app/analysis/scanner.py"
+      },
+      {
+        "attribute": "auto_trade_regime_direction_lookback",
+        "classification": "facade_supported",
+        "column": 12,
+        "detail": "getattr on Settings",
+        "dynamic_names": [],
+        "line": 2814,
+        "operation": "getattr",
+        "path": "algo-bot/app/analysis/scanner.py"
+      },
+      {
+        "attribute": "auto_trade_xau_price_digits",
+        "classification": "facade_supported",
+        "column": 20,
+        "detail": "getattr on Settings",
+        "dynamic_names": [],
+        "line": 206,
+        "operation": "getattr",
+        "path": "algo-bot/app/autotrade/delivery.py"
+      },
+      {
+        "attribute": "auto_trade_broker_lot_size",
+        "classification": "facade_supported",
+        "column": 8,
+        "detail": "getattr on Settings",
+        "dynamic_names": [],
+        "line": 211,
+        "operation": "getattr",
+        "path": "algo-bot/app/autotrade/delivery.py"
+      },
+      {
+        "attribute": "auto_trade_range_targets_pips",
+        "classification": "facade_supported",
+        "column": 8,
+        "detail": "getattr on Settings",
+        "dynamic_names": [],
+        "line": 22,
+        "operation": "getattr",
+        "path": "algo-bot/app/autotrade/range_targets.py"
+      },
+      {
+        "attribute": "auto_trade_range_tp_buffer_pips",
+        "classification": "facade_supported",
+        "column": 10,
+        "detail": "getattr on Settings",
+        "dynamic_names": [],
+        "line": 42,
+        "operation": "getattr",
+        "path": "algo-bot/app/autotrade/range_targets.py"
+      },
+      {
+        "attribute": "auto_trade_range_min_target_pips",
+        "classification": "facade_supported",
+        "column": 10,
+        "detail": "getattr on Settings",
+        "dynamic_names": [],
+        "line": 53,
+        "operation": "getattr",
+        "path": "algo-bot/app/autotrade/range_targets.py"
+      },
+      {
+        "attribute": "auto_trade_range_min_rr",
+        "classification": "facade_supported",
+        "column": 10,
+        "detail": "getattr on Settings",
+        "dynamic_names": [],
+        "line": 64,
+        "operation": "getattr",
+        "path": "algo-bot/app/autotrade/range_targets.py"
+      },
+      {
+        "attribute": "auto_trade_xau_price_digits",
+        "classification": "facade_supported",
+        "column": 19,
+        "detail": "getattr on Settings",
+        "dynamic_names": [],
+        "line": 1124,
+        "operation": "getattr",
+        "path": "algo-bot/app/autotrade/setup_card.py"
+      },
+      {
+        "attribute": "auto_trade_xau_price_digits",
+        "classification": "facade_supported",
+        "column": 17,
+        "detail": "getattr on Settings",
+        "dynamic_names": [],
+        "line": 1153,
+        "operation": "getattr",
+        "path": "algo-bot/app/autotrade/setup_card.py"
+      },
+      {
+        "attribute": "auto_trade_map_thesis_lock_enabled",
+        "classification": "facade_supported",
+        "column": 14,
+        "detail": "getattr on Settings",
+        "dynamic_names": [],
+        "line": 2333,
+        "operation": "getattr",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_map_reaction_rearm_atr",
+        "classification": "facade_supported",
+        "column": 20,
+        "detail": "getattr on Settings",
+        "dynamic_names": [],
+        "line": 2445,
+        "operation": "getattr",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_map_reaction_rearm_bars",
+        "classification": "facade_supported",
+        "column": 19,
+        "detail": "getattr on Settings",
+        "dynamic_names": [],
+        "line": 2446,
+        "operation": "getattr",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_key_level_reaction_enabled",
+        "classification": "facade_supported",
+        "column": 16,
+        "detail": "getattr on Settings",
+        "dynamic_names": [],
+        "line": 2566,
+        "operation": "getattr",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_demand_reaction_enabled",
+        "classification": "facade_supported",
+        "column": 18,
+        "detail": "getattr on Settings",
+        "dynamic_names": [],
+        "line": 2571,
+        "operation": "getattr",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_supply_reaction_enabled",
+        "classification": "facade_supported",
+        "column": 16,
+        "detail": "getattr on Settings",
+        "dynamic_names": [],
+        "line": 2572,
+        "operation": "getattr",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_session_level_reaction_enabled",
+        "classification": "facade_supported",
+        "column": 6,
+        "detail": "getattr on Settings",
+        "dynamic_names": [],
+        "line": 2575,
+        "operation": "getattr",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_trendline_reaction_enabled",
+        "classification": "facade_supported",
+        "column": 16,
+        "detail": "getattr on Settings",
+        "dynamic_names": [],
+        "line": 2578,
+        "operation": "getattr",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_map_reaction_rearm_atr",
+        "classification": "facade_supported",
+        "column": 24,
+        "detail": "getattr on Settings",
+        "dynamic_names": [],
+        "line": 3722,
+        "operation": "getattr",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_map_reaction_rearm_bars",
+        "classification": "facade_supported",
+        "column": 23,
+        "detail": "getattr on Settings",
+        "dynamic_names": [],
+        "line": 3723,
+        "operation": "getattr",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "zone_merge_max_width",
+        "classification": "facade_supported",
+        "column": 20,
+        "detail": "getattr on Settings",
+        "dynamic_names": [],
+        "line": 4355,
+        "operation": "getattr",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "zone_merge_gap",
+        "classification": "facade_supported",
+        "column": 14,
+        "detail": "getattr on Settings",
+        "dynamic_names": [],
+        "line": 4356,
+        "operation": "getattr",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_retest_trigger_validity_bars",
+        "classification": "facade_supported",
+        "column": 12,
+        "detail": "getattr on Settings",
+        "dynamic_names": [],
+        "line": 4893,
+        "operation": "getattr",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_retest_trigger_validity_bars",
+        "classification": "facade_supported",
+        "column": 10,
+        "detail": "getattr on Settings",
+        "dynamic_names": [],
+        "line": 5078,
+        "operation": "getattr",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_displacement_override_lookback_bars",
+        "classification": "facade_supported",
+        "column": 11,
+        "detail": "getattr on Settings",
+        "dynamic_names": [],
+        "line": 5094,
+        "operation": "getattr",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_opposing_active_min_price",
+        "classification": "facade_supported",
+        "column": 6,
+        "detail": "getattr on Settings",
+        "dynamic_names": [],
+        "line": 5278,
+        "operation": "getattr",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_same_direction_stack_size_fraction",
+        "classification": "facade_supported",
+        "column": 6,
+        "detail": "getattr on Settings",
+        "dynamic_names": [],
+        "line": 5281,
+        "operation": "getattr",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_v7_max_volume",
+        "classification": "facade_supported",
+        "column": 21,
+        "detail": "getattr on Settings",
+        "dynamic_names": [],
+        "line": 5339,
+        "operation": "getattr",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_same_direction_stack_size_fraction",
+        "classification": "facade_supported",
+        "column": 8,
+        "detail": "getattr on Settings",
+        "dynamic_names": [],
+        "line": 5345,
+        "operation": "getattr",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_xau_price_digits",
+        "classification": "facade_supported",
+        "column": 19,
+        "detail": "getattr on Settings",
+        "dynamic_names": [],
+        "line": 5547,
+        "operation": "getattr",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_opposing_active_min_price",
+        "classification": "facade_supported",
+        "column": 8,
+        "detail": "getattr on Settings",
+        "dynamic_names": [],
+        "line": 6752,
+        "operation": "getattr",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_same_direction_stack_size_fraction",
+        "classification": "facade_supported",
+        "column": 8,
+        "detail": "getattr on Settings",
+        "dynamic_names": [],
+        "line": 6755,
+        "operation": "getattr",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_same_direction_stack_size_fraction",
+        "classification": "facade_supported",
+        "column": 10,
+        "detail": "getattr on Settings",
+        "dynamic_names": [],
+        "line": 6777,
+        "operation": "getattr",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_map_reaction_rearm_atr",
+        "classification": "facade_supported",
+        "column": 10,
+        "detail": "getattr on Settings",
+        "dynamic_names": [],
+        "line": 7461,
+        "operation": "getattr",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "auto_trade_map_reaction_rearm_bars",
+        "classification": "facade_supported",
+        "column": 10,
+        "detail": "getattr on Settings",
+        "dynamic_names": [],
+        "line": 7464,
+        "operation": "getattr",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "atr_length",
+        "classification": "facade_supported",
+        "column": 41,
+        "detail": "getattr on Settings",
+        "dynamic_names": [],
+        "line": 7591,
+        "operation": "getattr",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": "telegram_owner_id",
+        "classification": "facade_supported",
+        "column": 13,
+        "detail": "getattr on Settings",
+        "dynamic_names": [],
+        "line": 140,
+        "operation": "getattr",
+        "path": "algo-bot/app/persistence/redis_state.py"
+      }
+    ],
+    "method_calls": [],
+    "type_dependencies": [
+      {
+        "attribute": null,
+        "classification": "facade_supported",
+        "column": 9,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 89,
+        "operation": "pass_settings",
+        "path": "algo-bot/app/analysis/market_map_delivery.py"
+      },
+      {
+        "attribute": null,
+        "classification": "facade_supported",
+        "column": 9,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 101,
+        "operation": "pass_settings",
+        "path": "algo-bot/app/analysis/market_map_delivery.py"
+      },
+      {
+        "attribute": null,
+        "classification": "facade_supported",
+        "column": 9,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 115,
+        "operation": "pass_settings",
+        "path": "algo-bot/app/analysis/market_map_delivery.py"
+      },
+      {
+        "attribute": null,
+        "classification": "facade_supported",
+        "column": 11,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 164,
+        "operation": "pass_settings",
+        "path": "algo-bot/app/analysis/market_map_delivery.py"
+      },
+      {
+        "attribute": null,
+        "classification": "facade_supported",
+        "column": 9,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 165,
+        "operation": "pass_settings",
+        "path": "algo-bot/app/analysis/scanner.py"
+      },
+      {
+        "attribute": null,
+        "classification": "facade_supported",
+        "column": 21,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 293,
+        "operation": "pass_settings",
+        "path": "algo-bot/app/analysis/scanner.py"
+      },
+      {
+        "attribute": null,
+        "classification": "facade_supported",
+        "column": 14,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 418,
+        "operation": "pass_settings",
+        "path": "algo-bot/app/analysis/scanner.py"
+      },
+      {
+        "attribute": null,
+        "classification": "facade_supported",
+        "column": 21,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 794,
+        "operation": "pass_settings",
+        "path": "algo-bot/app/analysis/scanner.py"
+      },
+      {
+        "attribute": null,
+        "classification": "facade_supported",
+        "column": 15,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 1738,
+        "operation": "pass_settings",
+        "path": "algo-bot/app/analysis/scanner.py"
+      },
+      {
+        "attribute": null,
+        "classification": "facade_supported",
+        "column": 15,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 1842,
+        "operation": "pass_settings",
+        "path": "algo-bot/app/analysis/scanner.py"
+      },
+      {
+        "attribute": null,
+        "classification": "facade_supported",
+        "column": 18,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 2746,
+        "operation": "pass_settings",
+        "path": "algo-bot/app/analysis/scanner.py"
+      },
+      {
+        "attribute": null,
+        "classification": "facade_supported",
+        "column": 18,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 2872,
+        "operation": "pass_settings",
+        "path": "algo-bot/app/analysis/scanner.py"
+      },
+      {
+        "attribute": null,
+        "classification": "facade_supported",
+        "column": 15,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 2653,
+        "operation": "pass_settings",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": null,
+        "classification": "facade_supported",
+        "column": 22,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 2786,
+        "operation": "pass_settings",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": null,
+        "classification": "facade_supported",
+        "column": 17,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 2828,
+        "operation": "pass_settings",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": null,
+        "classification": "facade_supported",
+        "column": 22,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 2842,
+        "operation": "pass_settings",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": null,
+        "classification": "facade_supported",
+        "column": 23,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 2896,
+        "operation": "pass_settings",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": null,
+        "classification": "facade_supported",
+        "column": 22,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 3114,
+        "operation": "pass_settings",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": null,
+        "classification": "facade_supported",
+        "column": 15,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 3204,
+        "operation": "pass_settings",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": null,
+        "classification": "facade_supported",
+        "column": 22,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 3370,
+        "operation": "pass_settings",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": null,
+        "classification": "facade_supported",
+        "column": 22,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 3473,
+        "operation": "pass_settings",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": null,
+        "classification": "facade_supported",
+        "column": 35,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 3552,
+        "operation": "pass_settings",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": null,
+        "classification": "facade_supported",
+        "column": 13,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 4833,
+        "operation": "pass_settings",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": null,
+        "classification": "facade_supported",
+        "column": 11,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 5020,
+        "operation": "pass_settings",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": null,
+        "classification": "facade_supported",
+        "column": 15,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 5210,
+        "operation": "pass_settings",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": null,
+        "classification": "facade_supported",
+        "column": 11,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 5318,
+        "operation": "pass_settings",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": null,
+        "classification": "facade_supported",
+        "column": 20,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 5645,
+        "operation": "pass_settings",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": null,
+        "classification": "facade_supported",
+        "column": 17,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 5653,
+        "operation": "pass_settings",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": null,
+        "classification": "facade_supported",
+        "column": 15,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 5687,
+        "operation": "pass_settings",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": null,
+        "classification": "facade_supported",
+        "column": 22,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 5780,
+        "operation": "pass_settings",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": null,
+        "classification": "facade_supported",
+        "column": 4,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 5830,
+        "operation": "pass_settings",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": null,
+        "classification": "facade_supported",
+        "column": 11,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 6720,
+        "operation": "pass_settings",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": null,
+        "classification": "facade_supported",
+        "column": 15,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 6874,
+        "operation": "pass_settings",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": null,
+        "classification": "facade_supported",
+        "column": 14,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 6977,
+        "operation": "pass_settings",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": null,
+        "classification": "facade_supported",
+        "column": 17,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 7007,
+        "operation": "pass_settings",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": null,
+        "classification": "facade_supported",
+        "column": 24,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 7631,
+        "operation": "pass_settings",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": null,
+        "classification": "facade_supported",
+        "column": 26,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 7651,
+        "operation": "pass_settings",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": null,
+        "classification": "facade_supported",
+        "column": 11,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 7669,
+        "operation": "pass_settings",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": null,
+        "classification": "facade_supported",
+        "column": 19,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 7677,
+        "operation": "pass_settings",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": null,
+        "classification": "facade_supported",
+        "column": 4,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 7721,
+        "operation": "pass_settings",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": null,
+        "classification": "facade_supported",
+        "column": 14,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 7735,
+        "operation": "pass_settings",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": null,
+        "classification": "facade_supported",
+        "column": 15,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 7736,
+        "operation": "pass_settings",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": null,
+        "classification": "facade_supported",
+        "column": 22,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 7837,
+        "operation": "pass_settings",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": null,
+        "classification": "facade_supported",
+        "column": 29,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 7931,
+        "operation": "pass_settings",
+        "path": "algo-bot/app/autotrade/worker.py"
+      },
+      {
+        "attribute": null,
+        "classification": "facade_supported",
+        "column": 22,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 308,
+        "operation": "pass_settings",
+        "path": "algo-bot/app/autotrade/zone_execution_cutover.py"
+      },
+      {
+        "attribute": null,
+        "classification": "facade_supported",
+        "column": 12,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 517,
+        "operation": "pass_settings",
+        "path": "algo-bot/app/autotrade/zone_execution_cutover.py"
+      },
+      {
+        "attribute": null,
+        "classification": "legacy_internal_only",
+        "column": 9,
+        "detail": "local legacy Settings construction",
+        "dynamic_names": [],
+        "line": 42,
+        "operation": "construct_settings",
+        "path": "algo-bot/app/configuration/activation_cli.py"
+      }
+    ]
+  },
+  "scripts": {
+    "attribute_deletions": [],
+    "attribute_reads": [
+      {
+        "attribute": "database_url",
+        "classification": "facade_supported",
+        "column": 34,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 134,
+        "operation": "attribute_read",
+        "path": "algo-bot/migrate_sqlite_to_pg.py"
+      },
+      {
+        "attribute": "database_url",
+        "classification": "facade_supported",
+        "column": 29,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 139,
+        "operation": "attribute_read",
+        "path": "algo-bot/migrate_sqlite_to_pg.py"
+      }
+    ],
+    "attribute_writes": [],
+    "introspection": [],
+    "method_calls": [],
+    "type_dependencies": []
+  },
+  "source_fingerprint": "012f42ec3aaf21d736f8073d8d798481c7ab0e3a55e33b569097f0919fb820f6",
+  "tests": {
+    "attribute_deletions": [],
+    "attribute_reads": [
+      {
+        "attribute": "auto_trade_max_entry_distance_pips",
+        "classification": "test_only_adaptation",
+        "column": 9,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 220,
+        "operation": "attribute_read",
+        "path": "algo-bot/tests/test_execution_confirmation.py"
+      },
+      {
+        "attribute": "auto_trade_entry_contract_tolerance_pips",
+        "classification": "test_only_adaptation",
+        "column": 9,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 221,
+        "operation": "attribute_read",
+        "path": "algo-bot/tests/test_execution_confirmation.py"
+      },
+      {
+        "attribute": "zone_merge_max_width",
+        "classification": "test_only_adaptation",
+        "column": 9,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 222,
+        "operation": "attribute_read",
+        "path": "algo-bot/tests/test_execution_confirmation.py"
+      },
+      {
+        "attribute": "scanner_actionability_gate_enabled",
+        "classification": "test_only_adaptation",
+        "column": 9,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 223,
+        "operation": "attribute_read",
+        "path": "algo-bot/tests/test_execution_confirmation.py"
+      },
+      {
+        "attribute": "key_level_role_ambiguity_gate_enabled",
+        "classification": "test_only_adaptation",
+        "column": 9,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 224,
+        "operation": "attribute_read",
+        "path": "algo-bot/tests/test_execution_confirmation.py"
+      },
+      {
+        "attribute": "range_context_disagreement_gate_enabled",
+        "classification": "test_only_adaptation",
+        "column": 9,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 225,
+        "operation": "attribute_read",
+        "path": "algo-bot/tests/test_execution_confirmation.py"
+      },
+      {
+        "attribute": "signal_vip_channel_id",
+        "classification": "test_only_adaptation",
+        "column": 15,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 232,
+        "operation": "attribute_read",
+        "path": "algo-bot/tests/test_manual_execution.py"
+      },
+      {
+        "attribute": "auto_trade_stream",
+        "classification": "test_only_adaptation",
+        "column": 17,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 326,
+        "operation": "attribute_read",
+        "path": "algo-bot/tests/test_mapped_reaction_idempotency.py"
+      },
+      {
+        "attribute": "auto_trade_stream",
+        "classification": "test_only_adaptation",
+        "column": 17,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 207,
+        "operation": "attribute_read",
+        "path": "algo-bot/tests/test_mapped_thesis_lock.py"
+      },
+      {
+        "attribute": "auto_trade_stream",
+        "classification": "test_only_adaptation",
+        "column": 17,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 225,
+        "operation": "attribute_read",
+        "path": "algo-bot/tests/test_mapped_thesis_lock.py"
+      },
+      {
+        "attribute": "auto_trade_contract_mode",
+        "classification": "test_only_adaptation",
+        "column": 9,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 25,
+        "operation": "attribute_read",
+        "path": "algo-bot/tests/test_trade_plan_v7_migration_mode.py"
+      },
+      {
+        "attribute": "auto_trade_contract_mode",
+        "classification": "test_only_adaptation",
+        "column": 9,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 49,
+        "operation": "attribute_read",
+        "path": "algo-bot/tests/test_trade_plan_v7_migration_mode.py"
+      },
+      {
+        "attribute": "trend_min_bos",
+        "classification": "test_only_adaptation",
+        "column": 29,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 168,
+        "operation": "attribute_read",
+        "path": "algo-bot/tests/test_trend.py"
+      },
+      {
+        "attribute": "trend_atr_expansion",
+        "classification": "test_only_adaptation",
+        "column": 28,
+        "detail": "direct Settings attribute read",
+        "dynamic_names": [],
+        "line": 207,
+        "operation": "attribute_read",
+        "path": "algo-bot/tests/test_trend.py"
+      }
+    ],
+    "attribute_writes": [
+      {
+        "attribute": "manual_algo_owner_execution_dm_enabled",
+        "classification": "test_only_adaptation",
+        "column": 2,
+        "detail": "helper or monkeypatch mutation of Settings",
+        "dynamic_names": [],
+        "line": 250,
+        "operation": "setattr",
+        "path": "algo-bot/tests/test_manual_execution.py"
+      },
+      {
+        "attribute": "manual_algo_owner_execution_dm_enabled",
+        "classification": "test_only_adaptation",
+        "column": 2,
+        "detail": "helper or monkeypatch mutation of Settings",
+        "dynamic_names": [],
+        "line": 282,
+        "operation": "setattr",
+        "path": "algo-bot/tests/test_manual_execution.py"
+      },
+      {
+        "attribute": "manual_trade_intent_stream",
+        "classification": "test_only_adaptation",
+        "column": 2,
+        "detail": "helper or monkeypatch mutation of Settings",
+        "dynamic_names": [],
+        "line": 64,
+        "operation": "setattr",
+        "path": "algo-bot/tests/test_manual_intent.py"
+      },
+      {
+        "attribute": "manual_trade_intent_stream_maxlen",
+        "classification": "test_only_adaptation",
+        "column": 2,
+        "detail": "helper or monkeypatch mutation of Settings",
+        "dynamic_names": [],
+        "line": 65,
+        "operation": "setattr",
+        "path": "algo-bot/tests/test_manual_intent.py"
+      },
+      {
+        "attribute": "manual_trade_intent_stream",
+        "classification": "test_only_adaptation",
+        "column": 2,
+        "detail": "helper or monkeypatch mutation of Settings",
+        "dynamic_names": [],
+        "line": 93,
+        "operation": "setattr",
+        "path": "algo-bot/tests/test_manual_intent.py"
+      },
+      {
+        "attribute": "auto_trade_enabled",
+        "classification": "test_only_adaptation",
+        "column": 2,
+        "detail": "helper or monkeypatch mutation of Settings",
+        "dynamic_names": [],
+        "line": 203,
+        "operation": "setattr",
+        "path": "algo-bot/tests/test_mapped_reaction_idempotency.py"
+      },
+      {
+        "attribute": "auto_trade_mapped_zone_enabled",
+        "classification": "test_only_adaptation",
+        "column": 2,
+        "detail": "helper or monkeypatch mutation of Settings",
+        "dynamic_names": [],
+        "line": 204,
+        "operation": "setattr",
+        "path": "algo-bot/tests/test_mapped_reaction_idempotency.py"
+      },
+      {
+        "attribute": "auto_trade_min_confluence",
+        "classification": "test_only_adaptation",
+        "column": 2,
+        "detail": "helper or monkeypatch mutation of Settings",
+        "dynamic_names": [],
+        "line": 207,
+        "operation": "setattr",
+        "path": "algo-bot/tests/test_mapped_reaction_idempotency.py"
+      },
+      {
+        "attribute": "auto_trade_candidate_ttl",
+        "classification": "test_only_adaptation",
+        "column": 2,
+        "detail": "helper or monkeypatch mutation of Settings",
+        "dynamic_names": [],
+        "line": 208,
+        "operation": "setattr",
+        "path": "algo-bot/tests/test_mapped_reaction_idempotency.py"
+      },
+      {
+        "attribute": "auto_trade_opposing_barrier_veto_enabled",
+        "classification": "test_only_adaptation",
+        "column": 2,
+        "detail": "helper or monkeypatch mutation of Settings",
+        "dynamic_names": [],
+        "line": 209,
+        "operation": "setattr",
+        "path": "algo-bot/tests/test_mapped_reaction_idempotency.py"
+      },
+      {
+        "attribute": "auto_trade_overlap_veto_enabled",
+        "classification": "test_only_adaptation",
+        "column": 2,
+        "detail": "helper or monkeypatch mutation of Settings",
+        "dynamic_names": [],
+        "line": 212,
+        "operation": "setattr",
+        "path": "algo-bot/tests/test_mapped_reaction_idempotency.py"
+      },
+      {
+        "attribute": "auto_trade_zone_cooldown_enabled",
+        "classification": "test_only_adaptation",
+        "column": 2,
+        "detail": "helper or monkeypatch mutation of Settings",
+        "dynamic_names": [],
+        "line": 213,
+        "operation": "setattr",
+        "path": "algo-bot/tests/test_mapped_reaction_idempotency.py"
+      },
+      {
+        "attribute": "auto_trade_htf_veto_enabled",
+        "classification": "test_only_adaptation",
+        "column": 2,
+        "detail": "helper or monkeypatch mutation of Settings",
+        "dynamic_names": [],
+        "line": 214,
+        "operation": "setattr",
+        "path": "algo-bot/tests/test_mapped_reaction_idempotency.py"
+      },
+      {
+        "attribute": "auto_trade_map_thesis_lock_enabled",
+        "classification": "test_only_adaptation",
+        "column": 2,
+        "detail": "helper or monkeypatch mutation of Settings",
+        "dynamic_names": [],
+        "line": 215,
+        "operation": "setattr",
+        "path": "algo-bot/tests/test_mapped_reaction_idempotency.py"
+      },
+      {
+        "attribute": "auto_trade_enabled",
+        "classification": "test_only_adaptation",
+        "column": 2,
+        "detail": "helper or monkeypatch mutation of Settings",
+        "dynamic_names": [],
+        "line": 131,
+        "operation": "setattr",
+        "path": "algo-bot/tests/test_mapped_thesis_lock.py"
+      },
+      {
+        "attribute": "auto_trade_mapped_zone_enabled",
+        "classification": "test_only_adaptation",
+        "column": 2,
+        "detail": "helper or monkeypatch mutation of Settings",
+        "dynamic_names": [],
+        "line": 132,
+        "operation": "setattr",
+        "path": "algo-bot/tests/test_mapped_thesis_lock.py"
+      },
+      {
+        "attribute": "auto_trade_map_thesis_lock_enabled",
+        "classification": "test_only_adaptation",
+        "column": 2,
+        "detail": "helper or monkeypatch mutation of Settings",
+        "dynamic_names": [],
+        "line": 135,
+        "operation": "setattr",
+        "path": "algo-bot/tests/test_mapped_thesis_lock.py"
+      },
+      {
+        "attribute": "auto_trade_min_confluence",
+        "classification": "test_only_adaptation",
+        "column": 2,
+        "detail": "helper or monkeypatch mutation of Settings",
+        "dynamic_names": [],
+        "line": 136,
+        "operation": "setattr",
+        "path": "algo-bot/tests/test_mapped_thesis_lock.py"
+      },
+      {
+        "attribute": "auto_trade_candidate_ttl",
+        "classification": "test_only_adaptation",
+        "column": 2,
+        "detail": "helper or monkeypatch mutation of Settings",
+        "dynamic_names": [],
+        "line": 137,
+        "operation": "setattr",
+        "path": "algo-bot/tests/test_mapped_thesis_lock.py"
+      },
+      {
+        "attribute": "auto_trade_opposing_barrier_veto_enabled",
+        "classification": "test_only_adaptation",
+        "column": 2,
+        "detail": "helper or monkeypatch mutation of Settings",
+        "dynamic_names": [],
+        "line": 138,
+        "operation": "setattr",
+        "path": "algo-bot/tests/test_mapped_thesis_lock.py"
+      },
+      {
+        "attribute": "auto_trade_overlap_veto_enabled",
+        "classification": "test_only_adaptation",
+        "column": 2,
+        "detail": "helper or monkeypatch mutation of Settings",
+        "dynamic_names": [],
+        "line": 141,
+        "operation": "setattr",
+        "path": "algo-bot/tests/test_mapped_thesis_lock.py"
+      },
+      {
+        "attribute": "auto_trade_zone_cooldown_enabled",
+        "classification": "test_only_adaptation",
+        "column": 2,
+        "detail": "helper or monkeypatch mutation of Settings",
+        "dynamic_names": [],
+        "line": 142,
+        "operation": "setattr",
+        "path": "algo-bot/tests/test_mapped_thesis_lock.py"
+      },
+      {
+        "attribute": "auto_trade_htf_veto_enabled",
+        "classification": "test_only_adaptation",
+        "column": 2,
+        "detail": "helper or monkeypatch mutation of Settings",
+        "dynamic_names": [],
+        "line": 143,
+        "operation": "setattr",
+        "path": "algo-bot/tests/test_mapped_thesis_lock.py"
+      },
+      {
+        "attribute": "auto_trade_allow_counter_bias",
+        "classification": "test_only_adaptation",
+        "column": 2,
+        "detail": "helper or monkeypatch mutation of Settings",
+        "dynamic_names": [],
+        "line": 178,
+        "operation": "setattr",
+        "path": "algo-bot/tests/test_trend.py"
+      },
+      {
+        "attribute": "trend_atr_expansion",
+        "classification": "test_only_adaptation",
+        "column": 2,
+        "detail": "helper or monkeypatch mutation of Settings",
+        "dynamic_names": [],
+        "line": 197,
+        "operation": "setattr",
+        "path": "algo-bot/tests/test_trend.py"
+      },
+      {
+        "attribute": "trend_breakout_min_room_pips",
+        "classification": "test_only_adaptation",
+        "column": 2,
+        "detail": "helper or monkeypatch mutation of Settings",
+        "dynamic_names": [],
+        "line": 282,
+        "operation": "setattr",
+        "path": "algo-bot/tests/test_trend.py"
+      },
+      {
+        "attribute": "trend_breakout_min_room_pips",
+        "classification": "test_only_adaptation",
+        "column": 2,
+        "detail": "helper or monkeypatch mutation of Settings",
+        "dynamic_names": [],
+        "line": 301,
+        "operation": "setattr",
+        "path": "algo-bot/tests/test_trend.py"
+      },
+      {
+        "attribute": "trend_breakout_min_room_pips",
+        "classification": "test_only_adaptation",
+        "column": 2,
+        "detail": "helper or monkeypatch mutation of Settings",
+        "dynamic_names": [],
+        "line": 323,
+        "operation": "setattr",
+        "path": "algo-bot/tests/test_trend.py"
+      },
+      {
+        "attribute": "trend_allow_chase",
+        "classification": "test_only_adaptation",
+        "column": 2,
+        "detail": "helper or monkeypatch mutation of Settings",
+        "dynamic_names": [],
+        "line": 538,
+        "operation": "setattr",
+        "path": "algo-bot/tests/test_trend.py"
+      }
+    ],
+    "introspection": [
+      {
+        "attribute": null,
+        "classification": "test_only_adaptation",
+        "column": 11,
+        "detail": "getattr on Settings",
+        "dynamic_names": [],
+        "line": 149,
+        "operation": "getattr",
+        "path": "algo-bot/tests/test_trend.py"
+      }
+    ],
+    "method_calls": [
+      {
+        "attribute": "model_dump",
+        "classification": "test_only_adaptation",
+        "column": 11,
+        "detail": "method call on legacy Settings instance",
+        "dynamic_names": [],
+        "line": 111,
+        "operation": "method:model_dump",
+        "path": "algo-bot/tests/config_characterization.py"
+      }
+    ],
+    "type_dependencies": [
+      {
+        "attribute": "model_fields",
+        "classification": "test_only_adaptation",
+        "column": 21,
+        "detail": "legacy Settings class API dependency",
+        "dynamic_names": [],
+        "line": 79,
+        "operation": "settings_class_attribute",
+        "path": "algo-bot/tests/config_characterization.py"
+      },
+      {
+        "attribute": null,
+        "classification": "test_only_adaptation",
+        "column": 15,
+        "detail": "local legacy Settings construction",
+        "dynamic_names": [],
+        "line": 110,
+        "operation": "construct_settings",
+        "path": "algo-bot/tests/config_characterization.py"
+      },
+      {
+        "attribute": "model_fields",
+        "classification": "test_only_adaptation",
+        "column": 41,
+        "detail": "legacy Settings class API dependency",
+        "dynamic_names": [],
+        "line": 115,
+        "operation": "settings_class_attribute",
+        "path": "algo-bot/tests/config_characterization.py"
+      },
+      {
+        "attribute": null,
+        "classification": "test_only_adaptation",
+        "column": 9,
+        "detail": "isinstance on Settings",
+        "dynamic_names": [],
+        "line": 57,
+        "operation": "isinstance",
+        "path": "algo-bot/tests/test_config_activation_architecture.py"
+      },
+      {
+        "attribute": null,
+        "classification": "test_only_adaptation",
+        "column": 9,
+        "detail": "type on Settings",
+        "dynamic_names": [],
+        "line": 58,
+        "operation": "type",
+        "path": "algo-bot/tests/test_config_activation_architecture.py"
+      },
+      {
+        "attribute": null,
+        "classification": "test_only_adaptation",
+        "column": 9,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 34,
+        "operation": "pass_settings",
+        "path": "algo-bot/tests/test_config_activation_readiness.py"
+      },
+      {
+        "attribute": null,
+        "classification": "test_only_adaptation",
+        "column": 11,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 62,
+        "operation": "pass_settings",
+        "path": "algo-bot/tests/test_config_authority.py"
+      },
+      {
+        "attribute": null,
+        "classification": "test_only_adaptation",
+        "column": 11,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 73,
+        "operation": "pass_settings",
+        "path": "algo-bot/tests/test_config_authority.py"
+      },
+      {
+        "attribute": null,
+        "classification": "test_only_adaptation",
+        "column": 11,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 85,
+        "operation": "pass_settings",
+        "path": "algo-bot/tests/test_config_authority.py"
+      },
+      {
+        "attribute": null,
+        "classification": "test_only_adaptation",
+        "column": 9,
+        "detail": "isinstance on Settings",
+        "dynamic_names": [],
+        "line": 71,
+        "operation": "isinstance",
+        "path": "algo-bot/tests/test_config_shadow_architecture.py"
+      },
+      {
+        "attribute": null,
+        "classification": "test_only_adaptation",
+        "column": 13,
+        "detail": "local legacy Settings construction",
+        "dynamic_names": [],
+        "line": 71,
+        "operation": "construct_settings",
+        "path": "algo-bot/tests/test_config_shadow_loader.py"
+      },
+      {
+        "attribute": null,
+        "classification": "test_only_adaptation",
+        "column": 11,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 73,
+        "operation": "pass_settings",
+        "path": "algo-bot/tests/test_config_shadow_loader.py"
+      },
+      {
+        "attribute": null,
+        "classification": "test_only_adaptation",
+        "column": 11,
+        "detail": "local legacy Settings construction",
+        "dynamic_names": [],
+        "line": 35,
+        "operation": "construct_settings",
+        "path": "algo-bot/tests/test_config_shadow_parity.py"
+      },
+      {
+        "attribute": null,
+        "classification": "test_only_adaptation",
+        "column": 6,
+        "detail": "local legacy Settings construction",
+        "dynamic_names": [],
+        "line": 173,
+        "operation": "construct_settings",
+        "path": "algo-bot/tests/test_config_shadow_parity.py"
+      },
+      {
+        "attribute": null,
+        "classification": "test_only_adaptation",
+        "column": 11,
+        "detail": "local legacy Settings construction",
+        "dynamic_names": [],
+        "line": 30,
+        "operation": "construct_settings",
+        "path": "algo-bot/tests/test_config_source_characterization.py"
+      },
+      {
+        "attribute": null,
+        "classification": "test_only_adaptation",
+        "column": 9,
+        "detail": "local legacy Settings construction",
+        "dynamic_names": [],
+        "line": 33,
+        "operation": "construct_settings",
+        "path": "algo-bot/tests/test_demo_eval_runtime.py"
+      },
+      {
+        "attribute": null,
+        "classification": "test_only_adaptation",
+        "column": 9,
+        "detail": "local legacy Settings construction",
+        "dynamic_names": [],
+        "line": 209,
+        "operation": "construct_settings",
+        "path": "algo-bot/tests/test_execution_confirmation.py"
+      },
+      {
+        "attribute": null,
+        "classification": "test_only_adaptation",
+        "column": 4,
+        "detail": "local legacy Settings construction",
+        "dynamic_names": [],
+        "line": 211,
+        "operation": "construct_settings",
+        "path": "algo-bot/tests/test_execution_confirmation.py"
+      },
+      {
+        "attribute": null,
+        "classification": "test_only_adaptation",
+        "column": 15,
+        "detail": "local legacy Settings construction",
+        "dynamic_names": [],
+        "line": 218,
+        "operation": "construct_settings",
+        "path": "algo-bot/tests/test_execution_confirmation.py"
+      },
+      {
+        "attribute": null,
+        "classification": "test_only_adaptation",
+        "column": 4,
+        "detail": "local legacy Settings construction",
+        "dynamic_names": [],
+        "line": 228,
+        "operation": "construct_settings",
+        "path": "algo-bot/tests/test_execution_confirmation.py"
+      },
+      {
+        "attribute": "model_fields",
+        "classification": "test_only_adaptation",
+        "column": 20,
+        "detail": "legacy Settings class API dependency",
+        "dynamic_names": [],
+        "line": 47,
+        "operation": "settings_class_attribute",
+        "path": "algo-bot/tests/test_m1_trigger.py"
+      },
+      {
+        "attribute": null,
+        "classification": "test_only_adaptation",
+        "column": 2,
+        "detail": "local legacy Settings construction",
+        "dynamic_names": [],
+        "line": 12,
+        "operation": "construct_settings",
+        "path": "algo-bot/tests/test_range_box_scale_out.py"
+      },
+      {
+        "attribute": null,
+        "classification": "test_only_adaptation",
+        "column": 4,
+        "detail": "local legacy Settings construction",
+        "dynamic_names": [],
+        "line": 20,
+        "operation": "construct_settings",
+        "path": "algo-bot/tests/test_range_box_scale_out.py"
+      },
+      {
+        "attribute": null,
+        "classification": "test_only_adaptation",
+        "column": 4,
+        "detail": "local legacy Settings construction",
+        "dynamic_names": [],
+        "line": 27,
+        "operation": "construct_settings",
+        "path": "algo-bot/tests/test_range_box_scale_out.py"
+      },
+      {
+        "attribute": null,
+        "classification": "test_only_adaptation",
+        "column": 11,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 164,
+        "operation": "pass_settings",
+        "path": "algo-bot/tests/test_trend.py"
+      },
+      {
+        "attribute": null,
+        "classification": "test_only_adaptation",
+        "column": 11,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 184,
+        "operation": "pass_settings",
+        "path": "algo-bot/tests/test_trend.py"
+      },
+      {
+        "attribute": null,
+        "classification": "test_only_adaptation",
+        "column": 11,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 204,
+        "operation": "pass_settings",
+        "path": "algo-bot/tests/test_trend.py"
+      },
+      {
+        "attribute": null,
+        "classification": "test_only_adaptation",
+        "column": 11,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 235,
+        "operation": "pass_settings",
+        "path": "algo-bot/tests/test_trend.py"
+      },
+      {
+        "attribute": null,
+        "classification": "test_only_adaptation",
+        "column": 13,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 249,
+        "operation": "pass_settings",
+        "path": "algo-bot/tests/test_trend.py"
+      },
+      {
+        "attribute": null,
+        "classification": "test_only_adaptation",
+        "column": 13,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 266,
+        "operation": "pass_settings",
+        "path": "algo-bot/tests/test_trend.py"
+      },
+      {
+        "attribute": null,
+        "classification": "test_only_adaptation",
+        "column": 13,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 284,
+        "operation": "pass_settings",
+        "path": "algo-bot/tests/test_trend.py"
+      },
+      {
+        "attribute": null,
+        "classification": "test_only_adaptation",
+        "column": 13,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 306,
+        "operation": "pass_settings",
+        "path": "algo-bot/tests/test_trend.py"
+      },
+      {
+        "attribute": null,
+        "classification": "test_only_adaptation",
+        "column": 13,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 325,
+        "operation": "pass_settings",
+        "path": "algo-bot/tests/test_trend.py"
+      },
+      {
+        "attribute": null,
+        "classification": "test_only_adaptation",
+        "column": 13,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 376,
+        "operation": "pass_settings",
+        "path": "algo-bot/tests/test_trend.py"
+      },
+      {
+        "attribute": null,
+        "classification": "test_only_adaptation",
+        "column": 13,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 400,
+        "operation": "pass_settings",
+        "path": "algo-bot/tests/test_trend.py"
+      },
+      {
+        "attribute": null,
+        "classification": "test_only_adaptation",
+        "column": 13,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 427,
+        "operation": "pass_settings",
+        "path": "algo-bot/tests/test_trend.py"
+      },
+      {
+        "attribute": null,
+        "classification": "test_only_adaptation",
+        "column": 13,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 483,
+        "operation": "pass_settings",
+        "path": "algo-bot/tests/test_trend.py"
+      },
+      {
+        "attribute": null,
+        "classification": "test_only_adaptation",
+        "column": 13,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 503,
+        "operation": "pass_settings",
+        "path": "algo-bot/tests/test_trend.py"
+      },
+      {
+        "attribute": null,
+        "classification": "test_only_adaptation",
+        "column": 13,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 522,
+        "operation": "pass_settings",
+        "path": "algo-bot/tests/test_trend.py"
+      },
+      {
+        "attribute": null,
+        "classification": "test_only_adaptation",
+        "column": 13,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 541,
+        "operation": "pass_settings",
+        "path": "algo-bot/tests/test_trend.py"
+      },
+      {
+        "attribute": null,
+        "classification": "test_only_adaptation",
+        "column": 12,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 572,
+        "operation": "pass_settings",
+        "path": "algo-bot/tests/test_trend.py"
+      },
+      {
+        "attribute": null,
+        "classification": "test_only_adaptation",
+        "column": 12,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 592,
+        "operation": "pass_settings",
+        "path": "algo-bot/tests/test_trend.py"
+      },
+      {
+        "attribute": null,
+        "classification": "test_only_adaptation",
+        "column": 9,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 607,
+        "operation": "pass_settings",
+        "path": "algo-bot/tests/test_trend.py"
+      },
+      {
+        "attribute": null,
+        "classification": "test_only_adaptation",
+        "column": 13,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 624,
+        "operation": "pass_settings",
+        "path": "algo-bot/tests/test_trend.py"
+      },
+      {
+        "attribute": null,
+        "classification": "test_only_adaptation",
+        "column": 12,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 642,
+        "operation": "pass_settings",
+        "path": "algo-bot/tests/test_trend.py"
+      },
+      {
+        "attribute": null,
+        "classification": "test_only_adaptation",
+        "column": 17,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 648,
+        "operation": "pass_settings",
+        "path": "algo-bot/tests/test_trend.py"
+      },
+      {
+        "attribute": null,
+        "classification": "test_only_adaptation",
+        "column": 16,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 659,
+        "operation": "pass_settings",
+        "path": "algo-bot/tests/test_trend.py"
+      },
+      {
+        "attribute": null,
+        "classification": "test_only_adaptation",
+        "column": 17,
+        "detail": "legacy Settings instance passed as a structural dependency",
+        "dynamic_names": [],
+        "line": 666,
+        "operation": "pass_settings",
+        "path": "algo-bot/tests/test_trend.py"
+      }
+    ]
+  }
+}

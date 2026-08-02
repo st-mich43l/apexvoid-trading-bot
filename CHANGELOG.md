@@ -31,6 +31,12 @@ dated section after deployment.
   inside the still-healthy feed session instead of leaving execution stopped.
 
 ### Added
+- Non-authoritative Phase 2D1 configuration activation rehearsal: an
+  AST-backed legacy `Settings` usage inventory, generated immutable Python
+  access map, read-only 316-field/four-property canonical facade, local-only
+  authority and rollback models, explicit readiness blockers, secret-safe
+  diagnostics, and reproducible Python/.NET verification commands. Legacy
+  `Settings` remains authoritative and no production consumer is migrated.
 - Non-authoritative Phase 2C configuration shadow loading: immutable
   `conservative`/`demo_eval` profiles, deterministic source precedence,
   per-layer alias conflict detection, field provenance, legacy compatibility
