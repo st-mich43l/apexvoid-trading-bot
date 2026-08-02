@@ -13,7 +13,7 @@ from aiogram.types import Message
 from app.signals.chart_analysis import analyse_chart_image
 from app.autotrade.delivery import auto_trade_status_text, set_auto_trade_paused
 from app.signals.manual_execution import request_close_all
-from app.core.config import settings
+from app.core.config import runtime_config, settings
 from app.analysis import scanner
 from app.analysis.market_map_delivery import send_current_market_map
 from app.persistence import redis_state
@@ -208,14 +208,16 @@ async def handle_scan_report(msg: Message) -> None:
     return
   raw = _command_args(msg)
   symbol, rest = _take_symbol(raw, default=None)
-  symbol = (symbol or settings.scanner_symbols.split(",")[0]).strip().upper()
+  symbol = (
+    symbol or runtime_config.market_data.scanner.symbols.split(",")[0]
+  ).strip().upper()
   hours = 24.0
   if rest.strip():
     try:
       hours = max(1.0, float(rest.strip().split()[0]))
     except ValueError:
       pass
-  tf = settings.scanner_exec_tf.upper()
+  tf = runtime_config.market_data.scanner.execution_timeframe.upper()
   client = redis_state.get_client()
   rows = await scanner.scan_report(client, symbol, tf, hours=hours)
   await msg.answer(scanner.format_scan_report(rows, symbol, tf, hours))
@@ -625,7 +627,7 @@ async def handle_trade_untagged(msg: Message) -> None:
   if not signals:
     await msg.answer("✅ No untagged signals.")
     return
-  tz = ZoneInfo(settings.seq_reset_tz)
+  tz = ZoneInfo(runtime_config.delivery.presentation.seq_reset_tz)
   lines = [f"📋 <b>Untagged signals ({len(signals)})</b>"]
   for signal in signals:
     signal_id = signal["id"]
@@ -701,10 +703,10 @@ async def handle_trade_stats(msg: Message) -> None:
   stats = build_stats(
     records,
     signals,
-    settings.seq_reset_tz,
-    settings.session_asia_start,
-    settings.session_london_start,
-    settings.session_ny_start,
+    runtime_config.delivery.presentation.seq_reset_tz,
+    runtime_config.market_data.sessions.asia_start,
+    runtime_config.market_data.sessions.london_start,
+    runtime_config.market_data.sessions.ny_start,
   )
   await msg.answer(
     format_stats(stats, label)

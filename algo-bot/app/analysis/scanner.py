@@ -10,7 +10,7 @@ from html import escape
 from typing import Any, Awaitable, Callable, Iterable
 
 from app.persistence import redis_state
-from app.core.config import settings
+from app.core.config import runtime_config, settings
 from app.analysis.detectors import (
   DEFAULT_DETECTORS,
   DetectionContext,
@@ -145,11 +145,11 @@ def _csv(value: str) -> list[str]:
 
 
 def _watched_symbols() -> set[str]:
-  return set(_csv(settings.scanner_symbols))
+  return set(_csv(runtime_config.market_data.scanner.symbols))
 
 
 def _htf_tfs() -> list[str]:
-  return _csv(settings.scanner_htf)
+  return _csv(runtime_config.market_data.scanner.htf)
 
 
 def _all_tfs(exec_tf: str, htf_tfs: Iterable[str]) -> list[str]:
@@ -209,7 +209,7 @@ def _dedup_key(symbol: str, tf: str, result: DetectionResult) -> str:
   bucket = _level_bucket(
     symbol,
     result.key_level,
-    settings.scanner_level_bucket,
+    runtime_config.market_data.scanner.level_bucket_pips,
   )
   return f"scanner:alerted:{symbol}:{tf}:{result.setup}:{bucket}"
 
@@ -231,7 +231,7 @@ def _band_dedup_key(symbol: str, result: DetectionResult) -> str:
     bucket = _level_bucket(
       symbol,
       midpoint,
-      settings.scanner_level_bucket,
+      runtime_config.market_data.scanner.level_bucket_pips,
     )
     return (
       f"scanner:alerted_band:{symbol}:{result.direction}:"
@@ -241,7 +241,7 @@ def _band_dedup_key(symbol: str, result: DetectionResult) -> str:
   bucket = _level_bucket(
     symbol,
     midpoint,
-    settings.scanner_level_bucket,
+    runtime_config.market_data.scanner.level_bucket_pips,
   )
   return (
     f"scanner:alerted_band:{symbol}:{result.direction}:"
@@ -955,7 +955,7 @@ def _active_setup_band_key(
   bucket = _level_bucket(
     symbol,
     midpoint,
-    settings.scanner_level_bucket,
+    runtime_config.market_data.scanner.level_bucket_pips,
   )
   return (
     f"scanner:setup:active_band:{symbol.upper()}:{tf.upper()}:"
@@ -1483,7 +1483,7 @@ async def _load_spot_snapshot(client: Any, symbol: str) -> SpotSnapshot | None:
   return SpotSnapshot(
     price=price,
     ts=ts,
-    fresh=now - ts <= max(0, settings.spot_fresh_secs),
+    fresh=now - ts <= max(0, runtime_config.market_data.spot.fresh_secs),
   )
 
 
@@ -1511,7 +1511,7 @@ def _trusted_spot_values(
     return None, None
 
   close = float(df["close"].iloc[-1])
-  gate = max(0.0, settings.spot_max_deviation_pct) / 100.0
+  gate = max(0.0, runtime_config.market_data.spot.max_deviation_pct) / 100.0
   bad = (
     not math.isfinite(spot.price)
     or spot.price <= 0
@@ -1525,7 +1525,7 @@ def _trusted_spot_values(
       "falling back to bar close",
       spot.price,
       close,
-      settings.spot_max_deviation_pct,
+      runtime_config.market_data.spot.max_deviation_pct,
     )
     return None, None
   return spot.price, spot.ts
@@ -1880,7 +1880,7 @@ def _digest_results(
       result for result in results if not _is_digest_primary(result)
     ])
   ordered = sorted(candidates, key=_result_rank)
-  top_n = int(settings.scanner_top_n)
+  top_n = int(runtime_config.delivery.scanner_cards.top_n)
   return (ordered if top_n <= 0 else ordered[:top_n]), conflicts
 
 
@@ -2050,7 +2050,7 @@ async def _notify_digest_once(
 ) -> list[DetectionResult]:
   if not results:
     return []
-  if not settings.telegram_owner_id:
+  if not runtime_config.delivery.telegram.telegram_owner_id:
     log.info(
       "scanner detection suppressed: TELEGRAM_OWNER_ID not set "
       "symbol=%s tf=%s count=%s",
@@ -2141,7 +2141,7 @@ async def _notify_digest_once(
     item for item in card_candidates if item.setup in STRUCTURAL_SETUPS
   ]
   cards = sorted(structural or card_candidates[:1], key=_result_rank)
-  card_top_n = int(settings.scanner_card_top_n)
+  card_top_n = int(runtime_config.delivery.scanner_cards.maximum_cards)
   if card_top_n > 0:
     cards = cards[:card_top_n]
   match_ids_by_card: dict[int, str] = {}
@@ -2165,7 +2165,7 @@ async def _notify_digest_once(
     dedup_claimed = await client.set(
       dedup_key,
       "1",
-      ex=settings.scanner_alert_ttl,
+      ex=runtime_config.market_data.scanner.alert_ttl,
       nx=True,
     )
     if not dedup_claimed:
@@ -2198,7 +2198,7 @@ async def _notify_digest_once(
         client,
         match_for_card.match_id,
         text,
-        chat_id=settings.telegram_owner_id,
+        chat_id=runtime_config.delivery.telegram.telegram_owner_id,
         send_fn=notify,
         edit_fn=edit or edit_scanner_message_text,
         delete_fn=delete_scanner_message,
@@ -2633,7 +2633,9 @@ async def _load_market_context_for_symbol(
   symbol = symbol.upper()
   client = client or redis_state.get_client()
   source = source or RedisOHLCSource(client)
-  exec_tf = (exec_tf or settings.scanner_exec_tf).upper()
+  exec_tf = (
+    exec_tf or runtime_config.market_data.scanner.execution_timeframe
+  ).upper()
   htf_order = htf_order or _htf_tfs()
   spot = await _load_spot_snapshot(client, symbol)
   frames = await _load_frames(
@@ -2678,7 +2680,7 @@ async def _handle_event(
   if parsed is None:
     return []
   symbol, tf, event_ts = parsed
-  exec_tf = settings.scanner_exec_tf.upper()
+  exec_tf = runtime_config.market_data.scanner.execution_timeframe.upper()
   if symbol not in _watched_symbols():
     return []
 
@@ -3111,7 +3113,7 @@ async def scanner_loop() -> None:
   if not settings.scanner_enabled:
     log.info("Price-action scanner disabled: SCANNER_ENABLED=false")
     return
-  if not settings.telegram_owner_id:
+  if not runtime_config.delivery.telegram.telegram_owner_id:
     log.info(
       "Price-action scanner notifications disabled: TELEGRAM_OWNER_ID not set"
     )
@@ -3123,8 +3125,12 @@ async def scanner_loop() -> None:
   log.info(
     "Price-action scanner watching %s on %s (%s)",
     ",".join(sorted(_watched_symbols())),
-    settings.scanner_exec_tf.upper(),
-    "owner DM enabled" if settings.telegram_owner_id else "analysis only",
+    runtime_config.market_data.scanner.execution_timeframe.upper(),
+    (
+      "owner DM enabled"
+      if runtime_config.delivery.telegram.telegram_owner_id
+      else "analysis only"
+    ),
   )
   try:
     async for message in pubsub.listen():

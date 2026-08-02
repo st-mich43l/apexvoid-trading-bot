@@ -15,16 +15,19 @@ from aiogram.types import (
   Message,
 )
 
-from app.core.config import settings
+from app.core.config import runtime_config
 
 log = logging.getLogger(__name__)
 
 bot = Bot(
-  token=settings.telegram_bot_token,
+  token=runtime_config.bootstrap.telegram.bot_token,
   default=DefaultBotProperties(parse_mode=ParseMode.HTML),
 )
 scanner_bot = Bot(
-  token=settings.scanner_telegram_bot_token or settings.telegram_bot_token,
+  token=(
+    runtime_config.delivery.telegram.scanner_telegram_bot_token
+    or runtime_config.bootstrap.telegram.bot_token
+  ),
   default=DefaultBotProperties(parse_mode=ParseMode.HTML),
 )
 dp = Dispatcher()
@@ -73,10 +76,12 @@ async def setup_commands(target_bot: Bot) -> None:
     [],
     scope=BotCommandScopeDefault(),
   )
-  if settings.telegram_owner_id:
+  if runtime_config.delivery.telegram.telegram_owner_id:
     await target_bot.set_my_commands(
       OWNER_COMMANDS,
-      scope=BotCommandScopeChat(chat_id=settings.telegram_owner_id),
+      scope=BotCommandScopeChat(
+        chat_id=runtime_config.delivery.telegram.telegram_owner_id
+      ),
     )
 
 
@@ -85,10 +90,12 @@ async def setup_scanner_commands(target_bot: Bot) -> None:
     SCANNER_PUBLIC_COMMANDS,
     scope=BotCommandScopeDefault(),
   )
-  if settings.telegram_owner_id:
+  if runtime_config.delivery.telegram.telegram_owner_id:
     await target_bot.set_my_commands(
       SCANNER_OWNER_COMMANDS,
-      scope=BotCommandScopeChat(chat_id=settings.telegram_owner_id),
+      scope=BotCommandScopeChat(
+        chat_id=runtime_config.delivery.telegram.telegram_owner_id
+      ),
     )
 
 
@@ -134,7 +141,9 @@ async def _send_message_with_retry(
   for attempt in range(1, _MAX_SEND_ATTEMPTS + 1):
     try:
       return await target_bot.send_message(
-        chat_id=chat_id or settings.telegram_channel_id,
+        chat_id=(
+          chat_id or runtime_config.delivery.telegram.telegram_channel_id
+        ),
         text=text,
         reply_to_message_id=reply_to,
         reply_markup=reply_markup,

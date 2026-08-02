@@ -81,7 +81,7 @@ def _rowcount(status: str) -> int:
 
 
 def _current_trade_date() -> str:
-  tz = ZoneInfo(settings.seq_reset_tz)
+  tz = ZoneInfo(runtime_config.delivery.presentation.seq_reset_tz)
   return datetime.now(tz).date().isoformat()
 
 

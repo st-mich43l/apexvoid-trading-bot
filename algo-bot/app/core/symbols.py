@@ -1,6 +1,6 @@
 """Instrument metadata and Telegram channel routing."""
 
-from app.core.config import settings
+from app.core.config import runtime_config, settings
 
 
 SYMBOLS = {
@@ -36,7 +36,7 @@ CHANNELS = [
   {
     "symbol": "XAU",
     "tier": "public",
-    "channel_id": settings.signal_public_channel_id,
+    "channel_id": runtime_config.delivery.telegram.signal_public_channel_id,
   },
 ]
 

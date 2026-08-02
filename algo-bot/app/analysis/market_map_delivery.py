@@ -9,7 +9,7 @@ import json
 import logging
 from zoneinfo import ZoneInfo
 
-from app.core.config import settings
+from app.core.config import runtime_config, settings
 from app.persistence import redis_state
 from app.persistence.store import get_meta, set_meta
 from app.analysis.market_map import (
@@ -76,7 +76,9 @@ async def get_current_market_map(symbol: str) -> MarketMap | None:
     analysis = getattr(ctx, "analysis", None) if ctx is not None else None
     if analysis is None:
       return None
-    frame = analysis.frames.get(settings.scanner_exec_tf.upper())
+    frame = analysis.frames.get(
+      runtime_config.market_data.scanner.execution_timeframe.upper()
+    )
     price = (
       float(ctx.spot_price)
       if getattr(ctx, "spot_price", None) is not None
@@ -96,7 +98,7 @@ async def render_current_market_map(
   market_map = await get_current_market_map(symbol)
   if market_map is None:
     return None
-  local_tz = ZoneInfo(settings.seq_reset_tz)
+  local_tz = ZoneInfo(runtime_config.delivery.presentation.seq_reset_tz)
   display_now = now.astimezone(local_tz) if now else datetime.now(local_tz)
   return render_market_map(market_map, symbol, display_now, settings)
 
@@ -105,12 +107,12 @@ async def send_current_market_map(
   symbol: str,
   now: datetime | None = None,
 ) -> bool:
-  if not settings.telegram_owner_id:
+  if not runtime_config.delivery.telegram.telegram_owner_id:
     return False
   market_map = await get_current_market_map(symbol)
   if market_map is None:
     return False
-  local_tz = ZoneInfo(settings.seq_reset_tz)
+  local_tz = ZoneInfo(runtime_config.delivery.presentation.seq_reset_tz)
   display_now = now.astimezone(local_tz) if now else datetime.now(local_tz)
   text = render_market_map(market_map, symbol, display_now, settings)
   await _replace_owner_market_map_message(symbol, text)
@@ -134,7 +136,10 @@ def _xau_weekend_closed(now: datetime) -> bool:
 
 
 async def _market_map_scan_tick(now: datetime | None = None) -> bool:
-  if not settings.map_session_send or not settings.telegram_owner_id:
+  if (
+    not runtime_config.delivery.market_map.session_send
+    or not runtime_config.delivery.telegram.telegram_owner_id
+  ):
     return False
   now = now.astimezone(timezone.utc) if now else datetime.now(timezone.utc)
   if _xau_weekend_closed(now):
@@ -160,7 +165,9 @@ async def _market_map_scan_tick(now: datetime | None = None) -> bool:
       if previous is not None:
         await _remember_displayed_map(symbol, previous)
       continue
-    display_now = now.astimezone(ZoneInfo(settings.seq_reset_tz))
+    display_now = now.astimezone(
+      ZoneInfo(runtime_config.delivery.presentation.seq_reset_tz)
+    )
     text = render_market_map(market_map, symbol, display_now, settings)
     await _replace_owner_market_map_message(symbol, text)
     await _remember_displayed_map(symbol, market_map)
@@ -173,7 +180,7 @@ async def _market_map_scan_tick(now: datetime | None = None) -> bool:
 
 
 async def market_map_scan_loop() -> None:
-  if not settings.map_session_send:
+  if not runtime_config.delivery.market_map.session_send:
     log.info("Market Map automatic delivery disabled")
     return
   while True:
@@ -188,7 +195,7 @@ async def market_map_scan_loop() -> None:
 
 async def _replace_owner_market_map_message(symbol: str, text: str) -> None:
   """Send the latest owner map and delete the previous Telegram message."""
-  chat_id = int(settings.telegram_owner_id)
+  chat_id = int(runtime_config.delivery.telegram.telegram_owner_id)
   client = redis_state.get_client()
   key = market_map_telegram_key(symbol)
   previous = await _load_market_map_telegram(client, key)
@@ -267,7 +274,7 @@ def _scan_bucket_key(now: datetime, interval_minutes: int) -> str:
 def _map_symbols() -> list[str]:
   configured = [
     item.strip().upper()
-    for item in settings.scanner_symbols.split(",")
+    for item in runtime_config.market_data.scanner.symbols.split(",")
     if item.strip()
   ]
   return [symbol for symbol in configured if symbol in SYMBOLS]

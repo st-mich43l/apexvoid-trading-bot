@@ -20,7 +20,7 @@ from redis.backoff import ExponentialBackoff
 from redis.exceptions import ConnectionError as RedisConnectionError
 from redis.exceptions import TimeoutError as RedisTimeoutError
 
-from app.core.config import runtime_config, settings
+from app.core.config import runtime_config
 
 log = logging.getLogger(__name__)
 
@@ -137,7 +137,7 @@ async def _alert_owner_component_fatal(
   error: str,
 ) -> None:
   """DM the owner once per component when a supervised loop goes fatal."""
-  owner_id = getattr(settings, "telegram_owner_id", None)
+  owner_id = runtime_config.delivery.telegram.telegram_owner_id
   if not owner_id:
     return
   client = get_client()
