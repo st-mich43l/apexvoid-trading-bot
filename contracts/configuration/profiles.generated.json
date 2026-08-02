@@ -1,0 +1,213 @@
+{
+  "catalog_version": 1,
+  "profile_count": 2,
+  "profiles": [
+    {
+      "assignment_count": 0,
+      "assignments": [],
+      "name": "conservative",
+      "profile_fingerprint_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "assignment_count": 48,
+      "assignments": [
+        {
+          "path": "actionability.counter_bias.allowed",
+          "value": true
+        },
+        {
+          "path": "actionability.gates.market_map_guard_enabled",
+          "value": true
+        },
+        {
+          "path": "actionability.gates.opposing_barrier_veto_enabled",
+          "value": false
+        },
+        {
+          "path": "actionability.overlapping_zones.veto_enabled",
+          "value": false
+        },
+        {
+          "path": "actionability.structural_guard.guard_mode",
+          "value": "observe"
+        },
+        {
+          "path": "actionability.zone_reconciliation.mode",
+          "value": "shadow"
+        },
+        {
+          "path": "contract.account.require_demo",
+          "value": true
+        },
+        {
+          "path": "delivery.scanner_cards.top_n",
+          "value": 0
+        },
+        {
+          "path": "execution.mapped_zone.hard_entry_drift_pips",
+          "value": 20.0
+        },
+        {
+          "path": "execution.mapped_zone.max_entry_drift_atr",
+          "value": 1.0
+        },
+        {
+          "path": "execution.mapped_zone.min_entry_drift_pips",
+          "value": 10.0
+        },
+        {
+          "path": "execution.policy.structural_reaction_lookback_bars",
+          "value": 3
+        },
+        {
+          "path": "execution.range.hard_entry_drift_pips",
+          "value": 20.0
+        },
+        {
+          "path": "execution.range.max_entry_drift_atr",
+          "value": 1.0
+        },
+        {
+          "path": "execution.range.min_entry_drift_pips",
+          "value": 10.0
+        },
+        {
+          "path": "execution.trend.hard_entry_drift_pips",
+          "value": 30.0
+        },
+        {
+          "path": "execution.trend.max_entry_drift_atr",
+          "value": 1.5
+        },
+        {
+          "path": "execution.trend.min_entry_drift_pips",
+          "value": 15.0
+        },
+        {
+          "path": "execution.zone_scaling.fill_enabled",
+          "value": true
+        },
+        {
+          "path": "lifecycle.candidate.execution_maximum_age_seconds",
+          "value": 420
+        },
+        {
+          "path": "lifecycle.candidate.storage_ttl_seconds",
+          "value": 604800
+        },
+        {
+          "path": "lifecycle.zone.cooldown_enabled",
+          "value": false
+        },
+        {
+          "path": "risk.exposure.allow_concurrent_strategies",
+          "value": true
+        },
+        {
+          "path": "risk.exposure.allow_hedged_xau",
+          "value": true
+        },
+        {
+          "path": "risk.exposure.non_hedged_opposite_policy",
+          "value": "broker_netting"
+        },
+        {
+          "path": "risk.exposure.require_flat_for_range",
+          "value": false
+        },
+        {
+          "path": "risk.position_limits.max_tracked_candidates",
+          "value": 0
+        },
+        {
+          "path": "risk.position_limits.maximum_per_symbol",
+          "value": 0
+        },
+        {
+          "path": "runtime.auto_trade.dry_run",
+          "value": false
+        },
+        {
+          "path": "runtime.auto_trade.enabled",
+          "value": true
+        },
+        {
+          "path": "runtime.auto_trade.strategy_match_enabled",
+          "value": true
+        },
+        {
+          "path": "strategies.breakout.breakout_enabled",
+          "value": true
+        },
+        {
+          "path": "strategies.mapped_zone.counter_bias_enabled",
+          "value": true
+        },
+        {
+          "path": "strategies.mapped_zone.enabled",
+          "value": true
+        },
+        {
+          "path": "strategies.matching.multiple_matches_enabled",
+          "value": true
+        },
+        {
+          "path": "strategies.matching.track_all_structural_matches",
+          "value": true
+        },
+        {
+          "path": "strategies.range_reversion.enabled",
+          "value": true
+        },
+        {
+          "path": "strategies.range_reversion.flip_enabled",
+          "value": true
+        },
+        {
+          "path": "strategies.range_reversion.two_sided_enabled",
+          "value": true
+        },
+        {
+          "path": "strategies.reaction.demand.enabled",
+          "value": true
+        },
+        {
+          "path": "strategies.reaction.enabled",
+          "value": true
+        },
+        {
+          "path": "strategies.reaction.key_level.enabled",
+          "value": true
+        },
+        {
+          "path": "strategies.reaction.liquidity_reversal.enabled",
+          "value": true
+        },
+        {
+          "path": "strategies.reaction.session_level.enabled",
+          "value": true
+        },
+        {
+          "path": "strategies.reaction.supply.enabled",
+          "value": true
+        },
+        {
+          "path": "strategies.reaction.trendline.enabled",
+          "value": true
+        },
+        {
+          "path": "strategies.selection.retest_enabled",
+          "value": true
+        },
+        {
+          "path": "strategies.trend.enabled",
+          "value": true
+        }
+      ],
+      "name": "demo_eval",
+      "profile_fingerprint_sha256": "92166352a83aeaf049ee3529377064743dcaede1f3d2d5f0900c1f1971067589"
+    }
+  ],
+  "source_fingerprint_sha256": "5001f967384dd74f709d75b714cc03b2576b900ef0b9861aa77b25ff80e29094",
+  "source_model": "app.configuration.models.root.ApexVoidConfig"
+}

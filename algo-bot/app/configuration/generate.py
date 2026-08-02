@@ -14,6 +14,8 @@ from app.configuration.catalog import DERIVED_LEGACY_PROPERTIES
 from app.configuration.catalog import CatalogEntry
 from app.configuration.catalog import infer_ctrader_type
 from app.configuration.catalog import iter_catalog_entries
+from app.configuration.profiles import PROFILES
+from app.configuration.profiles import profile_fingerprint
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
@@ -199,6 +201,25 @@ def _protocol_artifact(
   }
 
 
+def _profiles_artifact(fingerprint: str) -> dict[str, Any]:
+  profiles = []
+  for name, profile in sorted(PROFILES.items()):
+    profiles.append({
+      "name": name,
+      "assignment_count": len(profile.assignments),
+      "profile_fingerprint_sha256": profile_fingerprint(profile),
+      "assignments": [
+        {"path": assignment.path, "value": assignment.value}
+        for assignment in profile.assignments
+      ],
+    })
+  return {
+    **_header(fingerprint),
+    "profile_count": len(profiles),
+    "profiles": profiles,
+  }
+
+
 def _markdown(
   entries: tuple[CatalogEntry, ...],
   fingerprint: str,
@@ -249,6 +270,8 @@ def render_artifacts() -> dict[Path, bytes]:
       _json_bytes(_shared_artifact(entries, fingerprint)),
     Path("contracts/configuration/protocol-constants.generated.json"):
       _json_bytes(_protocol_artifact(entries, fingerprint)),
+    Path("contracts/configuration/profiles.generated.json"):
+      _json_bytes(_profiles_artifact(fingerprint)),
     Path("docs/configuration/config-catalog.generated.md"):
       _markdown(entries, fingerprint),
   }
