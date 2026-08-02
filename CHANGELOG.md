@@ -31,6 +31,11 @@ dated section after deployment.
   inside the still-healthy feed session instead of leaving execution stopped.
 
 ### Added
+- Non-authoritative Phase 2C configuration shadow loading: immutable
+  `conservative`/`demo_eval` profiles, deterministic source precedence,
+  per-layer alias conflict detection, field provenance, legacy compatibility
+  rules, four-fixture 316/316 parity checks, redacted diagnostics, and an
+  offline shadow CLI. Legacy `Settings` remains the only active runtime loader.
 - Source-generated System.Text.Json metadata and a production-path startup
   contract self-test for TradePlan V7, plus durable C# executor
   acknowledgements and per-stream rejection records.
