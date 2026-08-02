@@ -737,7 +737,7 @@ async def _sync_strategy_match(
     executable_results,
   )
   if match is None:
-    if not settings.auto_trade_multi_match_enabled:
+    if not runtime_config.strategies.matching.multiple_matches_enabled:
       await client.delete(key)
       await client.delete(matches_key)
     if reason is not None:
@@ -760,7 +760,7 @@ async def _sync_strategy_match(
   all_matches = measured.get("all_matches") if isinstance(measured, dict) else None
   current = (
     deserialize_matches(await client.get(matches_key))
-    if settings.auto_trade_multi_match_enabled
+    if runtime_config.strategies.matching.multiple_matches_enabled
     else []
   )
   incoming = all_matches if isinstance(all_matches, list) and all_matches else [match]
@@ -796,7 +796,7 @@ async def _sync_strategy_match(
     atr=match.atr,
     cfg=settings,
   )
-  if not settings.auto_trade_track_all_structural_matches:
+  if not runtime_config.strategies.matching.track_all_structural_matches:
     top_n = int(runtime_config.delivery.scanner_cards.top_n)
     if top_n > 0:
       combined = combined[:top_n]
@@ -1867,7 +1867,7 @@ def _is_digest_primary(result: DetectionResult) -> bool:
 def _digest_results(
   results: list[DetectionResult],
 ) -> tuple[list[DetectionResult], list[dict[str, Any]]]:
-  if settings.auto_trade_track_all_structural_matches:
+  if runtime_config.strategies.matching.track_all_structural_matches:
     candidates, conflicts = _suppress_overlaps(results)
     return sorted(candidates, key=_result_rank), conflicts
   primary, primary_conflicts = _suppress_overlaps([

@@ -649,7 +649,7 @@ async def _load_strategy_matches(
 ) -> list[StrategyMatch]:
   if not settings.auto_trade_strategy_match_enabled:
     return []
-  if not settings.auto_trade_multi_match_enabled:
+  if not runtime_config.strategies.matching.multiple_matches_enabled:
     match = await _load_strategy_match(client, symbol)
     return [] if match is None else [match]
   raw = await client.get(strategy_matches_key(symbol))
@@ -2561,36 +2561,34 @@ def _strategy_mode_enabled(match: StrategyMatch) -> bool:
   value = match.strategy.casefold()
   family = (match.family or "").casefold()
   if match.is_range_edge or family in {"range", "range_reversion"}:
-    return settings.auto_trade_range_enabled
+    return runtime_config.strategies.range_reversion.enabled
   if "mapped" in value or family in {"mapped_zone", "mapped_zone_reaction"}:
-    return settings.auto_trade_mapped_zone_enabled
+    return runtime_config.strategies.mapped_zone.enabled
   if family == "key_level" or value == "key level reaction":
-    return bool(getattr(settings, "auto_trade_key_level_reaction_enabled", True))
+    return runtime_config.strategies.reaction.key_level.enabled
   if family == "supply_demand" or value in {
     "demand zone reaction", "supply zone reaction",
   }:
     if "demand" in value:
-      return bool(getattr(settings, "auto_trade_demand_reaction_enabled", True))
-    return bool(getattr(settings, "auto_trade_supply_reaction_enabled", True))
+      return runtime_config.strategies.reaction.demand.enabled
+    return runtime_config.strategies.reaction.supply.enabled
   if family == "session_level" or value == "session level reaction":
-    return bool(
-      getattr(settings, "auto_trade_session_level_reaction_enabled", True)
-    )
+    return runtime_config.strategies.reaction.session_level.enabled
   if family == "trendline" or value == "trendline reaction":
-    return bool(getattr(settings, "auto_trade_trendline_reaction_enabled", True))
+    return runtime_config.strategies.reaction.trendline.enabled
   if "liquidity" in value or "sweep" in value or family == "liquidity_reversal":
-    return settings.auto_trade_liquidity_reversal_enabled
+    return runtime_config.strategies.reaction.liquidity_reversal.enabled
   if "retest" in value or family == "breakout_retest":
-    return settings.auto_trade_retest_enabled
+    return runtime_config.strategies.selection.retest_enabled
   if "breakout" in value or "breakdown" in value:
-    return settings.auto_trade_breakout_enabled
+    return runtime_config.strategies.breakout.breakout_enabled
   if (
     "reaction" in value
     or "rejection" in value
     or "supply" in value
     or "demand" in value
   ):
-    return settings.auto_trade_reaction_enabled
+    return runtime_config.strategies.reaction.enabled
   return settings.auto_trade_strategy_match_enabled
 
 
@@ -2633,7 +2631,7 @@ async def _publish_candidate(
 ) -> str | None:
   if (
     not settings.auto_trade_enabled
-    or not settings.auto_trade_range_enabled
+    or not runtime_config.strategies.range_reversion.enabled
     or spot is None
     or not spot.fresh
     or decision.state != "candidate"
@@ -2911,8 +2909,8 @@ async def _publish_candidate(
         int(decision.full_tp_pips),
       ]
       if (
-        settings.auto_trade_range_box_scale_out_enabled
-        and not settings.auto_trade_range_flip_enabled
+        runtime_config.strategies.range_reversion.box_scale_out_enabled
+        and not runtime_config.strategies.range_reversion.flip_enabled
         and decision.full_tp_pips is not None
         and int(decision.full_tp_pips)
           > int(settings.auto_trade_range_box_scale_out_threshold_pips)
@@ -2929,8 +2927,8 @@ async def _publish_candidate(
     "scale_out_fraction": (
       float(settings.auto_trade_range_box_scale_out_fraction)
       if (
-        settings.auto_trade_range_box_scale_out_enabled
-        and not settings.auto_trade_range_flip_enabled
+        runtime_config.strategies.range_reversion.box_scale_out_enabled
+        and not runtime_config.strategies.range_reversion.flip_enabled
         and decision.full_tp_pips is not None
         and int(decision.full_tp_pips)
           > int(settings.auto_trade_range_box_scale_out_threshold_pips)
@@ -5605,7 +5603,7 @@ async def _publish_trend_candidate(
 ) -> str | None:
   if (
     not settings.auto_trade_enabled
-    or not settings.auto_trade_trend_enabled
+    or not runtime_config.strategies.trend.enabled
     or spot is None
     or not spot.fresh
     or regime.state not in ("trend", "breakout")
@@ -6181,7 +6179,7 @@ def _status_payload(
   elif trend_routed and trend_decision is not None:
     state = (
       trend_decision.state
-      if settings.auto_trade_trend_enabled
+      if runtime_config.strategies.trend.enabled
       else "trend_disabled"
     )
     direction = trend_decision.direction
@@ -7652,7 +7650,7 @@ async def _handle_event(
   strategy_matches = list(scanner_strategy_matches)
   if ready_match_id is None and market_map_decision.match is not None:
     strategy_matches.append(market_map_decision.match)
-  if settings.auto_trade_multi_match_enabled and strategy_matches:
+  if runtime_config.strategies.matching.multiple_matches_enabled and strategy_matches:
     strategy_matches, _ = dedupe_matches(
       strategy_matches,
       atr=strategy_matches[0].atr,
@@ -7707,7 +7705,7 @@ async def _handle_event(
     resolved=resolved_range,
     regime_state=regime.state,
     now=int(datetime.now(timezone.utc).timestamp()),
-    range_enabled=bool(settings.auto_trade_range_enabled),
+    range_enabled=bool(runtime_config.strategies.range_reversion.enabled),
   )
   box_selected = box_eligibility.eligible
   if box_eligibility.eligible:
@@ -7912,7 +7910,7 @@ async def _handle_event(
       eligibility_reason = None
       enabled = True
       if intent.source == "private_range":
-        enabled = bool(settings.auto_trade_range_enabled)
+        enabled = bool(runtime_config.strategies.range_reversion.enabled)
         eligibility_reason = (
           None
           if box_eligibility.eligible
@@ -7965,7 +7963,7 @@ async def _handle_event(
               eligibility_reason = guard_name
               break
       elif intent.source == "private_trend":
-        enabled = bool(settings.auto_trade_trend_enabled)
+        enabled = bool(runtime_config.strategies.trend.enabled)
         if regime.state not in {"trend", "breakout"}:
           eligibility_reason = "trend_regime_not_permitted"
       preflight = await _preflight_private_intent(
