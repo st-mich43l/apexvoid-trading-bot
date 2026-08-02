@@ -295,7 +295,7 @@ def _generated_package_init() -> bytes:
 def _python_mapping(
   name: str,
   annotation: str,
-  rows: list[tuple[str, str]],
+  rows: list[tuple[object, str]],
 ) -> list[str]:
   lines = [f"{name}: Final[{annotation}] = MappingProxyType({{"]
   lines.extend(f"  {key!r}: {value}," for key, value in rows)
@@ -311,6 +311,20 @@ def _legacy_access_python(
     (entry for entry in entries if entry.legacy_attr is not None),
     key=lambda entry: entry.legacy_attr or "",
   )
+  reverse: dict[tuple[str, ...], str] = {}
+  for entry in legacy:
+    path = tuple(entry.path.split("."))
+    if path in reverse:
+      raise ValueError(
+        f"duplicate canonical legacy path {entry.path}: "
+        f"{reverse[path]} and {entry.legacy_attr}"
+      )
+    reverse[path] = entry.legacy_attr or ""
+  prefixes = {
+    path[:length]
+    for path in reverse
+    for length in range(1, len(path) + 1)
+  }
   lines = [
     '"""Generated static access contract for CanonicalSettingsFacade."""',
     "",
@@ -341,6 +355,19 @@ def _legacy_access_python(
       for entry in legacy
     ],
   ))
+  lines.extend(["", ""])
+  lines.extend(_python_mapping(
+    "CANONICAL_PATH_TO_LEGACY_ATTR",
+    "Mapping[tuple[str, ...], str]",
+    [(path, repr(attribute)) for path, attribute in sorted(reverse.items())],
+  ))
+  lines.extend([
+    "",
+    "",
+    "CANONICAL_LEGACY_PATH_PREFIXES: Final[frozenset[tuple[str, ...]]] = frozenset({",
+    *[f"  {path!r}," for path in sorted(prefixes)],
+    "})",
+  ])
   lines.extend(["", ""])
   derived_rows = []
   for item in sorted(DERIVED_LEGACY_PROPERTIES, key=lambda value: value.property_name):
