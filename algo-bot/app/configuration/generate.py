@@ -17,6 +17,7 @@ from app.configuration.catalog import iter_catalog_entries
 from app.configuration.profiles import PROFILES
 from app.configuration.profiles import profile_fingerprint
 from app.configuration.usage_audit import audit_legacy_settings_usage
+from app.configuration.models.python_runtime import PythonRuntimeConfig
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
@@ -221,6 +222,32 @@ def _profiles_artifact(fingerprint: str) -> dict[str, Any]:
   }
 
 
+def _python_projection_artifact(
+  entries: tuple[CatalogEntry, ...],
+  fingerprint: str,
+) -> dict[str, Any]:
+  projected = iter_catalog_entries(PythonRuntimeConfig)
+  projected_paths = {entry.path for entry in projected}
+  excluded = tuple(entry for entry in entries if entry.path not in projected_paths)
+  return {
+    **_header(fingerprint),
+    "projection_model": (
+      "app.configuration.models.python_runtime.PythonRuntimeConfig"
+    ),
+    "included_leaf_count": len(projected),
+    "excluded_ctrader_only_count": len(excluded),
+    "included_direct_legacy_field_count": sum(
+      entry.legacy_attr is not None for entry in projected
+    ),
+    "included_shared_field_count": sum(
+      entry.owner == "shared" for entry in projected
+    ),
+    "included_secret_count": sum(entry.secret for entry in projected),
+    "included_paths": [entry.path for entry in projected],
+    "excluded_paths": [entry.path for entry in excluded],
+  }
+
+
 def _markdown(
   entries: tuple[CatalogEntry, ...],
   fingerprint: str,
@@ -369,6 +396,8 @@ def render_artifacts() -> dict[Path, bytes]:
       _json_bytes(_protocol_artifact(entries, fingerprint)),
     Path("contracts/configuration/profiles.generated.json"):
       _json_bytes(_profiles_artifact(fingerprint)),
+    Path("contracts/configuration/python-runtime-projection.generated.json"):
+      _json_bytes(_python_projection_artifact(entries, fingerprint)),
     Path("docs/configuration/config-catalog.generated.md"):
       _markdown(entries, fingerprint),
     Path("contracts/configuration/legacy-usage.generated.json"):
