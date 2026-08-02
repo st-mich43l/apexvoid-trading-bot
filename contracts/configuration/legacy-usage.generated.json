@@ -4583,6 +4583,16 @@
         "line": 517,
         "operation": "pass_settings",
         "path": "algo-bot/app/autotrade/zone_execution_cutover.py"
+      },
+      {
+        "attribute": null,
+        "classification": "legacy_internal_only",
+        "column": 9,
+        "detail": "local legacy Settings construction",
+        "dynamic_names": [],
+        "line": 43,
+        "operation": "construct_settings",
+        "path": "algo-bot/app/configuration/activation_cli.py"
       }
     ]
   },
@@ -4615,7 +4625,7 @@
     "method_calls": [],
     "type_dependencies": []
   },
-  "source_fingerprint": "ed738451b89e9f330d62e03001c301fa9c613b3bb128d16d9d9f168666bcfa1b",
+  "source_fingerprint": "0b89428b804961fe2787610232c26ba3b083bad5e18fbd5acbf265f622da0e84",
   "tests": {
     "attribute_deletions": [],
     "attribute_reads": [
