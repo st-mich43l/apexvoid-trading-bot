@@ -20,6 +20,7 @@ if TYPE_CHECKING:
 class ConfigurationAuthority(StrEnum):
   LEGACY = "legacy"
   CANONICAL_REHEARSAL = "canonical_rehearsal"
+  CANONICAL = "canonical"
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,16 +43,19 @@ def build_configuration_runtime_bundle(
   requested_authority: ConfigurationAuthority = ConfigurationAuthority.LEGACY,
   readiness: ActivationReadiness | None = None,
 ) -> ConfigurationRuntimeBundle:
-  """Build an isolated bundle; legacy remains the only authority in Phase 2D1."""
+  """Build an isolated authority bundle for local verification."""
   shadow = load_shadow_configuration(source_bundle)
   parity = compare_legacy_settings(legacy_settings, shadow)
   facade = (
     CanonicalSettingsFacade(shadow.config)
     if shadow.config is not None else None
   )
-  if requested_authority is ConfigurationAuthority.CANONICAL_REHEARSAL:
+  if requested_authority in {
+    ConfigurationAuthority.CANONICAL_REHEARSAL,
+    ConfigurationAuthority.CANONICAL,
+  }:
     if facade is None:
-      raise ValueError("canonical rehearsal requires a complete shadow configuration")
+      raise ValueError("canonical authority requires a complete configuration")
     selected = facade
   else:
     selected = legacy_settings
@@ -62,9 +66,13 @@ def build_configuration_runtime_bundle(
     parity_report=parity,
     selected_authority=requested_authority,
     selected_object=selected,
-    authoritative_object=legacy_settings,
+    authoritative_object=(
+      selected
+      if requested_authority is ConfigurationAuthority.CANONICAL
+      else legacy_settings
+    ),
     selected_is_authoritative=(
-      requested_authority is ConfigurationAuthority.LEGACY
+      requested_authority is not ConfigurationAuthority.CANONICAL_REHEARSAL
     ),
     readiness=readiness,
   )
