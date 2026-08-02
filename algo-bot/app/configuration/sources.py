@@ -69,6 +69,8 @@ def parse_source_value(spec: FieldSpec, raw: object) -> object:
   """Parse one supplied value using its canonical typed declaration."""
   annotation = spec.field.annotation
   origin = get_origin(annotation)
+  if isinstance(raw, str) and spec.entry.allowed_values:
+    raw = raw.strip().lower()
   if isinstance(raw, str) and origin is list:
     item_type = get_args(annotation)[0]
     parts = [] if not raw.strip() else raw.split(",")
@@ -207,4 +209,3 @@ def resolve_source_layer(
     ),
     warnings=tuple(warnings),
   )
-

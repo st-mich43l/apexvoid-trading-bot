@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from pydantic_core import PydanticUndefined
 
+from app.configuration.compatibility_rules import apply_compatibility_rules
 from app.configuration.profiles import get_profile
 from app.configuration.source_types import ConfigurationSourceBundle
 from app.configuration.source_types import ResolvedConfiguration
@@ -173,7 +174,7 @@ def resolve_configuration(
     path for path, spec in specs.items()
     if spec.field.is_required() and path not in values
   ))
-  return ResolvedConfiguration(
+  resolved = ResolvedConfiguration(
     profile=profile,
     nested_input=_nested(values),
     flat_values=values,
@@ -182,4 +183,4 @@ def resolve_configuration(
     conflicts=tuple(conflicts),
     missing_required_paths=missing,
   )
-
+  return apply_compatibility_rules(resolved)
