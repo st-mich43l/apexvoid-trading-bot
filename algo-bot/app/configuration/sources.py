@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Annotated, Any, Mapping, get_args, get_origin
 
 from pydantic import BaseModel, TypeAdapter, ValidationError
@@ -26,7 +26,7 @@ class FieldSpec:
 @dataclass(frozen=True, slots=True)
 class ParsedCandidate:
   source: SourceCandidate
-  value: object = None
+  value: object = field(default=None, repr=False)
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,9 +78,18 @@ def parse_source_value(spec: FieldSpec, raw: object) -> object:
       raw = [item.strip() for item in parts]
     else:
       raw = [item.strip() for item in parts]
-  elif isinstance(raw, str) and annotation is not str:
+  elif isinstance(raw, str) and not _is_string_annotation(annotation):
     raw = raw.strip()
   return _adapter(spec.field).validate_python(raw)
+
+
+def _is_string_annotation(annotation: object) -> bool:
+  if annotation is str:
+    return True
+  args = get_args(annotation)
+  return bool(args) and str in args and all(
+    item in {str, type(None)} for item in args
+  )
 
 
 def _input_names(
@@ -143,10 +152,13 @@ def resolve_source_layer(
     if value not in distinct:
       distinct.append(value)
   if len(distinct) > 1:
+    be_conflict = (
+      spec.entry.canonical_env == "AUTO_TRADE_BE_BUFFER_TICKS"
+    )
     return LayerResolution(
       candidate=None,
       conflicts=(ResolutionConflict(
-        code="source_alias_conflict",
+        code=("be_alias_conflict" if be_conflict else "source_alias_conflict"),
         path=spec.entry.path,
         source_kind=source_kind,
         source_name=source_name,
@@ -154,6 +166,10 @@ def resolve_source_layer(
         supplied_names=present,
         secret=spec.entry.secret,
         message=(
+          "AUTO_TRADE_BE_BUFFER_TICKS and AUTO_TRADE_BE_BUFFER_PIPS "
+          "conflict; remove the deprecated PIPS variable or set both to "
+          "the same tick count"
+          if be_conflict else
           f"conflicting aliases for {spec.entry.path} in {source_name}: "
           f"{', '.join(present)}"
         ),
@@ -175,17 +191,19 @@ def resolve_source_layer(
         f"using {chosen}"
       ),
     ))
-  if chosen in spec.entry.deprecated_aliases:
+  for supplied_alias in (
+    name for name in present if name in spec.entry.deprecated_aliases
+  ):
     warnings.append(ResolutionWarning(
       code="deprecated_alias",
       path=spec.entry.path,
       source_kind=source_kind,
       source_name=source_name,
       canonical_env=spec.entry.canonical_env,
-      supplied_alias=chosen,
+      supplied_alias=supplied_alias,
       secret=spec.entry.secret,
       message=(
-        f"deprecated alias {chosen} supplied for "
+        f"deprecated alias {supplied_alias} supplied for "
         f"{spec.entry.canonical_env} ({spec.entry.path}) in {source_name}"
       ),
     ))
