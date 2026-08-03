@@ -1830,6 +1830,23 @@ public sealed class TradePlanRuntime(
         var desiredClose = decimal.ToInt64(
           groupRemaining * target.CloseRatio / remainingTargetsSum
         );
+        if (
+          !isFinalTarget
+          && desiredClose < symbol.StepVolume
+          && groupRemaining >= symbol.StepVolume
+        )
+        {
+          // The proportional share (e.g. a 20% slice of a 2-step position)
+          // rounds below a single StepVolume - rather than skip this
+          // target and leave it unprotected until some later target's
+          // share happens to cross the threshold (or the ladder just runs
+          // out and nothing ever closes early), take one whole step now.
+          // For a position with only as many steps as roughly N targets,
+          // this naturally degrades to closing one step per target reached
+          // - e.g. half now, half at the next target for a 2-step position
+          // - instead of silently deferring everything to the final target.
+          desiredClose = symbol.StepVolume;
+        }
         var closeVolume = VolumePlanner.PlanPartialCloseVolume(
           groupRemaining,
           desiredClose,
@@ -1852,7 +1869,8 @@ public sealed class TradePlanRuntime(
           // trailing. Advancing by one still avoids re-retrying this same
           // unclosable target (HasReachedTarget only fires again once price
           // reaches the next index), without skipping targets price hasn't
-          // touched.
+          // touched. With the StepVolume floor above, this now only fires
+          // when groupRemaining itself is below one StepVolume (dust).
           log(
             $"v7 target partial skipped id={plan.PlanId} "
             + $"target={target.TargetId} remaining={groupRemaining} "
