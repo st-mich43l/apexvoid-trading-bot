@@ -659,30 +659,40 @@ def _fallback_barrier(
     1,
     int(cfg.strategies.scalp.scalp_barrier_fallback_min_confirmations),
   )
-  lows = frame["low"].astype(float)
-  highs = frame["high"].astype(float)
+  opp = opposite[0]
+  # 2026-08-03 incident: this used to search the single most extreme
+  # low/high across the *entire* lookback frame, with no regard for
+  # whether it happened before the opposing edge even started forming.
+  # XAU: a deep wick ~2h earlier (already-resolved swing) got paired with
+  # a live, currently-testing resistance from the last 15 minutes,
+  # producing an 18-point "range" instead of the ~8-point box actually
+  # forming. Bound the search to bars at-or-after the opposing barrier's
+  # own first touch - a local extreme from before that belongs to a
+  # prior swing, not the range currently being tested.
+  relevant_start = max(0, min(len(frame), opp.first_touch_index - offset))
+  relevant_frame = frame.iloc[relevant_start:] if relevant_start < len(frame) else frame
+  lows = relevant_frame["low"].astype(float)
+  highs = relevant_frame["high"].astype(float)
   closes = frame["close"].astype(float)
   if side == "support":
-    extreme_idx = int(lows.values.argmin())
-    level = float(lows.iloc[extreme_idx])
+    extreme_idx = int(lows.values.argmin()) + relevant_start
+    level = float(lows.iloc[int(lows.values.argmin())])
     if level >= price:
       # Prefer dealing-range / consolidation floor below price.
       below = lows[lows < price - _EPS]
       if below.empty:
         return None
       level = float(below.min())
-      extreme_idx = int(lows[lows == level].index[0] - frame.index[0])
+      extreme_idx = frame.index.get_loc(below[below == level].index[0])
   else:
-    extreme_idx = int(highs.values.argmax())
-    level = float(highs.iloc[extreme_idx])
+    extreme_idx = int(highs.values.argmax()) + relevant_start
+    level = float(highs.iloc[int(highs.values.argmax())])
     if level <= price:
       above = highs[highs > price + _EPS]
       if above.empty:
         return None
       level = float(above.max())
-      extreme_idx = int(highs[highs == level].index[0] - frame.index[0])
-
-  opp = opposite[0]
+      extreme_idx = frame.index.get_loc(above[above == level].index[0])
   # Opposite edge of recent consolidation: use mid-range distance sanity.
   width = abs(opp.level - level)
   if width < atr_value * 0.8 or width > atr_value * 8.0:

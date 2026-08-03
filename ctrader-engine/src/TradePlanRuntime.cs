@@ -1830,6 +1830,23 @@ public sealed class TradePlanRuntime(
         var desiredClose = decimal.ToInt64(
           groupRemaining * target.CloseRatio / remainingTargetsSum
         );
+        if (
+          !isFinalTarget
+          && desiredClose < symbol.StepVolume
+          && groupRemaining >= symbol.StepVolume
+        )
+        {
+          // The proportional share (e.g. a 20% slice of a 2-step position)
+          // rounds below a single StepVolume - rather than skip this
+          // target and leave it unprotected until some later target's
+          // share happens to cross the threshold (or the ladder just runs
+          // out and nothing ever closes early), take one whole step now.
+          // For a position with only as many steps as roughly N targets,
+          // this naturally degrades to closing one step per target reached
+          // - e.g. half now, half at the next target for a 2-step position
+          // - instead of silently deferring everything to the final target.
+          desiredClose = symbol.StepVolume;
+        }
         var closeVolume = VolumePlanner.PlanPartialCloseVolume(
           groupRemaining,
           desiredClose,
@@ -1839,8 +1856,21 @@ public sealed class TradePlanRuntime(
         if (closeVolume <= 0)
         {
           // Cannot book a broker-valid partial against the filled remainder
-          // (e.g. one StepVolume position vs a 20% TP). Ride to the final
-          // target instead of spamming TRADING_BAD_VOLUME every poll.
+          // (e.g. one StepVolume position vs a 20% TP). Advance past just
+          // this one target - jumping straight to Targets.Count - 1 used to
+          // live here, but that corrupts NextTargetIndex for every target
+          // still ahead of price: the trail-stop step below reads
+          // `NextTargetIndex - 3` assuming NextTargetIndex tracks genuinely
+          // reached targets, so a premature jump makes it compute a stop
+          // price from a target the market hasn't reached yet, and the
+          // broker then rejects that amend on every poll forever
+          // (TRADING_BAD_STOPS) - trading one infinite-retry log spam for
+          // another, and leaving the position's stop stuck at BE instead of
+          // trailing. Advancing by one still avoids re-retrying this same
+          // unclosable target (HasReachedTarget only fires again once price
+          // reaches the next index), without skipping targets price hasn't
+          // touched. With the StepVolume floor above, this now only fires
+          // when groupRemaining itself is below one StepVolume (dust).
           log(
             $"v7 target partial skipped id={plan.PlanId} "
             + $"target={target.TargetId} remaining={groupRemaining} "
@@ -1848,7 +1878,7 @@ public sealed class TradePlanRuntime(
             + "reason=not_step_aligned_after_unfilled_cancel"
           );
           state = AggregateState(
-            state with { NextTargetIndex = plan.Targets.Count - 1 }
+            state with { NextTargetIndex = state.NextTargetIndex + 1 }
           );
           await PersistStateAsync(state, cancellationToken);
           continue;
@@ -1860,13 +1890,15 @@ public sealed class TradePlanRuntime(
         );
         if (allocations.Sum() <= 0)
         {
+          // Same NextTargetIndex-corruption hazard as the closeVolume <= 0
+          // branch above - advance past only this target, not to the end.
           log(
             $"v7 target partial skipped id={plan.PlanId} "
             + $"target={target.TargetId} remaining={groupRemaining} "
             + "reason=stepped_allocation_empty"
           );
           state = AggregateState(
-            state with { NextTargetIndex = plan.Targets.Count - 1 }
+            state with { NextTargetIndex = state.NextTargetIndex + 1 }
           );
           await PersistStateAsync(state, cancellationToken);
           continue;

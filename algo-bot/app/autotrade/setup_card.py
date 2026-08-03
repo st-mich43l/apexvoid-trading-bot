@@ -276,11 +276,34 @@ async def clear_forming_reconcile_pending(client, setup_id: str) -> None:
   await client.delete(forming_reconcile_pending_key(setup_id))
 
 
+# Matches the SETUP FORMING / MARKET OBSERVATION root-card headline (e.g.
+# "🔎 <b>XAU M5 · SETUP FORMING</b>") so it can be rewritten in place once
+# the position actually activates - a filled position showing a stale
+# "SETUP FORMING" head reads as "still waiting" when it's already live.
+_CARD_HEADER_RE = re.compile(
+  r"^\S+\s*<b>(?P<symbol>[A-Za-z0-9]+)\s+(?P<tf>\S+)\s*·\s*[^<]*</b>$"
+)
+
+
+def _position_activated_header(line: str) -> str | None:
+  match = _CARD_HEADER_RE.match(line.strip())
+  if match is None:
+    return None
+  return (
+    f"✅ <b>POSITION ACTIVATED · {match.group('symbol')} "
+    f"{match.group('tf')}</b>"
+  )
+
+
 def apply_forming_card_status(text: str, status_line: str) -> str:
   lines = text.splitlines()
   if len(lines) < 2 or not status_line:
     return text
   lines[1] = status_line
+  if _infer_status_state(status_line) == "order_filled":
+    rewritten_header = _position_activated_header(lines[0])
+    if rewritten_header is not None:
+      lines[0] = rewritten_header
   return "\n".join(lines)
 
 
@@ -1059,17 +1082,17 @@ def format_plan_published_root_card(
   return "\n".join(lines)
 
 
-async def _published_plan_stop_price(client, match: StrategyMatch) -> float | None:
+async def published_plan_stop_price(client, match_id: str) -> float | None:
   """Best-effort stop from the just-published TradePlan V7 (if present)."""
   try:
     from app.autotrade.setup_execution_aggregate import v7_plan_id
     from app.autotrade.trade_plan_stream import read_trade_plan
 
-    plan = await read_trade_plan(client, v7_plan_id(match.match_id))
+    plan = await read_trade_plan(client, v7_plan_id(match_id))
   except Exception:
     log.exception(
       "plan_published_root_card_stop_lookup_failed setup_id=%s",
-      match.match_id,
+      match_id,
     )
     return None
   if plan is None or plan.stop is None:
@@ -1119,7 +1142,7 @@ async def ensure_plan_published_root_card(
   resolved_edit = edit_fn or edit_scanner_message_text
   resolved_send = send_fn or send_scanner_with_retry
   resolved_delete = delete_fn or delete_scanner_message
-  stop_price = await _published_plan_stop_price(client, match)
+  stop_price = await published_plan_stop_price(client, match.match_id)
 
   existing = await load_forming_card(client, match.match_id)
   if existing is not None:
