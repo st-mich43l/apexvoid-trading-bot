@@ -41,8 +41,10 @@ class DeploymentEnvVar:
 EXTRA_DEPLOYMENT_ENV: tuple[DeploymentEnvVar, ...] = (
   DeploymentEnvVar(
     "APEXVOID_CONFIG_AUTHORITY",
-    "legacy",
-    "Configuration authority: legacy (default) or canonical.",
+    "canonical",
+    "Configuration authority: canonical (managed-deployment default) or "
+    "legacy (rollback). Unset selects legacy with an implicit-authority "
+    "warning; canonical is fail-closed.",
   ),
   DeploymentEnvVar(
     "POSTGRES_PASSWORD",
