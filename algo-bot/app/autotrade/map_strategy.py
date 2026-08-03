@@ -32,22 +32,6 @@ from app.analysis.market_map import (
 from app.autotrade.strategy_match import StrategyMatch
 
 
-# Phase 2I-A: legacy field names the market-map strategy subtree reads
-# (evaluate_market_map_strategy + _reaction_in_lookback). When ``cfg`` is
-# omitted in production it builds a narrow snapshot of exactly these fields off
-# the canonical ``runtime_config`` (replacing the retired
-# per-call flat legacy config facade). Tests still inject a flat SimpleNamespace.
-_RUNTIME_MAP_STRATEGY_CFG_FIELDS = (
-  "auto_trade_mapped_zone_enabled",
-  "atr_length",
-  "proximal_band_atr",
-  "auto_trade_map_counter_bias_enabled",
-  "auto_trade_map_track_distance_atr",
-  "auto_trade_map_execute_tolerance_pips",
-  "auto_trade_map_execute_tolerance_atr",
-  "auto_trade_map_reaction_lookback_bars",
-)
-
 EXECUTION_TIMEFRAME = "M1"
 MARKET_MAP_KEY_PREFIX = "auto_trade:market_map"
 MARKET_MAP_DISPLAY_KEY_PREFIX = "auto_trade:market_map_display"
@@ -161,9 +145,9 @@ def evaluate_market_map_strategy(
   it next (the M1 candlestick trigger, P3).
   """
   if cfg is None:
-    from app.core.runtime_projection import project_runtime_config
-    cfg = project_runtime_config(_RUNTIME_MAP_STRATEGY_CFG_FIELDS)
-  if not bool(getattr(cfg, "auto_trade_mapped_zone_enabled", True)):
+    from app.core.config import runtime_config
+    cfg = runtime_config
+  if not bool(cfg.strategies.mapped_zone.enabled):
     return MarketMapStrategyDecision("disabled")
   if spot_price is None or not math.isfinite(float(spot_price)):
     return MarketMapStrategyDecision("waiting_for_spot")
@@ -192,7 +176,7 @@ def evaluate_market_map_strategy(
     )
 
   m1 = frames[EXECUTION_TIMEFRAME]
-  atr_values = atr_indicator(m1, max(2, int(getattr(cfg, "atr_length", 14))))
+  atr_values = atr_indicator(m1, max(2, int(cfg.analysis.atr.length)))
   atr = _last_positive(atr_values)
   if atr is None:
     return MarketMapStrategyDecision("warming_up", ("M1 ATR is not ready",))
@@ -202,7 +186,7 @@ def evaluate_market_map_strategy(
     m1,
     float(spot_price),
     atr,
-    float(getattr(cfg, "proximal_band_atr", 0.5)),
+    float(cfg.actionability.gates.proximal_band_atr),
     cfg,
     rendered_map,
   )
@@ -259,6 +243,9 @@ def _select_reaction_detailed(
   cfg: Any = None,
   rendered_map: MarketMap | None = None,
 ) -> _ReactionSelection:
+  if cfg is None:
+    from app.core.config import runtime_config
+    cfg = runtime_config
   bias_side = (
     "buy" if market_map.bias == "up"
     else "sell" if market_map.bias == "down"
@@ -269,12 +256,14 @@ def _select_reaction_detailed(
     if bias_side is None
     else "BUY" if bias_side == "buy" else "SELL"
   )
+  # ``auto_trade_allow_counter_bias`` (the actionability-family gate) used to
+  # win over the mapped-zone-specific toggle here via a nested ``getattr``
+  # fallback; that shape is retired. The canonical rule matches the intended
+  # precedence: if the actionability gate says counter-bias is allowed
+  # anywhere, honour it; otherwise honour the mapped-zone-specific opt-in.
   counter_enabled = bool(
-    getattr(
-      cfg,
-      "auto_trade_allow_counter_bias",
-      getattr(cfg, "auto_trade_map_counter_bias_enabled", False),
-    )
+    cfg.actionability.counter_bias.allowed
+    or cfg.strategies.mapped_zone.counter_bias_enabled
   )
   counts = {
     "side": 0,
@@ -347,30 +336,19 @@ def _select_reaction_detailed(
       -item[0].score,
     ),
   )
-  track_limit_atr = float(getattr(cfg, "auto_trade_map_track_distance_atr", 8.0))
+  mapped_zone_execution = cfg.execution.mapped_zone
+  track_limit_atr = float(mapped_zone_execution.track_distance_atr)
   track_limit = track_limit_atr * atr
-  execute_limit_atr = float(
-    getattr(
-      cfg,
-      "auto_trade_map_execute_distance_atr",
-      MAP_REACTION_REACH_ATR,
-    )
-  )
+  execute_limit_atr = float(mapped_zone_execution.execute_distance_atr)
   execute_limit = execute_limit_atr * atr
-  pip_size = max(
-    1e-9,
-    float(getattr(cfg, "pip_size", 0.1) or 0.1),
-  )
+  # ``pip_size`` has no canonical path (symbol-derived) so keep the safe
+  # 0.1 default that mirrors the pre-migration ``getattr(cfg, "pip_size", 0.1)``
+  # fallback. Callers that need a per-symbol pip should pass one explicitly.
+  pip_size = 0.1
   # Small execution tolerance absorbs bid/ask, ATR recalc, and bar-vs-spot
   # rounding without turning distant tracked zones into market entries.
-  exec_tol_pips = max(
-    0.0,
-    float(getattr(cfg, "auto_trade_map_execute_tolerance_pips", 3.0)),
-  )
-  exec_tol_atr = max(
-    0.0,
-    float(getattr(cfg, "auto_trade_map_execute_tolerance_atr", 0.15)),
-  )
+  exec_tol_pips = max(0.0, float(mapped_zone_execution.execute_tolerance_pips))
+  exec_tol_atr = max(0.0, float(mapped_zone_execution.execute_tolerance_atr))
   execute_tolerance = max(exec_tol_pips * pip_size, exec_tol_atr * atr)
   effective_execute_limit = execute_limit + execute_tolerance
 
@@ -471,22 +449,9 @@ def _width_is_actionable(
   *,
   warn: bool,
 ) -> bool:
-  atr_multiple = max(
-    0.0,
-    float(getattr(
-      cfg,
-      "auto_trade_map_zone_min_width_atr",
-      MAP_ZONE_MIN_WIDTH_ATR,
-    )),
-  )
-  absolute_minimum = max(
-    0.0,
-    float(getattr(
-      cfg,
-      "auto_trade_map_zone_min_width_abs",
-      MAP_ZONE_MIN_WIDTH_ABS,
-    )),
-  )
+  mapped_zone_execution = cfg.execution.mapped_zone
+  atr_multiple = max(0.0, float(mapped_zone_execution.zone_min_width_atr))
+  absolute_minimum = max(0.0, float(mapped_zone_execution.zone_min_width_abs))
   minimum = max(
     atr_multiple * atr,
     absolute_minimum,
@@ -519,22 +484,13 @@ def _counter_bias_quality(
   if "fresh" not in tags:
     return False
   minimum_score = max(
-    0.0,
-    float(getattr(
-      cfg,
-      "auto_trade_map_counter_bias_min_score",
-      MAP_COUNTER_BIAS_MIN_SCORE,
-    )),
+    0.0, float(cfg.execution.mapped_zone.counter_bias_min_score)
   )
   if entry.score < minimum_score:
     return False
   minimum_confluence = max(
     1,
-    int(getattr(
-      cfg,
-      "auto_trade_map_counter_bias_min_confluence",
-      MAP_COUNTER_BIAS_MIN_CONFLUENCE,
-    )),
+    int(cfg.actionability.counter_bias.map_counter_bias_min_confluence),
   )
   structural_count = len(tags & _STRUCTURAL_TAGS)
   return (
@@ -655,8 +611,7 @@ def _reaction_in_lookback(
   price: float,
 ) -> _LookbackReaction | None:
   lookback = max(
-    1,
-    int(getattr(cfg, "auto_trade_map_reaction_lookback_bars", 5)),
+    1, int(cfg.execution.mapped_zone.reaction_lookback_bars)
   )
   window = m1.tail(lookback)
   if window.empty:

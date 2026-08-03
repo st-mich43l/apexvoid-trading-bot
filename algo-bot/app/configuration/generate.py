@@ -14,6 +14,9 @@ from app.configuration.catalog import DERIVED_LEGACY_PROPERTIES
 from app.configuration.catalog import CatalogEntry
 from app.configuration.catalog import infer_ctrader_type
 from app.configuration.catalog import iter_catalog_entries
+from app.configuration.canonical_consumer_surface import (
+  audit_canonical_consumer_surface,
+)
 from app.configuration.compatibility_surface_audit import (
   audit_compatibility_surface,
 )
@@ -1126,11 +1129,17 @@ def render_artifacts() -> dict[Path, bytes]:
   usage = audit_legacy_settings_usage(REPOSITORY_ROOT)
   environment_usage = audit_environment_usage(REPOSITORY_ROOT)
   compatibility_surface = audit_compatibility_surface(REPOSITORY_ROOT)
+  canonical_consumer_surface = audit_canonical_consumer_surface(REPOSITORY_ROOT)
   return {
     Path(
       "contracts/configuration/compatibility-surface-phase-2i-a.generated.json"
     ):
       _json_bytes(compatibility_surface),
+    Path(
+      "contracts/configuration/"
+      "canonical-consumer-surface-phase-2i-a1.generated.json"
+    ):
+      _json_bytes(canonical_consumer_surface),
     Path("contracts/configuration/environment-usage.generated.json"):
       _json_bytes(environment_usage),
     Path("contracts/configuration/environment-contract.generated.json"):

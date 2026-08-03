@@ -37,13 +37,16 @@ def accepted_box_break(
   box_low = float(regime.range_low)
   if box_high <= box_low:
     return None
+  if cfg is None:
+    from app.core.config import runtime_config
+    cfg = runtime_config
   buffer_atr = max(
     0.0,
-    float(getattr(cfg, "breakout_buffer_atr", BREAKOUT_BUFFER_ATR)),
+    float(cfg.analysis.breakout.buffer_atr),
   )
   accept_bars = max(
     1,
-    int(getattr(cfg, "breakout_accept_bars", BREAKOUT_ACCEPT_BARS)),
+    int(cfg.analysis.breakout.accept_bars),
   )
   up_holds = 0
   down_holds = 0

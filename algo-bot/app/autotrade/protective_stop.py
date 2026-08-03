@@ -10,6 +10,12 @@ from typing import Any
 from app.autotrade.strategy_taxonomy import RANGE_STRATEGIES, REACTION_STRATEGIES
 
 
+def _default_runtime_cfg() -> Any:
+  from app.core.config import runtime_config
+
+  return runtime_config
+
+
 STOP_PLAN_VERSION = 2
 
 
@@ -165,12 +171,21 @@ def opposing_zone_context_from_values(
   width = high - low
   width_atr = width / atr_value if atr_value > 0 else Decimal("Infinity")
   width_pips = width / pip if pip > 0 else Decimal("Infinity")
+  if cfg is None:
+    cfg = _default_runtime_cfg()
+  policy_cfg = cfg.execution.policy
+  stops_cfg = cfg.execution.stops
+  scaling_add_cfg = cfg.execution.scaling.add
   max_width_atr = decimal_value(
-    getattr(cfg, "auto_trade_execution_zone_max_width_atr", 2.0),
+    policy_cfg.execution_zone_max_width_atr
+    if policy_cfg.execution_zone_max_width_atr is not None
+    else 2.0,
     "auto_trade_execution_zone_max_width_atr",
   )
   max_width_pips = decimal_value(
-    getattr(cfg, "auto_trade_execution_zone_max_width_pips", 100.0),
+    policy_cfg.execution_zone_max_width_pips
+    if policy_cfg.execution_zone_max_width_pips is not None
+    else 100.0,
     "auto_trade_execution_zone_max_width_pips",
   )
   execution_grade = (
@@ -184,10 +199,14 @@ def opposing_zone_context_from_values(
     high=high,
     execution_grade=execution_grade,
     push_beyond_zone=bool(
-      getattr(cfg, "auto_trade_stop_push_beyond_zone", True),
+      stops_cfg.stop_push_beyond_zone
+      if stops_cfg.stop_push_beyond_zone is not None
+      else True
     ),
     buffer_atr=decimal_value(
-      getattr(cfg, "auto_trade_add_stop_buffer_atr", 0.3),
+      scaling_add_cfg.stop_buffer_atr
+      if scaling_add_cfg.stop_buffer_atr is not None
+      else 0.3,
       "auto_trade_add_stop_buffer_atr",
     ),
   )
@@ -646,24 +665,38 @@ def stop_bounds_for_reaction_room(
         "desired_stop_pips": None,
       },
     )
+  if cfg is None:
+    cfg = _default_runtime_cfg()
   if is_scalp:
     min_rr = float(
-      getattr(cfg, "auto_trade_range_min_rr", 1.0) or 1.0
-    )
+      cfg.execution.range.min_rr
+      if cfg.execution.range.min_rr is not None
+      else 1.0
+    ) or 1.0
     floor_pips = int(
-      getattr(cfg, "auto_trade_range_room_stop_floor_pips", 15) or 15
-    )
+      cfg.execution.range.room_stop_floor_pips
+      if cfg.execution.range.room_stop_floor_pips is not None
+      else 15
+    ) or 15
     # Prefer Range Box max (sl_distance) when present; else trend cap.
     cap_pips = int(fallback[1]) if fallback[1] > 0 else 60
     source = "scalp_room"
   else:
     min_rr = float(
-      getattr(cfg, "auto_trade_reaction_room_stop_min_rr", 1.0) or 1.0
-    )
+      cfg.execution.reaction.room_stop_min_rr
+      if cfg.execution.reaction.room_stop_min_rr is not None
+      else 1.0
+    ) or 1.0
     floor_pips = int(
-      getattr(cfg, "auto_trade_reaction_room_stop_floor_pips", 20) or 20
-    )
-    cap_pips = int(getattr(cfg, "auto_trade_trend_stop_max_pips", 60) or 60)
+      cfg.execution.stops.reaction.room_floor_pips
+      if cfg.execution.stops.reaction.room_floor_pips is not None
+      else 20
+    ) or 20
+    cap_pips = int(
+      cfg.execution.trend.stop_max_pips
+      if cfg.execution.trend.stop_max_pips is not None
+      else 60
+    ) or 60
     source = "reaction_room"
   if not math.isfinite(min_rr) or min_rr <= 0:
     min_rr = 1.0
@@ -959,23 +992,38 @@ def stop_bounds_for_strategy(
   known — that path pins SL to ≈TP (floor 20 / cap 60) instead of forcing 40.
   ``AUTO_TRADE_REACTION_STOP_*`` keys remain for compatibility.
   """
+  if cfg is None:
+    cfg = _default_runtime_cfg()
+  scaling_add_cfg = cfg.execution.scaling.add
+  stops_cfg = cfg.execution.stops
+  trend_stops_cfg = cfg.execution.stops.trend
   if str(strategy) == "Range Box Scalp":
-    minimum = int(getattr(cfg, "auto_trade_add_min_stop_pips", 30))
+    minimum = int(
+      scaling_add_cfg.min_stop_pips
+      if scaling_add_cfg.min_stop_pips is not None
+      else 30
+    )
     sl_distance = decimal_value(
-      getattr(cfg, "auto_trade_sl_distance", 6.5),
+      stops_cfg.sl_distance
+      if stops_cfg.sl_distance is not None
+      else 6.5,
       "auto_trade_sl_distance",
     )
     pip = decimal_value(pip_size, "pip_size")
     maximum = int(sl_distance // pip)
     return minimum, maximum
+  trend_min = int(
+    trend_stops_cfg.minimum_pips
+    if trend_stops_cfg.minimum_pips is not None
+    else 40
+  )
+  trend_max = int(
+    cfg.execution.trend.stop_max_pips
+    if cfg.execution.trend.stop_max_pips is not None
+    else 60
+  )
   # Reaction taxonomy fallback when room TP is unavailable. Zone / Demand /
   # Supply use the same numeric envelope as an independent family default.
   if str(strategy) in _REACTION_FAMILY_STRATEGIES:
-    return (
-      int(getattr(cfg, "auto_trade_trend_stop_min_pips", 40)),
-      int(getattr(cfg, "auto_trade_trend_stop_max_pips", 60)),
-    )
-  return (
-    int(getattr(cfg, "auto_trade_trend_stop_min_pips", 40)),
-    int(getattr(cfg, "auto_trade_trend_stop_max_pips", 60)),
-  )
+    return trend_min, trend_max
+  return trend_min, trend_max

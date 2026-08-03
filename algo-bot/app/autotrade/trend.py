@@ -49,40 +49,9 @@ _TIMEFRAME_SECONDS = {"M1": 60, "M5": 300, "M15": 900}
 _FALLBACK_TP_PIPS = (30, 60, 90, 120, 200)
 _EPS = 1e-9
 
-# Phase 2I-A: legacy field names the trend gate subtree reads. When ``cfg`` is
-# omitted in production the entry points build a narrow snapshot of exactly
-# these fields off the canonical ``runtime_config`` (replacing the retired
-# per-call flat legacy config facade). Tests still inject an explicit SimpleNamespace.
-_RUNTIME_TREND_CFG_FIELDS = (
-  "atr_length",
-  "swing_fractal_n",
-  "zigzag_pct",
-  "zigzag_atr_mult",
-  "trend_min_bos",
-  "trend_min_height_atr",
-  "auto_trade_allow_counter_bias",
-  "trend_atr_expansion",
-  "auto_trade_regime_direction_enabled",
-  "auto_trade_regime_direction_lookback",
-  "auto_trade_regime_min_directional_swings",
-  "auto_trade_regime_min_displacement_atr",
-  "displacement_atr_mult",
-  "momentum_body_frac",
-  "tp_min_spacing_atr",
-  "trend_breakout_max_age_bars",
-  "trend_breakout_accept_bars",
-  "trend_breakout_min_room_pips",
-  "reaction_max_atr",
-  "trend_allow_chase",
-  "trend_level_buffer_atr",
-  "trend_atr_baseline_bars",
-)
-
-
-def _runtime_trend_cfg() -> Any:
-  from app.core.runtime_projection import project_runtime_config
-
-  return project_runtime_config(_RUNTIME_TREND_CFG_FIELDS)
+def _default_runtime_cfg() -> Any:
+  from app.core.config import runtime_config
+  return runtime_config
 
 
 @dataclass(frozen=True)
@@ -131,7 +100,7 @@ def classify_regime(
   legacy-name view); tests may still inject a SimpleNamespace override.
   """
   if cfg is None:
-    cfg = _runtime_trend_cfg()
+    cfg = _default_runtime_cfg()
   m1_raw = frames.get("M1")
   if m1_raw is None or m1_raw.empty:
     return RegimeInfo(
@@ -149,7 +118,7 @@ def classify_regime(
       ("insufficient M1 history",),
     )
 
-  atr_length = max(2, int(getattr(cfg, "atr_length", 14)))
+  atr_length = max(2, int(cfg.analysis.atr.length))
   atr_series_full = atr_series(m1, atr_length)
   atr = float(atr_series_full.iloc[-1])
   if not math.isfinite(atr) or atr <= _EPS:
@@ -163,9 +132,9 @@ def classify_regime(
 
   swings = find_swings(
     m1,
-    max(1, int(getattr(cfg, "swing_fractal_n", 2))),
-    max(0.0, float(getattr(cfg, "zigzag_pct", 0.0))),
-    max(0.0, float(getattr(cfg, "zigzag_atr_mult", 1.0))),
+    max(1, int(cfg.analysis.swings.fractal_size)),
+    max(0.0, float(cfg.analysis.swings.zigzag.pct)),
+    max(0.0, float(cfg.analysis.swings.zigzag.atr_mult)),
     atr_series_full,
   )
   structure = market_structure(swings)
@@ -185,7 +154,7 @@ def classify_regime(
 
   breaks = structure_breaks(swings, m1)
   bos_count = _bos_count_since_choch(breaks)
-  min_bos = max(0, int(getattr(cfg, "trend_min_bos", 2)))
+  min_bos = max(0, int(cfg.strategies.trend.minimum_bos))
   if bos_count < min_bos:
     return _maybe_directional_trend(
       m1,
@@ -201,7 +170,7 @@ def classify_regime(
 
   window = m1.tail(BOX_LOOKBACK_FOR_HEIGHT)
   height = float(window["high"].max() - window["low"].min())
-  min_height_atr = max(0.0, float(getattr(cfg, "trend_min_height_atr", 3.0)))
+  min_height_atr = max(0.0, float(cfg.strategies.trend.min_height_atr))
   if height < min_height_atr * atr:
     return _maybe_directional_trend(
       m1,
@@ -222,7 +191,7 @@ def classify_regime(
   htf_aligned = htf_bias == structure or htf_bias == "range"
   if (
     not htf_aligned
-    and not bool(getattr(cfg, "auto_trade_allow_counter_bias", False))
+    and not bool(cfg.actionability.counter_bias.allowed)
   ):
     return _maybe_directional_trend(
       m1,
@@ -236,7 +205,9 @@ def classify_regime(
       cfg,
     )
 
-  expansion_needed = max(0.0, float(getattr(cfg, "trend_atr_expansion", 1.15)))
+  expansion_needed = max(
+    0.0, float(cfg.strategies.trend.atr_expansion_multiplier)
+  )
   if atr_ratio < expansion_needed:
     return _maybe_directional_trend(
       m1,
@@ -282,7 +253,8 @@ def _maybe_directional_trend(
   successive LH/LL or HH/HL pairs show a directed market that the BOS/height
   path still called chop.
   """
-  if not bool(getattr(cfg, "auto_trade_regime_direction_enabled", False)):
+  regime_execution = cfg.execution.regime
+  if not bool(regime_execution.direction_enabled):
     return RegimeInfo(
       "chop", structure, bos_count, atr_ratio, htf_aligned, None, chop_reasons,
     )
@@ -290,13 +262,9 @@ def _maybe_directional_trend(
     m1,
     swings,
     atr,
-    lookback=int(getattr(cfg, "auto_trade_regime_direction_lookback", 120)),
-    min_directional_swings=int(
-      getattr(cfg, "auto_trade_regime_min_directional_swings", 3)
-    ),
-    min_displacement_atr=float(
-      getattr(cfg, "auto_trade_regime_min_displacement_atr", 4.0)
-    ),
+    lookback=int(regime_execution.direction_lookback),
+    min_directional_swings=int(regime_execution.min_directional_swings),
+    min_displacement_atr=float(regime_execution.min_displacement_atr),
   )
   if override is None:
     return RegimeInfo(
@@ -340,7 +308,7 @@ def evaluate_trend_gate(
   production; tests may still inject a flat SimpleNamespace override.
   """
   if cfg is None:
-    cfg = _runtime_trend_cfg()
+    cfg = _default_runtime_cfg()
   if regime.state not in ("trend", "breakout"):
     return TrendDecision("no_setup", reasons=(f"regime is {regime.state}",))
   m1_raw = frames.get("M1")
@@ -352,7 +320,7 @@ def evaluate_trend_gate(
       "insufficient_history",
       reasons=(f"insufficient M1 history: {len(m1)} bars",),
     )
-  atr_length = max(2, int(getattr(cfg, "atr_length", 14)))
+  atr_length = max(2, int(cfg.analysis.atr.length))
   atr_series_full = atr_series(m1, atr_length)
   atr = float(atr_series_full.iloc[-1])
   if not math.isfinite(atr) or atr <= _EPS:
@@ -421,9 +389,9 @@ def build_trend_targets(
 
   legs = displacement(
     m1,
-    atr_series(m1, max(2, int(getattr(cfg, "atr_length", 14)))),
-    max(0.1, float(getattr(cfg, "displacement_atr_mult", 1.5))),
-    max(0.0, float(getattr(cfg, "momentum_body_frac", 0.6))),
+    atr_series(m1, max(2, int(cfg.analysis.atr.length))),
+    max(0.1, float(cfg.analysis.displacement.atr_mult)),
+    max(0.0, float(cfg.analysis.momentum.body_frac)),
   )
   zone_candidates: list[float] = []
   zones = supply_demand(m1, legs) if legs else []
@@ -432,7 +400,9 @@ def build_trend_targets(
     if zone.side == opposing_side:
       zone_candidates.append(zone.low if up else zone.high)
 
-  min_spacing = max(0.0, float(getattr(cfg, "tp_min_spacing_atr", 0.5))) * atr
+  min_spacing = max(
+    0.0, float(cfg.analysis.measurements.tp_min_spacing_atr)
+  ) * atr
 
   def _add(price: float, bucket: list[float]) -> bool:
     if not _ahead(price):
@@ -487,13 +457,13 @@ def _classify_breakout(
 ) -> RegimeInfo | None:
   if box_decision.state != "box_broken" or box_decision.box is None:
     return None
-  max_age = max(1, int(getattr(cfg, "trend_breakout_max_age_bars", 5)))
+  max_age = max(1, int(cfg.strategies.trend.breakout_max_age_bars))
   direction_pa, age = _breakout_direction_and_age(
     m1, box_decision.box, atr, max_age,
   )
   if direction_pa is None or age is None or age >= max_age:
     return None
-  accept_bars = max(1, int(getattr(cfg, "trend_breakout_accept_bars", 2)))
+  accept_bars = max(1, int(cfg.strategies.trend.breakout_accept_bars))
   consecutive = age + 1
   last_row = m1.iloc[-1]
   accepted_by_displacement = displacement_grade(last_row, atr, direction_pa)
@@ -606,8 +576,7 @@ def _evaluate_box_breakout(
     break_age,
   )
   min_room_pips = max(
-    0,
-    int(getattr(cfg, "trend_breakout_min_room_pips", 35)),
+    0, int(cfg.strategies.trend.breakout_min_room_pips)
   )
   if obstacle is not None:
     room_pips = abs(obstacle - entry_reference) / pip_size
@@ -643,7 +612,7 @@ def _evaluate_box_breakout(
       entry_reference,
       obstacle,
       targets,
-      max(0.0, float(getattr(cfg, "tp_min_spacing_atr", 0.5))) * atr,
+      max(0.0, float(cfg.analysis.measurements.tp_min_spacing_atr)) * atr,
     )
     reasons.append(f"prior barrier {obstacle:.2f}")
   targets_pips = tuple(
@@ -785,8 +754,8 @@ def _evaluate_mode_a(
   legs = displacement(
     m1,
     atr_series_full,
-    max(0.1, float(getattr(cfg, "displacement_atr_mult", 1.5))),
-    max(0.0, float(getattr(cfg, "momentum_body_frac", 0.6))),
+    max(0.1, float(cfg.analysis.displacement.atr_mult)),
+    max(0.0, float(cfg.analysis.momentum.body_frac)),
   )
   matching_legs = [leg for leg in legs if leg.direction == direction_pa]
   if not matching_legs:
@@ -871,9 +840,9 @@ def _evaluate_mode_b(
 ) -> TrendDecision:
   swings = find_swings(
     m1,
-    max(1, int(getattr(cfg, "swing_fractal_n", 2))),
-    max(0.0, float(getattr(cfg, "zigzag_pct", 0.0))),
-    max(0.0, float(getattr(cfg, "zigzag_atr_mult", 1.0))),
+    max(1, int(cfg.analysis.swings.fractal_size)),
+    max(0.0, float(cfg.analysis.swings.zigzag.pct)),
+    max(0.0, float(cfg.analysis.swings.zigzag.atr_mult)),
     atr_series_full,
   )
   broken_kind = "high" if direction_pa == "up" else "low"
@@ -907,9 +876,11 @@ def _evaluate_mode_b(
   base_swing = base_candidates[-1]
   structure_swing = float(base_swing.price)
 
-  reaction_window = max(0.0, float(getattr(cfg, "reaction_max_atr", 0.5))) * atr
+  reaction_window = max(
+    0.0, float(cfg.analysis.reactions.max_atr)
+  ) * atr
   pulled_back = abs(live_price - level) <= reaction_window
-  if not pulled_back and not bool(getattr(cfg, "trend_allow_chase", True)):
+  if not pulled_back and not bool(cfg.strategies.trend.allow_chase):
     return TrendDecision(
       "no_setup", reasons=("mode b: no pullback yet and chase disabled",),
     )
@@ -921,7 +892,9 @@ def _evaluate_mode_b(
 
   opposing_levels = _opposing_levels(m1, cfg)
   opposing = _nearest_opposing_level(direction_pa, entry_reference, opposing_levels)
-  level_buffer = max(0.0, float(getattr(cfg, "trend_level_buffer_atr", 1.0))) * atr
+  level_buffer = max(
+    0.0, float(cfg.strategies.trend.level_buffer_atr)
+  ) * atr
   if opposing is not None and abs(opposing - entry_reference) <= level_buffer:
     return TrendDecision(
       "no_setup",
@@ -1026,7 +999,7 @@ def _bos_count_since_choch(breaks: list) -> int:
 
 
 def _atr_ratio(atr_series_full: pd.Series, atr: float, cfg: Any) -> float:
-  baseline_bars = max(1, int(getattr(cfg, "trend_atr_baseline_bars", 48)))
+  baseline_bars = max(1, int(cfg.strategies.trend.atr_baseline_bars))
   baseline = float(atr_series_full.tail(baseline_bars).mean())
   if not math.isfinite(baseline) or baseline <= _EPS:
     return 0.0

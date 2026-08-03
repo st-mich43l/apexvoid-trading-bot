@@ -460,9 +460,14 @@ def build_trade_plan_from_strategy_match(
     max_group_risk_percent=max_group_risk_percent,
   )
 
+  if cfg is None:
+    from app.core.config import runtime_config as _rc
+    cfg_for_fraction = _rc
+  else:
+    cfg_for_fraction = cfg
   first_leg_fraction = Decimal(str(
-    getattr(cfg, "auto_trade_reaction_market_fraction", None)
-    or getattr(cfg, "auto_trade_zone_scale_first_leg_fraction", 0.70)
+    cfg_for_fraction.execution.reaction.market_fraction
+    or cfg_for_fraction.execution.zone_scaling.first_leg_fraction
     or 0.70
   ))
   if entry.legs:

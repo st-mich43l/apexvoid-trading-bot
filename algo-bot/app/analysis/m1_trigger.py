@@ -30,17 +30,6 @@ ALL_PATTERNS = (
   "hammer",
 )
 
-# Phase 2I-A: legacy field names the M1 trigger subtree reads. When ``cfg`` is
-# omitted in production the entry point builds a narrow snapshot of exactly
-# these fields off the canonical ``runtime_config`` (replacing the retired
-# per-call flat legacy config facade). Tests still inject a flat SimpleNamespace.
-_RUNTIME_M1_TRIGGER_CFG_FIELDS = (
-  "m1_trigger_patterns",
-  "m1_trigger_wick_fraction",
-  "m1_trigger_strong_close_pct",
-)
-
-
 @dataclass(frozen=True)
 class M1TriggerResult:
   pattern: str
@@ -86,7 +75,7 @@ def _intersects_zone(
 
 
 def enabled_patterns(cfg: Any) -> set[str]:
-  raw = str(getattr(cfg, "m1_trigger_patterns", ",".join(ALL_PATTERNS)) or "")
+  raw = str(cfg.analysis.triggers.m1.patterns or "")
   configured = {item.strip() for item in raw.split(",") if item.strip()}
   return configured & set(ALL_PATTERNS)
 
@@ -95,7 +84,7 @@ def _wick_rejection(
   bar: pd.Series, geo: _BarGeometry, *, direction: str,
   zone_low: float, zone_high: float, cfg: Any,
 ) -> M1TriggerResult | None:
-  wick_fraction = float(getattr(cfg, "m1_trigger_wick_fraction", 0.5))
+  wick_fraction = float(cfg.analysis.triggers.m1.wick_fraction)
   if direction == "BUY":
     if geo.close <= zone_high or geo.lower_wick / geo.range_ < wick_fraction:
       return None
@@ -133,7 +122,7 @@ def _body_close(
 def _strong_close(
   bar: pd.Series, geo: _BarGeometry, *, direction: str, cfg: Any,
 ) -> M1TriggerResult | None:
-  strong_pct = float(getattr(cfg, "m1_trigger_strong_close_pct", 0.2))
+  strong_pct = float(cfg.analysis.triggers.m1.strong_close_pct)
   if direction == "BUY":
     if (geo.high - geo.close) / geo.range_ > strong_pct:
       return None
@@ -332,6 +321,9 @@ def evaluate_m1_trigger(
   direction = direction.upper()
   if direction not in {"BUY", "SELL"}:
     return None
+  if cfg is None:
+    from app.core.config import runtime_config
+    cfg = runtime_config
   bar = m1.iloc[-1]
   if not _bar_is_closed(bar):
     return None
@@ -362,8 +354,8 @@ def evaluate_m1_trigger_window(
 ) -> M1TriggerResult | None:
   """Return the earliest unprocessed closed trigger in the current episode."""
   if cfg is None:
-    from app.core.runtime_projection import project_runtime_config
-    cfg = project_runtime_config(_RUNTIME_M1_TRIGGER_CFG_FIELDS)
+    from app.core.config import runtime_config
+    cfg = runtime_config
   if m1 is None or m1.empty:
     return None
   side = str(direction).upper()

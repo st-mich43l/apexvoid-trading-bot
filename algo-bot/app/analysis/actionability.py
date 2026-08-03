@@ -237,7 +237,7 @@ def _entries_excluding_displaced_barriers(
   intrabar highs/lows. Returns (filtered_entries, displacement_state).
   """
   lookback = max(
-    0, int(getattr(cfg, "auto_trade_displacement_override_lookback_bars", 0)),
+    0, int(cfg.execution.policy.displacement_override_lookback_bars),
   )
   if lookback <= 0:
     return entries, {"applied": False, "lookback_bars": 0}
@@ -359,24 +359,8 @@ def _key_level_role(
     band_low=float(result.entry_zone.low),
     band_high=float(result.entry_zone.high),
     closed_bars=frame,
-    breakout_accept_bars=int(getattr(cfg, "breakout_accept_bars", 2)),
+    breakout_accept_bars=int(cfg.analysis.breakout.accept_bars),
   ).role
-
-
-# Phase 2I-A: legacy field names the actionability subtree reads. When ``cfg``
-# is omitted in production it builds a narrow snapshot of exactly these fields
-# off the canonical ``runtime_config`` (replacing the retired
-# per-call flat legacy config facade). Tests still inject a flat SimpleNamespace.
-_RUNTIME_ACTIONABILITY_CFG_FIELDS = (
-  "auto_trade_displacement_override_lookback_bars",
-  "breakout_accept_bars",
-  "contested_corridor_gap_atr",
-  "auto_trade_opposing_barrier_atr",
-  "auto_trade_min_capped_target_pips",
-  "auto_trade_execution_cost_pips",
-  "auto_trade_allow_counter_bias",
-  "scanner_actionability_gate_enabled",
-)
 
 
 def resolve_actionability(
@@ -391,12 +375,12 @@ def resolve_actionability(
 ) -> ActionabilityResolution:
   """Resolve semantic, cross-side, and opposing-room hard geometry.
 
-  ``cfg`` defaults to a narrow canonical ``runtime_config`` projection in
-  production; tests may still inject a flat SimpleNamespace override.
+  ``cfg`` defaults to the authority-neutral canonical ``runtime_config``;
+  tests may inject a canonical-shaped override.
   """
   if cfg is None:
-    from app.core.runtime_projection import project_runtime_config
-    cfg = project_runtime_config(_RUNTIME_ACTIONABILITY_CFG_FIELDS)
+    from app.core.config import runtime_config
+    cfg = runtime_config
   observed = tuple(observed_results)
   entries = () if market_map is None else tuple(market_map.actionable_entries)
   gated: dict[int, ActionabilityDecision] = {}
@@ -464,7 +448,10 @@ def resolve_actionability(
   # Contested corridor requires actual executable conflict — not mere
   # proximity. Nearby opposing support/resistance may coexist in ZoneWatch;
   # a fixed ATR gap alone must not kill both sides.
-  gap_threshold = max(0.0, float(getattr(cfg, "contested_corridor_gap_atr", 0.5))) * max(0.0, atr)
+  gap_threshold = max(
+    0.0,
+    float(cfg.actionability.contested_corridor.gap_atr),
+  ) * max(0.0, atr)
   for first_index, first in enumerate(observed):
     if first_index in gated:
       continue
@@ -540,14 +527,12 @@ def resolve_actionability(
         atr=atr,
         pip_size=pip_size,
         barrier_buffer_atr=float(
-          getattr(cfg, "auto_trade_opposing_barrier_atr", 0.5)
+          cfg.actionability.target_room.barrier_buffer_atr
         ),
         min_capped_target_pips=float(
-          getattr(cfg, "auto_trade_min_capped_target_pips", 15.0)
+          cfg.actionability.target_room.minimum_capped_target_pips
         ),
-        execution_cost_pips=float(
-          getattr(cfg, "auto_trade_execution_cost_pips", 1.0)
-        ),
+        execution_cost_pips=float(cfg.execution.policy.execution_cost_pips),
         displacement_state=displacement_state,
       )
       measured = {
@@ -637,7 +622,7 @@ def resolve_actionability(
     if (
       str(result.bias_relationship or result.mode).casefold()
       == "counter_bias"
-      and not bool(getattr(cfg, "auto_trade_allow_counter_bias", False))
+      and not bool(cfg.actionability.counter_bias.allowed)
     ):
       decision = _decision(
         "counter_bias_disabled",
@@ -651,7 +636,9 @@ def resolve_actionability(
         continue
     processed[index] = result
 
-  gate_enabled = bool(getattr(cfg, "scanner_actionability_gate_enabled", False))
+  gate_enabled = bool(
+    cfg.actionability.scanner_gates.actionability_gate_enabled
+  )
   hard_reasons = (
     _GATED_HARD_BLOCK_REASONS if gate_enabled else _UNIVERSAL_HARD_BLOCK_REASONS
   )
