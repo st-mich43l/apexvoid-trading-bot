@@ -235,209 +235,108 @@ class DetectorSettings:
     )
 
 
-# Phase 2I-A: legacy field names detector_settings_from reads. When ``config``
-# is omitted in production it builds a narrow snapshot of exactly these fields
-# off the canonical ``runtime_config`` (replacing the retired
-# per-call flat legacy config facade). Tests still inject a flat SimpleNamespace/
-# Settings-shaped override which flows through the unchanged flat-read body.
-_RUNTIME_DETECTOR_CFG_FIELDS = (
-  "scanner_confluence_floor",
-  "max_entry_atr",
-  "range_lookback",
-  "atr_length",
-  "swing_fractal_n",
-  "zigzag_pct",
-  "zigzag_atr_mult",
-  "displacement_atr_mult",
-  "zone_width",
-  "zone_merge_overlap",
-  "max_merged_zone_atr",
-  "equal_tol_atr",
-  "level_cluster_atr",
-  "round_step",
-  "key_level_min_touches",
-  "momentum_lookback",
-  "momentum_body_frac",
-  "session_asia_start",
-  "session_london_start",
-  "session_ny_start",
-  "daily_rollover_utc_hour",
-  "eq_band",
-  "strict_pd_gate",
-  "sweep_body_frac",
-  "sweep_react_bars",
-  "inducement_band_atr",
-  "max_zone_width_atr",
-  "proximal_band_atr",
-  "chop_filter_enabled",
-  "chop_range_atr",
-  "chop_lookback",
-  "chop_edge_frac",
-  "tl_min_touches",
-  "tl_tol_atr",
-  "tl_max_slope_atr",
-  "coil_contract",
-  "breakout_buffer_atr",
-  "breakout_accept_bars",
-  "breakout_max_age_bars",
-  "allow_counter_trend",
-  "counter_min_zone_score",
-  "counter_extreme_pd",
-  "counter_level_min_touches",
-  "range_scalp_enabled",
-  "range_scalp_lookback",
-  "range_scalp_cluster_atr",
-  "range_scalp_min_touches",
-  "range_scalp_min_wick_frac",
-  "range_scalp_entry_tol_atr",
-  "range_scalp_min_width_atr",
-  "range_scalp_max_width_atr",
-  "range_scalp_min_room_atr",
-  "range_scalp_break_closes",
-  "range_scalp_min_wick_rejections",
-  "range_scalp_allow_rejection_only",
-  "auto_trade_zone_reconcile_enabled",
-  "auto_trade_zone_reconcile_mode",
-  "auto_trade_regime_direction_enabled",
-  "auto_trade_regime_direction_lookback",
-  "auto_trade_regime_min_directional_swings",
-  "auto_trade_regime_min_displacement_atr",
-  "auto_trade_structural_reaction_lookback_bars",
-  "auto_trade_key_level_reaction_enabled",
-  "auto_trade_demand_reaction_enabled",
-  "auto_trade_supply_reaction_enabled",
-  "auto_trade_session_level_reaction_enabled",
-  "auto_trade_trendline_reaction_enabled",
-  "auto_trade_box_breakout_enabled",
-  "auto_trade_trend_pullback_enabled",
-  "auto_trade_break_retest_enabled",
-  "auto_trade_momentum_ride_enabled",
-  "auto_trade_snap_back_enabled",
-  "auto_trade_fade_scalp_enabled",
-)
-
-
-def detector_settings_from(config=None) -> DetectorSettings:
+def detector_settings_from(config: object | None = None) -> DetectorSettings:
   """Build detector settings from the app config for every PA consumer.
 
-  ``config`` defaults to the authority-neutral runtime configuration (read
-  through a flat legacy-name view) so production callers never depend on the
-  legacy Settings singleton. Tests may still inject a flat SimpleNamespace/
-  Settings-shaped override. The lazy import keeps this module's import-time
-  decoupling from ``app.core.config`` intact.
+  ``config`` defaults to the authority-neutral canonical ``runtime_config`` so
+  production callers never depend on the legacy Settings singleton. Tests may
+  inject a canonical-shaped override (``ApexVoidConfig`` /
+  ``LegacyCanonicalConfigView`` / any object exposing the canonical grouped
+  paths). The lazy import keeps this module's import-time decoupling from
+  ``app.core.config`` intact.
   """
-  flip_zone_enabled = True
   if config is None:
     from app.core.config import runtime_config
-    from app.core.runtime_projection import project_runtime_config
-    config = project_runtime_config(_RUNTIME_DETECTOR_CFG_FIELDS)
-    try:
-      flip_zone_enabled = bool(runtime_config.strategies.zone.flip.enabled)
-    except AttributeError:
-      flip_zone_enabled = True
-  else:
-    flip_zone_enabled = bool(
-      getattr(config, "flip_zone_enabled", True)
-    )
+    config = runtime_config
+  analysis = config.analysis
+  strategies = config.strategies
+  market_data = config.market_data
+  actionability = config.actionability
+  execution = config.execution
+  # ``strategies.zone.flip.enabled`` has no legacy_attr, so the
+  # LegacyCanonicalConfigView cannot expose it under the legacy authority.
+  # Preserve the pre-migration default (True) in that path.
+  try:
+    flip_zone_enabled = bool(strategies.zone.flip.enabled)
+  except AttributeError:
+    flip_zone_enabled = True
   return DetectorSettings(
-    confluence_floor=config.scanner_confluence_floor,
-    max_entry_atr=config.max_entry_atr,
-    range_lookback=config.range_lookback,
-    atr_length=config.atr_length,
-    swing_fractal_n=config.swing_fractal_n,
-    zigzag_pct=config.zigzag_pct,
-    zigzag_atr_mult=config.zigzag_atr_mult,
-    displacement_atr_mult=config.displacement_atr_mult,
-    zone_width=config.zone_width,
-    zone_merge_overlap=config.zone_merge_overlap,
-    max_merged_zone_atr=config.max_merged_zone_atr,
-    equal_tol_atr=config.equal_tol_atr,
-    level_cluster_atr=config.level_cluster_atr,
-    round_step=config.round_step,
-    key_level_min_touches=config.key_level_min_touches,
-    momentum_lookback=config.momentum_lookback,
-    momentum_body_frac=config.momentum_body_frac,
-    session_asia_start=config.session_asia_start,
-    session_london_start=config.session_london_start,
-    session_ny_start=config.session_ny_start,
-    daily_rollover_utc_hour=config.daily_rollover_utc_hour,
-    eq_band=config.eq_band,
-    strict_pd_gate=config.strict_pd_gate,
-    sweep_body_frac=config.sweep_body_frac,
-    sweep_react_bars=config.sweep_react_bars,
-    inducement_band_atr=config.inducement_band_atr,
-    max_zone_width_atr=config.max_zone_width_atr,
-    proximal_band_atr=config.proximal_band_atr,
-    chop_filter_enabled=config.chop_filter_enabled,
-    chop_range_atr=config.chop_range_atr,
-    chop_lookback=config.chop_lookback,
-    chop_edge_frac=config.chop_edge_frac,
-    tl_min_touches=config.tl_min_touches,
-    tl_tol_atr=config.tl_tol_atr,
-    tl_max_slope_atr=config.tl_max_slope_atr,
-    coil_contract=config.coil_contract,
-    breakout_buffer_atr=config.breakout_buffer_atr,
-    breakout_accept_bars=config.breakout_accept_bars,
-    breakout_max_age_bars=config.breakout_max_age_bars,
-    allow_counter_trend=config.allow_counter_trend,
-    counter_min_zone_score=config.counter_min_zone_score,
-    counter_extreme_pd=config.counter_extreme_pd,
-    counter_level_min_touches=config.counter_level_min_touches,
-    range_scalp_enabled=config.range_scalp_enabled,
-    range_scalp_lookback=config.range_scalp_lookback,
-    range_scalp_cluster_atr=config.range_scalp_cluster_atr,
-    range_scalp_min_touches=config.range_scalp_min_touches,
-    range_scalp_min_wick_frac=config.range_scalp_min_wick_frac,
-    range_scalp_entry_tol_atr=config.range_scalp_entry_tol_atr,
-    range_scalp_min_width_atr=config.range_scalp_min_width_atr,
-    range_scalp_max_width_atr=config.range_scalp_max_width_atr,
-    range_scalp_min_room_atr=config.range_scalp_min_room_atr,
-    range_scalp_break_closes=config.range_scalp_break_closes,
-    range_scalp_min_wick_rejections=config.range_scalp_min_wick_rejections,
-    range_scalp_allow_rejection_only=config.range_scalp_allow_rejection_only,
-    zone_reconcile_enabled=config.auto_trade_zone_reconcile_enabled,
-    zone_reconcile_mode=config.auto_trade_zone_reconcile_mode,
-    regime_direction_enabled=config.auto_trade_regime_direction_enabled,
-    regime_direction_lookback=config.auto_trade_regime_direction_lookback,
-    regime_min_directional_swings=config.auto_trade_regime_min_directional_swings,
-    regime_min_displacement_atr=config.auto_trade_regime_min_displacement_atr,
+    confluence_floor=market_data.scanner.confluence_floor,
+    max_entry_atr=actionability.gates.max_entry_atr,
+    range_lookback=analysis.ranges.lookback,
+    atr_length=analysis.atr.length,
+    swing_fractal_n=analysis.swings.fractal_size,
+    zigzag_pct=analysis.swings.zigzag.pct,
+    zigzag_atr_mult=analysis.swings.zigzag.atr_mult,
+    displacement_atr_mult=analysis.displacement.atr_mult,
+    zone_width=analysis.zones.width,
+    zone_merge_overlap=analysis.zones.merge_overlap,
+    max_merged_zone_atr=analysis.measurements.max_merged_zone_atr,
+    equal_tol_atr=analysis.levels.equal_tol_atr,
+    level_cluster_atr=analysis.levels.level_cluster_atr,
+    round_step=analysis.levels.round_step,
+    key_level_min_touches=analysis.levels.minimum_key_touches,
+    momentum_lookback=analysis.momentum.lookback,
+    momentum_body_frac=analysis.momentum.body_frac,
+    session_asia_start=market_data.sessions.asia_start,
+    session_london_start=market_data.sessions.london_start,
+    session_ny_start=market_data.sessions.ny_start,
+    daily_rollover_utc_hour=market_data.sessions.daily_rollover_utc_hour,
+    eq_band=analysis.measurements.eq_band,
+    strict_pd_gate=analysis.measurements.strict_pd_gate,
+    sweep_body_frac=analysis.liquidity.sweep.body_frac,
+    sweep_react_bars=analysis.liquidity.sweep.react_bars,
+    inducement_band_atr=analysis.measurements.inducement_band_atr,
+    max_zone_width_atr=analysis.zones.discovery.maximum_width_atr,
+    proximal_band_atr=actionability.gates.proximal_band_atr,
+    chop_filter_enabled=analysis.regime.chop.filter_enabled,
+    chop_range_atr=analysis.regime.chop.range_atr,
+    chop_lookback=analysis.regime.chop.lookback,
+    chop_edge_frac=analysis.regime.chop.edge_frac,
+    tl_min_touches=analysis.trendlines.minimum_touches,
+    tl_tol_atr=analysis.trendlines.tolerance_atr,
+    tl_max_slope_atr=analysis.trendlines.maximum_slope_atr,
+    coil_contract=analysis.measurements.coil_contract,
+    breakout_buffer_atr=analysis.breakout.buffer_atr,
+    breakout_accept_bars=analysis.breakout.accept_bars,
+    breakout_max_age_bars=analysis.breakout.max_age_bars,
+    allow_counter_trend=strategies.counter_trend.allow_counter_trend,
+    counter_min_zone_score=strategies.counter_trend.min_zone_score,
+    counter_extreme_pd=strategies.counter_trend.extreme_pd,
+    counter_level_min_touches=strategies.counter_trend.level_min_touches,
+    range_scalp_enabled=strategies.range_reversion.range_edge.enabled,
+    range_scalp_lookback=strategies.range_reversion.range_edge.lookback,
+    range_scalp_cluster_atr=strategies.range_reversion.range_edge.cluster_atr,
+    range_scalp_min_touches=strategies.range_reversion.range_edge.min_touches,
+    range_scalp_min_wick_frac=strategies.range_reversion.range_edge.min_wick_frac,
+    range_scalp_entry_tol_atr=strategies.range_reversion.range_edge.entry_tol_atr,
+    range_scalp_min_width_atr=strategies.range_reversion.range_edge.min_width_atr,
+    range_scalp_max_width_atr=strategies.range_reversion.range_edge.max_width_atr,
+    range_scalp_min_room_atr=strategies.range_reversion.range_edge.min_room_atr,
+    range_scalp_break_closes=strategies.range_reversion.range_edge.break_closes,
+    range_scalp_min_wick_rejections=strategies.range_reversion.range_edge.min_wick_rejections,
+    range_scalp_allow_rejection_only=strategies.range_reversion.range_edge.allow_rejection_only,
+    zone_reconcile_enabled=actionability.zone_reconciliation.enabled,
+    zone_reconcile_mode=actionability.zone_reconciliation.mode,
+    regime_direction_enabled=execution.regime.direction_enabled,
+    regime_direction_lookback=execution.regime.direction_lookback,
+    regime_min_directional_swings=execution.regime.min_directional_swings,
+    regime_min_displacement_atr=execution.regime.min_displacement_atr,
     structural_reaction_lookback_bars=int(
-      getattr(config, "auto_trade_structural_reaction_lookback_bars", 3)
+      execution.policy.structural_reaction_lookback_bars
     ),
-    key_level_reaction_enabled=bool(
-      getattr(config, "auto_trade_key_level_reaction_enabled", True)
-    ),
-    demand_reaction_enabled=bool(
-      getattr(config, "auto_trade_demand_reaction_enabled", True)
-    ),
-    supply_reaction_enabled=bool(
-      getattr(config, "auto_trade_supply_reaction_enabled", True)
-    ),
+    key_level_reaction_enabled=bool(strategies.reaction.key_level.enabled),
+    demand_reaction_enabled=bool(strategies.reaction.demand.enabled),
+    supply_reaction_enabled=bool(strategies.reaction.supply.enabled),
     flip_zone_enabled=flip_zone_enabled,
-    session_level_reaction_enabled=bool(
-      getattr(config, "auto_trade_session_level_reaction_enabled", True)
-    ),
-    trendline_reaction_enabled=bool(
-      getattr(config, "auto_trade_trendline_reaction_enabled", True)
-    ),
-    box_breakout_enabled=bool(
-      getattr(config, "auto_trade_box_breakout_enabled", False)
-    ),
-    trend_pullback_enabled=bool(
-      getattr(config, "auto_trade_trend_pullback_enabled", False)
-    ),
-    break_retest_enabled=bool(
-      getattr(config, "auto_trade_break_retest_enabled", False)
-    ),
-    momentum_ride_enabled=bool(
-      getattr(config, "auto_trade_momentum_ride_enabled", False)
-    ),
-    snap_back_enabled=bool(
-      getattr(config, "auto_trade_snap_back_enabled", False)
-    ),
-    fade_scalp_enabled=bool(
-      getattr(config, "auto_trade_fade_scalp_enabled", False)
-    ),
+    session_level_reaction_enabled=bool(strategies.reaction.session_level.enabled),
+    trendline_reaction_enabled=bool(strategies.reaction.trendline.enabled),
+    box_breakout_enabled=bool(strategies.selection.box_breakout_enabled),
+    trend_pullback_enabled=bool(strategies.trend.pullback_enabled),
+    break_retest_enabled=bool(strategies.breakout.break_retest_enabled),
+    momentum_ride_enabled=bool(strategies.selection.momentum_ride_enabled),
+    snap_back_enabled=bool(strategies.selection.snap_back_enabled),
+    fade_scalp_enabled=bool(strategies.scalp.fade_scalp_enabled),
   )
 
 

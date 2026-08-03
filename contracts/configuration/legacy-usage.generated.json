@@ -1,17 +1,5 @@
 {
-  "activation_blockers": [
-    {
-      "attribute": null,
-      "canonical_path": "strategies.zone.flip.enabled",
-      "classification": "activation_blocker",
-      "column": 31,
-      "detail": "canonical nested read without direct legacy ownership",
-      "dynamic_names": [],
-      "line": 335,
-      "operation": "canonical_read",
-      "path": "algo-bot/app/analysis/detectors.py"
-    }
-  ],
+  "activation_blockers": [],
   "production": {
     "attribute_deletions": [],
     "attribute_reads": [],
@@ -50,17 +38,6 @@
         "line": 145,
         "operation": "canonical_read",
         "path": "algo-bot/app/analysis/confluence_zone.py"
-      },
-      {
-        "attribute": null,
-        "canonical_path": "strategies.zone.flip.enabled",
-        "classification": "activation_blocker",
-        "column": 31,
-        "detail": "canonical nested read without direct legacy ownership",
-        "dynamic_names": [],
-        "line": 335,
-        "operation": "canonical_read",
-        "path": "algo-bot/app/analysis/detectors.py"
       },
       {
         "attribute": null,
@@ -4448,7 +4425,7 @@
     "method_calls": [],
     "type_dependencies": []
   },
-  "source_fingerprint": "7105801ef90de3717e2c173234d37d066f260254b7a9ef7f6289e9648a9693bc",
+  "source_fingerprint": "6801d9e9c9562bf0e246ea5ccadba1dc71d3c4fc92794dd7ed554a21400c0b29",
   "tests": {
     "attribute_deletions": [],
     "attribute_reads": [
@@ -10916,7 +10893,7 @@
         "column": 20,
         "detail": "legacy Settings class API dependency",
         "dynamic_names": [],
-        "line": 47,
+        "line": 66,
         "operation": "settings_class_attribute",
         "path": "algo-bot/tests/test_m1_trigger.py"
       },

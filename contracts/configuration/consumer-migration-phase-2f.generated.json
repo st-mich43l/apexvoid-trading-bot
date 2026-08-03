@@ -11,7 +11,7 @@
     "eligible_production_reads_before": 130,
     "eligible_reads_remaining": 0,
     "migrated_reads": 130,
-    "unknown_blockers": 1
+    "unknown_blockers": 0
   },
   "phase": "2F",
   "reads": [
@@ -56,20 +56,6 @@
       "root_domain": "analysis",
       "subdomain": "zones",
       "targeted_test_coverage": "test_zone_width_contract.py; test_confluence_zone.py"
-    },
-    {
-      "authority_neutral_support": false,
-      "behavior_boundary": "STRATEGY_SELECTION",
-      "canonical_path": "strategies.zone.flip.enabled",
-      "deferred_reason": "canonical Phase 2F read lacks direct legacy ownership",
-      "file": "algo-bot/app/analysis/detectors.py",
-      "legacy_attribute": null,
-      "line": 335,
-      "migration_classification": "UNKNOWN_BLOCKER",
-      "migration_status": "blocked",
-      "root_domain": "strategies",
-      "subdomain": "zone",
-      "targeted_test_coverage": "test_strategy_match.py; test_structure_aware_autotrade.py"
     },
     {
       "authority_neutral_support": true,

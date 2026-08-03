@@ -92,47 +92,15 @@ class MarketMap:
     return [entry for entry in self.entries if entry.tier == "major"]
 
 
-# Phase 2I-A: legacy field names the market-map builder/renderer subtree reads.
-# When ``cfg`` is omitted in production these entry points build a narrow
-# snapshot of exactly these fields off the canonical ``runtime_config``
-# (replacing the retired per-call flat legacy config facade). Tests still inject a flat
-# SimpleNamespace. Fields without a canonical path (``map_source_timeframe``,
-# ``pip_size``) are intentionally excluded so ``getattr`` uses the code default,
-# matching the facade's ``AttributeError`` fallthrough.
-_RUNTIME_MARKET_MAP_CFG_FIELDS = (
-  "map_major_score",
-  "map_max_touches",
-  "map_min_zone_score",
-  "map_min_level_touches",
-  "map_band_max_atr",
-  "map_max_distance_atr",
-  "proximal_band_atr",
-  "map_min_per_side",
-  "map_max_per_side",
-  "map_fallback_radius",
-  "round_step",
-  "scanner_exec_tf",
-  "map_scalp_radius",
-  "range_scalp_min_touches",
-  "range_scalp_break_closes",
-  "range_scalp_min_width_atr",
-  "range_scalp_min_room_atr",
-  "range_scalp_max_width_atr",
-  "session_asia_start",
-  "session_london_start",
-  "session_ny_start",
-)
-
-
-def _runtime_market_map_cfg():
-  from app.core.runtime_projection import project_runtime_config
-
-  return project_runtime_config(_RUNTIME_MARKET_MAP_CFG_FIELDS)
+def _default_runtime_cfg():
+  from app.core.config import runtime_config
+  return runtime_config
 
 
 def build_map(ctx_or_per_tf, price: float, cfg=None) -> MarketMap:
   if cfg is None:
-    cfg = _runtime_market_map_cfg()
+    cfg = _default_runtime_cfg()
+  map_cfg = cfg.analysis.market_map
   per_tf = getattr(ctx_or_per_tf, "per_tf", ctx_or_per_tf)
   if not isinstance(per_tf, dict):
     per_tf = {}
@@ -141,30 +109,23 @@ def build_map(ctx_or_per_tf, price: float, cfg=None) -> MarketMap:
   trendline_candidates: list[MapEntry] = []
   revisit_candidates: list[MapEntry] = []
   swept_candidates: list[MapEntry] = []
-  major_score = float(getattr(cfg, "map_major_score", MAP_MAJOR_SCORE))
-  max_touches = max(1, int(getattr(cfg, "map_max_touches", MAP_MAX_TOUCHES)))
-  min_zone_score = max(
-    0.0,
-    float(getattr(cfg, "map_min_zone_score", MAP_MIN_ZONE_SCORE)),
-  )
-  min_level_touches = max(
-    3,
-    int(getattr(cfg, "map_min_level_touches", MAP_MIN_LEVEL_TOUCHES)),
-  )
+  major_score = float(map_cfg.major_score)
+  max_touches = max(1, int(map_cfg.max_touches))
+  min_zone_score = max(0.0, float(map_cfg.min_zone_score))
+  min_level_touches = max(3, int(map_cfg.min_level_touches))
   reference_atr = _reference_atr(per_tf)
   band_max = max(
     5.0,
-    max(0.0, float(getattr(cfg, "map_band_max_atr", MAP_BAND_MAX_ATR)))
-    * reference_atr,
+    max(0.0, float(map_cfg.band_max_atr)) * reference_atr,
   )
   max_distance = (
-    max(0.0, float(getattr(cfg, "map_max_distance_atr", MAP_MAX_DISTANCE_ATR)))
+    max(0.0, float(map_cfg.max_distance_atr))
     * reference_atr
     if reference_atr > 0
     else math.inf
   )
   proximal_band = (
-    max(0.0, float(getattr(cfg, "proximal_band_atr", 0.5)))
+    max(0.0, float(cfg.actionability.gates.proximal_band_atr))
     * reference_atr
   )
   for tf, item in sorted(per_tf.items(), key=lambda pair: (_tf_rank(pair[0]), pair[0])):
@@ -270,18 +231,12 @@ def build_map(ctx_or_per_tf, price: float, cfg=None) -> MarketMap:
     if _is_structural_actionable(entry)
   ]
   capped: list[MapEntry] = []
-  min_per_side = max(0, int(getattr(cfg, "map_min_per_side", MAP_MIN_PER_SIDE)))
-  max_per_side = max(
-    min_per_side,
-    int(getattr(cfg, "map_max_per_side", MAP_MAX_PER_SIDE)),
-  )
-  fallback_radius = max(
-    0.0,
-    float(getattr(cfg, "map_fallback_radius", MAP_FALLBACK_RADIUS)),
-  )
+  min_per_side = max(0, int(map_cfg.min_per_side))
+  max_per_side = max(min_per_side, int(map_cfg.max_per_side))
+  fallback_radius = max(0.0, float(map_cfg.fallback_radius_price))
   round_candidates = _round_fallback_entries(
     price,
-    float(getattr(cfg, "round_step", 5.0)),
+    float(cfg.analysis.levels.round_step),
     fallback_radius,
   )
   for side in ("sell", "buy"):
@@ -315,11 +270,7 @@ def build_map(ctx_or_per_tf, price: float, cfg=None) -> MarketMap:
     scalp_rejected_by,
   )
   generated_at = int(datetime.now(timezone.utc).timestamp())
-  source_tf = str(
-    getattr(cfg, "scanner_exec_tf", None)
-    or getattr(cfg, "map_source_timeframe", "M5")
-    or "M5"
-  ).upper()
+  source_tf = str(cfg.market_data.scanner.execution_timeframe or "M5").upper()
   actionable_entries = _rank_entries(actionable_pool, float(price))
   map_id = _build_map_id(
     capped,
@@ -351,7 +302,7 @@ def render_market_map(
   cfg=None,
 ) -> str:
   if cfg is None:
-    cfg = _runtime_market_map_cfg()
+    cfg = _default_runtime_cfg()
   clock = now.strftime("%H:%M")
   bias = market_map.bias
   if market_map.bias_tf:
@@ -1084,10 +1035,10 @@ def _build_scalp_rails(
   price: float,
   cfg,
 ) -> tuple[list[ScalpRail], str | None]:
-  radius = max(0.0, float(getattr(cfg, "map_scalp_radius", MAP_SCALP_RADIUS)))
+  radius = max(0.0, float(cfg.analysis.market_map.scalp_radius_price))
   if not per_tf or radius <= 0:
     return [], "no_radius"
-  exec_tf = str(getattr(cfg, "scanner_exec_tf", "")).upper()
+  exec_tf = str(cfg.market_data.scanner.execution_timeframe or "").upper()
   item = per_tf.get(exec_tf)
   if item is None:
     _, item = min(per_tf.items(), key=lambda pair: (_tf_rank(pair[0]), pair[0]))
@@ -1136,8 +1087,9 @@ def _validated_scalp_pair(
   if max(abs(lower.level - price), abs(upper.level - price)) > radius:
     return None, "outside_radius"
 
-  minimum_touches = max(2, int(getattr(cfg, "range_scalp_min_touches", 3)))
-  break_closes = max(1, int(getattr(cfg, "range_scalp_break_closes", 2)))
+  range_edge = cfg.strategies.range_reversion.range_edge
+  minimum_touches = max(2, int(range_edge.min_touches))
+  break_closes = max(1, int(range_edge.break_closes))
   if (
     lower.touches < minimum_touches
     or upper.touches < minimum_touches
@@ -1150,12 +1102,12 @@ def _validated_scalp_pair(
 
   minimum_width = max(
     0.0,
-    float(getattr(cfg, "range_scalp_min_width_atr", 1.2)),
-    2.0 * float(getattr(cfg, "range_scalp_min_room_atr", 1.0)),
+    float(range_edge.min_width_atr),
+    2.0 * float(range_edge.min_room_atr),
   )
   maximum_width = max(
     minimum_width,
-    float(getattr(cfg, "range_scalp_max_width_atr", 6.0)),
+    float(range_edge.max_width_atr),
   )
   if not minimum_width <= scalp_range.width_atr <= maximum_width:
     return None, "width_out_of_range"
@@ -1342,10 +1294,11 @@ def _compact_rail_tags(tags: list[str], limit: int) -> list[str]:
 
 def _session_context(now: datetime, cfg) -> str:
   current = now.astimezone(timezone.utc)
+  sessions = cfg.market_data.sessions
   opens = [
-    ("Asia", int(getattr(cfg, "session_asia_start", 22))),
-    ("London", int(getattr(cfg, "session_london_start", 7))),
-    ("NY", int(getattr(cfg, "session_ny_start", 13))),
+    ("Asia", int(sessions.asia_start)),
+    ("London", int(sessions.london_start)),
+    ("NY", int(sessions.ny_start)),
   ]
   points = []
   for name, hour in opens:
