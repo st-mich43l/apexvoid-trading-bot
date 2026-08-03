@@ -11,7 +11,7 @@ from aiogram.types import Message
 
 from app.signals.broadcast import broadcast_entry
 from app.autotrade.config_health import CONFIG_HEALTH_KEY
-from app.core.config import runtime_config, settings
+from app.core.config import runtime_config
 from app.persistence import redis_state
 from app.persistence.store import (
   event_in_window,
@@ -65,7 +65,7 @@ async def _arm_algo_intent(signal_id: int, signal: dict) -> str:
   runs, so a failure here must read as "algo arming failed" and nothing
   else, never as the whole DM being rejected.
   """
-  if not settings.manual_algo_enabled:
+  if not runtime_config.manual_algo.runtime.enabled:
     return "⚠️ Algo suffix ignored — MANUAL_ALGO_ENABLED is off"
   try:
     raw_health = await redis_state.get_client().get(CONFIG_HEALTH_KEY)

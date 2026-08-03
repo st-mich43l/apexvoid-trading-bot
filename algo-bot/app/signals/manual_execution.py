@@ -1,6 +1,6 @@
 """Consumer + real broker execution for owner-armed manual /algo signals.
 
-Two independent loops, both no-ops unless ``settings.manual_algo_enabled``:
+Two independent loops, both no-ops unless ``runtime_config.manual_algo.runtime.enabled``:
 
 - ``bridge_intents_loop``: translates each published ``ManualTradeIntent``
   into the dedicated ``mode=manual_algo`` owner-execution contract. The C#
@@ -25,7 +25,7 @@ import json
 import logging
 
 from app.bot.client import send_scanner_with_retry
-from app.core.config import runtime_config, settings
+from app.core.config import runtime_config
 from app.persistence import redis_state
 from app.persistence.store import (
   get_manual_signal,
@@ -88,7 +88,7 @@ async def _handle_limit_placed(event: dict) -> None:
     if entry_low is not None and entry_high is not None
     else _price(event.get("price"))
   )
-  if settings.manual_algo_owner_execution_dm_enabled:
+  if runtime_config.manual_algo.runtime.owner_execution_dm_enabled:
     await _send_executor_truth(
       "✅ <b>LIMIT ORDER PLACED</b>\n"
       f"Direction: <b>{event.get('direction') or 'n/a'}</b>\n"
@@ -204,9 +204,9 @@ async def _process_intent_entries(client, entries, *, cursor: str) -> str:
       intent = ManualTradeIntent(**payload)
       candidate = _intent_to_candidate_payload(intent)
       await client.xadd(
-        settings.auto_trade_stream,
+        runtime_config.contract.streams.candidates,
         {"payload": json.dumps(candidate, separators=(",", ":"))},
-        maxlen=max(100, settings.auto_trade_stream_maxlen),
+        maxlen=max(100, runtime_config.contract.streams.candidate_maximum_length),
         approximate=True,
       )
     except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
@@ -217,12 +217,12 @@ async def _process_intent_entries(client, entries, *, cursor: str) -> str:
 
 
 async def bridge_intents_loop() -> None:
-  if not settings.manual_algo_enabled:
+  if not runtime_config.manual_algo.runtime.enabled:
     return
   client = redis_state.get_client()
   cursor = await client.get(_INTENT_BRIDGE_CURSOR_KEY)
   if not cursor:
-    latest = await client.xrevrange(settings.manual_trade_intent_stream, count=1)
+    latest = await client.xrevrange(runtime_config.manual_algo.streams.intents, count=1)
     cursor = latest[0][0] if latest else "0-0"
     await client.set(_INTENT_BRIDGE_CURSOR_KEY, cursor)
   log.info("Manual-algo intent bridge active from Redis cursor %s", cursor)
@@ -230,7 +230,7 @@ async def bridge_intents_loop() -> None:
   while True:
     try:
       batches = await client.xread(
-        {settings.manual_trade_intent_stream: cursor},
+        {runtime_config.manual_algo.streams.intents: cursor},
         count=20,
         block=5000,
       )
@@ -309,7 +309,7 @@ async def _handle_fill_event(
   await set_execution_fill(
     sig["id"], broker_position_id=int(position_id), broker_fill_price=float(price),
   )
-  if settings.manual_algo_owner_execution_dm_enabled:
+  if runtime_config.manual_algo.runtime.owner_execution_dm_enabled:
     await _send_executor_truth(
       "✅ <b>POSITION OPENED</b>\n"
       f"Direction: <b>{event.get('direction') or sig.get('action')}</b>\n"
@@ -599,12 +599,12 @@ async def _process_event_entries(
 
 
 async def reconcile_events_loop() -> None:
-  if not settings.manual_algo_enabled:
+  if not runtime_config.manual_algo.runtime.enabled:
     return
   client = redis_state.get_client()
   cursor = await client.get(_EVENT_CURSOR_KEY)
   if not cursor:
-    latest = await client.xrevrange(settings.auto_trade_event_stream, count=1)
+    latest = await client.xrevrange(runtime_config.contract.streams.events, count=1)
     cursor = latest[0][0] if latest else "0-0"
     await client.set(_EVENT_CURSOR_KEY, cursor)
   log.info("Manual-algo reconcile loop active from Redis cursor %s", cursor)
@@ -613,7 +613,7 @@ async def reconcile_events_loop() -> None:
   while True:
     try:
       batches = await client.xread(
-        {settings.auto_trade_event_stream: cursor},
+        {runtime_config.contract.streams.events: cursor},
         count=20,
         block=5000,
       )
@@ -634,9 +634,9 @@ async def reconcile_events_loop() -> None:
 async def _xadd_command(payload: dict) -> None:
   client = redis_state.get_client()
   await client.xadd(
-    settings.manual_trade_command_stream,
+    runtime_config.manual_algo.streams.manual_trade_command_stream,
     {"payload": json.dumps(payload, separators=(",", ":"))},
-    maxlen=max(100, settings.manual_trade_command_stream_maxlen),
+    maxlen=max(100, runtime_config.manual_algo.streams.manual_trade_command_stream_maxlen),
     approximate=True,
   )
 
