@@ -1,0 +1,3433 @@
+{
+  "classifications": [
+    "PRODUCTION_REMOVE_2I_A",
+    "TEST_COMPATIBILITY_RETAIN_2I_A",
+    "LEGACY_ROLLBACK_RETAIN_2I_A",
+    "TOOLING_RETAIN_2I_A",
+    "REMOVE_2I_B",
+    "UNKNOWN_BLOCKER"
+  ],
+  "counts": {
+    "by_classification": {
+      "LEGACY_ROLLBACK_RETAIN_2I_A": 16,
+      "PRODUCTION_REMOVE_2I_A": 0,
+      "REMOVE_2I_B": 1,
+      "TEST_COMPATIBILITY_RETAIN_2I_A": 315,
+      "TOOLING_RETAIN_2I_A": 45,
+      "UNKNOWN_BLOCKER": 0
+    },
+    "by_symbol": {
+      "CanonicalSettingsFacade": 13,
+      "DERIVED_LEGACY_PROPERTIES": 41,
+      "DIRECT_LEGACY_PATHS": 39,
+      "LegacyCanonicalConfigView": 6,
+      "LegacySettings": 2,
+      "Settings": 34,
+      "getattr_legacy_name": 185,
+      "runtime_config_facade": 1,
+      "settings": 39,
+      "simplenamespace_config_fixture": 17
+    },
+    "production_facade_calls": 0,
+    "total": 377,
+    "unknown_blockers": 0
+  },
+  "phase": "2I-A",
+  "source_fingerprint": "aa886707a6c9ce6c3ac42c2c083dc61094030153fd7f0ef14f8945f26ab07c01",
+  "unknown_blockers": [],
+  "usages": [
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 11,
+      "detail": "getattr(..., 'auto_trade_displacement_override_lookback_bars')",
+      "kind": "getattr",
+      "line": 240,
+      "path": "algo-bot/app/analysis/actionability.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 29,
+      "detail": "getattr(..., 'breakout_accept_bars')",
+      "kind": "getattr",
+      "line": 362,
+      "path": "algo-bot/app/analysis/actionability.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 33,
+      "detail": "getattr(..., 'contested_corridor_gap_atr')",
+      "kind": "getattr",
+      "line": 467,
+      "path": "algo-bot/app/analysis/actionability.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 10,
+      "detail": "getattr(..., 'auto_trade_opposing_barrier_atr')",
+      "kind": "getattr",
+      "line": 543,
+      "path": "algo-bot/app/analysis/actionability.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 10,
+      "detail": "getattr(..., 'auto_trade_min_capped_target_pips')",
+      "kind": "getattr",
+      "line": 546,
+      "path": "algo-bot/app/analysis/actionability.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 10,
+      "detail": "getattr(..., 'auto_trade_execution_cost_pips')",
+      "kind": "getattr",
+      "line": 549,
+      "path": "algo-bot/app/analysis/actionability.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 19,
+      "detail": "getattr(..., 'auto_trade_allow_counter_bias')",
+      "kind": "getattr",
+      "line": 640,
+      "path": "algo-bot/app/analysis/actionability.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 22,
+      "detail": "getattr(..., 'scanner_actionability_gate_enabled')",
+      "kind": "getattr",
+      "line": 654,
+      "path": "algo-bot/app/analysis/actionability.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 6,
+      "detail": "getattr(..., 'auto_trade_structural_reaction_lookback_bars')",
+      "kind": "getattr",
+      "line": 394,
+      "path": "algo-bot/app/analysis/detectors.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 6,
+      "detail": "getattr(..., 'auto_trade_key_level_reaction_enabled')",
+      "kind": "getattr",
+      "line": 397,
+      "path": "algo-bot/app/analysis/detectors.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 6,
+      "detail": "getattr(..., 'auto_trade_demand_reaction_enabled')",
+      "kind": "getattr",
+      "line": 400,
+      "path": "algo-bot/app/analysis/detectors.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 6,
+      "detail": "getattr(..., 'auto_trade_supply_reaction_enabled')",
+      "kind": "getattr",
+      "line": 403,
+      "path": "algo-bot/app/analysis/detectors.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 6,
+      "detail": "getattr(..., 'auto_trade_session_level_reaction_enabled')",
+      "kind": "getattr",
+      "line": 406,
+      "path": "algo-bot/app/analysis/detectors.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 6,
+      "detail": "getattr(..., 'auto_trade_trendline_reaction_enabled')",
+      "kind": "getattr",
+      "line": 409,
+      "path": "algo-bot/app/analysis/detectors.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 6,
+      "detail": "getattr(..., 'auto_trade_box_breakout_enabled')",
+      "kind": "getattr",
+      "line": 412,
+      "path": "algo-bot/app/analysis/detectors.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 6,
+      "detail": "getattr(..., 'auto_trade_trend_pullback_enabled')",
+      "kind": "getattr",
+      "line": 415,
+      "path": "algo-bot/app/analysis/detectors.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 6,
+      "detail": "getattr(..., 'auto_trade_break_retest_enabled')",
+      "kind": "getattr",
+      "line": 418,
+      "path": "algo-bot/app/analysis/detectors.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 6,
+      "detail": "getattr(..., 'auto_trade_momentum_ride_enabled')",
+      "kind": "getattr",
+      "line": 421,
+      "path": "algo-bot/app/analysis/detectors.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 6,
+      "detail": "getattr(..., 'auto_trade_snap_back_enabled')",
+      "kind": "getattr",
+      "line": 424,
+      "path": "algo-bot/app/analysis/detectors.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 6,
+      "detail": "getattr(..., 'auto_trade_fade_scalp_enabled')",
+      "kind": "getattr",
+      "line": 427,
+      "path": "algo-bot/app/analysis/detectors.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 12,
+      "detail": "getattr(..., 'm1_trigger_patterns')",
+      "kind": "getattr",
+      "line": 89,
+      "path": "algo-bot/app/analysis/m1_trigger.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 24,
+      "detail": "getattr(..., 'm1_trigger_wick_fraction')",
+      "kind": "getattr",
+      "line": 98,
+      "path": "algo-bot/app/analysis/m1_trigger.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 21,
+      "detail": "getattr(..., 'm1_trigger_strong_close_pct')",
+      "kind": "getattr",
+      "line": 136,
+      "path": "algo-bot/app/analysis/m1_trigger.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 22,
+      "detail": "getattr(..., 'map_major_score')",
+      "kind": "getattr",
+      "line": 144,
+      "path": "algo-bot/app/analysis/market_map.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 27,
+      "detail": "getattr(..., 'map_max_touches')",
+      "kind": "getattr",
+      "line": 145,
+      "path": "algo-bot/app/analysis/market_map.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 10,
+      "detail": "getattr(..., 'map_min_zone_score')",
+      "kind": "getattr",
+      "line": 148,
+      "path": "algo-bot/app/analysis/market_map.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 8,
+      "detail": "getattr(..., 'map_min_level_touches')",
+      "kind": "getattr",
+      "line": 152,
+      "path": "algo-bot/app/analysis/market_map.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 19,
+      "detail": "getattr(..., 'map_band_max_atr')",
+      "kind": "getattr",
+      "line": 157,
+      "path": "algo-bot/app/analysis/market_map.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 19,
+      "detail": "getattr(..., 'map_max_distance_atr')",
+      "kind": "getattr",
+      "line": 161,
+      "path": "algo-bot/app/analysis/market_map.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 19,
+      "detail": "getattr(..., 'proximal_band_atr')",
+      "kind": "getattr",
+      "line": 167,
+      "path": "algo-bot/app/analysis/market_map.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 28,
+      "detail": "getattr(..., 'map_min_per_side')",
+      "kind": "getattr",
+      "line": 273,
+      "path": "algo-bot/app/analysis/market_map.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 8,
+      "detail": "getattr(..., 'map_max_per_side')",
+      "kind": "getattr",
+      "line": 276,
+      "path": "algo-bot/app/analysis/market_map.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 10,
+      "detail": "getattr(..., 'map_fallback_radius')",
+      "kind": "getattr",
+      "line": 280,
+      "path": "algo-bot/app/analysis/market_map.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 10,
+      "detail": "getattr(..., 'round_step')",
+      "kind": "getattr",
+      "line": 284,
+      "path": "algo-bot/app/analysis/market_map.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 4,
+      "detail": "getattr(..., 'scanner_exec_tf')",
+      "kind": "getattr",
+      "line": 319,
+      "path": "algo-bot/app/analysis/market_map.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 26,
+      "detail": "getattr(..., 'map_scalp_radius')",
+      "kind": "getattr",
+      "line": 1087,
+      "path": "algo-bot/app/analysis/market_map.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 16,
+      "detail": "getattr(..., 'scanner_exec_tf')",
+      "kind": "getattr",
+      "line": 1090,
+      "path": "algo-bot/app/analysis/market_map.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 31,
+      "detail": "getattr(..., 'range_scalp_min_touches')",
+      "kind": "getattr",
+      "line": 1139,
+      "path": "algo-bot/app/analysis/market_map.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 28,
+      "detail": "getattr(..., 'range_scalp_break_closes')",
+      "kind": "getattr",
+      "line": 1140,
+      "path": "algo-bot/app/analysis/market_map.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 10,
+      "detail": "getattr(..., 'range_scalp_min_width_atr')",
+      "kind": "getattr",
+      "line": 1153,
+      "path": "algo-bot/app/analysis/market_map.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 16,
+      "detail": "getattr(..., 'range_scalp_min_room_atr')",
+      "kind": "getattr",
+      "line": 1154,
+      "path": "algo-bot/app/analysis/market_map.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 10,
+      "detail": "getattr(..., 'range_scalp_max_width_atr')",
+      "kind": "getattr",
+      "line": 1158,
+      "path": "algo-bot/app/analysis/market_map.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 17,
+      "detail": "getattr(..., 'session_asia_start')",
+      "kind": "getattr",
+      "line": 1346,
+      "path": "algo-bot/app/analysis/market_map.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 19,
+      "detail": "getattr(..., 'session_london_start')",
+      "kind": "getattr",
+      "line": 1347,
+      "path": "algo-bot/app/analysis/market_map.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 15,
+      "detail": "getattr(..., 'session_ny_start')",
+      "kind": "getattr",
+      "line": 1348,
+      "path": "algo-bot/app/analysis/market_map.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 10,
+      "detail": "getattr(..., 'breakout_buffer_atr')",
+      "kind": "getattr",
+      "line": 42,
+      "path": "algo-bot/app/analysis/regime.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 8,
+      "detail": "getattr(..., 'breakout_accept_bars')",
+      "kind": "getattr",
+      "line": 46,
+      "path": "algo-bot/app/analysis/regime.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 24,
+      "detail": "getattr(..., 'range_scalp_lookback')",
+      "kind": "getattr",
+      "line": 162,
+      "path": "algo-bot/app/analysis/scalp_ranges.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 21,
+      "detail": "getattr(..., 'range_scalp_entry_tol_atr')",
+      "kind": "getattr",
+      "line": 169,
+      "path": "algo-bot/app/analysis/scalp_ranges.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 12,
+      "detail": "getattr(..., 'range_scalp_max_edge_width_atr')",
+      "kind": "getattr",
+      "line": 175,
+      "path": "algo-bot/app/analysis/scalp_ranges.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 8,
+      "detail": "getattr(..., 'range_scalp_min_touches')",
+      "kind": "getattr",
+      "line": 182,
+      "path": "algo-bot/app/analysis/scalp_ranges.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 19,
+      "detail": "getattr(..., 'range_scalp_min_wick_frac')",
+      "kind": "getattr",
+      "line": 186,
+      "path": "algo-bot/app/analysis/scalp_ranges.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 8,
+      "detail": "getattr(..., 'range_scalp_break_closes')",
+      "kind": "getattr",
+      "line": 190,
+      "path": "algo-bot/app/analysis/scalp_ranges.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 14,
+      "detail": "getattr(..., 'round_step')",
+      "kind": "getattr",
+      "line": 228,
+      "path": "algo-bot/app/analysis/scalp_ranges.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 10,
+      "detail": "getattr(..., 'scalp_barrier_fallback_enabled')",
+      "kind": "getattr",
+      "line": 281,
+      "path": "algo-bot/app/analysis/scalp_ranges.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 8,
+      "detail": "getattr(..., 'range_scalp_break_closes')",
+      "kind": "getattr",
+      "line": 343,
+      "path": "algo-bot/app/analysis/scalp_ranges.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 10,
+      "detail": "getattr(..., 'range_scalp_cluster_atr')",
+      "kind": "getattr",
+      "line": 369,
+      "path": "algo-bot/app/analysis/scalp_ranges.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 10,
+      "detail": "getattr(..., 'range_scalp_cluster_min_abs')",
+      "kind": "getattr",
+      "line": 373,
+      "path": "algo-bot/app/analysis/scalp_ranges.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 8,
+      "detail": "getattr(..., 'scalp_barrier_fallback_min_confirmations')",
+      "kind": "getattr",
+      "line": 651,
+      "path": "algo-bot/app/analysis/scalp_ranges.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 8,
+      "detail": "getattr(..., 'range_scalp_min_inside_closes')",
+      "kind": "getattr",
+      "line": 742,
+      "path": "algo-bot/app/analysis/scalp_ranges.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 10,
+      "detail": "getattr(..., 'range_scalp_min_room_atr')",
+      "kind": "getattr",
+      "line": 812,
+      "path": "algo-bot/app/analysis/scalp_ranges.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 10,
+      "detail": "getattr(..., 'range_scalp_min_width_atr')",
+      "kind": "getattr",
+      "line": 816,
+      "path": "algo-bot/app/analysis/scalp_ranges.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 10,
+      "detail": "getattr(..., 'range_scalp_max_width_atr')",
+      "kind": "getattr",
+      "line": 821,
+      "path": "algo-bot/app/analysis/scalp_ranges.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 4,
+      "detail": "getattr(..., 'scalp_range_provisional_enabled')",
+      "kind": "getattr",
+      "line": 824,
+      "path": "algo-bot/app/analysis/scalp_ranges.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 4,
+      "detail": "getattr(..., 'scalp_post_impulse_range_enabled')",
+      "kind": "getattr",
+      "line": 827,
+      "path": "algo-bot/app/analysis/scalp_ranges.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 8,
+      "detail": "getattr(..., 'range_scalp_min_inside_closes')",
+      "kind": "getattr",
+      "line": 831,
+      "path": "algo-bot/app/analysis/scalp_ranges.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 44,
+      "detail": "getattr(..., 'range_scalp_break_closes')",
+      "kind": "getattr",
+      "line": 906,
+      "path": "algo-bot/app/analysis/scalp_ranges.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 47,
+      "detail": "getattr(..., 'range_scalp_break_closes')",
+      "kind": "getattr",
+      "line": 907,
+      "path": "algo-bot/app/analysis/scalp_ranges.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 13,
+      "detail": "getattr(..., 'session_asia_start')",
+      "kind": "getattr",
+      "line": 138,
+      "path": "algo-bot/app/analysis/session_liquidity.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 15,
+      "detail": "getattr(..., 'session_london_start')",
+      "kind": "getattr",
+      "line": 139,
+      "path": "algo-bot/app/analysis/session_liquidity.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 11,
+      "detail": "getattr(..., 'session_ny_start')",
+      "kind": "getattr",
+      "line": 140,
+      "path": "algo-bot/app/analysis/session_liquidity.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 13,
+      "detail": "getattr(..., 'daily_rollover_utc_hour')",
+      "kind": "getattr",
+      "line": 149,
+      "path": "algo-bot/app/analysis/session_liquidity.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 29,
+      "detail": "getattr(..., 'tl_tol_atr')",
+      "kind": "getattr",
+      "line": 42,
+      "path": "algo-bot/app/analysis/trendlines.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 27,
+      "detail": "getattr(..., 'tl_min_touches')",
+      "kind": "getattr",
+      "line": 43,
+      "path": "algo-bot/app/analysis/trendlines.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 19,
+      "detail": "getattr(..., 'tl_max_slope_atr')",
+      "kind": "getattr",
+      "line": 45,
+      "path": "algo-bot/app/analysis/trendlines.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 13,
+      "detail": "getattr(..., 'auto_trade_structural_guard_mode')",
+      "kind": "getattr",
+      "line": 306,
+      "path": "algo-bot/app/autotrade/execution_policy.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 34,
+      "detail": "getattr(..., 'auto_trade_range_max_entry_drift_atr')",
+      "kind": "getattr",
+      "line": 505,
+      "path": "algo-bot/app/autotrade/execution_policy.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 33,
+      "detail": "getattr(..., 'auto_trade_trend_max_entry_drift_atr')",
+      "kind": "getattr",
+      "line": 508,
+      "path": "algo-bot/app/autotrade/execution_policy.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 34,
+      "detail": "getattr(..., 'auto_trade_trend_max_entry_drift_atr')",
+      "kind": "getattr",
+      "line": 511,
+      "path": "algo-bot/app/autotrade/execution_policy.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 40,
+      "detail": "getattr(..., 'auto_trade_trend_max_entry_drift_atr')",
+      "kind": "getattr",
+      "line": 514,
+      "path": "algo-bot/app/autotrade/execution_policy.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 39,
+      "detail": "getattr(..., 'auto_trade_map_max_entry_drift_atr')",
+      "kind": "getattr",
+      "line": 517,
+      "path": "algo-bot/app/autotrade/execution_policy.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 28,
+      "detail": "getattr(..., 'auto_trade_map_max_entry_drift_atr')",
+      "kind": "getattr",
+      "line": 520,
+      "path": "algo-bot/app/autotrade/execution_policy.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 32,
+      "detail": "getattr(..., 'auto_trade_map_max_entry_drift_atr')",
+      "kind": "getattr",
+      "line": 523,
+      "path": "algo-bot/app/autotrade/execution_policy.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 32,
+      "detail": "getattr(..., 'auto_trade_map_max_entry_drift_atr')",
+      "kind": "getattr",
+      "line": 526,
+      "path": "algo-bot/app/autotrade/execution_policy.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 28,
+      "detail": "getattr(..., 'auto_trade_trend_max_entry_drift_atr')",
+      "kind": "getattr",
+      "line": 529,
+      "path": "algo-bot/app/autotrade/execution_policy.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 26,
+      "detail": "getattr(..., 'auto_trade_range_min_rr')",
+      "kind": "getattr",
+      "line": 540,
+      "path": "algo-bot/app/autotrade/execution_policy.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 15,
+      "detail": "getattr(..., 'auto_trade_xau_price_digits')",
+      "kind": "getattr",
+      "line": 638,
+      "path": "algo-bot/app/autotrade/execution_policy.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 6,
+      "detail": "getattr(..., 'auto_trade_zone_fill_enabled')",
+      "kind": "getattr",
+      "line": 648,
+      "path": "algo-bot/app/autotrade/execution_policy.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 6,
+      "detail": "getattr(..., 'auto_trade_zone_fill_min_atr')",
+      "kind": "getattr",
+      "line": 651,
+      "path": "algo-bot/app/autotrade/execution_policy.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 6,
+      "detail": "getattr(..., 'auto_trade_inside_zone_market_entry_enabled')",
+      "kind": "getattr",
+      "line": 654,
+      "path": "algo-bot/app/autotrade/execution_policy.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 6,
+      "detail": "getattr(..., 'auto_trade_zone_fill_fallback_enabled')",
+      "kind": "getattr",
+      "line": 657,
+      "path": "algo-bot/app/autotrade/execution_policy.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 6,
+      "detail": "getattr(..., 'auto_trade_zone_scale_first_leg_fraction')",
+      "kind": "getattr",
+      "line": 662,
+      "path": "algo-bot/app/autotrade/execution_policy.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 6,
+      "detail": "getattr(..., 'auto_trade_zone_scale_step_atr')",
+      "kind": "getattr",
+      "line": 665,
+      "path": "algo-bot/app/autotrade/execution_policy.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 6,
+      "detail": "getattr(..., 'auto_trade_reaction_scale_enabled')",
+      "kind": "getattr",
+      "line": 668,
+      "path": "algo-bot/app/autotrade/execution_policy.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 6,
+      "detail": "getattr(..., 'auto_trade_reaction_market_fraction')",
+      "kind": "getattr",
+      "line": 671,
+      "path": "algo-bot/app/autotrade/execution_policy.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 6,
+      "detail": "getattr(..., 'auto_trade_reaction_scale_fraction')",
+      "kind": "getattr",
+      "line": 674,
+      "path": "algo-bot/app/autotrade/execution_policy.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 6,
+      "detail": "getattr(..., 'auto_trade_reaction_scale_step_atr')",
+      "kind": "getattr",
+      "line": 677,
+      "path": "algo-bot/app/autotrade/execution_policy.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 6,
+      "detail": "getattr(..., 'auto_trade_reaction_scale_invalid_policy')",
+      "kind": "getattr",
+      "line": 680,
+      "path": "algo-bot/app/autotrade/execution_policy.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 17,
+      "detail": "getattr(..., 'auto_trade_xau_price_digits')",
+      "kind": "getattr",
+      "line": 787,
+      "path": "algo-bot/app/autotrade/execution_policy.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 27,
+      "detail": "getattr(..., 'auto_trade_add_stop_buffer_atr')",
+      "kind": "getattr",
+      "line": 788,
+      "path": "algo-bot/app/autotrade/execution_policy.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 22,
+      "detail": "getattr(..., 'auto_trade_wick_stop_buffer_atr')",
+      "kind": "getattr",
+      "line": 791,
+      "path": "algo-bot/app/autotrade/execution_policy.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 6,
+      "detail": "getattr(..., 'auto_trade_range_max_risk_multiplier')",
+      "kind": "getattr",
+      "line": 959,
+      "path": "algo-bot/app/autotrade/execution_policy.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 12,
+      "detail": "getattr(..., 'auto_trade_tier_a_risk_multiplier')",
+      "kind": "getattr",
+      "line": 1091,
+      "path": "algo-bot/app/autotrade/execution_policy.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 12,
+      "detail": "getattr(..., 'auto_trade_tier_b_risk_multiplier')",
+      "kind": "getattr",
+      "line": 1092,
+      "path": "algo-bot/app/autotrade/execution_policy.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 15,
+      "detail": "getattr(..., 'auto_trade_post_impulse_risk_multiplier')",
+      "kind": "getattr",
+      "line": 1094,
+      "path": "algo-bot/app/autotrade/execution_policy.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 19,
+      "detail": "getattr(..., 'auto_trade_one_sided_range_risk_multiplier')",
+      "kind": "getattr",
+      "line": 1095,
+      "path": "algo-bot/app/autotrade/execution_policy.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 6,
+      "detail": "getattr(..., 'auto_trade_range_max_risk_multiplier')",
+      "kind": "getattr",
+      "line": 1099,
+      "path": "algo-bot/app/autotrade/execution_policy.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 14,
+      "detail": "getattr(..., 'auto_trade_mapped_zone_enabled')",
+      "kind": "getattr",
+      "line": 166,
+      "path": "algo-bot/app/autotrade/map_strategy.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 44,
+      "detail": "getattr(..., 'atr_length')",
+      "kind": "getattr",
+      "line": 195,
+      "path": "algo-bot/app/autotrade/map_strategy.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 10,
+      "detail": "getattr(..., 'proximal_band_atr')",
+      "kind": "getattr",
+      "line": 205,
+      "path": "algo-bot/app/autotrade/map_strategy.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 4,
+      "detail": "getattr(..., 'auto_trade_allow_counter_bias')",
+      "kind": "getattr",
+      "line": 273,
+      "path": "algo-bot/app/autotrade/map_strategy.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 6,
+      "detail": "getattr(..., 'auto_trade_map_counter_bias_enabled')",
+      "kind": "getattr",
+      "line": 276,
+      "path": "algo-bot/app/autotrade/map_strategy.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 26,
+      "detail": "getattr(..., 'auto_trade_map_track_distance_atr')",
+      "kind": "getattr",
+      "line": 350,
+      "path": "algo-bot/app/autotrade/map_strategy.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 4,
+      "detail": "getattr(..., 'auto_trade_map_execute_distance_atr')",
+      "kind": "getattr",
+      "line": 353,
+      "path": "algo-bot/app/autotrade/map_strategy.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 10,
+      "detail": "getattr(..., 'auto_trade_map_execute_tolerance_pips')",
+      "kind": "getattr",
+      "line": 368,
+      "path": "algo-bot/app/autotrade/map_strategy.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 10,
+      "detail": "getattr(..., 'auto_trade_map_execute_tolerance_atr')",
+      "kind": "getattr",
+      "line": 372,
+      "path": "algo-bot/app/autotrade/map_strategy.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 10,
+      "detail": "getattr(..., 'auto_trade_map_zone_min_width_atr')",
+      "kind": "getattr",
+      "line": 476,
+      "path": "algo-bot/app/autotrade/map_strategy.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 10,
+      "detail": "getattr(..., 'auto_trade_map_zone_min_width_abs')",
+      "kind": "getattr",
+      "line": 484,
+      "path": "algo-bot/app/autotrade/map_strategy.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 10,
+      "detail": "getattr(..., 'auto_trade_map_counter_bias_min_score')",
+      "kind": "getattr",
+      "line": 523,
+      "path": "algo-bot/app/autotrade/map_strategy.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 8,
+      "detail": "getattr(..., 'auto_trade_map_counter_bias_min_confluence')",
+      "kind": "getattr",
+      "line": 533,
+      "path": "algo-bot/app/autotrade/map_strategy.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 8,
+      "detail": "getattr(..., 'auto_trade_map_reaction_lookback_bars')",
+      "kind": "getattr",
+      "line": 659,
+      "path": "algo-bot/app/autotrade/map_strategy.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 4,
+      "detail": "getattr(..., 'auto_trade_execution_zone_max_width_atr')",
+      "kind": "getattr",
+      "line": 169,
+      "path": "algo-bot/app/autotrade/protective_stop.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 4,
+      "detail": "getattr(..., 'auto_trade_execution_zone_max_width_pips')",
+      "kind": "getattr",
+      "line": 173,
+      "path": "algo-bot/app/autotrade/protective_stop.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 6,
+      "detail": "getattr(..., 'auto_trade_stop_push_beyond_zone')",
+      "kind": "getattr",
+      "line": 187,
+      "path": "algo-bot/app/autotrade/protective_stop.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 6,
+      "detail": "getattr(..., 'auto_trade_add_stop_buffer_atr')",
+      "kind": "getattr",
+      "line": 190,
+      "path": "algo-bot/app/autotrade/protective_stop.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 6,
+      "detail": "getattr(..., 'auto_trade_range_min_rr')",
+      "kind": "getattr",
+      "line": 651,
+      "path": "algo-bot/app/autotrade/protective_stop.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 6,
+      "detail": "getattr(..., 'auto_trade_range_room_stop_floor_pips')",
+      "kind": "getattr",
+      "line": 654,
+      "path": "algo-bot/app/autotrade/protective_stop.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 6,
+      "detail": "getattr(..., 'auto_trade_reaction_room_stop_min_rr')",
+      "kind": "getattr",
+      "line": 661,
+      "path": "algo-bot/app/autotrade/protective_stop.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 6,
+      "detail": "getattr(..., 'auto_trade_reaction_room_stop_floor_pips')",
+      "kind": "getattr",
+      "line": 664,
+      "path": "algo-bot/app/autotrade/protective_stop.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 19,
+      "detail": "getattr(..., 'auto_trade_trend_stop_max_pips')",
+      "kind": "getattr",
+      "line": 666,
+      "path": "algo-bot/app/autotrade/protective_stop.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 18,
+      "detail": "getattr(..., 'auto_trade_add_min_stop_pips')",
+      "kind": "getattr",
+      "line": 963,
+      "path": "algo-bot/app/autotrade/protective_stop.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 6,
+      "detail": "getattr(..., 'auto_trade_sl_distance')",
+      "kind": "getattr",
+      "line": 965,
+      "path": "algo-bot/app/autotrade/protective_stop.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 10,
+      "detail": "getattr(..., 'auto_trade_trend_stop_min_pips')",
+      "kind": "getattr",
+      "line": 975,
+      "path": "algo-bot/app/autotrade/protective_stop.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 10,
+      "detail": "getattr(..., 'auto_trade_trend_stop_max_pips')",
+      "kind": "getattr",
+      "line": 976,
+      "path": "algo-bot/app/autotrade/protective_stop.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 8,
+      "detail": "getattr(..., 'auto_trade_trend_stop_min_pips')",
+      "kind": "getattr",
+      "line": 979,
+      "path": "algo-bot/app/autotrade/protective_stop.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 8,
+      "detail": "getattr(..., 'auto_trade_trend_stop_max_pips')",
+      "kind": "getattr",
+      "line": 980,
+      "path": "algo-bot/app/autotrade/protective_stop.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 34,
+      "detail": "getattr(..., 'atr_length')",
+      "kind": "getattr",
+      "line": 79,
+      "path": "algo-bot/app/autotrade/scale_context.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 15,
+      "detail": "getattr(..., 'swing_fractal_n')",
+      "kind": "getattr",
+      "line": 85,
+      "path": "algo-bot/app/autotrade/scale_context.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 19,
+      "detail": "getattr(..., 'zigzag_pct')",
+      "kind": "getattr",
+      "line": 86,
+      "path": "algo-bot/app/autotrade/scale_context.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 19,
+      "detail": "getattr(..., 'zigzag_atr_mult')",
+      "kind": "getattr",
+      "line": 87,
+      "path": "algo-bot/app/autotrade/scale_context.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 19,
+      "detail": "getattr(..., 'displacement_atr_mult')",
+      "kind": "getattr",
+      "line": 99,
+      "path": "algo-bot/app/autotrade/scale_context.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 19,
+      "detail": "getattr(..., 'momentum_body_frac')",
+      "kind": "getattr",
+      "line": 100,
+      "path": "algo-bot/app/autotrade/scale_context.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 4,
+      "detail": "getattr(..., 'auto_trade_reaction_market_fraction')",
+      "kind": "getattr",
+      "line": 464,
+      "path": "algo-bot/app/autotrade/trade_plan_builder.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 7,
+      "detail": "getattr(..., 'auto_trade_zone_scale_first_leg_fraction')",
+      "kind": "getattr",
+      "line": 465,
+      "path": "algo-bot/app/autotrade/trade_plan_builder.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 26,
+      "detail": "getattr(..., 'atr_length')",
+      "kind": "getattr",
+      "line": 152,
+      "path": "algo-bot/app/autotrade/trend.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 15,
+      "detail": "getattr(..., 'swing_fractal_n')",
+      "kind": "getattr",
+      "line": 166,
+      "path": "algo-bot/app/autotrade/trend.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 19,
+      "detail": "getattr(..., 'zigzag_pct')",
+      "kind": "getattr",
+      "line": 167,
+      "path": "algo-bot/app/autotrade/trend.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 19,
+      "detail": "getattr(..., 'zigzag_atr_mult')",
+      "kind": "getattr",
+      "line": 168,
+      "path": "algo-bot/app/autotrade/trend.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 23,
+      "detail": "getattr(..., 'trend_min_bos')",
+      "kind": "getattr",
+      "line": 188,
+      "path": "algo-bot/app/autotrade/trend.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 34,
+      "detail": "getattr(..., 'trend_min_height_atr')",
+      "kind": "getattr",
+      "line": 204,
+      "path": "algo-bot/app/autotrade/trend.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 17,
+      "detail": "getattr(..., 'auto_trade_allow_counter_bias')",
+      "kind": "getattr",
+      "line": 225,
+      "path": "algo-bot/app/autotrade/trend.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 36,
+      "detail": "getattr(..., 'trend_atr_expansion')",
+      "kind": "getattr",
+      "line": 239,
+      "path": "algo-bot/app/autotrade/trend.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 14,
+      "detail": "getattr(..., 'auto_trade_regime_direction_enabled')",
+      "kind": "getattr",
+      "line": 285,
+      "path": "algo-bot/app/autotrade/trend.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 17,
+      "detail": "getattr(..., 'auto_trade_regime_direction_lookback')",
+      "kind": "getattr",
+      "line": 293,
+      "path": "algo-bot/app/autotrade/trend.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 6,
+      "detail": "getattr(..., 'auto_trade_regime_min_directional_swings')",
+      "kind": "getattr",
+      "line": 295,
+      "path": "algo-bot/app/autotrade/trend.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 6,
+      "detail": "getattr(..., 'auto_trade_regime_min_displacement_atr')",
+      "kind": "getattr",
+      "line": 298,
+      "path": "algo-bot/app/autotrade/trend.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 26,
+      "detail": "getattr(..., 'atr_length')",
+      "kind": "getattr",
+      "line": 355,
+      "path": "algo-bot/app/autotrade/trend.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 30,
+      "detail": "getattr(..., 'atr_length')",
+      "kind": "getattr",
+      "line": 424,
+      "path": "algo-bot/app/autotrade/trend.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 19,
+      "detail": "getattr(..., 'displacement_atr_mult')",
+      "kind": "getattr",
+      "line": 425,
+      "path": "algo-bot/app/autotrade/trend.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 19,
+      "detail": "getattr(..., 'momentum_body_frac')",
+      "kind": "getattr",
+      "line": 426,
+      "path": "algo-bot/app/autotrade/trend.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 31,
+      "detail": "getattr(..., 'tp_min_spacing_atr')",
+      "kind": "getattr",
+      "line": 435,
+      "path": "algo-bot/app/autotrade/trend.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 23,
+      "detail": "getattr(..., 'trend_breakout_max_age_bars')",
+      "kind": "getattr",
+      "line": 490,
+      "path": "algo-bot/app/autotrade/trend.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 27,
+      "detail": "getattr(..., 'trend_breakout_accept_bars')",
+      "kind": "getattr",
+      "line": 496,
+      "path": "algo-bot/app/autotrade/trend.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 8,
+      "detail": "getattr(..., 'trend_breakout_min_room_pips')",
+      "kind": "getattr",
+      "line": 610,
+      "path": "algo-bot/app/autotrade/trend.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 21,
+      "detail": "getattr(..., 'tp_min_spacing_atr')",
+      "kind": "getattr",
+      "line": 646,
+      "path": "algo-bot/app/autotrade/trend.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 19,
+      "detail": "getattr(..., 'displacement_atr_mult')",
+      "kind": "getattr",
+      "line": 788,
+      "path": "algo-bot/app/autotrade/trend.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 19,
+      "detail": "getattr(..., 'momentum_body_frac')",
+      "kind": "getattr",
+      "line": 789,
+      "path": "algo-bot/app/autotrade/trend.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 15,
+      "detail": "getattr(..., 'swing_fractal_n')",
+      "kind": "getattr",
+      "line": 874,
+      "path": "algo-bot/app/autotrade/trend.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 19,
+      "detail": "getattr(..., 'zigzag_pct')",
+      "kind": "getattr",
+      "line": 875,
+      "path": "algo-bot/app/autotrade/trend.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 19,
+      "detail": "getattr(..., 'zigzag_atr_mult')",
+      "kind": "getattr",
+      "line": 876,
+      "path": "algo-bot/app/autotrade/trend.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 35,
+      "detail": "getattr(..., 'reaction_max_atr')",
+      "kind": "getattr",
+      "line": 910,
+      "path": "algo-bot/app/autotrade/trend.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 34,
+      "detail": "getattr(..., 'trend_allow_chase')",
+      "kind": "getattr",
+      "line": 912,
+      "path": "algo-bot/app/autotrade/trend.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 32,
+      "detail": "getattr(..., 'trend_level_buffer_atr')",
+      "kind": "getattr",
+      "line": 924,
+      "path": "algo-bot/app/autotrade/trend.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 29,
+      "detail": "getattr(..., 'trend_atr_baseline_bars')",
+      "kind": "getattr",
+      "line": 1029,
+      "path": "algo-bot/app/autotrade/trend.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 26,
+      "detail": "getattr(..., 'atr_length')",
+      "kind": "getattr",
+      "line": 1254,
+      "path": "algo-bot/app/autotrade/worker.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 19,
+      "detail": "getattr(..., 'displacement_atr_mult')",
+      "kind": "getattr",
+      "line": 1264,
+      "path": "algo-bot/app/autotrade/worker.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 19,
+      "detail": "getattr(..., 'momentum_body_frac')",
+      "kind": "getattr",
+      "line": 1265,
+      "path": "algo-bot/app/autotrade/worker.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 19,
+      "detail": "getattr(..., 'auto_trade_xau_pip_size')",
+      "kind": "getattr",
+      "line": 1271,
+      "path": "algo-bot/app/autotrade/worker.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 26,
+      "detail": "getattr(..., 'atr_length')",
+      "kind": "getattr",
+      "line": 1295,
+      "path": "algo-bot/app/autotrade/worker.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 15,
+      "detail": "getattr(..., 'swing_fractal_n')",
+      "kind": "getattr",
+      "line": 1299,
+      "path": "algo-bot/app/autotrade/worker.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 19,
+      "detail": "getattr(..., 'zigzag_pct')",
+      "kind": "getattr",
+      "line": 1300,
+      "path": "algo-bot/app/autotrade/worker.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 19,
+      "detail": "getattr(..., 'zigzag_atr_mult')",
+      "kind": "getattr",
+      "line": 1301,
+      "path": "algo-bot/app/autotrade/worker.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 19,
+      "detail": "getattr(..., 'level_cluster_atr')",
+      "kind": "getattr",
+      "line": 1309,
+      "path": "algo-bot/app/autotrade/worker.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 19,
+      "detail": "getattr(..., 'round_step')",
+      "kind": "getattr",
+      "line": 1310,
+      "path": "algo-bot/app/autotrade/worker.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 15,
+      "detail": "getattr(..., 'key_level_min_touches')",
+      "kind": "getattr",
+      "line": 1311,
+      "path": "algo-bot/app/autotrade/worker.py",
+      "symbol": "getattr_legacy_name"
+    },
+    {
+      "classification": "TOOLING_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import DERIVED_LEGACY_PROPERTIES",
+      "kind": "import",
+      "line": 16,
+      "path": "algo-bot/app/configuration/activation_cli.py",
+      "symbol": "DERIVED_LEGACY_PROPERTIES"
+    },
+    {
+      "classification": "TOOLING_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import DIRECT_LEGACY_PATHS",
+      "kind": "import",
+      "line": 17,
+      "path": "algo-bot/app/configuration/activation_cli.py",
+      "symbol": "DIRECT_LEGACY_PATHS"
+    },
+    {
+      "classification": "TOOLING_RETAIN_2I_A",
+      "column": 10,
+      "detail": "reference DIRECT_LEGACY_PATHS",
+      "kind": "reference",
+      "line": 84,
+      "path": "algo-bot/app/configuration/activation_cli.py",
+      "symbol": "DIRECT_LEGACY_PATHS"
+    },
+    {
+      "classification": "TOOLING_RETAIN_2I_A",
+      "column": 14,
+      "detail": "reference DERIVED_LEGACY_PROPERTIES",
+      "kind": "reference",
+      "line": 85,
+      "path": "algo-bot/app/configuration/activation_cli.py",
+      "symbol": "DERIVED_LEGACY_PROPERTIES"
+    },
+    {
+      "classification": "TOOLING_RETAIN_2I_A",
+      "column": 47,
+      "detail": "reference DIRECT_LEGACY_PATHS",
+      "kind": "reference",
+      "line": 106,
+      "path": "algo-bot/app/configuration/activation_cli.py",
+      "symbol": "DIRECT_LEGACY_PATHS"
+    },
+    {
+      "classification": "TOOLING_RETAIN_2I_A",
+      "column": 48,
+      "detail": "reference DERIVED_LEGACY_PROPERTIES",
+      "kind": "reference",
+      "line": 107,
+      "path": "algo-bot/app/configuration/activation_cli.py",
+      "symbol": "DERIVED_LEGACY_PROPERTIES"
+    },
+    {
+      "classification": "TOOLING_RETAIN_2I_A",
+      "column": 19,
+      "detail": "reference DIRECT_LEGACY_PATHS",
+      "kind": "reference",
+      "line": 110,
+      "path": "algo-bot/app/configuration/activation_cli.py",
+      "symbol": "DIRECT_LEGACY_PATHS"
+    },
+    {
+      "classification": "TOOLING_RETAIN_2I_A",
+      "column": 46,
+      "detail": "reference DERIVED_LEGACY_PROPERTIES",
+      "kind": "reference",
+      "line": 110,
+      "path": "algo-bot/app/configuration/activation_cli.py",
+      "symbol": "DERIVED_LEGACY_PROPERTIES"
+    },
+    {
+      "classification": "TOOLING_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import DERIVED_LEGACY_PROPERTIES",
+      "kind": "import",
+      "line": 11,
+      "path": "algo-bot/app/configuration/activation_rehearsal.py",
+      "symbol": "DERIVED_LEGACY_PROPERTIES"
+    },
+    {
+      "classification": "TOOLING_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import DIRECT_LEGACY_PATHS",
+      "kind": "import",
+      "line": 12,
+      "path": "algo-bot/app/configuration/activation_rehearsal.py",
+      "symbol": "DIRECT_LEGACY_PATHS"
+    },
+    {
+      "classification": "TOOLING_RETAIN_2I_A",
+      "column": 12,
+      "detail": "reference DIRECT_LEGACY_PATHS",
+      "kind": "reference",
+      "line": 89,
+      "path": "algo-bot/app/configuration/activation_rehearsal.py",
+      "symbol": "DIRECT_LEGACY_PATHS"
+    },
+    {
+      "classification": "TOOLING_RETAIN_2I_A",
+      "column": 34,
+      "detail": "reference DERIVED_LEGACY_PROPERTIES",
+      "kind": "reference",
+      "line": 89,
+      "path": "algo-bot/app/configuration/activation_rehearsal.py",
+      "symbol": "DERIVED_LEGACY_PROPERTIES"
+    },
+    {
+      "classification": "TOOLING_RETAIN_2I_A",
+      "column": 23,
+      "detail": "reference DIRECT_LEGACY_PATHS",
+      "kind": "reference",
+      "line": 147,
+      "path": "algo-bot/app/configuration/activation_rehearsal.py",
+      "symbol": "DIRECT_LEGACY_PATHS"
+    },
+    {
+      "classification": "TOOLING_RETAIN_2I_A",
+      "column": 24,
+      "detail": "reference DERIVED_LEGACY_PROPERTIES",
+      "kind": "reference",
+      "line": 148,
+      "path": "algo-bot/app/configuration/activation_rehearsal.py",
+      "symbol": "DERIVED_LEGACY_PROPERTIES"
+    },
+    {
+      "classification": "LEGACY_ROLLBACK_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import CanonicalSettingsFacade",
+      "kind": "import",
+      "line": 9,
+      "path": "algo-bot/app/configuration/authority.py",
+      "symbol": "CanonicalSettingsFacade"
+    },
+    {
+      "classification": "LEGACY_ROLLBACK_RETAIN_2I_A",
+      "column": 20,
+      "detail": "reference CanonicalSettingsFacade",
+      "kind": "reference",
+      "line": 31,
+      "path": "algo-bot/app/configuration/authority.py",
+      "symbol": "CanonicalSettingsFacade"
+    },
+    {
+      "classification": "LEGACY_ROLLBACK_RETAIN_2I_A",
+      "column": 4,
+      "detail": "reference CanonicalSettingsFacade",
+      "kind": "reference",
+      "line": 81,
+      "path": "algo-bot/app/configuration/authority.py",
+      "symbol": "CanonicalSettingsFacade"
+    },
+    {
+      "classification": "TOOLING_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import DERIVED_LEGACY_PROPERTIES",
+      "kind": "import",
+      "line": 41,
+      "path": "algo-bot/app/configuration/compatibility_surface_audit.py",
+      "symbol": "DERIVED_LEGACY_PROPERTIES"
+    },
+    {
+      "classification": "TOOLING_RETAIN_2I_A",
+      "column": 38,
+      "detail": "reference DERIVED_LEGACY_PROPERTIES",
+      "kind": "reference",
+      "line": 89,
+      "path": "algo-bot/app/configuration/compatibility_surface_audit.py",
+      "symbol": "DERIVED_LEGACY_PROPERTIES"
+    },
+    {
+      "classification": "TOOLING_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import DERIVED_LEGACY_PROPERTIES",
+      "kind": "import",
+      "line": 5,
+      "path": "algo-bot/app/configuration/facade.py",
+      "symbol": "DERIVED_LEGACY_PROPERTIES"
+    },
+    {
+      "classification": "TOOLING_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import DIRECT_LEGACY_PATHS",
+      "kind": "import",
+      "line": 6,
+      "path": "algo-bot/app/configuration/facade.py",
+      "symbol": "DIRECT_LEGACY_PATHS"
+    },
+    {
+      "classification": "TOOLING_RETAIN_2I_A",
+      "column": 11,
+      "detail": "reference DIRECT_LEGACY_PATHS",
+      "kind": "reference",
+      "line": 40,
+      "path": "algo-bot/app/configuration/facade.py",
+      "symbol": "DIRECT_LEGACY_PATHS"
+    },
+    {
+      "classification": "TOOLING_RETAIN_2I_A",
+      "column": 15,
+      "detail": "reference DERIVED_LEGACY_PROPERTIES",
+      "kind": "reference",
+      "line": 43,
+      "path": "algo-bot/app/configuration/facade.py",
+      "symbol": "DERIVED_LEGACY_PROPERTIES"
+    },
+    {
+      "classification": "TOOLING_RETAIN_2I_A",
+      "column": 7,
+      "detail": "reference DIRECT_LEGACY_PATHS",
+      "kind": "reference",
+      "line": 60,
+      "path": "algo-bot/app/configuration/facade.py",
+      "symbol": "DIRECT_LEGACY_PATHS"
+    },
+    {
+      "classification": "TOOLING_RETAIN_2I_A",
+      "column": 7,
+      "detail": "reference DERIVED_LEGACY_PROPERTIES",
+      "kind": "reference",
+      "line": 61,
+      "path": "algo-bot/app/configuration/facade.py",
+      "symbol": "DERIVED_LEGACY_PROPERTIES"
+    },
+    {
+      "classification": "TOOLING_RETAIN_2I_A",
+      "column": 49,
+      "detail": "reference DIRECT_LEGACY_PATHS",
+      "kind": "reference",
+      "line": 66,
+      "path": "algo-bot/app/configuration/facade.py",
+      "symbol": "DIRECT_LEGACY_PATHS"
+    },
+    {
+      "classification": "TOOLING_RETAIN_2I_A",
+      "column": 28,
+      "detail": "reference DERIVED_LEGACY_PROPERTIES",
+      "kind": "reference",
+      "line": 67,
+      "path": "algo-bot/app/configuration/facade.py",
+      "symbol": "DERIVED_LEGACY_PROPERTIES"
+    },
+    {
+      "classification": "TOOLING_RETAIN_2I_A",
+      "column": 26,
+      "detail": "reference DIRECT_LEGACY_PATHS",
+      "kind": "reference",
+      "line": 78,
+      "path": "algo-bot/app/configuration/facade.py",
+      "symbol": "DIRECT_LEGACY_PATHS"
+    },
+    {
+      "classification": "TOOLING_RETAIN_2I_A",
+      "column": 48,
+      "detail": "reference DERIVED_LEGACY_PROPERTIES",
+      "kind": "reference",
+      "line": 78,
+      "path": "algo-bot/app/configuration/facade.py",
+      "symbol": "DERIVED_LEGACY_PROPERTIES"
+    },
+    {
+      "classification": "TOOLING_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import DERIVED_LEGACY_PROPERTIES",
+      "kind": "import",
+      "line": 13,
+      "path": "algo-bot/app/configuration/generate.py",
+      "symbol": "DERIVED_LEGACY_PROPERTIES"
+    },
+    {
+      "classification": "TOOLING_RETAIN_2I_A",
+      "column": 17,
+      "detail": "reference DERIVED_LEGACY_PROPERTIES",
+      "kind": "reference",
+      "line": 150,
+      "path": "algo-bot/app/configuration/generate.py",
+      "symbol": "DERIVED_LEGACY_PROPERTIES"
+    },
+    {
+      "classification": "TOOLING_RETAIN_2I_A",
+      "column": 8,
+      "detail": "reference DERIVED_LEGACY_PROPERTIES",
+      "kind": "reference",
+      "line": 154,
+      "path": "algo-bot/app/configuration/generate.py",
+      "symbol": "DERIVED_LEGACY_PROPERTIES"
+    },
+    {
+      "classification": "TOOLING_RETAIN_2I_A",
+      "column": 16,
+      "detail": "reference DERIVED_LEGACY_PROPERTIES",
+      "kind": "reference",
+      "line": 409,
+      "path": "algo-bot/app/configuration/generate.py",
+      "symbol": "DERIVED_LEGACY_PROPERTIES"
+    },
+    {
+      "classification": "TOOLING_RETAIN_2I_A",
+      "column": 16,
+      "detail": "reference DERIVED_LEGACY_PROPERTIES",
+      "kind": "reference",
+      "line": 636,
+      "path": "algo-bot/app/configuration/generate.py",
+      "symbol": "DERIVED_LEGACY_PROPERTIES"
+    },
+    {
+      "classification": "TOOLING_RETAIN_2I_A",
+      "column": 16,
+      "detail": "reference DERIVED_LEGACY_PROPERTIES",
+      "kind": "reference",
+      "line": 809,
+      "path": "algo-bot/app/configuration/generate.py",
+      "symbol": "DERIVED_LEGACY_PROPERTIES"
+    },
+    {
+      "classification": "TOOLING_RETAIN_2I_A",
+      "column": 21,
+      "detail": "reference DERIVED_LEGACY_PROPERTIES",
+      "kind": "reference",
+      "line": 1067,
+      "path": "algo-bot/app/configuration/generate.py",
+      "symbol": "DERIVED_LEGACY_PROPERTIES"
+    },
+    {
+      "classification": "TOOLING_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import DERIVED_LEGACY_PROPERTIES",
+      "kind": "import",
+      "line": 9,
+      "path": "algo-bot/app/configuration/parity.py",
+      "symbol": "DERIVED_LEGACY_PROPERTIES"
+    },
+    {
+      "classification": "TOOLING_RETAIN_2I_A",
+      "column": 50,
+      "detail": "reference DERIVED_LEGACY_PROPERTIES",
+      "kind": "reference",
+      "line": 133,
+      "path": "algo-bot/app/configuration/parity.py",
+      "symbol": "DERIVED_LEGACY_PROPERTIES"
+    },
+    {
+      "classification": "TOOLING_RETAIN_2I_A",
+      "column": 16,
+      "detail": "reference DERIVED_LEGACY_PROPERTIES",
+      "kind": "reference",
+      "line": 145,
+      "path": "algo-bot/app/configuration/parity.py",
+      "symbol": "DERIVED_LEGACY_PROPERTIES"
+    },
+    {
+      "classification": "LEGACY_ROLLBACK_RETAIN_2I_A",
+      "column": 4,
+      "detail": "import CanonicalSettingsFacade",
+      "kind": "import",
+      "line": 84,
+      "path": "algo-bot/app/configuration/phase2i_removal_gate.py",
+      "symbol": "CanonicalSettingsFacade"
+    },
+    {
+      "classification": "LEGACY_ROLLBACK_RETAIN_2I_A",
+      "column": 4,
+      "detail": "import LegacyCanonicalConfigView",
+      "kind": "import",
+      "line": 85,
+      "path": "algo-bot/app/configuration/phase2i_removal_gate.py",
+      "symbol": "LegacyCanonicalConfigView"
+    },
+    {
+      "classification": "LEGACY_ROLLBACK_RETAIN_2I_A",
+      "column": 4,
+      "detail": "import LegacySettings",
+      "kind": "import",
+      "line": 88,
+      "path": "algo-bot/app/configuration/phase2i_removal_gate.py",
+      "symbol": "LegacySettings"
+    },
+    {
+      "classification": "LEGACY_ROLLBACK_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import CanonicalSettingsFacade",
+      "kind": "import",
+      "line": 11,
+      "path": "algo-bot/app/configuration/python_loader.py",
+      "symbol": "CanonicalSettingsFacade"
+    },
+    {
+      "classification": "LEGACY_ROLLBACK_RETAIN_2I_A",
+      "column": 10,
+      "detail": "reference CanonicalSettingsFacade",
+      "kind": "reference",
+      "line": 52,
+      "path": "algo-bot/app/configuration/python_loader.py",
+      "symbol": "CanonicalSettingsFacade"
+    },
+    {
+      "classification": "LEGACY_ROLLBACK_RETAIN_2I_A",
+      "column": 11,
+      "detail": "reference CanonicalSettingsFacade",
+      "kind": "reference",
+      "line": 112,
+      "path": "algo-bot/app/configuration/python_loader.py",
+      "symbol": "CanonicalSettingsFacade"
+    },
+    {
+      "classification": "TOOLING_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import DIRECT_LEGACY_PATHS",
+      "kind": "import",
+      "line": 29,
+      "path": "algo-bot/app/configuration/runtime_projection.py",
+      "symbol": "DIRECT_LEGACY_PATHS"
+    },
+    {
+      "classification": "TOOLING_RETAIN_2I_A",
+      "column": 11,
+      "detail": "reference DIRECT_LEGACY_PATHS",
+      "kind": "reference",
+      "line": 43,
+      "path": "algo-bot/app/configuration/runtime_projection.py",
+      "symbol": "DIRECT_LEGACY_PATHS"
+    },
+    {
+      "classification": "TOOLING_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import DERIVED_LEGACY_PROPERTIES",
+      "kind": "import",
+      "line": 14,
+      "path": "algo-bot/app/configuration/usage_audit.py",
+      "symbol": "DERIVED_LEGACY_PROPERTIES"
+    },
+    {
+      "classification": "TOOLING_RETAIN_2I_A",
+      "column": 38,
+      "detail": "reference DERIVED_LEGACY_PROPERTIES",
+      "kind": "reference",
+      "line": 66,
+      "path": "algo-bot/app/configuration/usage_audit.py",
+      "symbol": "DERIVED_LEGACY_PROPERTIES"
+    },
+    {
+      "classification": "LEGACY_ROLLBACK_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import CanonicalSettingsFacade",
+      "kind": "import",
+      "line": 25,
+      "path": "algo-bot/app/core/config.py",
+      "symbol": "CanonicalSettingsFacade"
+    },
+    {
+      "classification": "TOOLING_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import DERIVED_LEGACY_PROPERTIES",
+      "kind": "import",
+      "line": 27,
+      "path": "algo-bot/app/core/config.py",
+      "symbol": "DERIVED_LEGACY_PROPERTIES"
+    },
+    {
+      "classification": "TOOLING_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import DIRECT_LEGACY_PATHS",
+      "kind": "import",
+      "line": 27,
+      "path": "algo-bot/app/core/config.py",
+      "symbol": "DIRECT_LEGACY_PATHS"
+    },
+    {
+      "classification": "LEGACY_ROLLBACK_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import LegacyCanonicalConfigView",
+      "kind": "import",
+      "line": 31,
+      "path": "algo-bot/app/core/config.py",
+      "symbol": "LegacyCanonicalConfigView"
+    },
+    {
+      "classification": "LEGACY_ROLLBACK_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import LegacySettings",
+      "kind": "import",
+      "line": 35,
+      "path": "algo-bot/app/core/config.py",
+      "symbol": "LegacySettings"
+    },
+    {
+      "classification": "LEGACY_ROLLBACK_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import Settings",
+      "kind": "import",
+      "line": 35,
+      "path": "algo-bot/app/core/config.py",
+      "symbol": "Settings"
+    },
+    {
+      "classification": "LEGACY_ROLLBACK_RETAIN_2I_A",
+      "column": 13,
+      "detail": "reference Settings",
+      "kind": "reference",
+      "line": 81,
+      "path": "algo-bot/app/core/config.py",
+      "symbol": "Settings"
+    },
+    {
+      "classification": "LEGACY_ROLLBACK_RETAIN_2I_A",
+      "column": 21,
+      "detail": "reference LegacyCanonicalConfigView",
+      "kind": "reference",
+      "line": 86,
+      "path": "algo-bot/app/core/config.py",
+      "symbol": "LegacyCanonicalConfigView"
+    },
+    {
+      "classification": "REMOVE_2I_B",
+      "column": 0,
+      "detail": "facade definition",
+      "kind": "definition",
+      "line": 125,
+      "path": "algo-bot/app/core/config.py",
+      "symbol": "runtime_config_facade"
+    },
+    {
+      "classification": "LEGACY_ROLLBACK_RETAIN_2I_A",
+      "column": 9,
+      "detail": "reference CanonicalSettingsFacade",
+      "kind": "reference",
+      "line": 133,
+      "path": "algo-bot/app/core/config.py",
+      "symbol": "CanonicalSettingsFacade"
+    },
+    {
+      "classification": "TOOLING_RETAIN_2I_A",
+      "column": 39,
+      "detail": "reference DIRECT_LEGACY_PATHS",
+      "kind": "reference",
+      "line": 171,
+      "path": "algo-bot/app/core/config.py",
+      "symbol": "DIRECT_LEGACY_PATHS"
+    },
+    {
+      "classification": "TOOLING_RETAIN_2I_A",
+      "column": 40,
+      "detail": "reference DERIVED_LEGACY_PROPERTIES",
+      "kind": "reference",
+      "line": 172,
+      "path": "algo-bot/app/core/config.py",
+      "symbol": "DERIVED_LEGACY_PROPERTIES"
+    },
+    {
+      "classification": "TOOLING_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import settings",
+      "kind": "import",
+      "line": 32,
+      "path": "algo-bot/migrate_sqlite_to_pg.py",
+      "symbol": "settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import Settings",
+      "kind": "import",
+      "line": 19,
+      "path": "algo-bot/tests/config_characterization.py",
+      "symbol": "Settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 21,
+      "detail": "reference Settings",
+      "kind": "reference",
+      "line": 79,
+      "path": "algo-bot/tests/config_characterization.py",
+      "symbol": "Settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 15,
+      "detail": "reference Settings",
+      "kind": "reference",
+      "line": 110,
+      "path": "algo-bot/tests/config_characterization.py",
+      "symbol": "Settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 41,
+      "detail": "reference Settings",
+      "kind": "reference",
+      "line": 115,
+      "path": "algo-bot/tests/config_characterization.py",
+      "symbol": "Settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import settings",
+      "kind": "import",
+      "line": 26,
+      "path": "algo-bot/tests/conftest.py",
+      "symbol": "settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import settings",
+      "kind": "import",
+      "line": 16,
+      "path": "algo-bot/tests/test_analysis_only_delivery_suppressed.py",
+      "symbol": "settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import settings",
+      "kind": "import",
+      "line": 4,
+      "path": "algo-bot/tests/test_auto_close_all.py",
+      "symbol": "settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 8,
+      "detail": "SimpleNamespace config fixture",
+      "kind": "namespace",
+      "line": 40,
+      "path": "algo-bot/tests/test_auto_scale_context.py",
+      "symbol": "simplenamespace_config_fixture"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 8,
+      "detail": "SimpleNamespace config fixture",
+      "kind": "namespace",
+      "line": 93,
+      "path": "algo-bot/tests/test_auto_scale_context.py",
+      "symbol": "simplenamespace_config_fixture"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 8,
+      "detail": "SimpleNamespace config fixture",
+      "kind": "namespace",
+      "line": 122,
+      "path": "algo-bot/tests/test_auto_scale_context.py",
+      "symbol": "simplenamespace_config_fixture"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import settings",
+      "kind": "import",
+      "line": 2,
+      "path": "algo-bot/tests/test_auto_scalp_worker.py",
+      "symbol": "settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import settings",
+      "kind": "import",
+      "line": 2,
+      "path": "algo-bot/tests/test_auto_trade_ops.py",
+      "symbol": "settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import settings",
+      "kind": "import",
+      "line": 2,
+      "path": "algo-bot/tests/test_auto_trade_stats_ingestion.py",
+      "symbol": "settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import settings",
+      "kind": "import",
+      "line": 13,
+      "path": "algo-bot/tests/test_broadcast.py",
+      "symbol": "settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import settings",
+      "kind": "import",
+      "line": 17,
+      "path": "algo-bot/tests/test_calendar.py",
+      "symbol": "settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import settings",
+      "kind": "import",
+      "line": 13,
+      "path": "algo-bot/tests/test_close_button.py",
+      "symbol": "settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import Settings",
+      "kind": "import",
+      "line": 9,
+      "path": "algo-bot/tests/test_config_activation_architecture.py",
+      "symbol": "Settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 44,
+      "detail": "reference Settings",
+      "kind": "reference",
+      "line": 59,
+      "path": "algo-bot/tests/test_config_activation_architecture.py",
+      "symbol": "Settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 41,
+      "detail": "reference Settings",
+      "kind": "reference",
+      "line": 60,
+      "path": "algo-bot/tests/test_config_activation_architecture.py",
+      "symbol": "Settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import DERIVED_LEGACY_PROPERTIES",
+      "kind": "import",
+      "line": 14,
+      "path": "algo-bot/tests/test_config_complete_catalog.py",
+      "symbol": "DERIVED_LEGACY_PROPERTIES"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 35,
+      "detail": "reference DERIVED_LEGACY_PROPERTIES",
+      "kind": "reference",
+      "line": 366,
+      "path": "algo-bot/tests/test_config_complete_catalog.py",
+      "symbol": "DERIVED_LEGACY_PROPERTIES"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import CanonicalSettingsFacade",
+      "kind": "import",
+      "line": 5,
+      "path": "algo-bot/tests/test_config_facade.py",
+      "symbol": "CanonicalSettingsFacade"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import DERIVED_LEGACY_PROPERTIES",
+      "kind": "import",
+      "line": 6,
+      "path": "algo-bot/tests/test_config_facade.py",
+      "symbol": "DERIVED_LEGACY_PROPERTIES"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import DIRECT_LEGACY_PATHS",
+      "kind": "import",
+      "line": 7,
+      "path": "algo-bot/tests/test_config_facade.py",
+      "symbol": "DIRECT_LEGACY_PATHS"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 30,
+      "detail": "reference CanonicalSettingsFacade",
+      "kind": "reference",
+      "line": 21,
+      "path": "algo-bot/tests/test_config_facade.py",
+      "symbol": "CanonicalSettingsFacade"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 21,
+      "detail": "reference DIRECT_LEGACY_PATHS",
+      "kind": "reference",
+      "line": 32,
+      "path": "algo-bot/tests/test_config_facade.py",
+      "symbol": "DIRECT_LEGACY_PATHS"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 21,
+      "detail": "reference DERIVED_LEGACY_PROPERTIES",
+      "kind": "reference",
+      "line": 59,
+      "path": "algo-bot/tests/test_config_facade.py",
+      "symbol": "DERIVED_LEGACY_PROPERTIES"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 21,
+      "detail": "reference DIRECT_LEGACY_PATHS",
+      "kind": "reference",
+      "line": 70,
+      "path": "algo-bot/tests/test_config_facade.py",
+      "symbol": "DIRECT_LEGACY_PATHS"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 43,
+      "detail": "reference DERIVED_LEGACY_PROPERTIES",
+      "kind": "reference",
+      "line": 70,
+      "path": "algo-bot/tests/test_config_facade.py",
+      "symbol": "DERIVED_LEGACY_PROPERTIES"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 39,
+      "detail": "reference DIRECT_LEGACY_PATHS",
+      "kind": "reference",
+      "line": 114,
+      "path": "algo-bot/tests/test_config_facade.py",
+      "symbol": "DIRECT_LEGACY_PATHS"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 39,
+      "detail": "reference DERIVED_LEGACY_PROPERTIES",
+      "kind": "reference",
+      "line": 115,
+      "path": "algo-bot/tests/test_config_facade.py",
+      "symbol": "DERIVED_LEGACY_PROPERTIES"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import DERIVED_LEGACY_PROPERTIES",
+      "kind": "import",
+      "line": 10,
+      "path": "algo-bot/tests/test_config_legacy_access_generation.py",
+      "symbol": "DERIVED_LEGACY_PROPERTIES"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import DIRECT_LEGACY_PATHS",
+      "kind": "import",
+      "line": 11,
+      "path": "algo-bot/tests/test_config_legacy_access_generation.py",
+      "symbol": "DIRECT_LEGACY_PATHS"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 13,
+      "detail": "reference DIRECT_LEGACY_PATHS",
+      "kind": "reference",
+      "line": 23,
+      "path": "algo-bot/tests/test_config_legacy_access_generation.py",
+      "symbol": "DIRECT_LEGACY_PATHS"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 13,
+      "detail": "reference DIRECT_LEGACY_PATHS",
+      "kind": "reference",
+      "line": 24,
+      "path": "algo-bot/tests/test_config_legacy_access_generation.py",
+      "symbol": "DIRECT_LEGACY_PATHS"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 13,
+      "detail": "reference DERIVED_LEGACY_PROPERTIES",
+      "kind": "reference",
+      "line": 32,
+      "path": "algo-bot/tests/test_config_legacy_access_generation.py",
+      "symbol": "DERIVED_LEGACY_PROPERTIES"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 13,
+      "detail": "reference DERIVED_LEGACY_PROPERTIES",
+      "kind": "reference",
+      "line": 33,
+      "path": "algo-bot/tests/test_config_legacy_access_generation.py",
+      "symbol": "DERIVED_LEGACY_PROPERTIES"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 4,
+      "detail": "reference DIRECT_LEGACY_PATHS",
+      "kind": "reference",
+      "line": 58,
+      "path": "algo-bot/tests/test_config_legacy_access_generation.py",
+      "symbol": "DIRECT_LEGACY_PATHS"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 43,
+      "detail": "reference DIRECT_LEGACY_PATHS",
+      "kind": "reference",
+      "line": 68,
+      "path": "algo-bot/tests/test_config_legacy_access_generation.py",
+      "symbol": "DIRECT_LEGACY_PATHS"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import LegacyCanonicalConfigView",
+      "kind": "import",
+      "line": 7,
+      "path": "algo-bot/tests/test_config_legacy_canonical_view.py",
+      "symbol": "LegacyCanonicalConfigView"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 15,
+      "detail": "reference LegacyCanonicalConfigView",
+      "kind": "reference",
+      "line": 13,
+      "path": "algo-bot/tests/test_config_legacy_canonical_view.py",
+      "symbol": "LegacyCanonicalConfigView"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 11,
+      "detail": "SimpleNamespace config fixture",
+      "kind": "namespace",
+      "line": 14,
+      "path": "algo-bot/tests/test_config_legacy_canonical_view.py",
+      "symbol": "simplenamespace_config_fixture"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 9,
+      "detail": "reference LegacyCanonicalConfigView",
+      "kind": "reference",
+      "line": 22,
+      "path": "algo-bot/tests/test_config_legacy_canonical_view.py",
+      "symbol": "LegacyCanonicalConfigView"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import DIRECT_LEGACY_PATHS",
+      "kind": "import",
+      "line": 10,
+      "path": "algo-bot/tests/test_config_phase2e_migration_audit.py",
+      "symbol": "DIRECT_LEGACY_PATHS"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 11,
+      "detail": "reference DIRECT_LEGACY_PATHS",
+      "kind": "reference",
+      "line": 54,
+      "path": "algo-bot/tests/test_config_phase2e_migration_audit.py",
+      "symbol": "DIRECT_LEGACY_PATHS"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 13,
+      "detail": "reference DIRECT_LEGACY_PATHS",
+      "kind": "reference",
+      "line": 61,
+      "path": "algo-bot/tests/test_config_phase2e_migration_audit.py",
+      "symbol": "DIRECT_LEGACY_PATHS"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import DIRECT_LEGACY_PATHS",
+      "kind": "import",
+      "line": 10,
+      "path": "algo-bot/tests/test_config_phase2f_migration_audit.py",
+      "symbol": "DIRECT_LEGACY_PATHS"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 11,
+      "detail": "reference DIRECT_LEGACY_PATHS",
+      "kind": "reference",
+      "line": 37,
+      "path": "algo-bot/tests/test_config_phase2f_migration_audit.py",
+      "symbol": "DIRECT_LEGACY_PATHS"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 13,
+      "detail": "reference DIRECT_LEGACY_PATHS",
+      "kind": "reference",
+      "line": 44,
+      "path": "algo-bot/tests/test_config_phase2f_migration_audit.py",
+      "symbol": "DIRECT_LEGACY_PATHS"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 13,
+      "detail": "reference DIRECT_LEGACY_PATHS",
+      "kind": "reference",
+      "line": 105,
+      "path": "algo-bot/tests/test_config_phase2f_migration_audit.py",
+      "symbol": "DIRECT_LEGACY_PATHS"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import DIRECT_LEGACY_PATHS",
+      "kind": "import",
+      "line": 12,
+      "path": "algo-bot/tests/test_config_phase2g_migration_audit.py",
+      "symbol": "DIRECT_LEGACY_PATHS"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 11,
+      "detail": "reference DIRECT_LEGACY_PATHS",
+      "kind": "reference",
+      "line": 39,
+      "path": "algo-bot/tests/test_config_phase2g_migration_audit.py",
+      "symbol": "DIRECT_LEGACY_PATHS"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 13,
+      "detail": "reference DIRECT_LEGACY_PATHS",
+      "kind": "reference",
+      "line": 46,
+      "path": "algo-bot/tests/test_config_phase2g_migration_audit.py",
+      "symbol": "DIRECT_LEGACY_PATHS"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import CanonicalSettingsFacade",
+      "kind": "import",
+      "line": 7,
+      "path": "algo-bot/tests/test_config_python_loader.py",
+      "symbol": "CanonicalSettingsFacade"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import DERIVED_LEGACY_PROPERTIES",
+      "kind": "import",
+      "line": 8,
+      "path": "algo-bot/tests/test_config_python_loader.py",
+      "symbol": "DERIVED_LEGACY_PROPERTIES"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import DIRECT_LEGACY_PATHS",
+      "kind": "import",
+      "line": 8,
+      "path": "algo-bot/tests/test_config_python_loader.py",
+      "symbol": "DIRECT_LEGACY_PATHS"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import Settings",
+      "kind": "import",
+      "line": 17,
+      "path": "algo-bot/tests/test_config_python_loader.py",
+      "symbol": "Settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 11,
+      "detail": "reference Settings",
+      "kind": "reference",
+      "line": 38,
+      "path": "algo-bot/tests/test_config_python_loader.py",
+      "symbol": "Settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 13,
+      "detail": "reference DIRECT_LEGACY_PATHS",
+      "kind": "reference",
+      "line": 79,
+      "path": "algo-bot/tests/test_config_python_loader.py",
+      "symbol": "DIRECT_LEGACY_PATHS"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 72,
+      "detail": "reference DIRECT_LEGACY_PATHS",
+      "kind": "reference",
+      "line": 80,
+      "path": "algo-bot/tests/test_config_python_loader.py",
+      "symbol": "DIRECT_LEGACY_PATHS"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 13,
+      "detail": "reference DERIVED_LEGACY_PROPERTIES",
+      "kind": "reference",
+      "line": 86,
+      "path": "algo-bot/tests/test_config_python_loader.py",
+      "symbol": "DERIVED_LEGACY_PROPERTIES"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 72,
+      "detail": "reference DERIVED_LEGACY_PROPERTIES",
+      "kind": "reference",
+      "line": 87,
+      "path": "algo-bot/tests/test_config_python_loader.py",
+      "symbol": "DERIVED_LEGACY_PROPERTIES"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 12,
+      "detail": "reference DIRECT_LEGACY_PATHS",
+      "kind": "reference",
+      "line": 93,
+      "path": "algo-bot/tests/test_config_python_loader.py",
+      "symbol": "DIRECT_LEGACY_PATHS"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 34,
+      "detail": "reference DERIVED_LEGACY_PROPERTIES",
+      "kind": "reference",
+      "line": 93,
+      "path": "algo-bot/tests/test_config_python_loader.py",
+      "symbol": "DERIVED_LEGACY_PROPERTIES"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 36,
+      "detail": "reference CanonicalSettingsFacade",
+      "kind": "reference",
+      "line": 104,
+      "path": "algo-bot/tests/test_config_python_loader.py",
+      "symbol": "CanonicalSettingsFacade"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import Settings",
+      "kind": "import",
+      "line": 10,
+      "path": "algo-bot/tests/test_config_shadow_architecture.py",
+      "symbol": "Settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 44,
+      "detail": "reference Settings",
+      "kind": "reference",
+      "line": 71,
+      "path": "algo-bot/tests/test_config_shadow_architecture.py",
+      "symbol": "Settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import Settings",
+      "kind": "import",
+      "line": 11,
+      "path": "algo-bot/tests/test_config_shadow_loader.py",
+      "symbol": "Settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 13,
+      "detail": "reference Settings",
+      "kind": "reference",
+      "line": 71,
+      "path": "algo-bot/tests/test_config_shadow_loader.py",
+      "symbol": "Settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import Settings",
+      "kind": "import",
+      "line": 11,
+      "path": "algo-bot/tests/test_config_shadow_parity.py",
+      "symbol": "Settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 11,
+      "detail": "reference Settings",
+      "kind": "reference",
+      "line": 35,
+      "path": "algo-bot/tests/test_config_shadow_parity.py",
+      "symbol": "Settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 6,
+      "detail": "reference Settings",
+      "kind": "reference",
+      "line": 173,
+      "path": "algo-bot/tests/test_config_shadow_parity.py",
+      "symbol": "Settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import Settings",
+      "kind": "import",
+      "line": 8,
+      "path": "algo-bot/tests/test_config_source_characterization.py",
+      "symbol": "Settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 5,
+      "detail": "reference Settings",
+      "kind": "reference",
+      "line": 27,
+      "path": "algo-bot/tests/test_config_source_characterization.py",
+      "symbol": "Settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 11,
+      "detail": "reference Settings",
+      "kind": "reference",
+      "line": 30,
+      "path": "algo-bot/tests/test_config_source_characterization.py",
+      "symbol": "Settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import settings",
+      "kind": "import",
+      "line": 4,
+      "path": "algo-bot/tests/test_confluence_card_rr_pregate.py",
+      "symbol": "settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import settings",
+      "kind": "import",
+      "line": 2,
+      "path": "algo-bot/tests/test_demo_eval_runtime.py",
+      "symbol": "settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import Settings",
+      "kind": "import",
+      "line": 20,
+      "path": "algo-bot/tests/test_demo_eval_runtime.py",
+      "symbol": "Settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 9,
+      "detail": "reference Settings",
+      "kind": "reference",
+      "line": 33,
+      "path": "algo-bot/tests/test_demo_eval_runtime.py",
+      "symbol": "Settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import Settings",
+      "kind": "import",
+      "line": 24,
+      "path": "algo-bot/tests/test_execution_confirmation.py",
+      "symbol": "Settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 9,
+      "detail": "reference Settings",
+      "kind": "reference",
+      "line": 209,
+      "path": "algo-bot/tests/test_execution_confirmation.py",
+      "symbol": "Settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 4,
+      "detail": "reference Settings",
+      "kind": "reference",
+      "line": 211,
+      "path": "algo-bot/tests/test_execution_confirmation.py",
+      "symbol": "Settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 15,
+      "detail": "reference Settings",
+      "kind": "reference",
+      "line": 218,
+      "path": "algo-bot/tests/test_execution_confirmation.py",
+      "symbol": "Settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 4,
+      "detail": "reference Settings",
+      "kind": "reference",
+      "line": 228,
+      "path": "algo-bot/tests/test_execution_confirmation.py",
+      "symbol": "Settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import settings",
+      "kind": "import",
+      "line": 4,
+      "path": "algo-bot/tests/test_execution_pipeline_integrity.py",
+      "symbol": "settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 8,
+      "detail": "SimpleNamespace config fixture",
+      "kind": "namespace",
+      "line": 300,
+      "path": "algo-bot/tests/test_execution_pipeline_integrity.py",
+      "symbol": "simplenamespace_config_fixture"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import settings",
+      "kind": "import",
+      "line": 2,
+      "path": "algo-bot/tests/test_forming_route_contract.py",
+      "symbol": "settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import settings",
+      "kind": "import",
+      "line": 13,
+      "path": "algo-bot/tests/test_lifecycle.py",
+      "symbol": "settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 2,
+      "detail": "import Settings",
+      "kind": "import",
+      "line": 46,
+      "path": "algo-bot/tests/test_m1_trigger.py",
+      "symbol": "Settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 20,
+      "detail": "reference Settings",
+      "kind": "reference",
+      "line": 47,
+      "path": "algo-bot/tests/test_m1_trigger.py",
+      "symbol": "Settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import settings",
+      "kind": "import",
+      "line": 14,
+      "path": "algo-bot/tests/test_main.py",
+      "symbol": "settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import settings",
+      "kind": "import",
+      "line": 8,
+      "path": "algo-bot/tests/test_manual_execution.py",
+      "symbol": "settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import settings",
+      "kind": "import",
+      "line": 5,
+      "path": "algo-bot/tests/test_manual_intent.py",
+      "symbol": "settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import settings",
+      "kind": "import",
+      "line": 4,
+      "path": "algo-bot/tests/test_map_reaction_range_retirement.py",
+      "symbol": "settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 4,
+      "detail": "SimpleNamespace config fixture",
+      "kind": "namespace",
+      "line": 342,
+      "path": "algo-bot/tests/test_map_reaction_range_retirement.py",
+      "symbol": "simplenamespace_config_fixture"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import settings",
+      "kind": "import",
+      "line": 2,
+      "path": "algo-bot/tests/test_market_map_delivery.py",
+      "symbol": "settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import settings",
+      "kind": "import",
+      "line": 10,
+      "path": "algo-bot/tests/test_ohlc_lookback_settings.py",
+      "symbol": "settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 8,
+      "detail": "SimpleNamespace config fixture",
+      "kind": "namespace",
+      "line": 384,
+      "path": "algo-bot/tests/test_protective_stop.py",
+      "symbol": "simplenamespace_config_fixture"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 8,
+      "detail": "SimpleNamespace config fixture",
+      "kind": "namespace",
+      "line": 423,
+      "path": "algo-bot/tests/test_protective_stop.py",
+      "symbol": "simplenamespace_config_fixture"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 8,
+      "detail": "SimpleNamespace config fixture",
+      "kind": "namespace",
+      "line": 472,
+      "path": "algo-bot/tests/test_protective_stop.py",
+      "symbol": "simplenamespace_config_fixture"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import settings",
+      "kind": "import",
+      "line": 15,
+      "path": "algo-bot/tests/test_publish_trade_plan_v7.py",
+      "symbol": "settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import Settings",
+      "kind": "import",
+      "line": 8,
+      "path": "algo-bot/tests/test_range_box_scale_out.py",
+      "symbol": "Settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 2,
+      "detail": "reference Settings",
+      "kind": "reference",
+      "line": 12,
+      "path": "algo-bot/tests/test_range_box_scale_out.py",
+      "symbol": "Settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 4,
+      "detail": "reference Settings",
+      "kind": "reference",
+      "line": 20,
+      "path": "algo-bot/tests/test_range_box_scale_out.py",
+      "symbol": "Settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 4,
+      "detail": "reference Settings",
+      "kind": "reference",
+      "line": 27,
+      "path": "algo-bot/tests/test_range_box_scale_out.py",
+      "symbol": "Settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import settings",
+      "kind": "import",
+      "line": 15,
+      "path": "algo-bot/tests/test_reentry_reports.py",
+      "symbol": "settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import settings",
+      "kind": "import",
+      "line": 2,
+      "path": "algo-bot/tests/test_scanner.py",
+      "symbol": "settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 13,
+      "detail": "SimpleNamespace config fixture",
+      "kind": "namespace",
+      "line": 698,
+      "path": "algo-bot/tests/test_scanner.py",
+      "symbol": "simplenamespace_config_fixture"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import settings",
+      "kind": "import",
+      "line": 4,
+      "path": "algo-bot/tests/test_scanner_actionability.py",
+      "symbol": "settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 9,
+      "detail": "SimpleNamespace config fixture",
+      "kind": "namespace",
+      "line": 138,
+      "path": "algo-bot/tests/test_scanner_actionability.py",
+      "symbol": "simplenamespace_config_fixture"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import settings",
+      "kind": "import",
+      "line": 6,
+      "path": "algo-bot/tests/test_setup_card.py",
+      "symbol": "settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import settings",
+      "kind": "import",
+      "line": 2,
+      "path": "algo-bot/tests/test_setup_tag_backfill.py",
+      "symbol": "settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import settings",
+      "kind": "import",
+      "line": 2,
+      "path": "algo-bot/tests/test_strategy_match.py",
+      "symbol": "settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import settings",
+      "kind": "import",
+      "line": 4,
+      "path": "algo-bot/tests/test_strategy_match_ready_handoff.py",
+      "symbol": "settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 13,
+      "detail": "SimpleNamespace config fixture",
+      "kind": "namespace",
+      "line": 86,
+      "path": "algo-bot/tests/test_strategy_match_ready_handoff.py",
+      "symbol": "simplenamespace_config_fixture"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 8,
+      "detail": "SimpleNamespace config fixture",
+      "kind": "namespace",
+      "line": 175,
+      "path": "algo-bot/tests/test_structure_aware_autotrade.py",
+      "symbol": "simplenamespace_config_fixture"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import settings",
+      "kind": "import",
+      "line": 4,
+      "path": "algo-bot/tests/test_telegram_single_root_card.py",
+      "symbol": "settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import settings",
+      "kind": "import",
+      "line": 13,
+      "path": "algo-bot/tests/test_trade_commands.py",
+      "symbol": "settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 8,
+      "detail": "SimpleNamespace config fixture",
+      "kind": "namespace",
+      "line": 204,
+      "path": "algo-bot/tests/test_trade_plan_builder.py",
+      "symbol": "simplenamespace_config_fixture"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 8,
+      "detail": "SimpleNamespace config fixture",
+      "kind": "namespace",
+      "line": 217,
+      "path": "algo-bot/tests/test_trade_plan_builder.py",
+      "symbol": "simplenamespace_config_fixture"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 8,
+      "detail": "SimpleNamespace config fixture",
+      "kind": "namespace",
+      "line": 248,
+      "path": "algo-bot/tests/test_trade_plan_builder.py",
+      "symbol": "simplenamespace_config_fixture"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 8,
+      "detail": "SimpleNamespace config fixture",
+      "kind": "namespace",
+      "line": 383,
+      "path": "algo-bot/tests/test_trade_plan_builder.py",
+      "symbol": "simplenamespace_config_fixture"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 2,
+      "detail": "import settings",
+      "kind": "import",
+      "line": 23,
+      "path": "algo-bot/tests/test_trade_plan_v7_migration_mode.py",
+      "symbol": "settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import settings",
+      "kind": "import",
+      "line": 9,
+      "path": "algo-bot/tests/test_trend.py",
+      "symbol": "settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import settings",
+      "kind": "import",
+      "line": 15,
+      "path": "algo-bot/tests/test_watcher.py",
+      "symbol": "settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import settings",
+      "kind": "import",
+      "line": 15,
+      "path": "algo-bot/tests/test_weekly_report.py",
+      "symbol": "settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import settings",
+      "kind": "import",
+      "line": 17,
+      "path": "algo-bot/tests/test_worker_terminal_card_cleanup.py",
+      "symbol": "settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import settings",
+      "kind": "import",
+      "line": 21,
+      "path": "algo-bot/tests/test_worker_veto_regression_replay.py",
+      "symbol": "settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import settings",
+      "kind": "import",
+      "line": 2,
+      "path": "algo-bot/tests/test_zone_execution_cutover.py",
+      "symbol": "settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import settings",
+      "kind": "import",
+      "line": 12,
+      "path": "algo-bot/tests/test_zone_width_contract.py",
+      "symbol": "settings"
+    }
+  ]
+}

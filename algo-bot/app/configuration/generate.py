@@ -14,6 +14,9 @@ from app.configuration.catalog import DERIVED_LEGACY_PROPERTIES
 from app.configuration.catalog import CatalogEntry
 from app.configuration.catalog import infer_ctrader_type
 from app.configuration.catalog import iter_catalog_entries
+from app.configuration.compatibility_surface_audit import (
+  audit_compatibility_surface,
+)
 from app.configuration.env_example_policy import render_env_example
 from app.configuration.environment_contract import deprecated_environment_document
 from app.configuration.environment_contract import environment_contract_document
@@ -1122,7 +1125,12 @@ def render_artifacts() -> dict[Path, bytes]:
   fingerprint = _fingerprint(entries)
   usage = audit_legacy_settings_usage(REPOSITORY_ROOT)
   environment_usage = audit_environment_usage(REPOSITORY_ROOT)
+  compatibility_surface = audit_compatibility_surface(REPOSITORY_ROOT)
   return {
+    Path(
+      "contracts/configuration/compatibility-surface-phase-2i-a.generated.json"
+    ):
+      _json_bytes(compatibility_surface),
     Path("contracts/configuration/environment-usage.generated.json"):
       _json_bytes(environment_usage),
     Path("contracts/configuration/environment-contract.generated.json"):
