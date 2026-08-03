@@ -4425,7 +4425,7 @@
     "method_calls": [],
     "type_dependencies": []
   },
-  "source_fingerprint": "495e4340aeca45a2ed60f9f9e49e95f24606b1a8e64521f1dd19e35ee542b978",
+  "source_fingerprint": "239f7179d7d8a10f07228d171fec2d8a64d5564884742712cbda21a2af3551f2",
   "tests": {
     "attribute_deletions": [],
     "attribute_reads": [
@@ -10604,10 +10604,131 @@
         "line": 54,
         "operation": "canonical_read",
         "path": "algo-bot/tests/configuration/canonical_fixtures.py"
+      },
+      {
+        "attribute": null,
+        "canonical_path": "analysis",
+        "classification": "test_only_adaptation",
+        "column": 17,
+        "detail": "canonical nested read without direct legacy ownership",
+        "dynamic_names": [],
+        "line": 131,
+        "operation": "canonical_read",
+        "path": "algo-bot/tests/test_config_phase2i_a1_guards.py"
+      },
+      {
+        "attribute": null,
+        "canonical_path": "actionability",
+        "classification": "test_only_adaptation",
+        "column": 17,
+        "detail": "canonical nested read without direct legacy ownership",
+        "dynamic_names": [],
+        "line": 137,
+        "operation": "canonical_read",
+        "path": "algo-bot/tests/test_config_phase2i_a1_guards.py"
+      },
+      {
+        "attribute": null,
+        "canonical_path": "actionability.target_room.barrier_buffer_atr",
+        "classification": "test_only_adaptation",
+        "column": 4,
+        "detail": "direct legacy-backed canonical nested read",
+        "dynamic_names": [],
+        "line": 139,
+        "operation": "canonical_read",
+        "path": "algo-bot/tests/test_config_phase2i_a1_guards.py"
+      },
+      {
+        "attribute": null,
+        "canonical_path": "execution",
+        "classification": "test_only_adaptation",
+        "column": 17,
+        "detail": "canonical nested read without direct legacy ownership",
+        "dynamic_names": [],
+        "line": 149,
+        "operation": "canonical_read",
+        "path": "algo-bot/tests/test_config_phase2i_a1_guards.py"
+      },
+      {
+        "attribute": null,
+        "canonical_path": "risk",
+        "classification": "test_only_adaptation",
+        "column": 17,
+        "detail": "canonical nested read without direct legacy ownership",
+        "dynamic_names": [],
+        "line": 155,
+        "operation": "canonical_read",
+        "path": "algo-bot/tests/test_config_phase2i_a1_guards.py"
+      },
+      {
+        "attribute": null,
+        "canonical_path": "risk",
+        "classification": "test_only_adaptation",
+        "column": 17,
+        "detail": "canonical nested read without direct legacy ownership",
+        "dynamic_names": [],
+        "line": 156,
+        "operation": "canonical_read",
+        "path": "algo-bot/tests/test_config_phase2i_a1_guards.py"
+      },
+      {
+        "attribute": null,
+        "canonical_path": "lifecycle",
+        "classification": "test_only_adaptation",
+        "column": 17,
+        "detail": "canonical nested read without direct legacy ownership",
+        "dynamic_names": [],
+        "line": 162,
+        "operation": "canonical_read",
+        "path": "algo-bot/tests/test_config_phase2i_a1_guards.py"
       }
     ],
     "canonical_writes": [],
     "introspection": [
+      {
+        "attribute": null,
+        "canonical_path": null,
+        "classification": "test_only_adaptation",
+        "column": 13,
+        "detail": "getattr on Settings",
+        "dynamic_names": [],
+        "line": 171,
+        "operation": "getattr",
+        "path": "algo-bot/tests/test_config_phase2i_a1_guards.py"
+      },
+      {
+        "attribute": null,
+        "canonical_path": null,
+        "classification": "test_only_adaptation",
+        "column": 13,
+        "detail": "getattr on Settings",
+        "dynamic_names": [],
+        "line": 192,
+        "operation": "getattr",
+        "path": "algo-bot/tests/test_config_phase2i_a1_guards.py"
+      },
+      {
+        "attribute": null,
+        "canonical_path": null,
+        "classification": "test_only_adaptation",
+        "column": 19,
+        "detail": "getattr on Settings",
+        "dynamic_names": [],
+        "line": 224,
+        "operation": "getattr",
+        "path": "algo-bot/tests/test_config_phase2i_a1_guards.py"
+      },
+      {
+        "attribute": null,
+        "canonical_path": null,
+        "classification": "test_only_adaptation",
+        "column": 19,
+        "detail": "getattr on Settings",
+        "dynamic_names": [],
+        "line": 240,
+        "operation": "getattr",
+        "path": "algo-bot/tests/test_config_phase2i_a1_guards.py"
+      },
       {
         "attribute": null,
         "canonical_path": null,

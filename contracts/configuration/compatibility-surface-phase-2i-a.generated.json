@@ -12,27 +12,27 @@
       "LEGACY_ROLLBACK_RETAIN_2I_A": 16,
       "PRODUCTION_REMOVE_2I_A": 0,
       "REMOVE_2I_B": 1,
-      "TEST_COMPATIBILITY_RETAIN_2I_A": 121,
+      "TEST_COMPATIBILITY_RETAIN_2I_A": 130,
       "TOOLING_RETAIN_2I_A": 46,
       "UNKNOWN_BLOCKER": 0
     },
     "by_symbol": {
       "CanonicalSettingsFacade": 13,
       "DERIVED_LEGACY_PROPERTIES": 44,
-      "DIRECT_LEGACY_PATHS": 41,
+      "DIRECT_LEGACY_PATHS": 46,
       "LegacyCanonicalConfigView": 6,
       "LegacySettings": 2,
       "Settings": 34,
       "runtime_config_facade": 1,
-      "settings": 39,
+      "settings": 43,
       "simplenamespace_config_fixture": 4
     },
     "production_facade_calls": 0,
-    "total": 184,
+    "total": 193,
     "unknown_blockers": 0
   },
   "phase": "2I-A",
-  "source_fingerprint": "93965de3719d4ff1f9c1d881c225447297b6999c5157dde12270e6ac3522be45",
+  "source_fingerprint": "38c4297db7c3507409da7534db6ef95deede15106c5e5eeeb27b6c0d29b4d32b",
   "unknown_blockers": [],
   "usages": [
     {
@@ -1086,6 +1086,87 @@
       "kind": "reference",
       "line": 46,
       "path": "algo-bot/tests/test_config_phase2g_migration_audit.py",
+      "symbol": "DIRECT_LEGACY_PATHS"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import DIRECT_LEGACY_PATHS",
+      "kind": "import",
+      "line": 22,
+      "path": "algo-bot/tests/test_config_phase2i_a1_guards.py",
+      "symbol": "DIRECT_LEGACY_PATHS"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 2,
+      "detail": "import settings",
+      "kind": "import",
+      "line": 166,
+      "path": "algo-bot/tests/test_config_phase2i_a1_guards.py",
+      "symbol": "settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 27,
+      "detail": "reference DIRECT_LEGACY_PATHS",
+      "kind": "reference",
+      "line": 169,
+      "path": "algo-bot/tests/test_config_phase2i_a1_guards.py",
+      "symbol": "DIRECT_LEGACY_PATHS"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 2,
+      "detail": "import settings",
+      "kind": "import",
+      "line": 187,
+      "path": "algo-bot/tests/test_config_phase2i_a1_guards.py",
+      "symbol": "settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 27,
+      "detail": "reference DIRECT_LEGACY_PATHS",
+      "kind": "reference",
+      "line": 190,
+      "path": "algo-bot/tests/test_config_phase2i_a1_guards.py",
+      "symbol": "DIRECT_LEGACY_PATHS"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 2,
+      "detail": "import settings",
+      "kind": "import",
+      "line": 212,
+      "path": "algo-bot/tests/test_config_phase2i_a1_guards.py",
+      "symbol": "settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 11,
+      "detail": "reference DIRECT_LEGACY_PATHS",
+      "kind": "reference",
+      "line": 220,
+      "path": "algo-bot/tests/test_config_phase2i_a1_guards.py",
+      "symbol": "DIRECT_LEGACY_PATHS"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 2,
+      "detail": "import settings",
+      "kind": "import",
+      "line": 228,
+      "path": "algo-bot/tests/test_config_phase2i_a1_guards.py",
+      "symbol": "settings"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 11,
+      "detail": "reference DIRECT_LEGACY_PATHS",
+      "kind": "reference",
+      "line": 236,
+      "path": "algo-bot/tests/test_config_phase2i_a1_guards.py",
       "symbol": "DIRECT_LEGACY_PATHS"
     },
     {

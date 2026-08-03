@@ -28,20 +28,20 @@
       "PHASE_2I_A_1_MIGRATE": 0,
       "PHASE_2I_A_1_MIGRATED": 0,
       "TEST_COMPATIBILITY_RETAIN_2I_A_1": 9,
-      "TOOLING_RETAIN_2I_A_1": 12,
+      "TOOLING_RETAIN_2I_A_1": 13,
       "UNKNOWN_BLOCKER": 0
     },
     "by_file_pending": {},
     "by_mechanism": {
-      "DIRECT_LEGACY_PATHS_import": 12,
+      "DIRECT_LEGACY_PATHS_import": 13,
       "simplenamespace_legacy_fixture": 9
     },
     "production_pending": 0,
-    "total": 21,
+    "total": 22,
     "unknown_blockers": 0
   },
   "phase": "2I-A.1",
-  "source_fingerprint": "5ee3f9e9651d62a34a7767555962e5ff247755376affc2bc46812dc516f5e115",
+  "source_fingerprint": "dbe78222a6686b41516cd1d5749fae1e205eeda3e4b53e89d9e147ee6d93daf5",
   "unknown_blockers": [],
   "usages": [
     {
@@ -262,6 +262,19 @@
       "line": 12,
       "mechanism": "DIRECT_LEGACY_PATHS_import",
       "path": "algo-bot/tests/test_config_phase2g_migration_audit.py",
+      "status": "retained",
+      "test_coverage": ""
+    },
+    {
+      "canonical_path": null,
+      "classification": "TOOLING_RETAIN_2I_A_1",
+      "column": 0,
+      "detail": "import DIRECT_LEGACY_PATHS",
+      "function": "<module>",
+      "legacy_field": "DIRECT_LEGACY_PATHS",
+      "line": 22,
+      "mechanism": "DIRECT_LEGACY_PATHS_import",
+      "path": "algo-bot/tests/test_config_phase2i_a1_guards.py",
       "status": "retained",
       "test_coverage": ""
     },
