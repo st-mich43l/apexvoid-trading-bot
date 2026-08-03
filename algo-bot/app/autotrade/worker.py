@@ -220,7 +220,8 @@ from app.autotrade.trend import (
   classify_regime,
   evaluate_trend_gate,
 )
-from app.core.config import runtime_config, runtime_config_facade
+from app.core.runtime_projection import project_runtime_config
+from app.core.config import runtime_config
 from app.persistence.store import event_in_window
 from app.analysis.ohlc_source import RedisOHLCSource, window_for_timeframe
 from app.analysis.math_utils import atr_series
@@ -232,15 +233,32 @@ from app.analysis.swings import find_swings
 
 log = logging.getLogger(__name__)
 
-
-def _cfg() -> object:
-  """Authority-neutral flat legacy-name view over the runtime configuration.
-
-  Replaces the previous ``config.settings`` pass-throughs. It resolves lazily
-  against ``runtime_config`` (which wraps the live settings in the legacy
-  authority), so test monkeypatches of individual fields are still observed.
-  """
-  return runtime_config_facade()
+# Phase 2I-A: legacy field names the worker-local HTF/overlap helpers read.
+# These helpers self-default their ``cfg`` to a narrow canonical
+# ``runtime_config`` projection (replacing the retired module-level ``None``
+# flat facade). Every other worker call site that previously passed ``None``
+# now passes ``cfg=None`` so the callee builds its own narrow projection.
+_RUNTIME_HTF_ZONES_CFG_FIELDS = (
+  "atr_length",
+  "displacement_atr_mult",
+  "momentum_body_frac",
+  "auto_trade_xau_pip_size",
+  "auto_trade_execution_zone_max_width_atr",
+  "auto_trade_execution_zone_max_width_pips",
+)
+_RUNTIME_HTF_LEVELS_CFG_FIELDS = (
+  "atr_length",
+  "swing_fractal_n",
+  "zigzag_pct",
+  "zigzag_atr_mult",
+  "level_cluster_atr",
+  "round_step",
+  "key_level_min_touches",
+)
+_RUNTIME_OVERLAP_CFG_FIELDS = (
+  "auto_trade_structural_guard_mode",
+  "auto_trade_map_reaction_lookback_bars",
+)
 
 
 EXECUTION_TIMEFRAME = "M1"
@@ -1222,12 +1240,14 @@ def _edge_proximity_reason(
   return None
 
 
-def _htf_zones(frames: dict[str, Any], cfg: Any) -> list[Zone]:
+def _htf_zones(frames: dict[str, Any], cfg: Any | None = None) -> list[Zone]:
   """Fresh/tested HTF (M15) supply/demand zones, for the A3 veto and the A2
   opposing-zone attachment. Independent of gate.py/trend.py's own M1 legs -
   this is the one place the shared analysis stack enters the autotrade path,
   and it enters only as a veto input, never as a signal.
   """
+  if cfg is None:
+    cfg = project_runtime_config(_RUNTIME_HTF_ZONES_CFG_FIELDS)
   htf = frames.get(_HTF_TIMEFRAME)
   if htf is None or htf.empty:
     return []
@@ -1261,12 +1281,14 @@ def _htf_zones(frames: dict[str, Any], cfg: Any) -> list[Zone]:
   ]
 
 
-def _htf_levels(frames: dict[str, Any], cfg: Any) -> list[Level]:
+def _htf_levels(frames: dict[str, Any], cfg: Any | None = None) -> list[Level]:
   """HTF (M15) round-number and reaction key levels, for the opposing-barrier
   veto below. Round-number levels aren't sided the way supply/demand zones
   are (a round number caps a rally the same way it floors a selloff), so
   they're kept as a separate ``Level`` list rather than folded into ``Zone``.
   """
+  if cfg is None:
+    cfg = project_runtime_config(_RUNTIME_HTF_LEVELS_CFG_FIELDS)
   htf = frames.get(_HTF_TIMEFRAME)
   if htf is None or htf.empty:
     return []
@@ -1906,7 +1928,7 @@ def _resolve_overlap_thesis(
   market_map: MarketMap | None,
   m1: Any,
   atr: float | None,
-  cfg: Any,
+  cfg: Any | None = None,
 ) -> GuardOutcome:
   """Resolve an entry inside both a demand and a supply band by the same
   M1 reaction-lookback memory ``map_strategy.py`` already computes for its
@@ -1917,6 +1939,8 @@ def _resolve_overlap_thesis(
   """
   from app.autotrade.map_strategy import _reaction_in_lookback
 
+  if cfg is None:
+    cfg = project_runtime_config(_RUNTIME_OVERLAP_CFG_FIELDS)
   guard_mode = resolve_guard_mode(cfg)
   if market_map is None:
     return GuardOutcome("overlap", OUTCOME_ALLOW, "no_map", "no market map", False)
@@ -2801,7 +2825,7 @@ async def _publish_candidate(
   ):
     overlap_outcome = _resolve_overlap_thesis(
       decision.direction, entry_reference, market_map, m1,
-      scale_context.atr, _cfg(),
+      scale_context.atr, None,
     )
     if overlap_outcome.reason_code not in ("no_map", "no_overlap"):
       await _record_guard_evaluation(
@@ -2856,7 +2880,7 @@ async def _publish_candidate(
         if decision.full_tp_pips is not None else ()
       ),
       risk_multiplier=risk_multiplier_for_tier(
-        range_tier, _cfg(), range_scalp=True,
+        range_tier, None, range_scalp=True,
       ),
       sweep_low=decision.sweep_low,
       sweep_high=decision.sweep_high,
@@ -2864,7 +2888,7 @@ async def _publish_candidate(
     spot_price=_executable_spot_price(spot, decision.direction),
     regime=regime.state if regime is not None else "chop",
     pip_size=units.pip_size(symbol),
-    cfg=_cfg(),
+    cfg=None,
     **_opposing_zone_policy_kwargs(
       opposing_zone,
       atr=scale_context.atr,
@@ -2911,7 +2935,7 @@ async def _publish_candidate(
     "tier": range_tier,
     "risk_multiplier": risk_multiplier_for_tier(
       range_tier,
-      _cfg(),
+      None,
       range_scalp=True,
     ),
     "reasons": list(decision.reasons),
@@ -3391,7 +3415,7 @@ async def _publish_strategy_match(
     executable_quote=executable_quote,
     regime=None if regime is None else regime.state,
     pip_size=units.pip_size(symbol),
-    cfg=_cfg(),
+    cfg=None,
     **_opposing_zone_policy_kwargs(
       strategy_opposing_zone,
       atr=match.atr,
@@ -3489,7 +3513,7 @@ async def _publish_strategy_match(
     or guard_mode == GUARD_MODE_OBSERVE
   ):
     overlap_outcome = _resolve_overlap_thesis(
-      match.direction, spot.price, market_map, m1, match.atr, _cfg(),
+      match.direction, spot.price, market_map, m1, match.atr, None,
     )
     if overlap_outcome.reason_code not in ("no_map", "no_overlap"):
       await _record_guard_evaluation(
@@ -3572,7 +3596,7 @@ async def _publish_strategy_match(
     atr=float(match.atr),
     pip_size=units.pip_size(symbol),
     remaining_target_room_pips=remaining_room,
-    cfg=_cfg(),
+    cfg=None,
   )
   if distance_pips > distance_limit:
     # Genuinely stale only when even the strategy's absolute hard cap is
@@ -4860,7 +4884,7 @@ async def _publish_trade_plan_v7(
           direction=match.direction,
           earliest_bar_ts=episode_start,
           after_bar_ts=execution_state.last_evaluated_m1_ts,
-          cfg=_cfg(),
+          cfg=None,
         )
       )
       latest_evaluated = latest_eligible_m1_bar_ts(
@@ -5047,7 +5071,7 @@ async def _publish_trade_plan_v7(
         direction=match.direction,
         earliest_bar_ts=confirmation_boundary,
         after_bar_ts=None,
-        cfg=_cfg(),
+        cfg=None,
       )
     )
     if trigger is not None:
@@ -5349,7 +5373,7 @@ async def _publish_trade_plan_v7(
       pip_size=Decimal(str(units.pip_size(symbol))),
       spot_price=spot.price,
       regime=None if regime is None else regime.state,
-      cfg=_cfg(),
+      cfg=None,
       opposing_zone_low=opposing_kwargs.get(
         "opposing_zone_low", opposing_zone_low,
       ),
@@ -5681,7 +5705,7 @@ async def _publish_trend_candidate(
     spot_price=_executable_spot_price(spot, trend_decision.direction),
     regime=regime.state,
     pip_size=units.pip_size(symbol),
-    cfg=_cfg(),
+    cfg=None,
     **_opposing_zone_policy_kwargs(
       opposing_zone,
       atr=trend_decision.atr,
@@ -5805,7 +5829,7 @@ async def _publish_trend_candidate(
   ):
     overlap_outcome = _resolve_overlap_thesis(
       trend_decision.direction, entry_reference, market_map, trend_m1,
-      trend_decision.atr, _cfg(),
+      trend_decision.atr, None,
     )
     if overlap_outcome.reason_code not in ("no_map", "no_overlap"):
       await _record_guard_evaluation(
@@ -5857,7 +5881,7 @@ async def _publish_trend_candidate(
       frames or {},
       trend_decision.direction,
       spot_price=entry_reference,
-      cfg=_cfg(),
+      cfg=None,
     )
     if frames is not None else None
   )
@@ -6752,7 +6776,7 @@ async def _common_preflight(
     executable_quote=executable_quote,
     regime=None if regime is None else regime.state,
     pip_size=units.pip_size(intent.symbol),
-    cfg=_cfg(),
+    cfg=None,
   )
   policy_measured = dict(policy.measured)
   if intent.is_initial:
@@ -7009,7 +7033,7 @@ async def _common_preflight(
       market_map,
       frames.get("M1"),
       atr,
-      _cfg(),
+      None,
     )
     if overlap.hard_block:
       return _preflight_decision(
@@ -7040,7 +7064,7 @@ async def _common_preflight(
     remaining_target_room_pips=float(
       policy.measured.get("remaining_target_room_pips", 0.0)
     ),
-    cfg=_cfg(),
+    cfg=None,
   )
   if distance_pips > limit:
     hard_cap = float(drift.get("hard_cap_pips", limit))
@@ -7664,7 +7688,7 @@ async def _handle_event(
     spot_price=(
       spot.price if spot is not None and spot.fresh else None
     ),
-    cfg=_cfg(),
+    cfg=None,
     market_map=cached_market_map,
     rendered_map=displayed_market_map,
   )
@@ -7680,7 +7704,7 @@ async def _handle_event(
     strategy_matches, _ = dedupe_matches(
       strategy_matches,
       atr=strategy_matches[0].atr,
-      cfg=_cfg(),
+      cfg=None,
     )
   elif strategy_matches:
     strategy_matches = [strategy_matches[0]]
@@ -7695,7 +7719,7 @@ async def _handle_event(
     if market_map_decision.match is not None
     else "private_ohlc"
   )
-  regime = classify_regime(frames, decision, _cfg())
+  regime = classify_regime(frames, decision, None)
   now_ts = int(datetime.now(timezone.utc).timestamp())
   try:
     await _record_regime(client, symbol, regime.state, now_ts)
@@ -7709,7 +7733,7 @@ async def _handle_event(
     decision,
     symbol=symbol,
     spot_price=None if spot is None or not spot.fresh else spot.price,
-    cfg=_cfg(),
+    cfg=None,
   )
   closed_price = (
     float(frames[EXECUTION_TIMEFRAME]["close"].iloc[-1])
@@ -7751,7 +7775,7 @@ async def _handle_event(
       frames,
       decision.direction or "",
       spot_price=spot.price,
-      cfg=_cfg(),
+      cfg=None,
       target_low=None if decision.target is None else decision.target.low,
       target_high=None if decision.target is None else decision.target.high,
     )
@@ -7761,8 +7785,8 @@ async def _handle_event(
       and spot.fresh
     ) else None
   )
-  htf_zones = _htf_zones(frames, _cfg())
-  htf_levels = _htf_levels(frames, _cfg())
+  htf_zones = _htf_zones(frames, None)
+  htf_levels = _htf_levels(frames, None)
   spot_price = spot.price if spot is not None and spot.fresh else None
   intents: list[ExecutionIntent] = []
   intent_matches: dict[str, StrategyMatch] = {}

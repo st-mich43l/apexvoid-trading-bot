@@ -92,10 +92,47 @@ class MarketMap:
     return [entry for entry in self.entries if entry.tier == "major"]
 
 
+# Phase 2I-A: legacy field names the market-map builder/renderer subtree reads.
+# When ``cfg`` is omitted in production these entry points build a narrow
+# snapshot of exactly these fields off the canonical ``runtime_config``
+# (replacing the retired per-call flat legacy config facade). Tests still inject a flat
+# SimpleNamespace. Fields without a canonical path (``map_source_timeframe``,
+# ``pip_size``) are intentionally excluded so ``getattr`` uses the code default,
+# matching the facade's ``AttributeError`` fallthrough.
+_RUNTIME_MARKET_MAP_CFG_FIELDS = (
+  "map_major_score",
+  "map_max_touches",
+  "map_min_zone_score",
+  "map_min_level_touches",
+  "map_band_max_atr",
+  "map_max_distance_atr",
+  "proximal_band_atr",
+  "map_min_per_side",
+  "map_max_per_side",
+  "map_fallback_radius",
+  "round_step",
+  "scanner_exec_tf",
+  "map_scalp_radius",
+  "range_scalp_min_touches",
+  "range_scalp_break_closes",
+  "range_scalp_min_width_atr",
+  "range_scalp_min_room_atr",
+  "range_scalp_max_width_atr",
+  "session_asia_start",
+  "session_london_start",
+  "session_ny_start",
+)
+
+
+def _runtime_market_map_cfg():
+  from app.core.runtime_projection import project_runtime_config
+
+  return project_runtime_config(_RUNTIME_MARKET_MAP_CFG_FIELDS)
+
+
 def build_map(ctx_or_per_tf, price: float, cfg=None) -> MarketMap:
   if cfg is None:
-    from app.core.config import runtime_config_facade
-    cfg = runtime_config_facade()
+    cfg = _runtime_market_map_cfg()
   per_tf = getattr(ctx_or_per_tf, "per_tf", ctx_or_per_tf)
   if not isinstance(per_tf, dict):
     per_tf = {}
@@ -314,8 +351,7 @@ def render_market_map(
   cfg=None,
 ) -> str:
   if cfg is None:
-    from app.core.config import runtime_config_facade
-    cfg = runtime_config_facade()
+    cfg = _runtime_market_map_cfg()
   clock = now.strftime("%H:%M")
   bias = market_map.bias
   if market_map.bias_tf:

@@ -2,6 +2,8 @@ import asyncio
 import logging
 
 from app.core.config import (
+  active_configuration_deprecation_message,
+  active_configuration_implicit_authority_warning,
   active_configuration_startup_message,
   runtime_config,
 )
@@ -53,6 +55,12 @@ _log_info = configure_logging(
 )
 log = logging.getLogger("bot")
 log.info(active_configuration_startup_message())
+_implicit_authority_warning = active_configuration_implicit_authority_warning()
+if _implicit_authority_warning is not None:
+  log.warning(_implicit_authority_warning)
+_authority_deprecation = active_configuration_deprecation_message()
+if _authority_deprecation is not None:
+  log.warning(_authority_deprecation)
 if _log_info.get("file"):
   log.info(
     "file logging enabled path=%s retention_days=%s",

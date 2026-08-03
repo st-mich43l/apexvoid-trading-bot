@@ -22,6 +22,67 @@ GUARD_MODE_BALANCED = "balanced"
 GUARD_MODE_STRICT = "strict"
 _GUARD_MODES = (GUARD_MODE_OBSERVE, GUARD_MODE_BALANCED, GUARD_MODE_STRICT)
 
+# Phase 2I-A: legacy field names each production entry point (and the helpers it
+# hands its ``cfg`` to) reads. When ``cfg is None`` the entry point builds a
+# narrow snapshot of exactly these fields off the canonical ``runtime_config``
+# instead of the retired per-call flat legacy config facade. Tests still pass an
+# explicit flat SimpleNamespace, which flows through the unchanged bodies below.
+_RUNTIME_GUARD_CFG_FIELDS = ("auto_trade_structural_guard_mode",)
+_RUNTIME_TIER_CFG_FIELDS = (
+  "auto_trade_tier_a_risk_multiplier",
+  "auto_trade_tier_b_risk_multiplier",
+  "auto_trade_post_impulse_risk_multiplier",
+  "auto_trade_one_sided_range_risk_multiplier",
+  "auto_trade_range_max_risk_multiplier",
+)
+# evaluate_execution_policy subtree: its own reads + policy_for +
+# protective_stop (opposing_zone_context_from_values, stop_bounds_for_reaction_room,
+# stop_bounds_for_strategy).
+_RUNTIME_POLICY_CFG_FIELDS = (
+  "auto_trade_xau_price_digits",
+  "auto_trade_zone_fill_enabled",
+  "auto_trade_zone_fill_min_atr",
+  "auto_trade_inside_zone_market_entry_enabled",
+  "auto_trade_zone_fill_fallback_enabled",
+  "auto_trade_zone_scale_first_leg_fraction",
+  "auto_trade_zone_scale_step_atr",
+  "auto_trade_reaction_scale_enabled",
+  "auto_trade_reaction_market_fraction",
+  "auto_trade_reaction_scale_fraction",
+  "auto_trade_reaction_scale_step_atr",
+  "auto_trade_reaction_scale_invalid_policy",
+  "auto_trade_add_stop_buffer_atr",
+  "auto_trade_wick_stop_buffer_atr",
+  "auto_trade_range_max_risk_multiplier",
+  "auto_trade_range_max_entry_drift_atr",
+  "auto_trade_trend_max_entry_drift_atr",
+  "auto_trade_map_max_entry_drift_atr",
+  "auto_trade_range_min_rr",
+  "auto_trade_execution_zone_max_width_atr",
+  "auto_trade_execution_zone_max_width_pips",
+  "auto_trade_stop_push_beyond_zone",
+  "auto_trade_range_room_stop_floor_pips",
+  "auto_trade_reaction_room_stop_min_rr",
+  "auto_trade_reaction_room_stop_floor_pips",
+  "auto_trade_trend_stop_max_pips",
+  "auto_trade_add_min_stop_pips",
+  "auto_trade_sl_distance",
+  "auto_trade_trend_stop_min_pips",
+)
+# max_entry_drift_pips subtree: its own family drift settings + policy_for.
+_RUNTIME_DRIFT_CFG_FIELDS = (
+  "auto_trade_range_min_entry_drift_pips",
+  "auto_trade_trend_min_entry_drift_pips",
+  "auto_trade_map_min_entry_drift_pips",
+  "auto_trade_range_hard_entry_drift_pips",
+  "auto_trade_trend_hard_entry_drift_pips",
+  "auto_trade_map_hard_entry_drift_pips",
+  "auto_trade_range_max_entry_drift_atr",
+  "auto_trade_trend_max_entry_drift_atr",
+  "auto_trade_map_max_entry_drift_atr",
+  "auto_trade_range_min_rr",
+)
+
 # Version of the entry-plan contract (`planned_execution_route`,
 # `planned_entry_price`, `planned_leg_entry_prices`) shared with the executor.
 ENTRY_PLAN_VERSION = 1
@@ -240,8 +301,8 @@ def resolve_guard_mode(cfg: Any | None = None) -> str:
   # (actionability.structural_guard.guard_mode); tests may still inject a flat
   # SimpleNamespace/Settings-shaped override.
   if cfg is None:
-    from app.core.config import runtime_config_facade
-    cfg = runtime_config_facade()
+    from app.core.runtime_projection import project_runtime_config
+    cfg = project_runtime_config(_RUNTIME_GUARD_CFG_FIELDS)
   mode = str(getattr(cfg, "auto_trade_structural_guard_mode", GUARD_MODE_BALANCED))
   mode = mode.strip().lower()
   return mode if mode in _GUARD_MODES else GUARD_MODE_BALANCED
@@ -525,6 +586,9 @@ def evaluate_execution_policy(
   trigger_wick_extreme: float | None = None,
 ) -> ExecutionPolicyEvaluation:
   """Enforce every declared setup policy before candidate publication."""
+  if cfg is None:
+    from app.core.runtime_projection import project_runtime_config
+    cfg = project_runtime_config(_RUNTIME_POLICY_CFG_FIELDS)
   try:
     policy = policy_for(str(getattr(match, "strategy", "")), cfg)
   except ValueError as exc:
@@ -1021,8 +1085,8 @@ def risk_multiplier_for_tier(tier: str, cfg: Any | None = None, *, post_impulse:
   # here resolve to identical values (config defaults match the historical
   # hardcoded fallbacks). Tests may still inject a SimpleNamespace override.
   if cfg is None:
-    from app.core.config import runtime_config_facade
-    cfg = runtime_config_facade()
+    from app.core.runtime_projection import project_runtime_config
+    cfg = project_runtime_config(_RUNTIME_TIER_CFG_FIELDS)
   tier = (tier or TIER_C).upper()
   a = float(getattr(cfg, "auto_trade_tier_a_risk_multiplier", 1.0))
   b = float(getattr(cfg, "auto_trade_tier_b_risk_multiplier", 0.5))
@@ -1108,6 +1172,9 @@ def max_entry_drift_pips(
   target room is genuinely consumed, or that has moved further than any
   reasonable latency explains, is still capped/rejected.
   """
+  if cfg is None:
+    from app.core.runtime_projection import project_runtime_config
+    cfg = project_runtime_config(_RUNTIME_DRIFT_CFG_FIELDS)
   policy = policy_for(strategy, cfg)
   family = strategy_family(strategy)
   pip = pip_size if pip_size > 0 else 0.1

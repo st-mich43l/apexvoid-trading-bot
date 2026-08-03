@@ -10,7 +10,7 @@ from html import escape
 from typing import Any, Awaitable, Callable, Iterable
 
 from app.persistence import redis_state
-from app.core.config import runtime_config, runtime_config_facade
+from app.core.config import runtime_config
 from app.analysis.detectors import (
   DEFAULT_DETECTORS,
   DetectionContext,
@@ -1743,7 +1743,7 @@ def _reward_risk_pre_gate(
     spot_price=match.current_price,
     regime=regime or None,
     pip_size=_pip_size(symbol),
-    cfg=runtime_config_facade(),
+    cfg=None,
   )
   measured.update(dict(evaluation.measured))
   measured["policy_reason_code"] = evaluation.reason_code
@@ -1847,7 +1847,7 @@ def _annotate_actionability_geometry(
     spot_price=match.current_price,
     regime=regime or None,
     pip_size=_pip_size(symbol),
-    cfg=runtime_config_facade(),
+    cfg=None,
   )
   planned_entry = evaluation.measured.get("planned_entry_price")
   try:
@@ -2885,7 +2885,7 @@ async def _handle_event(
     context=ctx,
     atr=invalidation_atr,
     pip_size=_pip_size(symbol),
-    cfg=runtime_config_facade(),
+    cfg=None,
   )
   actionable_results = list(actionability.actionable)
   actionability_decisions = list(actionability.decisions)

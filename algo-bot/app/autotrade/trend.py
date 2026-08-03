@@ -49,6 +49,41 @@ _TIMEFRAME_SECONDS = {"M1": 60, "M5": 300, "M15": 900}
 _FALLBACK_TP_PIPS = (30, 60, 90, 120, 200)
 _EPS = 1e-9
 
+# Phase 2I-A: legacy field names the trend gate subtree reads. When ``cfg`` is
+# omitted in production the entry points build a narrow snapshot of exactly
+# these fields off the canonical ``runtime_config`` (replacing the retired
+# per-call flat legacy config facade). Tests still inject an explicit SimpleNamespace.
+_RUNTIME_TREND_CFG_FIELDS = (
+  "atr_length",
+  "swing_fractal_n",
+  "zigzag_pct",
+  "zigzag_atr_mult",
+  "trend_min_bos",
+  "trend_min_height_atr",
+  "auto_trade_allow_counter_bias",
+  "trend_atr_expansion",
+  "auto_trade_regime_direction_enabled",
+  "auto_trade_regime_direction_lookback",
+  "auto_trade_regime_min_directional_swings",
+  "auto_trade_regime_min_displacement_atr",
+  "displacement_atr_mult",
+  "momentum_body_frac",
+  "tp_min_spacing_atr",
+  "trend_breakout_max_age_bars",
+  "trend_breakout_accept_bars",
+  "trend_breakout_min_room_pips",
+  "reaction_max_atr",
+  "trend_allow_chase",
+  "trend_level_buffer_atr",
+  "trend_atr_baseline_bars",
+)
+
+
+def _runtime_trend_cfg() -> Any:
+  from app.core.runtime_projection import project_runtime_config
+
+  return project_runtime_config(_RUNTIME_TREND_CFG_FIELDS)
+
 
 @dataclass(frozen=True)
 class RegimeInfo:
@@ -96,8 +131,7 @@ def classify_regime(
   legacy-name view); tests may still inject a SimpleNamespace override.
   """
   if cfg is None:
-    from app.core.config import runtime_config_facade
-    cfg = runtime_config_facade()
+    cfg = _runtime_trend_cfg()
   m1_raw = frames.get("M1")
   if m1_raw is None or m1_raw.empty:
     return RegimeInfo(
@@ -296,12 +330,17 @@ def evaluate_trend_gate(
   *,
   symbol: str,
   spot_price: float | None = None,
-  cfg: Any,
+  cfg: Any | None = None,
 ) -> TrendDecision:
   """Route to box-breakout, pullback (Mode A), or breakout-continuation
   (Mode B) depending on ``regime.state``. Returns ``"no_setup"`` if the
   regime doesn't support a trend-family setup right now.
+
+  ``cfg`` defaults to a narrow canonical ``runtime_config`` projection in
+  production; tests may still inject a flat SimpleNamespace override.
   """
+  if cfg is None:
+    cfg = _runtime_trend_cfg()
   if regime.state not in ("trend", "breakout"):
     return TrendDecision("no_setup", reasons=(f"regime is {regime.state}",))
   m1_raw = frames.get("M1")

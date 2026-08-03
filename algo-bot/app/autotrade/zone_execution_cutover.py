@@ -61,7 +61,7 @@ from app.autotrade.zone_watch import (
   record_zone_presence,
   transition_zone_watch,
 )
-from app.core.config import runtime_config, runtime_config_facade
+from app.core.config import runtime_config
 from app.persistence import redis_state
 
 
@@ -526,7 +526,7 @@ async def _m1_trigger_for_zone(
     direction=record.direction,
     earliest_bar_ts=int(record.zone_entered_at) + 1,
     after_bar_ts=record.last_evaluated_m1_ts,
-    cfg=runtime_config_facade(),
+    cfg=None,
   )
   latest = latest_eligible_m1_bar_ts(
     frame,
