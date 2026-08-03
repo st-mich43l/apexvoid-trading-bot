@@ -4,7 +4,6 @@ import logging
 from app.core.config import (
   active_configuration_startup_message,
   runtime_config,
-  settings,
 )
 from app.core.logging_setup import configure_logging
 from app.bot.wiring import (
@@ -111,7 +110,7 @@ async def main() -> None:
     manifest["config_sources"],
     config_health["state"],
   )
-  if settings.auto_trade_enabled:
+  if runtime_config.runtime.auto_trade.enabled:
     # Repair pre-existing orphaned/stale state before any background task
     # starts reading it, so nothing races startup reconciliation.
     await reconcile_startup_state(redis_state.get_client())

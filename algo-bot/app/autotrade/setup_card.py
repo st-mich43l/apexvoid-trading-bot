@@ -34,7 +34,7 @@ from app.autotrade.setup_execution_aggregate import (
 )
 from app.autotrade.setup_lifecycle import TERMINAL_STATES, load_setup
 from app.autotrade.strategy_match import StrategyMatch
-from app.core.config import runtime_config, settings
+from app.core.config import runtime_config
 
 log = logging.getLogger(__name__)
 
@@ -1135,7 +1135,7 @@ async def ensure_plan_published_root_card(
         client,
         match.match_id,
         stop_price,
-        digits=int(getattr(settings, "auto_trade_xau_price_digits", 2)),
+        digits=int(runtime_config.contract.instrument.price_digits),
         edit_fn=resolved_edit,
       )
     return int(existing["message_id"])
@@ -1164,7 +1164,7 @@ async def ensure_plan_published_root_card(
       client,
       match.match_id,
       stop_price,
-      digits=int(getattr(settings, "auto_trade_xau_price_digits", 2)),
+      digits=int(runtime_config.contract.instrument.price_digits),
       edit_fn=resolved_edit,
     )
   log.info(

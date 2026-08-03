@@ -13,7 +13,7 @@ import asyncio
 import json
 import logging
 
-from app.core.config import settings
+from app.core.config import runtime_config
 from app.persistence import redis_state
 from app.persistence.store import record_auto_trade_event
 
@@ -54,7 +54,7 @@ async def backfill_retained_auto_trade_stats(client) -> str:
   cursor = _text(stored) if stored else "0-0"
   start = f"({cursor}" if stored else "-"
   entries = await client.xrange(
-    settings.auto_trade_event_stream,
+    runtime_config.contract.streams.events,
     min=start,
     max="+",
   )
@@ -82,7 +82,7 @@ async def auto_trade_stats_ingestion_loop() -> None:
   while True:
     try:
       batches = await client.xread(
-        {settings.auto_trade_event_stream: cursor},
+        {runtime_config.contract.streams.events: cursor},
         count=100,
         block=5000,
       )

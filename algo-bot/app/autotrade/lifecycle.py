@@ -7,7 +7,7 @@ import json
 import uuid
 from typing import Any
 
-from app.core.config import runtime_config, settings
+from app.core.config import runtime_config
 
 
 LIFECYCLE_STATES = (
@@ -115,7 +115,7 @@ async def emit_lifecycle(
     "previous_state": previous,
     "reason_code": reason_code,
     "message": message,
-    "configuration_profile": settings.auto_trade_profile,
+    "configuration_profile": runtime_config.runtime.profile,
     "account_type": account_type,
     "broker": broker,
     "measured": measured or {},
@@ -167,12 +167,12 @@ async def emit_lifecycle(
       )
   if publish_status:
     pipe.xadd(
-      settings.auto_trade_event_stream,
+      runtime_config.contract.streams.events,
       {"payload": json.dumps({
         "type": state,
         **event,
       }, separators=(",", ":"), sort_keys=True)},
-      maxlen=max(100, settings.auto_trade_stream_maxlen),
+      maxlen=max(100, runtime_config.contract.streams.candidate_maximum_length),
       approximate=True,
     )
   await pipe.execute()

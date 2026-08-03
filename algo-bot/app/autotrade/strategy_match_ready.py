@@ -19,7 +19,7 @@ from app.autotrade.strategy_match import (
   StrategyMatch,
   strategy_match_key,
 )
-from app.core.config import settings
+from app.core.config import runtime_config
 
 
 READY_EVENT_VERSION = 1
@@ -226,7 +226,7 @@ async def enqueue_strategy_match_ready(
     stream_id = await client.xadd(
       READY_STREAM,
       event.fields(),
-      maxlen=max(100, int(settings.auto_trade_stream_maxlen)),
+      maxlen=max(100, int(runtime_config.contract.streams.candidate_maximum_length)),
       approximate=True,
     )
     await client.set(dedup_key, event.event_id, ex=ttl)
