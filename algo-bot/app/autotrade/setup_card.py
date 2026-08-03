@@ -76,7 +76,8 @@ if current then
     current_line = tostring(decoded['status_line'] or '')
   else
     current_line = current
-    if string.find(current, 'ORDER FILLED', 1, true) then
+    if string.find(current, 'POSITION ACTIVATED', 1, true)
+      or string.find(current, 'ORDER FILLED', 1, true) then
       current_priority = 150
     elseif string.find(current, 'PLAN PUBLISHED', 1, true) then
       current_priority = 100
@@ -112,7 +113,7 @@ class FormingCardStatus:
 
 def _infer_status_state(status_line: str) -> str:
   upper = status_line.upper()
-  if "ORDER FILLED" in upper:
+  if "POSITION ACTIVATED" in upper or "ORDER FILLED" in upper:
     return "order_filled"
   if "EXECUTOR ARMED" in upper:
     return "executor_armed"
@@ -963,6 +964,9 @@ async def assert_or_repair_forming_projection(
 
 
 PLAN_PUBLISHED_STATUS_LINE = STATUS_LINE_BY_PROJECTION_STATE["plan_published"]
+# Reserved status-slot placeholder so TERMINAL / later edits still replace
+# lines[1] without showing "PLAN PUBLISHED" on the forming card.
+_PLAN_PUBLISHED_STATUS_SLOT = "\u200b"
 
 
 def _price_text(value: float) -> str:
@@ -974,11 +978,12 @@ def format_plan_published_root_card(
   *,
   stop_price: float | None = None,
 ) -> str:
-  """PLAN PUBLISHED root card with scanner-style trade/context detail.
+  """Root card after publish with scanner-style trade/context detail.
 
   Includes bias / structure / trade area / context / stop when available on
-  the StrategyMatch. No copy-draft. Trade-area Stop is the published plan
-  stop and is not rewritten on BE / trailing updates.
+  the StrategyMatch. No PLAN PUBLISHED status line — publication is silent on
+  the card head. Trade-area Stop is the published plan stop and is not
+  rewritten on BE / trailing updates.
   """
   direction = str(match.direction or "").upper()
   direction_icon = "🟢" if direction == "BUY" else "🔴"
@@ -1000,9 +1005,7 @@ def format_plan_published_root_card(
       f"🔎 <b>{escape(str(match.symbol))} "
       f"{escape(str(match.source_tf))} · SETUP FORMING</b>"
     ),
-    PLAN_PUBLISHED_STATUS_LINE or (
-      "🟢 <b>PLAN PUBLISHED</b> · TradePlan V7 sent to executor"
-    ),
+    _PLAN_PUBLISHED_STATUS_SLOT,
     (
       f"{direction_icon} <b>{escape(direction)} · "
       f"{escape(setup_label)}</b> · {stars}"
@@ -1106,9 +1109,7 @@ async def ensure_plan_published_root_card(
     )
     return None
 
-  status_line = PLAN_PUBLISHED_STATUS_LINE or (
-    "🟢 <b>PLAN PUBLISHED</b> · TradePlan V7 sent to executor"
-  )
+  status_line = PLAN_PUBLISHED_STATUS_LINE or _PLAN_PUBLISHED_STATUS_SLOT
   from app.bot.client import (
     delete_scanner_message,
     edit_scanner_message_text,
@@ -1122,14 +1123,8 @@ async def ensure_plan_published_root_card(
 
   existing = await load_forming_card(client, match.match_id)
   if existing is not None:
-    await edit_forming_card_status(
-      client,
-      match.match_id,
-      status_line,
-      state="plan_published",
-      reason_code="plan_published",
-      edit_fn=resolved_edit,
-    )
+    # Keep existing head status (no PLAN PUBLISHED advertisement). Still
+    # refresh Stop so BE/trail patches have a real Trade-area baseline.
     if stop_price is not None:
       await edit_forming_card_stop(
         client,

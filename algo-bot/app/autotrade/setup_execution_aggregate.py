@@ -81,7 +81,9 @@ STATUS_LINE_BY_PROJECTION_STATE = {
     "the confirmed entry zone"
   ),
   "trigger_ready": "🟢 <b>TRIGGER READY</b> · waiting for the M1 trigger candle",
-  "plan_published": "🟢 <b>PLAN PUBLISHED</b> · TradePlan V7 sent to executor",
+  # Do not advertise PLAN PUBLISHED on the forming card — root stays SETUP
+  # FORMING until fill / TERMINAL. Publication is mechanical, not a card status.
+  "plan_published": None,
   "executor_armed": (
     "🟢 <b>EXECUTOR ARMED</b> · waiting for mechanical entry activation"
   ),
