@@ -620,10 +620,16 @@ public sealed class CTraderOpenApiFeedClient : ICTraderFeedClient, ICTraderTrade
     CancellationToken cancellationToken
   )
   {
-    // ProtoOADealListByPositionIdReq timestamps are optional. Prefer the
-    // position-scoped query with no window — BE/SL reconcile often runs with
-    // approximateClose≈now, and close+1m future ToTimestamp triggers
-    // INCORRECT_BOUNDARIES even when From/To look locally valid.
+    // Prefer a clamped From/To window. Unbounded ProtoOADealListByPositionIdReq
+    // (no timestamps) hangs until RequestTimeout on some brokers — BE/SL
+    // reconcile then spends 30s and never classifies the protective close.
+    // Windowed queries must keep ToTimestamp <= now (see BuildDealListWindow)
+    // to avoid INCORRECT_BOUNDARIES when approximateClose≈now.
+    var (fromTimestamp, toTimestamp) = BuildDealListWindow(
+      openedAtTimestamp,
+      approximateCloseTimestamp,
+      _clock().ToUnixTimeMilliseconds()
+    );
     try
     {
       return await SendAndWaitAsync<ProtoOADealListByPositionIdRes>(
@@ -631,6 +637,8 @@ public sealed class CTraderOpenApiFeedClient : ICTraderFeedClient, ICTraderTrade
         {
           CtidTraderAccountId = options.AccountId,
           PositionId = positionId,
+          FromTimestamp = fromTimestamp,
+          ToTimestamp = toTimestamp,
         },
         res => res.CtidTraderAccountId == options.AccountId,
         cancellationToken
@@ -638,39 +646,39 @@ public sealed class CTraderOpenApiFeedClient : ICTraderFeedClient, ICTraderTrade
     }
     catch (Exception exception) when (
       exception is not OperationCanceledException
-      && IsIncorrectBoundaries(exception)
+      && IsRetryableDealListFailure(exception)
     )
     {
       Log(
-        $"position_close_deal_list_unbounded_rejected position_id={positionId}: "
-          + exception.Message
+        $"position_close_deal_list_windowed_failed position_id={positionId} "
+          + $"window={fromTimestamp}-{toTimestamp}: {exception.Message}"
       );
     }
 
-    var (fromTimestamp, toTimestamp) = BuildDealListWindow(
-      openedAtTimestamp,
-      approximateCloseTimestamp,
-      _clock().ToUnixTimeMilliseconds()
-    );
+    // Last resort: position-scoped query without a time window. Some brokers
+    // accept this even when a window is rejected; others time out — keep it
+    // behind the windowed attempt so BE classification is not delayed.
     return await SendAndWaitAsync<ProtoOADealListByPositionIdRes>(
       new ProtoOADealListByPositionIdReq
       {
         CtidTraderAccountId = options.AccountId,
         PositionId = positionId,
-        FromTimestamp = fromTimestamp,
-        ToTimestamp = toTimestamp,
       },
       res => res.CtidTraderAccountId == options.AccountId,
       cancellationToken
     );
   }
 
-  static bool IsIncorrectBoundaries(Exception exception)
+  internal static bool IsIncorrectBoundaries(Exception exception)
   {
     var text = exception.Message ?? string.Empty;
     return text.Contains("INCORRECT_BOUNDARIES", StringComparison.OrdinalIgnoreCase)
       || text.Contains("Incorrect period boundaries", StringComparison.OrdinalIgnoreCase);
   }
+
+  internal static bool IsRetryableDealListFailure(Exception exception) =>
+    exception is TimeoutException
+    || IsIncorrectBoundaries(exception);
 
   // cTrader rejects DealList/OrderList windows with INCORRECT_BOUNDARIES when
   // from/to are inverted, negative, past the 2038 cap, in the future, or (for
