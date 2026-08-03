@@ -94,7 +94,7 @@
       "classification": "LEGACY_ROLLBACK_ALLOWED",
       "env_name": "AUTO_TRADE_BE_BUFFER_TICKS",
       "file": "algo-bot/app/configuration/legacy_settings.py",
-      "line": 1074
+      "line": 1075
     },
     {
       "allowed": true,
@@ -102,7 +102,7 @@
       "classification": "LEGACY_ROLLBACK_ALLOWED",
       "env_name": "AUTO_TRADE_BE_BUFFER_PIPS",
       "file": "algo-bot/app/configuration/legacy_settings.py",
-      "line": 1075
+      "line": 1076
     },
     {
       "allowed": true,

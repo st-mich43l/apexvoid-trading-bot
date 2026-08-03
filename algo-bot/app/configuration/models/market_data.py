@@ -552,14 +552,17 @@ class MarketDataLookbacksConfig(FrozenConfigModel):
     runtime_reload=ReloadPolicy.RESTART,
     unit=ConfigUnit.BARS,
     risk=RiskClassification.INFRASTRUCTURE,
-    description='Legacy xau_lookback_h1_bars configuration mapped to market_data.lookbacks.h1_bars.',
+    description=(
+      'H1 closed-bar lookback for major structure (weekly/daily range, '
+      'untested swing H/L, flip zones). Target window ~2.5-4 weeks (300-500 bars).'
+    ),
     default_contexts=(
       ContextDefault(DefaultContext.PYTHON_SCHEMA, 400),
     ),
     validation_summary='Pydantic required/type coercion only',
     ge=50,
   )
-  m15_bars: int = config_field(650,
+  m15_bars: int = config_field(250,
     item_id='python.settings.xau_lookback_m15_bars',
     legacy_attr='xau_lookback_m15_bars',
     env='XAU_LOOKBACK_M15_BARS',
@@ -568,9 +571,12 @@ class MarketDataLookbacksConfig(FrozenConfigModel):
     runtime_reload=ReloadPolicy.RESTART,
     unit=ConfigUnit.BARS,
     risk=RiskClassification.INFRASTRUCTURE,
-    description='Legacy xau_lookback_m15_bars configuration mapped to market_data.lookbacks.m15_bars.',
+    description=(
+      'M15 closed-bar lookback for session structure (Asia/London/NY range, '
+      'intermediate OB). Target window ~2-3 days (200-300 bars).'
+    ),
     default_contexts=(
-      ContextDefault(DefaultContext.PYTHON_SCHEMA, 650),
+      ContextDefault(DefaultContext.PYTHON_SCHEMA, 250),
     ),
     validation_summary='Pydantic required/type coercion only',
     ge=50,
@@ -591,7 +597,7 @@ class MarketDataLookbacksConfig(FrozenConfigModel):
     validation_summary='Pydantic required/type coercion only',
     ge=50,
   )
-  m5_bars: int = config_field(1000,
+  m5_bars: int = config_field(150,
     item_id='python.settings.xau_lookback_m5_bars',
     legacy_attr='xau_lookback_m5_bars',
     env='XAU_LOOKBACK_M5_BARS',
@@ -600,9 +606,12 @@ class MarketDataLookbacksConfig(FrozenConfigModel):
     runtime_reload=ReloadPolicy.RESTART,
     unit=ConfigUnit.BARS,
     risk=RiskClassification.INFRASTRUCTURE,
-    description='Legacy xau_lookback_m5_bars configuration mapped to market_data.lookbacks.m5_bars.',
+    description=(
+      'M5 closed-bar lookback for entry structure (OB/FVG/micro BOS/retest). '
+      'Target window is current + previous session (100-150 bars).'
+    ),
     default_contexts=(
-      ContextDefault(DefaultContext.PYTHON_SCHEMA, 1000),
+      ContextDefault(DefaultContext.PYTHON_SCHEMA, 150),
     ),
     validation_summary='Pydantic required/type coercion only',
     ge=50,
