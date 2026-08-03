@@ -12,27 +12,27 @@
       "LEGACY_ROLLBACK_RETAIN_2I_A": 16,
       "PRODUCTION_REMOVE_2I_A": 0,
       "REMOVE_2I_B": 1,
-      "TEST_COMPATIBILITY_RETAIN_2I_A": 131,
-      "TOOLING_RETAIN_2I_A": 48,
+      "TEST_COMPATIBILITY_RETAIN_2I_A": 121,
+      "TOOLING_RETAIN_2I_A": 46,
       "UNKNOWN_BLOCKER": 0
     },
     "by_symbol": {
       "CanonicalSettingsFacade": 13,
       "DERIVED_LEGACY_PROPERTIES": 44,
-      "DIRECT_LEGACY_PATHS": 39,
+      "DIRECT_LEGACY_PATHS": 41,
       "LegacyCanonicalConfigView": 6,
       "LegacySettings": 2,
       "Settings": 34,
       "runtime_config_facade": 1,
       "settings": 39,
-      "simplenamespace_config_fixture": 18
+      "simplenamespace_config_fixture": 4
     },
     "production_facade_calls": 0,
-    "total": 196,
+    "total": 184,
     "unknown_blockers": 0
   },
   "phase": "2I-A",
-  "source_fingerprint": "11f71c7953c93ff2fc298281051daa7c9d808ca6638631418d740bbc2742d1fb",
+  "source_fingerprint": "93965de3719d4ff1f9c1d881c225447297b6999c5157dde12270e6ac3522be45",
   "unknown_blockers": [],
   "usages": [
     {
@@ -202,7 +202,7 @@
       "column": 38,
       "detail": "reference DERIVED_LEGACY_PROPERTIES",
       "kind": "reference",
-      "line": 102,
+      "line": 100,
       "path": "algo-bot/app/configuration/canonical_consumer_surface.py",
       "symbol": "DERIVED_LEGACY_PROPERTIES"
     },
@@ -211,7 +211,7 @@
       "column": 14,
       "detail": "reference DERIVED_LEGACY_PROPERTIES",
       "kind": "reference",
-      "line": 110,
+      "line": 108,
       "path": "algo-bot/app/configuration/canonical_consumer_surface.py",
       "symbol": "DERIVED_LEGACY_PROPERTIES"
     },
@@ -470,24 +470,6 @@
     {
       "classification": "TOOLING_RETAIN_2I_A",
       "column": 0,
-      "detail": "import DIRECT_LEGACY_PATHS",
-      "kind": "import",
-      "line": 29,
-      "path": "algo-bot/app/configuration/runtime_projection.py",
-      "symbol": "DIRECT_LEGACY_PATHS"
-    },
-    {
-      "classification": "TOOLING_RETAIN_2I_A",
-      "column": 11,
-      "detail": "reference DIRECT_LEGACY_PATHS",
-      "kind": "reference",
-      "line": 43,
-      "path": "algo-bot/app/configuration/runtime_projection.py",
-      "symbol": "DIRECT_LEGACY_PATHS"
-    },
-    {
-      "classification": "TOOLING_RETAIN_2I_A",
-      "column": 0,
       "detail": "import DERIVED_LEGACY_PROPERTIES",
       "kind": "import",
       "line": 14,
@@ -508,7 +490,7 @@
       "column": 0,
       "detail": "import CanonicalSettingsFacade",
       "kind": "import",
-      "line": 25,
+      "line": 24,
       "path": "algo-bot/app/core/config.py",
       "symbol": "CanonicalSettingsFacade"
     },
@@ -517,7 +499,7 @@
       "column": 0,
       "detail": "import DERIVED_LEGACY_PROPERTIES",
       "kind": "import",
-      "line": 27,
+      "line": 26,
       "path": "algo-bot/app/core/config.py",
       "symbol": "DERIVED_LEGACY_PROPERTIES"
     },
@@ -526,7 +508,7 @@
       "column": 0,
       "detail": "import DIRECT_LEGACY_PATHS",
       "kind": "import",
-      "line": 27,
+      "line": 26,
       "path": "algo-bot/app/core/config.py",
       "symbol": "DIRECT_LEGACY_PATHS"
     },
@@ -535,7 +517,7 @@
       "column": 0,
       "detail": "import LegacyCanonicalConfigView",
       "kind": "import",
-      "line": 31,
+      "line": 30,
       "path": "algo-bot/app/core/config.py",
       "symbol": "LegacyCanonicalConfigView"
     },
@@ -544,7 +526,7 @@
       "column": 0,
       "detail": "import LegacySettings",
       "kind": "import",
-      "line": 35,
+      "line": 34,
       "path": "algo-bot/app/core/config.py",
       "symbol": "LegacySettings"
     },
@@ -553,7 +535,7 @@
       "column": 0,
       "detail": "import Settings",
       "kind": "import",
-      "line": 35,
+      "line": 34,
       "path": "algo-bot/app/core/config.py",
       "symbol": "Settings"
     },
@@ -562,7 +544,7 @@
       "column": 13,
       "detail": "reference Settings",
       "kind": "reference",
-      "line": 81,
+      "line": 80,
       "path": "algo-bot/app/core/config.py",
       "symbol": "Settings"
     },
@@ -571,7 +553,7 @@
       "column": 21,
       "detail": "reference LegacyCanonicalConfigView",
       "kind": "reference",
-      "line": 86,
+      "line": 85,
       "path": "algo-bot/app/core/config.py",
       "symbol": "LegacyCanonicalConfigView"
     },
@@ -580,7 +562,7 @@
       "column": 0,
       "detail": "facade definition",
       "kind": "definition",
-      "line": 125,
+      "line": 124,
       "path": "algo-bot/app/core/config.py",
       "symbol": "runtime_config_facade"
     },
@@ -589,7 +571,7 @@
       "column": 9,
       "detail": "reference CanonicalSettingsFacade",
       "kind": "reference",
-      "line": 133,
+      "line": 131,
       "path": "algo-bot/app/core/config.py",
       "symbol": "CanonicalSettingsFacade"
     },
@@ -598,7 +580,7 @@
       "column": 39,
       "detail": "reference DIRECT_LEGACY_PATHS",
       "kind": "reference",
-      "line": 171,
+      "line": 169,
       "path": "algo-bot/app/core/config.py",
       "symbol": "DIRECT_LEGACY_PATHS"
     },
@@ -607,7 +589,7 @@
       "column": 40,
       "detail": "reference DERIVED_LEGACY_PROPERTIES",
       "kind": "reference",
-      "line": 172,
+      "line": 170,
       "path": "algo-bot/app/core/config.py",
       "symbol": "DERIVED_LEGACY_PROPERTIES"
     },
@@ -658,6 +640,42 @@
     },
     {
       "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 2,
+      "detail": "import DIRECT_LEGACY_PATHS",
+      "kind": "import",
+      "line": 50,
+      "path": "algo-bot/tests/configuration/canonical_fixtures.py",
+      "symbol": "DIRECT_LEGACY_PATHS"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 21,
+      "detail": "reference DIRECT_LEGACY_PATHS",
+      "kind": "reference",
+      "line": 59,
+      "path": "algo-bot/tests/configuration/canonical_fixtures.py",
+      "symbol": "DIRECT_LEGACY_PATHS"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 2,
+      "detail": "import DIRECT_LEGACY_PATHS",
+      "kind": "import",
+      "line": 78,
+      "path": "algo-bot/tests/configuration/canonical_fixtures.py",
+      "symbol": "DIRECT_LEGACY_PATHS"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 20,
+      "detail": "reference DIRECT_LEGACY_PATHS",
+      "kind": "reference",
+      "line": 85,
+      "path": "algo-bot/tests/configuration/canonical_fixtures.py",
+      "symbol": "DIRECT_LEGACY_PATHS"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
       "column": 0,
       "detail": "import settings",
       "kind": "import",
@@ -682,33 +700,6 @@
       "line": 4,
       "path": "algo-bot/tests/test_auto_close_all.py",
       "symbol": "settings"
-    },
-    {
-      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
-      "column": 8,
-      "detail": "SimpleNamespace config fixture",
-      "kind": "namespace",
-      "line": 40,
-      "path": "algo-bot/tests/test_auto_scale_context.py",
-      "symbol": "simplenamespace_config_fixture"
-    },
-    {
-      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
-      "column": 8,
-      "detail": "SimpleNamespace config fixture",
-      "kind": "namespace",
-      "line": 93,
-      "path": "algo-bot/tests/test_auto_scale_context.py",
-      "symbol": "simplenamespace_config_fixture"
-    },
-    {
-      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
-      "column": 8,
-      "detail": "SimpleNamespace config fixture",
-      "kind": "namespace",
-      "line": 122,
-      "path": "algo-bot/tests/test_auto_scale_context.py",
-      "symbol": "simplenamespace_config_fixture"
     },
     {
       "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
@@ -1387,15 +1378,6 @@
     },
     {
       "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
-      "column": 8,
-      "detail": "SimpleNamespace config fixture",
-      "kind": "namespace",
-      "line": 322,
-      "path": "algo-bot/tests/test_execution_pipeline_integrity.py",
-      "symbol": "simplenamespace_config_fixture"
-    },
-    {
-      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
       "column": 0,
       "detail": "import settings",
       "kind": "import",
@@ -1417,7 +1399,7 @@
       "column": 2,
       "detail": "import Settings",
       "kind": "import",
-      "line": 65,
+      "line": 68,
       "path": "algo-bot/tests/test_m1_trigger.py",
       "symbol": "Settings"
     },
@@ -1426,7 +1408,7 @@
       "column": 20,
       "detail": "reference Settings",
       "kind": "reference",
-      "line": 66,
+      "line": 69,
       "path": "algo-bot/tests/test_m1_trigger.py",
       "symbol": "Settings"
     },
@@ -1471,7 +1453,7 @@
       "column": 4,
       "detail": "SimpleNamespace config fixture",
       "kind": "namespace",
-      "line": 342,
+      "line": 344,
       "path": "algo-bot/tests/test_map_reaction_range_retirement.py",
       "symbol": "simplenamespace_config_fixture"
     },
@@ -1492,42 +1474,6 @@
       "line": 8,
       "path": "algo-bot/tests/test_ohlc_lookback_settings.py",
       "symbol": "settings"
-    },
-    {
-      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
-      "column": 8,
-      "detail": "SimpleNamespace config fixture",
-      "kind": "namespace",
-      "line": 384,
-      "path": "algo-bot/tests/test_protective_stop.py",
-      "symbol": "simplenamespace_config_fixture"
-    },
-    {
-      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
-      "column": 8,
-      "detail": "SimpleNamespace config fixture",
-      "kind": "namespace",
-      "line": 423,
-      "path": "algo-bot/tests/test_protective_stop.py",
-      "symbol": "simplenamespace_config_fixture"
-    },
-    {
-      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
-      "column": 8,
-      "detail": "SimpleNamespace config fixture",
-      "kind": "namespace",
-      "line": 472,
-      "path": "algo-bot/tests/test_protective_stop.py",
-      "symbol": "simplenamespace_config_fixture"
-    },
-    {
-      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
-      "column": 8,
-      "detail": "SimpleNamespace config fixture",
-      "kind": "namespace",
-      "line": 495,
-      "path": "algo-bot/tests/test_protective_stop.py",
-      "symbol": "simplenamespace_config_fixture"
     },
     {
       "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
@@ -1612,15 +1558,6 @@
     },
     {
       "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
-      "column": 9,
-      "detail": "SimpleNamespace config fixture",
-      "kind": "namespace",
-      "line": 138,
-      "path": "algo-bot/tests/test_scanner_actionability.py",
-      "symbol": "simplenamespace_config_fixture"
-    },
-    {
-      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
       "column": 0,
       "detail": "import settings",
       "kind": "import",
@@ -1666,15 +1603,6 @@
     },
     {
       "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
-      "column": 8,
-      "detail": "SimpleNamespace config fixture",
-      "kind": "namespace",
-      "line": 175,
-      "path": "algo-bot/tests/test_structure_aware_autotrade.py",
-      "symbol": "simplenamespace_config_fixture"
-    },
-    {
-      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
       "column": 0,
       "detail": "import settings",
       "kind": "import",
@@ -1690,42 +1618,6 @@
       "line": 13,
       "path": "algo-bot/tests/test_trade_commands.py",
       "symbol": "settings"
-    },
-    {
-      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
-      "column": 8,
-      "detail": "SimpleNamespace config fixture",
-      "kind": "namespace",
-      "line": 204,
-      "path": "algo-bot/tests/test_trade_plan_builder.py",
-      "symbol": "simplenamespace_config_fixture"
-    },
-    {
-      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
-      "column": 8,
-      "detail": "SimpleNamespace config fixture",
-      "kind": "namespace",
-      "line": 217,
-      "path": "algo-bot/tests/test_trade_plan_builder.py",
-      "symbol": "simplenamespace_config_fixture"
-    },
-    {
-      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
-      "column": 8,
-      "detail": "SimpleNamespace config fixture",
-      "kind": "namespace",
-      "line": 248,
-      "path": "algo-bot/tests/test_trade_plan_builder.py",
-      "symbol": "simplenamespace_config_fixture"
-    },
-    {
-      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
-      "column": 8,
-      "detail": "SimpleNamespace config fixture",
-      "kind": "namespace",
-      "line": 383,
-      "path": "algo-bot/tests/test_trade_plan_builder.py",
-      "symbol": "simplenamespace_config_fixture"
     },
     {
       "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",

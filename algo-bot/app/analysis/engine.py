@@ -66,53 +66,61 @@ def _nested_cfg_from_analysis_settings(settings: AnalysisSettings) -> Any:
   This is an internal composition adapter only — it is not a second
   configuration system and does not read ENV or legacy Settings.
   """
-  return SimpleNamespace(
-    analysis=SimpleNamespace(
-      trendlines=SimpleNamespace(
-        tolerance_atr=settings.tl_tol_atr,
-        minimum_touches=settings.tl_min_touches,
-        maximum_slope_atr=settings.tl_max_slope_atr,
-      ),
-      breakout=SimpleNamespace(
-        buffer_atr=settings.breakout_buffer_atr,
-        accept_bars=settings.breakout_accept_bars,
-        max_age_bars=settings.breakout_max_age_bars,
-      ),
-      levels=SimpleNamespace(round_step=settings.round_step),
-    ),
-    market_data=SimpleNamespace(
-      sessions=SimpleNamespace(
-        asia_start=settings.session_asia_start,
-        london_start=settings.session_london_start,
-        ny_start=settings.session_ny_start,
-        daily_rollover_utc_hour=settings.daily_rollover_utc_hour,
-      ),
-    ),
-    strategies=SimpleNamespace(
-      range_reversion=SimpleNamespace(
-        range_edge=SimpleNamespace(
-          lookback=settings.range_scalp_lookback,
-          cluster_atr=settings.range_scalp_cluster_atr,
-          cluster_min_abs=0.0,
-          min_touches=settings.range_scalp_min_touches,
-          min_wick_frac=settings.range_scalp_min_wick_frac,
-          entry_tol_atr=settings.range_scalp_entry_tol_atr,
-          max_edge_width_atr=0.75,
-          min_width_atr=settings.range_scalp_min_width_atr,
-          max_width_atr=settings.range_scalp_max_width_atr,
-          min_room_atr=settings.range_scalp_min_room_atr,
-          break_closes=settings.range_scalp_break_closes,
-          min_inside_closes=3,
-        ),
-      ),
-      scalp=SimpleNamespace(
-        scalp_barrier_fallback_enabled=True,
-        scalp_barrier_fallback_min_confirmations=1,
-        scalp_range_provisional_enabled=True,
-        scalp_post_impulse_range_enabled=True,
-      ),
-    ),
-  )
+  def tree(data: dict[str, Any]) -> SimpleNamespace:
+    return SimpleNamespace(**{
+      key: tree(value) if isinstance(value, dict) else value
+      for key, value in data.items()
+    })
+
+  return tree({
+    "analysis": {
+      "trendlines": {
+        "tolerance_atr": settings.tl_tol_atr,
+        "minimum_touches": settings.tl_min_touches,
+        "maximum_slope_atr": settings.tl_max_slope_atr,
+      },
+      "breakout": {
+        "buffer_atr": settings.breakout_buffer_atr,
+        "accept_bars": settings.breakout_accept_bars,
+        "max_age_bars": settings.breakout_max_age_bars,
+      },
+      "levels": {
+        "round_step": settings.round_step,
+      },
+    },
+    "market_data": {
+      "sessions": {
+        "asia_start": settings.session_asia_start,
+        "london_start": settings.session_london_start,
+        "ny_start": settings.session_ny_start,
+        "daily_rollover_utc_hour": settings.daily_rollover_utc_hour,
+      },
+    },
+    "strategies": {
+      "range_reversion": {
+        "range_edge": {
+          "lookback": settings.range_scalp_lookback,
+          "cluster_atr": settings.range_scalp_cluster_atr,
+          "cluster_min_abs": 0.0,
+          "min_touches": settings.range_scalp_min_touches,
+          "min_wick_frac": settings.range_scalp_min_wick_frac,
+          "entry_tol_atr": settings.range_scalp_entry_tol_atr,
+          "max_edge_width_atr": 0.75,
+          "min_width_atr": settings.range_scalp_min_width_atr,
+          "max_width_atr": settings.range_scalp_max_width_atr,
+          "min_room_atr": settings.range_scalp_min_room_atr,
+          "break_closes": settings.range_scalp_break_closes,
+          "min_inside_closes": 3,
+        },
+      },
+      "scalp": {
+        "scalp_barrier_fallback_enabled": True,
+        "scalp_barrier_fallback_min_confirmations": 1,
+        "scalp_range_provisional_enabled": True,
+        "scalp_post_impulse_range_enabled": True,
+      },
+    },
+  })
 
 
 @dataclass(frozen=True)

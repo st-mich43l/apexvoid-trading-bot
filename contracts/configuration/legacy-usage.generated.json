@@ -4425,7 +4425,7 @@
     "method_calls": [],
     "type_dependencies": []
   },
-  "source_fingerprint": "a881292cff7b82fbdb08a5673f9d44eddbb15c1e19d07cec3b6467e4508891b0",
+  "source_fingerprint": "495e4340aeca45a2ed60f9f9e49e95f24606b1a8e64521f1dd19e35ee542b978",
   "tests": {
     "attribute_deletions": [],
     "attribute_reads": [
@@ -4524,7 +4524,7 @@
         "column": 13,
         "detail": "direct Settings attribute read",
         "dynamic_names": [],
-        "line": 508,
+        "line": 510,
         "operation": "attribute_read",
         "path": "algo-bot/tests/test_execution_pipeline_integrity.py"
       },
@@ -4535,7 +4535,7 @@
         "column": 32,
         "detail": "direct Settings attribute read",
         "dynamic_names": [],
-        "line": 108,
+        "line": 109,
         "operation": "attribute_read",
         "path": "algo-bot/tests/test_forming_route_contract.py"
       },
@@ -4546,7 +4546,7 @@
         "column": 15,
         "detail": "direct Settings attribute read",
         "dynamic_names": [],
-        "line": 137,
+        "line": 138,
         "operation": "attribute_read",
         "path": "algo-bot/tests/test_forming_route_contract.py"
       },
@@ -4568,7 +4568,7 @@
         "column": 17,
         "detail": "direct Settings attribute read",
         "dynamic_names": [],
-        "line": 326,
+        "line": 328,
         "operation": "attribute_read",
         "path": "algo-bot/tests/test_mapped_reaction_idempotency.py"
       },
@@ -4579,7 +4579,7 @@
         "column": 17,
         "detail": "direct Settings attribute read",
         "dynamic_names": [],
-        "line": 207,
+        "line": 209,
         "operation": "attribute_read",
         "path": "algo-bot/tests/test_mapped_thesis_lock.py"
       },
@@ -4590,7 +4590,7 @@
         "column": 17,
         "detail": "direct Settings attribute read",
         "dynamic_names": [],
-        "line": 225,
+        "line": 227,
         "operation": "attribute_read",
         "path": "algo-bot/tests/test_mapped_thesis_lock.py"
       },
@@ -4722,7 +4722,7 @@
         "column": 29,
         "detail": "direct Settings attribute read",
         "dynamic_names": [],
-        "line": 168,
+        "line": 176,
         "operation": "attribute_read",
         "path": "algo-bot/tests/test_trend.py"
       },
@@ -4733,7 +4733,7 @@
         "column": 28,
         "detail": "direct Settings attribute read",
         "dynamic_names": [],
-        "line": 207,
+        "line": 215,
         "operation": "attribute_read",
         "path": "algo-bot/tests/test_trend.py"
       },
@@ -6715,7 +6715,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 491,
+        "line": 493,
         "operation": "setattr",
         "path": "algo-bot/tests/test_execution_pipeline_integrity.py"
       },
@@ -6726,7 +6726,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 492,
+        "line": 494,
         "operation": "setattr",
         "path": "algo-bot/tests/test_execution_pipeline_integrity.py"
       },
@@ -6737,7 +6737,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 558,
+        "line": 560,
         "operation": "setattr",
         "path": "algo-bot/tests/test_execution_pipeline_integrity.py"
       },
@@ -6748,23 +6748,12 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 559,
+        "line": 561,
         "operation": "setattr",
         "path": "algo-bot/tests/test_execution_pipeline_integrity.py"
       },
       {
         "attribute": "auto_trade_enabled",
-        "canonical_path": null,
-        "classification": "test_only_adaptation",
-        "column": 2,
-        "detail": "helper or monkeypatch mutation of Settings",
-        "dynamic_names": [],
-        "line": 72,
-        "operation": "setattr",
-        "path": "algo-bot/tests/test_forming_route_contract.py"
-      },
-      {
-        "attribute": "auto_trade_dry_run",
         "canonical_path": null,
         "classification": "test_only_adaptation",
         "column": 2,
@@ -6775,7 +6764,7 @@
         "path": "algo-bot/tests/test_forming_route_contract.py"
       },
       {
-        "attribute": "auto_trade_strategy_match_enabled",
+        "attribute": "auto_trade_dry_run",
         "canonical_path": null,
         "classification": "test_only_adaptation",
         "column": 2,
@@ -6786,7 +6775,7 @@
         "path": "algo-bot/tests/test_forming_route_contract.py"
       },
       {
-        "attribute": "auto_trade_supply_reaction_enabled",
+        "attribute": "auto_trade_strategy_match_enabled",
         "canonical_path": null,
         "classification": "test_only_adaptation",
         "column": 2,
@@ -6797,7 +6786,7 @@
         "path": "algo-bot/tests/test_forming_route_contract.py"
       },
       {
-        "attribute": "auto_trade_mapped_zone_enabled",
+        "attribute": "auto_trade_supply_reaction_enabled",
         "canonical_path": null,
         "classification": "test_only_adaptation",
         "column": 2,
@@ -6808,7 +6797,7 @@
         "path": "algo-bot/tests/test_forming_route_contract.py"
       },
       {
-        "attribute": "auto_trade_structural_guard_mode",
+        "attribute": "auto_trade_mapped_zone_enabled",
         "canonical_path": null,
         "classification": "test_only_adaptation",
         "column": 2,
@@ -6819,7 +6808,7 @@
         "path": "algo-bot/tests/test_forming_route_contract.py"
       },
       {
-        "attribute": "auto_trade_zone_cooldown_enabled",
+        "attribute": "auto_trade_structural_guard_mode",
         "canonical_path": null,
         "classification": "test_only_adaptation",
         "column": 2,
@@ -6830,7 +6819,7 @@
         "path": "algo-bot/tests/test_forming_route_contract.py"
       },
       {
-        "attribute": "auto_trade_news_guard_minutes",
+        "attribute": "auto_trade_zone_cooldown_enabled",
         "canonical_path": null,
         "classification": "test_only_adaptation",
         "column": 2,
@@ -6841,7 +6830,7 @@
         "path": "algo-bot/tests/test_forming_route_contract.py"
       },
       {
-        "attribute": "auto_trade_min_confluence",
+        "attribute": "auto_trade_news_guard_minutes",
         "canonical_path": null,
         "classification": "test_only_adaptation",
         "column": 2,
@@ -6852,7 +6841,7 @@
         "path": "algo-bot/tests/test_forming_route_contract.py"
       },
       {
-        "attribute": "auto_trade_opposing_barrier_veto_enabled",
+        "attribute": "auto_trade_min_confluence",
         "canonical_path": null,
         "classification": "test_only_adaptation",
         "column": 2,
@@ -6863,13 +6852,24 @@
         "path": "algo-bot/tests/test_forming_route_contract.py"
       },
       {
-        "attribute": "auto_trade_overlap_veto_enabled",
+        "attribute": "auto_trade_opposing_barrier_veto_enabled",
         "canonical_path": null,
         "classification": "test_only_adaptation",
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
         "line": 82,
+        "operation": "setattr",
+        "path": "algo-bot/tests/test_forming_route_contract.py"
+      },
+      {
+        "attribute": "auto_trade_overlap_veto_enabled",
+        "canonical_path": null,
+        "classification": "test_only_adaptation",
+        "column": 2,
+        "detail": "helper or monkeypatch mutation of Settings",
+        "dynamic_names": [],
+        "line": 83,
         "operation": "setattr",
         "path": "algo-bot/tests/test_forming_route_contract.py"
       },
@@ -7122,7 +7122,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 145,
+        "line": 147,
         "operation": "setattr",
         "path": "algo-bot/tests/test_map_reaction_range_retirement.py"
       },
@@ -7133,7 +7133,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 403,
+        "line": 405,
         "operation": "setattr",
         "path": "algo-bot/tests/test_map_reaction_range_retirement.py"
       },
@@ -7144,7 +7144,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 404,
+        "line": 406,
         "operation": "setattr",
         "path": "algo-bot/tests/test_map_reaction_range_retirement.py"
       },
@@ -7155,7 +7155,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 203,
+        "line": 205,
         "operation": "setattr",
         "path": "algo-bot/tests/test_mapped_reaction_idempotency.py"
       },
@@ -7166,34 +7166,12 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 204,
+        "line": 206,
         "operation": "setattr",
         "path": "algo-bot/tests/test_mapped_reaction_idempotency.py"
       },
       {
         "attribute": "auto_trade_min_confluence",
-        "canonical_path": null,
-        "classification": "test_only_adaptation",
-        "column": 2,
-        "detail": "helper or monkeypatch mutation of Settings",
-        "dynamic_names": [],
-        "line": 207,
-        "operation": "setattr",
-        "path": "algo-bot/tests/test_mapped_reaction_idempotency.py"
-      },
-      {
-        "attribute": "auto_trade_candidate_ttl",
-        "canonical_path": null,
-        "classification": "test_only_adaptation",
-        "column": 2,
-        "detail": "helper or monkeypatch mutation of Settings",
-        "dynamic_names": [],
-        "line": 208,
-        "operation": "setattr",
-        "path": "algo-bot/tests/test_mapped_reaction_idempotency.py"
-      },
-      {
-        "attribute": "auto_trade_opposing_barrier_veto_enabled",
         "canonical_path": null,
         "classification": "test_only_adaptation",
         "column": 2,
@@ -7204,29 +7182,29 @@
         "path": "algo-bot/tests/test_mapped_reaction_idempotency.py"
       },
       {
+        "attribute": "auto_trade_candidate_ttl",
+        "canonical_path": null,
+        "classification": "test_only_adaptation",
+        "column": 2,
+        "detail": "helper or monkeypatch mutation of Settings",
+        "dynamic_names": [],
+        "line": 210,
+        "operation": "setattr",
+        "path": "algo-bot/tests/test_mapped_reaction_idempotency.py"
+      },
+      {
+        "attribute": "auto_trade_opposing_barrier_veto_enabled",
+        "canonical_path": null,
+        "classification": "test_only_adaptation",
+        "column": 2,
+        "detail": "helper or monkeypatch mutation of Settings",
+        "dynamic_names": [],
+        "line": 211,
+        "operation": "setattr",
+        "path": "algo-bot/tests/test_mapped_reaction_idempotency.py"
+      },
+      {
         "attribute": "auto_trade_overlap_veto_enabled",
-        "canonical_path": null,
-        "classification": "test_only_adaptation",
-        "column": 2,
-        "detail": "helper or monkeypatch mutation of Settings",
-        "dynamic_names": [],
-        "line": 212,
-        "operation": "setattr",
-        "path": "algo-bot/tests/test_mapped_reaction_idempotency.py"
-      },
-      {
-        "attribute": "auto_trade_zone_cooldown_enabled",
-        "canonical_path": null,
-        "classification": "test_only_adaptation",
-        "column": 2,
-        "detail": "helper or monkeypatch mutation of Settings",
-        "dynamic_names": [],
-        "line": 213,
-        "operation": "setattr",
-        "path": "algo-bot/tests/test_mapped_reaction_idempotency.py"
-      },
-      {
-        "attribute": "auto_trade_htf_veto_enabled",
         "canonical_path": null,
         "classification": "test_only_adaptation",
         "column": 2,
@@ -7237,7 +7215,7 @@
         "path": "algo-bot/tests/test_mapped_reaction_idempotency.py"
       },
       {
-        "attribute": "auto_trade_map_thesis_lock_enabled",
+        "attribute": "auto_trade_zone_cooldown_enabled",
         "canonical_path": null,
         "classification": "test_only_adaptation",
         "column": 2,
@@ -7248,13 +7226,35 @@
         "path": "algo-bot/tests/test_mapped_reaction_idempotency.py"
       },
       {
+        "attribute": "auto_trade_htf_veto_enabled",
+        "canonical_path": null,
+        "classification": "test_only_adaptation",
+        "column": 2,
+        "detail": "helper or monkeypatch mutation of Settings",
+        "dynamic_names": [],
+        "line": 216,
+        "operation": "setattr",
+        "path": "algo-bot/tests/test_mapped_reaction_idempotency.py"
+      },
+      {
+        "attribute": "auto_trade_map_thesis_lock_enabled",
+        "canonical_path": null,
+        "classification": "test_only_adaptation",
+        "column": 2,
+        "detail": "helper or monkeypatch mutation of Settings",
+        "dynamic_names": [],
+        "line": 217,
+        "operation": "setattr",
+        "path": "algo-bot/tests/test_mapped_reaction_idempotency.py"
+      },
+      {
         "attribute": "auto_trade_enabled",
         "canonical_path": null,
         "classification": "test_only_adaptation",
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 131,
+        "line": 133,
         "operation": "setattr",
         "path": "algo-bot/tests/test_mapped_thesis_lock.py"
       },
@@ -7265,7 +7265,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 132,
+        "line": 134,
         "operation": "setattr",
         "path": "algo-bot/tests/test_mapped_thesis_lock.py"
       },
@@ -7276,7 +7276,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 135,
+        "line": 137,
         "operation": "setattr",
         "path": "algo-bot/tests/test_mapped_thesis_lock.py"
       },
@@ -7287,7 +7287,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 136,
+        "line": 138,
         "operation": "setattr",
         "path": "algo-bot/tests/test_mapped_thesis_lock.py"
       },
@@ -7298,7 +7298,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 137,
+        "line": 139,
         "operation": "setattr",
         "path": "algo-bot/tests/test_mapped_thesis_lock.py"
       },
@@ -7309,7 +7309,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 138,
+        "line": 140,
         "operation": "setattr",
         "path": "algo-bot/tests/test_mapped_thesis_lock.py"
       },
@@ -7320,7 +7320,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 141,
+        "line": 143,
         "operation": "setattr",
         "path": "algo-bot/tests/test_mapped_thesis_lock.py"
       },
@@ -7331,7 +7331,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 142,
+        "line": 144,
         "operation": "setattr",
         "path": "algo-bot/tests/test_mapped_thesis_lock.py"
       },
@@ -7342,7 +7342,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 143,
+        "line": 145,
         "operation": "setattr",
         "path": "algo-bot/tests/test_mapped_thesis_lock.py"
       },
@@ -9300,7 +9300,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 1176,
+        "line": 1177,
         "operation": "setattr",
         "path": "algo-bot/tests/test_scanner_actionability.py"
       },
@@ -9311,7 +9311,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 1181,
+        "line": 1182,
         "operation": "setattr",
         "path": "algo-bot/tests/test_scanner_actionability.py"
       },
@@ -9322,7 +9322,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 1483,
+        "line": 1487,
         "operation": "setattr",
         "path": "algo-bot/tests/test_scanner_actionability.py"
       },
@@ -9333,7 +9333,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 1484,
+        "line": 1488,
         "operation": "setattr",
         "path": "algo-bot/tests/test_scanner_actionability.py"
       },
@@ -9344,7 +9344,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 1485,
+        "line": 1489,
         "operation": "setattr",
         "path": "algo-bot/tests/test_scanner_actionability.py"
       },
@@ -9355,7 +9355,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 1486,
+        "line": 1490,
         "operation": "setattr",
         "path": "algo-bot/tests/test_scanner_actionability.py"
       },
@@ -9366,7 +9366,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 1487,
+        "line": 1491,
         "operation": "setattr",
         "path": "algo-bot/tests/test_scanner_actionability.py"
       },
@@ -9377,7 +9377,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 1488,
+        "line": 1492,
         "operation": "setattr",
         "path": "algo-bot/tests/test_scanner_actionability.py"
       },
@@ -9388,7 +9388,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 1491,
+        "line": 1495,
         "operation": "setattr",
         "path": "algo-bot/tests/test_scanner_actionability.py"
       },
@@ -10048,7 +10048,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 178,
+        "line": 186,
         "operation": "setattr",
         "path": "algo-bot/tests/test_trend.py"
       },
@@ -10059,7 +10059,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 197,
+        "line": 205,
         "operation": "setattr",
         "path": "algo-bot/tests/test_trend.py"
       },
@@ -10070,7 +10070,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 282,
+        "line": 290,
         "operation": "setattr",
         "path": "algo-bot/tests/test_trend.py"
       },
@@ -10081,7 +10081,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 301,
+        "line": 309,
         "operation": "setattr",
         "path": "algo-bot/tests/test_trend.py"
       },
@@ -10092,7 +10092,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 323,
+        "line": 331,
         "operation": "setattr",
         "path": "algo-bot/tests/test_trend.py"
       },
@@ -10103,7 +10103,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 538,
+        "line": 546,
         "operation": "setattr",
         "path": "algo-bot/tests/test_trend.py"
       },
@@ -10593,7 +10593,19 @@
       }
     ],
     "canonical_deletions": [],
-    "canonical_reads": [],
+    "canonical_reads": [
+      {
+        "attribute": null,
+        "canonical_path": "model_dump",
+        "classification": "test_only_adaptation",
+        "column": 28,
+        "detail": "canonical nested read without direct legacy ownership",
+        "dynamic_names": [],
+        "line": 54,
+        "operation": "canonical_read",
+        "path": "algo-bot/tests/configuration/canonical_fixtures.py"
+      }
+    ],
     "canonical_writes": [],
     "introspection": [
       {
@@ -10603,7 +10615,7 @@
         "column": 11,
         "detail": "getattr on Settings",
         "dynamic_names": [],
-        "line": 149,
+        "line": 157,
         "operation": "getattr",
         "path": "algo-bot/tests/test_trend.py"
       }
@@ -10879,10 +10891,10 @@
         "attribute": null,
         "canonical_path": null,
         "classification": "test_only_adaptation",
-        "column": 19,
+        "column": 8,
         "detail": "legacy Settings instance passed as a structural dependency",
         "dynamic_names": [],
-        "line": 163,
+        "line": 168,
         "operation": "pass_settings",
         "path": "algo-bot/tests/test_forming_route_contract.py"
       },
@@ -10893,7 +10905,7 @@
         "column": 20,
         "detail": "legacy Settings class API dependency",
         "dynamic_names": [],
-        "line": 66,
+        "line": 69,
         "operation": "settings_class_attribute",
         "path": "algo-bot/tests/test_m1_trigger.py"
       },
@@ -10934,274 +10946,10 @@
         "attribute": null,
         "canonical_path": null,
         "classification": "test_only_adaptation",
-        "column": 15,
-        "detail": "legacy Settings instance passed as a structural dependency",
-        "dynamic_names": [],
-        "line": 1197,
-        "operation": "pass_settings",
-        "path": "algo-bot/tests/test_scanner_actionability.py"
-      },
-      {
-        "attribute": null,
-        "canonical_path": null,
-        "classification": "test_only_adaptation",
-        "column": 11,
-        "detail": "legacy Settings instance passed as a structural dependency",
-        "dynamic_names": [],
-        "line": 164,
-        "operation": "pass_settings",
-        "path": "algo-bot/tests/test_trend.py"
-      },
-      {
-        "attribute": null,
-        "canonical_path": null,
-        "classification": "test_only_adaptation",
-        "column": 11,
-        "detail": "legacy Settings instance passed as a structural dependency",
-        "dynamic_names": [],
-        "line": 184,
-        "operation": "pass_settings",
-        "path": "algo-bot/tests/test_trend.py"
-      },
-      {
-        "attribute": null,
-        "canonical_path": null,
-        "classification": "test_only_adaptation",
-        "column": 11,
-        "detail": "legacy Settings instance passed as a structural dependency",
-        "dynamic_names": [],
-        "line": 204,
-        "operation": "pass_settings",
-        "path": "algo-bot/tests/test_trend.py"
-      },
-      {
-        "attribute": null,
-        "canonical_path": null,
-        "classification": "test_only_adaptation",
-        "column": 11,
-        "detail": "legacy Settings instance passed as a structural dependency",
-        "dynamic_names": [],
-        "line": 235,
-        "operation": "pass_settings",
-        "path": "algo-bot/tests/test_trend.py"
-      },
-      {
-        "attribute": null,
-        "canonical_path": null,
-        "classification": "test_only_adaptation",
-        "column": 13,
-        "detail": "legacy Settings instance passed as a structural dependency",
-        "dynamic_names": [],
-        "line": 249,
-        "operation": "pass_settings",
-        "path": "algo-bot/tests/test_trend.py"
-      },
-      {
-        "attribute": null,
-        "canonical_path": null,
-        "classification": "test_only_adaptation",
-        "column": 13,
-        "detail": "legacy Settings instance passed as a structural dependency",
-        "dynamic_names": [],
-        "line": 266,
-        "operation": "pass_settings",
-        "path": "algo-bot/tests/test_trend.py"
-      },
-      {
-        "attribute": null,
-        "canonical_path": null,
-        "classification": "test_only_adaptation",
-        "column": 13,
-        "detail": "legacy Settings instance passed as a structural dependency",
-        "dynamic_names": [],
-        "line": 284,
-        "operation": "pass_settings",
-        "path": "algo-bot/tests/test_trend.py"
-      },
-      {
-        "attribute": null,
-        "canonical_path": null,
-        "classification": "test_only_adaptation",
-        "column": 13,
-        "detail": "legacy Settings instance passed as a structural dependency",
-        "dynamic_names": [],
-        "line": 306,
-        "operation": "pass_settings",
-        "path": "algo-bot/tests/test_trend.py"
-      },
-      {
-        "attribute": null,
-        "canonical_path": null,
-        "classification": "test_only_adaptation",
-        "column": 13,
-        "detail": "legacy Settings instance passed as a structural dependency",
-        "dynamic_names": [],
-        "line": 325,
-        "operation": "pass_settings",
-        "path": "algo-bot/tests/test_trend.py"
-      },
-      {
-        "attribute": null,
-        "canonical_path": null,
-        "classification": "test_only_adaptation",
-        "column": 13,
-        "detail": "legacy Settings instance passed as a structural dependency",
-        "dynamic_names": [],
-        "line": 376,
-        "operation": "pass_settings",
-        "path": "algo-bot/tests/test_trend.py"
-      },
-      {
-        "attribute": null,
-        "canonical_path": null,
-        "classification": "test_only_adaptation",
-        "column": 13,
-        "detail": "legacy Settings instance passed as a structural dependency",
-        "dynamic_names": [],
-        "line": 400,
-        "operation": "pass_settings",
-        "path": "algo-bot/tests/test_trend.py"
-      },
-      {
-        "attribute": null,
-        "canonical_path": null,
-        "classification": "test_only_adaptation",
-        "column": 13,
-        "detail": "legacy Settings instance passed as a structural dependency",
-        "dynamic_names": [],
-        "line": 427,
-        "operation": "pass_settings",
-        "path": "algo-bot/tests/test_trend.py"
-      },
-      {
-        "attribute": null,
-        "canonical_path": null,
-        "classification": "test_only_adaptation",
-        "column": 13,
-        "detail": "legacy Settings instance passed as a structural dependency",
-        "dynamic_names": [],
-        "line": 483,
-        "operation": "pass_settings",
-        "path": "algo-bot/tests/test_trend.py"
-      },
-      {
-        "attribute": null,
-        "canonical_path": null,
-        "classification": "test_only_adaptation",
-        "column": 13,
-        "detail": "legacy Settings instance passed as a structural dependency",
-        "dynamic_names": [],
-        "line": 503,
-        "operation": "pass_settings",
-        "path": "algo-bot/tests/test_trend.py"
-      },
-      {
-        "attribute": null,
-        "canonical_path": null,
-        "classification": "test_only_adaptation",
-        "column": 13,
-        "detail": "legacy Settings instance passed as a structural dependency",
-        "dynamic_names": [],
-        "line": 522,
-        "operation": "pass_settings",
-        "path": "algo-bot/tests/test_trend.py"
-      },
-      {
-        "attribute": null,
-        "canonical_path": null,
-        "classification": "test_only_adaptation",
-        "column": 13,
-        "detail": "legacy Settings instance passed as a structural dependency",
-        "dynamic_names": [],
-        "line": 541,
-        "operation": "pass_settings",
-        "path": "algo-bot/tests/test_trend.py"
-      },
-      {
-        "attribute": null,
-        "canonical_path": null,
-        "classification": "test_only_adaptation",
-        "column": 12,
-        "detail": "legacy Settings instance passed as a structural dependency",
-        "dynamic_names": [],
-        "line": 572,
-        "operation": "pass_settings",
-        "path": "algo-bot/tests/test_trend.py"
-      },
-      {
-        "attribute": null,
-        "canonical_path": null,
-        "classification": "test_only_adaptation",
-        "column": 12,
-        "detail": "legacy Settings instance passed as a structural dependency",
-        "dynamic_names": [],
-        "line": 592,
-        "operation": "pass_settings",
-        "path": "algo-bot/tests/test_trend.py"
-      },
-      {
-        "attribute": null,
-        "canonical_path": null,
-        "classification": "test_only_adaptation",
         "column": 9,
         "detail": "legacy Settings instance passed as a structural dependency",
         "dynamic_names": [],
-        "line": 607,
-        "operation": "pass_settings",
-        "path": "algo-bot/tests/test_trend.py"
-      },
-      {
-        "attribute": null,
-        "canonical_path": null,
-        "classification": "test_only_adaptation",
-        "column": 13,
-        "detail": "legacy Settings instance passed as a structural dependency",
-        "dynamic_names": [],
-        "line": 624,
-        "operation": "pass_settings",
-        "path": "algo-bot/tests/test_trend.py"
-      },
-      {
-        "attribute": null,
-        "canonical_path": null,
-        "classification": "test_only_adaptation",
-        "column": 12,
-        "detail": "legacy Settings instance passed as a structural dependency",
-        "dynamic_names": [],
-        "line": 642,
-        "operation": "pass_settings",
-        "path": "algo-bot/tests/test_trend.py"
-      },
-      {
-        "attribute": null,
-        "canonical_path": null,
-        "classification": "test_only_adaptation",
-        "column": 17,
-        "detail": "legacy Settings instance passed as a structural dependency",
-        "dynamic_names": [],
-        "line": 648,
-        "operation": "pass_settings",
-        "path": "algo-bot/tests/test_trend.py"
-      },
-      {
-        "attribute": null,
-        "canonical_path": null,
-        "classification": "test_only_adaptation",
-        "column": 16,
-        "detail": "legacy Settings instance passed as a structural dependency",
-        "dynamic_names": [],
-        "line": 659,
-        "operation": "pass_settings",
-        "path": "algo-bot/tests/test_trend.py"
-      },
-      {
-        "attribute": null,
-        "canonical_path": null,
-        "classification": "test_only_adaptation",
-        "column": 17,
-        "detail": "legacy Settings instance passed as a structural dependency",
-        "dynamic_names": [],
-        "line": 666,
+        "line": 14,
         "operation": "pass_settings",
         "path": "algo-bot/tests/test_trend.py"
       }

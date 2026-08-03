@@ -6,10 +6,9 @@ process-wide configuration authority, builds the active ``runtime_config`` and
 ``Settings`` model now lives in ``app.configuration.legacy_settings`` and is
 re-exported here as ``Settings`` for backward compatibility and rollback.
 
-Production consumers must read ``runtime_config`` (or a narrow
-``project_runtime_config`` snapshot) rather than the legacy ``settings``
-singleton. ``runtime_config_facade`` remains only for tests/tools until
-Phase 2I-B.
+Production consumers must read ``runtime_config`` (typed grouped models)
+rather than the legacy ``settings`` singleton. ``runtime_config_facade``
+remains only for tests/tools until Phase 2I-B.
 """
 
 from __future__ import annotations
@@ -125,10 +124,9 @@ _IMPLICIT_AUTHORITY_WARNING = process_implicit_authority_warning()
 def runtime_config_facade() -> object:
   """Flat legacy-name view for tests/tools only (removed in Phase 2I-B).
 
-  Production modules must not call this. Phase 2I-A replaced every production
-  default with ``project_runtime_config`` (narrow one-shot snapshots) or direct
-  ``runtime_config`` reads. The values remain identical to the legacy Settings
-  surface under both authorities.
+  Production modules must not call this. Phase 2I-A.1 migrated every production
+  consumer to typed ``runtime_config`` grouped nodes. The values remain
+  identical to the legacy Settings surface under both authorities.
   """
   return CanonicalSettingsFacade(runtime_config)
 

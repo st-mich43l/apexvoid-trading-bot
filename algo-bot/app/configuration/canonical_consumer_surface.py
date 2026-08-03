@@ -63,13 +63,11 @@ _TARGET_SYMBOLS = frozenset({
 # Config-package modules that legitimately own the reverse-mapping surface.
 _TOOLING_ALLOWED_DIRECT_LEGACY_PATHS_IMPORTS = frozenset({
   "algo-bot/app/configuration/facade.py",
-  "algo-bot/app/configuration/runtime_projection.py",
   "algo-bot/app/configuration/activation_cli.py",
   "algo-bot/app/configuration/activation_rehearsal.py",
   "algo-bot/app/configuration/generate.py",
   "algo-bot/app/configuration/compatibility_surface_audit.py",
   "algo-bot/app/configuration/canonical_consumer_surface.py",
-  "algo-bot/app/core/runtime_projection.py",
   "algo-bot/app/core/config.py",
 })
 
