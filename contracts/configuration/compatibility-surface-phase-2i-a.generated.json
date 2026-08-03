@@ -13,12 +13,12 @@
       "PRODUCTION_REMOVE_2I_A": 0,
       "REMOVE_2I_B": 1,
       "TEST_COMPATIBILITY_RETAIN_2I_A": 316,
-      "TOOLING_RETAIN_2I_A": 45,
+      "TOOLING_RETAIN_2I_A": 48,
       "UNKNOWN_BLOCKER": 0
     },
     "by_symbol": {
       "CanonicalSettingsFacade": 13,
-      "DERIVED_LEGACY_PROPERTIES": 41,
+      "DERIVED_LEGACY_PROPERTIES": 44,
       "DIRECT_LEGACY_PATHS": 39,
       "LegacyCanonicalConfigView": 6,
       "LegacySettings": 2,
@@ -29,11 +29,11 @@
       "simplenamespace_config_fixture": 18
     },
     "production_facade_calls": 0,
-    "total": 378,
+    "total": 381,
     "unknown_blockers": 0
   },
   "phase": "2I-A",
-  "source_fingerprint": "c25127d12795bdf8c5d8a9ea3c955806517a41b015846ded3de70407e5c79e62",
+  "source_fingerprint": "ee1a8d2007b5d326664a2ab66aef7b26dae22e0bca5c55ec9fbfe1d53710d423",
   "unknown_blockers": [],
   "usages": [
     {
@@ -1859,6 +1859,33 @@
       "column": 0,
       "detail": "import DERIVED_LEGACY_PROPERTIES",
       "kind": "import",
+      "line": 46,
+      "path": "algo-bot/app/configuration/canonical_consumer_surface.py",
+      "symbol": "DERIVED_LEGACY_PROPERTIES"
+    },
+    {
+      "classification": "TOOLING_RETAIN_2I_A",
+      "column": 38,
+      "detail": "reference DERIVED_LEGACY_PROPERTIES",
+      "kind": "reference",
+      "line": 102,
+      "path": "algo-bot/app/configuration/canonical_consumer_surface.py",
+      "symbol": "DERIVED_LEGACY_PROPERTIES"
+    },
+    {
+      "classification": "TOOLING_RETAIN_2I_A",
+      "column": 14,
+      "detail": "reference DERIVED_LEGACY_PROPERTIES",
+      "kind": "reference",
+      "line": 110,
+      "path": "algo-bot/app/configuration/canonical_consumer_surface.py",
+      "symbol": "DERIVED_LEGACY_PROPERTIES"
+    },
+    {
+      "classification": "TOOLING_RETAIN_2I_A",
+      "column": 0,
+      "detail": "import DERIVED_LEGACY_PROPERTIES",
+      "kind": "import",
       "line": 41,
       "path": "algo-bot/app/configuration/compatibility_surface_audit.py",
       "symbol": "DERIVED_LEGACY_PROPERTIES"
@@ -1976,7 +2003,7 @@
       "column": 17,
       "detail": "reference DERIVED_LEGACY_PROPERTIES",
       "kind": "reference",
-      "line": 150,
+      "line": 153,
       "path": "algo-bot/app/configuration/generate.py",
       "symbol": "DERIVED_LEGACY_PROPERTIES"
     },
@@ -1985,7 +2012,7 @@
       "column": 8,
       "detail": "reference DERIVED_LEGACY_PROPERTIES",
       "kind": "reference",
-      "line": 154,
+      "line": 157,
       "path": "algo-bot/app/configuration/generate.py",
       "symbol": "DERIVED_LEGACY_PROPERTIES"
     },
@@ -1994,7 +2021,7 @@
       "column": 16,
       "detail": "reference DERIVED_LEGACY_PROPERTIES",
       "kind": "reference",
-      "line": 409,
+      "line": 412,
       "path": "algo-bot/app/configuration/generate.py",
       "symbol": "DERIVED_LEGACY_PROPERTIES"
     },
@@ -2003,7 +2030,7 @@
       "column": 16,
       "detail": "reference DERIVED_LEGACY_PROPERTIES",
       "kind": "reference",
-      "line": 636,
+      "line": 639,
       "path": "algo-bot/app/configuration/generate.py",
       "symbol": "DERIVED_LEGACY_PROPERTIES"
     },
@@ -2012,7 +2039,7 @@
       "column": 16,
       "detail": "reference DERIVED_LEGACY_PROPERTIES",
       "kind": "reference",
-      "line": 809,
+      "line": 812,
       "path": "algo-bot/app/configuration/generate.py",
       "symbol": "DERIVED_LEGACY_PROPERTIES"
     },
@@ -2021,7 +2048,7 @@
       "column": 21,
       "detail": "reference DERIVED_LEGACY_PROPERTIES",
       "kind": "reference",
-      "line": 1067,
+      "line": 1070,
       "path": "algo-bot/app/configuration/generate.py",
       "symbol": "DERIVED_LEGACY_PROPERTIES"
     },
