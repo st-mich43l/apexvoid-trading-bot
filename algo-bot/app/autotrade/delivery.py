@@ -26,10 +26,12 @@ from app.bot.client import (
 )
 from app.autotrade.setup_card import (
   edit_forming_card_status,
+  edit_forming_card_stop,
   forming_message_key as _setup_card_forming_message_key,
   kill_setup_card,
   load_forming_card,
   load_telegram_root_message_id,
+  published_plan_stop_price,
 )
 from app.autotrade.lifecycle import LIFECYCLE_STATES, emit_lifecycle
 from app.autotrade.range_context import (
@@ -1212,6 +1214,25 @@ async def _mark_forming_card_position_activated(client, match_id: str) -> None:
   except Exception:
     log.exception(
       "forming card POSITION ACTIVATED edit failed setup_id=%s",
+      match_id,
+    )
+  # A fill can never precede publication, so the plan's stop is guaranteed
+  # to exist by now even if an earlier publish-time patch raced the card's
+  # own creation and missed - re-apply it here so an activated position
+  # never shows a blank/placeholder Stop line.
+  try:
+    stop_price = await published_plan_stop_price(client, match_id)
+    if stop_price is not None:
+      await edit_forming_card_stop(
+        client,
+        match_id,
+        stop_price,
+        digits=int(runtime_config.contract.instrument.price_digits),
+        edit_fn=edit_scanner_message_text,
+      )
+  except Exception:
+    log.exception(
+      "forming card POSITION ACTIVATED stop refresh failed setup_id=%s",
       match_id,
     )
 
