@@ -18,7 +18,12 @@
   'ZONE_MERGE_GAP': '1',
   'SCANNER_ACTIONABILITY_GATE_ENABLED': 'false',
   'KEY_LEVEL_ROLE_AMBIGUITY_GATE_ENABLED': 'false',
-  'RANGE_CONTEXT_DISAGREEMENT_GATE_ENABLED': 'false'
+  'RANGE_CONTEXT_DISAGREEMENT_GATE_ENABLED': 'false',
+  {# Phase 2H: pin the mapped-zone execution route and its context guard off #}
+  {# for the bot, mirroring root compose and the ctrader-engine default. The  #}
+  {# demo_eval profile would otherwise enable them. Vault values still win.   #}
+  'AUTO_TRADE_MAPPED_ZONE_ENABLED': 'false',
+  'AUTO_TRADE_MARKET_MAP_GUARD_ENABLED': 'false'
 } %}
 {% set logging_defaults = {
   'LOG_DIR': '/var/log/apexvoid',
