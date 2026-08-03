@@ -234,6 +234,88 @@ class DetectorSettings:
     )
 
 
+# Phase 2I-A: legacy field names detector_settings_from reads. When ``config``
+# is omitted in production it builds a narrow snapshot of exactly these fields
+# off the canonical ``runtime_config`` (replacing the retired
+# per-call flat legacy config facade). Tests still inject a flat SimpleNamespace/
+# Settings-shaped override which flows through the unchanged flat-read body.
+_RUNTIME_DETECTOR_CFG_FIELDS = (
+  "scanner_confluence_floor",
+  "max_entry_atr",
+  "range_lookback",
+  "atr_length",
+  "swing_fractal_n",
+  "zigzag_pct",
+  "zigzag_atr_mult",
+  "displacement_atr_mult",
+  "zone_width",
+  "zone_merge_overlap",
+  "max_merged_zone_atr",
+  "equal_tol_atr",
+  "level_cluster_atr",
+  "round_step",
+  "key_level_min_touches",
+  "momentum_lookback",
+  "momentum_body_frac",
+  "session_asia_start",
+  "session_london_start",
+  "session_ny_start",
+  "daily_rollover_utc_hour",
+  "eq_band",
+  "strict_pd_gate",
+  "sweep_body_frac",
+  "sweep_react_bars",
+  "inducement_band_atr",
+  "max_zone_width_atr",
+  "proximal_band_atr",
+  "chop_filter_enabled",
+  "chop_range_atr",
+  "chop_lookback",
+  "chop_edge_frac",
+  "tl_min_touches",
+  "tl_tol_atr",
+  "tl_max_slope_atr",
+  "coil_contract",
+  "breakout_buffer_atr",
+  "breakout_accept_bars",
+  "breakout_max_age_bars",
+  "allow_counter_trend",
+  "counter_min_zone_score",
+  "counter_extreme_pd",
+  "counter_level_min_touches",
+  "range_scalp_enabled",
+  "range_scalp_lookback",
+  "range_scalp_cluster_atr",
+  "range_scalp_min_touches",
+  "range_scalp_min_wick_frac",
+  "range_scalp_entry_tol_atr",
+  "range_scalp_min_width_atr",
+  "range_scalp_max_width_atr",
+  "range_scalp_min_room_atr",
+  "range_scalp_break_closes",
+  "range_scalp_min_wick_rejections",
+  "range_scalp_allow_rejection_only",
+  "auto_trade_zone_reconcile_enabled",
+  "auto_trade_zone_reconcile_mode",
+  "auto_trade_regime_direction_enabled",
+  "auto_trade_regime_direction_lookback",
+  "auto_trade_regime_min_directional_swings",
+  "auto_trade_regime_min_displacement_atr",
+  "auto_trade_structural_reaction_lookback_bars",
+  "auto_trade_key_level_reaction_enabled",
+  "auto_trade_demand_reaction_enabled",
+  "auto_trade_supply_reaction_enabled",
+  "auto_trade_session_level_reaction_enabled",
+  "auto_trade_trendline_reaction_enabled",
+  "auto_trade_box_breakout_enabled",
+  "auto_trade_trend_pullback_enabled",
+  "auto_trade_break_retest_enabled",
+  "auto_trade_momentum_ride_enabled",
+  "auto_trade_snap_back_enabled",
+  "auto_trade_fade_scalp_enabled",
+)
+
+
 def detector_settings_from(config=None) -> DetectorSettings:
   """Build detector settings from the app config for every PA consumer.
 
@@ -244,8 +326,8 @@ def detector_settings_from(config=None) -> DetectorSettings:
   decoupling from ``app.core.config`` intact.
   """
   if config is None:
-    from app.core.config import runtime_config_facade
-    config = runtime_config_facade()
+    from app.core.runtime_projection import project_runtime_config
+    config = project_runtime_config(_RUNTIME_DETECTOR_CFG_FIELDS)
   return DetectorSettings(
     confluence_floor=config.scanner_confluence_floor,
     max_entry_atr=config.max_entry_atr,

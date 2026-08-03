@@ -32,6 +32,22 @@ from app.analysis.market_map import (
 from app.autotrade.strategy_match import StrategyMatch
 
 
+# Phase 2I-A: legacy field names the market-map strategy subtree reads
+# (evaluate_market_map_strategy + _reaction_in_lookback). When ``cfg`` is
+# omitted in production it builds a narrow snapshot of exactly these fields off
+# the canonical ``runtime_config`` (replacing the retired
+# per-call flat legacy config facade). Tests still inject a flat SimpleNamespace.
+_RUNTIME_MAP_STRATEGY_CFG_FIELDS = (
+  "auto_trade_mapped_zone_enabled",
+  "atr_length",
+  "proximal_band_atr",
+  "auto_trade_map_counter_bias_enabled",
+  "auto_trade_map_track_distance_atr",
+  "auto_trade_map_execute_tolerance_pips",
+  "auto_trade_map_execute_tolerance_atr",
+  "auto_trade_map_reaction_lookback_bars",
+)
+
 EXECUTION_TIMEFRAME = "M1"
 MARKET_MAP_KEY_PREFIX = "auto_trade:market_map"
 MARKET_MAP_DISPLAY_KEY_PREFIX = "auto_trade:market_map_display"
@@ -133,7 +149,7 @@ def evaluate_market_map_strategy(
   symbol: str,
   event_ts: str,
   spot_price: float | None,
-  cfg: Any,
+  cfg: Any | None = None,
   market_map: MarketMap | None = None,
   rendered_map: MarketMap | None = None,
   now: int | None = None,
@@ -144,6 +160,9 @@ def evaluate_market_map_strategy(
   cutover, P2) - Market Map stays a structure snapshot for whatever consumes
   it next (the M1 candlestick trigger, P3).
   """
+  if cfg is None:
+    from app.core.runtime_projection import project_runtime_config
+    cfg = project_runtime_config(_RUNTIME_MAP_STRATEGY_CFG_FIELDS)
   if not bool(getattr(cfg, "auto_trade_mapped_zone_enabled", True)):
     return MarketMapStrategyDecision("disabled")
   if spot_price is None or not math.isfinite(float(spot_price)):

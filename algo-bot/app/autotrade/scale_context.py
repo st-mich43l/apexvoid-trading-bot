@@ -16,6 +16,20 @@ from app.analysis.zones import displacement
 from app.autotrade.map_strategy import _rejects
 
 
+# Phase 2I-A: legacy field names build_auto_scale_context reads. When ``cfg`` is
+# omitted in production it builds a narrow snapshot of exactly these fields off
+# the canonical ``runtime_config`` (replacing the retired
+# per-call flat legacy config facade). Tests still inject a flat SimpleNamespace.
+_RUNTIME_SCALE_CFG_FIELDS = (
+  "atr_length",
+  "swing_fractal_n",
+  "zigzag_pct",
+  "zigzag_atr_mult",
+  "displacement_atr_mult",
+  "momentum_body_frac",
+)
+
+
 @dataclass(frozen=True)
 class AutoScaleContext:
   bar_ts: int
@@ -42,10 +56,13 @@ def build_auto_scale_context(
   direction: str,
   *,
   spot_price: float,
-  cfg: Any,
+  cfg: Any | None = None,
   target_low: float | None = None,
   target_high: float | None = None,
 ) -> AutoScaleContext | None:
+  if cfg is None:
+    from app.core.runtime_projection import project_runtime_config
+    cfg = project_runtime_config(_RUNTIME_SCALE_CFG_FIELDS)
   direction = str(direction or "").upper()
   frame = frames.get("M1")
   if direction not in {"BUY", "SELL"} or frame is None or frame.empty:

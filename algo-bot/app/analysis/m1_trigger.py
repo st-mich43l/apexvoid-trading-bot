@@ -30,6 +30,16 @@ ALL_PATTERNS = (
   "hammer",
 )
 
+# Phase 2I-A: legacy field names the M1 trigger subtree reads. When ``cfg`` is
+# omitted in production the entry point builds a narrow snapshot of exactly
+# these fields off the canonical ``runtime_config`` (replacing the retired
+# per-call flat legacy config facade). Tests still inject a flat SimpleNamespace.
+_RUNTIME_M1_TRIGGER_CFG_FIELDS = (
+  "m1_trigger_patterns",
+  "m1_trigger_wick_fraction",
+  "m1_trigger_strong_close_pct",
+)
+
 
 @dataclass(frozen=True)
 class M1TriggerResult:
@@ -351,6 +361,9 @@ def evaluate_m1_trigger_window(
   cfg: Any = None,
 ) -> M1TriggerResult | None:
   """Return the earliest unprocessed closed trigger in the current episode."""
+  if cfg is None:
+    from app.core.runtime_projection import project_runtime_config
+    cfg = project_runtime_config(_RUNTIME_M1_TRIGGER_CFG_FIELDS)
   if m1 is None or m1.empty:
     return None
   side = str(direction).upper()

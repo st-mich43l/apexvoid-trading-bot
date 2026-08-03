@@ -363,6 +363,22 @@ def _key_level_role(
   ).role
 
 
+# Phase 2I-A: legacy field names the actionability subtree reads. When ``cfg``
+# is omitted in production it builds a narrow snapshot of exactly these fields
+# off the canonical ``runtime_config`` (replacing the retired
+# per-call flat legacy config facade). Tests still inject a flat SimpleNamespace.
+_RUNTIME_ACTIONABILITY_CFG_FIELDS = (
+  "auto_trade_displacement_override_lookback_bars",
+  "breakout_accept_bars",
+  "contested_corridor_gap_atr",
+  "auto_trade_opposing_barrier_atr",
+  "auto_trade_min_capped_target_pips",
+  "auto_trade_execution_cost_pips",
+  "auto_trade_allow_counter_bias",
+  "scanner_actionability_gate_enabled",
+)
+
+
 def resolve_actionability(
   *,
   symbol: str,
@@ -371,9 +387,16 @@ def resolve_actionability(
   context: Any,
   atr: float,
   pip_size: float,
-  cfg: Any,
+  cfg: Any | None = None,
 ) -> ActionabilityResolution:
-  """Resolve semantic, cross-side, and opposing-room hard geometry."""
+  """Resolve semantic, cross-side, and opposing-room hard geometry.
+
+  ``cfg`` defaults to a narrow canonical ``runtime_config`` projection in
+  production; tests may still inject a flat SimpleNamespace override.
+  """
+  if cfg is None:
+    from app.core.runtime_projection import project_runtime_config
+    cfg = project_runtime_config(_RUNTIME_ACTIONABILITY_CFG_FIELDS)
   observed = tuple(observed_results)
   entries = () if market_map is None else tuple(market_map.actionable_entries)
   gated: dict[int, ActionabilityDecision] = {}
