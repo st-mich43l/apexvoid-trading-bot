@@ -729,10 +729,8 @@ def _format_detection_cutover(*args: Any, **kwargs: Any) -> str:
     # and let the first real card be PLAN PUBLISHED.
     return ""
   text = _ORIGINAL_FORMAT(*args, **kwargs)
+  # Do not rewrite QUEUED → PLAN PUBLISHED; plan publish is silent on the card.
   return text.replace(
-    "🟡 <b>QUEUED</b> · worker acknowledgement pending",
-    "🟢 <b>PLAN PUBLISHED</b> · TradePlan V7 sent to executor",
-  ).replace(
     # Legacy pre-algo-only footer; scanner no longer emits this, but keep
     # the rewrite so any retained cached formatter text stays consistent.
     "→ Review confirmation, SL &amp; TP before posting.",

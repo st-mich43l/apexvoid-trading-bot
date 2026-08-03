@@ -542,6 +542,31 @@ def _resolve_no_tp_loss_pips(event: dict, cleaned: str) -> float | None:
     return None
 
 
+def _sl_close_result_parts(
+  event: dict,
+  cleaned: str,
+  *,
+  html: bool,
+) -> list[str]:
+  """Build SL / result / @price fragments for a single close status line."""
+  parts: list[str] = ["🛡 <b>SL</b>" if html else "🛡 SL"]
+  losing = _resolve_no_tp_loss_pips(event, cleaned)
+  if losing is not None and losing < 0:
+    body = f"❌ Losing: {format_signed_pips(losing)} pips"
+    parts.append(f"<b>{body}</b>" if html else body)
+  elif losing is not None and losing == 0:
+    body = "➖ Result: 0 pips (BE)"
+    parts.append(f"<b>{body}</b>" if html else body)
+  elif losing is not None:
+    body = f"Total: {format_signed_pips(losing)} pips"
+    parts.append(f"<b>{body}</b>" if html else body)
+  at = _PLAN_CLOSED_AT_RE.search(cleaned) if cleaned else None
+  if at is not None:
+    price = escape(at.group("price"))
+    parts.append(f"@ <b>{price}</b>" if html else f"@ {price}")
+  return parts
+
+
 def _format_position_closed(event: dict, message: str) -> str:
   seq = _trade_seq_prefix(event)
   lines = [
@@ -567,23 +592,14 @@ def _format_position_closed(event: dict, message: str) -> str:
     if at is not None:
       lines.append(f"@ <b>{escape(at.group('price'))}</b>")
   elif no_tp is not None:
-    # Full SL before any TP — say SL, never the ambiguous "broker SL/TP".
-    lines.append("🛡 <b>SL</b>")
-    losing = _resolve_no_tp_loss_pips(event, cleaned)
-    if losing is not None and losing < 0:
-      lines.append(f"❌ Losing: <b>{format_signed_pips(losing)} pips</b>")
-    elif losing is not None and losing == 0:
-      lines.append("➖ Result: <b>0 pips (BE)</b>")
-    at = _PLAN_CLOSED_AT_RE.search(cleaned)
-    if at is not None:
-      lines.append(f"@ <b>{escape(at.group('price'))}</b>")
+    # Full SL before any TP — one line: SL · Losing · @ price.
+    lines.append(" · ".join(_sl_close_result_parts(event, cleaned, html=True)))
   else:
     reason = str(event.get("reason_code") or "")
     losing = _resolve_no_tp_loss_pips(event, cleaned)
     if reason == "stop_loss_or_take_profit" and losing is not None and losing < 0:
       # One-shot SL without the V7 "no TP archived" phrasing.
-      lines.append("🛡 <b>SL</b>")
-      lines.append(f"❌ Losing: <b>{format_signed_pips(losing)} pips</b>")
+      lines.append(" · ".join(_sl_close_result_parts(event, cleaned, html=True)))
     else:
       reason_label = _CLOSE_REASON_LABELS.get(reason)
       if reason_label:
@@ -981,6 +997,9 @@ def _split_manage_fill_and_tps(text: str) -> tuple[str, list[str]]:
   return "\n".join(fill_lines).rstrip(), append_lines
 
 
+POSITION_ACTIVATED_STATUS_LINE = "✅ <b>POSITION ACTIVATED</b>"
+
+
 def _format_order_filled_manage_body(event: dict) -> str:
   cleaned = _clean_message(event.get("message", "")) or "order filled"
   return "\n".join([
@@ -1077,8 +1096,7 @@ def _manage_has_tp_target(text: str, target: str) -> bool:
 
 
 def _format_position_closed_compact_line(event: dict, message: str) -> str:
-  """Close trailer for the manage reply — icon rows without leading bullets."""
-  lines = ["🏁 POSITION CLOSED"]
+  """Close trailer for the manage reply — SL status stays on one line."""
   cleaned = _MONEY_RE.sub("", message).strip(" ·") if message else ""
   highest = _HIGHEST_TP_ARCHIVED_RE.search(cleaned) if cleaned else None
   no_tp = _NO_TP_ARCHIVED_RE.search(cleaned) if cleaned else None
@@ -1086,29 +1104,25 @@ def _format_position_closed_compact_line(event: dict, message: str) -> str:
     # Highest level is already on a 🎯 line; only add exit price here.
     at = _PLAN_CLOSED_AT_RE.search(cleaned)
     if at is not None:
-      lines.append(f"• @ {escape(at.group('price'))}")
-  elif no_tp is not None:
-    lines.append("🛡 SL")
-    losing = _resolve_no_tp_loss_pips(event, cleaned)
-    if losing is not None and losing < 0:
-      lines.append(f"❌ Losing: {format_signed_pips(losing)} pips")
-    elif losing is not None and losing == 0:
-      lines.append("➖ Result: 0 pips (BE)")
-    at = _PLAN_CLOSED_AT_RE.search(cleaned)
-    if at is not None:
-      lines.append(f"• @ {escape(at.group('price'))}")
-  else:
-    reason_label = _CLOSE_REASON_LABELS.get(str(event.get("reason_code") or ""))
-    if reason_label and reason_label != _CLOSE_REASON_LABELS["stop_loss_or_take_profit"]:
-      lines.append(reason_label)
-    elif str(event.get("reason_code") or "") == "stop_loss_or_take_profit":
-      lines.append("🛡 SL")
-    group_realized = _resolve_no_tp_loss_pips(event, cleaned)
-    if group_realized is not None and group_realized < 0:
-      lines.append(f"❌ Losing: {format_signed_pips(group_realized)} pips")
-    elif group_realized is not None:
-      lines.append(f"• Total: {format_signed_pips(group_realized)} pips")
-  return "\n".join(lines)
+      return f"🏁 POSITION CLOSED · @ {escape(at.group('price'))}"
+    return "🏁 POSITION CLOSED"
+  if no_tp is not None or str(event.get("reason_code") or "") == (
+    "stop_loss_or_take_profit"
+  ):
+    parts = ["🏁 POSITION CLOSED", *_sl_close_result_parts(
+      event, cleaned, html=False,
+    )]
+    return " · ".join(parts)
+  reason_label = _CLOSE_REASON_LABELS.get(str(event.get("reason_code") or ""))
+  parts = ["🏁 POSITION CLOSED"]
+  if reason_label and reason_label != _CLOSE_REASON_LABELS["stop_loss_or_take_profit"]:
+    parts.append(reason_label)
+  group_realized = _resolve_no_tp_loss_pips(event, cleaned)
+  if group_realized is not None and group_realized < 0:
+    parts.append(f"❌ Losing: {format_signed_pips(group_realized)} pips")
+  elif group_realized is not None:
+    parts.append(f"Total: {format_signed_pips(group_realized)} pips")
+  return " · ".join(parts)
 
 
 def _format_be_trail_head_status(event: dict, message: str) -> tuple[str, str, float | None]:
@@ -1184,6 +1198,24 @@ def _upsert_manage_be_trail_line(text: str, trail_line: str) -> str:
   return "\n".join(out)
 
 
+async def _mark_forming_card_position_activated(client, match_id: str) -> None:
+  """Move SETUP FORMING head from publish/queued → POSITION ACTIVATED."""
+  try:
+    await edit_forming_card_status(
+      client,
+      match_id,
+      POSITION_ACTIVATED_STATUS_LINE,
+      state="order_filled",
+      reason_code="order_filled",
+      edit_fn=edit_scanner_message_text,
+    )
+  except Exception:
+    log.exception(
+      "forming card POSITION ACTIVATED edit failed setup_id=%s",
+      match_id,
+    )
+
+
 async def _deliver_compact_order_filled(
   client,
   event: dict,
@@ -1192,8 +1224,7 @@ async def _deliver_compact_order_filled(
   chat_id: int,
   send,
 ) -> bool:
-  # Fill details live only on the manage reply — do not put ORDER FILLED
-  # on the forming-card head (keeps SETUP FORMING / PLAN PUBLISHED clean).
+  # Reply keeps ORDER FILLED; root SETUP FORMING card becomes POSITION ACTIVATED.
   body = _format_order_filled_manage_body(event)
   manage_id, manage_text = await _load_manage_message(client, match_id)
   if manage_id is not None and manage_text:
@@ -1207,6 +1238,7 @@ async def _deliver_compact_order_filled(
         client, match_id, message_id=manage_id, text=new_text,
       )
       await _remember_trade_message(client, event, "internal", manage_id)
+      await _mark_forming_card_position_activated(client, match_id)
       return True
     except Exception:
       log.exception(
@@ -1230,6 +1262,7 @@ async def _deliver_compact_order_filled(
         match_id,
         error,
       )
+      await _mark_forming_card_position_activated(client, match_id)
       return True
     raise
   message_id = int(sent.message_id)
@@ -1237,6 +1270,7 @@ async def _deliver_compact_order_filled(
     client, match_id, message_id=message_id, text=body,
   )
   await _remember_trade_message(client, event, "internal", message_id)
+  await _mark_forming_card_position_activated(client, match_id)
   return True
 
 
@@ -1306,6 +1340,7 @@ async def _deliver_compact_position_closed(
 
   Final target hits emit position_closed without a separate tp_booked, so
   this path also appends the archived TP compact line when missing.
+  The SETUP FORMING root card is left unchanged on close.
   """
   message = str(event.get("message") or "")
   close_line = _format_position_closed_compact_line(event, message)
