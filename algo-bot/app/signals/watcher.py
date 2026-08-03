@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 import aiohttp
 
-from app.core.config import runtime_config, settings
+from app.core.config import runtime_config
 from app.autotrade.delivery import tp_message_key
 from app.bot.client import send_scanner_with_retry
 from app.signals.broadcast import fanout_update

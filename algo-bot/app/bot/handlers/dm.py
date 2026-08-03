@@ -13,7 +13,7 @@ from aiogram.types import Message
 from app.signals.chart_analysis import analyse_chart_image
 from app.autotrade.delivery import auto_trade_status_text, set_auto_trade_paused
 from app.signals.manual_execution import request_close_all
-from app.core.config import runtime_config, settings
+from app.core.config import runtime_config
 from app.analysis import scanner
 from app.analysis.market_map_delivery import send_current_market_map
 from app.persistence import redis_state

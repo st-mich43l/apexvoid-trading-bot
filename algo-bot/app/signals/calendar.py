@@ -14,7 +14,7 @@ from zoneinfo import ZoneInfo
 
 import aiohttp
 
-from app.core.config import runtime_config, settings
+from app.core.config import runtime_config
 from app.persistence.store import (
   events_between,
   get_meta,

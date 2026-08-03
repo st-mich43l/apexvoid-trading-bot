@@ -9,7 +9,7 @@ import json
 import logging
 from zoneinfo import ZoneInfo
 
-from app.core.config import runtime_config, settings
+from app.core.config import runtime_config
 from app.persistence import redis_state
 from app.persistence.store import get_meta, set_meta
 from app.analysis.market_map import (
@@ -88,7 +88,7 @@ async def get_current_market_map(symbol: str) -> MarketMap | None:
     cached = _cache.get(symbol)
   if cached is None:
     return None
-  return build_map(cached.analysis, cached.price, settings)
+  return build_map(cached.analysis, cached.price)
 
 
 async def render_current_market_map(
@@ -100,7 +100,7 @@ async def render_current_market_map(
     return None
   local_tz = ZoneInfo(runtime_config.delivery.presentation.seq_reset_tz)
   display_now = now.astimezone(local_tz) if now else datetime.now(local_tz)
-  return render_market_map(market_map, symbol, display_now, settings)
+  return render_market_map(market_map, symbol, display_now)
 
 
 async def send_current_market_map(
@@ -114,7 +114,7 @@ async def send_current_market_map(
     return False
   local_tz = ZoneInfo(runtime_config.delivery.presentation.seq_reset_tz)
   display_now = now.astimezone(local_tz) if now else datetime.now(local_tz)
-  text = render_market_map(market_map, symbol, display_now, settings)
+  text = render_market_map(market_map, symbol, display_now)
   await _replace_owner_market_map_message(symbol, text)
   await _remember_displayed_map(symbol, market_map)
   return True
@@ -170,7 +170,7 @@ async def _market_map_scan_tick(now: datetime | None = None) -> bool:
     display_now = now.astimezone(
       ZoneInfo(runtime_config.delivery.presentation.seq_reset_tz)
     )
-    text = render_market_map(market_map, symbol, display_now, settings)
+    text = render_market_map(market_map, symbol, display_now)
     await _replace_owner_market_map_message(symbol, text)
     await _remember_displayed_map(symbol, market_map)
     await set_meta(payload_key, market_map_payload(market_map))
