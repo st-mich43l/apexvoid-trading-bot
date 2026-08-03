@@ -162,6 +162,29 @@ def trendline_structural_id(
   )
 
 
+def box_structural_id(
+  symbol: str,
+  timeframe: str,
+  box: Any,
+) -> str:
+  """Accepted consolidation-box identity (Box Breakout).
+
+  Keyed on the box's own edges, direction, and acceptance bar - the same
+  accepted box always yields the same id across the proximal-entry poll and
+  every later retest poll, so a proximal fire and a subsequent retest fire
+  on the same box collapse into one confluence zone instead of two.
+  """
+  return structural_hash(
+    symbol.upper(),
+    timeframe.upper(),
+    "box_breakout",
+    getattr(box, "direction", ""),
+    f"{round(float(getattr(box, 'box_low', 0.0)), 5):.5f}",
+    f"{round(float(getattr(box, 'box_high', 0.0)), 5):.5f}",
+    int(getattr(box, "accept_index", -1)),
+  )
+
+
 def structural_thesis_id(
   *,
   symbol: str,
