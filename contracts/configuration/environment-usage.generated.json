@@ -1,0 +1,143 @@
+{
+  "accesses": [
+    {
+      "allowed": true,
+      "api": "os.environ",
+      "classification": "SCRIPT_TOOL_ALLOWED",
+      "env_name": null,
+      "file": "algo-bot/app/configuration/activation_cli.py",
+      "line": 37
+    },
+    {
+      "allowed": true,
+      "api": "os.environ",
+      "classification": "BOOTSTRAP_AUTHORITY_ALLOWED",
+      "env_name": null,
+      "file": "algo-bot/app/configuration/bootstrap_authority.py",
+      "line": 38
+    },
+    {
+      "allowed": true,
+      "api": "os.getenv",
+      "classification": "DEPLOYMENT_OBSERVABILITY_ALLOWED",
+      "env_name": "SERVICE_VERSION",
+      "file": "algo-bot/app/configuration/deployment_identity.py",
+      "line": 18
+    },
+    {
+      "allowed": true,
+      "api": "os.getenv",
+      "classification": "DEPLOYMENT_OBSERVABILITY_ALLOWED",
+      "env_name": "GIT_SHA",
+      "file": "algo-bot/app/configuration/deployment_identity.py",
+      "line": 23
+    },
+    {
+      "allowed": true,
+      "api": "os.getenv",
+      "classification": "DEPLOYMENT_OBSERVABILITY_ALLOWED",
+      "env_name": "AUTO_TRADE_EXPECTED_BROKER",
+      "file": "algo-bot/app/configuration/deployment_identity.py",
+      "line": 28
+    },
+    {
+      "allowed": true,
+      "api": "os.environ",
+      "classification": "SCRIPT_TOOL_ALLOWED",
+      "env_name": null,
+      "file": "algo-bot/app/configuration/environment_cli.py",
+      "line": 42
+    },
+    {
+      "allowed": true,
+      "api": "os.environ",
+      "classification": "SCRIPT_TOOL_ALLOWED",
+      "env_name": null,
+      "file": "algo-bot/app/configuration/environment_cli.py",
+      "line": 62
+    },
+    {
+      "allowed": true,
+      "api": "BaseSettings",
+      "classification": "LEGACY_ROLLBACK_ALLOWED",
+      "env_name": "Settings",
+      "file": "algo-bot/app/configuration/legacy_settings.py",
+      "line": 25
+    },
+    {
+      "allowed": true,
+      "api": "SettingsConfigDict",
+      "classification": "LEGACY_ROLLBACK_ALLOWED",
+      "env_name": null,
+      "file": "algo-bot/app/configuration/legacy_settings.py",
+      "line": 28
+    },
+    {
+      "allowed": true,
+      "api": "os.environ.get",
+      "classification": "LEGACY_ROLLBACK_ALLOWED",
+      "env_name": "AUTO_TRADE_BE_BUFFER_TICKS",
+      "file": "algo-bot/app/configuration/legacy_settings.py",
+      "line": 1074
+    },
+    {
+      "allowed": true,
+      "api": "os.environ.get",
+      "classification": "LEGACY_ROLLBACK_ALLOWED",
+      "env_name": "AUTO_TRADE_BE_BUFFER_PIPS",
+      "file": "algo-bot/app/configuration/legacy_settings.py",
+      "line": 1075
+    },
+    {
+      "allowed": true,
+      "api": "os.environ.get",
+      "classification": "SCRIPT_TOOL_ALLOWED",
+      "env_name": "APEXVOID_CONFIG_AUTHORITY",
+      "file": "algo-bot/app/configuration/phase2h_gate.py",
+      "line": 77
+    },
+    {
+      "allowed": true,
+      "api": "dotenv_values",
+      "classification": "CANONICAL_SOURCE_COLLECTION_ALLOWED",
+      "env_name": null,
+      "file": "algo-bot/app/configuration/python_sources.py",
+      "line": 32
+    },
+    {
+      "allowed": true,
+      "api": "os.environ",
+      "classification": "CANONICAL_SOURCE_COLLECTION_ALLOWED",
+      "env_name": null,
+      "file": "algo-bot/app/configuration/python_sources.py",
+      "line": 39
+    },
+    {
+      "allowed": true,
+      "api": "dotenv_values",
+      "classification": "SCRIPT_TOOL_ALLOWED",
+      "env_name": null,
+      "file": "algo-bot/app/configuration/shadow_cli.py",
+      "line": 26
+    },
+    {
+      "allowed": true,
+      "api": "os.environ",
+      "classification": "SCRIPT_TOOL_ALLOWED",
+      "env_name": null,
+      "file": "algo-bot/app/configuration/shadow_cli.py",
+      "line": 33
+    }
+  ],
+  "allowed_sites": 16,
+  "counts": {
+    "BOOTSTRAP_AUTHORITY_ALLOWED": 1,
+    "CANONICAL_SOURCE_COLLECTION_ALLOWED": 2,
+    "DEPLOYMENT_OBSERVABILITY_ALLOWED": 3,
+    "LEGACY_ROLLBACK_ALLOWED": 4,
+    "SCRIPT_TOOL_ALLOWED": 6
+  },
+  "direct_production_env_forbidden": 0,
+  "total_access_sites": 16,
+  "unknown_blockers": 0
+}

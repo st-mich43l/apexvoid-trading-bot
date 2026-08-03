@@ -1,0 +1,134 @@
+{
+  "aliases": [
+    {
+      "canonical_env": "LOG_DIR",
+      "deprecated_alias": "APEXVOID_LOG_DIR",
+      "path": "bootstrap.logging.directory",
+      "type": "str"
+    },
+    {
+      "canonical_env": "LOG_FILE_ENABLED",
+      "deprecated_alias": "APEXVOID_LOG_FILE_ENABLED",
+      "path": "bootstrap.logging.file_enabled",
+      "type": "bool"
+    },
+    {
+      "canonical_env": "LOG_RETENTION_DAYS",
+      "deprecated_alias": "APEXVOID_LOG_RETENTION_DAYS",
+      "path": "bootstrap.logging.retention_days",
+      "type": "int"
+    },
+    {
+      "canonical_env": "AUTO_TRADE_BE_BUFFER_TICKS",
+      "deprecated_alias": "AUTO_TRADE_BE_BUFFER_PIPS",
+      "path": "execution.stops.be_buffer_ticks",
+      "type": "int"
+    },
+    {
+      "canonical_env": "AUTO_TRADE_CANDIDATE_MAX_AGE_SECONDS",
+      "deprecated_alias": "AUTO_TRADE_CANDIDATE_MAX_AGE",
+      "path": "lifecycle.candidate.execution_maximum_age_seconds",
+      "type": "int"
+    },
+    {
+      "canonical_env": "AUTO_TRADE_CANDIDATE_STORAGE_TTL_SECONDS",
+      "deprecated_alias": "AUTO_TRADE_CANDIDATE_TTL",
+      "path": "lifecycle.candidate.storage_ttl_seconds",
+      "type": "int"
+    },
+    {
+      "canonical_env": "AUTO_TRADE_XAU_CONTRACT_SIZE",
+      "deprecated_alias": "AUTO_TRADE_CONTRACT_SIZE",
+      "path": "contract.instrument.contract_units_per_lot",
+      "type": "float"
+    },
+    {
+      "canonical_env": "AUTO_TRADE_STRATEGY_MATCH_ENABLED",
+      "deprecated_alias": "AUTO_TRADE_FORMING_GATE_ENABLED",
+      "path": "runtime.auto_trade.strategy_match_enabled",
+      "type": "bool"
+    },
+    {
+      "canonical_env": "AUTO_TRADE_STRATEGY_MATCH_MAX_AGE_SECONDS",
+      "deprecated_alias": "AUTO_TRADE_FORMING_MAX_AGE_SECONDS",
+      "path": "lifecycle.strategy_match.maximum_age_seconds",
+      "type": "int"
+    },
+    {
+      "canonical_env": "AUTO_TRADE_MAPPED_ZONE_ENABLED",
+      "deprecated_alias": "AUTO_TRADE_MARKET_MAP_STRATEGY_ENABLED",
+      "path": "strategies.mapped_zone.enabled",
+      "type": "bool"
+    },
+    {
+      "canonical_env": "AUTO_TRADE_XAU_PIP_SIZE",
+      "deprecated_alias": "AUTO_TRADE_PIP_SIZE",
+      "path": "contract.instrument.pip_size",
+      "type": "float"
+    },
+    {
+      "canonical_env": "AUTO_TRADE_SPOT_MAX_AGE_SECONDS",
+      "deprecated_alias": "AUTO_TRADE_SPOT_MAX_AGE",
+      "path": "market_data.spot.maximum_age_seconds",
+      "type": "int"
+    },
+    {
+      "canonical_env": "AUTO_TRADE_STRATEGY_MATCH_ENABLED",
+      "deprecated_alias": "AUTO_TRADE_STRATEGY_BRIDGE_ENABLED",
+      "path": "runtime.auto_trade.strategy_match_enabled",
+      "type": "bool"
+    },
+    {
+      "canonical_env": "AUTO_TRADE_CANDIDATE_STREAM",
+      "deprecated_alias": "AUTO_TRADE_STREAM",
+      "path": "contract.streams.candidates",
+      "type": "str"
+    },
+    {
+      "canonical_env": "AUTO_TRADE_TARGET_PLANS_PIPS",
+      "deprecated_alias": "AUTO_TRADE_TP_PIPS",
+      "path": "execution.targeting.default_ladder_pips",
+      "type": "str"
+    },
+    {
+      "canonical_env": "AUTO_TRADE_EXPECTED_BROKER",
+      "deprecated_alias": "CTRADER_EXPECTED_BROKER",
+      "path": "contract.account.expected_broker",
+      "type": "string"
+    },
+    {
+      "canonical_env": "DATABASE_URL",
+      "deprecated_alias": "POSTGRES_DSN",
+      "path": "bootstrap.postgres.url",
+      "type": "str"
+    },
+    {
+      "canonical_env": "SIGNAL_PUBLIC_SHOW_PIPS",
+      "deprecated_alias": "PUBLIC_SHOW_PIPS",
+      "path": "delivery.telegram.public_show_pips",
+      "type": "bool"
+    },
+    {
+      "canonical_env": "SIGNAL_VIP_CHANNEL_ID",
+      "deprecated_alias": "TELEGRAM_CHANNEL_ID",
+      "path": "delivery.telegram.telegram_channel_id",
+      "type": "int"
+    },
+    {
+      "canonical_env": "SIGNAL_VIP_CHANNEL_ID",
+      "deprecated_alias": "TELEGRAM_CHAT_ID",
+      "path": "delivery.telegram.telegram_channel_id",
+      "type": "int"
+    },
+    {
+      "canonical_env": "SIGNAL_PUBLIC_CHANNEL_ID",
+      "deprecated_alias": "XAU_PUBLIC_CHANNEL_ID",
+      "path": "delivery.telegram.signal_public_channel_id",
+      "type": "Optional[int]"
+    }
+  ],
+  "catalog_version": 1,
+  "count": 21,
+  "source_fingerprint_sha256": "5001f967384dd74f709d75b714cc03b2576b900ef0b9861aa77b25ff80e29094",
+  "source_model": "app.configuration.models.root.ApexVoidConfig"
+}

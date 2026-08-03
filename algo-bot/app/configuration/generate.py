@@ -14,6 +14,11 @@ from app.configuration.catalog import DERIVED_LEGACY_PROPERTIES
 from app.configuration.catalog import CatalogEntry
 from app.configuration.catalog import infer_ctrader_type
 from app.configuration.catalog import iter_catalog_entries
+from app.configuration.env_example_policy import render_env_example
+from app.configuration.environment_contract import deprecated_environment_document
+from app.configuration.environment_contract import environment_contract_document
+from app.configuration.environment_contract import environment_reference_markdown
+from app.configuration.environment_usage_audit import audit_environment_usage
 from app.configuration.profiles import PROFILES
 from app.configuration.profiles import profile_fingerprint
 from app.configuration.usage_audit import audit_legacy_settings_usage
@@ -1093,11 +1098,41 @@ def _legacy_access_python(
   return "\n".join(lines).encode("utf-8")
 
 
+def _environment_contract_artifact(fingerprint: str) -> dict[str, Any]:
+  return {**_header(fingerprint), **environment_contract_document()}
+
+
+def _deprecated_environment_artifact(fingerprint: str) -> dict[str, Any]:
+  return {**_header(fingerprint), **deprecated_environment_document()}
+
+
+def _environment_reference_markdown(fingerprint: str) -> bytes:
+  lines = environment_reference_markdown()
+  # Insert the source fingerprint just under the generated notice.
+  lines = [
+    *lines[:4],
+    f"- Source fingerprint: `{fingerprint}`",
+    *lines[4:],
+  ]
+  return ("\n".join(lines).rstrip() + "\n").encode("utf-8")
+
+
 def render_artifacts() -> dict[Path, bytes]:
   entries = iter_catalog_entries()
   fingerprint = _fingerprint(entries)
   usage = audit_legacy_settings_usage(REPOSITORY_ROOT)
+  environment_usage = audit_environment_usage(REPOSITORY_ROOT)
   return {
+    Path("contracts/configuration/environment-usage.generated.json"):
+      _json_bytes(environment_usage),
+    Path("contracts/configuration/environment-contract.generated.json"):
+      _json_bytes(_environment_contract_artifact(fingerprint)),
+    Path("contracts/configuration/deprecated-environment.generated.json"):
+      _json_bytes(_deprecated_environment_artifact(fingerprint)),
+    Path("docs/configuration/environment-reference.generated.md"):
+      _environment_reference_markdown(fingerprint),
+    Path(".env.example"):
+      render_env_example().encode("utf-8"),
     Path("contracts/configuration/config-catalog.generated.json"):
       _json_bytes(_catalog_artifact(entries, fingerprint)),
     Path("contracts/configuration/legacy-map.generated.json"):
