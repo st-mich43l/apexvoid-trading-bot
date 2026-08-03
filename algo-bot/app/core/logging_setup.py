@@ -9,7 +9,6 @@ logrotate is required.
 from __future__ import annotations
 
 import logging
-import os
 from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
 from typing import Any
@@ -49,11 +48,10 @@ def configure_logging(
   if not enable_file:
     return info
 
-  directory = Path(
-    log_dir
-    or os.environ.get("LOG_DIR")
-    or DEFAULT_LOG_DIR
-  )
+  # ``log_dir`` is supplied by the composition root from ``runtime_config``
+  # (``bootstrap.logging.directory``, itself LOG_DIR/APEXVOID_LOG_DIR aware), so
+  # this early-boot helper no longer performs an ambient environment read.
+  directory = Path(log_dir or DEFAULT_LOG_DIR)
   try:
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / log_file_name

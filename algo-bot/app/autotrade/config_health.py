@@ -6,17 +6,28 @@ from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 import hashlib
 import json
-import os
 from typing import Any, Iterable
 from urllib.parse import urlparse
 
 from app.autotrade.range_targets import configured_range_targets
 from app.autotrade.trade_plan import TRADE_PLAN_VERSION
-from app.core.config import runtime_config
-from app.core.environment_options import (
+from app.configuration.deployment_identity import (
+  expected_broker,
+  git_sha,
+  service_version,
+)
+from app.configuration.environment_aliases import present_deprecated_aliases
+from app.configuration.environment_contract import (
+  environment_entry_for_name,
+  iter_environment_contract_entries,
+)
+from app.configuration.environment_option_resolution import (
   canonical_option_health,
   deprecated_option_warnings,
+  runtime_environment_mapping,
 )
+from app.configuration.profiles import get_profile
+from app.core.config import runtime_config
 
 
 CONTRACT_MODES = ("v7_only",)
@@ -27,108 +38,6 @@ PYTHON_MANIFEST_KEY = "auto_trade:config_manifest:python"
 CTRADER_MANIFEST_KEY = "auto_trade:config_manifest:ctrader"
 CONFIG_HEALTH_KEY = "auto_trade:config_health"
 EXECUTOR_READINESS_KEY = "auto_trade:executor_readiness"
-
-_LEGACY_ENV_ALIASES = {
-  "AUTO_TRADE_CANDIDATE_STREAM": ("AUTO_TRADE_STREAM",),
-  "AUTO_TRADE_XAU_PIP_SIZE": ("AUTO_TRADE_PIP_SIZE",),
-  "AUTO_TRADE_XAU_CONTRACT_SIZE": ("AUTO_TRADE_CONTRACT_SIZE",),
-  "AUTO_TRADE_TARGET_PLANS_PIPS": ("AUTO_TRADE_TP_PIPS",),
-  "AUTO_TRADE_CANDIDATE_MAX_AGE_SECONDS": (
-    "AUTO_TRADE_CANDIDATE_MAX_AGE",
-  ),
-  "AUTO_TRADE_CANDIDATE_STORAGE_TTL_SECONDS": (
-    "AUTO_TRADE_CANDIDATE_TTL",
-  ),
-  "AUTO_TRADE_SPOT_MAX_AGE_SECONDS": ("AUTO_TRADE_SPOT_MAX_AGE",),
-  "AUTO_TRADE_MAPPED_ZONE_ENABLED": (
-    "AUTO_TRADE_MARKET_MAP_STRATEGY_ENABLED",
-  ),
-  "AUTO_TRADE_STRATEGY_MATCH_ENABLED": (
-    "AUTO_TRADE_STRATEGY_BRIDGE_ENABLED",
-    "AUTO_TRADE_FORMING_GATE_ENABLED",
-  ),
-  "AUTO_TRADE_BE_BUFFER_TICKS": (
-    "AUTO_TRADE_BE_BUFFER_PIPS",
-  ),
-}
-
-_PROFILE_DEFAULT_FIELDS = {
-  "AUTO_TRADE_ENABLED",
-  "AUTO_TRADE_DRY_RUN",
-  "AUTO_TRADE_REQUIRE_DEMO_ACCOUNT",
-  "AUTO_TRADE_RANGE_FLIP_ENABLED",
-  "AUTO_TRADE_RANGE_TWO_SIDED_ENABLED",
-  "AUTO_TRADE_ALLOW_CONCURRENT_STRATEGIES",
-  "AUTO_TRADE_ALLOW_COUNTER_BIAS",
-  "AUTO_TRADE_ZONE_FILL_ENABLED",
-  "AUTO_TRADE_CANDIDATE_MAX_AGE_SECONDS",
-  "AUTO_TRADE_CANDIDATE_STORAGE_TTL_SECONDS",
-  "AUTO_TRADE_NON_HEDGED_OPPOSITE_POLICY",
-  "AUTO_TRADE_STRUCTURAL_GUARD_MODE",
-  "AUTO_TRADE_ZONE_COOLDOWN_ENABLED",
-  "AUTO_TRADE_ZONE_RECONCILE_MODE",
-  "AUTO_TRADE_MAPPED_ZONE_ENABLED",
-  "AUTO_TRADE_MARKET_MAP_GUARD_ENABLED",
-  "AUTO_TRADE_STRATEGY_MATCH_ENABLED",
-  "AUTO_TRADE_EXECUTION_ZONE_MAX_WIDTH_ATR",
-  "AUTO_TRADE_EXECUTION_ZONE_MAX_WIDTH_PIPS",
-  "AUTO_TRADE_ADD_STOP_BUFFER_ATR",
-  "AUTO_TRADE_ADD_MIN_STOP_PIPS",
-  "AUTO_TRADE_SL_DISTANCE",
-  "AUTO_TRADE_WICK_STOP_BUFFER_ATR",
-  "AUTO_TRADE_TREND_STOP_MIN_PIPS",
-  "AUTO_TRADE_TREND_STOP_MAX_PIPS",
-}
-
-_CANONICAL_ENV_NAMES = {
-  "AUTO_TRADE_PROFILE",
-  "AUTO_TRADE_ENABLED",
-  "AUTO_TRADE_DRY_RUN",
-  "AUTO_TRADE_CANDIDATE_STREAM",
-  "AUTO_TRADE_EVENT_STREAM",
-  "AUTO_TRADE_CANDIDATE_CONTRACT_VERSION",
-  "AUTO_TRADE_SYMBOLS",
-  "AUTO_TRADE_CANONICAL_SYMBOL",
-  "AUTO_TRADE_XAU_PIP_SIZE",
-  "AUTO_TRADE_XAU_CONTRACT_SIZE",
-  "AUTO_TRADE_TARGET_PLANS_PIPS",
-  "AUTO_TRADE_RANGE_TARGETS_PIPS",
-  "AUTO_TRADE_RANGE_TP_BUFFER_PIPS",
-  "AUTO_TRADE_CANDIDATE_MAX_AGE_SECONDS",
-  "AUTO_TRADE_CANDIDATE_STORAGE_TTL_SECONDS",
-  "AUTO_TRADE_SPOT_MAX_AGE_SECONDS",
-  "AUTO_TRADE_RANGE_FLIP_ENABLED",
-  "AUTO_TRADE_RANGE_TWO_SIDED_ENABLED",
-  "AUTO_TRADE_ALLOW_CONCURRENT_STRATEGIES",
-  "AUTO_TRADE_ALLOW_COUNTER_BIAS",
-  "AUTO_TRADE_ZONE_FILL_ENABLED",
-  "AUTO_TRADE_MIN_CONFLUENCE",
-  "AUTO_TRADE_REQUIRE_DEMO_ACCOUNT",
-  "AUTO_TRADE_NON_HEDGED_OPPOSITE_POLICY",
-  "AUTO_TRADE_STRUCTURAL_GUARD_MODE",
-  "AUTO_TRADE_ZONE_COOLDOWN_ENABLED",
-  "AUTO_TRADE_ZONE_RECONCILE_MODE",
-  "AUTO_TRADE_RANGE_BOX_SCALE_OUT_ENABLED",
-  "AUTO_TRADE_RANGE_BOX_SCALE_OUT_THRESHOLD_PIPS",
-  "AUTO_TRADE_RANGE_BOX_SCALE_OUT_TRIGGER_PIPS",
-  "AUTO_TRADE_RANGE_BOX_SCALE_OUT_FRACTION",
-  "AUTO_TRADE_RANGE_BOX_MOVE_SL_TO_BE_AFTER_SCALE_OUT",
-  "AUTO_TRADE_MAPPED_ZONE_ENABLED",
-  "AUTO_TRADE_STRATEGY_MATCH_ENABLED",
-  "AUTO_TRADE_KEY_LEVEL_REACTION_ENABLED",
-  "AUTO_TRADE_DEMAND_REACTION_ENABLED",
-  "AUTO_TRADE_SUPPLY_REACTION_ENABLED",
-  "AUTO_TRADE_SESSION_LEVEL_REACTION_ENABLED",
-  "AUTO_TRADE_TRENDLINE_REACTION_ENABLED",
-  "AUTO_TRADE_EXECUTION_ZONE_MAX_WIDTH_ATR",
-  "AUTO_TRADE_EXECUTION_ZONE_MAX_WIDTH_PIPS",
-  "AUTO_TRADE_ADD_STOP_BUFFER_ATR",
-  "AUTO_TRADE_ADD_MIN_STOP_PIPS",
-  "AUTO_TRADE_SL_DISTANCE",
-  "AUTO_TRADE_WICK_STOP_BUFFER_ATR",
-  "AUTO_TRADE_TREND_STOP_MIN_PIPS",
-  "AUTO_TRADE_TREND_STOP_MAX_PIPS",
-}
 
 
 def canonicalize_int_set(values: Iterable[Any]) -> list[int]:
@@ -174,52 +83,78 @@ def canonicalize_account_mode(value: Any) -> str:
 
 
 def deprecated_environment_variables() -> list[str]:
-  deprecated = [
-    warning.removeprefix("deprecated_variable:")
-    for warning in deprecated_option_warnings()
-  ]
-  for canonical, aliases in _LEGACY_ENV_ALIASES.items():
-    deprecated.extend(alias for alias in aliases if os.getenv(alias) is not None)
-  return sorted(set(deprecated))
+  """Return deprecated ENV aliases that are present, derived from the catalog.
+
+  Presence is read from the canonical source bundle (dotenv < process
+  environment) and the alias registry lives in the catalog, so this never
+  reaches for ``os.getenv`` or a hand-maintained alias table.
+  """
+  environment = runtime_environment_mapping()
+  return sorted({
+    usage.deprecated_alias
+    for usage in present_deprecated_aliases(environment)
+  })
 
 
 def resolved_config_sources() -> dict[str, str]:
+  """Classify each auto-trade ENV field's provenance from metadata only.
+
+  Provenance is derived honestly from three catalog-backed inputs — the
+  canonical source bundle (explicit env / deprecated alias), the selected
+  profile document (``profile_<name>``), and otherwise the schema/application
+  default. No ambient ``os.getenv`` reads and no hand-maintained field lists.
+  Where the exact lower-level provenance cannot be proven from metadata the
+  label falls back conservatively to ``application_default``.
+  """
+  environment = runtime_environment_mapping()
+  profile = runtime_config.runtime.profile
+  profile_paths = {
+    assignment.path for assignment in get_profile(profile).assignments
+  }
   sources: dict[str, str] = {}
-  for canonical, aliases in _LEGACY_ENV_ALIASES.items():
-    if os.getenv(canonical) is not None:
-      sources[canonical] = "explicit_env"
+  for entry in iter_environment_contract_entries():
+    name = entry.canonical_env
+    if not name.startswith("AUTO_TRADE_"):
       continue
-    legacy = next(
-      (alias for alias in aliases if os.getenv(alias) is not None),
+    if environment.get(name) is not None:
+      sources[name] = "explicit_env"
+      continue
+    alias = next(
+      (a for a in entry.deprecated_aliases if environment.get(a) is not None),
       None,
     )
-    if legacy:
-      sources[canonical] = f"deprecated_env:{legacy}"
-    elif (
-      runtime_config.runtime.profile == "demo_eval"
-      and canonical in _PROFILE_DEFAULT_FIELDS
-    ):
-      sources[canonical] = "profile_demo_eval"
-    else:
-      sources[canonical] = "application_default"
-  for canonical in _PROFILE_DEFAULT_FIELDS:
-    if canonical in sources:
+    if alias is not None:
+      sources[name] = f"deprecated_env:{alias}"
       continue
-    sources[canonical] = (
-      "explicit_env"
-      if os.getenv(canonical) is not None
-      else "profile_demo_eval"
-      if runtime_config.runtime.profile == "demo_eval"
-      else "application_default"
-    )
-  for canonical in _CANONICAL_ENV_NAMES:
-    sources.setdefault(
-      canonical,
-      "explicit_env"
-      if os.getenv(canonical) is not None
-      else "application_default",
-    )
+    if entry.path in profile_paths:
+      sources[name] = f"profile_{profile}"
+      continue
+    sources[name] = "application_default"
   return dict(sorted(sources.items()))
+
+
+def _required_options_missing(
+  required_options: set[str],
+  sources: dict[str, str],
+) -> list[str]:
+  """Return required strategy options with no resolvable value.
+
+  Phase 2H makes catalog schema defaults and the active profile authoritative,
+  so an option resolving to ``application_default`` is a valid, present value —
+  not a missing one. An option is only ``missing`` when its catalog entry is
+  genuinely required (no default) and nothing supplies it. This keeps the
+  cross-service ``required_strategy_key_missing`` fatal rule intact while no
+  longer misfiring on options that the profile/defaults intentionally supply.
+  """
+  missing: list[str] = []
+  for name in required_options:
+    entry = environment_entry_for_name(name)
+    if entry is None:
+      missing.append(name)
+      continue
+    if entry.required and sources.get(name) in (None, "application_default"):
+      missing.append(name)
+  return sorted(missing)
 
 
 def _redis_identity(url: str) -> tuple[str, int]:
@@ -244,7 +179,7 @@ def python_manifest() -> dict[str, Any]:
   fingerprint, database = _redis_identity(runtime_config.bootstrap.redis.url)
   symbols = canonicalize_symbols(runtime_config.contract.instrument.symbols.split(","))
   now = datetime.now(timezone.utc)
-  raw_broker = os.getenv("AUTO_TRADE_EXPECTED_BROKER", "")
+  raw_broker = expected_broker()
   required_strategy_options = {
     "AUTO_TRADE_STRATEGY_MATCH_ENABLED",
     "AUTO_TRADE_KEY_LEVEL_REACTION_ENABLED",
@@ -259,8 +194,8 @@ def python_manifest() -> dict[str, Any]:
   return {
     "config_manifest_version": CONFIG_MANIFEST_VERSION,
     "service": "algo-bot",
-    "service_version": os.getenv("SERVICE_VERSION", "dev"),
-    "git_sha": os.getenv("GIT_SHA", "unknown"),
+    "service_version": service_version(),
+    "git_sha": git_sha(),
     "profile": runtime_config.runtime.profile,
     "auto_trade_enabled": runtime_config.runtime.auto_trade.enabled,
     "dry_run": runtime_config.runtime.auto_trade.dry_run,
@@ -381,10 +316,8 @@ def python_manifest() -> dict[str, Any]:
     "deprecated_variables": deprecated_environment_variables(),
     "canonical_options": canonical_option_health(),
     "config_sources": sources,
-    "required_options_missing": sorted(
-      name
-      for name in required_strategy_options
-      if sources.get(name) == "application_default"
+    "required_options_missing": _required_options_missing(
+      required_strategy_options, sources
     ),
     "generated_at": int(now.timestamp()),
     "generated_at_iso": now.isoformat(),
