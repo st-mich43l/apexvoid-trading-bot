@@ -61,7 +61,7 @@ from app.autotrade.zone_watch import (
   record_zone_presence,
   transition_zone_watch,
 )
-from app.core.config import runtime_config, settings
+from app.core.config import runtime_config, runtime_config_facade
 from app.persistence import redis_state
 
 
@@ -171,7 +171,7 @@ def _quote_evidence(
   pip = units.pip_size(record.symbol)
   tolerance = max(
     0.0,
-    float(settings.auto_trade_entry_contract_tolerance_pips) * pip,
+    float(runtime_config.execution.entry.contract_tolerance_pips) * pip,
   )
   return executable_quote_in_zone(
     record.direction,
@@ -311,7 +311,6 @@ async def _persist_match(client: Any, match: StrategyMatch) -> StrategyMatch:
   combined, _events = dedupe_matches(
     [*active, match],
     atr=match.atr,
-    cfg=settings,
   )
   ttl = max(60, match.expires_at - _now())
   await client.set(strategy_match_key(match.symbol), match.to_json(), ex=ttl)
@@ -527,7 +526,7 @@ async def _m1_trigger_for_zone(
     direction=record.direction,
     earliest_bar_ts=int(record.zone_entered_at) + 1,
     after_bar_ts=record.last_evaluated_m1_ts,
-    cfg=settings,
+    cfg=runtime_config_facade(),
   )
   latest = latest_eligible_m1_bar_ts(
     frame,
@@ -756,7 +755,7 @@ async def evaluate_active_zone_watches(
 
 async def zone_watch_execution_loop() -> None:
   """M1 wake-up for retained zones; no execution queue while merely waiting."""
-  if not settings.auto_trade_enabled:
+  if not runtime_config.runtime.auto_trade.enabled:
     return
   client = redis_state.get_client()
   pubsub = client.pubsub()

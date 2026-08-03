@@ -83,7 +83,7 @@ class TrendDecision:
 def classify_regime(
   frames: dict[str, pd.DataFrame],
   box_decision: AutoScalpDecision,
-  cfg: Any,
+  cfg: Any | None = None,
 ) -> RegimeInfo:
   """Classify the current M1 regime as chop, trend, or breakout.
 
@@ -91,7 +91,13 @@ def classify_regime(
   then a structurally-confirmed, ATR-expanding trend, else chop. HTF bias is
   retained as alignment metadata; demo evaluation may execute a valid local
   structure in either direction.
+
+  ``cfg`` defaults to the authority-neutral runtime configuration (flat
+  legacy-name view); tests may still inject a SimpleNamespace override.
   """
+  if cfg is None:
+    from app.core.config import runtime_config_facade
+    cfg = runtime_config_facade()
   m1_raw = frames.get("M1")
   if m1_raw is None or m1_raw.empty:
     return RegimeInfo(
