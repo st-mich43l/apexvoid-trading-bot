@@ -18,6 +18,22 @@
     },
     {
       "allowed": true,
+      "api": "os.environ",
+      "classification": "BOOTSTRAP_AUTHORITY_ALLOWED",
+      "env_name": null,
+      "file": "algo-bot/app/configuration/bootstrap_authority.py",
+      "line": 43
+    },
+    {
+      "allowed": true,
+      "api": "os.environ",
+      "classification": "BOOTSTRAP_AUTHORITY_ALLOWED",
+      "env_name": null,
+      "file": "algo-bot/app/configuration/bootstrap_authority.py",
+      "line": 48
+    },
+    {
+      "allowed": true,
       "api": "os.getenv",
       "classification": "DEPLOYMENT_OBSERVABILITY_ALLOWED",
       "env_name": "SERVICE_VERSION",
@@ -129,15 +145,15 @@
       "line": 33
     }
   ],
-  "allowed_sites": 16,
+  "allowed_sites": 18,
   "counts": {
-    "BOOTSTRAP_AUTHORITY_ALLOWED": 1,
+    "BOOTSTRAP_AUTHORITY_ALLOWED": 3,
     "CANONICAL_SOURCE_COLLECTION_ALLOWED": 2,
     "DEPLOYMENT_OBSERVABILITY_ALLOWED": 3,
     "LEGACY_ROLLBACK_ALLOWED": 4,
     "SCRIPT_TOOL_ALLOWED": 6
   },
   "direct_production_env_forbidden": 0,
-  "total_access_sites": 16,
+  "total_access_sites": 18,
   "unknown_blockers": 0
 }
