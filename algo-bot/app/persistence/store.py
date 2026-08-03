@@ -32,7 +32,7 @@ import logging
 from contextlib import asynccontextmanager
 from datetime import datetime
 from zoneinfo import ZoneInfo
-from app.core.config import runtime_config, settings
+from app.core.config import runtime_config
 from app.core.symbols import pip_for
 from app.signals.pips_format import legs_achieved_pips
 
@@ -306,7 +306,7 @@ async def init_db() -> None:
       -- that collides on *either* unique constraint (PK or message_id).
       ON CONFLICT DO NOTHING
       """,
-      settings.signal_vip_channel_id,
+      runtime_config.delivery.telegram.telegram_channel_id,
     )
 
     await db.execute(
@@ -881,7 +881,7 @@ async def set_manual_signal_channel_id(row_id: int, channel_message_id: int) -> 
           message_id = excluded.message_id,
           tier = 'vip'
         """,
-        row_id, settings.signal_vip_channel_id, channel_message_id,
+        row_id, runtime_config.delivery.telegram.telegram_channel_id, channel_message_id,
       )
 
 

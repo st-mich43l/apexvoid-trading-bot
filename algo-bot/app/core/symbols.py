@@ -1,11 +1,11 @@
 """Instrument metadata and Telegram channel routing."""
 
-from app.core.config import runtime_config, settings
+from app.core.config import runtime_config
 
 
 SYMBOLS = {
   "XAU": {
-    "pip": settings.auto_trade_xau_pip_size,
+    "pip": runtime_config.contract.instrument.pip_size,
     "digits": 2,
   },
   # "US30": {"pip": 1.0, "digits": 1},
@@ -31,7 +31,7 @@ CHANNELS = [
   {
     "symbol": "XAU",
     "tier": "vip",
-    "channel_id": settings.signal_vip_channel_id,
+    "channel_id": runtime_config.delivery.telegram.telegram_channel_id,
   },
   {
     "symbol": "XAU",

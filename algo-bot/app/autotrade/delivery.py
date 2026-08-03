@@ -18,7 +18,7 @@ from app.autotrade.volume_pips import (
   volume_percent,
 )
 from app.persistence import redis_state
-from app.core.config import runtime_config, settings
+from app.core.config import runtime_config
 from app.bot.client import (
   delete_scanner_message,
   edit_scanner_message_text,
@@ -203,17 +203,12 @@ def _format_event_price(raw: str, *, digits: int | None = None) -> str:
     return raw
   precision = digits
   if precision is None:
-    precision = int(getattr(settings, "auto_trade_xau_price_digits", 2))
+    precision = int(runtime_config.contract.instrument.price_digits)
   return f"{value:.{max(0, precision)}f}"
 
 
 def _broker_lot_size() -> float:
-  raw = getattr(settings, "auto_trade_broker_lot_size", None)
-  try:
-    value = float(raw) if raw is not None else _DEFAULT_BROKER_LOT_SIZE
-  except (TypeError, ValueError):
-    value = _DEFAULT_BROKER_LOT_SIZE
-  return value if value > 0 else _DEFAULT_BROKER_LOT_SIZE
+  return _DEFAULT_BROKER_LOT_SIZE
 
 
 def _format_message_lot(raw: str) -> str:
@@ -1885,7 +1880,7 @@ async def auto_trade_status_text() -> str:
   primary_symbol = next(
     (
       item.strip().upper()
-      for item in settings.auto_trade_symbols.split(",")
+      for item in runtime_config.contract.instrument.symbols.split(",")
       if item.strip()
     ),
     "XAU",
@@ -1900,22 +1895,22 @@ async def auto_trade_status_text() -> str:
   )
   mode = (
     "disabled"
-    if not settings.auto_trade_enabled
+    if not runtime_config.runtime.auto_trade.enabled
     else "dry run"
-    if settings.auto_trade_dry_run
+    if runtime_config.runtime.auto_trade.dry_run
     else "demo trading"
   )
   state = "paused" if paused else "running"
   profile = str(
     (config_health or {}).get("profile")
-    or settings.auto_trade_profile
+    or runtime_config.runtime.profile
     or "conservative"
   )
   selected_text = "none"
   execution_state = "-"
   why = ""
   regime = ""
-  if settings.auto_trade_enabled:
+  if runtime_config.runtime.auto_trade.enabled:
     execution_state = "waiting"
     raw = await client.get(f"auto_trade:last_gate:{primary_symbol}")
     if raw:
@@ -2002,7 +1997,7 @@ async def auto_trade_status_text() -> str:
     lines.append(f"Route: {escape(route_line)}")
   if why:
     lines.append(f"Why: {escape(why)}")
-  if settings.auto_trade_enabled:
+  if runtime_config.runtime.auto_trade.enabled:
     # Supervisor marks programming bugs as fatal (Redis blips stay retrying).
     try:
       fatals = await redis_state.list_fatal_components()
@@ -2386,7 +2381,7 @@ async def _auto_trade_owner_events_loop(*, chat_id: int) -> None:
   cursor = await client.get(_CURSOR_KEY)
   if not cursor:
     latest = await client.xrevrange(
-      settings.auto_trade_event_stream,
+      runtime_config.contract.streams.events,
       count=1,
     )
     cursor = latest[0][0] if latest else "0-0"
@@ -2401,7 +2396,7 @@ async def _auto_trade_owner_events_loop(*, chat_id: int) -> None:
     try:
       await _check_regime_alerts(client)
       batches = await client.xread(
-        {settings.auto_trade_event_stream: cursor},
+        {runtime_config.contract.streams.events: cursor},
         count=20,
         block=5000,
       )
@@ -2425,7 +2420,7 @@ async def _auto_trade_owner_events_loop(*, chat_id: int) -> None:
 
 async def auto_trade_events_loop() -> None:
   if (
-    not settings.auto_trade_enabled
+    not runtime_config.runtime.auto_trade.enabled
     or not runtime_config.delivery.telegram.telegram_owner_id
   ):
     return
