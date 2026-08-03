@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 import math
+from types import SimpleNamespace
+from typing import Any
 
 import pandas as pd
 
@@ -54,6 +56,63 @@ _TF_MINUTES = {
   "H4": 240,
   "D1": 1440,
 }
+
+
+def _nested_cfg_from_analysis_settings(settings: AnalysisSettings) -> Any:
+  """Project the engine's flat ``AnalysisSettings`` DTO into the nested
+  canonical shape expected by trendlines / session_liquidity / regime /
+  scalp_ranges after Phase 2I-A.1.
+
+  This is an internal composition adapter only — it is not a second
+  configuration system and does not read ENV or legacy Settings.
+  """
+  return SimpleNamespace(
+    analysis=SimpleNamespace(
+      trendlines=SimpleNamespace(
+        tolerance_atr=settings.tl_tol_atr,
+        minimum_touches=settings.tl_min_touches,
+        maximum_slope_atr=settings.tl_max_slope_atr,
+      ),
+      breakout=SimpleNamespace(
+        buffer_atr=settings.breakout_buffer_atr,
+        accept_bars=settings.breakout_accept_bars,
+        max_age_bars=settings.breakout_max_age_bars,
+      ),
+      levels=SimpleNamespace(round_step=settings.round_step),
+    ),
+    market_data=SimpleNamespace(
+      sessions=SimpleNamespace(
+        asia_start=settings.session_asia_start,
+        london_start=settings.session_london_start,
+        ny_start=settings.session_ny_start,
+        daily_rollover_utc_hour=settings.daily_rollover_utc_hour,
+      ),
+    ),
+    strategies=SimpleNamespace(
+      range_reversion=SimpleNamespace(
+        range_edge=SimpleNamespace(
+          lookback=settings.range_scalp_lookback,
+          cluster_atr=settings.range_scalp_cluster_atr,
+          cluster_min_abs=0.0,
+          min_touches=settings.range_scalp_min_touches,
+          min_wick_frac=settings.range_scalp_min_wick_frac,
+          entry_tol_atr=settings.range_scalp_entry_tol_atr,
+          max_edge_width_atr=0.75,
+          min_width_atr=settings.range_scalp_min_width_atr,
+          max_width_atr=settings.range_scalp_max_width_atr,
+          min_room_atr=settings.range_scalp_min_room_atr,
+          break_closes=settings.range_scalp_break_closes,
+          min_inside_closes=3,
+        ),
+      ),
+      scalp=SimpleNamespace(
+        scalp_barrier_fallback_enabled=True,
+        scalp_barrier_fallback_min_confirmations=1,
+        scalp_range_provisional_enabled=True,
+        scalp_post_impulse_range_enabled=True,
+      ),
+    ),
+  )
 
 
 @dataclass(frozen=True)
@@ -207,7 +266,8 @@ def _analyze_tf(
   )
   structure = market_structure(swings)
   breaks = structure_breaks(swings, df)
-  diagonal_lines = find_trendlines(swings, df, atr, settings)
+  nested_cfg = _nested_cfg_from_analysis_settings(settings)
+  diagonal_lines = find_trendlines(swings, df, atr, nested_cfg)
   levels = key_levels(
     swings,
     atr,
@@ -237,7 +297,7 @@ def _analyze_tf(
   fvg_zones = fvg(df)
   pools = liquidity_pools(swings, df, settings.equal_tol_atr, atr)
   sessions = [
-    *session_levels(df, settings),
+    *session_levels(df, nested_cfg),
     *(weekly_levels or []),
   ]
   range_ = dealing_range(
@@ -246,7 +306,7 @@ def _analyze_tf(
     settings.eq_band,
   )
   regime_ = regime(df, atr, swings, structure, range_, settings)
-  box_break = accepted_box_break(df, atr, regime_, settings)
+  box_break = accepted_box_break(df, atr, regime_, nested_cfg)
   zones = merge_zones(
     [*sd_zones, *ob_zones, *flip, *fvg_zones],
     settings.zone_merge_overlap,
@@ -329,7 +389,7 @@ def _analyze_tf(
     sessions,
     diagonal_lines,
     regime_,
-    settings,
+    nested_cfg,
   )
   ob_zones, sd_zones, flip, fvg_zones = _zone_views(zones)
   return TimeframeAnalysis(

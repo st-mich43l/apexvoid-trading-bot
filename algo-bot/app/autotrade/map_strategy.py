@@ -243,6 +243,9 @@ def _select_reaction_detailed(
   cfg: Any = None,
   rendered_map: MarketMap | None = None,
 ) -> _ReactionSelection:
+  if cfg is None:
+    from app.core.config import runtime_config
+    cfg = runtime_config
   bias_side = (
     "buy" if market_map.bias == "up"
     else "sell" if market_map.bias == "down"

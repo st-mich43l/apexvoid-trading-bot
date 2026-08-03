@@ -540,8 +540,8 @@ def classify_execution_zone(
   width_pips = width / pip_size if pip_size > 0 else math.inf
   width_atr = width / atr if atr > 0 else math.inf
   exceeds = (
-    width_atr > float(cfg.auto_trade_execution_zone_max_width_atr)
-    or width_pips > float(cfg.auto_trade_execution_zone_max_width_pips)
+    width_atr > float(cfg.execution.policy.execution_zone_max_width_atr)
+    or width_pips > float(cfg.execution.policy.execution_zone_max_width_pips)
   )
   return ExecutionZoneClassification(
     side=zone.side,

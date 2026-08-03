@@ -608,7 +608,7 @@
       "deferred_reason": null,
       "file": "algo-bot/app/autotrade/worker.py",
       "legacy_attribute": "auto_trade_spot_max_age",
-      "line": 629,
+      "line": 612,
       "migration_classification": "PHASE_2E_MIGRATE",
       "migration_status": "migrated",
       "root_domain": "market_data",
