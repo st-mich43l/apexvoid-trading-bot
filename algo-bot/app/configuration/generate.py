@@ -27,6 +27,24 @@ PHASE_2E_ROOTS = frozenset({"bootstrap", "delivery", "market_data"})
 PHASE_2F_ROOTS = frozenset({
   "actionability", "analysis", "lifecycle", "strategies",
 })
+PHASE_2G_ROOTS = frozenset({
+  "contract", "execution", "manual_algo", "risk", "runtime",
+})
+# Fixed Phase 2F end-state inventory used as the Phase 2G "before" baseline.
+PHASE_2G_BASELINE_ROOT_COUNTS = {
+  "contract": 42,
+  "execution": 41,
+  "manual_algo": 13,
+  "risk": 11,
+  "runtime": 35,
+}
+PHASE_2G_BASELINE_DERIVED = 3
+PHASE_2G_BASELINE_OPTIONAL = 2
+PHASE_2G_BASELINE_TOTAL = (
+  sum(PHASE_2G_BASELINE_ROOT_COUNTS.values())
+  + PHASE_2G_BASELINE_DERIVED
+  + PHASE_2G_BASELINE_OPTIONAL
+)
 
 
 def _json_bytes(value: Any) -> bytes:
@@ -304,6 +322,293 @@ _PHASE2F_TEST_COVERAGE = {
   "RECONCILIATION": "test_startup_reconciliation.py",
   "TELEMETRY_ONLY": "configuration usage-audit guards",
 }
+
+
+_PHASE2G_TEST_COVERAGE = {
+  "RUNTIME_ENABLEMENT": "test_config_phase2g_behavior_characterization.py",
+  "SCANNER_ENABLEMENT": "test_config_phase2g_behavior_characterization.py",
+  "CONTRACT_HANDSHAKE": "test_config_health.py; test_config_phase2g_behavior_characterization.py",
+  "STREAM_ROUTING": "test_config_phase2g_behavior_characterization.py",
+  "INSTRUMENT_CONTRACT": "test_config_health.py; test_symbols.py",
+  "ENTRY_POLICY": "test_trade_plan_builder.py; test_execution_confirmation.py",
+  "TARGETING": "test_range_targets.py; test_trade_plan_builder.py",
+  "STOP_POLICY": "test_protective_stop.py; test_trade_plan_builder.py",
+  "SCALE_IN": "test_zone_scale_execution.py",
+  "SCALE_OUT": "test_range_box_scale_out.py",
+  "POSITION_SIZING": "test_scale_in_sizing.py; test_config_phase2g_behavior_characterization.py",
+  "EXPOSURE": "test_active_exposure.py",
+  "POSITION_LIMIT": "test_active_exposure.py",
+  "MANUAL_COMMAND": "test_manual_execution.py",
+  "CONFIG_HEALTH": "test_config_health.py",
+  "TELEMETRY_ONLY": "configuration usage-audit guards",
+}
+
+
+def _phase2g_behavior_boundary(path: str | None) -> str:
+  if not path:
+    return "TELEMETRY_ONLY"
+  if path.startswith("runtime.scanner"):
+    return "SCANNER_ENABLEMENT"
+  if path.startswith("runtime"):
+    return "RUNTIME_ENABLEMENT"
+  if path.startswith("contract.streams"):
+    return "STREAM_ROUTING"
+  if path.startswith("contract.instrument") or path.startswith("contract.broker"):
+    return "INSTRUMENT_CONTRACT"
+  if path.startswith("contract"):
+    return "CONTRACT_HANDSHAKE"
+  if path.startswith("execution.entry"):
+    return "ENTRY_POLICY"
+  if path.startswith(("execution.targeting", "execution.range")):
+    if "scale_out" in path or "box_scale" in path:
+      return "SCALE_OUT"
+    return "TARGETING"
+  if path.startswith(("execution.stops", "execution.trend")):
+    return "STOP_POLICY"
+  if path.startswith(("execution.scaling", "execution.zone_scaling", "execution.reaction")):
+    return "SCALE_IN"
+  if path.startswith("execution"):
+    return "ENTRY_POLICY"
+  if path.startswith("risk.sizing") or path.startswith("risk.quality_tiers"):
+    return "POSITION_SIZING"
+  if path.startswith("risk.exposure"):
+    return "EXPOSURE"
+  if path.startswith("risk.position_limits"):
+    return "POSITION_LIMIT"
+  if path.startswith("risk"):
+    return "POSITION_SIZING"
+  if path.startswith("manual_algo"):
+    return "MANUAL_COMMAND"
+  if path.startswith("delivery"):
+    return "TELEMETRY_ONLY"
+  return "TELEMETRY_ONLY"
+
+
+def _consumer_migration_phase2g_artifact(
+  entries: tuple[CatalogEntry, ...],
+  fingerprint: str,
+  usage: dict[str, object],
+) -> dict[str, Any]:
+  """Render the Phase 2G final-consumer migration ledger from AST facts."""
+  direct_paths = {
+    entry.legacy_attr: entry.path
+    for entry in entries
+    if entry.legacy_attr is not None
+  }
+  reverse_paths = {path: attribute for attribute, path in direct_paths.items()}
+  derived_paths = {
+    item.property_name: item.source_path
+    for item in DERIVED_LEGACY_PROPERTIES
+  }
+  rows: list[dict[str, Any]] = []
+
+  def add_row(
+    item: dict[str, Any],
+    *,
+    legacy_attribute: str | None,
+    canonical_path: str | None,
+    classification: str,
+    status: str,
+    support: bool,
+    reason: str | None,
+  ) -> None:
+    parts = canonical_path.split(".") if canonical_path else []
+    boundary = _phase2g_behavior_boundary(canonical_path)
+    rows.append({
+      "file": item["path"],
+      "line": item["line"],
+      "legacy_attribute": legacy_attribute,
+      "canonical_path": canonical_path,
+      "root_domain": parts[0] if parts else None,
+      "subdomain": parts[1] if len(parts) > 1 else None,
+      "authority_neutral_support": support,
+      "migration_classification": classification,
+      "migration_status": status,
+      "deferred_reason": reason,
+      "behavior_boundary": boundary,
+      "targeted_test_coverage": _PHASE2G_TEST_COVERAGE[boundary],
+    })
+
+  production = usage["production"]
+  for item in production["canonical_reads"]:
+    path = item["canonical_path"]
+    root = path.split(".", 1)[0]
+    if root not in PHASE_2G_ROOTS and root != "delivery":
+      continue
+    attribute = reverse_paths.get(path)
+    derived_attr = next(
+      (
+        name for name, source in derived_paths.items()
+        if source == path
+      ),
+      None,
+    )
+    if root in PHASE_2G_ROOTS and attribute is not None:
+      add_row(
+        item,
+        legacy_attribute=attribute,
+        canonical_path=path,
+        classification="PHASE_2G_MIGRATE",
+        status="migrated",
+        support=True,
+        reason=None,
+      )
+    elif derived_attr is not None or (
+      path == "delivery.telegram.telegram_channel_id"
+    ):
+      add_row(
+        item,
+        legacy_attribute=derived_attr or "signal_vip_channel_id",
+        canonical_path=path,
+        classification="DERIVED_PROPERTY_REPLACE",
+        status="migrated",
+        support=True,
+        reason=None,
+      )
+    elif root in PHASE_2G_ROOTS:
+      add_row(
+        item,
+        legacy_attribute=attribute,
+        canonical_path=path,
+        classification="UNKNOWN_BLOCKER",
+        status="blocked",
+        support=False,
+        reason="canonical Phase 2G read lacks direct legacy ownership",
+      )
+
+  # Document optional compatibility resolutions that left no AST residue.
+  for path, attribute, reason in (
+    (
+      "algo-bot/app/autotrade/delivery.py",
+      "auto_trade_broker_lot_size",
+      "replaced with local _DEFAULT_BROKER_LOT_SIZE non-configuration constant",
+    ),
+    (
+      "algo-bot/app/autotrade/worker.py",
+      "auto_trade_v7_max_volume",
+      "replaced with local _V7_MAX_VOLUME_DEFAULT non-configuration constant",
+    ),
+  ):
+    add_row(
+      {"path": path, "line": 0},
+      legacy_attribute=attribute,
+      canonical_path=None,
+      classification="OPTIONAL_COMPATIBILITY_RESOLVE",
+      status="migrated",
+      support=False,
+      reason=reason,
+    )
+
+  remaining_flat = []
+  for item in production["attribute_reads"]:
+    attribute = item["attribute"]
+    path = direct_paths.get(attribute)
+    root = path.split(".", 1)[0] if path else None
+    if root in PHASE_2G_ROOTS or attribute in derived_paths or path is None:
+      remaining_flat.append(item)
+      add_row(
+        item,
+        legacy_attribute=attribute,
+        canonical_path=path or derived_paths.get(attribute),
+        classification=(
+          "PHASE_2G_MIGRATE" if path and root in PHASE_2G_ROOTS
+          else (
+            "DERIVED_PROPERTY_REPLACE" if attribute in derived_paths
+            else "OPTIONAL_COMPATIBILITY_RESOLVE"
+          )
+        ),
+        status="pending",
+        support=bool(path),
+        reason="production flat Settings read remains",
+      )
+  for item in production["introspection"]:
+    names = item["dynamic_names"] or (
+      [item["attribute"]] if item["attribute"] is not None else []
+    )
+    for attribute in names:
+      path = direct_paths.get(attribute)
+      root = path.split(".", 1)[0] if path else None
+      if root in PHASE_2G_ROOTS or attribute in derived_paths or path is None:
+        remaining_flat.append(item)
+        add_row(
+          item,
+          legacy_attribute=attribute,
+          canonical_path=path or derived_paths.get(attribute),
+          classification="UNKNOWN_BLOCKER",
+          status="blocked",
+          support=False,
+          reason="production dynamic Settings lookup remains",
+        )
+
+  rows.sort(key=lambda item: (
+    item["file"],
+    item["line"],
+    item["legacy_attribute"] or "",
+    item["canonical_path"] or "",
+  ))
+  migrated = sum(item["migration_status"] == "migrated" for item in rows)
+  eligible_remaining = sum(
+    item["migration_classification"] == "PHASE_2G_MIGRATE"
+    and item["migration_status"] != "migrated"
+    for item in rows
+  )
+  unknown = sum(
+    item["migration_classification"] == "UNKNOWN_BLOCKER" for item in rows
+  )
+  derived_replaced = sum(
+    item["migration_classification"] == "DERIVED_PROPERTY_REPLACE"
+    and item["migration_status"] == "migrated"
+    for item in rows
+  )
+  optional_resolved = sum(
+    item["migration_classification"] == "OPTIONAL_COMPATIBILITY_RESOLVE"
+    and item["migration_status"] == "migrated"
+    for item in rows
+  )
+  roots = {
+    root: {
+      "eligible_before": PHASE_2G_BASELINE_ROOT_COUNTS[root],
+      "migrated": sum(
+        item["root_domain"] == root
+        and item["migration_classification"] == "PHASE_2G_MIGRATE"
+        and item["migration_status"] == "migrated"
+        for item in rows
+      ),
+      "remaining": sum(
+        item["root_domain"] == root
+        and item["migration_classification"] == "PHASE_2G_MIGRATE"
+        and item["migration_status"] != "migrated"
+        for item in rows
+      ),
+    }
+    for root in sorted(PHASE_2G_ROOTS)
+  }
+  return {
+    **_header(fingerprint),
+    "phase": "2G",
+    "candidate_roots": sorted(PHASE_2G_ROOTS),
+    "counts": {
+      "production_flat_reads_before": PHASE_2G_BASELINE_TOTAL,
+      "eligible_production_reads_before": sum(
+        PHASE_2G_BASELINE_ROOT_COUNTS.values()
+      ),
+      "migrated_reads": migrated,
+      "eligible_reads_remaining": eligible_remaining,
+      "production_flat_reads_remaining": len(production["attribute_reads"])
+        + sum(
+          len(item["dynamic_names"] or (
+            [item["attribute"]] if item["attribute"] is not None else []
+          ))
+          for item in production["introspection"]
+        ),
+      "production_settings_imports_remaining": 0,
+      "derived_properties_replaced": derived_replaced,
+      "optional_compatibility_names_resolved": optional_resolved,
+      "unknown_blockers": unknown,
+    },
+    "root_counts": roots,
+    "reads": rows,
+  }
 
 
 def _consumer_migration_phase2f_artifact(
@@ -815,6 +1120,10 @@ def render_artifacts() -> dict[Path, bytes]:
       _json_bytes(_consumer_migration_artifact(entries, fingerprint, usage)),
     Path("contracts/configuration/consumer-migration-phase-2f.generated.json"):
       _json_bytes(_consumer_migration_phase2f_artifact(
+        entries, fingerprint, usage,
+      )),
+    Path("contracts/configuration/consumer-migration-phase-2g.generated.json"):
+      _json_bytes(_consumer_migration_phase2g_artifact(
         entries, fingerprint, usage,
       )),
     Path("algo-bot/app/configuration/generated/__init__.py"):

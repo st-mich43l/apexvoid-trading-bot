@@ -17,6 +17,7 @@ from app.configuration.generated.legacy_access import (
 from app.configuration.python_loader import load_python_canonical_settings
 from app.configuration.python_sources import load_python_runtime_source_bundle
 from app.configuration.fingerprints import catalog_fingerprint
+from app.configuration.facade import CanonicalSettingsFacade
 from app.configuration.legacy_canonical_view import LegacyCanonicalConfigView
 
 
@@ -1147,6 +1148,19 @@ _ACTIVE_CONFIGURATION = _build_active_configuration(
 )
 settings = _ACTIVE_CONFIGURATION.settings
 runtime_config = _ACTIVE_CONFIGURATION.runtime_config
+
+
+def runtime_config_facade() -> object:
+  """Authority-neutral flat legacy-name view backed by ``runtime_config``.
+
+  Production helpers that still read flat legacy attribute names (the
+  ``getattr(cfg, "auto_trade_...")`` execution/analysis knobs) resolve them
+  through this view when no explicit test override is supplied, so they never
+  depend on the legacy ``settings`` singleton. The values are identical to the
+  legacy Settings surface in both authorities: ``CanonicalSettingsFacade``
+  traverses the same canonical paths ``runtime_config`` exposes.
+  """
+  return CanonicalSettingsFacade(runtime_config)
 
 
 def active_configuration_authority() -> RuntimeConfigurationAuthority:

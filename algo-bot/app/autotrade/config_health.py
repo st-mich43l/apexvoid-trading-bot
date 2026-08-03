@@ -12,7 +12,7 @@ from urllib.parse import urlparse
 
 from app.autotrade.range_targets import configured_range_targets
 from app.autotrade.trade_plan import TRADE_PLAN_VERSION
-from app.core.config import runtime_config, settings
+from app.core.config import runtime_config
 from app.core.environment_options import (
   canonical_option_health,
   deprecated_option_warnings,
@@ -196,7 +196,7 @@ def resolved_config_sources() -> dict[str, str]:
     if legacy:
       sources[canonical] = f"deprecated_env:{legacy}"
     elif (
-      settings.auto_trade_profile == "demo_eval"
+      runtime_config.runtime.profile == "demo_eval"
       and canonical in _PROFILE_DEFAULT_FIELDS
     ):
       sources[canonical] = "profile_demo_eval"
@@ -209,7 +209,7 @@ def resolved_config_sources() -> dict[str, str]:
       "explicit_env"
       if os.getenv(canonical) is not None
       else "profile_demo_eval"
-      if settings.auto_trade_profile == "demo_eval"
+      if runtime_config.runtime.profile == "demo_eval"
       else "application_default"
     )
   for canonical in _CANONICAL_ENV_NAMES:
@@ -242,7 +242,7 @@ def _int_values(raw: str) -> list[int]:
 
 def python_manifest() -> dict[str, Any]:
   fingerprint, database = _redis_identity(runtime_config.bootstrap.redis.url)
-  symbols = canonicalize_symbols(settings.auto_trade_symbols.split(","))
+  symbols = canonicalize_symbols(runtime_config.contract.instrument.symbols.split(","))
   now = datetime.now(timezone.utc)
   raw_broker = os.getenv("AUTO_TRADE_EXPECTED_BROKER", "")
   required_strategy_options = {
@@ -261,42 +261,42 @@ def python_manifest() -> dict[str, Any]:
     "service": "algo-bot",
     "service_version": os.getenv("SERVICE_VERSION", "dev"),
     "git_sha": os.getenv("GIT_SHA", "unknown"),
-    "profile": settings.auto_trade_profile,
-    "auto_trade_enabled": settings.auto_trade_enabled,
-    "dry_run": settings.auto_trade_dry_run,
-    "manual_algo_enabled": settings.manual_algo_enabled,
-    "manual_algo_dry_run": settings.manual_algo_dry_run,
+    "profile": runtime_config.runtime.profile,
+    "auto_trade_enabled": runtime_config.runtime.auto_trade.enabled,
+    "dry_run": runtime_config.runtime.auto_trade.dry_run,
+    "manual_algo_enabled": runtime_config.manual_algo.runtime.enabled,
+    "manual_algo_dry_run": runtime_config.manual_algo.runtime.dry_run,
     "redis_fingerprint": fingerprint,
     "redis_database": database,
-    "candidate_stream": settings.auto_trade_stream,
-    "event_stream": settings.auto_trade_event_stream,
+    "candidate_stream": runtime_config.contract.streams.candidates,
+    "event_stream": runtime_config.contract.streams.events,
     "symbols": symbols,
-    "canonical_symbol": settings.auto_trade_canonical_symbol.upper(),
-    "pip_size": settings.auto_trade_xau_pip_size,
-    "price_digits": settings.auto_trade_xau_price_digits,
-    "max_entry_distance_pips": settings.auto_trade_max_entry_distance_pips,
+    "canonical_symbol": runtime_config.contract.instrument.canonical_symbol.upper(),
+    "pip_size": runtime_config.contract.instrument.pip_size,
+    "price_digits": runtime_config.contract.instrument.price_digits,
+    "max_entry_distance_pips": runtime_config.execution.entry.maximum_chase_distance_pips,
     "entry_contract_tolerance_pips": (
-      settings.auto_trade_entry_contract_tolerance_pips
+      runtime_config.execution.entry.contract_tolerance_pips
     ),
-    "break_even_buffer_ticks": settings.auto_trade_be_buffer_ticks,
+    "break_even_buffer_ticks": runtime_config.execution.stops.be_buffer_ticks,
     "symbol_tick_size": float(
-      Decimal("1") / (Decimal("10") ** int(settings.auto_trade_xau_price_digits))
+      Decimal("1") / (Decimal("10") ** int(runtime_config.contract.instrument.price_digits))
     ),
-    "post_fill_target_fallback": settings.auto_trade_post_fill_target_fallback,
+    "post_fill_target_fallback": runtime_config.execution.targeting.post_fill_target_fallback,
     "entry_plan_version": 1,
     "stop_plan_version": 3,
-    "contract_size": settings.auto_trade_contract_size,
-    "structure_stop_buffer_atr": settings.auto_trade_add_stop_buffer_atr,
-    "ordinary_stop_min_pips": settings.auto_trade_add_min_stop_pips,
-    "ordinary_stop_max_distance": settings.auto_trade_sl_distance,
-    "wick_stop_buffer_atr": settings.auto_trade_wick_stop_buffer_atr,
-    "trend_stop_min_pips": settings.auto_trade_trend_stop_min_pips,
-    "trend_stop_max_pips": settings.auto_trade_trend_stop_max_pips,
-    "target_plans": _int_values(settings.auto_trade_tp_pips),
+    "contract_size": runtime_config.contract.instrument.contract_units_per_lot,
+    "structure_stop_buffer_atr": runtime_config.execution.scaling.add.stop_buffer_atr,
+    "ordinary_stop_min_pips": runtime_config.execution.scaling.add.min_stop_pips,
+    "ordinary_stop_max_distance": runtime_config.execution.stops.sl_distance,
+    "wick_stop_buffer_atr": runtime_config.execution.stops.wick_stop_buffer_atr,
+    "trend_stop_min_pips": runtime_config.execution.stops.trend.minimum_pips,
+    "trend_stop_max_pips": runtime_config.execution.trend.stop_max_pips,
+    "target_plans": _int_values(runtime_config.execution.targeting.default_ladder_pips),
     "range_target_plans": canonicalize_int_set(
       configured_range_targets()
     ),
-    "range_tp_buffer": settings.auto_trade_range_tp_buffer_pips,
+    "range_tp_buffer": runtime_config.execution.range.tp_buffer_pips,
     "candidate_storage_ttl_seconds": (
       runtime_config.lifecycle.candidate.storage_ttl_seconds
     ),
@@ -308,23 +308,23 @@ def python_manifest() -> dict[str, Any]:
     "two_sided_range": (
       runtime_config.strategies.range_reversion.two_sided_enabled
     ),
-    "concurrent_strategies": settings.auto_trade_allow_concurrent_strategies,
-    "hedging_policy": settings.auto_trade_allow_hedged_xau,
+    "concurrent_strategies": runtime_config.risk.exposure.allow_concurrent_strategies,
+    "hedging_policy": runtime_config.risk.exposure.allow_hedged_xau,
     "broker_hedging_capability": None,
-    "zone_fill": settings.auto_trade_zone_fill_enabled,
+    "zone_fill": runtime_config.execution.zone_scaling.fill_enabled,
     "trend_enabled": runtime_config.strategies.trend.enabled,
     "range_enabled": runtime_config.strategies.range_reversion.enabled,
     "mapped_zone_enabled": runtime_config.strategies.mapped_zone.enabled,
     "market_map_guard_enabled": (
       runtime_config.actionability.gates.market_map_guard_enabled
     ),
-    "map_thesis_lock_enabled": settings.auto_trade_map_thesis_lock_enabled,
-    "strategy_match_enabled": settings.auto_trade_strategy_match_enabled,
+    "map_thesis_lock_enabled": runtime_config.execution.mapped_zone.thesis_lock_enabled,
+    "strategy_match_enabled": runtime_config.runtime.auto_trade.strategy_match_enabled,
     "execution_zone_max_width_atr": (
-      settings.auto_trade_execution_zone_max_width_atr
+      runtime_config.execution.policy.execution_zone_max_width_atr
     ),
     "execution_zone_max_width_pips": (
-      settings.auto_trade_execution_zone_max_width_pips
+      runtime_config.execution.policy.execution_zone_max_width_pips
     ),
     "breakout_enabled": runtime_config.strategies.breakout.breakout_enabled,
     "retest_enabled": runtime_config.strategies.selection.retest_enabled,
@@ -335,12 +335,12 @@ def python_manifest() -> dict[str, Any]:
     "allow_counter_bias": runtime_config.actionability.counter_bias.allowed,
     "min_confluence": runtime_config.actionability.gates.min_confluence,
     "account_mode": "demo"
-    if settings.auto_trade_require_demo_account else "live",
-    "require_demo_account": settings.auto_trade_require_demo_account,
+    if runtime_config.contract.account.require_demo else "live",
+    "require_demo_account": runtime_config.contract.account.require_demo,
     "broker": canonicalize_broker(raw_broker),
     "broker_configured": raw_broker,
     "non_hedged_opposite_policy": (
-      settings.auto_trade_non_hedged_opposite_policy
+      runtime_config.risk.exposure.non_hedged_opposite_policy
     ),
     "structural_guard_mode": (
       runtime_config.actionability.structural_guard.guard_mode
@@ -351,31 +351,31 @@ def python_manifest() -> dict[str, Any]:
       runtime_config.strategies.range_reversion.box_scale_out_enabled
     ),
     "range_box_scale_out_threshold_pips": (
-      settings.auto_trade_range_box_scale_out_threshold_pips
+      runtime_config.execution.range.box_scale_out_threshold_pips
     ),
     "range_box_scale_out_trigger_pips": (
-      settings.auto_trade_range_box_scale_out_trigger_pips
+      runtime_config.execution.range.box_scale_out_trigger_pips
     ),
     "range_box_scale_out_fraction": (
-      settings.auto_trade_range_box_scale_out_fraction
+      runtime_config.execution.range.box_scale_out_fraction
     ),
     "range_box_move_sl_to_be_after_scale_out": (
-      settings.auto_trade_range_box_move_sl_to_be_after_scale_out
+      runtime_config.execution.range.box_move_sl_to_be_after_scale_out
     ),
     "candidate_contract_version": (
-      settings.auto_trade_candidate_contract_version
+      runtime_config.contract.versions.candidate
     ),
-    "contract_mode": settings.auto_trade_contract_mode,
+    "contract_mode": runtime_config.contract.mode,
     "trade_plan_version": TRADE_PLAN_VERSION,
-    "trade_plan_stream": settings.auto_trade_trade_plan_stream,
-    "sizing_mode": settings.auto_trade_sizing_mode,
-    "equity_table_version": settings.auto_trade_equity_table_version,
+    "trade_plan_stream": runtime_config.contract.streams.trade_plans,
+    "sizing_mode": runtime_config.risk.sizing.mode,
+    "equity_table_version": runtime_config.risk.sizing.equity_table_version,
     "zone_scale_undersized_policy": (
-      settings.auto_trade_zone_scale_undersized_policy
+      runtime_config.execution.zone_scaling.scale_undersized_policy
     ),
-    "group_close_allocation": settings.auto_trade_group_close_allocation,
+    "group_close_allocation": runtime_config.execution.policy.group_close_allocation,
     "unfilled_leg_after_tp_policy": (
-      settings.auto_trade_unfilled_leg_after_tp_policy
+      runtime_config.execution.targeting.unfilled_leg_after_tp_policy
     ),
     "entry_leg_ratios": "0.70,0.30",
     "deprecated_variables": deprecated_environment_variables(),
@@ -608,21 +608,21 @@ async def publish_python_manifest(client: Any) -> dict[str, Any]:
   health = compare_manifests(manifest, ctrader)
   payload = {
     **health,
-    "profile": settings.auto_trade_profile,
+    "profile": runtime_config.runtime.profile,
     "checked_at": datetime.now(timezone.utc).isoformat(),
   }
   encoded = json.dumps(payload, separators=(",", ":"), sort_keys=True)
   await client.set(CONFIG_HEALTH_KEY, encoded)
   await client.xadd(
-    settings.auto_trade_event_stream,
+    runtime_config.contract.streams.events,
     {"payload": json.dumps({
       "type": "config_health",
       "timestamp": int(datetime.now(timezone.utc).timestamp()),
       "message": f"configuration health: {health['state']}",
-      "profile": settings.auto_trade_profile,
+      "profile": runtime_config.runtime.profile,
       "health": health,
     }, separators=(",", ":"))},
-    maxlen=max(100, settings.auto_trade_stream_maxlen),
+    maxlen=max(100, runtime_config.contract.streams.candidate_maximum_length),
     approximate=True,
   )
   return payload

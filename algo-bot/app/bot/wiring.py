@@ -9,7 +9,6 @@ from app.bot.handlers import channel as _channel
 from app.bot.handlers import dm as _dm
 from app.bot.handlers import fallback as _fallback
 from app.bot.handlers import scanner_dm as _scanner_dm
-from app.core.config import settings
 from app.persistence.store import (
   event_in_window,
   get_all_signals,

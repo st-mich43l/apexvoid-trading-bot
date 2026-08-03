@@ -10,7 +10,7 @@ from html import escape
 from typing import Any, Awaitable, Callable, Iterable
 
 from app.persistence import redis_state
-from app.core.config import runtime_config, settings
+from app.core.config import runtime_config, runtime_config_facade
 from app.analysis.detectors import (
   DEFAULT_DETECTORS,
   DetectionContext,
@@ -162,7 +162,7 @@ def _all_tfs(exec_tf: str, htf_tfs: Iterable[str]) -> list[str]:
 
 
 def _detector_settings():
-  return detector_settings_from(settings)
+  return detector_settings_from()
 
 
 def _parse_bar_event(data: object) -> tuple[str, str, str] | None:
@@ -252,7 +252,7 @@ def _band_dedup_key(symbol: str, result: DetectionResult) -> str:
 def _configured_strategy_targets() -> tuple[int, ...]:
   values = {
     int(item.strip())
-    for item in settings.auto_trade_tp_pips.split(",")
+    for item in runtime_config.execution.targeting.default_ladder_pips.split(",")
     if item.strip().isdigit() and int(item.strip()) > 0
   }
   return tuple(sorted(values))
@@ -290,7 +290,7 @@ def _build_strategy_match(
   if not built:
     return None, last_reason, last_measured
   atr = built[0].atr
-  deduped, _events = dedupe_matches(built, atr=atr, cfg=settings)
+  deduped, _events = dedupe_matches(built, atr=atr)
   primary = select_primary(deduped)
   if primary is None:
     return None, "all_matches_tier_c", {"count": len(built)}
@@ -419,7 +419,6 @@ def _build_one_strategy_match(
     pass
   risk_mult = risk_multiplier_for_tier(
     tier,
-    settings,
     post_impulse=post_impulse,
     one_sided=one_sided,
     range_scalp=(family == FAMILY_RANGE_REVERSION),
@@ -719,7 +718,7 @@ async def _sync_strategy_match(
     )
     if previous is not None:
       await increment_metric(client, "scanner_range_withdrawn", symbol=symbol)
-  if not settings.auto_trade_strategy_match_enabled:
+  if not runtime_config.runtime.auto_trade.strategy_match_enabled:
     await client.delete(key)
     await client.delete(matches_key)
     return None
@@ -796,7 +795,6 @@ async def _sync_strategy_match(
   combined, events = dedupe_matches(
     [*active, *incoming],
     atr=match.atr,
-    cfg=settings,
   )
   if not runtime_config.strategies.matching.track_all_structural_matches:
     top_n = int(runtime_config.delivery.scanner_cards.top_n)
@@ -824,7 +822,7 @@ async def _sync_strategy_match(
       continue
     setup_record = await load_setup(client, tracked.match_id)
     if setup_record is not None and setup_record.state == CONFIRMED:
-      if settings.auto_trade_direct_publish_enabled:
+      if runtime_config.runtime.auto_trade.direct_publish_enabled:
         direct_result = await autotrade_worker.try_publish_executable_signal(
           client,
           tracked,
@@ -1272,7 +1270,7 @@ def _format_detection(
   execution_match: StrategyMatch | None = None,
 ) -> str:
   executable = bool(
-    settings.auto_trade_enabled
+    runtime_config.runtime.auto_trade.enabled
     and execution_match is not None
     and (
       result.execution_eligibility is None
@@ -1296,7 +1294,7 @@ def _format_detection(
       "🟡 <b>QUEUED</b> · worker acknowledgement pending"
       if executable
       else "🔵 <b>ANALYSIS ONLY</b> · no executable StrategyMatch"
-      if settings.auto_trade_enabled
+      if runtime_config.runtime.auto_trade.enabled
       else "🔵 <b>ANALYSIS ONLY</b> · autonomous execution disabled"
     ),
     (
@@ -1745,7 +1743,7 @@ def _reward_risk_pre_gate(
     spot_price=match.current_price,
     regime=regime or None,
     pip_size=_pip_size(symbol),
-    cfg=settings,
+    cfg=runtime_config_facade(),
   )
   measured.update(dict(evaluation.measured))
   measured["policy_reason_code"] = evaluation.reason_code
@@ -1849,7 +1847,7 @@ def _annotate_actionability_geometry(
     spot_price=match.current_price,
     regime=regime or None,
     pip_size=_pip_size(symbol),
-    cfg=settings,
+    cfg=runtime_config_facade(),
   )
   planned_entry = evaluation.measured.get("planned_entry_price")
   try:
@@ -2754,7 +2752,7 @@ async def _handle_event(
       if getattr(ctx, "spot_price", None) is not None
       else float(frames[exec_tf]["close"].iloc[-1])
     )
-    current_map = build_map(analysis, price, settings)
+    current_map = build_map(analysis, price)
     map_payload = market_map_payload(current_map)
     map_ttl = max(
       900,
@@ -2822,7 +2820,7 @@ async def _handle_event(
         )
         if regime.new_kind != regime.legacy_kind:
           lookback = int(
-            getattr(settings, "auto_trade_regime_direction_lookback", 120)
+            runtime_config.execution.regime.direction_lookback
           )
           log.debug(
             "regime: legacy=%s new=%s (%s) height=%.2fATR lookback=%s",
@@ -2887,7 +2885,7 @@ async def _handle_event(
     context=ctx,
     atr=invalidation_atr,
     pip_size=_pip_size(symbol),
-    cfg=settings,
+    cfg=runtime_config_facade(),
   )
   actionable_results = list(actionability.actionable)
   actionability_decisions = list(actionability.decisions)
@@ -3119,7 +3117,7 @@ async def _handle_event(
 
 async def scanner_loop() -> None:
   """Subscribe to closed-bar events and analyze scanner detections."""
-  if not settings.scanner_enabled:
+  if not runtime_config.runtime.scanner.enabled:
     log.info("Price-action scanner disabled: SCANNER_ENABLED=false")
     return
   if not runtime_config.delivery.telegram.telegram_owner_id:

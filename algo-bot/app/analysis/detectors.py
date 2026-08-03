@@ -234,8 +234,18 @@ class DetectorSettings:
     )
 
 
-def detector_settings_from(config) -> DetectorSettings:
-  """Build detector settings from the app config for every PA consumer."""
+def detector_settings_from(config=None) -> DetectorSettings:
+  """Build detector settings from the app config for every PA consumer.
+
+  ``config`` defaults to the authority-neutral runtime configuration (read
+  through a flat legacy-name view) so production callers never depend on the
+  legacy Settings singleton. Tests may still inject a flat SimpleNamespace/
+  Settings-shaped override. The lazy import keeps this module's import-time
+  decoupling from ``app.core.config`` intact.
+  """
+  if config is None:
+    from app.core.config import runtime_config_facade
+    config = runtime_config_facade()
   return DetectorSettings(
     confluence_floor=config.scanner_confluence_floor,
     max_entry_atr=config.max_entry_atr,

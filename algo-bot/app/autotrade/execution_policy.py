@@ -235,7 +235,13 @@ def classify_barrier_relationship(
   return "irrelevant"
 
 
-def resolve_guard_mode(cfg: Any) -> str:
+def resolve_guard_mode(cfg: Any | None = None) -> str:
+  # Production reads the authority-neutral runtime config
+  # (actionability.structural_guard.guard_mode); tests may still inject a flat
+  # SimpleNamespace/Settings-shaped override.
+  if cfg is None:
+    from app.core.config import runtime_config_facade
+    cfg = runtime_config_facade()
   mode = str(getattr(cfg, "auto_trade_structural_guard_mode", GUARD_MODE_BALANCED))
   mode = mode.strip().lower()
   return mode if mode in _GUARD_MODES else GUARD_MODE_BALANCED
@@ -1011,16 +1017,22 @@ def classify_tier(
 
 
 def risk_multiplier_for_tier(tier: str, cfg: Any | None = None, *, post_impulse: bool = False, one_sided: bool = False, range_scalp: bool = False) -> float:
+  # Default to the authority-neutral runtime config; the flat legacy names read
+  # here resolve to identical values (config defaults match the historical
+  # hardcoded fallbacks). Tests may still inject a SimpleNamespace override.
+  if cfg is None:
+    from app.core.config import runtime_config_facade
+    cfg = runtime_config_facade()
   tier = (tier or TIER_C).upper()
-  a = float(getattr(cfg, "auto_trade_tier_a_risk_multiplier", 1.0) if cfg else 1.0)
-  b = float(getattr(cfg, "auto_trade_tier_b_risk_multiplier", 0.5) if cfg else 0.5)
-  c = float(getattr(cfg, "auto_trade_tier_c_risk_multiplier", b) if cfg else b)
-  post = float(getattr(cfg, "auto_trade_post_impulse_risk_multiplier", 0.5) if cfg else 0.5)
-  onesided = float(getattr(cfg, "auto_trade_one_sided_range_risk_multiplier", 0.5) if cfg else 0.5)
+  a = float(getattr(cfg, "auto_trade_tier_a_risk_multiplier", 1.0))
+  b = float(getattr(cfg, "auto_trade_tier_b_risk_multiplier", 0.5))
+  c = float(getattr(cfg, "auto_trade_tier_c_risk_multiplier", b))
+  post = float(getattr(cfg, "auto_trade_post_impulse_risk_multiplier", 0.5))
+  onesided = float(getattr(cfg, "auto_trade_one_sided_range_risk_multiplier", 0.5))
   if range_scalp and tier == TIER_A:
     # Thin-room scalp frequency: allow up to 2× base size on A-quality setups.
     a = float(
-      getattr(cfg, "auto_trade_range_max_risk_multiplier", 2.0) if cfg else 2.0
+      getattr(cfg, "auto_trade_range_max_risk_multiplier", 2.0)
     )
     if not math.isfinite(a) or a <= 0:
       a = 2.0

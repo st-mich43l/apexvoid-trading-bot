@@ -3,7 +3,7 @@
 Built from a ``manual_signals`` row when a DM signal carries the ``/ algo``
 suffix (``execution_mode == "algo"``). Publishing this contract to Redis is
 the entire scope of this PR: nothing in this codebase consumes
-``settings.manual_trade_intent_stream`` yet. A future ``ctrader-engine``
+``runtime_config.manual_algo.streams.intents`` yet. A future ``ctrader-engine``
 change (a separate, later PR) will watch live price against the intent's
 absolute entry/SL/TP — the owner's exact entered stop, not a re-derived
 structure stop like the existing box-scalp/trend auto-trade strategies — and
@@ -14,7 +14,7 @@ intent has no broker-execution side effect whatsoever.
 import json
 from dataclasses import asdict, dataclass
 
-from app.core.config import settings
+from app.core.config import runtime_config
 from app.persistence import redis_state
 
 
@@ -81,8 +81,8 @@ async def publish_intent(intent: ManualTradeIntent) -> None:
   client = redis_state.get_client()
   payload = _payload(intent)
   await client.xadd(
-    settings.manual_trade_intent_stream,
+    runtime_config.manual_algo.streams.intents,
     {"payload": json.dumps(payload, separators=(",", ":"))},
-    maxlen=max(100, settings.manual_trade_intent_stream_maxlen),
+    maxlen=max(100, runtime_config.manual_algo.streams.manual_trade_intent_stream_maxlen),
     approximate=True,
   )

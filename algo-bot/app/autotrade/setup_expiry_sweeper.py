@@ -27,7 +27,7 @@ from typing import Any
 from app.autotrade.lifecycle import increment_metric
 from app.autotrade.setup_lifecycle import expire_setup, setup_expiry_index_key
 from app.autotrade.terminal_cleanup import finalize_terminal_setup
-from app.core.config import settings
+from app.core.config import runtime_config
 from app.persistence import redis_state
 
 log = logging.getLogger("bot")
@@ -94,7 +94,7 @@ async def sweep_expired_setups_once(client: Any, *, now: int | None = None) -> i
 
 
 async def setup_expiry_sweeper_loop() -> None:
-  if not settings.auto_trade_enabled:
+  if not runtime_config.runtime.auto_trade.enabled:
     return
   client = redis_state.get_client()
   log.info("ApexVoid Algo setup-expiry sweeper started")

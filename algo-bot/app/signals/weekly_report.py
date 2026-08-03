@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from html import escape
 from zoneinfo import ZoneInfo
 
-from app.core.config import runtime_config, settings
+from app.core.config import runtime_config
 from app.persistence.store import (
   get_all_signals,
   get_meta,

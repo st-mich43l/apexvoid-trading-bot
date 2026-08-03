@@ -5,7 +5,7 @@ from typing import Any
 
 import pandas as pd
 
-from app.core.config import runtime_config, settings
+from app.core.config import runtime_config
 from app.persistence import redis_state
 from app.core.symbols import SYMBOLS
 

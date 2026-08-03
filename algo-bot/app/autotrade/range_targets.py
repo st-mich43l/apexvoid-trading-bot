@@ -7,7 +7,7 @@ target. The ladder is configurable via AUTO_TRADE_RANGE_TARGETS_PIPS
 
 from __future__ import annotations
 
-from app.core.config import settings
+from app.core.config import runtime_config
 
 _EPS = 1e-9
 
@@ -19,7 +19,7 @@ DEFAULT_RANGE_MIN_RR = 1.00
 
 def configured_range_targets() -> tuple[int, ...]:
   """Parsed, deduplicated, descending-sorted AUTO_TRADE_RANGE_TARGETS_PIPS."""
-  raw = getattr(settings, "auto_trade_range_targets_pips", None)
+  raw = runtime_config.execution.targeting.range_ladder_pips
   if not raw:
     return DEFAULT_RANGE_TARGETS_PIPS
   values: list[int] = []
@@ -39,7 +39,7 @@ def configured_range_targets() -> tuple[int, ...]:
 
 
 def range_tp_buffer_pips() -> float:
-  value = getattr(settings, "auto_trade_range_tp_buffer_pips", None)
+  value = runtime_config.execution.range.tp_buffer_pips
   if value is None:
     return DEFAULT_RANGE_TP_BUFFER_PIPS
   try:
@@ -50,7 +50,7 @@ def range_tp_buffer_pips() -> float:
 
 
 def range_min_target_pips() -> float:
-  value = getattr(settings, "auto_trade_range_min_target_pips", None)
+  value = runtime_config.execution.range.min_target_pips
   if value is None:
     return DEFAULT_RANGE_MIN_TARGET_PIPS
   try:
@@ -61,7 +61,7 @@ def range_min_target_pips() -> float:
 
 
 def range_min_rr() -> float:
-  value = getattr(settings, "auto_trade_range_min_rr", None)
+  value = runtime_config.execution.range.min_rr
   if value is None:
     return DEFAULT_RANGE_MIN_RR
   try:

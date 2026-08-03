@@ -11,7 +11,7 @@ from typing import Any, Iterator
 
 from app.autotrade.arbitration import CandidatePublicationResult, ExecutionIntent
 from app.autotrade.candidate_execution_state import published_candidate_record
-from app.core.config import runtime_config, settings
+from app.core.config import runtime_config
 
 
 log = logging.getLogger(__name__)

@@ -92,7 +92,10 @@ class MarketMap:
     return [entry for entry in self.entries if entry.tier == "major"]
 
 
-def build_map(ctx_or_per_tf, price: float, cfg) -> MarketMap:
+def build_map(ctx_or_per_tf, price: float, cfg=None) -> MarketMap:
+  if cfg is None:
+    from app.core.config import runtime_config_facade
+    cfg = runtime_config_facade()
   per_tf = getattr(ctx_or_per_tf, "per_tf", ctx_or_per_tf)
   if not isinstance(per_tf, dict):
     per_tf = {}
@@ -308,8 +311,11 @@ def render_market_map(
   market_map: MarketMap,
   symbol: str,
   now: datetime,
-  cfg,
+  cfg=None,
 ) -> str:
+  if cfg is None:
+    from app.core.config import runtime_config_facade
+    cfg = runtime_config_facade()
   clock = now.strftime("%H:%M")
   bias = market_map.bias
   if market_map.bias_tf:

@@ -15,7 +15,7 @@ import json
 from typing import Any
 
 from app.autotrade.trade_plan import TradePlan
-from app.core.config import runtime_config, settings
+from app.core.config import runtime_config
 
 
 _PUBLISH_PLAN_LUA = """
@@ -71,8 +71,8 @@ async def publish_trade_plan(client: Any, plan: TradePlan) -> str:
   dedup_ttl = max(
     86400, int(runtime_config.lifecycle.candidate.storage_ttl_seconds),
   )
-  stream = settings.auto_trade_trade_plan_stream
-  maxlen = max(100, settings.auto_trade_stream_maxlen)
+  stream = runtime_config.contract.streams.trade_plans
+  maxlen = max(100, runtime_config.contract.streams.candidate_maximum_length)
   try:
     event_id = await client.eval(
       _PUBLISH_PLAN_LUA,
