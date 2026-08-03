@@ -127,19 +127,20 @@ class Settings(BaseSettings):
   # under-fetches M5 (needs the deepest history to find durable supply/
   # demand and order-block evidence) and over-fetches M1 (timing/trigger
   # only, never a source of a primary key level). Defaults sit inside the
-  # XAU-appropriate ranges documented in docs/. `window_for_timeframe()`
-  # is the single place that resolves a timeframe string to its bar count -
-  # detectors must never hardcode a lookback count themselves.
+  # Per-TF structure windows: H1 major (~2.5-4w), M15 session (~2-3d),
+  # M5 entry/current+previous session, M1 trigger-only.
+  # `window_for_timeframe()` is the single resolver - detectors must never
+  # hardcode a lookback count themselves.
   xau_lookback_h1_bars: int = Field(
     default=400,
     validation_alias=AliasChoices("XAU_LOOKBACK_H1_BARS"),
   )
   xau_lookback_m15_bars: int = Field(
-    default=650,
+    default=250,
     validation_alias=AliasChoices("XAU_LOOKBACK_M15_BARS"),
   )
   xau_lookback_m5_bars: int = Field(
-    default=1000,
+    default=150,
     validation_alias=AliasChoices("XAU_LOOKBACK_M5_BARS"),
   )
   xau_lookback_m1_bars: int = Field(

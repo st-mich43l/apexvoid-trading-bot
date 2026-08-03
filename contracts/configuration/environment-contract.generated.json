@@ -5803,7 +5803,7 @@
       "default": 400,
       "deprecated": false,
       "deprecated_aliases": [],
-      "description": "Legacy xau_lookback_h1_bars configuration mapped to market_data.lookbacks.h1_bars.",
+      "description": "H1 closed-bar lookback for major structure (weekly/daily range, untested swing H/L, flip zones). Target window ~2.5-4 weeks (300-500 bars).",
       "item_id": "python.settings.xau_lookback_h1_bars",
       "owner": "python",
       "path": "market_data.lookbacks.h1_bars",
@@ -5816,10 +5816,10 @@
     },
     {
       "canonical_env": "XAU_LOOKBACK_M15_BARS",
-      "default": 650,
+      "default": 250,
       "deprecated": false,
       "deprecated_aliases": [],
-      "description": "Legacy xau_lookback_m15_bars configuration mapped to market_data.lookbacks.m15_bars.",
+      "description": "M15 closed-bar lookback for session structure (Asia/London/NY range, intermediate OB). Target window ~2-3 days (200-300 bars).",
       "item_id": "python.settings.xau_lookback_m15_bars",
       "owner": "python",
       "path": "market_data.lookbacks.m15_bars",
@@ -5848,10 +5848,10 @@
     },
     {
       "canonical_env": "XAU_LOOKBACK_M5_BARS",
-      "default": 1000,
+      "default": 150,
       "deprecated": false,
       "deprecated_aliases": [],
-      "description": "Legacy xau_lookback_m5_bars configuration mapped to market_data.lookbacks.m5_bars.",
+      "description": "M5 closed-bar lookback for entry structure (OB/FVG/micro BOS/retest). Target window is current + previous session (100-150 bars).",
       "item_id": "python.settings.xau_lookback_m5_bars",
       "owner": "python",
       "path": "market_data.lookbacks.m5_bars",
@@ -6041,6 +6041,6 @@
   ],
   "secret_count": 9,
   "shared_with_ctrader_count": 86,
-  "source_fingerprint_sha256": "1d0758c9636c9cc0209c1d385fbf205c52388c55782ccccd5a35d2260c21b696",
+  "source_fingerprint_sha256": "bb24affb47b297c91637a83880cd2043e59a4cff0b5b17ca2d02fb4952fb54f0",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }
