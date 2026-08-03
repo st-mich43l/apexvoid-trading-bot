@@ -1340,6 +1340,7 @@ async def _deliver_compact_position_closed(
 
   Final target hits emit position_closed without a separate tp_booked, so
   this path also appends the archived TP compact line when missing.
+  The SETUP FORMING root card is left unchanged on close.
   """
   message = str(event.get("message") or "")
   close_line = _format_position_closed_compact_line(event, message)
@@ -1356,27 +1357,9 @@ async def _deliver_compact_position_closed(
       text = f"{text}\n{close_line}"
     return text
 
-  async def _mark_root_terminal() -> None:
-    # Completed orders stop forming-card monitoring: edit root to TERMINAL
-    # so projection repair / status writes no longer advertise a live setup.
-    try:
-      await kill_setup_card(
-        client,
-        match_id,
-        reason_code=str(event.get("reason_code") or "position_closed"),
-        delete_fn=delete_scanner_message,
-        edit_fn=edit_scanner_message_text,
-      )
-    except Exception:
-      log.exception(
-        "forming card terminal mark failed after close setup_id=%s",
-        match_id,
-      )
-
   manage_id, manage_text = await _load_manage_message(client, match_id)
   if manage_id is not None and manage_text:
     if "POSITION CLOSED" in manage_text:
-      await _mark_root_terminal()
       return True
     new_text = _compose(manage_text)
     try:
@@ -1384,7 +1367,6 @@ async def _deliver_compact_position_closed(
       await _save_manage_message(
         client, match_id, message_id=manage_id, text=new_text,
       )
-      await _mark_root_terminal()
       return True
     except Exception:
       log.exception(
@@ -1407,14 +1389,12 @@ async def _deliver_compact_position_closed(
         match_id,
         error,
       )
-      await _mark_root_terminal()
       return True
     raise
   message_id = int(sent.message_id)
   await _save_manage_message(
     client, match_id, message_id=message_id, text=stub,
   )
-  await _mark_root_terminal()
   return True
 
 
