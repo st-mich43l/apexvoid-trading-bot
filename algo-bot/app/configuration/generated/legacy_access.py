@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Final, Mapping
 
-CATALOG_FINGERPRINT_SHA256: Final = '5001f967384dd74f709d75b714cc03b2576b900ef0b9861aa77b25ff80e29094'
+CATALOG_FINGERPRINT_SHA256: Final = '1d0758c9636c9cc0209c1d385fbf205c52388c55782ccccd5a35d2260c21b696'
 
 
 @dataclass(frozen=True, slots=True)

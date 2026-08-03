@@ -154,6 +154,7 @@ class DetectorSettings:
   key_level_reaction_enabled: bool = True
   demand_reaction_enabled: bool = True
   supply_reaction_enabled: bool = True
+  flip_zone_enabled: bool = True
   session_level_reaction_enabled: bool = True
   trendline_reaction_enabled: bool = True
   # Recovery mission (2026-07-30): these six sources were live around
@@ -325,9 +326,19 @@ def detector_settings_from(config=None) -> DetectorSettings:
   Settings-shaped override. The lazy import keeps this module's import-time
   decoupling from ``app.core.config`` intact.
   """
+  flip_zone_enabled = True
   if config is None:
+    from app.core.config import runtime_config
     from app.core.runtime_projection import project_runtime_config
     config = project_runtime_config(_RUNTIME_DETECTOR_CFG_FIELDS)
+    try:
+      flip_zone_enabled = bool(runtime_config.strategies.zone.flip.enabled)
+    except AttributeError:
+      flip_zone_enabled = True
+  else:
+    flip_zone_enabled = bool(
+      getattr(config, "flip_zone_enabled", True)
+    )
   return DetectorSettings(
     confluence_floor=config.scanner_confluence_floor,
     max_entry_atr=config.max_entry_atr,
@@ -402,6 +413,7 @@ def detector_settings_from(config=None) -> DetectorSettings:
     supply_reaction_enabled=bool(
       getattr(config, "auto_trade_supply_reaction_enabled", True)
     ),
+    flip_zone_enabled=flip_zone_enabled,
     session_level_reaction_enabled=bool(
       getattr(config, "auto_trade_session_level_reaction_enabled", True)
     ),
@@ -2422,18 +2434,64 @@ def key_level_reaction(ctx: DetectionContext) -> DetectionResult | None:
   return best
 
 
+def _zone_has_source(zone: Zone, source: str) -> bool:
+  sources = list(getattr(zone, "sources", None) or [])
+  if not sources and getattr(zone, "source", None):
+    sources = [str(zone.source)]
+  return source in sources
+
+
 def demand_zone_reaction(ctx: DetectionContext) -> DetectionResult | None:
   if not ctx.settings.demand_reaction_enabled:
     return None
   # Display name is zone-only (BUY/SELL carries the side). Legacy
   # "Demand Zone Reaction" remains accepted in taxonomy/policy maps.
-  return _sd_zone_reaction(ctx, side="demand", direction="BUY", setup="Zone Reaction")
+  # Flip-tagged bands are owned by Flip Zone (not Zone Reaction).
+  return _sd_zone_reaction(
+    ctx,
+    side="demand",
+    direction="BUY",
+    setup="Zone Reaction",
+    exclude_sources=("flip_zone",),
+  )
 
 
 def supply_zone_reaction(ctx: DetectionContext) -> DetectionResult | None:
   if not ctx.settings.supply_reaction_enabled:
     return None
-  return _sd_zone_reaction(ctx, side="supply", direction="SELL", setup="Zone Reaction")
+  return _sd_zone_reaction(
+    ctx,
+    side="supply",
+    direction="SELL",
+    setup="Zone Reaction",
+    exclude_sources=("flip_zone",),
+  )
+
+
+def flip_demand_zone_reaction(ctx: DetectionContext) -> DetectionResult | None:
+  if not ctx.settings.flip_zone_enabled:
+    return None
+  return _sd_zone_reaction(
+    ctx,
+    side="demand",
+    direction="BUY",
+    setup="Flip Zone",
+    require_source="flip_zone",
+    structural_source="flip_zone",
+  )
+
+
+def flip_supply_zone_reaction(ctx: DetectionContext) -> DetectionResult | None:
+  if not ctx.settings.flip_zone_enabled:
+    return None
+  return _sd_zone_reaction(
+    ctx,
+    side="supply",
+    direction="SELL",
+    setup="Flip Zone",
+    require_source="flip_zone",
+    structural_source="flip_zone",
+  )
 
 
 def _sd_zone_reaction(
@@ -2442,6 +2500,9 @@ def _sd_zone_reaction(
   side: str,
   direction: str,
   setup: str,
+  require_source: str | None = None,
+  exclude_sources: tuple[str, ...] = (),
+  structural_source: str = "supply_demand",
 ) -> DetectionResult | None:
   df, ind, st = _exec(ctx)
   if len(df) < 3:
@@ -2449,10 +2510,15 @@ def _sd_zone_reaction(
   price = _current_price(ctx, df)
   atr = _atr(ind)
   lookback = max(1, int(ctx.settings.structural_reaction_lookback_bars))
-  zones = [
-    zone for zone in [*st.zones, *st.order_blocks]
-    if zone.side == side and not zone.mitigated
-  ]
+  zones = []
+  for zone in [*st.zones, *st.order_blocks]:
+    if zone.side != side or zone.mitigated:
+      continue
+    if require_source is not None and not _zone_has_source(zone, require_source):
+      continue
+    if any(_zone_has_source(zone, excluded) for excluded in exclude_sources):
+      continue
+    zones.append(zone)
   selected = _best_valid_zone(zones, price, atr, direction, ctx.settings)
   if selected is None:
     # Still allow touch within lookback even if proximal helper misses.
@@ -2500,7 +2566,7 @@ def _sd_zone_reaction(
     price=price,
     atr=atr,
     reasons=reasons,
-    structural_source="supply_demand",
+    structural_source=structural_source,
     structural_id=zone_structural_id(ctx.symbol, ctx.tf, zone),
     structural_low=float(zone.low),
     structural_high=float(zone.high),
@@ -2706,6 +2772,14 @@ LIVE_DETECTOR_REGISTRY: tuple[DetectorRegistration, ...] = (
   DetectorRegistration(
     "supply_zone_reaction", supply_zone_reaction, FAMILY_SUPPLY_DEMAND,
     lambda cfg: cfg.supply_reaction_enabled,
+  ),
+  DetectorRegistration(
+    "flip_demand_zone_reaction", flip_demand_zone_reaction, FAMILY_SUPPLY_DEMAND,
+    lambda cfg: cfg.flip_zone_enabled,
+  ),
+  DetectorRegistration(
+    "flip_supply_zone_reaction", flip_supply_zone_reaction, FAMILY_SUPPLY_DEMAND,
+    lambda cfg: cfg.flip_zone_enabled,
   ),
   DetectorRegistration(
     "session_level_reaction", session_level_reaction, FAMILY_SESSION_LEVEL,

@@ -33,9 +33,8 @@ from app.autotrade.candidate_publish import (
 from app.autotrade.arbitration import (
   ArbitrationResult,
   CandidatePublicationResult,
-  ExecutionPreflightDecision,
   ExecutionIntent,
-  arbitrate_preflight_decisions,
+  arbitrate_execution_intents,
 )
 from app.autotrade.entry_distance import measure_entry_distance
 from app.autotrade.execution_policy import (
@@ -3425,7 +3424,10 @@ async def _publish_strategy_match(
     ),
   )
   if (
-    not bypasses_opposing_structure_gates(match.strategy)
+    not bypasses_opposing_structure_gates(
+      match.strategy,
+      full_take_profit_pips=match.full_take_profit_pips,
+    )
     and (
       runtime_config.actionability.gates.opposing_barrier_veto_enabled
       or guard_mode == GUARD_MODE_OBSERVE
@@ -4185,7 +4187,46 @@ async def _record_v7_build_rejected(
   message: str,
   measured: dict[str, Any],
 ) -> None:
+  """Hard V7 reject: metric + terminalize setup so it does not keep watching."""
   await _record_gate_reject(client, symbol, f"v7_{reason_code}")
+  terminal_state = (
+    EXPIRED
+    if reason_code == "policy_reward_risk_insufficient"
+    else INVALIDATED
+  )
+  lifecycle_reason = (
+    "confirmation_expired"
+    if terminal_state == EXPIRED
+    else f"v7_{reason_code}"
+  )
+  setup_id = match.match_id
+  try:
+    await transition_setup(
+      client,
+      setup_id,
+      terminal_state,
+      reason_code=lifecycle_reason,
+    )
+  except SetupLifecycleError:
+    log.exception(
+      "v7 setup could not terminalize after build rejection "
+      "symbol=%s setup_id=%s reason=%s",
+      symbol,
+      setup_id,
+      reason_code,
+    )
+  await emit_lifecycle(
+    client,
+    terminal_state,
+    symbol=symbol,
+    match_id=setup_id,
+    correlation_id=setup_id,
+    timeframe=match.source_tf,
+    reason_code=lifecycle_reason,
+    message=message,
+    measured=measured,
+    publish_status=True,
+  )
   await emit_lifecycle(
     client,
     "rejected",
@@ -4196,6 +4237,22 @@ async def _record_v7_build_rejected(
     message=message,
     measured=measured,
   )
+  await _consume_strategy_match(client, symbol, match)
+  await record_route_outcome(
+    client,
+    match,
+    stage="publication",
+    status="blocked",
+    reason_code=reason_code,
+    message=message,
+    measured={
+      "setup_id": setup_id,
+      "match_id": setup_id,
+      **dict(measured or {}),
+    },
+    retained=False,
+    publish_status=False,
+  )
   stop_detail = measured.get("stop_reject_detail")
   stop_zone = None
   zone_low = measured.get("stop_side_opposing_zone_low")
@@ -4205,7 +4262,7 @@ async def _record_v7_build_rejected(
   log.info(
     "v7 plan build rejected symbol=%s match_id=%s reason=%s message=%s "
     "stop_detail=%s base_stop=%s pushed_stop=%s stop_zone=%s "
-    "max_pips=%s over_envelope_pips=%s",
+    "max_pips=%s over_envelope_pips=%s terminal=%s",
     symbol,
     match.match_id[:12],
     reason_code,
@@ -4216,6 +4273,7 @@ async def _record_v7_build_rejected(
     stop_zone,
     measured.get("stop_max_envelope_pips"),
     measured.get("pushed_over_envelope_pips"),
+    terminal_state,
   )
 
 
@@ -4538,7 +4596,7 @@ async def _publish_trade_plan_v7(
         EXPIRED,
         reason_code=(
           "confirmation_expired"
-          if policy.reaction_family else "m1_trigger_expired"
+          if policy.m5_authoritative_contract else "m1_trigger_expired"
         ),
       )
     except SetupLifecycleError:
@@ -4546,7 +4604,7 @@ async def _publish_trade_plan_v7(
         "v7 setup could not expire symbol=%s setup_id=%s",
         symbol, setup_id,
       )
-    if policy.reaction_family:
+    if policy.m5_authoritative_contract:
       await _persist_v7_confirmation_phase(
         client,
         symbol,
@@ -4570,7 +4628,7 @@ async def _publish_trade_plan_v7(
       timeframe=match.source_tf,
       reason_code=(
         "confirmation_expired"
-        if policy.reaction_family else "m1_trigger_expired"
+        if policy.m5_authoritative_contract else "m1_trigger_expired"
       ),
       message="setup confirmation expired before execution",
       publish_status=True,
@@ -4599,7 +4657,7 @@ async def _publish_trade_plan_v7(
         symbol,
         setup_id,
       )
-    if policy.reaction_family:
+    if policy.m5_authoritative_contract:
       await _persist_v7_confirmation_phase(
         client,
         symbol,
@@ -4627,7 +4685,7 @@ async def _publish_trade_plan_v7(
     )
     return None
 
-  if policy.reaction_family and not policy.metadata_valid:
+  if policy.m5_authoritative_contract and not policy.metadata_valid:
     await _record_v7_build_rejected(
       client,
       symbol,
@@ -5118,7 +5176,7 @@ async def _publish_trade_plan_v7(
 
   entry_reference = _executable_spot_price(spot, match.direction)
   execution_match = match
-  if policy.reaction_family and confirmation.source == M1_RETEST:
+  if policy.m5_authoritative_contract and confirmation.source == M1_RETEST:
     validity_bars = max(
       1,
       int(runtime_config.lifecycle.retest.trigger_validity_bars),
@@ -5132,7 +5190,10 @@ async def _publish_trade_plan_v7(
     ()
     if (
       market_map is None
-      or bypasses_opposing_structure_gates(execution_match.strategy)
+      or bypasses_opposing_structure_gates(
+        execution_match.strategy,
+        full_take_profit_pips=execution_match.full_take_profit_pips,
+      )
     )
     else tuple(getattr(market_map, "actionable_entries", ()) or ())
   )
@@ -5291,7 +5352,10 @@ async def _publish_trade_plan_v7(
 
   if (
     barrier_outcome.hard_block
-    and not bypasses_opposing_structure_gates(match_for_plan.strategy)
+    and not bypasses_opposing_structure_gates(
+      match_for_plan.strategy,
+      full_take_profit_pips=match_for_plan.full_take_profit_pips,
+    )
   ):
     await _release_claims()
     await _record_v7_build_rejected(
@@ -5299,6 +5363,84 @@ async def _publish_trade_plan_v7(
       barrier_outcome.message, barrier_outcome.measured,
     )
     return None
+
+  # HTF veto: reject when the nearest opposing HTF zone is still untested and
+  # ahead of the executable quote (defect 4: a short taken below untested
+  # supply). Preflight used to enforce this; V7 owns it now.
+  if runtime_config.actionability.gates.htf_veto_enabled:
+    htf_opposing = _nearest_directional_zone(
+      match_for_plan.direction, spot.price, htf_zones or [],
+    )
+    htf_reason = _htf_veto_reason(match_for_plan.direction, spot.price, htf_opposing)
+    if htf_reason is not None:
+      htf_severity = classify_guard_severity(
+        "htf_veto",
+        "htf_veto",
+        htf_reason,
+        guard_mode=guard_mode,
+      )
+      if htf_severity.hard_block:
+        await _release_claims()
+        await _record_v7_build_rejected(
+          client, symbol, match, "htf_veto", htf_reason, dict(htf_severity.measured),
+        )
+        return None
+
+  # Hard overlap veto: an entry inside both demand and supply must fail before
+  # publishing, resolved via the reaction-lookback thesis check that the
+  # preflight used to run.
+  overlap_outcome = _resolve_overlap_thesis(
+    match_for_plan.direction,
+    entry_reference,
+    market_map,
+    None if frames is None else frames.get("M1"),
+    float(match_for_plan.atr),
+    None,
+  )
+  if overlap_outcome.hard_block:
+    await _release_claims()
+    await _record_v7_build_rejected(
+      client,
+      symbol,
+      match,
+      overlap_outcome.reason_code,
+      overlap_outcome.message,
+      dict(overlap_outcome.measured),
+    )
+    return None
+  if overlap_outcome.reason_code not in {"no_map", "no_overlap"}:
+    log.info(
+      "v7 overlap preference observed symbol=%s reason=%s",
+      symbol, overlap_outcome.reason_code,
+    )
+
+  # News window: a lookup failure retains the intent (non-terminal wait);
+  # an active window is preference telemetry only (matches old preflight
+  # executable=True behavior).
+  news_now = int(datetime.now(timezone.utc).timestamp())
+  try:
+    news_event = await event_in_window(
+      news_now,
+      max(0, runtime_config.actionability.gates.news_guard_minutes) * 60,
+    )
+  except Exception:
+    await _release_claims()
+    await record_route_outcome(
+      client,
+      match,
+      stage="news",
+      status="waiting",
+      reason_code="news_guard_unavailable",
+      message="news guard unavailable; intent retained",
+      retained=True,
+      publish_status=False,
+    )
+    return None
+  if news_event is not None:
+    log.info(
+      "v7 news preference observed symbol=%s title=%s",
+      symbol, news_event.get("title", "unknown"),
+    )
 
   cooldown_reason = await _zone_cooldown_reason(
     client, symbol, match.direction, spot.price,
@@ -5310,14 +5452,6 @@ async def _publish_trade_plan_v7(
       symbol, cooldown_reason,
     )
     # Zone cooldown is preference telemetry — continue to publish.
-
-  overlap_reason = _overlapping_zone_conflict_reason(entry_reference, None)
-  if overlap_reason is not None:
-    log.info(
-      "v7 overlap preference observed symbol=%s reason=%s",
-      symbol, overlap_reason,
-    )
-    # Overlap veto is preference telemetry — continue to publish.
 
   exposures = await load_active_exposures(client)
   exposure = evaluate_entry_against_exposure(
@@ -5364,6 +5498,73 @@ async def _publish_trade_plan_v7(
     symbol=symbol,
     timeframe=str(match_for_plan.source_tf or "M5"),
   )
+  # Zone-split capability + required-limit-side checks: mirror old preflight
+  # policy gates against the fresh policy evaluation for the plan-time match.
+  side_aware_quote = _executable_spot_price(spot, match_for_plan.direction)
+  gate_policy = evaluate_execution_policy(
+    match_for_plan,
+    spot_price=spot.price,
+    executable_quote=side_aware_quote,
+    regime=None if regime is None else regime.state,
+    pip_size=units.pip_size(symbol),
+    cfg=None,
+  )
+  gate_measured = dict(gate_policy.measured)
+  gate_entry_distribution = str(gate_measured.get("entry_distribution", "single"))
+  if (
+    gate_entry_distribution == "zone_split"
+    and not runtime_config.execution.zone_scaling.fill_enabled
+  ):
+    await _release_claims()
+    await _record_v7_build_rejected(
+      client,
+      symbol,
+      match,
+      "zone_split_capability_unavailable",
+      "execution policy requires disabled zone-fill capability",
+      gate_measured,
+    )
+    return None
+  gate_order_type = (
+    gate_policy.policy.order_type_preference
+    if gate_policy.policy is not None else "either"
+  )
+  gate_direction = str(match_for_plan.direction).upper()
+  gate_entry_low = float(match_for_plan.entry_low)
+  gate_entry_high = float(match_for_plan.entry_high)
+  gate_zone_width = gate_entry_high - gate_entry_low
+  gate_limit_side_valid = (
+    gate_direction == "BUY"
+    and (
+      gate_entry_high <= spot.price
+      or (
+        gate_entry_low <= spot.price < gate_entry_high
+        and spot.price - gate_entry_low >= gate_zone_width * 0.35
+      )
+    )
+    or gate_direction == "SELL"
+    and (
+      gate_entry_low >= spot.price
+      or (
+        gate_entry_low < spot.price <= gate_entry_high
+        and gate_entry_high - spot.price >= gate_zone_width * 0.35
+      )
+    )
+  )
+  if gate_order_type == "limit" and not gate_limit_side_valid:
+    await _release_claims()
+    await record_route_outcome(
+      client,
+      match,
+      stage="policy",
+      status="waiting",
+      reason_code="required_limit_side_unavailable",
+      message="required limit entry is not currently on a valid broker side",
+      measured=gate_measured,
+      retained=True,
+      publish_status=False,
+    )
+    return None
   try:
     plan = build_trade_plan_from_strategy_match(
       match_for_plan,
@@ -5411,15 +5612,8 @@ async def _publish_trade_plan_v7(
       exc.message,
       rejection_measured,
     )
-    # A build rejection at this point (the M1 trigger already fired) means
-    # this specific match structurally cannot become a plan - a data
-    # problem with the match itself, not a transient market condition -
-    # so, unlike the soft/retryable guards above (barrier/cooldown/overlap,
-    # which release their claims precisely so a LATER re-evaluation can
-    # retry), this setup is genuinely done. A trigger-anchored R/R failure
-    # expires under the M1-trigger lifecycle; other build failures
-    # invalidate. Both terminal events reach delivery.py, which deletes the
-    # forming card and posts nothing (_CARD_TERMINAL_TYPES).
+    # Terminalize already ran inside _record_v7_build_rejected. Persist
+    # confirmation phase for reaction-family setups when confirmation exists.
     terminal_state = (
       EXPIRED
       if exc.reason_code == "policy_reward_risk_insufficient"
@@ -5434,30 +5628,7 @@ async def _publish_trade_plan_v7(
       if terminal_state == EXPIRED
       else f"v7_{exc.reason_code}"
     )
-    try:
-      await transition_setup(
-        client,
-        setup_id,
-        terminal_state,
-        reason_code=lifecycle_reason,
-      )
-    except SetupLifecycleError:
-      log.exception(
-        "v7 setup could not invalidate after build rejection "
-        "symbol=%s setup_id=%s", symbol, setup_id,
-      )
-    await emit_lifecycle(
-      client,
-      terminal_state,
-      symbol=symbol,
-      match_id=setup_id,
-      correlation_id=setup_id,
-      timeframe=match.source_tf,
-      reason_code=lifecycle_reason,
-      message=exc.message,
-      publish_status=True,
-    )
-    if policy.reaction_family:
+    if policy.m5_authoritative_contract:
       await _persist_v7_confirmation_phase(
         client,
         symbol,
@@ -6534,41 +6705,159 @@ async def _apply_box_retirement(
   return decision
 
 
-def _preflight_decision(
+@dataclass(frozen=True)
+class _AdmissionFailure:
+  """Terse admission-time verdict for a scanner or private strategy intent."""
+
+  reason_code: str
+  terminal: bool
+  message: str
+  stage: str = "mode_check"
+  measured: dict[str, Any] = field(default_factory=dict)
+
+
+async def _admit_strategy_intent_for_cycle(
+  client: Any,
   intent: ExecutionIntent,
+  match: StrategyMatch,
   *,
-  executable: bool,
-  terminal: bool,
-  stage: str,
-  reason_code: str,
-  message: str,
-  measured: dict[str, Any] | None = None,
-  policy: Any | None = None,
-  warnings: tuple[str, ...] = (),
-  order_type_preference: str = "either",
-  entry_distribution: str = "single",
-  effective_risk_multiplier: float = 1.0,
-  target_model: str | None = None,
-  subject: Any | None = None,
-) -> ExecutionPreflightDecision:
-  return ExecutionPreflightDecision(
-    intent=intent,
-    executable=executable,
-    terminal=terminal,
-    status="checking" if executable else "blocked" if terminal else "waiting",
-    stage=stage,
-    reason_code=reason_code,
-    message=message,
-    measured=dict(measured or {}),
-    policy=policy,
-    warnings=warnings,
-    order_type_preference=order_type_preference,
-    entry_distribution=entry_distribution,
-    effective_risk_multiplier=effective_risk_multiplier,
-    target_model=target_model or intent.target_model,
-    proposed_group_id=intent.proposed_group_id,
-    subject=subject,
+  spot: AutoTradeSpot | None,
+  regime: RegimeInfo,
+  htf_zones: list[Zone],
+  htf_levels: list[Level],
+) -> _AdmissionFailure | None:
+  """Admit or reject a StrategyMatch intent before cross-engine arbitration.
+
+  Returns ``None`` when the intent should enter arbitration (including the
+  case where V7 already published a plan for it — V7 reconciles that itself).
+  A returned _AdmissionFailure records why the intent must be filtered out;
+  V7's own hard gates (HTF veto, overlap, news, zone-split, limit-side,
+  exposure) still run afterward if the intent is admitted and wins.
+  """
+  existing = await resolve_existing_v7_state(
+    client,
+    match,
+    cycle_id=intent.cycle_id,
   )
+  if existing.already_terminal:
+    return _AdmissionFailure(
+      reason_code=(
+        existing.plan_state
+        or existing.setup_state
+        or "existing_v7_terminal"
+      ),
+      terminal=True,
+      message="durable V7 lifecycle is already terminal",
+      stage="publication_reconciliation",
+      measured={"plan_id": existing.plan_id},
+    )
+  if existing.already_published:
+    # V7 will reconcile the existing plan when it runs; admit as-is.
+    return None
+  if not runtime_config.runtime.auto_trade.enabled:
+    return _AdmissionFailure(
+      reason_code="auto_trade_disabled",
+      terminal=True,
+      message="autonomous execution is disabled",
+    )
+  if not runtime_config.runtime.auto_trade.strategy_match_enabled:
+    return _AdmissionFailure(
+      reason_code="strategy_match_disabled",
+      terminal=True,
+      message="StrategyMatch routing is disabled",
+    )
+  if not _strategy_mode_enabled(match):
+    return _AdmissionFailure(
+      reason_code="strategy_disabled",
+      terminal=True,
+      message=f"{match.strategy} execution is disabled",
+    )
+  if match.symbol != intent.symbol.upper():
+    return _AdmissionFailure(
+      reason_code="symbol_mismatch",
+      terminal=True,
+      message="intent symbol does not match worker symbol",
+    )
+  if intent.source == "scanner_strategy_match":
+    eligibility = match.execution_eligibility
+    if eligibility is None:
+      return _AdmissionFailure(
+        reason_code="static_eligibility_missing",
+        terminal=True,
+        message="scanner match has no authoritative static eligibility",
+        stage="static_eligibility",
+      )
+    if not eligibility.allowed:
+      return _AdmissionFailure(
+        reason_code="static_eligibility_contract_violation",
+        terminal=True,
+        message="analysis-only scanner result reached the executable store",
+        stage="static_eligibility",
+        measured={
+          "scanner_reason_code": eligibility.reason_code,
+          "market_map_id": eligibility.market_map_id,
+        },
+      )
+  if match.confluence < max(1, runtime_config.actionability.gates.min_confluence):
+    return _AdmissionFailure(
+      reason_code="confluence_below_minimum",
+      terminal=True,
+      message="strategy confluence is below the global minimum",
+      measured={"confluence": match.confluence},
+    )
+  if match.is_range_edge:
+    if regime.state != "chop":
+      return _AdmissionFailure(
+        reason_code="range_edge_not_chop",
+        terminal=True,
+        message=f"Range Edge requires chop; regime={regime.state}",
+        stage="range_context",
+      )
+    scanner_context = RangeContext.from_json(
+      await client.get(range_context_source_key(intent.symbol, "scanner"))
+    )
+    now = int(datetime.now(timezone.utc).timestamp())
+    if (
+      scanner_context is None
+      or not is_range_context_current(
+        scanner_context,
+        now=now,
+        max_age_seconds=SCANNER_SOURCE_MAX_AGE_SECONDS,
+      )
+      or scanner_context.state not in ACTIVE_RANGE_STATES
+      or not range_geometry_matches_match(
+        scanner_context,
+        range_id=match.range_id,
+        range_low=match.range_low,
+        range_high=match.range_high,
+      )
+    ):
+      return _AdmissionFailure(
+        reason_code=(
+          "range_context_withdrawn"
+          if scanner_context is None else "scanner_range_stale"
+        ),
+        terminal=scanner_context is None,
+        message="Range Edge requires its current scanner range episode",
+        stage="range_context",
+      )
+  if spot is not None and spot.fresh:
+    _, counter_bias = _adapt_counter_bias_target(
+      match,
+      spot.price,
+      htf_zones,
+      htf_levels,
+      units.pip_size(intent.symbol),
+    )
+    if counter_bias.hard_block:
+      return _AdmissionFailure(
+        reason_code=counter_bias.reason_code,
+        terminal=True,
+        message=counter_bias.message,
+        stage="counter_bias",
+        measured=dict(counter_bias.measured or {}),
+      )
+  return None
 
 
 def _arbitration_followup(
@@ -6604,6 +6893,17 @@ def _arbitration_followup(
     else "intent did not obtain final atomic publication ownership"
   )
   return status, reason_code, message
+
+
+_WAITING_RETEST_PUBLICATION_REASONS = frozenset({
+  "waiting_retest_entry_zone",
+  "waiting_retest",
+  "reaction_confirmation_handoff",
+  "waiting_m1_retest",
+  "trigger_price_left_zone",
+  "stale_m1_trigger_ignored",
+  "entry_contract_satisfied",
+})
 
 
 async def _strategy_publication_result(
@@ -6643,6 +6943,16 @@ async def _strategy_publication_result(
     return CandidatePublicationResult.blocked("duplicate_thesis", reason)
   if reason in {"cycle_conflict", "conflict"}:
     return CandidatePublicationResult.blocked("cycle_conflict", reason)
+  # V7 returned None because the reaction is still waiting for its retest.
+  # The old preflight kept this outside arbitration precisely so it wouldn't
+  # suppress executable lower-ranked intents; V7-cutover surfaces the same
+  # semantics as a terminal reject so ranked fallback can still publish.
+  if (
+    status == "waiting"
+    and retained is not False
+    and reason in _WAITING_RETEST_PUBLICATION_REASONS
+  ):
+    return CandidatePublicationResult.terminal_reject(reason)
   return CandidatePublicationResult.blocked(
     "publication_unavailable", reason,
   )
@@ -6733,886 +7043,6 @@ async def _active_opposite_initial_group(
     if _normalize_trade_direction(payload.get("direction")) == opposite:
       return payload
   return None
-
-
-async def _common_preflight(
-  client: Any,
-  intent: ExecutionIntent,
-  subject: Any,
-  *,
-  spot: AutoTradeSpot | None,
-  regime: RegimeInfo | None,
-  htf_zones: list[Zone],
-  htf_levels: list[Level],
-  market_map: MarketMap | None,
-  frames: dict[str, Any],
-) -> ExecutionPreflightDecision:
-  """Pure/read-only policy, geometry, market-state and news preflight."""
-  if not runtime_config.runtime.auto_trade.enabled:
-    return _preflight_decision(
-      intent,
-      executable=False,
-      terminal=True,
-      stage="mode_check",
-      reason_code="auto_trade_disabled",
-      message="autonomous execution is disabled",
-      subject=subject,
-    )
-  if spot is None or not spot.fresh:
-    return _preflight_decision(
-      intent,
-      executable=False,
-      terminal=False,
-      stage="spot_check",
-      reason_code="stale_or_missing_spot",
-      message="intent waits for a fresh cTrader quote",
-      subject=subject,
-    )
-  direction_for_quote = str(getattr(subject, "direction", intent.direction))
-  executable_quote = _executable_spot_price(spot, direction_for_quote)
-  policy = evaluate_execution_policy(
-    subject,
-    spot_price=spot.price,
-    executable_quote=executable_quote,
-    regime=None if regime is None else regime.state,
-    pip_size=units.pip_size(intent.symbol),
-    cfg=None,
-  )
-  policy_measured = dict(policy.measured)
-  if intent.is_initial:
-    exposures = await load_active_exposures(client)
-    entry_low = getattr(subject, "entry_low", None)
-    entry_high = getattr(subject, "entry_high", None)
-    entry_reference = float(
-      policy_measured.get("planned_entry_price")
-      or getattr(subject, "current_price", None)
-      or spot.price
-      or 0
-    )
-    try:
-      if entry_low is not None and entry_high is not None:
-        entry_reference = float(
-          policy_measured.get("planned_entry_price")
-          or ((float(entry_low) + float(entry_high)) / 2.0)
-        )
-    except (TypeError, ValueError):
-      pass
-    exposure = evaluate_entry_against_exposure(
-      direction=intent.direction,
-      entry_price=float(entry_reference or 0),
-      exposures=exposures,
-      min_price_separation=float(
-        runtime_config.risk.exposure.opposing_minimum_separation_price
-      ),
-      same_direction_size_fraction=float(
-        runtime_config.risk.position_limits.same_direction_stack_size_fraction
-      ),
-    )
-    if exposure.block:
-      return _preflight_decision(
-        intent,
-        executable=False,
-        terminal=True,
-        stage="candidate_claim",
-        reason_code=str(exposure.reason_code or "opposing_active_too_close"),
-        message=exposure.message,
-        measured={
-          **policy_measured,
-          **(exposure.measured or {}),
-        },
-        policy=policy.policy,
-        subject=subject,
-      )
-    if exposure.same_direction_stack:
-      policy_measured = apply_same_direction_stack_sizing(
-        policy_measured,
-        size_fraction=float(
-          runtime_config.risk.position_limits.same_direction_stack_size_fraction
-        ),
-      )
-      policy_measured.update(exposure.measured or {})
-  policy = replace(policy, measured=policy_measured)
-  if not policy.allowed:
-    return _preflight_decision(
-      intent,
-      executable=False,
-      terminal=policy.terminal,
-      stage="policy",
-      reason_code=policy.reason_code,
-      message=policy.message,
-      measured=policy_measured,
-      policy=policy.policy,
-      subject=subject,
-    )
-  direction = str(getattr(subject, "direction", intent.direction)).upper()
-  entry_low = float(getattr(subject, "entry_low", intent.entry_low))
-  entry_high = float(getattr(subject, "entry_high", intent.entry_high))
-  order_type = (
-    policy.policy.order_type_preference
-    if policy.policy is not None else "either"
-  )
-  entry_distribution = str(
-    policy.measured.get("entry_distribution", "single")
-  )
-  if (
-    entry_distribution == "zone_split"
-    and not runtime_config.execution.zone_scaling.fill_enabled
-  ):
-    return _preflight_decision(
-      intent,
-      executable=False,
-      terminal=True,
-      stage="policy",
-      reason_code="zone_split_capability_unavailable",
-      message="execution policy requires disabled zone-fill capability",
-      measured=policy.measured,
-      policy=policy.policy,
-      subject=subject,
-    )
-  zone_width = entry_high - entry_low
-  limit_side_valid = (
-    direction == "BUY"
-    and (
-      entry_high <= spot.price
-      or (
-        entry_low <= spot.price < entry_high
-        and spot.price - entry_low >= zone_width * 0.35
-      )
-    )
-    or direction == "SELL"
-    and (
-      entry_low >= spot.price
-      or (
-        entry_low < spot.price <= entry_high
-        and entry_high - spot.price >= zone_width * 0.35
-      )
-    )
-  )
-  if order_type == "limit" and not limit_side_valid:
-    return _preflight_decision(
-      intent,
-      executable=False,
-      terminal=False,
-      stage="policy",
-      reason_code="required_limit_side_unavailable",
-      message="required limit entry is not currently on a valid broker side",
-      measured=policy.measured,
-      policy=policy.policy,
-      subject=subject,
-    )
-  atr = float(getattr(subject, "atr", 0.0) or 0.0)
-  structure_swing = float(
-    getattr(subject, "structure_swing", spot.price)
-  )
-  invalidated = (
-    direction == "BUY" and spot.price < structure_swing
-    or direction == "SELL" and spot.price > structure_swing
-  )
-  if invalidated:
-    return _preflight_decision(
-      intent,
-      executable=False,
-      terminal=True,
-      stage="entry_invalidation",
-      reason_code="reaction_crossed_invalidation",
-      message="current price crossed structural invalidation",
-      measured={
-        **policy.measured,
-        "spot_price": spot.price,
-        "invalidation_price": structure_swing,
-      },
-      policy=policy.policy,
-      subject=subject,
-    )
-  guard_mode = resolve_guard_mode()
-  warnings: list[str] = []
-  source = _structural_source_identity(
-    strategy=str(getattr(subject, "strategy", intent.strategy)),
-    family=intent.family,
-    structural_source=str(
-      getattr(subject, "structural_source", intent.source)
-    ),
-    low=entry_low,
-    high=entry_high,
-    key_level=float(getattr(subject, "key_level", (entry_low + entry_high) / 2)),
-    zone_id=str(getattr(subject, "zone_id", "") or "") or None,
-    level_id=str(getattr(subject, "level_id", "") or "") or None,
-  )
-  if runtime_config.actionability.gates.htf_veto_enabled:
-    opposing_zone = _nearest_directional_zone(
-      direction,
-      spot.price,
-      htf_zones,
-    )
-    htf_reason = _htf_veto_reason(direction, spot.price, opposing_zone)
-    if htf_reason is not None:
-      htf_outcome = classify_guard_severity(
-        "htf_veto",
-        "htf_veto",
-        htf_reason,
-        guard_mode=guard_mode,
-      )
-      if htf_outcome.hard_block:
-        return _preflight_decision(
-          intent,
-          executable=False,
-          terminal=True,
-          stage="opposing_barrier",
-          reason_code="htf_veto",
-          message=htf_reason,
-          measured={**policy.measured, **htf_outcome.measured},
-          policy=policy.policy,
-          subject=subject,
-        )
-      warnings.append("htf_veto")
-  if (
-    runtime_config.actionability.gates.opposing_barrier_veto_enabled
-    or guard_mode == GUARD_MODE_OBSERVE
-  ):
-    barrier = _opposing_barrier_decision(
-      direction,
-      spot.price,
-      getattr(subject, "absolute_target_price", None),
-      atr,
-      htf_zones,
-      htf_levels,
-      runtime_config.actionability.target_room.barrier_buffer_atr,
-      source=source,
-      guard_mode=guard_mode,
-    )
-    if barrier.hard_block:
-      return _preflight_decision(
-        intent,
-        executable=False,
-        terminal=True,
-        stage="opposing_barrier",
-        reason_code=barrier.reason_code,
-        message=barrier.message,
-        measured={**policy.measured, **barrier.measured},
-        policy=policy.policy,
-        subject=subject,
-      )
-    if barrier.reason_code != "no_opposing_barrier":
-      warnings.append(barrier.reason_code)
-  cooldown = await _zone_cooldown_reason(
-    client,
-    intent.symbol,
-    direction,
-    spot.price,
-    atr,
-    runtime_config.lifecycle.zone.cooldown_atr,
-  )
-  if cooldown is not None:
-    severity = classify_guard_severity(
-      "zone_cooldown",
-      "zone_cooldown",
-      cooldown,
-      guard_mode=guard_mode,
-      hard_geometry=False,
-    )
-    if severity.hard_block:
-      return _preflight_decision(
-        intent,
-        executable=False,
-        terminal=True,
-        stage="cooldown",
-        reason_code="zone_cooldown",
-        message=cooldown,
-        measured=policy.measured,
-        policy=policy.policy,
-        subject=subject,
-      )
-    warnings.append("zone_cooldown")
-  if (
-    runtime_config.actionability.overlapping_zones.veto_enabled
-    or guard_mode == GUARD_MODE_OBSERVE
-  ):
-    overlap = _resolve_overlap_thesis(
-      direction,
-      spot.price,
-      market_map,
-      frames.get("M1"),
-      atr,
-      None,
-    )
-    if overlap.hard_block:
-      return _preflight_decision(
-        intent,
-        executable=False,
-        terminal=True,
-        stage="overlap",
-        reason_code=overlap.reason_code,
-        message=overlap.message,
-        measured={**policy.measured, **overlap.measured},
-        policy=policy.policy,
-        subject=subject,
-      )
-    if overlap.reason_code not in {"no_map", "no_overlap"}:
-      warnings.append(overlap.reason_code)
-  distance = (
-    entry_low - spot.price
-    if spot.price < entry_low
-    else spot.price - entry_high
-    if spot.price > entry_high
-    else 0.0
-  )
-  distance_pips = distance / units.pip_size(intent.symbol)
-  limit, drift = max_entry_drift_pips(
-    strategy=str(getattr(subject, "strategy", intent.strategy)),
-    atr=atr,
-    pip_size=units.pip_size(intent.symbol),
-    remaining_target_room_pips=float(
-      policy.measured.get("remaining_target_room_pips", 0.0)
-    ),
-    cfg=None,
-  )
-  if distance_pips > limit:
-    hard_cap = float(drift.get("hard_cap_pips", limit))
-    terminal = distance_pips > hard_cap
-    return _preflight_decision(
-      intent,
-      executable=False,
-      terminal=terminal,
-      stage="entry_drift",
-      reason_code=(
-        "strategy_entry_moved_beyond_hard_cap"
-        if terminal else "strategy_entry_moved"
-      ),
-      message=(
-        f"entry moved {distance_pips:.1f}p beyond "
-        f"{'hard cap' if terminal else 'adaptive limit'}"
-      ),
-      measured={
-        **policy.measured,
-        **drift,
-        "distance_pips": round(distance_pips, 3),
-      },
-      policy=policy.policy,
-      subject=subject,
-    )
-  executor_measurement = _measure_executor_entry_distance(
-    direction=direction,
-    spot=spot,
-    zone_low=entry_low,
-    zone_high=entry_high,
-    symbol=intent.symbol,
-  )
-  if not executor_measurement.within_cap:
-    return _preflight_decision(
-      intent,
-      executable=False,
-      terminal=False,
-      stage="entry_distance",
-      reason_code="executor_entry_envelope_exceeded",
-      message=(
-        f"executor quote {float(executor_measurement.executable_quote):.2f} "
-        f"is {float(executor_measurement.distance_pips):.1f}p outside entry "
-        f"zone (executor limit "
-        f"{float(executor_measurement.cap_pips):.1f}p)"
-      ),
-      measured={
-        **policy.measured,
-        **executor_measurement.as_measured(),
-        "entry_low": entry_low,
-        "entry_high": entry_high,
-        "spot_price": spot.price,
-        "bid": spot.bid,
-        "ask": spot.ask,
-      },
-      policy=policy.policy,
-      subject=subject,
-    )
-  now = int(datetime.now(timezone.utc).timestamp())
-  try:
-    guarded = await event_in_window(
-      now,
-      max(0, runtime_config.actionability.gates.news_guard_minutes) * 60,
-    )
-  except Exception:
-    return _preflight_decision(
-      intent,
-      executable=False,
-      terminal=False,
-      stage="news",
-      reason_code="news_guard_unavailable",
-      message="news guard unavailable; intent retained",
-      measured=policy.measured,
-      policy=policy.policy,
-      subject=subject,
-    )
-  if guarded is not None:
-    return _preflight_decision(
-      intent,
-      executable=True,
-      terminal=False,
-      stage="news",
-      reason_code="news_window_active",
-      message=(
-        f"high-impact event preference observed: "
-        f"{guarded.get('title', 'unknown')}"
-      ),
-      measured={
-        **policy.measured,
-        "event": guarded.get("title"),
-        "preference_telemetry": True,
-      },
-      policy=policy.policy,
-      subject=subject,
-    )
-  if await client.exists(candidate_key(intent.match_id or intent.intent_id)):
-    return _preflight_decision(
-      intent,
-      executable=False,
-      terminal=False,
-      stage="candidate_claim",
-      reason_code="duplicate_candidate",
-      message="candidate ID is already owned",
-      measured=policy.measured,
-      policy=policy.policy,
-      subject=subject,
-    )
-  if (
-    intent.is_initial
-    and intent.cycle_id
-    and await client.exists(
-      autonomous_cycle_owner_key(intent.symbol, intent.cycle_id)
-    )
-  ):
-    return _preflight_decision(
-      intent,
-      executable=False,
-      terminal=False,
-      stage="candidate_claim",
-      reason_code="cycle_initial_already_owned",
-      message="another initial candidate already owns this closed M1 cycle",
-      measured=policy.measured,
-      policy=policy.policy,
-      subject=subject,
-    )
-  if await _group_is_active(client, intent.symbol, intent.proposed_group_id):
-    if not intent.is_initial:
-      return _preflight_decision(
-        intent,
-        executable=True,
-        terminal=False,
-        stage="policy",
-        reason_code="preflight_allowed_parent_group",
-        message="scale-in intent inherits an active parent group",
-        measured={
-          **policy.measured,
-          **drift,
-          "distance_pips": round(distance_pips, 3),
-          "parent_group_active": True,
-        },
-        policy=policy.policy,
-        warnings=tuple(dict.fromkeys(warnings)),
-        order_type_preference=(
-          policy.policy.order_type_preference
-          if policy.policy is not None else "either"
-        ),
-        entry_distribution=str(
-          policy.measured.get("entry_distribution", "single")
-        ),
-        effective_risk_multiplier=float(
-          policy.measured.get("effective_risk_multiplier", 1.0)
-        ),
-        target_model=str(
-          policy.measured.get("target_model", intent.target_model)
-        ),
-        subject=subject,
-      )
-    return _preflight_decision(
-      intent,
-      executable=False,
-      terminal=True,
-      stage="candidate_claim",
-      reason_code="duplicate_active_group",
-      message="executor snapshot already contains the proposed initial group",
-      measured=policy.measured,
-      policy=policy.policy,
-      subject=subject,
-    )
-  return _preflight_decision(
-    intent,
-    executable=True,
-    terminal=False,
-    stage="policy",
-    reason_code="preflight_allowed",
-    message="intent passed side-effect-free execution preflight",
-    measured={
-      **policy.measured,
-      **drift,
-      "distance_pips": round(distance_pips, 3),
-    },
-    policy=policy.policy,
-    warnings=tuple(dict.fromkeys(warnings)),
-    order_type_preference=(
-      policy.policy.order_type_preference
-      if policy.policy is not None else "either"
-    ),
-    entry_distribution=str(
-      policy.measured.get("entry_distribution", "single")
-    ),
-    effective_risk_multiplier=float(
-      policy.measured.get("effective_risk_multiplier", 1.0)
-    ),
-    target_model=str(policy.measured.get("target_model", intent.target_model)),
-    subject=subject,
-  )
-
-
-async def _preflight_strategy_intent(
-  client: Any,
-  intent: ExecutionIntent,
-  match: StrategyMatch,
-  *,
-  spot: AutoTradeSpot | None,
-  regime: RegimeInfo,
-  htf_zones: list[Zone],
-  htf_levels: list[Level],
-  market_map: MarketMap | None,
-  frames: dict[str, Any],
-) -> ExecutionPreflightDecision:
-  existing = await resolve_existing_v7_state(
-    client,
-    match,
-    cycle_id=intent.cycle_id,
-  )
-  if existing.already_terminal:
-    return _preflight_decision(
-      intent,
-      executable=False,
-      terminal=True,
-      stage="publication_reconciliation",
-      reason_code=(
-        existing.plan_state
-        or existing.setup_state
-        or "existing_v7_terminal"
-      ),
-      message="durable V7 lifecycle is already terminal",
-      measured={"plan_id": existing.plan_id},
-      subject=match,
-    )
-  if existing.already_published:
-    return _preflight_decision(
-      intent,
-      executable=True,
-      terminal=False,
-      stage="publication_reconciliation",
-      reason_code="existing_v7_plan",
-      message="durable TradePlan V7 already exists",
-      measured={
-        "plan_id": existing.plan_id,
-        "plan_state": existing.plan_state,
-        "setup_state": existing.setup_state,
-      },
-      subject=match,
-    )
-  if not runtime_config.runtime.auto_trade.strategy_match_enabled:
-    return _preflight_decision(
-      intent,
-      executable=False,
-      terminal=True,
-      stage="mode_check",
-      reason_code="strategy_match_disabled",
-      message="StrategyMatch routing is disabled",
-      subject=match,
-    )
-  if not _strategy_mode_enabled(match):
-    return _preflight_decision(
-      intent,
-      executable=False,
-      terminal=True,
-      stage="mode_check",
-      reason_code="strategy_disabled",
-      message=f"{match.strategy} execution is disabled",
-      subject=match,
-    )
-  if match.symbol != intent.symbol.upper():
-    return _preflight_decision(
-      intent,
-      executable=False,
-      terminal=True,
-      stage="mode_check",
-      reason_code="symbol_mismatch",
-      message="intent symbol does not match worker symbol",
-      subject=match,
-    )
-  if intent.source == "scanner_strategy_match":
-    eligibility = match.execution_eligibility
-    if eligibility is None:
-      return _preflight_decision(
-        intent,
-        executable=False,
-        terminal=True,
-        stage="static_eligibility",
-        reason_code="static_eligibility_missing",
-        message="scanner match has no authoritative static eligibility",
-        subject=match,
-      )
-    if not eligibility.allowed:
-      return _preflight_decision(
-        intent,
-        executable=False,
-        terminal=True,
-        stage="static_eligibility",
-        reason_code="static_eligibility_contract_violation",
-        message="analysis-only scanner result reached the executable store",
-        measured={
-          "scanner_reason_code": eligibility.reason_code,
-          "market_map_id": eligibility.market_map_id,
-        },
-        subject=match,
-      )
-  if match.confluence < max(1, runtime_config.actionability.gates.min_confluence):
-    return _preflight_decision(
-      intent,
-      executable=False,
-      terminal=True,
-      stage="mode_check",
-      reason_code="confluence_below_minimum",
-      message="strategy confluence is below the global minimum",
-      measured={"confluence": match.confluence},
-      subject=match,
-    )
-  if match.is_range_edge:
-    if regime.state != "chop":
-      return _preflight_decision(
-        intent,
-        executable=False,
-        terminal=True,
-        stage="range_context",
-        reason_code="range_edge_not_chop",
-        message=f"Range Edge requires chop; regime={regime.state}",
-        subject=match,
-      )
-    scanner_context = RangeContext.from_json(
-      await client.get(range_context_source_key(intent.symbol, "scanner"))
-    )
-    now = int(datetime.now(timezone.utc).timestamp())
-    if (
-      scanner_context is None
-      or not is_range_context_current(
-        scanner_context,
-        now=now,
-        max_age_seconds=SCANNER_SOURCE_MAX_AGE_SECONDS,
-      )
-      or scanner_context.state not in ACTIVE_RANGE_STATES
-      or not range_geometry_matches_match(
-        scanner_context,
-        range_id=match.range_id,
-        range_low=match.range_low,
-        range_high=match.range_high,
-      )
-    ):
-      return _preflight_decision(
-        intent,
-        executable=False,
-        terminal=scanner_context is None,
-        stage="range_context",
-        reason_code=(
-          "range_context_withdrawn"
-          if scanner_context is None else "scanner_range_stale"
-        ),
-        message="Range Edge requires its current scanner range episode",
-        subject=match,
-      )
-  if spot is None or not spot.fresh:
-    return await _common_preflight(
-      client,
-      intent,
-      match,
-      spot=spot,
-      regime=regime,
-      htf_zones=htf_zones,
-      htf_levels=htf_levels,
-      market_map=market_map,
-      frames=frames,
-    )
-  handoff_policy = confirmation_policy_for(match)
-  handoff_evidence = executable_quote_in_zone(
-    match.direction,
-    spot.bid,
-    spot.ask,
-    match.entry_low,
-    match.entry_high,
-    max(
-      0.0,
-      float(runtime_config.execution.entry.contract_tolerance_pips)
-      * units.pip_size(intent.symbol),
-    ),
-    pip_size=units.pip_size(intent.symbol),
-  )
-  handoff_quote = handoff_evidence.executable_quote
-  handoff_invalidated = (
-    handoff_quote is not None
-    and (
-      match.direction == "BUY" and handoff_quote < match.structure_swing
-      or match.direction == "SELL" and handoff_quote > match.structure_swing
-    )
-  )
-  if (
-    handoff_policy.m5_authoritative
-    and not handoff_evidence.inside
-    and not handoff_invalidated
-    and (
-      not match.expires_at
-      or int(datetime.now(timezone.utc).timestamp()) < int(match.expires_at)
-    )
-  ):
-    # An out-of-zone reaction is not executable, but the orchestrator must
-    # still
-    # advance its handoff once so Python can persist WAITING_RETEST. Keep it
-    # out of arbitration: a waiting reaction must not suppress an executable
-    # intent on the other side.
-    return _preflight_decision(
-      intent,
-      executable=False,
-      terminal=False,
-      stage="preflight",
-      reason_code="reaction_confirmation_handoff",
-      message="reaction is outside its entry contract and must wait",
-      measured={
-        "executable_quote": handoff_evidence.executable_quote,
-        "quote_side": handoff_evidence.quote_side,
-        "quote_inside_zone": handoff_evidence.inside,
-        "distance_pips": handoff_evidence.distance_pips,
-        "entry_low": match.entry_low,
-        "entry_high": match.entry_high,
-      },
-      subject=match,
-    )
-  adapted, counter_bias = _adapt_counter_bias_target(
-    match,
-    spot.price,
-    htf_zones,
-    htf_levels,
-    units.pip_size(intent.symbol),
-  )
-  if counter_bias.hard_block:
-    return _preflight_decision(
-      intent,
-      executable=False,
-      terminal=True,
-      stage="counter_bias",
-      reason_code=counter_bias.reason_code,
-      message=counter_bias.message,
-      measured=counter_bias.measured,
-      subject=adapted,
-    )
-  thesis_cycle = 1
-  if match.thesis_id and _thesis_lock_enabled():
-    existing_thesis = await _load_thesis_claim(client, match.thesis_id)
-    if existing_thesis is not None:
-      thesis_decision = evaluate_thesis_rearm_for_publish(
-        existing_thesis,
-        new_touch_ts=str(match.touch_bar_ts or ""),
-        new_confirmation_ts=str(match.confirmation_bar_ts or ""),
-        price=float(spot.price),
-        atr=float(match.atr),
-        rearm_atr=float(
-          runtime_config.lifecycle.mapped_zone.reaction_rearm_atr
-        ),
-        rearm_bars=int(
-          runtime_config.lifecycle.mapped_zone.reaction_rearm_bars
-        ),
-      )
-      if not thesis_decision.allowed:
-        return _preflight_decision(
-          intent,
-          executable=False,
-          terminal=True,
-          stage="candidate_claim",
-          reason_code=thesis_decision.reason_code,
-          message="an active group already owns this structural thesis",
-          measured={"thesis_state": thesis_decision.state},
-          subject=adapted,
-        )
-      thesis_cycle = int(existing_thesis.get("thesis_cycle") or 1) + 1
-  if thesis_cycle > 1:
-    intent = replace(
-      intent,
-      proposed_group_id=_strategy_group_id(
-        adapted,
-        thesis_cycle=thesis_cycle,
-      ),
-    )
-  if match.reaction_id:
-    raw = await client.get(reaction_claim_key(match.reaction_id))
-    existing = parse_reaction_claim(raw)
-    if existing is not None and str(existing.get("state") or "").casefold() not in {
-      "closed", "cancelled", "rejected", "expired", "terminal", "rearm_ready",
-    }:
-      return _preflight_decision(
-        intent,
-        executable=False,
-        terminal=True,
-        stage="candidate_claim",
-        reason_code="duplicate_reaction",
-        message="an active candidate already owns this reaction",
-        measured={"reaction_state": existing.get("state")},
-        subject=adapted,
-      )
-  return await _common_preflight(
-    client,
-    intent,
-    adapted,
-    spot=spot,
-    regime=regime,
-    htf_zones=htf_zones,
-    htf_levels=htf_levels,
-    market_map=market_map,
-    frames=frames,
-  )
-
-
-async def _preflight_private_intent(
-  client: Any,
-  intent: ExecutionIntent,
-  subject: PrivatePolicySubject,
-  *,
-  enabled: bool,
-  eligibility_reason: str | None,
-  spot: AutoTradeSpot | None,
-  regime: RegimeInfo,
-  htf_zones: list[Zone],
-  htf_levels: list[Level],
-  market_map: MarketMap | None,
-  frames: dict[str, Any],
-) -> ExecutionPreflightDecision:
-  if not enabled:
-    return _preflight_decision(
-      intent,
-      executable=False,
-      terminal=True,
-      stage="mode_check",
-      reason_code="strategy_disabled",
-      message=f"{intent.strategy} execution is disabled",
-      subject=subject,
-    )
-  if eligibility_reason is not None:
-    return _preflight_decision(
-      intent,
-      executable=False,
-      terminal=eligibility_reason not in {
-        "warming_up", "data_gap", "stale_or_missing_spot",
-      },
-      stage="range_context" if intent.source == "private_range" else "policy",
-      reason_code=eligibility_reason,
-      message=f"{intent.strategy} is not technically executable",
-      subject=subject,
-    )
-  return await _common_preflight(
-    client,
-    intent,
-    subject,
-    spot=spot,
-    regime=regime,
-    htf_zones=htf_zones,
-    htf_levels=htf_levels,
-    market_map=market_map,
-    frames=frames,
-  )
 
 
 async def _handle_event(
@@ -7940,11 +7370,11 @@ async def _handle_event(
     intents.append(intent)
     intent_subjects[trend_intent_id] = trend_subject
 
-  preflight_decisions: list[ExecutionPreflightDecision] = []
+  arbitrable: list[ExecutionIntent] = []
   for intent in intents:
     routed_match = intent_matches.get(intent.intent_id)
     if routed_match is not None:
-      preflight = await _preflight_strategy_intent(
+      failure = await _admit_strategy_intent_for_cycle(
         client,
         intent,
         routed_match,
@@ -7952,109 +7382,24 @@ async def _handle_event(
         regime=regime,
         htf_zones=htf_zones,
         htf_levels=htf_levels,
-        market_map=guard_market_map,
-        frames=frames,
       )
-    else:
-      subject = intent_subjects[intent.intent_id]
-      eligibility_reason = None
-      enabled = True
-      if intent.source == "private_range":
-        enabled = bool(runtime_config.strategies.range_reversion.enabled)
-        eligibility_reason = (
-          None
-          if box_eligibility.eligible
-          else box_eligibility.reason_code
-        )
-        if (
-          eligibility_reason is None
-          and decision.full_tp_pips not in configured_range_targets()
-        ):
-          eligibility_reason = "insufficient_target_room"
-        if eligibility_reason is None and scale_context is None:
-          eligibility_reason = "data_gap"
-        if (
-          eligibility_reason is None
-          and spot is not None
-          and spot.fresh
-          and decision.box is not None
-          and decision.rail is not None
-          and scale_context is not None
-        ):
-          range_guard_mode = resolve_guard_mode()
-          for guard_name, guard_reason in (
-            (
-              "eq_exclusion",
-              _eq_exclusion_reason(
-                decision.box,
-                spot.price,
-                runtime_config.actionability.gates.eq_exclusion_fraction,
-              ),
-            ),
-            (
-              "edge_proximity",
-              _edge_proximity_reason(
-                decision.rail,
-                spot.price,
-                scale_context.atr,
-                runtime_config.actionability.gates.edge_proximity_atr,
-              ),
-            ),
-          ):
-            if guard_reason is None:
-              continue
-            severity = classify_guard_severity(
-              guard_name,
-              guard_name,
-              guard_reason,
-              guard_mode=range_guard_mode,
-            )
-            if severity.hard_block:
-              eligibility_reason = guard_name
-              break
-      elif intent.source == "private_trend":
-        enabled = bool(runtime_config.strategies.trend.enabled)
-        if regime.state not in {"trend", "breakout"}:
-          eligibility_reason = "trend_regime_not_permitted"
-      preflight = await _preflight_private_intent(
-        client,
-        intent,
-        subject,
-        enabled=enabled,
-        eligibility_reason=eligibility_reason,
-        spot=spot,
-        regime=regime,
-        htf_zones=htf_zones,
-        htf_levels=htf_levels,
-        market_map=guard_market_map,
-        frames=frames,
-      )
-    preflight_decisions.append(preflight)
-  preflight_by_id = {
-    item.intent.intent_id: item for item in preflight_decisions
-  }
-  arbitration = arbitrate_preflight_decisions(
-    preflight_decisions,
-    conflict_margin=runtime_config.actionability.scanner_gates.conflict_margin,
-  )
-  for preflight in preflight_decisions:
-    intent = preflight.intent
-    routed_match = intent_matches.get(intent.intent_id)
-    if routed_match is not None:
+      if failure is None:
+        arbitrable.append(intent)
+        continue
+      status = "blocked" if failure.terminal else "waiting"
       await record_route_outcome(
         client,
         routed_match,
-        stage=preflight.stage,  # type: ignore[arg-type]
-        status=preflight.status,  # type: ignore[arg-type]
-        reason_code=preflight.reason_code,
-        message=preflight.message,
-        measured=preflight.measured,
-        retained=not preflight.terminal,
-        preflight_reason_code=preflight.reason_code,
+        stage=failure.stage,  # type: ignore[arg-type]
+        status=status,  # type: ignore[arg-type]
+        reason_code=failure.reason_code,
+        message=failure.message,
+        measured=failure.measured,
+        retained=not failure.terminal,
         signal_source=intent.source,
-        publish_status=preflight.terminal and not preflight.executable,
+        publish_status=failure.terminal,
       )
-      if preflight.terminal:
+      if failure.terminal:
         setup = await load_setup(client, routed_match.match_id)
         next_state = (
           None
@@ -8067,13 +7412,8 @@ async def _handle_event(
               client,
               routed_match.match_id,
               next_state,
-              reason_code=preflight.reason_code,
+              reason_code=failure.reason_code,
             )
-            # This path had no emit_lifecycle call to ride downstream on
-            # (unlike the other terminal transitions in this module), so
-            # nothing ever cleared the card for this failure - publish one
-            # now, gated on the transition actually succeeding, so
-            # delivery.py's _CARD_TERMINAL_TYPES handling picks it up.
             await emit_lifecycle(
               client,
               next_state,
@@ -8081,20 +7421,23 @@ async def _handle_event(
               match_id=routed_match.match_id,
               correlation_id=routed_match.match_id,
               timeframe=routed_match.source_tf,
-              reason_code=preflight.reason_code,
-              message=preflight.message,
+              reason_code=failure.reason_code,
+              message=failure.message,
               publish_status=True,
             )
           except SetupLifecycleError:
             log.exception(
-              "terminal preflight lifecycle transition failed "
+              "terminal admission lifecycle transition failed "
               "symbol=%s setup_id=%s reason=%s",
               symbol,
               routed_match.match_id,
-              preflight.reason_code,
+              failure.reason_code,
             )
         await _consume_strategy_match(client, symbol, routed_match)
     else:
+      # Private intents (range / trend) are recorded as unavailable and
+      # kept out of arbitration; the V6 candidate path is retired and no
+      # V7 equivalent publishes them.
       await _record_private_route(
         client,
         symbol=symbol,
@@ -8107,50 +7450,18 @@ async def _handle_event(
         entry_low=intent.entry_low,
         entry_high=intent.entry_high,
         spot_price=spot_price,
-        status=preflight.status,
-        reason_code=preflight.reason_code,
-        message=preflight.message,
+        status="blocked",
+        reason_code="publication_unavailable",
+        message="private strategy has no active V7 publication path",
         group_id=intent.proposed_group_id,
-        retained=not preflight.terminal,
-        stage=preflight.stage,
-        measured=preflight.measured,
-        preflight_reason_code=preflight.reason_code,
-        terminal_reason_code=(
-          preflight.reason_code if preflight.terminal else None
-        ),
+        retained=False,
+        stage="publication",
+        terminal_reason_code="publication_unavailable",
       )
-
-  # Waiting reactions are intentionally absent from executable arbitration,
-  # but still need one locked lifecycle pass to persist WAITING_RETEST. This
-  # call cannot publish while the side-aware quote is outside the zone.
-  for preflight in preflight_decisions:
-    if preflight.reason_code != "reaction_confirmation_handoff":
-      continue
-    routed_match = intent_matches.get(preflight.intent.intent_id)
-    if routed_match is None:
-      continue
-    route_lock = (
-      f"auto_trade:route_lock:{symbol.upper()}:{routed_match.match_id}"
-    )
-    route_lock_token = await acquire_owned_lock(
-      client, route_lock, ttl=30,
-    )
-    if route_lock_token is None:
-      continue
-    try:
-      await _publish_trade_plan_v7(
-        client,
-        symbol,
-        spot,
-        routed_match,
-        htf_zones=htf_zones,
-        htf_levels=htf_levels,
-        regime=regime,
-        frames=frames,
-        market_map=cached_market_map,
-      )
-    finally:
-      await release_owned_lock(client, route_lock, route_lock_token)
+  arbitration = arbitrate_execution_intents(
+    arbitrable,
+    conflict_margin=runtime_config.actionability.scanner_gates.conflict_margin,
+  )
 
   strategy_candidate_ids: list[str] = []
   box_candidate_id = None
@@ -8171,10 +7482,7 @@ async def _handle_event(
     attempted_intent_ids.add(intent.intent_id)
     published = None
     publication_result: CandidatePublicationResult | None = None
-    preflight = preflight_by_id[intent.intent_id]
     routed_match = intent_matches.get(intent.intent_id)
-    if isinstance(preflight.subject, StrategyMatch):
-      routed_match = preflight.subject
     if routed_match is not None:
       route_lock = (
         f"auto_trade:route_lock:{symbol.upper()}:{routed_match.match_id}"
@@ -8233,7 +7541,6 @@ async def _handle_event(
           candidate_id=published,
           group_id=intent.proposed_group_id,
           retained=False,
-          preflight_reason_code=preflight.reason_code,
           arbitration_reason_code="selected_for_publication",
           publication_reason_code="candidate_published",
           winner_intent_id=intent.intent_id,
@@ -8324,7 +7631,6 @@ async def _handle_event(
           publish_status=False,
         )
       else:
-        top_preflight = preflight_by_id[top.intent_id]
         await _record_private_route(
           client,
           symbol=symbol,
@@ -8343,20 +7649,14 @@ async def _handle_event(
           group_id=top.proposed_group_id,
           retained=True,
           stage="candidate_claim",
-          measured=top_preflight.measured,
-          preflight_reason_code=top_preflight.reason_code,
           arbitration_reason_code=reason_code,
           winner_intent_id=winner_intent_id,
         )
-  executable_ids = {
-    item.intent.intent_id
-    for item in preflight_decisions
-    if item.executable
-  }
+  arbitrable_ids = {item.intent_id for item in arbitrable}
   ordered_ids = {item.intent_id for item in arbitration.ordered}
   for intent in intents:
     if (
-      intent.intent_id not in executable_ids
+      intent.intent_id not in arbitrable_ids
       or (
         published_intent is not None
         and intent.intent_id == published_intent.intent_id
@@ -8384,9 +7684,6 @@ async def _handle_event(
         reason_code=reason_code,
         message=message,
         retained=True,
-        preflight_reason_code=preflight_by_id[
-          intent.intent_id
-        ].reason_code,
         arbitration_reason_code=reason_code,
         winner_intent_id=(
           None if published_intent is None else published_intent.intent_id
@@ -8413,9 +7710,6 @@ async def _handle_event(
         group_id=intent.proposed_group_id,
         retained=True,
         stage="arbitration",
-        preflight_reason_code=preflight_by_id[
-          intent.intent_id
-        ].reason_code,
         arbitration_reason_code=reason_code,
         winner_intent_id=(
           None if published_intent is None else published_intent.intent_id
@@ -8457,7 +7751,6 @@ async def _handle_event(
       ),
       retained=False,
       stage="stream_publish",
-      preflight_reason_code=preflight_by_id[box_intent_id].reason_code,
       arbitration_reason_code="selected_for_publication",
       publication_reason_code="candidate_published",
       winner_intent_id=box_intent_id,
@@ -8493,7 +7786,6 @@ async def _handle_event(
       ),
       retained=False,
       stage="stream_publish",
-      preflight_reason_code=preflight_by_id[trend_intent_id].reason_code,
       arbitration_reason_code="selected_for_publication",
       publication_reason_code="candidate_published",
       winner_intent_id=trend_intent_id,
@@ -8569,6 +7861,7 @@ async def _handle_event(
   payload["arbitration"] = {
     "reason_code": arbitration.reason_code,
     "intent_count": len(intents),
+    "arbitrable_intent_ids": [item.intent_id for item in arbitrable],
     "ordered_intent_ids": [
       item.intent_id for item in arbitration.ordered
     ],
@@ -8578,17 +7871,6 @@ async def _handle_event(
     "winner_intent_id": (
       None if published_intent is None else published_intent.intent_id
     ),
-    "preflight": [
-      {
-        "intent_id": item.intent.intent_id,
-        "executable": item.executable,
-        "terminal": item.terminal,
-        "stage": item.stage,
-        "reason_code": item.reason_code,
-        "warnings": list(item.warnings),
-      }
-      for item in preflight_decisions
-    ],
   }
   payload["box_eligibility"] = asdict(box_eligibility)
   payload["box_candidate_id"] = box_candidate_id

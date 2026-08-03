@@ -54,7 +54,7 @@
     "risk.sizing.risk_pct"
   ],
   "included_direct_legacy_field_count": 316,
-  "included_leaf_count": 387,
+  "included_leaf_count": 391,
   "included_paths": [
     "actionability.contested_corridor.gap_atr",
     "actionability.counter_bias.allowed",
@@ -442,11 +442,15 @@
     "strategies.trend.level_buffer_atr",
     "strategies.trend.min_height_atr",
     "strategies.trend.minimum_bos",
-    "strategies.trend.pullback_enabled"
+    "strategies.trend.pullback_enabled",
+    "strategies.zone.demand.enabled",
+    "strategies.zone.enabled",
+    "strategies.zone.flip.enabled",
+    "strategies.zone.supply.enabled"
   ],
   "included_secret_count": 6,
   "included_shared_field_count": 95,
   "projection_model": "app.configuration.models.python_runtime.PythonRuntimeConfig",
-  "source_fingerprint_sha256": "5001f967384dd74f709d75b714cc03b2576b900ef0b9861aa77b25ff80e29094",
+  "source_fingerprint_sha256": "1d0758c9636c9cc0209c1d385fbf205c52388c55782ccccd5a35d2260c21b696",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

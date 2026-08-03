@@ -1,6 +1,6 @@
 {
   "catalog_version": 1,
-  "count": 370,
+  "count": 374,
   "deprecated_alias_count": 21,
   "entries": [
     {
@@ -588,6 +588,22 @@
       "unit": "boolean"
     },
     {
+      "canonical_env": "AUTO_TRADE_DEMAND_ZONE_ENABLED",
+      "default": true,
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Enable Demand Zone / Zone Reaction (BUY) independently of Reaction family. Legacy AUTO_TRADE_DEMAND_REACTION_ENABLED still maps via strategies.reaction.demand for compatibility.",
+      "item_id": "python.settings.auto_trade_demand_zone_enabled",
+      "owner": "python",
+      "path": "strategies.zone.demand.enabled",
+      "replacement_path": null,
+      "required": false,
+      "secret": false,
+      "shared_with_ctrader": false,
+      "type": "bool",
+      "unit": "boolean"
+    },
+    {
       "canonical_env": "AUTO_TRADE_DIRECT_PUBLISH_ENABLED",
       "default": true,
       "deprecated": false,
@@ -844,6 +860,22 @@
       "shared_with_ctrader": false,
       "type": "int",
       "unit": "pips"
+    },
+    {
+      "canonical_env": "AUTO_TRADE_FLIP_ZONE_ENABLED",
+      "default": true,
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Enable Flip Zone (broken key-level role flip) under the Zone family. Uses flip_zone geometry from analysis; independent of Demand/Supply Zone Reaction and Reaction-family toggles.",
+      "item_id": "python.settings.auto_trade_flip_zone_enabled",
+      "owner": "python",
+      "path": "strategies.zone.flip.enabled",
+      "replacement_path": null,
+      "required": false,
+      "secret": false,
+      "shared_with_ctrader": false,
+      "type": "bool",
+      "unit": "boolean"
     },
     {
       "canonical_env": "AUTO_TRADE_GROUP_CLOSE_ALLOCATION",
@@ -2407,6 +2439,22 @@
       "unit": "boolean"
     },
     {
+      "canonical_env": "AUTO_TRADE_SUPPLY_ZONE_ENABLED",
+      "default": true,
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Enable Supply Zone / Zone Reaction (SELL) independently of Reaction family. Legacy AUTO_TRADE_SUPPLY_REACTION_ENABLED still maps via strategies.reaction.supply for compatibility.",
+      "item_id": "python.settings.auto_trade_supply_zone_enabled",
+      "owner": "python",
+      "path": "strategies.zone.supply.enabled",
+      "replacement_path": null,
+      "required": false,
+      "secret": false,
+      "shared_with_ctrader": false,
+      "type": "bool",
+      "unit": "boolean"
+    },
+    {
       "canonical_env": "AUTO_TRADE_SYMBOLS",
       "default": "XAU",
       "deprecated": false,
@@ -2817,6 +2865,22 @@
       "shared_with_ctrader": false,
       "type": "int",
       "unit": "minutes"
+    },
+    {
+      "canonical_env": "AUTO_TRADE_ZONE_ENABLED",
+      "default": true,
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Master enable for independent Zone (supply/demand/flip) strategies.",
+      "item_id": "python.settings.auto_trade_zone_enabled",
+      "owner": "python",
+      "path": "strategies.zone.enabled",
+      "replacement_path": null,
+      "required": false,
+      "secret": false,
+      "shared_with_ctrader": false,
+      "type": "bool",
+      "unit": "boolean"
     },
     {
       "canonical_env": "AUTO_TRADE_ZONE_FILL_ENABLED",
@@ -5977,6 +6041,6 @@
   ],
   "secret_count": 9,
   "shared_with_ctrader_count": 86,
-  "source_fingerprint_sha256": "5001f967384dd74f709d75b714cc03b2576b900ef0b9861aa77b25ff80e29094",
+  "source_fingerprint_sha256": "1d0758c9636c9cc0209c1d385fbf205c52388c55782ccccd5a35d2260c21b696",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

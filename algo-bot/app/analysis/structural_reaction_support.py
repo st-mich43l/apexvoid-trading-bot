@@ -23,6 +23,7 @@ CONFIRM_ENGULFING = "engulfing"
 STRUCTURAL_SETUPS = frozenset({
   "Key Level Reaction",
   "Zone Reaction",
+  "Flip Zone",
   # Legacy labels still treated as structural for open/historical setups:
   "Demand Zone Reaction",
   "Supply Zone Reaction",

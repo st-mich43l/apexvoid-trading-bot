@@ -1209,6 +1209,101 @@ class StrategiesTrendConfig(FrozenConfigModel):
   )
 
 
+class StrategiesZoneDemandConfig(FrozenConfigModel):
+  enabled: bool = config_field(True,
+    item_id='python.settings.auto_trade_demand_zone_enabled',
+    legacy_attr=None,
+    env='AUTO_TRADE_DEMAND_ZONE_ENABLED',
+    owner=ConfigOwner.PYTHON,
+    reload=ReloadPolicy.NEW_SETUP_ONLY,
+    runtime_reload=ReloadPolicy.RESTART,
+    unit=ConfigUnit.BOOLEAN,
+    risk=RiskClassification.STRATEGY_BEHAVIOR,
+    description=(
+      'Enable Demand Zone / Zone Reaction (BUY) independently of Reaction '
+      'family. Legacy AUTO_TRADE_DEMAND_REACTION_ENABLED still maps via '
+      'strategies.reaction.demand for compatibility.'
+    ),
+    default_contexts=(
+      ContextDefault(DefaultContext.PYTHON_SCHEMA, True),
+    ),
+    validation_summary='Pydantic required/type coercion only',
+  )
+
+
+class StrategiesZoneSupplyConfig(FrozenConfigModel):
+  enabled: bool = config_field(True,
+    item_id='python.settings.auto_trade_supply_zone_enabled',
+    legacy_attr=None,
+    env='AUTO_TRADE_SUPPLY_ZONE_ENABLED',
+    owner=ConfigOwner.PYTHON,
+    reload=ReloadPolicy.NEW_SETUP_ONLY,
+    runtime_reload=ReloadPolicy.RESTART,
+    unit=ConfigUnit.BOOLEAN,
+    risk=RiskClassification.STRATEGY_BEHAVIOR,
+    description=(
+      'Enable Supply Zone / Zone Reaction (SELL) independently of Reaction '
+      'family. Legacy AUTO_TRADE_SUPPLY_REACTION_ENABLED still maps via '
+      'strategies.reaction.supply for compatibility.'
+    ),
+    default_contexts=(
+      ContextDefault(DefaultContext.PYTHON_SCHEMA, True),
+    ),
+    validation_summary='Pydantic required/type coercion only',
+  )
+
+
+class StrategiesZoneFlipConfig(FrozenConfigModel):
+  enabled: bool = config_field(True,
+    item_id='python.settings.auto_trade_flip_zone_enabled',
+    legacy_attr=None,
+    env='AUTO_TRADE_FLIP_ZONE_ENABLED',
+    owner=ConfigOwner.PYTHON,
+    reload=ReloadPolicy.NEW_SETUP_ONLY,
+    runtime_reload=ReloadPolicy.RESTART,
+    unit=ConfigUnit.BOOLEAN,
+    risk=RiskClassification.STRATEGY_BEHAVIOR,
+    description=(
+      'Enable Flip Zone (broken key-level role flip) under the Zone family. '
+      'Uses flip_zone geometry from analysis; independent of Demand/Supply '
+      'Zone Reaction and Reaction-family toggles.'
+    ),
+    default_contexts=(
+      ContextDefault(DefaultContext.PYTHON_SCHEMA, True),
+    ),
+    validation_summary='Pydantic required/type coercion only',
+  )
+
+
+class StrategiesZoneConfig(FrozenConfigModel):
+  demand: StrategiesZoneDemandConfig = Field(
+    default_factory=StrategiesZoneDemandConfig,
+  )
+  enabled: bool = config_field(True,
+    item_id='python.settings.auto_trade_zone_enabled',
+    legacy_attr=None,
+    env='AUTO_TRADE_ZONE_ENABLED',
+    owner=ConfigOwner.PYTHON,
+    reload=ReloadPolicy.NEW_SETUP_ONLY,
+    runtime_reload=ReloadPolicy.RESTART,
+    unit=ConfigUnit.BOOLEAN,
+    risk=RiskClassification.STRATEGY_BEHAVIOR,
+    description=(
+      'Master enable for independent Zone (supply/demand/flip) strategies.'
+    ),
+    default_contexts=(
+      ContextDefault(DefaultContext.PYTHON_SCHEMA, True),
+    ),
+    validation_summary='Pydantic required/type coercion only',
+  )
+  flip: StrategiesZoneFlipConfig = Field(
+    default_factory=StrategiesZoneFlipConfig,
+  )
+  supply: StrategiesZoneSupplyConfig = Field(
+    default_factory=StrategiesZoneSupplyConfig,
+  )
+
+
 class StrategiesConfig(FrozenConfigModel):
   auto_scalp: StrategiesAutoScalpConfig = Field(default_factory=StrategiesAutoScalpConfig)
   breakout: StrategiesBreakoutConfig = Field(default_factory=StrategiesBreakoutConfig)
@@ -1220,3 +1315,4 @@ class StrategiesConfig(FrozenConfigModel):
   scalp: StrategiesScalpConfig = Field(default_factory=StrategiesScalpConfig)
   selection: StrategiesSelectionConfig = Field(default_factory=StrategiesSelectionConfig)
   trend: StrategiesTrendConfig = Field(default_factory=StrategiesTrendConfig)
+  zone: StrategiesZoneConfig = Field(default_factory=StrategiesZoneConfig)

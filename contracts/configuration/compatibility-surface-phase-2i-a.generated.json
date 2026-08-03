@@ -12,7 +12,7 @@
       "LEGACY_ROLLBACK_RETAIN_2I_A": 16,
       "PRODUCTION_REMOVE_2I_A": 0,
       "REMOVE_2I_B": 1,
-      "TEST_COMPATIBILITY_RETAIN_2I_A": 315,
+      "TEST_COMPATIBILITY_RETAIN_2I_A": 316,
       "TOOLING_RETAIN_2I_A": 45,
       "UNKNOWN_BLOCKER": 0
     },
@@ -26,14 +26,14 @@
       "getattr_legacy_name": 185,
       "runtime_config_facade": 1,
       "settings": 39,
-      "simplenamespace_config_fixture": 17
+      "simplenamespace_config_fixture": 18
     },
     "production_facade_calls": 0,
-    "total": 377,
+    "total": 378,
     "unknown_blockers": 0
   },
   "phase": "2I-A",
-  "source_fingerprint": "aa886707a6c9ce6c3ac42c2c083dc61094030153fd7f0ef14f8945f26ab07c01",
+  "source_fingerprint": "4e74d50a96beb6cacaa079de808ace240a0b586eaa24664ff3636feff23b9e30",
   "unknown_blockers": [],
   "usages": [
     {
@@ -113,7 +113,7 @@
       "column": 6,
       "detail": "getattr(..., 'auto_trade_structural_reaction_lookback_bars')",
       "kind": "getattr",
-      "line": 394,
+      "line": 405,
       "path": "algo-bot/app/analysis/detectors.py",
       "symbol": "getattr_legacy_name"
     },
@@ -122,7 +122,7 @@
       "column": 6,
       "detail": "getattr(..., 'auto_trade_key_level_reaction_enabled')",
       "kind": "getattr",
-      "line": 397,
+      "line": 408,
       "path": "algo-bot/app/analysis/detectors.py",
       "symbol": "getattr_legacy_name"
     },
@@ -131,7 +131,7 @@
       "column": 6,
       "detail": "getattr(..., 'auto_trade_demand_reaction_enabled')",
       "kind": "getattr",
-      "line": 400,
+      "line": 411,
       "path": "algo-bot/app/analysis/detectors.py",
       "symbol": "getattr_legacy_name"
     },
@@ -140,7 +140,7 @@
       "column": 6,
       "detail": "getattr(..., 'auto_trade_supply_reaction_enabled')",
       "kind": "getattr",
-      "line": 403,
+      "line": 414,
       "path": "algo-bot/app/analysis/detectors.py",
       "symbol": "getattr_legacy_name"
     },
@@ -149,7 +149,7 @@
       "column": 6,
       "detail": "getattr(..., 'auto_trade_session_level_reaction_enabled')",
       "kind": "getattr",
-      "line": 406,
+      "line": 418,
       "path": "algo-bot/app/analysis/detectors.py",
       "symbol": "getattr_legacy_name"
     },
@@ -158,7 +158,7 @@
       "column": 6,
       "detail": "getattr(..., 'auto_trade_trendline_reaction_enabled')",
       "kind": "getattr",
-      "line": 409,
+      "line": 421,
       "path": "algo-bot/app/analysis/detectors.py",
       "symbol": "getattr_legacy_name"
     },
@@ -167,7 +167,7 @@
       "column": 6,
       "detail": "getattr(..., 'auto_trade_box_breakout_enabled')",
       "kind": "getattr",
-      "line": 412,
+      "line": 424,
       "path": "algo-bot/app/analysis/detectors.py",
       "symbol": "getattr_legacy_name"
     },
@@ -176,7 +176,7 @@
       "column": 6,
       "detail": "getattr(..., 'auto_trade_trend_pullback_enabled')",
       "kind": "getattr",
-      "line": 415,
+      "line": 427,
       "path": "algo-bot/app/analysis/detectors.py",
       "symbol": "getattr_legacy_name"
     },
@@ -185,7 +185,7 @@
       "column": 6,
       "detail": "getattr(..., 'auto_trade_break_retest_enabled')",
       "kind": "getattr",
-      "line": 418,
+      "line": 430,
       "path": "algo-bot/app/analysis/detectors.py",
       "symbol": "getattr_legacy_name"
     },
@@ -194,7 +194,7 @@
       "column": 6,
       "detail": "getattr(..., 'auto_trade_momentum_ride_enabled')",
       "kind": "getattr",
-      "line": 421,
+      "line": 433,
       "path": "algo-bot/app/analysis/detectors.py",
       "symbol": "getattr_legacy_name"
     },
@@ -203,7 +203,7 @@
       "column": 6,
       "detail": "getattr(..., 'auto_trade_snap_back_enabled')",
       "kind": "getattr",
-      "line": 424,
+      "line": 436,
       "path": "algo-bot/app/analysis/detectors.py",
       "symbol": "getattr_legacy_name"
     },
@@ -212,7 +212,7 @@
       "column": 6,
       "detail": "getattr(..., 'auto_trade_fade_scalp_enabled')",
       "kind": "getattr",
-      "line": 427,
+      "line": 439,
       "path": "algo-bot/app/analysis/detectors.py",
       "symbol": "getattr_legacy_name"
     },
@@ -716,7 +716,7 @@
       "column": 13,
       "detail": "getattr(..., 'auto_trade_structural_guard_mode')",
       "kind": "getattr",
-      "line": 306,
+      "line": 307,
       "path": "algo-bot/app/autotrade/execution_policy.py",
       "symbol": "getattr_legacy_name"
     },
@@ -725,7 +725,7 @@
       "column": 34,
       "detail": "getattr(..., 'auto_trade_range_max_entry_drift_atr')",
       "kind": "getattr",
-      "line": 505,
+      "line": 507,
       "path": "algo-bot/app/autotrade/execution_policy.py",
       "symbol": "getattr_legacy_name"
     },
@@ -734,7 +734,7 @@
       "column": 33,
       "detail": "getattr(..., 'auto_trade_trend_max_entry_drift_atr')",
       "kind": "getattr",
-      "line": 508,
+      "line": 510,
       "path": "algo-bot/app/autotrade/execution_policy.py",
       "symbol": "getattr_legacy_name"
     },
@@ -743,7 +743,7 @@
       "column": 34,
       "detail": "getattr(..., 'auto_trade_trend_max_entry_drift_atr')",
       "kind": "getattr",
-      "line": 511,
+      "line": 513,
       "path": "algo-bot/app/autotrade/execution_policy.py",
       "symbol": "getattr_legacy_name"
     },
@@ -752,7 +752,7 @@
       "column": 40,
       "detail": "getattr(..., 'auto_trade_trend_max_entry_drift_atr')",
       "kind": "getattr",
-      "line": 514,
+      "line": 516,
       "path": "algo-bot/app/autotrade/execution_policy.py",
       "symbol": "getattr_legacy_name"
     },
@@ -761,7 +761,7 @@
       "column": 39,
       "detail": "getattr(..., 'auto_trade_map_max_entry_drift_atr')",
       "kind": "getattr",
-      "line": 517,
+      "line": 519,
       "path": "algo-bot/app/autotrade/execution_policy.py",
       "symbol": "getattr_legacy_name"
     },
@@ -770,7 +770,7 @@
       "column": 28,
       "detail": "getattr(..., 'auto_trade_map_max_entry_drift_atr')",
       "kind": "getattr",
-      "line": 520,
+      "line": 522,
       "path": "algo-bot/app/autotrade/execution_policy.py",
       "symbol": "getattr_legacy_name"
     },
@@ -779,7 +779,7 @@
       "column": 32,
       "detail": "getattr(..., 'auto_trade_map_max_entry_drift_atr')",
       "kind": "getattr",
-      "line": 523,
+      "line": 525,
       "path": "algo-bot/app/autotrade/execution_policy.py",
       "symbol": "getattr_legacy_name"
     },
@@ -788,7 +788,7 @@
       "column": 32,
       "detail": "getattr(..., 'auto_trade_map_max_entry_drift_atr')",
       "kind": "getattr",
-      "line": 526,
+      "line": 528,
       "path": "algo-bot/app/autotrade/execution_policy.py",
       "symbol": "getattr_legacy_name"
     },
@@ -797,7 +797,7 @@
       "column": 28,
       "detail": "getattr(..., 'auto_trade_trend_max_entry_drift_atr')",
       "kind": "getattr",
-      "line": 529,
+      "line": 531,
       "path": "algo-bot/app/autotrade/execution_policy.py",
       "symbol": "getattr_legacy_name"
     },
@@ -806,7 +806,7 @@
       "column": 26,
       "detail": "getattr(..., 'auto_trade_range_min_rr')",
       "kind": "getattr",
-      "line": 540,
+      "line": 542,
       "path": "algo-bot/app/autotrade/execution_policy.py",
       "symbol": "getattr_legacy_name"
     },
@@ -815,7 +815,7 @@
       "column": 15,
       "detail": "getattr(..., 'auto_trade_xau_price_digits')",
       "kind": "getattr",
-      "line": 638,
+      "line": 640,
       "path": "algo-bot/app/autotrade/execution_policy.py",
       "symbol": "getattr_legacy_name"
     },
@@ -824,7 +824,7 @@
       "column": 6,
       "detail": "getattr(..., 'auto_trade_zone_fill_enabled')",
       "kind": "getattr",
-      "line": 648,
+      "line": 650,
       "path": "algo-bot/app/autotrade/execution_policy.py",
       "symbol": "getattr_legacy_name"
     },
@@ -833,7 +833,7 @@
       "column": 6,
       "detail": "getattr(..., 'auto_trade_zone_fill_min_atr')",
       "kind": "getattr",
-      "line": 651,
+      "line": 653,
       "path": "algo-bot/app/autotrade/execution_policy.py",
       "symbol": "getattr_legacy_name"
     },
@@ -842,7 +842,7 @@
       "column": 6,
       "detail": "getattr(..., 'auto_trade_inside_zone_market_entry_enabled')",
       "kind": "getattr",
-      "line": 654,
+      "line": 656,
       "path": "algo-bot/app/autotrade/execution_policy.py",
       "symbol": "getattr_legacy_name"
     },
@@ -851,7 +851,7 @@
       "column": 6,
       "detail": "getattr(..., 'auto_trade_zone_fill_fallback_enabled')",
       "kind": "getattr",
-      "line": 657,
+      "line": 659,
       "path": "algo-bot/app/autotrade/execution_policy.py",
       "symbol": "getattr_legacy_name"
     },
@@ -860,7 +860,7 @@
       "column": 6,
       "detail": "getattr(..., 'auto_trade_zone_scale_first_leg_fraction')",
       "kind": "getattr",
-      "line": 662,
+      "line": 664,
       "path": "algo-bot/app/autotrade/execution_policy.py",
       "symbol": "getattr_legacy_name"
     },
@@ -869,7 +869,7 @@
       "column": 6,
       "detail": "getattr(..., 'auto_trade_zone_scale_step_atr')",
       "kind": "getattr",
-      "line": 665,
+      "line": 667,
       "path": "algo-bot/app/autotrade/execution_policy.py",
       "symbol": "getattr_legacy_name"
     },
@@ -878,7 +878,7 @@
       "column": 6,
       "detail": "getattr(..., 'auto_trade_reaction_scale_enabled')",
       "kind": "getattr",
-      "line": 668,
+      "line": 670,
       "path": "algo-bot/app/autotrade/execution_policy.py",
       "symbol": "getattr_legacy_name"
     },
@@ -887,7 +887,7 @@
       "column": 6,
       "detail": "getattr(..., 'auto_trade_reaction_market_fraction')",
       "kind": "getattr",
-      "line": 671,
+      "line": 673,
       "path": "algo-bot/app/autotrade/execution_policy.py",
       "symbol": "getattr_legacy_name"
     },
@@ -896,7 +896,7 @@
       "column": 6,
       "detail": "getattr(..., 'auto_trade_reaction_scale_fraction')",
       "kind": "getattr",
-      "line": 674,
+      "line": 676,
       "path": "algo-bot/app/autotrade/execution_policy.py",
       "symbol": "getattr_legacy_name"
     },
@@ -905,7 +905,7 @@
       "column": 6,
       "detail": "getattr(..., 'auto_trade_reaction_scale_step_atr')",
       "kind": "getattr",
-      "line": 677,
+      "line": 679,
       "path": "algo-bot/app/autotrade/execution_policy.py",
       "symbol": "getattr_legacy_name"
     },
@@ -914,7 +914,7 @@
       "column": 6,
       "detail": "getattr(..., 'auto_trade_reaction_scale_invalid_policy')",
       "kind": "getattr",
-      "line": 680,
+      "line": 682,
       "path": "algo-bot/app/autotrade/execution_policy.py",
       "symbol": "getattr_legacy_name"
     },
@@ -923,7 +923,7 @@
       "column": 17,
       "detail": "getattr(..., 'auto_trade_xau_price_digits')",
       "kind": "getattr",
-      "line": 787,
+      "line": 796,
       "path": "algo-bot/app/autotrade/execution_policy.py",
       "symbol": "getattr_legacy_name"
     },
@@ -932,7 +932,7 @@
       "column": 27,
       "detail": "getattr(..., 'auto_trade_add_stop_buffer_atr')",
       "kind": "getattr",
-      "line": 788,
+      "line": 797,
       "path": "algo-bot/app/autotrade/execution_policy.py",
       "symbol": "getattr_legacy_name"
     },
@@ -941,7 +941,7 @@
       "column": 22,
       "detail": "getattr(..., 'auto_trade_wick_stop_buffer_atr')",
       "kind": "getattr",
-      "line": 791,
+      "line": 800,
       "path": "algo-bot/app/autotrade/execution_policy.py",
       "symbol": "getattr_legacy_name"
     },
@@ -950,7 +950,7 @@
       "column": 6,
       "detail": "getattr(..., 'auto_trade_range_max_risk_multiplier')",
       "kind": "getattr",
-      "line": 959,
+      "line": 968,
       "path": "algo-bot/app/autotrade/execution_policy.py",
       "symbol": "getattr_legacy_name"
     },
@@ -959,7 +959,7 @@
       "column": 12,
       "detail": "getattr(..., 'auto_trade_tier_a_risk_multiplier')",
       "kind": "getattr",
-      "line": 1091,
+      "line": 1100,
       "path": "algo-bot/app/autotrade/execution_policy.py",
       "symbol": "getattr_legacy_name"
     },
@@ -968,7 +968,7 @@
       "column": 12,
       "detail": "getattr(..., 'auto_trade_tier_b_risk_multiplier')",
       "kind": "getattr",
-      "line": 1092,
+      "line": 1101,
       "path": "algo-bot/app/autotrade/execution_policy.py",
       "symbol": "getattr_legacy_name"
     },
@@ -977,7 +977,7 @@
       "column": 15,
       "detail": "getattr(..., 'auto_trade_post_impulse_risk_multiplier')",
       "kind": "getattr",
-      "line": 1094,
+      "line": 1103,
       "path": "algo-bot/app/autotrade/execution_policy.py",
       "symbol": "getattr_legacy_name"
     },
@@ -986,7 +986,7 @@
       "column": 19,
       "detail": "getattr(..., 'auto_trade_one_sided_range_risk_multiplier')",
       "kind": "getattr",
-      "line": 1095,
+      "line": 1104,
       "path": "algo-bot/app/autotrade/execution_policy.py",
       "symbol": "getattr_legacy_name"
     },
@@ -995,7 +995,7 @@
       "column": 6,
       "detail": "getattr(..., 'auto_trade_range_max_risk_multiplier')",
       "kind": "getattr",
-      "line": 1099,
+      "line": 1108,
       "path": "algo-bot/app/autotrade/execution_policy.py",
       "symbol": "getattr_legacy_name"
     },
@@ -2984,7 +2984,7 @@
       "column": 9,
       "detail": "reference Settings",
       "kind": "reference",
-      "line": 209,
+      "line": 211,
       "path": "algo-bot/tests/test_execution_confirmation.py",
       "symbol": "Settings"
     },
@@ -2993,7 +2993,7 @@
       "column": 4,
       "detail": "reference Settings",
       "kind": "reference",
-      "line": 211,
+      "line": 213,
       "path": "algo-bot/tests/test_execution_confirmation.py",
       "symbol": "Settings"
     },
@@ -3002,7 +3002,7 @@
       "column": 15,
       "detail": "reference Settings",
       "kind": "reference",
-      "line": 218,
+      "line": 220,
       "path": "algo-bot/tests/test_execution_confirmation.py",
       "symbol": "Settings"
     },
@@ -3011,7 +3011,7 @@
       "column": 4,
       "detail": "reference Settings",
       "kind": "reference",
-      "line": 228,
+      "line": 230,
       "path": "algo-bot/tests/test_execution_confirmation.py",
       "symbol": "Settings"
     },
@@ -3156,6 +3156,15 @@
       "detail": "SimpleNamespace config fixture",
       "kind": "namespace",
       "line": 472,
+      "path": "algo-bot/tests/test_protective_stop.py",
+      "symbol": "simplenamespace_config_fixture"
+    },
+    {
+      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
+      "column": 8,
+      "detail": "SimpleNamespace config fixture",
+      "kind": "namespace",
+      "line": 495,
       "path": "algo-bot/tests/test_protective_stop.py",
       "symbol": "simplenamespace_config_fixture"
     },

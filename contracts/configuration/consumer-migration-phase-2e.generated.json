@@ -404,7 +404,7 @@
       "deferred_reason": null,
       "file": "algo-bot/app/analysis/scanner.py",
       "legacy_attribute": "telegram_owner_id",
-      "line": 3123,
+      "line": 3124,
       "migration_classification": "PHASE_2E_MIGRATE",
       "migration_status": "migrated",
       "root_domain": "delivery",
@@ -416,7 +416,7 @@
       "deferred_reason": null,
       "file": "algo-bot/app/analysis/scanner.py",
       "legacy_attribute": "scanner_exec_tf",
-      "line": 3135,
+      "line": 3136,
       "migration_classification": "PHASE_2E_MIGRATE",
       "migration_status": "migrated",
       "root_domain": "market_data",
@@ -428,7 +428,7 @@
       "deferred_reason": null,
       "file": "algo-bot/app/analysis/scanner.py",
       "legacy_attribute": "telegram_owner_id",
-      "line": 3138,
+      "line": 3139,
       "migration_classification": "PHASE_2E_MIGRATE",
       "migration_status": "migrated",
       "root_domain": "delivery",
@@ -1575,6 +1575,6 @@
       "subdomain": "reports"
     }
   ],
-  "source_fingerprint_sha256": "5001f967384dd74f709d75b714cc03b2576b900ef0b9861aa77b25ff80e29094",
+  "source_fingerprint_sha256": "1d0758c9636c9cc0209c1d385fbf205c52388c55782ccccd5a35d2260c21b696",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

@@ -2,18 +2,18 @@
   "catalog_version": 1,
   "counts": {
     "algorithm_constants": 57,
-    "configurable": 370,
+    "configurable": 374,
     "known_conflicts": 30,
     "legacy_fields": 316,
     "owners": {
       "ctrader": 50,
-      "python": 292,
+      "python": 296,
       "shared": 95
     },
     "protocol_constants": 10,
     "secrets": 9,
     "shared": 95,
-    "total_items": 437
+    "total_items": 441
   },
   "items": [
     {
@@ -16731,8 +16731,160 @@
       "type": "bool",
       "unit": "boolean",
       "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_DEMAND_ZONE_ENABLED",
+      "catalog_version": 1,
+      "configurable": true,
+      "constraints": {},
+      "default": true,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": true
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Enable Demand Zone / Zone Reaction (BUY) independently of Reaction family. Legacy AUTO_TRADE_DEMAND_REACTION_ENABLED still maps via strategies.reaction.demand for compatibility.",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v1",
+      "item_id": "python.settings.auto_trade_demand_zone_enabled",
+      "kind": "configurable",
+      "legacy_attr": null,
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.zone.demand.enabled",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "strategy_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "bool",
+      "unit": "boolean",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_ZONE_ENABLED",
+      "catalog_version": 1,
+      "configurable": true,
+      "constraints": {},
+      "default": true,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": true
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Master enable for independent Zone (supply/demand/flip) strategies.",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v1",
+      "item_id": "python.settings.auto_trade_zone_enabled",
+      "kind": "configurable",
+      "legacy_attr": null,
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.zone.enabled",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "strategy_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "bool",
+      "unit": "boolean",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_FLIP_ZONE_ENABLED",
+      "catalog_version": 1,
+      "configurable": true,
+      "constraints": {},
+      "default": true,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": true
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Enable Flip Zone (broken key-level role flip) under the Zone family. Uses flip_zone geometry from analysis; independent of Demand/Supply Zone Reaction and Reaction-family toggles.",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v1",
+      "item_id": "python.settings.auto_trade_flip_zone_enabled",
+      "kind": "configurable",
+      "legacy_attr": null,
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.zone.flip.enabled",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "strategy_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "bool",
+      "unit": "boolean",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_SUPPLY_ZONE_ENABLED",
+      "catalog_version": 1,
+      "configurable": true,
+      "constraints": {},
+      "default": true,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": true
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Enable Supply Zone / Zone Reaction (SELL) independently of Reaction family. Legacy AUTO_TRADE_SUPPLY_REACTION_ENABLED still maps via strategies.reaction.supply for compatibility.",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v1",
+      "item_id": "python.settings.auto_trade_supply_zone_enabled",
+      "kind": "configurable",
+      "legacy_attr": null,
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.zone.supply.enabled",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "strategy_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "bool",
+      "unit": "boolean",
+      "validation_summary": "Pydantic required/type coercion only"
     }
   ],
-  "source_fingerprint_sha256": "5001f967384dd74f709d75b714cc03b2576b900ef0b9861aa77b25ff80e29094",
+  "source_fingerprint_sha256": "1d0758c9636c9cc0209c1d385fbf205c52388c55782ccccd5a35d2260c21b696",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }
