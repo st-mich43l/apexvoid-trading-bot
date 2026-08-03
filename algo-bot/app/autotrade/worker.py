@@ -219,7 +219,6 @@ from app.autotrade.trend import (
   classify_regime,
   evaluate_trend_gate,
 )
-from app.core.runtime_projection import project_runtime_config
 from app.core.config import runtime_config
 from app.persistence.store import event_in_window
 from app.analysis.ohlc_source import RedisOHLCSource, window_for_timeframe
@@ -232,32 +231,16 @@ from app.analysis.swings import find_swings
 
 log = logging.getLogger(__name__)
 
-# Phase 2I-A: legacy field names the worker-local HTF/overlap helpers read.
-# These helpers self-default their ``cfg`` to a narrow canonical
-# ``runtime_config`` projection (replacing the retired module-level ``None``
-# flat facade). Every other worker call site that previously passed ``None``
-# now passes ``cfg=None`` so the callee builds its own narrow projection.
-_RUNTIME_HTF_ZONES_CFG_FIELDS = (
-  "atr_length",
-  "displacement_atr_mult",
-  "momentum_body_frac",
-  "auto_trade_xau_pip_size",
-  "auto_trade_execution_zone_max_width_atr",
-  "auto_trade_execution_zone_max_width_pips",
-)
-_RUNTIME_HTF_LEVELS_CFG_FIELDS = (
-  "atr_length",
-  "swing_fractal_n",
-  "zigzag_pct",
-  "zigzag_atr_mult",
-  "level_cluster_atr",
-  "round_step",
-  "key_level_min_touches",
-)
-_RUNTIME_OVERLAP_CFG_FIELDS = (
-  "auto_trade_structural_guard_mode",
-  "auto_trade_map_reaction_lookback_bars",
-)
+# Phase 2I-A.1: worker HTF/overlap helpers now default `cfg` to the canonical
+# `runtime_config` singleton. Every other worker call site that previously
+# passed ``None`` still passes ``cfg=None`` so the callee builds its own
+# narrow projection.
+
+
+def _default_runtime_cfg() -> Any:
+  from app.core.config import runtime_config
+
+  return runtime_config
 
 
 EXECUTION_TIMEFRAME = "M1"
@@ -1246,11 +1229,11 @@ def _htf_zones(frames: dict[str, Any], cfg: Any | None = None) -> list[Zone]:
   and it enters only as a veto input, never as a signal.
   """
   if cfg is None:
-    cfg = project_runtime_config(_RUNTIME_HTF_ZONES_CFG_FIELDS)
+    cfg = _default_runtime_cfg()
   htf = frames.get(_HTF_TIMEFRAME)
   if htf is None or htf.empty:
     return []
-  atr_length = max(2, int(getattr(cfg, "atr_length", 14)))
+  atr_length = max(2, int(cfg.analysis.atr.length))
   atr_values = atr_series(htf, atr_length)
   current_atr = (
     float(atr_values.iloc[-1])
@@ -1260,14 +1243,14 @@ def _htf_zones(frames: dict[str, Any], cfg: Any | None = None) -> list[Zone]:
   legs = displacement(
     htf,
     atr_values,
-    max(0.1, float(getattr(cfg, "displacement_atr_mult", 1.5))),
-    max(0.0, float(getattr(cfg, "momentum_body_frac", 0.6))),
+    max(0.1, float(cfg.analysis.displacement.atr_mult)),
+    max(0.0, float(cfg.analysis.momentum.body_frac)),
   )
   if not legs:
     return []
   zones = supply_demand(htf, legs)
   marked = mark_mitigation(zones, htf)
-  pip_size = float(getattr(cfg, "auto_trade_xau_pip_size", 0.1))
+  pip_size = float(cfg.contract.instrument.pip_size)
   return [
     zone
     for zone in marked
@@ -1287,17 +1270,17 @@ def _htf_levels(frames: dict[str, Any], cfg: Any | None = None) -> list[Level]:
   they're kept as a separate ``Level`` list rather than folded into ``Zone``.
   """
   if cfg is None:
-    cfg = project_runtime_config(_RUNTIME_HTF_LEVELS_CFG_FIELDS)
+    cfg = _default_runtime_cfg()
   htf = frames.get(_HTF_TIMEFRAME)
   if htf is None or htf.empty:
     return []
-  atr_length = max(2, int(getattr(cfg, "atr_length", 14)))
+  atr_length = max(2, int(cfg.analysis.atr.length))
   atr = atr_series(htf, atr_length)
   swings = find_swings(
     htf,
-    max(1, int(getattr(cfg, "swing_fractal_n", 2))),
-    max(0.0, float(getattr(cfg, "zigzag_pct", 0.0))),
-    max(0.0, float(getattr(cfg, "zigzag_atr_mult", 1.0))),
+    max(1, int(cfg.analysis.swings.fractal_size)),
+    max(0.0, float(cfg.analysis.swings.zigzag.pct)),
+    max(0.0, float(cfg.analysis.swings.zigzag.atr_mult)),
     atr,
   )
   if not swings:
@@ -1305,9 +1288,9 @@ def _htf_levels(frames: dict[str, Any], cfg: Any | None = None) -> list[Level]:
   return key_levels(
     swings,
     atr,
-    max(0.0, float(getattr(cfg, "level_cluster_atr", 0.5))),
-    max(0.1, float(getattr(cfg, "round_step", 5.0))),
-    max(1, int(getattr(cfg, "key_level_min_touches", 2))),
+    max(0.0, float(cfg.analysis.levels.level_cluster_atr)),
+    max(0.1, float(cfg.analysis.levels.round_step)),
+    max(1, int(cfg.analysis.levels.minimum_key_touches)),
   )
 
 
@@ -1939,7 +1922,7 @@ def _resolve_overlap_thesis(
   from app.autotrade.map_strategy import _reaction_in_lookback
 
   if cfg is None:
-    cfg = project_runtime_config(_RUNTIME_OVERLAP_CFG_FIELDS)
+    cfg = _default_runtime_cfg()
   guard_mode = resolve_guard_mode(cfg)
   if market_map is None:
     return GuardOutcome("overlap", OUTCOME_ALLOW, "no_map", "no market map", False)

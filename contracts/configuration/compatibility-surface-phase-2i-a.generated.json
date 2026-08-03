@@ -12,7 +12,7 @@
       "LEGACY_ROLLBACK_RETAIN_2I_A": 16,
       "PRODUCTION_REMOVE_2I_A": 0,
       "REMOVE_2I_B": 1,
-      "TEST_COMPATIBILITY_RETAIN_2I_A": 142,
+      "TEST_COMPATIBILITY_RETAIN_2I_A": 131,
       "TOOLING_RETAIN_2I_A": 48,
       "UNKNOWN_BLOCKER": 0
     },
@@ -23,118 +23,18 @@
       "LegacyCanonicalConfigView": 6,
       "LegacySettings": 2,
       "Settings": 34,
-      "getattr_legacy_name": 11,
       "runtime_config_facade": 1,
       "settings": 39,
       "simplenamespace_config_fixture": 18
     },
     "production_facade_calls": 0,
-    "total": 207,
+    "total": 196,
     "unknown_blockers": 0
   },
   "phase": "2I-A",
-  "source_fingerprint": "b50b4ff52335871f6dc0c3b7518e4324c25a14089743841f96daf019a0bec812",
+  "source_fingerprint": "11f71c7953c93ff2fc298281051daa7c9d808ca6638631418d740bbc2742d1fb",
   "unknown_blockers": [],
   "usages": [
-    {
-      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
-      "column": 26,
-      "detail": "getattr(..., 'atr_length')",
-      "kind": "getattr",
-      "line": 1253,
-      "path": "algo-bot/app/autotrade/worker.py",
-      "symbol": "getattr_legacy_name"
-    },
-    {
-      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
-      "column": 19,
-      "detail": "getattr(..., 'displacement_atr_mult')",
-      "kind": "getattr",
-      "line": 1263,
-      "path": "algo-bot/app/autotrade/worker.py",
-      "symbol": "getattr_legacy_name"
-    },
-    {
-      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
-      "column": 19,
-      "detail": "getattr(..., 'momentum_body_frac')",
-      "kind": "getattr",
-      "line": 1264,
-      "path": "algo-bot/app/autotrade/worker.py",
-      "symbol": "getattr_legacy_name"
-    },
-    {
-      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
-      "column": 19,
-      "detail": "getattr(..., 'auto_trade_xau_pip_size')",
-      "kind": "getattr",
-      "line": 1270,
-      "path": "algo-bot/app/autotrade/worker.py",
-      "symbol": "getattr_legacy_name"
-    },
-    {
-      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
-      "column": 26,
-      "detail": "getattr(..., 'atr_length')",
-      "kind": "getattr",
-      "line": 1294,
-      "path": "algo-bot/app/autotrade/worker.py",
-      "symbol": "getattr_legacy_name"
-    },
-    {
-      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
-      "column": 15,
-      "detail": "getattr(..., 'swing_fractal_n')",
-      "kind": "getattr",
-      "line": 1298,
-      "path": "algo-bot/app/autotrade/worker.py",
-      "symbol": "getattr_legacy_name"
-    },
-    {
-      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
-      "column": 19,
-      "detail": "getattr(..., 'zigzag_pct')",
-      "kind": "getattr",
-      "line": 1299,
-      "path": "algo-bot/app/autotrade/worker.py",
-      "symbol": "getattr_legacy_name"
-    },
-    {
-      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
-      "column": 19,
-      "detail": "getattr(..., 'zigzag_atr_mult')",
-      "kind": "getattr",
-      "line": 1300,
-      "path": "algo-bot/app/autotrade/worker.py",
-      "symbol": "getattr_legacy_name"
-    },
-    {
-      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
-      "column": 19,
-      "detail": "getattr(..., 'level_cluster_atr')",
-      "kind": "getattr",
-      "line": 1308,
-      "path": "algo-bot/app/autotrade/worker.py",
-      "symbol": "getattr_legacy_name"
-    },
-    {
-      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
-      "column": 19,
-      "detail": "getattr(..., 'round_step')",
-      "kind": "getattr",
-      "line": 1309,
-      "path": "algo-bot/app/autotrade/worker.py",
-      "symbol": "getattr_legacy_name"
-    },
-    {
-      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
-      "column": 15,
-      "detail": "getattr(..., 'key_level_min_touches')",
-      "kind": "getattr",
-      "line": 1310,
-      "path": "algo-bot/app/autotrade/worker.py",
-      "symbol": "getattr_legacy_name"
-    },
     {
       "classification": "TOOLING_RETAIN_2I_A",
       "column": 0,
