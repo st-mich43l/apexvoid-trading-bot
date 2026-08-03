@@ -4436,7 +4436,7 @@
     "method_calls": [],
     "type_dependencies": []
   },
-  "source_fingerprint": "d200b40aae8ffab676e88814cc6066c477a5e319bbc7b24d1a1bf5671ef552fe",
+  "source_fingerprint": "4cb3557d89935a29c22872bc29931b50ed1ebbeaeb27638afe46d0ce0a6f29d7",
   "tests": {
     "attribute_deletions": [],
     "attribute_reads": [
@@ -4689,7 +4689,7 @@
         "column": 9,
         "detail": "direct Settings attribute read",
         "dynamic_names": [],
-        "line": 1953,
+        "line": 2002,
         "operation": "attribute_read",
         "path": "algo-bot/tests/test_scanner.py"
       },
@@ -8860,7 +8860,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 1436,
+        "line": 1485,
         "operation": "setattr",
         "path": "algo-bot/tests/test_scanner.py"
       },
@@ -8871,7 +8871,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 1497,
+        "line": 1546,
         "operation": "setattr",
         "path": "algo-bot/tests/test_scanner.py"
       },
@@ -8882,7 +8882,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 1498,
+        "line": 1547,
         "operation": "setattr",
         "path": "algo-bot/tests/test_scanner.py"
       },
@@ -8893,7 +8893,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 1499,
+        "line": 1548,
         "operation": "setattr",
         "path": "algo-bot/tests/test_scanner.py"
       },
@@ -8904,7 +8904,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 1500,
+        "line": 1549,
         "operation": "setattr",
         "path": "algo-bot/tests/test_scanner.py"
       },
@@ -8915,7 +8915,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 1501,
+        "line": 1550,
         "operation": "setattr",
         "path": "algo-bot/tests/test_scanner.py"
       },
@@ -8926,7 +8926,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 1502,
+        "line": 1551,
         "operation": "setattr",
         "path": "algo-bot/tests/test_scanner.py"
       },
@@ -8937,7 +8937,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 1503,
+        "line": 1552,
         "operation": "setattr",
         "path": "algo-bot/tests/test_scanner.py"
       },
@@ -8948,7 +8948,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 1565,
+        "line": 1614,
         "operation": "setattr",
         "path": "algo-bot/tests/test_scanner.py"
       },
@@ -8959,7 +8959,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 1566,
+        "line": 1615,
         "operation": "setattr",
         "path": "algo-bot/tests/test_scanner.py"
       },
@@ -8970,7 +8970,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 1567,
+        "line": 1616,
         "operation": "setattr",
         "path": "algo-bot/tests/test_scanner.py"
       },
@@ -8981,7 +8981,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 1568,
+        "line": 1617,
         "operation": "setattr",
         "path": "algo-bot/tests/test_scanner.py"
       },
@@ -8992,7 +8992,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 1569,
+        "line": 1618,
         "operation": "setattr",
         "path": "algo-bot/tests/test_scanner.py"
       },
@@ -9003,7 +9003,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 1570,
+        "line": 1619,
         "operation": "setattr",
         "path": "algo-bot/tests/test_scanner.py"
       },
@@ -9014,7 +9014,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 1571,
+        "line": 1620,
         "operation": "setattr",
         "path": "algo-bot/tests/test_scanner.py"
       },
@@ -9025,7 +9025,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 1572,
+        "line": 1621,
         "operation": "setattr",
         "path": "algo-bot/tests/test_scanner.py"
       },
@@ -9036,7 +9036,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 1573,
+        "line": 1622,
         "operation": "setattr",
         "path": "algo-bot/tests/test_scanner.py"
       },
@@ -9047,7 +9047,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 1641,
+        "line": 1690,
         "operation": "setattr",
         "path": "algo-bot/tests/test_scanner.py"
       },
@@ -9058,7 +9058,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 1642,
+        "line": 1691,
         "operation": "setattr",
         "path": "algo-bot/tests/test_scanner.py"
       },
@@ -9069,7 +9069,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 1643,
+        "line": 1692,
         "operation": "setattr",
         "path": "algo-bot/tests/test_scanner.py"
       },
@@ -9080,7 +9080,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 1644,
+        "line": 1693,
         "operation": "setattr",
         "path": "algo-bot/tests/test_scanner.py"
       },
@@ -9091,7 +9091,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 1645,
+        "line": 1694,
         "operation": "setattr",
         "path": "algo-bot/tests/test_scanner.py"
       },
@@ -9102,7 +9102,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 1646,
+        "line": 1695,
         "operation": "setattr",
         "path": "algo-bot/tests/test_scanner.py"
       },
@@ -9113,7 +9113,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 1647,
+        "line": 1696,
         "operation": "setattr",
         "path": "algo-bot/tests/test_scanner.py"
       },
@@ -9124,7 +9124,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 1680,
+        "line": 1729,
         "operation": "setattr",
         "path": "algo-bot/tests/test_scanner.py"
       },
@@ -9135,7 +9135,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 1681,
+        "line": 1730,
         "operation": "setattr",
         "path": "algo-bot/tests/test_scanner.py"
       },
@@ -9146,56 +9146,12 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 1682,
+        "line": 1731,
         "operation": "setattr",
         "path": "algo-bot/tests/test_scanner.py"
       },
       {
         "attribute": "scanner_window",
-        "canonical_path": null,
-        "classification": "test_only_adaptation",
-        "column": 2,
-        "detail": "helper or monkeypatch mutation of Settings",
-        "dynamic_names": [],
-        "line": 1683,
-        "operation": "setattr",
-        "path": "algo-bot/tests/test_scanner.py"
-      },
-      {
-        "attribute": "telegram_owner_id",
-        "canonical_path": null,
-        "classification": "test_only_adaptation",
-        "column": 2,
-        "detail": "helper or monkeypatch mutation of Settings",
-        "dynamic_names": [],
-        "line": 1684,
-        "operation": "setattr",
-        "path": "algo-bot/tests/test_scanner.py"
-      },
-      {
-        "attribute": "spot_fresh_secs",
-        "canonical_path": null,
-        "classification": "test_only_adaptation",
-        "column": 2,
-        "detail": "helper or monkeypatch mutation of Settings",
-        "dynamic_names": [],
-        "line": 1685,
-        "operation": "setattr",
-        "path": "algo-bot/tests/test_scanner.py"
-      },
-      {
-        "attribute": "spot_max_deviation_pct",
-        "canonical_path": null,
-        "classification": "test_only_adaptation",
-        "column": 2,
-        "detail": "helper or monkeypatch mutation of Settings",
-        "dynamic_names": [],
-        "line": 1686,
-        "operation": "setattr",
-        "path": "algo-bot/tests/test_scanner.py"
-      },
-      {
-        "attribute": "auto_trade_track_all_structural_matches",
         "canonical_path": null,
         "classification": "test_only_adaptation",
         "column": 2,
@@ -9206,13 +9162,57 @@
         "path": "algo-bot/tests/test_scanner.py"
       },
       {
+        "attribute": "telegram_owner_id",
+        "canonical_path": null,
+        "classification": "test_only_adaptation",
+        "column": 2,
+        "detail": "helper or monkeypatch mutation of Settings",
+        "dynamic_names": [],
+        "line": 1733,
+        "operation": "setattr",
+        "path": "algo-bot/tests/test_scanner.py"
+      },
+      {
+        "attribute": "spot_fresh_secs",
+        "canonical_path": null,
+        "classification": "test_only_adaptation",
+        "column": 2,
+        "detail": "helper or monkeypatch mutation of Settings",
+        "dynamic_names": [],
+        "line": 1734,
+        "operation": "setattr",
+        "path": "algo-bot/tests/test_scanner.py"
+      },
+      {
+        "attribute": "spot_max_deviation_pct",
+        "canonical_path": null,
+        "classification": "test_only_adaptation",
+        "column": 2,
+        "detail": "helper or monkeypatch mutation of Settings",
+        "dynamic_names": [],
+        "line": 1735,
+        "operation": "setattr",
+        "path": "algo-bot/tests/test_scanner.py"
+      },
+      {
+        "attribute": "auto_trade_track_all_structural_matches",
+        "canonical_path": null,
+        "classification": "test_only_adaptation",
+        "column": 2,
+        "detail": "helper or monkeypatch mutation of Settings",
+        "dynamic_names": [],
+        "line": 1781,
+        "operation": "setattr",
+        "path": "algo-bot/tests/test_scanner.py"
+      },
+      {
         "attribute": "alert_overlap_suppress",
         "canonical_path": null,
         "classification": "test_only_adaptation",
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 1751,
+        "line": 1800,
         "operation": "setattr",
         "path": "algo-bot/tests/test_scanner.py"
       },
@@ -9223,7 +9223,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 1773,
+        "line": 1822,
         "operation": "setattr",
         "path": "algo-bot/tests/test_scanner.py"
       },
@@ -9234,7 +9234,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 1838,
+        "line": 1887,
         "operation": "setattr",
         "path": "algo-bot/tests/test_scanner.py"
       },
@@ -9245,7 +9245,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 1884,
+        "line": 1933,
         "operation": "setattr",
         "path": "algo-bot/tests/test_scanner.py"
       },
@@ -9256,7 +9256,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 1885,
+        "line": 1934,
         "operation": "setattr",
         "path": "algo-bot/tests/test_scanner.py"
       },
@@ -9267,7 +9267,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 1961,
+        "line": 2010,
         "operation": "setattr",
         "path": "algo-bot/tests/test_scanner.py"
       },
@@ -9278,7 +9278,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 2001,
+        "line": 2050,
         "operation": "setattr",
         "path": "algo-bot/tests/test_scanner.py"
       },
@@ -9289,7 +9289,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 2048,
+        "line": 2097,
         "operation": "setattr",
         "path": "algo-bot/tests/test_scanner.py"
       },
@@ -9300,7 +9300,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 2095,
+        "line": 2144,
         "operation": "setattr",
         "path": "algo-bot/tests/test_scanner.py"
       },

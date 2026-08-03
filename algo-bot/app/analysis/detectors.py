@@ -36,6 +36,7 @@ from app.analysis.trendlines import Trendline, value_at
 from app.analysis.execution_eligibility import ExecutionEligibility
 from app.analysis.structural_reaction_support import (
   bias_relationship,
+  box_structural_id,
   equal_level_structural_id,
   evaluate_structural_reaction,
   key_level_structural_id,
@@ -1119,6 +1120,12 @@ def break_retest(ctx: DetectionContext) -> DetectionResult | None:
       price,
       atr,
       reasons,
+      structural_source="trendline",
+      structural_id=trendline_structural_id(ctx.symbol, ctx.tf, line),
+      structural_low=zone.low,
+      structural_high=zone.high,
+      structural_timeframe=ctx.tf,
+      structural_kind=line.kind,
     )
     if result is not None:
       return result
@@ -1150,6 +1157,12 @@ def break_retest(ctx: DetectionContext) -> DetectionResult | None:
     result = _finish(
       ctx, "Break & Retest", direction, level.price, zone, price, atr, reasons,
       factors=factors,
+      structural_source="key_level",
+      structural_id=key_level_structural_id(ctx.symbol, ctx.tf, level),
+      structural_low=zone.low,
+      structural_high=zone.high,
+      structural_timeframe=ctx.tf,
+      structural_kind=level.kind,
     )
     if result is not None:
       return result
@@ -1243,6 +1256,12 @@ def box_breakout(ctx: DetectionContext) -> DetectionResult | None:
     reasons,
     chop_tp_cap=False,
     include_score_reasons=False,
+    structural_source="box_breakout",
+    structural_id=box_structural_id(ctx.symbol, ctx.tf, box),
+    structural_low=zone.low,
+    structural_high=zone.high,
+    structural_timeframe=ctx.tf,
+    structural_kind=entry_kind,
   )
 
 
@@ -2698,17 +2717,24 @@ LIVE_DETECTOR_REGISTRY: tuple[DetectorRegistration, ...] = (
     replay_only_reason=(
       "uses its own box-consolidation confirmation, not the shared "
       "evaluate_structural_reaction path every live zone-reaction detector "
-      "uses - not yet re-verified against band-kind classification and "
-      "canonical BREAKOUT_RETEST family merge"
+      "uses. Band-kind classification and canonical BREAKOUT_RETEST family "
+      "merge are verified now (structural_source/structural_id wiring + "
+      "tests/test_detectors.py, tests/test_scanner.py) - stays off by "
+      "config default pending a deliberate rollout decision, same as "
+      "every other feature this pipeline ships dark by default"
     ),
   ),
   DetectorRegistration(
     "break_retest", break_retest, FAMILY_BREAKOUT_RETEST,
     lambda cfg: cfg.break_retest_enabled,
     replay_only_reason=(
-      "same bespoke confirmation path as box_breakout - not yet "
-      "re-verified against band-kind classification and canonical "
-      "BREAKOUT_RETEST family merge"
+      "same bespoke confirmation path as box_breakout (last-closed-bar "
+      "retest+rejection, not evaluate_structural_reaction's lookback-"
+      "window search). Band-kind classification and canonical family "
+      "merge are verified now (structural_source/structural_id wiring + "
+      "tests/test_detectors.py, tests/test_scanner.py) - stays off by "
+      "config default pending a deliberate rollout decision, same as "
+      "every other feature this pipeline ships dark by default"
     ),
   ),
   DetectorRegistration(
