@@ -134,10 +134,19 @@ def _swept_ts(
   return swept.index[0]
 
 
+def _resolve_cfg(cfg):
+  if cfg is None:
+    from app.core.config import runtime_config
+    return runtime_config
+  return cfg
+
+
 def _windows(cfg) -> list[SessionWindow]:
-  asia = int(getattr(cfg, "session_asia_start", 22))
-  london = int(getattr(cfg, "session_london_start", 7))
-  ny = int(getattr(cfg, "session_ny_start", 13))
+  cfg = _resolve_cfg(cfg)
+  sessions = cfg.market_data.sessions
+  asia = int(sessions.asia_start)
+  london = int(sessions.london_start)
+  ny = int(sessions.ny_start)
   return [
     SessionWindow("ASIA", asia, london),
     SessionWindow("LONDON", london, ny),
@@ -146,7 +155,8 @@ def _windows(cfg) -> list[SessionWindow]:
 
 
 def _daily_rollover(cfg) -> int:
-  return int(getattr(cfg, "daily_rollover_utc_hour", 21))
+  cfg = _resolve_cfg(cfg)
+  return int(cfg.market_data.sessions.daily_rollover_utc_hour)
 
 
 def _in_window(hour: int, start: int, end: int) -> bool:

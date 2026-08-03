@@ -23,66 +23,9 @@ GUARD_MODE_BALANCED = "balanced"
 GUARD_MODE_STRICT = "strict"
 _GUARD_MODES = (GUARD_MODE_OBSERVE, GUARD_MODE_BALANCED, GUARD_MODE_STRICT)
 
-# Phase 2I-A: legacy field names each production entry point (and the helpers it
-# hands its ``cfg`` to) reads. When ``cfg is None`` the entry point builds a
-# narrow snapshot of exactly these fields off the canonical ``runtime_config``
-# instead of the retired per-call flat legacy config facade. Tests still pass an
-# explicit flat SimpleNamespace, which flows through the unchanged bodies below.
-_RUNTIME_GUARD_CFG_FIELDS = ("auto_trade_structural_guard_mode",)
-_RUNTIME_TIER_CFG_FIELDS = (
-  "auto_trade_tier_a_risk_multiplier",
-  "auto_trade_tier_b_risk_multiplier",
-  "auto_trade_post_impulse_risk_multiplier",
-  "auto_trade_one_sided_range_risk_multiplier",
-  "auto_trade_range_max_risk_multiplier",
-)
-# evaluate_execution_policy subtree: its own reads + policy_for +
-# protective_stop (opposing_zone_context_from_values, stop_bounds_for_reaction_room,
-# stop_bounds_for_strategy).
-_RUNTIME_POLICY_CFG_FIELDS = (
-  "auto_trade_xau_price_digits",
-  "auto_trade_zone_fill_enabled",
-  "auto_trade_zone_fill_min_atr",
-  "auto_trade_inside_zone_market_entry_enabled",
-  "auto_trade_zone_fill_fallback_enabled",
-  "auto_trade_zone_scale_first_leg_fraction",
-  "auto_trade_zone_scale_step_atr",
-  "auto_trade_reaction_scale_enabled",
-  "auto_trade_reaction_market_fraction",
-  "auto_trade_reaction_scale_fraction",
-  "auto_trade_reaction_scale_step_atr",
-  "auto_trade_reaction_scale_invalid_policy",
-  "auto_trade_add_stop_buffer_atr",
-  "auto_trade_wick_stop_buffer_atr",
-  "auto_trade_range_max_risk_multiplier",
-  "auto_trade_range_max_entry_drift_atr",
-  "auto_trade_trend_max_entry_drift_atr",
-  "auto_trade_map_max_entry_drift_atr",
-  "auto_trade_range_min_rr",
-  "auto_trade_execution_zone_max_width_atr",
-  "auto_trade_execution_zone_max_width_pips",
-  "auto_trade_stop_push_beyond_zone",
-  "auto_trade_range_room_stop_floor_pips",
-  "auto_trade_reaction_room_stop_min_rr",
-  "auto_trade_reaction_room_stop_floor_pips",
-  "auto_trade_trend_stop_max_pips",
-  "auto_trade_add_min_stop_pips",
-  "auto_trade_sl_distance",
-  "auto_trade_trend_stop_min_pips",
-)
-# max_entry_drift_pips subtree: its own family drift settings + policy_for.
-_RUNTIME_DRIFT_CFG_FIELDS = (
-  "auto_trade_range_min_entry_drift_pips",
-  "auto_trade_trend_min_entry_drift_pips",
-  "auto_trade_map_min_entry_drift_pips",
-  "auto_trade_range_hard_entry_drift_pips",
-  "auto_trade_trend_hard_entry_drift_pips",
-  "auto_trade_map_hard_entry_drift_pips",
-  "auto_trade_range_max_entry_drift_atr",
-  "auto_trade_trend_max_entry_drift_atr",
-  "auto_trade_map_max_entry_drift_atr",
-  "auto_trade_range_min_rr",
-)
+def _default_runtime_cfg() -> Any:
+  from app.core.config import runtime_config
+  return runtime_config
 
 # Version of the entry-plan contract (`planned_execution_route`,
 # `planned_entry_price`, `planned_leg_entry_prices`) shared with the executor.
@@ -298,13 +241,15 @@ def classify_barrier_relationship(
 
 
 def resolve_guard_mode(cfg: Any | None = None) -> str:
-  # Production reads the authority-neutral runtime config
-  # (actionability.structural_guard.guard_mode); tests may still inject a flat
-  # SimpleNamespace/Settings-shaped override.
+  """Return the configured structural-guard mode.
+
+  Production reads the authority-neutral runtime config
+  (``actionability.structural_guard.guard_mode``); tests may inject a
+  canonical-shaped override.
+  """
   if cfg is None:
-    from app.core.runtime_projection import project_runtime_config
-    cfg = project_runtime_config(_RUNTIME_GUARD_CFG_FIELDS)
-  mode = str(getattr(cfg, "auto_trade_structural_guard_mode", GUARD_MODE_BALANCED))
+    cfg = _default_runtime_cfg()
+  mode = str(cfg.actionability.structural_guard.guard_mode)
   mode = mode.strip().lower()
   return mode if mode in _GUARD_MODES else GUARD_MODE_BALANCED
 
@@ -502,36 +447,38 @@ def policy_for(strategy: str, cfg: Any | None = None) -> ExecutionPolicy:
     raise ValueError(f"unknown execution strategy: {strategy}")
   base = _DEFAULT_POLICIES[family]
   if cfg is None:
-    return base
+    cfg = _default_runtime_cfg()
+  range_drift = float(
+    cfg.execution.range.max_entry_drift_atr
+    if cfg.execution.range.max_entry_drift_atr is not None
+    else base.max_entry_drift_atr
+  )
+  trend_drift = float(
+    cfg.execution.trend.max_entry_drift_atr
+    if cfg.execution.trend.max_entry_drift_atr is not None
+    else base.max_entry_drift_atr
+  )
+  map_drift = float(
+    cfg.execution.mapped_zone.max_entry_drift_atr
+    if cfg.execution.mapped_zone.max_entry_drift_atr is not None
+    else base.max_entry_drift_atr
+  )
   drift_overrides = {
-    FAMILY_RANGE_REVERSION: float(getattr(
-      cfg, "auto_trade_range_max_entry_drift_atr", base.max_entry_drift_atr,
-    )),
-    FAMILY_TREND_PULLBACK: float(getattr(
-      cfg, "auto_trade_trend_max_entry_drift_atr", base.max_entry_drift_atr,
-    )),
-    FAMILY_BREAKOUT_RETEST: float(getattr(
-      cfg, "auto_trade_trend_max_entry_drift_atr", base.max_entry_drift_atr,
-    )),
-    FAMILY_MOMENTUM_CONTINUATION: float(getattr(
-      cfg, "auto_trade_trend_max_entry_drift_atr", base.max_entry_drift_atr,
-    )),
-    FAMILY_MAPPED_ZONE_REACTION: float(getattr(
-      cfg, "auto_trade_map_max_entry_drift_atr", base.max_entry_drift_atr,
-    )),
-    FAMILY_KEY_LEVEL: float(getattr(
-      cfg, "auto_trade_map_max_entry_drift_atr", base.max_entry_drift_atr,
-    )),
-    FAMILY_SUPPLY_DEMAND: float(getattr(
-      cfg, "auto_trade_map_max_entry_drift_atr", base.max_entry_drift_atr,
-    )),
-    FAMILY_SESSION_LEVEL: float(getattr(
-      cfg, "auto_trade_map_max_entry_drift_atr", base.max_entry_drift_atr,
-    )),
-    FAMILY_TRENDLINE: float(getattr(
-      cfg, "auto_trade_trend_max_entry_drift_atr", base.max_entry_drift_atr,
-    )),
+    FAMILY_RANGE_REVERSION: range_drift,
+    FAMILY_TREND_PULLBACK: trend_drift,
+    FAMILY_BREAKOUT_RETEST: trend_drift,
+    FAMILY_MOMENTUM_CONTINUATION: trend_drift,
+    FAMILY_MAPPED_ZONE_REACTION: map_drift,
+    FAMILY_KEY_LEVEL: map_drift,
+    FAMILY_SUPPLY_DEMAND: map_drift,
+    FAMILY_SESSION_LEVEL: map_drift,
+    FAMILY_TRENDLINE: trend_drift,
   }
+  range_min_rr = float(
+    cfg.execution.range.min_rr
+    if cfg.execution.range.min_rr is not None
+    else base.min_reward_risk
+  )
   return ExecutionPolicy(
     family=base.family,
     min_confluence=base.min_confluence,
@@ -539,9 +486,7 @@ def policy_for(strategy: str, cfg: Any | None = None) -> ExecutionPolicy:
     max_entry_drift_pips=base.max_entry_drift_pips,
     max_zone_width_atr=base.max_zone_width_atr,
     min_target_room_atr=base.min_target_room_atr,
-    min_reward_risk=float(getattr(
-      cfg, "auto_trade_range_min_rr", base.min_reward_risk,
-    )) if family == FAMILY_RANGE_REVERSION else base.min_reward_risk,
+    min_reward_risk=range_min_rr if family == FAMILY_RANGE_REVERSION else base.min_reward_risk,
     risk_multiplier=base.risk_multiplier,
     order_type_preference=base.order_type_preference,
     permitted_regimes=base.permitted_regimes,
@@ -589,8 +534,7 @@ def evaluate_execution_policy(
 ) -> ExecutionPolicyEvaluation:
   """Enforce every declared setup policy before candidate publication."""
   if cfg is None:
-    from app.core.runtime_projection import project_runtime_config
-    cfg = project_runtime_config(_RUNTIME_POLICY_CFG_FIELDS)
+    cfg = _default_runtime_cfg()
   try:
     policy = policy_for(str(getattr(match, "strategy", "")), cfg)
   except ValueError as exc:
@@ -637,7 +581,10 @@ def evaluate_execution_policy(
   quote = float(
     spot_price if executable_quote is None else executable_quote
   )
-  digits = int(getattr(cfg, "auto_trade_xau_price_digits", 2) or 2)
+  digits = int(cfg.contract.instrument.price_digits or 2)
+  zone_scaling = cfg.execution.zone_scaling
+  execution_entry = cfg.execution.entry
+  reaction_execution = cfg.execution.reaction
   route_plan = resolve_execution_route_plan(
     direction=direction,
     order_type_preference=policy.order_type_preference,
@@ -646,42 +593,30 @@ def evaluate_execution_policy(
     zone_low=low,
     zone_high=high,
     atr=atr,
-    zone_fill_enabled=bool(
-      getattr(cfg, "auto_trade_zone_fill_enabled", False)
-    ),
-    zone_fill_min_atr=float(
-      getattr(cfg, "auto_trade_zone_fill_min_atr", 0.5) or 0.5
-    ),
+    zone_fill_enabled=bool(zone_scaling.fill_enabled),
+    zone_fill_min_atr=float(zone_scaling.fill_min_atr or 0.5),
     inside_zone_market_entry_enabled=bool(
-      getattr(cfg, "auto_trade_inside_zone_market_entry_enabled", True)
+      execution_entry.inside_zone_market_entry_enabled
     ),
-    zone_fill_fallback_enabled=bool(
-      getattr(cfg, "auto_trade_zone_fill_fallback_enabled", True)
-    ),
+    zone_fill_fallback_enabled=bool(zone_scaling.fill_fallback_enabled),
     digits=digits,
     allow_either=False,
     scale_first_leg_fraction=float(
-      getattr(cfg, "auto_trade_zone_scale_first_leg_fraction", 0.70) or 0.70
+      zone_scaling.first_leg_fraction or 0.70
     ),
-    scale_step_atr=float(
-      getattr(cfg, "auto_trade_zone_scale_step_atr", 0.5) or 0.5
-    ),
-    reaction_scale_enabled=bool(
-      getattr(cfg, "auto_trade_reaction_scale_enabled", True)
-    ),
+    scale_step_atr=float(zone_scaling.scale_step_atr or 0.5),
+    reaction_scale_enabled=bool(cfg.strategies.reaction.scale_enabled),
     reaction_market_fraction=float(
-      getattr(cfg, "auto_trade_reaction_market_fraction", 0.70) or 0.70
+      reaction_execution.market_fraction or 0.70
     ),
     reaction_scale_fraction=float(
-      getattr(cfg, "auto_trade_reaction_scale_fraction", 0.30) or 0.30
+      reaction_execution.scale_fraction or 0.30
     ),
     reaction_scale_step_atr=float(
-      getattr(cfg, "auto_trade_reaction_scale_step_atr", 0.5) or 0.5
+      reaction_execution.scale_step_atr or 0.5
     ),
     reaction_scale_invalid_policy=str(
-      getattr(
-        cfg, "auto_trade_reaction_scale_invalid_policy", "single_market",
-      ) or "single_market"
+      reaction_execution.scale_invalid_policy or "single_market"
     ),
     strategy=str(getattr(match, "strategy", "") or ""),
     strategy_family=str(
@@ -793,13 +728,9 @@ def evaluate_execution_policy(
       pip_size=pip,
       cfg=cfg,
     )
-    digits = int(getattr(cfg, "auto_trade_xau_price_digits", 2))
-    structure_buffer_atr = getattr(
-      cfg, "auto_trade_add_stop_buffer_atr", 0.3,
-    )
-    wick_buffer_atr = getattr(
-      cfg, "auto_trade_wick_stop_buffer_atr", 0.15,
-    )
+    digits = int(cfg.contract.instrument.price_digits)
+    structure_buffer_atr = float(cfg.execution.scaling.add.stop_buffer_atr)
+    wick_buffer_atr = float(cfg.execution.stops.wick_stop_buffer_atr)
     leg_prices = list(route_plan.planned_leg_entry_prices or ())
     leg_ratios = list(route_plan.planned_leg_volume_ratios or ())
     use_group_stop = (
@@ -965,7 +896,7 @@ def evaluate_execution_policy(
   max_risk_multiplier = 1.0
   if policy.family == FAMILY_RANGE_REVERSION:
     max_risk_multiplier = float(
-      getattr(cfg, "auto_trade_range_max_risk_multiplier", 2.0) or 2.0
+      cfg.risk.sizing.range_max_risk_multiplier or 2.0
     )
     if not math.isfinite(max_risk_multiplier) or max_risk_multiplier <= 0:
       max_risk_multiplier = 2.0
@@ -1090,23 +1021,26 @@ def classify_tier(
 
 
 def risk_multiplier_for_tier(tier: str, cfg: Any | None = None, *, post_impulse: bool = False, one_sided: bool = False, range_scalp: bool = False) -> float:
-  # Default to the authority-neutral runtime config; the flat legacy names read
-  # here resolve to identical values (config defaults match the historical
-  # hardcoded fallbacks). Tests may still inject a SimpleNamespace override.
+  """Resolve the risk multiplier for the given tier from canonical config.
+
+  ``auto_trade_tier_c_risk_multiplier`` was never actually a config value: the
+  retired flat facade path returned ``b`` for tier C via a ``getattr``
+  fallback, and the canonical model has no ``c_multiplier`` field. Preserve
+  that same "tier C mirrors tier B" behaviour here explicitly.
+  """
   if cfg is None:
-    from app.core.runtime_projection import project_runtime_config
-    cfg = project_runtime_config(_RUNTIME_TIER_CFG_FIELDS)
+    cfg = _default_runtime_cfg()
   tier = (tier or TIER_C).upper()
-  a = float(getattr(cfg, "auto_trade_tier_a_risk_multiplier", 1.0))
-  b = float(getattr(cfg, "auto_trade_tier_b_risk_multiplier", 0.5))
-  c = float(getattr(cfg, "auto_trade_tier_c_risk_multiplier", b))
-  post = float(getattr(cfg, "auto_trade_post_impulse_risk_multiplier", 0.5))
-  onesided = float(getattr(cfg, "auto_trade_one_sided_range_risk_multiplier", 0.5))
+  tiers = cfg.risk.tiers
+  sizing = cfg.risk.sizing
+  a = float(tiers.a_multiplier)
+  b = float(tiers.b_multiplier)
+  c = b
+  post = float(sizing.post_impulse_risk_multiplier)
+  onesided = float(sizing.one_sided_range_risk_multiplier)
   if range_scalp and tier == TIER_A:
     # Thin-room scalp frequency: allow up to 2× base size on A-quality setups.
-    a = float(
-      getattr(cfg, "auto_trade_range_max_risk_multiplier", 2.0)
-    )
+    a = float(sizing.range_max_risk_multiplier)
     if not math.isfinite(a) or a <= 0:
       a = 2.0
   if tier == TIER_A:
@@ -1123,28 +1057,53 @@ def risk_multiplier_for_tier(tier: str, cfg: Any | None = None, *, post_impulse:
   return max(0.0, mult)
 
 
-_FAMILY_MIN_DRIFT_SETTING = {
-  FAMILY_RANGE_REVERSION: "auto_trade_range_min_entry_drift_pips",
-  FAMILY_TREND_PULLBACK: "auto_trade_trend_min_entry_drift_pips",
-  FAMILY_BREAKOUT_RETEST: "auto_trade_trend_min_entry_drift_pips",
-  FAMILY_MOMENTUM_CONTINUATION: "auto_trade_trend_min_entry_drift_pips",
-  FAMILY_MAPPED_ZONE_REACTION: "auto_trade_map_min_entry_drift_pips",
-  FAMILY_KEY_LEVEL: "auto_trade_map_min_entry_drift_pips",
-  FAMILY_SUPPLY_DEMAND: "auto_trade_map_min_entry_drift_pips",
-  FAMILY_SESSION_LEVEL: "auto_trade_map_min_entry_drift_pips",
-  FAMILY_TRENDLINE: "auto_trade_trend_min_entry_drift_pips",
-}
-_FAMILY_HARD_DRIFT_SETTING = {
-  FAMILY_RANGE_REVERSION: "auto_trade_range_hard_entry_drift_pips",
-  FAMILY_TREND_PULLBACK: "auto_trade_trend_hard_entry_drift_pips",
-  FAMILY_BREAKOUT_RETEST: "auto_trade_trend_hard_entry_drift_pips",
-  FAMILY_MOMENTUM_CONTINUATION: "auto_trade_trend_hard_entry_drift_pips",
-  FAMILY_MAPPED_ZONE_REACTION: "auto_trade_map_hard_entry_drift_pips",
-  FAMILY_KEY_LEVEL: "auto_trade_map_hard_entry_drift_pips",
-  FAMILY_SUPPLY_DEMAND: "auto_trade_map_hard_entry_drift_pips",
-  FAMILY_SESSION_LEVEL: "auto_trade_map_hard_entry_drift_pips",
-  FAMILY_TRENDLINE: "auto_trade_trend_hard_entry_drift_pips",
-}
+def _family_min_drift_pips(cfg: Any, family: str) -> float | None:
+  """Canonical read of the per-family minimum entry-drift setting.
+
+  Returns None when the family does not have a configured minimum (e.g.
+  outside the mapped ``_FAMILY_MIN_DRIFT_SETTING`` keys); the caller
+  substitutes ``0.0`` for that case, matching the retired
+  ``getattr(cfg, name, 0.0)`` fallback.
+  """
+  execution = cfg.execution
+  if family == FAMILY_RANGE_REVERSION:
+    return float(execution.range.min_entry_drift_pips)
+  if family in {
+    FAMILY_TREND_PULLBACK,
+    FAMILY_BREAKOUT_RETEST,
+    FAMILY_MOMENTUM_CONTINUATION,
+    FAMILY_TRENDLINE,
+  }:
+    return float(execution.trend.min_entry_drift_pips)
+  if family in {
+    FAMILY_MAPPED_ZONE_REACTION,
+    FAMILY_KEY_LEVEL,
+    FAMILY_SUPPLY_DEMAND,
+    FAMILY_SESSION_LEVEL,
+  }:
+    return float(execution.mapped_zone.min_entry_drift_pips)
+  return None
+
+
+def _family_hard_drift_pips(cfg: Any, family: str) -> float | None:
+  execution = cfg.execution
+  if family == FAMILY_RANGE_REVERSION:
+    return float(execution.range.hard_entry_drift_pips)
+  if family in {
+    FAMILY_TREND_PULLBACK,
+    FAMILY_BREAKOUT_RETEST,
+    FAMILY_MOMENTUM_CONTINUATION,
+    FAMILY_TRENDLINE,
+  }:
+    return float(execution.trend.hard_entry_drift_pips)
+  if family in {
+    FAMILY_MAPPED_ZONE_REACTION,
+    FAMILY_KEY_LEVEL,
+    FAMILY_SUPPLY_DEMAND,
+    FAMILY_SESSION_LEVEL,
+  }:
+    return float(execution.mapped_zone.hard_entry_drift_pips)
+  return None
 _FAMILY_HARD_DRIFT_DEFAULT = {
   FAMILY_RANGE_REVERSION: 20.0,
   FAMILY_TREND_PULLBACK: 30.0,
@@ -1182,8 +1141,7 @@ def max_entry_drift_pips(
   reasonable latency explains, is still capped/rejected.
   """
   if cfg is None:
-    from app.core.runtime_projection import project_runtime_config
-    cfg = project_runtime_config(_RUNTIME_DRIFT_CFG_FIELDS)
+    cfg = _default_runtime_cfg()
   policy = policy_for(strategy, cfg)
   family = strategy_family(strategy)
   pip = pip_size if pip_size > 0 else 0.1
@@ -1192,20 +1150,15 @@ def max_entry_drift_pips(
   # Do NOT fold AUTO_TRADE_MAX_ENTRY_DISTANCE_PIPS into adaptive drift.
   # Adaptive drift is observation tolerance; executor distance is a separate
   # hard publication gate (see entry_distance.measure_entry_distance).
-  min_setting = _FAMILY_MIN_DRIFT_SETTING.get(family)
-  configured_minimum = (
-    float(getattr(cfg, min_setting, 0.0)) if cfg is not None and min_setting else 0.0
-  )
+  family_min = _family_min_drift_pips(cfg, family)
+  configured_minimum = 0.0 if family_min is None else family_min
   adaptive_floor = max(configured, configured_minimum, atr_pips)
   room_cap = float("inf")
   if remaining_target_room_pips is not None:
     room_cap = max(0.0, remaining_target_room_pips)
-  hard_setting = _FAMILY_HARD_DRIFT_SETTING.get(family)
+  family_hard = _family_hard_drift_pips(cfg, family)
   default_hard_cap = _FAMILY_HARD_DRIFT_DEFAULT.get(family, configured)
-  hard_cap = (
-    float(getattr(cfg, hard_setting, default_hard_cap))
-    if cfg is not None and hard_setting else configured
-  )
+  hard_cap = default_hard_cap if family_hard is None else family_hard
   limit = min(adaptive_floor, room_cap, hard_cap)
   measured = {
     "configured_pips": round(configured, 3),

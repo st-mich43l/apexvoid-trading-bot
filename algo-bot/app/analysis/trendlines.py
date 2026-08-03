@@ -38,11 +38,15 @@ def trendlines(
 ) -> list[Trendline]:
   if df.empty:
     return []
+  if cfg is None:
+    from app.core.config import runtime_config
+    cfg = runtime_config
+  tl_cfg = cfg.analysis.trendlines
   atr_value = atr_scalar(atr)
-  tolerance = max(0.0, float(getattr(cfg, "tl_tol_atr", TL_TOL_ATR))) * atr_value
-  min_touches = max(2, int(getattr(cfg, "tl_min_touches", TL_MIN_TOUCHES)))
+  tolerance = max(0.0, float(tl_cfg.tolerance_atr)) * atr_value
+  min_touches = max(2, int(tl_cfg.minimum_touches))
   max_slope = (
-    max(0.0, float(getattr(cfg, "tl_max_slope_atr", TL_MAX_SLOPE_ATR)))
+    max(0.0, float(tl_cfg.maximum_slope_atr))
     * atr_value
   )
   candidates: list[Trendline] = []

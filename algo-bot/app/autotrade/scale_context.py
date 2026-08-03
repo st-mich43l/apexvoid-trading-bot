@@ -16,20 +16,6 @@ from app.analysis.zones import displacement
 from app.autotrade.map_strategy import _rejects
 
 
-# Phase 2I-A: legacy field names build_auto_scale_context reads. When ``cfg`` is
-# omitted in production it builds a narrow snapshot of exactly these fields off
-# the canonical ``runtime_config`` (replacing the retired
-# per-call flat legacy config facade). Tests still inject a flat SimpleNamespace.
-_RUNTIME_SCALE_CFG_FIELDS = (
-  "atr_length",
-  "swing_fractal_n",
-  "zigzag_pct",
-  "zigzag_atr_mult",
-  "displacement_atr_mult",
-  "momentum_body_frac",
-)
-
-
 @dataclass(frozen=True)
 class AutoScaleContext:
   bar_ts: int
@@ -61,8 +47,9 @@ def build_auto_scale_context(
   target_high: float | None = None,
 ) -> AutoScaleContext | None:
   if cfg is None:
-    from app.core.runtime_projection import project_runtime_config
-    cfg = project_runtime_config(_RUNTIME_SCALE_CFG_FIELDS)
+    from app.core.config import runtime_config
+    cfg = runtime_config
+  analysis = cfg.analysis
   direction = str(direction or "").upper()
   frame = frames.get("M1")
   if direction not in {"BUY", "SELL"} or frame is None or frame.empty:
@@ -76,15 +63,15 @@ def build_auto_scale_context(
   m1 = m1.dropna(subset=required)
   if len(m1) < 8:
     return None
-  atr = atr_series(m1, max(2, int(getattr(cfg, "atr_length", 14))))
+  atr = atr_series(m1, max(2, int(analysis.atr.length)))
   atr_value = float(atr.iloc[-1])
   if not math.isfinite(atr_value) or atr_value <= 0:
     return None
   swings = find_swings(
     m1,
-    max(1, int(getattr(cfg, "swing_fractal_n", 2))),
-    max(0.0, float(getattr(cfg, "zigzag_pct", 0.0))),
-    max(0.0, float(getattr(cfg, "zigzag_atr_mult", 1.0))),
+    max(1, int(analysis.swings.fractal_size)),
+    max(0.0, float(analysis.swings.zigzag.pct)),
+    max(0.0, float(analysis.swings.zigzag.atr_mult)),
     atr,
   )
   swing_kind = "low" if direction == "BUY" else "high"
@@ -96,8 +83,8 @@ def build_auto_scale_context(
   legs = displacement(
     m1,
     atr,
-    max(0.1, float(getattr(cfg, "displacement_atr_mult", 1.5))),
-    max(0.0, float(getattr(cfg, "momentum_body_frac", 0.6))),
+    max(0.1, float(analysis.displacement.atr_mult)),
+    max(0.0, float(analysis.momentum.body_frac)),
   )
   pa_direction = "up" if direction == "BUY" else "down"
   counter_direction = "down" if pa_direction == "up" else "up"

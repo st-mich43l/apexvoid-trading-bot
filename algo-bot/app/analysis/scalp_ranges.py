@@ -17,6 +17,13 @@ from app.analysis.math_utils import atr_scalar
 from app.analysis.swings import find_swings
 from app.analysis.trendlines import value_at
 
+
+def _resolve_cfg(cfg):
+  if cfg is None:
+    from app.core.config import runtime_config
+    return runtime_config
+  return cfg
+
 RANGE_SCALP_LOOKBACK = 36
 RANGE_SCALP_CLUSTER_ATR = 0.20
 RANGE_SCALP_CLUSTER_MIN_ABS = 0.0
@@ -159,35 +166,35 @@ def build_scalp_structure_detailed(
     return ScalpStructureResult(
       [], None, RANGE_STATE_NO_RANGE, "invalid_atr",
     )
-  lookback = max(5, int(getattr(cfg, "range_scalp_lookback", RANGE_SCALP_LOOKBACK)))
+  cfg = _resolve_cfg(cfg)
+  range_edge = cfg.strategies.range_reversion.range_edge
+  lookback = max(5, int(range_edge.lookback))
   frame = df.tail(lookback)
   offset = len(df) - len(frame)
   cluster_tolerance = _cluster_tolerance(atr_value, frame, cfg)
   entry_tolerance = max(
     _EPS,
     atr_value
-    * max(0.0, float(getattr(cfg, "range_scalp_entry_tol_atr", RANGE_SCALP_ENTRY_TOL_ATR))),
+    * max(0.0, float(range_edge.entry_tol_atr)),
   )
   max_edge_width = max(
     entry_tolerance,
     atr_value * max(
       0.05,
-      float(getattr(
-        cfg, "range_scalp_max_edge_width_atr", RANGE_SCALP_MAX_EDGE_WIDTH_ATR,
-      )),
+      float(range_edge.max_edge_width_atr),
     ),
   )
   minimum_touches = max(
     2,
-    int(getattr(cfg, "range_scalp_min_touches", RANGE_SCALP_MIN_TOUCHES)),
+    int(range_edge.min_touches),
   )
   minimum_wick = max(
     0.0,
-    min(1.0, float(getattr(cfg, "range_scalp_min_wick_frac", RANGE_SCALP_MIN_WICK_FRAC))),
+    min(1.0, float(range_edge.min_wick_frac)),
   )
   break_closes = max(
     1,
-    int(getattr(cfg, "range_scalp_break_closes", RANGE_SCALP_BREAK_CLOSES)),
+    int(range_edge.break_closes),
   )
   contacts = _contacts(frame, offset, atr, minimum_wick)
   barriers: list[ScalpBarrier] = []
@@ -225,7 +232,7 @@ def build_scalp_structure_detailed(
         session_levels,
         trendlines,
         regime,
-        float(getattr(cfg, "round_step", 5.0)),
+        float(cfg.analysis.levels.round_step),
       )
       score = _barrier_score(
         len(episodes),
@@ -278,7 +285,7 @@ def build_scalp_structure_detailed(
   missing_side_reason: str | None = None
   supports = [b for b in barriers if b.side == "support"]
   resistances = [b for b in barriers if b.side == "resistance"]
-  if bool(getattr(cfg, "scalp_barrier_fallback_enabled", True)):
+  if bool(cfg.strategies.scalp.scalp_barrier_fallback_enabled):
     if resistances and not supports:
       fallback = _fallback_barrier(
         "support", frame, offset, df, atr_value, entry_tolerance,
@@ -338,9 +345,10 @@ def _recent_breakout_displacement(
   cfg,
 ) -> bool:
   """True when the latest closes show decisive displacement, not consolidation."""
+  cfg = _resolve_cfg(cfg)
   break_closes = max(
     1,
-    int(getattr(cfg, "range_scalp_break_closes", RANGE_SCALP_BREAK_CLOSES)),
+    int(cfg.strategies.range_reversion.range_edge.break_closes),
   )
   if len(df) < break_closes + 6 or atr_value <= 0:
     return False
@@ -364,20 +372,20 @@ def _cluster_tolerance(
   frame: pd.DataFrame,
   cfg,
 ) -> float:
+  cfg = _resolve_cfg(cfg)
+  range_edge = cfg.strategies.range_reversion.range_edge
   atr_frac = max(
     0.0,
-    float(getattr(cfg, "range_scalp_cluster_atr", RANGE_SCALP_CLUSTER_ATR)),
+    float(range_edge.cluster_atr),
   )
   min_abs = max(
     0.0,
-    float(getattr(cfg, "range_scalp_cluster_min_abs", RANGE_SCALP_CLUSTER_MIN_ABS)),
+    float(range_edge.cluster_min_abs),
   )
-  pip_size = max(0.0, float(getattr(cfg, "pip_size", 0.1) or 0.1))
+  pip_size = 0.1
   pip_mult = max(
     0.0,
-    float(getattr(
-      cfg, "range_scalp_cluster_pip_mult", RANGE_SCALP_CLUSTER_PIP_MULT,
-    )),
+    float(getattr(range_edge, "cluster_pip_mult", RANGE_SCALP_CLUSTER_PIP_MULT)),
   )
   atr_component = atr_value * atr_frac
   candle_noise = 0.0
@@ -646,13 +654,10 @@ def _fallback_barrier(
   """
   if frame.empty or not opposite:
     return None
+  cfg = _resolve_cfg(cfg)
   min_confirmations = max(
     1,
-    int(getattr(
-      cfg,
-      "scalp_barrier_fallback_min_confirmations",
-      RANGE_SCALP_FALLBACK_MIN_CONFIRMATIONS,
-    )),
+    int(cfg.strategies.scalp.scalp_barrier_fallback_min_confirmations),
   )
   lows = frame["low"].astype(float)
   highs = frame["high"].astype(float)
@@ -739,7 +744,7 @@ def _fallback_barrier(
       inside += 1
   if inside >= max(
     3,
-    int(getattr(cfg, "range_scalp_min_inside_closes", RANGE_SCALP_MIN_INSIDE_CLOSES)),
+    int(cfg.strategies.range_reversion.range_edge.min_inside_closes),
   ):
     confirmations += 1
 
@@ -807,28 +812,27 @@ def _best_range_with_state(
 ) -> tuple[ScalpRange | None, str]:
   if atr <= 0:
     return None, RANGE_STATE_NO_RANGE
+  cfg = _resolve_cfg(cfg)
+  range_edge = cfg.strategies.range_reversion.range_edge
+  scalp_cfg = cfg.strategies.scalp
   minimum_room = max(
     0.0,
-    float(getattr(cfg, "range_scalp_min_room_atr", RANGE_SCALP_MIN_ROOM_ATR)),
+    float(range_edge.min_room_atr),
   )
   minimum_width = max(
     0.0,
-    float(getattr(cfg, "range_scalp_min_width_atr", RANGE_SCALP_MIN_WIDTH_ATR)),
+    float(range_edge.min_width_atr),
     2.0 * minimum_room,
   )
   maximum_width = max(
     minimum_width,
-    float(getattr(cfg, "range_scalp_max_width_atr", RANGE_SCALP_MAX_WIDTH_ATR)),
+    float(range_edge.max_width_atr),
   )
-  provisional_enabled = bool(
-    getattr(cfg, "scalp_range_provisional_enabled", True),
-  )
-  post_impulse_enabled = bool(
-    getattr(cfg, "scalp_post_impulse_range_enabled", True),
-  )
+  provisional_enabled = bool(scalp_cfg.scalp_range_provisional_enabled)
+  post_impulse_enabled = bool(scalp_cfg.scalp_post_impulse_range_enabled)
   min_inside = max(
     1,
-    int(getattr(cfg, "range_scalp_min_inside_closes", RANGE_SCALP_MIN_INSIDE_CLOSES)),
+    int(range_edge.min_inside_closes),
   )
   supports = [
     barrier for barrier in barriers
@@ -902,9 +906,10 @@ def _best_range_with_state(
       else:
         continue
       # Broken barriers (accepted closes) never form a live range.
+      _break_closes = max(1, int(range_edge.break_closes))
       if (
-        lower.accepted_closes >= max(1, int(getattr(cfg, "range_scalp_break_closes", RANGE_SCALP_BREAK_CLOSES)))
-        or upper.accepted_closes >= max(1, int(getattr(cfg, "range_scalp_break_closes", RANGE_SCALP_BREAK_CLOSES)))
+        lower.accepted_closes >= _break_closes
+        or upper.accepted_closes >= _break_closes
       ):
         continue
       quality = lower.score + upper.score
