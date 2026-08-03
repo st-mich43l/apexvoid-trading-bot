@@ -6,8 +6,10 @@ process-wide configuration authority, builds the active ``runtime_config`` and
 ``Settings`` model now lives in ``app.configuration.legacy_settings`` and is
 re-exported here as ``Settings`` for backward compatibility and rollback.
 
-Production consumers must read ``runtime_config`` (or ``runtime_config_facade``)
-rather than the legacy ``settings`` singleton.
+Production consumers must read ``runtime_config`` (or a narrow
+``project_runtime_config`` snapshot) rather than the legacy ``settings``
+singleton. ``runtime_config_facade`` remains only for tests/tools until
+Phase 2I-B.
 """
 
 from __future__ import annotations
@@ -16,6 +18,8 @@ from dataclasses import dataclass
 
 from app.configuration.bootstrap_authority import (
   RuntimeConfigurationAuthority,
+  process_authority_is_explicit,
+  process_implicit_authority_warning,
   runtime_configuration_authority,
 )
 from app.configuration.facade import CanonicalSettingsFacade
@@ -46,12 +50,16 @@ __all__ = [
   "active_configuration_resolution_trace",
   "active_configuration_warnings",
   "active_configuration_startup_message",
+  "active_configuration_authority_explicit",
+  "active_configuration_deprecation_message",
+  "active_configuration_implicit_authority_warning",
 ]
 
 
 @dataclass(frozen=True, slots=True)
 class _ActiveConfiguration:
   authority: RuntimeConfigurationAuthority
+  authority_explicit: bool
   settings: object
   runtime_config: object
   catalog_fingerprint: str
@@ -62,6 +70,7 @@ class _ActiveConfiguration:
 
 def _build_active_configuration(
   authority: RuntimeConfigurationAuthority,
+  authority_explicit: bool = False,
 ) -> _ActiveConfiguration:
   if authority is RuntimeConfigurationAuthority.LEGACY:
     # Fail fast on conflicting canonical/deprecated aliases before building the
@@ -72,6 +81,7 @@ def _build_active_configuration(
     legacy = Settings()
     return _ActiveConfiguration(
       authority=authority,
+      authority_explicit=authority_explicit,
       settings=legacy,
       runtime_config=LegacyCanonicalConfigView(legacy),
       catalog_fingerprint=catalog_fingerprint(),
@@ -83,6 +93,7 @@ def _build_active_configuration(
   result = load_python_canonical_settings(source_bundle)
   return _ActiveConfiguration(
     authority=authority,
+    authority_explicit=authority_explicit,
     settings=result.facade,
     runtime_config=result.config,
     catalog_fingerprint=result.catalog_fingerprint,
@@ -94,25 +105,30 @@ def _build_active_configuration(
 
 def build_active_settings() -> object:
   """Construct settings for the authority selected by the current process."""
-  return _build_active_configuration(runtime_configuration_authority()).settings
+  return _build_active_configuration(
+    runtime_configuration_authority(),
+    process_authority_is_explicit(),
+  ).settings
 
 
 _ACTIVE_CONFIGURATION = _build_active_configuration(
-  runtime_configuration_authority()
+  runtime_configuration_authority(),
+  process_authority_is_explicit(),
 )
 settings = _ACTIVE_CONFIGURATION.settings
 runtime_config = _ACTIVE_CONFIGURATION.runtime_config
+# Captured once at composition time so diagnostics are deterministic and
+# secret-safe regardless of later ``os.environ`` mutation in-process.
+_IMPLICIT_AUTHORITY_WARNING = process_implicit_authority_warning()
 
 
 def runtime_config_facade() -> object:
-  """Authority-neutral flat legacy-name view backed by ``runtime_config``.
+  """Flat legacy-name view for tests/tools only (removed in Phase 2I-B).
 
-  Production helpers that still read flat legacy attribute names (the
-  ``getattr(cfg, "auto_trade_...")`` execution/analysis knobs) resolve them
-  through this view when no explicit test override is supplied, so they never
-  depend on the legacy ``settings`` singleton. The values are identical to the
-  legacy Settings surface in both authorities: ``CanonicalSettingsFacade``
-  traverses the same canonical paths ``runtime_config`` exposes.
+  Production modules must not call this. Phase 2I-A replaced every production
+  default with ``project_runtime_config`` (narrow one-shot snapshots) or direct
+  ``runtime_config`` reads. The values remain identical to the legacy Settings
+  surface under both authorities.
   """
   return CanonicalSettingsFacade(runtime_config)
 
@@ -155,3 +171,31 @@ def active_configuration_startup_message() -> str:
     f"configuration_facade_fields={len(DIRECT_LEGACY_PATHS)} "
     f"configuration_derived_fields={len(DERIVED_LEGACY_PROPERTIES)}"
   )
+
+
+def active_configuration_authority_explicit() -> bool:
+  """Whether ``APEXVOID_CONFIG_AUTHORITY`` was set explicitly at composition."""
+  return _ACTIVE_CONFIGURATION.authority_explicit
+
+
+def active_configuration_deprecation_message() -> str | None:
+  """Deprecation diagnostic emitted once when authority is explicitly legacy.
+
+  Returns ``None`` for the canonical authority and for the *implicit* legacy
+  selection (which is surfaced by the implicit-authority warning instead), so
+  callers can log it unconditionally.
+  """
+  if (
+    _ACTIVE_CONFIGURATION.authority is RuntimeConfigurationAuthority.LEGACY
+    and _ACTIVE_CONFIGURATION.authority_explicit
+  ):
+    return (
+      "configuration_authority=legacy configuration_authority_deprecated=true "
+      "rollback_mode=true planned_removal_phase=2I-B"
+    )
+  return None
+
+
+def active_configuration_implicit_authority_warning() -> str | None:
+  """Warning emitted once when the authority defaulted to legacy implicitly."""
+  return _IMPLICIT_AUTHORITY_WARNING
