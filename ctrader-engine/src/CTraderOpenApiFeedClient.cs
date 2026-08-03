@@ -524,19 +524,10 @@ public sealed class CTraderOpenApiFeedClient : ICTraderFeedClient, ICTraderTrade
   {
     try
     {
-      var (fromTimestamp, toTimestamp) = BuildDealListWindow(
+      var dealsResponse = await FetchDealsByPositionIdAsync(
+        positionId,
         openedAtTimestamp,
-        approximateCloseTimestamp
-      );
-      var dealsResponse = await SendAndWaitAsync<ProtoOADealListByPositionIdRes>(
-        new ProtoOADealListByPositionIdReq
-        {
-          CtidTraderAccountId = options.AccountId,
-          PositionId = positionId,
-          FromTimestamp = fromTimestamp,
-          ToTimestamp = toTimestamp,
-        },
-        res => res.CtidTraderAccountId == options.AccountId,
+        approximateCloseTimestamp,
         cancellationToken
       );
       var closingDeal = dealsResponse.Deal
@@ -547,7 +538,7 @@ public sealed class CTraderOpenApiFeedClient : ICTraderFeedClient, ICTraderTrade
       {
         Log(
           $"position_close_reason_unknown position_id={positionId} "
-            + $"reason=no_closing_deal_found window={fromTimestamp}-{toTimestamp}"
+            + "reason=no_closing_deal_found"
         );
         return new PositionCloseLookup(PositionCloseReason.Unknown);
       }
@@ -560,6 +551,14 @@ public sealed class CTraderOpenApiFeedClient : ICTraderFeedClient, ICTraderTrade
       if (bracketEnd <= bracketStart)
       {
         bracketEnd = Math.Min(MaxUnixMs, bracketStart + 10_000);
+      }
+      // Never ask OrderList for a future ToTimestamp — same INCORRECT_BOUNDARIES
+      // trap as DealList when reconcile runs immediately after a BE/SL fill.
+      var nowMs = _clock().ToUnixTimeMilliseconds();
+      bracketEnd = Math.Min(bracketEnd, Math.Max(bracketStart + 1_000L, nowMs));
+      if (bracketEnd <= bracketStart)
+      {
+        bracketStart = Math.Max(0L, bracketEnd - 10_000L);
       }
       var ordersResponse = await SendAndWaitAsync<ProtoOAOrderListRes>(
         new ProtoOAOrderListReq
@@ -614,9 +613,69 @@ public sealed class CTraderOpenApiFeedClient : ICTraderFeedClient, ICTraderTrade
     }
   }
 
+  async Task<ProtoOADealListByPositionIdRes> FetchDealsByPositionIdAsync(
+    long positionId,
+    long openedAtTimestamp,
+    long approximateCloseTimestamp,
+    CancellationToken cancellationToken
+  )
+  {
+    // ProtoOADealListByPositionIdReq timestamps are optional. Prefer the
+    // position-scoped query with no window — BE/SL reconcile often runs with
+    // approximateClose≈now, and close+1m future ToTimestamp triggers
+    // INCORRECT_BOUNDARIES even when From/To look locally valid.
+    try
+    {
+      return await SendAndWaitAsync<ProtoOADealListByPositionIdRes>(
+        new ProtoOADealListByPositionIdReq
+        {
+          CtidTraderAccountId = options.AccountId,
+          PositionId = positionId,
+        },
+        res => res.CtidTraderAccountId == options.AccountId,
+        cancellationToken
+      );
+    }
+    catch (Exception exception) when (
+      exception is not OperationCanceledException
+      && IsIncorrectBoundaries(exception)
+    )
+    {
+      Log(
+        $"position_close_deal_list_unbounded_rejected position_id={positionId}: "
+          + exception.Message
+      );
+    }
+
+    var (fromTimestamp, toTimestamp) = BuildDealListWindow(
+      openedAtTimestamp,
+      approximateCloseTimestamp,
+      _clock().ToUnixTimeMilliseconds()
+    );
+    return await SendAndWaitAsync<ProtoOADealListByPositionIdRes>(
+      new ProtoOADealListByPositionIdReq
+      {
+        CtidTraderAccountId = options.AccountId,
+        PositionId = positionId,
+        FromTimestamp = fromTimestamp,
+        ToTimestamp = toTimestamp,
+      },
+      res => res.CtidTraderAccountId == options.AccountId,
+      cancellationToken
+    );
+  }
+
+  static bool IsIncorrectBoundaries(Exception exception)
+  {
+    var text = exception.Message ?? string.Empty;
+    return text.Contains("INCORRECT_BOUNDARIES", StringComparison.OrdinalIgnoreCase)
+      || text.Contains("Incorrect period boundaries", StringComparison.OrdinalIgnoreCase);
+  }
+
   // cTrader rejects DealList/OrderList windows with INCORRECT_BOUNDARIES when
-  // from/to are inverted, negative, past the 2038 cap, or (for several list
-  // APIs) wider than one week. Keep every close-reason lookup inside that box.
+  // from/to are inverted, negative, past the 2038 cap, in the future, or (for
+  // several list APIs) wider than one week. Keep every close-reason lookup
+  // inside that box.
   internal const long MaxUnixMs = 2_147_483_646_000L;
   internal static readonly long MaxDealListWindowMs =
     (long)TimeSpan.FromDays(7).TotalMilliseconds - 60_000L;
@@ -634,23 +693,49 @@ public sealed class CTraderOpenApiFeedClient : ICTraderFeedClient, ICTraderTrade
   internal static (long FromTimestamp, long ToTimestamp) BuildDealListWindow(
     long openedAtTimestamp,
     long approximateCloseTimestamp
+  ) => BuildDealListWindow(
+    openedAtTimestamp,
+    approximateCloseTimestamp,
+    DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+  );
+
+  internal static (long FromTimestamp, long ToTimestamp) BuildDealListWindow(
+    long openedAtTimestamp,
+    long approximateCloseTimestamp,
+    long nowMs
   )
   {
+    if (nowMs <= 0)
+    {
+      nowMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+    }
+    nowMs = Math.Min(MaxUnixMs, nowMs);
     var approximateCloseMs = ToUnixMilliseconds(approximateCloseTimestamp);
     if (approximateCloseMs <= 0)
     {
-      approximateCloseMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+      approximateCloseMs = nowMs;
     }
+    // Never request a ToTimestamp in the future — reconcile after BE/SL often
+    // uses approximateClose≈now, and close+pad > now is rejected by cTrader.
+    var toTimestamp = Math.Min(
+      nowMs,
+      Math.Min(
+        MaxUnixMs,
+        approximateCloseMs + (long)TimeSpan.FromMinutes(1).TotalMilliseconds
+      )
+    );
     var openedAtMs = ToUnixMilliseconds(openedAtTimestamp);
     var defaultLookbackMs = (long)TimeSpan.FromMinutes(15).TotalMilliseconds;
-    var toTimestamp = Math.Min(
-      MaxUnixMs,
-      approximateCloseMs + (long)TimeSpan.FromMinutes(1).TotalMilliseconds
-    );
-    var preferredFrom = openedAtMs > 0
-      ? Math.Min(openedAtMs, approximateCloseMs - defaultLookbackMs)
-      : approximateCloseMs - defaultLookbackMs;
-    var fromTimestamp = Math.Max(0L, preferredFrom);
+    long fromTimestamp;
+    if (openedAtMs > 0 && openedAtMs < toTimestamp)
+    {
+      // Include the open deal when it still fits inside the week cap.
+      fromTimestamp = openedAtMs;
+    }
+    else
+    {
+      fromTimestamp = Math.Max(0L, toTimestamp - defaultLookbackMs);
+    }
     if (toTimestamp - fromTimestamp > MaxDealListWindowMs)
     {
       fromTimestamp = Math.Max(0L, toTimestamp - MaxDealListWindowMs);
