@@ -10,6 +10,9 @@
 {% set structural_guard_default = 'observe' if auto_trade_profile == 'demo_eval' else ('balanced' if require_demo == 'true' else 'strict') %}
 {% set zone_cooldown_default = 'false' if auto_trade_profile == 'demo_eval' else 'true' %}
 {% set zone_reconcile_default = 'shadow' if auto_trade_profile == 'demo_eval' else 'enforce' %}
+{# Phase 2H/2I-A: pin mapped-zone + market-map guard off for the bot (mirrors
+   root compose / ctrader-engine). demo_eval would otherwise enable them.
+   Vault values still win via combine(apexvoid_trading_bot_env). #}
 {% set execution_defaults = {
   'APEXVOID_CONFIG_AUTHORITY': 'canonical',
   'AUTO_TRADE_RETEST_TRIGGER_VALIDITY_BARS': '2',
@@ -19,9 +22,6 @@
   'SCANNER_ACTIONABILITY_GATE_ENABLED': 'false',
   'KEY_LEVEL_ROLE_AMBIGUITY_GATE_ENABLED': 'false',
   'RANGE_CONTEXT_DISAGREEMENT_GATE_ENABLED': 'false',
-  {# Phase 2H: pin the mapped-zone execution route and its context guard off #}
-  {# for the bot, mirroring root compose and the ctrader-engine default. The  #}
-  {# demo_eval profile would otherwise enable them. Vault values still win.   #}
   'AUTO_TRADE_MAPPED_ZONE_ENABLED': 'false',
   'AUTO_TRADE_MARKET_MAP_GUARD_ENABLED': 'false'
 } %}
