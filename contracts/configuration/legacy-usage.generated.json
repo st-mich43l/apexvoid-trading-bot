@@ -747,21 +747,10 @@
         "attribute": null,
         "canonical_path": "runtime.profile",
         "classification": "facade_supported",
-        "column": 6,
+        "column": 12,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 199,
-        "operation": "canonical_read",
-        "path": "algo-bot/app/autotrade/config_health.py"
-      },
-      {
-        "attribute": null,
-        "canonical_path": "runtime.profile",
-        "classification": "facade_supported",
-        "column": 9,
-        "detail": "direct legacy-backed canonical nested read",
-        "dynamic_names": [],
-        "line": 212,
+        "line": 110,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -772,7 +761,7 @@
         "column": 42,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 244,
+        "line": 179,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -783,7 +772,7 @@
         "column": 33,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 245,
+        "line": 180,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -794,7 +783,7 @@
         "column": 15,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 264,
+        "line": 199,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -805,7 +794,7 @@
         "column": 26,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 265,
+        "line": 200,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -816,7 +805,7 @@
         "column": 15,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 266,
+        "line": 201,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -827,7 +816,7 @@
         "column": 27,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 267,
+        "line": 202,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -838,7 +827,7 @@
         "column": 27,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 268,
+        "line": 203,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -849,7 +838,7 @@
         "column": 24,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 271,
+        "line": 206,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -860,7 +849,7 @@
         "column": 20,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 272,
+        "line": 207,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -871,7 +860,7 @@
         "column": 24,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 274,
+        "line": 209,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -882,7 +871,7 @@
         "column": 16,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 275,
+        "line": 210,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -893,7 +882,7 @@
         "column": 20,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 276,
+        "line": 211,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -904,7 +893,7 @@
         "column": 31,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 277,
+        "line": 212,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -915,7 +904,7 @@
         "column": 6,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 279,
+        "line": 214,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -926,7 +915,7 @@
         "column": 31,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 281,
+        "line": 216,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -937,7 +926,7 @@
         "column": 43,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 283,
+        "line": 218,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -948,7 +937,7 @@
         "column": 33,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 285,
+        "line": 220,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -959,7 +948,7 @@
         "column": 21,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 288,
+        "line": 223,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -970,7 +959,7 @@
         "column": 33,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 289,
+        "line": 224,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -981,7 +970,7 @@
         "column": 30,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 290,
+        "line": 225,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -992,7 +981,7 @@
         "column": 34,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 291,
+        "line": 226,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -1003,7 +992,7 @@
         "column": 28,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 292,
+        "line": 227,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -1014,7 +1003,7 @@
         "column": 27,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 293,
+        "line": 228,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -1025,7 +1014,7 @@
         "column": 27,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 294,
+        "line": 229,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -1036,7 +1025,7 @@
         "column": 32,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 295,
+        "line": 230,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -1047,7 +1036,7 @@
         "column": 23,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 299,
+        "line": 234,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -1058,7 +1047,7 @@
         "column": 6,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 301,
+        "line": 236,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -1069,7 +1058,7 @@
         "column": 6,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 304,
+        "line": 239,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -1080,7 +1069,7 @@
         "column": 28,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 306,
+        "line": 241,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -1091,7 +1080,7 @@
         "column": 18,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 307,
+        "line": 242,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -1102,7 +1091,7 @@
         "column": 6,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 309,
+        "line": 244,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -1113,7 +1102,7 @@
         "column": 29,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 311,
+        "line": 246,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -1124,7 +1113,7 @@
         "column": 22,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 312,
+        "line": 247,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -1135,7 +1124,7 @@
         "column": 17,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 314,
+        "line": 249,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -1146,7 +1135,7 @@
         "column": 21,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 315,
+        "line": 250,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -1157,7 +1146,7 @@
         "column": 21,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 316,
+        "line": 251,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -1168,7 +1157,7 @@
         "column": 27,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 317,
+        "line": 252,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -1179,7 +1168,7 @@
         "column": 6,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 319,
+        "line": 254,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -1190,7 +1179,7 @@
         "column": 31,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 321,
+        "line": 256,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -1201,7 +1190,7 @@
         "column": 30,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 322,
+        "line": 257,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -1212,7 +1201,7 @@
         "column": 6,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 324,
+        "line": 259,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -1223,7 +1212,7 @@
         "column": 6,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 327,
+        "line": 262,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -1234,7 +1223,7 @@
         "column": 24,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 329,
+        "line": 264,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -1245,7 +1234,7 @@
         "column": 22,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 330,
+        "line": 265,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -1256,7 +1245,7 @@
         "column": 24,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 331,
+        "line": 266,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -1267,7 +1256,7 @@
         "column": 6,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 333,
+        "line": 268,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -1278,7 +1267,7 @@
         "column": 26,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 335,
+        "line": 270,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -1289,7 +1278,7 @@
         "column": 22,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 336,
+        "line": 271,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -1300,7 +1289,7 @@
         "column": 7,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 338,
+        "line": 273,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -1311,7 +1300,7 @@
         "column": 28,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 339,
+        "line": 274,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -1322,7 +1311,7 @@
         "column": 6,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 343,
+        "line": 278,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -1333,7 +1322,7 @@
         "column": 6,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 346,
+        "line": 281,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -1344,7 +1333,7 @@
         "column": 29,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 348,
+        "line": 283,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -1355,7 +1344,7 @@
         "column": 27,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 349,
+        "line": 284,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -1366,7 +1355,7 @@
         "column": 6,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 351,
+        "line": 286,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -1377,7 +1366,7 @@
         "column": 6,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 354,
+        "line": 289,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -1388,7 +1377,7 @@
         "column": 6,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 357,
+        "line": 292,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -1399,7 +1388,7 @@
         "column": 6,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 360,
+        "line": 295,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -1410,7 +1399,7 @@
         "column": 6,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 363,
+        "line": 298,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -1421,7 +1410,7 @@
         "column": 6,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 366,
+        "line": 301,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -1432,7 +1421,7 @@
         "column": 21,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 368,
+        "line": 303,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -1443,7 +1432,7 @@
         "column": 25,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 370,
+        "line": 305,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -1454,7 +1443,7 @@
         "column": 19,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 371,
+        "line": 306,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -1465,7 +1454,7 @@
         "column": 28,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 372,
+        "line": 307,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -1476,7 +1465,7 @@
         "column": 6,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 374,
+        "line": 309,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -1487,7 +1476,7 @@
         "column": 30,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 376,
+        "line": 311,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -1498,7 +1487,7 @@
         "column": 6,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 378,
+        "line": 313,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -1509,7 +1498,7 @@
         "column": 15,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 611,
+        "line": 544,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -1520,7 +1509,7 @@
         "column": 4,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 617,
+        "line": 550,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -1531,7 +1520,7 @@
         "column": 17,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 622,
+        "line": 555,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -1542,7 +1531,7 @@
         "column": 20,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 625,
+        "line": 558,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/config_health.py"
       },
@@ -1564,7 +1553,7 @@
         "column": 4,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 1612,
+        "line": 1647,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/delivery.py"
       },
@@ -1575,7 +1564,7 @@
         "column": 18,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 1883,
+        "line": 1918,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/delivery.py"
       },
@@ -1586,7 +1575,7 @@
         "column": 11,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 1898,
+        "line": 1933,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/delivery.py"
       },
@@ -1597,7 +1586,7 @@
         "column": 7,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 1900,
+        "line": 1935,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/delivery.py"
       },
@@ -1608,7 +1597,7 @@
         "column": 7,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 1906,
+        "line": 1941,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/delivery.py"
       },
@@ -1619,7 +1608,7 @@
         "column": 5,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 1913,
+        "line": 1948,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/delivery.py"
       },
@@ -1630,7 +1619,7 @@
         "column": 5,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 2000,
+        "line": 2035,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/delivery.py"
       },
@@ -1641,7 +1630,7 @@
         "column": 6,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 2032,
+        "line": 2067,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/delivery.py"
       },
@@ -1652,7 +1641,7 @@
         "column": 6,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 2033,
+        "line": 2068,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/delivery.py"
       },
@@ -1663,7 +1652,7 @@
         "column": 6,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 2034,
+        "line": 2069,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/delivery.py"
       },
@@ -1674,7 +1663,7 @@
         "column": 6,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 2035,
+        "line": 2070,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/delivery.py"
       },
@@ -1685,7 +1674,7 @@
         "column": 7,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 2279,
+        "line": 2314,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/delivery.py"
       },
@@ -1696,7 +1685,7 @@
         "column": 16,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 2282,
+        "line": 2317,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/delivery.py"
       },
@@ -1707,7 +1696,7 @@
         "column": 6,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 2384,
+        "line": 2419,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/delivery.py"
       },
@@ -1718,7 +1707,7 @@
         "column": 9,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 2399,
+        "line": 2434,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/delivery.py"
       },
@@ -1729,7 +1718,7 @@
         "column": 8,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 2423,
+        "line": 2458,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/delivery.py"
       },
@@ -1740,7 +1729,7 @@
         "column": 11,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 2424,
+        "line": 2459,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/delivery.py"
       },
@@ -1751,7 +1740,7 @@
         "column": 12,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 2428,
+        "line": 2463,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/delivery.py"
       },
@@ -1861,7 +1850,7 @@
         "column": 11,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 297,
+        "line": 298,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/setup_card.py"
       },
@@ -1872,7 +1861,7 @@
         "column": 19,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 398,
+        "line": 399,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/setup_card.py"
       },
@@ -1883,7 +1872,7 @@
         "column": 11,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 410,
+        "line": 411,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/setup_card.py"
       },
@@ -1894,7 +1883,7 @@
         "column": 11,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 429,
+        "line": 430,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/setup_card.py"
       },
@@ -1905,7 +1894,7 @@
         "column": 9,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 1100,
+        "line": 1103,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/setup_card.py"
       },
@@ -1916,7 +1905,7 @@
         "column": 19,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 1138,
+        "line": 1133,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/setup_card.py"
       },
@@ -1927,7 +1916,7 @@
         "column": 17,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 1167,
+        "line": 1162,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/setup_card.py"
       },
@@ -1971,7 +1960,7 @@
         "column": 26,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 229,
+        "line": 232,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/strategy_match_ready.py"
       },
@@ -3478,7 +3467,7 @@
         "column": 9,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 758,
+        "line": 756,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/zone_execution_cutover.py"
       },
@@ -4590,7 +4579,7 @@
     "method_calls": [],
     "type_dependencies": []
   },
-  "source_fingerprint": "da113ebba2d4845263f43512dcd2b891ed276e20bdaebd59331f842e5df52a32",
+  "source_fingerprint": "8cd28851fdcf1c290e4008926f3a5b33648f9a90bd846efdd7c54c7c2c3cae9b",
   "tests": {
     "attribute_deletions": [],
     "attribute_reads": [
@@ -6209,7 +6198,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 1429,
+        "line": 1444,
         "operation": "setattr",
         "path": "algo-bot/tests/test_auto_trade_ops.py"
       },
@@ -6220,7 +6209,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 1729,
+        "line": 1744,
         "operation": "setattr",
         "path": "algo-bot/tests/test_auto_trade_ops.py"
       },
@@ -6231,7 +6220,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 1730,
+        "line": 1745,
         "operation": "setattr",
         "path": "algo-bot/tests/test_auto_trade_ops.py"
       },
@@ -6242,7 +6231,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 1731,
+        "line": 1746,
         "operation": "setattr",
         "path": "algo-bot/tests/test_auto_trade_ops.py"
       },
@@ -6253,7 +6242,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 1934,
+        "line": 1949,
         "operation": "setattr",
         "path": "algo-bot/tests/test_auto_trade_ops.py"
       },
@@ -6264,7 +6253,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 1935,
+        "line": 1950,
         "operation": "setattr",
         "path": "algo-bot/tests/test_auto_trade_ops.py"
       },
@@ -6275,7 +6264,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 1960,
+        "line": 1975,
         "operation": "setattr",
         "path": "algo-bot/tests/test_auto_trade_ops.py"
       },
@@ -6286,7 +6275,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 1961,
+        "line": 1976,
         "operation": "setattr",
         "path": "algo-bot/tests/test_auto_trade_ops.py"
       },
@@ -6297,7 +6286,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 1962,
+        "line": 1977,
         "operation": "setattr",
         "path": "algo-bot/tests/test_auto_trade_ops.py"
       },
@@ -6308,7 +6297,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 2015,
+        "line": 2030,
         "operation": "setattr",
         "path": "algo-bot/tests/test_auto_trade_ops.py"
       },
@@ -6319,7 +6308,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 2016,
+        "line": 2031,
         "operation": "setattr",
         "path": "algo-bot/tests/test_auto_trade_ops.py"
       },
@@ -6330,7 +6319,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 2046,
+        "line": 2061,
         "operation": "setattr",
         "path": "algo-bot/tests/test_auto_trade_ops.py"
       },
@@ -6341,7 +6330,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 2047,
+        "line": 2062,
         "operation": "setattr",
         "path": "algo-bot/tests/test_auto_trade_ops.py"
       },
@@ -6352,7 +6341,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 2072,
+        "line": 2087,
         "operation": "setattr",
         "path": "algo-bot/tests/test_auto_trade_ops.py"
       },
@@ -6363,7 +6352,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 2073,
+        "line": 2088,
         "operation": "setattr",
         "path": "algo-bot/tests/test_auto_trade_ops.py"
       },
@@ -6374,7 +6363,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 2107,
+        "line": 2122,
         "operation": "setattr",
         "path": "algo-bot/tests/test_auto_trade_ops.py"
       },
@@ -6385,7 +6374,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 2108,
+        "line": 2123,
         "operation": "setattr",
         "path": "algo-bot/tests/test_auto_trade_ops.py"
       },
@@ -6396,7 +6385,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 2126,
+        "line": 2141,
         "operation": "setattr",
         "path": "algo-bot/tests/test_auto_trade_ops.py"
       },
@@ -6407,7 +6396,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 2127,
+        "line": 2142,
         "operation": "setattr",
         "path": "algo-bot/tests/test_auto_trade_ops.py"
       },
@@ -6418,7 +6407,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 2146,
+        "line": 2161,
         "operation": "setattr",
         "path": "algo-bot/tests/test_auto_trade_ops.py"
       },
@@ -6429,7 +6418,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 2175,
+        "line": 2190,
         "operation": "setattr",
         "path": "algo-bot/tests/test_auto_trade_ops.py"
       },
@@ -6440,7 +6429,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 2195,
+        "line": 2210,
         "operation": "setattr",
         "path": "algo-bot/tests/test_auto_trade_ops.py"
       },
@@ -6451,7 +6440,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 2219,
+        "line": 2234,
         "operation": "setattr",
         "path": "algo-bot/tests/test_auto_trade_ops.py"
       },
@@ -6462,7 +6451,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 2220,
+        "line": 2235,
         "operation": "setattr",
         "path": "algo-bot/tests/test_auto_trade_ops.py"
       },
@@ -6473,7 +6462,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 2284,
+        "line": 2299,
         "operation": "setattr",
         "path": "algo-bot/tests/test_auto_trade_ops.py"
       },
@@ -6484,7 +6473,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 2285,
+        "line": 2300,
         "operation": "setattr",
         "path": "algo-bot/tests/test_auto_trade_ops.py"
       },
@@ -6495,7 +6484,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 2322,
+        "line": 2337,
         "operation": "setattr",
         "path": "algo-bot/tests/test_auto_trade_ops.py"
       },
@@ -6506,7 +6495,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 2323,
+        "line": 2338,
         "operation": "setattr",
         "path": "algo-bot/tests/test_auto_trade_ops.py"
       },

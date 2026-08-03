@@ -7,6 +7,7 @@ import hashlib
 import json
 import math
 import os
+import socket
 import time
 from typing import Any, Mapping
 
@@ -110,7 +111,9 @@ def _text(value: object) -> str:
 
 
 def ready_consumer_name() -> str:
-  host = os.getenv("HOSTNAME", "algo-worker").strip() or "algo-worker"
+  # ``socket.gethostname()`` returns the container hostname without an ambient
+  # ENV read; fall back to a stable name when it is empty/unavailable.
+  host = (socket.gethostname() or "algo-worker").strip() or "algo-worker"
   return f"{host}:{os.getpid()}"
 
 

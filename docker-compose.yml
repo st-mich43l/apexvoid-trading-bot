@@ -1,6 +1,6 @@
 name: apexvoid-trading-bot
 
-x-auto-trade-environment: &auto-trade-environment
+x-ctrader-auto-trade-environment: &ctrader-auto-trade-environment
   AUTO_TRADE_PROFILE: ${AUTO_TRADE_PROFILE:-demo_eval}
   AUTO_TRADE_ENABLED: ${AUTO_TRADE_ENABLED:-true}
   AUTO_TRADE_DRY_RUN: ${AUTO_TRADE_DRY_RUN:-false}
@@ -139,7 +139,7 @@ services:
     restart: unless-stopped
     env_file: .env
     environment:
-      <<: *auto-trade-environment
+      <<: *ctrader-auto-trade-environment
       LOG_DIR: ${LOG_DIR:-/var/log/apexvoid}
       LOG_RETENTION_DAYS: ${LOG_RETENTION_DAYS:-14}
       LOG_FILE_ENABLED: ${LOG_FILE_ENABLED:-true}
@@ -166,8 +166,16 @@ services:
     restart: unless-stopped
     env_file: .env
     environment:
-      <<: *auto-trade-environment
+      # Phase 2H: the bot no longer inherits the cTrader auto-trade anchor. The
+      # Python configuration schema defaults plus AUTO_TRADE_PROFILE=demo_eval
+      # reproduce every value the anchor previously injected (proven
+      # byte-identical for both the legacy and canonical authorities). Only the
+      # mapped-zone execution route and its context guard are pinned off here
+      # explicitly, because the demo_eval profile would otherwise enable them.
       APEXVOID_CONFIG_AUTHORITY: ${APEXVOID_CONFIG_AUTHORITY:-legacy}
+      AUTO_TRADE_PROFILE: ${AUTO_TRADE_PROFILE:-demo_eval}
+      AUTO_TRADE_MAPPED_ZONE_ENABLED: ${AUTO_TRADE_MAPPED_ZONE_ENABLED:-false}
+      AUTO_TRADE_MARKET_MAP_GUARD_ENABLED: ${AUTO_TRADE_MARKET_MAP_GUARD_ENABLED:-${AUTO_TRADE_MAPPED_ZONE_ENABLED:-false}}
       LOG_DIR: ${LOG_DIR:-/var/log/apexvoid}
       LOG_RETENTION_DAYS: ${LOG_RETENTION_DAYS:-14}
       LOG_FILE_ENABLED: ${LOG_FILE_ENABLED:-true}
