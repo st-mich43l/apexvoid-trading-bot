@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any, Literal
+from dataclasses import dataclass
+from typing import Literal
 
 
 PublicationStatus = Literal[
@@ -80,28 +80,6 @@ class ExecutionIntent:
 
 
 @dataclass(frozen=True)
-class ExecutionPreflightDecision:
-  """Side-effect-free execution decision produced before arbitration."""
-
-  intent: ExecutionIntent
-  executable: bool
-  terminal: bool
-  status: str
-  stage: str
-  reason_code: str
-  message: str
-  measured: dict[str, Any] = field(default_factory=dict)
-  policy: Any | None = None
-  warnings: tuple[str, ...] = ()
-  order_type_preference: str = "either"
-  entry_distribution: str = "single"
-  effective_risk_multiplier: float = 1.0
-  target_model: str = "fill_relative"
-  proposed_group_id: str | None = None
-  subject: Any | None = None
-
-
-@dataclass(frozen=True)
 class ArbitrationResult:
   ordered: tuple[ExecutionIntent, ...]
   suppressed: tuple[ExecutionIntent, ...]
@@ -166,16 +144,4 @@ def arbitrate_execution_intents(
     selected_direction,
     suppressed,
     "ranked_single_direction",
-  )
-
-
-def arbitrate_preflight_decisions(
-  decisions: list[ExecutionPreflightDecision],
-  *,
-  conflict_margin: float = 1.0,
-) -> ArbitrationResult:
-  """Arbitrate only intents proven executable by side-effect-free preflight."""
-  return arbitrate_execution_intents(
-    [decision.intent for decision in decisions if decision.executable],
-    conflict_margin=conflict_margin,
   )

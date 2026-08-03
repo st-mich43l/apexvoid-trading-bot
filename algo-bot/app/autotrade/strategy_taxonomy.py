@@ -13,6 +13,8 @@ ZONE_STRATEGIES = frozenset({
   "Supply Zone",
   # Canonical live name (side is BUY/SELL, not the strategy label):
   "Zone Reaction",
+  # Broken key-level role flip (source flip_zone); same Zone family:
+  "Flip Zone",
   # production legacy names that must remain Zone-family, NOT Reaction:
   "Demand Zone Reaction",
   "Supply Zone Reaction",
@@ -54,13 +56,24 @@ def is_range_strategy(name: str) -> bool:
   return str(name or "") in RANGE_STRATEGIES
 
 
-def bypasses_opposing_structure_gates(name: str) -> bool:
-  """Range/scalp may enter inside HTF opposing structure.
+def bypasses_opposing_structure_gates(
+  name: str,
+  *,
+  full_take_profit_pips: int | float | None = None,
+) -> bool:
+  """Range/scalp may enter inside HTF opposing only when target room fits.
 
-  Native range room (select_range_target / EQ room, typically ≥20p ladder
-  fit) remains the room gate — HTF opposing containment does not veto.
+  Requires a successful native range target (full_take_profit_pips from
+  select_range_target / EQ room). Ladder floor is currently 15 pips — a
+  fitted 15p target is enough to open. Without a fitted target, opposing
+  gates still apply.
   """
-  return is_range_strategy(name)
+  if not is_range_strategy(name):
+    return False
+  try:
+    return full_take_profit_pips is not None and float(full_take_profit_pips) > 0
+  except (TypeError, ValueError):
+    return False
 
 
 def canonical_family(name: str) -> str:

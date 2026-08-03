@@ -16,6 +16,7 @@ from app.autotrade.protective_stop import (
   primary_tp_pips_from_match,
   stop_bounds_for_reaction_room,
 )
+from app.autotrade.strategy_taxonomy import bypasses_opposing_structure_gates
 
 GUARD_MODE_OBSERVE = "observe"
 GUARD_MODE_BALANCED = "balanced"
@@ -378,6 +379,7 @@ _STRATEGY_FAMILY = {
   "Snap-Back": FAMILY_LIQUIDITY_REVERSAL,
   "Key Level Reaction": FAMILY_KEY_LEVEL,
   "Zone Reaction": FAMILY_SUPPLY_DEMAND,
+  "Flip Zone": FAMILY_SUPPLY_DEMAND,
   # Legacy display names (kept for open plans / historical events):
   "Demand Zone Reaction": FAMILY_SUPPLY_DEMAND,
   "Supply Zone Reaction": FAMILY_SUPPLY_DEMAND,
@@ -773,6 +775,13 @@ def evaluate_execution_policy(
       else getattr(match, "opposing_zone_id", None)
       or getattr(match, "zone_id", None)
     )
+    # Scalp with fitted target room ignores HTF opposing stop push/reject;
+    # normal min/max envelope still applies via stop_bounds_for_reaction_room.
+    if bypasses_opposing_structure_gates(
+      strategy_name,
+      full_take_profit_pips=getattr(match, "full_take_profit_pips", None),
+    ):
+      zone_low = zone_high = zone_id = None
     opposing_zone = opposing_zone_context_from_values(
       opposing_zone_low=zone_low,
       opposing_zone_high=zone_high,

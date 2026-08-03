@@ -112,8 +112,14 @@ class ConfirmationPolicy:
   allow_same_cycle_publish: bool
   require_quote_inside_zone: bool
   reaction_family: bool
+  zone_family: bool
   metadata_valid: bool
   reason_code: str
+
+  @property
+  def m5_authoritative_contract(self) -> bool:
+    """True for Reaction or Zone confirmation timing (not product taxonomy)."""
+    return self.reaction_family or self.zone_family
 
 
 @dataclass(frozen=True)
@@ -265,12 +271,19 @@ def confirmation_policy_for(match: Any) -> ConfirmationPolicy:
       allow_same_cycle_publish=True,
       require_quote_inside_zone=False,
       reaction_family=False,
+      zone_family=False,
       metadata_valid=True,
       reason_code="momentum_continuation",
     )
-  # reaction_family here means "M5-authoritative confirmation contract",
-  # including Zone (supply_demand) — not product taxonomy Reaction.
-  m5_authoritative_family = (
+  zone_family = family in _ZONE_CONFIRMATION_FAMILIES
+  reaction_family = (
+    not zone_family
+    and (
+      strategy in _REACTION_STRATEGIES
+      or family in _M5_AUTHORITATIVE_REACTION_FAMILIES
+    )
+  )
+  m5_authoritative_family = zone_family or reaction_family or (
     strategy in _REACTION_STRATEGIES or family in _M5_AUTHORITATIVE_FAMILIES
   )
   if not m5_authoritative_family:
@@ -280,6 +293,7 @@ def confirmation_policy_for(match: Any) -> ConfirmationPolicy:
       allow_same_cycle_publish=False,
       require_quote_inside_zone=False,
       reaction_family=False,
+      zone_family=False,
       metadata_valid=True,
       reason_code="non_reaction_m1_required",
     )
@@ -303,7 +317,8 @@ def confirmation_policy_for(match: Any) -> ConfirmationPolicy:
     m1_required_on_retest=False,
     allow_same_cycle_publish=metadata_valid,
     require_quote_inside_zone=True,
-    reaction_family=True,
+    reaction_family=reaction_family,
+    zone_family=zone_family,
     metadata_valid=metadata_valid,
     reason_code=(
       "m5_authoritative"
