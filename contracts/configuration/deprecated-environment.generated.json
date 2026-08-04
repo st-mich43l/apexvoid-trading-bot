@@ -127,8 +127,9 @@
       "type": "Optional[int]"
     }
   ],
-  "catalog_version": 1,
+  "catalog_version": 2,
+  "configuration_contract_fingerprint_sha256": "1dab7cdbe9266e96d6b9e2aa553d1848ab9e0cd42d8626385ebc2213a3bc6eac",
   "count": 21,
-  "source_fingerprint_sha256": "bb24affb47b297c91637a83880cd2043e59a4cff0b5b17ca2d02fb4952fb54f0",
+  "source_fingerprint_sha256": "1dab7cdbe9266e96d6b9e2aa553d1848ab9e0cd42d8626385ebc2213a3bc6eac",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }
