@@ -1937,6 +1937,12 @@ async def auto_trade_status_text() -> str:
   position_count = 0
   async for _ in client.scan_iter(match="auto_trade:position:*"):
     position_count += 1
+  try:
+    from app.persistence.store import count_pending_algo_signals
+    manual_pending = await count_pending_algo_signals()
+  except Exception:
+    log.exception("algo_status manual algo pending count failed")
+    manual_pending = 0
   primary_symbol = next(
     (
       item.strip().upper()
@@ -1953,6 +1959,19 @@ async def auto_trade_status_text() -> str:
   last_route = await _json_key(
     client, f"auto_trade:last_route_outcome:{primary_symbol}"
   )
+  spot = await _json_key(client, f"price:{primary_symbol}:spot")
+  cooldown_line = None
+  for direction in ("BUY", "SELL"):
+    cooldown_key = f"auto_trade:zone:cooldown:{primary_symbol}:{direction}"
+    cooldown = await _json_key(client, cooldown_key)
+    if (
+      cooldown.get("reason") == "stop_loss"
+      and cooldown.get("confidence") == "confirmed"
+    ):
+      ttl = await client.ttl(cooldown_key)
+      if isinstance(ttl, int) and ttl > 0:
+        cooldown_line = f"🧊 Cooldown <b>{direction}</b> · {max(1, ttl // 60)}m left"
+        break
   mode = (
     "disabled"
     if not runtime_config.runtime.auto_trade.enabled
@@ -2037,26 +2056,60 @@ async def auto_trade_status_text() -> str:
   ready = bool((readiness or {}).get("ready"))
   group_ids = executor.get("group_ids") if isinstance(executor, dict) else None
   group_count = len(group_ids) if isinstance(group_ids, list) else 0
+  state_icon = "⏸️" if paused else "▶️"
   lines = [
     "🤖 <b>Algo bot</b>",
-    f"{escape(mode)} · <b>{state}</b> · {escape(profile)}",
-    f"Open <b>{position_count}</b> · groups <b>{group_count}</b> · today <b>{daily}</b>",
+    f"{state_icon} {escape(mode)} · <b>{state}</b> · {escape(profile)}",
+    f"📊 Open <b>{position_count}</b> · groups <b>{group_count}</b> · "
+    f"today <b>{daily}</b> · algo <b>{manual_pending}</b>",
   ]
+  try:
+    bid = float(spot["bid"])
+    ask = float(spot["ask"])
+  except (KeyError, TypeError, ValueError):
+    pass
+  else:
+    from app.core.symbols import pip_for
+    pip = pip_for(primary_symbol) or 0.0
+    spread = f"{(ask - bid) / pip:.1f}p" if pip else f"{ask - bid:.2f}"
+    lines.append(
+      f"💹 {escape(primary_symbol)} <b>{bid:,.2f}</b>/<b>{ask:,.2f}</b> · "
+      f"spread {spread}"
+    )
   today_line = await _today_algo_scorecard_line()
   if today_line:
     lines.append(today_line)
-  lines.append(f"{escape(selected_text)} · {escape(execution_state)}")
-  health_bits = [f"Config <b>{escape(config_state)}</b>", f"ready <b>{ready}</b>"]
+  lines.append(f"🎯 {escape(selected_text)} · {escape(execution_state)}")
+  config_icon = "🩺" if config_state == "ok" else "⚠️"
+  ready_icon = "🟢" if ready else "🔴"
+  health_bits = [
+    f"{config_icon} Config <b>{escape(config_state)}</b>",
+    f"{ready_icon} ready <b>{ready}</b>",
+  ]
   if regime:
-    health_bits.insert(0, f"Regime <b>{escape(regime)}</b>")
+    health_bits.insert(0, f"🧭 Regime <b>{escape(regime)}</b>")
   lines.append(" · ".join(health_bits))
+  if cooldown_line:
+    lines.append(cooldown_line)
+  engine_updated_at = executor.get("updated_at") if isinstance(executor, dict) else None
+  if engine_updated_at:
+    try:
+      age = int(datetime.now(timezone.utc).timestamp()) - int(engine_updated_at)
+    except (TypeError, ValueError):
+      age = 0
+    # Reconcile refreshes this snapshot roughly every ~15s while the
+    # engine's alive - anything well past that means the process is
+    # stuck, crashed, or lost its broker connection with no other signal
+    # of that anywhere in /algo_status today.
+    if age > 60:
+      lines.append(f"🔌 Engine stale · last seen {max(1, age // 60)}m ago")
   open_book = await _open_v7_book_lines(client)
   lines.extend(open_book)
   route_line = _compact_route_line(last_route)
   if route_line:
-    lines.append(f"Route: {escape(route_line)}")
+    lines.append(f"🧵 Route: {escape(route_line)}")
   if why:
-    lines.append(f"Why: {escape(why)}")
+    lines.append(f"❓ Why: {escape(why)}")
   if runtime_config.runtime.auto_trade.enabled:
     # Supervisor marks programming bugs as fatal (Redis blips stay retrying).
     try:
@@ -2067,9 +2120,9 @@ async def auto_trade_status_text() -> str:
     for item in fatals[:3]:
       name = escape(str(item.get("component") or "component"))
       err = escape(str(item.get("error") or "fatal")[:80])
-      lines.append(f"⚠️ <b>{name}</b> fatal · {err}")
+      lines.append(f"🔥 <b>{name}</b> fatal · {err}")
     if len(fatals) > 3:
-      lines.append(f"+{len(fatals) - 3} more fatal components")
+      lines.append(f"➕ +{len(fatals) - 3} more fatal components")
   text = "\n".join(lines)
   # Soft budget for the owner DM; hard clip stays in the handler at 4000.
   if len(text) > 1500:
@@ -2104,8 +2157,10 @@ async def _today_algo_scorecard_line() -> str | None:
   wins = int(algo.get("wins") or 0)
   losses = int(algo.get("losses") or 0)
   net = algo.get("total_pips") or 0
+  net_icon = "🟢" if float(net or 0) >= 0 else "🔴"
   return (
-    f"Today · <b>{wins}W/{losses}L</b> · net <b>{escape(_signed_p(net))}</b>"
+    f"{net_icon} Today · <b>{wins}W/{losses}L</b> · "
+    f"net <b>{escape(_signed_p(net))}</b>"
   )
 
 
@@ -2160,13 +2215,14 @@ async def _open_v7_book_lines(client, *, limit: int = 3) -> list[str]:
         "algo_status open-book runtime read failed plan_id=%s",
         item.plan_id,
       )
+    direction_icon = "🟢" if str(item.direction).upper() == "BUY" else "🔴"
     lines.append(
-      f"Open: <b>{escape(item.direction)}</b> · "
+      f"{direction_icon} Open: <b>{escape(item.direction)}</b> · "
       f"{escape(setup)} · {escape(stage_label)}"
     )
   extra = len(v7) - limit
   if extra > 0:
-    lines.append(f"+{extra} more")
+    lines.append(f"➕ +{extra} more")
   return lines
 
 

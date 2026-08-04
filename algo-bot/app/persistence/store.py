@@ -982,6 +982,16 @@ async def expire_unfilled_pending_signals() -> list[dict]:
   return [_decode_signal(row) for row in rows]
 
 
+async def count_pending_algo_signals() -> int:
+  """Manual /algo orders still resting at the broker, not yet resolved."""
+  async with _connect() as db:
+    return int(await db.fetchval(
+      "SELECT COUNT(*) FROM manual_signals "
+      "WHERE execution_mode = 'algo' AND status = 'open' "
+      "AND execution_status = 'pending'",
+    ))
+
+
 def _decode_signal(row) -> dict:
   """Convert one signal row to a dict and deserialize its JSON fields."""
   result = dict(row)
