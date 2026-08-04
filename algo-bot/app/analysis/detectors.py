@@ -248,7 +248,7 @@ def detector_settings_from(config: object | None = None) -> DetectorSettings:
   market_data = config.market_data
   actionability = config.actionability
   execution = config.execution
-  # ``strategies.zone.flip.enabled`` has no legacy_attr, so the
+  # ``strategies.zone.flip.enabled`` is algorithm-owned without ENV binding, so the
   # LegacyCanonicalConfigView cannot expose it under the legacy authority.
   # Preserve the pre-migration default (True) in that path.
   try:
