@@ -88,7 +88,18 @@ public sealed record TradePlanLegRuntimeState(
   bool StopVerified = false,
   string Stage = TradePlanLegStages.Planned,
   string? LastError = null,
-  int Revision = 0
+  int Revision = 0,
+  // Set the first poll a submitted leg's BrokerOrderId is missing from the
+  // broker's pending-order snapshot with no matching position yet - either
+  // a same-instant fill whose position hasn't landed in this poll's
+  // snapshot (self-resolves next poll), or the owner cancelled it directly
+  // on the broker platform. Cleared the moment a position or the pending
+  // order reappears. Only once this persists across a follow-up poll does
+  // ReconcileSubmittedLegsAsync treat it as a real cancel - see the
+  // 2026-08-04 incident (a manually-cancelled Flip Zone limit-ladder leg
+  // left its plan stuck reporting "submitted" forever, with Telegram never
+  // told anything happened).
+  long? PendingGoneSinceUnixSeconds = null
 );
 
 public sealed record TradePlanRuntimeState(
@@ -520,6 +531,11 @@ public sealed class TradePlanRuntime(
   private static string NotifyDedupKey(string planId, string eventKey) =>
     $"auto_trade:v7_notify:{planId}:{eventKey}";
   private static readonly TimeSpan NotifyDedupTtl = TimeSpan.FromDays(7);
+  // How long a submitted leg's BrokerOrderId must stay missing from the
+  // broker's pending-order snapshot (no matching position either) before
+  // ReconcileSubmittedLegsAsync treats it as a real cancel rather than a
+  // same-instant fill whose position hasn't landed in this poll yet.
+  private const long OrphanPendingOrderConfirmSeconds = 10;
 
   public IReadOnlyCollection<TradePlanRuntimeState> TrackedStates => _statesById.Values;
 
@@ -1673,6 +1689,11 @@ public sealed class TradePlanRuntime(
         }
         if (pendingById.ContainsKey(orderId))
         {
+          if (leg.PendingGoneSinceUnixSeconds is not null)
+          {
+            legs[i] = leg with { PendingGoneSinceUnixSeconds = null };
+            changed = true;
+          }
           continue;
         }
         if (leg.BrokerPositionId is not null)
@@ -1680,13 +1701,40 @@ public sealed class TradePlanRuntime(
           // Already adopted via position match; drop the stale pending id.
           if (leg.Stage == TradePlanLegStages.Pending)
           {
-            legs[i] = leg with { Stage = TradePlanLegStages.Filled };
+            legs[i] = leg with
+            {
+              Stage = TradePlanLegStages.Filled,
+              PendingGoneSinceUnixSeconds = null,
+            };
             changed = true;
           }
           continue;
         }
-        // Order gone and no position yet — leave as pending for another
-        // poll; orphan detection is a later Telegram/classification slice.
+        // Order gone, no matching position: either a same-instant fill
+        // whose position hasn't landed in this poll's snapshot yet (self-
+        // resolves next poll via the position-match loop above), or the
+        // owner cancelled it directly on the broker (23 Aug incident: a
+        // manually-cancelled Flip Zone limit-ladder leg left the plan
+        // stuck reporting "submitted" forever - Telegram was never told).
+        // Require the gap to survive one more poll before treating it as a
+        // real cancel, so a fill's position has a full cycle to appear.
+        if (leg.PendingGoneSinceUnixSeconds is null)
+        {
+          legs[i] = leg with { PendingGoneSinceUnixSeconds = now };
+          changed = true;
+          continue;
+        }
+        if (now - leg.PendingGoneSinceUnixSeconds.Value < OrphanPendingOrderConfirmSeconds)
+        {
+          continue;
+        }
+        legs[i] = leg with
+        {
+          Stage = TradePlanLegStages.Cancelled,
+          BrokerOrderId = null,
+          PendingGoneSinceUnixSeconds = null,
+        };
+        changed = true;
       }
 
       var pendingIds = legs
@@ -1769,6 +1817,30 @@ public sealed class TradePlanRuntime(
             eventKey: $"entry_partial_filled_{string.Join("_", filledLegs)}",
             state: TradePlanGroupStages.PartiallyOpen
           );
+        }
+        else if (
+          changed
+          && state.GroupStage == TradePlanGroupStages.Cancelled
+          && initial.GroupStage != TradePlanGroupStages.Cancelled
+        )
+        {
+          // No leg of this plan ever reached a broker position - the owner
+          // cancelled the pending order(s) directly on the broker platform
+          // (see the OrphanPendingOrderConfirmSeconds comment above). Tell
+          // Telegram so the forming card reflects reality instead of
+          // sitting on "SETUP FORMING" / "submitted" forever, and stop
+          // tracking a plan with nothing left to do.
+          await PublishEventAsync(
+            "plan_cancelled",
+            $"TradePlan V7 cancelled {plan.Analysis.Direction} · "
+              + "owner cancelled the pending order on the broker",
+            plan,
+            cancellationToken,
+            eventKey: "plan_cancelled",
+            state: TradePlanGroupStages.Cancelled
+          );
+          log($"v7 plan cancelled id={state.PlanId} reason=owner_cancelled_on_broker");
+          await ForgetPlanAsync(state.PlanId, cancellationToken);
         }
       }
     }
@@ -2650,12 +2722,39 @@ public sealed class TradePlanRuntime(
     {
       return TradePlanRuntimeStage.Closed;
     }
+    // No leg open or pending and every remaining leg is a terminal
+    // non-fill (cancelled/expired/rejected, none ever reached a broker
+    // position) — there is genuinely nothing left to submit, wait for, or
+    // manage. Reuse Closed rather than adding a new enum value; the
+    // GroupStage string below still distinguishes "never filled, fully
+    // cancelled" from a real fill that later closed.
+    if (legs.All(leg =>
+      leg.Stage is TradePlanLegStages.Cancelled
+        or TradePlanLegStages.Expired
+        or TradePlanLegStages.Rejected
+        or TradePlanLegStages.Closed
+    ))
+    {
+      return TradePlanRuntimeStage.Closed;
+    }
     return TradePlanRuntimeStage.Submitted;
   }
 
   private static string DeriveGroupStage(IReadOnlyList<TradePlanLegRuntimeState> legs)
   {
     var stage = DeriveRuntimeStage(legs);
+    if (
+      stage == TradePlanRuntimeStage.Closed
+      && legs.Count > 0
+      && legs.All(leg => leg.FilledVolume == 0)
+      && legs.Any(leg => leg.Stage == TradePlanLegStages.Cancelled)
+    )
+    {
+      // Never opened at all (no leg ever filled) and at least one leg was
+      // cancelled - distinct from Closed, which implies a real fill that
+      // was later managed/closed with realized pips.
+      return TradePlanGroupStages.Cancelled;
+    }
     return stage switch
     {
       TradePlanRuntimeStage.PartiallyOpen => TradePlanGroupStages.PartiallyOpen,

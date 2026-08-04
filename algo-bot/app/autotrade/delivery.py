@@ -75,6 +75,7 @@ _FORMING_REPLY_PREFERRED_TYPES = frozenset({
   "sl_moved",
   "plan_rejected",
   "plan_expired",
+  "plan_cancelled",
 })
 # "rejected"/"invalidated"/"expired"/"cancelled" never reach render/send at
 # all - see _deliver_auto_trade_event, which deletes the forming card and
@@ -155,6 +156,7 @@ _NOTIFY_TYPES = {
   "sl_moved",
   "plan_rejected",
   "plan_expired",
+  "plan_cancelled",
 }
 
 _V7_NOTIFY_DEDUP_TYPES = frozenset({
@@ -164,6 +166,7 @@ _V7_NOTIFY_DEDUP_TYPES = frozenset({
   "position_closed",
   "plan_rejected",
   "plan_expired",
+  "plan_cancelled",
   "warning",
 })
 
@@ -888,6 +891,7 @@ def render_auto_trade_event(
     "sl_moved": "🛡 <b>GROUP SL MOVED</b>",
     "plan_rejected": "⛔ <b>PLAN REJECTED</b>",
     "plan_expired": "⌛ <b>PLAN EXPIRED</b>",
+    "plan_cancelled": "🚫 <b>PLAN CANCELLED</b>",
   }
   lines = ["🤖 <b>ApexVoid Algo</b>", labels[event_type]]
   if profile == "public":

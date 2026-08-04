@@ -96,8 +96,17 @@ public static class TradePlanExecutionEngine
         "market_watch_missing_zone"
       );
     }
-    var quote = plan.Entry.PriceSide == "ask" ? ask : bid;
-    if (quote < plan.Entry.ZoneLow.Value || quote > plan.Entry.ZoneHigh.Value)
+    // A zone can be narrower than the live spread (23:42 incident: a
+    // 0.40-wide BUY zone, price genuinely traded inside it on the bid side
+    // for a full minute, but the ask-only check below never saw it -
+    // "outside_zone" for the whole 7-minute window despite a real touch).
+    // The zone describes where price reacted, not a single execution side;
+    // fire whenever the current tradable range [bid, ask] overlaps the
+    // zone at all, not only when the single trade-side quote is strictly
+    // contained. A spread wide enough to matter is still caught below by
+    // MaxSpreadTicks - this only stops a normal, tight spread from making
+    // a real zone touch invisible to the ask/bid-only check.
+    if (ask < plan.Entry.ZoneLow.Value || bid > plan.Entry.ZoneHigh.Value)
     {
       return new TradePlanEntryDecision(TradePlanEntryAction.Wait, "outside_zone");
     }
