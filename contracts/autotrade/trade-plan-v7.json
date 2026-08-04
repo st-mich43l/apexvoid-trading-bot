@@ -62,13 +62,19 @@
         "risk": {
           "risk_percent": "1.0",
           "risk_multiplier": "1.0",
-          "max_volume": 1000,
+          "max_volume": 100000,
           "max_group_risk_percent": "2.0"
         },
         "management": {
           "be_after_target_id": "TP1",
           "be_buffer_ticks": 6,
           "never_worsen_stop": true
+        },
+        "sizing": {
+          "mode": "equity_table",
+          "table_version": "owner_equity_v1",
+          "entry_distribution": "single",
+          "leg_ratios": []
         },
         "execution_policy": {
           "allow_market": true,
@@ -139,13 +145,19 @@
         "risk": {
           "risk_percent": "1.0",
           "risk_multiplier": "1.0",
-          "max_volume": 1000,
+          "max_volume": 100000,
           "max_group_risk_percent": "2.0"
         },
         "management": {
           "be_after_target_id": "TP1",
           "be_buffer_ticks": 6,
           "never_worsen_stop": true
+        },
+        "sizing": {
+          "mode": "equity_table",
+          "table_version": "owner_equity_v1",
+          "entry_distribution": "single",
+          "leg_ratios": []
         },
         "execution_policy": {
           "allow_market": false,
@@ -217,13 +229,19 @@
         "risk": {
           "risk_percent": "0.75",
           "risk_multiplier": "1.0",
-          "max_volume": 800,
+          "max_volume": 100000,
           "max_group_risk_percent": "2.0"
         },
         "management": {
           "be_after_target_id": null,
           "be_buffer_ticks": 6,
           "never_worsen_stop": true
+        },
+        "sizing": {
+          "mode": "equity_table",
+          "table_version": "owner_equity_v1",
+          "entry_distribution": "zone_scale",
+          "leg_ratios": ["0.60", "0.40"]
         },
         "execution_policy": {
           "allow_market": false,
