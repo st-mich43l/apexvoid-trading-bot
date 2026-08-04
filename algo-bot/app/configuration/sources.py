@@ -98,7 +98,7 @@ def _input_names(
   spec: FieldSpec, source_kind: SourceKind,
 ) -> tuple[str, ...]:
   entry = spec.entry
-  if source_kind is SourceKind.INIT_VALUE:
+  if source_kind in {SourceKind.INIT_VALUE, SourceKind.CONFIG_FILE}:
     return tuple(dict.fromkeys(filter(None, (
       entry.path,
       entry.canonical_env,

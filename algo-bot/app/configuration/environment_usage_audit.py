@@ -52,6 +52,7 @@ _FILE_CLASSIFICATION: dict[str, str] = {
   "algo-bot/app/configuration/environment_cli.py": SCRIPT_TOOL_ALLOWED,
   "algo-bot/app/configuration/generate.py": SCRIPT_TOOL_ALLOWED,
   "algo-bot/app/configuration/diagnostic_cli.py": SCRIPT_TOOL_ALLOWED,
+  "algo-bot/app/configuration/migrate_env_to_config.py": SCRIPT_TOOL_ALLOWED,
   "algo-bot/app/configuration/phase2i_completion_gate.py": SCRIPT_TOOL_ALLOWED,
   "algo-bot/app/configuration/phase2i_inventory.py": SCRIPT_TOOL_ALLOWED,
 }

@@ -27,11 +27,12 @@
   "runtime_root": "PythonRuntimeConfig",
   "secret_count": 9,
   "shared_count": 95,
-  "source_policy": "schema>profile>file_secrets>dotenv>process_env>init",
+  "source_policy": "schema>profile>file_secrets>config_file>dotenv>process_env>init",
   "source_precedence": [
     "schema_default",
     "profile",
     "file_secret",
+    "config_file",
     "dotenv",
     "process_environment",
     "init_value",

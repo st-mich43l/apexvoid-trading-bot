@@ -1,0 +1,319 @@
+# Example / local trading-bot CONFIG_FILE.
+# Production is rendered by ansible from cleartext vars onto the host.
+# Point APEXVOID_CONFIG_FILE at this path (compose mounts it at /config/trading-bot.yml).
+# Secrets stay in .env / secrets/trading-bot.env — never in this file.
+
+actionability:
+  counter_bias:
+    allowed: true
+  gates:
+    htf_veto_enabled: true
+    market_map_guard_enabled: false
+    min_confluence: 2
+    news_guard_minutes: 30
+    opposing_barrier_veto_enabled: true
+    range_context_disagreement_gate_enabled: false
+  key_level_role:
+    enabled: false
+  overlapping_zones:
+    veto_enabled: true
+  scanner_gates:
+    actionability_gate_enabled: false
+    zone_width_gate_enabled: false
+  structural_guard:
+    guard_mode: observe
+  zone_reconciliation:
+    enabled: true
+    mode: shadow
+analysis:
+  triggers:
+    m1:
+      patterns: wick_rejection,body_close,strong_close,pin_bar,engulfing,hammer
+      strong_close_pct: 0.2
+      wick_fraction: 0.5
+  zones:
+    confluence:
+      merge_gap_price: 1.0
+    merge_max_width: 6.0
+contract:
+  account:
+    expected_broker: fpmarkets
+    require_demo: true
+  instrument:
+    canonical_symbol: XAU
+    symbols: XAU
+  mode: v7_only
+  streams:
+    candidate_maximum_length: 1000
+    candidates: auto_trade:candidates
+    events: auto_trade:events
+    trade_plans: execution:trade_plans
+  versions:
+    candidate: 6
+delivery:
+  lifecycle:
+    delete_on_terminal: true
+    thread_lifecycle: true
+  presentation:
+    auto_book_bare_pips: false
+    seq_reset_tz: Asia/Ho_Chi_Minh
+  reports:
+    weekly:
+      day_of_week: 6
+      enabled: true
+      skip_empty: false
+      utc_hour: 8
+  scanner_cards:
+    top_n: 3
+  telegram:
+    public_show_pips: true
+    signal_public_channel_id: '-1004468199035'
+execution:
+  broker_recovery:
+    absence_confirmations: 2
+  entry:
+    contract_tolerance_pips: 3.0
+    inside_zone_market_entry_enabled: true
+    max_spread_pips: 5
+    maximum_chase_distance_pips: 40.0
+    poll_ms: 1000
+  mapped_zone:
+    execute_tolerance_atr: 0.15
+    execute_tolerance_pips: 3.0
+    hard_entry_drift_pips: 20.0
+    max_entry_drift_atr: 1.0
+    min_entry_drift_pips: 10.0
+    reaction_lookback_bars: 5
+    thesis_lock_enabled: true
+  policy:
+    displacement_override_lookback_bars: 3
+    execution_zone_max_width_atr: 2.0
+    execution_zone_max_width_pips: 100.0
+    group_close_allocation: pro_rata
+    label: apexvoid-auto
+    max_tranches: 2
+    structural_reaction_lookback_bars: 3
+  range:
+    box_move_sl_to_be_after_scale_out: false
+    box_scale_out_fraction: 0.5
+    box_scale_out_threshold_pips: 70
+    box_scale_out_trigger_pips: 30
+    hard_entry_drift_pips: 20.0
+    max_entry_drift_atr: 1.0
+    min_entry_drift_pips: 10.0
+    min_rr: 1.0
+    min_target_pips: 15.0
+    room_stop_floor_pips: 15
+    tp_buffer_pips: 3.0
+  reaction:
+    market_fraction: 0.7
+    room_stop_min_rr: 1.0
+    scale_fraction: 0.3
+    scale_invalid_policy: single_market
+    scale_step_atr: 0.5
+    stop_max_pips: 60
+    stop_min_pips: 40
+  scaling:
+    add:
+      level_buffer_atr: 1.0
+      min_stop_pips: 30
+      size_ratio: 0.5
+      stop_buffer_atr: 0.3
+  stops:
+    be_buffer_ticks: 6
+    reaction:
+      room_floor_pips: 20
+    sl_distance: 6.5
+    stop_push_beyond_zone: true
+    trend:
+      minimum_pips: 40
+    wick_stop_buffer_atr: 0.15
+  targeting:
+    default_ladder_pips: 30,60,90,120,200
+    post_fill_target_fallback: fill_relative
+    range_ladder_pips: 15,20,30,40,50,70
+    tp_weights:
+    - '20'
+    - '20'
+    - '20'
+    - '20'
+    - '20'
+    unfilled_leg_after_tp_policy: cancel
+  trend:
+    hard_entry_drift_pips: 30.0
+    max_entry_drift_atr: 1.5
+    min_entry_drift_pips: 15.0
+    stop_max_pips: 60
+  zone_scaling:
+    fill_enabled: true
+    fill_fallback_enabled: true
+    first_leg_fraction: 0.7
+    scale_step_atr: 0.5
+    scale_undersized_policy: single_entry
+instruments:
+  XAU:
+    analysis:
+      zones:
+        major_maximum_width_price: 10.0
+        minimum_width_price: 3.0
+        preferred_maximum_width_price: 6.0
+        preferred_minimum_width_price: 3.0
+    broker_symbol: XAU
+    canonical_symbol: XAU
+    contract:
+      contract_units_per_lot: 100.0
+      pip_size: 0.1
+      price_digits: 2
+    enabled: true
+    market_data:
+      lookbacks:
+        h1_bars: 400
+        m15_bars: 250
+        m1_bars: 150
+        m5_bars: 150
+    timeframes:
+    - H1
+    - M15
+    - M5
+    - M1
+lifecycle:
+  candidate:
+    execution_maximum_age_seconds: 420
+    storage_ttl_seconds: 604800
+  mapped_zone:
+    reaction_rearm_atr: 0.5
+    reaction_rearm_bars: 3
+  reconciliation:
+    absence_recheck_seconds: 3
+    missing_confirmations: 2
+    missing_recheck_seconds: 3
+    recovery_timeout_seconds: 30
+  scaling:
+    cooldown_bars: 3
+    max_age_bars: 3
+  zone:
+    cooldown_enabled: false
+manual_algo:
+  runtime:
+    enabled: true
+    owner_execution_dm_enabled: false
+market_data:
+  calendar:
+    currencies: USD
+    enabled: true
+    event_guard_hours: 4.0
+    feed_nextweek: https://nfs.faireconomy.media/ff_calendar_nextweek.json
+    feed_thisweek: https://nfs.faireconomy.media/ff_calendar_thisweek.json
+    news_brief_hour: 7
+    news_guard_block: false
+    oil_keywords: crude oil inventories,opec,cushing,api weekly crude
+    user_agent: apexvoid-trading-bot/1.0 (+contact)
+  ctrader_feed:
+    symbol: XAUUSD
+    timeframes:
+    - M1
+    - M5
+    - M15
+    - H1
+  scanner:
+    execution_timeframe: M5
+    htf: H1,M15
+    symbols: XAU
+    window: 500
+  sessions:
+    asia_start: 22
+    london_start: 7
+    ny_start: 13
+  spot:
+    maximum_age_seconds: 5
+  watcher:
+    interval_seconds: 120
+risk:
+  exposure:
+    allow_concurrent_strategies: true
+    non_hedged_opposite_policy: broker_netting
+    opposing_minimum_separation_price: 15.0
+  position_limits:
+    max_tracked_candidates: 5
+    maximum_per_symbol: 1
+    same_direction_stack_size_fraction: 0.6
+  sizing:
+    add_require_risk_free: false
+    add_risk_fraction: 0.5
+    equity_table_version: owner_equity_v1
+    mode: equity_table
+    one_sided_range_risk_multiplier: 0.5
+    post_impulse_risk_multiplier: 0.5
+    range_max_risk_multiplier: 2.0
+  tiers:
+    a_multiplier: 1.0
+    b_multiplier: 0.5
+runtime:
+  auto_trade:
+    direct_publish_enabled: true
+    dry_run: false
+    enabled: true
+    strategy_match_enabled: true
+  scanner:
+    enabled: true
+strategies:
+  breakout:
+    break_retest_enabled: true
+    breakout_enabled: true
+  mapped_zone:
+    counter_bias_enabled: true
+    enabled: false
+  matching:
+    multiple_matches_enabled: true
+    track_all_structural_matches: true
+  range_reversion:
+    box_scale_out_enabled: true
+    flip_enabled: true
+    range_edge:
+      allow_rejection_only: true
+      break_closes: 2
+      cluster_atr: 0.25
+      enabled: true
+      entry_tol_atr: 0.25
+      lookback: 48
+      max_edge_width_atr: 0.75
+      max_width_atr: 6.0
+      min_inside_closes: 3
+      min_room_atr: 0.75
+      min_touches: 2
+      min_wick_frac: 0.25
+      min_wick_rejections: 1
+      min_width_atr: 1.0
+    two_sided_enabled: true
+  reaction:
+    demand:
+      enabled: true
+    enabled: true
+    key_level:
+      enabled: true
+    liquidity_reversal:
+      enabled: true
+    scale_enabled: false
+    session_level:
+      enabled: true
+    supply:
+      enabled: true
+    trendline:
+      enabled: true
+  scalp:
+    fade_scalp_enabled: true
+    scalp_barrier_fallback_enabled: true
+    scalp_barrier_fallback_min_confirmations: 1
+    scalp_post_impulse_range_enabled: true
+    scalp_range_provisional_enabled: true
+  selection:
+    box_breakout_enabled: true
+    momentum_ride_enabled: true
+    retest_enabled: true
+    snap_back_enabled: true
+  trend:
+    allow_chase: true
+    breakout_min_room_pips: 35
+    enabled: true
+    pullback_enabled: true
+version: 1

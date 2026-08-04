@@ -1,52 +1,8 @@
 {# Rendered on the VPS by ansible (deploy_image role). Do not edit on the host. #}
-{# Vars: image_tag, registry_namespace, apexvoid_trading_bot_env (from vault). #}
-{# The vaulted env dict must define DATABASE_URL, POSTGRES_USER,             #}
-{# POSTGRES_PASSWORD, POSTGRES_DB, and required CTRADER_* feed secrets.      #}
-{# DATABASE_URL host must be "postgres"; REDIS_URL host should be "redis".  #}
-{% set auto_trade_profile = apexvoid_trading_bot_env.AUTO_TRADE_PROFILE | default('demo_eval') | string | lower %}
-{% set demo_eval_default = 'true' if auto_trade_profile == 'demo_eval' else 'false' %}
-{% set range_flat_default = 'false' if auto_trade_profile == 'demo_eval' else 'true' %}
-{% set require_demo = apexvoid_trading_bot_env.AUTO_TRADE_REQUIRE_DEMO_ACCOUNT | default('true') | string | lower %}
-{% set structural_guard_default = 'observe' if auto_trade_profile == 'demo_eval' else ('balanced' if require_demo == 'true' else 'strict') %}
-{% set zone_cooldown_default = 'false' if auto_trade_profile == 'demo_eval' else 'true' %}
-{% set zone_reconcile_default = 'shadow' if auto_trade_profile == 'demo_eval' else 'enforce' %}
-{# Phase 2H/2I-A: pin mapped-zone + market-map guard off for the bot (mirrors
-   root compose / ctrader-engine). demo_eval would otherwise enable them.
-   Vault values still win via combine(apexvoid_trading_bot_env). #}
-{% set execution_defaults = {
-  'AUTO_TRADE_RETEST_TRIGGER_VALIDITY_BARS': '2',
-  'AUTO_TRADE_MAX_ENTRY_DISTANCE_PIPS': '40',
-  'ZONE_MERGE_MAX_WIDTH': '6',
-  'ZONE_MERGE_GAP': '1',
-  'SCANNER_ACTIONABILITY_GATE_ENABLED': 'false',
-  'KEY_LEVEL_ROLE_AMBIGUITY_GATE_ENABLED': 'false',
-  'RANGE_CONTEXT_DISAGREEMENT_GATE_ENABLED': 'false',
-  'AUTO_TRADE_MAPPED_ZONE_ENABLED': 'false',
-  'AUTO_TRADE_MARKET_MAP_GUARD_ENABLED': 'false'
-} %}
-{% set logging_defaults = {
-  'LOG_DIR': '/var/log/apexvoid',
-  'LOG_RETENTION_DAYS': '14',
-  'LOG_FILE_ENABLED': 'true'
-} %}
-{% set demo_execution_defaults = {
-  'AUTO_TRADE_STRUCTURAL_GUARD_MODE': 'observe',
-  'AUTO_TRADE_OPPOSING_BARRIER_VETO_ENABLED': 'false',
-  'AUTO_TRADE_OVERLAP_VETO_ENABLED': 'false',
-  'AUTO_TRADE_ZONE_COOLDOWN_ENABLED': 'false',
-  'AUTO_TRADE_ZONE_RECONCILE_MODE': 'shadow',
-  'AUTO_TRADE_RANGE_MIN_ENTRY_DRIFT_PIPS': '10',
-  'AUTO_TRADE_MAP_MIN_ENTRY_DRIFT_PIPS': '10',
-  'AUTO_TRADE_TREND_MIN_ENTRY_DRIFT_PIPS': '15',
-  'AUTO_TRADE_RANGE_MAX_ENTRY_DRIFT_ATR': '1.0',
-  'AUTO_TRADE_MAP_MAX_ENTRY_DRIFT_ATR': '1.0',
-  'AUTO_TRADE_TREND_MAX_ENTRY_DRIFT_ATR': '1.5',
-  'AUTO_TRADE_RANGE_HARD_ENTRY_DRIFT_PIPS': '20',
-  'AUTO_TRADE_MAP_HARD_ENTRY_DRIFT_PIPS': '20',
-  'AUTO_TRADE_TREND_HARD_ENTRY_DRIFT_PIPS': '30'
-} if auto_trade_profile == 'demo_eval' else {} %}
-{# Vault LOG_* must not also be emitted after this loop — duplicate YAML keys break compose. #}
-{% set resolved_bot_env = execution_defaults | combine(demo_execution_defaults) | combine(logging_defaults) | combine(apexvoid_trading_bot_env) %}
+{# Vars: image_tag, registry_namespace, apexvoid_trading_bot_secrets (vault).     #}
+{# Non-secret tuning lives in config/trading-bot.yml (CONFIG_FILE).               #}
+{# Secrets + shared cTrader ENV live in secrets/trading-bot.env (env_file).        #}
+{# DATABASE_URL host must be "postgres"; REDIS_URL host should be "redis".         #}
 name: apexvoid-trading-bot
 
 services:
@@ -55,13 +11,13 @@ services:
     container_name: apexvoid-trading-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: {{ apexvoid_trading_bot_env.POSTGRES_USER | to_json }}
-      POSTGRES_PASSWORD: {{ apexvoid_trading_bot_env.POSTGRES_PASSWORD | to_json }}
-      POSTGRES_DB: {{ apexvoid_trading_bot_env.POSTGRES_DB | to_json }}
+      POSTGRES_USER: {{ apexvoid_trading_bot_secrets.POSTGRES_USER | to_json }}
+      POSTGRES_PASSWORD: {{ apexvoid_trading_bot_secrets.POSTGRES_PASSWORD | to_json }}
+      POSTGRES_DB: {{ apexvoid_trading_bot_secrets.POSTGRES_DB | to_json }}
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U {{ apexvoid_trading_bot_env.POSTGRES_USER }} -d {{ apexvoid_trading_bot_env.POSTGRES_DB }}"]
+      test: ["CMD-SHELL", "pg_isready -U {{ apexvoid_trading_bot_secrets.POSTGRES_USER }} -d {{ apexvoid_trading_bot_secrets.POSTGRES_DB }}"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -90,140 +46,8 @@ services:
     depends_on:
       redis:
         condition: service_healthy
-    environment:
-      CTRADER_CLIENT_ID: {{ apexvoid_trading_bot_env.CTRADER_CLIENT_ID | mandatory | string | to_json }}
-      CTRADER_CLIENT_SECRET: {{ apexvoid_trading_bot_env.CTRADER_CLIENT_SECRET | mandatory | string | to_json }}
-      CTRADER_ACCESS_TOKEN: {{ apexvoid_trading_bot_env.CTRADER_ACCESS_TOKEN | mandatory | string | to_json }}
-      CTRADER_REFRESH_TOKEN: {{ apexvoid_trading_bot_env.CTRADER_REFRESH_TOKEN | mandatory | string | to_json }}
-      CTRADER_ACCOUNT_ID: {{ apexvoid_trading_bot_env.CTRADER_ACCOUNT_ID | mandatory | string | to_json }}
-      CTRADER_EXPECTED_BROKER: {{ apexvoid_trading_bot_env.CTRADER_EXPECTED_BROKER | default('fpmarkets') | string | to_json }}
-      CTRADER_HOST: {{ apexvoid_trading_bot_env.CTRADER_HOST | default('demo.ctraderapi.com') | string | to_json }}
-      CTRADER_PORT: {{ apexvoid_trading_bot_env.CTRADER_PORT | default('5035') | string | to_json }}
-      CTRADER_SYMBOL: {{ apexvoid_trading_bot_env.CTRADER_SYMBOL | default('XAUUSD') | string | to_json }}
-      CTRADER_TIMEFRAMES: {{ apexvoid_trading_bot_env.CTRADER_TIMEFRAMES | default('M1,M5,M15,M30') | string | to_json }}
-      CTRADER_BACKFILL_BARS: {{ apexvoid_trading_bot_env.CTRADER_BACKFILL_BARS | default('1500') | string | to_json }}
-      CTRADER_REQUEST_TIMEOUT: {{ apexvoid_trading_bot_env.CTRADER_REQUEST_TIMEOUT | default('30') | string | to_json }}
-      CTRADER_TOKEN_REFRESH_LEAD_DAYS: {{ apexvoid_trading_bot_env.CTRADER_TOKEN_REFRESH_LEAD_DAYS | default('5') | string | to_json }}
-      CTRADER_TOKEN_CHECK_INTERVAL_HOURS: {{ apexvoid_trading_bot_env.CTRADER_TOKEN_CHECK_INTERVAL_HOURS | default('6') | string | to_json }}
-      CTRADER_REFRESH_TOKEN_KEY: {{ apexvoid_trading_bot_env.CTRADER_REFRESH_TOKEN_KEY | default('ctrader:refresh_token') | string | to_json }}
-      CTRADER_REFRESH_TOKEN_FILE: {{ apexvoid_trading_bot_env.CTRADER_REFRESH_TOKEN_FILE | default('/var/lib/apexvoid/ctrader-token.json') | string | to_json }}
-      REDIS_URL: {{ apexvoid_trading_bot_env.REDIS_URL | default('redis://redis:6379/0') | string | to_json }}
-      BARS_WINDOW_MAX: {{ apexvoid_trading_bot_env.BARS_WINDOW_MAX | default('1500') | string | to_json }}
-      BARS_CHANNEL: {{ apexvoid_trading_bot_env.BARS_CHANNEL | default('bars:new') | string | to_json }}
-      HEALTH_FILE: {{ apexvoid_trading_bot_env.HEALTH_FILE | default('/tmp/ctrader-feed.heartbeat') | string | to_json }}
-      AUTO_TRADE_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_ENABLED | default('false') | string | to_json }}
-      AUTO_TRADE_DRY_RUN: {{ apexvoid_trading_bot_env.AUTO_TRADE_DRY_RUN | default('true') | string | to_json }}
-      AUTO_TRADE_PROFILE: {{ auto_trade_profile | to_json }}
-      AUTO_TRADE_REQUIRE_DEMO_ACCOUNT: {{ apexvoid_trading_bot_env.AUTO_TRADE_REQUIRE_DEMO_ACCOUNT | default('true') | string | to_json }}
-      AUTO_TRADE_ALLOW_CONCURRENT_STRATEGIES: {{ apexvoid_trading_bot_env.AUTO_TRADE_ALLOW_CONCURRENT_STRATEGIES | default(demo_eval_default) | string | to_json }}
-      AUTO_TRADE_ALLOW_HEDGED_XAU: {{ apexvoid_trading_bot_env.AUTO_TRADE_ALLOW_HEDGED_XAU | default(demo_eval_default) | string | to_json }}
-      AUTO_TRADE_REQUIRE_FLAT_FOR_RANGE: {{ apexvoid_trading_bot_env.AUTO_TRADE_REQUIRE_FLAT_FOR_RANGE | default(range_flat_default) | string | to_json }}
-      AUTO_TRADE_TREND_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_TREND_ENABLED | default(demo_eval_default) | string | to_json }}
-      AUTO_TRADE_RANGE_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_RANGE_ENABLED | default('true') | string | to_json }}
-      AUTO_TRADE_RANGE_TWO_SIDED_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_RANGE_TWO_SIDED_ENABLED | default(demo_eval_default) | string | to_json }}
-      AUTO_TRADE_MAPPED_ZONE_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_MAPPED_ZONE_ENABLED | default('false') | string | to_json }}
-      AUTO_TRADE_MARKET_MAP_GUARD_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_MARKET_MAP_GUARD_ENABLED | default(apexvoid_trading_bot_env.AUTO_TRADE_MAPPED_ZONE_ENABLED | default('false')) | string | to_json }}
-      AUTO_TRADE_EXECUTION_ZONE_MAX_WIDTH_ATR: {{ apexvoid_trading_bot_env.AUTO_TRADE_EXECUTION_ZONE_MAX_WIDTH_ATR | default('2.0') | string | to_json }}
-      AUTO_TRADE_EXECUTION_ZONE_MAX_WIDTH_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_EXECUTION_ZONE_MAX_WIDTH_PIPS | default('100') | string | to_json }}
-      AUTO_TRADE_KEY_LEVEL_REACTION_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_KEY_LEVEL_REACTION_ENABLED | default('true') | string | to_json }}
-      AUTO_TRADE_DEMAND_REACTION_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_DEMAND_REACTION_ENABLED | default('true') | string | to_json }}
-      AUTO_TRADE_SUPPLY_REACTION_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_SUPPLY_REACTION_ENABLED | default('true') | string | to_json }}
-      AUTO_TRADE_MOMENTUM_RIDE_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_MOMENTUM_RIDE_ENABLED | default('true') | string | to_json }}
-      AUTO_TRADE_SESSION_LEVEL_REACTION_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_SESSION_LEVEL_REACTION_ENABLED | default('true') | string | to_json }}
-      AUTO_TRADE_TRENDLINE_REACTION_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_TRENDLINE_REACTION_ENABLED | default('true') | string | to_json }}
-      AUTO_TRADE_STRUCTURAL_REACTION_LOOKBACK_BARS: {{ apexvoid_trading_bot_env.AUTO_TRADE_STRUCTURAL_REACTION_LOOKBACK_BARS | default('3') | string | to_json }}
-      AUTO_TRADE_MAP_THESIS_LOCK_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_MAP_THESIS_LOCK_ENABLED | default('true') | string | to_json }}
-      AUTO_TRADE_STRATEGY_MATCH_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_STRATEGY_MATCH_ENABLED | default('true') | string | to_json }}
-      AUTO_TRADE_BREAKOUT_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_BREAKOUT_ENABLED | default('true') | string | to_json }}
-      AUTO_TRADE_RETEST_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_RETEST_ENABLED | default('true') | string | to_json }}
-      AUTO_TRADE_REACTION_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_REACTION_ENABLED | default('true') | string | to_json }}
-      AUTO_TRADE_LIQUIDITY_REVERSAL_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_LIQUIDITY_REVERSAL_ENABLED | default('true') | string | to_json }}
-      AUTO_TRADE_MULTI_MATCH_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_MULTI_MATCH_ENABLED | default(demo_eval_default) | string | to_json }}
-      AUTO_TRADE_ALLOW_COUNTER_BIAS: {{ apexvoid_trading_bot_env.AUTO_TRADE_ALLOW_COUNTER_BIAS | default(demo_eval_default) | string | to_json }}
-      AUTO_TRADE_TRACK_ALL_STRUCTURAL_MATCHES: {{ apexvoid_trading_bot_env.AUTO_TRADE_TRACK_ALL_STRUCTURAL_MATCHES | default(demo_eval_default) | string | to_json }}
-      MANUAL_ALGO_ENABLED: {{ apexvoid_trading_bot_env.MANUAL_ALGO_ENABLED | default('false') | string | to_json }}
-      AUTO_TRADE_CANDIDATE_CONTRACT_VERSION: {{ apexvoid_trading_bot_env.AUTO_TRADE_CANDIDATE_CONTRACT_VERSION | default('6') | string | to_json }}
-      AUTO_TRADE_SYMBOLS: {{ apexvoid_trading_bot_env.AUTO_TRADE_SYMBOLS | default('XAU') | string | to_json }}
-      AUTO_TRADE_CANONICAL_SYMBOL: {{ apexvoid_trading_bot_env.AUTO_TRADE_CANONICAL_SYMBOL | default('XAU') | string | to_json }}
-      AUTO_TRADE_REQUIRE_DEMO_ONLY_TOKEN: {{ apexvoid_trading_bot_env.AUTO_TRADE_REQUIRE_DEMO_ONLY_TOKEN | default('false') | string | to_json }}
-      AUTO_TRADE_EXPECTED_BROKER: {{ apexvoid_trading_bot_env.AUTO_TRADE_EXPECTED_BROKER | default('fpmarkets') | string | to_json }}
-      AUTO_TRADE_SL_DISTANCE: {{ apexvoid_trading_bot_env.AUTO_TRADE_SL_DISTANCE | default('6.5') | string | to_json }}
-      AUTO_TRADE_ADD_STOP_BUFFER_ATR: {{ apexvoid_trading_bot_env.AUTO_TRADE_ADD_STOP_BUFFER_ATR | default('0.3') | string | to_json }}
-      AUTO_TRADE_ADD_MIN_STOP_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_ADD_MIN_STOP_PIPS | default('30') | string | to_json }}
-      AUTO_TRADE_MAX_TRANCHES: {{ apexvoid_trading_bot_env.AUTO_TRADE_MAX_TRANCHES | default('2') | string | to_json }}
-      AUTO_TRADE_ADD_RISK_FRACTION: {{ apexvoid_trading_bot_env.AUTO_TRADE_ADD_RISK_FRACTION | default('0.5') | string | to_json }}
-      AUTO_TRADE_ADD_SIZE_RATIO: {{ apexvoid_trading_bot_env.AUTO_TRADE_ADD_SIZE_RATIO | default('0.5') | string | to_json }}
-      AUTO_TRADE_ADD_MAX_AGE_BARS: {{ apexvoid_trading_bot_env.AUTO_TRADE_ADD_MAX_AGE_BARS | default('3') | string | to_json }}
-      AUTO_TRADE_ADD_COOLDOWN_BARS: {{ apexvoid_trading_bot_env.AUTO_TRADE_ADD_COOLDOWN_BARS | default('3') | string | to_json }}
-      AUTO_TRADE_ADD_LEVEL_BUFFER_ATR: {{ apexvoid_trading_bot_env.AUTO_TRADE_ADD_LEVEL_BUFFER_ATR | default('1.0') | string | to_json }}
-      AUTO_TRADE_ADD_REQUIRE_RISK_FREE: {{ apexvoid_trading_bot_env.AUTO_TRADE_ADD_REQUIRE_RISK_FREE | default('false') | string | to_json }}
-      AUTO_TRADE_WICK_STOP_BUFFER_ATR: {{ apexvoid_trading_bot_env.AUTO_TRADE_WICK_STOP_BUFFER_ATR | default('0.15') | string | to_json }}
-      AUTO_TRADE_RISK_PCT: {{ apexvoid_trading_bot_env.AUTO_TRADE_RISK_PCT | default('2.0') | string | to_json }}
-      AUTO_TRADE_SIZING_MODE: {{ apexvoid_trading_bot_env.AUTO_TRADE_SIZING_MODE | default('equity_table') | string | to_json }}
-      AUTO_TRADE_EQUITY_TABLE_VERSION: {{ apexvoid_trading_bot_env.AUTO_TRADE_EQUITY_TABLE_VERSION | default('owner_equity_v1') | string | to_json }}
-      AUTO_TRADE_ZONE_SCALE_UNDERSIZED_POLICY: {{ apexvoid_trading_bot_env.AUTO_TRADE_ZONE_SCALE_UNDERSIZED_POLICY | default('single_entry') | string | to_json }}
-      AUTO_TRADE_GROUP_CLOSE_ALLOCATION: {{ apexvoid_trading_bot_env.AUTO_TRADE_GROUP_CLOSE_ALLOCATION | default('pro_rata') | string | to_json }}
-      AUTO_TRADE_UNFILLED_LEG_AFTER_TP_POLICY: {{ apexvoid_trading_bot_env.AUTO_TRADE_UNFILLED_LEG_AFTER_TP_POLICY | default('cancel') | string | to_json }}
-      AUTO_TRADE_XAU_PIP_SIZE: {{ apexvoid_trading_bot_env.AUTO_TRADE_XAU_PIP_SIZE | default('0.1') | string | to_json }}
-      AUTO_TRADE_XAU_CONTRACT_SIZE: {{ apexvoid_trading_bot_env.AUTO_TRADE_XAU_CONTRACT_SIZE | default('100') | string | to_json }}
-      AUTO_TRADE_PIP_VALUE_PER_LOT: {{ apexvoid_trading_bot_env.AUTO_TRADE_PIP_VALUE_PER_LOT | default('10.0') | string | to_json }}
-      AUTO_TRADE_TARGET_PLANS_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_TARGET_PLANS_PIPS | default('30,60,90,120,200') | string | to_json }}
-      AUTO_TRADE_TP_WEIGHTS: {{ apexvoid_trading_bot_env.AUTO_TRADE_TP_WEIGHTS | default('20,20,20,20,20') | string | to_json }}
-      AUTO_TRADE_BE_BUFFER_TICKS: {{ apexvoid_trading_bot_env.AUTO_TRADE_BE_BUFFER_TICKS | default(apexvoid_trading_bot_env.AUTO_TRADE_BE_BUFFER_PIPS | default('6')) | string | to_json }}
-      AUTO_TRADE_POST_FILL_TARGET_FALLBACK: {{ apexvoid_trading_bot_env.AUTO_TRADE_POST_FILL_TARGET_FALLBACK | default('fill_relative') | string | to_json }}
-      AUTO_TRADE_CANDIDATE_MAX_AGE_SECONDS: {{ apexvoid_trading_bot_env.AUTO_TRADE_CANDIDATE_MAX_AGE_SECONDS | default('420') | string | to_json }}
-      AUTO_TRADE_CANDIDATE_STORAGE_TTL_SECONDS: {{ apexvoid_trading_bot_env.AUTO_TRADE_CANDIDATE_STORAGE_TTL_SECONDS | default('604800') | string | to_json }}
-      AUTO_TRADE_SPOT_MAX_AGE_SECONDS: {{ apexvoid_trading_bot_env.AUTO_TRADE_SPOT_MAX_AGE_SECONDS | default('5') | string | to_json }}
-      AUTO_TRADE_MAX_SPREAD_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_MAX_SPREAD_PIPS | default('5') | string | to_json }}
-      AUTO_TRADE_MAX_ENTRY_DISTANCE_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_MAX_ENTRY_DISTANCE_PIPS | default('40') | string | to_json }}
-      AUTO_TRADE_BOX_MIN_RR: {{ apexvoid_trading_bot_env.AUTO_TRADE_BOX_MIN_RR | default('1.25') | string | to_json }}
-      AUTO_TRADE_MIN_CONFLUENCE: {{ apexvoid_trading_bot_env.AUTO_TRADE_MIN_CONFLUENCE | default('2') | string | to_json }}
-      AUTO_TRADE_POLL_MS: {{ apexvoid_trading_bot_env.AUTO_TRADE_POLL_MS | default('1000') | string | to_json }}
-      AUTO_TRADE_CANDIDATE_STREAM: {{ apexvoid_trading_bot_env.AUTO_TRADE_CANDIDATE_STREAM | default('auto_trade:candidates') | string | to_json }}
-      AUTO_TRADE_EVENT_STREAM: {{ apexvoid_trading_bot_env.AUTO_TRADE_EVENT_STREAM | default('auto_trade:events') | string | to_json }}
-      AUTO_TRADE_LABEL: {{ apexvoid_trading_bot_env.AUTO_TRADE_LABEL | default('apexvoid-auto') | string | to_json }}
-      AUTO_TRADE_ZONE_FILL_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_ZONE_FILL_ENABLED | default('true') | string | to_json }}
-      AUTO_TRADE_ZONE_FILL_MIN_LOTS: {{ apexvoid_trading_bot_env.AUTO_TRADE_ZONE_FILL_MIN_LOTS | default('0.09') | string | to_json }}
-      AUTO_TRADE_ZONE_FILL_MIN_ATR: {{ apexvoid_trading_bot_env.AUTO_TRADE_ZONE_FILL_MIN_ATR | default('0.5') | string | to_json }}
-      AUTO_TRADE_ZONE_FILL_TTL_BARS: {{ apexvoid_trading_bot_env.AUTO_TRADE_ZONE_FILL_TTL_BARS | default('3') | string | to_json }}
-      AUTO_TRADE_ZONE_FILL_FALLBACK_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_ZONE_FILL_FALLBACK_ENABLED | default('true') | string | to_json }}
-      AUTO_TRADE_INSIDE_ZONE_MARKET_ENTRY_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_INSIDE_ZONE_MARKET_ENTRY_ENABLED | default('true') | string | to_json }}
-      AUTO_TRADE_RANGE_TARGETS_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_RANGE_TARGETS_PIPS | default('15,20,30,40,50,70') | string | to_json }}
-      AUTO_TRADE_RANGE_MIN_TARGET_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_RANGE_MIN_TARGET_PIPS | default('15') | string | to_json }}
-      AUTO_TRADE_RANGE_MIN_RR: {{ apexvoid_trading_bot_env.AUTO_TRADE_RANGE_MIN_RR | default('1.0') | string | to_json }}
-      AUTO_TRADE_RANGE_ROOM_STOP_FLOOR_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_RANGE_ROOM_STOP_FLOOR_PIPS | default('15') | string | to_json }}
-      AUTO_TRADE_RANGE_MAX_RISK_MULTIPLIER: {{ apexvoid_trading_bot_env.AUTO_TRADE_RANGE_MAX_RISK_MULTIPLIER | default('2.0') | string | to_json }}
-      AUTO_TRADE_RANGE_BOX_SCALE_OUT_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_RANGE_BOX_SCALE_OUT_ENABLED | default('true') | string | to_json }}
-      AUTO_TRADE_RANGE_BOX_SCALE_OUT_THRESHOLD_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_RANGE_BOX_SCALE_OUT_THRESHOLD_PIPS | default('70') | string | to_json }}
-      AUTO_TRADE_RANGE_BOX_SCALE_OUT_TRIGGER_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_RANGE_BOX_SCALE_OUT_TRIGGER_PIPS | default('30') | string | to_json }}
-      AUTO_TRADE_RANGE_BOX_SCALE_OUT_FRACTION: {{ apexvoid_trading_bot_env.AUTO_TRADE_RANGE_BOX_SCALE_OUT_FRACTION | default('0.50') | string | to_json }}
-      AUTO_TRADE_RANGE_BOX_MOVE_SL_TO_BE_AFTER_SCALE_OUT: {{ apexvoid_trading_bot_env.AUTO_TRADE_RANGE_BOX_MOVE_SL_TO_BE_AFTER_SCALE_OUT | default('false') | string | to_json }}
-      AUTO_TRADE_RANGE_TP_BUFFER_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_RANGE_TP_BUFFER_PIPS | default('3') | string | to_json }}
-      AUTO_TRADE_RANGE_FLIP_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_RANGE_FLIP_ENABLED | default(demo_eval_default) | string | to_json }}
-      AUTO_TRADE_NON_HEDGED_OPPOSITE_POLICY: {{ apexvoid_trading_bot_env.AUTO_TRADE_NON_HEDGED_OPPOSITE_POLICY | default('broker_netting') | string | to_json }}
-      AUTO_TRADE_STRUCTURAL_GUARD_MODE: {{ apexvoid_trading_bot_env.AUTO_TRADE_STRUCTURAL_GUARD_MODE | default(structural_guard_default) | string | to_json }}
-      AUTO_TRADE_ZONE_COOLDOWN_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_ZONE_COOLDOWN_ENABLED | default(zone_cooldown_default) | string | to_json }}
-      AUTO_TRADE_ZONE_RECONCILE_MODE: {{ apexvoid_trading_bot_env.AUTO_TRADE_ZONE_RECONCILE_MODE | default(zone_reconcile_default) | string | to_json }}
-      AUTO_TRADE_FLIP_EXIT_BUFFER_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_FLIP_EXIT_BUFFER_PIPS | default('10') | string | to_json }}
-      AUTO_TRADE_FLIP_CONFIRM_TIMEOUT_SECONDS: {{ apexvoid_trading_bot_env.AUTO_TRADE_FLIP_CONFIRM_TIMEOUT_SECONDS | default('30') | string | to_json }}
-      AUTO_TRADE_TREND_STOP_MIN_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_TREND_STOP_MIN_PIPS | default('40') | string | to_json }}
-      AUTO_TRADE_TREND_STOP_MAX_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_TREND_STOP_MAX_PIPS | default('60') | string | to_json }}
-      AUTO_TRADE_REACTION_ROOM_STOP_MIN_RR: {{ apexvoid_trading_bot_env.AUTO_TRADE_REACTION_ROOM_STOP_MIN_RR | default('1.0') | string | to_json }}
-      AUTO_TRADE_REACTION_ROOM_STOP_FLOOR_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_REACTION_ROOM_STOP_FLOOR_PIPS | default('20') | string | to_json }}
-      AUTO_TRADE_REACTION_MARKET_FRACTION: {{ apexvoid_trading_bot_env.AUTO_TRADE_REACTION_MARKET_FRACTION | default('0.70') | string | to_json }}
-      AUTO_TRADE_REACTION_SCALE_FRACTION: {{ apexvoid_trading_bot_env.AUTO_TRADE_REACTION_SCALE_FRACTION | default('0.30') | string | to_json }}
-      AUTO_TRADE_REACTION_SCALE_ENABLED: {{ apexvoid_trading_bot_env.AUTO_TRADE_REACTION_SCALE_ENABLED | default('false') | string | to_json }}
-      AUTO_TRADE_REACTION_SCALE_INVALID_POLICY: {{ apexvoid_trading_bot_env.AUTO_TRADE_REACTION_SCALE_INVALID_POLICY | default('single_market') | string | to_json }}
-      AUTO_TRADE_REACTION_SCALE_STEP_ATR: {{ apexvoid_trading_bot_env.AUTO_TRADE_REACTION_SCALE_STEP_ATR | default('0.50') | string | to_json }}
-      AUTO_TRADE_ENTRY_CONTRACT_TOLERANCE_PIPS: {{ apexvoid_trading_bot_env.AUTO_TRADE_ENTRY_CONTRACT_TOLERANCE_PIPS | default('3') | string | to_json }}
-      AUTO_TRADE_STOP_PUSH_BEYOND_ZONE: {{ apexvoid_trading_bot_env.AUTO_TRADE_STOP_PUSH_BEYOND_ZONE | default('true') | string | to_json }}
-      AUTO_TRADE_BROKER_ABSENCE_CONFIRMATIONS: {{ apexvoid_trading_bot_env.AUTO_TRADE_BROKER_ABSENCE_CONFIRMATIONS | default('2') | string | to_json }}
-      AUTO_TRADE_BROKER_ABSENCE_RECHECK_SECONDS: {{ apexvoid_trading_bot_env.AUTO_TRADE_BROKER_ABSENCE_RECHECK_SECONDS | default('3') | string | to_json }}
-      AUTO_TRADE_BROKER_RECOVERY_TIMEOUT_SECONDS: {{ apexvoid_trading_bot_env.AUTO_TRADE_BROKER_RECOVERY_TIMEOUT_SECONDS | default('30') | string | to_json }}
-      LOG_DIR: {{ apexvoid_trading_bot_env.LOG_DIR | default('/var/log/apexvoid') | string | to_json }}
-      LOG_RETENTION_DAYS: {{ apexvoid_trading_bot_env.LOG_RETENTION_DAYS | default('14') | string | to_json }}
-      LOG_FILE_ENABLED: {{ apexvoid_trading_bot_env.LOG_FILE_ENABLED | default('true') | string | to_json }}
-      LOG_FILE_NAME: {{ apexvoid_trading_bot_env.CTRADER_LOG_FILE_NAME | default('ctrader-engine.log') | string | to_json }}
+    env_file:
+      - ./secrets/trading-bot.env
     volumes:
       - ./data/ctrader-token:/var/lib/apexvoid
       - ./logs/ctrader-engine:/var/log/apexvoid
@@ -246,15 +70,14 @@ services:
         condition: service_healthy
       ctrader-engine:
         condition: service_healthy
-    # Calendar cache (ff_*.json) still persists here; signals live in Postgres.
-    # Service-rotated daily logs (TimedRotatingFileHandler) on the host.
+    env_file:
+      - ./secrets/trading-bot.env
+    environment:
+      APEXVOID_CONFIG_FILE: /config/trading-bot.yml
     volumes:
+      - ./config/trading-bot.yml:/config/trading-bot.yml:ro
       - ./data:/data
       - ./logs/algo-bot:/var/log/apexvoid
-    environment:
-{% for key, value in resolved_bot_env.items() %}
-      {{ key }}: {{ value | to_json }}
-{% endfor %}
 
 volumes:
   pgdata:

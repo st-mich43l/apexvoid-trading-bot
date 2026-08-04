@@ -9,6 +9,8 @@ from app.configuration.models.bootstrap import BootstrapConfig
 from app.configuration.models.contract import ContractConfig
 from app.configuration.models.delivery import DeliveryConfig
 from app.configuration.models.execution import ExecutionConfig
+from app.configuration.models.instruments import EMPTY_INSTRUMENTS
+from app.configuration.models.instruments import InstrumentsConfig
 from app.configuration.models.lifecycle import LifecycleConfig
 from app.configuration.models.manual_algo import ManualAlgoConfig
 from app.configuration.models.market_data import MarketDataConfig
@@ -30,3 +32,5 @@ class ApexVoidConfig(FrozenConfigModel):
   lifecycle: LifecycleConfig = Field(default_factory=LifecycleConfig)
   delivery: DeliveryConfig
   manual_algo: ManualAlgoConfig = Field(default_factory=ManualAlgoConfig)
+  # Outside ENV leaf catalog: dynamic symbol → InstrumentConfig mapping.
+  instruments: InstrumentsConfig = Field(default_factory=lambda: EMPTY_INSTRUMENTS)
