@@ -17,6 +17,7 @@ from app.configuration.source_types import ResolutionWarning
 from app.configuration.source_types import SourceKind
 from app.configuration.sources import FieldSpec
 from app.configuration.sources import field_specs
+from app.configuration.sources import parse_source_value
 from app.configuration.sources import resolve_source_layer
 from app.configuration.models.root import ApexVoidConfig
 
@@ -74,6 +75,26 @@ def _profile_name(
   return profile, tuple(conflicts)
 
 
+def _profile_assignment_conflict(
+  *,
+  code: str,
+  profile: str,
+  path: str,
+  message: str,
+  canonical_env: str | None = None,
+  secret: bool = False,
+) -> ResolutionConflict:
+  return ResolutionConflict(
+    code=code,
+    path=path,
+    source_kind=SourceKind.PROFILE,
+    source_name=profile,
+    canonical_env=canonical_env,
+    secret=secret,
+    message=message,
+  )
+
+
 def resolve_configuration(
   *,
   init_values: Mapping[str, object],
@@ -117,14 +138,64 @@ def resolve_configuration(
     )
 
   for assignment in selected_profile.assignments:
-    if assignment.path not in specs:
+    spec = specs.get(assignment.path)
+    if spec is None:
+      conflicts.append(_profile_assignment_conflict(
+        code="unknown_profile_path",
+        profile=profile,
+        path=assignment.path,
+        message=(
+          f"profile {profile!r} references unknown canonical path "
+          f"{assignment.path!r}"
+        ),
+      ))
       continue
-    spec = specs[assignment.path]
+    if not spec.entry.configurable:
+      conflicts.append(_profile_assignment_conflict(
+        code="profile_constant_override",
+        profile=profile,
+        path=assignment.path,
+        canonical_env=spec.entry.canonical_env,
+        secret=spec.entry.secret,
+        message=(
+          f"profile {profile!r} cannot override constant "
+          f"{assignment.path!r}"
+        ),
+      ))
+      continue
+    if spec.entry.secret:
+      conflicts.append(_profile_assignment_conflict(
+        code="profile_secret_override",
+        profile=profile,
+        path=assignment.path,
+        canonical_env=spec.entry.canonical_env,
+        secret=True,
+        message=(
+          f"profile {profile!r} cannot provide secret "
+          f"{assignment.path!r}"
+        ),
+      ))
+      continue
+    try:
+      profile_value = parse_source_value(spec, assignment.value)
+    except (TypeError, ValueError):
+      conflicts.append(_profile_assignment_conflict(
+        code="profile_value_invalid",
+        profile=profile,
+        path=assignment.path,
+        canonical_env=spec.entry.canonical_env,
+        secret=spec.entry.secret,
+        message=(
+          f"profile {profile!r} value for {assignment.path!r} does not "
+          f"satisfy {spec.entry.type} and constraints {spec.entry.constraints}"
+        ),
+      ))
+      continue
     previous = traces[assignment.path]
     histories[assignment.path].append(
       f"{previous.source_kind.value}:{previous.source_name}"
     )
-    values[assignment.path] = assignment.value
+    values[assignment.path] = profile_value
     traces[assignment.path] = ResolvedFieldSource(
       path=assignment.path,
       source_kind=SourceKind.PROFILE,
