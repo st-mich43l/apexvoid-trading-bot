@@ -410,7 +410,13 @@ async def handle_trade_close(msg: Message) -> None:
     "pips": pips,
     "frac": "be" if raw.lower().endswith(" be") else frac,
   })
-  await msg.answer(await post_result(result, symbol))
+  # See handle_trade_cancel: a broker-deferred algo close isn't final yet -
+  # _handle_manual_closed posts the one real channel update once C#
+  # confirms it, so only acknowledge the owner in DM here.
+  if result.get("pending"):
+    await msg.answer(render_result(result, symbol, "vip"))
+  else:
+    await msg.answer(await post_result(result, symbol))
 
 
 @router.message(Command("trade_tp"), F.chat.type == "private")
@@ -477,7 +483,15 @@ async def handle_trade_cancel(msg: Message) -> None:
     "chat_id": channel_for_symbol(symbol),
     "reply_to": None,
   })
-  await msg.answer(await post_result(result, symbol))
+  # A broker-deferred algo cancel is not final yet - manual_execution.py's
+  # confirmation handler (_handle_manual_cancelled) posts the one real
+  # channel update once C# actually confirms it. post_result here would
+  # ALSO fan out to the channel for this still-pending state, duplicating
+  # that later "cancelled" post - so only acknowledge the owner in DM.
+  if result.get("pending"):
+    await msg.answer(render_result(result, symbol, "vip"))
+  else:
+    await msg.answer(await post_result(result, symbol))
 
 
 @router.message(Command("trade_delete"), F.chat.type == "private")
@@ -527,7 +541,13 @@ async def handle_trade_sl(msg: Message) -> None:
     "reply_to": None,
     "sl": match.group(2),
   })
-  await msg.answer(await post_result(result, symbol))
+  # See handle_trade_cancel: a broker-deferred algo SL move isn't final yet
+  # - _handle_manual_sl_moved posts the one real channel update once C#
+  # confirms it, so only acknowledge the owner in DM here.
+  if result.get("pending"):
+    await msg.answer(render_result(result, symbol, "vip"))
+  else:
+    await msg.answer(await post_result(result, symbol))
 
 
 @router.message(Command("trade_reopen"), F.chat.type == "private")

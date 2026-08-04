@@ -13,6 +13,8 @@ intent has no broker-execution side effect whatsoever.
 
 import json
 from dataclasses import asdict, dataclass
+from datetime import date, datetime, time, timedelta
+from zoneinfo import ZoneInfo
 
 from app.core.config import runtime_config
 from app.persistence import redis_state
@@ -35,6 +37,20 @@ class ManualTradeIntent:
   execution_mode: str         # "algo" (this contract only exists for algo-mode signals)
 
 
+def _end_of_trade_day(trade_date: str | None) -> int:
+  """Unix ts for the end of ``trade_date`` in the owner's trade-day tz.
+
+  Matches ``store._current_trade_date()``'s day boundary exactly (same tz,
+  same local-midnight rollover) so a manual algo order expires at the same
+  moment its ``daily_seq`` would roll over to the next trading day, rather
+  than on some unrelated UTC-midnight or wall-clock boundary.
+  """
+  tz = ZoneInfo(runtime_config.delivery.presentation.seq_reset_tz)
+  day = date.fromisoformat(trade_date) if trade_date else datetime.now(tz).date()
+  end_of_day = datetime.combine(day + timedelta(days=1), time.min, tzinfo=tz)
+  return int(end_of_day.timestamp())
+
+
 def build_intent(signal: dict, *, revision: int = 0) -> ManualTradeIntent:
   """Build a ManualTradeIntent from a ``manual_signals`` row dict.
 
@@ -53,7 +69,7 @@ def build_intent(signal: dict, *, revision: int = 0) -> ManualTradeIntent:
     sl=float(signal["sl"]),
     tps=tuple(float(v) for v in signal["tps"]),
     created_at=int(signal["ts"]),
-    expires_at=None,
+    expires_at=_end_of_trade_day(signal.get("trade_date")),
     setup_type=signal.get("setup_type"),
     confluence=signal.get("confluence"),
     execution_mode="algo",
