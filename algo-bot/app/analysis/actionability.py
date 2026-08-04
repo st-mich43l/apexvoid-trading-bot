@@ -17,6 +17,7 @@ from app.analysis.key_level_role import (
 )
 from app.analysis.market_map import MapEntry, MarketMap
 from app.analysis.structural_reaction_support import STRUCTURAL_SETUPS
+from app.autotrade.strategy_taxonomy import is_range_strategy
 from app.autotrade.structural_target_room import (
   evaluate_structural_target_room,
   filter_displaced_opposing_entries,
@@ -513,6 +514,11 @@ def resolve_actionability(
         entries, result=result, context=context, cfg=cfg,
       )
       result = _trim_zone_against_overlapping_barrier(result, room_entries)
+      # Range/scalp setups (Range Edge Scalp, Fade Scalp, ...) are meant to
+      # trade close to structure with tight targets - the swing-strategy
+      # buffer/floor below starves them of room they were never supposed to
+      # need. Use the lighter scalp-specific pair for that family only.
+      is_scalp = is_range_strategy(result.setup)
       room = evaluate_structural_target_room(
         direction=result.direction,
         planned_entry_price=(
@@ -527,10 +533,14 @@ def resolve_actionability(
         atr=atr,
         pip_size=pip_size,
         barrier_buffer_atr=float(
-          cfg.actionability.target_room.barrier_buffer_atr
+          cfg.actionability.target_room.scalp_barrier_buffer_atr
+          if is_scalp
+          else cfg.actionability.target_room.barrier_buffer_atr
         ),
         min_capped_target_pips=float(
-          cfg.actionability.target_room.minimum_capped_target_pips
+          cfg.actionability.target_room.scalp_minimum_capped_target_pips
+          if is_scalp
+          else cfg.actionability.target_room.minimum_capped_target_pips
         ),
         execution_cost_pips=float(cfg.execution.policy.execution_cost_pips),
         displacement_state=displacement_state,

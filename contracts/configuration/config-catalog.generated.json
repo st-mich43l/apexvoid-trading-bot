@@ -1,20 +1,20 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "1dab7cdbe9266e96d6b9e2aa553d1848ab9e0cd42d8626385ebc2213a3bc6eac",
-  "configuration_document_fingerprint_sha256": "270f97eb425dae560f1be5d22055b89fadb86ffafa56512eeaf2cb48ca487b57",
+  "configuration_contract_fingerprint_sha256": "eb2002bd01237007c3eacdba1a4b8a6cd07417d5fa44c354e31b511e9a423629",
+  "configuration_document_fingerprint_sha256": "3f6103d0050adf11692fd86d203620cb3040f39395ebea46f12caff5fe632bf3",
   "counts": {
     "algorithm_constants": 57,
-    "configurable": 374,
+    "configurable": 376,
     "known_conflicts": 30,
     "owners": {
       "ctrader": 50,
-      "python": 296,
+      "python": 298,
       "shared": 95
     },
     "protocol_constants": 10,
     "secrets": 9,
     "shared": 95,
-    "total_items": 441
+    "total_items": 443
   },
   "items": [
     {
@@ -955,6 +955,80 @@
       "mismatch_policy": "not_reported",
       "owner": "python",
       "path": "actionability.target_room.minimum_capped_target_pips",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "execution_safety",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "float",
+      "unit": "pips",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_SCALP_OPPOSING_BARRIER_ATR",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {},
+      "default": 0.15,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 0.15
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Barrier buffer applied to range/scalp setups (Range Edge Scalp, Fade Scalp, etc) instead of barrier_buffer_atr - scalping close to structure is the intended style, not a violation of it (atr).",
+      "display_id": "config:actionability.target_room.scalp_barrier_buffer_atr",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "actionability.target_room.scalp_barrier_buffer_atr",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "execution_safety",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "float",
+      "unit": "atr",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_SCALP_MIN_CAPPED_TARGET_PIPS",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {},
+      "default": 8.0,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 8.0
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Minimum capped target applied to range/scalp setups instead of minimum_capped_target_pips (pips).",
+      "display_id": "config:actionability.target_room.scalp_minimum_capped_target_pips",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "actionability.target_room.scalp_minimum_capped_target_pips",
       "protocol_constant": false,
       "reload_policy": "new_setup_only",
       "replacement_path": null,
@@ -16445,6 +16519,6 @@
       "validation_summary": "Pydantic required/type coercion only"
     }
   ],
-  "source_fingerprint_sha256": "1dab7cdbe9266e96d6b9e2aa553d1848ab9e0cd42d8626385ebc2213a3bc6eac",
+  "source_fingerprint_sha256": "eb2002bd01237007c3eacdba1a4b8a6cd07417d5fa44c354e31b511e9a423629",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }
