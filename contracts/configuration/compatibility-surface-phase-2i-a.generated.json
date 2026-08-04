@@ -9,185 +9,30 @@
   ],
   "counts": {
     "by_classification": {
-      "LEGACY_ROLLBACK_RETAIN_2I_A": 16,
+      "LEGACY_ROLLBACK_RETAIN_2I_A": 0,
       "PRODUCTION_REMOVE_2I_A": 0,
-      "REMOVE_2I_B": 1,
-      "TEST_COMPATIBILITY_RETAIN_2I_A": 130,
-      "TOOLING_RETAIN_2I_A": 46,
+      "REMOVE_2I_B": 0,
+      "TEST_COMPATIBILITY_RETAIN_2I_A": 129,
+      "TOOLING_RETAIN_2I_A": 14,
       "UNKNOWN_BLOCKER": 0
     },
     "by_symbol": {
-      "CanonicalSettingsFacade": 13,
-      "DERIVED_LEGACY_PROPERTIES": 44,
-      "DIRECT_LEGACY_PATHS": 46,
-      "LegacyCanonicalConfigView": 6,
-      "LegacySettings": 2,
-      "Settings": 34,
-      "runtime_config_facade": 1,
-      "settings": 43,
+      "CanonicalSettingsFacade": 4,
+      "DERIVED_LEGACY_PROPERTIES": 27,
+      "DIRECT_LEGACY_PATHS": 32,
+      "LegacyCanonicalConfigView": 3,
+      "Settings": 32,
+      "settings": 41,
       "simplenamespace_config_fixture": 4
     },
     "production_facade_calls": 0,
-    "total": 193,
+    "total": 143,
     "unknown_blockers": 0
   },
   "phase": "2I-A",
-  "source_fingerprint": "38c4297db7c3507409da7534db6ef95deede15106c5e5eeeb27b6c0d29b4d32b",
+  "source_fingerprint": "0da8115f9611ed45f43328e7c3cf41643394e41d4b023d2029f8027a5dfd64c1",
   "unknown_blockers": [],
   "usages": [
-    {
-      "classification": "TOOLING_RETAIN_2I_A",
-      "column": 0,
-      "detail": "import DERIVED_LEGACY_PROPERTIES",
-      "kind": "import",
-      "line": 16,
-      "path": "algo-bot/app/configuration/activation_cli.py",
-      "symbol": "DERIVED_LEGACY_PROPERTIES"
-    },
-    {
-      "classification": "TOOLING_RETAIN_2I_A",
-      "column": 0,
-      "detail": "import DIRECT_LEGACY_PATHS",
-      "kind": "import",
-      "line": 17,
-      "path": "algo-bot/app/configuration/activation_cli.py",
-      "symbol": "DIRECT_LEGACY_PATHS"
-    },
-    {
-      "classification": "TOOLING_RETAIN_2I_A",
-      "column": 10,
-      "detail": "reference DIRECT_LEGACY_PATHS",
-      "kind": "reference",
-      "line": 84,
-      "path": "algo-bot/app/configuration/activation_cli.py",
-      "symbol": "DIRECT_LEGACY_PATHS"
-    },
-    {
-      "classification": "TOOLING_RETAIN_2I_A",
-      "column": 14,
-      "detail": "reference DERIVED_LEGACY_PROPERTIES",
-      "kind": "reference",
-      "line": 85,
-      "path": "algo-bot/app/configuration/activation_cli.py",
-      "symbol": "DERIVED_LEGACY_PROPERTIES"
-    },
-    {
-      "classification": "TOOLING_RETAIN_2I_A",
-      "column": 47,
-      "detail": "reference DIRECT_LEGACY_PATHS",
-      "kind": "reference",
-      "line": 106,
-      "path": "algo-bot/app/configuration/activation_cli.py",
-      "symbol": "DIRECT_LEGACY_PATHS"
-    },
-    {
-      "classification": "TOOLING_RETAIN_2I_A",
-      "column": 48,
-      "detail": "reference DERIVED_LEGACY_PROPERTIES",
-      "kind": "reference",
-      "line": 107,
-      "path": "algo-bot/app/configuration/activation_cli.py",
-      "symbol": "DERIVED_LEGACY_PROPERTIES"
-    },
-    {
-      "classification": "TOOLING_RETAIN_2I_A",
-      "column": 19,
-      "detail": "reference DIRECT_LEGACY_PATHS",
-      "kind": "reference",
-      "line": 110,
-      "path": "algo-bot/app/configuration/activation_cli.py",
-      "symbol": "DIRECT_LEGACY_PATHS"
-    },
-    {
-      "classification": "TOOLING_RETAIN_2I_A",
-      "column": 46,
-      "detail": "reference DERIVED_LEGACY_PROPERTIES",
-      "kind": "reference",
-      "line": 110,
-      "path": "algo-bot/app/configuration/activation_cli.py",
-      "symbol": "DERIVED_LEGACY_PROPERTIES"
-    },
-    {
-      "classification": "TOOLING_RETAIN_2I_A",
-      "column": 0,
-      "detail": "import DERIVED_LEGACY_PROPERTIES",
-      "kind": "import",
-      "line": 11,
-      "path": "algo-bot/app/configuration/activation_rehearsal.py",
-      "symbol": "DERIVED_LEGACY_PROPERTIES"
-    },
-    {
-      "classification": "TOOLING_RETAIN_2I_A",
-      "column": 0,
-      "detail": "import DIRECT_LEGACY_PATHS",
-      "kind": "import",
-      "line": 12,
-      "path": "algo-bot/app/configuration/activation_rehearsal.py",
-      "symbol": "DIRECT_LEGACY_PATHS"
-    },
-    {
-      "classification": "TOOLING_RETAIN_2I_A",
-      "column": 12,
-      "detail": "reference DIRECT_LEGACY_PATHS",
-      "kind": "reference",
-      "line": 89,
-      "path": "algo-bot/app/configuration/activation_rehearsal.py",
-      "symbol": "DIRECT_LEGACY_PATHS"
-    },
-    {
-      "classification": "TOOLING_RETAIN_2I_A",
-      "column": 34,
-      "detail": "reference DERIVED_LEGACY_PROPERTIES",
-      "kind": "reference",
-      "line": 89,
-      "path": "algo-bot/app/configuration/activation_rehearsal.py",
-      "symbol": "DERIVED_LEGACY_PROPERTIES"
-    },
-    {
-      "classification": "TOOLING_RETAIN_2I_A",
-      "column": 23,
-      "detail": "reference DIRECT_LEGACY_PATHS",
-      "kind": "reference",
-      "line": 147,
-      "path": "algo-bot/app/configuration/activation_rehearsal.py",
-      "symbol": "DIRECT_LEGACY_PATHS"
-    },
-    {
-      "classification": "TOOLING_RETAIN_2I_A",
-      "column": 24,
-      "detail": "reference DERIVED_LEGACY_PROPERTIES",
-      "kind": "reference",
-      "line": 148,
-      "path": "algo-bot/app/configuration/activation_rehearsal.py",
-      "symbol": "DERIVED_LEGACY_PROPERTIES"
-    },
-    {
-      "classification": "LEGACY_ROLLBACK_RETAIN_2I_A",
-      "column": 0,
-      "detail": "import CanonicalSettingsFacade",
-      "kind": "import",
-      "line": 9,
-      "path": "algo-bot/app/configuration/authority.py",
-      "symbol": "CanonicalSettingsFacade"
-    },
-    {
-      "classification": "LEGACY_ROLLBACK_RETAIN_2I_A",
-      "column": 20,
-      "detail": "reference CanonicalSettingsFacade",
-      "kind": "reference",
-      "line": 31,
-      "path": "algo-bot/app/configuration/authority.py",
-      "symbol": "CanonicalSettingsFacade"
-    },
-    {
-      "classification": "LEGACY_ROLLBACK_RETAIN_2I_A",
-      "column": 4,
-      "detail": "reference CanonicalSettingsFacade",
-      "kind": "reference",
-      "line": 81,
-      "path": "algo-bot/app/configuration/authority.py",
-      "symbol": "CanonicalSettingsFacade"
-    },
     {
       "classification": "TOOLING_RETAIN_2I_A",
       "column": 0,
@@ -202,7 +47,7 @@
       "column": 38,
       "detail": "reference DERIVED_LEGACY_PROPERTIES",
       "kind": "reference",
-      "line": 100,
+      "line": 98,
       "path": "algo-bot/app/configuration/canonical_consumer_surface.py",
       "symbol": "DERIVED_LEGACY_PROPERTIES"
     },
@@ -211,7 +56,7 @@
       "column": 14,
       "detail": "reference DERIVED_LEGACY_PROPERTIES",
       "kind": "reference",
-      "line": 108,
+      "line": 106,
       "path": "algo-bot/app/configuration/canonical_consumer_surface.py",
       "symbol": "DERIVED_LEGACY_PROPERTIES"
     },
@@ -231,96 +76,6 @@
       "kind": "reference",
       "line": 89,
       "path": "algo-bot/app/configuration/compatibility_surface_audit.py",
-      "symbol": "DERIVED_LEGACY_PROPERTIES"
-    },
-    {
-      "classification": "TOOLING_RETAIN_2I_A",
-      "column": 0,
-      "detail": "import DERIVED_LEGACY_PROPERTIES",
-      "kind": "import",
-      "line": 5,
-      "path": "algo-bot/app/configuration/facade.py",
-      "symbol": "DERIVED_LEGACY_PROPERTIES"
-    },
-    {
-      "classification": "TOOLING_RETAIN_2I_A",
-      "column": 0,
-      "detail": "import DIRECT_LEGACY_PATHS",
-      "kind": "import",
-      "line": 6,
-      "path": "algo-bot/app/configuration/facade.py",
-      "symbol": "DIRECT_LEGACY_PATHS"
-    },
-    {
-      "classification": "TOOLING_RETAIN_2I_A",
-      "column": 11,
-      "detail": "reference DIRECT_LEGACY_PATHS",
-      "kind": "reference",
-      "line": 40,
-      "path": "algo-bot/app/configuration/facade.py",
-      "symbol": "DIRECT_LEGACY_PATHS"
-    },
-    {
-      "classification": "TOOLING_RETAIN_2I_A",
-      "column": 15,
-      "detail": "reference DERIVED_LEGACY_PROPERTIES",
-      "kind": "reference",
-      "line": 43,
-      "path": "algo-bot/app/configuration/facade.py",
-      "symbol": "DERIVED_LEGACY_PROPERTIES"
-    },
-    {
-      "classification": "TOOLING_RETAIN_2I_A",
-      "column": 7,
-      "detail": "reference DIRECT_LEGACY_PATHS",
-      "kind": "reference",
-      "line": 60,
-      "path": "algo-bot/app/configuration/facade.py",
-      "symbol": "DIRECT_LEGACY_PATHS"
-    },
-    {
-      "classification": "TOOLING_RETAIN_2I_A",
-      "column": 7,
-      "detail": "reference DERIVED_LEGACY_PROPERTIES",
-      "kind": "reference",
-      "line": 61,
-      "path": "algo-bot/app/configuration/facade.py",
-      "symbol": "DERIVED_LEGACY_PROPERTIES"
-    },
-    {
-      "classification": "TOOLING_RETAIN_2I_A",
-      "column": 49,
-      "detail": "reference DIRECT_LEGACY_PATHS",
-      "kind": "reference",
-      "line": 66,
-      "path": "algo-bot/app/configuration/facade.py",
-      "symbol": "DIRECT_LEGACY_PATHS"
-    },
-    {
-      "classification": "TOOLING_RETAIN_2I_A",
-      "column": 28,
-      "detail": "reference DERIVED_LEGACY_PROPERTIES",
-      "kind": "reference",
-      "line": 67,
-      "path": "algo-bot/app/configuration/facade.py",
-      "symbol": "DERIVED_LEGACY_PROPERTIES"
-    },
-    {
-      "classification": "TOOLING_RETAIN_2I_A",
-      "column": 26,
-      "detail": "reference DIRECT_LEGACY_PATHS",
-      "kind": "reference",
-      "line": 78,
-      "path": "algo-bot/app/configuration/facade.py",
-      "symbol": "DIRECT_LEGACY_PATHS"
-    },
-    {
-      "classification": "TOOLING_RETAIN_2I_A",
-      "column": 48,
-      "detail": "reference DERIVED_LEGACY_PROPERTIES",
-      "kind": "reference",
-      "line": 78,
-      "path": "algo-bot/app/configuration/facade.py",
       "symbol": "DERIVED_LEGACY_PROPERTIES"
     },
     {
@@ -391,87 +146,6 @@
       "column": 0,
       "detail": "import DERIVED_LEGACY_PROPERTIES",
       "kind": "import",
-      "line": 9,
-      "path": "algo-bot/app/configuration/parity.py",
-      "symbol": "DERIVED_LEGACY_PROPERTIES"
-    },
-    {
-      "classification": "TOOLING_RETAIN_2I_A",
-      "column": 50,
-      "detail": "reference DERIVED_LEGACY_PROPERTIES",
-      "kind": "reference",
-      "line": 133,
-      "path": "algo-bot/app/configuration/parity.py",
-      "symbol": "DERIVED_LEGACY_PROPERTIES"
-    },
-    {
-      "classification": "TOOLING_RETAIN_2I_A",
-      "column": 16,
-      "detail": "reference DERIVED_LEGACY_PROPERTIES",
-      "kind": "reference",
-      "line": 145,
-      "path": "algo-bot/app/configuration/parity.py",
-      "symbol": "DERIVED_LEGACY_PROPERTIES"
-    },
-    {
-      "classification": "LEGACY_ROLLBACK_RETAIN_2I_A",
-      "column": 4,
-      "detail": "import CanonicalSettingsFacade",
-      "kind": "import",
-      "line": 84,
-      "path": "algo-bot/app/configuration/phase2i_removal_gate.py",
-      "symbol": "CanonicalSettingsFacade"
-    },
-    {
-      "classification": "LEGACY_ROLLBACK_RETAIN_2I_A",
-      "column": 4,
-      "detail": "import LegacyCanonicalConfigView",
-      "kind": "import",
-      "line": 85,
-      "path": "algo-bot/app/configuration/phase2i_removal_gate.py",
-      "symbol": "LegacyCanonicalConfigView"
-    },
-    {
-      "classification": "LEGACY_ROLLBACK_RETAIN_2I_A",
-      "column": 4,
-      "detail": "import LegacySettings",
-      "kind": "import",
-      "line": 88,
-      "path": "algo-bot/app/configuration/phase2i_removal_gate.py",
-      "symbol": "LegacySettings"
-    },
-    {
-      "classification": "LEGACY_ROLLBACK_RETAIN_2I_A",
-      "column": 0,
-      "detail": "import CanonicalSettingsFacade",
-      "kind": "import",
-      "line": 11,
-      "path": "algo-bot/app/configuration/python_loader.py",
-      "symbol": "CanonicalSettingsFacade"
-    },
-    {
-      "classification": "LEGACY_ROLLBACK_RETAIN_2I_A",
-      "column": 10,
-      "detail": "reference CanonicalSettingsFacade",
-      "kind": "reference",
-      "line": 52,
-      "path": "algo-bot/app/configuration/python_loader.py",
-      "symbol": "CanonicalSettingsFacade"
-    },
-    {
-      "classification": "LEGACY_ROLLBACK_RETAIN_2I_A",
-      "column": 11,
-      "detail": "reference CanonicalSettingsFacade",
-      "kind": "reference",
-      "line": 112,
-      "path": "algo-bot/app/configuration/python_loader.py",
-      "symbol": "CanonicalSettingsFacade"
-    },
-    {
-      "classification": "TOOLING_RETAIN_2I_A",
-      "column": 0,
-      "detail": "import DERIVED_LEGACY_PROPERTIES",
-      "kind": "import",
       "line": 14,
       "path": "algo-bot/app/configuration/usage_audit.py",
       "symbol": "DERIVED_LEGACY_PROPERTIES"
@@ -484,123 +158,6 @@
       "line": 66,
       "path": "algo-bot/app/configuration/usage_audit.py",
       "symbol": "DERIVED_LEGACY_PROPERTIES"
-    },
-    {
-      "classification": "LEGACY_ROLLBACK_RETAIN_2I_A",
-      "column": 0,
-      "detail": "import CanonicalSettingsFacade",
-      "kind": "import",
-      "line": 24,
-      "path": "algo-bot/app/core/config.py",
-      "symbol": "CanonicalSettingsFacade"
-    },
-    {
-      "classification": "TOOLING_RETAIN_2I_A",
-      "column": 0,
-      "detail": "import DERIVED_LEGACY_PROPERTIES",
-      "kind": "import",
-      "line": 26,
-      "path": "algo-bot/app/core/config.py",
-      "symbol": "DERIVED_LEGACY_PROPERTIES"
-    },
-    {
-      "classification": "TOOLING_RETAIN_2I_A",
-      "column": 0,
-      "detail": "import DIRECT_LEGACY_PATHS",
-      "kind": "import",
-      "line": 26,
-      "path": "algo-bot/app/core/config.py",
-      "symbol": "DIRECT_LEGACY_PATHS"
-    },
-    {
-      "classification": "LEGACY_ROLLBACK_RETAIN_2I_A",
-      "column": 0,
-      "detail": "import LegacyCanonicalConfigView",
-      "kind": "import",
-      "line": 30,
-      "path": "algo-bot/app/core/config.py",
-      "symbol": "LegacyCanonicalConfigView"
-    },
-    {
-      "classification": "LEGACY_ROLLBACK_RETAIN_2I_A",
-      "column": 0,
-      "detail": "import LegacySettings",
-      "kind": "import",
-      "line": 34,
-      "path": "algo-bot/app/core/config.py",
-      "symbol": "LegacySettings"
-    },
-    {
-      "classification": "LEGACY_ROLLBACK_RETAIN_2I_A",
-      "column": 0,
-      "detail": "import Settings",
-      "kind": "import",
-      "line": 34,
-      "path": "algo-bot/app/core/config.py",
-      "symbol": "Settings"
-    },
-    {
-      "classification": "LEGACY_ROLLBACK_RETAIN_2I_A",
-      "column": 13,
-      "detail": "reference Settings",
-      "kind": "reference",
-      "line": 80,
-      "path": "algo-bot/app/core/config.py",
-      "symbol": "Settings"
-    },
-    {
-      "classification": "LEGACY_ROLLBACK_RETAIN_2I_A",
-      "column": 21,
-      "detail": "reference LegacyCanonicalConfigView",
-      "kind": "reference",
-      "line": 85,
-      "path": "algo-bot/app/core/config.py",
-      "symbol": "LegacyCanonicalConfigView"
-    },
-    {
-      "classification": "REMOVE_2I_B",
-      "column": 0,
-      "detail": "facade definition",
-      "kind": "definition",
-      "line": 124,
-      "path": "algo-bot/app/core/config.py",
-      "symbol": "runtime_config_facade"
-    },
-    {
-      "classification": "LEGACY_ROLLBACK_RETAIN_2I_A",
-      "column": 9,
-      "detail": "reference CanonicalSettingsFacade",
-      "kind": "reference",
-      "line": 131,
-      "path": "algo-bot/app/core/config.py",
-      "symbol": "CanonicalSettingsFacade"
-    },
-    {
-      "classification": "TOOLING_RETAIN_2I_A",
-      "column": 39,
-      "detail": "reference DIRECT_LEGACY_PATHS",
-      "kind": "reference",
-      "line": 169,
-      "path": "algo-bot/app/core/config.py",
-      "symbol": "DIRECT_LEGACY_PATHS"
-    },
-    {
-      "classification": "TOOLING_RETAIN_2I_A",
-      "column": 40,
-      "detail": "reference DERIVED_LEGACY_PROPERTIES",
-      "kind": "reference",
-      "line": 170,
-      "path": "algo-bot/app/core/config.py",
-      "symbol": "DERIVED_LEGACY_PROPERTIES"
-    },
-    {
-      "classification": "TOOLING_RETAIN_2I_A",
-      "column": 0,
-      "detail": "import settings",
-      "kind": "import",
-      "line": 32,
-      "path": "algo-bot/migrate_sqlite_to_pg.py",
-      "symbol": "settings"
     },
     {
       "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
@@ -673,15 +230,6 @@
       "line": 85,
       "path": "algo-bot/tests/configuration/canonical_fixtures.py",
       "symbol": "DIRECT_LEGACY_PATHS"
-    },
-    {
-      "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",
-      "column": 0,
-      "detail": "import settings",
-      "kind": "import",
-      "line": 26,
-      "path": "algo-bot/tests/conftest.py",
-      "symbol": "settings"
     },
     {
       "classification": "TEST_COMPATIBILITY_RETAIN_2I_A",

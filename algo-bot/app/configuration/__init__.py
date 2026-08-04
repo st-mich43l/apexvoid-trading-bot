@@ -1,7 +1,8 @@
-"""Inactive typed-configuration foundation.
+"""Canonical configuration package.
 
-The production application still imports :mod:`app.core.config`; nothing in
-this package participates in startup during Phase 2A.
+Production startup loads configuration exclusively through
+``app.core.config`` -> ``python_sources`` / ``python_loader`` ->
+``PythonRuntimeConfig``.
 """
 
 from app.configuration.metadata import ConfigKind

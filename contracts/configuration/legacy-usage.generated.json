@@ -3588,7 +3588,7 @@
         "column": 8,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 51,
+        "line": 49,
         "operation": "canonical_read",
         "path": "algo-bot/app/main.py"
       },
@@ -3599,7 +3599,7 @@
         "column": 10,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 52,
+        "line": 50,
         "operation": "canonical_read",
         "path": "algo-bot/app/main.py"
       },
@@ -3610,7 +3610,7 @@
         "column": 17,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 53,
+        "line": 51,
         "operation": "canonical_read",
         "path": "algo-bot/app/main.py"
       },
@@ -3621,7 +3621,7 @@
         "column": 14,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 54,
+        "line": 52,
         "operation": "canonical_read",
         "path": "algo-bot/app/main.py"
       },
@@ -3632,7 +3632,7 @@
         "column": 5,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 121,
+        "line": 113,
         "operation": "canonical_read",
         "path": "algo-bot/app/main.py"
       },
@@ -3643,7 +3643,7 @@
         "column": 4,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 132,
+        "line": 124,
         "operation": "canonical_read",
         "path": "algo-bot/app/main.py"
       },
@@ -3654,7 +3654,7 @@
         "column": 8,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 133,
+        "line": 125,
         "operation": "canonical_read",
         "path": "algo-bot/app/main.py"
       },
@@ -3665,7 +3665,7 @@
         "column": 7,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 134,
+        "line": 126,
         "operation": "canonical_read",
         "path": "algo-bot/app/main.py"
       },
@@ -3676,7 +3676,7 @@
         "column": 9,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 158,
+        "line": 150,
         "operation": "canonical_read",
         "path": "algo-bot/app/main.py"
       },
@@ -4388,69 +4388,46 @@
     "canonical_writes": [],
     "introspection": [],
     "method_calls": [],
-    "type_dependencies": [
-      {
-        "attribute": null,
-        "canonical_path": null,
-        "classification": "legacy_internal_only",
-        "column": 9,
-        "detail": "local legacy Settings construction",
-        "dynamic_names": [],
-        "line": 42,
-        "operation": "construct_settings",
-        "path": "algo-bot/app/configuration/activation_cli.py"
-      }
-    ]
+    "type_dependencies": []
   },
   "scripts": {
     "attribute_deletions": [],
-    "attribute_reads": [
+    "attribute_reads": [],
+    "attribute_writes": [],
+    "canonical_deletions": [],
+    "canonical_reads": [
       {
-        "attribute": "database_url",
-        "canonical_path": null,
+        "attribute": null,
+        "canonical_path": "bootstrap.postgres.url",
         "classification": "facade_supported",
-        "column": 34,
-        "detail": "direct Settings attribute read",
+        "column": 4,
+        "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 134,
-        "operation": "attribute_read",
+        "line": 136,
+        "operation": "canonical_read",
         "path": "algo-bot/migrate_sqlite_to_pg.py"
       },
       {
-        "attribute": "database_url",
-        "canonical_path": null,
+        "attribute": null,
+        "canonical_path": "bootstrap.postgres.url",
         "classification": "facade_supported",
         "column": 29,
-        "detail": "direct Settings attribute read",
+        "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 139,
-        "operation": "attribute_read",
+        "line": 142,
+        "operation": "canonical_read",
         "path": "algo-bot/migrate_sqlite_to_pg.py"
       }
     ],
-    "attribute_writes": [],
-    "canonical_deletions": [],
-    "canonical_reads": [],
     "canonical_writes": [],
     "introspection": [],
     "method_calls": [],
     "type_dependencies": []
   },
-  "source_fingerprint": "7ad63fe5ee6cd5fb2e24835d06f4b2538cd4f6f41d7d6ee10dac627a1fefc0fc",
+  "source_fingerprint": "219a6f1ec050b87bdd1d3fd20e316404f790dbe67637178d5d5c5cc80ddcc749",
   "tests": {
     "attribute_deletions": [],
     "attribute_reads": [
-      {
-        "attribute": "database_url",
-        "canonical_path": null,
-        "classification": "test_only_adaptation",
-        "column": 33,
-        "detail": "direct Settings attribute read",
-        "dynamic_names": [],
-        "line": 66,
-        "operation": "attribute_read",
-        "path": "algo-bot/tests/conftest.py"
-      },
       {
         "attribute": "auto_trade_event_stream",
         "canonical_path": null,
@@ -9311,7 +9288,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 1177,
+        "line": 1208,
         "operation": "setattr",
         "path": "algo-bot/tests/test_scanner_actionability.py"
       },
@@ -9322,7 +9299,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 1182,
+        "line": 1213,
         "operation": "setattr",
         "path": "algo-bot/tests/test_scanner_actionability.py"
       },
@@ -9333,7 +9310,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 1487,
+        "line": 1518,
         "operation": "setattr",
         "path": "algo-bot/tests/test_scanner_actionability.py"
       },
@@ -9344,7 +9321,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 1488,
+        "line": 1519,
         "operation": "setattr",
         "path": "algo-bot/tests/test_scanner_actionability.py"
       },
@@ -9355,7 +9332,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 1489,
+        "line": 1520,
         "operation": "setattr",
         "path": "algo-bot/tests/test_scanner_actionability.py"
       },
@@ -9366,7 +9343,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 1490,
+        "line": 1521,
         "operation": "setattr",
         "path": "algo-bot/tests/test_scanner_actionability.py"
       },
@@ -9377,7 +9354,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 1491,
+        "line": 1522,
         "operation": "setattr",
         "path": "algo-bot/tests/test_scanner_actionability.py"
       },
@@ -9388,7 +9365,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 1492,
+        "line": 1523,
         "operation": "setattr",
         "path": "algo-bot/tests/test_scanner_actionability.py"
       },
@@ -9399,7 +9376,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 1495,
+        "line": 1526,
         "operation": "setattr",
         "path": "algo-bot/tests/test_scanner_actionability.py"
       },
@@ -10615,6 +10592,17 @@
         "line": 54,
         "operation": "canonical_read",
         "path": "algo-bot/tests/configuration/canonical_fixtures.py"
+      },
+      {
+        "attribute": null,
+        "canonical_path": "bootstrap.postgres.url",
+        "classification": "test_only_adaptation",
+        "column": 33,
+        "detail": "direct legacy-backed canonical nested read",
+        "dynamic_names": [],
+        "line": 67,
+        "operation": "canonical_read",
+        "path": "algo-bot/tests/conftest.py"
       },
       {
         "attribute": null,

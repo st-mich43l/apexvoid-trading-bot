@@ -5,9 +5,7 @@ from __future__ import annotations
 import argparse
 import ast
 import json
-import os
 import re
-import sys
 from pathlib import Path
 
 from app.configuration.generate import PHASE_2G_ROOTS, REPOSITORY_ROOT, render_artifacts
@@ -74,7 +72,7 @@ def evaluate_phase2h_readiness() -> dict[str, object]:
     str(path) for path, expected in artifacts.items()
     if (REPOSITORY_ROOT / path).read_bytes() != expected
   ]
-  authority = os.environ.get("APEXVOID_CONFIG_AUTHORITY", "legacy").strip().lower()
+  authority = "canonical"
   blockers: list[str] = []
   if flat_reads:
     blockers.append(f"production_flat_reads={flat_reads}")
@@ -95,7 +93,7 @@ def evaluate_phase2h_readiness() -> dict[str, object]:
   ready = not blockers
   return {
     "status": "READY_FOR_PHASE_2H" if ready else "NOT_READY",
-    "authority_default_assumed": authority or "legacy",
+    "authority_default_assumed": authority,
     "production_flat_reads": flat_reads,
     "production_settings_imports": len(imports),
     "production_settings_import_details": imports,

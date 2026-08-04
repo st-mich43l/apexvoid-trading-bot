@@ -29,7 +29,7 @@ import sys
 import asyncpg
 
 from app.persistence import store
-from app.core.config import settings
+from app.core.config import runtime_config
 
 logging.basicConfig(level="INFO", format="%(levelname)s: %(message)s")
 log = logging.getLogger("migrate")
@@ -131,12 +131,15 @@ async def main() -> None:
   args = ap.parse_args()
 
   log.info("Source SQLite : %s", args.sqlite)
-  log.info("Target Postgres: %s", settings.database_url.split("@")[-1])
+  log.info(
+    "Target Postgres: %s",
+    runtime_config.bootstrap.postgres.url.split("@")[-1],
+  )
 
   # Create the schema in Postgres (idempotent).
   await store.init_db()
 
-  pg = await asyncpg.connect(settings.database_url)
+  pg = await asyncpg.connect(runtime_config.bootstrap.postgres.url)
   try:
     async with pg.transaction():
       total = 0

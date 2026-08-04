@@ -6,9 +6,7 @@ from dataclasses import dataclass, field
 
 from pydantic import ValidationError
 
-from app.configuration.authority import ConfigurationAuthority
 from app.configuration.catalog import iter_catalog_entries
-from app.configuration.facade import CanonicalSettingsFacade
 from app.configuration.fingerprints import catalog_fingerprint
 from app.configuration.models.python_runtime import PythonRuntimeConfig
 from app.configuration.profiles import get_profile, profile_fingerprint
@@ -18,8 +16,8 @@ from app.configuration.source_types import ResolutionTrace
 from app.configuration.source_types import ResolutionWarning
 
 
-ROLLBACK_ACTION = (
-  "set APEXVOID_CONFIG_AUTHORITY=legacy and restart the service"
+RECOVERY_ACTION = (
+  "correct the reported configuration input and restart the service"
 )
 
 
@@ -38,7 +36,7 @@ class CanonicalConfigurationError(RuntimeError):
     super().__init__(
       "configuration_authority=canonical "
       f"error_category={category} canonical_path={path}{source} "
-      f"catalog_fingerprint={fingerprint} rollback_action=\"{ROLLBACK_ACTION}\""
+      f"catalog_fingerprint={fingerprint} recovery_action=\"{RECOVERY_ACTION}\""
     )
     self.category = category
     self.path = path
@@ -49,8 +47,6 @@ class CanonicalConfigurationError(RuntimeError):
 @dataclass(frozen=True, slots=True)
 class PythonCanonicalLoadResult:
   config: PythonRuntimeConfig = field(repr=False)
-  facade: CanonicalSettingsFacade = field(repr=False)
-  authority: ConfigurationAuthority
   profile: str
   catalog_fingerprint: str
   profile_fingerprint: str
@@ -69,7 +65,7 @@ def _validation_location(error: ValidationError) -> str:
 def load_python_canonical_settings(
   source_bundle: ConfigurationSourceBundle,
 ) -> PythonCanonicalLoadResult:
-  """Resolve the Python projection and fail without constructing legacy state."""
+  """Resolve the Python projection and fail without constructing partial state."""
   full_entries = iter_catalog_entries()
   projected_entries = iter_catalog_entries(PythonRuntimeConfig)
   expected_paths = {
@@ -109,8 +105,6 @@ def load_python_canonical_settings(
     ) from None
   return PythonCanonicalLoadResult(
     config=config,
-    facade=CanonicalSettingsFacade(config),
-    authority=ConfigurationAuthority.CANONICAL,
     profile=resolved.profile,
     catalog_fingerprint=catalog_fingerprint(),
     profile_fingerprint=profile_fingerprint(get_profile(resolved.profile)),

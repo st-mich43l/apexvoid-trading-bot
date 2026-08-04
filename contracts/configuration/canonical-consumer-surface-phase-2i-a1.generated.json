@@ -28,74 +28,22 @@
       "PHASE_2I_A_1_MIGRATE": 0,
       "PHASE_2I_A_1_MIGRATED": 0,
       "TEST_COMPATIBILITY_RETAIN_2I_A_1": 9,
-      "TOOLING_RETAIN_2I_A_1": 13,
+      "TOOLING_RETAIN_2I_A_1": 9,
       "UNKNOWN_BLOCKER": 0
     },
     "by_file_pending": {},
     "by_mechanism": {
-      "DIRECT_LEGACY_PATHS_import": 13,
+      "DIRECT_LEGACY_PATHS_import": 9,
       "simplenamespace_legacy_fixture": 9
     },
     "production_pending": 0,
-    "total": 22,
+    "total": 18,
     "unknown_blockers": 0
   },
   "phase": "2I-A.1",
-  "source_fingerprint": "dbe78222a6686b41516cd1d5749fae1e205eeda3e4b53e89d9e147ee6d93daf5",
+  "source_fingerprint": "5a0065fffc104c3ae5280556fcb6aede1955d21d16b67e76ce77c86b69d58137",
   "unknown_blockers": [],
   "usages": [
-    {
-      "canonical_path": null,
-      "classification": "TOOLING_RETAIN_2I_A_1",
-      "column": 0,
-      "detail": "import DIRECT_LEGACY_PATHS",
-      "function": "<module>",
-      "legacy_field": "DIRECT_LEGACY_PATHS",
-      "line": 17,
-      "mechanism": "DIRECT_LEGACY_PATHS_import",
-      "path": "algo-bot/app/configuration/activation_cli.py",
-      "status": "retained",
-      "test_coverage": ""
-    },
-    {
-      "canonical_path": null,
-      "classification": "TOOLING_RETAIN_2I_A_1",
-      "column": 0,
-      "detail": "import DIRECT_LEGACY_PATHS",
-      "function": "<module>",
-      "legacy_field": "DIRECT_LEGACY_PATHS",
-      "line": 12,
-      "mechanism": "DIRECT_LEGACY_PATHS_import",
-      "path": "algo-bot/app/configuration/activation_rehearsal.py",
-      "status": "retained",
-      "test_coverage": ""
-    },
-    {
-      "canonical_path": null,
-      "classification": "TOOLING_RETAIN_2I_A_1",
-      "column": 0,
-      "detail": "import DIRECT_LEGACY_PATHS",
-      "function": "<module>",
-      "legacy_field": "DIRECT_LEGACY_PATHS",
-      "line": 6,
-      "mechanism": "DIRECT_LEGACY_PATHS_import",
-      "path": "algo-bot/app/configuration/facade.py",
-      "status": "retained",
-      "test_coverage": ""
-    },
-    {
-      "canonical_path": null,
-      "classification": "TOOLING_RETAIN_2I_A_1",
-      "column": 0,
-      "detail": "import DIRECT_LEGACY_PATHS",
-      "function": "<module>",
-      "legacy_field": "DIRECT_LEGACY_PATHS",
-      "line": 26,
-      "mechanism": "DIRECT_LEGACY_PATHS_import",
-      "path": "algo-bot/app/core/config.py",
-      "status": "retained",
-      "test_coverage": ""
-    },
     {
       "canonical_path": null,
       "classification": "TOOLING_RETAIN_2I_A_1",

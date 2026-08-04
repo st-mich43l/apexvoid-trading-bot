@@ -1,12 +1,10 @@
 """Declarative Python configuration source policy.
 
-Phase 2H decouples runtime source collection from the legacy ``Settings``
-``model_config``. The dotenv file, encoding, and (reserved) file-secret
-directory are described here once, so both the legacy authority and the
-canonical loader observe an identical, reviewed source contract instead of
-reaching into a pydantic-settings ``SettingsConfigDict`` at call time.
+Phase 2H/2I-B describe the dotenv file, encoding, and (reserved) file-secret
+directory here once, so the canonical loader observes a reviewed source
+contract independent of any legacy SettingsConfigDict.
 
-Precedence is unchanged from the historical ``Settings`` behavior: process
+Precedence is unchanged from the historical Settings behavior: process
 environment overrides dotenv, and explicit init values override the process
 environment. This module only names the file inputs; the resolver in
 ``app.configuration.resolver`` owns the layered precedence.
@@ -23,8 +21,9 @@ class PythonConfigurationSourcePolicy:
 
   env_file: str = ".env"
   env_file_encoding: str = "utf-8"
-  # Legacy Settings declares no secrets directory; the layer is retained by
-  # the resolver for deterministic precedence and future reviewed adoption.
+  # No secrets directory is configured for the historical path; the layer is
+  # retained by the resolver for deterministic precedence and future reviewed
+  # adoption.
   secrets_directory: str | None = None
 
 

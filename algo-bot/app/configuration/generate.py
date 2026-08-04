@@ -1180,8 +1180,6 @@ def render_artifacts() -> dict[Path, bytes]:
       )),
     Path("algo-bot/app/configuration/generated/__init__.py"):
       _generated_package_init(),
-    Path("algo-bot/app/configuration/generated/legacy_access.py"):
-      _legacy_access_python(entries, fingerprint),
   }
 
 

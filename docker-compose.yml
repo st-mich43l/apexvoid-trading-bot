@@ -166,13 +166,12 @@ services:
     restart: unless-stopped
     env_file: .env
     environment:
-      # Phase 2H: the bot no longer inherits the cTrader auto-trade anchor. The
-      # Python configuration schema defaults plus AUTO_TRADE_PROFILE=demo_eval
-      # reproduce every value the anchor previously injected (proven
-      # byte-identical for both the legacy and canonical authorities). Only the
-      # mapped-zone execution route and its context guard are pinned off here
-      # explicitly, because the demo_eval profile would otherwise enable them.
-      APEXVOID_CONFIG_AUTHORITY: ${APEXVOID_CONFIG_AUTHORITY:-canonical}
+      # Phase 2H/2I-B: the bot no longer inherits the cTrader auto-trade anchor.
+      # Configuration is always canonical. The Python configuration schema
+      # defaults plus AUTO_TRADE_PROFILE=demo_eval reproduce every value the
+      # anchor previously injected. Only the mapped-zone execution route and
+      # its context guard are pinned off here explicitly, because the
+      # demo_eval profile would otherwise enable them.
       AUTO_TRADE_PROFILE: ${AUTO_TRADE_PROFILE:-demo_eval}
       AUTO_TRADE_MAPPED_ZONE_ENABLED: ${AUTO_TRADE_MAPPED_ZONE_ENABLED:-false}
       AUTO_TRADE_MARKET_MAP_GUARD_ENABLED: ${AUTO_TRADE_MARKET_MAP_GUARD_ENABLED:-${AUTO_TRADE_MAPPED_ZONE_ENABLED:-false}}

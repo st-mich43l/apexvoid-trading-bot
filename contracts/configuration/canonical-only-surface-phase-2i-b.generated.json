@@ -1,0 +1,49 @@
+{
+  "phase": "2I-B",
+  "scope": "core_path_landed_tests_pending",
+  "authorization": "explicit_structural_architecture_decision",
+  "observation_evidence_fabricated": false,
+  "baseline_ancestor": "a7d6a6718247d5b4587fc39c10d3f280e08cc9d0",
+  "counts": {
+    "runtime_configuration_authorities": 1,
+    "authority_selector_ENV_variables": 0,
+    "legacy_Settings_classes": 0,
+    "legacy_settings_singletons": 0,
+    "legacy_canonical_views": 0,
+    "canonical_flat_facades": 0,
+    "runtime_config_facade_functions": 0,
+    "legacy_access_map_generated_modules": 0,
+    "production_ambient_env_unknown_blockers": 0,
+    "unknown_blockers": 0
+  },
+  "canonical_loader_entry_point": "app.configuration.python_loader.load_python_canonical_settings",
+  "composition_root": "app.core.config",
+  "runtime_root_type": "PythonRuntimeConfig",
+  "authority_env_leftover_policy": "APEXVOID_CONFIG_AUTHORITY is an unmanaged unknown environment variable; it is not a selector and does not alter runtime behavior",
+  "deleted_modules": [
+    "legacy_settings.py",
+    "legacy_canonical_view.py",
+    "facade.py",
+    "bootstrap_authority.py",
+    "generated/legacy_access.py",
+    "activation_cli.py",
+    "activation_rehearsal.py",
+    "activation_verification.py",
+    "authority.py",
+    "parity.py",
+    "readiness.py",
+    "shadow_loader.py",
+    "shadow_cli.py",
+    "phase2i_removal_gate.py"
+  ],
+  "added_modules": [
+    "diagnostic_cli.py",
+    "phase2i_completion_gate.py"
+  ],
+  "follow_up_required_for_PHASE_2I_COMPLETE": [
+    "migrate remaining tests off Settings/facade/DIRECT_LEGACY_PATHS/authority",
+    "finish docs ADR + runbook updates",
+    "gate currently reports PHASE_2I_INCOMPLETE due to test/tooling symbol leftovers"
+  ],
+  "catalog_fingerprint": "bb24affb47b297c91637a83880cd2043e59a4cff0b5b17ca2d02fb4952fb54f0"
+}
