@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from pydantic_core import PydanticUndefined
 
 from app.configuration.compatibility_rules import apply_compatibility_rules
-from app.configuration.profile_validation import ProfileAssignmentValidation
+from app.configuration.profile_validation import ProfileAssignmentProblem
 from app.configuration.profile_validation import validate_profile_assignment
 from app.configuration.profiles import get_profile
 from app.configuration.source_types import ConfigurationSourceBundle
@@ -78,17 +78,17 @@ def _profile_name(
 
 def _profile_validation_conflict(
   profile: str,
-  result: ProfileAssignmentValidation,
+  problem: ProfileAssignmentProblem,
 ) -> ResolutionConflict:
-  spec = result.spec
+  spec = problem.spec
   return ResolutionConflict(
-    code=result.code or "profile_assignment_invalid",
-    path=result.path,
+    code=problem.code,
+    path=problem.path,
     source_kind=SourceKind.PROFILE,
     source_name=profile,
     canonical_env=None if spec is None else spec.entry.canonical_env,
     secret=False if spec is None else spec.entry.secret,
-    message=result.message or "invalid profile assignment",
+    message=problem.message,
   )
 
 
@@ -140,13 +140,10 @@ def resolve_configuration(
       assignment=assignment,
       specs=specs,
     )
-    if not validation.valid:
+    if isinstance(validation, ProfileAssignmentProblem):
       conflicts.append(_profile_validation_conflict(profile, validation))
       continue
     spec = validation.spec
-    if spec is None:  # Defensive; valid results always carry a spec.
-      conflicts.append(_profile_validation_conflict(profile, validation))
-      continue
     previous = traces[assignment.path]
     histories[assignment.path].append(
       f"{previous.source_kind.value}:{previous.source_name}"
