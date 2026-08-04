@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from collections.abc import Mapping
+from dataclasses import dataclass
 
 from app.configuration.profiles import ProfileAssignment
 from app.configuration.sources import FieldSpec
@@ -11,13 +11,23 @@ from app.configuration.sources import parse_source_value
 
 
 @dataclass(frozen=True, slots=True)
-class ProfileAssignmentValidation:
+class ParsedProfileAssignment:
   path: str
-  valid: bool
+  spec: FieldSpec
+  value: object
+
+
+@dataclass(frozen=True, slots=True)
+class ProfileAssignmentProblem:
+  path: str
+  code: str
+  message: str
   spec: FieldSpec | None = None
-  value: object = None
-  code: str | None = None
-  message: str | None = None
+
+
+ProfileAssignmentValidation = (
+  ParsedProfileAssignment | ProfileAssignmentProblem
+)
 
 
 def validate_profile_assignment(
@@ -29,9 +39,8 @@ def validate_profile_assignment(
   """Validate and parse one profile assignment using canonical field rules."""
   spec = specs.get(assignment.path)
   if spec is None:
-    return ProfileAssignmentValidation(
+    return ProfileAssignmentProblem(
       path=assignment.path,
-      valid=False,
       code="unknown_profile_path",
       message=(
         f"profile {profile_name!r} references unknown canonical path "
@@ -39,9 +48,8 @@ def validate_profile_assignment(
       ),
     )
   if not spec.entry.configurable:
-    return ProfileAssignmentValidation(
+    return ProfileAssignmentProblem(
       path=assignment.path,
-      valid=False,
       spec=spec,
       code="profile_constant_override",
       message=(
@@ -50,9 +58,8 @@ def validate_profile_assignment(
       ),
     )
   if spec.entry.secret:
-    return ProfileAssignmentValidation(
+    return ProfileAssignmentProblem(
       path=assignment.path,
-      valid=False,
       spec=spec,
       code="profile_secret_override",
       message=(
@@ -63,9 +70,8 @@ def validate_profile_assignment(
   try:
     value = parse_source_value(spec, assignment.value)
   except (TypeError, ValueError):
-    return ProfileAssignmentValidation(
+    return ProfileAssignmentProblem(
       path=assignment.path,
-      valid=False,
       spec=spec,
       code="profile_value_invalid",
       message=(
@@ -73,9 +79,8 @@ def validate_profile_assignment(
         f"satisfy {spec.entry.type} and constraints {spec.entry.constraints}"
       ),
     )
-  return ProfileAssignmentValidation(
+  return ParsedProfileAssignment(
     path=assignment.path,
-    valid=True,
     spec=spec,
     value=value,
   )
