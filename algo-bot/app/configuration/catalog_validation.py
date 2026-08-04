@@ -25,9 +25,9 @@ from app.configuration.metadata import MismatchPolicy
 from app.configuration.metadata import ReloadPolicy
 from app.configuration.metadata import RiskClassification
 from app.configuration.models.python_runtime import PythonRuntimeConfig
+from app.configuration.profile_validation import validate_profile_assignment
 from app.configuration.profiles import PROFILES
 from app.configuration.sources import field_specs
-from app.configuration.sources import parse_source_value
 
 
 class CatalogValidationError(ValueError):
@@ -89,7 +89,7 @@ def catalog_semantic_errors(
       )
     if (
       entry.allowed_values
-      and entry.default not in {"<required>", "<redacted>"}
+      and entry.default not in ("<required>", "<redacted>")
       and entry.default not in entry.allowed_values
     ):
       errors.append(
@@ -107,23 +107,14 @@ def profile_assignment_errors(
   errors: list[str] = []
   for profile in PROFILES.values():
     for assignment in profile.assignments:
-      label = f"profile {profile.name}:{assignment.path}"
-      spec = specs.get(assignment.path)
-      if spec is None:
-        errors.append(f"{label}: unknown canonical path")
-        continue
-      if not spec.entry.configurable:
-        errors.append(f"{label}: profile cannot override a constant")
-        continue
-      if spec.entry.secret:
-        errors.append(f"{label}: profile cannot provide a secret")
-        continue
-      try:
-        parse_source_value(spec, assignment.value)
-      except (TypeError, ValueError):
+      result = validate_profile_assignment(
+        profile_name=profile.name,
+        assignment=assignment,
+        specs=specs,
+      )
+      if not result.valid:
         errors.append(
-          f"{label}: value does not satisfy {spec.entry.type} "
-          f"and constraints {spec.entry.constraints}"
+          f"profile {profile.name}:{assignment.path}: {result.message}"
         )
   return errors
 
