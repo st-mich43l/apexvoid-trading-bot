@@ -60,15 +60,13 @@ _TARGET_SYMBOLS = frozenset({
   "project_from",
 })
 
-# Config-package modules that legitimately own the reverse-mapping surface.
+# Config-package modules that historically owned the reverse-mapping surface.
+# Phase 2I-B removed facade/activation tooling; only the generator/audits remain
+# as historical scanners until their dependency on DIRECT_LEGACY_PATHS is gone.
 _TOOLING_ALLOWED_DIRECT_LEGACY_PATHS_IMPORTS = frozenset({
-  "algo-bot/app/configuration/facade.py",
-  "algo-bot/app/configuration/activation_cli.py",
-  "algo-bot/app/configuration/activation_rehearsal.py",
   "algo-bot/app/configuration/generate.py",
   "algo-bot/app/configuration/compatibility_surface_audit.py",
   "algo-bot/app/configuration/canonical_consumer_surface.py",
-  "algo-bot/app/core/config.py",
 })
 
 _PRODUCTION_ROOT = "algo-bot/app/"

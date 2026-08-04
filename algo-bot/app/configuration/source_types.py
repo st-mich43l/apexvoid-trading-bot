@@ -6,11 +6,6 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Mapping
 
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-  from pydantic import BaseModel
-
 
 class SourceKind(StrEnum):
   SCHEMA_DEFAULT = "schema_default"
@@ -20,12 +15,6 @@ class SourceKind(StrEnum):
   PROCESS_ENV = "process_environment"
   INIT_VALUE = "init_value"
   DERIVED_COMPATIBILITY_RULE = "derived_compatibility_rule"
-
-
-class ShadowLoadStatus(StrEnum):
-  COMPLETE = "complete"
-  INCOMPLETE_REQUIRED_INPUT = "incomplete_required_input"
-  INVALID = "invalid"
 
 
 @dataclass(frozen=True, slots=True)
@@ -104,23 +93,3 @@ class ResolvedConfiguration:
   warnings: tuple[ResolutionWarning, ...]
   conflicts: tuple[ResolutionConflict, ...]
   missing_required_paths: tuple[str, ...]
-
-
-@dataclass(frozen=True, slots=True)
-class ShadowLoadResult:
-  config: "BaseModel | None" = field(default=None, repr=False)
-  profile: str = "conservative"
-  status: ShadowLoadStatus = ShadowLoadStatus.INVALID
-  trace: ResolutionTrace = field(default_factory=lambda: ResolutionTrace(()))
-  warnings: tuple[ResolutionWarning, ...] = ()
-  conflicts: tuple[ResolutionConflict, ...] = ()
-  validation_errors: tuple[str, ...] = ()
-  missing_required_paths: tuple[str, ...] = ()
-  catalog_fingerprint: str = ""
-  profile_fingerprint: str = ""
-  success: bool = False
-  authoritative: bool = False
-
-  def __post_init__(self) -> None:
-    if self.authoritative:
-      raise ValueError("Phase 2C shadow results cannot be authoritative")

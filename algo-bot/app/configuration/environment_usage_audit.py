@@ -47,18 +47,13 @@ _ALLOWED_CLASSIFICATIONS = frozenset({
 # to the repository root. A file absent from this map is UNKNOWN_BLOCKER, which
 # forces a reviewed decision before it can pass the contract check.
 _FILE_CLASSIFICATION: dict[str, str] = {
-  "algo-bot/app/configuration/bootstrap_authority.py": BOOTSTRAP_AUTHORITY_ALLOWED,
   "algo-bot/app/configuration/python_sources.py": CANONICAL_SOURCE_COLLECTION_ALLOWED,
-  "algo-bot/app/configuration/legacy_settings.py": LEGACY_ROLLBACK_ALLOWED,
   "algo-bot/app/configuration/deployment_identity.py": DEPLOYMENT_OBSERVABILITY_ALLOWED,
-  "algo-bot/app/configuration/shadow_cli.py": SCRIPT_TOOL_ALLOWED,
-  "algo-bot/app/configuration/shadow_loader.py": SCRIPT_TOOL_ALLOWED,
-  "algo-bot/app/configuration/activation_cli.py": SCRIPT_TOOL_ALLOWED,
-  "algo-bot/app/configuration/activation_rehearsal.py": SCRIPT_TOOL_ALLOWED,
-  "algo-bot/app/configuration/activation_verification.py": SCRIPT_TOOL_ALLOWED,
   "algo-bot/app/configuration/phase2h_gate.py": SCRIPT_TOOL_ALLOWED,
   "algo-bot/app/configuration/environment_cli.py": SCRIPT_TOOL_ALLOWED,
   "algo-bot/app/configuration/generate.py": SCRIPT_TOOL_ALLOWED,
+  "algo-bot/app/configuration/diagnostic_cli.py": SCRIPT_TOOL_ALLOWED,
+  "algo-bot/app/configuration/phase2i_completion_gate.py": SCRIPT_TOOL_ALLOWED,
 }
 
 
