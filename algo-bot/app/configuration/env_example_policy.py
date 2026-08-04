@@ -35,17 +35,11 @@ class DeploymentEnvVar:
   comment: str
 
 
-# Non-catalog deployment variables: the bootstrap authority selector and the
-# compose-managed Postgres password (owned by the database service, not the
-# algo-bot configuration catalog).
+# Non-catalog deployment variables. The compose-managed Postgres password is
+# owned by the database service, not the algo-bot configuration catalog.
+# APEXVOID_CONFIG_AUTHORITY was removed in Phase 2I-B: leftover values are
+# unmanaged unknown environment variables and do not alter runtime behavior.
 EXTRA_DEPLOYMENT_ENV: tuple[DeploymentEnvVar, ...] = (
-  DeploymentEnvVar(
-    "APEXVOID_CONFIG_AUTHORITY",
-    "canonical",
-    "Configuration authority: canonical (managed-deployment default) or "
-    "legacy (rollback). Unset selects legacy with an implicit-authority "
-    "warning; canonical is fail-closed.",
-  ),
   DeploymentEnvVar(
     "POSTGRES_PASSWORD",
     REQUIRED_SECRET_PLACEHOLDER,
