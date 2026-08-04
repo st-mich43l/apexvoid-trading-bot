@@ -1,4 +1,4 @@
-"""Immutable, secret-safe source-resolution records for Phase 2C."""
+"""Immutable, secret-safe source-resolution records."""
 
 from __future__ import annotations
 
@@ -17,10 +17,20 @@ class SourceKind(StrEnum):
   DERIVED_COMPATIBILITY_RULE = "derived_compatibility_rule"
 
 
+SOURCE_PRECEDENCE = (
+  SourceKind.SCHEMA_DEFAULT,
+  SourceKind.PROFILE,
+  SourceKind.FILE_SECRET,
+  SourceKind.DOTENV,
+  SourceKind.PROCESS_ENV,
+  SourceKind.INIT_VALUE,
+  SourceKind.DERIVED_COMPATIBILITY_RULE,
+)
+
+
 @dataclass(frozen=True, slots=True)
 class SourceCandidate:
   path: str
-  item_id: str
   source_kind: SourceKind
   source_name: str
   canonical_env: str | None
@@ -32,7 +42,6 @@ class SourceCandidate:
 @dataclass(frozen=True, slots=True)
 class ResolvedFieldSource:
   path: str
-  item_id: str
   source_kind: SourceKind
   source_name: str
   canonical_env: str | None

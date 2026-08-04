@@ -105,7 +105,6 @@ def resolve_configuration(
       values[path] = default
     traces[path] = ResolvedFieldSource(
       path=path,
-      item_id=spec.entry.item_id,
       source_kind=SourceKind.SCHEMA_DEFAULT,
       source_name=("required_input_missing" if missing else "schema_default"),
       canonical_env=spec.entry.canonical_env,
@@ -128,7 +127,6 @@ def resolve_configuration(
     values[assignment.path] = assignment.value
     traces[assignment.path] = ResolvedFieldSource(
       path=assignment.path,
-      item_id=spec.entry.item_id,
       source_kind=SourceKind.PROFILE,
       source_name=profile,
       canonical_env=spec.entry.canonical_env,
@@ -163,7 +161,6 @@ def resolve_configuration(
       source = layer.candidate.source
       traces[path] = ResolvedFieldSource(
         path=path,
-        item_id=source.item_id,
         source_kind=source.source_kind,
         source_name=source.source_name,
         canonical_env=source.canonical_env,
