@@ -1180,10 +1180,24 @@ public sealed class TradePlanRuntime(
         cancellationToken,
         "plan_expired"
       );
+      var waitReasonForExpiry = state.LastEntryWaitReason ?? "never_evaluated";
+      // Every other terminal transition in this file (plan_rejected,
+      // order_filled, position_closed, ...) publishes an event so Python
+      // can resolve the forming card and the owner learns what happened.
+      // This branch used to just log and forget the plan - the owner had
+      // no way to tell a market_watch setup died from a stale "SETUP
+      // FORMING" card short of noticing on their own and asking why.
+      await PublishEventAsync(
+        "plan_expired",
+        $"TradePlan V7 expired {plan.Analysis.Direction} · "
+          + $"price never returned to the entry zone ({waitReasonForExpiry})",
+        plan,
+        cancellationToken
+      );
       await ForgetPlanAsync(state.PlanId, cancellationToken);
       log(
         $"v7 plan expired id={state.PlanId} "
-        + $"last_wait_reason={state.LastEntryWaitReason ?? "never_evaluated"}"
+        + $"last_wait_reason={waitReasonForExpiry}"
       );
       return;
     }
