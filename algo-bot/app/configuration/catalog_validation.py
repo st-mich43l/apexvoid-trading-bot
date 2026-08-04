@@ -13,6 +13,9 @@ import sys
 from collections import Counter
 from typing import Iterable
 
+from pydantic import BaseModel
+
+from app.configuration.catalog import CatalogEntry
 from app.configuration.catalog import iter_catalog_entries
 from app.configuration.generate import CATALOG_VERSION
 from app.configuration.metadata import ConfigKind
@@ -22,6 +25,9 @@ from app.configuration.metadata import MismatchPolicy
 from app.configuration.metadata import ReloadPolicy
 from app.configuration.metadata import RiskClassification
 from app.configuration.models.python_runtime import PythonRuntimeConfig
+from app.configuration.profiles import PROFILES
+from app.configuration.sources import field_specs
+from app.configuration.sources import parse_source_value
 
 
 class CatalogValidationError(ValueError):
@@ -56,6 +62,70 @@ V1_ID_PREFIXES = (
 def _duplicates(values: Iterable[str]) -> list[str]:
   counts = Counter(values)
   return sorted(value for value, count in counts.items() if count > 1)
+
+
+def catalog_semantic_errors(
+  entries: Iterable[CatalogEntry],
+) -> list[str]:
+  """Return cross-field metadata errors not enforced by enum membership."""
+  errors: list[str] = []
+  for entry in entries:
+    label = entry.path
+    shared_owner = entry.owner == ConfigOwner.SHARED.value
+
+    if entry.configurable and entry.canonical_env is None:
+      errors.append(f"{label}: configurable field has no canonical ENV")
+    if shared_owner != entry.shared_with_ctrader:
+      errors.append(
+        f"{label}: owner/shared_with_ctrader mismatch "
+        f"({entry.owner!r}, {entry.shared_with_ctrader!r})"
+      )
+    if not entry.shared_with_ctrader and entry.mismatch_policy != (
+      MismatchPolicy.NOT_REPORTED.value
+    ):
+      errors.append(
+        f"{label}: non-shared field has mismatch policy "
+        f"{entry.mismatch_policy!r}"
+      )
+    if (
+      entry.allowed_values
+      and entry.default not in {"<required>", "<redacted>"}
+      and entry.default not in entry.allowed_values
+    ):
+      errors.append(
+        f"{label}: default {entry.default!r} is outside allowed values "
+        f"{list(entry.allowed_values)!r}"
+      )
+  return errors
+
+
+def profile_assignment_errors(
+  model: type[BaseModel] = PythonRuntimeConfig,
+) -> list[str]:
+  """Validate every immutable profile against the active typed projection."""
+  specs = field_specs(model)
+  errors: list[str] = []
+  for profile in PROFILES.values():
+    for assignment in profile.assignments:
+      label = f"profile {profile.name}:{assignment.path}"
+      spec = specs.get(assignment.path)
+      if spec is None:
+        errors.append(f"{label}: unknown canonical path")
+        continue
+      if not spec.entry.configurable:
+        errors.append(f"{label}: profile cannot override a constant")
+        continue
+      if spec.entry.secret:
+        errors.append(f"{label}: profile cannot provide a secret")
+        continue
+      try:
+        parse_source_value(spec, assignment.value)
+      except (TypeError, ValueError):
+        errors.append(
+          f"{label}: value does not satisfy {spec.entry.type} "
+          f"and constraints {spec.entry.constraints}"
+        )
+  return errors
 
 
 def validate_active_catalog() -> None:
@@ -125,11 +195,6 @@ def validate_active_catalog() -> None:
       errors.append(f"{label}: secret default is not redacted")
     if entry.canonical_env in SECRET_ENV_NAMES and not entry.secret:
       errors.append(f"{label}: known secret ENV is not classified secret")
-    if entry.shared_with_ctrader and entry.mismatch_policy == (
-      MismatchPolicy.NOT_REPORTED.value
-    ):
-      # Shared fields may be not_reported; keep soft signal only when fatal-required.
-      pass
     if entry.deprecated and not (
       entry.replacement_path or entry.terminal_deprecation_reason
     ):
@@ -138,12 +203,15 @@ def validate_active_catalog() -> None:
     if "item_id" in payload or "legacy_attr" in payload:
       errors.append(f"{label}: legacy identity metadata still present")
 
+  errors.extend(catalog_semantic_errors(entries))
+  errors.extend(profile_assignment_errors())
+
   projected = {entry.path for entry in iter_catalog_entries(PythonRuntimeConfig)}
   for entry in entries:
-    if entry.owner == "ctrader" and not entry.shared_with_ctrader:
+    if entry.owner == ConfigOwner.CTRADER.value:
       if entry.path in projected:
         errors.append(f"{entry.path}: cTrader-only leaf projected into Python")
-    elif entry.path not in projected and entry.owner != "ctrader":
+    elif entry.path not in projected:
       errors.append(f"{entry.path}: Python/shared leaf missing from projection")
 
   if errors:
