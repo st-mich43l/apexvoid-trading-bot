@@ -1,7 +1,7 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "1dab7cdbe9266e96d6b9e2aa553d1848ab9e0cd42d8626385ebc2213a3bc6eac",
-  "count": 374,
+  "configuration_contract_fingerprint_sha256": "eb2002bd01237007c3eacdba1a4b8a6cd07417d5fa44c354e31b511e9a423629",
+  "count": 376,
   "deprecated_alias_count": 21,
   "entries": [
     {
@@ -2239,6 +2239,38 @@
       "shared_with_ctrader": false,
       "type": "float",
       "unit": "fraction"
+    },
+    {
+      "canonical_env": "AUTO_TRADE_SCALP_MIN_CAPPED_TARGET_PIPS",
+      "default": 8.0,
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Minimum capped target applied to range/scalp setups instead of minimum_capped_target_pips (pips).",
+      "display_id": "config:actionability.target_room.scalp_minimum_capped_target_pips",
+      "owner": "python",
+      "path": "actionability.target_room.scalp_minimum_capped_target_pips",
+      "replacement_path": null,
+      "required": false,
+      "secret": false,
+      "shared_with_ctrader": false,
+      "type": "float",
+      "unit": "pips"
+    },
+    {
+      "canonical_env": "AUTO_TRADE_SCALP_OPPOSING_BARRIER_ATR",
+      "default": 0.15,
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Barrier buffer applied to range/scalp setups (Range Edge Scalp, Fade Scalp, etc) instead of barrier_buffer_atr - scalping close to structure is the intended style, not a violation of it (atr).",
+      "display_id": "config:actionability.target_room.scalp_barrier_buffer_atr",
+      "owner": "python",
+      "path": "actionability.target_room.scalp_barrier_buffer_atr",
+      "replacement_path": null,
+      "required": false,
+      "secret": false,
+      "shared_with_ctrader": false,
+      "type": "float",
+      "unit": "atr"
     },
     {
       "canonical_env": "AUTO_TRADE_SESSION_LEVEL_REACTION_ENABLED",
@@ -6042,6 +6074,6 @@
   ],
   "secret_count": 9,
   "shared_with_ctrader_count": 86,
-  "source_fingerprint_sha256": "1dab7cdbe9266e96d6b9e2aa553d1848ab9e0cd42d8626385ebc2213a3bc6eac",
+  "source_fingerprint_sha256": "eb2002bd01237007c3eacdba1a4b8a6cd07417d5fa44c354e31b511e9a423629",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }
