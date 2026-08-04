@@ -25,6 +25,7 @@ from app.configuration.metadata import MismatchPolicy
 from app.configuration.metadata import ReloadPolicy
 from app.configuration.metadata import RiskClassification
 from app.configuration.models.python_runtime import PythonRuntimeConfig
+from app.configuration.profile_validation import ProfileAssignmentProblem
 from app.configuration.profile_validation import validate_profile_assignment
 from app.configuration.profiles import PROFILES
 from app.configuration.sources import field_specs
@@ -112,10 +113,8 @@ def profile_assignment_errors(
         assignment=assignment,
         specs=specs,
       )
-      if not result.valid:
-        errors.append(
-          f"profile {profile.name}:{assignment.path}: {result.message}"
-        )
+      if isinstance(result, ProfileAssignmentProblem):
+        errors.append(result.message)
   return errors
 
 
