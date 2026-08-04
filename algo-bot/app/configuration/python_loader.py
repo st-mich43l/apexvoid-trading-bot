@@ -82,6 +82,8 @@ def load_python_canonical_settings(
     process_environment=source_bundle.process_environment,
     dotenv_values=source_bundle.dotenv_values,
     file_secret_values=source_bundle.file_secret_values,
+    config_file_values=source_bundle.config_file_values,
+    instruments=source_bundle.instruments,
     model=PythonRuntimeConfig,
   )
   if resolved.conflicts:
@@ -96,8 +98,10 @@ def load_python_canonical_settings(
       category="missing_required_input",
       path=resolved.missing_required_paths[0],
     )
+  nested_input = dict(resolved.nested_input)
+  nested_input["instruments"] = dict(resolved.instruments)
   try:
-    config = PythonRuntimeConfig.model_validate(resolved.nested_input)
+    config = PythonRuntimeConfig.model_validate(nested_input)
   except ValidationError as exc:
     raise CanonicalConfigurationError(
       category="validation_error",

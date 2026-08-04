@@ -37,6 +37,11 @@ def _project_model(model: type[BaseModel], *, projected_name: str | None=None) -
         projected_field = deepcopy(source_field)
         if isinstance(annotation, type) and issubclass(annotation, BaseModel):
             child_owners = _descendant_owners(annotation)
+            # Non-catalog containers (e.g. instruments registry) have no leaf
+            # owners; retain them on the Python projection unchanged.
+            if not child_owners:
+                definitions[field_name] = (annotation, projected_field)
+                continue
             if not child_owners & _PYTHON_RUNTIME_OWNERS:
                 continue
             projected_annotation = _project_model(annotation)

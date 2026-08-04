@@ -22,6 +22,7 @@ from app.configuration.fingerprints import configuration_document_fingerprint
 from app.configuration.models.python_runtime import PythonRuntimeConfig
 from app.configuration.profiles import PROFILES
 from app.configuration.profiles import profile_fingerprint
+from app.configuration.deployment_contract import deployment_contract_document
 from app.configuration.source_types import SOURCE_PRECEDENCE
 
 
@@ -224,7 +225,9 @@ def _architecture_artifact(
     "catalog_version": CATALOG_VERSION,
     "runtime_root": "PythonRuntimeConfig",
     "runtime_authority_count": 1,
-    "source_policy": "schema>profile>file_secrets>dotenv>process_env>init",
+    "source_policy": (
+      "schema>profile>file_secrets>config_file>dotenv>process_env>init"
+    ),
     "source_precedence": [kind.value for kind in SOURCE_PRECEDENCE],
     "catalog_entry_count": len(entries),
     "configurable_count": kinds["configurable"],
@@ -344,6 +347,10 @@ def render_artifacts() -> dict[Path, bytes]:
     Path("contracts/configuration/configuration-architecture.generated.json"):
       _json_bytes(_architecture_artifact(
         entries, contract_fingerprint, document_fingerprint,
+      )),
+    Path("contracts/configuration/deployment-contract.generated.json"):
+      _json_bytes(deployment_contract_document(
+        entries, contract_fingerprint=contract_fingerprint,
       )),
     Path("docs/configuration/config-catalog.generated.md"):
       _markdown(entries, contract_fingerprint, document_fingerprint),

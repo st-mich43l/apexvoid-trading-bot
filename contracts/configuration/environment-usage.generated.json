@@ -43,10 +43,10 @@
     {
       "allowed": true,
       "api": "dotenv_values",
-      "classification": "CANONICAL_SOURCE_COLLECTION_ALLOWED",
+      "classification": "SCRIPT_TOOL_ALLOWED",
       "env_name": null,
-      "file": "algo-bot/app/configuration/python_sources.py",
-      "line": 32
+      "file": "algo-bot/app/configuration/migrate_env_to_config.py",
+      "line": 236
     },
     {
       "allowed": true,
@@ -54,16 +54,24 @@
       "classification": "CANONICAL_SOURCE_COLLECTION_ALLOWED",
       "env_name": null,
       "file": "algo-bot/app/configuration/python_sources.py",
+      "line": 32
+    },
+    {
+      "allowed": true,
+      "api": "dotenv_values",
+      "classification": "CANONICAL_SOURCE_COLLECTION_ALLOWED",
+      "env_name": null,
+      "file": "algo-bot/app/configuration/python_sources.py",
       "line": 39
     }
   ],
-  "allowed_sites": 7,
+  "allowed_sites": 8,
   "counts": {
     "CANONICAL_SOURCE_COLLECTION_ALLOWED": 2,
     "DEPLOYMENT_OBSERVABILITY_ALLOWED": 3,
-    "SCRIPT_TOOL_ALLOWED": 2
+    "SCRIPT_TOOL_ALLOWED": 3
   },
   "direct_production_env_forbidden": 0,
-  "total_access_sites": 7,
+  "total_access_sites": 8,
   "unknown_blockers": 0
 }

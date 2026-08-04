@@ -11,6 +11,7 @@ class SourceKind(StrEnum):
   SCHEMA_DEFAULT = "schema_default"
   PROFILE = "profile"
   FILE_SECRET = "file_secret"
+  CONFIG_FILE = "config_file"
   DOTENV = "dotenv"
   PROCESS_ENV = "process_environment"
   INIT_VALUE = "init_value"
@@ -21,6 +22,7 @@ SOURCE_PRECEDENCE = (
   SourceKind.SCHEMA_DEFAULT,
   SourceKind.PROFILE,
   SourceKind.FILE_SECRET,
+  SourceKind.CONFIG_FILE,
   SourceKind.DOTENV,
   SourceKind.PROCESS_ENV,
   SourceKind.INIT_VALUE,
@@ -91,6 +93,9 @@ class ConfigurationSourceBundle:
   process_environment: Mapping[str, str] = field(default_factory=dict)
   dotenv_values: Mapping[str, str | None] = field(default_factory=dict)
   file_secret_values: Mapping[str, str] = field(default_factory=dict)
+  config_file_values: Mapping[str, object] = field(default_factory=dict)
+  # Parsed instruments registry from CONFIG_FILE (may be empty).
+  instruments: Mapping[str, object] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -102,3 +107,4 @@ class ResolvedConfiguration:
   warnings: tuple[ResolutionWarning, ...]
   conflicts: tuple[ResolutionConflict, ...]
   missing_required_paths: tuple[str, ...]
+  instruments: Mapping[str, object] = field(default_factory=dict, repr=False)

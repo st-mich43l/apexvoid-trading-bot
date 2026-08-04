@@ -7,6 +7,8 @@ from pydantic import BaseModel
 from pydantic_core import PydanticUndefined
 
 from app.configuration.compatibility_rules import apply_compatibility_rules
+from app.configuration.models.instruments import EMPTY_INSTRUMENTS
+from app.configuration.models.instruments import InstrumentsConfig
 from app.configuration.profile_validation import ProfileAssignmentProblem
 from app.configuration.profile_validation import validate_profile_assignment
 from app.configuration.profiles import get_profile
@@ -25,6 +27,7 @@ from app.configuration.models.root import ApexVoidConfig
 
 _LAYERS = (
   (SourceKind.FILE_SECRET, "file_secret_values"),
+  (SourceKind.CONFIG_FILE, "config_file_values"),
   (SourceKind.DOTENV, "dotenv_values"),
   (SourceKind.PROCESS_ENV, "process_environment"),
   (SourceKind.INIT_VALUE, "init_values"),
@@ -43,6 +46,18 @@ def _nested(flat_values: Mapping[str, object]) -> dict[str, object]:
       cursor = child
     cursor[parts[-1]] = value
   return root
+
+
+def _as_instruments(raw: object | None) -> InstrumentsConfig:
+  if raw is None:
+    return EMPTY_INSTRUMENTS
+  if isinstance(raw, InstrumentsConfig):
+    return raw
+  if isinstance(raw, dict):
+    if not raw:
+      return EMPTY_INSTRUMENTS
+    return InstrumentsConfig.model_validate(raw)
+  return EMPTY_INSTRUMENTS
 
 
 def _profile_name(
@@ -98,6 +113,8 @@ def resolve_configuration(
   process_environment: Mapping[str, str],
   dotenv_values: Mapping[str, str | None],
   file_secret_values: Mapping[str, str],
+  config_file_values: Mapping[str, object] | None = None,
+  instruments: Mapping[str, object] | InstrumentsConfig | None = None,
   model: type[BaseModel] = ApexVoidConfig,
 ) -> ResolvedConfiguration:
   """Resolve explicit mappings without reading dotenv or process state."""
@@ -106,6 +123,15 @@ def resolve_configuration(
     process_environment=dict(process_environment),
     dotenv_values=dict(dotenv_values),
     file_secret_values=dict(file_secret_values),
+    config_file_values=dict(config_file_values or {}),
+    instruments=(
+      None if instruments is None
+      else (
+        instruments
+        if isinstance(instruments, Mapping)
+        else instruments.root
+      )
+    ),
   )
   specs = field_specs(model)
   profile, profile_conflicts = _profile_name(specs["runtime.profile"], bundle)
@@ -208,5 +234,6 @@ def resolve_configuration(
     warnings=tuple(warnings),
     conflicts=tuple(conflicts),
     missing_required_paths=missing,
+    instruments=_as_instruments(bundle.instruments).root,
   )
   return apply_compatibility_rules(resolved)

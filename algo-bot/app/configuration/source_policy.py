@@ -4,10 +4,10 @@ Phase 2H/2I-B describe the dotenv file, encoding, and (reserved) file-secret
 directory here once, so the canonical loader observes a reviewed source
 contract independent of any legacy SettingsConfigDict.
 
-Precedence is unchanged from the historical Settings behavior: process
-environment overrides dotenv, and explicit init values override the process
-environment. This module only names the file inputs; the resolver in
-``app.configuration.resolver`` owns the layered precedence.
+Precedence is unchanged from the historical Settings behavior aside from the
+inserted CONFIG_FILE layer: schema → profile → file_secret → config_file →
+dotenv → process_env → init → derived. This module only names the file inputs;
+the resolver in ``app.configuration.resolver`` owns the layered precedence.
 """
 
 from __future__ import annotations
@@ -25,6 +25,8 @@ class PythonConfigurationSourcePolicy:
   # retained by the resolver for deterministic precedence and future reviewed
   # adoption.
   secrets_directory: str | None = None
+  # Optional absolute/relative path; None means read APEXVOID_CONFIG_FILE.
+  config_file: str | None = None
 
 
 PYTHON_SOURCE_POLICY = PythonConfigurationSourcePolicy()
