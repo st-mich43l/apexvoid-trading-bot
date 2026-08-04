@@ -304,6 +304,17 @@ def apply_forming_card_status(text: str, status_line: str) -> str:
     rewritten_header = _position_activated_header(lines[0])
     if rewritten_header is not None:
       lines[0] = rewritten_header
+      # The header itself now says POSITION ACTIVATED - repeating the
+      # identical phrase immediately below it read as a duplicated line
+      # (confirmed live: "✅ POSITION ACTIVATED · XAU M5" followed by a
+      # second "✅ POSITION ACTIVATED"). Collapse the now-redundant status
+      # slot the same way PLAN PUBLISHED already does with
+      # _PLAN_PUBLISHED_STATUS_SLOT - invisible, but still a real line so
+      # later status edits keep replacing lines[1] correctly. Only the
+      # card TEXT changes here; the persisted status snapshot
+      # (save_forming_card_status) still stores the real status_line for
+      # priority gating, so this is purely cosmetic.
+      lines[1] = _PLAN_PUBLISHED_STATUS_SLOT
   return "\n".join(lines)
 
 

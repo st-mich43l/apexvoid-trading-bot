@@ -121,7 +121,15 @@ public sealed record TradePlanRuntimeState(
   bool GroupStopVerified = false,
   string GroupStage = TradePlanGroupStages.Received,
   string? TerminalReason = null,
-  int Revision = 0
+  int Revision = 0,
+  // In-memory only (never persisted to Redis - just a cheap per-poll
+  // cache): the reason the last pending-entry poll didn't submit
+  // ("outside_zone" / "spread_exceeds_declared_limit"). Wait decisions
+  // fire on every poll and are otherwise completely silent, so without
+  // this the "v7 plan expired" log line can't say why a market_watch
+  // entry never filled even when price genuinely returned to the zone
+  // before expiry - see the live incident this fixed.
+  string? LastEntryWaitReason = null
 );
 
 public sealed record TradePlanRejectionRecord(
@@ -1173,11 +1181,18 @@ public sealed class TradePlanRuntime(
         "plan_expired"
       );
       await ForgetPlanAsync(state.PlanId, cancellationToken);
-      log($"v7 plan expired id={state.PlanId}");
+      log(
+        $"v7 plan expired id={state.PlanId} "
+        + $"last_wait_reason={state.LastEntryWaitReason ?? "never_evaluated"}"
+      );
       return;
     }
     if (!decision.ShouldSubmit)
     {
+      if (decision.RejectReason is string waitReason)
+      {
+        _statesById[state.PlanId] = state with { LastEntryWaitReason = waitReason };
+      }
       return;
     }
     if (!ShouldSubmitOrders)

@@ -99,7 +99,7 @@ public static class TradePlanExecutionEngine
     var quote = plan.Entry.PriceSide == "ask" ? ask : bid;
     if (quote < plan.Entry.ZoneLow.Value || quote > plan.Entry.ZoneHigh.Value)
     {
-      return new TradePlanEntryDecision(TradePlanEntryAction.Wait);
+      return new TradePlanEntryDecision(TradePlanEntryAction.Wait, "outside_zone");
     }
     if (plan.Entry.MaxSpreadTicks is int maxSpread && spreadTicks > maxSpread)
     {
