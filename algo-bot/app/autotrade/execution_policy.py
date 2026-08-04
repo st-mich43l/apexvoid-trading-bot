@@ -87,6 +87,10 @@ PREFERENCE_TELEMETRY_REASONS = frozenset({
   "opposing_barrier_target_capped",
   "opposing_barrier_target_capped_below_ladder",
   "configured_ladder_does_not_fit",
+  # Opposing barrier present but not binding — the full configured ladder
+  # already fits within buffered room; same allow/effective-target outcome
+  # as no_opposing_barrier, split out only for telemetry clarity.
+  "opposing_barrier_full_ladder_fits",
 })
 
 # True structural conflicts — must hard-block publication.

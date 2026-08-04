@@ -379,10 +379,27 @@ def evaluate_structural_target_room(
   fitted = tuple(target for target in targets if target <= usable_pips)
   if fitted:
     effective = float(max(fitted))
+    # The opposing barrier only actually truncated the ladder if some
+    # configured target didn't fit — when the full ladder fits (usable
+    # room clears even the largest target), the barrier had no effect on
+    # the outcome and labeling it "capped" is misleading telemetry, even
+    # though the decision itself (allow, effective=max(targets)) is
+    # identical to no_opposing_barrier's.
+    capped = len(fitted) < len(targets)
+    reason = (
+      "opposing_barrier_target_capped"
+      if capped
+      else "opposing_barrier_full_ladder_fits"
+    )
+    message = (
+      "configured target ladder capped before opposing structure"
+      if capped
+      else "opposing structure present but configured ladder fits within buffered room"
+    )
     return _log_decision(StructuralTargetRoomDecision(
       True,
-      "opposing_barrier_target_capped",
-      "configured target ladder capped before opposing structure",
+      reason,
+      message,
       False,
       {
         **measured,
