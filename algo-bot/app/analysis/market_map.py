@@ -271,7 +271,15 @@ def build_map(ctx_or_per_tf, price: float, cfg=None) -> MarketMap:
   )
   generated_at = int(datetime.now(timezone.utc).timestamp())
   source_tf = str(cfg.market_data.scanner.execution_timeframe or "M5").upper()
-  actionable_entries = _rank_entries(actionable_pool, float(price))
+  # actionable_pool feeds _beyond_display_cap_lines's "ALSO QUALIFIES"
+  # section directly - without this same reconciliation, an entry
+  # _resolve_cross_side_overlaps correctly dropped from `capped` for
+  # substantially overlapping a stronger opposing entry reappears there
+  # under "beyond display cap", resurfacing exactly the contradictory
+  # supply/demand pair the reconciliation exists to suppress.
+  actionable_entries = _rank_entries(
+    _resolve_cross_side_overlaps(actionable_pool), float(price),
+  )
   map_id = _build_map_id(
     capped,
     actionable_entries,
