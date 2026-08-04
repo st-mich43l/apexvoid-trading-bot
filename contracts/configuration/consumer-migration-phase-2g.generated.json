@@ -1819,7 +1819,7 @@
       "deferred_reason": null,
       "file": "algo-bot/app/main.py",
       "legacy_attribute": "auto_trade_enabled",
-      "line": 121,
+      "line": 113,
       "migration_classification": "PHASE_2G_MIGRATE",
       "migration_status": "migrated",
       "root_domain": "runtime",
