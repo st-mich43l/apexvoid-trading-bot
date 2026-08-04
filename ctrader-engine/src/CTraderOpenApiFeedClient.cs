@@ -625,6 +625,19 @@ public sealed class CTraderOpenApiFeedClient : ICTraderFeedClient, ICTraderTrade
     // reconcile then spends 30s and never classifies the protective close.
     // Windowed queries must keep ToTimestamp <= now (see BuildDealListWindow)
     // to avoid INCORRECT_BOUNDARIES when approximateClose≈now.
+    //
+    // This lookup is purely diagnostic (best-effort close reason + exit
+    // price for a position the broker has already closed) and every request
+    // shares one global in-flight slot with live order management
+    // (SendAndWaitAsync's _requestLock). At the full RequestTimeout (30s),
+    // a genuine broker stall on the windowed attempt followed by the same
+    // stall on the unbounded fallback held that lock — and therefore
+    // blocked stop-loss trailing / order submission for every other open
+    // position — for a full 60s after every SL/BE close (seen live:
+    // position_close_deal_list_windowed_failed immediately followed by
+    // position_close_reason_lookup_failed, both after 30s). Use a much
+    // shorter timeout here so a slow/unresponsive broker fails this
+    // best-effort lookup fast instead of stalling the whole client.
     var (fromTimestamp, toTimestamp) = BuildDealListWindow(
       openedAtTimestamp,
       approximateCloseTimestamp,
@@ -641,7 +654,8 @@ public sealed class CTraderOpenApiFeedClient : ICTraderFeedClient, ICTraderTrade
           ToTimestamp = toTimestamp,
         },
         res => res.CtidTraderAccountId == options.AccountId,
-        cancellationToken
+        cancellationToken,
+        DealListLookupTimeout
       );
     }
     catch (Exception exception) when (
@@ -665,9 +679,15 @@ public sealed class CTraderOpenApiFeedClient : ICTraderFeedClient, ICTraderTrade
         PositionId = positionId,
       },
       res => res.CtidTraderAccountId == options.AccountId,
-      cancellationToken
+      cancellationToken,
+      DealListLookupTimeout
     );
   }
+
+  // Kept well under options.RequestTimeout (default 30s) — see the
+  // FetchDealsByPositionIdAsync comment above for why this specific lookup
+  // must not hold the shared request lock as long as a live order call.
+  internal static readonly TimeSpan DealListLookupTimeout = TimeSpan.FromSeconds(8);
 
   internal static bool IsIncorrectBoundaries(Exception exception)
   {
@@ -939,14 +959,15 @@ public sealed class CTraderOpenApiFeedClient : ICTraderFeedClient, ICTraderTrade
   private async Task<T> SendAndWaitAsync<T>(
     IMessage request,
     Func<T, bool> predicate,
-    CancellationToken cancellationToken
+    CancellationToken cancellationToken,
+    TimeSpan? timeoutOverride = null
   )
     where T : class, IMessage
   {
     await _requestLock.WaitAsync(cancellationToken);
     try
     {
-      return await SendAndWaitLockedAsync(request, predicate, cancellationToken);
+      return await SendAndWaitLockedAsync(request, predicate, cancellationToken, timeoutOverride);
     }
     finally
     {
@@ -957,13 +978,15 @@ public sealed class CTraderOpenApiFeedClient : ICTraderFeedClient, ICTraderTrade
   private async Task<T> SendAndWaitLockedAsync<T>(
     IMessage request,
     Func<T, bool> predicate,
-    CancellationToken cancellationToken
+    CancellationToken cancellationToken,
+    TimeSpan? timeoutOverride = null
   )
     where T : class, IMessage
   {
     var client = _client ?? throw new InvalidOperationException("Client is not connected");
+    var effectiveTimeout = timeoutOverride ?? options.RequestTimeout;
     using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-    timeout.CancelAfter(options.RequestTimeout);
+    timeout.CancelAfter(effectiveTimeout);
 
     await client.SendMessage(request);
     try
@@ -1001,11 +1024,11 @@ public sealed class CTraderOpenApiFeedClient : ICTraderFeedClient, ICTraderTrade
     catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
     {
       throw new TimeoutException(
-        $"Timed out after {options.RequestTimeout.TotalSeconds:N0}s waiting for {typeof(T).Name} after {request.GetType().Name}"
+        $"Timed out after {effectiveTimeout.TotalSeconds:N0}s waiting for {typeof(T).Name} after {request.GetType().Name}"
       );
     }
     throw new TimeoutException(
-      $"Timed out after {options.RequestTimeout.TotalSeconds:N0}s waiting for {typeof(T).Name} after {request.GetType().Name}"
+      $"Timed out after {effectiveTimeout.TotalSeconds:N0}s waiting for {typeof(T).Name} after {request.GetType().Name}"
     );
   }
 

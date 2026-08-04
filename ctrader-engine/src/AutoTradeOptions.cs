@@ -150,8 +150,8 @@ public sealed record AutoTradeOptions(
   // this executor independently hardcoded FullTakeProfitPips to exactly 50
   // or 70, duplicating a policy Python already owned and drifting from it
   // the moment the Python ladder changed. A null/empty override (e.g. a
-  // test fixture that never sets it) falls back to the same "30,40,50"
-  // default Python uses.
+  // test fixture that never sets it) falls back to the same "15,20,30,40,
+  // 50,70" default Python uses.
   private static readonly IReadOnlyList<int> DefaultRangeTargetsPips =
     new[] { 15, 20, 30, 40, 50, 70 };
 
