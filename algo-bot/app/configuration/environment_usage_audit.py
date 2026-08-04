@@ -49,11 +49,11 @@ _ALLOWED_CLASSIFICATIONS = frozenset({
 _FILE_CLASSIFICATION: dict[str, str] = {
   "algo-bot/app/configuration/python_sources.py": CANONICAL_SOURCE_COLLECTION_ALLOWED,
   "algo-bot/app/configuration/deployment_identity.py": DEPLOYMENT_OBSERVABILITY_ALLOWED,
-  "algo-bot/app/configuration/phase2h_gate.py": SCRIPT_TOOL_ALLOWED,
   "algo-bot/app/configuration/environment_cli.py": SCRIPT_TOOL_ALLOWED,
   "algo-bot/app/configuration/generate.py": SCRIPT_TOOL_ALLOWED,
   "algo-bot/app/configuration/diagnostic_cli.py": SCRIPT_TOOL_ALLOWED,
   "algo-bot/app/configuration/phase2i_completion_gate.py": SCRIPT_TOOL_ALLOWED,
+  "algo-bot/app/configuration/phase2i_inventory.py": SCRIPT_TOOL_ALLOWED,
 }
 
 
@@ -160,6 +160,8 @@ def audit_environment_usage(repository_root: Path) -> dict[str, object]:
   app_root = repository_root / "algo-bot" / "app"
   accesses: list[EnvironmentAccess] = []
   for path in sorted(app_root.rglob("*.py")):
+    if not path.is_file():
+      continue
     rel = path.relative_to(repository_root).as_posix()
     if "/generated/" in rel:
       continue

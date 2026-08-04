@@ -240,6 +240,9 @@ pgdata/
 **/TestResults/
 **/publish/
 **/artifacts/
+# Keep Phase 2I frozen migration ledgers tracked (not .NET build output).
+!docs/configuration/history/artifacts/
+!docs/configuration/history/artifacts/**
 .vs/
 *.user
 *.suo
