@@ -1861,7 +1861,7 @@
         "column": 11,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 321,
+        "line": 332,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/setup_card.py"
       },
@@ -1872,7 +1872,7 @@
         "column": 19,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 422,
+        "line": 433,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/setup_card.py"
       },
@@ -1883,7 +1883,7 @@
         "column": 11,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 434,
+        "line": 445,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/setup_card.py"
       },
@@ -1894,7 +1894,7 @@
         "column": 11,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 453,
+        "line": 464,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/setup_card.py"
       },
@@ -1905,7 +1905,7 @@
         "column": 9,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 1126,
+        "line": 1137,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/setup_card.py"
       },
@@ -1916,7 +1916,7 @@
         "column": 19,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 1156,
+        "line": 1167,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/setup_card.py"
       },
@@ -1927,7 +1927,7 @@
         "column": 17,
         "detail": "direct legacy-backed canonical nested read",
         "dynamic_names": [],
-        "line": 1185,
+        "line": 1196,
         "operation": "canonical_read",
         "path": "algo-bot/app/autotrade/setup_card.py"
       },
@@ -4436,7 +4436,7 @@
     "method_calls": [],
     "type_dependencies": []
   },
-  "source_fingerprint": "4cb3557d89935a29c22872bc29931b50ed1ebbeaeb27638afe46d0ce0a6f29d7",
+  "source_fingerprint": "7ad63fe5ee6cd5fb2e24835d06f4b2538cd4f6f41d7d6ee10dac627a1fefc0fc",
   "tests": {
     "attribute_deletions": [],
     "attribute_reads": [
@@ -6066,7 +6066,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 1444,
+        "line": 1447,
         "operation": "setattr",
         "path": "algo-bot/tests/test_auto_trade_ops.py"
       },
@@ -6077,7 +6077,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 1744,
+        "line": 1747,
         "operation": "setattr",
         "path": "algo-bot/tests/test_auto_trade_ops.py"
       },
@@ -6088,7 +6088,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 1745,
+        "line": 1748,
         "operation": "setattr",
         "path": "algo-bot/tests/test_auto_trade_ops.py"
       },
@@ -6099,7 +6099,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 1746,
+        "line": 1749,
         "operation": "setattr",
         "path": "algo-bot/tests/test_auto_trade_ops.py"
       },
@@ -6110,7 +6110,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 1949,
+        "line": 1952,
         "operation": "setattr",
         "path": "algo-bot/tests/test_auto_trade_ops.py"
       },
@@ -6121,7 +6121,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 1950,
+        "line": 1953,
         "operation": "setattr",
         "path": "algo-bot/tests/test_auto_trade_ops.py"
       },
@@ -6132,7 +6132,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 1975,
+        "line": 1978,
         "operation": "setattr",
         "path": "algo-bot/tests/test_auto_trade_ops.py"
       },
@@ -6143,7 +6143,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 1976,
+        "line": 1979,
         "operation": "setattr",
         "path": "algo-bot/tests/test_auto_trade_ops.py"
       },
@@ -6154,7 +6154,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 1977,
+        "line": 1980,
         "operation": "setattr",
         "path": "algo-bot/tests/test_auto_trade_ops.py"
       },
@@ -6165,7 +6165,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 2030,
+        "line": 2033,
         "operation": "setattr",
         "path": "algo-bot/tests/test_auto_trade_ops.py"
       },
@@ -6176,7 +6176,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 2031,
+        "line": 2034,
         "operation": "setattr",
         "path": "algo-bot/tests/test_auto_trade_ops.py"
       },
@@ -6187,7 +6187,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 2061,
+        "line": 2064,
         "operation": "setattr",
         "path": "algo-bot/tests/test_auto_trade_ops.py"
       },
@@ -6198,7 +6198,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 2062,
+        "line": 2065,
         "operation": "setattr",
         "path": "algo-bot/tests/test_auto_trade_ops.py"
       },
@@ -6209,7 +6209,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 2087,
+        "line": 2090,
         "operation": "setattr",
         "path": "algo-bot/tests/test_auto_trade_ops.py"
       },
@@ -6220,7 +6220,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 2088,
+        "line": 2091,
         "operation": "setattr",
         "path": "algo-bot/tests/test_auto_trade_ops.py"
       },
@@ -6231,7 +6231,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 2122,
+        "line": 2125,
         "operation": "setattr",
         "path": "algo-bot/tests/test_auto_trade_ops.py"
       },
@@ -6242,7 +6242,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 2123,
+        "line": 2126,
         "operation": "setattr",
         "path": "algo-bot/tests/test_auto_trade_ops.py"
       },
@@ -6253,7 +6253,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 2141,
+        "line": 2144,
         "operation": "setattr",
         "path": "algo-bot/tests/test_auto_trade_ops.py"
       },
@@ -6264,7 +6264,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 2142,
+        "line": 2145,
         "operation": "setattr",
         "path": "algo-bot/tests/test_auto_trade_ops.py"
       },
@@ -6275,7 +6275,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 2161,
+        "line": 2164,
         "operation": "setattr",
         "path": "algo-bot/tests/test_auto_trade_ops.py"
       },
@@ -6286,7 +6286,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 2190,
+        "line": 2193,
         "operation": "setattr",
         "path": "algo-bot/tests/test_auto_trade_ops.py"
       },
@@ -6297,7 +6297,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 2210,
+        "line": 2213,
         "operation": "setattr",
         "path": "algo-bot/tests/test_auto_trade_ops.py"
       },
@@ -6308,7 +6308,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 2234,
+        "line": 2237,
         "operation": "setattr",
         "path": "algo-bot/tests/test_auto_trade_ops.py"
       },
@@ -6319,7 +6319,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 2235,
+        "line": 2238,
         "operation": "setattr",
         "path": "algo-bot/tests/test_auto_trade_ops.py"
       },
@@ -6330,7 +6330,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 2299,
+        "line": 2302,
         "operation": "setattr",
         "path": "algo-bot/tests/test_auto_trade_ops.py"
       },
@@ -6341,7 +6341,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 2300,
+        "line": 2303,
         "operation": "setattr",
         "path": "algo-bot/tests/test_auto_trade_ops.py"
       },
@@ -6352,7 +6352,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 2337,
+        "line": 2340,
         "operation": "setattr",
         "path": "algo-bot/tests/test_auto_trade_ops.py"
       },
@@ -6363,7 +6363,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 2338,
+        "line": 2341,
         "operation": "setattr",
         "path": "algo-bot/tests/test_auto_trade_ops.py"
       },
@@ -9410,7 +9410,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 473,
+        "line": 478,
         "operation": "setattr",
         "path": "algo-bot/tests/test_setup_card.py"
       },
@@ -9421,7 +9421,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 474,
+        "line": 479,
         "operation": "setattr",
         "path": "algo-bot/tests/test_setup_card.py"
       },
@@ -9432,7 +9432,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 503,
+        "line": 508,
         "operation": "setattr",
         "path": "algo-bot/tests/test_setup_card.py"
       },
@@ -9443,7 +9443,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 504,
+        "line": 509,
         "operation": "setattr",
         "path": "algo-bot/tests/test_setup_card.py"
       },
@@ -9454,7 +9454,7 @@
         "column": 2,
         "detail": "helper or monkeypatch mutation of Settings",
         "dynamic_names": [],
-        "line": 526,
+        "line": 531,
         "operation": "setattr",
         "path": "algo-bot/tests/test_setup_card.py"
       },
