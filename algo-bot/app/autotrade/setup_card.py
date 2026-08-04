@@ -284,9 +284,27 @@ _CARD_HEADER_RE = re.compile(
   r"^\S+\s*<b>(?P<symbol>[A-Za-z0-9]+)\s+(?P<tf>\S+)\s*·\s*[^<]*</b>$"
 )
 
+# The direction/strategy body line format.py always writes right after the
+# status slot (see format_plan_published_root_card) - "🔴 <b>SELL · ...</b>"
+# or "🟢 <b>BUY · ...</b>". Used post-activation to tell "no status line is
+# currently shown, this is body content" apart from "a real status line
+# (SL MOVED/TP hit/...) is already sitting here", since several status
+# texts and a BUY body line happen to share the same leading emoji (both
+# TRIGGER READY and a BUY line start with 🟢).
+_BODY_DIRECTION_LINE_RE = re.compile(r"^[🔴🟢]\s*<b>(BUY|SELL)\b")
+
 
 def _position_activated_header(line: str) -> str | None:
-  match = _CARD_HEADER_RE.match(line.strip())
+  stripped = line.strip()
+  if "POSITION ACTIVATED" in stripped:
+    # Already rewritten by an earlier fill event on this same setup (e.g.
+    # a multi-leg entry fires order_filled once per leg, then again on
+    # "ENTRY GROUP FULLY FILLED"). Re-running _CARD_HEADER_RE against our
+    # own prior output would parse "POSITION ACTIVATED" itself as the
+    # symbol/tf tokens and mangle the header into "POSITION ACTIVATED ·
+    # POSITION ACTIVATED" - confirmed live. Nothing left to rewrite.
+    return None
+  match = _CARD_HEADER_RE.match(stripped)
   if match is None:
     return None
   return (
@@ -297,24 +315,42 @@ def _position_activated_header(line: str) -> str | None:
 
 def apply_forming_card_status(text: str, status_line: str) -> str:
   lines = text.splitlines()
-  if len(lines) < 2 or not status_line:
+  if not lines or not status_line:
     return text
-  lines[1] = status_line
+  # Whether the header ALREADY says POSITION ACTIVATED tells us whether
+  # line[1] is still the reserved status slot or was already folded away
+  # by an earlier order_filled call below - it's the only reliable signal
+  # since real status text and BUY/SELL body lines can share a leading
+  # emoji (both TRIGGER READY and a BUY line start with 🟢).
+  activated = "POSITION ACTIVATED" in lines[0]
   if _infer_status_state(status_line) == "order_filled":
     rewritten_header = _position_activated_header(lines[0])
     if rewritten_header is not None:
       lines[0] = rewritten_header
-      # The header itself now says POSITION ACTIVATED - repeating the
-      # identical phrase immediately below it read as a duplicated line
-      # (confirmed live: "✅ POSITION ACTIVATED · XAU M5" followed by a
-      # second "✅ POSITION ACTIVATED"). Collapse the now-redundant status
-      # slot the same way PLAN PUBLISHED already does with
-      # _PLAN_PUBLISHED_STATUS_SLOT - invisible, but still a real line so
-      # later status edits keep replacing lines[1] correctly. Only the
-      # card TEXT changes here; the persisted status snapshot
-      # (save_forming_card_status) still stores the real status_line for
-      # priority gating, so this is purely cosmetic.
-      lines[1] = _PLAN_PUBLISHED_STATUS_SLOT
+    if not activated and len(lines) > 1:
+      # First fill event on this setup: the header now already says
+      # POSITION ACTIVATED, so a status line repeating it below is
+      # redundant. A blank placeholder line was tried before, but
+      # Telegram still renders an invisible-character-only line at full
+      # line-height, so the card showed a stray empty line under the
+      # header. Remove the line outright instead; a later real status
+      # update (SL move/TP hit) re-inserts one via the branch below,
+      # since by then the header will already read as activated.
+      del lines[1]
+    return "\n".join(lines)
+  if activated:
+    # Post-fill status updates (SL move, then later a TP hit) must keep
+    # replacing the SAME line, not stack a new one each time - only
+    # insert when index 1 is still the direction/strategy body line,
+    # i.e. no status has been shown here since activation yet.
+    if len(lines) > 1 and not _BODY_DIRECTION_LINE_RE.match(lines[1].strip()):
+      lines[1] = status_line
+    else:
+      lines.insert(1, status_line)
+  elif len(lines) > 1:
+    lines[1] = status_line
+  else:
+    lines.append(status_line)
   return "\n".join(lines)
 
 
