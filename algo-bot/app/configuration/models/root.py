@@ -1,4 +1,4 @@
-"""Complete canonical grouped schema; inactive until a later phase."""
+"""Complete canonical grouped configuration schema (Catalog V2)."""
 
 from pydantic import Field
 
@@ -23,9 +23,7 @@ class ApexVoidConfig(FrozenConfigModel):
   market_data: MarketDataConfig = Field(default_factory=MarketDataConfig)
   analysis: AnalysisConfig = Field(default_factory=AnalysisConfig)
   strategies: StrategiesConfig = Field(default_factory=StrategiesConfig)
-  actionability: ActionabilityConfig = Field(
-    default_factory=ActionabilityConfig,
-  )
+  actionability: ActionabilityConfig = Field(default_factory=ActionabilityConfig)
   contract: ContractConfig = Field(default_factory=ContractConfig)
   execution: ExecutionConfig = Field(default_factory=ExecutionConfig)
   risk: RiskConfig = Field(default_factory=RiskConfig)

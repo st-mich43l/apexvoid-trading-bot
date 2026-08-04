@@ -1,0 +1,161 @@
+{
+  "baseline_master": "afc0a37713a6e147fca3abb39450cd5c70b0a98b",
+  "contract_baseline": {
+    "algorithm_constants": 57,
+    "catalog_fingerprint": "bb24affb47b297c91637a83880cd2043e59a4cff0b5b17ca2d02fb4952fb54f0",
+    "catalog_version": 1,
+    "configurable_entries": 374,
+    "deprecated_environment_aliases": 21,
+    "environment_contract_entries": 374,
+    "excluded_ctrader_only_leaves": 50,
+    "owners": {
+      "ctrader": 50,
+      "python": 296,
+      "shared": 95
+    },
+    "profiles": [
+      "conservative",
+      "demo_eval"
+    ],
+    "protocol_constants": 10,
+    "python_runtime_leaves": 391,
+    "secrets": 9,
+    "shared_entries": 95,
+    "total_catalog_entries": 441
+  },
+  "debt_counts": {
+    "active_phase_modules": [
+      "algo-bot/app/configuration/phase2i_inventory.py",
+      "algo-bot/app/configuration/phase2i_completion_gate.py"
+    ],
+    "catalog_entries_with_item_id": 441,
+    "catalog_entries_with_legacy_attr": 316,
+    "config_field_calls": 441,
+    "dead_generator_symbols_present": {
+      "PHASE_2E_ROOTS": true,
+      "PHASE_2F_ROOTS": true,
+      "PHASE_2G_BASELINE_DERIVED": true,
+      "PHASE_2G_BASELINE_OPTIONAL": true,
+      "PHASE_2G_BASELINE_ROOT_COUNTS": true,
+      "PHASE_2G_BASELINE_TOTAL": true,
+      "PHASE_2G_ROOTS": true,
+      "_PHASE2F_TEST_COVERAGE": true,
+      "_PHASE2G_TEST_COVERAGE": true,
+      "_consumer_migration_artifact": true,
+      "_consumer_migration_phase2f_artifact": true,
+      "_consumer_migration_phase2g_artifact": true,
+      "_derived_artifact": true,
+      "_legacy_artifact": true,
+      "_phase2f_behavior_boundary": true,
+      "_phase2g_behavior_boundary": true
+    },
+    "derived_legacy_properties": 4,
+    "duplicate_phase2i_surfaces": [
+      "contracts/configuration/canonical-only-surface-phase-2i-b.generated.json",
+      "contracts/configuration/canonical-only-surface-phase-2i-final.generated.json"
+    ],
+    "env_kwargs": 441,
+    "historical_validator_inputs": [
+      "docs/configuration/config-catalog-phase-2a-normalized.json"
+    ],
+    "item_id_groups": {
+      "ctrader.env.*": 47,
+      "environment.*": 7,
+      "hardcoded.*": 67,
+      "python.settings.*": 320
+    },
+    "item_id_kwargs": 441,
+    "legacy_attr_kwargs": 441,
+    "migrationish_descriptions": 362,
+    "risk_deprecated_legacy_assignments": 0
+  },
+  "derived_legacy_properties": [
+    {
+      "property_name": "signal_vip_channel_id",
+      "return_type": "int",
+      "source_path": "delivery.telegram.telegram_channel_id",
+      "source_property": null,
+      "transformation": "identity"
+    },
+    {
+      "property_name": "telegram_chat_id",
+      "return_type": "str",
+      "source_path": "delivery.telegram.telegram_channel_id",
+      "source_property": null,
+      "transformation": "str(value)"
+    },
+    {
+      "property_name": "xau_public_channel_id",
+      "return_type": "Optional[int]",
+      "source_path": "delivery.telegram.signal_public_channel_id",
+      "source_property": null,
+      "transformation": "identity"
+    },
+    {
+      "property_name": "xau_vip_channel_id",
+      "return_type": "int",
+      "source_path": null,
+      "source_property": "signal_vip_channel_id",
+      "transformation": "identity"
+    }
+  ],
+  "migrationish_description_paths_sample": [
+    "actionability.contested_corridor.gap_atr",
+    "actionability.counter_bias.allowed",
+    "actionability.counter_bias.map_counter_bias_min_confluence",
+    "actionability.counter_bias.minimum_confluence",
+    "actionability.counter_bias.suppress_in_range",
+    "actionability.gates.edge_proximity_atr",
+    "actionability.gates.eq_exclusion_fraction",
+    "actionability.gates.htf_veto_enabled",
+    "actionability.gates.market_map_guard_enabled",
+    "actionability.gates.max_entry_atr",
+    "actionability.gates.min_confluence",
+    "actionability.gates.news_guard_minutes",
+    "actionability.gates.opposing_barrier_veto_enabled",
+    "actionability.gates.proximal_band_atr",
+    "actionability.gates.range_context_disagreement_gate_enabled",
+    "actionability.key_level_role.enabled",
+    "actionability.overlapping_zones.veto_enabled",
+    "actionability.scanner_gates.actionability_gate_enabled",
+    "actionability.scanner_gates.conflict_margin",
+    "actionability.scanner_gates.zone_width_gate_enabled",
+    "actionability.structural_anchor.maximum_source_touches",
+    "actionability.structural_anchor.required",
+    "actionability.structural_guard.guard_mode",
+    "actionability.target_room.barrier_buffer_atr",
+    "actionability.target_room.minimum_capped_target_pips",
+    "actionability.zone_reconciliation.enabled",
+    "actionability.zone_reconciliation.mode",
+    "analysis.atr.length",
+    "analysis.breakout.accept_bars",
+    "analysis.breakout.buffer_atr",
+    "analysis.breakout.max_age_bars",
+    "analysis.displacement.atr_mult",
+    "analysis.levels.equal_tol_atr",
+    "analysis.levels.level_cluster_atr",
+    "analysis.levels.minimum_key_touches",
+    "analysis.levels.round_step",
+    "analysis.liquidity.sweep.body_frac",
+    "analysis.liquidity.sweep.react_bars",
+    "analysis.market_map.band_max_atr",
+    "analysis.market_map.change_min"
+  ],
+  "observation_evidence_fabricated": false,
+  "phase": "2J",
+  "phase2i_invariants": {
+    "authority_selector_usages": 0,
+    "flat_settings_exports": 0,
+    "flat_settings_imports": 0,
+    "legacy_access_map_usages": 0,
+    "production_legacy_imports": 0,
+    "runtime_authorities": 1,
+    "runtime_config_facade_usages": 0,
+    "test_legacy_imports": 0,
+    "tooling_legacy_imports": 0,
+    "unknown_blockers": 0
+  },
+  "purpose": "catalog_v2_program_closeout_before_inventory",
+  "unknown_classifications": 0,
+  "verified_head": "9ef74ae0f6fd11797e452ed63420be40c63d7f36"
+}

@@ -1,10 +1,11 @@
 {
-  "catalog_version": 1,
+  "catalog_version": 2,
+  "configuration_contract_fingerprint_sha256": "1dab7cdbe9266e96d6b9e2aa553d1848ab9e0cd42d8626385ebc2213a3bc6eac",
   "count": 10,
   "items": [
     {
       "description": "Config-like hardcoded value proposed at contract.keys.config_health.",
-      "item_id": "hardcoded.contract.config_health_key",
+      "display_id": "config:contract.keys.config_health",
       "mismatch_policy": "not_reported",
       "owner": "shared",
       "path": "contract.keys.config_health",
@@ -15,7 +16,7 @@
     },
     {
       "description": "Config-like hardcoded value proposed at contract.keys.ctrader_manifest.",
-      "item_id": "hardcoded.contract.ctrader_manifest_key",
+      "display_id": "config:contract.keys.ctrader_manifest",
       "mismatch_policy": "not_reported",
       "owner": "shared",
       "path": "contract.keys.ctrader_manifest",
@@ -26,7 +27,7 @@
     },
     {
       "description": "Config-like hardcoded value proposed at contract.keys.executor_readiness.",
-      "item_id": "hardcoded.contract.executor_readiness_key",
+      "display_id": "config:contract.keys.executor_readiness",
       "mismatch_policy": "not_reported",
       "owner": "shared",
       "path": "contract.keys.executor_readiness",
@@ -37,7 +38,7 @@
     },
     {
       "description": "Config-like hardcoded value proposed at contract.keys.python_manifest.",
-      "item_id": "hardcoded.contract.python_manifest_key",
+      "display_id": "config:contract.keys.python_manifest",
       "mismatch_policy": "not_reported",
       "owner": "shared",
       "path": "contract.keys.python_manifest",
@@ -48,7 +49,7 @@
     },
     {
       "description": "Config-like hardcoded value proposed at contract.keys.tracked_positions.",
-      "item_id": "hardcoded.contract.tracked_positions_key",
+      "display_id": "config:contract.keys.tracked_positions",
       "mismatch_policy": "not_reported",
       "owner": "shared",
       "path": "contract.keys.tracked_positions",
@@ -59,7 +60,7 @@
     },
     {
       "description": "Config-like hardcoded value proposed at contract.streams.strategy_match_ready.",
-      "item_id": "hardcoded.contract.strategy_match_ready_stream",
+      "display_id": "config:contract.streams.strategy_match_ready",
       "mismatch_policy": "not_reported",
       "owner": "python",
       "path": "contract.streams.strategy_match_ready",
@@ -70,7 +71,7 @@
     },
     {
       "description": "Config-like hardcoded value proposed at contract.versions.config_manifest.",
-      "item_id": "hardcoded.contract.config_manifest_version",
+      "display_id": "config:contract.versions.config_manifest",
       "mismatch_policy": "fatal",
       "owner": "shared",
       "path": "contract.versions.config_manifest",
@@ -81,7 +82,7 @@
     },
     {
       "description": "Config-like hardcoded value proposed at contract.versions.entry_plan.",
-      "item_id": "hardcoded.contract.entry_plan_version",
+      "display_id": "config:contract.versions.entry_plan",
       "mismatch_policy": "fatal",
       "owner": "shared",
       "path": "contract.versions.entry_plan",
@@ -92,7 +93,7 @@
     },
     {
       "description": "Config-like hardcoded value proposed at contract.versions.stop_plan.",
-      "item_id": "hardcoded.contract.stop_plan_version",
+      "display_id": "config:contract.versions.stop_plan",
       "mismatch_policy": "fatal",
       "owner": "shared",
       "path": "contract.versions.stop_plan",
@@ -103,7 +104,7 @@
     },
     {
       "description": "Config-like hardcoded value proposed at contract.versions.trade_plan.",
-      "item_id": "hardcoded.contract.trade_plan_version",
+      "display_id": "config:contract.versions.trade_plan",
       "mismatch_policy": "fatal",
       "owner": "shared",
       "path": "contract.versions.trade_plan",
@@ -113,6 +114,6 @@
       "value": 7
     }
   ],
-  "source_fingerprint_sha256": "bb24affb47b297c91637a83880cd2043e59a4cff0b5b17ca2d02fb4952fb54f0",
+  "source_fingerprint_sha256": "1dab7cdbe9266e96d6b9e2aa553d1848ab9e0cd42d8626385ebc2213a3bc6eac",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

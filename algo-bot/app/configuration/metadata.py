@@ -1,4 +1,4 @@
-"""Canonical metadata primitives for the inactive grouped config model."""
+"""Canonical metadata primitives for the Catalog V2 grouped config model."""
 
 from __future__ import annotations
 
@@ -73,7 +73,7 @@ class RiskClassification(StrEnum):
   LIFECYCLE = "lifecycle"
   DELIVERY = "delivery"
   OBSERVABILITY = "observability"
-  DEPRECATED_LEGACY = "deprecated_legacy"
+  DEPRECATED_CONFIGURATION = "deprecated_configuration"
 
 
 class ConfigKind(StrEnum):
@@ -96,10 +96,8 @@ class ContextDefault:
 
 @dataclass(frozen=True)
 class ConfigMetadata:
-  item_id: str
-  legacy_attr: str | None
   canonical_env: str | None
-  deprecated_aliases: tuple[str, ...]
+  deprecated_env_aliases: tuple[str, ...]
   owner: ConfigOwner
   reload_policy: ReloadPolicy
   runtime_reload_policy: ReloadPolicy
@@ -117,15 +115,13 @@ class ConfigMetadata:
   allowed_values: tuple[Any, ...] = ()
   validation_summary: str | None = None
   evidence_notes: tuple[str, ...] = ()
-  catalog_version: int = 1
-  introduced_in: str = "config-catalog-v1"
+  catalog_version: int = 2
+  introduced_in: str = "config-catalog-v2"
   deprecated: bool = False
   replacement_path: str | None = None
   terminal_deprecation_reason: str | None = None
 
   def __post_init__(self) -> None:
-    if not self.item_id:
-      raise ValueError("item_id must be non-empty")
     expected = {
       ConfigKind.CONFIGURABLE: (True, False, False),
       ConfigKind.PROTOCOL_CONSTANT: (False, True, False),
@@ -139,7 +135,7 @@ class ConfigMetadata:
     if actual != expected:
       raise ValueError(f"kind flags {actual!r} do not match {self.kind.value}")
     if self.kind is not ConfigKind.CONFIGURABLE and (
-      self.canonical_env or self.deprecated_aliases
+      self.canonical_env or self.deprecated_env_aliases
     ):
       raise ValueError("constants cannot have ENV bindings")
     if self.deprecated and not (
@@ -174,6 +170,9 @@ class ConfigMetadata:
     values["allowed_values"] = [
       _json_value(value) for value in self.allowed_values
     ]
+    # Alias key retained in emitted metadata for environment-contract consumers
+    # that read deprecated_aliases historically; CatalogEntry uses both.
+    values["deprecated_aliases"] = values.pop("deprecated_env_aliases")
     return values
 
 
@@ -194,13 +193,16 @@ def _json_value(value: Any) -> Any:
   return value
 
 
+def display_config_id(path: str) -> str:
+  """Deterministic display identity derived from the canonical path."""
+  return f"config:{path}"
+
+
 def config_field(
   default: T | Any = PydanticUndefined,
   *,
-  item_id: str,
-  legacy_attr: str | None,
-  env: str | None,
-  aliases: tuple[str, ...] = (),
+  canonical_env: str | None,
+  deprecated_env_aliases: tuple[str, ...] = (),
   owner: ConfigOwner,
   reload: ReloadPolicy,
   runtime_reload: ReloadPolicy | None = None,
@@ -215,8 +217,8 @@ def config_field(
   allowed_values: tuple[Any, ...] = (),
   validation_summary: str | None = None,
   evidence_notes: tuple[str, ...] = (),
-  catalog_version: int = 1,
-  introduced_in: str = "config-catalog-v1",
+  catalog_version: int = 2,
+  introduced_in: str = "config-catalog-v2",
   deprecated: bool = False,
   replacement_path: str | None = None,
   terminal_deprecation_reason: str | None = None,
@@ -231,10 +233,8 @@ def config_field(
   """Declare one field and its catalog metadata in the same location."""
   configurable = kind is ConfigKind.CONFIGURABLE
   metadata = ConfigMetadata(
-    item_id=item_id,
-    legacy_attr=legacy_attr,
-    canonical_env=env,
-    deprecated_aliases=aliases,
+    canonical_env=canonical_env,
+    deprecated_env_aliases=deprecated_env_aliases,
     owner=owner,
     reload_policy=reload,
     runtime_reload_policy=(
@@ -267,7 +267,9 @@ def config_field(
     terminal_deprecation_reason=terminal_deprecation_reason,
   )
   validation_alias = (
-    AliasChoices(env, *aliases) if env is not None else None
+    AliasChoices(canonical_env, *deprecated_env_aliases)
+    if canonical_env is not None
+    else None
   )
   return Field(
     default,

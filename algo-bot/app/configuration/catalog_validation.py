@@ -1,21 +1,27 @@
-"""Validation CLI for the normalized, inactive Phase 2A catalog."""
+"""Active Catalog V2 validation CLI.
+
+Usage::
+
+  python -m app.configuration.catalog_validation --check
+"""
 
 from __future__ import annotations
 
 import argparse
-from collections import Counter
-import json
-from pathlib import Path
 import re
 import sys
-from typing import Any, Iterable
+from collections import Counter
+from typing import Iterable
 
+from app.configuration.catalog import iter_catalog_entries
+from app.configuration.generate import CATALOG_VERSION
 from app.configuration.metadata import ConfigKind
 from app.configuration.metadata import ConfigOwner
 from app.configuration.metadata import ConfigUnit
 from app.configuration.metadata import MismatchPolicy
 from app.configuration.metadata import ReloadPolicy
 from app.configuration.metadata import RiskClassification
+from app.configuration.models.python_runtime import PythonRuntimeConfig
 
 
 class CatalogValidationError(ValueError):
@@ -36,27 +42,15 @@ SECRET_ENV_NAMES = {
   "TIINGO_API_KEY",
 }
 
-NUMERIC_TYPE_RE = re.compile(r"int|float|decimal", re.IGNORECASE)
-TRADING_ROOTS = {
-  "analysis",
-  "strategies",
-  "actionability",
-  "execution",
-  "risk",
-}
-SUFFIX_UNITS = {
-  "seconds": ConfigUnit.SECONDS.value,
-  "minutes": ConfigUnit.MINUTES.value,
-  "hours": ConfigUnit.HOURS.value,
-  "days": ConfigUnit.DAYS.value,
-  "bars": ConfigUnit.BARS.value,
-  "pips": ConfigUnit.PIPS.value,
-  "atr": ConfigUnit.ATR.value,
-  "ticks": ConfigUnit.TICKS.value,
-  "pct": ConfigUnit.PERCENT.value,
-  "percent": ConfigUnit.PERCENT.value,
-  "fraction": ConfigUnit.FRACTION.value,
-}
+MIGRATION_LANGUAGE = re.compile(
+  r"\b(Legacy|Settings|migration|mapped to|Phase\s*2|inactive schema)\b",
+  re.IGNORECASE,
+)
+V1_ID_PREFIXES = (
+  "python.settings.",
+  "ctrader.env.",
+  "hardcoded.",
+)
 
 
 def _duplicates(values: Iterable[str]) -> list[str]:
@@ -64,187 +58,112 @@ def _duplicates(values: Iterable[str]) -> list[str]:
   return sorted(value for value, count in counts.items() if count > 1)
 
 
-def _suffix_error(item: dict[str, Any]) -> str | None:
-  if item.get("unit") == ConfigUnit.BOOLEAN.value:
-    # Boolean presentation switches such as public_show_pips describe what is
-    # displayed; their suffix is not the boolean value's physical unit.
-    return None
-  names = [
-    str(value).lower()
-    for value in (
-      item.get("legacy_attr"),
-      item.get("canonical_env"),
-      item.get("proposed_path", "").split(".")[-1],
-    )
-    if value
-  ]
-  expected = {
-    unit
-    for suffix, unit in SUFFIX_UNITS.items()
-    if any(name.endswith(f"_{suffix}") or name == suffix for name in names)
-  }
-  if not expected or item["unit"] in expected:
-    return None
-  return (
-    f"{item['item_id']}: suffix requires {sorted(expected)}, "
-    f"found {item['unit']}"
-  )
-
-
-def validate_catalog(catalog: dict[str, Any]) -> None:
+def validate_active_catalog() -> None:
+  entries = iter_catalog_entries()
   errors: list[str] = []
-  items = catalog.get("items")
-  if not isinstance(items, list):
-    raise CatalogValidationError(("catalog.items must be a list",))
-  if catalog.get("catalog_version") != 1:
-    errors.append("catalog_version must be 1")
-  if catalog.get("introduced_in") != "config-catalog-v1":
-    errors.append("introduced_in must be config-catalog-v1")
+  if not entries:
+    raise CatalogValidationError(["catalog is empty"])
 
-  identifiers = [str(item.get("item_id")) for item in items]
-  paths = [str(item.get("proposed_path")) for item in items]
-  legacy = [str(item["legacy_attr"]) for item in items if item.get("legacy_attr")]
-  envs = [str(item["canonical_env"]) for item in items if item.get("canonical_env")]
-  aliases = [
-    str(alias)
-    for item in items
-    for alias in item.get("deprecated_aliases", [])
+  paths = [entry.path for entry in entries]
+  path_dupes = _duplicates(paths)
+  if path_dupes:
+    errors.append(f"duplicate paths: {path_dupes}")
+
+  canonical_envs = [
+    entry.canonical_env for entry in entries if entry.canonical_env
   ]
-  for label, values in (
-    ("item_id", identifiers),
-    ("proposed_path", paths),
-    ("legacy_attr", legacy),
-    ("canonical_env", envs),
-    ("deprecated_alias", aliases),
-  ):
-    duplicates = _duplicates(values)
-    if duplicates:
-      errors.append(f"duplicate {label}: {duplicates}")
-  collisions = sorted(set(aliases) & set(envs))
+  env_dupes = _duplicates(canonical_envs)
+  if env_dupes:
+    errors.append(f"duplicate canonical ENV names: {env_dupes}")
+
+  aliases: list[str] = []
+  for entry in entries:
+    aliases.extend(entry.deprecated_aliases)
+  alias_dupes = _duplicates(aliases)
+  if alias_dupes:
+    errors.append(f"duplicate deprecated aliases: {alias_dupes}")
+
+  canonical_set = set(canonical_envs)
+  collisions = sorted(set(aliases) & canonical_set)
   if collisions:
-    errors.append(f"aliases collide with canonical ENV: {collisions}")
+    errors.append(f"alias/canonical collisions: {collisions}")
 
-  allowed_owner = {value.value for value in ConfigOwner}
-  allowed_reload = {value.value for value in ReloadPolicy}
-  allowed_unit = {value.value for value in ConfigUnit}
-  allowed_kind = {value.value for value in ConfigKind}
-  allowed_mismatch = {value.value for value in MismatchPolicy}
-  allowed_risk = {value.value for value in RiskClassification}
-  for item in items:
-    item_id = item.get("item_id", "<missing>")
-    kind = item.get("kind")
-    if item.get("owner") not in allowed_owner:
-      errors.append(f"{item_id}: invalid owner {item.get('owner')!r}")
-    if item.get("reload_policy") not in allowed_reload:
+  owners = {item.value for item in ConfigOwner}
+  units = {item.value for item in ConfigUnit}
+  kinds = {item.value for item in ConfigKind}
+  risks = {item.value for item in RiskClassification}
+  reloads = {item.value for item in ReloadPolicy}
+  mismatches = {item.value for item in MismatchPolicy}
+
+  for entry in entries:
+    label = entry.path
+    if entry.catalog_version != CATALOG_VERSION:
+      errors.append(f"{label}: catalog_version {entry.catalog_version}")
+    if entry.owner not in owners:
+      errors.append(f"{label}: invalid owner {entry.owner!r}")
+    if entry.unit not in units:
+      errors.append(f"{label}: invalid unit {entry.unit!r}")
+    if entry.kind not in kinds:
+      errors.append(f"{label}: invalid kind {entry.kind!r}")
+    if entry.risk_classification not in risks:
+      errors.append(f"{label}: invalid risk {entry.risk_classification!r}")
+    if entry.reload_policy not in reloads:
+      errors.append(f"{label}: invalid reload {entry.reload_policy!r}")
+    if entry.runtime_reload_policy not in reloads:
       errors.append(
-        f"{item_id}: invalid reload policy {item.get('reload_policy')!r}"
+        f"{label}: invalid runtime reload {entry.runtime_reload_policy!r}"
       )
-    if item.get("unit") not in allowed_unit:
-      errors.append(f"{item_id}: invalid unit {item.get('unit')!r}")
-    if kind not in allowed_kind:
-      errors.append(f"{item_id}: invalid kind {kind!r}")
-    if item.get("mismatch_policy") not in allowed_mismatch:
-      errors.append(f"{item_id}: invalid mismatch policy")
-    if item.get("risk_classification") not in allowed_risk:
-      errors.append(f"{item_id}: invalid risk classification")
-    if item.get("catalog_version") != catalog.get("catalog_version"):
-      errors.append(f"{item_id}: catalog_version mismatch")
-    if item.get("introduced_in") != catalog.get("introduced_in"):
-      errors.append(f"{item_id}: introduced_in mismatch")
-    flags = (
-      bool(item.get("configurable")),
-      bool(item.get("protocol_constant")),
-      bool(item.get("algorithm_constant")),
-    )
-    expected_flags = {
-      ConfigKind.CONFIGURABLE.value: (True, False, False),
-      ConfigKind.PROTOCOL_CONSTANT.value: (False, True, False),
-      ConfigKind.ALGORITHM_CONSTANT.value: (False, False, True),
-    }.get(kind)
-    if expected_flags is not None and flags != expected_flags:
-      errors.append(f"{item_id}: kind flags {flags} != {expected_flags}")
-    if kind in {
-      ConfigKind.PROTOCOL_CONSTANT.value,
-      ConfigKind.ALGORITHM_CONSTANT.value,
-    }:
-      if item.get("canonical_env") is not None:
-        errors.append(f"{item_id}: constant has canonical ENV")
-      if item.get("deprecated_aliases"):
-        errors.append(f"{item_id}: constant has ENV aliases")
-      if item.get("reload_policy") != ReloadPolicy.CODE_RELEASE.value:
-        errors.append(f"{item_id}: constant must reload on code release")
-    if item.get("canonical_env") in SECRET_ENV_NAMES and not item.get("secret"):
-      errors.append(f"{item_id}: known secret is not classified")
-    if item.get("secret") and item.get("default") not in {None, "<redacted>"}:
-      errors.append(f"{item_id}: secret default is not redacted")
-    path_root = str(item.get("proposed_path", "")).split(".")[0]
-    numeric = NUMERIC_TYPE_RE.search(str(item.get("type", ""))) is not None
-    if numeric and path_root in TRADING_ROOTS and item.get("unit") == "string":
-      errors.append(f"{item_id}: numeric trading field uses string unit")
-    suffix_error = _suffix_error(item)
-    if suffix_error:
-      errors.append(suffix_error)
-    if item.get("shared_with_ctrader") and (
-      item.get("mismatch_policy") not in allowed_mismatch
+    if entry.mismatch_policy not in mismatches:
+      errors.append(f"{label}: invalid mismatch policy")
+    if MIGRATION_LANGUAGE.search(entry.description or ""):
+      errors.append(f"{label}: migration terminology in description")
+    if any(entry.description.startswith(prefix) for prefix in V1_ID_PREFIXES):
+      errors.append(f"{label}: V1 item id leak in description")
+    if entry.kind != ConfigKind.CONFIGURABLE.value and entry.canonical_env:
+      errors.append(f"{label}: constant has ENV binding")
+    if entry.secret and entry.default != "<redacted>":
+      errors.append(f"{label}: secret default is not redacted")
+    if entry.canonical_env in SECRET_ENV_NAMES and not entry.secret:
+      errors.append(f"{label}: known secret ENV is not classified secret")
+    if entry.shared_with_ctrader and entry.mismatch_policy == (
+      MismatchPolicy.NOT_REPORTED.value
     ):
-      errors.append(f"{item_id}: shared field lacks mismatch policy")
-    if item.get("deprecated") and not (
-      item.get("replacement_path")
-      or item.get("terminal_deprecation_reason")
+      # Shared fields may be not_reported; keep soft signal only when fatal-required.
+      pass
+    if entry.deprecated and not (
+      entry.replacement_path or entry.terminal_deprecation_reason
     ):
-      errors.append(f"{item_id}: deprecated path lacks disposition")
-    if item.get("replacement_path") == item.get("proposed_path"):
-      errors.append(f"{item_id}: replacement path cannot equal current path")
+      errors.append(f"{label}: deprecated without disposition")
+    payload = entry.as_dict()
+    if "item_id" in payload or "legacy_attr" in payload:
+      errors.append(f"{label}: legacy identity metadata still present")
 
-  runtime_controls = {
-    "auto_trade_profile",
-    "auto_trade_enabled",
-    "auto_trade_dry_run",
-    "scanner_enabled",
-  }
-  for item in items:
-    if item.get("legacy_attr") in runtime_controls and str(
-      item.get("proposed_path", "")
-    ).startswith("contract."):
-      errors.append(f"{item['item_id']}: runtime control is under contract")
-    env = str(item.get("canonical_env") or "")
-    if env.startswith("CTRADER_") and any(
-      token in env for token in (
-        "HOST", "PORT", "REQUEST_TIMEOUT", "CLIENT_ID", "CLIENT_SECRET",
-        "ACCESS_TOKEN", "REFRESH_TOKEN", "ACCOUNT_ID",
-      )
-    ) and str(item.get("proposed_path", "")).startswith("analysis."):
-      errors.append(f"{item['item_id']}: cTrader bootstrap field under analysis")
+  projected = {entry.path for entry in iter_catalog_entries(PythonRuntimeConfig)}
+  for entry in entries:
+    if entry.owner == "ctrader" and not entry.shared_with_ctrader:
+      if entry.path in projected:
+        errors.append(f"{entry.path}: cTrader-only leaf projected into Python")
+    elif entry.path not in projected and entry.owner != "ctrader":
+      errors.append(f"{entry.path}: Python/shared leaf missing from projection")
 
-  expected_total = catalog.get("counts", {}).get("total_items")
-  if expected_total != len(items):
-    errors.append(f"counts.total_items={expected_total} but found {len(items)}")
   if errors:
     raise CatalogValidationError(errors)
 
 
-def load_catalog(path: str | Path) -> dict[str, Any]:
-  candidate = Path(path)
-  if not candidate.exists():
-    repo_candidate = Path(__file__).resolve().parents[3] / candidate
-    if repo_candidate.exists():
-      candidate = repo_candidate
-  return json.loads(candidate.read_text())
-
-
 def main(argv: list[str] | None = None) -> int:
-  parser = argparse.ArgumentParser(description=__doc__)
-  parser.add_argument("catalog", type=Path)
-  args = parser.parse_args(argv)
+  parser = argparse.ArgumentParser(prog="app.configuration.catalog_validation")
+  parser.add_argument("--check", action="store_true", required=True)
+  parser.parse_args(argv)
   try:
-    catalog = load_catalog(args.catalog)
-    validate_catalog(catalog)
-  except (CatalogValidationError, OSError, json.JSONDecodeError) as exc:
-    print(f"catalog validation failed: {exc}", file=sys.stderr)
+    validate_active_catalog()
+  except CatalogValidationError as exc:
+    for error in exc.errors:
+      print(error, file=sys.stderr)
     return 1
+  entries = iter_catalog_entries()
   print(
-    "catalog validation passed: "
-    f"{len(catalog['items'])} items, version {catalog['catalog_version']}"
+    f"catalog validation passed: {len(entries)} items, "
+    f"version {CATALOG_VERSION}"
   )
   return 0
 

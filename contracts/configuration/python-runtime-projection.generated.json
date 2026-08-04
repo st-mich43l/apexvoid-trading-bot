@@ -1,5 +1,6 @@
 {
-  "catalog_version": 1,
+  "catalog_version": 2,
+  "configuration_contract_fingerprint_sha256": "1dab7cdbe9266e96d6b9e2aa553d1848ab9e0cd42d8626385ebc2213a3bc6eac",
   "excluded_ctrader_only_count": 50,
   "excluded_paths": [
     "bootstrap.ctrader.connection.host",
@@ -53,7 +54,6 @@
     "risk.sizing.add_require_risk_free",
     "risk.sizing.risk_pct"
   ],
-  "included_direct_legacy_field_count": 316,
   "included_leaf_count": 391,
   "included_paths": [
     "actionability.contested_corridor.gap_atr",
@@ -451,6 +451,6 @@
   "included_secret_count": 6,
   "included_shared_field_count": 95,
   "projection_model": "app.configuration.models.python_runtime.PythonRuntimeConfig",
-  "source_fingerprint_sha256": "bb24affb47b297c91637a83880cd2043e59a4cff0b5b17ca2d02fb4952fb54f0",
+  "source_fingerprint_sha256": "1dab7cdbe9266e96d6b9e2aa553d1848ab9e0cd42d8626385ebc2213a3bc6eac",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

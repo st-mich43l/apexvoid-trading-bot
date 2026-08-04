@@ -1,0 +1,41 @@
+{
+  "algorithm_constant_count": 57,
+  "architecture_version": 1,
+  "catalog_entry_count": 441,
+  "catalog_version": 2,
+  "configurable_count": 374,
+  "configuration_contract_fingerprint_sha256": "1dab7cdbe9266e96d6b9e2aa553d1848ab9e0cd42d8626385ebc2213a3bc6eac",
+  "configuration_document_fingerprint_sha256": "270f97eb425dae560f1be5d22055b89fadb86ffafa56512eeaf2cb48ca487b57",
+  "contract_fingerprint": "1dab7cdbe9266e96d6b9e2aa553d1848ab9e0cd42d8626385ebc2213a3bc6eac",
+  "ctrader_only_count": 50,
+  "deprecated_alias_count": 21,
+  "document_fingerprint": "270f97eb425dae560f1be5d22055b89fadb86ffafa56512eeaf2cb48ca487b57",
+  "environment_entry_count": 374,
+  "integrity_status": "CONFIGURATION_INTEGRITY_OK",
+  "owner_counts": {
+    "ctrader": 50,
+    "python": 296,
+    "shared": 95
+  },
+  "profile_names": [
+    "conservative",
+    "demo_eval"
+  ],
+  "protocol_constant_count": 10,
+  "python_projection_count": 391,
+  "runtime_authority_count": 1,
+  "runtime_root": "PythonRuntimeConfig",
+  "secret_count": 9,
+  "shared_count": 95,
+  "source_policy": "schema>profile>file_secrets>dotenv>process_env>init",
+  "source_precedence": [
+    "schema_default",
+    "profile",
+    "file_secret",
+    "dotenv",
+    "process_environment",
+    "init_value",
+    "derived_compatibility_rule"
+  ],
+  "startup_loader": "app.configuration.python_loader.load_python_canonical_settings"
+}

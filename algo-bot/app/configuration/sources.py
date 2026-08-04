@@ -101,7 +101,6 @@ def _input_names(
   if source_kind is SourceKind.INIT_VALUE:
     return tuple(dict.fromkeys(filter(None, (
       entry.path,
-      entry.legacy_attr,
       entry.canonical_env,
       *entry.deprecated_aliases,
     ))))
@@ -217,7 +216,6 @@ def resolve_source_layer(
     candidate=ParsedCandidate(
       source=SourceCandidate(
         path=spec.entry.path,
-        item_id=spec.entry.item_id,
         source_kind=source_kind,
         source_name=chosen,
         canonical_env=spec.entry.canonical_env,

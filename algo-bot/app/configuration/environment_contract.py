@@ -21,7 +21,7 @@ from app.configuration.catalog import CatalogEntry, iter_catalog_entries
 class EnvironmentContractEntry:
   canonical_env: str
   path: str
-  item_id: str
+  display_id: str
   type: str
   unit: str
   owner: str
@@ -38,7 +38,7 @@ class EnvironmentContractEntry:
     return {
       "canonical_env": self.canonical_env,
       "path": self.path,
-      "item_id": self.item_id,
+      "display_id": self.display_id,
       "type": self.type,
       "unit": self.unit,
       "owner": self.owner,
@@ -57,7 +57,7 @@ def _entry(catalog_entry: CatalogEntry) -> EnvironmentContractEntry:
   return EnvironmentContractEntry(
     canonical_env=catalog_entry.canonical_env or "",
     path=catalog_entry.path,
-    item_id=catalog_entry.item_id,
+    display_id=catalog_entry.display_id,
     type=catalog_entry.type,
     unit=catalog_entry.unit,
     owner=catalog_entry.owner,

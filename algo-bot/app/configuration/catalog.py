@@ -1,4 +1,4 @@
-"""Deterministic catalog traversal for the inactive canonical schema."""
+"""Deterministic catalog traversal for Catalog V2."""
 
 from __future__ import annotations
 
@@ -11,14 +11,13 @@ from pydantic import BaseModel
 from pydantic.fields import FieldInfo
 from pydantic_core import PydanticUndefined
 
+from app.configuration.metadata import display_config_id
 from app.configuration.models.root import ApexVoidConfig
 
 
 @dataclass(frozen=True)
 class CatalogEntry:
-  item_id: str
   path: str
-  legacy_attr: str | None
   canonical_env: str | None
   deprecated_aliases: tuple[str, ...]
   type: str
@@ -48,52 +47,14 @@ class CatalogEntry:
   replacement_path: str | None
   terminal_deprecation_reason: str | None
 
-  def as_dict(self) -> dict[str, Any]:
-    return _json_value(asdict(self))
-
-
-@dataclass(frozen=True)
-class DerivedLegacyProperty:
-  property_name: str
-  source_path: str | None
-  source_property: str | None
-  transformation: str
-  return_type: str
+  @property
+  def display_id(self) -> str:
+    return display_config_id(self.path)
 
   def as_dict(self) -> dict[str, Any]:
-    return asdict(self)
-
-
-DERIVED_LEGACY_PROPERTIES = (
-  DerivedLegacyProperty(
-    property_name="signal_vip_channel_id",
-    source_path="delivery.telegram.telegram_channel_id",
-    source_property=None,
-    transformation="identity",
-    return_type="int",
-  ),
-  DerivedLegacyProperty(
-    property_name="telegram_chat_id",
-    source_path="delivery.telegram.telegram_channel_id",
-    source_property=None,
-    transformation="str(value)",
-    return_type="str",
-  ),
-  DerivedLegacyProperty(
-    property_name="xau_public_channel_id",
-    source_path="delivery.telegram.signal_public_channel_id",
-    source_property=None,
-    transformation="identity",
-    return_type="Optional[int]",
-  ),
-  DerivedLegacyProperty(
-    property_name="xau_vip_channel_id",
-    source_path=None,
-    source_property="signal_vip_channel_id",
-    transformation="identity",
-    return_type="int",
-  ),
-)
+    payload = _json_value(asdict(self))
+    payload["display_id"] = self.display_id
+    return payload
 
 
 def _json_value(value: Any) -> Any:
@@ -117,19 +78,43 @@ def _nested_model(annotation: Any) -> type[BaseModel] | None:
   return None
 
 
-def _declared_type(annotation: Any, item_id: str) -> str:
+def _declared_type(
+  annotation: Any,
+  *,
+  path: str,
+  owner: str,
+  canonical_env: str | None,
+  validation_summary: str | None,
+) -> str:
+  """Infer catalog type from annotation, owner, and C#/ENV metadata."""
   origin = get_origin(annotation)
   args = get_args(annotation)
   if origin in (UnionType, getattr(__import__("typing"), "Union")):
     non_none = [item for item in args if item is not type(None)]
     if len(non_none) == 1:
-      inner = _declared_type(non_none[0], item_id)
+      inner = _declared_type(
+        non_none[0],
+        path=path,
+        owner=owner,
+        canonical_env=canonical_env,
+        validation_summary=validation_summary,
+      )
       if inner == "str":
         return "Optional[str]"
       if inner == "int":
         return "Optional[int]"
   if origin is list and args:
-    inner = "string" if args[0] is str else _declared_type(args[0], item_id)
+    inner = (
+      "string"
+      if args[0] is str
+      else _declared_type(
+        args[0],
+        path=path,
+        owner=owner,
+        canonical_env=canonical_env,
+        validation_summary=validation_summary,
+      )
+    )
     return f"list[{inner}]"
   if annotation is bool:
     return "bool"
@@ -138,17 +123,22 @@ def _declared_type(annotation: Any, item_id: str) -> str:
   if annotation is float:
     return "float"
   if annotation is int:
-    if item_id == "ctrader.env.CTRADER_ACCOUNT_ID":
+    if canonical_env == "CTRADER_ACCOUNT_ID":
       return "long"
     return "int"
   if annotation is str:
-    return (
-      "str"
-      if item_id.startswith(("python.settings.", "hardcoded."))
-      else "string"
-    )
-  raise TypeError(f"unsupported catalog annotation {annotation!r} for {item_id}")
-
+    summary = validation_summary or ""
+    if owner == "ctrader":
+      return "string"
+    if summary.startswith("direct environment read"):
+      return "string"
+    if owner == "shared" and (
+      summary.startswith("FeedOptions.Env")
+      or summary.startswith("EnvironmentResolver.String + AutoTradeOptions")
+    ):
+      return "string"
+    return "str"
+  raise TypeError(f"unsupported catalog annotation {annotation!r} for {path}")
 
 def _constraints(field: FieldInfo) -> dict[str, Any]:
   result: dict[str, Any] = {}
@@ -191,17 +181,26 @@ def iter_catalog_entries(
   entries = []
   for path, field, metadata in _iter_fields(model):
     secret = bool(metadata["secret"])
+    owner = metadata["owner"]
+    canonical_env = metadata["canonical_env"]
+    aliases = metadata.get("deprecated_aliases")
+    if aliases is None:
+      aliases = metadata.get("deprecated_env_aliases", ())
     entries.append(CatalogEntry(
-      item_id=metadata["item_id"],
       path=path,
-      legacy_attr=metadata["legacy_attr"],
-      canonical_env=metadata["canonical_env"],
-      deprecated_aliases=tuple(metadata["deprecated_aliases"]),
-      type=_declared_type(field.annotation, metadata["item_id"]),
+      canonical_env=canonical_env,
+      deprecated_aliases=tuple(aliases),
+      type=_declared_type(
+        field.annotation,
+        path=path,
+        owner=owner,
+        canonical_env=canonical_env,
+        validation_summary=metadata.get("validation_summary"),
+      ),
       required=field.is_required(),
       default=_field_default(field, secret=secret),
       constraints=_constraints(field),
-      owner=metadata["owner"],
+      owner=owner,
       unit=metadata["unit"],
       risk_classification=metadata["risk_classification"],
       kind=metadata["kind"],
@@ -224,7 +223,7 @@ def iter_catalog_entries(
       replacement_path=metadata["replacement_path"],
       terminal_deprecation_reason=metadata["terminal_deprecation_reason"],
     ))
-  return tuple(sorted(entries, key=lambda item: (item.path, item.item_id)))
+  return tuple(sorted(entries, key=lambda item: item.path))
 
 
 def infer_ctrader_type(entry: CatalogEntry) -> str | None:
