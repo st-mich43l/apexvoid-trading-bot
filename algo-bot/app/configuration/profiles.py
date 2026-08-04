@@ -1,4 +1,4 @@
-"""Immutable canonical configuration profiles for the inactive root model."""
+"""Immutable profiles for the active canonical configuration model."""
 
 from __future__ import annotations
 

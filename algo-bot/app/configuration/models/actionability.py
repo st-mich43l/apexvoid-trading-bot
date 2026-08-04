@@ -56,9 +56,12 @@ class ActionabilityZoneReconciliationConfig(FrozenConfigModel):
         return value.strip().lower() if isinstance(value, str) else value
 
     @model_validator(mode='after')
-    def disable_mode_with_switch(self):
+    def validate_disabled_mode(self):
         if not self.enabled and self.mode != 'off':
-            object.__setattr__(self, 'mode', 'off')
+            raise ValueError(
+                'disabled zone reconciliation requires mode=off; '
+                'canonical resolution derives this value before model validation'
+            )
         return self
 
 class ActionabilityContestedCorridorConfig(FrozenConfigModel):
