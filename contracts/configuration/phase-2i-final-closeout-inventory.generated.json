@@ -1,0 +1,650 @@
+{
+  "phase": "2I-final-closeout",
+  "baseline": "8f2aef8138ca93582fa2c89e665e92df4302bb61",
+  "pr216_incomplete_reason": "core_path_landed_tests_pending",
+  "observation_evidence_fabricated": false,
+  "unknown_blockers": 0,
+  "counts": {
+    "legacy_reference_sites": 86,
+    "delete_candidate_tests": 27
+  },
+  "delete_candidate_tests": [
+    "algo-bot/tests/test_config_facade.py",
+    "algo-bot/tests/test_config_legacy_canonical_view.py",
+    "algo-bot/tests/test_config_legacy_access_generation.py",
+    "algo-bot/tests/test_config_legacy_usage_audit.py",
+    "algo-bot/tests/test_config_bootstrap_authority.py",
+    "algo-bot/tests/test_config_authority.py",
+    "algo-bot/tests/test_config_active_authority.py",
+    "algo-bot/tests/test_config_activation_architecture.py",
+    "algo-bot/tests/test_config_activation_readiness.py",
+    "algo-bot/tests/test_config_shadow_architecture.py",
+    "algo-bot/tests/test_config_shadow_loader.py",
+    "algo-bot/tests/test_config_shadow_parity.py",
+    "algo-bot/tests/test_config_phase2e_authority_parity.py",
+    "algo-bot/tests/test_config_phase2f_authority_parity.py",
+    "algo-bot/tests/test_config_phase2g_authority_parity.py",
+    "algo-bot/tests/test_config_phase2e_migration_audit.py",
+    "algo-bot/tests/test_config_phase2f_migration_audit.py",
+    "algo-bot/tests/test_config_phase2g_migration_audit.py",
+    "algo-bot/tests/test_config_phase2i_a_authority.py",
+    "algo-bot/tests/test_config_phase2i_a_surface.py",
+    "algo-bot/tests/test_config_phase2i_a1_guards.py",
+    "algo-bot/tests/test_config_phase2i_a1_inventory.py",
+    "algo-bot/tests/test_config_authority_deployment.py",
+    "algo-bot/tests/test_config_phase2h_characterization.py",
+    "algo-bot/tests/test_config_phase2h_compose_parity.py",
+    "algo-bot/tests/test_config_phase2h_entry_gate.py",
+    "algo-bot/tests/test_config_phase2h_environment.py"
+  ],
+  "active_migration_modules": [
+    "algo-bot/app/configuration/canonical_consumer_surface.py",
+    "algo-bot/app/configuration/compatibility_surface_audit.py",
+    "algo-bot/app/configuration/usage_audit.py",
+    "algo-bot/app/configuration/phase2h_gate.py"
+  ],
+  "entries": [
+    {
+      "file": "algo-bot/tests/test_analysis_only_delivery_suppressed.py",
+      "line": 16,
+      "symbol": "app.core.config.settings",
+      "role": "flat_settings_import",
+      "final_action": "REWRITE_CANONICAL"
+    },
+    {
+      "file": "algo-bot/tests/test_trend.py",
+      "line": 9,
+      "symbol": "app.core.config.settings",
+      "role": "flat_settings_import",
+      "final_action": "REWRITE_CANONICAL"
+    },
+    {
+      "file": "algo-bot/tests/test_trend.py",
+      "line": 14,
+      "symbol": "canonical_ns_from_flat",
+      "role": "legacy_symbol",
+      "final_action": "DELETE_OR_REWRITE"
+    },
+    {
+      "file": "algo-bot/tests/test_range_box_scale_out.py",
+      "line": 8,
+      "symbol": "app.core.config.Settings",
+      "role": "flat_settings_import",
+      "final_action": "REWRITE_CANONICAL"
+    },
+    {
+      "file": "algo-bot/tests/test_main.py",
+      "line": 14,
+      "symbol": "app.core.config.settings",
+      "role": "flat_settings_import",
+      "final_action": "REWRITE_CANONICAL"
+    },
+    {
+      "file": "algo-bot/tests/test_scanner_actionability.py",
+      "line": 4,
+      "symbol": "app.core.config.settings",
+      "role": "flat_settings_import",
+      "final_action": "REWRITE_CANONICAL"
+    },
+    {
+      "file": "algo-bot/tests/test_watcher.py",
+      "line": 15,
+      "symbol": "app.core.config.settings",
+      "role": "flat_settings_import",
+      "final_action": "REWRITE_CANONICAL"
+    },
+    {
+      "file": "algo-bot/tests/test_config_legacy_access_generation.py",
+      "line": 23,
+      "symbol": "DIRECT_LEGACY_PATHS",
+      "role": "legacy_symbol",
+      "final_action": "DELETE_OR_REWRITE"
+    },
+    {
+      "file": "algo-bot/tests/test_config_legacy_access_generation.py",
+      "line": 24,
+      "symbol": "DIRECT_LEGACY_PATHS",
+      "role": "legacy_symbol",
+      "final_action": "DELETE_OR_REWRITE"
+    },
+    {
+      "file": "algo-bot/tests/test_config_legacy_access_generation.py",
+      "line": 58,
+      "symbol": "DIRECT_LEGACY_PATHS",
+      "role": "legacy_symbol",
+      "final_action": "DELETE_OR_REWRITE"
+    },
+    {
+      "file": "algo-bot/tests/test_config_legacy_access_generation.py",
+      "line": 68,
+      "symbol": "DIRECT_LEGACY_PATHS",
+      "role": "legacy_symbol",
+      "final_action": "DELETE_OR_REWRITE"
+    },
+    {
+      "file": "algo-bot/tests/test_setup_tag_backfill.py",
+      "line": 2,
+      "symbol": "app.core.config.settings",
+      "role": "flat_settings_import",
+      "final_action": "REWRITE_CANONICAL"
+    },
+    {
+      "file": "algo-bot/tests/test_calendar.py",
+      "line": 17,
+      "symbol": "app.core.config.settings",
+      "role": "flat_settings_import",
+      "final_action": "REWRITE_CANONICAL"
+    },
+    {
+      "file": "algo-bot/tests/test_m1_trigger.py",
+      "line": 68,
+      "symbol": "app.core.config.Settings",
+      "role": "flat_settings_import",
+      "final_action": "REWRITE_CANONICAL"
+    },
+    {
+      "file": "algo-bot/tests/test_demo_eval_runtime.py",
+      "line": 2,
+      "symbol": "app.core.config.settings",
+      "role": "flat_settings_import",
+      "final_action": "REWRITE_CANONICAL"
+    },
+    {
+      "file": "algo-bot/tests/test_demo_eval_runtime.py",
+      "line": 20,
+      "symbol": "app.core.config.Settings",
+      "role": "flat_settings_import",
+      "final_action": "REWRITE_CANONICAL"
+    },
+    {
+      "file": "algo-bot/tests/test_publish_trade_plan_v7.py",
+      "line": 15,
+      "symbol": "app.core.config.settings",
+      "role": "flat_settings_import",
+      "final_action": "REWRITE_CANONICAL"
+    },
+    {
+      "file": "algo-bot/tests/test_manual_intent.py",
+      "line": 5,
+      "symbol": "app.core.config.settings",
+      "role": "flat_settings_import",
+      "final_action": "REWRITE_CANONICAL"
+    },
+    {
+      "file": "algo-bot/tests/test_zone_execution_cutover.py",
+      "line": 2,
+      "symbol": "app.core.config.settings",
+      "role": "flat_settings_import",
+      "final_action": "REWRITE_CANONICAL"
+    },
+    {
+      "file": "algo-bot/tests/test_config_python_loader.py",
+      "line": 7,
+      "symbol": "app.configuration.facade.CanonicalSettingsFacade",
+      "role": "test_or_tooling_legacy_import",
+      "final_action": "DELETE_OR_REWRITE"
+    },
+    {
+      "file": "algo-bot/tests/test_config_python_loader.py",
+      "line": 17,
+      "symbol": "app.core.config.Settings",
+      "role": "flat_settings_import",
+      "final_action": "REWRITE_CANONICAL"
+    },
+    {
+      "file": "algo-bot/tests/test_config_python_loader.py",
+      "line": 104,
+      "symbol": "CanonicalSettingsFacade",
+      "role": "legacy_symbol",
+      "final_action": "DELETE_OR_REWRITE"
+    },
+    {
+      "file": "algo-bot/tests/test_config_python_loader.py",
+      "line": 79,
+      "symbol": "DIRECT_LEGACY_PATHS",
+      "role": "legacy_symbol",
+      "final_action": "DELETE_OR_REWRITE"
+    },
+    {
+      "file": "algo-bot/tests/test_config_python_loader.py",
+      "line": 93,
+      "symbol": "DIRECT_LEGACY_PATHS",
+      "role": "legacy_symbol",
+      "final_action": "DELETE_OR_REWRITE"
+    },
+    {
+      "file": "algo-bot/tests/test_config_python_loader.py",
+      "line": 80,
+      "symbol": "DIRECT_LEGACY_PATHS",
+      "role": "legacy_symbol",
+      "final_action": "DELETE_OR_REWRITE"
+    },
+    {
+      "file": "algo-bot/tests/test_zone_width_contract.py",
+      "line": 12,
+      "symbol": "app.core.config.settings",
+      "role": "flat_settings_import",
+      "final_action": "REWRITE_CANONICAL"
+    },
+    {
+      "file": "algo-bot/tests/test_worker_veto_regression_replay.py",
+      "line": 21,
+      "symbol": "app.core.config.settings",
+      "role": "flat_settings_import",
+      "final_action": "REWRITE_CANONICAL"
+    },
+    {
+      "file": "algo-bot/tests/test_confluence_card_rr_pregate.py",
+      "line": 4,
+      "symbol": "app.core.config.settings",
+      "role": "flat_settings_import",
+      "final_action": "REWRITE_CANONICAL"
+    },
+    {
+      "file": "algo-bot/tests/test_forming_route_contract.py",
+      "line": 2,
+      "symbol": "app.core.config.settings",
+      "role": "flat_settings_import",
+      "final_action": "REWRITE_CANONICAL"
+    },
+    {
+      "file": "algo-bot/tests/test_forming_route_contract.py",
+      "line": 168,
+      "symbol": "canonical_ns_from_flat",
+      "role": "legacy_symbol",
+      "final_action": "DELETE_OR_REWRITE"
+    },
+    {
+      "file": "algo-bot/tests/test_config_shadow_loader.py",
+      "line": 11,
+      "symbol": "app.core.config.Settings",
+      "role": "flat_settings_import",
+      "final_action": "REWRITE_CANONICAL"
+    },
+    {
+      "file": "algo-bot/tests/test_reentry_reports.py",
+      "line": 15,
+      "symbol": "app.core.config.settings",
+      "role": "flat_settings_import",
+      "final_action": "REWRITE_CANONICAL"
+    },
+    {
+      "file": "algo-bot/tests/config_characterization.py",
+      "line": 19,
+      "symbol": "app.core.config.Settings",
+      "role": "flat_settings_import",
+      "final_action": "REWRITE_CANONICAL"
+    },
+    {
+      "file": "algo-bot/tests/test_map_reaction_range_retirement.py",
+      "line": 4,
+      "symbol": "app.core.config.settings",
+      "role": "flat_settings_import",
+      "final_action": "REWRITE_CANONICAL"
+    },
+    {
+      "file": "algo-bot/tests/test_ohlc_lookback_settings.py",
+      "line": 8,
+      "symbol": "app.core.config.settings",
+      "role": "flat_settings_import",
+      "final_action": "REWRITE_CANONICAL"
+    },
+    {
+      "file": "algo-bot/tests/test_config_phase2i_a1_guards.py",
+      "line": 166,
+      "symbol": "app.core.config.settings",
+      "role": "flat_settings_import",
+      "final_action": "REWRITE_CANONICAL"
+    },
+    {
+      "file": "algo-bot/tests/test_config_phase2i_a1_guards.py",
+      "line": 187,
+      "symbol": "app.core.config.settings",
+      "role": "flat_settings_import",
+      "final_action": "REWRITE_CANONICAL"
+    },
+    {
+      "file": "algo-bot/tests/test_config_phase2i_a1_guards.py",
+      "line": 212,
+      "symbol": "app.core.config.settings",
+      "role": "flat_settings_import",
+      "final_action": "REWRITE_CANONICAL"
+    },
+    {
+      "file": "algo-bot/tests/test_config_phase2i_a1_guards.py",
+      "line": 228,
+      "symbol": "app.core.config.settings",
+      "role": "flat_settings_import",
+      "final_action": "REWRITE_CANONICAL"
+    },
+    {
+      "file": "algo-bot/tests/test_config_phase2i_a1_guards.py",
+      "line": 220,
+      "symbol": "DIRECT_LEGACY_PATHS",
+      "role": "legacy_symbol",
+      "final_action": "DELETE_OR_REWRITE"
+    },
+    {
+      "file": "algo-bot/tests/test_config_phase2i_a1_guards.py",
+      "line": 236,
+      "symbol": "DIRECT_LEGACY_PATHS",
+      "role": "legacy_symbol",
+      "final_action": "DELETE_OR_REWRITE"
+    },
+    {
+      "file": "algo-bot/tests/test_config_phase2i_a1_guards.py",
+      "line": 169,
+      "symbol": "DIRECT_LEGACY_PATHS",
+      "role": "legacy_symbol",
+      "final_action": "DELETE_OR_REWRITE"
+    },
+    {
+      "file": "algo-bot/tests/test_config_phase2i_a1_guards.py",
+      "line": 190,
+      "symbol": "DIRECT_LEGACY_PATHS",
+      "role": "legacy_symbol",
+      "final_action": "DELETE_OR_REWRITE"
+    },
+    {
+      "file": "algo-bot/tests/test_broadcast.py",
+      "line": 13,
+      "symbol": "app.core.config.settings",
+      "role": "flat_settings_import",
+      "final_action": "REWRITE_CANONICAL"
+    },
+    {
+      "file": "algo-bot/tests/test_worker_terminal_card_cleanup.py",
+      "line": 17,
+      "symbol": "app.core.config.settings",
+      "role": "flat_settings_import",
+      "final_action": "REWRITE_CANONICAL"
+    },
+    {
+      "file": "algo-bot/tests/test_config_shadow_architecture.py",
+      "line": 10,
+      "symbol": "app.core.config.Settings",
+      "role": "flat_settings_import",
+      "final_action": "REWRITE_CANONICAL"
+    },
+    {
+      "file": "algo-bot/tests/test_execution_pipeline_integrity.py",
+      "line": 4,
+      "symbol": "app.core.config.settings",
+      "role": "flat_settings_import",
+      "final_action": "REWRITE_CANONICAL"
+    },
+    {
+      "file": "algo-bot/tests/test_auto_close_all.py",
+      "line": 4,
+      "symbol": "app.core.config.settings",
+      "role": "flat_settings_import",
+      "final_action": "REWRITE_CANONICAL"
+    },
+    {
+      "file": "algo-bot/tests/test_strategy_match.py",
+      "line": 2,
+      "symbol": "app.core.config.settings",
+      "role": "flat_settings_import",
+      "final_action": "REWRITE_CANONICAL"
+    },
+    {
+      "file": "algo-bot/tests/test_trade_commands.py",
+      "line": 13,
+      "symbol": "app.core.config.settings",
+      "role": "flat_settings_import",
+      "final_action": "REWRITE_CANONICAL"
+    },
+    {
+      "file": "algo-bot/tests/test_config_source_characterization.py",
+      "line": 8,
+      "symbol": "app.core.config.Settings",
+      "role": "flat_settings_import",
+      "final_action": "REWRITE_CANONICAL"
+    },
+    {
+      "file": "algo-bot/tests/test_strategy_match_ready_handoff.py",
+      "line": 4,
+      "symbol": "app.core.config.settings",
+      "role": "flat_settings_import",
+      "final_action": "REWRITE_CANONICAL"
+    },
+    {
+      "file": "algo-bot/tests/test_config_phase2f_migration_audit.py",
+      "line": 37,
+      "symbol": "DIRECT_LEGACY_PATHS",
+      "role": "legacy_symbol",
+      "final_action": "DELETE_OR_REWRITE"
+    },
+    {
+      "file": "algo-bot/tests/test_config_phase2f_migration_audit.py",
+      "line": 44,
+      "symbol": "DIRECT_LEGACY_PATHS",
+      "role": "legacy_symbol",
+      "final_action": "DELETE_OR_REWRITE"
+    },
+    {
+      "file": "algo-bot/tests/test_config_phase2f_migration_audit.py",
+      "line": 105,
+      "symbol": "DIRECT_LEGACY_PATHS",
+      "role": "legacy_symbol",
+      "final_action": "DELETE_OR_REWRITE"
+    },
+    {
+      "file": "algo-bot/tests/test_execution_confirmation.py",
+      "line": 24,
+      "symbol": "app.core.config.Settings",
+      "role": "flat_settings_import",
+      "final_action": "REWRITE_CANONICAL"
+    },
+    {
+      "file": "algo-bot/tests/test_auto_scalp_worker.py",
+      "line": 2,
+      "symbol": "app.core.config.settings",
+      "role": "flat_settings_import",
+      "final_action": "REWRITE_CANONICAL"
+    },
+    {
+      "file": "algo-bot/tests/test_config_activation_architecture.py",
+      "line": 9,
+      "symbol": "app.core.config.Settings",
+      "role": "flat_settings_import",
+      "final_action": "REWRITE_CANONICAL"
+    },
+    {
+      "file": "algo-bot/tests/test_lifecycle.py",
+      "line": 13,
+      "symbol": "app.core.config.settings",
+      "role": "flat_settings_import",
+      "final_action": "REWRITE_CANONICAL"
+    },
+    {
+      "file": "algo-bot/tests/test_weekly_report.py",
+      "line": 15,
+      "symbol": "app.core.config.settings",
+      "role": "flat_settings_import",
+      "final_action": "REWRITE_CANONICAL"
+    },
+    {
+      "file": "algo-bot/tests/test_market_map_delivery.py",
+      "line": 2,
+      "symbol": "app.core.config.settings",
+      "role": "flat_settings_import",
+      "final_action": "REWRITE_CANONICAL"
+    },
+    {
+      "file": "algo-bot/tests/test_setup_card.py",
+      "line": 6,
+      "symbol": "app.core.config.settings",
+      "role": "flat_settings_import",
+      "final_action": "REWRITE_CANONICAL"
+    },
+    {
+      "file": "algo-bot/tests/test_config_legacy_canonical_view.py",
+      "line": 7,
+      "symbol": "app.configuration.legacy_canonical_view.LegacyCanonicalConfigView",
+      "role": "test_or_tooling_legacy_import",
+      "final_action": "DELETE_OR_REWRITE"
+    },
+    {
+      "file": "algo-bot/tests/test_config_phase2e_migration_audit.py",
+      "line": 54,
+      "symbol": "DIRECT_LEGACY_PATHS",
+      "role": "legacy_symbol",
+      "final_action": "DELETE_OR_REWRITE"
+    },
+    {
+      "file": "algo-bot/tests/test_config_phase2e_migration_audit.py",
+      "line": 61,
+      "symbol": "DIRECT_LEGACY_PATHS",
+      "role": "legacy_symbol",
+      "final_action": "DELETE_OR_REWRITE"
+    },
+    {
+      "file": "algo-bot/tests/test_config_bootstrap_authority.py",
+      "line": 5,
+      "symbol": "app.configuration.bootstrap_authority.RuntimeConfigurationAuthority",
+      "role": "test_or_tooling_legacy_import",
+      "final_action": "DELETE_OR_REWRITE"
+    },
+    {
+      "file": "algo-bot/tests/test_config_bootstrap_authority.py",
+      "line": 5,
+      "symbol": "app.configuration.bootstrap_authority.resolve_runtime_configuration_authority",
+      "role": "test_or_tooling_legacy_import",
+      "final_action": "DELETE_OR_REWRITE"
+    },
+    {
+      "file": "algo-bot/tests/test_scanner.py",
+      "line": 2,
+      "symbol": "app.core.config.settings",
+      "role": "flat_settings_import",
+      "final_action": "REWRITE_CANONICAL"
+    },
+    {
+      "file": "algo-bot/tests/test_trade_plan_v7_migration_mode.py",
+      "line": 23,
+      "symbol": "app.core.config.settings",
+      "role": "flat_settings_import",
+      "final_action": "REWRITE_CANONICAL"
+    },
+    {
+      "file": "algo-bot/tests/test_config_shadow_parity.py",
+      "line": 11,
+      "symbol": "app.core.config.Settings",
+      "role": "flat_settings_import",
+      "final_action": "REWRITE_CANONICAL"
+    },
+    {
+      "file": "algo-bot/tests/test_telegram_single_root_card.py",
+      "line": 4,
+      "symbol": "app.core.config.settings",
+      "role": "flat_settings_import",
+      "final_action": "REWRITE_CANONICAL"
+    },
+    {
+      "file": "algo-bot/tests/test_config_phase2g_migration_audit.py",
+      "line": 39,
+      "symbol": "DIRECT_LEGACY_PATHS",
+      "role": "legacy_symbol",
+      "final_action": "DELETE_OR_REWRITE"
+    },
+    {
+      "file": "algo-bot/tests/test_config_phase2g_migration_audit.py",
+      "line": 46,
+      "symbol": "DIRECT_LEGACY_PATHS",
+      "role": "legacy_symbol",
+      "final_action": "DELETE_OR_REWRITE"
+    },
+    {
+      "file": "algo-bot/tests/test_close_button.py",
+      "line": 13,
+      "symbol": "app.core.config.settings",
+      "role": "flat_settings_import",
+      "final_action": "REWRITE_CANONICAL"
+    },
+    {
+      "file": "algo-bot/tests/test_auto_trade_ops.py",
+      "line": 2,
+      "symbol": "app.core.config.settings",
+      "role": "flat_settings_import",
+      "final_action": "REWRITE_CANONICAL"
+    },
+    {
+      "file": "algo-bot/tests/test_config_facade.py",
+      "line": 5,
+      "symbol": "app.configuration.facade.CanonicalSettingsFacade",
+      "role": "test_or_tooling_legacy_import",
+      "final_action": "DELETE_OR_REWRITE"
+    },
+    {
+      "file": "algo-bot/tests/test_config_facade.py",
+      "line": 21,
+      "symbol": "CanonicalSettingsFacade",
+      "role": "legacy_symbol",
+      "final_action": "DELETE_OR_REWRITE"
+    },
+    {
+      "file": "algo-bot/tests/test_config_facade.py",
+      "line": 32,
+      "symbol": "DIRECT_LEGACY_PATHS",
+      "role": "legacy_symbol",
+      "final_action": "DELETE_OR_REWRITE"
+    },
+    {
+      "file": "algo-bot/tests/test_config_facade.py",
+      "line": 70,
+      "symbol": "DIRECT_LEGACY_PATHS",
+      "role": "legacy_symbol",
+      "final_action": "DELETE_OR_REWRITE"
+    },
+    {
+      "file": "algo-bot/tests/test_config_facade.py",
+      "line": 114,
+      "symbol": "DIRECT_LEGACY_PATHS",
+      "role": "legacy_symbol",
+      "final_action": "DELETE_OR_REWRITE"
+    },
+    {
+      "file": "algo-bot/tests/test_auto_trade_stats_ingestion.py",
+      "line": 2,
+      "symbol": "app.core.config.settings",
+      "role": "flat_settings_import",
+      "final_action": "REWRITE_CANONICAL"
+    },
+    {
+      "file": "algo-bot/tests/test_manual_execution.py",
+      "line": 8,
+      "symbol": "app.core.config.settings",
+      "role": "flat_settings_import",
+      "final_action": "REWRITE_CANONICAL"
+    },
+    {
+      "file": "algo-bot/tests/configuration/canonical_fixtures.py",
+      "line": 108,
+      "symbol": "canonical_ns_from_flat",
+      "role": "legacy_symbol",
+      "final_action": "DELETE_OR_REWRITE"
+    },
+    {
+      "file": "algo-bot/tests/configuration/canonical_fixtures.py",
+      "line": 144,
+      "symbol": "canonical_ns_from_flat",
+      "role": "legacy_symbol",
+      "final_action": "DELETE_OR_REWRITE"
+    },
+    {
+      "file": "algo-bot/tests/configuration/canonical_fixtures.py",
+      "line": 59,
+      "symbol": "DIRECT_LEGACY_PATHS",
+      "role": "legacy_symbol",
+      "final_action": "DELETE_OR_REWRITE"
+    },
+    {
+      "file": "algo-bot/tests/configuration/canonical_fixtures.py",
+      "line": 85,
+      "symbol": "DIRECT_LEGACY_PATHS",
+      "role": "legacy_symbol",
+      "final_action": "DELETE_OR_REWRITE"
+    }
+  ]
+}
