@@ -1444,12 +1444,24 @@ def _opposing_barrier_decision(
       f"{ambiguous.level_kind or ambiguous.side} "
       f"{ambiguous.low:.2f}-{ambiguous.high:.2f}"
     )
+    # A directional supply/demand zone is a real structural wall (23 Jul
+    # incident: a BUY filled inside an 8-touch SELL resistance band) and
+    # stays an unconditional hard block. A neutral key level - a round
+    # number or reaction-level band with no directional side - is a much
+    # weaker signal; production has only ever hard-blocked on this branch
+    # via a "round" level (never a real zone), rejecting otherwise-fine
+    # entries. Route those through the same telemetry-not-block treatment
+    # every other soft structural signal already gets.
+    is_neutral_level = ambiguous.source_type == "level"
     decision = classify_guard_severity(
       "opposing_barrier",
-      "entry_inside_opposing_zone",
+      (
+        "entry_inside_opposing_level" if is_neutral_level
+        else "entry_inside_opposing_zone"
+      ),
       message,
       guard_mode=guard_mode,
-      hard_geometry=True,
+      hard_geometry=not is_neutral_level,
     )
     return replace(
       decision,

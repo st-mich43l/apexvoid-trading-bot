@@ -91,6 +91,11 @@ PREFERENCE_TELEMETRY_REASONS = frozenset({
   # already fits within buffered room; same allow/effective-target outcome
   # as no_opposing_barrier, split out only for telemetry clarity.
   "opposing_barrier_full_ladder_fits",
+  # Entry falls inside a neutral key-level band (round number / reaction
+  # level) rather than a directional supply/demand zone. Unlike genuine
+  # zone containment (entry_inside_opposing_zone, still a hard block below),
+  # a level has no side and is a weak/ambiguous signal on its own.
+  "entry_inside_opposing_level",
 })
 
 # True structural conflicts — must hard-block publication.
