@@ -52,12 +52,6 @@ STAR_THREE_SCORE = 12.0
 STAR_TWO_SCORE = 8.0
 COIL_SCORE = 1.5
 REACTION_MAX_ATR = 1.0
-RANGE_CONFIRMATION_LABELS = {
-  "sweep_a": "sweep A",
-  "sweep_reclaim": "sweep + reclaim",
-  "rejection_choch": "rejection + micro CHoCH",
-  "rejection_edge": "rejection at scored edge",
-}
 
 
 @dataclass(frozen=True)
@@ -1497,6 +1491,36 @@ def momentum_ride(ctx: DetectionContext) -> DetectionResult | None:
 
 
 def range_edge_scalp(ctx: DetectionContext) -> DetectionResult | None:
+  """Confirmation retrofitted onto the shared evaluate_structural_reaction
+  path (2026-08-04 recovery mission, same reasoning as trend_pullback/
+  fade_scalp above). The old bespoke _range_edge_confirmation/
+  _recent_rejection check required a strict single-candle wick-rejection
+  shape inside a hard 3-bar (sweep_react_bars) window sized for M1
+  granularity - but this detector runs on the M5 execution timeframe, and
+  on real M5 data that exact shape essentially never landed in the last 3
+  bars even when a barrier already had genuine, multi-touch wick-rejection
+  history (touches/wick_rejections are already gated above, before
+  confirmation is even checked). Result: Range Edge Scalp never fired in
+  production despite RANGE_SCALP_ENABLED and a live, qualifying barrier -
+  confirmed against live XAU M5 data showing zero fires in 200+ recent
+  setups while sibling detectors on the same shared path fired normally.
+  It also never populated touch_bar_ts/confirmation_bar_ts, the same gap
+  trend_pullback's docstring describes for its own old bespoke check.
+
+  Root cause of the miss, confirmed against live XAU M5 data: the barrier's
+  own wick-rejection candle sat just outside the fixed
+  structural_reaction_lookback_bars=3 confirmation window (4 bars back
+  instead of 3) even though _barrier_touched_recently's separate,
+  price-band-only check (no candle-shape requirement) still passed for the
+  same barrier - a real, multi-touch/multi-wick-rejection level a few bars
+  older than the window can otherwise never confirm. Unlike a fresh zone
+  reaction, this barrier's touch/wick history was already independently
+  vetted (by the earlier touches/wick_rejections gates) over
+  scalp_ranges.py's own, much longer range-formation lookback - so the
+  confirmation window here is widened to at least reach the barrier's own
+  last recorded touch, instead of only trusting a fixed small constant
+  sized for a same-bar reaction.
+  """
   if not ctx.settings.range_scalp_enabled:
     return None
   df, ind, st = _exec(ctx)
@@ -1505,7 +1529,7 @@ def range_edge_scalp(ctx: DetectionContext) -> DetectionResult | None:
     return None
   price = _current_price(ctx, df)
   atr = _atr(ind)
-  confirmation_bars = max(1, ctx.settings.sweep_react_bars)
+  base_lookback = max(1, int(ctx.settings.structural_reaction_lookback_bars))
   candidates = [
     ("BUY", scalp_range.lower, scalp_range.upper.level),
     ("SELL", scalp_range.upper, scalp_range.lower.level),
@@ -1515,7 +1539,17 @@ def range_edge_scalp(ctx: DetectionContext) -> DetectionResult | None:
     key=lambda item: (abs(item[1].level - price), -item[1].score, item[0]),
   )
   for direction, barrier, opposing_level in candidates:
-    if not _barrier_touched_recently(df, barrier, confirmation_bars):
+    # Widen the confirmation window to at least reach this barrier's own
+    # last recorded touch (capped at the range's own formation lookback) -
+    # a barrier a few bars older than base_lookback must not be treated as
+    # unconfirmable when _barrier_touched_recently's own band-only check
+    # (no candle-shape requirement) already accepts it as current.
+    recency = max(0, (len(df) - 1) - int(barrier.last_touch_index))
+    lookback = min(
+      max(base_lookback, recency + 1),
+      max(base_lookback, int(ctx.settings.range_scalp_lookback)),
+    )
+    if not _barrier_touched_recently(df, barrier, lookback):
       continue
     if barrier.accepted_closes >= max(1, ctx.settings.range_scalp_break_closes):
       continue
@@ -1533,14 +1567,14 @@ def range_edge_scalp(ctx: DetectionContext) -> DetectionResult | None:
     room_atr = abs(barrier.level - scalp_range.eq) / max(atr, _EPS)
     if room_atr < max(0.0, ctx.settings.range_scalp_min_room_atr):
       continue
-    confirmation = _range_edge_confirmation(
+    confirmation = evaluate_structural_reaction(
       df,
-      st,
-      zone,
-      barrier,
-      direction,
-      confirmation_bars,
-      ctx.settings,
+      direction=direction,
+      low=float(zone.low),
+      high=float(zone.high),
+      lookback_bars=lookback,
+      grabs=_zone_grabs_for(st, zone, direction),
+      has_choch=_recent_choch_flag(st, direction, len(df), ctx.settings, lookback),
     )
     if confirmation is None:
       continue
@@ -1550,7 +1584,7 @@ def range_edge_scalp(ctx: DetectionContext) -> DetectionResult | None:
       f"{_number(scalp_range.upper.level)}",
       f"{edge} barrier ×{barrier.touches}",
       f"wick rejection ×{barrier.wick_rejections}",
-      RANGE_CONFIRMATION_LABELS[confirmation],
+      confirmation.confirmation_type,
       f"TP1 EQ {_number(scalp_range.eq)}",
       f"TP2 edge {_number(opposing_level)}",
     ]
@@ -1565,7 +1599,11 @@ def range_edge_scalp(ctx: DetectionContext) -> DetectionResult | None:
       reasons,
       mode="range_scalp",
       chop_tp_cap=False,
-      confirmation=confirmation,
+      confirmation=confirmation.confirmation_type,
+      confirmation_bar_ts=confirmation.confirmation_bar_ts,
+      touch_bar_ts=confirmation.touch_bar_ts,
+      source_touches=barrier.touches,
+      source_score=barrier.score,
     )
   return None
 
@@ -1590,66 +1628,6 @@ def _barrier_touched_recently(
     if float(row.low) <= barrier.high and float(row.high) >= barrier.low:
       return True
   return False
-
-
-def _range_edge_confirmation(
-  df: pd.DataFrame,
-  st: StructureSet,
-  zone: Zone,
-  barrier: ScalpBarrier,
-  direction: str,
-  bars: int,
-  settings: DetectorSettings,
-) -> str | None:
-  grab = _zone_grab(st, zone, direction)
-  if grab is not None and grab.grade == "A":
-    return "sweep_a"
-  if _barrier_sweep_reclaim(df, barrier, direction, bars):
-    return "sweep_reclaim"
-  if _recent_rejection(df, direction, bars) and (
-    _recent_choch(st, direction, len(df), settings)
-    or _micro_choch(df, direction, bars)
-  ):
-    return "rejection_choch"
-  if settings.range_scalp_allow_rejection_only and _recent_rejection(
-    df, direction, bars
-  ):
-    return "rejection_edge"
-  return None
-
-
-def _barrier_sweep_reclaim(
-  df: pd.DataFrame,
-  barrier: ScalpBarrier,
-  direction: str,
-  bars: int,
-) -> bool:
-  for row in df.tail(max(1, bars)).itertuples(index=False):
-    if direction == "SELL":
-      if float(row.high) > barrier.high and float(row.close) < barrier.level:
-        return True
-    elif float(row.low) < barrier.low and float(row.close) > barrier.level:
-      return True
-  return False
-
-
-def _recent_rejection(df: pd.DataFrame, direction: str, bars: int) -> bool:
-  start = max(0, len(df) - max(1, bars))
-  for index in range(start, len(df)):
-    if _rejection(df.iloc[:index + 1], direction):
-      return True
-  return False
-
-
-def _micro_choch(df: pd.DataFrame, direction: str, bars: int) -> bool:
-  lookback = max(2, bars)
-  if len(df) < lookback + 1:
-    return False
-  prior = df.iloc[-lookback - 1:-1]
-  close = float(df["close"].iloc[-1])
-  if direction == "BUY":
-    return close > float(prior["high"].max())
-  return close < float(prior["low"].min())
 
 
 def fade_scalp(ctx: DetectionContext) -> DetectionResult | None:
