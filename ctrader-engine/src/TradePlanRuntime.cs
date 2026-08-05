@@ -1304,6 +1304,71 @@ public sealed class TradePlanRuntime(
     return currentQuote >= zoneLow - tolerance && currentQuote <= zoneHigh + tolerance;
   }
 
+  private async Task<string> FormatPlanExpiredMessageAsync(
+    TradePlan plan,
+    string waitReasonForExpiry,
+    CancellationToken cancellationToken
+  )
+  {
+    var direction = plan.Analysis.Direction;
+    if (waitReasonForExpiry == "never_evaluated")
+    {
+      return $"TradePlan V7 expired {direction} · "
+        + $"executor never evaluated a live quote ({waitReasonForExpiry})";
+    }
+    if (waitReasonForExpiry == "spread_exceeds_declared_limit")
+    {
+      return $"TradePlan V7 expired {direction} · "
+        + $"spread stayed above the plan limit while waiting ({waitReasonForExpiry})";
+    }
+    if (waitReasonForExpiry == "outside_zone")
+    {
+      var touched = await ZoneTouchedSinceCreatedAsync(plan, cancellationToken);
+      if (touched)
+      {
+        // Live incident: SETUP FORMING card showed price already inside the
+        // entry zone, then expiry said "never returned". Prefer the truthful
+        // "left without a fill" copy whenever M1 evidence shows a touch.
+        return $"TradePlan V7 expired {direction} · "
+          + $"price left the entry zone without a fill ({waitReasonForExpiry})";
+      }
+      return $"TradePlan V7 expired {direction} · "
+        + $"price never entered the entry zone ({waitReasonForExpiry})";
+    }
+    return $"TradePlan V7 expired {direction} · "
+      + $"entry wait timed out ({waitReasonForExpiry})";
+  }
+
+  private async Task<bool> ZoneTouchedSinceCreatedAsync(
+    TradePlan plan,
+    CancellationToken cancellationToken
+  )
+  {
+    if (plan.Entry.ZoneLow is not decimal zoneLow || plan.Entry.ZoneHigh is not decimal zoneHigh)
+    {
+      return false;
+    }
+    try
+    {
+      var bars = await store.ReadRecentBarsAsync(
+        plan.Symbol, "M1", RecoveryCatchUpLookbackBars, cancellationToken
+      );
+      return bars.Any(bar =>
+        bar.Timestamp >= plan.CreatedAt
+        && bar.Low <= zoneHigh
+        && bar.High >= zoneLow
+      );
+    }
+    catch (Exception exception)
+    {
+      log(
+        $"v7 expiry touch check failed id={plan.PlanId} "
+        + $"exception={exception.GetType().Name}"
+      );
+      return false;
+    }
+  }
+
   private async Task TrySubmitReceivedPlanAsync(
     ICTraderTradeClient client,
     SymbolInfo symbol,
@@ -1345,10 +1410,12 @@ public sealed class TradePlanRuntime(
       // This branch used to just log and forget the plan - the owner had
       // no way to tell a market_watch setup died from a stale "SETUP
       // FORMING" card short of noticing on their own and asking why.
+      var expiryMessage = await FormatPlanExpiredMessageAsync(
+        plan, waitReasonForExpiry, cancellationToken
+      );
       await PublishEventAsync(
         "plan_expired",
-        $"TradePlan V7 expired {plan.Analysis.Direction} · "
-          + $"price never returned to the entry zone ({waitReasonForExpiry})",
+        expiryMessage,
         plan,
         cancellationToken
       );
@@ -1362,9 +1429,13 @@ public sealed class TradePlanRuntime(
     if (!decision.ShouldSubmit)
     {
       var caughtUp = false;
+      // Apply M1 missed-touch catch-up for ANY pending market_watch wait
+      // on outside_zone, not only RecoveryGraceActive. Polling can miss a
+      // brief overlap even without a restart (live 2026-08-05: zone
+      // overlapped on M1 for ~2 minutes while last_wait_reason ended as
+      // outside_zone and no order fired).
       if (
         decision.RejectReason == "outside_zone"
-        && state.RecoveryGraceActive
         && (
           plan.Entry.MaxSpreadTicks is not int maxSpread
           || spreadTicks <= maxSpread
@@ -1377,13 +1448,25 @@ public sealed class TradePlanRuntime(
       {
         if (decision.RejectReason is string waitReason)
         {
+          if (!string.Equals(state.LastEntryWaitReason, waitReason, StringComparison.Ordinal))
+          {
+            var zoneLow = plan.Entry.ZoneLow?.ToString(CultureInfo.InvariantCulture) ?? "-";
+            var zoneHigh = plan.Entry.ZoneHigh?.ToString(CultureInfo.InvariantCulture) ?? "-";
+            log(
+              $"v7 entry wait id={plan.PlanId} reason={waitReason} "
+              + $"bid={quote.Bid.ToString(CultureInfo.InvariantCulture)} "
+              + $"ask={quote.Ask.ToString(CultureInfo.InvariantCulture)} "
+              + $"spread_ticks={spreadTicks.ToString(CultureInfo.InvariantCulture)} "
+              + $"zone={zoneLow}-{zoneHigh}"
+            );
+          }
           _statesById[state.PlanId] = state with { LastEntryWaitReason = waitReason };
         }
         return;
       }
       log(
-        $"v7 recovery catch-up: id={plan.PlanId} submitting - the zone "
-        + "was touched during downtime and the live quote is still close"
+        $"v7 zone catch-up: id={plan.PlanId} submitting - the zone "
+        + "was touched on M1 and the live quote is still close"
       );
       state = state with { RecoveryGraceActive = false };
     }

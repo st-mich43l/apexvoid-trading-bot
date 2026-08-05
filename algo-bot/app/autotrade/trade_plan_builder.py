@@ -22,6 +22,7 @@ Wired into worker.py's live publish path behind AUTO_TRADE_CONTRACT_MODE
 
 from __future__ import annotations
 
+import math
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Any, Mapping, Sequence
 
@@ -70,6 +71,39 @@ def _parse_bar_ts(event_ts: str, fallback: int) -> int:
     return int(event_ts)
   except (TypeError, ValueError):
     return fallback
+
+
+def resolve_max_spread_ticks(
+  *,
+  max_spread_pips: float | int,
+  pip_size: Decimal | float,
+  price_digits: int,
+) -> int:
+  """Convert configured max spread in pips into broker tick count.
+
+  Live incident 2026-08-05: plans shipped ``max_spread_ticks=8`` hardcoded
+  while XAU digits=2 (tick 0.01) and live spread sat at ~0.09 (=9 ticks).
+  market_watch saw quote overlapping the zone, then Wait'd on
+  ``spread_exceeds_declared_limit`` for the whole window; after price left
+  the zone the last wait reason flipped to ``outside_zone`` and Telegram
+  lied that price "never returned". Deriving ticks from
+  ``execution.entry.max_spread_pips`` (× pip / tick) keeps the plan gate
+  aligned with the same pip budget AutoTradeOptions already uses.
+  """
+  pip = float(pip_size)
+  digits = max(0, int(price_digits))
+  tick = 10.0 ** (-digits)
+  if pip <= 0 or tick <= 0:
+    return 8
+  ticks = math.ceil(float(max_spread_pips) * pip / tick)
+  return max(1, int(ticks))
+
+
+def _resolve_cfg(cfg: Any | None) -> Any:
+  if cfg is not None:
+    return cfg
+  from app.core.config import runtime_config as _rc
+  return _rc
 
 
 def _equal_close_ratios(count: int) -> tuple[Decimal, ...]:
@@ -222,7 +256,7 @@ def build_trade_plan_from_strategy_match(
   opposing_zone_id: str | None = None,
   executable_quote: float | None = None,
   max_volume: int,
-  max_spread_ticks: int = 8,
+  max_spread_ticks: int | None = None,
   max_slippage_ticks: int = 10,
   be_after_target_index: int = 0,
   be_buffer_ticks: int = 6,
@@ -417,13 +451,39 @@ def build_trade_plan_from_strategy_match(
     invalidation_price=Decimal(str(match.structure_swing)),
   )
 
+  cfg_resolved = _resolve_cfg(cfg)
+  if max_spread_ticks is None:
+    max_spread_pips = float(
+      getattr(
+        getattr(getattr(cfg_resolved, "execution", None), "entry", None),
+        "max_spread_pips",
+        5,
+      )
+      or 5
+    )
+    price_digits = int(
+      getattr(
+        getattr(getattr(cfg_resolved, "contract", None), "instrument", None),
+        "price_digits",
+        2,
+      )
+      or 2
+    )
+    resolved_max_spread_ticks = resolve_max_spread_ticks(
+      max_spread_pips=max_spread_pips,
+      pip_size=pip_size,
+      price_digits=price_digits,
+    )
+  else:
+    resolved_max_spread_ticks = int(max_spread_ticks)
+
   entry = _build_entry(
     route=str(measured["planned_execution_route"]),
     direction=direction,
     match=match,
     measured=measured,
     expires_at=published_expires_at,
-    max_spread_ticks=max_spread_ticks,
+    max_spread_ticks=resolved_max_spread_ticks,
     max_slippage_ticks=max_slippage_ticks,
   )
 
@@ -461,8 +521,7 @@ def build_trade_plan_from_strategy_match(
   )
 
   if cfg is None:
-    from app.core.config import runtime_config as _rc
-    cfg_for_fraction = _rc
+    cfg_for_fraction = cfg_resolved
   else:
     cfg_for_fraction = cfg
   first_leg_fraction = Decimal(str(
