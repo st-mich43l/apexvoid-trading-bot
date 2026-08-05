@@ -269,6 +269,18 @@ public interface IAutoTradeStore
     IReadOnlyList<long>? pendingOrderIds,
     CancellationToken cancellationToken
   ) => Task.CompletedTask;
+  // Recent closed bars for a symbol/timeframe, newest first - same shape
+  // RedisBarSink.ReadLatestAsync already exposes, added here so the V7
+  // runtime (which only holds an IAutoTradeStore, not a RedisBarSink) can
+  // check what price actually did across a gap it wasn't polling for
+  // (see TradePlanRuntime's recovery catch-up). Default empty so every
+  // existing IAutoTradeStore fake keeps compiling unchanged.
+  Task<IReadOnlyList<OhlcBar>> ReadRecentBarsAsync(
+    string symbol,
+    string timeframe,
+    int count,
+    CancellationToken cancellationToken
+  ) => Task.FromResult<IReadOnlyList<OhlcBar>>(Array.Empty<OhlcBar>());
 }
 
 public sealed class RedisBarSink(
@@ -434,6 +446,27 @@ public sealed class StackExchangeRedisSeriesCommands :
         Convert.ToInt64(entry.Score, CultureInfo.InvariantCulture),
         entry.Element.ToString()
       ))
+      .ToArray();
+  }
+
+  public async Task<IReadOnlyList<OhlcBar>> ReadRecentBarsAsync(
+    string symbol,
+    string timeframe,
+    int count,
+    CancellationToken cancellationToken
+  )
+  {
+    // Mirrors RedisBarSink.ReadLatestAsync's own key/deserialize logic
+    // exactly - that method lives on RedisBarSink, not on this store, and
+    // the V7 runtime only holds an IAutoTradeStore.
+    var entries = await ReadLatestAsync(
+      RedisBarSink.Key(symbol, timeframe), count, cancellationToken
+    );
+    return entries
+      .Select(entry => System.Text.Json.JsonSerializer.Deserialize(
+        entry.Json,
+        RedisJsonContext.Default.RedisBar
+      )!.ToOhlc())
       .ToArray();
   }
 

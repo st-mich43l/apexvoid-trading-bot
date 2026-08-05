@@ -140,7 +140,16 @@ public sealed record TradePlanRuntimeState(
   // this the "v7 plan expired" log line can't say why a market_watch
   // entry never filled even when price genuinely returned to the zone
   // before expiry - see the live incident this fixed.
-  string? LastEntryWaitReason = null
+  string? LastEntryWaitReason = null,
+  // In-memory only, same reasoning as LastEntryWaitReason above: set when
+  // RestoreAsync grants this plan a recovery grace window (its
+  // Entry.ExpiresAt had already lapsed during a restart). While true, a
+  // plain "outside_zone" wait also tries the recovery catch-up check
+  // (TryRecoveryCatchUpAsync) - live price traded inside the zone while
+  // this process was down and left again before recovery finished is
+  // otherwise unrecoverable, since a plain live-tick check has no memory
+  // of price it never polled.
+  bool RecoveryGraceActive = false
 );
 
 public sealed record TradePlanRejectionRecord(
@@ -277,6 +286,9 @@ public static class TradePlanJson
   public static TradePlan DeserializePlan(string json) =>
     JsonSerializer.Deserialize(json, AutoTradeJsonContext.Default.TradePlan)
     ?? throw new TradePlanContractException("null plan payload");
+
+  public static string SerializePlan(TradePlan plan) =>
+    JsonSerializer.Serialize(plan, AutoTradeJsonContext.Default.TradePlan);
 
   public static string SerializeState(TradePlanRuntimeState state) =>
     JsonSerializer.Serialize(
@@ -454,6 +466,14 @@ public sealed class TradePlanRuntime(
   private readonly Dictionary<string, TradePlanRuntimeState> _statesById = new();
   private bool _restored;
 
+  // How long a recovered market_watch plan gets to see a live quote after
+  // a restart, when its own declared Entry.ExpiresAt already lapsed during
+  // the downtime. Deliberately short - this is a fairness grace against
+  // dead time the plan never got to use, not a way to keep a stale setup
+  // alive; the plan's own thesis (structure/zone) is unchanged, only the
+  // deadline the outage silently ate into is restored.
+  private const int RestoreExpiryGraceSeconds = 90;
+
   private static string FormatEventPrice(decimal price, SymbolInfo symbol) =>
     decimal.Round(price, symbol.Digits, MidpointRounding.AwayFromZero)
       .ToString($"F{Math.Max(0, symbol.Digits)}", CultureInfo.InvariantCulture);
@@ -521,6 +541,8 @@ public sealed class TradePlanRuntime(
   private static string PlanStateKey(string planId) => $"execution:plan_runtime:{planId}";
   private static string PlanRecoveryKey(string planId) =>
     $"execution:plan_recovery:{planId}";
+  private static string PlanRecoveryGraceKey(string planId) =>
+    $"execution:plan_recovery_grace:{planId}";
   private static string PlanExecutorStateKey(string planId) =>
     $"execution:plan_state:{planId}";
   private static string PlanAcknowledgementKey(string planId) =>
@@ -666,6 +688,67 @@ public sealed class TradePlanRuntime(
           var plan = TradePlanJson.DeserializePlan(planJson);
           if (plan is not null)
           {
+            var isPendingMarketWatch =
+              plan.Entry.Type == TradePlanContract.EntryTypeMarketWatch
+              && IsPendingEntryStage(state);
+            if (
+              isPendingMarketWatch
+              && plan.Entry.ExpiresAt <= clock().ToUnixTimeSeconds()
+              // Claim-once: a repeatedly-restarting process (the exact
+              // situation this exists for) must grant the grace a single
+              // time, not reset a fresh window on every restart, or a plan
+              // could outlive any real deadline for as long as restarts
+              // keep happening. TryClaimStringAsync is atomic (SET NX) -
+              // the same idempotency guard PlanClaimKey already uses.
+              && await store.TryClaimStringAsync(
+                PlanRecoveryGraceKey(planId),
+                "1",
+                TimeSpan.FromHours(1),
+                cancellationToken
+              )
+            )
+            {
+              // A deploy/restart is dead time for a market_watch plan: it's
+              // evaluated once per poll against the live quote, and nothing
+              // is watching while this process is down. A plan recovered
+              // here whose Entry.ExpiresAt already lapsed during that gap
+              // (TradePlanExecutionEngine.EvaluateEntry's plan_expired
+              // check reads exactly this field) would otherwise expire on
+              // the very next poll having never once seen a live quote -
+              // confirmed live: price traded inside the zone while a
+              // restart was in flight, and the plan died without ever
+              // getting a real look. Grant one genuine grace window
+              // instead so it gets an actual chance post-recovery.
+              var grantedUntil = clock().ToUnixTimeSeconds()
+                + RestoreExpiryGraceSeconds;
+              plan = plan with {
+                Entry = plan.Entry with { ExpiresAt = grantedUntil },
+              };
+              // Persist the extension too, not just the in-memory copy, so
+              // a later restart within the same grace window still sees
+              // the extended deadline rather than the original stale one.
+              await store.SetStringAsync(
+                PlanRecoveryKey(planId),
+                TradePlanJson.SerializePlan(plan),
+                cancellationToken
+              );
+              log(
+                $"v7 restore: granted {RestoreExpiryGraceSeconds}s recovery "
+                + $"grace to {planId} (entry expired during downtime)"
+              );
+            }
+            if (isPendingMarketWatch)
+            {
+              // Broader than the expiry-extension branch above: the
+              // "price touched the zone and left again before recovery
+              // finished" incident this exists for can happen even when
+              // Entry.ExpiresAt hadn't lapsed yet - the plan still had
+              // runway, it just had a blind spot while this process was
+              // down. Every recovered pending market_watch plan gets the
+              // more lenient recovery-aware check on its next poll(s),
+              // not only the ones that also needed the deadline extended.
+              _statesById[planId] = state with { RecoveryGraceActive = true };
+            }
             _plansById[planId] = plan;
           }
         }
@@ -1162,6 +1245,65 @@ public sealed class TradePlanRuntime(
     state.Stage is TradePlanRuntimeStage.Received
       or TradePlanRuntimeStage.Submitting;
 
+  // How far beyond the zone edge, as a FRACTION OF THE ZONE'S OWN WIDTH,
+  // the current live quote may still sit and be treated as "close enough"
+  // for a recovery catch-up. Scales with the zone's own thesis-derived
+  // width rather than a fixed pip amount. Deliberately conservative (half
+  // the zone width on each side, not the whole thing) - this exists
+  // specifically because a live-tick check alone has no memory of price
+  // it never polled while this process was down, and the owner explicitly
+  // asked for it after price traded inside a zone entirely during a
+  // restart and left again before recovery finished. The real tradeoff:
+  // the eventual fill price may differ from wherever price actually was
+  // during the missed touch, since only the CURRENT quote is ever used to
+  // execute - this never fires an order off stale/historical data alone.
+  private const decimal RecoveryCatchUpToleranceFraction = 0.5m;
+  // Bars searched for a missed touch - generous relative to how long a
+  // restart plausibly takes, without scanning arbitrarily far back.
+  private const int RecoveryCatchUpLookbackBars = 120;
+
+  private async Task<bool> TryRecoveryCatchUpAsync(
+    TradePlan plan,
+    SpotPrice quote,
+    CancellationToken cancellationToken
+  )
+  {
+    if (plan.Entry.ZoneLow is not decimal zoneLow || plan.Entry.ZoneHigh is not decimal zoneHigh)
+    {
+      return false;
+    }
+    IReadOnlyList<OhlcBar> bars;
+    try
+    {
+      bars = await store.ReadRecentBarsAsync(
+        plan.Symbol, "M1", RecoveryCatchUpLookbackBars, cancellationToken
+      );
+    }
+    catch (Exception exception)
+    {
+      // A telemetry-adjacent read must never take down live entry
+      // evaluation - fall back to "no catch-up", the plan keeps waiting
+      // exactly as it would have without this feature.
+      log(
+        $"v7 recovery catch-up read failed id={plan.PlanId} "
+        + $"exception={exception.GetType().Name}"
+      );
+      return false;
+    }
+    var touchedDuringGap = bars.Any(bar =>
+      bar.Timestamp >= plan.CreatedAt
+      && bar.Low <= zoneHigh
+      && bar.High >= zoneLow
+    );
+    if (!touchedDuringGap)
+    {
+      return false;
+    }
+    var currentQuote = plan.Entry.PriceSide == "ask" ? quote.Ask : quote.Bid;
+    var tolerance = (zoneHigh - zoneLow) * RecoveryCatchUpToleranceFraction;
+    return currentQuote >= zoneLow - tolerance && currentQuote <= zoneHigh + tolerance;
+  }
+
   private async Task TrySubmitReceivedPlanAsync(
     ICTraderTradeClient client,
     SymbolInfo symbol,
@@ -1219,11 +1361,31 @@ public sealed class TradePlanRuntime(
     }
     if (!decision.ShouldSubmit)
     {
-      if (decision.RejectReason is string waitReason)
+      var caughtUp = false;
+      if (
+        decision.RejectReason == "outside_zone"
+        && state.RecoveryGraceActive
+        && (
+          plan.Entry.MaxSpreadTicks is not int maxSpread
+          || spreadTicks <= maxSpread
+        )
+      )
       {
-        _statesById[state.PlanId] = state with { LastEntryWaitReason = waitReason };
+        caughtUp = await TryRecoveryCatchUpAsync(plan, quote, cancellationToken);
       }
-      return;
+      if (!caughtUp)
+      {
+        if (decision.RejectReason is string waitReason)
+        {
+          _statesById[state.PlanId] = state with { LastEntryWaitReason = waitReason };
+        }
+        return;
+      }
+      log(
+        $"v7 recovery catch-up: id={plan.PlanId} submitting - the zone "
+        + "was touched during downtime and the live quote is still close"
+      );
+      state = state with { RecoveryGraceActive = false };
     }
     if (!ShouldSubmitOrders)
     {
