@@ -2592,6 +2592,12 @@ def _trend_group_id(
 def _strategy_mode_enabled(match: StrategyMatch) -> bool:
   value = match.strategy.casefold()
   family = (match.family or "").casefold()
+  if family == "hfs" or match.strategy_mode == "hfs_scalp" or (
+    match.structural_source or ""
+  ).casefold() == "hfs":
+    hfs = getattr(runtime_config.strategies, "high_frequency_scalp", None)
+    mode = str(getattr(hfs, "mode", "off") or "off").casefold()
+    return mode == "live"
   if match.is_range_edge or family in {"range", "range_reversion"}:
     return runtime_config.strategies.range_reversion.enabled
   if "mapped" in value or family in {"mapped_zone", "mapped_zone_reaction"}:
