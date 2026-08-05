@@ -1,7 +1,7 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "eb2002bd01237007c3eacdba1a4b8a6cd07417d5fa44c354e31b511e9a423629",
-  "configuration_document_fingerprint_sha256": "3f6103d0050adf11692fd86d203620cb3040f39395ebea46f12caff5fe632bf3",
+  "configuration_contract_fingerprint_sha256": "2997a460475e33bc9e26902de93ee7a4e8d9715cbeb7acf23c4779ccff2b67f7",
+  "configuration_document_fingerprint_sha256": "c267947aa66fbabc2314e3675533fe1f9d48e92e746a03072be2254ccb2430c3",
   "counts": {
     "algorithm_constants": 57,
     "configurable": 376,
@@ -1954,16 +1954,16 @@
       "catalog_version": 2,
       "configurable": true,
       "constraints": {},
-      "default": 2,
+      "default": 4,
       "default_contexts": [
         {
           "context": "python_schema",
-          "value": 2
+          "value": 4
         }
       ],
       "deprecated": false,
       "deprecated_aliases": [],
-      "description": "Controls  (count).",
+      "description": "Zone touches before it drops out of the actionable opposing-barrier pool (count). Was 2 - a major/breaker/flip zone still being actively retested lost its opposing-barrier status after its 2nd touch, letting a SELL trade through with no real room-check against it (04 Aug 23:31 incident: SL loss reacting off a demand zone the map had correctly been blocking against 10 minutes earlier). Matches min_level_touches (4), which already treats 4 as the significance bar for levels.",
       "display_id": "config:analysis.market_map.max_touches",
       "evidence_notes": [],
       "introduced_in": "config-catalog-v2",
@@ -16519,6 +16519,6 @@
       "validation_summary": "Pydantic required/type coercion only"
     }
   ],
-  "source_fingerprint_sha256": "eb2002bd01237007c3eacdba1a4b8a6cd07417d5fa44c354e31b511e9a423629",
+  "source_fingerprint_sha256": "2997a460475e33bc9e26902de93ee7a4e8d9715cbeb7acf23c4779ccff2b67f7",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

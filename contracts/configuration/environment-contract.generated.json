@@ -1,6 +1,6 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "eb2002bd01237007c3eacdba1a4b8a6cd07417d5fa44c354e31b511e9a423629",
+  "configuration_contract_fingerprint_sha256": "2997a460475e33bc9e26902de93ee7a4e8d9715cbeb7acf23c4779ccff2b67f7",
   "count": 376,
   "deprecated_alias_count": 21,
   "entries": [
@@ -4242,10 +4242,10 @@
     },
     {
       "canonical_env": "MAP_MAX_TOUCHES",
-      "default": 2,
+      "default": 4,
       "deprecated": false,
       "deprecated_aliases": [],
-      "description": "Controls  (count).",
+      "description": "Zone touches before it drops out of the actionable opposing-barrier pool (count). Was 2 - a major/breaker/flip zone still being actively retested lost its opposing-barrier status after its 2nd touch, letting a SELL trade through with no real room-check against it (04 Aug 23:31 incident: SL loss reacting off a demand zone the map had correctly been blocking against 10 minutes earlier). Matches min_level_touches (4), which already treats 4 as the significance bar for levels.",
       "display_id": "config:analysis.market_map.max_touches",
       "owner": "python",
       "path": "analysis.market_map.max_touches",
@@ -6074,6 +6074,6 @@
   ],
   "secret_count": 9,
   "shared_with_ctrader_count": 86,
-  "source_fingerprint_sha256": "eb2002bd01237007c3eacdba1a4b8a6cd07417d5fa44c354e31b511e9a423629",
+  "source_fingerprint_sha256": "2997a460475e33bc9e26902de93ee7a4e8d9715cbeb7acf23c4779ccff2b67f7",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }
