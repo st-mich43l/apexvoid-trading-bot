@@ -37,8 +37,31 @@ services:
       retries: 10
       start_period: 5s
 
-  # Startup order (Compose waits on health, not just process start):
-  #   postgres + redis → ctrader-engine → bot
+  # Startup order:
+  #   postgres + redis → config-compiler → ctrader-engine → bot
+  # PR2: ENV remains authoritative for cTrader; manifest is shadow parity.
+  config-compiler:
+    image: "{{ registry_namespace }}/apexvoid-trading-bot:{{ image_tag }}"
+    container_name: apexvoid-config-compiler
+    restart: "no"
+    env_file:
+      - ./secrets/trading-bot.env
+    environment:
+      APEXVOID_CONFIG_FILE: /config/trading-bot.yml
+      APEXVOID_RUNTIME_MANIFEST_FILE: /runtime/resolved-runtime.json
+    command:
+      - python
+      - -m
+      - app.configuration.runtime_manifest_cli
+      - --config-file
+      - /config/trading-bot.yml
+      - --output
+      - /runtime/resolved-runtime.json
+      - --check
+    volumes:
+      - ./config/trading-bot.yml:/config/trading-bot.yml:ro
+      - runtime-config:/runtime
+
   ctrader-engine:
     image: "{{ registry_namespace }}/apexvoid-ctrader-engine:{{ image_tag }}"
     container_name: apexvoid-ctrader-engine
@@ -46,11 +69,18 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+      config-compiler:
+        condition: service_completed_successfully
     env_file:
       - ./secrets/trading-bot.env
+    environment:
+      APEXVOID_RUNTIME_MANIFEST_FILE: /runtime/resolved-runtime.json
+      CTRADER_CONFIGURATION_SOURCE: environment
+      CTRADER_MANIFEST_PARITY_MODE: enforce
     volumes:
       - ./data/ctrader-token:/var/lib/apexvoid
       - ./logs/ctrader-engine:/var/log/apexvoid
+      - runtime-config:/runtime:ro
     healthcheck:
       test: ["CMD", "/app/ctrader-feed", "--healthcheck"]
       interval: 15s
@@ -68,17 +98,22 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      config-compiler:
+        condition: service_completed_successfully
       ctrader-engine:
         condition: service_healthy
     env_file:
       - ./secrets/trading-bot.env
     environment:
       APEXVOID_CONFIG_FILE: /config/trading-bot.yml
+      APEXVOID_RUNTIME_MANIFEST_FILE: /runtime/resolved-runtime.json
     volumes:
       - ./config/trading-bot.yml:/config/trading-bot.yml:ro
+      - runtime-config:/runtime:ro
       - ./data:/data
       - ./logs/algo-bot:/var/log/apexvoid
 
 volumes:
   pgdata:
   redisdata:
+  runtime-config:

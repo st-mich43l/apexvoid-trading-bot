@@ -529,6 +529,174 @@ public sealed record AutoTradeOptions(
   };
   }
 
+  public static AutoTradeOptions FromRuntimeManifest(
+    ResolvedRuntimeManifest manifest,
+    AutoTradeOptions bootstrapFromEnvironment
+  )
+  {
+    ArgumentNullException.ThrowIfNull(manifest);
+    ArgumentNullException.ThrowIfNull(bootstrapFromEnvironment);
+    var t = manifest.AutoTrade;
+    if (ManifestDecimal.Parse(t.PipSize, "auto_trade.pip_size") <= 0m)
+    {
+      throw new InvalidOperationException("runtime manifest auto_trade.pip_size must be positive");
+    }
+    if (ManifestDecimal.Parse(t.ContractSize, "auto_trade.contract_size") <= 0m)
+    {
+      throw new InvalidOperationException(
+        "runtime manifest auto_trade.contract_size must be positive"
+      );
+    }
+    if (!string.Equals(t.CanonicalSymbol, "XAU", StringComparison.OrdinalIgnoreCase))
+    {
+      throw new InvalidOperationException(
+        $"runtime manifest canonical_symbol must be XAU for current production; got '{t.CanonicalSymbol}'"
+      );
+    }
+    return bootstrapFromEnvironment with
+    {
+      Enabled = t.Enabled,
+      DryRun = t.DryRun,
+      ExpectedBroker = t.ExpectedBroker,
+      StopLossDistance = ManifestDecimal.Parse(t.StopLossDistance, "auto_trade.stop_loss_distance"),
+      TargetsPips = t.TargetsPips.ToArray(),
+      TargetWeights = t.TargetWeights.ToArray(),
+      BreakEvenBufferTicks = t.BreakEvenBufferTicks,
+      CandidateMaxAgeSeconds = t.CandidateMaxAgeSeconds,
+      SpotMaxAgeSeconds = t.SpotMaxAgeSeconds,
+      MaxSpreadPips = t.MaxSpreadPips,
+      MaxEntryDistancePips = t.MaxEntryDistancePips,
+      MinConfluence = t.MinConfluence,
+      PollMilliseconds = t.PollMilliseconds,
+      CandidateStream = t.CandidateStream,
+      EventStream = t.EventStream,
+      Label = t.Label,
+      RequireDemoOnlyToken = t.RequireDemoOnlyToken,
+      RiskPercent = ManifestDecimal.Parse(t.RiskPercent, "auto_trade.risk_percent"),
+      SizingMode = t.SizingMode,
+      PipValuePerLot = ManifestDecimal.Parse(t.PipValuePerLot, "auto_trade.pip_value_per_lot"),
+      PipSize = ManifestDecimal.Parse(t.PipSize, "auto_trade.pip_size"),
+      ContractSize = ManifestDecimal.Parse(t.ContractSize, "auto_trade.contract_size"),
+      MaxTranches = t.MaxTranches,
+      AddRiskFraction = ManifestDecimal.Parse(t.AddRiskFraction, "auto_trade.add_risk_fraction"),
+      AddMaxAgeBars = t.AddMaxAgeBars,
+      AddCooldownBars = t.AddCooldownBars,
+      AddLevelBufferAtr = ManifestDecimal.Parse(t.AddLevelBufferAtr, "auto_trade.add_level_buffer_atr"),
+      AddStopBufferAtr = ManifestDecimal.Parse(t.AddStopBufferAtr, "auto_trade.add_stop_buffer_atr"),
+      AddMinStopPips = t.AddMinStopPips,
+      AddRequireRiskFree = t.AddRequireRiskFree,
+      ZoneFillEnabled = t.ZoneFillEnabled,
+      ZoneFillMinLots = ManifestDecimal.Parse(t.ZoneFillMinLots, "auto_trade.zone_fill_min_lots"),
+      ZoneFillMinAtr = ManifestDecimal.Parse(t.ZoneFillMinAtr, "auto_trade.zone_fill_min_atr"),
+      ZoneFillTtlBars = t.ZoneFillTtlBars,
+      ZoneFillFallbackEnabled = t.ZoneFillFallbackEnabled,
+      InsideZoneMarketEntryEnabled = t.InsideZoneMarketEntryEnabled,
+      BoxMinRiskReward = ManifestDecimal.Parse(t.BoxMinRiskReward, "auto_trade.box_min_risk_reward"),
+      TrendStopMinPips = t.TrendStopMinPips,
+      TrendStopMaxPips = t.TrendStopMaxPips,
+      StopPushBeyondZone = t.StopPushBeyondZone,
+      EntryContractTolerancePips = ManifestDecimal.Parse(
+        t.EntryContractTolerancePips,
+        "auto_trade.entry_contract_tolerance_pips"
+      ),
+      BrokerAbsenceConfirmations = t.BrokerAbsenceConfirmations,
+      BrokerAbsenceRecheckSeconds = t.BrokerAbsenceRecheckSeconds,
+      BrokerRecoveryTimeoutSeconds = t.BrokerRecoveryTimeoutSeconds,
+      WickStopBufferAtr = ManifestDecimal.Parse(t.WickStopBufferAtr, "auto_trade.wick_stop_buffer_atr"),
+      RangeFlipEnabled = t.RangeFlipEnabled,
+      FlipExitBufferPips = t.FlipExitBufferPips,
+      FlipConfirmTimeoutSeconds = t.FlipConfirmTimeoutSeconds,
+      ZoneCooldownMinutes = t.ZoneCooldownMinutes,
+      ZoneCooldownEnabled = t.ZoneCooldownEnabled,
+      AddPullbackEnabled = t.AddPullbackEnabled,
+      AddPullbackMinRetrace = ManifestDecimal.Parse(
+        t.AddPullbackMinRetrace,
+        "auto_trade.add_pullback_min_retrace"
+      ),
+      AddPullbackMaxRetrace = ManifestDecimal.Parse(
+        t.AddPullbackMaxRetrace,
+        "auto_trade.add_pullback_max_retrace"
+      ),
+      AddMaxGroupRiskPct = ManifestDecimal.Parse(
+        t.AddMaxGroupRiskPct,
+        "auto_trade.add_max_group_risk_pct"
+      ),
+      AddSizeRatio = ManifestDecimal.Parse(t.AddSizeRatio, "auto_trade.add_size_ratio"),
+      RangeTargetsPips = t.RangeTargetsPips.ToArray(),
+      RangeTpBufferPips = ManifestDecimal.Parse(
+        t.RangeTpBufferPips,
+        "auto_trade.range_tp_buffer_pips"
+      ),
+      Profile = t.Profile,
+      RequireDemoAccount = t.RequireDemoAccount,
+      AllowConcurrentStrategies = t.AllowConcurrentStrategies,
+      AllowHedgedXau = t.AllowHedgedXau,
+      RequireFlatForRange = t.RequireFlatForRange,
+      RangeTwoSidedEnabled = t.RangeTwoSidedEnabled,
+      MultiMatchEnabled = t.MultiMatchEnabled,
+      TrackAllStructuralMatches = t.TrackAllStructuralMatches,
+      CanonicalSymbol = t.CanonicalSymbol.ToUpperInvariant(),
+      CandidateContractVersion = t.CandidateContractVersion,
+      ContractMode = t.ContractMode.ToLowerInvariant(),
+      TradePlanStream = t.TradePlanStream,
+      ManualAlgoEnabled = t.ManualAlgoEnabled,
+      TrendEnabled = t.TrendEnabled,
+      RangeEnabled = t.RangeEnabled,
+      MappedZoneEnabled = t.MappedZoneEnabled,
+      MarketMapGuardEnabled = t.MarketMapGuardEnabled,
+      MapThesisLockEnabled = t.MapThesisLockEnabled,
+      StrategyMatchEnabled = t.StrategyMatchEnabled,
+      BreakoutEnabled = t.BreakoutEnabled,
+      RetestEnabled = t.RetestEnabled,
+      ReactionEnabled = t.ReactionEnabled,
+      LiquidityReversalEnabled = t.LiquidityReversalEnabled,
+      AllowCounterBias = t.AllowCounterBias,
+      CandidateStorageTtlSeconds = t.CandidateStorageTtlSeconds,
+      Symbols = t.Symbols.ToArray(),
+      ConfigManifestVersion = t.ConfigManifestVersion,
+      NonHedgedOppositePolicy = t.NonHedgedOppositePolicy.ToLowerInvariant(),
+      StructuralGuardMode = t.StructuralGuardMode.ToLowerInvariant(),
+      ZoneReconcileMode = t.ZoneReconcileMode,
+      RangeBoxScaleOutEnabled = t.RangeBoxScaleOutEnabled,
+      RangeBoxScaleOutThresholdPips = t.RangeBoxScaleOutThresholdPips,
+      RangeBoxScaleOutTriggerPips = t.RangeBoxScaleOutTriggerPips,
+      RangeBoxScaleOutFraction = ManifestDecimal.Parse(
+        t.RangeBoxScaleOutFraction,
+        "auto_trade.range_box_scale_out_fraction"
+      ),
+      RangeBoxMoveSlToBeAfterScaleOut = t.RangeBoxMoveSlToBeAfterScaleOut,
+      ExecutionZoneMaxWidthAtr = ManifestDecimal.Parse(
+        t.ExecutionZoneMaxWidthAtr,
+        "auto_trade.execution_zone_max_width_atr"
+      ),
+      ExecutionZoneMaxWidthPips = ManifestDecimal.Parse(
+        t.ExecutionZoneMaxWidthPips,
+        "auto_trade.execution_zone_max_width_pips"
+      ),
+      PostFillTargetFallback = t.PostFillTargetFallback.Trim().ToLowerInvariant(),
+      PositionMissingConfirmations = t.PositionMissingConfirmations,
+      PositionMissingRecheckSeconds = t.PositionMissingRecheckSeconds,
+      EquityTableVersion = t.EquityTableVersion,
+      ZoneScaleUndersizedPolicy = t.ZoneScaleUndersizedPolicy,
+      GroupCloseAllocation = t.GroupCloseAllocation,
+      UnfilledLegAfterTpPolicy = t.UnfilledLegAfterTpPolicy.Trim().ToLowerInvariant(),
+      ReactionMarketFraction = ManifestDecimal.Parse(
+        t.ReactionMarketFraction,
+        "auto_trade.reaction_market_fraction"
+      ),
+      ReactionScaleFraction = ManifestDecimal.Parse(
+        t.ReactionScaleFraction,
+        "auto_trade.reaction_scale_fraction"
+      ),
+      ReactionScaleEnabled = t.ReactionScaleEnabled,
+      ReactionScaleInvalidPolicy = t.ReactionScaleInvalidPolicy.Trim().ToLowerInvariant(),
+      ReactionScaleStepAtr = ManifestDecimal.Parse(
+        t.ReactionScaleStepAtr,
+        "auto_trade.reaction_scale_step_atr"
+      ),
+    };
+  }
+
   public void Validate()
   {
     if (Profile is not "conservative" and not "demo_eval")

@@ -1,0 +1,1197 @@
+{
+  "catalog_version": 2,
+  "configuration_contract_fingerprint_sha256": "2997a460475e33bc9e26902de93ee7a4e8d9715cbeb7acf23c4779ccff2b67f7",
+  "counts": {
+    "bootstrap_environment": 12,
+    "deprecated_compatibility": 1,
+    "derived_runtime": 2,
+    "manifest": 113,
+    "secret_environment": 3,
+    "total": 131,
+    "unclassified": 0
+  },
+  "entries": [
+    {
+      "canonical_path": "bootstrap.ctrader.credentials.access_token",
+      "classification": "secret_environment",
+      "environment": "CTRADER_ACCESS_TOKEN",
+      "manifest_path": null,
+      "options_type": "FeedOptions",
+      "property": "AccessToken",
+      "removable_after_cutover": false
+    },
+    {
+      "canonical_path": "bootstrap.ctrader.credentials.account_id",
+      "classification": "bootstrap_environment",
+      "environment": "CTRADER_ACCOUNT_ID",
+      "manifest_path": null,
+      "options_type": "FeedOptions",
+      "property": "AccountId",
+      "removable_after_cutover": false
+    },
+    {
+      "canonical_path": "market_data.ctrader_feed.backfill_bars",
+      "classification": "manifest",
+      "environment": "CTRADER_BACKFILL_BARS",
+      "manifest_path": "feed.backfill_bars",
+      "options_type": "FeedOptions",
+      "property": "BackfillBars",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "market_data.ctrader_feed.bar_quality_lookback_bars",
+      "classification": "manifest",
+      "environment": "BAR_QUALITY_LOOKBACK",
+      "manifest_path": "feed.bar_quality_lookback",
+      "options_type": "FeedOptions",
+      "property": "BarQualityLookback",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "market_data.ctrader_feed.bars_channel",
+      "classification": "manifest",
+      "environment": "BARS_CHANNEL",
+      "manifest_path": "feed.bars_channel",
+      "options_type": "FeedOptions",
+      "property": "BarsChannel",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "market_data.ctrader_feed.bars_window_max",
+      "classification": "manifest",
+      "environment": "BARS_WINDOW_MAX",
+      "manifest_path": "feed.bars_window_max",
+      "options_type": "FeedOptions",
+      "property": "BarsWindowMax",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "market_data.ctrader_feed.symbol",
+      "classification": "manifest",
+      "environment": "CTRADER_SYMBOL",
+      "manifest_path": "feed.ctrader_symbol",
+      "options_type": "FeedOptions",
+      "property": "CTraderSymbol",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "bootstrap.ctrader.credentials.client_id",
+      "classification": "bootstrap_environment",
+      "environment": "CTRADER_CLIENT_ID",
+      "manifest_path": null,
+      "options_type": "FeedOptions",
+      "property": "ClientId",
+      "removable_after_cutover": false
+    },
+    {
+      "canonical_path": "bootstrap.ctrader.credentials.client_secret",
+      "classification": "secret_environment",
+      "environment": "CTRADER_CLIENT_SECRET",
+      "manifest_path": null,
+      "options_type": "FeedOptions",
+      "property": "ClientSecret",
+      "removable_after_cutover": false
+    },
+    {
+      "canonical_path": "contract.account.expected_broker",
+      "classification": "manifest",
+      "environment": "CTRADER_EXPECTED_BROKER",
+      "manifest_path": "feed.expected_broker",
+      "options_type": "FeedOptions",
+      "property": "ExpectedBroker",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "market_data.ctrader_feed.health_file",
+      "classification": "bootstrap_environment",
+      "environment": "HEALTH_FILE",
+      "manifest_path": null,
+      "options_type": "FeedOptions",
+      "property": "HeartbeatFile",
+      "removable_after_cutover": false
+    },
+    {
+      "canonical_path": "bootstrap.ctrader.connection.host",
+      "classification": "bootstrap_environment",
+      "environment": "CTRADER_HOST",
+      "manifest_path": null,
+      "options_type": "FeedOptions",
+      "property": "Host",
+      "removable_after_cutover": false
+    },
+    {
+      "canonical_path": "bootstrap.ctrader.connection.port",
+      "classification": "bootstrap_environment",
+      "environment": "CTRADER_PORT",
+      "manifest_path": null,
+      "options_type": "FeedOptions",
+      "property": "Port",
+      "removable_after_cutover": false
+    },
+    {
+      "canonical_path": null,
+      "classification": "derived_runtime",
+      "environment": null,
+      "manifest_path": null,
+      "options_type": "FeedOptions",
+      "property": "RedisSymbol",
+      "removable_after_cutover": false
+    },
+    {
+      "canonical_path": "bootstrap.redis.url",
+      "classification": "bootstrap_environment",
+      "environment": "REDIS_URL",
+      "manifest_path": null,
+      "options_type": "FeedOptions",
+      "property": "RedisUrl",
+      "removable_after_cutover": false
+    },
+    {
+      "canonical_path": "bootstrap.ctrader.credentials.refresh_token",
+      "classification": "secret_environment",
+      "environment": "CTRADER_REFRESH_TOKEN",
+      "manifest_path": null,
+      "options_type": "FeedOptions",
+      "property": "RefreshToken",
+      "removable_after_cutover": false
+    },
+    {
+      "canonical_path": "bootstrap.ctrader.token_rotation.refresh_token_file",
+      "classification": "bootstrap_environment",
+      "environment": "CTRADER_REFRESH_TOKEN_FILE",
+      "manifest_path": null,
+      "options_type": "FeedOptions",
+      "property": "RefreshTokenFile",
+      "removable_after_cutover": false
+    },
+    {
+      "canonical_path": "bootstrap.ctrader.token_rotation.refresh_token_key",
+      "classification": "bootstrap_environment",
+      "environment": "CTRADER_REFRESH_TOKEN_KEY",
+      "manifest_path": null,
+      "options_type": "FeedOptions",
+      "property": "RefreshTokenKey",
+      "removable_after_cutover": false
+    },
+    {
+      "canonical_path": "bootstrap.ctrader.connection.request_timeout_seconds",
+      "classification": "bootstrap_environment",
+      "environment": "CTRADER_REQUEST_TIMEOUT",
+      "manifest_path": null,
+      "options_type": "FeedOptions",
+      "property": "RequestTimeout",
+      "removable_after_cutover": false
+    },
+    {
+      "canonical_path": "market_data.ctrader_feed.timeframes",
+      "classification": "manifest",
+      "environment": "CTRADER_TIMEFRAMES",
+      "manifest_path": "feed.timeframes",
+      "options_type": "FeedOptions",
+      "property": "Timeframes",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "bootstrap.ctrader.token_rotation.check_interval_hours",
+      "classification": "bootstrap_environment",
+      "environment": "CTRADER_TOKEN_CHECK_INTERVAL_HOURS",
+      "manifest_path": null,
+      "options_type": "FeedOptions",
+      "property": "TokenCheckInterval",
+      "removable_after_cutover": false
+    },
+    {
+      "canonical_path": "bootstrap.ctrader.token_rotation.refresh_lead_days",
+      "classification": "bootstrap_environment",
+      "environment": "CTRADER_TOKEN_REFRESH_LEAD_DAYS",
+      "manifest_path": null,
+      "options_type": "FeedOptions",
+      "property": "TokenRefreshLead",
+      "removable_after_cutover": false
+    },
+    {
+      "canonical_path": "lifecycle.scaling.cooldown_bars",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_ADD_COOLDOWN_BARS",
+      "manifest_path": "auto_trade.add_cooldown_bars",
+      "options_type": "AutoTradeOptions",
+      "property": "AddCooldownBars",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "execution.scaling.add.level_buffer_atr",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_ADD_LEVEL_BUFFER_ATR",
+      "manifest_path": "auto_trade.add_level_buffer_atr",
+      "options_type": "AutoTradeOptions",
+      "property": "AddLevelBufferAtr",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "lifecycle.scaling.max_age_bars",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_ADD_MAX_AGE_BARS",
+      "manifest_path": "auto_trade.add_max_age_bars",
+      "options_type": "AutoTradeOptions",
+      "property": "AddMaxAgeBars",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "risk.sizing.add_max_group_risk_pct",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_ADD_MAX_GROUP_RISK_PCT",
+      "manifest_path": "auto_trade.add_max_group_risk_pct",
+      "options_type": "AutoTradeOptions",
+      "property": "AddMaxGroupRiskPct",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "execution.scaling.add.min_stop_pips",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_ADD_MIN_STOP_PIPS",
+      "manifest_path": "auto_trade.add_min_stop_pips",
+      "options_type": "AutoTradeOptions",
+      "property": "AddMinStopPips",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "execution.scaling.add.pullback_enabled",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_ADD_PULLBACK_ENABLED",
+      "manifest_path": "auto_trade.add_pullback_enabled",
+      "options_type": "AutoTradeOptions",
+      "property": "AddPullbackEnabled",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "execution.scaling.add.pullback_max_retrace",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_ADD_PULLBACK_MAX_RETRACE",
+      "manifest_path": "auto_trade.add_pullback_max_retrace",
+      "options_type": "AutoTradeOptions",
+      "property": "AddPullbackMaxRetrace",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "execution.scaling.add.pullback_min_retrace",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_ADD_PULLBACK_MIN_RETRACE",
+      "manifest_path": "auto_trade.add_pullback_min_retrace",
+      "options_type": "AutoTradeOptions",
+      "property": "AddPullbackMinRetrace",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "risk.sizing.add_require_risk_free",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_ADD_REQUIRE_RISK_FREE",
+      "manifest_path": "auto_trade.add_require_risk_free",
+      "options_type": "AutoTradeOptions",
+      "property": "AddRequireRiskFree",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "risk.sizing.add_risk_fraction",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_ADD_RISK_FRACTION",
+      "manifest_path": "auto_trade.add_risk_fraction",
+      "options_type": "AutoTradeOptions",
+      "property": "AddRiskFraction",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "execution.scaling.add.size_ratio",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_ADD_SIZE_RATIO",
+      "manifest_path": "auto_trade.add_size_ratio",
+      "options_type": "AutoTradeOptions",
+      "property": "AddSizeRatio",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "execution.scaling.add.stop_buffer_atr",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_ADD_STOP_BUFFER_ATR",
+      "manifest_path": "auto_trade.add_stop_buffer_atr",
+      "options_type": "AutoTradeOptions",
+      "property": "AddStopBufferAtr",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "risk.exposure.allow_concurrent_strategies",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_ALLOW_CONCURRENT_STRATEGIES",
+      "manifest_path": "auto_trade.allow_concurrent_strategies",
+      "options_type": "AutoTradeOptions",
+      "property": "AllowConcurrentStrategies",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "actionability.counter_bias.allowed",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_ALLOW_COUNTER_BIAS",
+      "manifest_path": "auto_trade.allow_counter_bias",
+      "options_type": "AutoTradeOptions",
+      "property": "AllowCounterBias",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "risk.exposure.allow_hedged_xau",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_ALLOW_HEDGED_XAU",
+      "manifest_path": "auto_trade.allow_hedged_xau",
+      "options_type": "AutoTradeOptions",
+      "property": "AllowHedgedXau",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "execution.policy.box_min_rr",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_BOX_MIN_RR",
+      "manifest_path": "auto_trade.box_min_risk_reward",
+      "options_type": "AutoTradeOptions",
+      "property": "BoxMinRiskReward",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "execution.stops.be_buffer_ticks",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_BE_BUFFER_TICKS",
+      "manifest_path": "auto_trade.break_even_buffer_ticks",
+      "options_type": "AutoTradeOptions",
+      "property": "BreakEvenBufferTicks",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "strategies.breakout.breakout_enabled",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_BREAKOUT_ENABLED",
+      "manifest_path": "auto_trade.breakout_enabled",
+      "options_type": "AutoTradeOptions",
+      "property": "BreakoutEnabled",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "execution.broker_recovery.absence_confirmations",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_BROKER_ABSENCE_CONFIRMATIONS",
+      "manifest_path": "auto_trade.broker_absence_confirmations",
+      "options_type": "AutoTradeOptions",
+      "property": "BrokerAbsenceConfirmations",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "lifecycle.reconciliation.absence_recheck_seconds",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_BROKER_ABSENCE_RECHECK_SECONDS",
+      "manifest_path": "auto_trade.broker_absence_recheck_seconds",
+      "options_type": "AutoTradeOptions",
+      "property": "BrokerAbsenceRecheckSeconds",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "lifecycle.reconciliation.recovery_timeout_seconds",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_BROKER_RECOVERY_TIMEOUT_SECONDS",
+      "manifest_path": "auto_trade.broker_recovery_timeout_seconds",
+      "options_type": "AutoTradeOptions",
+      "property": "BrokerRecoveryTimeoutSeconds",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "contract.versions.candidate",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_CANDIDATE_CONTRACT_VERSION",
+      "manifest_path": "auto_trade.candidate_contract_version",
+      "options_type": "AutoTradeOptions",
+      "property": "CandidateContractVersion",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "lifecycle.candidate.execution_maximum_age_seconds",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_CANDIDATE_MAX_AGE_SECONDS",
+      "manifest_path": "auto_trade.candidate_max_age_seconds",
+      "options_type": "AutoTradeOptions",
+      "property": "CandidateMaxAgeSeconds",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "lifecycle.candidate.storage_ttl_seconds",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_CANDIDATE_STORAGE_TTL_SECONDS",
+      "manifest_path": "auto_trade.candidate_storage_ttl_seconds",
+      "options_type": "AutoTradeOptions",
+      "property": "CandidateStorageTtlSeconds",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "contract.streams.candidates",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_CANDIDATE_STREAM",
+      "manifest_path": "auto_trade.candidate_stream",
+      "options_type": "AutoTradeOptions",
+      "property": "CandidateStream",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "contract.instrument.canonical_symbol",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_CANONICAL_SYMBOL",
+      "manifest_path": "auto_trade.canonical_symbol",
+      "options_type": "AutoTradeOptions",
+      "property": "CanonicalSymbol",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": null,
+      "classification": "manifest",
+      "environment": null,
+      "manifest_path": "auto_trade.config_manifest_version",
+      "options_type": "AutoTradeOptions",
+      "property": "ConfigManifestVersion",
+      "removable_after_cutover": false
+    },
+    {
+      "canonical_path": null,
+      "classification": "derived_runtime",
+      "environment": null,
+      "manifest_path": null,
+      "options_type": "AutoTradeOptions",
+      "property": "ConfigSources",
+      "removable_after_cutover": false
+    },
+    {
+      "canonical_path": "contract.mode",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_CONTRACT_MODE",
+      "manifest_path": "auto_trade.contract_mode",
+      "options_type": "AutoTradeOptions",
+      "property": "ContractMode",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "contract.instrument.contract_units_per_lot",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_XAU_CONTRACT_SIZE",
+      "manifest_path": "auto_trade.contract_size",
+      "options_type": "AutoTradeOptions",
+      "property": "ContractSize",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": null,
+      "classification": "deprecated_compatibility",
+      "environment": null,
+      "manifest_path": null,
+      "options_type": "AutoTradeOptions",
+      "property": "DeprecatedVariables",
+      "removable_after_cutover": false
+    },
+    {
+      "canonical_path": "runtime.auto_trade.dry_run",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_DRY_RUN",
+      "manifest_path": "auto_trade.dry_run",
+      "options_type": "AutoTradeOptions",
+      "property": "DryRun",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "runtime.auto_trade.enabled",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_ENABLED",
+      "manifest_path": "auto_trade.enabled",
+      "options_type": "AutoTradeOptions",
+      "property": "Enabled",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "execution.entry.contract_tolerance_pips",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_ENTRY_CONTRACT_TOLERANCE_PIPS",
+      "manifest_path": "auto_trade.entry_contract_tolerance_pips",
+      "options_type": "AutoTradeOptions",
+      "property": "EntryContractTolerancePips",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "risk.sizing.equity_table_version",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_EQUITY_TABLE_VERSION",
+      "manifest_path": "auto_trade.equity_table_version",
+      "options_type": "AutoTradeOptions",
+      "property": "EquityTableVersion",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "contract.streams.events",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_EVENT_STREAM",
+      "manifest_path": "auto_trade.event_stream",
+      "options_type": "AutoTradeOptions",
+      "property": "EventStream",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "execution.policy.execution_zone_max_width_atr",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_EXECUTION_ZONE_MAX_WIDTH_ATR",
+      "manifest_path": "auto_trade.execution_zone_max_width_atr",
+      "options_type": "AutoTradeOptions",
+      "property": "ExecutionZoneMaxWidthAtr",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "execution.policy.execution_zone_max_width_pips",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_EXECUTION_ZONE_MAX_WIDTH_PIPS",
+      "manifest_path": "auto_trade.execution_zone_max_width_pips",
+      "options_type": "AutoTradeOptions",
+      "property": "ExecutionZoneMaxWidthPips",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "contract.account.expected_broker",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_EXPECTED_BROKER",
+      "manifest_path": "auto_trade.expected_broker",
+      "options_type": "AutoTradeOptions",
+      "property": "ExpectedBroker",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "lifecycle.range_flip.confirm_timeout_seconds",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_FLIP_CONFIRM_TIMEOUT_SECONDS",
+      "manifest_path": "auto_trade.flip_confirm_timeout_seconds",
+      "options_type": "AutoTradeOptions",
+      "property": "FlipConfirmTimeoutSeconds",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "execution.policy.flip_exit_buffer_pips",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_FLIP_EXIT_BUFFER_PIPS",
+      "manifest_path": "auto_trade.flip_exit_buffer_pips",
+      "options_type": "AutoTradeOptions",
+      "property": "FlipExitBufferPips",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "execution.policy.group_close_allocation",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_GROUP_CLOSE_ALLOCATION",
+      "manifest_path": "auto_trade.group_close_allocation",
+      "options_type": "AutoTradeOptions",
+      "property": "GroupCloseAllocation",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "execution.entry.inside_zone_market_entry_enabled",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_INSIDE_ZONE_MARKET_ENTRY_ENABLED",
+      "manifest_path": "auto_trade.inside_zone_market_entry_enabled",
+      "options_type": "AutoTradeOptions",
+      "property": "InsideZoneMarketEntryEnabled",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "execution.policy.label",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_LABEL",
+      "manifest_path": "auto_trade.label",
+      "options_type": "AutoTradeOptions",
+      "property": "Label",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "strategies.reaction.liquidity_reversal.enabled",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_LIQUIDITY_REVERSAL_ENABLED",
+      "manifest_path": "auto_trade.liquidity_reversal_enabled",
+      "options_type": "AutoTradeOptions",
+      "property": "LiquidityReversalEnabled",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "manual_algo.runtime.enabled",
+      "classification": "manifest",
+      "environment": "MANUAL_ALGO_ENABLED",
+      "manifest_path": "auto_trade.manual_algo_enabled",
+      "options_type": "AutoTradeOptions",
+      "property": "ManualAlgoEnabled",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "execution.mapped_zone.thesis_lock_enabled",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_MAP_THESIS_LOCK_ENABLED",
+      "manifest_path": "auto_trade.map_thesis_lock_enabled",
+      "options_type": "AutoTradeOptions",
+      "property": "MapThesisLockEnabled",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "strategies.mapped_zone.enabled",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_MAPPED_ZONE_ENABLED",
+      "manifest_path": "auto_trade.mapped_zone_enabled",
+      "options_type": "AutoTradeOptions",
+      "property": "MappedZoneEnabled",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "actionability.gates.market_map_guard_enabled",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_MARKET_MAP_GUARD_ENABLED",
+      "manifest_path": "auto_trade.market_map_guard_enabled",
+      "options_type": "AutoTradeOptions",
+      "property": "MarketMapGuardEnabled",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "execution.entry.maximum_chase_distance_pips",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_MAX_ENTRY_DISTANCE_PIPS",
+      "manifest_path": "auto_trade.max_entry_distance_pips",
+      "options_type": "AutoTradeOptions",
+      "property": "MaxEntryDistancePips",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "execution.entry.max_spread_pips",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_MAX_SPREAD_PIPS",
+      "manifest_path": "auto_trade.max_spread_pips",
+      "options_type": "AutoTradeOptions",
+      "property": "MaxSpreadPips",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "execution.policy.max_tranches",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_MAX_TRANCHES",
+      "manifest_path": "auto_trade.max_tranches",
+      "options_type": "AutoTradeOptions",
+      "property": "MaxTranches",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "actionability.gates.min_confluence",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_MIN_CONFLUENCE",
+      "manifest_path": "auto_trade.min_confluence",
+      "options_type": "AutoTradeOptions",
+      "property": "MinConfluence",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "strategies.matching.multiple_matches_enabled",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_MULTI_MATCH_ENABLED",
+      "manifest_path": "auto_trade.multi_match_enabled",
+      "options_type": "AutoTradeOptions",
+      "property": "MultiMatchEnabled",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "risk.exposure.non_hedged_opposite_policy",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_NON_HEDGED_OPPOSITE_POLICY",
+      "manifest_path": "auto_trade.non_hedged_opposite_policy",
+      "options_type": "AutoTradeOptions",
+      "property": "NonHedgedOppositePolicy",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "contract.instrument.pip_size",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_XAU_PIP_SIZE",
+      "manifest_path": "auto_trade.pip_size",
+      "options_type": "AutoTradeOptions",
+      "property": "PipSize",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "execution.policy.pip_value_per_lot",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_PIP_VALUE_PER_LOT",
+      "manifest_path": "auto_trade.pip_value_per_lot",
+      "options_type": "AutoTradeOptions",
+      "property": "PipValuePerLot",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "execution.entry.poll_ms",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_POLL_MS",
+      "manifest_path": "auto_trade.poll_milliseconds",
+      "options_type": "AutoTradeOptions",
+      "property": "PollMilliseconds",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "lifecycle.reconciliation.missing_confirmations",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_POSITION_MISSING_CONFIRMATIONS",
+      "manifest_path": "auto_trade.position_missing_confirmations",
+      "options_type": "AutoTradeOptions",
+      "property": "PositionMissingConfirmations",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "lifecycle.reconciliation.missing_recheck_seconds",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_POSITION_MISSING_RECHECK_SECONDS",
+      "manifest_path": "auto_trade.position_missing_recheck_seconds",
+      "options_type": "AutoTradeOptions",
+      "property": "PositionMissingRecheckSeconds",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "execution.targeting.post_fill_target_fallback",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_POST_FILL_TARGET_FALLBACK",
+      "manifest_path": "auto_trade.post_fill_target_fallback",
+      "options_type": "AutoTradeOptions",
+      "property": "PostFillTargetFallback",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "runtime.profile",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_PROFILE",
+      "manifest_path": "auto_trade.profile",
+      "options_type": "AutoTradeOptions",
+      "property": "Profile",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "execution.range.box_move_sl_to_be_after_scale_out",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_RANGE_BOX_MOVE_SL_TO_BE_AFTER_SCALE_OUT",
+      "manifest_path": "auto_trade.range_box_move_sl_to_be_after_scale_out",
+      "options_type": "AutoTradeOptions",
+      "property": "RangeBoxMoveSlToBeAfterScaleOut",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "strategies.range_reversion.box_scale_out_enabled",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_RANGE_BOX_SCALE_OUT_ENABLED",
+      "manifest_path": "auto_trade.range_box_scale_out_enabled",
+      "options_type": "AutoTradeOptions",
+      "property": "RangeBoxScaleOutEnabled",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "execution.range.box_scale_out_fraction",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_RANGE_BOX_SCALE_OUT_FRACTION",
+      "manifest_path": "auto_trade.range_box_scale_out_fraction",
+      "options_type": "AutoTradeOptions",
+      "property": "RangeBoxScaleOutFraction",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "execution.range.box_scale_out_threshold_pips",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_RANGE_BOX_SCALE_OUT_THRESHOLD_PIPS",
+      "manifest_path": "auto_trade.range_box_scale_out_threshold_pips",
+      "options_type": "AutoTradeOptions",
+      "property": "RangeBoxScaleOutThresholdPips",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "execution.range.box_scale_out_trigger_pips",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_RANGE_BOX_SCALE_OUT_TRIGGER_PIPS",
+      "manifest_path": "auto_trade.range_box_scale_out_trigger_pips",
+      "options_type": "AutoTradeOptions",
+      "property": "RangeBoxScaleOutTriggerPips",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "strategies.range_reversion.enabled",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_RANGE_ENABLED",
+      "manifest_path": "auto_trade.range_enabled",
+      "options_type": "AutoTradeOptions",
+      "property": "RangeEnabled",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "strategies.range_reversion.flip_enabled",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_RANGE_FLIP_ENABLED",
+      "manifest_path": "auto_trade.range_flip_enabled",
+      "options_type": "AutoTradeOptions",
+      "property": "RangeFlipEnabled",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "execution.targeting.range_ladder_pips",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_RANGE_TARGETS_PIPS",
+      "manifest_path": "auto_trade.range_targets_pips",
+      "options_type": "AutoTradeOptions",
+      "property": "RangeTargetsPips",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "execution.range.tp_buffer_pips",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_RANGE_TP_BUFFER_PIPS",
+      "manifest_path": "auto_trade.range_tp_buffer_pips",
+      "options_type": "AutoTradeOptions",
+      "property": "RangeTpBufferPips",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "strategies.range_reversion.two_sided_enabled",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_RANGE_TWO_SIDED_ENABLED",
+      "manifest_path": "auto_trade.range_two_sided_enabled",
+      "options_type": "AutoTradeOptions",
+      "property": "RangeTwoSidedEnabled",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "strategies.reaction.enabled",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_REACTION_ENABLED",
+      "manifest_path": "auto_trade.reaction_enabled",
+      "options_type": "AutoTradeOptions",
+      "property": "ReactionEnabled",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "execution.reaction.market_fraction",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_REACTION_MARKET_FRACTION",
+      "manifest_path": "auto_trade.reaction_market_fraction",
+      "options_type": "AutoTradeOptions",
+      "property": "ReactionMarketFraction",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "strategies.reaction.scale_enabled",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_REACTION_SCALE_ENABLED",
+      "manifest_path": "auto_trade.reaction_scale_enabled",
+      "options_type": "AutoTradeOptions",
+      "property": "ReactionScaleEnabled",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "execution.reaction.scale_fraction",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_REACTION_SCALE_FRACTION",
+      "manifest_path": "auto_trade.reaction_scale_fraction",
+      "options_type": "AutoTradeOptions",
+      "property": "ReactionScaleFraction",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "execution.reaction.scale_invalid_policy",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_REACTION_SCALE_INVALID_POLICY",
+      "manifest_path": "auto_trade.reaction_scale_invalid_policy",
+      "options_type": "AutoTradeOptions",
+      "property": "ReactionScaleInvalidPolicy",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "execution.reaction.scale_step_atr",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_REACTION_SCALE_STEP_ATR",
+      "manifest_path": "auto_trade.reaction_scale_step_atr",
+      "options_type": "AutoTradeOptions",
+      "property": "ReactionScaleStepAtr",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "bootstrap.redis.url",
+      "classification": "bootstrap_environment",
+      "environment": "REDIS_URL",
+      "manifest_path": null,
+      "options_type": "AutoTradeOptions",
+      "property": "RedisUrl",
+      "removable_after_cutover": false
+    },
+    {
+      "canonical_path": "contract.account.require_demo",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_REQUIRE_DEMO_ACCOUNT",
+      "manifest_path": "auto_trade.require_demo_account",
+      "options_type": "AutoTradeOptions",
+      "property": "RequireDemoAccount",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "execution.policy.require_demo_only_token",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_REQUIRE_DEMO_ONLY_TOKEN",
+      "manifest_path": "auto_trade.require_demo_only_token",
+      "options_type": "AutoTradeOptions",
+      "property": "RequireDemoOnlyToken",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "risk.exposure.require_flat_for_range",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_REQUIRE_FLAT_FOR_RANGE",
+      "manifest_path": "auto_trade.require_flat_for_range",
+      "options_type": "AutoTradeOptions",
+      "property": "RequireFlatForRange",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "strategies.selection.retest_enabled",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_RETEST_ENABLED",
+      "manifest_path": "auto_trade.retest_enabled",
+      "options_type": "AutoTradeOptions",
+      "property": "RetestEnabled",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "risk.sizing.risk_pct",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_RISK_PCT",
+      "manifest_path": "auto_trade.risk_percent",
+      "options_type": "AutoTradeOptions",
+      "property": "RiskPercent",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "risk.sizing.mode",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_SIZING_MODE",
+      "manifest_path": "auto_trade.sizing_mode",
+      "options_type": "AutoTradeOptions",
+      "property": "SizingMode",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "market_data.spot.maximum_age_seconds",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_SPOT_MAX_AGE_SECONDS",
+      "manifest_path": "auto_trade.spot_max_age_seconds",
+      "options_type": "AutoTradeOptions",
+      "property": "SpotMaxAgeSeconds",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "execution.stops.sl_distance",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_SL_DISTANCE",
+      "manifest_path": "auto_trade.stop_loss_distance",
+      "options_type": "AutoTradeOptions",
+      "property": "StopLossDistance",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "execution.stops.stop_push_beyond_zone",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_STOP_PUSH_BEYOND_ZONE",
+      "manifest_path": "auto_trade.stop_push_beyond_zone",
+      "options_type": "AutoTradeOptions",
+      "property": "StopPushBeyondZone",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "runtime.auto_trade.strategy_match_enabled",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_STRATEGY_MATCH_ENABLED",
+      "manifest_path": "auto_trade.strategy_match_enabled",
+      "options_type": "AutoTradeOptions",
+      "property": "StrategyMatchEnabled",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "actionability.structural_guard.guard_mode",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_STRUCTURAL_GUARD_MODE",
+      "manifest_path": "auto_trade.structural_guard_mode",
+      "options_type": "AutoTradeOptions",
+      "property": "StructuralGuardMode",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "contract.instrument.symbols",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_SYMBOLS",
+      "manifest_path": "auto_trade.symbols",
+      "options_type": "AutoTradeOptions",
+      "property": "Symbols",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "execution.targeting.tp_weights",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_TP_WEIGHTS",
+      "manifest_path": "auto_trade.target_weights",
+      "options_type": "AutoTradeOptions",
+      "property": "TargetWeights",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "execution.targeting.default_ladder_pips",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_TARGET_PLANS_PIPS",
+      "manifest_path": "auto_trade.targets_pips",
+      "options_type": "AutoTradeOptions",
+      "property": "TargetsPips",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "strategies.matching.track_all_structural_matches",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_TRACK_ALL_STRUCTURAL_MATCHES",
+      "manifest_path": "auto_trade.track_all_structural_matches",
+      "options_type": "AutoTradeOptions",
+      "property": "TrackAllStructuralMatches",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "contract.streams.trade_plans",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_TRADE_PLAN_STREAM",
+      "manifest_path": "auto_trade.trade_plan_stream",
+      "options_type": "AutoTradeOptions",
+      "property": "TradePlanStream",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "strategies.trend.enabled",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_TREND_ENABLED",
+      "manifest_path": "auto_trade.trend_enabled",
+      "options_type": "AutoTradeOptions",
+      "property": "TrendEnabled",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "execution.trend.stop_max_pips",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_TREND_STOP_MAX_PIPS",
+      "manifest_path": "auto_trade.trend_stop_max_pips",
+      "options_type": "AutoTradeOptions",
+      "property": "TrendStopMaxPips",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "execution.stops.trend.minimum_pips",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_TREND_STOP_MIN_PIPS",
+      "manifest_path": "auto_trade.trend_stop_min_pips",
+      "options_type": "AutoTradeOptions",
+      "property": "TrendStopMinPips",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "execution.targeting.unfilled_leg_after_tp_policy",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_UNFILLED_LEG_AFTER_TP_POLICY",
+      "manifest_path": "auto_trade.unfilled_leg_after_tp_policy",
+      "options_type": "AutoTradeOptions",
+      "property": "UnfilledLegAfterTpPolicy",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "execution.stops.wick_stop_buffer_atr",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_WICK_STOP_BUFFER_ATR",
+      "manifest_path": "auto_trade.wick_stop_buffer_atr",
+      "options_type": "AutoTradeOptions",
+      "property": "WickStopBufferAtr",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "lifecycle.zone.cooldown_enabled",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_ZONE_COOLDOWN_ENABLED",
+      "manifest_path": "auto_trade.zone_cooldown_enabled",
+      "options_type": "AutoTradeOptions",
+      "property": "ZoneCooldownEnabled",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "lifecycle.zone.cooldown_minutes",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_ZONE_COOLDOWN_MINUTES",
+      "manifest_path": "auto_trade.zone_cooldown_minutes",
+      "options_type": "AutoTradeOptions",
+      "property": "ZoneCooldownMinutes",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "execution.zone_scaling.fill_enabled",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_ZONE_FILL_ENABLED",
+      "manifest_path": "auto_trade.zone_fill_enabled",
+      "options_type": "AutoTradeOptions",
+      "property": "ZoneFillEnabled",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "execution.zone_scaling.fill_fallback_enabled",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_ZONE_FILL_FALLBACK_ENABLED",
+      "manifest_path": "auto_trade.zone_fill_fallback_enabled",
+      "options_type": "AutoTradeOptions",
+      "property": "ZoneFillFallbackEnabled",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "execution.zone_scaling.fill_min_atr",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_ZONE_FILL_MIN_ATR",
+      "manifest_path": "auto_trade.zone_fill_min_atr",
+      "options_type": "AutoTradeOptions",
+      "property": "ZoneFillMinAtr",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "execution.zone_scaling.fill_min_lots",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_ZONE_FILL_MIN_LOTS",
+      "manifest_path": "auto_trade.zone_fill_min_lots",
+      "options_type": "AutoTradeOptions",
+      "property": "ZoneFillMinLots",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "lifecycle.zone.fill_ttl_bars",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_ZONE_FILL_TTL_BARS",
+      "manifest_path": "auto_trade.zone_fill_ttl_bars",
+      "options_type": "AutoTradeOptions",
+      "property": "ZoneFillTtlBars",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "actionability.zone_reconciliation.mode",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_ZONE_RECONCILE_MODE",
+      "manifest_path": "auto_trade.zone_reconcile_mode",
+      "options_type": "AutoTradeOptions",
+      "property": "ZoneReconcileMode",
+      "removable_after_cutover": true
+    },
+    {
+      "canonical_path": "execution.zone_scaling.scale_undersized_policy",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_ZONE_SCALE_UNDERSIZED_POLICY",
+      "manifest_path": "auto_trade.zone_scale_undersized_policy",
+      "options_type": "AutoTradeOptions",
+      "property": "ZoneScaleUndersizedPolicy",
+      "removable_after_cutover": true
+    }
+  ],
+  "manifest_version": 1,
+  "source_fingerprint_sha256": "2997a460475e33bc9e26902de93ee7a4e8d9715cbeb7acf23c4779ccff2b67f7",
+  "source_model": "app.configuration.models.root.ApexVoidConfig"
+}

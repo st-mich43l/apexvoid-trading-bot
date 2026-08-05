@@ -40,8 +40,31 @@ services:
     # invalidates the previous token. The host file mirror recovers Redis loss,
     # but destroying both requires manual cTrader Playground re-authorisation.
 
-  # Startup order (Compose waits on health, not just process start):
-  #   postgres + redis → ctrader-engine → bot
+  # Startup order:
+  #   postgres + redis → config-compiler → ctrader-engine → bot
+  # PR2: ENV remains authoritative for cTrader; manifest is shadow parity.
+  config-compiler:
+    build: ./algo-bot
+    image: apexvoid-trading-bot:latest
+    container_name: apexvoid-config-compiler
+    restart: "no"
+    env_file: .env
+    environment:
+      APEXVOID_CONFIG_FILE: /config/trading-bot.yml
+      APEXVOID_RUNTIME_MANIFEST_FILE: /runtime/resolved-runtime.json
+    command:
+      - python
+      - -m
+      - app.configuration.runtime_manifest_cli
+      - --config-file
+      - /config/trading-bot.yml
+      - --output
+      - /runtime/resolved-runtime.json
+      - --check
+    volumes:
+      - ./config/trading-bot.yml:/config/trading-bot.yml:ro
+      - runtime-config:/runtime
+
   ctrader-engine:
     build: ./ctrader-engine
     image: apexvoid-ctrader-engine:latest
@@ -53,12 +76,18 @@ services:
       LOG_RETENTION_DAYS: ${LOG_RETENTION_DAYS:-14}
       LOG_FILE_ENABLED: ${LOG_FILE_ENABLED:-true}
       LOG_FILE_NAME: ${CTRADER_LOG_FILE_NAME:-ctrader-engine.log}
+      APEXVOID_RUNTIME_MANIFEST_FILE: /runtime/resolved-runtime.json
+      CTRADER_CONFIGURATION_SOURCE: environment
+      CTRADER_MANIFEST_PARITY_MODE: enforce
     depends_on:
       redis:
         condition: service_healthy
+      config-compiler:
+        condition: service_completed_successfully
     volumes:
       - ./data/ctrader-token:/var/lib/apexvoid
       - ./logs/ctrader-engine:/var/log/apexvoid
+      - runtime-config:/runtime:ro
     healthcheck:
       test: ["CMD", "/app/ctrader-feed", "--healthcheck"]
       interval: 15s
@@ -76,6 +105,7 @@ services:
     env_file: .env
     environment:
       APEXVOID_CONFIG_FILE: /config/trading-bot.yml
+      APEXVOID_RUNTIME_MANIFEST_FILE: /runtime/resolved-runtime.json
       # Mapped-zone route pinned off for local parity with production demo_eval
       # ops practice; override in .env / YAML if needed.
       AUTO_TRADE_PROFILE: ${AUTO_TRADE_PROFILE:-demo_eval}
@@ -89,10 +119,13 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      config-compiler:
+        condition: service_completed_successfully
       ctrader-engine:
         condition: service_healthy
     volumes:
       - ./config/trading-bot.yml:/config/trading-bot.yml:ro
+      - runtime-config:/runtime:ro
       - ./data:/data   # calendar cache (ff_*.json) still persists here
       - ./logs/algo-bot:/var/log/apexvoid
     # No ports exposed — the bot uses outbound Telegram long-polling only.
@@ -100,3 +133,4 @@ services:
 volumes:
   pgdata:
   redisdata:
+  runtime-config:

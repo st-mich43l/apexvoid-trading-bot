@@ -23,6 +23,11 @@ from app.configuration.models.python_runtime import PythonRuntimeConfig
 from app.configuration.profiles import PROFILES
 from app.configuration.profiles import profile_fingerprint
 from app.configuration.deployment_contract import deployment_contract_document
+from app.configuration.runtime_manifest import (
+  build_resolved_runtime_manifest,
+  env_migration_document,
+  serialize_manifest_bytes,
+)
 from app.configuration.source_types import SOURCE_PRECEDENCE
 
 
@@ -321,6 +326,11 @@ def render_artifacts() -> dict[Path, bytes]:
   contract_fingerprint = configuration_contract_fingerprint(entries)
   document_fingerprint = configuration_document_fingerprint(entries)
   environment_usage = audit_environment_usage(REPOSITORY_ROOT)
+  config_file = REPOSITORY_ROOT / "config" / "trading-bot.yml"
+  runtime_manifest = build_resolved_runtime_manifest(
+    config_file=str(config_file) if config_file.is_file() else None,
+  )
+  migration = env_migration_document()
   return {
     Path("contracts/configuration/environment-usage.generated.json"):
       _json_bytes(environment_usage),
@@ -352,6 +362,21 @@ def render_artifacts() -> dict[Path, bytes]:
       _json_bytes(deployment_contract_document(
         entries, contract_fingerprint=contract_fingerprint,
       )),
+    Path("contracts/configuration/runtime-manifest-schema.generated.json"):
+      _json_bytes({
+        **_header(contract_fingerprint),
+        "manifest_version": runtime_manifest["manifest_version"],
+        "required_top_level_keys": sorted(runtime_manifest.keys()),
+        "feed_keys": sorted(runtime_manifest["feed"].keys()),
+        "auto_trade_keys": sorted(runtime_manifest["auto_trade"].keys()),
+      }),
+    Path("contracts/configuration/runtime-manifest-env-migration.generated.json"):
+      _json_bytes({
+        **_header(contract_fingerprint),
+        **migration,
+      }),
+    Path("contracts/configuration/runtime-manifest-example.generated.json"):
+      serialize_manifest_bytes(runtime_manifest),
     Path("docs/configuration/config-catalog.generated.md"):
       _markdown(entries, contract_fingerprint, document_fingerprint),
     Path("algo-bot/app/configuration/generated/__init__.py"):

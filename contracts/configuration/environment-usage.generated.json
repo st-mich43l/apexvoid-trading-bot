@@ -63,15 +63,32 @@
       "env_name": null,
       "file": "algo-bot/app/configuration/python_sources.py",
       "line": 39
+    },
+    {
+      "allowed": true,
+      "api": "os.environ.get",
+      "classification": "EARLY_BOOT_ALLOWED",
+      "env_name": null,
+      "file": "algo-bot/app/configuration/runtime_manifest_boot.py",
+      "line": 25
+    },
+    {
+      "allowed": true,
+      "api": "os.environ.get",
+      "classification": "EARLY_BOOT_ALLOWED",
+      "env_name": null,
+      "file": "algo-bot/app/configuration/runtime_manifest_boot.py",
+      "line": 30
     }
   ],
-  "allowed_sites": 8,
+  "allowed_sites": 10,
   "counts": {
     "CANONICAL_SOURCE_COLLECTION_ALLOWED": 2,
     "DEPLOYMENT_OBSERVABILITY_ALLOWED": 3,
+    "EARLY_BOOT_ALLOWED": 2,
     "SCRIPT_TOOL_ALLOWED": 3
   },
   "direct_production_env_forbidden": 0,
-  "total_access_sites": 8,
+  "total_access_sites": 10,
   "unknown_blockers": 0
 }

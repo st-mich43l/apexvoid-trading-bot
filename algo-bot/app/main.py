@@ -42,6 +42,9 @@ from app.autotrade.config_health import (
   python_manifest,
   publish_python_manifest,
 )
+from app.configuration.runtime_manifest_boot import (
+  verify_mounted_runtime_manifest_or_raise,
+)
 from app.signals.manual_execution import bridge_intents_loop, reconcile_events_loop
 from app.persistence import redis_state
 
@@ -77,6 +80,7 @@ async def main() -> None:
   install_same_cycle_publish_retry()
   # Composition-root Telegram edit callback — worker never imports bot.client.
   configure_forming_card_edit_fn(edit_scanner_message_text)
+  verify_mounted_runtime_manifest_or_raise()
   await init_db()
   # Compose can report Redis healthy then briefly drop DNS while recreating the
   # container; wait for a real PING before anything else touches the client.
