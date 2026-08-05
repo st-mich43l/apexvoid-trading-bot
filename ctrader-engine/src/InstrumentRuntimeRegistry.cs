@@ -147,10 +147,21 @@ public sealed class InstrumentRuntimeRegistry
     ]);
   }
 
-  public static InstrumentRuntimeRegistry FromRuntimeManifest(
+  /// <summary>
+  /// Explicit V1 compatibility: one XAU runtime from top-level projections.
+  /// </summary>
+  public static InstrumentRuntimeRegistry FromManifestV1Projections(
+    FeedOptions feed,
+    AutoTradeOptions trade
+  ) => FromXauCompatibility(feed, trade);
+
+  /// <summary>
+  /// Manifest V2 authority: every runtime from instrument_runtimes.
+  /// Never falls back to XAU compatibility defaults.
+  /// </summary>
+  public static InstrumentRuntimeRegistry FromRuntimeManifestV2(
     ResolvedRuntimeManifest manifest,
-    FeedOptions feedBootstrap,
-    AutoTradeOptions tradeBootstrap
+    FeedOptions sharedFeed
   )
   {
     if (
@@ -158,7 +169,9 @@ public sealed class InstrumentRuntimeRegistry
       || manifest.InstrumentRuntimes.Count == 0
     )
     {
-      return FromXauCompatibility(feedBootstrap, tradeBootstrap);
+      throw new InvalidOperationException(
+        "runtime manifest instrument_runtimes is required for manifest_version=2"
+      );
     }
     var runtimes = new List<InstrumentRuntime>();
     foreach (var (instrumentId, element) in manifest.InstrumentRuntimes.OrderBy(
@@ -183,37 +196,91 @@ public sealed class InstrumentRuntimeRegistry
           $"instrument_runtimes.{instrumentId}.feed is required"
         );
       }
-      var cTraderSymbol = feedEl.GetProperty("ctrader_symbol").GetString()
-        ?? throw new InvalidOperationException(
-          $"instrument_runtimes.{instrumentId}.feed.ctrader_symbol missing"
+      if (!element.TryGetProperty("units", out var units))
+      {
+        throw new InvalidOperationException(
+          $"instrument_runtimes.{instrumentId}.units is required"
         );
-      var redisSymbol = feedEl.GetProperty("redis_symbol").GetString()
-        ?? throw new InvalidOperationException(
-          $"instrument_runtimes.{instrumentId}.feed.redis_symbol missing"
+      }
+      if (!units.TryGetProperty("pip_size", out var pipEl)
+        || string.IsNullOrWhiteSpace(pipEl.GetString()))
+      {
+        throw new InvalidOperationException(
+          $"instrument_runtimes.{instrumentId}.units.pip_size is required"
         );
-      var timeframes = feedEl.GetProperty("timeframes")
+      }
+      if (!units.TryGetProperty("contract_units_per_lot", out var contractEl)
+        || string.IsNullOrWhiteSpace(contractEl.GetString()))
+      {
+        throw new InvalidOperationException(
+          $"instrument_runtimes.{instrumentId}.units.contract_units_per_lot is required"
+        );
+      }
+      var pip = ManifestDecimal.Parse(
+        pipEl.GetString()!,
+        $"instrument_runtimes.{instrumentId}.units.pip_size"
+      );
+      var contract = ManifestDecimal.Parse(
+        contractEl.GetString()!,
+        $"instrument_runtimes.{instrumentId}.units.contract_units_per_lot"
+      );
+      if (pip <= 0m || contract <= 0m)
+      {
+        throw new InvalidOperationException(
+          $"instrument_runtimes.{instrumentId}.units must be positive"
+        );
+      }
+      var cTraderSymbol = feedEl.GetProperty("ctrader_symbol").GetString();
+      if (string.IsNullOrWhiteSpace(cTraderSymbol))
+      {
+        throw new InvalidOperationException(
+          $"instrument_runtimes.{instrumentId}.feed.ctrader_symbol is required"
+        );
+      }
+      var redisSymbol = feedEl.GetProperty("redis_symbol").GetString();
+      if (string.IsNullOrWhiteSpace(redisSymbol))
+      {
+        throw new InvalidOperationException(
+          $"instrument_runtimes.{instrumentId}.feed.redis_symbol is required"
+        );
+      }
+      if (!feedEl.TryGetProperty("timeframes", out var tfEl) || tfEl.GetArrayLength() == 0)
+      {
+        throw new InvalidOperationException(
+          $"instrument_runtimes.{instrumentId}.feed.timeframes is required"
+        );
+      }
+      var timeframes = tfEl
         .EnumerateArray()
         .Select(item => item.GetString() ?? "")
         .Where(item => item.Length > 0)
         .ToArray();
-      var pip = 0.1m;
-      var contract = 100m;
-      if (element.TryGetProperty("units", out var units))
+      if (timeframes.Length == 0)
       {
-        if (units.TryGetProperty("pip_size", out var pipEl))
-        {
-          pip = ManifestDecimal.Parse(
-            pipEl.GetString() ?? "0.1",
-            $"instrument_runtimes.{instrumentId}.units.pip_size"
-          );
-        }
-        if (units.TryGetProperty("contract_units_per_lot", out var contractEl))
-        {
-          contract = ManifestDecimal.Parse(
-            contractEl.GetString() ?? "100",
-            $"instrument_runtimes.{instrumentId}.units.contract_units_per_lot"
-          );
-        }
+        throw new InvalidOperationException(
+          $"instrument_runtimes.{instrumentId}.feed.timeframes is empty"
+        );
+      }
+      var backfill = sharedFeed.BackfillBars;
+      var barsWindow = sharedFeed.BarsWindowMax;
+      var barsChannel = sharedFeed.BarsChannel;
+      var lookback = sharedFeed.BarQualityLookback;
+      if (feedEl.TryGetProperty("backfill_bars", out var bf))
+      {
+        backfill = bf.GetInt32();
+      }
+      if (feedEl.TryGetProperty("bars_window_max", out var bw))
+      {
+        barsWindow = bw.GetInt32();
+      }
+      if (feedEl.TryGetProperty("bars_channel", out var bc)
+        && !string.IsNullOrWhiteSpace(bc.GetString()))
+      {
+        barsChannel = bc.GetString()!;
+      }
+      if (feedEl.TryGetProperty("bar_quality_lookback", out var bl))
+      {
+        lookback = bl.GetInt32();
       }
       runtimes.Add(new InstrumentRuntime
       {
@@ -223,11 +290,11 @@ public sealed class InstrumentRuntimeRegistry
           CanonicalSymbol: redisSymbol,
           CTraderSymbol: cTraderSymbol,
           RedisSymbol: redisSymbol,
-          Timeframes: timeframes.Length > 0 ? timeframes : feedBootstrap.Timeframes,
-          BackfillBars: feedBootstrap.BackfillBars,
-          BarsWindowMax: feedBootstrap.BarsWindowMax,
-          BarsChannel: feedBootstrap.BarsChannel,
-          BarQualityLookback: feedBootstrap.BarQualityLookback,
+          Timeframes: timeframes,
+          BackfillBars: backfill,
+          BarsWindowMax: barsWindow,
+          BarsChannel: barsChannel,
+          BarQualityLookback: lookback,
           Rollout: rollout
         ),
         Execution = new ExecutionInstrumentOptions(
@@ -242,9 +309,25 @@ public sealed class InstrumentRuntimeRegistry
     }
     if (runtimes.Count == 0)
     {
-      return FromXauCompatibility(feedBootstrap, tradeBootstrap);
+      throw new InvalidOperationException(
+        "runtime manifest instrument_runtimes produced an empty registry"
+      );
     }
     return new InstrumentRuntimeRegistry(runtimes);
+  }
+
+  [Obsolete("Use FromRuntimeManifestV2 or FromManifestV1Projections")]
+  public static InstrumentRuntimeRegistry FromRuntimeManifest(
+    ResolvedRuntimeManifest manifest,
+    FeedOptions feedBootstrap,
+    AutoTradeOptions tradeBootstrap
+  )
+  {
+    if (manifest.ManifestVersion == 1)
+    {
+      return FromManifestV1Projections(feedBootstrap, tradeBootstrap);
+    }
+    return FromRuntimeManifestV2(manifest, feedBootstrap);
   }
 
   private void RegisterAlias(string alias, string instrumentId)

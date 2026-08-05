@@ -531,11 +531,11 @@ public sealed record AutoTradeOptions(
 
   public static AutoTradeOptions FromRuntimeManifest(
     ResolvedRuntimeManifest manifest,
-    AutoTradeOptions bootstrapFromEnvironment
+    CTraderAccountOptions account
   )
   {
     ArgumentNullException.ThrowIfNull(manifest);
-    ArgumentNullException.ThrowIfNull(bootstrapFromEnvironment);
+    ArgumentNullException.ThrowIfNull(account);
     var t = manifest.AutoTrade;
     if (ManifestDecimal.Parse(t.PipSize, "auto_trade.pip_size") <= 0m)
     {
@@ -553,7 +553,28 @@ public sealed record AutoTradeOptions(
         $"runtime manifest canonical_symbol must be XAU for current production; got '{t.CanonicalSymbol}'"
       );
     }
-    return bootstrapFromEnvironment with
+    // Skeleton provides required positional fields from the manifest only.
+    // RedisUrl is the sole account-bootstrap field retained on AutoTradeOptions.
+    var skeleton = new AutoTradeOptions(
+      Enabled: t.Enabled,
+      DryRun: t.DryRun,
+      ExpectedBroker: t.ExpectedBroker,
+      StopLossDistance: ManifestDecimal.Parse(t.StopLossDistance, "auto_trade.stop_loss_distance"),
+      TargetsPips: t.TargetsPips.ToArray(),
+      TargetWeights: t.TargetWeights.ToArray(),
+      BreakEvenBufferTicks: t.BreakEvenBufferTicks,
+      CandidateMaxAgeSeconds: t.CandidateMaxAgeSeconds,
+      SpotMaxAgeSeconds: t.SpotMaxAgeSeconds,
+      MaxSpreadPips: t.MaxSpreadPips,
+      MaxEntryDistancePips: t.MaxEntryDistancePips,
+      MinConfluence: t.MinConfluence,
+      PollMilliseconds: t.PollMilliseconds,
+      CandidateStream: t.CandidateStream,
+      EventStream: t.EventStream,
+      Label: t.Label,
+      RedisUrl: account.RedisUrl
+    );
+    return skeleton with
     {
       Enabled = t.Enabled,
       DryRun = t.DryRun,
@@ -635,6 +656,7 @@ public sealed record AutoTradeOptions(
       RangeTwoSidedEnabled = t.RangeTwoSidedEnabled,
       MultiMatchEnabled = t.MultiMatchEnabled,
       TrackAllStructuralMatches = t.TrackAllStructuralMatches,
+      RedisUrl = account.RedisUrl,
       CanonicalSymbol = t.CanonicalSymbol.ToUpperInvariant(),
       CandidateContractVersion = t.CandidateContractVersion,
       ContractMode = t.ContractMode.ToLowerInvariant(),
@@ -655,6 +677,8 @@ public sealed record AutoTradeOptions(
       Symbols = t.Symbols.ToArray(),
       ConfigManifestVersion = t.ConfigManifestVersion,
       NonHedgedOppositePolicy = t.NonHedgedOppositePolicy.ToLowerInvariant(),
+      ConfigSources = null,
+      DeprecatedVariables = Array.Empty<string>(),
       StructuralGuardMode = t.StructuralGuardMode.ToLowerInvariant(),
       ZoneReconcileMode = t.ZoneReconcileMode,
       RangeBoxScaleOutEnabled = t.RangeBoxScaleOutEnabled,
@@ -695,6 +719,37 @@ public sealed record AutoTradeOptions(
         "auto_trade.reaction_scale_step_atr"
       ),
     };
+  }
+
+  /// <summary>
+  /// Compatibility overload for tests that still supply an ENV-built options
+  /// object. Only RedisUrl is retained from the bootstrap object.
+  /// </summary>
+  public static AutoTradeOptions FromRuntimeManifest(
+    ResolvedRuntimeManifest manifest,
+    AutoTradeOptions bootstrapFromEnvironment
+  )
+  {
+    ArgumentNullException.ThrowIfNull(bootstrapFromEnvironment);
+    return FromRuntimeManifest(
+      manifest,
+      new CTraderAccountOptions(
+        ClientId: "compat",
+        ClientSecret: "compat",
+        AccessToken: "compat",
+        RefreshToken: "compat",
+        AccountId: 1,
+        Host: "compat",
+        Port: 1,
+        RedisUrl: bootstrapFromEnvironment.RedisUrl,
+        HeartbeatFile: "/tmp/compat",
+        RefreshTokenKey: "compat",
+        RefreshTokenFile: "/tmp/compat",
+        RequestTimeout: TimeSpan.FromSeconds(30),
+        TokenRefreshLead: TimeSpan.FromDays(5),
+        TokenCheckInterval: TimeSpan.FromHours(6)
+      )
+    );
   }
 
   public void Validate()

@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Reflection;
 using System.Text;
@@ -119,16 +120,18 @@ public static class RuntimeManifestParity
     }
   }
 
-  private static void CompareRecords(
-    object environment,
-    object manifest,
+  private static void CompareRecords<
+    [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T
+  >(
+    T environment,
+    T manifest,
     string typeName,
     string manifestRoot,
     HashSet<string> skip,
     List<RuntimeManifestMismatch> mismatches
   )
   {
-    foreach (var property in environment.GetType().GetProperties(
+    foreach (var property in typeof(T).GetProperties(
       BindingFlags.Instance | BindingFlags.Public
     ))
     {
