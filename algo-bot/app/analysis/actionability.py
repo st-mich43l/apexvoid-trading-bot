@@ -733,8 +733,13 @@ def resolve_actionability(
   )
 
 
-def _range_bounds_from_context(context: Any) -> dict[str, float | None]:
-  """Best-effort M15/H1/M5 dealing-range bounds from scanner analysis context."""
+def range_bounds_from_context(context: Any) -> dict[str, float | None]:
+  """Best-effort M15/H1/M5 dealing-range bounds from scanner analysis context.
+
+  Shared by discovery actionability and ZoneWatch cutover activation so both
+  evaluate entry location against the same dealing-range geometry. Never use
+  StrategyMatch.range_low/high here — those fields are scalp box edges only.
+  """
   out: dict[str, float | None] = {
     "m15_range_low": None,
     "m15_range_high": None,
@@ -783,6 +788,10 @@ def _range_bounds_from_context(context: Any) -> dict[str, float | None]:
   return out
 
 
+# Backward-compatible private alias for older call sites / tests.
+_range_bounds_from_context = range_bounds_from_context
+
+
 def _evaluate_discovery_entry_locations(
   *,
   observed: tuple[DetectionResult, ...],
@@ -800,7 +809,7 @@ def _evaluate_discovery_entry_locations(
   if mode == "off":
     return []
 
-  ranges = _range_bounds_from_context(context)
+  ranges = range_bounds_from_context(context)
   found: list[tuple[int, EntryLocationDecision]] = []
   for index, result in enumerate(observed):
     price = _executable_quote(result)

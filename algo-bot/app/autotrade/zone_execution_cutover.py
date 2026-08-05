@@ -23,6 +23,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import datetime, timezone
+from types import SimpleNamespace
 import asyncio
 import json
 import logging
@@ -30,6 +31,7 @@ import math
 import time
 from typing import Any
 
+from app.analysis.actionability import range_bounds_from_context
 from app.analysis.confluence_zone import (
   BandKind,
   classify_band_kind,
@@ -77,6 +79,7 @@ from app.persistence import redis_state
 log = logging.getLogger(__name__)
 
 _CANDIDATE_KEY_PREFIX = "analysis:zone_watch_candidate"
+_LOCATION_RANGES_KEY_PREFIX = "analysis:zone_watch_location_ranges"
 _WIDTH_TELEMETRY_KEY_PREFIX = "analysis:zone_width:last"
 _LAST_LOCATION_KEY_PREFIX = "auto_trade:last_entry_location"
 _LAST_ACTIVATION_KEY_PREFIX = "auto_trade:last_entry_activation"
@@ -98,6 +101,131 @@ _ORIGINAL_DIRECT_PUBLISH: Any = None
 
 def candidate_key(zone_id: str) -> str:
   return f"{_CANDIDATE_KEY_PREFIX}:{zone_id}"
+
+
+def location_ranges_key(zone_id: str) -> str:
+  return f"{_LOCATION_RANGES_KEY_PREFIX}:{zone_id}"
+
+
+def _ranges_usable(ranges: dict[str, float | None] | None) -> bool:
+  if not ranges:
+    return False
+  for prefix in ("m15", "h1", "m5"):
+    low = ranges.get(f"{prefix}_range_low")
+    high = ranges.get(f"{prefix}_range_high")
+    if low is None or high is None:
+      continue
+    try:
+      if float(high) > float(low) > 0:
+        return True
+    except (TypeError, ValueError):
+      continue
+  return False
+
+
+def _empty_range_bounds() -> dict[str, float | None]:
+  return {
+    "m15_range_low": None,
+    "m15_range_high": None,
+    "h1_range_low": None,
+    "h1_range_high": None,
+    "m5_range_low": None,
+    "m5_range_high": None,
+  }
+
+
+async def _save_location_ranges(
+  client: Any,
+  zone_id: str,
+  ranges: dict[str, float | None],
+) -> None:
+  if not _ranges_usable(ranges):
+    return
+  await client.set(
+    location_ranges_key(zone_id),
+    json.dumps(ranges, separators=(",", ":"), sort_keys=True),
+    ex=_CANDIDATE_TTL_SECONDS,
+  )
+
+
+async def _load_location_ranges(
+  client: Any,
+  zone_id: str,
+) -> dict[str, float | None]:
+  raw = await client.get(location_ranges_key(zone_id))
+  if raw is None:
+    return _empty_range_bounds()
+  try:
+    payload = json.loads(raw)
+  except (TypeError, ValueError, json.JSONDecodeError):
+    return _empty_range_bounds()
+  if not isinstance(payload, dict):
+    return _empty_range_bounds()
+  out = _empty_range_bounds()
+  for key in out:
+    value = payload.get(key)
+    if value is None:
+      continue
+    try:
+      out[key] = float(value)
+    except (TypeError, ValueError):
+      continue
+  return out
+
+
+async def _resolve_location_range_bounds(
+  client: Any,
+  *,
+  symbol: str,
+  zone_id: str,
+  analysis_context: Any | None = None,
+) -> dict[str, float | None]:
+  """Resolve dealing-range bounds the same way discovery does.
+
+  Preference order:
+  1. Live analysis / detection context passed by the scanner sync path
+  2. In-process market-map analysis cache
+  3. Snapshot written when the ZoneWatch candidate was saved
+  4. Fresh market-context load (M1 path when cache is cold)
+
+  Never use StrategyMatch.range_low/high — those are scalp box edges.
+  """
+  if analysis_context is not None:
+    ranges = range_bounds_from_context(analysis_context)
+    if _ranges_usable(ranges):
+      return ranges
+
+  try:
+    from app.analysis.market_map_delivery import get_cached_analysis
+
+    cached = get_cached_analysis(symbol)
+  except Exception:
+    cached = None
+  if cached is not None and getattr(cached, "analysis", None) is not None:
+    ranges = range_bounds_from_context(
+      SimpleNamespace(analysis=cached.analysis),
+    )
+    if _ranges_usable(ranges):
+      return ranges
+
+  snap = await _load_location_ranges(client, zone_id)
+  if _ranges_usable(snap):
+    return snap
+
+  try:
+    from app.analysis.scanner import _load_market_context_for_symbol
+
+    ctx, _frames = await _load_market_context_for_symbol(symbol)
+  except Exception:
+    log.exception(
+      "entry_location_range_reload_failed symbol=%s zone_id=%s",
+      symbol,
+      zone_id,
+    )
+    return _empty_range_bounds()
+  if ctx is None:
+    return _empty_range_bounds()
+  return range_bounds_from_context(ctx)
 
 
 def width_telemetry_key(symbol: str, zone_id: str) -> str:
@@ -252,19 +380,24 @@ def _location_and_activation_for_record(
   evidence: Any,
   trigger: Any,
   now: int,
+  range_bounds: dict[str, float | None] | None = None,
 ):
   bid, ask, _ts = quote
+  ranges = range_bounds or _empty_range_bounds()
   context = build_entry_location_context(
     execution_price=float(evidence.executable_quote or match.current_price),
     direction=record.direction,
     ask=ask,
     bid=bid,
-    m15_range_low=match.range_low,
-    m15_range_high=match.range_high,
-    h1_range_low=None,
-    h1_range_high=None,
-    m5_range_low=None,
-    m5_range_high=None,
+    # Deal with discovery-identical dealing ranges. Do NOT feed
+    # StrategyMatch.range_* here — those are scalp box edges and are null
+    # for Zone Reaction / key-level families (prod: entry_location_context_missing).
+    m15_range_low=ranges.get("m15_range_low"),
+    m15_range_high=ranges.get("m15_range_high"),
+    h1_range_low=ranges.get("h1_range_low"),
+    h1_range_high=ranges.get("h1_range_high"),
+    m5_range_low=ranges.get("m5_range_low"),
+    m5_range_high=ranges.get("m5_range_high"),
     zone_low=record.low,
     zone_high=record.high,
   )
@@ -297,10 +430,17 @@ async def _prepare_activation(
   match: StrategyMatch,
   quote: tuple[float, float, int],
   evidence: Any,
+  analysis_context: Any | None = None,
 ) -> StrategyMatch | None:
   """Return a stamped match ready to activate, or None while waiting/blocked."""
   now = quote[2]
   trigger = await _m1_trigger_for_zone(client, record)
+  range_bounds = await _resolve_location_range_bounds(
+    client,
+    symbol=record.symbol,
+    zone_id=record.zone_id,
+    analysis_context=analysis_context,
+  )
   location, activation, context = _location_and_activation_for_record(
     match=match,
     record=record,
@@ -308,6 +448,7 @@ async def _prepare_activation(
     evidence=evidence,
     trigger=trigger,
     now=now,
+    range_bounds=range_bounds,
   )
   checked_at = datetime.now(timezone.utc).isoformat()
   location_payload = {
@@ -327,6 +468,7 @@ async def _prepare_activation(
     "executable_quote": evidence.executable_quote,
     "trigger": None if trigger is None else str(trigger.pattern),
     "checked_at": checked_at,
+    "range_bounds_usable": _ranges_usable(range_bounds),
   }
   await _record_policy_telemetry(
     client,
@@ -352,7 +494,8 @@ async def _prepare_activation(
   )
   log.info(
     "entry activation decision symbol=%s strategy=%s direction=%s "
-    "location=%s activation=%s allowed=%s would_block=%s grade=%s",
+    "location=%s activation=%s allowed=%s would_block=%s grade=%s "
+    "range_source=%s range_usable=%s",
     record.symbol,
     match.strategy,
     record.direction,
@@ -361,6 +504,8 @@ async def _prepare_activation(
     activation.allowed,
     activation.would_block,
     record.grade,
+    context.effective_range_source,
+    _ranges_usable(range_bounds),
   )
   if not activation.allowed:
     if activation.reason_code == "zone_decisively_broken":
@@ -755,6 +900,7 @@ async def _evaluate_record(
     match=match,
     quote=quote,
     evidence=evidence,
+    analysis_context=None,
   )
   if prepared is None:
     # Keep ZoneWatch active; do not persist / publish / create lifecycle.
@@ -874,6 +1020,9 @@ async def _sync_strategy_match_cutover(
       match,
       confluence_zone_id=match.confluence_zone_id or zone_id,
     ))
+    # Snapshot discovery dealing ranges onto the zone so M1 cutover can
+    # evaluate location without StrategyMatch.range_* (scalp-box-only fields).
+    await _save_location_ranges(client, zone_id, range_bounds_from_context(ctx))
     quote = await _load_quote(client, symbol)
     if quote is None:
       log.info(
@@ -909,6 +1058,7 @@ async def _sync_strategy_match_cutover(
       match=match,
       quote=quote,
       evidence=evidence,
+      analysis_context=ctx,
     )
     if prepared is None:
       log.info(

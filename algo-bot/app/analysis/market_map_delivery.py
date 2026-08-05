@@ -62,6 +62,11 @@ def clear_market_map_cache() -> None:
   _cache.clear()
 
 
+def get_cached_analysis(symbol: str) -> CachedAnalysis | None:
+  """Return the in-process analysis cache entry for ``symbol``, if any."""
+  return _cache.get(symbol.upper())
+
+
 def market_map_telegram_key(symbol: str) -> str:
   return f"auto_trade:market_map_telegram:{symbol.upper()}"
 
