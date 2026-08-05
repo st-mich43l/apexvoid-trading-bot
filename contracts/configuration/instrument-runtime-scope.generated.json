@@ -1,0 +1,545 @@
+{
+  "auto_trade": [
+    {
+      "property": "AddCooldownBars",
+      "scope": "instrument"
+    },
+    {
+      "property": "AddLevelBufferAtr",
+      "scope": "instrument"
+    },
+    {
+      "property": "AddMaxAgeBars",
+      "scope": "instrument"
+    },
+    {
+      "property": "AddMaxGroupRiskPct",
+      "scope": "instrument"
+    },
+    {
+      "property": "AddMinStopPips",
+      "scope": "instrument"
+    },
+    {
+      "property": "AddPullbackEnabled",
+      "scope": "instrument"
+    },
+    {
+      "property": "AddPullbackMaxRetrace",
+      "scope": "instrument"
+    },
+    {
+      "property": "AddPullbackMinRetrace",
+      "scope": "instrument"
+    },
+    {
+      "property": "AddRequireRiskFree",
+      "scope": "instrument"
+    },
+    {
+      "property": "AddRiskFraction",
+      "scope": "instrument"
+    },
+    {
+      "property": "AddSizeRatio",
+      "scope": "instrument"
+    },
+    {
+      "property": "AddStopBufferAtr",
+      "scope": "instrument"
+    },
+    {
+      "property": "AllowConcurrentStrategies",
+      "scope": "instrument"
+    },
+    {
+      "property": "AllowCounterBias",
+      "scope": "instrument"
+    },
+    {
+      "property": "AllowHedgedXau",
+      "scope": "instrument"
+    },
+    {
+      "property": "BoxMinRiskReward",
+      "scope": "instrument"
+    },
+    {
+      "property": "BreakEvenBufferTicks",
+      "scope": "instrument"
+    },
+    {
+      "property": "BreakoutEnabled",
+      "scope": "instrument"
+    },
+    {
+      "property": "BrokerAbsenceConfirmations",
+      "scope": "instrument"
+    },
+    {
+      "property": "BrokerAbsenceRecheckSeconds",
+      "scope": "instrument"
+    },
+    {
+      "property": "BrokerRecoveryTimeoutSeconds",
+      "scope": "instrument"
+    },
+    {
+      "property": "CandidateContractVersion",
+      "scope": "account"
+    },
+    {
+      "property": "CandidateMaxAgeSeconds",
+      "scope": "instrument"
+    },
+    {
+      "property": "CandidateStorageTtlSeconds",
+      "scope": "instrument"
+    },
+    {
+      "property": "CandidateStream",
+      "scope": "account"
+    },
+    {
+      "property": "CanonicalSymbol",
+      "scope": "instrument"
+    },
+    {
+      "property": "ConfigManifestVersion",
+      "scope": "account"
+    },
+    {
+      "property": "ConfigSources",
+      "scope": "derived"
+    },
+    {
+      "property": "ContractMode",
+      "scope": "account"
+    },
+    {
+      "property": "ContractSize",
+      "scope": "instrument"
+    },
+    {
+      "property": "DeprecatedVariables",
+      "scope": "deprecated_compatibility"
+    },
+    {
+      "property": "DryRun",
+      "scope": "account"
+    },
+    {
+      "property": "Enabled",
+      "scope": "account"
+    },
+    {
+      "property": "EntryContractTolerancePips",
+      "scope": "instrument"
+    },
+    {
+      "property": "EquityTableVersion",
+      "scope": "account"
+    },
+    {
+      "property": "EventStream",
+      "scope": "account"
+    },
+    {
+      "property": "ExecutionZoneMaxWidthAtr",
+      "scope": "instrument"
+    },
+    {
+      "property": "ExecutionZoneMaxWidthPips",
+      "scope": "instrument"
+    },
+    {
+      "property": "ExpectedBroker",
+      "scope": "account"
+    },
+    {
+      "property": "FlipConfirmTimeoutSeconds",
+      "scope": "instrument"
+    },
+    {
+      "property": "FlipExitBufferPips",
+      "scope": "instrument"
+    },
+    {
+      "property": "GroupCloseAllocation",
+      "scope": "instrument"
+    },
+    {
+      "property": "InsideZoneMarketEntryEnabled",
+      "scope": "instrument"
+    },
+    {
+      "property": "Label",
+      "scope": "account"
+    },
+    {
+      "property": "LiquidityReversalEnabled",
+      "scope": "instrument"
+    },
+    {
+      "property": "ManualAlgoEnabled",
+      "scope": "instrument"
+    },
+    {
+      "property": "MapThesisLockEnabled",
+      "scope": "instrument"
+    },
+    {
+      "property": "MappedZoneEnabled",
+      "scope": "instrument"
+    },
+    {
+      "property": "MarketMapGuardEnabled",
+      "scope": "instrument"
+    },
+    {
+      "property": "MaxEntryDistancePips",
+      "scope": "instrument"
+    },
+    {
+      "property": "MaxSpreadPips",
+      "scope": "instrument"
+    },
+    {
+      "property": "MaxTranches",
+      "scope": "instrument"
+    },
+    {
+      "property": "MinConfluence",
+      "scope": "instrument"
+    },
+    {
+      "property": "MultiMatchEnabled",
+      "scope": "instrument"
+    },
+    {
+      "property": "NonHedgedOppositePolicy",
+      "scope": "instrument"
+    },
+    {
+      "property": "PipSize",
+      "scope": "instrument"
+    },
+    {
+      "property": "PipValuePerLot",
+      "scope": "instrument"
+    },
+    {
+      "property": "PollMilliseconds",
+      "scope": "account"
+    },
+    {
+      "property": "PositionMissingConfirmations",
+      "scope": "instrument"
+    },
+    {
+      "property": "PositionMissingRecheckSeconds",
+      "scope": "instrument"
+    },
+    {
+      "property": "PostFillTargetFallback",
+      "scope": "instrument"
+    },
+    {
+      "property": "Profile",
+      "scope": "account"
+    },
+    {
+      "property": "RangeBoxMoveSlToBeAfterScaleOut",
+      "scope": "instrument"
+    },
+    {
+      "property": "RangeBoxScaleOutEnabled",
+      "scope": "instrument"
+    },
+    {
+      "property": "RangeBoxScaleOutFraction",
+      "scope": "instrument"
+    },
+    {
+      "property": "RangeBoxScaleOutThresholdPips",
+      "scope": "instrument"
+    },
+    {
+      "property": "RangeBoxScaleOutTriggerPips",
+      "scope": "instrument"
+    },
+    {
+      "property": "RangeEnabled",
+      "scope": "instrument"
+    },
+    {
+      "property": "RangeFlipEnabled",
+      "scope": "instrument"
+    },
+    {
+      "property": "RangeTargetsPips",
+      "scope": "instrument"
+    },
+    {
+      "property": "RangeTpBufferPips",
+      "scope": "instrument"
+    },
+    {
+      "property": "RangeTwoSidedEnabled",
+      "scope": "instrument"
+    },
+    {
+      "property": "ReactionEnabled",
+      "scope": "instrument"
+    },
+    {
+      "property": "ReactionMarketFraction",
+      "scope": "instrument"
+    },
+    {
+      "property": "ReactionScaleEnabled",
+      "scope": "instrument"
+    },
+    {
+      "property": "ReactionScaleFraction",
+      "scope": "instrument"
+    },
+    {
+      "property": "ReactionScaleInvalidPolicy",
+      "scope": "instrument"
+    },
+    {
+      "property": "ReactionScaleStepAtr",
+      "scope": "instrument"
+    },
+    {
+      "property": "RedisUrl",
+      "scope": "bootstrap"
+    },
+    {
+      "property": "RequireDemoAccount",
+      "scope": "account"
+    },
+    {
+      "property": "RequireDemoOnlyToken",
+      "scope": "account"
+    },
+    {
+      "property": "RequireFlatForRange",
+      "scope": "instrument"
+    },
+    {
+      "property": "RetestEnabled",
+      "scope": "instrument"
+    },
+    {
+      "property": "RiskPercent",
+      "scope": "instrument"
+    },
+    {
+      "property": "SizingMode",
+      "scope": "instrument"
+    },
+    {
+      "property": "SpotMaxAgeSeconds",
+      "scope": "instrument"
+    },
+    {
+      "property": "StopLossDistance",
+      "scope": "instrument"
+    },
+    {
+      "property": "StopPushBeyondZone",
+      "scope": "instrument"
+    },
+    {
+      "property": "StrategyMatchEnabled",
+      "scope": "instrument"
+    },
+    {
+      "property": "StructuralGuardMode",
+      "scope": "instrument"
+    },
+    {
+      "property": "Symbols",
+      "scope": "deprecated_compatibility"
+    },
+    {
+      "property": "TargetWeights",
+      "scope": "instrument"
+    },
+    {
+      "property": "TargetsPips",
+      "scope": "instrument"
+    },
+    {
+      "property": "TrackAllStructuralMatches",
+      "scope": "instrument"
+    },
+    {
+      "property": "TradePlanStream",
+      "scope": "instrument"
+    },
+    {
+      "property": "TrendEnabled",
+      "scope": "instrument"
+    },
+    {
+      "property": "TrendStopMaxPips",
+      "scope": "instrument"
+    },
+    {
+      "property": "TrendStopMinPips",
+      "scope": "instrument"
+    },
+    {
+      "property": "UnfilledLegAfterTpPolicy",
+      "scope": "instrument"
+    },
+    {
+      "property": "WickStopBufferAtr",
+      "scope": "instrument"
+    },
+    {
+      "property": "ZoneCooldownEnabled",
+      "scope": "instrument"
+    },
+    {
+      "property": "ZoneCooldownMinutes",
+      "scope": "instrument"
+    },
+    {
+      "property": "ZoneFillEnabled",
+      "scope": "instrument"
+    },
+    {
+      "property": "ZoneFillFallbackEnabled",
+      "scope": "instrument"
+    },
+    {
+      "property": "ZoneFillMinAtr",
+      "scope": "instrument"
+    },
+    {
+      "property": "ZoneFillMinLots",
+      "scope": "instrument"
+    },
+    {
+      "property": "ZoneFillTtlBars",
+      "scope": "instrument"
+    },
+    {
+      "property": "ZoneReconcileMode",
+      "scope": "instrument"
+    },
+    {
+      "property": "ZoneScaleUndersizedPolicy",
+      "scope": "instrument"
+    }
+  ],
+  "catalog_version": 2,
+  "configuration_contract_fingerprint_sha256": "2997a460475e33bc9e26902de93ee7a4e8d9715cbeb7acf23c4779ccff2b67f7",
+  "counts": {
+    "account": 24,
+    "bootstrap": 4,
+    "deprecated_compatibility": 2,
+    "derived": 2,
+    "instrument": 96,
+    "secret": 3,
+    "unclassified": 0
+  },
+  "feed": [
+    {
+      "property": "AccessToken",
+      "scope": "secret"
+    },
+    {
+      "property": "AccountId",
+      "scope": "account"
+    },
+    {
+      "property": "BackfillBars",
+      "scope": "instrument"
+    },
+    {
+      "property": "BarQualityLookback",
+      "scope": "instrument"
+    },
+    {
+      "property": "BarsChannel",
+      "scope": "account"
+    },
+    {
+      "property": "BarsWindowMax",
+      "scope": "instrument"
+    },
+    {
+      "property": "CTraderSymbol",
+      "scope": "instrument"
+    },
+    {
+      "property": "ClientId",
+      "scope": "account"
+    },
+    {
+      "property": "ClientSecret",
+      "scope": "secret"
+    },
+    {
+      "property": "ExpectedBroker",
+      "scope": "account"
+    },
+    {
+      "property": "HeartbeatFile",
+      "scope": "bootstrap"
+    },
+    {
+      "property": "Host",
+      "scope": "account"
+    },
+    {
+      "property": "Port",
+      "scope": "account"
+    },
+    {
+      "property": "RedisSymbol",
+      "scope": "derived"
+    },
+    {
+      "property": "RedisUrl",
+      "scope": "account"
+    },
+    {
+      "property": "RefreshToken",
+      "scope": "secret"
+    },
+    {
+      "property": "RefreshTokenFile",
+      "scope": "bootstrap"
+    },
+    {
+      "property": "RefreshTokenKey",
+      "scope": "bootstrap"
+    },
+    {
+      "property": "RequestTimeout",
+      "scope": "account"
+    },
+    {
+      "property": "Timeframes",
+      "scope": "instrument"
+    },
+    {
+      "property": "TokenCheckInterval",
+      "scope": "account"
+    },
+    {
+      "property": "TokenRefreshLead",
+      "scope": "account"
+    }
+  ],
+  "manifest_version": 2,
+  "source_fingerprint_sha256": "2997a460475e33bc9e26902de93ee7a4e8d9715cbeb7acf23c4779ccff2b67f7",
+  "source_model": "app.configuration.models.root.ApexVoidConfig",
+  "unclassified_properties": []
+}

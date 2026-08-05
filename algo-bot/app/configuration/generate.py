@@ -28,6 +28,7 @@ from app.configuration.runtime_manifest import (
   env_migration_document,
   serialize_manifest_bytes,
 )
+from app.configuration.instrument_runtime_scope import assert_scope_audit_complete
 from app.configuration.source_types import SOURCE_PRECEDENCE
 
 
@@ -331,6 +332,7 @@ def render_artifacts() -> dict[Path, bytes]:
     config_file=str(config_file) if config_file.is_file() else None,
   )
   migration = env_migration_document()
+  scope_audit = assert_scope_audit_complete()
   return {
     Path("contracts/configuration/environment-usage.generated.json"):
       _json_bytes(environment_usage),
@@ -369,6 +371,14 @@ def render_artifacts() -> dict[Path, bytes]:
         "required_top_level_keys": sorted(runtime_manifest.keys()),
         "feed_keys": sorted(runtime_manifest["feed"].keys()),
         "auto_trade_keys": sorted(runtime_manifest["auto_trade"].keys()),
+        "instrument_runtime_keys": sorted(
+          runtime_manifest["instrument_runtimes"]["XAU"].keys()
+        ),
+        "deprecated_compatibility_projections": ["feed", "auto_trade"],
+        "notes": (
+          "Top-level feed/auto_trade are XAU compatibility projections. "
+          "Prefer instrument_runtimes.<ID> for multi-symbol consumers."
+        ),
       }),
     Path("contracts/configuration/runtime-manifest-env-migration.generated.json"):
       _json_bytes({
@@ -377,6 +387,11 @@ def render_artifacts() -> dict[Path, bytes]:
       }),
     Path("contracts/configuration/runtime-manifest-example.generated.json"):
       serialize_manifest_bytes(runtime_manifest),
+    Path("contracts/configuration/instrument-runtime-scope.generated.json"):
+      _json_bytes({
+        **_header(contract_fingerprint),
+        **scope_audit,
+      }),
     Path("docs/configuration/config-catalog.generated.md"):
       _markdown(entries, contract_fingerprint, document_fingerprint),
     Path("algo-bot/app/configuration/generated/__init__.py"):
