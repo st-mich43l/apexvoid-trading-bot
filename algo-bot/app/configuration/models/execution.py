@@ -145,7 +145,17 @@ class ExecutionTrendConfig(FrozenConfigModel):
     min_entry_drift_pips: float = config_field(15.0, canonical_env='AUTO_TRADE_TREND_MIN_ENTRY_DRIFT_PIPS', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.PIPS, risk=RiskClassification.EXECUTION_SAFETY, description='Controls  (pips).', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 15.0),), validation_summary='Pydantic required/type coercion only')
     stop_max_pips: int = config_field(60, canonical_env='AUTO_TRADE_TREND_STOP_MAX_PIPS', owner=ConfigOwner.SHARED, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.PIPS, risk=RiskClassification.EXECUTION_SAFETY, shared_with_ctrader=True, mismatch_policy=MismatchPolicy.FATAL, description='Controls  (pips).', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 60), ContextDefault(DefaultContext.CTRADER_FROM_ENVIRONMENT, 60)), validation_summary='Pydantic required/type coercion only; EnvironmentResolver.Int + AutoTradeOptions.Validate')
 
+class ExecutionActivationConfig(FrozenConfigModel):
+    mode: str = config_field('shadow', canonical_env='ENTRY_ACTIVATION_MODE', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.ENUM, risk=RiskClassification.EXECUTION_SAFETY, description='Entry-activation policy mode: off, shadow (record only), or enforce reaction triggers.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 'shadow'),), allowed_values=('off', 'shadow', 'enforce'), validation_summary='Pydantic type coercion + field validator', pattern='^(off|shadow|enforce)$')
+    reaction_trigger_maximum_age_bars: int = config_field(2, canonical_env='ENTRY_ACTIVATION_REACTION_TRIGGER_MAX_AGE_BARS', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.BARS, risk=RiskClassification.EXECUTION_SAFETY, description='Maximum closed M1 bars since trigger for reaction activation.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 2),), validation_summary='Pydantic required/type coercion only', ge=1)
+
+    @field_validator('mode', mode='before')
+    @classmethod
+    def normalize_activation_mode(cls, value):
+        return value.strip().lower() if isinstance(value, str) else value
+
 class ExecutionConfig(FrozenConfigModel):
+    activation: ExecutionActivationConfig = Field(default_factory=ExecutionActivationConfig)
     broker_recovery: ExecutionBrokerRecoveryConfig = Field(default_factory=ExecutionBrokerRecoveryConfig)
     entry: ExecutionEntryConfig = Field(default_factory=ExecutionEntryConfig)
     mapped_zone: ExecutionMappedZoneConfig = Field(default_factory=ExecutionMappedZoneConfig)

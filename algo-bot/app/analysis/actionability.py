@@ -7,6 +7,11 @@ import math
 from typing import Any, Sequence
 
 from app.analysis.detectors import DetectionResult
+from app.analysis.entry_location import (
+  EntryLocationDecision,
+  build_entry_location_context,
+  evaluate_entry_location,
+)
 from app.analysis.key_level_role import (
   ROLE_AMBIGUOUS,
   ROLE_BROKEN_RESISTANCE,
@@ -41,6 +46,7 @@ class ActionabilityResolution:
   gated: tuple[tuple[DetectionResult, ActionabilityDecision], ...]
   decisions: tuple[tuple[DetectionResult, ActionabilityDecision], ...]
   conflicts: tuple[dict[str, Any], ...]
+  entry_locations: tuple[tuple[DetectionResult, EntryLocationDecision], ...] = ()
 
 
 def _structural(result: DetectionResult) -> bool:
@@ -674,6 +680,32 @@ def resolve_actionability(
     if index not in demoted_gated
   )
 
+  # Discovery-time entry-location is a separate decision domain. Soft
+  # telemetry only — never demote scanner actionable observations here.
+  # Activation-time recheck in zone_execution_cutover is authoritative.
+  entry_location_pairs: list[tuple[DetectionResult, EntryLocationDecision]] = []
+  for index, location in _evaluate_discovery_entry_locations(
+    observed=observed,
+    context=context,
+    cfg=cfg,
+  ):
+    result = observed[index]
+    entry_location_pairs.append((result, location))
+    demoted_decisions.setdefault(index, []).append(
+      ActionabilityDecision(
+        allowed=True if not location.hard_block else location.allowed,
+        reason_code=location.reason_code,
+        message=f"entry location {location.reason_code}",
+        hard_block=False,
+        measured={
+          "decision_domain": "entry_location",
+          "would_block": location.would_block,
+          "enforce_would_hard_block": location.hard_block,
+          **dict(location.measured),
+        },
+      ),
+    )
+
   return ActionabilityResolution(
     observed,
     actionable,
@@ -687,4 +719,102 @@ def resolve_actionability(
       for decision in demoted_decisions[index]
     ),
     tuple(conflicts),
+    tuple(entry_location_pairs),
   )
+
+
+def _range_bounds_from_context(context: Any) -> dict[str, float | None]:
+  """Best-effort M15/H1/M5 dealing-range bounds from scanner analysis context."""
+  out: dict[str, float | None] = {
+    "m15_range_low": None,
+    "m15_range_high": None,
+    "h1_range_low": None,
+    "h1_range_high": None,
+    "m5_range_low": None,
+    "m5_range_high": None,
+  }
+  analysis = getattr(context, "analysis", None)
+  per_tf = getattr(analysis, "per_tf", None) or getattr(context, "per_tf", None) or {}
+  if not isinstance(per_tf, dict):
+    per_tf = {}
+  dealing = getattr(analysis, "dealing_range", None) or getattr(context, "dealing_range", None)
+  regime = getattr(analysis, "regime", None) or getattr(context, "regime", None)
+
+  def _assign(prefix: str, low: Any, high: Any) -> None:
+    try:
+      lo = float(low)
+      hi = float(high)
+    except (TypeError, ValueError):
+      return
+    if hi > lo > 0:
+      out[f"{prefix}_range_low"] = lo
+      out[f"{prefix}_range_high"] = hi
+
+  for tf_name, prefix in (("M15", "m15"), ("H1", "h1"), ("M5", "m5")):
+    item = per_tf.get(tf_name) or per_tf.get(tf_name.lower())
+    if item is None:
+      continue
+    dr = getattr(item, "dealing_range", None)
+    if dr is not None:
+      _assign(prefix, getattr(dr, "low", None), getattr(dr, "high", None))
+      continue
+    rg = getattr(item, "regime", None)
+    if rg is not None:
+      _assign(prefix, getattr(rg, "range_low", None), getattr(rg, "range_high", None))
+
+  if dealing is not None and out["m15_range_low"] is None:
+    _assign("m15", getattr(dealing, "low", None), getattr(dealing, "high", None))
+  if regime is not None and out["m15_range_low"] is None:
+    _assign(
+      "m15",
+      getattr(regime, "range_low", None),
+      getattr(regime, "range_high", None),
+    )
+  return out
+
+
+def _evaluate_discovery_entry_locations(
+  *,
+  observed: tuple[DetectionResult, ...],
+  context: Any,
+  cfg: Any,
+) -> list[tuple[int, EntryLocationDecision]]:
+  mode = str(
+    getattr(
+      getattr(getattr(cfg, "actionability", None), "entry_location", None),
+      "mode",
+      "off",
+    )
+    or "off"
+  ).strip().lower()
+  if mode == "off":
+    return []
+
+  ranges = _range_bounds_from_context(context)
+  found: list[tuple[int, EntryLocationDecision]] = []
+  for index, result in enumerate(observed):
+    price = _executable_quote(result)
+    if price is None:
+      continue
+    context_loc = build_entry_location_context(
+      execution_price=float(price),
+      direction=result.direction,
+      ask=float(price) if str(result.direction).upper() == "BUY" else None,
+      bid=float(price) if str(result.direction).upper() == "SELL" else None,
+      m15_range_low=ranges["m15_range_low"],
+      m15_range_high=ranges["m15_range_high"],
+      h1_range_low=ranges["h1_range_low"],
+      h1_range_high=ranges["h1_range_high"],
+      m5_range_low=ranges["m5_range_low"],
+      m5_range_high=ranges["m5_range_high"],
+      zone_low=float(result.entry_zone.low),
+      zone_high=float(result.entry_zone.high),
+    )
+    decision = evaluate_entry_location(
+      strategy=result.setup,
+      direction=result.direction,
+      context=context_loc,
+      cfg=cfg,
+    )
+    found.append((index, decision))
+  return found
