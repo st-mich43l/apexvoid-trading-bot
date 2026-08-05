@@ -18,6 +18,11 @@ free -h                                     # RAM not pinned
 
 Then DM the bot `active` — a reply confirms the poll loop is alive.
 
+Compose also runs a one-shot `config-compiler` that writes
+`/runtime/resolved-runtime.json`. cTrader compares ENV options against that
+manifest in enforce mode while remaining ENV-authoritative. See
+`docs/configuration/cross-service-runtime-manifest.md`.
+
 ## Log Access
 
 Each service writes and rotates its own daily log files on the host. Stdout
