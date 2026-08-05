@@ -4,12 +4,19 @@ from __future__ import annotations
 
 from dataclasses import replace
 import logging
+import time
 from typing import Any
 
 from app.analysis import scanner
 from app.analysis.structural_reaction_support import structural_thesis_id
 from app.autotrade import worker
-from app.autotrade.strategy_match import StrategyMatch
+from app.autotrade.multi_match import (
+  dedupe_matches,
+  deserialize_matches,
+  serialize_matches,
+  strategy_matches_key,
+)
+from app.autotrade.strategy_match import StrategyMatch, strategy_match_key
 from app.core.config import runtime_config
 from app.scalping.models import (
   STRATEGY_DISPLAY,
@@ -100,6 +107,32 @@ def build_hfs_strategy_match(
   )
 
 
+async def _persist_hfs_match(client: Any, match: StrategyMatch) -> StrategyMatch:
+  """Write HFS StrategyMatch into the same Redis keys the worker reads.
+
+  Live 2026-08-05: publish_hfs_live advanced setup lifecycle to CONFIRMED
+  but never persisted the match under strategy_match:/strategy_matches:.
+  try_publish → _handle_event then loaded zero matches for ready_match_id
+  and returned remained_watching / zone_watching_retest until expiry.
+  Mirror zone_execution_cutover._persist_match (without double-advancing
+  lifecycle — caller already did that).
+  """
+  now = int(time.time())
+  current_raw = await client.get(strategy_matches_key(match.symbol))
+  current = deserialize_matches(current_raw) if current_raw else []
+  active = [item for item in current if item.expires_at >= now]
+  combined, _events = dedupe_matches(
+    [*active, match],
+    atr=match.atr,
+  )
+  ttl = max(60, int(match.expires_at) - now)
+  await client.set(strategy_match_key(match.symbol), match.to_json(), ex=ttl)
+  await client.set(
+    strategy_matches_key(match.symbol), serialize_matches(combined), ex=ttl,
+  )
+  return match
+
+
 async def publish_hfs_live(
   client: Any,
   match: StrategyMatch,
@@ -130,6 +163,7 @@ async def publish_hfs_live(
 
   _setup_id, thesis_id = lifecycle
   stamped = replace(match, thesis_id=str(thesis_id))
+  stamped = await _persist_hfs_match(client, stamped)
   result = await worker.try_publish_executable_signal(
     client,
     stamped,

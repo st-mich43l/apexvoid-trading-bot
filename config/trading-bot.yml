@@ -7,9 +7,10 @@ actionability:
   counter_bias:
     allowed: true
   entry_location:
-    # Shadow: record would-block telemetry; do not change live execution yet.
-    # Future Ansible host var: apexvoid_trading_bot_config.actionability.entry_location
-    mode: shadow
+    # Enforce: block ZoneWatch at premium BUYs / discount SELLs (and extremes).
+    # Must pair with execution.activation.mode=enforce for cutover to hard-stop.
+    # Ansible: apexvoid_trading_bot_config.actionability.entry_location
+    mode: enforce
     missing_context_policy: block
     reversal:
       buy_maximum_position: 0.50
@@ -91,9 +92,9 @@ delivery:
     signal_public_channel_id: '-1004468199035'
 execution:
   activation:
-    # Shadow: preserve current zone-touch behaviour while recording waits.
-    # Flip to enforce after shadow telemetry review (Ansible cleartext config).
-    mode: shadow
+    # Enforce with entry_location: wait for M1 reaction + honor location blocks.
+    # Ansible: apexvoid_trading_bot_config.execution.activation
+    mode: enforce
     reaction_trigger_maximum_age_bars: 2
   broker_recovery:
     absence_confirmations: 2

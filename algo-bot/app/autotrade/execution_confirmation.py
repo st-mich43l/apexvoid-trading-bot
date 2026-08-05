@@ -57,6 +57,17 @@ _CONTINUATION_STRATEGIES = frozenset({
   "Momentum Ride",
   "Breakout Continuation",
 })
+_HFS_STRATEGIES = frozenset({
+  "HFS Range Sweep",
+  "HFS Impulse Pullback",
+  "HFS Breakout Retest",
+})
+_HFS_TRIGGERS = frozenset({
+  "sweep_reclaim",
+  "impulse_pullback",
+  "breakout_retest",
+  "range_sweep",
+})
 # Product Reaction taxonomy is only Key/Session/Trendline (see
 # strategy_taxonomy.REACTION_STRATEGIES). Confirmation mechanics below are
 # M5-authoritative / M1-optional — not product "Reaction" naming.
@@ -93,6 +104,20 @@ _AUTHORITATIVE_REACTIONS = frozenset({
   # confirmation.
   "engulfing",
 })
+
+
+def _is_hfs_match(match: Any) -> bool:
+  strategy = str(getattr(match, "strategy", "") or "")
+  family = str(getattr(match, "family", "") or "").casefold()
+  mode = str(getattr(match, "strategy_mode", "") or "").casefold()
+  source = str(getattr(match, "structural_source", "") or "").casefold()
+  return (
+    family == "hfs"
+    or mode == "hfs_scalp"
+    or source == "hfs"
+    or strategy in _HFS_STRATEGIES
+    or strategy.startswith("HFS ")
+  )
 
 
 @dataclass(frozen=True)
@@ -262,6 +287,40 @@ def parse_bar_timestamp(value: Any) -> int | None:
 def confirmation_policy_for(match: Any) -> ConfirmationPolicy:
   strategy = str(getattr(match, "strategy", "") or "")
   family = str(getattr(match, "family", "") or "").casefold()
+  if _is_hfs_match(match):
+    # Live 2026-08-05: HFS activation already ran closed-bar M1 gates, then
+    # publish_hfs_live handed the match to try_publish. Without an HFS
+    # confirmation policy the worker classified family=hfs as
+    # non_reaction_m1_required (allow_same_cycle_publish=False) and the
+    # TradePlan never formed - setups stayed CONFIRMED /
+    # zone_watching_retest until expiry.
+    reaction_type = str(getattr(match, "reaction_type", "") or "").casefold()
+    entry_low = _finite_float(getattr(match, "entry_low", None))
+    entry_high = _finite_float(getattr(match, "entry_high", None))
+    metadata_valid = bool(
+      (
+        reaction_type in _HFS_TRIGGERS
+        or reaction_type in _AUTHORITATIVE_REACTIONS
+      )
+      and parse_bar_timestamp(getattr(match, "touch_bar_ts", None)) is not None
+      and parse_bar_timestamp(
+        getattr(match, "confirmation_bar_ts", None),
+      ) is not None
+      and str(getattr(match, "structural_zone_id", "") or "").strip()
+      and entry_low is not None
+      and entry_high is not None
+      and entry_low < entry_high
+    )
+    return ConfirmationPolicy(
+      m5_authoritative=metadata_valid,
+      m1_required_on_retest=False,
+      allow_same_cycle_publish=metadata_valid,
+      require_quote_inside_zone=True,
+      reaction_family=False,
+      zone_family=False,
+      metadata_valid=metadata_valid,
+      reason_code="hfs_authoritative" if metadata_valid else "confirmation_metadata_missing",
+    )
   if strategy in _CONTINUATION_STRATEGIES or family == "momentum_continuation":
     # Impulse/continuation is confirmed by the detector itself (strong body
     # break). Do not force the reversal-shaped zone-edge M1 gate.
