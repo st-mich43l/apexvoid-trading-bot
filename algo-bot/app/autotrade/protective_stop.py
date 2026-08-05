@@ -900,7 +900,27 @@ def plan_group_protective_stop(
     )
   raw_pips = raw_distance / pip
   if raw_pips > Decimal(maximum_stop_pips):
-    raise ProtectiveStopError("stop_exceeds_max_envelope")
+    raise ProtectiveStopError(
+      "stop_exceeds_max_envelope",
+      measured={
+        "stop_reject_detail": "raw_distance_exceeds_max",
+        "planned_stop_entry_price": format(reference, "f"),
+        "structure_swing": format(swing, "f"),
+        "structural_stop_price": format(structural, "f"),
+        "clearance_edge_price": format(clearance_edge, "f"),
+        "raw_stop_price": format(raw_stop, "f"),
+        "planned_base_stop_price": format(raw_stop, "f"),
+        "raw_stop_pips": format(raw_pips, "f"),
+        "planned_base_stop_pips": format(raw_pips, "f"),
+        "stop_max_envelope_pips": int(maximum_stop_pips),
+        "pushed_over_envelope_pips": format(
+          raw_pips - Decimal(maximum_stop_pips), "f",
+        ),
+        "atr": float(atr_value),
+        "direction": direction,
+        **opposing_zone_context_measured(opposing_zone),
+      },
+    )
   stop_pips = max(raw_pips, Decimal(minimum_stop_pips))
   distance = stop_pips * pip
   stop_price = (
@@ -921,7 +941,27 @@ def plan_group_protective_stop(
   distance = abs(reference - stop_price)
   stop_pips = distance / pip
   if stop_pips > Decimal(maximum_stop_pips):
-    raise ProtectiveStopError("stop_exceeds_max_envelope")
+    raise ProtectiveStopError(
+      "stop_exceeds_max_envelope",
+      measured={
+        "stop_reject_detail": "final_stop_exceeds_max_after_floor",
+        "planned_stop_entry_price": format(reference, "f"),
+        "structure_swing": format(swing, "f"),
+        "structural_stop_price": format(structural, "f"),
+        "clearance_edge_price": format(clearance_edge, "f"),
+        "raw_stop_price": format(raw_stop, "f"),
+        "raw_stop_pips": format(raw_pips, "f"),
+        "planned_base_stop_price": format(stop_price, "f"),
+        "planned_base_stop_pips": format(stop_pips, "f"),
+        "stop_max_envelope_pips": int(maximum_stop_pips),
+        "pushed_over_envelope_pips": format(
+          stop_pips - Decimal(maximum_stop_pips), "f",
+        ),
+        "atr": float(atr_value),
+        "direction": direction,
+        **opposing_zone_context_measured(opposing_zone),
+      },
+    )
   clamped = stop_pips != raw_pips
   base_plan = FinalProtectiveStopPlan(
     entry_price=reference,
