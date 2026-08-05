@@ -39,7 +39,7 @@ services:
 
   # Startup order:
   #   postgres + redis → config-compiler → ctrader-engine → bot
-  # PR2: ENV remains authoritative for cTrader; manifest is shadow parity.
+  # ResolvedRuntimeManifest V2 is authoritative. ENV is secrets + bootstrap only.
   config-compiler:
     image: "{{ registry_namespace }}/apexvoid-trading-bot:{{ image_tag }}"
     container_name: apexvoid-config-compiler
@@ -74,13 +74,12 @@ services:
     env_file:
       - ./secrets/trading-bot.env
     environment:
-      # ENV mode = XAU-only compatibility host (strongest production parity).
-      # Manifest mode is required for multi-symbol feed subscriptions; the
-      # production source cutover is a separate PR after parity observation.
-      # See docs/runtime/multi-symbol-routing.md.
+      # ResolvedRuntimeManifest V2 is authoritative.
+      # ENV contains secrets and bootstrap only.
+      # See docs/configuration/manifest-authority-cutover.md.
       APEXVOID_RUNTIME_MANIFEST_FILE: /runtime/resolved-runtime.json
-      CTRADER_CONFIGURATION_SOURCE: environment
-      CTRADER_MANIFEST_PARITY_MODE: enforce
+      CTRADER_CONFIGURATION_SOURCE: manifest
+      CTRADER_MANIFEST_PARITY_MODE: off
     volumes:
       - ./data/ctrader-token:/var/lib/apexvoid
       - ./logs/ctrader-engine:/var/log/apexvoid

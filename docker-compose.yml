@@ -42,7 +42,7 @@ services:
 
   # Startup order:
   #   postgres + redis → config-compiler → ctrader-engine → bot
-  # PR2: ENV remains authoritative for cTrader; manifest is shadow parity.
+  # ResolvedRuntimeManifest V2 is authoritative. ENV is secrets + bootstrap only.
   config-compiler:
     build: ./algo-bot
     image: apexvoid-trading-bot:latest
@@ -77,8 +77,8 @@ services:
       LOG_FILE_ENABLED: ${LOG_FILE_ENABLED:-true}
       LOG_FILE_NAME: ${CTRADER_LOG_FILE_NAME:-ctrader-engine.log}
       APEXVOID_RUNTIME_MANIFEST_FILE: /runtime/resolved-runtime.json
-      CTRADER_CONFIGURATION_SOURCE: environment
-      CTRADER_MANIFEST_PARITY_MODE: enforce
+      CTRADER_CONFIGURATION_SOURCE: manifest
+      CTRADER_MANIFEST_PARITY_MODE: off
     depends_on:
       redis:
         condition: service_healthy

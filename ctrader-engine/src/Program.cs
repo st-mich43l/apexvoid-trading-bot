@@ -32,40 +32,37 @@ public static class Program
 
     var configurationSource = RuntimeManifestBootstrap.ReadSource();
     var parityMode = RuntimeManifestBootstrap.ReadParityMode();
-    var environmentFeedOptions = FeedOptions.FromEnvironment();
-    var environmentTradeOptions = AutoTradeOptions.FromEnvironment();
-    FeedOptions options = environmentFeedOptions;
-    AutoTradeOptions autoTradeOptions = environmentTradeOptions;
+    FeedOptions options;
+    AutoTradeOptions autoTradeOptions;
+    InstrumentRuntimeRegistry instrumentRegistry;
     string? manifestFingerprint = null;
     string parityState = "skipped";
     int loadedManifestVersion = 0;
-    ResolvedRuntimeManifest? loadedManifest = null;
+    string manifestValidation = "n/a";
+    string compatibility = "none";
 
-    if (
-      parityMode != CtraderManifestParityMode.Off
-      || configurationSource == CtraderConfigurationSource.Manifest
-    )
+    if (configurationSource == CtraderConfigurationSource.Environment)
     {
-      var manifestPath = RuntimeManifestBootstrap.RequireManifestPath();
-      var manifest = ResolvedRuntimeManifestLoader.Load(manifestPath);
-      loadedManifest = manifest;
-      loadedManifestVersion = manifest.ManifestVersion;
-      manifestFingerprint = manifest.EffectiveConfigurationFingerprint;
-      var manifestFeedOptions = FeedOptions.FromRuntimeManifest(
-        manifest,
-        environmentFeedOptions
-      );
-      var manifestTradeOptions = AutoTradeOptions.FromRuntimeManifest(
-        manifest,
-        environmentTradeOptions
+      // Legacy XAU compatibility path — may read full trading ENV.
+      options = FeedOptions.FromEnvironment();
+      autoTradeOptions = AutoTradeOptions.FromEnvironment();
+      instrumentRegistry = InstrumentRuntimeRegistry.FromXauCompatibility(
+        options,
+        autoTradeOptions
       );
       if (parityMode != CtraderManifestParityMode.Off)
       {
+        var manifestPath = RuntimeManifestBootstrap.RequireManifestPath();
+        var manifest = ResolvedRuntimeManifestLoader.Load(manifestPath);
+        loadedManifestVersion = manifest.ManifestVersion;
+        manifestFingerprint = manifest.EffectiveConfigurationFingerprint;
+        var account = CTraderAccountOptions.FromFeedOptions(options);
+        var manifestRuntime = ManifestRuntimeFactory.Create(manifest, account);
         var parity = RuntimeManifestParity.Compare(
-          environmentFeedOptions,
-          environmentTradeOptions,
-          manifestFeedOptions,
-          manifestTradeOptions
+          options,
+          autoTradeOptions,
+          manifestRuntime.Feed,
+          manifestRuntime.AutoTrade
         );
         parityState = parity.HasFatal ? "mismatch" : "matched";
         RuntimeManifestParity.ApplyParityMode(
@@ -74,11 +71,31 @@ public static class Program
           message => Console.Error.WriteLine(message)
         );
       }
-      if (configurationSource == CtraderConfigurationSource.Manifest)
+    }
+    else
+    {
+      // Manifest authority: no legacy trading ENV reads.
+      if (parityMode != CtraderManifestParityMode.Off)
       {
-        options = manifestFeedOptions;
-        autoTradeOptions = manifestTradeOptions;
+        throw new InvalidOperationException(
+          "CTRADER_MANIFEST_PARITY_MODE must be off when "
+          + "CTRADER_CONFIGURATION_SOURCE=manifest "
+          + "(ENV-versus-manifest parity requires legacy trading ENV; "
+          + "manifest schema/fingerprint validation remains enforced)"
+        );
       }
+      var account = CTraderAccountOptions.FromEnvironment();
+      var manifestPath = RuntimeManifestBootstrap.RequireManifestPath();
+      var manifest = ResolvedRuntimeManifestLoader.Load(manifestPath);
+      var runtime = ManifestRuntimeFactory.Create(manifest, account);
+      options = runtime.Feed;
+      autoTradeOptions = runtime.AutoTrade;
+      instrumentRegistry = runtime.Instruments;
+      loadedManifestVersion = runtime.ManifestVersion;
+      manifestFingerprint = runtime.EffectiveFingerprint;
+      manifestValidation = "enforced";
+      compatibility = runtime.CompatibilityMode;
+      parityState = "off";
     }
 
     Console.WriteLine(
@@ -87,20 +104,11 @@ public static class Program
       + $"fingerprint={(manifestFingerprint is null ? "-" : manifestFingerprint[..12])} "
       + $"source={configurationSource.ToString().ToLowerInvariant()} "
       + $"parity={parityMode.ToString().ToLowerInvariant()} "
+      + $"manifest_validation={manifestValidation} "
+      + $"manifest_compatibility={compatibility} "
       + $"instruments={string.Join(',', autoTradeOptions.EffectiveSymbols)} "
       + $"parity_state={parityState}"
     );
-
-    // ENV mode: XAU-only compatibility registry (legacy host remains primary).
-    // Manifest mode: construct from instrument_runtimes when present.
-    var instrumentRegistry = loadedManifest is not null
-      && configurationSource == CtraderConfigurationSource.Manifest
-      ? InstrumentRuntimeRegistry.FromRuntimeManifest(
-        loadedManifest,
-        options,
-        autoTradeOptions
-      )
-      : InstrumentRuntimeRegistry.FromXauCompatibility(options, autoTradeOptions);
 
     await using var redis = await StackExchangeRedisSeriesCommands.ConnectAsync(
       options.RedisUrl

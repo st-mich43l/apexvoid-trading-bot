@@ -1,8 +1,9 @@
 namespace ApexVoid.CTraderFeed;
 
 /// <summary>
-/// Account-level cTrader options (credentials, connection, shared streams).
-/// Instrument-specific feed/execution fields live in separate records.
+/// Account / process bootstrap options. May only be filled from ENV fields
+/// classified as <c>secret_environment</c> or <c>bootstrap_environment</c>.
+/// Manifest-owned trading policy must never be read here.
 /// </summary>
 public sealed record CTraderAccountOptions(
   string ClientId,
@@ -18,18 +19,39 @@ public sealed record CTraderAccountOptions(
   string RefreshTokenFile,
   TimeSpan RequestTimeout,
   TimeSpan TokenRefreshLead,
-  TimeSpan TokenCheckInterval,
-  string ExpectedBroker,
-  string CandidateStream,
-  string EventStream,
-  bool RequireDemoOnlyToken,
-  bool RequireDemoAccount
+  TimeSpan TokenCheckInterval
 )
 {
-  public static CTraderAccountOptions FromFeedAndTrade(
-    FeedOptions feed,
-    AutoTradeOptions trade
-  ) =>
+  public static CTraderAccountOptions FromEnvironment()
+  {
+    return new CTraderAccountOptions(
+      ClientId: Require("CTRADER_CLIENT_ID"),
+      ClientSecret: Require("CTRADER_CLIENT_SECRET"),
+      AccessToken: Require("CTRADER_ACCESS_TOKEN"),
+      RefreshToken: Require("CTRADER_REFRESH_TOKEN"),
+      AccountId: long.Parse(Require("CTRADER_ACCOUNT_ID")),
+      Host: Env("CTRADER_HOST", "demo.ctraderapi.com"),
+      Port: int.Parse(Env("CTRADER_PORT", "5035")),
+      RedisUrl: Env("REDIS_URL", "redis://redis:6379/0"),
+      HeartbeatFile: Env("HEALTH_FILE", "/tmp/ctrader-feed.heartbeat"),
+      RefreshTokenKey: Env("CTRADER_REFRESH_TOKEN_KEY", "ctrader:refresh_token"),
+      RefreshTokenFile: Env(
+        "CTRADER_REFRESH_TOKEN_FILE",
+        "/var/lib/apexvoid/ctrader-token.json"
+      ),
+      RequestTimeout: TimeSpan.FromSeconds(
+        int.Parse(Env("CTRADER_REQUEST_TIMEOUT", "30"))
+      ),
+      TokenRefreshLead: TimeSpan.FromDays(
+        double.Parse(Env("CTRADER_TOKEN_REFRESH_LEAD_DAYS", "5"))
+      ),
+      TokenCheckInterval: TimeSpan.FromHours(
+        double.Parse(Env("CTRADER_TOKEN_CHECK_INTERVAL_HOURS", "6"))
+      )
+    );
+  }
+
+  public static CTraderAccountOptions FromFeedOptions(FeedOptions feed) =>
     new(
       ClientId: feed.ClientId,
       ClientSecret: feed.ClientSecret,
@@ -44,13 +66,29 @@ public sealed record CTraderAccountOptions(
       RefreshTokenFile: feed.RefreshTokenFile,
       RequestTimeout: feed.RequestTimeout,
       TokenRefreshLead: feed.TokenRefreshLead,
-      TokenCheckInterval: feed.TokenCheckInterval,
-      ExpectedBroker: feed.ExpectedBroker,
-      CandidateStream: trade.CandidateStream,
-      EventStream: trade.EventStream,
-      RequireDemoOnlyToken: trade.RequireDemoOnlyToken,
-      RequireDemoAccount: trade.RequireDemoAccount
+      TokenCheckInterval: feed.TokenCheckInterval
     );
+
+  private static string Require(string key) =>
+    Env(key, required: true);
+
+  private static string Env(
+    string key,
+    string? fallback = null,
+    bool required = false
+  )
+  {
+    var value = Environment.GetEnvironmentVariable(key);
+    if (!string.IsNullOrWhiteSpace(value))
+    {
+      return value;
+    }
+    if (required)
+    {
+      throw new InvalidOperationException($"{key} must be set");
+    }
+    return fallback ?? "";
+  }
 }
 
 /// <summary>Per-instrument market-data subscription options.</summary>

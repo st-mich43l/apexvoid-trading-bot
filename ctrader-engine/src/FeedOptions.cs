@@ -66,32 +66,70 @@ public sealed record FeedOptions(
 
   public static FeedOptions FromRuntimeManifest(
     ResolvedRuntimeManifest manifest,
-    FeedOptions bootstrapFromEnvironment
+    CTraderAccountOptions account
   )
   {
     ArgumentNullException.ThrowIfNull(manifest);
-    ArgumentNullException.ThrowIfNull(bootstrapFromEnvironment);
+    ArgumentNullException.ThrowIfNull(account);
     var feed = manifest.Feed;
     if (string.IsNullOrWhiteSpace(feed.CTraderSymbol))
     {
       throw new InvalidOperationException("runtime manifest feed.ctrader_symbol is required");
     }
+    if (string.IsNullOrWhiteSpace(feed.RedisSymbol))
+    {
+      throw new InvalidOperationException("runtime manifest feed.redis_symbol is required");
+    }
     if (feed.Timeframes.Count == 0)
     {
       throw new InvalidOperationException("runtime manifest feed.timeframes is empty");
     }
-    return bootstrapFromEnvironment with
+    if (string.IsNullOrWhiteSpace(feed.ExpectedBroker))
     {
-      CTraderSymbol = feed.CTraderSymbol,
-      RedisSymbol = feed.RedisSymbol,
-      Timeframes = feed.Timeframes.ToArray(),
-      BackfillBars = feed.BackfillBars,
-      BarsWindowMax = feed.BarsWindowMax,
-      BarsChannel = feed.BarsChannel,
-      BarQualityLookback = feed.BarQualityLookback,
-      ExpectedBroker = feed.ExpectedBroker,
-    };
+      throw new InvalidOperationException("runtime manifest feed.expected_broker is required");
+    }
+    if (string.IsNullOrWhiteSpace(feed.BarsChannel))
+    {
+      throw new InvalidOperationException("runtime manifest feed.bars_channel is required");
+    }
+    return new FeedOptions(
+      ClientId: account.ClientId,
+      ClientSecret: account.ClientSecret,
+      AccessToken: account.AccessToken,
+      RefreshToken: account.RefreshToken,
+      AccountId: account.AccountId,
+      Host: account.Host,
+      Port: account.Port,
+      CTraderSymbol: feed.CTraderSymbol,
+      RedisSymbol: feed.RedisSymbol,
+      Timeframes: feed.Timeframes.ToArray(),
+      BackfillBars: feed.BackfillBars,
+      RedisUrl: account.RedisUrl,
+      BarsWindowMax: feed.BarsWindowMax,
+      BarsChannel: feed.BarsChannel,
+      BarQualityLookback: feed.BarQualityLookback,
+      HeartbeatFile: account.HeartbeatFile,
+      RefreshTokenKey: account.RefreshTokenKey,
+      RefreshTokenFile: account.RefreshTokenFile,
+      RequestTimeout: account.RequestTimeout,
+      TokenRefreshLead: account.TokenRefreshLead,
+      TokenCheckInterval: account.TokenCheckInterval,
+      ExpectedBroker: feed.ExpectedBroker
+    );
   }
+
+  /// <summary>
+  /// Compatibility overload retained for tests that still pass an ENV feed
+  /// template. Prefer <see cref="FromRuntimeManifest(ResolvedRuntimeManifest, CTraderAccountOptions)"/>.
+  /// </summary>
+  public static FeedOptions FromRuntimeManifest(
+    ResolvedRuntimeManifest manifest,
+    FeedOptions bootstrapFromEnvironment
+  ) =>
+    FromRuntimeManifest(
+      manifest,
+      CTraderAccountOptions.FromFeedOptions(bootstrapFromEnvironment)
+    );
 
   private static string Env(
     string key,
