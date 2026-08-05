@@ -1,6 +1,6 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "e8af1f2a8e68acb975e27d3c854aa2bd9989a42bd0151f873289c56a53ba7088",
+  "configuration_contract_fingerprint_sha256": "b0a3ca16a1778122fb54947fce11ac5d2507a8da0fef8ebbffa2c76ffec1999d",
   "count": 423,
   "deprecated_alias_count": 21,
   "entries": [
@@ -4316,7 +4316,7 @@
     },
     {
       "canonical_env": "HFS_MODE",
-      "default": "shadow",
+      "default": "live",
       "deprecated": false,
       "deprecated_aliases": [],
       "description": "HFS runtime mode: off, shadow, paper, or live.",
@@ -4460,7 +4460,7 @@
     },
     {
       "canonical_env": "HFS_RISK_MODE",
-      "default": "shadow",
+      "default": "live",
       "deprecated": false,
       "deprecated_aliases": [],
       "description": "HFS risk accounting mode.",
@@ -6826,6 +6826,6 @@
   ],
   "secret_count": 9,
   "shared_with_ctrader_count": 86,
-  "source_fingerprint_sha256": "e8af1f2a8e68acb975e27d3c854aa2bd9989a42bd0151f873289c56a53ba7088",
+  "source_fingerprint_sha256": "b0a3ca16a1778122fb54947fce11ac5d2507a8da0fef8ebbffa2c76ffec1999d",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

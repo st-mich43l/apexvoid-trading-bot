@@ -24,6 +24,7 @@ from app.scalping.models import (
   DISCOVERED,
   EXECUTABLE,
   MISSED,
+  PUBLISHED,
   ScalpLifecycleRecord,
   ScalpSignal,
   deterministic_id,
@@ -34,10 +35,12 @@ from app.scalping.lifecycle import (
   transition,
 )
 from app.scalping.microstructure import build_micro_structure
+from app.scalping.publish import build_hfs_strategy_match, publish_hfs_live
 from app.scalping.ranking import rank_opportunities, score_opportunity
 from app.scalping.risk import evaluate_risk, load_risk, save_risk
 from app.scalping.strategies import discover_all
 from app.scalping.telemetry import incr, record_cycle, set_last
+from app.autotrade import worker
 
 
 log = logging.getLogger(__name__)
@@ -267,7 +270,6 @@ async def process_m1_bar(
       created_at=now,
       measured={"score": score.total, "penalties": list(score.penalties)},
     )
-    # Shadow/paper only — never broker streams
     await client.set(
       f"scalp:signal:{symbol.upper()}:{signal.signal_id}",
       signal.to_json(),
@@ -283,11 +285,69 @@ async def process_m1_bar(
     if existing is not None:
       moved = transition(existing, EXECUTABLE, reason="activation_allowed", now=now)
       await save_lifecycle(client, symbol, moved)
+
+    published_status = None
+    if mode == "live":
+      match = build_hfs_strategy_match(
+        opportunity,
+        context,
+        bar_ts=bar_ts,
+        quote_bid=bid,
+        quote_ask=ask,
+        location_reason=str(decision.measured.get("location_reason") or ""),
+      )
+      publish_result = await publish_hfs_live(
+        client, match, symbol=symbol, bar_ts=bar_ts,
+      )
+      if publish_result is None:
+        published_status = "lifecycle_advance_failed"
+        await incr(client, symbol, "opportunity_blocked:lifecycle_advance_failed")
+      else:
+        published_status = publish_result.status
+        if publish_result.status in {
+          worker.PUBLISH_STATUS_PUBLISHED,
+          worker.PUBLISH_STATUS_DUPLICATE_RECONCILED,
+        }:
+          await incr(client, symbol, "opportunity_live_published")
+          latest = await load_lifecycle(client, symbol, opportunity.opportunity_id)
+          if latest is not None:
+            done = transition(
+              latest, PUBLISHED, reason=publish_result.reason_code or "live_published", now=now,
+            )
+            await save_lifecycle(client, symbol, done)
+          # One live position at a time — stop after first successful handoff.
+          if publish_result.status == worker.PUBLISH_STATUS_PUBLISHED:
+            result["allowed"].append({
+              "opportunity_id": opportunity.opportunity_id,
+              "archetype": opportunity.archetype,
+              "direction": opportunity.direction,
+              "score": score.total,
+              "publish_status": published_status,
+              "plan_id": publish_result.plan_id,
+            })
+            await set_last(client, "decision", symbol, {
+              "allowed": True,
+              "reason_code": decision.reason_code,
+              "opportunity_id": opportunity.opportunity_id,
+              "mode": mode,
+              "score": score.total,
+              "publish_status": published_status,
+              "plan_id": publish_result.plan_id,
+            })
+            break
+        else:
+          await incr(
+            client,
+            symbol,
+            f"opportunity_blocked:live_{publish_result.reason_code or publish_result.status}",
+          )
+
     result["allowed"].append({
       "opportunity_id": opportunity.opportunity_id,
       "archetype": opportunity.archetype,
       "direction": opportunity.direction,
       "score": score.total,
+      "publish_status": published_status,
     })
     await set_last(client, "decision", symbol, {
       "allowed": True,
@@ -295,6 +355,7 @@ async def process_m1_bar(
       "opportunity_id": opportunity.opportunity_id,
       "mode": mode,
       "score": score.total,
+      "publish_status": published_status,
     })
   persist_ms = (time.perf_counter() - t_persist) * 1000.0
   total_ms = (time.perf_counter() - t0) * 1000.0
@@ -319,7 +380,7 @@ async def process_m1_bar(
 
 
 async def scalp_m1_event_loop() -> None:
-  """Subscribe to closed M1 bars for XAU scalping (shadow by default)."""
+  """Subscribe to closed M1 bars for XAU scalping."""
   if _mode() == "off":
     log.info("HFS scalping disabled: strategies.high_frequency_scalp.mode=off")
     return
