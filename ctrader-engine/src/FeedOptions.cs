@@ -64,6 +64,35 @@ public sealed record FeedOptions(
     );
   }
 
+  public static FeedOptions FromRuntimeManifest(
+    ResolvedRuntimeManifest manifest,
+    FeedOptions bootstrapFromEnvironment
+  )
+  {
+    ArgumentNullException.ThrowIfNull(manifest);
+    ArgumentNullException.ThrowIfNull(bootstrapFromEnvironment);
+    var feed = manifest.Feed;
+    if (string.IsNullOrWhiteSpace(feed.CTraderSymbol))
+    {
+      throw new InvalidOperationException("runtime manifest feed.ctrader_symbol is required");
+    }
+    if (feed.Timeframes.Count == 0)
+    {
+      throw new InvalidOperationException("runtime manifest feed.timeframes is empty");
+    }
+    return bootstrapFromEnvironment with
+    {
+      CTraderSymbol = feed.CTraderSymbol,
+      RedisSymbol = feed.RedisSymbol,
+      Timeframes = feed.Timeframes.ToArray(),
+      BackfillBars = feed.BackfillBars,
+      BarsWindowMax = feed.BarsWindowMax,
+      BarsChannel = feed.BarsChannel,
+      BarQualityLookback = feed.BarQualityLookback,
+      ExpectedBroker = feed.ExpectedBroker,
+    };
+  }
+
   private static string Env(
     string key,
     string? fallback = null,
