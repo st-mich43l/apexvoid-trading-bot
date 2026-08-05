@@ -290,7 +290,26 @@ def _build_strategy_match(
   if not built:
     return None, last_reason, last_measured
   atr = built[0].atr
-  deduped, _events = dedupe_matches(built, atr=atr)
+  deduped, merge_events = dedupe_matches(built, atr=atr)
+  for event in merge_events:
+    if event.get("event") == "merged_confluence":
+      # dedupe_matches merges same-thesis matches (eg. Zone Reaction aliased
+      # onto another structural setup touching the same zone) and this is
+      # the only record of which match_id survived - without it, a result
+      # detected moments ago (actionability-observed, room/target checks
+      # passed) can vanish from the card feed with zero trace: nothing in
+      # auto_trade:gate_reject:*, nothing here, nothing anywhere. Live
+      # incident: "Zone Reaction BUY" observed as tradeable then silently
+      # suppressed as "no executable StrategyMatch" one line later, with no
+      # rejection reason recorded because it was never rejected - it was
+      # merged into a different match_id this loop previously discarded.
+      log.info(
+        "strategy match merged symbol=%s tf=%s match_id=%s into=%s",
+        symbol,
+        tf,
+        event.get("match_id"),
+        event.get("into"),
+      )
   primary = select_primary(deduped)
   if primary is None:
     return None, "all_matches_tier_c", {"count": len(built)}
@@ -2091,7 +2110,16 @@ async def _notify_digest_once(
         ),
         None,
       )
-    if match_for_card is None and not result.confluence_zone_id:
+    # Results without a confluence_zone_id always got these two fallbacks;
+    # results with one didn't, because the id lookup above was assumed
+    # precise enough to never need them. But dedupe_matches (scanner.py's
+    # _build_strategy_match) can legitimately merge this exact result's
+    # match into a different match_id first - eg. Zone Reaction is a named
+    # alias-prone strategy in multi_match.py's same_thesis() - and the
+    # result's own confluence_zone_id doesn't follow the merge. A detection
+    # that just passed actionability/room/target checks was silently
+    # vanishing here with zero recorded reason. Same fallbacks either way.
+    if match_for_card is None:
       match_for_card = next(
         (
           item for item in match_pool
@@ -2103,11 +2131,7 @@ async def _notify_digest_once(
         ),
         None,
       )
-    if (
-      match_for_card is None
-      and not result.confluence_zone_id
-      and result_index == 0
-    ):
+    if match_for_card is None and result_index == 0:
       match_for_card = execution_match
     if match_for_card is None:
       log.info(
