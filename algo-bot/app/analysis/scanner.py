@@ -1351,14 +1351,29 @@ def _format_detection(
     reason for reason in result.reasons
     if not reason.lower().startswith("htf bias")
   ][:6 if result.setup in {"Box Breakout", "Range Edge Scalp"} else 2]
+  from app.autotrade.setup_card import (
+    forming_card_headline,
+    quote_inside_entry_zone,
+  )
+  in_zone = bool(
+    executable
+    and result.entry_zone is not None
+    and quote_inside_entry_zone(
+      result.current_price,
+      float(result.entry_zone.low),
+      float(result.entry_zone.high),
+    )
+  )
   lines = [
     (
-      f"🔎 <b>{escape(symbol)} {escape(tf)} · SETUP FORMING</b>"
+      forming_card_headline(symbol, tf, in_zone=in_zone)
       if executable
       else f"🔵 <b>{escape(symbol)} {escape(tf)} · MARKET OBSERVATION</b>"
     ),
     (
-      "🟡 <b>QUEUED</b> · worker acknowledgement pending"
+      "⏳ <b>IN ZONE</b> · waiting market fill"
+      if in_zone
+      else "🟡 <b>QUEUED</b> · worker acknowledgement pending"
       if executable
       else "🔵 <b>ANALYSIS ONLY</b> · no executable StrategyMatch"
       if runtime_config.runtime.auto_trade.enabled

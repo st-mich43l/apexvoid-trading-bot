@@ -1043,6 +1043,44 @@ def _price_text(value: float) -> str:
   return f"{float(value):,.2f}"
 
 
+def quote_inside_entry_zone(
+  price: float | None,
+  entry_low: float | None,
+  entry_high: float | None,
+) -> bool:
+  """True when live price sits inside the declared entry band."""
+  try:
+    if price is None or entry_low is None or entry_high is None:
+      return False
+    low = float(entry_low)
+    high = float(entry_high)
+    px = float(price)
+  except (TypeError, ValueError):
+    return False
+  if not (math.isfinite(px) and math.isfinite(low) and math.isfinite(high)):
+    return False
+  if high < low:
+    low, high = high, low
+  return low <= px <= high
+
+
+def forming_card_headline(
+  symbol: str,
+  tf: str,
+  *,
+  in_zone: bool,
+) -> str:
+  """Headline for the Telegram root card.
+
+  SETUP FORMING lied when Price now was already inside the entry zone
+  (2026-08-05 Zone Reaction card). Prefer an explicit IN ZONE signal so the
+  owner is not told the setup is still "forming" after the executor already
+  owns a market_watch plan with quote_inside_zone activation.
+  """
+  label = "IN ZONE · WAITING FILL" if in_zone else "SETUP FORMING"
+  return f"🔎 <b>{escape(str(symbol))} {escape(str(tf))} · {label}</b>"
+
+
 def format_plan_published_root_card(
   match: StrategyMatch,
   *,
@@ -1069,13 +1107,17 @@ def format_plan_published_root_card(
     reason for reason in (match.reasons or ())
     if reason and not str(reason).lower().startswith("htf bias")
   ][:2]
+  in_zone = quote_inside_entry_zone(
+    match.current_price, match.entry_low, match.entry_high,
+  )
 
   lines = [
+    forming_card_headline(str(match.symbol), str(match.source_tf), in_zone=in_zone),
     (
-      f"🔎 <b>{escape(str(match.symbol))} "
-      f"{escape(str(match.source_tf))} · SETUP FORMING</b>"
+      "⏳ <b>IN ZONE</b> · waiting market fill"
+      if in_zone
+      else _PLAN_PUBLISHED_STATUS_SLOT
     ),
-    _PLAN_PUBLISHED_STATUS_SLOT,
     (
       f"{direction_icon} <b>{escape(direction)} · "
       f"{escape(setup_label)}</b> · {stars}"
