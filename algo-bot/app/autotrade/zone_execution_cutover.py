@@ -607,6 +607,14 @@ async def _sync_strategy_match_cutover(
   pip = scanner._pip_size(symbol)
   ready: list[tuple[int, ZoneWatch, StrategyMatch]] = []
 
+  # This function replaced scanner._sync_strategy_match at the module-name
+  # level (see install_zone_execution_cutover) - it is the only code that
+  # actually runs for every live "why did my setup vanish" complaint. Every
+  # `continue`/early `return None` below used to be silent: nothing in
+  # scanner.py's own logging (actionability-observed, gate_reject, etc.)
+  # covers what happens *after* a result is already eligible and handed to
+  # this function, so a setup could pass every upstream check and still
+  # never become an executable match with zero trace of why.
   for result in sorted(results, key=scanner._result_rank):
     if require_static_eligibility:
       eligibility = getattr(result, "execution_eligibility", None)
@@ -629,12 +637,22 @@ async def _sync_strategy_match_cutover(
           INVALIDATED,
           reason_code="zone_width_contract_rejected",
         )
+      log.info(
+        "zone watch cutover rejected symbol=%s tf=%s setup=%s direction=%s "
+        "reason=zone_width_contract_rejected zone_id=%s",
+        symbol, tf, result.setup, result.direction, zone_id,
+      )
       continue
 
     grade = _grade(result, source_tf)
     if grade not in {GRADE_A, GRADE_B}:
+      log.info(
+        "zone watch cutover rejected symbol=%s tf=%s setup=%s direction=%s "
+        "reason=grade_excluded grade=%s zone_id=%s",
+        symbol, tf, result.setup, result.direction, grade, zone_id,
+      )
       continue
-    match, _reason, _measured = scanner._build_one_strategy_match(
+    match, build_reason, _measured = scanner._build_one_strategy_match(
       symbol,
       tf,
       event_ts,
@@ -642,6 +660,11 @@ async def _sync_strategy_match_cutover(
       result,
     )
     if match is None:
+      log.info(
+        "zone watch cutover rejected symbol=%s tf=%s setup=%s direction=%s "
+        "reason=match_build_failed build_reason=%s zone_id=%s",
+        symbol, tf, result.setup, result.direction, build_reason, zone_id,
+      )
       continue
     record, created = await discover_zone_watch(
       client,
@@ -675,6 +698,11 @@ async def _sync_strategy_match_cutover(
     ))
     quote = await _load_quote(client, symbol)
     if quote is None:
+      log.info(
+        "zone watch cutover rejected symbol=%s tf=%s setup=%s direction=%s "
+        "reason=quote_unavailable zone_id=%s",
+        symbol, tf, result.setup, result.direction, zone_id,
+      )
       continue
     evidence = _quote_evidence(record, quote)
     record, _ = await record_zone_presence(
@@ -689,6 +717,13 @@ async def _sync_strategy_match_cutover(
       not evidence.inside
       or record.state in TERMINAL_ZONE_WATCH_STATES | LOCKED_ZONE_WATCH_STATES
     ):
+      log.info(
+        "zone watch cutover rejected symbol=%s tf=%s setup=%s direction=%s "
+        "reason=%s zone_id=%s state=%s",
+        symbol, tf, result.setup, result.direction,
+        "quote_outside_zone" if not evidence.inside else "zone_watch_locked_or_terminal",
+        zone_id, record.state,
+      )
       continue
     if record.grade == GRADE_B:
       # Same reasoning as _evaluate_record below: M1 refines entry
