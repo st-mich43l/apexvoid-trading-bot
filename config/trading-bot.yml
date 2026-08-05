@@ -284,9 +284,9 @@ runtime:
     enabled: true
 strategies:
   high_frequency_scalp:
-    # Shadow: discover/evaluate/record only. Never publish candidates/orders.
-    # Future Ansible promotion path: paper → live after calibration/holdout.
-    mode: shadow
+    # Live: publish TradePlan V7 via worker.try_publish_executable_signal when
+    # activation + risk pass. Requires runtime.auto_trade.enabled=true.
+    mode: live
     archetypes:
       range_sweep_enabled: true
       impulse_pullback_enabled: true
@@ -318,7 +318,7 @@ strategies:
       maximum_active_opportunities: 10
       maximum_spread_pips: 5
     risk:
-      mode: shadow
+      mode: live
       risk_fraction_per_trade: 0.10
       maximum_concurrent_positions: 1
       maximum_session_trades: 12

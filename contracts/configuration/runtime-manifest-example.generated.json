@@ -128,8 +128,8 @@
     "zone_reconcile_mode": "shadow",
     "zone_scale_undersized_policy": "single_entry"
   },
-  "contract_fingerprint": "e8af1f2a8e68acb975e27d3c854aa2bd9989a42bd0151f873289c56a53ba7088",
-  "effective_configuration_fingerprint": "c2b842a8e9aaa296ce3acf170df42930ec24e30200c341bf2fee524c0e0e2878",
+  "contract_fingerprint": "b0a3ca16a1778122fb54947fce11ac5d2507a8da0fef8ebbffa2c76ffec1999d",
+  "effective_configuration_fingerprint": "59d6c5f9df43dc7c58d77a819500a3bff70a4af5274e132bf2212ac4a87cf7cc",
   "feed": {
     "backfill_bars": 1500,
     "bar_quality_lookback": 6,
@@ -742,7 +742,7 @@
             "range_buy_maximum_position": "0.35",
             "range_sell_minimum_position": "0.65"
           },
-          "mode": "shadow",
+          "mode": "live",
           "policy": {
             "maximum_active_opportunities": 10,
             "maximum_opportunities_per_cycle": 3,
@@ -756,7 +756,7 @@
             "maximum_consecutive_losses": 3,
             "maximum_daily_trades": 30,
             "maximum_session_trades": 12,
-            "mode": "shadow",
+            "mode": "live",
             "risk_fraction_per_trade": "0.1",
             "session_loss_limit_r": "2"
           },
@@ -1283,7 +1283,7 @@
             "range_buy_maximum_position": "0.35",
             "range_sell_minimum_position": "0.65"
           },
-          "mode": "shadow",
+          "mode": "live",
           "policy": {
             "maximum_active_opportunities": 10,
             "maximum_opportunities_per_cycle": 3,
@@ -1297,7 +1297,7 @@
             "maximum_consecutive_losses": 3,
             "maximum_daily_trades": 30,
             "maximum_session_trades": 12,
-            "mode": "shadow",
+            "mode": "live",
             "risk_fraction_per_trade": "0.1",
             "session_loss_limit_r": "2"
           },
