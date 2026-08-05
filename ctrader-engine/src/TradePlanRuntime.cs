@@ -278,6 +278,9 @@ public static class TradePlanJson
     JsonSerializer.Deserialize(json, AutoTradeJsonContext.Default.TradePlan)
     ?? throw new TradePlanContractException("null plan payload");
 
+  public static string SerializePlan(TradePlan plan) =>
+    JsonSerializer.Serialize(plan, AutoTradeJsonContext.Default.TradePlan);
+
   public static string SerializeState(TradePlanRuntimeState state) =>
     JsonSerializer.Serialize(
       state,
@@ -454,6 +457,14 @@ public sealed class TradePlanRuntime(
   private readonly Dictionary<string, TradePlanRuntimeState> _statesById = new();
   private bool _restored;
 
+  // How long a recovered market_watch plan gets to see a live quote after
+  // a restart, when its own declared Entry.ExpiresAt already lapsed during
+  // the downtime. Deliberately short - this is a fairness grace against
+  // dead time the plan never got to use, not a way to keep a stale setup
+  // alive; the plan's own thesis (structure/zone) is unchanged, only the
+  // deadline the outage silently ate into is restored.
+  private const int RestoreExpiryGraceSeconds = 90;
+
   private static string FormatEventPrice(decimal price, SymbolInfo symbol) =>
     decimal.Round(price, symbol.Digits, MidpointRounding.AwayFromZero)
       .ToString($"F{Math.Max(0, symbol.Digits)}", CultureInfo.InvariantCulture);
@@ -521,6 +532,8 @@ public sealed class TradePlanRuntime(
   private static string PlanStateKey(string planId) => $"execution:plan_runtime:{planId}";
   private static string PlanRecoveryKey(string planId) =>
     $"execution:plan_recovery:{planId}";
+  private static string PlanRecoveryGraceKey(string planId) =>
+    $"execution:plan_recovery_grace:{planId}";
   private static string PlanExecutorStateKey(string planId) =>
     $"execution:plan_state:{planId}";
   private static string PlanAcknowledgementKey(string planId) =>
@@ -666,6 +679,53 @@ public sealed class TradePlanRuntime(
           var plan = TradePlanJson.DeserializePlan(planJson);
           if (plan is not null)
           {
+            if (
+              plan.Entry.Type == TradePlanContract.EntryTypeMarketWatch
+              && IsPendingEntryStage(state)
+              && plan.Entry.ExpiresAt <= clock().ToUnixTimeSeconds()
+              // Claim-once: a repeatedly-restarting process (the exact
+              // situation this exists for) must grant the grace a single
+              // time, not reset a fresh window on every restart, or a plan
+              // could outlive any real deadline for as long as restarts
+              // keep happening. TryClaimStringAsync is atomic (SET NX) -
+              // the same idempotency guard PlanClaimKey already uses.
+              && await store.TryClaimStringAsync(
+                PlanRecoveryGraceKey(planId),
+                "1",
+                TimeSpan.FromHours(1),
+                cancellationToken
+              )
+            )
+            {
+              // A deploy/restart is dead time for a market_watch plan: it's
+              // evaluated once per poll against the live quote, and nothing
+              // is watching while this process is down. A plan recovered
+              // here whose Entry.ExpiresAt already lapsed during that gap
+              // (TradePlanExecutionEngine.EvaluateEntry's plan_expired
+              // check reads exactly this field) would otherwise expire on
+              // the very next poll having never once seen a live quote -
+              // confirmed live: price traded inside the zone while a
+              // restart was in flight, and the plan died without ever
+              // getting a real look. Grant one genuine grace window
+              // instead so it gets an actual chance post-recovery.
+              var grantedUntil = clock().ToUnixTimeSeconds()
+                + RestoreExpiryGraceSeconds;
+              plan = plan with {
+                Entry = plan.Entry with { ExpiresAt = grantedUntil },
+              };
+              // Persist the extension too, not just the in-memory copy, so
+              // a later restart within the same grace window still sees
+              // the extended deadline rather than the original stale one.
+              await store.SetStringAsync(
+                PlanRecoveryKey(planId),
+                TradePlanJson.SerializePlan(plan),
+                cancellationToken
+              );
+              log(
+                $"v7 restore: granted {RestoreExpiryGraceSeconds}s recovery "
+                + $"grace to {planId} (entry expired during downtime)"
+              );
+            }
             _plansById[planId] = plan;
           }
         }
