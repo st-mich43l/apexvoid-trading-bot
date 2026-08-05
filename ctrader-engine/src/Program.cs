@@ -38,6 +38,8 @@ public static class Program
     AutoTradeOptions autoTradeOptions = environmentTradeOptions;
     string? manifestFingerprint = null;
     string parityState = "skipped";
+    int loadedManifestVersion = 0;
+    ResolvedRuntimeManifest? loadedManifest = null;
 
     if (
       parityMode != CtraderManifestParityMode.Off
@@ -46,6 +48,8 @@ public static class Program
     {
       var manifestPath = RuntimeManifestBootstrap.RequireManifestPath();
       var manifest = ResolvedRuntimeManifestLoader.Load(manifestPath);
+      loadedManifest = manifest;
+      loadedManifestVersion = manifest.ManifestVersion;
       manifestFingerprint = manifest.EffectiveConfigurationFingerprint;
       var manifestFeedOptions = FeedOptions.FromRuntimeManifest(
         manifest,
@@ -79,13 +83,24 @@ public static class Program
 
     Console.WriteLine(
       "runtime_manifest_loaded "
-      + $"manifest_version=1 "
+      + $"manifest_version={(loadedManifestVersion == 0 ? "-" : loadedManifestVersion.ToString())} "
       + $"fingerprint={(manifestFingerprint is null ? "-" : manifestFingerprint[..12])} "
       + $"source={configurationSource.ToString().ToLowerInvariant()} "
       + $"parity={parityMode.ToString().ToLowerInvariant()} "
       + $"instruments={string.Join(',', autoTradeOptions.EffectiveSymbols)} "
       + $"parity_state={parityState}"
     );
+
+    // ENV mode: XAU-only compatibility registry (legacy host remains primary).
+    // Manifest mode: construct from instrument_runtimes when present.
+    var instrumentRegistry = loadedManifest is not null
+      && configurationSource == CtraderConfigurationSource.Manifest
+      ? InstrumentRuntimeRegistry.FromRuntimeManifest(
+        loadedManifest,
+        options,
+        autoTradeOptions
+      )
+      : InstrumentRuntimeRegistry.FromXauCompatibility(options, autoTradeOptions);
 
     await using var redis = await StackExchangeRedisSeriesCommands.ConnectAsync(
       options.RedisUrl
@@ -116,6 +131,7 @@ public static class Program
       options.BarsChannel
     );
     var autoTrade = new AutoTradeEngine(autoTradeOptions, redis);
+    autoTrade.InstrumentRegistry = instrumentRegistry;
     Func<string, string, CancellationToken, Task> notify =
       autoTrade.PublishOperationalEventAsync;
     var tokenEvents = new TokenEventNotifier(notify);
@@ -179,7 +195,8 @@ public static class Program
       ),
       sink,
       new HealthFile(options.HeartbeatFile),
-      autoTrade: autoTrade
+      autoTrade: autoTrade,
+      instrumentRegistry: instrumentRegistry
     );
 
     using var cts = new CancellationTokenSource();

@@ -9,7 +9,8 @@ public sealed class FeedRunner(
   Action<string>? warningLog = null,
   AutoTradeEngine? autoTrade = null,
   Func<DateTimeOffset>? clock = null,
-  Func<TimeSpan, CancellationToken, Task>? delay = null
+  Func<TimeSpan, CancellationToken, Task>? delay = null,
+  InstrumentRuntimeRegistry? instrumentRegistry = null
 )
 {
   private bool _startupBackfillPending = true;
@@ -78,75 +79,209 @@ public sealed class FeedRunner(
         + $"broker={feedAccount.BrokerName}"
       );
       LogTokenStatus(client.TokenStatus);
-      var symbol = await client.ResolveSymbolAsync(cancellationToken);
-      Log(
-        $"resolved symbol {symbol.CTraderSymbol} -> id={symbol.SymbolId} redis={symbol.RedisSymbol} digits={symbol.Digits}"
-      );
-      if (autoTrade?.Enabled == true)
+      var feedRuntimes = instrumentRegistry?.FeedInstruments();
+      if (feedRuntimes is null || feedRuntimes.Count <= 1)
       {
-        autoTrade.LogUnitConfiguration(symbol, Log, warningLog ?? Warn);
-      }
-      var fullWindowBackfill = _startupBackfillPending;
-      await BackfillAsync(client, symbol, fullWindowBackfill, cancellationToken);
-      _startupBackfillPending = false;
-      Log("backfill complete");
-      await client.SubscribeAsync(symbol, options.Timeframes, cancellationToken);
-      Log("subscribed live trendbars");
-      healthFile.Touch();
-
-      refreshTask = RefreshLoopAsync(client, linked.Token);
-      var spots = new SpotHistory();
-      spotTask = SpotLoopAsync(client, spots, autoTrade, linked.Token);
-      if (autoTrade?.Enabled == true)
-      {
-        autoTradeTask = RunAutoTradeSafelyAsync(
-          autoTrade,
-          client,
-          symbol,
-          linked.Token
-        );
-      }
-      var emitter = new ClosedBarEmitter(spots, symbol.RedisSymbol);
-      var quality = new LiveBarQualityMonitor(
-        options.BarQualityLookback,
-        warningLog ?? Warn
-      );
-      var rawDumped = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-      Log("live stream started");
-      await foreach (var raw in client.LiveTrendbarsAsync(linked.Token))
-      {
-        if (rawDumped.Add(raw.Timeframe))
+        // Legacy single-symbol path — strongest XAU behaviour parity.
+        var symbol = await client.ResolveSymbolAsync(cancellationToken);
+        if (instrumentRegistry is not null && feedRuntimes is { Count: 1 })
         {
-          LogRawTrendbar("live", raw);
+          instrumentRegistry.BindResolvedSymbol(feedRuntimes[0], symbol);
+          feedRuntimes[0].FeedReady = true;
         }
-        var bar = TrendbarDecoder.Decode(raw, symbol.Digits);
-        foreach (var emission in emitter.Observe(raw.Timeframe, bar))
+        Log(
+          $"resolved symbol {symbol.CTraderSymbol} -> id={symbol.SymbolId} redis={symbol.RedisSymbol} digits={symbol.Digits}"
+        );
+        if (autoTrade?.Enabled == true)
         {
-          var closed = await ClosedBarCloseResolver.ResolveAsync(
+          if (instrumentRegistry is not null)
+          {
+            autoTrade.InstrumentRegistry = instrumentRegistry;
+          }
+          autoTrade.BindInstrumentSymbols([symbol]);
+          autoTrade.LogUnitConfiguration(symbol, Log, warningLog ?? Warn);
+        }
+        var fullWindowBackfill = _startupBackfillPending;
+        await BackfillAsync(client, symbol, fullWindowBackfill, cancellationToken);
+        _startupBackfillPending = false;
+        Log("backfill complete");
+        await client.SubscribeAsync(symbol, options.Timeframes, cancellationToken);
+        Log("subscribed live trendbars");
+        healthFile.Touch();
+
+        refreshTask = RefreshLoopAsync(client, linked.Token);
+        var spots = new SpotHistory();
+        spotTask = SpotLoopAsync(client, spots, autoTrade, linked.Token);
+        if (autoTrade?.Enabled == true)
+        {
+          autoTradeTask = RunAutoTradeSafelyAsync(
+            autoTrade,
             client,
             symbol,
-            raw.Timeframe,
-            emission,
-            cancellationToken
+            linked.Token
           );
-          if (emission.RequiresHistoricalClose)
+        }
+        var emitter = new ClosedBarEmitter(spots, symbol.RedisSymbol);
+        var quality = new LiveBarQualityMonitor(
+          options.BarQualityLookback,
+          warningLog ?? Warn
+        );
+        var rawDumped = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        Log("live stream started");
+        await foreach (var raw in client.LiveTrendbarsAsync(linked.Token))
+        {
+          if (rawDumped.Add(raw.Timeframe))
           {
-            Log(
-              $"live close fallback {symbol.RedisSymbol} {raw.Timeframe} "
-              + $"ts={closed.Timestamp} close={closed.Close}"
-            );
+            LogRawTrendbar("live", raw);
           }
-          quality.Observe(raw.Timeframe, closed);
-          await sink.WriteClosedBarAsync(
-            symbol.RedisSymbol,
-            raw.Timeframe,
-            closed,
-            cancellationToken
-          );
-          healthFile.Touch();
+          var bar = TrendbarDecoder.Decode(raw, symbol.Digits);
+          foreach (var emission in emitter.Observe(raw.Timeframe, bar))
+          {
+            var closed = await ClosedBarCloseResolver.ResolveAsync(
+              client,
+              symbol,
+              raw.Timeframe,
+              emission,
+              cancellationToken
+            );
+            if (emission.RequiresHistoricalClose)
+            {
+              Log(
+                $"live close fallback {symbol.RedisSymbol} {raw.Timeframe} "
+                + $"ts={closed.Timestamp} close={closed.Close}"
+              );
+            }
+            quality.Observe(raw.Timeframe, closed);
+            await sink.WriteClosedBarAsync(
+              symbol.RedisSymbol,
+              raw.Timeframe,
+              closed,
+              cancellationToken
+            );
+            healthFile.Touch();
+          }
         }
       }
-    }
+      else
+      {
+        // Multi-instrument feed path (manifest mode / fixtures).
+        var resolved = new List<(InstrumentRuntime Runtime, SymbolInfo Symbol)>();
+        foreach (var runtime in feedRuntimes)
+        {
+          try
+          {
+            var symbol = await ResolveRuntimeSymbolAsync(client, runtime, cancellationToken);
+            instrumentRegistry!.BindResolvedSymbol(runtime, symbol);
+            runtime.FeedReady = true;
+            resolved.Add((runtime, symbol));
+            Log(
+              $"resolved symbol {symbol.CTraderSymbol} -> id={symbol.SymbolId} "
+              + $"redis={symbol.RedisSymbol} digits={symbol.Digits} "
+              + $"instrument={runtime.InstrumentId} rollout={InstrumentRolloutGates.ToWire(runtime.Rollout)}"
+            );
+          }
+          catch (Exception ex) when (runtime.Rollout == InstrumentRollout.Live)
+          {
+            throw new InvalidOperationException(
+              $"live instrument {runtime.InstrumentId} feed subscription failed: {ex.Message}",
+              ex
+            );
+          }
+        }
+        if (resolved.Count == 0)
+        {
+          throw new InvalidOperationException("no feed instruments resolved");
+        }
+        if (autoTrade?.Enabled == true)
+        {
+          autoTrade.InstrumentRegistry = instrumentRegistry;
+          autoTrade.BindInstrumentSymbols(resolved.Select(item => item.Symbol));
+          autoTrade.LogUnitConfiguration(resolved[0].Symbol, Log, warningLog ?? Warn);
+        }
+        var multiFullWindow = _startupBackfillPending;
+        foreach (var (runtime, symbol) in resolved)
+        {
+          await BackfillAsync(
+            client,
+            symbol,
+            multiFullWindow,
+            cancellationToken,
+            timeframeOverride: runtime.Feed.Timeframes
+          );
+        }
+        _startupBackfillPending = false;
+        Log("multi-instrument backfill complete");
+        foreach (var (runtime, symbol) in resolved)
+        {
+          await client.SubscribeAsync(symbol, runtime.Feed.Timeframes, cancellationToken);
+          Log(
+            $"subscribed live trendbars instrument={runtime.InstrumentId} "
+            + $"redis={symbol.RedisSymbol}"
+          );
+        }
+        healthFile.Touch();
+        refreshTask = RefreshLoopAsync(client, linked.Token);
+        var multiSpots = new SpotHistory();
+        spotTask = SpotLoopAsync(client, multiSpots, autoTrade, linked.Token);
+        if (autoTrade?.Enabled == true)
+        {
+          autoTradeTask = RunAutoTradeSafelyAsync(
+            autoTrade,
+            client,
+            resolved[0].Symbol,
+            linked.Token
+          );
+        }
+        var emitters = resolved.ToDictionary(
+          item => item.Symbol.SymbolId,
+          item => new ClosedBarEmitter(multiSpots, item.Symbol.RedisSymbol)
+        );
+        var symbolsById = resolved.ToDictionary(
+          item => item.Symbol.SymbolId,
+          item => item.Symbol
+        );
+        var qualities = resolved.ToDictionary(
+          item => item.Symbol.SymbolId,
+          item => new LiveBarQualityMonitor(
+            item.Runtime.Feed.BarQualityLookback,
+            warningLog ?? Warn
+          )
+        );
+        Log("multi-instrument live stream started");
+        await foreach (var raw in client.LiveTrendbarsAsync(linked.Token))
+        {
+          if (!symbolsById.TryGetValue(raw.SymbolId, out var symbol))
+          {
+            if (raw.SymbolId == 0 && resolved.Count > 0)
+            {
+              symbol = resolved[0].Symbol;
+            }
+            else
+            {
+              continue;
+            }
+          }
+          var bar = TrendbarDecoder.Decode(raw, symbol.Digits);
+          foreach (var emission in emitters[symbol.SymbolId].Observe(raw.Timeframe, bar))
+          {
+            var closed = await ClosedBarCloseResolver.ResolveAsync(
+              client,
+              symbol,
+              raw.Timeframe,
+              emission,
+              cancellationToken
+            );
+            qualities[symbol.SymbolId].Observe(raw.Timeframe, closed);
+            await sink.WriteClosedBarAsync(
+              symbol.RedisSymbol,
+              raw.Timeframe,
+              closed,
+              cancellationToken
+            );
+            healthFile.Touch();
+          }
+        }
+      }    }
     finally
     {
       client.Heartbeat -= TouchOnHeartbeat;
@@ -255,11 +390,13 @@ public sealed class FeedRunner(
     ICTraderFeedClient client,
     SymbolInfo symbol,
     bool fullWindow,
-    CancellationToken cancellationToken
+    CancellationToken cancellationToken,
+    IReadOnlyList<string>? timeframeOverride = null
   )
   {
     var now = DateTimeOffset.UtcNow;
-    foreach (var timeframe in options.Timeframes)
+    var timeframes = timeframeOverride ?? options.Timeframes;
+    foreach (var timeframe in timeframes)
     {
       var seconds = TimeframeCodec.ToSeconds(timeframe);
       var latest = fullWindow
@@ -307,6 +444,19 @@ public sealed class FeedRunner(
       Log($"backfill {symbol.RedisSymbol} {timeframe}: wrote {rawBars.Count} raw bars");
     }
     healthFile.Touch();
+  }
+
+  private static async Task<SymbolInfo> ResolveRuntimeSymbolAsync(
+    ICTraderFeedClient client,
+    InstrumentRuntime runtime,
+    CancellationToken cancellationToken
+  )
+  {
+    return await client.ResolveSymbolAsync(
+      runtime.Feed.CTraderSymbol,
+      runtime.Feed.RedisSymbol,
+      cancellationToken
+    );
   }
 
   private async Task RefreshLoopAsync(

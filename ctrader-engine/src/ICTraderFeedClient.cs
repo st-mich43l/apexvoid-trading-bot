@@ -11,6 +11,11 @@ public interface ICTraderFeedClient : IAsyncDisposable
     CancellationToken cancellationToken
   );
   Task<SymbolInfo> ResolveSymbolAsync(CancellationToken cancellationToken);
+  Task<SymbolInfo> ResolveSymbolAsync(
+    string cTraderSymbol,
+    string redisSymbol,
+    CancellationToken cancellationToken
+  ) => ResolveSymbolAsync(cancellationToken);
 
   Task<IReadOnlyList<RawTrendbar>> GetTrendbarsAsync(
     SymbolInfo symbol,

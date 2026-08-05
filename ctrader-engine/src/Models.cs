@@ -10,7 +10,8 @@ public sealed record RawTrendbar(
   ulong DeltaClose,
   long Volume,
   uint UtcTimestampInMinutes,
-  bool HasDeltaClose = true
+  bool HasDeltaClose = true,
+  long SymbolId = 0
 );
 
 public sealed record OhlcBar(
