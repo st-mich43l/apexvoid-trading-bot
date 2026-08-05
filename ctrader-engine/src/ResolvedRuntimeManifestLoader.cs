@@ -1,17 +1,9 @@
 using System.Text.Json;
-using System.Text.Json.Serialization;
 
 namespace ApexVoid.CTraderFeed;
 
 public static class ResolvedRuntimeManifestLoader
 {
-  private static readonly JsonSerializerOptions JsonOptions = new()
-  {
-    PropertyNameCaseInsensitive = false,
-    ReadCommentHandling = JsonCommentHandling.Disallow,
-    AllowTrailingCommas = false,
-  };
-
   public static ResolvedRuntimeManifest Load(string path)
   {
     if (string.IsNullOrWhiteSpace(path))
@@ -37,7 +29,20 @@ public static class ResolvedRuntimeManifestLoader
     ResolvedRuntimeManifest? manifest;
     try
     {
-      manifest = JsonSerializer.Deserialize<ResolvedRuntimeManifest>(json, JsonOptions);
+      // The reflection-based Deserialize<T>(json, options) overload throws
+      // at runtime in this AOT-published app ("Reflection-based
+      // serialization has been disabled") - confirmed live, crashed on
+      // every single startup attempt. Must go through the source-generated
+      // context like every other JSON type in this codebase already does.
+      // RedisJsonContext's PropertyNamingPolicy/DefaultIgnoreCondition
+      // don't affect this: every property here already declares its own
+      // explicit JsonPropertyName, which always wins: over any policy, and
+      // ReadCommentHandling/AllowTrailingCommas/PropertyNameCaseInsensitive
+      // are already JsonSerializerOptions' own defaults, so parsing
+      // behavior is unchanged - only the AOT-safety mechanism is.
+      manifest = JsonSerializer.Deserialize(
+        json, RedisJsonContext.Default.ResolvedRuntimeManifest
+      );
     }
     catch (JsonException ex)
     {
