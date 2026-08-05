@@ -692,6 +692,24 @@ async def _sync_strategy_match(
   *,
   require_static_eligibility: bool = False,
 ) -> StrategyMatch | None:
+  # Diagnostic: scanner_range_observed/scanner_range_withdrawn metrics and
+  # the range_context_source_key(symbol, "scanner") key have zero hits in
+  # the full retained production log/redis history, and neither this
+  # function's success log ("strategy match synced") nor its failure log
+  # ("scanner match build rejected") has ever fired - despite no exception
+  # ever being caught by scanner_loop's "scanner tick failed" handler, which
+  # wraps every call into this function's only caller. That combination is
+  # only possible if this function is silently never being entered at all.
+  # This unconditional, argument-free line proves or disproves that in one
+  # deploy cycle - remove once the real cause is found.
+  log.info(
+    "sync_strategy_match entered symbol=%s tf=%s results=%d "
+    "require_static_eligibility=%s",
+    symbol,
+    tf,
+    len(results),
+    require_static_eligibility,
+  )
   key = strategy_match_key(symbol)
   matches_key = strategy_matches_key(symbol)
   structures = getattr(ctx, "structures", None)
