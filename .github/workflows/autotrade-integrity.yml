@@ -9,6 +9,7 @@ on:
       - "algo-bot/**"
       - "ctrader-engine/**"
       - "contracts/autotrade/**"
+      - "contracts/configuration/**"
       - "docker-compose.yml"
       - ".github/workflows/autotrade-integrity.yml"
 
@@ -116,6 +117,44 @@ jobs:
           dotnet test tests/CTraderFeed.Tests.csproj --nologo \
             --logger "trx;LogFileName=csharp-results.trx" \
             --results-directory TestResults
+
+      - name: Native AOT manifest startup smoke
+        working-directory: ctrader-engine
+        env:
+          CTRADER_CONFIGURATION_SOURCE: manifest
+          CTRADER_MANIFEST_PARITY_MODE: "off"
+          CTRADER_CLIENT_ID: test-client
+          CTRADER_CLIENT_SECRET: test-secret
+          CTRADER_ACCESS_TOKEN: test-access
+          CTRADER_REFRESH_TOKEN: test-refresh
+          CTRADER_ACCOUNT_ID: "42"
+          CTRADER_HOST: demo.ctraderapi.com
+          CTRADER_PORT: "5035"
+          CTRADER_REFRESH_TOKEN_KEY: ctrader:aot-smoke:refresh-token
+          CTRADER_REFRESH_TOKEN_FILE: /tmp/ctrader-aot-smoke-token.json
+          CTRADER_REQUEST_TIMEOUT: "30"
+          CTRADER_TOKEN_REFRESH_LEAD_DAYS: "5"
+          CTRADER_TOKEN_CHECK_INTERVAL_HOURS: "6"
+          REDIS_URL: redis://127.0.0.1:6379/14
+          HEALTH_FILE: /tmp/ctrader-aot-smoke.heartbeat
+          LOG_FILE_ENABLED: "false"
+        run: |
+          set -euo pipefail
+          export APEXVOID_RUNTIME_MANIFEST_FILE="$GITHUB_WORKSPACE/contracts/configuration/runtime-manifest-example.generated.json"
+          rm -rf AotSmoke
+          dotnet publish src/CTraderFeed.csproj \
+            -c Release \
+            -r linux-x64 \
+            -p:PublishAot=true \
+            --self-contained true \
+            --nologo \
+            -o AotSmoke
+          ./AotSmoke/ctrader-feed --reset-token-cache --yes-i-know | tee aot-smoke.txt
+          grep -F "manifest_version=2" aot-smoke.txt
+          grep -F "source=manifest" aot-smoke.txt
+          grep -F "parity=off" aot-smoke.txt
+          grep -F "manifest_validation=enforced" aot-smoke.txt
+          grep -F "instruments=XAU" aot-smoke.txt
 
       - name: Upload C# test results
         if: always()
