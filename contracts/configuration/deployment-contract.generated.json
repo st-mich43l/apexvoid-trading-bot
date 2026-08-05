@@ -417,10 +417,14 @@
   "instrument_schema": {
     "active_projection_symbol": "XAU",
     "optional": [
+      "aliases",
       "analysis",
       "contract",
       "enabled",
       "market_data",
+      "overrides",
+      "policy",
+      "rollout",
       "timeframes"
     ],
     "projected_leaf_groups": [

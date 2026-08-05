@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from enum import StrEnum
 from typing import Any, Mapping
 
 from pydantic import Field, field_validator, model_validator
@@ -10,6 +11,18 @@ from app.configuration.models.base import FrozenConfigModel
 
 
 SUPPORTED_INSTRUMENT_TIMEFRAMES = frozenset({"H1", "M15", "M5", "M1", "H4", "D1"})
+
+# Compatibility policy: inherit global trading domains from the resolved root.
+XAU_CURRENT_V1_POLICY = "xau_current_v1"
+REGISTERED_INSTRUMENT_POLICIES = frozenset({XAU_CURRENT_V1_POLICY})
+
+
+class InstrumentRollout(StrEnum):
+  DISABLED = "disabled"
+  FEED_ONLY = "feed_only"
+  ANALYSIS_ONLY = "analysis_only"
+  PAPER = "paper"
+  LIVE = "live"
 
 
 class InstrumentContractConfig(FrozenConfigModel):
@@ -56,13 +69,49 @@ class InstrumentAnalysisConfig(FrozenConfigModel):
 
 
 class InstrumentConfig(FrozenConfigModel):
+  """Per-instrument declaration.
+
+  Legacy ``enabled: true/false`` remains supported. When ``rollout`` is omitted,
+  it is derived as ``live`` (enabled) or ``disabled`` (!enabled) so existing
+  production XAU YAML keeps its current runtime meaning.
+  """
+
   enabled: bool = True
+  rollout: InstrumentRollout | None = None
+  policy: str | None = None
   canonical_symbol: str
   broker_symbol: str
+  aliases: tuple[str, ...] = ()
   timeframes: list[str] = Field(default_factory=lambda: ["H1", "M15", "M5", "M1"])
   contract: InstrumentContractConfig | None = None
   market_data: InstrumentMarketDataConfig | None = None
   analysis: InstrumentAnalysisConfig | None = None
+  # Sparse dotted-path overrides applied when building EffectiveInstrumentConfig.
+  overrides: dict[str, Any] = Field(default_factory=dict)
+
+  @model_validator(mode="before")
+  @classmethod
+  def _reject_enabled_rollout_conflicts(cls, data: Any) -> Any:
+    if not isinstance(data, dict):
+      return data
+    if "rollout" not in data or "enabled" not in data:
+      return data
+    enabled = bool(data["enabled"])
+    rollout = data["rollout"]
+    if isinstance(rollout, InstrumentRollout):
+      rollout_value = rollout.value
+    else:
+      rollout_value = str(rollout)
+    if enabled and rollout_value == InstrumentRollout.DISABLED.value:
+      raise ValueError(
+        "conflicting instrument state: enabled=true with rollout=disabled"
+      )
+    if (not enabled) and rollout_value != InstrumentRollout.DISABLED.value:
+      raise ValueError(
+        "conflicting instrument state: enabled=false with "
+        f"rollout={rollout_value!r}"
+      )
+    return data
 
   @field_validator("canonical_symbol", "broker_symbol")
   @classmethod
@@ -71,6 +120,25 @@ class InstrumentConfig(FrozenConfigModel):
     if not cleaned:
       raise ValueError("symbol must be non-empty")
     return cleaned
+
+  @field_validator("aliases", mode="before")
+  @classmethod
+  def _normalize_aliases(cls, value: Any) -> tuple[str, ...]:
+    if value is None:
+      return ()
+    if isinstance(value, str):
+      items = [value]
+    else:
+      items = list(value)
+    cleaned: list[str] = []
+    seen: set[str] = set()
+    for item in items:
+      alias = str(item).strip().upper()
+      if not alias or alias in seen:
+        continue
+      seen.add(alias)
+      cleaned.append(alias)
+    return tuple(cleaned)
 
   @field_validator("timeframes")
   @classmethod
@@ -88,11 +156,74 @@ class InstrumentConfig(FrozenConfigModel):
       )
     return normalized
 
+  @field_validator("policy")
+  @classmethod
+  def _validate_policy(cls, value: str | None) -> str | None:
+    if value is None:
+      return None
+    cleaned = value.strip()
+    if not cleaned:
+      raise ValueError("policy must be non-empty when provided")
+    if cleaned not in REGISTERED_INSTRUMENT_POLICIES:
+      raise ValueError(
+        f"unknown instrument policy {cleaned!r}; known policies: "
+        + ", ".join(sorted(REGISTERED_INSTRUMENT_POLICIES))
+      )
+    return cleaned
+
+  @field_validator("overrides")
+  @classmethod
+  def _validate_overrides_are_mapping(cls, value: Any) -> dict[str, Any]:
+    if value is None:
+      return {}
+    if not isinstance(value, dict):
+      raise ValueError("overrides must be a mapping of dotted path to value")
+    for key in value:
+      if not isinstance(key, str) or not key.strip():
+        raise ValueError("override paths must be non-empty strings")
+    return {str(key).strip(): item for key, item in value.items()}
+
   @model_validator(mode="after")
-  def _require_contract_when_enabled(self) -> InstrumentConfig:
-    if self.enabled and self.contract is None:
-      raise ValueError("enabled instruments require contract configuration")
+  def _require_contract_when_active(self) -> InstrumentConfig:
+    if effective_rollout(self) is not InstrumentRollout.DISABLED and self.contract is None:
+      raise ValueError(
+        "non-disabled instruments require contract configuration"
+      )
     return self
+
+
+def effective_rollout(instrument: InstrumentConfig) -> InstrumentRollout:
+  """Resolve the effective rollout, preserving legacy enabled semantics."""
+  if instrument.rollout is not None:
+    return instrument.rollout
+  return (
+    InstrumentRollout.LIVE if instrument.enabled else InstrumentRollout.DISABLED
+  )
+
+
+def resolve_policy_name(
+  instrument_id: str,
+  instrument: InstrumentConfig,
+) -> str:
+  """Select the named policy for an instrument."""
+  if instrument.policy is not None:
+    return instrument.policy
+  canonical = instrument.canonical_symbol.strip().upper()
+  if instrument_id.strip().upper() == "XAU" or canonical == "XAU":
+    return XAU_CURRENT_V1_POLICY
+  rollout = effective_rollout(instrument)
+  if rollout in {
+    InstrumentRollout.ANALYSIS_ONLY,
+    InstrumentRollout.PAPER,
+    InstrumentRollout.LIVE,
+  }:
+    raise ValueError(
+      f"instrument {instrument_id!r} requires an explicit policy when "
+      f"rollout={rollout.value}"
+    )
+  # feed_only / disabled may omit policy; still bind the compatibility policy
+  # so callers receive a deterministic name for provenance.
+  return XAU_CURRENT_V1_POLICY
 
 
 class InstrumentsConfig(FrozenConfigModel):
@@ -114,27 +245,59 @@ class InstrumentsConfig(FrozenConfigModel):
   @model_validator(mode="after")
   def _validate_registry(self) -> InstrumentsConfig:
     brokers: dict[str, str] = {}
+    canonicals: dict[str, str] = {}
     for instrument_id, instrument in self.root.items():
       if not instrument_id or not str(instrument_id).strip():
         raise ValueError("instrument id must be non-empty")
-      if not instrument.enabled:
+      if effective_rollout(instrument) is InstrumentRollout.DISABLED:
         continue
-      broker = instrument.broker_symbol
-      prior = brokers.get(broker)
-      if prior is not None and prior != instrument_id:
+      broker = instrument.broker_symbol.strip().upper()
+      prior_broker = brokers.get(broker)
+      if prior_broker is not None and prior_broker != instrument_id:
         raise ValueError(
-          f"duplicate broker_symbol {broker!r} among enabled instruments "
-          f"{prior!r} and {instrument_id!r}"
+          f"duplicate broker_symbol {instrument.broker_symbol!r} among "
+          f"active instruments {prior_broker!r} and {instrument_id!r}"
         )
       brokers[broker] = instrument_id
+      for alias in instrument.aliases:
+        alias_key = alias.strip().upper()
+        prior_alias = brokers.get(alias_key)
+        if prior_alias is not None and prior_alias != instrument_id:
+          raise ValueError(
+            f"duplicate broker alias {alias!r} among active instruments "
+            f"{prior_alias!r} and {instrument_id!r}"
+          )
+        brokers[alias_key] = instrument_id
+      canonical = instrument.canonical_symbol.strip().upper()
+      prior_canonical = canonicals.get(canonical)
+      if prior_canonical is not None and prior_canonical != instrument_id:
+        raise ValueError(
+          f"duplicate canonical_symbol {instrument.canonical_symbol!r} among "
+          f"active instruments {prior_canonical!r} and {instrument_id!r}"
+        )
+      canonicals[canonical] = instrument_id
     return self
 
   def get(self, instrument_id: str) -> InstrumentConfig | None:
     return self.root.get(instrument_id)
 
   def enabled_ids(self) -> tuple[str, ...]:
+    """Instrument ids that are not disabled (legacy active set)."""
     return tuple(
-      sorted(key for key, value in self.root.items() if value.enabled)
+      sorted(
+        key
+        for key, value in self.root.items()
+        if effective_rollout(value) is not InstrumentRollout.DISABLED
+      )
+    )
+
+  def live_ids(self) -> tuple[str, ...]:
+    return tuple(
+      sorted(
+        key
+        for key, value in self.root.items()
+        if effective_rollout(value) is InstrumentRollout.LIVE
+      )
     )
 
   def as_mapping(self) -> Mapping[str, InstrumentConfig]:
@@ -150,7 +313,9 @@ def default_xau_instrument() -> InstrumentConfig:
     enabled=True,
     canonical_symbol="XAU",
     broker_symbol="XAU",
+    aliases=("XAUUSD",),
     timeframes=["H1", "M15", "M5", "M1"],
+    policy=XAU_CURRENT_V1_POLICY,
     contract=InstrumentContractConfig(
       pip_size=0.1,
       contract_units_per_lot=100.0,
@@ -250,7 +415,9 @@ def hydrate_xau_from_leaves(flat_values: Mapping[str, object]) -> InstrumentConf
     enabled=True,
     canonical_symbol=str(flat_values.get("contract.instrument.canonical_symbol", "XAU")),
     broker_symbol=str(flat_values.get("contract.instrument.symbols", "XAU")),
+    aliases=("XAUUSD",),
     timeframes=["H1", "M15", "M5", "M1"],
+    policy=XAU_CURRENT_V1_POLICY,
     contract=InstrumentContractConfig(
       pip_size=float(flat_values["contract.instrument.pip_size"]),
       contract_units_per_lot=float(
