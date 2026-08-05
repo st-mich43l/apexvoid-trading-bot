@@ -19,13 +19,13 @@ free -h                                     # RAM not pinned
 Then DM the bot `active` — a reply confirms the poll loop is alive.
 
 Compose also runs a one-shot `config-compiler` that writes
-`/runtime/resolved-runtime.json`. cTrader compares ENV options against that
-manifest in enforce mode while remaining ENV-authoritative. See
-`docs/configuration/cross-service-runtime-manifest.md`.
+`/runtime/resolved-runtime.json`. Production uses
+`CTRADER_CONFIGURATION_SOURCE=manifest` with
+`CTRADER_MANIFEST_PARITY_MODE=off` (legacy ENV parity off; manifest validation
+enforced). See `docs/configuration/manifest-authority-cutover.md`.
 
-Multi-symbol feed subscriptions require `CTRADER_CONFIGURATION_SOURCE=manifest`
-and are not enabled in production by this PR. See
-`docs/runtime/multi-symbol-routing.md`.
+Multi-symbol activation remains a separate programme; production live
+instruments stay XAU-only. See `docs/runtime/multi-symbol-routing.md`.
 
 ## Log Access
 
