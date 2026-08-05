@@ -6,7 +6,7 @@ function boundary without duplicating detector logic:
 
   detection result -> retained ZoneWatch (no setup, card, or ready event)
   -> side-aware quote enters zone
-  -> A-grade publishes immediately; B-grade requires a fresh episode-scoped M1
+  -> activation evaluates location + fresh episode-scoped M1 for reaction families
   -> setup lifecycle begins only for the currently executable signal
 
 The old ready stream remains an emergency durable fallback only when an
@@ -36,13 +36,21 @@ from app.analysis.confluence_zone import (
   confluence_zone_id,
   validate_zone_width,
 )
+from app.analysis.entry_location import (
+  build_entry_location_context,
+  evaluate_entry_location,
+)
 from app.analysis.m1_trigger import evaluate_m1_trigger_window, latest_eligible_m1_bar_ts
 from app.analysis.ohlc_source import RedisOHLCSource, window_for_timeframe
+from app.autotrade.entry_activation import (
+  apply_trigger_to_match,
+  evaluate_entry_activation,
+)
 from app.autotrade.execution_confirmation import executable_quote_in_zone
+from app.autotrade.lifecycle import increment_metric
 from app.autotrade.multi_match import dedupe_matches, serialize_matches, strategy_matches_key
 from app.autotrade.strategy_match import StrategyMatch, strategy_match_key
 from app.autotrade.strategy_match_ready import enqueue_strategy_match_ready
-from app.autotrade.strategy_taxonomy import is_reaction_strategy
 from app.autotrade.zone_watch import (
   DISCOVERED,
   GRADE_A,
@@ -69,6 +77,8 @@ log = logging.getLogger(__name__)
 
 _CANDIDATE_KEY_PREFIX = "analysis:zone_watch_candidate"
 _WIDTH_TELEMETRY_KEY_PREFIX = "analysis:zone_width:last"
+_LAST_LOCATION_KEY_PREFIX = "auto_trade:last_entry_location"
+_LAST_ACTIVATION_KEY_PREFIX = "auto_trade:last_entry_activation"
 _CANDIDATE_TTL_SECONDS = 7 * 24 * 3600
 _AUTHORITATIVE_REACTIONS = {
   "rejection_choch",
@@ -198,6 +208,178 @@ def _decisive_break(record: ZoneWatch, evidence: Any) -> bool:
   if str(record.direction).upper() == "BUY":
     return price < record.low
   return price > record.high
+
+
+async def _record_policy_telemetry(
+  client: Any,
+  *,
+  symbol: str,
+  kind: str,
+  reason_code: str,
+  payload: dict[str, Any],
+) -> None:
+  counter_key = f"auto_trade:entry_{kind}:{symbol.upper()}:{reason_code}"
+  try:
+    await client.incr(counter_key)
+  except Exception:
+    log.exception(
+      "entry %s counter failed symbol=%s reason=%s",
+      kind, symbol, reason_code,
+    )
+  await increment_metric(
+    client,
+    f"entry_{kind}",
+    symbol=symbol,
+    dimensions={"reason": reason_code},
+  )
+  key = (
+    f"{_LAST_LOCATION_KEY_PREFIX}:{symbol.upper()}"
+    if kind == "location"
+    else f"{_LAST_ACTIVATION_KEY_PREFIX}:{symbol.upper()}"
+  )
+  await client.set(
+    key,
+    json.dumps(payload, separators=(",", ":"), sort_keys=True),
+  )
+
+
+def _location_and_activation_for_record(
+  *,
+  match: StrategyMatch,
+  record: ZoneWatch,
+  quote: tuple[float, float, int],
+  evidence: Any,
+  trigger: Any,
+  now: int,
+):
+  bid, ask, _ts = quote
+  context = build_entry_location_context(
+    execution_price=float(evidence.executable_quote or match.current_price),
+    direction=record.direction,
+    ask=ask,
+    bid=bid,
+    m15_range_low=match.range_low,
+    m15_range_high=match.range_high,
+    h1_range_low=None,
+    h1_range_high=None,
+    m5_range_low=None,
+    m5_range_high=None,
+    zone_low=record.low,
+    zone_high=record.high,
+  )
+  location = evaluate_entry_location(
+    strategy=match.strategy,
+    direction=record.direction,
+    context=context,
+    cfg=runtime_config,
+  )
+  activation = evaluate_entry_activation(
+    strategy=match.strategy,
+    direction=record.direction,
+    zone_entered_at=(
+      None if record.zone_entered_at is None else int(record.zone_entered_at)
+    ),
+    quote_inside=bool(evidence.inside),
+    decisive_break=_decisive_break(record, evidence),
+    trigger=trigger,
+    location_decision=location,
+    now=int(now),
+    cfg=runtime_config,
+  )
+  return location, activation, context
+
+
+async def _prepare_activation(
+  client: Any,
+  *,
+  record: ZoneWatch,
+  match: StrategyMatch,
+  quote: tuple[float, float, int],
+  evidence: Any,
+) -> StrategyMatch | None:
+  """Return a stamped match ready to activate, or None while waiting/blocked."""
+  now = quote[2]
+  trigger = await _m1_trigger_for_zone(client, record)
+  location, activation, context = _location_and_activation_for_record(
+    match=match,
+    record=record,
+    quote=quote,
+    evidence=evidence,
+    trigger=trigger,
+    now=now,
+  )
+  checked_at = datetime.now(timezone.utc).isoformat()
+  location_payload = {
+    "symbol": record.symbol,
+    "strategy": match.strategy,
+    "direction": record.direction,
+    "mode": location.measured.get("mode"),
+    "allowed": location.allowed,
+    "would_block": location.would_block,
+    "reason_code": location.reason_code,
+    "effective_range_source": context.effective_range_source,
+    "effective_range_low": context.effective_range_low,
+    "effective_range_high": context.effective_range_high,
+    "effective_range_position": context.effective_range_position_raw,
+    "zone_low": record.low,
+    "zone_high": record.high,
+    "executable_quote": evidence.executable_quote,
+    "trigger": None if trigger is None else str(trigger.pattern),
+    "checked_at": checked_at,
+  }
+  await _record_policy_telemetry(
+    client,
+    symbol=record.symbol,
+    kind="location",
+    reason_code=location.reason_code,
+    payload=location_payload,
+  )
+  activation_payload = {
+    **location_payload,
+    "mode": activation.measured.get("mode"),
+    "allowed": activation.allowed,
+    "would_block": activation.would_block,
+    "reason_code": activation.reason_code,
+    "requires_trigger": activation.requires_trigger,
+  }
+  await _record_policy_telemetry(
+    client,
+    symbol=record.symbol,
+    kind="activation",
+    reason_code=activation.reason_code,
+    payload=activation_payload,
+  )
+  log.info(
+    "entry activation decision symbol=%s strategy=%s direction=%s "
+    "location=%s activation=%s allowed=%s would_block=%s grade=%s",
+    record.symbol,
+    match.strategy,
+    record.direction,
+    location.reason_code,
+    activation.reason_code,
+    activation.allowed,
+    activation.would_block,
+    record.grade,
+  )
+  if not activation.allowed:
+    if activation.reason_code == "zone_decisively_broken":
+      latest = await load_zone_watch(client, record.zone_id)
+      if latest is not None and latest.state not in TERMINAL_ZONE_WATCH_STATES:
+        await transition_zone_watch(
+          client,
+          record.zone_id,
+          INVALIDATED,
+          reason_code="zone_decisively_broken",
+        )
+    return None
+
+  stamped = apply_trigger_to_match(match, trigger)
+  return replace(
+    stamped,
+    entry_location_source=context.effective_range_source,
+    entry_location_position=context.effective_range_position_raw,
+    entry_location_reason=location.reason_code,
+  )
 
 
 async def _record_width_telemetry(
@@ -566,22 +748,17 @@ async def _evaluate_record(
   match = await _load_candidate(client, record.zone_id)
   if match is None:
     return None
-  if record.grade == GRADE_B:
-    # M1 refines entry timing/anchor when a qualifying candle is already
-    # there - it must never be a requirement to publish at all. A zone the
-    # system has already decided is executable (quote inside, grade B or
-    # better) does not stop being executable just because no M1 pattern has
-    # printed yet; gating on that turned "confirm the entry timing" into
-    # "confirm whether to enter", which is not M1's job.
-    trigger = await _m1_trigger_for_zone(client, record)
-    if trigger is not None:
-      match = replace(
-        match,
-        confirmation_bar_ts=str(int(trigger.bar_ts)),
-        reaction_type=str(trigger.pattern),
-        touch_bar_ts=str(record.zone_entered_at or int(trigger.bar_ts)),
-      )
-  return await _activate_match(client, record, match, event_ts=event_ts)
+  prepared = await _prepare_activation(
+    client,
+    record=record,
+    match=match,
+    quote=quote,
+    evidence=evidence,
+  )
+  if prepared is None:
+    # Keep ZoneWatch active; do not persist / publish / create lifecycle.
+    return None
+  return await _activate_match(client, record, prepared, event_ts=event_ts)
 
 
 async def _sync_strategy_match_cutover(
@@ -725,19 +902,21 @@ async def _sync_strategy_match_cutover(
         zone_id, record.state,
       )
       continue
-    if record.grade == GRADE_B:
-      # Same reasoning as _evaluate_record below: M1 refines entry
-      # timing/anchor, it must never gate whether an already-executable
-      # zone gets to publish at all.
-      trigger = await _m1_trigger_for_zone(client, record)
-      if trigger is not None:
-        match = replace(
-          match,
-          confirmation_bar_ts=str(int(trigger.bar_ts)),
-          reaction_type=str(trigger.pattern),
-          touch_bar_ts=str(record.zone_entered_at or int(trigger.bar_ts)),
-        )
-    ready.append((0 if record.grade == GRADE_A else 1, record, match))
+    prepared = await _prepare_activation(
+      client,
+      record=record,
+      match=match,
+      quote=quote,
+      evidence=evidence,
+    )
+    if prepared is None:
+      log.info(
+        "zone watch cutover waiting symbol=%s tf=%s setup=%s direction=%s "
+        "reason=entry_activation_not_ready grade=%s zone_id=%s",
+        symbol, tf, result.setup, result.direction, record.grade, zone_id,
+      )
+      continue
+    ready.append((0 if record.grade == GRADE_A else 1, record, prepared))
 
   if not ready:
     return None

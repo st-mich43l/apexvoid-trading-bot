@@ -37,6 +37,7 @@ class M1TriggerResult:
   wick_extreme: float
   bar_ts: Any
   message: str
+  measured: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -120,21 +121,72 @@ def _body_close(
 
 
 def _strong_close(
-  bar: pd.Series, geo: _BarGeometry, *, direction: str, cfg: Any,
+  bar: pd.Series, geo: _BarGeometry, *, direction: str,
+  zone_low: float, zone_high: float, cfg: Any,
 ) -> M1TriggerResult | None:
+  """Require a directional strong close relative to the zone, not just the bar.
+
+  A BUY close near the top of its own candle is insufficient when price remains
+  below the zone midpoint / failed to reclaim. Mirrored for SELL.
+  """
   strong_pct = float(cfg.analysis.triggers.m1.strong_close_pct)
+  zone_mid = (float(zone_low) + float(zone_high)) / 2.0
+  measured = {
+    "bar_open": geo.open,
+    "bar_high": geo.high,
+    "bar_low": geo.low,
+    "bar_close": geo.close,
+    "zone_low": float(zone_low),
+    "zone_high": float(zone_high),
+    "zone_mid": zone_mid,
+    "close_relative_to_zone": (geo.close - float(zone_low)) / max(
+      float(zone_high) - float(zone_low), 1e-9,
+    ),
+  }
   if direction == "BUY":
     if (geo.high - geo.close) / geo.range_ > strong_pct:
       return None
+    if geo.close <= geo.open:
+      return None
+    if geo.close < zone_mid:
+      return None
+    if geo.close < float(zone_low):
+      return None
+    closed_away = geo.close >= float(zone_high)
+    measured["closed_away_from_zone"] = closed_away
     return M1TriggerResult(
-      "strong_close", direction, geo.low, bar.name,
-      f"closed in top {strong_pct:.0%} of range",
+      "strong_close",
+      direction,
+      geo.low,
+      bar.name,
+      (
+        f"closed {geo.close:.2f} in top {strong_pct:.0%} of range "
+        f"and toward/above zone mid {zone_mid:.2f}"
+        + ("; reclaim above proximal" if closed_away else "")
+      ),
+      measured=measured,
     )
   if (geo.close - geo.low) / geo.range_ > strong_pct:
     return None
+  if geo.close >= geo.open:
+    return None
+  if geo.close > zone_mid:
+    return None
+  if geo.close > float(zone_high):
+    return None
+  closed_away = geo.close <= float(zone_low)
+  measured["closed_away_from_zone"] = closed_away
   return M1TriggerResult(
-    "strong_close", direction, geo.high, bar.name,
-    f"closed in bottom {strong_pct:.0%} of range",
+    "strong_close",
+    direction,
+    geo.high,
+    bar.name,
+    (
+      f"closed {geo.close:.2f} in bottom {strong_pct:.0%} of range "
+      f"and toward/below zone mid {zone_mid:.2f}"
+      + ("; reclaim below proximal" if closed_away else "")
+    ),
+    measured=measured,
   )
 
 
@@ -240,7 +292,9 @@ _DETECTORS = {
   "body_close": lambda bar, geo, prior, direction, zone_low, zone_high,
     key_level, cfg: _body_close(bar, geo, direction=direction, key_level=key_level, cfg=cfg),
   "strong_close": lambda bar, geo, prior, direction, zone_low, zone_high,
-    key_level, cfg: _strong_close(bar, geo, direction=direction, cfg=cfg),
+    key_level, cfg: _strong_close(
+      bar, geo, direction=direction, zone_low=zone_low, zone_high=zone_high, cfg=cfg,
+    ),
   "pin_bar": lambda bar, geo, prior, direction, zone_low, zone_high,
     key_level, cfg: _pin_bar(bar, geo, direction=direction, cfg=cfg),
   "engulfing": lambda bar, geo, prior, direction, zone_low, zone_high,

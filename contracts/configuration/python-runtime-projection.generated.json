@@ -1,6 +1,6 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "2997a460475e33bc9e26902de93ee7a4e8d9715cbeb7acf23c4779ccff2b67f7",
+  "configuration_contract_fingerprint_sha256": "ff62a2f0601876ff335a4b1e76cf6048fe3342327f8377dae9d81abf0e1209f2",
   "excluded_ctrader_only_count": 50,
   "excluded_paths": [
     "bootstrap.ctrader.connection.host",
@@ -54,13 +54,25 @@
     "risk.sizing.add_require_risk_free",
     "risk.sizing.risk_pct"
   ],
-  "included_leaf_count": 393,
+  "included_leaf_count": 407,
   "included_paths": [
     "actionability.contested_corridor.gap_atr",
     "actionability.counter_bias.allowed",
     "actionability.counter_bias.map_counter_bias_min_confluence",
     "actionability.counter_bias.minimum_confluence",
     "actionability.counter_bias.suppress_in_range",
+    "actionability.entry_location.breakout_retest.allow_directional_expansion",
+    "actionability.entry_location.missing_context_policy",
+    "actionability.entry_location.mode",
+    "actionability.entry_location.range_reversion.buy_maximum_position",
+    "actionability.entry_location.range_reversion.equilibrium_exclusion_width",
+    "actionability.entry_location.range_reversion.sell_minimum_position",
+    "actionability.entry_location.reversal.buy_maximum_position",
+    "actionability.entry_location.reversal.extreme_buy_block_position",
+    "actionability.entry_location.reversal.extreme_sell_block_position",
+    "actionability.entry_location.reversal.sell_minimum_position",
+    "actionability.entry_location.trend_pullback.buy_maximum_position",
+    "actionability.entry_location.trend_pullback.sell_minimum_position",
     "actionability.gates.edge_proximity_atr",
     "actionability.gates.eq_exclusion_fraction",
     "actionability.gates.htf_veto_enabled",
@@ -227,6 +239,8 @@
     "delivery.telegram.single_root_card",
     "delivery.telegram.telegram_channel_id",
     "delivery.telegram.telegram_owner_id",
+    "execution.activation.mode",
+    "execution.activation.reaction_trigger_maximum_age_bars",
     "execution.entry.contract_tolerance_pips",
     "execution.entry.inside_zone_market_entry_enabled",
     "execution.entry.maximum_chase_distance_pips",
@@ -453,6 +467,6 @@
   "included_secret_count": 6,
   "included_shared_field_count": 95,
   "projection_model": "app.configuration.models.python_runtime.PythonRuntimeConfig",
-  "source_fingerprint_sha256": "2997a460475e33bc9e26902de93ee7a4e8d9715cbeb7acf23c4779ccff2b67f7",
+  "source_fingerprint_sha256": "ff62a2f0601876ff335a4b1e76cf6048fe3342327f8377dae9d81abf0e1209f2",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

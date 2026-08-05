@@ -86,6 +86,12 @@ class StrategyMatch:
   htf_bias: str = ""
   regime_kind: str = ""
   execution_eligibility: ExecutionEligibility | None = None
+  # Additive activation / location provenance (older Redis payloads omit these).
+  entry_location_source: str | None = None
+  entry_location_position: float | None = None
+  entry_location_reason: str | None = None
+  entry_activation_trigger: str | None = None
+  entry_activation_trigger_ts: str | None = None
 
   @property
   def is_range_edge(self) -> bool:
@@ -247,6 +253,26 @@ class StrategyMatch:
         regime_kind=str(payload.get("regime_kind") or ""),
         execution_eligibility=ExecutionEligibility.from_dict(
           payload.get("execution_eligibility"),
+        ),
+        entry_location_source=(
+          None if payload.get("entry_location_source") is None
+          else str(payload["entry_location_source"])
+        ),
+        entry_location_position=(
+          None if payload.get("entry_location_position") is None
+          else float(payload["entry_location_position"])
+        ),
+        entry_location_reason=(
+          None if payload.get("entry_location_reason") is None
+          else str(payload["entry_location_reason"])
+        ),
+        entry_activation_trigger=(
+          None if payload.get("entry_activation_trigger") is None
+          else str(payload["entry_activation_trigger"])
+        ),
+        entry_activation_trigger_ts=(
+          None if payload.get("entry_activation_trigger_ts") is None
+          else str(payload["entry_activation_trigger_ts"])
         ),
       )
     except (KeyError, TypeError, ValueError, json.JSONDecodeError):

@@ -6,6 +6,25 @@
 actionability:
   counter_bias:
     allowed: true
+  entry_location:
+    # Shadow: record would-block telemetry; do not change live execution yet.
+    # Future Ansible host var: apexvoid_trading_bot_config.actionability.entry_location
+    mode: shadow
+    missing_context_policy: block
+    reversal:
+      buy_maximum_position: 0.50
+      sell_minimum_position: 0.50
+      extreme_buy_block_position: 0.65
+      extreme_sell_block_position: 0.35
+    range_reversion:
+      buy_maximum_position: 0.40
+      sell_minimum_position: 0.60
+      equilibrium_exclusion_width: 0.20
+    trend_pullback:
+      buy_maximum_position: 0.70
+      sell_minimum_position: 0.30
+    breakout_retest:
+      allow_directional_expansion: true
   gates:
     htf_veto_enabled: true
     market_map_guard_enabled: false
@@ -67,8 +86,15 @@ delivery:
     top_n: 3
   telegram:
     public_show_pips: true
+    # Example local VIP channel id (production uses ansible / env secrets).
+    telegram_channel_id: '-100123456789'
     signal_public_channel_id: '-1004468199035'
 execution:
+  activation:
+    # Shadow: preserve current zone-touch behaviour while recording waits.
+    # Flip to enforce after shadow telemetry review (Ansible cleartext config).
+    mode: shadow
+    reaction_trigger_maximum_age_bars: 2
   broker_recovery:
     absence_confirmations: 2
   entry:
