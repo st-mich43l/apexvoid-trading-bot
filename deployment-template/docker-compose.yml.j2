@@ -74,6 +74,10 @@ services:
     env_file:
       - ./secrets/trading-bot.env
     environment:
+      # ENV mode = XAU-only compatibility host (strongest production parity).
+      # Manifest mode is required for multi-symbol feed subscriptions; the
+      # production source cutover is a separate PR after parity observation.
+      # See docs/runtime/multi-symbol-routing.md.
       APEXVOID_RUNTIME_MANIFEST_FILE: /runtime/resolved-runtime.json
       CTRADER_CONFIGURATION_SOURCE: environment
       CTRADER_MANIFEST_PARITY_MODE: enforce

@@ -20,6 +20,8 @@ public sealed class AutoTradeEngine(
   private readonly SemaphoreSlim _gate = new(1, 1);
   private readonly Dictionary<long, AutoTradePositionState> _states = [];
   private readonly Dictionary<string, StructuralRouteIdentity> _routeIdentityByCandidate = [];
+  private readonly Dictionary<string, SymbolInfo> _symbolsByCanonical =
+    new(StringComparer.OrdinalIgnoreCase);
   private readonly HashSet<string> _reportedErrors = [];
   private readonly HashSet<string> _reportedSessionErrors = [];
   private readonly HashSet<string> _reportedWarnings = [];
@@ -58,6 +60,11 @@ public sealed class AutoTradeEngine(
   private volatile bool _positionIdentityConflict;
   private CandidateExecutionLease? _activeLease;
   private CandidateLeaseHeartbeat? _heartbeat;
+  /// <summary>
+  /// Optional multi-instrument registry. When null, XAU-only legacy behaviour.
+  /// Shared stream is still consumed once; dispatch is by candidate.symbol.
+  /// </summary>
+  internal InstrumentRuntimeRegistry? InstrumentRegistry { get; set; }
   private static readonly TimeSpan CandidateLeaseDuration =
     CandidateLeaseDefaults.LeaseWindow;
   private static readonly TimeSpan CandidateHeartbeatInterval =
@@ -111,6 +118,15 @@ public sealed class AutoTradeEngine(
       return;
     }
     info(diagnostic.Message);
+  }
+
+  public void BindInstrumentSymbols(IEnumerable<SymbolInfo> symbols)
+  {
+    _symbolsByCanonical.Clear();
+    foreach (var symbol in symbols)
+    {
+      _symbolsByCanonical[symbol.RedisSymbol] = symbol;
+    }
   }
 
   public async Task RunSessionAsync(
@@ -1091,6 +1107,50 @@ public sealed class AutoTradeEngine(
   {
     var client = RequireClient();
     var symbol = RequireSymbol();
+    if (InstrumentRegistry is not null)
+    {
+      var paperCandidate = string.Equals(
+        candidate.Mode,
+        "paper",
+        StringComparison.OrdinalIgnoreCase
+      );
+      var instrumentRoute = CandidateInstrumentDispatcher.Route(
+        InstrumentRegistry,
+        candidate.Symbol,
+        paperCandidate
+      );
+      if (
+        !instrumentRoute.IsAccepted
+        || instrumentRoute.Outcome == CandidateRouteOutcome.AcceptPaper
+      )
+      {
+        await store.IncrementMetricAsync(
+          candidate.Symbol,
+          "candidate_route_rejected",
+          cancellationToken
+        );
+        return await RejectAsync(
+          candidate,
+          instrumentRoute.Outcome == CandidateRouteOutcome.AcceptPaper
+            ? "paper_instrument_no_broker_placement"
+            : instrumentRoute.Reason,
+          cancellationToken
+        );
+      }
+      if (
+        instrumentRoute.Runtime?.Symbol is not null
+        && _symbolsByCanonical.Count > 0
+      )
+      {
+        symbol = instrumentRoute.Runtime.Symbol;
+      }
+      else if (
+        _symbolsByCanonical.TryGetValue(candidate.Symbol, out var routedSymbol)
+      )
+      {
+        symbol = routedSymbol;
+      }
+    }
     var now = _clock().ToUnixTimeSeconds();
     var legacyRangeScalp = candidate.Version is 1 or 2 && string.Equals(
         candidate.Timeframe,

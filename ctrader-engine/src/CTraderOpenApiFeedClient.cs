@@ -24,7 +24,7 @@ public sealed class CTraderOpenApiFeedClient : ICTraderFeedClient, ICTraderTrade
   private TaskCompletionSource<bool>? _spotSubscriptionReady;
   private long _spotSubscriptionAccountId;
   private long _spotSubscriptionSymbolId;
-  private SymbolInfo? _spotSymbol;
+  private readonly Dictionary<long, SymbolInfo> _spotSymbols = new();
   private IReadOnlyList<TradingAccountGrant> _accountGrants = [];
 
   public event Action? Heartbeat;
@@ -192,18 +192,25 @@ public sealed class CTraderOpenApiFeedClient : ICTraderFeedClient, ICTraderTrade
     }
   }
 
-  public async Task<SymbolInfo> ResolveSymbolAsync(CancellationToken cancellationToken)
+  public async Task<SymbolInfo> ResolveSymbolAsync(CancellationToken cancellationToken) =>
+    await ResolveSymbolAsync(options.CTraderSymbol, options.RedisSymbol, cancellationToken);
+
+  public async Task<SymbolInfo> ResolveSymbolAsync(
+    string cTraderSymbol,
+    string redisSymbol,
+    CancellationToken cancellationToken
+  )
   {
     var symbolList = await SendAndWaitAsync<ProtoOASymbolsListRes>(
       new ProtoOASymbolsListReq { CtidTraderAccountId = options.AccountId },
       response => response.CtidTraderAccountId == options.AccountId,
       cancellationToken
     );
-    var expected = NormalizeSymbol(options.CTraderSymbol);
+    var expected = NormalizeSymbol(cTraderSymbol);
     var light = symbolList.Symbol.FirstOrDefault(
       symbol => NormalizeSymbol(symbol.SymbolName) == expected
     ) ?? throw new InvalidOperationException(
-      $"Symbol {options.CTraderSymbol} was not found on account {options.AccountId}"
+      $"Symbol {cTraderSymbol} was not found on account {options.AccountId}"
     );
 
     var byIdReq = new ProtoOASymbolByIdReq
@@ -220,8 +227,8 @@ public sealed class CTraderOpenApiFeedClient : ICTraderFeedClient, ICTraderTrade
       ?? throw new InvalidOperationException($"Symbol {light.SymbolId} details missing");
 
     return new SymbolInfo(
-      options.RedisSymbol,
-      options.CTraderSymbol,
+      redisSymbol,
+      cTraderSymbol,
       light.SymbolId,
       fullSymbol.Digits,
       fullSymbol.PipPosition,
@@ -799,7 +806,10 @@ public sealed class CTraderOpenApiFeedClient : ICTraderFeedClient, ICTraderTrade
       res => res.SymbolId == symbol.SymbolId && res.Period == TimeframeCodec.ToProto(timeframe),
       cancellationToken
     );
-    return response.Trendbar.Select(ToRaw).OrderBy(bar => bar.UtcTimestampInMinutes).ToArray();
+    return response.Trendbar
+      .Select(bar => ToRaw(bar, symbol.SymbolId))
+      .OrderBy(bar => bar.UtcTimestampInMinutes)
+      .ToArray();
   }
 
   public async Task SubscribeAsync(
@@ -816,7 +826,7 @@ public sealed class CTraderOpenApiFeedClient : ICTraderFeedClient, ICTraderTrade
       _spotSubscriptionReady = spotReady;
       _spotSubscriptionAccountId = options.AccountId;
       _spotSubscriptionSymbolId = symbol.SymbolId;
-      _spotSymbol = symbol;
+      _spotSymbols[symbol.SymbolId] = symbol;
     }
 
     var spotReq = new ProtoOASubscribeSpotsReq
@@ -931,7 +941,7 @@ public sealed class CTraderOpenApiFeedClient : ICTraderFeedClient, ICTraderTrade
       }
       foreach (var trendbar in spot.Trendbar)
       {
-        _liveTrendbars.Writer.TryWrite(ToRaw(trendbar));
+        _liveTrendbars.Writer.TryWrite(ToRaw(trendbar, spot.SymbolId));
       }
       return;
     }
@@ -1118,7 +1128,7 @@ public sealed class CTraderOpenApiFeedClient : ICTraderFeedClient, ICTraderTrade
     await client.SendMessage(request);
   }
 
-  private static RawTrendbar ToRaw(ProtoOATrendbar bar) =>
+  private static RawTrendbar ToRaw(ProtoOATrendbar bar, long symbolId = 0) =>
     new(
       TimeframeCodec.FromProto(bar.Period),
       bar.Low,
@@ -1127,7 +1137,8 @@ public sealed class CTraderOpenApiFeedClient : ICTraderFeedClient, ICTraderTrade
       bar.DeltaClose,
       bar.Volume,
       bar.UtcTimestampInMinutes,
-      bar.HasDeltaClose
+      bar.HasDeltaClose,
+      symbolId
     );
 
   private SpotPrice? ToSpot(ProtoOASpotEvent spot)
@@ -1135,9 +1146,9 @@ public sealed class CTraderOpenApiFeedClient : ICTraderFeedClient, ICTraderTrade
     SymbolInfo? symbol;
     lock (_spotSubscriptionLock)
     {
-      symbol = _spotSymbol;
+      _spotSymbols.TryGetValue(spot.SymbolId, out symbol);
     }
-    if (symbol is null || spot.SymbolId != symbol.SymbolId || spot.Bid <= 0 || spot.Ask <= 0)
+    if (symbol is null || spot.Bid <= 0 || spot.Ask <= 0)
     {
       return null;
     }

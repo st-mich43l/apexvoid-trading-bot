@@ -55,10 +55,10 @@ public static class ResolvedRuntimeManifestLoader
     {
       throw new InvalidOperationException("runtime manifest deserialized to null");
     }
-    if (manifest.ManifestVersion != 1)
+    if (manifest.ManifestVersion is not (1 or 2))
     {
       throw new InvalidOperationException(
-        $"unsupported runtime manifest_version {manifest.ManifestVersion}; expected 1"
+        $"unsupported runtime manifest_version {manifest.ManifestVersion}; expected 1 or 2"
       );
     }
     if (!manifest.Instruments.ContainsKey("XAU"))

@@ -1191,7 +1191,7 @@
       "removable_after_cutover": true
     }
   ],
-  "manifest_version": 1,
+  "manifest_version": 2,
   "source_fingerprint_sha256": "2997a460475e33bc9e26902de93ee7a4e8d9715cbeb7acf23c4779ccff2b67f7",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

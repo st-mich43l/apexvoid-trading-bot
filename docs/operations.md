@@ -23,6 +23,10 @@ Compose also runs a one-shot `config-compiler` that writes
 manifest in enforce mode while remaining ENV-authoritative. See
 `docs/configuration/cross-service-runtime-manifest.md`.
 
+Multi-symbol feed subscriptions require `CTRADER_CONFIGURATION_SOURCE=manifest`
+and are not enabled in production by this PR. See
+`docs/runtime/multi-symbol-routing.md`.
+
 ## Log Access
 
 Each service writes and rotates its own daily log files on the host. Stdout

@@ -45,7 +45,8 @@ from app.configuration.source_policy import PythonConfigurationSourcePolicy
 from app.configuration.source_types import ResolutionTrace
 
 
-MANIFEST_VERSION = 1
+MANIFEST_VERSION = 2
+MANIFEST_VERSION_V1 = 1
 
 # Placeholders used only so ApexVoidConfig can validate when secrets are absent
 # from the compiler process. They must never appear in serialized output.
@@ -66,7 +67,12 @@ class RuntimeManifestError(ValueError):
 
 
 class ResolvedRuntimeManifest(FrozenConfigModel):
-  """Versioned cross-service runtime manifest (file-based; not Redis health)."""
+  """Versioned cross-service runtime manifest (file-based; not Redis health).
+
+  Version 2 introduces ``instrument_runtimes``. Top-level ``feed`` and
+  ``auto_trade`` remain as explicit XAU compatibility projections
+  (deprecated for new multi-symbol consumers).
+  """
 
   model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -76,6 +82,7 @@ class ResolvedRuntimeManifest(FrozenConfigModel):
   profile: str
   global_: dict[str, Any] = Field(alias="global")
   instruments: dict[str, Any]
+  instrument_runtimes: dict[str, Any] = Field(default_factory=dict)
   feed: dict[str, Any]
   auto_trade: dict[str, Any]
   live_instruments: list[str]
@@ -198,7 +205,7 @@ def _resolve_full_config(
     # Secrets may still be missing if placeholders failed; surface clearly.
     if resolved.missing_required_paths and not all(
       (_catalog_by_path().get(path) and _catalog_by_path()[path].secret)
-      or path in resolved.values
+      or path in resolved.flat_values
       for path in resolved.missing_required_paths
     ):
       # Use placeholder injection into nested input for secret leaves.
@@ -498,6 +505,103 @@ def assert_no_secrets_in_payload(payload: Mapping[str, Any]) -> None:
   walk(payload, "")
 
 
+def build_instrument_runtime(
+  config: ApexVoidConfig,
+  instrument_id: str,
+  *,
+  feed_projection: Mapping[str, Any],
+  auto_trade_projection: Mapping[str, Any],
+) -> dict[str, Any]:
+  """Build one instrument runtime projection for manifest V2."""
+  slice_ = build_instrument_slice(config, instrument_id)
+  rollout = slice_["identity"]["rollout"]
+  # XAU retains the shared top-level feed/auto_trade projections for parity.
+  # Future instruments receive instrument-identity feed keys without inventing
+  # traded execution values in this PR.
+  if instrument_id.upper() == "XAU":
+    feed = dict(feed_projection)
+    auto_trade = dict(auto_trade_projection)
+  else:
+    instrument = config.instruments.root[instrument_id]
+    feed = {
+      **{
+        key: value
+        for key, value in feed_projection.items()
+        if key
+        not in {
+          "ctrader_symbol",
+          "redis_symbol",
+          "timeframes",
+        }
+      },
+      "ctrader_symbol": instrument.broker_symbol,
+      "redis_symbol": instrument.canonical_symbol,
+      "timeframes": list(instrument.timeframes),
+    }
+    auto_trade = {
+      **auto_trade_projection,
+      "canonical_symbol": instrument.canonical_symbol,
+      "symbols": [instrument.canonical_symbol],
+      "pip_size": slice_["units"]["pip_size"],
+      "contract_size": slice_["units"]["contract_units_per_lot"],
+    }
+  return {
+    "rollout": rollout,
+    "identity": slice_["identity"],
+    "units": slice_["units"],
+    "feed": _json_ready(feed, path=f"instrument_runtimes.{instrument_id}.feed"),
+    "analysis": slice_["analysis"],
+    "auto_trade": _json_ready(
+      auto_trade,
+      path=f"instrument_runtimes.{instrument_id}.auto_trade",
+    ),
+    "strategies": slice_["strategies"],
+    "actionability": slice_["actionability"],
+    "execution": slice_["execution"],
+    "risk": slice_["risk"],
+    "lifecycle": slice_["lifecycle"],
+    "policy_name": slice_["policy_name"],
+    "provenance": slice_["provenance"],
+  }
+
+
+def upgrade_v1_payload_to_v2(payload: Mapping[str, Any]) -> dict[str, Any]:
+  """Map a V1 manifest to a V2-equivalent XAU-only shape (no multi-symbol)."""
+  if int(payload.get("manifest_version", 0)) == MANIFEST_VERSION:
+    return dict(payload)
+  if int(payload.get("manifest_version", 0)) != MANIFEST_VERSION_V1:
+    raise RuntimeManifestError(
+      f"unsupported manifest_version {payload.get('manifest_version')!r}; "
+      f"expected {MANIFEST_VERSION_V1} or {MANIFEST_VERSION}"
+    )
+  instruments = payload.get("instruments") or {}
+  if "XAU" not in instruments:
+    raise RuntimeManifestError("V1 manifest requires instruments.XAU")
+  xau = instruments["XAU"]
+  upgraded = dict(payload)
+  upgraded["manifest_version"] = MANIFEST_VERSION
+  upgraded["instrument_runtimes"] = {
+    "XAU": {
+      "rollout": xau["identity"]["rollout"],
+      "identity": xau["identity"],
+      "units": xau["units"],
+      "feed": payload["feed"],
+      "analysis": xau.get("analysis", {}),
+      "auto_trade": payload["auto_trade"],
+      "strategies": xau.get("strategies", {}),
+      "actionability": xau.get("actionability", {}),
+      "execution": xau.get("execution", {}),
+      "risk": xau.get("risk", {}),
+      "lifecycle": xau.get("lifecycle", {}),
+      "policy_name": xau.get("policy_name", "xau_current_v1"),
+      "provenance": xau.get("provenance", {"entries": []}),
+    }
+  }
+  # Do not re-fingerprint — V1 mount consumers compare against resolved V2
+  # via the compiler, not via silent V1 reinterpretation as multi-symbol.
+  return upgraded
+
+
 def build_resolved_runtime_manifest(
   *,
   config_file: str | None = None,
@@ -525,6 +629,17 @@ def build_resolved_runtime_manifest(
     raise RuntimeManifestError(
       "production manifest requires instruments.XAU rollout=live"
     )
+  feed = build_feed_projection(config)
+  auto_trade = build_auto_trade_projection(config)
+  instrument_runtimes = {
+    instrument_id: build_instrument_runtime(
+      config,
+      instrument_id,
+      feed_projection=feed,
+      auto_trade_projection=auto_trade,
+    )
+    for instrument_id in sorted(instruments)
+  }
   payload = {
     "manifest_version": MANIFEST_VERSION,
     "contract_fingerprint": configuration_contract_fingerprint(
@@ -533,8 +648,10 @@ def build_resolved_runtime_manifest(
     "profile": profile,
     "global": build_global_section(config),
     "instruments": instruments,
-    "feed": build_feed_projection(config),
-    "auto_trade": build_auto_trade_projection(config),
+    "instrument_runtimes": instrument_runtimes,
+    # Deprecated XAU compatibility projections — prefer instrument_runtimes.XAU.
+    "feed": feed,
+    "auto_trade": auto_trade,
     "live_instruments": live_ids,
   }
   # Fingerprint excludes nothing else; no generated_at.
@@ -578,9 +695,12 @@ def load_manifest_file(path: Path) -> dict[str, Any]:
   if not isinstance(payload, dict):
     raise RuntimeManifestError("manifest root must be an object")
   version = payload.get("manifest_version")
-  if version != MANIFEST_VERSION:
+  if version == MANIFEST_VERSION_V1:
+    payload = upgrade_v1_payload_to_v2(payload)
+  elif version != MANIFEST_VERSION:
     raise RuntimeManifestError(
-      f"unsupported manifest_version {version!r}; expected {MANIFEST_VERSION}"
+      f"unsupported manifest_version {version!r}; expected "
+      f"{MANIFEST_VERSION_V1} or {MANIFEST_VERSION}"
     )
   assert_no_secrets_in_payload(payload)
   ResolvedRuntimeManifest.model_validate(payload)

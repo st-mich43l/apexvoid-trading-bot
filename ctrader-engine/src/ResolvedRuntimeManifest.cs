@@ -19,7 +19,9 @@ public sealed record ResolvedRuntimeManifest(
     Dictionary<string, JsonElement> Instruments,
   [property: JsonPropertyName("feed")] ResolvedFeedProjection Feed,
   [property: JsonPropertyName("auto_trade")] ResolvedAutoTradeProjection AutoTrade,
-  [property: JsonPropertyName("live_instruments")] IReadOnlyList<string> LiveInstruments
+  [property: JsonPropertyName("live_instruments")] IReadOnlyList<string> LiveInstruments,
+  [property: JsonPropertyName("instrument_runtimes")]
+    Dictionary<string, JsonElement>? InstrumentRuntimes = null
 );
 
 public sealed record ResolvedFeedProjection(
