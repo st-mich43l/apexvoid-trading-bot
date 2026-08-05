@@ -324,7 +324,17 @@ def _trim_zone_against_overlapping_barrier(
   new_zone = replace(result.entry_zone, bottom=low, top=high)
   planned = result.planned_entry_price
   if planned is not None:
-    planned = min(max(float(planned), low), high)
+    # Clamping into [low, high] alone lets planned land EXACTLY on the
+    # trimmed edge (== the opposing barrier's own boundary) whenever the
+    # original planned price was at or beyond it - current_price often is,
+    # since that's exactly when this trim fires. evaluate_structural_target_room's
+    # containment check is inclusive (opposing_low <= planned <= opposing_high),
+    # so an exact touch reads as "inside" and hard-blocks via
+    # opposing_entry_contained - the same rejection this trim exists to
+    # prevent (2026-08-05 incident: a Zone Reaction BUY's planned_entry_price
+    # clamped to precisely opposing_low, raw_room=0.0, blocked). Clamp
+    # strictly short of the trimmed edge so a touch never reads as contained.
+    planned = min(max(float(planned), low + _ZONE_TRIM_EPS), high - _ZONE_TRIM_EPS)
   return replace(result, entry_zone=new_zone, planned_entry_price=planned)
 
 
