@@ -2991,6 +2991,26 @@ async def _handle_event(
         symbol=symbol,
         dimensions={"reason": str(build_observation)},
       )
+      # Live incident: a "Zone Reaction" setup passed actionability/room/
+      # target checks (structural_target_room + resolve_actionability both
+      # non-hard-block) and still vanished as "no executable StrategyMatch"
+      # one line later, with nothing in auto_trade:gate_reject:* to explain
+      # it. Root cause: _build_one_strategy_match failed to construct a
+      # StrategyMatch for it here, and the ONLY record of that was a
+      # dimensioned metric bump plus auto_trade:last_match_build:{symbol} -
+      # a single snapshot key the very next scan cycle (including a
+      # completely unrelated "nothing detected" cycle) silently overwrites.
+      # By the time anyone went looking, the evidence was already gone.
+      # This is the actual, non-overwritable record.
+      log.info(
+        "scanner match build blocked symbol=%s tf=%s setup=%s direction=%s "
+        "reason=%s",
+        symbol,
+        exec_tf,
+        result.setup,
+        result.direction,
+        build_observation,
+      )
       continue
     if eligible:
       ready = replace(
