@@ -283,6 +283,50 @@ runtime:
   scanner:
     enabled: true
 strategies:
+  high_frequency_scalp:
+    # Shadow: discover/evaluate/record only. Never publish candidates/orders.
+    # Future Ansible promotion path: paper → live after calibration/holdout.
+    mode: shadow
+    archetypes:
+      range_sweep_enabled: true
+      impulse_pullback_enabled: true
+      breakout_retest_enabled: true
+    context:
+      maximum_m5_age_seconds: 420
+      m1_lookback_bars: 60
+      current_context_ttl_seconds: 3600
+      historic_context_ttl_seconds: 86400
+    location:
+      range_buy_maximum_position: 0.35
+      range_sell_minimum_position: 0.65
+      pullback_buy_maximum_position: 0.75
+      pullback_sell_minimum_position: 0.25
+    activation:
+      trigger_maximum_age_bars: 2
+      maximum_chase_pips: 5
+      rearm_distance_atr: 0.25
+    target:
+      preferred_ladder_pips: 20,25,30
+      minimum_net_target_pips: 15
+    stop:
+      minimum_pips: 12
+      maximum_pips: 30
+      buffer_atr: 0.10
+    policy:
+      minimum_reward_risk: 1.10
+      maximum_opportunities_per_cycle: 3
+      maximum_active_opportunities: 10
+      maximum_spread_pips: 5
+    risk:
+      mode: shadow
+      risk_fraction_per_trade: 0.10
+      maximum_concurrent_positions: 1
+      maximum_session_trades: 12
+      maximum_daily_trades: 30
+      maximum_consecutive_losses: 3
+      cooldown_after_loss_minutes: 5
+      daily_loss_limit_r: 3.0
+      session_loss_limit_r: 2.0
   breakout:
     break_retest_enabled: true
     breakout_enabled: true

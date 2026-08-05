@@ -32,6 +32,7 @@ from app.autotrade.zone_execution_cutover import (
   install_zone_execution_cutover,
   zone_watch_execution_loop,
 )
+from app.scalping.runtime import scalp_m1_event_loop
 from app.bot.client import edit_scanner_message_text
 from app.autotrade.zone_execution_runtime import uninstall_zone_execution_cutover
 from app.autotrade.direct_publish_same_cycle import (
@@ -142,6 +143,9 @@ async def main() -> None:
   _spawn_supervised("scanner_loop", scanner_loop)
   _spawn_supervised("zone_watch_execution_loop", zone_watch_execution_loop)
   _spawn_supervised("auto_scalp_loop", auto_scalp_loop)
+  # HFS M1 scalping is shadow/paper by default and never publishes broker
+  # candidates. The loop no-ops immediately when mode=off.
+  _spawn_supervised("scalp_m1_event_loop", scalp_m1_event_loop)
   # strategy_match_ready_loop removed from production startup: ZoneWatch →
   # direct TradePlan is authoritative. Legacy parsers remain for one release.
   _spawn_supervised("setup_expiry_sweeper_loop", setup_expiry_sweeper_loop)
