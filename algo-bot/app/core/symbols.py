@@ -1,23 +1,37 @@
 """Instrument metadata and Telegram channel routing."""
 
+from __future__ import annotations
+
+from app.configuration.effective_instrument import EffectiveInstrumentError
 from app.core.config import runtime_config
 
 
+def _xau_effective():
+  return runtime_config.for_instrument("XAU")
+
+
+def _symbol_units(symbol: str) -> dict[str, float | int]:
+  """Resolve pip/digits from the effective instrument context."""
+  try:
+    effective = runtime_config.for_instrument(symbol)
+  except EffectiveInstrumentError as exc:
+    raise KeyError(str(exc)) from None
+  return {
+    "pip": effective.units.pip_size,
+    "digits": effective.units.price_digits,
+  }
+
+
+# Compatibility mapping retained for callers that still index SYMBOLS directly.
+# Values are sourced from the resolved instrument context, not hard-coded units.
 SYMBOLS = {
-  "XAU": {
-    "pip": runtime_config.contract.instrument.pip_size,
-    "digits": 2,
-  },
-  # "US30": {"pip": 1.0, "digits": 1},
-  # "EURUSD": {"pip": 0.0001, "digits": 5},
+  "XAU": _symbol_units("XAU"),
 }
 
 # Broker-facing aliases that must resolve to the same logical instrument as
 # the internal SYMBOLS key. CTRADER_SYMBOL is configured as "XAUUSD" while
-# every internal candidate/analysis payload uses "XAU" - without this map, a
-# lookup keyed on the broker's own symbol string would either KeyError or
-# (in a looser caller) silently fall back to a generic 1.0 pip size instead
-# of XAU's actual 0.1, a 10x error in room/target/sizing math.
+# every internal candidate/analysis payload uses "XAU". The instrument context
+# also recognizes XAUUSD for XAU; this map preserves the previous helper API.
 _SYMBOL_ALIASES = {
   "XAUUSD": "XAU",
 }
@@ -25,7 +39,11 @@ _SYMBOL_ALIASES = {
 
 def canonical_symbol(symbol: str) -> str:
   upper = symbol.upper()
-  return _SYMBOL_ALIASES.get(upper, upper)
+  try:
+    return runtime_config.instrument_for_broker_symbol(upper).identity.canonical_symbol
+  except EffectiveInstrumentError:
+    return _SYMBOL_ALIASES.get(upper, upper)
+
 
 CHANNELS = [
   {
@@ -42,7 +60,7 @@ CHANNELS = [
 
 
 def pip_for(symbol: str) -> float:
-  return float(SYMBOLS[canonical_symbol(symbol)]["pip"])
+  return float(_symbol_units(symbol)["pip"])
 
 
 def symbol_for_channel(chat_id: int | str) -> str | None:
@@ -76,7 +94,7 @@ def tier_for_channel(chat_id: int | str) -> str | None:
 
 
 def channels_for(symbol: str, visibility: str) -> list[dict]:
-  symbol = symbol.upper()
+  symbol = canonical_symbol(symbol)
   return [
     dict(channel)
     for channel in CHANNELS
