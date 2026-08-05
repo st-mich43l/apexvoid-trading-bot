@@ -1,0 +1,449 @@
+"""Scalping strategy discovery (three archetypes)."""
+
+from __future__ import annotations
+
+from typing import Any
+
+import pandas as pd
+
+from app.scalping.microstructure import (
+  detect_breakout_retest,
+  detect_impulse_pullback,
+  detect_sweep_reclaim,
+)
+from app.scalping.models import (
+  ARCHETYPE_BREAKOUT_RETEST,
+  ARCHETYPE_IMPULSE_PULLBACK,
+  ARCHETYPE_RANGE_SWEEP,
+  OPPORTUNITY_VERSION,
+  ScalpContextSnapshot,
+  ScalpOpportunity,
+  MicroStructure,
+  STRATEGY_DISPLAY,
+  deterministic_id,
+)
+
+
+def _hfs_cfg(cfg: Any) -> Any:
+  return getattr(getattr(cfg, "strategies", None), "high_frequency_scalp", None)
+
+
+def _ladder(cfg: Any) -> list[float]:
+  section = getattr(_hfs_cfg(cfg), "target", None)
+  raw = getattr(section, "preferred_ladder_pips", "20,25,30")
+  if isinstance(raw, (list, tuple)):
+    return [float(x) for x in raw]
+  return [float(part.strip()) for part in str(raw).split(",") if part.strip()]
+
+
+def _parse_float(section: Any, name: str, default: float) -> float:
+  try:
+    return float(getattr(section, name, default) or default)
+  except (TypeError, ValueError):
+    return default
+
+
+def _select_target(
+  *,
+  direction: str,
+  entry: float,
+  room_pips: float | None,
+  ladder: list[float],
+  min_net: float,
+  pip_size: float,
+) -> tuple[float, float] | None:
+  if room_pips is None or pip_size <= 0:
+    return None
+  usable = float(room_pips)
+  candidates = [t for t in ladder if t <= usable and t >= min_net]
+  if not candidates:
+    # also allow any ladder value that fits room if above min
+    return None
+  chosen = max(candidates)
+  if chosen > usable:
+    return None
+  if str(direction).upper() == "BUY":
+    return entry + chosen * pip_size, chosen
+  return entry - chosen * pip_size, chosen
+
+
+def _stop_pips(
+  *,
+  structural: float,
+  cfg: Any,
+) -> float | None:
+  stop_cfg = getattr(_hfs_cfg(cfg), "stop", None)
+  mn = _parse_float(stop_cfg, "minimum_pips", 12.0)
+  mx = _parse_float(stop_cfg, "maximum_pips", 30.0)
+  value = abs(float(structural))
+  if value < mn or value > mx:
+    return None
+  return value
+
+
+def _enabled(cfg: Any, name: str) -> bool:
+  root = _hfs_cfg(cfg)
+  arch = getattr(root, "archetypes", None)
+  attr = f"{name}_enabled"
+  return bool(getattr(arch, attr, True))
+
+
+def discover_range_sweep(
+  context: ScalpContextSnapshot,
+  micro: MicroStructure,
+  m1_df: pd.DataFrame,
+  cfg: Any,
+  *,
+  pip_size: float,
+  now: int,
+) -> list[ScalpOpportunity]:
+  if not _enabled(cfg, "range_sweep"):
+    return []
+  if ARCHETYPE_RANGE_SWEEP not in context.permitted_archetypes:
+    return []
+  low = context.active_range_low
+  high = context.active_range_high
+  if low is None or high is None or high <= low:
+    return []
+  width_pips = (high - low) / pip_size
+  if width_pips < 25:
+    return []
+
+  loc = getattr(_hfs_cfg(cfg), "location", None)
+  buy_max = _parse_float(loc, "range_buy_maximum_position", 0.35)
+  sell_min = _parse_float(loc, "range_sell_minimum_position", 0.65)
+  pos = context.dealing_range_position
+  eq = context.active_range_eq
+  if eq is not None and abs((m1_df["close"].iloc[-1] - eq) / (high - low)) < 0.10:
+    return []
+
+  out: list[ScalpOpportunity] = []
+  buffer = max(pip_size * 2, context.atr * 0.05)
+  ladder = _ladder(cfg)
+  min_net = _parse_float(getattr(_hfs_cfg(cfg), "target", None), "minimum_net_target_pips", 15.0)
+
+  # BUY lower edge
+  buy_ev = detect_sweep_reclaim(
+    m1_df, direction="BUY", edge_price=low, tolerance=buffer,
+  )
+  if buy_ev is not None:
+    if pos is not None and pos > buy_max:
+      pass
+    else:
+      entry = float(buy_ev["close"])
+      stop_price = float(buy_ev["extreme"]) - buffer
+      stop = _stop_pips(structural=(entry - stop_price) / pip_size, cfg=cfg)
+      target = _select_target(
+        direction="BUY",
+        entry=entry,
+        room_pips=context.buy_corridor_room_pips,
+        ladder=ladder,
+        min_net=min_net,
+        pip_size=pip_size,
+      )
+      if stop is not None and target is not None:
+        target_price, target_pips = target
+        rr = target_pips / stop if stop else 0.0
+        source = deterministic_id("range", context.context_id, "BUY", round(low, 2))
+        oid = deterministic_id(
+          context.symbol, ARCHETYPE_RANGE_SWEEP, "BUY", context.context_id, source,
+        )
+        zone_low = low - buffer
+        zone_high = low + buffer * 2
+        out.append(ScalpOpportunity(
+          version=OPPORTUNITY_VERSION,
+          opportunity_id=oid,
+          context_id=context.context_id,
+          symbol=context.symbol,
+          archetype=ARCHETYPE_RANGE_SWEEP,
+          direction="BUY",
+          discovered_at=int(now),
+          source_bar_ts=int(buy_ev["bar_ts"]),
+          zone_low=zone_low,
+          zone_high=zone_high,
+          key_level=low,
+          trigger_type=str(buy_ev["pattern"]),
+          trigger_bar_ts=int(buy_ev["bar_ts"]),
+          trigger_price=entry,
+          invalidation_price=stop_price,
+          expected_target_price=target_price,
+          expected_target_pips=target_pips,
+          expected_stop_pips=stop,
+          expected_reward_risk=rr,
+          location_position=pos,
+          score=0.0,
+          reasons=("lower_edge_sweep_reclaim",),
+          expires_at=int(now) + 15 * 60,
+          episode_id=source,
+          source_identity=source,
+          measured={"strategy": STRATEGY_DISPLAY[ARCHETYPE_RANGE_SWEEP]},
+        ))
+
+  sell_ev = detect_sweep_reclaim(
+    m1_df, direction="SELL", edge_price=high, tolerance=buffer,
+  )
+  if sell_ev is not None:
+    if pos is not None and pos < sell_min:
+      pass
+    else:
+      entry = float(sell_ev["close"])
+      stop_price = float(sell_ev["extreme"]) + buffer
+      stop = _stop_pips(structural=(stop_price - entry) / pip_size, cfg=cfg)
+      target = _select_target(
+        direction="SELL",
+        entry=entry,
+        room_pips=context.sell_corridor_room_pips,
+        ladder=ladder,
+        min_net=min_net,
+        pip_size=pip_size,
+      )
+      if stop is not None and target is not None:
+        target_price, target_pips = target
+        rr = target_pips / stop if stop else 0.0
+        source = deterministic_id("range", context.context_id, "SELL", round(high, 2))
+        oid = deterministic_id(
+          context.symbol, ARCHETYPE_RANGE_SWEEP, "SELL", context.context_id, source,
+        )
+        out.append(ScalpOpportunity(
+          version=OPPORTUNITY_VERSION,
+          opportunity_id=oid,
+          context_id=context.context_id,
+          symbol=context.symbol,
+          archetype=ARCHETYPE_RANGE_SWEEP,
+          direction="SELL",
+          discovered_at=int(now),
+          source_bar_ts=int(sell_ev["bar_ts"]),
+          zone_low=high - buffer * 2,
+          zone_high=high + buffer,
+          key_level=high,
+          trigger_type=str(sell_ev["pattern"]),
+          trigger_bar_ts=int(sell_ev["bar_ts"]),
+          trigger_price=entry,
+          invalidation_price=stop_price,
+          expected_target_price=target_price,
+          expected_target_pips=target_pips,
+          expected_stop_pips=stop,
+          expected_reward_risk=rr,
+          location_position=pos,
+          score=0.0,
+          reasons=("upper_edge_sweep_reclaim",),
+          expires_at=int(now) + 15 * 60,
+          episode_id=source,
+          source_identity=source,
+          measured={"strategy": STRATEGY_DISPLAY[ARCHETYPE_RANGE_SWEEP]},
+        ))
+  return out
+
+
+def discover_impulse_pullback(
+  context: ScalpContextSnapshot,
+  micro: MicroStructure,
+  m1_df: pd.DataFrame,
+  cfg: Any,
+  *,
+  pip_size: float,
+  now: int,
+) -> list[ScalpOpportunity]:
+  if not _enabled(cfg, "impulse_pullback"):
+    return []
+  if ARCHETYPE_IMPULSE_PULLBACK not in context.permitted_archetypes:
+    return []
+
+  loc = getattr(_hfs_cfg(cfg), "location", None)
+  buy_max = _parse_float(loc, "pullback_buy_maximum_position", 0.75)
+  sell_min = _parse_float(loc, "pullback_sell_minimum_position", 0.25)
+  ladder = _ladder(cfg)
+  min_net = _parse_float(getattr(_hfs_cfg(cfg), "target", None), "minimum_net_target_pips", 15.0)
+  buffer = max(pip_size * 2, context.atr * _parse_float(getattr(_hfs_cfg(cfg), "stop", None), "buffer_atr", 0.10))
+  out: list[ScalpOpportunity] = []
+  pos = context.dealing_range_position
+
+  for direction in ("BUY", "SELL"):
+    if direction == "BUY" and pos is not None and pos > buy_max:
+      continue
+    if direction == "SELL" and pos is not None and pos < sell_min:
+      continue
+    ev = detect_impulse_pullback(m1_df, direction=direction)
+    if ev is None:
+      continue
+    if ev.get("rejected"):
+      continue
+    entry = float(ev["close"])
+    if direction == "BUY":
+      stop_price = float(ev["origin"]) - buffer
+      stop = _stop_pips(structural=(entry - stop_price) / pip_size, cfg=cfg)
+      room = context.buy_corridor_room_pips
+    else:
+      stop_price = float(ev["origin"]) + buffer
+      stop = _stop_pips(structural=(stop_price - entry) / pip_size, cfg=cfg)
+      room = context.sell_corridor_room_pips
+    target = _select_target(
+      direction=direction,
+      entry=entry,
+      room_pips=room,
+      ladder=ladder,
+      min_net=min_net,
+      pip_size=pip_size,
+    )
+    if stop is None or target is None:
+      continue
+    target_price, target_pips = target
+    if room is not None and target_pips > room * 0.9:
+      # mostly consumed
+      continue
+    source = deterministic_id(
+      "impulse", context.context_id, direction, round(float(ev["origin"]), 2), round(float(ev["extreme"]), 2),
+    )
+    oid = deterministic_id(
+      context.symbol, ARCHETYPE_IMPULSE_PULLBACK, direction, context.context_id, source,
+    )
+    band = max(buffer, pip_size * 3)
+    out.append(ScalpOpportunity(
+      version=OPPORTUNITY_VERSION,
+      opportunity_id=oid,
+      context_id=context.context_id,
+      symbol=context.symbol,
+      archetype=ARCHETYPE_IMPULSE_PULLBACK,
+      direction=direction,
+      discovered_at=int(now),
+      source_bar_ts=int(ev["bar_ts"]),
+      zone_low=entry - band,
+      zone_high=entry + band,
+      key_level=entry,
+      trigger_type=str(ev["pattern"]),
+      trigger_bar_ts=int(ev["bar_ts"]),
+      trigger_price=entry,
+      invalidation_price=stop_price,
+      expected_target_price=target_price,
+      expected_target_pips=target_pips,
+      expected_stop_pips=stop,
+      expected_reward_risk=target_pips / stop,
+      location_position=pos,
+      score=0.0,
+      reasons=("impulse_pullback_continuation",),
+      expires_at=int(now) + 15 * 60,
+      episode_id=source,
+      source_identity=source,
+      measured={
+        "strategy": STRATEGY_DISPLAY[ARCHETYPE_IMPULSE_PULLBACK],
+        "retracement": ev.get("retracement"),
+      },
+    ))
+  return out
+
+
+def discover_breakout_retest(
+  context: ScalpContextSnapshot,
+  micro: MicroStructure,
+  m1_df: pd.DataFrame,
+  cfg: Any,
+  *,
+  pip_size: float,
+  now: int,
+) -> list[ScalpOpportunity]:
+  if not _enabled(cfg, "breakout_retest"):
+    return []
+  if ARCHETYPE_BREAKOUT_RETEST not in context.permitted_archetypes:
+    return []
+  low = context.active_range_low
+  high = context.active_range_high
+  if low is None or high is None:
+    return []
+
+  ladder = _ladder(cfg)
+  min_net = _parse_float(getattr(_hfs_cfg(cfg), "target", None), "minimum_net_target_pips", 15.0)
+  buffer = max(pip_size * 2, context.atr * 0.1)
+  min_disp = max(pip_size * 3, context.atr * 0.15)
+  out: list[ScalpOpportunity] = []
+
+  for direction in ("BUY", "SELL"):
+    ev = detect_breakout_retest(
+      m1_df,
+      direction=direction,
+      box_high=high,
+      box_low=low,
+      min_displacement=min_disp,
+    )
+    if ev is None or ev.get("state") == "wait_retest" or not ev.get("accepted_break"):
+      continue
+    entry = float(ev["close"])
+    level = float(ev["level"])
+    if direction == "BUY":
+      stop_price = min(float(m1_df["low"].iloc[-1]), level) - buffer
+      stop = _stop_pips(structural=(entry - stop_price) / pip_size, cfg=cfg)
+      room = context.buy_corridor_room_pips
+    else:
+      stop_price = max(float(m1_df["high"].iloc[-1]), level) + buffer
+      stop = _stop_pips(structural=(stop_price - entry) / pip_size, cfg=cfg)
+      room = context.sell_corridor_room_pips
+    target = _select_target(
+      direction=direction,
+      entry=entry,
+      room_pips=room,
+      ladder=ladder,
+      min_net=min_net,
+      pip_size=pip_size,
+    )
+    if stop is None or target is None:
+      continue
+    target_price, target_pips = target
+    source = deterministic_id("box", context.context_id, direction, round(low, 2), round(high, 2))
+    oid = deterministic_id(
+      context.symbol, ARCHETYPE_BREAKOUT_RETEST, direction, context.context_id, source,
+    )
+    out.append(ScalpOpportunity(
+      version=OPPORTUNITY_VERSION,
+      opportunity_id=oid,
+      context_id=context.context_id,
+      symbol=context.symbol,
+      archetype=ARCHETYPE_BREAKOUT_RETEST,
+      direction=direction,
+      discovered_at=int(now),
+      source_bar_ts=int(ev["bar_ts"]),
+      zone_low=level - buffer,
+      zone_high=level + buffer,
+      key_level=level,
+      trigger_type=str(ev["pattern"]),
+      trigger_bar_ts=int(ev["bar_ts"]),
+      trigger_price=entry,
+      invalidation_price=stop_price,
+      expected_target_price=target_price,
+      expected_target_pips=target_pips,
+      expected_stop_pips=stop,
+      expected_reward_risk=target_pips / stop,
+      location_position=context.dealing_range_position,
+      score=0.0,
+      reasons=("micro_breakout_retest",),
+      expires_at=int(now) + 15 * 60,
+      episode_id=source,
+      source_identity=source,
+      measured={
+        "strategy": STRATEGY_DISPLAY[ARCHETYPE_BREAKOUT_RETEST],
+        "breakout_evidence": {
+          "accepted_break": True,
+          "correct_key_level_role": True,
+          "retest_of_broken_level": True,
+          "directionally_valid_close": True,
+          "target_room_beyond_breakout": True,
+        },
+      },
+    ))
+  return out
+
+
+def discover_all(
+  context: ScalpContextSnapshot,
+  micro: MicroStructure,
+  m1_df: pd.DataFrame,
+  cfg: Any,
+  *,
+  pip_size: float,
+  now: int,
+) -> list[ScalpOpportunity]:
+  found: list[ScalpOpportunity] = []
+  found.extend(discover_range_sweep(context, micro, m1_df, cfg, pip_size=pip_size, now=now))
+  found.extend(discover_impulse_pullback(context, micro, m1_df, cfg, pip_size=pip_size, now=now))
+  found.extend(discover_breakout_retest(context, micro, m1_df, cfg, pip_size=pip_size, now=now))
+  # Deduplicate by opportunity_id
+  by_id = {item.opportunity_id: item for item in found}
+  return list(by_id.values())

@@ -128,8 +128,8 @@
     "zone_reconcile_mode": "shadow",
     "zone_scale_undersized_policy": "single_entry"
   },
-  "contract_fingerprint": "ff62a2f0601876ff335a4b1e76cf6048fe3342327f8377dae9d81abf0e1209f2",
-  "effective_configuration_fingerprint": "5b29da6f51bd6b22d239d649195bf67e900f632397a4daceba2fdec1ff51bede",
+  "contract_fingerprint": "e8af1f2a8e68acb975e27d3c854aa2bd9989a42bd0151f873289c56a53ba7088",
+  "effective_configuration_fingerprint": "c2b842a8e9aaa296ce3acf170df42930ec24e30200c341bf2fee524c0e0e2878",
   "feed": {
     "backfill_bars": 1500,
     "bar_quality_lookback": 6,
@@ -719,6 +719,57 @@
           "level_min_touches": 3,
           "min_zone_score": "10"
         },
+        "high_frequency_scalp": {
+          "activation": {
+            "maximum_chase_pips": "5",
+            "rearm_distance_atr": "0.25",
+            "trigger_maximum_age_bars": 2
+          },
+          "archetypes": {
+            "breakout_retest_enabled": true,
+            "impulse_pullback_enabled": true,
+            "range_sweep_enabled": true
+          },
+          "context": {
+            "current_context_ttl_seconds": 3600,
+            "historic_context_ttl_seconds": 86400,
+            "m1_lookback_bars": 60,
+            "maximum_m5_age_seconds": 420
+          },
+          "location": {
+            "pullback_buy_maximum_position": "0.75",
+            "pullback_sell_minimum_position": "0.25",
+            "range_buy_maximum_position": "0.35",
+            "range_sell_minimum_position": "0.65"
+          },
+          "mode": "shadow",
+          "policy": {
+            "maximum_active_opportunities": 10,
+            "maximum_opportunities_per_cycle": 3,
+            "maximum_spread_pips": "5",
+            "minimum_reward_risk": "1.1"
+          },
+          "risk": {
+            "cooldown_after_loss_minutes": 5,
+            "daily_loss_limit_r": "3",
+            "maximum_concurrent_positions": 1,
+            "maximum_consecutive_losses": 3,
+            "maximum_daily_trades": 30,
+            "maximum_session_trades": 12,
+            "mode": "shadow",
+            "risk_fraction_per_trade": "0.1",
+            "session_loss_limit_r": "2"
+          },
+          "stop": {
+            "buffer_atr": "0.1",
+            "maximum_pips": "30",
+            "minimum_pips": "12"
+          },
+          "target": {
+            "minimum_net_target_pips": "15",
+            "preferred_ladder_pips": "20,25,30"
+          }
+        },
         "mapped_zone": {
           "counter_bias_enabled": true,
           "enabled": false
@@ -1208,6 +1259,57 @@
           "extreme_pd": "0.25",
           "level_min_touches": 3,
           "min_zone_score": "10"
+        },
+        "high_frequency_scalp": {
+          "activation": {
+            "maximum_chase_pips": "5",
+            "rearm_distance_atr": "0.25",
+            "trigger_maximum_age_bars": 2
+          },
+          "archetypes": {
+            "breakout_retest_enabled": true,
+            "impulse_pullback_enabled": true,
+            "range_sweep_enabled": true
+          },
+          "context": {
+            "current_context_ttl_seconds": 3600,
+            "historic_context_ttl_seconds": 86400,
+            "m1_lookback_bars": 60,
+            "maximum_m5_age_seconds": 420
+          },
+          "location": {
+            "pullback_buy_maximum_position": "0.75",
+            "pullback_sell_minimum_position": "0.25",
+            "range_buy_maximum_position": "0.35",
+            "range_sell_minimum_position": "0.65"
+          },
+          "mode": "shadow",
+          "policy": {
+            "maximum_active_opportunities": 10,
+            "maximum_opportunities_per_cycle": 3,
+            "maximum_spread_pips": "5",
+            "minimum_reward_risk": "1.1"
+          },
+          "risk": {
+            "cooldown_after_loss_minutes": 5,
+            "daily_loss_limit_r": "3",
+            "maximum_concurrent_positions": 1,
+            "maximum_consecutive_losses": 3,
+            "maximum_daily_trades": 30,
+            "maximum_session_trades": 12,
+            "mode": "shadow",
+            "risk_fraction_per_trade": "0.1",
+            "session_loss_limit_r": "2"
+          },
+          "stop": {
+            "buffer_atr": "0.1",
+            "maximum_pips": "30",
+            "minimum_pips": "12"
+          },
+          "target": {
+            "minimum_net_target_pips": "15",
+            "preferred_ladder_pips": "20,25,30"
+          }
         },
         "mapped_zone": {
           "counter_bias_enabled": true,
