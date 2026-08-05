@@ -106,7 +106,12 @@ from app.autotrade.range_context import (
 )
 from app.autotrade import units
 from app.autotrade.map_strategy import market_map_display_key, market_map_key
-from app.core.symbols import SYMBOLS, canonical_symbol, pip_for
+from app.core.symbols import canonical_symbol, digits_for, pip_for
+from app.runtime.instrument_registry import (
+  InstrumentRuntimeError,
+  build_instrument_runtime_registry,
+)
+from app.runtime.price_format import format_price
 from app.bot.client import (
   delete_scanner_message,
   edit_scanner_message_text,
@@ -145,7 +150,18 @@ def _csv(value: str) -> list[str]:
 
 
 def _watched_symbols() -> set[str]:
-  return set(_csv(runtime_config.market_data.scanner.symbols))
+  """Rollout-aware analysis set ∩ scanner compatibility filter.
+
+  Production remains XAU-only. Global CSV is a filter, not sole authority.
+  """
+  compatibility = _csv(runtime_config.market_data.scanner.symbols)
+  try:
+    registry = build_instrument_runtime_registry(runtime_config)
+    return set(registry.scanner_symbols(compatibility_filter=compatibility))
+  except InstrumentRuntimeError:
+    # Fall back only when registry cannot build; still require CSV symbols
+    # to resolve via effective instrument context (fail closed later).
+    return set(compatibility)
 
 
 def _htf_tfs() -> list[str]:
@@ -175,16 +191,12 @@ def _parse_bar_event(data: object) -> tuple[str, str, str] | None:
 
 
 def _price_text(value: float, symbol: str, *, grouped: bool = False) -> str:
-  digits = int(SYMBOLS.get(canonical_symbol(symbol), {}).get("digits", 2))
-  spec = f",.{digits}f" if grouped else f".{digits}f"
-  return f"{value:{spec}}".rstrip("0").rstrip(".")
+  return format_price(symbol, value, grouped=grouped)
 
 
 def _pip_size(symbol: str) -> float:
-  try:
-    return pip_for(symbol)
-  except KeyError:
-    return 1.0
+  # Fail closed — never return 1.0 for an unknown instrument.
+  return pip_for(symbol)
 
 
 def _level_bucket(symbol: str, level: float, bucket_pips: int) -> str:
@@ -762,6 +774,24 @@ async def _sync_strategy_match(
       await client.delete(matches_key)
     if reason is not None:
       await _record_match_build_rejected(client, symbol, reason, measured)
+      # Live incident: two SELL setups (Zone Reaction, Session Level
+      # Reaction) both passed actionability/room checks and still vanished
+      # as "no executable StrategyMatch" with nothing left to explain it.
+      # This is the REAL match-build call that feeds execution_match/
+      # strategy_matches_key - not the one _reward_risk_pre_gate makes
+      # earlier purely for telemetry (logged separately, scanner match
+      # build blocked), which can succeed even when this one fails since
+      # nothing guarantees identical input/state between the two calls.
+      # auto_trade:last_match_build:{symbol} is a single snapshot the very
+      # next scan cycle (even one with nothing detected) silently
+      # overwrites, so this was the only real record - now permanent.
+      log.info(
+        "scanner match build rejected symbol=%s tf=%s reason=%s setups=%s",
+        symbol,
+        tf,
+        reason,
+        [f"{item.setup}:{item.direction}" for item in executable_results],
+      )
       if reason == "insufficient_target_room":
         await increment_metric(
           client, "insufficient_target_room", symbol=symbol,
@@ -1580,7 +1610,7 @@ def _confluence_member_band(
   high = float(result.entry_zone.high)
   if math.isfinite(low) and math.isfinite(high) and high > low:
     return low, high
-  digits = int(SYMBOLS.get(canonical_symbol(symbol), {}).get("digits", 2))
+  digits = digits_for(symbol)
   tick = 10 ** -max(0, digits)
   level = float(result.key_level)
   return level - tick, level + tick
@@ -2710,9 +2740,17 @@ async def _handle_event(
   parsed = _parse_bar_event(data)
   if parsed is None:
     return []
-  symbol, tf, event_ts = parsed
+  raw_symbol, tf, event_ts = parsed
+  try:
+    registry = build_instrument_runtime_registry(runtime_config)
+    instrument = registry.get(raw_symbol)
+  except InstrumentRuntimeError:
+    # Unknown broker/alias event — reject rather than invent a symbol.
+    return []
+  symbol = instrument.identity.canonical_symbol
   exec_tf = runtime_config.market_data.scanner.execution_timeframe.upper()
   if symbol not in _watched_symbols():
+    # disabled / feed_only / filtered — no scanner processing
     return []
 
   if tf != exec_tf:
