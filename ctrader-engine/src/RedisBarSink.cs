@@ -1250,6 +1250,7 @@ internal sealed record RedisSpot(
 [JsonSerializable(typeof(AutoTradeLifecycleStateRecord))]
 [JsonSerializable(typeof(TradePlan))]
 [JsonSerializable(typeof(PositionMissingRecord))]
+[JsonSerializable(typeof(ResolvedRuntimeManifest))]
 internal sealed partial class RedisJsonContext : JsonSerializerContext
 {
 }
