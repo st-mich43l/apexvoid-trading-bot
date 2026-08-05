@@ -30,7 +30,63 @@ public static class Program
       return 2;
     }
 
-    var options = FeedOptions.FromEnvironment();
+    var configurationSource = RuntimeManifestBootstrap.ReadSource();
+    var parityMode = RuntimeManifestBootstrap.ReadParityMode();
+    var environmentFeedOptions = FeedOptions.FromEnvironment();
+    var environmentTradeOptions = AutoTradeOptions.FromEnvironment();
+    FeedOptions options = environmentFeedOptions;
+    AutoTradeOptions autoTradeOptions = environmentTradeOptions;
+    string? manifestFingerprint = null;
+    string parityState = "skipped";
+
+    if (
+      parityMode != CtraderManifestParityMode.Off
+      || configurationSource == CtraderConfigurationSource.Manifest
+    )
+    {
+      var manifestPath = RuntimeManifestBootstrap.RequireManifestPath();
+      var manifest = ResolvedRuntimeManifestLoader.Load(manifestPath);
+      manifestFingerprint = manifest.EffectiveConfigurationFingerprint;
+      var manifestFeedOptions = FeedOptions.FromRuntimeManifest(
+        manifest,
+        environmentFeedOptions
+      );
+      var manifestTradeOptions = AutoTradeOptions.FromRuntimeManifest(
+        manifest,
+        environmentTradeOptions
+      );
+      if (parityMode != CtraderManifestParityMode.Off)
+      {
+        var parity = RuntimeManifestParity.Compare(
+          environmentFeedOptions,
+          environmentTradeOptions,
+          manifestFeedOptions,
+          manifestTradeOptions
+        );
+        parityState = parity.HasFatal ? "mismatch" : "matched";
+        RuntimeManifestParity.ApplyParityMode(
+          parity,
+          parityMode,
+          message => Console.Error.WriteLine(message)
+        );
+      }
+      if (configurationSource == CtraderConfigurationSource.Manifest)
+      {
+        options = manifestFeedOptions;
+        autoTradeOptions = manifestTradeOptions;
+      }
+    }
+
+    Console.WriteLine(
+      "runtime_manifest_loaded "
+      + $"manifest_version=1 "
+      + $"fingerprint={(manifestFingerprint is null ? "-" : manifestFingerprint[..12])} "
+      + $"source={configurationSource.ToString().ToLowerInvariant()} "
+      + $"parity={parityMode.ToString().ToLowerInvariant()} "
+      + $"instruments={string.Join(',', autoTradeOptions.EffectiveSymbols)} "
+      + $"parity_state={parityState}"
+    );
+
     await using var redis = await StackExchangeRedisSeriesCommands.ConnectAsync(
       options.RedisUrl
     );
@@ -59,7 +115,6 @@ public static class Program
       options.BarsWindowMax,
       options.BarsChannel
     );
-    var autoTradeOptions = AutoTradeOptions.FromEnvironment();
     var autoTrade = new AutoTradeEngine(autoTradeOptions, redis);
     Func<string, string, CancellationToken, Task> notify =
       autoTrade.PublishOperationalEventAsync;
