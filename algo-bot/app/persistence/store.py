@@ -34,7 +34,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 from app.core.config import runtime_config
 from app.core.symbols import pip_for
-from app.signals.pips_format import legs_net_pips
+from app.signals.pips_format import legs_achieved_pips
 
 log = logging.getLogger(__name__)
 
@@ -1196,7 +1196,10 @@ async def close_leg(
       now = int(time.time())
       legs.append({"frac": close_frac, "pips": pips, "ts": now})
       new_remaining = 1.0 - sum(float(leg["frac"]) for leg in legs)
-      achieved = legs_net_pips(legs)
+      # Journal /trade_stats uses the highest TP/pips reached, not a
+      # volume-fraction weighted blend that dilutes booked targets with a
+      # later BE residual.
+      achieved = legs_achieved_pips(legs)
       if new_remaining <= _LEG_EPSILON:
         await db.execute(
           "UPDATE manual_signals SET status = 'closed', result_pips = $1, "
