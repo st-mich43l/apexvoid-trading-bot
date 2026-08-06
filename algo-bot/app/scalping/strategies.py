@@ -28,14 +28,6 @@ def _hfs_cfg(cfg: Any) -> Any:
   return getattr(getattr(cfg, "strategies", None), "high_frequency_scalp", None)
 
 
-def _ladder(cfg: Any) -> list[float]:
-  section = getattr(_hfs_cfg(cfg), "target", None)
-  raw = getattr(section, "preferred_ladder_pips", "20,25,30")
-  if isinstance(raw, (list, tuple)):
-    return [float(x) for x in raw]
-  return [float(part.strip()) for part in str(raw).split(",") if part.strip()]
-
-
 def _parse_float(section: Any, name: str, default: float) -> float:
   try:
     return float(getattr(section, name, default) or default)
@@ -48,23 +40,25 @@ def _select_target(
   direction: str,
   entry: float,
   room_pips: float | None,
-  ladder: list[float],
+  stop_pips: float | None,
   min_net: float,
   pip_size: float,
 ) -> tuple[float, float] | None:
-  if room_pips is None or pip_size <= 0:
+  """Owner 2026-08-06: scalp target distance always equals stop distance.
+
+  A scalp is a 1:1 gamble by design -- no ladder, no picking whichever
+  preferred level happens to fit. If the stop's own distance doesn't clear
+  the minimum net target or doesn't fit the available room, there is no
+  opportunity here at all, not a smaller/larger substitute target.
+  """
+  if room_pips is None or pip_size <= 0 or stop_pips is None or stop_pips <= 0:
     return None
-  usable = float(room_pips)
-  candidates = [t for t in ladder if t <= usable and t >= min_net]
-  if not candidates:
-    # also allow any ladder value that fits room if above min
-    return None
-  chosen = max(candidates)
-  if chosen > usable:
+  target_pips = float(stop_pips)
+  if target_pips < min_net or target_pips > float(room_pips):
     return None
   if str(direction).upper() == "BUY":
-    return entry + chosen * pip_size, chosen
-  return entry - chosen * pip_size, chosen
+    return entry + target_pips * pip_size, target_pips
+  return entry - target_pips * pip_size, target_pips
 
 
 def _stop_pips(
@@ -125,7 +119,6 @@ def discover_range_sweep(
 
   out: list[ScalpOpportunity] = []
   buffer = max(pip_size * 2, context.atr * 0.05)
-  ladder = _ladder(cfg)
   min_net = _parse_float(getattr(_hfs_cfg(cfg), "target", None), "minimum_net_target_pips", 15.0)
   act = getattr(_hfs_cfg(cfg), "activation", None)
   lookback = max(1, int(getattr(act, "trigger_maximum_age_bars", 2) or 2))
@@ -149,7 +142,7 @@ def discover_range_sweep(
         direction="BUY",
         entry=entry,
         room_pips=context.buy_corridor_room_pips,
-        ladder=ladder,
+        stop_pips=stop,
         min_net=min_net,
         pip_size=pip_size,
       )
@@ -209,7 +202,7 @@ def discover_range_sweep(
         direction="SELL",
         entry=entry,
         room_pips=context.sell_corridor_room_pips,
-        ladder=ladder,
+        stop_pips=stop,
         min_net=min_net,
         pip_size=pip_size,
       )
@@ -268,7 +261,6 @@ def discover_impulse_pullback(
   loc = getattr(_hfs_cfg(cfg), "location", None)
   buy_max = _parse_float(loc, "pullback_buy_maximum_position", 0.75)
   sell_min = _parse_float(loc, "pullback_sell_minimum_position", 0.25)
-  ladder = _ladder(cfg)
   min_net = _parse_float(getattr(_hfs_cfg(cfg), "target", None), "minimum_net_target_pips", 15.0)
   buffer = max(pip_size * 2, context.atr * _parse_float(getattr(_hfs_cfg(cfg), "stop", None), "buffer_atr", 0.10))
   out: list[ScalpOpportunity] = []
@@ -297,7 +289,7 @@ def discover_impulse_pullback(
       direction=direction,
       entry=entry,
       room_pips=room,
-      ladder=ladder,
+      stop_pips=stop,
       min_net=min_net,
       pip_size=pip_size,
     )
@@ -366,7 +358,6 @@ def discover_breakout_retest(
   if low is None or high is None:
     return []
 
-  ladder = _ladder(cfg)
   min_net = _parse_float(getattr(_hfs_cfg(cfg), "target", None), "minimum_net_target_pips", 15.0)
   buffer = max(pip_size * 2, context.atr * 0.1)
   min_disp = max(pip_size * 3, context.atr * 0.15)
@@ -396,7 +387,7 @@ def discover_breakout_retest(
       direction=direction,
       entry=entry,
       room_pips=room,
-      ladder=ladder,
+      stop_pips=stop,
       min_net=min_net,
       pip_size=pip_size,
     )
