@@ -92,9 +92,9 @@ PREFERENCE_TELEMETRY_REASONS = frozenset({
   # already fits within buffered room; same allow/effective-target outcome
   # as no_opposing_barrier, split out only for telemetry clarity.
   "opposing_barrier_full_ladder_fits",
-  # Owner 2026-08-06: barrier room ignored; configured partial ladder kept.
+  # Owner 2026-08-06: barrier room ignored; configured partial ladder kept
+  # when usable room is still above the execution-cost floor.
   "opposing_barrier_room_ignored_full_ladder",
-  "opposing_barrier_room_below_cost_ignored",
   "opposing_barrier_no_configured_targets",
   # Entry falls inside a neutral key-level band (round number / reaction
   # level) rather than a directional supply/demand zone. Unlike genuine
@@ -109,6 +109,7 @@ HARD_STRUCTURAL_TARGET_ROOM_REASONS = frozenset({
   "opposing_entry_overlap",
   "opposing_major_no_room",
   "opposing_barrier_no_target",
+  "opposing_barrier_room_below_cost",
   "entry_inside_opposing_zone",
   "invalid_target_room_geometry",
   "execution_cost_insufficient_room",

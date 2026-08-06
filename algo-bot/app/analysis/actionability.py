@@ -164,6 +164,7 @@ _GATED_HARD_BLOCK_REASONS = frozenset({
   "opposing_entry_overlap",
   "opposing_major_no_room",
   "opposing_barrier_no_target",
+  "opposing_barrier_room_below_cost",
   "entry_inside_opposing_zone",
   "execution_cost_insufficient_room",
 })
