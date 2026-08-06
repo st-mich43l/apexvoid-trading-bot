@@ -74,6 +74,7 @@ from app.autotrade.strategy_match import (
 from app.autotrade.strategy_taxonomy import (
   bypasses_opposing_structure_gates,
   is_reaction_strategy,
+  match_bypasses_opposing_structure,
 )
 from app.autotrade.structural_target_room import (
   evaluate_structural_target_room,
@@ -473,6 +474,10 @@ class PrivatePolicySubject:
   absolute_target_price: float | None = None
   sweep_low: float | None = None
   sweep_high: float | None = None
+  # Fitted scalp room unlocks opposing bypass in evaluate_execution_policy.
+  full_take_profit_pips: int | None = None
+  family: str | None = None
+  strategy_mode: str | None = None
 
 
 @dataclass(frozen=True)
@@ -2769,7 +2774,17 @@ async def _publish_candidate(
   opposing_zone = _nearest_directional_zone(
     decision.direction, entry_reference, htf_zones or [],
   )
-  if runtime_config.actionability.gates.htf_veto_enabled:
+  # Range/scalp with fitted native room is not HTF-opposing gated.
+  scalp_ignores_opposing = bypasses_opposing_structure_gates(
+    "Range Box Scalp",
+    full_take_profit_pips=decision.full_tp_pips,
+    family="range",
+    strategy_mode="auto_box_scalp",
+  )
+  if (
+    runtime_config.actionability.gates.htf_veto_enabled
+    and not scalp_ignores_opposing
+  ):
     veto_reason = _htf_veto_reason(decision.direction, entry_reference, opposing_zone)
     if veto_reason is not None:
       veto_outcome = classify_guard_severity(
@@ -2884,17 +2899,27 @@ async def _publish_candidate(
       ),
       sweep_low=decision.sweep_low,
       sweep_high=decision.sweep_high,
+      full_take_profit_pips=(
+        int(decision.full_tp_pips)
+        if decision.full_tp_pips is not None else None
+      ),
+      family="range",
+      strategy_mode="auto_box_scalp",
     ),
     spot_price=_executable_spot_price(spot, decision.direction),
     regime=regime.state if regime is not None else "chop",
     pip_size=units.pip_size(symbol),
     cfg=None,
-    **_opposing_zone_policy_kwargs(
-      opposing_zone,
-      atr=scale_context.atr,
-      pip_size=units.pip_size(symbol),
-      symbol=symbol,
-      timeframe=EXECUTION_TIMEFRAME,
+    **(
+      {}
+      if scalp_ignores_opposing
+      else _opposing_zone_policy_kwargs(
+        opposing_zone,
+        atr=scale_context.atr,
+        pip_size=units.pip_size(symbol),
+        symbol=symbol,
+        timeframe=EXECUTION_TIMEFRAME,
+      )
     ),
   )
   if not range_policy.allowed:
@@ -3425,10 +3450,7 @@ async def _publish_strategy_match(
     ),
   )
   if (
-    not bypasses_opposing_structure_gates(
-      match.strategy,
-      full_take_profit_pips=match.full_take_profit_pips,
-    )
+    not match_bypasses_opposing_structure(match)
     and (
       runtime_config.actionability.gates.opposing_barrier_veto_enabled
       or guard_mode == GUARD_MODE_OBSERVE
@@ -5191,10 +5213,7 @@ async def _publish_trade_plan_v7(
     ()
     if (
       market_map is None
-      or bypasses_opposing_structure_gates(
-        execution_match.strategy,
-        full_take_profit_pips=execution_match.full_take_profit_pips,
-      )
+      or match_bypasses_opposing_structure(execution_match)
     )
     else tuple(getattr(market_map, "actionable_entries", ()) or ())
   )
@@ -5355,10 +5374,7 @@ async def _publish_trade_plan_v7(
 
   if (
     barrier_outcome.hard_block
-    and not bypasses_opposing_structure_gates(
-      match_for_plan.strategy,
-      full_take_profit_pips=match_for_plan.full_take_profit_pips,
-    )
+    and not match_bypasses_opposing_structure(match_for_plan)
   ):
     await _release_claims()
     await _record_v7_build_rejected(
@@ -5369,8 +5385,12 @@ async def _publish_trade_plan_v7(
 
   # HTF veto: reject when the nearest opposing HTF zone is still untested and
   # ahead of the executable quote (defect 4: a short taken below untested
-  # supply). Preflight used to enforce this; V7 owns it now.
-  if runtime_config.actionability.gates.htf_veto_enabled:
+  # supply). Preflight used to enforce this; V7 owns it now. Scalps with
+  # fitted native room skip HTF opposing — range/HFS room is the gate.
+  if (
+    runtime_config.actionability.gates.htf_veto_enabled
+    and not match_bypasses_opposing_structure(match_for_plan)
+  ):
     htf_opposing = _nearest_directional_zone(
       match_for_plan.direction, spot.price, htf_zones or [],
     )
@@ -5494,13 +5514,18 @@ async def _publish_trade_plan_v7(
   opposing_zone_high = (
     strategy_opposing_zone.high if strategy_opposing_zone is not None else None
   )
-  opposing_kwargs = _opposing_zone_policy_kwargs(
-    strategy_opposing_zone,
-    atr=float(match_for_plan.atr),
-    pip_size=float(units.pip_size(symbol)),
-    symbol=symbol,
-    timeframe=str(match_for_plan.source_tf or "M5"),
-  )
+  if match_bypasses_opposing_structure(match_for_plan):
+    opposing_kwargs: dict[str, Any] = {}
+    opposing_zone_low = None
+    opposing_zone_high = None
+  else:
+    opposing_kwargs = _opposing_zone_policy_kwargs(
+      strategy_opposing_zone,
+      atr=float(match_for_plan.atr),
+      pip_size=float(units.pip_size(symbol)),
+      symbol=symbol,
+      timeframe=str(match_for_plan.source_tf or "M5"),
+    )
   # Zone-split capability + required-limit-side checks: mirror old preflight
   # policy gates against the fresh policy evaluation for the plan-time match.
   side_aware_quote = _executable_spot_price(spot, match_for_plan.direction)

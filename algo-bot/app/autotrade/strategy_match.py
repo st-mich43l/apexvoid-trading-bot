@@ -348,14 +348,24 @@ def _valid_match(match: StrategyMatch) -> bool:
     match.structure_swing,
   )
   range_values = (match.range_low, match.range_high)
+  hfs_fitted = (
+    match.full_take_profit_pips is not None
+    and match.full_take_profit_pips > 0
+    and (
+      match.family == "hfs"
+      or match.strategy_mode == "hfs_scalp"
+      or str(match.strategy).startswith("HFS ")
+    )
+  )
   valid_range = (
     all(value is None for value in range_values)
     and match.range_id is None
-    and match.full_take_profit_pips is None
+    and (match.full_take_profit_pips is None or hfs_fitted)
   ) or (
     all(value is not None and math.isfinite(value) for value in range_values)
     and match.range_id is not None
     and match.range_low < match.range_high
+    and match.full_take_profit_pips is not None
     and match.full_take_profit_pips > 0
   )
   identity_ok = _identity_ok(match)
