@@ -240,6 +240,35 @@ def detect_impulse_pullback(
   }
 
 
+def macro_momentum_direction(
+  df: pd.DataFrame,
+  *,
+  atr: float,
+  min_displacement_atr: float = 2.5,
+  lookback_bars: int = 60,
+) -> str | None:
+  """Net directional bias over a wide recent window, or None if unclear.
+
+  Live 2026-08-06: an impulse_pullback SELL faded the top of a "range"
+  whose own high/low were the pre-crash level and flash-crash low from
+  under an hour earlier -- price wasn't topping out at stable resistance,
+  it was mid-reclaim of the entire crash with the freshest, strongest
+  momentum on the chart. impulse_pullback's own lookback is only the last
+  30 bars, too narrow to see a move that size; m5_structure and htf_bias
+  had nothing to say either ("range" / "unknown"). This is a wider,
+  displacement-only read (no directional-bar-count, no freshness
+  requirement -- unlike detect_momentum_ignition, which is for *entering*
+  a chase, this is only ever used as a veto against fading one).
+  """
+  if df is None or len(df) < lookback_bars or atr <= 0:
+    return None
+  window = df.tail(lookback_bars)
+  displacement = float(window["close"].iloc[-1] - window["open"].iloc[0])
+  if abs(displacement) / atr < min_displacement_atr:
+    return None
+  return "BUY" if displacement > 0 else "SELL"
+
+
 def detect_momentum_ignition(
   df: pd.DataFrame,
   *,

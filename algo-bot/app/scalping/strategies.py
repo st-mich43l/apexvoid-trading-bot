@@ -11,6 +11,7 @@ from app.scalping.microstructure import (
   detect_impulse_pullback,
   detect_momentum_ignition,
   detect_sweep_reclaim,
+  macro_momentum_direction,
 )
 from app.scalping.models import (
   ARCHETYPE_BREAKOUT_RETEST,
@@ -83,6 +84,26 @@ def _stop_pips(
   return min(max(value, mn), mx)
 
 
+def _fights_fresh_macro_momentum(
+  m1_df: pd.DataFrame, *, direction: str, atr: float, cfg: Any,
+) -> bool:
+  """True when a wide-window move opposes this entry's own direction.
+
+  Live 2026-08-06: impulse_pullback sold the "top" of a range whose high
+  was the pre-crash level, mid-reclaim of a flash crash under an hour old
+  -- its own 30-bar lookback never saw the move that made that level
+  matter. range_sweep has the identical blind spot at a range edge.
+  Doesn't apply to momentum_chase, which *is* the fresh-move entry.
+  """
+  mom_cfg = getattr(_hfs_cfg(cfg), "momentum", None)
+  lookback = int(_parse_float(mom_cfg, "macro_veto_lookback_bars", 60.0))
+  min_displacement_atr = _parse_float(mom_cfg, "macro_veto_min_displacement_atr", 2.5)
+  macro = macro_momentum_direction(
+    m1_df, atr=atr, min_displacement_atr=min_displacement_atr, lookback_bars=lookback,
+  )
+  return macro is not None and macro != str(direction).upper()
+
+
 def _enabled(cfg: Any, name: str) -> bool:
   root = _hfs_cfg(cfg)
   arch = getattr(root, "archetypes", None)
@@ -135,6 +156,10 @@ def discover_range_sweep(
   )
   if buy_ev is not None:
     if pos is not None and pos > buy_max:
+      pass
+    elif _fights_fresh_macro_momentum(
+      m1_df, direction="BUY", atr=context.atr, cfg=cfg,
+    ):
       pass
     else:
       entry = float(buy_ev["close"])
@@ -195,6 +220,10 @@ def discover_range_sweep(
   )
   if sell_ev is not None:
     if pos is not None and pos < sell_min:
+      pass
+    elif _fights_fresh_macro_momentum(
+      m1_df, direction="SELL", atr=context.atr, cfg=cfg,
+    ):
       pass
     else:
       entry = float(sell_ev["close"])
@@ -277,6 +306,10 @@ def discover_impulse_pullback(
     if ev is None:
       continue
     if ev.get("rejected"):
+      continue
+    if _fights_fresh_macro_momentum(
+      m1_df, direction=direction, atr=context.atr, cfg=cfg,
+    ):
       continue
     entry = float(ev["close"])
     if direction == "BUY":
