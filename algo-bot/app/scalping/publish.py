@@ -8,6 +8,11 @@ import time
 from typing import Any
 
 from app.analysis import scanner
+from app.analysis.execution_eligibility import (
+  EXECUTION_ELIGIBILITY_VERSION,
+  STATIC_ELIGIBLE,
+  ExecutionEligibility,
+)
 from app.analysis.structural_reaction_support import structural_thesis_id
 from app.autotrade import worker
 from app.autotrade.multi_match import (
@@ -65,6 +70,27 @@ def build_hfs_strategy_match(
   htf_bias = str(context.htf_bias or "range")
   if htf_bias in {"", "unknown"}:
     htf_bias = "range"
+  # HFS matches never pass through the classic scanner.py detection path,
+  # so _static_execution_eligibility() never runs for them. Without this,
+  # _admit_strategy_intent_for_cycle's static-eligibility gate (which only
+  # exempts strategy_mode == "mapped_zone_reaction") sees a bare
+  # source="scanner_strategy_match" intent with execution_eligibility=None
+  # and hard-rejects it as static_eligibility_missing -- every single HFS
+  # opportunity, unconditionally. The ScalpOpportunity pipeline already is
+  # this match's eligibility check, so mark it eligible by construction.
+  eligibility = ExecutionEligibility(
+    version=EXECUTION_ELIGIBILITY_VERSION,
+    allowed=True,
+    state=STATIC_ELIGIBLE,
+    reason_code="hfs_scalp_eligible",
+    message="HFS scalp opportunity is executable by construction",
+    hard_block=False,
+    direction=opportunity.direction.upper(),
+    entry_low=float(opportunity.zone_low),
+    entry_high=float(opportunity.zone_high),
+    planned_entry_price=mid,
+    calculated_at=now,
+  )
   return StrategyMatch(
     version=1,
     match_id=match_id,
@@ -81,6 +107,7 @@ def build_hfs_strategy_match(
     entry_high=float(opportunity.zone_high),
     current_price=mid,
     confluence=3,
+    execution_eligibility=eligibility,
     reasons=tuple(opportunity.reasons) or ("hfs",),
     atr=float(context.atr or 1.0),
     structure_swing=float(opportunity.invalidation_price),
