@@ -1052,22 +1052,26 @@ def risk_multiplier_for_tier(tier: str, cfg: Any | None = None, *, post_impulse:
   retired flat facade path returned ``b`` for tier C via a ``getattr``
   fallback, and the canonical model has no ``c_multiplier`` field. Preserve
   that same "tier C mirrors tier B" behaviour here explicitly.
+
+  Owner 2026-08-06: every scalp (HFS / Range Edge / Box) books **2×** the
+  equity-table lot size vs reaction. Stop distance is unchanged — volume
+  only. Quality tier does not shrink scalp below that 2× floor.
   """
   if cfg is None:
     cfg = _default_runtime_cfg()
+  sizing = cfg.risk.sizing
+  if range_scalp:
+    scalp_mult = float(sizing.range_max_risk_multiplier)
+    if not math.isfinite(scalp_mult) or scalp_mult <= 0:
+      scalp_mult = 2.0
+    return scalp_mult
   tier = (tier or TIER_C).upper()
   tiers = cfg.risk.tiers
-  sizing = cfg.risk.sizing
   a = float(tiers.a_multiplier)
   b = float(tiers.b_multiplier)
   c = b
   post = float(sizing.post_impulse_risk_multiplier)
   onesided = float(sizing.one_sided_range_risk_multiplier)
-  if range_scalp and tier == TIER_A:
-    # Thin-room scalp frequency: allow up to 2× base size on A-quality setups.
-    a = float(sizing.range_max_risk_multiplier)
-    if not math.isfinite(a) or a <= 0:
-      a = 2.0
   if tier == TIER_A:
     mult = a
   elif tier == TIER_B:
