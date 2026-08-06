@@ -85,6 +85,8 @@ def build_hfs_strategy_match(
     atr=float(context.atr or 1.0),
     structure_swing=float(opportunity.invalidation_price),
     targets_pips=(target_pips,),
+    # Fitted HFS room unlocks opposing-structure bypass (native scalp room).
+    full_take_profit_pips=target_pips,
     absolute_target_price=float(opportunity.expected_target_price),
     tier="A",
     family="hfs",

@@ -16,7 +16,7 @@ from app.autotrade.protective_stop import (
   primary_tp_pips_from_match,
   stop_bounds_for_reaction_room,
 )
-from app.autotrade.strategy_taxonomy import bypasses_opposing_structure_gates
+from app.autotrade.strategy_taxonomy import match_bypasses_opposing_structure
 
 GUARD_MODE_OBSERVE = "observe"
 GUARD_MODE_BALANCED = "balanced"
@@ -328,6 +328,12 @@ _STRATEGY_FAMILY = {
   "One-Sided Range Reaction": FAMILY_RANGE_REVERSION,
   "Fade Scalp": FAMILY_RANGE_REVERSION,
   "Chop Zone Reaction": FAMILY_RANGE_REVERSION,
+  # HFS live publishes through the same V7 plan builder; map to range
+  # reversion so policy/stop planning runs. Native HFS room unlocks
+  # opposing-structure bypass (strategy_taxonomy).
+  "HFS Range Sweep": FAMILY_RANGE_REVERSION,
+  "HFS Impulse Pullback": FAMILY_RANGE_REVERSION,
+  "HFS Breakout Retest": FAMILY_RANGE_REVERSION,
   "Trend Pullback": FAMILY_TREND_PULLBACK,
   "Break & Retest": FAMILY_BREAKOUT_RETEST,
   "Box Breakout": FAMILY_BREAKOUT_RETEST,
@@ -452,7 +458,14 @@ def strategy_family(strategy: str) -> str:
   # An unknown detector label is a contract error, not a trend pullback.
   # Falling back here silently grants an unreviewed setup the pullback
   # policy, including its drift and risk allowances.
-  return _STRATEGY_FAMILY.get(strategy, FAMILY_UNKNOWN)
+  key = str(strategy or "")
+  mapped = _STRATEGY_FAMILY.get(key)
+  if mapped is not None:
+    return mapped
+  # Forward-compatible HFS labels (publish falls back to "HFS {archetype}").
+  if key.startswith("HFS "):
+    return FAMILY_RANGE_REVERSION
+  return FAMILY_UNKNOWN
 
 
 def policy_for(strategy: str, cfg: Any | None = None) -> ExecutionPolicy:
@@ -724,12 +737,9 @@ def evaluate_execution_policy(
       else getattr(match, "opposing_zone_id", None)
       or getattr(match, "zone_id", None)
     )
-    # Scalp with fitted target room ignores HTF opposing stop push/reject;
-    # normal min/max envelope still applies via stop_bounds_for_reaction_room.
-    if bypasses_opposing_structure_gates(
-      strategy_name,
-      full_take_profit_pips=getattr(match, "full_take_profit_pips", None),
-    ):
+    # Scalp (Range / HFS) with fitted target room ignores HTF opposing stop
+    # push/reject; native room is the gate. Envelope still applies.
+    if match_bypasses_opposing_structure(match):
       zone_low = zone_high = zone_id = None
     opposing_zone = opposing_zone_context_from_values(
       opposing_zone_low=zone_low,

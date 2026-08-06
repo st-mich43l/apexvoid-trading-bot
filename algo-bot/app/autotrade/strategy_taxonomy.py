@@ -33,11 +33,21 @@ RANGE_STRATEGIES = frozenset({
   "Chop Zone Reaction",
 })
 
+HFS_STRATEGIES = frozenset({
+  "HFS Range Sweep",
+  "HFS Impulse Pullback",
+  "HFS Breakout Retest",
+})
+
 CANONICAL_FAMILY_REACTION = "reaction"
 CANONICAL_FAMILY_ZONE = "zone"
 CANONICAL_FAMILY_LIQUIDITY = "liquidity"
 CANONICAL_FAMILY_RANGE = "range"
+CANONICAL_FAMILY_HFS = "hfs"
 CANONICAL_FAMILY_UNKNOWN = "unknown"
+
+_SCALP_FAMILIES = frozenset({"hfs", "range", "range_reversion"})
+_SCALP_MODES = frozenset({"hfs_scalp", "range_scalp", "auto_box_scalp"})
 
 
 def is_reaction_strategy(name: str) -> bool:
@@ -56,24 +66,59 @@ def is_range_strategy(name: str) -> bool:
   return str(name or "") in RANGE_STRATEGIES
 
 
+def is_hfs_strategy(name: str) -> bool:
+  key = str(name or "")
+  return key in HFS_STRATEGIES or key.startswith("HFS ")
+
+
+def is_scalp_strategy(
+  name: str,
+  *,
+  family: str | None = None,
+  strategy_mode: str | None = None,
+) -> bool:
+  """Range Box / Range Edge / HFS — own native room, not HTF opposing."""
+  if is_range_strategy(name) or is_hfs_strategy(name):
+    return True
+  if str(family or "").casefold() in _SCALP_FAMILIES:
+    return True
+  if str(strategy_mode or "").casefold() in _SCALP_MODES:
+    return True
+  return False
+
+
 def bypasses_opposing_structure_gates(
   name: str,
   *,
   full_take_profit_pips: int | float | None = None,
+  family: str | None = None,
+  strategy_mode: str | None = None,
 ) -> bool:
-  """Range/scalp may enter inside HTF opposing only when target room fits.
+  """Scalp may enter inside HTF opposing only when native target room fits.
 
-  Requires a successful native range target (full_take_profit_pips from
-  select_range_target / EQ room). Ladder floor is currently 15 pips — a
-  fitted 15p target is enough to open. Without a fitted target, opposing
-  gates still apply.
+  Covers Range Box / Range Edge / HFS. Requires a fitted room evidence
+  (``full_take_profit_pips`` from select_range_target / HFS expected target).
+  Raw reaction ladders alone do not unlock this — without a fitted target,
+  opposing gates still apply.
   """
-  if not is_range_strategy(name):
+  if not is_scalp_strategy(
+    name, family=family, strategy_mode=strategy_mode,
+  ):
     return False
   try:
     return full_take_profit_pips is not None and float(full_take_profit_pips) > 0
   except (TypeError, ValueError):
     return False
+
+
+def match_bypasses_opposing_structure(match: object) -> bool:
+  """Read StrategyMatch / PrivatePolicySubject fields for scalp opposing skip."""
+  return bypasses_opposing_structure_gates(
+    str(getattr(match, "strategy", "") or ""),
+    full_take_profit_pips=getattr(match, "full_take_profit_pips", None),
+    family=getattr(match, "family", None),
+    strategy_mode=getattr(match, "strategy_mode", None),
+  )
 
 
 def canonical_family(name: str) -> str:
@@ -87,4 +132,6 @@ def canonical_family(name: str) -> str:
     return CANONICAL_FAMILY_LIQUIDITY
   if key in RANGE_STRATEGIES:
     return CANONICAL_FAMILY_RANGE
+  if is_hfs_strategy(key):
+    return CANONICAL_FAMILY_HFS
   return CANONICAL_FAMILY_UNKNOWN
