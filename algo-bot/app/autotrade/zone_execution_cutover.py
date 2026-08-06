@@ -48,12 +48,16 @@ from app.autotrade.entry_activation import (
   apply_trigger_to_match,
   evaluate_entry_activation,
 )
-from app.autotrade.execution_confirmation import executable_quote_in_zone
+from app.autotrade.execution_confirmation import (
+  executable_quote_in_zone,
+  scalp_maximum_chase_pips,
+  scalp_zone_access,
+)
 from app.autotrade.lifecycle import increment_metric
 from app.autotrade.multi_match import dedupe_matches, serialize_matches, strategy_matches_key
 from app.autotrade.strategy_match import StrategyMatch, strategy_match_key
 from app.autotrade.strategy_match_ready import enqueue_strategy_match_ready
-from app.autotrade.strategy_taxonomy import is_reaction_strategy
+from app.autotrade.strategy_taxonomy import is_range_strategy, is_reaction_strategy
 from app.autotrade.zone_watch import (
   DISCOVERED,
   GRADE_A,
@@ -328,6 +332,50 @@ def _quote_evidence(
   )
 
 
+def _scalp_access(
+  record: ZoneWatch,
+  quote: tuple[float, float, int],
+  *,
+  strategy: str | None = None,
+):
+  """Inside / chase access for range scalp families; strict inside otherwise."""
+  from app.autotrade import units
+
+  bid, ask, _ts = quote
+  pip = units.pip_size(record.symbol)
+  tolerance = max(
+    0.0,
+    float(runtime_config.execution.entry.contract_tolerance_pips) * pip,
+  )
+  if strategy and is_range_strategy(strategy):
+    return scalp_zone_access(
+      record.direction,
+      bid,
+      ask,
+      record.low,
+      record.high,
+      tolerance,
+      pip_size=pip,
+      maximum_chase_pips=scalp_maximum_chase_pips(runtime_config),
+    )
+  evidence = executable_quote_in_zone(
+    record.direction,
+    bid,
+    ask,
+    record.low,
+    record.high,
+    tolerance,
+    pip_size=pip,
+  )
+  from app.autotrade.execution_confirmation import ScalpZoneAccess
+  return ScalpZoneAccess(
+    evidence,
+    "inside" if evidence.inside else "approach_wait",
+    evidence.distance_pips,
+    0.0,
+  )
+
+
 def _decisive_break(record: ZoneWatch, evidence: Any) -> bool:
   """True when price closed beyond the zone's far/invalidating edge.
 
@@ -386,6 +434,8 @@ def _location_and_activation_for_record(
   trigger: Any,
   now: int,
   range_bounds: dict[str, float | None] | None = None,
+  chase_pips: float | None = None,
+  maximum_chase_pips: float | None = None,
 ):
   bid, ask, _ts = quote
   ranges = range_bounds or _empty_range_bounds()
@@ -424,6 +474,8 @@ def _location_and_activation_for_record(
     location_decision=location,
     now=int(now),
     cfg=runtime_config,
+    chase_pips=chase_pips,
+    maximum_chase_pips=maximum_chase_pips,
   )
   return location, activation, context
 
@@ -436,6 +488,8 @@ async def _prepare_activation(
   quote: tuple[float, float, int],
   evidence: Any,
   analysis_context: Any | None = None,
+  chase_pips: float | None = None,
+  maximum_chase_pips: float | None = None,
 ) -> StrategyMatch | None:
   """Return a stamped match ready to activate, or None while waiting/blocked."""
   now = quote[2]
@@ -454,6 +508,8 @@ async def _prepare_activation(
     trigger=trigger,
     now=now,
     range_bounds=range_bounds,
+    chase_pips=chase_pips,
+    maximum_chase_pips=maximum_chase_pips,
   )
   checked_at = datetime.now(timezone.utc).isoformat()
   location_payload = {
@@ -772,8 +828,9 @@ async def _activate_match(
   quote = await _load_quote(client, record.symbol)
   if quote is None:
     return None
-  evidence = _quote_evidence(record, quote)
-  if not evidence.inside:
+  access = _scalp_access(record, quote, strategy=match.strategy)
+  evidence = access.evidence
+  if not access.executable:
     await record_zone_presence(
       client,
       record.zone_id,
@@ -882,22 +939,23 @@ async def _evaluate_record(
   quote = await _load_quote(client, record.symbol)
   if quote is None:
     return None
-  evidence = _quote_evidence(record, quote)
+  match = await _load_candidate(client, record.zone_id)
+  if match is None:
+    return None
+  access = _scalp_access(record, quote, strategy=match.strategy)
+  evidence = access.evidence
   record, _entered = await record_zone_presence(
     client,
     record.zone_id,
-    inside=evidence.inside,
+    inside=bool(evidence.inside or access.status == "chase"),
     now=quote[2],
     htf_evidence=record.source_timeframe in {"H1", "M15"},
     decisive_break=_decisive_break(record, evidence),
   )
   if (
-    not evidence.inside
+    not access.executable
     or record.state in TERMINAL_ZONE_WATCH_STATES | LOCKED_ZONE_WATCH_STATES
   ):
-    return None
-  match = await _load_candidate(client, record.zone_id)
-  if match is None:
     return None
   prepared = await _prepare_activation(
     client,
@@ -906,6 +964,8 @@ async def _evaluate_record(
     quote=quote,
     evidence=evidence,
     analysis_context=None,
+    chase_pips=access.chase_pips,
+    maximum_chase_pips=access.maximum_chase_pips,
   )
   if prepared is None:
     # Keep ZoneWatch active; do not persist / publish / create lifecycle.
@@ -1036,25 +1096,34 @@ async def _sync_strategy_match_cutover(
         symbol, tf, result.setup, result.direction, zone_id,
       )
       continue
-    evidence = _quote_evidence(record, quote)
+    access = _scalp_access(record, quote, strategy=str(result.setup))
+    evidence = access.evidence
     record, _ = await record_zone_presence(
       client,
       zone_id,
-      inside=evidence.inside,
+      inside=bool(evidence.inside or access.status == "chase"),
       now=quote[2],
       htf_evidence=source_tf in {"H1", "M15"},
       decisive_break=_decisive_break(record, evidence),
     )
-    if (
-      not evidence.inside
-      or record.state in TERMINAL_ZONE_WATCH_STATES | LOCKED_ZONE_WATCH_STATES
-    ):
+    if record.state in TERMINAL_ZONE_WATCH_STATES | LOCKED_ZONE_WATCH_STATES:
       log.info(
         "zone watch cutover rejected symbol=%s tf=%s setup=%s direction=%s "
-        "reason=%s zone_id=%s state=%s",
+        "reason=zone_watch_locked_or_terminal zone_id=%s state=%s",
+        symbol, tf, result.setup, result.direction, zone_id, record.state,
+      )
+      continue
+    if not access.executable:
+      log.info(
+        "zone watch cutover waiting symbol=%s tf=%s setup=%s direction=%s "
+        "reason=%s zone_id=%s state=%s chase_pips=%s max_chase=%s",
         symbol, tf, result.setup, result.direction,
-        "quote_outside_zone" if not evidence.inside else "zone_watch_locked_or_terminal",
-        zone_id, record.state,
+        (
+          "scalp_missed_chase"
+          if access.status == "chase_missed"
+          else "quote_outside_zone"
+        ),
+        zone_id, record.state, access.chase_pips, access.maximum_chase_pips,
       )
       continue
     prepared = await _prepare_activation(
@@ -1064,6 +1133,8 @@ async def _sync_strategy_match_cutover(
       quote=quote,
       evidence=evidence,
       analysis_context=ctx,
+      chase_pips=access.chase_pips,
+      maximum_chase_pips=access.maximum_chase_pips,
     )
     if prepared is None:
       log.info(

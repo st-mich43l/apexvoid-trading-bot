@@ -452,6 +452,86 @@ def executable_quote_in_zone(
   )
 
 
+@dataclass(frozen=True)
+class ScalpZoneAccess:
+  """Inside-zone or trade-direction chase within ``maximum_chase_pips``."""
+
+  evidence: ExecutableZoneEvidence
+  status: str  # inside | chase | chase_missed | approach_wait | invalid
+  chase_pips: float | None = None
+  maximum_chase_pips: float = 0.0
+
+  @property
+  def executable(self) -> bool:
+    return self.status in {"inside", "chase"}
+
+
+def scalp_maximum_chase_pips(cfg: Any | None = None) -> float:
+  """Shared scalp chase budget (Range Edge / Fade / HFS). Default 15."""
+  if cfg is None:
+    try:
+      from app.core.config import runtime_config
+      cfg = runtime_config
+    except Exception:
+      return 15.0
+  hfs = getattr(getattr(cfg, "strategies", None), "high_frequency_scalp", None)
+  act = getattr(hfs, "activation", None)
+  try:
+    value = float(getattr(act, "maximum_chase_pips", 15.0) or 15.0)
+  except (TypeError, ValueError):
+    return 15.0
+  return max(0.0, value)
+
+
+def scalp_zone_access(
+  direction: str,
+  bid: Any,
+  ask: Any,
+  zone_low: float,
+  zone_high: float,
+  tolerance: float,
+  *,
+  pip_size: float,
+  maximum_chase_pips: float | None = None,
+) -> ScalpZoneAccess:
+  """Allow scalp activation inside the zone or chasing momentum past it.
+
+  Approach from the near side (price not yet at the zone) stays
+  ``approach_wait``. Past the far edge beyond the chase budget is
+  ``chase_missed``. Past the far edge within budget is ``chase`` so
+  Range Edge / Fade / Chop do not die on ``quote_outside_zone`` the
+  moment price rips through the band.
+  """
+  evidence = executable_quote_in_zone(
+    direction, bid, ask, zone_low, zone_high, tolerance, pip_size=pip_size,
+  )
+  chase_cap = (
+    float(maximum_chase_pips)
+    if maximum_chase_pips is not None
+    else scalp_maximum_chase_pips()
+  )
+  if evidence.inside:
+    return ScalpZoneAccess(evidence, "inside", 0.0, chase_cap)
+  quote = evidence.executable_quote
+  pip = float(pip_size)
+  if quote is None or pip <= 0 or not math.isfinite(pip):
+    return ScalpZoneAccess(evidence, "invalid", None, chase_cap)
+  side = str(direction).upper()
+  # Trade-direction past edge: BUY above high, SELL below low.
+  if side == "BUY":
+    past = quote - float(zone_high)
+  elif side == "SELL":
+    past = float(zone_low) - quote
+  else:
+    return ScalpZoneAccess(evidence, "invalid", None, chase_cap)
+  past_pips = past / pip
+  if past_pips > chase_cap + 1e-9:
+    return ScalpZoneAccess(evidence, "chase_missed", past_pips, chase_cap)
+  if past_pips > 0:
+    return ScalpZoneAccess(evidence, "chase", past_pips, chase_cap)
+  return ScalpZoneAccess(evidence, "approach_wait", past_pips, chase_cap)
+
+
 def deterministic_episode_id(
   setup_id: str,
   direction: str,
