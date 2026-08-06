@@ -134,6 +134,35 @@ def _infer_status_state(status_line: str) -> str:
   return "analysis_only"
 
 
+def should_stop_forming_price_track(
+  text: str,
+  *,
+  status_state: str | None = None,
+) -> bool:
+  """Live Price now is only for pre-fill watching — stop once filled/closed.
+
+  Continuous root-card edits after fill compete with ORDER FILLED replies for
+  Telegram rate limits and make the card look 'alive' without the fill reply.
+  """
+  upper = (text or "").upper()
+  if any(
+    token in upper
+    for token in (
+      "POSITION ACTIVATED",
+      "ORDER FILLED",
+      "TERMINAL",
+      "CLOSED",
+      "TP BOOKED",
+      "GROUP STOP",
+      "STOP LOSS",
+      "SL HIT",
+    )
+  ):
+    return True
+  priority = CARD_STATUS_PRIORITY.get(str(status_state or ""), -1)
+  return priority >= CARD_STATUS_PRIORITY["order_filled"]
+
+
 _PRICE_NOW_LINE_RE = re.compile(
   r"^(\s*•\s*<b>Price now:</b>\s*<b>)([^<]+)(</b>\s*<i>\(live\)</i>\s*)$",
   re.IGNORECASE,
@@ -887,6 +916,8 @@ async def edit_forming_card_status(
     return "pending_card_creation"
   text = apply_forming_card_status(str(card["text"]), status_line)
   if text == card["text"]:
+    if should_stop_forming_price_track(text, status_state=state):
+      await client.srem(FORMING_ACTIVE_INDEX_KEY, setup_id)
     return True
   try:
     await edit_fn(card["chat_id"], card["message_id"], text)
@@ -899,6 +930,8 @@ async def edit_forming_card_status(
         message_id=card["message_id"],
         text=text,
       )
+      if should_stop_forming_price_track(text, status_state=state):
+        await client.srem(FORMING_ACTIVE_INDEX_KEY, setup_id)
       return True
     log.info(
       "forming card status edit failed setup_id=%s error=%s",
@@ -913,6 +946,10 @@ async def edit_forming_card_status(
     message_id=card["message_id"],
     text=text,
   )
+  # Filled/activated cards must leave the live Price-now index immediately so
+  # the track loop cannot keep edit-flooding Telegram ahead of fill replies.
+  if should_stop_forming_price_track(text, status_state=state):
+    await client.srem(FORMING_ACTIVE_INDEX_KEY, setup_id)
   return True
 
 
@@ -971,11 +1008,15 @@ async def edit_forming_card_price(
   min_move: float = 0.1,
 ) -> bool:
   """Patch the root card Price now line when mid has moved enough."""
+  from aiogram.exceptions import TelegramRetryAfter
+
   card = await load_forming_card(client, setup_id)
   if card is None or not card.get("text"):
     return False
   text = str(card["text"])
-  if "TERMINAL" in text.upper() or "CLOSED" in text.upper():
+  snapshot = await load_forming_card_status_snapshot(client, setup_id)
+  status_state = snapshot.state if snapshot is not None else None
+  if should_stop_forming_price_track(text, status_state=status_state):
     await client.srem(FORMING_ACTIVE_INDEX_KEY, setup_id)
     return False
   current = parse_forming_card_price_now(text)
@@ -986,6 +1027,18 @@ async def edit_forming_card_price(
     return False
   try:
     await edit_fn(card["chat_id"], card["message_id"], next_text)
+  except TelegramRetryAfter as exc:
+    # Pause the whole track loop so ORDER FILLED / status replies can send.
+    global _PRICE_TRACK_PAUSE_UNTIL
+    _PRICE_TRACK_PAUSE_UNTIL = time.monotonic() + float(
+      getattr(exc, "retry_after", 5) or 5
+    ) + 1.0
+    log.warning(
+      "forming card price edit rate-limited setup_id=%s retry_after=%s",
+      setup_id,
+      getattr(exc, "retry_after", None),
+    )
+    return False
   except TelegramBadRequest as exc:
     if "message is not modified" in str(exc).casefold():
       await save_forming_card(
@@ -1010,6 +1063,9 @@ async def edit_forming_card_price(
     text=next_text,
   )
   return True
+
+
+_PRICE_TRACK_PAUSE_UNTIL = 0.0
 
 
 async def list_active_forming_setup_ids(client) -> list[str]:
@@ -1037,6 +1093,13 @@ async def refresh_forming_card_prices(
       await client.srem(FORMING_ACTIVE_INDEX_KEY, setup_id)
       continue
     if await is_setup_terminal(client, setup_id):
+      await client.srem(FORMING_ACTIVE_INDEX_KEY, setup_id)
+      continue
+    snapshot = await load_forming_card_status_snapshot(client, setup_id)
+    status_state = snapshot.state if snapshot is not None else None
+    if should_stop_forming_price_track(
+      str(card["text"]), status_state=status_state,
+    ):
       await client.srem(FORMING_ACTIVE_INDEX_KEY, setup_id)
       continue
     symbol = parse_forming_card_symbol(str(card["text"]))
@@ -1081,7 +1144,7 @@ async def _fresh_spot_mid(client, symbol: str) -> float | None:
 
 
 async def forming_price_track_loop() -> None:
-  """Refresh forming-card Price now ~1s when Redis spot moves."""
+  """Refresh forming-card Price now ~1s until fill/activation, then stop."""
   import asyncio
 
   from app.bot.client import edit_scanner_message_text
@@ -1091,6 +1154,10 @@ async def forming_price_track_loop() -> None:
   log.info("forming price track loop started interval_s=1.0 min_move=0.1")
   while True:
     try:
+      pause_for = _PRICE_TRACK_PAUSE_UNTIL - time.monotonic()
+      if pause_for > 0:
+        await asyncio.sleep(pause_for)
+        continue
       await refresh_forming_card_prices(
         client,
         edit_fn=edit_scanner_message_text,
