@@ -55,8 +55,9 @@ def classify_session(ts: int, cfg: Any | None = None) -> str:
 def permitted_archetypes_for_session(session: str) -> tuple[str, ...]:
   if session == "rollover":
     return ()
-  if session == "asia":
-    return (ARCHETYPE_RANGE_SWEEP,)
+  # Owner 2026-08-06: Asia used to permit only range_sweep, so live HFS
+  # sat at discovered=0 for hours while impulse/breakout opportunities were
+  # silently illegal. Same archetype set as London (still off in rollover).
   return (
     ARCHETYPE_RANGE_SWEEP,
     ARCHETYPE_IMPULSE_PULLBACK,

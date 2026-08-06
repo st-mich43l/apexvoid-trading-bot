@@ -88,55 +88,63 @@ def detect_sweep_reclaim(
   direction: str,
   edge_price: float,
   tolerance: float,
+  lookback_bars: int = 1,
 ) -> dict[str, Any] | None:
-  """False-break sweep of an edge that closes back inside the range."""
-  if df is None or len(df) < 2:
+  """Edge touch / false-break that closes back inside the range.
+
+  Owner 2026-08-06: requiring ``low < edge`` skipped bars that only wicked
+  *to* the edge. Accept touch-or-through within ``tolerance``, close
+  reclaimed inside, directional close. Scans newest ``lookback_bars`` so
+  discovery matches activation age.
+  """
+  if df is None or len(df) < 1:
     return None
-  bar = df.iloc[-1]
-  open_ = float(bar["open"])
-  high = float(bar["high"])
-  low = float(bar["low"])
-  close = float(bar["close"])
-  bar_ts = _ts(df.index[-1])
   side = str(direction).upper()
   edge = float(edge_price)
   tol = max(0.0, float(tolerance))
+  window = max(1, min(int(lookback_bars or 1), len(df)))
 
-  if side == "BUY":
-    # Sweep below support, close back above edge
-    if low > edge - tol:
-      return None
-    if low >= edge:
-      return None
-    if close < edge:
-      return None  # closed through / failed reclaim
-    if close <= open_:
-      return None
+  for offset in range(1, window + 1):
+    bar = df.iloc[-offset]
+    open_ = float(bar["open"])
+    high = float(bar["high"])
+    low = float(bar["low"])
+    close = float(bar["close"])
+    bar_ts = _ts(df.index[-offset])
+
+    if side == "BUY":
+      # Touch or pierce support, close back at/above edge, bullish bar.
+      if low > edge + tol:
+        continue
+      if close < edge:
+        continue
+      if close <= open_:
+        continue
+      return {
+        "pattern": "sweep_reclaim",
+        "direction": "BUY",
+        "bar_ts": bar_ts,
+        "extreme": low,
+        "close": close,
+        "edge": edge,
+      }
+
+    # Touch or pierce resistance, close back at/below edge, bearish bar.
+    if high < edge - tol:
+      continue
+    if close > edge:
+      continue
+    if close >= open_:
+      continue
     return {
       "pattern": "sweep_reclaim",
-      "direction": "BUY",
+      "direction": "SELL",
       "bar_ts": bar_ts,
-      "extreme": low,
+      "extreme": high,
       "close": close,
       "edge": edge,
     }
-
-  if high < edge + tol:
-    return None
-  if high <= edge:
-    return None
-  if close > edge:
-    return None
-  if close >= open_:
-    return None
-  return {
-    "pattern": "sweep_reclaim",
-    "direction": "SELL",
-    "bar_ts": bar_ts,
-    "extreme": high,
-    "close": close,
-    "edge": edge,
-  }
+  return None
 
 
 def detect_impulse_pullback(

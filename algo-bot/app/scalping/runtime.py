@@ -38,7 +38,7 @@ from app.scalping.microstructure import build_micro_structure
 from app.scalping.publish import build_hfs_strategy_match, publish_hfs_live
 from app.scalping.ranking import rank_opportunities, score_opportunity
 from app.scalping.risk import evaluate_risk, load_risk, save_risk
-from app.scalping.strategies import discover_all
+from app.scalping.strategies import discover_all, idle_discovery_reasons
 from app.scalping.telemetry import incr, record_cycle, set_last
 from app.autotrade import worker
 
@@ -175,10 +175,20 @@ async def process_m1_bar(
     return result
   ctx_cfg = getattr(_hfs(cfg), "context", None)
   max_age = int(getattr(ctx_cfg, "maximum_m5_age_seconds", 420) or 420)
-  if not is_context_fresh(context, now, max_age):
+  soft_age = max(max_age * 2, max_age + 300)
+  context_age = int(now) - int(getattr(context, "m5_bar_ts", now) or now)
+  if context_age > soft_age:
+    # Truly ancient context — fail closed.
     result["reason"] = "scalp_context_stale"
     await incr(client, symbol, "opportunity_blocked:scalp_context_stale")
     return result
+  if not is_context_fresh(context, now, max_age):
+    # Soft stale: M5 feed lag at bar boundaries used to abort every cycle
+    # (26 soft-stales in one prod window). Keep discovering off the last
+    # good snapshot and record telemetry.
+    result["context_soft_stale"] = True
+    result["context_age_seconds"] = context_age
+    await incr(client, symbol, "opportunity_soft_stale:scalp_context")
 
   lookback = int(getattr(ctx_cfg, "m1_lookback_bars", 60) or 60)
   t_micro = time.perf_counter()
@@ -189,6 +199,11 @@ async def process_m1_bar(
   pip = units.pip_size(symbol)
   t_strat = time.perf_counter()
   opportunities = discover_all(context, micro, m1, cfg, pip_size=pip, now=now)
+  idle_reasons = (
+    idle_discovery_reasons(context, m1, cfg, pip_size=pip)
+    if not opportunities
+    else []
+  )
   strat_ms = (time.perf_counter() - t_strat) * 1000.0
 
   quote = await _load_quote(client, symbol)
@@ -368,6 +383,9 @@ async def process_m1_bar(
     "allowed": len(ranked),
     "blocked": len(result["blocked"]),
     "mode": mode,
+    "idle_reasons": idle_reasons,
+    "context_soft_stale": bool(result.get("context_soft_stale")),
+    "context_age_seconds": result.get("context_age_seconds"),
     "context_load_ms": round(context_ms, 3),
     "microstructure_ms": round(micro_ms, 3),
     "strategy_evaluation_ms": round(strat_ms, 3),
