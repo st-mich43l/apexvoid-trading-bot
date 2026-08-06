@@ -88,7 +88,9 @@ public static class VolumePlanner
   /// <summary>
   /// Owner equity → lot table (owner_equity_v1). Bands are equity dollars;
   /// result is rounded AwayFromZero to two decimal places (lot cents), not
-  /// floored — e.g. equity 1300 → raw 0.108 → 0.11.
+  /// floored — e.g. equity 1300 → 0.12 (flat above-$1k band).
+  /// Owner 2026-08-06: $600–$1000 inclusive always 0.10; above $1000 and
+  /// below $2000 always 0.12 (no progressive ramp in those bands).
   /// </summary>
   public static decimal LotsForEquity(decimal equity)
   {
@@ -102,8 +104,8 @@ public static class VolumePlanner
       >= 5_000m => 0.30m,
       >= 3_000m => 0.25m + (equity - 3_000m) * 0.05m / 2_000m,
       >= 2_000m => 0.15m,
-      >= 1_000m => 0.09m + (equity - 1_000m) * 0.06m / 1_000m,
-      >= 900m => 0.06m,
+      > 1_000m => 0.12m,
+      >= 600m => 0.10m,
       _ => 0.02m + (equity - 200m) * 0.04m / 700m,
     };
     return decimal.Round(rawLots, 2, MidpointRounding.AwayFromZero);

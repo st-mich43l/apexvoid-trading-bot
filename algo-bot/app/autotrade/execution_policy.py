@@ -616,15 +616,15 @@ def evaluate_execution_policy(
     digits=digits,
     allow_either=False,
     scale_first_leg_fraction=float(
-      zone_scaling.first_leg_fraction or 0.70
+      zone_scaling.first_leg_fraction or 0.80
     ),
     scale_step_atr=float(zone_scaling.scale_step_atr or 0.5),
     reaction_scale_enabled=bool(cfg.strategies.reaction.scale_enabled),
     reaction_market_fraction=float(
-      reaction_execution.market_fraction or 0.70
+      reaction_execution.market_fraction or 0.80
     ),
     reaction_scale_fraction=float(
-      reaction_execution.scale_fraction or 0.30
+      reaction_execution.scale_fraction or 0.20
     ),
     reaction_scale_step_atr=float(
       reaction_execution.scale_step_atr or 0.5

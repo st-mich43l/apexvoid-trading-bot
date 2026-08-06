@@ -173,7 +173,7 @@ def _build_entry(
       ratios = [Decimal(str(value)) for value in custom_ratios]
       ratios[-1] += Decimal("1") - sum(ratios)
     else:
-      ratios = [Decimal("0.70"), Decimal("0.30")]
+      ratios = [Decimal("0.80"), Decimal("0.20")]
       if len(leg_prices) != 2:
         ratio = (Decimal("1") / len(leg_prices)).quantize(
           Decimal("0.0001"), rounding=ROUND_HALF_UP,
@@ -527,7 +527,7 @@ def build_trade_plan_from_strategy_match(
   first_leg_fraction = Decimal(str(
     cfg_for_fraction.execution.reaction.market_fraction
     or cfg_for_fraction.execution.zone_scaling.first_leg_fraction
-    or 0.70
+    or 0.80
   ))
   if entry.legs:
     leg_ratios = tuple(leg.volume_ratio for leg in entry.legs)

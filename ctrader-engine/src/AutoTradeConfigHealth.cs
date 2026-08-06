@@ -157,7 +157,7 @@ public static class AutoTradeConfigHealth
       ZoneScaleUndersizedPolicy: options.ZoneScaleUndersizedPolicy,
       GroupCloseAllocation: options.GroupCloseAllocation,
       UnfilledLegAfterTpPolicy: options.UnfilledLegAfterTpPolicy,
-      EntryLegRatios: "0.70,0.30"
+      EntryLegRatios: "0.80,0.20"
     );
   }
 
