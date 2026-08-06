@@ -16,7 +16,10 @@ from app.autotrade.protective_stop import (
   primary_tp_pips_from_match,
   stop_bounds_for_reaction_room,
 )
-from app.autotrade.strategy_taxonomy import match_bypasses_opposing_structure
+from app.autotrade.strategy_taxonomy import (
+  is_scalp_strategy,
+  match_bypasses_opposing_structure,
+)
 
 GUARD_MODE_OBSERVE = "observe"
 GUARD_MODE_BALANCED = "balanced"
@@ -809,8 +812,28 @@ def evaluate_execution_policy(
     else 0.0
   )
   raw_risk_multiplier = getattr(match, "risk_multiplier", 1.0)
-  match_risk_multiplier = float(
+  # Never trust a stale Redis/zone-watch stamp for volume. Live Trend Pullback
+  # Tier B kept booking risk_multiplier=0.5 after the helper returned 1.0
+  # because analysis:zone_watch_candidate still held the pre-fix field.
+  stamped_risk_multiplier = float(
     1.0 if raw_risk_multiplier is None else raw_risk_multiplier
+  )
+  range_scalp = is_scalp_strategy(
+    str(getattr(match, "strategy", "") or ""),
+    family=str(getattr(match, "family", "") or strategy_family(
+      str(getattr(match, "strategy", "") or ""),
+    )),
+    strategy_mode=str(getattr(match, "strategy_mode", "") or ""),
+  )
+  match_risk_multiplier = risk_multiplier_for_tier(
+    str(getattr(match, "tier", None) or TIER_B),
+    cfg,
+    post_impulse=bool(
+      getattr(match, "range_state", None) == "post_impulse_range"
+    ),
+    one_sided=str(getattr(match, "strategy", "") or "")
+    == "One-Sided Range Reaction",
+    range_scalp=range_scalp,
   )
   effective_risk_multiplier = (
     match_risk_multiplier * policy.risk_multiplier
@@ -845,6 +868,7 @@ def evaluate_execution_policy(
     "min_reward_risk": policy.min_reward_risk,
     "policy_risk_multiplier": policy.risk_multiplier,
     "match_risk_multiplier": match_risk_multiplier,
+    "stamped_risk_multiplier": stamped_risk_multiplier,
     "effective_risk_multiplier": effective_risk_multiplier,
     "order_type_preference": policy.order_type_preference,
     "entry_distribution": entry_distribution,

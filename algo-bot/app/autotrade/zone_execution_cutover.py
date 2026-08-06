@@ -671,12 +671,44 @@ async def _record_width_telemetry(
 
 
 async def _save_candidate(client: Any, zone_id: str, match: StrategyMatch) -> None:
-  await client.set(candidate_key(zone_id), match.to_json(), ex=_CANDIDATE_TTL_SECONDS)
+  await client.set(
+    candidate_key(zone_id),
+    _refresh_candidate_risk(match).to_json(),
+    ex=_CANDIDATE_TTL_SECONDS,
+  )
 
 
 async def _load_candidate(client: Any, zone_id: str) -> StrategyMatch | None:
   raw = await client.get(candidate_key(zone_id))
-  return None if raw is None else StrategyMatch.from_json(raw)
+  if raw is None:
+    return None
+  match = StrategyMatch.from_json(raw)
+  if match is None:
+    return None
+  return _refresh_candidate_risk(match)
+
+
+def _refresh_candidate_risk(match: StrategyMatch) -> StrategyMatch:
+  """Re-stamp volume multiplier so stale Redis candidates cannot half-size."""
+  from app.autotrade.execution_policy import (
+    TIER_B,
+    risk_multiplier_for_tier,
+  )
+  from app.autotrade.strategy_taxonomy import is_scalp_strategy
+
+  mult = risk_multiplier_for_tier(
+    str(getattr(match, "tier", None) or TIER_B),
+    post_impulse=bool(match.range_state == "post_impulse_range"),
+    one_sided=match.strategy == "One-Sided Range Reaction",
+    range_scalp=is_scalp_strategy(
+      match.strategy,
+      family=str(getattr(match, "family", "") or ""),
+      strategy_mode=str(getattr(match, "strategy_mode", "") or ""),
+    ),
+  )
+  if abs(float(match.risk_multiplier) - float(mult)) < 1e-9:
+    return match
+  return replace(match, risk_multiplier=float(mult))
 
 
 async def _persist_match(client: Any, match: StrategyMatch) -> StrategyMatch:
