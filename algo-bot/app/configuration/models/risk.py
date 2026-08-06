@@ -43,7 +43,7 @@ class RiskPositionLimitsConfig(FrozenConfigModel):
 
 class RiskTiersConfig(FrozenConfigModel):
     a_multiplier: float = config_field(1.0, canonical_env='AUTO_TRADE_TIER_A_RISK_MULTIPLIER', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.MULTIPLIER, risk=RiskClassification.BROKER_ACCOUNT_SAFETY, description='Controls  (multiplier).', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 1.0),), validation_summary='Pydantic required/type coercion only')
-    b_multiplier: float = config_field(0.5, canonical_env='AUTO_TRADE_TIER_B_RISK_MULTIPLIER', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.MULTIPLIER, risk=RiskClassification.BROKER_ACCOUNT_SAFETY, description='Controls  (multiplier).', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 0.5),), validation_summary='Pydantic required/type coercion only')
+    b_multiplier: float = config_field(1.0, canonical_env='AUTO_TRADE_TIER_B_RISK_MULTIPLIER', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.MULTIPLIER, risk=RiskClassification.BROKER_ACCOUNT_SAFETY, description='Controls  (multiplier).', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 1.0),), validation_summary='Pydantic required/type coercion only')
 
 class RiskConfig(FrozenConfigModel):
     exposure: RiskExposureConfig = Field(default_factory=RiskExposureConfig)

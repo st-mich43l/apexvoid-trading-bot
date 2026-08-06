@@ -274,7 +274,7 @@ risk:
     range_max_risk_multiplier: 2.0
   tiers:
     a_multiplier: 1.0
-    b_multiplier: 0.5
+    b_multiplier: 1.0
 runtime:
   auto_trade:
     direct_publish_enabled: true
