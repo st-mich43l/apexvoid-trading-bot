@@ -155,28 +155,24 @@ def evaluate_structural_target_room(
   execution_cost_pips: float = 0.0,
   displacement_state: dict[str, Any] | None = None,
 ) -> StructuralTargetRoomDecision:
-  """Cap reachable target room at the nearest opposing actionable entry.
+  """Measure opposing structure ahead — never invent a tiny TP ladder.
 
   Hard-blocks only on structural impossibility: planned entry contained in
-  the opposing structure, or raw geometric room <= 0. The ATR barrier buffer
-  is preference for TP sizing — it must not invent a hard reject when raw
-  room is still positive.
+  the opposing structure, or raw geometric room <= 0.
 
-  Market Map ``contains_price`` is telemetry only: it describes whether the
-  *current market price* sits inside a map entry, not whether the planned
-  execution entry is contained.
+  Live 2026-08-06 Trendline Reaction BUY published a single absolute TP at
+  4255.49 with close_ratio=1.0 (~9 pips from fill) because this function
+  used to replace the owner ladder with ``floor(usable_room)``. That is
+  scalping theatre. Owner directive: reaction/swing setups always keep the
+  configured partial ladder (30/60/90/120/200) — barrier room is telemetry
+  only, not a TP calculator.
 
-  Candidate-band overlap without planned-entry containment is allow-with-
-  warning plus optional target cap — never a hard structural reject.
+  Market Map ``contains_price`` is telemetry only. Candidate-band overlap
+  without planned-entry containment is allow-with-warning — never a hard
+  structural reject and never a reason to shrink ``fitted_targets_pips``.
 
   Callers must apply ``filter_displaced_opposing_entries`` on authoritative
   recent closed bars before passing ``actionable_entries``.
-
-  execution_cost_pips is the hard viability floor for a capped target (spread
-  / slippage). A capped target must never exceed usable buffered room and
-  must clear this floor. min_capped_target_pips remains preference telemetry
-  when room clears the execution-cost floor but sits below the preferred
-  minimum.
   """
   side = str(direction).upper()
   planned = float(planned_entry_price)
@@ -356,96 +352,53 @@ def evaluate_structural_target_room(
       opposing_entry=barrier,
     ))
 
-  # Band overlap without planned-entry containment: allow + optional TP cap.
+  # Band overlap without planned-entry containment: allow + telemetry.
   if overlap_price > 0:
     measured["band_overlap_without_planned_containment"] = True
 
-  # Usable TP room is buffer-aware but never negative for sizing.
   usable_pips = max(0.0, room_pips)
-  if usable_pips < cost:
-    return _log_decision(StructuralTargetRoomDecision(
-      False,
-      "execution_cost_insufficient_room",
-      "buffered target room does not clear the execution-cost floor",
-      True,
-      {
-        **measured,
-        "usable_room_pips": round(usable_pips, 3),
-        "effective_target_pips": None,
-      },
-      opposing_entry=barrier,
-    ))
-
-  fitted = tuple(target for target in targets if target <= usable_pips)
-  if fitted:
-    effective = float(max(fitted))
-    # The opposing barrier only actually truncated the ladder if some
-    # configured target didn't fit — when the full ladder fits (usable
-    # room clears even the largest target), the barrier had no effect on
-    # the outcome and labeling it "capped" is misleading telemetry, even
-    # though the decision itself (allow, effective=max(targets)) is
-    # identical to no_opposing_barrier's.
-    capped = len(fitted) < len(targets)
-    reason = (
-      "opposing_barrier_target_capped"
-      if capped
-      else "opposing_barrier_full_ladder_fits"
-    )
+  effective = float(max(targets)) if targets else None
+  would_fit = tuple(target for target in targets if target <= usable_pips)
+  barrier_would_cap = bool(targets) and len(would_fit) < len(targets)
+  below_cost = usable_pips < cost
+  # Owner 2026-08-06: never invent floor(usable_room) as a solo TP and never
+  # trim the configured ladder. Partial book 30/60/90/120/200 (or whatever
+  # configured_target_pips the caller passed). Barrier geometry stays in
+  # measured for cards/telemetry only.
+  if below_cost:
+    reason = "opposing_barrier_room_below_cost_ignored"
     message = (
-      "configured target ladder capped before opposing structure"
-      if capped
-      else "opposing structure present but configured ladder fits within buffered room"
+      "buffered target room sits below execution-cost floor; "
+      "configured ladder published without TP recalculation"
     )
-    return _log_decision(StructuralTargetRoomDecision(
-      True,
-      reason,
-      message,
-      False,
-      {
-        **measured,
-        "usable_room_pips": round(usable_pips, 3),
-        "effective_target_pips": effective,
-        "preference_telemetry": True,
-      },
-      opposing_entry=barrier,
-      fitted_targets_pips=fitted,
-      effective_target_pips=effective,
-    ))
-
-  # Cap to real usable room — never invent pips above room (no max(1.0, …)).
-  capped_target = float(math.floor(usable_pips))
-  if capped_target < cost or capped_target <= 0:
-    return _log_decision(StructuralTargetRoomDecision(
-      False,
-      "execution_cost_insufficient_room",
-      "no integer target clears the execution-cost floor inside usable room",
-      True,
-      {
-        **measured,
-        "usable_room_pips": round(usable_pips, 3),
-        "effective_target_pips": None,
-      },
-      opposing_entry=barrier,
-    ))
-  reason = (
-    "opposing_barrier_target_capped_below_ladder"
-    if preference_floor > 0 and capped_target < preference_floor
-    else "configured_ladder_does_not_fit"
-    if targets
-    else "opposing_barrier_target_capped_below_ladder"
-  )
+  elif not targets:
+    reason = "opposing_barrier_no_configured_targets"
+    message = "opposing structure present but no configured targets to publish"
+  elif barrier_would_cap:
+    reason = "opposing_barrier_room_ignored_full_ladder"
+    message = (
+      "opposing structure would have truncated the ladder; "
+      "configured partial ladder published unchanged"
+    )
+  else:
+    reason = "opposing_barrier_full_ladder_fits"
+    message = (
+      "opposing structure present but configured ladder fits within buffered room"
+    )
   return _log_decision(StructuralTargetRoomDecision(
     True,
     reason,
-    "no configured target fits; capping to real buffered room",
+    message,
     False,
     {
       **measured,
       "usable_room_pips": round(usable_pips, 3),
-      "effective_target_pips": capped_target,
+      "effective_target_pips": effective,
+      "barrier_would_cap_ladder": barrier_would_cap,
+      "barrier_usable_room_below_cost": below_cost,
       "preference_telemetry": True,
     },
     opposing_entry=barrier,
-    fitted_targets_pips=(int(capped_target),),
-    effective_target_pips=capped_target,
+    fitted_targets_pips=targets,
+    effective_target_pips=effective,
   ))

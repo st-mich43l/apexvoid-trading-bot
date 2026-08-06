@@ -414,22 +414,10 @@ def _build_one_strategy_match(
         targets_pips = (full_take_profit_pips,)
       range_id = strategy_range_id(symbol, range_low, range_high)
   if result.target_cap_pips is not None:
-    target_cap = float(result.target_cap_pips)
-    targets_pips = tuple(
-      target for target in targets_pips
-      if float(target) <= target_cap + 1e-9
-    )
-    if not targets_pips:
-      # Opposing-barrier room preference: keep configured ladder and tag
-      # the observation rather than refusing to build a match.
-      targets_pips = _configured_strategy_targets()
-      if not targets_pips:
-        return None, "empty_target_config", {
-          "effective_target_pips": target_cap,
-          "preference_telemetry": True,
-          "preference_reason_code": "opposing_barrier_no_target",
-        }
-    if full_take_profit_pips is not None:
+    # Owner 2026-08-06: target_cap_pips is barrier room telemetry only.
+    # Never shrink the owner partial ladder (30/60/90/120/200) into a tiny
+    # solo TP that flattens the whole position at ~9 pips.
+    if full_take_profit_pips is not None and targets_pips:
       full_take_profit_pips = max(targets_pips)
   if not targets_pips:
     return None, "empty_target_config", {}
@@ -1854,11 +1842,7 @@ def _static_execution_eligibility(
     return value if math.isfinite(value) else None
 
   fitted = tuple(result.provisional_targets_pips)
-  if result.target_cap_pips is not None:
-    fitted = tuple(
-      target for target in fitted
-      if target <= float(result.target_cap_pips) + 1e-9
-    )
+  # target_cap_pips is barrier-room telemetry — do not truncate the ladder.
   opposing = None
   if measured.get("opposing_low") is not None:
     opposing = {
