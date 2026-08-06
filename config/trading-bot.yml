@@ -149,7 +149,7 @@ execution:
   stops:
     be_buffer_ticks: 6
     reaction:
-      room_floor_pips: 20
+      room_floor_pips: 40
     sl_distance: 6.5
     stop_push_beyond_zone: true
     trend:

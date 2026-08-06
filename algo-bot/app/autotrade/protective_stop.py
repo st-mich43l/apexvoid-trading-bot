@@ -687,16 +687,31 @@ def stop_bounds_for_reaction_room(
       if cfg.execution.reaction.room_stop_min_rr is not None
       else 1.0
     ) or 1.0
-    floor_pips = int(
+    # Owner envelope for reaction families is 40–60. room_floor used to
+    # default to 20 and, with a room-capped TP of 30, produced a 30-pip SL
+    # (live 2026-08-06). Always lift the floor to reaction.stop_min_pips.
+    reaction_min = int(
+      cfg.execution.reaction.stop_min_pips
+      if cfg.execution.reaction.stop_min_pips is not None
+      else 40
+    ) or 40
+    room_floor = int(
       cfg.execution.stops.reaction.room_floor_pips
       if cfg.execution.stops.reaction.room_floor_pips is not None
-      else 20
-    ) or 20
-    cap_pips = int(
+      else reaction_min
+    ) or reaction_min
+    floor_pips = max(reaction_min, room_floor)
+    reaction_max = int(
+      cfg.execution.reaction.stop_max_pips
+      if cfg.execution.reaction.stop_max_pips is not None
+      else 60
+    ) or 60
+    trend_cap = int(
       cfg.execution.trend.stop_max_pips
       if cfg.execution.trend.stop_max_pips is not None
       else 60
     ) or 60
+    cap_pips = max(floor_pips, min(reaction_max, trend_cap))
     source = "reaction_room"
   if not math.isfinite(min_rr) or min_rr <= 0:
     min_rr = 1.0
@@ -1029,7 +1044,9 @@ def stop_bounds_for_strategy(
   """Owner group envelope 40–60 for trend and zone-scale reaction families.
 
   Prefer ``stop_bounds_for_reaction_room`` when a room-capped primary TP is
-  known — that path pins SL to ≈TP (floor 20 / cap 60) instead of forcing 40.
+  known — that path pins SL near TP inside the owner reaction envelope
+  (floor ``execution.reaction.stop_min_pips``, default 40; cap
+  ``execution.reaction.stop_max_pips``, default 60).
   ``AUTO_TRADE_REACTION_STOP_*`` keys remain for compatibility.
   """
   if cfg is None:

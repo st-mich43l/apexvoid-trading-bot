@@ -91,6 +91,11 @@ _AUTHORITATIVE_REACTIONS = {
   "wick_rejection",
   "rejection",
   "reclaim",
+  "engulfing",
+  "body_close",
+  "strong_close",
+  "pin_bar",
+  "hammer",
 }
 _PUBLISHED_SETUP_IDS: set[str] = set()
 _INSTALLED = False
