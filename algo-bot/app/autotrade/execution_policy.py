@@ -697,6 +697,32 @@ def evaluate_execution_policy(
   stop_plan_error_measured: dict[str, Any] = {}
   stop_bounds_measured: dict[str, Any] = {}
   opposing_zone = None
+  # Scalp tiers book sizing_risk_multiplier x the equity-table lots at the
+  # same equity band (owner 2026-08-06). Left alone, stop geometry computed
+  # below stays at the 1x envelope while volume doubles -- dollar risk
+  # (lots x stop_distance) doubles with it. Shrink the pip envelope by the
+  # same multiplier here so a 2x-volume scalp risks the same dollars as a
+  # 1x reaction trade, not double.
+  range_scalp = is_scalp_strategy(
+    str(getattr(match, "strategy", "") or ""),
+    family=str(getattr(match, "family", "") or strategy_family(
+      str(getattr(match, "strategy", "") or ""),
+    )),
+    strategy_mode=str(getattr(match, "strategy_mode", "") or ""),
+  )
+  match_risk_multiplier = risk_multiplier_for_tier(
+    str(getattr(match, "tier", None) or TIER_B),
+    cfg,
+    post_impulse=bool(
+      getattr(match, "range_state", None) == "post_impulse_range"
+    ),
+    one_sided=str(getattr(match, "strategy", "") or "")
+    == "One-Sided Range Reaction",
+    range_scalp=range_scalp,
+  )
+  sizing_risk_multiplier = match_risk_multiplier * policy.risk_multiplier
+  if not math.isfinite(sizing_risk_multiplier) or sizing_risk_multiplier <= 0:
+    sizing_risk_multiplier = 1.0
   try:
     strategy_name = str(getattr(match, "strategy", ""))
     # Prefer effective remaining room (fitted / hybrid-capped) over the raw
@@ -716,6 +742,17 @@ def evaluate_execution_policy(
       pip_size=pip,
       cfg=cfg,
     )
+    if sizing_risk_multiplier > 1.0:
+      stop_bounds_measured = {
+        **stop_bounds_measured,
+        "stop_bounds_pre_sizing_min_pips": minimum_stop_pips,
+        "stop_bounds_pre_sizing_max_pips": maximum_stop_pips,
+        "sizing_risk_multiplier": sizing_risk_multiplier,
+      }
+      minimum_stop_pips = max(1, int(minimum_stop_pips / sizing_risk_multiplier))
+      maximum_stop_pips = max(
+        minimum_stop_pips, int(maximum_stop_pips / sizing_risk_multiplier),
+      )
     sweep_extreme = (
       trigger_wick_extreme
       if trigger_wick_extreme is not None
@@ -818,26 +855,9 @@ def evaluate_execution_policy(
   stamped_risk_multiplier = float(
     1.0 if raw_risk_multiplier is None else raw_risk_multiplier
   )
-  range_scalp = is_scalp_strategy(
-    str(getattr(match, "strategy", "") or ""),
-    family=str(getattr(match, "family", "") or strategy_family(
-      str(getattr(match, "strategy", "") or ""),
-    )),
-    strategy_mode=str(getattr(match, "strategy_mode", "") or ""),
-  )
-  match_risk_multiplier = risk_multiplier_for_tier(
-    str(getattr(match, "tier", None) or TIER_B),
-    cfg,
-    post_impulse=bool(
-      getattr(match, "range_state", None) == "post_impulse_range"
-    ),
-    one_sided=str(getattr(match, "strategy", "") or "")
-    == "One-Sided Range Reaction",
-    range_scalp=range_scalp,
-  )
-  effective_risk_multiplier = (
-    match_risk_multiplier * policy.risk_multiplier
-  )
+  # range_scalp / match_risk_multiplier already resolved above (needed
+  # early to shrink the stop envelope for the same 2x-volume scalp tiers).
+  effective_risk_multiplier = sizing_risk_multiplier
   normalized_regime = (
     "range" if regime == "range"
     else str(regime or "unknown").strip().lower()
