@@ -156,7 +156,10 @@ def evaluate_scalp_activation(
       False, True, location.reason_code or "entry_location_blocked", 0.0, measured,
     )
 
-  # Cost-aware net target / RR
+  # Cost-aware net target. Minimum net pips is the owner room gate for scalp;
+  # intentional ~1:1 room-synced books (target=stop=30) cannot clear a 1.10
+  # net-RR floor after spread/slip — that path killed live HFS Impulse
+  # Pullback BUY (2026-08-06 09:08 UTC, reason=scalp_net_rr_insufficient).
   gross = float(opportunity.expected_target_pips)
   net = gross - spread_pips - float(expected_slippage_pips)
   measured["net_target_pips"] = net
@@ -167,8 +170,12 @@ def evaluate_scalp_activation(
   net_rr = net / stop if stop > 0 else 0.0
   measured["net_reward_risk"] = net_rr
   min_rr = float(getattr(getattr(hfs, "policy", None), "minimum_reward_risk", 1.10) or 1.10)
+  measured["minimum_reward_risk"] = min_rr
   if net_rr < min_rr:
-    return ScalpDecision(False, True, "scalp_net_rr_insufficient", 0.0, measured)
+    # Preference telemetry only once min-net room is already satisfied.
+    measured["net_rr_below_policy"] = True
+    measured["preference_telemetry"] = True
+    measured["preference_reason_code"] = "scalp_net_rr_below_policy"
 
   return ScalpDecision(
     True,
