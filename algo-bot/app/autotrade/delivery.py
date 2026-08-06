@@ -976,6 +976,99 @@ async def _load_manage_message(
   return message_id, text
 
 
+async def _delete_prior_manage_reply(
+  chat_id: int,
+  message_id: int | None,
+  *,
+  match_id: str,
+) -> None:
+  """Best-effort delete of the prior manage notification (never the root card)."""
+  if message_id is None:
+    return
+  try:
+    await delete_scanner_message(chat_id, message_id)
+  except Exception:
+    log.exception(
+      "manage reply delete failed setup_id=%s message_id=%s",
+      match_id,
+      message_id,
+    )
+
+
+async def _post_manage_reply(
+  client,
+  event: dict,
+  *,
+  match_id: str,
+  chat_id: int,
+  send,
+  text: str,
+  remember: bool = False,
+  require_reply_target: bool = False,
+) -> int | None:
+  """Post a manage reply under the root card and persist Redis keys."""
+  reply_to, reason = await _resolve_reply_message_id(client, event, "internal")
+  if reply_to is None:
+    if require_reply_target:
+      log.info(
+        "Auto-trade manage reply unavailable for %s: %s; skipping",
+        match_id,
+        reason,
+      )
+      return None
+    log.info(
+      "Auto-trade manage reply unavailable for %s: %s; sending standalone",
+      match_id,
+      reason,
+    )
+  try:
+    sent = await send(text, reply_to=reply_to, chat_id=chat_id)
+  except TelegramBadRequest as error:
+    if reply_to is not None and _is_bad_reply_target(error):
+      log.info(
+        "Auto-trade manage reply rejected for %s: %s; skipping",
+        match_id,
+        error,
+      )
+      return None
+    raise
+  message_id = int(sent.message_id)
+  await _save_manage_message(client, match_id, message_id=message_id, text=text)
+  if remember:
+    await _remember_trade_message(client, event, "internal", message_id)
+  return message_id
+
+
+async def _replace_manage_reply(
+  client,
+  event: dict,
+  *,
+  match_id: str,
+  chat_id: int,
+  send,
+  text: str,
+  old_message_id: int | None,
+  remember: bool = False,
+  require_reply_target: bool = False,
+) -> int | None:
+  """Delete the prior manage notification and reply with updated information.
+
+  The SETUP FORMING root card is left untouched — only the threaded manage
+  reply (fills / TP / SL / closed) is replaced.
+  """
+  await _delete_prior_manage_reply(chat_id, old_message_id, match_id=match_id)
+  return await _post_manage_reply(
+    client,
+    event,
+    match_id=match_id,
+    chat_id=chat_id,
+    send=send,
+    text=text,
+    remember=remember,
+    require_reply_target=require_reply_target,
+  )
+
+
 def _split_manage_fill_and_tps(text: str) -> tuple[str, list[str]]:
   """Split stored manage body into fill header + accumulated TP/close lines."""
   fill_lines: list[str] = []
@@ -1256,49 +1349,21 @@ async def _deliver_compact_order_filled(
   # Reply keeps ORDER FILLED; root SETUP FORMING card becomes POSITION ACTIVATED.
   body = _format_order_filled_manage_body(event)
   manage_id, manage_text = await _load_manage_message(client, match_id)
-  if manage_id is not None and manage_text:
+  new_text = body
+  if manage_text:
     _, tp_lines = _split_manage_fill_and_tps(manage_text)
-    new_text = body
     if tp_lines:
       new_text = f"{body}\n" + "\n".join(tp_lines)
-    try:
-      await edit_scanner_message_text(chat_id, manage_id, new_text)
-      await _save_manage_message(
-        client, match_id, message_id=manage_id, text=new_text,
-      )
-      await _remember_trade_message(client, event, "internal", manage_id)
-      await _mark_forming_card_position_activated(client, match_id)
-      return True
-    except Exception:
-      log.exception(
-        "manage fill edit failed setup_id=%s message_id=%s",
-        match_id,
-        manage_id,
-      )
-  reply_to, reason = await _resolve_reply_message_id(client, event, "internal")
-  if reply_to is None:
-    log.info(
-      "Auto-trade manage reply unavailable for %s: %s; sending standalone",
-      match_id,
-      reason,
-    )
-  try:
-    sent = await send(body, reply_to=reply_to, chat_id=chat_id)
-  except TelegramBadRequest as error:
-    if reply_to is not None and _is_bad_reply_target(error):
-      log.info(
-        "Auto-trade manage reply rejected for %s: %s; skipping standalone",
-        match_id,
-        error,
-      )
-      await _mark_forming_card_position_activated(client, match_id)
-      return True
-    raise
-  message_id = int(sent.message_id)
-  await _save_manage_message(
-    client, match_id, message_id=message_id, text=body,
+  await _replace_manage_reply(
+    client,
+    event,
+    match_id=match_id,
+    chat_id=chat_id,
+    send=send,
+    text=new_text,
+    old_message_id=manage_id,
+    remember=True,
   )
-  await _remember_trade_message(client, event, "internal", message_id)
   await _mark_forming_card_position_activated(client, match_id)
   return True
 
@@ -1316,43 +1381,25 @@ async def _deliver_compact_tp_booked(
   if line is None:
     return None
   manage_id, manage_text = await _load_manage_message(client, match_id)
-  if manage_id is not None and manage_text:
-    if line in manage_text:
-      return True
+  if manage_text and line in manage_text:
+    return True
+  if manage_text:
     new_text = f"{manage_text.rstrip()}\n{line}"
-    try:
-      await edit_scanner_message_text(chat_id, manage_id, new_text)
-      await _save_manage_message(
-        client, match_id, message_id=manage_id, text=new_text,
-      )
-      return True
-    except Exception:
-      log.exception(
-        "manage TP edit failed setup_id=%s message_id=%s",
-        match_id,
-        manage_id,
-      )
-  stub = "\n".join([
-    "🤖 <b>ApexVoid Algo</b>",
-    "• ✅ <b>ORDER FILLED</b>",
-    "",
-    line,
-  ])
-  reply_to, _ = await _resolve_reply_message_id(client, event, "internal")
-  try:
-    sent = await send(stub, reply_to=reply_to, chat_id=chat_id)
-  except TelegramBadRequest as error:
-    if reply_to is not None and _is_bad_reply_target(error):
-      log.info(
-        "Auto-trade TP fallback reply rejected for %s: %s; skipping",
-        match_id,
-        error,
-      )
-      return True
-    raise
-  message_id = int(sent.message_id)
-  await _save_manage_message(
-    client, match_id, message_id=message_id, text=stub,
+  else:
+    new_text = "\n".join([
+      "🤖 <b>ApexVoid Algo</b>",
+      "• ✅ <b>ORDER FILLED</b>",
+      "",
+      line,
+    ])
+  await _replace_manage_reply(
+    client,
+    event,
+    match_id=match_id,
+    chat_id=chat_id,
+    send=send,
+    text=new_text,
+    old_message_id=manage_id,
   )
   return True
 
@@ -1365,11 +1412,12 @@ async def _deliver_compact_position_closed(
   chat_id: int,
   send,
 ) -> bool:
-  """Append close into the manage reply under the forming card.
+  """Replace manage reply under the forming card with close (and missing TP).
 
   Final target hits emit position_closed without a separate tp_booked, so
   this path also appends the archived TP compact line when missing.
-  The SETUP FORMING root card is left unchanged on close.
+  The SETUP FORMING root card is left unchanged on close; the prior manage
+  notification is deleted and a fresh reply is posted with the update.
   """
   message = str(event.get("message") or "")
   close_line = _format_position_closed_compact_line(event, message)
@@ -1387,42 +1435,24 @@ async def _deliver_compact_position_closed(
     return text
 
   manage_id, manage_text = await _load_manage_message(client, match_id)
-  if manage_id is not None and manage_text:
-    if "POSITION CLOSED" in manage_text:
-      return True
+  if manage_text and "POSITION CLOSED" in manage_text:
+    return True
+  if manage_text:
     new_text = _compose(manage_text)
-    try:
-      await edit_scanner_message_text(chat_id, manage_id, new_text)
-      await _save_manage_message(
-        client, match_id, message_id=manage_id, text=new_text,
-      )
-      return True
-    except Exception:
-      log.exception(
-        "manage close edit failed setup_id=%s message_id=%s",
-        match_id,
-        manage_id,
-      )
-  stub = _compose("\n".join([
-    "🤖 <b>ApexVoid Algo</b>",
-    "✅ <b>ORDER FILLED</b>",
-    "",
-  ]))
-  reply_to, _ = await _resolve_reply_message_id(client, event, "internal")
-  try:
-    sent = await send(stub, reply_to=reply_to, chat_id=chat_id)
-  except TelegramBadRequest as error:
-    if reply_to is not None and _is_bad_reply_target(error):
-      log.info(
-        "Auto-trade close fallback reply rejected for %s: %s; skipping",
-        match_id,
-        error,
-      )
-      return True
-    raise
-  message_id = int(sent.message_id)
-  await _save_manage_message(
-    client, match_id, message_id=message_id, text=stub,
+  else:
+    new_text = _compose("\n".join([
+      "🤖 <b>ApexVoid Algo</b>",
+      "✅ <b>ORDER FILLED</b>",
+      "",
+    ]))
+  await _replace_manage_reply(
+    client,
+    event,
+    match_id=match_id,
+    chat_id=chat_id,
+    send=send,
+    text=new_text,
+    old_message_id=manage_id,
   )
   return True
 
@@ -1435,58 +1465,38 @@ async def _deliver_compact_be_trail(
   chat_id: int,
   send,
 ) -> bool:
-  """Update manage reply with BE/Trail; leave Trade-area Stop on the root card."""
+  """Replace manage reply with BE/Trail; leave Trade-area Stop on the root card."""
   message = str(event.get("message") or "")
   status_line, _state, _price_val = _format_be_trail_head_status(event, message)
 
   manage_id, manage_text = await _load_manage_message(client, match_id)
-  if manage_id is not None and manage_text:
+  if manage_text:
     new_text = _upsert_manage_be_trail_line(manage_text, status_line)
-    try:
-      await edit_scanner_message_text(chat_id, manage_id, new_text)
-      await _save_manage_message(
-        client, match_id, message_id=manage_id, text=new_text,
-      )
-    except Exception:
-      log.exception(
-        "manage BE/trail edit failed setup_id=%s message_id=%s",
-        match_id,
-        manage_id,
-      )
+    await _replace_manage_reply(
+      client,
+      event,
+      match_id=match_id,
+      chat_id=chat_id,
+      send=send,
+      text=new_text,
+      old_message_id=manage_id,
+      remember=True,
+    )
   else:
     body = "\n".join([
       "🤖 <b>ApexVoid Algo</b>",
       status_line,
     ])
-    reply_to, reason = await _resolve_reply_message_id(client, event, "internal")
-    if reply_to is None:
-      log.info(
-        "Auto-trade BE/trail reply unavailable for %s: %s; skipping",
-        match_id,
-        reason,
-      )
-    else:
-      try:
-        sent = await send(body, reply_to=reply_to, chat_id=chat_id)
-        message_id = int(sent.message_id)
-        await _save_manage_message(
-          client, match_id, message_id=message_id, text=body,
-        )
-        await _remember_trade_message(client, event, "internal", message_id)
-      except TelegramBadRequest as error:
-        if reply_to is not None and _is_bad_reply_target(error):
-          log.info(
-            "Auto-trade BE/trail reply rejected for %s: %s; skipping",
-            match_id,
-            error,
-          )
-        else:
-          raise
-      except Exception:
-        log.exception(
-          "manage BE/trail send failed setup_id=%s",
-          match_id,
-        )
+    await _post_manage_reply(
+      client,
+      event,
+      match_id=match_id,
+      chat_id=chat_id,
+      send=send,
+      text=body,
+      remember=True,
+      require_reply_target=True,
+    )
   return True
 
 
