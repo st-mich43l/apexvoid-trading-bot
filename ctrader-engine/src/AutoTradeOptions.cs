@@ -138,8 +138,8 @@ public sealed record AutoTradeOptions(
   // Reaction Key/Session/Trendline market_with_limit_scale: L1 market
   // fraction + L2 deeper-limit fraction. InvalidPolicy=single_market
   // collapses to 100% L1 market when two valid legs cannot be formed.
-  decimal ReactionMarketFraction = 0.70m,
-  decimal ReactionScaleFraction = 0.30m,
+  decimal ReactionMarketFraction = 0.80m,
+  decimal ReactionScaleFraction = 0.20m,
   bool ReactionScaleEnabled = true,
   string ReactionScaleInvalidPolicy = "single_market",
   decimal ReactionScaleStepAtr = 0.50m
@@ -496,10 +496,10 @@ public sealed record AutoTradeOptions(
       "AUTO_TRADE_UNFILLED_LEG_AFTER_TP_POLICY", "cancel"
     ).Trim().ToLowerInvariant(),
     ReactionMarketFraction: resolver.Decimal(
-      "AUTO_TRADE_REACTION_MARKET_FRACTION", 0.70m
+      "AUTO_TRADE_REACTION_MARKET_FRACTION", 0.80m
     ),
     ReactionScaleFraction: resolver.Decimal(
-      "AUTO_TRADE_REACTION_SCALE_FRACTION", 0.30m
+      "AUTO_TRADE_REACTION_SCALE_FRACTION", 0.20m
     ),
     ReactionScaleEnabled: resolver.Bool(
       "AUTO_TRADE_REACTION_SCALE_ENABLED", false

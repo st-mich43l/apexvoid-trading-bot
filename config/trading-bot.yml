@@ -133,9 +133,9 @@ execution:
     room_stop_floor_pips: 15
     tp_buffer_pips: 3.0
   reaction:
-    market_fraction: 0.7
+    market_fraction: 0.8
     room_stop_min_rr: 1.0
-    scale_fraction: 0.3
+    scale_fraction: 0.2
     scale_invalid_policy: single_market
     scale_step_atr: 0.5
     stop_max_pips: 60
@@ -174,7 +174,7 @@ execution:
   zone_scaling:
     fill_enabled: true
     fill_fallback_enabled: true
-    first_leg_fraction: 0.7
+    first_leg_fraction: 0.8
     scale_step_atr: 0.5
     scale_undersized_policy: single_entry
 instruments:

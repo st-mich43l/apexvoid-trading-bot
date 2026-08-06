@@ -582,7 +582,7 @@ public sealed record AutoTradeConfigManifest(
   string ZoneScaleUndersizedPolicy = "single_entry",
   string GroupCloseAllocation = "pro_rata",
   string UnfilledLegAfterTpPolicy = "cancel",
-  string EntryLegRatios = "0.70,0.30"
+  string EntryLegRatios = "0.80,0.20"
 );
 
 public sealed record AutoTradeConfigHealthDocument(

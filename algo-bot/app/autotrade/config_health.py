@@ -312,7 +312,7 @@ def python_manifest() -> dict[str, Any]:
     "unfilled_leg_after_tp_policy": (
       runtime_config.execution.targeting.unfilled_leg_after_tp_policy
     ),
-    "entry_leg_ratios": "0.70,0.30",
+    "entry_leg_ratios": "0.80,0.20",
     "deprecated_variables": deprecated_environment_variables(),
     "canonical_options": canonical_option_health(),
     "config_sources": sources,
