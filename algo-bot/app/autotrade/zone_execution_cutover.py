@@ -553,7 +553,14 @@ async def _prepare_activation(
     reason_code=activation.reason_code,
     payload=activation_payload,
   )
-  log.info(
+  # Spot-driven ZoneWatch re-checks ~0.5s while waiting for M1 reaction.
+  # Keep INFO for allow / decisive break; soft waits stay DEBUG or the
+  # owner log scrolls one Key Level line per tick.
+  _log = log.info if (
+    activation.allowed
+    or activation.reason_code == "zone_decisively_broken"
+  ) else log.debug
+  _log(
     "entry activation decision symbol=%s strategy=%s direction=%s "
     "location=%s activation=%s allowed=%s would_block=%s grade=%s "
     "range_source=%s range_usable=%s",
