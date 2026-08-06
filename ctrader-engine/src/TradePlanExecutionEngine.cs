@@ -186,30 +186,43 @@ public static class TradePlanExecutionEngine
         $"equity {equity.Equity:N2} is below the $200 equity sizing floor"
       );
     }
+    // Python stamps RiskMultiplier (scalp = 2.0 for all quality tiers).
+    // Stop geometry stays unchanged — this scales volume only.
+    var riskMultiplier = plan.Risk.RiskMultiplier;
+    if (riskMultiplier <= 0m)
+    {
+      riskMultiplier = 1m;
+    }
+    var sizedLots = decimal.Round(
+      tableLots * riskMultiplier,
+      2,
+      MidpointRounding.AwayFromZero
+    );
     var maxVolumeLots = symbol.LotSize > 0
       ? (decimal)plan.Risk.MaxVolume / symbol.LotSize
       : 0m;
     // MaxVolume is a hard ceiling: never silently Min() the owner table lots
     // down (e.g. 0.11 → smaller). Python publishes a large broker-style
     // max_volume that the table already fits; a tighter ceiling rejects.
-    if (maxVolumeLots > 0m && tableLots > maxVolumeLots)
+    if (maxVolumeLots > 0m && sizedLots > maxVolumeLots)
     {
       throw new TradePlanContractException("equity_table_above_broker_maximum");
     }
     if (
       symbol.MaxVolume > 0
       && symbol.LotSize > 0
-      && tableLots * symbol.LotSize > symbol.MaxVolume
+      && sizedLots * symbol.LotSize > symbol.MaxVolume
     )
     {
       throw new TradePlanContractException("equity_table_above_broker_maximum");
     }
-    var volume = VolumePlanner.VolumeForLots(tableLots, symbol);
+    var volume = VolumePlanner.VolumeForLots(sizedLots, symbol);
     if (volume <= 0)
     {
       throw new TradePlanContractException(
         $"equity-table sizing produced a non-tradeable volume "
-        + $"(table lots={tableLots:0.####}, plan max_volume lots={maxVolumeLots:0.####})"
+        + $"(table lots={tableLots:0.####}, risk_multiplier={riskMultiplier:0.####}, "
+        + $"sized lots={sizedLots:0.####}, plan max_volume lots={maxVolumeLots:0.####})"
       );
     }
 

@@ -249,8 +249,14 @@ def evaluate_entry_against_exposure(
   exposures: list[ActiveExposure],
   min_price_separation: float = 15.0,
   same_direction_size_fraction: float = 0.60,
+  ignore_opposing_active: bool = False,
 ) -> ExposureDecision:
-  """Apply opposing-distance and same-direction stack rules."""
+  """Apply opposing-distance and same-direction stack rules.
+
+  ``ignore_opposing_active``: scalp with fitted native min room may open
+  even while an opposite position is already activated — opposing price
+  separation is soft telemetry then, not a hard block.
+  """
   wanted = normalize_direction(direction)
   if wanted is None or entry_price <= 0:
     return ExposureDecision(block=False)
@@ -262,6 +268,32 @@ def evaluate_entry_against_exposure(
       continue
     distance = abs(float(entry_price) - float(active.entry_price))
     if distance < separation:
+      measured = {
+        "active_direction": active.direction,
+        "active_entry_price": active.entry_price,
+        "candidate_entry_price": entry_price,
+        "price_distance": distance,
+        "min_price_separation": separation,
+        "active_source": active.source,
+        "active_plan_id": active.plan_id,
+        "active_group_id": active.group_id,
+        "active_position_id": active.position_id,
+      }
+      if ignore_opposing_active:
+        return ExposureDecision(
+          block=False,
+          reason_code="opposing_active_too_close_ignored_scalp",
+          message=(
+            f"{wanted} scalp entry {entry_price:.2f} is {distance:.2f} from "
+            f"active {active.direction} @ {active.entry_price:.2f}; "
+            "fitted native room ignores opposing-active separation"
+          ),
+          measured={
+            **measured,
+            "ignore_opposing_active": True,
+            "preference_telemetry": True,
+          },
+        )
       return ExposureDecision(
         block=True,
         reason_code="opposing_active_too_close",
@@ -270,17 +302,7 @@ def evaluate_entry_against_exposure(
           f"active {active.direction} @ {active.entry_price:.2f}; "
           f"require >= {separation:.0f} price separation"
         ),
-        measured={
-          "active_direction": active.direction,
-          "active_entry_price": active.entry_price,
-          "candidate_entry_price": entry_price,
-          "price_distance": distance,
-          "min_price_separation": separation,
-          "active_source": active.source,
-          "active_plan_id": active.plan_id,
-          "active_group_id": active.group_id,
-          "active_position_id": active.position_id,
-        },
+        measured=measured,
       )
 
   same = [item for item in exposures if item.direction == wanted]

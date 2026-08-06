@@ -5519,6 +5519,9 @@ async def _publish_trade_plan_v7(
     # Zone cooldown is preference telemetry — continue to publish.
 
   exposures = await load_active_exposures(client)
+  scalp_ignores_opposing_active = match_bypasses_opposing_structure(
+    match_for_plan,
+  )
   exposure = evaluate_entry_against_exposure(
     direction=match_for_plan.direction,
     entry_price=float(entry_reference),
@@ -5529,6 +5532,9 @@ async def _publish_trade_plan_v7(
     same_direction_size_fraction=float(
       runtime_config.risk.position_limits.same_direction_stack_size_fraction
     ),
+    # Active opposite position must not block HFS / Range Edge when native
+    # min room already fitted (owner 2026-08-06).
+    ignore_opposing_active=scalp_ignores_opposing_active,
   )
   if exposure.block:
     await _release_claims()
@@ -5541,6 +5547,13 @@ async def _publish_trade_plan_v7(
       dict(exposure.measured or {}),
     )
     return None
+  if exposure.reason_code == "opposing_active_too_close_ignored_scalp":
+    log.info(
+      "v7 scalp ignores opposing-active separation symbol=%s match_id=%s %s",
+      symbol,
+      match.match_id[:12],
+      exposure.message,
+    )
   same_direction_stack = bool(exposure.same_direction_stack)
   if same_direction_stack:
     log.info(

@@ -361,17 +361,31 @@ def evaluate_structural_target_room(
   would_fit = tuple(target for target in targets if target <= usable_pips)
   barrier_would_cap = bool(targets) and len(would_fit) < len(targets)
   below_cost = usable_pips < cost
-  # Owner 2026-08-06: never invent floor(usable_room) as a solo TP and never
-  # trim the configured ladder. Partial book 30/60/90/120/200 (or whatever
-  # configured_target_pips the caller passed). Barrier geometry stays in
-  # measured for cards/telemetry only.
+  # Owner 2026-08-06 (revised same day): buffered usable room below the
+  # execution-cost floor is a hard structural kill — publishing a full
+  # 30/60/90/120/200 ladder into ~0 pip of barrier room put live Trendline
+  # / Key Level SELs next to demand (fe023dd8 @ 4268 with opposing high
+  # 4267.8). Positive usable room still never invents floor(usable) as a
+  # solo TP and never trims the configured partial ladder.
   if below_cost:
-    reason = "opposing_barrier_room_below_cost_ignored"
-    message = (
-      "buffered target room sits below execution-cost floor; "
-      "configured ladder published without TP recalculation"
-    )
-  elif not targets:
+    return _log_decision(StructuralTargetRoomDecision(
+      False,
+      "opposing_barrier_room_below_cost",
+      (
+        "buffered target room sits below execution-cost floor; "
+        "opposing barrier leaves no tradable TP room"
+      ),
+      True,
+      {
+        **measured,
+        "usable_room_pips": round(usable_pips, 3),
+        "effective_target_pips": None,
+        "barrier_would_cap_ladder": barrier_would_cap,
+        "barrier_usable_room_below_cost": True,
+      },
+      opposing_entry=barrier,
+    ))
+  if not targets:
     reason = "opposing_barrier_no_configured_targets"
     message = "opposing structure present but no configured targets to publish"
   elif barrier_would_cap:
@@ -395,7 +409,7 @@ def evaluate_structural_target_room(
       "usable_room_pips": round(usable_pips, 3),
       "effective_target_pips": effective,
       "barrier_would_cap_ladder": barrier_would_cap,
-      "barrier_usable_room_below_cost": below_cost,
+      "barrier_usable_room_below_cost": False,
       "preference_telemetry": True,
     },
     opposing_entry=barrier,

@@ -22,7 +22,7 @@ from app.analysis.key_level_role import (
 )
 from app.analysis.market_map import MapEntry, MarketMap
 from app.analysis.structural_reaction_support import STRUCTURAL_SETUPS
-from app.autotrade.strategy_taxonomy import is_range_strategy
+from app.autotrade.strategy_taxonomy import is_scalp_strategy
 from app.autotrade.structural_target_room import (
   evaluate_structural_target_room,
   filter_displaced_opposing_entries,
@@ -164,6 +164,7 @@ _GATED_HARD_BLOCK_REASONS = frozenset({
   "opposing_entry_overlap",
   "opposing_major_no_room",
   "opposing_barrier_no_target",
+  "opposing_barrier_room_below_cost",
   "entry_inside_opposing_zone",
   "execution_cost_insufficient_room",
 })
@@ -530,11 +531,11 @@ def resolve_actionability(
         entries, result=result, context=context, cfg=cfg,
       )
       result = _trim_zone_against_overlapping_barrier(result, room_entries)
-      # Range/scalp setups (Range Edge Scalp, Fade Scalp, ...) are meant to
-      # trade close to structure with tight targets - the swing-strategy
-      # buffer/floor below starves them of room they were never supposed to
-      # need. Use the lighter scalp-specific pair for that family only.
-      is_scalp = is_range_strategy(result.setup)
+      # Range/HFS scalp: detector already required native min room (EQ /
+      # select_range_target / HFS fitted TP). HTF opposing barriers must not
+      # hard-kill discovery — same rule as worker opposing bypass when
+      # fitted room exists. Reaction/zone still evaluate the map.
+      is_scalp = is_scalp_strategy(result.setup)
       room = evaluate_structural_target_room(
         direction=result.direction,
         planned_entry_price=(
@@ -545,7 +546,7 @@ def resolve_actionability(
         candidate_entry_low=float(result.entry_zone.low),
         candidate_entry_high=float(result.entry_zone.high),
         configured_target_pips=targets,
-        actionable_entries=room_entries,
+        actionable_entries=() if is_scalp else room_entries,
         atr=atr,
         pip_size=pip_size,
         barrier_buffer_atr=float(
@@ -559,7 +560,11 @@ def resolve_actionability(
           else cfg.actionability.target_room.minimum_capped_target_pips
         ),
         execution_cost_pips=float(cfg.execution.policy.execution_cost_pips),
-        displacement_state=displacement_state,
+        displacement_state=(
+          {"skipped": "scalp_native_room_ignores_htf_opposing"}
+          if is_scalp
+          else displacement_state
+        ),
       )
       measured = {
         **room.measured,
