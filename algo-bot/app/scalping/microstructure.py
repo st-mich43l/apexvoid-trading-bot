@@ -240,6 +240,78 @@ def detect_impulse_pullback(
   }
 
 
+def detect_momentum_ignition(
+  df: pd.DataFrame,
+  *,
+  direction: str,
+  atr: float,
+  min_displacement_atr: float = 1.2,
+  lookback_bars: int = 5,
+  min_directional_bars: int = 4,
+) -> dict[str, Any] | None:
+  """A live, still-accelerating thrust -- chase it, don't wait for a pullback.
+
+  impulse_pullback deliberately waits for a 25-75% retracement before
+  entering. That leaves a straight, uninterrupted run with nothing to catch
+  it: the market can travel the entire distance a scalp would have wanted
+  before ever handing back the pullback impulse_pullback is waiting for.
+  This fires while the thrust is still in progress -- most of the last
+  ``lookback_bars`` bars directional, net displacement past
+  ``min_displacement_atr``, and the newest bar still making a fresh extreme
+  (not basing/stalling, which is impulse_pullback's job, not this one's).
+  """
+  if df is None or len(df) < lookback_bars or atr <= 0:
+    return None
+  side = str(direction).upper()
+  window = df.tail(lookback_bars)
+  opens = window["open"].astype(float)
+  closes = window["close"].astype(float)
+  highs = window["high"].astype(float)
+  lows = window["low"].astype(float)
+  last = window.iloc[-1]
+
+  if side == "BUY":
+    directional = int((closes > opens).sum())
+    if directional < min_directional_bars:
+      return None
+    displacement = float(closes.iloc[-1] - opens.iloc[0])
+    if displacement <= 0 or displacement / atr < min_displacement_atr:
+      return None
+    if float(last["close"]) <= float(last["open"]):
+      return None
+    if float(last["high"]) < float(highs.iloc[:-1].max()):
+      return {"rejected": True, "reason": "momentum_stalling"}
+    return {
+      "pattern": "momentum_ignition",
+      "direction": "BUY",
+      "bar_ts": _ts(window.index[-1]),
+      "extreme": float(lows.min()),
+      "close": float(closes.iloc[-1]),
+      "directional_bars": directional,
+      "displacement_atr": displacement / atr,
+    }
+
+  directional = int((closes < opens).sum())
+  if directional < min_directional_bars:
+    return None
+  displacement = float(opens.iloc[0] - closes.iloc[-1])
+  if displacement <= 0 or displacement / atr < min_displacement_atr:
+    return None
+  if float(last["close"]) >= float(last["open"]):
+    return None
+  if float(last["low"]) > float(lows.iloc[:-1].min()):
+    return {"rejected": True, "reason": "momentum_stalling"}
+  return {
+    "pattern": "momentum_ignition",
+    "direction": "SELL",
+    "bar_ts": _ts(window.index[-1]),
+    "extreme": float(highs.max()),
+    "close": float(closes.iloc[-1]),
+    "directional_bars": directional,
+    "displacement_atr": displacement / atr,
+  }
+
+
 def detect_breakout_retest(
   df: pd.DataFrame,
   *,

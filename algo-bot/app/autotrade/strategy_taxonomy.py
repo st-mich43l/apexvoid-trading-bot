@@ -37,6 +37,7 @@ HFS_STRATEGIES = frozenset({
   "HFS Range Sweep",
   "HFS Impulse Pullback",
   "HFS Breakout Retest",
+  "HFS Momentum Chase",
 })
 
 CANONICAL_FAMILY_REACTION = "reaction"
