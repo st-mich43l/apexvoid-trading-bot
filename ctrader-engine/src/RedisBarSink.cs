@@ -291,7 +291,8 @@ public sealed class RedisBarSink(
 ) : IBarSink
 {
   private readonly IRedisStringCommands? _strings = strings ?? redis as IRedisStringCommands;
-  private readonly Dictionary<string, long> _lastSpotWrite = [];
+  private readonly Dictionary<string, long> _lastSpotWriteMs = [];
+  private const long SpotWriteMinIntervalMs = 250;
 
   public async Task WriteClosedBarAsync(
     string symbol,
@@ -346,9 +347,12 @@ public sealed class RedisBarSink(
     var strings = _strings
       ?? throw new InvalidOperationException("Redis string commands are required for spot writes");
     var key = SpotKey(spot.Symbol);
+    // Wall-clock throttle (was 1s via spot.Timestamp) so Redis/spot consumers
+    // see sub-second price updates for cards + activation.
+    var nowMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
     if (
-      _lastSpotWrite.TryGetValue(key, out var last)
-      && spot.Timestamp - last < 1
+      _lastSpotWriteMs.TryGetValue(key, out var lastMs)
+      && nowMs - lastMs < SpotWriteMinIntervalMs
     )
     {
       return;
@@ -358,7 +362,12 @@ public sealed class RedisBarSink(
       RedisJsonContext.Default.RedisSpot
     );
     await strings.SetStringAsync(key, json, cancellationToken);
-    _lastSpotWrite[key] = spot.Timestamp;
+    _lastSpotWriteMs[key] = nowMs;
+    await redis.PublishAsync(
+      "spots:new",
+      $"{spot.Symbol.ToUpperInvariant()}:{spot.Timestamp}",
+      cancellationToken
+    );
   }
 
   public static string Key(string symbol, string timeframe) =>

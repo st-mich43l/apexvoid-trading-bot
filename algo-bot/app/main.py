@@ -32,6 +32,7 @@ from app.autotrade.zone_execution_cutover import (
   install_zone_execution_cutover,
   zone_watch_execution_loop,
 )
+from app.autotrade.setup_card import forming_price_track_loop
 from app.scalping.runtime import scalp_m1_event_loop
 from app.bot.client import edit_scanner_message_text
 from app.autotrade.zone_execution_runtime import uninstall_zone_execution_cutover
@@ -142,6 +143,7 @@ async def main() -> None:
   _spawn_supervised("weekly_report_loop", weekly_report_loop)
   _spawn_supervised("scanner_loop", scanner_loop)
   _spawn_supervised("zone_watch_execution_loop", zone_watch_execution_loop)
+  _spawn_supervised("forming_price_track_loop", forming_price_track_loop)
   _spawn_supervised("auto_scalp_loop", auto_scalp_loop)
   # HFS M1 scalping is shadow/paper by default and never publishes broker
   # candidates. The loop no-ops immediately when mode=off.

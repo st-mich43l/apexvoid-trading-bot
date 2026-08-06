@@ -1046,16 +1046,16 @@ def classify_tier(
 
 
 def risk_multiplier_for_tier(tier: str, cfg: Any | None = None, *, post_impulse: bool = False, one_sided: bool = False, range_scalp: bool = False) -> float:
-  """Resolve the risk multiplier for the given tier from canonical config.
+  """Resolve volume multiplier for equity-table sizing.
 
-  ``auto_trade_tier_c_risk_multiplier`` was never actually a config value: the
-  retired flat facade path returned ``b`` for tier C via a ``getattr``
-  fallback, and the canonical model has no ``c_multiplier`` field. Preserve
-  that same "tier C mirrors tier B" behaviour here explicitly.
-
-  Owner 2026-08-06: every scalp (HFS / Range Edge / Box) books **2×** the
-  equity-table lot size vs reaction. Stop distance is unchanged — volume
-  only. Quality tier does not shrink scalp below that 2× floor.
+  Owner 2026-08-06:
+  - Scalp (HFS / Range Edge / Box) books **2×** equity-table lots.
+  - Reaction / swing books **full** equity-table lots on every quality
+    tier (A/B/C). Tier stars remain card/telemetry only — live Trend
+    Pullback ⭐⭐ was half-sizing to 0.05 on a $887 → 0.10 table because
+    Tier B was 0.5.
+  - ``post_impulse`` / ``one_sided`` may still soft-cap below full table
+    when those flags apply.
   """
   if cfg is None:
     cfg = _default_runtime_cfg()
@@ -1065,20 +1065,11 @@ def risk_multiplier_for_tier(tier: str, cfg: Any | None = None, *, post_impulse:
     if not math.isfinite(scalp_mult) or scalp_mult <= 0:
       scalp_mult = 2.0
     return scalp_mult
-  tier = (tier or TIER_C).upper()
-  tiers = cfg.risk.tiers
-  a = float(tiers.a_multiplier)
-  b = float(tiers.b_multiplier)
-  c = b
+  # Equity-table reaction: ignore tier A/B/C shrink.
+  _ = tier
+  mult = 1.0
   post = float(sizing.post_impulse_risk_multiplier)
   onesided = float(sizing.one_sided_range_risk_multiplier)
-  if tier == TIER_A:
-    mult = a
-  elif tier == TIER_B:
-    mult = b
-  else:
-    # Tier C remains executable with reduced size; quality is telemetry.
-    mult = max(0.25, min(b, c))
   if post_impulse:
     mult = min(mult, post)
   if one_sided:
