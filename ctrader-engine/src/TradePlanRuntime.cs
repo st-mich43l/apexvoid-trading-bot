@@ -2176,23 +2176,14 @@ public sealed class TradePlanRuntime(
         var desiredClose = decimal.ToInt64(
           groupRemaining * target.CloseRatio / remainingTargetsSum
         );
-        if (
-          !isFinalTarget
-          && desiredClose < symbol.StepVolume
-          && groupRemaining >= symbol.StepVolume
-        )
-        {
-          // The proportional share (e.g. a 20% slice of a 2-step position)
-          // rounds below a single StepVolume - rather than skip this
-          // target and leave it unprotected until some later target's
-          // share happens to cross the threshold (or the ladder just runs
-          // out and nothing ever closes early), take one whole step now.
-          // For a position with only as many steps as roughly N targets,
-          // this naturally degrades to closing one step per target reached
-          // - e.g. half now, half at the next target for a 2-step position
-          // - instead of silently deferring everything to the final target.
-          desiredClose = symbol.StepVolume;
-        }
+        // Owner's call: book by the plan's actual declared % share, even on
+        // a small partially-filled ladder - never force a non-final target
+        // up to a whole StepVolume it didn't earn just to book *something*.
+        // A share that rounds under one step is legitimately deferred
+        // (PlanPartialCloseVolume returns 0 below and the caller advances
+        // past this target untouched); the final target still closes
+        // whatever is left regardless of size, including a single-step
+        // dust remainder - that floor belongs to the *last* target only.
         var closeVolume = VolumePlanner.PlanPartialCloseVolume(
           groupRemaining,
           desiredClose,
@@ -2215,13 +2206,16 @@ public sealed class TradePlanRuntime(
           // trailing. Advancing by one still avoids re-retrying this same
           // unclosable target (HasReachedTarget only fires again once price
           // reaches the next index), without skipping targets price hasn't
-          // touched. With the StepVolume floor above, this now only fires
-          // when groupRemaining itself is below one StepVolume (dust).
+          // touched. Now the normal path for any non-final target whose
+          // declared % share of a small partially-filled remainder rounds
+          // under a single StepVolume - deferred honestly to whichever
+          // later target's cumulative share clears a step, or to the final
+          // target, which always closes what's left regardless of size.
           log(
-            $"v7 target partial skipped id={plan.PlanId} "
+            $"v7 target partial deferred id={plan.PlanId} "
             + $"target={target.TargetId} remaining={groupRemaining} "
             + $"desired={desiredClose} step={symbol.StepVolume} "
-            + "reason=not_step_aligned_after_unfilled_cancel"
+            + "reason=share_below_one_step"
           );
           state = AggregateState(
             state with { NextTargetIndex = state.NextTargetIndex + 1 }
