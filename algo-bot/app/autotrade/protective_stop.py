@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from decimal import Decimal, InvalidOperation, ROUND_CEILING, ROUND_FLOOR, ROUND_HALF_UP
 import math
 from typing import Any
 
@@ -914,29 +914,12 @@ def plan_group_protective_stop(
       "Structure invalidation is not on the losing side of entry"
     )
   raw_pips = raw_distance / pip
-  if raw_pips > Decimal(maximum_stop_pips):
-    raise ProtectiveStopError(
-      "stop_exceeds_max_envelope",
-      measured={
-        "stop_reject_detail": "raw_distance_exceeds_max",
-        "planned_stop_entry_price": format(reference, "f"),
-        "structure_swing": format(swing, "f"),
-        "structural_stop_price": format(structural, "f"),
-        "clearance_edge_price": format(clearance_edge, "f"),
-        "raw_stop_price": format(raw_stop, "f"),
-        "planned_base_stop_price": format(raw_stop, "f"),
-        "raw_stop_pips": format(raw_pips, "f"),
-        "planned_base_stop_pips": format(raw_pips, "f"),
-        "stop_max_envelope_pips": int(maximum_stop_pips),
-        "pushed_over_envelope_pips": format(
-          raw_pips - Decimal(maximum_stop_pips), "f",
-        ),
-        "atr": float(atr_value),
-        "direction": direction,
-        **opposing_zone_context_measured(opposing_zone),
-      },
-    )
-  stop_pips = max(raw_pips, Decimal(minimum_stop_pips))
+  # Owner max envelope: clamp to max instead of fail-closed. Live 2026-08-06
+  # killed a ready plan with final_stop_exceeds_max_after_floor overshoot of
+  # 0.02 pips after floor quantization. Align with structure-stop clamp.
+  max_pips = Decimal(maximum_stop_pips)
+  min_pips = Decimal(minimum_stop_pips)
+  stop_pips = min(max(raw_pips, min_pips), max_pips)
   distance = stop_pips * pip
   stop_price = (
     reference - distance if direction == "BUY" else reference + distance
@@ -955,28 +938,20 @@ def plan_group_protective_stop(
       raise ProtectiveStopError("stop_not_beyond_planned_entries")
   distance = abs(reference - stop_price)
   stop_pips = distance / pip
-  if stop_pips > Decimal(maximum_stop_pips):
-    raise ProtectiveStopError(
-      "stop_exceeds_max_envelope",
-      measured={
-        "stop_reject_detail": "final_stop_exceeds_max_after_floor",
-        "planned_stop_entry_price": format(reference, "f"),
-        "structure_swing": format(swing, "f"),
-        "structural_stop_price": format(structural, "f"),
-        "clearance_edge_price": format(clearance_edge, "f"),
-        "raw_stop_price": format(raw_stop, "f"),
-        "raw_stop_pips": format(raw_pips, "f"),
-        "planned_base_stop_price": format(stop_price, "f"),
-        "planned_base_stop_pips": format(stop_pips, "f"),
-        "stop_max_envelope_pips": int(maximum_stop_pips),
-        "pushed_over_envelope_pips": format(
-          stop_pips - Decimal(maximum_stop_pips), "f",
-        ),
-        "atr": float(atr_value),
-        "direction": direction,
-        **opposing_zone_context_measured(opposing_zone),
-      },
-    )
+  if stop_pips > max_pips:
+    # Quantize sometimes drifts a tick past the cap (0.02 pips live). Pull
+    # the stop strictly toward entry so the plan can still publish.
+    distance = max_pips * pip
+    if direction == "BUY":
+      stop_price = (reference - distance).quantize(
+        tick, rounding=ROUND_CEILING,
+      )
+    else:
+      stop_price = (reference + distance).quantize(
+        tick, rounding=ROUND_FLOOR,
+      )
+    distance = abs(reference - stop_price)
+    stop_pips = distance / pip
   clamped = stop_pips != raw_pips
   base_plan = FinalProtectiveStopPlan(
     entry_price=reference,
