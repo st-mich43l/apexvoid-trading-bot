@@ -239,7 +239,7 @@ public sealed record AutoTradeOptions(
       "AUTO_TRADE_MAX_ENTRY_DISTANCE_PIPS", 40
     ),
     MinConfluence: resolver.Int("AUTO_TRADE_MIN_CONFLUENCE", 2),
-    PollMilliseconds: resolver.Int("AUTO_TRADE_POLL_MS", 1000),
+    PollMilliseconds: resolver.Int("AUTO_TRADE_POLL_MS", 250),
     CandidateStream: resolver.String(
       "AUTO_TRADE_CANDIDATE_STREAM",
       "auto_trade:candidates",

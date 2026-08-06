@@ -134,6 +134,60 @@ def _infer_status_state(status_line: str) -> str:
   return "analysis_only"
 
 
+_PRICE_NOW_LINE_RE = re.compile(
+  r"^(\s*•\s*<b>Price now:</b>\s*<b>)([^<]+)(</b>\s*<i>\(live\)</i>\s*)$",
+  re.IGNORECASE,
+)
+_CARD_HEADLINE_SYMBOL_RE = re.compile(
+  r"<b>\s*([A-Z0-9]+)\s+[A-Z0-9]+\s*·",
+  re.IGNORECASE,
+)
+
+FORMING_ACTIVE_INDEX_KEY = "auto_trade:forming_active"
+
+
+def apply_forming_card_price(text: str, price: float, *, digits: int = 2) -> str:
+  """Replace the Trade-area Price now line when present."""
+  if not text or not math.isfinite(price):
+    return text
+  price_text = f"{price:,.{digits}f}"
+  out: list[str] = []
+  replaced = False
+  for line in text.splitlines():
+    match = _PRICE_NOW_LINE_RE.match(line)
+    if match is not None:
+      out.append(f"{match.group(1)}{price_text}{match.group(3)}")
+      replaced = True
+      continue
+    out.append(line)
+  return "\n".join(out) if replaced else text
+
+
+def parse_forming_card_symbol(text: str) -> str | None:
+  if not text:
+    return None
+  match = _CARD_HEADLINE_SYMBOL_RE.search(text)
+  if match is None:
+    return None
+  return str(match.group(1)).upper()
+
+
+def parse_forming_card_price_now(text: str) -> float | None:
+  if not text:
+    return None
+  for line in text.splitlines():
+    match = _PRICE_NOW_LINE_RE.match(line)
+    if match is None:
+      continue
+    raw = match.group(2).replace(",", "").strip()
+    try:
+      value = float(raw)
+    except ValueError:
+      return None
+    return value if math.isfinite(value) else None
+  return None
+
+
 def apply_forming_card_stop(text: str, stop_price: float, *, digits: int = 2) -> str:
   """Insert or replace the Trade-area Stop line and copy-draft SL value."""
   if not text or not math.isfinite(stop_price):
@@ -508,6 +562,10 @@ async def save_forming_card(
     payload,
     ex=effective_ttl,
   )
+  await client.sadd(FORMING_ACTIVE_INDEX_KEY, setup_id)
+  # Keep the index alive at least as long as the card TTL so restart
+  # sweepers can still discover live cards without SCAN.
+  await client.expire(FORMING_ACTIVE_INDEX_KEY, effective_ttl)
   # Explicit setup_id → root_message_id mapping for one-root-card replies.
   await client.set(
     telegram_root_message_key(setup_id),
@@ -551,6 +609,7 @@ async def clear_forming_card(client, setup_id: str) -> None:
     forming_reconcile_pending_key(setup_id),
     telegram_root_message_key(setup_id),
   )
+  await client.srem(FORMING_ACTIVE_INDEX_KEY, setup_id)
 
 
 async def is_setup_terminal(client, setup_id: str) -> bool:
@@ -900,6 +959,146 @@ async def edit_forming_card_stop(
     text=text,
   )
   return True
+
+
+async def edit_forming_card_price(
+  client,
+  setup_id: str,
+  price: float,
+  *,
+  digits: int = 2,
+  edit_fn: EditFn,
+  min_move: float = 0.1,
+) -> bool:
+  """Patch the root card Price now line when mid has moved enough."""
+  card = await load_forming_card(client, setup_id)
+  if card is None or not card.get("text"):
+    return False
+  text = str(card["text"])
+  if "TERMINAL" in text.upper() or "CLOSED" in text.upper():
+    await client.srem(FORMING_ACTIVE_INDEX_KEY, setup_id)
+    return False
+  current = parse_forming_card_price_now(text)
+  if current is not None and abs(float(price) - current) < float(min_move):
+    return False
+  next_text = apply_forming_card_price(text, float(price), digits=digits)
+  if next_text == text:
+    return False
+  try:
+    await edit_fn(card["chat_id"], card["message_id"], next_text)
+  except TelegramBadRequest as exc:
+    if "message is not modified" in str(exc).casefold():
+      await save_forming_card(
+        client,
+        setup_id,
+        chat_id=card["chat_id"],
+        message_id=card["message_id"],
+        text=next_text,
+      )
+      return True
+    log.info(
+      "forming card price edit failed setup_id=%s error=%s",
+      setup_id,
+      exc,
+    )
+    return False
+  await save_forming_card(
+    client,
+    setup_id,
+    chat_id=card["chat_id"],
+    message_id=card["message_id"],
+    text=next_text,
+  )
+  return True
+
+
+async def list_active_forming_setup_ids(client) -> list[str]:
+  members = await client.smembers(FORMING_ACTIVE_INDEX_KEY)
+  out: list[str] = []
+  for raw in members or ():
+    text = raw.decode() if isinstance(raw, bytes) else str(raw)
+    if text:
+      out.append(text)
+  return out
+
+
+async def refresh_forming_card_prices(
+  client,
+  *,
+  edit_fn: EditFn,
+  digits: int = 2,
+  min_move: float = 0.1,
+) -> int:
+  """Best-effort Price now refresh for all indexed forming cards."""
+  updated = 0
+  for setup_id in await list_active_forming_setup_ids(client):
+    card = await load_forming_card(client, setup_id)
+    if card is None or not card.get("text"):
+      await client.srem(FORMING_ACTIVE_INDEX_KEY, setup_id)
+      continue
+    if await is_setup_terminal(client, setup_id):
+      await client.srem(FORMING_ACTIVE_INDEX_KEY, setup_id)
+      continue
+    symbol = parse_forming_card_symbol(str(card["text"]))
+    if not symbol:
+      continue
+    mid = await _fresh_spot_mid(client, symbol)
+    if mid is None:
+      continue
+    ok = await edit_forming_card_price(
+      client,
+      setup_id,
+      float(mid),
+      digits=digits,
+      edit_fn=edit_fn,
+      min_move=min_move,
+    )
+    if ok:
+      updated += 1
+  return updated
+
+
+async def _fresh_spot_mid(client, symbol: str) -> float | None:
+  raw = await client.get(f"price:{symbol.upper()}:spot")
+  if raw is None:
+    return None
+  text = raw.decode() if isinstance(raw, bytes) else str(raw)
+  try:
+    payload = json.loads(text)
+    bid = float(payload["bid"])
+    ask = float(payload["ask"])
+    ts = int(payload["ts"])
+  except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+    return None
+  mid = (bid + ask) / 2.0
+  if not math.isfinite(mid) or mid <= 0:
+    return None
+  now = int(time.time())
+  max_age = max(1, int(runtime_config.market_data.spot.maximum_age_seconds))
+  if not (0 <= now - ts <= max_age):
+    return None
+  return mid
+
+
+async def forming_price_track_loop() -> None:
+  """Refresh forming-card Price now ~1s when Redis spot moves."""
+  import asyncio
+
+  from app.bot.client import edit_scanner_message_text
+  from app.persistence import redis_state
+
+  client = redis_state.get_client()
+  log.info("forming price track loop started interval_s=1.0 min_move=0.1")
+  while True:
+    try:
+      await refresh_forming_card_prices(
+        client,
+        edit_fn=edit_scanner_message_text,
+        min_move=0.1,
+      )
+    except Exception:
+      log.exception("forming price track refresh failed")
+    await asyncio.sleep(1.0)
 
 
 def _terminal_status_line(reason_code: str) -> str:

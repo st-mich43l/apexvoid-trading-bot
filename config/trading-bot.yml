@@ -103,7 +103,7 @@ execution:
     inside_zone_market_entry_enabled: true
     max_spread_pips: 5
     maximum_chase_distance_pips: 40.0
-    poll_ms: 1000
+    poll_ms: 250
   mapped_zone:
     execute_tolerance_atr: 0.15
     execute_tolerance_pips: 3.0
