@@ -95,7 +95,8 @@ def detect_sweep_reclaim(
   Owner 2026-08-06: requiring ``low < edge`` skipped bars that only wicked
   *to* the edge. Accept touch-or-through within ``tolerance``, close
   reclaimed inside, directional close. Scans newest ``lookback_bars`` so
-  discovery matches activation age.
+  discovery matches activation age (slow M5 rebuild must not skip the only
+  reclaim bar forever).
   """
   if df is None or len(df) < 1:
     return None
