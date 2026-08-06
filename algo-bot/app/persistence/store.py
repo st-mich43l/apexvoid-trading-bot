@@ -698,11 +698,25 @@ async def _record_auto_trade_result(event: dict) -> None:
       )
     ):
       return
-    result_pips = event.get("group_realized_pips")
     message = str(event.get("message") or "")
     message_cf = message.casefold()
     no_tp_archived = "no tp archived" in message_cf
     highest_tp_archived = "highest tp archived" in message_cf
+    result_pips = None
+    if highest_tp_archived and event.get("target_pips") is not None:
+      # Owner directive: /trade_stats records the highest TP actually
+      # archived across the whole system, not a volume-weighted blended
+      # net - same convention as legs_achieved_pips in manual_signals.
+      # This must win over group_realized_pips (the real broker blend)
+      # whenever a TP was archived, not just fill the gap when it's absent.
+      try:
+        archived_pips = float(event["target_pips"])
+      except (TypeError, ValueError):
+        archived_pips = None
+      if archived_pips is not None:
+        result_pips = abs(archived_pips)
+    if result_pips is None:
+      result_pips = event.get("group_realized_pips")
     if result_pips is None and no_tp_archived:
       # Loss path only: SL with zero TPs booked. Never invent a loss from a
       # residual BE/SL exit after a booked TP.
@@ -715,20 +729,6 @@ async def _record_auto_trade_result(event: dict) -> None:
           result_pips = float(losing_match.group(1))
         except (TypeError, ValueError):
           result_pips = None
-    if (
-      result_pips is None
-      and event.get("target_pips") is not None
-      and highest_tp_archived
-    ):
-      # V7 reports the highest booked target explicitly. Preserve achieved
-      # pips even when the residual later exits at BE/SL and would otherwise
-      # make close-price reconstruction understate the trade.
-      try:
-        archived_pips = float(event["target_pips"])
-      except (TypeError, ValueError):
-        archived_pips = None
-      if archived_pips is not None:
-        result_pips = abs(archived_pips)
     if result_pips is None and event.get("type") in {
       "position_closed", "manual_closed",
     }:
