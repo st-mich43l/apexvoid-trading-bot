@@ -287,6 +287,19 @@ async def do_delete(ctx: dict) -> dict:
   signal = await get_manual_signal(ctx["sid"])
   if signal is None or signal.get("symbol", "XAU") != ctx["symbol"]:
     return {"action": "delete", "ok": False, "error": "not_found"}
+  # /trade_delete used to only wipe the local record - for a still-pending
+  # algo-manual signal (broker-confirmed live limit order, not yet filled)
+  # that left a real resting order on the broker with nothing left tracking
+  # it. Same defer condition as /trade_cancel's _maybe_defer_cancel_to_broker:
+  # once filled it's an open position, not an order, and /trade_close is the
+  # right verb for that - delete only ever needs to cancel an unfilled order.
+  if (
+    signal.get("execution_mode") == "algo"
+    and signal.get("execution_status") == "pending"
+    and signal.get("execution_intent_id")
+  ):
+    from app.signals import manual_execution
+    await manual_execution.request_cancel(signal["execution_intent_id"])
   result = await delete_manual_signal(ctx["sid"])
   if result is None:
     return {"action": "delete", "ok": False, "error": "not_found"}
