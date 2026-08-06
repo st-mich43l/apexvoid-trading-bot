@@ -78,9 +78,9 @@
     "range_tp_buffer_pips": "3",
     "range_two_sided_enabled": true,
     "reaction_enabled": true,
-    "reaction_market_fraction": "0.7",
+    "reaction_market_fraction": "0.8",
     "reaction_scale_enabled": false,
-    "reaction_scale_fraction": "0.3",
+    "reaction_scale_fraction": "0.2",
     "reaction_scale_invalid_policy": "single_market",
     "reaction_scale_step_atr": "0.5",
     "require_demo_account": true,
@@ -128,8 +128,8 @@
     "zone_reconcile_mode": "shadow",
     "zone_scale_undersized_policy": "single_entry"
   },
-  "contract_fingerprint": "b0a3ca16a1778122fb54947fce11ac5d2507a8da0fef8ebbffa2c76ffec1999d",
-  "effective_configuration_fingerprint": "59d6c5f9df43dc7c58d77a819500a3bff70a4af5274e132bf2212ac4a87cf7cc",
+  "contract_fingerprint": "255a32b9588b6c661c8466fa29e1b1c2b3a249e9bb6a483337169cb03ed170ce",
+  "effective_configuration_fingerprint": "e4ad239c982f71c95866adf1d7676ce8a50c3fdc2a3e47aa28b65ab6842b9878",
   "feed": {
     "backfill_bars": 1500,
     "bar_quality_lookback": 6,
@@ -208,7 +208,7 @@
             "allow_directional_expansion": true
           },
           "missing_context_policy": "block",
-          "mode": "shadow",
+          "mode": "enforce",
           "range_reversion": {
             "buy_maximum_position": "0.4",
             "equilibrium_exclusion_width": "0.2",
@@ -353,9 +353,9 @@
         "range_tp_buffer_pips": "3",
         "range_two_sided_enabled": true,
         "reaction_enabled": true,
-        "reaction_market_fraction": "0.7",
+        "reaction_market_fraction": "0.8",
         "reaction_scale_enabled": false,
-        "reaction_scale_fraction": "0.3",
+        "reaction_scale_fraction": "0.2",
         "reaction_scale_invalid_policy": "single_market",
         "reaction_scale_step_atr": "0.5",
         "require_demo_account": true,
@@ -405,7 +405,7 @@
       },
       "execution": {
         "activation": {
-          "mode": "shadow",
+          "mode": "enforce",
           "reaction_trigger_maximum_age_bars": 2
         },
         "broker_recovery": {
@@ -460,9 +460,9 @@
           "tp_buffer_pips": "3"
         },
         "reaction": {
-          "market_fraction": "0.7",
+          "market_fraction": "0.8",
           "room_stop_min_rr": "1",
-          "scale_fraction": "0.3",
+          "scale_fraction": "0.2",
           "scale_invalid_policy": "single_market",
           "scale_step_atr": "0.5",
           "stop_max_pips": 60,
@@ -488,7 +488,7 @@
         "stops": {
           "be_buffer_ticks": 6,
           "reaction": {
-            "room_floor_pips": 20
+            "room_floor_pips": 40
           },
           "sl_distance": "6.5",
           "stop_push_beyond_zone": true,
@@ -521,7 +521,7 @@
           "fill_fallback_enabled": true,
           "fill_min_atr": "0.5",
           "fill_min_lots": "0.09",
-          "first_leg_fraction": "0.7",
+          "first_leg_fraction": "0.8",
           "scale_step_atr": "0.5",
           "scale_undersized_policy": "single_entry"
         }
@@ -721,7 +721,7 @@
         },
         "high_frequency_scalp": {
           "activation": {
-            "maximum_chase_pips": "5",
+            "maximum_chase_pips": "100",
             "rearm_distance_atr": "0.25",
             "trigger_maximum_age_bars": 2
           },
@@ -886,7 +886,7 @@
             "allow_directional_expansion": true
           },
           "missing_context_policy": "block",
-          "mode": "shadow",
+          "mode": "enforce",
           "range_reversion": {
             "buy_maximum_position": "0.4",
             "equilibrium_exclusion_width": "0.2",
@@ -954,7 +954,7 @@
       },
       "execution": {
         "activation": {
-          "mode": "shadow",
+          "mode": "enforce",
           "reaction_trigger_maximum_age_bars": 2
         },
         "broker_recovery": {
@@ -1009,9 +1009,9 @@
           "tp_buffer_pips": "3"
         },
         "reaction": {
-          "market_fraction": "0.7",
+          "market_fraction": "0.8",
           "room_stop_min_rr": "1",
-          "scale_fraction": "0.3",
+          "scale_fraction": "0.2",
           "scale_invalid_policy": "single_market",
           "scale_step_atr": "0.5",
           "stop_max_pips": 60,
@@ -1037,7 +1037,7 @@
         "stops": {
           "be_buffer_ticks": 6,
           "reaction": {
-            "room_floor_pips": 20
+            "room_floor_pips": 40
           },
           "sl_distance": "6.5",
           "stop_push_beyond_zone": true,
@@ -1070,7 +1070,7 @@
           "fill_fallback_enabled": true,
           "fill_min_atr": "0.5",
           "fill_min_lots": "0.09",
-          "first_leg_fraction": "0.7",
+          "first_leg_fraction": "0.8",
           "scale_step_atr": "0.5",
           "scale_undersized_policy": "single_entry"
         }
@@ -1262,7 +1262,7 @@
         },
         "high_frequency_scalp": {
           "activation": {
-            "maximum_chase_pips": "5",
+            "maximum_chase_pips": "100",
             "rearm_distance_atr": "0.25",
             "trigger_maximum_age_bars": 2
           },

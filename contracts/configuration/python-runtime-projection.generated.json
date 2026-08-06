@@ -1,6 +1,6 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "b0a3ca16a1778122fb54947fce11ac5d2507a8da0fef8ebbffa2c76ffec1999d",
+  "configuration_contract_fingerprint_sha256": "255a32b9588b6c661c8466fa29e1b1c2b3a249e9bb6a483337169cb03ed170ce",
   "excluded_ctrader_only_count": 50,
   "excluded_paths": [
     "bootstrap.ctrader.connection.host",
@@ -500,6 +500,6 @@
   "included_secret_count": 6,
   "included_shared_field_count": 95,
   "projection_model": "app.configuration.models.python_runtime.PythonRuntimeConfig",
-  "source_fingerprint_sha256": "b0a3ca16a1778122fb54947fce11ac5d2507a8da0fef8ebbffa2c76ffec1999d",
+  "source_fingerprint_sha256": "255a32b9588b6c661c8466fa29e1b1c2b3a249e9bb6a483337169cb03ed170ce",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

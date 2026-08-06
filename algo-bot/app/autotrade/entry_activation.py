@@ -115,6 +115,8 @@ def evaluate_entry_activation(
   cfg: Any | None = None,
   breakout_evidence: Mapping[str, Any] | None = None,
   continuation_evidence: Mapping[str, Any] | None = None,
+  chase_pips: float | None = None,
+  maximum_chase_pips: float | None = None,
 ) -> EntryActivationDecision:
   """Pure activation decision. Does not touch Redis.
 
@@ -129,6 +131,25 @@ def evaluate_entry_activation(
   mode = _mode(cfg)
   archetype = activation_archetype(strategy)
   requires_trigger = archetype == ACTIVATION_REACTION
+  chase_ok = False
+  try:
+    chase_value = None if chase_pips is None else float(chase_pips)
+  except (TypeError, ValueError):
+    chase_value = None
+  try:
+    chase_cap = (
+      None if maximum_chase_pips is None else float(maximum_chase_pips)
+    )
+  except (TypeError, ValueError):
+    chase_cap = None
+  if (
+    is_range_strategy(strategy)
+    and chase_value is not None
+    and chase_cap is not None
+    and chase_value > 0
+    and chase_value <= chase_cap + 1e-9
+  ):
+    chase_ok = True
   measured: dict[str, Any] = {
     "mode": mode,
     "archetype": archetype,
@@ -141,6 +162,9 @@ def evaluate_entry_activation(
     "location_reason": location_decision.reason_code,
     "location_allowed": location_decision.allowed,
     "now": int(now),
+    "chase_pips": chase_value,
+    "maximum_chase_pips": chase_cap,
+    "chase_entry": chase_ok,
   }
 
   def _result(
@@ -191,7 +215,7 @@ def evaluate_entry_activation(
       hard=location_decision.hard_block,
     )
 
-  if not quote_inside:
+  if not quote_inside and not chase_ok:
     return _result(reason="quote_outside_zone", would_block=True, hard=True)
 
   if archetype == ACTIVATION_BREAKOUT_RETEST:
