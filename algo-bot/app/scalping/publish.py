@@ -193,35 +193,17 @@ async def publish_hfs_live(
   _setup_id, thesis_id = lifecycle
   stamped = replace(match, thesis_id=str(thesis_id))
   stamped = await _persist_hfs_match(client, stamped)
+  # Root-card creation lives centrally in worker._publish_trade_plan_v7
+  # (called from _handle_event, which this and every other publish route
+  # -- including this cycle's own independent arbitration re-discovering
+  # the same persisted match -- funnels through). Ensuring it here too
+  # would only be redundant with that single shared choke point.
   result = await worker.try_publish_executable_signal(
     client,
     stamped,
     symbol=symbol,
     event_ts=str(bar_ts),
   )
-  if getattr(result, "status", None) in {
-    worker.PUBLISH_STATUS_EXECUTION_HANDOFF_CREATED,
-    worker.PUBLISH_STATUS_PUBLISHED,
-    worker.PUBLISH_STATUS_DUPLICATE_RECONCILED,
-  }:
-    # HFS reaches the broker either synchronously (same-cycle publish, which
-    # already threads a root card) or via a later re-evaluation once the
-    # setup goes from "watching" to executable -- that second path never
-    # runs zone_execution_cutover's own root-card ensure, so a real fill can
-    # land with zero Telegram history to thread to (live 2026-08-06: order
-    # filled notifications with no root card, no entry zone, no SL/TP ever
-    # shown). Same safety net zone_execution_cutover.py gives its own
-    # direct-publish path -- must never roll back a successful publish.
-    try:
-      from app.autotrade.setup_card import ensure_plan_published_root_card
-
-      await ensure_plan_published_root_card(client, stamped)
-    except Exception:
-      log.exception(
-        "HFS plan_published_root_card_ensure_failed setup_id=%s symbol=%s",
-        stamped.match_id,
-        symbol,
-      )
   log.info(
     "HFS live publish match_id=%s status=%s reason=%s plan_id=%s",
     stamped.match_id,

@@ -5840,15 +5840,23 @@ async def _publish_trade_plan_v7(
     },
   )
   try:
-    edit_fn = _forming_card_edit_fn
-    if edit_fn is not None:
-      await edit_forming_card_stop(
-        client,
-        setup_id,
-        float(plan.stop.price),
-        digits=int(runtime_config.contract.instrument.price_digits),
-        edit_fn=edit_fn,
-      )
+    from app.autotrade.setup_card import ensure_plan_published_root_card
+
+    # ensure (not just edit): a plan can reach this point without ever
+    # having a root card -- HFS's own synchronous publish attempt is only
+    # one of the ways a plan gets published here. The same match, once
+    # persisted to strategy_matches, is also independently discovered and
+    # published by this cycle's own arbitration on a later pass in the
+    # same tick, bypassing publish_hfs_live() (and its card-ensure)
+    # entirely. Live 2026-08-06: an HFS fill with zero Telegram card,
+    # confirmed to have published via exactly this second path (own
+    # publish_hfs_live call logged status=remained_watching; this
+    # function then logged the actual publish moments later in the same
+    # cycle). ensure_plan_published_root_card() creates the card if
+    # missing or just refreshes Stop on an existing one either way.
+    await ensure_plan_published_root_card(
+      client, match, edit_fn=_forming_card_edit_fn,
+    )
   except Exception:
     log.exception(
       "v7 forming card stop refresh failed setup_id=%s plan_id=%s",
