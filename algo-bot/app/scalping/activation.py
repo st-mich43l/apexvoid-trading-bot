@@ -104,7 +104,7 @@ def evaluate_scalp_activation(
   if age_bars > max_age:
     return ScalpDecision(False, True, "reaction_trigger_stale", 0.0, measured)
 
-  chase = float(getattr(act, "maximum_chase_pips", 15.0) or 15.0)
+  chase = float(getattr(act, "maximum_chase_pips", 100.0) or 100.0)
   if opportunity.direction == "BUY":
     distance = (executable - opportunity.zone_high) / pip_size
   else:

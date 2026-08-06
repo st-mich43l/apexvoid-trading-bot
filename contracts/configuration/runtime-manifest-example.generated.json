@@ -128,8 +128,8 @@
     "zone_reconcile_mode": "shadow",
     "zone_scale_undersized_policy": "single_entry"
   },
-  "contract_fingerprint": "c0fd91bd1019c6f00c3a9ad5e5aecb5ba5a7d913f7f7e3eaf99bf6c9eec9e5a2",
-  "effective_configuration_fingerprint": "f9bb5573f9c14c7d1017da7368c71065f052d43a3d495cf20220717771f9dad4",
+  "contract_fingerprint": "255a32b9588b6c661c8466fa29e1b1c2b3a249e9bb6a483337169cb03ed170ce",
+  "effective_configuration_fingerprint": "e4ad239c982f71c95866adf1d7676ce8a50c3fdc2a3e47aa28b65ab6842b9878",
   "feed": {
     "backfill_bars": 1500,
     "bar_quality_lookback": 6,
@@ -721,7 +721,7 @@
         },
         "high_frequency_scalp": {
           "activation": {
-            "maximum_chase_pips": "15",
+            "maximum_chase_pips": "100",
             "rearm_distance_atr": "0.25",
             "trigger_maximum_age_bars": 2
           },
@@ -1262,7 +1262,7 @@
         },
         "high_frequency_scalp": {
           "activation": {
-            "maximum_chase_pips": "15",
+            "maximum_chase_pips": "100",
             "rearm_distance_atr": "0.25",
             "trigger_maximum_age_bars": 2
           },

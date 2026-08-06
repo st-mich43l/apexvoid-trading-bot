@@ -467,19 +467,19 @@ class ScalpZoneAccess:
 
 
 def scalp_maximum_chase_pips(cfg: Any | None = None) -> float:
-  """Shared scalp chase budget (Range Edge / Fade / HFS). Default 15."""
+  """Shared scalp chase budget (Range Edge / Fade / HFS). Default 100."""
   if cfg is None:
     try:
       from app.core.config import runtime_config
       cfg = runtime_config
     except Exception:
-      return 15.0
+      return 100.0
   hfs = getattr(getattr(cfg, "strategies", None), "high_frequency_scalp", None)
   act = getattr(hfs, "activation", None)
   try:
-    value = float(getattr(act, "maximum_chase_pips", 15.0) or 15.0)
+    value = float(getattr(act, "maximum_chase_pips", 100.0) or 100.0)
   except (TypeError, ValueError):
-    return 15.0
+    return 100.0
   return max(0.0, value)
 
 
