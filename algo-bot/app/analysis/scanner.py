@@ -2985,7 +2985,12 @@ async def _handle_event(
       symbol=symbol,
     )
     await increment_metric(client, decision.reason_code, symbol=symbol)
-    log.info(
+    # Soft preference / allow telemetry is DEBUG — INFO was drowning the
+    # cycle with measured dumps for setups that immediately suppress
+    # (Momentum Ride mid-range, quote_outside_zone, etc.). Hard gates stay
+    # INFO so kills remain visible in prod tails.
+    _log = log.info if decision.hard_block else log.debug
+    _log(
       "scanner result actionability-%s symbol=%s tf=%s setup=%s "
       "direction=%s reason=%s measured=%s",
       "gated" if decision.hard_block else "observed",
