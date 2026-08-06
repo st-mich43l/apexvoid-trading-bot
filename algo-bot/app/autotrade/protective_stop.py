@@ -826,8 +826,10 @@ def plan_group_protective_stop(
   inside the source entry zone.
 
   ``resolved_leg_volumes`` are relative weights only (declared ratios or
-  broker lots) used to measure the 40–60 pip envelope from a group reference
-  entry. They must not invent an absolute stop from assumed equity/lots.
+  broker lots) used as a group reference entry for plan telemetry still.
+  The 40–60 pip envelope is enforced against every planned leg: floor from
+  the nearest leg to the stop, cap from the furthest. Volumes must not invent
+  an absolute stop from assumed equity/lots.
   """
   direction = str(direction).upper()
   zone_low = decimal_value(entry_zone_low, "entry_zone_low")
@@ -914,17 +916,79 @@ def plan_group_protective_stop(
       "Structure invalidation is not on the losing side of entry"
     )
   raw_pips = raw_distance / pip
-  # Owner max envelope: clamp to max instead of fail-closed. Live 2026-08-06
-  # killed a ready plan with final_stop_exceeds_max_after_floor overshoot of
-  # 0.02 pips after floor quantization. Align with structure-stop clamp.
   max_pips = Decimal(maximum_stop_pips)
   min_pips = Decimal(minimum_stop_pips)
-  stop_pips = min(max(raw_pips, min_pips), max_pips)
-  distance = stop_pips * pip
-  stop_price = (
-    reference - distance if direction == "BUY" else reference + distance
-  )
+  # Owner 2026-08-06: envelope against WORST planned legs, not only the
+  # volume-weighted mid. Live Key Level Reaction published SL ~37 pips from
+  # weighted L1+L2 while L1-only risk reported -37 after fill — under the
+  # 40 floor. Floor from the nearest leg; cap from the furthest.
+  nearest = min(prices) if direction == "BUY" else max(prices)
+  furthest = max(prices) if direction == "BUY" else min(prices)
+  if direction == "BUY":
+    floor_stop = nearest - min_pips * pip
+    cap_stop = furthest - max_pips * pip
+    # Expand away from entries for floor, then pull toward for cap.
+    stop_price = min(raw_stop, floor_stop)
+    if stop_price < cap_stop:
+      stop_price = cap_stop
+  else:
+    floor_stop = nearest + min_pips * pip
+    cap_stop = furthest + max_pips * pip
+    stop_price = max(raw_stop, floor_stop)
+    if stop_price > cap_stop:
+      stop_price = cap_stop
   stop_price = stop_price.quantize(tick, rounding=ROUND_HALF_UP)
+
+  def _leg_pips(stop: Decimal) -> list[Decimal]:
+    if direction == "BUY":
+      return [(price - stop) / pip for price in prices]
+    return [(stop - price) / pip for price in prices]
+
+  leg_pips = _leg_pips(stop_price)
+  tightest = min(leg_pips)
+  widest = max(leg_pips)
+  if tightest + Decimal("0.000001") < min_pips:
+    # Cap pulled the stop inside the floor — leg span cannot fit 40–60.
+    raise ProtectiveStopError(
+      "stop_leg_span_exceeds_envelope",
+      measured={
+        "stop_reject_detail": "leg_span_exceeds_envelope",
+        "stop_min_envelope_pips": int(minimum_stop_pips),
+        "stop_max_envelope_pips": int(maximum_stop_pips),
+        "nearest_leg_stop_pips": format(tightest, "f"),
+        "furthest_leg_stop_pips": format(widest, "f"),
+        "leg_span_pips": format(widest - tightest, "f"),
+        "planned_leg_prices": [format(price, "f") for price in prices],
+        "planned_stop_price": format(stop_price, "f"),
+      },
+    )
+  if widest > max_pips:
+    # Quantize can overshoot the cap by a tick; pull toward entries.
+    if direction == "BUY":
+      stop_price = (furthest - max_pips * pip).quantize(
+        tick, rounding=ROUND_CEILING,
+      )
+    else:
+      stop_price = (furthest + max_pips * pip).quantize(
+        tick, rounding=ROUND_FLOOR,
+      )
+    leg_pips = _leg_pips(stop_price)
+    tightest = min(leg_pips)
+    widest = max(leg_pips)
+    if tightest + Decimal("0.000001") < min_pips:
+      raise ProtectiveStopError(
+        "stop_leg_span_exceeds_envelope",
+        measured={
+          "stop_reject_detail": "leg_span_exceeds_envelope",
+          "stop_min_envelope_pips": int(minimum_stop_pips),
+          "stop_max_envelope_pips": int(maximum_stop_pips),
+          "nearest_leg_stop_pips": format(tightest, "f"),
+          "furthest_leg_stop_pips": format(widest, "f"),
+          "leg_span_pips": format(widest - tightest, "f"),
+          "planned_leg_prices": [format(price, "f") for price in prices],
+          "planned_stop_price": format(stop_price, "f"),
+        },
+      )
   # Expanding to the floor must still clear zone + entries.
   if direction == "BUY":
     if stop_price >= zone_low:
@@ -936,23 +1000,12 @@ def plan_group_protective_stop(
       raise ProtectiveStopError("stop_inside_entry_zone")
     if any(stop_price <= price for price in prices):
       raise ProtectiveStopError("stop_not_beyond_planned_entries")
-  distance = abs(reference - stop_price)
-  stop_pips = distance / pip
-  if stop_pips > max_pips:
-    # Quantize sometimes drifts a tick past the cap (0.02 pips live). Pull
-    # the stop strictly toward entry so the plan can still publish.
-    distance = max_pips * pip
-    if direction == "BUY":
-      stop_price = (reference - distance).quantize(
-        tick, rounding=ROUND_CEILING,
-      )
-    else:
-      stop_price = (reference + distance).quantize(
-        tick, rounding=ROUND_FLOOR,
-      )
-    distance = abs(reference - stop_price)
-    stop_pips = distance / pip
-  clamped = stop_pips != raw_pips
+  # Report worst-leg risk (furthest entry → stop) for RR / sizing telemetry.
+  stop_pips = max(leg_pips)
+  distance = stop_pips * pip
+  clamped = stop_price != raw_stop.quantize(tick, rounding=ROUND_HALF_UP) or (
+    stop_pips != raw_pips
+  )
   base_plan = FinalProtectiveStopPlan(
     entry_price=reference,
     base_stop_price=stop_price,
@@ -993,13 +1046,39 @@ def plan_group_protective_stop(
     raise ProtectiveStopError("stop_inside_entry_zone")
   if direction == "SELL" and final_stop_price <= zone_high:
     raise ProtectiveStopError("stop_inside_entry_zone")
+  pushed_leg_pips = (
+    [(price - final_stop_price) / pip for price in prices]
+    if direction == "BUY"
+    else [(final_stop_price - price) / pip for price in prices]
+  )
+  if min(pushed_leg_pips) + Decimal("0.000001") < Decimal(minimum_stop_pips):
+    raise ProtectiveStopError(
+      "stop_leg_span_exceeds_envelope",
+      measured={
+        "stop_reject_detail": "opposing_push_breaks_leg_floor",
+        "stop_min_envelope_pips": int(minimum_stop_pips),
+        "stop_max_envelope_pips": int(maximum_stop_pips),
+        "nearest_leg_stop_pips": format(min(pushed_leg_pips), "f"),
+        "furthest_leg_stop_pips": format(max(pushed_leg_pips), "f"),
+      },
+    )
+  if max(pushed_leg_pips) > Decimal(maximum_stop_pips):
+    raise ProtectiveStopError(
+      "stop_exceeds_max_envelope",
+      measured={
+        "stop_reject_detail": "opposing_push_exceeds_leg_cap",
+        "stop_min_envelope_pips": int(minimum_stop_pips),
+        "stop_max_envelope_pips": int(maximum_stop_pips),
+        "furthest_leg_stop_pips": format(max(pushed_leg_pips), "f"),
+      },
+    )
   return FinalProtectiveStopPlan(
     entry_price=reference,
     base_stop_price=stop_price,
     base_stop_pips=stop_pips,
     final_stop_price=final_stop_price,
-    final_stop_distance=final_distance,
-    final_stop_pips=final_stop_pips,
+    final_stop_distance=max(pushed_leg_pips) * pip,
+    final_stop_pips=max(pushed_leg_pips),
     raw_stop_price=raw_stop,
     clamped=clamped,
     source=source,
