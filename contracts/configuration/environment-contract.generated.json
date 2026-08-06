@@ -1,6 +1,6 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "b0a3ca16a1778122fb54947fce11ac5d2507a8da0fef8ebbffa2c76ffec1999d",
+  "configuration_contract_fingerprint_sha256": "c0fd91bd1019c6f00c3a9ad5e5aecb5ba5a7d913f7f7e3eaf99bf6c9eec9e5a2",
   "count": 423,
   "deprecated_alias_count": 21,
   "entries": [
@@ -1922,7 +1922,7 @@
     },
     {
       "canonical_env": "AUTO_TRADE_REACTION_MARKET_FRACTION",
-      "default": 0.7,
+      "default": 0.8,
       "deprecated": false,
       "deprecated_aliases": [],
       "description": "Controls  (fraction).",
@@ -1938,7 +1938,7 @@
     },
     {
       "canonical_env": "AUTO_TRADE_REACTION_ROOM_STOP_FLOOR_PIPS",
-      "default": 20,
+      "default": 40,
       "deprecated": false,
       "deprecated_aliases": [],
       "description": "Controls  (pips).",
@@ -1986,7 +1986,7 @@
     },
     {
       "canonical_env": "AUTO_TRADE_REACTION_SCALE_FRACTION",
-      "default": 0.3,
+      "default": 0.2,
       "deprecated": false,
       "deprecated_aliases": [],
       "description": "Controls  (fraction).",
@@ -3029,7 +3029,7 @@
     },
     {
       "canonical_env": "AUTO_TRADE_ZONE_SCALE_FIRST_LEG_FRACTION",
-      "default": 0.7,
+      "default": 0.8,
       "deprecated": false,
       "deprecated_aliases": [],
       "description": "Controls  (fraction).",
@@ -4156,7 +4156,7 @@
     },
     {
       "canonical_env": "HFS_MAXIMUM_CHASE_PIPS",
-      "default": 5.0,
+      "default": 15.0,
       "deprecated": false,
       "deprecated_aliases": [],
       "description": "Miss opportunity beyond this chase distance.",
@@ -6826,6 +6826,6 @@
   ],
   "secret_count": 9,
   "shared_with_ctrader_count": 86,
-  "source_fingerprint_sha256": "b0a3ca16a1778122fb54947fce11ac5d2507a8da0fef8ebbffa2c76ffec1999d",
+  "source_fingerprint_sha256": "c0fd91bd1019c6f00c3a9ad5e5aecb5ba5a7d913f7f7e3eaf99bf6c9eec9e5a2",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

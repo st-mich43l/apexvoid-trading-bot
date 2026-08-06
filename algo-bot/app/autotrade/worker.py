@@ -5269,25 +5269,67 @@ async def _publish_trade_plan_v7(
     displacement_state=displacement_state,
   )
   if not target_room.allowed:
-    # Hard reject structural conflicts (e.g. SELL entry inside demand /
-    # opposing_entry_contained). Preference-only demotion previously let
-    # those plans publish and hedge the correct side.
-    await _record_v7_build_rejected(
-      client,
-      symbol,
-      match,
-      str(target_room.reason_code or "opposing_structure_blocked"),
-      target_room.message
-      or "planned entry conflicts with opposing actionable structure",
-      dict(target_room.measured or {}),
+    # Counter-bias vs HTF intentionally presses into opposing structure.
+    # Keep the setup when native usable room still clears the floor —
+    # prod was dying on v7_opposing_entry_overlap while Bias:counter_bias
+    # cards never published (live 2026-08-06). Zero/negative room still fails.
+    bias = str(
+      getattr(execution_match, "bias_relationship", None)
+      or execution_match.strategy_mode
+      or ""
+    ).casefold()
+    tags = {
+      str(tag).casefold() for tag in (execution_match.tags or ())
+    }
+    is_counter_bias = "counter_bias" in tags or bias == "counter_bias"
+    room_measured = dict(target_room.measured or {})
+    try:
+      room_pips = float(
+        room_measured.get("usable_room_pips")
+        or room_measured.get("room_pips")
+        or 0.0
+      )
+    except (TypeError, ValueError):
+      room_pips = 0.0
+    min_room = float(
+      runtime_config.actionability.target_room.minimum_capped_target_pips or 15
     )
-    await increment_metric(
-      client,
-      "target_room_rejected",
-      symbol=symbol,
-      dimensions={"reason": str(target_room.reason_code or "unknown")},
-    )
-    return None
+    soft_codes = {
+      "opposing_entry_overlap",
+      "opposing_entry_contained",
+      "opposing_major_no_room",
+    }
+    if (
+      is_counter_bias
+      and str(target_room.reason_code or "") in soft_codes
+      and room_pips + 1e-9 >= min_room
+    ):
+      log.info(
+        "v7 counter_bias keeping setup past %s room_pips=%.1f match=%s",
+        target_room.reason_code,
+        room_pips,
+        match.match_id[:12],
+      )
+    else:
+      # Hard reject structural conflicts (e.g. SELL entry inside demand /
+      # opposing_entry_contained). Preference-only demotion previously let
+      # those plans publish and hedge the correct side.
+      await _record_v7_build_rejected(
+        client,
+        symbol,
+        match,
+        str(target_room.reason_code or "opposing_structure_blocked"),
+        target_room.message
+        or "planned entry conflicts with opposing actionable structure",
+        room_measured,
+      )
+      await increment_metric(
+        client,
+        "target_room_rejected",
+        symbol=symbol,
+        dimensions={"reason": str(target_room.reason_code or "unknown")},
+      )
+      return None
   match_for_plan = execution_match
   if (
     target_room.opposing_entry is not None

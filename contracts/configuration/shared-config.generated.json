@@ -1,6 +1,6 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "b0a3ca16a1778122fb54947fce11ac5d2507a8da0fef8ebbffa2c76ffec1999d",
+  "configuration_contract_fingerprint_sha256": "c0fd91bd1019c6f00c3a9ad5e5aecb5ba5a7d913f7f7e3eaf99bf6c9eec9e5a2",
   "count": 95,
   "items": [
     {
@@ -1284,17 +1284,17 @@
       "canonical_env": "AUTO_TRADE_REACTION_MARKET_FRACTION",
       "configurable": true,
       "ctrader_constructor_default": null,
-      "ctrader_from_environment_default": 0.7,
+      "ctrader_from_environment_default": 0.8,
       "ctrader_type": "decimal",
       "default_conflict": false,
       "default_contexts": [
         {
           "context": "python_schema",
-          "value": 0.7
+          "value": 0.8
         },
         {
           "context": "ctrader_from_environment",
-          "value": 0.7
+          "value": 0.8
         }
       ],
       "deprecated_aliases": [],
@@ -1304,7 +1304,7 @@
       "known_conflict": false,
       "mismatch_policy": "not_reported",
       "path": "execution.reaction.market_fraction",
-      "python_schema_default": 0.7,
+      "python_schema_default": 0.8,
       "python_type": "float",
       "secret": false,
       "unit": "fraction",
@@ -1315,17 +1315,17 @@
       "canonical_env": "AUTO_TRADE_REACTION_SCALE_FRACTION",
       "configurable": true,
       "ctrader_constructor_default": null,
-      "ctrader_from_environment_default": 0.3,
+      "ctrader_from_environment_default": 0.2,
       "ctrader_type": "decimal",
       "default_conflict": false,
       "default_contexts": [
         {
           "context": "python_schema",
-          "value": 0.3
+          "value": 0.2
         },
         {
           "context": "ctrader_from_environment",
-          "value": 0.3
+          "value": 0.2
         }
       ],
       "deprecated_aliases": [],
@@ -1335,7 +1335,7 @@
       "known_conflict": false,
       "mismatch_policy": "not_reported",
       "path": "execution.reaction.scale_fraction",
-      "python_schema_default": 0.3,
+      "python_schema_default": 0.2,
       "python_type": "float",
       "secret": false,
       "unit": "fraction",
@@ -2964,6 +2964,6 @@
       "path": "strategies.mapped_zone.enabled"
     }
   ],
-  "source_fingerprint_sha256": "b0a3ca16a1778122fb54947fce11ac5d2507a8da0fef8ebbffa2c76ffec1999d",
+  "source_fingerprint_sha256": "c0fd91bd1019c6f00c3a9ad5e5aecb5ba5a7d913f7f7e3eaf99bf6c9eec9e5a2",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

@@ -104,20 +104,27 @@ def evaluate_scalp_activation(
   if age_bars > max_age:
     return ScalpDecision(False, True, "reaction_trigger_stale", 0.0, measured)
 
-  chase = float(getattr(act, "maximum_chase_pips", 5.0) or 5.0)
+  chase = float(getattr(act, "maximum_chase_pips", 15.0) or 15.0)
   if opportunity.direction == "BUY":
     distance = (executable - opportunity.zone_high) / pip_size
   else:
     distance = (opportunity.zone_low - executable) / pip_size
   measured["chase_pips"] = distance
+  measured["maximum_chase_pips"] = chase
   if distance > chase:
     return ScalpDecision(False, True, "scalp_missed_chase", 0.0, measured)
 
   inside = opportunity.zone_low <= executable <= opportunity.zone_high
   measured["quote_inside"] = inside
-  if not inside and distance > 0:
-    # not touched yet — not executable
+  if not inside and distance <= 0:
+    # Still approaching the zone — wait for a touch / reclaim.
     return ScalpDecision(False, False, "quote_outside_zone", 0.0, measured)
+  if not inside and distance > 0:
+    # Price already ran through the zone in trade direction — momentum
+    # chase within maximum_chase_pips (owner: scalp must chase with momentum).
+    measured["chase_entry"] = True
+  else:
+    measured["chase_entry"] = False
 
   # Location — enforce inside HFS
   loc_ctx = build_entry_location_context(

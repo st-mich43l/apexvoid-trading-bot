@@ -1,7 +1,7 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "b0a3ca16a1778122fb54947fce11ac5d2507a8da0fef8ebbffa2c76ffec1999d",
-  "configuration_document_fingerprint_sha256": "f2b265919978b8cdad8ba3e559897f9d9187aee401212258991042a2dc544c58",
+  "configuration_contract_fingerprint_sha256": "c0fd91bd1019c6f00c3a9ad5e5aecb5ba5a7d913f7f7e3eaf99bf6c9eec9e5a2",
+  "configuration_document_fingerprint_sha256": "2943c157bb6953029c918d6cbfa726dc79d3d5df456abfe6cb43059439d7f4ea",
   "counts": {
     "algorithm_constants": 57,
     "configurable": 423,
@@ -8885,15 +8885,15 @@
       "constraints": {
         "gt": 0
       },
-      "default": 0.7,
+      "default": 0.8,
       "default_contexts": [
         {
           "context": "python_schema",
-          "value": 0.7
+          "value": 0.8
         },
         {
           "context": "ctrader_from_environment",
-          "value": 0.7
+          "value": 0.8
         }
       ],
       "deprecated": false,
@@ -8965,15 +8965,15 @@
       "constraints": {
         "gt": 0
       },
-      "default": 0.3,
+      "default": 0.2,
       "default_contexts": [
         {
           "context": "python_schema",
-          "value": 0.3
+          "value": 0.2
         },
         {
           "context": "ctrader_from_environment",
-          "value": 0.3
+          "value": 0.2
         }
       ],
       "deprecated": false,
@@ -9632,11 +9632,11 @@
       "catalog_version": 2,
       "configurable": true,
       "constraints": {},
-      "default": 20,
+      "default": 40,
       "default_contexts": [
         {
           "context": "python_schema",
-          "value": 20
+          "value": 40
         }
       ],
       "deprecated": false,
@@ -10360,11 +10360,11 @@
       "catalog_version": 2,
       "configurable": true,
       "constraints": {},
-      "default": 0.7,
+      "default": 0.8,
       "default_contexts": [
         {
           "context": "python_schema",
-          "value": 0.7
+          "value": 0.8
         }
       ],
       "deprecated": false,
@@ -15004,11 +15004,11 @@
       "constraints": {
         "ge": 0
       },
-      "default": 5.0,
+      "default": 15.0,
       "default_contexts": [
         {
           "context": "python_schema",
-          "value": 5.0
+          "value": 15.0
         }
       ],
       "deprecated": false,
@@ -18376,6 +18376,6 @@
       "validation_summary": "Pydantic required/type coercion only"
     }
   ],
-  "source_fingerprint_sha256": "b0a3ca16a1778122fb54947fce11ac5d2507a8da0fef8ebbffa2c76ffec1999d",
+  "source_fingerprint_sha256": "c0fd91bd1019c6f00c3a9ad5e5aecb5ba5a7d913f7f7e3eaf99bf6c9eec9e5a2",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

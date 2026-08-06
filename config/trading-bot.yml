@@ -304,7 +304,7 @@ strategies:
       pullback_sell_minimum_position: 0.25
     activation:
       trigger_maximum_age_bars: 2
-      maximum_chase_pips: 5
+      maximum_chase_pips: 15
       rearm_distance_atr: 0.25
     target:
       preferred_ladder_pips: 20,25,30
