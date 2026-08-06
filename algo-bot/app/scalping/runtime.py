@@ -394,6 +394,8 @@ async def process_m1_bar(
   })
   result["cycle_total_ms"] = total_ms
   result["context_id"] = context.context_id
+  result["discovered"] = len(opportunities)
+  result["idle_reasons"] = list(idle_reasons)
   return result
 
 
@@ -443,12 +445,19 @@ async def scalp_m1_event_loop() -> None:
           ohlc_source=source,
         )
         log.info(
-          "scalp m1 cycle symbol=%s bar_ts=%s mode=%s allowed=%s blocked=%s ms=%s",
+          "scalp m1 cycle symbol=%s bar_ts=%s mode=%s allowed=%s blocked=%s "
+          "discovered=%s idle=%s block_reasons=%s ms=%s",
           symbol,
           bar_ts,
           summary.get("mode"),
           len(summary.get("allowed") or ()),
           len(summary.get("blocked") or ()),
+          summary.get("discovered"),
+          ",".join(summary.get("idle_reasons") or ()) or "-",
+          ",".join(
+            str(item.get("reason") or "?")
+            for item in (summary.get("blocked") or ())
+          ) or "-",
           summary.get("cycle_total_ms"),
         )
       except Exception:
