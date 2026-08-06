@@ -90,11 +90,13 @@ def detect_sweep_reclaim(
   tolerance: float,
   lookback_bars: int = 1,
 ) -> dict[str, Any] | None:
-  """False-break sweep of an edge that closes back inside the range.
+  """Edge touch / false-break that closes back inside the range.
 
-  Scans the newest ``lookback_bars`` closed bars (inclusive). Activation
-  allows trigger age of N bars; discovery must scan the same window or a
-  slow M5 context rebuild can skip the only reclaim bar forever.
+  Owner 2026-08-06: requiring ``low < edge`` skipped bars that only wicked
+  *to* the edge. Accept touch-or-through within ``tolerance``, close
+  reclaimed inside, directional close. Scans newest ``lookback_bars`` so
+  discovery matches activation age (slow M5 rebuild must not skip the only
+  reclaim bar forever).
   """
   if df is None or len(df) < 1:
     return None
@@ -112,13 +114,11 @@ def detect_sweep_reclaim(
     bar_ts = _ts(df.index[-offset])
 
     if side == "BUY":
-      # Sweep below support, close back above edge
-      if low > edge - tol:
-        continue
-      if low >= edge:
+      # Touch or pierce support, close back at/above edge, bullish bar.
+      if low > edge + tol:
         continue
       if close < edge:
-        continue  # closed through / failed reclaim
+        continue
       if close <= open_:
         continue
       return {
@@ -130,9 +130,8 @@ def detect_sweep_reclaim(
         "edge": edge,
       }
 
-    if high < edge + tol:
-      continue
-    if high <= edge:
+    # Touch or pierce resistance, close back at/below edge, bearish bar.
+    if high < edge - tol:
       continue
     if close > edge:
       continue

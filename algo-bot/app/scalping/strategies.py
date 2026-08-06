@@ -119,9 +119,9 @@ def discover_range_sweep(
   buy_max = _parse_float(loc, "range_buy_maximum_position", 0.35)
   sell_min = _parse_float(loc, "range_sell_minimum_position", 0.65)
   pos = context.dealing_range_position
-  eq = context.active_range_eq
-  if eq is not None and abs((m1_df["close"].iloc[-1] - eq) / (high - low)) < 0.10:
-    return []
+  # Owner 2026-08-06: near-EQ mute used to return [] and kill Asia discovery
+  # for hours while price sat mid-range. Location filters below already gate
+  # BUY/SELL by dealing position — do not blank the whole archetype here.
 
   out: list[ScalpOpportunity] = []
   buffer = max(pip_size * 2, context.atr * 0.05)
@@ -486,9 +486,7 @@ def idle_discovery_reasons(
       width_pips = (high - low) / pip_size
       if width_pips < 25:
         reasons.append("range_sweep:range_too_narrow")
-      eq = context.active_range_eq
-      if eq is not None and abs((float(m1_df["close"].iloc[-1]) - eq) / (high - low)) < 0.10:
-        reasons.append("range_sweep:near_equilibrium")
+      # near_equilibrium is telemetry-only / not an absolute mute (owner 2026-08-06).
       act = getattr(_hfs_cfg(cfg), "activation", None)
       lookback = max(1, int(getattr(act, "trigger_maximum_age_bars", 2) or 2))
       buffer = max(pip_size * 2, context.atr * 0.05)

@@ -83,7 +83,8 @@ PREFERENCE_TELEMETRY_REASONS = frozenset({
   "news_guard_unavailable",
   "rr_pre_gate",
   "opposing_barrier_rr_insufficient",
-  # Positive room but ladder prefers more — cap TP, do not reject:
+  # Positive room but ladder prefers more — legacy cap codes kept for
+  # historical telemetry / old events:
   "opposing_barrier_target_capped",
   "opposing_barrier_target_capped_below_ladder",
   "configured_ladder_does_not_fit",
@@ -91,6 +92,10 @@ PREFERENCE_TELEMETRY_REASONS = frozenset({
   # already fits within buffered room; same allow/effective-target outcome
   # as no_opposing_barrier, split out only for telemetry clarity.
   "opposing_barrier_full_ladder_fits",
+  # Owner 2026-08-06: barrier room ignored; configured partial ladder kept.
+  "opposing_barrier_room_ignored_full_ladder",
+  "opposing_barrier_room_below_cost_ignored",
+  "opposing_barrier_no_configured_targets",
   # Entry falls inside a neutral key-level band (round number / reaction
   # level) rather than a directional supply/demand zone. Unlike genuine
   # zone containment (entry_inside_opposing_zone, still a hard block below),

@@ -5269,18 +5269,20 @@ async def _publish_trade_plan_v7(
       dimensions={"reason": str(target_room.reason_code or "unknown")},
     )
     return None
-  match_for_plan = (
-    replace(
-      execution_match,
-      targets_pips=(
-        target_room.fitted_targets_pips
-        if target_room.fitted_targets_pips
-        else execution_match.targets_pips
-      ),
+  match_for_plan = execution_match
+  if (
+    target_room.opposing_entry is not None
+    and target_room.fitted_targets_pips
+    and tuple(target_room.fitted_targets_pips) != tuple(execution_match.targets_pips)
+  ):
+    # Fitted targets must only ever equal the full configured ladder now.
+    # Refuse silent shrink-to-one-tiny-TP (live 2026-08-06 +9 pip full exit).
+    log.warning(
+      "v7 ignoring non-matching fitted_targets_pips match=%s fitted=%s configured=%s",
+      execution_match.match_id,
+      target_room.fitted_targets_pips,
+      execution_match.targets_pips,
     )
-    if target_room.opposing_entry is not None
-    else execution_match
-  )
 
   zone_claim_id = _resolve_match_confluence_claim_id(
     symbol,
