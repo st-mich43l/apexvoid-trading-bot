@@ -76,9 +76,15 @@ def _stop_pips(
   mn = _parse_float(stop_cfg, "minimum_pips", 12.0)
   mx = _parse_float(stop_cfg, "maximum_pips", 30.0)
   value = abs(float(structural))
-  if value < mn or value > mx:
+  if value <= 0:
     return None
-  return value
+  # Prod 2026-08-06: deep XAU wicks (> max) or tight reclaim (< min) used
+  # to return None and drop the whole opportunity with discovered=0 and no
+  # telemetry. Clamp into the HFS envelope like the main protective-stop
+  # path so edge sweeps still publish.
+  if mx < mn:
+    return None
+  return min(max(value, mn), mx)
 
 
 def _enabled(cfg: Any, name: str) -> bool:
@@ -121,10 +127,16 @@ def discover_range_sweep(
   buffer = max(pip_size * 2, context.atr * 0.05)
   ladder = _ladder(cfg)
   min_net = _parse_float(getattr(_hfs_cfg(cfg), "target", None), "minimum_net_target_pips", 15.0)
+  act = getattr(_hfs_cfg(cfg), "activation", None)
+  lookback = max(1, int(getattr(act, "trigger_maximum_age_bars", 2) or 2))
 
   # BUY lower edge
   buy_ev = detect_sweep_reclaim(
-    m1_df, direction="BUY", edge_price=low, tolerance=buffer,
+    m1_df,
+    direction="BUY",
+    edge_price=low,
+    tolerance=buffer,
+    lookback_bars=lookback,
   )
   if buy_ev is not None:
     if pos is not None and pos > buy_max:
@@ -180,7 +192,11 @@ def discover_range_sweep(
         ))
 
   sell_ev = detect_sweep_reclaim(
-    m1_df, direction="SELL", edge_price=high, tolerance=buffer,
+    m1_df,
+    direction="SELL",
+    edge_price=high,
+    tolerance=buffer,
+    lookback_bars=lookback,
   )
   if sell_ev is not None:
     if pos is not None and pos < sell_min:
@@ -447,3 +463,54 @@ def discover_all(
   # Deduplicate by opportunity_id
   by_id = {item.opportunity_id: item for item in found}
   return list(by_id.values())
+
+
+def idle_discovery_reasons(
+  context: ScalpContextSnapshot,
+  m1_df: pd.DataFrame,
+  cfg: Any,
+  *,
+  pip_size: float,
+) -> list[str]:
+  """Explain an empty discover_all cycle for last_cycle telemetry."""
+  reasons: list[str] = []
+  if not context.permitted_archetypes:
+    reasons.append("no_permitted_archetypes")
+    return reasons
+  if ARCHETYPE_RANGE_SWEEP in context.permitted_archetypes and _enabled(cfg, "range_sweep"):
+    low = context.active_range_low
+    high = context.active_range_high
+    if low is None or high is None or high <= low:
+      reasons.append("range_sweep:missing_active_range")
+    else:
+      width_pips = (high - low) / pip_size
+      if width_pips < 25:
+        reasons.append("range_sweep:range_too_narrow")
+      eq = context.active_range_eq
+      if eq is not None and abs((float(m1_df["close"].iloc[-1]) - eq) / (high - low)) < 0.10:
+        reasons.append("range_sweep:near_equilibrium")
+      act = getattr(_hfs_cfg(cfg), "activation", None)
+      lookback = max(1, int(getattr(act, "trigger_maximum_age_bars", 2) or 2))
+      buffer = max(pip_size * 2, context.atr * 0.05)
+      buy_ev = detect_sweep_reclaim(
+        m1_df, direction="BUY", edge_price=low, tolerance=buffer, lookback_bars=lookback,
+      )
+      sell_ev = detect_sweep_reclaim(
+        m1_df, direction="SELL", edge_price=high, tolerance=buffer, lookback_bars=lookback,
+      )
+      if buy_ev is None and sell_ev is None:
+        reasons.append("range_sweep:no_edge_sweep_reclaim")
+      else:
+        pos = context.dealing_range_position
+        loc = getattr(_hfs_cfg(cfg), "location", None)
+        buy_max = _parse_float(loc, "range_buy_maximum_position", 0.35)
+        sell_min = _parse_float(loc, "range_sell_minimum_position", 0.65)
+        if buy_ev is not None and pos is not None and pos > buy_max:
+          reasons.append("range_sweep:buy_location_blocked")
+        if sell_ev is not None and pos is not None and pos < sell_min:
+          reasons.append("range_sweep:sell_location_blocked")
+  if ARCHETYPE_IMPULSE_PULLBACK in context.permitted_archetypes and _enabled(cfg, "impulse_pullback"):
+    reasons.append("impulse_pullback:not_matched")
+  if ARCHETYPE_BREAKOUT_RETEST in context.permitted_archetypes and _enabled(cfg, "breakout_retest"):
+    reasons.append("breakout_retest:not_matched")
+  return reasons or ["no_microstructure_match"]

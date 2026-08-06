@@ -38,7 +38,7 @@ from app.scalping.microstructure import build_micro_structure
 from app.scalping.publish import build_hfs_strategy_match, publish_hfs_live
 from app.scalping.ranking import rank_opportunities, score_opportunity
 from app.scalping.risk import evaluate_risk, load_risk, save_risk
-from app.scalping.strategies import discover_all
+from app.scalping.strategies import discover_all, idle_discovery_reasons
 from app.scalping.telemetry import incr, record_cycle, set_last
 from app.autotrade import worker
 
@@ -189,6 +189,11 @@ async def process_m1_bar(
   pip = units.pip_size(symbol)
   t_strat = time.perf_counter()
   opportunities = discover_all(context, micro, m1, cfg, pip_size=pip, now=now)
+  idle_reasons = (
+    idle_discovery_reasons(context, m1, cfg, pip_size=pip)
+    if not opportunities
+    else []
+  )
   strat_ms = (time.perf_counter() - t_strat) * 1000.0
 
   quote = await _load_quote(client, symbol)
@@ -368,6 +373,7 @@ async def process_m1_bar(
     "allowed": len(ranked),
     "blocked": len(result["blocked"]),
     "mode": mode,
+    "idle_reasons": idle_reasons,
     "context_load_ms": round(context_ms, 3),
     "microstructure_ms": round(micro_ms, 3),
     "strategy_evaluation_ms": round(strat_ms, 3),
