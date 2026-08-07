@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from html import escape
 from typing import Literal
 
-from aiogram.exceptions import TelegramBadRequest
+from aiogram.exceptions import TelegramBadRequest, TelegramRetryAfter
 
 from app.analysis.scanner import clear_active_setup_tracking
 from app.autotrade import units
@@ -2506,6 +2506,18 @@ async def _record_lifecycle_event(client, event: dict) -> None:
     )
 
 
+# Live incident 2026-08-07: once app/bot/client.py raises instead of
+# sleeping out a long Telegram flood ban (see _MAX_RETRY_AFTER_SLEEP_SECONDS),
+# this loop's generic except caught it and retried the same stuck cursor
+# entry every 5s with a full traceback logged each time - thousands of
+# duplicate error blocks over the life of an ~11-hour ban. Retrying the
+# same entry forever is still correct (the ban is chat-wide, so skipping
+# ahead wouldn't help, and it guarantees no notification is silently
+# dropped - once the ban lifts, delivery resumes automatically) - only the
+# retry interval and log volume needed to change.
+_OWNER_LOOP_FLOOD_BACKOFF_SECONDS = 60
+
+
 async def _auto_trade_owner_events_loop(*, chat_id: int) -> None:
   client = redis_state.get_client()
   cursor = await client.get(_CURSOR_KEY)
@@ -2539,6 +2551,16 @@ async def _auto_trade_owner_events_loop(*, chat_id: int) -> None:
         )
     except asyncio.CancelledError:
       raise
+    except TelegramRetryAfter as exc:
+      cursor = str(await client.get(_CURSOR_KEY) or cursor)
+      log.warning(
+        "Auto-trade owner delivery flood-limited (retry_after=%ds) at "
+        "cursor %s; backing off %ds before retrying the same entry",
+        exc.retry_after,
+        cursor,
+        _OWNER_LOOP_FLOOD_BACKOFF_SECONDS,
+      )
+      await asyncio.sleep(_OWNER_LOOP_FLOOD_BACKOFF_SECONDS)
     except Exception:
       cursor = str(await client.get(_CURSOR_KEY) or cursor)
       log.exception(
