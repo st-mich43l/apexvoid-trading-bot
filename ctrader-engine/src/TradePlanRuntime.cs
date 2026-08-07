@@ -2178,18 +2178,23 @@ public sealed class TradePlanRuntime(
         );
         // Owner's call: book by the plan's actual declared % share, even on
         // a small partially-filled ladder - never force a non-final target
-        // up to a whole StepVolume it didn't earn just to book *something*.
-        // A share that rounds under one step is legitimately deferred
-        // (PlanPartialCloseVolume returns 0 below and the caller advances
-        // past this target untouched); the final target still closes
-        // whatever is left regardless of size, including a single-step
-        // dust remainder - that floor belongs to the *last* target only.
-        var closeVolume = VolumePlanner.PlanPartialCloseVolume(
-          groupRemaining,
-          desiredClose,
-          symbol,
-          isFinalTarget
-        );
+        // up to a size it didn't earn just to book *something*. But a share
+        // under two broker steps (eg. a single 0.01 lot on an 0.08 lot
+        // position) still isn't a meaningful booking on its own - defer it
+        // the same way a sub-one-step share already deferred, just with a
+        // higher bar (2026-08-07: raised from one step to two after a live
+        // 0.08 lot position kept booking bare single-step TPs). The final
+        // target still closes whatever is left regardless of size - that
+        // floor belongs to the *last* target only.
+        var minimumMeaningfulClose = checked(2 * symbol.StepVolume);
+        var closeVolume = !isFinalTarget && desiredClose < minimumMeaningfulClose
+          ? 0
+          : VolumePlanner.PlanPartialCloseVolume(
+              groupRemaining,
+              desiredClose,
+              symbol,
+              isFinalTarget
+            );
         if (closeVolume <= 0)
         {
           // Cannot book a broker-valid partial against the filled remainder
@@ -2208,14 +2213,14 @@ public sealed class TradePlanRuntime(
           // reaches the next index), without skipping targets price hasn't
           // touched. Now the normal path for any non-final target whose
           // declared % share of a small partially-filled remainder rounds
-          // under a single StepVolume - deferred honestly to whichever
-          // later target's cumulative share clears a step, or to the final
+          // under two broker steps - deferred honestly to whichever later
+          // target's cumulative share clears that bar, or to the final
           // target, which always closes what's left regardless of size.
           log(
             $"v7 target partial deferred id={plan.PlanId} "
             + $"target={target.TargetId} remaining={groupRemaining} "
             + $"desired={desiredClose} step={symbol.StepVolume} "
-            + "reason=share_below_one_step"
+            + "reason=share_below_minimum_meaningful_close"
           );
           state = AggregateState(
             state with { NextTargetIndex = state.NextTargetIndex + 1 }
