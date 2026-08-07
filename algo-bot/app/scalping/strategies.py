@@ -176,7 +176,7 @@ def discover_range_sweep(
       if stop is not None and target is not None:
         target_price, target_pips = target
         rr = target_pips / stop if stop else 0.0
-        source = deterministic_id("range", context.context_id, "BUY", round(low, 2))
+        source = deterministic_id("range", context.symbol, "BUY", round(low, 2))
         oid = deterministic_id(
           context.symbol, ARCHETYPE_RANGE_SWEEP, "BUY", context.context_id, source,
         )
@@ -240,7 +240,7 @@ def discover_range_sweep(
       if stop is not None and target is not None:
         target_price, target_pips = target
         rr = target_pips / stop if stop else 0.0
-        source = deterministic_id("range", context.context_id, "SELL", round(high, 2))
+        source = deterministic_id("range", context.symbol, "SELL", round(high, 2))
         oid = deterministic_id(
           context.symbol, ARCHETYPE_RANGE_SWEEP, "SELL", context.context_id, source,
         )
@@ -335,7 +335,7 @@ def discover_impulse_pullback(
       # mostly consumed
       continue
     source = deterministic_id(
-      "impulse", context.context_id, direction, round(float(ev["origin"]), 2), round(float(ev["extreme"]), 2),
+      "impulse", context.symbol, direction, round(float(ev["origin"]), 2), round(float(ev["extreme"]), 2),
     )
     oid = deterministic_id(
       context.symbol, ARCHETYPE_IMPULSE_PULLBACK, direction, context.context_id, source,
@@ -429,7 +429,7 @@ def discover_breakout_retest(
     if stop is None or target is None:
       continue
     target_price, target_pips = target
-    source = deterministic_id("box", context.context_id, direction, round(low, 2), round(high, 2))
+    source = deterministic_id("box", context.symbol, direction, round(low, 2), round(high, 2))
     oid = deterministic_id(
       context.symbol, ARCHETYPE_BREAKOUT_RETEST, direction, context.context_id, source,
     )
@@ -544,7 +544,7 @@ def discover_momentum_chase(
       continue
     target_price, target_pips = target
     source = deterministic_id(
-      "momentum", context.context_id, direction, round(entry, 2), int(ev["bar_ts"]),
+      "momentum", context.symbol, direction, round(entry, 2), int(ev["bar_ts"]),
     )
     oid = deterministic_id(
       context.symbol, ARCHETYPE_MOMENTUM_CHASE, direction, context.context_id, source,
