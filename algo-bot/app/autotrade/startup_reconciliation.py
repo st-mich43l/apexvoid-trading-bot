@@ -20,6 +20,8 @@ import logging
 import time
 from typing import Any
 
+from aiogram.exceptions import TelegramRetryAfter
+
 from app.autotrade.lifecycle import increment_metric
 from app.autotrade.setup_card import (
   assert_or_repair_forming_projection,
@@ -158,6 +160,22 @@ async def _reconcile_forming_cards(client: Any) -> None:
       )
       if repaired:
         await increment_metric(client, "forming_card_projection_repaired")
+    except TelegramRetryAfter as exc:
+      # Live incident 2026-08-07: Telegram flood-banned the chat (~11 hours)
+      # and this loop kept scanning straight into every remaining stale
+      # card, each one immediately re-hitting the same wall - a wall of
+      # near-identical tracebacks doing nothing but confirming what the
+      # first failure already proved. edit_scanner_message_text/
+      # delete_scanner_message have no retry wrapper of their own, so this
+      # is the only place that sees the raw exception. Once Telegram says
+      # "not for N seconds," every other card in this scan is going to get
+      # the same answer - stop burning through them.
+      log.error(
+        "startup reconciliation: Telegram flood-limited for %ds - "
+        "aborting the rest of this pass (will retry next restart)",
+        exc.retry_after,
+      )
+      return
     except Exception:
       # One card's Telegram failure (eg. a bad token, a deleted chat) must
       # not abort reconciliation for every other setup in this scan.

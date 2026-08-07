@@ -69,6 +69,16 @@ SCANNER_OWNER_COMMANDS = [
 ]
 
 _MAX_SEND_ATTEMPTS = 3
+# Live incident 2026-08-07: Telegram issued a genuine flood-control ban
+# (~39856s, ~11 hours) after repeated startup reconciliation passes burst
+# Telegram with unthrottled edits. This unconditionally slept the full
+# retry_after - freezing whatever task called send_with_retry for 11 real
+# hours, not just failing the one send. A short per-second throttle is
+# exactly what this retry loop is for; a multi-hour flood ban is not
+# something worth blocking a task on. Above this cap, log and raise
+# instead of sleeping, so the caller's own error handling (skip, log,
+# move on) takes over rather than the whole task going dark.
+_MAX_RETRY_AFTER_SLEEP_SECONDS = 30
 
 
 async def setup_commands(target_bot: Bot) -> None:
@@ -149,6 +159,14 @@ async def _send_message_with_retry(
         reply_markup=reply_markup,
       )
     except TelegramRetryAfter as e:
+      if e.retry_after > _MAX_RETRY_AFTER_SLEEP_SECONDS:
+        log.error(
+          "Telegram flood-limited for %ds (exceeds %ds cap) - not "
+          "blocking this task waiting it out; raising instead",
+          e.retry_after,
+          _MAX_RETRY_AFTER_SLEEP_SECONDS,
+        )
+        raise
       log.warning(
         "Telegram rate-limited; waiting %ds (attempt %d/%d)",
         e.retry_after,
