@@ -3,7 +3,12 @@
 When an order is already active:
 - opposing direction within ``min_price_separation`` (absolute |Δprice|) is
   blocked (SELL @ 4063 → BUY blocked between 4048 and 4078 when separation is 15)
-- same-direction opportunity is allowed at 60% size on a single leg only
+- same-direction non-scalp adds are allowed only after every open same-dir
+  plan has **booked** TP2 (``HighestBookedTargetIndex >= 1``) **and** the new
+  candidate is Tier A; size stays ``same_direction_size_fraction`` (default 60%)
+  on a single leg
+- same-direction scalp adds may stack at that fraction without waiting for TP2
+  / Tier A when ``allow_same_direction_stack`` is true
 """
 
 from __future__ import annotations
@@ -14,6 +19,10 @@ from dataclasses import dataclass
 from typing import Any
 
 log = logging.getLogger(__name__)
+
+# Target ladder indexes: TP1=0, TP2=1. Non-scalp same-dir unlock requires a
+# real booked close at/after TP2 — not merely NextTargetIndex after a deferral.
+SAME_DIRECTION_UNLOCK_BOOKED_TARGET_INDEX = 1
 
 _OPEN_V7_STAGES = frozenset({
   "PartiallyOpen",
@@ -41,6 +50,8 @@ class ActiveExposure:
   plan_id: str | None = None
   position_id: int | None = None
   remaining_volume: float | None = None
+  # None when unknown (V6 / pre-schema-3). Treated as not-yet-TP2 for unlock.
+  highest_booked_target_index: int | None = None
 
 
 @dataclass(frozen=True)
@@ -79,6 +90,30 @@ def _as_float(value: object) -> float | None:
   if number != number:  # NaN
     return None
   return number
+
+
+def _as_int(value: object) -> int | None:
+  try:
+    number = int(value)  # type: ignore[arg-type]
+  except (TypeError, ValueError):
+    return None
+  return number
+
+
+def same_direction_tp2_booked(exposure: ActiveExposure) -> bool:
+  """True when a real TP2 (or later) partial was booked on this exposure."""
+  booked = exposure.highest_booked_target_index
+  return (
+    booked is not None
+    and booked >= SAME_DIRECTION_UNLOCK_BOOKED_TARGET_INDEX
+  )
+
+
+def same_direction_stack_unlocked(exposures: list[ActiveExposure]) -> bool:
+  """Unlock non-scalp stack only when every same-dir open has booked TP2."""
+  if not exposures:
+    return True
+  return all(same_direction_tp2_booked(item) for item in exposures)
 
 
 def _payload_get(payload: dict[str, Any], *keys: str) -> Any:
@@ -227,6 +262,15 @@ async def _load_v7_plan_exposures(client: Any) -> list[ActiveExposure]:
     )
     if direction is None or entry is None or entry <= 0:
       continue
+    booked_raw = _payload_get(
+      payload,
+      "highest_booked_target_index",
+      "HighestBookedTargetIndex",
+    )
+    booked = _as_int(booked_raw)
+    # Schema/default -1 means nothing booked yet.
+    if booked is not None and booked < 0:
+      booked = None
     out.append(ActiveExposure(
       direction=direction,
       entry_price=float(entry),
@@ -238,6 +282,7 @@ async def _load_v7_plan_exposures(client: Any) -> list[ActiveExposure]:
         _payload_get(payload, "setup_id", "SetupId") or ""
       ) or None,
       remaining_volume=remaining if remaining is not None else filled,
+      highest_booked_target_index=booked,
     ))
   return out
 
@@ -250,18 +295,26 @@ def evaluate_entry_against_exposure(
   min_price_separation: float = 15.0,
   same_direction_size_fraction: float = 0.60,
   ignore_opposing_active: bool = False,
+  allow_same_direction_stack: bool = False,
+  candidate_tier: str | None = None,
 ) -> ExposureDecision:
-  """Apply opposing-distance and same-direction stack rules.
+  """Apply opposing-distance and same-direction rules.
 
   ``ignore_opposing_active``: scalp with fitted native min room may open
   even while an opposite position is already activated — opposing price
   separation is soft telemetry then, not a hard block.
+
+  ``allow_same_direction_stack``: scalps pass True to stack without waiting
+  for TP2 / Tier A. Non-scalp (False) may stack at
+  ``same_direction_size_fraction`` only after every open same-dir plan has
+  booked TP2 and the candidate is Tier A; otherwise blocked.
   """
   wanted = normalize_direction(direction)
   if wanted is None or entry_price <= 0:
     return ExposureDecision(block=False)
   opposite = "SELL" if wanted == "BUY" else "BUY"
   separation = max(0.0, float(min_price_separation))
+  tier = str(candidate_tier or "").strip().upper() or None
 
   for active in exposures:
     if active.direction != opposite:
@@ -310,26 +363,69 @@ def evaluate_entry_against_exposure(
     return ExposureDecision(block=False)
   primary = same[0]
   fraction = max(0.01, min(1.0, float(same_direction_size_fraction)))
+  unlocked = same_direction_stack_unlocked(same)
+  tier_ok = tier == "A"
+  measured = {
+    "active_direction": primary.direction,
+    "active_entry_price": primary.entry_price,
+    "same_direction_size_fraction": fraction,
+    "active_source": primary.source,
+    "active_plan_id": primary.plan_id,
+    "active_group_id": primary.group_id,
+    "active_position_id": primary.position_id,
+    "same_direction_count": len(same),
+    "same_direction_tp2_booked": unlocked,
+    "unlock_booked_target_index": SAME_DIRECTION_UNLOCK_BOOKED_TARGET_INDEX,
+    "active_highest_booked_target_indexes": [
+      item.highest_booked_target_index for item in same
+    ],
+    "candidate_tier": tier,
+    "same_direction_requires_tier_a": not allow_same_direction_stack,
+  }
+  # Scalps stack freely; non-scalp needs booked TP2 + Tier A candidate.
+  if allow_same_direction_stack:
+    return ExposureDecision(
+      block=False,
+      same_direction_stack=True,
+      reason_code="same_direction_stack",
+      message=(
+        f"same-direction stack on active {wanted} @ {primary.entry_price:.2f}: "
+        f"size {fraction:.0%} on a single leg"
+      ),
+      measured=measured,
+    )
+  if not unlocked:
+    return ExposureDecision(
+      block=True,
+      reason_code="same_direction_active_before_tp2",
+      message=(
+        f"same-direction {wanted} already active @ {primary.entry_price:.2f}; "
+        "wait until each open plan has booked TP2 before adding"
+      ),
+      measured=measured,
+    )
+  if not tier_ok:
+    return ExposureDecision(
+      block=True,
+      reason_code="same_direction_stack_requires_tier_a",
+      message=(
+        f"same-direction {wanted} already active @ {primary.entry_price:.2f} "
+        f"with TP2 booked, but candidate tier={tier or 'missing'} "
+        "(require Tier A quality to stack)"
+      ),
+      measured=measured,
+    )
   return ExposureDecision(
     block=False,
     same_direction_stack=True,
     reason_code="same_direction_stack",
     message=(
       f"same-direction stack on active {wanted} @ {primary.entry_price:.2f}: "
-      f"size {fraction:.0%} on a single leg"
+      f"size {fraction:.0%} on a single leg "
+      "(unlocked after booked TP2 + Tier A)"
     ),
-    measured={
-      "active_direction": primary.direction,
-      "active_entry_price": primary.entry_price,
-      "same_direction_size_fraction": fraction,
-      "active_source": primary.source,
-      "active_plan_id": primary.plan_id,
-      "active_group_id": primary.group_id,
-      "active_position_id": primary.position_id,
-      "same_direction_count": len(same),
-    },
+    measured=measured,
   )
-
 
 def apply_same_direction_stack_sizing(
   measured: dict[str, Any],
