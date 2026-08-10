@@ -27,6 +27,19 @@ jobs:
           --health-interval 5s
           --health-timeout 3s
           --health-retries 10
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: apexvoid
+          POSTGRES_PASSWORD: apexvoid
+          POSTGRES_DB: signals
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd "pg_isready -U apexvoid -d signals"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
 
@@ -49,6 +62,7 @@ jobs:
         working-directory: algo-bot
         env:
           REAL_REDIS_URL: redis://127.0.0.1:6379/15
+          DATABASE_URL: postgresql://apexvoid:apexvoid@127.0.0.1:55432/signals
           PYTHONPATH: .
         run: |
           set -euo pipefail
