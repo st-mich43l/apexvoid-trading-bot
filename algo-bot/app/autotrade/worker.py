@@ -5543,9 +5543,8 @@ async def _publish_trade_plan_v7(
     # Active opposite position must not block HFS / Range Edge when native
     # min room already fitted (owner 2026-08-06).
     ignore_opposing_active=scalp_ignores_opposing_active,
-    # Non-scalp must not shrink to 60% when another same-direction trade is
-    # open (prod 2026-08-10: 0.06/0.07 vs full 0.10/0.12). Scalps may still
-    # stack.
+    # Non-scalp may same-dir stack at 60% only after every open plan has
+    # booked TP2; earlier adds are blocked. Scalps may stack freely.
     allow_same_direction_stack=candidate_is_scalp,
   )
   if exposure.block:
