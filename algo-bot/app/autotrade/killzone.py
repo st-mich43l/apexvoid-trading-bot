@@ -192,13 +192,14 @@ def evaluate_killzone_gate(
   return decision
 
 
-# Confirmation patterns accepted as sweep / body displacement for reaction.
+# Confirmation patterns accepted as sweep / body / displacement for reaction.
 SWEEP_BODY_TRIGGERS = frozenset({
   "sweep_reclaim",
   "strong_reclaim",
   "body_close",
   "strong_close",
   "engulfing",
+  "rejection_choch",
 })
 
 

@@ -832,10 +832,10 @@ def plan_group_protective_stop(
   ``resolved_leg_volumes`` are relative weights only (declared ratios or
   broker lots) used as a group reference entry for plan telemetry still.
   The envelope is enforced against every planned leg with a hard floor from
-  the nearest leg (never under ``minimum_stop_pips``). When technique
-  hard-cap is on (default), furthest-leg distance may not exceed
-  ``maximum_stop_pips`` — reject instead of soft-expanding past the envelope.
-  Volumes must not invent an absolute stop from assumed equity/lots.
+  the nearest leg (never under ``minimum_stop_pips``) and a hard furthest-leg
+  cap: if floor geometry leaves furthest distance over ``maximum_stop_pips``,
+  reject — never soft-expand past the owner envelope. Volumes must not invent
+  an absolute stop from assumed equity/lots.
   """
   direction = str(direction).upper()
   zone_low = decimal_value(entry_zone_low, "entry_zone_low")
@@ -868,17 +868,6 @@ def plan_group_protective_stop(
     or digits < 0
   ):
     raise ProtectiveStopError("Structure-stop inputs are invalid")
-
-  hard_cap = False
-  try:
-    cfg = _default_runtime_cfg()
-    tech = getattr(getattr(cfg, "execution", None), "technique", None)
-    if tech is not None:
-      hard_cap = bool(getattr(tech, "enforce", True)) and bool(
-        getattr(tech, "hard_cap_group_stop", True),
-      )
-  except Exception:
-    hard_cap = False
 
   structural = (
     swing - structure_buffer * atr_value
@@ -935,8 +924,8 @@ def plan_group_protective_stop(
   raw_pips = raw_distance / pip
   max_pips = Decimal(maximum_stop_pips)
   min_pips = Decimal(minimum_stop_pips)
-  # Hard floor from nearest planned leg; furthest-leg max is hard when
-  # technique.hard_cap_group_stop (default) — reject if floor forces overshoot.
+  # Hard floor from nearest planned leg; furthest-leg max is always hard —
+  # reject if floor geometry overshoots maximum_stop_pips (no soft expand).
   nearest = min(prices) if direction == "BUY" else max(prices)
   furthest = max(prices) if direction == "BUY" else min(prices)
   if direction == "BUY":
@@ -987,7 +976,7 @@ def plan_group_protective_stop(
         "planned_stop_price": format(stop_price, "f"),
       },
     )
-  if hard_cap and widest > max_pips + Decimal("0.000001"):
+  if widest > max_pips + Decimal("0.000001"):
     raise ProtectiveStopError(
       "stop_exceeds_envelope_furthest_leg",
       measured={
@@ -998,7 +987,6 @@ def plan_group_protective_stop(
         "furthest_leg_stop_pips": format(widest, "f"),
         "planned_leg_prices": [format(price, "f") for price in prices],
         "planned_stop_price": format(stop_price, "f"),
-        "hard_cap_group_stop": True,
       },
     )
   # Expanding to the floor must still clear zone + entries.

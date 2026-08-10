@@ -255,18 +255,6 @@ class ExecutionTechniqueConfig(FrozenConfigModel):
       default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, True),),
       validation_summary='Pydantic required/type coercion only',
     )
-    hard_cap_group_stop: bool = config_field(
-      True,
-      canonical_env='AUTO_TRADE_TECHNIQUE_HARD_CAP_GROUP_STOP',
-      owner=ConfigOwner.PYTHON,
-      reload=ReloadPolicy.NEW_SETUP_ONLY,
-      runtime_reload=ReloadPolicy.RESTART,
-      unit=ConfigUnit.BOOLEAN,
-      risk=RiskClassification.EXECUTION_SAFETY,
-      description='Reject ladder stops when furthest leg exceeds stop_max_pips.',
-      default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, True),),
-      validation_summary='Pydantic required/type coercion only',
-    )
 
 
 class ExecutionConfig(FrozenConfigModel):
