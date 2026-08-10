@@ -5544,8 +5544,9 @@ async def _publish_trade_plan_v7(
     # min room already fitted (owner 2026-08-06).
     ignore_opposing_active=scalp_ignores_opposing_active,
     # Non-scalp may same-dir stack at 60% only after every open plan has
-    # booked TP2; earlier adds are blocked. Scalps may stack freely.
+    # booked TP2 and the candidate is Tier A. Scalps may stack freely.
     allow_same_direction_stack=candidate_is_scalp,
+    candidate_tier=str(getattr(match_for_plan, "tier", "") or ""),
   )
   if exposure.block:
     await _release_claims()
