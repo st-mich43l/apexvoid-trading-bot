@@ -104,6 +104,17 @@ def _fights_fresh_macro_momentum(
   return macro is not None and macro != str(direction).upper()
 
 
+def _technique_require_sweep_body(cfg: Any) -> bool:
+  from app.autotrade.killzone import technique_enforce
+
+  if not technique_enforce(cfg):
+    return False
+  tech = getattr(getattr(cfg, "execution", None), "technique", None)
+  if tech is None:
+    return True
+  return bool(getattr(tech, "require_sweep_body", True))
+
+
 def _enabled(cfg: Any, name: str) -> bool:
   root = _hfs_cfg(cfg)
   arch = getattr(root, "archetypes", None)
@@ -307,6 +318,24 @@ def discover_impulse_pullback(
       continue
     if ev.get("rejected"):
       continue
+    if _technique_require_sweep_body(cfg):
+      edge = (
+        float(context.active_range_low)
+        if direction == "BUY"
+        else float(context.active_range_high)
+      )
+      sweep = detect_sweep_reclaim(
+        m1_df,
+        direction=direction,
+        edge_price=edge,
+        tolerance=buffer,
+        lookback_bars=max(
+          1,
+          int(getattr(getattr(_hfs_cfg(cfg), "activation", None), "trigger_maximum_age_bars", 2) or 2),
+        ),
+      )
+      if sweep is None:
+        continue
     if _fights_fresh_macro_momentum(
       m1_df, direction=direction, atr=context.atr, cfg=cfg,
     ):
@@ -523,6 +552,21 @@ def discover_momentum_chase(
     )
     if ev is None or ev.get("rejected"):
       continue
+    if _technique_require_sweep_body(cfg):
+      edge = (
+        float(context.active_range_low)
+        if direction == "BUY"
+        else float(context.active_range_high)
+      )
+      sweep = detect_sweep_reclaim(
+        m1_df,
+        direction=direction,
+        edge_price=edge,
+        tolerance=buffer,
+        lookback_bars=max(1, lookback_bars),
+      )
+      if sweep is None:
+        continue
     entry = float(ev["close"])
     if direction == "BUY":
       stop_price = float(ev["extreme"]) - buffer

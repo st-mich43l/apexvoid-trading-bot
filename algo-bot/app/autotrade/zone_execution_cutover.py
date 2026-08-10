@@ -493,6 +493,45 @@ async def _prepare_activation(
 ) -> StrategyMatch | None:
   """Return a stamped match ready to activate, or None while waiting/blocked."""
   now = quote[2]
+  from app.autotrade.killzone import evaluate_killzone_gate, technique_enforce
+  from app.core.config import runtime_config
+
+  tech = getattr(runtime_config.execution, "technique", None)
+  require_kz = True if tech is None else bool(
+    getattr(tech, "reaction_require_killzone", True),
+  )
+  kz = evaluate_killzone_gate(
+    ts=now,
+    cfg=runtime_config,
+    require=require_kz and technique_enforce(runtime_config),
+  )
+  if not kz.allowed:
+    log.info(
+      "entry activation blocked outside killzone symbol=%s zone_id=%s "
+      "utc_hour=%s killzone=%s reason=%s",
+      record.symbol,
+      record.zone_id,
+      kz.utc_hour,
+      kz.killzone_name,
+      kz.reason_code,
+    )
+    await _record_policy_telemetry(
+      client,
+      symbol=record.symbol,
+      kind="activation",
+      reason_code=kz.reason_code,
+      payload={
+        "symbol": record.symbol,
+        "zone_id": record.zone_id,
+        "strategy": match.strategy,
+        "direction": record.direction,
+        "killzone_name": kz.killzone_name,
+        "utc_hour": kz.utc_hour,
+        **kz.measured,
+      },
+    )
+    return None
+
   trigger = await _m1_trigger_for_zone(client, record)
   range_bounds = await _resolve_location_range_bounds(
     client,
