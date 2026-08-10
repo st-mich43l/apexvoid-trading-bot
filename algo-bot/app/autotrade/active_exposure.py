@@ -3,7 +3,10 @@
 When an order is already active:
 - opposing direction within ``min_price_separation`` (absolute |Δprice|) is
   blocked (SELL @ 4063 → BUY blocked between 4048 and 4078 when separation is 15)
-- same-direction opportunity is allowed at 60% size on a single leg only
+- same-direction non-scalp adds are blocked (prod 2026-08-10: Key Level
+  stacked at 60% → 0.06/0.07 lots while peers booked full table 0.10/0.12)
+- same-direction scalp adds may still stack at ``same_direction_size_fraction``
+  on a single leg when ``allow_same_direction_stack`` is true
 """
 
 from __future__ import annotations
@@ -250,12 +253,17 @@ def evaluate_entry_against_exposure(
   min_price_separation: float = 15.0,
   same_direction_size_fraction: float = 0.60,
   ignore_opposing_active: bool = False,
+  allow_same_direction_stack: bool = False,
 ) -> ExposureDecision:
-  """Apply opposing-distance and same-direction stack rules.
+  """Apply opposing-distance and same-direction rules.
 
   ``ignore_opposing_active``: scalp with fitted native min room may open
   even while an opposite position is already activated — opposing price
   separation is soft telemetry then, not a hard block.
+
+  ``allow_same_direction_stack``: when false (default, non-scalp), a live
+  same-direction exposure blocks the candidate instead of shrinking it.
+  Scalps may pass True to keep the historical 60% single-leg stack add.
   """
   wanted = normalize_direction(direction)
   if wanted is None or entry_price <= 0:
@@ -310,6 +318,26 @@ def evaluate_entry_against_exposure(
     return ExposureDecision(block=False)
   primary = same[0]
   fraction = max(0.01, min(1.0, float(same_direction_size_fraction)))
+  measured = {
+    "active_direction": primary.direction,
+    "active_entry_price": primary.entry_price,
+    "same_direction_size_fraction": fraction,
+    "active_source": primary.source,
+    "active_plan_id": primary.plan_id,
+    "active_group_id": primary.group_id,
+    "active_position_id": primary.position_id,
+    "same_direction_count": len(same),
+  }
+  if not allow_same_direction_stack:
+    return ExposureDecision(
+      block=True,
+      reason_code="same_direction_active",
+      message=(
+        f"same-direction {wanted} already active @ {primary.entry_price:.2f}; "
+        "skip add (full table lots only — no 60% stack shrink)"
+      ),
+      measured=measured,
+    )
   return ExposureDecision(
     block=False,
     same_direction_stack=True,
@@ -318,16 +346,7 @@ def evaluate_entry_against_exposure(
       f"same-direction stack on active {wanted} @ {primary.entry_price:.2f}: "
       f"size {fraction:.0%} on a single leg"
     ),
-    measured={
-      "active_direction": primary.direction,
-      "active_entry_price": primary.entry_price,
-      "same_direction_size_fraction": fraction,
-      "active_source": primary.source,
-      "active_plan_id": primary.plan_id,
-      "active_group_id": primary.group_id,
-      "active_position_id": primary.position_id,
-      "same_direction_count": len(same),
-    },
+    measured=measured,
   )
 
 

@@ -74,6 +74,7 @@ from app.autotrade.strategy_match import (
 from app.autotrade.strategy_taxonomy import (
   bypasses_opposing_structure_gates,
   is_reaction_strategy,
+  is_scalp_strategy,
   match_bypasses_opposing_structure,
 )
 from app.autotrade.structural_target_room import (
@@ -5522,6 +5523,13 @@ async def _publish_trade_plan_v7(
   scalp_ignores_opposing_active = match_bypasses_opposing_structure(
     match_for_plan,
   )
+  candidate_is_scalp = is_scalp_strategy(
+    str(getattr(match_for_plan, "strategy", "") or ""),
+    family=str(getattr(match_for_plan, "strategy_family", "") or "") or None,
+    strategy_mode=str(
+      getattr(match_for_plan, "strategy_mode", "") or ""
+    ) or None,
+  )
   exposure = evaluate_entry_against_exposure(
     direction=match_for_plan.direction,
     entry_price=float(entry_reference),
@@ -5535,6 +5543,10 @@ async def _publish_trade_plan_v7(
     # Active opposite position must not block HFS / Range Edge when native
     # min room already fitted (owner 2026-08-06).
     ignore_opposing_active=scalp_ignores_opposing_active,
+    # Non-scalp must not shrink to 60% when another same-direction trade is
+    # open (prod 2026-08-10: 0.06/0.07 vs full 0.10/0.12). Scalps may still
+    # stack.
+    allow_same_direction_stack=candidate_is_scalp,
   )
   if exposure.block:
     await _release_claims()
