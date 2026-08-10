@@ -53,18 +53,46 @@ def classify_session(ts: int, cfg: Any | None = None) -> str:
   return "london"
 
 
-def permitted_archetypes_for_session(session: str) -> tuple[str, ...]:
+_HFS_ARCHETYPES: tuple[str, ...] = (
+  ARCHETYPE_RANGE_SWEEP,
+  ARCHETYPE_IMPULSE_PULLBACK,
+  ARCHETYPE_BREAKOUT_RETEST,
+  ARCHETYPE_MOMENTUM_CHASE,
+)
+
+
+def permitted_archetypes_for_session(
+  session: str,
+  *,
+  ts: int | None = None,
+  hour: int | None = None,
+  cfg: Any | None = None,
+) -> tuple[str, ...]:
+  """Permit HFS archetypes only inside killzones when technique pack enforces.
+
+  Owner 2026-08-10: Asia/dead-hour Impulse churn ≈ −498 pips. Killzone-only
+  (London / London–NY / late NY) replaces the prior always-on permit list.
+  Rollover stays empty regardless of enforce.
+  """
   if session == "rollover":
     return ()
-  # Owner 2026-08-06: Asia used to permit only range_sweep, so live HFS
-  # sat at discovered=0 for hours while impulse/breakout opportunities were
-  # silently illegal. Same archetype set as London (still off in rollover).
-  return (
-    ARCHETYPE_RANGE_SWEEP,
-    ARCHETYPE_IMPULSE_PULLBACK,
-    ARCHETYPE_BREAKOUT_RETEST,
-    ARCHETYPE_MOMENTUM_CHASE,
+  from app.autotrade.killzone import classify_killzone, technique_enforce
+
+  tech = getattr(getattr(cfg, "execution", None), "technique", None)
+  require_kz = True if tech is None else bool(
+    getattr(tech, "hfs_require_killzone", True),
   )
+  if technique_enforce(cfg) and require_kz:
+    if ts is None and hour is None:
+      # Legacy callers without a clock: only named London/overlap sessions
+      # are optimistic; Asia/NY-label without hour fail closed (late NY
+      # always passes ``ts`` from ``build_scalp_context_snapshot``).
+      if session not in {"london", "london_ny_overlap"}:
+        return ()
+    else:
+      if not classify_killzone(ts=ts, hour=hour, cfg=cfg).allowed:
+        return ()
+  return _HFS_ARCHETYPES
 
 
 def _bar_ts(df: pd.DataFrame) -> int | None:
@@ -175,8 +203,11 @@ def build_scalp_context_snapshot(
   buy_room = (active_high - price) / pip_size if pip_size > 0 else None
   sell_room = (price - active_low) / pip_size if pip_size > 0 else None
 
-  session = classify_session(now if now else m5_ts, cfg)
-  permitted = permitted_archetypes_for_session(session)
+  context_ts = int(now) if now else m5_ts
+  session = classify_session(context_ts, cfg)
+  permitted = permitted_archetypes_for_session(
+    session, ts=context_ts, cfg=cfg,
+  )
 
   context_id = compute_context_id(
     symbol,

@@ -278,7 +278,19 @@ def detector_settings_from(config: object | None = None) -> DetectorSettings:
     session_ny_start=market_data.sessions.ny_start,
     daily_rollover_utc_hour=market_data.sessions.daily_rollover_utc_hour,
     eq_band=analysis.measurements.eq_band,
-    strict_pd_gate=analysis.measurements.strict_pd_gate,
+    strict_pd_gate=(
+      bool(analysis.measurements.strict_pd_gate)
+      or (
+        bool(getattr(getattr(execution, "technique", None), "enforce", True))
+        and bool(
+          getattr(
+            getattr(execution, "technique", None),
+            "strict_premium_discount",
+            True,
+          ),
+        )
+      )
+    ),
     sweep_body_frac=analysis.liquidity.sweep.body_frac,
     sweep_react_bars=analysis.liquidity.sweep.react_bars,
     inducement_band_atr=analysis.measurements.inducement_band_atr,

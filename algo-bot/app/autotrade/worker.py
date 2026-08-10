@@ -4579,6 +4579,80 @@ async def _publish_trade_plan_v7(
     )
     return None
 
+  # Technique pack: killzone + sweep/body confirmation before V7 publish.
+  from app.autotrade.killzone import (
+    confirmation_is_sweep_body,
+    evaluate_killzone_gate,
+    technique_enforce,
+  )
+
+  tech = getattr(runtime_config.execution, "technique", None)
+  enforce_pack = technique_enforce(runtime_config)
+  require_kz = True if tech is None else bool(
+    getattr(tech, "reaction_require_killzone", True),
+  )
+  kz = evaluate_killzone_gate(
+    ts=int(getattr(spot, "ts", 0) or int(datetime.now(timezone.utc).timestamp())),
+    cfg=runtime_config,
+    require=require_kz and enforce_pack,
+  )
+  if not kz.allowed:
+    log.info(
+      "v7 publish blocked outside killzone symbol=%s match_id=%s "
+      "utc_hour=%s killzone=%s",
+      symbol,
+      match.match_id,
+      kz.utc_hour,
+      kz.killzone_name,
+    )
+    await _record_v7_build_rejected(
+      client,
+      symbol,
+      match,
+      "outside_killzone",
+      "technique pack: executable publish blocked outside killzone",
+      {
+        "killzone_name": kz.killzone_name,
+        "utc_hour": kz.utc_hour,
+        **kz.measured,
+      },
+    )
+    return None
+
+  require_sweep = True if tech is None else bool(
+    getattr(tech, "require_sweep_body", True),
+  )
+  if (
+    enforce_pack
+    and require_sweep
+    and (
+      is_reaction_strategy(match.strategy)
+      or match.family in {
+        "mapped_zone_reaction",
+        "liquidity_reversal",
+        "range_reversion",
+      }
+    )
+  ):
+    trigger_name = (
+      str(match.entry_activation_trigger or "")
+      or str(match.reaction_type or "")
+    )
+    if not confirmation_is_sweep_body(trigger_name):
+      await _record_v7_build_rejected(
+        client,
+        symbol,
+        match,
+        "confirmation_requires_sweep_body",
+        "technique pack: reaction publish requires sweep_reclaim/body_close",
+        {
+          "trigger": trigger_name or None,
+          "killzone_name": kz.killzone_name,
+          "utc_hour": kz.utc_hour,
+        },
+      )
+      return None
+
   setup_id = match.match_id
   setup_record = await load_setup(client, setup_id)
   if setup_record is None or not is_publishable_setup_state(setup_record.state):

@@ -832,10 +832,10 @@ def plan_group_protective_stop(
   ``resolved_leg_volumes`` are relative weights only (declared ratios or
   broker lots) used as a group reference entry for plan telemetry still.
   The envelope is enforced against every planned leg with a hard floor from
-  the nearest leg (never under ``minimum_stop_pips``). The furthest-leg cap
-  is soft: when both cannot hold, expand so nearest clears the floor even if
-  furthest exceeds ``maximum_stop_pips``. Volumes must not invent an absolute
-  stop from assumed equity/lots.
+  the nearest leg (never under ``minimum_stop_pips``) and a hard furthest-leg
+  cap: if floor geometry leaves furthest distance over ``maximum_stop_pips``,
+  reject — never soft-expand past the owner envelope. Volumes must not invent
+  an absolute stop from assumed equity/lots.
   """
   direction = str(direction).upper()
   zone_low = decimal_value(entry_zone_low, "entry_zone_low")
@@ -924,16 +924,14 @@ def plan_group_protective_stop(
   raw_pips = raw_distance / pip
   max_pips = Decimal(maximum_stop_pips)
   min_pips = Decimal(minimum_stop_pips)
-  # Owner: hard floor from nearest planned leg; soft cap from furthest.
-  # Prefer floor when both cannot hold (Trend Pullback live: 40p from high
-  # left ~23p from weighted fill after min=max band capped from the far leg).
+  # Hard floor from nearest planned leg; furthest-leg max is always hard —
+  # reject if floor geometry overshoots maximum_stop_pips (no soft expand).
   nearest = min(prices) if direction == "BUY" else max(prices)
   furthest = max(prices) if direction == "BUY" else min(prices)
   if direction == "BUY":
     floor_stop = nearest - min_pips * pip
     cap_stop = furthest - max_pips * pip
     stop_price = min(raw_stop, floor_stop)
-    # Soft cap only when it still clears the near-leg floor.
     if stop_price < cap_stop and (nearest - cap_stop) / pip + Decimal("0.000001") >= min_pips:
       stop_price = cap_stop
   else:
@@ -978,7 +976,19 @@ def plan_group_protective_stop(
         "planned_stop_price": format(stop_price, "f"),
       },
     )
-  # Soft max: furthest may exceed max_pips when floor wins; do not shrink.
+  if widest > max_pips + Decimal("0.000001"):
+    raise ProtectiveStopError(
+      "stop_exceeds_envelope_furthest_leg",
+      measured={
+        "stop_reject_detail": "furthest_leg_over_max",
+        "stop_min_envelope_pips": int(minimum_stop_pips),
+        "stop_max_envelope_pips": int(maximum_stop_pips),
+        "nearest_leg_stop_pips": format(tightest, "f"),
+        "furthest_leg_stop_pips": format(widest, "f"),
+        "planned_leg_prices": [format(price, "f") for price in prices],
+        "planned_stop_price": format(stop_price, "f"),
+      },
+    )
   # Expanding to the floor must still clear zone + entries.
   if direction == "BUY":
     if stop_price >= zone_low:

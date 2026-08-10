@@ -154,6 +154,109 @@ class ExecutionActivationConfig(FrozenConfigModel):
     def normalize_activation_mode(cls, value):
         return value.strip().lower() if isinstance(value, str) else value
 
+class ExecutionTechniqueConfig(FrozenConfigModel):
+    """Prod technique pack (2026-08-10): killzone + sweep/body + strict PD + SL hard-cap."""
+
+    enforce: bool = config_field(
+      True,
+      canonical_env='AUTO_TRADE_TECHNIQUE_ENFORCE',
+      owner=ConfigOwner.PYTHON,
+      reload=ReloadPolicy.NEW_SETUP_ONLY,
+      runtime_reload=ReloadPolicy.RESTART,
+      unit=ConfigUnit.BOOLEAN,
+      risk=RiskClassification.EXECUTION_SAFETY,
+      description='Master switch for killzone/sweep/PD technique pack (enforce-on).',
+      default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, True),),
+      validation_summary='Pydantic required/type coercion only',
+    )
+    include_late_ny: bool = config_field(
+      True,
+      canonical_env='AUTO_TRADE_TECHNIQUE_INCLUDE_LATE_NY',
+      owner=ConfigOwner.PYTHON,
+      reload=ReloadPolicy.NEW_SETUP_ONLY,
+      runtime_reload=ReloadPolicy.RESTART,
+      unit=ConfigUnit.BOOLEAN,
+      risk=RiskClassification.EXECUTION_SAFETY,
+      description='Allow UTC 22-23 as killzone (prod dig strong hours).',
+      default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, True),),
+      validation_summary='Pydantic required/type coercion only',
+    )
+    london_window_hours: int = config_field(
+      3,
+      canonical_env='AUTO_TRADE_TECHNIQUE_LONDON_WINDOW_HOURS',
+      owner=ConfigOwner.PYTHON,
+      reload=ReloadPolicy.NEW_SETUP_ONLY,
+      runtime_reload=ReloadPolicy.RESTART,
+      unit=ConfigUnit.COUNT,
+      risk=RiskClassification.EXECUTION_SAFETY,
+      description='Hours after london_start that count as London killzone.',
+      default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 3),),
+      validation_summary='Pydantic required/type coercion only',
+      ge=1,
+    )
+    ny_window_hours: int = config_field(
+      3,
+      canonical_env='AUTO_TRADE_TECHNIQUE_NY_WINDOW_HOURS',
+      owner=ConfigOwner.PYTHON,
+      reload=ReloadPolicy.NEW_SETUP_ONLY,
+      runtime_reload=ReloadPolicy.RESTART,
+      unit=ConfigUnit.COUNT,
+      risk=RiskClassification.EXECUTION_SAFETY,
+      description='Hours after ny_start that count as NY/London-NY killzone.',
+      default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 3),),
+      validation_summary='Pydantic required/type coercion only',
+      ge=1,
+    )
+    reaction_require_killzone: bool = config_field(
+      True,
+      canonical_env='AUTO_TRADE_TECHNIQUE_REACTION_REQUIRE_KILLZONE',
+      owner=ConfigOwner.PYTHON,
+      reload=ReloadPolicy.NEW_SETUP_ONLY,
+      runtime_reload=ReloadPolicy.RESTART,
+      unit=ConfigUnit.BOOLEAN,
+      risk=RiskClassification.EXECUTION_SAFETY,
+      description='Block reaction/zone publish+arm outside killzone when enforce.',
+      default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, True),),
+      validation_summary='Pydantic required/type coercion only',
+    )
+    hfs_require_killzone: bool = config_field(
+      True,
+      canonical_env='AUTO_TRADE_TECHNIQUE_HFS_REQUIRE_KILLZONE',
+      owner=ConfigOwner.PYTHON,
+      reload=ReloadPolicy.NEW_SETUP_ONLY,
+      runtime_reload=ReloadPolicy.RESTART,
+      unit=ConfigUnit.BOOLEAN,
+      risk=RiskClassification.EXECUTION_SAFETY,
+      description='Permit HFS archetypes only inside killzone when enforce.',
+      default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, True),),
+      validation_summary='Pydantic required/type coercion only',
+    )
+    require_sweep_body: bool = config_field(
+      True,
+      canonical_env='AUTO_TRADE_TECHNIQUE_REQUIRE_SWEEP_BODY',
+      owner=ConfigOwner.PYTHON,
+      reload=ReloadPolicy.NEW_SETUP_ONLY,
+      runtime_reload=ReloadPolicy.RESTART,
+      unit=ConfigUnit.BOOLEAN,
+      risk=RiskClassification.EXECUTION_SAFETY,
+      description='Require sweep_reclaim/body_close family confirmation for reaction.',
+      default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, True),),
+      validation_summary='Pydantic required/type coercion only',
+    )
+    strict_premium_discount: bool = config_field(
+      True,
+      canonical_env='AUTO_TRADE_TECHNIQUE_STRICT_PREMIUM_DISCOUNT',
+      owner=ConfigOwner.PYTHON,
+      reload=ReloadPolicy.NEW_SETUP_ONLY,
+      runtime_reload=ReloadPolicy.RESTART,
+      unit=ConfigUnit.BOOLEAN,
+      risk=RiskClassification.EXECUTION_SAFETY,
+      description='Force BUY=discount / SELL=premium dealing-range gate when enforce.',
+      default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, True),),
+      validation_summary='Pydantic required/type coercion only',
+    )
+
+
 class ExecutionConfig(FrozenConfigModel):
     activation: ExecutionActivationConfig = Field(default_factory=ExecutionActivationConfig)
     broker_recovery: ExecutionBrokerRecoveryConfig = Field(default_factory=ExecutionBrokerRecoveryConfig)
@@ -166,5 +269,6 @@ class ExecutionConfig(FrozenConfigModel):
     scaling: ExecutionScalingConfig = Field(default_factory=ExecutionScalingConfig)
     stops: ExecutionStopsConfig = Field(default_factory=ExecutionStopsConfig)
     targeting: ExecutionTargetingConfig = Field(default_factory=ExecutionTargetingConfig)
+    technique: ExecutionTechniqueConfig = Field(default_factory=ExecutionTechniqueConfig)
     trend: ExecutionTrendConfig = Field(default_factory=ExecutionTrendConfig)
     zone_scaling: ExecutionZoneScalingConfig = Field(default_factory=ExecutionZoneScalingConfig)

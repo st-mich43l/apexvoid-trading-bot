@@ -296,6 +296,25 @@ def evaluate_entry_activation(
         hard=True,
       )
 
+    from app.autotrade.killzone import (
+      confirmation_is_sweep_body,
+      technique_enforce,
+    )
+
+    tech = getattr(getattr(cfg, "execution", None), "technique", None)
+    require_sweep = True if tech is None else bool(
+      getattr(tech, "require_sweep_body", True),
+    )
+    if technique_enforce(cfg) and require_sweep:
+      pattern = str(trigger.pattern or "")
+      measured["sweep_body_required"] = True
+      if not confirmation_is_sweep_body(pattern):
+        return _result(
+          reason="confirmation_requires_sweep_body",
+          would_block=True,
+          hard=True,
+        )
+
   return _result(reason="entry_activation_allowed", would_block=False)
 
 
