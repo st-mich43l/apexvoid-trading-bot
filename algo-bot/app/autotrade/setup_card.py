@@ -17,6 +17,7 @@ for card helpers would cycle. Both modules import from here instead.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import math
@@ -46,6 +47,13 @@ log = logging.getLogger(__name__)
 # the moment the card actually exists. TTL only needs to outlive the
 # scanner/Telegram race window, not the setup itself.
 _RECONCILE_PENDING_TTL_SECONDS = 900
+# Prod 2026-08-10 13:07 UTC: two concurrent ensure/post paths both saw
+# load_forming_card=None and both mode=send for the same setup_id (~3ms),
+# creating Telegram roots 3946 then 3947 (WAITING FILL + full POSITION
+# ACTIVATED orphan). Claim create before send; losers wait for the winner.
+_FORMING_CARD_CREATE_LOCK_TTL_SECONDS = 30
+_FORMING_CARD_CREATE_WAIT_SECONDS = 2.0
+_FORMING_CARD_CREATE_POLL_SECONDS = 0.05
 
 SendFn = Callable[..., Awaitable[Any]]
 EditFn = Callable[[int, int, str], Awaitable[Any]]
@@ -276,6 +284,10 @@ def apply_forming_card_stop(text: str, stop_price: float, *, digits: int = 2) ->
 
 def forming_message_key(setup_id: str) -> str:
   return f"auto_trade:forming_message:{setup_id}"
+
+
+def forming_card_create_lock_key(setup_id: str) -> str:
+  return f"auto_trade:forming_card_create_lock:{setup_id}"
 
 
 def telegram_root_message_key(setup_id: str) -> str:
@@ -668,6 +680,9 @@ async def post_or_edit_forming_card(
   required for the terminal-during-send branch to actually remove the
   message rather than merely neutralizing it via edit).
 
+  Concurrent first-create callers (prod HFS double-send race) contend on a
+  short Redis SET NX lock so only one Telegram root is posted for a setup_id.
+
   Returns the card's message_id, or None if the setup is already terminal
   (a rejected/invalidated/expired setup is never re-carded, checked here so
   every caller gets this guard for free - and re-checked again after the
@@ -682,7 +697,7 @@ async def post_or_edit_forming_card(
   existing = await load_forming_card(client, setup_id)
   message_id: int | None = None
   resolved_chat_id = chat_id
-  if existing is not None:
+  if existing is not None and int(existing.get("message_id") or 0) > 0:
     if existing.get("text") == text:
       message_id = existing["message_id"]
       resolved_chat_id = existing["chat_id"]
@@ -702,10 +717,16 @@ async def post_or_edit_forming_card(
             setup_id,
           )
   if message_id is None:
-    log.info("forming_card_send_started setup_id=%s mode=send", setup_id)
-    sent = await send_fn(text, chat_id=chat_id)
-    message_id = int(sent.message_id)
-    resolved_chat_id = chat_id
+    message_id, resolved_chat_id = await _send_forming_card_once(
+      client,
+      setup_id,
+      text,
+      chat_id=chat_id,
+      send_fn=send_fn,
+      edit_fn=edit_fn,
+    )
+    if message_id is None:
+      return None
   # Persist identity immediately (P0-4 item 4) before any further
   # reconciliation, so a crash here still leaves the card discoverable.
   await save_forming_card(
@@ -725,6 +746,156 @@ async def post_or_edit_forming_card(
     edit_fn=edit_fn,
     delete_fn=delete_fn,
   )
+
+
+async def _await_peer_forming_card(
+  client,
+  setup_id: str,
+  *,
+  timeout_seconds: float = _FORMING_CARD_CREATE_WAIT_SECONDS,
+  poll_seconds: float = _FORMING_CARD_CREATE_POLL_SECONDS,
+) -> dict | None:
+  deadline = time.monotonic() + max(0.0, float(timeout_seconds))
+  while time.monotonic() < deadline:
+    peer = await load_forming_card(client, setup_id)
+    if peer is not None and int(peer.get("message_id") or 0) > 0:
+      return peer
+    await asyncio.sleep(max(0.01, float(poll_seconds)))
+  peer = await load_forming_card(client, setup_id)
+  if peer is not None and int(peer.get("message_id") or 0) > 0:
+    return peer
+  return None
+
+
+async def _edit_existing_forming_card(
+  *,
+  existing: dict,
+  text: str,
+  setup_id: str,
+  edit_fn: EditFn,
+) -> tuple[int | None, int]:
+  message_id = int(existing.get("message_id") or 0)
+  chat_id = int(existing["chat_id"])
+  if message_id <= 0:
+    return None, chat_id
+  if existing.get("text") == text:
+    return message_id, chat_id
+  log.info("forming_card_send_started setup_id=%s mode=edit", setup_id)
+  try:
+    await edit_fn(chat_id, message_id, text)
+    return message_id, chat_id
+  except TelegramBadRequest as exc:
+    if "message is not modified" in str(exc).casefold():
+      return message_id, chat_id
+    log.info(
+      "forming card edit failed setup_id=%s error=%s",
+      setup_id,
+      exc,
+    )
+    return None, chat_id
+
+
+async def _send_forming_card_once(
+  client,
+  setup_id: str,
+  text: str,
+  *,
+  chat_id: int,
+  send_fn: SendFn,
+  edit_fn: EditFn,
+) -> tuple[int | None, int]:
+  """Send exactly one new Telegram root for ``setup_id`` under a create lock."""
+  lock_key = forming_card_create_lock_key(setup_id)
+  claimed = bool(
+    await client.set(
+      lock_key,
+      "1",
+      nx=True,
+      ex=_FORMING_CARD_CREATE_LOCK_TTL_SECONDS,
+    )
+  )
+  if not claimed:
+    log.info(
+      "forming_card_create_lock_wait setup_id=%s",
+      setup_id,
+    )
+    peer = await _await_peer_forming_card(client, setup_id)
+    if peer is not None:
+      message_id, resolved_chat_id = await _edit_existing_forming_card(
+        existing=peer,
+        text=text,
+        setup_id=setup_id,
+        edit_fn=edit_fn,
+      )
+      if message_id is not None:
+        return message_id, resolved_chat_id
+    # Peer never published a real Telegram root — try to take over create.
+    claimed = bool(
+      await client.set(
+        lock_key,
+        "1",
+        nx=True,
+        ex=_FORMING_CARD_CREATE_LOCK_TTL_SECONDS,
+      )
+    )
+    if not claimed:
+      peer = await _await_peer_forming_card(
+        client,
+        setup_id,
+        timeout_seconds=0.5,
+      )
+      if peer is not None:
+        message_id, resolved_chat_id = await _edit_existing_forming_card(
+          existing=peer,
+          text=text,
+          setup_id=setup_id,
+          edit_fn=edit_fn,
+        )
+        if message_id is not None:
+          return message_id, resolved_chat_id
+      log.warning(
+        "forming_card_create_lock_exhausted setup_id=%s",
+        setup_id,
+      )
+      return None, chat_id
+
+  # Won the create lock — re-check in case a peer saved between our first
+  # load and the SET NX claim.
+  peer = await load_forming_card(client, setup_id)
+  if peer is not None and int(peer.get("message_id") or 0) > 0:
+    message_id, resolved_chat_id = await _edit_existing_forming_card(
+      existing=peer,
+      text=text,
+      setup_id=setup_id,
+      edit_fn=edit_fn,
+    )
+    if message_id is not None:
+      return message_id, resolved_chat_id
+
+  # Reserve Redis identity before Telegram I/O so waiters see an in-flight
+  # create and do not race a second send while our round-trip is pending.
+  await save_forming_card(
+    client,
+    setup_id,
+    chat_id=chat_id,
+    message_id=0,
+    text=text,
+  )
+  log.info("forming_card_send_started setup_id=%s mode=send", setup_id)
+  try:
+    sent = await send_fn(text, chat_id=chat_id)
+  except Exception:
+    await clear_forming_card(client, setup_id)
+    raise
+  message_id = int(sent.message_id)
+  await save_forming_card(
+    client,
+    setup_id,
+    chat_id=chat_id,
+    message_id=message_id,
+    text=text,
+  )
+  return message_id, chat_id
 
 
 async def reconcile_forming_card_after_send(
@@ -1500,7 +1671,7 @@ async def ensure_plan_published_root_card(
   stop_price = await published_plan_stop_price(client, match.match_id)
 
   existing = await load_forming_card(client, match.match_id)
-  if existing is not None:
+  if existing is not None and int(existing.get("message_id") or 0) > 0:
     # Keep existing head status (no PLAN PUBLISHED advertisement). Still
     # refresh Stop so BE/trail patches have a real Trade-area baseline.
     if stop_price is not None:
