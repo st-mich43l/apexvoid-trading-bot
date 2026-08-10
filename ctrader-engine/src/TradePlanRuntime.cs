@@ -37,7 +37,7 @@ public enum TradePlanRuntimeStage
 public static class TradePlanRuntimeStateSchema
 {
   public const int Legacy = 1;
-  public const int Current = 2;
+  public const int Current = 3;
 }
 
 public static class TradePlanLegStages
@@ -117,6 +117,12 @@ public sealed record TradePlanRuntimeState(
   decimal CurrentStop = 0,
   int NextTargetIndex = 0,
   bool BreakEvenApplied = false,
+  // Highest target index that actually closed broker volume (tp_booked / final
+  // TP close). Touched-but-deferred targets advance NextTargetIndex without
+  // booking; BE must key off this, not NextTargetIndex alone — otherwise a
+  // 0.06-lot ladder moves SL to BE after TP1 while closing nothing
+  // (prod 2026-08-10: fb13be6e… deferred TP1 desired=120 step=100 then BE).
+  int HighestBookedTargetIndex = -1,
   // How many of Entry.Legs (or the single single_limit leg) have already
   // been submitted to the broker and durably recorded here. Resuming from
   // this index - instead of always restarting the ladder at leg 0 - is what
@@ -394,6 +400,12 @@ public static class TradePlanJson
     var totalFilled = legs.Sum(leg => leg.FilledVolume);
     var remaining = legs.Sum(leg => leg.RemainingVolume);
     var weighted = WeightedFillPrice(legs);
+    // Schema 2→3: recover HighestBookedTargetIndex after restarts. Deferred
+    // TP touches advance NextTargetIndex without reducing volume; a real
+    // booked partial does. Prefer the pre-migration snapshot volumes so a
+    // synthetic single-leg rewrite that copies Remaining into Filled does
+    // not erase evidence of earlier closes.
+    var highestBooked = InferHighestBookedTargetIndex(state, legs);
 
     return state with
     {
@@ -406,9 +418,43 @@ public static class TradePlanJson
       GroupWeightedFillPrice = weighted ?? state.GroupWeightedFillPrice,
       GroupStage = groupStage,
       TerminalReason = terminalReason,
+      HighestBookedTargetIndex = highestBooked,
       PositionId = state.PositionId
         ?? legs.Select(leg => leg.BrokerPositionId).FirstOrDefault(id => id is not null),
     };
+  }
+
+  /// <summary>
+  /// Schema 2→3 recovery: infer the highest TP that actually closed volume.
+  /// NextTargetIndex alone is not enough — deferred undersized shares advance
+  /// it without booking. Closed volume is the durable signal.
+  /// </summary>
+  public static int InferHighestBookedTargetIndex(
+    TradePlanRuntimeState state,
+    IReadOnlyList<TradePlanLegRuntimeState> legs
+  )
+  {
+    if (state.HighestBookedTargetIndex >= 0)
+    {
+      return state.HighestBookedTargetIndex;
+    }
+    var closedFromLegs = legs.Sum(leg =>
+      Math.Max(0L, leg.FilledVolume - leg.RemainingVolume)
+    );
+    var filled = state.TotalFilledVolume > 0
+      ? state.TotalFilledVolume
+      : legs.Sum(leg => leg.FilledVolume);
+    var remaining = state.TotalFilledVolume > 0 || state.RemainingVolume > 0
+      ? state.RemainingVolume
+      : legs.Sum(leg => leg.RemainingVolume);
+    var closed = closedFromLegs > 0
+      ? closedFromLegs
+      : Math.Max(0L, filled - remaining);
+    if (closed <= 0 || state.NextTargetIndex <= 0)
+    {
+      return -1;
+    }
+    return state.NextTargetIndex - 1;
   }
 
   public static decimal? WeightedFillPrice(
@@ -2345,6 +2391,10 @@ public sealed class TradePlanRuntime(
           {
             Legs = legs,
             NextTargetIndex = state.NextTargetIndex + 1,
+            HighestBookedTargetIndex = Math.Max(
+              state.HighestBookedTargetIndex,
+              IndexOfTarget(plan, target.TargetId)
+            ),
             GroupStage = remainingAfter <= 0
               ? TradePlanGroupStages.Closed
               : TradePlanGroupStages.PartiallyClosed,
@@ -2373,11 +2423,16 @@ public sealed class TradePlanRuntime(
       }
 
       var fillPrice = state.GroupWeightedFillPrice ?? state.EntryFillPrice;
+      var beAfterIndex = plan.Management.BeAfterTargetId is null
+        ? -1
+        : IndexOfTarget(plan, plan.Management.BeAfterTargetId);
       if (
         !state.BreakEvenApplied
-        && plan.Management.BeAfterTargetId is not null
+        && beAfterIndex >= 0
         && fillPrice is decimal beFill
-        && state.NextTargetIndex > IndexOfTarget(plan, plan.Management.BeAfterTargetId)
+        // Require a real booked TP at/after BeAfterTargetId. Advancing
+        // NextTargetIndex on deferred undersized shares must not move BE.
+        && state.HighestBookedTargetIndex >= beAfterIndex
       )
       {
         state = await CancelUnfilledEntryLegsAsync(
