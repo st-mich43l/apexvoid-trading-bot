@@ -95,14 +95,19 @@ delivery:
     signal_public_channel_id: '-1004468199035'
 execution:
   technique:
-    # Enforce sweep/body + strict PD + hard SL cap; killzone clock off (any hour).
+    # Enforce strict PD + hard SL cap; killzone clock and sweep/body off.
+    # Prod dig 2026-08-11: require_sweep_body was killing ~22 valid
+    # impulse_pullback/momentum_chase candidates/hour (both directions,
+    # confirmed via scalping.strategies' "sweep gate rejection" diagnostic)
+    # with zero fills getting through - archetypes' own pattern match is
+    # the confirmation again, same as before the 2026-08-10 technique pack.
     enforce: true
     include_late_ny: true
     london_window_hours: 3
     ny_window_hours: 3
     reaction_require_killzone: false
     hfs_require_killzone: false
-    require_sweep_body: true
+    require_sweep_body: false
     strict_premium_discount: true
   activation:
     # Enforce with entry_location: wait for M1 reaction + honor location blocks.
