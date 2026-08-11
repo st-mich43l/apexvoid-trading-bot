@@ -1,6 +1,7 @@
 """Pure price-action setup detectors for replayable scanner decisions."""
 
 from dataclasses import dataclass, field, replace
+import logging
 import math
 from typing import Callable, Protocol
 
@@ -45,6 +46,8 @@ from app.analysis.structural_reaction_support import (
   zone_structural_id,
 )
 from app.analysis.zones import score_zones
+
+log = logging.getLogger(__name__)
 
 _EPS = 1e-9
 _BUY_ZONE_SIDE = "de" + "mand"
@@ -747,19 +750,39 @@ def _confirmation_direction(ctx: DetectionContext) -> str | None:
   return direction if ctx.htf_bias == _bias_for_direction(direction) else None
 
 
-def _pd_gate(st: StructureSet, direction: str, settings: DetectorSettings) -> bool:
+def _pd_gate(
+  st: StructureSet,
+  direction: str,
+  settings: DetectorSettings,
+  *,
+  ctx: "DetectionContext | None" = None,
+  setup: str = "",
+) -> bool:
   range_ = st.dealing_range
   if range_ is None:
     return True
   if range_.zone == "eq":
     return False
   if direction == "BUY":
-    if settings.strict_pd_gate:
-      return range_.zone == "discount"
-    return range_.zone != "premium"
-  if settings.strict_pd_gate:
-    return range_.zone == "premium"
-  return range_.zone != "discount"
+    loose = range_.zone != "premium"
+    strict = range_.zone == "discount"
+  else:
+    loose = range_.zone != "discount"
+    strict = range_.zone == "premium"
+  if settings.strict_pd_gate and loose and not strict and ctx is not None:
+    # Diagnostic (2026-08-11): execution.technique.strict_premium_discount
+    # narrows BUY to discount-only / SELL to premium-only with zero
+    # telemetry anywhere - unlike every other gate in this pipeline, there
+    # was no way to tell how many candidates this was actually costing.
+    # Logs only the divergence case (loose would allow, strict rejects),
+    # so a count of these lines is exactly the candidate volume strict
+    # mode is removing. Does not change the returned decision.
+    log.info(
+      "pd gate strict-only rejection symbol=%s tf=%s setup=%s direction=%s "
+      "zone=%s",
+      ctx.symbol, ctx.tf, setup, direction, range_.zone,
+    )
+  return strict if settings.strict_pd_gate else loose
 
 
 def _in_chop(ctx: DetectionContext) -> bool:
@@ -1016,7 +1039,7 @@ def trend_pullback(ctx: DetectionContext) -> DetectionResult | None:
   )
   if (
     direction is None
-    or not _pd_gate(st, direction, ctx.settings)
+    or not _pd_gate(st, direction, ctx.settings, ctx=ctx, setup="Trend Pullback")
     or (
       not ctx.settings.allow_counter_trend
       and st.bias != ctx.htf_bias
@@ -1095,7 +1118,7 @@ def break_retest(ctx: DetectionContext) -> DetectionResult | None:
   direction = _confirmation_direction(ctx)
   if (
     direction is None
-    or not _pd_gate(st, direction, ctx.settings)
+    or not _pd_gate(st, direction, ctx.settings, ctx=ctx, setup="Break & Retest")
     or not _rejection(df, direction)
   ):
     return None
@@ -1370,7 +1393,7 @@ def snap_back(ctx: DetectionContext) -> DetectionResult | None:
   if len(df) < 5:
     return None
   direction = _confirmation_direction(ctx)
-  if direction is None or not _pd_gate(st, direction, ctx.settings):
+  if direction is None or not _pd_gate(st, direction, ctx.settings, ctx=ctx, setup="Snap-Back"):
     return None
   price = _current_price(ctx, df)
   atr = _atr(ind)
@@ -1458,7 +1481,7 @@ def momentum_ride(ctx: DetectionContext) -> DetectionResult | None:
   if _in_chop(ctx):
     return None
   direction = _confirmation_direction(ctx)
-  if direction is None or not _pd_gate(st, direction, ctx.settings):
+  if direction is None or not _pd_gate(st, direction, ctx.settings, ctx=ctx, setup="Momentum Ride"):
     return None
   if not _strong_body_break(df, st, direction, ctx.settings.momentum_body_frac):
     return None
@@ -1656,7 +1679,7 @@ def fade_scalp(ctx: DetectionContext) -> DetectionResult | None:
   if len(df) < 5:
     return None
   direction = _confirmation_direction(ctx)
-  if direction is None or not _pd_gate(st, direction, ctx.settings):
+  if direction is None or not _pd_gate(st, direction, ctx.settings, ctx=ctx, setup="Fade Scalp"):
     return None
   price = _current_price(ctx, df)
   atr = _atr(ind)
