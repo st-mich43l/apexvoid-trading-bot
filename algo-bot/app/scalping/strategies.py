@@ -564,6 +564,18 @@ def discover_momentum_chase(
       min_directional_bars=min_directional_bars,
     )
     if ev is None or ev.get("rejected"):
+      if isinstance(ev, dict):
+        # Diagnostic (2026-08-11): owner report - momentum_chase rarely
+        # fires even on visibly impulsive candles. detect_momentum_ignition
+        # now carries a specific reason on every rejection path instead of
+        # a bare None; log it here so the real distribution across its
+        # four independent, all-mandatory conditions is visible.
+        log.info(
+          "momentum ignition rejected symbol=%s direction=%s reason=%s "
+          "measured=%s",
+          context.symbol, direction, ev.get("reason"),
+          {k: v for k, v in ev.items() if k not in ("rejected", "reason")},
+        )
       continue
     if _technique_require_sweep_body(cfg):
       edge = (
