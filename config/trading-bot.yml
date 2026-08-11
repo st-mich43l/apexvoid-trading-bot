@@ -95,13 +95,13 @@ delivery:
     signal_public_channel_id: '-1004468199035'
 execution:
   technique:
-    # Prod dig 2026-08-10: killzone + sweep/body + strict PD + hard SL cap.
+    # Enforce sweep/body + strict PD + hard SL cap; killzone clock off (any hour).
     enforce: true
     include_late_ny: true
     london_window_hours: 3
     ny_window_hours: 3
-    reaction_require_killzone: true
-    hfs_require_killzone: true
+    reaction_require_killzone: false
+    hfs_require_killzone: false
     require_sweep_body: true
     strict_premium_discount: true
   activation:
