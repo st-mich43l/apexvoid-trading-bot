@@ -41,6 +41,32 @@ def _structural_kind(opportunity: ScalpOpportunity) -> str:
   return "demand" if opportunity.direction.upper() == "BUY" else "supply"
 
 
+def _hfs_target_ladder(
+  opportunity: ScalpOpportunity,
+) -> tuple[int, tuple[int, ...]]:
+  """Final TP pips + published ladder.
+
+  Owner 2026-08-11: when the scalp selected 1:2, book half at 1R and half
+  at 2R (no trail / no BE). 1:1 stays a single full-exit TP.
+  """
+  final_pips = max(1, int(round(float(opportunity.expected_target_pips))))
+  stop_raw = float(opportunity.expected_stop_pips or 0.0)
+  stop_pips = max(1, int(round(stop_raw))) if stop_raw > 0 else None
+  rr = float(opportunity.expected_reward_risk or 0.0)
+  is_one_to_two = (
+    stop_pips is not None
+    and (
+      rr >= 1.9
+      or final_pips >= int(round(stop_raw * 1.9))
+    )
+  )
+  if is_one_to_two and stop_pips is not None:
+    one_r = stop_pips
+    two_r = max(one_r + 1, final_pips, int(round(stop_raw * 2.0)))
+    return two_r, (one_r, two_r)
+  return final_pips, (final_pips,)
+
+
 def build_hfs_strategy_match(
   opportunity: ScalpOpportunity,
   context: ScalpContextSnapshot,
@@ -66,7 +92,7 @@ def build_hfs_strategy_match(
   mid = (float(quote_bid) + float(quote_ask)) / 2.0
   now = int(bar_ts)
   expires = max(now + 60, int(opportunity.expires_at))
-  target_pips = max(1, int(round(float(opportunity.expected_target_pips))))
+  target_pips, targets_pips = _hfs_target_ladder(opportunity)
   htf_bias = str(context.htf_bias or "range")
   if htf_bias in {"", "unknown"}:
     htf_bias = "range"
@@ -111,7 +137,7 @@ def build_hfs_strategy_match(
     reasons=tuple(opportunity.reasons) or ("hfs",),
     atr=float(context.atr or 1.0),
     structure_swing=float(opportunity.invalidation_price),
-    targets_pips=(target_pips,),
+    targets_pips=targets_pips,
     # Fitted HFS room unlocks opposing-structure bypass (native scalp room).
     full_take_profit_pips=target_pips,
     absolute_target_price=float(opportunity.expected_target_price),
