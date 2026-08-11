@@ -46,15 +46,27 @@ public static class StopTrailPlanner
     else
     {
       var trailTargetOrdinal = completedTargetOrdinal - 2;
-      var offsetPips = TargetPips(state, trailTargetOrdinal);
-      if (offsetPips is null)
+      // Prefer absolute TargetPrices (manual / owner ladders) so trail
+      // matches the booked TP levels rather than fill±pips from TargetsPips
+      // (slippage made trail ≠ owner TP after TP4 on manual #8 2026-08-11).
+      var absolute = AbsoluteTargetPrice(state, trailTargetOrdinal);
+      if (absolute is decimal absolutePrice)
       {
-        return null;
+        desired = absolutePrice;
+        label = $"TP{trailTargetOrdinal}";
       }
-      desired = state.Direction == TradeDirection.Buy
-        ? state.EntryPrice + offsetPips.Value * pipSize
-        : state.EntryPrice - offsetPips.Value * pipSize;
-      label = $"TP{trailTargetOrdinal}";
+      else
+      {
+        var offsetPips = TargetPips(state, trailTargetOrdinal);
+        if (offsetPips is null)
+        {
+          return null;
+        }
+        desired = state.Direction == TradeDirection.Buy
+          ? state.EntryPrice + offsetPips.Value * pipSize
+          : state.EntryPrice - offsetPips.Value * pipSize;
+        label = $"TP{trailTargetOrdinal}";
+      }
     }
     desired = decimal.Round(desired, symbol.Digits, MidpointRounding.AwayFromZero);
     if (
@@ -149,6 +161,28 @@ public static class StopTrailPlanner
       if (TargetOrdinal(state, index) == targetOrdinal)
       {
         return state.TargetsPips[index];
+      }
+    }
+    return null;
+  }
+
+  private static decimal? AbsoluteTargetPrice(
+    AutoTradePositionState state,
+    int targetOrdinal
+  )
+  {
+    if (targetOrdinal < 1 || state.TargetPrices is not { } prices)
+    {
+      return null;
+    }
+    for (var index = 0; index < state.TargetsPips.Count; index++)
+    {
+      if (
+        TargetOrdinal(state, index) == targetOrdinal
+        && index < prices.Count
+      )
+      {
+        return prices[index];
       }
     }
     return null;

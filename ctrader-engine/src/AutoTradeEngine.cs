@@ -5448,6 +5448,20 @@ public sealed class AutoTradeEngine(
           }
           break;
         }
+        // Final TP only partially filled — keep the last index live so the
+        // residual can be re-closed on the next spot instead of becoming
+        // unmanaged until SL / missing-snapshot (loop requires
+        // NextTargetIndex < Count).
+        if (state.NextTargetIndex >= state.TargetsPips.Count)
+        {
+          state = state with
+          {
+            NextTargetIndex = state.TargetsPips.Count - 1,
+          };
+          _states[state.PositionId] = state;
+          await store.SavePositionAsync(state, cancellationToken);
+          continue;
+        }
         state = await MoveStopAfterTargetAsync(
           state,
           completedTargetIndex,
@@ -5667,11 +5681,16 @@ public sealed class AutoTradeEngine(
         cancellationToken
       );
     }
-    var botPositions = _allSymbolPositions
-      .Where(position => position.Label == options.Label)
-      .ToArray();
-    var openIds = botPositions.Select(position => position.PositionId).ToHashSet();
     var trackedIds = await store.GetTrackedPositionIdsAsync(cancellationToken);
+    // Presence is by PositionId on the full symbol snapshot. Filtering
+    // openIds by Label orphaned runners whose broker Label drifted empty
+    // or drifted off options.Label after SLTP/partials (manual #8 2026-08-11:
+    // remaining 20% waiting TP5 was confirmed-missing while still open /
+    // mismanaged). Label is only for new adopt; tracked IDs stay live as
+    // long as the PositionId is still on the symbol.
+    var openIds = _allSymbolPositions
+      .Select(position => position.PositionId)
+      .ToHashSet();
     foreach (var stale in trackedIds.Where(id => !openIds.Contains(id)))
     {
       // A single missing broker snapshot is only "suspected" missing, not
@@ -5766,14 +5785,15 @@ public sealed class AutoTradeEngine(
         var exitEstimate = closeLookup.ExecutionPrice
           ?? state.CurrentStopLoss
           ?? state.EntryPrice;
-        // If the position vanishes with an exit at the protective stop
-        // (initial SL or trailed BE/prior-TP), treat it as a broker SL/TP
-        // hit even when the order-list lookup could not confirm OrderType —
-        // otherwise operators see "reason unconfirmed" for ordinary stop-outs
-        // (full SL before any TP, or BE after booked targets).
+        // Promote Unknown → SL/TP only when the deal lookup recovered a real
+        // execution price sitting on the protective stop. Defaulting the
+        // exit estimate FROM CurrentStopLoss and then comparing to that same
+        // stop is a tautology (manual #8 2026-08-11: deal-list timeout →
+        // fabricated "stop loss / take profit" with no TP5 book).
         if (
           closeReason == PositionCloseReason.Unknown
-          && LooksLikeProtectiveStopHit(state, exitEstimate)
+          && closeLookup.ExecutionPrice is decimal recoveredExit
+          && LooksLikeProtectiveStopHit(state, recoveredExit)
         )
         {
           closeReason = PositionCloseReason.StopLossOrTakeProfit;
@@ -5884,8 +5904,27 @@ public sealed class AutoTradeEngine(
         }
       }
     }
-    foreach (var position in botPositions)
+    // Adopt bot-labeled positions and any still-tracked IDs present on the
+    // symbol (label-drift recovery for orphaned runners).
+    foreach (var position in _allSymbolPositions.Where(
+      item => item.Label == options.Label || trackedIds.Contains(item.PositionId)
+    ))
     {
+      if (
+        position.Label != options.Label
+        && trackedIds.Contains(position.PositionId)
+      )
+      {
+        await store.IncrementMetricAsync(
+          symbol.RedisSymbol,
+          "tracked_position_label_mismatch_recovered",
+          cancellationToken
+        );
+        _log(
+          "auto-trade tracked_position_label_mismatch_recovered "
+            + $"position_id={position.PositionId} label={position.Label}"
+        );
+      }
       await AdoptPositionAsync(position, cancellationToken);
     }
     foreach (var group in _states.Values.GroupBy(GroupId).ToArray())
@@ -5919,7 +5958,9 @@ public sealed class AutoTradeEngine(
       Hedged: _accountSupportsHedging,
       Ready: _ready,
       PositionIds: _allSymbolPositions
-        .Where(item => item.Label == options.Label)
+        .Where(item =>
+          item.Label == options.Label || trackedIds.Contains(item.PositionId)
+        )
         .Select(item => item.PositionId)
         .ToArray(),
       PendingOrderIds: _allSymbolPendingOrders
