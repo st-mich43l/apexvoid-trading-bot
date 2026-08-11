@@ -55,6 +55,9 @@ def _select_target(
   happens to fit, and never anything outside this pair. If neither ratio
   clears the minimum net target and fits the available room, there is no
   opportunity here at all, not a smaller/larger substitute target.
+
+  Publish layer turns a selected 1:2 into TP1@1R (50%) + TP2@2R (50%) with
+  the protective stop left fixed (no BE / no trail).
   """
   if room_pips is None or pip_size <= 0 or stop_pips is None or stop_pips <= 0:
     return None

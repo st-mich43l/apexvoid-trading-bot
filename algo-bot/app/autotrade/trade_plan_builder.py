@@ -258,7 +258,7 @@ def build_trade_plan_from_strategy_match(
   max_volume: int,
   max_spread_ticks: int | None = None,
   max_slippage_ticks: int = 10,
-  be_after_target_index: int = 0,
+  be_after_target_index: int | None = 0,
   be_buffer_ticks: int = 6,
   max_group_risk_percent: Decimal = Decimal("2.0"),
   close_ratios: Sequence[Decimal] | None = None,
@@ -505,8 +505,12 @@ def build_trade_plan_from_strategy_match(
     ),
   )
 
+  if be_after_target_index is None or not targets:
+    be_after_target_id = None
+  else:
+    be_after_target_id = targets[be_after_target_index].target_id
   management = TradePlanManagement(
-    be_after_target_id=targets[be_after_target_index].target_id if targets else None,
+    be_after_target_id=be_after_target_id,
     be_buffer_ticks=be_buffer_ticks,
     never_worsen_stop=True,
   )

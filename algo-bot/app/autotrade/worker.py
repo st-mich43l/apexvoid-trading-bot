@@ -73,6 +73,7 @@ from app.autotrade.strategy_match import (
 )
 from app.autotrade.strategy_taxonomy import (
   bypasses_opposing_structure_gates,
+  is_hfs_strategy,
   is_reaction_strategy,
   is_scalp_strategy,
   match_bypasses_opposing_structure,
@@ -5735,6 +5736,13 @@ async def _publish_trade_plan_v7(
     )
     return None
   try:
+    # Owner 2026-08-11: HFS 1:2 publishes TP1@1R (50%) + TP2@2R (50%) and
+    # keeps the original stop fixed - no BE after the half, no trail (trail
+    # only engages after TP3+ on multi-ladder plans anyway).
+    hfs_one_to_two = (
+      is_hfs_strategy(str(match_for_plan.strategy))
+      and len(tuple(match_for_plan.targets_pips or ())) == 2
+    )
     plan = build_trade_plan_from_strategy_match(
       match_for_plan,
       plan_id=_v7_plan_id(match_for_plan),
@@ -5762,6 +5770,7 @@ async def _publish_trade_plan_v7(
       same_direction_size_fraction=float(
         runtime_config.risk.position_limits.same_direction_stack_size_fraction
       ),
+      be_after_target_index=None if hfs_one_to_two else 0,
     )
   except TradePlanBuildRejected as exc:
     await _release_claims()
