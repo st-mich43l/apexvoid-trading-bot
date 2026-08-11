@@ -364,6 +364,7 @@ async def do_reopen(ctx: dict) -> dict:
     "record": rec,
     "entry": entry,
     "entry_end": entry_end,
+    "sl": original_sl,
     "round": len(cluster) + 1,
     "reply_to": None,
   }
@@ -543,7 +544,9 @@ def render_result(
       f"{source['action']} "
       f"{_price(result['entry'], symbol)}–"
       f"{_price(result['entry_end'], symbol)} / "
-      f"🛡 {_price(source['sl'], symbol)} / TP {tps}"
+      # The reopened round's own stop (the source's ORIGINAL stop, not its
+      # possibly-trailed current sl - see do_reopen's original_sl comment)
+      f"🛡 {_price(result['sl'], symbol)} / TP {tps}"
     )
   if action == "tag":
     stars = f" {'⭐' * result['stars']}" if result.get("stars") else ""

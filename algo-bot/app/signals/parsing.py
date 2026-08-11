@@ -7,19 +7,34 @@ from zoneinfo import ZoneInfo
 
 from app.core.config import runtime_config
 from app.persistence.store import get_all_signals, get_open_signals, get_signal_by_post
-from app.core.symbols import SYMBOLS, channel_for_symbol
+from app.core.symbols import SYMBOLS, channel_for_symbol, pip_for
 
 # Matches: +100 pips / -50 pips / +1500Pips / -30 PIPS
 _PIPS_RE = re.compile(r'([+-])\s*(\d+)\s*pips?', re.IGNORECASE)
 
-# Manual signal template (DM to bot):
+# Short-form defaults (owner 2026-08-11): sl/tp/setup are each independently
+# optional now - whichever the owner fills in is used as-is, whichever are
+# left out fall back to these. Setup only defaults to DEFAULT_SETUP_TYPE when
+# the message is actually using the short form (sl or tp omitted); a
+# full-form message (both given) with no explicit tag still stays untagged,
+# unchanged from before.
+DEFAULT_SL_PIPS = 60
+DEFAULT_TP_PIPS = (30, 60, 100, 130, 200)
+DEFAULT_SETUP_TYPE = "key-level"
+
+# Manual signal template (DM to bot), sl/tp each optional:
 #   gold sell entry zone (4100-4105)
 #   sl 4110
 #   tp 95/90/80   (absolute or 2-digit shorthand, any count)
 _MANUAL_RE = re.compile(
-  r'gold\s+(buy|sell)\s+(?:entry\s+zone\s*)?\(?\s*([\d.]+)\s*[-–—]\s*([\d.]+)\s*\)?\s*[\r\n]+'
-  r'\s*sl\s+([\d.]+)\s*[\r\n]+'
-  r'\s*tp\s+([\d./]+)',
+  # [ \t]* (not \s*) around the dash: a bare \s* here would greedily eat the
+  # \n the optional sl/tp groups below need, and since those groups are
+  # themselves optional, the regex would silently give up on them instead
+  # of backtracking - reproduced and confirmed in isolation before this fix.
+  r'(?:gold|xau(?:usd)?)\s+(buy|sell)\s+(?:entry\s+zone\s*)?'
+  r'\(?[ \t]*([\d.]+)[ \t]*[-–—][ \t]*([\d.]+)[ \t]*\)?'
+  r'(?:\s*[\r\n]+\s*sl\s+([\d.]+))?'
+  r'(?:\s*[\r\n]+\s*tp\s+([\d./]+))?',
   re.IGNORECASE,
 )
 SETUP_RESERVED_WORDS = frozenset({
@@ -132,17 +147,33 @@ def _parse_manual(text: str) -> Optional[dict]:
   m = _MANUAL_RE.search(raw)
   if not m:
     return None
-  action, entry_a, entry_b, sl, tp_raw = m.groups()
+  action, entry_a, entry_b, sl_raw, tp_raw = m.groups()
   action = action.upper()
   entry_anchor = float(entry_a)
   entry_other = _expand_entry_endpoint(float(entry_b), entry_anchor)
   entry_low, entry_high = sorted((entry_anchor, entry_other))
-  sl = float(sl)
   rr_entry = entry_low if action == 'SELL' else entry_high
-  tps = [
-    _expand_tp(float(v), rr_entry, action)
-    for v in tp_raw.strip().split('/') if v.strip()
-  ]
+  pip = pip_for('XAU')
+  short_form = sl_raw is None or not (tp_raw or '').strip()
+  if setup_type is None and not scalp_count and short_form:
+    setup_type = DEFAULT_SETUP_TYPE
+  if sl_raw is not None:
+    sl = float(sl_raw)
+  else:
+    sl = (
+      rr_entry - DEFAULT_SL_PIPS * pip if action == 'BUY'
+      else rr_entry + DEFAULT_SL_PIPS * pip
+    )
+  if (tp_raw or '').strip():
+    tps = [
+      _expand_tp(float(v), rr_entry, action)
+      for v in tp_raw.strip().split('/') if v.strip()
+    ]
+  else:
+    tps = [
+      rr_entry + pips * pip if action == 'BUY' else rr_entry - pips * pip
+      for pips in DEFAULT_TP_PIPS
+    ]
   if not tps:
     return None
   risk = abs(rr_entry - sl)
