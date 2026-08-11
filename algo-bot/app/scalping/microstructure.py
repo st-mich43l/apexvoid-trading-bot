@@ -299,15 +299,32 @@ def detect_momentum_ignition(
   lows = window["low"].astype(float)
   last = window.iloc[-1]
 
+  # Diagnostic (2026-08-11): owner report - momentum_chase fires rarely
+  # even on visibly impulsive candles. Every rejection path below used to
+  # return a bare None, indistinguishable from every other - the caller's
+  # "not_matched" telemetry couldn't tell "wrong number of directional
+  # bars" from "displacement fell short" from "last bar isn't a fresh
+  # extreme" (momentum_stalling, the only one that already carried a
+  # reason). All four now carry a reason plus the measured value that
+  # missed, so a real distribution can be read from production instead of
+  # guessing which of these four independent, all-mandatory conditions is
+  # actually the bottleneck.
   if side == "BUY":
     directional = int((closes > opens).sum())
     if directional < min_directional_bars:
-      return None
+      return {
+        "rejected": True, "reason": "insufficient_directional_bars",
+        "directional_bars": directional, "min_directional_bars": min_directional_bars,
+      }
     displacement = float(closes.iloc[-1] - opens.iloc[0])
     if displacement <= 0 or displacement / atr < min_displacement_atr:
-      return None
+      return {
+        "rejected": True, "reason": "insufficient_displacement",
+        "displacement_atr": displacement / atr if atr > 0 else 0.0,
+        "min_displacement_atr": min_displacement_atr,
+      }
     if float(last["close"]) <= float(last["open"]):
-      return None
+      return {"rejected": True, "reason": "last_bar_not_directional"}
     if float(last["high"]) < float(highs.iloc[:-1].max()):
       return {"rejected": True, "reason": "momentum_stalling"}
     return {
@@ -322,12 +339,19 @@ def detect_momentum_ignition(
 
   directional = int((closes < opens).sum())
   if directional < min_directional_bars:
-    return None
+    return {
+      "rejected": True, "reason": "insufficient_directional_bars",
+      "directional_bars": directional, "min_directional_bars": min_directional_bars,
+    }
   displacement = float(opens.iloc[0] - closes.iloc[-1])
   if displacement <= 0 or displacement / atr < min_displacement_atr:
-    return None
+    return {
+      "rejected": True, "reason": "insufficient_displacement",
+      "displacement_atr": displacement / atr if atr > 0 else 0.0,
+      "min_displacement_atr": min_displacement_atr,
+    }
   if float(last["close"]) >= float(last["open"]):
-    return None
+    return {"rejected": True, "reason": "last_bar_not_directional"}
   if float(last["low"]) > float(lows.iloc[:-1].min()):
     return {"rejected": True, "reason": "momentum_stalling"}
   return {
