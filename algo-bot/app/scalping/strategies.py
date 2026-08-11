@@ -543,7 +543,12 @@ def discover_momentum_chase(
   sell_min = _parse_float(loc, "momentum_sell_minimum_position", 0.15)
   min_net = _parse_float(getattr(_hfs_cfg(cfg), "target", None), "minimum_net_target_pips", 15.0)
   mom_cfg = getattr(_hfs_cfg(cfg), "momentum", None)
-  min_displacement_atr = _parse_float(mom_cfg, "min_displacement_atr", 1.2)
+  # Owner-tuned 2026-08-11: production showed a real, otherwise-qualifying
+  # thrust rejected at displacement_atr=1.056 against this 1.2 floor (88%
+  # of the way there) - confirmed via the momentum-ignition-rejection
+  # diagnostic. min_directional_bars (the larger share of rejections) left
+  # untouched by owner choice - only this threshold moves for now.
+  min_displacement_atr = _parse_float(mom_cfg, "min_displacement_atr", 1.0)
   lookback_bars = int(_parse_float(mom_cfg, "lookback_bars", 5.0))
   min_directional_bars = int(_parse_float(mom_cfg, "min_directional_bars", 4.0))
   buffer = max(pip_size * 2, context.atr * 0.15)
