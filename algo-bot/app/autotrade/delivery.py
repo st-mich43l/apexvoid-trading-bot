@@ -5,6 +5,7 @@ import hashlib
 import json
 import logging
 import re
+import time
 from datetime import datetime, timezone
 from html import escape
 from typing import Literal
@@ -28,6 +29,7 @@ from app.autotrade.setup_card import (
   edit_forming_card_status,
   edit_forming_card_stop,
   forming_message_key as _setup_card_forming_message_key,
+  is_setup_terminal,
   kill_setup_card,
   load_forming_card,
   load_telegram_root_message_id,
@@ -54,6 +56,16 @@ _REGIME_ALERT_PENDING_PREFIX = "auto_trade:regime_alert_pending:"
 _REGIME_ALERT_SENT_TTL = 86400
 _TRADE_MESSAGE_TTL = 7 * 24 * 3600
 _FULL_TP_RESULT_TTL = 24 * 3600
+# Live 2026-08-11: order_filled arrived and sent standalone (no reply_to)
+# while the setup's own root/forming card was still mid-send - a single
+# Telegram edit/send round-trip took 17s in production (flood-control
+# throttling per the existing TelegramRetryAfter handling), long enough for
+# a fast-filling order to race ahead of its own root card. Bounded poll
+# before falling back to standalone, same pattern as setup_card.py's
+# _await_peer_forming_card but budgeted for a network round-trip, not just
+# Redis lock contention.
+_FORMING_REPLY_WAIT_SECONDS = 20.0
+_FORMING_REPLY_POLL_SECONDS = 0.5
 # event types that go standalone (never even try to reply) if the forming
 # card is missing/expired - as opposed to _FORMING_REPLY_PREFERRED_TYPES
 # below, which fall back to the older position_id reply chain instead.
@@ -1576,13 +1588,10 @@ def _event_match_id(event: dict) -> str:
   return str(event.get("candidate_id") or "").strip()
 
 
-async def _forming_reply_message_id(
+async def _lookup_forming_reply_message_id(
   client,
-  event: dict,
-) -> tuple[int | None, str]:
-  match_id = _event_match_id(event)
-  if not match_id:
-    return None, "event has no match id"
+  match_id: str,
+) -> int | None:
   # Prefer the live forming card address over telegram_root — root can go
   # stale if the card was re-posted while the root key lagged behind.
   card = await load_forming_card(client, match_id)
@@ -1592,10 +1601,35 @@ async def _forming_reply_message_id(
     except (KeyError, TypeError, ValueError):
       message_id = 0
     if message_id > 0:
-      return message_id, ""
+      return message_id
   root_id = await load_telegram_root_message_id(client, match_id)
   if root_id is not None and root_id > 0:
-    return root_id, ""
+    return root_id
+  return None
+
+
+async def _forming_reply_message_id(
+  client,
+  event: dict,
+) -> tuple[int | None, str]:
+  match_id = _event_match_id(event)
+  if not match_id:
+    return None, "event has no match id"
+  message_id = await _lookup_forming_reply_message_id(client, match_id)
+  if message_id is not None:
+    return message_id, ""
+  # Live 2026-08-11: a fast fill/close can reach here before its own
+  # setup's root card has finished sending (Telegram flood-control can
+  # stretch a single edit/send to 17s+) - poll instead of committing to a
+  # standalone message the instant the first lookup comes up empty.
+  deadline = time.monotonic() + _FORMING_REPLY_WAIT_SECONDS
+  while time.monotonic() < deadline:
+    if await is_setup_terminal(client, match_id):
+      break
+    await asyncio.sleep(_FORMING_REPLY_POLL_SECONDS)
+    message_id = await _lookup_forming_reply_message_id(client, match_id)
+    if message_id is not None:
+      return message_id, ""
   key = _forming_message_key(match_id)
   return None, f"stored forming message is missing or expired ({key})"
 
