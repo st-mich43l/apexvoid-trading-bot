@@ -50,21 +50,22 @@ def _select_target(
   min_net: float,
   pip_size: float,
 ) -> tuple[float, float] | None:
-  """Owner 2026-08-06: scalp target distance always equals stop distance.
-
-  A scalp is a 1:1 gamble by design -- no ladder, no picking whichever
-  preferred level happens to fit. If the stop's own distance doesn't clear
-  the minimum net target or doesn't fit the available room, there is no
+  """Owner 2026-08-11: every scalp is 1:2 when the available room supports
+  it, 1:1 otherwise - no ladder, no picking whichever preferred level
+  happens to fit, and never anything outside this pair. If neither ratio
+  clears the minimum net target and fits the available room, there is no
   opportunity here at all, not a smaller/larger substitute target.
   """
   if room_pips is None or pip_size <= 0 or stop_pips is None or stop_pips <= 0:
     return None
-  target_pips = float(stop_pips)
-  if target_pips < min_net or target_pips > float(room_pips):
-    return None
-  if str(direction).upper() == "BUY":
-    return entry + target_pips * pip_size, target_pips
-  return entry - target_pips * pip_size, target_pips
+  for reward_risk in (2.0, 1.0):
+    target_pips = float(stop_pips) * reward_risk
+    if target_pips < min_net or target_pips > float(room_pips):
+      continue
+    if str(direction).upper() == "BUY":
+      return entry + target_pips * pip_size, target_pips
+    return entry - target_pips * pip_size, target_pips
+  return None
 
 
 def _stop_pips(
