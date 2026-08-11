@@ -274,7 +274,7 @@ def detect_momentum_ignition(
   *,
   direction: str,
   atr: float,
-  min_displacement_atr: float = 1.2,
+  min_displacement_atr: float = 1.0,  # owner-tuned 2026-08-11, was 1.2
   lookback_bars: int = 5,
   min_directional_bars: int = 4,
 ) -> dict[str, Any] | None:
