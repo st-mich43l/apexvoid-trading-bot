@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import pandas as pd
+
+log = logging.getLogger(__name__)
 
 from app.scalping.microstructure import (
   detect_breakout_retest,
@@ -335,6 +338,16 @@ def discover_impulse_pullback(
         ),
       )
       if sweep is None:
+        # Diagnostic (2026-08-11): execution.technique.require_sweep_body
+        # silently drops an otherwise-matched impulse_pullback candidate
+        # with zero telemetry - same visibility gap as detectors._pd_gate.
+        # Only logs when everything else (ev matched, not rejected) already
+        # passed and this specific check is what killed it.
+        log.info(
+          "sweep gate rejection symbol=%s archetype=impulse_pullback "
+          "direction=%s",
+          context.symbol, direction,
+        )
         continue
     if _fights_fresh_macro_momentum(
       m1_df, direction=direction, atr=context.atr, cfg=cfg,
@@ -566,6 +579,13 @@ def discover_momentum_chase(
         lookback_bars=max(1, lookback_bars),
       )
       if sweep is None:
+        # Diagnostic (2026-08-11): see the matching note in
+        # discover_impulse_pullback - same silent gate, same fix.
+        log.info(
+          "sweep gate rejection symbol=%s archetype=momentum_chase "
+          "direction=%s",
+          context.symbol, direction,
+        )
         continue
     entry = float(ev["close"])
     if direction == "BUY":
