@@ -27,6 +27,7 @@ from app.autotrade.structural_target_room import (
   evaluate_structural_target_room,
   filter_displaced_opposing_entries,
   filter_shared_boundary_opposing_entries,
+  zone_proximal_room_reference,
 )
 
 
@@ -532,6 +533,19 @@ def resolve_actionability(
         entries, result=result, context=context, cfg=cfg,
       )
       shared_boundary_state: dict[str, Any] = {"applied": False}
+      spot_price = (
+        result.planned_entry_price
+        if result.planned_entry_price is not None
+        else result.current_price
+      )
+      room_planned, room_reference_source = zone_proximal_room_reference(
+        direction=result.direction,
+        spot_price=float(spot_price),
+        candidate_entry_low=float(result.entry_zone.low),
+        candidate_entry_high=float(result.entry_zone.high),
+        pip_size=pip_size,
+        atr=atr,
+      )
       if room_entries:
         room_entries, shared_boundary_state = filter_shared_boundary_opposing_entries(
           room_entries,
@@ -540,6 +554,7 @@ def resolve_actionability(
           candidate_entry_high=float(result.entry_zone.high),
           pip_size=pip_size,
           atr=atr,
+          planned_entry=room_planned,
         )
       result = _trim_zone_against_overlapping_barrier(result, room_entries)
       # Range/HFS scalp: detector already required native min room (EQ /
@@ -549,11 +564,7 @@ def resolve_actionability(
       is_scalp = is_scalp_strategy(result.setup)
       room = evaluate_structural_target_room(
         direction=result.direction,
-        planned_entry_price=(
-          result.planned_entry_price
-          if result.planned_entry_price is not None
-          else result.current_price
-        ),
+        planned_entry_price=room_planned,
         candidate_entry_low=float(result.entry_zone.low),
         candidate_entry_high=float(result.entry_zone.high),
         configured_target_pips=targets,
@@ -576,6 +587,7 @@ def resolve_actionability(
           if is_scalp
           else displacement_state
         ),
+        room_reference_source=room_reference_source,
         shared_boundary_state=(
           None if is_scalp else shared_boundary_state
         ),

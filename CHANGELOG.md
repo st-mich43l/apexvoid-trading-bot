@@ -19,6 +19,10 @@ dated section after deployment.
   at/above `$2,000` still applies the stamped scalp boost.
 
 ### Fixed
+- Reaction publish no longer treats a Market Map band glued to the live/
+  planned price as opposing structure ahead (`raw_room≈0` /
+  `opposing_barrier_room_below_cost`). Shared-boundary filter now also
+  matches the planned entry; true interior barriers (fe023) still hard-block.
 - Cut Redis SCAN thrash that was saturating the bot event loop: zone watches
   list via a membership index (`SMEMBERS`) instead of keyspace SCAN, regime
   alert delivery probes configured symbols with a 30s throttle, and spot-driven
