@@ -13,7 +13,7 @@ import logging
 import time
 from typing import Any
 
-from app.autotrade.lifecycle import emit_lifecycle, increment_metric
+from app.autotrade.lifecycle import increment_metric
 from app.autotrade.strategy_taxonomy import is_scalp_strategy
 
 log = logging.getLogger(__name__)
@@ -164,48 +164,26 @@ async def emit_plan_complete_event(
   strategy_mode: str | None = None,
   measured: dict[str, Any] | None = None,
 ) -> None:
-  """Durable compact complete event (survives short executor stream TTL)."""
-  bucket = funnel_bucket(
-    strategy, family=family, strategy_mode=strategy_mode,
-  )
+  """Record funnel stage only — never publish to the Telegram event stream.
+
+  Broker fill/close cards already own owner-facing copy. Emitting a second
+  ``order_filled`` / ``closed`` lifecycle with ``publish_status=True``
+  overwrites the reply body with internal funnel text.
+  """
+  del measured  # retained for call-site compatibility; counters are enough
   stage = STAGE_SL if outcome == "sl" else STAGE_TP if outcome == "tp" else STAGE_FILL
   once = None
   if group_id or candidate_id:
     once = f"{group_id or candidate_id}:{outcome}"
-  if outcome in {"sl", "tp", "fill"}:
-    await bump_funnel(
-      client,
-      symbol=symbol,
-      stage=stage,
-      strategy=strategy,
-      family=family,
-      strategy_mode=strategy_mode,
-      reason_code=reason_code,
-      once_key=once,
-    )
-  payload = {
-    "bucket": bucket,
-    "outcome": outcome,
-    "group_id": group_id,
-    **(measured or {}),
-  }
-  try:
-    await emit_lifecycle(
-      client,
-      "closed" if outcome in {"sl", "tp"} else "order_filled",
-      symbol=symbol,
-      candidate_id=candidate_id or group_id,
-      match_id=candidate_id or group_id,
-      group_id=group_id,
-      strategy=strategy,
-      strategy_family=family or bucket,
-      reason_code=reason_code,
-      message=f"funnel complete outcome={outcome} bucket={bucket}",
-      measured=payload,
-      publish_status=True,
-    )
-  except Exception:
-    log.exception(
-      "funnel complete event failed symbol=%s strategy=%s outcome=%s",
-      symbol, strategy, outcome,
-    )
+  if outcome not in {"sl", "tp", "fill"}:
+    return
+  await bump_funnel(
+    client,
+    symbol=symbol,
+    stage=stage,
+    strategy=strategy,
+    family=family,
+    strategy_mode=strategy_mode,
+    reason_code=reason_code,
+    once_key=once,
+  )
