@@ -281,10 +281,31 @@ public static class TradePlanExecutionEngine
     TradePlan plan,
     TradePlanTarget target,
     decimal currentPrice
-  ) =>
-    plan.Analysis.Direction == "BUY"
-      ? currentPrice >= target.Price
-      : currentPrice <= target.Price;
+  ) => HasReachedExitTarget(plan.Analysis.Direction, currentPrice, target.Price);
+
+  /// <summary>
+  /// BUY: exit at bid, need bid &gt;= target.
+  /// SELL: exit at ask. Whole-number VIP handles (4408.00) get a 1.0 price
+  /// cushion matching algo-bot <c>watcher._tp_hit</c> so a bid tag of the
+  /// posted level still books when ask sits a few ticks above the handle
+  /// due to spread. Decimal targets stay exact (<c>ask &lt;= target</c>).
+  /// </summary>
+  public static bool HasReachedExitTarget(
+    string direction,
+    decimal exitQuote,
+    decimal target
+  )
+  {
+    if (string.Equals(direction, "BUY", StringComparison.OrdinalIgnoreCase))
+    {
+      return exitQuote >= target;
+    }
+    if (target == decimal.Truncate(target))
+    {
+      return exitQuote < target + 1.0m;
+    }
+    return exitQuote <= target;
+  }
 
   /// <summary>
   /// buffer_price = be_buffer_ticks * tick_size; BUY desired = fill +

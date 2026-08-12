@@ -5176,9 +5176,11 @@ public sealed class AutoTradeEngine(
           break;
         }
         var exitQuote = state.Direction == TradeDirection.Buy ? spot.Bid : spot.Ask;
-        var hit = state.Direction == TradeDirection.Buy
-          ? exitQuote >= target
-          : exitQuote <= target;
+        var hit = TradePlanExecutionEngine.HasReachedExitTarget(
+          DirectionLabel(state.Direction),
+          exitQuote,
+          target
+        );
         if (!hit)
         {
           break;
