@@ -188,8 +188,8 @@ public static class TradePlanExecutionEngine
     }
     // Python stamps RiskMultiplier (scalp = 2.0 for all quality tiers).
     // Stop geometry stays unchanged — this scales volume only.
-    // Owner 2026-08-12: below $2k equity, scalp must book 0.5× table lots
-    // instead of doubling (small-account protection).
+    // Owner 2026-08-12: below $2k equity, scalp books 1.5× table lots
+    // (e.g. 0.10 → 0.15) instead of doubling.
     var riskMultiplier = plan.Risk.RiskMultiplier;
     if (riskMultiplier <= 0m)
     {
@@ -197,7 +197,7 @@ public static class TradePlanExecutionEngine
     }
     if (riskMultiplier > 1m && equity.Equity < 2_000m)
     {
-      riskMultiplier = 0.5m;
+      riskMultiplier = 1.5m;
     }
     var sizedLots = decimal.Round(
       tableLots * riskMultiplier,

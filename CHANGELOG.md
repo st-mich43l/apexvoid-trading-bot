@@ -14,9 +14,9 @@ dated section after deployment.
 
 ### Changed
 - Scalp equity-table sizing: when account equity is below `$2,000`, a stamped
-  scalp `risk_multiplier` above `1` now books **0.5×** table lots instead of
-  doubling. Reaction (`1.0`) sizing is unchanged; equity at/above `$2,000`
-  still applies the stamped scalp boost.
+  scalp `risk_multiplier` above `1` now books **1.5×** table lots (e.g. `0.10`
+  → `0.15`) instead of doubling. Reaction (`1.0`) sizing is unchanged; equity
+  at/above `$2,000` still applies the stamped scalp boost.
 
 ### Fixed
 - Cut Redis SCAN thrash that was saturating the bot event loop: zone watches
