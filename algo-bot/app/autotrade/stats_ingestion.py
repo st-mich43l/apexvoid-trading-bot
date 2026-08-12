@@ -26,6 +26,81 @@ def _text(value: object) -> str:
   return value.decode() if isinstance(value, bytes) else str(value)
 
 
+def _complete_outcome(event: dict) -> str | None:
+  event_type = str(event.get("type") or "")
+  if event_type in {"opened", "add", "manual_opened", "order_filled"}:
+    return "fill"
+  if event_type not in {"group_result", "position_closed", "manual_closed"}:
+    return None
+  reason = str(event.get("reason_code") or event.get("close_reason") or "").casefold()
+  message = str(event.get("message") or "").casefold()
+  if "stop" in reason or "group_stop" in reason or "sl" == reason:
+    return "sl"
+  if "take_profit" in reason or "tp" in reason or "target" in reason:
+    return "tp"
+  if "group_stop_loss" in message or "stop loss" in message:
+    return "sl"
+  if "take profit" in message or "tp" in message:
+    return "tp"
+  result_pips = event.get("group_realized_pips")
+  if result_pips is None:
+    result_pips = event.get("result_pips")
+  try:
+    pips = float(result_pips) if result_pips is not None else None
+  except (TypeError, ValueError):
+    pips = None
+  if pips is None:
+    return None
+  if pips < 0:
+    return "sl"
+  if pips > 0:
+    return "tp"
+  return None
+
+
+async def _emit_funnel_complete(client, event: dict) -> None:
+  outcome = _complete_outcome(event)
+  if outcome is None:
+    return
+  from app.autotrade.reaction_funnel import emit_plan_complete_event
+
+  strategy = (
+    event.get("setup")
+    or event.get("strategy")
+    or event.get("setup_type")
+  )
+  await emit_plan_complete_event(
+    client,
+    symbol=str(event.get("symbol") or "XAU"),
+    strategy=None if strategy is None else str(strategy),
+    reason_code=str(
+      event.get("reason_code")
+      or event.get("close_reason")
+      or event.get("type")
+      or "plan_complete"
+    ),
+    outcome=outcome,
+    group_id=(
+      None if event.get("group_id") is None else str(event.get("group_id"))
+    ),
+    candidate_id=(
+      None
+      if event.get("candidate_id") is None
+      else str(event.get("candidate_id"))
+    ),
+    family=(
+      None
+      if event.get("strategy_family") is None
+      else str(event.get("strategy_family"))
+    ),
+    measured={
+      "event_type": event.get("type"),
+      "group_realized_pips": event.get("group_realized_pips"),
+      "result_pips": event.get("result_pips"),
+    },
+  )
+
+
 async def process_auto_trade_stats_entries(
   client,
   entries,
@@ -43,6 +118,14 @@ async def process_auto_trade_stats_entries(
       log.warning("Invalid auto-trade stats event %s: %s", entry_id, exc)
     else:
       await record_auto_trade_event(event)
+      try:
+        await _emit_funnel_complete(client, event)
+      except Exception:
+        log.exception(
+          "funnel complete emit failed entry_id=%s type=%s",
+          entry_id,
+          event.get("type") if isinstance(event, dict) else None,
+        )
     cursor = _text(entry_id)
     await client.set(STATS_EVENT_CURSOR_KEY, cursor)
   return cursor

@@ -245,7 +245,8 @@ def resolve_execution_route_plan(
     )
 
   if preference == "market":
-    if reaction_scale_ok and (geometry == "inside" or split_ok):
+    # In-zone reaction: L1 market + deeper L2 limit (not a resting ladder).
+    if reaction_scale_ok and geometry == "inside":
       scaled = _market_with_limit_scale_plan()
       if scaled is not None:
         return scaled
@@ -269,9 +270,9 @@ def resolve_execution_route_plan(
     )
 
   if preference == "limit":
-    if reaction_scale_ok and (geometry == "inside" or distribution in {
-      "zone_scale", "reaction_scale", "either", "",
-    }):
+    # Only force market_with_limit_scale once price is already inside the
+    # zone. Outside approaches keep the resting limit / DCA ladder path.
+    if reaction_scale_ok and geometry == "inside":
       scaled = _market_with_limit_scale_plan()
       if scaled is not None:
         return scaled
@@ -349,7 +350,7 @@ def resolve_execution_route_plan(
       "legacy uncommitted either",
       True,
     )
-  if reaction_scale_ok and (geometry == "inside" or split_ok):
+  if reaction_scale_ok and geometry == "inside":
     scaled = _market_with_limit_scale_plan()
     if scaled is not None:
       return scaled

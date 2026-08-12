@@ -462,6 +462,9 @@ def _location_and_activation_for_record(
     context=context,
     cfg=runtime_config,
   )
+  from app.autotrade.execution_confirmation import confirmation_policy_for
+
+  confirmation = confirmation_policy_for(match)
   activation = evaluate_entry_activation(
     strategy=match.strategy,
     direction=record.direction,
@@ -476,6 +479,7 @@ def _location_and_activation_for_record(
     cfg=runtime_config,
     chase_pips=chase_pips,
     maximum_chase_pips=maximum_chase_pips,
+    m5_authoritative=bool(confirmation.m5_authoritative),
   )
   return location, activation, context
 
@@ -592,6 +596,40 @@ async def _prepare_activation(
     reason_code=activation.reason_code,
     payload=activation_payload,
   )
+  from app.autotrade.reaction_funnel import (
+    STAGE_ACTIVATION_ALLOWED,
+    STAGE_WAITING_REACTION_TRIGGER,
+    bump_funnel,
+  )
+
+  if activation.allowed:
+    await bump_funnel(
+      client,
+      symbol=record.symbol,
+      stage=STAGE_ACTIVATION_ALLOWED,
+      strategy=match.strategy,
+      family=str(getattr(match, "family", "") or ""),
+      strategy_mode=str(getattr(match, "strategy_mode", "") or ""),
+      reason_code=activation.reason_code,
+      once_key=f"{record.zone_id}:activation_allowed",
+    )
+  elif activation.reason_code in {
+    "reaction_trigger_missing",
+    "reaction_trigger_stale",
+    "reaction_trigger_before_zone_touch",
+    "reaction_trigger_wrong_direction",
+    "confirmation_requires_sweep_body",
+  }:
+    await bump_funnel(
+      client,
+      symbol=record.symbol,
+      stage=STAGE_WAITING_REACTION_TRIGGER,
+      strategy=match.strategy,
+      family=str(getattr(match, "family", "") or ""),
+      strategy_mode=str(getattr(match, "strategy_mode", "") or ""),
+      reason_code=activation.reason_code,
+      once_key=f"{record.zone_id}:waiting_reaction_trigger",
+    )
   # Spot-driven ZoneWatch re-checks ~0.5s while waiting for M1 reaction.
   # Keep INFO for allow / decisive break; soft waits stay DEBUG or the
   # owner log scrolls one Key Level line per tick.
@@ -938,6 +976,21 @@ async def _activate_match(
     worker.PUBLISH_STATUS_DUPLICATE_RECONCILED,
   }:
     _PUBLISHED_SETUP_IDS.add(match.match_id)
+    from app.autotrade.reaction_funnel import (
+      STAGE_PLAN_PUBLISHED,
+      bump_funnel,
+    )
+
+    await bump_funnel(
+      client,
+      symbol=record.symbol,
+      stage=STAGE_PLAN_PUBLISHED,
+      strategy=match.strategy,
+      family=str(getattr(match, "family", "") or ""),
+      strategy_mode=str(getattr(match, "strategy_mode", "") or ""),
+      reason_code=str(result.reason_code or result.status),
+      once_key=f"{record.zone_id}:plan_published",
+    )
     latest = await load_zone_watch(client, record.zone_id)
     if latest is not None and latest.state not in (
       TERMINAL_ZONE_WATCH_STATES | LOCKED_ZONE_WATCH_STATES
@@ -1158,6 +1211,21 @@ async def _sync_strategy_match_cutover(
         zone_id,
         WATCHING_RETEST,
         reason_code="zone_discovered",
+      )
+      from app.autotrade.reaction_funnel import (
+        STAGE_ZONE_DISCOVERED,
+        bump_funnel,
+      )
+
+      await bump_funnel(
+        client,
+        symbol=symbol,
+        stage=STAGE_ZONE_DISCOVERED,
+        strategy=str(result.setup),
+        family=str(getattr(match, "family", "") or ""),
+        strategy_mode=str(getattr(match, "strategy_mode", "") or ""),
+        reason_code="zone_discovered",
+        once_key=f"{zone_id}:zone_discovered",
       )
     await _save_candidate(client, zone_id, replace(
       match,

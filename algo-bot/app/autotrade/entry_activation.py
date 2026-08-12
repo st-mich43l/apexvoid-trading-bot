@@ -117,12 +117,19 @@ def evaluate_entry_activation(
   continuation_evidence: Mapping[str, Any] | None = None,
   chase_pips: float | None = None,
   maximum_chase_pips: float | None = None,
+  m5_authoritative: bool = False,
 ) -> EntryActivationDecision:
   """Pure activation decision. Does not touch Redis.
 
   In shadow/off modes, reaction strategies that would wait on a missing trigger
   are reported via would_block but still allowed so production behaviour stays
   unchanged until enforce is enabled.
+
+  When enforce is on, M1 remains the preferred reaction path. If that trigger is
+  missing/invalid but the candidate already carries M5-authoritative confirmation
+  and quote is inside the zone, publish is allowed via
+  ``reaction_m5_authoritative_in_zone`` so ZoneWatch is not stuck forever on
+  ``reaction_trigger_missing``.
   """
   if cfg is None:
     from app.core.config import runtime_config
@@ -165,6 +172,7 @@ def evaluate_entry_activation(
     "chase_pips": chase_value,
     "maximum_chase_pips": chase_cap,
     "chase_entry": chase_ok,
+    "m5_authoritative": bool(m5_authoritative),
   }
 
   def _result(
@@ -268,52 +276,52 @@ def evaluate_entry_activation(
         )
     return _result(reason="entry_activation_allowed", would_block=False)
 
-  # Reaction / reversal / range / mapped / liquidity — require fresh M1.
+  # Reaction / reversal / range / mapped / liquidity — prefer fresh M1;
+  # fall back to in-zone M5-authoritative confirmation when M1 is absent.
   if requires_trigger:
+    m1_fail_reason: str | None = None
     if trigger is None:
-      return _result(reason="reaction_trigger_missing", would_block=True, hard=True)
+      m1_fail_reason = "reaction_trigger_missing"
+    else:
+      bar_ts = _trigger_ts(trigger)
+      if bar_ts is None:
+        m1_fail_reason = "reaction_trigger_missing"
+      elif zone_entered_at is not None and bar_ts <= int(zone_entered_at):
+        m1_fail_reason = "reaction_trigger_before_zone_touch"
+      else:
+        max_age = _max_age_bars(cfg)
+        age_seconds = int(now) - bar_ts
+        if age_seconds > max_age * _SECONDS_PER_M1_BAR:
+          m1_fail_reason = "reaction_trigger_stale"
+        elif str(trigger.direction).upper() != str(direction).upper():
+          m1_fail_reason = "reaction_trigger_wrong_direction"
+        else:
+          from app.autotrade.killzone import (
+            confirmation_is_sweep_body,
+            technique_enforce,
+          )
 
-    bar_ts = _trigger_ts(trigger)
-    if bar_ts is None:
-      return _result(reason="reaction_trigger_missing", would_block=True, hard=True)
+          tech = getattr(getattr(cfg, "execution", None), "technique", None)
+          require_sweep = True if tech is None else bool(
+            getattr(tech, "require_sweep_body", True),
+          )
+          if technique_enforce(cfg) and require_sweep:
+            pattern = str(trigger.pattern or "")
+            measured["sweep_body_required"] = True
+            if not confirmation_is_sweep_body(pattern):
+              m1_fail_reason = "confirmation_requires_sweep_body"
 
-    if zone_entered_at is not None and bar_ts <= int(zone_entered_at):
+    if m1_fail_reason is None:
+      return _result(reason="entry_activation_allowed", would_block=False)
+
+    if bool(m5_authoritative) and bool(quote_inside):
+      measured["m1_fallback_reason"] = m1_fail_reason
       return _result(
-        reason="reaction_trigger_before_zone_touch",
-        would_block=True,
-        hard=True,
+        reason="reaction_m5_authoritative_in_zone",
+        would_block=False,
       )
 
-    max_age = _max_age_bars(cfg)
-    age_seconds = int(now) - bar_ts
-    if age_seconds > max_age * _SECONDS_PER_M1_BAR:
-      return _result(reason="reaction_trigger_stale", would_block=True, hard=True)
-
-    if str(trigger.direction).upper() != str(direction).upper():
-      return _result(
-        reason="reaction_trigger_wrong_direction",
-        would_block=True,
-        hard=True,
-      )
-
-    from app.autotrade.killzone import (
-      confirmation_is_sweep_body,
-      technique_enforce,
-    )
-
-    tech = getattr(getattr(cfg, "execution", None), "technique", None)
-    require_sweep = True if tech is None else bool(
-      getattr(tech, "require_sweep_body", True),
-    )
-    if technique_enforce(cfg) and require_sweep:
-      pattern = str(trigger.pattern or "")
-      measured["sweep_body_required"] = True
-      if not confirmation_is_sweep_body(pattern):
-        return _result(
-          reason="confirmation_requires_sweep_body",
-          would_block=True,
-          hard=True,
-        )
+    return _result(reason=m1_fail_reason, would_block=True, hard=True)
 
   return _result(reason="entry_activation_allowed", would_block=False)
 
