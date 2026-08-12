@@ -46,6 +46,14 @@ from app.analysis.structural_reaction_support import (
   zone_structural_id,
 )
 from app.analysis.zones import score_zones
+from app.analysis.technique_detectors import (
+  confluence_zone_reaction,
+  crt_technique_reaction,
+  fvg_technique_reaction,
+  ifvg_technique_reaction,
+  order_block_technique_reaction,
+  supply_demand_technique_reaction,
+)
 
 log = logging.getLogger(__name__)
 
@@ -155,6 +163,17 @@ class DetectorSettings:
   flip_zone_enabled: bool = True
   session_level_reaction_enabled: bool = True
   trendline_reaction_enabled: bool = True
+  # Technique math publishers (feat/technique-math-strategies):
+  technique_sd_enabled: bool = True
+  technique_ob_enabled: bool = True
+  technique_fvg_enabled: bool = True
+  technique_ifvg_enabled: bool = True
+  technique_crt_enabled: bool = True
+  confluence_zone_enabled: bool = True
+  zone_reaction_fallback_enabled: bool = False
+  crt_min_atr: float = 1.5
+  crt_reclaim_bars: int = 6
+  fvg_max_atr: float = 2.0
   # Recovery mission (2026-07-30): these six sources were live around
   # 2026-07-28 and were deliberately dropped from DEFAULT_DETECTORS during
   # the P0 zone/M1 simplification without their own enable flags, leaving
@@ -341,6 +360,18 @@ def detector_settings_from(config: object | None = None) -> DetectorSettings:
     flip_zone_enabled=flip_zone_enabled,
     session_level_reaction_enabled=bool(strategies.reaction.session_level.enabled),
     trendline_reaction_enabled=bool(strategies.reaction.trendline.enabled),
+    technique_sd_enabled=bool(strategies.technique.sd.enabled),
+    technique_ob_enabled=bool(strategies.technique.ob.enabled),
+    technique_fvg_enabled=bool(strategies.technique.fvg.enabled),
+    technique_ifvg_enabled=bool(strategies.technique.ifvg.enabled),
+    technique_crt_enabled=bool(strategies.technique.crt.enabled),
+    confluence_zone_enabled=bool(strategies.technique.confluence.enabled),
+    zone_reaction_fallback_enabled=bool(
+      strategies.technique.zone_reaction_fallback.enabled
+    ),
+    crt_min_atr=float(strategies.technique.crt.min_atr),
+    crt_reclaim_bars=int(strategies.technique.crt.reclaim_bars),
+    fvg_max_atr=float(strategies.technique.fvg.max_atr),
     box_breakout_enabled=bool(strategies.selection.box_breakout_enabled),
     trend_pullback_enabled=bool(strategies.trend.pullback_enabled),
     break_retest_enabled=bool(strategies.breakout.break_retest_enabled),
@@ -2375,6 +2406,8 @@ def _zone_has_source(zone: Zone, source: str) -> bool:
 def demand_zone_reaction(ctx: DetectionContext) -> DetectionResult | None:
   if not ctx.settings.demand_reaction_enabled:
     return None
+  if not ctx.settings.zone_reaction_fallback_enabled:
+    return None
   # Display name is zone-only (BUY/SELL carries the side). Legacy
   # "Demand Zone Reaction" remains accepted in taxonomy/policy maps.
   # Flip-tagged bands are owned by Flip Zone (not Zone Reaction).
@@ -2389,6 +2422,8 @@ def demand_zone_reaction(ctx: DetectionContext) -> DetectionResult | None:
 
 def supply_zone_reaction(ctx: DetectionContext) -> DetectionResult | None:
   if not ctx.settings.supply_reaction_enabled:
+    return None
+  if not ctx.settings.zone_reaction_fallback_enabled:
     return None
   return _sd_zone_reaction(
     ctx,
@@ -2697,12 +2732,51 @@ LIVE_DETECTOR_REGISTRY: tuple[DetectorRegistration, ...] = (
     lambda cfg: cfg.key_level_reaction_enabled,
   ),
   DetectorRegistration(
+    "confluence_zone_reaction", confluence_zone_reaction, FAMILY_SUPPLY_DEMAND,
+    lambda cfg: cfg.confluence_zone_enabled,
+  ),
+  DetectorRegistration(
+    "supply_demand_technique_reaction", supply_demand_technique_reaction,
+    FAMILY_SUPPLY_DEMAND,
+    lambda cfg: cfg.technique_sd_enabled,
+  ),
+  DetectorRegistration(
+    "order_block_technique_reaction", order_block_technique_reaction,
+    FAMILY_SUPPLY_DEMAND,
+    lambda cfg: cfg.technique_ob_enabled,
+  ),
+  DetectorRegistration(
+    "fvg_technique_reaction", fvg_technique_reaction, FAMILY_SUPPLY_DEMAND,
+    lambda cfg: cfg.technique_fvg_enabled,
+  ),
+  DetectorRegistration(
+    "ifvg_technique_reaction", ifvg_technique_reaction, FAMILY_SUPPLY_DEMAND,
+    lambda cfg: cfg.technique_ifvg_enabled,
+  ),
+  DetectorRegistration(
+    "crt_technique_reaction", crt_technique_reaction, FAMILY_SUPPLY_DEMAND,
+    lambda cfg: cfg.technique_crt_enabled,
+  ),
+  DetectorRegistration(
     "demand_zone_reaction", demand_zone_reaction, FAMILY_SUPPLY_DEMAND,
-    lambda cfg: cfg.demand_reaction_enabled,
+    lambda cfg: (
+      cfg.demand_reaction_enabled and cfg.zone_reaction_fallback_enabled
+    ),
+    replay_only_reason=(
+      "legacy Zone Reaction publisher retired in favour of named technique "
+      "detectors (Supply Demand Reaction, etc.). Enable "
+      "AUTO_TRADE_ZONE_REACTION_FALLBACK_ENABLED to restore"
+    ),
   ),
   DetectorRegistration(
     "supply_zone_reaction", supply_zone_reaction, FAMILY_SUPPLY_DEMAND,
-    lambda cfg: cfg.supply_reaction_enabled,
+    lambda cfg: (
+      cfg.supply_reaction_enabled and cfg.zone_reaction_fallback_enabled
+    ),
+    replay_only_reason=(
+      "legacy Zone Reaction publisher retired in favour of named technique "
+      "detectors. Enable AUTO_TRADE_ZONE_REACTION_FALLBACK_ENABLED to restore"
+    ),
   ),
   DetectorRegistration(
     "flip_demand_zone_reaction", flip_demand_zone_reaction, FAMILY_SUPPLY_DEMAND,

@@ -20,6 +20,25 @@ ZONE_STRATEGIES = frozenset({
   "Supply Zone Reaction",
 })
 
+TECHNIQUE_STRATEGIES = frozenset({
+  "Supply Demand Reaction",
+  "Order Block Reaction",
+  "FVG Reaction",
+  "iFVG Reaction",
+  "CRT Reaction",
+})
+
+CONFLUENCE_STRATEGIES = frozenset({
+  "Confluence Zone",
+})
+
+# Union for convenience — technique + confluence are zone-family publishers.
+ZONE_STRATEGIES = frozenset({
+  *ZONE_STRATEGIES,
+  *TECHNIQUE_STRATEGIES,
+  *CONFLUENCE_STRATEGIES,
+})
+
 LIQUIDITY_STRATEGIES = frozenset({
   "Liquidity Sweep",
   "Snap-Back",

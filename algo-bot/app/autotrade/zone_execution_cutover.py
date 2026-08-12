@@ -1196,6 +1196,7 @@ async def _sync_strategy_match_cutover(
       source_timeframe=source_tf,
       structural_sources=(str(getattr(result, "structural_source", "") or result.setup),),
       confluence_tags=tuple(getattr(result, "confluence_tags", None) or ()),
+      technique_tags=tuple(getattr(result, "confluence_tags", None) or ()),
       grade=grade,
       score=float(getattr(result, "source_score", None) or result.confluence),
       market_map_id=(

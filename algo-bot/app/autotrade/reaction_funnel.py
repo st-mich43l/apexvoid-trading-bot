@@ -62,6 +62,12 @@ _SETUP_TYPE_ALIASES = {
   "session level": "Session Level Reaction",
   "session-level": "Session Level Reaction",
   "zone reaction": "Zone Reaction",
+  "supply demand reaction": "Supply Demand Reaction",
+  "order block reaction": "Order Block Reaction",
+  "fvg reaction": "FVG Reaction",
+  "ifvg reaction": "iFVG Reaction",
+  "crt reaction": "CRT Reaction",
+  "confluence zone": "Confluence Zone",
   "trend pullback": "Trend Pullback",
 }
 
