@@ -21,11 +21,11 @@ ZONE_STRATEGIES = frozenset({
 })
 
 TECHNIQUE_STRATEGIES = frozenset({
-  "Supply Demand Reaction",
-  "Order Block Reaction",
-  "FVG Reaction",
-  "iFVG Reaction",
-  "CRT Reaction",
+  "Supply Demand",
+  "Order Block",
+  "FVG",
+  "iFVG",
+  "CRT",
 })
 
 CONFLUENCE_STRATEGIES = frozenset({
