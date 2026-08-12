@@ -5935,7 +5935,11 @@ async def _publish_trade_plan_v7(
     },
   )
   try:
-    from app.autotrade.setup_card import ensure_plan_published_root_card
+    from app.autotrade.setup_card import (
+      ensure_plan_published_root_card,
+      schedule_deferred_root_card_ensure,
+    )
+    from aiogram.exceptions import TelegramRetryAfter
 
     # ensure (not just edit): a plan can reach this point without ever
     # having a root card -- HFS's own synchronous publish attempt is only
@@ -5952,11 +5956,26 @@ async def _publish_trade_plan_v7(
     await ensure_plan_published_root_card(
       client, match, edit_fn=_forming_card_edit_fn,
     )
+  except TelegramRetryAfter as exc:
+    delay = float(getattr(exc, "retry_after", 5) or 5) + 1.0
+    log.error(
+      "v7 forming card flood-limited setup_id=%s plan_id=%s "
+      "retry_after=%ss; scheduling deferred ensure",
+      setup_id,
+      plan.plan_id,
+      getattr(exc, "retry_after", None),
+    )
+    await schedule_deferred_root_card_ensure(
+      client, match, delay_seconds=delay,
+    )
   except Exception:
     log.exception(
       "v7 forming card stop refresh failed setup_id=%s plan_id=%s",
       setup_id,
       plan.plan_id,
+    )
+    await schedule_deferred_root_card_ensure(
+      client, match, delay_seconds=5.0,
     )
   log.info(
     "v7 plan published id=%s symbol=%s strategy=%s direction=%s entry_type=%s",

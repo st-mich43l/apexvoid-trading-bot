@@ -859,43 +859,54 @@ async def _send_forming_card_once(
       )
       return None, chat_id
 
-  # Won the create lock — re-check in case a peer saved between our first
-  # load and the SET NX claim.
-  peer = await load_forming_card(client, setup_id)
-  if peer is not None and int(peer.get("message_id") or 0) > 0:
-    message_id, resolved_chat_id = await _edit_existing_forming_card(
-      existing=peer,
-      text=text,
-      setup_id=setup_id,
-      edit_fn=edit_fn,
-    )
-    if message_id is not None:
-      return message_id, resolved_chat_id
-
-  # Reserve Redis identity before Telegram I/O so waiters see an in-flight
-  # create and do not race a second send while our round-trip is pending.
-  await save_forming_card(
-    client,
-    setup_id,
-    chat_id=chat_id,
-    message_id=0,
-    text=text,
-  )
-  log.info("forming_card_send_started setup_id=%s mode=send", setup_id)
+  # Won the create lock — release it even if Telegram send fails so a peer
+  # (or a later fill-path ensure) can retry instead of lock_exhausted.
   try:
-    sent = await send_fn(text, chat_id=chat_id)
-  except Exception:
-    await clear_forming_card(client, setup_id)
-    raise
-  message_id = int(sent.message_id)
-  await save_forming_card(
-    client,
-    setup_id,
-    chat_id=chat_id,
-    message_id=message_id,
-    text=text,
-  )
-  return message_id, chat_id
+    # Won the create lock — re-check in case a peer saved between our first
+    # load and the SET NX claim.
+    peer = await load_forming_card(client, setup_id)
+    if peer is not None and int(peer.get("message_id") or 0) > 0:
+      message_id, resolved_chat_id = await _edit_existing_forming_card(
+        existing=peer,
+        text=text,
+        setup_id=setup_id,
+        edit_fn=edit_fn,
+      )
+      if message_id is not None:
+        return message_id, resolved_chat_id
+
+    # Reserve Redis identity before Telegram I/O so waiters see an in-flight
+    # create and do not race a second send while our round-trip is pending.
+    await save_forming_card(
+      client,
+      setup_id,
+      chat_id=chat_id,
+      message_id=0,
+      text=text,
+    )
+    log.info("forming_card_send_started setup_id=%s mode=send", setup_id)
+    try:
+      sent = await send_fn(text, chat_id=chat_id)
+    except Exception:
+      await clear_forming_card(client, setup_id)
+      raise
+    message_id = int(sent.message_id)
+    await save_forming_card(
+      client,
+      setup_id,
+      chat_id=chat_id,
+      message_id=message_id,
+      text=text,
+    )
+    return message_id, chat_id
+  finally:
+    try:
+      await client.delete(lock_key)
+    except Exception:
+      log.exception(
+        "forming_card_create_lock_release_failed setup_id=%s",
+        setup_id,
+      )
 
 
 async def reconcile_forming_card_after_send(
@@ -1662,11 +1673,11 @@ async def ensure_plan_published_root_card(
   from app.bot.client import (
     delete_scanner_message,
     edit_scanner_message_text,
-    send_scanner_with_retry,
+    send_scanner_root_card_with_retry,
   )
 
   resolved_edit = edit_fn or edit_scanner_message_text
-  resolved_send = send_fn or send_scanner_with_retry
+  resolved_send = send_fn or send_scanner_root_card_with_retry
   resolved_delete = delete_fn or delete_scanner_message
   stop_price = await published_plan_stop_price(client, match.match_id)
 
@@ -1718,3 +1729,150 @@ async def ensure_plan_published_root_card(
     message_id,
   )
   return message_id
+
+
+def strategy_match_from_trade_plan(plan: Any) -> StrategyMatch:
+  """Rebuild a minimal StrategyMatch so root-card formatting can recover."""
+  from app.autotrade.strategy_match import STRATEGY_MATCH_VERSION
+
+  analysis = plan.analysis
+  structure = plan.source_structure
+  entry = plan.entry
+  low = float(entry.zone_low if entry.zone_low is not None else structure.low)
+  high = float(entry.zone_high if entry.zone_high is not None else structure.high)
+  mid = (low + high) / 2.0
+  now = int(time.time())
+  return StrategyMatch(
+    version=STRATEGY_MATCH_VERSION,
+    match_id=str(plan.setup_id),
+    symbol=str(plan.symbol).upper(),
+    source_tf=str(analysis.formation_timeframe or "M1").upper(),
+    event_ts=str(analysis.confirmation_bar_ts or plan.created_at),
+    issued_at=int(plan.created_at or now),
+    expires_at=int(plan.expires_at or (now + 600)),
+    strategy=str(analysis.strategy),
+    strategy_mode=str(analysis.bias or ""),
+    direction=str(analysis.direction).upper(),
+    key_level=mid,
+    entry_low=low,
+    entry_high=high,
+    current_price=mid,
+    confluence=int(analysis.confluence or 1),
+    reasons=tuple(analysis.reasons or ()),
+    atr=max(0.1, high - low),
+    structure_swing=float(structure.invalidation_price),
+    targets_pips=tuple(
+      int(round(abs(float(target.price) - mid) / 0.1))
+      for target in (plan.targets or ())
+      if getattr(target, "price", None) is not None
+    ) or (30,),
+    family=str(analysis.strategy_family or ""),
+    structural_source=str(structure.kind or ""),
+    structural_zone_id=str(structure.structure_id or ""),
+    reaction_type="m5_authoritative",
+    confirmation_bar_ts=str(analysis.confirmation_bar_ts or ""),
+    touch_bar_ts=str(analysis.formation_bar_ts or ""),
+    structural_timeframe=str(structure.timeframe or analysis.formation_timeframe or ""),
+    htf_bias=str(analysis.bias or ""),
+  )
+
+
+async def load_strategy_match_for_root_card(
+  client: Any,
+  setup_id: str,
+  *,
+  symbol: str = "XAU",
+) -> StrategyMatch | None:
+  """Load a StrategyMatch for root-card recovery (live matches or TradePlan)."""
+  from app.autotrade.multi_match import deserialize_matches, strategy_matches_key
+  from app.autotrade.strategy_match import strategy_match_key
+  from app.autotrade.trade_plan import TradePlan
+  from app.autotrade.trade_plan_stream import plan_key
+
+  setup_id = str(setup_id or "").strip()
+  if not setup_id:
+    return None
+  symbol = str(symbol or "XAU").upper()
+
+  multi_raw = await client.get(strategy_matches_key(symbol))
+  for match in deserialize_matches(multi_raw):
+    if str(match.match_id) == setup_id:
+      return match
+
+  legacy_raw = await client.get(strategy_match_key(symbol))
+  legacy = StrategyMatch.from_json(legacy_raw) if legacy_raw else None
+  if legacy is not None and str(legacy.match_id) == setup_id:
+    return legacy
+
+  plan_id = setup_id if setup_id.startswith("v7:") else f"v7:{setup_id}"
+  plan_raw = await client.get(plan_key(plan_id))
+  if plan_raw is None and setup_id.startswith("v7:"):
+    plan_raw = await client.get(plan_key(setup_id))
+  if plan_raw is None:
+    return None
+  try:
+    payload = json.loads(
+      plan_raw.decode() if isinstance(plan_raw, bytes) else str(plan_raw)
+    )
+    plan = TradePlan.from_dict(payload)
+  except Exception:
+    log.exception(
+      "root_card_plan_load_failed setup_id=%s plan_id=%s",
+      setup_id,
+      plan_id,
+    )
+    return None
+  return strategy_match_from_trade_plan(plan)
+
+
+async def ensure_root_card_for_setup_id(
+  client: Any,
+  setup_id: str,
+  *,
+  symbol: str = "XAU",
+  chat_id: int | None = None,
+) -> int | None:
+  """Create/recover the PLAN PUBLISHED root when fill delivery finds none."""
+  match = await load_strategy_match_for_root_card(
+    client, setup_id, symbol=symbol,
+  )
+  if match is None:
+    log.warning(
+      "root_card_recovery_skipped setup_id=%s reason=match_unavailable",
+      setup_id,
+    )
+    return None
+  return await ensure_plan_published_root_card(
+    client,
+    match,
+    chat_id=chat_id,
+  )
+
+
+async def schedule_deferred_root_card_ensure(
+  client: Any,
+  match: StrategyMatch,
+  *,
+  delay_seconds: float,
+) -> None:
+  """Retry root-card ensure after Telegram flood / transient create failure."""
+  delay = max(1.0, float(delay_seconds))
+
+  async def _run() -> None:
+    try:
+      await asyncio.sleep(delay)
+      message_id = await ensure_plan_published_root_card(client, match)
+      log.info(
+        "deferred_root_card_ensure setup_id=%s delay_s=%.1f message_id=%s",
+        match.match_id,
+        delay,
+        message_id,
+      )
+    except Exception:
+      log.exception(
+        "deferred_root_card_ensure_failed setup_id=%s delay_s=%.1f",
+        match.match_id,
+        delay,
+      )
+
+  asyncio.create_task(_run(), name=f"root-card-ensure:{match.match_id}")

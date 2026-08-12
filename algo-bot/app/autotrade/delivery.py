@@ -63,8 +63,9 @@ _FULL_TP_RESULT_TTL = 24 * 3600
 # a fast-filling order to race ahead of its own root card. Bounded poll
 # before falling back to standalone, same pattern as setup_card.py's
 # _await_peer_forming_card but budgeted for a network round-trip, not just
-# Redis lock contention.
-_FORMING_REPLY_WAIT_SECONDS = 20.0
+# Redis lock contention. Live 2026-08-12 raised this again after a 247s
+# flood dropped the root entirely — fill path now also recreates the card.
+_FORMING_REPLY_WAIT_SECONDS = 45.0
 _FORMING_REPLY_POLL_SECONDS = 0.5
 # event types that go standalone (never even try to reply) if the forming
 # card is missing/expired - as opposed to _FORMING_REPLY_PREFERRED_TYPES
@@ -1020,6 +1021,18 @@ async def _post_manage_reply(
 ) -> int | None:
   """Post a manage reply under the root card and persist Redis keys."""
   reply_to, reason = await _resolve_reply_message_id(client, event, "internal")
+  if reply_to is None and match_id:
+    # Live 2026-08-12: publish raced Telegram flood → root never created,
+    # fill arrived as standalone ORDER FILLED. Recover the root first.
+    recovered = await _ensure_root_card_for_manage_reply(
+      client,
+      event,
+      match_id=match_id,
+      chat_id=chat_id,
+    )
+    if recovered is not None:
+      reply_to = recovered
+      reason = ""
   if reply_to is None:
     if require_reply_target:
       log.info(
@@ -1028,7 +1041,7 @@ async def _post_manage_reply(
         reason,
       )
       return None
-    log.info(
+    log.error(
       "Auto-trade manage reply unavailable for %s: %s; sending standalone",
       match_id,
       reason,
@@ -1049,6 +1062,39 @@ async def _post_manage_reply(
   if remember:
     await _remember_trade_message(client, event, "internal", message_id)
   return message_id
+
+
+async def _ensure_root_card_for_manage_reply(
+  client,
+  event: dict,
+  *,
+  match_id: str,
+  chat_id: int,
+) -> int | None:
+  """Create a missing root card so fill/TP/close can reply under it."""
+  try:
+    from app.autotrade.setup_card import ensure_root_card_for_setup_id
+
+    message_id = await ensure_root_card_for_setup_id(
+      client,
+      match_id,
+      symbol=str(event.get("symbol") or "XAU"),
+      chat_id=chat_id,
+    )
+  except Exception:
+    log.exception(
+      "manage_reply_root_card_recovery_failed setup_id=%s",
+      match_id,
+    )
+    return None
+  if message_id is not None and message_id > 0:
+    log.info(
+      "manage_reply_root_card_recovered setup_id=%s message_id=%s",
+      match_id,
+      message_id,
+    )
+    return int(message_id)
+  return None
 
 
 async def _replace_manage_reply(

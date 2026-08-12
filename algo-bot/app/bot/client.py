@@ -79,6 +79,9 @@ _MAX_SEND_ATTEMPTS = 3
 # instead of sleeping, so the caller's own error handling (skip, log,
 # move on) takes over rather than the whole task going dark.
 _MAX_RETRY_AFTER_SLEEP_SECONDS = 30
+# Root/PLAN PUBLISHED cards must exist before fill replies thread under them.
+# Prefer waiting out a longer flood over trading with no Telegram root.
+_MAX_ROOT_CARD_RETRY_AFTER_SLEEP_SECONDS = 120
 
 
 async def setup_commands(target_bot: Bot) -> None:
@@ -141,12 +144,31 @@ async def send_scanner_with_retry(
   )
 
 
+async def send_scanner_root_card_with_retry(
+  text: str,
+  reply_to: int | None = None,
+  chat_id: int | str | None = None,
+  reply_markup: InlineKeyboardMarkup | None = None,
+) -> Message:
+  """Send the PLAN PUBLISHED / forming root card with a longer flood budget."""
+  return await _send_message_with_retry(
+    scanner_bot,
+    text,
+    reply_to,
+    chat_id,
+    reply_markup,
+    max_retry_after_sleep=_MAX_ROOT_CARD_RETRY_AFTER_SLEEP_SECONDS,
+  )
+
+
 async def _send_message_with_retry(
   target_bot: Bot,
   text: str,
   reply_to: int | None,
   chat_id: int | str | None,
   reply_markup: InlineKeyboardMarkup | None,
+  *,
+  max_retry_after_sleep: int = _MAX_RETRY_AFTER_SLEEP_SECONDS,
 ) -> Message:
   for attempt in range(1, _MAX_SEND_ATTEMPTS + 1):
     try:
@@ -159,12 +181,12 @@ async def _send_message_with_retry(
         reply_markup=reply_markup,
       )
     except TelegramRetryAfter as e:
-      if e.retry_after > _MAX_RETRY_AFTER_SLEEP_SECONDS:
+      if e.retry_after > max_retry_after_sleep:
         log.error(
           "Telegram flood-limited for %ds (exceeds %ds cap) - not "
           "blocking this task waiting it out; raising instead",
           e.retry_after,
-          _MAX_RETRY_AFTER_SLEEP_SECONDS,
+          max_retry_after_sleep,
         )
         raise
       log.warning(
