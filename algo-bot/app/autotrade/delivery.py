@@ -54,6 +54,8 @@ _PAUSED_KEY = "auto_trade:paused"
 _STATS_KEY = "auto_trade:stats"
 _REGIME_ALERT_PENDING_PREFIX = "auto_trade:regime_alert_pending:"
 _REGIME_ALERT_SENT_TTL = 86400
+_REGIME_ALERT_POLL_SECONDS = 30.0
+_regime_alert_last_check_monotonic = 0.0
 _TRADE_MESSAGE_TTL = 7 * 24 * 3600
 _FULL_TP_RESULT_TTL = 24 * 3600
 # Live 2026-08-11: order_filled arrived and sent standalone (no reply_to)
@@ -2560,9 +2562,37 @@ async def _check_regime_alerts(client) -> None:
   auto_trade_events_loop poll below - is the delivery side that actually
   sends the owner DM, deduping via a companion "sent" key so a flag never
   fires twice within its cooldown window.
+
+  Never SCAN the whole Redis keyspace — only probe configured symbols.
+  Throttled so the owner delivery loop does not pay Redis on every tick.
   """
-  async for key in client.scan_iter(match=f"{_REGIME_ALERT_PENDING_PREFIX}*"):
-    symbol = key[len(_REGIME_ALERT_PENDING_PREFIX):]
+  global _regime_alert_last_check_monotonic
+  now = time.monotonic()
+  if now - _regime_alert_last_check_monotonic < _REGIME_ALERT_POLL_SECONDS:
+    return
+  _regime_alert_last_check_monotonic = now
+
+  raw_symbols = getattr(runtime_config.contract.instrument, "symbols", "XAU")
+  if isinstance(raw_symbols, str):
+    symbols = {
+      part.strip().upper()
+      for part in raw_symbols.replace(";", ",").split(",")
+      if part.strip()
+    }
+  else:
+    symbols = {
+      str(symbol).upper()
+      for symbol in (raw_symbols or ())
+      if str(symbol).strip()
+    }
+  if not symbols:
+    symbols = {"XAU"}
+
+  for symbol in symbols:
+    key = f"{_REGIME_ALERT_PENDING_PREFIX}{symbol}"
+    raw = await client.get(key)
+    if not raw:
+      continue
     sent_key = f"auto_trade:regime_alert_sent:{symbol}"
     claimed = await client.set(
       sent_key,
@@ -2572,12 +2602,10 @@ async def _check_regime_alerts(client) -> None:
     )
     if not claimed:
       continue
-    raw = await client.get(key)
-    if not raw:
-      continue
     try:
       payload = json.loads(raw)
     except (TypeError, json.JSONDecodeError):
+      await client.delete(key)
       continue
     chop = float(payload.get("chop_share", 0.0))
     trend = float(payload.get("trend_share", 0.0))
@@ -2593,6 +2621,7 @@ async def _check_regime_alerts(client) -> None:
         text,
         chat_id=runtime_config.delivery.telegram.telegram_owner_id,
       )
+    await client.delete(key)
 
 
 async def _process_owner_entries(

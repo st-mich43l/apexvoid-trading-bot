@@ -12,11 +12,14 @@ dated section after deployment.
 
 ## Unreleased
 
-- TradePlan V8 cutover: `version`/`plan_id` prefix `v8:`, `AUTO_TRADE_CONTRACT_MODE=v8_only`, dual-read drain for in-flight V7.
-  See `docs/adr-trade-plan-v8-cutover.md`.
-## Unreleased
-
 ### Fixed
+- Cut Redis SCAN thrash that was saturating the bot event loop: zone watches
+  list via a membership index (`SMEMBERS`) instead of keyspace SCAN, regime
+  alert delivery probes configured symbols with a 30s throttle, and spot-driven
+  zone re-eval is capped at 2s.
+- Forming-card create no longer indexes `message_id=0` placeholders into the
+  live price-track set, so Telegram is never asked to edit a reserved id during
+  the send round-trip.
 - Scanner observations without a canonical executable match no longer reserve
   the four-hour Telegram band dedup and suppress the forming card when that
   same structure later becomes executable.

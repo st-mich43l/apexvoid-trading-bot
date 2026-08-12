@@ -603,6 +603,11 @@ async def save_forming_card(
     payload,
     ex=effective_ttl,
   )
+  # message_id=0 is an in-flight create reservation only — peers must see the
+  # Redis key, but price-track / reply-root must wait for a real Telegram id.
+  if int(message_id) <= 0:
+    await client.srem(FORMING_ACTIVE_INDEX_KEY, setup_id)
+    return
   await client.sadd(FORMING_ACTIVE_INDEX_KEY, setup_id)
   # Keep the index alive at least as long as the card TTL so restart
   # sweepers can still discover live cards without SCAN.
@@ -1079,7 +1084,11 @@ async def edit_forming_card_status(
     if snapshot is None or snapshot.status_line != status_line:
       return True
   card = await load_forming_card(client, setup_id)
-  if card is None or not card.get("text"):
+  if (
+    card is None
+    or not card.get("text")
+    or int(card.get("message_id") or 0) <= 0
+  ):
     if await is_setup_terminal(client, setup_id):
       # A terminal setup is never re-carded (P0-5) - no point stashing a
       # marker post_or_edit_forming_card will just refuse to apply anyway.
@@ -1147,6 +1156,8 @@ async def edit_forming_card_stop(
   card = await load_forming_card(client, setup_id)
   if card is None or not card.get("text"):
     return False
+  if int(card.get("message_id") or 0) <= 0:
+    return False
   text = apply_forming_card_stop(
     str(card["text"]), float(stop_price), digits=digits,
   )
@@ -1194,6 +1205,9 @@ async def edit_forming_card_price(
 
   card = await load_forming_card(client, setup_id)
   if card is None or not card.get("text"):
+    return False
+  if int(card.get("message_id") or 0) <= 0:
+    # In-flight create reservation — never call Telegram with message_id=0.
     return False
   text = str(card["text"])
   snapshot = await load_forming_card_status_snapshot(client, setup_id)
@@ -1272,6 +1286,9 @@ async def refresh_forming_card_prices(
   for setup_id in await list_active_forming_setup_ids(client):
     card = await load_forming_card(client, setup_id)
     if card is None or not card.get("text"):
+      await client.srem(FORMING_ACTIVE_INDEX_KEY, setup_id)
+      continue
+    if int(card.get("message_id") or 0) <= 0:
       await client.srem(FORMING_ACTIVE_INDEX_KEY, setup_id)
       continue
     if await is_setup_terminal(client, setup_id):

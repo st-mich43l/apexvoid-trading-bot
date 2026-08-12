@@ -71,6 +71,9 @@ ZONE_WATCH_RETENTION_SECONDS = 7 * 24 * 3600
 # threshold only for callers that still want "many retests" signals.
 _DOWNGRADE_AFTER_TOUCHES = 2
 _MAX_CAS_RETRIES = 12
+# Membership set for O(watches) listing — never SCAN the whole Redis DB.
+ZONE_WATCH_INDEX_KEY = "analysis:zone_watch:index"
+_ZONE_WATCH_INDEX_BUILT_KEY = "analysis:zone_watch:index_built"
 
 _CAS_SAVE_LUA = """
 local raw = redis.call('GET', KEYS[1])
@@ -84,6 +87,12 @@ else
   if revision ~= expected then return 0 end
 end
 redis.call('SET', KEYS[1], ARGV[2], 'EX', tonumber(ARGV[3]))
+local zone_id = ARGV[4]
+if tonumber(ARGV[5]) == 1 then
+  redis.call('SADD', KEYS[2], zone_id)
+else
+  redis.call('SREM', KEYS[2], zone_id)
+end
 return 1
 """
 
@@ -91,6 +100,13 @@ return 1
 def zone_watch_key(zone_id: str) -> str:
   return f"analysis:zone_watch:{zone_id}"
 
+
+def _index_wants_record(record: "ZoneWatch") -> bool:
+  return (
+    record.grade in ACTIVE_WATCHLIST_GRADES
+    and record.state not in TERMINAL_ZONE_WATCH_STATES
+    and record.state not in LOCKED_ZONE_WATCH_STATES
+  )
 
 class ZoneWatchError(ValueError):
   """Illegal zone operation or repeated compare-and-swap contention."""
@@ -239,14 +255,18 @@ async def _cas_save(
   *,
   expected_revision: int,
 ) -> bool:
+  indexed = 1 if _index_wants_record(record) else 0
   try:
     result = await client.eval(
       _CAS_SAVE_LUA,
-      1,
+      2,
       zone_watch_key(record.zone_id),
+      ZONE_WATCH_INDEX_KEY,
       expected_revision,
       _payload(record),
       ZONE_WATCH_RETENTION_SECONDS,
+      record.zone_id,
+      indexed,
     )
     return int(result) == 1
   except Exception:
@@ -265,6 +285,10 @@ async def _cas_save(
       _payload(record),
       ex=ZONE_WATCH_RETENTION_SECONDS,
     )
+    if indexed:
+      await client.sadd(ZONE_WATCH_INDEX_KEY, record.zone_id)
+    else:
+      await client.srem(ZONE_WATCH_INDEX_KEY, record.zone_id)
     return True
 
 
@@ -293,6 +317,55 @@ async def _mutate(
       return updated, result
   raise ZoneWatchError(f"zone watch CAS contention exceeded for {zone_id!r}")
 
+
+async def _rebuild_zone_watch_index(client: Any) -> None:
+  """One-shot migration: populate index from legacy keyspace scan."""
+  claimed = await client.set(_ZONE_WATCH_INDEX_BUILT_KEY, "1", nx=True, ex=86400)
+  if not claimed:
+    return
+  async for raw_key in client.scan_iter(match="analysis:zone_watch:*", count=200):
+    key = raw_key.decode() if isinstance(raw_key, bytes) else str(raw_key)
+    if key in {ZONE_WATCH_INDEX_KEY, _ZONE_WATCH_INDEX_BUILT_KEY}:
+      continue
+    if not key.startswith("analysis:zone_watch:"):
+      continue
+    zone_id = key.rsplit(":", 1)[-1]
+    if zone_id in {"index", "index_built"}:
+      continue
+    record = await load_zone_watch(client, zone_id)
+    if record is not None and _index_wants_record(record):
+      await client.sadd(ZONE_WATCH_INDEX_KEY, zone_id)
+    else:
+      await client.srem(ZONE_WATCH_INDEX_KEY, zone_id)
+
+
+async def list_active_zone_watches(
+  client: Any,
+  *,
+  symbol: str | None = None,
+) -> list[ZoneWatch]:
+  members = await client.smembers(ZONE_WATCH_INDEX_KEY)
+  if not members:
+    await _rebuild_zone_watch_index(client)
+    members = await client.smembers(ZONE_WATCH_INDEX_KEY)
+  records: list[ZoneWatch] = []
+  stale: list[str] = []
+  for raw_id in members:
+    zone_id = raw_id.decode() if isinstance(raw_id, bytes) else str(raw_id)
+    record = await load_zone_watch(client, zone_id)
+    if record is None or not is_actively_watchable(record):
+      stale.append(zone_id)
+      continue
+    if symbol is not None and record.symbol != symbol.upper():
+      continue
+    records.append(record)
+  if stale:
+    await client.srem(ZONE_WATCH_INDEX_KEY, *stale)
+  return sorted(records, key=lambda item: (-item.score, item.low, item.zone_id))
+
+
+def is_actively_watchable(record: ZoneWatch) -> bool:
+  return _index_wants_record(record)
 
 async def discover_zone_watch(
   client: Any,
@@ -687,29 +760,3 @@ async def mark_m1_evaluated(
 
   updated, _ = await _mutate(client, zone_id, apply)
   return updated
-
-
-async def list_active_zone_watches(
-  client: Any,
-  *,
-  symbol: str | None = None,
-) -> list[ZoneWatch]:
-  records: list[ZoneWatch] = []
-  async for raw_key in client.scan_iter(match="analysis:zone_watch:*"):
-    key = raw_key.decode() if isinstance(raw_key, bytes) else str(raw_key)
-    zone_id = key.rsplit(":", 1)[-1]
-    record = await load_zone_watch(client, zone_id)
-    if record is None or not is_actively_watchable(record):
-      continue
-    if symbol is not None and record.symbol != symbol.upper():
-      continue
-    records.append(record)
-  return sorted(records, key=lambda item: (-item.score, item.low, item.zone_id))
-
-
-def is_actively_watchable(record: ZoneWatch) -> bool:
-  return (
-    record.grade in ACTIVE_WATCHLIST_GRADES
-    and record.state not in TERMINAL_ZONE_WATCH_STATES
-    and record.state not in LOCKED_ZONE_WATCH_STATES
-  )

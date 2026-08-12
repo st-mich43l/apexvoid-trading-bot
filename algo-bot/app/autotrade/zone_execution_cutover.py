@@ -1346,7 +1346,7 @@ async def zone_watch_execution_loop() -> None:
   pubsub = client.pubsub()
   await pubsub.subscribe("bars:new", "spots:new")
   # Cap spot-driven re-evals so ticks cannot busy-loop evaluate_active.
-  spot_min_interval_s = 0.5
+  spot_min_interval_s = 2.0
   last_spot_eval_monotonic: dict[str, float] = {}
   log.info(
     "ZoneWatch direct execution loop started channels=bars:new,spots:new "
