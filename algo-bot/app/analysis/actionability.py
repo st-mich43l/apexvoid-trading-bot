@@ -26,6 +26,7 @@ from app.autotrade.strategy_taxonomy import is_scalp_strategy
 from app.autotrade.structural_target_room import (
   evaluate_structural_target_room,
   filter_displaced_opposing_entries,
+  filter_shared_boundary_opposing_entries,
 )
 
 
@@ -530,6 +531,16 @@ def resolve_actionability(
       room_entries, displacement_state = _entries_excluding_displaced_barriers(
         entries, result=result, context=context, cfg=cfg,
       )
+      shared_boundary_state: dict[str, Any] = {"applied": False}
+      if room_entries:
+        room_entries, shared_boundary_state = filter_shared_boundary_opposing_entries(
+          room_entries,
+          direction=result.direction,
+          candidate_entry_low=float(result.entry_zone.low),
+          candidate_entry_high=float(result.entry_zone.high),
+          pip_size=pip_size,
+          atr=atr,
+        )
       result = _trim_zone_against_overlapping_barrier(result, room_entries)
       # Range/HFS scalp: detector already required native min room (EQ /
       # select_range_target / HFS fitted TP). HTF opposing barriers must not
@@ -564,6 +575,9 @@ def resolve_actionability(
           {"skipped": "scalp_native_room_ignores_htf_opposing"}
           if is_scalp
           else displacement_state
+        ),
+        shared_boundary_state=(
+          None if is_scalp else shared_boundary_state
         ),
       )
       measured = {

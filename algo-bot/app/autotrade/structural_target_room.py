@@ -94,6 +94,108 @@ def filter_displaced_opposing_entries(
   return kept
 
 
+def shared_boundary_epsilon(*, pip_size: float, atr: float) -> float:
+  """Tick-scale glue tolerance for Market Map walls that share a proximal edge."""
+  pip = max(0.0, float(pip_size))
+  atr_value = max(0.0, float(atr))
+  return max(pip, 0.05 * atr_value)
+
+
+def filter_shared_boundary_opposing_entries(
+  entries: Iterable[Any],
+  *,
+  direction: str,
+  candidate_entry_low: float,
+  candidate_entry_high: float,
+  pip_size: float,
+  atr: float,
+) -> tuple[list[Any], dict[str, Any]]:
+  """V8: drop opposing map entries glued to the candidate proximal wall.
+
+  Market Map often stacks demand under supply (or supply over demand) so the
+  opposing far edge equals the candidate proximal edge. Measuring room from
+  live spot at that wall yields raw_room≈0 / false containment. Those shared
+  walls are not tradable opposing structure ahead — drop them. Deep
+  penetration past the proximal wall stays and still hard-blocks.
+  """
+  side = str(direction).upper()
+  low = min(float(candidate_entry_low), float(candidate_entry_high))
+  high = max(float(candidate_entry_low), float(candidate_entry_high))
+  epsilon = shared_boundary_epsilon(pip_size=pip_size, atr=atr)
+  opposing_side = "sell" if side == "BUY" else "buy"
+  kept: list[Any] = []
+  dropped: list[tuple[float, float]] = []
+  if side not in {"BUY", "SELL"} or not math.isfinite(epsilon):
+    return list(entries), {
+      "applied": False,
+      "reason": "invalid_shared_boundary_geometry",
+      "epsilon": epsilon,
+    }
+  for entry in entries:
+    if str(getattr(entry, "side", "")).casefold() != opposing_side:
+      kept.append(entry)
+      continue
+    entry_low = float(getattr(entry, "lo"))
+    entry_high = float(getattr(entry, "hi"))
+    if side == "SELL":
+      # Proximal wall is candidate_low; glued demand has hi ≈ proximal and
+      # must not penetrate into the supply band by more than epsilon.
+      glued = abs(entry_high - low) <= epsilon and entry_high <= low + epsilon
+    else:
+      glued = abs(entry_low - high) <= epsilon and entry_low >= high - epsilon
+    if glued:
+      dropped.append((entry_low, entry_high))
+    else:
+      kept.append(entry)
+  state = {
+    "applied": True,
+    "contract": "v8",
+    "epsilon": round(epsilon, 6),
+    "entries_before": len(kept) + len(dropped),
+    "entries_after": len(kept),
+    "shared_boundary_excluded": len(dropped),
+    "dropped_bounds": [(round(lo, 6), round(hi, 6)) for lo, hi in dropped],
+  }
+  log_fn = log.info if dropped else log.debug
+  log_fn(
+    "structural_target_room v8 shared_boundary direction=%s "
+    "epsilon=%s kept=%s dropped=%s dropped_bounds=%s",
+    side,
+    round(epsilon, 6),
+    len(kept),
+    len(dropped),
+    state["dropped_bounds"],
+  )
+  return kept, state
+
+
+def zone_proximal_room_reference(
+  *,
+  direction: str,
+  spot_price: float,
+  candidate_entry_low: float,
+  candidate_entry_high: float,
+  pip_size: float,
+  atr: float,
+) -> tuple[float, str]:
+  """V8: when spot is in/near the candidate zone, measure room from proximal.
+
+  Returns (room_reference_price, room_reference_source). Order routing still
+  uses executable spot; this value is only for structural target-room geometry.
+  """
+  side = str(direction).upper()
+  spot = float(spot_price)
+  low = min(float(candidate_entry_low), float(candidate_entry_high))
+  high = max(float(candidate_entry_low), float(candidate_entry_high))
+  epsilon = shared_boundary_epsilon(pip_size=pip_size, atr=atr)
+  in_or_near = (low - epsilon) <= spot <= (high + epsilon)
+  if side == "SELL" and in_or_near and math.isfinite(spot):
+    return low, "v8_zone_proximal"
+  if side == "BUY" and in_or_near and math.isfinite(spot):
+    return high, "v8_zone_proximal"
+  return spot, "executable_spot"
+
+
 def _nearest_opposing(
   direction: str,
   planned_entry: float,
@@ -154,6 +256,9 @@ def evaluate_structural_target_room(
   min_capped_target_pips: float = 0.0,
   execution_cost_pips: float = 0.0,
   displacement_state: dict[str, Any] | None = None,
+  room_reference_source: str | None = None,
+  executable_entry_price: float | None = None,
+  shared_boundary_state: dict[str, Any] | None = None,
 ) -> StructuralTargetRoomDecision:
   """Measure opposing structure ahead — never invent a tiny TP ladder.
 
@@ -216,8 +321,17 @@ def evaluate_structural_target_room(
     "execution_cost_pips": cost,
     "min_capped_target_pips": preference_floor,
   }
+  if room_reference_source:
+    base_measured["room_reference_source"] = str(room_reference_source)
+    base_measured["room_reference_price"] = planned
+  if executable_entry_price is not None and math.isfinite(
+    float(executable_entry_price)
+  ):
+    base_measured["executable_entry_price"] = float(executable_entry_price)
   if displacement_state:
     base_measured["displacement_state"] = dict(displacement_state)
+  if shared_boundary_state:
+    base_measured["shared_boundary_state"] = dict(shared_boundary_state)
   if barrier is None:
     effective = float(max(targets)) if targets else None
     log.debug(

@@ -81,6 +81,8 @@ from app.autotrade.strategy_taxonomy import (
 from app.autotrade.structural_target_room import (
   evaluate_structural_target_room,
   filter_displaced_opposing_entries,
+  filter_shared_boundary_opposing_entries,
+  zone_proximal_room_reference,
 )
 from app.autotrade.execution_confirmation import (
   EXPIRED as CONFIRMATION_EXPIRED,
@@ -5326,15 +5328,39 @@ async def _publish_trade_plan_v7(
         "lookback_bars": displacement_lookback,
         "reason": "no_closed_bars",
       }
+  pip_size = units.pip_size(symbol)
+  shared_boundary_state: dict[str, object] = {"applied": False}
+  if room_entries:
+    before_shared = len(room_entries)
+    room_entries, shared_boundary_state = filter_shared_boundary_opposing_entries(
+      room_entries,
+      direction=execution_match.direction,
+      candidate_entry_low=execution_match.entry_low,
+      candidate_entry_high=execution_match.entry_high,
+      pip_size=pip_size,
+      atr=execution_match.atr,
+    )
+    shared_boundary_state = {
+      **shared_boundary_state,
+      "entries_before_filter": before_shared,
+    }
+  room_planned, room_reference_source = zone_proximal_room_reference(
+    direction=execution_match.direction,
+    spot_price=entry_reference,
+    candidate_entry_low=execution_match.entry_low,
+    candidate_entry_high=execution_match.entry_high,
+    pip_size=pip_size,
+    atr=execution_match.atr,
+  )
   target_room = evaluate_structural_target_room(
     direction=execution_match.direction,
-    planned_entry_price=entry_reference,
+    planned_entry_price=room_planned,
     candidate_entry_low=execution_match.entry_low,
     candidate_entry_high=execution_match.entry_high,
     configured_target_pips=execution_match.targets_pips,
     actionable_entries=room_entries,
     atr=execution_match.atr,
-    pip_size=units.pip_size(symbol),
+    pip_size=pip_size,
     barrier_buffer_atr=float(
       runtime_config.actionability.target_room.barrier_buffer_atr
     ),
@@ -5343,6 +5369,9 @@ async def _publish_trade_plan_v7(
     ),
     execution_cost_pips=float(runtime_config.execution.policy.execution_cost_pips),
     displacement_state=displacement_state,
+    room_reference_source=room_reference_source,
+    executable_entry_price=entry_reference,
+    shared_boundary_state=shared_boundary_state,
   )
   if not target_room.allowed:
     # Counter-bias vs HTF intentionally presses into opposing structure.
