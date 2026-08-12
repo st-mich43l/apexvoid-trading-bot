@@ -44,11 +44,11 @@ TECHNIQUE_SHORT = {
 }
 
 TECHNIQUE_SETUP_NAMES = {
-  TECHNIQUE_SD: "Supply Demand Reaction",
-  TECHNIQUE_OB: "Order Block Reaction",
-  TECHNIQUE_FVG: "FVG Reaction",
-  TECHNIQUE_IFVG: "iFVG Reaction",
-  TECHNIQUE_CRT: "CRT Reaction",
+  TECHNIQUE_SD: "Supply Demand",
+  TECHNIQUE_OB: "Order Block",
+  TECHNIQUE_FVG: "FVG",
+  TECHNIQUE_IFVG: "iFVG",
+  TECHNIQUE_CRT: "CRT",
 }
 
 CONFLUENCE_SETUP_NAME = "Confluence Zone"

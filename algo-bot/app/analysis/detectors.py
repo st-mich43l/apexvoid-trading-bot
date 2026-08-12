@@ -2764,7 +2764,7 @@ LIVE_DETECTOR_REGISTRY: tuple[DetectorRegistration, ...] = (
     ),
     replay_only_reason=(
       "legacy Zone Reaction publisher retired in favour of named technique "
-      "detectors (Supply Demand Reaction, etc.). Enable "
+      "detectors (Supply Demand, Order Block, etc.). Enable "
       "AUTO_TRADE_ZONE_REACTION_FALLBACK_ENABLED to restore"
     ),
   ),
