@@ -101,6 +101,21 @@ def shared_boundary_epsilon(*, pip_size: float, atr: float) -> float:
   return max(pip, 0.05 * atr_value)
 
 
+def _glued_to_ref(
+  *,
+  side: str,
+  entry_low: float,
+  entry_high: float,
+  ref: float,
+  epsilon: float,
+) -> bool:
+  if not math.isfinite(ref):
+    return False
+  if side == "SELL":
+    return abs(entry_high - ref) <= epsilon and entry_high <= ref + epsilon
+  return abs(entry_low - ref) <= epsilon and entry_low >= ref - epsilon
+
+
 def filter_shared_boundary_opposing_entries(
   entries: Iterable[Any],
   *,
@@ -109,14 +124,15 @@ def filter_shared_boundary_opposing_entries(
   candidate_entry_high: float,
   pip_size: float,
   atr: float,
+  planned_entry: float | None = None,
 ) -> tuple[list[Any], dict[str, Any]]:
   """V8: drop opposing map entries glued to the candidate proximal wall.
 
   Market Map often stacks demand under supply (or supply over demand) so the
-  opposing far edge equals the candidate proximal edge. Measuring room from
-  live spot at that wall yields raw_room≈0 / false containment. Those shared
-  walls are not tradable opposing structure ahead — drop them. Deep
-  penetration past the proximal wall stays and still hard-blocks.
+  opposing far edge equals the candidate proximal edge *or* the live/planned
+  price sitting on that wall. Measuring room from that price yields
+  raw_room≈0 — those shared walls are not structure ahead. Deep penetration
+  past the wall stays and still hard-blocks.
   """
   side = str(direction).upper()
   low = min(float(candidate_entry_low), float(candidate_entry_high))
@@ -131,18 +147,25 @@ def filter_shared_boundary_opposing_entries(
       "reason": "invalid_shared_boundary_geometry",
       "epsilon": epsilon,
     }
+  refs = [low] if side == "SELL" else [high]
+  if planned_entry is not None:
+    refs.append(float(planned_entry))
   for entry in entries:
     if str(getattr(entry, "side", "")).casefold() != opposing_side:
       kept.append(entry)
       continue
     entry_low = float(getattr(entry, "lo"))
     entry_high = float(getattr(entry, "hi"))
-    if side == "SELL":
-      # Proximal wall is candidate_low; glued demand has hi ≈ proximal and
-      # must not penetrate into the supply band by more than epsilon.
-      glued = abs(entry_high - low) <= epsilon and entry_high <= low + epsilon
-    else:
-      glued = abs(entry_low - high) <= epsilon and entry_low >= high - epsilon
+    glued = any(
+      _glued_to_ref(
+        side=side,
+        entry_low=entry_low,
+        entry_high=entry_high,
+        ref=ref,
+        epsilon=epsilon,
+      )
+      for ref in refs
+    )
     if glued:
       dropped.append((entry_low, entry_high))
     else:
@@ -306,12 +329,34 @@ def evaluate_structural_target_room(
       },
     )
 
+  room_entries, internal_shared = filter_shared_boundary_opposing_entries(
+    actionable_entries,
+    direction=side,
+    candidate_entry_low=low,
+    candidate_entry_high=high,
+    pip_size=pip,
+    atr=atr,
+    planned_entry=planned,
+  )
+  if internal_shared.get("applied"):
+    prior = dict(shared_boundary_state or {})
+    extra_dropped = list(internal_shared.get("dropped_bounds") or [])
+    shared_boundary_state = {
+      **prior,
+      **internal_shared,
+      "shared_boundary_excluded": (
+        int(prior.get("shared_boundary_excluded") or 0)
+        + int(internal_shared.get("shared_boundary_excluded") or 0)
+      ),
+      "dropped_bounds": list(prior.get("dropped_bounds") or []) + extra_dropped,
+    }
+
   barrier = _nearest_opposing(
     side,
     planned,
     low,
     high,
-    actionable_entries,
+    room_entries,
   )
   base_measured: dict[str, Any] = {
     "planned_entry_price": planned,

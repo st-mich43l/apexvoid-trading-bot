@@ -5329,6 +5329,14 @@ async def _publish_trade_plan_v8(
         "reason": "no_closed_bars",
       }
   pip_size = units.pip_size(symbol)
+  room_planned, room_reference_source = zone_proximal_room_reference(
+    direction=execution_match.direction,
+    spot_price=entry_reference,
+    candidate_entry_low=execution_match.entry_low,
+    candidate_entry_high=execution_match.entry_high,
+    pip_size=pip_size,
+    atr=execution_match.atr,
+  )
   shared_boundary_state: dict[str, object] = {"applied": False}
   if room_entries:
     before_shared = len(room_entries)
@@ -5339,19 +5347,12 @@ async def _publish_trade_plan_v8(
       candidate_entry_high=execution_match.entry_high,
       pip_size=pip_size,
       atr=execution_match.atr,
+      planned_entry=room_planned,
     )
     shared_boundary_state = {
       **shared_boundary_state,
       "entries_before_filter": before_shared,
     }
-  room_planned, room_reference_source = zone_proximal_room_reference(
-    direction=execution_match.direction,
-    spot_price=entry_reference,
-    candidate_entry_low=execution_match.entry_low,
-    candidate_entry_high=execution_match.entry_high,
-    pip_size=pip_size,
-    atr=execution_match.atr,
-  )
   target_room = evaluate_structural_target_room(
     direction=execution_match.direction,
     planned_entry_price=room_planned,
