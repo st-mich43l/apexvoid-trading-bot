@@ -43,6 +43,7 @@ def _geometry_settings(settings: "DetectorSettings") -> TechniqueGeometrySetting
     crt_min_atr=settings.crt_min_atr,
     crt_reclaim_bars=settings.crt_reclaim_bars,
     fvg_max_atr=settings.fvg_max_atr,
+    fvg_entry_max_width_price=settings.fvg_entry_max_width_price,
   )
 
 

@@ -9,7 +9,8 @@ setup with explicit technique tags.
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass, field
+import math
+from dataclasses import dataclass, field, replace
 from typing import Any, Iterable, Sequence
 
 import pandas as pd
@@ -54,6 +55,21 @@ TECHNIQUE_SETUP_NAMES = {
 CONFLUENCE_SETUP_NAME = "Confluence Zone"
 
 
+# Owner entry-band for FVG / iFVG / imbalance: keep the full gap for
+# structure/mitigation, but every strategy's *entry* zone is the proximal
+# slice capped at this price width (XAU: 5.0 == 50 pips at pip_size 0.1).
+FVG_IMBALANCE_ENTRY_MAX_WIDTH_PRICE = 5.0
+
+_FVG_IMBALANCE_TOKENS = frozenset({
+  "fvg",
+  "ifvg",
+  "imbalance",
+  "bullish_fvg",
+  "bearish_fvg",
+  "fvg_ifvg",
+})
+
+
 @dataclass(frozen=True)
 class TechniqueGeometrySettings:
   pip_size: float = 0.1
@@ -61,12 +77,84 @@ class TechniqueGeometrySettings:
   max_zone_atr: float = 3.0
   fvg_max_atr: float = 2.0
   fvg_min_pips: float = 1.0
+  fvg_entry_max_width_price: float = FVG_IMBALANCE_ENTRY_MAX_WIDTH_PRICE
   momentum_body_frac: float = 0.6
   crt_min_atr: float = 1.5
   crt_reclaim_bars: int = 6
   confluence_min_overlap: float = 0.5
   zone_merge_max_width: float = 6.0
   structural_reaction_lookback_bars: int = 3
+
+
+def _token_is_fvg_imbalance(token: str) -> bool:
+  text = str(token or "").strip().lower().replace("-", "_").replace("+", "_")
+  if not text:
+    return False
+  if text in _FVG_IMBALANCE_TOKENS:
+    return True
+  parts = {part for part in text.split("_") if part}
+  if parts & {"fvg", "ifvg", "imbalance"}:
+    return True
+  return text.endswith("_fvg")
+
+
+def is_fvg_imbalance_zone(
+  zone: Any,
+  *,
+  tags: Iterable[str] = (),
+  structural_kind: str | None = None,
+) -> bool:
+  """True when the zone / tags are FVG, iFVG, or imbalance provenance."""
+  tokens: list[str] = []
+  source = getattr(zone, "source", None)
+  if source:
+    tokens.append(str(source))
+  for item in getattr(zone, "sources", None) or ():
+    tokens.append(str(item))
+  for item in tags or ():
+    tokens.append(str(item))
+  if structural_kind:
+    tokens.append(str(structural_kind))
+  return any(_token_is_fvg_imbalance(token) for token in tokens)
+
+
+def optimize_imbalance_entry_zone(
+  zone: Zone,
+  *,
+  direction: str,
+  max_width_price: float = FVG_IMBALANCE_ENTRY_MAX_WIDTH_PRICE,
+  tags: Iterable[str] = (),
+  structural_kind: str | None = None,
+) -> tuple[Zone, bool]:
+  """Clip FVG/imbalance entry to a proximal ``max_width_price`` band.
+
+  Structural low/high for fill/mitigation stay with the caller; this only
+  shrinks the tradeable entry zone so every strategy (FVG, iFVG, Confluence,
+  zone reaction on an FVG member) shares the same 5-price proximal contract.
+  """
+  if not is_fvg_imbalance_zone(
+    zone, tags=tags, structural_kind=structural_kind,
+  ):
+    return zone, False
+  try:
+    low = float(zone.low)
+    high = float(zone.high)
+    max_width = float(max_width_price)
+  except (TypeError, ValueError):
+    return zone, False
+  if not math.isfinite(low) or not math.isfinite(high) or high <= low:
+    return zone, False
+  if not math.isfinite(max_width) or max_width <= 0:
+    return zone, False
+  width = high - low
+  if width <= max_width + 1e-12:
+    return zone, False
+  direction_u = str(direction or "").upper()
+  side = str(getattr(zone, "side", "") or "").lower()
+  sell_side = direction_u == "SELL" or side == "supply"
+  if sell_side:
+    return replace(zone, bottom=low, top=low + max_width), True
+  return replace(zone, bottom=high - max_width, top=high), True
 
 
 @dataclass(frozen=True)

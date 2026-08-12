@@ -302,6 +302,11 @@ runtime:
   scanner:
     enabled: true
 strategies:
+  technique:
+    fvg:
+      # Proximal entry width for FVG/iFVG/imbalance (price). Full gap stays
+      # structural; every strategy clips tradeable entry to this band.
+      entry_max_width_price: 5.0
   high_frequency_scalp:
     # Live: publish TradePlan V7 via worker.try_publish_executable_signal when
     # activation + risk pass. Requires runtime.auto_trade.enabled=true.
