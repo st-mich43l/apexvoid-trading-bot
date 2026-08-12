@@ -444,3 +444,121 @@ async def release_confluence_zone(
   current_id = current.decode() if isinstance(current, bytes) else current
   if current_id == owner_id:
     await client.delete(key)
+
+
+@dataclass(frozen=True)
+class ConfluenceBand:
+  """Merged price band where two or more distinct techniques overlap."""
+
+  low: float
+  high: float
+  side: str
+  technique_tags: tuple[str, ...]
+  zone_id: str
+  provenance: tuple[str, ...]
+  score: float = 0.0
+
+
+def _technique_overlap_ratio(
+  a_low: float,
+  a_high: float,
+  b_low: float,
+  b_high: float,
+) -> float:
+  overlap = min(a_high, b_high) - max(a_low, b_low)
+  if overlap <= 0:
+    return 0.0
+  smaller = min(a_high - a_low, b_high - b_low)
+  if smaller <= 0:
+    return 1.0 if a_low <= b_high and b_low <= a_high else 0.0
+  return overlap / smaller
+
+
+def build_confluence_bands(
+  instances: Sequence[Any],
+  *,
+  symbol: str,
+  atr: float,
+  pip_size: float,
+  source_tf: str = "M5",
+  min_overlap: float = 0.5,
+  max_width: float = 6.0,
+) -> list[ConfluenceBand]:
+  """Cluster technique instances into Confluence bands (>=2 distinct techniques).
+
+  ``instances`` must expose ``technique``, ``side``, ``low``, ``high``,
+  ``instance_id``, and optional ``measured['score']``.
+  """
+  from app.analysis.technique_geometry import TECHNIQUE_TAGS
+
+  clusters: list[list[Any]] = []
+  for side in ("buy", "sell"):
+    side_items = sorted(
+      (item for item in instances if str(getattr(item, "side", "")).lower() == side),
+      key=lambda item: (float(item.low), float(item.high)),
+    )
+    for item in side_items:
+      technique = str(getattr(item, "technique", ""))
+      if technique not in TECHNIQUE_TAGS:
+        continue
+      placed = False
+      for cluster in clusters:
+        if cluster[0].side != side:
+          continue
+        cluster_low = min(float(member.low) for member in cluster)
+        cluster_high = max(float(member.high) for member in cluster)
+        if _technique_overlap_ratio(
+          cluster_low, cluster_high, float(item.low), float(item.high),
+        ) < min_overlap:
+          continue
+        union_low = min(cluster_low, float(item.low))
+        union_high = max(cluster_high, float(item.high))
+        if union_high - union_low > max_width:
+          continue
+        cluster.append(item)
+        placed = True
+        break
+      if not placed:
+        clusters.append([item])
+
+  bands: list[ConfluenceBand] = []
+  for cluster in clusters:
+    techniques = {str(member.technique) for member in cluster}
+    if len(techniques) < 2:
+      continue
+    low = min(float(member.low) for member in cluster)
+    high = max(float(member.high) for member in cluster)
+    side = str(cluster[0].side).lower()
+    tags = tuple(sorted(techniques))
+    zone_id = confluence_zone_id(
+      symbol, side, low, high, tags,
+      atr=atr, pip_size=pip_size, source_tf=source_tf,
+    )
+    provenance = tuple(str(member.instance_id) for member in cluster)
+    score = max(
+      float((getattr(member, "measured", None) or {}).get("score", 0.0))
+      for member in cluster
+    )
+    bands.append(ConfluenceBand(
+      low=low,
+      high=high,
+      side=side,
+      technique_tags=tags,
+      zone_id=zone_id,
+      provenance=provenance,
+      score=score,
+    ))
+  return bands
+
+
+def confluence_band_covers_instance(
+  band: ConfluenceBand,
+  instance: Any,
+  *,
+  min_overlap: float = 0.5,
+) -> bool:
+  if str(getattr(instance, "side", "")).lower() != band.side:
+    return False
+  return _technique_overlap_ratio(
+    band.low, band.high, float(instance.low), float(instance.high),
+  ) >= min_overlap

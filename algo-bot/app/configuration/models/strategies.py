@@ -148,6 +148,39 @@ class StrategiesZoneConfig(FrozenConfigModel):
     flip: StrategiesZoneFlipConfig = Field(default_factory=StrategiesZoneFlipConfig)
     supply: StrategiesZoneSupplyConfig = Field(default_factory=StrategiesZoneSupplyConfig)
 
+class StrategiesTechniqueSdConfig(FrozenConfigModel):
+    enabled: bool = config_field(True, canonical_env='AUTO_TRADE_TECHNIQUE_SD_ENABLED', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.BOOLEAN, risk=RiskClassification.STRATEGY_BEHAVIOR, description='Enable Supply Demand technique publisher.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, True),), validation_summary='Pydantic required/type coercion only')
+
+class StrategiesTechniqueObConfig(FrozenConfigModel):
+    enabled: bool = config_field(True, canonical_env='AUTO_TRADE_TECHNIQUE_OB_ENABLED', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.BOOLEAN, risk=RiskClassification.STRATEGY_BEHAVIOR, description='Enable Order Block technique publisher.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, True),), validation_summary='Pydantic required/type coercion only')
+
+class StrategiesTechniqueFvgConfig(FrozenConfigModel):
+    enabled: bool = config_field(True, canonical_env='AUTO_TRADE_TECHNIQUE_FVG_ENABLED', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.BOOLEAN, risk=RiskClassification.STRATEGY_BEHAVIOR, description='Enable FVG technique publisher.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, True),), validation_summary='Pydantic required/type coercion only')
+    max_atr: float = config_field(2.0, canonical_env='AUTO_TRADE_TECHNIQUE_FVG_MAX_ATR', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.ATR, risk=RiskClassification.STRATEGY_BEHAVIOR, description='Maximum FVG width in ATR.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 2.0),), validation_summary='Pydantic required/type coercion only')
+
+class StrategiesTechniqueIfvgConfig(FrozenConfigModel):
+    enabled: bool = config_field(True, canonical_env='AUTO_TRADE_TECHNIQUE_IFVG_ENABLED', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.BOOLEAN, risk=RiskClassification.STRATEGY_BEHAVIOR, description='Enable iFVG technique publisher.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, True),), validation_summary='Pydantic required/type coercion only')
+
+class StrategiesTechniqueCrtConfig(FrozenConfigModel):
+    enabled: bool = config_field(True, canonical_env='AUTO_TRADE_TECHNIQUE_CRT_ENABLED', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.BOOLEAN, risk=RiskClassification.STRATEGY_BEHAVIOR, description='Enable CRT technique publisher.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, True),), validation_summary='Pydantic required/type coercion only')
+    min_atr: float = config_field(1.5, canonical_env='AUTO_TRADE_TECHNIQUE_CRT_MIN_ATR', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.ATR, risk=RiskClassification.STRATEGY_BEHAVIOR, description='Minimum H1 impulse range in ATR for CRT.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 1.5),), validation_summary='Pydantic required/type coercion only')
+    reclaim_bars: int = config_field(6, canonical_env='AUTO_TRADE_TECHNIQUE_CRT_RECLAIM_BARS', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.BARS, risk=RiskClassification.STRATEGY_BEHAVIOR, description='Execution TF bars allowed for CRT reclaim.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 6),), validation_summary='Pydantic required/type coercion only')
+
+class StrategiesTechniqueConfluenceConfig(FrozenConfigModel):
+    enabled: bool = config_field(True, canonical_env='AUTO_TRADE_CONFLUENCE_ZONE_ENABLED', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.BOOLEAN, risk=RiskClassification.STRATEGY_BEHAVIOR, description='Enable Confluence Zone publisher when 2+ techniques overlap.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, True),), validation_summary='Pydantic required/type coercion only')
+
+class StrategiesTechniqueZoneReactionFallbackConfig(FrozenConfigModel):
+    enabled: bool = config_field(False, canonical_env='AUTO_TRADE_ZONE_REACTION_FALLBACK_ENABLED', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.BOOLEAN, risk=RiskClassification.STRATEGY_BEHAVIOR, description='Legacy Zone Reaction fallback when technique publishers are active.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, False),), validation_summary='Pydantic required/type coercion only')
+
+class StrategiesTechniqueConfig(FrozenConfigModel):
+    sd: StrategiesTechniqueSdConfig = Field(default_factory=StrategiesTechniqueSdConfig)
+    ob: StrategiesTechniqueObConfig = Field(default_factory=StrategiesTechniqueObConfig)
+    fvg: StrategiesTechniqueFvgConfig = Field(default_factory=StrategiesTechniqueFvgConfig)
+    ifvg: StrategiesTechniqueIfvgConfig = Field(default_factory=StrategiesTechniqueIfvgConfig)
+    crt: StrategiesTechniqueCrtConfig = Field(default_factory=StrategiesTechniqueCrtConfig)
+    confluence: StrategiesTechniqueConfluenceConfig = Field(default_factory=StrategiesTechniqueConfluenceConfig)
+    zone_reaction_fallback: StrategiesTechniqueZoneReactionFallbackConfig = Field(default_factory=StrategiesTechniqueZoneReactionFallbackConfig)
+
 class StrategiesHighFrequencyScalpArchetypesConfig(FrozenConfigModel):
     breakout_retest_enabled: bool = config_field(True, canonical_env='HFS_BREAKOUT_RETEST_ENABLED', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.BOOLEAN, risk=RiskClassification.STRATEGY_BEHAVIOR, description='Enable micro breakout-retest HFS archetype.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, True),), validation_summary='Pydantic required/type coercion only')
     impulse_pullback_enabled: bool = config_field(True, canonical_env='HFS_IMPULSE_PULLBACK_ENABLED', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.BOOLEAN, risk=RiskClassification.STRATEGY_BEHAVIOR, description='Enable impulse pullback continuation HFS archetype.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, True),), validation_summary='Pydantic required/type coercion only')
@@ -225,4 +258,5 @@ class StrategiesConfig(FrozenConfigModel):
     scalp: StrategiesScalpConfig = Field(default_factory=StrategiesScalpConfig)
     selection: StrategiesSelectionConfig = Field(default_factory=StrategiesSelectionConfig)
     trend: StrategiesTrendConfig = Field(default_factory=StrategiesTrendConfig)
+    technique: StrategiesTechniqueConfig = Field(default_factory=StrategiesTechniqueConfig)
     zone: StrategiesZoneConfig = Field(default_factory=StrategiesZoneConfig)

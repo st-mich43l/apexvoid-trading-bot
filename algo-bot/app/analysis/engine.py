@@ -31,6 +31,11 @@ from app.analysis.session_liquidity import previous_week_levels, session_levels
 from app.analysis.structure import market_structure, structure_breaks
 from app.analysis.swings import find_swings
 from app.analysis.trendlines import Trendline, trendlines as find_trendlines
+from app.analysis.technique_geometry import (
+  TechniqueGeometrySettings,
+  TechniqueInstance,
+  collect_technique_instances,
+)
 from app.analysis.zones import (
   ZONE_MERGE_OVERLAP,
   ZONE_MIN_WIDTH,
@@ -221,6 +226,7 @@ class TimeframeAnalysis:
   zone_reconcile_shadow_output: int = 0
   zone_reconcile_trimmed: int = 0
   zone_reconcile_candidate_difference_count: int = 0
+  technique_instances: list[TechniqueInstance] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -250,6 +256,7 @@ def analyze(
   }
   htf_order = htf_order or ["H1", "M15"]
   per_tf = _apply_mtf_zone_scores(per_tf, settings)
+  per_tf = _attach_technique_instances(per_tf, settings)
   return AnalysisContext(
     frames={tf.upper(): df for tf, df in df_by_tf.items()},
     per_tf=per_tf,
@@ -257,6 +264,36 @@ def analyze(
     dealing_range=_exec_dealing_range(per_tf),
     regime=_exec_regime(per_tf),
   )
+
+
+def _attach_technique_instances(
+  per_tf: dict[str, TimeframeAnalysis],
+  settings: AnalysisSettings,
+) -> dict[str, TimeframeAnalysis]:
+  """Classify unmerged technique instances before map-only zone merge."""
+  h1 = per_tf.get("H1")
+  h1_df = h1.df if h1 is not None else None
+  h1_atr = atr_scalar(h1.atr) if h1 is not None else 0.0
+  geom = TechniqueGeometrySettings(
+    momentum_body_frac=settings.momentum_body_frac,
+    confluence_min_overlap=settings.zone_merge_overlap,
+    zone_merge_max_width=max(0.0, settings.max_merged_zone_atr) * max(h1_atr, 1.0),
+  )
+  updated: dict[str, TimeframeAnalysis] = {}
+  for tf, analysis in per_tf.items():
+    exec_atr = atr_scalar(analysis.atr)
+    instances = collect_technique_instances(
+      sd_zones=analysis.supply_demand_zones,
+      ob_zones=analysis.order_blocks,
+      fvg_zones=analysis.fvg_zones,
+      df=analysis.df,
+      h1_df=h1_df if tf.upper() != "H1" else None,
+      h1_atr=h1_atr,
+      exec_atr=exec_atr,
+      settings=geom,
+    )
+    updated[tf] = replace(analysis, technique_instances=instances)
+  return updated
 
 
 def _analyze_tf(

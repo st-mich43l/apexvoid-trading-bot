@@ -2921,6 +2921,12 @@ async def _handle_event(
       "Flip Zone": "flip_zone_reaction_detected",
       "Demand Zone Reaction": "demand_zone_reaction_detected",
       "Supply Zone Reaction": "supply_zone_reaction_detected",
+      "Supply Demand Reaction": "technique_sd_detected",
+      "Order Block Reaction": "technique_ob_detected",
+      "FVG Reaction": "technique_fvg_detected",
+      "iFVG Reaction": "technique_ifvg_detected",
+      "CRT Reaction": "technique_crt_detected",
+      "Confluence Zone": "confluence_zone_detected",
       "Session Level Reaction": "session_level_reaction_detected",
       "Trendline Reaction": "trendline_reaction_detected",
     }.get(result.setup)

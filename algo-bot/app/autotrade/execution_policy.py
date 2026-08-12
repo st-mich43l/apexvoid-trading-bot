@@ -349,6 +349,12 @@ _STRATEGY_FAMILY = {
   "Key Level Reaction": FAMILY_KEY_LEVEL,
   "Zone Reaction": FAMILY_SUPPLY_DEMAND,
   "Flip Zone": FAMILY_SUPPLY_DEMAND,
+  "Supply Demand Reaction": FAMILY_SUPPLY_DEMAND,
+  "Order Block Reaction": FAMILY_SUPPLY_DEMAND,
+  "FVG Reaction": FAMILY_SUPPLY_DEMAND,
+  "iFVG Reaction": FAMILY_SUPPLY_DEMAND,
+  "CRT Reaction": FAMILY_SUPPLY_DEMAND,
+  "Confluence Zone": FAMILY_SUPPLY_DEMAND,
   # Legacy display names (kept for open plans / historical events):
   "Demand Zone Reaction": FAMILY_SUPPLY_DEMAND,
   "Supply Zone Reaction": FAMILY_SUPPLY_DEMAND,

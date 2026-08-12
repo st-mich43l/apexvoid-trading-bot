@@ -124,6 +124,7 @@ class ZoneWatch:
   source_timeframe: str
   structural_sources: tuple[str, ...]
   confluence_tags: tuple[str, ...]
+  technique_tags: tuple[str, ...] = ()
   grade: str
   score: float
   freshness: int
@@ -157,6 +158,7 @@ class ZoneWatch:
       "source_timeframe": self.source_timeframe,
       "structural_sources": list(self.structural_sources),
       "confluence_tags": list(self.confluence_tags),
+      "technique_tags": list(self.technique_tags),
       "grade": self.grade,
       "score": self.score,
       "freshness": self.freshness,
@@ -197,6 +199,7 @@ class ZoneWatch:
       source_timeframe=str(data.get("source_timeframe") or "").upper(),
       structural_sources=tuple(str(item) for item in data.get("structural_sources") or ()),
       confluence_tags=tuple(str(item) for item in data.get("confluence_tags") or ()),
+      technique_tags=tuple(str(item) for item in data.get("technique_tags") or ()),
       grade=str(data.get("grade") or GRADE_C).upper(),
       score=float(data.get("score") or 0.0),
       freshness=int(data.get("freshness") or 0),
@@ -382,6 +385,7 @@ async def discover_zone_watch(
   score: float = 0.0,
   market_map_id: str = "",
   structure_signature: str = "",
+  technique_tags: Sequence[str] = (),
   now: int | None = None,
 ) -> tuple[ZoneWatch, bool]:
   """Create or refresh a stable retained zone without resetting its episode."""
@@ -406,6 +410,7 @@ async def discover_zone_watch(
         source_timeframe=source_timeframe.upper(),
         structural_sources=tuple(sorted(set(structural_sources))),
         confluence_tags=tuple(sorted(set(confluence_tags))),
+        technique_tags=tuple(sorted(set(technique_tags))),
         grade=grade.upper(),
         score=float(score),
         freshness=0,
@@ -434,6 +439,7 @@ async def discover_zone_watch(
       source_timeframe=source_timeframe.upper() or existing.source_timeframe,
       structural_sources=tuple(sorted(set(structural_sources))),
       confluence_tags=tuple(sorted(set(confluence_tags))),
+      technique_tags=tuple(sorted(set(technique_tags))) or existing.technique_tags,
       score=float(score),
       last_confirmed_at=ts,
       market_map_id=market_map_id or existing.market_map_id,
