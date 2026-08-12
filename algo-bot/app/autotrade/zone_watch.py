@@ -124,7 +124,6 @@ class ZoneWatch:
   source_timeframe: str
   structural_sources: tuple[str, ...]
   confluence_tags: tuple[str, ...]
-  technique_tags: tuple[str, ...] = ()
   grade: str
   score: float
   freshness: int
@@ -137,6 +136,9 @@ class ZoneWatch:
   market_map_id: str
   structure_signature: str
   updated_at: int
+  # Defaults must follow every required field (prod 2026-08-12 crash loop:
+  # technique_tags before grade raised TypeError at import).
+  technique_tags: tuple[str, ...] = ()
   revision: int = 0
   inside: bool = False
   episode_id: str | None = None
