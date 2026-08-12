@@ -9,6 +9,11 @@ The project deploys from `master` without tagged releases. Add new entries to
 `Unreleased` in the same pull request as the code change, then move them into a
 dated section after deployment.
 
+
+## Unreleased
+
+- TradePlan V8 cutover: `version`/`plan_id` prefix `v8:`, `AUTO_TRADE_CONTRACT_MODE=v8_only`, dual-read drain for in-flight V7.
+  See `docs/adr-trade-plan-v8-cutover.md`.
 ## Unreleased
 
 ### Fixed

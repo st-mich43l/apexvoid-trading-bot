@@ -24,7 +24,7 @@ log = logging.getLogger(__name__)
 # real booked close at/after TP2 — not merely NextTargetIndex after a deferral.
 SAME_DIRECTION_UNLOCK_BOOKED_TARGET_INDEX = 1
 
-_OPEN_V7_STAGES = frozenset({
+_OPEN_TRADE_PLAN_STAGES = frozenset({
   "PartiallyOpen",
   "FullyOpen",
   "Open",  # legacy synonym
@@ -33,7 +33,7 @@ _OPEN_V7_STAGES = frozenset({
   "managing",
   "partially_closed",
 })
-_OPEN_V7_GROUP_STAGES = frozenset({
+_OPEN_TRADE_PLAN_GROUP_STAGES = frozenset({
   "partially_open",
   "fully_open",
   "managing",
@@ -163,7 +163,7 @@ async def load_active_exposures(client: Any) -> list[ActiveExposure]:
   """Load open V6 position states and V7 plan runtimes."""
   exposures: list[ActiveExposure] = []
   exposures.extend(await _load_v6_position_exposures(client))
-  exposures.extend(await _load_v7_plan_exposures(client))
+  exposures.extend(await _load_trade_plan_exposures(client))
   return exposures
 
 
@@ -211,7 +211,7 @@ async def _load_v6_position_exposures(client: Any) -> list[ActiveExposure]:
   return out
 
 
-async def _load_v7_plan_exposures(client: Any) -> list[ActiveExposure]:
+async def _load_trade_plan_exposures(client: Any) -> list[ActiveExposure]:
   raw = await client.get("execution:trade_plan_runtime_ids")
   if not raw:
     return []
@@ -234,7 +234,7 @@ async def _load_v7_plan_exposures(client: Any) -> list[ActiveExposure]:
     # (Stage/GroupStage/Direction) with string enums — accept both shapes.
     stage = str(_payload_get(payload, "stage", "Stage") or "")
     group_stage = str(_payload_get(payload, "group_stage", "GroupStage") or "")
-    if stage not in _OPEN_V7_STAGES and group_stage not in _OPEN_V7_GROUP_STAGES:
+    if stage not in _OPEN_TRADE_PLAN_STAGES and group_stage not in _OPEN_TRADE_PLAN_GROUP_STAGES:
       continue
     remaining = _payload_remaining(payload)
     if remaining is not None and remaining <= 0:
@@ -274,7 +274,7 @@ async def _load_v7_plan_exposures(client: Any) -> list[ActiveExposure]:
     out.append(ActiveExposure(
       direction=direction,
       entry_price=float(entry),
-      source="v7_plan",
+      source="v8_plan",
       plan_id=str(
         _payload_get(payload, "plan_id", "PlanId") or plan_id
       ),

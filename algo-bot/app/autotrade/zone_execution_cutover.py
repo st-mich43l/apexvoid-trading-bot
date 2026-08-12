@@ -875,7 +875,7 @@ async def _safe_direct_publish(
       symbol,
       match.match_id,
     )
-    existing = await worker.resolve_existing_v7_state(client, match)
+    existing = await worker.resolve_existing_v8_state(client, match)
     if existing.already_published:
       _PUBLISHED_SETUP_IDS.add(match.match_id)
       await _ensure_published_root_card(client, match)
@@ -896,7 +896,7 @@ async def _safe_direct_publish(
       measured={"exception_type": type(exc).__name__},
     )
 
-  existing = await worker.resolve_existing_v7_state(client, match)
+  existing = await worker.resolve_existing_v8_state(client, match)
   if existing.already_published:
     _PUBLISHED_SETUP_IDS.add(match.match_id)
     await _ensure_published_root_card(client, match)

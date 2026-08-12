@@ -17,7 +17,7 @@ structural_timeframe/htf_bias/regime_kind fields) - never derived from
 direction.
 
 Wired into worker.py's live publish path behind AUTO_TRADE_CONTRACT_MODE
-(app/autotrade/worker.py::_publish_trade_plan_v7).
+(app/autotrade/worker.py::_publish_trade_plan_v8).
 """
 
 from __future__ import annotations
@@ -291,7 +291,7 @@ def build_trade_plan_from_strategy_match(
   WAITING_RETEST/IN_ZONE_WAITING_M1 for several minutes before its retest
   and M1 confirmation finally completed could still be under
   match.expires_at at publish time (the earlier expiry pre-check in
-  _publish_trade_plan_v7 passes), but with almost none of its original TTL
+  _publish_trade_plan_v8 passes), but with almost none of its original TTL
   actually left - the plan reached the C# executor seconds before that
   stale deadline and expired without ever getting a chance to submit,
   despite the executable quote already being inside the zone at

@@ -286,7 +286,7 @@ class AutoTradeSpot:
     return self.price
 
 
-_ACTIVE_V7_PLAN_STATES = frozenset({
+_ACTIVE_V8_PLAN_STATES = frozenset({
   "published",
   "received",
   "armed",
@@ -295,7 +295,7 @@ _ACTIVE_V7_PLAN_STATES = frozenset({
   "managing",
   "completed",
 })
-_TERMINAL_V7_PLAN_STATES = frozenset({
+_TERMINAL_V8_PLAN_STATES = frozenset({
   "rejected",
   "cancelled",
   "expired",
@@ -308,7 +308,7 @@ _POST_PUBLICATION_SETUP_STATES = frozenset({
 
 
 @dataclass(frozen=True)
-class ExistingV7State:
+class ExistingV8State:
   plan_id: str
   setup_state: str | None
   plan_state: str | None
@@ -318,14 +318,14 @@ class ExistingV7State:
   owner_matches: bool
 
 
-async def resolve_existing_v7_state(
+async def resolve_existing_v8_state(
   client: Any,
   match: StrategyMatch,
   *,
   cycle_id: str | None = None,
-) -> ExistingV7State:
+) -> ExistingV8State:
   """Resolve one setup's durable V7 truth before any dynamic preflight."""
-  plan_id = _v7_plan_id(match)
+  plan_id = _v8_plan_id(match)
   setup = await load_setup(client, match.match_id)
   plan_state = await read_plan_state(client, plan_id)
   plan_exists = bool(await client.exists(plan_key(plan_id)))
@@ -355,13 +355,13 @@ async def resolve_existing_v7_state(
   setup_state = None if setup is None else setup.state
   already_published = bool(
     setup_state in _POST_PUBLICATION_SETUP_STATES
-    or plan_state in _ACTIVE_V7_PLAN_STATES
+    or plan_state in _ACTIVE_V8_PLAN_STATES
     or (
       setup_state == PLAN_BUILT
       and (plan_exists or plan_state is not None)
     )
   )
-  return ExistingV7State(
+  return ExistingV8State(
     plan_id=plan_id,
     setup_state=setup_state,
     plan_state=plan_state,
@@ -369,7 +369,7 @@ async def resolve_existing_v7_state(
     already_published=already_published,
     already_terminal=bool(
       setup_state in TERMINAL_STATES
-      or plan_state in _TERMINAL_V7_PLAN_STATES
+      or plan_state in _TERMINAL_V8_PLAN_STATES
       or plan_state == "completed"
     ),
     owner_matches=owner_matches,
@@ -4199,14 +4199,14 @@ async def _publish_strategy_match(
   return candidate_id
 
 
-_V7_MAX_VOLUME_DEFAULT = 100_000
+_V8_MAX_VOLUME_DEFAULT = 100_000
 
 
-def _v7_plan_id(match: StrategyMatch) -> str:
-  return f"v7:{match.match_id}"
+def _v8_plan_id(match: StrategyMatch) -> str:
+  return f"v8:{match.match_id}"
 
 
-async def _record_v7_build_rejected(
+async def _record_v8_build_rejected(
   client: Any,
   symbol: str,
   match: StrategyMatch,
@@ -4215,7 +4215,7 @@ async def _record_v7_build_rejected(
   measured: dict[str, Any],
 ) -> None:
   """Hard V7 reject: metric + terminalize setup so it does not keep watching."""
-  await _record_gate_reject(client, symbol, f"v7_{reason_code}")
+  await _record_gate_reject(client, symbol, f"v8_{reason_code}")
   terminal_state = (
     EXPIRED
     if reason_code == "policy_reward_risk_insufficient"
@@ -4224,7 +4224,7 @@ async def _record_v7_build_rejected(
   lifecycle_reason = (
     "confirmation_expired"
     if terminal_state == EXPIRED
-    else f"v7_{reason_code}"
+    else f"v8_{reason_code}"
   )
   setup_id = match.match_id
   try:
@@ -4236,7 +4236,7 @@ async def _record_v7_build_rejected(
     )
   except SetupLifecycleError:
     log.exception(
-      "v7 setup could not terminalize after build rejection "
+      "v8 setup could not terminalize after build rejection "
       "symbol=%s setup_id=%s reason=%s",
       symbol,
       setup_id,
@@ -4287,7 +4287,7 @@ async def _record_v7_build_rejected(
   if zone_low is not None and zone_high is not None:
     stop_zone = f"{zone_low}-{zone_high}"
   log.info(
-    "v7 plan build rejected symbol=%s match_id=%s reason=%s message=%s "
+    "v8 plan build rejected symbol=%s match_id=%s reason=%s message=%s "
     "stop_detail=%s base_stop=%s pushed_stop=%s stop_zone=%s "
     "max_pips=%s over_envelope_pips=%s terminal=%s",
     symbol,
@@ -4348,7 +4348,7 @@ async def _emit_setup_card_status(
   )
 
 
-async def _persist_v7_confirmation_phase(
+async def _persist_v8_confirmation_phase(
   client: Any,
   symbol: str,
   match: StrategyMatch,
@@ -4425,7 +4425,7 @@ async def _persist_v7_confirmation_phase(
     # PREFLIGHT lifecycle card status removed from the architecture.
     pass
   log.info(
-    "v7 execution confirmation symbol=%s setup_id=%s match_id=%s "
+    "v8 execution confirmation symbol=%s setup_id=%s match_id=%s "
     "direction=%s phase=%s executable_quote=%s quote_side=%s "
     "zone_low=%.5f zone_high=%.5f episode_id=%s "
     "confirmation_source=%s trigger_bar_ts=%s last_evaluated_m1_ts=%s "
@@ -4489,7 +4489,7 @@ def _resolve_match_confluence_claim_id(
   )
 
 
-async def _publish_trade_plan_v7(
+async def _publish_trade_plan_v8(
   client: Any,
   symbol: str,
   spot: AutoTradeSpot | None,
@@ -4523,10 +4523,10 @@ async def _publish_trade_plan_v7(
 
   Returns the published plan_id, or None if not published (still outside the
   entry contract, thesis/zone already claimed by another setup, or a
-  guard/policy rejection - always recorded via _record_v7_build_rejected,
+  guard/policy rejection - always recorded via _record_v8_build_rejected,
   never a bare silent return, except the ordinary retained retest wait).
   """
-  existing = await resolve_existing_v7_state(client, match)
+  existing = await resolve_existing_v8_state(client, match)
   if existing.already_terminal:
     return existing.plan_id if existing.plan_exists else None
   if existing.already_published:
@@ -4535,7 +4535,7 @@ async def _publish_trade_plan_v7(
         client,
         match.match_id,
         PLAN_PUBLISHED,
-        reason_code="v7_publish_reconciled",
+        reason_code="v8_publish_reconciled",
       )
     # No standalone PLAN PUBLISHED card status — root card owns updates.
     return existing.plan_id
@@ -4544,7 +4544,7 @@ async def _publish_trade_plan_v7(
       client,
       match.match_id,
       CANCELLED,
-      reason_code="v7_plan_build_incomplete",
+      reason_code="v8_plan_build_incomplete",
     )
     # No other caller reaches this branch, so nothing else will ever clear
     # the forming card for it - publish_status=True routes this through
@@ -4557,7 +4557,7 @@ async def _publish_trade_plan_v7(
       match_id=match.match_id,
       correlation_id=match.match_id,
       timeframe=match.source_tf,
-      reason_code="v7_plan_build_incomplete",
+      reason_code="v8_plan_build_incomplete",
       message="TradePlan V7 build left incomplete across a restart/crash",
       publish_status=True,
     )
@@ -4575,7 +4575,7 @@ async def _publish_trade_plan_v7(
     )
     return None
   if not match.thesis_id:
-    await _record_v7_build_rejected(
+    await _record_v8_build_rejected(
       client, symbol, match, "missing_stable_thesis_id",
       "match has no thesis_id - setup_lifecycle wiring did not attach one",
       {},
@@ -4601,14 +4601,14 @@ async def _publish_trade_plan_v7(
   )
   if not kz.allowed:
     log.info(
-      "v7 publish blocked outside killzone symbol=%s match_id=%s "
+      "v8 publish blocked outside killzone symbol=%s match_id=%s "
       "utc_hour=%s killzone=%s",
       symbol,
       match.match_id,
       kz.utc_hour,
       kz.killzone_name,
     )
-    await _record_v7_build_rejected(
+    await _record_v8_build_rejected(
       client,
       symbol,
       match,
@@ -4642,7 +4642,7 @@ async def _publish_trade_plan_v7(
       or str(match.reaction_type or "")
     )
     if not confirmation_is_sweep_body(trigger_name):
-      await _record_v7_build_rejected(
+      await _record_v8_build_rejected(
         client,
         symbol,
         match,
@@ -4659,7 +4659,7 @@ async def _publish_trade_plan_v7(
   setup_id = match.match_id
   setup_record = await load_setup(client, setup_id)
   if setup_record is None or not is_publishable_setup_state(setup_record.state):
-    await _record_v7_build_rejected(
+    await _record_v8_build_rejected(
       client, symbol, match, "setup_not_confirmed",
       f"setup {setup_id!r} is not in a publishable state "
       f"({setup_record.state if setup_record else 'missing'})",
@@ -4702,11 +4702,11 @@ async def _publish_trade_plan_v7(
       )
     except SetupLifecycleError:
       log.exception(
-        "v7 setup could not expire symbol=%s setup_id=%s",
+        "v8 setup could not expire symbol=%s setup_id=%s",
         symbol, setup_id,
       )
     if policy.m5_authoritative_contract:
-      await _persist_v7_confirmation_phase(
+      await _persist_v8_confirmation_phase(
         client,
         symbol,
         match,
@@ -4754,12 +4754,12 @@ async def _publish_trade_plan_v7(
       )
     except SetupLifecycleError:
       log.exception(
-        "v7 setup could not invalidate symbol=%s setup_id=%s",
+        "v8 setup could not invalidate symbol=%s setup_id=%s",
         symbol,
         setup_id,
       )
     if policy.m5_authoritative_contract:
-      await _persist_v7_confirmation_phase(
+      await _persist_v8_confirmation_phase(
         client,
         symbol,
         match,
@@ -4787,7 +4787,7 @@ async def _publish_trade_plan_v7(
     return None
 
   if policy.m5_authoritative_contract and not policy.metadata_valid:
-    await _record_v7_build_rejected(
+    await _record_v8_build_rejected(
       client,
       symbol,
       match,
@@ -4809,12 +4809,12 @@ async def _publish_trade_plan_v7(
       )
     except SetupLifecycleError:
       log.exception(
-        "v7 setup could not invalidate missing confirmation metadata "
+        "v8 setup could not invalidate missing confirmation metadata "
         "symbol=%s setup_id=%s",
         symbol,
         setup_id,
       )
-    await _persist_v7_confirmation_phase(
+    await _persist_v8_confirmation_phase(
       client,
       symbol,
       match,
@@ -4863,7 +4863,7 @@ async def _publish_trade_plan_v7(
         now=now_ts,
         zone_exited_at=quote_ts,
       )
-      await _persist_v7_confirmation_phase(
+      await _persist_v8_confirmation_phase(
         client,
         symbol,
         match,
@@ -4894,7 +4894,7 @@ async def _publish_trade_plan_v7(
       zone_entered_at=confirmation_boundary,
       last_inside_at=quote_ts,
     )
-    await _persist_v7_confirmation_phase(
+    await _persist_v8_confirmation_phase(
       client,
       symbol,
       match,
@@ -4948,7 +4948,7 @@ async def _publish_trade_plan_v7(
           trigger_source=execution_state.trigger_source,
           trigger_consumed=True,
         )
-        await _persist_v7_confirmation_phase(
+        await _persist_v8_confirmation_phase(
           client,
           symbol,
           match,
@@ -4983,7 +4983,7 @@ async def _publish_trade_plan_v7(
             trigger_source=execution_state.trigger_source,
             trigger_consumed=execution_state.trigger_consumed,
           )
-        await _persist_v7_confirmation_phase(
+        await _persist_v8_confirmation_phase(
           client,
           symbol,
           match,
@@ -5008,7 +5008,7 @@ async def _publish_trade_plan_v7(
         zone_entered_at=quote_ts,
         last_inside_at=quote_ts,
       )
-      await _persist_v7_confirmation_phase(
+      await _persist_v8_confirmation_phase(
         client,
         symbol,
         match,
@@ -5078,7 +5078,7 @@ async def _publish_trade_plan_v7(
           trigger_source=confirmation_source,
           trigger_consumed=True,
         )
-        await _persist_v7_confirmation_phase(
+        await _persist_v8_confirmation_phase(
           client,
           symbol,
           match,
@@ -5116,7 +5116,7 @@ async def _publish_trade_plan_v7(
           trigger_source=confirmation_source,
           trigger_consumed=True,
         )
-        await _persist_v7_confirmation_phase(
+        await _persist_v8_confirmation_phase(
           client,
           symbol,
           match,
@@ -5151,7 +5151,7 @@ async def _publish_trade_plan_v7(
           trigger_source=confirmation_source,
           trigger_consumed=True,
         )
-        await _persist_v7_confirmation_phase(
+        await _persist_v8_confirmation_phase(
           client,
           symbol,
           match,
@@ -5175,7 +5175,7 @@ async def _publish_trade_plan_v7(
         trigger_source=confirmation_source,
         trigger_consumed=True,
       )
-      await _persist_v7_confirmation_phase(
+      await _persist_v8_confirmation_phase(
         client,
         symbol,
         match,
@@ -5263,7 +5263,7 @@ async def _publish_trade_plan_v7(
       trigger_source=confirmation.source,
       trigger_consumed=True,
     )
-    await _persist_v7_confirmation_phase(
+    await _persist_v8_confirmation_phase(
       client,
       symbol,
       match,
@@ -5376,7 +5376,7 @@ async def _publish_trade_plan_v7(
   if not target_room.allowed:
     # Counter-bias vs HTF intentionally presses into opposing structure.
     # Keep the setup when native usable room still clears the floor —
-    # prod was dying on v7_opposing_entry_overlap while Bias:counter_bias
+    # prod was dying on v8_opposing_entry_overlap while Bias:counter_bias
     # cards never published (live 2026-08-06). Zero/negative room still fails.
     bias = str(
       getattr(execution_match, "bias_relationship", None)
@@ -5410,7 +5410,7 @@ async def _publish_trade_plan_v7(
       and room_pips + 1e-9 >= min_room
     ):
       log.info(
-        "v7 counter_bias keeping setup past %s room_pips=%.1f match=%s",
+        "v8 counter_bias keeping setup past %s room_pips=%.1f match=%s",
         target_room.reason_code,
         room_pips,
         match.match_id[:12],
@@ -5419,7 +5419,7 @@ async def _publish_trade_plan_v7(
       # Hard reject structural conflicts (e.g. SELL entry inside demand /
       # opposing_entry_contained). Preference-only demotion previously let
       # those plans publish and hedge the correct side.
-      await _record_v7_build_rejected(
+      await _record_v8_build_rejected(
         client,
         symbol,
         match,
@@ -5444,7 +5444,7 @@ async def _publish_trade_plan_v7(
     # Fitted targets must only ever equal the full configured ladder now.
     # Refuse silent shrink-to-one-tiny-TP (live 2026-08-06 +9 pip full exit).
     log.warning(
-      "v7 ignoring non-matching fitted_targets_pips match=%s fitted=%s configured=%s",
+      "v8 ignoring non-matching fitted_targets_pips match=%s fitted=%s configured=%s",
       execution_match.match_id,
       target_room.fitted_targets_pips,
       execution_match.targets_pips,
@@ -5460,7 +5460,7 @@ async def _publish_trade_plan_v7(
       client, zone_id=zone_claim_id, owner_id=setup_id,
     )
     if not zone_claimed:
-      await _record_v7_build_rejected(
+      await _record_v8_build_rejected(
         client, symbol, match, "zone_already_claimed",
         f"merged confluence zone {zone_claim_id!r} is already owned by a "
         "different setup - one merged zone may own at most one order",
@@ -5476,7 +5476,7 @@ async def _publish_trade_plan_v7(
       await release_confluence_zone(
         client, zone_id=zone_claim_id, owner_id=setup_id,
       )
-    await _record_v7_build_rejected(
+    await _record_v8_build_rejected(
       client, symbol, match, "thesis_already_owned",
       f"thesis {match.thesis_id!r} is already owned by a different setup - "
       "one active thesis may own at most one autonomous initial plan",
@@ -5524,7 +5524,7 @@ async def _publish_trade_plan_v7(
     and not match_bypasses_opposing_structure(match_for_plan)
   ):
     await _release_claims()
-    await _record_v7_build_rejected(
+    await _record_v8_build_rejected(
       client, symbol, match, barrier_outcome.reason_code,
       barrier_outcome.message, barrier_outcome.measured,
     )
@@ -5551,7 +5551,7 @@ async def _publish_trade_plan_v7(
       )
       if htf_severity.hard_block:
         await _release_claims()
-        await _record_v7_build_rejected(
+        await _record_v8_build_rejected(
           client, symbol, match, "htf_veto", htf_reason, dict(htf_severity.measured),
         )
         return None
@@ -5569,7 +5569,7 @@ async def _publish_trade_plan_v7(
   )
   if overlap_outcome.hard_block:
     await _release_claims()
-    await _record_v7_build_rejected(
+    await _record_v8_build_rejected(
       client,
       symbol,
       match,
@@ -5580,7 +5580,7 @@ async def _publish_trade_plan_v7(
     return None
   if overlap_outcome.reason_code not in {"no_map", "no_overlap"}:
     log.info(
-      "v7 overlap preference observed symbol=%s reason=%s",
+      "v8 overlap preference observed symbol=%s reason=%s",
       symbol, overlap_outcome.reason_code,
     )
 
@@ -5608,7 +5608,7 @@ async def _publish_trade_plan_v7(
     return None
   if news_event is not None:
     log.info(
-      "v7 news preference observed symbol=%s title=%s",
+      "v8 news preference observed symbol=%s title=%s",
       symbol, news_event.get("title", "unknown"),
     )
 
@@ -5618,7 +5618,7 @@ async def _publish_trade_plan_v7(
   )
   if cooldown_reason is not None:
     log.info(
-      "v7 zone_cooldown preference observed symbol=%s reason=%s",
+      "v8 zone_cooldown preference observed symbol=%s reason=%s",
       symbol, cooldown_reason,
     )
     # Zone cooldown is preference telemetry — continue to publish.
@@ -5654,7 +5654,7 @@ async def _publish_trade_plan_v7(
   )
   if exposure.block:
     await _release_claims()
-    await _record_v7_build_rejected(
+    await _record_v8_build_rejected(
       client,
       symbol,
       match,
@@ -5665,7 +5665,7 @@ async def _publish_trade_plan_v7(
     return None
   if exposure.reason_code == "opposing_active_too_close_ignored_scalp":
     log.info(
-      "v7 scalp ignores opposing-active separation symbol=%s match_id=%s %s",
+      "v8 scalp ignores opposing-active separation symbol=%s match_id=%s %s",
       symbol,
       match.match_id[:12],
       exposure.message,
@@ -5673,7 +5673,7 @@ async def _publish_trade_plan_v7(
   same_direction_stack = bool(exposure.same_direction_stack)
   if same_direction_stack:
     log.info(
-      "v7 same-direction stack symbol=%s match_id=%s %s",
+      "v8 same-direction stack symbol=%s match_id=%s %s",
       symbol,
       match.match_id[:12],
       exposure.message,
@@ -5715,7 +5715,7 @@ async def _publish_trade_plan_v7(
     and not runtime_config.execution.zone_scaling.fill_enabled
   ):
     await _release_claims()
-    await _record_v7_build_rejected(
+    await _record_v8_build_rejected(
       client,
       symbol,
       match,
@@ -5774,7 +5774,7 @@ async def _publish_trade_plan_v7(
     )
     plan = build_trade_plan_from_strategy_match(
       match_for_plan,
-      plan_id=_v7_plan_id(match_for_plan),
+      plan_id=_v8_plan_id(match_for_plan),
       setup_id=setup_id,
       thesis_id=match.thesis_id,
       pip_size=Decimal(str(units.pip_size(symbol))),
@@ -5793,7 +5793,7 @@ async def _publish_trade_plan_v7(
       execution_confirmation_bar_ts=confirmation.bar_ts,
       zone_episode_id=confirmation.zone_episode_id,
       trigger_wick_extreme=confirmation.wick_extreme,
-      max_volume=int(_V7_MAX_VOLUME_DEFAULT),
+      max_volume=int(_V8_MAX_VOLUME_DEFAULT),
       now_ts=now_ts,
       same_direction_stack=same_direction_stack,
       same_direction_size_fraction=float(
@@ -5811,7 +5811,7 @@ async def _publish_trade_plan_v7(
       ),
       **exc.measured,
     }
-    await _record_v7_build_rejected(
+    await _record_v8_build_rejected(
       client,
       symbol,
       match,
@@ -5819,7 +5819,7 @@ async def _publish_trade_plan_v7(
       exc.message,
       rejection_measured,
     )
-    # Terminalize already ran inside _record_v7_build_rejected. Persist
+    # Terminalize already ran inside _record_v8_build_rejected. Persist
     # confirmation phase for reaction-family setups when confirmation exists.
     terminal_state = (
       EXPIRED
@@ -5833,10 +5833,10 @@ async def _publish_trade_plan_v7(
         else "confirmation_expired"
       )
       if terminal_state == EXPIRED
-      else f"v7_{exc.reason_code}"
+      else f"v8_{exc.reason_code}"
     )
     if policy.m5_authoritative_contract:
-      await _persist_v7_confirmation_phase(
+      await _persist_v8_confirmation_phase(
         client,
         symbol,
         match,
@@ -5866,7 +5866,7 @@ async def _publish_trade_plan_v7(
     if setup_live is None or setup_live.state in TERMINAL_STATES:
       await _release_claims()
       log.info(
-        "v7 publish aborted: setup is terminal symbol=%s setup_id=%s "
+        "v8 publish aborted: setup is terminal symbol=%s setup_id=%s "
         "state=%s plan_id=%s",
         symbol,
         setup_id,
@@ -5876,7 +5876,7 @@ async def _publish_trade_plan_v7(
       return None
     if setup_live.state in {PLAN_PUBLISHED, ARMED}:
       log.info(
-        "v7 publish skipped: setup already published symbol=%s "
+        "v8 publish skipped: setup already published symbol=%s "
         "setup_id=%s state=%s plan_id=%s",
         symbol, setup_id, setup_live.state, plan.plan_id,
       )
@@ -5886,7 +5886,7 @@ async def _publish_trade_plan_v7(
         client,
         setup_id,
         PLAN_BUILT,
-        reason_code="v7_builder",
+        reason_code="v8_builder",
       )
     await publish_trade_plan(client, plan)
     await transition_setup(
@@ -5894,7 +5894,7 @@ async def _publish_trade_plan_v7(
     )
   except SetupLifecycleError:
     log.exception(
-      "v7 plan publish blocked by setup lifecycle symbol=%s "
+      "v8 plan publish blocked by setup lifecycle symbol=%s "
       "setup_id=%s plan_id=%s",
       symbol, setup_id, plan.plan_id,
     )
@@ -5918,7 +5918,7 @@ async def _publish_trade_plan_v7(
     trigger_source=confirmation.source,
     trigger_consumed=True,
   )
-  await _persist_v7_confirmation_phase(
+  await _persist_v8_confirmation_phase(
     client,
     symbol,
     match,
@@ -5933,7 +5933,7 @@ async def _publish_trade_plan_v7(
     metric="entry_contract_plan_published",
     status="candidate_published",
   )
-  await increment_metric(client, "v7_plan_published", symbol=symbol)
+  await increment_metric(client, "v8_plan_published", symbol=symbol)
   if policy.reaction_family:
     await increment_metric(
       client,
@@ -5988,7 +5988,7 @@ async def _publish_trade_plan_v7(
   except TelegramRetryAfter as exc:
     delay = float(getattr(exc, "retry_after", 5) or 5) + 1.0
     log.error(
-      "v7 forming card flood-limited setup_id=%s plan_id=%s "
+      "v8 forming card flood-limited setup_id=%s plan_id=%s "
       "retry_after=%ss; scheduling deferred ensure",
       setup_id,
       plan.plan_id,
@@ -5999,7 +5999,7 @@ async def _publish_trade_plan_v7(
     )
   except Exception:
     log.exception(
-      "v7 forming card stop refresh failed setup_id=%s plan_id=%s",
+      "v8 forming card stop refresh failed setup_id=%s plan_id=%s",
       setup_id,
       plan.plan_id,
     )
@@ -6007,7 +6007,7 @@ async def _publish_trade_plan_v7(
       client, match, delay_seconds=5.0,
     )
   log.info(
-    "v7 plan published id=%s symbol=%s strategy=%s direction=%s entry_type=%s",
+    "v8 plan published id=%s symbol=%s strategy=%s direction=%s entry_type=%s",
     plan.plan_id, symbol, match.strategy, match.direction, plan.entry.type,
   )
   return plan.plan_id
@@ -6968,7 +6968,7 @@ async def _admit_strategy_intent_for_cycle(
   V7's own hard gates (HTF veto, overlap, news, zone-split, limit-side,
   exposure) still run afterward if the intent is admitted and wins.
   """
-  existing = await resolve_existing_v7_state(
+  existing = await resolve_existing_v8_state(
     client,
     match,
     cycle_id=intent.cycle_id,
@@ -6978,7 +6978,7 @@ async def _admit_strategy_intent_for_cycle(
       reason_code=(
         existing.plan_state
         or existing.setup_state
-        or "existing_v7_terminal"
+        or "existing_v8_terminal"
       ),
       terminal=True,
       message="durable V7 lifecycle is already terminal",
@@ -7148,12 +7148,12 @@ async def _strategy_publication_result(
   """Translate the legacy publisher return into a fallback-safe result."""
   if candidate_id is not None:
     return CandidatePublicationResult.published(candidate_id)
-  existing = await resolve_existing_v7_state(client, match)
+  existing = await resolve_existing_v8_state(client, match)
   if existing.already_terminal:
     return CandidatePublicationResult.terminal_reject(
       existing.plan_state
       or existing.setup_state
-      or "existing_v7_terminal"
+      or "existing_v8_terminal"
     )
   if existing.already_published:
     return CandidatePublicationResult.published(existing.plan_id)
@@ -7746,7 +7746,7 @@ async def _handle_event(
         # mode) so a confirmed setup can never arm both a V7 plan and a V6
         # candidate for the same thesis. Existing open V6 positions are
         # untouched; this only blocks new autonomous publication.
-        published = await _publish_trade_plan_v7(
+        published = await _publish_trade_plan_v8(
           client,
           symbol,
           spot,
@@ -8225,7 +8225,7 @@ async def try_publish_executable_signal(
   """
   setup_id = match.match_id
   zone_id = str(match.confluence_zone_id or match.structural_zone_id or "")
-  plan_id = _v7_plan_id(match)
+  plan_id = _v8_plan_id(match)
   bar_event = f"{symbol}:{EXECUTION_TIMEFRAME}:{event_ts or match.event_ts}"
 
   await _handle_event(bar_event, source=source, client=client, ready_match_id=setup_id)
@@ -8368,7 +8368,7 @@ async def _process_strategy_match_ready_entry(
   existing = (
     None
     if canonical is None
-    else await resolve_existing_v7_state(
+    else await resolve_existing_v8_state(
       client,
       canonical,
       cycle_id=str(event.scanner_event_ts or ""),
@@ -8568,7 +8568,7 @@ async def _recover_unfinished_strategy_matches(
         or match.expires_at <= now
       ):
         continue
-      plan_state = await read_plan_state(client, _v7_plan_id(match))
+      plan_state = await read_plan_state(client, _v8_plan_id(match))
       if plan_state == "published":
         if setup.state == PLAN_BUILT:
           try:
@@ -8576,7 +8576,7 @@ async def _recover_unfinished_strategy_matches(
               client,
               match.match_id,
               PLAN_PUBLISHED,
-              reason_code="v7_publish_reconciled",
+              reason_code="v8_publish_reconciled",
             )
           except SetupLifecycleError:
             log.exception(

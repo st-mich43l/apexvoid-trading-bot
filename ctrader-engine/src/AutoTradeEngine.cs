@@ -1163,16 +1163,20 @@ public sealed class AutoTradeEngine(
     var trendCandidate = IsTrendCandidate(candidate);
     var strategyMatchCandidate = IsStrategyMatchCandidate(candidate);
     var manualAlgoCandidate = IsManualAlgoCandidate(candidate);
-    if (options.ContractMode == "v7_only" && !manualAlgoCandidate)
+    if (options.ContractMode is "v7_only" or "v8_only" && !manualAlgoCandidate)
     {
-      // V7 is the sole autonomous order path in this mode - reject any new
-      // V6 autonomous candidate before planning or broker calls, as
+      // TradePlan is the sole autonomous order path in this mode - reject any
+      // new V6 autonomous candidate before planning or broker calls, as
       // defense-in-depth alongside Python no longer publishing them (see
-      // docs/adr-trade-plan-v7-boundary.md Section L). Manual /algo
-      // candidates are explicitly exempt - they are the owner's direct
-      // decision, not autonomous analysis output.
+      // docs/adr-trade-plan-v8-cutover.md). Manual /algo candidates are
+      // explicitly exempt - they are the owner's direct decision, not
+      // autonomous analysis output.
       return await RejectAsync(
-        candidate, "legacy_candidate_disabled_in_v7_only", cancellationToken
+        candidate,
+        options.ContractMode == "v8_only"
+          ? "legacy_candidate_disabled_in_v8_only"
+          : "legacy_candidate_disabled_in_v7_only",
+        cancellationToken
       );
     }
     var orderTypePreference = (

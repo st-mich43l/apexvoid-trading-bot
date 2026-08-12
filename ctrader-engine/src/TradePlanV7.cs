@@ -2,17 +2,20 @@ using System.Text.Json.Serialization;
 
 namespace ApexVoid.CTraderFeed;
 
-// TradePlan V7 — the only trade-planning contract the V7 executor path may
-// consume. Python is the sole author of every value here; the executor
-// parses and validates shape (ValidateTradePlan below) but never recomputes
-// a route or a stop to compare against these values. See
-// docs/adr-trade-plan-v7-boundary.md for why the V6 TradeCandidate
-// Planned*/StopAdjustment* field family and the three-way stop recomputation
-// in AutoTradeEngine.cs do not exist on this path.
+// TradePlan V8 — the only trade-planning contract the executor path may
+// consume for new publishes. Python is the sole author of every value here;
+// the executor parses and validates shape (ValidateTradePlan below) but
+// never recomputes a route or a stop to compare against these values. See
+// docs/adr-trade-plan-v8-cutover.md. During the drain window, version 7
+// in-flight plans remain acceptable for manage/fill/close.
 
 public static class TradePlanContract
 {
-  public const int Version = 7;
+  public const int Version = 8;
+
+  /// <summary>Accepted plan versions during V7→V8 drain (manage in-flight V7).</summary>
+  public static readonly IReadOnlySet<int> SupportedVersions =
+    new HashSet<int> { 7, 8 };
 
   public const string EntryTypeMarketWatch = "market_watch";
   public const string EntryTypeSingleLimit = "single_limit";
@@ -203,21 +206,21 @@ public sealed record TradePlan(
 );
 
 // Execution-safety shape validation only. This is deliberately the ONLY
-// place the V7 path inspects a TradePlan's stop/target geometry, and it
-// never re-derives what the stop or targets *should* be — it only checks
-// that the values Python already declared are internally consistent
-// (finite, correct side, ordered). Mirrors
-// app/autotrade/trade_plan.py:TradePlan.validate exactly so the two
-// implementations reject the same fixture cases; see
-// TradePlanV7ContractTests.cs and contracts/autotrade/trade-plan-v7.json.
+// place the TradePlan path inspects stop/target geometry, and it never
+// re-derives what the stop or targets *should* be — it only checks that
+// the values Python already declared are internally consistent (finite,
+// correct side, ordered). Mirrors app/autotrade/trade_plan.py:TradePlan.validate
+// exactly so the two implementations reject the same fixture cases; see
+// TradePlanV8ContractTests.cs and contracts/autotrade/trade-plan-v8.json.
 public static class TradePlanValidator
 {
   public static void Validate(TradePlan plan)
   {
-    if (plan.Version != TradePlanContract.Version)
+    if (!TradePlanContract.SupportedVersions.Contains(plan.Version))
     {
       throw new TradePlanContractException(
-        $"unsupported TradePlan version {plan.Version}, expected {TradePlanContract.Version}"
+        $"unsupported TradePlan version {plan.Version}, expected one of "
+        + string.Join(",", TradePlanContract.SupportedVersions)
       );
     }
 

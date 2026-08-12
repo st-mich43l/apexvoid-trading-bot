@@ -201,8 +201,8 @@ public static class TradePlanJson
 {
   private const string SelfTestPayload = """
   {
-    "version":7,
-    "plan_id":"v7:self-test",
+    "version":8,
+    "plan_id":"v8:self-test",
     "thesis_id":"self-test-thesis",
     "setup_id":"self-test-setup",
     "symbol":"XAU",
@@ -1557,7 +1557,8 @@ public sealed class TradePlanRuntime(
   // EvaluateArmedPlansAsync removed — Armed is not part of the runtime.
 
   private bool ShouldSubmitOrders =>
-    options.ContractMode is "v7_primary" or "v7_only" && !options.DryRun;
+    options.ContractMode is "v7_primary" or "v7_only" or "v8_only"
+    && !options.DryRun;
 
   private async Task SubmitEntryAsync(
     ICTraderTradeClient client,

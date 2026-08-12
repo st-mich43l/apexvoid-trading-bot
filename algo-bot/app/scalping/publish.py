@@ -219,7 +219,7 @@ async def publish_hfs_live(
   _setup_id, thesis_id = lifecycle
   stamped = replace(match, thesis_id=str(thesis_id))
   stamped = await _persist_hfs_match(client, stamped)
-  # Root-card creation lives centrally in worker._publish_trade_plan_v7
+  # Root-card creation lives centrally in worker._publish_trade_plan_v8
   # (called from _handle_event, which this and every other publish route
   # -- including this cycle's own independent arbitration re-discovering
   # the same persisted match -- funnels through). Ensuring it here too

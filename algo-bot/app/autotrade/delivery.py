@@ -1721,17 +1721,17 @@ def _event_match_id(event: dict) -> str:
   """Resolve the setup/forming-card id for reply/edit threading.
 
   TradePlan V7 events carry ``match_id`` = setup_id and ``candidate_id`` /
-  ``group_id`` = ``v7:{setup_id}``. Prefer the real setup id; when only a
-  plan id is present, strip the ``v7:`` prefix so we still find the root
+  ``group_id`` = ``v8:{setup_id}``. Prefer the real setup id; when only a
+  plan id is present, strip the ``v7:`` / ``v8:`` prefix so we still find the root
   card instead of falling back to a standalone message.
   """
   for key in ("match_id", "setup_id"):
     value = str(event.get(key) or "").strip()
     if value:
-      return value[3:] if value.startswith("v7:") else value
+      return value[3:] if value.startswith(("v7:", "v8:")) else value
   for key in ("candidate_id", "plan_id", "group_id", "correlation_id"):
     value = str(event.get(key) or "").strip()
-    if value.startswith("v7:") and len(value) > 3:
+    if value.startswith(("v7:", "v8:")) and len(value) > 3:
       return value[3:]
   return str(event.get("candidate_id") or "").strip()
 
@@ -2299,7 +2299,7 @@ async def auto_trade_status_text() -> str:
     # of that anywhere in /algo_status today.
     if age > 60:
       lines.append(f"🔌 Engine stale · last seen {max(1, age // 60)}m ago")
-  open_book = await _open_v7_book_lines(client)
+  open_book = await _open_trade_plan_book_lines(client)
   lines.extend(open_book)
   route_line = _compact_route_line(last_route)
   if route_line:
@@ -2360,7 +2360,7 @@ async def _today_algo_scorecard_line() -> str | None:
   )
 
 
-async def _open_v7_book_lines(client, *, limit: int = 3) -> list[str]:
+async def _open_trade_plan_book_lines(client, *, limit: int = 3) -> list[str]:
   """Compact open V7 plan lines: direction · setup · stage."""
   try:
     from app.autotrade.active_exposure import load_active_exposures
@@ -2373,11 +2373,11 @@ async def _open_v7_book_lines(client, *, limit: int = 3) -> list[str]:
   except Exception:
     log.exception("algo_status open-book load failed")
     return []
-  v7 = [item for item in exposures if item.source == "v7_plan" and item.plan_id]
-  if not v7:
+  plans = [item for item in exposures if item.source in {"v8_plan", "v7_plan"} and item.plan_id]
+  if not plans:
     return []
   lines: list[str] = []
-  for item in v7[: max(1, limit)]:
+  for item in plans[: max(1, limit)]:
     setup = "plan"
     stage_label = "open"
     try:

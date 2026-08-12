@@ -1,10 +1,10 @@
-"""TradePlan V7 — Python's sole trade-planning contract.
+"""TradePlan V8 — Python's sole trade-planning contract.
 
 V6 (`TradeCandidate`, `auto_trade_candidate_contract_version = 6`) lets both
 Python and C# resolve an execution route and compute a protective stop, then
 cross-validates the two independently derived answers. That's the dual
-planning bug documented in `docs/adr-trade-plan-v7-boundary.md`. V7 replaces
-it with a single, complete, versioned plan: Python declares the exact entry
+planning bug documented in `docs/adr-trade-plan-v7-boundary.md`. V8 is the live TradePlan cutover (see `docs/adr-trade-plan-v8-cutover.md`).
+Python declares a single, complete, versioned plan: Python declares the exact entry
 instruction, the exact absolute stop, and the exact absolute targets; C#
 consumes the plan and never recomputes any of it.
 
@@ -21,7 +21,9 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Any, Mapping, Sequence
 
-TRADE_PLAN_VERSION = 7
+TRADE_PLAN_VERSION = 8
+# Drain window: accept in-flight V7 plans when loading from Redis.
+TRADE_PLAN_SUPPORTED_VERSIONS = frozenset({7, 8})
 
 ENTRY_TYPE_MARKET_WATCH = "market_watch"
 ENTRY_TYPE_SINGLE_LIMIT = "single_limit"
@@ -577,9 +579,10 @@ class TradePlan:
   @classmethod
   def from_dict(cls, data: Mapping[str, Any]) -> "TradePlan":
     version = int(_require(data, "version"))
-    if version != TRADE_PLAN_VERSION:
+    if version not in TRADE_PLAN_SUPPORTED_VERSIONS:
       raise TradePlanError(
-        f"unsupported TradePlan version {version}, expected {TRADE_PLAN_VERSION}",
+        f"unsupported TradePlan version {version}, expected one of "
+        f"{sorted(TRADE_PLAN_SUPPORTED_VERSIONS)}",
       )
     sizing_data = data.get("sizing")
     plan = cls(

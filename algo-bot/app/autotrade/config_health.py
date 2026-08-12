@@ -30,7 +30,7 @@ from app.configuration.profiles import get_profile
 from app.core.config import runtime_config
 
 
-CONTRACT_MODES = ("v7_only",)
+CONTRACT_MODES = ("v8_only",)
 
 
 CONFIG_MANIFEST_VERSION = 2

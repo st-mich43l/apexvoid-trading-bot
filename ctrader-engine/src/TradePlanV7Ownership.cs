@@ -1,15 +1,22 @@
 namespace ApexVoid.CTraderFeed;
 
 /// <summary>
-/// Parses V7 broker ownership tokens from order/position comments and
+/// Parses TradePlan broker ownership tokens from order/position comments and
 /// ClientOrderIds. Recognizes L1/L2-style leg ids and the legacy 0-based
 /// numeric index form used before the P0 ownership fix.
+/// Accepts both v7| and v8| prefixes during the V7→V8 drain window; new
+/// comments are always formatted as v8|.
 /// </summary>
 public static class TradePlanV7Ownership
 {
   public sealed record Ownership(string PlanId, string ThesisId, string LegId);
 
   public static Ownership? TryParseV7Ownership(
+    string? comment,
+    string? clientOrderId
+  ) => TryParseOwnership(comment, clientOrderId);
+
+  public static Ownership? TryParseOwnership(
     string? comment,
     string? clientOrderId
   )
@@ -22,8 +29,14 @@ public static class TradePlanV7Ownership
   }
 
   public static bool IsV7OwnershipComment(string? comment) =>
+    IsTradePlanOwnershipComment(comment);
+
+  public static bool IsTradePlanOwnershipComment(string? comment) =>
     !string.IsNullOrWhiteSpace(comment)
-    && comment.StartsWith("v7|", StringComparison.Ordinal);
+    && (
+      comment.StartsWith("v8|", StringComparison.Ordinal)
+      || comment.StartsWith("v7|", StringComparison.Ordinal)
+    );
 
   private static Ownership? TryParseComment(string? comment)
   {
@@ -32,7 +45,10 @@ public static class TradePlanV7Ownership
       return null;
     }
     var parts = comment.Split('|');
-    if (parts.Length < 3 || parts[0] != "v7")
+    if (
+      parts.Length < 3
+      || (parts[0] != "v8" && parts[0] != "v7")
+    )
     {
       return null;
     }
@@ -104,7 +120,7 @@ public static class TradePlanV7Ownership
   }
 
   public static string FormatComment(string planId, string thesisId, string legId) =>
-    $"v7|{planId}|{thesisId}|{legId}";
+    $"v8|{planId}|{thesisId}|{legId}";
 
   public static string FormatClientOrderId(string planId, string legId) =>
     $"{planId}:{legId}";

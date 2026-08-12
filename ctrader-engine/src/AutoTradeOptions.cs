@@ -393,7 +393,7 @@ public sealed record AutoTradeOptions(
       "AUTO_TRADE_CANDIDATE_CONTRACT_VERSION", 6
     ),
     ContractMode: resolver.String(
-      "AUTO_TRADE_CONTRACT_MODE", "v7_only"
+      "AUTO_TRADE_CONTRACT_MODE", "v8_only"
     ).ToLowerInvariant(),
     TradePlanStream: resolver.String(
       "AUTO_TRADE_TRADE_PLAN_STREAM", "execution:trade_plans"
@@ -791,11 +791,11 @@ public sealed record AutoTradeOptions(
     // Python's "v7_only"-only manifest - so this stays lenient here
     // without weakening the actual production guarantee.
     if (ContractMode is not "legacy_v6" and not "shadow_v7"
-      and not "v7_primary" and not "v7_only")
+      and not "v7_primary" and not "v7_only" and not "v8_only")
     {
       throw new AutoTradeConfigurationException(
         "Auto trade disabled: AUTO_TRADE_CONTRACT_MODE must be legacy_v6, "
-        + "shadow_v7, v7_primary, or v7_only"
+        + "shadow_v7, v7_primary, v7_only, or v8_only"
       );
     }
     if (StopLossDistance <= 0 || StopLossDistance > 6.5m)
