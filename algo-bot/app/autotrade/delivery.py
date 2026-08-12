@@ -1034,7 +1034,29 @@ async def _post_manage_reply(
       reply_to = recovered
       reason = ""
   if reply_to is None:
-    if require_reply_target:
+    event_type = str(event.get("type") or "")
+    must_thread = event_type in {
+      "order_filled", "opened", "tp_booked", "position_closed",
+      "take_profit", "stop_moved", "sl_moved",
+    }
+    if require_reply_target or must_thread:
+      if must_thread and match_id:
+        await _schedule_deferred_manage_reply(
+          client,
+          event,
+          match_id=match_id,
+          chat_id=chat_id,
+          send=send,
+          text=text,
+          remember=remember,
+        )
+        log.error(
+          "Auto-trade manage reply deferred for %s until root card exists "
+          "(%s) — not sending standalone",
+          match_id,
+          reason,
+        )
+        return None
       log.info(
         "Auto-trade manage reply unavailable for %s: %s; skipping",
         match_id,
@@ -1071,30 +1093,110 @@ async def _ensure_root_card_for_manage_reply(
   match_id: str,
   chat_id: int,
 ) -> int | None:
-  """Create a missing root card so fill/TP/close can reply under it."""
-  try:
-    from app.autotrade.setup_card import ensure_root_card_for_setup_id
+  """Create a missing root card so fill/TP/close can reply under it.
 
-    message_id = await ensure_root_card_for_setup_id(
-      client,
-      match_id,
-      symbol=str(event.get("symbol") or "XAU"),
-      chat_id=chat_id,
-    )
-  except Exception:
-    log.exception(
-      "manage_reply_root_card_recovery_failed setup_id=%s",
-      match_id,
-    )
+  Waits out scanner flood and retries once — never give up on the first
+  RetryAfter when a setup_id is known.
+  """
+  from app.autotrade.setup_card import ensure_root_card_for_setup_id
+  from app.bot.client import note_scanner_flood, wait_out_scanner_flood
+
+  for attempt in range(1, 3):
+    try:
+      await wait_out_scanner_flood()
+      message_id = await ensure_root_card_for_setup_id(
+        client,
+        match_id,
+        symbol=str(event.get("symbol") or "XAU"),
+        chat_id=chat_id,
+      )
+    except TelegramRetryAfter as exc:
+      await note_scanner_flood(exc.retry_after)
+      wait = max(1, int(exc.retry_after) + 1)
+      log.warning(
+        "manage_reply_root_card_flood setup_id=%s attempt=%s "
+        "retry_after=%ss; waiting then retrying",
+        match_id,
+        attempt,
+        exc.retry_after,
+      )
+      if attempt >= 2:
+        break
+      await asyncio.sleep(min(wait, 360))
+      continue
+    except Exception:
+      log.exception(
+        "manage_reply_root_card_recovery_failed setup_id=%s attempt=%s",
+        match_id,
+        attempt,
+      )
+      return None
+    if message_id is not None and message_id > 0:
+      log.info(
+        "manage_reply_root_card_recovered setup_id=%s message_id=%s",
+        match_id,
+        message_id,
+      )
+      return int(message_id)
     return None
-  if message_id is not None and message_id > 0:
-    log.info(
-      "manage_reply_root_card_recovered setup_id=%s message_id=%s",
-      match_id,
-      message_id,
-    )
-    return int(message_id)
   return None
+
+
+async def _schedule_deferred_manage_reply(
+  client,
+  event: dict,
+  *,
+  match_id: str,
+  chat_id: int,
+  send,
+  text: str,
+  remember: bool,
+) -> None:
+  """Post fill/TP/close under the root after flood clears — never standalone."""
+
+  async def _run() -> None:
+    from app.bot.client import wait_out_scanner_flood
+
+    try:
+      await wait_out_scanner_flood()
+      await asyncio.sleep(2.0)
+      recovered = await _ensure_root_card_for_manage_reply(
+        client,
+        event,
+        match_id=match_id,
+        chat_id=chat_id,
+      )
+      if recovered is None:
+        log.error(
+          "deferred_manage_reply_still_no_root setup_id=%s — giving up",
+          match_id,
+        )
+        return
+      sent = await send(text, reply_to=recovered, chat_id=chat_id)
+      message_id = int(sent.message_id)
+      await _save_manage_message(
+        client, match_id, message_id=message_id, text=text,
+      )
+      if remember:
+        await _remember_trade_message(client, event, "internal", message_id)
+      await _mark_forming_card_position_activated(client, match_id)
+      log.info(
+        "deferred_manage_reply_posted setup_id=%s message_id=%s "
+        "reply_to=%s",
+        match_id,
+        message_id,
+        recovered,
+      )
+    except Exception:
+      log.exception(
+        "deferred_manage_reply_failed setup_id=%s",
+        match_id,
+      )
+
+  asyncio.create_task(
+    _run(),
+    name=f"deferred-manage-reply:{match_id}",
+  )
 
 
 async def _replace_manage_reply(

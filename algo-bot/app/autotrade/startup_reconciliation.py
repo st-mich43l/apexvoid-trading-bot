@@ -20,13 +20,9 @@ import logging
 import time
 from typing import Any
 
-from aiogram.exceptions import TelegramRetryAfter
-
 from app.autotrade.lifecycle import increment_metric
 from app.autotrade.setup_card import (
-  assert_or_repair_forming_projection,
   forming_status_key,
-  kill_setup_card,
   load_forming_card,
   save_forming_reconcile_pending,
 )
@@ -37,7 +33,6 @@ from app.autotrade.setup_lifecycle import (
   setup_expiry_index_key,
 )
 from app.autotrade.terminal_cleanup import finalize_terminal_setup
-from app.bot.client import delete_scanner_message, edit_scanner_message_text
 
 log = logging.getLogger("bot")
 
@@ -118,22 +113,24 @@ async def _reconcile_canonical_setups(client: Any) -> None:
 
 
 async def _reconcile_forming_cards(client: Any) -> None:
-  """Remove any forming card whose setup is missing, terminal, or past
-  its own expires_at by wall-clock time; repair status/text drift on the
-  rest via the same invariant helper the send path itself uses.
+  """Remove Redis forming-card state for missing/terminal setups.
+
+  Live 2026-08-12: calling Telegram delete/edit here on every process
+  restart flooded the scanner bot for 3–4 minutes, so brand-new plans
+  published during that window could not create a root card and fills
+  arrived as standalone ORDER FILLED. Startup reconciliation is Redis-only;
+  live card lifecycle (kill_setup_card / ensure_plan_published_root_card)
+  still owns Telegram I/O after the bot is up.
   """
+  from app.autotrade.setup_card import clear_forming_card
+
   now = int(time.time())
   async for key in _scan_keys(client, f"{_FORMING_MESSAGE_PREFIX}*"):
     setup_id = key[len(_FORMING_MESSAGE_PREFIX):]
     try:
       record = await load_setup(client, setup_id)
       if record is None:
-        await kill_setup_card(
-          client, setup_id,
-          reason_code="startup_reconciliation_missing_setup",
-          delete_fn=delete_scanner_message,
-          edit_fn=edit_scanner_message_text,
-        )
+        await clear_forming_card(client, setup_id)
         await increment_metric(
           client, "missing_canonical_setup_projection_removed",
         )
@@ -146,41 +143,14 @@ async def _reconcile_forming_cards(client: Any) -> None:
         and record.state not in TERMINAL_STATES
       )
       if record.state in TERMINAL_STATES or stale_by_wall_clock:
-        await kill_setup_card(
-          client, setup_id,
-          reason_code="startup_reconciliation_orphan_card",
-          delete_fn=delete_scanner_message,
-          edit_fn=edit_scanner_message_text,
-        )
+        await clear_forming_card(client, setup_id)
         await increment_metric(client, "orphan_forming_card_removed")
         continue
-
-      repaired = await assert_or_repair_forming_projection(
-        client, setup_id, edit_fn=edit_scanner_message_text,
-      )
-      if repaired:
-        await increment_metric(client, "forming_card_projection_repaired")
-    except TelegramRetryAfter as exc:
-      # Live incident 2026-08-07: Telegram flood-banned the chat (~11 hours)
-      # and this loop kept scanning straight into every remaining stale
-      # card, each one immediately re-hitting the same wall - a wall of
-      # near-identical tracebacks doing nothing but confirming what the
-      # first failure already proved. edit_scanner_message_text/
-      # delete_scanner_message have no retry wrapper of their own, so this
-      # is the only place that sees the raw exception. Once Telegram says
-      # "not for N seconds," every other card in this scan is going to get
-      # the same answer - stop burning through them.
-      log.error(
-        "startup reconciliation: Telegram flood-limited for %ds - "
-        "aborting the rest of this pass (will retry next restart)",
-        exc.retry_after,
-      )
-      return
+      # Do not call assert_or_repair_forming_projection at startup — that
+      # edits Telegram and is the flood source above.
     except Exception:
-      # One card's Telegram failure (eg. a bad token, a deleted chat) must
-      # not abort reconciliation for every other setup in this scan.
       log.exception(
-        "startup reconciliation: forming card repair failed setup_id=%s",
+        "startup reconciliation: forming card redis cleanup failed setup_id=%s",
         setup_id,
       )
 

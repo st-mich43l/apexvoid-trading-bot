@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import time
 
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
@@ -80,8 +81,11 @@ _MAX_SEND_ATTEMPTS = 3
 # move on) takes over rather than the whole task going dark.
 _MAX_RETRY_AFTER_SLEEP_SECONDS = 30
 # Root/PLAN PUBLISHED cards must exist before fill replies thread under them.
-# Prefer waiting out a longer flood over trading with no Telegram root.
-_MAX_ROOT_CARD_RETRY_AFTER_SLEEP_SECONDS = 120
+# Live 2026-08-12: scanner flood after startup reconciliation was 227–261s —
+# a 120s cap still orphaned ORDER FILLED. Wait out typical floods; still
+# refuse multi-hour bans.
+_MAX_ROOT_CARD_RETRY_AFTER_SLEEP_SECONDS = 360
+_SCANNER_FLOOD_UNTIL_KEY = "auto_trade:telegram_scanner_flood_until"
 
 
 async def setup_commands(target_bot: Bot) -> None:
@@ -128,6 +132,46 @@ async def send_with_retry(
   )
 
 
+async def note_scanner_flood(retry_after: float | int) -> None:
+  """Record scanner-bot flood so other tasks can wait instead of hammering."""
+  try:
+    from app.persistence import redis_state
+
+    client = redis_state.get_client()
+    wait = max(1, int(retry_after))
+    until = int(time.time()) + wait
+    await client.set(_SCANNER_FLOOD_UNTIL_KEY, str(until), ex=wait + 30)
+  except Exception:
+    log.exception("note_scanner_flood failed retry_after=%s", retry_after)
+
+
+async def wait_out_scanner_flood(
+  *,
+  max_wait_seconds: float = _MAX_ROOT_CARD_RETRY_AFTER_SLEEP_SECONDS,
+) -> float:
+  """Sleep until recorded scanner flood clears (capped). Returns seconds waited."""
+  try:
+    from app.persistence import redis_state
+
+    client = redis_state.get_client()
+    raw = await client.get(_SCANNER_FLOOD_UNTIL_KEY)
+  except Exception:
+    return 0.0
+  if not raw:
+    return 0.0
+  try:
+    until = float(raw.decode() if isinstance(raw, bytes) else raw)
+  except (TypeError, ValueError):
+    return 0.0
+  wait = until - time.time()
+  if wait <= 0:
+    return 0.0
+  wait = min(wait, float(max_wait_seconds))
+  log.warning("waiting %.1fs for scanner Telegram flood to clear", wait)
+  await asyncio.sleep(wait)
+  return wait
+
+
 async def send_scanner_with_retry(
   text: str,
   reply_to: int | None = None,
@@ -151,6 +195,7 @@ async def send_scanner_root_card_with_retry(
   reply_markup: InlineKeyboardMarkup | None = None,
 ) -> Message:
   """Send the PLAN PUBLISHED / forming root card with a longer flood budget."""
+  await wait_out_scanner_flood()
   return await _send_message_with_retry(
     scanner_bot,
     text,
@@ -181,6 +226,8 @@ async def _send_message_with_retry(
         reply_markup=reply_markup,
       )
     except TelegramRetryAfter as e:
+      if target_bot is scanner_bot:
+        await note_scanner_flood(e.retry_after)
       if e.retry_after > max_retry_after_sleep:
         log.error(
           "Telegram flood-limited for %ds (exceeds %ds cap) - not "
