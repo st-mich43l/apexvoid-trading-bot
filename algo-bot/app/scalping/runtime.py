@@ -37,7 +37,12 @@ from app.scalping.lifecycle import (
 from app.scalping.microstructure import build_micro_structure
 from app.scalping.publish import build_hfs_strategy_match, publish_hfs_live
 from app.scalping.ranking import rank_opportunities, score_opportunity
-from app.scalping.risk import evaluate_risk, load_risk, save_risk
+from app.scalping.risk import (
+  apply_loss_streak_cooldown_reset,
+  evaluate_risk,
+  load_risk,
+  save_risk,
+)
 from app.scalping.strategies import discover_all, idle_discovery_reasons
 from app.scalping.telemetry import incr, record_cycle, set_last
 from app.autotrade import worker
@@ -213,12 +218,35 @@ async def process_m1_bar(
   bid, ask, qts = quote
 
   risk_state = await load_risk(client, symbol)
+  risk_state = apply_loss_streak_cooldown_reset(risk_state, cfg, now=now)
+  await save_risk(client, symbol, risk_state)
   risk = evaluate_risk(risk_state, cfg, session=context.session, now=now)
 
   scored: list = []
   for opportunity in opportunities:
     await incr(client, symbol, "opportunity_discovered")
     await set_last(client, "opportunity", symbol, json.loads(opportunity.to_json()))
+    try:
+      from app.autotrade.reaction_funnel import (
+        STAGE_DISCOVERED,
+        bump_funnel,
+      )
+      from app.scalping.models import STRATEGY_DISPLAY
+
+      await bump_funnel(
+        client,
+        symbol=symbol,
+        stage=STAGE_DISCOVERED,
+        strategy=STRATEGY_DISPLAY.get(
+          opportunity.archetype, opportunity.archetype,
+        ),
+        family="hfs",
+        strategy_mode="hfs_scalp",
+        archetype=opportunity.archetype,
+        once_key=f"discover:{opportunity.opportunity_id}:{bar_ts}",
+      )
+    except Exception:
+      log.exception("hfs discover funnel bump failed")
     existing = await load_lifecycle(client, symbol, opportunity.opportunity_id)
     if existing is None:
       record = ScalpLifecycleRecord(
@@ -276,6 +304,27 @@ async def process_m1_bar(
   t_persist = time.perf_counter()
   for opportunity, decision, score in ranked:
     await incr(client, symbol, "opportunity_allowed")
+    try:
+      from app.autotrade.reaction_funnel import (
+        STAGE_ACTIVATION_ALLOWED,
+        bump_funnel,
+      )
+      from app.scalping.models import STRATEGY_DISPLAY
+
+      await bump_funnel(
+        client,
+        symbol=symbol,
+        stage=STAGE_ACTIVATION_ALLOWED,
+        strategy=STRATEGY_DISPLAY.get(
+          opportunity.archetype, opportunity.archetype,
+        ),
+        family="hfs",
+        strategy_mode="hfs_scalp",
+        archetype=opportunity.archetype,
+        once_key=f"activate:{opportunity.opportunity_id}:{bar_ts}",
+      )
+    except Exception:
+      log.exception("hfs activation funnel bump failed")
     signal = ScalpSignal(
       signal_id=deterministic_id("signal", opportunity.opportunity_id, bar_ts),
       opportunity_id=opportunity.opportunity_id,
@@ -332,6 +381,27 @@ async def process_m1_bar(
             await save_lifecycle(client, symbol, done)
           # One live position at a time — stop after first successful handoff.
           if publish_result.status == worker.PUBLISH_STATUS_PUBLISHED:
+            try:
+              from app.autotrade.reaction_funnel import (
+                STAGE_PLAN_PUBLISHED,
+                bump_funnel,
+              )
+              from app.scalping.models import STRATEGY_DISPLAY
+
+              await bump_funnel(
+                client,
+                symbol=symbol,
+                stage=STAGE_PLAN_PUBLISHED,
+                strategy=STRATEGY_DISPLAY.get(
+                  opportunity.archetype, opportunity.archetype,
+                ),
+                family="hfs",
+                strategy_mode="hfs_scalp",
+                archetype=opportunity.archetype,
+                once_key=f"publish:{opportunity.opportunity_id}",
+              )
+            except Exception:
+              log.exception("hfs publish funnel bump failed")
             result["allowed"].append({
               "opportunity_id": opportunity.opportunity_id,
               "archetype": opportunity.archetype,

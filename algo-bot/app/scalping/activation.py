@@ -33,8 +33,8 @@ def _enforce_location_cfg(hfs: Any) -> SimpleNamespace:
         mode="enforce",
         missing_context_policy="block",
         reversal=SimpleNamespace(
-          buy_maximum_position=float(getattr(loc, "pullback_buy_maximum_position", 0.75) or 0.75),
-          sell_minimum_position=float(getattr(loc, "pullback_sell_minimum_position", 0.25) or 0.25),
+          buy_maximum_position=float(getattr(loc, "pullback_buy_maximum_position", 0.60) or 0.60),
+          sell_minimum_position=float(getattr(loc, "pullback_sell_minimum_position", 0.40) or 0.40),
           extreme_buy_block_position=0.85,
           extreme_sell_block_position=0.15,
         ),
@@ -44,8 +44,8 @@ def _enforce_location_cfg(hfs: Any) -> SimpleNamespace:
           equilibrium_exclusion_width=0.20,
         ),
         trend_pullback=SimpleNamespace(
-          buy_maximum_position=float(getattr(loc, "pullback_buy_maximum_position", 0.75) or 0.75),
-          sell_minimum_position=float(getattr(loc, "pullback_sell_minimum_position", 0.25) or 0.25),
+          buy_maximum_position=float(getattr(loc, "pullback_buy_maximum_position", 0.60) or 0.60),
+          sell_minimum_position=float(getattr(loc, "pullback_sell_minimum_position", 0.40) or 0.40),
         ),
         breakout_retest=SimpleNamespace(allow_directional_expansion=True),
       ),
@@ -104,7 +104,7 @@ def evaluate_scalp_activation(
   if age_bars > max_age:
     return ScalpDecision(False, True, "reaction_trigger_stale", 0.0, measured)
 
-  chase = float(getattr(act, "maximum_chase_pips", 100.0) or 100.0)
+  chase = float(getattr(act, "maximum_chase_pips", 40.0) or 40.0)
   if opportunity.direction == "BUY":
     distance = (executable - opportunity.zone_high) / pip_size
   else:
@@ -123,8 +123,20 @@ def evaluate_scalp_activation(
     # Price already ran through the zone in trade direction — momentum
     # chase within maximum_chase_pips (owner: scalp must chase with momentum).
     measured["chase_entry"] = True
+    # Impulse Pullback quality: late chase after pause setups is the bleed.
+    if opportunity.archetype == ARCHETYPE_IMPULSE_PULLBACK and distance > min(chase, 25.0):
+      return ScalpDecision(False, True, "scalp_impulse_chase_too_far", 0.0, measured)
   else:
     measured["chase_entry"] = False
+
+  # HTF agreement for impulse (activation belt-and-suspenders with discovery).
+  htf = str(context.htf_bias or "unknown").casefold()
+  measured["htf_bias"] = htf
+  if opportunity.archetype == ARCHETYPE_IMPULSE_PULLBACK:
+    if htf == "up" and opportunity.direction == "SELL":
+      return ScalpDecision(False, True, "scalp_htf_counter_bias", 0.0, measured)
+    if htf == "down" and opportunity.direction == "BUY":
+      return ScalpDecision(False, True, "scalp_htf_counter_bias", 0.0, measured)
 
   # Location — enforce inside HFS
   loc_ctx = build_entry_location_context(

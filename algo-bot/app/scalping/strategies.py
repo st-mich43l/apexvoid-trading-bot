@@ -123,10 +123,15 @@ def _technique_require_sweep_body(cfg: Any) -> bool:
 
 
 def _enabled(cfg: Any, name: str) -> bool:
+  """Archetype enable flags are fail-closed when missing (not default-on).
+
+  Live 2026-08-12: ``momentum_chase`` had no yaml/schema field so
+  ``getattr(..., True)`` kept publishing a −13.8 avg archetype.
+  """
   root = _hfs_cfg(cfg)
   arch = getattr(root, "archetypes", None)
   attr = f"{name}_enabled"
-  return bool(getattr(arch, attr, True))
+  return bool(getattr(arch, attr, False))
 
 
 def discover_range_sweep(
@@ -308,17 +313,23 @@ def discover_impulse_pullback(
     return []
 
   loc = getattr(_hfs_cfg(cfg), "location", None)
-  buy_max = _parse_float(loc, "pullback_buy_maximum_position", 0.75)
-  sell_min = _parse_float(loc, "pullback_sell_minimum_position", 0.25)
+  buy_max = _parse_float(loc, "pullback_buy_maximum_position", 0.60)
+  sell_min = _parse_float(loc, "pullback_sell_minimum_position", 0.40)
   min_net = _parse_float(getattr(_hfs_cfg(cfg), "target", None), "minimum_net_target_pips", 15.0)
   buffer = max(pip_size * 2, context.atr * _parse_float(getattr(_hfs_cfg(cfg), "stop", None), "buffer_atr", 0.10))
   out: list[ScalpOpportunity] = []
   pos = context.dealing_range_position
+  htf = str(context.htf_bias or "unknown").casefold()
 
   for direction in ("BUY", "SELL"):
     if direction == "BUY" and pos is not None and pos > buy_max:
       continue
     if direction == "SELL" and pos is not None and pos < sell_min:
+      continue
+    # Live 2026-08-12: soft HTF penalty was not enough — hard-block counter-HTF.
+    if htf == "up" and direction == "SELL":
+      continue
+    if htf == "down" and direction == "BUY":
       continue
     ev = detect_impulse_pullback(m1_df, direction=direction)
     if ev is None:

@@ -106,7 +106,7 @@ execution:
     london_window_hours: 3
     ny_window_hours: 3
     reaction_require_killzone: false
-    hfs_require_killzone: false
+    hfs_require_killzone: true
     require_sweep_body: false
     strict_premium_discount: true
   activation:
@@ -310,6 +310,8 @@ strategies:
       range_sweep_enabled: true
       impulse_pullback_enabled: true
       breakout_retest_enabled: true
+      # Off after 2026-08-12 quality dig (12 trades / −166 pips).
+      momentum_chase_enabled: false
     context:
       maximum_m5_age_seconds: 420
       m1_lookback_bars: 60
@@ -318,18 +320,18 @@ strategies:
     location:
       range_buy_maximum_position: 0.35
       range_sell_minimum_position: 0.65
-      pullback_buy_maximum_position: 0.75
-      pullback_sell_minimum_position: 0.25
+      pullback_buy_maximum_position: 0.60
+      pullback_sell_minimum_position: 0.40
     activation:
       trigger_maximum_age_bars: 2
-      maximum_chase_pips: 100
+      maximum_chase_pips: 40
       rearm_distance_atr: 0.25
     target:
       preferred_ladder_pips: 20,25,30
       minimum_net_target_pips: 15
     stop:
       minimum_pips: 12
-      maximum_pips: 30
+      maximum_pips: 22
       buffer_atr: 0.10
     policy:
       minimum_reward_risk: 1.10

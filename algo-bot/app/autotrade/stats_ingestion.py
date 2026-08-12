@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 
 from app.core.config import runtime_config
 from app.persistence import redis_state
@@ -62,9 +63,19 @@ async def _emit_funnel_complete(client, event: dict) -> None:
   outcome = _complete_outcome(event)
   if outcome is None:
     return
-  from app.autotrade.reaction_funnel import emit_plan_complete_event
+  from app.autotrade.reaction_funnel import (
+    emit_plan_complete_event,
+    funnel_bucket,
+    normalize_setup_type,
+    BUCKET_SCALP,
+  )
+  from app.scalping.risk import (
+    load_risk,
+    record_scalp_outcome,
+    save_risk,
+  )
 
-  strategy = (
+  strategy = normalize_setup_type(
     event.get("setup")
     or event.get("strategy")
     or event.get("setup_type")
@@ -99,6 +110,40 @@ async def _emit_funnel_complete(client, event: dict) -> None:
       "result_pips": event.get("result_pips"),
     },
   )
+  # Keep HFS risk streak / R counters alive (was never wired before).
+  if funnel_bucket(strategy, family=event.get("strategy_family")) != BUCKET_SCALP:
+    return
+  symbol = str(event.get("symbol") or "XAU")
+  try:
+    state = await load_risk(client, symbol)
+    now = int(event.get("timestamp") or time.time())
+    result_pips = event.get("group_realized_pips")
+    if result_pips is None:
+      result_pips = event.get("result_pips")
+    try:
+      pips = float(result_pips or 0.0)
+    except (TypeError, ValueError):
+      pips = 0.0
+    stop_raw = event.get("stop_pips") or event.get("initial_stop_pips")
+    try:
+      stop_pips = float(stop_raw) if stop_raw is not None else None
+    except (TypeError, ValueError):
+      stop_pips = None
+    if outcome == "fill":
+      state = record_scalp_outcome(
+        state, result_pips=0.0, stop_pips=stop_pips, now=now, opened=True,
+      )
+    else:
+      state = record_scalp_outcome(
+        state,
+        result_pips=pips,
+        stop_pips=stop_pips,
+        now=now,
+        closed=True,
+      )
+    await save_risk(client, symbol, state)
+  except Exception:
+    log.exception("hfs risk state update failed symbol=%s", symbol)
 
 
 async def process_auto_trade_stats_entries(

@@ -91,8 +91,16 @@ def evaluate_risk(
   max_losses = int(getattr(risk, "maximum_consecutive_losses", 3) or 3)
   cooldown = int(getattr(risk, "cooldown_after_loss_minutes", 5) or 5) * 60
   if state.consecutive_losses >= max_losses:
-    if state.last_loss_ts is not None and int(now) - int(state.last_loss_ts) < cooldown:
+    # Live 2026-08-12: old logic only blocked *during* cooldown, then allowed
+    # trading again with streak still ≥ max. Serve the full cooldown, then
+    # require the streak to be cleared (see apply_loss_streak_cooldown_reset).
+    cooled = (
+      state.last_loss_ts is None
+      or int(now) - int(state.last_loss_ts) >= cooldown
+    )
+    if not cooled:
       return ScalpDecision(False, True, "scalp_loss_streak_cooldown", 0.0, measured)
+    return ScalpDecision(False, True, "scalp_loss_streak_active", 0.0, measured)
 
   daily_limit = float(getattr(risk, "daily_loss_limit_r", 3.0) or 3.0)
   if state.daily_r <= -abs(daily_limit):
@@ -106,6 +114,65 @@ def evaluate_risk(
     return ScalpDecision(False, True, "scalp_session_rollover_block", 0.0, measured)
 
   return ScalpDecision(True, False, "scalp_risk_allowed", 1.0, measured)
+
+
+def apply_loss_streak_cooldown_reset(
+  state: ScalpRiskState,
+  cfg: Any,
+  *,
+  now: int,
+) -> ScalpRiskState:
+  """After the cooldown window, clear the streak so trading can resume.
+
+  Wins also clear the streak via ``record_scalp_outcome``. This path covers
+  the case where the bot sat out the cooldown without a win.
+  """
+  risk = getattr(
+    getattr(getattr(cfg, "strategies", None), "high_frequency_scalp", None),
+    "risk",
+    None,
+  )
+  max_losses = int(getattr(risk, "maximum_consecutive_losses", 3) or 3)
+  cooldown = int(getattr(risk, "cooldown_after_loss_minutes", 5) or 5) * 60
+  if state.consecutive_losses < max_losses:
+    return state
+  if state.last_loss_ts is None:
+    return state
+  if int(now) - int(state.last_loss_ts) < cooldown:
+    return state
+  state.consecutive_losses = 0
+  state.last_loss_ts = None
+  return state
+
+
+def record_scalp_outcome(
+  state: ScalpRiskState,
+  *,
+  result_pips: float,
+  stop_pips: float | None,
+  now: int,
+  opened: bool = False,
+  closed: bool = False,
+) -> ScalpRiskState:
+  """Update HFS risk counters from a fill or close. No martingale."""
+  if opened:
+    state.open_positions = max(0, int(state.open_positions) + 1)
+    state.daily_trades = int(state.daily_trades) + 1
+    state.session_trades = int(state.session_trades) + 1
+  if not closed:
+    return state
+  state.open_positions = max(0, int(state.open_positions) - 1)
+  risk_unit = float(stop_pips) if stop_pips and float(stop_pips) > 0 else 20.0
+  r_multiple = float(result_pips) / risk_unit
+  state.daily_r = float(state.daily_r) + r_multiple
+  state.session_r = float(state.session_r) + r_multiple
+  if float(result_pips) < 0:
+    state.consecutive_losses = int(state.consecutive_losses) + 1
+    state.last_loss_ts = int(now)
+  else:
+    state.consecutive_losses = 0
+    state.last_loss_ts = None
+  return state
 
 
 async def load_risk(client: Any, symbol: str) -> ScalpRiskState:

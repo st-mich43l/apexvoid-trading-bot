@@ -1,6 +1,6 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "255a32b9588b6c661c8466fa29e1b1c2b3a249e9bb6a483337169cb03ed170ce",
+  "configuration_contract_fingerprint_sha256": "d2307f717e28786b1e333ff34eca1b6cb9e3248f452cead4fd2e4596ba18219f",
   "excluded_ctrader_only_count": 50,
   "excluded_paths": [
     "bootstrap.ctrader.connection.host",
@@ -54,7 +54,7 @@
     "risk.sizing.add_require_risk_free",
     "risk.sizing.risk_pct"
   ],
-  "included_leaf_count": 440,
+  "included_leaf_count": 449,
   "included_paths": [
     "actionability.contested_corridor.gap_atr",
     "actionability.counter_bias.allowed",
@@ -298,6 +298,14 @@
     "execution.targeting.post_fill_target_fallback",
     "execution.targeting.range_ladder_pips",
     "execution.targeting.unfilled_leg_after_tp_policy",
+    "execution.technique.enforce",
+    "execution.technique.hfs_require_killzone",
+    "execution.technique.include_late_ny",
+    "execution.technique.london_window_hours",
+    "execution.technique.ny_window_hours",
+    "execution.technique.reaction_require_killzone",
+    "execution.technique.require_sweep_body",
+    "execution.technique.strict_premium_discount",
     "execution.trend.hard_entry_drift_pips",
     "execution.trend.max_entry_drift_atr",
     "execution.trend.min_entry_drift_pips",
@@ -413,6 +421,7 @@
     "strategies.high_frequency_scalp.activation.trigger_maximum_age_bars",
     "strategies.high_frequency_scalp.archetypes.breakout_retest_enabled",
     "strategies.high_frequency_scalp.archetypes.impulse_pullback_enabled",
+    "strategies.high_frequency_scalp.archetypes.momentum_chase_enabled",
     "strategies.high_frequency_scalp.archetypes.range_sweep_enabled",
     "strategies.high_frequency_scalp.context.current_context_ttl_seconds",
     "strategies.high_frequency_scalp.context.historic_context_ttl_seconds",
@@ -500,6 +509,6 @@
   "included_secret_count": 6,
   "included_shared_field_count": 95,
   "projection_model": "app.configuration.models.python_runtime.PythonRuntimeConfig",
-  "source_fingerprint_sha256": "255a32b9588b6c661c8466fa29e1b1c2b3a249e9bb6a483337169cb03ed170ce",
+  "source_fingerprint_sha256": "d2307f717e28786b1e333ff34eca1b6cb9e3248f452cead4fd2e4596ba18219f",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

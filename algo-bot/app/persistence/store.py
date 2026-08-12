@@ -626,6 +626,11 @@ async def _record_auto_trade_fill(event: dict) -> None:
   candidate_id = str(event.get("candidate_id") or "")
   symbol = str(event.get("symbol") or "XAU").upper()
   stop_pips = _resolve_fill_stop_pips(event, symbol)
+  from app.autotrade.reaction_funnel import normalize_setup_type
+
+  setup_type = normalize_setup_type(
+    event.get("setup") or event.get("setup_type") or event.get("strategy"),
+  )
   async with _connect() as db:
     if stream == "algo_manual" and candidate_id:
       signal_id = await db.fetchval(
@@ -659,7 +664,7 @@ async def _record_auto_trade_fill(event: dict) -> None:
         volume = COALESCE(excluded.volume, auto_trade_fills.volume)
       """,
       int(position_id), group_id, trade_key, stream,
-      symbol, event.get("setup"),
+      symbol, setup_type,
       event.get("direction"), event.get("price"), stop_pips,
       event.get("volume"), int(event.get("timestamp") or time.time()),
     )
