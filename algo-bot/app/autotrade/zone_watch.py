@@ -353,17 +353,32 @@ async def list_active_zone_watches(
   if not members:
     await _rebuild_zone_watch_index(client)
     members = await client.smembers(ZONE_WATCH_INDEX_KEY)
+  zone_ids = [
+    raw_id.decode() if isinstance(raw_id, bytes) else str(raw_id)
+    for raw_id in members
+  ]
   records: list[ZoneWatch] = []
   stale: list[str] = []
-  for raw_id in members:
-    zone_id = raw_id.decode() if isinstance(raw_id, bytes) else str(raw_id)
-    record = await load_zone_watch(client, zone_id)
-    if record is None or not is_actively_watchable(record):
-      stale.append(zone_id)
-      continue
-    if symbol is not None and record.symbol != symbol.upper():
-      continue
-    records.append(record)
+  if zone_ids:
+    # One round-trip instead of N GETs — prod 2026-08-12 had 100+ active
+    # watches and the per-key load starved the Telegram event loop.
+    raw_values = await client.mget([zone_watch_key(zone_id) for zone_id in zone_ids])
+    for zone_id, raw in zip(zone_ids, raw_values):
+      if raw is None:
+        stale.append(zone_id)
+        continue
+      text = raw.decode() if isinstance(raw, bytes) else str(raw)
+      try:
+        record = ZoneWatch.from_dict(json.loads(text))
+      except (TypeError, ValueError, json.JSONDecodeError, KeyError):
+        stale.append(zone_id)
+        continue
+      if not is_actively_watchable(record):
+        stale.append(zone_id)
+        continue
+      if symbol is not None and record.symbol != symbol.upper():
+        continue
+      records.append(record)
   if stale:
     await client.srem(ZONE_WATCH_INDEX_KEY, *stale)
   return sorted(records, key=lambda item: (-item.score, item.low, item.zone_id))

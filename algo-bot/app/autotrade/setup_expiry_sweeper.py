@@ -34,6 +34,53 @@ log = logging.getLogger("bot")
 
 _BATCH_SIZE = 200
 _POLL_INTERVAL_SECONDS = 3
+_SCALP_ARMED_MAX_AGE_SECONDS = 3600
+_SCALP_ACTIVE_SYMBOLS = ("XAU",)
+
+
+async def sweep_stale_scalp_armed_once(
+  client: Any,
+  *,
+  now: int | None = None,
+  max_age_seconds: int = _SCALP_ARMED_MAX_AGE_SECONDS,
+) -> int:
+  """Drop armed scalp IDs that never left the active set (prod leak).
+
+  Prod 2026-08-12: scalp:active:XAU held 632 armed records aged up to 150h
+  because nothing swept terminal transitions after opportunities went idle.
+  """
+  from app.scalping.lifecycle import (
+    active_key,
+    load_lifecycle,
+    save_lifecycle,
+    transition,
+  )
+  from app.scalping.models import ARMED, EXPIRED
+
+  now = int(now if now is not None else time.time())
+  cleaned = 0
+  for symbol in _SCALP_ACTIVE_SYMBOLS:
+    members = await client.smembers(active_key(symbol))
+    if not members:
+      continue
+    for raw in members:
+      opportunity_id = raw.decode() if isinstance(raw, bytes) else str(raw)
+      record = await load_lifecycle(client, symbol, opportunity_id)
+      if record is None:
+        await client.srem(active_key(symbol), opportunity_id)
+        cleaned += 1
+        continue
+      age = now - int(record.updated_at or 0)
+      if record.state == ARMED and age >= max_age_seconds:
+        expired = transition(
+          record,
+          EXPIRED,
+          reason="stale_armed_cleanup",
+          now=now,
+        )
+        await save_lifecycle(client, symbol, expired)
+        cleaned += 1
+  return cleaned
 
 
 async def sweep_expired_setups_once(client: Any, *, now: int | None = None) -> int:
@@ -101,6 +148,7 @@ async def setup_expiry_sweeper_loop() -> None:
   while True:
     try:
       processed = await sweep_expired_setups_once(client)
+      await sweep_stale_scalp_armed_once(client)
       if processed >= _BATCH_SIZE:
         # More may already be due - keep draining instead of waiting out
         # a full poll interval while a backlog exists.

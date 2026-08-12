@@ -1,5 +1,6 @@
 """Price-action scanner over closed Redis OHLC bars."""
 
+import asyncio
 import json
 import logging
 import math
@@ -2726,11 +2727,15 @@ async def _load_market_context_for_symbol(
   if exec_tf not in frames:
     return None, frames
   trigger = event_ts or str(frames[exec_tf].index[-1])
-  ctx = build_context(
+  # build_context is pandas/CPU-heavy; keep it off the Telegram event loop.
+  # Prod 2026-08-12: M5 closes blocked handlers for ~5-6s while this ran inline.
+  settings = _detector_settings()
+  ctx = await asyncio.to_thread(
+    build_context,
     symbol,
     exec_tf,
     frames,
-    _detector_settings(),
+    settings,
     htf_order,
   )
   ctx = _attach_price_context(ctx, spot, trigger, frames[exec_tf])
@@ -2831,7 +2836,7 @@ async def _handle_event(
       if getattr(ctx, "spot_price", None) is not None
       else float(frames[exec_tf]["close"].iloc[-1])
     )
-    current_map = build_map(analysis, price)
+    current_map = await asyncio.to_thread(build_map, analysis, price)
     map_payload = market_map_payload(current_map)
     map_ttl = max(
       900,
@@ -2911,10 +2916,18 @@ async def _handle_event(
           )
   raw_detector_results = []
   structure_gated: list[tuple[DetectionResult, str]] = []
-  for detector in detectors or DEFAULT_DETECTORS:
-    result = detector(ctx)
-    if result is None:
-      continue
+  active_detectors = list(detectors or DEFAULT_DETECTORS)
+
+  def _run_detectors() -> list[DetectionResult]:
+    found: list[DetectionResult] = []
+    for detector in active_detectors:
+      result = detector(ctx)
+      if result is not None:
+        found.append(result)
+    return found
+
+  detected = await asyncio.to_thread(_run_detectors)
+  for result in detected:
     metric_name = {
       "Key Level Reaction": "key_level_reaction_detected",
       "Zone Reaction": "zone_reaction_detected",

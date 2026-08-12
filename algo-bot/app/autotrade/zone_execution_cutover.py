@@ -60,6 +60,7 @@ from app.autotrade.strategy_match_ready import enqueue_strategy_match_ready
 from app.autotrade.strategy_taxonomy import is_range_strategy, is_reaction_strategy
 from app.autotrade.zone_watch import (
   DISCOVERED,
+  EXPIRED,
   GRADE_A,
   GRADE_B,
   INVALIDATED,
@@ -1064,10 +1065,11 @@ async def _evaluate_record(
   record: ZoneWatch,
   *,
   event_ts: str,
+  quote: tuple[float, float, int] | None = None,
 ) -> StrategyMatch | None:
   if record.state in TERMINAL_ZONE_WATCH_STATES | LOCKED_ZONE_WATCH_STATES:
     return None
-  quote = await _load_quote(client, record.symbol)
+  quote = quote or await _load_quote(client, record.symbol)
   if quote is None:
     return None
   match = await _load_candidate(client, record.zone_id)
@@ -1326,14 +1328,93 @@ def _format_detection_cutover(*args: Any, **kwargs: Any) -> str:
   )
 
 
+def _outside_distance(record: ZoneWatch, mid_price: float) -> float:
+  if mid_price > record.high:
+    return float(mid_price - record.high)
+  if mid_price < record.low:
+    return float(record.low - mid_price)
+  return 0.0
+
+
+def _eval_skip_outside_price(symbol: str) -> float:
+  """Furthest outside distance that could still be executable.
+
+  Reaction zones need inside (chase=0); range scalp may chase up to the
+  configured HFS maximum. Anything beyond that cannot activate — skip the
+  Redis presence write storm that was starving Telegram on prod.
+  """
+  from app.autotrade import units
+
+  pip = units.pip_size(symbol)
+  tolerance = max(
+    0.0,
+    float(runtime_config.execution.entry.contract_tolerance_pips) * pip,
+  )
+  chase = max(0.0, float(scalp_maximum_chase_pips(runtime_config))) * pip
+  # Small cushion so near-edge approaches still get presence updates.
+  return max(tolerance, chase) + max(pip * 5.0, 0.5)
+
+
+# Prod dig 2026-08-12: 118/137 watches were >12h old and far from market,
+# re-evaluated every 2s. Expire those so the active index stays near price.
+_ZONE_STALE_AGE_SECONDS = 12 * 3600
+_ZONE_STALE_OUTSIDE_PRICE = 25.0
+
+
 async def evaluate_active_zone_watches(
   client: Any,
   *,
   symbol: str,
   event_ts: str,
 ) -> StrategyMatch | None:
-  for record in await list_active_zone_watches(client, symbol=symbol):
-    activated = await _evaluate_record(client, record, event_ts=event_ts)
+  records = await list_active_zone_watches(client, symbol=symbol)
+  if not records:
+    return None
+  quote = await _load_quote(client, symbol)
+  if quote is None:
+    return None
+  bid, ask, _ts = quote
+  mid = (bid + ask) / 2.0
+  skip_outside = _eval_skip_outside_price(symbol)
+  now = _now()
+  # Near-first so an executable zone is tried before far junk.
+  ranked = sorted(
+    records,
+    key=lambda item: (_outside_distance(item, mid), -item.score, item.zone_id),
+  )
+  for index, record in enumerate(ranked):
+    if index and index % 8 == 0:
+      await asyncio.sleep(0)
+    outside = _outside_distance(record, mid)
+    age_s = now - int(record.discovered_at or now)
+    if (
+      outside >= _ZONE_STALE_OUTSIDE_PRICE
+      and age_s >= _ZONE_STALE_AGE_SECONDS
+      and record.state not in TERMINAL_ZONE_WATCH_STATES | LOCKED_ZONE_WATCH_STATES
+    ):
+      try:
+        await transition_zone_watch(
+          client,
+          record.zone_id,
+          EXPIRED,
+          reason_code="stale_far_from_market",
+        )
+      except Exception:
+        log.exception(
+          "failed expiring stale zone_id=%s outside=%.2f age_s=%s",
+          record.zone_id,
+          outside,
+          age_s,
+        )
+      continue
+    if outside > skip_outside:
+      continue
+    activated = await _evaluate_record(
+      client,
+      record,
+      event_ts=event_ts,
+      quote=quote,
+    )
     if activated is not None:
       return activated
   return None
@@ -1347,7 +1428,7 @@ async def zone_watch_execution_loop() -> None:
   pubsub = client.pubsub()
   await pubsub.subscribe("bars:new", "spots:new")
   # Cap spot-driven re-evals so ticks cannot busy-loop evaluate_active.
-  spot_min_interval_s = 2.0
+  spot_min_interval_s = 3.0
   last_spot_eval_monotonic: dict[str, float] = {}
   log.info(
     "ZoneWatch direct execution loop started channels=bars:new,spots:new "

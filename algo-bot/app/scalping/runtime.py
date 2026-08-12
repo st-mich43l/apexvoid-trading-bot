@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import time
@@ -112,7 +113,8 @@ async def _ensure_context(
   mid = (bid + ask) / 2.0
   pip = units.pip_size(symbol)
   atr = float(m5["high"].astype(float).tail(14).mean() - m5["low"].astype(float).tail(14).mean())
-  snapshot = build_scalp_context_snapshot(
+  snapshot = await asyncio.to_thread(
+    build_scalp_context_snapshot,
     symbol=symbol,
     m5=m5,
     m15=m15,
