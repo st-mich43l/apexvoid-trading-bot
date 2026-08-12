@@ -174,6 +174,7 @@ class DetectorSettings:
   crt_min_atr: float = 1.5
   crt_reclaim_bars: int = 6
   fvg_max_atr: float = 2.0
+  fvg_entry_max_width_price: float = 5.0
   # Recovery mission (2026-07-30): these six sources were live around
   # 2026-07-28 and were deliberately dropped from DEFAULT_DETECTORS during
   # the P0 zone/M1 simplification without their own enable flags, leaving
@@ -372,6 +373,9 @@ def detector_settings_from(config: object | None = None) -> DetectorSettings:
     crt_min_atr=float(strategies.technique.crt.min_atr),
     crt_reclaim_bars=int(strategies.technique.crt.reclaim_bars),
     fvg_max_atr=float(strategies.technique.fvg.max_atr),
+    fvg_entry_max_width_price=float(
+      strategies.technique.fvg.entry_max_width_price
+    ),
     box_breakout_enabled=bool(strategies.selection.box_breakout_enabled),
     trend_pullback_enabled=bool(strategies.trend.pullback_enabled),
     break_retest_enabled=bool(strategies.breakout.break_retest_enabled),
@@ -738,10 +742,19 @@ def _proximal_if_wide(
   direction: str,
   settings: DetectorSettings,
 ) -> tuple[Zone, bool]:
+  from app.analysis.technique_geometry import optimize_imbalance_entry_zone
+
+  # FVG/imbalance members always take the shared 5-price proximal entry,
+  # even when ATR width would still allow a wider band.
+  zone, fvg_clipped = optimize_imbalance_entry_zone(
+    zone,
+    direction=direction,
+    max_width_price=float(settings.fvg_entry_max_width_price),
+  )
   width = zone.high - zone.low
   max_width = max(0.0, settings.max_zone_width_atr) * max(0.0, atr)
   if max_width <= 0 or width <= max_width:
-    return zone, False
+    return zone, fvg_clipped
   band = max(_EPS, settings.proximal_band_atr * max(0.0, atr))
   if direction == "SELL":
     top = min(zone.high, zone.low + band)
@@ -953,6 +966,28 @@ def _finish(
   source_score: float | None = None,
   bias_relationship: str | None = None,
 ) -> DetectionResult | None:
+  from app.analysis.technique_geometry import optimize_imbalance_entry_zone
+
+  # Preserve full FVG/imbalance gap for mitigation / fill semantics, then
+  # clip the tradeable entry to the shared proximal 5-price contract so
+  # every strategy (FVG, iFVG, Confluence, zone reaction on FVG members)
+  # publishes the same execution geometry.
+  raw_low = float(
+    structural_low if structural_low is not None else zone.low
+  )
+  raw_high = float(
+    structural_high if structural_high is not None else zone.high
+  )
+  zone, clipped = optimize_imbalance_entry_zone(
+    zone,
+    direction=direction,
+    max_width_price=float(ctx.settings.fvg_entry_max_width_price),
+    structural_kind=structural_kind,
+  )
+  if clipped:
+    structural_low = raw_low
+    structural_high = raw_high
+    reasons = [*reasons, "proximal fvg imbalance entry"]
   if not _level_valid(level, price, direction):
     return None
   if not _entry_valid_for_settings(zone, price, atr, direction, ctx.settings):

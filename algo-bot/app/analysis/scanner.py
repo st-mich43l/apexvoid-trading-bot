@@ -1716,6 +1716,21 @@ def _merge_detection_confluence(
       score=zone.score,
       score_reasons=score_reasons,
     )
+    from app.analysis.technique_geometry import optimize_imbalance_entry_zone
+
+    direction = "BUY" if zone.side == "buy" else "SELL"
+    max_width = float(
+      runtime_config.strategies.technique.fvg.entry_max_width_price
+    )
+    optimized_entry, clipped = optimize_imbalance_entry_zone(
+      merged_entry,
+      direction=direction,
+      max_width_price=max_width,
+      tags=zone.tags,
+    )
+    if clipped:
+      merged_entry = optimized_entry
+      reasons = [*reasons, "proximal fvg imbalance entry"]
     merged = replace(
       representative,
       entry_zone=merged_entry,
