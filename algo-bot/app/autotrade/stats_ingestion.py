@@ -69,7 +69,9 @@ async def _emit_funnel_complete(client, event: dict) -> None:
     normalize_setup_type,
     BUCKET_SCALP,
   )
+  from app.scalping.context import classify_session
   from app.scalping.risk import (
+    apply_daily_reset,
     load_risk,
     record_scalp_outcome,
     save_risk,
@@ -117,6 +119,9 @@ async def _emit_funnel_complete(client, event: dict) -> None:
   try:
     state = await load_risk(client, symbol)
     now = int(event.get("timestamp") or time.time())
+    state = apply_daily_reset(
+      state, runtime_config, now=now, session=classify_session(now, runtime_config)
+    )
     result_pips = event.get("group_realized_pips")
     if result_pips is None:
       result_pips = event.get("result_pips")

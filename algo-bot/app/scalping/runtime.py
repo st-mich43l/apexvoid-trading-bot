@@ -39,6 +39,7 @@ from app.scalping.microstructure import build_micro_structure
 from app.scalping.publish import build_hfs_strategy_match, publish_hfs_live
 from app.scalping.ranking import rank_opportunities, score_opportunity
 from app.scalping.risk import (
+  apply_daily_reset,
   apply_loss_streak_cooldown_reset,
   evaluate_risk,
   load_risk,
@@ -220,6 +221,9 @@ async def process_m1_bar(
   bid, ask, qts = quote
 
   risk_state = await load_risk(client, symbol)
+  risk_state = apply_daily_reset(
+    risk_state, cfg, now=now, session=context.session
+  )
   risk_state = apply_loss_streak_cooldown_reset(risk_state, cfg, now=now)
   await save_risk(client, symbol, risk_state)
   risk = evaluate_risk(risk_state, cfg, session=context.session, now=now)

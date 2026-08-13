@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
+from datetime import datetime, timedelta, timezone
 import json
 from typing import Any
 
@@ -114,6 +115,43 @@ def evaluate_risk(
     return ScalpDecision(False, True, "scalp_session_rollover_block", 0.0, measured)
 
   return ScalpDecision(True, False, "scalp_risk_allowed", 1.0, measured)
+
+
+def _trading_day_key(now: int, cfg: Any) -> str:
+  sessions = getattr(getattr(cfg, "market_data", None), "sessions", None)
+  rollover = int(getattr(sessions, "daily_rollover_utc_hour", 21) or 21)
+  shifted = datetime.fromtimestamp(int(now), tz=timezone.utc) - timedelta(
+    hours=rollover
+  )
+  return shifted.date().isoformat()
+
+
+def apply_daily_reset(
+  state: ScalpRiskState,
+  cfg: Any,
+  *,
+  now: int,
+  session: str,
+) -> ScalpRiskState:
+  """Clear daily/session R and trade counters at trading-day/session edges.
+
+  ``day_key``/``session_key`` were persisted but never compared against
+  anything, so a losing streak that tripped scalp_daily_loss_limit stayed
+  tripped indefinitely once daily_r crossed the threshold -- confirmed live,
+  daily_r sat at -3.75R from a loss recorded 2026-08-12, still blocking
+  every scalp entry over 24h later with no rollover in between.
+  """
+  day_key = _trading_day_key(now, cfg)
+  if state.day_key != day_key:
+    state.day_key = day_key
+    state.daily_trades = 0
+    state.daily_r = 0.0
+  session_key = f"{day_key}:{session}"
+  if state.session_key != session_key:
+    state.session_key = session_key
+    state.session_trades = 0
+    state.session_r = 0.0
+  return state
 
 
 def apply_loss_streak_cooldown_reset(
