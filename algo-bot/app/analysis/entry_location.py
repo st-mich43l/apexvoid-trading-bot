@@ -17,6 +17,7 @@ from app.autotrade.strategy_taxonomy import (
   is_liquidity_strategy,
   is_range_strategy,
   is_reaction_strategy,
+  is_technique_or_confluence,
   is_zone_strategy,
 )
 
@@ -381,17 +382,22 @@ def evaluate_entry_location(
     sell_min = _float_cfg(section, "sell_minimum_position", 0.50)
     extreme_buy = _float_cfg(section, "extreme_buy_block_position", 0.65)
     extreme_sell = _float_cfg(section, "extreme_sell_block_position", 0.35)
+    # Techniques / confluence often form at dealing-range extremes by
+    # design — allow the extreme band; keep mid-range premium/discount.
+    skip_extremes = is_technique_or_confluence(strategy)
     if side == "BUY":
       if pos >= extreme_buy:
-        reason = "buy_at_range_extreme"
-        would_block = True
+        if not skip_extremes:
+          reason = "buy_at_range_extreme"
+          would_block = True
       elif pos > buy_max:
         reason = "buy_in_premium"
         would_block = True
     elif side == "SELL":
       if pos <= extreme_sell:
-        reason = "sell_at_range_extreme"
-        would_block = True
+        if not skip_extremes:
+          reason = "sell_at_range_extreme"
+          would_block = True
       elif pos < sell_min:
         reason = "sell_in_discount"
         would_block = True

@@ -78,6 +78,19 @@ def is_zone_strategy(name: str) -> bool:
   return str(name or "") in ZONE_STRATEGIES
 
 
+def is_technique_strategy(name: str) -> bool:
+  return str(name or "") in TECHNIQUE_STRATEGIES
+
+
+def is_confluence_strategy(name: str) -> bool:
+  return str(name or "") in CONFLUENCE_STRATEGIES
+
+
+def is_technique_or_confluence(name: str) -> bool:
+  key = str(name or "")
+  return key in TECHNIQUE_STRATEGIES or key in CONFLUENCE_STRATEGIES
+
+
 def is_liquidity_strategy(name: str) -> bool:
   return str(name or "") in LIQUIDITY_STRATEGIES
 

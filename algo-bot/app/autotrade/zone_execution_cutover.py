@@ -57,7 +57,11 @@ from app.autotrade.lifecycle import increment_metric
 from app.autotrade.multi_match import dedupe_matches, serialize_matches, strategy_matches_key
 from app.autotrade.strategy_match import StrategyMatch, strategy_match_key
 from app.autotrade.strategy_match_ready import enqueue_strategy_match_ready
-from app.autotrade.strategy_taxonomy import is_range_strategy, is_reaction_strategy
+from app.autotrade.strategy_taxonomy import (
+  is_range_strategy,
+  is_reaction_strategy,
+  is_technique_or_confluence,
+)
 from app.autotrade.zone_watch import (
   DISCOVERED,
   EXPIRED,
@@ -333,13 +337,22 @@ def _quote_evidence(
   )
 
 
+def _technique_chase_pips() -> float:
+  """Chase budget for technique / confluence ZoneWatch activation."""
+  try:
+    value = float(runtime_config.execution.entry.maximum_chase_distance_pips)
+  except (TypeError, ValueError, AttributeError):
+    return 40.0
+  return max(0.0, value)
+
+
 def _scalp_access(
   record: ZoneWatch,
   quote: tuple[float, float, int],
   *,
   strategy: str | None = None,
 ):
-  """Inside / chase access for range scalp families; strict inside otherwise."""
+  """Inside / chase access for range scalp + techniques; strict inside otherwise."""
   from app.autotrade import units
 
   bid, ask, _ts = quote
@@ -359,6 +372,17 @@ def _scalp_access(
       pip_size=pip,
       maximum_chase_pips=scalp_maximum_chase_pips(runtime_config),
     )
+  if strategy and is_technique_or_confluence(strategy):
+    return scalp_zone_access(
+      record.direction,
+      bid,
+      ask,
+      record.low,
+      record.high,
+      tolerance,
+      pip_size=pip,
+      maximum_chase_pips=_technique_chase_pips(),
+    )
   evidence = executable_quote_in_zone(
     record.direction,
     bid,
@@ -377,20 +401,45 @@ def _scalp_access(
   )
 
 
-def _decisive_break(record: ZoneWatch, evidence: Any) -> bool:
-  """True when price closed beyond the zone's far/invalidating edge.
+def _decisive_break_from_close(record: ZoneWatch, close: float | None) -> bool:
+  """True when a closed bar finished beyond the zone's far/invalidating edge.
 
-  BUY (demand) is approached from above and fails by closing below `low`;
-  SELL (supply) is approached from below and fails by closing above
-  `high`. Exiting back out the *near* edge (a bounce) is not a break - see
-  zone_watch.record_zone_presence's decisive_break param.
+  BUY (demand) fails by closing below ``low``; SELL (supply) fails by closing
+  above ``high``. Live spot wicks must not invalidate — callers load the latest
+  closed bar on ``record.source_timeframe`` (fallback M5).
   """
-  price = evidence.executable_quote
-  if price is None:
+  if close is None:
+    return False
+  try:
+    price = float(close)
+  except (TypeError, ValueError):
+    return False
+  if not math.isfinite(price):
     return False
   if str(record.direction).upper() == "BUY":
     return price < record.low
   return price > record.high
+
+
+async def _closed_bar_decisive_break(client: Any, record: ZoneWatch) -> bool:
+  """Load latest closed bar and test far-edge invalidation."""
+  tf = str(record.source_timeframe or "M5").upper() or "M5"
+  try:
+    source = RedisOHLCSource(client)
+    frame = await source.window(record.symbol, tf, max(3, window_for_timeframe(tf)))
+  except Exception:
+    log.exception(
+      "closed-bar decisive_break load failed symbol=%s zone_id=%s tf=%s",
+      record.symbol, record.zone_id, tf,
+    )
+    return False
+  if frame.empty:
+    return False
+  try:
+    close = float(frame["close"].iloc[-1])
+  except (TypeError, ValueError, KeyError, IndexError):
+    return False
+  return _decisive_break_from_close(record, close)
 
 
 async def _record_policy_telemetry(
@@ -437,6 +486,7 @@ def _location_and_activation_for_record(
   range_bounds: dict[str, float | None] | None = None,
   chase_pips: float | None = None,
   maximum_chase_pips: float | None = None,
+  decisive_break: bool = False,
 ):
   bid, ask, _ts = quote
   ranges = range_bounds or _empty_range_bounds()
@@ -473,7 +523,7 @@ def _location_and_activation_for_record(
       None if record.zone_entered_at is None else int(record.zone_entered_at)
     ),
     quote_inside=bool(evidence.inside),
-    decisive_break=_decisive_break(record, evidence),
+    decisive_break=bool(decisive_break),
     trigger=trigger,
     location_decision=location,
     now=int(now),
@@ -544,6 +594,7 @@ async def _prepare_activation(
     zone_id=record.zone_id,
     analysis_context=analysis_context,
   )
+  decisive_break = await _closed_bar_decisive_break(client, record)
   location, activation, context = _location_and_activation_for_record(
     match=match,
     record=record,
@@ -554,6 +605,7 @@ async def _prepare_activation(
     range_bounds=range_bounds,
     chase_pips=chase_pips,
     maximum_chase_pips=maximum_chase_pips,
+    decisive_break=decisive_break,
   )
   checked_at = datetime.now(timezone.utc).isoformat()
   location_payload = {
@@ -944,16 +996,37 @@ async def _activate_match(
   now = _now()
   quote = await _load_quote(client, record.symbol)
   if quote is None:
+    log.info(
+      "zone activate remain symbol=%s strategy=%s zone_id=%s reason=quote_unavailable",
+      record.symbol, match.strategy, record.zone_id,
+    )
     return None
   access = _scalp_access(record, quote, strategy=match.strategy)
   evidence = access.evidence
   if not access.executable:
+    decisive_break = await _closed_bar_decisive_break(client, record)
+    log.info(
+      "zone activate remain symbol=%s strategy=%s zone_id=%s "
+      "reason=%s mode=%s distance_pips=%s max_chase=%s decisive_break=%s",
+      record.symbol,
+      match.strategy,
+      record.zone_id,
+      (
+        "scalp_missed_chase"
+        if access.status == "chase_missed"
+        else "quote_outside_zone"
+      ),
+      access.status,
+      access.chase_pips,
+      access.maximum_chase_pips,
+      decisive_break,
+    )
     await record_zone_presence(
       client,
       record.zone_id,
       inside=False,
       now=now,
-      decisive_break=_decisive_break(record, evidence),
+      decisive_break=decisive_break,
     )
     return None
   match = replace(
@@ -1007,16 +1080,43 @@ async def _activate_match(
     return match
 
   if result.reason_code == "direct_publish_failed_durable_fallback":
-    # Reaction strategies never use the ready stream once executable —
-    # leave them watching and retry on the next M1/quote cycle.
-    if is_reaction_strategy(match.strategy):
+    # Reaction + technique/confluence never use the ready stream once
+    # executable — leave them watching and retry on the next M1/quote cycle.
+    if (
+      is_reaction_strategy(match.strategy)
+      or is_technique_or_confluence(match.strategy)
+    ):
+      log.info(
+        "zone activate remain symbol=%s strategy=%s zone_id=%s "
+        "reason=direct_publish_failed_durable_fallback status=%s "
+        "mode=%s distance_pips=%s max_chase=%s",
+        record.symbol,
+        match.strategy,
+        record.zone_id,
+        result.status,
+        access.status,
+        access.chase_pips,
+        access.maximum_chase_pips,
+      )
       await record_zone_presence(client, record.zone_id, inside=False, now=now)
       return None
-    # Exceptional fallback only for non-reaction workflows.
+    # Exceptional fallback only for non-reaction / non-technique workflows.
     stream_id = await enqueue_strategy_match_ready(client, match, recovery=True)
     if stream_id is not None:
       return match
 
+  log.info(
+    "zone activate reject symbol=%s strategy=%s zone_id=%s "
+    "reason=%s status=%s mode=%s distance_pips=%s max_chase=%s",
+    record.symbol,
+    match.strategy,
+    record.zone_id,
+    result.reason_code or "zone_no_longer_executable",
+    result.status,
+    access.status,
+    access.chase_pips,
+    access.maximum_chase_pips,
+  )
   setup = await load_setup(client, match.match_id)
   if setup is not None and setup.state not in {SETUP_INVALIDATED, *worker.TERMINAL_STATES}:
     try:
@@ -1077,13 +1177,14 @@ async def _evaluate_record(
     return None
   access = _scalp_access(record, quote, strategy=match.strategy)
   evidence = access.evidence
+  decisive_break = await _closed_bar_decisive_break(client, record)
   record, _entered = await record_zone_presence(
     client,
     record.zone_id,
     inside=bool(evidence.inside or access.status == "chase"),
     now=quote[2],
     htf_evidence=record.source_timeframe in {"H1", "M15"},
-    decisive_break=_decisive_break(record, evidence),
+    decisive_break=decisive_break,
   )
   if (
     not access.executable
@@ -1247,13 +1348,14 @@ async def _sync_strategy_match_cutover(
       continue
     access = _scalp_access(record, quote, strategy=str(result.setup))
     evidence = access.evidence
+    decisive_break = await _closed_bar_decisive_break(client, record)
     record, _ = await record_zone_presence(
       client,
       zone_id,
       inside=bool(evidence.inside or access.status == "chase"),
       now=quote[2],
       htf_evidence=source_tf in {"H1", "M15"},
-      decisive_break=_decisive_break(record, evidence),
+      decisive_break=decisive_break,
     )
     if record.state in TERMINAL_ZONE_WATCH_STATES | LOCKED_ZONE_WATCH_STATES:
       log.info(
