@@ -629,12 +629,25 @@ def stop_bounds_for_reaction_room(
   primary_tp_pips: float | int | None,
   pip_size: Any,
   cfg: Any | None,
+  for_group_stop: bool = False,
 ) -> tuple[int, int, dict[str, Any]]:
   """Pin reaction/scalp SL envelope to room-synced primary TP (≈1:1).
 
   Returns ``(minimum_stop_pips, maximum_stop_pips, measured)``. When primary
   TP is missing, falls back to the strategy envelope. Zone / Demand / Supply
   never use this path (independent family).
+
+  ``for_group_stop`` must be set whenever the caller will size a multi-leg
+  absolute group stop (plan_group_protective_stop), not a single-leg one.
+  A wide room pushes ``desired`` up near/at ``cap_pips``, and pinning
+  ``minimum`` to that same value collapses [min, max] to a single point
+  (live 2026-08-06: min=max=60 on live Supply/Demand candidates). A single
+  absolute stop price is a different pip distance from every leg by
+  construction, so a single-point band makes every multi-leg group stop
+  with any real leg spread mathematically unsatisfiable — it always
+  rejected as stop_exceeds_envelope_furthest_leg. Group stops keep the
+  floor at ``floor_pips`` regardless of ``desired`` so [min, max] always
+  has real width to place legs across.
   """
   fallback = stop_bounds_for_strategy(
     strategy=strategy, pip_size=pip_size, cfg=cfg,
@@ -718,16 +731,24 @@ def stop_bounds_for_reaction_room(
   floor_pips = max(1, floor_pips)
   cap_pips = max(floor_pips, cap_pips)
   desired = max(floor_pips, int(math.ceil(primary / min_rr)))
-  # Floor can rise with room RR, but the hard cap stays the owner max so
-  # multi-leg group stops keep a real [min, max] band. Collapsing to a
-  # single point (min=max=40) made the cap pull SL to 40p from the far
-  # leg and strand the near leg at ~23p (live Trend Pullback 2026-08-06).
-  minimum = min(desired, cap_pips)
+  if for_group_stop:
+    # Never let a wide room pull the floor up toward the cap here -- see
+    # the for_group_stop docstring note. floor_pips < cap_pips whenever
+    # the owner envelope has any width at all, so [min, max] always has
+    # real room for a multi-leg spread instead of collapsing to a point.
+    minimum = floor_pips
+  else:
+    # Single-leg: pin toward desired for a genuine ~1:1 stop against the
+    # room-capped target; a single absolute price has only one leg to
+    # satisfy, so collapsing [min, max] toward one point is intentional
+    # here, not a bug.
+    minimum = min(desired, cap_pips)
   maximum = cap_pips
   measured: dict[str, Any] = {
     "stop_bounds_source": source,
     "primary_tp_pips": round(primary, 3),
     "desired_stop_pips": desired,
+    "stop_bounds_for_group_stop": for_group_stop,
   }
   if is_scalp:
     measured["range_room_stop_floor_pips"] = floor_pips

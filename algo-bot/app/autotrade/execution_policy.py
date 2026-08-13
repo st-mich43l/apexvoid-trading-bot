@@ -738,6 +738,16 @@ def evaluate_execution_policy(
       if remaining_pips > 0
       else primary_tp_pips_from_match(match)
     )
+    # Known ahead of the stop-bounds call so a wide room never collapses
+    # [min, max] to a single point for a multi-leg group stop -- see
+    # stop_bounds_for_reaction_room's for_group_stop docstring note.
+    leg_prices = list(route_plan.planned_leg_entry_prices or ())
+    leg_ratios = list(route_plan.planned_leg_volume_ratios or ())
+    use_group_stop = (
+      entry_distribution == "zone_scale"
+      and len(leg_prices) >= 2
+      and len(leg_ratios) == len(leg_prices)
+    )
     (
       minimum_stop_pips,
       maximum_stop_pips,
@@ -747,6 +757,7 @@ def evaluate_execution_policy(
       primary_tp_pips=primary_tp,
       pip_size=pip,
       cfg=cfg,
+      for_group_stop=use_group_stop,
     )
     if sizing_risk_multiplier > 1.0:
       stop_bounds_measured = {
@@ -802,13 +813,6 @@ def evaluate_execution_policy(
     digits = int(cfg.contract.instrument.price_digits)
     structure_buffer_atr = float(cfg.execution.scaling.add.stop_buffer_atr)
     wick_buffer_atr = float(cfg.execution.stops.wick_stop_buffer_atr)
-    leg_prices = list(route_plan.planned_leg_entry_prices or ())
-    leg_ratios = list(route_plan.planned_leg_volume_ratios or ())
-    use_group_stop = (
-      entry_distribution == "zone_scale"
-      and len(leg_prices) >= 2
-      and len(leg_ratios) == len(leg_prices)
-    )
     if use_group_stop:
       # Absolute group SL is structural (one price beyond zone/entries/swing).
       # Envelope distance uses declared leg ratios as relative weights only —
