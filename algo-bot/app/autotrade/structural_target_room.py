@@ -567,36 +567,85 @@ def evaluate_structural_target_room(
       if planned_in_overlap
       else "opposing_entry_contained"
     )
-    return _log_decision(StructuralTargetRoomDecision(
-      False,
-      reason,
-      (
-        "planned entry sits inside an opposing-structure overlap"
-        if reason == "opposing_entry_overlap"
-        else "planned entry is inside an opposing actionable structure"
-      ),
-      True,
-      measured,
-      opposing_entry=barrier,
-    ))
+    # Weak map "level" bands are often stacked noise next to a real zone —
+    # they silenced HFS/technique analysis while discretionary charts still
+    # had a trade. Major/zone containment stays a hard structural reject.
+    if tier.casefold() == "level":
+      measured["weak_opposing_level_ignored"] = True
+      measured["weak_opposing_level_reason"] = reason
+      log.info(
+        "structural_target_room ignoring weak opposing level "
+        "reason=%s direction=%s planned_entry=%s opposing=%s-%s",
+        reason,
+        side,
+        planned,
+        opposing_low,
+        opposing_high,
+      )
+    else:
+      return _log_decision(StructuralTargetRoomDecision(
+        False,
+        reason,
+        (
+          "planned entry sits inside an opposing-structure overlap"
+          if reason == "opposing_entry_overlap"
+          else "planned entry is inside an opposing actionable structure"
+        ),
+        True,
+        measured,
+        opposing_entry=barrier,
+      ))
   # Hard structural: no raw geometric room. Buffer must not invent this.
-  if raw_room <= 0:
+  if raw_room <= 0 and not measured.get("weak_opposing_level_ignored"):
     reason = (
       "opposing_major_no_room"
       if tier.casefold() == "major"
       else "opposing_barrier_no_target"
     )
+    if tier.casefold() == "level":
+      measured["weak_opposing_level_ignored"] = True
+      measured["weak_opposing_level_reason"] = reason
+      log.info(
+        "structural_target_room ignoring weak opposing level "
+        "reason=%s direction=%s planned_entry=%s opposing=%s-%s",
+        reason,
+        side,
+        planned,
+        opposing_low,
+        opposing_high,
+      )
+    else:
+      return _log_decision(StructuralTargetRoomDecision(
+        False,
+        reason,
+        (
+          "opposing major structure leaves no raw target room"
+          if reason == "opposing_major_no_room"
+          else "opposing structure leaves no positive raw target room"
+        ),
+        True,
+        measured,
+        opposing_entry=barrier,
+      ))
+  elif raw_room <= 0 and measured.get("weak_opposing_level_ignored"):
+    pass  # fall through — treat weak level as non-barrier below
+
+  if measured.get("weak_opposing_level_ignored"):
+    effective = float(max(targets)) if targets else None
     return _log_decision(StructuralTargetRoomDecision(
-      False,
-      reason,
-      (
-        "opposing major structure leaves no raw target room"
-        if reason == "opposing_major_no_room"
-        else "opposing structure leaves no positive raw target room"
-      ),
       True,
-      measured,
+      "weak_opposing_level_ignored",
+      "weak map level opposing ignored; analysis continues",
+      False,
+      {
+        **measured,
+        "usable_room_pips": round(max(0.0, room_pips), 3),
+        "effective_target_pips": effective,
+        "preference_telemetry": True,
+      },
       opposing_entry=barrier,
+      fitted_targets_pips=targets,
+      effective_target_pips=effective,
     ))
 
   # Band overlap without planned-entry containment: allow + telemetry.

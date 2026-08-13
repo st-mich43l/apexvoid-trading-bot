@@ -2057,17 +2057,76 @@ def _opposing_zone_policy_kwargs(
   }
 
 
+def _zone_overlaps_candidate_band(
+  zone: Zone,
+  *,
+  candidate_low: float,
+  candidate_high: float,
+  atr: float,
+  pip_size: float,
+) -> bool:
+  """True when an HTF zone is the candidate's own wall (stacked map noise)."""
+  from app.autotrade.structural_target_room import overlap_exclusion_threshold
+
+  low = min(float(candidate_low), float(candidate_high))
+  high = max(float(candidate_low), float(candidate_high))
+  overlap = min(high, float(zone.high)) - max(low, float(zone.low))
+  if overlap <= 0:
+    return False
+  threshold = overlap_exclusion_threshold(pip_size=pip_size, atr=atr)
+  return overlap >= threshold
+
+
 def _nearest_directional_zone(
   direction: str,
   entry_reference: float,
   zones: list[Zone],
+  *,
+  candidate_entry_low: float | None = None,
+  candidate_entry_high: float | None = None,
+  atr: float | None = None,
+  pip_size: float | None = None,
+  exclude_entry_structure: bool = True,
 ) -> Zone | None:
-  """Nearest HTF zone on the side that justifies (and can trap the stop of)
-  ``direction`` - supply for a SELL, demand for a BUY. Used both for A2's
-  opposing-zone attachment (any freshness) and the A3 veto (fresh only).
+  """Nearest HTF zone on the side that can trap the stop of ``direction``.
+
+  Supply for SELL, demand for BUY. Used for opposing-zone attachment and
+  HTF veto.
+
+  Excludes the candidate's own entry structure: a SELL at supply used to
+  pick that same supply (distance 0), then opposing-stop push blew the
+  envelope and silenced valid trades. Same for BUY at demand.
   """
   side = "supply" if direction == "SELL" else "demand"
   candidates = [zone for zone in zones if zone.side == side]
+  if not candidates:
+    return None
+
+  band_low = candidate_entry_low
+  band_high = candidate_entry_high
+  if (
+    band_low is not None
+    and band_high is not None
+    and atr is not None
+    and pip_size is not None
+    and float(atr) > 0
+    and float(pip_size) > 0
+  ):
+    candidates = [
+      zone for zone in candidates
+      if not _zone_overlaps_candidate_band(
+        zone,
+        candidate_low=float(band_low),
+        candidate_high=float(band_high),
+        atr=float(atr),
+        pip_size=float(pip_size),
+      )
+    ]
+  if exclude_entry_structure:
+    candidates = [
+      zone for zone in candidates
+      if not (float(zone.low) <= float(entry_reference) <= float(zone.high))
+    ]
   if not candidates:
     return None
 
@@ -2776,7 +2835,13 @@ async def _publish_candidate(
       await _record_gate_reject(client, symbol, "edge_proximity")
       return None
   opposing_zone = _nearest_directional_zone(
-    decision.direction, entry_reference, htf_zones or [],
+    decision.direction,
+    entry_reference,
+    htf_zones or [],
+    candidate_entry_low=float(decision.entry_zone[0]),
+    candidate_entry_high=float(decision.entry_zone[1]),
+    atr=float(scale_context.atr),
+    pip_size=float(units.pip_size(symbol)),
   )
   # Range/scalp with fitted native room is not HTF-opposing gated.
   scalp_ignores_opposing = bypasses_opposing_structure_gates(
@@ -3434,7 +3499,13 @@ async def _publish_strategy_match(
     return None
 
   strategy_opposing_zone = _nearest_directional_zone(
-    match.direction, spot.price, htf_zones or [],
+    match.direction,
+    spot.price,
+    htf_zones or [],
+    candidate_entry_low=match.entry_low,
+    candidate_entry_high=match.entry_high,
+    atr=float(match.atr),
+    pip_size=float(units.pip_size(symbol)),
   )
   executable_quote = _executable_spot_price(spot, match.direction)
   # Geometry measurement only — never a worker publication gate.
@@ -5486,7 +5557,13 @@ async def _publish_trade_plan_v8(
     return None
 
   strategy_opposing_zone = _nearest_directional_zone(
-    match_for_plan.direction, spot.price, htf_zones or [],
+    match_for_plan.direction,
+    spot.price,
+    htf_zones or [],
+    candidate_entry_low=match_for_plan.entry_low,
+    candidate_entry_high=match_for_plan.entry_high,
+    atr=float(match_for_plan.atr),
+    pip_size=float(units.pip_size(symbol)),
   )
   guard_mode = resolve_guard_mode()
   source = _structural_source_identity(
@@ -5540,7 +5617,13 @@ async def _publish_trade_plan_v8(
     and not match_bypasses_opposing_structure(match_for_plan)
   ):
     htf_opposing = _nearest_directional_zone(
-      match_for_plan.direction, spot.price, htf_zones or [],
+      match_for_plan.direction,
+      spot.price,
+      htf_zones or [],
+      candidate_entry_low=match_for_plan.entry_low,
+      candidate_entry_high=match_for_plan.entry_high,
+      atr=float(match_for_plan.atr),
+      pip_size=float(units.pip_size(symbol)),
     )
     htf_reason = _htf_veto_reason(match_for_plan.direction, spot.price, htf_opposing)
     if htf_reason is not None:
@@ -6079,7 +6162,13 @@ async def _publish_trend_candidate(
   trend_tier = "A" if trend_decision.confluence >= 3 else "B"
   entry_reference = spot.price
   opposing_zone = _nearest_directional_zone(
-    trend_decision.direction, entry_reference, htf_zones or [],
+    trend_decision.direction,
+    entry_reference,
+    htf_zones or [],
+    candidate_entry_low=trend_decision.entry_zone[0],
+    candidate_entry_high=trend_decision.entry_zone[1],
+    atr=float(trend_decision.atr),
+    pip_size=float(units.pip_size(symbol)),
   )
   absolute_target = (
     max(trend_decision.target_prices)
