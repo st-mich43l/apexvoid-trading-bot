@@ -1440,44 +1440,51 @@ def _opposing_barrier_decision(
     ),
     None,
   )
-  ambiguous = next(
+  contained = next(
     (
-      barrier for barrier, relationship in relationships
-      if relationship == "overlapping_ambiguous"
+      (barrier, relationship) for barrier, relationship in relationships
+      if relationship in ("overlapping_ambiguous", "overlapping_neutral")
     ),
     None,
   )
-  if ambiguous is not None:
+  if contained is not None:
+    ambiguous, relationship = contained
     message = (
       f"entry {entry_reference:.2f} inside opposing/ambiguous "
       f"{ambiguous.level_kind or ambiguous.side} "
       f"{ambiguous.low:.2f}-{ambiguous.high:.2f}"
     )
-    # A directional supply/demand zone is a real structural wall (23 Jul
-    # incident: a BUY filled inside an 8-touch SELL resistance band) and
-    # stays an unconditional hard block. A neutral key level - a round
-    # number or reaction-level band with no directional side - is a much
-    # weaker signal; production has only ever hard-blocked on this branch
-    # via a "round" level (never a real zone), rejecting otherwise-fine
-    # entries. Route those through the same telemetry-not-block treatment
-    # every other soft structural signal already gets.
+    # A directional supply/demand zone the entry sits inside is a real
+    # structural wall (23 Jul incident: a BUY filled inside an 8-touch SELL
+    # resistance band) and stays an unconditional hard block -- that's
+    # relationship == "overlapping_ambiguous", which classify_barrier_
+    # relationship only returns when the barrier's side cleanly matches the
+    # opposing set. A neutral key level (source_type == "level") or a zone
+    # whose side couldn't be cleanly classified as opposing at all
+    # (relationship == "overlapping_neutral") are both much weaker signals;
+    # route them through the same telemetry-not-block treatment every
+    # other soft structural signal already gets.
     is_neutral_level = ambiguous.source_type == "level"
+    is_side_unclear = relationship == "overlapping_neutral"
+    if is_neutral_level:
+      reason_code = "entry_inside_opposing_level"
+    elif is_side_unclear:
+      reason_code = "entry_inside_ambiguous_zone"
+    else:
+      reason_code = "entry_inside_opposing_zone"
     decision = classify_guard_severity(
       "opposing_barrier",
-      (
-        "entry_inside_opposing_level" if is_neutral_level
-        else "entry_inside_opposing_zone"
-      ),
+      reason_code,
       message,
       guard_mode=guard_mode,
-      hard_geometry=not is_neutral_level,
+      hard_geometry=not (is_neutral_level or is_side_unclear),
     )
     return replace(
       decision,
       barrier=ambiguous,
       measured={
         "entry_reference": entry_reference,
-        "relationship": "overlapping_ambiguous",
+        "relationship": relationship,
       },
     )
 

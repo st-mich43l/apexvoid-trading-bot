@@ -104,6 +104,12 @@ PREFERENCE_TELEMETRY_REASONS = frozenset({
   # zone containment (entry_inside_opposing_zone, still a hard block below),
   # a level has no side and is a weak/ambiguous signal on its own.
   "entry_inside_opposing_level",
+  # Entry falls inside a zone whose side couldn't be cleanly classified as
+  # opposing this direction (classify_barrier_relationship's
+  # "overlapping_neutral"). Same reasoning as entry_inside_opposing_level:
+  # only a zone that's unambiguously on the opposing side is the real
+  # structural wall entry_inside_opposing_zone hard-blocks for.
+  "entry_inside_ambiguous_zone",
 })
 
 # True structural conflicts — must hard-block publication.
@@ -240,11 +246,18 @@ def classify_barrier_relationship(
 
   contains_entry = barrier.low <= entry_reference <= barrier.high
   if contains_entry:
-    return (
-      "overlapping_ambiguous"
-      if barrier.side == "neutral" or not opposing
-      else "overlapping_ambiguous"
-    )
+    # Bug (since this function's introduction in 13414b7): both branches of
+    # this condition returned the same literal value, so a zone whose side
+    # couldn't be cleanly classified as opposing (barrier.side == "neutral",
+    # or not matching the opposing-side set at all -- already excluded from
+    # "supportive" above by the side_supports check) was hard-blocked
+    # exactly like a confirmed, cleanly-classified opposing zone. Only a
+    # genuinely opposing zone containing the entry is the 23 Jul incident
+    # this guard exists for (BUY filled inside an 8-touch SELL resistance
+    # band, unambiguously barrier.side == "supply"); a side-unclear zone is
+    # a materially weaker signal, same reasoning PR #223 already applied to
+    # neutral key levels.
+    return "overlapping_ambiguous" if opposing else "overlapping_neutral"
   if opposing and ahead:
     if target_reference is None:
       return "opposing_ahead"
