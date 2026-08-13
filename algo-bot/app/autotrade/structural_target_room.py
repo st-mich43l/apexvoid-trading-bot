@@ -192,6 +192,76 @@ def filter_shared_boundary_opposing_entries(
   return kept, state
 
 
+def overlap_exclusion_threshold(*, pip_size: float, atr: float) -> float:
+  """Minimum price overlap to treat an opposing map band as the same wall."""
+  pip = max(0.0, float(pip_size))
+  atr_value = max(0.0, float(atr))
+  return max(2.0 * pip, 0.10 * atr_value)
+
+
+def filter_overlapping_opposing_entries(
+  entries: Iterable[Any],
+  *,
+  direction: str,
+  candidate_entry_low: float,
+  candidate_entry_high: float,
+  pip_size: float,
+  atr: float,
+) -> tuple[list[Any], dict[str, Any]]:
+  """Drop opposing map entries that substantially overlap the candidate band.
+
+  Technique / confluence geometry often stacks on top of Market Map
+  demand/supply so the opposing entry *is* the candidate's own wall.
+  Shared-boundary glue only catches edge-touch cases; overlap catches the
+  band-inside-band case. Barriers beyond the candidate (no meaningful
+  overlap) stay and still hard-block.
+  """
+  side = str(direction).upper()
+  low = min(float(candidate_entry_low), float(candidate_entry_high))
+  high = max(float(candidate_entry_low), float(candidate_entry_high))
+  threshold = overlap_exclusion_threshold(pip_size=pip_size, atr=atr)
+  opposing_side = "sell" if side == "BUY" else "buy"
+  kept: list[Any] = []
+  dropped: list[tuple[float, float]] = []
+  if side not in {"BUY", "SELL"} or not math.isfinite(threshold):
+    return list(entries), {
+      "applied": False,
+      "reason": "invalid_overlap_geometry",
+      "threshold": threshold,
+    }
+  for entry in entries:
+    if str(getattr(entry, "side", "")).casefold() != opposing_side:
+      kept.append(entry)
+      continue
+    entry_low = float(getattr(entry, "lo"))
+    entry_high = float(getattr(entry, "hi"))
+    overlap_width, _ratio = _overlap(low, high, entry_low, entry_high)
+    if overlap_width >= threshold:
+      dropped.append((entry_low, entry_high))
+    else:
+      kept.append(entry)
+  state = {
+    "applied": True,
+    "contract": "v8_overlap",
+    "threshold": round(threshold, 6),
+    "entries_before": len(kept) + len(dropped),
+    "entries_after": len(kept),
+    "overlap_excluded": len(dropped),
+    "dropped_bounds": [(round(lo, 6), round(hi, 6)) for lo, hi in dropped],
+  }
+  log_fn = log.info if dropped else log.debug
+  log_fn(
+    "structural_target_room v8 overlap direction=%s "
+    "threshold=%s kept=%s dropped=%s dropped_bounds=%s",
+    side,
+    round(threshold, 6),
+    len(kept),
+    len(dropped),
+    state["dropped_bounds"],
+  )
+  return kept, state
+
+
 def zone_proximal_room_reference(
   *,
   direction: str,
@@ -348,6 +418,24 @@ def evaluate_structural_target_room(
         int(prior.get("shared_boundary_excluded") or 0)
         + int(internal_shared.get("shared_boundary_excluded") or 0)
       ),
+      "dropped_bounds": list(prior.get("dropped_bounds") or []) + extra_dropped,
+    }
+
+  room_entries, internal_overlap = filter_overlapping_opposing_entries(
+    room_entries,
+    direction=side,
+    candidate_entry_low=low,
+    candidate_entry_high=high,
+    pip_size=pip,
+    atr=atr,
+  )
+  if internal_overlap.get("applied"):
+    prior = dict(shared_boundary_state or {})
+    extra_dropped = list(internal_overlap.get("dropped_bounds") or [])
+    shared_boundary_state = {
+      **prior,
+      "overlap_state": internal_overlap,
+      "overlap_excluded": int(internal_overlap.get("overlap_excluded") or 0),
       "dropped_bounds": list(prior.get("dropped_bounds") or []) + extra_dropped,
     }
 

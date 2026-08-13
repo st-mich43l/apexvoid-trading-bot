@@ -29,6 +29,13 @@ STRUCTURAL_SETUPS = frozenset({
   "Supply Zone Reaction",
   "Session Level Reaction",
   "Trendline Reaction",
+  # Atomic technique publishers + confluence band:
+  "Supply Demand",
+  "Order Block",
+  "FVG",
+  "iFVG",
+  "CRT",
+  "Confluence Zone",
 })
 
 _ZONE_REACTION_ALIASES = frozenset({
