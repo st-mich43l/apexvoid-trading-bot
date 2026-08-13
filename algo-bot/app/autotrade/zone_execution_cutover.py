@@ -112,6 +112,20 @@ _ORIGINAL_SYNC: Any = None
 _ORIGINAL_FORMAT: Any = None
 _ORIGINAL_DIRECT_PUBLISH: Any = None
 
+# Hard stop geometry failures: never activate / thrash-retry the same zone.
+# ``stop_exceeds_envelope_furthest_leg`` is not always listed in builder
+# ``known_stop_errors`` (maps to protective_stop_unavailable) but must still
+# pre-block here from eligibility.measured.planned_stop_error.
+_STOP_HARD_ERRORS = frozenset({
+  "stop_exceeds_envelope_after_wick",
+  "stop_exceeds_envelope_furthest_leg",
+  "stop_exceeds_max_envelope",
+  "stop_inside_opposing_zone",
+  "stop_inside_entry_zone",
+  "stop_not_beyond_planned_entries",
+  "protective_stop_unavailable",
+})
+
 
 def candidate_key(zone_id: str) -> str:
   return f"{_CANDIDATE_KEY_PREFIX}:{zone_id}"
@@ -248,6 +262,79 @@ def width_telemetry_key(symbol: str, zone_id: str) -> str:
 
 def _now() -> int:
   return int(datetime.now(timezone.utc).timestamp())
+
+
+def _is_stop_hard_error(code: str | None) -> bool:
+  text = str(code or "").strip()
+  if not text:
+    return False
+  if text in _STOP_HARD_ERRORS:
+    return True
+  if text.startswith("stop_exceeds_envelope"):
+    return True
+  # Publish path prefixes builder rejects: v8_protective_stop_unavailable,
+  # v8_stop_inside_opposing_zone, v8_stop_exceeds_max_envelope, ...
+  if text.startswith("v8_"):
+    return _is_stop_hard_error(text[3:])
+  return False
+
+
+def _match_planned_stop_hard_error(match: StrategyMatch) -> str | None:
+  """Return a durable stop geometry error already known on the candidate.
+
+  Activation must not start (and thrash) when scanner eligibility already
+  measured an unplannable protective stop — including the prod case where
+  ``allowed`` looked true while ``measured.planned_stop_error`` was set.
+  """
+  eligibility = getattr(match, "execution_eligibility", None)
+  if eligibility is None:
+    return None
+  measured = getattr(eligibility, "measured", None) or {}
+  for raw in (
+    measured.get("planned_stop_error"),
+    getattr(eligibility, "reason_code", None),
+  ):
+    code = str(raw or "").strip()
+    if _is_stop_hard_error(code):
+      return code
+  return None
+
+
+def _publish_should_terminalize_zone_watch(
+  *,
+  status: str,
+  reason_code: str | None,
+) -> bool:
+  """True when a failed publish must stop ZoneWatch re-activation thrash."""
+  if status == "invalidated":
+    return True
+  return _is_stop_hard_error(reason_code)
+
+
+async def _terminalize_zone_watch(
+  client: Any,
+  zone_id: str,
+  *,
+  reason_code: str,
+) -> None:
+  latest = await load_zone_watch(client, zone_id)
+  if latest is None or latest.state in TERMINAL_ZONE_WATCH_STATES:
+    return
+  if latest.state in LOCKED_ZONE_WATCH_STATES:
+    return
+  try:
+    await transition_zone_watch(
+      client,
+      zone_id,
+      INVALIDATED,
+      reason_code=reason_code,
+    )
+  except Exception:
+    log.exception(
+      "could not terminalize zone watch zone_id=%s reason=%s",
+      zone_id,
+      reason_code,
+    )
 
 
 def _zone_id(symbol: str, tf: str, result: Any, atr: float, pip_size: float) -> str:
@@ -584,6 +671,36 @@ async def _prepare_activation(
         "utc_hour": kz.utc_hour,
         **kz.measured,
       },
+    )
+    return None
+
+  stop_error = _match_planned_stop_hard_error(match)
+  if stop_error is not None:
+    log.info(
+      "entry activation blocked planned_stop_error symbol=%s strategy=%s "
+      "zone_id=%s reason=%s",
+      record.symbol,
+      match.strategy,
+      record.zone_id,
+      stop_error,
+    )
+    await _record_policy_telemetry(
+      client,
+      symbol=record.symbol,
+      kind="activation",
+      reason_code=stop_error,
+      payload={
+        "symbol": record.symbol,
+        "zone_id": record.zone_id,
+        "strategy": match.strategy,
+        "direction": record.direction,
+        "planned_stop_error": stop_error,
+      },
+    )
+    await _terminalize_zone_watch(
+      client,
+      record.zone_id,
+      reason_code=stop_error,
     )
     return None
 
@@ -1105,13 +1222,14 @@ async def _activate_match(
     if stream_id is not None:
       return match
 
+  reject_reason = result.reason_code or "zone_no_longer_executable"
   log.info(
     "zone activate reject symbol=%s strategy=%s zone_id=%s "
     "reason=%s status=%s mode=%s distance_pips=%s max_chase=%s",
     record.symbol,
     match.strategy,
     record.zone_id,
-    result.reason_code or "zone_no_longer_executable",
+    reject_reason,
     result.status,
     access.status,
     access.chase_pips,
@@ -1128,7 +1246,17 @@ async def _activate_match(
       )
     except Exception:
       log.exception("could not retire non-executable setup=%s", match.match_id)
-  await record_zone_presence(client, record.zone_id, inside=False, now=now)
+  if _publish_should_terminalize_zone_watch(
+    status=result.status,
+    reason_code=reject_reason,
+  ):
+    await _terminalize_zone_watch(
+      client,
+      record.zone_id,
+      reason_code=reject_reason,
+    )
+  else:
+    await record_zone_presence(client, record.zone_id, inside=False, now=now)
   return None
 
 

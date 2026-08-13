@@ -127,13 +127,21 @@ def bypasses_opposing_structure_gates(
   family: str | None = None,
   strategy_mode: str | None = None,
 ) -> bool:
-  """Scalp may enter inside HTF opposing only when native target room fits.
+  """Scalp may ignore HTF map opposing when native room owns the trade.
 
-  Covers Range Box / Range Edge / HFS. Requires a fitted room evidence
-  (``full_take_profit_pips`` from select_range_target / HFS expected target).
-  Raw reaction ladders alone do not unlock this — without a fitted target,
-  opposing gates still apply.
+  HFS always bypasses — its episode already sized stop/target; map
+  ``actionable_entries`` / HTF zones must not silence the scalp loop.
+
+  Range Box / Range Edge still require fitted ``full_take_profit_pips``
+  (select_range_target / configured floor). Raw reaction ladders alone
+  do not unlock the bypass.
   """
+  if is_hfs_strategy(name):
+    return True
+  if str(strategy_mode or "").casefold() == "hfs_scalp":
+    return True
+  if str(family or "").casefold() == CANONICAL_FAMILY_HFS:
+    return True
   if not is_scalp_strategy(
     name, family=family, strategy_mode=strategy_mode,
   ):
