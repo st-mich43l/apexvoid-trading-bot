@@ -2261,6 +2261,25 @@ async def auto_trade_status_text() -> str:
     f"📊 Open <b>{position_count}</b> · groups <b>{group_count}</b> · "
     f"today <b>{daily}</b> · algo <b>{manual_pending}</b>",
   ]
+  if isinstance(executor, dict):
+    try:
+      equity_val = float(executor.get("account_equity"))
+    except (TypeError, ValueError):
+      equity_val = None
+    try:
+      balance_val = float(executor.get("account_balance"))
+    except (TypeError, ValueError):
+      balance_val = None
+    # 0 before the engine's first broker account snapshot arrives - omit
+    # rather than show a misleading $0.00.
+    if equity_val or balance_val:
+      parts = []
+      if equity_val is not None:
+        parts.append(f"Equity <b>${equity_val:,.2f}</b>")
+      if balance_val is not None and balance_val != equity_val:
+        parts.append(f"Balance <b>${balance_val:,.2f}</b>")
+      if parts:
+        lines.append(f"💰 {' · '.join(parts)}")
   try:
     bid = float(spot["bid"])
     ask = float(spot["ask"])

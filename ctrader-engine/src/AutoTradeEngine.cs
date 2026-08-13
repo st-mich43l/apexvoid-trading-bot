@@ -5956,6 +5956,28 @@ public sealed class AutoTradeEngine(
       };
       await PropagateGroupMetadataAsync(source, cancellationToken);
     }
+    var executorPositionIds = _allSymbolPositions
+      .Where(item =>
+        item.Label == options.Label || trackedIds.Contains(item.PositionId)
+      )
+      .Select(item => item.PositionId)
+      .ToArray();
+    var executorPendingOrderIds = _allSymbolPendingOrders
+      .Where(item => item.Label == options.Label)
+      .Select(item => item.OrderId)
+      .ToArray();
+    var accountBalance = 0m;
+    var accountEquity = 0m;
+    var accountEquitySource = "";
+    if (_account is { } account)
+    {
+      var equityResolution = EquityResolver.Resolve(
+        account, executorPositionIds.Length, executorPendingOrderIds.Length
+      );
+      accountBalance = equityResolution.AccountBalance;
+      accountEquity = equityResolution.Equity;
+      accountEquitySource = equityResolution.EquitySource;
+    }
     var executorSnapshot = new AutoTradeExecutorSnapshot(
       symbol.RedisSymbol,
       options.Profile,
@@ -5963,22 +5985,17 @@ public sealed class AutoTradeEngine(
       Demo: _account is { IsLive: false },
       Hedged: _accountSupportsHedging,
       Ready: _ready,
-      PositionIds: _allSymbolPositions
-        .Where(item =>
-          item.Label == options.Label || trackedIds.Contains(item.PositionId)
-        )
-        .Select(item => item.PositionId)
-        .ToArray(),
-      PendingOrderIds: _allSymbolPendingOrders
-        .Where(item => item.Label == options.Label)
-        .Select(item => item.OrderId)
-        .ToArray(),
+      PositionIds: executorPositionIds,
+      PendingOrderIds: executorPendingOrderIds,
       GroupIds: _states.Values
         .Select(GroupId)
         .Distinct(StringComparer.Ordinal)
         .Order()
         .ToArray(),
-      UpdatedAt: _clock().ToUnixTimeSeconds()
+      UpdatedAt: _clock().ToUnixTimeSeconds(),
+      AccountBalance: accountBalance,
+      AccountEquity: accountEquity,
+      AccountEquitySource: accountEquitySource
     );
     await store.SetValueAsync(
       $"auto_trade:executor_snapshot:{symbol.RedisSymbol.ToUpperInvariant()}",

@@ -612,7 +612,13 @@ public sealed record AutoTradeExecutorSnapshot(
   IReadOnlyList<long> PositionIds,
   IReadOnlyList<long> PendingOrderIds,
   IReadOnlyList<string> GroupIds,
-  long UpdatedAt
+  long UpdatedAt,
+  // Raw broker account figures at snapshot time (0 before the first
+  // account snapshot arrives). Equity uses the same balance_proxy fallback
+  // as sizing (EquityResolver) - see AccountEquitySource for which.
+  decimal AccountBalance = 0m,
+  decimal AccountEquity = 0m,
+  string AccountEquitySource = ""
 );
 
 // Durable, restart-surviving confirmation progress for a tracked position
