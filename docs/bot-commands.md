@@ -297,48 +297,30 @@ The raw `+/-N pips` text also triggers auto-edit on edited messages if the chann
 
 ## Environment Variables
 
+Secrets and bootstrap live in `.env`. Full generated contract:
+[`docs/configuration/environment-reference.generated.md`](configuration/environment-reference.generated.md).
+
 | Variable | Required | Description |
 |---|---|---|
-| `TELEGRAM_BOT_TOKEN` | ✅ | Bot token from @BotFather |
-| `TELEGRAM_CHAT_ID` | ✅ | Channel ID where signals are posted (e.g. `-1001234567890`) |
-| `TELEGRAM_OWNER_ID` | Required for DMs | Your numeric Telegram user ID; privileged DMs are disabled when unset |
-| `ANTHROPIC_API_KEY` | Optional | Enables chart screenshot analysis via Claude vision |
-| `DB_PATH` | Optional | SQLite database path (default: `/data/signals.db`) |
-| `LOG_LEVEL` | Optional | Python log level (default: `INFO`) |
+| `TELEGRAM_BOT_TOKEN` | yes | Bot token from @BotFather |
+| `SIGNAL_VIP_CHANNEL_ID` | yes | VIP channel id (e.g. `-100…`) |
+| `SIGNAL_PUBLIC_CHANNEL_ID` | optional | Public broadcast channel |
+| `TELEGRAM_OWNER_ID` | required for DMs | Numeric owner id; privileged DMs disabled when unset |
+| `DATABASE_URL` | yes | Postgres DSN for the `signals` database |
+| `REDIS_URL` | yes | Redis for bars / ZoneWatch / plans |
+| `ANTHROPIC_API_KEY` | optional | Claude vision chart analysis |
+| `LOG_DIR` / `LOG_RETENTION_DAYS` | optional | Host-mounted daily logs |
+
+Non-secret detector / technique / actionability knobs belong in
+`config/trading-bot.yml`.
 
 ---
 
-## Database Tables
+## Database
 
-All state is persisted in SQLite at `DB_PATH`.
-
-### `manual_signals` — signal lifecycle
-
-| Column | Type | Description |
-|---|---|---|
-| `id` | INTEGER PK | Auto-increment id shown as `#<id>` in commands |
-| `ts` | INTEGER | Unix timestamp of when the signal was posted |
-| `action` | TEXT | `BUY` or `SELL` |
-| `entry` | REAL | Lower edge of the entry zone |
-| `entry_end` | REAL | Upper edge of the entry zone |
-| `sl` | REAL | Stop-loss price |
-| `tps` | TEXT | JSON array of TP prices e.g. `[3835.0, 3830.0, 3820.0]` |
-| `order_type` | TEXT | Legacy compatibility column; new signals use `zone` |
-| `channel_message_id` | INTEGER | Telegram message_id in the channel — used to reply on close/cancel |
-| `status` | TEXT | `open` / `closed` / `cancelled` |
-| `result_pips` | INTEGER | Signed pip result recorded on close (NULL while open) |
-| `closed_at` | INTEGER | Unix timestamp of close/cancel event (NULL while open) |
-
-### `pips_log` — pips history
-
-| Column | Type | Description |
-|---|---|---|
-| `id` | INTEGER PK | Auto-increment |
-| `ts` | INTEGER | Unix timestamp of the auto-edit |
-| `sign` | TEXT | `+` (profit) or `-` (loss) |
-| `pips` | INTEGER | Absolute pip count (always positive) |
-| `message_id` | INTEGER | Telegram message_id that was edited |
-| `chat_id` | TEXT | Channel chat_id |
+Lifecycle and stats persist in **PostgreSQL** (`signals`), not SQLite.
+Manual signal rows still expose `#<id>` in DM commands; schema is owned by
+`algo-bot` persistence / migrations.
 
 ---
 

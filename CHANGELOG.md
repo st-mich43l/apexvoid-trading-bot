@@ -13,10 +13,22 @@ dated section after deployment.
 ## Unreleased
 
 ### Changed
+- Docs refreshed to the current multi-service stack: README and
+  `docs/architecture.md` describe algo-bot + ctrader-engine + Postgres +
+  Redis + ZoneWatch → TradePlan V8; operations/deployment/bot-commands no
+  longer document SQLite as the store. Added
+  `docs/technique-zonewatch-publish.md` for technique/Confluence activation
+  (chase, closed-bar invalidate, opposing overlap, location extremes).
 - Scalp equity-table sizing: when account equity is below `$2,000`, a stamped
   scalp `risk_multiplier` above `1` now books **1.5×** table lots (e.g. `0.10`
   → `0.15`) instead of doubling. Reaction (`1.0`) sizing is unchanged; equity
   at/above `$2,000` still applies the stamped scalp boost.
+
+### Fixed
+- Technique / Confluence ZoneWatches can activate and publish: non-zero chase
+  budget, closed-bar-only decisive break, activate remain/reject logs,
+  `STRUCTURAL_SETUPS` membership, overlapping map opposing filter, and
+  extreme location allowance for techniques (merged via #303).
 
 ### Fixed
 - Reaction publish no longer treats a Market Map band glued to the live/

@@ -97,5 +97,5 @@ git reset --hard <sha>
 docker compose up -d --build
 ```
 
-If the bad change corrupted `signals.db`, restore from the most recent
-backup (see `docs/operations.md`).
+If the bad change corrupted Postgres data, restore from the most recent
+`pg_dump` backup (see `docs/operations.md`).

@@ -2,41 +2,48 @@
 
 ## Threat Model
 
-This is a small, single-tenant bot with a **very narrow** attack surface: it
-opens no inbound ports and only initiates outbound connections to Telegram and
-Anthropic. Realistic threats, in decreasing order of likelihood:
+Single-tenant trading stack with a **narrow inbound** surface (SSH only) and
+outbound connections to Telegram, optional Anthropic, and cTrader Open API.
+Realistic threats, in decreasing order of likelihood:
 
-1. **Credential leak in source control** — the most common real-world incident
-   for projects of this shape. Mitigation: strict `.gitignore`, never commit
-   `.env`, rotate the bot token if exposure is suspected.
-2. **Unauthorized DM commands.** Privileged DM handlers fail closed unless
-   `TELEGRAM_OWNER_ID` is configured and matches the sender.
-3. **Bot token compromise.** A leaked `TELEGRAM_BOT_TOKEN` grants full control
-   of the bot (posting to the channel). Mitigation: treat it as a secret,
-   rotate via `@BotFather` `/revoke`.
-4. **Host compromise via opportunistic SSH scanning.** Mitigation: SSH
-   key-only auth, no password login, non-root user.
+1. **Credential leak in source control** — `.env` secrets (Telegram, cTrader,
+   Postgres). Mitigation: strict `.gitignore`, never commit `.env`, rotate
+   immediately on exposure.
+2. **cTrader token / account compromise** — leaked Open API tokens can trade.
+   Mitigation: demo-first profiles, `AUTO_TRADE_REQUIRE_DEMO_ONLY_TOKEN` where
+   applicable, rotate refresh tokens via cTrader Playground, host file + Redis
+   token mirror.
+3. **Unauthorized DM commands.** Privileged DM handlers fail closed unless
+   `TELEGRAM_OWNER_ID` matches the sender.
+4. **Bot token compromise.** A leaked `TELEGRAM_BOT_TOKEN` can post to VIP/
+   public channels. Rotate via `@BotFather` `/revoke`.
+5. **Host compromise via SSH scanning.** Key-only auth, no password login,
+   non-root deploy user.
 
-Because the bot places **no orders** and receives **no inbound traffic**, there
-is no forged-signal or replay vector, and no broker-drain path.
+Autonomous execution is intentionally gated (config health, spread/news,
+opposing room, stop envelope). Fail closed rather than guessing.
 
 ## Secret Inventory
 
 | Secret | Location | Rotation |
 |---|---|---|
-| `TELEGRAM_BOT_TOKEN` | `.env` | `@BotFather` → `/revoke`. Re-issue on suspected leak. |
-| `TELEGRAM_CHAT_ID` | `.env` | Not secret per se; re-derive if the channel is recreated. |
-| `ANTHROPIC_API_KEY` | `.env` | Rotate in the Anthropic console. |
-| SSH private key | Operator workstation | Passphrase-protected. Rotate on compromise. |
+| `TELEGRAM_BOT_TOKEN` | `.env` | `@BotFather` → `/revoke` |
+| `SIGNAL_VIP_CHANNEL_ID` / public id | `.env` | Re-derive if channel recreated |
+| `POSTGRES_PASSWORD` / `DATABASE_URL` | `.env` | Rotate DB role; update DSN |
+| `CTRADER_CLIENT_SECRET` / access / refresh | `.env` + Redis/file mirror | Re-auth via cTrader Playground |
+| `ANTHROPIC_API_KEY` | `.env` | Rotate in Anthropic console |
+| SSH private key | Operator workstation | Passphrase-protected; rotate on compromise |
 
 ## Secret Handling
 
 - `.env` has mode `600` and is owned by the deploying user.
 - `.env` is listed in `.gitignore`. Before a `git push`, grep for leaks:
   ```bash
-  git grep -E '^(TELEGRAM|ANTHROPIC)_' || echo "clean"
+  git grep -E '^(TELEGRAM_|CTRADER_|POSTGRES_|ANTHROPIC_|DATABASE_URL)' || echo "clean"
   ```
-- Never screenshot or paste `.env` or the bot token.
+- Never screenshot or paste `.env` or bot/cTrader tokens.
+- Runtime manifest is secret-safe (no credential material in
+  `resolved-runtime.json`).
 
 ## Network Surface
 
@@ -46,50 +53,21 @@ is no forged-signal or replay vector, and no broker-drain path.
 |---|---|---|
 | 22 | SSH | Key-only auth, no passwords |
 
-The bot container publishes **no ports**. There is nothing else to reach.
+Compose services publish **no** application ports to the host by default
+(Postgres/Redis stay on the internal network).
 
 ### Outbound
 
-The host initiates connections to:
+- `api.telegram.org` — long-polling and message delivery
+- `api.anthropic.com` — chart vision (if enabled)
+- cTrader Open API hosts (`demo.ctraderapi.com` / live) — feed + execution
+- OS / Docker package mirrors as needed for host maintenance
 
-- `api.telegram.org` — bot long-polling and message delivery.
-- `api.anthropic.com` — chart vision analysis (if enabled).
-- `download.docker.com`, `deb.debian.org` — package updates.
+## Hardening Checklist
 
-No broker/exchange APIs are contacted.
-
-## SSH Hardening
-
-```
-PermitRootLogin no
-PasswordAuthentication no
-PubkeyAuthentication yes
-MaxAuthTries 3
-LoginGraceTime 30
-```
-
-Optional: `fail2ban` for the `sshd` jail; restrict port 22 to known source IPs
-if you have a static address.
-
-## Docker Security Notes
-
-- The `docker` group is root-equivalent on the host. Acceptable on a
-  single-operator box; use `sudo docker` on shared hosts.
-- The container runs as root by default. The bot does not need root — adding a
-  `USER` directive to the Dockerfile is a good follow-up.
-
-## Supply Chain
-
-- Base image (`python:3.12-slim`) is pinned by tag. For stricter
-  reproducibility, pin to a digest and update deliberately.
-- Python dependencies are pinned in `algo-bot/requirements.txt`. Run `pip-audit`
-  before bumping.
-
-## Incident Response
-
-If you suspect compromise:
-
-1. Rotate everything in the secret inventory, most-sensitive first.
-2. Revoke the bot token (`@BotFather` → `/revoke`).
-3. Revoke and replace the SSH key; rebuild the host from a fresh image and
-   redeploy from source control rather than trusting a possibly-tampered host.
+- [ ] `.env` mode `600`, not world-readable
+- [ ] SSH key-only; disable password auth
+- [ ] Owner ID set; test that non-owner DMs are ignored
+- [ ] Auto-trade profile appropriate (`demo_eval` vs live)
+- [ ] Backups of Postgres dumps stored off-host
+- [ ] Log retention bounded (`LOG_RETENTION_DAYS`)

@@ -75,20 +75,17 @@ docker exec -i apexvoid-trading-postgres psql -U apexvoid signals \
 
 ## Database Maintenance
 
-`signals.db` holds `manual_signals` and `pips_log`. Both grow slowly (a handful
-of rows per day) and rarely need pruning. To trim closed/cancelled signals older
-than 180 days:
+PostgreSQL `signals` holds manual lifecycle rows and ingested auto-trade
+stats. Growth is modest; prefer `pg_dump` backups over ad-hoc deletes.
+
+Trim closed/cancelled **manual** signals older than 180 days only when needed
+(adjust table/column names to the current store schema if they differ):
 
 ```bash
-docker compose exec bot python3 -c "
-import sqlite3, time
-conn = sqlite3.connect('/data/signals.db')
-cur = conn.cursor()
-cutoff = int(time.time()) - 180 * 86400
-cur.execute(\"DELETE FROM manual_signals WHERE status != 'open' AND closed_at < ?\", (cutoff,))
-n = cur.rowcount
-conn.commit(); cur.execute('VACUUM')
-print(f'Deleted {n} closed signals')
+docker exec -i apexvoid-trading-postgres psql -U apexvoid -d signals -c "
+  DELETE FROM manual_signals
+  WHERE status <> 'open'
+    AND closed_at < EXTRACT(EPOCH FROM NOW() - INTERVAL '180 days');
 "
 ```
 
@@ -131,19 +128,24 @@ Because there is no HTTP health endpoint, monitor liveness by either:
 
 ```bash
 docker compose logs bot
+docker compose logs config-compiler
+docker compose logs ctrader-engine
 ```
 
-- `pydantic ... ValidationError` on `Settings` — a required env var
-  (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`) is missing from `.env`.
-- `sqlite3.OperationalError: unable to open database file` — the `./data`
-  bind-mount is missing. `mkdir -p data` and retry.
+- Config / pydantic validation errors — required secrets missing from `.env`
+  (`TELEGRAM_BOT_TOKEN`, `POSTGRES_PASSWORD`, `CTRADER_*`, …) or invalid
+  `config/trading-bot.yml`.
+- Manifest verify failure — `config-compiler` did not write
+  `/runtime/resolved-runtime.json`; fix YAML and recreate.
+- Postgres / Redis unhealthy — wait for healthchecks; check
+  `DATABASE_URL` / `REDIS_URL`.
 
 ### Telegram messages are not arriving
 
 - Bot removed from the channel — re-add as admin with Post Messages.
 - Token revoked/regenerated — update `TELEGRAM_BOT_TOKEN` and
   `docker compose up -d --force-recreate bot`.
-- `TELEGRAM_CHAT_ID` wrong — re-derive from
+- `SIGNAL_VIP_CHANNEL_ID` (or public id) wrong — re-derive from
   `https://api.telegram.org/bot<TOKEN>/getUpdates`.
 
 ### DM commands are ignored
