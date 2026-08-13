@@ -1,175 +1,160 @@
-# 📉 ApexVoid Trading Bot 🤖
+# ApexVoid Trading Bot
 
 ![Python](https://img.shields.io/badge/Python-3.12-3776AB?style=flat-square&logo=python&logoColor=white)
+![.NET](https://img.shields.io/badge/.NET-8-512BD4?style=flat-square&logo=dotnet&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat-square&logo=docker&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?style=flat-square&logo=postgresql&logoColor=white)
+![Redis](https://img.shields.io/badge/Redis-DC382D?style=flat-square&logo=redis&logoColor=white)
 ![Telegram](https://img.shields.io/badge/Telegram-2CA5E0?style=flat-square&logo=telegram&logoColor=white)
-![Claude](https://img.shields.io/badge/Claude_Vision-D97757?style=flat-square&logo=anthropic&logoColor=white)
 
-A self-hosted Telegram bot for posting and tracking XAUUSD (Gold) trading signals by hand, with optional **AI chart analysis**. It runs as a single long-polling process — no inbound webhook server, no public endpoint, no TLS required. 🚀
+Self-hosted XAUUSD trading stack: Telegram signal delivery, market-structure
+analysis, ZoneWatch activation, and broker execution on cTrader. Production
+live instrument is **XAU**. All external connections are outbound (Telegram
+long-polling, Anthropic optional, cTrader Open API). No inbound webhook /
+public HTTP surface.
 
 ```text
-┌────────────┐   DM    ┌──────────────────────────┐        ┌────────────┐
-│  You (DM)  │ ──────▶ │  Telegram bot (aiogram)  │ ─────▶ │  Telegram  │
-│  + charts  │         │  ├─ 📝 manual parse      │        │  channel   │
-└────────────┘         │  ├─ 🔄 lifecycle track   │        └────────────┘
-                       │  ├─ 🧮 pips calculator    │
-                       │  └─ 👁️ Claude vision      │
-                       └────────────┬─────────────┘
-                                    ▼
-                          ┌──────────────────────┐
-                          │ 💾 SQLite            │
-                          │ ├─ manual_signals    │
-                          │ └─ pips_log          │
-                          └──────────────────────┘
+┌──────────────┐   OHLC ZSET    ┌─────────────────────┐
+│ ctrader-     │ ──────────────▶ │ Redis                │
+│ engine (.NET)│ ◀──────────── │ bars / plans / events│
+│ feed+exec    │  TradePlan V8  └──────────┬──────────┘
+└──────────────┘                           │
+                                           ▼
+┌──────────────┐   SQL          ┌─────────────────────┐
+│ Postgres     │ ◀──────────── │ algo-bot (Python)    │
+│ signals DB   │                │ Telegram + scanner   │
+└──────────────┘                │ ZoneWatch → publish  │
+                                └──────────┬──────────┘
+                                           │ long-poll
+                                           ▼
+                                    Telegram VIP/public
 ```
 
-The bot talks to Telegram over **outbound long-polling only**, meaning it requires zero open ports, no domain names, and no reverse proxy to operate securely. 🔒
+Compose boot order: **postgres + redis → config-compiler → ctrader-engine → bot**.
 
 ---
 
-## ✨ Features
+## What it does
 
-### 📡 Manual Signal Posting (DM interface)
-- **Insta-Post Signals** ⚡ — DM `gold sell entry zone (4100-4105) / sl 4110 / tp 95/90/80` and the bot will instantly post a beautifully formatted signal to the channel.
-- **TP Shorthand** 🎯 — Just write the last 2 digits (`35` → `3835`). You can list any number of TPs!
-- **Scalp Metadata** ⚡ — Add `/ scalp` or `/ scalp nhanh` to mark a fast scalp internally for review/stats without exposing a channel tag.
-- **Lifecycle Tracking** 🔄 — Every signal is tracked. DM `/trade_active` to see open positions, `/trade_close XAU #3 +80` to log a result, `/trade_uncclose XAU #3` to restore a mistaken close, or `/trade_cancel XAU #3` to drop it.
-- **Cancel by Reply** 🗑️ — Simply reply `cancel` directly to a channel signal post; the bot removes the original and cleans up your reply.
-- **Owner-Exclusive** 👑 — Set `TELEGRAM_OWNER_ID` to strictly lock all DM commands to you.
+### Manual signals (owner DM + VIP/public)
 
-### 📣 VIP + Public Broadcast
-- `SIGNAL_VIP_CHANNEL_ID` is the private control channel; bare lifecycle
-  commands are accepted only there.
-- `SIGNAL_PUBLIC_CHANNEL_ID` receives broadcast-only signal posts and updates
-  without internal `#id` values.
-- `SIGNAL_PUBLIC_SHOW_PIPS=true` shows per-signal results publicly; set it to
-  `false` for event-only wording. Aggregate stats always stay in owner DM.
-- Signals publish to both channels by default. Add `/ vip` to an entry to keep
-  that signal and all later updates VIP-only.
-- The bot must be an administrator with post/edit permissions in both channels.
-- A restart-safe Sunday performance recap is delivered to VIP only. Configure
-  it with `WEEKLY_REPORT_ENABLED`, `WEEKLY_REPORT_DOW`, and
-  `WEEKLY_REPORT_HOUR`; public never receives aggregate performance.
+- Parse DM zone entries (`gold sell entry zone (4100-4105) / sl … / tp …`).
+- Broadcast to VIP and optional public channels; lifecycle
+  `active` / `close` / `cancel` / `/trade_*` commands.
+- Economic calendar brief, weekly VIP recap, optional Claude Vision chart draft.
+- Details: [docs/bot-commands.md](docs/bot-commands.md).
 
-### 🗓 Economic Calendar
-- The daily ForexFactory brief includes only configured high-impact USD,
-  gold, and oil events. The bot stays silent when none are scheduled.
-- Calendar briefs are broadcast to both VIP and public channels.
-- Upcoming events can tag or block a new signal through the local event guard.
+### Autonomous analysis → TradePlan V8
 
-### 🧮 Pips Calculator
-- DM `calculate gold pips today` or `this week` for a win/loss pips summary drawn from the local `pips_log` (populated automatically whenever you close a result).
-- **Auto-edit Pips** ✏️ — Post `+80 pips` or `-30 pips` in the channel and the bot replaces it with a clean formatted result (even works on photos!).
+1. **Scanner** runs detectors on closed H1/M15/M5 bars from Redis OHLC.
+2. **Techniques** (Supply Demand, Order Block, FVG, iFVG, CRT) and structural
+   reactions publish candidates; **2+ overlapping techniques** become a
+   **Confluence Zone**.
+3. **ZoneWatch** retains the zone (no premature setup card). Spot / M1 cycles
+   evaluate location + activation.
+4. When executable, **direct publish** builds a **TradePlan V8** into Redis.
+5. **ctrader-engine** claims the plan, sizes from the equity table, and manages
+   the group (shared stop, TP ladder, BE/trail).
 
-### 🧠 AI Chart Analysis
-- DM one or more chart screenshots and the bot will run a structured **Smart Money Concepts (SMC)** analysis via **Claude Vision**, automatically drafting the setup to the channel.
-- **Multi-Timeframe Aware** ⏱️ — Send several charts; it uses higher TFs for directional bias and lower TFs for entry precision.
+Authoritative path: ZoneWatch → direct publish (ready-stream is fallback only).
+See [docs/technique-zonewatch-publish.md](docs/technique-zonewatch-publish.md)
+and [docs/adr-trade-plan-v8-cutover.md](docs/adr-trade-plan-v8-cutover.md).
 
-### 🤖 ApexVoid Algo (demo)
-- Scanner detectors own complete strategy matching. With
-  `AUTO_TRADE_STRATEGY_MATCH_ENABLED=true`, every independent completed M5 match
-  is sent to ApexVoid Algo as typed data without parsing Telegram text or
-  asking a private regime/M1 gate to confirm it again.
-- It builds a 60-bar M1 auction box only after repeated reactions at both
-  edges, at least 82% of closes remain inside, and close-path efficiency shows
-  consolidation rather than trend. This remains a separate private strategy,
-  not a market regime. When private strategies overlap, the higher-confluence
-  match wins; regime classification is telemetry rather than a veto.
-- A box entry closes the full position at +50 pips, or +70 pips when at least
-  75 pips of clean room remain to the opposite edge. Box mode does not scale in
-  or use planned zone-fill orders.
-- Two accepted M1 closes, or one accepted M5 close, outside the box retire that
-  box and stop new entries from it. A used edge must first travel through the
-  box midpoint before that same side can fire again.
-- The lane still fails closed on stale quotes, excessive spread, entry drift,
-  guarded news, and an existing XAU position. There is no daily trade cap;
-  a validated box may keep cycling until its breakout is confirmed.
-- `/auto_status` exposes the selected source, scanner strategy/direction,
-  latest private-strategy state, and selected box for diagnostics. The typed
-  routing design is documented in `docs/algo-strategy-match-routing.md`.
+### High-frequency M1 scalping (separate lane)
+
+Shadow/paper/live HFS on closed M1 with immutable M5 context. Does not share
+the technique ZoneWatch publishers. See [docs/scalping/README.md](docs/scalping/README.md).
 
 ---
 
-## 🛠️ Tech Stack
+## Tech stack
 
 | Layer | Choice |
 |---|---|
-| **Runtime** | Python 3.12 🐍 |
-| **Telegram Bot** | aiogram 3 (long-polling) 🤖 |
-| **AI Analysis** | Anthropic Claude (Vision) 👁️ |
-| **Persistence** | SQLite (aiosqlite) 🗄️ |
-| **Packaging** | Docker + Compose v2 🐳 |
+| Algo / Telegram | Python 3.12, aiogram 3, asyncpg, Redis |
+| Broker feed + execution | .NET 8, cTrader Open API |
+| Config | `config/trading-bot.yml` + secrets in `.env` → `ResolvedRuntimeManifest` |
+| Persistence | PostgreSQL (`signals`), Redis (bars, ZoneWatch, plans, events) |
+| Packaging | Docker Compose v2 |
+
+Canonical configuration docs live under
+[docs/configuration/](docs/configuration/configuration-architecture.md).
 
 ---
 
-## 📚 Documentation
+## Documentation
 
-Dive into the docs for full details on configuring and operating the bot:
-
-- 📖 [Bot Commands](docs/bot-commands.md) — Manual posting, lifecycle (`active`/`close`/`cancel`), pips calculator, auto-edit, env setup.
-- 🏗️ [Architecture](docs/architecture.md) — Process model, message flow, database schema, design decisions.
-- 🚀 [Deployment Guide](docs/deployment.md) — From a fresh host to a running bot.
-- ⚙️ [Operations](docs/operations.md) — Monitoring, backups, log rotation, updates, troubleshooting.
-- 🔒 [Security](docs/security.md) — Threat model, secret management, hardening.
-- 📊 [Redis Bar Contract](docs/redis-contract.md) — Closed OHLC window keys shared by the cTrader feed and scanners.
-- 📝 [Changelog](CHANGELOG.md) — Notable behavior, configuration, and deployment changes.
+| Doc | Contents |
+|---|---|
+| [Architecture](docs/architecture.md) | Services, loops, ZoneWatch publish path |
+| [Technique / ZoneWatch publish](docs/technique-zonewatch-publish.md) | Five techniques, Confluence, chase, closed-bar invalidate, opposing room |
+| [Bot commands](docs/bot-commands.md) | Manual posting and lifecycle |
+| [Deployment](docs/deployment.md) | Host → running stack |
+| [Operations](docs/operations.md) | Logs, backups, updates, troubleshooting |
+| [Redis contract](docs/redis-contract.md) | Bars, plans, events boundary |
+| [TradePlan V8 ADR](docs/adr-trade-plan-v8-cutover.md) | Plan identity cutover |
+| [Security](docs/security.md) | Threat model and secrets |
+| [Changelog](CHANGELOG.md) | Behavior / config / deploy notes |
 
 ---
 
-## 🚀 Quick Start
+## Quick start
 
 ```bash
 git clone <this-repo> apexvoid-trading-bot
 cd apexvoid-trading-bot
-
-# Setup Environment
 cp .env.example .env
-# Edit .env: TELEGRAM_BOT_TOKEN, SIGNAL_VIP_CHANNEL_ID,
-#            SIGNAL_PUBLIC_CHANNEL_ID, SIGNAL_PUBLIC_SHOW_PIPS,
-#            TELEGRAM_OWNER_ID,
-#            ANTHROPIC_API_KEY (chart analysis)
+# Fill secrets: TELEGRAM_BOT_TOKEN, SIGNAL_VIP_CHANNEL_ID, TELEGRAM_OWNER_ID,
+# POSTGRES_PASSWORD, DATABASE_URL, REDIS_URL, CTRADER_* credentials.
+# Non-secret tuning: config/trading-bot.yml
 
-# Deploy
 docker compose up -d --build
+docker compose ps
 docker compose logs -f bot
+docker compose logs -f ctrader-engine
 ```
 
-**Expected startup lines:**
-```log
-bot: DB ready at /data/signals.db
-bot: Starting Telegram polling
-```
+Expected shape:
 
-Then, just DM your bot: `active` should reply with `📋 No open signals.` 🎉
+- `config-compiler` exits 0 after writing `/runtime/resolved-runtime.json`
+- `ctrader-engine` heartbeats and writes `bars:XAU:*`
+- `bot` starts Telegram polling and scanner / ZoneWatch loops
+
+Owner DM `active` should reply (empty book is fine). Demo auto-trade profile
+runbook: [docs/demo-eval-autotrade.md](docs/demo-eval-autotrade.md).
 
 ---
 
-## 📁 Repository Layout
+## Repository layout
 
-```tree
+```text
 apexvoid-trading-bot/
-├── docker-compose.yml        🐳 bot + postgres + redis + cTrader feed
-├── .env.example              🔑 env template
-├── README.md                 📖 this file
-├── docs/                     📚 detailed documentation
-├── ctrader-engine/           📊 .NET: cTrader Open API feed + auto-trade execution
-└── algo-bot/                 🤖 the Algo bot application (Telegram delivery + trade planning)
+├── docker-compose.yml          # postgres, redis, config-compiler, engine, bot
+├── config/trading-bot.yml      # non-secret Python/shared tuning
+├── .env.example                # secrets + bootstrap (generated policy)
+├── docs/                       # architecture, ops, config, ADRs
+├── contracts/                  # shared JSON / schema contracts
+├── ctrader-engine/             # .NET feed + TradePlan executor
+│   └── src/                    # AutoTradeEngine, TradePlanExecutionEngine, …
+└── algo-bot/                   # Python application
     ├── Dockerfile
-    ├── requirements.txt
-    ├── scripts/               🧰 one-off/manual utility scripts
+    ├── requirements.txt / pyproject
+    ├── scripts/
     └── app/
-        ├── main.py            🏁 entrypoint: init DB, start long-polling
-        ├── core/               ⚙️ settings (pydantic-settings) and symbol config
-        ├── persistence/        🗄️ PostgreSQL store + Redis watcher state
-        ├── bot/                💬 aiogram: client, wiring, keyboards, handlers/
-        ├── signals/            📡 manual-signal lifecycle: parsing, broadcast, watcher, reports
-        ├── analysis/           📈 price-action primitives, detectors, scanner, market map
-        └── autotrade/          🤖 independent auto-scalp gate, scale context, worker, delivery
+        ├── main.py             # composition root: install cutover, spawn loops
+        ├── configuration/      # catalog, YAML loader, runtime manifest
+        ├── core/               # runtime_config facade, symbols, logging
+        ├── persistence/        # Postgres store + Redis client
+        ├── bot/                # aiogram wiring + handlers
+        ├── signals/            # manual signals, calendar, weekly report
+        ├── analysis/           # detectors, techniques, scanner, market map
+        ├── autotrade/          # ZoneWatch cutover, TradePlan V8, delivery
+        ├── scalping/           # HFS M1 lane
+        └── runtime/            # multi-symbol routing helpers
 ```
 
 ---
 
-## 📄 License
+## License
 
-Private project. Not licensed for redistribution. ⛔
+Private project. Not licensed for redistribution.
