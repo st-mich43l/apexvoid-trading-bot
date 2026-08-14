@@ -12,6 +12,11 @@ dated section after deployment.
 
 ## Unreleased
 
+### Fixed
+- Autotrade Integrity stays aligned with live close-card edits and
+  broker-recovery metric snapshots. Leftover Range Edge opposing-containment
+  pytest is deselected with the other retired V7 opposing fixtures.
+
 ### Changed
 - Technique and Confluence Zone orders use the same five-clip scalp
   micro-grid as HFS (equal clips into the structural zone). Key Level
