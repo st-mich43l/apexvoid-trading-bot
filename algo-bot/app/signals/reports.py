@@ -315,11 +315,25 @@ def _cluster_lines(groups: list[dict]) -> list[str]:
 
 _STREAM_ORDER = ("algo_auto", "algo_manual", "manual")
 _STREAM_LABELS = {
-  "algo_auto": "Algo auto",
-  "algo_manual": "Algo manual",
-  "manual": "Manual signal",
-  "all_unique": "All unique",
+  "algo_auto": "AUTO TRADE",
+  "algo_manual": "ALGO MANUAL",
+  "manual": "CHART / SIGNAL",
+  "all_unique": "COMBINED UNIQUE",
 }
+
+
+def _setup_groups_from_rows(rows: list[dict]) -> list[dict]:
+  by_setup: dict[str, list[dict]] = defaultdict(list)
+  for row in rows:
+    by_setup[row.get("setup_type") or "untagged"].append(row)
+  return sorted(
+    (
+      _group_stats(label, group)
+      for label, group in by_setup.items()
+    ),
+    key=lambda group: group["net"],
+    reverse=True,
+  )
 
 
 def _performance_stats(rows: list[dict]) -> dict:
@@ -396,6 +410,15 @@ def build_stats(
     for stream in _STREAM_ORDER
   }
   by_stream["all_unique"] = _performance_stats(rows)
+  stream_rows_by_stream = {
+    stream: [row for row in stream_rows if row["stream"] == stream]
+    for stream in _STREAM_ORDER
+  }
+  by_setup_by_stream = {
+    stream: _setup_groups_from_rows(group)
+    for stream, group in stream_rows_by_stream.items()
+  }
+
   all_values = [row["value"] for row in rows]
   wins = [value for value in all_values if value > 0]
   losses = [value for value in all_values if value < 0]
@@ -420,14 +443,7 @@ def build_stats(
       )
     ].append(row)
 
-  setup_groups = sorted(
-    (
-      _group_stats(label, group)
-      for label, group in by_setup.items()
-    ),
-    key=lambda group: group["net"],
-    reverse=True,
-  )
+  setup_groups = _setup_groups_from_rows(rows)
   session_groups = []
   for name in ("Asia", "London", "NY", "Legacy"):
     if name in by_session:
@@ -487,26 +503,65 @@ def build_stats(
     "by_session": session_groups,
     "by_cluster": cluster_groups,
     "by_stream": by_stream,
+    "by_setup_by_stream": by_setup_by_stream,
     "cumulative": cumulative,
   }
 
 
-def _stream_lines(by_stream: dict[str, dict]) -> list[str]:
-  lines = []
+def _stream_book_lines(stats: dict) -> list[str]:
+  """One block per book so auto and algo-manual never share a headline."""
+  by_stream = stats.get("by_stream") or {}
+  by_setup = stats.get("by_setup_by_stream") or {}
   shown = [
-    stream for stream in (*_STREAM_ORDER, "all_unique")
-    if by_stream.get(stream, {}).get("fill_count")
+    stream for stream in _STREAM_ORDER
+    if int((by_stream.get(stream) or {}).get("trades") or 0) > 0
   ]
-  for index, stream in enumerate(shown):
+  lines: list[str] = []
+  for stream in shown:
     item = by_stream[stream]
-    branch = "└─" if index == len(shown) - 1 else "├─"
+    if lines:
+      lines.append("")
+    net = float(item.get("total_pips") or 0)
+    net_icon = "🟢" if net >= 0 else "🔴"
     lines.extend([
-      f"{branch} {_STREAM_LABELS[stream]:<13} "
-      f"{item['fill_count']} fills · {item['win_rate']:.0f}% WR",
-      f"   {_signed_p(item['total_pips'])} · {item['mean_r']:+.2f}R "
-      f"· stop {item['mean_stop_pips']:.0f}p",
+      _STREAM_LABELS[stream],
+      _metric_line("💰", "Net", _signed_p(net), net_icon),
+      _metric_line(
+        "🎯",
+        "Winrate",
+        f"{item['win_rate']:.0f}%",
+        f"({item['wins']}W / {item['losses']}L)",
+      ),
+      _metric_line("📦", "Trades", str(item["trades"])),
+      "📐 Setup",
+      *_stats_group_lines(by_setup.get(stream) or [], setup=True),
+    ])
+  if len(shown) >= 2:
+    combined = by_stream.get("all_unique") or {}
+    net = float(combined.get("total_pips") or 0)
+    net_icon = "🟢" if net >= 0 else "🔴"
+    lines.extend([
+      "",
+      _STREAM_LABELS["all_unique"],
+      "same ticket counted once",
+      _metric_line("💰", "Net", _signed_p(net), net_icon),
+      _metric_line(
+        "🎯",
+        "Winrate",
+        f"{combined.get('win_rate', 0):.0f}%",
+        f"({combined.get('wins', 0)}W / {combined.get('losses', 0)}L)",
+      ),
+      _metric_line("📦", "Trades", str(combined.get("trades") or 0)),
     ])
   return lines or ["└─ —"]
+
+
+def _stream_lines(by_stream: dict[str, dict]) -> list[str]:
+  """Compact stream summary for callers that still pass by_stream only."""
+  return _stream_book_lines({
+    "by_stream": by_stream,
+    "by_setup_by_stream": {},
+  })
 
 
 def format_stats(stats: dict, period: str) -> str:
@@ -522,45 +577,12 @@ def format_stats(stats: dict, period: str) -> str:
     ])
     return f"<pre>{escape(text)}</pre>"
 
-  best = stats["best"]
-  worst = stats["worst"]
-  best_seq = best.get("daily_seq") or best.get("signal_id") or "?"
-  worst_seq = worst.get("daily_seq") or worst.get("signal_id") or "?"
-  net_icon = "🟢" if stats["net"] >= 0 else "🔴"
   lines = [
     f"📊 STATS — {_stats_title(period)}",
     "━━━━━━━━━━━━━━━━━━━━━━",
-    _metric_line("💰", "Net", _signed_p(stats["net"]), net_icon),
-    _metric_line(
-      "🎯",
-      "Winrate",
-      f"{stats['win_rate']:.0f}%",
-      f"({stats['wins']}W / {stats['losses']}L)",
-    ),
-    _metric_line("📦", "Trades", str(stats["trades"])),
-    _metric_line("🟢", "Avg win", _signed_p(stats["average_win"])),
-    _metric_line("🔴", "Avg loss", _signed_p(stats["average_loss"])),
-    _metric_line("⚖", "Expectancy", _signed_p(stats["expectancy"]), "/ trade"),
-    _metric_line(
-      "🏆",
-      "Best",
-      _signed_p(best["value"]),
-      f"· #{best_seq} {_setup_label(best.get('setup_type'))}",
-    ),
-    _metric_line(
-      "🩸",
-      "Worst",
-      _signed_p(worst["value"]),
-      f"· #{worst_seq} {_setup_label(worst.get('setup_type'))}",
-    ),
+    *_stream_book_lines(stats),
     "",
-    "🧬 By stream",
-    *_stream_lines(stats["by_stream"]),
-    "",
-    "📐 By setup",
-    *_stats_group_lines(stats["by_setup"], setup=True),
-    "",
-    "🕐 By session",
+    "🕐 By session (combined unique)",
     *_stats_group_lines(stats["by_session"], setup=False),
   ]
 
@@ -573,7 +595,7 @@ def format_stats(stats: dict, period: str) -> str:
 
   lines.extend([
     "",
-    "📈 Equity",
+    "📈 Equity (combined unique)",
     f"{sparkline(stats['cumulative'])}  {_signed_p(stats['net'])}",
     "━━━━━━━━━━━━━━━━━━━━━━",
     "🤖 Apex Void · stats",

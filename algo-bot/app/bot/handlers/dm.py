@@ -97,6 +97,7 @@ _HELP_TEXT = """<b>Trade controls</b>
 <code>/algo_resume</code>
 <code>/algo_close_all confirm</code>
 <code>/trade_stats [SYMBOL] [today|week|month]</code>
+auto trade and algo manual are separate books
 <code>/trade_pips [SYMBOL] [today|yesterday|week|last week]</code>"""
 
 _WELCOME_TEXT = """👋 <b>Welcome to Apex Void Trading</b>
@@ -713,7 +714,8 @@ async def handle_trade_stats(msg: Message) -> None:
   period = (raw or "today").lower()
   if period not in {"today", "week", "month", "all"}:
     await msg.answer(
-      "Usage: <code>/trade_stats [SYMBOL] [today|week|month]</code>"
+      "Usage: <code>/trade_stats [SYMBOL] [today|week|month]</code>\n"
+      "Auto trade and algo manual are separate books."
     )
     return
   start_ts, end_ts = _stats_range(period)
