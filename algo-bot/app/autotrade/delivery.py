@@ -2388,7 +2388,7 @@ async def _today_algo_scorecard_line() -> str | None:
 
 
 async def _open_trade_plan_book_lines(client, *, limit: int = 3) -> list[str]:
-  """Compact open V7 plan lines: direction · setup · stage."""
+  """Compact open TradePlan lines: direction · setup · stage."""
   try:
     from app.autotrade.active_exposure import load_active_exposures
     from app.autotrade.trade_plan_stream import read_trade_plan
@@ -2443,7 +2443,7 @@ async def _open_trade_plan_book_lines(client, *, limit: int = 3) -> list[str]:
       f"{direction_icon} Open: <b>{escape(item.direction)}</b> · "
       f"{escape(setup)} · {escape(stage_label)}"
     )
-  extra = len(v7) - limit
+  extra = len(plans) - limit
   if extra > 0:
     lines.append(f"➕ +{extra} more")
   return lines
