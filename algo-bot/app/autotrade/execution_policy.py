@@ -757,9 +757,16 @@ def evaluate_execution_policy(
     leg_prices = list(route_plan.planned_leg_entry_prices or ())
     leg_ratios = list(route_plan.planned_leg_volume_ratios or ())
     use_group_stop = (
-      entry_distribution == "zone_scale"
-      and len(leg_prices) >= 2
+      len(leg_prices) >= 2
       and len(leg_ratios) == len(leg_prices)
+      and (
+        entry_distribution == "zone_scale"
+        or is_scalp_strategy(
+          strategy_name,
+          family=str(getattr(match, "family", "") or ""),
+          strategy_mode=str(getattr(match, "strategy_mode", "") or ""),
+        )
+      )
     )
     (
       minimum_stop_pips,

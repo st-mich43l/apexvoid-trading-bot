@@ -332,8 +332,8 @@ strategies:
       maximum_chase_pips: 40
       rearm_distance_atr: 0.25
     target:
-      preferred_ladder_pips: 20,25,30
-      minimum_net_target_pips: 15
+      preferred_ladder_pips: 10,15,20
+      minimum_net_target_pips: 10
     stop:
       minimum_pips: 12
       maximum_pips: 22

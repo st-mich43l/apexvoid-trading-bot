@@ -82,17 +82,41 @@ def permitted_archetypes_for_session(
   require_kz = True if tech is None else bool(
     getattr(tech, "hfs_require_killzone", True),
   )
+  enabled = _enabled_hfs_archetypes(cfg)
   if technique_enforce(cfg) and require_kz:
     if ts is None and hour is None:
       # Legacy callers without a clock: only named London/overlap sessions
       # are optimistic; Asia/NY-label without hour fail closed (late NY
       # always passes ``ts`` from ``build_scalp_context_snapshot``).
       if session not in {"london", "london_ny_overlap"}:
-        return ()
-    else:
-      if not classify_killzone(ts=ts, hour=hour, cfg=cfg).allowed:
-        return ()
-  return _HFS_ARCHETYPES
+        return tuple(
+          item for item in (ARCHETYPE_RANGE_SWEEP,) if item in enabled
+        )
+    elif not classify_killzone(ts=ts, hour=hour, cfg=cfg).allowed:
+      # Outside killzone: still allow range-edge sweep (location-gated).
+      # Impulse/breakout/chase stay killzone-only.
+      return tuple(
+        item for item in (ARCHETYPE_RANGE_SWEEP,) if item in enabled
+      )
+  return tuple(item for item in _HFS_ARCHETYPES if item in enabled)
+
+
+def _enabled_hfs_archetypes(cfg: Any | None) -> frozenset[str]:
+  arch = getattr(
+    getattr(getattr(cfg, "strategies", None), "high_frequency_scalp", None),
+    "archetypes",
+    None,
+  )
+  allowed: list[str] = []
+  if bool(getattr(arch, "range_sweep_enabled", True)):
+    allowed.append(ARCHETYPE_RANGE_SWEEP)
+  if bool(getattr(arch, "impulse_pullback_enabled", True)):
+    allowed.append(ARCHETYPE_IMPULSE_PULLBACK)
+  if bool(getattr(arch, "breakout_retest_enabled", True)):
+    allowed.append(ARCHETYPE_BREAKOUT_RETEST)
+  if bool(getattr(arch, "momentum_chase_enabled", True)):
+    allowed.append(ARCHETYPE_MOMENTUM_CHASE)
+  return frozenset(allowed)
 
 
 def _bar_ts(df: pd.DataFrame) -> int | None:

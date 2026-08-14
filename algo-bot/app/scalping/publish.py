@@ -46,25 +46,15 @@ def _hfs_target_ladder(
 ) -> tuple[int, tuple[int, ...]]:
   """Final TP pips + published ladder.
 
-  Owner 2026-08-11: when the scalp selected 1:2, book half at 1R and half
-  at 2R (no trail / no BE). 1:1 stays a single full-exit TP.
+  Scalp books 10 then 20 pips instead of a swing 1R/2R ladder. A shorter
+  native room still publishes a single exit at that room.
   """
   final_pips = max(1, int(round(float(opportunity.expected_target_pips))))
-  stop_raw = float(opportunity.expected_stop_pips or 0.0)
-  stop_pips = max(1, int(round(stop_raw))) if stop_raw > 0 else None
-  rr = float(opportunity.expected_reward_risk or 0.0)
-  is_one_to_two = (
-    stop_pips is not None
-    and (
-      rr >= 1.9
-      or final_pips >= int(round(stop_raw * 1.9))
-    )
-  )
-  if is_one_to_two and stop_pips is not None:
-    one_r = stop_pips
-    two_r = max(one_r + 1, final_pips, int(round(stop_raw * 2.0)))
-    return two_r, (one_r, two_r)
-  return final_pips, (final_pips,)
+  first = 10
+  last = min(20, max(final_pips, first))
+  if last <= first:
+    return last, (last,)
+  return last, (first, last)
 
 
 def build_hfs_strategy_match(
