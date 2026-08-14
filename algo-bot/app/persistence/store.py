@@ -30,7 +30,7 @@ import time
 import asyncpg
 import logging
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 from app.core.config import runtime_config
 from app.core.symbols import pip_for
@@ -279,6 +279,17 @@ async def init_db() -> None:
       "CREATE INDEX IF NOT EXISTS idx_auto_trade_results_closed "
       "ON auto_trade_results(closed_at)"
     )
+    for stmt in (
+      "ALTER TABLE auto_trade_results ADD COLUMN IF NOT EXISTS setup_type TEXT",
+      "ALTER TABLE auto_trade_results ADD COLUMN IF NOT EXISTS direction TEXT",
+      "ALTER TABLE auto_trade_results ADD COLUMN IF NOT EXISTS session TEXT",
+      "ALTER TABLE auto_trade_results ADD COLUMN IF NOT EXISTS killzone_name TEXT",
+      "ALTER TABLE auto_trade_results ADD COLUMN IF NOT EXISTS stop_pips DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_results ADD COLUMN IF NOT EXISTS booked_tp_count INTEGER",
+      "ALTER TABLE auto_trade_results ADD COLUMN IF NOT EXISTS utc_hour INTEGER",
+      "ALTER TABLE auto_trade_results ADD COLUMN IF NOT EXISTS symbol TEXT NOT NULL DEFAULT 'XAU'",
+    ):
+      await db.execute(stmt)
 
     await db.execute(
       """
@@ -690,7 +701,8 @@ async def _record_auto_trade_result(event: dict) -> None:
     if not group_id:
       return
     fill = await db.fetchrow(
-      "SELECT trade_key, trade_stream FROM auto_trade_fills "
+      "SELECT trade_key, trade_stream, setup_type, direction, stop_pips, symbol "
+      "FROM auto_trade_fills "
       "WHERE group_id = $1 ORDER BY filled_at ASC LIMIT 1",
       group_id,
     )
@@ -784,19 +796,59 @@ async def _record_auto_trade_result(event: dict) -> None:
           return
       else:
         return
+    closed_at = int(event.get("timestamp") or time.time())
+    utc_hour = datetime.fromtimestamp(closed_at, tz=timezone.utc).hour
+    if 7 <= utc_hour < 13:
+      session = "london"
+    elif 13 <= utc_hour < 21:
+      session = "new_york"
+    else:
+      session = "asia"
+    try:
+      from app.autotrade.killzone import classify_killzone
+      kz_name = classify_killzone(ts=closed_at).killzone_name
+    except Exception:
+      kz_name = None
+    booked_tp_count = None
+    if highest_tp_archived:
+      booked_tp_count = 1
+      for token, count in (("tp5", 5), ("tp4", 4), ("tp3", 3), ("tp2", 2), ("tp1", 1)):
+        if token in message_cf:
+          booked_tp_count = count
+          break
+      try:
+        if event.get("target_index") is not None:
+          booked_tp_count = max(booked_tp_count, int(event["target_index"]))
+      except (TypeError, ValueError):
+        pass
+    elif no_tp_archived:
+      booked_tp_count = 0
     await db.execute(
       """
       INSERT INTO auto_trade_results (
-        group_id, trade_key, trade_stream, result_pips, closed_at
-      ) VALUES ($1, $2, $3, $4, $5)
+        group_id, trade_key, trade_stream, result_pips, closed_at,
+        setup_type, direction, session, killzone_name, stop_pips,
+        booked_tp_count, utc_hour, symbol
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
       ON CONFLICT (group_id) DO UPDATE SET
         trade_key = excluded.trade_key,
         trade_stream = excluded.trade_stream,
         result_pips = excluded.result_pips,
-        closed_at = excluded.closed_at
+        closed_at = excluded.closed_at,
+        setup_type = COALESCE(excluded.setup_type, auto_trade_results.setup_type),
+        direction = COALESCE(excluded.direction, auto_trade_results.direction),
+        session = COALESCE(excluded.session, auto_trade_results.session),
+        killzone_name = COALESCE(excluded.killzone_name, auto_trade_results.killzone_name),
+        stop_pips = COALESCE(excluded.stop_pips, auto_trade_results.stop_pips),
+        booked_tp_count = COALESCE(excluded.booked_tp_count, auto_trade_results.booked_tp_count),
+        utc_hour = COALESCE(excluded.utc_hour, auto_trade_results.utc_hour),
+        symbol = COALESCE(excluded.symbol, auto_trade_results.symbol)
       """,
       group_id, fill["trade_key"], fill["trade_stream"],
-      float(result_pips), int(event.get("timestamp") or time.time()),
+      float(result_pips), closed_at,
+      fill["setup_type"], fill["direction"], session, kz_name,
+      fill["stop_pips"], booked_tp_count, utc_hour,
+      fill["symbol"] or "XAU",
     )
 
 
