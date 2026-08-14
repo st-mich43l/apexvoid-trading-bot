@@ -14,8 +14,9 @@ dated section after deployment.
 
 ### Changed
 - Closed-bar dispatcher prefetches M1/M5/M15/H1 once and reuses those Redis
-  windows for HFS, scanner, and worker. ZoneWatch still runs first so OHLC
-  prefetch cannot delay activation.
+  windows for ZoneWatch, HFS, scanner, and worker. ZoneWatch still runs
+  first so full HTF prefetch cannot delay activation; M1/M5 loads during
+  activation populate the same cache.
 
 ### Changed
 - Closed-bar dispatcher runs ZoneWatch M1 and HFS before scanner/worker so
