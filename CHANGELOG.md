@@ -13,6 +13,10 @@ dated section after deployment.
 ## Unreleased
 
 ### Changed
+- Closed-bar dispatcher runs ZoneWatch M1 and HFS before scanner/worker so
+  activation is not blocked behind detector analysis.
+
+### Changed
 - Closed-bar handling uses one `bars:new` dispatcher (scanner, worker,
   ZoneWatch M1, HFS) instead of four Redis subscriptions. ZoneWatch still
   listens to `spots:new` for in-zone activation.

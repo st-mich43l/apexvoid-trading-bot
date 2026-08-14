@@ -1,8 +1,8 @@
-"""One Redis ``bars:new`` subscriber for scanner, worker, ZoneWatch M1, and HFS.
+"""One Redis ``bars:new`` subscriber for ZoneWatch M1, HFS, scanner, and worker.
 
-Each of those used to subscribe separately, so one closed bar was deserialized
-and handled three or four times on the same event loop. ZoneWatch still owns
-``spots:new`` (sub-second activation); this module owns closed bars only.
+Publish/activation handlers run first. Scanner detectors and the legacy worker
+gate run after so a heavy analysis tick cannot delay an already-watched zone.
+ZoneWatch still owns ``spots:new`` separately.
 """
 
 from __future__ import annotations
@@ -34,52 +34,47 @@ async def dispatch_closed_bar(
   client: Any,
   source: RedisOHLCSource,
 ) -> list[str]:
-  """Run isolated handlers. Returns names that ran without raising."""
+  """Run isolated handlers. Publish/activation first, analysis last.
+
+  Existing ZoneWatches and HFS must not wait on scanner detectors. Scanner
+  still runs before the worker because the worker reads this bar's matches.
+  """
   parsed = parse_closed_bar(data)
   if parsed is None:
     return []
   symbol, tf, event_ts = parsed
   ran: list[str] = []
 
-  if runtime_config.runtime.scanner.enabled:
+  async def _run(name: str, coro) -> None:
     try:
-      from app.analysis.scanner import _handle_event as scanner_handle
-
-      await scanner_handle(data, source=source, client=client)
-      ran.append("scanner")
+      await coro
+      ran.append(name)
     except Exception:
-      log.exception("dispatcher scanner tick failed symbol=%s tf=%s", symbol, tf)
+      log.exception(
+        "dispatcher %s tick failed symbol=%s tf=%s", name, symbol, tf,
+      )
+
+  if runtime_config.runtime.auto_trade.enabled and tf == "M1":
+    from app.autotrade.zone_execution_cutover import evaluate_active_zone_watches
+
+    await _run(
+      "zone_watch",
+      evaluate_active_zone_watches(client, symbol=symbol, event_ts=event_ts),
+    )
+
+  from app.scalping.runtime import handle_closed_bar as hfs_handle
+
+  await _run("hfs", hfs_handle(data, client=client, source=source))
+
+  if runtime_config.runtime.scanner.enabled:
+    from app.analysis.scanner import _handle_event as scanner_handle
+
+    await _run("scanner", scanner_handle(data, source=source, client=client))
 
   if runtime_config.runtime.auto_trade.enabled:
-    try:
-      from app.autotrade.worker import _handle_event as worker_handle
+    from app.autotrade.worker import _handle_event as worker_handle
 
-      await worker_handle(data, source=source, client=client)
-      ran.append("worker")
-    except Exception:
-      log.exception("dispatcher worker tick failed symbol=%s tf=%s", symbol, tf)
-    if tf == "M1":
-      try:
-        from app.autotrade.zone_execution_cutover import evaluate_active_zone_watches
-
-        await evaluate_active_zone_watches(
-          client, symbol=symbol, event_ts=event_ts,
-        )
-        ran.append("zone_watch")
-      except Exception:
-        log.exception(
-          "dispatcher zone-watch M1 failed symbol=%s event_ts=%s",
-          symbol,
-          event_ts,
-        )
-
-  try:
-    from app.scalping.runtime import handle_closed_bar as hfs_handle
-
-    await hfs_handle(data, client=client, source=source)
-    ran.append("hfs")
-  except Exception:
-    log.exception("dispatcher hfs tick failed symbol=%s tf=%s", symbol, tf)
+    await _run("worker", worker_handle(data, source=source, client=client))
 
   return ran
 
