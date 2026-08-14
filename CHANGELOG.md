@@ -12,6 +12,11 @@ dated section after deployment.
 
 ## Unreleased
 
+### Changed
+- ``/trade_stats`` (and the weekly recap) show AUTO TRADE and ALGO MANUAL
+  as separate books with their own net, winrate, and setup lines. Combined
+  unique is a footer only when both books have trades.
+
 ### Fixed
 - HFS concurrent risk no longer sticks after multi-clip fills. Clip
   ``order_filled`` events count once per group, and each M1 cycle drops

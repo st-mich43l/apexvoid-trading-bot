@@ -13,7 +13,7 @@ from app.persistence.store import (
   get_pips_records,
   set_meta,
 )
-from app.signals.reports import _stream_lines, build_stats, sparkline
+from app.signals.reports import _stream_book_lines, build_stats, sparkline
 from app.core.symbols import SYMBOLS, channels_for
 from app.bot.client import send_with_retry
 
@@ -136,37 +136,16 @@ def format_weekly_recap(
     ])
     return f"<pre>{escape(text)}</pre>"
 
-  best = stats["best"]
-  worst = stats["worst"]
-  net_icon = "🟢" if stats["net"] >= 0 else "🔴"
   lines = [
     f"📊 WEEKLY RECAP — {_symbol_label(symbol)}",
     f"🗓 {_date_range(start, end)}",
     _SEP,
-    _metric_line("💰", "Net", _signed(stats["net"]), net_icon),
-    _metric_line(
-      "🎯",
-      "Winrate",
-      f"{stats['win_rate']:.0f}%",
-      f"({stats['wins']}W / {stats['losses']}L)",
-    ),
-    _metric_line("📦", "Trades", str(stats["trades"])),
-    _metric_line("🟢", "Avg win", _signed(stats["average_win"])),
-    _metric_line("🔴", "Avg loss", _signed(stats["average_loss"])),
-    _metric_line("⚖", "Expectancy", _signed(stats["expectancy"]), "/ trade"),
-    _best_worst_line("🏆", "Best", best),
-    _best_worst_line("🩸", "Worst", worst),
+    *_stream_book_lines(stats),
     "",
-    "🧬 By stream",
-    *_stream_lines(stats["by_stream"]),
-    "",
-    "📐 By setup",
-    *_branch_lines(stats["by_setup"], "setup"),
-    "",
-    "🕐 By session",
+    "🕐 By session (combined unique)",
     *_branch_lines(stats["by_session"], "session"),
     "",
-    "📈 Equity",
+    "📈 Equity (combined unique)",
     f"{sparkline(stats['cumulative'])}  {_signed(stats['net'])}",
     _SEP,
     "🤖 Apex Void · weekly recap",
