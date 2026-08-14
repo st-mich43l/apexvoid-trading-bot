@@ -1689,45 +1689,28 @@ async def evaluate_active_zone_watches(
 
 
 async def zone_watch_execution_loop() -> None:
-  """Wake retained zones on M1 bars and sub-second spot updates."""
+  """Wake retained zones on sub-second spot updates.
+
+  Closed M1 bars are handled by ``bar_event_dispatcher_loop`` so this loop
+  does not subscribe to ``bars:new``.
+  """
   if not runtime_config.runtime.auto_trade.enabled:
     return
   client = redis_state.get_client()
   pubsub = client.pubsub()
-  await pubsub.subscribe("bars:new", "spots:new")
-  # Cap spot-driven re-evals so ticks cannot busy-loop evaluate_active.
-  # First tick that lands inside a cached zone still evaluates immediately.
+  await pubsub.subscribe("spots:new")
   last_spot_eval_monotonic: dict[str, float] = {}
   log.info(
-    "ZoneWatch direct execution loop started channels=bars:new,spots:new "
-    "spot_min_interval_s=%.2f",
+    "ZoneWatch spot loop started channel=spots:new spot_min_interval_s=%.2f",
     SPOT_MIN_INTERVAL_S,
   )
   try:
     async for message in pubsub.listen():
       if message.get("type") != "message":
         continue
-      channel_raw = message.get("channel")
-      channel = (
-        channel_raw.decode()
-        if isinstance(channel_raw, bytes)
-        else str(channel_raw or "")
-      )
       raw = message.get("data")
       text = raw.decode() if isinstance(raw, bytes) else str(raw)
       try:
-        if channel == "bars:new":
-          parts = text.split(":", 2)
-          if len(parts) != 3 or parts[1].upper() != "M1":
-            continue
-          await evaluate_active_zone_watches(
-            client,
-            symbol=parts[0].upper(),
-            event_ts=parts[2],
-          )
-          continue
-        if channel != "spots:new":
-          continue
         parts = text.split(":", 1)
         if len(parts) != 2:
           continue
@@ -1755,12 +1738,11 @@ async def zone_watch_execution_loop() -> None:
         )
       except Exception:
         log.exception(
-          "ZoneWatch evaluation failed channel=%s event=%s",
-          channel,
+          "ZoneWatch evaluation failed channel=spots:new event=%s",
           text,
         )
   finally:
-    await pubsub.unsubscribe("bars:new", "spots:new")
+    await pubsub.unsubscribe("spots:new")
     await pubsub.close()
 
 

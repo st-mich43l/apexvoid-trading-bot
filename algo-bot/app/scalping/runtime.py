@@ -475,69 +475,60 @@ async def process_m1_bar(
   return result
 
 
+async def handle_closed_bar(
+  data: object,
+  *,
+  client: Any,
+  source: RedisOHLCSource,
+) -> None:
+  """HFS handler for one closed-bar event (M5 context refresh, M1 cycle)."""
+  if _mode() == "off":
+    return
+  parsed = _parse_bar_event(data)
+  if parsed is None:
+    return
+  symbol, tf, bar_ts = parsed
+  if symbol != LIVE_SYMBOL:
+    return
+  if tf == "M5":
+    await _ensure_context(
+      client,
+      source,
+      symbol=symbol,
+      now=bar_ts,
+      cfg=runtime_config,
+      force=True,
+    )
+    return
+  if tf != "M1":
+    return
+  summary = await process_m1_bar(
+    client,
+    symbol=symbol,
+    bar_ts=bar_ts,
+    ohlc_source=source,
+  )
+  log.info(
+    "scalp m1 cycle symbol=%s bar_ts=%s mode=%s allowed=%s blocked=%s "
+    "discovered=%s idle=%s block_reasons=%s ms=%s",
+    symbol,
+    bar_ts,
+    summary.get("mode"),
+    len(summary.get("allowed") or ()),
+    len(summary.get("blocked") or ()),
+    summary.get("discovered"),
+    ",".join(summary.get("idle_reasons") or ()) or "-",
+    ",".join(
+      str(item.get("reason") or "?")
+      for item in (summary.get("blocked") or ())
+    ) or "-",
+    summary.get("cycle_total_ms"),
+  )
+
+
 async def scalp_m1_event_loop() -> None:
-  """Subscribe to closed M1 bars for XAU scalping."""
+  """Deprecated: closed bars are owned by bar_event_dispatcher_loop."""
   if _mode() == "off":
     log.info("HFS scalping disabled: strategies.high_frequency_scalp.mode=off")
     return
-
-  log.info(
-    "HFS scalping loop starting mode=%s symbol=%s",
-    _mode(),
-    LIVE_SYMBOL,
-  )
-  client = await redis_state.get_client()
-  pubsub = client.pubsub()
-  channel = runtime_config.market_data.ctrader_feed.bars_channel
-  await pubsub.subscribe(channel)
-  source = RedisOHLCSource(client)
-  try:
-    async for message in pubsub.listen():
-      if message is None or message.get("type") != "message":
-        continue
-      parsed = _parse_bar_event(message.get("data"))
-      if parsed is None:
-        continue
-      symbol, tf, bar_ts = parsed
-      if symbol != LIVE_SYMBOL:
-        continue
-      try:
-        if tf == "M5":
-          await _ensure_context(
-            client,
-            source,
-            symbol=symbol,
-            now=bar_ts,
-            cfg=runtime_config,
-            force=True,
-          )
-          continue
-        if tf != "M1":
-          continue
-        summary = await process_m1_bar(
-          client,
-          symbol=symbol,
-          bar_ts=bar_ts,
-          ohlc_source=source,
-        )
-        log.info(
-          "scalp m1 cycle symbol=%s bar_ts=%s mode=%s allowed=%s blocked=%s "
-          "discovered=%s idle=%s block_reasons=%s ms=%s",
-          symbol,
-          bar_ts,
-          summary.get("mode"),
-          len(summary.get("allowed") or ()),
-          len(summary.get("blocked") or ()),
-          summary.get("discovered"),
-          ",".join(summary.get("idle_reasons") or ()) or "-",
-          ",".join(
-            str(item.get("reason") or "?")
-            for item in (summary.get("blocked") or ())
-          ) or "-",
-          summary.get("cycle_total_ms"),
-        )
-      except Exception:
-        log.exception("scalp m1 cycle failed symbol=%s tf=%s bar_ts=%s", symbol, tf, bar_ts)
-  finally:
-    await pubsub.unsubscribe(channel)
-    await pubsub.aclose()
+  log.info("scalp_m1_event_loop idle; bar_event_dispatcher_loop owns %s", LIVE_SYMBOL)

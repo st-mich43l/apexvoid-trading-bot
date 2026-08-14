@@ -8805,42 +8805,8 @@ async def strategy_match_ready_loop() -> None:
 
 
 async def auto_scalp_loop() -> None:
-  """Route scanner strategy matches and private Algo strategies."""
+  """Deprecated: closed bars are owned by bar_event_dispatcher_loop."""
   if not runtime_config.runtime.auto_trade.enabled:
     log.info("ApexVoid Algo gate disabled: AUTO_TRADE_ENABLED=false")
     return
-
-  client = redis_state.get_client()
-  source = RedisOHLCSource(client)
-  try:
-    await _reconcile_legacy_mapped_thesis_claims(client)
-  except Exception:
-    log.exception("legacy mapped thesis claim reconcile failed")
-  pubsub = client.pubsub()
-  await pubsub.subscribe("bars:new")
-  log.info(
-    "ApexVoid Algo watching %s on M1/M5 with strategy_bridge=%s thesis_lock=%s",
-    ",".join(sorted(_symbols())),
-    runtime_config.runtime.auto_trade.strategy_match_enabled,
-    _thesis_lock_enabled(),
-  )
-  if not _thesis_lock_enabled():
-    log.warning(
-      "AUTO_TRADE_MAP_THESIS_LOCK_ENABLED=false — mapped theses may open "
-      "multiple active groups; disable only for intentional diagnostics"
-    )
-  try:
-    async for message in pubsub.listen():
-      if message.get("type") != "message":
-        continue
-      try:
-        await _handle_event(message.get("data"), source=source, client=client)
-      except Exception:
-        log.exception("ApexVoid Algo gate tick failed")
-        try:
-          await increment_metric(client, "lifecycle_error")
-        except Exception:
-          log.exception("ApexVoid Algo lifecycle_error metric failed")
-  finally:
-    await pubsub.unsubscribe("bars:new")
-    await pubsub.close()
+  log.info("auto_scalp_loop idle; bar_event_dispatcher_loop owns bars:new")

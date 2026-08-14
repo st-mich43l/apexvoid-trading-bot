@@ -38,11 +38,9 @@ No inbound application ports. Only SSH to the host is required.
 
 | Loop | Purpose |
 |---|---|
-| `scanner_loop` | Closed-bar analysis → detectors → ZoneWatch discovery |
+| `bar_event_dispatcher_loop` | One `bars:new` subscriber: scanner + worker + ZoneWatch M1 + HFS |
 | `zone_watch_execution_loop` | Spot-driven re-eval → activate → direct publish |
 | `forming_price_track_loop` | Live edits on forming Telegram cards |
-| `auto_scalp_loop` | Legacy/scalp worker path (ZoneWatch is authoritative for techniques) |
-| `scalp_m1_event_loop` | HFS M1 lane (`off` / `shadow` / `paper` / `live`) |
 | `setup_expiry_sweeper_loop` | Age out stale setups / watches |
 | `market_map_scan_loop` | Market Map refresh / delivery |
 | `auto_trade_events_loop` | Executor events → Telegram |
