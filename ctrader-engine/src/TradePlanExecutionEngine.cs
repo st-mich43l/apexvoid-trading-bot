@@ -285,11 +285,14 @@ public static class TradePlanExecutionEngine
 
   /// <summary>
   /// BUY: exit at bid, need bid &gt;= target.
-  /// SELL: exit at ask. Whole-number VIP handles (4408.00) get a 1.0 price
-  /// cushion matching algo-bot <c>watcher._tp_hit</c> so a bid tag of the
-  /// posted level still books when ask sits a few ticks above the handle
-  /// due to spread. Decimal targets stay exact (<c>ask &lt;= target</c>).
+  /// SELL: exit at ask. Whole-number VIP handles (4323.00) get a 0.10 price
+  /// cushion (~1 XAU pip) matching algo-bot <c>watcher._tp_hit</c> so ask
+  /// sitting a few ticks above the handle still books. A 1.0-price cushion
+  /// booked ~10 pips early (2026-08-14 #3 TP1 +22 vs posted +30).
+  /// Decimal targets stay exact (<c>ask &lt;= target</c>).
   /// </summary>
+  public const decimal SellWholeTpHandleCushion = 0.10m;
+
   public static bool HasReachedExitTarget(
     string direction,
     decimal exitQuote,
@@ -302,7 +305,7 @@ public static class TradePlanExecutionEngine
     }
     if (target == decimal.Truncate(target))
     {
-      return exitQuote < target + 1.0m;
+      return exitQuote < target + SellWholeTpHandleCushion;
     }
     return exitQuote <= target;
   }
