@@ -13,6 +13,14 @@ dated section after deployment.
 ## Unreleased
 
 ### Changed
+- Owner Telegram I/O runs through one priority actor (fill/root before
+  Price-now). Forming-card live price updates every 5s (0.5 min move) and is
+  dropped while flood-paused. ZoneWatch still throttles spots to 3s except the
+  first tick inside a cached zone. Close-reason DealList lookup is 2s and does
+  not retry unbounded on timeout. A flood-limited event retries once (5s) then
+  the stream cursor advances instead of stalling 60s.
+
+### Changed
 - Docs refreshed to the current multi-service stack: README and
   `docs/architecture.md` describe algo-bot + ctrader-engine + Postgres +
   Redis + ZoneWatch → TradePlan V8; operations/deployment/bot-commands no

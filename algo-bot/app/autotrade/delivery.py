@@ -2699,13 +2699,40 @@ async def _process_owner_entries(
       if not event.get("lifecycle_id"):
         await _record_lifecycle_event(client, event)
       await _record_group_result(client, event)
-      await _deliver_auto_trade_event(
-        client,
-        event,
-        profile="internal",
-        chat_id=chat_id,
-        send=send,
-      )
+      try:
+        await _deliver_auto_trade_event(
+          client,
+          event,
+          profile="internal",
+          chat_id=chat_id,
+          send=send,
+        )
+      except TelegramRetryAfter as exc:
+        # Do not stall the stream for 60s: one flood-limited card must not
+        # block later fills. Retry once after a short wait, then advance.
+        wait = min(5.0, max(0.0, float(exc.retry_after)))
+        log.warning(
+          "Auto-trade event %s flood-limited retry_after=%s; "
+          "waiting %.1fs then retrying once",
+          entry_id,
+          exc.retry_after,
+          wait,
+        )
+        if wait > 0:
+          await asyncio.sleep(wait)
+        try:
+          await _deliver_auto_trade_event(
+            client,
+            event,
+            profile="internal",
+            chat_id=chat_id,
+            send=send,
+          )
+        except TelegramRetryAfter:
+          log.warning(
+            "Auto-trade event %s still flood-limited; advancing cursor",
+            entry_id,
+          )
     cursor = entry_id
     await client.set(_CURSOR_KEY, cursor)
   return cursor
@@ -2773,16 +2800,10 @@ async def _record_lifecycle_event(client, event: dict) -> None:
     )
 
 
-# Live incident 2026-08-07: once app/bot/client.py raises instead of
-# sleeping out a long Telegram flood ban (see _MAX_RETRY_AFTER_SLEEP_SECONDS),
-# this loop's generic except caught it and retried the same stuck cursor
-# entry every 5s with a full traceback logged each time - thousands of
-# duplicate error blocks over the life of an ~11-hour ban. Retrying the
-# same entry forever is still correct (the ban is chat-wide, so skipping
-# ahead wouldn't help, and it guarantees no notification is silently
-# dropped - once the ban lifts, delivery resumes automatically) - only the
-# retry interval and log volume needed to change.
-_OWNER_LOOP_FLOOD_BACKOFF_SECONDS = 60
+# RetryAfter on a single event is handled inside _process_owner_entries so
+# the stream cursor keeps moving. This loop-level handler is only for a
+# flood that escapes that path (e.g. regime-alert send).
+_OWNER_LOOP_FLOOD_BACKOFF_SECONDS = 5
 
 
 async def _auto_trade_owner_events_loop(*, chat_id: int) -> None:
