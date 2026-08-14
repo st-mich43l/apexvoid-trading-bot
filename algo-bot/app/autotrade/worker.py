@@ -585,9 +585,10 @@ async def _load_frames(
   symbol: str,
   *,
   window: int | None = None,
+  timeframes: tuple[str, ...] | None = None,
 ) -> dict[str, Any]:
   frames: dict[str, Any] = {}
-  for timeframe in (EXECUTION_TIMEFRAME, *CONTEXT_TIMEFRAMES):
+  for timeframe in timeframes or (EXECUTION_TIMEFRAME, *CONTEXT_TIMEFRAMES):
     count = (
       max(50, int(window)) if window is not None
       else window_for_timeframe(timeframe)
@@ -7376,6 +7377,77 @@ async def _active_opposite_initial_group(
   return None
 
 
+async def _advance_mapped_thesis_rearms_from_frames(
+  client: Any,
+  *,
+  symbol: str,
+  frames: dict[str, Any],
+) -> None:
+  try:
+    from app.analysis.indicators import atr as atr_indicator
+    m1 = frames.get(EXECUTION_TIMEFRAME) or frames.get("M1")
+    if m1 is None or len(m1) < 15:
+      return
+    atr_series = atr_indicator(m1, int(runtime_config.analysis.atr.length))
+    atr_for_rearm = float(atr_series.iloc[-1])
+    if math.isfinite(atr_for_rearm) and atr_for_rearm > 0:
+      await _advance_mapped_thesis_rearms(
+        client,
+        symbol=symbol,
+        m1=m1,
+        atr=atr_for_rearm,
+      )
+  except Exception:
+    log.exception("mapped thesis rearm advance failed symbol=%s", symbol)
+
+
+async def _persist_idle_last_gate(
+  client: Any,
+  *,
+  symbol: str,
+  event_ts: str,
+  spot: AutoTradeSpot | None,
+) -> None:
+  payload = {
+    "state": "idle_no_match",
+    "box_state": "idle_no_match",
+    "symbol": symbol.upper(),
+    "tf": EXECUTION_TIMEFRAME,
+    "event_ts": event_ts,
+    "checked_at": datetime.now(timezone.utc).isoformat(),
+    "gate_source": "idle_no_match",
+    "published": False,
+    "candidate_id": None,
+    "tracked_strategy_matches": [],
+    "published_candidate_ids": [],
+    "published_candidate": None,
+    "selected_strategy": None,
+    "selected_timeframe": None,
+    "selection_state": "no_match",
+    "reasons": ["no leftover StrategyMatch"],
+    "spot_fresh": None if spot is None else spot.fresh,
+    "arbitration": {
+      "reason_code": "no_intent",
+      "intent_count": 0,
+      "arbitrable_intent_ids": [],
+      "ordered_intent_ids": [],
+      "suppressed_intent_ids": [],
+      "winner_intent_id": None,
+    },
+  }
+  encoded = json.dumps(payload, separators=(",", ":"), sort_keys=True)
+  await client.set(
+    "auto_trade:last_gate",
+    encoded,
+    ex=WORKER_SNAPSHOT_TTL_SECONDS,
+  )
+  await client.set(
+    f"auto_trade:last_gate:{symbol.upper()}",
+    encoded,
+    ex=WORKER_SNAPSHOT_TTL_SECONDS,
+  )
+
+
 async def _handle_event(
   data: object,
   *,
@@ -7392,27 +7464,31 @@ async def _handle_event(
 
   client = client or redis_state.get_client()
   source = source or RedisOHLCSource(client)
-  frames = await _load_frames(source, symbol)
   spot = await _load_spot(client, symbol)
+  scanner_strategy_matches = await _load_strategy_matches(client, symbol)
+  if ready_match_id is not None:
+    scanner_strategy_matches = [
+      item for item in scanner_strategy_matches
+      if item.match_id == ready_match_id
+    ]
+  if not scanner_strategy_matches:
+    frames = await _load_frames(
+      source, symbol, timeframes=(EXECUTION_TIMEFRAME,),
+    )
+    await _rearm_scanner_range_edges(client, symbol, spot)
+    await _advance_mapped_thesis_rearms_from_frames(
+      client, symbol=symbol, frames=frames,
+    )
+    await _persist_idle_last_gate(
+      client, symbol=symbol, event_ts=event_ts, spot=spot,
+    )
+    return None
+
+  frames = await _load_frames(source, symbol)
   await _rearm_scanner_range_edges(client, symbol, spot)
-  # Advance mapped thesis rearm tracking on every closed M1 before detection.
-  try:
-    from app.analysis.indicators import atr as atr_indicator
-    m1 = frames.get(EXECUTION_TIMEFRAME)
-    if m1 is None:
-      m1 = frames.get("M1")
-    if m1 is not None and len(m1) >= 15:
-      atr_series = atr_indicator(m1, int(runtime_config.analysis.atr.length))
-      atr_for_rearm = float(atr_series.iloc[-1])
-      if math.isfinite(atr_for_rearm) and atr_for_rearm > 0:
-        await _advance_mapped_thesis_rearms(
-          client,
-          symbol=symbol,
-          m1=m1,
-          atr=atr_for_rearm,
-        )
-  except Exception:
-    log.exception("mapped thesis rearm advance failed symbol=%s", symbol)
+  await _advance_mapped_thesis_rearms_from_frames(
+    client, symbol=symbol, frames=frames,
+  )
   private_decision = evaluate_auto_scalp_gate(
     frames,
     symbol=symbol,
@@ -7425,12 +7501,6 @@ async def _handle_event(
     private_decision=private_decision,
     spot=spot,
   )
-  scanner_strategy_matches = await _load_strategy_matches(client, symbol)
-  if ready_match_id is not None:
-    scanner_strategy_matches = [
-      item for item in scanner_strategy_matches
-      if item.match_id == ready_match_id
-    ]
   cached_market_map = decode_market_map(
     await client.get(market_map_key(symbol))
   )

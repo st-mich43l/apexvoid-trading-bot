@@ -13,6 +13,13 @@ dated section after deployment.
 ## Unreleased
 
 ### Changed
+- Idle M1 worker ticks load leftover StrategyMatch first. With none, they
+  rearm on M1 only and write a thin `last_gate` (`idle_no_match`) without
+  private-gate, market-map, regime, or trend pandas. Scanner/ZoneWatch
+  technique analysis is unchanged. A leftover match still runs the full
+  worker publish path.
+
+### Changed
 - Idle M1 worker ticks skip leftover StrategyMatch routing and TradePlan V8
   publish when Redis has no match. Rearm, private-gate telemetry, and
   last_gate snapshots still run. Scanner-routed matches still publish.
