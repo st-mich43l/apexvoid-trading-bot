@@ -1493,15 +1493,25 @@ async def _sync_strategy_match_cutover(
       )
       continue
     if not access.executable:
+      if access.status == "chase_missed":
+        await transition_zone_watch(
+          client,
+          zone_id,
+          INVALIDATED,
+          reason_code="scalp_missed_chase",
+        )
+        log.info(
+          "zone watch cutover rejected symbol=%s tf=%s setup=%s direction=%s "
+          "reason=scalp_missed_chase zone_id=%s chase_pips=%s max_chase=%s",
+          symbol, tf, result.setup, result.direction, zone_id,
+          access.chase_pips, access.maximum_chase_pips,
+        )
+        continue
       log.info(
         "zone watch cutover waiting symbol=%s tf=%s setup=%s direction=%s "
         "reason=%s zone_id=%s state=%s chase_pips=%s max_chase=%s",
         symbol, tf, result.setup, result.direction,
-        (
-          "scalp_missed_chase"
-          if access.status == "chase_missed"
-          else "quote_outside_zone"
-        ),
+        "quote_outside_zone",
         zone_id, record.state, access.chase_pips, access.maximum_chase_pips,
       )
       continue

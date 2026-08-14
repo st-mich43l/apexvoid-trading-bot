@@ -14,7 +14,11 @@ from typing import Any
 from app.autotrade.strategy_taxonomy import (
   REACTION_STRATEGIES,
   is_reaction_strategy,
+  is_scalp_strategy,
 )
+
+# AE-style scalp: one structural zone, five equal clips (not one full lot).
+SCALP_MICRO_CLIPS = 5
 
 ROUTE_MARKET = "market"
 ROUTE_SINGLE_LIMIT = "single_limit"
@@ -108,6 +112,56 @@ def _scale_ladder_legs(
     _round_price(proximal, digits),
     _round_price(second_leg, digits),
   )
+
+
+def _unique_prices(prices: list[float]) -> tuple[float, ...]:
+  out: list[float] = []
+  for price in prices:
+    if not out or price != out[-1]:
+      out.append(price)
+  return tuple(out)
+
+
+def scalp_micro_grid_legs(
+  *,
+  side: str,
+  low: float,
+  high: float,
+  quote: float,
+  digits: int,
+  clips: int = SCALP_MICRO_CLIPS,
+) -> tuple[float, ...]:
+  """Equal-size DCA clips from live/proximal into the confirmed zone.
+
+  BUY steps down toward demand distal; SELL steps up toward supply distal.
+  L1 is the live quote when already inside (marketable); remaining legs rest
+  as limits so they only fill if M1 actually travels there.
+  """
+  count = max(2, int(clips))
+  if side == "BUY":
+    start = min(quote, high) if quote <= high else high
+    far = low
+    if start <= far:
+      return ()
+    step = (start - far) / (count - 1)
+    raw = [start - (step * index) for index in range(count)]
+  else:
+    start = max(quote, low) if quote >= low else low
+    far = high
+    if start >= far:
+      return ()
+    step = (far - start) / (count - 1)
+    raw = [start + (step * index) for index in range(count)]
+  return _unique_prices([_round_price(price, digits) for price in raw])
+
+
+def _equal_clip_ratios(count: int) -> tuple[float, ...]:
+  if count <= 0:
+    return ()
+  base = round(1.0 / count, 6)
+  ratios = [base] * count
+  ratios[-1] = round(1.0 - base * (count - 1), 6)
+  return tuple(ratios)
 
 
 def resolve_execution_route_plan(
@@ -243,6 +297,25 @@ def resolve_execution_route_plan(
       True,
       planned_leg_volume_ratios=reaction_ratios,
     )
+
+  if is_scalp_strategy(
+    str(strategy or ""),
+    family=strategy_family,
+  ):
+    grid = scalp_micro_grid_legs(
+      side=side, low=low, high=high, quote=quote, digits=digits,
+    )
+    if len(grid) >= 2:
+      l1 = grid[0]
+      return ExecutionRoutePlan(
+        ROUTE_MARKET_WITH_LIMIT_SCALE,
+        l1,
+        grid,
+        geometry,
+        "scalp micro-grid: equal clips into the structural zone",
+        True,
+        planned_leg_volume_ratios=_equal_clip_ratios(len(grid)),
+      )
 
   if preference == "market":
     # In-zone reaction: L1 market + deeper L2 limit (not a resting ladder).
