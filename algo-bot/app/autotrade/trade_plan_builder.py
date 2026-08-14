@@ -156,6 +156,8 @@ def _build_entry(
     return TradePlanEntry(
       type=ENTRY_TYPE_SINGLE_LIMIT,
       expires_at=expires_at,
+      zone_low=Decimal(str(match.entry_low)),
+      zone_high=Decimal(str(match.entry_high)),
       order_price=Decimal(str(measured["planned_entry_price"])),
       max_spread_ticks=max_spread_ticks,
       max_slippage_ticks=max_slippage_ticks,
@@ -230,6 +232,8 @@ def _build_entry(
     return TradePlanEntry(
       type=ENTRY_TYPE_LIMIT_LADDER,
       expires_at=expires_at,
+      zone_low=Decimal(str(match.entry_low)),
+      zone_high=Decimal(str(match.entry_high)),
       legs=legs,
       max_spread_ticks=max_spread_ticks,
       max_slippage_ticks=max_slippage_ticks,
