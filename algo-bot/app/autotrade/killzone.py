@@ -192,6 +192,88 @@ def evaluate_killzone_gate(
   return decision
 
 
+def parse_reaction_publish_windows(cfg: Any | None = None) -> tuple[tuple[int, int], ...]:
+  """Parse ``7-11,13-16`` into exclusive-end hour ranges."""
+  section = getattr(getattr(cfg, "execution", None), "technique", None)
+  raw = str(
+    getattr(section, "reaction_publish_windows", "7-11,13-16") or "7-11,13-16"
+  )
+  windows: list[tuple[int, int]] = []
+  for part in raw.split(","):
+    token = part.strip()
+    if not token or "-" not in token:
+      continue
+    left, right = token.split("-", 1)
+    try:
+      start = int(left) % 24
+      end = int(right)
+    except (TypeError, ValueError):
+      continue
+    if end <= start:
+      continue
+    windows.append((start, end % 24 if end >= 24 else end))
+  return tuple(windows) if windows else ((7, 11), (13, 16))
+
+
+def hour_in_reaction_publish_windows(hour: int, cfg: Any | None = None) -> bool:
+  hour = int(hour) % 24
+  for start, end in parse_reaction_publish_windows(cfg):
+    if start <= hour < end:
+      return True
+  return False
+
+
+def evaluate_reaction_publish_window(
+  *,
+  ts: int | float | None = None,
+  hour: int | None = None,
+  cfg: Any | None = None,
+  require: bool = True,
+) -> KillzoneDecision:
+  """Non-scalp reaction hours (not the HFS killzone / late-NY clock)."""
+  if hour is None:
+    if ts is None:
+      hour = datetime.now(timezone.utc).hour
+    else:
+      hour = datetime.fromtimestamp(int(ts), tz=timezone.utc).hour
+  hour = int(hour) % 24
+  windows = parse_reaction_publish_windows(cfg)
+  inside = hour_in_reaction_publish_windows(hour, cfg)
+  measured = {
+    "utc_hour": hour,
+    "reaction_publish_windows": list(windows),
+    "require": require,
+    "technique_enforce": technique_enforce(cfg),
+  }
+  if not require or not technique_enforce(cfg):
+    return KillzoneDecision(
+      allowed=True,
+      reason_code=(
+        "reaction_publish_window"
+        if inside
+        else "outside_reaction_publish_window_not_enforced"
+      ),
+      killzone_name=KILLZONE_NONE,
+      utc_hour=hour,
+      measured={**measured, "would_block": not inside},
+    )
+  if inside:
+    return KillzoneDecision(
+      allowed=True,
+      reason_code="reaction_publish_window",
+      killzone_name=KILLZONE_NONE,
+      utc_hour=hour,
+      measured=measured,
+    )
+  return KillzoneDecision(
+    allowed=False,
+    reason_code="outside_reaction_publish_window",
+    killzone_name=KILLZONE_NONE,
+    utc_hour=hour,
+    measured=measured,
+  )
+
+
 # Confirmation patterns accepted as sweep / body / displacement for reaction.
 SWEEP_BODY_TRIGGERS = frozenset({
   "sweep_reclaim",
@@ -200,6 +282,8 @@ SWEEP_BODY_TRIGGERS = frozenset({
   "strong_close",
   "engulfing",
   "rejection_choch",
+  # Owner 2026-08-14 algo_manual: Key SELL #51 was a failure wick after tap.
+  "wick_rejection",
 })
 
 

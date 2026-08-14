@@ -60,6 +60,7 @@ from app.autotrade.strategy_match_ready import enqueue_strategy_match_ready
 from app.autotrade.strategy_taxonomy import (
   is_range_strategy,
   is_reaction_strategy,
+  is_scalp_strategy,
   is_technique_or_confluence,
 )
 from app.autotrade.zone_watch import (
@@ -586,6 +587,7 @@ def _location_and_activation_for_record(
   chase_pips: float | None = None,
   maximum_chase_pips: float | None = None,
   decisive_break: bool = False,
+  impulse_bars: list | None = None,
 ):
   bid, ask, _ts = quote
   ranges = range_bounds or _empty_range_bounds()
@@ -630,6 +632,12 @@ def _location_and_activation_for_record(
     chase_pips=chase_pips,
     maximum_chase_pips=maximum_chase_pips,
     m5_authoritative=bool(confirmation.m5_authoritative),
+    impulse_bars=impulse_bars,
+    zone_low=record.low,
+    zone_high=record.high,
+    execution_price=float(
+      getattr(evidence, "executable_quote", None) or match.current_price
+    ),
   )
   return location, activation, context
 
@@ -648,7 +656,10 @@ async def _prepare_activation(
 ) -> StrategyMatch | None:
   """Return a stamped match ready to activate, or None while waiting/blocked."""
   now = quote[2]
-  from app.autotrade.killzone import evaluate_killzone_gate, technique_enforce
+  from app.autotrade.killzone import (
+    evaluate_killzone_gate,
+    technique_enforce,
+  )
   from app.core.config import runtime_config
 
   tech = getattr(runtime_config.execution, "technique", None)
@@ -718,6 +729,7 @@ async def _prepare_activation(
     return None
 
   trigger = await _m1_trigger_for_zone(client, record, source=source)
+  impulse_bars = await _recent_m1_impulse_bars(client, record, source=source)
   range_bounds = await _resolve_location_range_bounds(
     client,
     symbol=record.symbol,
@@ -738,6 +750,7 @@ async def _prepare_activation(
     chase_pips=chase_pips,
     maximum_chase_pips=maximum_chase_pips,
     decisive_break=decisive_break,
+    impulse_bars=impulse_bars,
   )
   checked_at = datetime.now(timezone.utc).isoformat()
   location_payload = {
@@ -1306,6 +1319,30 @@ async def _m1_trigger_for_zone(
   if latest is not None:
     await mark_m1_evaluated(client, record.zone_id, int(latest))
   return trigger
+
+
+async def _recent_m1_impulse_bars(
+  client: Any,
+  record: ZoneWatch,
+  *,
+  source: RedisOHLCSource | None = None,
+) -> list[dict[str, float]]:
+  ohlc = _ohlc_source(client, source)
+  frame = await ohlc.window(record.symbol, "M1", window_for_timeframe("M1"))
+  if frame is None or getattr(frame, "empty", True):
+    return []
+  tail = frame.tail(5)
+  bars: list[dict[str, float]] = []
+  for _, row in tail.iterrows():
+    try:
+      bars.append({
+        "h": float(row["high"]),
+        "l": float(row["low"]),
+        "c": float(row["close"]),
+      })
+    except (TypeError, ValueError, KeyError):
+      continue
+  return bars
 
 
 async def _evaluate_record(

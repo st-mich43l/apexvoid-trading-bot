@@ -4701,12 +4701,8 @@ async def _publish_trade_plan_v8(
     )
     return None
 
-  require_sweep = True if tech is None else bool(
-    getattr(tech, "require_sweep_body", True),
-  )
   if (
     enforce_pack
-    and require_sweep
     and (
       is_reaction_strategy(match.strategy)
       or match.family in {
