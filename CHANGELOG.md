@@ -13,6 +13,11 @@ dated section after deployment.
 ## Unreleased
 
 ### Changed
+- Closed-bar dispatcher no longer prefetches H1/M15/M5 on every M1. ZoneWatch
+  and HFS fill the shared cache on demand. M5 still prefetches M1/M5/M15/H1
+  for scanner.
+
+### Changed
 - Idle M1 worker ticks load leftover StrategyMatch first. With none, they
   rearm on M1 only and write a thin `last_gate` (`idle_no_match`) without
   private-gate, market-map, regime, or trend pandas. Scanner/ZoneWatch
