@@ -282,6 +282,8 @@ SWEEP_BODY_TRIGGERS = frozenset({
   "strong_close",
   "engulfing",
   "rejection_choch",
+  # Owner 2026-08-14 algo_manual: Key SELL #51 was a failure wick after tap.
+  "wick_rejection",
 })
 
 

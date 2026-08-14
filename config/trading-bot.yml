@@ -109,8 +109,6 @@ execution:
     hfs_require_killzone: true
     require_sweep_body: false
     strict_premium_discount: true
-    # Non-scalp (Key/Zone/FVG/Demand) publish hours UTC, exclusive end.
-    reaction_publish_windows: '7-11,13-16'
   activation:
     # Enforce with entry_location: wait for M1 reaction + honor location blocks.
     # Ansible: apexvoid_trading_bot_config.execution.activation

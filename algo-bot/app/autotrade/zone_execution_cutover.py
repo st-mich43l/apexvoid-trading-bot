@@ -635,6 +635,9 @@ def _location_and_activation_for_record(
     impulse_bars=impulse_bars,
     zone_low=record.low,
     zone_high=record.high,
+    execution_price=float(
+      getattr(evidence, "executable_quote", None) or match.current_price
+    ),
   )
   return location, activation, context
 
@@ -655,7 +658,6 @@ async def _prepare_activation(
   now = quote[2]
   from app.autotrade.killzone import (
     evaluate_killzone_gate,
-    evaluate_reaction_publish_window,
     technique_enforce,
   )
   from app.core.config import runtime_config
@@ -695,40 +697,6 @@ async def _prepare_activation(
       },
     )
     return None
-
-  if not is_scalp_strategy(
-    match.strategy,
-    family=str(getattr(match, "family", "") or ""),
-    strategy_mode=str(getattr(match, "strategy_mode", "") or ""),
-  ):
-    sess = evaluate_reaction_publish_window(
-      ts=now,
-      cfg=runtime_config,
-      require=technique_enforce(runtime_config),
-    )
-    if not sess.allowed:
-      log.info(
-        "entry activation blocked outside reaction window symbol=%s "
-        "zone_id=%s utc_hour=%s",
-        record.symbol,
-        record.zone_id,
-        sess.utc_hour,
-      )
-      await _record_policy_telemetry(
-        client,
-        symbol=record.symbol,
-        kind="activation",
-        reason_code=sess.reason_code,
-        payload={
-          "symbol": record.symbol,
-          "zone_id": record.zone_id,
-          "strategy": match.strategy,
-          "direction": record.direction,
-          "utc_hour": sess.utc_hour,
-          **sess.measured,
-        },
-      )
-      return None
 
   stop_error = _match_planned_stop_hard_error(match)
   if stop_error is not None:

@@ -4665,7 +4665,6 @@ async def _publish_trade_plan_v8(
   from app.autotrade.killzone import (
     confirmation_is_sweep_body,
     evaluate_killzone_gate,
-    evaluate_reaction_publish_window,
     technique_enforce,
   )
 
@@ -4701,37 +4700,6 @@ async def _publish_trade_plan_v8(
       },
     )
     return None
-
-  if not is_scalp_strategy(
-    match.strategy,
-    family=str(getattr(match, "family", "") or ""),
-    strategy_mode=str(getattr(match, "strategy_mode", "") or ""),
-  ):
-    sess = evaluate_reaction_publish_window(
-      ts=int(getattr(spot, "ts", 0) or int(datetime.now(timezone.utc).timestamp())),
-      cfg=runtime_config,
-      require=enforce_pack,
-    )
-    if not sess.allowed:
-      log.info(
-        "v8 publish blocked outside reaction window symbol=%s match_id=%s "
-        "utc_hour=%s",
-        symbol,
-        match.match_id,
-        sess.utc_hour,
-      )
-      await _record_v8_build_rejected(
-        client,
-        symbol,
-        match,
-        "outside_reaction_publish_window",
-        "technique pack: non-scalp publish blocked outside UTC 07-11/13-16",
-        {
-          "utc_hour": sess.utc_hour,
-          **sess.measured,
-        },
-      )
-      return None
 
   if (
     enforce_pack

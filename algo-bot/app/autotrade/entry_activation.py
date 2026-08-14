@@ -20,6 +20,7 @@ from app.autotrade.strategy_taxonomy import (
   is_liquidity_strategy,
   is_range_strategy,
   is_reaction_strategy,
+  is_technique_or_confluence,
   is_zone_strategy,
 )
 
@@ -138,6 +139,64 @@ def detect_impulse_against(
   return False
 
 
+def detect_expanding_up(
+  bars: list[Mapping[str, Any]] | None,
+  *,
+  lookback: int = 5,
+) -> bool:
+  """True when last M1 bars are making HH with rising closes (#53 / Key-BUY-into-bid)."""
+  if not bars or len(bars) < 3:
+    return False
+  chunk = list(bars)[-max(3, lookback):]
+  try:
+    closes = [float(bar.get("c", bar.get("close"))) for bar in chunk]
+    highs = [float(bar.get("h", bar.get("high"))) for bar in chunk]
+  except (TypeError, ValueError):
+    return False
+  expanding = highs[-1] > highs[0] and closes[-1] > closes[0]
+  up_closes = sum(
+    1 for idx in range(1, len(closes)) if closes[idx] >= closes[idx - 1]
+  )
+  return expanding and up_closes >= 2
+
+
+def demand_swept_and_reclaimed(
+  *,
+  bars: list[Mapping[str, Any]] | None,
+  zone_low: float | None,
+  zone_high: float | None,
+) -> bool:
+  """Demand BUY: wick through/at zone low, last close back in the box (#42)."""
+  if not bars or zone_low is None or zone_high is None:
+    return False
+  low = float(zone_low)
+  high = float(zone_high)
+  try:
+    lows = [float(bar.get("l", bar.get("low"))) for bar in bars]
+    close = float(bars[-1].get("c", bars[-1].get("close")))
+  except (TypeError, ValueError):
+    return False
+  swept = any(value <= low + 0.05 for value in lows)
+  return swept and low <= close <= high + 0.15
+
+
+def sell_quote_is_proximal(
+  *,
+  price: float | None,
+  zone_low: float | None,
+  zone_high: float | None,
+) -> bool:
+  """Key/FVG SELL fills at the cheap half of the box (#44/#46/#49/#51/#39)."""
+  if price is None or zone_low is None or zone_high is None:
+    return True
+  low = float(zone_low)
+  high = float(zone_high)
+  if high <= low:
+    return True
+  mid = low + (high - low) / 2.0
+  return float(price) <= mid + 0.02
+
+
 def evaluate_entry_activation(
   *,
   strategy: str,
@@ -157,6 +216,7 @@ def evaluate_entry_activation(
   impulse_bars: list[Mapping[str, Any]] | None = None,
   zone_low: float | None = None,
   zone_high: float | None = None,
+  execution_price: float | None = None,
 ) -> EntryActivationDecision:
   """Pure activation decision. Does not touch Redis.
 
@@ -341,6 +401,57 @@ def evaluate_entry_activation(
             measured["sweep_body_required"] = True
             if not confirmation_is_sweep_body(pattern):
               m1_fail_reason = "confirmation_requires_sweep_body"
+
+    side = str(direction or "").upper()
+    name = str(strategy or "")
+    if (
+      m1_fail_reason is None
+      and technique_enforce(cfg)
+      and side == "BUY"
+      and (is_zone_strategy(name) or "Demand" in name)
+      and not is_reaction_strategy(name)
+    ):
+      pattern = "" if trigger is None else str(trigger.pattern or "")
+      if pattern not in {"sweep_reclaim", "strong_reclaim"} and not demand_swept_and_reclaimed(
+        bars=impulse_bars,
+        zone_low=zone_low,
+        zone_high=zone_high,
+      ):
+        m1_fail_reason = "demand_requires_sweep_reclaim"
+
+    if (
+      m1_fail_reason is None
+      and technique_enforce(cfg)
+      and side == "SELL"
+      and (
+        is_reaction_strategy(name)
+        or is_technique_or_confluence(name)
+      )
+      and not sell_quote_is_proximal(
+        price=execution_price,
+        zone_low=zone_low,
+        zone_high=zone_high,
+      )
+    ):
+      return _result(
+        reason="sell_not_proximal",
+        would_block=True,
+        hard=True,
+      )
+
+    if (
+      m1_fail_reason is None
+      and technique_enforce(cfg)
+      and side == "BUY"
+      and is_reaction_strategy(name)
+      and detect_expanding_up(impulse_bars)
+    ):
+      measured["impulse_against"] = True
+      return _result(
+        reason="key_buy_into_impulse",
+        would_block=True,
+        hard=True,
+      )
 
     if (
       m1_fail_reason is None
