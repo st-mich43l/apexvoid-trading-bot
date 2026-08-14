@@ -129,6 +129,7 @@ TELEGRAM_SILENT_LIFECYCLE_TYPES = frozenset({
   # card under one-root-card mode — progress edits the root instead.
   "plan_published",
   "v7_order_submitted",
+  "v8_order_submitted",
 })
 # Preflight route outcomes remain in Redis, route history, metrics, and
 # /auto_status, but are operator diagnostics rather than Telegram content.
@@ -2055,14 +2056,19 @@ async def _deliver_auto_trade_event(
       # restarts. Use sha256 (not Python's salted hash()) so dedup survives
       # process restarts and matches across workers.
       digest = hashlib.sha256(event_key.encode("utf-8")).hexdigest()[:16]
-      dedup_key = f"auto_trade:v7_notify:{plan_id}:{event_type}:{digest}"
-      claimed = await client.set(
-        dedup_key,
+      claimed_v8 = await client.set(
+        f"auto_trade:v8_notify:{plan_id}:{event_type}:{digest}",
         "1",
         nx=True,
         ex=_TRADE_MESSAGE_TTL,
       )
-      if not claimed:
+      claimed_legacy = await client.set(
+        f"auto_trade:v7_notify:{plan_id}:{event_type}:{digest}",
+        "1",
+        nx=True,
+        ex=_TRADE_MESSAGE_TTL,
+      )
+      if not claimed_v8 or not claimed_legacy:
         return False
   send = send or send_scanner_with_retry
   if profile == "internal":
@@ -2382,7 +2388,7 @@ async def _today_algo_scorecard_line() -> str | None:
 
 
 async def _open_trade_plan_book_lines(client, *, limit: int = 3) -> list[str]:
-  """Compact open V7 plan lines: direction · setup · stage."""
+  """Compact open TradePlan lines: direction · setup · stage."""
   try:
     from app.autotrade.active_exposure import load_active_exposures
     from app.autotrade.trade_plan_stream import read_trade_plan
@@ -2437,7 +2443,7 @@ async def _open_trade_plan_book_lines(client, *, limit: int = 3) -> list[str]:
       f"{direction_icon} Open: <b>{escape(item.direction)}</b> · "
       f"{escape(setup)} · {escape(stage_label)}"
     )
-  extra = len(v7) - limit
+  extra = len(plans) - limit
   if extra > 0:
     lines.append(f"➕ +{extra} more")
   return lines
