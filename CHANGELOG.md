@@ -13,6 +13,11 @@ dated section after deployment.
 ## Unreleased
 
 ### Changed
+- Idle M1 worker ticks skip leftover StrategyMatch routing and TradePlan V8
+  publish when Redis has no match. Rearm, private-gate telemetry, and
+  last_gate snapshots still run. Scanner-routed matches still publish.
+
+### Changed
 - Closed-bar dispatcher prefetches M1/M5/M15/H1 once and reuses those Redis
   windows for ZoneWatch, HFS, scanner, and worker. ZoneWatch still runs
   first so full HTF prefetch cannot delay activation; M1/M5 loads during
