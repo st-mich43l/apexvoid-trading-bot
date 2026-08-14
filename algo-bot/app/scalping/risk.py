@@ -22,6 +22,8 @@ class ScalpRiskState:
   day_key: str = ""
   session_key: str = ""
   measured: dict[str, Any] = field(default_factory=dict)
+  # One id per HFS group — clip fills must not each increment concurrent.
+  open_group_ids: list[str] = field(default_factory=list)
 
   def to_json(self) -> str:
     return json.dumps(asdict(self), separators=(",", ":"), sort_keys=True)
@@ -29,6 +31,11 @@ class ScalpRiskState:
   @classmethod
   def from_json(cls, raw: str | bytes) -> ScalpRiskState:
     data = json.loads(raw)
+    groups = [
+      str(item).strip()
+      for item in (data.get("open_group_ids") or [])
+      if str(item).strip()
+    ]
     return cls(
       daily_trades=int(data.get("daily_trades") or 0),
       session_trades=int(data.get("session_trades") or 0),
@@ -42,6 +49,7 @@ class ScalpRiskState:
       day_key=str(data.get("day_key") or ""),
       session_key=str(data.get("session_key") or ""),
       measured=dict(data.get("measured") or {}),
+      open_group_ids=groups,
     )
 
 
@@ -154,6 +162,54 @@ def apply_daily_reset(
   return state
 
 
+def _normalize_group_id(group_id: str | None) -> str | None:
+  text = str(group_id or "").strip()
+  return text or None
+
+
+def live_exposure_ids(exposures: list[Any]) -> set[str]:
+  """Stable ids from open V6 positions / V8 plan runtimes."""
+  ids: set[str] = set()
+  for item in exposures or []:
+    for raw in (
+      getattr(item, "group_id", None),
+      getattr(item, "plan_id", None),
+    ):
+      token = _normalize_group_id(None if raw is None else str(raw))
+      if token is not None:
+        ids.add(token)
+        if token.startswith("v8:"):
+          ids.add(token[3:])
+        else:
+          ids.add(f"v8:{token}")
+  return ids
+
+
+def reconcile_open_positions(
+  state: ScalpRiskState,
+  live_ids: set[str] | None,
+) -> ScalpRiskState:
+  """Drop ghost HFS concurrent when the broker/plan book no longer has them.
+
+  Live 2026-08-14: five-clip ``order_filled`` events each incremented
+  ``open_positions`` while one ``position_closed`` decremented once, then
+  ``scalp_max_concurrent_positions`` blocked real Impulse discoveries with
+  an empty ``auto_trade:positions`` set.
+  """
+  live = set(live_ids or ())
+  if state.open_group_ids:
+    state.open_group_ids = [
+      gid for gid in state.open_group_ids if gid in live
+    ]
+    state.open_positions = len(state.open_group_ids)
+    return state
+  if not live:
+    state.open_positions = 0
+  elif int(state.open_positions) > len(live):
+    state.open_positions = len(live)
+  return state
+
+
 def apply_loss_streak_cooldown_reset(
   state: ScalpRiskState,
   cfg: Any,
@@ -191,15 +247,29 @@ def record_scalp_outcome(
   now: int,
   opened: bool = False,
   closed: bool = False,
+  group_id: str | None = None,
 ) -> ScalpRiskState:
   """Update HFS risk counters from a fill or close. No martingale."""
+  gid = _normalize_group_id(group_id)
   if opened:
-    state.open_positions = max(0, int(state.open_positions) + 1)
+    if gid is not None and gid in state.open_group_ids:
+      return state
+    if gid is not None:
+      state.open_group_ids.append(gid)
+    state.open_positions = (
+      len(state.open_group_ids)
+      if state.open_group_ids
+      else max(0, int(state.open_positions) + 1)
+    )
     state.daily_trades = int(state.daily_trades) + 1
     state.session_trades = int(state.session_trades) + 1
   if not closed:
     return state
-  state.open_positions = max(0, int(state.open_positions) - 1)
+  if gid is not None and gid in state.open_group_ids:
+    state.open_group_ids = [item for item in state.open_group_ids if item != gid]
+    state.open_positions = len(state.open_group_ids)
+  else:
+    state.open_positions = max(0, int(state.open_positions) - 1)
   risk_unit = float(stop_pips) if stop_pips and float(stop_pips) > 0 else 20.0
   r_multiple = float(result_pips) / risk_unit
   state.daily_r = float(state.daily_r) + r_multiple

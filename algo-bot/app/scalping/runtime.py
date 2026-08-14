@@ -42,7 +42,9 @@ from app.scalping.risk import (
   apply_daily_reset,
   apply_loss_streak_cooldown_reset,
   evaluate_risk,
+  live_exposure_ids,
   load_risk,
+  reconcile_open_positions,
   save_risk,
 )
 from app.scalping.strategies import discover_all, idle_discovery_reasons
@@ -225,6 +227,14 @@ async def process_m1_bar(
     risk_state, cfg, now=now, session=context.session
   )
   risk_state = apply_loss_streak_cooldown_reset(risk_state, cfg, now=now)
+  try:
+    from app.autotrade.active_exposure import load_active_exposures
+
+    live = live_exposure_ids(await load_active_exposures(client))
+  except Exception:
+    log.exception("hfs live exposure reconcile failed symbol=%s", symbol)
+    live = set()
+  risk_state = reconcile_open_positions(risk_state, live)
   await save_risk(client, symbol, risk_state)
   risk = evaluate_risk(risk_state, cfg, session=context.session, now=now)
 

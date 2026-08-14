@@ -136,7 +136,14 @@ async def _emit_funnel_complete(client, event: dict) -> None:
       stop_pips = None
     if outcome == "fill":
       state = record_scalp_outcome(
-        state, result_pips=0.0, stop_pips=stop_pips, now=now, opened=True,
+        state,
+        result_pips=0.0,
+        stop_pips=stop_pips,
+        now=now,
+        opened=True,
+        group_id=(
+          None if event.get("group_id") is None else str(event.get("group_id"))
+        ),
       )
     else:
       state = record_scalp_outcome(
@@ -145,6 +152,9 @@ async def _emit_funnel_complete(client, event: dict) -> None:
         stop_pips=stop_pips,
         now=now,
         closed=True,
+        group_id=(
+          None if event.get("group_id") is None else str(event.get("group_id"))
+        ),
       )
     await save_risk(client, symbol, state)
   except Exception:

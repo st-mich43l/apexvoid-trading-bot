@@ -13,6 +13,11 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- HFS concurrent risk no longer sticks after multi-clip fills. Clip
+  ``order_filled`` events count once per group, and each M1 cycle drops
+  ghost ``open_positions`` when the broker/plan book is empty.
+
+### Fixed
 - Autotrade Integrity stays aligned with live close-card edits and
   broker-recovery metric snapshots. Leftover Range Edge opposing-containment
   pytest is deselected with the other retired V7 opposing fixtures.
