@@ -164,6 +164,9 @@ def should_stop_forming_price_track(
       "GROUP STOP",
       "STOP LOSS",
       "SL HIT",
+      "PLAN EXPIRED",
+      "PLAN REJECTED",
+      "PLAN CANCELLED",
     )
   ):
     return True
@@ -408,6 +411,19 @@ def _position_activated_header(line: str) -> str | None:
   )
 
 
+def _terminal_header(line: str) -> str | None:
+  stripped = line.strip()
+  if stripped.startswith("❌") and "TERMINAL" in stripped:
+    return None
+  match = _CARD_HEADER_RE.match(stripped)
+  if match is None:
+    return None
+  return (
+    f"❌ <b>TERMINAL · {match.group('symbol')} "
+    f"{match.group('tf')}</b>"
+  )
+
+
 def apply_forming_card_status(text: str, status_line: str) -> str:
   lines = text.splitlines()
   if not lines or not status_line:
@@ -418,7 +434,8 @@ def apply_forming_card_status(text: str, status_line: str) -> str:
   # since real status text and BUY/SELL body lines can share a leading
   # emoji (both TRIGGER READY and a BUY line start with 🟢).
   activated = "POSITION ACTIVATED" in lines[0]
-  if _infer_status_state(status_line) == "order_filled":
+  inferred = _infer_status_state(status_line)
+  if inferred == "order_filled":
     rewritten_header = _position_activated_header(lines[0])
     if rewritten_header is not None:
       lines[0] = rewritten_header
@@ -433,6 +450,10 @@ def apply_forming_card_status(text: str, status_line: str) -> str:
       # since by then the header will already read as activated.
       del lines[1]
     return "\n".join(lines)
+  if inferred == "terminal" and not activated:
+    rewritten_header = _terminal_header(lines[0])
+    if rewritten_header is not None:
+      lines[0] = rewritten_header
   if activated:
     # Post-fill status updates (SL move, then later a TP hit) must keep
     # replacing the SAME line, not stack a new one each time - only
@@ -608,10 +629,13 @@ async def save_forming_card(
   if int(message_id) <= 0:
     await client.srem(FORMING_ACTIVE_INDEX_KEY, setup_id)
     return
-  await client.sadd(FORMING_ACTIVE_INDEX_KEY, setup_id)
-  # Keep the index alive at least as long as the card TTL so restart
-  # sweepers can still discover live cards without SCAN.
-  await client.expire(FORMING_ACTIVE_INDEX_KEY, effective_ttl)
+  if should_stop_forming_price_track(text):
+    await client.srem(FORMING_ACTIVE_INDEX_KEY, setup_id)
+  else:
+    await client.sadd(FORMING_ACTIVE_INDEX_KEY, setup_id)
+    # Keep the index alive at least as long as the card TTL so restart
+    # sweepers can still discover live cards without SCAN.
+    await client.expire(FORMING_ACTIVE_INDEX_KEY, effective_ttl)
   # Explicit setup_id → root_message_id mapping for one-root-card replies.
   await client.set(
     telegram_root_message_key(setup_id),
@@ -1394,6 +1418,7 @@ async def kill_setup_card(
   Fill/TP/BE/SL replies can still thread to it. Delete is intentionally
   disabled — see should_delete_root_on_terminal().
   """
+  await client.srem(FORMING_ACTIVE_INDEX_KEY, setup_id)
   card = await load_forming_card(client, setup_id)
   if card is None:
     await clear_forming_card(client, setup_id)
@@ -1842,27 +1867,92 @@ async def load_strategy_match_for_root_card(
   return strategy_match_from_trade_plan(plan)
 
 
+def format_event_recovery_root_card(event: dict) -> str:
+  """Compact root when publish never posted a card (fill/close still happened)."""
+  symbol = escape(str(event.get("symbol") or "XAU").upper())
+  tf = escape(str(event.get("tf") or event.get("timeframe") or "M1").upper())
+  message = str(event.get("message") or "")
+  direction = str(event.get("direction") or "").upper()
+  if direction not in {"BUY", "SELL"}:
+    upper = message.upper()
+    if "SELL" in upper:
+      direction = "SELL"
+    elif "BUY" in upper:
+      direction = "BUY"
+  strategy = escape(
+    str(event.get("strategy") or event.get("setup") or "Algo").strip() or "Algo"
+  )
+  event_type = str(event.get("type") or "")
+  if event_type in {
+    "plan_expired", "plan_cancelled", "plan_rejected", "position_closed",
+  }:
+    head = f"❌ <b>TERMINAL · {symbol} {tf}</b>"
+  else:
+    head = f"✅ <b>POSITION ACTIVATED · {symbol} {tf}</b>"
+  icon = "🟢" if direction == "BUY" else "🔴"
+  lines = [head]
+  if direction:
+    lines.append(f"{icon} <b>{direction} · {strategy}</b>")
+  if message:
+    lines.append(f"• {escape(message)}")
+  return "\n".join(lines)
+
+
 async def ensure_root_card_for_setup_id(
   client: Any,
   setup_id: str,
   *,
   symbol: str = "XAU",
   chat_id: int | None = None,
+  event: dict | None = None,
 ) -> int | None:
-  """Create/recover the PLAN PUBLISHED root when fill delivery finds none."""
+  """Create/recover the root when fill delivery finds none.
+
+  Prefer the published StrategyMatch / TradePlan card. If those are already
+  gone (fast fill, Asia scalp, Redis TTL), still post a compact activated
+  card from the lifecycle event so manage replies have a thread parent.
+  """
   match = await load_strategy_match_for_root_card(
     client, setup_id, symbol=symbol,
   )
-  if match is None:
+  if match is not None:
+    return await ensure_plan_published_root_card(
+      client,
+      match,
+      chat_id=chat_id,
+    )
+  if not event:
     log.warning(
       "root_card_recovery_skipped setup_id=%s reason=match_unavailable",
       setup_id,
     )
     return None
-  return await ensure_plan_published_root_card(
+  owner_id = (
+    chat_id
+    if chat_id is not None
+    else runtime_config.delivery.telegram.telegram_owner_id
+  )
+  if not owner_id:
+    return None
+  from app.bot.client import (
+    delete_scanner_message,
+    edit_scanner_message_text,
+    send_scanner_root_card_with_retry,
+  )
+
+  log.info(
+    "root_card_recovery_from_event setup_id=%s type=%s",
+    setup_id,
+    event.get("type"),
+  )
+  return await post_or_edit_forming_card(
     client,
-    match,
-    chat_id=chat_id,
+    setup_id,
+    format_event_recovery_root_card(event),
+    chat_id=int(owner_id),
+    send_fn=send_scanner_root_card_with_retry,
+    edit_fn=edit_scanner_message_text,
+    delete_fn=delete_scanner_message,
   )
 
 

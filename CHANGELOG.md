@@ -25,6 +25,13 @@ dated section after deployment.
   at/above `$2,000` still applies the stamped scalp boost.
 
 ### Fixed
+- Root Telegram card stays in sync with the live order: fill rewrites
+  `IN ZONE · WAITING FILL` before the manage reply; expire/reject/cancel and
+  close change the head to TERMINAL and drop Price-now tracking. If publish
+  never posted a root, fill/close recover one from the TradePlan match or
+  from the lifecycle event itself (no 2s standalone gap).
+
+### Fixed
 - Technique / Confluence ZoneWatches can activate and publish: non-zero chase
   budget, closed-bar-only decisive break, activate remain/reject logs,
   `STRUCTURAL_SETUPS` membership, overlapping map opposing filter, and
