@@ -42,8 +42,8 @@ async def dispatch_closed_bar(
   Existing ZoneWatches and HFS must not wait on scanner detectors. Scanner
   still runs before the worker because the worker reads this bar's matches.
   ZoneWatch, HFS, scanner, and worker share one OHLC window cache for this
-  bar. ZoneWatch still runs first so full HTF prefetch cannot delay
-  activation.
+  bar. ZoneWatch still runs first. M1 does not prefetch H1/M15; M5 warms
+  the HTF windows scanner needs.
   """
   parsed = parse_closed_bar(data)
   if parsed is None:
@@ -74,12 +74,15 @@ async def dispatch_closed_bar(
         ),
       )
 
-    try:
-      await prefetch_closed_bar_windows(source, symbol)
-    except Exception:
-      log.exception(
-        "dispatcher OHLC prefetch failed symbol=%s tf=%s", symbol, tf,
-      )
+    if tf != "M1":
+      try:
+        await prefetch_closed_bar_windows(
+          source, symbol, closed_tf=tf,
+        )
+      except Exception:
+        log.exception(
+          "dispatcher OHLC prefetch failed symbol=%s tf=%s", symbol, tf,
+        )
 
     from app.scalping.runtime import handle_closed_bar as hfs_handle
 

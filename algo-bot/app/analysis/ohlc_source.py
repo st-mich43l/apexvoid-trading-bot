@@ -60,12 +60,24 @@ def _normalize_price(symbol: str, value: float) -> float:
 CLOSED_BAR_TIMEFRAMES = ("M1", "M5", "M15", "H1")
 
 
-async def prefetch_closed_bar_windows(source: Any, symbol: str) -> None:
-  """Warm one closed-bar cache with configured lookbacks for shared handlers."""
+def prefetch_timeframes_for_closed_bar(closed_tf: str) -> tuple[str, ...]:
+  """HTF windows are for scanner/M5. M1 handlers fill the cache on demand."""
+  if str(closed_tf or "").upper() == "M1":
+    return ()
+  return CLOSED_BAR_TIMEFRAMES
+
+
+async def prefetch_closed_bar_windows(
+  source: Any,
+  symbol: str,
+  *,
+  closed_tf: str | None = None,
+) -> None:
+  """Warm the shared bar cache for handlers that need HTF this tick."""
   window = getattr(source, "window", None)
   if not callable(window):
     return
-  for tf in CLOSED_BAR_TIMEFRAMES:
+  for tf in prefetch_timeframes_for_closed_bar(closed_tf or "M5"):
     await window(symbol, tf, window_for_timeframe(tf))
 
 
