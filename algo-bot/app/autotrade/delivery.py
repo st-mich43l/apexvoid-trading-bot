@@ -26,6 +26,7 @@ from app.bot.client import (
   send_scanner_with_retry,
 )
 from app.autotrade.setup_card import (
+  FORMING_ACTIVE_INDEX_KEY,
   edit_forming_card_status,
   edit_forming_card_stop,
   forming_message_key as _setup_card_forming_message_key,
@@ -1101,8 +1102,12 @@ async def _ensure_root_card_for_manage_reply(
   Waits out scanner flood and retries once — never give up on the first
   RetryAfter when a setup_id is known.
   """
-  from app.autotrade.setup_card import ensure_root_card_for_setup_id
+  from app.autotrade.setup_card import ensure_root_card_for_setup_id, load_forming_card
   from app.bot.client import note_scanner_flood, wait_out_scanner_flood
+
+  existing = await load_forming_card(client, match_id)
+  if existing is not None and int(existing.get("message_id") or 0) > 0:
+    return int(existing["message_id"])
 
   for attempt in range(1, 3):
     try:
@@ -1112,6 +1117,7 @@ async def _ensure_root_card_for_manage_reply(
         match_id,
         symbol=str(event.get("symbol") or "XAU"),
         chat_id=chat_id,
+        event=event,
       )
     except TelegramRetryAfter as exc:
       await note_scanner_flood(exc.retry_after)
@@ -1162,7 +1168,7 @@ async def _schedule_deferred_manage_reply(
 
     try:
       await wait_out_scanner_flood()
-      await asyncio.sleep(2.0)
+      await asyncio.sleep(0.2)
       recovered = await _ensure_root_card_for_manage_reply(
         client,
         event,
@@ -1517,6 +1523,12 @@ async def _deliver_compact_order_filled(
     _, tp_lines = _split_manage_fill_and_tps(manage_text)
     if tp_lines:
       new_text = f"{body}\n" + "\n".join(tp_lines)
+  # Create a missing root first (publish can lag the fill), then rewrite
+  # WAITING FILL → POSITION ACTIVATED before the manage reply.
+  await _ensure_root_card_for_manage_reply(
+    client, event, match_id=match_id, chat_id=chat_id,
+  )
+  await _mark_forming_card_position_activated(client, match_id)
   await _replace_manage_reply(
     client,
     event,
@@ -1527,7 +1539,6 @@ async def _deliver_compact_order_filled(
     old_message_id=manage_id,
     remember=True,
   )
-  await _mark_forming_card_position_activated(client, match_id)
   return True
 
 
@@ -1579,8 +1590,9 @@ async def _deliver_compact_position_closed(
 
   Final target hits emit position_closed without a separate tp_booked, so
   this path also appends the archived TP compact line when missing.
-  The SETUP FORMING root card is left unchanged on close; the prior manage
-  notification is deleted and a fresh reply is posted with the update.
+  The prior manage notification is deleted and a fresh reply is posted.
+  The root card is also resolved here: a fill can race the card create, so
+  close must not leave IN ZONE · WAITING FILL on a dead trade.
   """
   message = str(event.get("message") or "")
   close_line = _format_position_closed_compact_line(event, message)
@@ -1598,8 +1610,7 @@ async def _deliver_compact_position_closed(
     return text
 
   manage_id, manage_text = await _load_manage_message(client, match_id)
-  if manage_text and "POSITION CLOSED" in manage_text:
-    return True
+  already_closed = bool(manage_text and "POSITION CLOSED" in manage_text)
   if manage_text:
     new_text = _compose(manage_text)
   else:
@@ -1608,6 +1619,16 @@ async def _deliver_compact_position_closed(
       "✅ <b>ORDER FILLED</b>",
       "",
     ]))
+  # Fill may have raced card create; never leave WAITING FILL after close.
+  await kill_setup_card(
+    client,
+    match_id,
+    reason_code=str(event.get("reason_code") or "position_closed"),
+    delete_fn=delete_scanner_message,
+    edit_fn=edit_scanner_message_text,
+  )
+  if already_closed:
+    return True
   await _replace_manage_reply(
     client,
     event,
@@ -1678,6 +1699,16 @@ async def _deliver_compact_manage(
   match_id = _event_match_id(event)
   if not match_id:
     return None
+  if event_type in {"plan_expired", "plan_cancelled", "plan_rejected"}:
+    await kill_setup_card(
+      client,
+      match_id,
+      reason_code=str(event.get("reason_code") or event_type),
+      delete_fn=delete_scanner_message,
+      edit_fn=edit_scanner_message_text,
+    )
+    await client.srem(FORMING_ACTIVE_INDEX_KEY, match_id)
+    return True
   if event_type == "order_filled":
     return await _deliver_compact_order_filled(
       client, event, match_id=match_id, chat_id=chat_id, send=send,
