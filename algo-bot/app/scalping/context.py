@@ -89,15 +89,9 @@ def permitted_archetypes_for_session(
       # are optimistic; Asia/NY-label without hour fail closed (late NY
       # always passes ``ts`` from ``build_scalp_context_snapshot``).
       if session not in {"london", "london_ny_overlap"}:
-        return tuple(
-          item for item in (ARCHETYPE_RANGE_SWEEP,) if item in enabled
-        )
+        return ()
     elif not classify_killzone(ts=ts, hour=hour, cfg=cfg).allowed:
-      # Outside killzone: still allow range-edge sweep (location-gated).
-      # Impulse/breakout/chase stay killzone-only.
-      return tuple(
-        item for item in (ARCHETYPE_RANGE_SWEEP,) if item in enabled
-      )
+      return ()
   return tuple(item for item in _HFS_ARCHETYPES if item in enabled)
 
 
@@ -110,7 +104,7 @@ def _enabled_hfs_archetypes(cfg: Any | None) -> frozenset[str]:
   allowed: list[str] = []
   if bool(getattr(arch, "range_sweep_enabled", True)):
     allowed.append(ARCHETYPE_RANGE_SWEEP)
-  if bool(getattr(arch, "impulse_pullback_enabled", True)):
+  if bool(getattr(arch, "impulse_pullback_enabled", False)):
     allowed.append(ARCHETYPE_IMPULSE_PULLBACK)
   if bool(getattr(arch, "breakout_retest_enabled", True)):
     allowed.append(ARCHETYPE_BREAKOUT_RETEST)

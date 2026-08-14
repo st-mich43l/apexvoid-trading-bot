@@ -109,6 +109,8 @@ execution:
     hfs_require_killzone: true
     require_sweep_body: false
     strict_premium_discount: true
+    # Non-scalp (Key/Zone/FVG/Demand) publish hours UTC, exclusive end.
+    reaction_publish_windows: '7-11,13-16'
   activation:
     # Enforce with entry_location: wait for M1 reaction + honor location blocks.
     # Ansible: apexvoid_trading_bot_config.execution.activation
@@ -313,7 +315,8 @@ strategies:
     mode: live
     archetypes:
       range_sweep_enabled: true
-      impulse_pullback_enabled: true
+      # Paused until a killzone-only sample proves the edge (7d HFS −498).
+      impulse_pullback_enabled: false
       breakout_retest_enabled: true
       # Off after 2026-08-12 quality dig (12 trades / −166 pips).
       momentum_chase_enabled: false

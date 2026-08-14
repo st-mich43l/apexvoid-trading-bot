@@ -243,6 +243,18 @@ class ExecutionTechniqueConfig(FrozenConfigModel):
       default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, True),),
       validation_summary='Pydantic required/type coercion only',
     )
+    reaction_publish_windows: str = config_field(
+      '7-11,13-16',
+      canonical_env='AUTO_TRADE_TECHNIQUE_REACTION_PUBLISH_WINDOWS',
+      owner=ConfigOwner.PYTHON,
+      reload=ReloadPolicy.NEW_SETUP_ONLY,
+      runtime_reload=ReloadPolicy.RESTART,
+      unit=ConfigUnit.STRING,
+      risk=RiskClassification.EXECUTION_SAFETY,
+      description='UTC hour windows (exclusive end) for non-scalp reaction publish, e.g. 7-11,13-16.',
+      default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, '7-11,13-16'),),
+      validation_summary='Pydantic required/type coercion only',
+    )
     strict_premium_discount: bool = config_field(
       True,
       canonical_env='AUTO_TRADE_TECHNIQUE_STRICT_PREMIUM_DISCOUNT',

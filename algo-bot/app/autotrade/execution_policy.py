@@ -17,7 +17,10 @@ from app.autotrade.protective_stop import (
   stop_bounds_for_reaction_room,
 )
 from app.autotrade.strategy_taxonomy import (
+  is_reaction_strategy,
   is_scalp_strategy,
+  is_technique_or_confluence,
+  is_zone_strategy,
   match_bypasses_opposing_structure,
 )
 
@@ -790,6 +793,24 @@ def evaluate_execution_policy(
       maximum_stop_pips = max(
         minimum_stop_pips, int(maximum_stop_pips / sizing_risk_multiplier),
       )
+    if (
+      is_reaction_strategy(strategy_name)
+      or is_zone_strategy(strategy_name)
+      or is_technique_or_confluence(strategy_name)
+    ):
+      reaction_cap = int(
+        getattr(getattr(cfg.execution, "reaction", None), "stop_max_pips", 60)
+        or 60
+      )
+      if maximum_stop_pips > reaction_cap:
+        stop_bounds_measured = {
+          **stop_bounds_measured,
+          "stop_bounds_hard_capped_pips": reaction_cap,
+          "stop_bounds_pre_hard_cap_pips": maximum_stop_pips,
+        }
+        maximum_stop_pips = reaction_cap
+      if minimum_stop_pips > maximum_stop_pips:
+        minimum_stop_pips = maximum_stop_pips
     sweep_extreme = (
       trigger_wick_extreme
       if trigger_wick_extreme is not None
@@ -873,6 +894,25 @@ def evaluate_execution_policy(
   except ProtectiveStopError as exc:
     stop_plan_error = str(exc)
     stop_plan_error_measured = dict(getattr(exc, "measured", None) or {})
+  if (
+    stop_plan is not None
+    and (
+      is_reaction_strategy(strategy_name)
+      or is_zone_strategy(strategy_name)
+      or is_technique_or_confluence(strategy_name)
+    )
+  ):
+    reaction_cap = int(
+      getattr(getattr(cfg.execution, "reaction", None), "stop_max_pips", 60)
+      or 60
+    )
+    if float(stop_plan.final_stop_pips) > reaction_cap + 1e-9:
+      stop_plan_error = "stop_exceeds_reaction_hard_cap"
+      stop_plan_error_measured = {
+        "final_stop_pips": float(stop_plan.final_stop_pips),
+        "reaction_stop_max_pips": reaction_cap,
+      }
+      stop_plan = None
   reward_risk = (
     max(0.0, remaining_pips) / float(stop_plan.final_stop_pips)
     if stop_plan is not None and stop_plan.final_stop_pips > 0

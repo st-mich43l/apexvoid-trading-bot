@@ -102,6 +102,42 @@ def _trigger_ts(trigger: M1TriggerResult | None) -> int | None:
     return None
 
 
+def detect_impulse_against(
+  *,
+  direction: str,
+  bars: list[Mapping[str, Any]] | None,
+  zone_low: float | None = None,
+  zone_high: float | None = None,
+  lookback: int = 5,
+) -> bool:
+  """True when recent M1 is expanding through the zone against the thesis."""
+  if not bars or len(bars) < 3:
+    return False
+  chunk = list(bars)[-max(3, lookback):]
+  try:
+    closes = [float(bar.get("c", bar.get("close"))) for bar in chunk]
+    highs = [float(bar.get("h", bar.get("high"))) for bar in chunk]
+    lows = [float(bar.get("l", bar.get("low"))) for bar in chunk]
+  except (TypeError, ValueError):
+    return False
+  side = str(direction or "").upper()
+  if side == "SELL":
+    expanding = highs[-1] > highs[0] and closes[-1] > closes[0]
+    up_closes = sum(
+      1 for idx in range(1, len(closes)) if closes[idx] >= closes[idx - 1]
+    )
+    through = zone_low is None or closes[-1] >= float(zone_low)
+    return expanding and up_closes >= 2 and through
+  if side == "BUY":
+    expanding = lows[-1] < lows[0] and closes[-1] < closes[0]
+    down_closes = sum(
+      1 for idx in range(1, len(closes)) if closes[idx] <= closes[idx - 1]
+    )
+    through = zone_high is None or closes[-1] <= float(zone_high)
+    return expanding and down_closes >= 2 and through
+  return False
+
+
 def evaluate_entry_activation(
   *,
   strategy: str,
@@ -118,6 +154,9 @@ def evaluate_entry_activation(
   chase_pips: float | None = None,
   maximum_chase_pips: float | None = None,
   m5_authoritative: bool = False,
+  impulse_bars: list[Mapping[str, Any]] | None = None,
+  zone_low: float | None = None,
+  zone_high: float | None = None,
 ) -> EntryActivationDecision:
   """Pure activation decision. Does not touch Redis.
 
@@ -125,11 +164,8 @@ def evaluate_entry_activation(
   are reported via would_block but still allowed so production behaviour stays
   unchanged until enforce is enabled.
 
-  When enforce is on, M1 remains the preferred reaction path. If that trigger is
-  missing/invalid but the candidate already carries M5-authoritative confirmation
-  and quote is inside the zone, publish is allowed via
-  ``reaction_m5_authoritative_in_zone`` so ZoneWatch is not stuck forever on
-  ``reaction_trigger_missing``.
+  Under technique.enforce, reaction families require a post-tap sweep/body
+  M1 trigger. M5-authoritative-in-zone does not bypass a missing reject.
   """
   if cfg is None:
     from app.core.config import runtime_config
@@ -173,6 +209,7 @@ def evaluate_entry_activation(
     "maximum_chase_pips": chase_cap,
     "chase_entry": chase_ok,
     "m5_authoritative": bool(m5_authoritative),
+    "impulse_against": False,
   }
 
   def _result(
@@ -277,7 +314,10 @@ def evaluate_entry_activation(
     return _result(reason="entry_activation_allowed", would_block=False)
 
   # Reaction / reversal / range / mapped / liquidity — prefer fresh M1;
-  # fall back to in-zone M5-authoritative confirmation when M1 is absent.
+  # fall back to in-zone M5-authoritative confirmation when M1 is absent
+  # and technique.enforce is off.
+  from app.autotrade.killzone import confirmation_is_sweep_body, technique_enforce
+
   if requires_trigger:
     m1_fail_reason: str | None = None
     if trigger is None:
@@ -296,25 +336,37 @@ def evaluate_entry_activation(
         elif str(trigger.direction).upper() != str(direction).upper():
           m1_fail_reason = "reaction_trigger_wrong_direction"
         else:
-          from app.autotrade.killzone import (
-            confirmation_is_sweep_body,
-            technique_enforce,
-          )
-
-          tech = getattr(getattr(cfg, "execution", None), "technique", None)
-          require_sweep = True if tech is None else bool(
-            getattr(tech, "require_sweep_body", True),
-          )
-          if technique_enforce(cfg) and require_sweep:
+          if technique_enforce(cfg):
             pattern = str(trigger.pattern or "")
             measured["sweep_body_required"] = True
             if not confirmation_is_sweep_body(pattern):
               m1_fail_reason = "confirmation_requires_sweep_body"
 
+    if (
+      m1_fail_reason is None
+      and technique_enforce(cfg)
+      and detect_impulse_against(
+        direction=direction,
+        bars=impulse_bars,
+        zone_low=zone_low,
+        zone_high=zone_high,
+      )
+    ):
+      measured["impulse_against"] = True
+      return _result(
+        reason="impulse_against_block",
+        would_block=True,
+        hard=True,
+      )
+
     if m1_fail_reason is None:
       return _result(reason="entry_activation_allowed", would_block=False)
 
-    if bool(m5_authoritative) and bool(quote_inside):
+    if (
+      bool(m5_authoritative)
+      and bool(quote_inside)
+      and not technique_enforce(cfg)
+    ):
       measured["m1_fallback_reason"] = m1_fail_reason
       return _result(
         reason="reaction_m5_authoritative_in_zone",

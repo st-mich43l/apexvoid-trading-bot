@@ -125,14 +125,20 @@ def select_effective_range(
   m15_high: float | None,
   m5_low: float | None,
   m5_high: float | None,
+  htf_only: bool = False,
 ) -> tuple[str | None, float | None, float | None]:
   """Prefer M15 → H1 → M5 among ranges that bracket price, else first valid."""
   candidates: list[tuple[str, float, float]] = []
-  for source, low, high in (
-    ("M15", m15_low, m15_high),
-    ("H1", h1_low, h1_high),
-    ("M5", m5_low, m5_high),
-  ):
+  sources = (
+    (("M15", m15_low, m15_high), ("H1", h1_low, h1_high))
+    if htf_only
+    else (
+      ("M15", m15_low, m15_high),
+      ("H1", h1_low, h1_high),
+      ("M5", m5_low, m5_high),
+    )
+  )
+  for source, low, high in sources:
     if _valid_bounds(low, high):
       candidates.append((source, float(low), float(high)))
   if not candidates:
@@ -261,6 +267,13 @@ def evaluate_entry_location(
 
   mode = _mode(cfg)
   archetype = location_archetype(strategy)
+  from app.autotrade.killzone import technique_enforce
+
+  tech = getattr(getattr(cfg, "execution", None), "technique", None)
+  strict_pd = True if tech is None else bool(
+    getattr(tech, "strict_premium_discount", True),
+  )
+  htf_pd = bool(technique_enforce(cfg) and strict_pd)
   measured: dict[str, Any] = {
     "mode": mode,
     "archetype": archetype,
@@ -275,6 +288,7 @@ def evaluate_entry_location(
     "m5_range_position": context.m5_range_position,
     "zone_position": context.zone_position,
     "direction": str(direction or "").upper(),
+    "htf_premium_discount": htf_pd,
   }
 
   if mode == MODE_OFF:
@@ -343,6 +357,24 @@ def evaluate_entry_location(
       measured=measured,
     )
 
+  if (
+    htf_pd
+    and archetype in {
+      ARCHETYPE_REVERSAL,
+      ARCHETYPE_RANGE_REVERSION,
+      ARCHETYPE_UNKNOWN,
+    }
+    and context.effective_range_source not in {"M15", "H1"}
+  ):
+    return EntryLocationDecision(
+      allowed=False,
+      reason_code="entry_location_htf_range_missing",
+      hard_block=True,
+      archetype=archetype,
+      would_block=True,
+      measured=measured,
+    )
+
   pos = float(context.effective_range_position_raw)
   side = str(direction or "").upper()
   root = _cfg_section(cfg, "actionability", "entry_location")
@@ -384,8 +416,17 @@ def evaluate_entry_location(
     extreme_sell = _float_cfg(section, "extreme_sell_block_position", 0.35)
     # Techniques / confluence often form at dealing-range extremes by
     # design — allow the extreme band; keep mid-range premium/discount.
-    skip_extremes = is_technique_or_confluence(strategy)
-    if side == "BUY":
+    skip_extremes = (
+      is_technique_or_confluence(strategy) and not htf_pd
+    )
+    if htf_pd:
+      if side == "BUY" and pos > buy_max:
+        reason = "buy_in_premium"
+        would_block = True
+      elif side == "SELL" and pos < sell_min:
+        reason = "sell_in_discount"
+        would_block = True
+    elif side == "BUY":
       if pos >= extreme_buy:
         if not skip_extremes:
           reason = "buy_at_range_extreme"
