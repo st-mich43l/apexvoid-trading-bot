@@ -10,7 +10,10 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from app.analysis.ohlc_source import RedisOHLCSource
+from app.analysis.ohlc_source import (
+  RedisOHLCSource,
+  prefetch_closed_bar_windows,
+)
 from app.core.config import runtime_config
 from app.persistence import redis_state
 
@@ -38,12 +41,17 @@ async def dispatch_closed_bar(
 
   Existing ZoneWatches and HFS must not wait on scanner detectors. Scanner
   still runs before the worker because the worker reads this bar's matches.
+  HFS/scanner/worker share one OHLC window cache for this bar; ZoneWatch
+  still runs first so prefetch cannot delay activation.
   """
   parsed = parse_closed_bar(data)
   if parsed is None:
     return []
   symbol, tf, event_ts = parsed
   ran: list[str] = []
+  caching = hasattr(source, "begin_closed_bar_cache")
+  if caching:
+    source.begin_closed_bar_cache()
 
   async def _run(name: str, coro) -> None:
     try:
@@ -54,27 +62,38 @@ async def dispatch_closed_bar(
         "dispatcher %s tick failed symbol=%s tf=%s", name, symbol, tf,
       )
 
-  if runtime_config.runtime.auto_trade.enabled and tf == "M1":
-    from app.autotrade.zone_execution_cutover import evaluate_active_zone_watches
+  try:
+    if runtime_config.runtime.auto_trade.enabled and tf == "M1":
+      from app.autotrade.zone_execution_cutover import evaluate_active_zone_watches
 
-    await _run(
-      "zone_watch",
-      evaluate_active_zone_watches(client, symbol=symbol, event_ts=event_ts),
-    )
+      await _run(
+        "zone_watch",
+        evaluate_active_zone_watches(client, symbol=symbol, event_ts=event_ts),
+      )
 
-  from app.scalping.runtime import handle_closed_bar as hfs_handle
+    try:
+      await prefetch_closed_bar_windows(source, symbol)
+    except Exception:
+      log.exception(
+        "dispatcher OHLC prefetch failed symbol=%s tf=%s", symbol, tf,
+      )
 
-  await _run("hfs", hfs_handle(data, client=client, source=source))
+    from app.scalping.runtime import handle_closed_bar as hfs_handle
 
-  if runtime_config.runtime.scanner.enabled:
-    from app.analysis.scanner import _handle_event as scanner_handle
+    await _run("hfs", hfs_handle(data, client=client, source=source))
 
-    await _run("scanner", scanner_handle(data, source=source, client=client))
+    if runtime_config.runtime.scanner.enabled:
+      from app.analysis.scanner import _handle_event as scanner_handle
 
-  if runtime_config.runtime.auto_trade.enabled:
-    from app.autotrade.worker import _handle_event as worker_handle
+      await _run("scanner", scanner_handle(data, source=source, client=client))
 
-    await _run("worker", worker_handle(data, source=source, client=client))
+    if runtime_config.runtime.auto_trade.enabled:
+      from app.autotrade.worker import _handle_event as worker_handle
+
+      await _run("worker", worker_handle(data, source=source, client=client))
+  finally:
+    if caching:
+      source.end_closed_bar_cache()
 
   return ran
 
