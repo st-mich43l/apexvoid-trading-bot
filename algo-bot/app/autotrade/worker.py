@@ -7531,434 +7531,493 @@ async def _handle_event(
   trend_selected = (
     ready_match_id is None and trend_decision.state == "candidate"
   )
-  scale_context = (
-    build_auto_scale_context(
-      frames,
-      decision.direction or "",
-      spot_price=spot.price,
-      cfg=None,
-      target_low=None if decision.target is None else decision.target.low,
-      target_high=None if decision.target is None else decision.target.high,
-    )
-    if (
-      box_selected
-      and spot is not None
-      and spot.fresh
-    ) else None
-  )
-  htf_zones = _htf_zones(frames, None)
-  htf_levels = _htf_levels(frames, None)
+  # Private box/trend have no V8 publish path. Do not build scale context
+  # for them on the autonomous cycle.
   spot_price = spot.price if spot is not None and spot.fresh else None
-  intents: list[ExecutionIntent] = []
-  intent_matches: dict[str, StrategyMatch] = {}
-  intent_subjects: dict[str, Any] = {}
-  for routed_match in strategy_matches:
-    intent_id = f"strategy:{routed_match.match_id}"
-    intent_matches[intent_id] = routed_match
-    group_id = _strategy_group_id(routed_match)
-    intent = ExecutionIntent(
-      intent_id=intent_id,
-      source=(
-        "market_map_strategy"
-        if routed_match.strategy_mode == "mapped_zone_reaction"
-        else "scanner_strategy_match"
-      ),
-      strategy=routed_match.strategy,
-      direction=routed_match.direction,
-      confluence=routed_match.confluence,
-      tier=routed_match.tier,
-      freshness=_intent_freshness(
-        routed_match.confirmation_bar_ts or routed_match.event_ts,
-        routed_match.issued_at,
-      ),
-      distance_pips=_band_distance_pips(
-        spot_price,
-        routed_match.entry_low,
-        routed_match.entry_high,
-        symbol,
-      ),
-      symbol=symbol.upper(),
-      timeframe=routed_match.source_tf,
-      family=routed_match.family,
-      entry_low=routed_match.entry_low,
-      entry_high=routed_match.entry_high,
-      structural_id=str(
-        routed_match.structural_zone_id
-        or routed_match.zone_id
-        or routed_match.level_id
-        or routed_match.match_id
-      ),
-      match_id=routed_match.match_id,
-      reaction_id=routed_match.reaction_id,
-      thesis_id=routed_match.thesis_id,
-      current_price=spot_price,
-      target_model=routed_match.target_model,
-      targets_pips=routed_match.targets_pips,
-      absolute_target_price=(
-        routed_match.absolute_target_price
-        if routed_match.absolute_target_price is not None
-        else routed_match.target_price
-      ),
-      target_reference_price=routed_match.target_reference_price,
-      proposed_group_id=group_id,
-      cycle_id=str(event_ts or ""),
-    )
-    intents.append(intent)
-    intent_subjects[intent_id] = routed_match
-  # The private M1 range gate (gate.py) is retired as an autonomous setup
-  # source (H1->M15->M5 single-analysis-source cutover, P2) - M1 no longer
-  # originates trade candidates on its own. evaluate_auto_scalp_gate/
-  # evaluate_range_box_eligibility above are still called because `decision`
-  # also feeds classify_regime's breakout classifier (a distinct, still-valid
-  # concern) and box_eligibility still feeds status/telemetry payloads below;
-  # box_intent_id staying permanently None is what guarantees this gate can
-  # never construct an ExecutionIntent, so it emits no setups.
   box_intent_id = None
   trend_intent_id = None
-  if (
-    trend_selected
-    and trend_decision.direction is not None
-    and trend_decision.entry_zone is not None
-  ):
-    trend_intent_id = (
-      f"trend:{trend_decision.mode}:{trend_decision.direction}:"
-      f"{trend_decision.key_level}"
-    )
-    trend_strategy = _TREND_SETUP_LABELS.get(
-      trend_decision.mode or "",
-      "Trend Strategy",
-    )
-    trend_group_id = _trend_group_id(symbol, trend_decision)
-    trend_tier = "A" if trend_decision.confluence >= 3 else "B"
-    absolute_target = (
-      max(trend_decision.target_prices)
-      if trend_decision.direction.upper() == "BUY"
-      and trend_decision.target_prices
-      else min(trend_decision.target_prices)
-      if trend_decision.target_prices
-      else None
-    )
-    trend_subject = PrivatePolicySubject(
-      strategy=trend_strategy,
-      direction=trend_decision.direction.upper(),
-      entry_low=trend_decision.entry_zone[0],
-      entry_high=trend_decision.entry_zone[1],
-      current_price=spot_price or trend_decision.key_level or 0.0,
-      confluence=trend_decision.confluence,
-      atr=float(trend_decision.atr or 0.0),
-      structure_swing=float(trend_decision.structure_swing or 0.0),
-      targets_pips=trend_decision.targets_pips,
-      risk_multiplier=risk_multiplier_for_tier(trend_tier),
-      target_model=(
-        "hybrid" if absolute_target is not None else "fill_relative"
-      ),
-      target_reference_price=(
-        "planned_entry" if absolute_target is not None else "broker_fill"
-      ),
-      target_price=absolute_target,
-      absolute_target_price=absolute_target,
-    )
-    trend_candidate_identity = _trend_candidate_id(
-      symbol,
-      str(event_ts or ""),
-      trend_decision,
-    )
-    trend_group_active = await _group_is_active(
-      client,
-      symbol,
-      trend_group_id,
-    )
-    intent = ExecutionIntent(
-      intent_id=trend_intent_id,
-      source="private_trend",
-      strategy=trend_strategy,
-      direction=trend_decision.direction.upper(),
-      confluence=trend_decision.confluence,
-      tier=trend_tier,
-      freshness=_intent_freshness(event_ts, now_ts),
-      distance_pips=_band_distance_pips(
-        spot_price,
-        trend_decision.entry_zone[0],
-        trend_decision.entry_zone[1],
-        symbol,
-      ),
-      symbol=symbol.upper(),
-      timeframe=EXECUTION_TIMEFRAME,
-      family="trend",
-      entry_low=trend_decision.entry_zone[0],
-      entry_high=trend_decision.entry_zone[1],
-      structural_id=trend_group_id,
-      match_id=trend_candidate_identity,
-      current_price=spot_price,
-      target_model=trend_subject.target_model,
-      targets_pips=trend_decision.targets_pips,
-      absolute_target_price=absolute_target,
-      target_reference_price=trend_subject.target_reference_price,
-      proposed_group_id=trend_group_id,
-      is_initial=not trend_group_active,
-      cycle_id=str(event_ts or ""),
-    )
-    intents.append(intent)
-    intent_subjects[trend_intent_id] = trend_subject
-
-  arbitrable: list[ExecutionIntent] = []
-  for intent in intents:
-    routed_match = intent_matches.get(intent.intent_id)
-    if routed_match is not None:
-      failure = await _admit_strategy_intent_for_cycle(
-        client,
-        intent,
-        routed_match,
-        spot=spot,
-        regime=regime,
-        htf_zones=htf_zones,
-        htf_levels=htf_levels,
-      )
-      if failure is None:
-        arbitrable.append(intent)
-        continue
-      status = "blocked" if failure.terminal else "waiting"
-      await record_route_outcome(
-        client,
-        routed_match,
-        stage=failure.stage,  # type: ignore[arg-type]
-        status=status,  # type: ignore[arg-type]
-        reason_code=failure.reason_code,
-        message=failure.message,
-        measured=failure.measured,
-        retained=not failure.terminal,
-        signal_source=intent.source,
-        publish_status=failure.terminal,
-      )
-      if failure.terminal:
-        setup = await load_setup(client, routed_match.match_id)
-        next_state = (
-          None
-          if setup is None
-          else terminal_state_for_preflight_failure(setup.state)
-        )
-        if setup is not None and next_state is not None:
-          try:
-            await transition_setup(
-              client,
-              routed_match.match_id,
-              next_state,
-              reason_code=failure.reason_code,
-            )
-            await emit_lifecycle(
-              client,
-              next_state,
-              symbol=routed_match.symbol,
-              match_id=routed_match.match_id,
-              correlation_id=routed_match.match_id,
-              timeframe=routed_match.source_tf,
-              reason_code=failure.reason_code,
-              message=failure.message,
-              publish_status=True,
-            )
-          except SetupLifecycleError:
-            log.exception(
-              "terminal admission lifecycle transition failed "
-              "symbol=%s setup_id=%s reason=%s",
-              symbol,
-              routed_match.match_id,
-              failure.reason_code,
-            )
-        await _consume_strategy_match(client, symbol, routed_match)
-    else:
-      # Private intents (range / trend) are recorded as unavailable and
-      # kept out of arbitration; the V6 candidate path is retired and no
-      # V7 equivalent publishes them.
-      await _record_private_route(
-        client,
-        symbol=symbol,
-        event_ts=event_ts,
-        strategy=intent.strategy,
-        family=intent.family,
-        direction=intent.direction,
-        source=intent.source,
-        structural_id=intent.structural_id,
-        entry_low=intent.entry_low,
-        entry_high=intent.entry_high,
-        spot_price=spot_price,
-        status="blocked",
-        reason_code="publication_unavailable",
-        message="private strategy has no active V7 publication path",
-        group_id=intent.proposed_group_id,
-        retained=False,
-        stage="publication",
-        terminal_reason_code="publication_unavailable",
-      )
-  arbitration = arbitrate_execution_intents(
-    arbitrable,
-    conflict_margin=runtime_config.actionability.scanner_gates.conflict_margin,
-  )
-
   strategy_candidate_ids: list[str] = []
   box_candidate_id = None
   trend_candidate_id = None
   published_match: StrategyMatch | None = None
   published_intent: ExecutionIntent | None = None
   attempted_intent_ids: set[str] = set()
-  cycle_id = str(event_ts or "")
-
-  async def publish_ranked_intent(
-    intent: ExecutionIntent,
-  ) -> CandidatePublicationResult:
-    nonlocal box_candidate_id
-    nonlocal trend_candidate_id
-    nonlocal published_match
-    nonlocal published_intent
-
-    attempted_intent_ids.add(intent.intent_id)
-    published = None
-    publication_result: CandidatePublicationResult | None = None
-    routed_match = intent_matches.get(intent.intent_id)
-    if routed_match is not None:
-      route_lock = (
-        f"auto_trade:route_lock:{symbol.upper()}:{routed_match.match_id}"
-      )
-      route_lock_token = await acquire_owned_lock(
-        client, route_lock, ttl=30,
-      )
-      if route_lock_token is None:
-        await record_route_outcome(
-          client,
-          routed_match,
-          stage="candidate_claim",
-          status="waiting",
-          reason_code="route_evaluation_in_progress",
-          message="another worker is evaluating this exact match",
-          retained=True,
-          publish_status=False,
-        )
-        publication_result = CandidatePublicationResult.blocked(
-          "route_in_progress",
-        )
-        return publication_result
-      try:
-        # V7 is the sole autonomous order path, per
-        # docs/adr-trade-plan-v7-boundary.md - the V6 candidate path is
-        # removed entirely for autonomous publication (not gated behind a
-        # mode) so a confirmed setup can never arm both a V7 plan and a V6
-        # candidate for the same thesis. Existing open V6 positions are
-        # untouched; this only blocks new autonomous publication.
-        published = await _publish_trade_plan_v8(
-          client,
+  intents: list[ExecutionIntent] = []
+  intent_matches: dict[str, StrategyMatch] = {}
+  intent_subjects: dict[str, Any] = {}
+  arbitrable: list[ExecutionIntent] = []
+  arbitration = arbitrate_execution_intents([])
+  if strategy_matches:
+    htf_zones = _htf_zones(frames, None)
+    htf_levels = _htf_levels(frames, None)
+    for routed_match in strategy_matches:
+      intent_id = f"strategy:{routed_match.match_id}"
+      intent_matches[intent_id] = routed_match
+      group_id = _strategy_group_id(routed_match)
+      intent = ExecutionIntent(
+        intent_id=intent_id,
+        source=(
+          "market_map_strategy"
+          if routed_match.strategy_mode == "mapped_zone_reaction"
+          else "scanner_strategy_match"
+        ),
+        strategy=routed_match.strategy,
+        direction=routed_match.direction,
+        confluence=routed_match.confluence,
+        tier=routed_match.tier,
+        freshness=_intent_freshness(
+          routed_match.confirmation_bar_ts or routed_match.event_ts,
+          routed_match.issued_at,
+        ),
+        distance_pips=_band_distance_pips(
+          spot_price,
+          routed_match.entry_low,
+          routed_match.entry_high,
           symbol,
-          spot,
+        ),
+        symbol=symbol.upper(),
+        timeframe=routed_match.source_tf,
+        family=routed_match.family,
+        entry_low=routed_match.entry_low,
+        entry_high=routed_match.entry_high,
+        structural_id=str(
+          routed_match.structural_zone_id
+          or routed_match.zone_id
+          or routed_match.level_id
+          or routed_match.match_id
+        ),
+        match_id=routed_match.match_id,
+        reaction_id=routed_match.reaction_id,
+        thesis_id=routed_match.thesis_id,
+        current_price=spot_price,
+        target_model=routed_match.target_model,
+        targets_pips=routed_match.targets_pips,
+        absolute_target_price=(
+          routed_match.absolute_target_price
+          if routed_match.absolute_target_price is not None
+          else routed_match.target_price
+        ),
+        target_reference_price=routed_match.target_reference_price,
+        proposed_group_id=group_id,
+        cycle_id=str(event_ts or ""),
+      )
+      intents.append(intent)
+      intent_subjects[intent_id] = routed_match
+    # The private M1 range gate (gate.py) is retired as an autonomous setup
+    # source (H1->M15->M5 single-analysis-source cutover, P2) - M1 no longer
+    # originates trade candidates on its own. evaluate_auto_scalp_gate/
+    # evaluate_range_box_eligibility above are still called because `decision`
+    # also feeds classify_regime's breakout classifier (a distinct, still-valid
+    # concern) and box_eligibility still feeds status/telemetry payloads below;
+    # box_intent_id staying permanently None is what guarantees this gate can
+    # never construct an ExecutionIntent, so it emits no setups.
+    box_intent_id = None
+    trend_intent_id = None
+    if (
+      trend_selected
+      and trend_decision.direction is not None
+      and trend_decision.entry_zone is not None
+    ):
+      trend_intent_id = (
+        f"trend:{trend_decision.mode}:{trend_decision.direction}:"
+        f"{trend_decision.key_level}"
+      )
+      trend_strategy = _TREND_SETUP_LABELS.get(
+        trend_decision.mode or "",
+        "Trend Strategy",
+      )
+      trend_group_id = _trend_group_id(symbol, trend_decision)
+      trend_tier = "A" if trend_decision.confluence >= 3 else "B"
+      absolute_target = (
+        max(trend_decision.target_prices)
+        if trend_decision.direction.upper() == "BUY"
+        and trend_decision.target_prices
+        else min(trend_decision.target_prices)
+        if trend_decision.target_prices
+        else None
+      )
+      trend_subject = PrivatePolicySubject(
+        strategy=trend_strategy,
+        direction=trend_decision.direction.upper(),
+        entry_low=trend_decision.entry_zone[0],
+        entry_high=trend_decision.entry_zone[1],
+        current_price=spot_price or trend_decision.key_level or 0.0,
+        confluence=trend_decision.confluence,
+        atr=float(trend_decision.atr or 0.0),
+        structure_swing=float(trend_decision.structure_swing or 0.0),
+        targets_pips=trend_decision.targets_pips,
+        risk_multiplier=risk_multiplier_for_tier(trend_tier),
+        target_model=(
+          "hybrid" if absolute_target is not None else "fill_relative"
+        ),
+        target_reference_price=(
+          "planned_entry" if absolute_target is not None else "broker_fill"
+        ),
+        target_price=absolute_target,
+        absolute_target_price=absolute_target,
+      )
+      trend_candidate_identity = _trend_candidate_id(
+        symbol,
+        str(event_ts or ""),
+        trend_decision,
+      )
+      trend_group_active = await _group_is_active(
+        client,
+        symbol,
+        trend_group_id,
+      )
+      intent = ExecutionIntent(
+        intent_id=trend_intent_id,
+        source="private_trend",
+        strategy=trend_strategy,
+        direction=trend_decision.direction.upper(),
+        confluence=trend_decision.confluence,
+        tier=trend_tier,
+        freshness=_intent_freshness(event_ts, now_ts),
+        distance_pips=_band_distance_pips(
+          spot_price,
+          trend_decision.entry_zone[0],
+          trend_decision.entry_zone[1],
+          symbol,
+        ),
+        symbol=symbol.upper(),
+        timeframe=EXECUTION_TIMEFRAME,
+        family="trend",
+        entry_low=trend_decision.entry_zone[0],
+        entry_high=trend_decision.entry_zone[1],
+        structural_id=trend_group_id,
+        match_id=trend_candidate_identity,
+        current_price=spot_price,
+        target_model=trend_subject.target_model,
+        targets_pips=trend_decision.targets_pips,
+        absolute_target_price=absolute_target,
+        target_reference_price=trend_subject.target_reference_price,
+        proposed_group_id=trend_group_id,
+        is_initial=not trend_group_active,
+        cycle_id=str(event_ts or ""),
+      )
+      intents.append(intent)
+      intent_subjects[trend_intent_id] = trend_subject
+
+    arbitrable: list[ExecutionIntent] = []
+    for intent in intents:
+      routed_match = intent_matches.get(intent.intent_id)
+      if routed_match is not None:
+        failure = await _admit_strategy_intent_for_cycle(
+          client,
+          intent,
           routed_match,
+          spot=spot,
+          regime=regime,
           htf_zones=htf_zones,
           htf_levels=htf_levels,
-          regime=regime,
-          frames=frames,
-          # Final structural geometry is a correctness boundary, not an
-          # optional soft guard. Use the canonical cached Market Map even
-          # when the legacy guard toggle is disabled.
-          market_map=cached_market_map,
         )
-      finally:
-        await release_owned_lock(client, route_lock, route_lock_token)
-      if published is not None:
-        strategy_candidate_ids.append(published)
-        published_match = routed_match
+        if failure is None:
+          arbitrable.append(intent)
+          continue
+        status = "blocked" if failure.terminal else "waiting"
         await record_route_outcome(
           client,
           routed_match,
-          stage="stream_publish",
-          status="candidate_published",
-          reason_code="candidate_published",
-          message="selected strategy candidate published atomically",
-          candidate_id=published,
+          stage=failure.stage,  # type: ignore[arg-type]
+          status=status,  # type: ignore[arg-type]
+          reason_code=failure.reason_code,
+          message=failure.message,
+          measured=failure.measured,
+          retained=not failure.terminal,
+          signal_source=intent.source,
+          publish_status=failure.terminal,
+        )
+        if failure.terminal:
+          setup = await load_setup(client, routed_match.match_id)
+          next_state = (
+            None
+            if setup is None
+            else terminal_state_for_preflight_failure(setup.state)
+          )
+          if setup is not None and next_state is not None:
+            try:
+              await transition_setup(
+                client,
+                routed_match.match_id,
+                next_state,
+                reason_code=failure.reason_code,
+              )
+              await emit_lifecycle(
+                client,
+                next_state,
+                symbol=routed_match.symbol,
+                match_id=routed_match.match_id,
+                correlation_id=routed_match.match_id,
+                timeframe=routed_match.source_tf,
+                reason_code=failure.reason_code,
+                message=failure.message,
+                publish_status=True,
+              )
+            except SetupLifecycleError:
+              log.exception(
+                "terminal admission lifecycle transition failed "
+                "symbol=%s setup_id=%s reason=%s",
+                symbol,
+                routed_match.match_id,
+                failure.reason_code,
+              )
+          await _consume_strategy_match(client, symbol, routed_match)
+      else:
+        # Private intents (range / trend) are recorded as unavailable and
+        # kept out of arbitration; the V6 candidate path is retired and no
+        # V7 equivalent publishes them.
+        await _record_private_route(
+          client,
+          symbol=symbol,
+          event_ts=event_ts,
+          strategy=intent.strategy,
+          family=intent.family,
+          direction=intent.direction,
+          source=intent.source,
+          structural_id=intent.structural_id,
+          entry_low=intent.entry_low,
+          entry_high=intent.entry_high,
+          spot_price=spot_price,
+          status="blocked",
+          reason_code="publication_unavailable",
+          message="private strategy has no active V7 publication path",
           group_id=intent.proposed_group_id,
           retained=False,
-          arbitration_reason_code="selected_for_publication",
-          publication_reason_code="candidate_published",
-          winner_intent_id=intent.intent_id,
-          signal_source=intent.source,
-          publish_status=False,
+          stage="publication",
+          terminal_reason_code="publication_unavailable",
         )
-      publication_result = await _strategy_publication_result(
-        client, routed_match, published,
-      )
-    elif intent.intent_id == box_intent_id:
-      # Private M1 range gate is a V6-only autonomous detector (Section A/L
-      # of the V7 cutover) - it never feeds scanner.py's setup lifecycle, so
-      # it has no V7 equivalent and must not publish new autonomous
-      # candidates now that V7 is the sole autonomous path.
-      published = None
-      box_candidate_id = published
-      publication_result = (
-        CandidatePublicationResult.published(published)
-        if published is not None
-        else CandidatePublicationResult.blocked("publication_unavailable")
-      )
-    elif intent.intent_id == trend_intent_id:
-      # Private trend detector (trend.py) is likewise V6-only autonomous
-      # analysis, parallel to (not fed by) scanner.py - see Section A/L. It
-      # must not publish new autonomous candidates now that V7 is the sole
-      # autonomous path.
-      published = None
-      trend_candidate_id = published
-      publication_result = (
-        CandidatePublicationResult.published(published)
-        if published is not None
-        else CandidatePublicationResult.blocked("publication_unavailable")
-      )
-    if publication_result is None:
-      publication_result = CandidatePublicationResult.blocked(
-        "publication_unavailable",
-      )
-    if publication_result.candidate_id is not None:
-      published_intent = intent
-    return publication_result
-
-  cycle_publication_result: CandidatePublicationResult | None = None
-  if arbitration.ordered:
-    cycle_publication_result = await publish_ranked_cycle(
-      client,
-      symbol=symbol,
-      cycle_id=cycle_id,
-      ordered=arbitration.ordered,
-      publisher=publish_ranked_intent,
+    arbitration = arbitrate_execution_intents(
+      arbitrable,
+      conflict_margin=runtime_config.actionability.scanner_gates.conflict_margin,
     )
-    if (
-      not attempted_intent_ids
-      and cycle_publication_result.status
-        in {"route_in_progress", "cycle_conflict"}
-    ):
-      top = arbitration.ordered[0]
-      attempted_intent_ids.add(top.intent_id)
-      routed_top = intent_matches.get(top.intent_id)
-      status = (
-        "waiting"
-        if cycle_publication_result.status == "route_in_progress"
-        else "duplicate_suppressed"
+
+    strategy_candidate_ids: list[str] = []
+    box_candidate_id = None
+    trend_candidate_id = None
+    published_match: StrategyMatch | None = None
+    published_intent: ExecutionIntent | None = None
+    attempted_intent_ids: set[str] = set()
+    cycle_id = str(event_ts or "")
+
+    async def publish_ranked_intent(
+      intent: ExecutionIntent,
+    ) -> CandidatePublicationResult:
+      nonlocal box_candidate_id
+      nonlocal trend_candidate_id
+      nonlocal published_match
+      nonlocal published_intent
+
+      attempted_intent_ids.add(intent.intent_id)
+      published = None
+      publication_result: CandidatePublicationResult | None = None
+      routed_match = intent_matches.get(intent.intent_id)
+      if routed_match is not None:
+        route_lock = (
+          f"auto_trade:route_lock:{symbol.upper()}:{routed_match.match_id}"
+        )
+        route_lock_token = await acquire_owned_lock(
+          client, route_lock, ttl=30,
+        )
+        if route_lock_token is None:
+          await record_route_outcome(
+            client,
+            routed_match,
+            stage="candidate_claim",
+            status="waiting",
+            reason_code="route_evaluation_in_progress",
+            message="another worker is evaluating this exact match",
+            retained=True,
+            publish_status=False,
+          )
+          publication_result = CandidatePublicationResult.blocked(
+            "route_in_progress",
+          )
+          return publication_result
+        try:
+          # V7 is the sole autonomous order path, per
+          # docs/adr-trade-plan-v7-boundary.md - the V6 candidate path is
+          # removed entirely for autonomous publication (not gated behind a
+          # mode) so a confirmed setup can never arm both a V7 plan and a V6
+          # candidate for the same thesis. Existing open V6 positions are
+          # untouched; this only blocks new autonomous publication.
+          published = await _publish_trade_plan_v8(
+            client,
+            symbol,
+            spot,
+            routed_match,
+            htf_zones=htf_zones,
+            htf_levels=htf_levels,
+            regime=regime,
+            frames=frames,
+            # Final structural geometry is a correctness boundary, not an
+            # optional soft guard. Use the canonical cached Market Map even
+            # when the legacy guard toggle is disabled.
+            market_map=cached_market_map,
+          )
+        finally:
+          await release_owned_lock(client, route_lock, route_lock_token)
+        if published is not None:
+          strategy_candidate_ids.append(published)
+          published_match = routed_match
+          await record_route_outcome(
+            client,
+            routed_match,
+            stage="stream_publish",
+            status="candidate_published",
+            reason_code="candidate_published",
+            message="selected strategy candidate published atomically",
+            candidate_id=published,
+            group_id=intent.proposed_group_id,
+            retained=False,
+            arbitration_reason_code="selected_for_publication",
+            publication_reason_code="candidate_published",
+            winner_intent_id=intent.intent_id,
+            signal_source=intent.source,
+            publish_status=False,
+          )
+        publication_result = await _strategy_publication_result(
+          client, routed_match, published,
+        )
+      elif intent.intent_id == box_intent_id:
+        # Private M1 range gate is a V6-only autonomous detector (Section A/L
+        # of the V7 cutover) - it never feeds scanner.py's setup lifecycle, so
+        # it has no V7 equivalent and must not publish new autonomous
+        # candidates now that V7 is the sole autonomous path.
+        published = None
+        box_candidate_id = published
+        publication_result = (
+          CandidatePublicationResult.published(published)
+          if published is not None
+          else CandidatePublicationResult.blocked("publication_unavailable")
+        )
+      elif intent.intent_id == trend_intent_id:
+        # Private trend detector (trend.py) is likewise V6-only autonomous
+        # analysis, parallel to (not fed by) scanner.py - see Section A/L. It
+        # must not publish new autonomous candidates now that V7 is the sole
+        # autonomous path.
+        published = None
+        trend_candidate_id = published
+        publication_result = (
+          CandidatePublicationResult.published(published)
+          if published is not None
+          else CandidatePublicationResult.blocked("publication_unavailable")
+        )
+      if publication_result is None:
+        publication_result = CandidatePublicationResult.blocked(
+          "publication_unavailable",
+        )
+      if publication_result.candidate_id is not None:
+        published_intent = intent
+      return publication_result
+
+    cycle_publication_result: CandidatePublicationResult | None = None
+    if arbitration.ordered:
+      cycle_publication_result = await publish_ranked_cycle(
+        client,
+        symbol=symbol,
+        cycle_id=cycle_id,
+        ordered=arbitration.ordered,
+        publisher=publish_ranked_intent,
       )
-      reason_code = (
-        "route_evaluation_in_progress"
-        if cycle_publication_result.status == "route_in_progress"
-        else "cycle_conflict"
+      if (
+        not attempted_intent_ids
+        and cycle_publication_result.status
+          in {"route_in_progress", "cycle_conflict"}
+      ):
+        top = arbitration.ordered[0]
+        attempted_intent_ids.add(top.intent_id)
+        routed_top = intent_matches.get(top.intent_id)
+        status = (
+          "waiting"
+          if cycle_publication_result.status == "route_in_progress"
+          else "duplicate_suppressed"
+        )
+        reason_code = (
+          "route_evaluation_in_progress"
+          if cycle_publication_result.status == "route_in_progress"
+          else "cycle_conflict"
+        )
+        message = (
+          "another worker owns publication arbitration for this cycle"
+          if cycle_publication_result.status == "route_in_progress"
+          else "this closed-bar cycle already has a publication owner"
+        )
+        existing_cycle_owner = await client.get(
+          autonomous_cycle_owner_key(symbol, cycle_id)
+        )
+        winner_intent_id = parse_cycle_owner_intent_id(existing_cycle_owner)
+        if routed_top is not None:
+          await record_route_outcome(
+            client,
+            routed_top,
+            stage="candidate_claim",
+            status=status,  # type: ignore[arg-type]
+            reason_code=reason_code,
+            message=message,
+            retained=True,
+            winner_intent_id=winner_intent_id,
+            publish_status=False,
+          )
+        else:
+          await _record_private_route(
+            client,
+            symbol=symbol,
+            event_ts=event_ts,
+            strategy=top.strategy,
+            family=top.family,
+            direction=top.direction,
+            source=top.source,
+            structural_id=top.structural_id,
+            entry_low=top.entry_low,
+            entry_high=top.entry_high,
+            spot_price=spot_price,
+            status=status,
+            reason_code=reason_code,
+            message=message,
+            group_id=top.proposed_group_id,
+            retained=True,
+            stage="candidate_claim",
+            arbitration_reason_code=reason_code,
+            winner_intent_id=winner_intent_id,
+          )
+    arbitrable_ids = {item.intent_id for item in arbitrable}
+    ordered_ids = {item.intent_id for item in arbitration.ordered}
+    for intent in intents:
+      if (
+        intent.intent_id not in arbitrable_ids
+        or (
+          published_intent is not None
+          and intent.intent_id == published_intent.intent_id
+        )
+        or intent.intent_id in attempted_intent_ids
+      ):
+        continue
+      followup = _arbitration_followup(
+        intent,
+        arbitration=arbitration,
+        published_intent=published_intent,
+        ordered_ids=ordered_ids,
+        attempted_intent_ids=attempted_intent_ids,
       )
-      message = (
-        "another worker owns publication arbitration for this cycle"
-        if cycle_publication_result.status == "route_in_progress"
-        else "this closed-bar cycle already has a publication owner"
-      )
-      existing_cycle_owner = await client.get(
-        autonomous_cycle_owner_key(symbol, cycle_id)
-      )
-      winner_intent_id = parse_cycle_owner_intent_id(existing_cycle_owner)
-      if routed_top is not None:
+      if followup is None:
+        continue
+      status, reason_code, message = followup
+      routed_match = intent_matches.get(intent.intent_id)
+      if routed_match is not None:
         await record_route_outcome(
           client,
-          routed_top,
-          stage="candidate_claim",
+          routed_match,
+          stage="arbitration",
           status=status,  # type: ignore[arg-type]
           reason_code=reason_code,
           message=message,
           retained=True,
-          winner_intent_id=winner_intent_id,
+          arbitration_reason_code=reason_code,
+          winner_intent_id=(
+            None if published_intent is None else published_intent.intent_id
+          ),
+          signal_source=intent.source,
           publish_status=False,
         )
       else:
@@ -7966,161 +8025,100 @@ async def _handle_event(
           client,
           symbol=symbol,
           event_ts=event_ts,
-          strategy=top.strategy,
-          family=top.family,
-          direction=top.direction,
-          source=top.source,
-          structural_id=top.structural_id,
-          entry_low=top.entry_low,
-          entry_high=top.entry_high,
+          strategy=intent.strategy,
+          family=intent.family,
+          direction=intent.direction,
+          source=intent.source,
+          structural_id=intent.structural_id,
+          entry_low=intent.entry_low,
+          entry_high=intent.entry_high,
           spot_price=spot_price,
           status=status,
           reason_code=reason_code,
           message=message,
-          group_id=top.proposed_group_id,
+          group_id=intent.proposed_group_id,
           retained=True,
-          stage="candidate_claim",
+          stage="arbitration",
           arbitration_reason_code=reason_code,
-          winner_intent_id=winner_intent_id,
+          winner_intent_id=(
+            None if published_intent is None else published_intent.intent_id
+          ),
         )
-  arbitrable_ids = {item.intent_id for item in arbitrable}
-  ordered_ids = {item.intent_id for item in arbitration.ordered}
-  for intent in intents:
     if (
-      intent.intent_id not in arbitrable_ids
-      or (
-        published_intent is not None
-        and intent.intent_id == published_intent.intent_id
-      )
-      or intent.intent_id in attempted_intent_ids
+      box_candidate_id is not None
+      and box_intent_id is not None
+      and decision.box is not None
+      and decision.rail is not None
+      and decision.direction is not None
+      and (decision.state == "candidate" or box_eligibility.eligible)
     ):
-      continue
-    followup = _arbitration_followup(
-      intent,
-      arbitration=arbitration,
-      published_intent=published_intent,
-      ordered_ids=ordered_ids,
-      attempted_intent_ids=attempted_intent_ids,
-    )
-    if followup is None:
-      continue
-    status, reason_code, message = followup
-    routed_match = intent_matches.get(intent.intent_id)
-    if routed_match is not None:
-      await record_route_outcome(
-        client,
-        routed_match,
-        stage="arbitration",
-        status=status,  # type: ignore[arg-type]
-        reason_code=reason_code,
-        message=message,
-        retained=True,
-        arbitration_reason_code=reason_code,
-        winner_intent_id=(
-          None if published_intent is None else published_intent.intent_id
-        ),
-        signal_source=intent.source,
-        publish_status=False,
-      )
-    else:
       await _record_private_route(
         client,
         symbol=symbol,
         event_ts=event_ts,
-        strategy=intent.strategy,
-        family=intent.family,
-        direction=intent.direction,
-        source=intent.source,
-        structural_id=intent.structural_id,
-        entry_low=intent.entry_low,
-        entry_high=intent.entry_high,
+        strategy="Range Box Scalp",
+        family="range",
+        direction=decision.direction,
+        source="private_range",
+        structural_id=decision.box.box_id,
+        entry_low=decision.rail.low,
+        entry_high=decision.rail.high,
         spot_price=spot_price,
-        status=status,
-        reason_code=reason_code,
-        message=message,
-        group_id=intent.proposed_group_id,
-        retained=True,
-        stage="arbitration",
-        arbitration_reason_code=reason_code,
-        winner_intent_id=(
-          None if published_intent is None else published_intent.intent_id
+        status="candidate_published",
+        reason_code="candidate_published",
+        message="private range candidate published",
+        candidate_id=box_candidate_id,
+        group_id=(
+          None
+          if box_candidate_id is None
+          else _group_id(
+            symbol,
+            "range",
+            decision.box.box_id,
+            decision.direction,
+          )
         ),
+        retained=False,
+        stage="stream_publish",
+        arbitration_reason_code="selected_for_publication",
+        publication_reason_code="candidate_published",
+        winner_intent_id=box_intent_id,
       )
-  if (
-    box_candidate_id is not None
-    and box_intent_id is not None
-    and decision.box is not None
-    and decision.rail is not None
-    and decision.direction is not None
-    and (decision.state == "candidate" or box_eligibility.eligible)
-  ):
-    await _record_private_route(
-      client,
-      symbol=symbol,
-      event_ts=event_ts,
-      strategy="Range Box Scalp",
-      family="range",
-      direction=decision.direction,
-      source="private_range",
-      structural_id=decision.box.box_id,
-      entry_low=decision.rail.low,
-      entry_high=decision.rail.high,
-      spot_price=spot_price,
-      status="candidate_published",
-      reason_code="candidate_published",
-      message="private range candidate published",
-      candidate_id=box_candidate_id,
-      group_id=(
-        None
-        if box_candidate_id is None
-        else _group_id(
-          symbol,
-          "range",
-          decision.box.box_id,
-          decision.direction,
-        )
-      ),
-      retained=False,
-      stage="stream_publish",
-      arbitration_reason_code="selected_for_publication",
-      publication_reason_code="candidate_published",
-      winner_intent_id=box_intent_id,
-    )
-  if (
-    trend_candidate_id is not None
-    and trend_intent_id is not None
-    and trend_decision.state == "candidate"
-    and trend_decision.direction is not None
-    and trend_decision.entry_zone is not None
-    and trend_decision.mode is not None
-  ):
-    await _record_private_route(
-      client,
-      symbol=symbol,
-      event_ts=event_ts,
-      strategy=_TREND_SETUP_LABELS[trend_decision.mode],
-      family="trend",
-      direction=trend_decision.direction,
-      source="private_trend",
-      structural_id=_trend_group_id(symbol, trend_decision),
-      entry_low=trend_decision.entry_zone[0],
-      entry_high=trend_decision.entry_zone[1],
-      spot_price=spot_price,
-      status="candidate_published",
-      reason_code="candidate_published",
-      message="private trend candidate published",
-      candidate_id=trend_candidate_id,
-      group_id=(
-        None
-        if trend_candidate_id is None
-        else _trend_group_id(symbol, trend_decision)
-      ),
-      retained=False,
-      stage="stream_publish",
-      arbitration_reason_code="selected_for_publication",
-      publication_reason_code="candidate_published",
-      winner_intent_id=trend_intent_id,
-    )
+    if (
+      trend_candidate_id is not None
+      and trend_intent_id is not None
+      and trend_decision.state == "candidate"
+      and trend_decision.direction is not None
+      and trend_decision.entry_zone is not None
+      and trend_decision.mode is not None
+    ):
+      await _record_private_route(
+        client,
+        symbol=symbol,
+        event_ts=event_ts,
+        strategy=_TREND_SETUP_LABELS[trend_decision.mode],
+        family="trend",
+        direction=trend_decision.direction,
+        source="private_trend",
+        structural_id=_trend_group_id(symbol, trend_decision),
+        entry_low=trend_decision.entry_zone[0],
+        entry_high=trend_decision.entry_zone[1],
+        spot_price=spot_price,
+        status="candidate_published",
+        reason_code="candidate_published",
+        message="private trend candidate published",
+        candidate_id=trend_candidate_id,
+        group_id=(
+          None
+          if trend_candidate_id is None
+          else _trend_group_id(symbol, trend_decision)
+        ),
+        retained=False,
+        stage="stream_publish",
+        arbitration_reason_code="selected_for_publication",
+        publication_reason_code="candidate_published",
+        winner_intent_id=trend_intent_id,
+      )
   if _has_overlapping_zones(cached_market_map):
     await client.incr(f"auto_trade:zone_overlap:{symbol.upper()}")
   candidate_ids = [
