@@ -35,6 +35,7 @@ from app.autotrade.zone_execution_cutover import (
 from app.autotrade.setup_card import forming_price_track_loop
 from app.scalping.runtime import scalp_m1_event_loop
 from app.bot.client import edit_scanner_message_text
+from app.bot.telegram_actor import start_telegram_actor
 from app.autotrade.zone_execution_runtime import uninstall_zone_execution_cutover
 from app.autotrade.direct_publish_same_cycle import (
   install_same_cycle_publish_retry,
@@ -125,6 +126,7 @@ async def main() -> None:
   # cursor, including when autonomous execution is currently switched off.
   await backfill_retained_auto_trade_stats(redis_state.get_client())
   await setup_commands(bot)
+  start_telegram_actor()
   scanner_polling = None
   if (
     runtime_config.delivery.telegram.scanner_telegram_bot_token

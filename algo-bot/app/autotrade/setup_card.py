@@ -1367,28 +1367,30 @@ async def _fresh_spot_mid(client, symbol: str) -> float | None:
 
 
 async def forming_price_track_loop() -> None:
-  """Refresh forming-card Price now ~1s until fill/activation, then stop."""
+  """Refresh forming-card Price now ~5s until fill/activation, then stop."""
   import asyncio
 
-  from app.bot.client import edit_scanner_message_text
+  from app.bot.client import edit_scanner_price_now
   from app.persistence import redis_state
 
   client = redis_state.get_client()
-  log.info("forming price track loop started interval_s=1.0 min_move=0.1")
+  log.info("forming price track loop started interval_s=5.0 min_move=0.5")
   while True:
     try:
+      from app.bot.telegram_actor import flood_paused
+
       pause_for = _PRICE_TRACK_PAUSE_UNTIL - time.monotonic()
-      if pause_for > 0:
-        await asyncio.sleep(pause_for)
+      if pause_for > 0 or flood_paused():
+        await asyncio.sleep(max(pause_for, 1.0) if pause_for > 0 else 1.0)
         continue
       await refresh_forming_card_prices(
         client,
-        edit_fn=edit_scanner_message_text,
-        min_move=0.1,
+        edit_fn=edit_scanner_price_now,
+        min_move=0.5,
       )
     except Exception:
       log.exception("forming price track refresh failed")
-    await asyncio.sleep(1.0)
+    await asyncio.sleep(5.0)
 
 
 def _terminal_status_line(reason_code: str) -> str:

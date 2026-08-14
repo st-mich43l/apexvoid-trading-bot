@@ -16,6 +16,12 @@ from aiogram.types import (
   Message,
 )
 
+from app.bot.telegram_actor import (
+  PRIORITY_CARD,
+  PRIORITY_LIFECYCLE,
+  PRIORITY_PRICE,
+  submit as submit_telegram,
+)
 from app.core.config import runtime_config
 
 log = logging.getLogger(__name__)
@@ -179,13 +185,19 @@ async def send_scanner_with_retry(
   reply_markup: InlineKeyboardMarkup | None = None,
 ) -> Message:
   """Send scanner/feed-analysis notifications with the scanner bot token."""
-  return await _send_message_with_retry(
-    scanner_bot,
-    text,
-    reply_to,
-    chat_id,
-    reply_markup,
+  result = await submit_telegram(
+    lambda: _send_message_with_retry(
+      scanner_bot,
+      text,
+      reply_to,
+      chat_id,
+      reply_markup,
+    ),
+    priority=PRIORITY_CARD,
   )
+  if result is None:
+    raise RuntimeError("telegram actor dropped a non-droppable send")
+  return result
 
 
 async def send_scanner_root_card_with_retry(
@@ -196,14 +208,20 @@ async def send_scanner_root_card_with_retry(
 ) -> Message:
   """Send the PLAN PUBLISHED / forming root card with a longer flood budget."""
   await wait_out_scanner_flood()
-  return await _send_message_with_retry(
-    scanner_bot,
-    text,
-    reply_to,
-    chat_id,
-    reply_markup,
-    max_retry_after_sleep=_MAX_ROOT_CARD_RETRY_AFTER_SLEEP_SECONDS,
+  result = await submit_telegram(
+    lambda: _send_message_with_retry(
+      scanner_bot,
+      text,
+      reply_to,
+      chat_id,
+      reply_markup,
+      max_retry_after_sleep=_MAX_ROOT_CARD_RETRY_AFTER_SLEEP_SECONDS,
+    ),
+    priority=PRIORITY_LIFECYCLE,
   )
+  if result is None:
+    raise RuntimeError("telegram actor dropped a root-card send")
+  return result
 
 
 async def _send_message_with_retry(
@@ -228,6 +246,8 @@ async def _send_message_with_retry(
     except TelegramRetryAfter as e:
       if target_bot is scanner_bot:
         await note_scanner_flood(e.retry_after)
+        from app.bot.telegram_actor import note_flood
+        note_flood(e.retry_after)
       if e.retry_after > max_retry_after_sleep:
         log.error(
           "Telegram flood-limited for %ds (exceeds %ds cap) - not "
@@ -282,13 +302,37 @@ async def edit_scanner_message_text(
   message_id: int,
   text: str,
   reply_markup: InlineKeyboardMarkup | None = None,
-) -> Message:
+  *,
+  droppable: bool = False,
+  priority: int = PRIORITY_CARD,
+) -> Message | None:
   """Edit a message the scanner bot itself sent (forming cards)."""
-  return await scanner_bot.edit_message_text(
-    chat_id=chat_id,
-    message_id=int(message_id),
-    text=text,
-    reply_markup=reply_markup,
+  return await submit_telegram(
+    lambda: scanner_bot.edit_message_text(
+      chat_id=chat_id,
+      message_id=int(message_id),
+      text=text,
+      reply_markup=reply_markup,
+    ),
+    priority=priority,
+    droppable=droppable,
+  )
+
+
+async def edit_scanner_price_now(
+  chat_id: int | str,
+  message_id: int,
+  text: str,
+  reply_markup: InlineKeyboardMarkup | None = None,
+) -> Message | None:
+  """Live Price-now edits — dropped while the actor is flood-paused."""
+  return await edit_scanner_message_text(
+    chat_id,
+    message_id,
+    text,
+    reply_markup,
+    droppable=True,
+    priority=PRIORITY_PRICE,
   )
 
 
@@ -300,4 +344,7 @@ async def delete_scanner_message(chat_id: int | str, message_id: int) -> None:
   a distinct function from delete_message (which uses the main `bot` and is
   for messages `bot` itself sent, eg. broadcast.py's signal posts).
   """
-  await scanner_bot.delete_message(int(chat_id), int(message_id))
+  await submit_telegram(
+    lambda: scanner_bot.delete_message(int(chat_id), int(message_id)),
+    priority=PRIORITY_CARD,
+  )

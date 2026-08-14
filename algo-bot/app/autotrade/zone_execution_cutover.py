@@ -1599,6 +1599,33 @@ def _eval_skip_outside_price(symbol: str) -> float:
 # re-evaluated every 2s. Expire those so the active index stays near price.
 _ZONE_STALE_AGE_SECONDS = 12 * 3600
 _ZONE_STALE_OUTSIDE_PRICE = 25.0
+_SPOT_ZONE_BANDS: dict[str, list[tuple[float, float]]] = {}
+_SPOT_IN_ZONE_EVALUATED: dict[str, bool] = {}
+SPOT_MIN_INTERVAL_S = 3.0
+
+
+def _cache_spot_zone_bands(symbol: str, records: list) -> None:
+  bands: list[tuple[float, float]] = []
+  for record in records:
+    try:
+      low = float(record.low)
+      high = float(record.high)
+    except (TypeError, ValueError):
+      continue
+    if high < low:
+      low, high = high, low
+    bands.append((low, high))
+  _SPOT_ZONE_BANDS[symbol] = bands
+
+
+def quote_inside_cached_spot_zone(symbol: str, mid: float) -> bool:
+  if not math.isfinite(mid):
+    return False
+  for low, high in _SPOT_ZONE_BANDS.get(symbol, ()):
+    if low <= mid <= high:
+      return True
+  return False
+_ZONE_STALE_OUTSIDE_PRICE = 25.0
 
 
 async def evaluate_active_zone_watches(
@@ -1608,6 +1635,7 @@ async def evaluate_active_zone_watches(
   event_ts: str,
 ) -> StrategyMatch | None:
   records = await list_active_zone_watches(client, symbol=symbol)
+  _cache_spot_zone_bands(symbol, records)
   if not records:
     return None
   quote = await _load_quote(client, symbol)
@@ -1668,12 +1696,12 @@ async def zone_watch_execution_loop() -> None:
   pubsub = client.pubsub()
   await pubsub.subscribe("bars:new", "spots:new")
   # Cap spot-driven re-evals so ticks cannot busy-loop evaluate_active.
-  spot_min_interval_s = 3.0
+  # First tick that lands inside a cached zone still evaluates immediately.
   last_spot_eval_monotonic: dict[str, float] = {}
   log.info(
     "ZoneWatch direct execution loop started channels=bars:new,spots:new "
     "spot_min_interval_s=%.2f",
-    spot_min_interval_s,
+    SPOT_MIN_INTERVAL_S,
   )
   try:
     async for message in pubsub.listen():
@@ -1706,8 +1734,19 @@ async def zone_watch_execution_loop() -> None:
         symbol = parts[0].upper()
         now = time.monotonic()
         last = last_spot_eval_monotonic.get(symbol, 0.0)
-        if now - last < spot_min_interval_s:
-          continue
+        if now - last < SPOT_MIN_INTERVAL_S:
+          quote = await _load_quote(client, symbol)
+          if quote is None:
+            continue
+          bid, ask, _ts = quote
+          mid = (bid + ask) / 2.0
+          inside = quote_inside_cached_spot_zone(symbol, mid)
+          if not inside:
+            _SPOT_IN_ZONE_EVALUATED[symbol] = False
+            continue
+          if _SPOT_IN_ZONE_EVALUATED.get(symbol):
+            continue
+          _SPOT_IN_ZONE_EVALUATED[symbol] = True
         last_spot_eval_monotonic[symbol] = now
         await evaluate_active_zone_watches(
           client,
