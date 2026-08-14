@@ -7598,9 +7598,6 @@ async def _handle_event(
       symbol=symbol,
     )
     await increment_metric(client, "range_box_ineligible", symbol=symbol)
-  trend_selected = (
-    ready_match_id is None and trend_decision.state == "candidate"
-  )
   # Private box/trend have no V8 publish path. Do not build scale context
   # for them on the autonomous cycle.
   spot_price = spot.price if spot is not None and spot.fresh else None
@@ -7683,91 +7680,8 @@ async def _handle_event(
     # never construct an ExecutionIntent, so it emits no setups.
     box_intent_id = None
     trend_intent_id = None
-    if (
-      trend_selected
-      and trend_decision.direction is not None
-      and trend_decision.entry_zone is not None
-    ):
-      trend_intent_id = (
-        f"trend:{trend_decision.mode}:{trend_decision.direction}:"
-        f"{trend_decision.key_level}"
-      )
-      trend_strategy = _TREND_SETUP_LABELS.get(
-        trend_decision.mode or "",
-        "Trend Strategy",
-      )
-      trend_group_id = _trend_group_id(symbol, trend_decision)
-      trend_tier = "A" if trend_decision.confluence >= 3 else "B"
-      absolute_target = (
-        max(trend_decision.target_prices)
-        if trend_decision.direction.upper() == "BUY"
-        and trend_decision.target_prices
-        else min(trend_decision.target_prices)
-        if trend_decision.target_prices
-        else None
-      )
-      trend_subject = PrivatePolicySubject(
-        strategy=trend_strategy,
-        direction=trend_decision.direction.upper(),
-        entry_low=trend_decision.entry_zone[0],
-        entry_high=trend_decision.entry_zone[1],
-        current_price=spot_price or trend_decision.key_level or 0.0,
-        confluence=trend_decision.confluence,
-        atr=float(trend_decision.atr or 0.0),
-        structure_swing=float(trend_decision.structure_swing or 0.0),
-        targets_pips=trend_decision.targets_pips,
-        risk_multiplier=risk_multiplier_for_tier(trend_tier),
-        target_model=(
-          "hybrid" if absolute_target is not None else "fill_relative"
-        ),
-        target_reference_price=(
-          "planned_entry" if absolute_target is not None else "broker_fill"
-        ),
-        target_price=absolute_target,
-        absolute_target_price=absolute_target,
-      )
-      trend_candidate_identity = _trend_candidate_id(
-        symbol,
-        str(event_ts or ""),
-        trend_decision,
-      )
-      trend_group_active = await _group_is_active(
-        client,
-        symbol,
-        trend_group_id,
-      )
-      intent = ExecutionIntent(
-        intent_id=trend_intent_id,
-        source="private_trend",
-        strategy=trend_strategy,
-        direction=trend_decision.direction.upper(),
-        confluence=trend_decision.confluence,
-        tier=trend_tier,
-        freshness=_intent_freshness(event_ts, now_ts),
-        distance_pips=_band_distance_pips(
-          spot_price,
-          trend_decision.entry_zone[0],
-          trend_decision.entry_zone[1],
-          symbol,
-        ),
-        symbol=symbol.upper(),
-        timeframe=EXECUTION_TIMEFRAME,
-        family="trend",
-        entry_low=trend_decision.entry_zone[0],
-        entry_high=trend_decision.entry_zone[1],
-        structural_id=trend_group_id,
-        match_id=trend_candidate_identity,
-        current_price=spot_price,
-        target_model=trend_subject.target_model,
-        targets_pips=trend_decision.targets_pips,
-        absolute_target_price=absolute_target,
-        target_reference_price=trend_subject.target_reference_price,
-        proposed_group_id=trend_group_id,
-        is_initial=not trend_group_active,
-        cycle_id=str(event_ts or ""),
-      )
-      intents.append(intent)
-      intent_subjects[trend_intent_id] = trend_subject
+    # Private trend has no TradePlan V8 path. Do not build intents or
+    # record publication_unavailable private routes on leftover matches.
 
     arbitrable: list[ExecutionIntent] = []
     for intent in intents:

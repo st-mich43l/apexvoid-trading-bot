@@ -15,6 +15,7 @@ from app.autotrade.strategy_taxonomy import (
   REACTION_STRATEGIES,
   is_reaction_strategy,
   is_scalp_strategy,
+  is_technique_or_confluence,
 )
 
 # AE-style scalp: one structural zone, five equal clips (not one full lot).
@@ -301,7 +302,7 @@ def resolve_execution_route_plan(
   if is_scalp_strategy(
     str(strategy or ""),
     family=strategy_family,
-  ):
+  ) or is_technique_or_confluence(str(strategy or "")):
     grid = scalp_micro_grid_legs(
       side=side, low=low, high=high, quote=quote, digits=digits,
     )
