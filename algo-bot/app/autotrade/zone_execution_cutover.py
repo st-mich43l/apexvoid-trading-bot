@@ -1651,7 +1651,6 @@ def quote_inside_cached_spot_zone(symbol: str, mid: float) -> bool:
     if low <= mid <= high:
       return True
   return False
-_ZONE_STALE_OUTSIDE_PRICE = 25.0
 
 
 async def evaluate_active_zone_watches(
