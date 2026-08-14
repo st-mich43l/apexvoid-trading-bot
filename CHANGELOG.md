@@ -13,6 +13,13 @@ dated section after deployment.
 ## Unreleased
 
 ### Changed
+- Technique and Confluence Zone orders use the same five-clip scalp
+  micro-grid as HFS (equal clips into the structural zone). Key Level
+  reaction stays single-market. Momentum-chase HFS stays off unless
+  `HFS_MOMENTUM_CHASE_ENABLED` is set. Dead private-trend worker intents
+  are no longer built.
+
+### Changed
 - Spot-loop ZoneWatch reuses one OHLC window cache per eval so several
   active zones do not each ZRANGE M1/M5.
 

@@ -114,7 +114,7 @@ def _enabled_hfs_archetypes(cfg: Any | None) -> frozenset[str]:
     allowed.append(ARCHETYPE_IMPULSE_PULLBACK)
   if bool(getattr(arch, "breakout_retest_enabled", True)):
     allowed.append(ARCHETYPE_BREAKOUT_RETEST)
-  if bool(getattr(arch, "momentum_chase_enabled", True)):
+  if bool(getattr(arch, "momentum_chase_enabled", False)):
     allowed.append(ARCHETYPE_MOMENTUM_CHASE)
   return frozenset(allowed)
 
