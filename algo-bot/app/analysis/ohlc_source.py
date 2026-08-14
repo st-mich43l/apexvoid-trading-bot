@@ -57,13 +57,52 @@ def _normalize_price(symbol: str, value: float) -> float:
   return value
 
 
+CLOSED_BAR_TIMEFRAMES = ("M1", "M5", "M15", "H1")
+
+
+async def prefetch_closed_bar_windows(source: Any, symbol: str) -> None:
+  """Warm one closed-bar cache with configured lookbacks for shared handlers."""
+  window = getattr(source, "window", None)
+  if not callable(window):
+    return
+  for tf in CLOSED_BAR_TIMEFRAMES:
+    await window(symbol, tf, window_for_timeframe(tf))
+
+
 class RedisOHLCSource:
   """Read closed OHLCV bars from Redis ZSETs populated by ctrader-feed."""
 
   def __init__(self, client: Any | None = None):
     self.client = client or redis_state.get_client()
+    self._bar_cache: dict[tuple[str, str], tuple[int, pd.DataFrame]] | None = None
+
+  def begin_closed_bar_cache(self) -> None:
+    """Reuse ZRANGE results across dispatcher handlers for one closed bar."""
+    self._bar_cache = {}
+
+  def end_closed_bar_cache(self) -> None:
+    self._bar_cache = None
 
   async def window(self, symbol: str, tf: str, n: int) -> pd.DataFrame:
+    count = max(0, int(n))
+    key = (symbol.upper(), tf.upper())
+    cache = self._bar_cache
+    if cache is not None:
+      hit = cache.get(key)
+      if hit is not None and hit[0] >= count:
+        df = hit[1]
+        if count <= 0 or df.empty:
+          return df.copy()
+        return df.tail(count).copy()
+
+    df = await self._fetch_window(symbol, tf, count)
+    if cache is not None:
+      prev = cache.get(key)
+      if prev is None or count > prev[0]:
+        cache[key] = (count, df)
+    return df.copy()
+
+  async def _fetch_window(self, symbol: str, tf: str, n: int) -> pd.DataFrame:
     rows = await self.client.zrevrange(
       _bar_key(symbol, tf),
       0,
