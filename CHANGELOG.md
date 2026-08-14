@@ -13,6 +13,11 @@ dated section after deployment.
 ## Unreleased
 
 ### Changed
+- Closed-bar handling uses one `bars:new` dispatcher (scanner, worker,
+  ZoneWatch M1, HFS) instead of four Redis subscriptions. ZoneWatch still
+  listens to `spots:new` for in-zone activation.
+
+### Changed
 - Owner Telegram I/O runs through one priority actor (fill/root before
   Price-now). Forming-card live price updates every 5s (0.5 min move) and is
   dropped while flood-paused. ZoneWatch still throttles spots to 3s except the

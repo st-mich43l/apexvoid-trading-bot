@@ -3255,41 +3255,8 @@ async def _handle_event(
 
 
 async def scanner_loop() -> None:
-  """Subscribe to closed-bar events and analyze scanner detections."""
+  """Deprecated: closed bars are owned by bar_event_dispatcher_loop."""
   if not runtime_config.runtime.scanner.enabled:
     log.info("Price-action scanner disabled: SCANNER_ENABLED=false")
     return
-  if not runtime_config.delivery.telegram.telegram_owner_id:
-    log.info(
-      "Price-action scanner notifications disabled: TELEGRAM_OWNER_ID not set"
-    )
-
-  client = redis_state.get_client()
-  source = RedisOHLCSource(client)
-  pubsub = client.pubsub()
-  await pubsub.subscribe("bars:new")
-  log.info(
-    "Price-action scanner watching %s on %s (%s)",
-    ",".join(sorted(_watched_symbols())),
-    runtime_config.market_data.scanner.execution_timeframe.upper(),
-    (
-      "owner DM enabled"
-      if runtime_config.delivery.telegram.telegram_owner_id
-      else "analysis only"
-    ),
-  )
-  try:
-    async for message in pubsub.listen():
-      if message.get("type") != "message":
-        continue
-      try:
-        await _handle_event(message.get("data"), source=source, client=client)
-      except Exception:
-        log.exception("scanner tick failed")
-        try:
-          await increment_metric(client, "lifecycle_error")
-        except Exception:
-          log.exception("scanner lifecycle_error metric failed")
-  finally:
-    await pubsub.unsubscribe("bars:new")
-    await pubsub.close()
+  log.info("scanner_loop idle; bar_event_dispatcher_loop owns bars:new")

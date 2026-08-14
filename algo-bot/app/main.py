@@ -18,7 +18,7 @@ from app.persistence.store import init_db, close_pool
 from app.signals.watcher import watcher_loop
 from app.signals.calendar import calendar_sync_loop
 from app.signals.weekly_report import weekly_report_loop
-from app.analysis.scanner import scanner_loop
+from app.analysis.bar_event_dispatcher import bar_event_dispatcher_loop
 from app.analysis.market_map_delivery import market_map_scan_loop
 from app.autotrade.delivery import auto_trade_events_loop
 from app.autotrade.stats_ingestion import (
@@ -27,13 +27,12 @@ from app.autotrade.stats_ingestion import (
 )
 from app.autotrade.setup_expiry_sweeper import setup_expiry_sweeper_loop
 from app.autotrade.startup_reconciliation import reconcile_startup_state
-from app.autotrade.worker import auto_scalp_loop, configure_forming_card_edit_fn
+from app.autotrade.worker import configure_forming_card_edit_fn
 from app.autotrade.zone_execution_cutover import (
   install_zone_execution_cutover,
   zone_watch_execution_loop,
 )
 from app.autotrade.setup_card import forming_price_track_loop
-from app.scalping.runtime import scalp_m1_event_loop
 from app.bot.client import edit_scanner_message_text
 from app.bot.telegram_actor import start_telegram_actor
 from app.autotrade.zone_execution_runtime import uninstall_zone_execution_cutover
@@ -143,13 +142,9 @@ async def main() -> None:
   _spawn_supervised("watcher_loop", watcher_loop)
   _spawn_supervised("calendar_sync_loop", calendar_sync_loop)
   _spawn_supervised("weekly_report_loop", weekly_report_loop)
-  _spawn_supervised("scanner_loop", scanner_loop)
+  _spawn_supervised("bar_event_dispatcher_loop", bar_event_dispatcher_loop)
   _spawn_supervised("zone_watch_execution_loop", zone_watch_execution_loop)
   _spawn_supervised("forming_price_track_loop", forming_price_track_loop)
-  _spawn_supervised("auto_scalp_loop", auto_scalp_loop)
-  # HFS M1 scalping is shadow/paper by default and never publishes broker
-  # candidates. The loop no-ops immediately when mode=off.
-  _spawn_supervised("scalp_m1_event_loop", scalp_m1_event_loop)
   # strategy_match_ready_loop removed from production startup: ZoneWatch →
   # direct TradePlan is authoritative. Legacy parsers remain for one release.
   _spawn_supervised("setup_expiry_sweeper_loop", setup_expiry_sweeper_loop)
