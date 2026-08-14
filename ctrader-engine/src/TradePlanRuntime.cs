@@ -143,7 +143,7 @@ public sealed record TradePlanRuntimeState(
   // cache): the reason the last pending-entry poll didn't submit
   // ("outside_zone" / "spread_exceeds_declared_limit"). Wait decisions
   // fire on every poll and are otherwise completely silent, so without
-  // this the "v7 plan expired" log line can't say why a market_watch
+  // this the "v8 plan expired" log line can't say why a market_watch
   // entry never filled even when price genuinely returned to the zone
   // before expiry - see the live incident this fixed.
   string? LastEntryWaitReason = null,
@@ -597,6 +597,8 @@ public sealed class TradePlanRuntime(
     $"execution:plan_rejection:{streamId}";
   private static string TrackedPlansKey() => "execution:trade_plan_runtime_ids";
   private static string NotifyDedupKey(string planId, string eventKey) =>
+    $"auto_trade:v8_notify:{planId}:{eventKey}";
+  private static string LegacyNotifyDedupKey(string planId, string eventKey) =>
     $"auto_trade:v7_notify:{planId}:{eventKey}";
   private static readonly TimeSpan NotifyDedupTtl = TimeSpan.FromDays(7);
   // How long a submitted leg's BrokerOrderId must stay missing from the
@@ -637,11 +639,10 @@ public sealed class TradePlanRuntime(
   }
 
   /// <summary>
-  /// Adopts a broker position whose comment/ClientOrderId carries V7
-  /// ownership into the matching tracked plan leg. Returns true when the
-  /// position was recognised as V7 ownership (whether or not a live plan
-  /// was found) so AutoTradeEngine can skip the av* reconstruct path and
-  /// the "cannot reconstruct" spam for V7 comments.
+  /// Adopts a broker position whose comment/ClientOrderId carries TradePlan
+  /// V8 (or draining V7) ownership into the matching tracked plan leg.
+  /// Idempotent: a leg already filled on the same broker position is a no-op
+  /// so reconcile ticks do not re-log or re-amend every poll.
   /// </summary>
   public Task<bool> TryAdoptV7BrokerPositionAsync(
     TradingPosition position,
@@ -672,12 +673,23 @@ public sealed class TradePlanRuntime(
     if (!_statesById.TryGetValue(ownership.PlanId, out var state))
     {
       log(
-        $"v7 adopt: no tracked plan for position={position.PositionId} "
+        $"v8 adopt: no tracked plan for position={position.PositionId} "
         + $"plan_id={ownership.PlanId} leg={ownership.LegId}"
       );
       return true;
     }
     _plansById.TryGetValue(ownership.PlanId, out var plan);
+    var existingLeg = (state.Legs ?? [])
+      .FirstOrDefault(leg => leg.LegId == ownership.LegId);
+    if (
+      existingLeg is not null
+      && existingLeg.BrokerPositionId == position.PositionId
+      && existingLeg.Stage is TradePlanLegStages.Filled
+        or TradePlanLegStages.Managing
+    )
+    {
+      return true;
+    }
     var absoluteStop = plan?.Stop.Price
       ?? state.GroupAbsoluteStop
       ?? state.CurrentStop;
@@ -696,7 +708,7 @@ public sealed class TradePlanRuntime(
     }
     await PersistStateAsync(next, cancellationToken);
     log(
-      $"v7 adopt: position={position.PositionId} plan_id={ownership.PlanId} "
+      $"v8 adopt: position={position.PositionId} plan_id={ownership.PlanId} "
       + $"leg={ownership.LegId} stage={next.Stage}"
     );
     return true;
@@ -779,7 +791,7 @@ public sealed class TradePlanRuntime(
                 cancellationToken
               );
               log(
-                $"v7 restore: granted {RestoreExpiryGraceSeconds}s recovery "
+                $"v8 restore: granted {RestoreExpiryGraceSeconds}s recovery "
                 + $"grace to {planId} (entry expired during downtime)"
               );
             }
@@ -800,10 +812,10 @@ public sealed class TradePlanRuntime(
         }
         catch (JsonException)
         {
-          log($"v7 restore: could not re-parse plan {planId}");
+          log($"v8 restore: could not re-parse plan {planId}");
         }
       }
-      log($"v7 restore: recovered {planId} at stage {state.Stage}");
+      log($"v8 restore: recovered {planId} at stage {state.Stage}");
     }
   }
 
@@ -978,7 +990,7 @@ public sealed class TradePlanRuntime(
     {
       var equity = await ResolveEquityForSizingAsync(client, cancellationToken);
       log(
-        $"v7 sizing pre-submit id={plan.PlanId} {EquityResolver.FormatTelemetry(equity)}"
+        $"v8 sizing pre-submit id={plan.PlanId} {EquityResolver.FormatTelemetry(equity)}"
       );
       TradePlanExecutionEngine.CalculateVolume(
         plan, equity, options.PipSize, options.PipValuePerLot, symbol
@@ -994,12 +1006,12 @@ public sealed class TradePlanRuntime(
       );
       await PublishEventAsync(
         "plan_rejected",
-        $"TradePlan V7 rejected: {exception.Message}",
+        $"TradePlan V8 rejected: {exception.Message}",
         plan,
         cancellationToken
       );
       log(
-        $"v7 plan sizing rejected pre-submit id={plan.PlanId} "
+        $"v8 plan sizing rejected pre-submit id={plan.PlanId} "
         + $"stream_id={entry.Id} "
         + $"exception={exception.GetType().Name} message={exception.Message}"
       );
@@ -1125,7 +1137,7 @@ public sealed class TradePlanRuntime(
       new AutoTradeEvent(
         "plan_rejected",
         record.RejectedAt,
-        $"TradePlan V7 rejected: {record.Message}",
+        $"TradePlan V8 rejected: {record.Message}",
         "UNKNOWN",
         CandidateId: planId,
         ReasonCode: record.ReasonCode,
@@ -1220,16 +1232,23 @@ public sealed class TradePlanRuntime(
   {
     if (!string.IsNullOrWhiteSpace(eventKey))
     {
-      var claimed = await store.TryClaimStringAsync(
+      var stamp = clock().ToUnixTimeSeconds().ToString();
+      var claimedV8 = await store.TryClaimStringAsync(
         NotifyDedupKey(plan.PlanId, eventKey),
-        clock().ToUnixTimeSeconds().ToString(),
+        stamp,
         NotifyDedupTtl,
         cancellationToken
       );
-      if (!claimed)
+      var claimedLegacy = await store.TryClaimStringAsync(
+        LegacyNotifyDedupKey(plan.PlanId, eventKey),
+        stamp,
+        NotifyDedupTtl,
+        cancellationToken
+      );
+      if (!claimedV8 || !claimedLegacy)
       {
         log(
-          $"v7 notify dedup skipped plan_id={plan.PlanId} event_key={eventKey} type={type}"
+          $"v8 notify dedup skipped plan_id={plan.PlanId} event_key={eventKey} type={type}"
         );
         return;
       }
@@ -1331,7 +1350,7 @@ public sealed class TradePlanRuntime(
       // evaluation - fall back to "no catch-up", the plan keeps waiting
       // exactly as it would have without this feature.
       log(
-        $"v7 recovery catch-up read failed id={plan.PlanId} "
+        $"v8 recovery catch-up read failed id={plan.PlanId} "
         + $"exception={exception.GetType().Name}"
       );
       return false;
@@ -1359,12 +1378,12 @@ public sealed class TradePlanRuntime(
     var direction = plan.Analysis.Direction;
     if (waitReasonForExpiry == "never_evaluated")
     {
-      return $"TradePlan V7 expired {direction} · "
+      return $"TradePlan V8 expired {direction} · "
         + $"executor never evaluated a live quote ({waitReasonForExpiry})";
     }
     if (waitReasonForExpiry == "spread_exceeds_declared_limit")
     {
-      return $"TradePlan V7 expired {direction} · "
+      return $"TradePlan V8 expired {direction} · "
         + $"spread stayed above the plan limit while waiting ({waitReasonForExpiry})";
     }
     if (waitReasonForExpiry == "outside_zone")
@@ -1375,13 +1394,13 @@ public sealed class TradePlanRuntime(
         // Live incident: SETUP FORMING card showed price already inside the
         // entry zone, then expiry said "never returned". Prefer the truthful
         // "left without a fill" copy whenever M1 evidence shows a touch.
-        return $"TradePlan V7 expired {direction} · "
+        return $"TradePlan V8 expired {direction} · "
           + $"price left the entry zone without a fill ({waitReasonForExpiry})";
       }
-      return $"TradePlan V7 expired {direction} · "
+      return $"TradePlan V8 expired {direction} · "
         + $"price never entered the entry zone ({waitReasonForExpiry})";
     }
-    return $"TradePlan V7 expired {direction} · "
+    return $"TradePlan V8 expired {direction} · "
       + $"entry wait timed out ({waitReasonForExpiry})";
   }
 
@@ -1408,7 +1427,7 @@ public sealed class TradePlanRuntime(
     catch (Exception exception)
     {
       log(
-        $"v7 expiry touch check failed id={plan.PlanId} "
+        $"v8 expiry touch check failed id={plan.PlanId} "
         + $"exception={exception.GetType().Name}"
       );
       return false;
@@ -1467,7 +1486,7 @@ public sealed class TradePlanRuntime(
       );
       await ForgetPlanAsync(state.PlanId, cancellationToken);
       log(
-        $"v7 plan expired id={state.PlanId} "
+        $"v8 plan expired id={state.PlanId} "
         + $"last_wait_reason={waitReasonForExpiry}"
       );
       return;
@@ -1499,7 +1518,7 @@ public sealed class TradePlanRuntime(
             var zoneLow = plan.Entry.ZoneLow?.ToString(CultureInfo.InvariantCulture) ?? "-";
             var zoneHigh = plan.Entry.ZoneHigh?.ToString(CultureInfo.InvariantCulture) ?? "-";
             log(
-              $"v7 entry wait id={plan.PlanId} reason={waitReason} "
+              $"v8 entry wait id={plan.PlanId} reason={waitReason} "
               + $"bid={quote.Bid.ToString(CultureInfo.InvariantCulture)} "
               + $"ask={quote.Ask.ToString(CultureInfo.InvariantCulture)} "
               + $"spread_ticks={spreadTicks.ToString(CultureInfo.InvariantCulture)} "
@@ -1511,7 +1530,7 @@ public sealed class TradePlanRuntime(
         return;
       }
       log(
-        $"v7 zone catch-up: id={plan.PlanId} submitting - the zone "
+        $"v8 zone catch-up: id={plan.PlanId} submitting - the zone "
         + "was touched on M1 and the live quote is still close"
       );
       state = state with { RecoveryGraceActive = false };
@@ -1522,7 +1541,7 @@ public sealed class TradePlanRuntime(
       // but per docs/adr-trade-plan-v7-boundary.md shadow mode "places no
       // orders from it". Left Received so the next poll re-evaluates it.
       log(
-        $"v7 shadow: would submit id={plan.PlanId} entry_type={plan.Entry.Type}"
+        $"v8 shadow: would submit id={plan.PlanId} entry_type={plan.Entry.Type}"
       );
       return;
     }
@@ -1542,13 +1561,13 @@ public sealed class TradePlanRuntime(
       );
       await PublishEventAsync(
         "plan_rejected",
-        $"TradePlan V7 rejected: {exception.Message}",
+        $"TradePlan V8 rejected: {exception.Message}",
         plan,
         cancellationToken
       );
       await ForgetPlanAsync(state.PlanId, cancellationToken);
       log(
-        $"v7 plan sizing rejected id={state.PlanId} "
+        $"v8 plan sizing rejected id={state.PlanId} "
         + $"exception={exception.GetType().Name} message={exception.Message}"
       );
     }
@@ -1571,7 +1590,7 @@ public sealed class TradePlanRuntime(
   {
     var equity = await ResolveEquityForSizingAsync(client, cancellationToken);
     log(
-      $"v7 sizing submit id={plan.PlanId} {EquityResolver.FormatTelemetry(equity)}"
+      $"v8 sizing submit id={plan.PlanId} {EquityResolver.FormatTelemetry(equity)}"
     );
     var volumePlan = TradePlanExecutionEngine.CalculateVolume(
       plan, equity, options.PipSize, options.PipValuePerLot, symbol
@@ -1900,7 +1919,7 @@ public sealed class TradePlanRuntime(
         .Select(leg => $"{leg.LegId}={leg.IntendedVolume}")
         .ToArray();
       await PublishEventAsync(
-        "v7_order_submitted",
+        "v8_order_submitted",
         $"ORDERS SUBMITTED {plan.Analysis.Direction} "
         + $"{string.Join(" ", legVolumes)} "
         + $"(pending={pendingOrderIds.Count})",
@@ -2124,14 +2143,14 @@ public sealed class TradePlanRuntime(
           // tracking a plan with nothing left to do.
           await PublishEventAsync(
             "plan_cancelled",
-            $"TradePlan V7 cancelled {plan.Analysis.Direction} · "
+            $"TradePlan V8 cancelled {plan.Analysis.Direction} · "
               + "owner cancelled the pending order on the broker",
             plan,
             cancellationToken,
             eventKey: "plan_cancelled",
             state: TradePlanGroupStages.Cancelled
           );
-          log($"v7 plan cancelled id={state.PlanId} reason=owner_cancelled_on_broker");
+          log($"v8 plan cancelled id={state.PlanId} reason=owner_cancelled_on_broker");
           await ForgetPlanAsync(state.PlanId, cancellationToken);
         }
       }
@@ -2264,7 +2283,7 @@ public sealed class TradePlanRuntime(
           // target's cumulative share clears that bar, or to the final
           // target, which always closes what's left regardless of size.
           log(
-            $"v7 target partial deferred id={plan.PlanId} "
+            $"v8 target partial deferred id={plan.PlanId} "
             + $"target={target.TargetId} remaining={groupRemaining} "
             + $"desired={desiredClose} step={symbol.StepVolume} "
             + "reason=share_below_minimum_meaningful_close"
@@ -2285,7 +2304,7 @@ public sealed class TradePlanRuntime(
           // Same NextTargetIndex-corruption hazard as the closeVolume <= 0
           // branch above - advance past only this target, not to the end.
           log(
-            $"v7 target partial skipped id={plan.PlanId} "
+            $"v8 target partial skipped id={plan.PlanId} "
             + $"target={target.TargetId} remaining={groupRemaining} "
             + "reason=stepped_allocation_empty"
           );
@@ -2336,7 +2355,7 @@ public sealed class TradePlanRuntime(
           {
             allSucceeded = false;
             log(
-              $"v7 target close failed id={plan.PlanId} "
+              $"v8 target close failed id={plan.PlanId} "
               + $"leg={openLegs[i].LegId} message={exception.Message}"
             );
           }
@@ -2353,7 +2372,7 @@ public sealed class TradePlanRuntime(
         );
         var totalLegs = legs.Count(leg => leg.BrokerPositionId is not null);
         log(
-          $"v7 target hit id={plan.PlanId} target={target.TargetId} "
+          $"v8 target hit id={plan.PlanId} target={target.TargetId} "
           + $"lot={closedTotal} remaining={remainingAfter}"
         );
         string tpMessage;
@@ -2464,7 +2483,7 @@ public sealed class TradePlanRuntime(
             {
               beOk = false;
               log(
-                $"v7 BE amend failed id={plan.PlanId} leg={leg.LegId} "
+                $"v8 BE amend failed id={plan.PlanId} leg={leg.LegId} "
                 + $"message={exception.Message}"
               );
             }
@@ -2474,7 +2493,7 @@ public sealed class TradePlanRuntime(
             state = state with { CurrentStop = be.NewStop, BreakEvenApplied = true };
             await PersistStateAsync(state, cancellationToken);
             var n = openLegs.Length;
-            log($"v7 stop moved to BE id={plan.PlanId} stop={be.NewStop}");
+            log($"v8 stop moved to BE id={plan.PlanId} stop={be.NewStop}");
             await PublishEventAsync(
               "sl_moved",
               $"GROUP SL MOVED TO BE {be.NewStop} ({n}/{n})",
@@ -2522,7 +2541,7 @@ public sealed class TradePlanRuntime(
             {
               trailOk = false;
               log(
-                $"v7 trail amend failed id={plan.PlanId} leg={leg.LegId} "
+                $"v8 trail amend failed id={plan.PlanId} leg={leg.LegId} "
                 + $"message={exception.Message}"
               );
             }
@@ -2532,7 +2551,7 @@ public sealed class TradePlanRuntime(
             state = state with { CurrentStop = desired };
             await PersistStateAsync(state, cancellationToken);
             log(
-              $"v7 stop trailed id={plan.PlanId} stop={desired} "
+              $"v8 stop trailed id={plan.PlanId} stop={desired} "
               + $"to_target={plan.Targets[trailToIndex].TargetId}"
             );
             await PublishEventAsync(
@@ -2638,7 +2657,7 @@ public sealed class TradePlanRuntime(
         eventKey: "recovery_required_unknown_close",
         state: TradePlanGroupStages.RecoveryRequired
       );
-      log($"v7 recovery_required id={plan.PlanId} reason=unknown_leg_close");
+      log($"v8 recovery_required id={plan.PlanId} reason=unknown_leg_close");
       return next;
     }
 
@@ -2806,14 +2825,14 @@ public sealed class TradePlanRuntime(
           };
         }
         log(
-          $"v7 cancel unfilled leg id={plan.PlanId} leg={leg.LegId} "
+          $"v8 cancel unfilled leg id={plan.PlanId} leg={leg.LegId} "
           + $"order={leg.BrokerOrderId} reason={reason}"
         );
       }
       catch (Exception exception)
       {
         log(
-          $"v7 cancel unfilled leg failed id={plan.PlanId} leg={leg.LegId} "
+          $"v8 cancel unfilled leg failed id={plan.PlanId} leg={leg.LegId} "
           + $"message={exception.Message}"
         );
       }

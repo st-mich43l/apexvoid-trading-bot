@@ -4636,7 +4636,7 @@ async def _publish_trade_plan_v8(
       correlation_id=match.match_id,
       timeframe=match.source_tf,
       reason_code="v8_plan_build_incomplete",
-      message="TradePlan V7 build left incomplete across a restart/crash",
+      message="TradePlan V8 build left incomplete across a restart/crash",
       publish_status=True,
     )
     return None
@@ -6019,7 +6019,7 @@ async def _publish_trade_plan_v8(
       if confirmation.source == M1_RETEST
       else "entry_contract_satisfied"
     ),
-    message="TradePlan V7 published inside the executable entry contract",
+    message="TradePlan V8 published inside the executable entry contract",
     evidence=evidence,
     metric="entry_contract_plan_published",
     status="candidate_published",
@@ -6042,7 +6042,7 @@ async def _publish_trade_plan_v8(
     correlation_id=setup_id,
     timeframe=match.source_tf,
     reason_code="",
-    message=f"TradePlan V7 published: {match.strategy} {match.direction}",
+    message=f"TradePlan V8 published: {match.strategy} {match.direction}",
     measured={
       "plan_id": plan.plan_id,
       "thesis_id": plan.thesis_id,

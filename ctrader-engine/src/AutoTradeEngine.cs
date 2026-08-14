@@ -6049,9 +6049,10 @@ public sealed class AutoTradeEngine(
         isNewManualFill = true;
       }
     }
-    // V7 ownership (v7|plan|thesis|L1) is never an av1/av2/av3/avz comment —
-    // hand it to TradePlanRuntime before the reconstruct failure log so
-    // multi-leg ladder fills are not treated as unowned orphans.
+    // TradePlan ownership (v8|plan|thesis|L1, plus draining v7|) is never
+    // an av1/av2/av3/avz comment — hand it to TradePlanRuntime before the
+    // reconstruct failure log so multi-leg ladder fills are not treated as
+    // unowned orphans.
     if (
       state is null
       && TradePlanV7Ownership.TryParseV7Ownership(

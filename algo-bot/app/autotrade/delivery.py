@@ -129,6 +129,7 @@ TELEGRAM_SILENT_LIFECYCLE_TYPES = frozenset({
   # card under one-root-card mode — progress edits the root instead.
   "plan_published",
   "v7_order_submitted",
+  "v8_order_submitted",
 })
 # Preflight route outcomes remain in Redis, route history, metrics, and
 # /auto_status, but are operator diagnostics rather than Telegram content.
@@ -2055,14 +2056,19 @@ async def _deliver_auto_trade_event(
       # restarts. Use sha256 (not Python's salted hash()) so dedup survives
       # process restarts and matches across workers.
       digest = hashlib.sha256(event_key.encode("utf-8")).hexdigest()[:16]
-      dedup_key = f"auto_trade:v7_notify:{plan_id}:{event_type}:{digest}"
-      claimed = await client.set(
-        dedup_key,
+      claimed_v8 = await client.set(
+        f"auto_trade:v8_notify:{plan_id}:{event_type}:{digest}",
         "1",
         nx=True,
         ex=_TRADE_MESSAGE_TTL,
       )
-      if not claimed:
+      claimed_legacy = await client.set(
+        f"auto_trade:v7_notify:{plan_id}:{event_type}:{digest}",
+        "1",
+        nx=True,
+        ex=_TRADE_MESSAGE_TTL,
+      )
+      if not claimed_v8 or not claimed_legacy:
         return False
   send = send or send_scanner_with_retry
   if profile == "internal":
