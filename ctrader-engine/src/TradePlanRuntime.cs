@@ -520,22 +520,22 @@ public sealed class TradePlanRuntime(
   // deadline the outage silently ate into is restored.
   private const int RestoreExpiryGraceSeconds = 90;
 
-  private static string FormatEventPrice(decimal price, SymbolInfo symbol) =>
-    decimal.Round(price, symbol.Digits, MidpointRounding.AwayFromZero)
-      .ToString($"F{Math.Max(0, symbol.Digits)}", CultureInfo.InvariantCulture);
+  private static string FormatEventPrice(decimal price, SymbolInfo? symbol)
+  {
+    var digits = symbol is { Digits: > 0 } ? symbol.Digits : 2;
+    return decimal.Round(price, digits, MidpointRounding.AwayFromZero)
+      .ToString($"F{digits}", CultureInfo.InvariantCulture);
+  }
 
-  private static string FormatEventPrice(decimal? price, SymbolInfo symbol) =>
+  private static string FormatEventPrice(decimal? price, SymbolInfo? symbol) =>
     price is decimal value ? FormatEventPrice(value, symbol) : "?";
 
-  private static string FormatEventLot(long volumeUnits, SymbolInfo symbol)
+  private static string FormatEventLot(long volumeUnits, SymbolInfo? symbol)
   {
     // Owner Telegram cards must show strategy lots (0.08), never raw cTrader
     // volume units (800 when LotSize=10000).
-    if (symbol.LotSize <= 0)
-    {
-      return volumeUnits.ToString(CultureInfo.InvariantCulture);
-    }
-    var lots = (decimal)volumeUnits / symbol.LotSize;
+    var lotSize = symbol is { LotSize: > 0 } ? symbol.LotSize : 10_000m;
+    var lots = (decimal)volumeUnits / lotSize;
     var text = lots.ToString("0.########", CultureInfo.InvariantCulture);
     return string.IsNullOrWhiteSpace(text) ? "0" : text;
   }
@@ -707,11 +707,76 @@ public sealed class TradePlanRuntime(
       );
     }
     await PersistStateAsync(next, cancellationToken);
+    if (plan is not null)
+    {
+      await PublishEntryFillProgressAsync(
+        plan, state, next, symbol, cancellationToken
+      );
+    }
     log(
       $"v8 adopt: position={position.PositionId} plan_id={ownership.PlanId} "
       + $"leg={ownership.LegId} stage={next.Stage}"
     );
     return true;
+  }
+
+  private async Task PublishEntryFillProgressAsync(
+    TradePlan plan,
+    TradePlanRuntimeState previous,
+    TradePlanRuntimeState next,
+    SymbolInfo? symbol,
+    CancellationToken cancellationToken
+  )
+  {
+    if (
+      next.Stage == TradePlanRuntimeStage.FullyOpen
+      && previous.Stage != TradePlanRuntimeStage.FullyOpen
+    )
+    {
+      await PublishEventAsync(
+        "order_filled",
+        $"ENTRY GROUP FULLY FILLED {plan.Analysis.Direction} "
+        + $"lot={FormatEventLot(next.TotalFilledVolume, symbol)} "
+        + $"weighted={FormatEventPrice(next.GroupWeightedFillPrice, symbol)}",
+        plan,
+        cancellationToken,
+        positionId: next.PositionId,
+        price: next.GroupWeightedFillPrice,
+        volume: next.TotalFilledVolume,
+        eventKey: "entry_group_fully_filled",
+        state: TradePlanGroupStages.FullyOpen
+      );
+      return;
+    }
+    if (next.TotalFilledVolume <= previous.TotalFilledVolume)
+    {
+      return;
+    }
+    var filledLegs = (next.Legs ?? [])
+      .Where(leg => leg.BrokerPositionId is not null)
+      .Select(leg => leg.LegId)
+      .ToArray();
+    var pendingLegs = (next.Legs ?? [])
+      .Where(leg => leg.BrokerOrderId is not null && leg.BrokerPositionId is null)
+      .Select(leg => leg.LegId)
+      .ToArray();
+    var pendingSuffix = pendingLegs.Length == 0
+      ? ""
+      : $"; {string.Join("/", pendingLegs)} still pending";
+    await PublishEventAsync(
+      "order_filled",
+      $"ENTRY {string.Join("/", filledLegs)} FILLED "
+      + $"lot={FormatEventLot(next.TotalFilledVolume, symbol)} "
+      + $"@ {FormatEventPrice(next.GroupWeightedFillPrice, symbol)}"
+      + pendingSuffix,
+      plan,
+      cancellationToken,
+      positionId: next.PositionId,
+      price: next.GroupWeightedFillPrice,
+      volume: next.TotalFilledVolume,
+      eventKey: $"entry_partial_filled_{string.Join("_", filledLegs)}",
+      state: TradePlanGroupStages.PartiallyOpen
+    );
   }
 
   private async Task RestoreAsync(CancellationToken cancellationToken)
@@ -2080,56 +2145,13 @@ public sealed class TradePlanRuntime(
             cancellationToken
           );
         }
+        if (changed)
+        {
+          await PublishEntryFillProgressAsync(
+            plan, initial, state, symbol, cancellationToken
+          );
+        }
         if (
-          changed
-          && state.Stage == TradePlanRuntimeStage.FullyOpen
-          && initial.Stage != TradePlanRuntimeStage.FullyOpen
-        )
-        {
-          await PublishEventAsync(
-            "order_filled",
-            $"ENTRY GROUP FULLY FILLED {plan.Analysis.Direction} "
-            + $"lot={FormatEventLot(state.TotalFilledVolume, symbol)} "
-            + $"weighted={FormatEventPrice(state.GroupWeightedFillPrice, symbol)}",
-            plan,
-            cancellationToken,
-            positionId: state.PositionId,
-            price: state.GroupWeightedFillPrice,
-            volume: state.TotalFilledVolume,
-            eventKey: "entry_group_fully_filled",
-            state: TradePlanGroupStages.FullyOpen
-          );
-        }
-        else if (
-          changed
-          && state.Stage == TradePlanRuntimeStage.PartiallyOpen
-          && state.TotalFilledVolume > initial.TotalFilledVolume
-        )
-        {
-          var filledLegs = (state.Legs ?? [])
-            .Where(leg => leg.BrokerPositionId is not null)
-            .Select(leg => leg.LegId)
-            .ToArray();
-          var pendingLegs = (state.Legs ?? [])
-            .Where(leg => leg.BrokerOrderId is not null && leg.BrokerPositionId is null)
-            .Select(leg => leg.LegId)
-            .ToArray();
-          await PublishEventAsync(
-            "order_filled",
-            $"ENTRY {string.Join("/", filledLegs)} FILLED "
-            + $"lot={FormatEventLot(state.TotalFilledVolume, symbol)} "
-            + $"@ {FormatEventPrice(state.GroupWeightedFillPrice, symbol)}; "
-            + $"{string.Join("/", pendingLegs)} still pending",
-            plan,
-            cancellationToken,
-            positionId: state.PositionId,
-            price: state.GroupWeightedFillPrice,
-            volume: state.TotalFilledVolume,
-            eventKey: $"entry_partial_filled_{string.Join("_", filledLegs)}",
-            state: TradePlanGroupStages.PartiallyOpen
-          );
-        }
-        else if (
           changed
           && state.GroupStage == TradePlanGroupStages.Cancelled
           && initial.GroupStage != TradePlanGroupStages.Cancelled

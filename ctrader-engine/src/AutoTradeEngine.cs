@@ -6061,7 +6061,7 @@ public sealed class AutoTradeEngine(
     )
     {
       await _tradePlanRuntime.TryAdoptV7BrokerPositionAsync(
-        position, cancellationToken
+        _client, RequireSymbol(), position, cancellationToken
       );
       return;
     }
