@@ -6,7 +6,10 @@ from dataclasses import dataclass, field
 import math
 from typing import Any
 
-from app.autotrade.execution_route import resolve_execution_route_plan
+from app.autotrade.execution_route import (
+  ExecutionRoutePlan,
+  resolve_execution_route_plan,
+)
 from app.autotrade.protective_stop import (
   ProtectiveStopError,
   opposing_zone_context_from_values,
@@ -569,6 +572,32 @@ def planned_execution_route(
   return ROUTE_MARKET
 
 
+def _collapse_route_to_single_entry(route_plan: ExecutionRoutePlan) -> ExecutionRoutePlan:
+  """Honor scale_undersized_policy=single_entry when a shared group stop cannot fit."""
+  price = float(
+    route_plan.planned_leg_entry_prices[0]
+    if route_plan.planned_leg_entry_prices
+    else route_plan.planned_entry_price
+  )
+  route = (
+    ROUTE_MARKET
+    if route_plan.route in {ROUTE_MARKET, "market_with_limit_scale"}
+    else ROUTE_SINGLE_LIMIT
+  )
+  return ExecutionRoutePlan(
+    route,
+    price,
+    (price,),
+    route_plan.entry_geometry,
+    (
+      f"{route_plan.routing_reason}; "
+      "scale_undersized_policy=single_entry after group-stop envelope"
+    ),
+    True,
+    planned_leg_volume_ratios=(1.0,),
+  )
+
+
 def evaluate_execution_policy(
   match: Any,
   *,
@@ -742,137 +771,149 @@ def evaluate_execution_policy(
   sizing_risk_multiplier = match_risk_multiplier * policy.risk_multiplier
   if not math.isfinite(sizing_risk_multiplier) or sizing_risk_multiplier <= 0:
     sizing_risk_multiplier = 1.0
-  try:
-    strategy_name = str(getattr(match, "strategy", ""))
-    # Prefer effective remaining room (fitted / hybrid-capped) over the raw
-    # ladder max so reaction SL tracks what the trade can actually reach.
-    primary_tp = (
-      remaining_pips
-      if remaining_pips > 0
-      else primary_tp_pips_from_match(match)
-    )
-    # Known ahead of the stop-bounds call so a wide room never collapses
-    # [min, max] to a single point for a multi-leg group stop -- see
-    # stop_bounds_for_reaction_room's for_group_stop docstring note.
-    leg_prices = list(route_plan.planned_leg_entry_prices or ())
-    leg_ratios = list(route_plan.planned_leg_volume_ratios or ())
-    use_group_stop = (
-      len(leg_prices) >= 2
-      and len(leg_ratios) == len(leg_prices)
-      and (
-        entry_distribution == "zone_scale"
-        or is_scalp_strategy(
-          strategy_name,
-          family=str(getattr(match, "family", "") or ""),
-          strategy_mode=str(getattr(match, "strategy_mode", "") or ""),
+  strategy_name = str(getattr(match, "strategy", ""))
+  # Prefer effective remaining room (fitted / hybrid-capped) over the raw
+  # ladder max so reaction SL tracks what the trade can actually reach.
+  primary_tp = (
+    remaining_pips
+    if remaining_pips > 0
+    else primary_tp_pips_from_match(match)
+  )
+  scale_undersized_policy = str(
+    getattr(zone_scaling, "scale_undersized_policy", None) or "single_entry"
+  ).strip().lower()
+  collapsed_from_group_stop = False
+  use_group_stop = False
+  for stop_attempt in (0, 1):
+    try:
+      # Known ahead of the stop-bounds call so a wide room never collapses
+      # [min, max] to a single point for a multi-leg group stop -- see
+      # stop_bounds_for_reaction_room's for_group_stop docstring note.
+      leg_prices = list(route_plan.planned_leg_entry_prices or ())
+      leg_ratios = list(route_plan.planned_leg_volume_ratios or ())
+      use_group_stop = (
+        len(leg_prices) >= 2
+        and len(leg_ratios) == len(leg_prices)
+      )
+      (
+        minimum_stop_pips,
+        maximum_stop_pips,
+        stop_bounds_measured,
+      ) = stop_bounds_for_reaction_room(
+        strategy=strategy_name,
+        primary_tp_pips=primary_tp,
+        pip_size=pip,
+        cfg=cfg,
+        for_group_stop=use_group_stop,
+      )
+      if sizing_risk_multiplier > 1.0:
+        stop_bounds_measured = {
+          **stop_bounds_measured,
+          "stop_bounds_pre_sizing_min_pips": minimum_stop_pips,
+          "stop_bounds_pre_sizing_max_pips": maximum_stop_pips,
+          "sizing_risk_multiplier": sizing_risk_multiplier,
+        }
+        minimum_stop_pips = max(1, int(minimum_stop_pips / sizing_risk_multiplier))
+        maximum_stop_pips = max(
+          minimum_stop_pips, int(maximum_stop_pips / sizing_risk_multiplier),
+        )
+      sweep_extreme = (
+        trigger_wick_extreme
+        if trigger_wick_extreme is not None
+        else getattr(
+          match,
+          "sweep_low" if direction == "BUY" else "sweep_high",
+          None,
         )
       )
-    )
-    (
-      minimum_stop_pips,
-      maximum_stop_pips,
-      stop_bounds_measured,
-    ) = stop_bounds_for_reaction_room(
-      strategy=strategy_name,
-      primary_tp_pips=primary_tp,
-      pip_size=pip,
-      cfg=cfg,
-      for_group_stop=use_group_stop,
-    )
-    if sizing_risk_multiplier > 1.0:
-      stop_bounds_measured = {
-        **stop_bounds_measured,
-        "stop_bounds_pre_sizing_min_pips": minimum_stop_pips,
-        "stop_bounds_pre_sizing_max_pips": maximum_stop_pips,
-        "sizing_risk_multiplier": sizing_risk_multiplier,
-      }
-      minimum_stop_pips = max(1, int(minimum_stop_pips / sizing_risk_multiplier))
-      maximum_stop_pips = max(
-        minimum_stop_pips, int(maximum_stop_pips / sizing_risk_multiplier),
+      zone_low = (
+        opposing_zone_low
+        if opposing_zone_low is not None
+        else getattr(match, "opposing_zone_low", None)
       )
-    sweep_extreme = (
-      trigger_wick_extreme
-      if trigger_wick_extreme is not None
-      else getattr(
-        match,
-        "sweep_low" if direction == "BUY" else "sweep_high",
-        None,
+      zone_high = (
+        opposing_zone_high
+        if opposing_zone_high is not None
+        else getattr(match, "opposing_zone_high", None)
       )
-    )
-    zone_low = (
-      opposing_zone_low
-      if opposing_zone_low is not None
-      else getattr(match, "opposing_zone_low", None)
-    )
-    zone_high = (
-      opposing_zone_high
-      if opposing_zone_high is not None
-      else getattr(match, "opposing_zone_high", None)
-    )
-    zone_id = (
-      opposing_zone_id
-      if opposing_zone_id is not None
-      else getattr(match, "opposing_zone_id", None)
-      or getattr(match, "zone_id", None)
-    )
-    # Scalp (Range / HFS) with fitted target room ignores HTF opposing stop
-    # push/reject; native room is the gate. Envelope still applies.
-    if match_bypasses_opposing_structure(match):
-      zone_low = zone_high = zone_id = None
-    opposing_zone = opposing_zone_context_from_values(
-      opposing_zone_low=zone_low,
-      opposing_zone_high=zone_high,
-      opposing_zone_id=(
-        str(zone_id) if zone_id is not None else None
-      ),
-      direction=direction,
-      atr=atr,
-      pip_size=pip,
-      cfg=cfg,
-    )
-    digits = int(cfg.contract.instrument.price_digits)
-    structure_buffer_atr = float(cfg.execution.scaling.add.stop_buffer_atr)
-    wick_buffer_atr = float(cfg.execution.stops.wick_stop_buffer_atr)
-    if use_group_stop:
-      # Absolute group SL is structural (one price beyond zone/entries/swing).
-      # Envelope distance uses declared leg ratios as relative weights only —
-      # never a fake planning total lots. Live equity sizes broker volume later
-      # in C#; it must not reshape the published absolute stop.
-      stop_plan = plan_group_protective_stop(
+      zone_id = (
+        opposing_zone_id
+        if opposing_zone_id is not None
+        else getattr(match, "opposing_zone_id", None)
+        or getattr(match, "zone_id", None)
+      )
+      # Scalp (Range / HFS) with fitted target room ignores HTF opposing stop
+      # push/reject; native room is the gate. Envelope still applies.
+      if match_bypasses_opposing_structure(match):
+        zone_low = zone_high = zone_id = None
+      opposing_zone = opposing_zone_context_from_values(
+        opposing_zone_low=zone_low,
+        opposing_zone_high=zone_high,
+        opposing_zone_id=(
+          str(zone_id) if zone_id is not None else None
+        ),
         direction=direction,
-        entry_zone_low=low,
-        entry_zone_high=high,
-        planned_leg_prices=leg_prices,
-        resolved_leg_volumes=leg_ratios,
-        structure_swing=getattr(match, "structure_swing", None),
         atr=atr,
-        structure_buffer_atr=structure_buffer_atr,
-        sweep_extreme=sweep_extreme,
-        wick_buffer_atr=wick_buffer_atr,
-        minimum_stop_pips=minimum_stop_pips,
-        maximum_stop_pips=maximum_stop_pips,
         pip_size=pip,
-        digits=digits,
-        opposing_zone=opposing_zone,
+        cfg=cfg,
       )
-    else:
-      stop_plan = plan_protective_stop(
-        direction=direction,
-        entry_price=planned_entry,
-        structure_swing=getattr(match, "structure_swing", None),
-        atr=atr,
-        structure_buffer_atr=structure_buffer_atr,
-        sweep_extreme=sweep_extreme,
-        wick_buffer_atr=wick_buffer_atr,
-        minimum_stop_pips=minimum_stop_pips,
-        maximum_stop_pips=maximum_stop_pips,
-        pip_size=pip,
-        digits=digits,
-        opposing_zone=opposing_zone,
+      digits = int(cfg.contract.instrument.price_digits)
+      structure_buffer_atr = float(cfg.execution.scaling.add.stop_buffer_atr)
+      wick_buffer_atr = float(cfg.execution.stops.wick_stop_buffer_atr)
+      if use_group_stop:
+        # Absolute group SL is structural (one price beyond zone/entries/swing).
+        # Envelope distance uses declared leg ratios as relative weights only —
+        # never a fake planning total lots. Live equity sizes broker volume later
+        # in C#; it must not reshape the published absolute stop.
+        stop_plan = plan_group_protective_stop(
+          direction=direction,
+          entry_zone_low=low,
+          entry_zone_high=high,
+          planned_leg_prices=leg_prices,
+          resolved_leg_volumes=leg_ratios,
+          structure_swing=getattr(match, "structure_swing", None),
+          atr=atr,
+          structure_buffer_atr=structure_buffer_atr,
+          sweep_extreme=sweep_extreme,
+          wick_buffer_atr=wick_buffer_atr,
+          minimum_stop_pips=minimum_stop_pips,
+          maximum_stop_pips=maximum_stop_pips,
+          pip_size=pip,
+          digits=digits,
+          opposing_zone=opposing_zone,
+        )
+      else:
+        stop_plan = plan_protective_stop(
+          direction=direction,
+          entry_price=planned_entry,
+          structure_swing=getattr(match, "structure_swing", None),
+          atr=atr,
+          structure_buffer_atr=structure_buffer_atr,
+          sweep_extreme=sweep_extreme,
+          wick_buffer_atr=wick_buffer_atr,
+          minimum_stop_pips=minimum_stop_pips,
+          maximum_stop_pips=maximum_stop_pips,
+          pip_size=pip,
+          digits=digits,
+          opposing_zone=opposing_zone,
+        )
+      break
+    except ProtectiveStopError as exc:
+      can_collapse = (
+        stop_attempt == 0
+        and use_group_stop
+        and str(exc) == "stop_exceeds_envelope_furthest_leg"
+        and scale_undersized_policy == "single_entry"
       )
-  except ProtectiveStopError as exc:
-    stop_plan_error = str(exc)
-    stop_plan_error_measured = dict(getattr(exc, "measured", None) or {})
+      if can_collapse:
+        collapsed_from_group_stop = True
+        route_plan = _collapse_route_to_single_entry(route_plan)
+        planned_route = route_plan.route
+        planned_entry = float(route_plan.planned_entry_price)
+        continue
+      stop_plan_error = str(exc)
+      stop_plan_error_measured = dict(getattr(exc, "measured", None) or {})
+      break
   reward_risk = (
     max(0.0, remaining_pips) / float(stop_plan.final_stop_pips)
     if stop_plan is not None and stop_plan.final_stop_pips > 0
@@ -935,6 +976,7 @@ def evaluate_execution_policy(
     "absolute_target_price": absolute_target,
     "planned_entry_price": round(planned_entry, 6),
     "planned_stop_error": stop_plan_error,
+    "collapsed_to_single_entry": collapsed_from_group_stop,
     "entry_plan_version": ENTRY_PLAN_VERSION,
     "regime": normalized_regime or "unknown",
     "permitted_regimes": list(policy.permitted_regimes),
@@ -964,6 +1006,7 @@ def evaluate_execution_policy(
     known_stop_errors = {
       "stop_exceeds_envelope_after_wick",
       "stop_exceeds_max_envelope",
+      "stop_exceeds_envelope_furthest_leg",
       "stop_inside_opposing_zone",
       "stop_inside_entry_zone",
       "stop_not_beyond_planned_entries",

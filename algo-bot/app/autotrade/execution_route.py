@@ -15,7 +15,6 @@ from app.autotrade.strategy_taxonomy import (
   REACTION_STRATEGIES,
   is_reaction_strategy,
   is_scalp_strategy,
-  is_technique_or_confluence,
 )
 
 # AE-style scalp: one structural zone, five equal clips (not one full lot).
@@ -299,10 +298,14 @@ def resolve_execution_route_plan(
       planned_leg_volume_ratios=reaction_ratios,
     )
 
+  # Five equal clips span the full zone. Technique/FVG/Confluence share one
+  # 40–60 pip group stop; a 5-price clipped FVG then places the furthest
+  # clip ~50 pips past the nearest and always fails furthest_leg. Keep the
+  # micro-grid on HFS / range scalp only — they use a native scalp envelope.
   if is_scalp_strategy(
     str(strategy or ""),
     family=strategy_family,
-  ) or is_technique_or_confluence(str(strategy or "")):
+  ):
     grid = scalp_micro_grid_legs(
       side=side, low=low, high=high, quote=quote, digits=digits,
     )
