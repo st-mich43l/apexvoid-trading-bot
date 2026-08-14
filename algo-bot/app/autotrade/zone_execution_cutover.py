@@ -508,12 +508,24 @@ def _decisive_break_from_close(record: ZoneWatch, close: float | None) -> bool:
   return price > record.high
 
 
-async def _closed_bar_decisive_break(client: Any, record: ZoneWatch) -> bool:
+def _ohlc_source(
+  client: Any,
+  source: RedisOHLCSource | None = None,
+) -> RedisOHLCSource:
+  return source if source is not None else RedisOHLCSource(client)
+
+
+async def _closed_bar_decisive_break(
+  client: Any,
+  record: ZoneWatch,
+  *,
+  source: RedisOHLCSource | None = None,
+) -> bool:
   """Load latest closed bar and test far-edge invalidation."""
   tf = str(record.source_timeframe or "M5").upper() or "M5"
   try:
-    source = RedisOHLCSource(client)
-    frame = await source.window(record.symbol, tf, max(3, window_for_timeframe(tf)))
+    ohlc = _ohlc_source(client, source)
+    frame = await ohlc.window(record.symbol, tf, max(3, window_for_timeframe(tf)))
   except Exception:
     log.exception(
       "closed-bar decisive_break load failed symbol=%s zone_id=%s tf=%s",
@@ -632,6 +644,7 @@ async def _prepare_activation(
   analysis_context: Any | None = None,
   chase_pips: float | None = None,
   maximum_chase_pips: float | None = None,
+  source: RedisOHLCSource | None = None,
 ) -> StrategyMatch | None:
   """Return a stamped match ready to activate, or None while waiting/blocked."""
   now = quote[2]
@@ -704,14 +717,16 @@ async def _prepare_activation(
     )
     return None
 
-  trigger = await _m1_trigger_for_zone(client, record)
+  trigger = await _m1_trigger_for_zone(client, record, source=source)
   range_bounds = await _resolve_location_range_bounds(
     client,
     symbol=record.symbol,
     zone_id=record.zone_id,
     analysis_context=analysis_context,
   )
-  decisive_break = await _closed_bar_decisive_break(client, record)
+  decisive_break = await _closed_bar_decisive_break(
+    client, record, source=source,
+  )
   location, activation, context = _location_and_activation_for_record(
     match=match,
     record=record,
@@ -1101,6 +1116,7 @@ async def _activate_match(
   match: StrategyMatch,
   *,
   event_ts: str,
+  source: RedisOHLCSource | None = None,
 ):
   from app.autotrade import worker
   from app.autotrade.setup_lifecycle import (
@@ -1121,7 +1137,9 @@ async def _activate_match(
   access = _scalp_access(record, quote, strategy=match.strategy)
   evidence = access.evidence
   if not access.executable:
-    decisive_break = await _closed_bar_decisive_break(client, record)
+    decisive_break = await _closed_bar_decisive_break(
+      client, record, source=source,
+    )
     log.info(
       "zone activate remain symbol=%s strategy=%s zone_id=%s "
       "reason=%s mode=%s distance_pips=%s max_chase=%s decisive_break=%s",
@@ -1263,9 +1281,11 @@ async def _activate_match(
 async def _m1_trigger_for_zone(
   client: Any,
   record: ZoneWatch,
+  *,
+  source: RedisOHLCSource | None = None,
 ) -> Any | None:
-  source = RedisOHLCSource(client)
-  frame = await source.window(record.symbol, "M1", window_for_timeframe("M1"))
+  ohlc = _ohlc_source(client, source)
+  frame = await ohlc.window(record.symbol, "M1", window_for_timeframe("M1"))
   if frame.empty or record.zone_entered_at is None:
     return None
   trigger = evaluate_m1_trigger_window(
@@ -1294,6 +1314,7 @@ async def _evaluate_record(
   *,
   event_ts: str,
   quote: tuple[float, float, int] | None = None,
+  source: RedisOHLCSource | None = None,
 ) -> StrategyMatch | None:
   if record.state in TERMINAL_ZONE_WATCH_STATES | LOCKED_ZONE_WATCH_STATES:
     return None
@@ -1305,7 +1326,9 @@ async def _evaluate_record(
     return None
   access = _scalp_access(record, quote, strategy=match.strategy)
   evidence = access.evidence
-  decisive_break = await _closed_bar_decisive_break(client, record)
+  decisive_break = await _closed_bar_decisive_break(
+    client, record, source=source,
+  )
   record, _entered = await record_zone_presence(
     client,
     record.zone_id,
@@ -1328,11 +1351,14 @@ async def _evaluate_record(
     analysis_context=None,
     chase_pips=access.chase_pips,
     maximum_chase_pips=access.maximum_chase_pips,
+    source=source,
   )
   if prepared is None:
     # Keep ZoneWatch active; do not persist / publish / create lifecycle.
     return None
-  return await _activate_match(client, record, prepared, event_ts=event_ts)
+  return await _activate_match(
+    client, record, prepared, event_ts=event_ts, source=source,
+  )
 
 
 async def _sync_strategy_match_cutover(
@@ -1633,6 +1659,7 @@ async def evaluate_active_zone_watches(
   *,
   symbol: str,
   event_ts: str,
+  source: RedisOHLCSource | None = None,
 ) -> StrategyMatch | None:
   records = await list_active_zone_watches(client, symbol=symbol)
   _cache_spot_zone_bands(symbol, records)
@@ -1682,6 +1709,7 @@ async def evaluate_active_zone_watches(
       record,
       event_ts=event_ts,
       quote=quote,
+      source=source,
     )
     if activated is not None:
       return activated

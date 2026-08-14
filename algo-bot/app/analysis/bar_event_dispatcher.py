@@ -41,8 +41,9 @@ async def dispatch_closed_bar(
 
   Existing ZoneWatches and HFS must not wait on scanner detectors. Scanner
   still runs before the worker because the worker reads this bar's matches.
-  HFS/scanner/worker share one OHLC window cache for this bar; ZoneWatch
-  still runs first so prefetch cannot delay activation.
+  ZoneWatch, HFS, scanner, and worker share one OHLC window cache for this
+  bar. ZoneWatch still runs first so full HTF prefetch cannot delay
+  activation.
   """
   parsed = parse_closed_bar(data)
   if parsed is None:
@@ -68,7 +69,9 @@ async def dispatch_closed_bar(
 
       await _run(
         "zone_watch",
-        evaluate_active_zone_watches(client, symbol=symbol, event_ts=event_ts),
+        evaluate_active_zone_watches(
+          client, symbol=symbol, event_ts=event_ts, source=source,
+        ),
       )
 
     try:
