@@ -1716,6 +1716,26 @@ async def evaluate_active_zone_watches(
   return None
 
 
+async def evaluate_spot_zone_watches(
+  client: Any,
+  *,
+  symbol: str,
+  event_ts: str,
+) -> StrategyMatch | None:
+  """Spot-loop eval: one OHLC cache so every active zone shares M1/M5."""
+  source = RedisOHLCSource(client)
+  source.begin_closed_bar_cache()
+  try:
+    return await evaluate_active_zone_watches(
+      client,
+      symbol=symbol,
+      event_ts=event_ts,
+      source=source,
+    )
+  finally:
+    source.end_closed_bar_cache()
+
+
 async def zone_watch_execution_loop() -> None:
   """Wake retained zones on sub-second spot updates.
 
@@ -1759,7 +1779,7 @@ async def zone_watch_execution_loop() -> None:
             continue
           _SPOT_IN_ZONE_EVALUATED[symbol] = True
         last_spot_eval_monotonic[symbol] = now
-        await evaluate_active_zone_watches(
+        await evaluate_spot_zone_watches(
           client,
           symbol=symbol,
           event_ts=parts[1],

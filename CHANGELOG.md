@@ -13,6 +13,10 @@ dated section after deployment.
 ## Unreleased
 
 ### Changed
+- Spot-loop ZoneWatch reuses one OHLC window cache per eval so several
+  active zones do not each ZRANGE M1/M5.
+
+### Changed
 - Closed-bar dispatcher no longer prefetches H1/M15/M5 on every M1. ZoneWatch
   and HFS fill the shared cache on demand. M5 still prefetches M1/M5/M15/H1
   for scanner.
