@@ -159,11 +159,18 @@ def _last_tp_floor_pips(sig: dict) -> int:
   return pips_between(sig, float(tps[-1]))
 
 
+# SELL VIP cards post whole handles (4323.00). Exit is ask, which sits a
+# few ticks above bid when the handle prints. A 1.0-price cushion booked
+# ~10 XAU pips early (prod 2026-08-14 #3: TP1 +22 vs posted +30). Keep a
+# one-pip spread cushion only.
+SELL_WHOLE_TP_HANDLE_CUSHION = 0.10
+
+
 def _tp_hit(touch: float, tp: float, is_buy: bool) -> bool:
   if is_buy:
     return touch >= tp
   if float(tp).is_integer():
-    return touch < tp + 1.0
+    return touch < tp + SELL_WHOLE_TP_HANDLE_CUSHION
   return touch <= tp
 
 
