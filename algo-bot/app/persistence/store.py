@@ -22,6 +22,10 @@ manual_signals
   Status flow:
     open  ──► closed     (via DM "close <id> +pips" or reply "+pips" to channel post)
         ──► cancelled  (via DM "cancel <id>" or reply "cancel" to channel post)
+
+manual_algo_charts
+  Redis OHLC windows (M1/M5/M15/H1) captured at issue, fill, and close for each
+  VIP/manual signal so later formula fitting uses the same tape the owner measured.
 """
 
 import json
@@ -235,6 +239,26 @@ async def init_db() -> None:
     await db.execute(
       "CREATE INDEX IF NOT EXISTS idx_manual_signals_symbol_trade_date "
       "ON manual_signals(symbol, trade_date)"
+    )
+    await db.execute(
+      """
+      CREATE TABLE IF NOT EXISTS manual_algo_charts (
+        id            BIGSERIAL PRIMARY KEY,
+        signal_id     BIGINT NOT NULL REFERENCES manual_signals(id),
+        event         TEXT   NOT NULL,
+        captured_at   BIGINT NOT NULL,
+        symbol        TEXT   NOT NULL,
+        timeframe     TEXT   NOT NULL,
+        window_start  BIGINT NOT NULL,
+        window_end    BIGINT NOT NULL,
+        bars          JSONB  NOT NULL,
+        UNIQUE (signal_id, event, timeframe)
+      )
+      """
+    )
+    await db.execute(
+      "CREATE INDEX IF NOT EXISTS idx_manual_algo_charts_signal "
+      "ON manual_algo_charts(signal_id, event)"
     )
     await db.execute(
       "CREATE INDEX IF NOT EXISTS idx_manual_signals_parent_id "
@@ -914,6 +938,12 @@ async def store_manual_signal(
         channel_message_id, daily_seq, trade_date, parent_id,
         setup_type, confluence, symbol, visibility, execution_mode,
       )
+  await _safe_snapshot_manual_chart(
+    signal_id=int(new_id),
+    event="issued",
+    ts=int(ts),
+    symbol=symbol,
+  )
   return {
     "id": new_id,
     "daily_seq": daily_seq,
@@ -1083,6 +1113,67 @@ async def get_untagged_signals(limit: int = 20) -> list[dict]:
   return [_decode_signal(row) for row in rows]
 
 
+async def upsert_manual_algo_chart(
+  *,
+  signal_id: int,
+  event: str,
+  captured_at: int,
+  symbol: str,
+  timeframe: str,
+  window_start: int,
+  window_end: int,
+  bars: list,
+) -> None:
+  """Idempotent OHLC snapshot for one signal event and timeframe."""
+  async with _connect() as db:
+    await db.execute(
+      """
+      INSERT INTO manual_algo_charts
+        (signal_id, event, captured_at, symbol, timeframe,
+         window_start, window_end, bars)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
+      ON CONFLICT (signal_id, event, timeframe) DO UPDATE SET
+        captured_at = excluded.captured_at,
+        symbol = excluded.symbol,
+        window_start = excluded.window_start,
+        window_end = excluded.window_end,
+        bars = excluded.bars
+      """,
+      signal_id,
+      event,
+      captured_at,
+      symbol,
+      timeframe,
+      window_start,
+      window_end,
+      json.dumps(bars),
+    )
+
+
+async def _safe_snapshot_manual_chart(
+  *,
+  signal_id: int,
+  event: str,
+  ts: int,
+  symbol: str = "XAU",
+) -> None:
+  """Never fail the Telegram/fill path if Redis or chart write is empty."""
+  try:
+    from app.signals.manual_algo_chart import snapshot_manual_algo_chart
+    await snapshot_manual_algo_chart(
+      signal_id=signal_id,
+      event=event,
+      ts=ts,
+      symbol=symbol,
+    )
+  except Exception:
+    log.exception(
+      "manual_algo_chart snapshot failed signal=%s event=%s",
+      signal_id,
+      event,
+    )
+
+
 async def get_manual_signal(row_id: int) -> dict | None:
   """Return one signal by primary key, regardless of lifecycle state."""
   async with _connect() as db:
@@ -1222,6 +1313,7 @@ async def close_leg(
   frac: float | None = None,
 ) -> dict | None:
   """Book one scale-out leg and close the signal when no size remains."""
+  snapshot_close: tuple[int, int, str] | None = None
   async with _connect() as db:
     async with db.transaction():
       row = await db.fetchrow(
@@ -1263,26 +1355,35 @@ async def close_leg(
           "closed_at = $2, legs = $3 WHERE id = $4 AND status = 'open'",
           achieved, now, json.dumps(legs), row_id,
         )
-        return {
+        snapshot_close = (int(row_id), now, str(row["symbol"] or "XAU"))
+        result = {
           **result_base,
           "closed": True,
           "net": achieved,
           "remaining": 0.0,
           "frac": close_frac,
         }
-
-      await db.execute(
-        "UPDATE manual_signals SET legs = $1 "
-        "WHERE id = $2 AND status = 'open'",
-        json.dumps(legs), row_id,
-      )
-    return {
-      **result_base,
-      "closed": False,
-      "net": achieved,
-      "remaining": new_remaining,
-      "frac": close_frac,
-    }
+      else:
+        await db.execute(
+          "UPDATE manual_signals SET legs = $1 "
+          "WHERE id = $2 AND status = 'open'",
+          json.dumps(legs), row_id,
+        )
+        result = {
+          **result_base,
+          "closed": False,
+          "net": achieved,
+          "remaining": new_remaining,
+          "frac": close_frac,
+        }
+  if snapshot_close is not None:
+    await _safe_snapshot_manual_chart(
+      signal_id=snapshot_close[0],
+      event="closed",
+      ts=snapshot_close[1],
+      symbol=snapshot_close[2],
+    )
+  return result
 
 
 async def update_sl(row_id: int, price: float) -> dict | None:
@@ -1369,7 +1470,15 @@ async def set_execution_fill(
       "RETURNING *",
       str(broker_position_id), broker_fill_price, signal_id,
     )
-  return _decode_signal(row) if row else None
+  decoded = _decode_signal(row) if row else None
+  if decoded is not None:
+    await _safe_snapshot_manual_chart(
+      signal_id=int(signal_id),
+      event="filled",
+      ts=int(time.time()),
+      symbol=str(decoded.get("symbol") or "XAU"),
+    )
+  return decoded
 
 
 async def get_signal_by_execution_intent_id(intent_token: str) -> dict | None:
@@ -1423,12 +1532,19 @@ async def close_manual_signal(row_id: int, result_pips: int) -> dict | None:
       )
       if row is None:
         return None
+      closed_at = int(time.time())
       await db.execute(
         "UPDATE manual_signals SET status = 'closed', result_pips = $1, "
         "closed_at = $2 WHERE id = $3",
-        result_pips, int(time.time()), row_id,
+        result_pips, closed_at, row_id,
       )
-    return dict(row)
+  await _safe_snapshot_manual_chart(
+    signal_id=int(row_id),
+    event="closed",
+    ts=closed_at,
+    symbol=str(row["symbol"] or "XAU"),
+  )
+  return dict(row)
 
 
 async def cancel_manual_signal_by_channel_id(channel_message_id: int) -> dict | None:
