@@ -7,7 +7,8 @@ from zoneinfo import ZoneInfo
 
 from app.core.symbols import pip_for
 
-_SPARKS = "▁▂▃▄▅▆▇█"
+_SPARKS = "▁▂▃▄▅▆▇"
+_SPARK_WIDTH = 22
 
 
 def _number(value: float | int | None) -> str:
@@ -181,16 +182,31 @@ def format_review(cluster: list[dict]) -> str:
   return "\n".join(lines)
 
 
-def sparkline(values: list[int]) -> str:
-  """Scale cumulative values into one dependency-free block per trade."""
+def _downsample_equity(values: list[int], width: int = _SPARK_WIDTH) -> list[int]:
+  """Keep one point per column so Telegram never wraps a 200-trade spark."""
+  count = len(values)
+  if count <= width:
+    return list(values)
+  sampled: list[int] = []
+  for index in range(width):
+    end = max(1, (index + 1) * count // width)
+    sampled.append(values[end - 1])
+  return sampled
+
+
+def sparkline(values: list[int], width: int = _SPARK_WIDTH) -> str:
+  """Scale cumulative equity into a single Telegram-safe sparkline."""
   if not values:
     return "—"
-  low, high = min(values), max(values)
+  series = _downsample_equity(values, width)
+  low, high = min(series), max(series)
   if low == high:
-    return _SPARKS[len(_SPARKS) // 2] * len(values)
+    return _SPARKS[len(_SPARKS) // 2] * len(series)
+  span = high - low
+  last = len(_SPARKS) - 1
   return "".join(
-    _SPARKS[round((value - low) * (len(_SPARKS) - 1) / (high - low))]
-    for value in values
+    _SPARKS[round((value - low) * last / span)]
+    for value in series
   )
 
 
@@ -596,7 +612,8 @@ def format_stats(stats: dict, period: str) -> str:
   lines.extend([
     "",
     "📈 Equity (combined unique)",
-    f"{sparkline(stats['cumulative'])}  {_signed_p(stats['net'])}",
+    sparkline(stats["cumulative"]),
+    f"└─ {_signed_p(stats['net'])}",
     "━━━━━━━━━━━━━━━━━━━━━━",
     "🤖 Apex Void · stats",
   ])
