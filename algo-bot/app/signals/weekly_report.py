@@ -146,7 +146,8 @@ def format_weekly_recap(
     *_branch_lines(stats["by_session"], "session"),
     "",
     "📈 Equity (combined unique)",
-    f"{sparkline(stats['cumulative'])}  {_signed(stats['net'])}",
+    sparkline(stats["cumulative"]),
+    f"└─ {_signed(stats['net'])}",
     _SEP,
     "🤖 Apex Void · weekly recap",
   ]
