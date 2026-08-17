@@ -1404,6 +1404,69 @@ async def update_sl(row_id: int, price: float) -> dict | None:
     return dict(row)
 
 
+async def update_pending_levels(
+  row_id: int,
+  *,
+  entry: float | None = None,
+  entry_end: float | None = None,
+  sl: float | None = None,
+  tps: list[float] | None = None,
+) -> dict | None:
+  """Rewrite entry/SL/TPs on an unfilled open signal; return the updated row.
+
+  Only ``status=open`` + ``fill_state=pending`` rows are eligible. When SL
+  changes, ``original_sl`` tracks the new stop so reopen/BE stay consistent.
+  """
+  if entry is None and entry_end is None and sl is None and tps is None:
+    return None
+  async with _connect() as db:
+    async with db.transaction():
+      row = await db.fetchrow(
+        "SELECT * FROM manual_signals WHERE id = $1 AND status = 'open' "
+        "AND fill_state = 'pending' FOR UPDATE",
+        row_id,
+      )
+      if row is None:
+        return None
+      next_entry = float(row["entry"] if entry is None else entry)
+      next_end = row["entry_end"] if entry_end is None else entry_end
+      if next_end is None:
+        next_end = next_entry
+      next_end = float(next_end)
+      if next_entry > next_end:
+        next_entry, next_end = next_end, next_entry
+      next_sl = float(row["sl"] if sl is None else sl)
+      next_tps = (
+        list(tps)
+        if tps is not None
+        else json.loads(row["tps"] or "[]")
+      )
+      await db.execute(
+        "UPDATE manual_signals SET entry = $1, entry_end = $2, sl = $3, "
+        "original_sl = CASE WHEN $4 THEN $3 ELSE original_sl END, "
+        "tps = $5 WHERE id = $6 AND status = 'open' "
+        "AND fill_state = 'pending'",
+        next_entry,
+        next_end,
+        next_sl,
+        sl is not None,
+        json.dumps(next_tps),
+        row_id,
+      )
+      updated = await db.fetchrow(
+        "SELECT * FROM manual_signals WHERE id = $1", row_id,
+      )
+  return _decode_signal(updated) if updated else None
+
+
+async def clear_signal_posts(signal_id: int) -> None:
+  """Drop persisted post rows so broadcast_entry can post fresh cards."""
+  async with _connect() as db:
+    await db.execute(
+      "DELETE FROM signal_posts WHERE signal_id = $1", signal_id,
+    )
+
+
 async def set_execution_intent(
   signal_id: int,
   *,

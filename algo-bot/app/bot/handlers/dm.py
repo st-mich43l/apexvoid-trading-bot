@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import re
 from datetime import datetime
 from html import escape
 from zoneinfo import ZoneInfo
@@ -37,6 +38,7 @@ from app.signals.parsing import (
   _is_owner,
   _num,
   _parse_close,
+  _parse_modify_body,
   _period_range,
   _resolve_any_sid,
   _resolve_sid,
@@ -52,6 +54,7 @@ from app.signals.trade_ops import (
   do_cancel,
   do_close,
   do_delete,
+  do_modify,
   do_note,
   do_reopen,
   do_sl,
@@ -72,6 +75,7 @@ _HELP_TEXT = """<b>Trade controls</b>
 <code>close #id ±pips [%] | be</code>
 <code>sl #id be|price</code>
 <code>cancel #id</code>
+<code>modify #id entry … sl … tp …</code>
 <code>reopen #id [lo-hi]</code>
 <code>tag #id &lt;setup&gt; [***]</code>
 <code>note #id &lt;text&gt;</code>
@@ -85,6 +89,7 @@ _HELP_TEXT = """<b>Trade controls</b>
 <code>/trade_sl [SYMBOL] #id be|price</code>
 <code>/trade_cancel [SYMBOL] #id</code>
 <code>/trade_delete [SYMBOL] #id</code>
+<code>/trade_modify [SYMBOL] #id entry lo-hi sl X tp a/b/c</code>
 <code>/trade_reopen [SYMBOL] #id [lo-hi]</code>
 <code>/trade_tag [SYMBOL] #id|id:DB_ID &lt;setup&gt; [***]</code>
 <code>/trade_untagged [N]</code>
@@ -519,6 +524,52 @@ async def handle_trade_delete(msg: Message) -> None:
   # Pending algo delete waits for broker cancel confirm; the confirmation
   # handler hard-deletes and DMs 🗑 deleted. Ack only in DM here so we do
   # not pretend the channel card is already gone.
+  if result.get("pending"):
+    await msg.answer(render_result(result, symbol, "vip"))
+  else:
+    await msg.answer(await post_result(result, symbol))
+
+
+@router.message(Command("trade_modify"), F.chat.type == "private")
+async def handle_trade_modify(msg: Message) -> None:
+  if not _is_owner(msg):
+    return
+  symbol, raw = _take_symbol(_command_args(msg))
+  seq = _seq_token(raw)
+  if seq is None:
+    await msg.answer(
+      "Usage: <code>/trade_modify [SYMBOL] #N "
+      "entry lo-hi sl X tp a/b/c</code>"
+    )
+    return
+  # Strip the leading #N so the remaining body is entry/sl/tp fragments.
+  body = re.sub(r"^#?\d+\s*", "", raw.strip(), count=1)
+  sid = await _resolve_sid(seq, None, symbol)
+  if sid is None:
+    await msg.answer("⚠️ Signal not found.")
+    return
+  signal = await get_manual_signal(sid)
+  if signal is None:
+    await msg.answer("⚠️ Signal not found.")
+    return
+  fields = _parse_modify_body(
+    body,
+    action=signal["action"],
+    entry=float(signal["entry"]),
+    entry_end=signal.get("entry_end"),
+  )
+  if fields is None:
+    await msg.answer(
+      "Usage: <code>/trade_modify [SYMBOL] #N "
+      "entry lo-hi sl X tp a/b/c</code>"
+    )
+    return
+  result = await do_modify({
+    "sid": sid,
+    "symbol": symbol,
+    "reply_to": None,
+    **fields,
+  })
   if result.get("pending"):
     await msg.answer(render_result(result, symbol, "vip"))
   else:

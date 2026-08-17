@@ -8,20 +8,24 @@ from app.signals.parsing import (
   _CANCEL_RE,
   _CLOSE_RE,
   _CLOSEBE_RE,
+  _MODIFY_RE,
   _NOTE_RE,
   _REOPEN_RE,
   _SL_RE,
   _TAG_RE,
   _parse_close,
+  _parse_modify_body,
   _resolve_any_sid,
   _resolve_sid,
 )
 from app.core.symbols import symbol_for_channel, tier_for_channel
 from app.bot.client import delete_message, send_with_retry
+from app.persistence.store import get_manual_signal
 from app.signals.trade_ops import (
   do_active,
   do_cancel,
   do_close,
+  do_modify,
   do_note,
   do_reopen,
   do_sl,
@@ -185,6 +189,53 @@ async def handle_channel_reopen(msg: Message) -> None:
     await _delete_command(msg)
     return
   await post_result(result, symbol)
+  await _delete_command(msg)
+
+
+@router.channel_post(F.text.regexp(_MODIFY_RE), F.reply_to_message)
+async def handle_channel_modify(msg: Message) -> None:
+  symbol = _channel_symbol(msg)
+  if symbol is None:
+    return
+  match = _MODIFY_RE.match(msg.text or "")
+  if match is None:
+    return
+  explicit_seq = int(match.group(1)) if match.group(1) else None
+  reply_to = msg.reply_to_message.message_id
+  sid = await _resolve_sid(explicit_seq, reply_to, symbol)
+  if sid is None:
+    return
+  signal = await get_manual_signal(sid)
+  if signal is None:
+    return
+  fields = _parse_modify_body(
+    match.group(2) or "",
+    action=signal["action"],
+    entry=float(signal["entry"]),
+    entry_end=signal.get("entry_end"),
+  )
+  if fields is None:
+    await send_with_retry(
+      "⚠️ modify needs entry, sl, and/or tp",
+      reply_to=reply_to,
+      chat_id=msg.chat.id,
+    )
+    await _delete_command(msg)
+    return
+  result = await do_modify({
+    "sid": sid,
+    "symbol": symbol,
+    "reply_to": reply_to,
+    **fields,
+  })
+  if result.get("pending") or not result.get("ok"):
+    await send_with_retry(
+      render_result(result, symbol, "vip"),
+      reply_to=reply_to,
+      chat_id=msg.chat.id,
+    )
+  else:
+    await post_result(result, symbol)
   await _delete_command(msg)
 
 

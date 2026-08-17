@@ -59,6 +59,10 @@ def _pending_delete_key(intent_id: str) -> str:
   return f"manual_trade:pending_delete:{intent_id}"
 
 
+def _pending_modify_key(intent_id: str) -> str:
+  return f"manual_trade:pending_modify:{intent_id}"
+
+
 async def mark_pending_delete(intent_id: str) -> None:
   """Remember /trade_delete so manual_cancelled hard-deletes, not cancels."""
   client = redis_state.get_client()
@@ -68,6 +72,22 @@ async def mark_pending_delete(intent_id: str) -> None:
 async def consume_pending_delete(intent_id: str) -> bool:
   client = redis_state.get_client()
   key = _pending_delete_key(intent_id)
+  raw = await client.get(key)
+  if raw is None:
+    return False
+  await client.delete(key)
+  return True
+
+
+async def mark_pending_modify(intent_id: str) -> None:
+  """Remember /trade_modify so manual_cancelled re-arms instead of cancel."""
+  client = redis_state.get_client()
+  await client.set(_pending_modify_key(intent_id), "1", ex=3600)
+
+
+async def consume_pending_modify(intent_id: str) -> bool:
+  client = redis_state.get_client()
+  key = _pending_modify_key(intent_id)
   raw = await client.get(key)
   if raw is None:
     return False
@@ -494,6 +514,7 @@ async def _handle_stop_moved(event: dict, signal_id: int) -> None:
 
 async def _handle_manual_cancelled(event: dict) -> None:
   from app.signals import trade_ops
+  from app.persistence.store import get_manual_signal
 
   candidate_id = event.get("candidate_id")
   if not candidate_id:
@@ -504,6 +525,22 @@ async def _handle_manual_cancelled(event: dict) -> None:
     log.warning(
       "manual_cancelled event: no signal for intent token %s", candidate_id,
     )
+    return
+  # /trade_modify: levels already updated — re-arm a bumped intent and
+  # replace VIP/public cards. Do not cancel the signal lifecycle.
+  if await consume_pending_modify(intent_token):
+    fresh = await get_manual_signal(sig["id"]) or sig
+    rearmed = await trade_ops._rearm_algo_after_modify(fresh)
+    if rearmed is None:
+      await _send_executor_truth(
+        f"⚠️ #{fresh.get('daily_seq') or fresh['id']} modify re-arm failed",
+      )
+      return
+    result = await trade_ops._finish_modify(rearmed)
+    text = trade_ops.render_result(
+      result, rearmed.get("symbol", "XAU"), "vip",
+    )
+    await _send_executor_truth(text)
     return
   # /trade_delete asked to remove the typo card after broker cancel — not
   # leave a cancelled lifecycle row. Cancel path stays for /trade_cancel.

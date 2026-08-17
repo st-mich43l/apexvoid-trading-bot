@@ -97,6 +97,26 @@ async def delete_posts(posts: list[dict]) -> None:
       )
 
 
+async def replace_entry_posts(
+  sig: dict,
+  render_fn: Callable[[str], str] | None = None,
+  sticker: str | None = None,
+) -> list[dict]:
+  """Delete prior VIP/public entry cards and post a fresh entry message.
+
+  Keeps the same signal id / daily_seq. ``broadcast_entry`` skips channels
+  that already have ``signal_posts`` rows, so those rows are cleared first.
+  """
+  from app.persistence.store import clear_signal_posts, get_signal_posts
+
+  signal_id = int(sig["id"])
+  old_posts = await get_signal_posts(signal_id)
+  if old_posts:
+    await delete_posts(old_posts)
+  await clear_signal_posts(signal_id)
+  return await broadcast_entry(sig, render_fn=render_fn, sticker=sticker)
+
+
 async def broadcast_entry(
   sig: dict,
   render_fn: Callable[[str], str] | None = None,

@@ -49,6 +49,10 @@ OWNER_COMMANDS = [
   BotCommand(command="trade_sl", description="[SYMBOL] #id be|price"),
   BotCommand(command="trade_cancel", description="[SYMBOL] #id"),
   BotCommand(command="trade_delete", description="[SYMBOL] #id — remove a typo"),
+  BotCommand(
+    command="trade_modify",
+    description="[SYMBOL] #id entry/sl/tp — pending only",
+  ),
   BotCommand(command="trade_reopen", description="[SYMBOL] #id [lo-hi]"),
   BotCommand(command="trade_tag", description="[SYMBOL] #id|id:DB_ID setup"),
   BotCommand(command="trade_untagged", description="[N] — setup backfill list"),

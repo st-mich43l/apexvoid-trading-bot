@@ -91,6 +91,14 @@ _NOTE_RE = re.compile(r'(?is)^\s*note\s+#?(\d+)\s+(.+?)\s*$')
 _TP_RE = re.compile(
   r'(?i)^\s*tp\s+#?(\d+)\s+(?:tp)?(\d+)\s+\+(\d+)\s*(?:pips?)?\s*$'
 )
+_MODIFY_RE = re.compile(
+  r'(?is)^\s*modify(?:\s+#?(\d+))?\s+(.+?)\s*$'
+)
+_MODIFY_ENTRY_RE = re.compile(
+  r'(?i)\bentry(?:\s*zone)?\s*([\d.]+)\s*[-–]\s*([\d.]+)'
+)
+_MODIFY_SL_RE = re.compile(r'(?i)\bsl\s+([\d.]+)')
+_MODIFY_TP_RE = re.compile(r'(?i)\btp\s+([\d./\s]+)')
 
 
 def _expand_entry_endpoint(value: float, anchor: float) -> float:
@@ -348,6 +356,48 @@ def _parse_close(text: str) -> tuple[int | None, int, float | None] | None:
     seq = int(match.group(1)) if match.group(1) else None
     return seq, 0, None
   return None
+
+
+def _parse_modify_body(
+  body: str,
+  *,
+  action: str,
+  entry: float,
+  entry_end: float | None,
+) -> dict | None:
+  """Parse ``entry lo-hi sl X tp a/b/c`` fragments for /trade_modify.
+
+  Returns a dict with optional ``entry``, ``entry_end``, ``sl``, ``tps`` keys,
+  or ``None`` when nothing recognizable is present.
+  """
+  text = (body or "").strip()
+  if not text:
+    return None
+  out: dict = {}
+  entry_match = _MODIFY_ENTRY_RE.search(text)
+  if entry_match:
+    anchor = float(entry_match.group(1))
+    other = _expand_entry_endpoint(float(entry_match.group(2)), anchor)
+    lo, hi = sorted((anchor, other))
+    out["entry"] = lo
+    out["entry_end"] = hi
+  sl_match = _MODIFY_SL_RE.search(text)
+  if sl_match:
+    out["sl"] = float(sl_match.group(1))
+  tp_match = _MODIFY_TP_RE.search(text)
+  if tp_match:
+    rr = float(entry if action.upper() == "SELL" else (entry_end or entry))
+    if "entry" in out:
+      rr = out["entry"] if action.upper() == "SELL" else out["entry_end"]
+    raw_tps = re.split(r"[/\s]+", tp_match.group(1).strip())
+    tps = [
+      _expand_tp(float(token), rr, action.upper())
+      for token in raw_tps
+      if token
+    ]
+    if tps:
+      out["tps"] = tps
+  return out or None
 
 
 def _num(value: float | int) -> str:
