@@ -20,6 +20,7 @@ dated section after deployment.
 - ``/trade_delete`` on a still-pending algo-manual limit cancels the broker
   order first, then hard-deletes the row/posts on confirm (``🗑 deleted``).
   That is not ``/trade_cancel`` — cancel leaves a cancelled lifecycle card.
+  Hard-delete also clears ``manual_algo_charts`` so FK rows cannot block it.
 
 ### Changed
 - ``/trade_stats`` (and the weekly recap) show AUTO TRADE and ALGO MANUAL
