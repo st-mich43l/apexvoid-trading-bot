@@ -1,6 +1,6 @@
 """Active open-trade exposure gates for new autonomous plans.
 
-When an order is already active:
+When an order is already active **on the same instrument**:
 - opposing direction within ``min_price_separation`` (absolute |Δprice|) is
   blocked (SELL @ 4063 → BUY blocked between 4048 and 4078 when separation is 15)
 - same-direction non-scalp adds are allowed only after every open same-dir
@@ -9,6 +9,11 @@ When an order is already active:
   on a single leg
 - same-direction scalp adds may stack at that fraction without waiting for TP2
   / Tier A when ``allow_same_direction_stack`` is true
+
+Live 2026-08-17: GBPJPY SELL @ 215.91 blocked EURUSD SELL, and VIP XAU SELL
+@ 4414.11 blocked GBPJPY, because this module compared direction/price with
+no symbol. Engine ``HasBlockingSameDirectionLivePlan`` already filters by
+symbol; Python must match that.
 """
 
 from __future__ import annotations
@@ -23,6 +28,12 @@ log = logging.getLogger(__name__)
 # Target ladder indexes: TP1=0, TP2=1. Non-scalp same-dir unlock requires a
 # real booked close at/after TP2 — not merely NextTargetIndex after a deferral.
 SAME_DIRECTION_UNLOCK_BOOKED_TARGET_INDEX = 1
+
+# Broker aliases that must not leak exposure across instruments.
+_SYMBOL_ALIASES = {
+  "XAUUSD": "XAU",
+  "GOLD": "XAU",
+}
 
 _OPEN_TRADE_PLAN_STAGES = frozenset({
   "PartiallyOpen",
@@ -61,6 +72,7 @@ class ActiveExposure:
   direction: str
   entry_price: float
   source: str
+  symbol: str | None = None
   group_id: str | None = None
   plan_id: str | None = None
   position_id: int | None = None
@@ -78,6 +90,20 @@ class ExposureDecision:
   message: str = ""
   same_direction_stack: bool = False
   measured: dict[str, Any] | None = None
+
+
+def normalize_symbol(value: object) -> str | None:
+  """Canonical instrument key so XAUUSD and XAU occupy the same book."""
+  text = str(value or "").strip().upper()
+  if not text:
+    return None
+  return _SYMBOL_ALIASES.get(text, text)
+
+
+def same_instrument(left: object, right: object) -> bool:
+  a = normalize_symbol(left)
+  b = normalize_symbol(right)
+  return a is not None and a == b
 
 
 def normalize_direction(value: object) -> str | None:
@@ -137,6 +163,10 @@ def _payload_get(payload: dict[str, Any], *keys: str) -> Any:
     if key in payload and payload[key] is not None:
       return payload[key]
   return None
+
+
+def _payload_symbol(payload: dict[str, Any]) -> str | None:
+  return normalize_symbol(_payload_get(payload, "symbol", "Symbol"))
 
 
 def _payload_entry_price(payload: dict[str, Any]) -> float | None:
@@ -233,6 +263,7 @@ async def _load_v6_position_exposures(client: Any) -> list[ActiveExposure]:
       direction=direction,
       entry_price=entry,
       source="v6_position",
+      symbol=_payload_symbol(payload),
       group_id=str(
         _payload_get(payload, "group_id", "GroupId") or ""
       ) or None,
@@ -304,6 +335,7 @@ async def _load_trade_plan_exposures(client: Any) -> list[ActiveExposure]:
       direction=direction,
       entry_price=float(entry),
       source="v8_plan",
+      symbol=_payload_symbol(payload),
       plan_id=str(
         _payload_get(payload, "plan_id", "PlanId") or plan_id
       ),
@@ -313,6 +345,29 @@ async def _load_trade_plan_exposures(client: Any) -> list[ActiveExposure]:
       remaining_volume=remaining if remaining is not None else filled,
       highest_booked_target_index=booked,
     ))
+  return out
+
+
+def _exposures_for_candidate(
+  exposures: list[ActiveExposure],
+  candidate_symbol: str | None,
+) -> list[ActiveExposure]:
+  """Keep same-instrument rows only when the candidate names a symbol.
+
+  Missing-symbol rows are dropped in that mode so a GBPJPY fill cannot lock
+  EURUSD/XAU (and a VIP gold pending cannot lock GBPJPY). When the caller
+  omits ``candidate_symbol``, the full list is used — existing same-book
+  unit tests stay valid.
+  """
+  wanted = normalize_symbol(candidate_symbol)
+  if wanted is None:
+    return list(exposures)
+  out: list[ActiveExposure] = []
+  for item in exposures:
+    active = normalize_symbol(item.symbol)
+    if active is None or active != wanted:
+      continue
+    out.append(item)
   return out
 
 
@@ -326,8 +381,12 @@ def evaluate_entry_against_exposure(
   ignore_opposing_active: bool = False,
   allow_same_direction_stack: bool = False,
   candidate_tier: str | None = None,
+  candidate_symbol: str | None = None,
 ) -> ExposureDecision:
   """Apply opposing-distance and same-direction rules.
+
+  ``candidate_symbol``: only exposures on that instrument count. Omit only
+  in tests that model a single-book.
 
   ``ignore_opposing_active``: scalp with fitted native min room may open
   even while an opposite position is already activated — opposing price
@@ -344,6 +403,7 @@ def evaluate_entry_against_exposure(
   opposite = "SELL" if wanted == "BUY" else "BUY"
   separation = max(0.0, float(min_price_separation))
   tier = str(candidate_tier or "").strip().upper() or None
+  exposures = _exposures_for_candidate(exposures, candidate_symbol)
 
   for active in exposures:
     if active.direction != opposite:
@@ -353,7 +413,9 @@ def evaluate_entry_against_exposure(
       measured = {
         "active_direction": active.direction,
         "active_entry_price": active.entry_price,
+        "active_symbol": active.symbol,
         "candidate_entry_price": entry_price,
+        "candidate_symbol": normalize_symbol(candidate_symbol),
         "price_distance": distance,
         "min_price_separation": separation,
         "active_source": active.source,
@@ -397,6 +459,8 @@ def evaluate_entry_against_exposure(
   measured = {
     "active_direction": primary.direction,
     "active_entry_price": primary.entry_price,
+    "active_symbol": primary.symbol,
+    "candidate_symbol": normalize_symbol(candidate_symbol),
     "same_direction_size_fraction": fraction,
     "active_source": primary.source,
     "active_plan_id": primary.plan_id,

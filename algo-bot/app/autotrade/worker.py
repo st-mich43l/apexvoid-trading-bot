@@ -5738,6 +5738,7 @@ async def _publish_trade_plan_v8(
     direction=match_for_plan.direction,
     entry_price=float(entry_reference),
     exposures=exposures,
+    candidate_symbol=symbol,
     min_price_separation=float(
       instrument_geometry.opposing_minimum_separation_price(symbol)
     ),
