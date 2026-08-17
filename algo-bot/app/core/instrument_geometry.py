@@ -42,3 +42,11 @@ def fvg_entry_max_width_price(symbol: str) -> float:
   return float(
     _effective(symbol).strategies.technique.fvg.entry_max_width_price
   )
+
+
+def plan_max_volume(symbol: str) -> int:
+  """Per-instrument cTrader volume ceiling for TradePlan.risk.max_volume.
+
+  FX majors use 10_000_000 units/lot, not the XAU 10_000 / 100_000 cap.
+  """
+  return _effective(symbol).units.plan_max_volume()

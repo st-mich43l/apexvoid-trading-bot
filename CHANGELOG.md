@@ -13,6 +13,10 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- V8 plans stamp ``risk.max_volume`` from each instrument's ``max_lots ×
+  volume_units_per_lot`` (XAU 100_000, EURUSD/GBPJPY 100_000_000). The
+  gold 100_000 cap on GBPJPY was 0.01 lots and rejected the 17 Aug HFS
+  Range Sweep before submit (``equity_table_above_broker_maximum``).
 - Mapped thesis rearm no longer crashes every M1 tick: picking the OHLC
   frame no longer bool-coerces a pandas DataFrame (``frames.get("M1") or …``).
 - Close / reject / expire leave the autotrade root card intact (no

@@ -17,6 +17,7 @@ from pydantic import BaseModel, ConfigDict
 from app.configuration.catalog import iter_catalog_entries
 from app.configuration.models.base import FrozenConfigModel
 from app.configuration.models.instruments import (
+  CTRADER_VOLUME_HUNDREDTHS,
   InstrumentConfig,
   InstrumentLookbacksConfig,
   InstrumentRollout,
@@ -48,6 +49,15 @@ class InstrumentUnitsConfig(FrozenConfigModel):
   price_digits: int
   contract_units_per_lot: float
   pip_value_per_lot: float
+  volume_units_per_lot: int
+  max_lots: float
+
+  def plan_max_volume(self) -> int:
+    """cTrader volume-unit ceiling stamped on TradePlan.risk.max_volume."""
+    volume = int(round(float(self.max_lots) * int(self.volume_units_per_lot)))
+    if volume <= 0:
+      raise ValueError("plan max_volume must be positive")
+    return volume
 
 
 class EffectiveInstrumentMarketDataConfig(FrozenConfigModel):
@@ -210,11 +220,28 @@ def _require_units(
     raise EffectiveInstrumentError(
       f"instrument {instrument_id!r} pip_value_per_lot must be positive"
     )
+  if contract.volume_units_per_lot is not None:
+    volume_units = int(contract.volume_units_per_lot)
+  else:
+    volume_units = int(round(
+      float(contract.contract_units_per_lot) * CTRADER_VOLUME_HUNDREDTHS
+    ))
+  if volume_units <= 0:
+    raise EffectiveInstrumentError(
+      f"instrument {instrument_id!r} volume_units_per_lot must be positive"
+    )
+  max_lots = float(contract.max_lots)
+  if max_lots <= 0:
+    raise EffectiveInstrumentError(
+      f"instrument {instrument_id!r} max_lots must be positive"
+    )
   return InstrumentUnitsConfig(
     pip_size=float(contract.pip_size),
     price_digits=int(contract.price_digits),
     contract_units_per_lot=float(contract.contract_units_per_lot),
     pip_value_per_lot=pip_value,
+    volume_units_per_lot=volume_units,
+    max_lots=max_lots,
   )
 
 
