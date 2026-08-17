@@ -353,7 +353,10 @@ public sealed record AutoTradePositionState(
   string? TargetModel = null,
   decimal? AbsoluteTargetPrice = null,
   long FillSourceQuoteTimestamp = 0,
-  long FillSourceQuoteSequence = 0
+  long FillSourceQuoteSequence = 0,
+  // Canonical Redis instrument (XAU / EURUSD / GBPJPY). Python exposure
+  // gates filter by this string — SymbolId alone cannot isolate books.
+  string? Symbol = null
 );
 
 public sealed record RedisClaimPayload(

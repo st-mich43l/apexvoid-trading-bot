@@ -131,6 +131,18 @@ public sealed class AutoTradeEngine(
     return null;
   }
 
+  private string? RedisSymbolFor(long symbolId)
+  {
+    foreach (var item in _symbolsByCanonical.Values)
+    {
+      if (item.SymbolId == symbolId)
+      {
+        return item.RedisSymbol;
+      }
+    }
+    return null;
+  }
+
   private (decimal PipSize, decimal PipValuePerLot) ResolveInstrumentUnits(
     string canonical
   )
@@ -3946,7 +3958,8 @@ public sealed class AutoTradeEngine(
       TargetModel: candidate.TargetModel,
       AbsoluteTargetPrice: candidate.AbsoluteTargetPrice,
       FillSourceQuoteTimestamp: _lastSpot?.Timestamp ?? now,
-      FillSourceQuoteSequence: _spotSequence
+      FillSourceQuoteSequence: _spotSequence,
+      Symbol: symbol.RedisSymbol
     );
     if (
       _states.TryGetValue(state.PositionId, out var existingState)
@@ -6187,6 +6200,14 @@ public sealed class AutoTradeEngine(
     {
       _log($"auto-trade cannot reconstruct position {position.PositionId}");
       return;
+    }
+    if (string.IsNullOrWhiteSpace(state.Symbol))
+    {
+      state = state with
+      {
+        Symbol = RedisSymbolFor(position.SymbolId)
+          ?? RequireSymbol().RedisSymbol,
+      };
     }
     AutoTradeGroupPlan? plan = null;
     if (stored is null && !string.IsNullOrWhiteSpace(state.GroupId))

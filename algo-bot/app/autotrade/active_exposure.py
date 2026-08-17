@@ -216,16 +216,45 @@ def _is_scale_in_child(payload: dict[str, Any]) -> bool:
   return bool(str(parent or "").strip())
 
 
-async def load_active_exposures(client: Any) -> list[ActiveExposure]:
+async def load_active_exposures(
+  client: Any,
+  *,
+  symbol: str | None = None,
+) -> list[ActiveExposure]:
   """Load open V6 positions plus live V8 plans, including pending/submitted.
 
   Received/Submitted plans occupy the symbol before the first fill. Omitting
   them let two GBPJPY Key Level sells publish 5s apart (2026-08-17).
+
+  Pass ``symbol`` to keep only that instrument's book (HFS reconcile / any
+  per-symbol caller). Omit only when the caller will filter next.
   """
   exposures: list[ActiveExposure] = []
   exposures.extend(await _load_v6_position_exposures(client))
   exposures.extend(await _load_trade_plan_exposures(client))
-  return exposures
+  return filter_exposures_for_symbol(exposures, symbol)
+
+
+def filter_exposures_for_symbol(
+  exposures: list[ActiveExposure],
+  symbol: str | None,
+) -> list[ActiveExposure]:
+  """Keep same-instrument rows only when ``symbol`` is set.
+
+  Missing-symbol rows are dropped in that mode so a GBPJPY fill cannot lock
+  EURUSD/XAU (and a VIP gold pending cannot lock GBPJPY). When the caller
+  omits ``symbol``, the full list is returned.
+  """
+  wanted = normalize_symbol(symbol)
+  if wanted is None:
+    return list(exposures)
+  out: list[ActiveExposure] = []
+  for item in exposures:
+    active = normalize_symbol(item.symbol)
+    if active is None or active != wanted:
+      continue
+    out.append(item)
+  return out
 
 
 async def _load_v6_position_exposures(client: Any) -> list[ActiveExposure]:
@@ -352,23 +381,7 @@ def _exposures_for_candidate(
   exposures: list[ActiveExposure],
   candidate_symbol: str | None,
 ) -> list[ActiveExposure]:
-  """Keep same-instrument rows only when the candidate names a symbol.
-
-  Missing-symbol rows are dropped in that mode so a GBPJPY fill cannot lock
-  EURUSD/XAU (and a VIP gold pending cannot lock GBPJPY). When the caller
-  omits ``candidate_symbol``, the full list is used — existing same-book
-  unit tests stay valid.
-  """
-  wanted = normalize_symbol(candidate_symbol)
-  if wanted is None:
-    return list(exposures)
-  out: list[ActiveExposure] = []
-  for item in exposures:
-    active = normalize_symbol(item.symbol)
-    if active is None or active != wanted:
-      continue
-    out.append(item)
-  return out
+  return filter_exposures_for_symbol(exposures, candidate_symbol)
 
 
 def evaluate_entry_against_exposure(

@@ -586,11 +586,22 @@ public sealed class TradePlanRuntime(
   }
 
   private static bool SameInstrument(string planSymbol, SymbolInfo session) =>
-    string.Equals(planSymbol, session.RedisSymbol, StringComparison.OrdinalIgnoreCase)
-    || string.Equals(planSymbol, session.CTraderSymbol, StringComparison.OrdinalIgnoreCase);
+    CanonicalInstrument(planSymbol) == CanonicalInstrument(session.RedisSymbol)
+    || string.Equals(
+      planSymbol, session.CTraderSymbol, StringComparison.OrdinalIgnoreCase
+    );
 
   private static bool SameInstrument(string planSymbol, SpotPrice quote) =>
-    string.Equals(planSymbol, quote.Symbol, StringComparison.OrdinalIgnoreCase);
+    CanonicalInstrument(planSymbol) == CanonicalInstrument(quote.Symbol);
+
+  private static string CanonicalInstrument(string symbol)
+  {
+    var upper = (symbol ?? "").Trim().ToUpperInvariant();
+    return upper is "XAUUSD" or "GOLD" ? "XAU" : upper;
+  }
+
+  private static bool SameInstrumentKey(string left, string right) =>
+    CanonicalInstrument(left) == CanonicalInstrument(right);
 
   private static readonly HashSet<string> ScalpFamilies = new(
     StringComparer.OrdinalIgnoreCase
@@ -663,9 +674,7 @@ public sealed class TradePlanRuntime(
       {
         continue;
       }
-      if (!string.Equals(
-        state.Symbol, incoming.Symbol, StringComparison.OrdinalIgnoreCase
-      ))
+      if (!SameInstrumentKey(state.Symbol, incoming.Symbol))
       {
         continue;
       }
