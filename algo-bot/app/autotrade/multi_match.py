@@ -183,6 +183,30 @@ def same_thesis(left: StrategyMatch, right: StrategyMatch, *, atr: float) -> boo
       )
     return True
 
+  # Same-source structural reactions on a proximal overlapping zone are one
+  # thesis even when Market Map rehashed the structural id. Live 2026-08-17
+  # GBPJPY Key Level 215.85 published twice (sids 47519286 vs 90824b10,
+  # zones 215.90-215.92 vs 215.90-215.93) in the same confirmation bar.
+  if (
+    left.structural_source
+    and left.structural_source == right.structural_source
+    and left.structural_source in {
+      "key_level", "supply_demand", "session_level", "trendline",
+    }
+    and left_setup == right_setup
+    and _zone_overlap_ratio(
+      left.entry_low,
+      left.entry_high,
+      right.entry_low,
+      right.entry_high,
+    ) >= 0.5
+  ):
+    if left.confirmation_bar_ts and right.confirmation_bar_ts:
+      return left.confirmation_bar_ts == right.confirmation_bar_ts
+    if left.touch_bar_ts and right.touch_bar_ts:
+      return left.touch_bar_ts == right.touch_bar_ts
+    return True
+
   # Legacy Zone Reaction aliases without a shared structural id: overlapping
   # entry (+ shared confirmation when present) is still one thesis.
   if zone_alias_pair and left.strategy != right.strategy:
