@@ -15,9 +15,9 @@ dated section after deployment.
 ### Fixed
 - Mapped thesis rearm no longer crashes every M1 tick: picking the OHLC
   frame no longer bool-coerces a pandas DataFrame (``frames.get("M1") or …``).
-- Autotrade root cards no longer rewrite to ``TERMINAL`` on close / reject /
-  expire. The SETUP FORMING or POSITION ACTIVATED body stays intact (live
-  price cue dropped); fill / TP / BE / close stay on threaded replies.
+- Close / reject / expire leave the autotrade root card intact (no
+  ``TERMINAL`` rewrite) and drop it from the live Price-now index so a
+  still-WAITING-FILL body cannot keep editing after the trade is dead.
 - Setup-card publish test expects status-only edits when direction/strategy
   already match; wrong-direction forming bodies still get a full rewrite
   (regression coverage for the #333 terminal/card refresh path).
