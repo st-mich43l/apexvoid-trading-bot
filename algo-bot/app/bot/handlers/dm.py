@@ -516,7 +516,13 @@ async def handle_trade_delete(msg: Message) -> None:
     "chat_id": channel_for_symbol(symbol),
     "reply_to": None,
   })
-  await msg.answer(await post_result(result, symbol))
+  # Pending algo delete waits for broker cancel confirm; the confirmation
+  # handler hard-deletes and DMs 🗑 deleted. Ack only in DM here so we do
+  # not pretend the channel card is already gone.
+  if result.get("pending"):
+    await msg.answer(render_result(result, symbol, "vip"))
+  else:
+    await msg.answer(await post_result(result, symbol))
 
 
 @router.message(Command("trade_sl"), F.chat.type == "private")

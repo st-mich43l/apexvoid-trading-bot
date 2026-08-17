@@ -1612,6 +1612,9 @@ async def delete_manual_signal(row_id: int) -> dict | None:
         "SELECT * FROM signal_posts WHERE signal_id = $1", row_id,
       )
       await db.execute("DELETE FROM pips_log WHERE signal_id = $1", row_id)
+      await db.execute(
+        "DELETE FROM manual_algo_charts WHERE signal_id = $1", row_id,
+      )
       await db.execute("DELETE FROM signal_posts WHERE signal_id = $1", row_id)
       await db.execute("DELETE FROM manual_signals WHERE id = $1", row_id)
     return {**_decode_signal(row), "posts": [dict(post) for post in posts]}

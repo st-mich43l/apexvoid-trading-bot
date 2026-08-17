@@ -283,24 +283,9 @@ async def do_cancel(ctx: dict) -> dict:
   return await _execute_cancel(ctx["sid"], ctx.get("reply_to"))
 
 
-async def do_delete(ctx: dict) -> dict:
-  signal = await get_manual_signal(ctx["sid"])
-  if signal is None or signal.get("symbol", "XAU") != ctx["symbol"]:
-    return {"action": "delete", "ok": False, "error": "not_found"}
-  # /trade_delete used to only wipe the local record - for a still-pending
-  # algo-manual signal (broker-confirmed live limit order, not yet filled)
-  # that left a real resting order on the broker with nothing left tracking
-  # it. Same defer condition as /trade_cancel's _maybe_defer_cancel_to_broker:
-  # once filled it's an open position, not an order, and /trade_close is the
-  # right verb for that - delete only ever needs to cancel an unfilled order.
-  if (
-    signal.get("execution_mode") == "algo"
-    and signal.get("execution_status") == "pending"
-    and signal.get("execution_intent_id")
-  ):
-    from app.signals import manual_execution
-    await manual_execution.request_cancel(signal["execution_intent_id"])
-  result = await delete_manual_signal(ctx["sid"])
+async def _execute_delete(sid: int) -> dict:
+  """Hard-remove the signal row and channel posts (delete ≠ cancel)."""
+  result = await delete_manual_signal(sid)
   if result is None:
     return {"action": "delete", "ok": False, "error": "not_found"}
   if result.get("error") == "has_rounds":
@@ -312,6 +297,33 @@ async def do_delete(ctx: dict) -> dict:
     "row": result,
     "seq": _display_seq(result),
   }
+
+
+async def do_delete(ctx: dict) -> dict:
+  signal = await get_manual_signal(ctx["sid"])
+  if signal is None or signal.get("symbol", "XAU") != ctx["symbol"]:
+    return {"action": "delete", "ok": False, "error": "not_found"}
+  # Pending algo limit: cancel at broker first, keep the row until confirm,
+  # then hard-delete (not cancel-fanout). Flag tells manual_cancelled which
+  # outcome the owner asked for — delete ≠ cancelled.
+  if (
+    signal.get("execution_mode") == "algo"
+    and signal.get("execution_status") == "pending"
+    and signal.get("execution_intent_id")
+  ):
+    from app.signals import manual_execution
+    intent_id = signal["execution_intent_id"]
+    await manual_execution.mark_pending_delete(intent_id)
+    await manual_execution.request_cancel(intent_id)
+    return {
+      "action": "delete",
+      "ok": True,
+      "pending": True,
+      "row": signal,
+      "seq": _display_seq(signal),
+      "reply_to": signal.get("channel_message_id") or ctx.get("reply_to"),
+    }
+  return await _execute_delete(ctx["sid"])
 
 
 async def do_reopen(ctx: dict) -> dict:
@@ -446,6 +458,8 @@ def render_result(
     return f"❌ {seq}cancelled"
   if action == "delete":
     seq = f"#{result['seq']} " if tier == "vip" else ""
+    if result.get("pending"):
+      return f"⏳ {seq}delete requested"
     return f"🗑 {seq}deleted"
   if action == "uncclose":
     seq = f"#{_display_seq(result['row'])} " if tier == "vip" else ""

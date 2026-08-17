@@ -55,6 +55,26 @@ def _pending_close_key(position_id: int) -> str:
   return f"manual_trade:pending_close:{position_id}"
 
 
+def _pending_delete_key(intent_id: str) -> str:
+  return f"manual_trade:pending_delete:{intent_id}"
+
+
+async def mark_pending_delete(intent_id: str) -> None:
+  """Remember /trade_delete so manual_cancelled hard-deletes, not cancels."""
+  client = redis_state.get_client()
+  await client.set(_pending_delete_key(intent_id), "1", ex=3600)
+
+
+async def consume_pending_delete(intent_id: str) -> bool:
+  client = redis_state.get_client()
+  key = _pending_delete_key(intent_id)
+  raw = await client.get(key)
+  if raw is None:
+    return False
+  await client.delete(key)
+  return True
+
+
 def _price(value: object) -> str:
   if value is None:
     return "n/a"
@@ -478,11 +498,23 @@ async def _handle_manual_cancelled(event: dict) -> None:
   candidate_id = event.get("candidate_id")
   if not candidate_id:
     return
-  sig = await get_signal_by_execution_intent_id(str(candidate_id))
+  intent_token = str(candidate_id)
+  sig = await get_signal_by_execution_intent_id(intent_token)
   if sig is None:
     log.warning(
       "manual_cancelled event: no signal for intent token %s", candidate_id,
     )
+    return
+  # /trade_delete asked to remove the typo card after broker cancel — not
+  # leave a cancelled lifecycle row. Cancel path stays for /trade_cancel.
+  if await consume_pending_delete(intent_token):
+    result = await trade_ops._execute_delete(sig["id"])
+    # Channel posts are already gone via delete_posts; post_result skips
+    # fan-out for delete. Owner still needs the final 🗑 deleted ack.
+    text = trade_ops.render_result(
+      result, sig.get("symbol", "XAU"), "vip",
+    )
+    await _send_executor_truth(text)
     return
   await set_execution_status(sig["id"], "cancelled")
   result = await trade_ops._execute_cancel(sig["id"])
