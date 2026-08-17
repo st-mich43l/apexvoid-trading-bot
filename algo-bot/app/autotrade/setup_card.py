@@ -1500,6 +1500,9 @@ async def kill_setup_card(
       message_id=int(card["message_id"]),
       text=intact or existing_text,
     )
+    # save_forming_card re-indexes WAITING FILL cards for live Price now.
+    # Close/reject/expire must not keep that loop on a dead trade.
+    await client.srem(FORMING_ACTIVE_INDEX_KEY, setup_id)
     await client.delete(
       forming_status_key(setup_id),
       forming_reconcile_pending_key(setup_id),
