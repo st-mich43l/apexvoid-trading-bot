@@ -17,9 +17,9 @@ dated section after deployment.
   instead of stacking ``POSITION ACTIVATED`` + ``TERMINAL`` (and keep a
   stale ``(live)`` price). Publish refreshes a confluence root body when
   direction/strategy no longer match the armed plan.
-- ``/trade_delete`` on a still-pending algo-manual limit defers like
-  ``/trade_cancel`` (wait for broker confirm) instead of hard-deleting the
-  row immediately and racing the cancel event.
+- ``/trade_delete`` on a still-pending algo-manual limit cancels the broker
+  order first, then hard-deletes the row/posts on confirm (``🗑 deleted``).
+  That is not ``/trade_cancel`` — cancel leaves a cancelled lifecycle card.
 
 ### Changed
 - ``/trade_stats`` (and the weekly recap) show AUTO TRADE and ALGO MANUAL
