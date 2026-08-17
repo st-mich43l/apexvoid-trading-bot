@@ -155,7 +155,12 @@ public sealed record TradePlanRuntimeState(
   // this process was down and left again before recovery finished is
   // otherwise unrecoverable, since a plain live-tick check has no memory
   // of price it never polled.
-  bool RecoveryGraceActive = false
+  bool RecoveryGraceActive = false,
+  // Zone midpoint / declared limit used as exposure identity before fill.
+  // Python same-direction gates must see Received/Submitted plans, not only
+  // FullyOpen fills (live 2026-08-17: two GBPJPY Key Level sells published
+  // 5s apart while open_position_count was still 0).
+  decimal? IntendedEntryPrice = null
 );
 
 public sealed record TradePlanRejectionRecord(
@@ -586,6 +591,99 @@ public sealed class TradePlanRuntime(
 
   private static bool SameInstrument(string planSymbol, SpotPrice quote) =>
     string.Equals(planSymbol, quote.Symbol, StringComparison.OrdinalIgnoreCase);
+
+  private static readonly HashSet<string> ScalpFamilies = new(
+    StringComparer.OrdinalIgnoreCase
+  )
+  {
+    "hfs", "range", "range_reversion",
+  };
+
+  private static readonly HashSet<string> ScalpStrategies = new(
+    StringComparer.OrdinalIgnoreCase
+  )
+  {
+    "HFS Range Sweep",
+    "HFS Impulse Pullback",
+    "HFS Breakout Retest",
+    "HFS Momentum Chase",
+    "Range Box Scalp",
+    "Range Edge Scalp",
+    "One-Sided Range Reaction",
+    "Fade Scalp",
+    "Chop Zone Reaction",
+  };
+
+  private static bool IsScalpPlan(TradePlan plan) =>
+    ScalpFamilies.Contains(plan.Analysis.StrategyFamily ?? "")
+    || ScalpStrategies.Contains(plan.Analysis.Strategy ?? "");
+
+  private static decimal? IntendedEntryPriceFrom(TradePlan plan)
+  {
+    try
+    {
+      var prices = plan.Entry.EntryPrices();
+      if (prices.Count == 0)
+      {
+        return plan.Entry.OrderPrice;
+      }
+      return prices.Average();
+    }
+    catch (TradePlanContractException)
+    {
+      if (plan.Entry.OrderPrice is decimal orderPrice)
+      {
+        return orderPrice;
+      }
+      if (plan.Entry.ZoneLow is decimal low && plan.Entry.ZoneHigh is decimal high)
+      {
+        return (low + high) / 2m;
+      }
+      return null;
+    }
+  }
+
+  // Non-scalp may not open a second same-direction plan while another is
+  // still pending or open without TP2. Pending was invisible to Python
+  // exposure (live 2026-08-17 GBPJPY two Key Level sells at 215.91).
+  // Incoming scalps still stack — matching evaluate_entry_against_exposure.
+  private bool HasBlockingSameDirectionLivePlan(TradePlan incoming)
+  {
+    if (IsScalpPlan(incoming))
+    {
+      return false;
+    }
+    foreach (var state in _statesById.Values)
+    {
+      if (string.Equals(state.PlanId, incoming.PlanId, StringComparison.Ordinal))
+      {
+        continue;
+      }
+      if (state.Stage is TradePlanRuntimeStage.Closed)
+      {
+        continue;
+      }
+      if (!string.Equals(
+        state.Symbol, incoming.Symbol, StringComparison.OrdinalIgnoreCase
+      ))
+      {
+        continue;
+      }
+      if (!string.Equals(
+        state.Direction, incoming.Analysis.Direction,
+        StringComparison.OrdinalIgnoreCase
+      ))
+      {
+        continue;
+      }
+      if (state.HighestBookedTargetIndex >= 1)
+      {
+        continue;
+      }
+      return true;
+    }
+    return false;
+  }
 
   private bool LooksLikeProtectiveStopHit(
     TradePlan plan,
@@ -1132,6 +1230,26 @@ public sealed class TradePlanRuntime(
       );
       return;
     }
+    if (HasBlockingSameDirectionLivePlan(plan))
+    {
+      await PersistPlanExecutionStateAsync(
+        plan.PlanId, "rejected", entry.Id, cancellationToken,
+        "same_direction_live_plan"
+      );
+      await PublishEventAsync(
+        "plan_rejected",
+        "TradePlan V8 rejected: same-direction plan already live on "
+          + $"{plan.Symbol} before TP2",
+        plan,
+        cancellationToken
+      );
+      log(
+        "v8 plan rejected same_direction_live_plan "
+          + $"id={plan.PlanId} symbol={plan.Symbol} "
+          + $"direction={plan.Analysis.Direction} stream_id={entry.Id}"
+      );
+      return;
+    }
     _plansById[plan.PlanId] = plan;
     // Keep the executor recovery copy independent of Python's payload TTL.
     await store.SetStringAsync(
@@ -1146,7 +1264,8 @@ public sealed class TradePlanRuntime(
       plan.Entry.Type,
       TradePlanRuntimeStage.Received,
       CurrentStop: plan.Stop.Price,
-      GroupStage: TradePlanGroupStages.Received
+      GroupStage: TradePlanGroupStages.Received,
+      IntendedEntryPrice: IntendedEntryPriceFrom(plan)
     );
     await PersistStateAsync(state, cancellationToken);
     await PersistPlanExecutionStateAsync(

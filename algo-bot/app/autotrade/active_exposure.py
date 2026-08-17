@@ -39,6 +39,21 @@ _OPEN_TRADE_PLAN_GROUP_STAGES = frozenset({
   "managing",
   "partially_closed",
 })
+# Pending/submitted plans already occupy the symbol. Live 2026-08-17 GBPJPY
+# duplicated two Key Level sells because only FullyOpen fills counted.
+_PENDING_TRADE_PLAN_STAGES = frozenset({
+  "Received",
+  "Submitting",
+  "Submitted",
+  "received",
+  "submitting",
+  "submitted",
+})
+_PENDING_TRADE_PLAN_GROUP_STAGES = frozenset({
+  "received",
+  "submitting",
+  "submitted",
+})
 
 
 @dataclass(frozen=True)
@@ -132,10 +147,22 @@ def _payload_entry_price(payload: dict[str, Any]) -> float | None:
     "GroupWeightedFillPrice",
     "entry_fill_price",
     "EntryFillPrice",
+    "intended_entry_price",
+    "IntendedEntryPrice",
   ):
     price = _as_float(payload.get(key))
     if price is not None and price > 0:
       return price
+  legs = _payload_get(payload, "legs", "Legs")
+  if isinstance(legs, list):
+    for leg in legs:
+      if not isinstance(leg, dict):
+        continue
+      price = _as_float(
+        _payload_get(leg, "intended_price", "IntendedPrice")
+      )
+      if price is not None and price > 0:
+        return price
   return None
 
 
@@ -160,7 +187,11 @@ def _is_scale_in_child(payload: dict[str, Any]) -> bool:
 
 
 async def load_active_exposures(client: Any) -> list[ActiveExposure]:
-  """Load open V6 position states and V7 plan runtimes."""
+  """Load open V6 positions plus live V8 plans, including pending/submitted.
+
+  Received/Submitted plans occupy the symbol before the first fill. Omitting
+  them let two GBPJPY Key Level sells publish 5s apart (2026-08-17).
+  """
   exposures: list[ActiveExposure] = []
   exposures.extend(await _load_v6_position_exposures(client))
   exposures.extend(await _load_trade_plan_exposures(client))
@@ -234,32 +265,30 @@ async def _load_trade_plan_exposures(client: Any) -> list[ActiveExposure]:
     # (Stage/GroupStage/Direction) with string enums — accept both shapes.
     stage = str(_payload_get(payload, "stage", "Stage") or "")
     group_stage = str(_payload_get(payload, "group_stage", "GroupStage") or "")
-    if stage not in _OPEN_TRADE_PLAN_STAGES and group_stage not in _OPEN_TRADE_PLAN_GROUP_STAGES:
+    is_pending = (
+      stage in _PENDING_TRADE_PLAN_STAGES
+      or group_stage in _PENDING_TRADE_PLAN_GROUP_STAGES
+    )
+    is_open = (
+      stage in _OPEN_TRADE_PLAN_STAGES
+      or group_stage in _OPEN_TRADE_PLAN_GROUP_STAGES
+    )
+    if not is_pending and not is_open:
       continue
     remaining = _payload_remaining(payload)
-    if remaining is not None and remaining <= 0:
-      continue
-    # Still-open means at least one filled/remaining lot or submitted legs.
     filled = _as_float(
       _payload_get(payload, "total_filled_volume", "TotalFilledVolume")
     ) or 0.0
-    if filled <= 0 and (remaining is None or remaining <= 0):
-      continue
+    if not is_pending:
+      if remaining is not None and remaining <= 0:
+        continue
+      # Still-open means at least one filled/remaining lot or submitted legs.
+      if filled <= 0 and (remaining is None or remaining <= 0):
+        continue
     direction = normalize_direction(
       _payload_get(payload, "direction", "Direction")
     )
-    entry = (
-      _as_float(
-        _payload_get(
-          payload,
-          "group_weighted_fill_price",
-          "GroupWeightedFillPrice",
-        )
-      )
-      or _as_float(
-        _payload_get(payload, "entry_fill_price", "EntryFillPrice")
-      )
-    )
+    entry = _payload_entry_price(payload)
     if direction is None or entry is None or entry <= 0:
       continue
     booked_raw = _payload_get(

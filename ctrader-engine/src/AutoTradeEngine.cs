@@ -6188,11 +6188,10 @@ public sealed class AutoTradeEngine(
       _log($"auto-trade cannot reconstruct position {position.PositionId}");
       return;
     }
-    if (stored is null)
+    AutoTradeGroupPlan? plan = null;
+    if (stored is null && !string.IsNullOrWhiteSpace(state.GroupId))
     {
-      var plan = string.IsNullOrWhiteSpace(state.GroupId)
-        ? null
-        : await LoadGroupPlanAsync(state.GroupId, cancellationToken);
+      plan = await LoadGroupPlanAsync(state.GroupId, cancellationToken);
       if (plan is not null)
       {
         state = state with
@@ -6226,10 +6225,54 @@ public sealed class AutoTradeEngine(
         };
       }
     }
+    // Manual limits send a relative SL from the limit price. cTrader then
+    // anchors that distance to the fill, so a better BUY fill silently
+    // widens the VIP stop (live 2026-08-17: #64 posted SL 4382, fill
+    // 4385.85, broker SL ~4378). Pin the approved absolute price the same
+    // way PlaceTrancheAsync does for market fills.
+    var currentStop = position.StopLoss ?? state.CurrentStopLoss;
+    var initialStop = state.InitialStopLoss;
+    if (isNewManualFill && plan?.ManualStopLoss is decimal approvedStop)
+    {
+      var symbol = RequireSymbol();
+      var stopLoss = decimal.Round(
+        approvedStop,
+        symbol.Digits,
+        MidpointRounding.AwayFromZero
+      );
+      try
+      {
+        await RequireClient().AmendPositionStopLossAsync(
+          position.PositionId,
+          stopLoss,
+          cancellationToken
+        );
+        await store.IncrementMetricAsync(
+          symbol.RedisSymbol,
+          "final_stop_absolute_applied",
+          cancellationToken
+        );
+        currentStop = stopLoss;
+        initialStop = stopLoss;
+      }
+      catch (Exception exception) when (exception is not OperationCanceledException)
+      {
+        await store.IncrementMetricAsync(
+          symbol.RedisSymbol,
+          "final_stop_amendment_unknown",
+          cancellationToken
+        );
+        _log(
+          "auto-trade manual fill stop amend failed "
+            + $"position_id={position.PositionId}: {exception.Message}"
+        );
+      }
+    }
     state = state with
     {
       RemainingVolume = position.Volume,
-      CurrentStopLoss = position.StopLoss ?? state.CurrentStopLoss,
+      CurrentStopLoss = currentStop,
+      InitialStopLoss = initialStop,
     };
     _states[position.PositionId] = state;
     await store.SavePositionAsync(state, cancellationToken);
