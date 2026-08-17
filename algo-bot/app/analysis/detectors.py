@@ -3,6 +3,7 @@
 from dataclasses import dataclass, field, replace
 import logging
 import math
+from types import SimpleNamespace
 from typing import Callable, Protocol
 
 import pandas as pd
@@ -83,6 +84,9 @@ class StructureSet:
   liquidity_pools: list = field(default_factory=list)
   liquidity_grabs: list = field(default_factory=list)
   momentum: str = "neutral"
+  momentum_state: object | None = None
+  fib_levels: list = field(default_factory=list)
+  nearest_fib: object | None = None
   session_levels: list[SessionLevel] = field(default_factory=list)
   dealing_range: DealingRange | None = None
   trendlines: list[Trendline] = field(default_factory=list)
@@ -114,6 +118,15 @@ class DetectorSettings:
   key_level_min_touches: int = 2
   momentum_lookback: int = 8
   momentum_body_frac: float = 0.6
+  momentum_velocity_lookback: int = 8
+  momentum_velocity_bull_threshold: float = 0.15
+  momentum_velocity_bear_threshold: float = -0.15
+  momentum_va_gate_enabled: bool = False
+  fibonacci_enabled: bool = True
+  fibonacci_epsilon_atr: float = 0.15
+  fibonacci_confluence_weight: float = 2.5
+  fibonacci_deep_discount: float = 0.382
+  fibonacci_deep_premium: float = 0.618
   session_asia_start: int = 22
   session_london_start: int = 7
   session_ny_start: int = 13
@@ -217,6 +230,15 @@ class DetectorSettings:
       key_level_min_touches=self.key_level_min_touches,
       momentum_lookback=self.momentum_lookback,
       momentum_body_frac=self.momentum_body_frac,
+      momentum_velocity_lookback=self.momentum_velocity_lookback,
+      momentum_velocity_bull_threshold=self.momentum_velocity_bull_threshold,
+      momentum_velocity_bear_threshold=self.momentum_velocity_bear_threshold,
+      momentum_va_gate_enabled=self.momentum_va_gate_enabled,
+      fibonacci_enabled=self.fibonacci_enabled,
+      fibonacci_epsilon_atr=self.fibonacci_epsilon_atr,
+      fibonacci_confluence_weight=self.fibonacci_confluence_weight,
+      fibonacci_deep_discount=self.fibonacci_deep_discount,
+      fibonacci_deep_premium=self.fibonacci_deep_premium,
       session_asia_start=self.session_asia_start,
       session_london_start=self.session_london_start,
       session_ny_start=self.session_ny_start,
@@ -253,6 +275,16 @@ class DetectorSettings:
     )
 
 
+def _fib_cfg(analysis: object) -> object:
+  return getattr(analysis, "fibonacci", None) or SimpleNamespace(
+    enabled=True,
+    epsilon_atr=0.15,
+    confluence_weight=2.5,
+    deep_discount=0.382,
+    deep_premium=0.618,
+  )
+
+
 def detector_settings_from(config: object | None = None) -> DetectorSettings:
   """Build detector settings from the app config for every PA consumer.
 
@@ -278,6 +310,7 @@ def detector_settings_from(config: object | None = None) -> DetectorSettings:
     flip_zone_enabled = bool(strategies.zone.flip.enabled)
   except AttributeError:
     flip_zone_enabled = True
+  fib = _fib_cfg(analysis)
   return DetectorSettings(
     confluence_floor=market_data.scanner.confluence_floor,
     max_entry_atr=actionability.gates.max_entry_atr,
@@ -296,6 +329,23 @@ def detector_settings_from(config: object | None = None) -> DetectorSettings:
     key_level_min_touches=analysis.levels.minimum_key_touches,
     momentum_lookback=analysis.momentum.lookback,
     momentum_body_frac=analysis.momentum.body_frac,
+    momentum_velocity_lookback=int(
+      getattr(analysis.momentum, "velocity_lookback", 8)
+    ),
+    momentum_velocity_bull_threshold=float(
+      getattr(analysis.momentum, "velocity_bull_threshold", 0.15)
+    ),
+    momentum_velocity_bear_threshold=float(
+      getattr(analysis.momentum, "velocity_bear_threshold", -0.15)
+    ),
+    momentum_va_gate_enabled=bool(
+      getattr(analysis.momentum, "va_gate_enabled", False)
+    ),
+    fibonacci_enabled=bool(getattr(fib, "enabled", True)),
+    fibonacci_epsilon_atr=float(getattr(fib, "epsilon_atr", 0.15)),
+    fibonacci_confluence_weight=float(getattr(fib, "confluence_weight", 2.5)),
+    fibonacci_deep_discount=float(getattr(fib, "deep_discount", 0.382)),
+    fibonacci_deep_premium=float(getattr(fib, "deep_premium", 0.618)),
     session_asia_start=market_data.sessions.asia_start,
     session_london_start=market_data.sessions.london_start,
     session_ny_start=market_data.sessions.ny_start,
@@ -439,6 +489,10 @@ class DetectionResult:
   target_cap_pips: float | None = None
   target_room_measured: dict[str, object] | None = None
   execution_eligibility: ExecutionEligibility | None = None
+  math_fib_ratio: float | None = None
+  math_velocity: float | None = None
+  math_acceleration: float | None = None
+  math_pd: float | None = None
 
 
 class SetupDetector(Protocol):
@@ -532,6 +586,9 @@ def _structure_sets_from_analysis(items) -> dict[str, StructureSet]:
       liquidity_pools=item.liquidity_pools,
       liquidity_grabs=item.liquidity_grabs,
       momentum=item.momentum,
+      momentum_state=getattr(item, "momentum_state", None),
+      fib_levels=list(getattr(item, "fib_levels", None) or []),
+      nearest_fib=getattr(item, "nearest_fib", None),
       session_levels=item.session_levels,
       dealing_range=item.dealing_range,
       trendlines=item.trendlines,
@@ -878,6 +935,7 @@ class ConfluenceFactors:
   displacement_grade: bool = False
   session_context: bool = False
   structural_agreement: bool = False
+  fib_touch: bool = False
 
 
 _FACTOR_HTF_ALIGN_WEIGHT = 4.0
@@ -887,9 +945,19 @@ _FACTOR_WICK_REJECTION_WEIGHT = 3.0
 _FACTOR_DISPLACEMENT_WEIGHT = 3.0
 _FACTOR_SESSION_CONTEXT_WEIGHT = 2.0
 _FACTOR_STRUCTURAL_AGREEMENT_WEIGHT = 3.0
+_FACTOR_FIB_TOUCH_WEIGHT = 2.5
 
 
-def _confluence_from_factors(factors: ConfluenceFactors) -> int:
+def _fib_touch_weight(settings: DetectorSettings | None = None) -> float:
+  if settings is None:
+    return _FACTOR_FIB_TOUCH_WEIGHT
+  return max(0.0, float(settings.fibonacci_confluence_weight))
+
+
+def _confluence_from_factors(
+  factors: ConfluenceFactors,
+  settings: DetectorSettings | None = None,
+) -> int:
   score = (
     (_FACTOR_HTF_ALIGN_WEIGHT if factors.htf_aligned else 0.0)
     + min(max(0, factors.touches), _FACTOR_TOUCH_CAP) * _FACTOR_TOUCH_UNIT_WEIGHT
@@ -900,6 +968,7 @@ def _confluence_from_factors(factors: ConfluenceFactors) -> int:
       _FACTOR_STRUCTURAL_AGREEMENT_WEIGHT
       if factors.structural_agreement else 0.0
     )
+    + (_fib_touch_weight(settings) if factors.fib_touch else 0.0)
   )
   return 3 if score >= STAR_THREE_SCORE else 2 if score >= STAR_TWO_SCORE else 1
 
@@ -907,12 +976,16 @@ def _confluence_from_factors(factors: ConfluenceFactors) -> int:
 def _confluence_from_zone(
   zone: Zone,
   factors: ConfluenceFactors | None = None,
+  settings: DetectorSettings | None = None,
 ) -> int:
+  factors = factors or ConfluenceFactors()
   score = float(getattr(zone, "score", 0.0))
   if score > 0:
+    if factors.fib_touch:
+      score += _fib_touch_weight(settings)
     stars = 3 if score >= STAR_THREE_SCORE else 2 if score >= STAR_TWO_SCORE else 1
   else:
-    stars = _confluence_from_factors(factors or ConfluenceFactors())
+    stars = _confluence_from_factors(factors, settings)
   if getattr(zone, "touches", 0) >= 1:
     stars = min(stars, 2)
   return max(1, stars)
@@ -993,6 +1066,20 @@ def _finish(
   if not _entry_valid_for_settings(zone, price, atr, direction, ctx.settings):
     return None
   st = ctx.structures[ctx.tf]
+  factors = factors or ConfluenceFactors()
+  fib_hit = _resolve_fib_touch(st, level, atr, ctx.settings)
+  if fib_hit is not None:
+    factors = replace(factors, fib_touch=True)
+    fib_reason = f"fib {fib_hit.ratio:g}"
+    if fib_reason not in reasons:
+      reasons = [*reasons, fib_reason]
+  mom = getattr(st, "momentum_state", None)
+  if mom is not None:
+    mom_reason = (
+      f"mom v={float(mom.velocity):+.2f} a={float(mom.acceleration):+.2f}"
+    )
+    if mom_reason not in reasons:
+      reasons = [*reasons, mom_reason]
   full_reasons = _merge_tp_anchor(
     ctx,
     reasons,
@@ -1003,9 +1090,12 @@ def _finish(
   )
   if include_score_reasons:
     full_reasons = _merge_score_reasons(full_reasons, zone)
-  confluence = _confluence_from_zone(zone, factors)
+  confluence = _confluence_from_zone(zone, factors, ctx.settings)
   if confluence < ctx.settings.confluence_floor:
     return None
+  math_pd = None
+  if st.dealing_range is not None:
+    math_pd = float(st.dealing_range.position)
   return DetectionResult(
     setup=setup,
     direction=direction,
@@ -1028,6 +1118,35 @@ def _finish(
     source_touches=source_touches,
     source_score=source_score,
     bias_relationship=bias_relationship,
+    math_fib_ratio=(None if fib_hit is None else float(fib_hit.ratio)),
+    math_velocity=(
+      None if mom is None else float(getattr(mom, "velocity", 0.0))
+    ),
+    math_acceleration=(
+      None if mom is None else float(getattr(mom, "acceleration", 0.0))
+    ),
+    math_pd=math_pd,
+  )
+
+
+def _resolve_fib_touch(
+  st: StructureSet,
+  level: float,
+  atr: float,
+  settings: DetectorSettings,
+):
+  if not settings.fibonacci_enabled or atr <= 0:
+    return None
+  from app.analysis.fibonacci import fib_from_swings, nearest_fib
+
+  levels = list(getattr(st, "fib_levels", None) or [])
+  if not levels:
+    levels = fib_from_swings(st.swings, float(level))
+  return nearest_fib(
+    levels,
+    float(level),
+    float(atr),
+    settings.fibonacci_epsilon_atr,
   )
 
 
@@ -1540,6 +1659,30 @@ def snap_back(ctx: DetectionContext) -> DetectionResult | None:
   )
 
 
+def _momentum_va_allows(
+  st: StructureSet,
+  direction: str,
+  settings: DetectorSettings,
+) -> bool:
+  """Optional hard gate: velocity aligned, acceleration not strongly opposing."""
+  if not settings.momentum_va_gate_enabled:
+    return True
+  mom = getattr(st, "momentum_state", None)
+  if mom is None:
+    return True
+  v = float(getattr(mom, "velocity", 0.0))
+  a = float(getattr(mom, "acceleration", 0.0))
+  if direction == "BUY":
+    if v < float(settings.momentum_velocity_bull_threshold):
+      return False
+    return a >= -abs(float(settings.momentum_velocity_bull_threshold))
+  if direction == "SELL":
+    if v > float(settings.momentum_velocity_bear_threshold):
+      return False
+    return a <= abs(float(settings.momentum_velocity_bear_threshold))
+  return True
+
+
 def momentum_ride(ctx: DetectionContext) -> DetectionResult | None:
   df, ind, st = _exec(ctx)
   if len(df) < 5:
@@ -1550,6 +1693,8 @@ def momentum_ride(ctx: DetectionContext) -> DetectionResult | None:
   if direction is None or not _pd_gate(st, direction, ctx.settings, ctx=ctx, setup="Momentum Ride"):
     return None
   if not _strong_body_break(df, st, direction, ctx.settings.momentum_body_frac):
+    return None
+  if not _momentum_va_allows(st, direction, ctx.settings):
     return None
   price = _current_price(ctx, df)
   atr = _atr(ind)

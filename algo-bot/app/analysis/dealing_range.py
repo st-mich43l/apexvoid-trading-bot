@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.analysis.fibonacci import fib_zone_label
 from app.analysis.types import DealingRange, Swing
 
 
@@ -9,8 +10,11 @@ def dealing_range(
   swings: list[Swing],
   price: float,
   eq_band: float = 0.10,
+  *,
+  deep_discount: float = 0.382,
+  deep_premium: float = 0.618,
 ) -> DealingRange | None:
-  pair = _bracketing_pair(swings, price) or _last_opposing_pair(swings)
+  pair = swing_range_pair(swings, price)
   if pair is None:
     return None
   low, high = pair
@@ -25,7 +29,27 @@ def dealing_range(
     zone = "discount"
   else:
     zone = "premium"
-  return DealingRange(high=high, low=low, eq=eq, position=position, zone=zone)
+  fib_zone = fib_zone_label(
+    position,
+    deep_discount=deep_discount,
+    deep_premium=deep_premium,
+    eq_half_band=half_band,
+  )
+  return DealingRange(
+    high=high,
+    low=low,
+    eq=eq,
+    position=position,
+    zone=zone,
+    fib_zone=fib_zone,
+  )
+
+
+def swing_range_pair(
+  swings: list[Swing],
+  price: float,
+) -> tuple[float, float] | None:
+  return _bracketing_pair(swings, price) or _last_opposing_pair(swings)
 
 
 def _bracketing_pair(
