@@ -25,6 +25,17 @@ from app.scalping.models import (
 LIVE_SYMBOL = "XAU"
 
 
+def _hfs_symbols() -> set[str]:
+  from app.core.config import runtime_config
+
+  live = {item.upper() for item in runtime_config.live_instruments()}
+  return live or {LIVE_SYMBOL}
+
+
+def is_hfs_symbol(symbol: str) -> bool:
+  return str(symbol).upper() in _hfs_symbols()
+
+
 def classify_session(ts: int, cfg: Any | None = None) -> str:
   """Return asia|london|new_york|london_ny_overlap|rollover."""
   hour = datetime.fromtimestamp(int(ts), tz=timezone.utc).hour
@@ -168,7 +179,7 @@ def is_context_fresh(
   now: int,
   max_age_seconds: int,
 ) -> bool:
-  if snapshot.symbol.upper() != LIVE_SYMBOL:
+  if snapshot.symbol.upper() not in _hfs_symbols():
     return False
   age = int(now) - int(snapshot.m5_bar_ts)
   return age <= max(0, int(max_age_seconds))
@@ -189,8 +200,8 @@ def build_scalp_context_snapshot(
   m5_structure: str = "range",
   regime: str = "range",
 ) -> ScalpContextSnapshot | None:
-  """Build an immutable M5 context. Fail closed for non-XAU / malformed."""
-  if str(symbol).upper() != LIVE_SYMBOL:
+  """Build an immutable M5 context. Fail closed for non-live / malformed."""
+  if not is_hfs_symbol(symbol):
     return None
   if m5 is None or m5.empty or not math.isfinite(price) or price <= 0:
     return None
@@ -239,7 +250,7 @@ def build_scalp_context_snapshot(
   return ScalpContextSnapshot(
     version=CONTEXT_VERSION,
     context_id=context_id,
-    symbol=LIVE_SYMBOL,
+    symbol=str(symbol).upper(),
     created_at=int(now),
     h1_bar_ts=_bar_ts(h1) if h1 is not None else None,
     m15_bar_ts=_bar_ts(m15) if m15 is not None else None,
@@ -304,7 +315,7 @@ async def load_current_context(
   client: Any,
   symbol: str,
 ) -> ScalpContextSnapshot | None:
-  if str(symbol).upper() != LIVE_SYMBOL:
+  if not is_hfs_symbol(symbol):
     return None
   raw = await client.get(current_context_key(symbol))
   if raw is None:

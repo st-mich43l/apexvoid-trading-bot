@@ -51,11 +51,11 @@ public static class ManifestRuntimeFactory
       registry = InstrumentRuntimeRegistry.FromRuntimeManifestV2(manifest, feed);
     }
 
-    if (registry.LiveInstruments().Count != 1
-      || registry.LiveInstruments()[0].InstrumentId != "XAU")
+    if (registry.LiveInstruments().All(item => item.InstrumentId != "XAU")
+      || registry.LiveInstruments().Count == 0)
     {
       throw new InvalidOperationException(
-        "manifest live instrument set must be exactly [XAU]"
+        "manifest live instrument set must include XAU"
       );
     }
 
@@ -81,12 +81,6 @@ public static class ManifestRuntimeFactory
     {
       throw new InvalidOperationException(
         "runtime manifest live_instruments does not include XAU"
-      );
-    }
-    if (manifest.LiveInstruments.Count != 1)
-    {
-      throw new InvalidOperationException(
-        "runtime manifest live_instruments must contain only XAU for production"
       );
     }
     var xau = manifest.Instruments["XAU"];

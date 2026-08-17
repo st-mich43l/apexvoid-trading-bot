@@ -9,6 +9,7 @@ from app.analysis.entry_location import (
   build_entry_location_context,
   evaluate_entry_location,
 )
+from app.scalping.context import is_hfs_symbol
 from app.scalping.models import (
   ARCHETYPE_BREAKOUT_RETEST,
   ARCHETYPE_IMPULSE_PULLBACK,
@@ -82,7 +83,7 @@ def evaluate_scalp_activation(
     "direction": opportunity.direction,
   }
 
-  if opportunity.symbol.upper() != "XAU":
+  if not is_hfs_symbol(opportunity.symbol):
     return ScalpDecision(False, True, "scalp_symbol_not_enabled", 0.0, measured)
 
   # Quote freshness (60s hard cap inside HFS)

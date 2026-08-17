@@ -36,11 +36,11 @@ public sealed class AutoTradeEngine(
   // TradePlanExecutionEngineDependencyTests can scan every V7 file for
   // forbidden analysis/route/stop symbols without tripping over this file's
   // legitimate V6 use of them elsewhere.
-  private readonly TradePlanRuntime _tradePlanRuntime = new(
-    options, store, clock ?? (() => DateTimeOffset.UtcNow), log ?? Log
-  );
+  private TradePlanRuntime? _tradePlanRuntime;
   private long _spotSequence;
   private SpotPrice? _lastSpot;
+  private readonly Dictionary<string, SpotPrice> _lastSpotBySymbol =
+    new(StringComparer.OrdinalIgnoreCase);
   private ICTraderTradeClient? _client;
   private SymbolInfo? _symbol;
   private IReadOnlyList<TradingPosition> _allSymbolPositions = [];
@@ -105,13 +105,103 @@ public sealed class AutoTradeEngine(
 
   public bool Enabled => options.Enabled && !_disabled;
 
+  private TradePlanRuntime TradePlans =>
+    _tradePlanRuntime ??= new TradePlanRuntime(
+      options,
+      store,
+      _clock,
+      _log,
+      resolveBoundSymbol: ResolveBoundSymbol,
+      resolveUnits: ResolveInstrumentUnits
+    );
+
+  private SymbolInfo? ResolveBoundSymbol(string canonical)
+  {
+    if (_symbolsByCanonical.TryGetValue(canonical, out var bound))
+    {
+      return bound;
+    }
+    if (
+      InstrumentRegistry is not null
+      && InstrumentRegistry.TryGet(canonical, out var runtime)
+    )
+    {
+      return runtime.Symbol;
+    }
+    return null;
+  }
+
+  private (decimal PipSize, decimal PipValuePerLot) ResolveInstrumentUnits(
+    string canonical
+  )
+  {
+    if (
+      InstrumentRegistry is not null
+      && InstrumentRegistry.TryGet(canonical, out var runtime)
+    )
+    {
+      return (
+        runtime.Execution.PipSize,
+        runtime.Execution.EffectivePipValuePerLot
+      );
+    }
+    return (options.PipSize, options.PipValuePerLot);
+  }
+
+  private decimal PipSizeForSymbol(string symbol)
+  {
+    return ResolveInstrumentUnits(symbol).PipSize;
+  }
+
+  private IEnumerable<(SymbolInfo Symbol, SpotPrice? Quote)> TradePlanPollTargets(
+    SymbolInfo sessionSymbol,
+    SpotPrice? sessionSpot
+  )
+  {
+    if (_symbolsByCanonical.Count == 0 || InstrumentRegistry is null)
+    {
+      yield return (sessionSymbol, sessionSpot);
+      yield break;
+    }
+    var live = InstrumentRegistry.LiveInstruments();
+    if (live.Count == 0)
+    {
+      yield return (sessionSymbol, sessionSpot);
+      yield break;
+    }
+    foreach (var runtime in live)
+    {
+      SymbolInfo? bound = runtime.Symbol;
+      if (bound is null
+        && !_symbolsByCanonical.TryGetValue(runtime.Feed.RedisSymbol, out bound))
+      {
+        continue;
+      }
+      _lastSpotBySymbol.TryGetValue(bound.RedisSymbol, out var quote);
+      yield return (bound, quote);
+    }
+  }
+
   public void LogUnitConfiguration(
     SymbolInfo symbol,
     Action<string> info,
     Action<string> warning
   )
   {
-    var diagnostic = VolumePlanner.PipUnitDiagnostic(symbol, options);
+    var slice = options;
+    if (
+      InstrumentRegistry is not null
+      && InstrumentRegistry.TryGet(symbol.RedisSymbol, out var runtime)
+    )
+    {
+      slice = options with
+      {
+        PipSize = runtime.Execution.PipSize,
+        PipValuePerLot = runtime.Execution.EffectivePipValuePerLot,
+        ContractSize = runtime.Execution.ContractSize,
+      };
+    }
+    var diagnostic = VolumePlanner.PipUnitDiagnostic(symbol, slice);
     if (diagnostic.Differs)
     {
       warning(diagnostic.Message);
@@ -417,9 +507,12 @@ public sealed class AutoTradeEngine(
     }
     try
     {
-      await _tradePlanRuntime.PollAsync(
-        client, symbol, spot, cancellationToken
-      );
+      foreach (var (bound, quote) in TradePlanPollTargets(symbol, spot))
+      {
+        await TradePlans.PollAsync(
+          client, bound, quote, cancellationToken
+        );
+      }
       if (_tradePlanConsumerFailures > 0)
       {
         _log(
@@ -458,6 +551,7 @@ public sealed class AutoTradeEngine(
   {
     _spotSequence++;
     _lastSpot = spot;
+    _lastSpotBySymbol[spot.Symbol] = spot;
     if (!_ready || options.DryRun || !Enabled)
     {
       return;
@@ -5055,20 +5149,36 @@ public sealed class AutoTradeEngine(
 
   private SpotPrice ValidateQuote(TradeCandidate candidate)
   {
-    var quote = _lastSpot
-      ?? throw new CandidateRejectedException("live cTrader quote unavailable");
+    if (!_lastSpotBySymbol.TryGetValue(candidate.Symbol, out var quote))
+    {
+      quote = _lastSpot
+        ?? throw new CandidateRejectedException("live cTrader quote unavailable");
+      if (
+        !string.Equals(
+          quote.Symbol,
+          candidate.Symbol,
+          StringComparison.OrdinalIgnoreCase
+        )
+      )
+      {
+        throw new CandidateRejectedException(
+          $"live quote is for {quote.Symbol}, not {candidate.Symbol}"
+        );
+      }
+    }
+    var pipSize = PipSizeForSymbol(candidate.Symbol);
     var age = _clock().ToUnixTimeSeconds() - quote.Timestamp;
     if (age < 0 || age > Math.Max(1, options.SpotMaxAgeSeconds))
     {
       throw new CandidateRejectedException("live cTrader quote is stale");
     }
     var spread = quote.Ask - quote.Bid;
-    var spreadPips = spread / options.PipSize;
+    var spreadPips = spread / pipSize;
     if (spreadPips < 0 || spreadPips > options.MaxSpreadPips)
     {
       throw new CandidateRejectedException(
         $"spread rejected: bid={quote.Bid:0.00} ask={quote.Ask:0.00} "
-          + $"raw={spread:0.00} pip={options.PipSize} -> "
+          + $"raw={spread:0.00} pip={pipSize} -> "
           + $"{spreadPips:0.0} pips, cap {options.MaxSpreadPips:0.0}"
       );
     }
@@ -5089,7 +5199,7 @@ public sealed class AutoTradeEngine(
       : entry > candidate.EntryZone.High
         ? entry - candidate.EntryZone.High
         : 0m;
-    var distancePips = distance / options.PipSize;
+    var distancePips = distance / pipSize;
     if (distancePips > options.MaxEntryDistancePips)
     {
       var publicationDistance = candidate.CurrentPrice < candidate.EntryZone.Low
@@ -5097,12 +5207,12 @@ public sealed class AutoTradeEngine(
         : candidate.CurrentPrice > candidate.EntryZone.High
           ? candidate.CurrentPrice - candidate.EntryZone.High
           : 0m;
-      var publicationDistancePips = publicationDistance / options.PipSize;
+      var publicationDistancePips = publicationDistance / pipSize;
       throw new CandidateRejectedException(
         $"entry distance rejected: direction={candidate.Direction} "
           + $"entry={entry:0.00} "
           + $"zone={candidate.EntryZone.Low:0.00}-{candidate.EntryZone.High:0.00} "
-          + $"raw={distance:0.00} pip={options.PipSize} -> "
+          + $"raw={distance:0.00} pip={pipSize} -> "
           + $"{distancePips:0.0} pips, cap {options.MaxEntryDistancePips:0.0}"
           + (
             publicationDistance > 0m
@@ -5122,12 +5232,20 @@ public sealed class AutoTradeEngine(
   {
     var client = RequireClient();
     var symbol = RequireSymbol();
-    if (!spot.Symbol.Equals(symbol.RedisSymbol, StringComparison.OrdinalIgnoreCase))
+    if (_symbolsByCanonical.TryGetValue(spot.Symbol, out var routed))
+    {
+      symbol = routed;
+    }
+    else if (!spot.Symbol.Equals(symbol.RedisSymbol, StringComparison.OrdinalIgnoreCase))
     {
       return;
     }
     foreach (var original in _states.Values.ToArray())
     {
+      if (original.SymbolId != symbol.SymbolId)
+      {
+        continue;
+      }
       var state = _states.GetValueOrDefault(original.PositionId, original);
       while (
         state.RemainingVolume > 0
@@ -6060,7 +6178,7 @@ public sealed class AutoTradeEngine(
       ) is not null
     )
     {
-      await _tradePlanRuntime.TryAdoptV7BrokerPositionAsync(
+      await TradePlans.TryAdoptV7BrokerPositionAsync(
         _client, RequireSymbol(), position, cancellationToken
       );
       return;

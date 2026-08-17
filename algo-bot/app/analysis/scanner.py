@@ -12,6 +12,7 @@ from typing import Any, Awaitable, Callable, Iterable
 
 from app.persistence import redis_state
 from app.core.config import runtime_config
+from app.core import instrument_geometry
 from app.analysis.detectors import (
   DEFAULT_DETECTORS,
   DetectionContext,
@@ -153,7 +154,8 @@ def _csv(value: str) -> list[str]:
 def _watched_symbols() -> set[str]:
   """Rollout-aware analysis set ∩ scanner compatibility filter.
 
-  Production remains XAU-only. Global CSV is a filter, not sole authority.
+  Live instruments that permit analysis (currently XAU, EURUSD, GBPJPY)
+  are scanned when they also appear in the scanner CSV.
   """
   compatibility = _csv(runtime_config.market_data.scanner.symbols)
   try:
@@ -178,8 +180,17 @@ def _all_tfs(exec_tf: str, htf_tfs: Iterable[str]) -> list[str]:
   return result
 
 
-def _detector_settings():
-  return detector_settings_from()
+def _detector_settings(symbol: str | None = None):
+  settings = detector_settings_from()
+  if not symbol:
+    return settings
+  return replace(
+    settings,
+    round_step=instrument_geometry.round_step(symbol),
+    fvg_entry_max_width_price=instrument_geometry.fvg_entry_max_width_price(
+      symbol
+    ),
+  )
 
 
 def _parse_bar_event(data: object) -> tuple[str, str, str] | None:
@@ -1298,7 +1309,8 @@ def _copy_draft(
   execution_match: StrategyMatch | None = None,
 ) -> str | None:
   """Build an editable one-line command; include planned SL when known."""
-  if symbol.upper() != "XAU":
+  live = {item.upper() for item in runtime_config.live_instruments()}
+  if symbol.upper() not in live:
     return None
   setup = re.sub(r"[^a-z0-9]+", "-", result.setup.lower()).strip("-")
   grade = "*" * max(1, min(3, int(result.confluence)))
@@ -1677,8 +1689,8 @@ def _merge_detection_confluence(
     atr=atr,
     pip_size=_pip_size(symbol),
     source_tf=tf,
-    max_width=float(runtime_config.analysis.zones.merge_max_width),
-    gap=float(runtime_config.analysis.zones.confluence.merge_gap_price),
+    max_width=float(instrument_geometry.merge_max_width(symbol)),
+    gap=float(instrument_geometry.merge_gap_price(symbol)),
   )
   merged_by_index: list[tuple[int, DetectionResult]] = []
   consumed: set[int] = set()
@@ -1723,9 +1735,7 @@ def _merge_detection_confluence(
     from app.analysis.technique_geometry import optimize_imbalance_entry_zone
 
     direction = "BUY" if zone.side == "buy" else "SELL"
-    max_width = float(
-      runtime_config.strategies.technique.fvg.entry_max_width_price
-    )
+    max_width = float(instrument_geometry.fvg_entry_max_width_price(symbol))
     optimized_entry, clipped = optimize_imbalance_entry_zone(
       merged_entry,
       direction=direction,
@@ -2748,7 +2758,7 @@ async def _load_market_context_for_symbol(
   trigger = event_ts or str(frames[exec_tf].index[-1])
   # build_context is pandas/CPU-heavy; keep it off the Telegram event loop.
   # Prod 2026-08-12: M5 closes blocked handlers for ~5-6s while this ran inline.
-  settings = _detector_settings()
+  settings = _detector_settings(symbol)
   ctx = await asyncio.to_thread(
     build_context,
     symbol,
