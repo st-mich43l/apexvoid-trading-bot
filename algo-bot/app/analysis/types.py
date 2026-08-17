@@ -58,6 +58,9 @@ class DealingRange:
   eq: float
   position: float
   zone: str
+  # Fine Fibonacci PD band (deep_discount / discount / eq / premium /
+  # deep_premium). Additive so older positional constructors still work.
+  fib_zone: str = ""
 
 
 @dataclass(frozen=True)

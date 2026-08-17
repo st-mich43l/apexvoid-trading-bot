@@ -149,7 +149,22 @@ def build_hfs_strategy_match(
     entry_location_reason=location_reason,
     entry_activation_trigger=str(opportunity.trigger_type),
     entry_activation_trigger_ts=touch,
+    math_pd=(
+      None if context.dealing_range_position is None
+      else float(context.dealing_range_position)
+    ),
+    math_fib_ratio=_hfs_math_fib_ratio(opportunity),
   )
+
+
+def _hfs_math_fib_ratio(opportunity: Any) -> float | None:
+  measured = getattr(opportunity, "measured", None) or {}
+  if isinstance(measured, dict) and measured.get("retracement") is not None:
+    try:
+      return float(measured["retracement"])
+    except (TypeError, ValueError):
+      return None
+  return None
 
 
 async def _persist_hfs_match(client: Any, match: StrategyMatch) -> StrategyMatch:

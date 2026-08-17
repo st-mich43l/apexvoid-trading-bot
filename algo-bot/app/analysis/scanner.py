@@ -552,6 +552,10 @@ def _build_one_strategy_match(
     htf_bias=str(getattr(ctx, "htf_bias", "") or ""),
     regime_kind=str(getattr(getattr(ctx, "regime", None), "kind", "") or ""),
     execution_eligibility=result.execution_eligibility,
+    math_fib_ratio=getattr(result, "math_fib_ratio", None),
+    math_velocity=getattr(result, "math_velocity", None),
+    math_acceleration=getattr(result, "math_acceleration", None),
+    math_pd=getattr(result, "math_pd", None),
   )
   return match, None, {}
 

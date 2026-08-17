@@ -13,6 +13,12 @@ dated section after deployment.
 ## Unreleased
 
 ### Added
+- Autotrade Fibonacci + ATR-normalized velocity/acceleration math: swing Fib
+  ladders soft-boost confluence (`fib_touch`), dealing-range
+  deep_discount/deep_premium at 0.382/0.618, HFS impulse preferred band
+  0.382–0.618, and a Telegram **Math** line (`fib` / `v` / `a` / `PD`) on
+  forming cards. Momentum Ride hard VA gate stays off unless
+  ``MOMENTUM_VA_GATE_ENABLED=true``.
 - Owner ``/trade_modify [SYMBOL] #N entry lo-hi sl X tp a/b/c`` (VIP
   ``modify #N …``) rewrites levels on an **unfilled** signal, deletes the
   old VIP/public cards, and posts a fresh entry message with the same

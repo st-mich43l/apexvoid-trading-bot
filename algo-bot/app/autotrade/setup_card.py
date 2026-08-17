@@ -1628,6 +1628,26 @@ def forming_card_headline(
   return f"🔎 <b>{escape(str(symbol))} {escape(str(tf))} · {label}</b>"
 
 
+def _format_math_line(match: StrategyMatch) -> str | None:
+  parts: list[str] = []
+  fib = getattr(match, "math_fib_ratio", None)
+  if fib is not None and math.isfinite(float(fib)):
+    parts.append(f"fib {float(fib):g}")
+  vel = getattr(match, "math_velocity", None)
+  acc = getattr(match, "math_acceleration", None)
+  if vel is not None and math.isfinite(float(vel)):
+    if acc is not None and math.isfinite(float(acc)):
+      parts.append(f"v={float(vel):+.2f} · a={float(acc):+.2f}")
+    else:
+      parts.append(f"v={float(vel):+.2f}")
+  pd = getattr(match, "math_pd", None)
+  if pd is not None and math.isfinite(float(pd)):
+    parts.append(f"PD {float(pd):.2f}")
+  if not parts:
+    return None
+  return " · ".join(parts)
+
+
 def format_plan_published_root_card(
   match: StrategyMatch,
   *,
@@ -1689,6 +1709,10 @@ def format_plan_published_root_card(
     lines.append(f"✅ <b>Confirmation:</b> {escape(confirmation)}")
   if source_tf:
     lines.append(f"⏱ <b>Source TF:</b> {escape(source_tf)}")
+
+  math_line = _format_math_line(match)
+  if math_line:
+    lines.extend(["", "📐 <b>Math</b>", f"• {escape(math_line)}"])
 
   lines.extend([
     "",

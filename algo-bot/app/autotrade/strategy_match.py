@@ -92,6 +92,11 @@ class StrategyMatch:
   entry_location_reason: str | None = None
   entry_activation_trigger: str | None = None
   entry_activation_trigger_ts: str | None = None
+  # Soft math diagnostics for Telegram Math line (additive / optional).
+  math_fib_ratio: float | None = None
+  math_velocity: float | None = None
+  math_acceleration: float | None = None
+  math_pd: float | None = None
 
   @property
   def is_range_edge(self) -> bool:
@@ -273,6 +278,22 @@ class StrategyMatch:
         entry_activation_trigger_ts=(
           None if payload.get("entry_activation_trigger_ts") is None
           else str(payload["entry_activation_trigger_ts"])
+        ),
+        math_fib_ratio=(
+          None if payload.get("math_fib_ratio") is None
+          else float(payload["math_fib_ratio"])
+        ),
+        math_velocity=(
+          None if payload.get("math_velocity") is None
+          else float(payload["math_velocity"])
+        ),
+        math_acceleration=(
+          None if payload.get("math_acceleration") is None
+          else float(payload["math_acceleration"])
+        ),
+        math_pd=(
+          None if payload.get("math_pd") is None
+          else float(payload["math_pd"])
         ),
       )
     except (KeyError, TypeError, ValueError, json.JSONDecodeError):

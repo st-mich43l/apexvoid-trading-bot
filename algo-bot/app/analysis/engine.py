@@ -10,9 +10,10 @@ from typing import Any
 import pandas as pd
 
 from app.analysis.dealing_range import dealing_range
+from app.analysis.fibonacci import FibLevel, fib_from_swings, nearest_fib
 from app.analysis.levels import key_levels
 from app.analysis.liquidity import liquidity_grabs, liquidity_pools
-from app.analysis.momentum import momentum
+from app.analysis.momentum import MomentumState, momentum_state
 from app.analysis.math_utils import atr_scalar, atr_series
 from app.analysis.types import (
   Break,
@@ -144,6 +145,15 @@ class AnalysisSettings:
   key_level_min_touches: int = 2
   momentum_lookback: int = 8
   momentum_body_frac: float = 0.6
+  momentum_velocity_lookback: int = 8
+  momentum_velocity_bull_threshold: float = 0.15
+  momentum_velocity_bear_threshold: float = -0.15
+  momentum_va_gate_enabled: bool = False
+  fibonacci_enabled: bool = True
+  fibonacci_epsilon_atr: float = 0.15
+  fibonacci_confluence_weight: float = 2.5
+  fibonacci_deep_discount: float = 0.382
+  fibonacci_deep_premium: float = 0.618
   session_asia_start: int = 22
   session_london_start: int = 7
   session_ny_start: int = 13
@@ -211,6 +221,9 @@ class TimeframeAnalysis:
   liquidity_pools: list[Pool]
   liquidity_grabs: list[Grab]
   momentum: str
+  momentum_state: MomentumState | None = None
+  fib_levels: list[FibLevel] = field(default_factory=list)
+  nearest_fib: FibLevel | None = None
   session_levels: list[SessionLevel] = field(default_factory=list)
   dealing_range: DealingRange | None = None
   regime: Regime | None = None
@@ -349,6 +362,8 @@ def _analyze_tf(
     swings,
     float(df["close"].iloc[-1]),
     settings.eq_band,
+    deep_discount=settings.fibonacci_deep_discount,
+    deep_premium=settings.fibonacci_deep_premium,
   )
   regime_ = regime(df, atr, swings, structure, range_, settings)
   box_break = accepted_box_break(df, atr, regime_, nested_cfg)
@@ -437,6 +452,25 @@ def _analyze_tf(
     nested_cfg,
   )
   ob_zones, sd_zones, flip, fvg_zones = _zone_views(zones)
+  close_price = float(df["close"].iloc[-1])
+  atr_value = atr_scalar(atr)
+  mom = momentum_state(
+    df,
+    atr,
+    settings.momentum_velocity_lookback,
+    settings.momentum_velocity_bull_threshold,
+    settings.momentum_velocity_bear_threshold,
+  )
+  fib_levels: list[FibLevel] = []
+  near_fib: FibLevel | None = None
+  if settings.fibonacci_enabled:
+    fib_levels = fib_from_swings(swings, close_price)
+    near_fib = nearest_fib(
+      fib_levels,
+      close_price,
+      atr_value,
+      settings.fibonacci_epsilon_atr,
+    )
   return TimeframeAnalysis(
     df=df,
     atr=atr,
@@ -452,7 +486,10 @@ def _analyze_tf(
     zones=zones,
     liquidity_pools=pools,
     liquidity_grabs=grabs,
-    momentum=momentum(df, atr, settings.momentum_lookback, settings.momentum_body_frac),
+    momentum=mom.state,
+    momentum_state=mom,
+    fib_levels=fib_levels,
+    nearest_fib=near_fib,
     session_levels=sessions,
     dealing_range=range_,
     regime=regime_,

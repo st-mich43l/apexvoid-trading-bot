@@ -154,8 +154,8 @@ def detect_impulse_pullback(
   direction: str,
   min_retracement: float = 0.25,
   max_retracement: float = 0.75,
-  preferred_low: float = 0.33,
-  preferred_high: float = 0.62,
+  preferred_low: float = 0.382,
+  preferred_high: float = 0.618,
 ) -> dict[str, Any] | None:
   """Measure pullback against the most recent impulse leg."""
   if df is None or len(df) < 8:
