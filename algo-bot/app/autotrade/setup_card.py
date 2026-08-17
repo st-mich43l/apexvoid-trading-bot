@@ -381,6 +381,14 @@ async def clear_forming_reconcile_pending(client, setup_id: str) -> None:
 _CARD_HEADER_RE = re.compile(
   r"^\S+\s*<b>(?P<symbol>[A-Za-z0-9]+)\s+(?P<tf>\S+)\s*·\s*[^<]*</b>$"
 )
+# Fill rewrites the headline to this shape; _CARD_HEADER_RE must not parse
+# it (would read symbol=POSITION). Terminal close needs its own extract.
+_ACTIVATED_HEADER_RE = re.compile(
+  r"^\S+\s*<b>POSITION ACTIVATED\s*·\s*"
+  r"(?P<symbol>[A-Za-z0-9]+)\s+(?P<tf>\S+)\s*</b>$",
+  re.IGNORECASE,
+)
+_LIVE_PRICE_MARKER_RE = re.compile(r"\s*<i>\(live\)</i>", re.IGNORECASE)
 
 # The direction/strategy body line format.py always writes right after the
 # status slot (see format_plan_published_root_card) - "🔴 <b>SELL · ...</b>"
@@ -415,6 +423,12 @@ def _terminal_header(line: str) -> str | None:
   stripped = line.strip()
   if stripped.startswith("❌") and "TERMINAL" in stripped:
     return None
+  activated = _ACTIVATED_HEADER_RE.match(stripped)
+  if activated is not None:
+    return (
+      f"❌ <b>TERMINAL · {activated.group('symbol')} "
+      f"{activated.group('tf')}</b>"
+    )
   match = _CARD_HEADER_RE.match(stripped)
   if match is None:
     return None
@@ -422,6 +436,34 @@ def _terminal_header(line: str) -> str | None:
     f"❌ <b>TERMINAL · {match.group('symbol')} "
     f"{match.group('tf')}</b>"
   )
+
+
+def _strip_live_price_marker(text: str) -> str:
+  """Terminal cards are closed — drop the live price cue."""
+  return _LIVE_PRICE_MARKER_RE.sub("", text)
+
+
+def forming_card_matches_strategy(text: str, match: StrategyMatch) -> bool:
+  """True when the root body direction/strategy still matches ``match``.
+
+  Confluence zones share one setup_id across detectors; publish can reuse an
+  older forming card that only refreshed Stop. Stale Key Level / opposing
+  direction bodies must be replaced before fill replies thread to them.
+  """
+  direction = str(match.direction or "").upper()
+  strategy = str(match.strategy or "").strip()
+  if not direction:
+    return True
+  for line in (text or "").splitlines():
+    body = _BODY_DIRECTION_LINE_RE.match(line.strip())
+    if body is None:
+      continue
+    if body.group(1) != direction:
+      return False
+    if strategy and strategy not in line:
+      return False
+    return True
+  return False
 
 
 def apply_forming_card_status(text: str, status_line: str) -> str:
@@ -450,10 +492,20 @@ def apply_forming_card_status(text: str, status_line: str) -> str:
       # since by then the header will already read as activated.
       del lines[1]
     return "\n".join(lines)
-  if inferred == "terminal" and not activated:
+  if inferred == "terminal":
+    # Prod 2026-08-17: close on an already-activated root inserted
+    # "TERMINAL" under "POSITION ACTIVATED" instead of rewriting the
+    # headline — looked like an old live card flipped to terminal mid-body.
+    was_activated = activated
     rewritten_header = _terminal_header(lines[0])
     if rewritten_header is not None:
       lines[0] = rewritten_header
+    if was_activated:
+      if len(lines) > 1 and not _BODY_DIRECTION_LINE_RE.match(lines[1].strip()):
+        lines[1] = status_line
+      else:
+        lines.insert(1, status_line)
+      return _strip_live_price_marker("\n".join(lines))
   if activated:
     # Post-fill status updates (SL move, then later a TP hit) must keep
     # replacing the SAME line, not stack a new one each time - only
@@ -467,7 +519,10 @@ def apply_forming_card_status(text: str, status_line: str) -> str:
     lines[1] = status_line
   else:
     lines.append(status_line)
-  return "\n".join(lines)
+  joined = "\n".join(lines)
+  if inferred == "terminal":
+    return _strip_live_price_marker(joined)
+  return joined
 
 
 async def save_forming_card_status(
@@ -1727,6 +1782,40 @@ async def ensure_plan_published_root_card(
 
   existing = await load_forming_card(client, match.match_id)
   if existing is not None and int(existing.get("message_id") or 0) > 0:
+    existing_text = str(existing.get("text") or "")
+    if not forming_card_matches_strategy(existing_text, match):
+      # Confluence setup_id is shared across detectors — an older Key Level
+      # (or wrong-direction) body must not stay as the Trend Pullback root.
+      replacement = format_plan_published_root_card(match, stop_price=stop_price)
+      upper_head = existing_text.splitlines()[0].upper() if existing_text else ""
+      if "TERMINAL" in upper_head:
+        snapshot = await load_forming_card_status_snapshot(client, match.match_id)
+        status = (
+          snapshot.status_line
+          if snapshot is not None and snapshot.status_line
+          else _terminal_status_line("closed")
+        )
+        replacement = apply_forming_card_status(replacement, status)
+      elif "POSITION ACTIVATED" in upper_head:
+        replacement = apply_forming_card_status(
+          replacement, "✅ <b>POSITION ACTIVATED</b>",
+        )
+      message_id = await post_or_edit_forming_card(
+        client,
+        match.match_id,
+        replacement,
+        chat_id=int(existing.get("chat_id") or owner_id),
+        send_fn=resolved_send,
+        edit_fn=resolved_edit,
+        delete_fn=resolved_delete,
+      )
+      log.info(
+        "plan_published_root_card_body_refreshed setup_id=%s message_id=%s "
+        "reason=strategy_mismatch",
+        match.match_id,
+        message_id,
+      )
+      return message_id
     # Keep existing head status (no PLAN PUBLISHED advertisement). Still
     # refresh Stop so BE/trail patches have a real Trade-area baseline.
     if stop_price is not None:

@@ -12,6 +12,15 @@ dated section after deployment.
 
 ## Unreleased
 
+### Fixed
+- Activated algo root cards rewrite to ``TERMINAL · SYMBOL TF`` on close
+  instead of stacking ``POSITION ACTIVATED`` + ``TERMINAL`` (and keep a
+  stale ``(live)`` price). Publish refreshes a confluence root body when
+  direction/strategy no longer match the armed plan.
+- ``/trade_delete`` on a still-pending algo-manual limit defers like
+  ``/trade_cancel`` (wait for broker confirm) instead of hard-deleting the
+  row immediately and racing the cancel event.
+
 ### Changed
 - ``/trade_stats`` (and the weekly recap) show AUTO TRADE and ALGO MANUAL
   as separate books with their own net, winrate, and setup lines. Combined
