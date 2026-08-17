@@ -1,6 +1,6 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "d2307f717e28786b1e333ff34eca1b6cb9e3248f452cead4fd2e4596ba18219f",
+  "configuration_contract_fingerprint_sha256": "280b4886604dd550286e011c641ab33256ee1f769661544cd707e378191d499c",
   "count": 95,
   "items": [
     {
@@ -627,22 +627,22 @@
     },
     {
       "allowed_values": [
-        "v7_only"
+        "v8_only"
       ],
       "canonical_env": "AUTO_TRADE_CONTRACT_MODE",
       "configurable": true,
       "ctrader_constructor_default": "legacy_v6",
-      "ctrader_from_environment_default": "v7_only",
+      "ctrader_from_environment_default": "v8_only",
       "ctrader_type": "string",
       "default_conflict": true,
       "default_contexts": [
         {
           "context": "python_schema",
-          "value": "v7_only"
+          "value": "v8_only"
         },
         {
           "context": "ctrader_from_environment",
-          "value": "v7_only"
+          "value": "v8_only"
         },
         {
           "context": "ctrader_constructor",
@@ -656,7 +656,7 @@
       "known_conflict": false,
       "mismatch_policy": "fatal",
       "path": "contract.mode",
-      "python_schema_default": "v7_only",
+      "python_schema_default": "v8_only",
       "python_type": "str",
       "secret": false,
       "unit": "enum",
@@ -2964,6 +2964,6 @@
       "path": "strategies.mapped_zone.enabled"
     }
   ],
-  "source_fingerprint_sha256": "d2307f717e28786b1e333ff34eca1b6cb9e3248f452cead4fd2e4596ba18219f",
+  "source_fingerprint_sha256": "280b4886604dd550286e011c641ab33256ee1f769661544cd707e378191d499c",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

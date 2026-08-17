@@ -199,7 +199,9 @@ instruments:
   # Demo live FX. Zone/merge/round/opposing gaps are price units (not XAU
   # dollars). Pip value is USD per 1.0 lot: EURUSD derives 10; GBPJPY is
   # explicit (~1000 JPY / 143 USDJPY). Equity-table lots still apply; broker
-  # volume uses each symbol's LotSize.
+  # volume uses each symbol's LotSize. Plan max_volume is max_lots ×
+  # volume_units_per_lot (XAU 10×10_000=100_000; FX 10×10_000_000=100_000_000)
+  # — never reuse the gold 100_000 cap on FX.
   EURUSD:
     analysis:
       zones:
@@ -211,8 +213,10 @@ instruments:
     canonical_symbol: EURUSD
     contract:
       contract_units_per_lot: 100000.0
+      max_lots: 10.0
       pip_size: 0.0001
       price_digits: 5
+      volume_units_per_lot: 10000000
     enabled: true
     market_data:
       lookbacks:
@@ -244,9 +248,11 @@ instruments:
     canonical_symbol: GBPJPY
     contract:
       contract_units_per_lot: 100000.0
+      max_lots: 10.0
       pip_size: 0.01
       pip_value_per_lot: 7.0
       price_digits: 3
+      volume_units_per_lot: 10000000
     enabled: true
     market_data:
       lookbacks:
@@ -278,8 +284,10 @@ instruments:
     canonical_symbol: XAU
     contract:
       contract_units_per_lot: 100.0
+      max_lots: 10.0
       pip_size: 0.1
       price_digits: 2
+      volume_units_per_lot: 10000
     enabled: true
     market_data:
       lookbacks:

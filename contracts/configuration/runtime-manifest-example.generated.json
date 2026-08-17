@@ -131,7 +131,7 @@
     "zone_scale_undersized_policy": "single_entry"
   },
   "contract_fingerprint": "280b4886604dd550286e011c641ab33256ee1f769661544cd707e378191d499c",
-  "effective_configuration_fingerprint": "8d0d03658c93208f748ace2ece65f2e99338aab70d5676ae643d6ce7e67999a3",
+  "effective_configuration_fingerprint": "4b45a47c12185f828136d77f2f56b9c818931bc8d7c2a3a9f543f780bcb57eb4",
   "feed": {
     "backfill_bars": 1500,
     "bar_quality_lookback": 6,
@@ -933,9 +933,11 @@
       },
       "units": {
         "contract_units_per_lot": "100000",
+        "max_lots": "10",
         "pip_size": "0.0001",
         "pip_value_per_lot": "10",
-        "price_digits": 5
+        "price_digits": 5,
+        "volume_units_per_lot": 10000000
       }
     },
     "GBPJPY": {
@@ -1677,9 +1679,11 @@
       },
       "units": {
         "contract_units_per_lot": "100000",
+        "max_lots": "10",
         "pip_size": "0.01",
         "pip_value_per_lot": "7",
-        "price_digits": 3
+        "price_digits": 3,
+        "volume_units_per_lot": 10000000
       }
     },
     "XAU": {
@@ -2395,9 +2399,11 @@
       },
       "units": {
         "contract_units_per_lot": "100",
+        "max_lots": "10",
         "pip_size": "0.1",
         "pip_value_per_lot": "10",
-        "price_digits": 2
+        "price_digits": 2,
+        "volume_units_per_lot": 10000
       }
     }
   },
@@ -3004,9 +3010,11 @@
       },
       "units": {
         "contract_units_per_lot": "100000",
+        "max_lots": "10",
         "pip_size": "0.0001",
         "pip_value_per_lot": "10",
-        "price_digits": 5
+        "price_digits": 5,
+        "volume_units_per_lot": 10000000
       }
     },
     "GBPJPY": {
@@ -3611,9 +3619,11 @@
       },
       "units": {
         "contract_units_per_lot": "100000",
+        "max_lots": "10",
         "pip_size": "0.01",
         "pip_value_per_lot": "7",
-        "price_digits": 3
+        "price_digits": 3,
+        "volume_units_per_lot": 10000000
       }
     },
     "XAU": {
@@ -4190,9 +4200,11 @@
       },
       "units": {
         "contract_units_per_lot": "100",
+        "max_lots": "10",
         "pip_size": "0.1",
         "pip_value_per_lot": "10",
-        "price_digits": 2
+        "price_digits": 2,
+        "volume_units_per_lot": 10000
       }
     }
   },

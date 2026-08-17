@@ -25,6 +25,11 @@ class InstrumentRollout(StrEnum):
   LIVE = "live"
 
 
+# cTrader ProtoOA volume is hundredths of a contract unit, so 1.0 lot
+# volume = contract_units_per_lot * 100 (XAU 10_000, FX majors 10_000_000).
+CTRADER_VOLUME_HUNDREDTHS = 100
+
+
 class InstrumentContractConfig(FrozenConfigModel):
   pip_size: float = Field(gt=0)
   contract_units_per_lot: float = Field(gt=0)
@@ -33,6 +38,12 @@ class InstrumentContractConfig(FrozenConfigModel):
   # pip_size * contract_units_per_lot (correct for USD-quoted XAU/EURUSD).
   # JPY-quoted pairs must set this explicitly (quote units are not dollars).
   pip_value_per_lot: float | None = Field(default=None, gt=0)
+  # Broker (cTrader) volume units in 1.0 lot. Must match Symbol.LotSize.
+  # Omit to derive as contract_units_per_lot * 100.
+  volume_units_per_lot: int | None = Field(default=None, gt=0)
+  # Hard ceiling in lots for TradePlan.risk.max_volume. Equity-table size
+  # must fit under this; the engine never silently clamps.
+  max_lots: float = Field(default=10.0, gt=0)
 
 
 class InstrumentLookbacksConfig(FrozenConfigModel):

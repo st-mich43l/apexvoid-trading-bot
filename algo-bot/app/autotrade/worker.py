@@ -4293,9 +4293,6 @@ async def _publish_strategy_match(
   return candidate_id
 
 
-_V8_MAX_VOLUME_DEFAULT = 100_000
-
-
 def _v8_plan_id(match: StrategyMatch) -> str:
   return f"v8:{match.match_id}"
 
@@ -5896,7 +5893,7 @@ async def _publish_trade_plan_v8(
       execution_confirmation_bar_ts=confirmation.bar_ts,
       zone_episode_id=confirmation.zone_episode_id,
       trigger_wick_extreme=confirmation.wick_extreme,
-      max_volume=int(_V8_MAX_VOLUME_DEFAULT),
+      max_volume=int(instrument_geometry.plan_max_volume(symbol)),
       now_ts=now_ts,
       same_direction_stack=same_direction_stack,
       same_direction_size_fraction=float(
