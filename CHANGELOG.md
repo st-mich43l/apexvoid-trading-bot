@@ -10,7 +10,17 @@ The project deploys from `master` without tagged releases. Add new entries to
 dated section after deployment.
 
 
-## Unreleased
+### Fixed
+- Autotrade root cards no longer rewrite to ``TERMINAL`` on close / reject /
+  expire. The SETUP FORMING or POSITION ACTIVATED body stays intact (live
+  price cue dropped); fill / TP / BE / close stay on threaded replies.
+- Setup-card publish test expects status-only edits when direction/strategy
+  already match; wrong-direction forming bodies still get a full rewrite
+  (regression coverage for the #333 terminal/card refresh path).
+- ``/trade_delete`` on a still-pending algo-manual limit cancels the broker
+  order first, then hard-deletes the row/posts on confirm (``🗑 deleted``).
+  That is not ``/trade_cancel`` — cancel leaves a cancelled lifecycle card.
+  Hard-delete also clears ``manual_algo_charts`` so FK rows cannot block it.
 
 ### Added
 - Autotrade Fibonacci + ATR-normalized velocity/acceleration math: swing Fib
@@ -24,19 +34,6 @@ dated section after deployment.
   old VIP/public cards, and posts a fresh entry message with the same
   ``#N``. Resting algo limits cancel first, then re-arm with a bumped
   intent revision on broker confirm.
-
-### Fixed
-- Setup-card publish test expects status-only edits when direction/strategy
-  already match; wrong-direction forming bodies still get a full rewrite
-  (regression coverage for the #333 terminal/card refresh path).
-- Activated algo root cards rewrite to ``TERMINAL · SYMBOL TF`` on close
-  instead of stacking ``POSITION ACTIVATED`` + ``TERMINAL`` (and keep a
-  stale ``(live)`` price). Publish refreshes a confluence root body when
-  direction/strategy no longer match the armed plan.
-- ``/trade_delete`` on a still-pending algo-manual limit cancels the broker
-  order first, then hard-deletes the row/posts on confirm (``🗑 deleted``).
-  That is not ``/trade_cancel`` — cancel leaves a cancelled lifecycle card.
-  Hard-delete also clears ``manual_algo_charts`` so FK rows cannot block it.
 
 ### Changed
 - ``/trade_stats`` (and the weekly recap) show AUTO TRADE and ALGO MANUAL

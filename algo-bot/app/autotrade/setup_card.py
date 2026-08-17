@@ -299,10 +299,11 @@ def telegram_root_message_key(setup_id: str) -> str:
 
 
 def should_delete_root_on_terminal() -> bool:
-  """Reject/expire/invalidate always retain the root card (edit, never delete).
+  """Reject/expire/invalidate retain the root card body (never delete).
 
-  Single-root mode and the legacy delivery flag both used to allow delete;
-  that orphaned reply threads and hid the terminal reason from the owner.
+  Single-root mode used to allow delete; that orphaned reply threads.
+  Close/reject now also leave the SETUP/ACTIVATED body intact — no
+  TERMINAL rewrite on the root (see kill_setup_card).
   """
   return False
 
@@ -493,19 +494,11 @@ def apply_forming_card_status(text: str, status_line: str) -> str:
       del lines[1]
     return "\n".join(lines)
   if inferred == "terminal":
-    # Prod 2026-08-17: close on an already-activated root inserted
-    # "TERMINAL" under "POSITION ACTIVATED" instead of rewriting the
-    # headline — looked like an old live card flipped to terminal mid-body.
-    was_activated = activated
-    rewritten_header = _terminal_header(lines[0])
-    if rewritten_header is not None:
-      lines[0] = rewritten_header
-    if was_activated:
-      if len(lines) > 1 and not _BODY_DIRECTION_LINE_RE.match(lines[1].strip()):
-        lines[1] = status_line
-      else:
-        lines.insert(1, status_line)
-      return _strip_live_price_marker("\n".join(lines))
+    # Owner 2026-08-17: never paint TERMINAL on the autotrade root card.
+    # Close / reject / expire outcomes live in threaded reply cards
+    # (ORDER FILLED / TP / BE / POSITION CLOSED). Keep SETUP FORMING or
+    # POSITION ACTIVATED body intact for audit; only drop the live price cue.
+    return _strip_live_price_marker(text)
   if activated:
     # Post-fill status updates (SL move, then later a TP hit) must keep
     # replacing the SAME line, not stack a new one each time - only
@@ -1454,10 +1447,14 @@ def _terminal_status_line(reason_code: str) -> str:
 
 
 def _terminal_card_text(reason_code: str, existing_text: str | None = None) -> str:
-  """Edit status line only — keep root body for audit / reply context."""
+  """Legacy terminal body used only by the force-delete fallback path."""
   status = _terminal_status_line(reason_code)
   if existing_text and existing_text.strip():
-    return apply_forming_card_status(existing_text, status)
+    # Prefer leaving the existing body; only used when delete fails.
+    intact = apply_forming_card_status(existing_text, status)
+    if "TERMINAL" not in intact:
+      return intact
+    return intact
   return f"🤖 <b>ApexVoid Algo</b>\n{status}"
 
 
@@ -1469,11 +1466,12 @@ async def kill_setup_card(
   delete_fn: DeleteFn,
   edit_fn: EditFn,
 ) -> None:
-  """Close the forming/root card on reject/invalidate/expire.
+  """Close the forming/root card on reject/invalidate/expire/position close.
 
-  Always retains the Telegram message (edit to a terminal line) so
-  Fill/TP/BE/SL replies can still thread to it. Delete is intentionally
-  disabled — see should_delete_root_on_terminal().
+  Default: leave the Telegram root body intact (SETUP FORMING /
+  POSITION ACTIVATED) so Fill/TP/BE/close replies still thread to it.
+  Never rewrite the root to TERMINAL — that reason lives on the reply
+  cards. Delete remains opt-in via should_delete_root_on_terminal().
   """
   await client.srem(FORMING_ACTIVE_INDEX_KEY, setup_id)
   card = await load_forming_card(client, setup_id)
@@ -1481,33 +1479,39 @@ async def kill_setup_card(
     await clear_forming_card(client, setup_id)
     return
 
-  terminal = _terminal_card_text(reason_code, str(card.get("text") or ""))
+  existing_text = str(card.get("text") or "")
+  intact = _strip_live_price_marker(existing_text) if existing_text else existing_text
   if not should_delete_root_on_terminal():
-    try:
-      await edit_fn(card["chat_id"], card["message_id"], terminal)
-    except TelegramBadRequest as exc:
-      # Already terminal with the same text — treat as success (no traceback).
-      if "message is not modified" not in str(exc).casefold():
-        log.info(
-          "forming card terminal edit failed setup_id=%s reason=%s",
-          setup_id, reason_code,
-          exc_info=True,
-        )
+    if intact and intact != existing_text:
+      try:
+        await edit_fn(card["chat_id"], card["message_id"], intact)
+      except TelegramBadRequest as exc:
+        if "message is not modified" not in str(exc).casefold():
+          log.info(
+            "forming card intact close edit failed setup_id=%s reason=%s",
+            setup_id, reason_code,
+            exc_info=True,
+          )
     # Keep forming_message + telegram_root mapping for reply threading.
     await save_forming_card(
       client,
       setup_id,
       chat_id=int(card["chat_id"]),
       message_id=int(card["message_id"]),
-      text=terminal,
+      text=intact or existing_text,
     )
     await client.delete(
       forming_status_key(setup_id),
       forming_reconcile_pending_key(setup_id),
     )
+    log.info(
+      "forming_card_left_intact setup_id=%s reason=%s",
+      setup_id, reason_code,
+    )
     return
 
   # Legacy delete path retained for tests that force-delete via monkeypatch.
+  terminal = _terminal_card_text(reason_code, existing_text)
   try:
     await delete_fn(card["chat_id"], card["message_id"])
   except TelegramBadRequest:
@@ -1997,13 +2001,8 @@ def format_event_recovery_root_card(event: dict) -> str:
   strategy = escape(
     str(event.get("strategy") or event.get("setup") or "Algo").strip() or "Algo"
   )
-  event_type = str(event.get("type") or "")
-  if event_type in {
-    "plan_expired", "plan_cancelled", "plan_rejected", "position_closed",
-  }:
-    head = f"❌ <b>TERMINAL · {symbol} {tf}</b>"
-  else:
-    head = f"✅ <b>POSITION ACTIVATED · {symbol} {tf}</b>"
+  # Never paint TERMINAL on a recovered root — close lives on reply cards.
+  head = f"✅ <b>POSITION ACTIVATED · {symbol} {tf}</b>"
   icon = "🟢" if direction == "BUY" else "🔴"
   lines = [head]
   if direction:
