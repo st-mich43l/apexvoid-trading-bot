@@ -26,6 +26,9 @@ dated section after deployment.
   intent revision on broker confirm.
 
 ### Fixed
+- Setup-card publish test expects status-only edits when direction/strategy
+  already match; wrong-direction forming bodies still get a full rewrite
+  (regression coverage for the #333 terminal/card refresh path).
 - Activated algo root cards rewrite to ``TERMINAL · SYMBOL TF`` on close
   instead of stacking ``POSITION ACTIVATED`` + ``TERMINAL`` (and keep a
   stale ``(live)`` price). Publish refreshes a confluence root body when
