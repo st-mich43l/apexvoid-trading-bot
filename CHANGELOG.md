@@ -12,6 +12,13 @@ dated section after deployment.
 
 ## Unreleased
 
+### Added
+- Owner ``/trade_modify [SYMBOL] #N entry lo-hi sl X tp a/b/c`` (VIP
+  ``modify #N …``) rewrites levels on an **unfilled** signal, deletes the
+  old VIP/public cards, and posts a fresh entry message with the same
+  ``#N``. Resting algo limits cancel first, then re-arm with a bumped
+  intent revision on broker confirm.
+
 ### Fixed
 - Activated algo root cards rewrite to ``TERMINAL · SYMBOL TF`` on close
   instead of stacking ``POSITION ACTIVATED`` + ``TERMINAL`` (and keep a

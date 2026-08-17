@@ -77,6 +77,7 @@ from app.signals.trade_ops import (
   do_cancel,
   do_close,
   do_delete,
+  do_modify,
   do_note,
   do_reopen,
   do_sl,
@@ -140,6 +141,7 @@ def _sync_legacy_patches() -> None:
   _dm.do_cancel = do_cancel
   _dm.do_close = do_close
   _dm.do_delete = do_delete
+  _dm.do_modify = do_modify
   _dm.do_note = do_note
   _dm.do_reopen = do_reopen
   _dm.do_sl = do_sl
@@ -159,6 +161,7 @@ def _sync_legacy_patches() -> None:
   _channel.do_active = do_active
   _channel.do_cancel = do_cancel
   _channel.do_close = do_close
+  _channel.do_modify = do_modify
   _channel.do_note = do_note
   _channel.do_reopen = do_reopen
   _channel.do_sl = do_sl
@@ -353,6 +356,11 @@ async def handle_trade_cancel(msg) -> None:
 async def handle_trade_delete(msg) -> None:
   _sync_legacy_patches()
   return await _dm.handle_trade_delete(msg)
+
+
+async def handle_trade_modify(msg) -> None:
+  _sync_legacy_patches()
+  return await _dm.handle_trade_modify(msg)
 
 
 async def handle_trade_sl(msg) -> None:

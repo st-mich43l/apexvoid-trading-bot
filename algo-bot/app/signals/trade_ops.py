@@ -17,10 +17,16 @@ from app.persistence.store import (
   store_manual_signal,
   store_pips,
   undo_last_close_leg,
+  update_pending_levels,
   update_setup,
   update_sl,
 )
-from app.signals.broadcast import broadcast_entry, delete_posts, fanout_update
+from app.signals.broadcast import (
+  broadcast_entry,
+  delete_posts,
+  fanout_update,
+  replace_entry_posts,
+)
 from app.bot.keyboards import build_tp_close_kb
 from app.signals.pips_format import wing_icons
 from app.persistence.redis_state import clear_sl_alert, mark_tp_alert
@@ -299,6 +305,145 @@ async def _execute_delete(sid: int) -> dict:
   }
 
 
+def _validate_modify_levels(
+  action: str,
+  entry: float,
+  entry_end: float,
+  sl: float,
+  tps: list[float],
+) -> str | None:
+  if entry > entry_end:
+    entry, entry_end = entry_end, entry
+  if not tps:
+    return "empty_tps"
+  side = str(action or "").upper()
+  if side == "BUY" and not (sl < entry):
+    return "sl_wrong_side"
+  if side == "SELL" and not (sl > entry_end):
+    return "sl_wrong_side"
+  return None
+
+
+async def _finish_modify(
+  row: dict,
+  *,
+  reply_to: int | None = None,
+) -> dict:
+  """Replace channel cards after levels are already persisted."""
+  await replace_entry_posts(row)
+  refreshed = await get_manual_signal(row["id"]) or row
+  return {
+    "action": "modify",
+    "ok": True,
+    "row": refreshed,
+    "seq": _display_seq(refreshed),
+    "reply_to": refreshed.get("channel_message_id") or reply_to,
+  }
+
+
+async def _rearm_algo_after_modify(signal: dict) -> dict | None:
+  """Publish a bumped ManualTradeIntent for the updated pending levels."""
+  from app.persistence.store import set_execution_intent, set_execution_status
+  from app.signals.manual_intent import build_intent, publish_intent
+
+  revision = int(signal.get("execution_revision") or 0) + 1
+  intent = build_intent(signal, revision=revision)
+  try:
+    await set_execution_intent(
+      signal["id"],
+      intent_id=intent.intent_id,
+      status="requested",
+      revision=revision,
+    )
+    await publish_intent(intent)
+  except Exception as exc:
+    await set_execution_status(signal["id"], "error", error=str(exc))
+    return None
+  return await get_manual_signal(signal["id"])
+
+
+async def do_modify(ctx: dict) -> dict:
+  """Rewrite entry/SL/TPs on an unfilled open signal; new channel cards.
+
+  Filled positions are rejected — use /trade_sl or /trade_close. Algo limits
+  that are already resting at the broker cancel first, then re-arm on
+  manual_cancelled (pending_modify flag).
+  """
+  signal = await get_manual_signal(ctx["sid"])
+  if signal is None or signal.get("symbol", "XAU") != ctx["symbol"]:
+    return {"action": "modify", "ok": False, "error": "not_found"}
+  if signal.get("status") != "open" or signal.get("fill_state") != "pending":
+    return {"action": "modify", "ok": False, "error": "not_pending"}
+  if (
+    signal.get("execution_status") == "filled"
+    or signal.get("broker_position_id") is not None
+  ):
+    return {"action": "modify", "ok": False, "error": "not_pending"}
+
+  entry = ctx.get("entry")
+  entry_end = ctx.get("entry_end")
+  sl = ctx.get("sl")
+  tps = ctx.get("tps")
+  if entry is None and entry_end is None and sl is None and tps is None:
+    return {"action": "modify", "ok": False, "error": "no_changes"}
+
+  next_entry = float(signal["entry"] if entry is None else entry)
+  next_end = signal.get("entry_end") if entry_end is None else entry_end
+  if next_end is None:
+    next_end = next_entry
+  next_end = float(next_end)
+  if next_entry > next_end:
+    next_entry, next_end = next_end, next_entry
+  next_sl = float(signal["sl"] if sl is None else sl)
+  next_tps = list(signal.get("tps") or []) if tps is None else [float(v) for v in tps]
+  invalid = _validate_modify_levels(
+    signal["action"], next_entry, next_end, next_sl, next_tps,
+  )
+  if invalid is not None:
+    return {"action": "modify", "ok": False, "error": invalid, "row": signal}
+
+  updated = await update_pending_levels(
+    signal["id"],
+    entry=next_entry if entry is not None or entry_end is not None else None,
+    entry_end=next_end if entry is not None or entry_end is not None else None,
+    sl=next_sl if sl is not None else None,
+    tps=next_tps if tps is not None else None,
+  )
+  if updated is None:
+    return {"action": "modify", "ok": False, "error": "not_pending"}
+
+  # Live resting algo limit: cancel at broker, re-arm + new cards on confirm.
+  if (
+    updated.get("execution_mode") == "algo"
+    and updated.get("execution_status") == "pending"
+    and updated.get("execution_intent_id")
+  ):
+    from app.signals import manual_execution
+    intent_id = updated["execution_intent_id"]
+    await manual_execution.mark_pending_modify(intent_id)
+    await manual_execution.request_cancel(intent_id)
+    return {
+      "action": "modify",
+      "ok": True,
+      "pending": True,
+      "row": updated,
+      "seq": _display_seq(updated),
+      "reply_to": updated.get("channel_message_id") or ctx.get("reply_to"),
+    }
+
+  # Algo requested (not yet placed): bump intent so the bridge sees new levels.
+  if (
+    updated.get("execution_mode") == "algo"
+    and updated.get("execution_intent_id")
+    and updated.get("execution_status") in {"requested", "armed", "error"}
+  ):
+    rearmed = await _rearm_algo_after_modify(updated)
+    if rearmed is not None:
+      updated = rearmed
+
+  return await _finish_modify(updated, reply_to=ctx.get("reply_to"))
+
+
 async def do_delete(ctx: dict) -> dict:
   signal = await get_manual_signal(ctx["sid"])
   if signal is None or signal.get("symbol", "XAU") != ctx["symbol"]:
@@ -447,6 +592,16 @@ def render_result(
       return (
         f"⚠️ #{seq} still open — close or cancel it before reopening"
       )
+    if result.get("error") == "not_pending":
+      return "⚠️ Only unfilled/pending signals can be modified."
+    if result.get("error") == "no_changes":
+      return (
+        "⚠️ Nothing to modify — pass entry, sl, and/or tp."
+      )
+    if result.get("error") == "sl_wrong_side":
+      return "⚠️ Stop must be on the protective side of the entry zone."
+    if result.get("error") == "empty_tps":
+      return "⚠️ At least one take-profit is required."
     return "⚠️ Signal not found or action is no longer valid."
   if action == "active":
     seq = f"#{_display_seq(result['row'])} " if tier == "vip" else ""
@@ -461,6 +616,19 @@ def render_result(
     if result.get("pending"):
       return f"⏳ {seq}delete requested"
     return f"🗑 {seq}deleted"
+  if action == "modify":
+    seq = f"#{result['seq']} " if tier == "vip" else ""
+    if result.get("pending"):
+      return f"⏳ {seq}modify requested"
+    row = result["row"]
+    entry_end = row.get("entry_end")
+    if entry_end is None:
+      entry_end = row["entry"]
+    return (
+      f"🔧 {seq}modified — entry "
+      f"{_price(row['entry'], symbol)}-{_price(entry_end, symbol)} · "
+      f"sl {_price(row['sl'], symbol)}"
+    )
   if action == "uncclose":
     seq = f"#{_display_seq(result['row'])} " if tier == "vip" else ""
     remaining = int(round(float(result["remaining"]) * 100))
@@ -578,7 +746,7 @@ async def post_result(result: dict, symbol: str) -> str:
   text = render_result(result, symbol, "vip")
   if not result.get("ok"):
     return text
-  if result["action"] in {"note", "tag", "delete"}:
+  if result["action"] in {"note", "tag", "delete", "modify"}:
     return text
   if result["action"] == "reopen":
     sig = await get_manual_signal(result["record"]["id"])
