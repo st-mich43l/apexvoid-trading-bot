@@ -27,6 +27,13 @@ dated section after deployment.
   Hard-delete also clears ``manual_algo_charts`` so FK rows cannot block it.
 
 ### Added
+- EURUSD and GBPJPY go **live on the demo account** (same VIP/public Telegram
+  channels as XAU). Pip/lot geometry is per instrument: EURUSD pip 0.0001 /
+  100k / pip-value 10; GBPJPY pip 0.01 / 100k / pip-value **7** (JPY quote).
+  Equity-table lots still apply; broker volume uses each symbol's `LotSize`.
+  Zone merge/round/FVG widths are FX price units, not XAU dollars. Live
+  resolve failures still fail closed (whole feed). Confirm broker symbol
+  names (`EURUSD` / `GBPJPY`) on first deploy.
 - Autotrade Fibonacci + ATR-normalized velocity/acceleration math: swing Fib
   ladders soft-boost confluence (`fib_touch`), dealing-range
   deep_discount/deep_premium at 0.382/0.618, HFS impulse preferred band

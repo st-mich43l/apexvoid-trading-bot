@@ -47,6 +47,7 @@ class InstrumentUnitsConfig(FrozenConfigModel):
   pip_size: float
   price_digits: int
   contract_units_per_lot: float
+  pip_value_per_lot: float
 
 
 class EffectiveInstrumentMarketDataConfig(FrozenConfigModel):
@@ -199,10 +200,21 @@ def _require_units(
     raise EffectiveInstrumentError(
       f"instrument {instrument_id!r} contract_units_per_lot must be positive"
     )
+  derived = float(contract.pip_size) * float(contract.contract_units_per_lot)
+  pip_value = (
+    float(contract.pip_value_per_lot)
+    if contract.pip_value_per_lot is not None
+    else derived
+  )
+  if pip_value <= 0:
+    raise EffectiveInstrumentError(
+      f"instrument {instrument_id!r} pip_value_per_lot must be positive"
+    )
   return InstrumentUnitsConfig(
     pip_size=float(contract.pip_size),
     price_digits=int(contract.price_digits),
     contract_units_per_lot=float(contract.contract_units_per_lot),
+    pip_value_per_lot=pip_value,
   )
 
 

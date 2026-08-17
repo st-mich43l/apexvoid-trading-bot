@@ -127,9 +127,13 @@ public sealed record ExecutionInstrumentOptions(
   InstrumentRollout Rollout,
   decimal PipSize,
   decimal ContractSize,
-  IReadOnlyList<string> EffectiveSymbols
+  IReadOnlyList<string> EffectiveSymbols,
+  decimal PipValuePerLot = 0m
 )
 {
+  public decimal EffectivePipValuePerLot =>
+    PipValuePerLot > 0m ? PipValuePerLot : PipSize * ContractSize;
+
   public static ExecutionInstrumentOptions FromAutoTradeOptions(
     AutoTradeOptions trade
   ) =>
@@ -139,6 +143,7 @@ public sealed record ExecutionInstrumentOptions(
       Rollout: InstrumentRollout.Live,
       PipSize: trade.PipSize,
       ContractSize: trade.ContractSize,
-      EffectiveSymbols: trade.EffectiveSymbols
+      EffectiveSymbols: trade.EffectiveSymbols,
+      PipValuePerLot: trade.PipValuePerLot
     );
 }

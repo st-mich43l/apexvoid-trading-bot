@@ -230,6 +230,23 @@ public sealed class InstrumentRuntimeRegistry
           $"instrument_runtimes.{instrumentId}.units must be positive"
         );
       }
+      decimal pipValue = 0m;
+      if (
+        units.TryGetProperty("pip_value_per_lot", out var pipValueEl)
+        && !string.IsNullOrWhiteSpace(pipValueEl.GetString())
+      )
+      {
+        pipValue = ManifestDecimal.Parse(
+          pipValueEl.GetString()!,
+          $"instrument_runtimes.{instrumentId}.units.pip_value_per_lot"
+        );
+        if (pipValue <= 0m)
+        {
+          throw new InvalidOperationException(
+            $"instrument_runtimes.{instrumentId}.units.pip_value_per_lot must be positive"
+          );
+        }
+      }
       var cTraderSymbol = feedEl.GetProperty("ctrader_symbol").GetString();
       if (string.IsNullOrWhiteSpace(cTraderSymbol))
       {
@@ -303,7 +320,8 @@ public sealed class InstrumentRuntimeRegistry
           Rollout: rollout,
           PipSize: pip,
           ContractSize: contract,
-          EffectiveSymbols: [redisSymbol]
+          EffectiveSymbols: [redisSymbol],
+          PipValuePerLot: pipValue
         ),
       });
     }

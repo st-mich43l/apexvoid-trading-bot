@@ -505,7 +505,9 @@ public sealed class TradePlanRuntime(
   AutoTradeOptions options,
   IAutoTradeStore store,
   Func<DateTimeOffset> clock,
-  Action<string> log
+  Action<string> log,
+  Func<string, SymbolInfo?>? resolveBoundSymbol = null,
+  Func<string, (decimal PipSize, decimal PipValuePerLot)>? resolveUnits = null
 )
 {
   private readonly Dictionary<string, TradePlan> _plansById = new();
@@ -540,6 +542,51 @@ public sealed class TradePlanRuntime(
     return string.IsNullOrWhiteSpace(text) ? "0" : text;
   }
 
+  private SymbolInfo BoundSymbol(string planSymbol, SymbolInfo sessionSymbol)
+  {
+    if (resolveBoundSymbol is null)
+    {
+      return sessionSymbol;
+    }
+    return resolveBoundSymbol(planSymbol)
+      ?? throw new InvalidOperationException(
+        $"no bound broker symbol for plan symbol {planSymbol}"
+      );
+  }
+
+  private (decimal PipSize, decimal PipValuePerLot) UnitsFor(string planSymbol)
+  {
+    if (resolveUnits is null)
+    {
+      return (options.PipSize, options.PipValuePerLot);
+    }
+    var units = resolveUnits(planSymbol);
+    if (units.PipSize <= 0m || units.PipValuePerLot <= 0m)
+    {
+      throw new InvalidOperationException(
+        $"instrument units for {planSymbol} must be positive"
+      );
+    }
+    return units;
+  }
+
+  private decimal PipSizeFor(string planSymbol)
+  {
+    if (resolveUnits is null)
+    {
+      return options.PipSize;
+    }
+    var units = resolveUnits(planSymbol);
+    return units.PipSize > 0m ? units.PipSize : options.PipSize;
+  }
+
+  private static bool SameInstrument(string planSymbol, SymbolInfo session) =>
+    string.Equals(planSymbol, session.RedisSymbol, StringComparison.OrdinalIgnoreCase)
+    || string.Equals(planSymbol, session.CTraderSymbol, StringComparison.OrdinalIgnoreCase);
+
+  private static bool SameInstrument(string planSymbol, SpotPrice quote) =>
+    string.Equals(planSymbol, quote.Symbol, StringComparison.OrdinalIgnoreCase);
+
   private bool LooksLikeProtectiveStopHit(
     TradePlan plan,
     TradePlanRuntimeState state,
@@ -553,7 +600,8 @@ public sealed class TradePlanRuntime(
     {
       return false;
     }
-    var tolerance = Math.Max(options.PipSize, 2m * options.PipSize);
+    var pipSize = PipSizeFor(plan.Symbol);
+    var tolerance = Math.Max(pipSize, 2m * pipSize);
     return Math.Abs(exitEstimate - stop) <= tolerance;
   }
 
@@ -1057,8 +1105,10 @@ public sealed class TradePlanRuntime(
       log(
         $"v8 sizing pre-submit id={plan.PlanId} {EquityResolver.FormatTelemetry(equity)}"
       );
+      var bound = BoundSymbol(plan.Symbol, symbol);
+      var units = UnitsFor(plan.Symbol);
       TradePlanExecutionEngine.CalculateVolume(
-        plan, equity, options.PipSize, options.PipValuePerLot, symbol
+        plan, equity, units.PipSize, units.PipValuePerLot, bound
       );
     }
     catch (Exception exception) when (
@@ -1365,8 +1415,13 @@ public sealed class TradePlanRuntime(
       {
         continue;
       }
+      if (!SameInstrument(plan.Symbol, quote))
+      {
+        continue;
+      }
+      var bound = BoundSymbol(plan.Symbol, symbol);
       await TrySubmitReceivedPlanAsync(
-        client, symbol, plan, state, quote, cancellationToken
+        client, bound, plan, state, quote, cancellationToken
       );
     }
   }
@@ -1657,8 +1712,9 @@ public sealed class TradePlanRuntime(
     log(
       $"v8 sizing submit id={plan.PlanId} {EquityResolver.FormatTelemetry(equity)}"
     );
+    var units = UnitsFor(plan.Symbol);
     var volumePlan = TradePlanExecutionEngine.CalculateVolume(
-      plan, equity, options.PipSize, options.PipValuePerLot, symbol
+      plan, equity, units.PipSize, units.PipValuePerLot, symbol
     );
     var direction = plan.Analysis.Direction == "BUY"
       ? TradeDirection.Buy
@@ -2019,6 +2075,10 @@ public sealed class TradePlanRuntime(
       {
         continue;
       }
+      if (!SameInstrument(plan.Symbol, symbol))
+      {
+        continue;
+      }
       var state = initial;
       var legs = (state.Legs ?? []).ToList();
       if (legs.Count == 0)
@@ -2197,6 +2257,10 @@ public sealed class TradePlanRuntime(
     {
       var state = AggregateState(initialState);
       if (!_plansById.TryGetValue(state.PlanId, out var plan))
+      {
+        continue;
+      }
+      if (!SameInstrument(plan.Symbol, symbol) || !SameInstrument(plan.Symbol, quote))
       {
         continue;
       }
@@ -3283,8 +3347,9 @@ public sealed class TradePlanRuntime(
   )
   {
     var weightedFill = state.GroupWeightedFillPrice ?? state.EntryFillPrice;
+    var pipSize = PipSizeFor(plan.Symbol);
     if (
-      options.PipSize <= 0
+      pipSize <= 0
       || weightedFill is not decimal fillPrice
       || fillPrice <= 0
     )
@@ -3300,7 +3365,7 @@ public sealed class TradePlanRuntime(
       plan.Targets[index].Price - fillPrice
     );
     return decimal.ToInt32(decimal.Round(
-      distance / options.PipSize,
+      distance / pipSize,
       0,
       MidpointRounding.AwayFromZero
     ));
@@ -3313,8 +3378,9 @@ public sealed class TradePlanRuntime(
   )
   {
     var weightedFill = state.GroupWeightedFillPrice ?? state.EntryFillPrice;
+    var pipSize = PipSizeFor(plan.Symbol);
     if (
-      options.PipSize <= 0
+      pipSize <= 0
       || weightedFill is not decimal fillPrice
       || fillPrice <= 0
     )
@@ -3327,8 +3393,8 @@ public sealed class TradePlanRuntime(
       StringComparison.OrdinalIgnoreCase
     );
     var raw = buy
-      ? (exitPrice - fillPrice) / options.PipSize
-      : (fillPrice - exitPrice) / options.PipSize;
+      ? (exitPrice - fillPrice) / pipSize
+      : (fillPrice - exitPrice) / pipSize;
     return decimal.ToInt32(decimal.Round(
       raw,
       0,

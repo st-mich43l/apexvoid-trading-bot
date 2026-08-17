@@ -14,9 +14,9 @@ from app.core.config import runtime_config
 from app.persistence import redis_state
 from app.scalping.activation import evaluate_scalp_activation
 from app.scalping.context import (
-  LIVE_SYMBOL,
   build_scalp_context_snapshot,
   is_context_fresh,
+  is_hfs_symbol,
   load_current_context,
   save_context,
 )
@@ -163,7 +163,7 @@ async def process_m1_bar(
   if mode == "off":
     result["reason"] = "scalp_mode_off"
     return result
-  if symbol.upper() != LIVE_SYMBOL:
+  if not is_hfs_symbol(symbol):
     result["reason"] = "scalp_symbol_not_enabled"
     return result
 
@@ -498,7 +498,7 @@ async def handle_closed_bar(
   if parsed is None:
     return
   symbol, tf, bar_ts = parsed
-  if symbol != LIVE_SYMBOL:
+  if not is_hfs_symbol(symbol):
     return
   if tf == "M5":
     await _ensure_context(
@@ -541,4 +541,6 @@ async def scalp_m1_event_loop() -> None:
   if _mode() == "off":
     log.info("HFS scalping disabled: strategies.high_frequency_scalp.mode=off")
     return
-  log.info("scalp_m1_event_loop idle; bar_event_dispatcher_loop owns %s", LIVE_SYMBOL)
+  log.info(
+    "scalp_m1_event_loop idle; bar_event_dispatcher_loop owns live HFS symbols"
+  )

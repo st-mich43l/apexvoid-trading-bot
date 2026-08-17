@@ -187,6 +187,15 @@ public sealed class FeedRunner(
               ex
             );
           }
+          catch (Exception ex)
+          {
+            // Feed-only / analysis / paper must not take down the XAU session
+            // when the broker uses a different symbol name.
+            Log(
+              $"feed instrument {runtime.InstrumentId} skipped "
+              + $"({InstrumentRolloutGates.ToWire(runtime.Rollout)}): {ex.Message}"
+            );
+          }
         }
         if (resolved.Count == 0)
         {
@@ -196,7 +205,13 @@ public sealed class FeedRunner(
         {
           autoTrade.InstrumentRegistry = instrumentRegistry;
           autoTrade.BindInstrumentSymbols(resolved.Select(item => item.Symbol));
-          autoTrade.LogUnitConfiguration(resolved[0].Symbol, Log, warningLog ?? Warn);
+          foreach (var (runtime, bound) in resolved)
+          {
+            if (InstrumentRolloutGates.PermitsBrokerExecution(runtime.Rollout))
+            {
+              autoTrade.LogUnitConfiguration(bound, Log, warningLog ?? Warn);
+            }
+          }
         }
         var multiFullWindow = _startupBackfillPending;
         foreach (var (runtime, symbol) in resolved)
@@ -225,10 +240,14 @@ public sealed class FeedRunner(
         spotTask = SpotLoopAsync(client, multiSpots, autoTrade, linked.Token);
         if (autoTrade?.Enabled == true)
         {
+          var sessionSymbol = resolved
+            .FirstOrDefault(item => item.Runtime.InstrumentId == "XAU")
+            .Symbol
+            ?? resolved[0].Symbol;
           autoTradeTask = RunAutoTradeSafelyAsync(
             autoTrade,
             client,
-            resolved[0].Symbol,
+            sessionSymbol,
             linked.Token
           );
         }

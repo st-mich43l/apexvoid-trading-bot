@@ -22,7 +22,7 @@ def _symbol_units(symbol: str) -> dict[str, float | int]:
 
 
 def _build_symbols_map() -> dict[str, dict[str, float | int]]:
-  """Dynamic SYMBOLS map from enabled/live instruments (currently XAU)."""
+  """Dynamic SYMBOLS map from enabled instruments."""
   mapping: dict[str, dict[str, float | int]] = {}
   for instrument_id in runtime_config.enabled_instruments():
     mapping[instrument_id] = _symbol_units(instrument_id)
@@ -53,18 +53,17 @@ def canonical_symbol(symbol: str) -> str:
     return _SYMBOL_ALIASES.get(upper, upper)
 
 
-CHANNELS = [
-  {
-    "symbol": "XAU",
-    "tier": "vip",
-    "channel_id": runtime_config.delivery.telegram.telegram_channel_id,
-  },
-  {
-    "symbol": "XAU",
-    "tier": "public",
-    "channel_id": runtime_config.delivery.telegram.signal_public_channel_id,
-  },
-]
+def _build_channels() -> list[dict]:
+  vip = runtime_config.delivery.telegram.telegram_channel_id
+  public = runtime_config.delivery.telegram.signal_public_channel_id
+  channels: list[dict] = []
+  for symbol in runtime_config.live_instruments() or ("XAU",):
+    channels.append({"symbol": symbol, "tier": "vip", "channel_id": vip})
+    channels.append({"symbol": symbol, "tier": "public", "channel_id": public})
+  return channels
+
+
+CHANNELS = _build_channels()
 
 
 def pip_for(symbol: str) -> float:
@@ -73,6 +72,13 @@ def pip_for(symbol: str) -> float:
 
 def digits_for(symbol: str) -> int:
   return int(_symbol_units(symbol)["digits"])
+
+
+def pip_value_per_lot(symbol: str) -> float:
+  try:
+    return float(runtime_config.for_instrument(symbol).units.pip_value_per_lot)
+  except EffectiveInstrumentError as exc:
+    raise KeyError(str(exc)) from None
 
 
 def contract_units_for(symbol: str) -> float:

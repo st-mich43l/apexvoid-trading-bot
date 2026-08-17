@@ -64,8 +64,8 @@ contract:
     require_demo: true
   instrument:
     canonical_symbol: XAU
-    symbols: XAU
-  mode: v7_only
+    symbols: XAU,EURUSD,GBPJPY
+  mode: v8_only
   streams:
     candidate_maximum_length: 1000
     candidates: auto_trade:candidates
@@ -196,6 +196,77 @@ execution:
     scale_step_atr: 0.5
     scale_undersized_policy: single_entry
 instruments:
+  # Demo live FX. Zone/merge/round/opposing gaps are price units (not XAU
+  # dollars). Pip value is USD per 1.0 lot: EURUSD derives 10; GBPJPY is
+  # explicit (~1000 JPY / 143 USDJPY). Equity-table lots still apply; broker
+  # volume uses each symbol's LotSize.
+  EURUSD:
+    analysis:
+      zones:
+        major_maximum_width_price: 0.003
+        minimum_width_price: 0.0003
+        preferred_maximum_width_price: 0.0015
+        preferred_minimum_width_price: 0.0005
+    broker_symbol: EURUSD
+    canonical_symbol: EURUSD
+    contract:
+      contract_units_per_lot: 100000.0
+      pip_size: 0.0001
+      price_digits: 5
+    enabled: true
+    market_data:
+      lookbacks:
+        h1_bars: 400
+        m15_bars: 250
+        m1_bars: 150
+        m5_bars: 150
+    overrides:
+      analysis.levels.round_step: 0.001
+      analysis.zones.confluence.merge_gap_price: 0.0003
+      analysis.zones.merge_max_width: 0.0015
+      risk.exposure.opposing_minimum_separation_price: 0.0015
+      strategies.technique.fvg.entry_max_width_price: 0.0015
+    policy: xau_current_v1
+    rollout: live
+    timeframes:
+    - H1
+    - M15
+    - M5
+    - M1
+  GBPJPY:
+    analysis:
+      zones:
+        major_maximum_width_price: 0.5
+        minimum_width_price: 0.08
+        preferred_maximum_width_price: 0.25
+        preferred_minimum_width_price: 0.1
+    broker_symbol: GBPJPY
+    canonical_symbol: GBPJPY
+    contract:
+      contract_units_per_lot: 100000.0
+      pip_size: 0.01
+      pip_value_per_lot: 7.0
+      price_digits: 3
+    enabled: true
+    market_data:
+      lookbacks:
+        h1_bars: 400
+        m15_bars: 250
+        m1_bars: 150
+        m5_bars: 150
+    overrides:
+      analysis.levels.round_step: 0.1
+      analysis.zones.confluence.merge_gap_price: 0.05
+      analysis.zones.merge_max_width: 0.25
+      risk.exposure.opposing_minimum_separation_price: 0.15
+      strategies.technique.fvg.entry_max_width_price: 0.25
+    policy: xau_current_v1
+    rollout: live
+    timeframes:
+    - H1
+    - M15
+    - M5
+    - M1
   XAU:
     analysis:
       zones:
@@ -244,7 +315,7 @@ manual_algo:
     owner_execution_dm_enabled: false
 market_data:
   calendar:
-    currencies: USD
+    currencies: USD,EUR,GBP,JPY
     enabled: true
     event_guard_hours: 4.0
     feed_nextweek: https://nfs.faireconomy.media/ff_calendar_nextweek.json
@@ -263,7 +334,7 @@ market_data:
   scanner:
     execution_timeframe: M5
     htf: H1,M15
-    symbols: XAU
+    symbols: XAU,EURUSD,GBPJPY
     window: 500
   sessions:
     asia_start: 22
@@ -279,7 +350,7 @@ risk:
     non_hedged_opposite_policy: broker_netting
     opposing_minimum_separation_price: 15.0
   position_limits:
-    max_tracked_candidates: 5
+    max_tracked_candidates: 9
     maximum_per_symbol: 1
     same_direction_stack_size_fraction: 0.6
   sizing:

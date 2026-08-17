@@ -20,6 +20,7 @@ from typing import Any, Awaitable, Callable
 
 from app.persistence import redis_state
 from app.autotrade import units
+from app.core import instrument_geometry
 from app.autotrade.range_targets import configured_range_targets
 from app.autotrade.candidate_publish import (
   acquire_owned_lock,
@@ -565,11 +566,15 @@ def classify_execution_zone(
 
 
 def _symbols() -> set[str]:
-  return {
+  csv = {
     item.strip().upper()
     for item in runtime_config.contract.instrument.symbols.split(",")
     if item.strip()
   }
+  live = {item.upper() for item in runtime_config.live_instruments()}
+  if csv and live:
+    return csv & live
+  return csv or live
 
 
 def _parse_bar_event(data: object) -> tuple[str, str, str] | None:
@@ -1232,7 +1237,12 @@ def _edge_proximity_reason(
   return None
 
 
-def _htf_zones(frames: dict[str, Any], cfg: Any | None = None) -> list[Zone]:
+def _htf_zones(
+  frames: dict[str, Any],
+  cfg: Any | None = None,
+  *,
+  symbol: str = "XAU",
+) -> list[Zone]:
   """Fresh/tested HTF (M15) supply/demand zones, for the A3 veto and the A2
   opposing-zone attachment. Independent of gate.py/trend.py's own M1 legs -
   this is the one place the shared analysis stack enters the autotrade path,
@@ -1260,7 +1270,7 @@ def _htf_zones(frames: dict[str, Any], cfg: Any | None = None) -> list[Zone]:
     return []
   zones = supply_demand(htf, legs)
   marked = mark_mitigation(zones, htf)
-  pip_size = float(cfg.contract.instrument.pip_size)
+  pip_size = units.pip_size(symbol)
   return [
     zone
     for zone in marked
@@ -1273,7 +1283,12 @@ def _htf_zones(frames: dict[str, Any], cfg: Any | None = None) -> list[Zone]:
   ]
 
 
-def _htf_levels(frames: dict[str, Any], cfg: Any | None = None) -> list[Level]:
+def _htf_levels(
+  frames: dict[str, Any],
+  cfg: Any | None = None,
+  *,
+  symbol: str = "XAU",
+) -> list[Level]:
   """HTF (M15) round-number and reaction key levels, for the opposing-barrier
   veto below. Round-number levels aren't sided the way supply/demand zones
   are (a round number caps a rally the same way it floors a selloff), so
@@ -1299,7 +1314,7 @@ def _htf_levels(frames: dict[str, Any], cfg: Any | None = None) -> list[Level]:
     swings,
     atr,
     max(0.0, float(cfg.analysis.levels.level_cluster_atr)),
-    max(0.1, float(cfg.analysis.levels.round_step)),
+    max(0.0, float(instrument_geometry.round_step(symbol))),
     max(1, int(cfg.analysis.levels.minimum_key_touches)),
   )
 
@@ -4562,8 +4577,8 @@ def _resolve_match_confluence_claim_id(
     atr=match.atr,
     pip_size=units.pip_size(symbol),
     source_tf=match.source_tf,
-    max_width=float(runtime_config.analysis.zones.merge_max_width),
-    gap=float(runtime_config.analysis.zones.confluence.merge_gap_price),
+    max_width=float(instrument_geometry.merge_max_width(symbol)),
+    gap=float(instrument_geometry.merge_gap_price(symbol)),
     candidate_id=match.match_id,
   )
 
@@ -5727,7 +5742,7 @@ async def _publish_trade_plan_v8(
     entry_price=float(entry_reference),
     exposures=exposures,
     min_price_separation=float(
-      runtime_config.risk.exposure.opposing_minimum_separation_price
+      instrument_geometry.opposing_minimum_separation_price(symbol)
     ),
     same_direction_size_fraction=float(
       runtime_config.risk.position_limits.same_direction_stack_size_fraction
@@ -7624,8 +7639,8 @@ async def _handle_event(
   arbitrable: list[ExecutionIntent] = []
   arbitration = arbitrate_execution_intents([])
   if strategy_matches:
-    htf_zones = _htf_zones(frames, None)
-    htf_levels = _htf_levels(frames, None)
+    htf_zones = _htf_zones(frames, None, symbol=symbol)
+    htf_levels = _htf_levels(frames, None, symbol=symbol)
     for routed_match in strategy_matches:
       intent_id = f"strategy:{routed_match.match_id}"
       intent_matches[intent_id] = routed_match

@@ -29,6 +29,10 @@ class InstrumentContractConfig(FrozenConfigModel):
   pip_size: float = Field(gt=0)
   contract_units_per_lot: float = Field(gt=0)
   price_digits: int = Field(ge=0, le=8)
+  # USD account pip value per 1.0 lot. When omitted, derived as
+  # pip_size * contract_units_per_lot (correct for USD-quoted XAU/EURUSD).
+  # JPY-quoted pairs must set this explicitly (quote units are not dollars).
+  pip_value_per_lot: float | None = Field(default=None, gt=0)
 
 
 class InstrumentLookbacksConfig(FrozenConfigModel):
