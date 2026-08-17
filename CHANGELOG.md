@@ -10,7 +10,11 @@ The project deploys from `master` without tagged releases. Add new entries to
 dated section after deployment.
 
 
+## Unreleased
+
 ### Fixed
+- Mapped thesis rearm no longer crashes every M1 tick: picking the OHLC
+  frame no longer bool-coerces a pandas DataFrame (``frames.get("M1") or …``).
 - Autotrade root cards no longer rewrite to ``TERMINAL`` on close / reject /
   expire. The SETUP FORMING or POSITION ACTIVATED body stays intact (live
   price cue dropped); fill / TP / BE / close stay on threaded replies.

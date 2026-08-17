@@ -7373,6 +7373,19 @@ async def _active_opposite_initial_group(
   return None
 
 
+def _ohlc_frame(frames: dict[str, Any], *keys: str):
+  """Pick an OHLC frame without bool-coercing pandas objects.
+
+  ``df or fallback`` raises ValueError on a live DataFrame (prod 2026-08-17
+  mapped thesis rearm: ``frames.get("M1") or frames.get("M1")``).
+  """
+  for key in keys:
+    frame = frames.get(key)
+    if frame is not None:
+      return frame
+  return None
+
+
 async def _advance_mapped_thesis_rearms_from_frames(
   client: Any,
   *,
@@ -7381,7 +7394,7 @@ async def _advance_mapped_thesis_rearms_from_frames(
 ) -> None:
   try:
     from app.analysis.indicators import atr as atr_indicator
-    m1 = frames.get(EXECUTION_TIMEFRAME) or frames.get("M1")
+    m1 = _ohlc_frame(frames, EXECUTION_TIMEFRAME, "M1")
     if m1 is None or len(m1) < 15:
       return
     atr_series = atr_indicator(m1, int(runtime_config.analysis.atr.length))
