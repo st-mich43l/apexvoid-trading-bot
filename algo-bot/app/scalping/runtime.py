@@ -230,7 +230,11 @@ async def process_m1_bar(
   try:
     from app.autotrade.active_exposure import load_active_exposures
 
-    live = live_exposure_ids(await load_active_exposures(client))
+    # Per-symbol book only — a live GBPJPY plan must not inflate EURUSD
+    # HFS concurrent / ghost-reconcile (live 2026-08-17 cross-symbol lock).
+    live = live_exposure_ids(
+      await load_active_exposures(client, symbol=symbol)
+    )
   except Exception:
     log.exception("hfs live exposure reconcile failed symbol=%s", symbol)
     live = set()

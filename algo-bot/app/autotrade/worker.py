@@ -7365,15 +7365,25 @@ async def _active_opposite_initial_group(
   client: Any,
   *,
   direction: str,
+  symbol: str | None = None,
 ) -> dict[str, Any] | None:
   """Mirror the C# executor guard for opposite autonomous initial groups."""
+  from app.autotrade.active_exposure import normalize_symbol
+
   wanted = str(direction or "").upper()
   if wanted not in {"BUY", "SELL"}:
     return None
   opposite = "SELL" if wanted == "BUY" else "BUY"
+  wanted_symbol = normalize_symbol(symbol)
   for payload in await _load_tracked_position_states(client):
     if str(payload.get("parent_group_id") or "").strip():
       continue
+    if wanted_symbol is not None:
+      payload_symbol = normalize_symbol(
+        payload.get("symbol") or payload.get("Symbol")
+      )
+      if payload_symbol is None or payload_symbol != wanted_symbol:
+        continue
     remaining = payload.get("remaining_volume")
     if remaining is not None:
       try:
