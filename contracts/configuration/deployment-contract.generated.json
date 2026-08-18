@@ -494,6 +494,7 @@
   "instrument_schema": {
     "active_projection_symbol": "XAU",
     "optional": [
+      "activation",
       "aliases",
       "analysis",
       "contract",
@@ -501,7 +502,10 @@
       "market_data",
       "overrides",
       "policy",
+      "price_scale",
+      "reaction_session",
       "rollout",
+      "stop_envelope",
       "targeting",
       "timeframes"
     ],

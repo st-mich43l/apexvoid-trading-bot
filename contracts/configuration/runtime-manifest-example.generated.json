@@ -131,7 +131,7 @@
     "zone_scale_undersized_policy": "single_entry"
   },
   "contract_fingerprint": "fc98c417552a4b287008435e5df8a9b6b198f7a6a797ff982f5fb1b4b8988ceb",
-  "effective_configuration_fingerprint": "a3f6b10b901479a89a632425e54367511e40042153e76d2242c9b25ae4a00a12",
+  "effective_configuration_fingerprint": "109ed30507f765b9b2d1d2756a9fe7229742ff56555e267177414330d2d0f527",
   "feed": {
     "backfill_bars": 1500,
     "bar_quality_lookback": 6,
@@ -649,151 +649,151 @@
             "path": "analysis.levels.round_step",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.EURUSD.overrides"
+            "source_name": "instruments.EURUSD.execution_pack"
           },
           {
             "path": "analysis.market_map.change_min",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.EURUSD.overrides"
+            "source_name": "instruments.EURUSD.execution_pack"
           },
           {
             "path": "analysis.market_map.fallback_radius_price",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.EURUSD.overrides"
+            "source_name": "instruments.EURUSD.execution_pack"
           },
           {
             "path": "analysis.market_map.scalp_radius_price",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.EURUSD.overrides"
+            "source_name": "instruments.EURUSD.execution_pack"
           },
           {
             "path": "analysis.zones.confluence.merge_gap_price",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.EURUSD.overrides"
+            "source_name": "instruments.EURUSD.execution_pack"
           },
           {
             "path": "analysis.zones.merge_max_width",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.EURUSD.overrides"
+            "source_name": "instruments.EURUSD.execution_pack"
           },
           {
             "path": "execution.activation.reaction_trigger_maximum_age_bars",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.EURUSD.overrides"
+            "source_name": "instruments.EURUSD.execution_pack"
           },
           {
             "path": "execution.entry.max_spread_pips",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.EURUSD.overrides"
+            "source_name": "instruments.EURUSD.execution_pack"
           },
           {
             "path": "execution.mapped_zone.zone_min_width_abs",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.EURUSD.overrides"
+            "source_name": "instruments.EURUSD.execution_pack"
           },
           {
             "path": "execution.range.min_rr",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.EURUSD.overrides"
+            "source_name": "instruments.EURUSD.execution_pack"
           },
           {
             "path": "execution.range.min_target_pips",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.EURUSD.overrides"
+            "source_name": "instruments.EURUSD.execution_pack"
           },
           {
             "path": "execution.range.room_stop_floor_pips",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.EURUSD.overrides"
+            "source_name": "instruments.EURUSD.execution_pack"
           },
           {
             "path": "execution.reaction.room_stop_min_rr",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.EURUSD.overrides"
+            "source_name": "instruments.EURUSD.execution_pack"
           },
           {
             "path": "execution.reaction.stop_max_pips",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.EURUSD.overrides"
+            "source_name": "instruments.EURUSD.execution_pack"
           },
           {
             "path": "execution.reaction.stop_min_pips",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.EURUSD.overrides"
+            "source_name": "instruments.EURUSD.execution_pack"
           },
           {
             "path": "execution.scaling.add.min_stop_pips",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.EURUSD.overrides"
+            "source_name": "instruments.EURUSD.execution_pack"
           },
           {
             "path": "execution.stops.reaction.room_floor_pips",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.EURUSD.overrides"
+            "source_name": "instruments.EURUSD.execution_pack"
           },
           {
             "path": "execution.stops.sl_distance",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.EURUSD.overrides"
+            "source_name": "instruments.EURUSD.execution_pack"
           },
           {
             "path": "execution.stops.trend.minimum_pips",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.EURUSD.overrides"
+            "source_name": "instruments.EURUSD.execution_pack"
           },
           {
             "path": "execution.technique.reaction_publish_windows",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.EURUSD.overrides"
+            "source_name": "instruments.EURUSD.execution_pack"
           },
           {
             "path": "execution.technique.require_sweep_body",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.EURUSD.overrides"
+            "source_name": "instruments.EURUSD.execution_pack"
           },
           {
             "path": "execution.trend.stop_max_pips",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.EURUSD.overrides"
+            "source_name": "instruments.EURUSD.execution_pack"
           },
           {
             "path": "risk.exposure.opposing_minimum_separation_price",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.EURUSD.overrides"
+            "source_name": "instruments.EURUSD.execution_pack"
           },
           {
             "path": "strategies.high_frequency_scalp.policy.minimum_reward_risk",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.EURUSD.overrides"
+            "source_name": "instruments.EURUSD.execution_pack"
           },
           {
             "path": "strategies.technique.fvg.entry_max_width_price",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.EURUSD.overrides"
+            "source_name": "instruments.EURUSD.execution_pack"
           },
           {
             "path": "execution.entry.maximum_chase_distance_pips",
@@ -1362,7 +1362,7 @@
         "scaling": {
           "add": {
             "level_buffer_atr": "1",
-            "min_stop_pips": 12,
+            "min_stop_pips": 15,
             "pullback_enabled": false,
             "pullback_max_retrace": "0.7",
             "pullback_min_retrace": "0.2",
@@ -1532,151 +1532,151 @@
             "path": "analysis.levels.round_step",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.GBPJPY.overrides"
+            "source_name": "instruments.GBPJPY.execution_pack"
           },
           {
             "path": "analysis.market_map.change_min",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.GBPJPY.overrides"
+            "source_name": "instruments.GBPJPY.execution_pack"
           },
           {
             "path": "analysis.market_map.fallback_radius_price",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.GBPJPY.overrides"
+            "source_name": "instruments.GBPJPY.execution_pack"
           },
           {
             "path": "analysis.market_map.scalp_radius_price",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.GBPJPY.overrides"
+            "source_name": "instruments.GBPJPY.execution_pack"
           },
           {
             "path": "analysis.zones.confluence.merge_gap_price",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.GBPJPY.overrides"
+            "source_name": "instruments.GBPJPY.execution_pack"
           },
           {
             "path": "analysis.zones.merge_max_width",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.GBPJPY.overrides"
+            "source_name": "instruments.GBPJPY.execution_pack"
           },
           {
             "path": "execution.activation.reaction_trigger_maximum_age_bars",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.GBPJPY.overrides"
+            "source_name": "instruments.GBPJPY.execution_pack"
           },
           {
             "path": "execution.entry.max_spread_pips",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.GBPJPY.overrides"
+            "source_name": "instruments.GBPJPY.execution_pack"
           },
           {
             "path": "execution.mapped_zone.zone_min_width_abs",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.GBPJPY.overrides"
+            "source_name": "instruments.GBPJPY.execution_pack"
           },
           {
             "path": "execution.range.min_rr",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.GBPJPY.overrides"
+            "source_name": "instruments.GBPJPY.execution_pack"
           },
           {
             "path": "execution.range.min_target_pips",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.GBPJPY.overrides"
+            "source_name": "instruments.GBPJPY.execution_pack"
           },
           {
             "path": "execution.range.room_stop_floor_pips",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.GBPJPY.overrides"
+            "source_name": "instruments.GBPJPY.execution_pack"
           },
           {
             "path": "execution.reaction.room_stop_min_rr",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.GBPJPY.overrides"
+            "source_name": "instruments.GBPJPY.execution_pack"
           },
           {
             "path": "execution.reaction.stop_max_pips",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.GBPJPY.overrides"
+            "source_name": "instruments.GBPJPY.execution_pack"
           },
           {
             "path": "execution.reaction.stop_min_pips",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.GBPJPY.overrides"
+            "source_name": "instruments.GBPJPY.execution_pack"
           },
           {
             "path": "execution.scaling.add.min_stop_pips",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.GBPJPY.overrides"
+            "source_name": "instruments.GBPJPY.execution_pack"
           },
           {
             "path": "execution.stops.reaction.room_floor_pips",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.GBPJPY.overrides"
+            "source_name": "instruments.GBPJPY.execution_pack"
           },
           {
             "path": "execution.stops.sl_distance",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.GBPJPY.overrides"
+            "source_name": "instruments.GBPJPY.execution_pack"
           },
           {
             "path": "execution.stops.trend.minimum_pips",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.GBPJPY.overrides"
+            "source_name": "instruments.GBPJPY.execution_pack"
           },
           {
             "path": "execution.technique.reaction_publish_windows",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.GBPJPY.overrides"
+            "source_name": "instruments.GBPJPY.execution_pack"
           },
           {
             "path": "execution.technique.require_sweep_body",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.GBPJPY.overrides"
+            "source_name": "instruments.GBPJPY.execution_pack"
           },
           {
             "path": "execution.trend.stop_max_pips",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.GBPJPY.overrides"
+            "source_name": "instruments.GBPJPY.execution_pack"
           },
           {
             "path": "risk.exposure.opposing_minimum_separation_price",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.GBPJPY.overrides"
+            "source_name": "instruments.GBPJPY.execution_pack"
           },
           {
             "path": "strategies.high_frequency_scalp.policy.minimum_reward_risk",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.GBPJPY.overrides"
+            "source_name": "instruments.GBPJPY.execution_pack"
           },
           {
             "path": "strategies.technique.fvg.entry_max_width_price",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.GBPJPY.overrides"
+            "source_name": "instruments.GBPJPY.execution_pack"
           },
           {
             "path": "execution.entry.maximum_chase_distance_pips",
@@ -3010,151 +3010,151 @@
             "path": "analysis.levels.round_step",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.EURUSD.overrides"
+            "source_name": "instruments.EURUSD.execution_pack"
           },
           {
             "path": "analysis.market_map.change_min",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.EURUSD.overrides"
+            "source_name": "instruments.EURUSD.execution_pack"
           },
           {
             "path": "analysis.market_map.fallback_radius_price",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.EURUSD.overrides"
+            "source_name": "instruments.EURUSD.execution_pack"
           },
           {
             "path": "analysis.market_map.scalp_radius_price",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.EURUSD.overrides"
+            "source_name": "instruments.EURUSD.execution_pack"
           },
           {
             "path": "analysis.zones.confluence.merge_gap_price",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.EURUSD.overrides"
+            "source_name": "instruments.EURUSD.execution_pack"
           },
           {
             "path": "analysis.zones.merge_max_width",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.EURUSD.overrides"
+            "source_name": "instruments.EURUSD.execution_pack"
           },
           {
             "path": "execution.activation.reaction_trigger_maximum_age_bars",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.EURUSD.overrides"
+            "source_name": "instruments.EURUSD.execution_pack"
           },
           {
             "path": "execution.entry.max_spread_pips",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.EURUSD.overrides"
+            "source_name": "instruments.EURUSD.execution_pack"
           },
           {
             "path": "execution.mapped_zone.zone_min_width_abs",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.EURUSD.overrides"
+            "source_name": "instruments.EURUSD.execution_pack"
           },
           {
             "path": "execution.range.min_rr",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.EURUSD.overrides"
+            "source_name": "instruments.EURUSD.execution_pack"
           },
           {
             "path": "execution.range.min_target_pips",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.EURUSD.overrides"
+            "source_name": "instruments.EURUSD.execution_pack"
           },
           {
             "path": "execution.range.room_stop_floor_pips",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.EURUSD.overrides"
+            "source_name": "instruments.EURUSD.execution_pack"
           },
           {
             "path": "execution.reaction.room_stop_min_rr",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.EURUSD.overrides"
+            "source_name": "instruments.EURUSD.execution_pack"
           },
           {
             "path": "execution.reaction.stop_max_pips",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.EURUSD.overrides"
+            "source_name": "instruments.EURUSD.execution_pack"
           },
           {
             "path": "execution.reaction.stop_min_pips",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.EURUSD.overrides"
+            "source_name": "instruments.EURUSD.execution_pack"
           },
           {
             "path": "execution.scaling.add.min_stop_pips",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.EURUSD.overrides"
+            "source_name": "instruments.EURUSD.execution_pack"
           },
           {
             "path": "execution.stops.reaction.room_floor_pips",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.EURUSD.overrides"
+            "source_name": "instruments.EURUSD.execution_pack"
           },
           {
             "path": "execution.stops.sl_distance",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.EURUSD.overrides"
+            "source_name": "instruments.EURUSD.execution_pack"
           },
           {
             "path": "execution.stops.trend.minimum_pips",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.EURUSD.overrides"
+            "source_name": "instruments.EURUSD.execution_pack"
           },
           {
             "path": "execution.technique.reaction_publish_windows",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.EURUSD.overrides"
+            "source_name": "instruments.EURUSD.execution_pack"
           },
           {
             "path": "execution.technique.require_sweep_body",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.EURUSD.overrides"
+            "source_name": "instruments.EURUSD.execution_pack"
           },
           {
             "path": "execution.trend.stop_max_pips",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.EURUSD.overrides"
+            "source_name": "instruments.EURUSD.execution_pack"
           },
           {
             "path": "risk.exposure.opposing_minimum_separation_price",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.EURUSD.overrides"
+            "source_name": "instruments.EURUSD.execution_pack"
           },
           {
             "path": "strategies.high_frequency_scalp.policy.minimum_reward_risk",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.EURUSD.overrides"
+            "source_name": "instruments.EURUSD.execution_pack"
           },
           {
             "path": "strategies.technique.fvg.entry_max_width_price",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.EURUSD.overrides"
+            "source_name": "instruments.EURUSD.execution_pack"
           },
           {
             "path": "execution.entry.maximum_chase_distance_pips",
@@ -3593,7 +3593,7 @@
         "scaling": {
           "add": {
             "level_buffer_atr": "1",
-            "min_stop_pips": 12,
+            "min_stop_pips": 15,
             "pullback_enabled": false,
             "pullback_max_retrace": "0.7",
             "pullback_min_retrace": "0.2",
@@ -3756,151 +3756,151 @@
             "path": "analysis.levels.round_step",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.GBPJPY.overrides"
+            "source_name": "instruments.GBPJPY.execution_pack"
           },
           {
             "path": "analysis.market_map.change_min",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.GBPJPY.overrides"
+            "source_name": "instruments.GBPJPY.execution_pack"
           },
           {
             "path": "analysis.market_map.fallback_radius_price",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.GBPJPY.overrides"
+            "source_name": "instruments.GBPJPY.execution_pack"
           },
           {
             "path": "analysis.market_map.scalp_radius_price",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.GBPJPY.overrides"
+            "source_name": "instruments.GBPJPY.execution_pack"
           },
           {
             "path": "analysis.zones.confluence.merge_gap_price",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.GBPJPY.overrides"
+            "source_name": "instruments.GBPJPY.execution_pack"
           },
           {
             "path": "analysis.zones.merge_max_width",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.GBPJPY.overrides"
+            "source_name": "instruments.GBPJPY.execution_pack"
           },
           {
             "path": "execution.activation.reaction_trigger_maximum_age_bars",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.GBPJPY.overrides"
+            "source_name": "instruments.GBPJPY.execution_pack"
           },
           {
             "path": "execution.entry.max_spread_pips",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.GBPJPY.overrides"
+            "source_name": "instruments.GBPJPY.execution_pack"
           },
           {
             "path": "execution.mapped_zone.zone_min_width_abs",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.GBPJPY.overrides"
+            "source_name": "instruments.GBPJPY.execution_pack"
           },
           {
             "path": "execution.range.min_rr",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.GBPJPY.overrides"
+            "source_name": "instruments.GBPJPY.execution_pack"
           },
           {
             "path": "execution.range.min_target_pips",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.GBPJPY.overrides"
+            "source_name": "instruments.GBPJPY.execution_pack"
           },
           {
             "path": "execution.range.room_stop_floor_pips",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.GBPJPY.overrides"
+            "source_name": "instruments.GBPJPY.execution_pack"
           },
           {
             "path": "execution.reaction.room_stop_min_rr",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.GBPJPY.overrides"
+            "source_name": "instruments.GBPJPY.execution_pack"
           },
           {
             "path": "execution.reaction.stop_max_pips",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.GBPJPY.overrides"
+            "source_name": "instruments.GBPJPY.execution_pack"
           },
           {
             "path": "execution.reaction.stop_min_pips",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.GBPJPY.overrides"
+            "source_name": "instruments.GBPJPY.execution_pack"
           },
           {
             "path": "execution.scaling.add.min_stop_pips",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.GBPJPY.overrides"
+            "source_name": "instruments.GBPJPY.execution_pack"
           },
           {
             "path": "execution.stops.reaction.room_floor_pips",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.GBPJPY.overrides"
+            "source_name": "instruments.GBPJPY.execution_pack"
           },
           {
             "path": "execution.stops.sl_distance",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.GBPJPY.overrides"
+            "source_name": "instruments.GBPJPY.execution_pack"
           },
           {
             "path": "execution.stops.trend.minimum_pips",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.GBPJPY.overrides"
+            "source_name": "instruments.GBPJPY.execution_pack"
           },
           {
             "path": "execution.technique.reaction_publish_windows",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.GBPJPY.overrides"
+            "source_name": "instruments.GBPJPY.execution_pack"
           },
           {
             "path": "execution.technique.require_sweep_body",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.GBPJPY.overrides"
+            "source_name": "instruments.GBPJPY.execution_pack"
           },
           {
             "path": "execution.trend.stop_max_pips",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.GBPJPY.overrides"
+            "source_name": "instruments.GBPJPY.execution_pack"
           },
           {
             "path": "risk.exposure.opposing_minimum_separation_price",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.GBPJPY.overrides"
+            "source_name": "instruments.GBPJPY.execution_pack"
           },
           {
             "path": "strategies.high_frequency_scalp.policy.minimum_reward_risk",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.GBPJPY.overrides"
+            "source_name": "instruments.GBPJPY.execution_pack"
           },
           {
             "path": "strategies.technique.fvg.entry_max_width_price",
             "secret": false,
             "source_kind": "instrument_override",
-            "source_name": "instruments.GBPJPY.overrides"
+            "source_name": "instruments.GBPJPY.execution_pack"
           },
           {
             "path": "execution.entry.maximum_chase_distance_pips",

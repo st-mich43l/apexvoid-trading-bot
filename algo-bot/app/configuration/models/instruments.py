@@ -180,6 +180,77 @@ class InstrumentAnalysisConfig(FrozenConfigModel):
   zones: InstrumentZoneWidthConfig
 
 
+# Named non-scalp reaction windows. Add a name here when onboarding a pair
+# rather than copying hour strings into every instrument block.
+REGISTERED_REACTION_SESSIONS: dict[str, str] = {
+  "london_ny": "7-11,13-16",
+  "tokyo_london": "0-3,7-11",
+}
+
+
+class InstrumentStopEnvelopeConfig(FrozenConfigModel):
+  """Structural stop band for one instrument.
+
+  Expands to reaction/trend/range floor and cap leaves so a new pair does not
+  copy eight dotted override paths that must stay in sync.
+  """
+
+  min_pips: int = Field(ge=1)
+  max_pips: int = Field(ge=1)
+  sl_distance: float = Field(gt=0)
+
+  @model_validator(mode="after")
+  def validate_band(self) -> InstrumentStopEnvelopeConfig:
+    if self.min_pips > self.max_pips:
+      raise ValueError("stop_envelope.min_pips must be <= max_pips")
+    return self
+
+
+class InstrumentActivationProfileConfig(FrozenConfigModel):
+  """Reaction confirmation + spread gate for one instrument."""
+
+  require_sweep_body: bool = True
+  trigger_maximum_age_bars: int = Field(default=3, ge=1)
+  max_spread_pips: int = Field(ge=1)
+
+
+class InstrumentMarketMapScaleConfig(FrozenConfigModel):
+  change_min: float = Field(gt=0)
+  fallback_radius_price: float = Field(gt=0)
+  scalp_radius_price: float = Field(gt=0)
+
+
+class InstrumentPriceScaleConfig(FrozenConfigModel):
+  """Pair-native analysis/risk geometry in price units.
+
+  Expands to round_step, market-map radii, zone merge, opposing gap, and FVG
+  width so a new FX pair does not invent dotted override paths.
+  """
+
+  round_step: float = Field(gt=0)
+  market_map: InstrumentMarketMapScaleConfig
+  zone_merge_gap_price: float = Field(gt=0)
+  zone_merge_max_width: float = Field(gt=0)
+  opposing_minimum_separation_price: float = Field(gt=0)
+  fvg_entry_max_width_price: float = Field(gt=0)
+
+
+def resolve_reaction_session_windows(session: str) -> str:
+  token = str(session or "").strip()
+  if not token:
+    raise ValueError("reaction_session must be non-empty")
+  named = REGISTERED_REACTION_SESSIONS.get(token)
+  if named is not None:
+    return named
+  if "-" in token and any(char.isdigit() for char in token):
+    return token
+  raise ValueError(
+    f"unknown reaction_session {session!r}; known names: "
+    + ", ".join(sorted(REGISTERED_REACTION_SESSIONS))
+    + ", or a window list like '7-11,13-16'"
+  )
+
+
 class InstrumentConfig(FrozenConfigModel):
   """Per-instrument declaration.
 
@@ -201,7 +272,14 @@ class InstrumentConfig(FrozenConfigModel):
   )
   market_data: InstrumentMarketDataConfig | None = None
   analysis: InstrumentAnalysisConfig | None = None
+  # Named session pack (`london_ny`) or a raw window list (`7-11,13-16`).
+  reaction_session: str | None = None
+  stop_envelope: InstrumentStopEnvelopeConfig | None = None
+  activation: InstrumentActivationProfileConfig | None = None
+  price_scale: InstrumentPriceScaleConfig | None = None
   # Sparse dotted-path overrides applied when building EffectiveInstrumentConfig.
+  # Prefer session / envelope / activation / price_scale for new pairs; keep
+  # this bag as an escape hatch for a single leaf.
   overrides: dict[str, Any] = Field(default_factory=dict)
 
   @model_validator(mode="before")
@@ -325,6 +403,30 @@ class InstrumentConfig(FrozenConfigModel):
       raise ValueError(
         "fixed_rr targeting requires policy=fx_fixed_2r_v1"
       )
+    if self.reaction_session:
+      resolve_reaction_session_windows(self.reaction_session)
+    executable = effective_rollout(self) in {
+      InstrumentRollout.PAPER,
+      InstrumentRollout.LIVE,
+    }
+    if self.policy == FX_FIXED_2R_V1_POLICY and executable:
+      if not self.reaction_session:
+        raise ValueError(
+          "fx_fixed_2r_v1 live/paper instruments require reaction_session "
+          f"(known: {', '.join(sorted(REGISTERED_REACTION_SESSIONS))})"
+        )
+      if self.stop_envelope is None:
+        raise ValueError(
+          "fx_fixed_2r_v1 live/paper instruments require stop_envelope"
+        )
+      if self.activation is None:
+        raise ValueError(
+          "fx_fixed_2r_v1 live/paper instruments require activation"
+        )
+      if self.price_scale is None:
+        raise ValueError(
+          "fx_fixed_2r_v1 live/paper instruments require price_scale"
+        )
     return self
 
 
@@ -360,6 +462,78 @@ def resolve_policy_name(
   # feed_only / disabled may omit policy; still bind the compatibility policy
   # so callers receive a deterministic name for provenance.
   return XAU_CURRENT_V1_POLICY
+
+
+def compose_instrument_domain_overrides(
+  instrument: InstrumentConfig,
+) -> dict[str, Any]:
+  """Expand session/envelope/activation/price_scale/policy into domain paths.
+
+  Explicit ``instrument.overrides`` win, so a pair can still pin one leaf
+  without abandoning the structural pack. XAU keeps global mapped-zone width;
+  only FX derives ``zone_min_width_abs`` from analysis zone floors.
+  """
+  composed: dict[str, Any] = {}
+  if instrument.reaction_session:
+    composed["execution.technique.reaction_publish_windows"] = (
+      resolve_reaction_session_windows(instrument.reaction_session)
+    )
+  envelope = instrument.stop_envelope
+  if envelope is not None:
+    composed.update({
+      "execution.reaction.stop_min_pips": envelope.min_pips,
+      "execution.reaction.stop_max_pips": envelope.max_pips,
+      "execution.stops.reaction.room_floor_pips": envelope.min_pips,
+      "execution.range.room_stop_floor_pips": envelope.min_pips,
+      "execution.stops.trend.minimum_pips": envelope.min_pips,
+      "execution.trend.stop_max_pips": envelope.max_pips,
+      "execution.scaling.add.min_stop_pips": envelope.min_pips,
+      "execution.stops.sl_distance": envelope.sl_distance,
+    })
+  if instrument.policy == FX_FIXED_2R_V1_POLICY:
+    ratio = float(instrument.targeting.reward_risk or 2.0)
+    composed["execution.range.min_rr"] = ratio
+    composed["execution.reaction.room_stop_min_rr"] = ratio
+    composed["strategies.high_frequency_scalp.policy.minimum_reward_risk"] = ratio
+    if envelope is not None:
+      composed["execution.range.min_target_pips"] = int(
+        round(float(envelope.min_pips) * ratio)
+      )
+    if instrument.analysis is not None:
+      composed["execution.mapped_zone.zone_min_width_abs"] = (
+        instrument.analysis.zones.minimum_width_price
+      )
+  activation = instrument.activation
+  if activation is not None:
+    composed["execution.technique.require_sweep_body"] = (
+      activation.require_sweep_body
+    )
+    composed["execution.activation.reaction_trigger_maximum_age_bars"] = (
+      activation.trigger_maximum_age_bars
+    )
+    composed["execution.entry.max_spread_pips"] = activation.max_spread_pips
+  scale = instrument.price_scale
+  if scale is not None:
+    composed.update({
+      "analysis.levels.round_step": scale.round_step,
+      "analysis.market_map.change_min": scale.market_map.change_min,
+      "analysis.market_map.fallback_radius_price": (
+        scale.market_map.fallback_radius_price
+      ),
+      "analysis.market_map.scalp_radius_price": (
+        scale.market_map.scalp_radius_price
+      ),
+      "analysis.zones.confluence.merge_gap_price": scale.zone_merge_gap_price,
+      "analysis.zones.merge_max_width": scale.zone_merge_max_width,
+      "risk.exposure.opposing_minimum_separation_price": (
+        scale.opposing_minimum_separation_price
+      ),
+      "strategies.technique.fvg.entry_max_width_price": (
+        scale.fvg_entry_max_width_price
+      ),
+    })
+  composed.update(instrument.overrides)
+  return composed
 
 
 class InstrumentsConfig(FrozenConfigModel):

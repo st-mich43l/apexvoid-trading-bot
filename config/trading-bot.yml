@@ -196,6 +196,11 @@ execution:
     scale_step_atr: 0.5
     scale_undersized_policy: single_entry
 instruments:
+  # Add a live FX pair by declaring: policy + targeting (locked 1:2) +
+  # reaction_session + stop_envelope + activation + price_scale + contract
+  # + analysis.zones. Register a session name in REGISTERED_REACTION_SESSIONS
+  # instead of copying hour strings. Session/envelope/activation/price_scale
+  # expand execution and analysis leaves; `overrides` is only an escape hatch.
   # Demo live FX. Zone/merge/round/opposing gaps are price units (not XAU
   # dollars). Pip value is USD per 1.0 lot: EURUSD derives 10; GBPJPY is
   # explicit (~1000 JPY / 143 USDJPY). Equity-table lots still apply; broker
@@ -224,37 +229,30 @@ instruments:
         m15_bars: 250
         m1_bars: 150
         m5_bars: 150
-    overrides:
-      analysis.levels.round_step: 0.001
+    # London/NY major: tight spread, 10–18 pip stop, still locked 1:2.
+    policy: fx_fixed_2r_v1
+    reaction_session: london_ny
+    stop_envelope:
+      min_pips: 10
+      max_pips: 18
+      sl_distance: 0.0018
+    activation:
+      require_sweep_body: true
+      trigger_maximum_age_bars: 3
+      max_spread_pips: 1
+    price_scale:
+      round_step: 0.001
       # Market Map price-unit fields must follow EURUSD geometry. Structural
       # distance remains ATR-based; these cap fallback/rail presentation and
       # make one pip a material map move instead of XAU's $1 threshold.
-      analysis.market_map.change_min: 0.0001
-      analysis.market_map.fallback_radius_price: 0.01
-      analysis.market_map.scalp_radius_price: 0.006
-      analysis.zones.confluence.merge_gap_price: 0.0005
-      analysis.zones.merge_max_width: 0.0015
-      execution.mapped_zone.zone_min_width_abs: 0.0006
-      risk.exposure.opposing_minimum_separation_price: 0.0015
-      strategies.technique.fvg.entry_max_width_price: 0.0015
-      # London/NY major: tight spread, 10–18 pip stop, still locked 1:2.
-      execution.technique.reaction_publish_windows: '7-11,13-16'
-      execution.technique.require_sweep_body: true
-      execution.activation.reaction_trigger_maximum_age_bars: 3
-      execution.entry.max_spread_pips: 1
-      execution.range.min_rr: 2.0
-      execution.reaction.room_stop_min_rr: 2.0
-      execution.reaction.stop_min_pips: 10
-      execution.reaction.stop_max_pips: 18
-      execution.stops.reaction.room_floor_pips: 10
-      execution.range.room_stop_floor_pips: 10
-      execution.range.min_target_pips: 20
-      execution.stops.trend.minimum_pips: 10
-      execution.trend.stop_max_pips: 18
-      execution.scaling.add.min_stop_pips: 10
-      execution.stops.sl_distance: 0.0018
-      strategies.high_frequency_scalp.policy.minimum_reward_risk: 2.0
-    policy: fx_fixed_2r_v1
+      market_map:
+        change_min: 0.0001
+        fallback_radius_price: 0.01
+        scalp_radius_price: 0.006
+      zone_merge_gap_price: 0.0005
+      zone_merge_max_width: 0.0015
+      opposing_minimum_separation_price: 0.0015
+      fvg_entry_max_width_price: 0.0015
     rollout: live
     targeting:
       mode: fixed_rr
@@ -298,35 +296,27 @@ instruments:
         m15_bars: 250
         m1_bars: 150
         m5_bars: 150
-    overrides:
-      analysis.levels.round_step: 0.1
-      analysis.market_map.change_min: 0.01
-      analysis.market_map.fallback_radius_price: 1.0
-      analysis.market_map.scalp_radius_price: 0.6
-      analysis.zones.confluence.merge_gap_price: 0.05
-      analysis.zones.merge_max_width: 0.25
-      execution.mapped_zone.zone_min_width_abs: 0.12
-      risk.exposure.opposing_minimum_separation_price: 0.25
-      strategies.technique.fvg.entry_max_width_price: 0.25
-      # Tokyo/London cross: wider spread/stop, no NY dump window, still 1:2.
-      execution.technique.reaction_publish_windows: '0-3,7-11'
-      execution.technique.require_sweep_body: true
-      execution.activation.reaction_trigger_maximum_age_bars: 3
-      # Catalog field is int; 3 pips is the live cross allowance (plan 2.5).
-      execution.entry.max_spread_pips: 3
-      execution.range.min_rr: 2.0
-      execution.reaction.room_stop_min_rr: 2.0
-      execution.reaction.stop_min_pips: 15
-      execution.reaction.stop_max_pips: 30
-      execution.stops.reaction.room_floor_pips: 15
-      execution.range.room_stop_floor_pips: 15
-      execution.range.min_target_pips: 30
-      execution.stops.trend.minimum_pips: 15
-      execution.trend.stop_max_pips: 30
-      execution.scaling.add.min_stop_pips: 12
-      execution.stops.sl_distance: 0.30
-      strategies.high_frequency_scalp.policy.minimum_reward_risk: 2.0
+    # Tokyo/London cross: wider spread/stop, no NY dump window, still 1:2.
     policy: fx_fixed_2r_v1
+    reaction_session: tokyo_london
+    stop_envelope:
+      min_pips: 15
+      max_pips: 30
+      sl_distance: 0.30
+    activation:
+      require_sweep_body: true
+      trigger_maximum_age_bars: 3
+      max_spread_pips: 3
+    price_scale:
+      round_step: 0.1
+      market_map:
+        change_min: 0.01
+        fallback_radius_price: 1.0
+        scalp_radius_price: 0.6
+      zone_merge_gap_price: 0.05
+      zone_merge_max_width: 0.25
+      opposing_minimum_separation_price: 0.25
+      fvg_entry_max_width_price: 0.25
     rollout: live
     targeting:
       mode: fixed_rr
