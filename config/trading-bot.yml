@@ -64,7 +64,7 @@ contract:
     require_demo: true
   instrument:
     canonical_symbol: XAU
-    symbols: XAU,EURUSD,GBPJPY
+    symbols: XAU,EURUSD,GBPJPY,USDJPY
   mode: v8_only
   streams:
     candidate_maximum_length: 1000
@@ -347,6 +347,82 @@ instruments:
     - M15
     - M5
     - M1
+  USDJPY:
+    analysis:
+      zones:
+        major_maximum_width_price: 0.3
+        minimum_width_price: 0.06
+        preferred_maximum_width_price: 0.15
+        preferred_minimum_width_price: 0.08
+    broker_symbol: USDJPY
+    canonical_symbol: USDJPY
+    contract:
+      contract_units_per_lot: 100000.0
+      max_lots: 10.0
+      pip_size: 0.01
+      # 1000 JPY / ~159.47 USDJPY (spot 2026-08-17) -- same
+      # 1000/rate convention as GBPJPY's pip_value_per_lot. Drifts with the
+      # rate; revisit if USDJPY moves far from this level.
+      pip_value_per_lot: 6.27
+      price_digits: 3
+      volume_units_per_lot: 10000000
+    enabled: true
+    market_data:
+      lookbacks:
+        h1_bars: 400
+        m15_bars: 250
+        m1_bars: 150
+        m5_bars: 150
+    overrides:
+      analysis.levels.round_step: 0.1
+      analysis.market_map.change_min: 0.01
+      analysis.market_map.fallback_radius_price: 1.0
+      analysis.market_map.scalp_radius_price: 0.6
+      analysis.zones.confluence.merge_gap_price: 0.05
+      analysis.zones.merge_max_width: 0.15
+      execution.mapped_zone.zone_min_width_abs: 0.06
+      risk.exposure.opposing_minimum_separation_price: 0.15
+      strategies.technique.fvg.entry_max_width_price: 0.15
+      # Major pair, tight like EURUSD (not a volatile cross like GBPJPY).
+      # Tokyo (JPY driver) + London + NY (USD driver) -- USDJPY is liquid
+      # across all three, unlike GBPJPY's Tokyo/London-only, no-NY window.
+      execution.technique.reaction_publish_windows: '0-3,7-11,13-16'
+      execution.technique.require_sweep_body: true
+      execution.activation.reaction_trigger_maximum_age_bars: 3
+      execution.entry.max_spread_pips: 1
+      execution.range.min_rr: 2.0
+      execution.reaction.room_stop_min_rr: 2.0
+      execution.reaction.stop_min_pips: 10
+      execution.reaction.stop_max_pips: 18
+      execution.stops.reaction.room_floor_pips: 10
+      execution.range.room_stop_floor_pips: 10
+      execution.range.min_target_pips: 20
+      execution.stops.trend.minimum_pips: 10
+      execution.trend.stop_max_pips: 18
+      execution.scaling.add.min_stop_pips: 10
+      execution.stops.sl_distance: 0.18
+      strategies.high_frequency_scalp.policy.minimum_reward_risk: 2.0
+    policy: fx_fixed_2r_v1
+    rollout: live
+    targeting:
+      mode: fixed_rr
+      reward_risk: 2.0
+      target_r_multiples:
+      - 1.0
+      - 1.5
+      - 2.0
+      close_ratios:
+      - 0.25
+      - 0.25
+      - 0.50
+      trail_after_r: 1.5
+      trail_to_r: 1.0
+      entry_clips: 2
+    timeframes:
+    - H1
+    - M15
+    - M5
+    - M1
   XAU:
     analysis:
       zones:
@@ -416,7 +492,7 @@ market_data:
   scanner:
     execution_timeframe: M5
     htf: H1,M15
-    symbols: XAU,EURUSD,GBPJPY
+    symbols: XAU,EURUSD,GBPJPY,USDJPY
     window: 500
   sessions:
     asia_start: 22
