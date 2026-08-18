@@ -229,7 +229,7 @@ from app.autotrade.trend import (
 from app.core.config import runtime_config
 from app.runtime.instrument_config import instrument_runtime_view
 from app.runtime.price_identity import price_token
-from app.persistence.store import event_in_window
+from app.persistence.store import event_in_window, nearest_currency_event
 from app.analysis.ohlc_source import RedisOHLCSource, window_for_timeframe
 from app.analysis.math_utils import atr_series
 from app.analysis.types import Level, Zone
@@ -1239,7 +1239,7 @@ def _eq_exclusion_reason(
   if width <= 0:
     return None
   if abs(entry_reference - eq) < max(0.0, fraction) * width:
-    return f"EQ exclusion: entry {entry_reference:.2f} within {fraction:.0%} of box EQ {eq:.2f}"
+    return f"EQ exclusion: entry {entry_reference:.5f} within {fraction:.0%} of box EQ {eq:.5f}"
   return None
 
 
@@ -1255,8 +1255,8 @@ def _edge_proximity_reason(
   distance_atr = abs(entry_reference - rail.level) / atr
   if distance_atr > max(0.0, limit_atr):
     return (
-      f"Range Edge Scalp not near an edge: entry {entry_reference:.2f} is "
-      f"{distance_atr:.2f} ATR from rail {rail.level:.2f} "
+      f"Range Edge Scalp not near an edge: entry {entry_reference:.5f} is "
+      f"{distance_atr:.2f} ATR from rail {rail.level:.5f} "
       f"(limit {limit_atr:.2f} ATR)"
     )
   return None
@@ -1491,9 +1491,9 @@ def _opposing_barrier_decision(
   if contained is not None:
     ambiguous, relationship = contained
     message = (
-      f"entry {entry_reference:.2f} inside opposing/ambiguous "
+      f"entry {entry_reference:.5f} inside opposing/ambiguous "
       f"{ambiguous.level_kind or ambiguous.side} "
-      f"{ambiguous.low:.2f}-{ambiguous.high:.2f}"
+      f"{ambiguous.low:.5f}-{ambiguous.high:.5f}"
     )
     # A directional supply/demand zone the entry sits inside is a real
     # structural wall (23 Jul incident: a BUY filled inside an 8-touch SELL
@@ -1546,8 +1546,8 @@ def _opposing_barrier_decision(
       message = (
         f"Opposing barrier ahead: {direction} into "
         f"{barrier.level_kind or barrier.side} "
-        f"{barrier.low:.2f}-{barrier.high:.2f} "
-        f"({distance:.2f} away)"
+        f"{barrier.low:.5f}-{barrier.high:.5f} "
+        f"({distance:.5f} away)"
       )
       decision = classify_guard_severity(
         "opposing_barrier",
@@ -1572,7 +1572,7 @@ def _opposing_barrier_decision(
       OUTCOME_ALLOW,
       "primary_source_excluded_from_barrier",
       (
-        f"primary source {primary.low:.2f}-{primary.high:.2f} "
+        f"primary source {primary.low:.5f}-{primary.high:.5f} "
         "excluded from opposing barriers"
       ),
       False,
@@ -1585,6 +1585,56 @@ def _opposing_barrier_decision(
     "no_opposing_barrier",
     "no opposing barrier",
     False,
+  )
+
+
+def _defended_level_guard(
+  symbol: str, entry_reference: float, *, guard_mode: str,
+) -> ExecutionGuardDecision:
+  """Block a fresh entry near a macro-significant defended price level.
+
+  2026 USDJPY dig: Japan/the US ran a record ~Y11.73T (~$73B) joint
+  intervention specifically when USDJPY breached 160 -- the dollar
+  snapped from 163 to ~156-157 within days, a 600+ pip reversal. With
+  spot sitting at ~159.47 as of this guard's introduction, that is not a
+  hypothetical tail risk. Unlike the opposing-barrier guard (discovered
+  market structure), this fires on distance to a configured macro level
+  and is unconditional (hard_geometry=True) -- guard_mode is currently
+  "observe" globally, which would make this a no-op warning if it
+  deferred to guard_mode like most other soft signals. Off by default
+  (defended_levels empty / buffer 0); currently only configured for
+  USDJPY.
+  """
+  levels = instrument_geometry.defended_levels(symbol)
+  buffer_price = instrument_geometry.defended_level_buffer_price(symbol)
+  if not levels or buffer_price <= 0:
+    return ExecutionGuardDecision(
+      "defended_level",
+      OUTCOME_ALLOW,
+      "no_defended_level_configured",
+      "no defended level configured",
+      False,
+    )
+  nearest = min(levels, key=lambda level: abs(level - entry_reference))
+  distance = abs(nearest - entry_reference)
+  if distance > buffer_price:
+    return ExecutionGuardDecision(
+      "defended_level",
+      OUTCOME_ALLOW,
+      "no_defended_level_nearby",
+      f"nearest defended level {nearest:.5f} is {distance:.5f} away",
+      False,
+    )
+  message = (
+    f"entry {entry_reference:.5f} is {distance:.5f} from defended level "
+    f"{nearest:.5f} (buffer {buffer_price:.5f})"
+  )
+  return classify_guard_severity(
+    "defended_level",
+    "entry_near_defended_level",
+    message,
+    guard_mode=guard_mode,
+    hard_geometry=True,
   )
 
 
@@ -1682,7 +1732,7 @@ def _counter_bias_barrier_between(
     ]
     barrier = _nearest_directional_zone("SELL", entry_reference, between)
     if barrier is not None:
-      return barrier.low, f"{barrier.side} {barrier.low:.2f}-{barrier.high:.2f}"
+      return barrier.low, f"{barrier.side} {barrier.low:.5f}-{barrier.high:.5f}"
   else:
     between = [
       zone for zone in zones
@@ -1692,7 +1742,7 @@ def _counter_bias_barrier_between(
     ]
     barrier = _nearest_directional_zone("BUY", entry_reference, between)
     if barrier is not None:
-      return barrier.high, f"{barrier.side} {barrier.low:.2f}-{barrier.high:.2f}"
+      return barrier.high, f"{barrier.side} {barrier.low:.5f}-{barrier.high:.5f}"
 
   level_bounds = [
     (level.price - level.band, level.price + level.band, level.kind)
@@ -1715,7 +1765,7 @@ def _counter_bias_barrier_between(
     return None
   _, low, high, kind = min(ahead, key=lambda item: item[0])
   near_edge = low if direction == "BUY" else high
-  return near_edge, f"{kind} {low:.2f}-{high:.2f}"
+  return near_edge, f"{kind} {low:.5f}-{high:.5f}"
 
 
 def _counter_bias_target_barrier_reason(
@@ -1733,8 +1783,8 @@ def _counter_bias_target_barrier_reason(
     or match.direction == "SELL" and target >= entry_reference
   ):
     return (
-      f"counter-bias target {target:.2f} is not ahead of "
-      f"{match.direction} entry {entry_reference:.2f}"
+      f"counter-bias target {target:.5f} is not ahead of "
+      f"{match.direction} entry {entry_reference:.5f}"
     )
   barrier = _counter_bias_barrier_between(
     match.direction, entry_reference, target, zones, levels,
@@ -1742,7 +1792,7 @@ def _counter_bias_target_barrier_reason(
   if barrier is None:
     return None
   _, description = barrier
-  return f"counter-bias target blocked before EQ {target:.2f} by {description}"
+  return f"counter-bias target blocked before EQ {target:.5f} by {description}"
 
 
 _MIN_COUNTER_BIAS_TARGET_PIPS = 15
@@ -1777,8 +1827,8 @@ def _adapt_counter_bias_target(
       "counter_bias",
       "block",
       "target_not_ahead_of_entry",
-      f"counter-bias target {target:.2f} is not ahead of "
-      f"{match.direction} entry {entry_reference:.2f}",
+      f"counter-bias target {target:.5f} is not ahead of "
+      f"{match.direction} entry {entry_reference:.5f}",
       True,
     )
   source_levels = [
@@ -1818,7 +1868,7 @@ def _adapt_counter_bias_target(
       OUTCOME_ALLOW_WITH_WARNING,
       "target_room_insufficient",
       (
-        f"counter-bias target preference before EQ {target:.2f} by {description}: "
+        f"counter-bias target preference before EQ {target:.5f} by {description}: "
         f"room {room_pips:.1f}p does not fit the smallest configured target "
         f"({min(match.targets_pips) if match.targets_pips else 0}p)"
       ),
@@ -1855,7 +1905,7 @@ def _adapt_counter_bias_target(
     "adjust_target",
     "target_capped_by_structure",
     (
-      f"counter-bias target adapted {target:.2f} -> {adjusted_target:.2f} "
+      f"counter-bias target adapted {target:.5f} -> {adjusted_target:.5f} "
       f"(room {room_pips:.1f}p, barrier {description})"
     ),
     False,
@@ -1923,9 +1973,9 @@ async def _zone_cooldown_reason(
   if distance_atr > cooldown_atr:
     return None
   return (
-    f"zone cooldown: {direction} entry {entry_reference:.2f} is "
+    f"zone cooldown: {direction} entry {entry_reference:.5f} is "
     f"{distance_atr:.2f} ATR from a stopped-out entry at "
-    f"{recorded_entry:.2f} (limit {cooldown_atr:.2f} ATR)"
+    f"{recorded_entry:.5f} (limit {cooldown_atr:.2f} ATR)"
   )
 
 
@@ -1967,9 +2017,9 @@ def _overlapping_zone_conflict_reason(
   if demand_hit is None or supply_hit is None:
     return None
   return (
-    f"entry {entry_reference:.2f} inside both demand "
-    f"{demand_hit.lo:.2f}-{demand_hit.hi:.2f} and supply "
-    f"{supply_hit.lo:.2f}-{supply_hit.hi:.2f}"
+    f"entry {entry_reference:.5f} inside both demand "
+    f"{demand_hit.lo:.5f}-{demand_hit.hi:.5f} and supply "
+    f"{supply_hit.lo:.5f}-{supply_hit.hi:.5f}"
   )
 
 
@@ -2008,9 +2058,9 @@ def _resolve_overlap_thesis(
   if demand_hit is None or supply_hit is None:
     return GuardOutcome("overlap", OUTCOME_ALLOW, "no_overlap", "no overlap", False)
   reason = (
-    f"entry {entry_reference:.2f} inside both demand "
-    f"{demand_hit.lo:.2f}-{demand_hit.hi:.2f} and supply "
-    f"{supply_hit.lo:.2f}-{supply_hit.hi:.2f}"
+    f"entry {entry_reference:.5f} inside both demand "
+    f"{demand_hit.lo:.5f}-{demand_hit.hi:.5f} and supply "
+    f"{supply_hit.lo:.5f}-{supply_hit.hi:.5f}"
   )
   if m1 is None or getattr(m1, "empty", True) or not atr or atr <= 0:
     return classify_guard_severity(
@@ -2209,7 +2259,7 @@ def _htf_veto_reason(
   side_word = "below" if direction == "SELL" else "above"
   return (
     f"HTF veto: {direction} {side_word} untested {kind} "
-    f"{zone.low:.2f}-{zone.high:.2f}"
+    f"{zone.low:.5f}-{zone.high:.5f}"
   )
 
 
@@ -2774,6 +2824,67 @@ def _trend_bias_metadata(
   return bias, "with_bias" if bias == local_bias else "counter_bias"
 
 
+def _instrument_currencies(symbol: str) -> tuple[str, str] | None:
+  """Split a 6-letter FX pair like 'GBPJPY' into ('GBP', 'JPY').
+
+  None for anything that isn't a two-fiat-currency pair (XAU and friends),
+  so the event-cluster guard below safely no-ops for them.
+  """
+  upper = symbol.upper()
+  if len(upper) != 6 or not upper.isalpha():
+    return None
+  first, second = upper[:3], upper[3:]
+  return None if first == second else (first, second)
+
+
+async def _event_cluster_guard(symbol: str, now: int) -> dict | None:
+  """Widened news guard for a compounding event cluster.
+
+  2026 GBP/JPY dig: a BoE data print and a BoJ policy statement landing in
+  the same 48h window compounds volatility rather than adding it -- the
+  single-event news_guard_minutes window (30m by default) is far too
+  narrow to cover that. When both of this instrument's constituent
+  currencies have a high-impact event within event_cluster_span_hours of
+  each other, apply the wider event_cluster_guard_minutes window around
+  whichever event is nearer to `now` instead. Off by default
+  (event_cluster_guard_enabled); currently only turned on for GBPJPY.
+  """
+  gates = runtime_config.actionability.gates
+  if not gates.event_cluster_guard_enabled:
+    return None
+  currencies = _instrument_currencies(symbol)
+  if currencies is None:
+    return None
+  span = max(1, gates.event_cluster_span_hours) * 3600
+  first_currency, second_currency = currencies
+  first_event = await nearest_currency_event(
+    first_currency, now - span, now + span, now,
+  )
+  second_event = await nearest_currency_event(
+    second_currency, now - span, now + span, now,
+  )
+  if first_event is None or second_event is None:
+    return None
+  nearer = min(
+    (first_event, second_event),
+    key=lambda event: abs(int(event["ts_utc"]) - now),
+  )
+  guard_window = max(0, gates.event_cluster_guard_minutes) * 60
+  if abs(int(nearer["ts_utc"]) - now) > guard_window:
+    return None
+  return nearer
+
+
+async def _news_guard_hit(symbol: str, now: int) -> dict | None:
+  """The normal single-event news guard, widened by an event-cluster hit."""
+  cluster_hit = await _event_cluster_guard(symbol, now)
+  if cluster_hit is not None:
+    return cluster_hit
+  return await event_in_window(
+    now, max(0, runtime_config.actionability.gates.news_guard_minutes) * 60,
+  )
+
+
 async def _publish_candidate(
   client: Any,
   symbol: str,
@@ -2828,7 +2939,7 @@ async def _publish_candidate(
       strategy="Range Box Scalp",
       direction=decision.direction,
       source_structure=(
-        f"range_box_edge {decision.rail.low:.2f}-{decision.rail.high:.2f}"
+        f"range_box_edge {decision.rail.low:.5f}-{decision.rail.high:.5f}"
       ),
     )
     await _record_gate_reject(client, symbol, "range_edge_not_chop")
@@ -2985,9 +3096,8 @@ async def _publish_candidate(
 
   now = int(datetime.now(timezone.utc).timestamp())
   try:
-    guarded = await event_in_window(
-      now,
-      max(0, runtime_config.actionability.gates.news_guard_minutes) * 60,
+    guarded = await _news_guard_hit(
+      symbol, now,
     )
   except Exception:
     log.exception("auto-scalp candidate blocked: news guard unavailable")
@@ -3402,7 +3512,7 @@ async def _publish_strategy_match(
   guard_mode = resolve_guard_mode()
   source_summary = (
     f"{match.structural_source or match.strategy} "
-    f"{match.entry_low:.2f}-{match.entry_high:.2f}"
+    f"{match.entry_low:.5f}-{match.entry_high:.5f}"
   )
   if match.is_range_edge:
     # Range Edge Scalp ("Range Box Scalp" label) is a mean-reversion play on
@@ -3723,7 +3833,7 @@ async def _publish_strategy_match(
       "reaction_crossed_invalidation",
       (
         f"{match.direction} reaction crossed invalidation "
-        f"{match.structure_swing:.2f} at {spot.price:.2f}"
+        f"{match.structure_swing:.5f} at {spot.price:.5f}"
       ),
       True,
       measured={
@@ -3863,7 +3973,7 @@ async def _publish_strategy_match(
       "waiting",
       "executor_entry_envelope_exceeded",
       (
-        f"executor quote {float(executor_measurement.executable_quote):.2f} "
+        f"executor quote {float(executor_measurement.executable_quote):.5f} "
         f"is {float(executor_measurement.distance_pips):.1f}p outside entry "
         f"zone (executor limit "
         f"{float(executor_measurement.cap_pips):.1f}p)"
@@ -3887,9 +3997,8 @@ async def _publish_strategy_match(
   )
   now = int(datetime.now(timezone.utc).timestamp())
   try:
-    guarded = await event_in_window(
-      now,
-      max(0, runtime_config.actionability.gates.news_guard_minutes) * 60,
+    guarded = await _news_guard_hit(
+      symbol, now,
     )
   except Exception:
     log.exception("strategy match blocked: news guard unavailable")
@@ -5739,6 +5848,20 @@ async def _publish_trade_plan_v8(
     )
     return None
 
+  # Defended-level guard applies to every strategy family, unlike the
+  # opposing-barrier bypass above -- a scalp entry right at a macro level
+  # carries the same intervention-reversal risk as any other entry.
+  defended_outcome = _defended_level_guard(
+    symbol, spot.price, guard_mode=guard_mode,
+  )
+  if defended_outcome.hard_block:
+    await _release_claims()
+    await _record_v8_build_rejected(
+      client, symbol, match, defended_outcome.reason_code,
+      defended_outcome.message, defended_outcome.measured,
+    )
+    return None
+
   # HTF veto: reject when the nearest opposing HTF zone is still untested and
   # ahead of the executable quote (defect 4: a short taken below untested
   # supply). Preflight used to enforce this; V7 owns it now. Scalps with
@@ -5805,9 +5928,8 @@ async def _publish_trade_plan_v8(
   # executable=True behavior).
   news_now = int(datetime.now(timezone.utc).timestamp())
   try:
-    news_event = await event_in_window(
-      news_now,
-      max(0, runtime_config.actionability.gates.news_guard_minutes) * 60,
+    news_event = await _news_guard_hit(
+      symbol, news_now,
     )
   except Exception:
     await _release_claims()
@@ -6525,9 +6647,8 @@ async def _publish_trend_candidate(
 
   now = int(datetime.now(timezone.utc).timestamp())
   try:
-    guarded = await event_in_window(
-      now,
-      max(0, runtime_config.actionability.gates.news_guard_minutes) * 60,
+    guarded = await _news_guard_hit(
+      symbol, now,
     )
   except Exception:
     log.exception("auto-trend candidate blocked: news guard unavailable")
@@ -6891,7 +7012,7 @@ def _status_payload(
     zone_high = breakout_retest.get("zone_high")
     reasons = (
       (
-        f"breakout retest waiting at {float(zone_low):.2f}-{float(zone_high):.2f}",
+        f"breakout retest waiting at {float(zone_low):.5f}-{float(zone_high):.5f}",
       )
       if zone_low is not None and zone_high is not None
       else ("breakout retest waiting",)

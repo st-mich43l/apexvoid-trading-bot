@@ -16,10 +16,25 @@ SUPPORTED_INSTRUMENT_TIMEFRAMES = frozenset({"H1", "M15", "M5", "M1", "H4", "D1"
 # Compatibility policy: inherit global trading domains from the resolved root.
 XAU_CURRENT_V1_POLICY = "xau_current_v1"
 FX_FIXED_2R_V1_POLICY = "fx_fixed_2r_v1"
+# 2026 GBP/JPY dig: ATR(14) ~180 pips/day vs EURUSD's ~70, and moves reverse
+# hard once they've run -- front-load profit-taking (40/25/35 instead of the
+# standard 25/25/50) so more of the win is locked in before a violent
+# snap-back gives it back. Same 2R ladder/trail/entry_clips as
+# fx_fixed_2r_v1, only the close_ratios split differs.
+FX_FIXED_2R_FRONTLOAD_V1_POLICY = "fx_fixed_2r_frontload_v1"
 REGISTERED_INSTRUMENT_POLICIES = frozenset({
   FX_FIXED_2R_V1_POLICY,
+  FX_FIXED_2R_FRONTLOAD_V1_POLICY,
   XAU_CURRENT_V1_POLICY,
 })
+
+# Required targeting.close_ratios per fixed_rr policy variant -- every other
+# fixed_rr field (reward_risk, target_r_multiples, trail_after_r, trail_to_r,
+# entry_clips) is shared across variants; only the close-ratio split differs.
+FIXED_RR_POLICY_CLOSE_RATIOS: dict[str, tuple[float, float, float]] = {
+  FX_FIXED_2R_V1_POLICY: (0.25, 0.25, 0.50),
+  FX_FIXED_2R_FRONTLOAD_V1_POLICY: (0.40, 0.25, 0.35),
+}
 
 
 class InstrumentRollout(StrEnum):
@@ -185,6 +200,10 @@ class InstrumentAnalysisConfig(FrozenConfigModel):
 REGISTERED_REACTION_SESSIONS: dict[str, str] = {
   "london_ny": "7-11,13-16",
   "tokyo_london": "0-3,7-11",
+  # USDJPY dig: liquid across all three home sessions (JPY driver in
+  # Tokyo, USD driver in NY, plus London), unlike GBPJPY's Tokyo/London-
+  # only, no-NY-dump-window profile as a cross pair.
+  "tokyo_london_ny": "0-3,7-11,13-16",
 }
 
 
@@ -382,26 +401,29 @@ class InstrumentConfig(FrozenConfigModel):
       raise ValueError(
         "non-disabled instruments require contract configuration"
       )
-    if self.policy == FX_FIXED_2R_V1_POLICY and not (
+    required_close_ratios = FIXED_RR_POLICY_CLOSE_RATIOS.get(self.policy)
+    if required_close_ratios is not None and not (
       self.targeting.mode is InstrumentTargetMode.FIXED_RR
       and self.targeting.reward_risk == 2.0
       and self.targeting.target_r_multiples == (1.0, 1.5, 2.0)
-      and self.targeting.close_ratios == (0.25, 0.25, 0.50)
+      and self.targeting.close_ratios == required_close_ratios
       and self.targeting.trail_after_r == 1.5
       and self.targeting.trail_to_r == 1.0
       and self.targeting.entry_clips == 2
     ):
+      pct = tuple(f"{ratio:.0%}" for ratio in required_close_ratios)
       raise ValueError(
-        "fx_fixed_2r_v1 requires targeting.mode=fixed_rr and "
-        "targets 1R/1.5R/2R at 25%/25%/50%, trailing 1.5R to 1R, "
-        "entry_clips=2"
+        f"{self.policy} requires targeting.mode=fixed_rr and "
+        f"targets 1R/1.5R/2R at {pct[0]}/{pct[1]}/{pct[2]}, "
+        "trailing 1.5R to 1R, entry_clips=2"
       )
     if (
       self.targeting.mode is InstrumentTargetMode.FIXED_RR
-      and self.policy != FX_FIXED_2R_V1_POLICY
+      and self.policy not in FIXED_RR_POLICY_CLOSE_RATIOS
     ):
       raise ValueError(
-        "fixed_rr targeting requires policy=fx_fixed_2r_v1"
+        "fixed_rr targeting requires policy in "
+        + ", ".join(sorted(FIXED_RR_POLICY_CLOSE_RATIOS))
       )
     if self.reaction_session:
       resolve_reaction_session_windows(self.reaction_session)
@@ -409,23 +431,23 @@ class InstrumentConfig(FrozenConfigModel):
       InstrumentRollout.PAPER,
       InstrumentRollout.LIVE,
     }
-    if self.policy == FX_FIXED_2R_V1_POLICY and executable:
+    if self.policy in FIXED_RR_POLICY_CLOSE_RATIOS and executable:
       if not self.reaction_session:
         raise ValueError(
-          "fx_fixed_2r_v1 live/paper instruments require reaction_session "
+          f"{self.policy} live/paper instruments require reaction_session "
           f"(known: {', '.join(sorted(REGISTERED_REACTION_SESSIONS))})"
         )
       if self.stop_envelope is None:
         raise ValueError(
-          "fx_fixed_2r_v1 live/paper instruments require stop_envelope"
+          f"{self.policy} live/paper instruments require stop_envelope"
         )
       if self.activation is None:
         raise ValueError(
-          "fx_fixed_2r_v1 live/paper instruments require activation"
+          f"{self.policy} live/paper instruments require activation"
         )
       if self.price_scale is None:
         raise ValueError(
-          "fx_fixed_2r_v1 live/paper instruments require price_scale"
+          f"{self.policy} live/paper instruments require price_scale"
         )
     return self
 
@@ -490,7 +512,7 @@ def compose_instrument_domain_overrides(
       "execution.scaling.add.min_stop_pips": envelope.min_pips,
       "execution.stops.sl_distance": envelope.sl_distance,
     })
-  if instrument.policy == FX_FIXED_2R_V1_POLICY:
+  if instrument.policy in FIXED_RR_POLICY_CLOSE_RATIOS:
     ratio = float(instrument.targeting.reward_risk or 2.0)
     composed["execution.range.min_rr"] = ratio
     composed["execution.reaction.room_stop_min_rr"] = ratio

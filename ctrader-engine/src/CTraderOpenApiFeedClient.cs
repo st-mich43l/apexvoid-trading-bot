@@ -674,12 +674,17 @@ public sealed class CTraderOpenApiFeedClient : ICTraderFeedClient, ICTraderTrade
         $"position_close_deal_list_windowed_failed position_id={positionId} "
           + $"window={fromTimestamp}-{toTimestamp}: {exception.Message}"
       );
-      if (!IsIncorrectBoundaries(exception))
-      {
-        // Timeout / transport failure: do not hold the shared request lock
-        // for a second 8s unbounded attempt. Close reason stays Unknown.
-        throw;
-      }
+      // Live 2026-08-18 (fpmarketssc demo): every windowed attempt on record
+      // (38/38 in 14 days retained logs) timed out at DealListLookupTimeout,
+      // never once an INCORRECT_BOUNDARIES rejection — the old
+      // IsIncorrectBoundaries-only gate meant the unbounded fallback below
+      // was never actually reached for this broker, so every broker-absent
+      // close landed as Unknown and forced a false GROUP RECOVERY REQUIRED
+      // alarm even on ordinary TP/SL fills. Always give the differently-
+      // shaped fallback a try on any retryable failure — it shares the same
+      // short DealListLookupTimeout, so the worst case (both attempts fail)
+      // stays well under RequestTimeout; see
+      // DealListLookupTimeoutStaysWellUnderTheDefaultRequestTimeout.
     }
 
     // Last resort: position-scoped query without a time window. Some brokers
@@ -700,7 +705,7 @@ public sealed class CTraderOpenApiFeedClient : ICTraderFeedClient, ICTraderTrade
   // Kept well under options.RequestTimeout (default 30s) — see the
   // FetchDealsByPositionIdAsync comment above for why this specific lookup
   // must not hold the shared request lock as long as a live order call.
-  internal static readonly TimeSpan DealListLookupTimeout = TimeSpan.FromSeconds(2);
+  internal static readonly TimeSpan DealListLookupTimeout = TimeSpan.FromSeconds(3);
 
   internal static bool IsIncorrectBoundaries(Exception exception)
   {
