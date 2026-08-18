@@ -379,6 +379,10 @@ def build_instrument_slice(config: ApexVoidConfig, instrument_id: str) -> dict[s
   return {
     "identity": _json_ready(effective.identity, path=f"instruments.{instrument_id}.identity"),
     "units": _json_ready(effective.units, path=f"instruments.{instrument_id}.units"),
+    "targeting": _json_ready(
+      effective.targeting,
+      path=f"instruments.{instrument_id}.targeting",
+    ),
     "market_data": {
       "lookbacks": _json_ready(
         effective.market_data.lookbacks,
@@ -549,6 +553,7 @@ def build_instrument_runtime(
     "rollout": rollout,
     "identity": slice_["identity"],
     "units": slice_["units"],
+    "targeting": slice_["targeting"],
     "feed": _json_ready(feed, path=f"instrument_runtimes.{instrument_id}.feed"),
     "analysis": slice_["analysis"],
     "auto_trade": _json_ready(
@@ -585,6 +590,10 @@ def upgrade_v1_payload_to_v2(payload: Mapping[str, Any]) -> dict[str, Any]:
       "rollout": xau["identity"]["rollout"],
       "identity": xau["identity"],
       "units": xau["units"],
+      "targeting": xau.get(
+        "targeting",
+        {"mode": "ladder_pips", "reward_risk": None},
+      ),
       "feed": payload["feed"],
       "analysis": xau.get("analysis", {}),
       "auto_trade": payload["auto_trade"],

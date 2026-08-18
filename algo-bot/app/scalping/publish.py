@@ -43,16 +43,17 @@ def _structural_kind(opportunity: ScalpOpportunity) -> str:
 
 def _hfs_target_ladder(
   opportunity: ScalpOpportunity,
+  cfg: Any | None = None,
 ) -> tuple[int, tuple[int, ...]]:
   """Final TP pips + published ladder.
 
-  XAU scalp books 10 then 20 pips. FX is a single full-close 2R target.
-  A shorter native room still publishes a single exit at that room.
+  XAU scalp books 10 then 20 pips. A fixed-RR instrument publishes one
+  full-close target. A shorter native room still publishes one exit.
   """
-  from app.core.instrument_geometry import is_fx
+  from app.core.instrument_geometry import fixed_reward_risk
 
   final_pips = max(1, int(round(float(opportunity.expected_target_pips))))
-  if is_fx(opportunity.symbol):
+  if fixed_reward_risk(opportunity.symbol, cfg) is not None:
     return final_pips, (final_pips,)
   first = 10
   last = min(20, max(final_pips, first))
@@ -69,6 +70,7 @@ def build_hfs_strategy_match(
   quote_bid: float,
   quote_ask: float,
   location_reason: str | None = None,
+  cfg: Any | None = None,
 ) -> StrategyMatch:
   strategy = _strategy_name(opportunity.archetype)
   structural_id = opportunity.episode_id or opportunity.opportunity_id
@@ -86,7 +88,7 @@ def build_hfs_strategy_match(
   mid = (float(quote_bid) + float(quote_ask)) / 2.0
   now = int(bar_ts)
   expires = max(now + 60, int(opportunity.expires_at))
-  target_pips, targets_pips = _hfs_target_ladder(opportunity)
+  target_pips, targets_pips = _hfs_target_ladder(opportunity, cfg)
   htf_bias = str(context.htf_bias or "range")
   if htf_bias in {"", "unknown"}:
     htf_bias = "range"

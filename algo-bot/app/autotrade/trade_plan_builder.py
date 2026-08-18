@@ -366,6 +366,7 @@ def build_trade_plan_from_strategy_match(
     known_stop_errors = {
       "stop_exceeds_envelope_after_wick",
       "stop_exceeds_max_envelope",
+      "stop_exceeds_envelope_furthest_leg",
       "stop_inside_opposing_zone",
       "stop_inside_entry_zone",
       "stop_not_beyond_planned_entries",
@@ -388,35 +389,48 @@ def build_trade_plan_from_strategy_match(
       measured,
     )
 
-  ratios = (
-    tuple(Decimal(str(r)) for r in close_ratios)
-    if close_ratios is not None
-    else _equal_close_ratios(len(match.targets_pips))
+  fixed_target_prices = tuple(
+    Decimal(str(price))
+    for price in (measured.get("planned_target_prices") or ())
   )
-  targets_pips = tuple(match.targets_pips)
-  fx_targets = measured.get("fx_targets_pips")
-  if fx_targets:
-    targets_pips = tuple(int(p) for p in fx_targets)
-    if close_ratios is None:
-      ratios = _equal_close_ratios(len(targets_pips))
-  if len(ratios) != len(targets_pips):
+  fixed_rr = measured.get("target_policy_mode") == "fixed_rr"
+  if fixed_rr:
+    if len(fixed_target_prices) != 1:
+      raise TradePlanBuildRejected(
+        "invalid_fixed_rr_target",
+        "fixed_rr policy must produce exactly one target price",
+        measured,
+      )
+    ratios = (Decimal("1"),)
+    target_values = fixed_target_prices
+  else:
+    ratios = (
+      tuple(Decimal(str(r)) for r in close_ratios)
+      if close_ratios is not None
+      else _equal_close_ratios(len(match.targets_pips))
+    )
+    entry_reference = Decimal(str(measured["planned_entry_price"]))
+    sign = Decimal("1") if direction == "BUY" else Decimal("-1")
+    target_values = tuple(
+      entry_reference + sign * (Decimal(pips) * pip_size)
+      for pips in match.targets_pips
+    )
+  if len(ratios) != len(target_values):
     raise TradePlanBuildRejected(
       "target_ratio_mismatch",
-      f"close_ratios length {len(ratios)} does not match targets_pips "
-      f"length {len(targets_pips)}",
+      f"close_ratios length {len(ratios)} does not match targets "
+      f"length {len(target_values)}",
       measured,
     )
 
-  entry_reference = Decimal(str(measured["planned_entry_price"]))
-  sign = Decimal("1") if direction == "BUY" else Decimal("-1")
   targets = tuple(
     TradePlanTarget(
       target_id=f"TP{index + 1}",
       type="absolute",
-      price=entry_reference + sign * (Decimal(pips) * pip_size),
+      price=price,
       close_ratio=ratio,
     )
-    for index, (pips, ratio) in enumerate(zip(targets_pips, ratios))
+    for index, (price, ratio) in enumerate(zip(target_values, ratios))
   )
 
   ttl_seconds = max(60, int(match.expires_at) - int(match.issued_at))
@@ -511,7 +525,7 @@ def build_trade_plan_from_strategy_match(
     ),
   )
 
-  if be_after_target_index is None or not targets:
+  if fixed_rr or be_after_target_index is None or not targets:
     be_after_target_id = None
   else:
     be_after_target_id = targets[be_after_target_index].target_id

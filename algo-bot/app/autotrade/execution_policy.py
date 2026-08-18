@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from decimal import Decimal, ROUND_HALF_UP
 import math
 from types import SimpleNamespace
 from typing import Any
@@ -35,34 +36,31 @@ def _default_runtime_cfg() -> Any:
   return runtime_config
 
 
-def _instrument_execution(symbol: str, cfg: Any) -> Any:
-  if symbol:
-    try:
-      if hasattr(cfg, "for_instrument"):
-        return cfg.for_instrument(symbol).execution
-    except Exception:
-      pass
-    try:
-      from app.core.instrument_geometry import execution as execution_for
-      return execution_for(symbol)
-    except Exception:
-      pass
-  return cfg.execution
+def _instrument_context(symbol: str, cfg: Any) -> Any:
+  resolver = getattr(cfg, "for_instrument", None)
+  if symbol and callable(resolver):
+    # Configuration has already been validated at startup. Do not silently
+    # fall back to root/XAU policy if a live instrument cannot be resolved.
+    return resolver(symbol)
+  return cfg
 
 
 def _instrument_digits(symbol: str, cfg: Any) -> int:
-  if symbol:
-    try:
-      if hasattr(cfg, "for_instrument"):
-        return int(cfg.for_instrument(symbol).units.price_digits)
-    except Exception:
-      pass
-    try:
-      from app.core.instrument_geometry import price_digits
-      return price_digits(symbol)
-    except Exception:
-      pass
-  return int(cfg.contract.instrument.price_digits or 2)
+  context = _instrument_context(symbol, cfg)
+  units = getattr(context, "units", None)
+  if units is not None:
+    return int(units.price_digits)
+  return int(context.contract.instrument.price_digits or 2)
+
+
+def _instrument_fixed_reward_risk(symbol: str, cfg: Any) -> float | None:
+  targeting = getattr(_instrument_context(symbol, cfg), "targeting", None)
+  if targeting is not None:
+    mode = getattr(targeting.mode, "value", targeting.mode)
+    if str(mode) == "fixed_rr":
+      ratio = float(targeting.reward_risk or 0.0)
+      return ratio if ratio > 0 else None
+  return None
 
 # Version of the entry-plan contract (`planned_execution_route`,
 # `planned_entry_price`, `planned_leg_entry_prices`) shared with the executor.
@@ -615,12 +613,14 @@ def evaluate_execution_policy(
   opposing_zone_id: str | None = None,
   executable_quote: float | None = None,
   trigger_wick_extreme: float | None = None,
+  available_target_room_pips: float | None = None,
 ) -> ExecutionPolicyEvaluation:
   """Enforce every declared setup policy before candidate publication."""
   if cfg is None:
     cfg = _default_runtime_cfg()
   symbol = str(getattr(match, "symbol", "") or "")
-  execution = _instrument_execution(symbol, cfg)
+  instrument_cfg = _instrument_context(symbol, cfg)
+  execution = instrument_cfg.execution
   try:
     policy = policy_for(
       str(getattr(match, "strategy", "")),
@@ -670,7 +670,7 @@ def evaluate_execution_policy(
   quote = float(
     spot_price if executable_quote is None else executable_quote
   )
-  digits = _instrument_digits(symbol, cfg)
+  digits = _instrument_digits("", instrument_cfg)
   zone_scaling = execution.zone_scaling
   execution_entry = execution.entry
   reaction_execution = execution.reaction
@@ -694,7 +694,9 @@ def evaluate_execution_policy(
       zone_scaling.first_leg_fraction or 0.80
     ),
     scale_step_atr=float(zone_scaling.scale_step_atr or 0.5),
-    reaction_scale_enabled=bool(cfg.strategies.reaction.scale_enabled),
+    reaction_scale_enabled=bool(
+      instrument_cfg.strategies.reaction.scale_enabled
+    ),
     reaction_market_fraction=float(
       reaction_execution.market_fraction or 0.80
     ),
@@ -770,7 +772,7 @@ def evaluate_execution_policy(
   )
   match_risk_multiplier = risk_multiplier_for_tier(
     str(getattr(match, "tier", None) or TIER_B),
-    cfg,
+    instrument_cfg,
     post_impulse=bool(
       getattr(match, "range_state", None) == "post_impulse_range"
     ),
@@ -815,7 +817,7 @@ def evaluate_execution_policy(
       strategy=strategy_name,
       primary_tp_pips=primary_tp,
       pip_size=pip,
-      cfg=cfg,
+      cfg=instrument_cfg,
       for_group_stop=use_group_stop,
       symbol=symbol,
     )
@@ -886,9 +888,9 @@ def evaluate_execution_policy(
       direction=direction,
       atr=atr,
       pip_size=pip,
-      cfg=cfg,
+      cfg=SimpleNamespace(execution=execution),
     )
-    digits = _instrument_digits(symbol, cfg)
+    digits = _instrument_digits("", instrument_cfg)
     structure_buffer_atr = float(execution.scaling.add.stop_buffer_atr)
     wick_buffer_atr = float(execution.stops.wick_stop_buffer_atr)
     if use_group_stop:
@@ -1058,19 +1060,52 @@ def evaluate_execution_policy(
       measured,
       policy,
     )
-  from app.core.instrument_geometry import FX_REWARD_RISK, is_fx, one_to_two_targets
-  if is_fx(symbol):
-    fx_targets = one_to_two_targets(float(stop_plan.final_stop_pips))
-    measured["fx_targets_pips"] = list(fx_targets)
-    measured["fx_reward_risk"] = FX_REWARD_RISK
-    need = float(fx_targets[0])
-    if remaining_pips + 1e-9 < need:
+  fixed_reward_risk = _instrument_fixed_reward_risk("", instrument_cfg)
+  if fixed_reward_risk is not None:
+    entry_value = Decimal(str(planned_entry))
+    stop_value = stop_plan.final_stop_price
+    risk_distance = abs(entry_value - stop_value)
+    quantum = Decimal(1).scaleb(-_instrument_digits("", instrument_cfg))
+    reward_distance = risk_distance * Decimal(str(fixed_reward_risk))
+    target_value = (
+      entry_value + reward_distance
+      if direction == "BUY"
+      else entry_value - reward_distance
+    ).quantize(quantum, rounding=ROUND_HALF_UP)
+    target_pips = abs(target_value - entry_value) / Decimal(str(pip))
+    actual_reward_risk = (
+      target_pips / (risk_distance / Decimal(str(pip)))
+      if risk_distance > 0
+      else Decimal("0")
+    )
+    reward_risk = float(actual_reward_risk)
+    measured.update({
+      "target_policy_mode": "fixed_rr",
+      "target_reward_risk": fixed_reward_risk,
+      "planned_target_prices": [format(target_value, "f")],
+      "planned_target_pips": [format(target_pips, "f")],
+      "planned_target_close_ratios": ["1"],
+      "reward_risk": round(reward_risk, 4),
+      "min_reward_risk": fixed_reward_risk,
+    })
+    available_room = (
+      float(available_target_room_pips)
+      if available_target_room_pips is not None
+      and math.isfinite(float(available_target_room_pips))
+      else remaining_pips
+      if target_model in {"absolute", "hybrid"}
+      else None
+    )
+    if available_room is not None:
+      measured["available_target_room_pips"] = round(available_room, 3)
+    if available_room is not None and available_room + 1e-9 < float(target_pips):
       return ExecutionPolicyEvaluation(
         False,
-        "fx_reward_risk_insufficient",
+        "fixed_rr_room_insufficient",
         (
-          f"FX 1:2 needs {need:.0f} pips of room, remaining "
-          f"{remaining_pips:.1f}"
+          f"fixed {fixed_reward_risk:.2f}R needs {float(target_pips):.1f} "
+          "pips of room, remaining "
+          f"{available_room:.1f}"
         ),
         True,
         measured,
@@ -1091,7 +1126,7 @@ def evaluate_execution_policy(
   max_risk_multiplier = 1.0
   if policy.family == FAMILY_RANGE_REVERSION:
     max_risk_multiplier = float(
-      cfg.risk.sizing.range_max_risk_multiplier or 2.0
+      instrument_cfg.risk.sizing.range_max_risk_multiplier or 2.0
     )
     if not math.isfinite(max_risk_multiplier) or max_risk_multiplier <= 0:
       max_risk_multiplier = 2.0

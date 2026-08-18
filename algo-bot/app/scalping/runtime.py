@@ -379,6 +379,7 @@ async def process_m1_bar(
         quote_bid=bid,
         quote_ask=ask,
         location_reason=str(decision.measured.get("location_reason") or ""),
+        cfg=cfg,
       )
       publish_result = await publish_hfs_live(
         client, match, symbol=symbol, bar_ts=bar_ts,

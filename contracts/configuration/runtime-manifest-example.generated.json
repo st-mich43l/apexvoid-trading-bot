@@ -131,7 +131,7 @@
     "zone_scale_undersized_policy": "single_entry"
   },
   "contract_fingerprint": "280b4886604dd550286e011c641ab33256ee1f769661544cd707e378191d499c",
-  "effective_configuration_fingerprint": "4b45a47c12185f828136d77f2f56b9c818931bc8d7c2a3a9f543f780bcb57eb4",
+  "effective_configuration_fingerprint": "3659500078dec1c0486fb6ff17c7423ecb86db33cb47ae038ec2ad24bc1bb5be",
   "feed": {
     "backfill_bars": 1500,
     "bar_quality_lookback": 6,
@@ -456,19 +456,19 @@
           "hard_entry_drift_pips": "20",
           "max_entry_drift_atr": "1",
           "min_entry_drift_pips": "10",
-          "min_rr": "1",
-          "min_target_pips": "15",
-          "room_stop_floor_pips": 15,
+          "min_rr": "2",
+          "min_target_pips": 20,
+          "room_stop_floor_pips": 10,
           "tp_buffer_pips": "3"
         },
         "reaction": {
           "market_fraction": "0.8",
-          "room_stop_min_rr": "1",
+          "room_stop_min_rr": "2",
           "scale_fraction": "0.2",
           "scale_invalid_policy": "single_market",
           "scale_step_atr": "0.5",
-          "stop_max_pips": 60,
-          "stop_min_pips": 40
+          "stop_max_pips": 25,
+          "stop_min_pips": 12
         },
         "regime": {
           "direction_enabled": false,
@@ -479,7 +479,7 @@
         "scaling": {
           "add": {
             "level_buffer_atr": "1",
-            "min_stop_pips": 30,
+            "min_stop_pips": 10,
             "pullback_enabled": false,
             "pullback_max_retrace": "0.7",
             "pullback_min_retrace": "0.2",
@@ -490,12 +490,12 @@
         "stops": {
           "be_buffer_ticks": 6,
           "reaction": {
-            "room_floor_pips": 40
+            "room_floor_pips": 12
           },
-          "sl_distance": "6.5",
+          "sl_distance": "0.0025",
           "stop_push_beyond_zone": true,
           "trend": {
-            "minimum_pips": 40
+            "minimum_pips": 12
           },
           "wick_stop_buffer_atr": "0.15"
         },
@@ -527,7 +527,7 @@
           "hard_entry_drift_pips": "30",
           "max_entry_drift_atr": "1.5",
           "min_entry_drift_pips": "15",
-          "stop_max_pips": 60
+          "stop_max_pips": 25
         },
         "zone_scaling": {
           "fill_enabled": true,
@@ -624,7 +624,7 @@
           "retention_seconds": 604800
         }
       },
-      "policy_name": "xau_current_v1",
+      "policy_name": "fx_fixed_2r_v1",
       "provenance": {
         "entries": [
           {
@@ -664,7 +664,79 @@
             "source_name": "instruments.EURUSD.overrides"
           },
           {
+            "path": "execution.range.min_rr",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.EURUSD.overrides"
+          },
+          {
+            "path": "execution.range.min_target_pips",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.EURUSD.overrides"
+          },
+          {
+            "path": "execution.range.room_stop_floor_pips",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.EURUSD.overrides"
+          },
+          {
+            "path": "execution.reaction.room_stop_min_rr",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.EURUSD.overrides"
+          },
+          {
+            "path": "execution.reaction.stop_max_pips",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.EURUSD.overrides"
+          },
+          {
+            "path": "execution.reaction.stop_min_pips",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.EURUSD.overrides"
+          },
+          {
+            "path": "execution.scaling.add.min_stop_pips",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.EURUSD.overrides"
+          },
+          {
+            "path": "execution.stops.reaction.room_floor_pips",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.EURUSD.overrides"
+          },
+          {
+            "path": "execution.stops.sl_distance",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.EURUSD.overrides"
+          },
+          {
+            "path": "execution.stops.trend.minimum_pips",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.EURUSD.overrides"
+          },
+          {
+            "path": "execution.trend.stop_max_pips",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.EURUSD.overrides"
+          },
+          {
             "path": "risk.exposure.opposing_minimum_separation_price",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.EURUSD.overrides"
+          },
+          {
+            "path": "strategies.high_frequency_scalp.policy.minimum_reward_risk",
             "secret": false,
             "source_kind": "instrument_override",
             "source_name": "instruments.EURUSD.overrides"
@@ -679,19 +751,19 @@
             "path": "execution.entry.maximum_chase_distance_pips",
             "secret": false,
             "source_kind": "config_file",
-            "source_name": "xau_current_v1"
+            "source_name": "fx_fixed_2r_v1"
           },
           {
             "path": "risk.sizing.mode",
             "secret": false,
             "source_kind": "config_file",
-            "source_name": "xau_current_v1"
+            "source_name": "fx_fixed_2r_v1"
           },
           {
             "path": "lifecycle.candidate.execution_maximum_age_seconds",
             "secret": false,
             "source_kind": "config_file",
-            "source_name": "xau_current_v1"
+            "source_name": "fx_fixed_2r_v1"
           }
         ]
       },
@@ -789,7 +861,7 @@
             "maximum_active_opportunities": 10,
             "maximum_opportunities_per_cycle": 3,
             "maximum_spread_pips": "5",
-            "minimum_reward_risk": "1.1"
+            "minimum_reward_risk": "2"
           },
           "risk": {
             "cooldown_after_loss_minutes": 5,
@@ -930,6 +1002,10 @@
             "enabled": true
           }
         }
+      },
+      "targeting": {
+        "mode": "fixed_rr",
+        "reward_risk": "2"
       },
       "units": {
         "contract_units_per_lot": "100000",
@@ -1202,19 +1278,19 @@
           "hard_entry_drift_pips": "20",
           "max_entry_drift_atr": "1",
           "min_entry_drift_pips": "10",
-          "min_rr": "1",
-          "min_target_pips": "15",
-          "room_stop_floor_pips": 15,
+          "min_rr": "2",
+          "min_target_pips": 20,
+          "room_stop_floor_pips": 10,
           "tp_buffer_pips": "3"
         },
         "reaction": {
           "market_fraction": "0.8",
-          "room_stop_min_rr": "1",
+          "room_stop_min_rr": "2",
           "scale_fraction": "0.2",
           "scale_invalid_policy": "single_market",
           "scale_step_atr": "0.5",
-          "stop_max_pips": 60,
-          "stop_min_pips": 40
+          "stop_max_pips": 25,
+          "stop_min_pips": 12
         },
         "regime": {
           "direction_enabled": false,
@@ -1225,7 +1301,7 @@
         "scaling": {
           "add": {
             "level_buffer_atr": "1",
-            "min_stop_pips": 30,
+            "min_stop_pips": 10,
             "pullback_enabled": false,
             "pullback_max_retrace": "0.7",
             "pullback_min_retrace": "0.2",
@@ -1236,12 +1312,12 @@
         "stops": {
           "be_buffer_ticks": 6,
           "reaction": {
-            "room_floor_pips": 40
+            "room_floor_pips": 12
           },
-          "sl_distance": "6.5",
+          "sl_distance": "0.25",
           "stop_push_beyond_zone": true,
           "trend": {
-            "minimum_pips": 40
+            "minimum_pips": 12
           },
           "wick_stop_buffer_atr": "0.15"
         },
@@ -1273,7 +1349,7 @@
           "hard_entry_drift_pips": "30",
           "max_entry_drift_atr": "1.5",
           "min_entry_drift_pips": "15",
-          "stop_max_pips": 60
+          "stop_max_pips": 25
         },
         "zone_scaling": {
           "fill_enabled": true,
@@ -1370,7 +1446,7 @@
           "retention_seconds": 604800
         }
       },
-      "policy_name": "xau_current_v1",
+      "policy_name": "fx_fixed_2r_v1",
       "provenance": {
         "entries": [
           {
@@ -1410,7 +1486,79 @@
             "source_name": "instruments.GBPJPY.overrides"
           },
           {
+            "path": "execution.range.min_rr",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.GBPJPY.overrides"
+          },
+          {
+            "path": "execution.range.min_target_pips",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.GBPJPY.overrides"
+          },
+          {
+            "path": "execution.range.room_stop_floor_pips",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.GBPJPY.overrides"
+          },
+          {
+            "path": "execution.reaction.room_stop_min_rr",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.GBPJPY.overrides"
+          },
+          {
+            "path": "execution.reaction.stop_max_pips",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.GBPJPY.overrides"
+          },
+          {
+            "path": "execution.reaction.stop_min_pips",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.GBPJPY.overrides"
+          },
+          {
+            "path": "execution.scaling.add.min_stop_pips",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.GBPJPY.overrides"
+          },
+          {
+            "path": "execution.stops.reaction.room_floor_pips",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.GBPJPY.overrides"
+          },
+          {
+            "path": "execution.stops.sl_distance",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.GBPJPY.overrides"
+          },
+          {
+            "path": "execution.stops.trend.minimum_pips",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.GBPJPY.overrides"
+          },
+          {
+            "path": "execution.trend.stop_max_pips",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.GBPJPY.overrides"
+          },
+          {
             "path": "risk.exposure.opposing_minimum_separation_price",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.GBPJPY.overrides"
+          },
+          {
+            "path": "strategies.high_frequency_scalp.policy.minimum_reward_risk",
             "secret": false,
             "source_kind": "instrument_override",
             "source_name": "instruments.GBPJPY.overrides"
@@ -1425,19 +1573,19 @@
             "path": "execution.entry.maximum_chase_distance_pips",
             "secret": false,
             "source_kind": "config_file",
-            "source_name": "xau_current_v1"
+            "source_name": "fx_fixed_2r_v1"
           },
           {
             "path": "risk.sizing.mode",
             "secret": false,
             "source_kind": "config_file",
-            "source_name": "xau_current_v1"
+            "source_name": "fx_fixed_2r_v1"
           },
           {
             "path": "lifecycle.candidate.execution_maximum_age_seconds",
             "secret": false,
             "source_kind": "config_file",
-            "source_name": "xau_current_v1"
+            "source_name": "fx_fixed_2r_v1"
           }
         ]
       },
@@ -1535,7 +1683,7 @@
             "maximum_active_opportunities": 10,
             "maximum_opportunities_per_cycle": 3,
             "maximum_spread_pips": "5",
-            "minimum_reward_risk": "1.1"
+            "minimum_reward_risk": "2"
           },
           "risk": {
             "cooldown_after_loss_minutes": 5,
@@ -1676,6 +1824,10 @@
             "enabled": true
           }
         }
+      },
+      "targeting": {
+        "mode": "fixed_rr",
+        "reward_risk": "2"
       },
       "units": {
         "contract_units_per_lot": "100000",
@@ -2397,6 +2549,10 @@
           }
         }
       },
+      "targeting": {
+        "mode": "ladder_pips",
+        "reward_risk": null
+      },
       "units": {
         "contract_units_per_lot": "100",
         "max_lots": "10",
@@ -2541,19 +2697,19 @@
           "hard_entry_drift_pips": "20",
           "max_entry_drift_atr": "1",
           "min_entry_drift_pips": "10",
-          "min_rr": "1",
-          "min_target_pips": "15",
-          "room_stop_floor_pips": 15,
+          "min_rr": "2",
+          "min_target_pips": 20,
+          "room_stop_floor_pips": 10,
           "tp_buffer_pips": "3"
         },
         "reaction": {
           "market_fraction": "0.8",
-          "room_stop_min_rr": "1",
+          "room_stop_min_rr": "2",
           "scale_fraction": "0.2",
           "scale_invalid_policy": "single_market",
           "scale_step_atr": "0.5",
-          "stop_max_pips": 60,
-          "stop_min_pips": 40
+          "stop_max_pips": 25,
+          "stop_min_pips": 12
         },
         "regime": {
           "direction_enabled": false,
@@ -2564,7 +2720,7 @@
         "scaling": {
           "add": {
             "level_buffer_atr": "1",
-            "min_stop_pips": 30,
+            "min_stop_pips": 10,
             "pullback_enabled": false,
             "pullback_max_retrace": "0.7",
             "pullback_min_retrace": "0.2",
@@ -2575,12 +2731,12 @@
         "stops": {
           "be_buffer_ticks": 6,
           "reaction": {
-            "room_floor_pips": 40
+            "room_floor_pips": 12
           },
-          "sl_distance": "6.5",
+          "sl_distance": "0.0025",
           "stop_push_beyond_zone": true,
           "trend": {
-            "minimum_pips": 40
+            "minimum_pips": 12
           },
           "wick_stop_buffer_atr": "0.15"
         },
@@ -2612,7 +2768,7 @@
           "hard_entry_drift_pips": "30",
           "max_entry_drift_atr": "1.5",
           "min_entry_drift_pips": "15",
-          "stop_max_pips": 60
+          "stop_max_pips": 25
         },
         "zone_scaling": {
           "fill_enabled": true,
@@ -2702,7 +2858,7 @@
           "m5_bars": 150
         }
       },
-      "policy_name": "xau_current_v1",
+      "policy_name": "fx_fixed_2r_v1",
       "provenance": {
         "entries": [
           {
@@ -2742,7 +2898,79 @@
             "source_name": "instruments.EURUSD.overrides"
           },
           {
+            "path": "execution.range.min_rr",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.EURUSD.overrides"
+          },
+          {
+            "path": "execution.range.min_target_pips",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.EURUSD.overrides"
+          },
+          {
+            "path": "execution.range.room_stop_floor_pips",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.EURUSD.overrides"
+          },
+          {
+            "path": "execution.reaction.room_stop_min_rr",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.EURUSD.overrides"
+          },
+          {
+            "path": "execution.reaction.stop_max_pips",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.EURUSD.overrides"
+          },
+          {
+            "path": "execution.reaction.stop_min_pips",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.EURUSD.overrides"
+          },
+          {
+            "path": "execution.scaling.add.min_stop_pips",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.EURUSD.overrides"
+          },
+          {
+            "path": "execution.stops.reaction.room_floor_pips",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.EURUSD.overrides"
+          },
+          {
+            "path": "execution.stops.sl_distance",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.EURUSD.overrides"
+          },
+          {
+            "path": "execution.stops.trend.minimum_pips",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.EURUSD.overrides"
+          },
+          {
+            "path": "execution.trend.stop_max_pips",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.EURUSD.overrides"
+          },
+          {
             "path": "risk.exposure.opposing_minimum_separation_price",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.EURUSD.overrides"
+          },
+          {
+            "path": "strategies.high_frequency_scalp.policy.minimum_reward_risk",
             "secret": false,
             "source_kind": "instrument_override",
             "source_name": "instruments.EURUSD.overrides"
@@ -2757,19 +2985,19 @@
             "path": "execution.entry.maximum_chase_distance_pips",
             "secret": false,
             "source_kind": "config_file",
-            "source_name": "xau_current_v1"
+            "source_name": "fx_fixed_2r_v1"
           },
           {
             "path": "risk.sizing.mode",
             "secret": false,
             "source_kind": "config_file",
-            "source_name": "xau_current_v1"
+            "source_name": "fx_fixed_2r_v1"
           },
           {
             "path": "lifecycle.candidate.execution_maximum_age_seconds",
             "secret": false,
             "source_kind": "config_file",
-            "source_name": "xau_current_v1"
+            "source_name": "fx_fixed_2r_v1"
           }
         ]
       },
@@ -2866,7 +3094,7 @@
             "maximum_active_opportunities": 10,
             "maximum_opportunities_per_cycle": 3,
             "maximum_spread_pips": "5",
-            "minimum_reward_risk": "1.1"
+            "minimum_reward_risk": "2"
           },
           "risk": {
             "cooldown_after_loss_minutes": 5,
@@ -3007,6 +3235,10 @@
             "enabled": true
           }
         }
+      },
+      "targeting": {
+        "mode": "fixed_rr",
+        "reward_risk": "2"
       },
       "units": {
         "contract_units_per_lot": "100000",
@@ -3150,19 +3382,19 @@
           "hard_entry_drift_pips": "20",
           "max_entry_drift_atr": "1",
           "min_entry_drift_pips": "10",
-          "min_rr": "1",
-          "min_target_pips": "15",
-          "room_stop_floor_pips": 15,
+          "min_rr": "2",
+          "min_target_pips": 20,
+          "room_stop_floor_pips": 10,
           "tp_buffer_pips": "3"
         },
         "reaction": {
           "market_fraction": "0.8",
-          "room_stop_min_rr": "1",
+          "room_stop_min_rr": "2",
           "scale_fraction": "0.2",
           "scale_invalid_policy": "single_market",
           "scale_step_atr": "0.5",
-          "stop_max_pips": 60,
-          "stop_min_pips": 40
+          "stop_max_pips": 25,
+          "stop_min_pips": 12
         },
         "regime": {
           "direction_enabled": false,
@@ -3173,7 +3405,7 @@
         "scaling": {
           "add": {
             "level_buffer_atr": "1",
-            "min_stop_pips": 30,
+            "min_stop_pips": 10,
             "pullback_enabled": false,
             "pullback_max_retrace": "0.7",
             "pullback_min_retrace": "0.2",
@@ -3184,12 +3416,12 @@
         "stops": {
           "be_buffer_ticks": 6,
           "reaction": {
-            "room_floor_pips": 40
+            "room_floor_pips": 12
           },
-          "sl_distance": "6.5",
+          "sl_distance": "0.25",
           "stop_push_beyond_zone": true,
           "trend": {
-            "minimum_pips": 40
+            "minimum_pips": 12
           },
           "wick_stop_buffer_atr": "0.15"
         },
@@ -3221,7 +3453,7 @@
           "hard_entry_drift_pips": "30",
           "max_entry_drift_atr": "1.5",
           "min_entry_drift_pips": "15",
-          "stop_max_pips": 60
+          "stop_max_pips": 25
         },
         "zone_scaling": {
           "fill_enabled": true,
@@ -3311,7 +3543,7 @@
           "m5_bars": 150
         }
       },
-      "policy_name": "xau_current_v1",
+      "policy_name": "fx_fixed_2r_v1",
       "provenance": {
         "entries": [
           {
@@ -3351,7 +3583,79 @@
             "source_name": "instruments.GBPJPY.overrides"
           },
           {
+            "path": "execution.range.min_rr",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.GBPJPY.overrides"
+          },
+          {
+            "path": "execution.range.min_target_pips",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.GBPJPY.overrides"
+          },
+          {
+            "path": "execution.range.room_stop_floor_pips",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.GBPJPY.overrides"
+          },
+          {
+            "path": "execution.reaction.room_stop_min_rr",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.GBPJPY.overrides"
+          },
+          {
+            "path": "execution.reaction.stop_max_pips",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.GBPJPY.overrides"
+          },
+          {
+            "path": "execution.reaction.stop_min_pips",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.GBPJPY.overrides"
+          },
+          {
+            "path": "execution.scaling.add.min_stop_pips",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.GBPJPY.overrides"
+          },
+          {
+            "path": "execution.stops.reaction.room_floor_pips",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.GBPJPY.overrides"
+          },
+          {
+            "path": "execution.stops.sl_distance",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.GBPJPY.overrides"
+          },
+          {
+            "path": "execution.stops.trend.minimum_pips",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.GBPJPY.overrides"
+          },
+          {
+            "path": "execution.trend.stop_max_pips",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.GBPJPY.overrides"
+          },
+          {
             "path": "risk.exposure.opposing_minimum_separation_price",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.GBPJPY.overrides"
+          },
+          {
+            "path": "strategies.high_frequency_scalp.policy.minimum_reward_risk",
             "secret": false,
             "source_kind": "instrument_override",
             "source_name": "instruments.GBPJPY.overrides"
@@ -3366,19 +3670,19 @@
             "path": "execution.entry.maximum_chase_distance_pips",
             "secret": false,
             "source_kind": "config_file",
-            "source_name": "xau_current_v1"
+            "source_name": "fx_fixed_2r_v1"
           },
           {
             "path": "risk.sizing.mode",
             "secret": false,
             "source_kind": "config_file",
-            "source_name": "xau_current_v1"
+            "source_name": "fx_fixed_2r_v1"
           },
           {
             "path": "lifecycle.candidate.execution_maximum_age_seconds",
             "secret": false,
             "source_kind": "config_file",
-            "source_name": "xau_current_v1"
+            "source_name": "fx_fixed_2r_v1"
           }
         ]
       },
@@ -3475,7 +3779,7 @@
             "maximum_active_opportunities": 10,
             "maximum_opportunities_per_cycle": 3,
             "maximum_spread_pips": "5",
-            "minimum_reward_risk": "1.1"
+            "minimum_reward_risk": "2"
           },
           "risk": {
             "cooldown_after_loss_minutes": 5,
@@ -3616,6 +3920,10 @@
             "enabled": true
           }
         }
+      },
+      "targeting": {
+        "mode": "fixed_rr",
+        "reward_risk": "2"
       },
       "units": {
         "contract_units_per_lot": "100000",
@@ -4197,6 +4505,10 @@
             "enabled": true
           }
         }
+      },
+      "targeting": {
+        "mode": "ladder_pips",
+        "reward_risk": null
       },
       "units": {
         "contract_units_per_lot": "100",

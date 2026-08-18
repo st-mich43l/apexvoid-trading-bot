@@ -277,7 +277,19 @@ def _configured_strategy_targets(symbol: str | None = None) -> tuple[int, ...]:
   raw = runtime_config.execution.targeting.default_ladder_pips
   if symbol:
     try:
-      raw = runtime_config.for_instrument(symbol).execution.targeting.default_ladder_pips
+      effective = runtime_config.for_instrument(symbol)
+      reward_risk = instrument_geometry.fixed_reward_risk(symbol)
+      if reward_risk is not None:
+        stop_cap = max(
+          float(effective.execution.reaction.stop_max_pips),
+          float(effective.execution.trend.stop_max_pips),
+          float(effective.execution.stops.sl_distance)
+          / float(effective.units.pip_size),
+        )
+        # Provisional only: execution_policy replaces this with exactly
+        # reward_risk × the final protective stop before publication.
+        return (max(1, int(math.ceil(stop_cap * reward_risk))),)
+      raw = effective.execution.targeting.default_ladder_pips
     except Exception:
       raw = runtime_config.execution.targeting.default_ladder_pips
   values = {

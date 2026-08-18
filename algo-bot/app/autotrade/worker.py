@@ -463,6 +463,7 @@ class PrivateRouteIdentity:
 
 @dataclass(frozen=True)
 class PrivatePolicySubject:
+  symbol: str
   strategy: str
   direction: str
   entry_low: float
@@ -483,6 +484,27 @@ class PrivatePolicySubject:
   full_take_profit_pips: int | None = None
   family: str | None = None
   strategy_mode: str | None = None
+
+
+def _fixed_rr_policy_targets(
+  evaluation: Any,
+) -> tuple[int, ...]:
+  """Integer-pip projection for the legacy candidate stream.
+
+  TradePlan V8 uses the exact absolute target price. The legacy stream only
+  accepts integer pip offsets, so round the same approved policy result once.
+  """
+  if evaluation.measured.get("target_policy_mode") != "fixed_rr":
+    return ()
+  values: list[int] = []
+  for raw in evaluation.measured.get("planned_target_pips") or ():
+    try:
+      value = int(round(float(raw)))
+    except (TypeError, ValueError):
+      continue
+    if value > 0:
+      values.append(value)
+  return tuple(values)
 
 
 @dataclass(frozen=True)
@@ -2974,6 +2996,7 @@ async def _publish_candidate(
   range_tier = "A" if decision.confluence >= 3 else "B"
   range_policy = evaluate_execution_policy(
     PrivatePolicySubject(
+      symbol=symbol,
       strategy="Range Box Scalp",
       direction=decision.direction.upper(),
       entry_low=decision.rail.low,
@@ -3019,6 +3042,25 @@ async def _publish_candidate(
       client, symbol, range_policy.reason_code,
     )
     return None
+  fixed_rr_targets = _fixed_rr_policy_targets(range_policy)
+  range_targets = (
+    list(fixed_rr_targets)
+    if fixed_rr_targets
+    else [
+      int(runtime_config.execution.range.box_scale_out_trigger_pips),
+      int(decision.full_tp_pips),
+    ]
+    if (
+      runtime_config.strategies.range_reversion.box_scale_out_enabled
+      and not runtime_config.strategies.range_reversion.flip_enabled
+      and decision.full_tp_pips is not None
+      and int(decision.full_tp_pips)
+        > int(runtime_config.execution.range.box_scale_out_threshold_pips)
+    )
+    else [int(decision.full_tp_pips)]
+    if decision.full_tp_pips is not None
+    else []
+  )
   payload = {
     "version": 5,
     "candidate_id": candidate_id,
@@ -3059,23 +3101,10 @@ async def _publish_candidate(
     "range_id": decision.box.box_id,
     "range_low": decision.box.lower.level,
     "range_high": decision.box.upper.level,
-    "full_take_profit_pips": decision.full_tp_pips,
-    "targets_pips": (
-      [
-        int(runtime_config.execution.range.box_scale_out_trigger_pips),
-        int(decision.full_tp_pips),
-      ]
-      if (
-        runtime_config.strategies.range_reversion.box_scale_out_enabled
-        and not runtime_config.strategies.range_reversion.flip_enabled
-        and decision.full_tp_pips is not None
-        and int(decision.full_tp_pips)
-          > int(runtime_config.execution.range.box_scale_out_threshold_pips)
-      )
-      else [int(decision.full_tp_pips)]
-      if decision.full_tp_pips is not None
-      else []
+    "full_take_profit_pips": (
+      range_targets[-1] if range_targets else decision.full_tp_pips
     ),
+    "targets_pips": range_targets,
     "target_model": "fill_relative",
     "target_reference_price": "broker_fill",
     "absolute_target_price": None,
@@ -3084,7 +3113,8 @@ async def _publish_candidate(
     "scale_out_fraction": (
       float(runtime_config.execution.range.box_scale_out_fraction)
       if (
-        runtime_config.strategies.range_reversion.box_scale_out_enabled
+        not fixed_rr_targets
+        and runtime_config.strategies.range_reversion.box_scale_out_enabled
         and not runtime_config.strategies.range_reversion.flip_enabled
         and decision.full_tp_pips is not None
         and int(decision.full_tp_pips)
@@ -5801,6 +5831,20 @@ async def _publish_trade_plan_v8(
   # Zone-split capability + required-limit-side checks: mirror old preflight
   # policy gates against the fresh policy evaluation for the plan-time match.
   side_aware_quote = _executable_spot_price(spot, match_for_plan.direction)
+  fixed_rr_target = instrument_geometry.fixed_reward_risk(symbol) is not None
+  fixed_rr_room: float | None = None
+  target_room_measured = dict(target_room.measured or {})
+  if (
+    fixed_rr_target
+    and target_room.opposing_entry is not None
+    and not target_room_measured.get("weak_opposing_level_ignored")
+  ):
+    raw_room = target_room_measured.get("usable_room_pips")
+    if raw_room is not None:
+      try:
+        fixed_rr_room = max(0.0, float(raw_room))
+      except (TypeError, ValueError):
+        fixed_rr_room = None
   gate_policy = evaluate_execution_policy(
     match_for_plan,
     spot_price=spot.price,
@@ -5808,8 +5852,21 @@ async def _publish_trade_plan_v8(
     regime=None if regime is None else regime.state,
     pip_size=units.pip_size(symbol),
     cfg=None,
+    available_target_room_pips=fixed_rr_room,
+    **opposing_kwargs,
   )
   gate_measured = dict(gate_policy.measured)
+  if fixed_rr_target and not gate_policy.allowed:
+    await _release_claims()
+    await _record_v8_build_rejected(
+      client,
+      symbol,
+      match,
+      gate_policy.reason_code,
+      gate_policy.message,
+      gate_measured,
+    )
+    return None
   gate_entry_distribution = str(gate_measured.get("entry_distribution", "single"))
   if (
     gate_entry_distribution == "zone_split"
@@ -5900,7 +5957,8 @@ async def _publish_trade_plan_v8(
       same_direction_size_fraction=float(
         runtime_config.risk.position_limits.same_direction_stack_size_fraction
       ),
-      be_after_target_index=None if hfs_one_to_two else 0,
+      be_after_target_index=None if (hfs_one_to_two or fixed_rr_target) else 0,
+      approved_measured=gate_measured if fixed_rr_target else None,
     )
   except TradePlanBuildRejected as exc:
     await _release_claims()
@@ -6195,6 +6253,7 @@ async def _publish_trend_candidate(
     else None
   )
   trend_policy_subject = PrivatePolicySubject(
+    symbol=symbol,
     strategy=trend_setup,
     direction=trend_decision.direction,
     entry_low=trend_decision.entry_zone[0],
@@ -6245,6 +6304,24 @@ async def _publish_trend_candidate(
       retained=not trend_policy.terminal,
     )
     return None
+  fixed_rr_targets = _fixed_rr_policy_targets(trend_policy)
+  fixed_rr_prices = tuple(
+    float(value)
+    for value in (trend_policy.measured.get("planned_target_prices") or ())
+  )
+  published_targets = (
+    fixed_rr_targets if fixed_rr_targets else trend_decision.targets_pips
+  )
+  published_absolute_target = (
+    fixed_rr_prices[0] if fixed_rr_prices else absolute_target
+  )
+  published_target_model = (
+    "absolute" if fixed_rr_prices else trend_policy_subject.target_model
+  )
+  published_target_reference = (
+    "planned_entry" if fixed_rr_prices
+    else trend_policy_subject.target_reference_price
+  )
 
   guard_mode = resolve_guard_mode()
   if runtime_config.actionability.gates.htf_veto_enabled:
@@ -6448,11 +6525,11 @@ async def _publish_trend_candidate(
     "reasons": list(trend_decision.reasons),
     "atr": trend_decision.atr,
     "structure_swing": trend_decision.structure_swing,
-    "targets_pips": list(trend_decision.targets_pips),
-    "target_model": trend_policy_subject.target_model,
-    "target_reference_price": trend_policy_subject.target_reference_price,
-    "absolute_target_price": absolute_target,
-    "target_price": absolute_target,
+    "targets_pips": list(published_targets),
+    "target_model": published_target_model,
+    "target_reference_price": published_target_reference,
+    "absolute_target_price": published_absolute_target,
+    "target_price": published_absolute_target,
     "tier": trend_tier,
     "risk_multiplier": trend_policy.measured[
       "effective_risk_multiplier"
@@ -6571,7 +6648,7 @@ async def _publish_trend_candidate(
     timeframe=EXECUTION_TIMEFRAME,
     entry_zone=payload["entry_zone"],
     current_price=spot.price,
-    target_plan=list(trend_decision.targets_pips),
+    target_plan=list(published_targets),
     message="private trend candidate published to executor",
     publish_status=True,
   )
