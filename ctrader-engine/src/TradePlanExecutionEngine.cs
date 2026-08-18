@@ -135,15 +135,13 @@ public static class TradePlanExecutionEngine
     TradingAccountSnapshot account,
     decimal pipSize,
     decimal pipValuePerLot,
-    SymbolInfo symbol,
-    decimal lotMultiplier = 1m
+    SymbolInfo symbol
   ) => CalculateVolume(
     plan,
     EquityResolver.Resolve(account, openPositionCount: 0, pendingOrderCount: 0),
     pipSize,
     pipValuePerLot,
-    symbol,
-    lotMultiplier
+    symbol
   );
 
   /// <summary>
@@ -155,8 +153,7 @@ public static class TradePlanExecutionEngine
     EquityResolution equity,
     decimal pipSize,
     decimal pipValuePerLot,
-    SymbolInfo symbol,
-    decimal lotMultiplier = 1m
+    SymbolInfo symbol
   )
   {
     if (equity.Equity <= 0)
@@ -202,12 +199,8 @@ public static class TradePlanExecutionEngine
     {
       riskMultiplier = 1.5m;
     }
-    if (lotMultiplier <= 0m)
-    {
-      lotMultiplier = 1m;
-    }
     var sizedLots = decimal.Round(
-      tableLots * riskMultiplier * lotMultiplier,
+      tableLots * riskMultiplier,
       2,
       MidpointRounding.AwayFromZero
     );
@@ -345,5 +338,51 @@ public static class TradePlanExecutionEngine
       ? Math.Max(currentStop, desired)
       : Math.Min(currentStop, desired);
     return new TradePlanBreakEvenResult(desired, newStop, newStop != currentStop);
+  }
+
+  /// <summary>
+  /// Resolves the target whose absolute price should protect the runner.
+  /// Explicit plan management wins; legacy plans keep the established
+  /// two-targets-behind behavior based on NextTargetIndex.
+  /// </summary>
+  public static int ResolveTrailTargetIndex(
+    TradePlan plan,
+    int nextTargetIndex,
+    int highestBookedTargetIndex
+  )
+  {
+    if (
+      plan.Management.TrailAfterTargetId is string trailAfterId
+      && plan.Management.TrailToTargetId is string trailToId
+    )
+    {
+      var trailAfterIndex = TargetIndex(plan.Targets, trailAfterId);
+      var trailToIndex = TargetIndex(plan.Targets, trailToId);
+      return trailAfterIndex >= 0
+        && trailToIndex >= 0
+        && highestBookedTargetIndex >= trailAfterIndex
+          ? trailToIndex
+          : -1;
+    }
+
+    var legacyTrailToIndex = nextTargetIndex - 3;
+    return legacyTrailToIndex >= 0 && legacyTrailToIndex < plan.Targets.Count
+      ? legacyTrailToIndex
+      : -1;
+  }
+
+  private static int TargetIndex(
+    IReadOnlyList<TradePlanTarget> targets,
+    string targetId
+  )
+  {
+    for (var index = 0; index < targets.Count; index++)
+    {
+      if (targets[index].TargetId == targetId)
+      {
+        return index;
+      }
+    }
+    return -1;
   }
 }

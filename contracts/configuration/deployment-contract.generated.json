@@ -502,6 +502,7 @@
       "overrides",
       "policy",
       "rollout",
+      "targeting",
       "timeframes"
     ],
     "projected_leaf_groups": [

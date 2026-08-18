@@ -18,12 +18,13 @@ from app.configuration.catalog import iter_catalog_entries
 from app.configuration.models.base import FrozenConfigModel
 from app.configuration.models.instruments import (
   CTRADER_VOLUME_HUNDREDTHS,
+  REGISTERED_INSTRUMENT_POLICIES,
   InstrumentConfig,
   InstrumentLookbacksConfig,
   InstrumentRollout,
+  InstrumentTargetingConfig,
   InstrumentZoneWidthConfig,
   InstrumentsConfig,
-  XAU_CURRENT_V1_POLICY,
   effective_rollout,
   resolve_policy_name,
 )
@@ -51,7 +52,6 @@ class InstrumentUnitsConfig(FrozenConfigModel):
   pip_value_per_lot: float
   volume_units_per_lot: int
   max_lots: float
-  lot_multiplier: float = 1.0
 
   def plan_max_volume(self) -> int:
     """cTrader volume-unit ceiling stamped on TradePlan.risk.max_volume."""
@@ -130,6 +130,7 @@ class EffectiveInstrumentConfig(FrozenConfigModel):
 
   identity: InstrumentIdentityConfig
   units: InstrumentUnitsConfig
+  targeting: InstrumentTargetingConfig
   market_data: EffectiveInstrumentMarketDataConfig
   analysis: EffectiveInstrumentAnalysisConfig
   strategies: BaseModel
@@ -236,11 +237,6 @@ def _require_units(
     raise EffectiveInstrumentError(
       f"instrument {instrument_id!r} max_lots must be positive"
     )
-  lot_multiplier = float(contract.lot_multiplier)
-  if lot_multiplier <= 0:
-    raise EffectiveInstrumentError(
-      f"instrument {instrument_id!r} lot_multiplier must be positive"
-    )
   return InstrumentUnitsConfig(
     pip_size=float(contract.pip_size),
     price_digits=int(contract.price_digits),
@@ -248,7 +244,6 @@ def _require_units(
     pip_value_per_lot=pip_value,
     volume_units_per_lot=volume_units,
     max_lots=max_lots,
-    lot_multiplier=lot_multiplier,
   )
 
 
@@ -426,7 +421,7 @@ def build_effective_instrument(
     policy_name = resolve_policy_name(key, instrument)
   except ValueError as exc:
     raise EffectiveInstrumentError(str(exc)) from None
-  if policy_name != XAU_CURRENT_V1_POLICY:
+  if policy_name not in REGISTERED_INSTRUMENT_POLICIES:
     raise EffectiveInstrumentError(
       f"instrument {key!r} policy {policy_name!r} is not supported"
     )
@@ -535,6 +530,7 @@ def build_effective_instrument(
   return EffectiveInstrumentConfig(
     identity=identity,
     units=units,
+    targeting=instrument.targeting,
     market_data=EffectiveInstrumentMarketDataConfig(
       lookbacks=lookbacks,
       runtime=market_data,

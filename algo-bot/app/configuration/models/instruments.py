@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from enum import StrEnum
+import math
 from typing import Any, Mapping
 
 from pydantic import Field, field_validator, model_validator
@@ -14,7 +15,11 @@ SUPPORTED_INSTRUMENT_TIMEFRAMES = frozenset({"H1", "M15", "M5", "M1", "H4", "D1"
 
 # Compatibility policy: inherit global trading domains from the resolved root.
 XAU_CURRENT_V1_POLICY = "xau_current_v1"
-REGISTERED_INSTRUMENT_POLICIES = frozenset({XAU_CURRENT_V1_POLICY})
+FX_FIXED_2R_V1_POLICY = "fx_fixed_2r_v1"
+REGISTERED_INSTRUMENT_POLICIES = frozenset({
+  FX_FIXED_2R_V1_POLICY,
+  XAU_CURRENT_V1_POLICY,
+})
 
 
 class InstrumentRollout(StrEnum):
@@ -23,6 +28,95 @@ class InstrumentRollout(StrEnum):
   ANALYSIS_ONLY = "analysis_only"
   PAPER = "paper"
   LIVE = "live"
+
+
+class InstrumentTargetMode(StrEnum):
+  LADDER_PIPS = "ladder_pips"
+  FIXED_RR = "fixed_rr"
+
+
+class InstrumentTargetingConfig(FrozenConfigModel):
+  """Instrument-owned exit contract.
+
+  ``fixed_rr`` produces an R-multiple ladder from the final protective stop.
+  It does not inherit XAU's absolute pip ladder.
+  """
+
+  mode: InstrumentTargetMode = InstrumentTargetMode.LADDER_PIPS
+  reward_risk: float | None = Field(default=None, gt=0)
+  target_r_multiples: tuple[float, ...] = ()
+  close_ratios: tuple[float, ...] = ()
+  trail_after_r: float | None = Field(default=None, gt=0)
+  trail_to_r: float | None = Field(default=None, gt=0)
+
+  @model_validator(mode="after")
+  def validate_reward_risk(self) -> InstrumentTargetingConfig:
+    if self.mode is InstrumentTargetMode.FIXED_RR:
+      if self.reward_risk is None:
+        raise ValueError("fixed_rr targeting requires reward_risk")
+      levels = tuple(float(value) for value in self.target_r_multiples)
+      ratios = tuple(float(value) for value in self.close_ratios)
+      if not levels:
+        raise ValueError("fixed_rr targeting requires target_r_multiples")
+      if not ratios:
+        raise ValueError("fixed_rr targeting requires close_ratios")
+      if len(levels) != len(ratios):
+        raise ValueError(
+          "fixed_rr target_r_multiples and close_ratios must have equal length"
+        )
+      if (
+        any(not math.isfinite(value) or value <= 0 for value in levels)
+        or tuple(sorted(set(levels))) != levels
+      ):
+        raise ValueError(
+          "fixed_rr target_r_multiples must be positive and strictly increasing"
+        )
+      if not math.isclose(
+        levels[-1], float(self.reward_risk), rel_tol=0.0, abs_tol=1e-9,
+      ):
+        raise ValueError(
+          "fixed_rr final target_r_multiple must equal reward_risk"
+        )
+      if any(not math.isfinite(value) or value <= 0 for value in ratios):
+        raise ValueError("fixed_rr close_ratios must be positive")
+      if not math.isclose(sum(ratios), 1.0, rel_tol=0.0, abs_tol=1e-9):
+        raise ValueError("fixed_rr close_ratios must sum to 1.0")
+      if (self.trail_after_r is None) != (self.trail_to_r is None):
+        raise ValueError(
+          "fixed_rr trail_after_r and trail_to_r must be set together"
+        )
+      if self.trail_after_r is not None and self.trail_to_r is not None:
+        trail_after = float(self.trail_after_r)
+        trail_to = float(self.trail_to_r)
+        if not math.isfinite(trail_after) or not math.isfinite(trail_to):
+          raise ValueError("fixed_rr trailing R values must be finite")
+        if not any(
+          math.isclose(trail_after, level, rel_tol=0.0, abs_tol=1e-9)
+          for level in levels
+        ):
+          raise ValueError("fixed_rr trail_after_r must name a target R level")
+        if not any(
+          math.isclose(trail_to, level, rel_tol=0.0, abs_tol=1e-9)
+          for level in levels
+        ):
+          raise ValueError("fixed_rr trail_to_r must name a target R level")
+        if trail_to >= trail_after:
+          raise ValueError("fixed_rr trail_to_r must be below trail_after_r")
+        if math.isclose(
+          trail_after, levels[-1], rel_tol=0.0, abs_tol=1e-9,
+        ):
+          raise ValueError("fixed_rr trail_after_r must precede the final target")
+    elif (
+      self.reward_risk is not None
+      or self.target_r_multiples
+      or self.close_ratios
+      or self.trail_after_r is not None
+      or self.trail_to_r is not None
+    ):
+      raise ValueError(
+        "ladder_pips targeting must not set fixed-RR fields"
+      )
+    return self
 
 
 # cTrader ProtoOA volume is hundredths of a contract unit, so 1.0 lot
@@ -44,9 +138,6 @@ class InstrumentContractConfig(FrozenConfigModel):
   # Hard ceiling in lots for TradePlan.risk.max_volume. Equity-table size
   # must fit under this; the engine never silently clamps.
   max_lots: float = Field(default=10.0, gt=0)
-  # Extra multiplier on equity-table lots. FX uses >1 so a short 1:2
-  # target still books similar dollar risk to gold's wider stop.
-  lot_multiplier: float = Field(default=1.0, gt=0)
 
 
 class InstrumentLookbacksConfig(FrozenConfigModel):
@@ -102,6 +193,9 @@ class InstrumentConfig(FrozenConfigModel):
   aliases: tuple[str, ...] = ()
   timeframes: list[str] = Field(default_factory=lambda: ["H1", "M15", "M5", "M1"])
   contract: InstrumentContractConfig | None = None
+  targeting: InstrumentTargetingConfig = Field(
+    default_factory=InstrumentTargetingConfig,
+  )
   market_data: InstrumentMarketDataConfig | None = None
   analysis: InstrumentAnalysisConfig | None = None
   # Sparse dotted-path overrides applied when building EffectiveInstrumentConfig.
@@ -206,6 +300,25 @@ class InstrumentConfig(FrozenConfigModel):
     if effective_rollout(self) is not InstrumentRollout.DISABLED and self.contract is None:
       raise ValueError(
         "non-disabled instruments require contract configuration"
+      )
+    if self.policy == FX_FIXED_2R_V1_POLICY and not (
+      self.targeting.mode is InstrumentTargetMode.FIXED_RR
+      and self.targeting.reward_risk == 2.0
+      and self.targeting.target_r_multiples == (1.0, 1.5, 2.0)
+      and self.targeting.close_ratios == (0.25, 0.25, 0.50)
+      and self.targeting.trail_after_r == 1.5
+      and self.targeting.trail_to_r == 1.0
+    ):
+      raise ValueError(
+        "fx_fixed_2r_v1 requires targeting.mode=fixed_rr and "
+        "targets 1R/1.5R/2R at 25%/25%/50%, trailing 1.5R to 1R"
+      )
+    if (
+      self.targeting.mode is InstrumentTargetMode.FIXED_RR
+      and self.policy != FX_FIXED_2R_V1_POLICY
+    ):
+      raise ValueError(
+        "fixed_rr targeting requires policy=fx_fixed_2r_v1"
       )
     return self
 

@@ -682,15 +682,9 @@ def stop_bounds_for_reaction_room(
   if cfg is None:
     cfg = _default_runtime_cfg()
   execution = cfg.execution
-  if symbol:
-    try:
-      if hasattr(cfg, "for_instrument"):
-        execution = cfg.for_instrument(symbol).execution
-      else:
-        from app.core.instrument_geometry import execution as execution_for
-        execution = execution_for(symbol)
-    except Exception:
-      execution = cfg.execution
+  resolver = getattr(cfg, "for_instrument", None)
+  if symbol and callable(resolver):
+    execution = resolver(symbol).execution
   if is_scalp:
     min_rr = float(
       execution.range.min_rr
@@ -741,17 +735,13 @@ def stop_bounds_for_reaction_room(
   floor_pips = max(1, floor_pips)
   cap_pips = max(floor_pips, cap_pips)
   desired = max(floor_pips, int(math.ceil(primary / min_rr)))
-  fx_symbol = False
+  fixed_rr = False
   if symbol:
-    try:
-      from app.core.instrument_geometry import is_fx
-      fx_symbol = is_fx(symbol)
-    except Exception:
-      fx_symbol = False
-  if for_group_stop or fx_symbol:
-    # Group stops keep [min, max] wide. FX 1:2 plans the stop from
-    # structure inside the FX envelope, then places TP at 2R — do not pin
-    # SL to a gold pip-ladder first target.
+    from app.core.instrument_geometry import fixed_reward_risk
+    fixed_rr = fixed_reward_risk(symbol, cfg) is not None
+  if for_group_stop or fixed_rr:
+    # Group stops keep [min, max] wide. Fixed-RR instruments plan the stop
+    # from structure first, then place TP at the configured R multiple.
     minimum = floor_pips
   else:
     # Single-leg XAU: pin toward desired for a genuine ~1:1 stop against
@@ -763,7 +753,7 @@ def stop_bounds_for_reaction_room(
     "primary_tp_pips": round(primary, 3),
     "desired_stop_pips": desired,
     "stop_bounds_for_group_stop": for_group_stop,
-    "fx_one_to_two": fx_symbol,
+    "fixed_rr_targeting": fixed_rr,
   }
   if is_scalp:
     measured["range_room_stop_floor_pips"] = floor_pips
@@ -1134,15 +1124,9 @@ def stop_bounds_for_strategy(
   if cfg is None:
     cfg = _default_runtime_cfg()
   execution = cfg.execution
-  if symbol:
-    try:
-      if hasattr(cfg, "for_instrument"):
-        execution = cfg.for_instrument(symbol).execution
-      else:
-        from app.core.instrument_geometry import execution as execution_for
-        execution = execution_for(symbol)
-    except Exception:
-      execution = cfg.execution
+  resolver = getattr(cfg, "for_instrument", None)
+  if symbol and callable(resolver):
+    execution = resolver(symbol).execution
   scaling_add_cfg = execution.scaling.add
   stops_cfg = execution.stops
   trend_stops_cfg = execution.stops.trend

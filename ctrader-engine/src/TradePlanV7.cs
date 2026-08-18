@@ -161,7 +161,9 @@ public sealed record TradePlanRisk(
 public sealed record TradePlanManagement(
   string? BeAfterTargetId,
   int BeBufferTicks,
-  bool NeverWorsenStop = true
+  bool NeverWorsenStop = true,
+  string? TrailAfterTargetId = null,
+  string? TrailToTargetId = null
 );
 
 public sealed record TradePlanExecutionPolicy(
@@ -304,14 +306,55 @@ public static class TradePlanValidator
       );
     }
 
+    var targetIds = plan.Targets.Select(t => t.TargetId).ToList();
     if (plan.Management.BeAfterTargetId is not null)
     {
-      var targetIds = plan.Targets.Select(t => t.TargetId).ToHashSet();
       if (!targetIds.Contains(plan.Management.BeAfterTargetId))
       {
         throw new TradePlanContractException(
           $"management.be_after_target_id '{plan.Management.BeAfterTargetId}' "
           + $"is not one of the declared targets"
+        );
+      }
+    }
+
+    var trailAfterId = plan.Management.TrailAfterTargetId;
+    var trailToId = plan.Management.TrailToTargetId;
+    if ((trailAfterId is null) != (trailToId is null))
+    {
+      throw new TradePlanContractException(
+        "management.trail_after_target_id and trail_to_target_id "
+        + "must be set together"
+      );
+    }
+    if (trailAfterId is not null && trailToId is not null)
+    {
+      var trailAfterIndex = targetIds.IndexOf(trailAfterId);
+      var trailToIndex = targetIds.IndexOf(trailToId);
+      if (trailAfterIndex < 0)
+      {
+        throw new TradePlanContractException(
+          $"management.trail_after_target_id '{trailAfterId}' "
+          + "is not one of the declared targets"
+        );
+      }
+      if (trailToIndex < 0)
+      {
+        throw new TradePlanContractException(
+          $"management.trail_to_target_id '{trailToId}' "
+          + "is not one of the declared targets"
+        );
+      }
+      if (trailToIndex >= trailAfterIndex)
+      {
+        throw new TradePlanContractException(
+          "management.trail_to_target_id must precede trail_after_target_id"
+        );
+      }
+      if (trailAfterIndex >= targetIds.Count - 1)
+      {
+        throw new TradePlanContractException(
+          "management.trail_after_target_id must precede the final target"
         );
       }
     }
