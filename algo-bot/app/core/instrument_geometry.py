@@ -7,9 +7,46 @@ from __future__ import annotations
 
 from app.core.config import runtime_config
 
+_FX_CANONICAL = frozenset({"EURUSD", "GBPJPY"})
+FX_REWARD_RISK = 2.0
+
 
 def _effective(symbol: str):
   return runtime_config.for_instrument(symbol)
+
+
+def is_fx(symbol: str) -> bool:
+  """True for demo-live FX majors (EURUSD, GBPJPY)."""
+  key = (symbol or "").strip().upper()
+  if key in _FX_CANONICAL:
+    return True
+  try:
+    return _effective(symbol).identity.canonical_symbol in _FX_CANONICAL
+  except Exception:
+    return False
+
+
+def execution(symbol: str):
+  """Per-instrument execution slice (FX stop/RR overrides live here)."""
+  return _effective(symbol).execution
+
+
+def price_digits(symbol: str) -> int:
+  return int(_effective(symbol).units.price_digits)
+
+
+def lot_multiplier(symbol: str) -> float:
+  try:
+    value = float(_effective(symbol).units.lot_multiplier)
+  except Exception:
+    value = 1.0
+  return value if value > 0 else 1.0
+
+
+def one_to_two_targets(stop_pips: float) -> tuple[int, ...]:
+  """Single full-close target at 2R of the planned stop."""
+  pips = max(1, int(round(float(stop_pips) * FX_REWARD_RISK)))
+  return (pips,)
 
 
 def analysis_runtime(symbol: str):

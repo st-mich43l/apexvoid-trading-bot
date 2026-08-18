@@ -12,6 +12,13 @@ dated section after deployment.
 
 ## Unreleased
 
+### Changed
+- FX (EURUSD/GBPJPY) is **1:2 RR only**: one full-close target at 2× stop.
+  Gold 40–60 pip / 30-200 pip ladder no longer applied. Stop envelope is
+  12–25 pips. Equity-table lots are **3×** so a short 2R still pays.
+  Production EURUSD had 52 zones and zero publishes — activation died on
+  ``stop_exceeds_envelope_furthest_leg`` from the XAU stop envelope.
+
 ### Fixed
 - V8 plans stamp ``risk.max_volume`` from each instrument's ``max_lots ×
   volume_units_per_lot`` (XAU 100_000, EURUSD/GBPJPY 100_000_000). The

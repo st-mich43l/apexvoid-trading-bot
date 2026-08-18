@@ -112,8 +112,22 @@ public sealed class AutoTradeEngine(
       _clock,
       _log,
       resolveBoundSymbol: ResolveBoundSymbol,
-      resolveUnits: ResolveInstrumentUnits
+      resolveUnits: ResolveInstrumentUnits,
+      resolveLotMultiplier: ResolveLotMultiplier
     );
+
+  private decimal ResolveLotMultiplier(string canonical)
+  {
+    if (
+      InstrumentRegistry is not null
+      && InstrumentRegistry.TryGet(canonical, out var runtime)
+      && runtime.Execution.LotMultiplier > 0m
+    )
+    {
+      return runtime.Execution.LotMultiplier;
+    }
+    return 1m;
+  }
 
   private SymbolInfo? ResolveBoundSymbol(string canonical)
   {

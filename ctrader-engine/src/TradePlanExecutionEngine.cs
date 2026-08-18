@@ -135,13 +135,15 @@ public static class TradePlanExecutionEngine
     TradingAccountSnapshot account,
     decimal pipSize,
     decimal pipValuePerLot,
-    SymbolInfo symbol
+    SymbolInfo symbol,
+    decimal lotMultiplier = 1m
   ) => CalculateVolume(
     plan,
     EquityResolver.Resolve(account, openPositionCount: 0, pendingOrderCount: 0),
     pipSize,
     pipValuePerLot,
-    symbol
+    symbol,
+    lotMultiplier
   );
 
   /// <summary>
@@ -153,7 +155,8 @@ public static class TradePlanExecutionEngine
     EquityResolution equity,
     decimal pipSize,
     decimal pipValuePerLot,
-    SymbolInfo symbol
+    SymbolInfo symbol,
+    decimal lotMultiplier = 1m
   )
   {
     if (equity.Equity <= 0)
@@ -199,8 +202,12 @@ public static class TradePlanExecutionEngine
     {
       riskMultiplier = 1.5m;
     }
+    if (lotMultiplier <= 0m)
+    {
+      lotMultiplier = 1m;
+    }
     var sizedLots = decimal.Round(
-      tableLots * riskMultiplier,
+      tableLots * riskMultiplier * lotMultiplier,
       2,
       MidpointRounding.AwayFromZero
     );

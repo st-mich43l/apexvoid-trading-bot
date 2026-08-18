@@ -46,10 +46,14 @@ def _hfs_target_ladder(
 ) -> tuple[int, tuple[int, ...]]:
   """Final TP pips + published ladder.
 
-  Scalp books 10 then 20 pips instead of a swing 1R/2R ladder. A shorter
-  native room still publishes a single exit at that room.
+  XAU scalp books 10 then 20 pips. FX is a single full-close 2R target.
+  A shorter native room still publishes a single exit at that room.
   """
+  from app.core.instrument_geometry import is_fx
+
   final_pips = max(1, int(round(float(opportunity.expected_target_pips))))
+  if is_fx(opportunity.symbol):
+    return final_pips, (final_pips,)
   first = 10
   last = min(20, max(final_pips, first))
   if last <= first:

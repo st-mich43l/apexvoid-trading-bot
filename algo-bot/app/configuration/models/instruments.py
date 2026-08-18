@@ -44,6 +44,9 @@ class InstrumentContractConfig(FrozenConfigModel):
   # Hard ceiling in lots for TradePlan.risk.max_volume. Equity-table size
   # must fit under this; the engine never silently clamps.
   max_lots: float = Field(default=10.0, gt=0)
+  # Extra multiplier on equity-table lots. FX uses >1 so a short 1:2
+  # target still books similar dollar risk to gold's wider stop.
+  lot_multiplier: float = Field(default=1.0, gt=0)
 
 
 class InstrumentLookbacksConfig(FrozenConfigModel):

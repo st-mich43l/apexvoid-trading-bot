@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace ApexVoid.CTraderFeed;
 
 /// <summary>
@@ -247,6 +249,26 @@ public sealed class InstrumentRuntimeRegistry
           );
         }
       }
+      decimal lotMultiplier = 1m;
+      if (units.TryGetProperty("lot_multiplier", out var lotMultEl))
+      {
+        var raw = lotMultEl.ValueKind == JsonValueKind.String
+          ? lotMultEl.GetString()
+          : lotMultEl.GetRawText();
+        if (!string.IsNullOrWhiteSpace(raw))
+        {
+          lotMultiplier = ManifestDecimal.Parse(
+            raw!,
+            $"instrument_runtimes.{instrumentId}.units.lot_multiplier"
+          );
+          if (lotMultiplier <= 0m)
+          {
+            throw new InvalidOperationException(
+              $"instrument_runtimes.{instrumentId}.units.lot_multiplier must be positive"
+            );
+          }
+        }
+      }
       var cTraderSymbol = feedEl.GetProperty("ctrader_symbol").GetString();
       if (string.IsNullOrWhiteSpace(cTraderSymbol))
       {
@@ -321,7 +343,8 @@ public sealed class InstrumentRuntimeRegistry
           PipSize: pip,
           ContractSize: contract,
           EffectiveSymbols: [redisSymbol],
-          PipValuePerLot: pipValue
+          PipValuePerLot: pipValue,
+          LotMultiplier: lotMultiplier
         ),
       });
     }
