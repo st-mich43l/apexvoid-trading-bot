@@ -23,6 +23,7 @@ from app.analysis.market_map import (
 from app.core.symbols import SYMBOLS
 from app.bot.client import delete_scanner_message, send_scanner_with_retry
 from app.autotrade.map_strategy import market_map_display_key
+from app.runtime.instrument_config import instrument_runtime_view
 
 log = logging.getLogger(__name__)
 
@@ -93,7 +94,7 @@ async def get_current_market_map(symbol: str) -> MarketMap | None:
     cached = _cache.get(symbol)
   if cached is None:
     return None
-  return build_map(cached.analysis, cached.price)
+  return build_map(cached.analysis, cached.price, symbol=symbol)
 
 
 async def render_current_market_map(
@@ -167,7 +168,7 @@ async def _market_map_scan_tick(now: datetime | None = None) -> bool:
     if not map_materially_changed(
       previous,
       market_map,
-      runtime_config.analysis.market_map.change_min,
+      instrument_runtime_view(symbol).analysis.market_map.change_min,
     ):
       if previous is not None:
         await _remember_displayed_map(symbol, previous)

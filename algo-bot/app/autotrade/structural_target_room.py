@@ -352,6 +352,7 @@ def evaluate_structural_target_room(
   room_reference_source: str | None = None,
   executable_entry_price: float | None = None,
   shared_boundary_state: dict[str, Any] | None = None,
+  allow_same_wall_overlap: bool = True,
 ) -> StructuralTargetRoomDecision:
   """Measure opposing structure ahead — never invent a tiny TP ladder.
 
@@ -421,14 +422,19 @@ def evaluate_structural_target_room(
       "dropped_bounds": list(prior.get("dropped_bounds") or []) + extra_dropped,
     }
 
-  room_entries, internal_overlap = filter_overlapping_opposing_entries(
-    room_entries,
-    direction=side,
-    candidate_entry_low=low,
-    candidate_entry_high=high,
-    pip_size=pip,
-    atr=atr,
-  )
+  internal_overlap: dict[str, Any] = {
+    "applied": False,
+    "reason": "same_wall_overlap_not_allowed",
+  }
+  if allow_same_wall_overlap:
+    room_entries, internal_overlap = filter_overlapping_opposing_entries(
+      room_entries,
+      direction=side,
+      candidate_entry_low=low,
+      candidate_entry_high=high,
+      pip_size=pip,
+      atr=atr,
+    )
   if internal_overlap.get("applied"):
     prior = dict(shared_boundary_state or {})
     extra_dropped = list(internal_overlap.get("dropped_bounds") or [])

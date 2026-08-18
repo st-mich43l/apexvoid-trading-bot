@@ -98,6 +98,7 @@ class StructureSet:
 
 @dataclass(frozen=True)
 class DetectorSettings:
+  pip_size: float = 0.1
   confluence_floor: int = 2
   max_entry_atr: float = 2.0
   max_zone_width_atr: float = 1.5
@@ -216,6 +217,7 @@ class DetectorSettings:
 
   def analysis_settings(self) -> AnalysisSettings:
     return AnalysisSettings(
+      pip_size=self.pip_size,
       atr_length=self.atr_length,
       swing_fractal_n=self.swing_fractal_n,
       zigzag_pct=self.zigzag_pct,
@@ -303,6 +305,12 @@ def detector_settings_from(config: object | None = None) -> DetectorSettings:
   market_data = config.market_data
   actionability = config.actionability
   execution = config.execution
+  units = getattr(config, "units", None)
+  pip_size = float(
+    units.pip_size
+    if units is not None
+    else config.contract.instrument.pip_size
+  )
   # ``strategies.zone.flip.enabled`` is algorithm-owned without ENV binding, so the
   # LegacyCanonicalConfigView cannot expose it under the legacy authority.
   # Preserve the pre-migration default (True) in that path.
@@ -312,6 +320,7 @@ def detector_settings_from(config: object | None = None) -> DetectorSettings:
     flip_zone_enabled = True
   fib = _fib_cfg(analysis)
   return DetectorSettings(
+    pip_size=pip_size,
     confluence_floor=market_data.scanner.confluence_floor,
     max_entry_atr=actionability.gates.max_entry_atr,
     range_lookback=analysis.ranges.lookback,
@@ -1253,7 +1262,7 @@ def trend_pullback(ctx: DetectionContext) -> DetectionResult | None:
     low=float(zone.low),
     high=float(zone.high),
     lookback_bars=lookback,
-    grabs=_zone_grabs_for(st, zone, direction),
+    grabs=_zone_grabs_for(st, zone, direction, ctx.settings.pip_size),
     has_choch=_recent_choch_flag(st, direction, len(df), ctx.settings, lookback),
   )
   if conf is None:
@@ -1351,6 +1360,7 @@ def break_retest(ctx: DetectionContext) -> DetectionResult | None:
       df,
       level.price,
       min_consecutive_closes=ctx.settings.breakout_accept_bars,
+      pip_size=ctx.settings.pip_size,
     )
     if zone is None:
       continue
@@ -1440,7 +1450,9 @@ def box_breakout(ctx: DetectionContext) -> DetectionResult | None:
   price = _current_price(ctx, df)
   atr = _atr(ind)
   edge = box.box_high if direction == "BUY" else box.box_low
-  entry_kind = _box_entry_kind(df, box, edge, direction, price, atr)
+  entry_kind = _box_entry_kind(
+    df, box, edge, direction, price, atr, ctx.settings.pip_size,
+  )
   if entry_kind is None:
     return None
   zone = _scored_box_zone(ctx, st, edge, direction, atr, box)
@@ -1486,9 +1498,10 @@ def _box_entry_kind(
   direction: str,
   price: float,
   atr: float,
+  pip_size: float = 0.1,
 ) -> str | None:
   current = len(df) - 1
-  retest = find_retest(df, edge)
+  retest = find_retest(df, edge, pip_size=pip_size)
   expected_kind = "retest_support" if direction == "BUY" else "retest_resistance"
   if (
     retest is not None
@@ -1542,6 +1555,7 @@ def _scored_box_zone(
     grabs=st.liquidity_grabs,
     trendlines=st.trendlines,
     bar_index=len(ctx.frames[ctx.tf]) - 1,
+    pip_size=ctx.settings.pip_size,
   )[0]
   if not box.coiling:
     return scored
@@ -1602,7 +1616,9 @@ def snap_back(ctx: DetectionContext) -> DetectionResult | None:
     nearest = _nearest_level(st.levels, price, direction)
     if nearest is None:
       return None
-    zone = entry_zone(df, nearest.price, direction)
+    zone = entry_zone(
+      df, nearest.price, direction, pip_size=ctx.settings.pip_size,
+    )
     distance = _zone_distance(zone, price, direction)
     level = nearest.price
     touches = nearest.touches
@@ -1611,7 +1627,7 @@ def snap_back(ctx: DetectionContext) -> DetectionResult | None:
     structural_id_value = key_level_structural_id(ctx.symbol, ctx.tf, nearest)
   if distance < atr * ctx.settings.snap_atr_mult:
     return None
-  grab = _zone_grab(st, zone, direction)
+  grab = _zone_grab(st, zone, direction, ctx.settings.pip_size)
   if grab is None or grab.grade not in {"A", "B"}:
     return None
   lookback = max(1, int(ctx.settings.structural_reaction_lookback_bars))
@@ -1723,7 +1739,9 @@ def momentum_ride(ctx: DetectionContext) -> DetectionResult | None:
   level = _nearest_level(st.levels, price, direction)
   if level is None:
     return None
-  zone = entry_zone(df, level.price, direction)
+  zone = entry_zone(
+    df, level.price, direction, pip_size=ctx.settings.pip_size,
+  )
   reasons = [f"HTF bias {ctx.htf_bias}", "impulse break", "near valid-side level"]
   factors = ConfluenceFactors(
     htf_aligned=ctx.htf_bias == _bias_for_direction(direction),
@@ -1800,7 +1818,7 @@ def range_edge_scalp(ctx: DetectionContext) -> DetectionResult | None:
     if barrier.accepted_closes >= max(1, ctx.settings.range_scalp_break_closes):
       continue
     zone = _barrier_zone(barrier, direction)
-    grab = _zone_grab(st, zone, direction)
+    grab = _zone_grab(st, zone, direction, ctx.settings.pip_size)
     grade_a = grab is not None and grab.grade == "A"
     minimum_touches = max(2, ctx.settings.range_scalp_min_touches)
     if barrier.touches < minimum_touches and not (
@@ -1819,7 +1837,7 @@ def range_edge_scalp(ctx: DetectionContext) -> DetectionResult | None:
       low=float(zone.low),
       high=float(zone.high),
       lookback_bars=lookback,
-      grabs=_zone_grabs_for(st, zone, direction),
+      grabs=_zone_grabs_for(st, zone, direction, ctx.settings.pip_size),
       has_choch=_recent_choch_flag(st, direction, len(df), ctx.settings, lookback),
     )
     if confirmation is None:
@@ -1902,7 +1920,9 @@ def fade_scalp(ctx: DetectionContext) -> DetectionResult | None:
     grab = _level_grab(st, level, direction)
     if grab is None or grab.grade not in {"A", "B"}:
       continue
-    zone = entry_zone(df, level.price, direction)
+    zone = entry_zone(
+      df, level.price, direction, pip_size=ctx.settings.pip_size,
+    )
     if _in_chop(ctx) and (grab.grade != "A" or not _chop_edge_ok(ctx, zone, direction)):
       continue
     conf = evaluate_structural_reaction(
@@ -2134,7 +2154,7 @@ def _counter_confirmation(
   level: Level | None,
   settings: DetectorSettings,
 ) -> str | None:
-  grab = _zone_grab(st, zone, direction)
+  grab = _zone_grab(st, zone, direction, settings.pip_size)
   if grab is None and level is not None:
     grab = _level_grab(st, level, direction)
   if grab is not None and grab.grade == "A":
@@ -2265,20 +2285,25 @@ def _zone_grab(
   st: StructureSet,
   zone: Zone,
   direction: str,
+  pip_size: float = 0.1,
 ) -> Grab | None:
   wanted_direction = "bull" if direction == "BUY" else "bear"
   wanted_side = "sell" if direction == "BUY" else "buy"
   for grab in reversed(st.liquidity_grabs):
     if grab.direction != wanted_direction or grab.pool.side != wanted_side:
       continue
-    if _grab_points_into_zone(grab, zone):
+    if _grab_points_into_zone(grab, zone, pip_size):
       return grab
   return None
 
 
-def _grab_points_into_zone(grab: Grab, zone: Zone) -> bool:
+def _grab_points_into_zone(
+  grab: Grab,
+  zone: Zone,
+  pip_size: float = 0.1,
+) -> bool:
   width = max(zone.high - zone.low, 0.0)
-  tolerance = max(grab.pool.band, width, 0.1)
+  tolerance = max(grab.pool.band, width, float(pip_size))
   if zone.side == "demand" and grab.pool.side == "sell":
     return zone.low - tolerance <= grab.pool.level <= zone.high
   if zone.side == "supply" and grab.pool.side == "buy":
@@ -2314,8 +2339,9 @@ def _zone_grabs_for(
   st: StructureSet,
   zone: Zone,
   direction: str,
+  pip_size: float = 0.1,
 ) -> list:
-  grab = _zone_grab(st, zone, direction)
+  grab = _zone_grab(st, zone, direction, pip_size)
   return [grab] if grab is not None else []
 
 
@@ -2685,7 +2711,7 @@ def _sd_zone_reaction(
     low=float(zone.low),
     high=float(zone.high),
     lookback_bars=lookback,
-    grabs=_zone_grabs_for(st, zone, direction),
+    grabs=_zone_grabs_for(st, zone, direction, ctx.settings.pip_size),
     has_choch=_recent_choch_flag(st, direction, len(df), ctx.settings, lookback),
   )
   if conf is None:

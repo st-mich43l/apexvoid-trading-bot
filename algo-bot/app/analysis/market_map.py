@@ -13,6 +13,9 @@ import math
 from app.analysis.math_utils import atr_scalar
 from app.analysis.scalp_ranges import ScalpBarrier, ScalpRange
 from app.analysis.trendlines import value_at
+from app.runtime.instrument_config import instrument_runtime_view
+from app.runtime.price_format import format_price
+from app.runtime.price_identity import price_token
 
 log = logging.getLogger(__name__)
 
@@ -42,8 +45,8 @@ class MapEntry:
   side: str
   lo: float
   hi: float
-  label_lo: int
-  label_hi: int
+  label_lo: float
+  label_hi: float
   tier: str
   tags: list[str]
   score: float
@@ -51,6 +54,7 @@ class MapEntry:
   # where price *is*, not something ahead of it. Defaults False so a payload
   # written before this field existed still round-trips correctly.
   contains_price: bool = False
+  label_step: float = 1.0
 
 
 @dataclass(frozen=True)
@@ -58,10 +62,11 @@ class ScalpRail:
   price: float
   lo: float
   hi: float
-  label: int
+  label: float
   direction: str
   tags: list[str]
   score: float
+  label_step: float = 1.0
 
 
 @dataclass(frozen=True)
@@ -97,9 +102,27 @@ def _default_runtime_cfg():
   return runtime_config
 
 
-def build_map(ctx_or_per_tf, price: float, cfg=None) -> MarketMap:
+def _instrument_cfg(cfg, symbol: str):
   if cfg is None:
     cfg = _default_runtime_cfg()
+  if callable(getattr(cfg, "for_instrument", None)):
+    return instrument_runtime_view(symbol, cfg)
+  return cfg
+
+
+def _label_step(cfg) -> float:
+  digits = int(getattr(getattr(cfg, "units", None), "price_digits", 0))
+  return 1.0 if digits <= 2 else 10.0 ** -digits
+
+
+def build_map(
+  ctx_or_per_tf,
+  price: float,
+  cfg=None,
+  *,
+  symbol: str = "XAU",
+) -> MarketMap:
+  cfg = _instrument_cfg(cfg, symbol)
   map_cfg = cfg.analysis.market_map
   per_tf = getattr(ctx_or_per_tf, "per_tf", ctx_or_per_tf)
   if not isinstance(per_tf, dict):
@@ -114,8 +137,15 @@ def build_map(ctx_or_per_tf, price: float, cfg=None) -> MarketMap:
   min_zone_score = max(0.0, float(map_cfg.min_zone_score))
   min_level_touches = max(3, int(map_cfg.min_level_touches))
   reference_atr = _reference_atr(per_tf)
+  label_step = _label_step(cfg)
+  configured_band_floor = (
+    min(5.0, float(cfg.analysis.zones.merge_max_width))
+    if hasattr(cfg, "units")
+    else 5.0
+  )
   band_max = max(
-    5.0,
+    configured_band_floor,
+    label_step,
     max(0.0, float(map_cfg.band_max_atr)) * reference_atr,
   )
   max_distance = (
@@ -133,7 +163,9 @@ def build_map(ctx_or_per_tf, price: float, cfg=None) -> MarketMap:
     for zone in getattr(item, "zones", []) or []:
       touches = int(getattr(zone, "touches", 0))
       if touches == max_touches:
-        entry = _zone_entry(zone, tf, per_tf, session_levels, price, major_score)
+        entry = _zone_entry(
+          zone, tf, per_tf, session_levels, price, major_score, label_step,
+        )
         if entry is not None and _within_distance(entry, price, max_distance):
           revisit_candidates.append(replace(
             entry,
@@ -144,7 +176,9 @@ def build_map(ctx_or_per_tf, price: float, cfg=None) -> MarketMap:
         continue
       if float(getattr(zone, "score", 0.0)) < min_zone_score:
         continue
-      entry = _zone_entry(zone, tf, per_tf, session_levels, price, major_score)
+      entry = _zone_entry(
+        zone, tf, per_tf, session_levels, price, major_score, label_step,
+      )
       if entry is not None and _within_distance(entry, price, max_distance):
         zone_candidates.append(entry)
     for level in getattr(item, "key_levels", []) or []:
@@ -160,6 +194,7 @@ def build_map(ctx_or_per_tf, price: float, cfg=None) -> MarketMap:
         f"support ×{level.touches}",
         f"resistance ×{level.touches}",
         float(getattr(level, "strength", level.touches)),
+        label_step=label_step,
       ), price, max_distance))
     session_band = max(0.0, SESSION_BAND_ATR * reference_atr)
     for level in session_levels:
@@ -171,6 +206,7 @@ def build_map(ctx_or_per_tf, price: float, cfg=None) -> MarketMap:
           str(level.name),
           str(level.name),
           3.0,
+          label_step=label_step,
         ), price, max_distance):
           swept_candidates.append(replace(
             entry,
@@ -185,6 +221,7 @@ def build_map(ctx_or_per_tf, price: float, cfg=None) -> MarketMap:
         str(level.name),
         str(level.name),
         major_score if level.name in _MAJOR_SESSION_LEVELS else 4.0,
+        label_step=label_step,
       ), price, max_distance))
     current_bar = max(0, len(getattr(item, "df", [])) - 1)
     for line in getattr(item, "trendlines", []) or []:
@@ -200,6 +237,7 @@ def build_map(ctx_or_per_tf, price: float, cfg=None) -> MarketMap:
         float(line.touches),
         support=line.kind == "support",
         resistance=line.kind == "resistance",
+        label_step=label_step,
       ), price, max_distance))
     box_break = getattr(item, "box_break", None)
     if box_break is not None:
@@ -218,6 +256,7 @@ def build_map(ctx_or_per_tf, price: float, cfg=None) -> MarketMap:
         tier="zone",
         support=box_break.direction == "up",
         resistance=box_break.direction == "down",
+        label_step=label_step,
       ), price, max_distance))
 
   zones = _merge_display_entries(zone_candidates, band_max)
@@ -238,6 +277,7 @@ def build_map(ctx_or_per_tf, price: float, cfg=None) -> MarketMap:
     price,
     float(cfg.analysis.levels.round_step),
     fallback_radius,
+    label_step,
   )
   for side in ("sell", "buy"):
     ranked = _rank_entries(
@@ -261,7 +301,9 @@ def build_map(ctx_or_per_tf, price: float, cfg=None) -> MarketMap:
   regime = getattr(ctx_or_per_tf, "regime", None)
   dealing_range = getattr(ctx_or_per_tf, "dealing_range", None)
   bias = str(getattr(ctx_or_per_tf, "htf_bias", "range"))
-  rails, scalp_rejected_by = _build_scalp_rails(per_tf, float(price), cfg)
+  rails, scalp_rejected_by = _build_scalp_rails(
+    per_tf, float(price), cfg, label_step,
+  )
   log.debug(
     "range check: box=%s-%s (source=dealing_range) scalp_edges=%s (source=scalp_ranges, rejected_by=%s)",
     regime.range_low if regime is not None else None,
@@ -286,6 +328,7 @@ def build_map(ctx_or_per_tf, price: float, cfg=None) -> MarketMap:
     float(price),
     generated_at,
     source_tf,
+    int(getattr(getattr(cfg, "units", None), "price_digits", 2)),
   )
   return MarketMap(
     entries=capped,
@@ -309,8 +352,8 @@ def render_market_map(
   now: datetime,
   cfg=None,
 ) -> str:
-  if cfg is None:
-    cfg = _default_runtime_cfg()
+  cfg = _instrument_cfg(cfg, symbol)
+  price_digits = int(getattr(getattr(cfg, "units", None), "price_digits", 2))
   clock = now.strftime("%H:%M")
   bias = market_map.bias
   if market_map.bias_tf:
@@ -319,25 +362,28 @@ def render_market_map(
   summary = f"bias {bias} · {context}"
   if market_map.box_low is not None and market_map.box_high is not None:
     summary += (
-      f" · box {_format_number(market_map.box_low)}"
-      f"–{_format_number(market_map.box_high)}"
+      f" · box {_format_number(market_map.box_low, symbol, price_digits)}"
+      f"–{_format_number(market_map.box_high, symbol, price_digits)}"
     )
   if market_map.eq is not None:
-    summary += f" · EQ ~{_format_number(market_map.eq)}"
+    summary += f" · EQ ~{_format_number(market_map.eq, symbol, price_digits)}"
   lines = [
-    f"🗺 {symbol.upper()} Market Map · {clock} · price {_format_number(market_map.price)}",
+    (
+      f"🗺 {symbol.upper()} Market Map · {clock} · price "
+      f"{_format_number(market_map.price, symbol, price_digits)}"
+    ),
     summary,
     "",
     "SELL",
-    *_render_side(market_map.sells, market_map.price),
+    *_render_side(market_map.sells, market_map.price, symbol, price_digits),
     "",
     "⚡ SCALP · RANGE EDGES",
-    *_render_rails(market_map.rails),
+    *_render_rails(market_map.rails, symbol, price_digits),
     "",
     "BUY",
-    *_render_side(market_map.buys, market_map.price),
+    *_render_side(market_map.buys, market_map.price, symbol, price_digits),
   ]
-  beyond_cap = _beyond_display_cap_lines(market_map)
+  beyond_cap = _beyond_display_cap_lines(market_map, symbol, price_digits)
   if beyond_cap:
     # These bands only ended up here because the per-side display cap
     # (MAP_TAG_LIMIT/entries slicing above) dropped them from SELL/BUY -
@@ -357,6 +403,7 @@ def map_reference(
   direction: str,
   lo: float,
   hi: float,
+  symbol: str = "XAU",
 ) -> str | None:
   side = "buy" if direction.upper() == "BUY" else "sell"
   matches = [
@@ -372,7 +419,8 @@ def map_reference(
   entry = min(matches, key=lambda item: (_distance(item, (lo + hi) / 2), -item.score))
   tags = "·".join(_compact_tags(entry.tags, 2))
   return (
-    f"map: {side.upper()} {_format_band(entry.label_lo, entry.label_hi)}"
+    f"map: {side.upper()} "
+    f"{_format_band(entry.label_lo, entry.label_hi, symbol)}"
     f" ({tags})"
   )
 
@@ -381,6 +429,7 @@ def rail_reference(
   market_map: MarketMap,
   lo: float,
   hi: float,
+  symbol: str = "XAU",
 ) -> str | None:
   matches = [
     rail for rail in market_map.rails
@@ -396,7 +445,10 @@ def rail_reference(
   rail = min(matches, key=lambda item: (abs(item.price - center), -item.score))
   tags = "·".join(_compact_rail_tags(rail.tags, 3))
   suffix = f" {tags}" if tags else ""
-  return f"rail: {_rail_action(rail.direction)} {_format_number(rail.label)}{suffix}"
+  return (
+    f"rail: {_rail_action(rail.direction)} "
+    f"{_format_number(rail.label, symbol)}{suffix}"
+  )
 
 
 def market_map_payload(market_map: MarketMap) -> str:
@@ -456,6 +508,7 @@ def _zone_entry(
   session_levels: list,
   price: float,
   major_score: float,
+  label_step: float,
 ) -> MapEntry | None:
   zone_low = float(zone.low)
   zone_high = float(zone.high)
@@ -497,7 +550,16 @@ def _zone_entry(
   tags.extend(_score_tags(score_reasons))
   if contains_price:
     tags.append("price inside")
-  return _entry(side, zone_low, zone_high, tier, tags, score, contains_price)
+  return _entry(
+    side,
+    zone_low,
+    zone_high,
+    tier,
+    tags,
+    score,
+    contains_price,
+    label_step,
+  )
 
 
 def _zone_tags(zone, side: str) -> list[str]:
@@ -569,6 +631,7 @@ def _level_entry(
   tier: str = "level",
   support: bool = True,
   resistance: bool = True,
+  label_step: float = 1.0,
 ) -> list[MapEntry]:
   lo = value - band
   hi = value + band
@@ -581,6 +644,7 @@ def _level_entry(
       "major" if major else tier,
       [buy_tag],
       score,
+      label_step=label_step,
     ))
   if resistance and value > price:
     entries.append(_entry(
@@ -590,6 +654,7 @@ def _level_entry(
       "major" if major else tier,
       [sell_tag],
       score,
+      label_step=label_step,
     ))
   return entries
 
@@ -602,9 +667,11 @@ def _entry(
   tags: list[str],
   score: float,
   contains_price: bool = False,
+  label_step: float = 1.0,
 ) -> MapEntry:
   lo, hi = sorted((float(lo), float(hi)))
-  label_lo, label_hi = _rounded_band(lo, hi)
+  label_step = max(float(label_step), 1e-12)
+  label_lo, label_hi = _rounded_band(lo, hi, label_step)
   return MapEntry(
     side,
     lo,
@@ -615,15 +682,27 @@ def _entry(
     _compact_tags(tags, MAP_TAG_LIMIT),
     float(score),
     contains_price,
+    label_step,
   )
 
 
-def _rounded_band(lo: float, hi: float) -> tuple[int, int]:
-  label_lo = math.floor(lo)
-  label_hi = math.ceil(hi)
-  if hi - lo < 1.0 and label_hi <= label_lo:
-    label_hi = label_lo + 1
+def _rounded_band(
+  lo: float,
+  hi: float,
+  step: float = 1.0,
+) -> tuple[float, float]:
+  step = max(float(step), 1e-12)
+  label_lo = _clean_label(math.floor((lo / step) + 1e-9) * step, step)
+  label_hi = _clean_label(math.ceil((hi / step) - 1e-9) * step, step)
+  if hi - lo < step and label_hi <= label_lo:
+    label_hi = _clean_label(label_lo + step, step)
   return label_lo, label_hi
+
+
+def _clean_label(value: float, step: float) -> float:
+  decimals = max(0, min(12, int(math.ceil(-math.log10(step))) + 1))
+  rounded = round(float(value), decimals)
+  return 0.0 if rounded == 0 else rounded
 
 
 def _merge_display_entries(
@@ -705,17 +784,24 @@ def _cap_entry_width(entry: MapEntry, cap: float) -> MapEntry:
     entry.tags,
     entry.score,
     entry.contains_price,
+    entry.label_step,
   )
   return _limit_label_width(capped, cap)
 
 
 def _limit_label_width(entry: MapEntry, cap: float) -> MapEntry:
-  label_cap = max(1, int(math.floor(cap)))
-  if entry.label_hi - entry.label_lo <= label_cap:
+  step = max(float(entry.label_step), 1e-12)
+  label_units = max(1, int(math.floor((cap / step) + 1e-9)))
+  label_cap = label_units * step
+  if entry.label_hi - entry.label_lo <= label_cap + step * 1e-6:
     return entry
-  center = int(round((entry.lo + entry.hi) / 2))
-  label_lo = center - (label_cap // 2)
-  return replace(entry, label_lo=label_lo, label_hi=label_lo + label_cap)
+  center = round(((entry.lo + entry.hi) / 2) / step) * step
+  label_lo = center - (label_units // 2) * step
+  return replace(
+    entry,
+    label_lo=_clean_label(label_lo, step),
+    label_hi=_clean_label(label_lo + label_cap, step),
+  )
 
 
 def _merged_entry(
@@ -733,6 +819,7 @@ def _merged_entry(
     [*first.tags, *second.tags],
     max(first.score, second.score),
     first.contains_price or second.contains_price,
+    min(first.label_step, second.label_step),
   )
 
 
@@ -757,6 +844,7 @@ def _remove_display_overlaps(
           current.tier,
           current.tags,
           current.score,
+          label_step=current.label_step,
         )
       else:
         if previous.lo >= current.lo:
@@ -770,6 +858,7 @@ def _remove_display_overlaps(
           previous.tier,
           previous.tags,
           previous.score,
+          label_step=previous.label_step,
         )
     index += 1
 
@@ -840,6 +929,7 @@ def _attach_confluence(
       [*entry.tags, *reference.tags],
       max(entry.score, reference.score),
       entry.contains_price,
+      min(entry.label_step, reference.label_step),
     )
   return attached, unmatched
 
@@ -932,15 +1022,17 @@ def _build_map_id(
   price: float,
   generated_at: int,
   source_timeframe: str,
+  price_digits: int,
 ) -> str:
   parts = [
     source_timeframe,
-    f"{price:.2f}",
+    price_token(price, digits=price_digits),
     str(generated_at),
   ]
   for entry in [*entries, *actionable]:
     parts.append(
-      f"{entry.side}:{entry.lo:.2f}-{entry.hi:.2f}:{entry.tier}"
+      f"{entry.side}:{price_token(entry.lo, digits=price_digits)}-"
+      f"{price_token(entry.hi, digits=price_digits)}:{entry.tier}"
     )
   digest = hashlib.sha256("|".join(parts).encode("ascii")).hexdigest()
   return digest[:16]
@@ -955,7 +1047,11 @@ def _entry_in_list(entry: MapEntry, entries: list[MapEntry]) -> bool:
   )
 
 
-def _beyond_display_cap_lines(market_map: MarketMap) -> list[str]:
+def _beyond_display_cap_lines(
+  market_map: MarketMap,
+  symbol: str = "XAU",
+  price_digits: int | None = None,
+) -> list[str]:
   """Render actionable bands dropped only by display capping."""
   lines: list[str] = []
   for entry in market_map.actionable_entries:
@@ -964,7 +1060,8 @@ def _beyond_display_cap_lines(market_map: MarketMap) -> list[str]:
     tags = "·".join(_compact_tags(entry.tags, 2))
     suffix = f" ({tags})" if tags else ""
     lines.append(
-      f"{entry.side.upper()} {_format_band(entry.label_lo, entry.label_hi)}"
+      f"{entry.side.upper()} "
+      f"{_format_band(entry.label_lo, entry.label_hi, symbol, price_digits)}"
       f"{suffix}"
     )
   return lines
@@ -1014,6 +1111,7 @@ def _round_fallback_entries(
   price: float,
   step: float,
   radius: float,
+  label_step: float = 1.0,
 ) -> list[MapEntry]:
   if step <= 0 or radius <= 0 or not math.isfinite(price):
     return []
@@ -1025,7 +1123,15 @@ def _round_fallback_entries(
     if level == price:
       continue
     side = "buy" if level < price else "sell"
-    entries.append(_entry(side, level, level, "level", ["round"], 1.0))
+    entries.append(_entry(
+      side,
+      level,
+      level,
+      "level",
+      ["round"],
+      1.0,
+      label_step=label_step,
+    ))
   return entries
 
 
@@ -1042,6 +1148,7 @@ def _build_scalp_rails(
   per_tf: dict,
   price: float,
   cfg,
+  label_step: float = 1.0,
 ) -> tuple[list[ScalpRail], str | None]:
   radius = max(0.0, float(cfg.analysis.market_map.scalp_radius_price))
   if not per_tf or radius <= 0:
@@ -1056,8 +1163,8 @@ def _build_scalp_rails(
     return [], rejected_by
   lower, upper = pair
   rails = [
-    _scalp_edge_rail(lower, "BUY"),
-    _scalp_edge_rail(upper, "SELL"),
+    _scalp_edge_rail(lower, "BUY", label_step),
+    _scalp_edge_rail(upper, "SELL", label_step),
   ]
   return sorted(
     rails,
@@ -1122,15 +1229,21 @@ def _validated_scalp_pair(
   return (lower, upper), None
 
 
-def _scalp_edge_rail(barrier: ScalpBarrier, direction: str) -> ScalpRail:
+def _scalp_edge_rail(
+  barrier: ScalpBarrier,
+  direction: str,
+  label_step: float = 1.0,
+) -> ScalpRail:
+  label_step = max(float(label_step), 1e-12)
   return ScalpRail(
     price=float(barrier.level),
     lo=float(barrier.low),
     hi=float(barrier.high),
-    label=int(round(barrier.level)),
+    label=_clean_label(round(barrier.level / label_step) * label_step, label_step),
     direction=direction,
     tags=_compact_rail_tags(list(barrier.tags), 4),
     score=float(barrier.score),
+    label_step=label_step,
   )
 
 
@@ -1167,7 +1280,12 @@ def _reference_atr(per_tf: dict) -> float:
   return 0.0
 
 
-def _render_side(entries: list[MapEntry], price: float) -> list[str]:
+def _render_side(
+  entries: list[MapEntry],
+  price: float,
+  symbol: str = "XAU",
+  price_digits: int | None = None,
+) -> list[str]:
   ordered = sorted(entries, key=lambda entry: (_distance(entry, price), entry.label_lo))
   if not ordered:
     return ["└ no mapped levels"]
@@ -1182,12 +1300,18 @@ def _render_side(entries: list[MapEntry], price: float) -> list[str]:
       tag.casefold() == "breakout-retest" for tag in entry.tags
     ) else ""
     lines.append(
-      f"{branch} {_format_band(entry.label_lo, entry.label_hi)}  {tags}{suffix}"
+      f"{branch} "
+      f"{_format_band(entry.label_lo, entry.label_hi, symbol, price_digits)}  "
+      f"{tags}{suffix}"
     )
   return lines
 
 
-def _render_rails(rails: list[ScalpRail]) -> list[str]:
+def _render_rails(
+  rails: list[ScalpRail],
+  symbol: str = "XAU",
+  price_digits: int | None = None,
+) -> list[str]:
   if not rails:
     return ["└ no validated range edges"]
   lines: list[str] = []
@@ -1197,7 +1321,7 @@ def _render_rails(rails: list[ScalpRail]) -> list[str]:
     suffix = f"  {details}" if details else ""
     lines.append(
       f"{branch} {_rail_action(rail.direction)} "
-      f"{_format_number(rail.label)}{suffix}"
+      f"{_format_number(rail.label, symbol, price_digits)}{suffix}"
     )
   return lines
 
@@ -1353,12 +1477,24 @@ def _bands_overlap(first_lo: float, first_hi: float, lo: float, hi: float) -> bo
   return min(first_hi, hi) >= max(first_lo, lo)
 
 
-def _format_band(lo: int, hi: int) -> str:
-  return f"{lo:,}–{hi:,}"
+def _format_band(
+  lo: float,
+  hi: float,
+  symbol: str = "XAU",
+  price_digits: int | None = None,
+) -> str:
+  return (
+    f"{format_price(symbol, lo, grouped=True, digits=price_digits)}"
+    f"–{format_price(symbol, hi, grouped=True, digits=price_digits)}"
+  )
 
 
-def _format_number(value: float) -> str:
-  return f"{int(round(float(value))):,}"
+def _format_number(
+  value: float,
+  symbol: str = "XAU",
+  price_digits: int | None = None,
+) -> str:
+  return format_price(symbol, value, grouped=True, digits=price_digits)
 
 
 def _entry_groups(entries: list[MapEntry]) -> dict[tuple, list[tuple[float, float]]]:

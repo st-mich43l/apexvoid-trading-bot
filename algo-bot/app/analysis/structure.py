@@ -158,6 +158,7 @@ def find_retest(
   level: float | Level,
   *,
   min_consecutive_closes: int = 1,
+  pip_size: float = 0.1,
 ) -> Zone | None:
   """Find a retest of ``level`` after it breaks.
 
@@ -173,7 +174,7 @@ def find_retest(
   if len(df) < 3:
     return None
   price = level.price if isinstance(level, Level) else float(level)
-  tolerance = _tol(df)
+  tolerance = _tol(df, pip_size)
   closes_series = df["close"].astype(float)
   closes = closes_series.tolist()
   required = max(1, int(min_consecutive_closes))
@@ -217,9 +218,11 @@ def entry_zone(
   df: pd.DataFrame,
   level: float | Level,
   direction: str,
+  *,
+  pip_size: float = 0.1,
 ) -> Zone:
   price = level.price if isinstance(level, Level) else float(level)
-  tolerance = _tol(df)
+  tolerance = _tol(df, pip_size)
   zones = order_blocks(df) + flip_zones(df) + fvg(df)
   for zone in reversed(zones):
     if zone.low - tolerance <= price <= zone.high + tolerance:
@@ -236,11 +239,11 @@ def _break_kind(trend: str, direction: str) -> str:
   return "BOS"
 
 
-def _tol(df: pd.DataFrame) -> float:
+def _tol(df: pd.DataFrame, pip_size: float = 0.1) -> float:
   if df.empty:
     return 0.0
   span = float(df["high"].max() - df["low"].min())
-  return max(span * 0.003, 0.1)
+  return max(span * 0.003, float(pip_size))
 
 
 def _legacy_order_blocks(df: pd.DataFrame) -> list[Zone]:

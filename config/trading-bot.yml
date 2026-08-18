@@ -226,8 +226,15 @@ instruments:
         m5_bars: 150
     overrides:
       analysis.levels.round_step: 0.001
+      # Market Map price-unit fields must follow EURUSD geometry. Structural
+      # distance remains ATR-based; these cap fallback/rail presentation and
+      # make one pip a material map move instead of XAU's $1 threshold.
+      analysis.market_map.change_min: 0.0001
+      analysis.market_map.fallback_radius_price: 0.01
+      analysis.market_map.scalp_radius_price: 0.006
       analysis.zones.confluence.merge_gap_price: 0.0003
       analysis.zones.merge_max_width: 0.0015
+      execution.mapped_zone.zone_min_width_abs: 0.0003
       risk.exposure.opposing_minimum_separation_price: 0.0015
       strategies.technique.fvg.entry_max_width_price: 0.0015
       # FX stop geometry is pip-based; XAU's 40–60 pip envelope is too wide.
@@ -289,8 +296,12 @@ instruments:
         m5_bars: 150
     overrides:
       analysis.levels.round_step: 0.1
+      analysis.market_map.change_min: 0.01
+      analysis.market_map.fallback_radius_price: 1.0
+      analysis.market_map.scalp_radius_price: 0.6
       analysis.zones.confluence.merge_gap_price: 0.05
       analysis.zones.merge_max_width: 0.25
+      execution.mapped_zone.zone_min_width_abs: 0.08
       risk.exposure.opposing_minimum_separation_price: 0.15
       strategies.technique.fvg.entry_max_width_price: 0.25
       execution.range.min_rr: 2.0

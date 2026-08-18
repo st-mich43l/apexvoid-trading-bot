@@ -79,6 +79,9 @@ def _nested_cfg_from_analysis_settings(settings: AnalysisSettings) -> Any:
     })
 
   return tree({
+    "units": {
+      "pip_size": settings.pip_size,
+    },
     "analysis": {
       "trendlines": {
         "tolerance_atr": settings.tl_tol_atr,
@@ -131,6 +134,7 @@ def _nested_cfg_from_analysis_settings(settings: AnalysisSettings) -> Any:
 
 @dataclass(frozen=True)
 class AnalysisSettings:
+  pip_size: float = 0.1
   atr_length: int = 14
   swing_fractal_n: int = 2
   zigzag_pct: float = 0.0
@@ -287,10 +291,17 @@ def _attach_technique_instances(
   h1 = per_tf.get("H1")
   h1_df = h1.df if h1 is not None else None
   h1_atr = atr_scalar(h1.atr) if h1 is not None else 0.0
+  reference_atr = h1_atr if h1_atr > 0 else max(
+    (atr_scalar(item.atr) for item in per_tf.values()),
+    default=0.0,
+  )
   geom = TechniqueGeometrySettings(
     momentum_body_frac=settings.momentum_body_frac,
     confluence_min_overlap=settings.zone_merge_overlap,
-    zone_merge_max_width=max(0.0, settings.max_merged_zone_atr) * max(h1_atr, 1.0),
+    pip_size=max(settings.pip_size, 1e-12),
+    zone_merge_max_width=(
+      max(0.0, settings.max_merged_zone_atr) * reference_atr
+    ),
   )
   updated: dict[str, TimeframeAnalysis] = {}
   for tf, analysis in per_tf.items():
@@ -382,6 +393,7 @@ def _analyze_tf(
     settings.sweep_body_frac,
     settings.sweep_react_bars,
     settings.inducement_band_atr,
+    settings.pip_size,
   )
   zones = score_zones(
     zones,
@@ -393,6 +405,7 @@ def _analyze_tf(
     grabs=grabs,
     trendlines=diagonal_lines,
     bar_index=len(df) - 1,
+    pip_size=settings.pip_size,
   )
   zone_reconcile_dropped = 0
   zone_reconcile_aborted = False
@@ -744,6 +757,7 @@ def _apply_mtf_zone_scores(
         item.liquidity_grabs,
         item.trendlines,
         len(item.df) - 1,
+        settings.pip_size,
       )
       item = _with_zone_views(item, zones)
       updated[tf] = item

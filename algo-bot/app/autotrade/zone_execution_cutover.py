@@ -63,6 +63,7 @@ from app.autotrade.strategy_taxonomy import (
   is_scalp_strategy,
   is_technique_or_confluence,
 )
+from app.runtime.instrument_config import instrument_runtime_view
 from app.autotrade.zone_watch import (
   DISCOVERED,
   EXPIRED,
@@ -900,6 +901,7 @@ async def _record_width_telemetry(
     # structural zone - it must never be rejected only for being narrower
     # than XAU_ZONE_MIN_WIDTH_PRICE.
     min_width=0.0 if band_kind != BandKind.STRUCTURAL_ZONE else None,
+    symbol=symbol,
   )
   payload = {
     "symbol": symbol.upper(),
@@ -1309,7 +1311,7 @@ async def _m1_trigger_for_zone(
     direction=record.direction,
     earliest_bar_ts=int(record.zone_entered_at) + 1,
     after_bar_ts=record.last_evaluated_m1_ts,
-    cfg=None,
+    cfg=instrument_runtime_view(record.symbol),
   )
   latest = latest_eligible_m1_bar_ts(
     frame,

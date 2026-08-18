@@ -714,7 +714,11 @@ def evaluate_execution_policy(
       or getattr(match, "strategy_family", None)
       or strategy_family(str(getattr(match, "strategy", "") or ""))
     ),
-    entry_clips=int(getattr(instrument_cfg.targeting, "entry_clips", SCALP_MICRO_CLIPS)),
+    entry_clips=int(getattr(
+      getattr(instrument_cfg, "targeting", None),
+      "entry_clips",
+      SCALP_MICRO_CLIPS,
+    )),
   )
   if not route_plan.valid:
     return ExecutionPolicyEvaluation(

@@ -22,7 +22,10 @@ from app.analysis.key_level_role import (
 )
 from app.analysis.market_map import MapEntry, MarketMap
 from app.analysis.structural_reaction_support import STRUCTURAL_SETUPS
-from app.autotrade.strategy_taxonomy import is_scalp_strategy
+from app.autotrade.strategy_taxonomy import (
+  is_scalp_strategy,
+  is_technique_or_confluence,
+)
 from app.autotrade.structural_target_room import (
   evaluate_structural_target_room,
   filter_displaced_opposing_entries,
@@ -591,6 +594,7 @@ def resolve_actionability(
         shared_boundary_state=(
           None if is_scalp else shared_boundary_state
         ),
+        allow_same_wall_overlap=is_technique_or_confluence(result.setup),
       )
       measured = {
         **room.measured,

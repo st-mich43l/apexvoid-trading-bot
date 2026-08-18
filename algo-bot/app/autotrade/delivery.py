@@ -221,15 +221,30 @@ _DEFAULT_BROKER_LOT_SIZE = 10_000.0
 DeliveryProfile = Literal["internal", "public"]
 
 
-def _format_event_price(raw: str, *, digits: int | None = None) -> str:
+def _event_symbol(event: dict) -> str:
+  return str(event.get("symbol") or "XAU").strip().upper()
+
+
+def _format_event_price(
+  raw: str,
+  *,
+  digits: int | None = None,
+  symbol: str | None = None,
+  grouped: bool = False,
+) -> str:
   try:
     value = float(raw)
   except (TypeError, ValueError):
     return raw
   precision = digits
   if precision is None:
-    precision = int(runtime_config.contract.instrument.price_digits)
-  return f"{value:.{max(0, precision)}f}"
+    precision = (
+      int(runtime_config.for_instrument(symbol).units.price_digits)
+      if symbol
+      else int(runtime_config.contract.instrument.price_digits)
+    )
+  spec = f",.{max(0, precision)}f" if grouped else f".{max(0, precision)}f"
+  return f"{value:{spec}}"
 
 
 def _broker_lot_size() -> float:
@@ -252,7 +267,7 @@ def _format_message_lot(raw: str) -> str:
   return format_lots(value)
 
 
-def _clean_message(value: object) -> str:
+def _clean_message(value: object, *, symbol: str | None = None) -> str:
   text = _AUTO_NAME_RE.sub("ApexVoid Algo", str(value or ""))
   text = _POSITION_TEXT_RE.sub("", text)
   # Owner-facing fill/TP lines: broker volume units are labeled lot=, and
@@ -265,11 +280,15 @@ def _clean_message(value: object) -> str:
     text,
   )
   text = _WEIGHTED_EQ_RE.sub(
-    lambda match: f"weighted={_format_event_price(match.group(1))}",
+    lambda match: (
+      f"weighted={_format_event_price(match.group(1), symbol=symbol)}"
+    ),
     text,
   )
   text = _AT_PRICE_RE.sub(
-    lambda match: f"{match.group(1)}{_format_event_price(match.group(2))}",
+    lambda match: (
+      f"{match.group(1)}{_format_event_price(match.group(2), symbol=symbol)}"
+    ),
     text,
   )
   text = re.sub(r"\s*·\s*(?=·|$)", "", text)
@@ -370,13 +389,14 @@ def _format_opened(
   if match is None:
     return None
   direction, _lots, entry, stop, stop_pips, details = match.groups()
+  symbol = _event_symbol(event)
   side_icon = "🟢" if direction.upper() == "BUY" else "🔴"
   full_tp = re.search(r"(?i)full TP\s+(\d+)p", details)
   range_box = re.search(r"(?i)range\s+([\d.,]+)-([\d.,]+)", details)
   lines = [
     "🤖 <b>ApexVoid Algo</b>",
     "✅ <b>ORDER FILLED</b>",
-    f"{side_icon} <b>XAU {direction.upper()} opened</b>",
+    f"{side_icon} <b>{escape(symbol)} {direction.upper()} opened</b>",
     "",
     f"📍 Entry: <b>{escape(entry)}</b>",
     f"🛡 SL: <b>{escape(stop)}</b> · {escape(stop_pips)} pips",
@@ -396,12 +416,14 @@ def _format_opened(
     try:
       entry_price = float(entry.replace(",", ""))
       target_price = entry_price + (
-        target_pips * units.pip_size("XAU")
+        target_pips * units.pip_size(symbol)
         if direction.upper() == "BUY"
-        else -target_pips * units.pip_size("XAU")
+        else -target_pips * units.pip_size(symbol)
       )
       lines.append(
-        f"🎯 Full TP: <b>{target_price:,.2f}</b> · +{target_pips} pips"
+        "🎯 Full TP: <b>"
+        f"{_format_event_price(str(target_price), symbol=symbol, grouped=True)}"
+        f"</b> · +{target_pips} pips"
       )
     except ValueError:
       lines.append(f"🎯 Full TP: <b>+{target_pips} pips</b>")
@@ -679,7 +701,7 @@ def _format_position_closed(event: dict, message: str) -> str:
     exit_price = _event_float(event, "price")
     if exit_price is not None:
       lines.append(
-        f"@ <b>{escape(_format_event_price(str(exit_price)))}</b>"
+        f"@ <b>{escape(_format_event_price(str(exit_price), symbol=_event_symbol(event)))}</b>"
       )
     elif cleaned and " lot=" not in cleaned.lower() and reason_label is None:
       lines.extend(["", escape(cleaned)])
@@ -699,6 +721,7 @@ def _format_strategy_route(event: dict) -> str | None:
   # candidate is not that, so this must not read "ready".
   headline = "🟢 <b>Algo bot PLAN PUBLISHED</b>"
   measured = event.get("measured") or {}
+  symbol = _event_symbol(event)
   strategy = escape(str(event.get("strategy") or "StrategyMatch"))
   direction = escape(str(event.get("direction") or ""))
   lines = [
@@ -711,7 +734,10 @@ def _format_strategy_route(event: dict) -> str | None:
   zone_high = measured.get("entry_high")
   zone_text = None
   if zone_low is not None and zone_high is not None:
-    zone_text = f"{float(zone_low):,.2f}–{float(zone_high):,.2f}"
+    zone_text = (
+      f"{_format_event_price(str(zone_low), symbol=symbol, grouped=True)}–"
+      f"{_format_event_price(str(zone_high), symbol=symbol, grouped=True)}"
+    )
 
   route = measured.get("planned_execution_route")
   planned_entry = measured.get("planned_entry_price")
@@ -720,7 +746,11 @@ def _format_strategy_route(event: dict) -> str | None:
   if route:
     lines.append(f"Route: <b>{escape(str(route))}</b>")
   if planned_entry is not None:
-    lines.append(f"Planned entry: <b>{float(planned_entry):,.2f}</b>")
+    lines.append(
+      "Planned entry: <b>"
+      f"{_format_event_price(str(planned_entry), symbol=symbol, grouped=True)}"
+      "</b>"
+    )
   if zone_text:
     lines.append(f"Zone: <b>{zone_text}</b>")
   if executor_distance is not None:
@@ -760,14 +790,15 @@ _SL_MOVED_RE = re.compile(
 
 def _format_tp_booked(event: dict, message: str) -> str | None:
   """Rich TP archive card — target + fill only (no per-leg / remaining dump)."""
-  cleaned = _clean_message(message)
+  symbol = _event_symbol(event)
+  cleaned = _clean_message(message, symbol=symbol)
   match = _TP_BOOKED_RE.match(cleaned)
   target = match.group("target").upper() if match else None
   plan_closed = "PLAN CLOSED" in cleaned.upper()
   price = event.get("price")
   try:
     price_text = (
-      None if price is None else _format_event_price(str(price))
+      None if price is None else _format_event_price(str(price), symbol=symbol)
     )
   except Exception:
     price_text = None
@@ -794,7 +825,8 @@ def _format_tp_booked(event: dict, message: str) -> str | None:
 
 def _format_sl_moved(event: dict, message: str) -> str | None:
   """Rich group stop-move card — BE / trail target with price."""
-  cleaned = _clean_message(message)
+  symbol = _event_symbol(event)
+  cleaned = _clean_message(message, symbol=symbol)
   match = _SL_MOVED_RE.match(cleaned)
   price = None
   details = ""
@@ -804,7 +836,7 @@ def _format_sl_moved(event: dict, message: str) -> str | None:
   if price is None:
     price_val = _event_float(event, "price", "stop_price", "new_stop")
     if price_val is not None:
-      price = _format_event_price(str(price_val))
+      price = _format_event_price(str(price_val), symbol=symbol)
   upper = cleaned.upper()
   if "TO BE" in upper or upper.startswith("GROUP SL MOVED TO BE"):
     kind = "Break-even"
@@ -850,7 +882,9 @@ def _format_stop_moved(
     return None
   return "\n".join([
     "🤖 <b>ApexVoid Algo</b>",
-    f"🛡 move SL to <b>{new_sl:,.2f}</b>",
+    "🛡 move SL to <b>"
+    f"{_format_event_price(str(new_sl), symbol=_event_symbol(event), grouped=True)}"
+    "</b>",
   ])
 
 
@@ -883,7 +917,10 @@ def render_auto_trade_event(
     return None
   if "duplicate_reaction" in reason_code or "active_thesis_group" in reason_code:
     return None
-  message = _clean_message(event.get("message", ""))
+  message = _clean_message(
+    event.get("message", ""),
+    symbol=_event_symbol(event),
+  )
   if "already_processed:duplicate_reaction_active" in message:
     return None
   if "already_processed:active_thesis_group" in message:
@@ -1320,7 +1357,10 @@ POSITION_ACTIVATED_STATUS_LINE = "✅ <b>POSITION ACTIVATED</b>"
 
 
 def _format_order_filled_manage_body(event: dict) -> str:
-  cleaned = _clean_message(event.get("message", "")) or "order filled"
+  cleaned = _clean_message(
+    event.get("message", ""),
+    symbol=_event_symbol(event),
+  ) or "order filled"
   return "\n".join([
     "🤖 <b>ApexVoid Algo</b>",
     "✅ <b>ORDER FILLED</b>",
@@ -1334,7 +1374,8 @@ def _format_tp_compact_line(event: dict, message: str) -> str | None:
   Exact owner format::
     🎯 TP1 · 💰 Fill: 4029.98 · ✅ Achieved: +41.0 pips
   """
-  cleaned = _clean_message(message)
+  symbol = _event_symbol(event)
+  cleaned = _clean_message(message, symbol=symbol)
   match = _TP_BOOKED_RE.match(cleaned)
   target = match.group("target").upper() if match else None
   if target is None:
@@ -1354,7 +1395,9 @@ def _format_tp_compact_line(event: dict, message: str) -> str | None:
   price = event.get("price")
   try:
     if price is not None:
-      parts.append(f"💰 Fill: {escape(_format_event_price(str(price)))}")
+      parts.append(
+        f"💰 Fill: {escape(_format_event_price(str(price), symbol=symbol))}"
+      )
   except Exception:
     pass
   archived_pips = _event_float(event, "target_pips", "leg_realized_pips")
@@ -1447,7 +1490,8 @@ def _format_position_closed_compact_line(event: dict, message: str) -> str:
 
 def _format_be_trail_head_status(event: dict, message: str) -> tuple[str, str, float | None]:
   """Short BE/trail manage-reply line + optional stop price."""
-  cleaned = _clean_message(message)
+  symbol = _event_symbol(event)
+  cleaned = _clean_message(message, symbol=symbol)
   match = _SL_MOVED_RE.match(cleaned)
   price_text = None
   details = ""
@@ -1456,7 +1500,7 @@ def _format_be_trail_head_status(event: dict, message: str) -> tuple[str, str, f
     details = str(match.group("details") or "").strip()
   price_val = _event_float(event, "price", "stop_price", "new_stop")
   if price_text is None and price_val is not None:
-    price_text = _format_event_price(str(price_val))
+    price_text = _format_event_price(str(price_val), symbol=symbol)
   if price_val is None and price_text is not None:
     try:
       price_val = float(str(price_text).replace(",", ""))
@@ -1467,7 +1511,7 @@ def _format_be_trail_head_status(event: dict, message: str) -> tuple[str, str, f
     if stop_match is not None:
       try:
         price_val = float(str(stop_match.group(1)).replace(",", ""))
-        price_text = _format_event_price(str(price_val))
+        price_text = _format_event_price(str(price_val), symbol=symbol)
       except (TypeError, ValueError):
         pass
   upper = cleaned.upper()
@@ -2375,7 +2419,9 @@ async def auto_trade_status_text() -> str:
     pip = pip_for(primary_symbol) or 0.0
     spread = f"{(ask - bid) / pip:.1f}p" if pip else f"{ask - bid:.2f}"
     lines.append(
-      f"💹 {escape(primary_symbol)} <b>{bid:,.2f}</b>/<b>{ask:,.2f}</b> · "
+      f"💹 {escape(primary_symbol)} "
+      f"<b>{_format_event_price(str(bid), symbol=primary_symbol, grouped=True)}</b>/"
+      f"<b>{_format_event_price(str(ask), symbol=primary_symbol, grouped=True)}</b> · "
       f"spread {spread}"
     )
   today_line = await _today_algo_scorecard_line()

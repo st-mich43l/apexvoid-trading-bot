@@ -20,20 +20,37 @@ from app.scalping.models import (
   ScalpContextSnapshot,
   deterministic_id,
 )
+from app.runtime.price_identity import rounded_price
 
 
 LIVE_SYMBOL = "XAU"
 
 
-def _hfs_symbols() -> set[str]:
-  from app.core.config import runtime_config
+def _hfs_symbols(cfg: Any | None = None) -> set[str]:
+  if cfg is None:
+    from app.core.config import runtime_config
 
-  live = {item.upper() for item in runtime_config.live_instruments()}
-  return live or {LIVE_SYMBOL}
+    cfg = runtime_config
+  live_instruments = getattr(cfg, "live_instruments", None)
+  if callable(live_instruments):
+    live = {item.upper() for item in live_instruments()}
+    return live or {LIVE_SYMBOL}
+  identity = getattr(cfg, "identity", None)
+  if identity is not None:
+    rollout = getattr(identity.rollout, "value", identity.rollout)
+    if str(rollout).lower() != "live":
+      return set()
+    return {
+      str(identity.instrument_id).upper(),
+      str(identity.canonical_symbol).upper(),
+      str(identity.broker_symbol).upper(),
+      *(str(alias).upper() for alias in identity.aliases),
+    }
+  return {LIVE_SYMBOL}
 
 
-def is_hfs_symbol(symbol: str) -> bool:
-  return str(symbol).upper() in _hfs_symbols()
+def is_hfs_symbol(symbol: str, cfg: Any | None = None) -> bool:
+  return str(symbol).upper() in _hfs_symbols(cfg)
 
 
 def classify_session(ts: int, cfg: Any | None = None) -> str:
@@ -162,14 +179,18 @@ def compute_context_id(
   active_range_low: float | None,
   active_range_high: float | None,
   structure: str,
+  pip_size: float = 0.1,
 ) -> str:
+  def identity_price(value: float | None) -> float | None:
+    return None if value is None else rounded_price(value, pip_size)
+
   return deterministic_id(
     symbol.upper(),
     m5_bar_ts,
-    None if dealing_range_low is None else round(float(dealing_range_low), 2),
-    None if dealing_range_high is None else round(float(dealing_range_high), 2),
-    None if active_range_low is None else round(float(active_range_low), 2),
-    None if active_range_high is None else round(float(active_range_high), 2),
+    identity_price(dealing_range_low),
+    identity_price(dealing_range_high),
+    identity_price(active_range_low),
+    identity_price(active_range_high),
     structure,
   )
 
@@ -178,8 +199,9 @@ def is_context_fresh(
   snapshot: ScalpContextSnapshot,
   now: int,
   max_age_seconds: int,
+  cfg: Any | None = None,
 ) -> bool:
-  if snapshot.symbol.upper() not in _hfs_symbols():
+  if snapshot.symbol.upper() not in _hfs_symbols(cfg):
     return False
   age = int(now) - int(snapshot.m5_bar_ts)
   return age <= max(0, int(max_age_seconds))
@@ -201,7 +223,7 @@ def build_scalp_context_snapshot(
   regime: str = "range",
 ) -> ScalpContextSnapshot | None:
   """Build an immutable M5 context. Fail closed for non-live / malformed."""
-  if not is_hfs_symbol(symbol):
+  if not is_hfs_symbol(symbol, cfg):
     return None
   if m5 is None or m5.empty or not math.isfinite(price) or price <= 0:
     return None
@@ -246,6 +268,7 @@ def build_scalp_context_snapshot(
     active_low,
     active_high,
     m5_structure,
+    pip_size,
   )
   return ScalpContextSnapshot(
     version=CONTEXT_VERSION,
@@ -314,8 +337,9 @@ async def save_context(
 async def load_current_context(
   client: Any,
   symbol: str,
+  cfg: Any | None = None,
 ) -> ScalpContextSnapshot | None:
-  if not is_hfs_symbol(symbol):
+  if not is_hfs_symbol(symbol, cfg):
     return None
   raw = await client.get(current_context_key(symbol))
   if raw is None:

@@ -30,6 +30,8 @@ from app.analysis.market_map import (
   market_map_from_payload,
 )
 from app.autotrade.strategy_match import StrategyMatch
+from app.autotrade import units
+from app.runtime.instrument_config import instrument_runtime_view
 
 
 EXECUTION_TIMEFRAME = "M1"
@@ -61,6 +63,27 @@ _STRUCTURAL_TAGS = {
 }
 
 log = logging.getLogger(__name__)
+
+
+def _pip_size(symbol: str, cfg: Any) -> float:
+  configured = getattr(getattr(cfg, "units", None), "pip_size", None)
+  return float(configured) if configured is not None else units.pip_size(symbol)
+
+
+def _price_text(symbol: str, value: float, cfg: Any) -> str:
+  configured = getattr(getattr(cfg, "units", None), "price_digits", None)
+  if configured is None:
+    from app.core.symbols import digits_for
+
+    configured = digits_for(symbol)
+  return f"{float(value):.{max(0, int(configured))}f}"
+
+
+def _distance_text(symbol: str, value: float, cfg: Any) -> str:
+  digits = getattr(getattr(cfg, "units", None), "price_digits", None)
+  if digits is None or int(digits) <= 2:
+    return f"{float(value):.1f}"
+  return f"{float(value):.{int(digits)}f}"
 
 
 @dataclass(frozen=True)
@@ -145,8 +168,7 @@ def evaluate_market_map_strategy(
   it next (the M1 candlestick trigger, P3).
   """
   if cfg is None:
-    from app.core.config import runtime_config
-    cfg = runtime_config
+    cfg = instrument_runtime_view(symbol)
   if not bool(cfg.strategies.mapped_zone.enabled):
     return MarketMapStrategyDecision("disabled")
   if spot_price is None or not math.isfinite(float(spot_price)):
@@ -189,6 +211,7 @@ def evaluate_market_map_strategy(
     float(cfg.actionability.gates.proximal_band_atr),
     cfg,
     rendered_map,
+    symbol,
   )
   # selection.selected is always None now: _select_reaction_detailed no
   # longer has any mechanism to promote a tracked zone to a hit (the M1
@@ -215,6 +238,7 @@ def _select_reaction(
   proximal_band_atr: float,
   cfg: Any = None,
   rendered_map: MarketMap | None = None,
+  symbol: str = "XAU",
 ) -> tuple[tuple[MapEntry, str, float, float] | None, str, tuple[str, ...]]:
   result = _select_reaction_detailed(
     market_map,
@@ -224,6 +248,7 @@ def _select_reaction(
     proximal_band_atr,
     cfg,
     rendered_map,
+    symbol,
   )
   selected = None if result.selected is None else (
     result.selected.entry,
@@ -242,10 +267,10 @@ def _select_reaction_detailed(
   proximal_band_atr: float,
   cfg: Any = None,
   rendered_map: MarketMap | None = None,
+  symbol: str = "XAU",
 ) -> _ReactionSelection:
   if cfg is None:
-    from app.core.config import runtime_config
-    cfg = runtime_config
+    cfg = instrument_runtime_view(symbol)
   bias_side = (
     "buy" if market_map.bias == "up"
     else "sell" if market_map.bias == "down"
@@ -328,7 +353,8 @@ def _select_reaction_detailed(
       _filter_counts(**counts),
     )
 
-  tolerance = max(0.05, max(0.0, proximal_band_atr) * atr)
+  pip_size = _pip_size(symbol, cfg)
+  tolerance = max(0.5 * pip_size, max(0.0, proximal_band_atr) * atr)
   ordered = sorted(
     candidates,
     key=lambda item: (
@@ -341,10 +367,6 @@ def _select_reaction_detailed(
   track_limit = track_limit_atr * atr
   execute_limit_atr = float(mapped_zone_execution.execute_distance_atr)
   execute_limit = execute_limit_atr * atr
-  # ``pip_size`` has no canonical path (symbol-derived) so keep the safe
-  # 0.1 default that mirrors the pre-migration ``getattr(cfg, "pip_size", 0.1)``
-  # fallback. Callers that need a per-symbol pip should pass one explicitly.
-  pip_size = 0.1
   # Small execution tolerance absorbs bid/ask, ATR recalc, and bar-vs-spot
   # rounding without turning distant tracked zones into market entries.
   exec_tol_pips = max(0.0, float(mapped_zone_execution.execute_tolerance_pips))
@@ -366,8 +388,13 @@ def _select_reaction_detailed(
       "no_zone_in_range",
       (
         f"no mapped {nearest_direction} zone within track distance "
-        f"(nearest {nearest.lo:.2f}-{nearest.hi:.2f} at {distance:.1f} price, "
-        f"track limit {track_limit_atr:.1f}×ATR = {track_limit:.1f})"
+        f"(nearest {_price_text(symbol, nearest.lo, cfg)}-"
+        f"{_price_text(symbol, nearest.hi, cfg)} at "
+        f"{_distance_text(symbol, distance, cfg)} price / "
+        f"{distance / pip_size:.1f} pips, "
+        f"track limit {track_limit_atr:.1f}×ATR = "
+        f"{_distance_text(symbol, track_limit, cfg)} price "
+        f"({track_limit / pip_size:.1f} pips))"
         f"{divergence}{_filter_summary(counts)}",
       ),
       len(market_map.entries),
@@ -390,9 +417,15 @@ def _select_reaction_detailed(
       None,
       "waiting_for_touch",
       (
-        f"nearest mapped {nearest_direction} zone {nearest.lo:.2f}-{nearest.hi:.2f} "
-        f"({distance:.1f} away · tracked, execute within {effective_execute_limit:.1f}"
-        f" = base {execute_limit:.1f} + tol {execute_tolerance:.1f})"
+        f"nearest mapped {nearest_direction} zone "
+        f"{_price_text(symbol, nearest.lo, cfg)}-"
+        f"{_price_text(symbol, nearest.hi, cfg)} "
+        f"({_distance_text(symbol, distance, cfg)} away · tracked, execute "
+        f"within {_distance_text(symbol, effective_execute_limit, cfg)} = "
+        f"base {_distance_text(symbol, execute_limit, cfg)} + tol "
+        f"{_distance_text(symbol, execute_tolerance, cfg)}; instrument geometry "
+        f"{distance / pip_size:.1f} pips away / "
+        f"{effective_execute_limit / pip_size:.1f} pips execute)"
         f"{divergence}{_filter_summary(counts)}",
       ),
       len(market_map.entries),
@@ -417,8 +450,13 @@ def _select_reaction_detailed(
     None,
     "waiting_for_touch",
     (
-      f"nearest mapped {nearest_direction} zone {nearest.lo:.2f}-{nearest.hi:.2f} "
-      f"({distance:.1f} away · tracked, execute within {effective_execute_limit:.1f}); "
+      f"nearest mapped {nearest_direction} zone "
+      f"{_price_text(symbol, nearest.lo, cfg)}-"
+      f"{_price_text(symbol, nearest.hi, cfg)} "
+      f"({_distance_text(symbol, distance, cfg)} away · tracked, execute within "
+      f"{_distance_text(symbol, effective_execute_limit, cfg)}; instrument geometry "
+      f"{distance / pip_size:.1f} pips away / "
+      f"{effective_execute_limit / pip_size:.1f} pips execute); "
       f"no entry trigger source configured"
       f"{divergence}{_filter_summary(counts)}",
     ),

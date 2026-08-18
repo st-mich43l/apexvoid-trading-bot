@@ -16,6 +16,7 @@ import pandas as pd
 from app.analysis.math_utils import atr_scalar
 from app.analysis.swings import find_swings
 from app.analysis.trendlines import value_at
+from app.runtime.price_identity import price_token
 
 
 def _resolve_cfg(cfg):
@@ -23,6 +24,13 @@ def _resolve_cfg(cfg):
     from app.core.config import runtime_config
     return runtime_config
   return cfg
+
+
+def _pip_size(cfg) -> float:
+  return max(
+    _EPS,
+    float(getattr(getattr(cfg, "units", None), "pip_size", 0.1)),
+  )
 
 RANGE_SCALP_LOOKBACK = 36
 RANGE_SCALP_CLUSTER_ATR = 0.20
@@ -382,7 +390,7 @@ def _cluster_tolerance(
     0.0,
     float(range_edge.cluster_min_abs),
   )
-  pip_size = 0.1
+  pip_size = _pip_size(cfg)
   pip_mult = max(
     0.0,
     float(getattr(range_edge, "cluster_pip_mult", RANGE_SCALP_CLUSTER_PIP_MULT)),
@@ -927,7 +935,11 @@ def _best_range_with_state(
         quality *= 0.75
       if state == RANGE_STATE_POST_IMPULSE:
         quality *= 0.85
-      range_id = f"{lower.level:.2f}-{upper.level:.2f}-{state}"
+      pip_size = _pip_size(cfg)
+      range_id = (
+        f"{price_token(lower.level, pip_size=pip_size)}-"
+        f"{price_token(upper.level, pip_size=pip_size)}-{state}"
+      )
       candidates.append(ScalpRange(
         lower,
         upper,
