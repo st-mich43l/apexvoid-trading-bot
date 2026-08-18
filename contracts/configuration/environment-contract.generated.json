@@ -1,6 +1,6 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "280b4886604dd550286e011c641ab33256ee1f769661544cd707e378191d499c",
+  "configuration_contract_fingerprint_sha256": "fc98c417552a4b287008435e5df8a9b6b198f7a6a797ff982f5fb1b4b8988ceb",
   "count": 453,
   "deprecated_alias_count": 21,
   "entries": [
@@ -1317,14 +1317,14 @@
       "default": 5,
       "deprecated": false,
       "deprecated_aliases": [],
-      "description": "cTrader configuration option AUTO_TRADE_MAX_SPREAD_PIPS controlling  (pips).",
+      "description": "Max bid/ask spread allowed at publish (pips).",
       "display_id": "config:execution.entry.max_spread_pips",
-      "owner": "ctrader",
+      "owner": "shared",
       "path": "execution.entry.max_spread_pips",
       "replacement_path": null,
       "required": false,
       "secret": false,
-      "shared_with_ctrader": false,
+      "shared_with_ctrader": true,
       "type": "int",
       "unit": "pips"
     },
@@ -7305,7 +7305,7 @@
     }
   ],
   "secret_count": 9,
-  "shared_with_ctrader_count": 86,
-  "source_fingerprint_sha256": "280b4886604dd550286e011c641ab33256ee1f769661544cd707e378191d499c",
+  "shared_with_ctrader_count": 87,
+  "source_fingerprint_sha256": "fc98c417552a4b287008435e5df8a9b6b198f7a6a797ff982f5fb1b4b8988ceb",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

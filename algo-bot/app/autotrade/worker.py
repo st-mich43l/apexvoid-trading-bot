@@ -4718,48 +4718,115 @@ async def _publish_trade_plan_v8(
     )
     return None
 
-  # Technique pack: killzone + sweep/body confirmation before V7 publish.
+  # Technique pack: pair reaction windows for non-scalp; HFS killzone for scalps.
   from app.autotrade.killzone import (
     confirmation_is_sweep_body,
     evaluate_killzone_gate,
+    evaluate_reaction_publish_window,
     technique_enforce,
+    technique_require_sweep_body,
   )
 
-  tech = getattr(runtime_config.execution, "technique", None)
-  enforce_pack = technique_enforce(runtime_config)
-  require_kz = True if tech is None else bool(
-    getattr(tech, "reaction_require_killzone", True),
+  inst = instrument_geometry.instrument_runtime(symbol)
+  tech = getattr(inst.execution, "technique", None)
+  enforce_pack = technique_enforce(inst)
+  candidate_is_scalp = is_scalp_strategy(
+    str(getattr(match, "strategy", "") or ""),
+    family=str(getattr(match, "strategy_family", "") or getattr(match, "family", "") or "")
+    or None,
+    strategy_mode=str(getattr(match, "strategy_mode", "") or "") or None,
   )
-  kz = evaluate_killzone_gate(
-    ts=int(getattr(spot, "ts", 0) or int(datetime.now(timezone.utc).timestamp())),
-    cfg=runtime_config,
-    require=require_kz and enforce_pack,
-  )
-  if not kz.allowed:
-    log.info(
-      "v8 publish blocked outside killzone symbol=%s match_id=%s "
-      "utc_hour=%s killzone=%s",
-      symbol,
-      match.match_id,
-      kz.utc_hour,
-      kz.killzone_name,
+  spot_ts = int(getattr(spot, "ts", 0) or int(datetime.now(timezone.utc).timestamp()))
+  if candidate_is_scalp:
+    require_kz = True if tech is None else bool(
+      getattr(tech, "hfs_require_killzone", True),
     )
-    await _record_v8_build_rejected(
-      client,
-      symbol,
-      match,
-      "outside_killzone",
-      "technique pack: executable publish blocked outside killzone",
-      {
-        "killzone_name": kz.killzone_name,
-        "utc_hour": kz.utc_hour,
-        **kz.measured,
-      },
+    kz = evaluate_killzone_gate(
+      ts=spot_ts,
+      cfg=inst,
+      require=require_kz and enforce_pack,
     )
-    return None
+    if not kz.allowed:
+      log.info(
+        "v8 publish blocked outside killzone symbol=%s match_id=%s "
+        "utc_hour=%s killzone=%s",
+        symbol,
+        match.match_id,
+        kz.utc_hour,
+        kz.killzone_name,
+      )
+      await _record_v8_build_rejected(
+        client,
+        symbol,
+        match,
+        "outside_killzone",
+        "technique pack: executable publish blocked outside killzone",
+        {
+          "killzone_name": kz.killzone_name,
+          "utc_hour": kz.utc_hour,
+          **kz.measured,
+        },
+      )
+      return None
+  else:
+    win = evaluate_reaction_publish_window(
+      ts=spot_ts,
+      cfg=inst,
+      require=enforce_pack,
+    )
+    if not win.allowed:
+      log.info(
+        "v8 publish waiting outside_reaction_publish_window symbol=%s "
+        "match_id=%s utc_hour=%s",
+        symbol,
+        match.match_id,
+        win.utc_hour,
+      )
+      await record_route_outcome(
+        client,
+        match,
+        stage="technique",
+        status="waiting",
+        reason_code="outside_reaction_publish_window",
+        message="technique pack: non-scalp publish waits for pair session window",
+        measured=dict(win.measured),
+        retained=True,
+        publish_status=False,
+      )
+      return None
+    require_kz = True if tech is None else bool(
+      getattr(tech, "reaction_require_killzone", True),
+    )
+    kz = evaluate_killzone_gate(
+      ts=spot_ts,
+      cfg=inst,
+      require=require_kz and enforce_pack,
+    )
+    if not kz.allowed:
+      log.info(
+        "v8 publish blocked outside killzone symbol=%s match_id=%s "
+        "utc_hour=%s killzone=%s",
+        symbol,
+        match.match_id,
+        kz.utc_hour,
+        kz.killzone_name,
+      )
+      await _record_v8_build_rejected(
+        client,
+        symbol,
+        match,
+        "outside_killzone",
+        "technique pack: executable publish blocked outside killzone",
+        {
+          "killzone_name": kz.killzone_name,
+          "utc_hour": kz.utc_hour,
+          **kz.measured,
+        },
+      )
+      return None
 
   if (
-    enforce_pack
+    technique_require_sweep_body(inst)
     and (
       is_reaction_strategy(match.strategy)
       or match.family in {
@@ -4815,7 +4882,7 @@ async def _publish_trade_plan_v8(
     match.entry_high,
     max(
       0.0,
-      float(runtime_config.execution.entry.contract_tolerance_pips) * pip_size,
+      float(inst.execution.entry.contract_tolerance_pips) * pip_size,
     ),
     pip_size=pip_size,
   )
@@ -5956,7 +6023,7 @@ async def _publish_trade_plan_v8(
       pip_size=Decimal(str(units.pip_size(symbol))),
       spot_price=spot.price,
       regime=None if regime is None else regime.state,
-      cfg=None,
+      cfg=inst,
       opposing_zone_low=opposing_kwargs.get(
         "opposing_zone_low", opposing_zone_low,
       ),

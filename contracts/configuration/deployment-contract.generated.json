@@ -490,7 +490,7 @@
     "XAU_ZONE_PREFERRED_MAX_WIDTH_PRICE": "instruments.XAU.analysis.zones.preferred_maximum_width_price",
     "XAU_ZONE_PREFERRED_MIN_WIDTH_PRICE": "instruments.XAU.analysis.zones.preferred_minimum_width_price"
   },
-  "fingerprint": "280b4886604dd550286e011c641ab33256ee1f769661544cd707e378191d499c",
+  "fingerprint": "fc98c417552a4b287008435e5df8a9b6b198f7a6a797ff982f5fb1b4b8988ceb",
   "instrument_schema": {
     "active_projection_symbol": "XAU",
     "optional": [

@@ -13,6 +13,11 @@ def _effective(symbol: str):
   return runtime_config.for_instrument(symbol)
 
 
+def instrument_runtime(symbol: str):
+  """Effective instrument config: technique windows, spread, stops, 2R."""
+  return _effective(symbol)
+
+
 def execution(symbol: str):
   """Per-instrument execution slice (FX stop/RR overrides live here)."""
   return _effective(symbol).execution

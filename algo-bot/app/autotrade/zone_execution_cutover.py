@@ -63,6 +63,7 @@ from app.autotrade.strategy_taxonomy import (
   is_scalp_strategy,
   is_technique_or_confluence,
 )
+from app.core import instrument_geometry
 from app.runtime.instrument_config import instrument_runtime_view
 from app.autotrade.zone_watch import (
   DISCOVERED,
@@ -609,11 +610,12 @@ def _location_and_activation_for_record(
     zone_low=record.low,
     zone_high=record.high,
   )
+  inst = instrument_geometry.instrument_runtime(record.symbol)
   location = evaluate_entry_location(
     strategy=match.strategy,
     direction=record.direction,
     context=context,
-    cfg=runtime_config,
+    cfg=inst,
   )
   from app.autotrade.execution_confirmation import confirmation_policy_for
 
@@ -629,7 +631,7 @@ def _location_and_activation_for_record(
     trigger=trigger,
     location_decision=location,
     now=int(now),
-    cfg=runtime_config,
+    cfg=inst,
     chase_pips=chase_pips,
     maximum_chase_pips=maximum_chase_pips,
     m5_authoritative=bool(confirmation.m5_authoritative),
@@ -659,45 +661,118 @@ async def _prepare_activation(
   now = quote[2]
   from app.autotrade.killzone import (
     evaluate_killzone_gate,
+    evaluate_reaction_publish_window,
     technique_enforce,
   )
-  from app.core.config import runtime_config
 
-  tech = getattr(runtime_config.execution, "technique", None)
-  require_kz = True if tech is None else bool(
-    getattr(tech, "reaction_require_killzone", True),
+  inst = instrument_geometry.instrument_runtime(record.symbol)
+  tech = getattr(inst.execution, "technique", None)
+  enforce_pack = technique_enforce(inst)
+  candidate_is_scalp = is_scalp_strategy(
+    str(getattr(match, "strategy", "") or ""),
+    family=str(getattr(match, "strategy_family", "") or getattr(match, "family", "") or "")
+    or None,
+    strategy_mode=str(getattr(match, "strategy_mode", "") or "") or None,
   )
-  kz = evaluate_killzone_gate(
-    ts=now,
-    cfg=runtime_config,
-    require=require_kz and technique_enforce(runtime_config),
-  )
-  if not kz.allowed:
-    log.info(
-      "entry activation blocked outside killzone symbol=%s zone_id=%s "
-      "utc_hour=%s killzone=%s reason=%s",
-      record.symbol,
-      record.zone_id,
-      kz.utc_hour,
-      kz.killzone_name,
-      kz.reason_code,
+  if candidate_is_scalp:
+    require_kz = True if tech is None else bool(
+      getattr(tech, "hfs_require_killzone", True),
     )
-    await _record_policy_telemetry(
-      client,
-      symbol=record.symbol,
-      kind="activation",
-      reason_code=kz.reason_code,
-      payload={
-        "symbol": record.symbol,
-        "zone_id": record.zone_id,
-        "strategy": match.strategy,
-        "direction": record.direction,
-        "killzone_name": kz.killzone_name,
-        "utc_hour": kz.utc_hour,
-        **kz.measured,
-      },
+    kz = evaluate_killzone_gate(
+      ts=now,
+      cfg=inst,
+      require=require_kz and enforce_pack,
     )
-    return None
+    if not kz.allowed:
+      log.info(
+        "entry activation blocked outside killzone symbol=%s zone_id=%s "
+        "utc_hour=%s killzone=%s reason=%s",
+        record.symbol,
+        record.zone_id,
+        kz.utc_hour,
+        kz.killzone_name,
+        kz.reason_code,
+      )
+      await _record_policy_telemetry(
+        client,
+        symbol=record.symbol,
+        kind="activation",
+        reason_code=kz.reason_code,
+        payload={
+          "symbol": record.symbol,
+          "zone_id": record.zone_id,
+          "strategy": match.strategy,
+          "direction": record.direction,
+          "killzone_name": kz.killzone_name,
+          "utc_hour": kz.utc_hour,
+          **kz.measured,
+        },
+      )
+      return None
+  else:
+    win = evaluate_reaction_publish_window(
+      ts=now,
+      cfg=inst,
+      require=enforce_pack,
+    )
+    if not win.allowed:
+      log.info(
+        "entry activation waiting outside_reaction_publish_window "
+        "symbol=%s zone_id=%s utc_hour=%s reason=%s",
+        record.symbol,
+        record.zone_id,
+        win.utc_hour,
+        win.reason_code,
+      )
+      await _record_policy_telemetry(
+        client,
+        symbol=record.symbol,
+        kind="activation",
+        reason_code=win.reason_code,
+        payload={
+          "symbol": record.symbol,
+          "zone_id": record.zone_id,
+          "strategy": match.strategy,
+          "direction": record.direction,
+          "utc_hour": win.utc_hour,
+          **win.measured,
+        },
+      )
+      return None
+    require_kz = True if tech is None else bool(
+      getattr(tech, "reaction_require_killzone", True),
+    )
+    kz = evaluate_killzone_gate(
+      ts=now,
+      cfg=inst,
+      require=require_kz and enforce_pack,
+    )
+    if not kz.allowed:
+      log.info(
+        "entry activation blocked outside killzone symbol=%s zone_id=%s "
+        "utc_hour=%s killzone=%s reason=%s",
+        record.symbol,
+        record.zone_id,
+        kz.utc_hour,
+        kz.killzone_name,
+        kz.reason_code,
+      )
+      await _record_policy_telemetry(
+        client,
+        symbol=record.symbol,
+        kind="activation",
+        reason_code=kz.reason_code,
+        payload={
+          "symbol": record.symbol,
+          "zone_id": record.zone_id,
+          "strategy": match.strategy,
+          "direction": record.direction,
+          "killzone_name": kz.killzone_name,
+          "utc_hour": kz.utc_hour,
+          **kz.measured,
+        },
+      )
+      return None
 
   stop_error = _match_planned_stop_hard_error(match)
   if stop_error is not None:

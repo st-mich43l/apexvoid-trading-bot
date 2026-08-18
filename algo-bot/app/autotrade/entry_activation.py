@@ -376,7 +376,11 @@ def evaluate_entry_activation(
   # Reaction / reversal / range / mapped / liquidity — prefer fresh M1;
   # fall back to in-zone M5-authoritative confirmation when M1 is absent
   # and technique.enforce is off.
-  from app.autotrade.killzone import confirmation_is_sweep_body, technique_enforce
+  from app.autotrade.killzone import (
+    confirmation_is_sweep_body,
+    technique_enforce,
+    technique_require_sweep_body,
+  )
 
   if requires_trigger:
     m1_fail_reason: str | None = None
@@ -396,7 +400,7 @@ def evaluate_entry_activation(
         elif str(trigger.direction).upper() != str(direction).upper():
           m1_fail_reason = "reaction_trigger_wrong_direction"
         else:
-          if technique_enforce(cfg):
+          if technique_require_sweep_body(cfg):
             pattern = str(trigger.pattern or "")
             measured["sweep_body_required"] = True
             if not confirmation_is_sweep_body(pattern):

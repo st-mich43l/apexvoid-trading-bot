@@ -1,7 +1,7 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "280b4886604dd550286e011c641ab33256ee1f769661544cd707e378191d499c",
-  "count": 95,
+  "configuration_contract_fingerprint_sha256": "fc98c417552a4b287008435e5df8a9b6b198f7a6a797ff982f5fb1b4b8988ceb",
+  "count": 96,
   "items": [
     {
       "allowed_values": [],
@@ -937,6 +937,37 @@
       "secret": false,
       "unit": "boolean",
       "validation_summary": "Pydantic required/type coercion only; EnvironmentResolver.Bool + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_MAX_SPREAD_PIPS",
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": 5,
+      "ctrader_type": "int",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 5
+        },
+        {
+          "context": "ctrader_from_environment",
+          "value": 5
+        }
+      ],
+      "deprecated_aliases": [],
+      "display_id": "config:execution.entry.max_spread_pips",
+      "evidence_notes": [],
+      "kind": "configurable",
+      "known_conflict": false,
+      "mismatch_policy": "fatal",
+      "path": "execution.entry.max_spread_pips",
+      "python_schema_default": 5,
+      "python_type": "int",
+      "secret": false,
+      "unit": "pips",
+      "validation_summary": "Pydantic required/type coercion only; EnvironmentResolver.Int + AutoTradeOptions.Validate"
     },
     {
       "allowed_values": [],
@@ -2964,6 +2995,6 @@
       "path": "strategies.mapped_zone.enabled"
     }
   ],
-  "source_fingerprint_sha256": "280b4886604dd550286e011c641ab33256ee1f769661544cd707e378191d499c",
+  "source_fingerprint_sha256": "fc98c417552a4b287008435e5df8a9b6b198f7a6a797ff982f5fb1b4b8988ceb",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

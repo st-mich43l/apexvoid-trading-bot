@@ -122,14 +122,9 @@ def _fights_fresh_macro_momentum(
 
 
 def _technique_require_sweep_body(cfg: Any) -> bool:
-  from app.autotrade.killzone import technique_enforce
+  from app.autotrade.killzone import technique_require_sweep_body
 
-  if not technique_enforce(cfg):
-    return False
-  tech = getattr(getattr(cfg, "execution", None), "technique", None)
-  if tech is None:
-    return True
-  return bool(getattr(tech, "require_sweep_body", True))
+  return technique_require_sweep_body(cfg)
 
 
 def _enabled(cfg: Any, name: str) -> bool:

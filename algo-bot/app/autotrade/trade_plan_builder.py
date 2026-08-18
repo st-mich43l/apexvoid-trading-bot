@@ -490,14 +490,14 @@ def build_trade_plan_from_strategy_match(
       )
       or 5
     )
-    price_digits = int(
-      getattr(
+    units_digits = getattr(getattr(cfg_resolved, "units", None), "price_digits", None)
+    if units_digits is None:
+      units_digits = getattr(
         getattr(getattr(cfg_resolved, "contract", None), "instrument", None),
         "price_digits",
         2,
       )
-      or 2
-    )
+    price_digits = int(units_digits or 2)
     resolved_max_spread_ticks = resolve_max_spread_ticks(
       max_spread_pips=max_spread_pips,
       pip_size=pip_size,
