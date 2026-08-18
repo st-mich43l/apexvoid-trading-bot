@@ -705,8 +705,8 @@ def stop_bounds_for_reaction_room(
       if execution.reaction.room_stop_min_rr is not None
       else 1.0
     ) or 1.0
-    # Owner envelope for reaction families is 40–60 on XAU. FX overrides
-    # this slice (12–25) so EURUSD structure can actually plan a stop.
+    # Owner envelope for reaction families is 40–60 on XAU. FX stop_envelope
+    # expands this slice so EURUSD/GBPJPY structure can actually plan a stop.
     reaction_min = int(
       execution.reaction.stop_min_pips
       if execution.reaction.stop_min_pips is not None

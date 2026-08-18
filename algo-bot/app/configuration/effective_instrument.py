@@ -25,6 +25,7 @@ from app.configuration.models.instruments import (
   InstrumentTargetingConfig,
   InstrumentZoneWidthConfig,
   InstrumentsConfig,
+  compose_instrument_domain_overrides,
   effective_rollout,
   resolve_policy_name,
 )
@@ -450,7 +451,8 @@ def build_effective_instrument(
       else _require_zones(key, instrument, runtime.analysis)
     )
 
-  _validate_overrides(key, instrument.overrides)
+  composed_overrides = compose_instrument_domain_overrides(instrument)
+  _validate_overrides(key, composed_overrides)
   (
     market_data,
     analysis,
@@ -459,7 +461,7 @@ def build_effective_instrument(
     execution,
     risk,
     lifecycle,
-  ) = _apply_domain_overrides(runtime, instrument.overrides)
+  ) = _apply_domain_overrides(runtime, composed_overrides)
 
   aliases = tuple(dict.fromkeys((
     *instrument.aliases,
@@ -508,11 +510,15 @@ def build_effective_instrument(
       source_name="instrument_registry",
     ),
   ]
-  for path in sorted(instrument.overrides):
+  for path in sorted(composed_overrides):
     provenance_entries.append(EffectiveValueProvenance(
       path=path,
       source_kind="instrument_override",
-      source_name=f"instruments.{key}.overrides",
+      source_name=(
+        f"instruments.{key}.overrides"
+        if path in instrument.overrides
+        else f"instruments.{key}.execution_pack"
+      ),
     ))
   # Preserve selected global traces for shared domains.
   for leaf in (
