@@ -326,7 +326,12 @@ instruments:
       execution.scaling.add.min_stop_pips: 12
       execution.stops.sl_distance: 0.30
       strategies.high_frequency_scalp.policy.minimum_reward_risk: 2.0
-    policy: fx_fixed_2r_v1
+      # 2026 dig: ATR(14) ~180 pips/day vs EURUSD's ~70, and BoE+BoJ events
+      # landing within 48h compound volatility instead of adding it
+      # ("volatility clusters"). Widen the news guard around either event
+      # instead of the flat 30m single-event window every pair gets.
+      actionability.gates.event_cluster_guard_enabled: true
+    policy: fx_fixed_2r_frontload_v1
     rollout: live
     targeting:
       mode: fixed_rr
@@ -335,10 +340,14 @@ instruments:
       - 1.0
       - 1.5
       - 2.0
+      # Front-loaded vs EURUSD/USDJPY's 25/25/50: GBPJPY's moves happen
+      # fast and reverse hard, so lock in more of the win at 1R instead of
+      # waiting out the full ladder and risking a violent snap-back giving
+      # it back.
       close_ratios:
+      - 0.40
       - 0.25
-      - 0.25
-      - 0.50
+      - 0.35
       trail_after_r: 1.5
       trail_to_r: 1.0
       entry_clips: 2
@@ -402,6 +411,13 @@ instruments:
       execution.scaling.add.min_stop_pips: 10
       execution.stops.sl_distance: 0.18
       strategies.high_frequency_scalp.policy.minimum_reward_risk: 2.0
+      # 2026 dig: Japan/US ran a record ~Y11.73T joint intervention when
+      # USDJPY breached 160 -- dollar snapped 163->~156-157, a 600+ pip
+      # reversal. Spot was ~159.47 when this was added, i.e. already at
+      # the edge of the defended level, not a hypothetical tail risk.
+      # Block fresh entries within 100 pips (1.0 price unit) of 160.
+      risk.exposure.defended_levels: '160'
+      risk.exposure.defended_level_buffer_price: 1.0
     policy: fx_fixed_2r_v1
     rollout: live
     targeting:

@@ -32,6 +32,9 @@
       "actionability.entry_location.trend_pullback.sell_minimum_position",
       "actionability.gates.edge_proximity_atr",
       "actionability.gates.eq_exclusion_fraction",
+      "actionability.gates.event_cluster_guard_enabled",
+      "actionability.gates.event_cluster_guard_minutes",
+      "actionability.gates.event_cluster_span_hours",
       "actionability.gates.htf_veto_enabled",
       "actionability.gates.market_map_guard_enabled",
       "actionability.gates.max_entry_atr",
@@ -328,6 +331,8 @@
       "market_data.watcher.interval_seconds",
       "risk.exposure.allow_concurrent_strategies",
       "risk.exposure.allow_hedged_xau",
+      "risk.exposure.defended_level_buffer_price",
+      "risk.exposure.defended_levels",
       "risk.exposure.non_hedged_opposite_policy",
       "risk.exposure.opposing_minimum_separation_price",
       "risk.exposure.require_flat_for_range",
@@ -490,7 +495,7 @@
     "XAU_ZONE_PREFERRED_MAX_WIDTH_PRICE": "instruments.XAU.analysis.zones.preferred_maximum_width_price",
     "XAU_ZONE_PREFERRED_MIN_WIDTH_PRICE": "instruments.XAU.analysis.zones.preferred_minimum_width_price"
   },
-  "fingerprint": "fc98c417552a4b287008435e5df8a9b6b198f7a6a797ff982f5fb1b4b8988ceb",
+  "fingerprint": "0440df81e1e672947a5943b69e3a6dc30642e66f0ce073d0ab63e4c1c17be30e",
   "instrument_schema": {
     "active_projection_symbol": "XAU",
     "optional": [

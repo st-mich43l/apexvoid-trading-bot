@@ -16,10 +16,25 @@ SUPPORTED_INSTRUMENT_TIMEFRAMES = frozenset({"H1", "M15", "M5", "M1", "H4", "D1"
 # Compatibility policy: inherit global trading domains from the resolved root.
 XAU_CURRENT_V1_POLICY = "xau_current_v1"
 FX_FIXED_2R_V1_POLICY = "fx_fixed_2r_v1"
+# 2026 GBP/JPY dig: ATR(14) ~180 pips/day vs EURUSD's ~70, and moves reverse
+# hard once they've run -- front-load profit-taking (40/25/35 instead of the
+# standard 25/25/50) so more of the win is locked in before a violent
+# snap-back gives it back. Same 2R ladder/trail/entry_clips as
+# fx_fixed_2r_v1, only the close_ratios split differs.
+FX_FIXED_2R_FRONTLOAD_V1_POLICY = "fx_fixed_2r_frontload_v1"
 REGISTERED_INSTRUMENT_POLICIES = frozenset({
   FX_FIXED_2R_V1_POLICY,
+  FX_FIXED_2R_FRONTLOAD_V1_POLICY,
   XAU_CURRENT_V1_POLICY,
 })
+
+# Required targeting.close_ratios per fixed_rr policy variant -- every other
+# fixed_rr field (reward_risk, target_r_multiples, trail_after_r, trail_to_r,
+# entry_clips) is shared across variants; only the close-ratio split differs.
+FIXED_RR_POLICY_CLOSE_RATIOS: dict[str, tuple[float, float, float]] = {
+  FX_FIXED_2R_V1_POLICY: (0.25, 0.25, 0.50),
+  FX_FIXED_2R_FRONTLOAD_V1_POLICY: (0.40, 0.25, 0.35),
+}
 
 
 class InstrumentRollout(StrEnum):
@@ -304,26 +319,29 @@ class InstrumentConfig(FrozenConfigModel):
       raise ValueError(
         "non-disabled instruments require contract configuration"
       )
-    if self.policy == FX_FIXED_2R_V1_POLICY and not (
+    required_close_ratios = FIXED_RR_POLICY_CLOSE_RATIOS.get(self.policy)
+    if required_close_ratios is not None and not (
       self.targeting.mode is InstrumentTargetMode.FIXED_RR
       and self.targeting.reward_risk == 2.0
       and self.targeting.target_r_multiples == (1.0, 1.5, 2.0)
-      and self.targeting.close_ratios == (0.25, 0.25, 0.50)
+      and self.targeting.close_ratios == required_close_ratios
       and self.targeting.trail_after_r == 1.5
       and self.targeting.trail_to_r == 1.0
       and self.targeting.entry_clips == 2
     ):
+      pct = tuple(f"{ratio:.0%}" for ratio in required_close_ratios)
       raise ValueError(
-        "fx_fixed_2r_v1 requires targeting.mode=fixed_rr and "
-        "targets 1R/1.5R/2R at 25%/25%/50%, trailing 1.5R to 1R, "
-        "entry_clips=2"
+        f"{self.policy} requires targeting.mode=fixed_rr and "
+        f"targets 1R/1.5R/2R at {pct[0]}/{pct[1]}/{pct[2]}, "
+        "trailing 1.5R to 1R, entry_clips=2"
       )
     if (
       self.targeting.mode is InstrumentTargetMode.FIXED_RR
-      and self.policy != FX_FIXED_2R_V1_POLICY
+      and self.policy not in FIXED_RR_POLICY_CLOSE_RATIOS
     ):
       raise ValueError(
-        "fixed_rr targeting requires policy=fx_fixed_2r_v1"
+        "fixed_rr targeting requires policy in "
+        + ", ".join(sorted(FIXED_RR_POLICY_CLOSE_RATIOS))
       )
     return self
 

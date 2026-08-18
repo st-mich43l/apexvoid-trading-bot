@@ -131,8 +131,8 @@
     "zone_reconcile_mode": "shadow",
     "zone_scale_undersized_policy": "single_entry"
   },
-  "contract_fingerprint": "fc98c417552a4b287008435e5df8a9b6b198f7a6a797ff982f5fb1b4b8988ceb",
-  "effective_configuration_fingerprint": "97efc522f93267870535194dce02f2baf4aa26c4201d935eb0ffda80266d5378",
+  "contract_fingerprint": "0440df81e1e672947a5943b69e3a6dc30642e66f0ce073d0ab63e4c1c17be30e",
+  "effective_configuration_fingerprint": "1678ad14b610a91028eb3108e6d567b1d57f884c4d1343cf43f526b2f7778d0b",
   "feed": {
     "backfill_bars": 1500,
     "bar_quality_lookback": 6,
@@ -231,6 +231,9 @@
         "gates": {
           "edge_proximity_atr": "0.5",
           "eq_exclusion_fraction": "0.15",
+          "event_cluster_guard_enabled": false,
+          "event_cluster_guard_minutes": 180,
+          "event_cluster_span_hours": 48,
           "htf_veto_enabled": true,
           "market_map_guard_enabled": false,
           "max_entry_atr": "2",
@@ -820,6 +823,8 @@
         "exposure": {
           "allow_concurrent_strategies": true,
           "allow_hedged_xau": false,
+          "defended_level_buffer_price": "0",
+          "defended_levels": "",
           "non_hedged_opposite_policy": "broker_netting",
           "opposing_minimum_separation_price": "0.0015",
           "require_flat_for_range": true
@@ -1114,6 +1119,9 @@
         "gates": {
           "edge_proximity_atr": "0.5",
           "eq_exclusion_fraction": "0.15",
+          "event_cluster_guard_enabled": true,
+          "event_cluster_guard_minutes": 180,
+          "event_cluster_span_hours": 48,
           "htf_veto_enabled": true,
           "market_map_guard_enabled": false,
           "max_entry_atr": "2",
@@ -1508,7 +1516,7 @@
           "retention_seconds": 604800
         }
       },
-      "policy_name": "fx_fixed_2r_v1",
+      "policy_name": "fx_fixed_2r_frontload_v1",
       "provenance": {
         "entries": [
           {
@@ -1528,6 +1536,12 @@
             "secret": false,
             "source_kind": "config_file",
             "source_name": "instrument_registry"
+          },
+          {
+            "path": "actionability.gates.event_cluster_guard_enabled",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.GBPJPY.overrides"
           },
           {
             "path": "analysis.levels.round_step",
@@ -1683,19 +1697,19 @@
             "path": "execution.entry.maximum_chase_distance_pips",
             "secret": false,
             "source_kind": "config_file",
-            "source_name": "fx_fixed_2r_v1"
+            "source_name": "fx_fixed_2r_frontload_v1"
           },
           {
             "path": "risk.sizing.mode",
             "secret": false,
             "source_kind": "config_file",
-            "source_name": "fx_fixed_2r_v1"
+            "source_name": "fx_fixed_2r_frontload_v1"
           },
           {
             "path": "lifecycle.candidate.execution_maximum_age_seconds",
             "secret": false,
             "source_kind": "config_file",
-            "source_name": "fx_fixed_2r_v1"
+            "source_name": "fx_fixed_2r_frontload_v1"
           }
         ]
       },
@@ -1703,6 +1717,8 @@
         "exposure": {
           "allow_concurrent_strategies": true,
           "allow_hedged_xau": false,
+          "defended_level_buffer_price": "0",
+          "defended_levels": "",
           "non_hedged_opposite_policy": "broker_netting",
           "opposing_minimum_separation_price": "0.25",
           "require_flat_for_range": true
@@ -1937,9 +1953,9 @@
       },
       "targeting": {
         "close_ratios": [
+          "0.4",
           "0.25",
-          "0.25",
-          "0.5"
+          "0.35"
         ],
         "entry_clips": 2,
         "mode": "fixed_rr",
@@ -1997,6 +2013,9 @@
         "gates": {
           "edge_proximity_atr": "0.5",
           "eq_exclusion_fraction": "0.15",
+          "event_cluster_guard_enabled": false,
+          "event_cluster_guard_minutes": 180,
+          "event_cluster_span_hours": 48,
           "htf_veto_enabled": true,
           "market_map_guard_enabled": false,
           "max_entry_atr": "2",
@@ -2545,6 +2564,18 @@
             "source_name": "instruments.USDJPY.overrides"
           },
           {
+            "path": "risk.exposure.defended_level_buffer_price",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.USDJPY.overrides"
+          },
+          {
+            "path": "risk.exposure.defended_levels",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.USDJPY.overrides"
+          },
+          {
             "path": "risk.exposure.opposing_minimum_separation_price",
             "secret": false,
             "source_kind": "instrument_override",
@@ -2586,6 +2617,8 @@
         "exposure": {
           "allow_concurrent_strategies": true,
           "allow_hedged_xau": false,
+          "defended_level_buffer_price": "1",
+          "defended_levels": "160",
           "non_hedged_opposite_policy": "broker_netting",
           "opposing_minimum_separation_price": "0.15",
           "require_flat_for_range": true
@@ -2880,6 +2913,9 @@
         "gates": {
           "edge_proximity_atr": "0.5",
           "eq_exclusion_fraction": "0.15",
+          "event_cluster_guard_enabled": false,
+          "event_cluster_guard_minutes": 180,
+          "event_cluster_span_hours": 48,
           "htf_veto_enabled": true,
           "market_map_guard_enabled": false,
           "max_entry_atr": "2",
@@ -3324,6 +3360,8 @@
         "exposure": {
           "allow_concurrent_strategies": true,
           "allow_hedged_xau": false,
+          "defended_level_buffer_price": "0",
+          "defended_levels": "",
           "non_hedged_opposite_policy": "broker_netting",
           "opposing_minimum_separation_price": "15",
           "require_flat_for_range": true
@@ -3612,6 +3650,9 @@
         "gates": {
           "edge_proximity_atr": "0.5",
           "eq_exclusion_fraction": "0.15",
+          "event_cluster_guard_enabled": false,
+          "event_cluster_guard_minutes": 180,
+          "event_cluster_span_hours": 48,
           "htf_veto_enabled": true,
           "market_map_guard_enabled": false,
           "max_entry_atr": "2",
@@ -4065,6 +4106,8 @@
         "exposure": {
           "allow_concurrent_strategies": true,
           "allow_hedged_xau": false,
+          "defended_level_buffer_price": "0",
+          "defended_levels": "",
           "non_hedged_opposite_policy": "broker_netting",
           "opposing_minimum_separation_price": "0.0015",
           "require_flat_for_range": true
@@ -4358,6 +4401,9 @@
         "gates": {
           "edge_proximity_atr": "0.5",
           "eq_exclusion_fraction": "0.15",
+          "event_cluster_guard_enabled": true,
+          "event_cluster_guard_minutes": 180,
+          "event_cluster_span_hours": 48,
           "htf_veto_enabled": true,
           "market_map_guard_enabled": false,
           "max_entry_atr": "2",
@@ -4616,7 +4662,7 @@
           "m5_bars": 150
         }
       },
-      "policy_name": "fx_fixed_2r_v1",
+      "policy_name": "fx_fixed_2r_frontload_v1",
       "provenance": {
         "entries": [
           {
@@ -4636,6 +4682,12 @@
             "secret": false,
             "source_kind": "config_file",
             "source_name": "instrument_registry"
+          },
+          {
+            "path": "actionability.gates.event_cluster_guard_enabled",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.GBPJPY.overrides"
           },
           {
             "path": "analysis.levels.round_step",
@@ -4791,19 +4843,19 @@
             "path": "execution.entry.maximum_chase_distance_pips",
             "secret": false,
             "source_kind": "config_file",
-            "source_name": "fx_fixed_2r_v1"
+            "source_name": "fx_fixed_2r_frontload_v1"
           },
           {
             "path": "risk.sizing.mode",
             "secret": false,
             "source_kind": "config_file",
-            "source_name": "fx_fixed_2r_v1"
+            "source_name": "fx_fixed_2r_frontload_v1"
           },
           {
             "path": "lifecycle.candidate.execution_maximum_age_seconds",
             "secret": false,
             "source_kind": "config_file",
-            "source_name": "fx_fixed_2r_v1"
+            "source_name": "fx_fixed_2r_frontload_v1"
           }
         ]
       },
@@ -4811,6 +4863,8 @@
         "exposure": {
           "allow_concurrent_strategies": true,
           "allow_hedged_xau": false,
+          "defended_level_buffer_price": "0",
+          "defended_levels": "",
           "non_hedged_opposite_policy": "broker_netting",
           "opposing_minimum_separation_price": "0.25",
           "require_flat_for_range": true
@@ -5044,9 +5098,9 @@
       },
       "targeting": {
         "close_ratios": [
+          "0.4",
           "0.25",
-          "0.25",
-          "0.5"
+          "0.35"
         ],
         "entry_clips": 2,
         "mode": "fixed_rr",
@@ -5104,6 +5158,9 @@
         "gates": {
           "edge_proximity_atr": "0.5",
           "eq_exclusion_fraction": "0.15",
+          "event_cluster_guard_enabled": false,
+          "event_cluster_guard_minutes": 180,
+          "event_cluster_span_hours": 48,
           "htf_veto_enabled": true,
           "market_map_guard_enabled": false,
           "max_entry_atr": "2",
@@ -5516,6 +5573,18 @@
             "source_name": "instruments.USDJPY.overrides"
           },
           {
+            "path": "risk.exposure.defended_level_buffer_price",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.USDJPY.overrides"
+          },
+          {
+            "path": "risk.exposure.defended_levels",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.USDJPY.overrides"
+          },
+          {
             "path": "risk.exposure.opposing_minimum_separation_price",
             "secret": false,
             "source_kind": "instrument_override",
@@ -5557,6 +5626,8 @@
         "exposure": {
           "allow_concurrent_strategies": true,
           "allow_hedged_xau": false,
+          "defended_level_buffer_price": "1",
+          "defended_levels": "160",
           "non_hedged_opposite_policy": "broker_netting",
           "opposing_minimum_separation_price": "0.15",
           "require_flat_for_range": true
@@ -5850,6 +5921,9 @@
         "gates": {
           "edge_proximity_atr": "0.5",
           "eq_exclusion_fraction": "0.15",
+          "event_cluster_guard_enabled": false,
+          "event_cluster_guard_minutes": 180,
+          "event_cluster_span_hours": 48,
           "htf_veto_enabled": true,
           "market_map_guard_enabled": false,
           "max_entry_atr": "2",
@@ -6155,6 +6229,8 @@
         "exposure": {
           "allow_concurrent_strategies": true,
           "allow_hedged_xau": false,
+          "defended_level_buffer_price": "0",
+          "defended_levels": "",
           "non_hedged_opposite_policy": "broker_netting",
           "opposing_minimum_separation_price": "15",
           "require_flat_for_range": true

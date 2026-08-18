@@ -438,6 +438,27 @@ async def event_in_window(now: int, horizon: int) -> dict | None:
   return dict(row) if row else None
 
 
+async def nearest_currency_event(
+  currency: str, start_utc: int, end_utc: int, anchor: int,
+) -> dict | None:
+  """Nearest-to-anchor high-impact timed event for one currency in a span."""
+  async with _connect() as db:
+    row = await db.fetchrow(
+      """
+      SELECT * FROM events
+      WHERE impact = 'High'
+        AND all_day = 0
+        AND currency = $1
+        AND ts_utc >= $2
+        AND ts_utc <= $3
+      ORDER BY ABS(ts_utc - $4) ASC, ts_utc ASC
+      LIMIT 1
+      """,
+      currency.upper(), start_utc, end_utc, anchor,
+    )
+  return dict(row) if row else None
+
+
 async def get_meta(key: str) -> str | None:
   async with _connect() as db:
     return await db.fetchval("SELECT value FROM meta WHERE key = $1", key)

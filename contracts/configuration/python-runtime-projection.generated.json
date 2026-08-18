@@ -1,6 +1,6 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "fc98c417552a4b287008435e5df8a9b6b198f7a6a797ff982f5fb1b4b8988ceb",
+  "configuration_contract_fingerprint_sha256": "0440df81e1e672947a5943b69e3a6dc30642e66f0ce073d0ab63e4c1c17be30e",
   "excluded_ctrader_only_count": 49,
   "excluded_paths": [
     "bootstrap.ctrader.connection.host",
@@ -53,7 +53,7 @@
     "risk.sizing.add_require_risk_free",
     "risk.sizing.risk_pct"
   ],
-  "included_leaf_count": 471,
+  "included_leaf_count": 476,
   "included_paths": [
     "actionability.contested_corridor.gap_atr",
     "actionability.counter_bias.allowed",
@@ -74,6 +74,9 @@
     "actionability.entry_location.trend_pullback.sell_minimum_position",
     "actionability.gates.edge_proximity_atr",
     "actionability.gates.eq_exclusion_fraction",
+    "actionability.gates.event_cluster_guard_enabled",
+    "actionability.gates.event_cluster_guard_minutes",
+    "actionability.gates.event_cluster_span_hours",
     "actionability.gates.htf_veto_enabled",
     "actionability.gates.market_map_guard_enabled",
     "actionability.gates.max_entry_atr",
@@ -382,6 +385,8 @@
     "market_data.watcher.interval_seconds",
     "risk.exposure.allow_concurrent_strategies",
     "risk.exposure.allow_hedged_xau",
+    "risk.exposure.defended_level_buffer_price",
+    "risk.exposure.defended_levels",
     "risk.exposure.non_hedged_opposite_policy",
     "risk.exposure.opposing_minimum_separation_price",
     "risk.exposure.require_flat_for_range",
@@ -530,6 +535,6 @@
   "included_secret_count": 6,
   "included_shared_field_count": 96,
   "projection_model": "app.configuration.models.python_runtime.PythonRuntimeConfig",
-  "source_fingerprint_sha256": "fc98c417552a4b287008435e5df8a9b6b198f7a6a797ff982f5fb1b4b8988ceb",
+  "source_fingerprint_sha256": "0440df81e1e672947a5943b69e3a6dc30642e66f0ce073d0ab63e4c1c17be30e",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

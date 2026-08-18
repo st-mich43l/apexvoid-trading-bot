@@ -1,7 +1,7 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "fc98c417552a4b287008435e5df8a9b6b198f7a6a797ff982f5fb1b4b8988ceb",
-  "count": 453,
+  "configuration_contract_fingerprint_sha256": "0440df81e1e672947a5943b69e3a6dc30642e66f0ce073d0ab63e4c1c17be30e",
+  "count": 458,
   "deprecated_alias_count": 21,
   "entries": [
     {
@@ -589,6 +589,38 @@
       "unit": "enum"
     },
     {
+      "canonical_env": "AUTO_TRADE_DEFENDED_LEVELS",
+      "default": "",
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Comma-separated macro-significant price levels (e.g. a central-bank-defended level) this instrument treats as an elevated reversal-risk zone within defended_level_buffer_price. Empty disables the guard.",
+      "display_id": "config:risk.exposure.defended_levels",
+      "owner": "python",
+      "path": "risk.exposure.defended_levels",
+      "replacement_path": null,
+      "required": false,
+      "secret": false,
+      "shared_with_ctrader": false,
+      "type": "str",
+      "unit": "string"
+    },
+    {
+      "canonical_env": "AUTO_TRADE_DEFENDED_LEVEL_BUFFER_PRICE",
+      "default": 0.0,
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Distance (price units) from the nearest defended_levels entry within which new entries are blocked. 0 disables the guard.",
+      "display_id": "config:risk.exposure.defended_level_buffer_price",
+      "owner": "python",
+      "path": "risk.exposure.defended_level_buffer_price",
+      "replacement_path": null,
+      "required": false,
+      "secret": false,
+      "shared_with_ctrader": false,
+      "type": "float",
+      "unit": "price"
+    },
+    {
       "canonical_env": "AUTO_TRADE_DEMAND_REACTION_ENABLED",
       "default": true,
       "deprecated": false,
@@ -747,6 +779,54 @@
       "shared_with_ctrader": false,
       "type": "float",
       "unit": "fraction"
+    },
+    {
+      "canonical_env": "AUTO_TRADE_EVENT_CLUSTER_GUARD_ENABLED",
+      "default": false,
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Widen the news guard when both of an instrument constituent currencies have a high-impact event within event_cluster_span_hours of each other (2026 GBP/JPY: BoE data + BoJ policy in the same 48h window compounds volatility rather than adding it).",
+      "display_id": "config:actionability.gates.event_cluster_guard_enabled",
+      "owner": "python",
+      "path": "actionability.gates.event_cluster_guard_enabled",
+      "replacement_path": null,
+      "required": false,
+      "secret": false,
+      "shared_with_ctrader": false,
+      "type": "bool",
+      "unit": "boolean"
+    },
+    {
+      "canonical_env": "AUTO_TRADE_EVENT_CLUSTER_GUARD_MINUTES",
+      "default": 180,
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Guard window applied around each clustered event instead of the normal news_guard_minutes, once a compounding cluster is detected (minutes).",
+      "display_id": "config:actionability.gates.event_cluster_guard_minutes",
+      "owner": "python",
+      "path": "actionability.gates.event_cluster_guard_minutes",
+      "replacement_path": null,
+      "required": false,
+      "secret": false,
+      "shared_with_ctrader": false,
+      "type": "int",
+      "unit": "minutes"
+    },
+    {
+      "canonical_env": "AUTO_TRADE_EVENT_CLUSTER_SPAN_HOURS",
+      "default": 48,
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Window searched for a compounding second-currency high-impact event (hours).",
+      "display_id": "config:actionability.gates.event_cluster_span_hours",
+      "owner": "python",
+      "path": "actionability.gates.event_cluster_span_hours",
+      "replacement_path": null,
+      "required": false,
+      "secret": false,
+      "shared_with_ctrader": false,
+      "type": "int",
+      "unit": "hours"
     },
     {
       "canonical_env": "AUTO_TRADE_EVENT_STREAM",
@@ -7306,6 +7386,6 @@
   ],
   "secret_count": 9,
   "shared_with_ctrader_count": 87,
-  "source_fingerprint_sha256": "fc98c417552a4b287008435e5df8a9b6b198f7a6a797ff982f5fb1b4b8988ceb",
+  "source_fingerprint_sha256": "0440df81e1e672947a5943b69e3a6dc30642e66f0ce073d0ab63e4c1c17be30e",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

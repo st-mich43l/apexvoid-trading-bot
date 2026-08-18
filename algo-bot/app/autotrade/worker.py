@@ -229,7 +229,7 @@ from app.autotrade.trend import (
 from app.core.config import runtime_config
 from app.runtime.instrument_config import instrument_runtime_view
 from app.runtime.price_identity import price_token
-from app.persistence.store import event_in_window
+from app.persistence.store import event_in_window, nearest_currency_event
 from app.analysis.ohlc_source import RedisOHLCSource, window_for_timeframe
 from app.analysis.math_utils import atr_series
 from app.analysis.types import Level, Zone
@@ -1588,6 +1588,56 @@ def _opposing_barrier_decision(
   )
 
 
+def _defended_level_guard(
+  symbol: str, entry_reference: float, *, guard_mode: str,
+) -> ExecutionGuardDecision:
+  """Block a fresh entry near a macro-significant defended price level.
+
+  2026 USDJPY dig: Japan/the US ran a record ~Y11.73T (~$73B) joint
+  intervention specifically when USDJPY breached 160 -- the dollar
+  snapped from 163 to ~156-157 within days, a 600+ pip reversal. With
+  spot sitting at ~159.47 as of this guard's introduction, that is not a
+  hypothetical tail risk. Unlike the opposing-barrier guard (discovered
+  market structure), this fires on distance to a configured macro level
+  and is unconditional (hard_geometry=True) -- guard_mode is currently
+  "observe" globally, which would make this a no-op warning if it
+  deferred to guard_mode like most other soft signals. Off by default
+  (defended_levels empty / buffer 0); currently only configured for
+  USDJPY.
+  """
+  levels = instrument_geometry.defended_levels(symbol)
+  buffer_price = instrument_geometry.defended_level_buffer_price(symbol)
+  if not levels or buffer_price <= 0:
+    return ExecutionGuardDecision(
+      "defended_level",
+      OUTCOME_ALLOW,
+      "no_defended_level_configured",
+      "no defended level configured",
+      False,
+    )
+  nearest = min(levels, key=lambda level: abs(level - entry_reference))
+  distance = abs(nearest - entry_reference)
+  if distance > buffer_price:
+    return ExecutionGuardDecision(
+      "defended_level",
+      OUTCOME_ALLOW,
+      "no_defended_level_nearby",
+      f"nearest defended level {nearest:.5f} is {distance:.5f} away",
+      False,
+    )
+  message = (
+    f"entry {entry_reference:.5f} is {distance:.5f} from defended level "
+    f"{nearest:.5f} (buffer {buffer_price:.5f})"
+  )
+  return classify_guard_severity(
+    "defended_level",
+    "entry_near_defended_level",
+    message,
+    guard_mode=guard_mode,
+    hard_geometry=True,
+  )
+
+
 def _opposing_barrier_reason(
   direction: str,
   entry_reference: float,
@@ -2774,6 +2824,67 @@ def _trend_bias_metadata(
   return bias, "with_bias" if bias == local_bias else "counter_bias"
 
 
+def _instrument_currencies(symbol: str) -> tuple[str, str] | None:
+  """Split a 6-letter FX pair like 'GBPJPY' into ('GBP', 'JPY').
+
+  None for anything that isn't a two-fiat-currency pair (XAU and friends),
+  so the event-cluster guard below safely no-ops for them.
+  """
+  upper = symbol.upper()
+  if len(upper) != 6 or not upper.isalpha():
+    return None
+  first, second = upper[:3], upper[3:]
+  return None if first == second else (first, second)
+
+
+async def _event_cluster_guard(symbol: str, now: int) -> dict | None:
+  """Widened news guard for a compounding event cluster.
+
+  2026 GBP/JPY dig: a BoE data print and a BoJ policy statement landing in
+  the same 48h window compounds volatility rather than adding it -- the
+  single-event news_guard_minutes window (30m by default) is far too
+  narrow to cover that. When both of this instrument's constituent
+  currencies have a high-impact event within event_cluster_span_hours of
+  each other, apply the wider event_cluster_guard_minutes window around
+  whichever event is nearer to `now` instead. Off by default
+  (event_cluster_guard_enabled); currently only turned on for GBPJPY.
+  """
+  gates = runtime_config.actionability.gates
+  if not gates.event_cluster_guard_enabled:
+    return None
+  currencies = _instrument_currencies(symbol)
+  if currencies is None:
+    return None
+  span = max(1, gates.event_cluster_span_hours) * 3600
+  first_currency, second_currency = currencies
+  first_event = await nearest_currency_event(
+    first_currency, now - span, now + span, now,
+  )
+  second_event = await nearest_currency_event(
+    second_currency, now - span, now + span, now,
+  )
+  if first_event is None or second_event is None:
+    return None
+  nearer = min(
+    (first_event, second_event),
+    key=lambda event: abs(int(event["ts_utc"]) - now),
+  )
+  guard_window = max(0, gates.event_cluster_guard_minutes) * 60
+  if abs(int(nearer["ts_utc"]) - now) > guard_window:
+    return None
+  return nearer
+
+
+async def _news_guard_hit(symbol: str, now: int) -> dict | None:
+  """The normal single-event news guard, widened by an event-cluster hit."""
+  cluster_hit = await _event_cluster_guard(symbol, now)
+  if cluster_hit is not None:
+    return cluster_hit
+  return await event_in_window(
+    now, max(0, runtime_config.actionability.gates.news_guard_minutes) * 60,
+  )
+
+
 async def _publish_candidate(
   client: Any,
   symbol: str,
@@ -2985,9 +3096,8 @@ async def _publish_candidate(
 
   now = int(datetime.now(timezone.utc).timestamp())
   try:
-    guarded = await event_in_window(
-      now,
-      max(0, runtime_config.actionability.gates.news_guard_minutes) * 60,
+    guarded = await _news_guard_hit(
+      symbol, now,
     )
   except Exception:
     log.exception("auto-scalp candidate blocked: news guard unavailable")
@@ -3887,9 +3997,8 @@ async def _publish_strategy_match(
   )
   now = int(datetime.now(timezone.utc).timestamp())
   try:
-    guarded = await event_in_window(
-      now,
-      max(0, runtime_config.actionability.gates.news_guard_minutes) * 60,
+    guarded = await _news_guard_hit(
+      symbol, now,
     )
   except Exception:
     log.exception("strategy match blocked: news guard unavailable")
@@ -5739,6 +5848,20 @@ async def _publish_trade_plan_v8(
     )
     return None
 
+  # Defended-level guard applies to every strategy family, unlike the
+  # opposing-barrier bypass above -- a scalp entry right at a macro level
+  # carries the same intervention-reversal risk as any other entry.
+  defended_outcome = _defended_level_guard(
+    symbol, spot.price, guard_mode=guard_mode,
+  )
+  if defended_outcome.hard_block:
+    await _release_claims()
+    await _record_v8_build_rejected(
+      client, symbol, match, defended_outcome.reason_code,
+      defended_outcome.message, defended_outcome.measured,
+    )
+    return None
+
   # HTF veto: reject when the nearest opposing HTF zone is still untested and
   # ahead of the executable quote (defect 4: a short taken below untested
   # supply). Preflight used to enforce this; V7 owns it now. Scalps with
@@ -5805,9 +5928,8 @@ async def _publish_trade_plan_v8(
   # executable=True behavior).
   news_now = int(datetime.now(timezone.utc).timestamp())
   try:
-    news_event = await event_in_window(
-      news_now,
-      max(0, runtime_config.actionability.gates.news_guard_minutes) * 60,
+    news_event = await _news_guard_hit(
+      symbol, news_now,
     )
   except Exception:
     await _release_claims()
@@ -6525,9 +6647,8 @@ async def _publish_trend_candidate(
 
   now = int(datetime.now(timezone.utc).timestamp())
   try:
-    guarded = await event_in_window(
-      now,
-      max(0, runtime_config.actionability.gates.news_guard_minutes) * 60,
+    guarded = await _news_guard_hit(
+      symbol, now,
     )
   except Exception:
     log.exception("auto-trend candidate blocked: news guard unavailable")

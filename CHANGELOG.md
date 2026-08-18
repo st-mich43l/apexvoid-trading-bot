@@ -17,6 +17,24 @@ dated section after deployment.
   pip/lot/zone geometry (pip 0.01, pip value ~6.27/lot at current spot), and
   a Tokyo+London+NY reaction-publish window (`0-3,7-11,13-16` UTC) reflecting
   its liquidity across all three sessions as a USD/JPY major.
+- Per-symbol position-management mechanisms, grounded in each pair's real
+  2026 behavior:
+  - USDJPY: a defended-level guard hard-blocks new entries within a
+    configurable price buffer of a macro-significant level. Japan/the US
+    ran a record ~¥11.73T joint intervention specifically when USDJPY
+    breached 160 (dollar snapped 163→~156-157, a 600+ pip reversal); with
+    spot sitting at ~159.47 when this shipped, USDJPY is configured with
+    `defended_levels: '160'` and a 100-pip buffer.
+  - GBPJPY: a new `fx_fixed_2r_frontload_v1` policy front-loads partial
+    exits (40%/25%/35% vs the standard 25%/25%/50%) — same 1R/1.5R/2R
+    ladder, more of the win locked in at 1R before a violent snap-back can
+    give it back (ATR(14) ~180 pips/day vs EURUSD's ~70). Also gains an
+    event-cluster news guard: when both GBP and JPY have a high-impact
+    calendar event within 48h ("volatility clusters" — a BoE print and a
+    BoJ statement compound rather than add), the news guard widens from
+    the normal 30-minute single-event window to 3 hours around whichever
+    event is nearer. Off by default (`event_cluster_guard_enabled`);
+    currently only turned on for GBPJPY.
 
 ### Changed
 - Price-action, Market Map, mapped-zone, range/trend, and HFS paths now consume

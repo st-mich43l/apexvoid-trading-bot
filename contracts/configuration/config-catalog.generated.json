@@ -1,20 +1,20 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "fc98c417552a4b287008435e5df8a9b6b198f7a6a797ff982f5fb1b4b8988ceb",
-  "configuration_document_fingerprint_sha256": "b9dbe60567b4b77a4737778c3b26b511881f05d0e90c7cb333e530a933f15e5d",
+  "configuration_contract_fingerprint_sha256": "0440df81e1e672947a5943b69e3a6dc30642e66f0ce073d0ab63e4c1c17be30e",
+  "configuration_document_fingerprint_sha256": "c2398f84a01af2faa808822952cc8e502af9d8813196d4bddaeb7a6d7b80bf05",
   "counts": {
     "algorithm_constants": 57,
-    "configurable": 453,
+    "configurable": 458,
     "known_conflicts": 30,
     "owners": {
       "ctrader": 49,
-      "python": 375,
+      "python": 380,
       "shared": 96
     },
     "protocol_constants": 10,
     "secrets": 9,
     "shared": 96,
-    "total_items": 520
+    "total_items": 525
   },
   "items": [
     {
@@ -762,6 +762,117 @@
       "terminal_deprecation_reason": null,
       "type": "float",
       "unit": "fraction",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_EVENT_CLUSTER_GUARD_ENABLED",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {},
+      "default": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": false
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Widen the news guard when both of an instrument constituent currencies have a high-impact event within event_cluster_span_hours of each other (2026 GBP/JPY: BoE data + BoJ policy in the same 48h window compounds volatility rather than adding it).",
+      "display_id": "config:actionability.gates.event_cluster_guard_enabled",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "actionability.gates.event_cluster_guard_enabled",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "execution_safety",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "bool",
+      "unit": "boolean",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_EVENT_CLUSTER_GUARD_MINUTES",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {},
+      "default": 180,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 180
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Guard window applied around each clustered event instead of the normal news_guard_minutes, once a compounding cluster is detected (minutes).",
+      "display_id": "config:actionability.gates.event_cluster_guard_minutes",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "actionability.gates.event_cluster_guard_minutes",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "execution_safety",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "int",
+      "unit": "minutes",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_EVENT_CLUSTER_SPAN_HOURS",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {},
+      "default": 48,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 48
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Window searched for a compounding second-currency high-impact event (hours).",
+      "display_id": "config:actionability.gates.event_cluster_span_hours",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "actionability.gates.event_cluster_span_hours",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "execution_safety",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "int",
+      "unit": "hours",
       "validation_summary": "Pydantic required/type coercion only"
     },
     {
@@ -13968,6 +14079,80 @@
     },
     {
       "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_DEFENDED_LEVEL_BUFFER_PRICE",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {},
+      "default": 0.0,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 0.0
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Distance (price units) from the nearest defended_levels entry within which new entries are blocked. 0 disables the guard.",
+      "display_id": "config:risk.exposure.defended_level_buffer_price",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "risk.exposure.defended_level_buffer_price",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "broker_account_safety",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "float",
+      "unit": "price",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_DEFENDED_LEVELS",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {},
+      "default": "",
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": ""
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Comma-separated macro-significant price levels (e.g. a central-bank-defended level) this instrument treats as an elevated reversal-risk zone within defended_level_buffer_price. Empty disables the guard.",
+      "display_id": "config:risk.exposure.defended_levels",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "risk.exposure.defended_levels",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "broker_account_safety",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "str",
+      "unit": "string",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
       "allowed_values": [
         "broker_netting",
         "close_then_reverse",
@@ -19496,6 +19681,6 @@
       "validation_summary": "Pydantic required/type coercion only"
     }
   ],
-  "source_fingerprint_sha256": "fc98c417552a4b287008435e5df8a9b6b198f7a6a797ff982f5fb1b4b8988ceb",
+  "source_fingerprint_sha256": "0440df81e1e672947a5943b69e3a6dc30642e66f0ce073d0ab63e4c1c17be30e",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }
