@@ -722,16 +722,35 @@ public sealed class TradePlanRuntime(
     {
       return lookup.Reason;
     }
-    // Mirror V6 AutoTradeEngine: promote Unknown → SL/TP only when the deal
-    // lookup recovered a real execution price sitting on the protective stop.
-    // Defaulting the exit FROM CurrentStop and then comparing to that same
-    // stop is a tautology — manual closes near BE/trail read as stop-outs.
+    // Promote Unknown → SL/TP only when the deal lookup recovered a real
+    // execution price sitting on the protective stop. Defaulting the exit
+    // FROM CurrentStop and then comparing to that same stop is a tautology
+    // — manual closes near BE/trail would read as stop-outs.
     if (
       lookup.ExecutionPrice is decimal exitPrice
       && LooksLikeProtectiveStopHit(plan, state, exitPrice)
     )
     {
       return PositionCloseReason.StopLossOrTakeProfit;
+    }
+    // After TP1 we ourselves moved the stop to BE/trail. cTrader often
+    // omits the auto-generated SLTP order from the short OrderList window
+    // (see DeterminePositionCloseReasonAsync), so a genuine BE fill arrives
+    // as Unknown with no execution price. That is not a tautology: the
+    // runner was already protected, and a manual close usually still
+    // returns a Market deal + fill.
+    if (
+      lookup.ExecutionPrice is null
+      && (state.BreakEvenApplied || state.HighestBookedTargetIndex >= 0)
+    )
+    {
+      var stop =
+        state.CurrentStop != 0 ? state.CurrentStop
+        : state.GroupAbsoluteStop ?? 0m;
+      if (stop > 0)
+      {
+        return PositionCloseReason.StopLossOrTakeProfit;
+      }
     }
     return PositionCloseReason.Unknown;
   }
@@ -2824,7 +2843,21 @@ public sealed class TradePlanRuntime(
         cancellationToken
       );
       var reason = ClassifyCloseReason(plan, state, lookup);
-      reasons.Add((leg, reason, lookup.ExecutionPrice));
+      decimal? exit = lookup.ExecutionPrice;
+      if (
+        exit is null
+        && reason == PositionCloseReason.StopLossOrTakeProfit
+      )
+      {
+        var stop =
+          state.CurrentStop != 0 ? state.CurrentStop
+          : state.GroupAbsoluteStop ?? plan.Stop.Price;
+        if (stop > 0)
+        {
+          exit = stop;
+        }
+      }
+      reasons.Add((leg, reason, exit));
       var idx = legs.FindIndex(item => item.LegId == leg.LegId);
       if (idx >= 0)
       {
@@ -3029,12 +3062,20 @@ public sealed class TradePlanRuntime(
       .FirstOrDefault(price => price is not null);
     if (
       exitHint is null
-      && highestTp is null
       && closeKind == "stop_loss_or_take_profit"
-      && plan.Stop.Price > 0
     )
     {
-      exitHint = plan.Stop.Price;
+      var stop =
+        state.CurrentStop != 0 ? state.CurrentStop
+        : state.GroupAbsoluteStop ?? 0m;
+      if (stop > 0)
+      {
+        exitHint = stop;
+      }
+      else if (highestTp is null && plan.Stop.Price > 0)
+      {
+        exitHint = plan.Stop.Price;
+      }
     }
     var next = AggregateState(
       state with

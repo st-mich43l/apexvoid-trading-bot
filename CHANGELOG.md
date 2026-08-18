@@ -33,6 +33,10 @@ dated section after deployment.
   protective stop, and Telegram no longer invents an SL loss from ``stop_pips``.
 
 ### Fixed
+- After TP1 moves the stop to break-even, a broker BE fill that cTrader
+  omits from the short deal/order window now closes the plan as
+  ``position_closed`` (highest TP archived) instead of
+  ``GROUP RECOVERY REQUIRED unknown close``.
 - EURUSD Market Map no longer rounds prices such as `1.08543` to whole numbers
   or applies XAU's map radii/change threshold. FX map bands, fallback levels,
   scalp rails, mapped-zone minimum widths, and material-change detection now
