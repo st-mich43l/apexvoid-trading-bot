@@ -128,7 +128,8 @@ public sealed record ExecutionInstrumentOptions(
   decimal PipSize,
   decimal ContractSize,
   IReadOnlyList<string> EffectiveSymbols,
-  decimal PipValuePerLot = 0m
+  decimal PipValuePerLot = 0m,
+  decimal LotMultiplier = 1m
 )
 {
   public decimal EffectivePipValuePerLot =>

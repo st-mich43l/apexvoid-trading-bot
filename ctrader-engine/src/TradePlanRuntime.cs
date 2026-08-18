@@ -512,7 +512,8 @@ public sealed class TradePlanRuntime(
   Func<DateTimeOffset> clock,
   Action<string> log,
   Func<string, SymbolInfo?>? resolveBoundSymbol = null,
-  Func<string, (decimal PipSize, decimal PipValuePerLot)>? resolveUnits = null
+  Func<string, (decimal PipSize, decimal PipValuePerLot)>? resolveUnits = null,
+  Func<string, decimal>? resolveLotMultiplier = null
 )
 {
   private readonly Dictionary<string, TradePlan> _plansById = new();
@@ -573,6 +574,16 @@ public sealed class TradePlanRuntime(
       );
     }
     return units;
+  }
+
+  private decimal LotMultiplierFor(string planSymbol)
+  {
+    if (resolveLotMultiplier is null)
+    {
+      return 1m;
+    }
+    var value = resolveLotMultiplier(planSymbol);
+    return value > 0m ? value : 1m;
   }
 
   private decimal PipSizeFor(string planSymbol)
@@ -1215,7 +1226,8 @@ public sealed class TradePlanRuntime(
       var bound = BoundSymbol(plan.Symbol, symbol);
       var units = UnitsFor(plan.Symbol);
       TradePlanExecutionEngine.CalculateVolume(
-        plan, equity, units.PipSize, units.PipValuePerLot, bound
+        plan, equity, units.PipSize, units.PipValuePerLot, bound,
+        LotMultiplierFor(plan.Symbol)
       );
     }
     catch (Exception exception) when (
@@ -1842,7 +1854,8 @@ public sealed class TradePlanRuntime(
     );
     var units = UnitsFor(plan.Symbol);
     var volumePlan = TradePlanExecutionEngine.CalculateVolume(
-      plan, equity, units.PipSize, units.PipValuePerLot, symbol
+      plan, equity, units.PipSize, units.PipValuePerLot, symbol,
+      LotMultiplierFor(plan.Symbol)
     );
     var direction = plan.Analysis.Direction == "BUY"
       ? TradeDirection.Buy

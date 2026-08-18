@@ -393,11 +393,17 @@ def build_trade_plan_from_strategy_match(
     if close_ratios is not None
     else _equal_close_ratios(len(match.targets_pips))
   )
-  if len(ratios) != len(match.targets_pips):
+  targets_pips = tuple(match.targets_pips)
+  fx_targets = measured.get("fx_targets_pips")
+  if fx_targets:
+    targets_pips = tuple(int(p) for p in fx_targets)
+    if close_ratios is None:
+      ratios = _equal_close_ratios(len(targets_pips))
+  if len(ratios) != len(targets_pips):
     raise TradePlanBuildRejected(
       "target_ratio_mismatch",
       f"close_ratios length {len(ratios)} does not match targets_pips "
-      f"length {len(match.targets_pips)}",
+      f"length {len(targets_pips)}",
       measured,
     )
 
@@ -410,7 +416,7 @@ def build_trade_plan_from_strategy_match(
       price=entry_reference + sign * (Decimal(pips) * pip_size),
       close_ratio=ratio,
     )
-    for index, (pips, ratio) in enumerate(zip(match.targets_pips, ratios))
+    for index, (pips, ratio) in enumerate(zip(targets_pips, ratios))
   )
 
   ttl_seconds = max(60, int(match.expires_at) - int(match.issued_at))

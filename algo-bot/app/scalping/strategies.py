@@ -49,6 +49,7 @@ def _select_target(
   stop_pips: float | None,
   min_net: float,
   pip_size: float,
+  symbol: str = "",
 ) -> tuple[float, float] | None:
   """Owner 2026-08-11: every scalp is 1:2 when the available room supports
   it, 1:1 otherwise - no ladder, no picking whichever preferred level
@@ -56,12 +57,17 @@ def _select_target(
   clears the minimum net target and fits the available room, there is no
   opportunity here at all, not a smaller/larger substitute target.
 
+  FX (EURUSD/GBPJPY) is 1:2 only — no 1:1 fallback.
+
   Publish layer turns a selected 1:2 into TP1@1R (50%) + TP2@2R (50%) with
-  the protective stop left fixed (no BE / no trail).
+  the protective stop left fixed (no BE / no trail). FX publishes a single
+  full-close 2R target.
   """
   if room_pips is None or pip_size <= 0 or stop_pips is None or stop_pips <= 0:
     return None
-  for reward_risk in (2.0, 1.0):
+  from app.core.instrument_geometry import is_fx
+  ratios = (2.0,) if is_fx(symbol) else (2.0, 1.0)
+  for reward_risk in ratios:
     target_pips = float(stop_pips) * reward_risk
     if target_pips < min_net or target_pips > float(room_pips):
       continue
@@ -195,6 +201,7 @@ def discover_range_sweep(
         stop_pips=stop,
         min_net=min_net,
         pip_size=pip_size,
+        symbol=context.symbol,
       )
       if stop is not None and target is not None:
         target_price, target_pips = target
@@ -259,6 +266,7 @@ def discover_range_sweep(
         stop_pips=stop,
         min_net=min_net,
         pip_size=pip_size,
+        symbol=context.symbol,
       )
       if stop is not None and target is not None:
         target_price, target_pips = target
@@ -384,6 +392,7 @@ def discover_impulse_pullback(
       stop_pips=stop,
       min_net=min_net,
       pip_size=pip_size,
+      symbol=context.symbol,
     )
     if stop is None or target is None:
       continue
@@ -482,6 +491,7 @@ def discover_breakout_retest(
       stop_pips=stop,
       min_net=min_net,
       pip_size=pip_size,
+      symbol=context.symbol,
     )
     if stop is None or target is None:
       continue
@@ -635,6 +645,7 @@ def discover_momentum_chase(
       stop_pips=stop,
       min_net=min_net,
       pip_size=pip_size,
+      symbol=context.symbol,
     )
     if stop is None or target is None:
       continue

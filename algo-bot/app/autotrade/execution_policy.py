@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import math
+from types import SimpleNamespace
 from typing import Any
 
 from app.autotrade.execution_route import resolve_execution_route_plan
@@ -32,6 +33,36 @@ _GUARD_MODES = (GUARD_MODE_OBSERVE, GUARD_MODE_BALANCED, GUARD_MODE_STRICT)
 def _default_runtime_cfg() -> Any:
   from app.core.config import runtime_config
   return runtime_config
+
+
+def _instrument_execution(symbol: str, cfg: Any) -> Any:
+  if symbol:
+    try:
+      if hasattr(cfg, "for_instrument"):
+        return cfg.for_instrument(symbol).execution
+    except Exception:
+      pass
+    try:
+      from app.core.instrument_geometry import execution as execution_for
+      return execution_for(symbol)
+    except Exception:
+      pass
+  return cfg.execution
+
+
+def _instrument_digits(symbol: str, cfg: Any) -> int:
+  if symbol:
+    try:
+      if hasattr(cfg, "for_instrument"):
+        return int(cfg.for_instrument(symbol).units.price_digits)
+    except Exception:
+      pass
+    try:
+      from app.core.instrument_geometry import price_digits
+      return price_digits(symbol)
+    except Exception:
+      pass
+  return int(cfg.contract.instrument.price_digits or 2)
 
 # Version of the entry-plan contract (`planned_execution_route`,
 # `planned_entry_price`, `planned_leg_entry_prices`) shared with the executor.
@@ -588,8 +619,13 @@ def evaluate_execution_policy(
   """Enforce every declared setup policy before candidate publication."""
   if cfg is None:
     cfg = _default_runtime_cfg()
+  symbol = str(getattr(match, "symbol", "") or "")
+  execution = _instrument_execution(symbol, cfg)
   try:
-    policy = policy_for(str(getattr(match, "strategy", "")), cfg)
+    policy = policy_for(
+      str(getattr(match, "strategy", "")),
+      SimpleNamespace(execution=execution),
+    )
   except ValueError as exc:
     return ExecutionPolicyEvaluation(
       False,
@@ -634,10 +670,10 @@ def evaluate_execution_policy(
   quote = float(
     spot_price if executable_quote is None else executable_quote
   )
-  digits = int(cfg.contract.instrument.price_digits or 2)
-  zone_scaling = cfg.execution.zone_scaling
-  execution_entry = cfg.execution.entry
-  reaction_execution = cfg.execution.reaction
+  digits = _instrument_digits(symbol, cfg)
+  zone_scaling = execution.zone_scaling
+  execution_entry = execution.entry
+  reaction_execution = execution.reaction
   route_plan = resolve_execution_route_plan(
     direction=direction,
     order_type_preference=policy.order_type_preference,
@@ -781,6 +817,7 @@ def evaluate_execution_policy(
       pip_size=pip,
       cfg=cfg,
       for_group_stop=use_group_stop,
+      symbol=symbol,
     )
     if sizing_risk_multiplier > 1.0:
       stop_bounds_measured = {
@@ -799,7 +836,7 @@ def evaluate_execution_policy(
       or is_technique_or_confluence(strategy_name)
     ):
       reaction_cap = int(
-        getattr(getattr(cfg.execution, "reaction", None), "stop_max_pips", 60)
+        getattr(getattr(execution, "reaction", None), "stop_max_pips", 60)
         or 60
       )
       if maximum_stop_pips > reaction_cap:
@@ -851,9 +888,9 @@ def evaluate_execution_policy(
       pip_size=pip,
       cfg=cfg,
     )
-    digits = int(cfg.contract.instrument.price_digits)
-    structure_buffer_atr = float(cfg.execution.scaling.add.stop_buffer_atr)
-    wick_buffer_atr = float(cfg.execution.stops.wick_stop_buffer_atr)
+    digits = _instrument_digits(symbol, cfg)
+    structure_buffer_atr = float(execution.scaling.add.stop_buffer_atr)
+    wick_buffer_atr = float(execution.stops.wick_stop_buffer_atr)
     if use_group_stop:
       # Absolute group SL is structural (one price beyond zone/entries/swing).
       # Envelope distance uses declared leg ratios as relative weights only —
@@ -903,7 +940,7 @@ def evaluate_execution_policy(
     )
   ):
     reaction_cap = int(
-      getattr(getattr(cfg.execution, "reaction", None), "stop_max_pips", 60)
+      getattr(getattr(execution, "reaction", None), "stop_max_pips", 60)
       or 60
     )
     if float(stop_plan.final_stop_pips) > reaction_cap + 1e-9:
@@ -1004,6 +1041,7 @@ def evaluate_execution_policy(
     known_stop_errors = {
       "stop_exceeds_envelope_after_wick",
       "stop_exceeds_max_envelope",
+      "stop_exceeds_envelope_furthest_leg",
       "stop_inside_opposing_zone",
       "stop_inside_entry_zone",
       "stop_not_beyond_planned_entries",
@@ -1020,6 +1058,24 @@ def evaluate_execution_policy(
       measured,
       policy,
     )
+  from app.core.instrument_geometry import FX_REWARD_RISK, is_fx, one_to_two_targets
+  if is_fx(symbol):
+    fx_targets = one_to_two_targets(float(stop_plan.final_stop_pips))
+    measured["fx_targets_pips"] = list(fx_targets)
+    measured["fx_reward_risk"] = FX_REWARD_RISK
+    need = float(fx_targets[0])
+    if remaining_pips + 1e-9 < need:
+      return ExecutionPolicyEvaluation(
+        False,
+        "fx_reward_risk_insufficient",
+        (
+          f"FX 1:2 needs {need:.0f} pips of room, remaining "
+          f"{remaining_pips:.1f}"
+        ),
+        True,
+        measured,
+        policy,
+      )
   if (
     not math.isfinite(effective_risk_multiplier)
     or effective_risk_multiplier <= 0

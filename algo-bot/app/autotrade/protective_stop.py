@@ -630,6 +630,7 @@ def stop_bounds_for_reaction_room(
   pip_size: Any,
   cfg: Any | None,
   for_group_stop: bool = False,
+  symbol: str | None = None,
 ) -> tuple[int, int, dict[str, Any]]:
   """Pin reaction/scalp SL envelope to room-synced primary TP (≈1:1).
 
@@ -650,7 +651,7 @@ def stop_bounds_for_reaction_room(
   has real width to place legs across.
   """
   fallback = stop_bounds_for_strategy(
-    strategy=strategy, pip_size=pip_size, cfg=cfg,
+    strategy=strategy, pip_size=pip_size, cfg=cfg, symbol=symbol,
   )
   is_reaction = uses_reaction_room_stop(strategy)
   is_scalp = uses_scalp_room_stop(strategy)
@@ -680,15 +681,25 @@ def stop_bounds_for_reaction_room(
     )
   if cfg is None:
     cfg = _default_runtime_cfg()
+  execution = cfg.execution
+  if symbol:
+    try:
+      if hasattr(cfg, "for_instrument"):
+        execution = cfg.for_instrument(symbol).execution
+      else:
+        from app.core.instrument_geometry import execution as execution_for
+        execution = execution_for(symbol)
+    except Exception:
+      execution = cfg.execution
   if is_scalp:
     min_rr = float(
-      cfg.execution.range.min_rr
-      if cfg.execution.range.min_rr is not None
+      execution.range.min_rr
+      if execution.range.min_rr is not None
       else 1.0
     ) or 1.0
     floor_pips = int(
-      cfg.execution.range.room_stop_floor_pips
-      if cfg.execution.range.room_stop_floor_pips is not None
+      execution.range.room_stop_floor_pips
+      if execution.range.room_stop_floor_pips is not None
       else 15
     ) or 15
     # Prefer Range Box max (sl_distance) when present; else trend cap.
@@ -696,32 +707,31 @@ def stop_bounds_for_reaction_room(
     source = "scalp_room"
   else:
     min_rr = float(
-      cfg.execution.reaction.room_stop_min_rr
-      if cfg.execution.reaction.room_stop_min_rr is not None
+      execution.reaction.room_stop_min_rr
+      if execution.reaction.room_stop_min_rr is not None
       else 1.0
     ) or 1.0
-    # Owner envelope for reaction families is 40–60. room_floor used to
-    # default to 20 and, with a room-capped TP of 30, produced a 30-pip SL
-    # (live 2026-08-06). Always lift the floor to reaction.stop_min_pips.
+    # Owner envelope for reaction families is 40–60 on XAU. FX overrides
+    # this slice (12–25) so EURUSD structure can actually plan a stop.
     reaction_min = int(
-      cfg.execution.reaction.stop_min_pips
-      if cfg.execution.reaction.stop_min_pips is not None
+      execution.reaction.stop_min_pips
+      if execution.reaction.stop_min_pips is not None
       else 40
     ) or 40
     room_floor = int(
-      cfg.execution.stops.reaction.room_floor_pips
-      if cfg.execution.stops.reaction.room_floor_pips is not None
+      execution.stops.reaction.room_floor_pips
+      if execution.stops.reaction.room_floor_pips is not None
       else reaction_min
     ) or reaction_min
     floor_pips = max(reaction_min, room_floor)
     reaction_max = int(
-      cfg.execution.reaction.stop_max_pips
-      if cfg.execution.reaction.stop_max_pips is not None
+      execution.reaction.stop_max_pips
+      if execution.reaction.stop_max_pips is not None
       else 60
     ) or 60
     trend_cap = int(
-      cfg.execution.trend.stop_max_pips
-      if cfg.execution.trend.stop_max_pips is not None
+      execution.trend.stop_max_pips
+      if execution.trend.stop_max_pips is not None
       else 60
     ) or 60
     cap_pips = max(floor_pips, min(reaction_max, trend_cap))
@@ -731,17 +741,21 @@ def stop_bounds_for_reaction_room(
   floor_pips = max(1, floor_pips)
   cap_pips = max(floor_pips, cap_pips)
   desired = max(floor_pips, int(math.ceil(primary / min_rr)))
-  if for_group_stop:
-    # Never let a wide room pull the floor up toward the cap here -- see
-    # the for_group_stop docstring note. floor_pips < cap_pips whenever
-    # the owner envelope has any width at all, so [min, max] always has
-    # real room for a multi-leg spread instead of collapsing to a point.
+  fx_symbol = False
+  if symbol:
+    try:
+      from app.core.instrument_geometry import is_fx
+      fx_symbol = is_fx(symbol)
+    except Exception:
+      fx_symbol = False
+  if for_group_stop or fx_symbol:
+    # Group stops keep [min, max] wide. FX 1:2 plans the stop from
+    # structure inside the FX envelope, then places TP at 2R — do not pin
+    # SL to a gold pip-ladder first target.
     minimum = floor_pips
   else:
-    # Single-leg: pin toward desired for a genuine ~1:1 stop against the
-    # room-capped target; a single absolute price has only one leg to
-    # satisfy, so collapsing [min, max] toward one point is intentional
-    # here, not a bug.
+    # Single-leg XAU: pin toward desired for a genuine ~1:1 stop against
+    # the room-capped target.
     minimum = min(desired, cap_pips)
   maximum = cap_pips
   measured: dict[str, Any] = {
@@ -749,6 +763,7 @@ def stop_bounds_for_reaction_room(
     "primary_tp_pips": round(primary, 3),
     "desired_stop_pips": desired,
     "stop_bounds_for_group_stop": for_group_stop,
+    "fx_one_to_two": fx_symbol,
   }
   if is_scalp:
     measured["range_room_stop_floor_pips"] = floor_pips
@@ -1106,6 +1121,7 @@ def stop_bounds_for_strategy(
   strategy: str,
   pip_size: Any,
   cfg: Any | None,
+  symbol: str | None = None,
 ) -> tuple[int, int]:
   """Owner group envelope 40–60 for trend and zone-scale reaction families.
 
@@ -1117,9 +1133,19 @@ def stop_bounds_for_strategy(
   """
   if cfg is None:
     cfg = _default_runtime_cfg()
-  scaling_add_cfg = cfg.execution.scaling.add
-  stops_cfg = cfg.execution.stops
-  trend_stops_cfg = cfg.execution.stops.trend
+  execution = cfg.execution
+  if symbol:
+    try:
+      if hasattr(cfg, "for_instrument"):
+        execution = cfg.for_instrument(symbol).execution
+      else:
+        from app.core.instrument_geometry import execution as execution_for
+        execution = execution_for(symbol)
+    except Exception:
+      execution = cfg.execution
+  scaling_add_cfg = execution.scaling.add
+  stops_cfg = execution.stops
+  trend_stops_cfg = execution.stops.trend
   if str(strategy) == "Range Box Scalp":
     minimum = int(
       scaling_add_cfg.min_stop_pips
@@ -1141,8 +1167,8 @@ def stop_bounds_for_strategy(
     else 40
   )
   trend_max = int(
-    cfg.execution.trend.stop_max_pips
-    if cfg.execution.trend.stop_max_pips is not None
+    execution.trend.stop_max_pips
+    if execution.trend.stop_max_pips is not None
     else 60
   )
   # Reaction taxonomy fallback when room TP is unavailable. Zone / Demand /

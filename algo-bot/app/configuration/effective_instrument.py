@@ -51,6 +51,7 @@ class InstrumentUnitsConfig(FrozenConfigModel):
   pip_value_per_lot: float
   volume_units_per_lot: int
   max_lots: float
+  lot_multiplier: float = 1.0
 
   def plan_max_volume(self) -> int:
     """cTrader volume-unit ceiling stamped on TradePlan.risk.max_volume."""
@@ -235,6 +236,11 @@ def _require_units(
     raise EffectiveInstrumentError(
       f"instrument {instrument_id!r} max_lots must be positive"
     )
+  lot_multiplier = float(contract.lot_multiplier)
+  if lot_multiplier <= 0:
+    raise EffectiveInstrumentError(
+      f"instrument {instrument_id!r} lot_multiplier must be positive"
+    )
   return InstrumentUnitsConfig(
     pip_size=float(contract.pip_size),
     price_digits=int(contract.price_digits),
@@ -242,6 +248,7 @@ def _require_units(
     pip_value_per_lot=pip_value,
     volume_units_per_lot=volume_units,
     max_lots=max_lots,
+    lot_multiplier=lot_multiplier,
   )
 
 

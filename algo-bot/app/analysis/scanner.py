@@ -273,10 +273,16 @@ def _band_dedup_key(symbol: str, result: DetectionResult) -> str:
   )
 
 
-def _configured_strategy_targets() -> tuple[int, ...]:
+def _configured_strategy_targets(symbol: str | None = None) -> tuple[int, ...]:
+  raw = runtime_config.execution.targeting.default_ladder_pips
+  if symbol:
+    try:
+      raw = runtime_config.for_instrument(symbol).execution.targeting.default_ladder_pips
+    except Exception:
+      raw = runtime_config.execution.targeting.default_ladder_pips
   values = {
     int(item.strip())
-    for item in runtime_config.execution.targeting.default_ladder_pips.split(",")
+    for item in str(raw).split(",")
     if item.strip().isdigit() and int(item.strip()) > 0
   }
   return tuple(sorted(values))
@@ -374,7 +380,7 @@ def _build_one_strategy_match(
   entry_high = float(result.entry_zone.high)
   direction = result.direction.upper()
   structure_swing = entry_low if direction == "BUY" else entry_high
-  targets_pips = _configured_strategy_targets()
+  targets_pips = _configured_strategy_targets(symbol)
   range_id = None
   range_low = None
   range_high = None
@@ -414,7 +420,7 @@ def _build_one_strategy_match(
       if full_take_profit_pips is None:
         # Target-room preference is telemetry; fall through to configured
         # strategy targets instead of refusing the match.
-        targets_pips = _configured_strategy_targets()
+        targets_pips = _configured_strategy_targets(symbol)
         if not targets_pips:
           return None, "empty_target_config", {
             "room_pips": round(room_pips, 1),
@@ -1935,7 +1941,7 @@ def _annotate_actionability_geometry(
     return replace(
       result,
       planned_entry_price=float(result.current_price),
-      provisional_targets_pips=_configured_strategy_targets(),
+      provisional_targets_pips=_configured_strategy_targets(symbol),
     )
   regime = str(getattr(getattr(ctx, "regime", None), "kind", "") or "")
   evaluation = evaluate_execution_policy(
