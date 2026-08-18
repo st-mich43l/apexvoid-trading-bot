@@ -528,43 +528,70 @@ _NO_TP_ARCHIVED_RE = re.compile(r"(?i)\bno\s+TP\s+archived\b")
 _LOSING_PIPS_RE = re.compile(
   r"(?i)\blosing\s+(?P<pips>-?\d+(?:\.\d+)?)\s*pips?\b"
 )
+_WINNING_PIPS_RE = re.compile(
+  r"(?i)\bwinning\s+(?P<pips>-?\d+(?:\.\d+)?)\s*pips?\b"
+)
 _PLAN_CLOSED_AT_RE = re.compile(
   r"(?i)@\s*(?P<price>[0-9]+(?:\.[0-9]+)?)"
 )
 
 
-def _resolve_no_tp_loss_pips(event: dict, cleaned: str) -> float | None:
-  """Net pips for an SL close that never archived a TP."""
-  losing = _event_float(event, "group_realized_pips", "leg_realized_pips")
-  if losing is None and cleaned:
+def _resolve_close_pips(
+  event: dict,
+  cleaned: str,
+  *,
+  allow_stop_fallback: bool = False,
+) -> float | None:
+  """Signed pips for a close card.
+
+  Stop-distance fallback is only for confirmed SL / no-TP-archived cards.
+  Manual and unconfirmed broker closes must not invent a loss from SL.
+  """
+  pips = _event_float(event, "group_realized_pips", "leg_realized_pips")
+  if pips is None and cleaned:
     losing_match = _LOSING_PIPS_RE.search(cleaned)
-    if losing_match is not None:
+    winning_match = _WINNING_PIPS_RE.search(cleaned)
+    parsed = losing_match or winning_match
+    if parsed is not None:
       try:
-        losing = float(losing_match.group("pips"))
+        pips = float(parsed.group("pips"))
       except (TypeError, ValueError):
-        losing = None
-  if losing is not None:
-    return losing
-  # Broker deal gaps often omit group_realized_pips + exit price. Fall back
-  # to planned stop distance so the owner still sees a net loss.
+        pips = None
+  if pips is not None:
+    return pips
+  exit_price = _event_float(event, "price")
+  entry = _event_float(event, "entry_price", "weighted_entry", "fill_price")
+  direction = str(event.get("direction") or "").upper()
+  if entry is not None and exit_price is not None and direction:
+    try:
+      from app.core.symbols import pip_for
+      move = float(exit_price) - float(entry)
+      if direction == "SELL":
+        move = -move
+      return move / pip_for(str(event.get("symbol") or "XAU"))
+    except Exception:
+      pass
+  if not allow_stop_fallback:
+    return None
   stop_pips = _event_float(event, "stop_pips")
   if stop_pips is not None and stop_pips > 0:
     return -abs(stop_pips)
-  exit_price = _event_float(event, "price")
-  entry = _event_float(event, "entry_price", "weighted_entry", "fill_price")
   stop_loss = _event_float(event, "stop_loss", "stop_price", "new_stop")
-  direction = str(event.get("direction") or "").upper()
-  ref_exit = exit_price if exit_price is not None else stop_loss
-  if entry is None or ref_exit is None or not direction:
+  if entry is None or stop_loss is None or not direction:
     return None
   try:
     from app.core.symbols import pip_for
-    move = float(ref_exit) - float(entry)
+    move = float(stop_loss) - float(entry)
     if direction == "SELL":
       move = -move
     return move / pip_for(str(event.get("symbol") or "XAU"))
   except Exception:
     return None
+
+
+def _resolve_no_tp_loss_pips(event: dict, cleaned: str) -> float | None:
+  """Net pips for an SL close that never archived a TP."""
+  return _resolve_close_pips(event, cleaned, allow_stop_fallback=True)
 
 
 def _sl_close_result_parts(
@@ -592,6 +619,23 @@ def _sl_close_result_parts(
   return parts
 
 
+def _append_signed_result_lines(
+  lines: list[str],
+  pips: float | None,
+  *,
+  html: bool,
+) -> None:
+  if pips is None:
+    return
+  if pips < 0:
+    body = f"❌ Losing: {format_signed_pips(pips)} pips"
+  elif pips > 0:
+    body = f"✅ Winning: {format_signed_pips(pips)} pips"
+  else:
+    body = "➖ Result: 0 pips (BE)"
+  lines.append(f"<b>{body}</b>" if html else body)
+
+
 def _format_position_closed(event: dict, message: str) -> str:
   seq = _trade_seq_prefix(event)
   lines = [
@@ -601,6 +645,7 @@ def _format_position_closed(event: dict, message: str) -> str:
   cleaned = _MONEY_RE.sub("", message).strip(" ·") if message else ""
   highest = _HIGHEST_TP_ARCHIVED_RE.search(cleaned) if cleaned else None
   no_tp = _NO_TP_ARCHIVED_RE.search(cleaned) if cleaned else None
+  reason = str(event.get("reason_code") or "")
   # Close card: highest TP archived only — never dump per-leg lot detail.
   if highest is not None:
     archived_pips = _event_float(event, "target_pips")
@@ -616,26 +661,28 @@ def _format_position_closed(event: dict, message: str) -> str:
     at = _PLAN_CLOSED_AT_RE.search(cleaned)
     if at is not None:
       lines.append(f"@ <b>{escape(at.group('price'))}</b>")
-  elif no_tp is not None:
-    # Full SL before any TP — one line: SL · Losing · @ price.
+  elif no_tp is not None or (
+    reason == "stop_loss_or_take_profit"
+    and (_resolve_close_pips(event, cleaned, allow_stop_fallback=True) or 0) < 0
+  ):
     lines.append(" · ".join(_sl_close_result_parts(event, cleaned, html=True)))
   else:
-    reason = str(event.get("reason_code") or "")
-    losing = _resolve_no_tp_loss_pips(event, cleaned)
-    if reason == "stop_loss_or_take_profit" and losing is not None and losing < 0:
-      # One-shot SL without the V7 "no TP archived" phrasing.
-      lines.append(" · ".join(_sl_close_result_parts(event, cleaned, html=True)))
-    else:
-      reason_label = _CLOSE_REASON_LABELS.get(reason)
-      if reason_label:
-        lines.append(reason_label)
-      if cleaned and " lot=" not in cleaned.lower():
-        lines.extend(["", escape(cleaned)])
-  # Earlier TP legs on this group each already posted their own card with
-  # their own leg pips (see _format_take_profit) - this is the only place
-  # that recaps the group's final blended result, so a close that followed
-  # one or more partial TPs (e.g. SL hit after being moved to BE/TP2/TP3)
-  # doesn't read as a bare, unexplained "position closed" with no result.
+    reason_label = _CLOSE_REASON_LABELS.get(reason)
+    if reason_label:
+      lines.append(reason_label)
+    if event.get("previous_state") != "partially_closed":
+      _append_signed_result_lines(
+        lines,
+        _resolve_close_pips(event, cleaned, allow_stop_fallback=False),
+        html=True,
+      )
+    exit_price = _event_float(event, "price")
+    if exit_price is not None:
+      lines.append(
+        f"@ <b>{escape(_format_event_price(str(exit_price)))}</b>"
+      )
+    elif cleaned and " lot=" not in cleaned.lower() and reason_label is None:
+      lines.extend(["", escape(cleaned)])
   if event.get("previous_state") == "partially_closed":
     group_realized = _event_float(event, "group_realized_pips")
     if group_realized is not None:
@@ -1372,28 +1419,29 @@ def _format_position_closed_compact_line(event: dict, message: str) -> str:
   cleaned = _MONEY_RE.sub("", message).strip(" ·") if message else ""
   highest = _HIGHEST_TP_ARCHIVED_RE.search(cleaned) if cleaned else None
   no_tp = _NO_TP_ARCHIVED_RE.search(cleaned) if cleaned else None
+  reason = str(event.get("reason_code") or "")
   if highest is not None:
     # Highest level is already on a 🎯 line; only add exit price here.
     at = _PLAN_CLOSED_AT_RE.search(cleaned)
     if at is not None:
       return f"🏁 POSITION CLOSED · @ {escape(at.group('price'))}"
     return "🏁 POSITION CLOSED"
-  if no_tp is not None or str(event.get("reason_code") or "") == (
-    "stop_loss_or_take_profit"
-  ):
+  if no_tp is not None or reason == "stop_loss_or_take_profit":
     parts = ["🏁 POSITION CLOSED", *_sl_close_result_parts(
       event, cleaned, html=False,
     )]
     return " · ".join(parts)
-  reason_label = _CLOSE_REASON_LABELS.get(str(event.get("reason_code") or ""))
+  reason_label = _CLOSE_REASON_LABELS.get(reason)
   parts = ["🏁 POSITION CLOSED"]
-  if reason_label and reason_label != _CLOSE_REASON_LABELS["stop_loss_or_take_profit"]:
+  if reason_label:
     parts.append(reason_label)
-  group_realized = _resolve_no_tp_loss_pips(event, cleaned)
-  if group_realized is not None and group_realized < 0:
-    parts.append(f"❌ Losing: {format_signed_pips(group_realized)} pips")
-  elif group_realized is not None:
-    parts.append(f"Total: {format_signed_pips(group_realized)} pips")
+  pips = _resolve_close_pips(event, cleaned, allow_stop_fallback=False)
+  if pips is not None and pips < 0:
+    parts.append(f"❌ Losing: {format_signed_pips(pips)} pips")
+  elif pips is not None and pips > 0:
+    parts.append(f"✅ Winning: {format_signed_pips(pips)} pips")
+  elif pips is not None:
+    parts.append("➖ Result: 0 pips (BE)")
   return " · ".join(parts)
 
 

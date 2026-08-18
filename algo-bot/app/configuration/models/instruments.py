@@ -48,6 +48,9 @@ class InstrumentTargetingConfig(FrozenConfigModel):
   close_ratios: tuple[float, ...] = ()
   trail_after_r: float | None = Field(default=None, gt=0)
   trail_to_r: float | None = Field(default=None, gt=0)
+  # Equal-size DCA clips for technique/scalp micro-grid entries. FX uses 2
+  # (market + one deeper limit); XAU keeps the default five-clip grid.
+  entry_clips: int = Field(default=5, ge=2, le=5)
 
   @model_validator(mode="after")
   def validate_reward_risk(self) -> InstrumentTargetingConfig:
@@ -308,10 +311,12 @@ class InstrumentConfig(FrozenConfigModel):
       and self.targeting.close_ratios == (0.25, 0.25, 0.50)
       and self.targeting.trail_after_r == 1.5
       and self.targeting.trail_to_r == 1.0
+      and self.targeting.entry_clips == 2
     ):
       raise ValueError(
         "fx_fixed_2r_v1 requires targeting.mode=fixed_rr and "
-        "targets 1R/1.5R/2R at 25%/25%/50%, trailing 1.5R to 1R"
+        "targets 1R/1.5R/2R at 25%/25%/50%, trailing 1.5R to 1R, "
+        "entry_clips=2"
       )
     if (
       self.targeting.mode is InstrumentTargetMode.FIXED_RR

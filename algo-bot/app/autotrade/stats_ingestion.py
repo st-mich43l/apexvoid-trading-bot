@@ -39,7 +39,9 @@ def _complete_outcome(event: dict) -> str | None:
     return "sl"
   if "take_profit" in reason or "tp" in reason or "target" in reason:
     return "tp"
-  if "group_stop_loss" in message or "stop loss" in message:
+  if "manual" in reason or "external" in reason:
+    pass
+  elif "group_stop_loss" in message or "stop loss" in message:
     return "sl"
   if "take profit" in message or "tp" in message:
     return "tp"

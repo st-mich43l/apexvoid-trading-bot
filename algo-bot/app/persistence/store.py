@@ -770,6 +770,16 @@ async def _record_auto_trade_result(event: dict) -> None:
           result_pips = float(losing_match.group(1))
         except (TypeError, ValueError):
           result_pips = None
+    if result_pips is None:
+      winning_match = re.search(
+        r"winning\s+(-?\d+(?:\.\d+)?)\s*pips?",
+        message_cf,
+      )
+      if winning_match is not None:
+        try:
+          result_pips = float(winning_match.group(1))
+        except (TypeError, ValueError):
+          result_pips = None
     if result_pips is None and event.get("type") in {
       "position_closed", "manual_closed",
     }:
