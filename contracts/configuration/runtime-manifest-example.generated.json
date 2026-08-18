@@ -130,8 +130,8 @@
     "zone_reconcile_mode": "shadow",
     "zone_scale_undersized_policy": "single_entry"
   },
-  "contract_fingerprint": "280b4886604dd550286e011c641ab33256ee1f769661544cd707e378191d499c",
-  "effective_configuration_fingerprint": "e0cbc0f5203a5b56b0b815e3f4b258340df78eeef3035a7db705defd91e56728",
+  "contract_fingerprint": "fc98c417552a4b287008435e5df8a9b6b198f7a6a797ff982f5fb1b4b8988ceb",
+  "effective_configuration_fingerprint": "a3f6b10b901479a89a632425e54367511e40042153e76d2242c9b25ae4a00a12",
   "feed": {
     "backfill_bars": 1500,
     "bar_quality_lookback": 6,
@@ -271,9 +271,9 @@
       "analysis": {
         "zones": {
           "major_maximum_width_price": "0.003",
-          "minimum_width_price": "0.0003",
+          "minimum_width_price": "0.0006",
           "preferred_maximum_width_price": "0.0015",
-          "preferred_minimum_width_price": "0.0005"
+          "preferred_minimum_width_price": "0.0008"
         }
       },
       "auto_trade": {
@@ -408,7 +408,7 @@
       "execution": {
         "activation": {
           "mode": "enforce",
-          "reaction_trigger_maximum_age_bars": 2
+          "reaction_trigger_maximum_age_bars": 3
         },
         "broker_recovery": {
           "absence_confirmations": 2
@@ -416,7 +416,7 @@
         "entry": {
           "contract_tolerance_pips": "3",
           "inside_zone_market_entry_enabled": true,
-          "max_spread_pips": 5,
+          "max_spread_pips": 1,
           "maximum_chase_distance_pips": "40",
           "poll_ms": 250
         },
@@ -431,7 +431,7 @@
           "reaction_lookback_bars": 5,
           "thesis_lock_enabled": true,
           "track_distance_atr": "8",
-          "zone_min_width_abs": "0.0003",
+          "zone_min_width_abs": "0.0006",
           "zone_min_width_atr": "0.15"
         },
         "policy": {
@@ -467,8 +467,8 @@
           "scale_fraction": "0.2",
           "scale_invalid_policy": "single_market",
           "scale_step_atr": "0.5",
-          "stop_max_pips": 25,
-          "stop_min_pips": 12
+          "stop_max_pips": 18,
+          "stop_min_pips": 10
         },
         "regime": {
           "direction_enabled": false,
@@ -490,12 +490,12 @@
         "stops": {
           "be_buffer_ticks": 6,
           "reaction": {
-            "room_floor_pips": 12
+            "room_floor_pips": 10
           },
-          "sl_distance": "0.0025",
+          "sl_distance": "0.0018",
           "stop_push_beyond_zone": true,
           "trend": {
-            "minimum_pips": 12
+            "minimum_pips": 10
           },
           "wick_stop_buffer_atr": "0.15"
         },
@@ -520,14 +520,14 @@
           "ny_window_hours": 3,
           "reaction_publish_windows": "7-11,13-16",
           "reaction_require_killzone": false,
-          "require_sweep_body": false,
+          "require_sweep_body": true,
           "strict_premium_discount": true
         },
         "trend": {
           "hard_entry_drift_pips": "30",
           "max_entry_drift_atr": "1.5",
           "min_entry_drift_pips": "15",
-          "stop_max_pips": 25
+          "stop_max_pips": 18
         },
         "zone_scaling": {
           "fill_enabled": true,
@@ -682,6 +682,18 @@
             "source_name": "instruments.EURUSD.overrides"
           },
           {
+            "path": "execution.activation.reaction_trigger_maximum_age_bars",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.EURUSD.overrides"
+          },
+          {
+            "path": "execution.entry.max_spread_pips",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.EURUSD.overrides"
+          },
+          {
             "path": "execution.mapped_zone.zone_min_width_abs",
             "secret": false,
             "source_kind": "instrument_override",
@@ -743,6 +755,18 @@
           },
           {
             "path": "execution.stops.trend.minimum_pips",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.EURUSD.overrides"
+          },
+          {
+            "path": "execution.technique.reaction_publish_windows",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.EURUSD.overrides"
+          },
+          {
+            "path": "execution.technique.require_sweep_body",
             "secret": false,
             "source_kind": "instrument_override",
             "source_name": "instruments.EURUSD.overrides"
@@ -1130,9 +1154,9 @@
       "analysis": {
         "zones": {
           "major_maximum_width_price": "0.5",
-          "minimum_width_price": "0.08",
+          "minimum_width_price": "0.12",
           "preferred_maximum_width_price": "0.25",
-          "preferred_minimum_width_price": "0.1"
+          "preferred_minimum_width_price": "0.12"
         }
       },
       "auto_trade": {
@@ -1267,7 +1291,7 @@
       "execution": {
         "activation": {
           "mode": "enforce",
-          "reaction_trigger_maximum_age_bars": 2
+          "reaction_trigger_maximum_age_bars": 3
         },
         "broker_recovery": {
           "absence_confirmations": 2
@@ -1275,7 +1299,7 @@
         "entry": {
           "contract_tolerance_pips": "3",
           "inside_zone_market_entry_enabled": true,
-          "max_spread_pips": 5,
+          "max_spread_pips": 3,
           "maximum_chase_distance_pips": "40",
           "poll_ms": 250
         },
@@ -1290,7 +1314,7 @@
           "reaction_lookback_bars": 5,
           "thesis_lock_enabled": true,
           "track_distance_atr": "8",
-          "zone_min_width_abs": "0.08",
+          "zone_min_width_abs": "0.12",
           "zone_min_width_atr": "0.15"
         },
         "policy": {
@@ -1316,8 +1340,8 @@
           "max_entry_drift_atr": "1",
           "min_entry_drift_pips": "10",
           "min_rr": "2",
-          "min_target_pips": 20,
-          "room_stop_floor_pips": 10,
+          "min_target_pips": 30,
+          "room_stop_floor_pips": 15,
           "tp_buffer_pips": "3"
         },
         "reaction": {
@@ -1326,8 +1350,8 @@
           "scale_fraction": "0.2",
           "scale_invalid_policy": "single_market",
           "scale_step_atr": "0.5",
-          "stop_max_pips": 25,
-          "stop_min_pips": 12
+          "stop_max_pips": 30,
+          "stop_min_pips": 15
         },
         "regime": {
           "direction_enabled": false,
@@ -1338,7 +1362,7 @@
         "scaling": {
           "add": {
             "level_buffer_atr": "1",
-            "min_stop_pips": 10,
+            "min_stop_pips": 12,
             "pullback_enabled": false,
             "pullback_max_retrace": "0.7",
             "pullback_min_retrace": "0.2",
@@ -1349,12 +1373,12 @@
         "stops": {
           "be_buffer_ticks": 6,
           "reaction": {
-            "room_floor_pips": 12
+            "room_floor_pips": 15
           },
-          "sl_distance": "0.25",
+          "sl_distance": "0.3",
           "stop_push_beyond_zone": true,
           "trend": {
-            "minimum_pips": 12
+            "minimum_pips": 15
           },
           "wick_stop_buffer_atr": "0.15"
         },
@@ -1377,16 +1401,16 @@
           "include_late_ny": true,
           "london_window_hours": 3,
           "ny_window_hours": 3,
-          "reaction_publish_windows": "7-11,13-16",
+          "reaction_publish_windows": "0-3,7-11",
           "reaction_require_killzone": false,
-          "require_sweep_body": false,
+          "require_sweep_body": true,
           "strict_premium_discount": true
         },
         "trend": {
           "hard_entry_drift_pips": "30",
           "max_entry_drift_atr": "1.5",
           "min_entry_drift_pips": "15",
-          "stop_max_pips": 25
+          "stop_max_pips": 30
         },
         "zone_scaling": {
           "fill_enabled": true,
@@ -1541,6 +1565,18 @@
             "source_name": "instruments.GBPJPY.overrides"
           },
           {
+            "path": "execution.activation.reaction_trigger_maximum_age_bars",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.GBPJPY.overrides"
+          },
+          {
+            "path": "execution.entry.max_spread_pips",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.GBPJPY.overrides"
+          },
+          {
             "path": "execution.mapped_zone.zone_min_width_abs",
             "secret": false,
             "source_kind": "instrument_override",
@@ -1607,6 +1643,18 @@
             "source_name": "instruments.GBPJPY.overrides"
           },
           {
+            "path": "execution.technique.reaction_publish_windows",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.GBPJPY.overrides"
+          },
+          {
+            "path": "execution.technique.require_sweep_body",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.GBPJPY.overrides"
+          },
+          {
             "path": "execution.trend.stop_max_pips",
             "secret": false,
             "source_kind": "instrument_override",
@@ -1655,7 +1703,7 @@
           "allow_concurrent_strategies": true,
           "allow_hedged_xau": false,
           "non_hedged_opposite_policy": "broker_netting",
-          "opposing_minimum_separation_price": "0.15",
+          "opposing_minimum_separation_price": "0.25",
           "require_flat_for_range": true
         },
         "position_limits": {
@@ -2720,15 +2768,15 @@
       "analysis": {
         "zones": {
           "major_maximum_width_price": "0.003",
-          "minimum_width_price": "0.0003",
+          "minimum_width_price": "0.0006",
           "preferred_maximum_width_price": "0.0015",
-          "preferred_minimum_width_price": "0.0005"
+          "preferred_minimum_width_price": "0.0008"
         }
       },
       "execution": {
         "activation": {
           "mode": "enforce",
-          "reaction_trigger_maximum_age_bars": 2
+          "reaction_trigger_maximum_age_bars": 3
         },
         "broker_recovery": {
           "absence_confirmations": 2
@@ -2736,7 +2784,7 @@
         "entry": {
           "contract_tolerance_pips": "3",
           "inside_zone_market_entry_enabled": true,
-          "max_spread_pips": 5,
+          "max_spread_pips": 1,
           "maximum_chase_distance_pips": "40",
           "poll_ms": 250
         },
@@ -2751,7 +2799,7 @@
           "reaction_lookback_bars": 5,
           "thesis_lock_enabled": true,
           "track_distance_atr": "8",
-          "zone_min_width_abs": "0.0003",
+          "zone_min_width_abs": "0.0006",
           "zone_min_width_atr": "0.15"
         },
         "policy": {
@@ -2787,8 +2835,8 @@
           "scale_fraction": "0.2",
           "scale_invalid_policy": "single_market",
           "scale_step_atr": "0.5",
-          "stop_max_pips": 25,
-          "stop_min_pips": 12
+          "stop_max_pips": 18,
+          "stop_min_pips": 10
         },
         "regime": {
           "direction_enabled": false,
@@ -2810,12 +2858,12 @@
         "stops": {
           "be_buffer_ticks": 6,
           "reaction": {
-            "room_floor_pips": 12
+            "room_floor_pips": 10
           },
-          "sl_distance": "0.0025",
+          "sl_distance": "0.0018",
           "stop_push_beyond_zone": true,
           "trend": {
-            "minimum_pips": 12
+            "minimum_pips": 10
           },
           "wick_stop_buffer_atr": "0.15"
         },
@@ -2840,14 +2888,14 @@
           "ny_window_hours": 3,
           "reaction_publish_windows": "7-11,13-16",
           "reaction_require_killzone": false,
-          "require_sweep_body": false,
+          "require_sweep_body": true,
           "strict_premium_discount": true
         },
         "trend": {
           "hard_entry_drift_pips": "30",
           "max_entry_drift_atr": "1.5",
           "min_entry_drift_pips": "15",
-          "stop_max_pips": 25
+          "stop_max_pips": 18
         },
         "zone_scaling": {
           "fill_enabled": true,
@@ -2995,6 +3043,18 @@
             "source_name": "instruments.EURUSD.overrides"
           },
           {
+            "path": "execution.activation.reaction_trigger_maximum_age_bars",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.EURUSD.overrides"
+          },
+          {
+            "path": "execution.entry.max_spread_pips",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.EURUSD.overrides"
+          },
+          {
             "path": "execution.mapped_zone.zone_min_width_abs",
             "secret": false,
             "source_kind": "instrument_override",
@@ -3056,6 +3116,18 @@
           },
           {
             "path": "execution.stops.trend.minimum_pips",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.EURUSD.overrides"
+          },
+          {
+            "path": "execution.technique.reaction_publish_windows",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.EURUSD.overrides"
+          },
+          {
+            "path": "execution.technique.require_sweep_body",
             "secret": false,
             "source_kind": "instrument_override",
             "source_name": "instruments.EURUSD.overrides"
@@ -3442,15 +3514,15 @@
       "analysis": {
         "zones": {
           "major_maximum_width_price": "0.5",
-          "minimum_width_price": "0.08",
+          "minimum_width_price": "0.12",
           "preferred_maximum_width_price": "0.25",
-          "preferred_minimum_width_price": "0.1"
+          "preferred_minimum_width_price": "0.12"
         }
       },
       "execution": {
         "activation": {
           "mode": "enforce",
-          "reaction_trigger_maximum_age_bars": 2
+          "reaction_trigger_maximum_age_bars": 3
         },
         "broker_recovery": {
           "absence_confirmations": 2
@@ -3458,7 +3530,7 @@
         "entry": {
           "contract_tolerance_pips": "3",
           "inside_zone_market_entry_enabled": true,
-          "max_spread_pips": 5,
+          "max_spread_pips": 3,
           "maximum_chase_distance_pips": "40",
           "poll_ms": 250
         },
@@ -3473,7 +3545,7 @@
           "reaction_lookback_bars": 5,
           "thesis_lock_enabled": true,
           "track_distance_atr": "8",
-          "zone_min_width_abs": "0.08",
+          "zone_min_width_abs": "0.12",
           "zone_min_width_atr": "0.15"
         },
         "policy": {
@@ -3499,8 +3571,8 @@
           "max_entry_drift_atr": "1",
           "min_entry_drift_pips": "10",
           "min_rr": "2",
-          "min_target_pips": 20,
-          "room_stop_floor_pips": 10,
+          "min_target_pips": 30,
+          "room_stop_floor_pips": 15,
           "tp_buffer_pips": "3"
         },
         "reaction": {
@@ -3509,8 +3581,8 @@
           "scale_fraction": "0.2",
           "scale_invalid_policy": "single_market",
           "scale_step_atr": "0.5",
-          "stop_max_pips": 25,
-          "stop_min_pips": 12
+          "stop_max_pips": 30,
+          "stop_min_pips": 15
         },
         "regime": {
           "direction_enabled": false,
@@ -3521,7 +3593,7 @@
         "scaling": {
           "add": {
             "level_buffer_atr": "1",
-            "min_stop_pips": 10,
+            "min_stop_pips": 12,
             "pullback_enabled": false,
             "pullback_max_retrace": "0.7",
             "pullback_min_retrace": "0.2",
@@ -3532,12 +3604,12 @@
         "stops": {
           "be_buffer_ticks": 6,
           "reaction": {
-            "room_floor_pips": 12
+            "room_floor_pips": 15
           },
-          "sl_distance": "0.25",
+          "sl_distance": "0.3",
           "stop_push_beyond_zone": true,
           "trend": {
-            "minimum_pips": 12
+            "minimum_pips": 15
           },
           "wick_stop_buffer_atr": "0.15"
         },
@@ -3560,16 +3632,16 @@
           "include_late_ny": true,
           "london_window_hours": 3,
           "ny_window_hours": 3,
-          "reaction_publish_windows": "7-11,13-16",
+          "reaction_publish_windows": "0-3,7-11",
           "reaction_require_killzone": false,
-          "require_sweep_body": false,
+          "require_sweep_body": true,
           "strict_premium_discount": true
         },
         "trend": {
           "hard_entry_drift_pips": "30",
           "max_entry_drift_atr": "1.5",
           "min_entry_drift_pips": "15",
-          "stop_max_pips": 25
+          "stop_max_pips": 30
         },
         "zone_scaling": {
           "fill_enabled": true,
@@ -3717,6 +3789,18 @@
             "source_name": "instruments.GBPJPY.overrides"
           },
           {
+            "path": "execution.activation.reaction_trigger_maximum_age_bars",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.GBPJPY.overrides"
+          },
+          {
+            "path": "execution.entry.max_spread_pips",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.GBPJPY.overrides"
+          },
+          {
             "path": "execution.mapped_zone.zone_min_width_abs",
             "secret": false,
             "source_kind": "instrument_override",
@@ -3783,6 +3867,18 @@
             "source_name": "instruments.GBPJPY.overrides"
           },
           {
+            "path": "execution.technique.reaction_publish_windows",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.GBPJPY.overrides"
+          },
+          {
+            "path": "execution.technique.require_sweep_body",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.GBPJPY.overrides"
+          },
+          {
             "path": "execution.trend.stop_max_pips",
             "secret": false,
             "source_kind": "instrument_override",
@@ -3831,7 +3927,7 @@
           "allow_concurrent_strategies": true,
           "allow_hedged_xau": false,
           "non_hedged_opposite_policy": "broker_netting",
-          "opposing_minimum_separation_price": "0.15",
+          "opposing_minimum_separation_price": "0.25",
           "require_flat_for_range": true
         },
         "position_limits": {

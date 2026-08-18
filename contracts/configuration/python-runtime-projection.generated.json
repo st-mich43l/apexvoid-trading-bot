@@ -1,7 +1,7 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "280b4886604dd550286e011c641ab33256ee1f769661544cd707e378191d499c",
-  "excluded_ctrader_only_count": 50,
+  "configuration_contract_fingerprint_sha256": "fc98c417552a4b287008435e5df8a9b6b198f7a6a797ff982f5fb1b4b8988ceb",
+  "excluded_ctrader_only_count": 49,
   "excluded_paths": [
     "bootstrap.ctrader.connection.host",
     "bootstrap.ctrader.connection.port",
@@ -17,7 +17,6 @@
     "bootstrap.ctrader.token_rotation.refresh_token_key",
     "bootstrap.logging.ctrader_file_name",
     "execution.broker_recovery.absence_confirmations",
-    "execution.entry.max_spread_pips",
     "execution.entry.poll_ms",
     "execution.policy.box_min_rr",
     "execution.policy.flip_exit_buffer_pips",
@@ -54,7 +53,7 @@
     "risk.sizing.add_require_risk_free",
     "risk.sizing.risk_pct"
   ],
-  "included_leaf_count": 470,
+  "included_leaf_count": 471,
   "included_paths": [
     "actionability.contested_corridor.gap_atr",
     "actionability.counter_bias.allowed",
@@ -252,6 +251,7 @@
     "execution.activation.reaction_trigger_maximum_age_bars",
     "execution.entry.contract_tolerance_pips",
     "execution.entry.inside_zone_market_entry_enabled",
+    "execution.entry.max_spread_pips",
     "execution.entry.maximum_chase_distance_pips",
     "execution.mapped_zone.counter_bias_min_score",
     "execution.mapped_zone.execute_distance_atr",
@@ -528,8 +528,8 @@
     "strategies.zone.supply.enabled"
   ],
   "included_secret_count": 6,
-  "included_shared_field_count": 95,
+  "included_shared_field_count": 96,
   "projection_model": "app.configuration.models.python_runtime.PythonRuntimeConfig",
-  "source_fingerprint_sha256": "280b4886604dd550286e011c641ab33256ee1f769661544cd707e378191d499c",
+  "source_fingerprint_sha256": "fc98c417552a4b287008435e5df8a9b6b198f7a6a797ff982f5fb1b4b8988ceb",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

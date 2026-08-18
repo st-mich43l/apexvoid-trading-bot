@@ -39,6 +39,7 @@ RouteStage = Literal[
   "candidate_claim",
   "stream_publish",
   "preflight",
+  "technique",
   "arbitration",
   "executor",
   "broker",

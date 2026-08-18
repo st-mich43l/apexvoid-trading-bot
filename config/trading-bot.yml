@@ -206,9 +206,9 @@ instruments:
     analysis:
       zones:
         major_maximum_width_price: 0.003
-        minimum_width_price: 0.0003
+        minimum_width_price: 0.0006
         preferred_maximum_width_price: 0.0015
-        preferred_minimum_width_price: 0.0005
+        preferred_minimum_width_price: 0.0008
     broker_symbol: EURUSD
     canonical_symbol: EURUSD
     contract:
@@ -232,23 +232,27 @@ instruments:
       analysis.market_map.change_min: 0.0001
       analysis.market_map.fallback_radius_price: 0.01
       analysis.market_map.scalp_radius_price: 0.006
-      analysis.zones.confluence.merge_gap_price: 0.0003
+      analysis.zones.confluence.merge_gap_price: 0.0005
       analysis.zones.merge_max_width: 0.0015
-      execution.mapped_zone.zone_min_width_abs: 0.0003
+      execution.mapped_zone.zone_min_width_abs: 0.0006
       risk.exposure.opposing_minimum_separation_price: 0.0015
       strategies.technique.fvg.entry_max_width_price: 0.0015
-      # FX stop geometry is pip-based; XAU's 40–60 pip envelope is too wide.
+      # London/NY major: tight spread, 10–18 pip stop, still locked 1:2.
+      execution.technique.reaction_publish_windows: '7-11,13-16'
+      execution.technique.require_sweep_body: true
+      execution.activation.reaction_trigger_maximum_age_bars: 3
+      execution.entry.max_spread_pips: 1
       execution.range.min_rr: 2.0
       execution.reaction.room_stop_min_rr: 2.0
-      execution.reaction.stop_min_pips: 12
-      execution.reaction.stop_max_pips: 25
-      execution.stops.reaction.room_floor_pips: 12
+      execution.reaction.stop_min_pips: 10
+      execution.reaction.stop_max_pips: 18
+      execution.stops.reaction.room_floor_pips: 10
       execution.range.room_stop_floor_pips: 10
       execution.range.min_target_pips: 20
-      execution.stops.trend.minimum_pips: 12
-      execution.trend.stop_max_pips: 25
+      execution.stops.trend.minimum_pips: 10
+      execution.trend.stop_max_pips: 18
       execution.scaling.add.min_stop_pips: 10
-      execution.stops.sl_distance: 0.0025
+      execution.stops.sl_distance: 0.0018
       strategies.high_frequency_scalp.policy.minimum_reward_risk: 2.0
     policy: fx_fixed_2r_v1
     rollout: live
@@ -275,9 +279,9 @@ instruments:
     analysis:
       zones:
         major_maximum_width_price: 0.5
-        minimum_width_price: 0.08
+        minimum_width_price: 0.12
         preferred_maximum_width_price: 0.25
-        preferred_minimum_width_price: 0.1
+        preferred_minimum_width_price: 0.12
     broker_symbol: GBPJPY
     canonical_symbol: GBPJPY
     contract:
@@ -301,20 +305,26 @@ instruments:
       analysis.market_map.scalp_radius_price: 0.6
       analysis.zones.confluence.merge_gap_price: 0.05
       analysis.zones.merge_max_width: 0.25
-      execution.mapped_zone.zone_min_width_abs: 0.08
-      risk.exposure.opposing_minimum_separation_price: 0.15
+      execution.mapped_zone.zone_min_width_abs: 0.12
+      risk.exposure.opposing_minimum_separation_price: 0.25
       strategies.technique.fvg.entry_max_width_price: 0.25
+      # Tokyo/London cross: wider spread/stop, no NY dump window, still 1:2.
+      execution.technique.reaction_publish_windows: '0-3,7-11'
+      execution.technique.require_sweep_body: true
+      execution.activation.reaction_trigger_maximum_age_bars: 3
+      # Catalog field is int; 3 pips is the live cross allowance (plan 2.5).
+      execution.entry.max_spread_pips: 3
       execution.range.min_rr: 2.0
       execution.reaction.room_stop_min_rr: 2.0
-      execution.reaction.stop_min_pips: 12
-      execution.reaction.stop_max_pips: 25
-      execution.stops.reaction.room_floor_pips: 12
-      execution.range.room_stop_floor_pips: 10
-      execution.range.min_target_pips: 20
-      execution.stops.trend.minimum_pips: 12
-      execution.trend.stop_max_pips: 25
-      execution.scaling.add.min_stop_pips: 10
-      execution.stops.sl_distance: 0.25
+      execution.reaction.stop_min_pips: 15
+      execution.reaction.stop_max_pips: 30
+      execution.stops.reaction.room_floor_pips: 15
+      execution.range.room_stop_floor_pips: 15
+      execution.range.min_target_pips: 30
+      execution.stops.trend.minimum_pips: 15
+      execution.trend.stop_max_pips: 30
+      execution.scaling.add.min_stop_pips: 12
+      execution.stops.sl_distance: 0.30
       strategies.high_frequency_scalp.policy.minimum_reward_risk: 2.0
     policy: fx_fixed_2r_v1
     rollout: live

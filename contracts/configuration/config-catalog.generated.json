@@ -1,19 +1,19 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "280b4886604dd550286e011c641ab33256ee1f769661544cd707e378191d499c",
-  "configuration_document_fingerprint_sha256": "745c5a80d84072d85258d462e02e94156dcee37dfcf663b9353a750e93d3e3c9",
+  "configuration_contract_fingerprint_sha256": "fc98c417552a4b287008435e5df8a9b6b198f7a6a797ff982f5fb1b4b8988ceb",
+  "configuration_document_fingerprint_sha256": "b9dbe60567b4b77a4737778c3b26b511881f05d0e90c7cb333e530a933f15e5d",
   "counts": {
     "algorithm_constants": 57,
     "configurable": 453,
     "known_conflicts": 30,
     "owners": {
-      "ctrader": 50,
+      "ctrader": 49,
       "python": 375,
-      "shared": 95
+      "shared": 96
     },
     "protocol_constants": 10,
     "secrets": 9,
-    "shared": 95,
+    "shared": 96,
     "total_items": 520
   },
   "items": [
@@ -7754,19 +7754,23 @@
       "default": 5,
       "default_contexts": [
         {
+          "context": "python_schema",
+          "value": 5
+        },
+        {
           "context": "ctrader_from_environment",
           "value": 5
         }
       ],
       "deprecated": false,
       "deprecated_aliases": [],
-      "description": "cTrader configuration option AUTO_TRADE_MAX_SPREAD_PIPS controlling  (pips).",
+      "description": "Max bid/ask spread allowed at publish (pips).",
       "display_id": "config:execution.entry.max_spread_pips",
       "evidence_notes": [],
       "introduced_in": "config-catalog-v2",
       "kind": "configurable",
-      "mismatch_policy": "not_reported",
-      "owner": "ctrader",
+      "mismatch_policy": "fatal",
+      "owner": "shared",
       "path": "execution.entry.max_spread_pips",
       "protocol_constant": false,
       "reload_policy": "new_setup_only",
@@ -7775,11 +7779,11 @@
       "risk_classification": "execution_safety",
       "runtime_reload_policy": "restart",
       "secret": false,
-      "shared_with_ctrader": false,
+      "shared_with_ctrader": true,
       "terminal_deprecation_reason": null,
       "type": "int",
       "unit": "pips",
-      "validation_summary": "EnvironmentResolver.Int + AutoTradeOptions.Validate"
+      "validation_summary": "Pydantic required/type coercion only; EnvironmentResolver.Int + AutoTradeOptions.Validate"
     },
     {
       "algorithm_constant": false,
@@ -19492,6 +19496,6 @@
       "validation_summary": "Pydantic required/type coercion only"
     }
   ],
-  "source_fingerprint_sha256": "280b4886604dd550286e011c641ab33256ee1f769661544cd707e378191d499c",
+  "source_fingerprint_sha256": "fc98c417552a4b287008435e5df8a9b6b198f7a6a797ff982f5fb1b4b8988ceb",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

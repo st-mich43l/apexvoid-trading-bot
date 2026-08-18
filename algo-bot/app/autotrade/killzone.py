@@ -37,6 +37,16 @@ def technique_enforce(cfg: Any | None) -> bool:
   return bool(getattr(section, "enforce", True))
 
 
+def technique_require_sweep_body(cfg: Any | None) -> bool:
+  """Sweep/body confirmation follows the instrument technique node."""
+  if not technique_enforce(cfg):
+    return False
+  section = getattr(getattr(cfg, "execution", None), "technique", None)
+  if section is None:
+    return True
+  return bool(getattr(section, "require_sweep_body", True))
+
+
 def _session_hours(cfg: Any | None) -> tuple[int, int, int, int]:
   sessions = getattr(getattr(cfg, "market_data", None), "sessions", None)
   london = int(getattr(sessions, "london_start", 7) or 7)
