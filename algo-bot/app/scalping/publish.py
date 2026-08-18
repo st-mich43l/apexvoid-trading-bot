@@ -47,8 +47,10 @@ def _hfs_target_ladder(
 ) -> tuple[int, tuple[int, ...]]:
   """Final TP pips + published ladder.
 
-  XAU scalp books 10 then 20 pips. A fixed-RR instrument publishes one
-  full-close target. A shorter native room still publishes one exit.
+  XAU scalp books 10 then 20 pips. A fixed-RR instrument carries one
+  provisional final target here; execution policy expands it into the
+  configured R ladder from the final stop. A shorter native room still
+  publishes one exit.
   """
   from app.core.instrument_geometry import fixed_reward_risk
 

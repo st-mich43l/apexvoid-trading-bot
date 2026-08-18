@@ -53,13 +53,12 @@ def _instrument_digits(symbol: str, cfg: Any) -> int:
   return int(context.contract.instrument.price_digits or 2)
 
 
-def _instrument_fixed_reward_risk(symbol: str, cfg: Any) -> float | None:
+def _instrument_fixed_targeting(symbol: str, cfg: Any) -> Any | None:
   targeting = getattr(_instrument_context(symbol, cfg), "targeting", None)
   if targeting is not None:
     mode = getattr(targeting.mode, "value", targeting.mode)
     if str(mode) == "fixed_rr":
-      ratio = float(targeting.reward_risk or 0.0)
-      return ratio if ratio > 0 else None
+      return targeting
   return None
 
 # Version of the entry-plan contract (`planned_execution_route`,
@@ -1060,21 +1059,32 @@ def evaluate_execution_policy(
       measured,
       policy,
     )
-  fixed_reward_risk = _instrument_fixed_reward_risk("", instrument_cfg)
-  if fixed_reward_risk is not None:
+  fixed_targeting = _instrument_fixed_targeting("", instrument_cfg)
+  if fixed_targeting is not None:
+    fixed_reward_risk = float(fixed_targeting.reward_risk)
     entry_value = Decimal(str(planned_entry))
     stop_value = stop_plan.final_stop_price
     risk_distance = abs(entry_value - stop_value)
     quantum = Decimal(1).scaleb(-_instrument_digits("", instrument_cfg))
-    reward_distance = risk_distance * Decimal(str(fixed_reward_risk))
-    target_value = (
-      entry_value + reward_distance
-      if direction == "BUY"
-      else entry_value - reward_distance
-    ).quantize(quantum, rounding=ROUND_HALF_UP)
-    target_pips = abs(target_value - entry_value) / Decimal(str(pip))
+    target_values: list[Decimal] = []
+    target_pips_values: list[Decimal] = []
+    target_r_multiples = tuple(
+      float(value) for value in fixed_targeting.target_r_multiples
+    )
+    for raw_multiple in target_r_multiples:
+      reward_distance = risk_distance * Decimal(str(raw_multiple))
+      target_value = (
+        entry_value + reward_distance
+        if direction == "BUY"
+        else entry_value - reward_distance
+      ).quantize(quantum, rounding=ROUND_HALF_UP)
+      target_values.append(target_value)
+      target_pips_values.append(
+        abs(target_value - entry_value) / Decimal(str(pip))
+      )
+    final_target_pips = target_pips_values[-1]
     actual_reward_risk = (
-      target_pips / (risk_distance / Decimal(str(pip)))
+      final_target_pips / (risk_distance / Decimal(str(pip)))
       if risk_distance > 0
       else Decimal("0")
     )
@@ -1082,12 +1092,42 @@ def evaluate_execution_policy(
     measured.update({
       "target_policy_mode": "fixed_rr",
       "target_reward_risk": fixed_reward_risk,
-      "planned_target_prices": [format(target_value, "f")],
-      "planned_target_pips": [format(target_pips, "f")],
-      "planned_target_close_ratios": ["1"],
+      "planned_target_r_multiples": [
+        format(Decimal(str(value)), "f")
+        for value in target_r_multiples
+      ],
+      "planned_target_prices": [
+        format(value, "f") for value in target_values
+      ],
+      "planned_target_pips": [
+        format(value, "f") for value in target_pips_values
+      ],
+      "planned_target_close_ratios": [
+        format(Decimal(str(value)), "f")
+        for value in fixed_targeting.close_ratios
+      ],
       "reward_risk": round(reward_risk, 4),
       "min_reward_risk": fixed_reward_risk,
     })
+    trail_after_r = getattr(fixed_targeting, "trail_after_r", None)
+    trail_to_r = getattr(fixed_targeting, "trail_to_r", None)
+    if trail_after_r is not None and trail_to_r is not None:
+      trail_after_index = next(
+        index for index, value in enumerate(target_r_multiples)
+        if math.isclose(
+          value, float(trail_after_r), rel_tol=0.0, abs_tol=1e-9,
+        )
+      )
+      trail_to_index = next(
+        index for index, value in enumerate(target_r_multiples)
+        if math.isclose(
+          value, float(trail_to_r), rel_tol=0.0, abs_tol=1e-9,
+        )
+      )
+      measured.update({
+        "planned_trail_after_target_id": f"TP{trail_after_index + 1}",
+        "planned_trail_to_target_id": f"TP{trail_to_index + 1}",
+      })
     available_room = (
       float(available_target_room_pips)
       if available_target_room_pips is not None
@@ -1098,12 +1138,16 @@ def evaluate_execution_policy(
     )
     if available_room is not None:
       measured["available_target_room_pips"] = round(available_room, 3)
-    if available_room is not None and available_room + 1e-9 < float(target_pips):
+    if (
+      available_room is not None
+      and available_room + 1e-9 < float(final_target_pips)
+    ):
       return ExecutionPolicyEvaluation(
         False,
         "fixed_rr_room_insufficient",
         (
-          f"fixed {fixed_reward_risk:.2f}R needs {float(target_pips):.1f} "
+          f"fixed {fixed_reward_risk:.2f}R needs "
+          f"{float(final_target_pips):.1f} "
           "pips of room, remaining "
           f"{available_room:.1f}"
         ),

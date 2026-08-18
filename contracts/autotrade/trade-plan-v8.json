@@ -89,7 +89,9 @@
         "management": {
           "be_after_target_id": "TP1",
           "be_buffer_ticks": 6,
-          "never_worsen_stop": true
+          "never_worsen_stop": true,
+          "trail_after_target_id": "TP2",
+          "trail_to_target_id": "TP1"
         },
         "sizing": {
           "mode": "equity_table",
@@ -376,6 +378,31 @@
       "plan_overrides": {
         "base": "market_watch_buy",
         "management.be_after_target_id": "TP9"
+      }
+    },
+    {
+      "name": "trail_target_pair_required",
+      "error": "must be set together",
+      "plan_overrides": {
+        "base": "market_watch_buy",
+        "management.trail_to_target_id": null
+      }
+    },
+    {
+      "name": "trail_destination_must_precede_trigger",
+      "error": "trail_to_target_id must precede",
+      "plan_overrides": {
+        "base": "market_watch_buy",
+        "management.trail_after_target_id": "TP1",
+        "management.trail_to_target_id": "TP2"
+      }
+    },
+    {
+      "name": "trail_trigger_cannot_be_final_target",
+      "error": "trail_after_target_id must precede the final target",
+      "plan_overrides": {
+        "base": "market_watch_buy",
+        "management.trail_after_target_id": "TP3"
       }
     }
   ]

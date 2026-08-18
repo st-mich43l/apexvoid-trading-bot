@@ -452,12 +452,16 @@ class TradePlanManagement:
   be_after_target_id: str | None
   be_buffer_ticks: int
   never_worsen_stop: bool = True
+  trail_after_target_id: str | None = None
+  trail_to_target_id: str | None = None
 
   def to_dict(self) -> dict:
     return {
       "be_after_target_id": self.be_after_target_id,
       "be_buffer_ticks": self.be_buffer_ticks,
       "never_worsen_stop": self.never_worsen_stop,
+      "trail_after_target_id": self.trail_after_target_id,
+      "trail_to_target_id": self.trail_to_target_id,
     }
 
   @classmethod
@@ -466,6 +470,8 @@ class TradePlanManagement:
       be_after_target_id=data.get("be_after_target_id"),
       be_buffer_ticks=int(data.get("be_buffer_ticks", 0)),
       never_worsen_stop=bool(data.get("never_worsen_stop", True)),
+      trail_after_target_id=data.get("trail_after_target_id"),
+      trail_to_target_id=data.get("trail_to_target_id"),
     )
 
 
@@ -663,4 +669,35 @@ class TradePlan:
         raise TradePlanError(
           f"management.be_after_target_id {self.management.be_after_target_id!r} "
           f"is not one of the declared targets {sorted(target_ids)}",
+        )
+
+    trail_after_id = self.management.trail_after_target_id
+    trail_to_id = self.management.trail_to_target_id
+    if (trail_after_id is None) != (trail_to_id is None):
+      raise TradePlanError(
+        "management.trail_after_target_id and trail_to_target_id "
+        "must be set together",
+      )
+    if trail_after_id is not None and trail_to_id is not None:
+      target_ids = [target.target_id for target in self.targets]
+      if trail_after_id not in target_ids:
+        raise TradePlanError(
+          f"management.trail_after_target_id {trail_after_id!r} "
+          f"is not one of the declared targets {target_ids}",
+        )
+      if trail_to_id not in target_ids:
+        raise TradePlanError(
+          f"management.trail_to_target_id {trail_to_id!r} "
+          f"is not one of the declared targets {target_ids}",
+        )
+      trail_after_index = target_ids.index(trail_after_id)
+      trail_to_index = target_ids.index(trail_to_id)
+      if trail_to_index >= trail_after_index:
+        raise TradePlanError(
+          "management.trail_to_target_id must precede "
+          "trail_after_target_id",
+        )
+      if trail_after_index >= len(target_ids) - 1:
+        raise TradePlanError(
+          "management.trail_after_target_id must precede the final target",
         )

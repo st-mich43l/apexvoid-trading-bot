@@ -393,15 +393,24 @@ def build_trade_plan_from_strategy_match(
     Decimal(str(price))
     for price in (measured.get("planned_target_prices") or ())
   )
+  fixed_close_ratios = tuple(
+    Decimal(str(ratio))
+    for ratio in (measured.get("planned_target_close_ratios") or ())
+  )
   fixed_rr = measured.get("target_policy_mode") == "fixed_rr"
   if fixed_rr:
-    if len(fixed_target_prices) != 1:
+    if (
+      not fixed_target_prices
+      or len(fixed_target_prices) != len(fixed_close_ratios)
+      or any(ratio <= 0 for ratio in fixed_close_ratios)
+      or sum(fixed_close_ratios) != Decimal("1")
+    ):
       raise TradePlanBuildRejected(
         "invalid_fixed_rr_target",
-        "fixed_rr policy must produce exactly one target price",
+        "fixed_rr policy must produce aligned targets whose ratios sum to 1",
         measured,
       )
-    ratios = (Decimal("1"),)
+    ratios = fixed_close_ratios
     target_values = fixed_target_prices
   else:
     ratios = (
@@ -525,14 +534,26 @@ def build_trade_plan_from_strategy_match(
     ),
   )
 
-  if fixed_rr or be_after_target_index is None or not targets:
+  if be_after_target_index is None or not targets:
     be_after_target_id = None
   else:
     be_after_target_id = targets[be_after_target_index].target_id
+  trail_after_target_id = (
+    str(measured["planned_trail_after_target_id"])
+    if fixed_rr and measured.get("planned_trail_after_target_id")
+    else None
+  )
+  trail_to_target_id = (
+    str(measured["planned_trail_to_target_id"])
+    if fixed_rr and measured.get("planned_trail_to_target_id")
+    else None
+  )
   management = TradePlanManagement(
     be_after_target_id=be_after_target_id,
     be_buffer_ticks=be_buffer_ticks,
     never_worsen_stop=True,
+    trail_after_target_id=trail_after_target_id,
+    trail_to_target_id=trail_to_target_id,
   )
 
   risk = TradePlanRisk(

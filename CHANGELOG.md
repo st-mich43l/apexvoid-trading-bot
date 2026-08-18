@@ -14,10 +14,10 @@ dated section after deployment.
 
 ### Changed
 - EURUSD and GBPJPY now use the explicit ``fx_fixed_2r_v1`` execution policy:
-  one full-close target at exactly 2R from the final planned entry and
-  protective stop, with a 12–25 pip stop envelope. They no longer inherit
-  XAU's pip ladder or partial-exit lifecycle; XAU and equity-table sizing are
-  unchanged.
+  partial exits of 25% at 1R and 25% at 1.5R, then the remaining 50% at 2R,
+  calculated from the final planned entry and protective stop. TP1 enables
+  protected break-even; booking 1.5R trails the runner to 1R. FX no longer
+  inherits XAU's absolute pip ladder; XAU and equity-table sizing are unchanged.
 
 ### Fixed
 - Private FX scalp/trend candidates now carry their canonical symbol through

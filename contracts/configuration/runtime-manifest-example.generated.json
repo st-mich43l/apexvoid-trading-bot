@@ -131,7 +131,7 @@
     "zone_scale_undersized_policy": "single_entry"
   },
   "contract_fingerprint": "280b4886604dd550286e011c641ab33256ee1f769661544cd707e378191d499c",
-  "effective_configuration_fingerprint": "3659500078dec1c0486fb6ff17c7423ecb86db33cb47ae038ec2ad24bc1bb5be",
+  "effective_configuration_fingerprint": "b5d86d0b0adcb7a25a43b752ea64026359435f547b04ec64af7334eb84299f1e",
   "feed": {
     "backfill_bars": 1500,
     "bar_quality_lookback": 6,
@@ -1004,8 +1004,20 @@
         }
       },
       "targeting": {
+        "close_ratios": [
+          "0.25",
+          "0.25",
+          "0.5"
+        ],
         "mode": "fixed_rr",
-        "reward_risk": "2"
+        "reward_risk": "2",
+        "target_r_multiples": [
+          "1",
+          "1.5",
+          "2"
+        ],
+        "trail_after_r": "1.5",
+        "trail_to_r": "1"
       },
       "units": {
         "contract_units_per_lot": "100000",
@@ -1826,8 +1838,20 @@
         }
       },
       "targeting": {
+        "close_ratios": [
+          "0.25",
+          "0.25",
+          "0.5"
+        ],
         "mode": "fixed_rr",
-        "reward_risk": "2"
+        "reward_risk": "2",
+        "target_r_multiples": [
+          "1",
+          "1.5",
+          "2"
+        ],
+        "trail_after_r": "1.5",
+        "trail_to_r": "1"
       },
       "units": {
         "contract_units_per_lot": "100000",
@@ -2550,8 +2574,12 @@
         }
       },
       "targeting": {
+        "close_ratios": [],
         "mode": "ladder_pips",
-        "reward_risk": null
+        "reward_risk": null,
+        "target_r_multiples": [],
+        "trail_after_r": null,
+        "trail_to_r": null
       },
       "units": {
         "contract_units_per_lot": "100",
@@ -3237,8 +3265,20 @@
         }
       },
       "targeting": {
+        "close_ratios": [
+          "0.25",
+          "0.25",
+          "0.5"
+        ],
         "mode": "fixed_rr",
-        "reward_risk": "2"
+        "reward_risk": "2",
+        "target_r_multiples": [
+          "1",
+          "1.5",
+          "2"
+        ],
+        "trail_after_r": "1.5",
+        "trail_to_r": "1"
       },
       "units": {
         "contract_units_per_lot": "100000",
@@ -3922,8 +3962,20 @@
         }
       },
       "targeting": {
+        "close_ratios": [
+          "0.25",
+          "0.25",
+          "0.5"
+        ],
         "mode": "fixed_rr",
-        "reward_risk": "2"
+        "reward_risk": "2",
+        "target_r_multiples": [
+          "1",
+          "1.5",
+          "2"
+        ],
+        "trail_after_r": "1.5",
+        "trail_to_r": "1"
       },
       "units": {
         "contract_units_per_lot": "100000",
@@ -4507,8 +4559,12 @@
         }
       },
       "targeting": {
+        "close_ratios": [],
         "mode": "ladder_pips",
-        "reward_risk": null
+        "reward_risk": null,
+        "target_r_multiples": [],
+        "trail_after_r": null,
+        "trail_to_r": null
       },
       "units": {
         "contract_units_per_lot": "100",

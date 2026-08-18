@@ -61,9 +61,9 @@ def _select_target(
   Instruments configured with ``fixed_rr`` use only that ratio, with no
   1:1 fallback.
 
-  Publish layer turns a selected 1:2 into TP1@1R (50%) + TP2@2R (50%) with
-  the protective stop left fixed (no BE / no trail). A fixed-RR instrument
-  publishes one full-close target.
+  XAU publish turns a selected 1:2 into TP1@1R (50%) + TP2@2R (50%) with
+  the protective stop left fixed. A fixed-RR instrument expands the selected
+  final target into its configured R ladder during execution-policy planning.
   """
   if room_pips is None or pip_size <= 0 or stop_pips is None or stop_pips <= 0:
     return None

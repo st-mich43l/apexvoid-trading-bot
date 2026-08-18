@@ -2721,7 +2721,11 @@ public sealed class TradePlanRuntime(
         }
       }
 
-      var trailToIndex = state.NextTargetIndex - 3;
+      var trailToIndex = TradePlanExecutionEngine.ResolveTrailTargetIndex(
+        plan,
+        state.NextTargetIndex,
+        state.HighestBookedTargetIndex
+      );
       if (trailToIndex >= 0 && trailToIndex < plan.Targets.Count)
       {
         state = await CancelUnfilledEntryLegsAsync(

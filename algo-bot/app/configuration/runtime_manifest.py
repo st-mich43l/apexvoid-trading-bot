@@ -592,7 +592,14 @@ def upgrade_v1_payload_to_v2(payload: Mapping[str, Any]) -> dict[str, Any]:
       "units": xau["units"],
       "targeting": xau.get(
         "targeting",
-        {"mode": "ladder_pips", "reward_risk": None},
+        {
+          "mode": "ladder_pips",
+          "reward_risk": None,
+          "target_r_multiples": [],
+          "close_ratios": [],
+          "trail_after_r": None,
+          "trail_to_r": None,
+        },
       ),
       "feed": payload["feed"],
       "analysis": xau.get("analysis", {}),

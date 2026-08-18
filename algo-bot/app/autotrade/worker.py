@@ -5923,9 +5923,8 @@ async def _publish_trade_plan_v8(
     )
     return None
   try:
-    # Owner 2026-08-11: HFS 1:2 publishes TP1@1R (50%) + TP2@2R (50%) and
-    # keeps the original stop fixed - no BE after the half, no trail (trail
-    # only engages after TP3+ on multi-ladder plans anyway).
+    # Native XAU HFS 1:2 keeps its original stop fixed. Instrument-owned
+    # fixed-RR ladders use their declared TP1 BE and explicit trail contract.
     hfs_one_to_two = (
       is_hfs_strategy(str(match_for_plan.strategy))
       and len(tuple(match_for_plan.targets_pips or ())) == 2
@@ -5957,7 +5956,7 @@ async def _publish_trade_plan_v8(
       same_direction_size_fraction=float(
         runtime_config.risk.position_limits.same_direction_stack_size_fraction
       ),
-      be_after_target_index=None if (hfs_one_to_two or fixed_rr_target) else 0,
+      be_after_target_index=None if hfs_one_to_two else 0,
       approved_measured=gate_measured if fixed_rr_target else None,
     )
   except TradePlanBuildRejected as exc:
@@ -6313,10 +6312,10 @@ async def _publish_trend_candidate(
     fixed_rr_targets if fixed_rr_targets else trend_decision.targets_pips
   )
   published_absolute_target = (
-    fixed_rr_prices[0] if fixed_rr_prices else absolute_target
+    fixed_rr_prices[-1] if fixed_rr_prices else absolute_target
   )
   published_target_model = (
-    "absolute" if fixed_rr_prices else trend_policy_subject.target_model
+    "hybrid" if fixed_rr_prices else trend_policy_subject.target_model
   )
   published_target_reference = (
     "planned_entry" if fixed_rr_prices
