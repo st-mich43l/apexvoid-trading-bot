@@ -189,6 +189,7 @@ def resolve_execution_route_plan(
   reaction_scale_invalid_policy: str = "single_market",
   strategy: str | None = None,
   strategy_family: str | None = None,
+  entry_clips: int = SCALP_MICRO_CLIPS,
 ) -> ExecutionRoutePlan:
   """Resolve a concrete route mirroring AutoTradeEngine.ResolveExecutionRoute."""
   preference = (order_type_preference or "").strip().lower()
@@ -304,7 +305,12 @@ def resolve_execution_route_plan(
     family=strategy_family,
   ) or is_technique_or_confluence(str(strategy or "")):
     grid = scalp_micro_grid_legs(
-      side=side, low=low, high=high, quote=quote, digits=digits,
+      side=side,
+      low=low,
+      high=high,
+      quote=quote,
+      digits=digits,
+      clips=entry_clips,
     )
     if len(grid) >= 2:
       l1 = grid[0]

@@ -8,7 +8,7 @@ import math
 from types import SimpleNamespace
 from typing import Any
 
-from app.autotrade.execution_route import resolve_execution_route_plan
+from app.autotrade.execution_route import SCALP_MICRO_CLIPS, resolve_execution_route_plan
 from app.autotrade.protective_stop import (
   ProtectiveStopError,
   opposing_zone_context_from_values,
@@ -714,6 +714,7 @@ def evaluate_execution_policy(
       or getattr(match, "strategy_family", None)
       or strategy_family(str(getattr(match, "strategy", "") or ""))
     ),
+    entry_clips=int(getattr(instrument_cfg.targeting, "entry_clips", SCALP_MICRO_CLIPS)),
   )
   if not route_plan.valid:
     return ExecutionPolicyEvaluation(

@@ -5069,6 +5069,51 @@ public sealed class AutoTradeEngine(
     return Math.Abs(exitEstimate - stopPrice) <= tolerance;
   }
 
+  private decimal ResolveMissingPositionExit(
+    AutoTradePositionState state,
+    PositionCloseLookup closeLookup,
+    PositionCloseReason closeReason
+  )
+  {
+    if (closeLookup.ExecutionPrice is decimal recovered)
+    {
+      return recovered;
+    }
+    if (closeReason == PositionCloseReason.StopLossOrTakeProfit)
+    {
+      return state.CurrentStopLoss ?? state.InitialStopLoss ?? state.EntryPrice;
+    }
+    return LiveExitQuote(state) ?? state.EntryPrice;
+  }
+
+  private decimal? LiveExitQuote(AutoTradePositionState state)
+  {
+    SpotPrice? spot = null;
+    if (
+      !string.IsNullOrWhiteSpace(state.Symbol)
+      && _lastSpotBySymbol.TryGetValue(state.Symbol, out var bySymbol)
+    )
+    {
+      spot = bySymbol;
+    }
+    else if (
+      RedisSymbolFor(state.SymbolId) is string redisSymbol
+      && _lastSpotBySymbol.TryGetValue(redisSymbol, out var byId)
+    )
+    {
+      spot = byId;
+    }
+    else
+    {
+      spot = _lastSpot;
+    }
+    if (spot is null)
+    {
+      return null;
+    }
+    return state.Direction == TradeDirection.Buy ? spot.Bid : spot.Ask;
+  }
+
   private static string GroupId(AutoTradePositionState state) =>
     string.IsNullOrWhiteSpace(state.GroupId)
       ? GroupToken(state.CandidateId)
@@ -5915,13 +5960,6 @@ public sealed class AutoTradeEngine(
           );
         }
         var closeReason = closeLookup.Reason;
-        // Broker snapshot disappearance does not expose the true fill by
-        // itself - fall back to the last known protective stop (or entry) to
-        // book the remaining volume into the volume-weighted pip total,
-        // unless the lookup above recovered the real closing deal price.
-        var exitEstimate = closeLookup.ExecutionPrice
-          ?? state.CurrentStopLoss
-          ?? state.EntryPrice;
         // Promote Unknown → SL/TP only when the deal lookup recovered a real
         // execution price sitting on the protective stop. Defaulting the
         // exit estimate FROM CurrentStopLoss and then comparing to that same
@@ -5935,6 +5973,13 @@ public sealed class AutoTradeEngine(
         {
           closeReason = PositionCloseReason.StopLossOrTakeProfit;
         }
+        // Manual / unconfirmed closes must not book P&L against the stop.
+        // Prefer the recovered deal fill, then the live quote, then entry.
+        var exitEstimate = ResolveMissingPositionExit(
+          state,
+          closeLookup,
+          closeReason
+        );
         var remainingVolume = Math.Max(0, state.RemainingVolume);
         var pipVolume = state.GroupRealizedPipVolume
           + SignedPips(state, exitEstimate) * remainingVolume;
@@ -5950,18 +5995,24 @@ public sealed class AutoTradeEngine(
           initialVolume
         );
         var groupId = GroupId(state);
+        var pipText = terminalGroupPips.ToString("0.0", CultureInfo.InvariantCulture);
+        var resultPhrase = terminalGroupPips > 0m
+          ? $"winning {pipText} pips"
+          : terminalGroupPips < 0m
+            ? $"losing {pipText} pips"
+            : "break-even";
         var (closeMessage, closeReasonCode) = closeReason switch
         {
           PositionCloseReason.StopLossOrTakeProfit => (
-            "position closed at broker: stop loss / take profit",
+            $"position closed at broker: stop loss / take profit · {resultPhrase}",
             "stop_loss_or_take_profit"
           ),
           PositionCloseReason.ManualOrExternalOrder => (
-            "position closed at broker: manual or external order",
+            $"position closed at broker: manual or external order · {resultPhrase}",
             "manual_or_external_close"
           ),
           _ => (
-            "position is no longer open at broker (reason unconfirmed)",
+            $"position is no longer open at broker (reason unconfirmed) · {resultPhrase}",
             (string?)null
           ),
         };

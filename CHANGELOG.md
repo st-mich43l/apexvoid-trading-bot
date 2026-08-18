@@ -18,8 +18,24 @@ dated section after deployment.
   calculated from the final planned entry and protective stop. TP1 enables
   protected break-even; booking 1.5R trails the runner to 1R. FX no longer
   inherits XAU's absolute pip ladder; XAU and equity-table sizing are unchanged.
+- FX technique and scalp entries use a two-clip micro-grid (market + one deeper
+  limit) instead of XAU's five equal legs, configured via ``targeting.entry_clips``.
+- V8 trade plans now finalize and report win/loss when the owner closes a
+  position directly on the broker. Manual/external closes publish
+  ``position_closed`` with the broker execution price and signed pips instead
+  of stalling in ``recovery_required`` or misclassifying near-stop exits as SL.
+- Algo-auto (V6) tracked positions do the same: a broker-side close reports
+  signed pips from the recovered deal fill or live quote, not from the
+  protective stop, and Telegram no longer invents an SL loss from ``stop_pips``.
 
 ### Fixed
+- V8 close-reason classification no longer promotes an ambiguous vanish to
+  stop-loss by comparing the exit to ``CurrentStop`` when no deal execution
+  price was recovered (the same tautology V6 already fixed).
+- Algo-auto missing-position P&L no longer falls back to ``CurrentStopLoss``
+  for manual or unconfirmed closes, which made winning platform closes look
+  like stop-outs.
+
 - Private FX scalp/trend candidates now carry their canonical symbol through
   policy evaluation, preventing silent fallback to XAU stop and target
   geometry.

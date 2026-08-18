@@ -722,14 +722,12 @@ public sealed class TradePlanRuntime(
     {
       return lookup.Reason;
     }
-    // Mirror V6 AutoTradeEngine: when deal history cannot confirm OrderType
-    // but the exit prints at the protective stop, treat it as an SL/TP hit
-    // so ordinary stop-outs do not stall in recovery_required. Prefer the
-    // deal fill when present; otherwise use the live group stop (BE/trail).
-    var exit = lookup.ExecutionPrice
-      ?? (state.CurrentStop != 0 ? state.CurrentStop : null);
+    // Mirror V6 AutoTradeEngine: promote Unknown → SL/TP only when the deal
+    // lookup recovered a real execution price sitting on the protective stop.
+    // Defaulting the exit FROM CurrentStop and then comparing to that same
+    // stop is a tautology — manual closes near BE/trail read as stop-outs.
     if (
-      exit is decimal exitPrice
+      lookup.ExecutionPrice is decimal exitPrice
       && LooksLikeProtectiveStopHit(plan, state, exitPrice)
     )
     {
@@ -1440,7 +1438,8 @@ public sealed class TradePlanRuntime(
     string? previousState = null,
     string? state = null,
     long? remainingVolume = null,
-    decimal? groupRealizedPips = null
+    decimal? groupRealizedPips = null,
+    string? reasonCode = null
   ) => PublishEventCoreAsync(
     type,
     message,
@@ -1454,7 +1453,8 @@ public sealed class TradePlanRuntime(
     previousState,
     state,
     remainingVolume,
-    groupRealizedPips
+    groupRealizedPips,
+    reasonCode
   );
 
   private async Task PublishEventCoreAsync(
@@ -1470,7 +1470,8 @@ public sealed class TradePlanRuntime(
     string? previousState,
     string? state,
     long? remainingVolume,
-    decimal? groupRealizedPips
+    decimal? groupRealizedPips,
+    string? reasonCode = null
   )
   {
     if (!string.IsNullOrWhiteSpace(eventKey))
@@ -1522,9 +1523,10 @@ public sealed class TradePlanRuntime(
         State: state,
         RemainingVolume: remainingVolume,
         GroupRealizedPips: groupRealizedPips,
-        ReasonCode: eventKey == "group_stop_loss"
-          ? "stop_loss_or_take_profit"
-          : null
+        ReasonCode: reasonCode
+          ?? (eventKey == "group_stop_loss"
+            ? "stop_loss_or_take_profit"
+            : null)
       ),
       cancellationToken
     );
@@ -2843,11 +2845,16 @@ public sealed class TradePlanRuntime(
     var allMissingAreSl = reasons.All(
       item => item.Reason == PositionCloseReason.StopLossOrTakeProfit
     );
+    var allManual = reasons.All(
+      item => item.Reason == PositionCloseReason.ManualOrExternalOrder
+    );
     var anyUnknown = reasons.Any(item => item.Reason == PositionCloseReason.Unknown);
+    var allHaveExitPrice = reasons.All(item => item.ExitPrice is not null);
     var totalTracked = legs.Count(leg => leg.BrokerPositionId is not null);
     var closedCount = reasons.Count;
+    var previousGroupStage = state.GroupStage;
 
-    if (anyUnknown)
+    if (anyUnknown && !allHaveExitPrice)
     {
       var next = AggregateState(
         state with
@@ -2904,75 +2911,76 @@ public sealed class TradePlanRuntime(
 
     if (allMissingAreSl && stillOpen == 0)
     {
-      var highestTp = HighestArchivedTargetId(plan, state);
-      var highestTpPips = highestTp is null
-        ? null
-        : ArchivedTargetPips(plan, state, highestTp);
-      // Broker deal lookup sometimes omits ExecutionPrice; for a full SL
-      // with no archived TP, the plan stop is the best exit estimate so
-      // Python /trade_stats still receives signed losing pips.
-      decimal? exitHint = reasons
+      return await FinalizeBrokerAbsentCloseAsync(
+        symbol,
+        plan,
+        state,
+        legs,
+        reasons,
+        terminalReason: "group_stop_loss",
+        eventKey: "group_stop_loss",
+        reasonCode: "stop_loss_or_take_profit",
+        closeKind: "stop_loss_or_take_profit",
+        previousGroupStage,
+        cancellationToken
+      );
+    }
+
+    if (stillOpen > 0 && !anyUnknown && !allMissingAreSl)
+    {
+      var partialExit = reasons
         .Select(item => item.ExitPrice)
         .FirstOrDefault(price => price is not null);
-      if (exitHint is null && highestTp is null && plan.Stop.Price > 0)
-      {
-        exitHint = plan.Stop.Price;
-      }
       var next = AggregateState(
         state with
         {
           Legs = legs,
-          GroupStage = TradePlanGroupStages.Closed,
-          TerminalReason = "group_stop_loss",
-          Stage = TradePlanRuntimeStage.Closed,
+          GroupStage = TradePlanGroupStages.PartiallyClosed,
         }
       );
       await PersistStateAsync(next, cancellationToken);
-      int? realizedPips = null;
-      if (highestTp is null && exitHint is decimal slExit)
-      {
-        realizedPips = SignedExitPips(plan, state, slExit);
-      }
-      string slMessage;
-      if (highestTp is not null)
-      {
-        slMessage = exitHint is decimal exitPrice
-          ? $"PLAN CLOSED · highest TP archived {highestTp} · @ {FormatEventPrice(exitPrice, symbol)}"
-          : $"PLAN CLOSED · highest TP archived {highestTp}";
-      }
-      else if (realizedPips is int lossPips && lossPips < 0)
-      {
-        slMessage = exitHint is decimal exitPrice
-          ? $"PLAN CLOSED · no TP archived · losing {lossPips} pips · @ {FormatEventPrice(exitPrice, symbol)}"
-          : $"PLAN CLOSED · no TP archived · losing {lossPips} pips";
-      }
-      else
-      {
-        slMessage = exitHint is decimal exitPrice
-          ? $"PLAN CLOSED · no TP archived · @ {FormatEventPrice(exitPrice, symbol)}"
-          : "PLAN CLOSED · no TP archived";
-      }
       await PublishEventAsync(
         "position_closed",
-        slMessage,
+        $"GROUP PARTIALLY CLOSED manual/external "
+        + $"({closedCount}/{Math.Max(totalTracked, 1)}); continuing management",
         plan,
         cancellationToken,
         positionId: state.PositionId,
-        price: exitHint,
-        targetPips: highestTpPips,
-        eventKey: "group_stop_loss",
-        state: TradePlanGroupStages.Closed,
-        groupRealizedPips: realizedPips
+        price: partialExit,
+        eventKey: "group_partial_manual_close",
+        previousState: previousGroupStage,
+        state: TradePlanGroupStages.PartiallyClosed,
+        groupRealizedPips: partialExit is decimal exit
+          ? SignedExitPips(plan, state, exit)
+          : null,
+        reasonCode: "manual_or_external_close"
       );
-      await PersistPlanExecutionStateAsync(
-        plan.PlanId, "completed", null, cancellationToken, "group_stop_loss"
-      );
-      await ForgetPlanAsync(state.PlanId, cancellationToken);
       return next;
     }
 
-    // Manual / external close on one or more legs without a clean SL story —
-    // do not guess; require recovery.
+    if (stillOpen == 0 && (allManual || (allHaveExitPrice && !allMissingAreSl)))
+    {
+      return await FinalizeBrokerAbsentCloseAsync(
+        symbol,
+        plan,
+        state,
+        legs,
+        reasons,
+        terminalReason: allManual
+          ? "manual_or_external_close"
+          : "broker_close_unconfirmed",
+        eventKey: allManual
+          ? "manual_or_external_close"
+          : "broker_close_unconfirmed",
+        reasonCode: allManual ? "manual_or_external_close" : null,
+        closeKind: allManual ? "manual_or_external" : "unconfirmed",
+        previousGroupStage,
+        cancellationToken
+      );
+    }
+
+    // Manual / external close on one or more legs without a recoverable exit
+    // price — do not guess; require recovery.
     var nextManual = AggregateState(
       state with
       {
@@ -2992,6 +3000,118 @@ public sealed class TradePlanRuntime(
       state: TradePlanGroupStages.RecoveryRequired
     );
     return nextManual;
+  }
+
+  private async Task<TradePlanRuntimeState> FinalizeBrokerAbsentCloseAsync(
+    SymbolInfo symbol,
+    TradePlan plan,
+    TradePlanRuntimeState state,
+    List<TradePlanLegRuntimeState> legs,
+    IReadOnlyList<(
+      TradePlanLegRuntimeState Leg,
+      PositionCloseReason Reason,
+      decimal? ExitPrice
+    )> reasons,
+    string terminalReason,
+    string eventKey,
+    string? reasonCode,
+    string closeKind,
+    string previousGroupStage,
+    CancellationToken cancellationToken
+  )
+  {
+    var highestTp = HighestArchivedTargetId(plan, state);
+    var highestTpPips = highestTp is null
+      ? null
+      : ArchivedTargetPips(plan, state, highestTp);
+    var exitHint = reasons
+      .Select(item => item.ExitPrice)
+      .FirstOrDefault(price => price is not null);
+    if (
+      exitHint is null
+      && highestTp is null
+      && closeKind == "stop_loss_or_take_profit"
+      && plan.Stop.Price > 0
+    )
+    {
+      exitHint = plan.Stop.Price;
+    }
+    var next = AggregateState(
+      state with
+      {
+        Legs = legs,
+        GroupStage = TradePlanGroupStages.Closed,
+        TerminalReason = terminalReason,
+        Stage = TradePlanRuntimeStage.Closed,
+      }
+    );
+    await PersistStateAsync(next, cancellationToken);
+    int? realizedPips = null;
+    if (exitHint is decimal exitPrice)
+    {
+      if (closeKind != "stop_loss_or_take_profit" || highestTp is null)
+      {
+        realizedPips = SignedExitPips(plan, state, exitPrice);
+      }
+    }
+    string closeMessage;
+    if (highestTp is not null)
+    {
+      closeMessage = exitHint is decimal exit
+        ? $"PLAN CLOSED · highest TP archived {highestTp} · @ {FormatEventPrice(exit, symbol)}"
+        : $"PLAN CLOSED · highest TP archived {highestTp}";
+    }
+    else if (realizedPips is int lossPips && lossPips < 0)
+    {
+      closeMessage = exitHint is decimal exit
+        ? closeKind == "stop_loss_or_take_profit"
+          ? $"PLAN CLOSED · no TP archived · losing {lossPips} pips · @ {FormatEventPrice(exit, symbol)}"
+          : $"PLAN CLOSED · {closeKind} · losing {lossPips} pips · @ {FormatEventPrice(exit, symbol)}"
+        : closeKind == "stop_loss_or_take_profit"
+          ? $"PLAN CLOSED · no TP archived · losing {lossPips} pips"
+          : $"PLAN CLOSED · {closeKind} · losing {lossPips} pips";
+    }
+    else if (realizedPips is int winPips && winPips > 0)
+    {
+      closeMessage = exitHint is decimal exit
+        ? $"PLAN CLOSED · {closeKind} · winning {winPips} pips · @ {FormatEventPrice(exit, symbol)}"
+        : $"PLAN CLOSED · {closeKind} · winning {winPips} pips";
+    }
+    else if (realizedPips is 0)
+    {
+      closeMessage = exitHint is decimal exit
+        ? $"PLAN CLOSED · {closeKind} · break-even · @ {FormatEventPrice(exit, symbol)}"
+        : $"PLAN CLOSED · {closeKind} · break-even";
+    }
+    else
+    {
+      closeMessage = exitHint is decimal exit
+        ? closeKind == "stop_loss_or_take_profit"
+          ? $"PLAN CLOSED · no TP archived · @ {FormatEventPrice(exit, symbol)}"
+          : $"PLAN CLOSED · {closeKind} · @ {FormatEventPrice(exit, symbol)}"
+        : closeKind == "stop_loss_or_take_profit"
+          ? "PLAN CLOSED · no TP archived"
+          : $"PLAN CLOSED · {closeKind}";
+    }
+    await PublishEventAsync(
+      "position_closed",
+      closeMessage,
+      plan,
+      cancellationToken,
+      positionId: state.PositionId,
+      price: exitHint,
+      targetPips: highestTpPips,
+      eventKey: eventKey,
+      previousState: previousGroupStage,
+      state: TradePlanGroupStages.Closed,
+      groupRealizedPips: realizedPips,
+      reasonCode: reasonCode
+    );
+    await PersistPlanExecutionStateAsync(
+      plan.PlanId, "completed", null, cancellationToken, terminalReason
+    );
+    await ForgetPlanAsync(state.PlanId, cancellationToken);
+    return next;
   }
 
   private async Task<TradePlanRuntimeState> CancelUnfilledEntryLegsAsync(
