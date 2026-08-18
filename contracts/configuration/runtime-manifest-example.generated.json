@@ -131,7 +131,7 @@
     "zone_scale_undersized_policy": "single_entry"
   },
   "contract_fingerprint": "280b4886604dd550286e011c641ab33256ee1f769661544cd707e378191d499c",
-  "effective_configuration_fingerprint": "b5d86d0b0adcb7a25a43b752ea64026359435f547b04ec64af7334eb84299f1e",
+  "effective_configuration_fingerprint": "e0cbc0f5203a5b56b0b815e3f4b258340df78eeef3035a7db705defd91e56728",
   "feed": {
     "backfill_bars": 1500,
     "bar_quality_lookback": 6,
@@ -431,7 +431,7 @@
           "reaction_lookback_bars": 5,
           "thesis_lock_enabled": true,
           "track_distance_atr": "8",
-          "zone_min_width_abs": "1",
+          "zone_min_width_abs": "0.0003",
           "zone_min_width_atr": "0.15"
         },
         "policy": {
@@ -652,6 +652,24 @@
             "source_name": "instruments.EURUSD.overrides"
           },
           {
+            "path": "analysis.market_map.change_min",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.EURUSD.overrides"
+          },
+          {
+            "path": "analysis.market_map.fallback_radius_price",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.EURUSD.overrides"
+          },
+          {
+            "path": "analysis.market_map.scalp_radius_price",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.EURUSD.overrides"
+          },
+          {
             "path": "analysis.zones.confluence.merge_gap_price",
             "secret": false,
             "source_kind": "instrument_override",
@@ -659,6 +677,12 @@
           },
           {
             "path": "analysis.zones.merge_max_width",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.EURUSD.overrides"
+          },
+          {
+            "path": "execution.mapped_zone.zone_min_width_abs",
             "secret": false,
             "source_kind": "instrument_override",
             "source_name": "instruments.EURUSD.overrides"
@@ -1009,6 +1033,7 @@
           "0.25",
           "0.5"
         ],
+        "entry_clips": 2,
         "mode": "fixed_rr",
         "reward_risk": "2",
         "target_r_multiples": [
@@ -1265,7 +1290,7 @@
           "reaction_lookback_bars": 5,
           "thesis_lock_enabled": true,
           "track_distance_atr": "8",
-          "zone_min_width_abs": "1",
+          "zone_min_width_abs": "0.08",
           "zone_min_width_atr": "0.15"
         },
         "policy": {
@@ -1486,6 +1511,24 @@
             "source_name": "instruments.GBPJPY.overrides"
           },
           {
+            "path": "analysis.market_map.change_min",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.GBPJPY.overrides"
+          },
+          {
+            "path": "analysis.market_map.fallback_radius_price",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.GBPJPY.overrides"
+          },
+          {
+            "path": "analysis.market_map.scalp_radius_price",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.GBPJPY.overrides"
+          },
+          {
             "path": "analysis.zones.confluence.merge_gap_price",
             "secret": false,
             "source_kind": "instrument_override",
@@ -1493,6 +1536,12 @@
           },
           {
             "path": "analysis.zones.merge_max_width",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.GBPJPY.overrides"
+          },
+          {
+            "path": "execution.mapped_zone.zone_min_width_abs",
             "secret": false,
             "source_kind": "instrument_override",
             "source_name": "instruments.GBPJPY.overrides"
@@ -1843,6 +1892,7 @@
           "0.25",
           "0.5"
         ],
+        "entry_clips": 2,
         "mode": "fixed_rr",
         "reward_risk": "2",
         "target_r_multiples": [
@@ -2575,6 +2625,7 @@
       },
       "targeting": {
         "close_ratios": [],
+        "entry_clips": 5,
         "mode": "ladder_pips",
         "reward_risk": null,
         "target_r_multiples": [],
@@ -2700,7 +2751,7 @@
           "reaction_lookback_bars": 5,
           "thesis_lock_enabled": true,
           "track_distance_atr": "8",
-          "zone_min_width_abs": "1",
+          "zone_min_width_abs": "0.0003",
           "zone_min_width_atr": "0.15"
         },
         "policy": {
@@ -2914,6 +2965,24 @@
             "source_name": "instruments.EURUSD.overrides"
           },
           {
+            "path": "analysis.market_map.change_min",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.EURUSD.overrides"
+          },
+          {
+            "path": "analysis.market_map.fallback_radius_price",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.EURUSD.overrides"
+          },
+          {
+            "path": "analysis.market_map.scalp_radius_price",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.EURUSD.overrides"
+          },
+          {
             "path": "analysis.zones.confluence.merge_gap_price",
             "secret": false,
             "source_kind": "instrument_override",
@@ -2921,6 +2990,12 @@
           },
           {
             "path": "analysis.zones.merge_max_width",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.EURUSD.overrides"
+          },
+          {
+            "path": "execution.mapped_zone.zone_min_width_abs",
             "secret": false,
             "source_kind": "instrument_override",
             "source_name": "instruments.EURUSD.overrides"
@@ -3270,6 +3345,7 @@
           "0.25",
           "0.5"
         ],
+        "entry_clips": 2,
         "mode": "fixed_rr",
         "reward_risk": "2",
         "target_r_multiples": [
@@ -3397,7 +3473,7 @@
           "reaction_lookback_bars": 5,
           "thesis_lock_enabled": true,
           "track_distance_atr": "8",
-          "zone_min_width_abs": "1",
+          "zone_min_width_abs": "0.08",
           "zone_min_width_atr": "0.15"
         },
         "policy": {
@@ -3611,6 +3687,24 @@
             "source_name": "instruments.GBPJPY.overrides"
           },
           {
+            "path": "analysis.market_map.change_min",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.GBPJPY.overrides"
+          },
+          {
+            "path": "analysis.market_map.fallback_radius_price",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.GBPJPY.overrides"
+          },
+          {
+            "path": "analysis.market_map.scalp_radius_price",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.GBPJPY.overrides"
+          },
+          {
             "path": "analysis.zones.confluence.merge_gap_price",
             "secret": false,
             "source_kind": "instrument_override",
@@ -3618,6 +3712,12 @@
           },
           {
             "path": "analysis.zones.merge_max_width",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.GBPJPY.overrides"
+          },
+          {
+            "path": "execution.mapped_zone.zone_min_width_abs",
             "secret": false,
             "source_kind": "instrument_override",
             "source_name": "instruments.GBPJPY.overrides"
@@ -3967,6 +4067,7 @@
           "0.25",
           "0.5"
         ],
+        "entry_clips": 2,
         "mode": "fixed_rr",
         "reward_risk": "2",
         "target_r_multiples": [
@@ -4560,6 +4661,7 @@
       },
       "targeting": {
         "close_ratios": [],
+        "entry_clips": 5,
         "mode": "ladder_pips",
         "reward_risk": null,
         "target_r_multiples": [],

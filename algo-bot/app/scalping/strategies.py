@@ -28,6 +28,7 @@ from app.scalping.models import (
   STRATEGY_DISPLAY,
   deterministic_id,
 )
+from app.runtime.price_identity import rounded_price
 
 
 def _hfs_cfg(cfg: Any) -> Any:
@@ -68,7 +69,7 @@ def _select_target(
   if room_pips is None or pip_size <= 0 or stop_pips is None or stop_pips <= 0:
     return None
   from app.core.instrument_geometry import fixed_reward_risk
-  configured_rr = fixed_reward_risk(symbol, cfg)
+  configured_rr = fixed_reward_risk(symbol, cfg) if symbol else None
   ratios = (configured_rr,) if configured_rr is not None else (2.0, 1.0)
   for reward_risk in ratios:
     target_pips = float(stop_pips) * reward_risk
@@ -210,7 +211,9 @@ def discover_range_sweep(
       if stop is not None and target is not None:
         target_price, target_pips = target
         rr = target_pips / stop if stop else 0.0
-        source = deterministic_id("range", context.symbol, "BUY", round(low, 2))
+        source = deterministic_id(
+          "range", context.symbol, "BUY", rounded_price(low, pip_size),
+        )
         oid = deterministic_id(
           context.symbol, ARCHETYPE_RANGE_SWEEP, "BUY", context.context_id, source,
         )
@@ -276,7 +279,9 @@ def discover_range_sweep(
       if stop is not None and target is not None:
         target_price, target_pips = target
         rr = target_pips / stop if stop else 0.0
-        source = deterministic_id("range", context.symbol, "SELL", round(high, 2))
+        source = deterministic_id(
+          "range", context.symbol, "SELL", rounded_price(high, pip_size),
+        )
         oid = deterministic_id(
           context.symbol, ARCHETYPE_RANGE_SWEEP, "SELL", context.context_id, source,
         )
@@ -407,7 +412,11 @@ def discover_impulse_pullback(
       # mostly consumed
       continue
     source = deterministic_id(
-      "impulse", context.symbol, direction, round(float(ev["origin"]), 2), round(float(ev["extreme"]), 2),
+      "impulse",
+      context.symbol,
+      direction,
+      rounded_price(float(ev["origin"]), pip_size),
+      rounded_price(float(ev["extreme"]), pip_size),
     )
     oid = deterministic_id(
       context.symbol, ARCHETYPE_IMPULSE_PULLBACK, direction, context.context_id, source,
@@ -503,7 +512,13 @@ def discover_breakout_retest(
     if stop is None or target is None:
       continue
     target_price, target_pips = target
-    source = deterministic_id("box", context.symbol, direction, round(low, 2), round(high, 2))
+    source = deterministic_id(
+      "box",
+      context.symbol,
+      direction,
+      rounded_price(low, pip_size),
+      rounded_price(high, pip_size),
+    )
     oid = deterministic_id(
       context.symbol, ARCHETYPE_BREAKOUT_RETEST, direction, context.context_id, source,
     )
@@ -659,7 +674,11 @@ def discover_momentum_chase(
       continue
     target_price, target_pips = target
     source = deterministic_id(
-      "momentum", context.symbol, direction, round(entry, 2), int(ev["bar_ts"]),
+      "momentum",
+      context.symbol,
+      direction,
+      rounded_price(entry, pip_size),
+      int(ev["bar_ts"]),
     )
     oid = deterministic_id(
       context.symbol, ARCHETYPE_MOMENTUM_CHASE, direction, context.context_id, source,

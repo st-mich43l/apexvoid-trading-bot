@@ -11,6 +11,8 @@ from typing import Any
 from app.analysis.ohlc_source import RedisOHLCSource
 from app.autotrade import units
 from app.core.config import runtime_config
+from app.runtime.instrument_config import instrument_runtime_view
+from app.runtime.price_identity import pip_price_digits
 from app.persistence import redis_state
 from app.scalping.activation import evaluate_scalp_activation
 from app.scalping.context import (
@@ -66,6 +68,17 @@ def _mode(cfg: Any = None) -> str:
   return mode if mode in {"off", "shadow", "paper", "live"} else "off"
 
 
+def _instrument_cfg(symbol: str, cfg: Any) -> Any:
+  if callable(getattr(cfg, "for_instrument", None)):
+    return instrument_runtime_view(symbol, cfg)
+  return cfg
+
+
+def _pip_size(symbol: str, cfg: Any) -> float:
+  configured = getattr(getattr(cfg, "units", None), "pip_size", None)
+  return float(configured) if configured is not None else units.pip_size(symbol)
+
+
 def _parse_bar_event(data: object) -> tuple[str, str, int] | None:
   text = data.decode() if isinstance(data, bytes) else str(data)
   parts = text.strip().split(":")
@@ -100,10 +113,14 @@ async def _ensure_context(
   cfg: Any,
   force: bool = False,
 ):
-  existing = await load_current_context(client, symbol)
+  existing = await load_current_context(client, symbol, cfg)
   ctx_cfg = getattr(_hfs(cfg), "context", None)
   max_age = int(getattr(ctx_cfg, "maximum_m5_age_seconds", 420) or 420)
-  if existing is not None and not force and is_context_fresh(existing, now, max_age):
+  if (
+    existing is not None
+    and not force
+    and is_context_fresh(existing, now, max_age, cfg)
+  ):
     return existing
 
   m5 = await source.window(symbol, "M5", 120)
@@ -114,7 +131,7 @@ async def _ensure_context(
     return existing
   bid, ask, _ = quote
   mid = (bid + ask) / 2.0
-  pip = units.pip_size(symbol)
+  pip = _pip_size(symbol, cfg)
   atr = float(m5["high"].astype(float).tail(14).mean() - m5["low"].astype(float).tail(14).mean())
   snapshot = await asyncio.to_thread(
     build_scalp_context_snapshot,
@@ -151,7 +168,7 @@ async def process_m1_bar(
   cfg: Any | None = None,
 ) -> dict[str, Any]:
   """Idempotent one-bar scalping cycle. Never publishes broker candidates."""
-  cfg = cfg or runtime_config
+  cfg = _instrument_cfg(symbol, cfg or runtime_config)
   mode = _mode(cfg)
   result: dict[str, Any] = {
     "symbol": symbol,
@@ -163,7 +180,7 @@ async def process_m1_bar(
   if mode == "off":
     result["reason"] = "scalp_mode_off"
     return result
-  if not is_hfs_symbol(symbol):
+  if not is_hfs_symbol(symbol, cfg):
     result["reason"] = "scalp_symbol_not_enabled"
     return result
 
@@ -192,7 +209,7 @@ async def process_m1_bar(
     result["reason"] = "scalp_context_stale"
     await incr(client, symbol, "opportunity_blocked:scalp_context_stale")
     return result
-  if not is_context_fresh(context, now, max_age):
+  if not is_context_fresh(context, now, max_age, cfg):
     # Soft stale: M5 feed lag at bar boundaries used to abort every cycle
     # (26 soft-stales in one prod window). Keep discovering off the last
     # good snapshot and record telemetry.
@@ -203,10 +220,20 @@ async def process_m1_bar(
   lookback = int(getattr(ctx_cfg, "m1_lookback_bars", 60) or 60)
   t_micro = time.perf_counter()
   m1 = await source.window(symbol, "M1", lookback)
-  micro = build_micro_structure(m1)
+  pip = _pip_size(symbol, cfg)
+  micro = build_micro_structure(
+    m1,
+    equal_tol=0.5 * pip,
+    price_digits=int(
+      getattr(
+        getattr(cfg, "units", None),
+        "price_digits",
+        pip_price_digits(pip),
+      )
+    ),
+  )
   micro_ms = (time.perf_counter() - t_micro) * 1000.0
 
-  pip = units.pip_size(symbol)
   t_strat = time.perf_counter()
   opportunities = discover_all(context, micro, m1, cfg, pip_size=pip, now=now)
   idle_reasons = (

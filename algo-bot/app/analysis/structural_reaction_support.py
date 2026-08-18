@@ -13,6 +13,8 @@ from typing import Any
 import pandas as pd
 
 from app.analysis.types import Grab, Level, SessionLevel, Zone
+from app.core.symbols import digits_for
+from app.runtime.price_identity import price_token
 
 CONFIRM_WICK_REJECTION = "wick_rejection"
 CONFIRM_SWEEP_RECLAIM = "sweep_reclaim"
@@ -86,6 +88,10 @@ def structural_hash(*parts: object) -> str:
   return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:32]
 
 
+def _price_id(symbol: str, value: float) -> str:
+  return price_token(value, digits=digits_for(symbol))
+
+
 def zone_structural_id(
   symbol: str,
   timeframe: str,
@@ -99,8 +105,8 @@ def zone_structural_id(
     "supply_demand",
     zone.side,
     source,
-    f"{float(zone.low):.5f}",
-    f"{float(zone.high):.5f}",
+    _price_id(symbol, zone.low),
+    _price_id(symbol, zone.high),
     origin,
   )
 
@@ -115,7 +121,7 @@ def key_level_structural_id(
     timeframe.upper(),
     "key_level",
     level.kind,
-    f"{round(float(level.price), 2):.2f}",
+    _price_id(symbol, level.price),
   )
 
 
@@ -134,7 +140,7 @@ def equal_level_structural_id(
     timeframe.upper(),
     "equal_level",
     level.kind,
-    f"{round(float(level.price), 2):.2f}",
+    _price_id(symbol, level.price),
   )
 
 
@@ -148,7 +154,7 @@ def session_level_structural_id(
     timeframe.upper(),
     "session_level",
     level.name,
-    f"{round(float(level.price), 2):.2f}",
+    _price_id(symbol, level.price),
   )
 
 
@@ -165,7 +171,7 @@ def trendline_structural_id(
     getattr(line, "kind", ""),
     anchors,
     f"{float(getattr(line, 'slope', 0.0)):.8f}",
-    f"{float(getattr(line, 'intercept', 0.0)):.5f}",
+    _price_id(symbol, getattr(line, "intercept", 0.0)),
   )
 
 
@@ -186,8 +192,8 @@ def box_structural_id(
     timeframe.upper(),
     "box_breakout",
     getattr(box, "direction", ""),
-    f"{round(float(getattr(box, 'box_low', 0.0)), 5):.5f}",
-    f"{round(float(getattr(box, 'box_high', 0.0)), 5):.5f}",
+    _price_id(symbol, getattr(box, "box_low", 0.0)),
+    _price_id(symbol, getattr(box, "box_high", 0.0)),
     int(getattr(box, "accept_index", -1)),
   )
 

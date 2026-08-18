@@ -42,6 +42,7 @@ def liquidity_grabs(
   sweep_body_frac: float = 0.5,
   sweep_react_bars: int = 3,
   inducement_band_atr: float = 0.3,
+  pip_size: float = 0.1,
 ) -> list[Grab]:
   atr = atr if atr is not None else atr_series(df)
   grabs: list[Grab] = []
@@ -66,7 +67,9 @@ def liquidity_grabs(
             df.index[i],
             grade,
             _has_reaction_displacement(i, "bear", legs or [], sweep_react_bars),
-            _is_inducement(pool, zones or [], atr, inducement_band_atr),
+            _is_inducement(
+              pool, zones or [], atr, inducement_band_atr, pip_size,
+            ),
           ))
       if pool.side == "sell" and row.low < pool.level - tol:
         grade = _grab_grade(
@@ -86,7 +89,9 @@ def liquidity_grabs(
             df.index[i],
             grade,
             _has_reaction_displacement(i, "bull", legs or [], sweep_react_bars),
-            _is_inducement(pool, zones or [], atr, inducement_band_atr),
+            _is_inducement(
+              pool, zones or [], atr, inducement_band_atr, pip_size,
+            ),
           ))
   return grabs
 
@@ -166,6 +171,7 @@ def _is_inducement(
   zones: list[Zone],
   atr: pd.Series,
   inducement_band_atr: float,
+  pip_size: float = 0.1,
 ) -> bool:
   if pool.touches != 2:
     return False
@@ -173,7 +179,7 @@ def _is_inducement(
     return False
   for zone in zones:
     width = max(zone.high - zone.low, 0.0)
-    tolerance = max(width, 0.1)
+    tolerance = max(width, float(pip_size))
     if zone.side == "demand" and pool.side == "sell":
       if zone.low - tolerance <= pool.level <= zone.high:
         return True

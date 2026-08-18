@@ -17,7 +17,6 @@ from app.analysis.technique_geometry import (
   TECHNIQUE_OB,
   TECHNIQUE_SD,
   TECHNIQUE_SETUP_NAMES,
-  TechniqueGeometrySettings,
   TechniqueInstance,
   technique_display_tags,
   trade_side_to_zone_side,
@@ -30,29 +29,7 @@ if TYPE_CHECKING:
     ConfluenceFactors,
     DetectionContext,
     DetectionResult,
-    DetectorSettings,
   )
-
-
-def _geometry_settings(settings: "DetectorSettings") -> TechniqueGeometrySettings:
-  return TechniqueGeometrySettings(
-    momentum_body_frac=settings.momentum_body_frac,
-    confluence_min_overlap=settings.zone_merge_overlap,
-    zone_merge_max_width=settings.max_merged_zone_atr * 2.0,
-    structural_reaction_lookback_bars=settings.structural_reaction_lookback_bars,
-    crt_min_atr=settings.crt_min_atr,
-    crt_reclaim_bars=settings.crt_reclaim_bars,
-    fvg_max_atr=settings.fvg_max_atr,
-    fvg_entry_max_width_price=settings.fvg_entry_max_width_price,
-  )
-
-
-def _pip_size(symbol: str) -> float:
-  from app.core.config import runtime_config
-  contract = runtime_config.analysis.zones.symbol_contract
-  if str(symbol).upper().startswith("XAU"):
-    return float(getattr(contract, "pip_size", 0.1) or 0.1)
-  return 0.0001
 
 
 def _technique_instances(ctx: "DetectionContext") -> list[TechniqueInstance]:
@@ -72,14 +49,17 @@ def _confluence_bands_for_ctx(ctx: "DetectionContext"):
     return []
   df, ind, _st = _exec(ctx)
   atr = _atr(ind)
+  pip_size = max(float(ctx.settings.pip_size), 1e-12)
   return build_confluence_bands(
     instances,
     symbol=ctx.symbol,
     atr=atr,
-    pip_size=_pip_size(ctx.symbol),
+    pip_size=pip_size,
     source_tf=ctx.tf,
     min_overlap=ctx.settings.zone_merge_overlap,
-    max_width=float(ctx.settings.max_merged_zone_atr) * max(atr, 1.0),
+    max_width=(
+      float(ctx.settings.max_merged_zone_atr) * max(atr, pip_size)
+    ),
   )
 
 

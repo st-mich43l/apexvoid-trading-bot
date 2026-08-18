@@ -10,6 +10,7 @@ import pandas as pd
 
 from app.autotrade import units
 from app.autotrade.range_targets import select_range_target
+from app.runtime.price_format import format_price
 
 
 ATR_LENGTH = 14
@@ -146,7 +147,7 @@ def evaluate_auto_scalp_gate(
     )
   triggered: list[tuple[AutoScalpRail, str, str, float]] = []
   for rail in (box.lower, box.upper):
-    trigger = _m1_rail_trigger(m1, rail, m1_atr)
+    trigger = _m1_rail_trigger(m1, rail, m1_atr, pip_size)
     if trigger is not None:
       triggered.append((rail, *trigger))
   if not triggered:
@@ -166,7 +167,8 @@ def evaluate_auto_scalp_gate(
       rail_count=2,
       reasons=(
         f"{state.replace('_', ' ')} at {nearest.role} rail "
-        f"{nearest.low:.2f}-{nearest.high:.2f}",
+        f"{format_price(symbol, nearest.low)}-"
+        f"{format_price(symbol, nearest.high)}",
       ),
     )
 
@@ -227,7 +229,8 @@ def evaluate_auto_scalp_gate(
       rail_count=2,
       reasons=(
         f"entry moved {distance / pip_size:.1f} pips beyond "
-        f"{MAX_ENTRY_DISTANCE_PIPS} pip limit from rail {rail.level:.2f}",
+        f"{MAX_ENTRY_DISTANCE_PIPS} pip limit from rail "
+        f"{format_price(symbol, rail.level)}",
       ),
     )
 
@@ -242,7 +245,10 @@ def evaluate_auto_scalp_gate(
   confluence = 3 if len(rail.timeframes) > 1 or rail.touches >= 3 else 2
   reasons = [
     f"M1 {trigger.replace('_', ' ')}",
-    f"{rail.role} rail {rail.low:.2f}-{rail.high:.2f}",
+    (
+      f"{rail.role} rail {format_price(symbol, rail.low)}-"
+      f"{format_price(symbol, rail.high)}"
+    ),
     f"rail touches {rail.touches}",
     f"range box {box.box_id} {box.width_pips:.0f} pips",
     f"{box.inside_ratio:.0%} closes held inside",
@@ -299,6 +305,7 @@ def _m1_rail_trigger(
   df: pd.DataFrame,
   rail: AutoScalpRail,
   atr: float,
+  pip_size: float,
 ) -> tuple[str, str, float] | None:
   row = df.iloc[-1]
   open_ = float(row["open"])
@@ -308,7 +315,6 @@ def _m1_rail_trigger(
   span = high - low
   if span <= _EPS:
     return None
-  pip_size = units.pip_size("XAU")
   touch = min(
     BOX_MAX_TOUCH_BAND_PIPS * pip_size,
     max(BOX_MIN_TOUCH_BAND_PIPS * pip_size, BOX_TOUCH_BAND_ATR * atr),

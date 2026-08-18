@@ -88,6 +88,8 @@ def classify_regime(
   frames: dict[str, pd.DataFrame],
   box_decision: AutoScalpDecision,
   cfg: Any | None = None,
+  *,
+  symbol: str = "XAU",
 ) -> RegimeInfo:
   """Classify the current M1 regime as chop, trend, or breakout.
 
@@ -126,7 +128,14 @@ def classify_regime(
       "data_gap", None, 0, 0.0, False, None, ("invalid atr",),
     )
 
-  breakout = _classify_breakout(m1, box_decision, atr, atr_series_full, cfg)
+  breakout = _classify_breakout(
+    m1,
+    box_decision,
+    atr,
+    atr_series_full,
+    cfg,
+    units.pip_size(symbol),
+  )
   if breakout is not None:
     return breakout
 
@@ -454,12 +463,13 @@ def _classify_breakout(
   atr: float,
   atr_series_full: pd.Series,
   cfg: Any,
+  pip_size: float,
 ) -> RegimeInfo | None:
   if box_decision.state != "box_broken" or box_decision.box is None:
     return None
   max_age = max(1, int(cfg.strategies.trend.breakout_max_age_bars))
   direction_pa, age = _breakout_direction_and_age(
-    m1, box_decision.box, atr, max_age,
+    m1, box_decision.box, atr, max_age, pip_size,
   )
   if direction_pa is None or age is None or age >= max_age:
     return None
@@ -491,8 +501,8 @@ def _breakout_direction_and_age(
   box: AutoScalpBox,
   atr: float,
   max_age_bars: int,
+  pip_size: float,
 ) -> tuple[str | None, int | None]:
-  pip_size = units.pip_size("XAU")
   buffer = max(3 * pip_size, _BREAK_BUFFER_ATR * atr)
   lower_break = box.lower.low - buffer
   upper_break = box.upper.high + buffer

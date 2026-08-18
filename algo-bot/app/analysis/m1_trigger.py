@@ -52,6 +52,18 @@ class _BarGeometry:
   lower_wick: float
 
 
+def _price(cfg: Any, value: float) -> str:
+  units = getattr(cfg, "units", None)
+  digits = getattr(units, "price_digits", None)
+  if digits is None:
+    digits = getattr(
+      getattr(getattr(cfg, "contract", None), "instrument", None),
+      "price_digits",
+      2,
+    )
+  return f"{float(value):.{max(0, int(digits))}f}"
+
+
 def _geometry(bar: pd.Series) -> _BarGeometry | None:
   o = float(bar["open"])
   h = float(bar["high"])
@@ -91,13 +103,15 @@ def _wick_rejection(
       return None
     return M1TriggerResult(
       "wick_rejection", direction, geo.low, bar.name,
-      f"wicked to {geo.low:.2f} into zone, closed {geo.close:.2f} back above",
+      f"wicked to {_price(cfg, geo.low)} into zone, closed "
+      f"{_price(cfg, geo.close)} back above",
     )
   if geo.close >= zone_low or geo.upper_wick / geo.range_ < wick_fraction:
     return None
   return M1TriggerResult(
     "wick_rejection", direction, geo.high, bar.name,
-    f"wicked to {geo.high:.2f} into zone, closed {geo.close:.2f} back below",
+    f"wicked to {_price(cfg, geo.high)} into zone, closed "
+    f"{_price(cfg, geo.close)} back below",
   )
 
 
@@ -110,13 +124,15 @@ def _body_close(
       return None
     return M1TriggerResult(
       "body_close", direction, geo.low, bar.name,
-      f"closed {geo.close:.2f} beyond key level {key_level:.2f}",
+      f"closed {_price(cfg, geo.close)} beyond key level "
+      f"{_price(cfg, key_level)}",
     )
   if geo.close >= key_level:
     return None
   return M1TriggerResult(
     "body_close", direction, geo.high, bar.name,
-    f"closed {geo.close:.2f} beyond key level {key_level:.2f}",
+    f"closed {_price(cfg, geo.close)} beyond key level "
+    f"{_price(cfg, key_level)}",
   )
 
 
@@ -160,8 +176,8 @@ def _strong_close(
       geo.low,
       bar.name,
       (
-        f"closed {geo.close:.2f} in top {strong_pct:.0%} of range "
-        f"and toward/above zone mid {zone_mid:.2f}"
+        f"closed {_price(cfg, geo.close)} in top {strong_pct:.0%} of range "
+        f"and toward/above zone mid {_price(cfg, zone_mid)}"
         + ("; reclaim above proximal" if closed_away else "")
       ),
       measured=measured,
@@ -182,8 +198,8 @@ def _strong_close(
     geo.high,
     bar.name,
     (
-      f"closed {geo.close:.2f} in bottom {strong_pct:.0%} of range "
-      f"and toward/below zone mid {zone_mid:.2f}"
+      f"closed {_price(cfg, geo.close)} in bottom {strong_pct:.0%} of range "
+      f"and toward/below zone mid {_price(cfg, zone_mid)}"
       + ("; reclaim below proximal" if closed_away else "")
     ),
     measured=measured,

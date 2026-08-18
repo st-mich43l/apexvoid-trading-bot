@@ -14,6 +14,8 @@ import json
 import math
 
 from app.analysis.confluence_zone import confluence_setup_id
+from app.core.symbols import digits_for
+from app.runtime.price_identity import price_token
 from app.analysis.execution_eligibility import ExecutionEligibility
 from app.analysis.structural_reaction_support import structural_thesis_id
 
@@ -315,16 +317,23 @@ def strategy_match_id(
   entry_high: float,
 ) -> str:
   """Stable per-detector-event identity for restart-safe idempotency."""
+  digits = digits_for(symbol)
   raw = (
     f"v{STRATEGY_MATCH_VERSION}|{symbol.upper()}|{source_tf.upper()}|"
     f"{event_ts}|{strategy}|{direction.upper()}|"
-    f"{entry_low:.2f}|{entry_high:.2f}"
+    f"{price_token(entry_low, digits=digits)}|"
+    f"{price_token(entry_high, digits=digits)}"
   )
   return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
 def strategy_range_id(symbol: str, lower: float, upper: float) -> str:
-  return f"{symbol.lower()}-strategy-range-{lower:.2f}-{upper:.2f}"
+  digits = digits_for(symbol)
+  return (
+    f"{symbol.lower()}-strategy-range-"
+    f"{price_token(lower, digits=digits)}-"
+    f"{price_token(upper, digits=digits)}"
+  )
 
 
 def _identity_ok(match: StrategyMatch) -> bool:

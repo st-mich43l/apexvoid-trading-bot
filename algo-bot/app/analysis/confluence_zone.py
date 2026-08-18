@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from typing import Any, Iterable, Sequence
 
 from app.core.config import runtime_config
+from app.runtime.price_identity import price_token
 
 CONFLUENCE_ZONE_CLAIM_KEY_PREFIX = "auto_trade:confluence_zone_claim"
 
@@ -115,8 +116,10 @@ def validate_zone_width(
   min_width: float | None = None,
   preferred_max_width: float | None = None,
   major_max_width: float | None = None,
+  symbol: str | None = None,
+  config: Any | None = None,
 ) -> ZoneWidthResult:
-  """Apply the configured XAU_ZONE_*_WIDTH_PRICE contract to one zone.
+  """Apply the configured instrument zone-width contract to one zone.
 
   ``is_major`` (typically an H1-sourced zone) uses the wider
   ``major_max_width`` ceiling instead of the normal ``preferred_max_width``
@@ -127,22 +130,43 @@ def validate_zone_width(
   offline width-audit tooling) can probe the contract without monkeypatching
   global settings.
   """
+  root = runtime_config if config is None else config
+  instrument_zones = (
+    root.for_instrument(symbol).analysis.zones
+    if symbol is not None
+    else None
+  )
+  default_minimum = (
+    instrument_zones.minimum_width_price
+    if instrument_zones is not None
+    else root.analysis.zones.symbol_contract.minimum_width_price
+  )
+  default_preferred_maximum = (
+    instrument_zones.preferred_maximum_width_price
+    if instrument_zones is not None
+    else root.analysis.zones.symbol_contract.preferred_maximum_width_price
+  )
+  default_major_maximum = (
+    instrument_zones.major_maximum_width_price
+    if instrument_zones is not None
+    else root.analysis.zones.symbol_contract.major_maximum_width_price
+  )
   resolved_min = float(
     min_width
     if min_width is not None
-    else runtime_config.analysis.zones.symbol_contract.minimum_width_price
+    else default_minimum
   )
   resolved_max = float(
     (
       major_max_width
       if major_max_width is not None
-      else runtime_config.analysis.zones.symbol_contract.major_maximum_width_price
+      else default_major_maximum
     )
     if is_major
     else (
       preferred_max_width
       if preferred_max_width is not None
-      else runtime_config.analysis.zones.symbol_contract.preferred_maximum_width_price
+      else default_preferred_maximum
     )
   )
   sources = tuple(merge_sources)
@@ -209,7 +233,7 @@ def _stable_atr(atr: float, pip_size: float) -> float:
   # Quantizing ATR into a coarse step before it can affect bucket size means
   # the grid only moves on a genuine regime-scale ATR change, not routine
   # bar-to-bar noise.
-  step = max(float(pip_size) * 40.0, 4.0)
+  step = float(pip_size) * 40.0
   return round(max(0.0, float(atr)) / step) * step
 
 
@@ -229,7 +253,8 @@ def _bucket(mid: float, *, atr: float, pip_size: float) -> float:
   # measured width from one scan to the next - only where it sits matters
   # for identity.
   bucket = max(
-    float(pip_size) * 10.0, _stable_atr(atr, pip_size) * 0.25, 1.0,
+    float(pip_size) * 10.0,
+    _stable_atr(atr, pip_size) * 0.25,
   )
   return round(mid / bucket) * bucket
 
@@ -259,7 +284,7 @@ def confluence_zone_id(
   tag_text = ",".join(sorted({str(tag).casefold() for tag in tags}))
   return _sha(
     f"cz|{symbol.upper()}|{side.lower()}|{source_tf.upper()}|"
-    f"{mid_bucket:.2f}|{tag_text}"
+    f"{price_token(mid_bucket, pip_size=pip_size)}|{tag_text}"
   )
 
 

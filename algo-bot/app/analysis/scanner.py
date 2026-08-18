@@ -50,6 +50,7 @@ from app.analysis.confluence_zone import (
   validate_zone_width,
 )
 from app.analysis.zones import ZONE_RECONCILED_TAG_PREFIX
+from app.runtime.instrument_config import instrument_runtime_view
 from app.autotrade.range_targets import select_range_target
 from app.autotrade.strategy_match import (
   STRATEGY_MATCH_VERSION,
@@ -181,16 +182,9 @@ def _all_tfs(exec_tf: str, htf_tfs: Iterable[str]) -> list[str]:
 
 
 def _detector_settings(symbol: str | None = None):
-  settings = detector_settings_from()
   if not symbol:
-    return settings
-  return replace(
-    settings,
-    round_step=instrument_geometry.round_step(symbol),
-    fvg_entry_max_width_price=instrument_geometry.fvg_entry_max_width_price(
-      symbol
-    ),
-  )
+    return detector_settings_from()
+  return detector_settings_from(instrument_runtime_view(symbol))
 
 
 def _parse_bar_event(data: object) -> tuple[str, str, str] | None:
@@ -1476,6 +1470,7 @@ def _format_detection(
       result.direction,
       result.entry_zone.low,
       result.entry_zone.high,
+      symbol,
     )
     if reference:
       lines.append(f"• {escape(reference)}")
@@ -1483,6 +1478,7 @@ def _format_detection(
       market_map,
       result.entry_zone.low,
       result.entry_zone.high,
+      symbol,
     )
     if rail:
       lines.append(f"• {escape(rail)}")
@@ -1797,6 +1793,7 @@ def _merge_detection_confluence(
         merged_width=zone.high - zone.low,
         merge_sources=zone.tags,
         is_major=is_major,
+        symbol=symbol,
       )
       if not width_result.eligible:
         log.info(
@@ -2883,7 +2880,12 @@ async def _handle_event(
       if getattr(ctx, "spot_price", None) is not None
       else float(frames[exec_tf]["close"].iloc[-1])
     )
-    current_map = await asyncio.to_thread(build_map, analysis, price)
+    current_map = await asyncio.to_thread(
+      build_map,
+      analysis,
+      price,
+      symbol=symbol,
+    )
     map_payload = market_map_payload(current_map)
     map_ttl = max(
       900,

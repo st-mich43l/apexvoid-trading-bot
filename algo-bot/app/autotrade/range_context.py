@@ -9,6 +9,8 @@ import json
 import math
 from typing import Any
 
+from app.runtime.price_identity import price_token
+
 
 RANGE_CONTEXT_VERSION = 1
 ACTIVE_RANGE_STATES = {
@@ -719,7 +721,8 @@ def _build_context(
     f"v{RANGE_CONTEXT_VERSION}|{symbol.upper()}|"
     f"{source}|{execution_timeframe.upper()}|"
     f"{episode_seed or generated_at}|"
-    f"{lower.level:.2f}|{upper.level:.2f}"
+    f"{price_token(lower.level, pip_size=pip_size)}|"
+    f"{price_token(upper.level, pip_size=pip_size)}"
   )
   range_id = hashlib.sha256(raw_id.encode("ascii")).hexdigest()[:24]
   return RangeContext(

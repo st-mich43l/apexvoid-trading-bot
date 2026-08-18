@@ -20,6 +20,7 @@ from app.analysis.types import (
   Zone,
 )
 from app.analysis.trendlines import Trendline, value_at
+from app.runtime.price_identity import price_token
 
 ZONE_MERGE_OVERLAP = 0.5
 # Opposing-side reconciliation (reconcile_opposing) uses the same bar as
@@ -273,6 +274,7 @@ def score_zones(
   grabs: list[Grab] | None = None,
   trendlines: list[Trendline] | None = None,
   bar_index: int | None = None,
+  pip_size: float = 0.1,
 ) -> list[Zone]:
   scored = [
     _score_zone(
@@ -286,6 +288,7 @@ def score_zones(
       grabs or [],
       trendlines or [],
       bar_index,
+      pip_size,
     )
     for zone in zones
   ]
@@ -565,6 +568,7 @@ def _score_zone(
   grabs: list[Grab],
   trendlines: list[Trendline],
   bar_index: int | None,
+  pip_size: float,
 ) -> Zone:
   score = 0.0
   reasons: list[str] = []
@@ -585,18 +589,20 @@ def _score_zone(
   round_number = _round_number_inside(zone, round_step)
   if round_number is not None:
     score += ROUND_NUMBER_SCORE
-    reasons.append(f"round {_number(round_number)}")
-  if _has_liquidity_confluence(zone, pools):
+    reasons.append(f"round {_number(round_number, pip_size)}")
+  if _has_liquidity_confluence(zone, pools, pip_size):
     score += LIQUIDITY_SCORE
     reasons.append("liquidity pool")
-  for session_name in _session_level_confluences(zone, session_levels):
+  for session_name in _session_level_confluences(
+    zone, session_levels, pip_size,
+  ):
     score += SESSION_LEVEL_SCORE
     reasons.append(session_name)
   pd_reason = _pd_position_reason(zone, dealing_range)
   if pd_reason is not None:
     score += PD_POSITION_SCORE
     reasons.append(pd_reason)
-  if _has_grade_a_grab(zone, grabs):
+  if _has_grade_a_grab(zone, grabs, pip_size):
     score += GRAB_A_SCORE
     reasons.append("sweep A")
   if any(_inside_htf_zone(zone, htf) for htf in htf_zones):
@@ -673,10 +679,14 @@ def _round_number_inside(zone: Zone, round_step: float) -> float | None:
   return None
 
 
-def _has_liquidity_confluence(zone: Zone, pools: list[Pool]) -> bool:
+def _has_liquidity_confluence(
+  zone: Zone,
+  pools: list[Pool],
+  pip_size: float = 0.1,
+) -> bool:
   width = max(zone.high - zone.low, 0.0)
   for pool in pools:
-    tolerance = max(pool.band, width, 0.1)
+    tolerance = max(pool.band, width, float(pip_size))
     if zone.side == "demand" and pool.side == "sell":
       if zone.low - tolerance <= pool.level <= zone.low:
         return True
@@ -689,10 +699,11 @@ def _has_liquidity_confluence(zone: Zone, pools: list[Pool]) -> bool:
 def _session_level_confluences(
   zone: Zone,
   session_levels: list[SessionLevel],
+  pip_size: float = 0.1,
 ) -> list[str]:
   result: list[str] = []
   width = max(zone.high - zone.low, 0.0)
-  tolerance = max(width, 0.1)
+  tolerance = max(width, float(pip_size))
   for level in session_levels:
     if level.swept:
       continue
@@ -726,22 +737,30 @@ def _pd_position_reason(
   return None
 
 
-def _has_grade_a_grab(zone: Zone, grabs: list[Grab]) -> bool:
+def _has_grade_a_grab(
+  zone: Zone,
+  grabs: list[Grab],
+  pip_size: float = 0.1,
+) -> bool:
   for grab in grabs:
     if grab.grade != "A":
       continue
     if zone.side == "demand" and grab.direction == "bull":
-      if _pool_points_into_zone(zone, grab.pool):
+      if _pool_points_into_zone(zone, grab.pool, pip_size):
         return True
     if zone.side == "supply" and grab.direction == "bear":
-      if _pool_points_into_zone(zone, grab.pool):
+      if _pool_points_into_zone(zone, grab.pool, pip_size):
         return True
   return False
 
 
-def _pool_points_into_zone(zone: Zone, pool: Pool) -> bool:
+def _pool_points_into_zone(
+  zone: Zone,
+  pool: Pool,
+  pip_size: float = 0.1,
+) -> bool:
   width = max(zone.high - zone.low, 0.0)
-  tolerance = max(pool.band, width, 0.1)
+  tolerance = max(pool.band, width, float(pip_size))
   if zone.side == "demand" and pool.side == "sell":
     return zone.low - tolerance <= pool.level <= zone.high
   if zone.side == "supply" and pool.side == "buy":
@@ -765,8 +784,9 @@ def _inside_htf_zone(zone: Zone, htf: Zone) -> bool:
   )
 
 
-def _number(value: float) -> str:
-  return f"{value:.2f}".rstrip("0").rstrip(".")
+def _number(value: float, pip_size: float = 0.1) -> str:
+  text = price_token(value, pip_size=pip_size)
+  return text.rstrip("0").rstrip(".") if "." in text else text
 
 
 def _breaker_violation(zone: Zone, df: pd.DataFrame) -> int | None:

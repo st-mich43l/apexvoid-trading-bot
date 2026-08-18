@@ -18,6 +18,7 @@ def build_micro_structure(
   *,
   swing_lookback: int = 3,
   equal_tol: float = 0.05,
+  price_digits: int = 2,
 ) -> MicroStructure:
   if df is None or df.empty:
     return MicroStructure(
@@ -48,11 +49,17 @@ def build_micro_structure(
   for i, first in enumerate(high_swings):
     for second in high_swings[i + 1:]:
       if abs(first.price - second.price) <= equal_tol:
-        equal_highs.append(round((first.price + second.price) / 2.0, 2))
+        equal_highs.append(round(
+          (first.price + second.price) / 2.0,
+          max(0, int(price_digits)),
+        ))
   for i, first in enumerate(low_swings):
     for second in low_swings[i + 1:]:
       if abs(first.price - second.price) <= equal_tol:
-        equal_lows.append(round((first.price + second.price) / 2.0, 2))
+        equal_lows.append(round(
+          (first.price + second.price) / 2.0,
+          max(0, int(price_digits)),
+        ))
 
   last_break_direction = None
   last_break_price = None

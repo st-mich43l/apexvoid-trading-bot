@@ -83,7 +83,7 @@ def evaluate_scalp_activation(
     "direction": opportunity.direction,
   }
 
-  if not is_hfs_symbol(opportunity.symbol):
+  if not is_hfs_symbol(opportunity.symbol, cfg):
     return ScalpDecision(False, True, "scalp_symbol_not_enabled", 0.0, measured)
 
   # Quote freshness (60s hard cap inside HFS)

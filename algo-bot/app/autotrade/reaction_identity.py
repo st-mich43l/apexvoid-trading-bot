@@ -17,6 +17,8 @@ import math
 from dataclasses import dataclass
 from typing import Any, Iterable
 
+from app.runtime.price_identity import price_token
+
 
 REACTION_ID_VERSION = 1
 THESIS_ID_VERSION = 1
@@ -71,7 +73,7 @@ def _stable_atr(atr: float, pip_size: float) -> float:
   routine bar-to-bar noise in a rolling per-bar indicator - see the fuller
   explanation and the live incident this fixed in confluence_zone.py.
   """
-  step = max(float(pip_size) * 40.0, 4.0)
+  step = float(pip_size) * 40.0
   return round(max(0.0, float(atr)) / step) * step
 
 
@@ -93,7 +95,8 @@ def canonicalize_zone_bucket(
   """
   mid = (float(lo) + float(hi)) / 2.0
   bucket = max(
-    float(pip_size) * 10.0, _stable_atr(atr, pip_size) * 0.25, 1.0,
+    float(pip_size) * 10.0,
+    _stable_atr(atr, pip_size) * 0.25,
   )
   return round(mid / bucket) * bucket
 
@@ -128,7 +131,7 @@ def structural_zone_id(
   )
   return _sha(
     f"sz|{symbol.upper()}|{side}|{source_tf.upper()}|"
-    f"{mid_b:.2f}|{structural}"
+    f"{price_token(mid_b, pip_size=pip_size)}|{structural}"
   )
 
 

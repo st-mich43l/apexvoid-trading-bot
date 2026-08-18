@@ -13,6 +13,10 @@ dated section after deployment.
 ## Unreleased
 
 ### Changed
+- Price-action, Market Map, mapped-zone, range/trend, and HFS paths now consume
+  one effective instrument runtime view. Pip floors, price identities,
+  liquidity tolerances, trigger buffers, and M1 precision are derived from the
+  active symbol instead of inheriting XAU's `0.1` pip and two-decimal geometry.
 - EURUSD and GBPJPY now use the explicit ``fx_fixed_2r_v1`` execution policy:
   partial exits of 25% at 1R and 25% at 1.5R, then the remaining 50% at 2R,
   calculated from the final planned entry and protective stop. TP1 enables
@@ -29,6 +33,22 @@ dated section after deployment.
   protective stop, and Telegram no longer invents an SL loss from ``stop_pips``.
 
 ### Fixed
+- EURUSD Market Map no longer rounds prices such as `1.08543` to whole numbers
+  or applies XAU's map radii/change threshold. FX map bands, fallback levels,
+  scalp rails, mapped-zone minimum widths, and material-change detection now
+  use per-instrument price units; GBPJPY receives the same three-digit-safe path.
+- FX fill, route, TP, close, and trailing-stop cards now retain the instrument's
+  configured price digits. Full-TP prices use the event symbol's pip size rather
+  than adding XAU's `0.1` pip to EURUSD or GBPJPY entries.
+- FX PA no longer creates false confluence from absolute `0.1` liquidity and
+  retest tolerances, collapses distinct zones/context IDs at two decimals, or
+  evaluates HFS with the global XAU runtime policy.
+- The same-wall overlap exemption is now limited to technique/confluence
+  setups. Key-level and unfitted range entries contained in opposing structure
+  are hard-blocked again instead of slipping through the final V8 gate.
+- Legacy XAU policy evaluation no longer crashes while reading instrument-only
+  `targeting.entry_clips`; it retains the five-clip default, while FX resolves
+  its configured two-clip route at the instrument's own price precision.
 - V8 close-reason classification no longer promotes an ambiguous vanish to
   stop-loss by comparing the exit to ``CurrentStop`` when no deal execution
   price was recovered (the same tautology V6 already fixed).

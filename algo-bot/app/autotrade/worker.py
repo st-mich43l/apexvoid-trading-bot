@@ -77,6 +77,7 @@ from app.autotrade.strategy_taxonomy import (
   is_hfs_strategy,
   is_reaction_strategy,
   is_scalp_strategy,
+  is_technique_or_confluence,
   match_bypasses_opposing_structure,
 )
 from app.autotrade.structural_target_room import (
@@ -226,6 +227,8 @@ from app.autotrade.trend import (
   evaluate_trend_gate,
 )
 from app.core.config import runtime_config
+from app.runtime.instrument_config import instrument_runtime_view
+from app.runtime.price_identity import price_token
 from app.persistence.store import event_in_window
 from app.analysis.ohlc_source import RedisOHLCSource, window_for_timeframe
 from app.analysis.math_utils import atr_series
@@ -1977,6 +1980,8 @@ def _resolve_overlap_thesis(
   m1: Any,
   atr: float | None,
   cfg: Any | None = None,
+  *,
+  symbol: str = "XAU",
 ) -> GuardOutcome:
   """Resolve an entry inside both a demand and a supply band by the same
   M1 reaction-lookback memory ``map_strategy.py`` already computes for its
@@ -1988,7 +1993,7 @@ def _resolve_overlap_thesis(
   from app.autotrade.map_strategy import _reaction_in_lookback
 
   if cfg is None:
-    cfg = _default_runtime_cfg()
+    cfg = instrument_runtime_view(symbol)
   guard_mode = resolve_guard_mode(cfg)
   if market_map is None:
     return GuardOutcome("overlap", OUTCOME_ALLOW, "no_map", "no market map", False)
@@ -2014,7 +2019,7 @@ def _resolve_overlap_thesis(
       reason,
       guard_mode=guard_mode,
     )
-  tolerance = max(0.05, 0.5 * atr)
+  tolerance = max(0.5 * units.pip_size(symbol), 0.5 * atr)
   own_entry = demand_hit if direction == "BUY" else supply_hit
   own_reaction = _reaction_in_lookback(
     m1, own_entry, direction, atr, tolerance, cfg, entry_reference,
@@ -2466,7 +2471,11 @@ def _strategy_group_id(match: StrategyMatch, *, thesis_cycle: int = 1) -> str:
     match.range_id
     or match.structural_zone_id
     or match.zone_id
-    or f"{match.key_level:.2f}:{match.entry_low:.2f}:{match.entry_high:.2f}"
+    or (
+      f"{price_token(match.key_level, pip_size=units.pip_size(match.symbol))}:"
+      f"{price_token(match.entry_low, pip_size=units.pip_size(match.symbol))}:"
+      f"{price_token(match.entry_high, pip_size=units.pip_size(match.symbol))}"
+    )
   )
   return _group_id(
     match.symbol,
@@ -2954,7 +2963,7 @@ async def _publish_candidate(
   ):
     overlap_outcome = _resolve_overlap_thesis(
       decision.direction, entry_reference, market_map, m1,
-      scale_context.atr, None,
+      scale_context.atr, None, symbol=symbol,
     )
     if overlap_outcome.reason_code not in ("no_map", "no_overlap"):
       await _record_guard_evaluation(
@@ -3666,7 +3675,13 @@ async def _publish_strategy_match(
     or guard_mode == GUARD_MODE_OBSERVE
   ):
     overlap_outcome = _resolve_overlap_thesis(
-      match.direction, spot.price, market_map, m1, match.atr, None,
+      match.direction,
+      spot.price,
+      market_map,
+      m1,
+      match.atr,
+      None,
+      symbol=symbol,
     )
     if overlap_outcome.reason_code not in ("no_map", "no_overlap"):
       await _record_guard_evaluation(
@@ -5160,7 +5175,7 @@ async def _publish_trade_plan_v8(
           direction=match.direction,
           earliest_bar_ts=episode_start,
           after_bar_ts=execution_state.last_evaluated_m1_ts,
-          cfg=None,
+          cfg=instrument_runtime_view(symbol),
         )
       )
       latest_evaluated = latest_eligible_m1_bar_ts(
@@ -5347,7 +5362,7 @@ async def _publish_trade_plan_v8(
         direction=match.direction,
         earliest_bar_ts=confirmation_boundary,
         after_bar_ts=None,
-        cfg=None,
+        cfg=instrument_runtime_view(symbol),
       )
     )
     if trigger is not None:
@@ -5490,6 +5505,9 @@ async def _publish_trade_plan_v8(
     room_reference_source=room_reference_source,
     executable_entry_price=entry_reference,
     shared_boundary_state=shared_boundary_state,
+    allow_same_wall_overlap=is_technique_or_confluence(
+      execution_match.strategy,
+    ),
   )
   if not target_room.allowed:
     # Counter-bias vs HTF intentionally presses into opposing structure.
@@ -5696,6 +5714,7 @@ async def _publish_trade_plan_v8(
     None if frames is None else frames.get("M1"),
     float(match_for_plan.atr),
     None,
+    symbol=symbol,
   )
   if overlap_outcome.hard_block:
     await _release_claims()
@@ -6417,7 +6436,7 @@ async def _publish_trend_candidate(
   ):
     overlap_outcome = _resolve_overlap_thesis(
       trend_decision.direction, entry_reference, market_map, trend_m1,
-      trend_decision.atr, None,
+      trend_decision.atr, None, symbol=symbol,
     )
     if overlap_outcome.reason_code not in ("no_map", "no_overlap"):
       await _record_guard_evaluation(
@@ -7620,6 +7639,7 @@ async def _handle_event(
   displayed_market_map = decode_market_map(
     await client.get(market_map_display_key(symbol))
   )
+  strategy_cfg = instrument_runtime_view(symbol)
   market_map_decision = evaluate_market_map_strategy(
     frames,
     symbol=symbol,
@@ -7627,7 +7647,7 @@ async def _handle_event(
     spot_price=(
       spot.price if spot is not None and spot.fresh else None
     ),
-    cfg=None,
+    cfg=strategy_cfg,
     market_map=cached_market_map,
     rendered_map=displayed_market_map,
   )
@@ -7658,7 +7678,12 @@ async def _handle_event(
     if market_map_decision.match is not None
     else "private_ohlc"
   )
-  regime = classify_regime(frames, decision, None)
+  regime = classify_regime(
+    frames,
+    decision,
+    strategy_cfg,
+    symbol=symbol,
+  )
   now_ts = int(datetime.now(timezone.utc).timestamp())
   try:
     await _record_regime(client, symbol, regime.state, now_ts)
@@ -7672,7 +7697,7 @@ async def _handle_event(
     decision,
     symbol=symbol,
     spot_price=None if spot is None or not spot.fresh else spot.price,
-    cfg=None,
+    cfg=strategy_cfg,
   )
   closed_price = (
     float(frames[EXECUTION_TIMEFRAME]["close"].iloc[-1])
