@@ -580,7 +580,67 @@ def _stream_lines(by_stream: dict[str, dict]) -> list[str]:
   })
 
 
-def format_stats(stats: dict, period: str) -> str:
+def partition_rows_by_symbol(rows: list[dict]) -> dict[str, list[dict]]:
+  grouped: dict[str, list[dict]] = defaultdict(list)
+  for row in rows:
+    grouped[str(row.get("symbol") or "XAU").upper()].append(row)
+  return dict(grouped)
+
+
+def partition_signals_by_symbol(signals: list[dict]) -> dict[str, list[dict]]:
+  grouped: dict[str, list[dict]] = defaultdict(list)
+  for signal in signals:
+    grouped[str(signal.get("symbol") or "XAU").upper()].append(signal)
+  return dict(grouped)
+
+
+def build_stats_by_symbol(
+  records: list[dict],
+  signals: list[dict],
+  timezone_name: str,
+  asia_start: int,
+  london_start: int,
+  ny_start: int,
+) -> dict[str, dict]:
+  record_groups = partition_rows_by_symbol(records)
+  signal_groups = partition_signals_by_symbol(signals)
+  symbols = sorted(set(record_groups) | set(signal_groups))
+  return {
+    symbol: build_stats(
+      record_groups.get(symbol, []),
+      signal_groups.get(symbol, []),
+      timezone_name,
+      asia_start,
+      london_start,
+      ny_start,
+    )
+    for symbol in symbols
+  }
+
+
+def _symbol_overview_lines(stats_by_symbol: dict[str, dict]) -> list[str]:
+  active = [
+    (symbol, stats)
+    for symbol, stats in sorted(stats_by_symbol.items())
+    if int(stats.get("trades") or 0) > 0
+  ]
+  if not active:
+    return []
+  if len(active) == 1:
+    return []
+  lines = ["📍 By symbol"]
+  for index, (symbol, stats) in enumerate(active):
+    branch = "└─" if index == len(active) - 1 else "├─"
+    net = float(stats.get("net") or 0)
+    net_icon = "🟢" if net >= 0 else "🔴"
+    lines.append(
+      f"{branch} {symbol:<7} {_signed_p(net):>7} {net_icon} · "
+      f"{stats['win_rate']:.0f}% · {stats['trades']}t"
+    )
+  return lines
+
+
+def format_stats(stats: dict, period: str, *, stats_by_symbol: dict[str, dict] | None = None) -> str:
   """Render the interactive stats view from canonical aggregated facts."""
   if not stats["trades"]:
     text = "\n".join([
@@ -596,7 +656,12 @@ def format_stats(stats: dict, period: str) -> str:
   lines = [
     f"📊 STATS — {_stats_title(period)}",
     "━━━━━━━━━━━━━━━━━━━━━━",
-    *_stream_book_lines(stats),
+  ]
+  overview = _symbol_overview_lines(stats_by_symbol or {})
+  if overview:
+    lines.extend(overview)
+    lines.append("")
+  lines.extend(_stream_book_lines(stats))
     "",
     "🕐 By session (combined unique)",
     *_stats_group_lines(stats["by_session"], setup=False),

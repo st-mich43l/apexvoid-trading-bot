@@ -104,6 +104,7 @@ async def handle_private_signal(msg: Message) -> None:
     await msg.answer(
       "Format:\n\n"
       "<code>gold sell entry zone (4100-4105)\nsl 4110\ntp 95/90/80</code>\n\n"
+      "<code>eurusd buy 1.15007 / algo</code> — FX 1:2 RR, single entry\n\n"
       "TP: absolute prices or last 2 digits. Any count.\n\n"
       "Commands: <code>/help</code>"
     )
@@ -128,7 +129,7 @@ async def handle_private_signal(msg: Message) -> None:
     tps=sig['tps'],
     setup_type=sig['setup_type'],
     confluence=sig['confluence'],
-    symbol="XAU",
+    symbol=sig.get("symbol", "XAU"),
     visibility=sig["visibility"],
     execution_mode=sig["execution_mode"],
   )

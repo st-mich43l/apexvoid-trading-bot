@@ -46,7 +46,12 @@ from app.signals.parsing import (
   _stats_range,
   _take_symbol,
 )
-from app.signals.reports import build_stats, format_review, format_stats
+from app.signals.reports import (
+  build_stats,
+  build_stats_by_symbol,
+  format_review,
+  format_stats,
+)
 from app.core.symbols import channel_for_symbol
 from app.bot.client import bot, send_with_retry
 from app.signals.trade_ops import (
@@ -779,16 +784,28 @@ async def handle_trade_stats(msg: Message) -> None:
   records = await get_pips_records(start_ts, end_ts, symbol)
   signals = await get_all_signals(symbol)
   label = f"{symbol} {period}" if symbol else period
+  tz = runtime_config.delivery.presentation.seq_reset_tz
+  sessions = runtime_config.market_data.sessions
   stats = build_stats(
     records,
     signals,
-    runtime_config.delivery.presentation.seq_reset_tz,
-    runtime_config.market_data.sessions.asia_start,
-    runtime_config.market_data.sessions.london_start,
-    runtime_config.market_data.sessions.ny_start,
+    tz,
+    sessions.asia_start,
+    sessions.london_start,
+    sessions.ny_start,
   )
+  stats_by_symbol = None
+  if symbol is None:
+    stats_by_symbol = build_stats_by_symbol(
+      records,
+      signals,
+      tz,
+      sessions.asia_start,
+      sessions.london_start,
+      sessions.ny_start,
+    )
   await msg.answer(
-    format_stats(stats, label)
+    format_stats(stats, label, stats_by_symbol=stats_by_symbol)
   )
 
 

@@ -3361,7 +3361,7 @@ public sealed class AutoTradeEngine(
         MidpointRounding.AwayFromZero
       )))
       .ToArray();
-    var targetWeights = EqualWeights(targetsPips.Length);
+    var targetWeights = ResolveManualTargetWeights(candidate, targetsPips.Length);
     InitialSizingResult sizing;
     try
     {
@@ -3392,61 +3392,87 @@ public sealed class AutoTradeEngine(
     IReadOnlyList<decimal> legEntryPrices;
     TargetVolumePlan[] legTargetPlans;
     StructureStopPlan[] legStopPlans;
-    try
+    if (candidate.ManualSingleEntry)
     {
-      var splitVolumes = VolumePlanner.SplitEntryVolume(
-        sizing.Volume, symbol, ManualEntryLegRatios
+      var singleTargetPlan = VolumePlanner.BuildTargetPlan(
+        sizing.Volume, symbol, targetsPips, targetWeights
       );
-      var splitPrices = splitVolumes.Count == 1
-        ? new[] { legPrices.Shallow }
-        : new[] { legPrices.Shallow, legPrices.Mid, legPrices.Deep };
-      var splitTargetPlans = new TargetVolumePlan[splitVolumes.Count];
-      // Owner-reported live 2026-08-19: Mid/Deep legs' broker stop landed
-      // away from the declared price (eg. 4347) because the single
-      // Shallow-anchored manualStopPlan's *relative* distance (a
-      // stop-loss is submitted as a distance from that order's own fill,
-      // not an absolute price) was reused unchanged for every leg -
-      // correct only for Shallow itself. Each leg needs its own stop plan
-      // computed from its own entry so every leg's broker stop actually
-      // resolves to the one owner-declared absolute price.
-      var splitStopPlans = new StructureStopPlan[splitVolumes.Count];
-      for (var index = 0; index < splitVolumes.Count; index++)
-      {
-        var legTargetPlan = VolumePlanner.BuildTargetPlan(
-          splitVolumes[index], symbol, targetsPips, targetWeights
-        );
-        var legLots = splitVolumes[index] / (decimal)symbol.LotSize;
-        if (legLots > ManualAlgoFirstLegThresholdLots)
-        {
-          var fixedFirstLeg = VolumePlanner.VolumeForLots(ManualAlgoFirstLegLots, symbol);
-          legTargetPlan = VolumePlanner.FixFirstLegVolume(
-            legTargetPlan, splitVolumes[index], fixedFirstLeg, symbol
-          );
-        }
-        splitTargetPlans[index] = legTargetPlan;
-        splitStopPlans[index] = splitPrices[index] == legPrices.Shallow
-          ? manualStopPlan
-          : ManualStop(candidate, direction, splitPrices[index], symbol);
-      }
-      legVolumes = splitVolumes;
-      legEntryPrices = splitPrices;
-      legTargetPlans = splitTargetPlans;
-      legStopPlans = splitStopPlans;
-    }
-    catch (VolumePlanningException)
-    {
-      var fallbackTargetPlan = sizing.TargetPlan;
       if (sizing.Lots > ManualAlgoFirstLegThresholdLots)
       {
-        var fixedFirstLeg = VolumePlanner.VolumeForLots(ManualAlgoFirstLegLots, symbol);
-        fallbackTargetPlan = VolumePlanner.FixFirstLegVolume(
-          fallbackTargetPlan, sizing.Volume, fixedFirstLeg, symbol
+        var fixedFirstLeg = VolumePlanner.VolumeForLots(
+          ManualAlgoFirstLegLots, symbol
+        );
+        singleTargetPlan = VolumePlanner.FixFirstLegVolume(
+          singleTargetPlan, sizing.Volume, fixedFirstLeg, symbol
         );
       }
       legVolumes = [sizing.Volume];
       legEntryPrices = [legPrices.Shallow];
-      legTargetPlans = [fallbackTargetPlan];
+      legTargetPlans = [singleTargetPlan];
       legStopPlans = [manualStopPlan];
+    }
+    else
+    {
+      try
+      {
+        var splitVolumes = VolumePlanner.SplitEntryVolume(
+          sizing.Volume, symbol, ManualEntryLegRatios
+        );
+        var splitPrices = splitVolumes.Count == 1
+          ? new[] { legPrices.Shallow }
+          : new[] { legPrices.Shallow, legPrices.Mid, legPrices.Deep };
+        var splitTargetPlans = new TargetVolumePlan[splitVolumes.Count];
+        // Owner-reported live 2026-08-19: Mid/Deep legs' broker stop landed
+        // away from the declared price (eg. 4347) because the single
+        // Shallow-anchored manualStopPlan's *relative* distance (a
+        // stop-loss is submitted as a distance from that order's own fill,
+        // not an absolute price) was reused unchanged for every leg -
+        // correct only for Shallow itself. Each leg needs its own stop plan
+        // computed from its own entry so every leg's broker stop actually
+        // resolves to the one owner-declared absolute price.
+        var splitStopPlans = new StructureStopPlan[splitVolumes.Count];
+        for (var index = 0; index < splitVolumes.Count; index++)
+        {
+          var legTargetPlan = VolumePlanner.BuildTargetPlan(
+            splitVolumes[index], symbol, targetsPips, targetWeights
+          );
+          var legLots = splitVolumes[index] / (decimal)symbol.LotSize;
+          if (legLots > ManualAlgoFirstLegThresholdLots)
+          {
+            var fixedFirstLeg = VolumePlanner.VolumeForLots(
+              ManualAlgoFirstLegLots, symbol
+            );
+            legTargetPlan = VolumePlanner.FixFirstLegVolume(
+              legTargetPlan, splitVolumes[index], fixedFirstLeg, symbol
+            );
+          }
+          splitTargetPlans[index] = legTargetPlan;
+          splitStopPlans[index] = splitPrices[index] == legPrices.Shallow
+            ? manualStopPlan
+            : ManualStop(candidate, direction, splitPrices[index], symbol);
+        }
+        legVolumes = splitVolumes;
+        legEntryPrices = splitPrices;
+        legTargetPlans = splitTargetPlans;
+        legStopPlans = splitStopPlans;
+      }
+      catch (VolumePlanningException)
+      {
+        var fallbackTargetPlan = sizing.TargetPlan;
+        if (sizing.Lots > ManualAlgoFirstLegThresholdLots)
+        {
+          var fixedFirstLeg = VolumePlanner.VolumeForLots(
+            ManualAlgoFirstLegLots, symbol
+          );
+          fallbackTargetPlan = VolumePlanner.FixFirstLegVolume(
+            fallbackTargetPlan, sizing.Volume, fixedFirstLeg, symbol
+          );
+        }
+        legVolumes = [sizing.Volume];
+        legEntryPrices = [legPrices.Shallow];
+        legTargetPlans = [fallbackTargetPlan];
+        legStopPlans = [manualStopPlan];
+      }
     }
     var legCount = legVolumes.Count;
     var groupId = CandidateGroupId(candidate);
@@ -8768,6 +8794,23 @@ public sealed class AutoTradeEngine(
       weights[index] = baseWeight + (index == count - 1 ? remainder : 0);
     }
     return weights;
+  }
+
+  private static IReadOnlyList<int> ResolveManualTargetWeights(
+    TradeCandidate candidate,
+    int targetCount
+  )
+  {
+    if (
+      candidate.ManualTargetWeights is { Count: > 0 } weights
+      && weights.Count == targetCount
+      && weights.All(value => value > 0)
+      && weights.Sum() == 100
+    )
+    {
+      return weights;
+    }
+    return EqualWeights(targetCount);
   }
 
   private decimal TargetPrice(
