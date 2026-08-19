@@ -24,10 +24,6 @@ public static class StopTrailPlanner
       return null;
     }
     var completedTargetOrdinal = TargetOrdinal(state, completedTargetIndex);
-    if (completedTargetOrdinal == 2)
-    {
-      return null;
-    }
     decimal desired;
     string label;
     decimal? bufferPrice = null;
@@ -45,7 +41,14 @@ public static class StopTrailPlanner
     }
     else
     {
-      var trailTargetOrdinal = completedTargetOrdinal - 2;
+      // TP2 has no target two behind it yet - trail to TP1 instead of the
+      // usual "two behind" step (2026-08 R:R dig: TP2 previously moved the
+      // stop nowhere at all, leaving the remaining position flat at
+      // breakeven all the way through to TP3 - the single biggest driver of
+      // wins scratching near zero instead of banking real progress).
+      var trailTargetOrdinal = completedTargetOrdinal == 2
+        ? 1
+        : completedTargetOrdinal - 2;
       // Prefer absolute TargetPrices (manual / owner ladders) so trail
       // matches the booked TP levels rather than fill±pips from TargetsPips
       // (slippage made trail ≠ owner TP after TP4 on manual #8 2026-08-11).

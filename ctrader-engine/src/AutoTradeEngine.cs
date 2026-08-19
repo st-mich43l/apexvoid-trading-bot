@@ -3273,6 +3273,48 @@ public sealed class AutoTradeEngine(
     }
   }
 
+  /// <summary>
+  /// Three entry-leg prices spanning the owner's zone: Shallow (near edge,
+  /// most likely to fill), Mid (midpoint), Deep (far edge, best price,
+  /// least likely to fill).
+  ///
+  /// A real typed range (zone.Low != zone.High) is used directly - Shallow
+  /// is whichever edge is closer to a profitable fill (High for BUY, Low
+  /// for SELL), Deep the opposite edge.
+  ///
+  /// A degenerate/single-price zone (zone.Low == zone.High, e.g. the owner
+  /// typed one number twice) has no real span to split, so Deep is derived
+  /// as the midpoint between the typed price and the stop loss - confirmed
+  /// against a live example (BUY 4390, SL 4384 -> Deep 4387, Mid 4388.5).
+  /// This never places a leg past the halfway point to the stop.
+  /// </summary>
+  private static (decimal Shallow, decimal Mid, decimal Deep) ManualEntryLegPrices(
+    TradeCandidateZone zone,
+    TradeDirection direction,
+    decimal manualStopLoss,
+    SymbolInfo symbol
+  )
+  {
+    decimal shallow;
+    decimal deep;
+    if (zone.Low != zone.High)
+    {
+      shallow = direction == TradeDirection.Buy ? zone.High : zone.Low;
+      deep = direction == TradeDirection.Buy ? zone.Low : zone.High;
+    }
+    else
+    {
+      shallow = zone.Low;
+      deep = shallow + (manualStopLoss - shallow) / 2m;
+    }
+    var mid = shallow + (deep - shallow) / 2m;
+    return (
+      decimal.Round(shallow, symbol.Digits, MidpointRounding.AwayFromZero),
+      decimal.Round(mid, symbol.Digits, MidpointRounding.AwayFromZero),
+      decimal.Round(deep, symbol.Digits, MidpointRounding.AwayFromZero)
+    );
+  }
+
   // Owner /algo instructions have their own execution route. Autonomous
   // selection, zone, regime, bias and scale-in policy must never alter them.
   private async Task<bool> ProcessManualAlgoAsync(
@@ -3286,20 +3328,17 @@ public sealed class AutoTradeEngine(
   {
     var symbol = RequireSymbol();
     var zone = candidate.EntryZone;
-    var insideZone = expectedEntry >= zone.Low && expectedEntry <= zone.High;
-    var limitPrice = insideZone
-      ? expectedEntry
-      : (direction == TradeDirection.Buy ? zone.High : zone.Low);
-    limitPrice = decimal.Round(
-      limitPrice,
-      symbol.Digits,
-      MidpointRounding.AwayFromZero
-    );
+    var manualStopLoss = candidate.ManualStopLoss
+      ?? throw new VolumePlanningException("manual algo candidate has no stop loss");
+    var legPrices = ManualEntryLegPrices(zone, direction, manualStopLoss, symbol);
     var targetPrices = candidate.ManualTakeProfits!;
+    // Validate against Shallow (the worst-case/most-likely-to-fill entry) -
+    // if targets are profitable and correctly ordered relative to the worst
+    // entry, they are automatically profitable relative to Mid/Deep too.
     var priceValidation = ValidateManualPrices(
       candidate,
       direction,
-      limitPrice,
+      legPrices.Shallow,
       symbol
     );
     if (priceValidation is not null)
@@ -3309,7 +3348,7 @@ public sealed class AutoTradeEngine(
     StructureStopPlan manualStopPlan;
     try
     {
-      manualStopPlan = ManualStop(candidate, direction, limitPrice, symbol);
+      manualStopPlan = ManualStop(candidate, direction, legPrices.Shallow, symbol);
     }
     catch (VolumePlanningException exception)
     {
@@ -3317,7 +3356,7 @@ public sealed class AutoTradeEngine(
     }
     var targetsPips = targetPrices
       .Select(price => decimal.ToInt32(decimal.Round(
-        decimal.Abs(price - limitPrice) / options.PipSize,
+        decimal.Abs(price - legPrices.Shallow) / options.PipSize,
         0,
         MidpointRounding.AwayFromZero
       )))
@@ -3341,30 +3380,77 @@ public sealed class AutoTradeEngine(
     {
       return await RejectAsync(candidate, exception.Message, cancellationToken);
     }
-    if (sizing.Lots > ManualAlgoFirstLegThresholdLots)
+    // Split the sized total across three entry legs (2026-08 R:R redesign):
+    // Shallow 50% / Mid 30% / Deep 20%. SplitEntryVolume already collapses
+    // to a single slice when the total can't support three broker-minimum
+    // legs, but a slice that individually clears MinVolume can still be too
+    // small for BuildTargetPlan's own "at least two broker-valid exits"
+    // requirement (a small deep 20% leg, in particular) - fail closed to
+    // the original single-leg-at-Shallow behavior rather than losing the
+    // candidate to an unhandled exception.
+    IReadOnlyList<long> legVolumes;
+    IReadOnlyList<decimal> legEntryPrices;
+    TargetVolumePlan[] legTargetPlans;
+    try
     {
-      var fixedFirstLeg = VolumePlanner.VolumeForLots(ManualAlgoFirstLegLots, symbol);
-      sizing = sizing with
+      var splitVolumes = VolumePlanner.SplitEntryVolume(
+        sizing.Volume, symbol, ManualEntryLegRatios
+      );
+      var splitPrices = splitVolumes.Count == 1
+        ? new[] { legPrices.Shallow }
+        : new[] { legPrices.Shallow, legPrices.Mid, legPrices.Deep };
+      var splitTargetPlans = new TargetVolumePlan[splitVolumes.Count];
+      for (var index = 0; index < splitVolumes.Count; index++)
       {
-        TargetPlan = VolumePlanner.FixFirstLegVolume(
-          sizing.TargetPlan,
-          sizing.Volume,
-          fixedFirstLeg,
-          symbol
-        ),
-      };
+        var legTargetPlan = VolumePlanner.BuildTargetPlan(
+          splitVolumes[index], symbol, targetsPips, targetWeights
+        );
+        var legLots = splitVolumes[index] / (decimal)symbol.LotSize;
+        if (legLots > ManualAlgoFirstLegThresholdLots)
+        {
+          var fixedFirstLeg = VolumePlanner.VolumeForLots(ManualAlgoFirstLegLots, symbol);
+          legTargetPlan = VolumePlanner.FixFirstLegVolume(
+            legTargetPlan, splitVolumes[index], fixedFirstLeg, symbol
+          );
+        }
+        splitTargetPlans[index] = legTargetPlan;
+      }
+      legVolumes = splitVolumes;
+      legEntryPrices = splitPrices;
+      legTargetPlans = splitTargetPlans;
     }
+    catch (VolumePlanningException)
+    {
+      var fallbackTargetPlan = sizing.TargetPlan;
+      if (sizing.Lots > ManualAlgoFirstLegThresholdLots)
+      {
+        var fixedFirstLeg = VolumePlanner.VolumeForLots(ManualAlgoFirstLegLots, symbol);
+        fallbackTargetPlan = VolumePlanner.FixFirstLegVolume(
+          fallbackTargetPlan, sizing.Volume, fixedFirstLeg, symbol
+        );
+      }
+      legVolumes = [sizing.Volume];
+      legEntryPrices = [legPrices.Shallow];
+      legTargetPlans = [fallbackTargetPlan];
+    }
+    var legCount = legVolumes.Count;
     var groupId = CandidateGroupId(candidate);
     var barTs = candidate.BarTs ?? candidate.CreatedAt;
     var expiresAt = candidate.ManualExpiresAt ?? 0;
     if (options.DryRun)
     {
+      var legSummary = string.Join(
+        " / ",
+        legEntryPrices.Select((price, index) =>
+          $"{legVolumes[index] / (decimal)symbol.LotSize:N2}@{price:N2}"
+        )
+      );
       return await CompleteDryRunAsync(
         candidate,
-        $"manual algo {direction} {sizing.Lots:N2} lots @ {limitPrice:N2} · "
+        $"manual algo {direction} {sizing.Lots:N2} lots [{legSummary}] · "
           + $"SL {manualStopPlan.StopLoss:N2} · {sizing.BindingTerm}",
         sizing.Volume,
-        limitPrice,
+        legPrices.Shallow,
         cancellationToken,
         setup: candidate.Setup,
         direction: candidate.Direction,
@@ -3392,85 +3478,96 @@ public sealed class AutoTradeEngine(
         cancellationToken
       );
     }
-    var comment = BuildManualComment(
-      candidate.CandidateId,
-      groupId,
-      sizing.Volume,
-      sizing.TargetPlan.Slices,
-      sizing.TargetPlan.TargetsPips,
-      sizing.TargetPlan.TargetOrdinals,
-      barTs,
-      expiresAt
-    );
-    // Persist the exact ID actually sent to the broker for the manual limit.
-    var clientOrderId = ClientOrderId(candidate.CandidateId);
+    var clientOrderIds = Enumerable.Range(1, legCount)
+      .Select(legIndex => ClientOrderId(candidate.CandidateId, legIndex))
+      .ToArray();
     await SaveGroupPlanAsync(
       candidate,
       groupId,
       cancellationToken,
       streamEventId: _activeLease?.StreamEventId,
       route: "manual_limit",
-      clientOrderIds: [clientOrderId]
+      clientOrderIds: clientOrderIds
     );
     if (!await EnsureBrokerLeaseAsync(cancellationToken))
     {
       throw new CandidateLeaseLostException(candidate.CandidateId);
     }
-    long orderId;
-    using var brokerCts = CreateBrokerCancellation(cancellationToken);
-    try
+    var orderIds = new List<long>(legCount);
+    for (var index = 0; index < legCount; index++)
     {
-      orderId = await RequireClient().PlaceLimitOrderAsync(
-        new LimitOrderRequest(
-          symbol.SymbolId,
-          direction,
-          sizing.Volume,
-          limitPrice,
-          decimal.ToInt64(manualStopPlan.Distance * 100_000m),
-          options.Label,
-          comment,
-          clientOrderId
-        ),
-        brokerCts.Token
+      var legIndex = index + 1;
+      var comment = BuildManualComment(
+        candidate.CandidateId,
+        groupId,
+        legVolumes[index],
+        legTargetPlans[index].Slices,
+        legTargetPlans[index].TargetsPips,
+        legTargetPlans[index].TargetOrdinals,
+        barTs,
+        expiresAt,
+        legIndex,
+        legCount
+      );
+      long orderId;
+      using var brokerCts = CreateBrokerCancellation(cancellationToken);
+      try
+      {
+        orderId = await RequireClient().PlaceLimitOrderAsync(
+          new LimitOrderRequest(
+            symbol.SymbolId,
+            direction,
+            legVolumes[index],
+            legEntryPrices[index],
+            decimal.ToInt64(manualStopPlan.Distance * 100_000m),
+            options.Label,
+            comment,
+            clientOrderIds[index]
+          ),
+          brokerCts.Token
+        );
+      }
+      catch (Exception exception) when (
+        exception is not OperationCanceledException
+        || BrokerOwnershipCancelled()
+      )
+      {
+        throw ClassifyBrokerUncertainty(candidate, clientOrderIds[index], exception);
+      }
+      orderIds.Add(orderId);
+      await PublishAsync(
+        "manual_limit_placed",
+        $"manual algo {direction} limit leg {legIndex}/{legCount} "
+          + $"{legVolumes[index] / (decimal)symbol.LotSize:N2} lots "
+          + $"@ {legEntryPrices[index]:N2} · SL {manualStopPlan.StopLoss:N2} · "
+          + $"{sizing.BindingTerm}",
+        cancellationToken,
+        candidate.CandidateId,
+        volume: legVolumes[index],
+        price: legEntryPrices[index],
+        groupId: groupId,
+        trancheIndex: legIndex,
+        groupWorstCase: -sizing.Lots * manualStopPlan.StopPips
+          * options.PipValuePerLot,
+        riskBudget: sizing.Budget,
+        hadAdds: false,
+        setup: candidate.Setup,
+        stopPips: manualStopPlan.StopPips,
+        targetsPips: legTargetPlans[index].TargetsPips,
+        stream: "algo_manual",
+        direction: candidate.Direction,
+        orderId: orderId,
+        stopLoss: manualStopPlan.StopLoss,
+        targetPrices: targetPrices,
+        entryLow: candidate.EntryZone.Low,
+        entryHigh: candidate.EntryZone.High
       );
     }
-    catch (Exception exception) when (
-      exception is not OperationCanceledException
-      || BrokerOwnershipCancelled()
-    )
-    {
-      throw ClassifyBrokerUncertainty(candidate, clientOrderId, exception);
-    }
     await CompleteActiveCandidateAsync(
-      $"ordered:{orderId}",
+      $"ordered:{string.Join(',', orderIds)}",
       cancellationToken
     );
     await store.IncrementDailyTradeCountAsync(date, cancellationToken);
-    await PublishAsync(
-      "manual_limit_placed",
-      $"manual algo {direction} limit {sizing.Lots:N2} lots @ {limitPrice:N2} · "
-        + $"SL {manualStopPlan.StopLoss:N2} · {sizing.BindingTerm}",
-      cancellationToken,
-      candidate.CandidateId,
-      volume: sizing.Volume,
-      price: limitPrice,
-      groupId: groupId,
-      trancheIndex: 1,
-      groupWorstCase: -sizing.Lots * manualStopPlan.StopPips
-        * options.PipValuePerLot,
-      riskBudget: sizing.Budget,
-      hadAdds: false,
-      setup: candidate.Setup,
-      stopPips: manualStopPlan.StopPips,
-      targetsPips: sizing.TargetPlan.TargetsPips,
-      stream: "algo_manual",
-      direction: candidate.Direction,
-      orderId: orderId,
-      stopLoss: manualStopPlan.StopLoss,
-      targetPrices: targetPrices,
-      entryLow: candidate.EntryZone.Low,
-      entryHigh: candidate.EntryZone.High
-    );
     return true;
   }
 
@@ -8483,6 +8580,16 @@ public sealed class AutoTradeEngine(
   private const decimal ManualAlgoFirstLegThresholdLots = 0.13m;
   private const decimal ManualAlgoFirstLegLots = 0.05m;
 
+  // 2026-08 R:R dig: manual /algo positions were a single entry, so a real
+  // win typically only banked TP1 on 20% before the remaining 80% gave back
+  // to breakeven on a pullback (58 closed XAU trades: median win 36 pips vs
+  // median loss the full -60 stop). Splitting into 3 legs across the
+  // owner's zone improves the realized average entry instead of touching
+  // exits: shallow (near edge, most likely to actually fill) carries the
+  // most size, deep (far edge, best price, least likely to fill) the least.
+  private static readonly IReadOnlyList<decimal> ManualEntryLegRatios =
+    [0.5m, 0.3m, 0.2m];
+
   private static bool UsesCandidateTargetPlan(TradeCandidate candidate) =>
     IsTrendCandidate(candidate) || IsStrategyMatchCandidate(candidate);
 
@@ -8800,7 +8907,9 @@ public sealed class AutoTradeEngine(
     IReadOnlyList<int> targets,
     IReadOnlyList<int> ordinals,
     long barTs,
-    long expiresAt
+    long expiresAt,
+    int legIndex,
+    int legCount
   )
   {
     var comment = string.Join(
@@ -8813,7 +8922,9 @@ public sealed class AutoTradeEngine(
       string.Join(',', targets),
       string.Join(',', ordinals),
       barTs.ToString(CultureInfo.InvariantCulture),
-      expiresAt.ToString(CultureInfo.InvariantCulture)
+      expiresAt.ToString(CultureInfo.InvariantCulture),
+      legIndex.ToString(CultureInfo.InvariantCulture),
+      legCount.ToString(CultureInfo.InvariantCulture)
     );
     if (comment.Length > 100)
     {
@@ -8824,10 +8935,18 @@ public sealed class AutoTradeEngine(
     return comment;
   }
 
+  // Three entry legs (2026-08 R:R redesign) share one GroupId/TargetPrices
+  // but are otherwise independent broker positions - each trails its own
+  // stop from its own real fill price (see StopTrailPlanner), so no
+  // group-level entry-price blending is needed. legIndex/legCount are
+  // parsed but only used for observability (TrancheIndex/GroupTrancheCount);
+  // a pre-redesign 9-part "avm" comment (no leg fields) still parses as a
+  // single leg 1-of-1 for backward compatibility with orders already live
+  // when this shipped.
   private static AutoTradePositionState? ParseManualComment(TradingPosition position)
   {
     var parts = position.Comment.Split('|');
-    if (parts.Length != 9 || parts[0] != "avm")
+    if ((parts.Length != 9 && parts.Length != 11) || parts[0] != "avm")
     {
       return null;
     }
@@ -8844,6 +8963,12 @@ public sealed class AutoTradeEngine(
         .Select(value => int.Parse(value, CultureInfo.InvariantCulture))
         .ToArray();
       var barTs = long.Parse(parts[7], CultureInfo.InvariantCulture);
+      var legIndex = parts.Length == 11
+        ? int.Parse(parts[9], CultureInfo.InvariantCulture)
+        : 1;
+      var legCount = parts.Length == 11
+        ? int.Parse(parts[10], CultureInfo.InvariantCulture)
+        : 1;
       if (
         slices.Length == 0
         || slices.Length != targets.Length
@@ -8852,6 +8977,9 @@ public sealed class AutoTradeEngine(
         || targets.Any(value => value <= 0)
         || ordinals.Any(value => value <= 0)
         || !ordinals.SequenceEqual(ordinals.Order())
+        || legIndex < 1
+        || legCount < 1
+        || legIndex > legCount
       )
       {
         return null;
@@ -8871,10 +8999,10 @@ public sealed class AutoTradeEngine(
         position.StopLoss,
         ordinals,
         parts[2],
-        TrancheIndex: 1,
+        TrancheIndex: legIndex,
         GroupOpenedAt: barTs,
         LastTrancheBarTs: barTs,
-        GroupTrancheCount: 1,
+        GroupTrancheCount: legCount,
         HadAdds: false,
         InitialStopLoss: position.StopLoss,
         ZoneLeg: 0,
@@ -8897,7 +9025,7 @@ public sealed class AutoTradeEngine(
   {
     var parts = comment.Split('|');
     if (
-      parts.Length != 9
+      (parts.Length != 9 && parts.Length != 11)
       || parts[0] != "avm"
       || !long.TryParse(
         parts[8],
@@ -9031,8 +9159,10 @@ public sealed class AutoTradeEngine(
     return (leg, barTs, parts[2]);
   }
 
-  private static string ClientOrderId(string candidateId) =>
-    $"av-{candidateId[..Math.Min(40, candidateId.Length)]}";
+  private static string ClientOrderId(string candidateId, int legIndex = 1) =>
+    legIndex <= 1
+      ? $"av-{candidateId[..Math.Min(40, candidateId.Length)]}"
+      : $"av-{candidateId[..Math.Min(38, candidateId.Length)]}-L{legIndex}";
 
   private static string CandidateToken(string candidateId) =>
     candidateId[..Math.Min(10, candidateId.Length)];
