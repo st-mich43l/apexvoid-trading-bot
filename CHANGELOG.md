@@ -13,6 +13,9 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- XAU manual /algo now cancels unfilled shallow/mid/deep entry clips as soon
+  as any TP books (``unfilled_leg_after_tp_policy=cancel``). Hitting TP1 no
+  longer leaves the rest of the entry ladder working on the broker.
 - FX owner manual ``/algo`` uses a single entry-at price (no entry zone) and
   defaults the setup tag to ``key-level`` the same way XAU short-form DMs do.
 - FX owner manual ``/algo`` parsing no longer crashes on
