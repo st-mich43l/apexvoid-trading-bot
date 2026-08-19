@@ -52,10 +52,6 @@ _EVENT_CURSOR_KEY = "manual_trade:algo_event_cursor"
 _FILL_EVENT_TYPE = "manual_opened"
 
 
-def _pending_close_key(position_id: int) -> str:
-  return f"manual_trade:pending_close:{position_id}"
-
-
 def _pending_delete_key(intent_id: str) -> str:
   return f"manual_trade:pending_delete:{intent_id}"
 
@@ -301,9 +297,16 @@ async def _resolve_signal_id(
   for a position (confirmed by reading every PublishAsync call site), so
   even if this process restarted after a manual-algo position filled (losing
   the in-memory cache), a later event still self-heals the mapping via
-  candidate_id - guarded by requiring the resolved signal's own
-  broker_position_id to match, so a stray candidate_id prefix collision
-  can't attach an event to the wrong signal.
+  candidate_id. get_signal_by_execution_intent_id matches by a 10-char
+  PREFIX (comment fields are broker-truncated), so a re-armed signal's
+  newer revision (e.g. "manual:89:1" after "manual:89:0") shares the same
+  prefix as the original and can win the "most recent" tiebreak - guard by
+  requiring an EXACT match against the event's own (always full, untruncated)
+  candidate_id, not a single stored broker_position_id. A manual /algo
+  signal can be several independent entry legs (shallow/mid/deep) sharing
+  one candidate_id but each its own position_id, so requiring position_id
+  equality here (the old guard) silently failed to resolve every leg but
+  the first one to fill after a restart.
   """
   raw_position_id = event.get("position_id")
   if raw_position_id is None:
@@ -319,7 +322,7 @@ async def _resolve_signal_id(
   if (
     sig is None
     or sig.get("execution_mode") != "algo"
-    or str(sig.get("broker_position_id") or "") != str(position_id)
+    or str(sig.get("execution_intent_id") or "") != str(candidate_id)
   ):
     return None
   positions[position_id] = sig["id"]
@@ -413,6 +416,19 @@ async def _handle_take_profit(event: dict, signal_id: int) -> None:
 
 
 async def _handle_position_closed(event: dict, signal_id: int) -> None:
+  """A broker-detected close (stop loss, or an unconfirmed disappearance)
+  for ONE entry leg. A manual /algo signal's entry can be several
+  independent legs (shallow/mid/deep) sharing one group - this leg fully
+  closing does not mean the SIGNAL is closed while siblings remain open,
+  so only a genuine partial (this leg itself still has volume left, e.g.
+  the leg's own take-profit ladder booking a slice) is recorded here.
+  A leg closing completely is left entirely to ``_handle_group_result``,
+  which fires exactly once the whole group has no open volume left and
+  carries AutoTradeEngine.cs's own correctly volume-weighted total -
+  booking a full close here too would let close_leg's own ledger finalize
+  the signal FIRST, using its "pure loss = last leg's own pips" rule that
+  silently drops every sibling leg's result (see finalize_manual_group).
+  """
   from app.signals import trade_ops
 
   sig = await get_manual_signal(signal_id)
@@ -425,31 +441,62 @@ async def _handle_position_closed(event: dict, signal_id: int) -> None:
       signal_id, "error", error="position_closed event missing price",
     )
     return
-  pips = pips_format.sl_result_pips(sig, float(price))
+  if not (event.get("remaining_volume") or 0) > 0:
+    return
+  pips, frac = _leg_close_pips_and_frac(sig, event, float(price))
   result = await trade_ops._execute_close(
-    signal_id, sig.get("symbol", "XAU"), pips, None,
+    signal_id, sig.get("symbol", "XAU"), pips, frac,
   )
   await trade_ops.post_result(result, sig.get("symbol", "XAU"))
 
 
+def _leg_close_pips_and_frac(
+  sig: dict, event: dict, price: float,
+) -> tuple[int, float | None]:
+  """This leg's own realized pips and its fraction of the group's total
+  volume, from the fields AutoTradeEngine.cs already computes per leg.
+  Falls back to the pre-multi-leg calc (whole-signal broker_fill_price)
+  only if an event is missing the newer fields (e.g. mid-deploy replay).
+  """
+  leg_pips = event.get("leg_realized_pips")
+  volume = event.get("volume")
+  group_initial_volume = event.get("group_initial_volume")
+  if leg_pips is None or not volume or not group_initial_volume:
+    return pips_format.sl_result_pips(sig, price), None
+  return round(float(leg_pips)), round(float(volume) / float(group_initial_volume), 6)
+
+
+async def _handle_group_result(event: dict, signal_id: int) -> None:
+  """The single authoritative close for a manual /algo signal - fires once
+  AutoTradeEngine.cs confirms every entry leg in the group has no volume
+  left, carrying its own correctly volume-weighted (or achieved-TP)
+  ``group_realized_pips``. See finalize_manual_group for why this bypasses
+  close_leg's own ledger instead of feeding it.
+  """
+  from app.signals import trade_ops
+
+  pips = event.get("group_realized_pips")
+  if pips is None:
+    log.error("group_result event missing group_realized_pips for signal %s", signal_id)
+    return
+  sig = await get_manual_signal(signal_id)
+  symbol = (sig or {}).get("symbol", "XAU")
+  result = await trade_ops._execute_group_close(signal_id, symbol, round(float(pips)))
+  await trade_ops.post_result(result, symbol)
+
+
 async def _handle_manual_closed(
-  client,
   event: dict,
   signal_id: int,
 ) -> None:
+  """The owner-confirmed counterpart to ``_handle_position_closed`` (one
+  entry leg closed via /trade_close or /auto_close_all rather than a
+  broker-detected stop). Same reasoning: only a genuine partial (this leg
+  itself still has volume left) is booked here; a leg finishing completely
+  is left to ``_handle_group_result``.
+  """
   from app.signals import trade_ops
 
-  position_id = event.get("position_id")
-  frac = None
-  if position_id is not None:
-    key = _pending_close_key(int(position_id))
-    raw = await client.get(key)
-    if raw:
-      try:
-        frac = json.loads(raw).get("frac")
-      except (TypeError, json.JSONDecodeError):
-        frac = None
-      await client.delete(key)
   sig = await get_manual_signal(signal_id)
   if sig is None:
     return
@@ -460,7 +507,9 @@ async def _handle_manual_closed(
       signal_id, "error", error="close command missing execution price",
     )
     return
-  pips = pips_format.sl_result_pips(sig, float(price))
+  if not (event.get("remaining_volume") or 0) > 0:
+    return
+  pips, frac = _leg_close_pips_and_frac(sig, event, float(price))
   result = await trade_ops._execute_close(
     signal_id, sig.get("symbol", "XAU"), pips, frac,
   )
@@ -632,6 +681,15 @@ async def _handle_event(
       return  # autonomous position; delivery.py owns channel fan-out
     await _handle_stop_moved(event, signal_id)
     return
+  if event_type == "group_result":
+    # No _resolve_signal_id positions-cache entry: group_result carries no
+    # position_id of its own semantic weight (just whichever leg happened
+    # to trigger it), so route by candidate_id/execution_intent_id only.
+    signal_id = await _resolve_signal_id(event, positions)
+    if signal_id is None:
+      return
+    await _handle_group_result(event, signal_id)
+    return
   signal_id = await _resolve_signal_id(event, positions)
   if signal_id is None:
     return  # not a manual-algo position this loop is tracking
@@ -639,14 +697,16 @@ async def _handle_event(
     await _handle_take_profit(event, signal_id)
   elif event_type == "position_closed":
     await _handle_position_closed(event, signal_id)
-    position_id = event.get("position_id")
-    if position_id is not None:
-      positions.pop(int(position_id), None)
+    if not (event.get("remaining_volume") or 0) > 0:
+      position_id = event.get("position_id")
+      if position_id is not None:
+        positions.pop(int(position_id), None)
   elif event_type == "manual_closed":
-    await _handle_manual_closed(client, event, signal_id)
-    position_id = event.get("position_id")
-    if position_id is not None:
-      positions.pop(int(position_id), None)
+    await _handle_manual_closed(event, signal_id)
+    if not (event.get("remaining_volume") or 0) > 0:
+      position_id = event.get("position_id")
+      if position_id is not None:
+        positions.pop(int(position_id), None)
   elif event_type == "manual_sl_moved":
     await _handle_manual_sl_moved(event, signal_id)
   # Any other type (e.g. manual_planned) is informational
@@ -727,25 +787,26 @@ async def request_cancel(intent_id: str) -> None:
 
 async def request_close(
   signal_id: int,
-  position_id: int,
+  intent_id: str,
   *,
   frac: float | None = None,
 ) -> None:
   """/trade_close on a filled manual algo signal.
 
-  Remembers the requested ``frac`` in Redis (not carried on the C# side's
-  confirmation event) so ``_handle_manual_closed`` can book the SAME
-  fraction the owner asked for once the broker confirms the close.
+  Routed by intent_id (the signal's group token), not a single position_id
+  - a manual /algo signal can be several independent entry legs (shallow/
+  mid/deep) sharing one group. AutoTradeEngine.cs's close handler resolves
+  every currently-open leg in the group from intent_id and closes each one
+  (see HandleCloseCommandAsync), applying ``frac`` uniformly to each leg's
+  own remaining volume so a partial /trade_close keeps every leg's
+  relative weighting intact. Each leg's own confirmation event already
+  carries its own actual executed volume, so - unlike before - there is no
+  need to remember the requested frac in Redis for later lookup.
   """
-  client = redis_state.get_client()
-  await client.set(
-    _pending_close_key(position_id),
-    json.dumps({"signal_id": signal_id, "frac": frac}),
-    ex=3600,
-  )
+  del signal_id  # kept for logging symmetry with request_cancel/move_sl
   await _xadd_command({
     "type": "close",
-    "position_id": position_id,
+    "intent_id": intent_id,
     "frac": frac,
   })
 

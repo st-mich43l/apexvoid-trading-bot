@@ -8,6 +8,7 @@ from app.persistence.store import (
   cancel_manual_signal,
   close_leg,
   delete_manual_signal,
+  finalize_manual_group,
   get_manual_signal,
   get_open_signals,
   get_signal_cluster,
@@ -100,6 +101,39 @@ async def _execute_close(
   return result
 
 
+async def _execute_group_close(sid: int, symbol: str, pips: int) -> dict:
+  """The manual-algo group-close counterpart to ``_execute_close`` - used
+  only by app.signals.manual_execution._handle_group_result, once
+  AutoTradeEngine.cs confirms a manual /algo signal's entire entry-leg
+  group (shallow/mid/deep, or just one leg for a smaller signal) has no
+  volume left. Calls finalize_manual_group instead of close_leg: that
+  function writes down AutoTradeEngine.cs's own volume-weighted total
+  directly rather than re-deriving one from close_leg's own ledger, whose
+  "pure loss = last leg's own pips" rule is right for one entry's exit
+  ladder but silently drops every sibling leg's result for several
+  independently-priced entry legs (see finalize_manual_group docstring).
+  """
+  row = await finalize_manual_group(sid, pips)
+  if row is None:
+    return {"action": "close", "ok": False, "error": "not_open"}
+  net = row["net"]
+  await store_pips(
+    "+" if net >= 0 else "-",
+    abs(net),
+    message_id=row.get("channel_message_id"),
+    chat_id=channel_for_symbol(symbol),
+    signal_id=sid,
+  )
+  return {
+    "action": "close",
+    "ok": True,
+    "row": row,
+    "pips": net,
+    "reply_to": row.get("channel_message_id"),
+    "tp_number": None,
+  }
+
+
 async def _maybe_defer_close_to_broker(
   sid: int,
   frac: float | None,
@@ -110,17 +144,26 @@ async def _maybe_defer_close_to_broker(
   exists (today /trade_close only ever mutated Postgres/Telegram, never a
   real position). Returns None to fall through to the direct path
   unchanged for every non-algo (or not-yet-filled) signal.
+
+  Routes by execution_intent_id (the signal's stable group token), not
+  broker_position_id - a manual /algo signal can be several independent
+  entry legs (shallow/mid/deep) sharing one group, and broker_position_id
+  is one column sized for one fill (the first leg to fill, see
+  set_execution_fill). AutoTradeEngine.cs resolves every open leg in the
+  group from the intent_id and closes all of them, so /trade_close
+  actually flattens the whole position instead of silently leaving two of
+  three legs open on the broker.
   """
   full = await get_manual_signal(sid)
   if full is None or full.get("execution_mode") != "algo":
     return None
   if full.get("execution_status") != "filled":
     return None
-  position_id = full.get("broker_position_id")
-  if position_id is None:
+  intent_id = full.get("execution_intent_id")
+  if not intent_id:
     return None
   from app.signals import manual_execution
-  await manual_execution.request_close(sid, int(position_id), frac=frac)
+  await manual_execution.request_close(sid, str(intent_id), frac=frac)
   return {
     "action": "close",
     "ok": True,

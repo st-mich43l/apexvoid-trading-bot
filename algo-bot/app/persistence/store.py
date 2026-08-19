@@ -1417,6 +1417,69 @@ async def close_leg(
   return result
 
 
+async def finalize_manual_group(
+  row_id: int,
+  result_pips: int,
+) -> dict | None:
+  """Close a manual /algo signal using AutoTradeEngine.cs's own final,
+  authoritative group result (its ``group_result`` event's
+  ``group_realized_pips``), bypassing ``close_leg``'s frac-accumulation
+  ledger entirely.
+
+  A manual /algo signal can be several independent entry legs (shallow/
+  mid/deep, each its own broker position filled at its own price) closing
+  together off one shared owner stop. ``close_leg``/``legs_achieved_pips``
+  is tuned for a DIFFERENT shape - several EXIT events off one entry (a
+  partial TP booking followed by a BE/SL residual), where "pure loss = use
+  the final residual's own pips" is the deliberately correct journal
+  behaviour (a trade that ran to BE after TP1 should not be diluted to a
+  lot-weighted ~fraction of the win). Applied to independently-priced
+  ENTRY legs instead, that same rule silently reports only the
+  last-to-close leg's own (typically smallest/best-priced) result and
+  discards every sibling leg's loss entirely (2026-08-19: a 3-leg SELL
+  reported -26 pips when the true volume-weighted loss across all three
+  fills was -47). AutoTradeEngine.cs already computes the correct number
+  once, from real per-leg fills - this just writes it down.
+  """
+  now = int(time.time())
+  snapshot_close: tuple[int, int, str] | None = None
+  async with _connect() as db:
+    async with db.transaction():
+      row = await db.fetchrow(
+        "SELECT * FROM manual_signals WHERE id = $1 AND status = 'open' "
+        "FOR UPDATE",
+        row_id,
+      )
+      if row is None:
+        return None
+      legs = json.loads(row["legs"] or "[]")
+      legs.append({"frac": 1.0, "pips": result_pips, "ts": now})
+      await db.execute(
+        "UPDATE manual_signals SET status = 'closed', result_pips = $1, "
+        "closed_at = $2, legs = $3 WHERE id = $4 AND status = 'open'",
+        result_pips, now, json.dumps(legs), row_id,
+      )
+      snapshot_close = (int(row_id), now, str(row["symbol"] or "XAU"))
+  if snapshot_close is not None:
+    await _safe_snapshot_manual_chart(
+      signal_id=snapshot_close[0],
+      event="closed",
+      ts=snapshot_close[1],
+      symbol=snapshot_close[2],
+    )
+  return {
+    "id": row["id"],
+    "channel_message_id": row["channel_message_id"],
+    "daily_seq": row["daily_seq"],
+    "symbol": row["symbol"],
+    "visibility": row["visibility"],
+    "closed": True,
+    "net": result_pips,
+    "remaining": 0.0,
+    "frac": 1.0,
+  }
+
+
 async def update_sl(row_id: int, price: float) -> dict | None:
   """Move the stop loss on an open signal and return its previous row."""
   async with _connect() as db:
@@ -1548,19 +1611,27 @@ async def set_execution_fill(
 ) -> dict | None:
   """Record a manual-algo limit order's real broker fill.
 
-  Called once (from the reconcile loop) when AutoTradeEngine.cs's fill
-  adoption reconstructs the position and publishes its "manual_opened"
-  event — marks the signal ``'filled'`` and records the real position id
-  and fill price the owner-override commands (``/trade_close``/``/trade_sl``)
-  need to route to the broker afterwards.
+  Called once per FILLED ENTRY LEG (from the reconcile loop) when
+  AutoTradeEngine.cs's fill adoption reconstructs a position and publishes
+  its "manual_opened" event - a manual /algo signal can be several
+  independent entry legs (the shallow/mid/deep split), so this fires more
+  than once for the same signal_id. broker_position_id/broker_fill_price
+  are single columns sized for one fill; only the FIRST leg to fill wins
+  them (via COALESCE) so they stay a stable, representative reference
+  instead of flapping to whichever leg happens to fill last. Owner-override
+  close routing no longer depends on this column (see
+  app.signals.manual_execution.request_close, which routes by
+  execution_intent_id / group instead), but display code
+  (app.signals.pips_format) still reads it, so it must stay populated.
 
   Returns the updated row, or ``None`` if ``signal_id`` does not exist.
   """
   async with _connect() as db:
     row = await db.fetchrow(
       "UPDATE manual_signals SET execution_status = 'filled', algo_armed = TRUE, "
-      "trade_stream = 'algo_manual', broker_position_id = $1, "
-      "broker_fill_price = $2 WHERE id = $3 "
+      "trade_stream = 'algo_manual', "
+      "broker_position_id = COALESCE(broker_position_id, $1), "
+      "broker_fill_price = COALESCE(broker_fill_price, $2) WHERE id = $3 "
       "RETURNING *",
       str(broker_position_id), broker_fill_price, signal_id,
     )

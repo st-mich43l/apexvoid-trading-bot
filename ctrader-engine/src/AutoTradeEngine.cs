@@ -930,21 +930,56 @@ public sealed class AutoTradeEngine(
     );
   }
 
-  // /trade_close on a filled manual algo signal: close the real position
-  // (full or partial by Frac) at the REAL broker fill. Full closes must
-  // drop tracked state immediately so the next reconcile does not re-book
-  // the same exit using a stop-loss estimate (wrong Total net / duplicate
-  // POSITION CLOSED cards).
+  // /trade_close on a filled manual algo signal: close the real position(s)
+  // (full or partial by Frac) at the REAL broker fill. A manual /algo
+  // signal can be several independent broker positions (the shallow/mid/
+  // deep entry-leg split) sharing one GroupId - an owner-typed intent_id
+  // with no PositionId means "close the whole group", not just whichever
+  // single leg an older/legacy caller happened to know about. PositionId
+  // stays supported for callers that already target one specific leg.
   private async Task HandleCloseCommandAsync(
     ManualTradeCommand command,
     CancellationToken cancellationToken
   )
   {
-    if (command.PositionId is not long positionId)
+    if (command.PositionId is long explicitPositionId)
     {
-      _log("auto-trade close command missing position_id");
+      await ClosePositionCommandAsync(command, explicitPositionId, cancellationToken);
       return;
     }
+    if (string.IsNullOrWhiteSpace(command.IntentId))
+    {
+      _log("auto-trade close command missing position_id and intent_id");
+      return;
+    }
+    var groupId = GroupToken(command.IntentId);
+    var groupPositionIds = _states.Values
+      .Where(item => GroupId(item) == groupId)
+      .Select(item => item.PositionId)
+      .ToArray();
+    if (groupPositionIds.Length == 0)
+    {
+      _log($"auto-trade close command: no open positions for group {groupId}");
+      await PublishAsync(
+        "manual_command_error",
+        $"close requested but no open positions found for group {groupId}",
+        cancellationToken,
+        candidateId: command.IntentId
+      );
+      return;
+    }
+    foreach (var groupPositionId in groupPositionIds)
+    {
+      await ClosePositionCommandAsync(command, groupPositionId, cancellationToken);
+    }
+  }
+
+  private async Task ClosePositionCommandAsync(
+    ManualTradeCommand command,
+    long positionId,
+    CancellationToken cancellationToken
+  )
+  {
     var client = RequireClient();
     var state = _states.GetValueOrDefault(positionId)
       ?? await store.GetPositionAsync(positionId, cancellationToken);
@@ -1093,6 +1128,16 @@ public sealed class AutoTradeEngine(
     }
     var groupPipVolume = GroupRealizedPipVolume(currentGroup)
       + realizedPips * closeVolume;
+    // Sibling legs (e.g. a manual-algo group's other filled entry clips)
+    // need this leg's just-realized contribution visible before THEY close
+    // in the same owner command loop (/trade_close on a whole group,
+    // /auto_close_all) - otherwise each one only sees its own isolated
+    // slice, the same staleness bug fixed in the stale-position path above.
+    await SyncGroupRealizedPipVolumeAsync(
+      currentGroup.Where(item => item.PositionId != state.PositionId).ToArray(),
+      groupPipVolume,
+      cancellationToken
+    );
     var groupInitialVolume = GroupInitialVolume(currentGroup);
     if (groupInitialVolume <= 0)
     {
@@ -5131,6 +5176,28 @@ public sealed class AutoTradeEngine(
     }
   }
 
+  // Writes a freshly computed group pip-volume total back to every sibling
+  // still tracked in _states, so the NEXT leg of the same group to close
+  // (even within this same reconcile pass) reads an up-to-date running
+  // total via GroupRealizedPipVolume(...) instead of its own stale field.
+  // Deliberately narrower than PropagateGroupMetadataAsync - this only
+  // touches the one field the close paths need corrected, leaving
+  // GroupBookedPnl/tranche metadata untouched to avoid overwriting a live
+  // sibling's own values with a closing leg's unrelated stale copies.
+  private async Task SyncGroupRealizedPipVolumeAsync(
+    IReadOnlyList<AutoTradePositionState> siblingStates,
+    decimal pipVolume,
+    CancellationToken cancellationToken
+  )
+  {
+    foreach (var sibling in siblingStates)
+    {
+      var updated = sibling with { GroupRealizedPipVolume = pipVolume };
+      _states[updated.PositionId] = updated;
+      await store.SavePositionAsync(updated, cancellationToken);
+    }
+  }
+
   private decimal OpenPnl(
     AutoTradePositionState state,
     decimal price,
@@ -6149,8 +6216,22 @@ public sealed class AutoTradeEngine(
           closeReason
         );
         var remainingVolume = Math.Max(0, state.RemainingVolume);
-        var pipVolume = state.GroupRealizedPipVolume
+        // Read the LIVE running total from siblings still in _states, not
+        // this leg's own (already stale) field - manual /algo groups with
+        // several entry legs commonly go stale together in the same
+        // ReconcileAsync pass (one shared owner stop, hit near-simultaneously
+        // for every filled leg). state.GroupRealizedPipVolume was last
+        // synced before any of them closed, so summing from it in isolation
+        // silently drops every sibling's already-realized pips (2026-08-19:
+        // a 3-leg SELL reported "losing 4 pips" per leg / -4 group total
+        // when the true volume-weighted loss across all three fills was
+        // -47 pips).
+        var siblingStates = _states.Values
+          .Where(item => GroupId(item) == GroupId(state))
+          .ToArray();
+        var pipVolume = GroupRealizedPipVolume(siblingStates)
           + SignedPips(state, exitEstimate) * remainingVolume;
+        await SyncGroupRealizedPipVolumeAsync(siblingStates, pipVolume, cancellationToken);
         // Total on the close card is the highest target reached (e.g. TP2
         // = 60), not the volume-weighted blend that dilutes booked TPs
         // with a later BE residual. Fall back to weighted only when no
