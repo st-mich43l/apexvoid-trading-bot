@@ -662,10 +662,11 @@ def format_stats(stats: dict, period: str, *, stats_by_symbol: dict[str, dict] |
     lines.extend(overview)
     lines.append("")
   lines.extend(_stream_book_lines(stats))
+  lines.extend([
     "",
     "🕐 By session (combined unique)",
     *_stats_group_lines(stats["by_session"], setup=False),
-  ]
+  ])
 
   if stats["by_cluster"]:
     lines.extend([
