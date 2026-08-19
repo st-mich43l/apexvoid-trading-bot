@@ -12,6 +12,14 @@ dated section after deployment.
 
 ## Unreleased
 
+### Fixed
+- FX owner manual ``/algo`` parsing no longer crashes on
+  ``EffectiveInstrumentConfig.stop_envelope``; default protective stops now
+  read ``execution.reaction.stop_min_pips`` / ``stop_max_pips`` like the rest
+  of the FX execution stack.
+- XAU owner manual DMs accept a single price (``xau buy 4078 / algo``) as
+  well as the existing entry-zone shorthand (``4078-75``).
+
 ### Added
 - Owner FX manual /algo DMs: ``eurusd buy 1.15007 / algo`` (and GBPJPY,
   USDJPY) auto-fill a 1:2 protective stop from each pair's stop envelope,
