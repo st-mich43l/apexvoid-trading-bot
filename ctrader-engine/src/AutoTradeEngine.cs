@@ -3391,6 +3391,7 @@ public sealed class AutoTradeEngine(
     IReadOnlyList<long> legVolumes;
     IReadOnlyList<decimal> legEntryPrices;
     TargetVolumePlan[] legTargetPlans;
+    StructureStopPlan[] legStopPlans;
     try
     {
       var splitVolumes = VolumePlanner.SplitEntryVolume(
@@ -3400,6 +3401,15 @@ public sealed class AutoTradeEngine(
         ? new[] { legPrices.Shallow }
         : new[] { legPrices.Shallow, legPrices.Mid, legPrices.Deep };
       var splitTargetPlans = new TargetVolumePlan[splitVolumes.Count];
+      // Owner-reported live 2026-08-19: Mid/Deep legs' broker stop landed
+      // away from the declared price (eg. 4347) because the single
+      // Shallow-anchored manualStopPlan's *relative* distance (a
+      // stop-loss is submitted as a distance from that order's own fill,
+      // not an absolute price) was reused unchanged for every leg -
+      // correct only for Shallow itself. Each leg needs its own stop plan
+      // computed from its own entry so every leg's broker stop actually
+      // resolves to the one owner-declared absolute price.
+      var splitStopPlans = new StructureStopPlan[splitVolumes.Count];
       for (var index = 0; index < splitVolumes.Count; index++)
       {
         var legTargetPlan = VolumePlanner.BuildTargetPlan(
@@ -3414,10 +3424,14 @@ public sealed class AutoTradeEngine(
           );
         }
         splitTargetPlans[index] = legTargetPlan;
+        splitStopPlans[index] = splitPrices[index] == legPrices.Shallow
+          ? manualStopPlan
+          : ManualStop(candidate, direction, splitPrices[index], symbol);
       }
       legVolumes = splitVolumes;
       legEntryPrices = splitPrices;
       legTargetPlans = splitTargetPlans;
+      legStopPlans = splitStopPlans;
     }
     catch (VolumePlanningException)
     {
@@ -3432,6 +3446,7 @@ public sealed class AutoTradeEngine(
       legVolumes = [sizing.Volume];
       legEntryPrices = [legPrices.Shallow];
       legTargetPlans = [fallbackTargetPlan];
+      legStopPlans = [manualStopPlan];
     }
     var legCount = legVolumes.Count;
     var groupId = CandidateGroupId(candidate);
@@ -3519,7 +3534,7 @@ public sealed class AutoTradeEngine(
             direction,
             legVolumes[index],
             legEntryPrices[index],
-            decimal.ToInt64(manualStopPlan.Distance * 100_000m),
+            decimal.ToInt64(legStopPlans[index].Distance * 100_000m),
             options.Label,
             comment,
             clientOrderIds[index]
@@ -3539,7 +3554,7 @@ public sealed class AutoTradeEngine(
         "manual_limit_placed",
         $"manual algo {direction} limit leg {legIndex}/{legCount} "
           + $"{legVolumes[index] / (decimal)symbol.LotSize:N2} lots "
-          + $"@ {legEntryPrices[index]:N2} · SL {manualStopPlan.StopLoss:N2} · "
+          + $"@ {legEntryPrices[index]:N2} · SL {legStopPlans[index].StopLoss:N2} · "
           + $"{sizing.BindingTerm}",
         cancellationToken,
         candidate.CandidateId,
@@ -3552,12 +3567,12 @@ public sealed class AutoTradeEngine(
         riskBudget: sizing.Budget,
         hadAdds: false,
         setup: candidate.Setup,
-        stopPips: manualStopPlan.StopPips,
+        stopPips: legStopPlans[index].StopPips,
         targetsPips: legTargetPlans[index].TargetsPips,
         stream: "algo_manual",
         direction: candidate.Direction,
         orderId: orderId,
-        stopLoss: manualStopPlan.StopLoss,
+        stopLoss: legStopPlans[index].StopLoss,
         targetPrices: targetPrices,
         entryLow: candidate.EntryZone.Low,
         entryHigh: candidate.EntryZone.High
