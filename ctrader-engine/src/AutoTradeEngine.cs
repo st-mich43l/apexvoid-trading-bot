@@ -128,6 +128,20 @@ public sealed class AutoTradeEngine(
     {
       return runtime.Symbol;
     }
+    // Legacy/single-instrument mode: BindInstrumentSymbols/InstrumentRegistry
+    // were never wired up (single-symbol tests, or a session that only ever
+    // binds one instrument via RunSessionAsync's own `symbol` argument). If
+    // the candidate's own claimed symbol matches that single bound session
+    // symbol, this is not a real mismatch - fall back to it. If it does not
+    // match, this must fail rather than silently trade one instrument's
+    // candidate under a different instrument's SymbolInfo/pip geometry.
+    if (
+      _symbol is { } sessionSymbol
+      && string.Equals(sessionSymbol.RedisSymbol, canonical, StringComparison.OrdinalIgnoreCase)
+    )
+    {
+      return sessionSymbol;
+    }
     return null;
   }
 
@@ -3326,7 +3340,19 @@ public sealed class AutoTradeEngine(
     CancellationToken cancellationToken
   )
   {
-    var symbol = RequireSymbol();
+    // Owner-reported 2026-08-19 (multi-symbol scale-up): RequireSymbol()
+    // returns this session's single bound symbol (XAU when present, per
+    // FeedRunner's multi-instrument startup) regardless of which
+    // instrument the candidate is actually for - every other manual-algo
+    // FX pair would have priced, stopped, and sized its order using XAU's
+    // SymbolInfo/pip geometry/pip value instead of its own. Resolve from
+    // the candidate's own symbol, same as ResolveInstrumentUnits already
+    // does for the (already-working) autonomous V7 path.
+    var symbol = ResolveBoundSymbol(candidate.Symbol)
+      ?? throw new VolumePlanningException(
+        $"manual algo candidate symbol {candidate.Symbol} is not a bound instrument"
+      );
+    var (pipSize, pipValuePerLot) = ResolveInstrumentUnits(candidate.Symbol);
     var zone = candidate.EntryZone;
     var manualStopLoss = candidate.ManualStopLoss
       ?? throw new VolumePlanningException("manual algo candidate has no stop loss");
@@ -3356,7 +3382,7 @@ public sealed class AutoTradeEngine(
     }
     var targetsPips = targetPrices
       .Select(price => decimal.ToInt32(decimal.Round(
-        decimal.Abs(price - legPrices.Shallow) / options.PipSize,
+        decimal.Abs(price - legPrices.Shallow) / pipSize,
         0,
         MidpointRounding.AwayFromZero
       )))
@@ -3370,7 +3396,7 @@ public sealed class AutoTradeEngine(
         options.RiskPercent,
         options.SizingMode,
         manualStopPlan.StopPips,
-        options.PipValuePerLot,
+        pipValuePerLot,
         symbol,
         targetsPips,
         targetWeights
@@ -3589,7 +3615,7 @@ public sealed class AutoTradeEngine(
         groupId: groupId,
         trancheIndex: legIndex,
         groupWorstCase: -sizing.Lots * manualStopPlan.StopPips
-          * options.PipValuePerLot,
+          * pipValuePerLot,
         riskBudget: sizing.Budget,
         hadAdds: false,
         setup: candidate.Setup,
