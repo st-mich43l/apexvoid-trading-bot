@@ -36,6 +36,13 @@ dated section after deployment.
     event is nearer. Off by default (`event_cluster_guard_enabled`);
     currently only turned on for GBPJPY.
 
+### Fixed
+- V8 trade plans no longer enter `recovery_required` when every leg vanishes
+  from the broker with an `Unknown` close reason and no deal fill price — the
+  common pattern after an owner manual close on cTrader when the short deal
+  window misses the exit. The runtime now finalizes with the live executable
+  quote (bid for longs, ask for shorts), matching V6 manual-close handling.
+
 ### Changed
 - Price-action, Market Map, mapped-zone, range/trend, and HFS paths now consume
   one effective instrument runtime view. Pip floors, price identities,
