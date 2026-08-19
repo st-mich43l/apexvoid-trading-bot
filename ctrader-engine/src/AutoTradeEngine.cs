@@ -5723,6 +5723,10 @@ public sealed class AutoTradeEngine(
           groupInitialVolume: groupInitialVolume,
           lotSize: symbol.LotSize
         );
+        await CancelUnfilledGroupEntryLegsAfterTpAsync(
+          GroupId(state),
+          cancellationToken
+        );
         if (remaining <= 0)
         {
           var groupId = GroupId(state);
@@ -7038,6 +7042,61 @@ public sealed class AutoTradeEngine(
       )
       .Select(order => order.OrderId)
       .ToArray();
+  }
+
+  private async Task CancelUnfilledGroupEntryLegsAfterTpAsync(
+    string groupId,
+    CancellationToken cancellationToken
+  )
+  {
+    if (
+      !string.Equals(
+        options.UnfilledLegAfterTpPolicy,
+        "cancel",
+        StringComparison.OrdinalIgnoreCase
+      )
+    )
+    {
+      return;
+    }
+    var client = RequireClient();
+    var snapshot = await client.ReconcileAccountAsync(cancellationToken);
+    var symbol = RequireSymbol();
+    _allSymbolPendingOrders = snapshot.PendingOrders
+      .Where(order => order.SymbolId == symbol.SymbolId)
+      .ToArray();
+    var orderIds = PendingOrderIdsForGroup(groupId);
+    if (orderIds.Count == 0)
+    {
+      return;
+    }
+    foreach (var orderId in orderIds)
+    {
+      try
+      {
+        await client.CancelPendingOrderAsync(orderId, cancellationToken);
+        _allSymbolPendingOrders = _allSymbolPendingOrders
+          .Where(order => order.OrderId != orderId)
+          .ToArray();
+      }
+      catch (Exception exception) when (exception is not OperationCanceledException)
+      {
+        _log(
+          $"cancel unfilled entry leg failed group={groupId} "
+          + $"order={orderId} message={exception.Message}"
+        );
+      }
+    }
+    await PublishAsync(
+      "unfilled_legs_cancelled",
+      $"cancelled {orderIds.Count} unfilled entry clip(s) after TP "
+        + $"group {groupId}",
+      cancellationToken,
+      groupId: groupId,
+      pendingOrderIds: orderIds,
+      reasonCode: "before_tp",
+      stream: "algo_manual"
+    );
   }
 
   private async Task MaybeDeleteGroupPlanAsync(
