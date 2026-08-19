@@ -53,6 +53,9 @@ dated section after deployment.
   Live-quote selection compares `plan.Analysis.Direction` as `"BUY"`/`"SELL"`
   (the V8 contract string), not the `TradeDirection` enum — that type mismatch
   is what blocked PR #359's ctrader-engine image from compiling.
+- Fix ``IndentationError`` in ``format_stats`` (PR #360) that crash-looped the
+  trading bot on startup, taking down owner DMs, manual ``/algo`` arming, and
+  all Telegram command handlers.
 
 ### Changed
 - Price-action, Market Map, mapped-zone, range/trend, and HFS paths now consume
