@@ -8912,7 +8912,7 @@ public sealed class AutoTradeEngine(
     int legCount
   )
   {
-    var comment = string.Join(
+    var basePart = string.Join(
       '|',
       "avm",
       CandidateToken(candidateId),
@@ -8922,17 +8922,31 @@ public sealed class AutoTradeEngine(
       string.Join(',', targets),
       string.Join(',', ordinals),
       barTs.ToString(CultureInfo.InvariantCulture),
-      expiresAt.ToString(CultureInfo.InvariantCulture),
+      expiresAt.ToString(CultureInfo.InvariantCulture)
+    );
+    var comment = string.Join(
+      '|',
+      basePart,
       legIndex.ToString(CultureInfo.InvariantCulture),
       legCount.ToString(CultureInfo.InvariantCulture)
     );
-    if (comment.Length > 100)
+    if (comment.Length <= 100)
     {
-      throw new VolumePlanningException(
-        $"manual algo comment is {comment.Length} chars; cTrader maximum is 100"
-      );
+      return comment;
     }
-    return comment;
+    // legIndex/legCount are parsed but observability-only (see
+    // ParseManualComment's backward-compat note just below) - a wide target
+    // ladder (eg. a 5-level short-form default) can leave the 9-part base
+    // already near the 100-char ceiling, and appending them tips it over.
+    // Drop them rather than losing the whole candidate to a diagnostic tag;
+    // the parser already treats the resulting 9-part comment as leg 1-of-1.
+    if (basePart.Length <= 100)
+    {
+      return basePart;
+    }
+    throw new VolumePlanningException(
+      $"manual algo comment is {basePart.Length} chars; cTrader maximum is 100"
+    );
   }
 
   // Three entry legs (2026-08 R:R redesign) share one GroupId/TargetPrices
