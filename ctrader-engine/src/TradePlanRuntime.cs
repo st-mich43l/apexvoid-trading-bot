@@ -594,6 +594,15 @@ public sealed class TradePlanRuntime(
   private static bool SameInstrument(string planSymbol, SpotPrice quote) =>
     CanonicalInstrument(planSymbol) == CanonicalInstrument(quote.Symbol);
 
+  private static decimal? ExecutableQuote(TradePlan plan, SpotPrice quote)
+  {
+    if (!SameInstrument(plan.Symbol, quote))
+    {
+      return null;
+    }
+    return plan.Analysis.Direction == TradeDirection.Buy ? quote.Bid : quote.Ask;
+  }
+
   private static string CanonicalInstrument(string symbol)
   {
     var upper = (symbol ?? "").Trim().ToUpperInvariant();
@@ -2415,7 +2424,7 @@ public sealed class TradePlanRuntime(
       }
 
       var missingHandled = await ClassifyMissingLegsAsync(
-        client, symbol, plan, state, byId, cancellationToken
+        client, symbol, plan, state, byId, quote, cancellationToken
       );
       if (missingHandled is not null)
       {
@@ -2814,6 +2823,7 @@ public sealed class TradePlanRuntime(
     TradePlan plan,
     TradePlanRuntimeState state,
     Dictionary<long, TradingPosition> byId,
+    SpotPrice quote,
     CancellationToken cancellationToken
   )
   {
@@ -2889,6 +2899,36 @@ public sealed class TradePlanRuntime(
 
     if (anyUnknown && !allHaveExitPrice)
     {
+      // Full-group vanish with no deal fill (common after owner manual close
+      // on cTrader when the short deal window misses the exit). Finalize with
+      // the live executable quote instead of leaving recovery_required behind.
+      if (stillOpen == 0)
+      {
+        var liveExit = ExecutableQuote(plan, quote);
+        if (liveExit is decimal exit)
+        {
+          var patched = reasons
+            .Select(item => (
+              item.Leg,
+              PositionCloseReason.ManualOrExternalOrder,
+              (decimal?)exit
+            ))
+            .ToList();
+          return await FinalizeBrokerAbsentCloseAsync(
+            symbol,
+            plan,
+            state,
+            legs,
+            patched,
+            terminalReason: "manual_or_external_close",
+            eventKey: "manual_or_external_close",
+            reasonCode: "manual_or_external_close",
+            closeKind: "manual_or_external",
+            previousGroupStage,
+            cancellationToken
+          );
+        }
+      }
       var next = AggregateState(
         state with
         {
