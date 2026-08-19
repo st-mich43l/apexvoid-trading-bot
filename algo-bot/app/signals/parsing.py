@@ -116,7 +116,8 @@ def _parse_fx_manual(raw: str) -> Optional[dict]:
     return None
   fx_re = re.compile(
     rf'({pattern})\s+(buy|sell)\s+'
-    rf'([\d.]+)(?:\s*[-–—]\s*([\d.]+))?'
+    rf'(?:entry(?:\s+at)?\s+)?'
+    rf'([\d.]+)'
     rf'(?:\s*[\r\n/]+\s*sl\s+([\d.]+))?'
     rf'(?:\s*[\r\n/]+\s*tp\s+([\d./]+))?',
     re.IGNORECASE,
@@ -124,17 +125,10 @@ def _parse_fx_manual(raw: str) -> Optional[dict]:
   match = fx_re.search(raw)
   if not match:
     return None
-  symbol, action, entry_a, entry_b, sl_raw, tp_raw = match.groups()
+  symbol, action, entry_raw, sl_raw, tp_raw = match.groups()
   action = action.upper()
   symbol = symbol.upper()
-  entry_anchor = float(entry_a)
-  if entry_b:
-    entry_other = float(entry_b)
-    entry_low, entry_high = sorted((entry_anchor, entry_other))
-    rr_entry = entry_low if action == "SELL" else entry_high
-  else:
-    entry_low = entry_high = entry_anchor
-    rr_entry = entry_low
+  entry = float(entry_raw)
   sl = float(sl_raw) if sl_raw is not None else None
   tps = None
   if (tp_raw or "").strip():
@@ -142,17 +136,19 @@ def _parse_fx_manual(raw: str) -> Optional[dict]:
   contract = build_fx_manual_contract(
     symbol,
     action,
-    rr_entry,
+    entry,
     sl=sl,
     tps=tps,
   )
-  risk = abs(rr_entry - contract["sl"])
+  risk = abs(entry - contract["sl"])
+  short_form = sl_raw is None or not (tp_raw or "").strip()
   return {
     "action": action,
     "symbol": symbol,
     "entry": contract["entry"],
     "entry_end": contract["entry_end"],
-    "rr_entry": rr_entry,
+    "rr_entry": entry,
+    "short_form": short_form,
     "sl": contract["sl"],
     "tps": contract["tps"],
     "risk": risk,
@@ -223,11 +219,14 @@ def _parse_manual(text: str) -> Optional[dict]:
       "visibility": "vip" if vip_count else fx.get("visibility", "both"),
       "execution_mode": "algo" if algo_count else "notify",
     }
+    short_form = bool(fx.pop("short_form", True))
     if setup_type is not None:
       fx["setup_type"] = setup_type
       fx["confluence"] = confluence
     elif scalp_count:
       fx["setup_type"] = "scalp"
+    elif short_form:
+      fx["setup_type"] = DEFAULT_SETUP_TYPE
     return fx
   m = _MANUAL_RE.search(raw)
   if not m:

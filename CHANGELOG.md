@@ -13,6 +13,8 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- FX owner manual ``/algo`` uses a single entry-at price (no entry zone) and
+  defaults the setup tag to ``key-level`` the same way XAU short-form DMs do.
 - FX owner manual ``/algo`` parsing no longer crashes on
   ``EffectiveInstrumentConfig.stop_envelope``; default protective stops now
   read ``execution.reaction.stop_min_pips`` / ``stop_max_pips`` like the rest
