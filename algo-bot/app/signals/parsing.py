@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 from app.core.config import runtime_config
 from app.persistence.store import get_all_signals, get_open_signals, get_signal_by_post
 from app.core.symbols import SYMBOLS, channel_for_symbol, pip_for
+from app.signals.fx_manual_algo import build_fx_manual_contract, fx_manual_symbols
 
 # Matches: +100 pips / -50 pips / +1500Pips / -30 PIPS
 _PIPS_RE = re.compile(r'([+-])\s*(\d+)\s*pips?', re.IGNORECASE)
@@ -101,6 +102,69 @@ _MODIFY_SL_RE = re.compile(r'(?i)\bsl\s+([\d.]+)')
 _MODIFY_TP_RE = re.compile(r'(?i)\btp\s+([\d./\s]+)')
 
 
+def _fx_manual_symbol_pattern() -> str:
+  symbols = fx_manual_symbols()
+  if not symbols:
+    return ""
+  return "|".join(re.escape(symbol.lower()) for symbol in symbols)
+
+
+def _parse_fx_manual(raw: str) -> Optional[dict]:
+  """Parse ``eurusd buy 1.15007 / algo`` (single-price FX manual /algo)."""
+  pattern = _fx_manual_symbol_pattern()
+  if not pattern:
+    return None
+  fx_re = re.compile(
+    rf'({pattern})\s+(buy|sell)\s+'
+    rf'([\d.]+)(?:\s*[-–—]\s*([\d.]+))?'
+    rf'(?:\s*[\r\n/]+\s*sl\s+([\d.]+))?'
+    rf'(?:\s*[\r\n/]+\s*tp\s+([\d./]+))?',
+    re.IGNORECASE,
+  )
+  match = fx_re.search(raw)
+  if not match:
+    return None
+  symbol, action, entry_a, entry_b, sl_raw, tp_raw = match.groups()
+  action = action.upper()
+  symbol = symbol.upper()
+  entry_anchor = float(entry_a)
+  if entry_b:
+    entry_other = float(entry_b)
+    entry_low, entry_high = sorted((entry_anchor, entry_other))
+    rr_entry = entry_low if action == "SELL" else entry_high
+  else:
+    entry_low = entry_high = entry_anchor
+    rr_entry = entry_low
+  sl = float(sl_raw) if sl_raw is not None else None
+  tps = None
+  if (tp_raw or "").strip():
+    tps = [float(token) for token in tp_raw.strip().split("/") if token.strip()]
+  contract = build_fx_manual_contract(
+    symbol,
+    action,
+    rr_entry,
+    sl=sl,
+    tps=tps,
+  )
+  risk = abs(rr_entry - contract["sl"])
+  return {
+    "action": action,
+    "symbol": symbol,
+    "entry": contract["entry"],
+    "entry_end": contract["entry_end"],
+    "rr_entry": rr_entry,
+    "sl": contract["sl"],
+    "tps": contract["tps"],
+    "risk": risk,
+    "setup_type": None,
+    "confluence": None,
+    "target_weights": contract["target_weights"],
+    "manual_single_entry": True,
+    "visibility": "both",
+    "execution_mode": "algo",
+  }
+
+
 def _expand_entry_endpoint(value: float, anchor: float) -> float:
   """Expand a short zone endpoint to the closest price around the anchor."""
   if value >= 100:
@@ -152,6 +216,19 @@ def _parse_manual(text: str) -> Optional[dict]:
     raw,
     flags=re.IGNORECASE,
   )
+  fx = _parse_fx_manual(raw)
+  if fx is not None:
+    fx = {
+      **fx,
+      "visibility": "vip" if vip_count else fx.get("visibility", "both"),
+      "execution_mode": "algo" if algo_count else "notify",
+    }
+    if setup_type is not None:
+      fx["setup_type"] = setup_type
+      fx["confluence"] = confluence
+    elif scalp_count:
+      fx["setup_type"] = "scalp"
+    return fx
   m = _MANUAL_RE.search(raw)
   if not m:
     return None
@@ -187,6 +264,7 @@ def _parse_manual(text: str) -> Optional[dict]:
   risk = abs(rr_entry - sl)
   return {
     'action': action,
+    'symbol': 'XAU',
     'entry': entry_low,
     'entry_end': entry_high,
     'rr_entry': rr_entry,

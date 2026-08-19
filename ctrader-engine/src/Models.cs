@@ -288,7 +288,9 @@ public sealed record TradeCandidate(
   [property: JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
   decimal? PlannedEntryPrice = null,
   IReadOnlyList<decimal>? PlannedLegEntryPrices = null,
-  int? EntryPlanVersion = null
+  int? EntryPlanVersion = null,
+  IReadOnlyList<int>? ManualTargetWeights = null,
+  bool ManualSingleEntry = false
 );
 
 public sealed record TradeStreamEntry(

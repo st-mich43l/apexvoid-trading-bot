@@ -26,6 +26,7 @@ class ManualTradeIntent:
   manual_signal_id: int
   revision: int
   direction: str             # "BUY" | "SELL"
+  symbol: str                # canonical instrument id (EURUSD, XAU, …)
   entry_low: float
   entry_high: float
   sl: float
@@ -64,6 +65,7 @@ def build_intent(signal: dict, *, revision: int = 0) -> ManualTradeIntent:
     manual_signal_id=signal["id"],
     revision=revision,
     direction=signal["action"],
+    symbol=str(signal.get("symbol") or "XAU").upper(),
     entry_low=float(signal["entry"]),
     entry_high=float(signal["entry_end"]),
     sl=float(signal["sl"]),

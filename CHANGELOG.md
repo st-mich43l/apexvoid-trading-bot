@@ -13,6 +13,14 @@ dated section after deployment.
 ## Unreleased
 
 ### Added
+- Owner FX manual /algo DMs: ``eurusd buy 1.15007 / algo`` (and GBPJPY,
+  USDJPY) auto-fill a 1:2 protective stop from each pair's stop envelope,
+  a 1R/1.5R/2R partial-exit ladder with policy close ratios, and a single
+  resting entry — BE at 1R and trail to 1R after 1.5R match autonomous
+  ``fx_fixed_2r_v1`` management on the V6 manual-algo executor.
+- ``/trade_stats`` without a ``SYMBOL`` argument now shows a per-symbol
+  net/win-rate overview (XAU, EURUSD, GBPJPY, …) above the combined books.
+
 - USDJPY joins EURUSD and GBPJPY as demo-live: `fx_fixed_2r_v1` policy, own
   pip/lot/zone geometry (pip 0.01, pip value ~6.27/lot at current spot), and
   a Tokyo+London+NY reaction-publish window (`0-3,7-11,13-16` UTC) reflecting
@@ -42,6 +50,9 @@ dated section after deployment.
   common pattern after an owner manual close on cTrader when the short deal
   window misses the exit. The runtime now finalizes with the live executable
   quote (bid for longs, ask for shorts), matching V6 manual-close handling.
+  Live-quote selection compares `plan.Analysis.Direction` as `"BUY"`/`"SELL"`
+  (the V8 contract string), not the `TradeDirection` enum — that type mismatch
+  is what blocked PR #359's ctrader-engine image from compiling.
 
 ### Changed
 - Price-action, Market Map, mapped-zone, range/trend, and HFS paths now consume

@@ -35,6 +35,7 @@ from app.persistence.store import (
 )
 from app.signals import pips_format
 from app.signals.manual_intent import ManualTradeIntent
+from app.signals.fx_manual_algo import close_ratio_weights, fx_manual_symbols
 
 log = logging.getLogger(__name__)
 
@@ -192,17 +193,17 @@ def _intent_to_candidate_payload(intent: ManualTradeIntent) -> dict:
     "action": intent.direction,
     "entry": intent.entry_low,
     "entry_end": intent.entry_high,
-    "symbol": "XAU",
+    "symbol": intent.symbol,
   }
   reference_entry = pips_format.rr_entry(sig)
   targets_pips = [
     max(1, pips_format.pips_between(sig, tp))
     for tp in intent.tps
   ]
-  return {
+  payload = {
     "version": 3,
     "candidate_id": intent.intent_id,
-    "symbol": "XAU",
+    "symbol": intent.symbol,
     "timeframe": "M1",
     "setup": intent.setup_type or "Manual Algo",
     "mode": "manual_algo",
@@ -235,6 +236,10 @@ def _intent_to_candidate_payload(intent: ManualTradeIntent) -> dict:
     "bias": "neutral",
     "relationship_to_bias": "neutral",
   }
+  if intent.symbol.upper() in fx_manual_symbols():
+    payload["manual_target_weights"] = close_ratio_weights(intent.symbol)
+    payload["manual_single_entry"] = True
+  return payload
 
 
 async def _process_intent_entries(client, entries, *, cursor: str) -> str:

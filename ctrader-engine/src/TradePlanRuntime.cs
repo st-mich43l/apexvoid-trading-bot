@@ -600,7 +600,7 @@ public sealed class TradePlanRuntime(
     {
       return null;
     }
-    return plan.Analysis.Direction == TradeDirection.Buy ? quote.Bid : quote.Ask;
+    return plan.Analysis.Direction == "BUY" ? quote.Bid : quote.Ask;
   }
 
   private static string CanonicalInstrument(string symbol)
