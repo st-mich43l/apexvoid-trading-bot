@@ -103,8 +103,10 @@ async def handle_private_signal(msg: Message) -> None:
   if not sig:
     await msg.answer(
       "Format:\n\n"
-      "<code>gold sell entry zone (4100-4105)\nsl 4110\ntp 95/90/80</code>\n\n"
-      "<code>eurusd buy 1.15007 / algo</code> — FX 1:2 RR, single entry\n\n"
+      "<code>xau buy 4078 / algo</code> — single entry\n"
+      "<code>xau buy 4078-75 / algo</code> — entry zone\n\n"
+      "<code>eurusd buy 1.15007 / algo</code> — FX 1:2 RR\n"
+      "<code>gbpjpy sell 216.168 / sl 216.50 / algo</code>\n\n"
       "TP: absolute prices or last 2 digits. Any count.\n\n"
       "Commands: <code>/help</code>"
     )

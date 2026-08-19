@@ -33,7 +33,7 @@ _MANUAL_RE = re.compile(
   # themselves optional, the regex would silently give up on them instead
   # of backtracking - reproduced and confirmed in isolation before this fix.
   r'(?:gold|xau(?:usd)?)\s+(buy|sell)\s+(?:entry\s+zone\s*)?'
-  r'\(?[ \t]*([\d.]+)[ \t]*[-–—][ \t]*([\d.]+)[ \t]*\)?'
+  r'\(?[ \t]*([\d.]+)(?:[ \t]*[-–—][ \t]*([\d.]+))?[ \t]*\)?'
   r'(?:\s*[\r\n]+\s*sl\s+([\d.]+))?'
   r'(?:\s*[\r\n]+\s*tp\s+([\d./]+))?',
   re.IGNORECASE,
@@ -235,8 +235,11 @@ def _parse_manual(text: str) -> Optional[dict]:
   action, entry_a, entry_b, sl_raw, tp_raw = m.groups()
   action = action.upper()
   entry_anchor = float(entry_a)
-  entry_other = _expand_entry_endpoint(float(entry_b), entry_anchor)
-  entry_low, entry_high = sorted((entry_anchor, entry_other))
+  if entry_b is None:
+    entry_low = entry_high = entry_anchor
+  else:
+    entry_other = _expand_entry_endpoint(float(entry_b), entry_anchor)
+    entry_low, entry_high = sorted((entry_anchor, entry_other))
   rr_entry = entry_low if action == 'SELL' else entry_high
   pip = pip_for('XAU')
   short_form = sl_raw is None or not (tp_raw or '').strip()

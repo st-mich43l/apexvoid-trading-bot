@@ -43,10 +43,12 @@ def close_ratio_weights(symbol: str) -> list[int]:
 
 def default_stop_pips(symbol: str) -> float:
   effective = runtime_config.for_instrument(symbol)
-  envelope = effective.stop_envelope
-  if envelope is None:
-    raise ValueError(f"{symbol} fixed_rr instrument requires stop_envelope")
-  return (float(envelope.min_pips) + float(envelope.max_pips)) / 2.0
+  reaction = effective.execution.reaction
+  min_pips = float(reaction.stop_min_pips)
+  max_pips = float(reaction.stop_max_pips)
+  if min_pips <= 0 or max_pips <= 0:
+    raise ValueError(f"{symbol} reaction stop envelope must be positive")
+  return (min_pips + max_pips) / 2.0
 
 
 def build_fx_manual_contract(
