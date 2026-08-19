@@ -64,7 +64,7 @@ contract:
     require_demo: true
   instrument:
     canonical_symbol: XAU
-    symbols: XAU,EURUSD,GBPJPY,USDJPY
+    symbols: XAU,EURUSD,GBPUSD,GBPJPY,USDJPY
   mode: v8_only
   streams:
     candidate_maximum_length: 1000
@@ -216,6 +216,72 @@ instruments:
         preferred_minimum_width_price: 0.0008
     broker_symbol: EURUSD
     canonical_symbol: EURUSD
+    contract:
+      contract_units_per_lot: 100000.0
+      max_lots: 10.0
+      pip_size: 0.0001
+      price_digits: 5
+      volume_units_per_lot: 10000000
+    enabled: true
+    market_data:
+      lookbacks:
+        h1_bars: 400
+        m15_bars: 250
+        m1_bars: 150
+        m5_bars: 150
+    # London/NY major: tight spread, 10–18 pip stop, still locked 1:2.
+    policy: fx_fixed_2r_v1
+    reaction_session: london_ny
+    stop_envelope:
+      min_pips: 10
+      max_pips: 18
+      sl_distance: 0.0018
+    activation:
+      require_sweep_body: true
+      trigger_maximum_age_bars: 3
+      max_spread_pips: 1
+    price_scale:
+      round_step: 0.001
+      # Market Map price-unit fields must follow EURUSD geometry. Structural
+      # distance remains ATR-based; these cap fallback/rail presentation and
+      # make one pip a material map move instead of XAU's $1 threshold.
+      market_map:
+        change_min: 0.0001
+        fallback_radius_price: 0.01
+        scalp_radius_price: 0.006
+      zone_merge_gap_price: 0.0005
+      zone_merge_max_width: 0.0015
+      opposing_minimum_separation_price: 0.0015
+      fvg_entry_max_width_price: 0.0015
+    rollout: live
+    targeting:
+      mode: fixed_rr
+      reward_risk: 2.0
+      target_r_multiples:
+      - 1.0
+      - 1.5
+      - 2.0
+      close_ratios:
+      - 0.25
+      - 0.25
+      - 0.50
+      trail_after_r: 1.5
+      trail_to_r: 1.0
+      entry_clips: 2
+    timeframes:
+    - H1
+    - M15
+    - M5
+    - M1
+  GBPUSD:
+    analysis:
+      zones:
+        major_maximum_width_price: 0.003
+        minimum_width_price: 0.0006
+        preferred_maximum_width_price: 0.0015
+        preferred_minimum_width_price: 0.0008
+    broker_symbol: GBPUSD
+    canonical_symbol: GBPUSD
     contract:
       contract_units_per_lot: 100000.0
       max_lots: 10.0
@@ -494,7 +560,7 @@ market_data:
   scanner:
     execution_timeframe: M5
     htf: H1,M15
-    symbols: XAU,EURUSD,GBPJPY,USDJPY
+    symbols: XAU,EURUSD,GBPUSD,GBPJPY,USDJPY
     window: 500
   sessions:
     asia_start: 22
