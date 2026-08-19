@@ -38,6 +38,9 @@ dated section after deployment.
   pip/lot/zone geometry (pip 0.01, pip value ~6.27/lot at current spot), and
   a Tokyo+London+NY reaction-publish window (`0-3,7-11,13-16` UTC) reflecting
   its liquidity across all three sessions as a USD/JPY major.
+- GBPUSD joins EURUSD and GBPJPY as demo-live: `fx_fixed_2r_v1` policy, a
+  London+NY reaction window (`london_ny`), and EURUSD stop-envelope geometry
+  (10–18 pip protective stop) with matching FX price-unit geometry.
 - Per-symbol position-management mechanisms, grounded in each pair's real
   2026 behavior:
   - USDJPY: a defended-level guard hard-blocks new entries within a
