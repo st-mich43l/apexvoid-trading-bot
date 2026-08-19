@@ -274,12 +274,19 @@ instruments:
     - M5
     - M1
   GBPUSD:
+    # 2026-08-19: was a byte-for-byte EURUSD clone (only broker/canonical
+    # symbol differed) - geometry below is scaled ~1.3x off EURUSD's own
+    # pack instead, reflecting Cable's real higher volatility (commonly
+    # documented ATR(14) roughly 1.3-1.5x EURUSD's ~70 pips/day, well
+    # short of GBPJPY's own ~180 pips/day cross-pair extreme). No live
+    # broker feed/ATR for this pair yet to compute an exact figure from -
+    # revisit once real GBPUSD price history accumulates on this account.
     analysis:
       zones:
-        major_maximum_width_price: 0.003
-        minimum_width_price: 0.0006
-        preferred_maximum_width_price: 0.0015
-        preferred_minimum_width_price: 0.0008
+        major_maximum_width_price: 0.004
+        minimum_width_price: 0.0008
+        preferred_maximum_width_price: 0.002
+        preferred_minimum_width_price: 0.001
     broker_symbol: GBPUSD
     canonical_symbol: GBPUSD
     contract:
@@ -295,30 +302,37 @@ instruments:
         m15_bars: 250
         m1_bars: 150
         m5_bars: 150
-    # London/NY major: tight spread, 10–18 pip stop, still locked 1:2.
+    # London/NY major, same active-session profile as EURUSD (unlike
+    # GBPJPY's Tokyo/London-only or USDJPY's Tokyo/London/NY) - Cable's
+    # wider typical range earns a wider envelope than EURUSD's 10-18,
+    # short of GBPJPY's 15-30. Standard fx_fixed_2r_v1 25/25/50 ladder:
+    # no documented fast-move-then-hard-reversal pattern here to justify
+    # GBPJPY's frontload, and no defended-level/event-cluster incident on
+    # record for this pair yet either - overrides intentionally omitted.
     policy: fx_fixed_2r_v1
     reaction_session: london_ny
     stop_envelope:
-      min_pips: 10
-      max_pips: 18
-      sl_distance: 0.0018
+      min_pips: 12
+      max_pips: 22
+      sl_distance: 0.0022
     activation:
       require_sweep_body: true
       trigger_maximum_age_bars: 3
       max_spread_pips: 1
     price_scale:
       round_step: 0.001
-      # Market Map price-unit fields must follow EURUSD geometry. Structural
-      # distance remains ATR-based; these cap fallback/rail presentation and
-      # make one pip a material map move instead of XAU's $1 threshold.
+      # Market Map price-unit fields scaled with the zone geometry above,
+      # not copied from EURUSD. Structural distance remains ATR-based;
+      # these cap fallback/rail presentation and make one pip a material
+      # map move instead of XAU's $1 threshold.
       market_map:
         change_min: 0.0001
-        fallback_radius_price: 0.01
-        scalp_radius_price: 0.006
-      zone_merge_gap_price: 0.0005
-      zone_merge_max_width: 0.0015
-      opposing_minimum_separation_price: 0.0015
-      fvg_entry_max_width_price: 0.0015
+        fallback_radius_price: 0.013
+        scalp_radius_price: 0.008
+      zone_merge_gap_price: 0.0006
+      zone_merge_max_width: 0.002
+      opposing_minimum_separation_price: 0.002
+      fvg_entry_max_width_price: 0.002
     rollout: live
     targeting:
       mode: fixed_rr
