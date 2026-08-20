@@ -173,8 +173,9 @@ async def _maybe_defer_close_to_broker(
   Routes by execution_intent_id (the signal's stable group token), not
   broker_position_id - a manual /algo signal can be several independent
   entry legs (shallow/mid/deep) sharing one group, and broker_position_id
-  is one column sized for one fill (the first leg to fill, see
-  set_execution_fill). AutoTradeEngine.cs resolves every open leg in the
+  is one column sized for one fill (the deepest filled ladder entry for
+  channel pip math; see app.persistence.store.set_execution_fill).
+  AutoTradeEngine.cs resolves every open leg in the
   group from the intent_id and closes all of them, so /trade_close
   actually flattens the whole position instead of silently leaving two of
   three legs open on the broker.

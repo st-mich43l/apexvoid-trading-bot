@@ -1615,24 +1615,33 @@ async def set_execution_fill(
   AutoTradeEngine.cs's fill adoption reconstructs a position and publishes
   its "manual_opened" event - a manual /algo signal can be several
   independent entry legs (the shallow/mid/deep split), so this fires more
-  than once for the same signal_id. broker_position_id/broker_fill_price
-  are single columns sized for one fill; only the FIRST leg to fill wins
-  them (via COALESCE) so they stay a stable, representative reference
-  instead of flapping to whichever leg happens to fill last. Owner-override
-  close routing no longer depends on this column (see
-  app.signals.manual_execution.request_close, which routes by
-  execution_intent_id / group instead), but display code
-  (app.signals.pips_format) still reads it, so it must stay populated.
+  than once for the same signal_id.
+
+  ``broker_fill_price`` keeps the **deepest** filled entry (best price:
+  higher for SELL, lower for BUY) so channel TP/SL pip math books from the
+  deeper ladder when it filled, else mid, else shallow. ``broker_position_id``
+  still keeps the first fill id via COALESCE (owner close routes by intent
+  group, not this column).
 
   Returns the updated row, or ``None`` if ``signal_id`` does not exist.
   """
   async with _connect() as db:
     row = await db.fetchrow(
-      "UPDATE manual_signals SET execution_status = 'filled', algo_armed = TRUE, "
-      "trade_stream = 'algo_manual', "
-      "broker_position_id = COALESCE(broker_position_id, $1), "
-      "broker_fill_price = COALESCE(broker_fill_price, $2) WHERE id = $3 "
-      "RETURNING *",
+      """
+      UPDATE manual_signals SET
+        execution_status = 'filled',
+        algo_armed = TRUE,
+        trade_stream = 'algo_manual',
+        broker_position_id = COALESCE(broker_position_id, $1),
+        broker_fill_price = CASE
+          WHEN broker_fill_price IS NULL THEN $2
+          WHEN UPPER(action) = 'SELL' AND $2 > broker_fill_price THEN $2
+          WHEN UPPER(action) = 'BUY' AND $2 < broker_fill_price THEN $2
+          ELSE broker_fill_price
+        END
+      WHERE id = $3
+      RETURNING *
+      """,
       str(broker_position_id), broker_fill_price, signal_id,
     )
   decoded = _decode_signal(row) if row else None

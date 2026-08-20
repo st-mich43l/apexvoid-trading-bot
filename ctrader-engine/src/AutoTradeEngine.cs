@@ -5825,6 +5825,16 @@ public sealed class AutoTradeEngine(
           var groupId = GroupId(state);
           _states.Remove(state.PositionId);
           await store.DeletePositionAsync(state.PositionId, cancellationToken);
+          // Deep-first TP1 often consumes the entire deep clip. BE/trail
+          // must still protect remaining mid/shallow siblings.
+          if (targetOrdinal == 1)
+          {
+            await ProtectRemainingGroupStopsAtBreakEvenAsync(
+              groupId,
+              symbol,
+              cancellationToken
+            );
+          }
           if (!_states.Values.Any(item => GroupId(item) == groupId))
           {
             var groupPips = WeightedPips(groupPipVolume, groupInitialVolume);
@@ -5879,6 +5889,18 @@ public sealed class AutoTradeEngine(
           await store.SavePositionAsync(state, cancellationToken);
           continue;
         }
+        if (targetOrdinal == 1)
+        {
+          await ProtectRemainingGroupStopsAtBreakEvenAsync(
+            GroupId(state),
+            symbol,
+            cancellationToken
+          );
+          if (_states.TryGetValue(state.PositionId, out var protectedState))
+          {
+            state = protectedState;
+          }
+        }
         state = await MoveStopAfterTargetAsync(
           state,
           completedTargetIndex,
@@ -5889,6 +5911,55 @@ public sealed class AutoTradeEngine(
         _states[state.PositionId] = state;
         await store.SavePositionAsync(state, cancellationToken);
       }
+    }
+  }
+
+  /// <summary>
+  /// After group TP1, move every remaining entry leg to protected BE from
+  /// that leg's own fill. Deep-first TP1 can fully close the deep clip, so
+  /// the booking leg never reaches <see cref="MoveStopAfterTargetAsync"/>.
+  /// </summary>
+  private async Task ProtectRemainingGroupStopsAtBreakEvenAsync(
+    string groupId,
+    SymbolInfo symbol,
+    CancellationToken cancellationToken
+  )
+  {
+    foreach (var remaining in _states.Values
+      .Where(item => GroupId(item) == groupId)
+      .ToArray())
+    {
+      if (
+        remaining.CurrentStopLoss is decimal current
+        && StopTrailPlanner.IsAtLeastProtectedBreakeven(
+          remaining.Direction,
+          remaining.EntryPrice,
+          current,
+          symbol,
+          options.BreakEvenBufferTicks
+        )
+      )
+      {
+        continue;
+      }
+      var move = new StopTrailMove(
+        StopTrailPlanner.ProtectedBreakevenStop(
+          remaining.Direction,
+          remaining.EntryPrice,
+          symbol,
+          options.BreakEvenBufferTicks
+        ),
+        $"BE+{options.BreakEvenBufferTicks} ticks",
+        options.BreakEvenBufferTicks * StopTrailPlanner.RequireTickSize(symbol)
+      );
+      var updated = await ApplyStopTrailMoveAsync(
+        remaining,
+        move,
+        targetOrdinal: 1,
+        cancellationToken
+      );
+      _states[updated.PositionId] = updated;
+      await store.SavePositionAsync(updated, cancellationToken);
     }
   }
 
@@ -5911,6 +5982,18 @@ public sealed class AutoTradeEngine(
     {
       return state;
     }
+    return await ApplyStopTrailMoveAsync(
+      state, move, targetOrdinal, cancellationToken
+    );
+  }
+
+  private async Task<AutoTradePositionState> ApplyStopTrailMoveAsync(
+    AutoTradePositionState state,
+    StopTrailMove move,
+    int targetOrdinal,
+    CancellationToken cancellationToken
+  )
+  {
     try
     {
       await RequireClient().AmendPositionStopLossAsync(
@@ -8835,8 +8918,8 @@ public sealed class AutoTradeEngine(
   // most size, deep (far edge, best price, least likely to fill) the least.
   //
   // Exit policy (2026-08 ladder PM): book the group TP ladder preferring
-  // shallow volume first so mid/deep keep size for the better-fill run.
-  // When shallow cannot cover a TP slice, spill into mid then deep.
+  // deep volume first (best fill / better booked pips), then mid, then
+  // shallow. Shallower legs keep size unless needed to complete the book.
   private static readonly IReadOnlyList<decimal> ManualEntryLegRatios =
     [0.5m, 0.3m, 0.2m];
 
@@ -8864,10 +8947,9 @@ public sealed class AutoTradeEngine(
   }
 
   /// <summary>
-  /// Distribute the group TP book across entry legs shallow → mid → deep.
-  /// Mid/deep only contribute when shallower capacity is exhausted for that
-  /// slice, so better-fill legs keep lot size unless needed to complete the
-  /// configured book.
+  /// Distribute the group TP book across entry legs deep → mid → shallow.
+  /// Book better-fill volume first; shallower legs only contribute when
+  /// deeper capacity is exhausted for that slice.
   /// </summary>
   private static TargetVolumePlan[] ManualAlgoAllocateTargetPlansAcrossLegs(
     IReadOnlyList<long> legVolumes,
@@ -8898,7 +8980,8 @@ public sealed class AutoTradeEngine(
       var need = groupPlan.Slices[sliceIndex];
       var pips = groupPlan.TargetsPips[sliceIndex];
       var ordinal = groupPlan.TargetOrdinals[sliceIndex];
-      for (var leg = 0; leg < remaining.Length && need > 0; leg++)
+      // Legs are ordered shallow/mid/deep — walk deep-first.
+      for (var leg = remaining.Length - 1; leg >= 0 && need > 0; leg--)
       {
         if (remaining[leg] <= 0)
         {

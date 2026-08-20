@@ -18,11 +18,22 @@ dated section after deployment.
   pairs stay current without one symbol blocking another.
 - FX manual /algo channel cards show **Entry Price** (single entry-at level) instead
   of **Entry Zone** — FX uses entry-at, not XAU-style zones.
-- XAU manual /algo ladders book the group TP ladder preferring shallow volume
-  first (keep mid/deep size for the better-fill run); when shallow cannot cover
-  a TP slice, volume spills into mid then deep.
+- XAU manual /algo ladders book the group TP ladder preferring **deep** volume
+  first (best fill), then mid, then shallow — shallower legs only contribute
+  when deeper capacity cannot cover a TP slice.
 
 ### Fixed
+- Manual /algo TP book pip math now uses the **deepest filled** entry (deep →
+  mid → shallow), not the first/shallow fill — e.g. XAU SELL zone 4500–4503
+  booking TP1 at 4497 reports ~+60 pips from the deep edge, not +30 from
+  shallow.
+- After TP1, remaining XAU ladder legs still move to protected BE (and publish
+  ``stop_moved``) even when deep-first volume fully closes the deep clip.
+- Manual /algo BE/TP channel updates still acquire when a lifecycle event
+  omits ``symbol`` or ``position_id`` — route by ``candidate_id`` / intent.
+- Manual-algo / FX CI tests no longer assume a single limit order or brittle
+  TP-slice comment strings after the XAU ladder redesign — smoke checks verify
+  placement; multi-leg cases opt in with ``manualSingleEntry: false``.
 - XAU manual /algo ladder fills no longer spam the channel with one TP/SL
   update per entry leg — progress is booked and posted from the furthest
   signal-level TP/SL only (trailing legs at the same level are ignored).

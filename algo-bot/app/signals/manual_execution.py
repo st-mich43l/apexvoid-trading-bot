@@ -210,9 +210,28 @@ async def _enqueue_intent(intent: ManualTradeIntent) -> None:
 async def _enqueue_event(event: dict) -> None:
   symbol = _event_route_symbol(event)
   if symbol is None:
+    symbol = await _symbol_from_manual_candidate(event)
+  if symbol is None:
+    log.warning(
+      "manual-algo event dropped; missing symbol type=%s candidate=%s",
+      event.get("type"),
+      event.get("candidate_id"),
+    )
     return
   _ensure_symbol_worker(symbol)
   await _symbol_queue(symbol).put(("event", event))
+
+
+async def _symbol_from_manual_candidate(event: dict) -> str | None:
+  """Recover the worker symbol when the engine omitted it on a lifecycle event."""
+  candidate_id = event.get("candidate_id")
+  if not candidate_id:
+    return None
+  sig = await get_signal_by_execution_intent_id(str(candidate_id))
+  if sig is None:
+    return None
+  raw = sig.get("symbol")
+  return str(raw or "XAU").upper()
 
 
 
@@ -457,12 +476,11 @@ async def _resolve_signal_id(
   the first one to fill after a restart.
   """
   raw_position_id = event.get("position_id")
-  if raw_position_id is None:
-    return None
-  position_id = int(raw_position_id)
-  cached = positions.get(position_id)
-  if cached is not None:
-    return cached
+  if raw_position_id is not None:
+    position_id = int(raw_position_id)
+    cached = positions.get(position_id)
+    if cached is not None:
+      return cached
   candidate_id = event.get("candidate_id")
   if not candidate_id:
     return None
@@ -473,7 +491,8 @@ async def _resolve_signal_id(
     or str(sig.get("execution_intent_id") or "") != str(candidate_id)
   ):
     return None
-  positions[position_id] = sig["id"]
+  if raw_position_id is not None:
+    positions[int(raw_position_id)] = sig["id"]
   return sig["id"]
 
 
@@ -483,7 +502,9 @@ async def _handle_fill_event(
 ) -> None:
   from app.signals import trade_ops  # local import breaks the module cycle
 
-  if event.get("stream") != "algo_manual":
+  if event.get("stream") != "algo_manual" and not str(
+    event.get("candidate_id") or ""
+  ).startswith("manual:"):
     return
   candidate_id = event.get("candidate_id")
   position_id = event.get("position_id")
@@ -564,6 +585,10 @@ async def _handle_take_profit(event: dict, signal_id: int) -> None:
   leg publishes its own ``take_profit`` events; only the furthest TP ordinal
   for the signal is booked and posted — sibling legs at the same (or lower)
   TP are ignored so the channel is not spammed and frac is not double-counted.
+
+  Pip math uses ``broker_fill_price`` (deepest filled entry: deep → mid →
+  shallow) so a SELL that filled the deep edge books TP1 from that fill, not
+  the shallow zone edge.
   """
   from app.signals import trade_ops
 
@@ -595,6 +620,8 @@ async def _handle_take_profit(event: dict, signal_id: int) -> None:
     await redis_state.set_tp_progress(signal_id, reached)
     if target_pips is not None:
       await redis_state.set_runner_pips(signal_id, int(target_pips))
+  # Channel pips measure from deepest stored fill (deep → mid → shallow),
+  # not from whichever leg's take_profit event arrived first.
   pips = pips_format.signed_result_pips(sig, float(price))
   # The broker's real target ladder can collapse (BuildTargetPlan skips
   # middle targets when volume is too small for every configured exit), so
@@ -726,17 +753,11 @@ def _stop_move_is_breakeven(sig: dict, new_sl: float, event: dict) -> bool:
   message = str(event.get("message") or "")
   if "BE" in message.upper():
     return True
-  entry = sig.get("entry")
-  if entry is None:
-    return False
-  entry_end = sig.get("entry_end")
-  if entry_end is None:
-    entry_end = entry
-  entry_reference = (float(entry) + float(entry_end)) / 2
+  entry = pips_format.actual_entry(sig)
   from app.core.symbols import pip_for
 
   pip = pip_for(sig.get("symbol", "XAU"))
-  return abs(new_sl - entry_reference) <= pip * 2
+  return abs(new_sl - entry) <= pip * 2
 
 
 async def _handle_stop_moved(event: dict, signal_id: int) -> None:
@@ -885,7 +906,7 @@ async def _handle_event(
   if event_type == "manual_command_error":
     await _handle_command_error(event, positions)
     return
-  if event_type == "stop_moved":
+  if event_type in {"stop_moved", "sl_moved"}:
     signal_id = await _resolve_signal_id(event, positions)
     if signal_id is None:
       return  # autonomous position; delivery.py owns channel fan-out
