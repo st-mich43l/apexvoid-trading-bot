@@ -330,7 +330,7 @@ public sealed class AutoTradeEngine(
           "Auto trade disabled: V7 JSON contract metadata is unavailable"
         );
       }
-      await ReconcileAsync(cancellationToken);
+      await ReconcileAllBoundSymbolsAsync(cancellationToken);
       _ready = true;
       await PublishReadinessAsync(
         true,
@@ -372,7 +372,7 @@ public sealed class AutoTradeEngine(
         if (_clock() >= nextReconcile)
         {
           await WithGateAsync(
-            () => ReconcileAsync(cancellationToken),
+            () => ReconcileAllBoundSymbolsAsync(cancellationToken),
             cancellationToken
           );
           nextReconcile = _clock().AddSeconds(15);
@@ -540,8 +540,19 @@ public sealed class AutoTradeEngine(
     {
       foreach (var (bound, quote) in TradePlanPollTargets(symbol, spot))
       {
+        // EvaluatePendingEntryPlansAsync may submit/cancel broker orders.
+        // Keep the lazy snapshot cycle scoped to one symbol so a mutation
+        // performed while evaluating a later symbol can never reconcile
+        // against a snapshot captured for an earlier symbol. Within this
+        // PollAsync call the first snapshot is taken only after evaluation,
+        // then shared by submitted-leg reconcile and position management.
+        var reconcileCycle = new AccountReconcileSnapshotCycle(client);
         await TradePlans.PollAsync(
-          client, bound, quote, cancellationToken
+          client,
+          bound,
+          quote,
+          cancellationToken,
+          reconcileCycle.GetAsync
         );
       }
       if (_tradePlanConsumerFailures > 0)
@@ -1590,7 +1601,10 @@ public sealed class AutoTradeEngine(
       return await RejectAsync(candidate, "executor paused", cancellationToken);
     }
     var direction = ParseDirection(candidate.Direction);
-    await ReconcileAsync(cancellationToken);
+    // Candidate routing may select an FX runtime while the authenticated
+    // session's historical primary symbol is XAU. Reconcile the candidate's
+    // own broker partition before duplicate/exposure checks.
+    await ReconcileAsync(cancellationToken, symbol);
     if (
       boxRangeScalp
       && options.RangeFlipEnabled
@@ -3580,7 +3594,7 @@ public sealed class AutoTradeEngine(
     {
       return await RejectAsync(candidate, "executor paused", cancellationToken);
     }
-    await ReconcileAsync(cancellationToken);
+    await ReconcileAsync(cancellationToken, symbol);
     if (
       !_accountSupportsHedging
       && (
@@ -5217,12 +5231,13 @@ public sealed class AutoTradeEngine(
     SymbolInfo symbol
   )
   {
+    var units = ResolveInstrumentUnits(symbol.RedisSymbol);
     var move = state.Direction == TradeDirection.Buy
       ? price - state.EntryPrice
       : state.EntryPrice - price;
-    var pips = move / options.PipSize;
+    var pips = move / units.PipSize;
     var lots = state.RemainingVolume / (decimal)symbol.LotSize;
-    return pips * lots * options.PipValuePerLot;
+    return pips * lots * units.PipValuePerLot;
   }
 
   private decimal RealizedPnl(
@@ -5232,12 +5247,13 @@ public sealed class AutoTradeEngine(
     SymbolInfo symbol
   )
   {
+    var units = ResolveInstrumentUnits(symbol.RedisSymbol);
     var move = state.Direction == TradeDirection.Buy
       ? price - state.EntryPrice
       : state.EntryPrice - price;
-    var pips = move / options.PipSize;
+    var pips = move / units.PipSize;
     var lots = closedVolume / (decimal)symbol.LotSize;
-    return pips * lots * options.PipValuePerLot;
+    return pips * lots * units.PipValuePerLot;
   }
 
   private decimal SignedPips(AutoTradePositionState state, decimal price)
@@ -5245,15 +5261,29 @@ public sealed class AutoTradeEngine(
     var move = state.Direction == TradeDirection.Buy
       ? price - state.EntryPrice
       : state.EntryPrice - price;
-    return move / options.PipSize;
+    return move / PipSizeForState(state);
   }
 
   private decimal? InitialStopPips(AutoTradePositionState state)
   {
     var stop = state.InitialStopLoss ?? state.CurrentStopLoss;
     return stop is decimal price
-      ? Math.Abs(state.EntryPrice - price) / options.PipSize
+      ? Math.Abs(state.EntryPrice - price) / PipSizeForState(state)
       : null;
+  }
+
+  private decimal PipSizeForState(AutoTradePositionState state)
+  {
+    var canonical = !string.IsNullOrWhiteSpace(state.Symbol)
+      ? state.Symbol
+      : RedisSymbolFor(state.SymbolId);
+    if (string.IsNullOrWhiteSpace(canonical))
+    {
+      throw new InvalidOperationException(
+        $"position {state.PositionId} has no bound instrument metadata"
+      );
+    }
+    return PipSizeForSymbol(canonical);
   }
 
   private static decimal WeightedPips(decimal pipVolume, long initialVolume) =>
@@ -5309,7 +5339,8 @@ public sealed class AutoTradeEngine(
     {
       return false;
     }
-    var tolerance = Math.Max(options.PipSize, 2m * options.PipSize);
+    var pipSize = PipSizeForState(state);
+    var tolerance = 2m * pipSize;
     return Math.Abs(exitEstimate - stopPrice) <= tolerance;
   }
 
@@ -6114,11 +6145,85 @@ public sealed class AutoTradeEngine(
     return state with { CurrentStopLoss = move.StopLoss };
   }
 
-  private async Task ReconcileAsync(CancellationToken cancellationToken)
+  private async Task ReconcileAllBoundSymbolsAsync(
+    CancellationToken cancellationToken
+  )
   {
     var client = RequireClient();
-    var symbol = RequireSymbol();
     var snapshot = await client.ReconcileAccountAsync(cancellationToken);
+    var trackedStates = await LoadTrackedPositionStatesAsync(cancellationToken);
+    var sessionSymbol = RequireSymbol();
+    var targets = _symbolsByCanonical.Values
+      .Append(sessionSymbol)
+      .GroupBy(item => item.SymbolId)
+      .Select(group => group.First())
+      .ToArray();
+    IReadOnlyList<TradingPosition> sessionPositions = snapshot.Positions
+      .Where(position => position.SymbolId == sessionSymbol.SymbolId)
+      .ToArray();
+    IReadOnlyList<TradingPendingOrder> sessionPendingOrders = snapshot.PendingOrders
+      .Where(order => order.SymbolId == sessionSymbol.SymbolId)
+      .ToArray();
+    try
+    {
+      foreach (var target in targets)
+      {
+        _symbol = target;
+        await ReconcileSymbolSnapshotAsync(
+          client, target, snapshot, trackedStates, cancellationToken
+        );
+        if (target.SymbolId == sessionSymbol.SymbolId)
+        {
+          // Preserve in-cycle cancellations/removals made while reconciling
+          // the session partition; restoring the raw snapshot would
+          // resurrect a just-cancelled order in the in-memory exposure view.
+          sessionPositions = _allSymbolPositions;
+          sessionPendingOrders = _allSymbolPendingOrders;
+        }
+      }
+    }
+    finally
+    {
+      // RunSessionAsync owns the session symbol. Per-symbol reconciliation
+      // only borrows _symbol while under the existing executor gate so all
+      // legacy helpers resolve the correct pip/lot/event metadata.
+      _symbol = sessionSymbol;
+      _allSymbolPositions = sessionPositions;
+      _allSymbolPendingOrders = sessionPendingOrders;
+    }
+  }
+
+  private async Task ReconcileAsync(
+    CancellationToken cancellationToken,
+    SymbolInfo? requestedSymbol = null
+  )
+  {
+    var client = RequireClient();
+    var priorSymbol = RequireSymbol();
+    var symbol = requestedSymbol ?? priorSymbol;
+    var snapshot = await client.ReconcileAccountAsync(cancellationToken);
+    var trackedStates = await LoadTrackedPositionStatesAsync(cancellationToken);
+    try
+    {
+      _symbol = symbol;
+      await ReconcileSymbolSnapshotAsync(
+        client, symbol, snapshot, trackedStates, cancellationToken
+      );
+    }
+    finally
+    {
+      _symbol = priorSymbol;
+    }
+  }
+
+  private async Task ReconcileSymbolSnapshotAsync(
+    ICTraderTradeClient client,
+    SymbolInfo symbol,
+    TradingReconcileSnapshot snapshot,
+    IReadOnlyDictionary<long, AutoTradePositionState> trackedStates,
+    CancellationToken cancellationToken
+  )
+  {
     _allSymbolPositions = snapshot.Positions
       .Where(position => position.SymbolId == symbol.SymbolId)
       .ToArray();
@@ -6195,7 +6300,10 @@ public sealed class AutoTradeEngine(
         cancellationToken
       );
     }
-    var trackedIds = await store.GetTrackedPositionIdsAsync(cancellationToken);
+    var trackedIds = trackedStates.Values
+      .Where(state => StateBelongsToSymbol(state, symbol))
+      .Select(state => state.PositionId)
+      .ToArray();
     // Presence is by PositionId on the full symbol snapshot. Filtering
     // openIds by Label orphaned runners whose broker Label drifted empty
     // or drifted off options.Label after SLTP/partials (manual #8 2026-08-11:
@@ -6257,7 +6365,7 @@ public sealed class AutoTradeEngine(
           + $" confirmations={confirmations}"
       );
       var state = _states.GetValueOrDefault(stale)
-        ?? await store.GetPositionAsync(stale, cancellationToken);
+        ?? trackedStates.GetValueOrDefault(stale);
       _states.Remove(stale);
       await store.DeletePositionAsync(stale, cancellationToken);
       if (state is not null)
@@ -6461,7 +6569,10 @@ public sealed class AutoTradeEngine(
       }
       await AdoptPositionAsync(position, cancellationToken);
     }
-    foreach (var group in _states.Values.GroupBy(GroupId).ToArray())
+    foreach (var group in _states.Values
+      .Where(state => StateBelongsToSymbol(state, symbol))
+      .GroupBy(GroupId)
+      .ToArray())
     {
       var states = group.ToArray();
       var source = states.MinBy(state => state.TrancheIndex)! with
@@ -6516,6 +6627,7 @@ public sealed class AutoTradeEngine(
       PositionIds: executorPositionIds,
       PendingOrderIds: executorPendingOrderIds,
       GroupIds: _states.Values
+        .Where(state => StateBelongsToSymbol(state, symbol))
         .Select(GroupId)
         .Distinct(StringComparer.Ordinal)
         .Order()
@@ -6533,6 +6645,43 @@ public sealed class AutoTradeEngine(
       ),
       cancellationToken
     );
+  }
+
+  private async Task<IReadOnlyDictionary<long, AutoTradePositionState>>
+    LoadTrackedPositionStatesAsync(
+    CancellationToken cancellationToken
+  )
+  {
+    var trackedIds = await store.GetTrackedPositionIdsAsync(cancellationToken);
+    var result = new Dictionary<long, AutoTradePositionState>(trackedIds.Count);
+    foreach (var positionId in trackedIds)
+    {
+      var state = _states.GetValueOrDefault(positionId)
+        ?? await store.GetPositionAsync(positionId, cancellationToken);
+      if (state is not null)
+      {
+        result[positionId] = state;
+      }
+    }
+    return result;
+  }
+
+  private bool StateBelongsToSymbol(
+    AutoTradePositionState state,
+    SymbolInfo symbol
+  )
+  {
+    if (!string.IsNullOrWhiteSpace(state.Symbol))
+    {
+      // Canonical metadata is authoritative when present. An unknown value
+      // is deliberately not mapped to the session symbol (historically XAU).
+      var bound = ResolveBoundSymbol(state.Symbol);
+      return bound is not null && bound.SymbolId == symbol.SymbolId;
+    }
+    // Rolling-upgrade states predate the canonical Symbol field. Their
+    // broker SymbolId is still safe to partition; an unknown id matches no
+    // bound runtime and therefore remains untouched rather than becoming XAU.
+    return state.SymbolId == symbol.SymbolId;
   }
 
   private async Task AdoptPositionAsync(

@@ -4,6 +4,33 @@ using System.Text.Json.Serialization;
 
 namespace ApexVoid.CTraderFeed;
 
+/// <summary>
+/// Lazily captures one account-wide broker reconcile snapshot for one bound
+/// symbol poll. A new instance is created before every per-symbol PollAsync,
+/// so failures and pre-mutation data are never retained across symbols or
+/// cycles. Sharing that immutable response combines submitted-leg reconcile
+/// and open-position management for the symbol while keeping all broker
+/// mutations on AutoTradeEngine's existing serialized gate.
+/// </summary>
+internal sealed class AccountReconcileSnapshotCycle(
+  ICTraderTradeClient client
+)
+{
+  private readonly object _sync = new();
+  private Task<TradingReconcileSnapshot>? _snapshot;
+
+  public Task<TradingReconcileSnapshot> GetAsync(
+    CancellationToken cancellationToken
+  )
+  {
+    cancellationToken.ThrowIfCancellationRequested();
+    lock (_sync)
+    {
+      return _snapshot ??= client.ReconcileAccountAsync(cancellationToken);
+    }
+  }
+}
+
 // V7 broker-execution runtime (Sections F-K of the TradePlan V7 cutover):
 // consumes execution:trade_plans, arms the exact declared entry, submits
 // exactly what Python declared, tracks the broker-confirmed fill/targets/
@@ -801,7 +828,8 @@ public sealed class TradePlanRuntime(
     ICTraderTradeClient client,
     SymbolInfo symbol,
     SpotPrice? quote,
-    CancellationToken cancellationToken
+    CancellationToken cancellationToken,
+    Func<CancellationToken, Task<TradingReconcileSnapshot>>? reconcileSnapshot = null
   )
   {
     if (!_restored)
@@ -815,8 +843,12 @@ public sealed class TradePlanRuntime(
       return;
     }
     await EvaluatePendingEntryPlansAsync(client, symbol, quote, cancellationToken);
-    await ReconcileSubmittedLegsAsync(client, symbol, cancellationToken);
-    await ManageOpenPositionsAsync(client, symbol, quote, cancellationToken);
+    await ReconcileSubmittedLegsAsync(
+      client, symbol, cancellationToken, reconcileSnapshot
+    );
+    await ManageOpenPositionsAsync(
+      client, symbol, quote, cancellationToken, reconcileSnapshot
+    );
   }
 
   /// <summary>
@@ -1443,8 +1475,9 @@ public sealed class TradePlanRuntime(
   )
   {
     var account = await client.GetTradingAccountAsync(cancellationToken);
-    var positions = await client.ReconcilePositionsAsync(cancellationToken);
-    var pending = await client.ReconcilePendingOrdersAsync(cancellationToken);
+    var reconcile = await client.ReconcileAccountAsync(cancellationToken);
+    var positions = reconcile.Positions;
+    var pending = reconcile.PendingOrders;
     return EquityResolver.Resolve(
       account,
       positions.Count,
@@ -2214,26 +2247,35 @@ public sealed class TradePlanRuntime(
   private async Task ReconcileSubmittedLegsAsync(
     ICTraderTradeClient client,
     SymbolInfo symbol,
-    CancellationToken cancellationToken
+    CancellationToken cancellationToken,
+    Func<CancellationToken, Task<TradingReconcileSnapshot>>? reconcileSnapshot
   )
   {
-    var candidates = _statesById.Values.Where(NeedsSubmittedReconcile).ToArray();
+    // _statesById is account-wide. Filter to this bound runtime before the
+    // lazy snapshot is touched, otherwise every idle FX target repeats a
+    // full account reconcile merely because XAU has a submitted plan.
+    var candidates = _statesById.Values
+      .Where(state =>
+        NeedsSubmittedReconcile(state)
+        && _plansById.TryGetValue(state.PlanId, out var plan)
+        && SameInstrument(plan.Symbol, symbol)
+      )
+      .ToArray();
     if (candidates.Length == 0)
     {
       return;
     }
-    var positions = await client.ReconcilePositionsAsync(cancellationToken);
-    var pending = await client.ReconcilePendingOrdersAsync(cancellationToken);
+    var reconcile = reconcileSnapshot is null
+      ? await client.ReconcileAccountAsync(cancellationToken)
+      : await reconcileSnapshot(cancellationToken);
+    var positions = reconcile.Positions;
+    var pending = reconcile.PendingOrders;
     var pendingById = pending.ToDictionary(order => order.OrderId);
     var now = clock().ToUnixTimeSeconds();
 
     foreach (var initial in candidates)
     {
       if (!_plansById.TryGetValue(initial.PlanId, out var plan))
-      {
-        continue;
-      }
-      if (!SameInstrument(plan.Symbol, symbol))
       {
         continue;
       }
@@ -2401,15 +2443,28 @@ public sealed class TradePlanRuntime(
     ICTraderTradeClient client,
     SymbolInfo symbol,
     SpotPrice quote,
-    CancellationToken cancellationToken
+    CancellationToken cancellationToken,
+    Func<CancellationToken, Task<TradingReconcileSnapshot>>? reconcileSnapshot
   )
   {
-    var openStates = _statesById.Values.Where(IsManagingStage).ToArray();
+    // As above, do not trigger an account snapshot for an idle runtime just
+    // because another symbol owns an open plan in this shared state table.
+    var openStates = _statesById.Values
+      .Where(state =>
+        IsManagingStage(state)
+        && _plansById.TryGetValue(state.PlanId, out var plan)
+        && SameInstrument(plan.Symbol, symbol)
+        && SameInstrument(plan.Symbol, quote)
+      )
+      .ToArray();
     if (openStates.Length == 0)
     {
       return;
     }
-    var positions = await client.ReconcilePositionsAsync(cancellationToken);
+    var reconcile = reconcileSnapshot is null
+      ? await client.ReconcileAccountAsync(cancellationToken)
+      : await reconcileSnapshot(cancellationToken);
+    var positions = reconcile.Positions;
     var byId = positions.ToDictionary(p => p.PositionId);
     foreach (var initialState in openStates)
     {
@@ -2418,11 +2473,6 @@ public sealed class TradePlanRuntime(
       {
         continue;
       }
-      if (!SameInstrument(plan.Symbol, symbol) || !SameInstrument(plan.Symbol, quote))
-      {
-        continue;
-      }
-
       var missingHandled = await ClassifyMissingLegsAsync(
         client, symbol, plan, state, byId, quote, cancellationToken
       );

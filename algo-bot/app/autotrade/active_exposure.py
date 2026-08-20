@@ -216,6 +216,22 @@ def _is_scale_in_child(payload: dict[str, Any]) -> bool:
   return bool(str(parent or "").strip())
 
 
+async def _mget_or_get(client: Any, keys: list[str]) -> list[Any]:
+  """Read a Redis key batch in one round-trip when the client supports it.
+
+  Production uses ``redis.asyncio.Redis.mget``.  The small fallback keeps
+  lightweight test doubles and alternate Redis adapters compatible without
+  making the production hot path N+1 again.
+  """
+  if not keys:
+    return []
+  mget = getattr(client, "mget", None)
+  if callable(mget):
+    values = await mget(keys)
+    return list(values or ())
+  return [await client.get(key) for key in keys]
+
+
 async def load_active_exposures(
   client: Any,
   *,
@@ -261,14 +277,19 @@ async def _load_v6_position_exposures(client: Any) -> list[ActiveExposure]:
   raw_ids = await client.smembers("auto_trade:positions")
   if not raw_ids:
     return []
-  out: list[ActiveExposure] = []
+  position_ids: list[int] = []
   for raw_id in raw_ids:
     token = raw_id.decode() if isinstance(raw_id, bytes) else str(raw_id)
     try:
-      position_id = int(token)
+      position_ids.append(int(token))
     except (TypeError, ValueError):
       continue
-    raw = await client.get(f"auto_trade:position:{position_id}")
+  raw_positions = await _mget_or_get(
+    client,
+    [f"auto_trade:position:{position_id}" for position_id in position_ids],
+  )
+  out: list[ActiveExposure] = []
+  for position_id, raw in zip(position_ids, raw_positions, strict=False):
     if not raw:
       continue
     try:
@@ -308,9 +329,12 @@ async def _load_trade_plan_exposures(client: Any) -> list[ActiveExposure]:
     return []
   text = raw.decode() if isinstance(raw, bytes) else str(raw)
   plan_ids = [item for item in text.split(",") if item.strip()]
+  raw_states = await _mget_or_get(
+    client,
+    [f"execution:plan_runtime:{plan_id}" for plan_id in plan_ids],
+  )
   out: list[ActiveExposure] = []
-  for plan_id in plan_ids:
-    state_raw = await client.get(f"execution:plan_runtime:{plan_id}")
+  for plan_id, state_raw in zip(plan_ids, raw_states, strict=False):
     if not state_raw:
       continue
     try:

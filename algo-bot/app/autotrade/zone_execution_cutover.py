@@ -1856,6 +1856,96 @@ async def evaluate_spot_zone_watches(
     source.end_closed_bar_cache()
 
 
+async def _evaluate_spot_zone_event(
+  client: Any,
+  *,
+  symbol: str,
+  event_ts: str,
+  last_spot_eval_monotonic: dict[str, float],
+) -> None:
+  """Apply the per-symbol spot throttle before a ZoneWatch evaluation."""
+  now = time.monotonic()
+  last = last_spot_eval_monotonic.get(symbol, 0.0)
+  if now - last < SPOT_MIN_INTERVAL_S:
+    quote = await _load_quote(client, symbol)
+    if quote is None:
+      return
+    bid, ask, _ts = quote
+    mid = (bid + ask) / 2.0
+    inside = quote_inside_cached_spot_zone(symbol, mid)
+    if not inside:
+      _SPOT_IN_ZONE_EVALUATED[symbol] = False
+      return
+    if _SPOT_IN_ZONE_EVALUATED.get(symbol):
+      return
+    _SPOT_IN_ZONE_EVALUATED[symbol] = True
+  last_spot_eval_monotonic[symbol] = now
+  await evaluate_spot_zone_watches(
+    client,
+    symbol=symbol,
+    event_ts=event_ts,
+  )
+
+
+class _LatestSpotZoneDispatcher:
+  """Run one ZoneWatch evaluator per symbol and coalesce stale quote wakes.
+
+  ``spots:new`` carries only ``symbol:timestamp``; evaluation reads the latest
+  Redis quote, so retaining every intermediate wake adds latency without
+  retaining its historical price.  Keep the newest pending wake while one is
+  running.  Different symbols may progress independently; each symbol still
+  has at most one evaluator touching its ZoneWatch state.
+  """
+
+  def __init__(self, client: Any):
+    self._client = client
+    self._pending: dict[str, str] = {}
+    self._tasks: dict[str, asyncio.Task[None]] = {}
+    self._last_eval: dict[str, float] = {}
+    self._closed = False
+
+  def submit(self, symbol: str, event_ts: str) -> bool:
+    if self._closed:
+      return False
+    self._pending[symbol] = event_ts
+    task = self._tasks.get(symbol)
+    if task is None or task.done():
+      self._tasks[symbol] = asyncio.create_task(
+        self._run_symbol(symbol),
+        name=f"zone-watch-spot:{symbol}",
+      )
+    return True
+
+  async def _run_symbol(self, symbol: str) -> None:
+    while symbol in self._pending:
+      event_ts = self._pending.pop(symbol)
+      try:
+        await _evaluate_spot_zone_event(
+          self._client,
+          symbol=symbol,
+          event_ts=event_ts,
+          last_spot_eval_monotonic=self._last_eval,
+        )
+      except asyncio.CancelledError:
+        raise
+      except Exception:
+        log.exception(
+          "ZoneWatch evaluation failed channel=spots:new symbol=%s event_ts=%s",
+          symbol,
+          event_ts,
+        )
+
+  async def close(self) -> None:
+    self._closed = True
+    self._pending.clear()
+    tasks = list(self._tasks.values())
+    for task in tasks:
+      task.cancel()
+    if tasks:
+      await asyncio.gather(*tasks, return_exceptions=True)
+    self._tasks.clear()
+
+
 async def zone_watch_execution_loop() -> None:
   """Wake retained zones on sub-second spot updates.
 
@@ -1866,8 +1956,8 @@ async def zone_watch_execution_loop() -> None:
     return
   client = redis_state.get_client()
   pubsub = client.pubsub()
+  dispatcher = _LatestSpotZoneDispatcher(client)
   await pubsub.subscribe("spots:new")
-  last_spot_eval_monotonic: dict[str, float] = {}
   log.info(
     "ZoneWatch spot loop started channel=spots:new spot_min_interval_s=%.2f",
     SPOT_MIN_INTERVAL_S,
@@ -1883,33 +1973,14 @@ async def zone_watch_execution_loop() -> None:
         if len(parts) != 2:
           continue
         symbol = parts[0].upper()
-        now = time.monotonic()
-        last = last_spot_eval_monotonic.get(symbol, 0.0)
-        if now - last < SPOT_MIN_INTERVAL_S:
-          quote = await _load_quote(client, symbol)
-          if quote is None:
-            continue
-          bid, ask, _ts = quote
-          mid = (bid + ask) / 2.0
-          inside = quote_inside_cached_spot_zone(symbol, mid)
-          if not inside:
-            _SPOT_IN_ZONE_EVALUATED[symbol] = False
-            continue
-          if _SPOT_IN_ZONE_EVALUATED.get(symbol):
-            continue
-          _SPOT_IN_ZONE_EVALUATED[symbol] = True
-        last_spot_eval_monotonic[symbol] = now
-        await evaluate_spot_zone_watches(
-          client,
-          symbol=symbol,
-          event_ts=parts[1],
-        )
+        dispatcher.submit(symbol, parts[1])
       except Exception:
         log.exception(
           "ZoneWatch evaluation failed channel=spots:new event=%s",
           text,
         )
   finally:
+    await dispatcher.close()
     await pubsub.unsubscribe("spots:new")
     await pubsub.close()
 

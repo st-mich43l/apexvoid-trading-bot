@@ -2261,9 +2261,14 @@ async def auto_trade_status_text() -> str:
   paused = await client.get(_PAUSED_KEY) == "1"
   date_key = datetime.now(timezone.utc).strftime("%Y%m%d")
   daily = int(await client.get(f"auto_trade:daily:{date_key}:trades") or 0)
-  position_count = 0
-  async for _ in client.scan_iter(match="auto_trade:position:*"):
-    position_count += 1
+  # The executor already maintains this active-position set.  Counting it is
+  # O(1); SCAN over the full Redis keyspace became seconds of avoidable work
+  # once multi-symbol bars/telemetry grew into tens of thousands of keys.
+  scard = getattr(client, "scard", None)
+  if callable(scard):
+    position_count = int(await scard("auto_trade:positions") or 0)
+  else:
+    position_count = len(await client.smembers("auto_trade:positions"))
   try:
     from app.persistence.store import count_pending_algo_signals
     manual_pending = await count_pending_algo_signals()
