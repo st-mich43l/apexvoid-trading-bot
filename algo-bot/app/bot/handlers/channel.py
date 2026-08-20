@@ -18,9 +18,9 @@ from app.signals.parsing import (
   _resolve_any_sid,
   _resolve_sid,
 )
-from app.core.symbols import symbol_for_channel, tier_for_channel
+from app.core.symbols import tier_for_channel
 from app.bot.client import delete_message, send_with_retry
-from app.persistence.store import get_manual_signal
+from app.persistence.store import get_manual_signal, get_signal_by_post
 from app.signals.trade_ops import (
   do_active,
   do_cancel,
@@ -44,21 +44,34 @@ async def _delete_command(msg: Message) -> None:
     pass
 
 
-def _channel_symbol(msg: Message) -> str | None:
+async def _channel_symbol(msg: Message) -> str | None:
+  """Symbol for a VIP channel command — from the replied signal, not chat id.
+
+  All live instruments share one VIP channel, so ``symbol_for_channel`` always
+  returned the first live book (EURUSD) and broke XAU/FX reply management.
+  """
   if tier_for_channel(msg.chat.id) != "vip":
     return None
-  return symbol_for_channel(msg.chat.id)
+  reply = msg.reply_to_message
+  if reply is None:
+    return None
+  row = await get_signal_by_post(msg.chat.id, reply.message_id)
+  if row is None:
+    return None
+  return str(row.get("symbol") or "XAU").upper()
 
 
 @router.channel_post(F.text.regexp(_ACTIVE_RE), F.reply_to_message)
 async def handle_channel_active(msg: Message) -> None:
-  symbol = _channel_symbol(msg)
+  symbol = await _channel_symbol(msg)
   if symbol is None:
     return
   match = _ACTIVE_RE.match(msg.text or "")
   explicit_seq = int(match.group(1)) if match and match.group(1) else None
   reply_to = msg.reply_to_message.message_id
-  sid = await _resolve_sid(explicit_seq, reply_to, symbol)
+  sid = await _resolve_sid(
+    explicit_seq, reply_to, symbol, chat_id=msg.chat.id,
+  )
   if sid is None:
     return
   result = await do_active({
@@ -78,7 +91,7 @@ async def handle_channel_active(msg: Message) -> None:
   F.reply_to_message,
 )
 async def handle_channel_close(msg: Message) -> None:
-  symbol = _channel_symbol(msg)
+  symbol = await _channel_symbol(msg)
   if symbol is None:
     return
   parsed = _parse_close(msg.text or "")
@@ -86,7 +99,9 @@ async def handle_channel_close(msg: Message) -> None:
     return
   explicit_seq, pips, frac = parsed
   reply_to = msg.reply_to_message.message_id
-  sid = await _resolve_sid(explicit_seq, reply_to, symbol)
+  sid = await _resolve_sid(
+    explicit_seq, reply_to, symbol, chat_id=msg.chat.id,
+  )
   if sid is None:
     return
   result = await do_close({
@@ -109,13 +124,15 @@ async def handle_channel_close(msg: Message) -> None:
 
 @router.channel_post(F.text.regexp(_CANCEL_RE), F.reply_to_message)
 async def handle_channel_cancel(msg: Message) -> None:
-  symbol = _channel_symbol(msg)
+  symbol = await _channel_symbol(msg)
   if symbol is None:
     return
   match = _CANCEL_RE.match(msg.text or "")
   explicit_seq = int(match.group(1)) if match and match.group(1) else None
   reply_to = msg.reply_to_message.message_id
-  sid = await _resolve_sid(explicit_seq, reply_to, symbol)
+  sid = await _resolve_sid(
+    explicit_seq, reply_to, symbol, chat_id=msg.chat.id,
+  )
   if sid is None:
     return
   result = await do_cancel({
@@ -132,13 +149,15 @@ async def handle_channel_cancel(msg: Message) -> None:
 
 @router.channel_post(F.text.regexp(_SL_RE), F.reply_to_message)
 async def handle_channel_sl(msg: Message) -> None:
-  symbol = _channel_symbol(msg)
+  symbol = await _channel_symbol(msg)
   if symbol is None:
     return
   match = _SL_RE.match(msg.text or "")
   explicit_seq = int(match.group(1)) if match and match.group(1) else None
   reply_to = msg.reply_to_message.message_id
-  sid = await _resolve_sid(explicit_seq, reply_to, symbol)
+  sid = await _resolve_sid(
+    explicit_seq, reply_to, symbol, chat_id=msg.chat.id,
+  )
   if sid is None:
     return
   result = await do_sl({
@@ -156,7 +175,7 @@ async def handle_channel_sl(msg: Message) -> None:
 
 @router.channel_post(F.text.regexp(_REOPEN_RE), F.reply_to_message)
 async def handle_channel_reopen(msg: Message) -> None:
-  symbol = _channel_symbol(msg)
+  symbol = await _channel_symbol(msg)
   if symbol is None:
     return
   match = _REOPEN_RE.match(msg.text or "")
@@ -166,6 +185,7 @@ async def handle_channel_reopen(msg: Message) -> None:
     explicit_seq,
     reply_to,
     symbol,
+    chat_id=msg.chat.id,
   )
   if source_id is None:
     return
@@ -194,7 +214,7 @@ async def handle_channel_reopen(msg: Message) -> None:
 
 @router.channel_post(F.text.regexp(_MODIFY_RE), F.reply_to_message)
 async def handle_channel_modify(msg: Message) -> None:
-  symbol = _channel_symbol(msg)
+  symbol = await _channel_symbol(msg)
   if symbol is None:
     return
   match = _MODIFY_RE.match(msg.text or "")
@@ -202,7 +222,9 @@ async def handle_channel_modify(msg: Message) -> None:
     return
   explicit_seq = int(match.group(1)) if match.group(1) else None
   reply_to = msg.reply_to_message.message_id
-  sid = await _resolve_sid(explicit_seq, reply_to, symbol)
+  sid = await _resolve_sid(
+    explicit_seq, reply_to, symbol, chat_id=msg.chat.id,
+  )
   if sid is None:
     return
   signal = await get_manual_signal(sid)
@@ -241,7 +263,7 @@ async def handle_channel_modify(msg: Message) -> None:
 
 @router.channel_post(F.text.regexp(_TAG_RE), F.reply_to_message)
 async def handle_channel_tag(msg: Message) -> None:
-  symbol = _channel_symbol(msg)
+  symbol = await _channel_symbol(msg)
   if symbol is None:
     return
   match = _TAG_RE.match(msg.text or "")
@@ -250,7 +272,7 @@ async def handle_channel_tag(msg: Message) -> None:
     return
   seq = int(match.group(1))
   reply_to = msg.reply_to_message.message_id
-  sid = await _resolve_any_sid(seq, reply_to, symbol)
+  sid = await _resolve_any_sid(seq, reply_to, symbol, chat_id=msg.chat.id)
   if sid is None:
     return
   grade = match.group(4)
@@ -274,13 +296,13 @@ async def handle_channel_tag(msg: Message) -> None:
 
 @router.channel_post(F.text.regexp(_NOTE_RE), F.reply_to_message)
 async def handle_channel_note(msg: Message) -> None:
-  symbol = _channel_symbol(msg)
+  symbol = await _channel_symbol(msg)
   if symbol is None:
     return
   match = _NOTE_RE.match(msg.text or "")
   seq = int(match.group(1))
   reply_to = msg.reply_to_message.message_id
-  sid = await _resolve_any_sid(seq, reply_to, symbol)
+  sid = await _resolve_any_sid(seq, reply_to, symbol, chat_id=msg.chat.id)
   if sid is None:
     return
   result = await do_note({

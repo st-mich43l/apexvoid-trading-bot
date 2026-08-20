@@ -79,11 +79,20 @@ def channels_list() -> list[dict]:
 def is_known_symbol(symbol: str) -> bool:
   """True when ``symbol`` resolves to an enabled instrument."""
   try:
-    canonical_symbol(symbol)
     runtime_config.for_instrument(canonical_symbol(symbol))
   except (KeyError, EffectiveInstrumentError):
     return False
   return True
+
+
+def resolve_command_symbol(token: str) -> str | None:
+  """Map a command token (``xauusd``, ``EURUSD``) to the canonical id."""
+  cleaned = str(token or "").strip()
+  if not cleaned:
+    return None
+  if not is_known_symbol(cleaned):
+    return None
+  return canonical_symbol(cleaned)
 
 
 def pip_for(symbol: str) -> float:

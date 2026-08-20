@@ -151,8 +151,13 @@ async def handle_private_signal(msg: Message) -> None:
     _manual_signal_confirmation(sig, rec["daily_seq"], algo_note)
   )
   log.info(
-    "Manual signal #%d (daily #%d): %s XAUUSD @ %s-%s",
-    rec["id"], rec["daily_seq"], sig['action'], sig['entry'], sig['entry_end'],
+    "Manual signal #%d (daily #%d): %s %s @ %s-%s",
+    rec["id"],
+    rec["daily_seq"],
+    sig["action"],
+    sig.get("symbol", "XAU"),
+    sig["entry"],
+    sig["entry_end"],
   )
 
 
