@@ -238,6 +238,22 @@ def load_config_file(
       )
     flat[leaf] = value
 
+  # Go-live source of truth is instruments.*.rollout=live. Keep the legacy
+  # contract/scanner CSV leaves in sync so adding a pack + rollout does not
+  # also require editing two comma lists.
+  from app.configuration.instrument_packs import live_instrument_symbol_csv
+  from app.configuration.models.instruments import InstrumentRollout, effective_rollout
+
+  live_raw = {
+    instrument_id: instrument.model_dump(mode="python")
+    for instrument_id, instrument in instruments.root.items()
+    if effective_rollout(instrument) is InstrumentRollout.LIVE
+  }
+  if live_raw:
+    live_csv = live_instrument_symbol_csv(live_raw)
+    flat["contract.instrument.symbols"] = live_csv
+    flat["market_data.scanner.symbols"] = live_csv
+
   return LoadedConfigFile(
     path=file_path,
     flat_values=flat,

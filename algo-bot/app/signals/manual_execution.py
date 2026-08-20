@@ -208,7 +208,14 @@ async def _enqueue_intent(intent: ManualTradeIntent) -> None:
 
 
 async def _enqueue_event(event: dict) -> None:
-  symbol = _event_route_symbol(event)
+  # Prefer the signal's own symbol for manual /algo events. PublishAsync used
+  # to stamp the session symbol (XAU) on every FX fill/limit event, which
+  # parked them on the XAU worker and broke scale-up notify/manage.
+  symbol = None
+  if _is_manual_algo_event(event):
+    symbol = await _symbol_from_manual_candidate(event)
+  if symbol is None:
+    symbol = _event_route_symbol(event)
   if symbol is None:
     symbol = await _symbol_from_manual_candidate(event)
   if symbol is None:

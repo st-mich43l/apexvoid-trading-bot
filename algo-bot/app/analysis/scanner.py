@@ -155,10 +155,18 @@ def _csv(value: str) -> list[str]:
 def _watched_symbols() -> set[str]:
   """Rollout-aware analysis set ∩ scanner compatibility filter.
 
-  Live instruments that permit analysis (currently XAU, EURUSD, GBPJPY)
-  are scanned when they also appear in the scanner CSV.
+  Live instruments that permit analysis are scanned when they also appear in
+  the scanner CSV. When the scanner CSV is empty/missing, live instruments
+  alone drive the watch set so go-live is one ``rollout: live`` edit.
   """
   compatibility = _csv(runtime_config.market_data.scanner.symbols)
+  live = [item.upper() for item in runtime_config.live_instruments()]
+  if live and not compatibility:
+    compatibility = live
+  elif live and compatibility:
+    # Prefer intersection when both are set, but never drop a live symbol that
+    # was forgotten in the compatibility CSV (scale-up trap).
+    compatibility = list(dict.fromkeys([*compatibility, *live]))
   try:
     registry = build_instrument_runtime_registry(runtime_config)
     return set(registry.scanner_symbols(compatibility_filter=compatibility))

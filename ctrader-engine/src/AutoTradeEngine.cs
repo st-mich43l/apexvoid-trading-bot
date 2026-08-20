@@ -20,6 +20,11 @@ public sealed class AutoTradeEngine(
   private readonly SemaphoreSlim _gate = new(1, 1);
   private readonly Dictionary<long, AutoTradePositionState> _states = [];
   private readonly Dictionary<string, StructuralRouteIdentity> _routeIdentityByCandidate = [];
+  // Multi-instrument: PublishAsync must stamp the candidate's own symbol,
+  // not RequireSymbolOrDefault() (session XAU). Otherwise FX manual /algo
+  // events route to the XAU worker and scale-up pairs look unmanaged.
+  private readonly Dictionary<string, string> _symbolByCandidate =
+    new(StringComparer.OrdinalIgnoreCase);
   private readonly Dictionary<string, SymbolInfo> _symbolsByCanonical =
     new(StringComparer.OrdinalIgnoreCase);
   private readonly HashSet<string> _reportedErrors = [];
@@ -3679,7 +3684,8 @@ public sealed class AutoTradeEngine(
         stopLoss: legStopPlans[index].StopLoss,
         targetPrices: targetPrices,
         entryLow: candidate.EntryZone.Low,
-        entryHigh: candidate.EntryZone.High
+        entryHigh: candidate.EntryZone.High,
+        symbol: symbol.RedisSymbol
       );
     }
     await CompleteActiveCandidateAsync(
@@ -8533,7 +8539,8 @@ public sealed class AutoTradeEngine(
     string? thesisId = null,
     decimal? riskMultiplier = null,
     string? targetModel = null,
-    string? entryDistribution = null
+    string? entryDistribution = null,
+    string? symbol = null
   )
   {
     var transition = LifecycleTransitionForEvent(type, remainingVolume);
@@ -8611,7 +8618,7 @@ public sealed class AutoTradeEngine(
       type,
       _clock().ToUnixTimeSeconds(),
       message,
-      RequireSymbolOrDefault(),
+      ResolvePublishedSymbol(symbol, candidateId, positionId),
       candidateId,
       positionId,
       targetPips,
@@ -9740,6 +9747,53 @@ public sealed class AutoTradeEngine(
       candidate.ReactionId,
       candidate.ThesisId
     );
+    if (!string.IsNullOrWhiteSpace(candidate.Symbol))
+    {
+      _symbolByCandidate[candidate.CandidateId] = candidate.Symbol;
+    }
+  }
+
+  private string ResolvePublishedSymbol(
+    string? explicitSymbol,
+    string? candidateId,
+    long? positionId
+  )
+  {
+    if (!string.IsNullOrWhiteSpace(explicitSymbol))
+    {
+      return explicitSymbol;
+    }
+    if (
+      !string.IsNullOrWhiteSpace(candidateId)
+      && _symbolByCandidate.TryGetValue(candidateId, out var mapped)
+      && !string.IsNullOrWhiteSpace(mapped)
+    )
+    {
+      return mapped;
+    }
+    if (
+      positionId is long id
+      && _states.TryGetValue(id, out var state)
+      && !string.IsNullOrWhiteSpace(state.Symbol)
+    )
+    {
+      return state.Symbol;
+    }
+    if (positionId is long positionKey)
+    {
+      var open = _allSymbolPositions.FirstOrDefault(
+        item => item.PositionId == positionKey
+      );
+      if (
+        open is not null
+        && RedisSymbolFor(open.SymbolId) is string redis
+        && !string.IsNullOrWhiteSpace(redis)
+      )
+      {
+        return redis;
+      }
+    }
+    return RequireSymbolOrDefault();
   }
 
   private static string Short(string candidateId) =>
