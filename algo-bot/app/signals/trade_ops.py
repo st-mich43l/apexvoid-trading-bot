@@ -52,6 +52,9 @@ def _entry_range_text(
   if uses_entry_price_display(symbol, entry, entry_end):
     return _price(entry, symbol)
   return f"{_price(entry, symbol)}–{_price(entry_end, symbol)}"
+
+
+def _win_wings(pips: int) -> str:
   icons = wing_icons(pips)
   return f" {icons}" if icons else ""
 

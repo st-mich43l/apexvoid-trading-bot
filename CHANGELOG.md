@@ -23,6 +23,8 @@ dated section after deployment.
   when deeper capacity cannot cover a TP slice.
 
 ### Fixed
+- Manual /algo TP channel posts no longer crash with ``NameError: _win_wings``
+  after #371 — restore the helper accidentally dropped from ``trade_ops.py``.
 - Manual /algo TP book pip math now uses the **deepest filled** entry (deep →
   mid → shallow), not the first/shallow fill — e.g. XAU SELL zone 4500–4503
   booking TP1 at 4497 reports ~+60 pips from the deep edge, not +30 from
