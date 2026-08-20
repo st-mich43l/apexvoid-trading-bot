@@ -14,7 +14,7 @@ from app.persistence.store import (
   set_meta,
 )
 from app.signals.reports import _stream_book_lines, build_stats, sparkline
-from app.core.symbols import SYMBOLS, channels_for
+from app.core.symbols import channels_for
 from app.bot.client import send_with_retry
 
 log = logging.getLogger(__name__)
@@ -172,7 +172,7 @@ async def _weekly_report_tick(now: datetime | None = None) -> bool:
   if await get_meta(_META_KEY) == week_key:
     return False
 
-  for symbol in SYMBOLS:
+  for symbol in runtime_config.enabled_instruments():
     records = await get_pips_records(
       int(start.timestamp()),
       int(end.timestamp()) - 1,

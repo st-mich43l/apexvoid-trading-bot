@@ -11,6 +11,7 @@ import yaml
 from pydantic import ValidationError
 
 from app.configuration.catalog import iter_catalog_entries
+from app.configuration.instrument_packs import expand_instrument_declarations
 from app.configuration.models.instruments import (
   InstrumentsConfig,
   EMPTY_INSTRUMENTS,
@@ -24,7 +25,12 @@ CONFIG_FILE_ENV = "APEXVOID_CONFIG_FILE"
 _CATALOG_ROOT_GROUPS = frozenset(
   name for name in ApexVoidConfig.model_fields if name != "instruments"
 )
-_TOP_LEVEL_KEYS = frozenset({"version", "instruments", *_CATALOG_ROOT_GROUPS})
+_TOP_LEVEL_KEYS = frozenset({
+  "version",
+  "instruments",
+  "instrument_packs",
+  *_CATALOG_ROOT_GROUPS,
+})
 
 
 class ConfigFileError(ValueError):
@@ -113,6 +119,7 @@ def _parse_instruments(
   raw: object,
   *,
   file_path: str,
+  packs: dict[str, Any] | None = None,
 ) -> InstrumentsConfig:
   if raw is None:
     return EMPTY_INSTRUMENTS
@@ -122,7 +129,10 @@ def _parse_instruments(
       path=file_path,
     )
   try:
-    return InstrumentsConfig.model_validate(raw)
+    expanded = expand_instrument_declarations(raw, packs)
+    return InstrumentsConfig.model_validate(expanded)
+  except ValueError as exc:
+    raise ConfigFileError(str(exc), path=file_path) from None
   except ValidationError as exc:
     loc = ".".join(str(part) for part in exc.errors()[0]["loc"]) if exc.errors() else "instruments"
     raise ConfigFileError(
@@ -189,9 +199,17 @@ def load_config_file(
   if version is not None and not isinstance(version, int):
     raise ConfigFileError("version must be an integer", path=file_path)
 
+  packs_raw = loaded.get("instrument_packs")
+  if packs_raw is not None and not isinstance(packs_raw, dict):
+    raise ConfigFileError(
+      "instrument_packs must be a mapping of pack name to defaults",
+      path=file_path,
+    )
+
   instruments = _parse_instruments(
     loaded.get("instruments"),
     file_path=file_path,
+    packs=packs_raw if isinstance(packs_raw, dict) else None,
   )
 
   global_nested = {

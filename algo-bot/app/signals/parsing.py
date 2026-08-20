@@ -7,7 +7,7 @@ from zoneinfo import ZoneInfo
 
 from app.core.config import runtime_config
 from app.persistence.store import get_all_signals, get_open_signals, get_signal_by_post
-from app.core.symbols import SYMBOLS, channel_for_symbol, pip_for
+from app.core.symbols import channel_for_symbol, is_known_symbol, pip_for
 from app.signals.fx_manual_algo import build_fx_manual_contract, fx_manual_symbols
 
 # Matches: +100 pips / -50 pips / +1500Pips / -30 PIPS
@@ -345,7 +345,7 @@ def _take_symbol(
   default: str | None = "XAU",
 ) -> tuple[str | None, str]:
   parts = raw.split(maxsplit=1)
-  if parts and parts[0].upper() in SYMBOLS:
+  if parts and is_known_symbol(parts[0]):
     return parts[0].upper(), parts[1] if len(parts) > 1 else ""
   return default, raw
 

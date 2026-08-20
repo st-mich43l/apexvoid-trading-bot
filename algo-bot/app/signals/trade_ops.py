@@ -28,10 +28,11 @@ from app.signals.broadcast import (
   fanout_update,
   replace_entry_posts,
 )
+from app.signals.fx_manual_algo import uses_entry_price_display
 from app.bot.keyboards import build_tp_close_kb
 from app.signals.pips_format import wing_icons
 from app.persistence.redis_state import clear_sl_alert, mark_tp_alert
-from app.core.symbols import SYMBOLS, channel_for_symbol
+from app.core.symbols import digits_for, channel_for_symbol
 
 
 def _display_seq(row: dict) -> int:
@@ -39,11 +40,18 @@ def _display_seq(row: dict) -> int:
 
 
 def _price(value: float, symbol: str) -> str:
-  digits = int(SYMBOLS[symbol]["digits"])
+  digits = digits_for(symbol)
   return f"{value:,.{digits}f}".rstrip("0").rstrip(".")
 
 
-def _win_wings(pips: int) -> str:
+def _entry_range_text(
+  entry: float,
+  entry_end: float,
+  symbol: str,
+) -> str:
+  if uses_entry_price_display(symbol, entry, entry_end):
+    return _price(entry, symbol)
+  return f"{_price(entry, symbol)}–{_price(entry_end, symbol)}"
   icons = wing_icons(pips)
   return f" {icons}" if icons else ""
 
@@ -54,6 +62,23 @@ async def do_active(ctx: dict) -> dict:
     return {"action": "active", "ok": False, "error": "not_pending"}
   return {
     "action": "active",
+    "ok": True,
+    "row": row,
+    "reply_to": row.get("channel_message_id") or ctx.get("reply_to"),
+  }
+
+
+async def do_limit_pending(ctx: dict) -> dict:
+  """Mark broker limit placement on an algo-armed signal for channel fan-out."""
+  from app.persistence.store import get_manual_signal
+
+  row = await get_manual_signal(ctx["sid"])
+  if row is None:
+    return {"action": "limit_pending", "ok": False, "error": "not_found"}
+  if row.get("execution_mode") != "algo":
+    return {"action": "limit_pending", "ok": False, "error": "not_algo"}
+  return {
+    "action": "limit_pending",
     "ok": True,
     "row": row,
     "reply_to": row.get("channel_message_id") or ctx.get("reply_to"),
@@ -649,6 +674,9 @@ def render_result(
   if action == "active":
     seq = f"#{_display_seq(result['row'])} " if tier == "vip" else ""
     return f"🟢 {seq}active — order filled"
+  if action == "limit_pending":
+    seq = f"#{_display_seq(result['row'])} " if tier == "vip" else ""
+    return f"⏳ {seq}limit placed — waiting for fill"
   if action == "cancel":
     seq = f"#{_display_seq(result['row'])} " if tier == "vip" else ""
     if result.get("pending"):
@@ -669,7 +697,7 @@ def render_result(
       entry_end = row["entry"]
     return (
       f"🔧 {seq}modified — entry "
-      f"{_price(row['entry'], symbol)}-{_price(entry_end, symbol)} · "
+      f"{_entry_range_text(row['entry'], entry_end, symbol)} · "
       f"sl {_price(row['sl'], symbol)}"
     )
   if action == "uncclose":
@@ -767,8 +795,7 @@ def render_result(
     return (
       f"♻️ <b>{seq}round {result['round']}{source_seq}</b> — "
       f"{source['action']} "
-      f"{_price(result['entry'], symbol)}–"
-      f"{_price(result['entry_end'], symbol)} / "
+      f"{_entry_range_text(result['entry'], result['entry_end'], symbol)} / "
       # The reopened round's own stop (the source's ORIGINAL stop, not its
       # possibly-trailed current sl - see do_reopen's original_sl comment)
       f"🛡 {_price(result['sl'], symbol)} / TP {tps}"

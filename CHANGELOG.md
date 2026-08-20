@@ -12,7 +12,28 @@ dated section after deployment.
 
 ## Unreleased
 
+### Changed
+- Manual /algo execution now runs one dedicated asyncio worker per live symbol
+  (intent bridge + event reconcile dispatch into per-symbol queues) so many FX
+  pairs stay current without one symbol blocking another.
+- FX manual /algo channel cards show **Entry Price** (single entry-at level) instead
+  of **Entry Zone** — FX uses entry-at, not XAU-style zones.
+- XAU manual /algo ladders book the group TP ladder preferring shallow volume
+  first (keep mid/deep size for the better-fill run); when shallow cannot cover
+  a TP slice, volume spills into mid then deep.
+
 ### Fixed
+- XAU manual /algo ladder fills no longer spam the channel with one TP/SL
+  update per entry leg — progress is booked and posted from the furthest
+  signal-level TP/SL only (trailing legs at the same level are ignored).
+- FX manual /algo channel threads now get a ``⏳ limit placed — waiting for fill``
+  reply when the broker accepts the resting entry order (``manual_limit_placed``),
+  not only after a fill — so USDJPY/EURUSD algo signals show lifecycle progress
+  while the limit is working.
+- Telegram ``CHANNELS`` / ``SYMBOLS`` routing rebuilds from
+  ``live_instruments()`` on each access instead of freezing at process import,
+  so a newly live pair routes channel fan-out after config reload/restart without
+  a stale map missing the symbol.
 - XAU manual /algo now cancels unfilled shallow/mid/deep entry clips as soon
   as any TP books (``unfilled_leg_after_tp_policy=cancel``). Hitting TP1 no
   longer leaves the rest of the entry ladder working on the broker.
@@ -26,6 +47,12 @@ dated section after deployment.
   well as the existing entry-zone shorthand (``4078-75``).
 
 ### Added
+- ``instrument_packs`` top-level CONFIG_FILE section: declare reusable FX packs
+  (e.g. ``fx_usd_major_v1``) and go live a pair with ``pack: …`` plus
+  ``broker_symbol`` / ``contract`` / ``analysis.zones`` overrides only.
+- ``manual_algo.sizing.fx_volume_multiplier`` (default ``1.5``): manual /algo FX
+  candidates stamp ``risk_multiplier`` and ctrader-engine scales equity-table
+  lots before placing the limit order.
 - Owner FX manual /algo DMs: ``eurusd buy 1.15007 / algo`` (and GBPJPY,
   USDJPY) auto-fill a 1:2 protective stop from each pair's stop envelope,
   a 1R/1.5R/2R partial-exit ladder with policy close ratios, and a single

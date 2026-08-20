@@ -9,6 +9,21 @@ from app.core.config import runtime_config
 from app.core.symbols import digits_for
 
 
+def uses_entry_price_display(
+  symbol: str,
+  entry: float,
+  entry_end: float | None,
+) -> bool:
+  """True when channel cards should show entry-at, not an XAU-style zone."""
+  symbol = symbol.upper()
+  if symbol not in fx_manual_symbols():
+    return False
+  if entry_end is None:
+    return True
+  pip = runtime_config.for_instrument(symbol).units.pip_size
+  return abs(float(entry) - float(entry_end)) <= pip * 0.01
+
+
 def fx_manual_symbols() -> tuple[str, ...]:
   """Enabled instruments on fixed_rr targeting (EURUSD, GBPJPY, …)."""
   symbols: list[str] = []

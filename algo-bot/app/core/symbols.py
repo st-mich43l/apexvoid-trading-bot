@@ -32,9 +32,17 @@ def _build_symbols_map() -> dict[str, dict[str, float | int]]:
   return mapping
 
 
-# Compatibility mapping retained for callers that still index SYMBOLS directly.
-# Values are sourced from the resolved instrument context, not hard-coded units.
-SYMBOLS = _build_symbols_map()
+def symbols_map() -> dict[str, dict[str, float | int]]:
+  """Return pip/digits metadata for every enabled instrument."""
+  return _build_symbols_map()
+
+
+def __getattr__(name: str):
+  if name == "SYMBOLS":
+    return _build_symbols_map()
+  if name == "CHANNELS":
+    return _build_channels()
+  raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 # Broker-facing aliases that must resolve to the same logical instrument as
 # the internal SYMBOLS key. CTRADER_SYMBOL is configured as "XAUUSD" while
@@ -63,7 +71,19 @@ def _build_channels() -> list[dict]:
   return channels
 
 
-CHANNELS = _build_channels()
+def channels_list() -> list[dict]:
+  """Return Telegram delivery routes for every live instrument."""
+  return _build_channels()
+
+
+def is_known_symbol(symbol: str) -> bool:
+  """True when ``symbol`` resolves to an enabled instrument."""
+  try:
+    canonical_symbol(symbol)
+    runtime_config.for_instrument(canonical_symbol(symbol))
+  except (KeyError, EffectiveInstrumentError):
+    return False
+  return True
 
 
 def pip_for(symbol: str) -> float:
@@ -93,7 +113,7 @@ def symbol_for_channel(chat_id: int | str) -> str | None:
   return next(
     (
       channel["symbol"]
-      for channel in CHANNELS
+      for channel in channels_list()
       if (
         channel["channel_id"] is not None
         and int(channel["channel_id"]) == target
@@ -108,7 +128,7 @@ def tier_for_channel(chat_id: int | str) -> str | None:
   return next(
     (
       channel["tier"]
-      for channel in CHANNELS
+      for channel in channels_list()
       if (
         channel["channel_id"] is not None
         and int(channel["channel_id"]) == target
@@ -127,7 +147,7 @@ def channels_for(symbol: str, visibility: str) -> list[dict]:
     ) from exc
   matched = [
     dict(channel)
-    for channel in CHANNELS
+    for channel in channels_list()
     if (
       channel["symbol"] == symbol
       and channel["channel_id"] is not None

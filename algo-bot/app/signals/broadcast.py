@@ -9,14 +9,15 @@ from app.persistence.store import (
   insert_signal_post,
 )
 from app.signals.pips_format import rr_entry
-from app.core.symbols import SYMBOLS, channels_for
+from app.signals.fx_manual_algo import uses_entry_price_display
+from app.core.symbols import digits_for, channels_for
 from app.bot.client import delete_message, send_sticker, send_with_retry
 
 log = logging.getLogger(__name__)
 
 
 def _price(value: float, symbol: str) -> str:
-  digits = int(SYMBOLS[symbol]["digits"])
+  digits = digits_for(symbol)
   return f"{value:,.{digits}f}".rstrip("0").rstrip(".")
 
 
@@ -24,12 +25,21 @@ def _rr(tp: float, entry: float, risk: float) -> str:
   return f"{abs(tp - entry) / risk:.1f}R" if risk > 0 else "-"
 
 
-def render_entry(sig: dict, tier: str) -> str:
-  symbol = sig["symbol"]
-  action = sig["action"]
+def _entry_line(sig: dict, symbol: str) -> str:
   entry_end = sig.get("entry_end")
   if entry_end is None:
     entry_end = sig["entry"]
+  if uses_entry_price_display(symbol, sig["entry"], entry_end):
+    return f"⚡️ Entry Price:  <b>{_price(sig['entry'], symbol)}</b>"
+  return (
+    f"⚡️ Entry Zone:  <b>{_price(sig['entry'], symbol)} - "
+    f"{_price(entry_end, symbol)}</b>"
+  )
+
+
+def render_entry(sig: dict, tier: str) -> str:
+  symbol = sig["symbol"]
+  action = sig["action"]
   entry_reference = rr_entry(sig)
   risk = abs(entry_reference - sig["sl"])
   seq = f"  #{sig['daily_seq']}" if tier == "vip" else ""
@@ -40,10 +50,7 @@ def render_entry(sig: dict, tier: str) -> str:
       f"{escape(action)}{seq}</b>  🔔"
     ),
     "",
-    (
-      f"⚡️ Entry Zone:  <b>{_price(sig['entry'], symbol)} - "
-      f"{_price(entry_end, symbol)}</b>"
-    ),
+    _entry_line(sig, symbol),
     (
       f"🛡 SL:     <b>{_price(sig['sl'], symbol)}</b>  ·  "
       f"risk <b>{_price(risk, symbol)}</b>"

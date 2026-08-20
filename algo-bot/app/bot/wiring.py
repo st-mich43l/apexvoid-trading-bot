@@ -55,7 +55,6 @@ from app.signals.reports import build_stats, format_review, format_stats
 from app.signals.broadcast import broadcast_entry, render_entry
 from app.signals.pips_format import wing_icons
 from app.core.symbols import (
-  SYMBOLS,
   channel_for_symbol,
   symbol_for_channel,
   tier_for_channel,

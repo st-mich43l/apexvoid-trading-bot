@@ -20,7 +20,7 @@ from app.analysis.market_map import (
   market_map_payload,
   render_market_map,
 )
-from app.core.symbols import SYMBOLS
+from app.core.symbols import is_known_symbol
 from app.bot.client import delete_scanner_message, send_scanner_with_retry
 from app.autotrade.map_strategy import market_map_display_key
 from app.runtime.instrument_config import instrument_runtime_view
@@ -285,7 +285,7 @@ def _map_symbols() -> list[str]:
     for item in runtime_config.market_data.scanner.symbols.split(",")
     if item.strip()
   ]
-  return [symbol for symbol in configured if symbol in SYMBOLS]
+  return [symbol for symbol in configured if is_known_symbol(symbol)]
 
 
 def _load_previous_map(payload: str | None) -> MarketMap | None:

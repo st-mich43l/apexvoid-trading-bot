@@ -7,7 +7,7 @@ import pandas as pd
 
 from app.core.config import runtime_config
 from app.persistence import redis_state
-from app.core.symbols import SYMBOLS
+from app.core.symbols import digits_for, is_known_symbol
 
 
 def _bar_key(symbol: str, tf: str) -> str:
@@ -40,7 +40,10 @@ def window_for_timeframe(tf: str, *, default: int | None = None) -> int:
 
 def _legacy_price_factor(symbol: str) -> float:
   """Return the old bad cTrader decode factor for symbols below 5 digits."""
-  digits = int(SYMBOLS.get(symbol.upper(), {}).get("digits", 5))
+  try:
+    digits = digits_for(symbol)
+  except KeyError:
+    digits = 5
   return float(10 ** max(0, 5 - digits))
 
 

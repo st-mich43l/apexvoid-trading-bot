@@ -195,6 +195,67 @@ execution:
     first_leg_fraction: 0.8
     scale_step_atr: 0.5
     scale_undersized_policy: single_entry
+instrument_packs:
+  fx_usd_major_v1:
+    enabled: true
+    rollout: live
+    policy: fx_fixed_2r_v1
+    reaction_session: london_ny
+    stop_envelope:
+      min_pips: 10
+      max_pips: 18
+      sl_distance: 0.0018
+    activation:
+      require_sweep_body: true
+      trigger_maximum_age_bars: 3
+      max_spread_pips: 1
+    price_scale:
+      round_step: 0.001
+      market_map:
+        change_min: 0.0001
+        fallback_radius_price: 0.01
+        scalp_radius_price: 0.006
+      zone_merge_gap_price: 0.0005
+      zone_merge_max_width: 0.0015
+      opposing_minimum_separation_price: 0.0015
+      fvg_entry_max_width_price: 0.0015
+    targeting:
+      mode: fixed_rr
+      reward_risk: 2.0
+      target_r_multiples:
+      - 1.0
+      - 1.5
+      - 2.0
+      close_ratios:
+      - 0.25
+      - 0.25
+      - 0.50
+      trail_after_r: 1.5
+      trail_to_r: 1.0
+      entry_clips: 2
+    market_data:
+      lookbacks:
+        h1_bars: 400
+        m15_bars: 250
+        m1_bars: 150
+        m5_bars: 150
+    timeframes:
+    - H1
+    - M15
+    - M5
+    - M1
+    contract:
+      contract_units_per_lot: 100000.0
+      max_lots: 10.0
+      pip_size: 0.0001
+      price_digits: 5
+      volume_units_per_lot: 10000000
+    analysis:
+      zones:
+        major_maximum_width_price: 0.003
+        minimum_width_price: 0.0006
+        preferred_maximum_width_price: 0.0015
+        preferred_minimum_width_price: 0.0008
 instruments:
   # Add a live FX pair by declaring: policy + targeting (locked 1:2) +
   # reaction_session + stop_envelope + activation + price_scale + contract
@@ -207,6 +268,10 @@ instruments:
   # volume uses each symbol's LotSize. Plan max_volume is max_lots ×
   # volume_units_per_lot (XAU 10×10_000=100_000; FX 10×10_000_000=100_000_000)
   # — never reuse the gold 100_000 cap on FX.
+  #
+  # Optional ``instrument_packs`` (top-level key) holds reusable FX pack
+  # defaults; each live pair can declare ``pack: fx_usd_major_v1`` plus
+  # broker_symbol, contract, and analysis.zones overrides only.
   EURUSD:
     analysis:
       zones:
@@ -553,6 +618,8 @@ manual_algo:
   runtime:
     enabled: true
     owner_execution_dm_enabled: false
+  sizing:
+    fx_volume_multiplier: 1.5
 market_data:
   calendar:
     currencies: USD,EUR,GBP,JPY
