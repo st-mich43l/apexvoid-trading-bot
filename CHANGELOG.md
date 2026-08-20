@@ -13,6 +13,13 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- HFS scalping's M1 cycle (``process_m1_bar``) called ``build_micro_structure``
+  and ``discover_all`` (pandas/CPU-heavy) directly on the shared event loop —
+  unlike ``_ensure_context`` right next to them, already correctly offloaded
+  via ``asyncio.to_thread``. Fires on every M1 bar close for every HFS-enabled
+  symbol (once a minute, all symbols' bars closing in sync); production logs
+  showed individual cycles taking 14-38 seconds, a real, frequent contributor
+  to the bot feeling slow to respond. Now offloaded the same way.
 - ``get_current_market_map`` called ``build_map`` (pandas/CPU-heavy)
   synchronously inline instead of via ``asyncio.to_thread``, unlike the
   scanner's own hot path which already offloads the same function after a
