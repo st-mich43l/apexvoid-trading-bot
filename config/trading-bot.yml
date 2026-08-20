@@ -256,69 +256,28 @@ instrument_packs:
         minimum_width_price: 0.0006
         preferred_maximum_width_price: 0.0015
         preferred_minimum_width_price: 0.0008
-instruments:
-  # Add a live FX pair by declaring: policy + targeting (locked 1:2) +
-  # reaction_session + stop_envelope + activation + price_scale + contract
-  # + analysis.zones. Register a session name in REGISTERED_REACTION_SESSIONS
-  # instead of copying hour strings. Session/envelope/activation/price_scale
-  # expand execution and analysis leaves; `overrides` is only an escape hatch.
-  # Demo live FX. Zone/merge/round/opposing gaps are price units (not XAU
-  # dollars). Pip value is USD per 1.0 lot: EURUSD derives 10; GBPJPY is
-  # explicit (~1000 JPY / 143 USDJPY). Equity-table lots still apply; broker
-  # volume uses each symbol's LotSize. Plan max_volume is max_lots ×
-  # volume_units_per_lot (XAU 10×10_000=100_000; FX 10×10_000_000=100_000_000)
-  # — never reuse the gold 100_000 cap on FX.
-  #
-  # Optional ``instrument_packs`` (top-level key) holds reusable FX pack
-  # defaults; each live pair can declare ``pack: fx_usd_major_v1`` plus
-  # broker_symbol, contract, and analysis.zones overrides only.
-  EURUSD:
-    analysis:
-      zones:
-        major_maximum_width_price: 0.003
-        minimum_width_price: 0.0006
-        preferred_maximum_width_price: 0.0015
-        preferred_minimum_width_price: 0.0008
-    broker_symbol: EURUSD
-    canonical_symbol: EURUSD
-    contract:
-      contract_units_per_lot: 100000.0
-      max_lots: 10.0
-      pip_size: 0.0001
-      price_digits: 5
-      volume_units_per_lot: 10000000
+  # Shared scaffolding for JPY-quoted crosses (GBPJPY, USDJPY): pip
+  # scale/digits, market-map radii, and the parts of targeting that do not
+  # vary by pair. Deliberately omits stop_envelope, policy, reaction_session,
+  # analysis.zones, targeting.close_ratios, contract.pip_value_per_lot, and
+  # the zone_merge_max_width/opposing_minimum_separation_price/
+  # fvg_entry_max_width_price trio - each pair's real volatility/session/
+  # risk profile differs enough (see per-pair comments below) that sharing
+  # those would hide, not remove, real divergence. Every JPY-cross instrument
+  # must declare those as its own overrides.
+  fx_jpy_cross_v1:
     enabled: true
-    market_data:
-      lookbacks:
-        h1_bars: 400
-        m15_bars: 250
-        m1_bars: 150
-        m5_bars: 150
-    # London/NY major: tight spread, 10–18 pip stop, still locked 1:2.
-    policy: fx_fixed_2r_v1
-    reaction_session: london_ny
-    stop_envelope:
-      min_pips: 10
-      max_pips: 18
-      sl_distance: 0.0018
+    rollout: live
     activation:
       require_sweep_body: true
       trigger_maximum_age_bars: 3
-      max_spread_pips: 1
     price_scale:
-      round_step: 0.001
-      # Market Map price-unit fields must follow EURUSD geometry. Structural
-      # distance remains ATR-based; these cap fallback/rail presentation and
-      # make one pip a material map move instead of XAU's $1 threshold.
+      round_step: 0.1
       market_map:
-        change_min: 0.0001
-        fallback_radius_price: 0.01
-        scalp_radius_price: 0.006
-      zone_merge_gap_price: 0.0005
-      zone_merge_max_width: 0.0015
-      opposing_minimum_separation_price: 0.0015
-      fvg_entry_max_width_price: 0.0015
-    rollout: live
+        change_min: 0.01
+        fallback_radius_price: 1.0
+        scalp_radius_price: 0.6
+      zone_merge_gap_price: 0.05
     targeting:
       mode: fixed_rr
       reward_risk: 2.0
@@ -326,19 +285,54 @@ instruments:
       - 1.0
       - 1.5
       - 2.0
-      close_ratios:
-      - 0.25
-      - 0.25
-      - 0.50
       trail_after_r: 1.5
       trail_to_r: 1.0
       entry_clips: 2
+    market_data:
+      lookbacks:
+        h1_bars: 400
+        m15_bars: 250
+        m1_bars: 150
+        m5_bars: 150
     timeframes:
     - H1
     - M15
     - M5
     - M1
+    contract:
+      contract_units_per_lot: 100000.0
+      max_lots: 10.0
+      pip_size: 0.01
+      price_digits: 3
+      volume_units_per_lot: 10000000
+instruments:
+  # Add a live FX pair by declaring `pack: <name>` (see `instrument_packs`
+  # above) plus broker_symbol/canonical_symbol and only the leaves that
+  # genuinely differ for this pair - policy, reaction_session, stop_envelope,
+  # analysis.zones, and the price_scale/targeting/contract leaves the pack
+  # does not already cover. `instrument_packs.*` merges under whatever this
+  # block declares (this block always wins on a shared key), so overriding
+  # one nested leaf (e.g. `stop_envelope.min_pips`) does not require
+  # repeating its siblings. Register a session name in
+  # REGISTERED_REACTION_SESSIONS instead of copying hour strings.
+  # `overrides` remains an escape hatch for a single dotted leaf a pack/
+  # instrument shape does not cover (a defended-level guard, a news-cluster
+  # guard) - not a substitute for a real pack default.
+  # Demo live FX. Zone/merge/round/opposing gaps are price units (not XAU
+  # dollars). Pip value is USD per 1.0 lot: EURUSD/GBPUSD derive 10 from
+  # pip_size*contract_units_per_lot; JPY crosses set contract.pip_value_per_lot
+  # explicitly (quote units are not dollars). Equity-table lots still apply;
+  # broker volume uses each symbol's LotSize. Plan max_volume is max_lots ×
+  # volume_units_per_lot (XAU 10×10_000=100_000; FX 10×10_000_000=100_000_000)
+  # — never reuse the gold 100_000 cap on FX.
+  EURUSD:
+    pack: fx_usd_major_v1
+    broker_symbol: EURUSD
+    canonical_symbol: EURUSD
+    # London/NY major: tight spread, 10-18 pip stop, still locked 1:2 - the
+    # pack's own defaults as-is; this pair carries no overrides.
   GBPUSD:
+    pack: fx_usd_major_v1
     # 2026-08-19: was a byte-for-byte EURUSD clone (only broker/canonical
     # symbol differed) - geometry below is scaled ~1.3x off EURUSD's own
     # pack instead, reflecting Cable's real higher volatility (commonly
@@ -354,71 +348,30 @@ instruments:
         preferred_minimum_width_price: 0.001
     broker_symbol: GBPUSD
     canonical_symbol: GBPUSD
-    contract:
-      contract_units_per_lot: 100000.0
-      max_lots: 10.0
-      pip_size: 0.0001
-      price_digits: 5
-      volume_units_per_lot: 10000000
-    enabled: true
-    market_data:
-      lookbacks:
-        h1_bars: 400
-        m15_bars: 250
-        m1_bars: 150
-        m5_bars: 150
     # London/NY major, same active-session profile as EURUSD (unlike
     # GBPJPY's Tokyo/London-only or USDJPY's Tokyo/London/NY) - Cable's
     # wider typical range earns a wider envelope than EURUSD's 10-18,
-    # short of GBPJPY's 15-30. Standard fx_fixed_2r_v1 25/25/50 ladder:
-    # no documented fast-move-then-hard-reversal pattern here to justify
-    # GBPJPY's frontload, and no defended-level/event-cluster incident on
-    # record for this pair yet either - overrides intentionally omitted.
-    policy: fx_fixed_2r_v1
-    reaction_session: london_ny
+    # short of GBPJPY's 15-30. Standard fx_fixed_2r_v1 25/25/50 ladder
+    # (inherited from the pack, not repeated here): no documented
+    # fast-move-then-hard-reversal pattern here to justify GBPJPY's
+    # frontload, and no defended-level/event-cluster incident on record
+    # for this pair yet either - overrides intentionally omitted.
     stop_envelope:
       min_pips: 12
       max_pips: 22
       sl_distance: 0.0022
-    activation:
-      require_sweep_body: true
-      trigger_maximum_age_bars: 3
-      max_spread_pips: 1
     price_scale:
-      round_step: 0.001
-      # Market Map price-unit fields scaled with the zone geometry above,
-      # not copied from EURUSD. Structural distance remains ATR-based;
-      # these cap fallback/rail presentation and make one pip a material
-      # map move instead of XAU's $1 threshold.
+      # Scaled with the zone geometry above, not copied from EURUSD.
+      # round_step and market_map.change_min are unchanged from the pack.
       market_map:
-        change_min: 0.0001
         fallback_radius_price: 0.013
         scalp_radius_price: 0.008
       zone_merge_gap_price: 0.0006
       zone_merge_max_width: 0.002
       opposing_minimum_separation_price: 0.002
       fvg_entry_max_width_price: 0.002
-    rollout: live
-    targeting:
-      mode: fixed_rr
-      reward_risk: 2.0
-      target_r_multiples:
-      - 1.0
-      - 1.5
-      - 2.0
-      close_ratios:
-      - 0.25
-      - 0.25
-      - 0.50
-      trail_after_r: 1.5
-      trail_to_r: 1.0
-      entry_clips: 2
-    timeframes:
-    - H1
-    - M15
-    - M5
-    - M1
   GBPJPY:
+    pack: fx_jpy_cross_v1
     analysis:
       zones:
         major_maximum_width_price: 0.5
@@ -428,19 +381,7 @@ instruments:
     broker_symbol: GBPJPY
     canonical_symbol: GBPJPY
     contract:
-      contract_units_per_lot: 100000.0
-      max_lots: 10.0
-      pip_size: 0.01
       pip_value_per_lot: 7.0
-      price_digits: 3
-      volume_units_per_lot: 10000000
-    enabled: true
-    market_data:
-      lookbacks:
-        h1_bars: 400
-        m15_bars: 250
-        m1_bars: 150
-        m5_bars: 150
     # Tokyo/London cross: wider spread/stop, no NY dump window, still 1:2.
     # 2026 dig: ATR(14) ~180 pips/day vs EURUSD's ~70, and BoE+BoJ events
     # landing within 48h compound volatility instead of adding it
@@ -451,8 +392,8 @@ instruments:
     # Front-loaded vs EURUSD/USDJPY's fx_fixed_2r_v1 25/25/50: GBPJPY's
     # moves happen fast and reverse hard, so lock in more of the win at
     # 1R instead of waiting out the full ladder and risking a violent
-    # snap-back giving it back. Same session/envelope/activation/
-    # price_scale pack shape as fx_fixed_2r_v1 -- only close_ratios differ.
+    # snap-back giving it back. Same targeting mode/multiples/trail as the
+    # fx_jpy_cross_v1 pack (not repeated here) -- only close_ratios differ.
     policy: fx_fixed_2r_frontload_v1
     reaction_session: tokyo_london
     stop_envelope:
@@ -460,40 +401,18 @@ instruments:
       max_pips: 30
       sl_distance: 0.30
     activation:
-      require_sweep_body: true
-      trigger_maximum_age_bars: 3
       max_spread_pips: 3
     price_scale:
-      round_step: 0.1
-      market_map:
-        change_min: 0.01
-        fallback_radius_price: 1.0
-        scalp_radius_price: 0.6
-      zone_merge_gap_price: 0.05
       zone_merge_max_width: 0.25
       opposing_minimum_separation_price: 0.25
       fvg_entry_max_width_price: 0.25
-    rollout: live
     targeting:
-      mode: fixed_rr
-      reward_risk: 2.0
-      target_r_multiples:
-      - 1.0
-      - 1.5
-      - 2.0
       close_ratios:
       - 0.40
       - 0.25
       - 0.35
-      trail_after_r: 1.5
-      trail_to_r: 1.0
-      entry_clips: 2
-    timeframes:
-    - H1
-    - M15
-    - M5
-    - M1
   USDJPY:
+    pack: fx_jpy_cross_v1
     analysis:
       zones:
         major_maximum_width_price: 0.3
@@ -503,22 +422,10 @@ instruments:
     broker_symbol: USDJPY
     canonical_symbol: USDJPY
     contract:
-      contract_units_per_lot: 100000.0
-      max_lots: 10.0
-      pip_size: 0.01
       # 1000 JPY / ~159.47 USDJPY (spot 2026-08-17) -- same
       # 1000/rate convention as GBPJPY's pip_value_per_lot. Drifts with the
       # rate; revisit if USDJPY moves far from this level.
       pip_value_per_lot: 6.27
-      price_digits: 3
-      volume_units_per_lot: 10000000
-    enabled: true
-    market_data:
-      lookbacks:
-        h1_bars: 400
-        m15_bars: 250
-        m1_bars: 150
-        m5_bars: 150
     # 2026 dig: Japan/US ran a record ~Y11.73T joint intervention when
     # USDJPY breached 160 -- dollar snapped 163->~156-157, a 600+ pip
     # reversal. Spot was ~159.47 when this was added, i.e. already at
@@ -537,39 +444,16 @@ instruments:
       max_pips: 18
       sl_distance: 0.18
     activation:
-      require_sweep_body: true
-      trigger_maximum_age_bars: 3
       max_spread_pips: 1
     price_scale:
-      round_step: 0.1
-      market_map:
-        change_min: 0.01
-        fallback_radius_price: 1.0
-        scalp_radius_price: 0.6
-      zone_merge_gap_price: 0.05
       zone_merge_max_width: 0.15
       opposing_minimum_separation_price: 0.15
       fvg_entry_max_width_price: 0.15
-    rollout: live
     targeting:
-      mode: fixed_rr
-      reward_risk: 2.0
-      target_r_multiples:
-      - 1.0
-      - 1.5
-      - 2.0
       close_ratios:
       - 0.25
       - 0.25
       - 0.50
-      trail_after_r: 1.5
-      trail_to_r: 1.0
-      entry_clips: 2
-    timeframes:
-    - H1
-    - M15
-    - M5
-    - M1
   XAU:
     analysis:
       zones:

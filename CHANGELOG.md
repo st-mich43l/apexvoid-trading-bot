@@ -13,6 +13,17 @@ dated section after deployment.
 ## Unreleased
 
 ### Changed
+- FX instrument declarations in ``config/trading-bot.yml`` now use the
+  ``instrument_packs`` mechanism (already implemented, previously unused —
+  every live pair was a full ~65-line block instead of a `pack:` reference).
+  EURUSD/GBPUSD declare ``pack: fx_usd_major_v1``; GBPJPY/USDJPY declare a
+  new ``fx_jpy_cross_v1`` pack (shared pip/digits/price-scale/targeting
+  scaffolding, `stop_envelope`/`policy`/`analysis.zones`/`close_ratios`
+  stay per-pair since they genuinely differ). Each pair now declares only
+  broker/canonical symbol plus its real deltas from the pack — adding a
+  new USD-major or JPY-cross pair no longer means copying and hand-editing
+  a 65-line block. Purely structural: verified the fully-expanded/merged
+  config is byte-identical to the pre-refactor YAML for every instrument.
 - Manual /algo execution now runs one dedicated asyncio worker per live symbol
   (intent bridge + event reconcile dispatch into per-symbol queues) so many FX
   pairs stay current without one symbol blocking another.
