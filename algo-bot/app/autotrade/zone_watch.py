@@ -74,24 +74,42 @@ _MAX_CAS_RETRIES = 12
 # Membership set for O(watches) listing — never SCAN the whole Redis DB.
 ZONE_WATCH_INDEX_KEY = "analysis:zone_watch:index"
 _ZONE_WATCH_INDEX_BUILT_KEY = "analysis:zone_watch:index_built"
+ZONE_WATCH_SYMBOL_INDEX_PREFIX = f"{ZONE_WATCH_INDEX_KEY}:"
+_ZONE_WATCH_SYMBOL_INDEX_BUILT_PREFIX = (
+  "analysis:zone_watch:symbol_index_built:"
+)
+# Re-check the compatibility/global index periodically. New code writes both
+# indexes atomically, but a short marker also bounds invisibility if a rolling
+# deploy or rollback briefly runs an older global-index-only writer.
+_ZONE_WATCH_INDEX_BUILD_TTL_SECONDS = 300
 
 _CAS_SAVE_LUA = """
 local raw = redis.call('GET', KEYS[1])
 local expected = tonumber(ARGV[1])
+local previous_symbol = nil
 if expected < 0 then
   if raw then return 0 end
 else
   if not raw then return -1 end
   local current = cjson.decode(raw)
+  previous_symbol = current['symbol']
   local revision = tonumber(current['revision'] or 0)
   if revision ~= expected then return 0 end
 end
 redis.call('SET', KEYS[1], ARGV[2], 'EX', tonumber(ARGV[3]))
 local zone_id = ARGV[4]
+if previous_symbol then
+  local old_symbol_key = ARGV[6] .. string.upper(tostring(previous_symbol))
+  if old_symbol_key ~= KEYS[3] then
+    redis.call('SREM', old_symbol_key, zone_id)
+  end
+end
 if tonumber(ARGV[5]) == 1 then
   redis.call('SADD', KEYS[2], zone_id)
+  redis.call('SADD', KEYS[3], zone_id)
 else
   redis.call('SREM', KEYS[2], zone_id)
+  redis.call('SREM', KEYS[3], zone_id)
 end
 return 1
 """
@@ -99,6 +117,17 @@ return 1
 
 def zone_watch_key(zone_id: str) -> str:
   return f"analysis:zone_watch:{zone_id}"
+
+
+def zone_watch_symbol_index_key(symbol: str) -> str:
+  return f"{ZONE_WATCH_SYMBOL_INDEX_PREFIX}{str(symbol).strip().upper()}"
+
+
+def _zone_watch_symbol_index_built_key(symbol: str) -> str:
+  return (
+    f"{_ZONE_WATCH_SYMBOL_INDEX_BUILT_PREFIX}"
+    f"{str(symbol).strip().upper()}"
+  )
 
 
 def _index_wants_record(record: "ZoneWatch") -> bool:
@@ -264,14 +293,16 @@ async def _cas_save(
   try:
     result = await client.eval(
       _CAS_SAVE_LUA,
-      2,
+      3,
       zone_watch_key(record.zone_id),
       ZONE_WATCH_INDEX_KEY,
+      zone_watch_symbol_index_key(record.symbol),
       expected_revision,
       _payload(record),
       ZONE_WATCH_RETENTION_SECONDS,
       record.zone_id,
       indexed,
+      ZONE_WATCH_SYMBOL_INDEX_PREFIX,
     )
     return int(result) == 1
   except Exception:
@@ -292,8 +323,18 @@ async def _cas_save(
     )
     if indexed:
       await client.sadd(ZONE_WATCH_INDEX_KEY, record.zone_id)
+      await client.sadd(
+        zone_watch_symbol_index_key(record.symbol), record.zone_id,
+      )
     else:
       await client.srem(ZONE_WATCH_INDEX_KEY, record.zone_id)
+      await client.srem(
+        zone_watch_symbol_index_key(record.symbol), record.zone_id,
+      )
+    if current is not None and current.symbol != record.symbol:
+      await client.srem(
+        zone_watch_symbol_index_key(current.symbol), record.zone_id,
+      )
     return True
 
 
@@ -325,12 +366,21 @@ async def _mutate(
 
 async def _rebuild_zone_watch_index(client: Any) -> None:
   """One-shot migration: populate index from legacy keyspace scan."""
-  claimed = await client.set(_ZONE_WATCH_INDEX_BUILT_KEY, "1", nx=True, ex=86400)
+  claimed = await client.set(
+    _ZONE_WATCH_INDEX_BUILT_KEY,
+    "1",
+    nx=True,
+    ex=_ZONE_WATCH_INDEX_BUILD_TTL_SECONDS,
+  )
   if not claimed:
     return
   async for raw_key in client.scan_iter(match="analysis:zone_watch:*", count=200):
     key = raw_key.decode() if isinstance(raw_key, bytes) else str(raw_key)
     if key in {ZONE_WATCH_INDEX_KEY, _ZONE_WATCH_INDEX_BUILT_KEY}:
+      continue
+    if key.startswith(ZONE_WATCH_SYMBOL_INDEX_PREFIX):
+      continue
+    if key.startswith(_ZONE_WATCH_SYMBOL_INDEX_BUILT_PREFIX):
       continue
     if not key.startswith("analysis:zone_watch:"):
       continue
@@ -340,8 +390,78 @@ async def _rebuild_zone_watch_index(client: Any) -> None:
     record = await load_zone_watch(client, zone_id)
     if record is not None and _index_wants_record(record):
       await client.sadd(ZONE_WATCH_INDEX_KEY, zone_id)
+      await client.sadd(zone_watch_symbol_index_key(record.symbol), zone_id)
     else:
       await client.srem(ZONE_WATCH_INDEX_KEY, zone_id)
+
+
+async def _ensure_symbol_zone_watch_index(client: Any, symbol: str) -> None:
+  """Lazily migrate legacy global-index records into symbol-local indexes.
+
+  The global set remains the compatibility/source-of-truth membership index.
+  New writes update both sets atomically.  The short-lived marker makes the
+  common listing path O(watches for this symbol), while its short expiry gives
+  rolling old writers and manually restored Redis data a bounded self-heal
+  path.
+  """
+  normalized_symbol = str(symbol).strip().upper()
+  built_key = _zone_watch_symbol_index_built_key(normalized_symbol)
+  if await client.get(built_key):
+    return
+
+  members = await client.smembers(ZONE_WATCH_INDEX_KEY)
+  if not members:
+    await _rebuild_zone_watch_index(client)
+    members = await client.smembers(ZONE_WATCH_INDEX_KEY)
+
+  zone_ids = [
+    raw_id.decode() if isinstance(raw_id, bytes) else str(raw_id)
+    for raw_id in members
+  ]
+  additions: dict[str, list[str]] = {}
+  stale_global: list[str] = []
+  stale_symbol_indexes: dict[str, list[str]] = {}
+  if zone_ids:
+    raw_values = await client.mget(
+      [zone_watch_key(zone_id) for zone_id in zone_ids]
+    )
+    for zone_id, raw in zip(zone_ids, raw_values):
+      if raw is None:
+        stale_global.append(zone_id)
+        continue
+      text = raw.decode() if isinstance(raw, bytes) else str(raw)
+      try:
+        record = ZoneWatch.from_dict(json.loads(text))
+      except (TypeError, ValueError, json.JSONDecodeError, KeyError):
+        stale_global.append(zone_id)
+        continue
+      symbol_key = zone_watch_symbol_index_key(record.symbol)
+      if _index_wants_record(record):
+        additions.setdefault(symbol_key, []).append(zone_id)
+      else:
+        stale_global.append(zone_id)
+        stale_symbol_indexes.setdefault(symbol_key, []).append(zone_id)
+
+  for index_key, index_zone_ids in additions.items():
+    await client.sadd(index_key, *index_zone_ids)
+  for index_key, index_zone_ids in stale_symbol_indexes.items():
+    await client.srem(index_key, *index_zone_ids)
+  if stale_global:
+    await client.srem(ZONE_WATCH_INDEX_KEY, *stale_global)
+
+  # The one global read above populated every symbol represented in it. Mark
+  # those as built too so five symbols do not each repeat the same migration.
+  built_symbols = {
+    index_key.removeprefix(ZONE_WATCH_SYMBOL_INDEX_PREFIX)
+    for index_key in additions
+  }
+  built_symbols.add(normalized_symbol)
+  for built_symbol in built_symbols:
+    await client.set(
+      _zone_watch_symbol_index_built_key(built_symbol),
+      "1",
+      ex=_ZONE_WATCH_INDEX_BUILD_TTL_SECONDS,
+    )
 
 
 async def list_active_zone_watches(
@@ -349,8 +469,14 @@ async def list_active_zone_watches(
   *,
   symbol: str | None = None,
 ) -> list[ZoneWatch]:
-  members = await client.smembers(ZONE_WATCH_INDEX_KEY)
-  if not members:
+  normalized_symbol = None if symbol is None else symbol.strip().upper()
+  index_key = ZONE_WATCH_INDEX_KEY
+  if normalized_symbol is not None:
+    await _ensure_symbol_zone_watch_index(client, normalized_symbol)
+    index_key = zone_watch_symbol_index_key(normalized_symbol)
+
+  members = await client.smembers(index_key)
+  if not members and normalized_symbol is None:
     await _rebuild_zone_watch_index(client)
     members = await client.smembers(ZONE_WATCH_INDEX_KEY)
   zone_ids = [
@@ -358,29 +484,40 @@ async def list_active_zone_watches(
     for raw_id in members
   ]
   records: list[ZoneWatch] = []
-  stale: list[str] = []
+  stale_indexes: dict[str, set[str]] = {}
+
+  def mark_stale(stale_index_key: str, zone_id: str) -> None:
+    stale_indexes.setdefault(stale_index_key, set()).add(zone_id)
+
   if zone_ids:
     # One round-trip instead of N GETs — prod 2026-08-12 had 100+ active
     # watches and the per-key load starved the Telegram event loop.
     raw_values = await client.mget([zone_watch_key(zone_id) for zone_id in zone_ids])
     for zone_id, raw in zip(zone_ids, raw_values):
       if raw is None:
-        stale.append(zone_id)
+        mark_stale(index_key, zone_id)
+        mark_stale(ZONE_WATCH_INDEX_KEY, zone_id)
         continue
       text = raw.decode() if isinstance(raw, bytes) else str(raw)
       try:
         record = ZoneWatch.from_dict(json.loads(text))
       except (TypeError, ValueError, json.JSONDecodeError, KeyError):
-        stale.append(zone_id)
+        mark_stale(index_key, zone_id)
+        mark_stale(ZONE_WATCH_INDEX_KEY, zone_id)
         continue
       if not is_actively_watchable(record):
-        stale.append(zone_id)
+        mark_stale(index_key, zone_id)
+        mark_stale(ZONE_WATCH_INDEX_KEY, zone_id)
+        mark_stale(zone_watch_symbol_index_key(record.symbol), zone_id)
         continue
-      if symbol is not None and record.symbol != symbol.upper():
+      if normalized_symbol is not None and record.symbol != normalized_symbol:
+        # A legacy/corrupt local index must not evict a valid record from the
+        # global set or the record's correct symbol index.
+        mark_stale(index_key, zone_id)
         continue
       records.append(record)
-  if stale:
-    await client.srem(ZONE_WATCH_INDEX_KEY, *stale)
+  for stale_index_key, stale_zone_ids in stale_indexes.items():
+    await client.srem(stale_index_key, *stale_zone_ids)
   return sorted(records, key=lambda item: (-item.score, item.low, item.zone_id))
 
 

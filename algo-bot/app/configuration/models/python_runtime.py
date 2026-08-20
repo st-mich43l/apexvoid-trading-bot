@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import TYPE_CHECKING, Any, cast
+from threading import RLock
+from typing import TYPE_CHECKING, Any, Mapping, Self, cast
 
-from pydantic import BaseModel, create_model
+from pydantic import BaseModel, PrivateAttr, create_model
 
 from app.configuration.models.base import FrozenConfigModel
 from app.configuration.models.root import ApexVoidConfig
@@ -16,19 +17,79 @@ if TYPE_CHECKING:
 _PYTHON_RUNTIME_OWNERS = frozenset({"python", "shared"})
 
 
+class _EffectiveInstrumentCache:
+  """Per-runtime cache that is never carried into a copied configuration."""
+
+  __slots__ = ("lock", "values")
+
+  def __init__(self) -> None:
+    self.lock = RLock()
+    self.values: dict[str, EffectiveInstrumentConfig] = {}
+
+  def __deepcopy__(self, memo: dict[int, object]) -> _EffectiveInstrumentCache:
+    # A deep model_copy represents a distinct configuration snapshot.  Its
+    # effective contexts must be composed from that snapshot, not this cache.
+    copied = type(self)()
+    memo[id(self)] = copied
+    return copied
+
+
 class RuntimeInstrumentAPI(FrozenConfigModel):
   """Instrument-context helpers available on PythonRuntimeConfig instances."""
+
+  _effective_instrument_cache: _EffectiveInstrumentCache = PrivateAttr(
+    default_factory=_EffectiveInstrumentCache,
+  )
+
+  def model_copy(
+    self,
+    *,
+    update: Mapping[str, Any] | None = None,
+    deep: bool = False,
+  ) -> Self:
+    copied = super().model_copy(update=update, deep=deep)
+    # Pydantic copies private attributes by reference for a shallow copy.
+    # Configuration fixtures and tests commonly customize the frozen runtime
+    # with model_copy(update=...), so retaining the old effective contexts
+    # would silently return stale instrument settings.
+    copied._effective_instrument_cache = _EffectiveInstrumentCache()
+    return copied
 
   def for_instrument(self, symbol: str) -> EffectiveInstrumentConfig:
     from app.configuration.effective_instrument import build_effective_instrument
 
-    trace = None
-    try:
-      from app.core import config as core_config
-      trace = core_config.active_configuration_resolution_trace()
-    except Exception:
+    cache_key = symbol.strip().upper()
+    cache = self._effective_instrument_cache
+    with cache.lock:
+      cached = cache.values.get(cache_key)
+      if cached is not None:
+        return cached
+
       trace = None
-    return build_effective_instrument(self, symbol, resolution_trace=trace)
+      try:
+        from app.core import config as core_config
+        trace = core_config.active_configuration_resolution_trace()
+      except Exception:
+        trace = None
+      effective = build_effective_instrument(
+        self,
+        symbol,
+        resolution_trace=trace,
+      )
+
+      instrument_id = effective.identity.instrument_id.strip().upper()
+      # Do not eagerly seed unvalidated aliases from one direct instrument-id
+      # lookup. A malformed config can assign another instrument's alias; the
+      # full builder detects that ambiguity when the alias is actually looked
+      # up. Eager alias seeding would bypass that validation. Once validation
+      # succeeds, reuse the already-cached immutable instrument context.
+      existing = cache.values.get(instrument_id)
+      if existing is not None:
+        cache.values[cache_key] = existing
+        return existing
+      cache.values[cache_key] = effective
+      cache.values[instrument_id] = effective
+      return effective
 
   def enabled_instruments(self) -> tuple[str, ...]:
     from app.configuration.effective_instrument import list_enabled_instrument_ids

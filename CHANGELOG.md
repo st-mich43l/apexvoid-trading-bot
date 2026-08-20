@@ -13,6 +13,24 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- Multi-symbol ZoneWatch processing no longer rebuilds the complete effective
+  instrument/catalog projection for every OHLC price. Effective instrument
+  contexts are cached per immutable runtime (with safe copy invalidation and
+  ambiguity checks), removing the production hot path that pinned the bot at
+  ~100% CPU and delayed owner commands by 72-79 seconds.
+- ZoneWatch active membership now has backward-compatible per-symbol Redis
+  indexes instead of loading and JSON-decoding every symbol's watch list on
+  each quote. Active V6/V8 exposure payloads use batched ``MGET``, and
+  ``/algo_status`` counts the maintained active-position set instead of
+  scanning the full Redis keyspace.
+- cTrader startup/periodic reconciliation now fetches one account snapshot
+  and partitions it across every bound instrument. Manual/legacy FX fills are
+  adopted and managed with their own symbol/pip/lot metadata; unknown symbols
+  remain unmanaged instead of silently falling back to the XAU session.
+- TradePlan submitted-leg reconciliation and open-position management share
+  one fresh broker snapshot within an active symbol poll, while idle symbols
+  do not request account snapshots. Snapshot reuse deliberately stops at the
+  symbol boundary so a later symbol never observes pre-mutation broker state.
 - Manual signals without an explicit setup tag always default to
   ``key-level`` (``/scalp`` or an explicit tag still win). SL/TP form does
   not leave trades untagged; candidate payload uses ``key-level`` instead
@@ -37,6 +55,11 @@ dated section after deployment.
   reliably delivering once an hour. Now posts once per bucket unconditionally.
 
 ### Changed
+- Closed bars now use one ordered worker/OHLC cache per symbol, allowing
+  different instruments to progress concurrently without corrupting shared
+  cache state. Spot ZoneWatch wakes similarly run once per symbol and
+  coalesce obsolete intermediate notifications because evaluation reads the
+  latest Redis quote.
 - ``entry activation waiting outside_reaction_publish_window`` (zone-watch
   spot-tick re-evaluation) is logged at DEBUG instead of INFO. The spot loop
   re-checks every still-pending zone-watch record on every tick
