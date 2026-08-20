@@ -71,23 +71,6 @@ async def do_active(ctx: dict) -> dict:
   }
 
 
-async def do_limit_pending(ctx: dict) -> dict:
-  """Mark broker limit placement on an algo-armed signal for channel fan-out."""
-  from app.persistence.store import get_manual_signal
-
-  row = await get_manual_signal(ctx["sid"])
-  if row is None:
-    return {"action": "limit_pending", "ok": False, "error": "not_found"}
-  if row.get("execution_mode") != "algo":
-    return {"action": "limit_pending", "ok": False, "error": "not_algo"}
-  return {
-    "action": "limit_pending",
-    "ok": True,
-    "row": row,
-    "reply_to": row.get("channel_message_id") or ctx.get("reply_to"),
-  }
-
-
 async def _execute_close(
   sid: int,
   symbol: str,
@@ -678,9 +661,6 @@ def render_result(
   if action == "active":
     seq = f"#{_display_seq(result['row'])} " if tier == "vip" else ""
     return f"🟢 {seq}active — order filled"
-  if action == "limit_pending":
-    seq = f"#{_display_seq(result['row'])} " if tier == "vip" else ""
-    return f"⏳ {seq}limit placed — waiting for fill"
   if action == "cancel":
     seq = f"#{_display_seq(result['row'])} " if tier == "vip" else ""
     if result.get("pending"):

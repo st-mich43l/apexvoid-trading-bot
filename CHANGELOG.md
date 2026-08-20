@@ -54,10 +54,12 @@ dated section after deployment.
 - XAU manual /algo ladder fills no longer spam the channel with one TP/SL
   update per entry leg — progress is booked and posted from the furthest
   signal-level TP/SL only (trailing legs at the same level are ignored).
-- FX manual /algo channel threads now get a ``⏳ limit placed — waiting for fill``
-  reply when the broker accepts the resting entry order (``manual_limit_placed``),
-  not only after a fill — so USDJPY/EURUSD algo signals show lifecycle progress
-  while the limit is working.
+- Manual /algo ``manual_limit_placed`` no longer posts a
+  "⏳ limit placed — waiting for fill" channel card. A multi-leg entry
+  (shallow/mid/deep) publishes one of these events per leg with no dedup,
+  so the channel got the identical card 2-3x per signal. The owner-only DM
+  (off by default) still records it; the real "🟢 active" card on fill
+  already tells the channel the position is live.
 - Telegram ``CHANNELS`` / ``SYMBOLS`` routing rebuilds from
   ``live_instruments()`` on each access instead of freezing at process import,
   so a newly live pair routes channel fan-out after config reload/restart without

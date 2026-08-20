@@ -249,8 +249,19 @@ async def _send_executor_truth(text: str) -> None:
 
 
 async def _handle_limit_placed(event: dict) -> None:
-  from app.signals import trade_ops
+  """Record the broker's limit-order acceptance. Owner-DM only (off by
+  default) - no VIP/public channel post.
 
+  A manual /algo signal's entry can be several independent legs (shallow/
+  mid/deep), and AutoTradeEngine.cs publishes one manual_limit_placed event
+  per leg - a channel post here fired once per leg with no dedup (unlike
+  the fill/TP paths, which gate on state transitions), spamming an
+  identical "limit placed - waiting for fill" card 2-3x for one signal.
+  Owner-reported 2026-08-20: remove the channel post outright; the real
+  "🟢 active" card on fill (_handle_fill_event/do_active, gated on the
+  first fill_state transition) already tells the channel the position is
+  live without a pre-fill placeholder.
+  """
   candidate_id = str(event.get("candidate_id") or "")
   if not candidate_id:
     return
@@ -275,8 +286,6 @@ async def _handle_limit_placed(event: dict) -> None:
       f"Order ID: <code>{event.get('order_id') or 'n/a'}</code>\n"
       f"Candidate ID: <code>{candidate_id}</code>"
     )
-  result = await trade_ops.do_limit_pending({"sid": sig["id"]})
-  await trade_ops.post_result(result, sig.get("symbol", "XAU"))
 
 
 async def _handle_execution_rejected(event: dict) -> None:
