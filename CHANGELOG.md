@@ -23,6 +23,16 @@ dated section after deployment.
   when deeper capacity cannot cover a TP slice.
 
 ### Fixed
+- Owner Market Map digest no longer deletes and resends an outwardly
+  identical card every scan tick. ``map_materially_changed`` grouped
+  entries/rails by their **full** internal tag list, but the rendered card
+  only ever shows the top few tags by priority (``_compact_tags``/
+  ``_compact_rail_tags``) — a low-priority tag like "price inside" (lowest
+  ``_tag_priority``) flips on/off as live price crosses a zone edge without
+  ever reaching the visible card, so the scan loop treated that invisible
+  flip as a material change and spammed the owner DM with a "new" message
+  that read the same as the last one. Change detection now compares the
+  same tag selection that actually gets rendered.
 - Manual /algo **close** channel cards no longer report a lower pip count
   than the highest TP already booked (e.g. TP4 +160 then closed +130) —
   ``finalize_manual_group`` and ``group_result`` handling keep the peak
