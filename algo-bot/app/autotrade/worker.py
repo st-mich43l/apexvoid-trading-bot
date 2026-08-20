@@ -591,15 +591,15 @@ def classify_execution_zone(
 
 
 def _symbols() -> set[str]:
-  csv = {
+  # rollout=live is the go-live switch; do not require a second CSV edit.
+  live = {item.upper() for item in runtime_config.live_instruments()}
+  if live:
+    return live
+  return {
     item.strip().upper()
     for item in runtime_config.contract.instrument.symbols.split(",")
     if item.strip()
   }
-  live = {item.upper() for item in runtime_config.live_instruments()}
-  if csv and live:
-    return csv & live
-  return csv or live
 
 
 def _parse_bar_event(data: object) -> tuple[str, str, str] | None:
