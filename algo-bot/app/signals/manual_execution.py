@@ -688,6 +688,33 @@ def _leg_close_pips_and_frac(
   return round(float(leg_pips)), round(float(volume) / float(group_initial_volume), 6)
 
 
+async def _resolve_group_close_pips(signal_id: int, group_pips: float) -> int:
+  """Close-card pips for ``group_result`` — never below TPs already booked.
+
+  ``group_realized_pips`` can reflect the last shallow leg's blend while
+  channel TP cards already printed higher pips from the deepest fill.
+  Prefer the ledger peak and redis runner telemetry when they are higher.
+  """
+  from app.signals import pips_format
+
+  sig = await get_manual_signal(signal_id)
+  pips = round(float(group_pips))
+  raw_legs = (sig or {}).get("legs") or "[]"
+  if isinstance(raw_legs, str):
+    existing = json.loads(raw_legs)
+  else:
+    existing = list(raw_legs)
+  if existing:
+    peak = pips_format.legs_achieved_pips(existing)
+    if peak > 0:
+      pips = max(pips, peak)
+  progress = await redis_state.get_progress(signal_id)
+  runner = progress.get("runner_pips")
+  if isinstance(runner, int) and runner > 0:
+    pips = max(pips, runner)
+  return pips
+
+
 async def _handle_group_result(event: dict, signal_id: int) -> None:
   """The single authoritative close for a manual /algo signal - fires once
   AutoTradeEngine.cs confirms every entry leg in the group has no volume
@@ -703,7 +730,8 @@ async def _handle_group_result(event: dict, signal_id: int) -> None:
     return
   sig = await get_manual_signal(signal_id)
   symbol = (sig or {}).get("symbol", "XAU")
-  result = await trade_ops._execute_group_close(signal_id, symbol, round(float(pips)))
+  resolved = await _resolve_group_close_pips(signal_id, float(pips))
+  result = await trade_ops._execute_group_close(signal_id, symbol, resolved)
   await trade_ops.post_result(result, symbol)
 
 

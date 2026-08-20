@@ -1428,18 +1428,14 @@ async def finalize_manual_group(
 
   A manual /algo signal can be several independent entry legs (shallow/
   mid/deep, each its own broker position filled at its own price) closing
-  together off one shared owner stop. ``close_leg``/``legs_achieved_pips``
-  is tuned for a DIFFERENT shape - several EXIT events off one entry (a
-  partial TP booking followed by a BE/SL residual), where "pure loss = use
-  the final residual's own pips" is the deliberately correct journal
-  behaviour (a trade that ran to BE after TP1 should not be diluted to a
-  lot-weighted ~fraction of the win). Applied to independently-priced
-  ENTRY legs instead, that same rule silently reports only the
-  last-to-close leg's own (typically smallest/best-priced) result and
-  discards every sibling leg's loss entirely (2026-08-19: a 3-leg SELL
-  reported -26 pips when the true volume-weighted loss across all three
-  fills was -47). AutoTradeEngine.cs already computes the correct number
-  once, from real per-leg fills - this just writes it down.
+  together off one shared owner stop. For **losses**, prefer
+  ``group_realized_pips`` (AutoTradeEngine.cs's volume-weighted total
+  across independently-priced entry legs — 2026-08-19: a 3-leg SELL must
+  not report -26 when the true blended loss was -47). For **wins**,
+  channel TP cards already booked via ``close_leg`` must not be downgraded
+  on the close line — ``legs_achieved_pips`` keeps the highest TP reached
+  (e.g. TP4 +160 from the deep fill) even when ``group_realized_pips``
+  from the last shallow leg prints +130.
   """
   now = int(time.time())
   snapshot_close: tuple[int, int, str] | None = None
@@ -1454,10 +1450,15 @@ async def finalize_manual_group(
         return None
       legs = json.loads(row["legs"] or "[]")
       legs.append({"frac": 1.0, "pips": result_pips, "ts": now})
+      # Channel TP cards already booked the highest target reached; the
+      # close line must never report a lower number than those legs (e.g.
+      # group_realized_pips from the last shallow leg after TP4 printed
+      # +160 from the deep fill).
+      achieved = legs_achieved_pips(legs)
       await db.execute(
         "UPDATE manual_signals SET status = 'closed', result_pips = $1, "
         "closed_at = $2, legs = $3 WHERE id = $4 AND status = 'open'",
-        result_pips, now, json.dumps(legs), row_id,
+        achieved, now, json.dumps(legs), row_id,
       )
       snapshot_close = (int(row_id), now, str(row["symbol"] or "XAU"))
   if snapshot_close is not None:
@@ -1474,7 +1475,7 @@ async def finalize_manual_group(
     "symbol": row["symbol"],
     "visibility": row["visibility"],
     "closed": True,
-    "net": result_pips,
+    "net": achieved,
     "remaining": 0.0,
     "frac": 1.0,
   }
