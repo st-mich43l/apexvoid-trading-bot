@@ -585,6 +585,8 @@ async def _handle_take_profit(event: dict, signal_id: int) -> None:
   leg publishes its own ``take_profit`` events; only the furthest TP ordinal
   for the signal is booked and posted — sibling legs at the same (or lower)
   TP are ignored so the channel is not spammed and frac is not double-counted.
+  An event whose ``target_pips`` cannot be resolved to any configured TP
+  ordinal is dropped rather than booked - it cannot be deduped or labeled.
 
   Pip math uses ``broker_fill_price`` (deepest filled entry: deep → mid →
   shallow) so a SELL that filled the deep edge books TP1 from that fill, not
@@ -604,22 +606,42 @@ async def _handle_take_profit(event: dict, signal_id: int) -> None:
   ]
   target_pips = event.get("target_pips")
   reached = _tp_ordinal_reached(sig, target_pips)
-  if reached:
-    progress = await redis_state.get_progress(signal_id)
-    current_tp = int(progress.get("tp") or 0)
-    if reached <= current_tp:
-      log.info(
-        "manual-algo take_profit skipped signal=%s tp=%s already=%s "
-        "position_id=%s",
-        signal_id,
-        reached,
-        current_tp,
-        event.get("position_id"),
-      )
-      return
-    await redis_state.set_tp_progress(signal_id, reached)
-    if target_pips is not None:
-      await redis_state.set_runner_pips(signal_id, int(target_pips))
+  if not reached:
+    # target_pips did not match any configured TP ordinal (e.g. stale
+    # `tps` after a /trade_modify re-arm, or an engine/DB pip-rounding
+    # mismatch). Previously this fell through to book+post anyway with
+    # tp_number=None (an unlabeled "booked X%" card) and, critically, with
+    # NO redis-progress dedup applied at all - every sibling leg whose own
+    # event also failed to resolve an ordinal posted its own undeduped
+    # message. Observed live on signal 99 (XAU SELL, 2026-08-20 ~03:04
+    # UTC): TP1 booked twice (+39p, +38p, 2s apart) and TP2 booked twice
+    # (+68p, +66p, 3s apart) before the redis-progress dedup below existed
+    # in this function. Fail closed instead: skip the post and log for
+    # investigation rather than spam an unlabeled duplicate.
+    log.warning(
+      "manual-algo take_profit could not resolve a configured TP ordinal "
+      "signal=%s target_pips=%s configured=%s position_id=%s - skipping post",
+      signal_id,
+      target_pips,
+      configured,
+      event.get("position_id"),
+    )
+    return
+  progress = await redis_state.get_progress(signal_id)
+  current_tp = int(progress.get("tp") or 0)
+  if reached <= current_tp:
+    log.info(
+      "manual-algo take_profit skipped signal=%s tp=%s already=%s "
+      "position_id=%s",
+      signal_id,
+      reached,
+      current_tp,
+      event.get("position_id"),
+    )
+    return
+  await redis_state.set_tp_progress(signal_id, reached)
+  if target_pips is not None:
+    await redis_state.set_runner_pips(signal_id, int(target_pips))
   # Channel pips measure from deepest stored fill (deep → mid → shallow),
   # not from whichever leg's take_profit event arrived first.
   pips = pips_format.signed_result_pips(sig, float(price))
@@ -632,7 +654,7 @@ async def _handle_take_profit(event: dict, signal_id: int) -> None:
     frac = round(1.0 / len(configured), 6)
   result = await trade_ops._execute_close(
     signal_id, sig.get("symbol", "XAU"), pips, frac,
-    tp_number=reached or None,
+    tp_number=reached,
   )
   await trade_ops.post_result(result, sig.get("symbol", "XAU"))
 
