@@ -12,6 +12,19 @@ dated section after deployment.
 
 ## Unreleased
 
+### Fixed
+- ``get_current_market_map`` called ``build_map`` (pandas/CPU-heavy)
+  synchronously inline instead of via ``asyncio.to_thread``, unlike the
+  scanner's own hot path which already offloads the same function after a
+  documented prod incident (2026-08-12: inline calls blocked Telegram
+  handling for 5-6s). This call site is reached every 60s by the market-map
+  scan loop and directly by the ``/trade_map`` command, both on the one
+  shared event loop — now offloaded the same way.
+- The hourly owner Market Map digest only posted when the map was judged
+  materially changed, but marked the hour's bucket done either way — on a
+  quiet market it could go silent for multiple consecutive hours instead of
+  reliably delivering once an hour. Now posts once per bucket unconditionally.
+
 ### Changed
 - ``entry activation waiting outside_reaction_publish_window`` (zone-watch
   spot-tick re-evaluation) is logged at DEBUG instead of INFO. The spot loop

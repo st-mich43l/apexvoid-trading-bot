@@ -15,20 +15,16 @@ from app.persistence.store import get_meta, set_meta
 from app.analysis.market_map import (
   MarketMap,
   build_map,
-  map_materially_changed,
-  market_map_from_payload,
   market_map_payload,
   render_market_map,
 )
 from app.core.symbols import is_known_symbol
 from app.bot.client import delete_scanner_message, send_scanner_with_retry
 from app.autotrade.map_strategy import market_map_display_key
-from app.runtime.instrument_config import instrument_runtime_view
 
 log = logging.getLogger(__name__)
 
 _META_SCAN_KEY = "last_map_scan"
-_META_MAP_PREFIX = "last_market_map"
 _LOOP_INTERVAL_SECONDS = 60
 _MARKET_MAP_TELEGRAM_TTL_SECONDS = 7 * 24 * 3600
 
@@ -94,7 +90,12 @@ async def get_current_market_map(symbol: str) -> MarketMap | None:
     cached = _cache.get(symbol)
   if cached is None:
     return None
-  return build_map(cached.analysis, cached.price, symbol=symbol)
+  # build_map is pandas/CPU-heavy (see scanner.py's own build_context/
+  # build_map offload, prod 2026-08-12: inline calls blocked Telegram
+  # handling for 5-6s) - this call site reached the same function without
+  # the same asyncio.to_thread guard, via both the 60s market-map scan
+  # loop and the /trade_map command handler, on the one shared event loop.
+  return await asyncio.to_thread(build_map, cached.analysis, cached.price, symbol=symbol)
 
 
 async def render_current_market_map(
@@ -156,6 +157,12 @@ async def _market_map_scan_tick(now: datetime | None = None) -> bool:
   if await get_meta(_META_SCAN_KEY) == scan_key:
     return False
 
+  # Owner-reported 2026-08-20: an hourly digest that only posts when
+  # map_materially_changed says so can go silent for multiple consecutive
+  # buckets on a quiet market - the bucket still gets marked done below
+  # even when nothing was sent, so the next check is another full
+  # scan_interval_minutes away. Post once per bucket for every symbol with
+  # a map, unconditionally, so "every hour" actually means every hour.
   evaluated = False
   sent = False
   for symbol in _map_symbols():
@@ -163,23 +170,12 @@ async def _market_map_scan_tick(now: datetime | None = None) -> bool:
     if market_map is None:
       continue
     evaluated = True
-    payload_key = f"{_META_MAP_PREFIX}:{symbol}"
-    previous = _load_previous_map(await get_meta(payload_key))
-    if not map_materially_changed(
-      previous,
-      market_map,
-      instrument_runtime_view(symbol).analysis.market_map.change_min,
-    ):
-      if previous is not None:
-        await _remember_displayed_map(symbol, previous)
-      continue
     display_now = now.astimezone(
       ZoneInfo(runtime_config.delivery.presentation.seq_reset_tz)
     )
     text = render_market_map(market_map, symbol, display_now)
     await _replace_owner_market_map_message(symbol, text)
     await _remember_displayed_map(symbol, market_map)
-    await set_meta(payload_key, market_map_payload(market_map))
     sent = True
 
   if evaluated:
@@ -286,12 +282,3 @@ def _map_symbols() -> list[str]:
     if item.strip()
   ]
   return [symbol for symbol in configured if is_known_symbol(symbol)]
-
-
-def _load_previous_map(payload: str | None) -> MarketMap | None:
-  if payload is None:
-    return None
-  try:
-    return market_map_from_payload(payload)
-  except (KeyError, TypeError, ValueError):
-    return None
