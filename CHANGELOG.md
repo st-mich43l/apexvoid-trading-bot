@@ -23,6 +23,10 @@ dated section after deployment.
   when deeper capacity cannot cover a TP slice.
 
 ### Fixed
+- Manual /algo **close** channel cards no longer report a lower pip count
+  than the highest TP already booked (e.g. TP4 +160 then closed +130) —
+  ``finalize_manual_group`` and ``group_result`` handling keep the peak
+  reached across booked legs / runner telemetry, not the last leg's blend.
 - Manual /algo TP channel posts no longer crash with ``NameError: _win_wings``
   after #371 — restore the helper accidentally dropped from ``trade_ops.py``.
 - Manual /algo TP book pip math now uses the **deepest filled** entry (deep →
