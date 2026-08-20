@@ -13,6 +13,15 @@ dated section after deployment.
 ## Unreleased
 
 ### Changed
+- ``entry activation waiting outside_reaction_publish_window`` (zone-watch
+  spot-tick re-evaluation) is logged at DEBUG instead of INFO. The spot loop
+  re-checks every still-pending zone-watch record on every tick
+  (``spot_min_interval_s=3.00``), and the reaction-publish window can stay
+  closed for hours outside session hours — this one line alone was 97.9% of
+  a full day's production log (109,821 of 112,212 lines, 2026-08-20),
+  drowning out everything else. The decision is still recorded via
+  ``_record_policy_telemetry`` regardless of log level, so no observability
+  is lost.
 - FX instrument declarations in ``config/trading-bot.yml`` now use the
   ``instrument_packs`` mechanism (already implemented, previously unused —
   every live pair was a full ~65-line block instead of a `pack:` reference).

@@ -716,7 +716,14 @@ async def _prepare_activation(
       require=enforce_pack,
     )
     if not win.allowed:
-      log.info(
+      # DEBUG, not INFO: the spot-tick loop re-evaluates every still-pending
+      # zone-watch record on every tick (spot_min_interval_s=3.00), and the
+      # reaction-publish window can stay closed for hours outside session
+      # hours - at INFO this one line was 97.9% of a full day's log
+      # (109,821 of 112,212 lines, 2026-08-20). The decision itself is
+      # still recorded via _record_policy_telemetry below regardless of
+      # log level, so nothing is lost by not repeating it on every recheck.
+      log.debug(
         "entry activation waiting outside_reaction_publish_window "
         "symbol=%s zone_id=%s utc_hour=%s reason=%s",
         record.symbol,
