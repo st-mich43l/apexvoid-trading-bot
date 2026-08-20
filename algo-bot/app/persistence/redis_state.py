@@ -317,6 +317,10 @@ def _progress_key(row_id: int) -> str:
   return f"{_KEY_PREFIX}:progress:{row_id}"
 
 
+def _tp_ordinals_key(row_id: int) -> str:
+  return f"{_KEY_PREFIX}:tp_ordinals:{row_id}"
+
+
 async def get_cursor(symbol: str) -> str | None:
   """ISO timestamp of the last OHLC bar already evaluated for ``symbol``."""
   return await _get_client().get(_cursor_key(symbol))
@@ -337,13 +341,42 @@ async def get_progress(row_id: int) -> dict:
 
 
 async def set_tp_progress(row_id: int, tp_number: int) -> None:
-  """Advance the highest alerted TP (monotonic — never moves backwards)."""
+  """Advance the highest alerted TP (monotonic — never moves backwards).
+
+  Correct for a single-ladder signal (one position climbing TP1, TP2, ...
+  in order - the watcher's own use case). A manual /algo signal can be
+  several independent entry legs with disjoint ordinal ranges (e.g.
+  shallow booking TP3/TP4 while a sibling leg's own TP1/TP2 arrive later
+  or out of order) - "highest ever seen" incorrectly treats a legitimate,
+  never-before-booked lower ordinal from a DIFFERENT leg as stale. See
+  tp_ordinal_already_booked/mark_tp_ordinal_booked for the per-ordinal
+  dedup that path needs instead.
+  """
   client = _get_client()
   key = _progress_key(row_id)
   current = int(await client.hget(key, "tp") or 0)
   if tp_number > current:
     await client.hset(key, "tp", tp_number)
     await client.expire(key, _PROGRESS_TTL)
+
+
+async def tp_ordinal_already_booked(row_id: int, ordinal: int) -> bool:
+  """True if this specific TP ordinal was already booked for this signal.
+
+  Unlike set_tp_progress's single "highest ever" scalar, this tracks the
+  full set of booked ordinals so a multi-leg manual /algo signal's
+  siblings can each book their own, disjoint ordinals in any order.
+  """
+  return bool(
+    await _get_client().sismember(_tp_ordinals_key(row_id), ordinal)
+  )
+
+
+async def mark_tp_ordinal_booked(row_id: int, ordinal: int) -> None:
+  client = _get_client()
+  key = _tp_ordinals_key(row_id)
+  await client.sadd(key, ordinal)
+  await client.expire(key, _PROGRESS_TTL)
 
 
 async def set_runner_pips(row_id: int, pips: int) -> None:
