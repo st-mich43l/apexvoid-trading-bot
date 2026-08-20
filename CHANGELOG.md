@@ -13,6 +13,17 @@ dated section after deployment.
 ## Unreleased
 
 ### Changed
+- FX instrument declarations in ``config/trading-bot.yml`` now use the
+  ``instrument_packs`` mechanism (already implemented, previously unused —
+  every live pair was a full ~65-line block instead of a `pack:` reference).
+  EURUSD/GBPUSD declare ``pack: fx_usd_major_v1``; GBPJPY/USDJPY declare a
+  new ``fx_jpy_cross_v1`` pack (shared pip/digits/price-scale/targeting
+  scaffolding, `stop_envelope`/`policy`/`analysis.zones`/`close_ratios`
+  stay per-pair since they genuinely differ). Each pair now declares only
+  broker/canonical symbol plus its real deltas from the pack — adding a
+  new USD-major or JPY-cross pair no longer means copying and hand-editing
+  a 65-line block. Purely structural: verified the fully-expanded/merged
+  config is byte-identical to the pre-refactor YAML for every instrument.
 - Manual /algo execution now runs one dedicated asyncio worker per live symbol
   (intent bridge + event reconcile dispatch into per-symbol queues) so many FX
   pairs stay current without one symbol blocking another.
@@ -23,6 +34,16 @@ dated section after deployment.
   when deeper capacity cannot cover a TP slice.
 
 ### Fixed
+- Owner Market Map digest no longer deletes and resends an outwardly
+  identical card every scan tick. ``map_materially_changed`` grouped
+  entries/rails by their **full** internal tag list, but the rendered card
+  only ever shows the top few tags by priority (``_compact_tags``/
+  ``_compact_rail_tags``) — a low-priority tag like "price inside" (lowest
+  ``_tag_priority``) flips on/off as live price crosses a zone edge without
+  ever reaching the visible card, so the scan loop treated that invisible
+  flip as a material change and spammed the owner DM with a "new" message
+  that read the same as the last one. Change detection now compares the
+  same tag selection that actually gets rendered.
 - Manual /algo **close** channel cards no longer report a lower pip count
   than the highest TP already booked (e.g. TP4 +160 then closed +130) —
   ``finalize_manual_group`` and ``group_result`` handling keep the peak
@@ -43,10 +64,12 @@ dated section after deployment.
 - XAU manual /algo ladder fills no longer spam the channel with one TP/SL
   update per entry leg — progress is booked and posted from the furthest
   signal-level TP/SL only (trailing legs at the same level are ignored).
-- FX manual /algo channel threads now get a ``⏳ limit placed — waiting for fill``
-  reply when the broker accepts the resting entry order (``manual_limit_placed``),
-  not only after a fill — so USDJPY/EURUSD algo signals show lifecycle progress
-  while the limit is working.
+- Manual /algo ``manual_limit_placed`` no longer posts a
+  "⏳ limit placed — waiting for fill" channel card. A multi-leg entry
+  (shallow/mid/deep) publishes one of these events per leg with no dedup,
+  so the channel got the identical card 2-3x per signal. The owner-only DM
+  (off by default) still records it; the real "🟢 active" card on fill
+  already tells the channel the position is live.
 - Telegram ``CHANNELS`` / ``SYMBOLS`` routing rebuilds from
   ``live_instruments()`` on each access instead of freezing at process import,
   so a newly live pair routes channel fan-out after config reload/restart without
