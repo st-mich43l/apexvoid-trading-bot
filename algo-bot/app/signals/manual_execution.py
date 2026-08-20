@@ -591,9 +591,11 @@ async def _handle_take_profit(event: dict, signal_id: int) -> None:
   """Book + fan out when signal-level TP progress advances.
 
   A XAU ladder can fill several entry legs that share one channel card. Each
-  leg publishes its own ``take_profit`` events; only the furthest TP ordinal
-  for the signal is booked and posted — sibling legs at the same (or lower)
-  TP are ignored so the channel is not spammed and frac is not double-counted.
+  leg publishes its own ``take_profit`` events, and different legs can own
+  disjoint ordinal ranges (shallow-first booking) that arrive interleaved
+  or out of order - each ordinal is booked and posted at most once per
+  signal (a real repeat of the same ordinal from a sibling leg sharing
+  that slice is ignored), not gated on "highest ordinal seen so far".
   An event whose ``target_pips`` cannot be resolved to any configured TP
   ordinal is dropped rather than booked - it cannot be deduped or labeled.
 
@@ -637,19 +639,28 @@ async def _handle_take_profit(event: dict, signal_id: int) -> None:
       event.get("position_id"),
     )
     return
-  progress = await redis_state.get_progress(signal_id)
-  current_tp = int(progress.get("tp") or 0)
-  if reached <= current_tp:
+  # Owner-reported 2026-08-19 (signal 102, real XAU SELL): a "highest
+  # ordinal ever seen" scalar assumes ordinals only ever climb for ONE
+  # ladder, but a multi-leg group's siblings can each own disjoint ordinal
+  # ranges (shallow-first booking assigns shallow the early ordinals, mid/
+  # deep later ones) and their events can interleave in either order.
+  # Confirmed live: shallow booked TP3 then TP4 while a sibling leg's own,
+  # never-before-seen TP1 and TP2 arrived in between and after - both got
+  # silently dropped ("already=3"/"already=4") because the scalar had
+  # already advanced past their ordinal from the OTHER leg's progress.
+  # That leg fully closed on that TP2 with no record of it anywhere - not
+  # a mislabeled card, an entirely missing one. Track booked ordinals as a
+  # set instead: only a genuine repeat of the SAME ordinal is a duplicate.
+  if await redis_state.tp_ordinal_already_booked(signal_id, reached):
     log.info(
-      "manual-algo take_profit skipped signal=%s tp=%s already=%s "
+      "manual-algo take_profit skipped signal=%s tp=%s already booked "
       "position_id=%s",
       signal_id,
       reached,
-      current_tp,
       event.get("position_id"),
     )
     return
-  await redis_state.set_tp_progress(signal_id, reached)
+  await redis_state.mark_tp_ordinal_booked(signal_id, reached)
   if target_pips is not None:
     await redis_state.set_runner_pips(signal_id, int(target_pips))
   # Owner-reported 2026-08-20: pips must be the booking leg's own actual
