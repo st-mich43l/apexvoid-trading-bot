@@ -352,7 +352,9 @@ def _intent_to_candidate_payload(intent: ManualTradeIntent) -> dict:
     "candidate_id": intent.intent_id,
     "symbol": intent.symbol,
     "timeframe": "M1",
-    "setup": intent.setup_type or "Manual Algo",
+    # Manual /algo without an explicit tag is key-level (same default as
+    # parsing.DEFAULT_SETUP_TYPE) — never the opaque "Manual Algo" label.
+    "setup": intent.setup_type or "key-level",
     "mode": "manual_algo",
     # Owner-authored /algo orders bypass scanner/analysis policy by contract.
     # The executor still applies broker-mechanical checks.

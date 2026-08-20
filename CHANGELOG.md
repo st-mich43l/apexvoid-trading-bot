@@ -13,6 +13,10 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- Manual signals without an explicit setup tag always default to
+  ``key-level`` (``/scalp`` or an explicit tag still win). SL/TP form does
+  not leave trades untagged; candidate payload uses ``key-level`` instead
+  of opaque ``Manual Algo``.
 - HFS scalping's M1 cycle (``process_m1_bar``) called ``build_micro_structure``
   and ``discover_all`` (pandas/CPU-heavy) directly on the shared event loop —
   unlike ``_ensure_context`` right next to them, already correctly offloaded

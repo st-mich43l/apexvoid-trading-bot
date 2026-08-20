@@ -13,12 +13,9 @@ from app.signals.fx_manual_algo import build_fx_manual_contract, fx_manual_symbo
 # Matches: +100 pips / -50 pips / +1500Pips / -30 PIPS
 _PIPS_RE = re.compile(r'([+-])\s*(\d+)\s*pips?', re.IGNORECASE)
 
-# Short-form defaults (owner 2026-08-11): sl/tp/setup are each independently
-# optional now - whichever the owner fills in is used as-is, whichever are
-# left out fall back to these. Setup only defaults to DEFAULT_SETUP_TYPE when
-# the message is actually using the short form (sl or tp omitted); a
-# full-form message (both given) with no explicit tag still stays untagged,
-# unchanged from before.
+# Setup defaults to key-level whenever the owner does not tag one (and is
+# not /scalp). Explicit ``/setup foo`` or ``/scalp`` wins. SL/TP presence
+# does not gate the setup default.
 DEFAULT_SL_PIPS = 60
 DEFAULT_TP_PIPS = (30, 60, 100, 130, 200)
 DEFAULT_SETUP_TYPE = "key-level"
@@ -219,14 +216,14 @@ def _parse_manual(text: str) -> Optional[dict]:
       "visibility": "vip" if vip_count else fx.get("visibility", "both"),
       "execution_mode": "algo" if algo_count else "notify",
     }
-    short_form = bool(fx.pop("short_form", True))
     if setup_type is not None:
       fx["setup_type"] = setup_type
       fx["confluence"] = confluence
     elif scalp_count:
       fx["setup_type"] = "scalp"
-    elif short_form:
+    else:
       fx["setup_type"] = DEFAULT_SETUP_TYPE
+    fx.pop("short_form", None)
     return fx
   m = _MANUAL_RE.search(raw)
   if not m:
@@ -241,8 +238,7 @@ def _parse_manual(text: str) -> Optional[dict]:
     entry_low, entry_high = sorted((entry_anchor, entry_other))
   rr_entry = entry_low if action == 'SELL' else entry_high
   pip = pip_for('XAU')
-  short_form = sl_raw is None or not (tp_raw or '').strip()
-  if setup_type is None and not scalp_count and short_form:
+  if setup_type is None and not scalp_count:
     setup_type = DEFAULT_SETUP_TYPE
   if sl_raw is not None:
     sl = float(sl_raw)
