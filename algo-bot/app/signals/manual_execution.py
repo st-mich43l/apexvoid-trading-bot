@@ -597,9 +597,10 @@ async def _handle_take_profit(event: dict, signal_id: int) -> None:
   An event whose ``target_pips`` cannot be resolved to any configured TP
   ordinal is dropped rather than booked - it cannot be deduped or labeled.
 
-  Pip math uses ``broker_fill_price`` (deepest filled entry: deep → mid →
-  shallow) so a SELL that filled the deep edge books TP1 from that fill, not
-  the shallow zone edge.
+  Pip math uses the booking leg's own ``leg_realized_pips`` (that leg's own
+  fill to its own exit), not a group-wide reference - a SELL whose shallow
+  leg fills at the zone edge and hits its own target books that leg's own
+  real distance, not some other leg's.
   """
   from app.signals import trade_ops
 
@@ -651,9 +652,17 @@ async def _handle_take_profit(event: dict, signal_id: int) -> None:
   await redis_state.set_tp_progress(signal_id, reached)
   if target_pips is not None:
     await redis_state.set_runner_pips(signal_id, int(target_pips))
-  # Channel pips measure from deepest stored fill (deep → mid → shallow),
-  # not from whichever leg's take_profit event arrived first.
-  pips = pips_format.signed_result_pips(sig, float(price))
+  # Owner-reported 2026-08-20: pips must be the booking leg's own actual
+  # entry-to-exit distance, not a shared "deepest filled" reference blended
+  # across the whole group - AutoTradeEngine.cs already computes this
+  # correctly per leg (SignedPips from that leg's own EntryPrice) and
+  # publishes it as leg_realized_pips on every take_profit event. Only
+  # fall back to the deepest-fill calc if an event predates that field.
+  leg_pips = event.get("leg_realized_pips")
+  pips = (
+    round(float(leg_pips)) if leg_pips is not None
+    else pips_format.signed_result_pips(sig, float(price))
+  )
   # The broker's real target ladder can collapse (BuildTargetPlan skips
   # middle targets when volume is too small for every configured exit), so
   # "is this the last leg" is decided by comparing against the LARGEST

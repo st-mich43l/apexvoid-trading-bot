@@ -51,9 +51,16 @@ dated section after deployment.
   pairs stay current without one symbol blocking another.
 - FX manual /algo channel cards show **Entry Price** (single entry-at level) instead
   of **Entry Zone** — FX uses entry-at, not XAU-style zones.
-- XAU manual /algo ladders book the group TP ladder preferring **deep** volume
-  first (best fill), then mid, then shallow — shallower legs only contribute
-  when deeper capacity cannot cover a TP slice.
+- XAU manual /algo ladders book the group TP ladder preferring **shallow**
+  volume first (most likely to fill, largest leg), then mid, then deep —
+  deep only contributes once shallow/mid capacity is exhausted for a
+  slice. Reversed from an earlier deep-first design: deep-first assigned
+  the group's closest ordinals (TP1/TP2) to the smallest, least-likely-
+  to-fill leg, so if deep (and often mid) never filled at all, no order
+  ever existed to hit TP1/TP2 — they silently never appeared on the
+  channel even after shallow itself had already booked real profit under
+  a later ordinal's label. Shallow now owns the close targets it can
+  reliably reach; deep rides as the runner toward the final target.
 
 ### Fixed
 - Owner Market Map digest no longer deletes and resends an outwardly
@@ -72,12 +79,13 @@ dated section after deployment.
   reached across booked legs / runner telemetry, not the last leg's blend.
 - Manual /algo TP channel posts no longer crash with ``NameError: _win_wings``
   after #371 — restore the helper accidentally dropped from ``trade_ops.py``.
-- Manual /algo TP book pip math now uses the **deepest filled** entry (deep →
-  mid → shallow), not the first/shallow fill — e.g. XAU SELL zone 4500–4503
-  booking TP1 at 4497 reports ~+60 pips from the deep edge, not +30 from
-  shallow.
+- Manual /algo TP book pip math now uses the **booking leg's own** actual
+  entry-to-exit distance (``leg_realized_pips``, already computed correctly
+  per leg by AutoTradeEngine.cs), not a shared "deepest filled" reference
+  blended across the whole group — a leg's own TP hit now reports that
+  leg's own real pips, not another leg's.
 - After TP1, remaining XAU ladder legs still move to protected BE (and publish
-  ``stop_moved``) even when deep-first volume fully closes the deep clip.
+  ``stop_moved``) even when shallow-first volume fully closes the shallow clip.
 - Manual /algo BE/TP channel updates still acquire when a lifecycle event
   omits ``symbol`` or ``position_id`` — route by ``candidate_id`` / intent.
 - Manual-algo / FX CI tests no longer assume a single limit order or brittle

@@ -5825,8 +5825,8 @@ public sealed class AutoTradeEngine(
           var groupId = GroupId(state);
           _states.Remove(state.PositionId);
           await store.DeletePositionAsync(state.PositionId, cancellationToken);
-          // Deep-first TP1 often consumes the entire deep clip. BE/trail
-          // must still protect remaining mid/shallow siblings.
+          // Shallow-first TP1 often consumes the entire shallow clip. BE/
+          // trail must still protect remaining mid/deep siblings.
           if (targetOrdinal == 1)
           {
             await ProtectRemainingGroupStopsAtBreakEvenAsync(
@@ -5916,8 +5916,9 @@ public sealed class AutoTradeEngine(
 
   /// <summary>
   /// After group TP1, move every remaining entry leg to protected BE from
-  /// that leg's own fill. Deep-first TP1 can fully close the deep clip, so
-  /// the booking leg never reaches <see cref="MoveStopAfterTargetAsync"/>.
+  /// that leg's own fill. Shallow-first TP1 can fully close the shallow
+  /// clip, so the booking leg never reaches
+  /// <see cref="MoveStopAfterTargetAsync"/>.
   /// </summary>
   private async Task ProtectRemainingGroupStopsAtBreakEvenAsync(
     string groupId,
@@ -8947,9 +8948,17 @@ public sealed class AutoTradeEngine(
   }
 
   /// <summary>
-  /// Distribute the group TP book across entry legs deep → mid → shallow.
-  /// Book better-fill volume first; shallower legs only contribute when
-  /// deeper capacity is exhausted for that slice.
+  /// Distribute the group TP book across entry legs shallow → mid → deep.
+  /// Owner-reported 2026-08-19: deep-first booking assigned the group's
+  /// earliest/closest TP ordinals to the deepest (least-likely-to-fill,
+  /// smallest) leg - when deep (and often mid) never filled at all (price
+  /// never reached their more favorable entry), no order ever existed to
+  /// hit TP1/TP2, so those ordinals silently never appeared on the channel
+  /// even though shallow itself had already booked real profit under a
+  /// later ordinal's label. Shallow is the most-likely-to-fill, largest
+  /// leg (50% of size) and should own the close, early targets it can
+  /// reliably reach; deep - the smallest leg, only filling on a genuinely
+  /// favorable move - rides as the runner toward the final target instead.
   /// </summary>
   private static TargetVolumePlan[] ManualAlgoAllocateTargetPlansAcrossLegs(
     IReadOnlyList<long> legVolumes,
@@ -8980,8 +8989,8 @@ public sealed class AutoTradeEngine(
       var need = groupPlan.Slices[sliceIndex];
       var pips = groupPlan.TargetsPips[sliceIndex];
       var ordinal = groupPlan.TargetOrdinals[sliceIndex];
-      // Legs are ordered shallow/mid/deep — walk deep-first.
-      for (var leg = remaining.Length - 1; leg >= 0 && need > 0; leg--)
+      // Legs are ordered shallow/mid/deep — walk shallow-first.
+      for (var leg = 0; leg < remaining.Length && need > 0; leg++)
       {
         if (remaining[leg] <= 0)
         {
