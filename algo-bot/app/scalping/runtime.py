@@ -221,7 +221,15 @@ async def process_m1_bar(
   t_micro = time.perf_counter()
   m1 = await source.window(symbol, "M1", lookback)
   pip = _pip_size(symbol, cfg)
-  micro = build_micro_structure(
+  # build_micro_structure/discover_all are pandas/CPU-heavy, same as
+  # build_context/build_map/build_scalp_context_snapshot elsewhere in this
+  # codebase - _ensure_context right above already offloads its own heavy
+  # call via asyncio.to_thread, but these two ran inline on the shared
+  # event loop that also runs Telegram polling. Fires on every M1 bar
+  # close for every HFS-enabled symbol (once a minute, all symbols'
+  # bars closing in sync) - a real, frequent blocking cost.
+  micro = await asyncio.to_thread(
+    build_micro_structure,
     m1,
     equal_tol=0.5 * pip,
     price_digits=int(
@@ -235,7 +243,9 @@ async def process_m1_bar(
   micro_ms = (time.perf_counter() - t_micro) * 1000.0
 
   t_strat = time.perf_counter()
-  opportunities = discover_all(context, micro, m1, cfg, pip_size=pip, now=now)
+  opportunities = await asyncio.to_thread(
+    discover_all, context, micro, m1, cfg, pip_size=pip, now=now,
+  )
   idle_reasons = (
     idle_discovery_reasons(context, m1, cfg, pip_size=pip)
     if not opportunities
