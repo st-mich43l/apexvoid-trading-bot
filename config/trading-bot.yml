@@ -572,6 +572,8 @@ strategies:
   high_frequency_scalp:
     # Live: publish TradePlan V7 via worker.try_publish_executable_signal when
     # activation + risk pass. Requires runtime.auto_trade.enabled=true.
+    # HFS cycles are XAU / ladder-pip only — FX fixed_rr books are excluded
+    # in app.scalping.context._hfs_symbols (do not enable FX HFS here).
     mode: live
     archetypes:
       range_sweep_enabled: true

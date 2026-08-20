@@ -6,10 +6,16 @@ from aiogram.types import CallbackQuery
 from app.persistence.store import get_manual_signal
 from app.bot.keyboards import build_tp_close_kb, _partial_kb
 from app.signals.parsing import _is_owner_cb
-from app.core.symbols import symbol_for_channel
 from app.signals.trade_ops import do_close, render_result
 
 router = Router(name="callbacks")
+
+
+async def _signal_symbol(sid: int) -> str:
+  signal = await get_manual_signal(sid)
+  if signal is None:
+    return "XAU"
+  return str(signal.get("symbol") or "XAU").upper()
 
 
 async def _book_leg(
@@ -18,7 +24,8 @@ async def _book_leg(
   frac: float | None,
   chat_id: str | int,
 ) -> tuple[dict, str] | None:
-  symbol = symbol_for_channel(chat_id) or "XAU"
+  del chat_id  # shared VIP channel is not symbol-authoritative
+  symbol = await _signal_symbol(sid)
   result = await do_close({
     "sid": sid,
     "symbol": symbol,
@@ -77,7 +84,7 @@ async def handle_close_book(cb: CallbackQuery) -> None:
   _, sid_s, tp_s, pips_s, frac_s = cb.data.split(":")
   sid, tp, pips, frac_pct = int(sid_s), int(tp_s), int(pips_s), int(frac_s)
   frac = None if frac_pct >= 100 else frac_pct / 100
-  symbol = symbol_for_channel(cb.message.chat.id) or "XAU"
+  symbol = await _signal_symbol(sid)
   result = await do_close({
     "sid": sid, "symbol": symbol, "pips": pips, "frac": frac,
   })

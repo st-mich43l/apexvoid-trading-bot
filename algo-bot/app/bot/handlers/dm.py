@@ -75,6 +75,10 @@ router = Router(name="dm")
 
 _HELP_TEXT = """<b>Trade controls</b>
 
+FX and XAU share one VIP channel — reply on the signal card, or pass
+<code>SYMBOL</code> in DM (<code>/trade_close USDJPY #2 …</code>).
+Daily <code>#N</code> is per symbol.
+
 <b>Channel replies</b>
 <code>active [#id]</code>
 <code>close #id ±pips [%] | be</code>
@@ -109,6 +113,29 @@ _HELP_TEXT = """<b>Trade controls</b>
 <code>/trade_stats [SYMBOL] [today|week|month]</code>
 auto trade and algo manual are separate books
 <code>/trade_pips [SYMBOL] [today|yesterday|week|last week]</code>"""
+
+
+async def _bound_trade_symbol(
+  sid: int,
+  requested: str | None,
+) -> str | None:
+  """Resolve the signal's book; reject when a requested SYMBOL disagrees."""
+  signal = await get_manual_signal(sid)
+  if signal is None:
+    return None
+  actual = str(signal.get("symbol") or "XAU").upper()
+  if requested is not None and requested != actual:
+    return None
+  return actual
+
+
+def _missing_signal_hint(requested: str | None) -> str:
+  if requested is None:
+    return (
+      "⚠️ Signal not found or ambiguous across symbols; "
+      "specify <code>SYMBOL</code> (e.g. <code>USDJPY #2</code>)."
+    )
+  return "⚠️ Signal not found."
 
 _WELCOME_TEXT = """👋 <b>Welcome to Apex Void Trading</b>
 
@@ -332,7 +359,7 @@ async def handle_trade_pips(msg: Message) -> None:
 async def handle_trade_map(msg: Message) -> None:
   if not _is_owner(msg):
     return
-  symbol, remainder = _take_symbol(_command_args(msg))
+  symbol, remainder = _take_symbol(_command_args(msg), default="XAU")
   if symbol is None or remainder:
     await msg.answer("Usage: <code>/trade_map [SYMBOL]</code>")
     return
@@ -377,14 +404,22 @@ async def handle_trade_open(msg: Message) -> None:
 async def handle_trade_active(msg: Message) -> None:
   if not _is_owner(msg):
     return
-  symbol, raw = _take_symbol(_command_args(msg))
+  symbol, raw = _take_symbol(_command_args(msg), default=None)
   explicit_seq = _seq_token(raw) if raw else None
   sid = await _resolve_sid(explicit_seq, None, symbol)
   if sid is None:
     await msg.answer(
-      "⚠️ Signal not found or ambiguous; specify "
-      "<code>/trade_active [SYMBOL] #N</code>."
+      _missing_signal_hint(symbol)
+      if explicit_seq is not None
+      else (
+        "⚠️ Signal not found or ambiguous; specify "
+        "<code>/trade_active [SYMBOL] #N</code>."
+      )
     )
+    return
+  symbol = await _bound_trade_symbol(sid, symbol)
+  if symbol is None:
+    await msg.answer(_missing_signal_hint(None))
     return
   result = await do_active({
     "sid": sid,
@@ -400,7 +435,7 @@ async def handle_trade_active(msg: Message) -> None:
 async def handle_trade_close(msg: Message) -> None:
   if not _is_owner(msg):
     return
-  symbol, raw = _take_symbol(_command_args(msg))
+  symbol, raw = _take_symbol(_command_args(msg), default=None)
   parsed = _parse_close(f"close {raw}")
   if parsed is None:
     await msg.answer(
@@ -411,7 +446,11 @@ async def handle_trade_close(msg: Message) -> None:
   explicit_seq, pips, frac = parsed
   sid = await _resolve_sid(explicit_seq, None, symbol)
   if sid is None:
-    await msg.answer("⚠️ Signal not found.")
+    await msg.answer(_missing_signal_hint(symbol))
+    return
+  symbol = await _bound_trade_symbol(sid, symbol)
+  if symbol is None:
+    await msg.answer(_missing_signal_hint(None))
     return
   result = await do_close({
     "sid": sid,
@@ -434,7 +473,7 @@ async def handle_trade_close(msg: Message) -> None:
 async def handle_trade_tp(msg: Message) -> None:
   if not _is_owner(msg):
     return
-  symbol, raw = _take_symbol(_command_args(msg))
+  symbol, raw = _take_symbol(_command_args(msg), default=None)
   match = _TP_RE.match(f"tp {raw}")
   if not match:
     await msg.answer(
@@ -445,6 +484,10 @@ async def handle_trade_tp(msg: Message) -> None:
   sid = await _resolve_sid(seq, None, symbol)
   if sid is None:
     await msg.answer("⚠️ Open signal not found.")
+    return
+  symbol = await _bound_trade_symbol(sid, symbol)
+  if symbol is None:
+    await msg.answer(_missing_signal_hint(None))
     return
   result = await do_tp({
     "sid": sid,
@@ -459,7 +502,7 @@ async def handle_trade_tp(msg: Message) -> None:
 async def handle_trade_uncclose(msg: Message) -> None:
   if not _is_owner(msg):
     return
-  symbol, raw = _take_symbol(_command_args(msg))
+  symbol, raw = _take_symbol(_command_args(msg), default=None)
   seq = _seq_token(raw)
   if seq is None:
     await msg.answer(
@@ -469,6 +512,10 @@ async def handle_trade_uncclose(msg: Message) -> None:
   sid = await _resolve_any_sid(seq, None, symbol)
   if sid is None:
     await msg.answer("⚠️ Signal not found.")
+    return
+  symbol = await _bound_trade_symbol(sid, symbol)
+  if symbol is None:
+    await msg.answer(_missing_signal_hint(None))
     return
   result = await do_uncclose({
     "sid": sid,
@@ -483,10 +530,14 @@ async def handle_trade_uncclose(msg: Message) -> None:
 async def handle_trade_cancel(msg: Message) -> None:
   if not _is_owner(msg):
     return
-  symbol, raw = _take_symbol(_command_args(msg))
+  symbol, raw = _take_symbol(_command_args(msg), default=None)
   sid = await _resolve_sid(_seq_token(raw), None, symbol)
   if sid is None:
     await msg.answer("⚠️ Signal not found.")
+    return
+  symbol = await _bound_trade_symbol(sid, symbol)
+  if symbol is None:
+    await msg.answer(_missing_signal_hint(None))
     return
   result = await do_cancel({
     "sid": sid,
@@ -509,7 +560,7 @@ async def handle_trade_cancel(msg: Message) -> None:
 async def handle_trade_delete(msg: Message) -> None:
   if not _is_owner(msg):
     return
-  symbol, raw = _take_symbol(_command_args(msg))
+  symbol, raw = _take_symbol(_command_args(msg), default=None)
   seq = _seq_token(raw)
   if seq is None:
     await msg.answer(
@@ -519,6 +570,10 @@ async def handle_trade_delete(msg: Message) -> None:
   sid = await _resolve_any_sid(seq, None, symbol)
   if sid is None:
     await msg.answer("⚠️ Signal not found.")
+    return
+  symbol = await _bound_trade_symbol(sid, symbol)
+  if symbol is None:
+    await msg.answer(_missing_signal_hint(None))
     return
   result = await do_delete({
     "sid": sid,
@@ -539,7 +594,7 @@ async def handle_trade_delete(msg: Message) -> None:
 async def handle_trade_modify(msg: Message) -> None:
   if not _is_owner(msg):
     return
-  symbol, raw = _take_symbol(_command_args(msg))
+  symbol, raw = _take_symbol(_command_args(msg), default=None)
   seq = _seq_token(raw)
   if seq is None:
     await msg.answer(
@@ -552,6 +607,10 @@ async def handle_trade_modify(msg: Message) -> None:
   sid = await _resolve_sid(seq, None, symbol)
   if sid is None:
     await msg.answer("⚠️ Signal not found.")
+    return
+  symbol = await _bound_trade_symbol(sid, symbol)
+  if symbol is None:
+    await msg.answer(_missing_signal_hint(None))
     return
   signal = await get_manual_signal(sid)
   if signal is None:
@@ -585,7 +644,7 @@ async def handle_trade_modify(msg: Message) -> None:
 async def handle_trade_sl(msg: Message) -> None:
   if not _is_owner(msg):
     return
-  symbol, raw = _take_symbol(_command_args(msg))
+  symbol, raw = _take_symbol(_command_args(msg), default=None)
   match = _SL_RE.match(f"sl {raw}")
   if not match:
     await msg.answer(
@@ -596,6 +655,10 @@ async def handle_trade_sl(msg: Message) -> None:
   sid = await _resolve_sid(explicit_seq, None, symbol)
   if sid is None:
     await msg.answer("⚠️ Signal not found.")
+    return
+  symbol = await _bound_trade_symbol(sid, symbol)
+  if symbol is None:
+    await msg.answer(_missing_signal_hint(None))
     return
   result = await do_sl({
     "sid": sid,
@@ -617,7 +680,7 @@ async def handle_trade_sl(msg: Message) -> None:
 async def handle_trade_reopen(msg: Message) -> None:
   if not _is_owner(msg):
     return
-  symbol, raw = _take_symbol(_command_args(msg))
+  symbol, raw = _take_symbol(_command_args(msg), default=None)
   match = _REOPEN_RE.match(f"reopen {raw}")
   if not match:
     await msg.answer(
@@ -628,6 +691,10 @@ async def handle_trade_reopen(msg: Message) -> None:
   source_id = await _resolve_any_sid(explicit_seq, None, symbol)
   if source_id is None:
     await msg.answer("⚠️ Signal not found.")
+    return
+  symbol = await _bound_trade_symbol(source_id, symbol)
+  if symbol is None:
+    await msg.answer(_missing_signal_hint(None))
     return
   entry_a = float(match.group(2)) if match and match.group(2) else None
   entry_b = float(match.group(3)) if match and match.group(3) else None
@@ -647,7 +714,7 @@ async def handle_trade_reopen(msg: Message) -> None:
 async def handle_trade_tag(msg: Message) -> None:
   if not _is_owner(msg):
     return
-  symbol, raw = _take_symbol(_command_args(msg))
+  symbol, raw = _take_symbol(_command_args(msg), default=None)
   match = _TAG_RE.match(f"tag {raw}")
   if not match:
     await msg.answer(
@@ -658,7 +725,10 @@ async def handle_trade_tag(msg: Message) -> None:
   absolute_id = match.group(2)
   if absolute_id:
     signal = await get_manual_signal(int(absolute_id))
-    if signal is None or signal.get("symbol", "XAU") != symbol:
+    if signal is None:
+      await msg.answer("⚠️ Signal not found.")
+      return
+    if symbol is not None and signal.get("symbol", "XAU") != symbol:
       await msg.answer("⚠️ Signal not found.")
       return
     sid = signal["id"]
@@ -667,7 +737,11 @@ async def handle_trade_tag(msg: Message) -> None:
     seq = int(seq_token)
     sid = await _resolve_any_sid(seq, None, symbol)
   if sid is None:
-    await msg.answer("⚠️ Signal not found.")
+    await msg.answer(_missing_signal_hint(symbol))
+    return
+  symbol = await _bound_trade_symbol(sid, symbol)
+  if symbol is None:
+    await msg.answer(_missing_signal_hint(None))
     return
   setup_type = match.group(3).lower()
   grade = match.group(4)
@@ -731,7 +805,7 @@ async def handle_trade_untagged(msg: Message) -> None:
 async def handle_trade_note(msg: Message) -> None:
   if not _is_owner(msg):
     return
-  symbol, raw = _take_symbol(_command_args(msg))
+  symbol, raw = _take_symbol(_command_args(msg), default=None)
   match = _NOTE_RE.match(f"note {raw}")
   if not match:
     await msg.answer(
@@ -742,6 +816,10 @@ async def handle_trade_note(msg: Message) -> None:
   sid = await _resolve_any_sid(seq, None, symbol)
   if sid is None:
     await msg.answer("⚠️ Signal not found.")
+    return
+  symbol = await _bound_trade_symbol(sid, symbol)
+  if symbol is None:
+    await msg.answer(_missing_signal_hint(None))
     return
   result = await do_note({
     "sid": sid,
@@ -758,7 +836,7 @@ async def handle_trade_note(msg: Message) -> None:
 async def handle_trade_review(msg: Message) -> None:
   if not _is_owner(msg):
     return
-  symbol, raw = _take_symbol(_command_args(msg))
+  symbol, raw = _take_symbol(_command_args(msg), default=None)
   seq = _seq_token(raw)
   sid = await _resolve_any_sid(seq, None, symbol)
   cluster = await get_signal_cluster(sid) if sid is not None else []

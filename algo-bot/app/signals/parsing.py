@@ -7,7 +7,11 @@ from zoneinfo import ZoneInfo
 
 from app.core.config import runtime_config
 from app.persistence.store import get_all_signals, get_open_signals, get_signal_by_post
-from app.core.symbols import channel_for_symbol, is_known_symbol, pip_for
+from app.core.symbols import (
+  channel_for_symbol,
+  resolve_command_symbol,
+  pip_for,
+)
 from app.signals.fx_manual_algo import build_fx_manual_contract, fx_manual_symbols
 
 # Matches: +100 pips / -50 pips / +1500Pips / -30 PIPS
@@ -341,8 +345,10 @@ def _take_symbol(
   default: str | None = "XAU",
 ) -> tuple[str | None, str]:
   parts = raw.split(maxsplit=1)
-  if parts and is_known_symbol(parts[0]):
-    return parts[0].upper(), parts[1] if len(parts) > 1 else ""
+  if parts:
+    resolved = resolve_command_symbol(parts[0])
+    if resolved is not None:
+      return resolved, parts[1] if len(parts) > 1 else ""
   return default, raw
 
 
@@ -356,68 +362,101 @@ def _today_str() -> str:
   return datetime.now(tz).date().isoformat()
 
 
+def _pick_seq_match(rows: list[dict], explicit_seq: int) -> int | None:
+  todays = [
+    row for row in rows
+    if row["daily_seq"] == explicit_seq and row["trade_date"] == _today_str()
+  ]
+  if todays:
+    return todays[-1]["id"]
+  matching = [row for row in rows if row["daily_seq"] == explicit_seq]
+  return matching[-1]["id"] if matching else None
+
+
 async def _resolve_sid(
   explicit_seq: int | None,
   reply_to_id: int | None,
-  symbol: str = "XAU",
+  symbol: str | None = "XAU",
+  *,
+  chat_id: int | None = None,
 ) -> int | None:
-  """Resolve a daily display number or reply target to a primary key."""
+  """Resolve a daily display number or reply target to a primary key.
+
+  ``symbol=None`` searches every open book and returns a match only when the
+  daily seq is unique (FX and XAU share one VIP channel and their own #N).
+  Reply lookup prefers the posted signal's own symbol over channel→symbol.
+  """
+  if reply_to_id is not None:
+    channel_id = chat_id
+    if channel_id is None and symbol:
+      try:
+        channel_id = channel_for_symbol(symbol)
+      except KeyError:
+        channel_id = None
+    if channel_id is not None:
+      row = await get_signal_by_post(
+        channel_id,
+        reply_to_id,
+        open_only=True,
+      )
+      if row is None:
+        return None
+      if symbol is None or row.get("symbol", "XAU") == symbol:
+        return row["id"]
+      return None
   opens = await get_open_signals(symbol)
   if explicit_seq is not None:
-    todays = [
-      s for s in opens
-      if s["daily_seq"] == explicit_seq and s["trade_date"] == _today_str()
-    ]
-    if todays:
-      return todays[-1]["id"]
-    any_seq = [s for s in opens if s["daily_seq"] == explicit_seq]
-    return any_seq[-1]["id"] if any_seq else None
-  if reply_to_id is not None:
-    row = await get_signal_by_post(
-      channel_for_symbol(symbol),
-      reply_to_id,
-      open_only=True,
-    )
-    return (
-      row["id"]
-      if row and row.get("symbol", "XAU") == symbol
-      else None
-    )
+    if symbol is None:
+      matches = [
+        row for row in opens if row["daily_seq"] == explicit_seq
+      ]
+      todays = [
+        row for row in matches if row["trade_date"] == _today_str()
+      ]
+      pool = todays or matches
+      if len(pool) == 1:
+        return pool[0]["id"]
+      return None
+    return _pick_seq_match(opens, explicit_seq)
   return opens[0]["id"] if len(opens) == 1 else None
 
 
 async def _resolve_any_sid(
   explicit_seq: int | None,
   reply_to_id: int | None,
-  symbol: str = "XAU",
+  symbol: str | None = "XAU",
+  *,
+  chat_id: int | None = None,
 ) -> int | None:
   """Resolve a display number or reply across all lifecycle states."""
+  if reply_to_id is not None:
+    channel_id = chat_id
+    if channel_id is None and symbol:
+      try:
+        channel_id = channel_for_symbol(symbol)
+      except KeyError:
+        channel_id = None
+    if channel_id is not None:
+      row = await get_signal_by_post(channel_id, reply_to_id)
+      if row is None:
+        return None
+      if symbol is None or row.get("symbol", "XAU") == symbol:
+        return row["id"]
+      return None
   signals = await get_all_signals(symbol)
   if explicit_seq is not None:
-    todays = [
-      signal for signal in signals
-      if (
-        signal["daily_seq"] == explicit_seq
-        and signal["trade_date"] == _today_str()
-      )
-    ]
-    if todays:
-      return todays[-1]["id"]
-    matching = [
-      signal for signal in signals
-      if signal["daily_seq"] == explicit_seq
-    ]
-    return matching[-1]["id"] if matching else None
-  if reply_to_id is not None:
-    row = await get_signal_by_post(
-      channel_for_symbol(symbol),
-      reply_to_id,
-    )
-    return (
-      row["id"]
-      if row and row.get("symbol", "XAU") == symbol
-      else None
-    )
+    if symbol is None:
+      matches = [
+        row for row in signals if row["daily_seq"] == explicit_seq
+      ]
+      todays = [
+        row for row in matches if row["trade_date"] == _today_str()
+      ]
+      pool = todays or matches
+      if len(pool) == 1:
+        return pool[0]["id"]
+      return None
+    return _pick_seq_match(signals, explicit_seq)
   return signals[0]["id"] if len(signals) == 1 else None
 
 

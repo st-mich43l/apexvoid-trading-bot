@@ -157,6 +157,8 @@ def _sync_legacy_patches() -> None:
 
   _channel.symbol_for_channel = symbol_for_channel
   _channel.tier_for_channel = tier_for_channel
+  _channel.get_signal_by_post = get_signal_by_post
+  _channel.get_manual_signal = get_manual_signal
   _channel.do_active = do_active
   _channel.do_cancel = do_cancel
   _channel.do_close = do_close
@@ -283,7 +285,7 @@ async def _legacy_delete_command(msg) -> None:
 _delete_command = _legacy_delete_command
 
 
-def _channel_symbol(msg) -> str | None:
+def _channel_symbol(msg):
   return _channel._channel_symbol(msg)
 
 

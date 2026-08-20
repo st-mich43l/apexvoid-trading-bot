@@ -3625,13 +3625,20 @@ public sealed class AutoTradeEngine(
       using var brokerCts = CreateBrokerCancellation(cancellationToken);
       try
       {
+        // Relative SL is fill-anchored on cTrader. Each leg must use its own
+        // distance to the one owner absolute stop (from Shallow), not Shallow's
+        // distance reused across Mid/Deep — that drifts Mid/Deep away from the
+        // VIP stop (live: deep fill kept Shallow's 60p and landed ~3 below).
         orderId = await RequireClient().PlaceLimitOrderAsync(
           new LimitOrderRequest(
             symbol.SymbolId,
             direction,
             legVolumes[index],
             legEntryPrices[index],
-            decimal.ToInt64(legStopPlans[index].Distance * 100_000m),
+            TradePlanJson.RelativeStopLossForEntry(
+              legEntryPrices[index],
+              manualStopPlan.StopLoss
+            ),
             options.Label,
             comment,
             clientOrderIds[index]
@@ -6639,7 +6646,13 @@ public sealed class AutoTradeEngine(
     var initialStop = state.InitialStopLoss;
     if (isNewManualFill && plan?.ManualStopLoss is decimal approvedStop)
     {
-      var symbol = RequireSymbol();
+      // Pin every leg (incl. Mid/Deep) to the Shallow-derived absolute VIP
+      // stop. Relative distance at place is necessary but not sufficient —
+      // a better BUY fill shortens the remaining room and the broker stop
+      // drifts below the owner price unless amended (live #64 / #104-105).
+      var symbol = ResolveBoundSymbol(state.Symbol)
+        ?? ResolveBoundSymbol(RedisSymbolFor(position.SymbolId) ?? "")
+        ?? RequireSymbol();
       var stopLoss = decimal.Round(
         approvedStop,
         symbol.Digits,
@@ -9268,16 +9281,37 @@ public sealed class AutoTradeEngine(
     AutoTradePositionState state,
     int targetPips,
     int targetIndex
-  ) => (
-    state.TargetPrices is { } targetPrices
-    && targetIndex < targetPrices.Count
   )
-    ? targetPrices[targetIndex]
-    : state.RangeExitPrice ?? (
-    state.Direction == TradeDirection.Buy
-      ? state.EntryPrice + targetPips * options.PipSize
-      : state.EntryPrice - targetPips * options.PipSize
-  );
+  {
+    if (state.TargetPrices is { } targetPrices)
+    {
+      // Compressed ladder (one price per TargetsPips row): local index.
+      // Full group ladder (manual multi-leg): TargetPrices is the owner TP
+      // list while Mid/Deep only own a subset of ordinals — must index by
+      // ordinal, not the leg-local slot (else Mid's first slice hits TP1).
+      if (
+        targetPrices.Count == state.TargetsPips.Count
+        && targetIndex < targetPrices.Count
+      )
+      {
+        return targetPrices[targetIndex];
+      }
+      var ordinal = TargetOrdinal(state, targetIndex);
+      if (ordinal >= 1 && ordinal <= targetPrices.Count)
+      {
+        return targetPrices[ordinal - 1];
+      }
+      if (targetIndex < targetPrices.Count)
+      {
+        return targetPrices[targetIndex];
+      }
+    }
+    return state.RangeExitPrice ?? (
+      state.Direction == TradeDirection.Buy
+        ? state.EntryPrice + targetPips * options.PipSize
+        : state.EntryPrice - targetPips * options.PipSize
+    );
+  }
 
   private IReadOnlyList<decimal> BuildAutonomousTargetPrices(
     TradeCandidate candidate,

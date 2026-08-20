@@ -178,17 +178,27 @@ public static class StopTrailPlanner
     {
       return null;
     }
-    for (var index = 0; index < state.TargetsPips.Count; index++)
+    // Compressed per-leg / adaptive ladders keep TargetPrices aligned 1:1
+    // with TargetsPips rows. Full group ladders (manual Mid/Deep) keep the
+    // owner TP list and must resolve by ordinal slot, not the local index
+    // of that ordinal inside the leg's subset.
+    if (prices.Count == state.TargetsPips.Count)
     {
-      if (
-        TargetOrdinal(state, index) == targetOrdinal
-        && index < prices.Count
-      )
+      for (var index = 0; index < state.TargetsPips.Count; index++)
       {
-        return prices[index];
+        if (
+          TargetOrdinal(state, index) == targetOrdinal
+          && index < prices.Count
+        )
+        {
+          return prices[index];
+        }
       }
+      return null;
     }
-    return null;
+    return targetOrdinal <= prices.Count
+      ? prices[targetOrdinal - 1]
+      : null;
   }
 
   private static bool MovesTowardProfit(

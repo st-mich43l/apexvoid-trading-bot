@@ -26,6 +26,22 @@ from app.runtime.price_identity import rounded_price
 LIVE_SYMBOL = "XAU"
 
 
+def _instrument_allows_hfs(instrument_cfg: Any) -> bool:
+  """HFS is gold ladder-pip only — never FX ``fixed_rr`` books.
+
+  Live 2026-08-20: treating every live instrument as HFS-eligible ran M1
+  scalp cycles on EURUSD/GBPJPY/GBPUSD/USDJPY together with XAU, pegged the
+  algo-bot container at ~100% CPU, and starved Telegram ``/trade`` responses
+  for minutes. FX stays reaction + manual /algo.
+  """
+  targeting = getattr(instrument_cfg, "targeting", None)
+  mode = getattr(targeting, "mode", None)
+  if mode is None:
+    return True
+  value = getattr(mode, "value", mode)
+  return str(value).casefold() != "fixed_rr"
+
+
 def _hfs_symbols(cfg: Any | None = None) -> set[str]:
   if cfg is None:
     from app.core.config import runtime_config
@@ -33,12 +49,25 @@ def _hfs_symbols(cfg: Any | None = None) -> set[str]:
     cfg = runtime_config
   live_instruments = getattr(cfg, "live_instruments", None)
   if callable(live_instruments):
-    live = {item.upper() for item in live_instruments()}
-    return live or {LIVE_SYMBOL}
+    allowed: set[str] = set()
+    for_instrument = getattr(cfg, "for_instrument", None)
+    for item in live_instruments():
+      symbol = str(item).upper()
+      if callable(for_instrument):
+        try:
+          effective = for_instrument(symbol)
+        except Exception:
+          continue
+        if not _instrument_allows_hfs(effective):
+          continue
+      allowed.add(symbol)
+    return allowed or {LIVE_SYMBOL}
   identity = getattr(cfg, "identity", None)
   if identity is not None:
     rollout = getattr(identity.rollout, "value", identity.rollout)
     if str(rollout).lower() != "live":
+      return set()
+    if not _instrument_allows_hfs(cfg):
       return set()
     return {
       str(identity.instrument_id).upper(),
