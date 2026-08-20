@@ -12,6 +12,19 @@ dated section after deployment.
 
 ## Unreleased
 
+### Fixed
+- ``get_current_market_map`` called ``build_map`` (pandas/CPU-heavy)
+  synchronously inline instead of via ``asyncio.to_thread``, unlike the
+  scanner's own hot path which already offloads the same function after a
+  documented prod incident (2026-08-12: inline calls blocked Telegram
+  handling for 5-6s). This call site is reached every 60s by the market-map
+  scan loop and directly by the ``/trade_map`` command, both on the one
+  shared event loop — now offloaded the same way.
+- The hourly owner Market Map digest only posted when the map was judged
+  materially changed, but marked the hour's bucket done either way — on a
+  quiet market it could go silent for multiple consecutive hours instead of
+  reliably delivering once an hour. Now posts once per bucket unconditionally.
+
 ### Changed
 - ``entry activation waiting outside_reaction_publish_window`` (zone-watch
   spot-tick re-evaluation) is logged at DEBUG instead of INFO. The spot loop
@@ -38,9 +51,16 @@ dated section after deployment.
   pairs stay current without one symbol blocking another.
 - FX manual /algo channel cards show **Entry Price** (single entry-at level) instead
   of **Entry Zone** — FX uses entry-at, not XAU-style zones.
-- XAU manual /algo ladders book the group TP ladder preferring **deep** volume
-  first (best fill), then mid, then shallow — shallower legs only contribute
-  when deeper capacity cannot cover a TP slice.
+- XAU manual /algo ladders book the group TP ladder preferring **shallow**
+  volume first (most likely to fill, largest leg), then mid, then deep —
+  deep only contributes once shallow/mid capacity is exhausted for a
+  slice. Reversed from an earlier deep-first design: deep-first assigned
+  the group's closest ordinals (TP1/TP2) to the smallest, least-likely-
+  to-fill leg, so if deep (and often mid) never filled at all, no order
+  ever existed to hit TP1/TP2 — they silently never appeared on the
+  channel even after shallow itself had already booked real profit under
+  a later ordinal's label. Shallow now owns the close targets it can
+  reliably reach; deep rides as the runner toward the final target.
 
 ### Fixed
 - Owner Market Map digest no longer deletes and resends an outwardly
@@ -59,12 +79,13 @@ dated section after deployment.
   reached across booked legs / runner telemetry, not the last leg's blend.
 - Manual /algo TP channel posts no longer crash with ``NameError: _win_wings``
   after #371 — restore the helper accidentally dropped from ``trade_ops.py``.
-- Manual /algo TP book pip math now uses the **deepest filled** entry (deep →
-  mid → shallow), not the first/shallow fill — e.g. XAU SELL zone 4500–4503
-  booking TP1 at 4497 reports ~+60 pips from the deep edge, not +30 from
-  shallow.
+- Manual /algo TP book pip math now uses the **booking leg's own** actual
+  entry-to-exit distance (``leg_realized_pips``, already computed correctly
+  per leg by AutoTradeEngine.cs), not a shared "deepest filled" reference
+  blended across the whole group — a leg's own TP hit now reports that
+  leg's own real pips, not another leg's.
 - After TP1, remaining XAU ladder legs still move to protected BE (and publish
-  ``stop_moved``) even when deep-first volume fully closes the deep clip.
+  ``stop_moved``) even when shallow-first volume fully closes the shallow clip.
 - Manual /algo BE/TP channel updates still acquire when a lifecycle event
   omits ``symbol`` or ``position_id`` — route by ``candidate_id`` / intent.
 - Manual-algo / FX CI tests no longer assume a single limit order or brittle
