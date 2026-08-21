@@ -61,6 +61,25 @@ def _instrument_fixed_targeting(symbol: str, cfg: Any) -> Any | None:
       return targeting
   return None
 
+
+def _instrument_volume_multiplier(instrument_cfg: Any) -> float:
+  """Pack volume scale for autonomous fixed_rr (FX) instruments.
+
+  Reads ``manual.risk_multiplier`` (FX packs stamp ``1.5`` from
+  ``manual_algo.sizing.fx_volume_multiplier``). XAU and non-fixed_rr
+  contexts stay at ``1.0``. Invalid values fail soft to ``1.0``.
+  """
+  raw = getattr(
+    getattr(instrument_cfg, "manual", None), "risk_multiplier", 1.0,
+  )
+  try:
+    value = float(1.0 if raw is None else raw)
+  except (TypeError, ValueError):
+    return 1.0
+  if not math.isfinite(value) or value <= 0:
+    return 1.0
+  return value
+
 # Version of the entry-plan contract (`planned_execution_route`,
 # `planned_entry_price`, `planned_leg_entry_prices`) shared with the executor.
 ENTRY_PLAN_VERSION = 1
@@ -970,7 +989,21 @@ def evaluate_execution_policy(
   )
   # range_scalp / match_risk_multiplier already resolved above (needed
   # early to shrink the stop envelope for the same 2x-volume scalp tiers).
-  effective_risk_multiplier = sizing_risk_multiplier
+  # FX pack volume (manual.risk_multiplier=1.5) applies to autonomous
+  # fixed_rr *reaction* only — never fold it into sizing_risk_multiplier
+  # or the stop envelope would shrink the way scalp 2x does. Scalp already
+  # books range_max (2.0 → engine clamps to 1.5 below $2k); do not stack.
+  instrument_volume_multiplier = 1.0
+  if (
+    not range_scalp
+    and _instrument_fixed_targeting("", instrument_cfg) is not None
+  ):
+    instrument_volume_multiplier = _instrument_volume_multiplier(
+      instrument_cfg,
+    )
+  effective_risk_multiplier = (
+    sizing_risk_multiplier * instrument_volume_multiplier
+  )
   normalized_regime = (
     "range" if regime == "range"
     else str(regime or "unknown").strip().lower()
@@ -1002,6 +1035,7 @@ def evaluate_execution_policy(
     "policy_risk_multiplier": policy.risk_multiplier,
     "match_risk_multiplier": match_risk_multiplier,
     "stamped_risk_multiplier": stamped_risk_multiplier,
+    "instrument_volume_multiplier": instrument_volume_multiplier,
     "effective_risk_multiplier": effective_risk_multiplier,
     "order_type_preference": policy.order_type_preference,
     "entry_distribution": entry_distribution,
@@ -1179,6 +1213,11 @@ def evaluate_execution_policy(
     )
     if not math.isfinite(max_risk_multiplier) or max_risk_multiplier <= 0:
       max_risk_multiplier = 2.0
+  # Autonomous FX fixed_rr reaction may book pack volume (1.5× table).
+  if fixed_targeting is not None:
+    pack_ceiling = _instrument_volume_multiplier(instrument_cfg)
+    if pack_ceiling > max_risk_multiplier:
+      max_risk_multiplier = pack_ceiling
   if effective_risk_multiplier > max_risk_multiplier:
     return ExecutionPolicyEvaluation(
       False,
