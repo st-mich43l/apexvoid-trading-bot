@@ -97,7 +97,13 @@ _MODIFY_RE = re.compile(
   r'(?is)^\s*modify(?:\s+#?(\d+))?\s+(.+?)\s*$'
 )
 _MODIFY_ENTRY_RE = re.compile(
-  r'(?i)\bentry(?:\s*zone)?\s*([\d.]+)\s*[-–]\s*([\d.]+)'
+  # The literal "entry" keyword stays optional, matching how the primary
+  # signal parser (_parse_manual's zone_re / _MANUAL_RE) already accepts a
+  # bare "lo-hi" zone - an owner who types "/trade_modify #19 buy 4586-83"
+  # or "/trade_modify #19 4586-83" the same way they type a new signal
+  # should not hit the Usage fallback just because /trade_modify alone
+  # required the keyword.
+  r'(?i)(?:\bentry(?:\s*zone)?\s*)?\b([\d.]+)\s*[-–]\s*([\d.]+)\b'
 )
 _MODIFY_SL_RE = re.compile(r'(?i)\bsl\s+([\d.]+)')
 _MODIFY_TP_RE = re.compile(r'(?i)\btp\s+([\d./\s]+)')

@@ -3485,11 +3485,11 @@ public sealed class AutoTradeEngine(
       return await RejectAsync(candidate, exception.Message, cancellationToken);
     }
     // Split the sized total across three entry legs (2026-08 R:R redesign):
-    // Shallow 50% / Mid 30% / Deep 20%. SplitEntryVolume already collapses
+    // Shallow 70% / Mid 20% / Deep 10%. SplitEntryVolume already collapses
     // to a single slice when the total can't support three broker-minimum
     // legs, but a slice that individually clears MinVolume can still be too
     // small for BuildTargetPlan's own "at least two broker-valid exits"
-    // requirement (a small deep 20% leg, in particular) - fail closed to
+    // requirement (a small deep 10% leg, in particular) - fail closed to
     // the original single-leg-at-Shallow behavior rather than losing the
     // candidate to an unhandled exception.
     IReadOnlyList<long> legVolumes;
@@ -9287,11 +9287,19 @@ public sealed class AutoTradeEngine(
   // exits: shallow (near edge, most likely to actually fill) carries the
   // most size, deep (far edge, best price, least likely to fill) the least.
   //
+  // 2026-08-21 owner-reported: too many trades only ever filled the shallow
+  // clip - mid/deep's more favorable price often never got reached at all,
+  // so the original 50/30/20 split left 50% of the intended risk unfilled
+  // on those trades. Reweighted shallow-heavy to 70/20/10 so the size
+  // that's actually most likely to see a fill captures more of the
+  // intended position, while mid/deep still ride for the better average
+  // entry on the trades where price does come back for them.
+  //
   // Exit policy (2026-08 ladder PM): book the group TP ladder preferring
   // deep volume first (best fill / better booked pips), then mid, then
   // shallow. Shallower legs keep size unless needed to complete the book.
   private static readonly IReadOnlyList<decimal> ManualEntryLegRatios =
-    [0.5m, 0.3m, 0.2m];
+    [0.7m, 0.2m, 0.1m];
 
   private static TargetVolumePlan ManualAlgoBuildGroupTargetPlan(
     long totalVolume,
