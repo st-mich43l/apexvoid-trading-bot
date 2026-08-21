@@ -13,6 +13,12 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- HFS / scalp chase entries no longer book a five-clip micro-grid into the
+  abandoned zone. Live 2026-08-21 HFS Range Sweep SELL filled only L1
+  (``0.04``) while L2–L5 rested above market and were cancelled ``before_tp``,
+  leaving most of the intended size off the winning move. Trade-direction
+  chase (SELL below zone / BUY above zone) now resolves to a full market
+  order; in-zone scalps keep the equal-clip grid.
 - FX Telegram root cards no longer collapse every price to two decimals
   (live 2026-08-21 GBPUSD showed ``1.36`` for price/zone/key/stop while the
   fill was ``1.36447``). Trade-area formatting, stop patches, and live Price
