@@ -27,6 +27,7 @@ from app.bot.client import (
 )
 from app.autotrade.setup_card import (
   FORMING_ACTIVE_INDEX_KEY,
+  card_price_digits,
   edit_forming_card_status,
   edit_forming_card_stop,
   forming_message_key as _setup_card_forming_message_key,
@@ -34,6 +35,7 @@ from app.autotrade.setup_card import (
   kill_setup_card,
   load_forming_card,
   load_telegram_root_message_id,
+  parse_forming_card_symbol,
   published_plan_stop_price,
 )
 from app.autotrade.lifecycle import LIFECYCLE_STATES, emit_lifecycle
@@ -1585,11 +1587,17 @@ async def _mark_forming_card_position_activated(client, match_id: str) -> None:
   try:
     stop_price = await published_plan_stop_price(client, match_id)
     if stop_price is not None:
+      card = await load_forming_card(client, match_id)
+      symbol = (
+        parse_forming_card_symbol(str(card["text"]))
+        if card and card.get("text")
+        else None
+      ) or str(event.get("symbol") or "XAU")
       await edit_forming_card_stop(
         client,
         match_id,
         stop_price,
-        digits=int(runtime_config.contract.instrument.price_digits),
+        digits=card_price_digits(symbol),
         edit_fn=edit_scanner_message_text,
       )
   except Exception:
