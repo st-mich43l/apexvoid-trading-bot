@@ -304,6 +304,23 @@ def resolve_execution_route_plan(
     str(strategy or ""),
     family=strategy_family,
   ) or is_technique_or_confluence(str(strategy or "")):
+    # Trade-direction chase: quote already past the proximal edge. A micro-
+    # grid into the abandoned zone rests L2–Ln on the wrong side of a
+    # continuation (live 2026-08-21 HFS Range Sweep SELL: L1 0.04 filled,
+    # L2–L5 cancelled before_tp). Book full market so size rides the move.
+    chase_away = (
+      (side == "SELL" and geometry == "below")
+      or (side == "BUY" and geometry == "above")
+    )
+    if chase_away:
+      return ExecutionRoutePlan(
+        ROUTE_MARKET,
+        _round_price(quote, digits),
+        (),
+        geometry,
+        "scalp chase: full market (micro-grid would rest into abandoned zone)",
+        True,
+      )
     grid = scalp_micro_grid_legs(
       side=side,
       low=low,
