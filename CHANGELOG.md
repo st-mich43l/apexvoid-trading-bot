@@ -13,6 +13,20 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- V8 publish always releases thesis/zone claims on failure — catch
+  ``TradePlanError`` and unexpected exceptions in ``_publish_trade_plan_v8``
+  (and convert validate failures in the builder to ``TradePlanBuildRejected``).
+  Live 2026-08-20: an uncaught ``SELL targets must all be below the entry zone``
+  left ``analysis:active_thesis:XAU:1681edb5…`` orphaned and blocked later HFS
+  with ``thesis_already_owned``.
+- Same-direction stack sizing collapses multi-leg routes
+  (including ``market_with_limit_scale``) to ``single_limit`` at the planned
+  entry instead of ``market_watch`` over the full zone, so short HFS SELL
+  targets stay on the correct side of the order price under a 60% stack add.
+- HFS / range-scalp V8 execution eligibility now treats trade-direction chase
+  within ``maximum_chase_pips`` as immediately executable (same contract as
+  HFS activation), instead of parking chase quotes as
+  ``waiting_retest_entry_zone``.
 - XAU manual `/algo` ladders now retain one shallow-entry initial-risk
   contract across all shallow/mid/deep legs. Simultaneous broker-side closure
   reconciles the full group's volume-weighted realised pips instead of losing

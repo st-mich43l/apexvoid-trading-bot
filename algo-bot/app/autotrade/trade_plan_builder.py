@@ -623,5 +623,17 @@ def build_trade_plan_from_strategy_match(
     ),
     sizing=sizing,
   )
-  plan.validate()
+  # Convert contract validation failures into TradePlanBuildRejected so the
+  # V8 publish path always releases thesis/zone claims (TradePlanError used
+  # to bubble out of validate() and leave analysis:active_thesis orphaned).
+  from app.autotrade.trade_plan import TradePlanError
+
+  try:
+    plan.validate()
+  except TradePlanError as exc:
+    raise TradePlanBuildRejected(
+      "trade_plan_invalid",
+      str(exc),
+      measured,
+    ) from exc
   return plan
