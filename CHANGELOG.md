@@ -13,6 +13,12 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- Autonomous FX ``fixed_rr`` reaction now stamps pack volume
+  (``manual.risk_multiplier`` / ``fx_volume_multiplier``, default ``1.5``)
+  onto ``effective_risk_multiplier`` so equity-table lots match manual /algo
+  FX (e.g. ``0.12`` → ``0.18``). Live 2026-08-21 GBPJPY Key Level filled at
+  raw ``0.12`` because auto ignored the pack scale. Stop envelopes stay at
+  1× (volume-only boost); scalp keeps ``range_max`` without stacking 1.5×.
 - V8 publish always releases thesis/zone claims on failure — catch
   ``TradePlanError`` and unexpected exceptions in ``_publish_trade_plan_v8``
   (and convert validate failures in the builder to ``TradePlanBuildRejected``).
