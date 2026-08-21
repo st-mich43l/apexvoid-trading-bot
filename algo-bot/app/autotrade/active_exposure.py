@@ -572,15 +572,22 @@ def apply_same_direction_stack_sizing(
   out["same_direction_size_fraction"] = fraction
   route = str(out.get("planned_execution_route") or "").strip().lower()
   entry = out.get("planned_entry_price")
+  # Always collapse to a single limit at planned_entry_price. Converting
+  # market_with_limit_scale → market_watch left validate() checking targets
+  # against the full zone (furthest = zone_low for SELL). Short HFS targets
+  # computed from the proximal planned entry then fail with
+  # "SELL targets must all be below the entry zone" (live 2026-08-20
+  # XAU 49ffb74 under same-direction stack) and TradePlanError bypassed
+  # claim release. Single-leg at the planned price matches the stack
+  # contract ("60% on a single leg") and keeps targets/entry coherent.
   if route in {
     "limit_ladder",
     "market_with_limit_scale",
     "zone_scale",
     "reaction_scale",
+    "market",
   }:
-    out["planned_execution_route"] = (
-      "market" if route == "market_with_limit_scale" else "single_limit"
-    )
+    out["planned_execution_route"] = "single_limit"
   if entry is not None:
     out["planned_leg_entry_prices"] = [entry]
     out["planned_leg_volume_ratios"] = [1.0]

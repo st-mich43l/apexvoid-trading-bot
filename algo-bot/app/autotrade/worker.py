@@ -106,6 +106,8 @@ from app.autotrade.execution_confirmation import (
   new_state,
   parse_bar_timestamp,
   save_execution_confirmation,
+  scalp_maximum_chase_pips,
+  scalp_zone_access,
 )
 from app.autotrade.multi_match import (
   dedupe_matches,
@@ -156,6 +158,7 @@ from app.analysis.confluence_zone import (
   release_confluence_zone,
   resolve_confluence_zone_id,
 )
+from app.autotrade.trade_plan import TradePlanError
 from app.autotrade.trade_plan_builder import (
   TradePlanBuildRejected,
   build_trade_plan_from_strategy_match,
@@ -4995,7 +4998,35 @@ async def _publish_trade_plan_v8(
     ),
     pip_size=pip_size,
   )
-  execution_eligible = evidence.inside
+  # HFS / range-scalp activation already allows trade-direction chase within
+  # maximum_chase_pips. V8 used to require quote-inside only
+  # (execution_eligible = evidence.inside), so chase activations were parked
+  # as waiting_retest_entry_zone until price returned — by then envelope /
+  # stack / thesis often killed the plan (Aug 20 HFS gold dig). Treat chase
+  # as immediately executable for those families, matching activation.
+  candidate_allows_chase = is_hfs_strategy(str(match.strategy)) or is_scalp_strategy(
+    str(match.strategy or ""),
+    family=str(getattr(match, "family", "") or "") or None,
+    strategy_mode=str(getattr(match, "strategy_mode", "") or "") or None,
+  )
+  if candidate_allows_chase:
+    scalp_access = scalp_zone_access(
+      match.direction,
+      getattr(spot, "bid", None),
+      getattr(spot, "ask", None),
+      match.entry_low,
+      match.entry_high,
+      max(
+        0.0,
+        float(inst.execution.entry.contract_tolerance_pips) * pip_size,
+      ),
+      pip_size=pip_size,
+      maximum_chase_pips=scalp_maximum_chase_pips(inst),
+    )
+    evidence = scalp_access.evidence
+    execution_eligible = scalp_access.executable
+  else:
+    execution_eligible = evidence.inside
 
   if match.expires_at and now_ts >= int(match.expires_at):
     try:
@@ -6226,6 +6257,40 @@ async def _publish_trade_plan_v8(
         status="expired" if terminal_state == EXPIRED else "blocked",
       )
     return None
+  except TradePlanError as exc:
+    # Defense in depth: builder should already wrap validate() failures as
+    # TradePlanBuildRejected. Still release claims if a TradePlanError escapes.
+    await _release_claims()
+    await _record_v8_build_rejected(
+      client,
+      symbol,
+      match,
+      "trade_plan_invalid",
+      str(exc),
+      {},
+    )
+    return None
+  except Exception as exc:
+    # Live 2026-08-20: uncaught exception after claim_active_thesis left
+    # analysis:active_thesis:XAU:1681edb5 orphaned for ~24h and blocked
+    # later HFS with thesis_already_owned. Always release on unexpected fail.
+    await _release_claims()
+    log.exception(
+      "v8 plan publish failed after thesis claim symbol=%s setup_id=%s "
+      "match_id=%s",
+      symbol,
+      setup_id,
+      match.match_id,
+    )
+    await _record_v8_build_rejected(
+      client,
+      symbol,
+      match,
+      "v8_publish_exception",
+      f"{type(exc).__name__}: {exc}",
+      {},
+    )
+    return None
 
   try:
     setup_live = await load_setup(client, setup_id)
@@ -6265,6 +6330,22 @@ async def _publish_trade_plan_v8(
       symbol, setup_id, plan.plan_id,
     )
     await _release_claims()
+    return None
+  except Exception as exc:
+    await _release_claims()
+    log.exception(
+      "v8 plan stream publish failed after thesis claim symbol=%s "
+      "setup_id=%s plan_id=%s",
+      symbol, setup_id, plan.plan_id,
+    )
+    await _record_v8_build_rejected(
+      client,
+      symbol,
+      match,
+      "v8_publish_exception",
+      f"{type(exc).__name__}: {exc}",
+      {"plan_id": plan.plan_id},
+    )
     return None
   published_state = new_state(
     setup_id,
