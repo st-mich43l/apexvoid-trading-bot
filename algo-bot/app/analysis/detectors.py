@@ -187,6 +187,8 @@ class DetectorSettings:
   zone_reaction_fallback_enabled: bool = False
   crt_min_atr: float = 1.5
   crt_reclaim_bars: int = 6
+  crt_entry_max_width_price: float = 5.0
+  crt_h1_lookback_bars: int = 3
   fvg_max_atr: float = 2.0
   fvg_entry_max_width_price: float = 5.0
   # Recovery mission (2026-07-30): these six sources were live around
@@ -274,6 +276,12 @@ class DetectorSettings:
       regime_direction_lookback=self.regime_direction_lookback,
       regime_min_directional_swings=self.regime_min_directional_swings,
       regime_min_displacement_atr=self.regime_min_displacement_atr,
+      crt_min_atr=self.crt_min_atr,
+      crt_reclaim_bars=self.crt_reclaim_bars,
+      crt_entry_max_width_price=self.crt_entry_max_width_price,
+      crt_h1_lookback_bars=self.crt_h1_lookback_bars,
+      fvg_entry_max_width_price=self.fvg_entry_max_width_price,
+      fvg_max_atr=self.fvg_max_atr,
     )
 
 
@@ -431,6 +439,10 @@ def detector_settings_from(config: object | None = None) -> DetectorSettings:
     ),
     crt_min_atr=float(strategies.technique.crt.min_atr),
     crt_reclaim_bars=int(strategies.technique.crt.reclaim_bars),
+    crt_entry_max_width_price=float(
+      strategies.technique.crt.entry_max_width_price
+    ),
+    crt_h1_lookback_bars=int(strategies.technique.crt.h1_lookback_bars),
     fvg_max_atr=float(strategies.technique.fvg.max_atr),
     fvg_entry_max_width_price=float(
       strategies.technique.fvg.entry_max_width_price
@@ -1048,12 +1060,13 @@ def _finish(
   source_score: float | None = None,
   bias_relationship: str | None = None,
 ) -> DetectionResult | None:
-  from app.analysis.technique_geometry import optimize_imbalance_entry_zone
+  from app.analysis.technique_geometry import (
+    optimize_crt_entry_zone,
+    optimize_imbalance_entry_zone,
+  )
 
-  # Preserve full FVG/imbalance gap for mitigation / fill semantics, then
-  # clip the tradeable entry to the shared proximal 5-price contract so
-  # every strategy (FVG, iFVG, Confluence, zone reaction on FVG members)
-  # publishes the same execution geometry.
+  # Preserve full FVG/imbalance / CRT H1 range for mitigation / fill
+  # semantics, then clip the tradeable entry to the shared proximal contract.
   raw_low = float(
     structural_low if structural_low is not None else zone.low
   )
@@ -1070,6 +1083,22 @@ def _finish(
     structural_low = raw_low
     structural_high = raw_high
     reasons = [*reasons, "proximal fvg imbalance entry"]
+  elif str(structural_kind or "").casefold() == "crt":
+    zone, crt_clipped = optimize_crt_entry_zone(
+      zone,
+      direction=direction,
+      max_width_price=float(
+        getattr(
+          ctx.settings,
+          "crt_entry_max_width_price",
+          ctx.settings.fvg_entry_max_width_price,
+        )
+      ),
+    )
+    if crt_clipped:
+      structural_low = raw_low
+      structural_high = raw_high
+      reasons = [*reasons, "proximal crt entry"]
   if not _level_valid(level, price, direction):
     return None
   if not _entry_valid_for_settings(zone, price, atr, direction, ctx.settings):

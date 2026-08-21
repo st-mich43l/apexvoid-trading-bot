@@ -122,14 +122,19 @@ def _publish_technique(
     return None
   direction = "BUY" if instance.side == "buy" else "SELL"
   zone = _instance_to_zone(instance)
+  structural_low = float(instance.measured.get("structural_low", zone.low))
+  structural_high = float(instance.measured.get("structural_high", zone.high))
   if not _entry_valid_for_settings(zone, price, atr, direction, ctx.settings):
     return None
   lookback = max(1, int(ctx.settings.structural_reaction_lookback_bars))
+  # CRT confirmation uses the full H1 candle; entry zone is the proximal clip.
+  conf_low = structural_low
+  conf_high = structural_high
   conf = evaluate_structural_reaction(
     df,
     direction=direction,
-    low=float(zone.low),
-    high=float(zone.high),
+    low=conf_low,
+    high=conf_high,
     lookback_bars=lookback,
     grabs=_zone_grabs_for(st, zone, direction),
     has_choch=_recent_choch_flag(st, direction, len(df), ctx.settings, lookback),
@@ -148,6 +153,10 @@ def _publish_technique(
     f"{side_label} {instance.technique} {_number(zone.low)}-{_number(zone.high)}",
     technique_display_tags([instance.technique]),
   ]
+  if instance.measured.get("entry_clipped"):
+    reasons.append(
+      f"proximal crt entry (H1 {_number(structural_low)}-{_number(structural_high)})"
+    )
   result = _structural_finish(
     ctx,
     setup=setup,
@@ -159,8 +168,8 @@ def _publish_technique(
     reasons=reasons,
     structural_source="technique",
     structural_id=instance.instance_id,
-    structural_low=float(zone.low),
-    structural_high=float(zone.high),
+    structural_low=structural_low,
+    structural_high=structural_high,
     structural_kind=instance.technique,
     confirmation=conf,
     source_touches=int(zone.touches),

@@ -60,6 +60,12 @@ CONFLUENCE_SETUP_NAME = "Confluence Zone"
 # slice capped at this price width (XAU: 5.0 == 50 pips at pip_size 0.1).
 FVG_IMBALANCE_ENTRY_MAX_WIDTH_PRICE = 5.0
 
+# CRT shares the same proximal price width contract as FVG by default
+# (instrument packs scale via price_scale.fvg_entry_max_width_price). Full
+# H1 candle range stays structural; tradeable entry is the reclaim edge.
+CRT_ENTRY_MAX_WIDTH_PRICE = FVG_IMBALANCE_ENTRY_MAX_WIDTH_PRICE
+CRT_H1_LOOKBACK_BARS = 3
+
 _FVG_IMBALANCE_TOKENS = frozenset({
   "fvg",
   "ifvg",
@@ -81,6 +87,8 @@ class TechniqueGeometrySettings:
   momentum_body_frac: float = 0.6
   crt_min_atr: float = 1.5
   crt_reclaim_bars: int = 6
+  crt_entry_max_width_price: float = CRT_ENTRY_MAX_WIDTH_PRICE
+  crt_h1_lookback_bars: int = CRT_H1_LOOKBACK_BARS
   confluence_min_overlap: float = 0.5
   zone_merge_max_width: float = 6.0
   structural_reaction_lookback_bars: int = 3
@@ -155,6 +163,37 @@ def optimize_imbalance_entry_zone(
   if sell_side:
     return replace(zone, bottom=low, top=low + max_width), True
   return replace(zone, bottom=high - max_width, top=high), True
+
+
+def optimize_crt_entry_zone(
+  zone: Zone,
+  *,
+  direction: str,
+  max_width_price: float = CRT_ENTRY_MAX_WIDTH_PRICE,
+) -> tuple[Zone, bool]:
+  """Clip CRT tradeable entry to the proximal reclaim band.
+
+  Full H1 candle stays structural (stop / mitigation). BUY keeps the swept
+  low edge; SELL keeps the swept high edge — same proximal contract as FVG.
+  """
+  try:
+    low = float(zone.low)
+    high = float(zone.high)
+    max_width = float(max_width_price)
+  except (TypeError, ValueError):
+    return zone, False
+  if not math.isfinite(low) or not math.isfinite(high) or high <= low:
+    return zone, False
+  if not math.isfinite(max_width) or max_width <= 0:
+    return zone, False
+  if high - low <= max_width + 1e-12:
+    return zone, False
+  direction_u = str(direction or "").upper()
+  side = str(getattr(zone, "side", "") or "").lower()
+  sell_side = direction_u == "SELL" or side == "supply"
+  if sell_side:
+    return replace(zone, bottom=high - max_width, top=high), True
+  return replace(zone, bottom=low, top=low + max_width), True
 
 
 @dataclass(frozen=True)
@@ -469,70 +508,112 @@ def discover_crt_instances(
   exec_atr: float,
   settings: TechniqueGeometrySettings,
 ) -> list[TechniqueInstance]:
-  """T5 — H1 impulse range with sweep + reclaim on execution TF."""
+  """T5 — H1 impulse range with sweep + reclaim on execution TF.
+
+  Live dig 2026-08: publishing the full H1 candle as the entry zone made CRT
+  fail width / stop-envelope gates (``zone_too_wide``,
+  ``stop_exceeds_envelope_furthest_leg``) with zero plan publishes. Keep the
+  H1 range as structural bounds; clip tradeable entry to the proximal
+  reclaim band. Prefer closed H1 candles (skip the forming bar).
+  """
+  del exec_atr  # reserved for future ATR-scaled reclaim tolerances
   if h1_df.empty or exec_df.empty or h1_atr <= 0:
     return []
   instances: list[TechniqueInstance] = []
   min_range = settings.crt_min_atr * h1_atr
   reclaim = max(1, int(settings.crt_reclaim_bars))
-  row = h1_df.iloc[-1]
-  range_high = float(row["high"])
-  range_low = float(row["low"])
-  range_width = range_high - range_low
-  if range_width < min_range:
-    return instances
-  mid = (range_high + range_low) / 2.0
+  entry_max = float(settings.crt_entry_max_width_price)
+  lookback = max(1, int(settings.crt_h1_lookback_bars))
+  # Prefer closed H1: forming bar widens continuously and is not a CRT
+  # "candle range" until it settles.
+  closed = h1_df.iloc[:-1] if len(h1_df) >= 2 else h1_df
+  if closed.empty:
+    return []
+  start = max(0, len(closed) - lookback)
+  found_sides: set[str] = set()
+  # Newest closed candle first so a fresh CRT wins over an older sibling.
+  for row_pos in range(len(closed) - 1, start - 1, -1):
+    row = closed.iloc[row_pos]
+    range_high = float(row["high"])
+    range_low = float(row["low"])
+    range_width = range_high - range_low
+    if range_width < min_range:
+      continue
+    mid = (range_high + range_low) / 2.0
+    origin_index = row_pos  # closed is h1_df without the forming bar
+    origin_ts = closed.index[row_pos]
 
-  for side, edge, direction in (
-    ("buy", range_low, "BUY"),
-    ("sell", range_high, "SELL"),
-  ):
-    swept = False
-    sweep_index = -1
-    for index in range(max(0, len(exec_df) - reclaim - 5), len(exec_df)):
-      bar = exec_df.iloc[index]
-      if side == "buy" and float(bar["low"]) < range_low:
-        swept = True
-        sweep_index = index
-      if side == "sell" and float(bar["high"]) > range_high:
-        swept = True
-        sweep_index = index
-    if not swept:
-      continue
-    reclaimed = False
-    for index in range(sweep_index, min(len(exec_df), sweep_index + reclaim + 1)):
-      close = float(exec_df.iloc[index]["close"])
-      if side == "buy" and close >= range_low:
-        reclaimed = True
-        break
-      if side == "sell" and close <= range_high:
-        reclaimed = True
-        break
-    if not reclaimed:
-      continue
-    price = float(exec_df.iloc[-1]["close"])
-    if side == "buy" and price > mid:
-      continue
-    if side == "sell" and price < mid:
-      continue
-    if not has_structural_confirmation(
-      exec_df,
-      direction=direction,
-      low=range_low,
-      high=range_high,
-      lookback_bars=settings.structural_reaction_lookback_bars,
-    ):
-      continue
-    instances.append(TechniqueInstance(
-      technique=TECHNIQUE_CRT,
-      side=side,
-      low=range_low,
-      high=range_high,
-      origin_ts=h1_df.index[-1],
-      sources=("crt",),
-      measured={"h1_range_atr": range_width / h1_atr},
-      origin_index=len(h1_df) - 1,
-    ))
+    for side, direction in (("buy", "BUY"), ("sell", "SELL")):
+      if side in found_sides:
+        continue
+      swept = False
+      sweep_index = -1
+      for index in range(max(0, len(exec_df) - reclaim - 5), len(exec_df)):
+        bar = exec_df.iloc[index]
+        if side == "buy" and float(bar["low"]) < range_low:
+          swept = True
+          sweep_index = index
+        if side == "sell" and float(bar["high"]) > range_high:
+          swept = True
+          sweep_index = index
+      if not swept:
+        continue
+      reclaimed = False
+      for index in range(sweep_index, min(len(exec_df), sweep_index + reclaim + 1)):
+        close = float(exec_df.iloc[index]["close"])
+        if side == "buy" and close >= range_low:
+          reclaimed = True
+          break
+        if side == "sell" and close <= range_high:
+          reclaimed = True
+          break
+      if not reclaimed:
+        continue
+      price = float(exec_df.iloc[-1]["close"])
+      if side == "buy" and price > mid:
+        continue
+      if side == "sell" and price < mid:
+        continue
+      if not has_structural_confirmation(
+        exec_df,
+        direction=direction,
+        low=range_low,
+        high=range_high,
+        lookback_bars=settings.structural_reaction_lookback_bars,
+      ):
+        continue
+      structural = Zone(
+        range_low,
+        range_high,
+        trade_side_to_zone_side(side),
+        source="crt",
+        sources=["crt"],
+        origin_index=origin_index,
+      )
+      entry_zone, clipped = optimize_crt_entry_zone(
+        structural,
+        direction=direction,
+        max_width_price=entry_max,
+      )
+      instances.append(TechniqueInstance(
+        technique=TECHNIQUE_CRT,
+        side=side,
+        low=float(entry_zone.low),
+        high=float(entry_zone.high),
+        origin_ts=origin_ts,
+        sources=("crt",),
+        measured={
+          "h1_range_atr": range_width / h1_atr,
+          "structural_low": range_low,
+          "structural_high": range_high,
+          "entry_clipped": clipped,
+          "entry_max_width_price": entry_max,
+        },
+        origin_index=origin_index,
+      ))
+      found_sides.add(side)
+    if len(found_sides) >= 2:
+      break
   return instances
 
 
