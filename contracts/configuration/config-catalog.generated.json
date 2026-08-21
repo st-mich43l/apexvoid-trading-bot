@@ -1,20 +1,20 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "0440df81e1e672947a5943b69e3a6dc30642e66f0ce073d0ab63e4c1c17be30e",
-  "configuration_document_fingerprint_sha256": "c2398f84a01af2faa808822952cc8e502af9d8813196d4bddaeb7a6d7b80bf05",
+  "configuration_contract_fingerprint_sha256": "5872fae5b93b8ccef51aa9f8261821851afa4dd3f2dd4f7c9c9110902635337d",
+  "configuration_document_fingerprint_sha256": "70b5615985bf41ca7f7c1a206f9c49de79c62b007a2565b6ff477edd54d7e16a",
   "counts": {
     "algorithm_constants": 57,
-    "configurable": 458,
+    "configurable": 461,
     "known_conflicts": 30,
     "owners": {
       "ctrader": 49,
-      "python": 380,
-      "shared": 96
+      "python": 382,
+      "shared": 97
     },
     "protocol_constants": 10,
     "secrets": 9,
     "shared": 96,
-    "total_items": 525
+    "total_items": 528
   },
   "items": [
     {
@@ -12410,6 +12410,43 @@
     {
       "algorithm_constant": false,
       "allowed_values": [],
+      "canonical_env": "MANUAL_ALGO_FX_VOLUME_MULTIPLIER",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {},
+      "default": 1.5,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 1.5
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Scales equity-table lots for fixed_rr (FX) instruments: manual /algo candidates and autonomous reaction plans via instrument manual.risk_multiplier.",
+      "display_id": "config:manual_algo.sizing.fx_volume_multiplier",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "shared",
+      "path": "manual_algo.sizing.fx_volume_multiplier",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "execution_safety",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "float",
+      "unit": "multiplier",
+      "validation_summary": "Must be positive finite"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
       "canonical_env": "MANUAL_ALGO_RISK_PCT",
       "catalog_version": 2,
       "configurable": true,
@@ -18789,6 +18826,84 @@
     {
       "algorithm_constant": false,
       "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_TECHNIQUE_CRT_ENTRY_MAX_WIDTH_PRICE",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "gt": 0
+      },
+      "default": 5.0,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 5.0
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Proximal reclaim entry-band width for CRT (price). Full H1 candle kept as structural bounds; tradeable entry clips to this width (same default contract as FVG).",
+      "display_id": "config:strategies.technique.crt.entry_max_width_price",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.technique.crt.entry_max_width_price",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "strategy_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "float",
+      "unit": "price",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_TECHNIQUE_CRT_H1_LOOKBACK_BARS",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 1
+      },
+      "default": 3,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 3
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Closed H1 candles scanned for CRT impulse (forming bar excluded).",
+      "display_id": "config:strategies.technique.crt.h1_lookback_bars",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.technique.crt.h1_lookback_bars",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "strategy_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "int",
+      "unit": "bars",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
       "canonical_env": "AUTO_TRADE_TECHNIQUE_CRT_MIN_ATR",
       "catalog_version": 2,
       "configurable": true,
@@ -19681,6 +19796,6 @@
       "validation_summary": "Pydantic required/type coercion only"
     }
   ],
-  "source_fingerprint_sha256": "0440df81e1e672947a5943b69e3a6dc30642e66f0ce073d0ab63e4c1c17be30e",
+  "source_fingerprint_sha256": "5872fae5b93b8ccef51aa9f8261821851afa4dd3f2dd4f7c9c9110902635337d",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

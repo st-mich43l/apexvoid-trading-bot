@@ -670,6 +670,9 @@ def compose_instrument_domain_overrides(
       "strategies.technique.fvg.entry_max_width_price": (
         scale.fvg_entry_max_width_price
       ),
+      "strategies.technique.crt.entry_max_width_price": (
+        scale.fvg_entry_max_width_price
+      ),
     })
   composed.update(instrument.overrides)
   return composed

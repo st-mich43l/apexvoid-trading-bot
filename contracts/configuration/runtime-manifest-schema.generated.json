@@ -108,7 +108,7 @@
     "zone_scale_undersized_policy"
   ],
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "0440df81e1e672947a5943b69e3a6dc30642e66f0ce073d0ab63e4c1c17be30e",
+  "configuration_contract_fingerprint_sha256": "5872fae5b93b8ccef51aa9f8261821851afa4dd3f2dd4f7c9c9110902635337d",
   "deprecated_compatibility_projections": [
     "feed",
     "auto_trade"
@@ -131,6 +131,7 @@
     "feed",
     "identity",
     "lifecycle",
+    "manual",
     "policy_name",
     "provenance",
     "risk",
@@ -153,6 +154,6 @@
     "manifest_version",
     "profile"
   ],
-  "source_fingerprint_sha256": "0440df81e1e672947a5943b69e3a6dc30642e66f0ce073d0ab63e4c1c17be30e",
+  "source_fingerprint_sha256": "5872fae5b93b8ccef51aa9f8261821851afa4dd3f2dd4f7c9c9110902635337d",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

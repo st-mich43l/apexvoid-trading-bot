@@ -191,6 +191,12 @@ class AnalysisSettings:
   regime_direction_lookback: int = 120
   regime_min_directional_swings: int = 3
   regime_min_displacement_atr: float = 4.0
+  crt_min_atr: float = 1.5
+  crt_reclaim_bars: int = 6
+  crt_entry_max_width_price: float = 5.0
+  crt_h1_lookback_bars: int = 3
+  fvg_entry_max_width_price: float = 5.0
+  fvg_max_atr: float = 2.0
 
 
 @dataclass(frozen=True)
@@ -302,6 +308,12 @@ def _attach_technique_instances(
     zone_merge_max_width=(
       max(0.0, settings.max_merged_zone_atr) * reference_atr
     ),
+    crt_min_atr=float(settings.crt_min_atr),
+    crt_reclaim_bars=int(settings.crt_reclaim_bars),
+    crt_entry_max_width_price=float(settings.crt_entry_max_width_price),
+    crt_h1_lookback_bars=int(settings.crt_h1_lookback_bars),
+    fvg_entry_max_width_price=float(settings.fvg_entry_max_width_price),
+    fvg_max_atr=float(settings.fvg_max_atr),
   )
   updated: dict[str, TimeframeAnalysis] = {}
   for tf, analysis in per_tf.items():

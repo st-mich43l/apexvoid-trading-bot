@@ -12,6 +12,14 @@ dated section after deployment.
 
 ## Unreleased
 
+### Changed
+- CRT technique entry now clips to a proximal reclaim band (same default
+  width contract as FVG / ``price_scale.fvg_entry_max_width_price``) while
+  keeping the full H1 candle as structural stop bounds. Discovery prefers
+  closed H1 candles (``h1_lookback_bars``, default 3) instead of the forming
+  bar. Live dig: full-H1 CRT zones hit ``zone_too_wide`` /
+  ``stop_exceeds_envelope_furthest_leg`` and never published.
+
 ### Fixed
 - HFS / scalp chase entries no longer book a five-clip micro-grid into the
   abandoned zone. Live 2026-08-21 HFS Range Sweep SELL filled only L1

@@ -1,6 +1,6 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "0440df81e1e672947a5943b69e3a6dc30642e66f0ce073d0ab63e4c1c17be30e",
+  "configuration_contract_fingerprint_sha256": "5872fae5b93b8ccef51aa9f8261821851afa4dd3f2dd4f7c9c9110902635337d",
   "excluded_ctrader_only_count": 49,
   "excluded_paths": [
     "bootstrap.ctrader.connection.host",
@@ -53,7 +53,7 @@
     "risk.sizing.add_require_risk_free",
     "risk.sizing.risk_pct"
   ],
-  "included_leaf_count": 476,
+  "included_leaf_count": 479,
   "included_paths": [
     "actionability.contested_corridor.gap_atr",
     "actionability.counter_bias.allowed",
@@ -347,6 +347,7 @@
     "manual_algo.runtime.dry_run",
     "manual_algo.runtime.enabled",
     "manual_algo.runtime.owner_execution_dm_enabled",
+    "manual_algo.sizing.fx_volume_multiplier",
     "manual_algo.sizing.risk_percent",
     "manual_algo.streams.intents",
     "manual_algo.streams.manual_trade_command_stream",
@@ -507,6 +508,8 @@
     "strategies.selection.snap_back_enabled",
     "strategies.technique.confluence.enabled",
     "strategies.technique.crt.enabled",
+    "strategies.technique.crt.entry_max_width_price",
+    "strategies.technique.crt.h1_lookback_bars",
     "strategies.technique.crt.min_atr",
     "strategies.technique.crt.reclaim_bars",
     "strategies.technique.fvg.enabled",
@@ -533,8 +536,8 @@
     "strategies.zone.supply.enabled"
   ],
   "included_secret_count": 6,
-  "included_shared_field_count": 96,
+  "included_shared_field_count": 97,
   "projection_model": "app.configuration.models.python_runtime.PythonRuntimeConfig",
-  "source_fingerprint_sha256": "0440df81e1e672947a5943b69e3a6dc30642e66f0ce073d0ab63e4c1c17be30e",
+  "source_fingerprint_sha256": "5872fae5b93b8ccef51aa9f8261821851afa4dd3f2dd4f7c9c9110902635337d",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

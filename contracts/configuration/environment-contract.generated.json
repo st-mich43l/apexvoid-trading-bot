@@ -1,7 +1,7 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "0440df81e1e672947a5943b69e3a6dc30642e66f0ce073d0ab63e4c1c17be30e",
-  "count": 458,
+  "configuration_contract_fingerprint_sha256": "5872fae5b93b8ccef51aa9f8261821851afa4dd3f2dd4f7c9c9110902635337d",
+  "count": 461,
   "deprecated_alias_count": 21,
   "entries": [
     {
@@ -2632,6 +2632,38 @@
       "shared_with_ctrader": false,
       "type": "bool",
       "unit": "boolean"
+    },
+    {
+      "canonical_env": "AUTO_TRADE_TECHNIQUE_CRT_ENTRY_MAX_WIDTH_PRICE",
+      "default": 5.0,
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Proximal reclaim entry-band width for CRT (price). Full H1 candle kept as structural bounds; tradeable entry clips to this width (same default contract as FVG).",
+      "display_id": "config:strategies.technique.crt.entry_max_width_price",
+      "owner": "python",
+      "path": "strategies.technique.crt.entry_max_width_price",
+      "replacement_path": null,
+      "required": false,
+      "secret": false,
+      "shared_with_ctrader": false,
+      "type": "float",
+      "unit": "price"
+    },
+    {
+      "canonical_env": "AUTO_TRADE_TECHNIQUE_CRT_H1_LOOKBACK_BARS",
+      "default": 3,
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Closed H1 candles scanned for CRT impulse (forming bar excluded).",
+      "display_id": "config:strategies.technique.crt.h1_lookback_bars",
+      "owner": "python",
+      "path": "strategies.technique.crt.h1_lookback_bars",
+      "replacement_path": null,
+      "required": false,
+      "secret": false,
+      "shared_with_ctrader": false,
+      "type": "int",
+      "unit": "bars"
     },
     {
       "canonical_env": "AUTO_TRADE_TECHNIQUE_CRT_MIN_ATR",
@@ -5297,6 +5329,22 @@
       "unit": "boolean"
     },
     {
+      "canonical_env": "MANUAL_ALGO_FX_VOLUME_MULTIPLIER",
+      "default": 1.5,
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Scales equity-table lots for fixed_rr (FX) instruments: manual /algo candidates and autonomous reaction plans via instrument manual.risk_multiplier.",
+      "display_id": "config:manual_algo.sizing.fx_volume_multiplier",
+      "owner": "shared",
+      "path": "manual_algo.sizing.fx_volume_multiplier",
+      "replacement_path": null,
+      "required": false,
+      "secret": false,
+      "shared_with_ctrader": false,
+      "type": "float",
+      "unit": "multiplier"
+    },
+    {
       "canonical_env": "MANUAL_ALGO_OWNER_EXECUTION_DM_ENABLED",
       "default": false,
       "deprecated": false,
@@ -7386,6 +7434,6 @@
   ],
   "secret_count": 9,
   "shared_with_ctrader_count": 87,
-  "source_fingerprint_sha256": "0440df81e1e672947a5943b69e3a6dc30642e66f0ce073d0ab63e4c1c17be30e",
+  "source_fingerprint_sha256": "5872fae5b93b8ccef51aa9f8261821851afa4dd3f2dd4f7c9c9110902635337d",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }
