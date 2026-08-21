@@ -7,11 +7,12 @@
 ![Redis](https://img.shields.io/badge/Redis-DC382D?style=flat-square&logo=redis&logoColor=white)
 ![Telegram](https://img.shields.io/badge/Telegram-2CA5E0?style=flat-square&logo=telegram&logoColor=white)
 
-Self-hosted XAUUSD trading stack: Telegram signal delivery, market-structure
-analysis, ZoneWatch activation, and broker execution on cTrader. Production
-live instrument is **XAU**. All external connections are outbound (Telegram
-long-polling, Anthropic optional, cTrader Open API). No inbound webhook /
-public HTTP surface.
+Self-hosted multi-symbol trading stack: Telegram signal delivery,
+market-structure analysis, ZoneWatch activation, and broker execution on
+cTrader. Production demo books are configured per instrument (currently XAU,
+EURUSD, GBPUSD, GBPJPY, and USDJPY). All external connections are outbound
+(Telegram long-polling, Anthropic optional, cTrader Open API). No inbound
+webhook / public HTTP surface.
 
 ```text
 ┌──────────────┐   OHLC ZSET    ┌─────────────────────┐
@@ -38,7 +39,9 @@ Compose boot order: **postgres + redis → config-compiler → ctrader-engine �
 
 ### Manual signals (owner DM + VIP/public)
 
-- Parse DM zone entries (`gold sell entry zone (4100-4105) / sl … / tp …`).
+- Parse the owner command surface (`/trade XAU sell 4100-4105 / sl … / tp …`
+  or `/trade EURUSD buy 1.15007 / algo`) while retaining the legacy free-text
+  forms.
 - Broadcast to VIP and optional public channels; lifecycle
   `active` / `close` / `cancel` / `/trade_*` commands.
 - Economic calendar brief, weekly VIP recap, optional Claude Vision chart draft.

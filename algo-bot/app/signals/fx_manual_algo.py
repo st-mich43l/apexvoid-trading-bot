@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from decimal import Decimal, ROUND_HALF_UP
 
-from app.configuration.models.instruments import InstrumentTargetMode
 from app.core.config import runtime_config
 from app.core.symbols import digits_for
 
@@ -25,14 +24,22 @@ def uses_entry_price_display(
 
 
 def fx_manual_symbols() -> tuple[str, ...]:
-  """Enabled instruments on fixed_rr targeting (EURUSD, GBPJPY, …)."""
+  """Enabled instruments configured for single-entry manual signals.
+
+  The historical name is retained for import compatibility; capability now
+  comes from ``instruments.<id>.manual`` rather than guessing that every
+  fixed-R/R policy is an FX manual book.
+  """
   symbols: list[str] = []
-  for instrument_id in runtime_config.enabled_instruments():
+  for instrument_id in runtime_config.live_instruments():
     try:
       effective = runtime_config.for_instrument(instrument_id)
     except Exception:
       continue
-    if effective.targeting.mode is InstrumentTargetMode.FIXED_RR:
+    if (
+      effective.manual.enabled
+      and effective.manual.entry_mode.value == "single"
+    ):
       symbols.append(instrument_id.upper())
   return tuple(symbols)
 
@@ -44,9 +51,9 @@ def round_price(symbol: str, price: float) -> float:
 
 
 def close_ratio_weights(symbol: str) -> list[int]:
-  """Percent weights (sum 100) from instrument close_ratios."""
-  targeting = runtime_config.for_instrument(symbol).targeting
-  ratios = [float(value) for value in targeting.close_ratios]
+  """Percent weights (sum 100) from the explicit manual exit profile."""
+  manual = runtime_config.for_instrument(symbol).manual
+  ratios = [float(value) for value in manual.target_close_ratios]
   if not ratios:
     return [100]
   raw = [int(round(ratio * 100)) for ratio in ratios]

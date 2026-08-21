@@ -50,6 +50,72 @@ class InstrumentTargetMode(StrEnum):
   FIXED_RR = "fixed_rr"
 
 
+class InstrumentManualEntryMode(StrEnum):
+  """Broker entry distribution for owner-authored manual signals."""
+
+  SINGLE = "single"
+  ZONE_LADDER = "zone_ladder"
+
+
+class InstrumentManualRiskReference(StrEnum):
+  """Entry edge used for the one approved manual-trade risk contract."""
+
+  SHALLOW = "shallow"
+
+
+class InstrumentManualConfig(FrozenConfigModel):
+  """Per-instrument owner manual-signal and ``/algo`` capabilities.
+
+  This is deliberately separate from autonomous ``targeting``. A fixed-RR
+  exit policy must not silently mean "FX", "single entry", or "multiply the
+  owner's size" for every future instrument that happens to reuse it.
+  """
+
+  # An explicitly present but incomplete manual block must still fail closed.
+  # Production packs opt in to both capabilities deliberately.
+  enabled: bool = False
+  algo_enabled: bool = False
+  entry_mode: InstrumentManualEntryMode = InstrumentManualEntryMode.SINGLE
+  risk_reference: InstrumentManualRiskReference = (
+    InstrumentManualRiskReference.SHALLOW
+  )
+  risk_multiplier: float = Field(default=1.0, gt=0)
+  # Manual exit distribution is explicit; autonomous targeting ratios must
+  # never silently change an owner-authored trade. Used when TP counts match.
+  target_close_ratios: tuple[float, ...] = ()
+  # Optional first-target close fraction. Candidate construction adapts this
+  # to any owner-supplied TP count: one TP closes 100%; otherwise TP1 gets
+  # this fraction and the remainder is split deterministically.
+  tp1_close_fraction: float | None = Field(default=None, gt=0, lt=1)
+
+  @model_validator(mode="after")
+  def validate_manual_profile(self) -> InstrumentManualConfig:
+    if self.algo_enabled and not self.enabled:
+      raise ValueError("manual.algo_enabled requires manual.enabled")
+    if not math.isfinite(float(self.risk_multiplier)):
+      raise ValueError("manual.risk_multiplier must be finite")
+    if (
+      self.tp1_close_fraction is not None
+      and not math.isfinite(float(self.tp1_close_fraction))
+    ):
+      raise ValueError("manual.tp1_close_fraction must be finite")
+    ratios = tuple(float(value) for value in self.target_close_ratios)
+    if any(not math.isfinite(value) or value <= 0 for value in ratios):
+      raise ValueError("manual.target_close_ratios must be positive and finite")
+    if ratios and not math.isclose(
+      sum(ratios),
+      1.0,
+      rel_tol=0.0,
+      abs_tol=1e-6,
+    ):
+      raise ValueError("manual.target_close_ratios must sum to 1")
+    if ratios and self.tp1_close_fraction is not None:
+      raise ValueError(
+        "manual target_close_ratios and tp1_close_fraction are mutually exclusive"
+      )
+    return self
+
+
 class InstrumentTargetingConfig(FrozenConfigModel):
   """Instrument-owned exit contract.
 
@@ -289,6 +355,10 @@ class InstrumentConfig(FrozenConfigModel):
   targeting: InstrumentTargetingConfig = Field(
     default_factory=InstrumentTargetingConfig,
   )
+  # ``None`` preserves enough information to apply the narrow compatibility
+  # defaults in ``resolve_manual_profile``. New declarations should state the
+  # profile directly (normally through an instrument pack).
+  manual: InstrumentManualConfig | None = None
   market_data: InstrumentMarketDataConfig | None = None
   analysis: InstrumentAnalysisConfig | None = None
   # Named session pack (`london_ny`) or a raw window list (`7-11,13-16`).
@@ -484,6 +554,53 @@ def resolve_policy_name(
   # feed_only / disabled may omit policy; still bind the compatibility policy
   # so callers receive a deterministic name for provenance.
   return XAU_CURRENT_V1_POLICY
+
+
+def resolve_manual_profile(
+  instrument_id: str,
+  instrument: InstrumentConfig,
+  *,
+  legacy_fixed_rr_risk_multiplier: float = 1.5,
+) -> InstrumentManualConfig:
+  """Resolve explicit manual capabilities plus backward-compatible defaults.
+
+  Compatibility is intentionally narrow: XAU keeps its three-entry zone
+  ladder, and existing fixed-RR instruments keep their historical single
+  entry and FX volume multiplier. Any other profile omitted by a future
+  instrument fails closed for manual submission instead of inheriting XAU.
+  """
+  if instrument.manual is not None:
+    return instrument.manual
+  canonical = instrument.canonical_symbol.strip().upper()
+  if instrument_id.strip().upper() == "XAU" or canonical == "XAU":
+    return InstrumentManualConfig(
+      enabled=True,
+      algo_enabled=True,
+      entry_mode=InstrumentManualEntryMode.ZONE_LADDER,
+      risk_reference=InstrumentManualRiskReference.SHALLOW,
+      risk_multiplier=1.0,
+      target_close_ratios=(),
+      tp1_close_fraction=None,
+    )
+  if instrument.targeting.mode is InstrumentTargetMode.FIXED_RR:
+    return InstrumentManualConfig(
+      enabled=True,
+      algo_enabled=True,
+      entry_mode=InstrumentManualEntryMode.SINGLE,
+      risk_reference=InstrumentManualRiskReference.SHALLOW,
+      risk_multiplier=legacy_fixed_rr_risk_multiplier,
+      target_close_ratios=instrument.targeting.close_ratios,
+      tp1_close_fraction=None,
+    )
+  return InstrumentManualConfig(
+    enabled=False,
+    algo_enabled=False,
+    entry_mode=InstrumentManualEntryMode.SINGLE,
+    risk_reference=InstrumentManualRiskReference.SHALLOW,
+    risk_multiplier=1.0,
+    target_close_ratios=(),
+    tp1_close_fraction=None,
+  )
 
 
 def compose_instrument_domain_overrides(

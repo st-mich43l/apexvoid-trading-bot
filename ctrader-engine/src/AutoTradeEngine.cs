@@ -3618,7 +3618,8 @@ public sealed class AutoTradeEngine(
       cancellationToken,
       streamEventId: _activeLease?.StreamEventId,
       route: "manual_limit",
-      clientOrderIds: clientOrderIds
+      clientOrderIds: clientOrderIds,
+      manualRiskStopPips: manualStopPlan.StopPips
     );
     if (!await EnsureBrokerLeaseAsync(cancellationToken))
     {
@@ -3690,7 +3691,10 @@ public sealed class AutoTradeEngine(
         riskBudget: sizing.Budget,
         hadAdds: false,
         setup: candidate.Setup,
-        stopPips: legStopPlans[index].StopPips,
+        // All three clips belong to one owner intent, sized from Shallow.
+        // Reporting each Mid/Deep distance here made one XAU setup look
+        // like three different risk contracts (for example 60p/45p/30p).
+        stopPips: manualStopPlan.StopPips,
         targetsPips: legTargetPlans[index].TargetsPips,
         stream: "algo_manual",
         direction: candidate.Direction,
@@ -5197,6 +5201,8 @@ public sealed class AutoTradeEngine(
         InitialRealizedPipVolume = source.InitialRealizedPipVolume,
         GroupInitialVolume = source.GroupInitialVolume,
         InitialTrancheVolume = source.InitialTrancheVolume,
+        InitialRiskStopPips = source.InitialRiskStopPips
+          ?? current.InitialRiskStopPips,
       };
       _states[updated.PositionId] = updated;
       await store.SavePositionAsync(updated, cancellationToken);
@@ -5266,6 +5272,10 @@ public sealed class AutoTradeEngine(
 
   private decimal? InitialStopPips(AutoTradePositionState state)
   {
+    if (state.InitialRiskStopPips is decimal planned && planned > 0m)
+    {
+      return planned;
+    }
     var stop = state.InitialStopLoss ?? state.CurrentStopLoss;
     return stop is decimal price
       ? Math.Abs(state.EntryPrice - price) / PipSizeForState(state)
@@ -5879,6 +5889,15 @@ public sealed class AutoTradeEngine(
               cancellationToken
             );
           }
+          else if (targetOrdinal == 2)
+          {
+            await ProtectRemainingManualGroupStopsAtTargetAsync(
+              groupId,
+              1,
+              symbol,
+              cancellationToken
+            );
+          }
           if (!_states.Values.Any(item => GroupId(item) == groupId))
           {
             var groupPips = WeightedPips(groupPipVolume, groupInitialVolume);
@@ -5933,9 +5952,10 @@ public sealed class AutoTradeEngine(
           await store.SavePositionAsync(state, cancellationToken);
           continue;
         }
+        var usedGroupEconomicBreakeven = false;
         if (targetOrdinal == 1)
         {
-          await ProtectRemainingGroupStopsAtBreakEvenAsync(
+          usedGroupEconomicBreakeven = await ProtectRemainingGroupStopsAtBreakEvenAsync(
             GroupId(state),
             symbol,
             cancellationToken
@@ -5945,13 +5965,30 @@ public sealed class AutoTradeEngine(
             state = protectedState;
           }
         }
-        state = await MoveStopAfterTargetAsync(
-          state,
-          completedTargetIndex,
-          targetOrdinal,
-          symbol,
-          cancellationToken
-        );
+        else if (targetOrdinal == 2)
+        {
+          usedGroupEconomicBreakeven =
+            await ProtectRemainingManualGroupStopsAtTargetAsync(
+              GroupId(state),
+              1,
+              symbol,
+              cancellationToken
+            );
+          if (_states.TryGetValue(state.PositionId, out var protectedState))
+          {
+            state = protectedState;
+          }
+        }
+        if (!usedGroupEconomicBreakeven)
+        {
+          state = await MoveStopAfterTargetAsync(
+            state,
+            completedTargetIndex,
+            targetOrdinal,
+            symbol,
+            cancellationToken
+          );
+        }
         _states[state.PositionId] = state;
         await store.SavePositionAsync(state, cancellationToken);
       }
@@ -5959,20 +5996,66 @@ public sealed class AutoTradeEngine(
   }
 
   /// <summary>
-  /// After group TP1, move every remaining entry leg to protected BE from
-  /// that leg's own fill. Shallow-first TP1 can fully close the shallow
-  /// clip, so the booking leg never reaches
-  /// <see cref="MoveStopAfterTargetAsync"/>.
+  /// After group TP1, protect every remaining entry leg. A manual multi-leg
+  /// ladder uses one group-economic BE price: booked TP1 profit funds room
+  /// beyond the remaining VWAP while the complete original group still
+  /// locks the configured small buffer. Other routes retain per-position
+  /// protected BE. Shallow-first TP1 can fully close the booking clip, so
+  /// this group path cannot rely on <see cref="MoveStopAfterTargetAsync"/>.
   /// </summary>
-  private async Task ProtectRemainingGroupStopsAtBreakEvenAsync(
+  /// <returns>True when the manual group-economic policy owned TP1.</returns>
+  private async Task<bool> ProtectRemainingGroupStopsAtBreakEvenAsync(
     string groupId,
     SymbolInfo symbol,
     CancellationToken cancellationToken
   )
   {
-    foreach (var remaining in _states.Values
+    var remainingStates = _states.Values
       .Where(item => GroupId(item) == groupId)
-      .ToArray())
+      .ToArray();
+    var manualMultiLeg = remainingStates.Any(state =>
+      state.Stream == "algo_manual" && state.GroupTrancheCount > 1
+    );
+    if (manualMultiLeg)
+    {
+      var move = StopTrailPlanner.PlanGroupEconomicBreakeven(
+        remainingStates,
+        GroupInitialVolume(remainingStates),
+        GroupRealizedPipVolume(remainingStates),
+        symbol,
+        PipSizeForSymbol(symbol.RedisSymbol),
+        options.BreakEvenBufferTicks
+      );
+      if (move is null)
+      {
+        return true;
+      }
+      foreach (var remaining in remainingStates)
+      {
+        if (
+          remaining.CurrentStopLoss is decimal current
+          && (
+            remaining.Direction == TradeDirection.Buy
+              ? current >= move.StopLoss
+              : current <= move.StopLoss
+          )
+        )
+        {
+          continue;
+        }
+        var updated = await ApplyStopTrailMoveAsync(
+          remaining,
+          move,
+          targetOrdinal: 1,
+          cancellationToken
+        );
+        _states[updated.PositionId] = updated;
+        await store.SavePositionAsync(updated, cancellationToken);
+      }
+      return true;
+    }
+
+    foreach (var remaining in remainingStates)
     {
       if (
         remaining.CurrentStopLoss is decimal current
@@ -6006,6 +6089,61 @@ public sealed class AutoTradeEngine(
       _states[updated.PositionId] = updated;
       await store.SavePositionAsync(updated, cancellationToken);
     }
+    return false;
+  }
+
+  // Manual ladder target slices can consume the booking leg completely.
+  // Trail the whole remaining group to the owner's one absolute TP price,
+  // not only the position that happened to own TP2.
+  private async Task<bool> ProtectRemainingManualGroupStopsAtTargetAsync(
+    string groupId,
+    int targetOrdinal,
+    SymbolInfo symbol,
+    CancellationToken cancellationToken
+  )
+  {
+    var remainingStates = _states.Values
+      .Where(item => GroupId(item) == groupId)
+      .ToArray();
+    if (!remainingStates.Any(state =>
+      state.Stream == "algo_manual" && state.GroupTrancheCount > 1
+    ))
+    {
+      return false;
+    }
+    var target = remainingStates
+      .Select(state => state.TargetPrices)
+      .Where(prices => prices is not null && prices.Count >= targetOrdinal)
+      .Select(prices => prices![targetOrdinal - 1])
+      .FirstOrDefault();
+    if (target <= 0m)
+    {
+      return false;
+    }
+    var move = new StopTrailMove(target, $"TP{targetOrdinal}");
+    foreach (var remaining in remainingStates)
+    {
+      if (
+        remaining.CurrentStopLoss is decimal current
+        && (
+          remaining.Direction == TradeDirection.Buy
+            ? current >= target
+            : current <= target
+        )
+      )
+      {
+        continue;
+      }
+      var updated = await ApplyStopTrailMoveAsync(
+        remaining,
+        move,
+        targetOrdinal: targetOrdinal + 1,
+        cancellationToken
+      );
+      _states[updated.PositionId] = updated;
+      await store.SavePositionAsync(updated, cancellationToken);
+    }
+    return true;
   }
 
   private async Task<AutoTradePositionState> MoveStopAfterTargetAsync(
@@ -6313,6 +6451,17 @@ public sealed class AutoTradeEngine(
     var openIds = _allSymbolPositions
       .Select(position => position.PositionId)
       .ToHashSet();
+    // Several legs of one manual ladder can disappear in the same broker
+    // snapshot when their shared owner SL is hit. Keep an in-pass aggregate:
+    // once the earlier sibling is removed there is otherwise no live state
+    // left from which the final/deep leg can recover the running total.
+    var closingGroupPipVolumes = new Dictionary<string, decimal>(
+      StringComparer.Ordinal
+    );
+    var closingGroupInitialVolumes = new Dictionary<string, long>(
+      StringComparer.Ordinal
+    );
+    var confirmedMissingPositionIds = new HashSet<long>();
     foreach (var stale in trackedIds.Where(id => !openIds.Contains(id)))
     {
       // A single missing broker snapshot is only "suspected" missing, not
@@ -6368,11 +6517,24 @@ public sealed class AutoTradeEngine(
         ?? trackedStates.GetValueOrDefault(stale);
       _states.Remove(stale);
       await store.DeletePositionAsync(stale, cancellationToken);
+      confirmedMissingPositionIds.Add(stale);
       if (state is not null)
       {
-        var initialVolume = state.GroupInitialVolume > 0
-          ? state.GroupInitialVolume
-          : state.InitialVolume;
+        var groupId = GroupId(state);
+        var trackedGroup = trackedStates.Values
+          .Where(item => GroupId(item) == groupId)
+          .ToArray();
+        if (!closingGroupInitialVolumes.TryGetValue(groupId, out var initialVolume))
+        {
+          initialVolume = GroupInitialVolume(trackedGroup);
+          if (initialVolume <= 0)
+          {
+            initialVolume = state.GroupInitialVolume > 0
+              ? state.GroupInitialVolume
+              : state.InitialVolume;
+          }
+          closingGroupInitialVolumes[groupId] = initialVolume;
+        }
         // Best-effort: was this the broker-attached SL/TP order, or a
         // manual/external order (almost certainly the owner closing it
         // directly on the platform)? Also recovers the closing deal's real
@@ -6421,21 +6583,29 @@ public sealed class AutoTradeEngine(
           closeReason
         );
         var remainingVolume = Math.Max(0, state.RemainingVolume);
-        // Read the LIVE running total from siblings still in _states, not
-        // this leg's own (already stale) field - manual /algo groups with
-        // several entry legs commonly go stale together in the same
-        // ReconcileAsync pass (one shared owner stop, hit near-simultaneously
-        // for every filled leg). state.GroupRealizedPipVolume was last
-        // synced before any of them closed, so summing from it in isolation
-        // silently drops every sibling's already-realized pips (2026-08-19:
-        // a 3-leg SELL reported "losing 4 pips" per leg / -4 group total
-        // when the true volume-weighted loss across all three fills was
-        // -47 pips).
+        // Seed from the complete tracked group, not this leg's own (possibly
+        // stale) field. Manual /algo groups commonly disappear together in
+        // one ReconcileAsync pass when the shared owner SL is hit; selecting
+        // the canonical max preserves a newer sibling's booked aggregate.
+        // The local dictionary then accumulates each simultaneous exit after
+        // siblings are removed (2026-08-19: a 3-leg SELL reported only its
+        // final/deep leg instead of the volume-weighted group result).
         var siblingStates = _states.Values
-          .Where(item => GroupId(item) == GroupId(state))
+          .Where(item => GroupId(item) == groupId)
           .ToArray();
-        var pipVolume = GroupRealizedPipVolume(siblingStates)
+        if (!closingGroupPipVolumes.TryGetValue(groupId, out var carriedPipVolume))
+        {
+          // Propagation normally keeps every sibling equal; max is defensive
+          // against a crash between durable sibling writes. From this point
+          // the local dictionary is authoritative for the complete
+          // simultaneous-disappearance pass, including the final leg.
+          carriedPipVolume = trackedGroup.Length > 0
+            ? GroupRealizedPipVolume(trackedGroup)
+            : state.GroupRealizedPipVolume;
+        }
+        var pipVolume = carriedPipVolume
           + SignedPips(state, exitEstimate) * remainingVolume;
+        closingGroupPipVolumes[groupId] = pipVolume;
         await SyncGroupRealizedPipVolumeAsync(siblingStates, pipVolume, cancellationToken);
         // Total on the close card is the highest target reached (e.g. TP2
         // = 60), not the volume-weighted blend that dilutes booked TPs
@@ -6448,7 +6618,6 @@ public sealed class AutoTradeEngine(
           pipVolume,
           initialVolume
         );
-        var groupId = GroupId(state);
         var pipText = terminalGroupPips.ToString("0.0", CultureInfo.InvariantCulture);
         var resultPhrase = terminalGroupPips > 0m
           ? $"winning {pipText} pips"
@@ -6496,7 +6665,13 @@ public sealed class AutoTradeEngine(
             ? SignedPips(state, exitEstimate)
             : null
         );
-        if (!_states.Values.Any(item => GroupId(item) == groupId))
+        var trackedGroupStillOpen = trackedGroup.Any(item =>
+          !confirmedMissingPositionIds.Contains(item.PositionId)
+        );
+        if (
+          !_states.Values.Any(item => GroupId(item) == groupId)
+          && !trackedGroupStillOpen
+        )
         {
           await PublishAsync(
             "group_result",
@@ -6756,7 +6931,17 @@ public sealed class AutoTradeEngine(
       };
     }
     AutoTradeGroupPlan? plan = null;
-    if (stored is null && !string.IsNullOrWhiteSpace(state.GroupId))
+    var needsManualPlanHydration = state.Stream == "algo_manual" && (
+      state.InitialRiskStopPips is null
+      || state.GroupTrancheCount <= 1
+    );
+    if (
+      (
+        stored is null
+        || needsManualPlanHydration
+      )
+      && !string.IsNullOrWhiteSpace(state.GroupId)
+    )
     {
       plan = await LoadGroupPlanAsync(state.GroupId, cancellationToken);
       if (plan is not null)
@@ -6789,6 +6974,19 @@ public sealed class AutoTradeEngine(
           RiskMultiplier = plan.RiskMultiplier,
           TargetModel = plan.TargetModel,
           AbsoluteTargetPrice = plan.AbsoluteTargetPrice,
+          InitialRiskStopPips = plan.ManualRiskStopPips
+            ?? state.InitialRiskStopPips,
+          // A long manual comment drops its diagnostic |leg|legCount suffix
+          // to stay within cTrader's 100-char limit. On restart the broker
+          // comment therefore looks like a legacy 1-of-1 position even when
+          // the persisted group plan owns a three-leg ladder. ClientOrderIds
+          // is the durable planned-leg identity and restores the real count.
+          GroupTrancheCount = state.Stream == "algo_manual"
+            ? Math.Max(
+              state.GroupTrancheCount,
+              plan.ClientOrderIds?.Count ?? 1
+            )
+            : state.GroupTrancheCount,
         };
       }
     }
@@ -7483,7 +7681,8 @@ public sealed class AutoTradeEngine(
     CancellationToken cancellationToken,
     string? streamEventId,
     string route,
-    IReadOnlyList<string> clientOrderIds
+    IReadOnlyList<string> clientOrderIds,
+    decimal? manualRiskStopPips = null
   )
   {
     var resolvedRoute = route;
@@ -7513,7 +7712,8 @@ public sealed class AutoTradeEngine(
       StreamEventId: streamEventId,
       Route: resolvedRoute,
       ClientOrderIds: clientOrderIds,
-      SubmittedAt: _clock().ToUnixTimeSeconds()
+      SubmittedAt: _clock().ToUnixTimeSeconds(),
+      ManualRiskStopPips: manualRiskStopPips
     );
     await store.SaveGroupPlanAsync(
       plan,
@@ -9649,9 +9849,9 @@ public sealed class AutoTradeEngine(
   }
 
   // Three entry legs (2026-08 R:R redesign) share one GroupId/TargetPrices
-  // but are otherwise independent broker positions - each trails its own
-  // stop from its own real fill price (see StopTrailPlanner), so no
-  // group-level entry-price blending is needed. legIndex/legCount are
+  // but are otherwise independent broker positions. After TP1 their live
+  // entries are blended by StopTrailPlanner into one group-economic BE;
+  // before TP1 each still uses the exact owner absolute SL. legIndex/legCount are
   // parsed but only used for observability (TrancheIndex/GroupTrancheCount);
   // a pre-redesign 9-part "avm" comment (no leg fields) still parses as a
   // single leg 1-of-1 for backward compatibility with orders already live

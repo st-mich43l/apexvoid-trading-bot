@@ -52,7 +52,7 @@ from app.signals.reports import (
   format_review,
   format_stats,
 )
-from app.core.symbols import channel_for_symbol
+from app.core.symbols import channel_for_symbol, resolve_command_symbol
 from app.bot.client import bot, send_with_retry
 from app.signals.trade_ops import (
   do_active,
@@ -90,6 +90,7 @@ Daily <code>#N</code> is per symbol.
 <code>note #id &lt;text&gt;</code>
 
 <b>Owner DM commands</b>
+<code>/trade [SYMBOL] BUY|SELL entry … [/ sl …] [/ tp …] [/ algo]</code>
 <code>/trade_open [SYMBOL]</code>
 <code>/trade_active [SYMBOL] [#id]</code>
 <code>/trade_close [SYMBOL] #id ±pips [%] | be</code>
@@ -374,6 +375,98 @@ async def handle_help(msg: Message) -> None:
   if not _is_owner(msg):
     return
   await msg.answer(_HELP_TEXT)
+
+
+def _trade_symbol_catalog(selected: str | None = None) -> str:
+  """Render the configured manual-trade surface from the runtime registry."""
+  live = tuple(runtime_config.live_instruments())
+  if selected is not None:
+    live = tuple(item for item in live if item == selected)
+  if not live:
+    return "⛔ No live manual-trade symbol matches this request."
+  lines = ["🧭 <b>ApexVoid trade symbols</b>"]
+  for instrument_id in live:
+    effective = runtime_config.for_instrument(instrument_id)
+    identity = effective.identity
+    manual = getattr(effective, "manual", None)
+    if manual is not None and not bool(getattr(manual, "enabled", True)):
+      continue
+    entry_mode = getattr(manual, "entry_mode", None)
+    entry_mode = getattr(entry_mode, "value", entry_mode)
+    if not entry_mode:
+      entry_mode = (
+        "single"
+        if str(getattr(effective.targeting.mode, "value", "")) == "fixed_rr"
+        else "zone_ladder"
+      )
+    algo_enabled = bool(getattr(manual, "algo_enabled", True))
+    algo = "algo ready" if algo_enabled else "notify only"
+    broker = escape(identity.broker_symbol)
+    timeframes = "/".join(identity.timeframes)
+    lines.append(
+      f"• <b>{escape(instrument_id)}</b> · {escape(str(entry_mode))} · "
+      f"{algo} · broker {broker} · {escape(timeframes)}"
+    )
+  if len(lines) == 1:
+    return "⛔ No live symbol has manual trading enabled."
+  lines.extend([
+    "",
+    "Send: <code>/trade XAU buy 4473-4470 / sl 4467 / tp 76/82 / algo</code>",
+    "Or: <code>/trade EURUSD buy 1.15007 / algo</code>",
+  ])
+  return "\n".join(lines)
+
+
+@router.message(Command("trade"), F.chat.type == "private")
+async def handle_trade(msg: Message) -> None:
+  """List configured symbols or submit a signal through the shared path."""
+  if not _is_owner(msg):
+    return
+  raw = _command_args(msg).strip()
+  if not raw:
+    await msg.answer(_trade_symbol_catalog())
+    return
+  head, _, remainder = raw.partition(" ")
+  symbol = resolve_command_symbol(head)
+  if symbol is None:
+    await msg.answer(
+      "⚠️ Unknown symbol. Use <code>/trade</code> to list configured books."
+    )
+    return
+  if symbol not in runtime_config.live_instruments():
+    await msg.answer(
+      f"⛔ {escape(symbol)} is configured but not live for manual execution."
+    )
+    return
+  effective = runtime_config.for_instrument(symbol)
+  manual = getattr(effective, "manual", None)
+  if manual is not None and not bool(getattr(manual, "enabled", True)):
+    await msg.answer(f"⛔ Manual trading is disabled for {escape(symbol)}.")
+    return
+  if not remainder.strip():
+    await msg.answer(_trade_symbol_catalog(symbol))
+    return
+  action = remainder.split(maxsplit=1)[0].upper()
+  if action not in {"BUY", "SELL"}:
+    await msg.answer(
+      "Usage: <code>/trade SYMBOL BUY|SELL entry-or-zone "
+      "[/ sl PRICE] [/ tp PRICES] [/ algo]</code>"
+    )
+    return
+  if (
+    re.search(r"(?i)(?:^|\s)/\s*algo(?:\s|$)", remainder)
+    and manual is not None
+    and not bool(getattr(manual, "algo_enabled", True))
+  ):
+    await msg.answer(f"⛔ Algo execution is disabled for {escape(symbol)}.")
+    return
+  # Rewrite aliases (e.g. XAUUSD) to the canonical configured id before the
+  # existing parser.  Submission, news guard, DB write, channel broadcast,
+  # and algo arming remain one shared implementation with legacy free text.
+  from app.bot.handlers.fallback import manual_signal_usage, submit_manual_signal
+
+  if not await submit_manual_signal(msg, f"{symbol} {remainder.strip()}"):
+    await msg.answer(manual_signal_usage())
 
 
 @router.message(Command("trade_open"), F.chat.type == "private")

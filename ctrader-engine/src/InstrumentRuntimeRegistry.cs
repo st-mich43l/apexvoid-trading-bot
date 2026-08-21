@@ -7,6 +7,7 @@ namespace ApexVoid.CTraderFeed;
 public sealed class InstrumentRuntime
 {
   public required string InstrumentId { get; init; }
+  public IReadOnlyList<string> Aliases { get; init; } = [];
   public required FeedInstrumentOptions Feed { get; init; }
   public required ExecutionInstrumentOptions Execution { get; init; }
   public SymbolInfo? Symbol { get; set; }
@@ -44,6 +45,10 @@ public sealed class InstrumentRuntimeRegistry
       RegisterAlias(runtime.Feed.CanonicalSymbol, runtime.InstrumentId);
       RegisterAlias(runtime.Feed.CTraderSymbol, runtime.InstrumentId);
       RegisterAlias(runtime.Feed.RedisSymbol, runtime.InstrumentId);
+      foreach (var alias in runtime.Aliases)
+      {
+        RegisterAlias(alias, runtime.InstrumentId);
+      }
       if (
         runtime.Feed.CanonicalSymbol.Equals("XAU", StringComparison.OrdinalIgnoreCase)
       )
@@ -278,6 +283,7 @@ public sealed class InstrumentRuntimeRegistry
           $"instrument_runtimes.{instrumentId}.feed.timeframes is empty"
         );
       }
+      var aliases = ReadIdentityAliases(element, instrumentId);
       var backfill = sharedFeed.BackfillBars;
       var barsWindow = sharedFeed.BarsWindowMax;
       var barsChannel = sharedFeed.BarsChannel;
@@ -302,6 +308,7 @@ public sealed class InstrumentRuntimeRegistry
       runtimes.Add(new InstrumentRuntime
       {
         InstrumentId = instrumentId,
+        Aliases = aliases,
         Feed = new FeedInstrumentOptions(
           InstrumentId: instrumentId,
           CanonicalSymbol: redisSymbol,
@@ -365,5 +372,41 @@ public sealed class InstrumentRuntimeRegistry
       );
     }
     _aliasToId[key] = instrumentId;
+  }
+
+  private static IReadOnlyList<string> ReadIdentityAliases(
+    System.Text.Json.JsonElement runtime,
+    string instrumentId
+  )
+  {
+    if (
+      !runtime.TryGetProperty("identity", out var identity)
+      || !identity.TryGetProperty("aliases", out var aliases)
+    )
+    {
+      return [];
+    }
+    if (aliases.ValueKind != System.Text.Json.JsonValueKind.Array)
+    {
+      throw new InvalidOperationException(
+        $"instrument_runtimes.{instrumentId}.identity.aliases must be an array"
+      );
+    }
+    var resolved = new List<string>();
+    foreach (var alias in aliases.EnumerateArray())
+    {
+      if (alias.ValueKind != System.Text.Json.JsonValueKind.String)
+      {
+        throw new InvalidOperationException(
+          $"instrument_runtimes.{instrumentId}.identity.aliases must contain strings"
+        );
+      }
+      var value = alias.GetString();
+      if (!string.IsNullOrWhiteSpace(value))
+      {
+        resolved.Add(value.Trim());
+      }
+    }
+    return resolved;
   }
 }

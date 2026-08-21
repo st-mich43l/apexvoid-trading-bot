@@ -383,6 +383,10 @@ def build_instrument_slice(config: ApexVoidConfig, instrument_id: str) -> dict[s
       effective.targeting,
       path=f"instruments.{instrument_id}.targeting",
     ),
+    "manual": _json_ready(
+      effective.manual,
+      path=f"instruments.{instrument_id}.manual",
+    ),
     "market_data": {
       "lookbacks": _json_ready(
         effective.market_data.lookbacks,
@@ -554,6 +558,7 @@ def build_instrument_runtime(
     "identity": slice_["identity"],
     "units": slice_["units"],
     "targeting": slice_["targeting"],
+    "manual": slice_["manual"],
     "feed": _json_ready(feed, path=f"instrument_runtimes.{instrument_id}.feed"),
     "analysis": slice_["analysis"],
     "auto_trade": _json_ready(
@@ -599,6 +604,18 @@ def upgrade_v1_payload_to_v2(payload: Mapping[str, Any]) -> dict[str, Any]:
           "close_ratios": [],
           "trail_after_r": None,
           "trail_to_r": None,
+        },
+      ),
+      "manual": xau.get(
+        "manual",
+        {
+          "enabled": True,
+          "algo_enabled": True,
+          "entry_mode": "zone_ladder",
+          "risk_reference": "shallow",
+          "risk_multiplier": "1",
+          "target_close_ratios": [],
+          "tp1_close_fraction": None,
         },
       ),
       "feed": payload["feed"],

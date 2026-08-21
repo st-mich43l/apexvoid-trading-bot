@@ -358,7 +358,12 @@ public sealed record AutoTradePositionState(
   long FillSourceQuoteSequence = 0,
   // Canonical Redis instrument (XAU / EURUSD / GBPJPY). Python exposure
   // gates filter by this string — SymbolId alone cannot isolate books.
-  string? Symbol = null
+  string? Symbol = null,
+  // Manual XAU ladders are sized as one owner intent from the shallow
+  // (worst-case) entry. Mid/deep clips keep their own actual fill for PnL,
+  // but lifecycle risk metadata must retain this group-level initial stop
+  // distance instead of shrinking it as deeper clips fill.
+  decimal? InitialRiskStopPips = null
 );
 
 public sealed record RedisClaimPayload(
@@ -492,7 +497,11 @@ public sealed record AutoTradeGroupPlan(
   long? SubmittedAt = null,
   int RecoveryAttempt = 0,
   int AbsenceConfirmations = 0,
-  long? LastAbsenceCheckAt = null
+  long? LastAbsenceCheckAt = null,
+  // One group-level risk distance derived from the shallow entry and the
+  // owner's absolute SL. This survives broker reconciliation/restarts so
+  // every ladder leg reports the same approved initial risk contract.
+  decimal? ManualRiskStopPips = null
 );
 
 public sealed record CanonicalConfigOption(

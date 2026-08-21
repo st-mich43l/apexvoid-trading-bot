@@ -9,6 +9,7 @@ on:
     paths:
       - "algo-bot/**"
       - "ctrader-engine/**"
+      - "config/**"
       - "docs/redis-contract.md"
       - "deployment-template/**"
       - ".github/workflows/deploy.yml"

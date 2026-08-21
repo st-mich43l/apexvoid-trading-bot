@@ -324,6 +324,11 @@ async def handle_help(msg) -> None:
   return await _dm.handle_help(msg)
 
 
+async def handle_trade(msg) -> None:
+  _sync_legacy_patches()
+  return await _dm.handle_trade(msg)
+
+
 async def handle_trade_open(msg) -> None:
   _sync_legacy_patches()
   return await _dm.handle_trade_open(msg)

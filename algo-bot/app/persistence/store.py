@@ -267,6 +267,9 @@ async def init_db() -> None:
 
     # Broker execution ledger. Fills and results are separate so scale-ins
     # retain their real fill count while one group result remains one trade.
+    # correction_source is also a durable replay fence: a narrowly audited
+    # historical correction must not be reverted by the generic Redis
+    # backfill replaying the original malformed terminal events.
     await db.execute(
       """
       CREATE TABLE IF NOT EXISTS auto_trade_fills (
@@ -280,7 +283,9 @@ async def init_db() -> None:
         entry_price DOUBLE PRECISION,
         stop_pips   DOUBLE PRECISION,
         volume      BIGINT,
-        filled_at   BIGINT           NOT NULL
+        filled_at   BIGINT           NOT NULL,
+        correction_source TEXT,
+        corrected_at BIGINT
       )
       """
     )
@@ -288,6 +293,13 @@ async def init_db() -> None:
       "CREATE INDEX IF NOT EXISTS idx_auto_trade_fills_group "
       "ON auto_trade_fills(group_id)"
     )
+    for stmt in (
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS correction_source TEXT",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS corrected_at BIGINT",
+    ):
+      await db.execute(stmt)
     await db.execute(
       """
       CREATE TABLE IF NOT EXISTS auto_trade_results (
@@ -312,6 +324,8 @@ async def init_db() -> None:
       "ALTER TABLE auto_trade_results ADD COLUMN IF NOT EXISTS booked_tp_count INTEGER",
       "ALTER TABLE auto_trade_results ADD COLUMN IF NOT EXISTS utc_hour INTEGER",
       "ALTER TABLE auto_trade_results ADD COLUMN IF NOT EXISTS symbol TEXT NOT NULL DEFAULT 'XAU'",
+      "ALTER TABLE auto_trade_results ADD COLUMN IF NOT EXISTS correction_source TEXT",
+      "ALTER TABLE auto_trade_results ADD COLUMN IF NOT EXISTS corrected_at BIGINT",
     ):
       await db.execute(stmt)
 
@@ -718,6 +732,7 @@ async def _record_auto_trade_fill(event: dict) -> None:
         entry_price = COALESCE(excluded.entry_price, auto_trade_fills.entry_price),
         stop_pips = COALESCE(excluded.stop_pips, auto_trade_fills.stop_pips),
         volume = COALESCE(excluded.volume, auto_trade_fills.volume)
+      WHERE auto_trade_fills.correction_source IS NULL
       """,
       int(position_id), group_id, trade_key, stream,
       symbol, setup_type,
@@ -898,6 +913,7 @@ async def _record_auto_trade_result(event: dict) -> None:
         booked_tp_count = COALESCE(excluded.booked_tp_count, auto_trade_results.booked_tp_count),
         utc_hour = COALESCE(excluded.utc_hour, auto_trade_results.utc_hour),
         symbol = COALESCE(excluded.symbol, auto_trade_results.symbol)
+      WHERE auto_trade_results.correction_source IS NULL
       """,
       group_id, fill["trade_key"], fill["trade_stream"],
       float(result_pips), closed_at,
@@ -1618,10 +1634,12 @@ async def set_execution_fill(
   independent entry legs (the shallow/mid/deep split), so this fires more
   than once for the same signal_id.
 
-  ``broker_fill_price`` keeps the **deepest** filled entry (best price:
-  higher for SELL, lower for BUY) so channel TP/SL pip math books from the
-  deeper ladder when it filled, else mid, else shallow. ``broker_position_id``
-  still keeps the first fill id via COALESCE (owner close routes by intent
+  ``broker_fill_price`` keeps the **shallow** filled entry (the approved
+  worst-case risk reference: lower for SELL, higher for BUY). Mid/deep
+  fills retain their own prices in executor state and lifecycle events for
+  actual weighted P&L; this one-column signal fallback must never shrink the
+  owner stop distance merely because a deeper clip filled. The position id
+  still keeps the first fill via COALESCE (owner close routes by intent
   group, not this column).
 
   Returns the updated row, or ``None`` if ``signal_id`` does not exist.
@@ -1636,8 +1654,8 @@ async def set_execution_fill(
         broker_position_id = COALESCE(broker_position_id, $1),
         broker_fill_price = CASE
           WHEN broker_fill_price IS NULL THEN $2
-          WHEN UPPER(action) = 'SELL' AND $2 > broker_fill_price THEN $2
-          WHEN UPPER(action) = 'BUY' AND $2 < broker_fill_price THEN $2
+          WHEN UPPER(action) = 'SELL' AND $2 < broker_fill_price THEN $2
+          WHEN UPPER(action) = 'BUY' AND $2 > broker_fill_price THEN $2
           ELSE broker_fill_price
         END
       WHERE id = $3

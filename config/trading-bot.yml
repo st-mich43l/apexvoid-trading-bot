@@ -197,8 +197,6 @@ execution:
     scale_undersized_policy: single_entry
 instrument_packs:
   fx_usd_major_v1:
-    enabled: true
-    rollout: live
     policy: fx_fixed_2r_v1
     reaction_session: london_ny
     stop_envelope:
@@ -233,6 +231,13 @@ instrument_packs:
       trail_after_r: 1.5
       trail_to_r: 1.0
       entry_clips: 2
+    manual:
+      enabled: true
+      algo_enabled: true
+      entry_mode: single
+      risk_reference: shallow
+      risk_multiplier: 1.5
+      target_close_ratios: [0.25, 0.25, 0.50]
     market_data:
       lookbacks:
         h1_bars: 400
@@ -266,8 +271,6 @@ instrument_packs:
   # those would hide, not remove, real divergence. Every JPY-cross instrument
   # must declare those as its own overrides.
   fx_jpy_cross_v1:
-    enabled: true
-    rollout: live
     activation:
       require_sweep_body: true
       trigger_maximum_age_bars: 3
@@ -288,6 +291,13 @@ instrument_packs:
       trail_after_r: 1.5
       trail_to_r: 1.0
       entry_clips: 2
+    manual:
+      enabled: true
+      algo_enabled: true
+      entry_mode: single
+      risk_reference: shallow
+      risk_multiplier: 1.5
+      target_close_ratios: [0.25, 0.25, 0.50]
     market_data:
       lookbacks:
         h1_bars: 400
@@ -327,12 +337,16 @@ instruments:
   # — never reuse the gold 100_000 cap on FX.
   EURUSD:
     pack: fx_usd_major_v1
+    # Deployment state is always explicit on the symbol. Packs must never
+    # make a newly-added instrument broker-live as a side effect.
+    rollout: live
     broker_symbol: EURUSD
     canonical_symbol: EURUSD
     # London/NY major: tight spread, 10-18 pip stop, still locked 1:2 - the
     # pack's own defaults as-is; this pair carries no overrides.
   GBPUSD:
     pack: fx_usd_major_v1
+    rollout: live
     # 2026-08-19: was a byte-for-byte EURUSD clone (only broker/canonical
     # symbol differed) - geometry below is scaled ~1.3x off EURUSD's own
     # pack instead, reflecting Cable's real higher volatility (commonly
@@ -372,6 +386,9 @@ instruments:
       fvg_entry_max_width_price: 0.002
   GBPJPY:
     pack: fx_jpy_cross_v1
+    rollout: live
+    manual:
+      target_close_ratios: [0.40, 0.25, 0.35]
     analysis:
       zones:
         major_maximum_width_price: 0.5
@@ -413,6 +430,7 @@ instruments:
       - 0.35
   USDJPY:
     pack: fx_jpy_cross_v1
+    rollout: live
     analysis:
       zones:
         major_maximum_width_price: 0.3
@@ -455,6 +473,14 @@ instruments:
       - 0.25
       - 0.50
   XAU:
+    rollout: live
+    manual:
+      enabled: true
+      algo_enabled: true
+      entry_mode: zone_ladder
+      risk_reference: shallow
+      risk_multiplier: 1.0
+      tp1_close_fraction: 0.40
     analysis:
       zones:
         major_maximum_width_price: 10.0
@@ -469,7 +495,6 @@ instruments:
       pip_size: 0.1
       price_digits: 2
       volume_units_per_lot: 10000
-    enabled: true
     market_data:
       lookbacks:
         h1_bars: 400

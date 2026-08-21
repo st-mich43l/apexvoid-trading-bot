@@ -38,11 +38,7 @@ from app.persistence.store import (
   set_execution_status,
 )
 from app.signals import pips_format
-from app.signals.fx_manual_algo import (
-  close_ratio_weights,
-  fx_manual_symbols,
-  uses_entry_price_display,
-)
+from app.signals.fx_manual_algo import uses_entry_price_display
 from app.signals.manual_intent import ManualTradeIntent
 
 log = logging.getLogger(__name__)
@@ -129,11 +125,15 @@ def _entry_event_text(
 
 
 def _manual_algo_symbols() -> tuple[str, ...]:
-  symbols = set(runtime_config.live_instruments() or ())
-  symbols.update(fx_manual_symbols())
-  if not symbols:
-    symbols.add("XAU")
-  return tuple(sorted(symbol.upper() for symbol in symbols))
+  symbols: list[str] = []
+  for instrument_id in runtime_config.live_instruments() or ():
+    try:
+      manual = runtime_config.for_instrument(instrument_id).manual
+    except Exception:
+      continue
+    if manual.enabled and manual.algo_enabled:
+      symbols.append(instrument_id.upper())
+  return tuple(sorted(set(symbols)))
 
 
 def _symbol_queue(symbol: str) -> asyncio.Queue[tuple[str, Any]]:
@@ -321,6 +321,48 @@ async def _handle_dry_run(event: dict) -> None:
   )
 
 
+def _percentage_weights_from_ratios(ratios: tuple[float, ...]) -> list[int]:
+  raw = [int(round(float(ratio) * 100)) for ratio in ratios]
+  if raw:
+    raw[-1] += 100 - sum(raw)
+  return raw
+
+
+def _manual_target_weights(effective: Any, target_count: int) -> list[int]:
+  """Resolve a valid 100% split for any owner-supplied TP count."""
+  if target_count <= 0:
+    raise ValueError("manual /algo requires at least one take profit")
+  if target_count == 1:
+    return [100]
+
+  close_ratios = tuple(
+    float(item) for item in effective.manual.target_close_ratios
+  )
+  if close_ratios and len(close_ratios) == target_count:
+    weights = _percentage_weights_from_ratios(close_ratios)
+    if all(weight > 0 for weight in weights) and sum(weights) == 100:
+      return weights
+
+  first_fraction = effective.manual.tp1_close_fraction
+  if first_fraction is not None:
+    first = int(round(float(first_fraction) * 100))
+    first = max(1, min(99, first))
+    remaining = 100 - first
+    later_count = target_count - 1
+    later = remaining // later_count
+    weights = [first, *([later] * later_count)]
+    weights[-1] += remaining - (later * later_count)
+    if all(weight > 0 for weight in weights):
+      return weights
+
+  equal = 100 // target_count
+  weights = [equal] * target_count
+  weights[-1] += 100 - sum(weights)
+  if any(weight <= 0 for weight in weights):
+    raise ValueError("manual /algo supports at most 100 take profits")
+  return weights
+
+
 def _intent_to_candidate_payload(intent: ManualTradeIntent) -> dict:
   """Build the TradeCandidate-shaped dict AutoTradeEngine.cs consumes.
 
@@ -354,6 +396,13 @@ def _intent_to_candidate_payload(intent: ManualTradeIntent) -> dict:
     max(1, pips_format.pips_between(sig, tp))
     for tp in intent.tps
   ]
+  effective = runtime_config.for_instrument(intent.symbol)
+  manual = effective.manual
+  if not manual.enabled:
+    raise ValueError(f"manual trading is disabled for {intent.symbol}")
+  if not manual.algo_enabled:
+    raise ValueError(f"manual /algo is disabled for {intent.symbol}")
+  target_weights = _manual_target_weights(effective, len(targets_pips))
   payload = {
     "version": 3,
     "candidate_id": intent.intent_id,
@@ -383,6 +432,9 @@ def _intent_to_candidate_payload(intent: ManualTradeIntent) -> dict:
     "manual_expires_at": intent.expires_at,
     "targets_pips": targets_pips,
     "manual_take_profits": list(intent.tps),
+    "manual_target_weights": target_weights,
+    "manual_single_entry": manual.entry_mode.value == "single",
+    "risk_multiplier": float(manual.risk_multiplier),
     "group_id": intent.intent_id,
     "strategy_family": "manual",
     "zone_id": f"manual-zone:{intent.manual_signal_id}",
@@ -392,12 +444,6 @@ def _intent_to_candidate_payload(intent: ManualTradeIntent) -> dict:
     "bias": "neutral",
     "relationship_to_bias": "neutral",
   }
-  if intent.symbol.upper() in fx_manual_symbols():
-    payload["manual_target_weights"] = close_ratio_weights(intent.symbol)
-    payload["manual_single_entry"] = True
-    multiplier = float(runtime_config.manual_algo.sizing.fx_volume_multiplier)
-    if multiplier > 0 and multiplier != 1.0:
-      payload["risk_multiplier"] = multiplier
   return payload
 
 
@@ -673,11 +719,12 @@ async def _handle_take_profit(event: dict, signal_id: int) -> None:
   if target_pips is not None:
     await redis_state.set_runner_pips(signal_id, int(target_pips))
   # Owner-reported 2026-08-20: pips must be the booking leg's own actual
-  # entry-to-exit distance, not a shared "deepest filled" reference blended
-  # across the whole group - AutoTradeEngine.cs already computes this
+  # entry-to-exit distance, not the signal row's shared shallow risk
+  # reference blended across the whole group - AutoTradeEngine.cs computes this
   # correctly per leg (SignedPips from that leg's own EntryPrice) and
   # publishes it as leg_realized_pips on every take_profit event. Only
-  # fall back to the deepest-fill calc if an event predates that field.
+  # fall back to the conservative shallow-fill calc if an event predates
+  # that field.
   leg_pips = event.get("leg_realized_pips")
   pips = (
     round(float(leg_pips)) if leg_pips is not None
@@ -751,8 +798,8 @@ def _leg_close_pips_and_frac(
 async def _resolve_group_close_pips(signal_id: int, group_pips: float) -> int:
   """Close-card pips for ``group_result`` — never below TPs already booked.
 
-  ``group_realized_pips`` can reflect the last shallow leg's blend while
-  channel TP cards already printed higher pips from the deepest fill.
+  ``group_realized_pips`` can reflect the final leg's weighted blend while
+  channel TP cards already printed higher achieved target pips.
   Prefer the ledger peak and redis runner telemetry when they are higher.
   """
   from app.signals import pips_format

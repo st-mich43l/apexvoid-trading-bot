@@ -8,6 +8,101 @@ public sealed record StopTrailMove(
 
 public static class StopTrailPlanner
 {
+  /// <summary>
+  /// Plans one shared absolute stop for the remaining clips of a manual
+  /// entry ladder after TP1. Realized TP pip-volume funds room below/above
+  /// the remaining-entry VWAP, while the whole original group still locks
+  /// the configured small positive buffer if every runner stops there.
+  ///
+  /// This deliberately differs from moving every clip to its own BE: the
+  /// latter bunches stops around the individual entries and is vulnerable
+  /// to an ordinary M1 retest even though TP1 already paid for wider group
+  /// protection. Existing/current stops are a hard never-worsen boundary.
+  /// </summary>
+  public static StopTrailMove? PlanGroupEconomicBreakeven(
+    IReadOnlyList<AutoTradePositionState> remainingStates,
+    long groupInitialVolume,
+    decimal bookedPipVolume,
+    SymbolInfo symbol,
+    decimal pipSize,
+    int protectedBufferTicks
+  )
+  {
+    if (remainingStates.Count == 0 || groupInitialVolume <= 0)
+    {
+      return null;
+    }
+    if (pipSize <= 0m)
+    {
+      throw new ArgumentOutOfRangeException(nameof(pipSize));
+    }
+    if (protectedBufferTicks < 0)
+    {
+      throw new ArgumentOutOfRangeException(nameof(protectedBufferTicks));
+    }
+    var direction = remainingStates[0].Direction;
+    if (remainingStates.Any(state => state.Direction != direction))
+    {
+      throw new InvalidOperationException(
+        "group economic breakeven requires one trade direction"
+      );
+    }
+    var remainingVolume = remainingStates.Sum(state => state.RemainingVolume);
+    if (remainingVolume <= 0)
+    {
+      return null;
+    }
+    var weightedEntry = remainingStates.Sum(
+      state => state.EntryPrice * state.RemainingVolume
+    ) / remainingVolume;
+    var tickSize = RequireTickSize(symbol);
+    var protectedBufferPrice = protectedBufferTicks * tickSize;
+    var protectedBufferPips = protectedBufferPrice / pipSize;
+    var targetPipVolume = protectedBufferPips * groupInitialVolume;
+    var unfundedPipVolume = targetPipVolume - bookedPipVolume;
+    var desired = direction == TradeDirection.Buy
+      ? weightedEntry + unfundedPipVolume * pipSize / remainingVolume
+      : weightedEntry - unfundedPipVolume * pipSize / remainingVolume;
+
+    // Never loosen any live or original owner stop. All remaining ladder
+    // clips receive one absolute price, so use the most protective boundary
+    // already held by any sibling.
+    var boundaries = remainingStates
+      .Select(state => state.CurrentStopLoss ?? state.InitialStopLoss)
+      .Where(stop => stop is not null)
+      .Select(stop => stop!.Value)
+      .ToArray();
+    if (boundaries.Length > 0)
+    {
+      desired = direction == TradeDirection.Buy
+        ? Math.Max(desired, boundaries.Max())
+        : Math.Min(desired, boundaries.Min());
+    }
+
+    // Round toward greater protection so tick rounding cannot turn the
+    // promised small group profit into a fractional loss.
+    desired = direction == TradeDirection.Buy
+      ? decimal.Ceiling(desired / tickSize) * tickSize
+      : decimal.Floor(desired / tickSize) * tickSize;
+    desired = decimal.Round(
+      desired,
+      symbol.Digits,
+      MidpointRounding.AwayFromZero
+    );
+    if (remainingStates.All(state =>
+      state.CurrentStopLoss is decimal current
+      && !MovesTowardProfit(direction, current, desired)
+    ))
+    {
+      return null;
+    }
+    return new StopTrailMove(
+      desired,
+      $"group BE+{protectedBufferTicks} ticks",
+      protectedBufferPrice
+    );
+  }
+
   public static StopTrailMove? Plan(
     AutoTradePositionState state,
     int completedTargetIndex,

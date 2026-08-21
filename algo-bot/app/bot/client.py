@@ -41,6 +41,7 @@ dp = Dispatcher()
 scanner_dp = Dispatcher()
 
 OWNER_COMMANDS = [
+  BotCommand(command="trade", description="[SYMBOL] BUY|SELL … — send/list"),
   BotCommand(command="trade_open", description="[SYMBOL] — list open signals"),
   BotCommand(command="trade_active", description="[SYMBOL] [#id]"),
   BotCommand(command="trade_close", description="[SYMBOL] #id ±pips [%] | be"),

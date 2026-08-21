@@ -110,6 +110,25 @@ def _fx_manual_symbol_pattern() -> str:
   return "|".join(re.escape(symbol.lower()) for symbol in symbols)
 
 
+def _zone_ladder_manual_symbol_pattern() -> str:
+  """Configured non-XAU books that accept an explicit entry zone.
+
+  XAU retains its legacy ``gold``/``xauusd`` grammar below. Aliases supplied
+  to `/trade` have already been canonicalized before this parser runs.
+  """
+  symbols: list[str] = []
+  for instrument_id in runtime_config.live_instruments():
+    if instrument_id.upper() == "XAU":
+      continue
+    try:
+      manual = runtime_config.for_instrument(instrument_id).manual
+    except Exception:
+      continue
+    if manual.entry_mode.value == "zone_ladder":
+      symbols.append(instrument_id.upper())
+  return "|".join(re.escape(symbol.lower()) for symbol in symbols)
+
+
 def _parse_fx_manual(raw: str) -> Optional[dict]:
   """Parse ``eurusd buy 1.15007 / algo`` (single-price FX manual /algo)."""
   pattern = _fx_manual_symbol_pattern()
@@ -230,18 +249,43 @@ def _parse_manual(text: str) -> Optional[dict]:
     fx.pop("short_form", None)
     return fx
   m = _MANUAL_RE.search(raw)
-  if not m:
-    return None
-  action, entry_a, entry_b, sl_raw, tp_raw = m.groups()
+  symbol = "XAU"
+  if m is not None:
+    action, entry_a, entry_b, sl_raw, tp_raw = m.groups()
+  else:
+    zone_pattern = _zone_ladder_manual_symbol_pattern()
+    if not zone_pattern:
+      return None
+    zone_re = re.compile(
+      rf'({zone_pattern})\s+(buy|sell)\s+'
+      rf'(?:entry(?:\s+zone)?\s+)?'
+      rf'\(?[ \t]*([\d.]+)(?:[ \t]*[-–—][ \t]*([\d.]+))?[ \t]*\)?'
+      rf'(?:\s*[\r\n/]+\s*sl\s+([\d.]+))?'
+      rf'(?:\s*[\r\n/]+\s*tp\s+([\d./]+))?',
+      re.IGNORECASE,
+    )
+    zone_match = zone_re.search(raw)
+    if zone_match is None:
+      return None
+    symbol_raw, action, entry_a, entry_b, sl_raw, tp_raw = zone_match.groups()
+    symbol = symbol_raw.upper()
+    # A new non-XAU ladder has no safe implicit stop/target geometry. It is
+    # command-ready with explicit prices and fails closed until both exist.
+    if sl_raw is None or not (tp_raw or "").strip():
+      return None
   action = action.upper()
   entry_anchor = float(entry_a)
   if entry_b is None:
     entry_low = entry_high = entry_anchor
   else:
-    entry_other = _expand_entry_endpoint(float(entry_b), entry_anchor)
+    entry_other = (
+      _expand_entry_endpoint(float(entry_b), entry_anchor)
+      if symbol == "XAU"
+      else float(entry_b)
+    )
     entry_low, entry_high = sorted((entry_anchor, entry_other))
   rr_entry = entry_low if action == 'SELL' else entry_high
-  pip = pip_for('XAU')
+  pip = pip_for(symbol)
   if setup_type is None and not scalp_count:
     setup_type = DEFAULT_SETUP_TYPE
   if sl_raw is not None:
@@ -253,7 +297,11 @@ def _parse_manual(text: str) -> Optional[dict]:
     )
   if (tp_raw or '').strip():
     tps = [
-      _expand_tp(float(v), rr_entry, action)
+      (
+        _expand_tp(float(v), rr_entry, action)
+        if symbol == "XAU"
+        else float(v)
+      )
       for v in tp_raw.strip().split('/') if v.strip()
     ]
   else:
@@ -266,7 +314,7 @@ def _parse_manual(text: str) -> Optional[dict]:
   risk = abs(rr_entry - sl)
   return {
     'action': action,
-    'symbol': 'XAU',
+    'symbol': symbol,
     'entry': entry_low,
     'entry_end': entry_high,
     'rr_entry': rr_entry,

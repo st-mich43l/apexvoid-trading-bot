@@ -30,6 +30,19 @@ log = logging.getLogger(__name__)
 router = Router(name="fallback")
 
 
+def manual_signal_usage() -> str:
+  return (
+    "Format:\n\n"
+    "<code>/trade xau buy 4078 / algo</code> — single entry\n"
+    "<code>/trade xau buy 4078-75 / algo</code> — entry zone\n\n"
+    "<code>/trade eurusd buy 1.15007 / algo</code> — fixed-R/R entry\n"
+    "<code>/trade gbpjpy sell 216.168 / sl 216.50 / algo</code>\n\n"
+    "The legacy forms without <code>/trade</code> still work.\n"
+    "TP: absolute prices or XAU last 2 digits. Any count.\n\n"
+    "Commands: <code>/help</code>"
+  )
+
+
 def _event_guard_timing(ts_utc: int, now: int) -> str:
   delta = ts_utc - now
   if delta < 0:
@@ -94,23 +107,33 @@ async def _arm_algo_intent(signal_id: int, signal: dict) -> str:
   return "📨 ALGO REQUEST RECEIVED"
 
 
-@router.message(F.chat.type == "private", F.text)
-async def handle_private_signal(msg: Message) -> None:
-  """Parse manual signal DM and post to channel."""
-  if not _is_owner(msg):
-    return
-  sig = _parse_manual(msg.text or "")
+async def submit_manual_signal(msg: Message, text: str) -> bool:
+  """Submit one owner-authored signal through the canonical manual flow.
+
+  Both the legacy free-text surface and ``/trade`` call this function so a
+  newly-configured symbol cannot drift into a second persistence/broadcast/
+  execution path.  ``False`` means only that the text was not a signal.
+  """
+  sig = _parse_manual(text)
   if not sig:
+    return False
+  symbol = str(sig.get("symbol") or "XAU").upper()
+  try:
+    effective = runtime_config.for_instrument(symbol)
+  except Exception:
+    await msg.answer(f"⛔ {escape(symbol)} is not a configured trade symbol.")
+    return True
+  if symbol not in runtime_config.live_instruments():
     await msg.answer(
-      "Format:\n\n"
-      "<code>xau buy 4078 / algo</code> — single entry\n"
-      "<code>xau buy 4078-75 / algo</code> — entry zone\n\n"
-      "<code>eurusd buy 1.15007 / algo</code> — FX entry-at, 1:2 RR\n"
-      "<code>gbpjpy sell 216.168 / sl 216.50 / algo</code>\n\n"
-      "TP: absolute prices or last 2 digits. Any count.\n\n"
-      "Commands: <code>/help</code>"
+      f"⛔ {escape(symbol)} is configured but not live for manual execution."
     )
-    return
+    return True
+  if not effective.manual.enabled:
+    await msg.answer(f"⛔ Manual trading is disabled for {escape(symbol)}.")
+    return True
+  if sig["execution_mode"] == "algo" and not effective.manual.algo_enabled:
+    await msg.answer(f"⛔ Algo execution is disabled for {escape(symbol)}.")
+    return True
   now = int(time.time())
   event = await event_in_window(
     now,
@@ -121,7 +144,7 @@ async def handle_private_signal(msg: Message) -> None:
       f"⚠️ Signal not posted: {escape(event['title'])} "
       f"{_event_guard_timing(event['ts_utc'], now)} — expect volatility"
     )
-    return
+    return True
   rec = await store_manual_signal(
     ts=now,
     action=sig['action'],
@@ -159,6 +182,16 @@ async def handle_private_signal(msg: Message) -> None:
     sig["entry"],
     sig["entry_end"],
   )
+  return True
+
+
+@router.message(F.chat.type == "private", F.text)
+async def handle_private_signal(msg: Message) -> None:
+  """Parse manual signal DM and post to channel."""
+  if not _is_owner(msg):
+    return
+  if not await submit_manual_signal(msg, msg.text or ""):
+    await msg.answer(manual_signal_usage())
 
 
 async def _handle_pips(msg: Message, text: str, has_photo: bool) -> None:

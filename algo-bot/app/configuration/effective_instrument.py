@@ -21,12 +21,14 @@ from app.configuration.models.instruments import (
   REGISTERED_INSTRUMENT_POLICIES,
   InstrumentConfig,
   InstrumentLookbacksConfig,
+  InstrumentManualConfig,
   InstrumentRollout,
   InstrumentTargetingConfig,
   InstrumentZoneWidthConfig,
   InstrumentsConfig,
   compose_instrument_domain_overrides,
   effective_rollout,
+  resolve_manual_profile,
   resolve_policy_name,
 )
 from app.configuration.source_types import ResolutionTrace
@@ -132,6 +134,7 @@ class EffectiveInstrumentConfig(FrozenConfigModel):
   identity: InstrumentIdentityConfig
   units: InstrumentUnitsConfig
   targeting: InstrumentTargetingConfig
+  manual: InstrumentManualConfig
   market_data: EffectiveInstrumentMarketDataConfig
   analysis: EffectiveInstrumentAnalysisConfig
   strategies: BaseModel
@@ -427,6 +430,23 @@ def build_effective_instrument(
       f"instrument {key!r} policy {policy_name!r} is not supported"
     )
 
+  legacy_manual_sizing = getattr(
+    getattr(runtime, "manual_algo", None), "sizing", None,
+  )
+  legacy_fixed_rr_risk_multiplier = float(
+    getattr(legacy_manual_sizing, "fx_volume_multiplier", 1.5)
+  )
+  try:
+    manual = resolve_manual_profile(
+      key,
+      instrument,
+      legacy_fixed_rr_risk_multiplier=legacy_fixed_rr_risk_multiplier,
+    )
+  except ValueError as exc:
+    raise EffectiveInstrumentError(
+      f"instrument {key!r} manual profile is invalid: {exc}"
+    ) from None
+
   if rollout is not InstrumentRollout.DISABLED:
     units = _require_units(key, instrument)
     lookbacks = _require_lookbacks(key, instrument, runtime.market_data)
@@ -505,6 +525,19 @@ def build_effective_instrument(
       ),
     ),
     EffectiveValueProvenance(
+      path=f"instruments.{key}.manual",
+      source_kind=(
+        SourceKind.CONFIG_FILE.value
+        if instrument.manual is not None
+        else SourceKind.DERIVED_COMPATIBILITY_RULE.value
+      ),
+      source_name=(
+        "instrument_manual_profile"
+        if instrument.manual is not None
+        else "legacy_manual_profile_mapping"
+      ),
+    ),
+    EffectiveValueProvenance(
       path=f"instruments.{key}.contract.pip_size",
       source_kind=SourceKind.CONFIG_FILE.value,
       source_name="instrument_registry",
@@ -537,6 +570,7 @@ def build_effective_instrument(
     identity=identity,
     units=units,
     targeting=instrument.targeting,
+    manual=manual,
     market_data=EffectiveInstrumentMarketDataConfig(
       lookbacks=lookbacks,
       runtime=market_data,

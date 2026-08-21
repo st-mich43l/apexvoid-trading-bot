@@ -13,6 +13,17 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- XAU manual `/algo` ladders now retain one shallow-entry initial-risk
+  contract across all shallow/mid/deep legs. Simultaneous broker-side closure
+  reconciles the full group's volume-weighted realised pips instead of losing
+  earlier sibling legs and reporting only the final deep leg.
+- Added an incident-scoped, dry-run-first repair for manual signals #101/#104;
+  corrected ledger rows carry a durable source marker so a generic Redis stats
+  replay cannot restore the bad deep-leg result or per-fill stop distances.
+- After manual-ladder TP1, booked profit now funds one shared group-economic
+  stop for every remaining clip. The stop guarantees the configured positive
+  whole-group buffer without bunching each leg at its own break-even; TP2
+  advances every surviving leg to the owner's absolute TP1.
 - Multi-symbol ZoneWatch processing no longer rebuilds the complete effective
   instrument/catalog projection for every OHLC price. Effective instrument
   contexts are cached per immutable runtime (with safe copy invalidation and
@@ -55,6 +66,10 @@ dated section after deployment.
   reliably delivering once an hour. Now posts once per bucket unconditionally.
 
 ### Changed
+- XAU manual `/algo` books 40% of group volume at TP1 by default. Manual entry
+  mode, algo capability, shallow risk reference, size multiplier, and TP1
+  fraction are now explicit per-instrument configuration rather than inferred
+  from autonomous target mode.
 - Closed bars now use one ordered worker/OHLC cache per symbol, allowing
   different instruments to progress concurrently without corrupting shared
   cache state. Spot ZoneWatch wakes similarly run once per symbol and
@@ -118,8 +133,10 @@ dated section after deployment.
   per leg by AutoTradeEngine.cs), not a shared "deepest filled" reference
   blended across the whole group — a leg's own TP hit now reports that
   leg's own real pips, not another leg's.
-- After TP1, remaining XAU ladder legs still move to protected BE (and publish
-  ``stop_moved``) even when shallow-first volume fully closes the shallow clip.
+- After TP1, remaining XAU ladder legs still publish ``stop_moved`` even when
+  shallow-first volume fully closes the shallow clip. The current policy now
+  uses the group-economic protected stop documented above rather than a
+  separate fill-level BE for each leg.
 - Manual /algo BE/TP channel updates still acquire when a lifecycle event
   omits ``symbol`` or ``position_id`` — route by ``candidate_id`` / intent.
 - Manual-algo / FX CI tests no longer assume a single limit order or brittle
@@ -151,6 +168,13 @@ dated section after deployment.
   well as the existing entry-zone shorthand (``4078-75``).
 
 ### Added
+- Owner `/trade [SYMBOL] BUY|SELL …` command: lists configured live manual
+  books when called without a signal, resolves configured broker aliases, and
+  submits through the same parse/news-guard/store/broadcast/algo path as the
+  legacy free-text DM.
+- Safe symbol-onboarding contract: reusable instrument packs reject identity
+  and rollout fields, every packed instrument must declare rollout explicitly,
+  and the resolved manifest carries each instrument's manual execution profile.
 - ``instrument_packs`` top-level CONFIG_FILE section: declare reusable FX packs
   (e.g. ``fx_usd_major_v1``) and go live a pair with ``pack: …`` plus
   ``broker_symbol`` / ``contract`` / ``analysis.zones`` overrides only.

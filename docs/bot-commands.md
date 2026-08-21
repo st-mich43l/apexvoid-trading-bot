@@ -30,7 +30,26 @@ docker compose up -d
 
 ## Manual Signal Posting
 
-Send the following template as a **DM to the bot**.  The bot parses it and posts a formatted signal to the channel.
+Use `/trade` in the owner DM. With no arguments it lists every live symbol,
+its broker alias, manual entry mode, and whether `/algo` execution is enabled:
+
+```text
+/trade
+/trade XAU buy 4473-4470 / sl 4467 / tp 4476/4479/4482 / algo
+/trade EURUSD sell 1.15007 / sl 1.15187 / algo
+```
+
+The symbol token accepts configured aliases (for example `XAUUSD`) and is
+normalized to the canonical instrument before it enters the existing parse,
+news-guard, persistence, broadcast, and execution flow. Legacy free-text DMs
+remain accepted.
+
+For a new instrument, `/trade` is available only when its concrete
+`instruments.<SYMBOL>` declaration is `rollout: live` and its `manual.enabled`
+capability is true. `/algo` additionally requires `manual.algo_enabled`.
+
+The original XAU template is still valid as a **DM to the bot**. The bot parses
+it and posts a formatted signal to the channel.
 
 ### Template
 
@@ -50,7 +69,7 @@ gold sell 4100-4105
 
 | Field | Values | Description |
 |---|---|---|
-| `gold` | literal | Always `gold` (XAUUSD) |
+| symbol | configured ID or alias | For example `XAU`, `XAUUSD`, `EURUSD`, or `GBPJPY` |
 | direction | `buy` / `sell` | Trade direction |
 | entry zone | e.g. `4100-4105` | Lower and upper entry prices |
 | `sl` | e.g. `4110` | Stop-loss — full price |
