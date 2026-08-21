@@ -2263,7 +2263,20 @@ def _nearest_opposing_pool(
 
 
 def _number(value: float) -> str:
-  return f"{value:.2f}".rstrip("0").rstrip(".")
+  """Format detector reason prices without XAU-only two-decimal collapse.
+
+  Live 2026-08-21 GBPUSD root cards showed ``1.36-1.36`` in context notes
+  because this helper always used ``.2f``. Infer digits from magnitude so
+  majors (≈1.x), JPY crosses (≈100+), and XAU (≈1000+) stay readable.
+  """
+  abs_v = abs(float(value))
+  if abs_v >= 1000.0:
+    digits = 2
+  elif abs_v >= 10.0:
+    digits = 3
+  else:
+    digits = 5
+  return f"{float(value):.{digits}f}".rstrip("0").rstrip(".")
 
 
 def _level_grab(

@@ -36,8 +36,34 @@ from app.autotrade.setup_execution_aggregate import (
 from app.autotrade.setup_lifecycle import TERMINAL_STATES, load_setup
 from app.autotrade.strategy_match import StrategyMatch
 from app.core.config import runtime_config
+from app.core.symbols import digits_for, pip_for
 
 log = logging.getLogger(__name__)
+
+
+def card_price_digits(symbol: str) -> int:
+  """Instrument price digits for Telegram root-card Trade area.
+
+  Live 2026-08-21 GBPUSD cards rendered every price as ``1.36`` because
+  the formatter hard-coded two decimals (XAU). Unknown symbols stay at 2.
+  """
+  try:
+    return int(digits_for(symbol))
+  except KeyError:
+    return 2
+
+
+def card_min_price_move(symbol: str) -> float:
+  """Minimum mid move before refreshing live Price now.
+
+  The forming-price loop used ``min_move=0.5`` (fine for XAU, ~5000 pips on
+  EURUSD) so FX root cards never updated after the first render.
+  """
+  try:
+    pip = float(pip_for(symbol))
+  except KeyError:
+    pip = 0.1
+  return max(pip, 1e-9)
 
 # P0-6: a durable status write (save_forming_card_status/edit_forming_card_status)
 # can arrive before the card itself has been created (the scanner send and the
@@ -1221,7 +1247,7 @@ async def edit_forming_card_stop(
   setup_id: str,
   stop_price: float,
   *,
-  digits: int = 2,
+  digits: int | None = None,
   edit_fn: EditFn,
 ) -> bool:
   """Patch the root card Trade-area Stop line and copy-draft SL."""
@@ -1230,8 +1256,12 @@ async def edit_forming_card_stop(
     return False
   if int(card.get("message_id") or 0) <= 0:
     return False
+  resolved_digits = digits
+  if resolved_digits is None:
+    symbol = parse_forming_card_symbol(str(card["text"]))
+    resolved_digits = card_price_digits(symbol) if symbol else 2
   text = apply_forming_card_stop(
-    str(card["text"]), float(stop_price), digits=digits,
+    str(card["text"]), float(stop_price), digits=int(resolved_digits),
   )
   if text == card["text"]:
     return True
@@ -1268,9 +1298,9 @@ async def edit_forming_card_price(
   setup_id: str,
   price: float,
   *,
-  digits: int = 2,
+  digits: int | None = None,
   edit_fn: EditFn,
-  min_move: float = 0.1,
+  min_move: float | None = None,
 ) -> bool:
   """Patch the root card Price now line when mid has moved enough."""
   from aiogram.exceptions import TelegramRetryAfter
@@ -1282,15 +1312,28 @@ async def edit_forming_card_price(
     # In-flight create reservation — never call Telegram with message_id=0.
     return False
   text = str(card["text"])
+  symbol = parse_forming_card_symbol(text)
+  resolved_digits = (
+    int(digits)
+    if digits is not None
+    else (card_price_digits(symbol) if symbol else 2)
+  )
+  resolved_min_move = (
+    float(min_move)
+    if min_move is not None
+    else (card_min_price_move(symbol) if symbol else 0.1)
+  )
   snapshot = await load_forming_card_status_snapshot(client, setup_id)
   status_state = snapshot.state if snapshot is not None else None
   if should_stop_forming_price_track(text, status_state=status_state):
     await client.srem(FORMING_ACTIVE_INDEX_KEY, setup_id)
     return False
   current = parse_forming_card_price_now(text)
-  if current is not None and abs(float(price) - current) < float(min_move):
+  if current is not None and abs(float(price) - current) < resolved_min_move:
     return False
-  next_text = apply_forming_card_price(text, float(price), digits=digits)
+  next_text = apply_forming_card_price(
+    text, float(price), digits=resolved_digits,
+  )
   if next_text == text:
     return False
   try:
@@ -1350,8 +1393,8 @@ async def refresh_forming_card_prices(
   client,
   *,
   edit_fn: EditFn,
-  digits: int = 2,
-  min_move: float = 0.1,
+  digits: int | None = None,
+  min_move: float | None = None,
 ) -> int:
   """Best-effort Price now refresh for all indexed forming cards."""
   updated = 0
@@ -1383,9 +1426,15 @@ async def refresh_forming_card_prices(
       client,
       setup_id,
       float(mid),
-      digits=digits,
+      digits=(
+        int(digits) if digits is not None else card_price_digits(symbol)
+      ),
       edit_fn=edit_fn,
-      min_move=min_move,
+      min_move=(
+        float(min_move)
+        if min_move is not None
+        else card_min_price_move(symbol)
+      ),
     )
     if ok:
       updated += 1
@@ -1422,7 +1471,10 @@ async def forming_price_track_loop() -> None:
   from app.persistence import redis_state
 
   client = redis_state.get_client()
-  log.info("forming price track loop started interval_s=5.0 min_move=0.5")
+  log.info(
+    "forming price track loop started interval_s=5.0 "
+    "min_move=per_instrument_pip"
+  )
   while True:
     try:
       from app.bot.telegram_actor import flood_paused
@@ -1434,7 +1486,6 @@ async def forming_price_track_loop() -> None:
       await refresh_forming_card_prices(
         client,
         edit_fn=edit_scanner_price_now,
-        min_move=0.5,
       )
     except Exception:
       log.exception("forming price track refresh failed")
@@ -1593,8 +1644,9 @@ PLAN_PUBLISHED_STATUS_LINE = STATUS_LINE_BY_PROJECTION_STATE["plan_published"]
 _PLAN_PUBLISHED_STATUS_SLOT = "\u200b"
 
 
-def _price_text(value: float) -> str:
-  return f"{float(value):,.2f}"
+def _price_text(value: float, *, symbol: str) -> str:
+  digits = card_price_digits(symbol)
+  return f"{float(value):,.{digits}f}"
 
 
 def quote_inside_entry_zone(
@@ -1684,9 +1736,10 @@ def format_plan_published_root_card(
   in_zone = quote_inside_entry_zone(
     match.current_price, match.entry_low, match.entry_high,
   )
+  symbol = str(match.symbol or "").upper() or "XAU"
 
   lines = [
-    forming_card_headline(str(match.symbol), str(match.source_tf), in_zone=in_zone),
+    forming_card_headline(symbol, str(match.source_tf), in_zone=in_zone),
     (
       "⏳ <b>IN ZONE</b> · waiting market fill"
       if in_zone
@@ -1726,16 +1779,24 @@ def format_plan_published_root_card(
     "📍 <b>Trade area</b>",
     (
       "• <b>Price now:</b> "
-      f"<b>{_price_text(match.current_price)}</b> <i>(live)</i>"
+      f"<b>{_price_text(match.current_price, symbol=symbol)}</b> "
+      "<i>(live)</i>"
     ),
     (
       "• <b>Entry zone:</b> "
-      f"<b>{_price_text(match.entry_low)}–{_price_text(match.entry_high)}</b>"
+      f"<b>{_price_text(match.entry_low, symbol=symbol)}–"
+      f"{_price_text(match.entry_high, symbol=symbol)}</b>"
     ),
-    f"• <b>Key level:</b> <b>{_price_text(match.key_level)}</b>",
+    (
+      "• <b>Key level:</b> "
+      f"<b>{_price_text(match.key_level, symbol=symbol)}</b>"
+    ),
   ])
   if stop_price is not None and math.isfinite(float(stop_price)):
-    lines.append(f"• <b>Stop:</b> <b>{_price_text(float(stop_price))}</b>")
+    lines.append(
+      "• <b>Stop:</b> "
+      f"<b>{_price_text(float(stop_price), symbol=symbol)}</b>"
+    )
   else:
     lines.append("• <b>Stop:</b> <b>SL</b>")
 
@@ -1854,7 +1915,7 @@ async def ensure_plan_published_root_card(
         client,
         match.match_id,
         stop_price,
-        digits=int(runtime_config.contract.instrument.price_digits),
+        digits=card_price_digits(str(match.symbol)),
         edit_fn=resolved_edit,
       )
     return int(existing["message_id"])
@@ -1883,7 +1944,7 @@ async def ensure_plan_published_root_card(
       client,
       match.match_id,
       stop_price,
-      digits=int(runtime_config.contract.instrument.price_digits),
+      digits=card_price_digits(str(match.symbol)),
       edit_fn=resolved_edit,
     )
   log.info(

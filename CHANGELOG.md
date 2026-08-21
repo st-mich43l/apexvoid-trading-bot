@@ -13,6 +13,12 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- FX Telegram root cards no longer collapse every price to two decimals
+  (live 2026-08-21 GBPUSD showed ``1.36`` for price/zone/key/stop while the
+  fill was ``1.36447``). Trade-area formatting, stop patches, and live Price
+  now refresh use per-instrument digits; FX live ``min_move`` is one pip
+  instead of the XAU ``0.5`` threshold that froze FX cards. Detector reason
+  price notes also stop forcing ``.2f``.
 - Autonomous FX ``fixed_rr`` reaction now stamps pack volume
   (``manual.risk_multiplier`` / ``fx_volume_multiplier``, default ``1.5``)
   onto ``effective_risk_multiplier`` so equity-table lots match manual /algo
