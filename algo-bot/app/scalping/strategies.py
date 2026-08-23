@@ -472,6 +472,8 @@ def discover_breakout_retest(
   min_net = _parse_float(getattr(_hfs_cfg(cfg), "target", None), "minimum_net_target_pips", 15.0)
   buffer = max(pip_size * 2, context.atr * 0.1)
   min_disp = max(pip_size * 3, context.atr * 0.15)
+  act = getattr(_hfs_cfg(cfg), "activation", None)
+  retest_lookback = max(1, int(getattr(act, "trigger_maximum_age_bars", 2) or 2))
   out: list[ScalpOpportunity] = []
 
   for direction in ("BUY", "SELL"):
@@ -481,6 +483,7 @@ def discover_breakout_retest(
       box_high=high,
       box_low=low,
       min_displacement=min_disp,
+      retest_lookback_bars=retest_lookback,
     )
     if ev is None or ev.get("state") == "wait_retest" or not ev.get("accepted_break"):
       continue

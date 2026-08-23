@@ -379,8 +379,25 @@ def detect_breakout_retest(
   box_high: float,
   box_low: float,
   min_displacement: float,
+  retest_lookback_bars: int = 1,
 ) -> dict[str, Any] | None:
-  """Require accepted break → return → hold, not wick-only break."""
+  """Require accepted break → return → hold, not wick-only break.
+
+  2026-08-23 dig: the retest touch was only ever checked on ``df.iloc[-1]``,
+  the single newest bar - a genuine break-then-pullback happening 2-3 bars
+  ago (routine in practice: the pullback touches the level, then price
+  continues away from it for a bar or two before this function next runs)
+  was invisible the moment the touch bar wasn't literally the bar this call
+  happened to run on. Range Sweep's ``detect_sweep_reclaim`` already fixed
+  the identical bug on 2026-08-06 ("discovery matches activation age (slow
+  M5 rebuild must not skip the only reclaim bar forever)") via a
+  ``lookback_bars`` scan; this widens only the "has it touched the level
+  yet" half the same way, reusing the same ``activation.
+  trigger_maximum_age_bars`` default (2) callers already pass Range Sweep,
+  not a new parameter. The reclaim signal itself stays anchored to the
+  current bar exactly as before - only the touch precondition looks back,
+  so a stale reclaim from several bars ago can never fire a fresh entry.
+  """
   if df is None or len(df) < 5:
     return None
   side = str(direction).upper()
@@ -405,13 +422,27 @@ def detect_breakout_retest(
   if accepted_i is None or accepted_i >= len(df) - 1:
     return {"state": "wait_retest", "accepted": False}
 
-  # After accept, look for return to level and reclaim
+  # Has price touched back to the level anywhere since the break, within
+  # the lookback window? (Widened half of the fix - was df.iloc[-1] only.)
+  window = max(1, min(int(retest_lookback_bars or 1), len(df) - accepted_i - 1))
+  touched = False
+  for offset in range(1, window + 1):
+    bar = df.iloc[-offset]
+    if side == "BUY":
+      if float(bar["low"]) <= high:
+        touched = True
+        break
+    else:
+      if float(bar["high"]) >= low:
+        touched = True
+        break
+  if not touched:
+    return {"state": "wait_retest", "accepted": True, "accepted_index": accepted_i}
+
+  # Reclaim signal stays anchored to the current bar, exactly as before.
   last = df.iloc[-1]
   last_ts = _ts(df.index[-1])
   if side == "BUY":
-    # Retest: wick or body tagged broken resistance, closed back above
-    if float(last["low"]) > high:
-      return {"state": "wait_retest", "accepted": True, "accepted_index": accepted_i}
     if float(last["close"]) < high:
       return None  # failed hold
     if float(last["close"]) <= float(last["open"]):
@@ -429,8 +460,6 @@ def detect_breakout_retest(
       "target_room_beyond_breakout": True,
     }
 
-  if float(last["high"]) < low:
-    return {"state": "wait_retest", "accepted": True, "accepted_index": accepted_i}
   if float(last["close"]) > low:
     return None
   if float(last["close"]) >= float(last["open"]):
