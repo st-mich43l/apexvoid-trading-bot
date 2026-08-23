@@ -154,8 +154,10 @@ def _publish_technique(
     technique_display_tags([instance.technique]),
   ]
   if instance.measured.get("entry_clipped"):
+    structural_label = "H1" if instance.technique == TECHNIQUE_CRT else "structural"
     reasons.append(
-      f"proximal crt entry (H1 {_number(structural_low)}-{_number(structural_high)})"
+      f"proximal {instance.technique} entry ({structural_label} "
+      f"{_number(structural_low)}-{_number(structural_high)})"
     )
   result = _structural_finish(
     ctx,

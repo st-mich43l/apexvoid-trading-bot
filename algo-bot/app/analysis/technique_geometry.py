@@ -196,6 +196,46 @@ def optimize_crt_entry_zone(
   return replace(zone, bottom=low, top=low + max_width), True
 
 
+def optimize_technique_entry_zone(
+  zone: Zone,
+  *,
+  max_width_price: float = FVG_IMBALANCE_ENTRY_MAX_WIDTH_PRICE,
+) -> tuple[Zone, bool]:
+  """Clip a Supply/Demand or Order Block zone to its proximal tradeable band.
+
+  2026-08-23 dig: unlike FVG (``optimize_imbalance_entry_zone``, via
+  ``_proximal_if_wide``) and CRT (``optimize_crt_entry_zone``), Supply
+  Demand and Order Block technique instances were built straight from the
+  raw multi-candle zone / single-candle OB body with no entry clip at all —
+  ``instance_from_zone`` fed that full width directly into
+  ``_publish_technique``'s stop-clearance calc as both structural AND
+  entry bounds. On a fast pair (e.g. GBPJPY, ~180 pips/day) that routinely
+  blew the stop envelope and killed the candidate between
+  activation_allowed and plan_published every time (0 Order Block fills
+  ever recorded). Same proximal-edge contract as FVG/CRT: SELL/supply
+  keeps the near (lower) edge — price falling into a supply zone from
+  below touches the bottom first; BUY/demand keeps the near (upper) edge.
+  Full zone stays structural (mitigation / confirmation) via the caller
+  stashing the pre-clip bounds.
+  """
+  try:
+    low = float(zone.low)
+    high = float(zone.high)
+    max_width = float(max_width_price)
+  except (TypeError, ValueError):
+    return zone, False
+  if not math.isfinite(low) or not math.isfinite(high) or high <= low:
+    return zone, False
+  if not math.isfinite(max_width) or max_width <= 0:
+    return zone, False
+  if high - low <= max_width + 1e-12:
+    return zone, False
+  side = str(getattr(zone, "side", "") or "").lower()
+  if side == "supply":
+    return replace(zone, bottom=low, top=low + max_width), True
+  return replace(zone, bottom=high - max_width, top=high), True
+
+
 @dataclass(frozen=True)
 class TechniqueInstance:
   technique: str
@@ -266,7 +306,20 @@ def _zone_technique(source: str) -> str | None:
   return None
 
 
-def instance_from_zone(zone: Zone, *, technique: str | None = None) -> TechniqueInstance | None:
+# Technique instances built straight from a raw detector Zone (Supply
+# Demand, Order Block, FVG) share the same missing-clip bug: the full
+# multi-candle / gap width was used as both structural bounds and the
+# tradeable entry, unlike CRT/iFVG's own dedicated builders. See
+# optimize_technique_entry_zone's docstring for the incident.
+_ENTRY_CLIPPABLE_TECHNIQUES = frozenset({TECHNIQUE_SD, TECHNIQUE_OB, TECHNIQUE_FVG})
+
+
+def instance_from_zone(
+  zone: Zone,
+  *,
+  technique: str | None = None,
+  entry_max_width_price: float | None = None,
+) -> TechniqueInstance | None:
   sources = tuple(zone.sources or ([zone.source] if zone.source else []))
   resolved = technique
   if resolved is None:
@@ -276,18 +329,30 @@ def instance_from_zone(zone: Zone, *, technique: str | None = None) -> Technique
         break
   if resolved is None:
     return None
+  measured: dict[str, Any] = {
+    "touches": int(zone.touches),
+    "mitigated": bool(zone.mitigated),
+    "score": float(getattr(zone, "score", 0.0)),
+  }
+  entry_zone = zone
+  if resolved in _ENTRY_CLIPPABLE_TECHNIQUES and entry_max_width_price:
+    clipped_zone, clipped = optimize_technique_entry_zone(
+      zone, max_width_price=entry_max_width_price,
+    )
+    if clipped:
+      measured["structural_low"] = float(zone.low)
+      measured["structural_high"] = float(zone.high)
+      measured["entry_clipped"] = True
+      measured["entry_max_width_price"] = float(entry_max_width_price)
+      entry_zone = clipped_zone
   return TechniqueInstance(
     technique=resolved,
     side=zone_side_to_trade_side(zone.side),
-    low=float(zone.low),
-    high=float(zone.high),
+    low=float(entry_zone.low),
+    high=float(entry_zone.high),
     origin_ts=zone.created_ts,
     sources=sources,
-    measured={
-      "touches": int(zone.touches),
-      "mitigated": bool(zone.mitigated),
-      "score": float(getattr(zone, "score", 0.0)),
-    },
+    measured=measured,
     origin_index=int(zone.origin_index),
   )
 
@@ -454,6 +519,7 @@ def discover_ifvg_instances(
   df: pd.DataFrame,
   *,
   settings: TechniqueGeometrySettings,
+  entry_max_width_price: float | None = None,
 ) -> list[TechniqueInstance]:
   """T4 — first close through gap flips side."""
   instances: list[TechniqueInstance] = []
@@ -487,14 +553,37 @@ def discover_ifvg_instances(
         break
     if inverted_side is None:
       continue
+    entry_lo, entry_hi = z_lo, z_hi
+    measured: dict[str, Any] = {
+      "inverted_from": zone.source, "invert_index": invert_index,
+    }
+    # Same missing-clip bug as Supply Demand / Order Block / FVG (see
+    # optimize_technique_entry_zone) - the full original gap width was
+    # used as the tradeable entry with no proximal clip. An inverted
+    # "sell" flip behaves like a supply zone (keep the near/low edge);
+    # an inverted "buy" flip behaves like demand (keep the near/high edge).
+    if (
+      entry_max_width_price
+      and math.isfinite(entry_max_width_price)
+      and entry_max_width_price > 0
+      and (z_hi - z_lo) > entry_max_width_price + 1e-12
+    ):
+      if trade_side == "sell":
+        entry_lo, entry_hi = z_lo, z_lo + entry_max_width_price
+      else:
+        entry_lo, entry_hi = z_hi - entry_max_width_price, z_hi
+      measured["structural_low"] = z_lo
+      measured["structural_high"] = z_hi
+      measured["entry_clipped"] = True
+      measured["entry_max_width_price"] = float(entry_max_width_price)
     instances.append(TechniqueInstance(
       technique=TECHNIQUE_IFVG,
       side=trade_side,
-      low=z_lo,
-      high=z_hi,
+      low=entry_lo,
+      high=entry_hi,
       origin_ts=df.index[invert_index],
       sources=("ifvg",),
-      measured={"inverted_from": zone.source, "invert_index": invert_index},
+      measured=measured,
       origin_index=invert_index,
     ))
   return instances
@@ -664,27 +753,36 @@ def collect_technique_instances(
 ) -> list[TechniqueInstance]:
   """Unmerged technique instances for detector routing (map merge stays separate)."""
   settings = settings or TechniqueGeometrySettings()
+  entry_max_width_price = float(settings.fvg_entry_max_width_price)
   instances: list[TechniqueInstance] = []
   for zone in sd_zones:
     if zone.mitigated:
       continue
-    item = instance_from_zone(zone, technique=TECHNIQUE_SD)
+    item = instance_from_zone(
+      zone, technique=TECHNIQUE_SD, entry_max_width_price=entry_max_width_price,
+    )
     if item is not None:
       instances.append(item)
   for zone in ob_zones:
     if zone.mitigated or zone.break_kind is None:
       continue
-    item = instance_from_zone(zone, technique=TECHNIQUE_OB)
+    item = instance_from_zone(
+      zone, technique=TECHNIQUE_OB, entry_max_width_price=entry_max_width_price,
+    )
     if item is not None:
       instances.append(item)
   for zone in fvg_zones:
     if zone.mitigated:
       continue
-    item = instance_from_zone(zone, technique=TECHNIQUE_FVG)
+    item = instance_from_zone(
+      zone, technique=TECHNIQUE_FVG, entry_max_width_price=entry_max_width_price,
+    )
     if item is not None:
       instances.append(item)
   instances = enrich_ob_instances(instances, df)
-  instances.extend(discover_ifvg_instances(fvg_zones, df, settings=settings))
+  instances.extend(discover_ifvg_instances(
+    fvg_zones, df, settings=settings, entry_max_width_price=entry_max_width_price,
+  ))
   if h1_df is not None and not h1_df.empty:
     instances.extend(discover_crt_instances(
       h1_df,
