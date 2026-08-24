@@ -6111,6 +6111,25 @@ public sealed class AutoTradeEngine(
     {
       return false;
     }
+    if (
+      targetOrdinal == 1
+      && ManualAlgoIsShallowOnlyGroup(remainingStates)
+    )
+    {
+      await store.IncrementMetricAsync(
+        symbol.RedisSymbol,
+        "manual_shallow_runner_tp2_be_held",
+        cancellationToken
+      );
+      _log(
+        "auto-trade manual shallow-only group held economic BE after TP2 "
+          + $"group_id={groupId} position_id={remainingStates[0].PositionId}"
+      );
+      // Return true so the shared TP2 -> TP1 fallback does not override the
+      // manual shallow-only policy. TP3 still uses the normal two-target-
+      // behind planner and advances this runner to owner TP1.
+      return true;
+    }
     var target = remainingStates
       .Select(state => state.TargetPrices)
       .Where(prices => prices is not null && prices.Count >= targetOrdinal)
@@ -6144,6 +6163,21 @@ public sealed class AutoTradeEngine(
       await store.SavePositionAsync(updated, cancellationToken);
     }
     return true;
+  }
+
+  private static bool ManualAlgoIsShallowOnlyGroup(
+    IReadOnlyList<AutoTradePositionState> remainingStates
+  )
+  {
+    if (remainingStates.Count != 1)
+    {
+      return false;
+    }
+    var state = remainingStates[0];
+    return state.Stream == "algo_manual"
+      && state.GroupTrancheCount > 1
+      && state.TargetOrdinals?.Contains(1) == true
+      && GroupInitialVolume(remainingStates) == state.InitialVolume;
   }
 
   private async Task<AutoTradePositionState> MoveStopAfterTargetAsync(
@@ -9295,9 +9329,10 @@ public sealed class AutoTradeEngine(
   // intended position, while mid/deep still ride for the better average
   // entry on the trades where price does come back for them.
   //
-  // Exit policy (2026-08 ladder PM): book the group TP ladder preferring
-  // deep volume first (best fill / better booked pips), then mid, then
-  // shallow. Shallower legs keep size unless needed to complete the book.
+  // Exit policy (2026-08 ladder PM): book the group TP ladder shallow-first
+  // so a shallow-only fill still owns the nearby targets. One broker-valid
+  // shallow slice is reserved for the final owner target so cancelling
+  // unfilled Mid/Deep orders after TP1 does not silently remove the runner.
   private static readonly IReadOnlyList<decimal> ManualEntryLegRatios =
     [0.7m, 0.2m, 0.1m];
 
@@ -9333,7 +9368,7 @@ public sealed class AutoTradeEngine(
   /// hit TP1/TP2, so those ordinals silently never appeared on the channel
   /// even though shallow itself had already booked real profit under a
   /// later ordinal's label. Shallow is the most-likely-to-fill, largest
-  /// leg (50% of size) and should own the close, early targets it can
+  /// leg (70% of size) and should own the close, early targets it can
   /// reliably reach; deep - the smallest leg, only filling on a genuinely
   /// favorable move - rides as the runner toward the final target instead.
   /// </summary>
@@ -9456,7 +9491,56 @@ public sealed class AutoTradeEngine(
         );
       }
     }
+    plans[0] = ManualAlgoReserveShallowRunner(
+      plans[0], groupPlan, symbol
+    );
     return plans;
+  }
+
+  private static TargetVolumePlan ManualAlgoReserveShallowRunner(
+    TargetVolumePlan shallowPlan,
+    TargetVolumePlan groupPlan,
+    SymbolInfo symbol
+  )
+  {
+    if (
+      groupPlan.TargetOrdinals.Count < 4
+      || symbol.StepVolume <= 0
+      || symbol.MinVolume <= 0
+    )
+    {
+      return shallowPlan;
+    }
+    var finalOrdinal = groupPlan.TargetOrdinals[^1];
+    if (shallowPlan.TargetOrdinals.Contains(finalOrdinal))
+    {
+      return shallowPlan;
+    }
+    var reserve = checked(
+      (symbol.MinVolume + symbol.StepVolume - 1) / symbol.StepVolume
+        * symbol.StepVolume
+    );
+    var donor = -1;
+    for (var index = shallowPlan.Slices.Count - 1; index >= 0; index--)
+    {
+      if (shallowPlan.Slices[index] >= reserve * 2)
+      {
+        donor = index;
+        break;
+      }
+    }
+    if (donor < 0)
+    {
+      return shallowPlan;
+    }
+    var slices = shallowPlan.Slices.ToList();
+    slices[donor] -= reserve;
+    slices.Add(reserve);
+    return new TargetVolumePlan(
+      slices,
+      [.. shallowPlan.TargetsPips, groupPlan.TargetsPips[^1]],
+      [.. shallowPlan.TargetOrdinals, finalOrdinal]
+    );
   }
 
   private static bool UsesCandidateTargetPlan(TradeCandidate candidate) =>

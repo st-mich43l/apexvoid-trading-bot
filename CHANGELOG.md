@@ -13,6 +13,11 @@ dated section after deployment.
 ## Unreleased
 
 ### Changed
+- Manual ``/algo`` multi-leg ladders now reserve one broker-minimum shallow
+  slice for the owner's final target. When only the shallow leg fills, TP2
+  keeps the group-economic break-even stop and TP3 advances it to TP1;
+  groups with Mid/Deep fills retain the existing TP2-to-TP1 protection.
+  Autonomous algo execution is unchanged.
 - JPY reaction sessions now cover Japanese open through London morning
   (``tokyo_london`` → ``0-11`` UTC, ``tokyo_london_ny`` → ``0-11,13-16``).
   The prior ``0-3`` Tokyo slice left mid-Tokyo (03–07 UTC / JST afternoon)
@@ -73,7 +78,8 @@ dated section after deployment.
 - After manual-ladder TP1, booked profit now funds one shared group-economic
   stop for every remaining clip. The stop guarantees the configured positive
   whole-group buffer without bunching each leg at its own break-even; TP2
-  advances every surviving leg to the owner's absolute TP1.
+  advances filled multi-leg groups to the owner's absolute TP1, while the
+  shallow-only runner follows the later progression documented above.
 - Multi-symbol ZoneWatch processing no longer rebuilds the complete effective
   instrument/catalog projection for every OHLC price. Effective instrument
   contexts are cached per immutable runtime (with safe copy invalidation and
