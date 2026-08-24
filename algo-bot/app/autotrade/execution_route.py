@@ -331,14 +331,22 @@ def resolve_execution_route_plan(
     )
     if len(grid) >= 2:
       l1 = grid[0]
+      grid_ratios = (
+        leg_ratios if len(grid) == 2 else _equal_clip_ratios(len(grid))
+      )
+      routing_reason = (
+        "two-clip grid: shallow/deep volume split"
+        if len(grid) == 2
+        else "scalp micro-grid: equal clips into the structural zone"
+      )
       return ExecutionRoutePlan(
         ROUTE_MARKET_WITH_LIMIT_SCALE,
         l1,
         grid,
         geometry,
-        "scalp micro-grid: equal clips into the structural zone",
+        routing_reason,
         True,
-        planned_leg_volume_ratios=_equal_clip_ratios(len(grid)),
+        planned_leg_volume_ratios=grid_ratios,
       )
 
   if preference == "market":
