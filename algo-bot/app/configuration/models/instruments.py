@@ -263,13 +263,17 @@ class InstrumentAnalysisConfig(FrozenConfigModel):
 
 # Named non-scalp reaction windows. Add a name here when onboarding a pair
 # rather than copying hour strings into every instrument block.
+#
+# Tokyo is Japanese open (00:00 UTC / 09:00 JST) through London open, so
+# JPY pairs are not London/NY-only. Prior 0-3 left mid-Tokyo (03–07 UTC,
+# still JST afternoon) dead despite local liquidity.
 REGISTERED_REACTION_SESSIONS: dict[str, str] = {
   "london_ny": "7-11,13-16",
-  "tokyo_london": "0-3,7-11",
+  "tokyo_london": "0-11",
   # USDJPY dig: liquid across all three home sessions (JPY driver in
   # Tokyo, USD driver in NY, plus London), unlike GBPJPY's Tokyo/London-
   # only, no-NY-dump-window profile as a cross pair.
-  "tokyo_london_ny": "0-3,7-11,13-16",
+  "tokyo_london_ny": "0-11,13-16",
 }
 
 
