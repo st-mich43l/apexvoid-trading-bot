@@ -15,6 +15,7 @@ import logging
 import time
 
 from app.core.config import runtime_config
+from app.autotrade.event_integrity import contradictory_archived_tp
 from app.persistence import redis_state
 from app.persistence.store import record_auto_trade_event
 
@@ -33,6 +34,8 @@ def _complete_outcome(event: dict) -> str | None:
     return "fill"
   if event_type not in {"group_result", "position_closed", "manual_closed"}:
     return None
+  if contradictory_archived_tp(event):
+    return "sl"
   reason = str(event.get("reason_code") or event.get("close_reason") or "").casefold()
   message = str(event.get("message") or "").casefold()
   if "stop" in reason or "group_stop" in reason or "sl" == reason:

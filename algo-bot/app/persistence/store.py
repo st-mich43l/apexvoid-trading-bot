@@ -38,6 +38,7 @@ from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 from app.core.config import runtime_config
 from app.core.symbols import pip_for
+from app.autotrade.event_integrity import contradictory_archived_tp
 from app.signals.pips_format import legs_achieved_pips
 
 log = logging.getLogger(__name__)
@@ -777,8 +778,11 @@ async def _record_auto_trade_result(event: dict) -> None:
       return
     message = str(event.get("message") or "")
     message_cf = message.casefold()
-    no_tp_archived = "no tp archived" in message_cf
-    highest_tp_archived = "highest tp archived" in message_cf
+    contradictory_tp = contradictory_archived_tp(event, message)
+    no_tp_archived = "no tp archived" in message_cf or contradictory_tp
+    highest_tp_archived = (
+      "highest tp archived" in message_cf and not contradictory_tp
+    )
     result_pips = None
     if highest_tp_archived and event.get("target_pips") is not None:
       # Owner directive: /trade_stats records the highest TP actually

@@ -15,12 +15,12 @@ EURUSD, GBPUSD, GBPJPY, and USDJPY). All external connections are outbound
 webhook / public HTTP surface.
 
 ```text
-┌──────────────┐   OHLC ZSET    ┌─────────────────────┐
+┌──────────────┐   OHLC ZSET      ┌─────────────────────┐
 │ ctrader-     │ ──────────────▶ │ Redis                │
-│ engine (.NET)│ ◀──────────── │ bars / plans / events│
-│ feed+exec    │  TradePlan V8  └──────────┬──────────┘
-└──────────────┘                           │
-                                           ▼
+│ engine (.NET)│ ◀────────────   │ bars / plans / events│
+│ feed+exec    │  TradePlan V8    └──────────┬──────────┘
+└──────────────┘                            │
+                                            ▼
 ┌──────────────┐   SQL          ┌─────────────────────┐
 │ Postgres     │ ◀──────────── │ algo-bot (Python)    │
 │ signals DB   │                │ Telegram + scanner   │

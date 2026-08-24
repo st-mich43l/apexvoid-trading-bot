@@ -13,6 +13,9 @@ dated section after deployment.
 ## Unreleased
 
 ### Changed
+- Autonomous two-leg XAU and FX entries now allocate 80% to the
+  shallow/live-proximal leg and 20% to the deep/distal limit leg. Manual algo
+  entry sizing is unchanged.
 - Autonomous FX now treats sweep/body confirmation as a preference after a
   fresh, directionally valid M1 trigger instead of a hard rejection. Fixed-RR
   plans still prefer the configured 2R partial ladder; when clean opposing
@@ -36,6 +39,10 @@ dated section after deployment.
   ``stop_exceeds_envelope_furthest_leg`` and never published.
 
 ### Fixed
+- Autonomous terminal events no longer promote a merely touched/deferred TP
+  into a booked TP when the position later closes at its stop. Broker lookup
+  timeouts now classify a live fallback fill near the protective stop as SL,
+  and Telegram/stats reject contradictory archived-TP loss events.
 - ``/trade_modify XAU #N lo-hi`` now shifts SL by the signal's existing
   shallow-entry risk distance when no explicit SL is supplied. Broker cancel
   now removes every pending shallow/mid/deep leg, including old revisions,

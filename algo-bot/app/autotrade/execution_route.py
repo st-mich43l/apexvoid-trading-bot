@@ -18,7 +18,7 @@ from app.autotrade.strategy_taxonomy import (
   is_technique_or_confluence,
 )
 
-# AE-style scalp: one structural zone, five equal clips (not one full lot).
+# Legacy/default micro-grid size; production instruments may override it.
 SCALP_MICRO_CLIPS = 5
 
 ROUTE_MARKET = "market"
@@ -132,7 +132,7 @@ def scalp_micro_grid_legs(
   digits: int,
   clips: int = SCALP_MICRO_CLIPS,
 ) -> tuple[float, ...]:
-  """Equal-size DCA clips from live/proximal into the confirmed zone.
+  """DCA price clips from live/proximal into the confirmed zone.
 
   BUY steps down toward demand distal; SELL steps up toward supply distal.
   L1 is the live quote when already inside (marketable); remaining legs rest
@@ -331,14 +331,22 @@ def resolve_execution_route_plan(
     )
     if len(grid) >= 2:
       l1 = grid[0]
+      grid_ratios = (
+        leg_ratios if len(grid) == 2 else _equal_clip_ratios(len(grid))
+      )
+      routing_reason = (
+        "two-clip grid: shallow/deep volume split"
+        if len(grid) == 2
+        else "scalp micro-grid: equal clips into the structural zone"
+      )
       return ExecutionRoutePlan(
         ROUTE_MARKET_WITH_LIMIT_SCALE,
         l1,
         grid,
         geometry,
-        "scalp micro-grid: equal clips into the structural zone",
+        routing_reason,
         True,
-        planned_leg_volume_ratios=_equal_clip_ratios(len(grid)),
+        planned_leg_volume_ratios=grid_ratios,
       )
 
   if preference == "market":

@@ -14,6 +14,10 @@ from aiogram.exceptions import TelegramBadRequest, TelegramRetryAfter
 
 from app.analysis.scanner import clear_active_setup_tracking
 from app.autotrade import units
+from app.autotrade.event_integrity import (
+  contradictory_archived_tp,
+  terminal_loss_at_protective_stop,
+)
 from app.autotrade.volume_pips import (
   format_signed_pips,
   volume_percent,
@@ -670,6 +674,9 @@ def _format_position_closed(event: dict, message: str) -> str:
   highest = _HIGHEST_TP_ARCHIVED_RE.search(cleaned) if cleaned else None
   no_tp = _NO_TP_ARCHIVED_RE.search(cleaned) if cleaned else None
   reason = str(event.get("reason_code") or "")
+  if contradictory_archived_tp(event, cleaned):
+    highest = None
+    no_tp = True
   # Close card: highest TP archived only — never dump per-leg lot detail.
   if highest is not None:
     archived_pips = _event_float(event, "target_pips")
@@ -685,7 +692,7 @@ def _format_position_closed(event: dict, message: str) -> str:
     at = _PLAN_CLOSED_AT_RE.search(cleaned)
     if at is not None:
       lines.append(f"@ <b>{escape(at.group('price'))}</b>")
-  elif no_tp is not None or (
+  elif no_tp is not None or terminal_loss_at_protective_stop(event) or (
     reason == "stop_loss_or_take_profit"
     and (_resolve_close_pips(event, cleaned, allow_stop_fallback=True) or 0) < 0
   ):
@@ -794,6 +801,8 @@ def _format_tp_booked(event: dict, message: str) -> str | None:
   """Rich TP archive card — target + fill only (no per-leg / remaining dump)."""
   symbol = _event_symbol(event)
   cleaned = _clean_message(message, symbol=symbol)
+  if contradictory_archived_tp(event, cleaned):
+    return None
   match = _TP_BOOKED_RE.match(cleaned)
   target = match.group("target").upper() if match else None
   plan_closed = "PLAN CLOSED" in cleaned.upper()
@@ -1378,6 +1387,8 @@ def _format_tp_compact_line(event: dict, message: str) -> str | None:
   """
   symbol = _event_symbol(event)
   cleaned = _clean_message(message, symbol=symbol)
+  if contradictory_archived_tp(event, cleaned):
+    return None
   match = _TP_BOOKED_RE.match(cleaned)
   target = match.group("target").upper() if match else None
   if target is None:
@@ -1465,13 +1476,20 @@ def _format_position_closed_compact_line(event: dict, message: str) -> str:
   highest = _HIGHEST_TP_ARCHIVED_RE.search(cleaned) if cleaned else None
   no_tp = _NO_TP_ARCHIVED_RE.search(cleaned) if cleaned else None
   reason = str(event.get("reason_code") or "")
+  if contradictory_archived_tp(event, cleaned):
+    highest = None
+    no_tp = True
   if highest is not None:
     # Highest level is already on a 🎯 line; only add exit price here.
     at = _PLAN_CLOSED_AT_RE.search(cleaned)
     if at is not None:
       return f"🏁 POSITION CLOSED · @ {escape(at.group('price'))}"
     return "🏁 POSITION CLOSED"
-  if no_tp is not None or reason == "stop_loss_or_take_profit":
+  if (
+    no_tp is not None
+    or reason == "stop_loss_or_take_profit"
+    or terminal_loss_at_protective_stop(event)
+  ):
     parts = ["🏁 POSITION CLOSED", *_sl_close_result_parts(
       event, cleaned, html=False,
     )]
