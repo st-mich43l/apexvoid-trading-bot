@@ -13,6 +13,11 @@ dated section after deployment.
 ## Unreleased
 
 ### Changed
+- JPY reaction sessions now cover Japanese open through London morning
+  (``tokyo_london`` → ``0-11`` UTC, ``tokyo_london_ny`` → ``0-11,13-16``).
+  The prior ``0-3`` Tokyo slice left mid-Tokyo (03–07 UTC / JST afternoon)
+  dead for GBPJPY/USDJPY, so those books looked London/NY-shaped despite
+  local JPY liquidity. EURUSD/GBPUSD stay ``london_ny``.
 - CRT technique entry now clips to a proximal reclaim band (same default
   width contract as FVG / ``price_scale.fvg_entry_max_width_price``) while
   keeping the full H1 candle as structural stop bounds. Discovery prefers

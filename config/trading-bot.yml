@@ -399,7 +399,8 @@ instruments:
     canonical_symbol: GBPJPY
     contract:
       pip_value_per_lot: 7.0
-    # Tokyo/London cross: wider spread/stop, no NY dump window, still 1:2.
+    # Tokyo/London cross: Japanese open through London morning (0-11 UTC),
+    # no NY dump window, still 1:2.
     # 2026 dig: ATR(14) ~180 pips/day vs EURUSD's ~70, and BoE+BoJ events
     # landing within 48h compound volatility instead of adding it
     # ("volatility clusters"). Widen the news guard around either event
@@ -454,8 +455,9 @@ instruments:
       risk.exposure.defended_level_buffer_price: 1.0
     policy: fx_fixed_2r_v1
     # Major pair, tight like EURUSD (not a volatile cross like GBPJPY).
-    # Tokyo (JPY driver) + London + NY (USD driver) -- USDJPY is liquid
-    # across all three, unlike GBPJPY's Tokyo/London-only, no-NY window.
+    # Tokyo (JPY driver, Japanese open→London) + London + NY (USD driver)
+    # — USDJPY is liquid across all three, unlike GBPJPY's Tokyo/London-
+    # only, no-NY window.
     reaction_session: tokyo_london_ny
     stop_envelope:
       min_pips: 10
