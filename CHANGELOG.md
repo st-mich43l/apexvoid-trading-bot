@@ -21,6 +21,11 @@ dated section after deployment.
   ``stop_exceeds_envelope_furthest_leg`` and never published.
 
 ### Fixed
+- ``/trade_modify [SYMBOL] #N lo-hi`` no longer hits Usage when only the
+  entry zone changes. ``_seq_token`` required the whole remainder to be
+  digits, so ``#14 4636-33`` never resolved the daily seq even though
+  bare-zone body parsing (``#394``) was already correct. Seq now reads
+  only the leading ``#N`` / ``N`` token; usage/help show the short forms.
 - HFS / scalp chase entries no longer book a five-clip micro-grid into the
   abandoned zone. Live 2026-08-21 HFS Range Sweep SELL filled only L1
   (``0.04``) while L2–L5 rested above market and were cancelled ``before_tp``,
