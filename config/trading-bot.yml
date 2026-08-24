@@ -204,7 +204,8 @@ instrument_packs:
       max_pips: 18
       sl_distance: 0.0018
     activation:
-      require_sweep_body: true
+      # Fresh M1 confirmation remains mandatory; sweep/body is preferred.
+      require_sweep_body: false
       trigger_maximum_age_bars: 3
       max_spread_pips: 1
     price_scale:
@@ -272,7 +273,8 @@ instrument_packs:
   # must declare those as its own overrides.
   fx_jpy_cross_v1:
     activation:
-      require_sweep_body: true
+      # Fresh M1 confirmation remains mandatory; sweep/body is preferred.
+      require_sweep_body: false
       trigger_maximum_age_bars: 3
     price_scale:
       round_step: 0.1
@@ -342,8 +344,8 @@ instruments:
     rollout: live
     broker_symbol: EURUSD
     canonical_symbol: EURUSD
-    # London/NY major: tight spread, 10-18 pip stop, still locked 1:2 - the
-    # pack's own defaults as-is; this pair carries no overrides.
+    # London/NY major: tight spread and 10-18 pip stop. Prefer the pack's 2R
+    # ladder, with a 1R full-close fallback when opposing room is constrained.
   GBPUSD:
     pack: fx_usd_major_v1
     rollout: live
@@ -400,7 +402,7 @@ instruments:
     contract:
       pip_value_per_lot: 7.0
     # Tokyo/London cross: Japanese open through London morning (0-11 UTC),
-    # no NY dump window, still 1:2.
+    # no NY dump window. Prefer 2R; constrained clean room may close at 1R.
     # 2026 dig: ATR(14) ~180 pips/day vs EURUSD's ~70, and BoE+BoJ events
     # landing within 48h compound volatility instead of adding it
     # ("volatility clusters"). Widen the news guard around either event

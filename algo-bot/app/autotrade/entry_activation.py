@@ -224,8 +224,10 @@ def evaluate_entry_activation(
   are reported via would_block but still allowed so production behaviour stays
   unchanged until enforce is enabled.
 
-  Under technique.enforce, reaction families require a post-tap sweep/body
-  M1 trigger. M5-authoritative-in-zone does not bypass a missing reject.
+  Under technique.enforce, reaction families require a fresh post-tap M1
+  trigger. Instruments may keep sweep/body confirmation as a hard requirement
+  or soften it to a quality preference; M5-authoritative-in-zone does not
+  bypass a missing trigger.
   """
   if cfg is None:
     from app.core.config import runtime_config
@@ -400,11 +402,21 @@ def evaluate_entry_activation(
         elif str(trigger.direction).upper() != str(direction).upper():
           m1_fail_reason = "reaction_trigger_wrong_direction"
         else:
-          if technique_require_sweep_body(cfg):
-            pattern = str(trigger.pattern or "")
-            measured["sweep_body_required"] = True
-            if not confirmation_is_sweep_body(pattern):
-              m1_fail_reason = "confirmation_requires_sweep_body"
+          pattern = str(trigger.pattern or "")
+          sweep_body_required = technique_require_sweep_body(cfg)
+          sweep_body_confirmed = confirmation_is_sweep_body(pattern)
+          measured.update({
+            "sweep_body_required": sweep_body_required,
+            "sweep_body_confirmed": sweep_body_confirmed,
+          })
+          if sweep_body_required and not sweep_body_confirmed:
+            m1_fail_reason = "confirmation_requires_sweep_body"
+          elif not sweep_body_required and not sweep_body_confirmed:
+            measured.update({
+              "sweep_body_soft_miss": True,
+              "preference_telemetry": True,
+              "preference_reason_code": "confirmation_without_sweep_body",
+            })
 
     side = str(direction or "").upper()
     name = str(strategy or "")

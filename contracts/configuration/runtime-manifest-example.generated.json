@@ -133,7 +133,7 @@
     "zone_scale_undersized_policy": "single_entry"
   },
   "contract_fingerprint": "5872fae5b93b8ccef51aa9f8261821851afa4dd3f2dd4f7c9c9110902635337d",
-  "effective_configuration_fingerprint": "b068ab280e58ac59cb89e238a6d71f073f7e57d8850384365e7ab8d1ec3be976",
+  "effective_configuration_fingerprint": "71b9e985db8e9f33cd65a9ae3b36963fefb995091a28ba429e122dff8854ce22",
   "feed": {
     "backfill_bars": 1500,
     "bar_quality_lookback": 6,
@@ -525,7 +525,7 @@
           "ny_window_hours": 3,
           "reaction_publish_windows": "7-11,13-16",
           "reaction_require_killzone": false,
-          "require_sweep_body": true,
+          "require_sweep_body": false,
           "strict_premium_discount": true
         },
         "trend": {
@@ -1440,7 +1440,7 @@
           "ny_window_hours": 3,
           "reaction_publish_windows": "0-11",
           "reaction_require_killzone": false,
-          "require_sweep_body": true,
+          "require_sweep_body": false,
           "strict_premium_discount": true
         },
         "trend": {
@@ -2361,7 +2361,7 @@
           "ny_window_hours": 3,
           "reaction_publish_windows": "7-11,13-16",
           "reaction_require_killzone": false,
-          "require_sweep_body": true,
+          "require_sweep_body": false,
           "strict_premium_discount": true
         },
         "trend": {
@@ -3276,7 +3276,7 @@
           "ny_window_hours": 3,
           "reaction_publish_windows": "0-11,13-16",
           "reaction_require_killzone": false,
-          "require_sweep_body": true,
+          "require_sweep_body": false,
           "strict_premium_discount": true
         },
         "trend": {
@@ -4829,7 +4829,7 @@
           "ny_window_hours": 3,
           "reaction_publish_windows": "7-11,13-16",
           "reaction_require_killzone": false,
-          "require_sweep_body": true,
+          "require_sweep_body": false,
           "strict_premium_discount": true
         },
         "trend": {
@@ -5607,7 +5607,7 @@
           "ny_window_hours": 3,
           "reaction_publish_windows": "0-11",
           "reaction_require_killzone": false,
-          "require_sweep_body": true,
+          "require_sweep_body": false,
           "strict_premium_discount": true
         },
         "trend": {
@@ -6391,7 +6391,7 @@
           "ny_window_hours": 3,
           "reaction_publish_windows": "7-11,13-16",
           "reaction_require_killzone": false,
-          "require_sweep_body": true,
+          "require_sweep_body": false,
           "strict_premium_discount": true
         },
         "trend": {
@@ -7169,7 +7169,7 @@
           "ny_window_hours": 3,
           "reaction_publish_windows": "0-11,13-16",
           "reaction_require_killzone": false,
-          "require_sweep_body": true,
+          "require_sweep_body": false,
           "strict_premium_discount": true
         },
         "trend": {

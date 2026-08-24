@@ -59,8 +59,8 @@ def _select_target(
   clears the minimum net target and fits the available room, there is no
   opportunity here at all, not a smaller/larger substitute target.
 
-  Instruments configured with ``fixed_rr`` use only that ratio, with no
-  1:1 fallback.
+  Instruments configured with ``fixed_rr`` keep their configured ratio as the
+  preference and may fall back to exactly 1:1 when clean room cannot hold it.
 
   XAU publish turns a selected 1:2 into TP1@1R (50%) + TP2@2R (50%) with
   the protective stop left fixed. A fixed-RR instrument expands the selected
@@ -70,7 +70,13 @@ def _select_target(
     return None
   from app.core.instrument_geometry import fixed_reward_risk
   configured_rr = fixed_reward_risk(symbol, cfg) if symbol else None
-  ratios = (configured_rr,) if configured_rr is not None else (2.0, 1.0)
+  ratios = (
+    (configured_rr, 1.0)
+    if configured_rr is not None and configured_rr > 1.0
+    else (configured_rr,)
+    if configured_rr is not None
+    else (2.0, 1.0)
+  )
   for reward_risk in ratios:
     target_pips = float(stop_pips) * reward_risk
     if target_pips < min_net or target_pips > float(room_pips):
