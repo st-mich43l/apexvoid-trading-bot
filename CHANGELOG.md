@@ -31,6 +31,10 @@ dated section after deployment.
   ``stop_exceeds_envelope_furthest_leg`` and never published.
 
 ### Fixed
+- ``/trade_modify XAU #N lo-hi`` now shifts SL by the signal's existing
+  shallow-entry risk distance when no explicit SL is supplied. Broker cancel
+  now removes every pending shallow/mid/deep leg, including old revisions,
+  before one confirmation re-arms the modified ladder.
 - ``/trade_modify [SYMBOL] #N lo-hi`` no longer hits Usage when only the
   entry zone changes. ``_seq_token`` required the whole remainder to be
   digits, so ``#14 4636-33`` never resolved the daily seq even though

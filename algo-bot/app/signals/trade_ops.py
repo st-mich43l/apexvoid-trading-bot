@@ -449,7 +449,26 @@ async def do_modify(ctx: dict) -> dict:
   next_end = float(next_end)
   if next_entry > next_end:
     next_entry, next_end = next_end, next_entry
-  next_sl = float(signal["sl"] if sl is None else sl)
+  entry_changed = entry is not None or entry_end is not None
+  if sl is not None:
+    next_sl = float(sl)
+  elif entry_changed:
+    old_entry = float(signal["entry"])
+    old_end = float(signal.get("entry_end") or old_entry)
+    if old_entry > old_end:
+      old_entry, old_end = old_end, old_entry
+    side = str(signal["action"]).upper()
+    old_rr_entry = old_end if side == "BUY" else old_entry
+    new_rr_entry = next_end if side == "BUY" else next_entry
+    risk_distance = abs(old_rr_entry - float(signal["sl"]))
+    shifted = (
+      new_rr_entry - risk_distance
+      if side == "BUY"
+      else new_rr_entry + risk_distance
+    )
+    next_sl = round(shifted, digits_for(ctx["symbol"]))
+  else:
+    next_sl = float(signal["sl"])
   next_tps = list(signal.get("tps") or []) if tps is None else [float(v) for v in tps]
   invalid = _validate_modify_levels(
     signal["action"], next_entry, next_end, next_sl, next_tps,
@@ -459,9 +478,9 @@ async def do_modify(ctx: dict) -> dict:
 
   updated = await update_pending_levels(
     signal["id"],
-    entry=next_entry if entry is not None or entry_end is not None else None,
-    entry_end=next_end if entry is not None or entry_end is not None else None,
-    sl=next_sl if sl is not None else None,
+    entry=next_entry if entry_changed else None,
+    entry_end=next_end if entry_changed else None,
+    sl=next_sl if sl is not None or entry_changed else None,
     tps=next_tps if tps is not None else None,
   )
   if updated is None:

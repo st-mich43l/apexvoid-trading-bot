@@ -899,10 +899,11 @@ public sealed class AutoTradeEngine(
     }
   }
 
-  // /trade_cancel on an armed (not yet filled) manual algo signal: find the
-  // still-resting limit order by its candidate token (the same
+  // /trade_cancel on an armed (not yet filled) manual algo signal: find all
+  // still-resting limit orders by their candidate token (the same
   // Contains(CandidateToken(...)) matching every other candidate type
-  // already uses) and cancel it for real.
+  // already uses) and cancel them before confirming. A manual intent can own
+  // shallow/mid/deep orders, including leftovers from an earlier revision.
   private async Task HandleCancelPendingCommandAsync(
     ManualTradeCommand command,
     CancellationToken cancellationToken
@@ -916,11 +917,11 @@ public sealed class AutoTradeEngine(
     var client = RequireClient();
     var pendingOrders = await client.ReconcilePendingOrdersAsync(cancellationToken);
     var token = CandidateToken(command.IntentId);
-    var target = pendingOrders.FirstOrDefault(order =>
+    var targets = pendingOrders.Where(order =>
       order.Label == options.Label
       && order.Comment.Contains(token, StringComparison.Ordinal)
-    );
-    if (target is null)
+    ).ToArray();
+    if (targets.Length == 0)
     {
       _log($"auto-trade cancel_pending: no matching pending order for {token}");
       await PublishAsync(
@@ -931,16 +932,28 @@ public sealed class AutoTradeEngine(
       );
       return;
     }
-    await client.CancelPendingOrderAsync(target.OrderId, cancellationToken);
-    _allSymbolPendingOrders = _allSymbolPendingOrders
-      .Where(item => item.OrderId != target.OrderId)
-      .ToArray();
-    var cancelledGroupId = ParseManualExpiry(target.Comment)?.GroupId
-      ?? ParseZoneComment(target.Comment)?.GroupId;
-    await MaybeDeleteGroupPlanAsync(cancelledGroupId, cancellationToken);
+    var cancelledGroupIds = new HashSet<string>(StringComparer.Ordinal);
+    foreach (var target in targets)
+    {
+      await client.CancelPendingOrderAsync(target.OrderId, cancellationToken);
+      _allSymbolPendingOrders = _allSymbolPendingOrders
+        .Where(item => item.OrderId != target.OrderId)
+        .ToArray();
+      var groupId = ParseManualExpiry(target.Comment)?.GroupId
+        ?? ParseZoneComment(target.Comment)?.GroupId;
+      if (!string.IsNullOrWhiteSpace(groupId))
+      {
+        cancelledGroupIds.Add(groupId);
+      }
+    }
+    foreach (var cancelledGroupId in cancelledGroupIds)
+    {
+      await MaybeDeleteGroupPlanAsync(cancelledGroupId, cancellationToken);
+    }
+    var cancelledOrderIds = string.Join(',', targets.Select(item => item.OrderId));
     await PublishAsync(
       "manual_cancelled",
-      $"manual algo limit {target.OrderId} cancelled by owner",
+      $"manual algo limits {cancelledOrderIds} cancelled by owner",
       cancellationToken,
       candidateId: command.IntentId
     );
