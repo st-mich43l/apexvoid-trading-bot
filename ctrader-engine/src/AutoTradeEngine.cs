@@ -899,10 +899,11 @@ public sealed class AutoTradeEngine(
     }
   }
 
-  // /trade_cancel on an armed (not yet filled) manual algo signal: find the
-  // still-resting limit order by its candidate token (the same
+  // /trade_cancel on an armed (not yet filled) manual algo signal: find all
+  // still-resting limit orders by their candidate token (the same
   // Contains(CandidateToken(...)) matching every other candidate type
-  // already uses) and cancel it for real.
+  // already uses) and cancel them before confirming. A manual intent can own
+  // shallow/mid/deep orders, including leftovers from an earlier revision.
   private async Task HandleCancelPendingCommandAsync(
     ManualTradeCommand command,
     CancellationToken cancellationToken
@@ -916,11 +917,12 @@ public sealed class AutoTradeEngine(
     var client = RequireClient();
     var pendingOrders = await client.ReconcilePendingOrdersAsync(cancellationToken);
     var token = CandidateToken(command.IntentId);
-    var target = pendingOrders.FirstOrDefault(order =>
+    _allSymbolPendingOrders = pendingOrders;
+    var targets = pendingOrders.Where(order =>
       order.Label == options.Label
-      && order.Comment.Contains(token, StringComparison.Ordinal)
-    );
-    if (target is null)
+      && PendingManualOrderMatchesIntent(order, command.IntentId)
+    ).ToArray();
+    if (targets.Length == 0)
     {
       _log($"auto-trade cancel_pending: no matching pending order for {token}");
       await PublishAsync(
@@ -931,16 +933,28 @@ public sealed class AutoTradeEngine(
       );
       return;
     }
-    await client.CancelPendingOrderAsync(target.OrderId, cancellationToken);
-    _allSymbolPendingOrders = _allSymbolPendingOrders
-      .Where(item => item.OrderId != target.OrderId)
-      .ToArray();
-    var cancelledGroupId = ParseManualExpiry(target.Comment)?.GroupId
-      ?? ParseZoneComment(target.Comment)?.GroupId;
-    await MaybeDeleteGroupPlanAsync(cancelledGroupId, cancellationToken);
+    var cancelledGroupIds = new HashSet<string>(StringComparer.Ordinal);
+    foreach (var target in targets)
+    {
+      await client.CancelPendingOrderAsync(target.OrderId, cancellationToken);
+      _allSymbolPendingOrders = _allSymbolPendingOrders
+        .Where(item => item.OrderId != target.OrderId)
+        .ToArray();
+      var groupId = ParseManualExpiry(target.Comment)?.GroupId
+        ?? ParseZoneComment(target.Comment)?.GroupId;
+      if (!string.IsNullOrWhiteSpace(groupId))
+      {
+        cancelledGroupIds.Add(groupId);
+      }
+    }
+    foreach (var cancelledGroupId in cancelledGroupIds)
+    {
+      await MaybeDeleteGroupPlanAsync(cancelledGroupId, cancellationToken);
+    }
+    var cancelledOrderIds = string.Join(',', targets.Select(item => item.OrderId));
     await PublishAsync(
       "manual_cancelled",
-      $"manual algo limit {target.OrderId} cancelled by owner",
+      $"manual algo limits {cancelledOrderIds} cancelled by owner",
       cancellationToken,
       candidateId: command.IntentId
     );
@@ -5891,9 +5905,9 @@ public sealed class AutoTradeEngine(
           }
           else if (targetOrdinal == 2)
           {
-            await ProtectRemainingManualGroupStopsAtTargetAsync(
+            await ProtectRemainingManualGroupStopsAtShallowEntryAsync(
               groupId,
-              1,
+              state,
               symbol,
               cancellationToken
             );
@@ -5968,9 +5982,9 @@ public sealed class AutoTradeEngine(
         else if (targetOrdinal == 2)
         {
           usedGroupEconomicBreakeven =
-            await ProtectRemainingManualGroupStopsAtTargetAsync(
+            await ProtectRemainingManualGroupStopsAtShallowEntryAsync(
               GroupId(state),
-              1,
+              state,
               symbol,
               cancellationToken
             );
@@ -6093,11 +6107,12 @@ public sealed class AutoTradeEngine(
   }
 
   // Manual ladder target slices can consume the booking leg completely.
-  // Trail the whole remaining group to the owner's one absolute TP price,
-  // not only the position that happened to own TP2.
-  private async Task<bool> ProtectRemainingManualGroupStopsAtTargetAsync(
+  // After TP2, protect the whole remaining group at the actual shallow fill
+  // instead of the shared TP2 -> TP1 fallback. The completed state is kept
+  // as an input because it may have been removed from _states already.
+  private async Task<bool> ProtectRemainingManualGroupStopsAtShallowEntryAsync(
     string groupId,
-    int targetOrdinal,
+    AutoTradePositionState completedState,
     SymbolInfo symbol,
     CancellationToken cancellationToken
   )
@@ -6111,43 +6126,36 @@ public sealed class AutoTradeEngine(
     {
       return false;
     }
-    if (
-      targetOrdinal == 1
-      && ManualAlgoIsShallowOnlyGroup(remainingStates)
-    )
-    {
-      await store.IncrementMetricAsync(
-        symbol.RedisSymbol,
-        "manual_shallow_runner_tp2_be_held",
-        cancellationToken
-      );
-      _log(
-        "auto-trade manual shallow-only group held economic BE after TP2 "
-          + $"group_id={groupId} position_id={remainingStates[0].PositionId}"
-      );
-      // Return true so the shared TP2 -> TP1 fallback does not override the
-      // manual shallow-only policy. TP3 still uses the normal two-target-
-      // behind planner and advances this runner to owner TP1.
-      return true;
-    }
-    var target = remainingStates
-      .Select(state => state.TargetPrices)
-      .Where(prices => prices is not null && prices.Count >= targetOrdinal)
-      .Select(prices => prices![targetOrdinal - 1])
-      .FirstOrDefault();
-    if (target <= 0m)
+    var groupStates = remainingStates
+      .Append(completedState)
+      .Where(state =>
+        state.Stream == "algo_manual" && GroupId(state) == groupId
+      )
+      .DistinctBy(state => state.PositionId)
+      .ToArray();
+    if (groupStates.Length == 0)
     {
       return false;
     }
-    var move = new StopTrailMove(target, $"TP{targetOrdinal}");
+    var direction = groupStates[0].Direction;
+    var shallowStates = groupStates
+      .Where(state => state.TrancheIndex == 1)
+      .ToArray();
+    var shallowCandidates = shallowStates.Length > 0
+      ? shallowStates
+      : groupStates;
+    var shallowEntry = direction == TradeDirection.Buy
+      ? shallowCandidates.Max(state => state.EntryPrice)
+      : shallowCandidates.Min(state => state.EntryPrice);
+    var move = new StopTrailMove(shallowEntry, "shallow entry");
     foreach (var remaining in remainingStates)
     {
       if (
         remaining.CurrentStopLoss is decimal current
         && (
           remaining.Direction == TradeDirection.Buy
-            ? current >= target
-            : current <= target
+            ? current >= shallowEntry
+            : current <= shallowEntry
         )
       )
       {
@@ -6156,28 +6164,22 @@ public sealed class AutoTradeEngine(
       var updated = await ApplyStopTrailMoveAsync(
         remaining,
         move,
-        targetOrdinal: targetOrdinal + 1,
+        targetOrdinal: 2,
         cancellationToken
       );
       _states[updated.PositionId] = updated;
       await store.SavePositionAsync(updated, cancellationToken);
     }
+    await store.IncrementMetricAsync(
+      symbol.RedisSymbol,
+      "manual_tp2_shallow_entry_applied",
+      cancellationToken
+    );
+    _log(
+      "auto-trade manual group protected at shallow entry after TP2 "
+        + $"group_id={groupId} shallow_entry={shallowEntry}"
+    );
     return true;
-  }
-
-  private static bool ManualAlgoIsShallowOnlyGroup(
-    IReadOnlyList<AutoTradePositionState> remainingStates
-  )
-  {
-    if (remainingStates.Count != 1)
-    {
-      return false;
-    }
-    var state = remainingStates[0];
-    return state.Stream == "algo_manual"
-      && state.GroupTrancheCount > 1
-      && state.TargetOrdinals?.Contains(1) == true
-      && GroupInitialVolume(remainingStates) == state.InitialVolume;
   }
 
   private async Task<AutoTradePositionState> MoveStopAfterTargetAsync(
@@ -10171,6 +10173,33 @@ public sealed class AutoTradeEngine(
 
   private static string CandidateToken(string candidateId) =>
     candidateId[..Math.Min(10, candidateId.Length)];
+
+  private static string ManualSignalToken(string value)
+  {
+    if (!value.StartsWith("manual:", StringComparison.Ordinal))
+    {
+      return CandidateToken(value);
+    }
+    var revisionSeparator = value.IndexOf(':', "manual:".Length);
+    return revisionSeparator < 0
+      ? value
+      : value[..revisionSeparator];
+  }
+
+  private static bool PendingManualOrderMatchesIntent(
+    TradingPendingOrder order,
+    string intentId
+  )
+  {
+    var parts = order.Comment.Split('|');
+    if (parts.Length >= 2 && parts[0] == "avm")
+    {
+      return ManualSignalToken(parts[1]) == ManualSignalToken(intentId);
+    }
+    return order.Comment.Contains(
+      CandidateToken(intentId), StringComparison.Ordinal
+    );
+  }
 
   private static string GroupToken(string groupId) =>
     groupId[..Math.Min(10, groupId.Length)];

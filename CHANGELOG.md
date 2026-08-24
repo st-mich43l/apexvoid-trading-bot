@@ -14,10 +14,10 @@ dated section after deployment.
 
 ### Changed
 - Manual ``/algo`` multi-leg ladders now reserve one broker-minimum shallow
-  slice for the owner's final target. When only the shallow leg fills, TP2
-  keeps the group-economic break-even stop and TP3 advances it to TP1;
-  groups with Mid/Deep fills retain the existing TP2-to-TP1 protection.
-  Autonomous algo execution is unchanged.
+  slice for the owner's final target. TP1 uses group-economic break-even,
+  TP2 protects every surviving clip at the actual shallow entry, and TP3
+  advances the runner to TP1. This applies whether only Shallow filled or
+  Mid/Deep also filled; autonomous algo execution is unchanged.
 - JPY reaction sessions now cover Japanese open through London morning
   (``tokyo_london`` → ``0-11`` UTC, ``tokyo_london_ny`` → ``0-11,13-16``).
   The prior ``0-3`` Tokyo slice left mid-Tokyo (03–07 UTC / JST afternoon)
@@ -31,6 +31,10 @@ dated section after deployment.
   ``stop_exceeds_envelope_furthest_leg`` and never published.
 
 ### Fixed
+- ``/trade_modify XAU #N lo-hi`` now shifts SL by the signal's existing
+  shallow-entry risk distance when no explicit SL is supplied. Broker cancel
+  now removes every pending shallow/mid/deep leg, including old revisions,
+  before one confirmation re-arms the modified ladder.
 - ``/trade_modify [SYMBOL] #N lo-hi`` no longer hits Usage when only the
   entry zone changes. ``_seq_token`` required the whole remainder to be
   digits, so ``#14 4636-33`` never resolved the daily seq even though
