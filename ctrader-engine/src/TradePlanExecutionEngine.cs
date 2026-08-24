@@ -72,6 +72,8 @@ public static class TradePlanExecutionEngine
     {
       TradePlanContract.EntryTypeMarketWatch =>
         EvaluateMarketWatch(plan, bid, ask, spreadTicks),
+      TradePlanContract.EntryTypeMarket =>
+        EvaluateMarket(plan, spreadTicks),
       TradePlanContract.EntryTypeSingleLimit =>
         new TradePlanEntryDecision(TradePlanEntryAction.SubmitLimit),
       TradePlanContract.EntryTypeLimitLadder =>
@@ -80,6 +82,21 @@ public static class TradePlanExecutionEngine
         new TradePlanEntryDecision(TradePlanEntryAction.SubmitLadder),
       _ => new TradePlanEntryDecision(TradePlanEntryAction.Wait, "unknown_entry_type"),
     };
+  }
+
+  private static TradePlanEntryDecision EvaluateMarket(
+    TradePlan plan,
+    decimal spreadTicks
+  )
+  {
+    if (plan.Entry.MaxSpreadTicks is int maxSpread && spreadTicks > maxSpread)
+    {
+      return new TradePlanEntryDecision(
+        TradePlanEntryAction.Wait,
+        "spread_exceeds_declared_limit"
+      );
+    }
+    return new TradePlanEntryDecision(TradePlanEntryAction.SubmitMarket);
   }
 
   private static TradePlanEntryDecision EvaluateMarketWatch(
@@ -237,8 +254,8 @@ public static class TradePlanExecutionEngine
         and not TradePlanContract.EntryTypeMarketWithLimitScale
     )
     {
-      // market_watch and single_limit submit the full volume as one order
-      // (TotalVolume) - no per-slice split exists to compute.
+      // market, market_watch, and single_limit submit the full volume as one
+      // order (TotalVolume) - no per-slice split exists to compute.
       return new TradePlanVolumePlan(volume, Array.Empty<TradePlanVolumeSlice>());
     }
     var legs = plan.Entry.Legs ?? Array.Empty<TradePlanEntryLeg>();

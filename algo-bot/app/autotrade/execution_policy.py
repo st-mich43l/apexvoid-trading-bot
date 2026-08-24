@@ -1040,6 +1040,7 @@ def evaluate_execution_policy(
     "order_type_preference": policy.order_type_preference,
     "entry_distribution": entry_distribution,
     "planned_execution_route": planned_route,
+    "planned_market_immediate": route_plan.immediate_market,
     "planned_leg_entry_prices": planned_leg_entry_prices,
     "planned_leg_volume_ratios": [
       round(float(ratio), 6) for ratio in route_plan.planned_leg_volume_ratios

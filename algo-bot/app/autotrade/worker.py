@@ -546,6 +546,7 @@ _STOP_CONTRACT_FIELDS = (
   # Entry plan: the route and entry the stop above was priced against. The
   # executor rejects route drift and material entry drift before submitting.
   "planned_execution_route",
+  "planned_market_immediate",
   "planned_entry_price",
   "planned_leg_entry_prices",
   "entry_plan_version",

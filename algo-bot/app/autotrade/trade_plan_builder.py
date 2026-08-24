@@ -9,7 +9,8 @@ data into the V7 contract shape by calling the SAME `evaluate_execution_policy`
 function the V6 path already uses for route/stop planning
 (app/autotrade/execution_policy.py) - it does not classify regime, resolve a
 route from scratch, or compute a stop independently. `entry.type` is whatever
-`evaluate_execution_policy` resolved (market_watch/single_limit/limit_ladder),
+`evaluate_execution_policy` resolved
+(market/market_watch/single_limit/limit_ladder/market_with_limit_scale),
 `stop.price` is exactly the Python-planned protective stop, `analysis.bias`/
 `analysis.regime`/`source_structure.kind` are the real values captured on the
 StrategyMatch at detection time (see strategy_match.py's structural_kind/
@@ -31,6 +32,7 @@ from app.autotrade.execution_policy import evaluate_execution_policy
 from app.autotrade.strategy_match import StrategyMatch
 from app.autotrade.trade_plan import (
   ENTRY_TYPE_LIMIT_LADDER,
+  ENTRY_TYPE_MARKET,
   ENTRY_TYPE_MARKET_WATCH,
   ENTRY_TYPE_MARKET_WITH_LIMIT_SCALE,
   ENTRY_TYPE_SINGLE_LIMIT,
@@ -142,6 +144,20 @@ def _build_entry(
   max_slippage_ticks: int,
 ) -> TradePlanEntry:
   if route == "market":
+    # HFS activation explicitly permits a trade-direction chase inside its
+    # pip budget. Re-arming that already-confirmed decision as market_watch
+    # against the abandoned structural zone made winning scalp plans wait
+    # for a retrace and expire. The route planner marks only that case as a
+    # full-market chase; ordinary in-zone market routes retain broker-side
+    # zone revalidation through market_watch.
+    if bool(measured.get("planned_market_immediate")):
+      return TradePlanEntry(
+        type=ENTRY_TYPE_MARKET,
+        expires_at=expires_at,
+        order_price=Decimal(str(measured["planned_entry_price"])),
+        max_spread_ticks=max_spread_ticks,
+        max_slippage_ticks=max_slippage_ticks,
+      )
     return TradePlanEntry(
       type=ENTRY_TYPE_MARKET_WATCH,
       expires_at=expires_at,
@@ -608,7 +624,9 @@ def build_trade_plan_from_strategy_match(
     management=management,
     execution_policy=TradePlanExecutionPolicy(
       allow_market=entry.type in {
-        ENTRY_TYPE_MARKET_WATCH, ENTRY_TYPE_MARKET_WITH_LIMIT_SCALE,
+        ENTRY_TYPE_MARKET,
+        ENTRY_TYPE_MARKET_WATCH,
+        ENTRY_TYPE_MARKET_WITH_LIMIT_SCALE,
       },
       allow_limit=entry.type in {
         ENTRY_TYPE_SINGLE_LIMIT,

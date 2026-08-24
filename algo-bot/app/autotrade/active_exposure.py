@@ -588,6 +588,7 @@ def apply_same_direction_stack_sizing(
     "market",
   }:
     out["planned_execution_route"] = "single_limit"
+    out["planned_market_immediate"] = False
   if entry is not None:
     out["planned_leg_entry_prices"] = [entry]
     out["planned_leg_volume_ratios"] = [1.0]
