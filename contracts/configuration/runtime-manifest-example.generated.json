@@ -133,7 +133,7 @@
     "zone_scale_undersized_policy": "single_entry"
   },
   "contract_fingerprint": "5872fae5b93b8ccef51aa9f8261821851afa4dd3f2dd4f7c9c9110902635337d",
-  "effective_configuration_fingerprint": "71b9e985db8e9f33cd65a9ae3b36963fefb995091a28ba429e122dff8854ce22",
+  "effective_configuration_fingerprint": "52055c4c92b8c35d8ab7d360ee90b402cc23d841a468bb96bd8b439a3b23e794",
   "feed": {
     "backfill_bars": 1500,
     "bar_quality_lookback": 6,
@@ -4611,7 +4611,7 @@
       },
       "targeting": {
         "close_ratios": [],
-        "entry_clips": 5,
+        "entry_clips": 2,
         "mode": "ladder_pips",
         "reward_risk": null,
         "target_r_multiples": [],
@@ -8355,7 +8355,7 @@
       },
       "targeting": {
         "close_ratios": [],
-        "entry_clips": 5,
+        "entry_clips": 2,
         "mode": "ladder_pips",
         "reward_risk": null,
         "target_r_multiples": [],

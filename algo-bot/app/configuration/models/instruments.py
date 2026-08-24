@@ -129,8 +129,8 @@ class InstrumentTargetingConfig(FrozenConfigModel):
   close_ratios: tuple[float, ...] = ()
   trail_after_r: float | None = Field(default=None, gt=0)
   trail_to_r: float | None = Field(default=None, gt=0)
-  # Equal-size DCA clips for technique/scalp micro-grid entries. FX uses 2
-  # (market + one deeper limit); XAU keeps the default five-clip grid.
+  # Instrument-owned DCA clip count for autonomous technique/scalp entries.
+  # Production XAU and FX packs use shallow + deep clips.
   entry_clips: int = Field(default=5, ge=2, le=5)
 
   @model_validator(mode="after")

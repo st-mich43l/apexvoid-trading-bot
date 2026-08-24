@@ -13,9 +13,9 @@ dated section after deployment.
 ## Unreleased
 
 ### Changed
-- Autonomous two-leg FX entries now allocate 80% to the shallow/live-proximal
-  leg and 20% to the deep/distal limit leg. Five-clip XAU micro-grids remain
-  equally weighted, and manual algo entry sizing is unchanged.
+- Autonomous two-leg XAU and FX entries now allocate 80% to the
+  shallow/live-proximal leg and 20% to the deep/distal limit leg. Manual algo
+  entry sizing is unchanged.
 - Autonomous FX now treats sweep/body confirmation as a preference after a
   fresh, directionally valid M1 trigger instead of a hard rejection. Fixed-RR
   plans still prefer the configured 2R partial ladder; when clean opposing

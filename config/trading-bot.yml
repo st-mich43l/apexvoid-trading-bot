@@ -478,6 +478,8 @@ instruments:
       - 0.50
   XAU:
     rollout: live
+    targeting:
+      entry_clips: 2
     manual:
       enabled: true
       algo_enabled: true
