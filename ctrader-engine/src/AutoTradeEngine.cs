@@ -917,9 +917,10 @@ public sealed class AutoTradeEngine(
     var client = RequireClient();
     var pendingOrders = await client.ReconcilePendingOrdersAsync(cancellationToken);
     var token = CandidateToken(command.IntentId);
+    _allSymbolPendingOrders = pendingOrders;
     var targets = pendingOrders.Where(order =>
       order.Label == options.Label
-      && order.Comment.Contains(token, StringComparison.Ordinal)
+      && PendingManualOrderMatchesIntent(order, command.IntentId)
     ).ToArray();
     if (targets.Length == 0)
     {
@@ -10172,6 +10173,33 @@ public sealed class AutoTradeEngine(
 
   private static string CandidateToken(string candidateId) =>
     candidateId[..Math.Min(10, candidateId.Length)];
+
+  private static string ManualSignalToken(string value)
+  {
+    if (!value.StartsWith("manual:", StringComparison.Ordinal))
+    {
+      return CandidateToken(value);
+    }
+    var revisionSeparator = value.IndexOf(':', "manual:".Length);
+    return revisionSeparator < 0
+      ? value
+      : value[..revisionSeparator];
+  }
+
+  private static bool PendingManualOrderMatchesIntent(
+    TradingPendingOrder order,
+    string intentId
+  )
+  {
+    var parts = order.Comment.Split('|');
+    if (parts.Length >= 2 && parts[0] == "avm")
+    {
+      return ManualSignalToken(parts[1]) == ManualSignalToken(intentId);
+    }
+    return order.Comment.Contains(
+      CandidateToken(intentId), StringComparison.Ordinal
+    );
+  }
 
   private static string GroupToken(string groupId) =>
     groupId[..Math.Min(10, groupId.Length)];
