@@ -151,12 +151,16 @@ def _build_entry(
     # full-market chase; ordinary in-zone market routes retain broker-side
     # zone revalidation through market_watch.
     if bool(measured.get("planned_market_immediate")):
+      # Chase is intentional, but MaxSlippageTicks is now enforced on the
+      # engine. Keep enough budget for a short continuation (~1.0 XAU /
+      # ~100 ticks) without allowing multi-point blow-throughs past TP1.
+      chase_slippage = max(max_slippage_ticks, 100)
       return TradePlanEntry(
         type=ENTRY_TYPE_MARKET,
         expires_at=expires_at,
         order_price=Decimal(str(measured["planned_entry_price"])),
         max_spread_ticks=max_spread_ticks,
-        max_slippage_ticks=max_slippage_ticks,
+        max_slippage_ticks=chase_slippage,
       )
     return TradePlanEntry(
       type=ENTRY_TYPE_MARKET_WATCH,
