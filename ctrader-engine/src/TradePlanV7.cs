@@ -18,6 +18,7 @@ public static class TradePlanContract
     new HashSet<int> { 7, 8 };
 
   public const string EntryTypeMarketWatch = "market_watch";
+  public const string EntryTypeMarket = "market";
   public const string EntryTypeSingleLimit = "single_limit";
   public const string EntryTypeLimitLadder = "limit_ladder";
   public const string EntryTypeMarketWithLimitScale = "market_with_limit_scale";
@@ -28,6 +29,7 @@ public static class TradePlanContract
   public static readonly IReadOnlyList<string> EntryTypes = new[]
   {
     EntryTypeMarketWatch,
+    EntryTypeMarket,
     EntryTypeSingleLimit,
     EntryTypeLimitLadder,
     EntryTypeMarketWithLimitScale,
@@ -112,12 +114,15 @@ public sealed record TradePlanEntry(
       }
       return new[] { ZoneLow.Value, ZoneHigh.Value };
     }
-    if (Type == TradePlanContract.EntryTypeSingleLimit)
+    if (
+      Type is TradePlanContract.EntryTypeMarket
+        or TradePlanContract.EntryTypeSingleLimit
+    )
     {
       if (OrderPrice is null)
       {
         throw new TradePlanContractException(
-          "single_limit entry requires order_price"
+          $"{Type} entry requires order_price"
         );
       }
       return new[] { OrderPrice.Value };
@@ -367,7 +372,7 @@ public static class TradePlanValidator
     if (!TradePlanContract.EntryTypes.Contains(entry.Type))
     {
       throw new TradePlanContractException(
-        "entry.type must be one of market_watch/single_limit/limit_ladder/"
+        "entry.type must be one of market/market_watch/single_limit/limit_ladder/"
         + $"market_with_limit_scale: {entry.Type}"
       );
     }
@@ -388,6 +393,15 @@ public static class TradePlanValidator
       {
         throw new TradePlanContractException(
           "market_watch entry.price_side must be 'bid' or 'ask'"
+        );
+      }
+    }
+    else if (entry.Type == TradePlanContract.EntryTypeMarket)
+    {
+      if (entry.OrderPrice is null)
+      {
+        throw new TradePlanContractException(
+          "market entry requires order_price"
         );
       }
     }

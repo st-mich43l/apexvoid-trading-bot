@@ -113,6 +113,99 @@
       }
     },
     {
+      "name": "market_buy_hfs_chase",
+      "plan": {
+        "version": 8,
+        "plan_id": "v8:f61032b9bc5a79ba15e3fa380ea995eb",
+        "thesis_id": "d54d9b0be5e5f0a00ee66529a684264c",
+        "setup_id": "f61032b9bc5a79ba15e3fa380ea995eb",
+        "symbol": "XAU",
+        "created_at": 1787560200,
+        "expires_at": 1787561174,
+        "analysis": {
+          "strategy": "HFS Range Sweep",
+          "strategy_family": "hfs",
+          "direction": "BUY",
+          "context_timeframes": ["M1"],
+          "formation_timeframe": "M1",
+          "confirmation_timeframe": "M1",
+          "formation_bar_ts": 1787560200,
+          "confirmation_bar_ts": 1787560200,
+          "score": 3.0,
+          "confluence": 3,
+          "bias": "range",
+          "regime": "range",
+          "reasons": ["lower_edge_sweep_reclaim"],
+          "tags": []
+        },
+        "source_structure": {
+          "structure_id": "c5f681bfbd6efdbf3d59eadd",
+          "kind": "demand",
+          "timeframe": "M1",
+          "low": "4629.134892857143",
+          "high": "4630.110214285714",
+          "invalidation_price": "4628.504892857143"
+        },
+        "entry": {
+          "type": "market",
+          "order_price": "4631.89",
+          "max_spread_ticks": 50,
+          "max_slippage_ticks": 10,
+          "expires_at": 1787561174,
+          "legs": []
+        },
+        "stop": {
+          "type": "absolute",
+          "price": "4628.89",
+          "source": "m5_structure",
+          "structure_id": "c5f681bfbd6efdbf3d59eadd",
+          "reason": "confirmed in-budget HFS chase"
+        },
+        "targets": [
+          {
+            "target_id": "TP1",
+            "type": "absolute",
+            "price": "4632.89",
+            "close_ratio": "0.50"
+          },
+          {
+            "target_id": "TP2",
+            "type": "absolute",
+            "price": "4633.89",
+            "close_ratio": "0.50"
+          }
+        ],
+        "risk": {
+          "risk_percent": "1.0",
+          "risk_multiplier": "2.0",
+          "max_volume": 100000,
+          "max_group_risk_percent": "2.0"
+        },
+        "management": {
+          "be_after_target_id": null,
+          "be_buffer_ticks": 6,
+          "never_worsen_stop": true
+        },
+        "sizing": {
+          "mode": "equity_table",
+          "table_version": "owner_equity_v1",
+          "entry_distribution": "single",
+          "leg_ratios": []
+        },
+        "execution_policy": {
+          "allow_market": true,
+          "allow_limit": false,
+          "allow_partial_fill": true,
+          "cancel_on_expiry": true
+        },
+        "provenance": {
+          "analysis_engine_version": "",
+          "market_map_id": "",
+          "config_fingerprint": ""
+        }
+      }
+    },
+    {
       "name": "single_limit_sell",
       "plan": {
         "version": 8,
@@ -362,6 +455,14 @@
       "plan_overrides": {
         "base": "limit_ladder_buy",
         "entry.legs.0.volume_ratio": "0.50"
+      }
+    },
+    {
+      "name": "market_missing_order_price_rejected",
+      "error": "market entry requires order_price",
+      "plan_overrides": {
+        "base": "market_buy_hfs_chase",
+        "entry.order_price": null
       }
     },
     {

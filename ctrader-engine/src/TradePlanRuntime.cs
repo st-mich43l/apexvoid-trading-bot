@@ -1913,7 +1913,10 @@ public sealed class TradePlanRuntime(
     var now = clock().ToUnixTimeSeconds();
     var absoluteStop = plan.Stop.Price;
 
-    if (plan.Entry.Type == TradePlanContract.EntryTypeMarketWatch)
+    if (
+      plan.Entry.Type is TradePlanContract.EntryTypeMarket
+        or TradePlanContract.EntryTypeMarketWatch
+    )
     {
       const string legId = "L1";
       var entryPrice = direction == TradeDirection.Buy ? quote.Ask : quote.Bid;

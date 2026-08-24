@@ -26,11 +26,13 @@ TRADE_PLAN_VERSION = 8
 TRADE_PLAN_SUPPORTED_VERSIONS = frozenset({7, 8})
 
 ENTRY_TYPE_MARKET_WATCH = "market_watch"
+ENTRY_TYPE_MARKET = "market"
 ENTRY_TYPE_SINGLE_LIMIT = "single_limit"
 ENTRY_TYPE_LIMIT_LADDER = "limit_ladder"
 ENTRY_TYPE_MARKET_WITH_LIMIT_SCALE = "market_with_limit_scale"
 ENTRY_TYPES = (
   ENTRY_TYPE_MARKET_WATCH,
+  ENTRY_TYPE_MARKET,
   ENTRY_TYPE_SINGLE_LIMIT,
   ENTRY_TYPE_LIMIT_LADDER,
   ENTRY_TYPE_MARKET_WITH_LIMIT_SCALE,
@@ -259,6 +261,9 @@ class TradePlanEntry:
         raise TradePlanError("market_watch entry requires activation")
       if str(_require(data, "price_side")) not in ("bid", "ask"):
         raise TradePlanError("market_watch entry.price_side must be 'bid' or 'ask'")
+    elif entry_type == ENTRY_TYPE_MARKET:
+      if order_price_d is None:
+        raise TradePlanError("market entry requires order_price")
     elif entry_type == ENTRY_TYPE_SINGLE_LIMIT:
       if order_price_d is None:
         raise TradePlanError("single_limit entry requires order_price")
@@ -314,7 +319,7 @@ class TradePlanEntry:
     if self.type == ENTRY_TYPE_MARKET_WATCH:
       assert self.zone_low is not None and self.zone_high is not None
       return (self.zone_low, self.zone_high)
-    if self.type == ENTRY_TYPE_SINGLE_LIMIT:
+    if self.type in (ENTRY_TYPE_MARKET, ENTRY_TYPE_SINGLE_LIMIT):
       assert self.order_price is not None
       return (self.order_price,)
     return tuple(leg.price for leg in self.legs)

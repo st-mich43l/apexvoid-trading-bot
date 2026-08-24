@@ -63,6 +63,9 @@ class ExecutionRoutePlan:
   # non-scaled route (market/single_limit) - trade_plan_builder falls back
   # to an equal split across whatever legs it does have in that case.
   planned_leg_volume_ratios: tuple[float, ...] = ()
+  # True only when Python has already admitted a trade-direction scalp chase
+  # and the old structural zone must not be re-armed by the executor.
+  immediate_market: bool = False
 
 
 def _round_price(value: float, digits: int) -> float:
@@ -320,6 +323,7 @@ def resolve_execution_route_plan(
         geometry,
         "scalp chase: full market (micro-grid would rest into abandoned zone)",
         True,
+        immediate_market=True,
       )
     grid = scalp_micro_grid_legs(
       side=side,

@@ -13,6 +13,9 @@ dated section after deployment.
 ## Unreleased
 
 ### Changed
+- TradePlan V8 now carries an explicit immediate `market` entry for a
+  confirmed, in-budget HFS trade-direction chase. Ordinary in-zone market
+  routes retain broker-side `market_watch` zone revalidation.
 - Autonomous two-leg XAU and FX entries now allocate 80% to the
   shallow/live-proximal leg and 20% to the deep/distal limit leg. Manual algo
   entry sizing is unchanged.
@@ -39,6 +42,10 @@ dated section after deployment.
   ``stop_exceeds_envelope_furthest_leg`` and never published.
 
 ### Fixed
+- HFS full-market chase plans no longer become `market_watch` orders against
+  an abandoned structural zone. Production replays showed valid Range Sweep
+  setups either failing stop validation or expiring unfilled while price
+  continued through both targets.
 - Autonomous terminal events no longer promote a merely touched/deferred TP
   into a booked TP when the position later closes at its stop. Broker lookup
   timeouts now classify a live fallback fill near the protective stop as SL,
