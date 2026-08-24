@@ -39,6 +39,10 @@ dated section after deployment.
   ``stop_exceeds_envelope_furthest_leg`` and never published.
 
 ### Fixed
+- Autonomous terminal events no longer promote a merely touched/deferred TP
+  into a booked TP when the position later closes at its stop. Broker lookup
+  timeouts now classify a live fallback fill near the protective stop as SL,
+  and Telegram/stats reject contradictory archived-TP loss events.
 - ``/trade_modify XAU #N lo-hi`` now shifts SL by the signal's existing
   shallow-entry risk distance when no explicit SL is supplied. Broker cancel
   now removes every pending shallow/mid/deep leg, including old revisions,

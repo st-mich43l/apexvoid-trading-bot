@@ -2957,10 +2957,14 @@ public sealed class TradePlanRuntime(
         var liveExit = ExecutableQuote(plan, quote);
         if (liveExit is decimal exit)
         {
+          var fallbackIsStop = LooksLikeProtectiveStopHit(plan, state, exit);
+          var fallbackReason = fallbackIsStop
+            ? PositionCloseReason.StopLossOrTakeProfit
+            : PositionCloseReason.ManualOrExternalOrder;
           var patched = reasons
             .Select(item => (
               item.Leg,
-              PositionCloseReason.ManualOrExternalOrder,
+              fallbackReason,
               (decimal?)exit
             ))
             .ToList();
@@ -2970,10 +2974,18 @@ public sealed class TradePlanRuntime(
             state,
             legs,
             patched,
-            terminalReason: "manual_or_external_close",
-            eventKey: "manual_or_external_close",
-            reasonCode: "manual_or_external_close",
-            closeKind: "manual_or_external",
+            terminalReason: fallbackIsStop
+              ? "group_stop_loss"
+              : "manual_or_external_close",
+            eventKey: fallbackIsStop
+              ? "group_stop_loss"
+              : "manual_or_external_close",
+            reasonCode: fallbackIsStop
+              ? "stop_loss_or_take_profit"
+              : "manual_or_external_close",
+            closeKind: fallbackIsStop
+              ? "stop_loss_or_take_profit"
+              : "manual_or_external",
             previousGroupStage,
             cancellationToken
           );
@@ -3143,7 +3155,7 @@ public sealed class TradePlanRuntime(
     CancellationToken cancellationToken
   )
   {
-    var highestTp = HighestArchivedTargetId(plan, state);
+    var highestTp = HighestBookedTargetId(plan, state);
     var highestTpPips = highestTp is null
       ? null
       : ArchivedTargetPips(plan, state, highestTp);
@@ -3707,19 +3719,23 @@ public sealed class TradePlanRuntime(
   }
 
   /// <summary>
-  /// Highest take-profit already booked before this close.
-  /// NextTargetIndex is the next target to hit, so archived count is that index.
+  /// Highest take-profit actually booked before this close. NextTargetIndex
+  /// also advances for touched targets whose partial was too small to book,
+  /// so it must never be used as the archive source.
   /// </summary>
-  private static string? HighestArchivedTargetId(
+  private static string? HighestBookedTargetId(
     TradePlan plan,
     TradePlanRuntimeState state
   )
   {
-    if (state.NextTargetIndex <= 0 || plan.Targets.Count == 0)
+    if (state.HighestBookedTargetIndex < 0 || plan.Targets.Count == 0)
     {
       return null;
     }
-    var index = Math.Min(state.NextTargetIndex, plan.Targets.Count) - 1;
+    var index = Math.Min(
+      state.HighestBookedTargetIndex,
+      plan.Targets.Count - 1
+    );
     return plan.Targets[index].TargetId;
   }
 
