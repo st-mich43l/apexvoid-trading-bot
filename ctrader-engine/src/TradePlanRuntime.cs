@@ -1697,6 +1697,16 @@ public sealed class TradePlanRuntime(
       return $"TradePlan V8 expired {direction} · "
         + $"spread stayed above the plan limit while waiting ({waitReasonForExpiry})";
     }
+    if (waitReasonForExpiry == "slippage_exceeds_declared_limit")
+    {
+      return $"TradePlan V8 expired {direction} · "
+        + $"quote chased past the admitted slippage budget ({waitReasonForExpiry})";
+    }
+    if (waitReasonForExpiry == "chase_through_target")
+    {
+      return $"TradePlan V8 expired {direction} · "
+        + $"quote already through the first take-profit before entry ({waitReasonForExpiry})";
+    }
     if (waitReasonForExpiry == "outside_zone")
     {
       var touched = await ZoneTouchedSinceCreatedAsync(plan, cancellationToken);
@@ -1768,7 +1778,12 @@ public sealed class TradePlanRuntime(
       ? (quote.Ask - quote.Bid) / StopTrailPlanner.RequireTickSize(symbol)
       : 0m;
     var decision = TradePlanExecutionEngine.EvaluateEntry(
-      plan, quote.Bid, quote.Ask, spreadTicks, now
+      plan,
+      quote.Bid,
+      quote.Ask,
+      spreadTicks,
+      now,
+      StopTrailPlanner.RequireTickSize(symbol)
     );
     if (decision.RejectReason == "plan_expired")
     {
@@ -2503,11 +2518,46 @@ public sealed class TradePlanRuntime(
       }
 
       var currentPrice = plan.Analysis.Direction == "BUY" ? quote.Bid : quote.Ask;
+      var fillPrice = state.GroupWeightedFillPrice ?? state.EntryFillPrice;
       var target = plan.Targets.ElementAtOrDefault(state.NextTargetIndex);
       if (target is not null && TradePlanExecutionEngine.HasReachedTarget(
         plan, target, currentPrice
       ))
       {
+        // Live 2026-08-24 HFS SELL: fill @ 4667.17 already through TP1
+        // 4667.29 → next poll booked "TP1 +1 pip" on a losing close. Skip
+        // targets that are not beyond the broker fill, and never close
+        // unless the live exit quote is actually favorable vs fill.
+        if (
+          fillPrice is not decimal confirmedFill
+          || !TradePlanExecutionEngine.TargetIsBeyondFill(
+            plan.Analysis.Direction,
+            confirmedFill,
+            target.Price
+          )
+        )
+        {
+          log(
+            $"v8 target skipped past fill id={plan.PlanId} "
+            + $"target={target.TargetId} fill={fillPrice} "
+            + $"target_price={target.Price} quote={currentPrice}"
+          );
+          state = AggregateState(
+            state with { NextTargetIndex = state.NextTargetIndex + 1 }
+          );
+          await PersistStateAsync(state, cancellationToken);
+          continue;
+        }
+        if (
+          !TradePlanExecutionEngine.ExitIsFavorableVsFill(
+            plan.Analysis.Direction,
+            confirmedFill,
+            currentPrice
+          )
+        )
+        {
+          continue;
+        }
         state = await CancelUnfilledEntryLegsAsync(
           client, plan, state, "before_tp", cancellationToken
         );
@@ -2739,7 +2789,6 @@ public sealed class TradePlanRuntime(
           .ToArray();
       }
 
-      var fillPrice = state.GroupWeightedFillPrice ?? state.EntryFillPrice;
       var beAfterIndex = plan.Management.BeAfterTargetId is null
         ? -1
         : IndexOfTarget(plan, plan.Management.BeAfterTargetId);
@@ -3763,11 +3812,22 @@ public sealed class TradePlanRuntime(
     {
       return null;
     }
-    var distance = decimal.Abs(
-      plan.Targets[index].Price - fillPrice
+    // Report realized direction vs fill — never abs() a losing chase-through
+    // TP as "+1 pip achieved".
+    var buy = string.Equals(
+      plan.Analysis.Direction,
+      "BUY",
+      StringComparison.OrdinalIgnoreCase
     );
+    var raw = buy
+      ? (plan.Targets[index].Price - fillPrice) / pipSize
+      : (fillPrice - plan.Targets[index].Price) / pipSize;
+    if (raw <= 0)
+    {
+      return null;
+    }
     return decimal.ToInt32(decimal.Round(
-      distance / pipSize,
+      raw,
       0,
       MidpointRounding.AwayFromZero
     ));

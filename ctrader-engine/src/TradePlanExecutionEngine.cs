@@ -61,7 +61,8 @@ public static class TradePlanExecutionEngine
     decimal bid,
     decimal ask,
     decimal spreadTicks,
-    long nowUnixSeconds
+    long nowUnixSeconds,
+    decimal tickSize = 0m
   )
   {
     if (nowUnixSeconds >= plan.Entry.ExpiresAt)
@@ -73,7 +74,7 @@ public static class TradePlanExecutionEngine
       TradePlanContract.EntryTypeMarketWatch =>
         EvaluateMarketWatch(plan, bid, ask, spreadTicks),
       TradePlanContract.EntryTypeMarket =>
-        EvaluateMarket(plan, spreadTicks),
+        EvaluateMarket(plan, bid, ask, spreadTicks, tickSize),
       TradePlanContract.EntryTypeSingleLimit =>
         new TradePlanEntryDecision(TradePlanEntryAction.SubmitLimit),
       TradePlanContract.EntryTypeLimitLadder =>
@@ -86,7 +87,10 @@ public static class TradePlanExecutionEngine
 
   private static TradePlanEntryDecision EvaluateMarket(
     TradePlan plan,
-    decimal spreadTicks
+    decimal bid,
+    decimal ask,
+    decimal spreadTicks,
+    decimal tickSize
   )
   {
     if (plan.Entry.MaxSpreadTicks is int maxSpread && spreadTicks > maxSpread)
@@ -96,6 +100,61 @@ public static class TradePlanExecutionEngine
         "spread_exceeds_declared_limit"
       );
     }
+    var buy = string.Equals(
+      plan.Analysis.Direction,
+      "BUY",
+      StringComparison.OrdinalIgnoreCase
+    );
+    var entryQuote = buy ? ask : bid;
+
+    // Never market-chase into/through the first take-profit. A fill already
+    // past TP1 makes HasReachedTarget fire on the next poll and books a
+    // "TP1 achieved" close that is often a loss vs fill.
+    // Checked before slippage so the live 2026-08-24 failure mode reports
+    // the more specific reason when both would apply.
+    if (
+      plan.Targets is { Count: > 0 }
+      && HasReachedExitTarget(
+        plan.Analysis.Direction,
+        entryQuote,
+        plan.Targets[0].Price
+      )
+    )
+    {
+      return new TradePlanEntryDecision(
+        TradePlanEntryAction.Wait,
+        "chase_through_target"
+      );
+    }
+
+    // Live 2026-08-24 HFS SELL: stamped max_slippage_ticks=10 but never
+    // enforced, so market chased 1+ points past order_price through TP1 and
+    // booked a fake take-profit on a losing print. Cap adverse drift from
+    // the admitted order_price when both are present.
+    if (
+      plan.Entry.OrderPrice is decimal orderPrice
+      && plan.Entry.MaxSlippageTicks is int maxSlippage
+      && maxSlippage >= 0
+      && tickSize > 0m
+    )
+    {
+      var maxAway = maxSlippage * tickSize;
+      if (buy && entryQuote > orderPrice + maxAway)
+      {
+        return new TradePlanEntryDecision(
+          TradePlanEntryAction.Wait,
+          "slippage_exceeds_declared_limit"
+        );
+      }
+      if (!buy && entryQuote < orderPrice - maxAway)
+      {
+        return new TradePlanEntryDecision(
+          TradePlanEntryAction.Wait,
+          "slippage_exceeds_declared_limit"
+        );
+      }
+    }
+
     return new TradePlanEntryDecision(TradePlanEntryAction.SubmitMarket);
   }
 
@@ -325,6 +384,41 @@ public static class TradePlanExecutionEngine
       return exitQuote < target + SellWholeTpHandleCushion;
     }
     return exitQuote <= target;
+  }
+
+  /// <summary>
+  /// True when the absolute target still sits on the profit side of the
+  /// broker fill. SELL needs target &lt; fill; BUY needs target &gt; fill.
+  /// Targets already behind the fill (chase-through) must be skipped, not
+  /// booked as take-profit.
+  /// </summary>
+  public static bool TargetIsBeyondFill(
+    string direction,
+    decimal fillPrice,
+    decimal targetPrice
+  )
+  {
+    if (string.Equals(direction, "BUY", StringComparison.OrdinalIgnoreCase))
+    {
+      return targetPrice > fillPrice;
+    }
+    return targetPrice < fillPrice;
+  }
+
+  /// <summary>
+  /// True when the live exit quote would realize a profit vs fill.
+  /// </summary>
+  public static bool ExitIsFavorableVsFill(
+    string direction,
+    decimal fillPrice,
+    decimal exitQuote
+  )
+  {
+    if (string.Equals(direction, "BUY", StringComparison.OrdinalIgnoreCase))
+    {
+      return exitQuote > fillPrice;
+    }
+    return exitQuote < fillPrice;
   }
 
   /// <summary>
