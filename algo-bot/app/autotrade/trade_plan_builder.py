@@ -534,7 +534,12 @@ def build_trade_plan_from_strategy_match(
     ),
   )
 
-  if be_after_target_index is None or not targets:
+  closes_at_first_target = (
+    fixed_rr
+    and len(targets) == 1
+    and targets[0].close_ratio == Decimal("1")
+  )
+  if be_after_target_index is None or not targets or closes_at_first_target:
     be_after_target_id = None
   else:
     be_after_target_id = targets[be_after_target_index].target_id

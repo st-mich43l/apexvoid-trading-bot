@@ -1100,27 +1100,86 @@ def evaluate_execution_policy(
     )
   fixed_targeting = _instrument_fixed_targeting("", instrument_cfg)
   if fixed_targeting is not None:
-    fixed_reward_risk = float(fixed_targeting.reward_risk)
+    preferred_reward_risk = float(fixed_targeting.reward_risk)
     entry_value = Decimal(str(planned_entry))
     stop_value = stop_plan.final_stop_price
     risk_distance = abs(entry_value - stop_value)
     quantum = Decimal(1).scaleb(-_instrument_digits("", instrument_cfg))
-    target_values: list[Decimal] = []
-    target_pips_values: list[Decimal] = []
-    target_r_multiples = tuple(
+    configured_target_r_multiples = tuple(
       float(value) for value in fixed_targeting.target_r_multiples
     )
-    for raw_multiple in target_r_multiples:
-      reward_distance = risk_distance * Decimal(str(raw_multiple))
-      target_value = (
-        entry_value + reward_distance
-        if direction == "BUY"
-        else entry_value - reward_distance
-      ).quantize(quantum, rounding=ROUND_HALF_UP)
-      target_values.append(target_value)
-      target_pips_values.append(
-        abs(target_value - entry_value) / Decimal(str(pip))
-      )
+    available_room = (
+      float(available_target_room_pips)
+      if available_target_room_pips is not None
+      and math.isfinite(float(available_target_room_pips))
+      else remaining_pips
+      if target_model in {"absolute", "hybrid"}
+      else None
+    )
+
+    def _fixed_target_geometry(
+      multiples: tuple[float, ...],
+    ) -> tuple[list[Decimal], list[Decimal]]:
+      prices: list[Decimal] = []
+      pips_values: list[Decimal] = []
+      for raw_multiple in multiples:
+        reward_distance = risk_distance * Decimal(str(raw_multiple))
+        target_value = (
+          entry_value + reward_distance
+          if direction == "BUY"
+          else entry_value - reward_distance
+        ).quantize(quantum, rounding=ROUND_HALF_UP)
+        prices.append(target_value)
+        pips_values.append(
+          abs(target_value - entry_value) / Decimal(str(pip))
+        )
+      return prices, pips_values
+
+    target_r_multiples = configured_target_r_multiples
+    target_close_ratios = tuple(
+      float(value) for value in fixed_targeting.close_ratios
+    )
+    target_values, target_pips_values = _fixed_target_geometry(
+      target_r_multiples,
+    )
+    preferred_target_pips = target_pips_values[-1]
+    fallback_reward_risk = min(1.0, preferred_reward_risk)
+    fallback_values, fallback_pips_values = _fixed_target_geometry(
+      (fallback_reward_risk,),
+    )
+    fallback_target_pips = fallback_pips_values[-1]
+    fallback_used = False
+    if (
+      available_room is not None
+      and available_room + 1e-9 < float(preferred_target_pips)
+    ):
+      if available_room + 1e-9 >= float(fallback_target_pips):
+        target_r_multiples = (fallback_reward_risk,)
+        target_close_ratios = (1.0,)
+        target_values = fallback_values
+        target_pips_values = fallback_pips_values
+        fallback_used = True
+      else:
+        measured.update({
+          "target_policy_mode": "fixed_rr",
+          "target_preferred_reward_risk": preferred_reward_risk,
+          "target_fallback_reward_risk": fallback_reward_risk,
+          "available_target_room_pips": round(available_room, 3),
+          "preferred_target_pips": format(preferred_target_pips, "f"),
+          "minimum_target_pips": format(fallback_target_pips, "f"),
+        })
+        return ExecutionPolicyEvaluation(
+          False,
+          "fixed_rr_room_insufficient",
+          (
+            f"adaptive fixed RR needs at least {fallback_reward_risk:.2f}R "
+            f"({float(fallback_target_pips):.1f} pips), remaining "
+            f"{available_room:.1f}"
+          ),
+          True,
+          measured,
+          policy,
+        )
     final_target_pips = target_pips_values[-1]
     actual_reward_risk = (
       final_target_pips / (risk_distance / Decimal(str(pip)))
@@ -1130,7 +1189,10 @@ def evaluate_execution_policy(
     reward_risk = float(actual_reward_risk)
     measured.update({
       "target_policy_mode": "fixed_rr",
-      "target_reward_risk": fixed_reward_risk,
+      "target_reward_risk": round(reward_risk, 4),
+      "target_preferred_reward_risk": preferred_reward_risk,
+      "target_fallback_reward_risk": fallback_reward_risk,
+      "target_room_fallback_used": fallback_used,
       "planned_target_r_multiples": [
         format(Decimal(str(value)), "f")
         for value in target_r_multiples
@@ -1143,14 +1205,18 @@ def evaluate_execution_policy(
       ],
       "planned_target_close_ratios": [
         format(Decimal(str(value)), "f")
-        for value in fixed_targeting.close_ratios
+        for value in target_close_ratios
       ],
       "reward_risk": round(reward_risk, 4),
-      "min_reward_risk": fixed_reward_risk,
+      "min_reward_risk": fallback_reward_risk,
     })
     trail_after_r = getattr(fixed_targeting, "trail_after_r", None)
     trail_to_r = getattr(fixed_targeting, "trail_to_r", None)
-    if trail_after_r is not None and trail_to_r is not None:
+    if (
+      not fallback_used
+      and trail_after_r is not None
+      and trail_to_r is not None
+    ):
       trail_after_index = next(
         index for index, value in enumerate(target_r_multiples)
         if math.isclose(
@@ -1167,33 +1233,8 @@ def evaluate_execution_policy(
         "planned_trail_after_target_id": f"TP{trail_after_index + 1}",
         "planned_trail_to_target_id": f"TP{trail_to_index + 1}",
       })
-    available_room = (
-      float(available_target_room_pips)
-      if available_target_room_pips is not None
-      and math.isfinite(float(available_target_room_pips))
-      else remaining_pips
-      if target_model in {"absolute", "hybrid"}
-      else None
-    )
     if available_room is not None:
       measured["available_target_room_pips"] = round(available_room, 3)
-    if (
-      available_room is not None
-      and available_room + 1e-9 < float(final_target_pips)
-    ):
-      return ExecutionPolicyEvaluation(
-        False,
-        "fixed_rr_room_insufficient",
-        (
-          f"fixed {fixed_reward_risk:.2f}R needs "
-          f"{float(final_target_pips):.1f} "
-          "pips of room, remaining "
-          f"{available_room:.1f}"
-        ),
-        True,
-        measured,
-        policy,
-      )
   if (
     not math.isfinite(effective_risk_multiplier)
     or effective_risk_multiplier <= 0

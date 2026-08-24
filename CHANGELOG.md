@@ -13,6 +13,11 @@ dated section after deployment.
 ## Unreleased
 
 ### Changed
+- Autonomous FX now treats sweep/body confirmation as a preference after a
+  fresh, directionally valid M1 trigger instead of a hard rejection. Fixed-RR
+  plans still prefer the configured 2R partial ladder; when clean opposing
+  room cannot hold 2R but can hold 1R, execution publishes one 1R target that
+  closes 100% with no trailing. Room below 1R remains a terminal rejection.
 - Manual ``/algo`` multi-leg ladders now reserve one broker-minimum shallow
   slice for the owner's final target. TP1 uses group-economic break-even,
   TP2 protects every surviving clip at the actual shallow entry, and TP3
