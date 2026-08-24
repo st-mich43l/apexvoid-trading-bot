@@ -99,7 +99,7 @@ Daily <code>#N</code> is per symbol.
 <code>/trade_sl [SYMBOL] #id be|price</code>
 <code>/trade_cancel [SYMBOL] #id</code>
 <code>/trade_delete [SYMBOL] #id</code>
-<code>/trade_modify [SYMBOL] #id entry lo-hi sl X tp a/b/c</code>
+<code>/trade_modify [SYMBOL] #id lo-hi | sl X | tp a/b/c</code>
 <code>/trade_reopen [SYMBOL] #id [lo-hi]</code>
 <code>/trade_tag [SYMBOL] #id|id:DB_ID &lt;setup&gt; [***]</code>
 <code>/trade_untagged [N]</code>
@@ -689,11 +689,13 @@ async def handle_trade_modify(msg: Message) -> None:
     return
   symbol, raw = _take_symbol(_command_args(msg), default=None)
   seq = _seq_token(raw)
+  _modify_usage = (
+    "Usage: <code>/trade_modify [SYMBOL] #N lo-hi</code>\n"
+    "Or: <code>#N sl X</code> · <code>#N tp a/b/c</code> · "
+    "<code>#N entry lo-hi sl X tp a/b/c</code>"
+  )
   if seq is None:
-    await msg.answer(
-      "Usage: <code>/trade_modify [SYMBOL] #N "
-      "entry lo-hi sl X tp a/b/c</code>"
-    )
+    await msg.answer(_modify_usage)
     return
   # Strip the leading #N so the remaining body is entry/sl/tp fragments.
   body = re.sub(r"^#?\d+\s*", "", raw.strip(), count=1)
@@ -716,10 +718,7 @@ async def handle_trade_modify(msg: Message) -> None:
     entry_end=signal.get("entry_end"),
   )
   if fields is None:
-    await msg.answer(
-      "Usage: <code>/trade_modify [SYMBOL] #N "
-      "entry lo-hi sl X tp a/b/c</code>"
-    )
+    await msg.answer(_modify_usage)
     return
   result = await do_modify({
     "sid": sid,

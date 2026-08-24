@@ -407,8 +407,15 @@ def _take_symbol(
 
 
 def _seq_token(value: str) -> int | None:
-  value = value.strip().lstrip("#")
-  return int(value) if value.isdigit() else None
+  """Parse a leading ``#N`` / ``N`` daily-seq from command remainder.
+
+  Only the first whitespace-separated token is considered so trailing
+  modify fragments (``#14 4636-33``, ``#12 sl 4384``) still resolve the
+  seq. A bare zone with no ``#N`` (``4636-33``) stays None.
+  """
+  first = value.strip().split(maxsplit=1)[0] if value.strip() else ""
+  first = first.lstrip("#")
+  return int(first) if first.isdigit() else None
 
 
 def _today_str() -> str:
