@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 import logging
+import math
 import time
 from typing import Any
 
@@ -47,18 +48,21 @@ def _hfs_target_ladder(
 ) -> tuple[int, tuple[int, ...]]:
   """Final TP pips + published ladder.
 
-  XAU scalp books 10 then 20 pips. A fixed-RR instrument carries one
-  provisional final target here; execution policy expands it into the
-  configured R ladder from the final stop. A shorter native room still
-  publishes one exit.
+  XAU HFS books 1R then 2R from the clamped stop when discovery selected
+  a 1:2 room target. A fixed-RR instrument carries one provisional final
+  target here; execution policy expands it into the configured R ladder
+  from the final stop. A shorter native room still publishes one exit.
   """
   from app.core.instrument_geometry import fixed_reward_risk
 
   final_pips = max(1, int(round(float(opportunity.expected_target_pips))))
   if fixed_reward_risk(opportunity.symbol, cfg) is not None:
     return final_pips, (final_pips,)
-  first = 10
-  last = min(20, max(final_pips, first))
+  stop = max(1, int(round(float(opportunity.expected_stop_pips))))
+  # 1:2 books as (1R, 2R). Cap the far leg at the discovery target so a
+  # 1:1 room selection does not invent a second print beyond available room.
+  first = stop
+  last = max(first, min(final_pips, stop * 2))
   if last <= first:
     return last, (last,)
   return last, (first, last)
@@ -94,6 +98,24 @@ def build_hfs_strategy_match(
   htf_bias = str(context.htf_bias or "range")
   if htf_bias in {"", "unknown"}:
     htf_bias = "range"
+  # Clamp structure_swing to the discovery stop envelope. Raw wick
+  # invalidation_price can sit 40–60+ pips away; TradePlan uses
+  # structure_swing as the protective-stop rail and was ignoring
+  # expected_stop_pips (dig 2026-08-25).
+  try:
+    from app.autotrade import units as _units
+
+    pip = float(_units.pip_size(opportunity.symbol))
+  except Exception:
+    pip = 0.1 if str(opportunity.symbol).upper() in {"XAU", "XAUUSD"} else 0.0001
+  if not math.isfinite(pip) or pip <= 0:
+    pip = 0.1
+  stop_distance = max(pip, float(opportunity.expected_stop_pips) * pip)
+  entry = float(opportunity.trigger_price)
+  if opportunity.direction.upper() == "BUY":
+    structure_swing = entry - stop_distance
+  else:
+    structure_swing = entry + stop_distance
   # HFS matches never pass through the classic scanner.py detection path,
   # so _static_execution_eligibility() never runs for them. Without this,
   # _admit_strategy_intent_for_cycle's static-eligibility gate (which only
@@ -134,7 +156,7 @@ def build_hfs_strategy_match(
     execution_eligibility=eligibility,
     reasons=tuple(opportunity.reasons) or ("hfs",),
     atr=float(context.atr or 1.0),
-    structure_swing=float(opportunity.invalidation_price),
+    structure_swing=float(structure_swing),
     targets_pips=targets_pips,
     # Fitted HFS room unlocks opposing-structure bypass (native scalp room).
     full_take_profit_pips=target_pips,

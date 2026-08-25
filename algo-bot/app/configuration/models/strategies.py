@@ -231,8 +231,9 @@ class StrategiesHighFrequencyScalpTargetConfig(FrozenConfigModel):
 
 class StrategiesHighFrequencyScalpStopConfig(FrozenConfigModel):
     buffer_atr: float = config_field(0.1, canonical_env='HFS_STOP_BUFFER_ATR', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.ATR, risk=RiskClassification.EXECUTION_SAFETY, description='ATR buffer beyond structural stop.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 0.1),), validation_summary='Pydantic required/type coercion only', ge=0)
-    # Live 2026-08-12: Impulse stops >22p summed −444 across 154 trades; 16–22 was +.
-    maximum_pips: float = config_field(22.0, canonical_env='HFS_STOP_MAXIMUM_PIPS', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.PIPS, risk=RiskClassification.EXECUTION_SAFETY, description='Maximum scalp stop size.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 22.0),), validation_summary='Pydantic required/type coercion only', ge=1)
+    # Dig 2026-08-25: TradePlan ignored this cap (reaction 40–60). Owner raised
+    # max to 30 so Range Sweep structure room can plan without clipping too hard.
+    maximum_pips: float = config_field(30.0, canonical_env='HFS_STOP_MAXIMUM_PIPS', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.PIPS, risk=RiskClassification.EXECUTION_SAFETY, description='Maximum scalp stop size.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 30.0),), validation_summary='Pydantic required/type coercion only', ge=1)
     minimum_pips: float = config_field(12.0, canonical_env='HFS_STOP_MINIMUM_PIPS', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.PIPS, risk=RiskClassification.EXECUTION_SAFETY, description='Minimum scalp stop size.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 12.0),), validation_summary='Pydantic required/type coercion only', ge=1)
 
 class StrategiesHighFrequencyScalpPolicyConfig(FrozenConfigModel):

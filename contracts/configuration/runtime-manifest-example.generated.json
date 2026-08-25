@@ -132,8 +132,8 @@
     "zone_reconcile_mode": "shadow",
     "zone_scale_undersized_policy": "single_entry"
   },
-  "contract_fingerprint": "0b72f1bcdedc7aad2e5691f7d36f5cd3ee09cead24f23d804a48cc4b1aaa71cf",
-  "effective_configuration_fingerprint": "802fa27f29339363c0a37ff56c11bd2a08900cb6897b2947488652cbeb6a6485",
+  "contract_fingerprint": "b81aae5175b0401e2d8e2bfb917fcddc3d2f3a1cfd7e6a2c3a4937ff5d04fe3b",
+  "effective_configuration_fingerprint": "9254879f87dda6784f3211ed8e2de6a82338e0eae2dbd1cdbbb335ee9bc44280",
   "feed": {
     "backfill_bars": 1500,
     "bar_quality_lookback": 6,
@@ -956,7 +956,7 @@
           },
           "stop": {
             "buffer_atr": "0.1",
-            "maximum_pips": "22",
+            "maximum_pips": "30",
             "minimum_pips": "12"
           },
           "target": {
@@ -1911,7 +1911,7 @@
           },
           "stop": {
             "buffer_atr": "0.1",
-            "maximum_pips": "22",
+            "maximum_pips": "30",
             "minimum_pips": "12"
           },
           "target": {
@@ -2830,7 +2830,7 @@
           },
           "stop": {
             "buffer_atr": "0.1",
-            "maximum_pips": "22",
+            "maximum_pips": "30",
             "minimum_pips": "12"
           },
           "target": {
@@ -3761,7 +3761,7 @@
           },
           "stop": {
             "buffer_atr": "0.1",
-            "maximum_pips": "22",
+            "maximum_pips": "30",
             "minimum_pips": "12"
           },
           "target": {
@@ -4526,7 +4526,7 @@
           },
           "stop": {
             "buffer_atr": "0.1",
-            "maximum_pips": "22",
+            "maximum_pips": "30",
             "minimum_pips": "12"
           },
           "target": {
@@ -5302,7 +5302,7 @@
           },
           "stop": {
             "buffer_atr": "0.1",
-            "maximum_pips": "22",
+            "maximum_pips": "30",
             "minimum_pips": "12"
           },
           "target": {
@@ -6120,7 +6120,7 @@
           },
           "stop": {
             "buffer_atr": "0.1",
-            "maximum_pips": "22",
+            "maximum_pips": "30",
             "minimum_pips": "12"
           },
           "target": {
@@ -6902,7 +6902,7 @@
           },
           "stop": {
             "buffer_atr": "0.1",
-            "maximum_pips": "22",
+            "maximum_pips": "30",
             "minimum_pips": "12"
           },
           "target": {
@@ -7696,7 +7696,7 @@
           },
           "stop": {
             "buffer_atr": "0.1",
-            "maximum_pips": "22",
+            "maximum_pips": "30",
             "minimum_pips": "12"
           },
           "target": {
@@ -8320,7 +8320,7 @@
           },
           "stop": {
             "buffer_atr": "0.1",
-            "maximum_pips": "22",
+            "maximum_pips": "30",
             "minimum_pips": "12"
           },
           "target": {
