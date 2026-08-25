@@ -639,7 +639,7 @@ strategies:
       minimum_net_target_pips: 10
     stop:
       minimum_pips: 12
-      maximum_pips: 22
+      maximum_pips: 30
       buffer_atr: 0.10
     policy:
       minimum_reward_risk: 1.10

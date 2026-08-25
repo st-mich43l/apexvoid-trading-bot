@@ -7,7 +7,11 @@ from decimal import Decimal, InvalidOperation, ROUND_CEILING, ROUND_FLOOR, ROUND
 import math
 from typing import Any
 
-from app.autotrade.strategy_taxonomy import RANGE_STRATEGIES, REACTION_STRATEGIES
+from app.autotrade.strategy_taxonomy import (
+  HFS_STRATEGIES,
+  RANGE_STRATEGIES,
+  REACTION_STRATEGIES,
+)
 
 
 def _default_runtime_cfg() -> Any:
@@ -592,7 +596,10 @@ _REACTION_FAMILY_STRATEGIES = REACTION_STRATEGIES
 _ROOM_SYNCED_STOP_STRATEGIES = frozenset(REACTION_STRATEGIES)
 
 # Range scalp family: thin room (15/20) tracks TP; independent of reaction.
-_SCALP_ROOM_SYNCED_STOP_STRATEGIES = frozenset(RANGE_STRATEGIES)
+# HFS must share this path — otherwise TradePlan falls through to the XAU
+# reaction envelope (40–60) and ignores strategies.high_frequency_scalp.stop
+# (live dig 2026-08-25: Range Sweep ledger stops 24–62 vs HFS max 22).
+_SCALP_ROOM_SYNCED_STOP_STRATEGIES = frozenset(RANGE_STRATEGIES | HFS_STRATEGIES)
 
 
 def uses_reaction_room_stop(strategy: str) -> bool:
@@ -686,19 +693,38 @@ def stop_bounds_for_reaction_room(
   if symbol and callable(resolver):
     execution = resolver(symbol).execution
   if is_scalp:
-    min_rr = float(
-      execution.range.min_rr
-      if execution.range.min_rr is not None
-      else 1.0
-    ) or 1.0
-    floor_pips = int(
-      execution.range.room_stop_floor_pips
-      if execution.range.room_stop_floor_pips is not None
-      else 15
-    ) or 15
-    # Prefer Range Box max (sl_distance) when present; else trend cap.
-    cap_pips = int(fallback[1]) if fallback[1] > 0 else 60
-    source = "scalp_room"
+    if str(strategy) in HFS_STRATEGIES:
+      hfs_stop = getattr(
+        getattr(getattr(cfg, "strategies", None), "high_frequency_scalp", None),
+        "stop",
+        None,
+      )
+      try:
+        floor_pips = int(float(getattr(hfs_stop, "minimum_pips", 12) or 12))
+      except (TypeError, ValueError):
+        floor_pips = 12
+      try:
+        cap_pips = int(float(getattr(hfs_stop, "maximum_pips", 30) or 30))
+      except (TypeError, ValueError):
+        cap_pips = 30
+      if cap_pips < floor_pips:
+        cap_pips = floor_pips
+      min_rr = 1.0
+      source = "hfs_stop_envelope"
+    else:
+      min_rr = float(
+        execution.range.min_rr
+        if execution.range.min_rr is not None
+        else 1.0
+      ) or 1.0
+      floor_pips = int(
+        execution.range.room_stop_floor_pips
+        if execution.range.room_stop_floor_pips is not None
+        else 15
+      ) or 15
+      # Prefer Range Box max (sl_distance) when present; else trend cap.
+      cap_pips = int(fallback[1]) if fallback[1] > 0 else 60
+      source = "scalp_room"
   else:
     min_rr = float(
       execution.reaction.room_stop_min_rr
@@ -1157,6 +1183,23 @@ def stop_bounds_for_strategy(
   )
   # Reaction taxonomy fallback when room TP is unavailable. Zone / Demand /
   # Supply use the same numeric envelope as an independent family default.
+  if str(strategy) in HFS_STRATEGIES:
+    hfs_stop = getattr(
+      getattr(getattr(cfg, "strategies", None), "high_frequency_scalp", None),
+      "stop",
+      None,
+    )
+    try:
+      hfs_min = int(float(getattr(hfs_stop, "minimum_pips", 12) or 12))
+    except (TypeError, ValueError):
+      hfs_min = 12
+    try:
+      hfs_max = int(float(getattr(hfs_stop, "maximum_pips", 30) or 30))
+    except (TypeError, ValueError):
+      hfs_max = 30
+    if hfs_max < hfs_min:
+      hfs_max = hfs_min
+    return hfs_min, hfs_max
   if str(strategy) in _REACTION_FAMILY_STRATEGIES:
     return trend_min, trend_max
   return trend_min, trend_max

@@ -13,6 +13,14 @@ dated section after deployment.
 ## Unreleased
 
 ### Changed
+- HFS stop envelope: TradePlan now uses ``strategies.high_frequency_scalp.stop``
+  (max **30** pips) for HFS strategies instead of the XAU reaction 40–60 band.
+  Publish clamps ``structure_swing`` to the discovery stop and books a 1R/2R
+  ladder from that stop. Dig 2026-08-25: Range Sweep ledger stops were 24–62
+  while HFS max was ignored.
+- HFS Breakout Retest: widen break scan (default 8 M1 bars), floor retest
+  lookback at 4, and require only close-beyond-level for the hold (drop
+  same-color body). Prod funnel had zero breakout_retest discoveries.
 - GBPJPY Key Level Reaction quality (still enabled): require killzone,
   explicit support/resistance role, HTF alignment, grade A, and
   ``minimum_key_touches: 3`` via instrument overrides. Dig 2026-08-25

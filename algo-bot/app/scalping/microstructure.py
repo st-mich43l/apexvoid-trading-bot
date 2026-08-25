@@ -380,6 +380,7 @@ def detect_breakout_retest(
   box_low: float,
   min_displacement: float,
   retest_lookback_bars: int = 1,
+  break_lookback_bars: int | None = None,
 ) -> dict[str, Any] | None:
   """Require accepted break → return → hold, not wick-only break.
 
@@ -397,6 +398,13 @@ def detect_breakout_retest(
   not a new parameter. The reclaim signal itself stays anchored to the
   current bar exactly as before - only the touch precondition looks back,
   so a stale reclaim from several bars ago can never fire a fresh entry.
+
+  2026-08-25 dig: break scan was hard-coded to the last 3 bars, so a clean
+  break 4–8 M1 bars earlier (common before the retest arrives) never
+  registered — ``auto_trade:funnel:XAU:hfs:breakout_retest`` stayed empty
+  while Range Sweep printed. Widen the break window independently. Hold
+  only requires close beyond the broken level; forcing a same-color body
+  killed valid retest holds that closed flat/slightly mixed.
   """
   if df is None or len(df) < 5:
     return None
@@ -406,8 +414,18 @@ def detect_breakout_retest(
   if high <= low:
     return None
 
+  retest_lb = max(1, int(retest_lookback_bars or 1))
+  # Default break window: enough room for break → pullback → hold inside
+  # a short M1 episode without inventing a multi-session hunt.
+  break_lb = (
+    max(3, int(break_lookback_bars))
+    if break_lookback_bars is not None
+    else max(8, retest_lb + 4)
+  )
+  break_lb = min(break_lb, max(3, len(df) - 1))
+
   accepted_i = None
-  for i in range(len(df) - 3, len(df)):
+  for i in range(len(df) - break_lb, len(df)):
     if i < 1:
       continue
     bar = df.iloc[i]
@@ -424,7 +442,8 @@ def detect_breakout_retest(
 
   # Has price touched back to the level anywhere since the break, within
   # the lookback window? (Widened half of the fix - was df.iloc[-1] only.)
-  window = max(1, min(int(retest_lookback_bars or 1), len(df) - accepted_i - 1))
+  bars_since_break = len(df) - accepted_i - 1
+  window = max(1, min(retest_lb, bars_since_break))
   touched = False
   for offset in range(1, window + 1):
     bar = df.iloc[-offset]
@@ -439,14 +458,14 @@ def detect_breakout_retest(
   if not touched:
     return {"state": "wait_retest", "accepted": True, "accepted_index": accepted_i}
 
-  # Reclaim signal stays anchored to the current bar, exactly as before.
+  # Hold: newest bar must close beyond the broken level. Body color is not
+  # required — a retest that closes above resistance (BUY) or below support
+  # (SELL) is the hold, even if the candle is mixed.
   last = df.iloc[-1]
   last_ts = _ts(df.index[-1])
   if side == "BUY":
     if float(last["close"]) < high:
       return None  # failed hold
-    if float(last["close"]) <= float(last["open"]):
-      return None
     return {
       "pattern": "breakout_retest",
       "direction": "BUY",
@@ -461,8 +480,6 @@ def detect_breakout_retest(
     }
 
   if float(last["close"]) > low:
-    return None
-  if float(last["close"]) >= float(last["open"]):
     return None
   return {
     "pattern": "breakout_retest",

@@ -479,7 +479,10 @@ def discover_breakout_retest(
   buffer = max(pip_size * 2, context.atr * 0.1)
   min_disp = max(pip_size * 3, context.atr * 0.15)
   act = getattr(_hfs_cfg(cfg), "activation", None)
-  retest_lookback = max(1, int(getattr(act, "trigger_maximum_age_bars", 2) or 2))
+  # Breakout needs a wider retest window than Range Sweep's edge reclaim:
+  # break → pullback → hold routinely spans 3–5 M1 bars. Floor at 4 so a
+  # global trigger_maximum_age_bars=2 does not sterilize the archetype.
+  retest_lookback = max(4, int(getattr(act, "trigger_maximum_age_bars", 2) or 2))
   out: list[ScalpOpportunity] = []
 
   for direction in ("BUY", "SELL"):
