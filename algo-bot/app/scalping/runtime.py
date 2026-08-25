@@ -524,6 +524,44 @@ async def process_m1_bar(
   result["context_id"] = context.context_id
   result["discovered"] = len(opportunities)
   result["idle_reasons"] = list(idle_reasons)
+
+  # PR G: mathematical shadow sidecar — never publishes; records X_t gates.
+  if mode in {"shadow", "paper"} and context.active_range_low and context.active_range_high:
+    try:
+      from datetime import datetime, timezone
+
+      from app.scalping.rollout import evaluate_math_shadow
+
+      last = m1.iloc[-1] if m1 is not None and not m1.empty else None
+      if last is not None:
+        mid = (float(quote[0]) + float(quote[1])) / 2.0
+        utc_hour = datetime.fromtimestamp(int(bar_ts), tz=timezone.utc).hour
+        target_min = float(
+          getattr(getattr(_hfs(cfg), "target", None), "minimum_net_target_pips", 10)
+          or 10
+        ) * pip
+        shadow = evaluate_math_shadow(
+          mode=mode,  # type: ignore[arg-type]
+          direction="BUY",
+          price=mid,
+          atr=float(context.atr or 0.0) or pip * 50,
+          range_low=float(context.active_range_low),
+          range_high=float(context.active_range_high),
+          liquidity_level=float(context.active_range_low),
+          barrier=context.nearest_resistance_low,
+          bar_open=float(last["open"]),
+          bar_high=float(last["high"]),
+          bar_low=float(last["low"]),
+          bar_close=float(last["close"]),
+          spread=(float(quote[1]) - float(quote[0])),
+          target_min_price=target_min,
+          utc_hour=utc_hour,
+        )
+        result["math_shadow"] = shadow.to_dict()
+        await set_last(client, "math_shadow", symbol, shadow.to_dict())
+    except Exception:
+      log.exception("math shadow evaluation failed symbol=%s", symbol)
+
   return result
 
 
