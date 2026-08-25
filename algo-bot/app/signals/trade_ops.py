@@ -450,26 +450,41 @@ async def do_modify(ctx: dict) -> dict:
   if next_entry > next_end:
     next_entry, next_end = next_end, next_entry
   entry_changed = entry is not None or entry_end is not None
+  old_entry = float(signal["entry"])
+  old_end = float(signal.get("entry_end") or old_entry)
+  if old_entry > old_end:
+    old_entry, old_end = old_end, old_entry
+  side = str(signal["action"]).upper()
+  old_rr_entry = old_end if side == "BUY" else old_entry
+  new_rr_entry = next_end if side == "BUY" else next_entry
+  digits = digits_for(ctx["symbol"])
   if sl is not None:
     next_sl = float(sl)
   elif entry_changed:
-    old_entry = float(signal["entry"])
-    old_end = float(signal.get("entry_end") or old_entry)
-    if old_entry > old_end:
-      old_entry, old_end = old_end, old_entry
-    side = str(signal["action"]).upper()
-    old_rr_entry = old_end if side == "BUY" else old_entry
-    new_rr_entry = next_end if side == "BUY" else next_entry
+    # Preserve shallow-entry risk distance when the owner only rewrote the
+    # zone (e.g. "/trade_modify xau #14 4636-33").
     risk_distance = abs(old_rr_entry - float(signal["sl"]))
     shifted = (
       new_rr_entry - risk_distance
       if side == "BUY"
       else new_rr_entry + risk_distance
     )
-    next_sl = round(shifted, digits_for(ctx["symbol"]))
+    next_sl = round(shifted, digits)
   else:
     next_sl = float(signal["sl"])
-  next_tps = list(signal.get("tps") or []) if tps is None else [float(v) for v in tps]
+  if tps is not None:
+    next_tps = [float(v) for v in tps]
+  elif entry_changed:
+    # Same delta as the RR entry so TP R-multiples stay intact when SL also
+    # auto-shifts. Owner-reported: bare-zone modify moved SL but left stale
+    # TPs from the old zone.
+    delta = new_rr_entry - old_rr_entry
+    next_tps = [
+      round(float(tp) + delta, digits)
+      for tp in (signal.get("tps") or [])
+    ]
+  else:
+    next_tps = list(signal.get("tps") or [])
   invalid = _validate_modify_levels(
     signal["action"], next_entry, next_end, next_sl, next_tps,
   )
@@ -481,7 +496,7 @@ async def do_modify(ctx: dict) -> dict:
     entry=next_entry if entry_changed else None,
     entry_end=next_end if entry_changed else None,
     sl=next_sl if sl is not None or entry_changed else None,
-    tps=next_tps if tps is not None else None,
+    tps=next_tps if tps is not None or entry_changed else None,
   )
   if updated is None:
     return {"action": "modify", "ok": False, "error": "not_pending"}
