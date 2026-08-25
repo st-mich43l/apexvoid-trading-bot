@@ -4858,6 +4858,7 @@ async def _publish_trade_plan_v8(
     confirmation_is_sweep_body,
     evaluate_killzone_gate,
     evaluate_reaction_publish_window,
+    reaction_require_killzone,
     technique_enforce,
     technique_require_sweep_body,
   )
@@ -4929,8 +4930,9 @@ async def _publish_trade_plan_v8(
         publish_status=False,
       )
       return None
-    require_kz = True if tech is None else bool(
-      getattr(tech, "reaction_require_killzone", True),
+    require_kz = reaction_require_killzone(
+      inst,
+      strategy=str(getattr(match, "strategy", "") or ""),
     )
     kz = evaluate_killzone_gate(
       ts=spot_ts,

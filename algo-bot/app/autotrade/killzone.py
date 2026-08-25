@@ -47,6 +47,45 @@ def technique_require_sweep_body(cfg: Any | None) -> bool:
   return bool(getattr(section, "require_sweep_body", True))
 
 
+def reaction_require_killzone(
+  cfg: Any | None,
+  *,
+  strategy: str | None = None,
+) -> bool:
+  """Whether non-scalp reaction publish/arm must be inside a killzone.
+
+  Global ``execution.technique.reaction_require_killzone`` is the baseline.
+  Key Level may raise the bar via ``strategies.reaction.key_level.require_killzone``
+  without turning the gate on for every reaction family on the pair.
+  """
+  section = getattr(getattr(cfg, "execution", None), "technique", None)
+  require = (
+    True if section is None
+    else bool(getattr(section, "reaction_require_killzone", True))
+  )
+  if str(strategy or "") == "Key Level Reaction":
+    key = getattr(
+      getattr(getattr(cfg, "strategies", None), "reaction", None),
+      "key_level",
+      None,
+    )
+    if key is not None and bool(getattr(key, "require_killzone", False)):
+      return True
+  return require
+
+
+def key_level_min_grade(cfg: Any | None) -> str:
+  """Minimum ZoneWatch grade for Key Level Reaction (``A`` or ``B``)."""
+  key = getattr(
+    getattr(getattr(cfg, "strategies", None), "reaction", None),
+    "key_level",
+    None,
+  )
+  raw = getattr(key, "min_grade", "B") if key is not None else "B"
+  grade = str(raw or "B").strip().upper()
+  return grade if grade in {"A", "B"} else "B"
+
+
 def _session_hours(cfg: Any | None) -> tuple[int, int, int, int]:
   sessions = getattr(getattr(cfg, "market_data", None), "sessions", None)
   london = int(getattr(sessions, "london_start", 7) or 7)

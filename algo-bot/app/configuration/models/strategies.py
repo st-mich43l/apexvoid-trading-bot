@@ -1,5 +1,6 @@
 """Complete Canonical Catalog V2 configuration domain. """
 from pydantic import Field
+from pydantic import field_validator
 from app.configuration.metadata import ConfigKind
 from app.configuration.metadata import ConfigOwner
 from app.configuration.metadata import ConfigUnit
@@ -58,6 +59,19 @@ class StrategiesReactionDemandConfig(FrozenConfigModel):
 
 class StrategiesReactionKeyLevelConfig(FrozenConfigModel):
     enabled: bool = config_field(True, canonical_env='AUTO_TRADE_KEY_LEVEL_REACTION_ENABLED', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.BOOLEAN, risk=RiskClassification.STRATEGY_BEHAVIOR, description='Controls .', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, True),), validation_summary='Pydantic required/type coercion only')
+    # Quality gates (off globally; enable per-instrument via overrides). Dig
+    # 2026-08-25: GBPJPY Key Level was 0/4 and −118 pips — mostly Asia/
+    # outside + ambiguous / counter-bias prints. Keep the detector live;
+    # raise the bar instead of disabling the family.
+    require_explicit_role: bool = config_field(False, canonical_env='AUTO_TRADE_KEY_LEVEL_REQUIRE_EXPLICIT_ROLE', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.BOOLEAN, risk=RiskClassification.STRATEGY_BEHAVIOR, description='Skip ambiguous-role Key Level (explicit support/resistance kind only).', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, False),), validation_summary='Pydantic required/type coercion only')
+    require_killzone: bool = config_field(False, canonical_env='AUTO_TRADE_KEY_LEVEL_REQUIRE_KILLZONE', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.BOOLEAN, risk=RiskClassification.STRATEGY_BEHAVIOR, description='Require killzone for Key Level even when global reaction_require_killzone is off.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, False),), validation_summary='Pydantic required/type coercion only')
+    require_htf_alignment: bool = config_field(False, canonical_env='AUTO_TRADE_KEY_LEVEL_REQUIRE_HTF_ALIGNMENT', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.BOOLEAN, risk=RiskClassification.STRATEGY_BEHAVIOR, description='Require Key Level direction to match HTF bias.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, False),), validation_summary='Pydantic required/type coercion only')
+    min_grade: str = config_field('B', canonical_env='AUTO_TRADE_KEY_LEVEL_MIN_GRADE', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.ENUM, risk=RiskClassification.STRATEGY_BEHAVIOR, description='Minimum ZoneWatch grade for Key Level Reaction (A or B).', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 'B'),), allowed_values=('A', 'B'), validation_summary='Pydantic type coercion + field validator', pattern='^[AB]$')
+
+    @field_validator('min_grade', mode='before')
+    @classmethod
+    def normalize_min_grade(cls, value):
+        return value.strip().upper() if isinstance(value, str) else value
 
 class StrategiesReactionLiquidityReversalConfig(FrozenConfigModel):
     enabled: bool = config_field(True, canonical_env='AUTO_TRADE_LIQUIDITY_REVERSAL_ENABLED', owner=ConfigOwner.SHARED, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.BOOLEAN, risk=RiskClassification.STRATEGY_BEHAVIOR, shared_with_ctrader=True, mismatch_policy=MismatchPolicy.WARNING, description='Controls .', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, True), ContextDefault(DefaultContext.CTRADER_FROM_ENVIRONMENT, True)), validation_summary='Pydantic required/type coercion only; EnvironmentResolver.Bool + AutoTradeOptions.Validate')
@@ -173,7 +187,7 @@ class StrategiesTechniqueConfluenceConfig(FrozenConfigModel):
     enabled: bool = config_field(True, canonical_env='AUTO_TRADE_CONFLUENCE_ZONE_ENABLED', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.BOOLEAN, risk=RiskClassification.STRATEGY_BEHAVIOR, description='Enable Confluence Zone publisher when 2+ techniques overlap.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, True),), validation_summary='Pydantic required/type coercion only')
 
 class StrategiesTechniqueZoneReactionFallbackConfig(FrozenConfigModel):
-    enabled: bool = config_field(False, canonical_env='AUTO_TRADE_ZONE_REACTION_FALLBACK_ENABLED', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.BOOLEAN, risk=RiskClassification.STRATEGY_BEHAVIOR, description='Legacy Zone Reaction fallback when technique publishers are active.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, False),), validation_summary='Pydantic required/type coercion only')
+    enabled: bool = config_field(False, canonical_env='AUTO_TRADE_ZONE_REACTION_FALLBACK_ENABLED', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.BOOLEAN, risk=RiskClassification.STRATEGY_BEHAVIOR, description='Zone Reaction fallback when technique publishers are active.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, False),), validation_summary='Pydantic required/type coercion only')
 
 class StrategiesTechniqueConfig(FrozenConfigModel):
     sd: StrategiesTechniqueSdConfig = Field(default_factory=StrategiesTechniqueSdConfig)

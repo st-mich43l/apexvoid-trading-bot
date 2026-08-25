@@ -1,6 +1,6 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "5872fae5b93b8ccef51aa9f8261821851afa4dd3f2dd4f7c9c9110902635337d",
+  "configuration_contract_fingerprint_sha256": "0b72f1bcdedc7aad2e5691f7d36f5cd3ee09cead24f23d804a48cc4b1aaa71cf",
   "excluded_ctrader_only_count": 49,
   "excluded_paths": [
     "bootstrap.ctrader.connection.host",
@@ -53,7 +53,7 @@
     "risk.sizing.add_require_risk_free",
     "risk.sizing.risk_pct"
   ],
-  "included_leaf_count": 479,
+  "included_leaf_count": 483,
   "included_paths": [
     "actionability.contested_corridor.gap_atr",
     "actionability.counter_bias.allowed",
@@ -492,6 +492,10 @@
     "strategies.reaction.demand.enabled",
     "strategies.reaction.enabled",
     "strategies.reaction.key_level.enabled",
+    "strategies.reaction.key_level.min_grade",
+    "strategies.reaction.key_level.require_explicit_role",
+    "strategies.reaction.key_level.require_htf_alignment",
+    "strategies.reaction.key_level.require_killzone",
     "strategies.reaction.liquidity_reversal.enabled",
     "strategies.reaction.scale_enabled",
     "strategies.reaction.session_level.enabled",
@@ -536,8 +540,8 @@
     "strategies.zone.supply.enabled"
   ],
   "included_secret_count": 6,
-  "included_shared_field_count": 97,
+  "included_shared_field_count": 96,
   "projection_model": "app.configuration.models.python_runtime.PythonRuntimeConfig",
-  "source_fingerprint_sha256": "5872fae5b93b8ccef51aa9f8261821851afa4dd3f2dd4f7c9c9110902635337d",
+  "source_fingerprint_sha256": "0b72f1bcdedc7aad2e5691f7d36f5cd3ee09cead24f23d804a48cc4b1aaa71cf",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }
