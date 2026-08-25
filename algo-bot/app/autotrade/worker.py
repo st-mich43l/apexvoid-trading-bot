@@ -1593,21 +1593,31 @@ def _opposing_barrier_decision(
 
 
 def _defended_level_guard(
-  symbol: str, entry_reference: float, *, guard_mode: str,
+  symbol: str,
+  entry_reference: float,
+  *,
+  direction: str,
+  guard_mode: str,
 ) -> ExecutionGuardDecision:
-  """Block a fresh entry near a macro-significant defended price level.
+  """Block fresh BUY entries near a macro-significant defended price level.
 
   2026 USDJPY dig: Japan/the US ran a record ~Y11.73T (~$73B) joint
-  intervention specifically when USDJPY breached 160 -- the dollar
-  snapped from 163 to ~156-157 within days, a 600+ pip reversal. With
-  spot sitting at ~159.47 as of this guard's introduction, that is not a
-  hypothetical tail risk. Unlike the opposing-barrier guard (discovered
-  market structure), this fires on distance to a configured macro level
-  and is unconditional (hard_geometry=True) -- guard_mode is currently
-  "observe" globally, which would make this a no-op warning if it
-  deferred to guard_mode like most other soft signals. Off by default
-  (defended_levels empty / buffer 0); currently only configured for
-  USDJPY.
+  intervention when USDJPY breached 160 — the dollar snapped from 163 to
+  ~156-157 within days. Intervention sells USDJPY, so the asymmetric risk
+  is being **long** into that ceiling — not short.
+
+  Prod failure mode (2026-08-25): a symmetric 100-pip buffer around 160
+  hard-blocked every USDJPY plan (including SELLs at ~159.4) while
+  activation_allowed kept climbing — zero publishes lifetime. Guard is
+  therefore:
+
+  - **BUY** (or unknown side) within ``buffer`` of a configured level →
+    hard block (``hard_geometry=True``, ignores observe mode).
+  - **SELL** near the level → allow (aligned with intervention direction).
+  - Outside buffer → allow.
+
+  Off by default (defended_levels empty / buffer 0); currently only
+  configured for USDJPY.
   """
   levels = instrument_geometry.defended_levels(symbol)
   buffer_price = instrument_geometry.defended_level_buffer_price(symbol)
@@ -1627,6 +1637,18 @@ def _defended_level_guard(
       OUTCOME_ALLOW,
       "no_defended_level_nearby",
       f"nearest defended level {nearest:.5f} is {distance:.5f} away",
+      False,
+    )
+  side = str(direction or "").upper()
+  if side == "SELL":
+    return ExecutionGuardDecision(
+      "defended_level",
+      OUTCOME_ALLOW,
+      "defended_level_sell_aligned",
+      (
+        f"SELL {entry_reference:.5f} near defended {nearest:.5f} "
+        f"(buffer {buffer_price:.5f}) aligned with intervention risk"
+      ),
       False,
     )
   message = (
@@ -5880,11 +5902,13 @@ async def _publish_trade_plan_v8(
     )
     return None
 
-  # Defended-level guard applies to every strategy family, unlike the
-  # opposing-barrier bypass above -- a scalp entry right at a macro level
-  # carries the same intervention-reversal risk as any other entry.
+  # Defended-level guard: intervention risk is long into the macro ceiling
+  # (USDJPY 160). SELLs near the level stay eligible; BUYs hard-block.
   defended_outcome = _defended_level_guard(
-    symbol, spot.price, guard_mode=guard_mode,
+    symbol,
+    spot.price,
+    direction=str(getattr(match_for_plan, "direction", "") or ""),
+    guard_mode=guard_mode,
   )
   if defended_outcome.hard_block:
     await _release_claims()
