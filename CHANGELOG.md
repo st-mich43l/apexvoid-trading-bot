@@ -54,6 +54,15 @@ dated section after deployment.
   shallow-entry risk distance when no explicit SL is supplied. Broker cancel
   now removes every pending shallow/mid/deep leg, including old revisions,
   before one confirmation re-arms the modified ladder.
+- Manual /algo SL accounting no longer journals the post-stop sweep when the
+  broker deal window misses the fill. Live 2026-08-25 XAU ``#5`` (BUY
+  4632–4635 / SL 4629) closed ``reason unconfirmed`` at live bid ``4622.08``
+  and booked ``-109`` against a 60-pip stop. Unknown closes with no recovered
+  deal price now promote to SL/TP and book the protective stop when the live
+  quote sits on or beyond that stop.
+- Bare-zone ``/trade_modify [SYMBOL] #N lo-hi`` also shifts TP levels by the
+  same entry delta (preserving R-multiples). Live dig: SL auto-moved with the
+  new zone while TPs stayed on the old ladder.
 - ``/trade_modify [SYMBOL] #N lo-hi`` no longer hits Usage when only the
   entry zone changes. ``_seq_token`` required the whole remainder to be
   digits, so ``#14 4636-33`` never resolved the daily seq even though
