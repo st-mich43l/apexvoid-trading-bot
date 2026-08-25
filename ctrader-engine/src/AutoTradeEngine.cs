@@ -5368,6 +5368,26 @@ public sealed class AutoTradeEngine(
     return Math.Abs(exitEstimate - stopPrice) <= tolerance;
   }
 
+  // Live dig 2026-08-25 XAU manual #5: deal window missed the SL fill and
+  // the live bid kept printing the post-stop sweep (4622 vs SL 4629), so
+  // group_result booked -109 against a 60-pip stop. A quote strictly past
+  // the protective stop on the loss side is the continuing wick, not the
+  // fill we should journal.
+  private bool ExitBeyondProtectiveStop(
+    AutoTradePositionState state,
+    decimal exitEstimate
+  )
+  {
+    var stop = state.CurrentStopLoss ?? state.InitialStopLoss;
+    if (stop is not decimal stopPrice)
+    {
+      return false;
+    }
+    return state.Direction == TradeDirection.Buy
+      ? exitEstimate < stopPrice
+      : exitEstimate > stopPrice;
+  }
+
   private decimal ResolveMissingPositionExit(
     AutoTradePositionState state,
     PositionCloseLookup closeLookup,
@@ -6607,6 +6627,24 @@ public sealed class AutoTradeEngine(
           closeReason == PositionCloseReason.Unknown
           && closeLookup.ExecutionPrice is decimal recoveredExit
           && LooksLikeProtectiveStopHit(state, recoveredExit)
+        )
+        {
+          closeReason = PositionCloseReason.StopLossOrTakeProfit;
+        }
+        // No recovered deal + live quote on/beyond the protective stop:
+        // the SL almost certainly filled and the quote is the continuing
+        // sweep (2026-08-25 manual #5 booked -109 from bid 4622 vs SL 4629).
+        // Promote to SL/TP so ResolveMissingPositionExit books the stop,
+        // not the wick. Do NOT invent SL from CurrentStopLoss alone when
+        // live is still between entry and stop (ambiguous manual/external).
+        if (
+          closeReason == PositionCloseReason.Unknown
+          && closeLookup.ExecutionPrice is null
+          && LiveExitQuote(state) is decimal liveExit
+          && (
+            LooksLikeProtectiveStopHit(state, liveExit)
+            || ExitBeyondProtectiveStop(state, liveExit)
+          )
         )
         {
           closeReason = PositionCloseReason.StopLossOrTakeProfit;
