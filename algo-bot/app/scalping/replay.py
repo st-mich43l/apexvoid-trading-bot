@@ -99,6 +99,9 @@ def aggregate_report(rows: Iterable[dict[str, Any]]) -> dict[str, Any]:
       "max_drawdown_r": 0.0,
       "avg_mfe_pips": 0.0,
       "avg_mae_pips": 0.0,
+      "by_session": {},
+      "by_archetype": {},
+      "by_vr": {},
     }
   wins = [r for r in items if r.get("outcome") == "target"]
   losses = [r for r in items if r.get("outcome") == "stop"]
@@ -135,6 +138,7 @@ def aggregate_report(rows: Iterable[dict[str, Any]]) -> dict[str, Any]:
     "avg_mae_pips": sum(mae_vals) / len(mae_vals),
     "by_session": _group(items, "session"),
     "by_archetype": _group(items, "archetype"),
+    "by_vr": _group(items, "vr"),
     "blocked_buy_top": sum(1 for r in items if r.get("block_reason") == "buy_in_premium"),
     "blocked_sell_bottom": sum(1 for r in items if r.get("block_reason") == "sell_in_discount"),
   }

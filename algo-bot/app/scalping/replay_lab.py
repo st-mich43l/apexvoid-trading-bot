@@ -63,6 +63,7 @@ class LabEvent:
   target_price: float | None = None
   pip_size: float = 0.1
   session: str = "unknown"
+  vr: str = "unknown"
   symbol: str = "XAU"
   # Sweep overrides (optional)
   max_location_buy: float = 0.40
@@ -105,6 +106,11 @@ class LabEvent:
       target_price=_opt_float(data.get("target_price")),
       pip_size=float(data.get("pip_size") or 0.1),
       session=str(data.get("session") or "unknown"),
+      vr=str(
+        data.get("vr")
+        or (data.get("measured") or {}).get("vr")
+        or "unknown"
+      ),
       symbol=str(data.get("symbol") or "XAU").upper(),
       max_location_buy=float(data.get("max_location_buy") or 0.40),
       min_location_sell=float(data.get("min_location_sell") or 0.60),
@@ -247,6 +253,7 @@ def replay_lab_event(event: LabEvent) -> dict[str, Any]:
   row: dict[str, Any] = {
     "timestamp": event.timestamp,
     "session": event.session,
+    "vr": event.vr,
     "archetype": event.strategy,
     "direction": event.direction,
     "symbol": event.symbol,
