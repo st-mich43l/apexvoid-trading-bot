@@ -7,6 +7,8 @@ import logging
 import math
 from typing import Any, Iterable
 
+from app.core.log_throttle import log_at_most
+
 log = logging.getLogger(__name__)
 
 
@@ -81,8 +83,7 @@ def filter_displaced_opposing_entries(
       dropped.append((low, high))
     else:
       kept.append(entry)
-  log_fn = log.info if dropped else log.debug
-  log_fn(
+  log.debug(
     "structural_target_room displacement direction=%s closes=%s "
     "kept=%s dropped=%s dropped_bounds=%s",
     side,
@@ -179,8 +180,7 @@ def filter_shared_boundary_opposing_entries(
     "shared_boundary_excluded": len(dropped),
     "dropped_bounds": [(round(lo, 6), round(hi, 6)) for lo, hi in dropped],
   }
-  log_fn = log.info if dropped else log.debug
-  log_fn(
+  log.debug(
     "structural_target_room v8 shared_boundary direction=%s "
     "epsilon=%s kept=%s dropped=%s dropped_bounds=%s",
     side,
@@ -249,8 +249,7 @@ def filter_overlapping_opposing_entries(
     "overlap_excluded": len(dropped),
     "dropped_bounds": [(round(lo, 6), round(hi, 6)) for lo, hi in dropped],
   }
-  log_fn = log.info if dropped else log.debug
-  log_fn(
+  log.debug(
     "structural_target_room v8 overlap direction=%s "
     "threshold=%s kept=%s dropped=%s dropped_bounds=%s",
     side,
@@ -536,12 +535,14 @@ def evaluate_structural_target_room(
   }
 
   def _log_decision(decision: StructuralTargetRoomDecision) -> StructuralTargetRoomDecision:
-    log.info(
+    msg = (
       "structural_target_room allowed=%s hard_block=%s reason=%s "
       "direction=%s planned_entry=%s opposing_low=%s opposing_high=%s "
       "planned_entry_contained=%s market_price_contained=%s "
       "overlap_price=%s overlap_ratio=%s raw_room=%s buffered_room=%s "
-      "displacement=%s",
+      "displacement=%s"
+    )
+    args = (
       decision.allowed,
       decision.hard_block,
       decision.reason_code,
@@ -557,6 +558,16 @@ def evaluate_structural_target_room(
       round(buffered_room, 6),
       displacement_state,
     )
+    if decision.allowed and not decision.hard_block:
+      log.debug(msg, *args)
+    else:
+      entry_key = round(float(planned), 4) if math.isfinite(float(planned)) else planned
+      log_at_most(
+        log,
+        f"str_room:{decision.reason_code}:{side}:{entry_key}",
+        msg,
+        *args,
+      )
     return decision
 
   if planned_entry_contained:
@@ -579,7 +590,7 @@ def evaluate_structural_target_room(
     if tier.casefold() == "level":
       measured["weak_opposing_level_ignored"] = True
       measured["weak_opposing_level_reason"] = reason
-      log.info(
+      log.debug(
         "structural_target_room ignoring weak opposing level "
         "reason=%s direction=%s planned_entry=%s opposing=%s-%s",
         reason,
@@ -611,7 +622,7 @@ def evaluate_structural_target_room(
     if tier.casefold() == "level":
       measured["weak_opposing_level_ignored"] = True
       measured["weak_opposing_level_reason"] = reason
-      log.info(
+      log.debug(
         "structural_target_room ignoring weak opposing level "
         "reason=%s direction=%s planned_entry=%s opposing=%s-%s",
         reason,

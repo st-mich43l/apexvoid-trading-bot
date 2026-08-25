@@ -2,15 +2,15 @@
 
 ## Component overview
 
-ApexVoid is a **multi-service** XAU trading stack on one Docker host:
+ApexVoid is a **multi-service multi-symbol** trading stack on one Docker host:
 
 | Service | Role |
 |---|---|
-| `postgres` | Durable signal lifecycle, pips/stats accounting |
+| `postgres` | Durable signal lifecycle, pips/stats, manual chart snapshots |
 | `redis` | Closed OHLC bars, ZoneWatch state, TradePlans, executor events |
 | `config-compiler` | One-shot: validate YAML + emit `ResolvedRuntimeManifest` |
 | `ctrader-engine` | cTrader Open API feed + TradePlan V8 execution |
-| `bot` (`algo-bot`) | Telegram, scanner, ZoneWatch activation, plan publish |
+| `bot` (`algo-bot`) | Telegram, scanner, ZoneWatch activation, plan publish, HFS |
 
 ```text
 ┌──────────────────────────── single host (Docker) ───────────────────────────┐
@@ -55,10 +55,13 @@ exceptional durable fallback.
 
 ### Manual signal (DM → channel)
 
-1. Owner DMs a zone entry string.
-2. Parser extracts side, zone, SL, TPs (2-digit shorthand expanded).
-3. Post to VIP (and public unless `/ vip`); insert Postgres lifecycle row.
-4. Later `close` / `cancel` / reply-`cancel` update status and channel posts.
+1. Owner DMs a zone entry (`/trade` / `/algo` or legacy free-text).
+2. Parser extracts symbol, side, zone, SL, TPs (2-digit shorthand expanded).
+3. Post to VIP (and public unless VIP-only); insert Postgres lifecycle row.
+4. On `/algo`, optional broker arm; OHLC windows snapshot into
+   `manual_algo_charts` at issued / filled / closed for later XAU fitting.
+5. Later `close` / `cancel` / `/trade_modify` / reply-`cancel` update status
+   and channel posts.
 
 ### Autonomous technique / reaction publish
 
@@ -99,9 +102,11 @@ filters: [technique-zonewatch-publish.md](technique-zonewatch-publish.md).
 
 ### PostgreSQL (`signals`)
 
-Manual signal lifecycle, pips/results, and autonomous stats ingested from
-executor events. Schema is owned by the algo-bot store / migrations — not a
-bind-mounted SQLite file.
+Manual signal lifecycle, pips/results, `manual_algo_charts` (Redis OHLC
+windows around owner `/algo` events), and autonomous stats ingested from
+executor events (`auto_trade_fills` / `auto_trade_results`). Schema is owned
+by `algo-bot` `store.init_db()` — see [schema.sql](schema.sql) for a reference
+DDL mirror.
 
 ### Redis
 
@@ -132,7 +137,10 @@ See [configuration/configuration-architecture.md](configuration/configuration-ar
   activation prove executability — avoids card spam and ready-stream ACK loss.
 - **Techniques are zone-family, not reaction-family.** Exact-name taxonomy in
   `strategy_taxonomy.py`; no substring classification.
-- **XAU-first.** Multi-symbol routing exists as a programme; production live
-  instrument remains XAU ([runtime/multi-symbol-routing.md](runtime/multi-symbol-routing.md)).
+- **Multi-symbol, policy per instrument.** Production live set is XAU +
+  EURUSD + GBPUSD + GBPJPY + USDJPY; each has its own pack (XAU ladder vs FX
+  fixed-RR). See [runtime/multi-symbol-routing.md](runtime/multi-symbol-routing.md).
 - **Fail closed.** Stale quotes, spread, news guards, opposing room, stop
   envelope, and demo-token checks block rather than guess.
+
+Doc index: [README.md](README.md).

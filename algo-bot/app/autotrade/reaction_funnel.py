@@ -35,7 +35,7 @@ STAGE_SL = "sl"
 STAGE_TP = "tp"
 
 _FUNNEL_TTL_SECONDS = 7 * 86400
-_LOG_MIN_INTERVAL_SECONDS = 60
+_LOG_MIN_INTERVAL_SECONDS = 900
 _last_funnel_log_at: dict[str, float] = {}
 
 _STRATEGY_TO_ARCHETYPE = {

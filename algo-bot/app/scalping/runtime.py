@@ -560,15 +560,19 @@ async def handle_closed_bar(
     bar_ts=bar_ts,
     ohlc_source=source,
   )
-  log.info(
+  allowed_n = len(summary.get("allowed") or ())
+  blocked_n = len(summary.get("blocked") or ())
+  discovered_n = int(summary.get("discovered") or 0)
+  log_fn = log.info if (allowed_n or blocked_n or discovered_n) else log.debug
+  log_fn(
     "scalp m1 cycle symbol=%s bar_ts=%s mode=%s allowed=%s blocked=%s "
     "discovered=%s idle=%s block_reasons=%s ms=%s",
     symbol,
     bar_ts,
     summary.get("mode"),
-    len(summary.get("allowed") or ()),
-    len(summary.get("blocked") or ()),
-    summary.get("discovered"),
+    allowed_n,
+    blocked_n,
+    discovered_n,
     ",".join(summary.get("idle_reasons") or ()) or "-",
     ",".join(
       str(item.get("reason") or "?")

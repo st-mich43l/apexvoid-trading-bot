@@ -13,6 +13,20 @@ dated section after deployment.
 ## Unreleased
 
 ### Changed
+- Docs: refreshed ``docs/deployment.md`` for current compose boot order,
+  local vs Ansible shapes, host dirs, manifest authority, multi-symbol
+  smoke checks, and technique-pack defaults aligned with
+  ``config/trading-bot.yml``.
+- Docs: refreshed overview-linked pages for multi-symbol reality, added
+  ``docs/README.md`` index, brought ``schema.sql`` / bot-commands in line with
+  ``store.init_db`` (charts, auto-trade ledger, ``/trade_modify``). Completed
+  P0/migration/phase ledgers moved under ``docs/history/`` and
+  ``docs/configuration/history/``.
+- Algo-bot INFO logs no longer heartbeat on expected wait/reject loops
+  (outside killzone, cutover waiting, scanner card suppress, allowed
+  structural-room dumps, idle scalp M1 cycles). Repeating killzone /
+  hard-block notices throttle to once per 5 minutes; reaction funnel
+  snapshots once per 15 minutes. Set ``LOG_LEVEL=DEBUG`` for full detail.
 - TradePlan V8 now carries an explicit immediate `market` entry for a
   confirmed, in-budget HFS trade-direction chase. Ordinary in-zone market
   routes retain broker-side `market_watch` zone revalidation.
