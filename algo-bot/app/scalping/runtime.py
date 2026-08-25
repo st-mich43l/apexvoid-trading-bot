@@ -279,6 +279,54 @@ async def process_m1_bar(
   await save_risk(client, symbol, risk_state)
   risk = evaluate_risk(risk_state, cfg, session=context.session, now=now)
 
+  # PR C operationalization: stamp Liquidity Sweep math gates onto
+  # range_sweep discoveries in shadow/paper. Live path unchanged (no block).
+  if (
+    mode in {"shadow", "paper"}
+    and opportunities
+    and m1 is not None
+    and not m1.empty
+    and context.active_range_low
+    and context.active_range_high
+  ):
+    try:
+      from datetime import datetime, timezone
+
+      from app.scalping.rollout import annotate_range_sweep_math_gate
+
+      last_bar = m1.iloc[-1]
+      utc_hour = datetime.fromtimestamp(int(bar_ts), tz=timezone.utc).hour
+      target_min = float(
+        getattr(getattr(_hfs(cfg), "target", None), "minimum_net_target_pips", 10)
+        or 10
+      ) * pip
+      spread_price = float(ask) - float(bid)
+      annotated: list = []
+      for opportunity in opportunities:
+        if opportunity.direction.upper() == "BUY":
+          opp_barrier = context.nearest_resistance_low
+        else:
+          opp_barrier = context.nearest_support_high
+        annotated.append(
+          annotate_range_sweep_math_gate(
+            opportunity,
+            atr=float(context.atr or 0.0) or pip * 50,
+            range_low=float(context.active_range_low),
+            range_high=float(context.active_range_high),
+            barrier=opp_barrier,
+            bar_open=float(last_bar["open"]),
+            bar_high=float(last_bar["high"]),
+            bar_low=float(last_bar["low"]),
+            bar_close=float(last_bar["close"]),
+            spread=spread_price,
+            target_min_price=target_min,
+            utc_hour=utc_hour,
+          )
+        )
+      opportunities = annotated
+    except Exception:
+      log.exception("range_sweep math gate annotate failed symbol=%s", symbol)
+
   scored: list = []
   for opportunity in opportunities:
     await incr(client, symbol, "opportunity_discovered")
@@ -526,6 +574,8 @@ async def process_m1_bar(
   result["idle_reasons"] = list(idle_reasons)
 
   # PR G: mathematical shadow sidecar — never publishes; records X_t gates.
+  # Prefer per-opportunity range_sweep stamps above; cycle sidecar still
+  # evaluates both edge directions for density when no opps fired.
   if mode in {"shadow", "paper"} and context.active_range_low and context.active_range_high:
     try:
       from datetime import datetime, timezone
@@ -540,25 +590,45 @@ async def process_m1_bar(
           getattr(getattr(_hfs(cfg), "target", None), "minimum_net_target_pips", 10)
           or 10
         ) * pip
-        shadow = evaluate_math_shadow(
+        spread_price = float(quote[1]) - float(quote[0])
+        atr = float(context.atr or 0.0) or pip * 50
+        common = dict(
           mode=mode,  # type: ignore[arg-type]
-          direction="BUY",
           price=mid,
-          atr=float(context.atr or 0.0) or pip * 50,
+          atr=atr,
           range_low=float(context.active_range_low),
           range_high=float(context.active_range_high),
-          liquidity_level=float(context.active_range_low),
-          barrier=context.nearest_resistance_low,
           bar_open=float(last["open"]),
           bar_high=float(last["high"]),
           bar_low=float(last["low"]),
           bar_close=float(last["close"]),
-          spread=(float(quote[1]) - float(quote[0])),
+          spread=spread_price,
           target_min_price=target_min,
           utc_hour=utc_hour,
         )
-        result["math_shadow"] = shadow.to_dict()
-        await set_last(client, "math_shadow", symbol, shadow.to_dict())
+        buy_shadow = evaluate_math_shadow(
+          **common,
+          direction="BUY",
+          liquidity_level=float(context.active_range_low),
+          barrier=context.nearest_resistance_low,
+        )
+        sell_shadow = evaluate_math_shadow(
+          **common,
+          direction="SELL",
+          liquidity_level=float(context.active_range_high),
+          barrier=context.nearest_support_high,
+        )
+        payload = {
+          "buy": buy_shadow.to_dict(),
+          "sell": sell_shadow.to_dict(),
+          "range_sweep_annotated": sum(
+            1
+            for o in opportunities
+            if (o.measured or {}).get("math_liquidity_sweep") is not None
+          ),
+        }
+        result["math_shadow"] = payload
+        await set_last(client, "math_shadow", symbol, payload)
     except Exception:
       log.exception("math shadow evaluation failed symbol=%s", symbol)
 

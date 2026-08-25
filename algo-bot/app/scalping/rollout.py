@@ -7,7 +7,7 @@ until promotion criteria pass.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from typing import Any, Literal
 
 from app.scalping.math_features import unified_scalp_score
@@ -17,6 +17,7 @@ from app.scalping.math_strategies import (
   evaluate_liquidity_sweep_reversal,
   evaluate_range_edge_mean_reversion,
 )
+from app.scalping.models import ARCHETYPE_RANGE_SWEEP, ScalpOpportunity
 from app.scalping.replay import evaluate_paper_outcome
 
 
@@ -183,6 +184,55 @@ def evaluate_math_shadow(
       "survivor_count": len(survivors),
     },
   )
+
+
+def annotate_range_sweep_math_gate(
+  opportunity: ScalpOpportunity,
+  *,
+  atr: float,
+  range_low: float,
+  range_high: float,
+  barrier: float | None,
+  bar_open: float,
+  bar_high: float,
+  bar_low: float,
+  bar_close: float,
+  spread: float,
+  target_min_price: float,
+  utc_hour: int | None = None,
+  slippage: float = 0.0,
+  buffer: float = 0.0,
+) -> ScalpOpportunity:
+  """Stamp Liquidity Sweep math gates onto HFS range_sweep (shadow-comparable).
+
+  Does not change allow/block for live publish — recorded under
+  ``measured.math_liquidity_sweep`` for density / disagreement review.
+  """
+  if opportunity.archetype != ARCHETYPE_RANGE_SWEEP:
+    return opportunity
+  gate = evaluate_liquidity_sweep_reversal(
+    direction=opportunity.direction,
+    price=float(opportunity.trigger_price),
+    liquidity_level=float(opportunity.key_level),
+    bar_low=bar_low,
+    bar_high=bar_high,
+    bar_close=bar_close,
+    bar_open=bar_open,
+    atr=atr,
+    range_low=range_low,
+    range_high=range_high,
+    barrier=barrier,
+    spread=spread,
+    slippage=slippage,
+    buffer=buffer,
+    target_min_price=target_min_price,
+    utc_hour=utc_hour,
+  )
+  measured = dict(opportunity.measured)
+  measured["math_liquidity_sweep"] = gate.to_dict()
+  if gate.score_inputs:
+    measured["math_score_inputs"] = dict(gate.score_inputs)
+  return replace(opportunity, measured=measured)
 
 
 # Re-export paper outcome helper for rollout callers.
