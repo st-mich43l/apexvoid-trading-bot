@@ -97,6 +97,8 @@ def aggregate_report(rows: Iterable[dict[str, Any]]) -> dict[str, Any]:
       "profit_factor": 0.0,
       "expectancy_r": 0.0,
       "max_drawdown_r": 0.0,
+      "avg_mfe_pips": 0.0,
+      "avg_mae_pips": 0.0,
     }
   wins = [r for r in items if r.get("outcome") == "target"]
   losses = [r for r in items if r.get("outcome") == "stop"]
@@ -118,6 +120,8 @@ def aggregate_report(rows: Iterable[dict[str, Any]]) -> dict[str, Any]:
       max_streak = max(max_streak, streak)
     else:
       streak = 0
+  mfe_vals = [float(r.get("mfe_pips") or 0.0) for r in items]
+  mae_vals = [float(r.get("mae_pips") or 0.0) for r in items]
   return {
     "count": len(items),
     "wins": len(wins),
@@ -127,10 +131,55 @@ def aggregate_report(rows: Iterable[dict[str, Any]]) -> dict[str, Any]:
     "expectancy_r": sum(float(r.get("net_r") or 0.0) for r in items) / len(items),
     "max_drawdown_r": abs(max_dd),
     "maximum_consecutive_losses": max_streak,
+    "avg_mfe_pips": sum(mfe_vals) / len(mfe_vals),
+    "avg_mae_pips": sum(mae_vals) / len(mae_vals),
     "by_session": _group(items, "session"),
     "by_archetype": _group(items, "archetype"),
     "blocked_buy_top": sum(1 for r in items if r.get("block_reason") == "buy_in_premium"),
     "blocked_sell_bottom": sum(1 for r in items if r.get("block_reason") == "sell_in_discount"),
+  }
+
+
+def split_dataset(
+  rows: list[dict[str, Any]],
+  *,
+  development: float = 0.60,
+  validation: float = 0.20,
+  holdout: float = 0.20,
+  timestamp_key: str = "timestamp",
+) -> dict[str, list[dict[str, Any]]]:
+  """Chronological 60/20/20 split. Holdout must remain untouched during tuning."""
+  if abs(development + validation + holdout - 1.0) > 1e-6:
+    raise ValueError("split fractions must sum to 1.0")
+  ordered = sorted(rows, key=lambda row: int(row.get(timestamp_key) or 0))
+  n = len(ordered)
+  if n == 0:
+    return {"development": [], "validation": [], "holdout": []}
+  i_dev = int(n * development)
+  i_val = i_dev + int(n * validation)
+  # Ensure holdout gets the remainder so fractions don't drop the last rows.
+  return {
+    "development": ordered[:i_dev],
+    "validation": ordered[i_dev:i_val],
+    "holdout": ordered[i_val:],
+  }
+
+
+def calibration_report(rows: list[dict[str, Any]]) -> dict[str, Any]:
+  """Replay lab summary with split discipline metadata."""
+  splits = split_dataset(rows)
+  return {
+    "discipline": {
+      "development": 0.60,
+      "validation": 0.20,
+      "holdout": 0.20,
+      "rule": "never_tune_thresholds_on_holdout",
+      "prefer": "wide_positive_expectancy_regions",
+    },
+    "development": aggregate_report(splits["development"]),
+    "validation": aggregate_report(splits["validation"]),
+    "holdout": aggregate_report(splits["holdout"]),
+    "full": aggregate_report(rows),
   }
 
 
@@ -188,7 +237,7 @@ def replay_from_fixture(path: Path) -> dict[str, Any]:
       "net_r": outcome.net_pips / stop,
       "block_reason": payload.get("block_reason"),
     })
-  return {"opportunities": rows, "aggregate": aggregate_report(rows)}
+  return {"opportunities": rows, "aggregate": aggregate_report(rows), "calibration": calibration_report(rows)}
 
 
 def main(argv: list[str] | None = None) -> int:
