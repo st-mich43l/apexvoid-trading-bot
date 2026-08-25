@@ -13,6 +13,10 @@ dated section after deployment.
 ## Unreleased
 
 ### Changed
+- USDJPY defended-level guard is direction-aware: hard-block **BUY** only
+  within 30 pips of 160; **SELL** near the ceiling is allowed (aligned with
+  intervention). The prior symmetric 100-pip band zeroed the book (0
+  publishes / 110+ activations at ~159.4).
 - Docs: refreshed ``docs/deployment.md`` for current compose boot order,
   local vs Ansible shapes, host dirs, manifest authority, multi-symbol
   smoke checks, and technique-pack defaults aligned with

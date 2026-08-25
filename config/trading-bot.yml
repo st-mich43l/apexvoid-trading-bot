@@ -447,14 +447,13 @@ instruments:
       # 1000/rate convention as GBPJPY's pip_value_per_lot. Drifts with the
       # rate; revisit if USDJPY moves far from this level.
       pip_value_per_lot: 6.27
-    # 2026 dig: Japan/US ran a record ~Y11.73T joint intervention when
-    # USDJPY breached 160 -- dollar snapped 163->~156-157, a 600+ pip
-    # reversal. Spot was ~159.47 when this was added, i.e. already at
-    # the edge of the defended level, not a hypothetical tail risk.
-    # Block fresh entries within 100 pips (1.0 price unit) of 160.
+    # 2026 dig: Japan/US intervention when USDJPY breached 160. Guard is
+    # direction-aware (hard-block BUY only) with a 30-pip buffer — the prior
+    # symmetric 100-pip band sterilized every plan at ~159.4 including SELLs
+    # (0 publishes / 110+ activations on 2026-08-25).
     overrides:
       risk.exposure.defended_levels: '160'
-      risk.exposure.defended_level_buffer_price: 1.0
+      risk.exposure.defended_level_buffer_price: 0.30
     policy: fx_fixed_2r_v1
     # Major pair, tight like EURUSD (not a volatile cross like GBPJPY).
     # Tokyo (JPY driver, Japanese open→London) + London + NY (USD driver)
