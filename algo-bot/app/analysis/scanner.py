@@ -2234,7 +2234,7 @@ async def _notify_digest_once(
     if match_for_card is None and result_index == 0:
       match_for_card = execution_match
     if match_for_card is None:
-      log.info(
+      log.debug(
         "scanner card suppressed: no executable StrategyMatch "
         "symbol=%s tf=%s setup=%s direction=%s",
         symbol,

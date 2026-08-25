@@ -64,6 +64,7 @@ from app.autotrade.strategy_taxonomy import (
   is_technique_or_confluence,
 )
 from app.core import instrument_geometry
+from app.core.log_throttle import log_at_most
 from app.runtime.instrument_config import instrument_runtime_view
 from app.autotrade.zone_watch import (
   DISCOVERED,
@@ -684,7 +685,9 @@ async def _prepare_activation(
       require=require_kz and enforce_pack,
     )
     if not kz.allowed:
-      log.info(
+      log_at_most(
+        log,
+        f"kz:{record.symbol}:{record.zone_id}:{kz.reason_code}",
         "entry activation blocked outside killzone symbol=%s zone_id=%s "
         "utc_hour=%s killzone=%s reason=%s",
         record.symbol,
@@ -755,7 +758,9 @@ async def _prepare_activation(
       require=require_kz and enforce_pack,
     )
     if not kz.allowed:
-      log.info(
+      log_at_most(
+        log,
+        f"kz:{record.symbol}:{record.zone_id}:{kz.reason_code}",
         "entry activation blocked outside killzone symbol=%s zone_id=%s "
         "utc_hour=%s killzone=%s reason=%s",
         record.symbol,
@@ -1633,7 +1638,9 @@ async def _sync_strategy_match_cutover(
       decisive_break=decisive_break,
     )
     if record.state in TERMINAL_ZONE_WATCH_STATES | LOCKED_ZONE_WATCH_STATES:
-      log.info(
+      log_at_most(
+        log,
+        f"cutover_reject:{zone_id}:{record.state}",
         "zone watch cutover rejected symbol=%s tf=%s setup=%s direction=%s "
         "reason=zone_watch_locked_or_terminal zone_id=%s state=%s",
         symbol, tf, result.setup, result.direction, zone_id, record.state,
@@ -1654,7 +1661,7 @@ async def _sync_strategy_match_cutover(
           access.chase_pips, access.maximum_chase_pips,
         )
         continue
-      log.info(
+      log.debug(
         "zone watch cutover waiting symbol=%s tf=%s setup=%s direction=%s "
         "reason=%s zone_id=%s state=%s chase_pips=%s max_chase=%s",
         symbol, tf, result.setup, result.direction,
@@ -1673,7 +1680,7 @@ async def _sync_strategy_match_cutover(
       maximum_chase_pips=access.maximum_chase_pips,
     )
     if prepared is None:
-      log.info(
+      log.debug(
         "zone watch cutover waiting symbol=%s tf=%s setup=%s direction=%s "
         "reason=entry_activation_not_ready grade=%s zone_id=%s",
         symbol, tf, result.setup, result.direction, record.grade, zone_id,

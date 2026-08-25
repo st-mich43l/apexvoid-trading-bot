@@ -130,7 +130,11 @@ After posting, the bot replies to your DM:
 ✅ Sent to channel (signal #4)
 ```
 
-Keep the `#id` — you use it with `close` and `cancel` commands.
+Keep the `#id` — you use it with `close`, `cancel`, and `/trade_modify`.
+
+When the signal is armed with `/algo`, the bot also snapshots Redis OHLC
+windows (M1/M5/M15/H1) into `manual_algo_charts` at issued, filled, and
+closed — used later for XAU formula fitting, not for live auto decisions.
 
 ---
 
@@ -186,6 +190,22 @@ Marks signal `#3` as closed, records the pip result, and posts a result reply to
 Bot replies to your DM: `#3 marked closed (+80 pips).`
 
 If the signal is not found or already closed: `⚠️ Signal #3 not found or already closed.`
+
+---
+
+### `/trade_modify` — edit entry / SL / TPs
+
+```text
+/trade_modify XAU #14 4636-33
+/trade_modify #14 4636-33
+/trade_modify XAU #14 sl 4629
+/trade_modify XAU #14 tp 4640/4650/4660
+```
+
+Updates an open signal’s zone, stop, and/or targets. Bare `lo-hi` shifts the
+entry zone and keeps risk distance on the stop; TPs shift with the same
+entry delta unless you pass an explicit `tp` ladder. Channels are edited in
+place when a message id is known.
 
 ---
 
@@ -338,8 +358,16 @@ Non-secret detector / technique / actionability knobs belong in
 ## Database
 
 Lifecycle and stats persist in **PostgreSQL** (`signals`), not SQLite.
-Manual signal rows still expose `#<id>` in DM commands; schema is owned by
-`algo-bot` persistence / migrations.
+Schema is owned by `algo-bot` `store.init_db()`; see [schema.sql](schema.sql).
+
+| Table | Role |
+|---|---|
+| `manual_signals` | Owner signal lifecycle (`#id`, fills, `/algo` arm) |
+| `manual_algo_charts` | OHLC snapshots around issued/filled/closed |
+| `signal_posts` | VIP/public message ids |
+| `pips_log` | Channel pips accounting |
+| `auto_trade_fills` / `auto_trade_results` | Autonomous + algo broker ledger |
+| `events` / `meta` | Calendar cache and small KV |
 
 ---
 
@@ -347,8 +375,10 @@ Manual signal rows still expose `#<id>` in DM commands; schema is owned by
 
 | What you type | Where | What happens |
 |---|---|---|
-| `gold sell 4100-4105\nsl 4110\ntp 95/90/80` | DM | Posts signal to channel, returns `#id` |
+| `/trade XAU sell 4100-4105 / sl … / tp … / algo` | DM | Posts signal; optional broker arm |
+| `gold sell 4100-4105\nsl 4110\ntp 95/90/80` | DM | Legacy free-text post |
 | `active` | DM | Lists all open signals |
+| `/trade_modify #3 4102-05` | DM | Shifts entry (and related SL/TP) |
 | `close 3 +80` | DM | Closes #3, posts +80 pips reply in channel |
 | `close 3 -30` | DM | Closes #3, posts -30 pips reply in channel |
 | `cancel 3` | DM | Cancels #3, posts cancelled reply in channel |

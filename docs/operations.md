@@ -24,8 +24,8 @@ Compose also runs a one-shot `config-compiler` that writes
 `CTRADER_MANIFEST_PARITY_MODE=off` (legacy ENV parity off; manifest validation
 enforced). See `docs/configuration/manifest-authority-cutover.md`.
 
-Multi-symbol activation remains a separate programme; production live
-instruments stay XAU-only. See `docs/runtime/multi-symbol-routing.md`.
+Multi-symbol: production **live** instruments are XAU, EURUSD, GBPUSD,
+GBPJPY, and USDJPY (demo account). See `docs/runtime/multi-symbol-routing.md`.
 
 ## Log Access
 

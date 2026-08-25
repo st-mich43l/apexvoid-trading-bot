@@ -7,66 +7,85 @@
 ![Redis](https://img.shields.io/badge/Redis-DC382D?style=flat-square&logo=redis&logoColor=white)
 ![Telegram](https://img.shields.io/badge/Telegram-2CA5E0?style=flat-square&logo=telegram&logoColor=white)
 
-Self-hosted multi-symbol trading stack: Telegram signal delivery,
-market-structure analysis, ZoneWatch activation, and broker execution on
-cTrader. Production demo books are configured per instrument (currently XAU,
-EURUSD, GBPUSD, GBPJPY, and USDJPY). All external connections are outbound
-(Telegram long-polling, Anthropic optional, cTrader Open API). No inbound
-webhook / public HTTP surface.
+Self-hosted multi-symbol trading stack: Telegram delivery, market-structure
+analysis, ZoneWatch activation, and broker execution on cTrader.
+
+**Live instruments today:** XAU, EURUSD, GBPUSD, GBPJPY, USDJPY — each with its
+own pip geometry, session windows, and execution policy (XAU ladder vs FX
+fixed-RR packs). All external I/O is outbound (Telegram long-poll, optional
+Anthropic, cTrader Open API). No public HTTP or inbound webhooks.
 
 ```text
-┌──────────────┐   OHLC ZSET      ┌─────────────────────┐
-│ ctrader-     │ ──────────────▶ │ Redis                │
-│ engine (.NET)│ ◀────────────   │ bars / plans / events│
-│ feed+exec    │  TradePlan V8    └──────────┬──────────┘
-└──────────────┘                            │
-                                            ▼
-┌──────────────┐   SQL          ┌─────────────────────┐
-│ Postgres     │ ◀──────────── │ algo-bot (Python)    │
-│ signals DB   │                │ Telegram + scanner   │
-└──────────────┘                │ ZoneWatch → publish  │
-                                └──────────┬──────────┘
-                                           │ long-poll
-                                           ▼
-                                    Telegram VIP/public
+┌──────────────────┐   OHLC ZSET / spots    ┌─────────────────────┐
+│ ctrader-engine   │ ─────────────────────▶ │ Redis               │
+│ (.NET feed+exec) │ ◀── TradePlan V8 ───── │ bars · watches ·    │
+└──────────────────┘                        │ plans · events      │
+         ▲                                  └──────────┬──────────┘
+         │ manifest                                     │
+┌──────────────────┐   SQL                  ┌──────────▼──────────┐
+│ config-compiler  │                        │ algo-bot (Python)   │
+│ → resolved JSON  │                        │ Telegram · scanner  │
+└──────────────────┘                        │ ZoneWatch → publish │
+┌──────────────────┐                        │ manual /algo + HFS  │
+│ PostgreSQL       │ ◀───────────────────── └──────────┬──────────┘
+│ signals · stats  │                                    │ long-poll
+└──────────────────┘                                    ▼
+                                                 Telegram VIP/public
 ```
 
 Compose boot order: **postgres + redis → config-compiler → ctrader-engine → bot**.
 
 ---
 
+## Overview
+
+Three execution lanes share one host and one Redis/Postgres spine, but keep
+separate journals and publish paths:
+
+| Lane | Who decides | Path | Book |
+|------|-------------|------|------|
+| **Manual /algo** | Owner DM | Parse → VIP/public → broker (optional) | `algo_manual` (+ OHLC chart snapshots for later XAU fitting) |
+| **Autonomous reaction** | Scanner + ZoneWatch | Detectors → watch → activate → TradePlan V8 | `algo_auto` |
+| **HFS scalping** | M1 lane | Closed M1 + immutable M5 context | Separate HFS publishers (not technique ZoneWatch) |
+
+**Config authority:** non-secret tuning in [`config/trading-bot.yml`](config/trading-bot.yml);
+secrets/bootstrap in `.env`. `config-compiler` emits a
+`ResolvedRuntimeManifest` that both Python and the .NET engine consume.
+Details: [docs/configuration/](docs/configuration/configuration-architecture.md)
+and [docs/runtime/multi-symbol-routing.md](docs/runtime/multi-symbol-routing.md).
+
+---
+
 ## What it does
 
-### Manual signals (owner DM + VIP/public)
+### Manual signals
 
-- Parse the owner command surface (`/trade XAU sell 4100-4105 / sl … / tp …`
-  or `/trade EURUSD buy 1.15007 / algo`) while retaining the legacy free-text
-  forms.
-- Broadcast to VIP and optional public channels; lifecycle
-  `active` / `close` / `cancel` / `/trade_*` commands.
-- Economic calendar brief, weekly VIP recap, optional Claude Vision chart draft.
-- Details: [docs/bot-commands.md](docs/bot-commands.md).
+Owner commands (`/trade`, `/algo`, `/trade_modify`, lifecycle close/cancel)
+post VIP/public cards, track fills and pips in Postgres, and can arm broker
+execution. Chart windows around issued/filled/closed trades are stored for
+offline XAU formula work later. Command surface:
+[docs/bot-commands.md](docs/bot-commands.md).
 
 ### Autonomous analysis → TradePlan V8
 
-1. **Scanner** runs detectors on closed H1/M15/M5 bars from Redis OHLC.
-2. **Techniques** (Supply Demand, Order Block, FVG, iFVG, CRT) and structural
-   reactions publish candidates; **2+ overlapping techniques** become a
-   **Confluence Zone**.
-3. **ZoneWatch** retains the zone (no premature setup card). Spot / M1 cycles
-   evaluate location + activation.
-4. When executable, **direct publish** builds a **TradePlan V8** into Redis.
+1. **Scanner** runs detectors on closed H1/M15/M5 bars from Redis.
+2. **Techniques** (Supply/Demand, OB, FVG, iFVG, CRT) and structural reactions
+   become candidates; overlapping techniques form a **Confluence Zone**.
+3. **ZoneWatch** retains the zone (no premature setup card) until location +
+   activation (killzone, M1 trigger, chase rules) pass.
+4. **Direct publish** writes a **TradePlan V8** to Redis; the ready-stream is
+   fallback only.
 5. **ctrader-engine** claims the plan, sizes from the equity table, and manages
    the group (shared stop, TP ladder, BE/trail).
 
-Authoritative path: ZoneWatch → direct publish (ready-stream is fallback only).
 See [docs/technique-zonewatch-publish.md](docs/technique-zonewatch-publish.md)
 and [docs/adr-trade-plan-v8-cutover.md](docs/adr-trade-plan-v8-cutover.md).
 
-### High-frequency M1 scalping (separate lane)
+### High-frequency M1 scalping
 
-Shadow/paper/live HFS on closed M1 with immutable M5 context. Does not share
-the technique ZoneWatch publishers. See [docs/scalping/README.md](docs/scalping/README.md).
+Shadow/paper/live HFS on closed M1 with immutable M5 context. Own publishers
+and funnel counters — not the technique ZoneWatch path.
+[docs/scalping/README.md](docs/scalping/README.md).
 
 ---
 
@@ -76,28 +95,28 @@ the technique ZoneWatch publishers. See [docs/scalping/README.md](docs/scalping/
 |---|---|
 | Algo / Telegram | Python 3.12, aiogram 3, asyncpg, Redis |
 | Broker feed + execution | .NET 8, cTrader Open API |
-| Config | `config/trading-bot.yml` + secrets in `.env` → `ResolvedRuntimeManifest` |
-| Persistence | PostgreSQL (`signals`), Redis (bars, ZoneWatch, plans, events) |
-| Packaging | Docker Compose v2 |
-
-Canonical configuration docs live under
-[docs/configuration/](docs/configuration/configuration-architecture.md).
+| Config | `trading-bot.yml` + `.env` → `ResolvedRuntimeManifest` |
+| Persistence | PostgreSQL (`signals`), Redis (bars, watches, plans, events) |
+| Packaging | Docker Compose v2 (`postgres`, `redis`, `config-compiler`, `ctrader-engine`, `bot`) |
 
 ---
 
 ## Documentation
 
+Index: [docs/README.md](docs/README.md).
+
 | Doc | Contents |
 |---|---|
-| [Architecture](docs/architecture.md) | Services, loops, ZoneWatch publish path |
-| [Technique / ZoneWatch publish](docs/technique-zonewatch-publish.md) | Five techniques, Confluence, chase, closed-bar invalidate, opposing room |
+| [Architecture](docs/architecture.md) | Services, loops, publish path |
+| [Multi-symbol routing](docs/runtime/multi-symbol-routing.md) | Live instruments, policies, packs |
+| [Technique / ZoneWatch](docs/technique-zonewatch-publish.md) | Techniques, confluence, activation |
 | [Bot commands](docs/bot-commands.md) | Manual posting and lifecycle |
-| [Deployment](docs/deployment.md) | Host → running stack |
-| [Operations](docs/operations.md) | Logs, backups, updates, troubleshooting |
-| [Redis contract](docs/redis-contract.md) | Bars, plans, events boundary |
+| [Scalping](docs/scalping/README.md) | HFS M1 lane |
+| [Configuration](docs/configuration/configuration-architecture.md) | Catalog, YAML, manifest |
+| [Deployment](docs/deployment.md) · [Operations](docs/operations.md) | Host → stack; logs, backups |
+| [Redis contract](docs/redis-contract.md) | Bars / plans / events boundary |
 | [TradePlan V8 ADR](docs/adr-trade-plan-v8-cutover.md) | Plan identity cutover |
-| [Security](docs/security.md) | Threat model and secrets |
-| [Changelog](CHANGELOG.md) | Behavior / config / deploy notes |
+| [Security](docs/security.md) · [Changelog](CHANGELOG.md) | Threat model; release notes |
 
 ---
 
@@ -107,8 +126,7 @@ Canonical configuration docs live under
 git clone <this-repo> apexvoid-trading-bot
 cd apexvoid-trading-bot
 cp .env.example .env
-# Fill secrets: TELEGRAM_BOT_TOKEN, SIGNAL_VIP_CHANNEL_ID, TELEGRAM_OWNER_ID,
-# POSTGRES_PASSWORD, DATABASE_URL, REDIS_URL, CTRADER_* credentials.
+# Secrets: TELEGRAM_*, POSTGRES_*, DATABASE_URL, REDIS_URL, CTRADER_*
 # Non-secret tuning: config/trading-bot.yml
 
 docker compose up -d --build
@@ -120,11 +138,11 @@ docker compose logs -f ctrader-engine
 Expected shape:
 
 - `config-compiler` exits 0 after writing `/runtime/resolved-runtime.json`
-- `ctrader-engine` heartbeats and writes `bars:XAU:*`
-- `bot` starts Telegram polling and scanner / ZoneWatch loops
+- `ctrader-engine` heartbeats and writes `bars:{SYMBOL}:*`
+- `bot` starts Telegram polling plus scanner / ZoneWatch / HFS loops
 
-Owner DM `active` should reply (empty book is fine). Demo auto-trade profile
-runbook: [docs/demo-eval-autotrade.md](docs/demo-eval-autotrade.md).
+Owner DM `active` should reply (empty book is fine). Demo auto-trade runbook:
+[docs/demo-eval-autotrade.md](docs/demo-eval-autotrade.md).
 
 ---
 
@@ -132,28 +150,36 @@ runbook: [docs/demo-eval-autotrade.md](docs/demo-eval-autotrade.md).
 
 ```text
 apexvoid-trading-bot/
-├── docker-compose.yml          # postgres, redis, config-compiler, engine, bot
-├── config/trading-bot.yml      # non-secret Python/shared tuning
-├── .env.example                # secrets + bootstrap (generated policy)
-├── docs/                       # architecture, ops, config, ADRs
-├── contracts/                  # shared JSON / schema contracts
-├── ctrader-engine/             # .NET feed + TradePlan executor
-│   └── src/                    # AutoTradeEngine, TradePlanExecutionEngine, …
-└── algo-bot/                   # Python application
+├── docker-compose.yml            # postgres, redis, config-compiler, engine, bot
+├── config/trading-bot.yml        # non-secret Python / shared instrument tuning
+├── .env.example                  # secrets + bootstrap
+├── deployment-template/          # host deploy scaffolding
+├── docs/                         # architecture, runtime, config, ops, ADRs
+│   ├── runtime/                  # multi-symbol routing
+│   ├── configuration/            # catalog + manifest authority
+│   └── scalping/                 # HFS lane
+├── contracts/                    # shared JSON schemas
+│   ├── autotrade/                # TradePlan V8, …
+│   └── configuration/            # catalog / env / manifest contracts
+├── ctrader-engine/                # .NET feed + TradePlan executor
+│   ├── src/
+│   └── tests/
+└── algo-bot/                     # Python application
     ├── Dockerfile
-    ├── requirements.txt / pyproject
+    ├── requirements.txt
+    ├── tests/
     ├── scripts/
     └── app/
-        ├── main.py             # composition root: install cutover, spawn loops
-        ├── configuration/      # catalog, YAML loader, runtime manifest
-        ├── core/               # runtime_config facade, symbols, logging
-        ├── persistence/        # Postgres store + Redis client
-        ├── bot/                # aiogram wiring + handlers
-        ├── signals/            # manual signals, calendar, weekly report
-        ├── analysis/           # detectors, techniques, scanner, market map
-        ├── autotrade/          # ZoneWatch cutover, TradePlan V8, delivery
-        ├── scalping/           # HFS M1 lane
-        └── runtime/            # multi-symbol routing helpers
+        ├── main.py               # composition root (cutover + loops)
+        ├── configuration/        # catalog, YAML loader, runtime manifest
+        ├── core/                 # runtime_config, symbols, logging
+        ├── persistence/          # Postgres store + Redis client
+        ├── bot/                  # aiogram wiring + handlers
+        ├── signals/              # manual /algo, charts, calendar, recap
+        ├── analysis/             # detectors, techniques, scanner, map
+        ├── autotrade/            # ZoneWatch cutover, TradePlan V8, delivery
+        ├── scalping/             # HFS M1 lane
+        └── runtime/              # multi-symbol routing helpers
 ```
 
 ---
