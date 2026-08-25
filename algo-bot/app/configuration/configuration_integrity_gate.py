@@ -33,15 +33,15 @@ from app.configuration.source_types import ConfigurationSourceBundle
 
 
 BASELINE = {
-  "catalog_entry_count": 499,
-  "configurable_count": 432,
+  "catalog_entry_count": 532,
+  "configurable_count": 465,
   "protocol_constant_count": 10,
   "algorithm_constant_count": 57,
-  "python_projection_count": 449,
-  "ctrader_only_count": 50,
-  "environment_entry_count": 432,
+  "python_projection_count": 483,
+  "ctrader_only_count": 49,
+  "environment_entry_count": 465,
   "deprecated_alias_count": 21,
-  "shared_count": 95,
+  "shared_count": 96,
 }
 
 FORBIDDEN_GENERATOR_SYMBOLS = (

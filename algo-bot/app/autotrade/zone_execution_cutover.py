@@ -663,6 +663,7 @@ async def _prepare_activation(
   from app.autotrade.killzone import (
     evaluate_killzone_gate,
     evaluate_reaction_publish_window,
+    reaction_require_killzone,
     technique_enforce,
   )
 
@@ -749,8 +750,9 @@ async def _prepare_activation(
         },
       )
       return None
-    require_kz = True if tech is None else bool(
-      getattr(tech, "reaction_require_killzone", True),
+    require_kz = reaction_require_killzone(
+      inst,
+      strategy=str(getattr(match, "strategy", "") or ""),
     )
     kz = evaluate_killzone_gate(
       ts=now,
@@ -1555,6 +1557,18 @@ async def _sync_strategy_match_cutover(
         symbol, tf, result.setup, result.direction, grade, zone_id,
       )
       continue
+    if str(result.setup) == "Key Level Reaction":
+      from app.autotrade.killzone import key_level_min_grade
+
+      inst = instrument_geometry.instrument_runtime(symbol)
+      min_grade = key_level_min_grade(inst)
+      if min_grade == "A" and grade != GRADE_A:
+        log.info(
+          "zone watch cutover rejected symbol=%s tf=%s setup=%s direction=%s "
+          "reason=key_level_min_grade grade=%s required=%s zone_id=%s",
+          symbol, tf, result.setup, result.direction, grade, min_grade, zone_id,
+        )
+        continue
     match, build_reason, _measured = scanner._build_one_strategy_match(
       symbol,
       tf,

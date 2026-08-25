@@ -132,8 +132,8 @@
     "zone_reconcile_mode": "shadow",
     "zone_scale_undersized_policy": "single_entry"
   },
-  "contract_fingerprint": "5872fae5b93b8ccef51aa9f8261821851afa4dd3f2dd4f7c9c9110902635337d",
-  "effective_configuration_fingerprint": "52055c4c92b8c35d8ab7d360ee90b402cc23d841a468bb96bd8b439a3b23e794",
+  "contract_fingerprint": "0b72f1bcdedc7aad2e5691f7d36f5cd3ee09cead24f23d804a48cc4b1aaa71cf",
+  "effective_configuration_fingerprint": "802fa27f29339363c0a37ff56c11bd2a08900cb6897b2947488652cbeb6a6485",
   "feed": {
     "backfill_bars": 1500,
     "bar_quality_lookback": 6,
@@ -1001,7 +1001,11 @@
           },
           "enabled": true,
           "key_level": {
-            "enabled": true
+            "enabled": true,
+            "min_grade": "B",
+            "require_explicit_role": false,
+            "require_htf_alignment": false,
+            "require_killzone": false
           },
           "liquidity_reversal": {
             "enabled": true
@@ -1591,6 +1595,12 @@
             "source_name": "instruments.GBPJPY.overrides"
           },
           {
+            "path": "analysis.levels.minimum_key_touches",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.GBPJPY.overrides"
+          },
+          {
             "path": "analysis.levels.round_step",
             "secret": false,
             "source_kind": "instrument_override",
@@ -1733,6 +1743,30 @@
             "secret": false,
             "source_kind": "instrument_override",
             "source_name": "instruments.GBPJPY.execution_pack"
+          },
+          {
+            "path": "strategies.reaction.key_level.min_grade",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.GBPJPY.overrides"
+          },
+          {
+            "path": "strategies.reaction.key_level.require_explicit_role",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.GBPJPY.overrides"
+          },
+          {
+            "path": "strategies.reaction.key_level.require_htf_alignment",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.GBPJPY.overrides"
+          },
+          {
+            "path": "strategies.reaction.key_level.require_killzone",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.GBPJPY.overrides"
           },
           {
             "path": "strategies.technique.crt.entry_max_width_price",
@@ -1922,7 +1956,11 @@
           },
           "enabled": true,
           "key_level": {
-            "enabled": true
+            "enabled": true,
+            "min_grade": "A",
+            "require_explicit_role": true,
+            "require_htf_alignment": true,
+            "require_killzone": true
           },
           "liquidity_reversal": {
             "enabled": true
@@ -2837,7 +2875,11 @@
           },
           "enabled": true,
           "key_level": {
-            "enabled": true
+            "enabled": true,
+            "min_grade": "B",
+            "require_explicit_role": false,
+            "require_htf_alignment": false,
+            "require_killzone": false
           },
           "liquidity_reversal": {
             "enabled": true
@@ -3612,7 +3654,7 @@
         "exposure": {
           "allow_concurrent_strategies": true,
           "allow_hedged_xau": false,
-          "defended_level_buffer_price": "1",
+          "defended_level_buffer_price": "0.3",
           "defended_levels": "160",
           "non_hedged_opposite_policy": "broker_netting",
           "opposing_minimum_separation_price": "0.15",
@@ -3764,7 +3806,11 @@
           },
           "enabled": true,
           "key_level": {
-            "enabled": true
+            "enabled": true,
+            "min_grade": "B",
+            "require_explicit_role": false,
+            "require_htf_alignment": false,
+            "require_killzone": false
           },
           "liquidity_reversal": {
             "enabled": true
@@ -4525,7 +4571,11 @@
           },
           "enabled": true,
           "key_level": {
-            "enabled": true
+            "enabled": true,
+            "min_grade": "B",
+            "require_explicit_role": false,
+            "require_htf_alignment": false,
+            "require_killzone": false
           },
           "liquidity_reversal": {
             "enabled": true
@@ -5297,7 +5347,11 @@
           },
           "enabled": true,
           "key_level": {
-            "enabled": true
+            "enabled": true,
+            "min_grade": "B",
+            "require_explicit_role": false,
+            "require_htf_alignment": false,
+            "require_killzone": false
           },
           "liquidity_reversal": {
             "enabled": true
@@ -5751,6 +5805,12 @@
             "source_name": "instruments.GBPJPY.overrides"
           },
           {
+            "path": "analysis.levels.minimum_key_touches",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.GBPJPY.overrides"
+          },
+          {
             "path": "analysis.levels.round_step",
             "secret": false,
             "source_kind": "instrument_override",
@@ -5893,6 +5953,30 @@
             "secret": false,
             "source_kind": "instrument_override",
             "source_name": "instruments.GBPJPY.execution_pack"
+          },
+          {
+            "path": "strategies.reaction.key_level.min_grade",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.GBPJPY.overrides"
+          },
+          {
+            "path": "strategies.reaction.key_level.require_explicit_role",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.GBPJPY.overrides"
+          },
+          {
+            "path": "strategies.reaction.key_level.require_htf_alignment",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.GBPJPY.overrides"
+          },
+          {
+            "path": "strategies.reaction.key_level.require_killzone",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.GBPJPY.overrides"
           },
           {
             "path": "strategies.technique.crt.entry_max_width_price",
@@ -6081,7 +6165,11 @@
           },
           "enabled": true,
           "key_level": {
-            "enabled": true
+            "enabled": true,
+            "min_grade": "A",
+            "require_explicit_role": true,
+            "require_htf_alignment": true,
+            "require_killzone": true
           },
           "liquidity_reversal": {
             "enabled": true
@@ -6859,7 +6947,11 @@
           },
           "enabled": true,
           "key_level": {
-            "enabled": true
+            "enabled": true,
+            "min_grade": "B",
+            "require_explicit_role": false,
+            "require_htf_alignment": false,
+            "require_killzone": false
           },
           "liquidity_reversal": {
             "enabled": true
@@ -7498,7 +7590,7 @@
         "exposure": {
           "allow_concurrent_strategies": true,
           "allow_hedged_xau": false,
-          "defended_level_buffer_price": "1",
+          "defended_level_buffer_price": "0.3",
           "defended_levels": "160",
           "non_hedged_opposite_policy": "broker_netting",
           "opposing_minimum_separation_price": "0.15",
@@ -7649,7 +7741,11 @@
           },
           "enabled": true,
           "key_level": {
-            "enabled": true
+            "enabled": true,
+            "min_grade": "B",
+            "require_explicit_role": false,
+            "require_htf_alignment": false,
+            "require_killzone": false
           },
           "liquidity_reversal": {
             "enabled": true
@@ -8269,7 +8365,11 @@
           },
           "enabled": true,
           "key_level": {
-            "enabled": true
+            "enabled": true,
+            "min_grade": "B",
+            "require_explicit_role": false,
+            "require_htf_alignment": false,
+            "require_killzone": false
           },
           "liquidity_reversal": {
             "enabled": true

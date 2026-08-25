@@ -172,6 +172,8 @@ class DetectorSettings:
   regime_min_displacement_atr: float = 4.0
   structural_reaction_lookback_bars: int = 3
   key_level_reaction_enabled: bool = True
+  key_level_require_explicit_role: bool = False
+  key_level_require_htf_alignment: bool = False
   demand_reaction_enabled: bool = True
   supply_reaction_enabled: bool = True
   flip_zone_enabled: bool = True
@@ -423,6 +425,12 @@ def detector_settings_from(config: object | None = None) -> DetectorSettings:
       execution.policy.structural_reaction_lookback_bars
     ),
     key_level_reaction_enabled=bool(strategies.reaction.key_level.enabled),
+    key_level_require_explicit_role=bool(
+      strategies.reaction.key_level.require_explicit_role
+    ),
+    key_level_require_htf_alignment=bool(
+      strategies.reaction.key_level.require_htf_alignment
+    ),
     demand_reaction_enabled=bool(strategies.reaction.demand.enabled),
     supply_reaction_enabled=bool(strategies.reaction.supply.enabled),
     flip_zone_enabled=flip_zone_enabled,
@@ -2514,6 +2522,11 @@ def key_level_reaction(ctx: DetectionContext) -> DetectionResult | None:
     # reinterpreted as an ordinary reaction in the opposite direction.
     if role in {ROLE_BROKEN_SUPPORT, ROLE_BROKEN_RESISTANCE}:
       continue
+    if (
+      role == ROLE_AMBIGUOUS
+      and bool(getattr(ctx.settings, "key_level_require_explicit_role", False))
+    ):
+      continue
     band_low = level.price - zone_band
     band_high = level.price + zone_band
     react_low = band_low
@@ -2571,6 +2584,11 @@ def key_level_reaction(ctx: DetectionContext) -> DetectionResult | None:
       directions = ("BUY", "SELL")
     confirmed_here: list[DetectionResult] = []
     for direction in directions:
+      if (
+        bool(getattr(ctx.settings, "key_level_require_htf_alignment", False))
+        and ctx.htf_bias != _bias_for_direction(direction)
+      ):
+        continue
       level_price = (
         contra_level if direction == contra_direction else level.price
       )

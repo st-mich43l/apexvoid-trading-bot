@@ -1,20 +1,20 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "5872fae5b93b8ccef51aa9f8261821851afa4dd3f2dd4f7c9c9110902635337d",
-  "configuration_document_fingerprint_sha256": "70b5615985bf41ca7f7c1a206f9c49de79c62b007a2565b6ff477edd54d7e16a",
+  "configuration_contract_fingerprint_sha256": "0b72f1bcdedc7aad2e5691f7d36f5cd3ee09cead24f23d804a48cc4b1aaa71cf",
+  "configuration_document_fingerprint_sha256": "f90cbc82c044a88b775675600f47142f9083f3b0ae8a3f6125849d29e1b8ae54",
   "counts": {
     "algorithm_constants": 57,
-    "configurable": 461,
+    "configurable": 465,
     "known_conflicts": 30,
     "owners": {
       "ctrader": 49,
-      "python": 382,
-      "shared": 97
+      "python": 387,
+      "shared": 96
     },
     "protocol_constants": 10,
     "secrets": 9,
     "shared": 96,
-    "total_items": 528
+    "total_items": 532
   },
   "items": [
     {
@@ -12429,7 +12429,7 @@
       "introduced_in": "config-catalog-v2",
       "kind": "configurable",
       "mismatch_policy": "not_reported",
-      "owner": "shared",
+      "owner": "python",
       "path": "manual_algo.sizing.fx_volume_multiplier",
       "protocol_constant": false,
       "reload_policy": "new_setup_only",
@@ -18221,6 +18221,159 @@
     },
     {
       "algorithm_constant": false,
+      "allowed_values": [
+        "A",
+        "B"
+      ],
+      "canonical_env": "AUTO_TRADE_KEY_LEVEL_MIN_GRADE",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "pattern": "^[AB]$"
+      },
+      "default": "B",
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": "B"
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Minimum ZoneWatch grade for Key Level Reaction (A or B).",
+      "display_id": "config:strategies.reaction.key_level.min_grade",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.reaction.key_level.min_grade",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "strategy_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "str",
+      "unit": "enum",
+      "validation_summary": "Pydantic type coercion + field validator"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_KEY_LEVEL_REQUIRE_EXPLICIT_ROLE",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {},
+      "default": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": false
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Skip ambiguous-role Key Level (explicit support/resistance kind only).",
+      "display_id": "config:strategies.reaction.key_level.require_explicit_role",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.reaction.key_level.require_explicit_role",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "strategy_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "bool",
+      "unit": "boolean",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_KEY_LEVEL_REQUIRE_HTF_ALIGNMENT",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {},
+      "default": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": false
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Require Key Level direction to match HTF bias.",
+      "display_id": "config:strategies.reaction.key_level.require_htf_alignment",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.reaction.key_level.require_htf_alignment",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "strategy_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "bool",
+      "unit": "boolean",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_KEY_LEVEL_REQUIRE_KILLZONE",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {},
+      "default": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": false
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Require killzone for Key Level even when global reaction_require_killzone is off.",
+      "display_id": "config:strategies.reaction.key_level.require_killzone",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.reaction.key_level.require_killzone",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "strategy_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "bool",
+      "unit": "boolean",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
       "allowed_values": [],
       "canonical_env": "AUTO_TRADE_LIQUIDITY_REVERSAL_ENABLED",
       "catalog_version": 2,
@@ -19215,7 +19368,7 @@
       ],
       "deprecated": false,
       "deprecated_aliases": [],
-      "description": "Legacy Zone Reaction fallback when technique publishers are active.",
+      "description": "Zone Reaction fallback when technique publishers are active.",
       "display_id": "config:strategies.technique.zone_reaction_fallback.enabled",
       "evidence_notes": [],
       "introduced_in": "config-catalog-v2",
@@ -19796,6 +19949,6 @@
       "validation_summary": "Pydantic required/type coercion only"
     }
   ],
-  "source_fingerprint_sha256": "5872fae5b93b8ccef51aa9f8261821851afa4dd3f2dd4f7c9c9110902635337d",
+  "source_fingerprint_sha256": "0b72f1bcdedc7aad2e5691f7d36f5cd3ee09cead24f23d804a48cc4b1aaa71cf",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

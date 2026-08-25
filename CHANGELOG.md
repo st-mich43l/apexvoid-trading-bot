@@ -13,6 +13,10 @@ dated section after deployment.
 ## Unreleased
 
 ### Changed
+- GBPJPY Key Level Reaction quality (still enabled): require killzone,
+  explicit support/resistance role, HTF alignment, grade A, and
+  ``minimum_key_touches: 3`` via instrument overrides. Dig 2026-08-25
+  showed Key Level alone was 0/4 (−118 pips); other setups were ~flat.
 - USDJPY defended-level guard is direction-aware: hard-block **BUY** only
   within 30 pips of 160; **SELL** near the ceiling is allowed (aligned with
   intervention). The prior symmetric 100-pip band zeroed the book (0
