@@ -279,7 +279,8 @@ async def process_m1_bar(
   await save_risk(client, symbol, risk_state)
   risk = evaluate_risk(risk_state, cfg, session=context.session, now=now)
 
-  # Shared MAD phase before ranking so range_sweep can prefer accumulation.
+  # Shared MAD clock for Redis / Range Edge technique only — never used to
+  # rank or gate HFS opportunities (owner 2026-08-26).
   mad_payload: dict[str, Any] | None = None
   if mode in {"shadow", "paper", "live"}:
     try:
@@ -310,6 +311,16 @@ async def process_m1_bar(
       await set_last(client, "mad", symbol, mad_payload)
     except Exception:
       log.exception("mad phase evaluation failed symbol=%s", symbol)
+
+  # Drop stale armed/discovered HFS contexts so scalp:active cannot pile up.
+  try:
+    from app.scalping.lifecycle import prune_stale_active
+
+    pruned = await prune_stale_active(client, symbol, now=now)
+    if pruned:
+      result["stale_active_pruned"] = pruned
+  except Exception:
+    log.exception("stale scalp active prune failed symbol=%s", symbol)
 
   # Stamp Liquidity Sweep math onto range_sweep discoveries (observe-only).
   # Live included so prod Redis can compare math vs publish without blocking.
@@ -655,14 +666,12 @@ async def process_m1_bar(
           direction="BUY",
           liquidity_level=float(context.active_range_low),
           barrier=context.nearest_resistance_low,
-          mad_phase=(mad_payload or {}).get("phase") or None,
         )
         sell_shadow = evaluate_math_shadow(
           **common,
           direction="SELL",
           liquidity_level=float(context.active_range_high),
           barrier=context.nearest_support_high,
-          mad_phase=(mad_payload or {}).get("phase") or None,
         )
         payload = {
           "buy": buy_shadow.to_dict(),

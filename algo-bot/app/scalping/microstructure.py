@@ -283,7 +283,7 @@ def detect_momentum_ignition(
   atr: float,
   min_displacement_atr: float = 1.0,  # owner-tuned 2026-08-11, was 1.2
   lookback_bars: int = 5,
-  min_directional_bars: int = 4,
+  min_directional_bars: int = 2,  # redefine 2026-08-26: was 4
 ) -> dict[str, Any] | None:
   """A live, still-accelerating thrust -- chase it, don't wait for a pullback.
 

@@ -12,6 +12,14 @@ dated section after deployment.
 
 ## Unreleased
 
+### Changed
+- Single redefine of technique + HFS: MAD no longer ranks/gates scalping —
+  only ``accum`` soft-favors **Range Edge Scalp**. HFS Impulse enabled by
+  default without ``require_sweep_body``; momentum ignition default bars 2;
+  stale armed HFS contexts prune from ``scalp:active``; scanner MAD refresh
+  no longer crashes on DataFrame ``or``. See
+  ``docs/scalping/TECHNIQUE_HFS_REDEFINE.md`` and ``docs/scalping/MAD.md``.
+
 ### Added
 - MAD-2 observe-only replay expectancy: phase × session × strategy table and
   Range/Impulse baselines via ``app.scalping.mad_replay`` (stamped phase only;
