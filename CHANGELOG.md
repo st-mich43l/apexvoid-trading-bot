@@ -13,6 +13,11 @@ dated section after deployment.
 ## Unreleased
 
 ### Added
+- MAD-1 continuous A/M/D feature scores and observe-only ``would_gate`` previews
+  on ``mad:phase:*`` and ``scalp:last_math_shadow:*`` (``features``, ``would_gate``,
+  ``measured.mad_gates``). No live hard block — teaches MAD-4 gates from demo.
+  Building Asia (unsealed) labels ``accum`` up to 24 ATR range quality.
+  See ``docs/scalping/MAD.md``.
 - MAD-0+ shared live telemetry: Asia session high/low seal + phase classifier
   (``accum`` / ``manip`` / ``expand`` / ``unclear``) for **technique scanner and
   HFS**. Redis ``mad:phase:*`` / ``mad:asia_range:*``; soft affinity boosts
