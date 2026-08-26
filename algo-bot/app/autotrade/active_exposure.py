@@ -65,6 +65,20 @@ _PENDING_TRADE_PLAN_GROUP_STAGES = frozenset({
   "submitting",
   "submitted",
 })
+# Live 2026-08-26: V8 left Stage=FullyOpen + GroupStage=recovery_required after
+# unknown_leg_close while broker position keys were already gone. Python still
+# counted FullyOpen as live exposure → HFS scalp_max_concurrent_positions
+# blocked every XAU discovery for hours. Recovery is not a manageable open book.
+_NON_LIVE_TRADE_PLAN_GROUP_STAGES = frozenset({
+  "recovery_required",
+  "closed",
+  "cancelled",
+  "expired",
+  "failed",
+})
+_NON_LIVE_TERMINAL_REASONS = frozenset({
+  "unknown_leg_close",
+})
 
 
 @dataclass(frozen=True)
@@ -90,6 +104,35 @@ class ExposureDecision:
   message: str = ""
   same_direction_stack: bool = False
   measured: dict[str, Any] | None = None
+
+
+def _normalize_stage_token(value: str | None) -> str:
+  return str(value or "").strip().lower()
+
+
+def _is_non_live_trade_plan(
+  *,
+  stage: str | None,
+  group_stage: str | None,
+  terminal_reason: str | None = None,
+) -> bool:
+  """True when a V8 runtime must not occupy the symbol concurrent book.
+
+  ``Stage=FullyOpen`` alone is not enough — recovery_required / unknown close
+  can leave FullyOpen sticky after broker positions are gone.
+  """
+  group = _normalize_stage_token(group_stage)
+  if group in _NON_LIVE_TRADE_PLAN_GROUP_STAGES:
+    return True
+  reason = _normalize_stage_token(terminal_reason)
+  # Sticky FullyOpen + unknown_leg_close must not lock HFS concurrent forever.
+  if reason in _NON_LIVE_TERMINAL_REASONS and _normalize_stage_token(stage) in {
+    "fullyopen",
+    "fully_open",
+    "open",
+  }:
+    return True
+  return False
 
 
 def normalize_symbol(value: object) -> str | None:
@@ -349,6 +392,15 @@ async def _load_trade_plan_exposures(client: Any) -> list[ActiveExposure]:
     # (Stage/GroupStage/Direction) with string enums — accept both shapes.
     stage = str(_payload_get(payload, "stage", "Stage") or "")
     group_stage = str(_payload_get(payload, "group_stage", "GroupStage") or "")
+    terminal_reason = str(
+      _payload_get(payload, "terminal_reason", "TerminalReason") or ""
+    )
+    if _is_non_live_trade_plan(
+      stage=stage,
+      group_stage=group_stage,
+      terminal_reason=terminal_reason,
+    ):
+      continue
     is_pending = (
       stage in _PENDING_TRADE_PLAN_STAGES
       or group_stage in _PENDING_TRADE_PLAN_GROUP_STAGES
