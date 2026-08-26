@@ -83,6 +83,7 @@ def evaluate_math_shadow(
   target_min_price: float,
   utc_hour: int | None = None,
   policy: ControlledLivePolicy | None = None,
+  mad_phase: str | None = None,
 ) -> ShadowEvaluation:
   """Run all three math strategies; rank survivors; never send broker orders."""
   results: list[MathGateResult] = []
@@ -175,15 +176,24 @@ def evaluate_math_shadow(
     elif ranked and ranked[0]["strategy"] == live_policy.strategy:
       would = True
 
+  measured: dict[str, Any] = {
+    "policy": asdict(live_policy),
+    "survivor_count": len(survivors),
+  }
+  if mad_phase:
+    from app.analysis.mad_phase import mad_hard_gate
+
+    measured["mad_gates"] = {
+      item.strategy: mad_hard_gate(phase=mad_phase, strategy=item.strategy).to_dict()
+      for item in results
+    }
+
   return ShadowEvaluation(
     mode=mode,
     results=tuple(results),
     ranked=tuple(ranked),
     would_execute=would,
-    measured={
-      "policy": asdict(live_policy),
-      "survivor_count": len(survivors),
-    },
+    measured=measured,
   )
 
 

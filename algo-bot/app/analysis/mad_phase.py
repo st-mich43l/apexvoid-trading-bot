@@ -26,6 +26,8 @@ PHASES = frozenset({PHASE_ACCUM, PHASE_MANIP, PHASE_EXPAND, PHASE_UNCLEAR})
 # Range quality (width/ATR): accumulation prefers a real but not huge box.
 _RQ_ACCUM_MIN = 0.8
 _RQ_ACCUM_MAX = 6.0
+# Building Asia (unsealed): allow wider box — early session expansion is normal.
+_RQ_BUILDING_ACCUM_MAX = 24.0
 # Expansion: close beyond sealed Asia edge by this ATR multiple, or impulse.
 _EXPAND_BREAK_ATR = 0.35
 _EXPAND_IMPULSE_ATR = 1.25
@@ -143,6 +145,152 @@ def mad_soft_bonus(*, phase: str | None, family: str) -> float:
     if p == PHASE_ACCUM:
       return 0.04
   return 0.0
+
+
+def _clamp01(value: float) -> float:
+  return max(0.0, min(1.0, float(value)))
+
+
+@dataclass(frozen=True)
+class MadFeatureScores:
+  """Continuous A/M/D scores (0–1) for shadow telemetry and replay."""
+
+  accum: float
+  manip: float
+  expand: float
+
+  def to_dict(self) -> dict[str, float]:
+    return {
+      "accum": round(float(self.accum), 4),
+      "manip": round(float(self.manip), 4),
+      "expand": round(float(self.expand), 4),
+    }
+
+
+@dataclass(frozen=True)
+class MadGatePreview:
+  """Observe-only gate — ``would_block`` is not applied to live publish in MAD-1."""
+
+  would_block: bool
+  reason_code: str
+
+  def to_dict(self) -> dict[str, Any]:
+    return {"would_block": self.would_block, "reason_code": self.reason_code}
+
+
+# Math shadow + HFS families evaluated for MAD-1 ``would_gate`` stamps.
+SHADOW_GATE_STRATEGIES: tuple[str, ...] = (
+  "liquidity_sweep_reversal",
+  "range_edge_mean_reversion",
+  "impulse_pullback_continuation",
+  "range_sweep",
+  "breakout_retest",
+  "momentum_chase",
+)
+
+_IMPULSE_GATE_STRATEGIES = frozenset({
+  "impulse_pullback_continuation",
+  "momentum_chase",
+  "impulse_pullback",
+  "momentum",
+  "impulse",
+})
+
+_RANGE_GATE_STRATEGIES = frozenset({
+  "liquidity_sweep_reversal",
+  "range_edge_mean_reversion",
+  "range_sweep",
+  "range_edge",
+  "range_scalp",
+  "hfs_range",
+})
+
+
+def _rq_accum_score(rq: float | None, *, building: bool = False) -> float:
+  if rq is None:
+    return 0.0
+  r = float(rq)
+  if r < _RQ_ACCUM_MIN:
+    return _clamp01(r / _RQ_ACCUM_MIN * 0.35)
+  peak = 2.5
+  width = _RQ_BUILDING_ACCUM_MAX if building else _RQ_ACCUM_MAX
+  if r <= peak:
+    return _clamp01(0.55 + (r - _RQ_ACCUM_MIN) / max(peak - _RQ_ACCUM_MIN, 1e-9) * 0.45)
+  if r <= width:
+    return _clamp01(1.0 - (r - peak) / max(width - peak, 1e-9) * 0.55)
+  return 0.15
+
+
+def compute_mad_features(snap: MadPhaseSnapshot) -> MadFeatureScores:
+  """Continuous accumulation / manipulation / expansion scores from phase snapshot."""
+  building = bool(
+    snap.asia is not None
+    and not snap.asia.sealed
+    and snap.measured.get("session") == "asia"
+  )
+  rq = snap.range_quality_atr
+  inside = snap.price_vs_asia == "inside"
+
+  accum = _rq_accum_score(rq, building=building) if inside else 0.0
+  if snap.phase == PHASE_ACCUM:
+    accum = max(accum, 0.72)
+  elif snap.phase == PHASE_MANIP and inside:
+    accum = max(accum, 0.35)
+
+  manip = 0.0
+  if snap.reclaim:
+    manip = 0.95
+  elif snap.sweep_side:
+    manip = 0.55
+  if snap.phase == PHASE_MANIP:
+    manip = max(manip, 0.8)
+
+  expand = 0.0
+  impulse = snap.measured.get("impulse_atr")
+  if impulse is not None and float(impulse) > 0:
+    expand = _clamp01(float(impulse) / _EXPAND_IMPULSE_ATR * 0.85)
+  if snap.price_vs_asia in {"above", "below"} and snap.asia and snap.asia.sealed:
+    expand = max(expand, 0.55)
+  if snap.phase == PHASE_EXPAND:
+    expand = max(expand, 0.78)
+
+  return MadFeatureScores(
+    accum=_clamp01(accum),
+    manip=_clamp01(manip),
+    expand=_clamp01(expand),
+  )
+
+
+def mad_hard_gate(*, phase: str | None, strategy: str) -> MadGatePreview:
+  """Preview hard gate for MAD-4 — observe-only in MAD-1 (not wired to publish)."""
+  p = str(phase or "").casefold()
+  strat = str(strategy or "").casefold()
+  if not p or p == PHASE_UNCLEAR:
+    return MadGatePreview(would_block=False, reason_code="mad_gate_neutral_unclear")
+  if strat in _IMPULSE_GATE_STRATEGIES:
+    if p not in EXPANSION_PHASES:
+      return MadGatePreview(
+        would_block=True,
+        reason_code="mad_gate_impulse_needs_manip_or_expand",
+      )
+  if strat in _RANGE_GATE_STRATEGIES:
+    if p == PHASE_EXPAND:
+      return MadGatePreview(
+        would_block=True,
+        reason_code="mad_gate_range_avoid_expand",
+      )
+  return MadGatePreview(would_block=False, reason_code="mad_gate_allowed")
+
+
+def enrich_mad_payload_for_shadow(snap: MadPhaseSnapshot) -> dict[str, Any]:
+  """Phase dict + continuous features + per-strategy ``would_gate`` previews."""
+  payload = snap.to_dict()
+  payload["features"] = compute_mad_features(snap).to_dict()
+  payload["would_gate"] = {
+    strategy: mad_hard_gate(phase=snap.phase, strategy=strategy).to_dict()
+    for strategy in SHADOW_GATE_STRATEGIES
+  }
+  return payload
 
 
 def _opt_int(value: Any) -> int | None:
@@ -394,9 +542,21 @@ def classify_mad_phase(
 
   # Accumulation: inside (or building) Asia box with sane RQ + range structure.
   structure = str(m5_structure or "").casefold()
-  rq_ok = rq is not None and _RQ_ACCUM_MIN <= float(rq) <= _RQ_ACCUM_MAX
+  rq_val = float(rq) if rq is not None else None
+  rq_sealed_ok = rq_val is not None and _RQ_ACCUM_MIN <= rq_val <= _RQ_ACCUM_MAX
+  building_asia = (
+    session == "asia"
+    and not asia.sealed
+    and vs == "inside"
+    and rq_val is not None
+    and _RQ_ACCUM_MIN <= rq_val <= _RQ_BUILDING_ACCUM_MAX
+  )
   inside_or_building = vs == "inside" or (session == "asia" and not asia.sealed)
-  if rq_ok and inside_or_building and structure in {"range", "unknown", ""}:
+  if (
+    inside_or_building
+    and structure in {"range", "unknown", ""}
+    and (rq_sealed_ok or building_asia)
+  ):
     return MadPhaseSnapshot(
       phase=PHASE_ACCUM,
       asia=asia,
@@ -404,7 +564,7 @@ def classify_mad_phase(
       price_vs_asia=vs,
       sweep_side=sweep_side,
       reclaim=False,
-      reason_code="asia_box_accum",
+      reason_code="asia_building_accum" if building_asia and not rq_sealed_ok else "asia_box_accum",
       measured=measured,
     )
 

@@ -283,7 +283,7 @@ async def process_m1_bar(
   mad_payload: dict[str, Any] | None = None
   if mode in {"shadow", "paper", "live"}:
     try:
-      from app.analysis.mad_phase import refresh_mad_for_symbol
+      from app.analysis.mad_phase import enrich_mad_payload_for_shadow, refresh_mad_for_symbol
 
       prior_m5 = await source.window(symbol, "M5", 120)
       mad_df = prior_m5 if prior_m5 is not None and not prior_m5.empty else m1
@@ -305,7 +305,7 @@ async def process_m1_bar(
         pip_size=pip,
         source="m5" if mad_df is prior_m5 else "m1",
       )
-      mad_payload = mad.to_dict()
+      mad_payload = enrich_mad_payload_for_shadow(mad)
       result["mad"] = mad_payload
       await set_last(client, "mad", symbol, mad_payload)
     except Exception:
@@ -655,12 +655,14 @@ async def process_m1_bar(
           direction="BUY",
           liquidity_level=float(context.active_range_low),
           barrier=context.nearest_resistance_low,
+          mad_phase=(mad_payload or {}).get("phase") or None,
         )
         sell_shadow = evaluate_math_shadow(
           **common,
           direction="SELL",
           liquidity_level=float(context.active_range_high),
           barrier=context.nearest_support_high,
+          mad_phase=(mad_payload or {}).get("phase") or None,
         )
         payload = {
           "buy": buy_shadow.to_dict(),
