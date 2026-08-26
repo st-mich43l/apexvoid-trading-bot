@@ -12,6 +12,9 @@ dated section after deployment.
 
 ## Unreleased
 
+### Added
+- Agent rules at ``.agents/AGENTS.md`` (CI hands-off, allowlisted smoke only).
+
 ### Fixed
 - V8 ``market_with_limit_scale`` no longer raises ``GROUP RECOVERY REQUIRED
   unknown close on L1`` when L1 hits SL, the deal-list lookup returns
