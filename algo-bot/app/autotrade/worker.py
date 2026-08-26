@@ -4874,18 +4874,18 @@ async def _publish_trade_plan_v8(
   )
   spot_ts = int(getattr(spot, "ts", 0) or int(datetime.now(timezone.utc).timestamp()))
   if candidate_is_scalp:
-    require_kz = True if tech is None else bool(
-      getattr(tech, "hfs_require_killzone", True),
+    # Optional clock sterilizer (prod off). Discovery permits are structure/
+    # technique driven; weak volume/momentum is rejected by analysis.
+    require_kz = False if tech is None else bool(
+      getattr(tech, "hfs_require_killzone", False),
     )
-    # Owner 2026-08-26: Asia session is allowed for HFS even when the
-    # killzone gate is on (discovery already permits Asia archetypes).
     from app.scalping.context import classify_session
 
     hfs_session = classify_session(spot_ts, inst)
     kz = evaluate_killzone_gate(
       ts=spot_ts,
       cfg=inst,
-      require=require_kz and enforce_pack and hfs_session != "asia",
+      require=require_kz and enforce_pack,
     )
     if not kz.allowed:
       log.info(
