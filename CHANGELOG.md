@@ -13,10 +13,11 @@ dated section after deployment.
 ## Unreleased
 
 ### Added
-- MAD-0 live telemetry: Asia session high/low seal + phase classifier
-  (``accum`` / ``manip`` / ``expand`` / ``unclear``) stamped each HFS M1 cycle
-  to ``scalp:asia_range:*``, ``scalp:last_mad:*``, and ``math_shadow.mad``.
-  Observe-only — no allow/block change. See ``docs/scalping/MAD.md``.
+- MAD-0+ shared live telemetry: Asia session high/low seal + phase classifier
+  (``accum`` / ``manip`` / ``expand`` / ``unclear``) for **technique scanner and
+  HFS**. Redis ``mad:phase:*`` / ``mad:asia_range:*``; soft affinity boosts
+  range scalping on accumulation and impulse families on expand/manip.
+  No hard allow/block change. See ``docs/scalping/MAD.md``.
 
 ### Changed
 - HFS Impulse Pullback and Momentum Chase enabled for **London/NY killzones**.

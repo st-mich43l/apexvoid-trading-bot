@@ -24,6 +24,22 @@ def score_opportunity(
   *,
   spread_pips: float,
 ) -> ScalpScore:
+  from app.analysis.mad_phase import mad_soft_bonus
+
+  mad_phase = None
+  if isinstance(decision.measured.get("mad"), dict):
+    mad_phase = decision.measured["mad"].get("phase")
+  if mad_phase is None and isinstance(opportunity.measured.get("mad"), dict):
+    mad_phase = opportunity.measured["mad"].get("phase")
+  if mad_phase is None:
+    mad_phase = (context.measured or {}).get("mad_phase")
+  family = "range_sweep"
+  if opportunity.archetype in {"impulse_pullback", "momentum_chase"}:
+    family = str(opportunity.archetype)
+  elif opportunity.archetype == "breakout_retest":
+    family = "impulse"
+  mad_bonus = mad_soft_bonus(phase=mad_phase, family=family)
+
   math_inputs = decision.measured.get("math_score_inputs")
   if isinstance(math_inputs, dict) and math_inputs:
     total = unified_scalp_score(
@@ -35,8 +51,9 @@ def score_opportunity(
       cost=float(math_inputs.get("cost", 0.0)),
       exhaustion=float(math_inputs.get("exhaustion", 0.0)),
     )
+    total = min(1.0, total + mad_bonus)
     return ScalpScore(
-      total=total,
+      total=round(total, 4),
       location=round(float(math_inputs.get("location", 0.0)), 4),
       trigger=round(float(math_inputs.get("trigger", 0.0)), 4),
       structure=round(float(math_inputs.get("structure", 0.0)), 4),
@@ -46,7 +63,10 @@ def score_opportunity(
       penalties=(),
     )
 
-  return _legacy_score(opportunity, context, decision, spread_pips=spread_pips)
+  return _legacy_score(
+    opportunity, context, decision,
+    spread_pips=spread_pips, mad_bonus=mad_bonus,
+  )
 
 
 def _legacy_score(
@@ -55,6 +75,7 @@ def _legacy_score(
   decision: ScalpDecision,
   *,
   spread_pips: float,
+  mad_bonus: float = 0.0,
 ) -> ScalpScore:
   penalties: list[str] = []
   location = 1.0
@@ -103,8 +124,10 @@ def _legacy_score(
     cost=1.0 - cost,
     exhaustion=0.0,
   )
+  # Accumulation favors range_sweep (owner: accum is good for range scalping).
+  total = min(1.0, total + float(mad_bonus or 0.0))
   return ScalpScore(
-    total=total,
+    total=round(total, 4),
     location=round(location, 4),
     trigger=round(trigger, 4),
     structure=round(structure, 4),
