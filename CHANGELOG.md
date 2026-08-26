@@ -24,11 +24,12 @@ dated section after deployment.
   range scalping on accumulation and impulse families on expand/manip.
   No hard allow/block change. See ``docs/scalping/MAD.md``.
 
-### Changed
-- HFS / range-scalp **and technique (FVG/OB/…)** entries use a **single-leg
-  market** only (no ``market_with_limit_scale`` micro-grid). Demo 2026-08-26:
-  two-leg HFS fills left L2 stranded after an Unknown L1 SL. Key Level /
-  Session reaction scale-in is unchanged.
+### Fixed
+- Allowlisted ``test_hfs_scalp_publishes_inside_opposing_structure`` fixture:
+  structure swing / wick now fit the HFS room-synced stop envelope so CI
+  no longer fails every PR on ``stop_exceeds_envelope_*`` (master was already
+  red). Test intent unchanged — opposing HTF bypass only.
+
 - HFS Impulse Pullback and Momentum Chase enabled for **London/NY killzones**.
   Asia still gets Range Sweep / Breakout Retest only (code excludes Impulse/
   Momentum from the Asia permit list).
