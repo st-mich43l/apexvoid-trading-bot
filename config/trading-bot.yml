@@ -615,11 +615,11 @@ strategies:
     mode: live
     archetypes:
       range_sweep_enabled: true
-      # Paused until a killzone-only sample proves the edge (7d HFS −498).
-      impulse_pullback_enabled: false
+      # London/NY killzones only — Asia excludes Impulse/Momentum in code.
+      impulse_pullback_enabled: true
       breakout_retest_enabled: true
-      # Off after 2026-08-12 quality dig (12 trades / −166 pips).
-      momentum_chase_enabled: false
+      # London/NY killzones only (same Asia exclusion as Impulse).
+      momentum_chase_enabled: true
     context:
       maximum_m5_age_seconds: 420
       m1_lookback_bars: 60

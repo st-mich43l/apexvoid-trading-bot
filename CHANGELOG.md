@@ -13,6 +13,16 @@ dated section after deployment.
 ## Unreleased
 
 ### Changed
+- HFS Impulse Pullback and Momentum Chase enabled for **London/NY killzones**.
+  Asia still gets Range Sweep / Breakout Retest only (code excludes Impulse/
+  Momentum from the Asia permit list).
+- HFS math shadow records in **live** observe-only (Redis ``scalp:last_math_shadow:*``
+  + per-opp ``measured.math_liquidity_sweep``). Does not change allow/block;
+  ``ControlledLivePolicy.enabled`` stays false so ``would_execute`` remains false.
+- HFS Asia session permitted again for enabled archetypes (Range Sweep /
+  Breakout Retest). Killzone choke still applies outside Asia; rollover stays
+  empty. Impulse/Momentum remain off via archetype flags. Owner: Asia still
+  prints usable XAU momentum.
 - HFS stop envelope: TradePlan now uses ``strategies.high_frequency_scalp.stop``
   (max **30** pips) for HFS strategies instead of the XAU reaction 40–60 band.
   Publish clamps ``structure_swing`` to the discovery stop and books a 1R/2R

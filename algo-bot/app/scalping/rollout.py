@@ -35,6 +35,7 @@ class ControlledLivePolicy:
   enabled: bool = False
   kill_switch: bool = False
   session_allowlist: tuple[str, ...] = (
+    "asia",
     "london",
     "london_ny_overlap",
     "ny_open",
