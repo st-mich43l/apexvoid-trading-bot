@@ -573,6 +573,45 @@ async def process_m1_bar(
   result["discovered"] = len(opportunities)
   result["idle_reasons"] = list(idle_reasons)
 
+  # MAD-0: Asia range seal + phase (live telemetry on demo). No allow/block.
+  mad_payload: dict[str, Any] | None = None
+  if mode in {"shadow", "paper", "live"}:
+    try:
+      from app.scalping.mad_phase import (
+        evaluate_mad_for_cycle,
+        load_asia_range_seal,
+        save_asia_range_seal,
+      )
+
+      prior = await load_asia_range_seal(client, symbol)
+      # Prefer M5 for the Asia box (stable); fall back to M1 lookback.
+      m5_for_mad = await source.window(symbol, "M5", 120)
+      mad_df = m5_for_mad if m5_for_mad is not None and not m5_for_mad.empty else m1
+      last = m1.iloc[-1] if m1 is not None and not m1.empty else None
+      mid = (float(bid) + float(ask)) / 2.0
+      seal, mad = evaluate_mad_for_cycle(
+        previous=prior,
+        ohlc=mad_df if mad_df is not None else m1,
+        now=now,
+        session=str(context.session or ""),
+        price=mid,
+        atr=float(context.atr or 0.0) or pip * 50,
+        m5_structure=str(context.m5_structure or "range"),
+        bar_high=None if last is None else float(last["high"]),
+        bar_low=None if last is None else float(last["low"]),
+        bar_close=None if last is None else float(last["close"]),
+        cfg=cfg,
+        pip_size=pip,
+        source="m5" if mad_df is m5_for_mad else "m1",
+      )
+      if seal is not None:
+        await save_asia_range_seal(client, symbol, seal)
+      mad_payload = mad.to_dict()
+      result["mad"] = mad_payload
+      await set_last(client, "mad", symbol, mad_payload)
+    except Exception:
+      log.exception("mad phase evaluation failed symbol=%s", symbol)
+
   # Mathematical shadow sidecar — records X_t gates; never publishes itself.
   # Live mode records observe-only (ControlledLivePolicy.enabled defaults false
   # so would_execute stays false). Prefer per-opp range_sweep stamps above;
@@ -628,6 +667,7 @@ async def process_m1_bar(
           "sell": sell_shadow.to_dict(),
           "bar_ts": int(bar_ts),
           "session": str(context.session or ""),
+          "mad": mad_payload,
           "range_sweep_annotated": sum(
             1
             for o in opportunities

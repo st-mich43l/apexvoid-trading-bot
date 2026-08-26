@@ -12,6 +12,12 @@ dated section after deployment.
 
 ## Unreleased
 
+### Added
+- MAD-0 live telemetry: Asia session high/low seal + phase classifier
+  (``accum`` / ``manip`` / ``expand`` / ``unclear``) stamped each HFS M1 cycle
+  to ``scalp:asia_range:*``, ``scalp:last_mad:*``, and ``math_shadow.mad``.
+  Observe-only — no allow/block change. See ``docs/scalping/MAD.md``.
+
 ### Changed
 - HFS Impulse Pullback and Momentum Chase enabled for **London/NY killzones**.
   Asia still gets Range Sweep / Breakout Retest only (code excludes Impulse/
