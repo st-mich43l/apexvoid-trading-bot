@@ -325,6 +325,19 @@ def resolve_execution_route_plan(
         True,
         immediate_market=True,
       )
+    # HFS / range scalp: single-leg market only. Multi-leg scale-in (L1+L2)
+    # caused false GROUP RECOVERY REQUIRED on demo when L1 SL'd and deal
+    # lookup missed (2026-08-26 v8:a80bf164…). Full size on one fill.
+    if is_scalp_strategy(str(strategy or ""), family=strategy_family):
+      return ExecutionRoutePlan(
+        ROUTE_MARKET,
+        _round_price(quote, digits),
+        (),
+        geometry,
+        "scalp: single-leg market (no micro-grid)",
+        True,
+        immediate_market=True,
+      )
     grid = scalp_micro_grid_legs(
       side=side,
       low=low,

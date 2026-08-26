@@ -25,6 +25,9 @@ dated section after deployment.
   No hard allow/block change. See ``docs/scalping/MAD.md``.
 
 ### Changed
+- HFS / range-scalp entries use a **single-leg market** only (no
+  ``market_with_limit_scale`` micro-grid). Demo 2026-08-26: two-leg HFS fills
+  left L2 stranded after an Unknown L1 SL. Technique FVG grids are unchanged.
 - HFS Impulse Pullback and Momentum Chase enabled for **London/NY killzones**.
   Asia still gets Range Sweep / Breakout Retest only (code excludes Impulse/
   Momentum from the Asia permit list).
