@@ -279,10 +279,10 @@ async def process_m1_bar(
   await save_risk(client, symbol, risk_state)
   risk = evaluate_risk(risk_state, cfg, session=context.session, now=now)
 
-  # PR C operationalization: stamp Liquidity Sweep math gates onto
-  # range_sweep discoveries in shadow/paper. Live path unchanged (no block).
+  # Stamp Liquidity Sweep math onto range_sweep discoveries (observe-only).
+  # Live included so prod Redis can compare math vs publish without blocking.
   if (
-    mode in {"shadow", "paper"}
+    mode in {"shadow", "paper", "live"}
     and opportunities
     and m1 is not None
     and not m1.empty
@@ -573,10 +573,15 @@ async def process_m1_bar(
   result["discovered"] = len(opportunities)
   result["idle_reasons"] = list(idle_reasons)
 
-  # PR G: mathematical shadow sidecar — never publishes; records X_t gates.
-  # Prefer per-opportunity range_sweep stamps above; cycle sidecar still
-  # evaluates both edge directions for density when no opps fired.
-  if mode in {"shadow", "paper"} and context.active_range_low and context.active_range_high:
+  # Mathematical shadow sidecar — records X_t gates; never publishes itself.
+  # Live mode records observe-only (ControlledLivePolicy.enabled defaults false
+  # so would_execute stays false). Prefer per-opp range_sweep stamps above;
+  # cycle sidecar still evaluates both edge directions for density.
+  if (
+    mode in {"shadow", "paper", "live"}
+    and context.active_range_low
+    and context.active_range_high
+  ):
     try:
       from datetime import datetime, timezone
 
@@ -621,6 +626,8 @@ async def process_m1_bar(
         payload = {
           "buy": buy_shadow.to_dict(),
           "sell": sell_shadow.to_dict(),
+          "bar_ts": int(bar_ts),
+          "session": str(context.session or ""),
           "range_sweep_annotated": sum(
             1
             for o in opportunities

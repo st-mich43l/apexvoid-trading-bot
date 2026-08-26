@@ -4877,19 +4877,25 @@ async def _publish_trade_plan_v8(
     require_kz = True if tech is None else bool(
       getattr(tech, "hfs_require_killzone", True),
     )
+    # Owner 2026-08-26: Asia session is allowed for HFS even when the
+    # killzone gate is on (discovery already permits Asia archetypes).
+    from app.scalping.context import classify_session
+
+    hfs_session = classify_session(spot_ts, inst)
     kz = evaluate_killzone_gate(
       ts=spot_ts,
       cfg=inst,
-      require=require_kz and enforce_pack,
+      require=require_kz and enforce_pack and hfs_session != "asia",
     )
     if not kz.allowed:
       log.info(
         "v8 publish blocked outside killzone symbol=%s match_id=%s "
-        "utc_hour=%s killzone=%s",
+        "utc_hour=%s killzone=%s session=%s",
         symbol,
         match.match_id,
         kz.utc_hour,
         kz.killzone_name,
+        hfs_session,
       )
       await _record_v8_build_rejected(
         client,
@@ -4900,6 +4906,7 @@ async def _publish_trade_plan_v8(
         {
           "killzone_name": kz.killzone_name,
           "utc_hour": kz.utc_hour,
+          "session": hfs_session,
           **kz.measured,
         },
       )

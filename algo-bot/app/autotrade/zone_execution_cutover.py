@@ -680,22 +680,27 @@ async def _prepare_activation(
     require_kz = True if tech is None else bool(
       getattr(tech, "hfs_require_killzone", True),
     )
+    # Owner 2026-08-26: Asia session allowed for HFS/scalp even with killzone on.
+    from app.scalping.context import classify_session
+
+    hfs_session = classify_session(int(now), inst)
     kz = evaluate_killzone_gate(
       ts=now,
       cfg=inst,
-      require=require_kz and enforce_pack,
+      require=require_kz and enforce_pack and hfs_session != "asia",
     )
     if not kz.allowed:
       log_at_most(
         log,
         f"kz:{record.symbol}:{record.zone_id}:{kz.reason_code}",
         "entry activation blocked outside killzone symbol=%s zone_id=%s "
-        "utc_hour=%s killzone=%s reason=%s",
+        "utc_hour=%s killzone=%s reason=%s session=%s",
         record.symbol,
         record.zone_id,
         kz.utc_hour,
         kz.killzone_name,
         kz.reason_code,
+        hfs_session,
       )
       await _record_policy_telemetry(
         client,

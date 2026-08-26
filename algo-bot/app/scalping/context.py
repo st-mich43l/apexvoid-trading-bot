@@ -125,11 +125,12 @@ def permitted_archetypes_for_session(
   hour: int | None = None,
   cfg: Any | None = None,
 ) -> tuple[str, ...]:
-  """Permit HFS archetypes only inside killzones when technique pack enforces.
+  """Permit HFS archetypes for Asia + killzones when technique pack enforces.
 
-  Owner 2026-08-10: Asia/dead-hour Impulse churn ≈ −498 pips. Killzone-only
-  (London / London–NY / late NY) replaces the prior always-on permit list.
-  Rollover stays empty regardless of enforce.
+  Owner 2026-08-10: dead-hour Impulse churn ≈ −498 pips → killzone gate.
+  Owner 2026-08-26: Asia still prints usable XAU momentum / range edges;
+  permit enabled archetypes for the Asia session (Impulse/Momentum stay off
+  via archetype flags). Rollover stays empty regardless of enforce.
   """
   if session == "rollover":
     return ()
@@ -140,12 +141,13 @@ def permitted_archetypes_for_session(
     getattr(tech, "hfs_require_killzone", True),
   )
   enabled = _enabled_hfs_archetypes(cfg)
+  if session == "asia":
+    return tuple(item for item in _HFS_ARCHETYPES if item in enabled)
   if technique_enforce(cfg) and require_kz:
     if ts is None and hour is None:
-      # Legacy callers without a clock: only named London/overlap sessions
-      # are optimistic; Asia/NY-label without hour fail closed (late NY
-      # always passes ``ts`` from ``build_scalp_context_snapshot``).
-      if session not in {"london", "london_ny_overlap"}:
+      # Legacy callers without a clock: named London/overlap/Asia are
+      # optimistic; other labels without hour fail closed.
+      if session not in {"london", "london_ny_overlap", "asia"}:
         return ()
     elif not classify_killzone(ts=ts, hour=hour, cfg=cfg).allowed:
       return ()
