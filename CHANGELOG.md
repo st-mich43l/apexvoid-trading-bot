@@ -13,6 +13,10 @@ dated section after deployment.
 ## Unreleased
 
 ### Added
+- MAD-2 observe-only replay expectancy: phase × session × strategy table and
+  Range/Impulse baselines via ``app.scalping.mad_replay`` (stamped phase only;
+  ``mad_hard_gate`` counterfactual; holdout never used for tuning). No live
+  hard block. See ``docs/scalping/MAD.md``.
 - Agent rules at ``.agents/AGENTS.md`` (CI hands-off, allowlisted smoke only).
 
 ### Fixed
