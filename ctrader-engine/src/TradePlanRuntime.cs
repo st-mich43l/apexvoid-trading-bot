@@ -748,6 +748,37 @@ public sealed class TradePlanRuntime(
     return Math.Abs(exitEstimate - stop) <= tolerance;
   }
 
+  // Live dig 2026-08-26 HFS Range Sweep (v8:a80bf164…): L1 SL filled, deal
+  // list timed out as Unknown, and the live bid kept printing the sweep past
+  // SL 4640.67. Abs-near-stop alone missed it; abs-beyond with still-open L2
+  // then raised GROUP RECOVERY REQUIRED and stranded L2. A quote strictly
+  // past the protective stop on the loss side is the continuing wick.
+  private bool ExitBeyondProtectiveStop(
+    TradePlan plan,
+    TradePlanRuntimeState state,
+    decimal exitEstimate
+  )
+  {
+    var stop =
+      state.CurrentStop != 0 ? state.CurrentStop
+      : state.GroupAbsoluteStop ?? plan.Stop.Price;
+    if (stop <= 0)
+    {
+      return false;
+    }
+    return plan.Analysis.Direction == "BUY"
+      ? exitEstimate < stop
+      : exitEstimate > stop;
+  }
+
+  private bool LooksLikeStopOut(
+    TradePlan plan,
+    TradePlanRuntimeState state,
+    decimal exitEstimate
+  ) =>
+    LooksLikeProtectiveStopHit(plan, state, exitEstimate)
+    || ExitBeyondProtectiveStop(plan, state, exitEstimate);
+
   private PositionCloseReason ClassifyCloseReason(
     TradePlan plan,
     TradePlanRuntimeState state,
@@ -764,7 +795,7 @@ public sealed class TradePlanRuntime(
     // — manual closes near BE/trail would read as stop-outs.
     if (
       lookup.ExecutionPrice is decimal exitPrice
-      && LooksLikeProtectiveStopHit(plan, state, exitPrice)
+      && LooksLikeStopOut(plan, state, exitPrice)
     )
     {
       return PositionCloseReason.StopLossOrTakeProfit;
@@ -2987,17 +3018,58 @@ public sealed class TradePlanRuntime(
       && byId.ContainsKey(id)
       && leg.RemainingVolume > 0
     );
+    var previousGroupStage = state.GroupStage;
+
+    // Promote Unknown legs with no deal fill using the live quote (near or
+    // past the protective stop). Applies to full-group and partial (L1 gone,
+    // L2 still open) so market_with_limit_scale SL hits do not stall in
+    // recovery_required and strand the remaining legs.
+    var liveExitHint = ExecutableQuote(plan, quote);
+    if (liveExitHint is decimal liveExitForPromote)
+    {
+      var stopForExit =
+        state.CurrentStop != 0 ? state.CurrentStop
+        : state.GroupAbsoluteStop ?? plan.Stop.Price;
+      for (var i = 0; i < reasons.Count; i++)
+      {
+        var item = reasons[i];
+        if (
+          item.Reason != PositionCloseReason.Unknown
+          || item.ExitPrice is not null
+        )
+        {
+          continue;
+        }
+        if (!LooksLikeStopOut(plan, state, liveExitForPromote))
+        {
+          continue;
+        }
+        var exit = stopForExit > 0
+          && ExitBeyondProtectiveStop(plan, state, liveExitForPromote)
+            ? stopForExit
+            : liveExitForPromote;
+        reasons[i] = (item.Leg, PositionCloseReason.StopLossOrTakeProfit, exit);
+        var legIdx = legs.FindIndex(leg => leg.LegId == item.Leg.LegId);
+        if (legIdx >= 0)
+        {
+          legs[legIdx] = legs[legIdx] with
+          {
+            LastError = PositionCloseReason.StopLossOrTakeProfit.ToString(),
+          };
+        }
+      }
+    }
+
+    var anyUnknown = reasons.Any(item => item.Reason == PositionCloseReason.Unknown);
+    var allHaveExitPrice = reasons.All(item => item.ExitPrice is not null);
+    var totalTracked = legs.Count(leg => leg.BrokerPositionId is not null);
+    var closedCount = reasons.Count;
     var allMissingAreSl = reasons.All(
       item => item.Reason == PositionCloseReason.StopLossOrTakeProfit
     );
     var allManual = reasons.All(
       item => item.Reason == PositionCloseReason.ManualOrExternalOrder
     );
-    var anyUnknown = reasons.Any(item => item.Reason == PositionCloseReason.Unknown);
-    var allHaveExitPrice = reasons.All(item => item.ExitPrice is not null);
-    var totalTracked = legs.Count(leg => leg.BrokerPositionId is not null);
-    var closedCount = reasons.Count;
-    var previousGroupStage = state.GroupStage;
 
     if (anyUnknown && !allHaveExitPrice)
     {
@@ -3006,18 +3078,29 @@ public sealed class TradePlanRuntime(
       // the live executable quote instead of leaving recovery_required behind.
       if (stillOpen == 0)
       {
-        var liveExit = ExecutableQuote(plan, quote);
+        var liveExit = liveExitHint ?? ExecutableQuote(plan, quote);
         if (liveExit is decimal exit)
         {
-          var fallbackIsStop = LooksLikeProtectiveStopHit(plan, state, exit);
+          var fallbackIsStop = LooksLikeStopOut(plan, state, exit);
           var fallbackReason = fallbackIsStop
             ? PositionCloseReason.StopLossOrTakeProfit
             : PositionCloseReason.ManualOrExternalOrder;
+          var stopExit =
+            state.CurrentStop != 0 ? state.CurrentStop
+            : state.GroupAbsoluteStop ?? plan.Stop.Price;
+          // Past-stop wick → book the protective stop (not the sweep). Near
+          // stop → keep the live quote as the best available fill estimate.
+          var bookedExit =
+            fallbackIsStop
+            && ExitBeyondProtectiveStop(plan, state, exit)
+            && stopExit > 0
+              ? stopExit
+              : exit;
           var patched = reasons
             .Select(item => (
               item.Leg,
               fallbackReason,
-              (decimal?)exit
+              (decimal?)bookedExit
             ))
             .ToList();
           return await FinalizeBrokerAbsentCloseAsync(
@@ -3043,34 +3126,72 @@ public sealed class TradePlanRuntime(
           );
         }
       }
-      var next = AggregateState(
-        state with
+      else
+      {
+        // Partial unknown with remaining open legs: do not raise recovery —
+        // that freezes IsManagingStage and strands L2/L3. Treat the vanished
+        // leg as manual/external and keep managing what is still open.
+        var partialExit = liveExitHint;
+        for (var i = 0; i < reasons.Count; i++)
         {
-          Legs = legs,
-          GroupStage = TradePlanGroupStages.RecoveryRequired,
-          TerminalReason = "unknown_leg_close",
+          var item = reasons[i];
+          if (item.Reason != PositionCloseReason.Unknown)
+          {
+            continue;
+          }
+          reasons[i] = (
+            item.Leg,
+            PositionCloseReason.ManualOrExternalOrder,
+            item.ExitPrice ?? partialExit
+          );
+          var legIdx = legs.FindIndex(leg => leg.LegId == item.Leg.LegId);
+          if (legIdx >= 0)
+          {
+            legs[legIdx] = legs[legIdx] with
+            {
+              LastError = PositionCloseReason.ManualOrExternalOrder.ToString(),
+            };
+          }
         }
-      );
-      await PersistStateAsync(next, cancellationToken);
-      var unknownBits = reasons
-        .Where(r => r.Reason == PositionCloseReason.Unknown)
-        .Select(r =>
-          r.ExitPrice is decimal exit
-            ? $"{r.Leg.LegId}@{FormatEventPrice(exit, symbol)}"
-            : r.Leg.LegId
+        anyUnknown = false;
+        allHaveExitPrice = reasons.All(item => item.ExitPrice is not null);
+        allManual = reasons.All(
+          item => item.Reason == PositionCloseReason.ManualOrExternalOrder
         );
-      await PublishEventAsync(
-        "warning",
-        $"GROUP RECOVERY REQUIRED unknown close on "
-        + $"{string.Join(",", unknownBits)}",
-        plan,
-        cancellationToken,
-        positionId: state.PositionId,
-        eventKey: "recovery_required_unknown_close",
-        state: TradePlanGroupStages.RecoveryRequired
-      );
-      log($"v8 recovery_required id={plan.PlanId} reason=unknown_leg_close");
-      return next;
+        allMissingAreSl = false;
+      }
+
+      if (anyUnknown && !allHaveExitPrice)
+      {
+        var next = AggregateState(
+          state with
+          {
+            Legs = legs,
+            GroupStage = TradePlanGroupStages.RecoveryRequired,
+            TerminalReason = "unknown_leg_close",
+          }
+        );
+        await PersistStateAsync(next, cancellationToken);
+        var unknownBits = reasons
+          .Where(r => r.Reason == PositionCloseReason.Unknown)
+          .Select(r =>
+            r.ExitPrice is decimal exit
+              ? $"{r.Leg.LegId}@{FormatEventPrice(exit, symbol)}"
+              : r.Leg.LegId
+          );
+        await PublishEventAsync(
+          "warning",
+          $"GROUP RECOVERY REQUIRED unknown close on "
+          + $"{string.Join(",", unknownBits)}",
+          plan,
+          cancellationToken,
+          positionId: state.PositionId,
+          eventKey: "recovery_required_unknown_close",
+          state: TradePlanGroupStages.RecoveryRequired
+        );
+        log($"v8 recovery_required id={plan.PlanId} reason=unknown_leg_close");
+        return next;
+      }
     }
 
     if (allMissingAreSl && stillOpen > 0)

@@ -12,6 +12,15 @@ dated section after deployment.
 
 ## Unreleased
 
+### Fixed
+- V8 ``market_with_limit_scale`` no longer raises ``GROUP RECOVERY REQUIRED
+  unknown close on L1`` when L1 hits SL, the deal-list lookup returns
+  Unknown, and L2 is still open. Live quote on/past the protective stop
+  promotes the vanished leg to SL (booking the stop, not the wick) and keeps
+  managing remaining legs. Ambiguous partial unknowns finalize as
+  manual/external instead of freezing ``IsManagingStage``. Dig 2026-08-26
+  HFS Range Sweep ``v8:a80bf164…``.
+
 ### Added
 - MAD-1 continuous A/M/D feature scores and observe-only ``would_gate`` previews
   on ``mad:phase:*`` and ``scalp:last_math_shadow:*`` (``features``, ``would_gate``,
