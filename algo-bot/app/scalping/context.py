@@ -117,23 +117,6 @@ _HFS_ARCHETYPES: tuple[str, ...] = (
   ARCHETYPE_MOMENTUM_CHASE,
 )
 
-# Impulse/Momentum stay killzone-only. Asia and post-overlap NY still print
-# usable range/breakout after the 2026-08 Asia Impulse bleed and the NY
-# afternoon sterilizer (empty permits when hour ≥ ny_start + ny_window).
-_KILLZONE_ONLY_ARCHETYPES = frozenset({
-  ARCHETYPE_IMPULSE_PULLBACK,
-  ARCHETYPE_MOMENTUM_CHASE,
-})
-
-
-def _structural_hfs_archetypes(enabled: frozenset[str]) -> tuple[str, ...]:
-  """Range/breakout only — permitted outside killzone when HFS require is on."""
-  return tuple(
-    item for item in _HFS_ARCHETYPES
-    if item in enabled and item not in _KILLZONE_ONLY_ARCHETYPES
-  )
-
-
 def permitted_archetypes_for_session(
   session: str,
   *,
@@ -141,39 +124,18 @@ def permitted_archetypes_for_session(
   hour: int | None = None,
   cfg: Any | None = None,
 ) -> tuple[str, ...]:
-  """Permit HFS archetypes for Asia + killzones when technique pack enforces.
+  """Return enabled HFS archetypes — structure/technique decide, not the clock.
 
-  Owner 2026-08-10: dead-hour Impulse churn ≈ −498 pips → killzone gate.
-  Owner 2026-08-26: Asia still prints usable XAU range/breakout; Impulse and
-  Momentum Chase are London/NY (killzone) only even when archetype flags are
-  on. Rollover stays empty regardless of enforce.
-  Owner 2026-08-26: post-overlap ``new_york`` outside the NY killzone window
-  must keep range/breakout (same carve-out as Asia), not ``()``.
+  Owner 2026-08-26: scalp is valid in any session/timezone. Weak volume or
+  momentum hours must be rejected by analysis (pattern quality, displacement,
+  macro fight, etc.), not by emptying ``permitted_archetypes``. Session and
+  hour args are retained for call-site compatibility / telemetry only.
+
+  Optional publish/activation killzone remains behind
+  ``execution.technique.hfs_require_killzone`` (prod default off).
   """
-  if session == "rollover":
-    return ()
-  from app.autotrade.killzone import classify_killzone, technique_enforce
-
-  tech = getattr(getattr(cfg, "execution", None), "technique", None)
-  require_kz = True if tech is None else bool(
-    getattr(tech, "hfs_require_killzone", True),
-  )
+  del session, ts, hour  # clock is not a discovery permit gate
   enabled = _enabled_hfs_archetypes(cfg)
-  if session == "asia":
-    return _structural_hfs_archetypes(enabled)
-  if technique_enforce(cfg) and require_kz:
-    if ts is None and hour is None:
-      # Legacy callers without a clock: named London/overlap are optimistic
-      # (full set). ``new_york`` without hour → structural only. Other
-      # labels fail closed.
-      if session in {"london", "london_ny_overlap"}:
-        pass
-      elif session == "new_york":
-        return _structural_hfs_archetypes(enabled)
-      else:
-        return ()
-    elif not classify_killzone(ts=ts, hour=hour, cfg=cfg).allowed:
-      return _structural_hfs_archetypes(enabled)
   return tuple(item for item in _HFS_ARCHETYPES if item in enabled)
 
 

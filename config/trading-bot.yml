@@ -106,7 +106,9 @@ execution:
     london_window_hours: 3
     ny_window_hours: 3
     reaction_require_killzone: false
-    hfs_require_killzone: true
+    # Scalp: structure + technique decide; do not sterilize by UTC killzone.
+    # Weak volume/momentum hours are rejected by analysis, not the clock.
+    hfs_require_killzone: false
     require_sweep_body: false
     strict_premium_discount: true
   activation:

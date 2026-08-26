@@ -227,7 +227,11 @@ class ExecutionTechniqueConfig(FrozenConfigModel):
       runtime_reload=ReloadPolicy.RESTART,
       unit=ConfigUnit.BOOLEAN,
       risk=RiskClassification.EXECUTION_SAFETY,
-      description='Permit HFS archetypes only inside killzone when enforce.',
+      description=(
+        'When true with enforce, block HFS publish/activation outside killzone. '
+        'Prod trading-bot.yml defaults this off; discovery permits are '
+        'structure/technique-driven regardless.'
+      ),
       default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, True),),
       validation_summary='Pydantic required/type coercion only',
     )

@@ -677,17 +677,17 @@ async def _prepare_activation(
     strategy_mode=str(getattr(match, "strategy_mode", "") or "") or None,
   )
   if candidate_is_scalp:
-    require_kz = True if tech is None else bool(
-      getattr(tech, "hfs_require_killzone", True),
+    # Optional clock sterilizer (prod off). Structure/technique decide entries.
+    require_kz = False if tech is None else bool(
+      getattr(tech, "hfs_require_killzone", False),
     )
-    # Owner 2026-08-26: Asia session allowed for HFS/scalp even with killzone on.
     from app.scalping.context import classify_session
 
     hfs_session = classify_session(int(now), inst)
     kz = evaluate_killzone_gate(
       ts=now,
       cfg=inst,
-      require=require_kz and enforce_pack and hfs_session != "asia",
+      require=require_kz and enforce_pack,
     )
     if not kz.allowed:
       log_at_most(
