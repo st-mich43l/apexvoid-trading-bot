@@ -35,7 +35,7 @@ log = logging.getLogger(__name__)
 
 
 def _strategy_name(archetype: str) -> str:
-  return STRATEGY_DISPLAY.get(archetype, f"HFS {archetype}")
+  return STRATEGY_DISPLAY.get(archetype, f"{archetype.replace('_', ' ').title()} Scalp")
 
 
 def _structural_kind(opportunity: ScalpOpportunity) -> str:
@@ -128,8 +128,8 @@ def build_hfs_strategy_match(
     version=EXECUTION_ELIGIBILITY_VERSION,
     allowed=True,
     state=STATIC_ELIGIBLE,
-    reason_code="hfs_scalp_eligible",
-    message="HFS scalp opportunity is executable by construction",
+    reason_code="scalp_m1_eligible",
+    message="M1 scalp opportunity is executable by construction",
     hard_block=False,
     direction=opportunity.direction.upper(),
     entry_low=float(opportunity.zone_low),
@@ -146,7 +146,7 @@ def build_hfs_strategy_match(
     issued_at=now,
     expires_at=expires,
     strategy=strategy,
-    strategy_mode="hfs_scalp",
+    strategy_mode="scalp_m1",
     direction=opportunity.direction.upper(),
     key_level=float(opportunity.key_level),
     entry_low=float(opportunity.zone_low),
@@ -154,15 +154,16 @@ def build_hfs_strategy_match(
     current_price=mid,
     confluence=3,
     execution_eligibility=eligibility,
-    reasons=tuple(opportunity.reasons) or ("hfs",),
+    reasons=tuple(opportunity.reasons) or ("scalp_m1",),
     atr=float(context.atr or 1.0),
     structure_swing=float(structure_swing),
     targets_pips=targets_pips,
-    # Fitted HFS room unlocks opposing-structure bypass (native scalp room).
+    # Fitted scalp room unlocks opposing-structure bypass (native scalp room).
     full_take_profit_pips=target_pips,
     absolute_target_price=float(opportunity.expected_target_price),
     tier="A",
-    family="hfs",
+    family="scalp",
+    # Keep structural_source=hfs so open-plan thesis ids stay compatible.
     structural_source="hfs",
     structural_zone_id=structural_id,
     structural_zone_low=float(opportunity.zone_low),

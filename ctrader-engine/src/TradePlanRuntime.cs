@@ -643,13 +643,18 @@ public sealed class TradePlanRuntime(
     StringComparer.OrdinalIgnoreCase
   )
   {
-    "hfs", "range", "range_reversion",
+    "scalp", "hfs", "range", "range_reversion",
   };
 
   private static readonly HashSet<string> ScalpStrategies = new(
     StringComparer.OrdinalIgnoreCase
   )
   {
+    "Range Sweep Scalp",
+    "Impulse Pullback Scalp",
+    "Breakout Retest Scalp",
+    "Momentum Chase Scalp",
+    // Legacy HFS display labels (open plans / historical events)
     "HFS Range Sweep",
     "HFS Impulse Pullback",
     "HFS Breakout Retest",

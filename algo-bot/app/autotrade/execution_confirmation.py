@@ -58,9 +58,14 @@ _CONTINUATION_STRATEGIES = frozenset({
   "Breakout Continuation",
 })
 _HFS_STRATEGIES = frozenset({
+  "Range Sweep Scalp",
+  "Impulse Pullback Scalp",
+  "Breakout Retest Scalp",
+  "Momentum Chase Scalp",
   "HFS Range Sweep",
   "HFS Impulse Pullback",
   "HFS Breakout Retest",
+  "HFS Momentum Chase",
 })
 _HFS_TRIGGERS = frozenset({
   "sweep_reclaim",
@@ -120,8 +125,8 @@ def _is_hfs_match(match: Any) -> bool:
   mode = str(getattr(match, "strategy_mode", "") or "").casefold()
   source = str(getattr(match, "structural_source", "") or "").casefold()
   return (
-    family == "hfs"
-    or mode == "hfs_scalp"
+    family in {"hfs", "scalp"}
+    or mode in {"hfs_scalp", "scalp_m1"}
     or source == "hfs"
     or strategy in _HFS_STRATEGIES
     or strategy.startswith("HFS ")

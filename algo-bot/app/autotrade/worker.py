@@ -2790,9 +2790,9 @@ def _trend_group_id(
 def _strategy_mode_enabled(match: StrategyMatch) -> bool:
   value = match.strategy.casefold()
   family = (match.family or "").casefold()
-  if family == "hfs" or match.strategy_mode == "hfs_scalp" or (
-    match.structural_source or ""
-  ).casefold() == "hfs":
+  if family in {"hfs", "scalp"} or match.strategy_mode in {
+    "hfs_scalp", "scalp_m1",
+  } or (match.structural_source or "").casefold() == "hfs":
     hfs = getattr(runtime_config.strategies, "high_frequency_scalp", None)
     mode = str(getattr(hfs, "mode", "off") or "off").casefold()
     return mode == "live"
