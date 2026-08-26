@@ -315,43 +315,27 @@ def resolve_execution_route_plan(
       (side == "SELL" and geometry == "below")
       or (side == "BUY" and geometry == "above")
     )
-    if chase_away:
-      return ExecutionRoutePlan(
-        ROUTE_MARKET,
-        _round_price(quote, digits),
-        (),
-        geometry,
-        "scalp chase: full market (micro-grid would rest into abandoned zone)",
-        True,
-        immediate_market=True,
+    # Scalp + technique (FVG/OB/IFVG/…): single-leg market only. Multi-leg
+    # scale-in caused false GROUP RECOVERY REQUIRED on demo when L1 SL'd
+    # and deal lookup missed (2026-08-26 v8:a80bf164…). Full size on one fill.
+    reason = (
+      "scalp chase: full market (micro-grid would rest into abandoned zone)"
+      if chase_away
+      else (
+        "scalp: single-leg market (no micro-grid)"
+        if is_scalp_strategy(str(strategy or ""), family=strategy_family)
+        else "technique: single-leg market (no micro-grid)"
       )
-    grid = scalp_micro_grid_legs(
-      side=side,
-      low=low,
-      high=high,
-      quote=quote,
-      digits=digits,
-      clips=entry_clips,
     )
-    if len(grid) >= 2:
-      l1 = grid[0]
-      grid_ratios = (
-        leg_ratios if len(grid) == 2 else _equal_clip_ratios(len(grid))
-      )
-      routing_reason = (
-        "two-clip grid: shallow/deep volume split"
-        if len(grid) == 2
-        else "scalp micro-grid: equal clips into the structural zone"
-      )
-      return ExecutionRoutePlan(
-        ROUTE_MARKET_WITH_LIMIT_SCALE,
-        l1,
-        grid,
-        geometry,
-        routing_reason,
-        True,
-        planned_leg_volume_ratios=grid_ratios,
-      )
+    return ExecutionRoutePlan(
+      ROUTE_MARKET,
+      _round_price(quote, digits),
+      (),
+      geometry,
+      reason,
+      True,
+      immediate_market=True,
+    )
 
   if preference == "market":
     # In-zone reaction: L1 market + deeper L2 limit (not a resting ladder).

@@ -12,6 +12,15 @@ dated section after deployment.
 
 ## Unreleased
 
+### Fixed
+- V8 ``market_with_limit_scale`` no longer raises ``GROUP RECOVERY REQUIRED
+  unknown close on L1`` when L1 hits SL, the deal-list lookup returns
+  Unknown, and L2 is still open. Live quote on/past the protective stop
+  promotes the vanished leg to SL (booking the stop, not the wick) and keeps
+  managing remaining legs. Ambiguous partial unknowns finalize as
+  manual/external instead of freezing ``IsManagingStage``. Dig 2026-08-26
+  HFS Range Sweep ``v8:a80bf164…``.
+
 ### Added
 - MAD-1 continuous A/M/D feature scores and observe-only ``would_gate`` previews
   on ``mad:phase:*`` and ``scalp:last_math_shadow:*`` (``features``, ``would_gate``,
@@ -24,7 +33,12 @@ dated section after deployment.
   range scalping on accumulation and impulse families on expand/manip.
   No hard allow/block change. See ``docs/scalping/MAD.md``.
 
-### Changed
+### Fixed
+- Allowlisted ``test_hfs_scalp_publishes_inside_opposing_structure`` fixture:
+  structure swing / wick now fit the HFS room-synced stop envelope so CI
+  no longer fails every PR on ``stop_exceeds_envelope_*`` (master was already
+  red). Test intent unchanged — opposing HTF bypass only.
+
 - HFS Impulse Pullback and Momentum Chase enabled for **London/NY killzones**.
   Asia still gets Range Sweep / Breakout Retest only (code excludes Impulse/
   Momentum from the Asia permit list).
