@@ -93,22 +93,30 @@ _ORIGINAL_HANDLE_PIPS = _fallback._handle_pips
 _ORIGINAL_TODAY_STR = _parsing._today_str
 
 # Include order is load-bearing: command routers before generic catch-alls.
-dp.include_router(_callbacks.router)
-dp.include_router(_dm.router)
-dp.include_router(_channel.router)
-dp.include_router(_fallback.router)
+_INCLUDED_ROUTERS = (
+  _callbacks.router,
+  _dm.router,
+  _channel.router,
+  _fallback.router,
+)
+for _router in _INCLUDED_ROUTERS:
+  dp.include_router(_router)
 scanner_dp.include_router(_scanner_dm.router)
 
 
-def _mirror_router_handlers_for_legacy_observers() -> None:
-  """Keep old tests/inspection paths that read dp.observers directly working."""
-  for router in (_callbacks.router, _dm.router, _channel.router, _fallback.router):
-    for update_name, observer in router.observers.items():
-      if observer.handlers:
-        dp.observers[update_name].handlers.extend(observer.handlers)
+def registered_handlers(update_name: str) -> list:
+  """Handlers in include order for tests/inspection.
 
-
-_mirror_router_handlers_for_legacy_observers()
+  Must NOT copy these onto ``dp.observers`` — ``include_router`` already
+  dispatches into nested routers. Live 2026-08-26: mirroring onto the root
+  dispatcher caused every command (e.g. /trade_modify) to run twice.
+  """
+  out: list = []
+  for router in _INCLUDED_ROUTERS:
+    observer = router.observers[update_name]
+    if observer.handlers:
+      out.extend(observer.handlers)
+  return out
 
 
 def _sync_legacy_patches() -> None:
