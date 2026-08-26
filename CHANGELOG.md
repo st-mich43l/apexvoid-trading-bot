@@ -13,6 +13,9 @@ dated section after deployment.
 ## Unreleased
 
 ### Changed
+- HFS Impulse Pullback and Momentum Chase enabled for **London/NY killzones**.
+  Asia still gets Range Sweep / Breakout Retest only (code excludes Impulse/
+  Momentum from the Asia permit list).
 - HFS math shadow records in **live** observe-only (Redis ``scalp:last_math_shadow:*``
   + per-opp ``measured.math_liquidity_sweep``). Does not change allow/block;
   ``ControlledLivePolicy.enabled`` stays false so ``would_execute`` remains false.

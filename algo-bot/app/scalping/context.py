@@ -117,6 +117,13 @@ _HFS_ARCHETYPES: tuple[str, ...] = (
   ARCHETYPE_MOMENTUM_CHASE,
 )
 
+# Asia prints usable range/breakout edges; Impulse/Momentum stay London/NY-only
+# after the 2026-08 Asia Impulse bleed and momentum quality dig.
+_ASIA_EXCLUDED_ARCHETYPES = frozenset({
+  ARCHETYPE_IMPULSE_PULLBACK,
+  ARCHETYPE_MOMENTUM_CHASE,
+})
+
 
 def permitted_archetypes_for_session(
   session: str,
@@ -128,9 +135,9 @@ def permitted_archetypes_for_session(
   """Permit HFS archetypes for Asia + killzones when technique pack enforces.
 
   Owner 2026-08-10: dead-hour Impulse churn ≈ −498 pips → killzone gate.
-  Owner 2026-08-26: Asia still prints usable XAU momentum / range edges;
-  permit enabled archetypes for the Asia session (Impulse/Momentum stay off
-  via archetype flags). Rollover stays empty regardless of enforce.
+  Owner 2026-08-26: Asia still prints usable XAU range/breakout; Impulse and
+  Momentum Chase are London/NY (killzone) only even when archetype flags are
+  on. Rollover stays empty regardless of enforce.
   """
   if session == "rollover":
     return ()
@@ -142,7 +149,10 @@ def permitted_archetypes_for_session(
   )
   enabled = _enabled_hfs_archetypes(cfg)
   if session == "asia":
-    return tuple(item for item in _HFS_ARCHETYPES if item in enabled)
+    return tuple(
+      item for item in _HFS_ARCHETYPES
+      if item in enabled and item not in _ASIA_EXCLUDED_ARCHETYPES
+    )
   if technique_enforce(cfg) and require_kz:
     if ts is None and hour is None:
       # Legacy callers without a clock: named London/overlap/Asia are
