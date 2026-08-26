@@ -173,7 +173,7 @@ def _enabled_hfs_archetypes(cfg: Any | None) -> frozenset[str]:
   allowed: list[str] = []
   if bool(getattr(arch, "range_sweep_enabled", True)):
     allowed.append(ARCHETYPE_RANGE_SWEEP)
-  if bool(getattr(arch, "impulse_pullback_enabled", False)):
+  if bool(getattr(arch, "impulse_pullback_enabled", True)):
     allowed.append(ARCHETYPE_IMPULSE_PULLBACK)
   if bool(getattr(arch, "breakout_retest_enabled", True)):
     allowed.append(ARCHETYPE_BREAKOUT_RETEST)

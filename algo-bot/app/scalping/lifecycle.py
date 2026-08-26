@@ -103,3 +103,40 @@ async def load_lifecycle(
   if raw is None:
     return None
   return ScalpLifecycleRecord.from_json(raw)
+
+
+# Armed/discovered without fill must not linger and confuse ops / caps.
+_STALE_ARMED_STATES = frozenset({DISCOVERED, ARMED})
+_DEFAULT_STALE_ARMED_SEC = 15 * 60
+
+
+async def prune_stale_active(
+  client: Any,
+  symbol: str,
+  *,
+  now: int,
+  max_age_sec: int = _DEFAULT_STALE_ARMED_SEC,
+) -> int:
+  """Expire stale armed/discovered entries and drop them from scalp:active."""
+  raw_ids = await client.smembers(active_key(symbol))
+  if not raw_ids:
+    return 0
+  pruned = 0
+  for token in raw_ids:
+    oid = token.decode() if isinstance(token, (bytes, bytearray)) else str(token)
+    record = await load_lifecycle(client, symbol, oid)
+    if record is None:
+      await client.srem(active_key(symbol), oid)
+      pruned += 1
+      continue
+    if record.state not in _STALE_ARMED_STATES:
+      continue
+    age = int(now) - int(record.updated_at or 0)
+    if age < int(max_age_sec):
+      continue
+    expired = transition(
+      record, EXPIRED, reason="stale_armed_expired", now=int(now),
+    )
+    await save_lifecycle(client, symbol, expired)
+    pruned += 1
+  return pruned

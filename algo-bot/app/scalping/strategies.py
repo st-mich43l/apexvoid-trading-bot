@@ -355,34 +355,8 @@ def discover_impulse_pullback(
       continue
     if ev.get("rejected"):
       continue
-    if _technique_require_sweep_body(cfg):
-      edge = (
-        float(context.active_range_low)
-        if direction == "BUY"
-        else float(context.active_range_high)
-      )
-      sweep = detect_sweep_reclaim(
-        m1_df,
-        direction=direction,
-        edge_price=edge,
-        tolerance=buffer,
-        lookback_bars=max(
-          1,
-          int(getattr(getattr(_hfs_cfg(cfg), "activation", None), "trigger_maximum_age_bars", 2) or 2),
-        ),
-      )
-      if sweep is None:
-        # Diagnostic (2026-08-11): execution.technique.require_sweep_body
-        # silently drops an otherwise-matched impulse_pullback candidate
-        # with zero telemetry - same visibility gap as detectors._pd_gate.
-        # Only logs when everything else (ev matched, not rejected) already
-        # passed and this specific check is what killed it.
-        log.info(
-          "sweep gate rejection symbol=%s archetype=impulse_pullback "
-          "direction=%s",
-          context.symbol, direction,
-        )
-        continue
+    # Continuation must not require sweep-reclaim (that gate belongs to
+    # range_sweep). Owner 2026-08-26: require_sweep_body was killing L1.
     if _fights_fresh_macro_momentum(
       m1_df, direction=direction, atr=context.atr, cfg=cfg,
     ):
@@ -597,14 +571,11 @@ def discover_momentum_chase(
   sell_min = _parse_float(loc, "momentum_sell_minimum_position", 0.15)
   min_net = _parse_float(getattr(_hfs_cfg(cfg), "target", None), "minimum_net_target_pips", 15.0)
   mom_cfg = getattr(_hfs_cfg(cfg), "momentum", None)
-  # Owner-tuned 2026-08-11: production showed a real, otherwise-qualifying
-  # thrust rejected at displacement_atr=1.056 against this 1.2 floor (88%
-  # of the way there) - confirmed via the momentum-ignition-rejection
-  # diagnostic. min_directional_bars (the larger share of rejections) left
-  # untouched by owner choice - only this threshold moves for now.
+  # Owner 2026-08-26 redefine: sharp London legs die on 4 same-direction
+  # bars — default 2 so real dumps can qualify without waiting for a pause.
   min_displacement_atr = _parse_float(mom_cfg, "min_displacement_atr", 1.0)
   lookback_bars = int(_parse_float(mom_cfg, "lookback_bars", 5.0))
-  min_directional_bars = int(_parse_float(mom_cfg, "min_directional_bars", 4.0))
+  min_directional_bars = int(_parse_float(mom_cfg, "min_directional_bars", 2.0))
   buffer = max(pip_size * 2, context.atr * 0.15)
   out: list[ScalpOpportunity] = []
   pos = context.dealing_range_position
@@ -624,11 +595,6 @@ def discover_momentum_chase(
     )
     if ev is None or ev.get("rejected"):
       if isinstance(ev, dict):
-        # Diagnostic (2026-08-11): owner report - momentum_chase rarely
-        # fires even on visibly impulsive candles. detect_momentum_ignition
-        # now carries a specific reason on every rejection path instead of
-        # a bare None; log it here so the real distribution across its
-        # four independent, all-mandatory conditions is visible.
         log.info(
           "momentum ignition rejected symbol=%s direction=%s reason=%s "
           "measured=%s",
@@ -636,28 +602,7 @@ def discover_momentum_chase(
           {k: v for k, v in ev.items() if k not in ("rejected", "reason")},
         )
       continue
-    if _technique_require_sweep_body(cfg):
-      edge = (
-        float(context.active_range_low)
-        if direction == "BUY"
-        else float(context.active_range_high)
-      )
-      sweep = detect_sweep_reclaim(
-        m1_df,
-        direction=direction,
-        edge_price=edge,
-        tolerance=buffer,
-        lookback_bars=max(1, lookback_bars),
-      )
-      if sweep is None:
-        # Diagnostic (2026-08-11): see the matching note in
-        # discover_impulse_pullback - same silent gate, same fix.
-        log.info(
-          "sweep gate rejection symbol=%s archetype=momentum_chase "
-          "direction=%s",
-          context.symbol, direction,
-        )
-        continue
+    # Continuation — never require sweep-reclaim (range_sweep owns that).
     entry = float(ev["close"])
     if direction == "BUY":
       stop_price = float(ev["extreme"]) - buffer

@@ -1152,19 +1152,17 @@ def _finish(
   if include_score_reasons:
     full_reasons = _merge_score_reasons(full_reasons, zone)
   confluence = _confluence_from_zone(zone, factors, ctx.settings)
+  # Owner: MAD applies only as accumulation soft favor on Range Edge Scalp.
   mad_family = _mad_family_for_setup(setup, mode)
-  from app.analysis.mad_phase import mad_soft_bonus
+  if mad_family == "range_scalp":
+    from app.analysis.mad_phase import mad_soft_bonus
 
-  mad_bonus = mad_soft_bonus(phase=ctx.mad_phase, family=mad_family)
-  if mad_bonus >= 0.1:
-    confluence += 1
-    tag = f"mad_{ctx.mad_phase}"
-    if tag not in full_reasons:
-      full_reasons = [*full_reasons, tag]
-  elif mad_bonus > 0 and ctx.mad_phase:
-    tag = f"mad_{ctx.mad_phase}"
-    if tag not in full_reasons:
-      full_reasons = [*full_reasons, tag]
+    mad_bonus = mad_soft_bonus(phase=ctx.mad_phase, family="range_scalp")
+    if mad_bonus >= 0.1:
+      confluence += 1
+      tag = f"mad_{ctx.mad_phase}"
+      if tag not in full_reasons:
+        full_reasons = [*full_reasons, tag]
   if confluence < ctx.settings.confluence_floor:
     return None
   math_pd = None

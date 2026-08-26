@@ -83,7 +83,6 @@ def evaluate_math_shadow(
   target_min_price: float,
   utc_hour: int | None = None,
   policy: ControlledLivePolicy | None = None,
-  mad_phase: str | None = None,
 ) -> ShadowEvaluation:
   """Run all three math strategies; rank survivors; never send broker orders."""
   results: list[MathGateResult] = []
@@ -180,13 +179,7 @@ def evaluate_math_shadow(
     "policy": asdict(live_policy),
     "survivor_count": len(survivors),
   }
-  if mad_phase:
-    from app.analysis.mad_phase import mad_hard_gate
-
-    measured["mad_gates"] = {
-      item.strategy: mad_hard_gate(phase=mad_phase, strategy=item.strategy).to_dict()
-      for item in results
-    }
+  # MAD gates are not stamped on HFS shadow — MAD does not drive scalping.
 
   return ShadowEvaluation(
     mode=mode,

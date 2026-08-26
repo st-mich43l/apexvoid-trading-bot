@@ -4684,10 +4684,10 @@
     },
     {
       "canonical_env": "HFS_IMPULSE_PULLBACK_ENABLED",
-      "default": false,
+      "default": true,
       "deprecated": false,
       "deprecated_aliases": [],
-      "description": "Enable impulse pullback continuation HFS archetype.",
+      "description": "Enable impulse pullback continuation HFS archetype (on by default for L1 continuation).",
       "display_id": "config:strategies.high_frequency_scalp.archetypes.impulse_pullback_enabled",
       "owner": "python",
       "path": "strategies.high_frequency_scalp.archetypes.impulse_pullback_enabled",

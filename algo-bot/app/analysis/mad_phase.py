@@ -120,30 +120,26 @@ def mad_last_key(symbol: str) -> str:
   return f"scalp:last_mad:{str(symbol).upper()}"
 
 
-# Technique / HFS family affinity (soft ranking — not hard gates).
-RANGE_SCALP_PHASES = frozenset({PHASE_ACCUM, PHASE_MANIP})
+# Owner 2026-08-26: MAD must not drive HFS/scalping. Soft affinity is only
+# accumulation → Range Edge Scalp (technique). No manip/expand bonuses, no
+# Impulse/Momentum/Range Sweep/reaction MAD nudges.
+RANGE_EDGE_MAD_FAMILIES = frozenset({
+  "range_scalp",
+  "range_edge",
+  "range_edge_mean_reversion",
+})
+RANGE_SCALP_PHASES = frozenset({PHASE_ACCUM})
 EXPANSION_PHASES = frozenset({PHASE_EXPAND, PHASE_MANIP})
 
 
 def mad_soft_bonus(*, phase: str | None, family: str) -> float:
-  """Small score/confluence nudge. Accumulation favors range scalping."""
+  """Soft confluence nudge — accumulation for Range Edge Scalp only."""
   p = str(phase or "").casefold()
   fam = str(family or "").casefold()
-  if not p or p == PHASE_UNCLEAR:
+  if p != PHASE_ACCUM:
     return 0.0
-  if fam in {"range_scalp", "range_edge", "hfs_range", "range_sweep"}:
-    if p == PHASE_ACCUM:
-      return 0.12
-    if p == PHASE_MANIP:
-      return 0.06
-  if fam in {"impulse", "impulse_pullback", "momentum", "momentum_chase", "trend"}:
-    if p in EXPANSION_PHASES:
-      return 0.10
-  if fam in {"reaction", "supply_demand", "key_level"}:
-    if p == PHASE_MANIP:
-      return 0.08
-    if p == PHASE_ACCUM:
-      return 0.04
+  if fam in RANGE_EDGE_MAD_FAMILIES:
+    return 0.12
   return 0.0
 
 
