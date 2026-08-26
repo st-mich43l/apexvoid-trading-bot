@@ -16,11 +16,14 @@ from app.runtime.price_identity import pip_price_digits
 from app.persistence import redis_state
 from app.scalping.activation import evaluate_scalp_activation
 from app.scalping.context import (
-  build_scalp_context_snapshot,
   is_context_fresh,
   is_hfs_symbol,
   load_current_context,
   save_context,
+)
+from app.scalping.unified_context import (
+  build_scalp_context_and_micro,
+  load_scalp_ohlc_windows,
 )
 from app.scalping.models import (
   ARMED,
@@ -123,25 +126,22 @@ async def _ensure_context(
   ):
     return existing
 
-  m5 = await source.window(symbol, "M5", 120)
-  m15 = await source.window(symbol, "M15", 120)
-  h1 = await source.window(symbol, "H1", 120)
+  windows = await load_scalp_ohlc_windows(
+    source, symbol, m1_bars=1, m5_bars=120, m15_bars=120, h1_bars=120,
+  )
+  m5 = windows["m5"]
   quote = await _load_quote(client, symbol)
-  if quote is None or m5.empty:
+  if quote is None or m5 is None or m5.empty:
     return existing
   bid, ask, _ = quote
   mid = (bid + ask) / 2.0
   pip = _pip_size(symbol, cfg)
-  atr = float(m5["high"].astype(float).tail(14).mean() - m5["low"].astype(float).tail(14).mean())
-  snapshot = await asyncio.to_thread(
-    build_scalp_context_snapshot,
+  snapshot, _micro = await asyncio.to_thread(
+    build_scalp_context_and_micro,
     symbol=symbol,
-    m5=m5,
-    m15=m15,
-    h1=h1,
+    windows=windows,
     price=mid,
     pip_size=pip,
-    atr=atr,
     now=now,
     cfg=cfg,
   )
@@ -388,8 +388,8 @@ async def process_m1_bar(
         strategy=STRATEGY_DISPLAY.get(
           opportunity.archetype, opportunity.archetype,
         ),
-        family="hfs",
-        strategy_mode="hfs_scalp",
+        family="scalp",
+        strategy_mode="scalp_m1",
         archetype=opportunity.archetype,
         once_key=f"discover:{opportunity.opportunity_id}:{bar_ts}",
       )
@@ -473,8 +473,8 @@ async def process_m1_bar(
         strategy=STRATEGY_DISPLAY.get(
           opportunity.archetype, opportunity.archetype,
         ),
-        family="hfs",
-        strategy_mode="hfs_scalp",
+        family="scalp",
+        strategy_mode="scalp_m1",
         archetype=opportunity.archetype,
         once_key=f"activate:{opportunity.opportunity_id}:{bar_ts}",
       )
@@ -551,8 +551,8 @@ async def process_m1_bar(
                 strategy=STRATEGY_DISPLAY.get(
                   opportunity.archetype, opportunity.archetype,
                 ),
-                family="hfs",
-                strategy_mode="hfs_scalp",
+                family="scalp",
+                strategy_mode="scalp_m1",
                 archetype=opportunity.archetype,
                 once_key=f"publish:{opportunity.opportunity_id}",
               )

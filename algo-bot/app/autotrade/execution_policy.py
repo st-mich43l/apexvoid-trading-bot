@@ -395,12 +395,18 @@ _STRATEGY_FAMILY = {
   "One-Sided Range Reaction": FAMILY_RANGE_REVERSION,
   "Fade Scalp": FAMILY_RANGE_REVERSION,
   "Chop Zone Reaction": FAMILY_RANGE_REVERSION,
-  # HFS live publishes through the same V7 plan builder; map to range
-  # reversion so policy/stop planning runs. Native HFS room unlocks
+  # M1 scalp live publishes through the same V7 plan builder; map to range
+  # reversion so policy/stop planning runs. Native scalp room unlocks
   # opposing-structure bypass (strategy_taxonomy).
+  "Range Sweep Scalp": FAMILY_RANGE_REVERSION,
+  "Impulse Pullback Scalp": FAMILY_RANGE_REVERSION,
+  "Breakout Retest Scalp": FAMILY_RANGE_REVERSION,
+  "Momentum Chase Scalp": FAMILY_RANGE_REVERSION,
+  # Legacy HFS display names (open plans / historical events):
   "HFS Range Sweep": FAMILY_RANGE_REVERSION,
   "HFS Impulse Pullback": FAMILY_RANGE_REVERSION,
   "HFS Breakout Retest": FAMILY_RANGE_REVERSION,
+  "HFS Momentum Chase": FAMILY_RANGE_REVERSION,
   "Trend Pullback": FAMILY_TREND_PULLBACK,
   "Break & Retest": FAMILY_BREAKOUT_RETEST,
   "Box Breakout": FAMILY_BREAKOUT_RETEST,

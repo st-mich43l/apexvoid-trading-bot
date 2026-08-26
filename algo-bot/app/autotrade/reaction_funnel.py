@@ -18,7 +18,11 @@ from typing import Any
 
 from app.autotrade.lifecycle import increment_metric
 from app.autotrade.strategy_taxonomy import is_scalp_strategy
-from app.scalping.models import STRATEGY_DISPLAY
+from app.scalping.models import (
+  LEGACY_STRATEGY_DISPLAY,
+  STRATEGY_DISPLAY,
+  canonical_scalp_strategy_name,
+)
 
 log = logging.getLogger(__name__)
 
@@ -41,17 +45,25 @@ _last_funnel_log_at: dict[str, float] = {}
 _STRATEGY_TO_ARCHETYPE = {
   display: archetype for archetype, display in STRATEGY_DISPLAY.items()
 }
+for _legacy, _canonical in LEGACY_STRATEGY_DISPLAY.items():
+  _arch = _STRATEGY_TO_ARCHETYPE.get(_canonical)
+  if _arch is not None:
+    _STRATEGY_TO_ARCHETYPE[_legacy] = _arch
 
 # Legacy / executor aliases seen in auto_trade_fills.setup_type.
 _SETUP_TYPE_ALIASES = {
-  "momentum": "HFS Momentum Chase",
-  "hfs momentum chase": "HFS Momentum Chase",
-  "impulse pullback": "HFS Impulse Pullback",
-  "hfs impulse pullback": "HFS Impulse Pullback",
-  "range sweep": "HFS Range Sweep",
-  "hfs range sweep": "HFS Range Sweep",
-  "breakout retest": "HFS Breakout Retest",
-  "hfs breakout retest": "HFS Breakout Retest",
+  "momentum": "Momentum Chase Scalp",
+  "hfs momentum chase": "Momentum Chase Scalp",
+  "momentum chase scalp": "Momentum Chase Scalp",
+  "impulse pullback": "Impulse Pullback Scalp",
+  "hfs impulse pullback": "Impulse Pullback Scalp",
+  "impulse pullback scalp": "Impulse Pullback Scalp",
+  "range sweep": "Range Sweep Scalp",
+  "hfs range sweep": "Range Sweep Scalp",
+  "range sweep scalp": "Range Sweep Scalp",
+  "breakout retest": "Breakout Retest Scalp",
+  "hfs breakout retest": "Breakout Retest Scalp",
+  "breakout retest scalp": "Breakout Retest Scalp",
   "key-level": "Key Level Reaction",
   "key level": "Key Level Reaction",
   "key level reaction": "Key Level Reaction",
@@ -87,11 +99,15 @@ def normalize_setup_type(raw: str | None) -> str | None:
   # Scale-in tags: "Key Level Reaction · add_momentum"
   base = text.split("·", 1)[0].strip()
   mapped = _SETUP_TYPE_ALIASES.get(base.casefold())
+  if mapped is None and base in LEGACY_STRATEGY_DISPLAY:
+    mapped = LEGACY_STRATEGY_DISPLAY[base]
+  if mapped is None and base.startswith("HFS "):
+    mapped = canonical_scalp_strategy_name(base)
   if mapped is not None:
     if "·" in text:
       return f"{mapped} ·{text.split('·', 1)[1]}"
     return mapped
-  if base in _STRATEGY_TO_ARCHETYPE or base.startswith("HFS "):
+  if base in _STRATEGY_TO_ARCHETYPE:
     return text if "·" in text else base
   return text
 
@@ -100,7 +116,7 @@ def archetype_from_strategy(strategy: str | None) -> str | None:
   if not strategy:
     return None
   normalized = normalize_setup_type(strategy) or str(strategy)
-  base = normalized.split("·", 1)[0].strip()
+  base = canonical_scalp_strategy_name(normalized.split("·", 1)[0].strip())
   return _STRATEGY_TO_ARCHETYPE.get(base)
 
 

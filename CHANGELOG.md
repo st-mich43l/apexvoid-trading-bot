@@ -13,6 +13,12 @@ dated section after deployment.
 ## Unreleased
 
 ### Changed
+- M1 scalp strategies drop the **HFS** display tag (`Range Sweep Scalp`,
+  ``Impulse Pullback Scalp``, ``Breakout Retest Scalp``,
+  ``Momentum Chase Scalp``). Publish uses ``family=scalp`` /
+  ``strategy_mode=scalp_m1``; legacy ``HFS *`` / ``hfs`` / ``hfs_scalp`` still
+  accepted. Shared ``unified_context`` loads M1+M5 windows for the M1 loop.
+  See ``docs/scalping/SCALP_UNIFY_M1_M5.md``.
 - Single redefine of technique + HFS: MAD no longer ranks/gates scalping —
   only ``accum`` soft-favors **Range Edge Scalp**. HFS Impulse enabled by
   default without ``require_sweep_body``; momentum ignition default bars 2;

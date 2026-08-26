@@ -382,9 +382,15 @@ def _valid_match(match: StrategyMatch) -> bool:
     match.full_take_profit_pips is not None
     and match.full_take_profit_pips > 0
     and (
-      match.family == "hfs"
-      or match.strategy_mode == "hfs_scalp"
+      match.family in {"hfs", "scalp"}
+      or match.strategy_mode in {"hfs_scalp", "scalp_m1"}
       or str(match.strategy).startswith("HFS ")
+      or str(match.strategy) in {
+        "Range Sweep Scalp",
+        "Impulse Pullback Scalp",
+        "Breakout Retest Scalp",
+        "Momentum Chase Scalp",
+      }
     )
   )
   valid_range = (

@@ -52,7 +52,17 @@ RANGE_STRATEGIES = frozenset({
   "Chop Zone Reaction",
 })
 
+# Canonical M1 scalp display names (no "HFS" product tag).
+SCALP_M1_STRATEGIES = frozenset({
+  "Range Sweep Scalp",
+  "Impulse Pullback Scalp",
+  "Breakout Retest Scalp",
+  "Momentum Chase Scalp",
+})
+
+# Legacy publish / open-plan labels — still classified as M1 scalp.
 HFS_STRATEGIES = frozenset({
+  *SCALP_M1_STRATEGIES,
   "HFS Range Sweep",
   "HFS Impulse Pullback",
   "HFS Breakout Retest",
@@ -63,11 +73,16 @@ CANONICAL_FAMILY_REACTION = "reaction"
 CANONICAL_FAMILY_ZONE = "zone"
 CANONICAL_FAMILY_LIQUIDITY = "liquidity"
 CANONICAL_FAMILY_RANGE = "range"
-CANONICAL_FAMILY_HFS = "hfs"
+CANONICAL_FAMILY_SCALP = "scalp"
+CANONICAL_FAMILY_HFS = "hfs"  # legacy alias of scalp
 CANONICAL_FAMILY_UNKNOWN = "unknown"
 
-_SCALP_FAMILIES = frozenset({"hfs", "range", "range_reversion"})
-_SCALP_MODES = frozenset({"hfs_scalp", "range_scalp", "auto_box_scalp"})
+_SCALP_FAMILIES = frozenset({"scalp", "hfs", "range", "range_reversion"})
+_SCALP_MODES = frozenset({
+  "scalp_m1", "hfs_scalp", "range_scalp", "auto_box_scalp",
+})
+_M1_SCALP_MODES = frozenset({"scalp_m1", "hfs_scalp"})
+_M1_SCALP_FAMILIES = frozenset({CANONICAL_FAMILY_SCALP, CANONICAL_FAMILY_HFS})
 
 
 def is_reaction_strategy(name: str) -> bool:
@@ -100,6 +115,7 @@ def is_range_strategy(name: str) -> bool:
 
 
 def is_hfs_strategy(name: str) -> bool:
+  """True for M1 scalp archetypes (canonical + legacy ``HFS *`` labels)."""
   key = str(name or "")
   return key in HFS_STRATEGIES or key.startswith("HFS ")
 
@@ -110,7 +126,7 @@ def is_scalp_strategy(
   family: str | None = None,
   strategy_mode: str | None = None,
 ) -> bool:
-  """Range Box / Range Edge / HFS — own native room, not HTF opposing."""
+  """Range Box / Range Edge / M1 scalp — own native room, not HTF opposing."""
   if is_range_strategy(name) or is_hfs_strategy(name):
     return True
   if str(family or "").casefold() in _SCALP_FAMILIES:
@@ -129,7 +145,7 @@ def bypasses_opposing_structure_gates(
 ) -> bool:
   """Scalp may ignore HTF map opposing when native room owns the trade.
 
-  HFS always bypasses — its episode already sized stop/target; map
+  M1 scalp always bypasses — its episode already sized stop/target; map
   ``actionable_entries`` / HTF zones must not silence the scalp loop.
 
   Range Box / Range Edge still require fitted ``full_take_profit_pips``
@@ -138,9 +154,9 @@ def bypasses_opposing_structure_gates(
   """
   if is_hfs_strategy(name):
     return True
-  if str(strategy_mode or "").casefold() == "hfs_scalp":
+  if str(strategy_mode or "").casefold() in _M1_SCALP_MODES:
     return True
-  if str(family or "").casefold() == CANONICAL_FAMILY_HFS:
+  if str(family or "").casefold() in _M1_SCALP_FAMILIES:
     return True
   if not is_scalp_strategy(
     name, family=family, strategy_mode=strategy_mode,
@@ -174,5 +190,6 @@ def canonical_family(name: str) -> str:
   if key in RANGE_STRATEGIES:
     return CANONICAL_FAMILY_RANGE
   if is_hfs_strategy(key):
-    return CANONICAL_FAMILY_HFS
+    # Prefer ``scalp``; legacy family ``hfs`` remains accepted on open plans.
+    return CANONICAL_FAMILY_SCALP
   return CANONICAL_FAMILY_UNKNOWN

@@ -16,12 +16,36 @@ ARCHETYPE_IMPULSE_PULLBACK = "impulse_pullback"
 ARCHETYPE_BREAKOUT_RETEST = "breakout_retest"
 ARCHETYPE_MOMENTUM_CHASE = "momentum_chase"
 
+# Canonical display names — no "HFS" tag. Legacy "HFS *" still accepted.
 STRATEGY_DISPLAY = {
-  ARCHETYPE_RANGE_SWEEP: "HFS Range Sweep",
-  ARCHETYPE_IMPULSE_PULLBACK: "HFS Impulse Pullback",
-  ARCHETYPE_BREAKOUT_RETEST: "HFS Breakout Retest",
-  ARCHETYPE_MOMENTUM_CHASE: "HFS Momentum Chase",
+  ARCHETYPE_RANGE_SWEEP: "Range Sweep Scalp",
+  ARCHETYPE_IMPULSE_PULLBACK: "Impulse Pullback Scalp",
+  ARCHETYPE_BREAKOUT_RETEST: "Breakout Retest Scalp",
+  ARCHETYPE_MOMENTUM_CHASE: "Momentum Chase Scalp",
 }
+
+LEGACY_STRATEGY_DISPLAY = {
+  "HFS Range Sweep": "Range Sweep Scalp",
+  "HFS Impulse Pullback": "Impulse Pullback Scalp",
+  "HFS Breakout Retest": "Breakout Retest Scalp",
+  "HFS Momentum Chase": "Momentum Chase Scalp",
+}
+
+
+def canonical_scalp_strategy_name(name: str) -> str:
+  """Map legacy HFS labels onto canonical scalp display names."""
+  key = str(name or "").strip()
+  if key in LEGACY_STRATEGY_DISPLAY:
+    return LEGACY_STRATEGY_DISPLAY[key]
+  if key.startswith("HFS "):
+    rest = key[4:].strip()
+    for arch, label in STRATEGY_DISPLAY.items():
+      if rest.casefold() == arch.replace("_", " ").casefold():
+        return label
+      if rest.casefold() == label.casefold().removesuffix(" scalp"):
+        return label
+    return rest
+  return key
 
 DISCOVERED = "discovered"
 ARMED = "armed"
