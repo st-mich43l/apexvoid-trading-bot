@@ -10,6 +10,8 @@ from datetime import datetime, timedelta, timezone
 from html import escape
 from typing import Any, Awaitable, Callable, Iterable
 
+import pandas as pd
+
 from app.persistence import redis_state
 from app.core.config import runtime_config
 from app.core import instrument_geometry
@@ -2791,6 +2793,51 @@ async def _load_market_context_for_symbol(
     htf_order,
   )
   ctx = _attach_price_context(ctx, spot, trigger, frames[exec_tf])
+  # Shared MAD phase for technique detectors (not HFS-only).
+  try:
+    from app.analysis.mad_phase import refresh_mad_for_symbol
+    from app.scalping.context import classify_session
+
+    m5 = frames.get("M5") or frames[exec_tf]
+    last = m5.iloc[-1]
+    mid = (
+      float(ctx.spot_price)
+      if ctx.spot_price is not None
+      else float(last["close"])
+    )
+    now_ts = int(pd.Timestamp(m5.index[-1]).timestamp())
+    atr_series = ctx.indicators[exec_tf].atr
+    atr_v = (
+      float(atr_series.iloc[-1])
+      if atr_series is not None and len(atr_series)
+      else 0.0
+    )
+    structure = "range"
+    if ctx.regime is not None:
+      structure = str(
+        getattr(ctx.regime, "state", None)
+        or getattr(ctx.regime, "kind", None)
+        or "range"
+      )
+    mad = await refresh_mad_for_symbol(
+      client,
+      symbol=symbol,
+      ohlc=m5,
+      now=now_ts,
+      session=classify_session(now_ts),
+      price=mid,
+      atr=atr_v if atr_v > 0 else float(settings.pip_size) * 50,
+      m5_structure=structure,
+      bar_high=float(last["high"]),
+      bar_low=float(last["low"]),
+      bar_close=float(last["close"]),
+      cfg=runtime_config,
+      pip_size=float(settings.pip_size),
+      source="m5",
+    )
+    ctx = replace(ctx, mad_phase=mad.phase, mad=mad.to_dict())
+  except Exception:
+    log.exception("scanner MAD refresh failed symbol=%s", symbol)
   analysis = getattr(ctx, "analysis", None)
   if analysis is not None and cache_market_analysis:
     price = (
