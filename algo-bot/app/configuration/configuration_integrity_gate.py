@@ -33,13 +33,13 @@ from app.configuration.source_types import ConfigurationSourceBundle
 
 
 BASELINE = {
-  "catalog_entry_count": 532,
-  "configurable_count": 465,
+  "catalog_entry_count": 540,
+  "configurable_count": 473,
   "protocol_constant_count": 10,
   "algorithm_constant_count": 57,
-  "python_projection_count": 483,
+  "python_projection_count": 491,
   "ctrader_only_count": 49,
-  "environment_entry_count": 465,
+  "environment_entry_count": 473,
   "deprecated_alias_count": 21,
   "shared_count": 96,
 }

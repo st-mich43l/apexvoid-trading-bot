@@ -12,6 +12,7 @@ from typing import Any
 
 from app.scalping.math_features import build_feature_vector
 from app.scalping.math_strategies import (
+  evaluate_breakout_retest_continuation,
   evaluate_impulse_pullback_continuation,
   evaluate_liquidity_sweep_reversal,
   evaluate_range_edge_mean_reversion,
@@ -166,7 +167,37 @@ def _math_counterfactual(
     payload["math_model"] = "impulse_pullback_continuation"
     return payload
 
-  if archetype in {ARCHETYPE_BREAKOUT_RETEST, ARCHETYPE_MOMENTUM_CHASE}:
+  if archetype == ARCHETYPE_BREAKOUT_RETEST:
+    measured_box = measured.get("compression_box") or {}
+    evidence = measured.get("breakout_evidence") or {}
+    box_low = _opt_float(measured_box.get("box_low"))
+    box_high = _opt_float(measured_box.get("box_high"))
+    if box_low is None or box_high is None:
+      box_low = range_low
+      box_high = range_high
+    gate = evaluate_breakout_retest_continuation(
+      direction=opportunity.direction,
+      price=float(opportunity.trigger_price),
+      atr=atr,
+      box_low=float(box_low),
+      box_high=float(box_high),
+      level=float(opportunity.key_level),
+      barrier=barrier,
+      spread=spread,
+      slippage=slippage,
+      buffer=buffer,
+      target_min_price=target_min_price,
+      break_displacement=_opt_float(evidence.get("break_displacement")),
+      retest_rejection=bool(evidence.get("retest_rejection", True)),
+      accepted_break=bool(evidence.get("accepted_break", True)),
+      failed_break=str(evidence.get("state") or "") == "failed_break",
+      utc_hour=utc_hour,
+    )
+    payload = gate.to_dict()
+    payload["math_model"] = "breakout_retest_continuation"
+    return payload
+
+  if archetype == ARCHETYPE_MOMENTUM_CHASE:
     return {
       "math_model": None,
       "allowed": None,
@@ -267,6 +298,13 @@ def annotate_opportunity_research(
       measured["math_score_inputs"] = dict(score_inputs)
   elif (
     opportunity.archetype == ARCHETYPE_IMPULSE_PULLBACK
+    and counterfactual.get("allowed") is True
+  ):
+    score_inputs = counterfactual.get("score_inputs")
+    if isinstance(score_inputs, dict) and score_inputs:
+      measured["math_score_inputs"] = dict(score_inputs)
+  elif (
+    opportunity.archetype == ARCHETYPE_BREAKOUT_RETEST
     and counterfactual.get("allowed") is True
   ):
     score_inputs = counterfactual.get("score_inputs")

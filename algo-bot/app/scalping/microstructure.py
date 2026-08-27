@@ -372,6 +372,83 @@ def detect_momentum_ignition(
   }
 
 
+def find_compression_box(
+  df: pd.DataFrame,
+  *,
+  atr: float,
+  min_box_bars: int = 8,
+  max_box_bars: int = 20,
+  box_max_atr: float = 1.5,
+  min_touches_per_side: int = 2,
+  touch_tol_atr: float = 0.20,
+) -> dict[str, Any] | None:
+  """Locate a recent M1 compression window (tight range + multi-touch).
+
+  Used only by Breakout Retest — Range Sweep keeps ``active_range_*``.
+  Prefers the most recent valid window that still leaves at least one bar
+  after the box for a break/retest episode.
+  """
+  if df is None or atr is None or float(atr) <= 0:
+    return None
+  atr_f = float(atr)
+  min_bars = max(3, int(min_box_bars))
+  max_bars = max(min_bars, int(max_box_bars))
+  # Need room after the box for break (+ ideally retest).
+  if len(df) < min_bars + 2:
+    return None
+  tol = max(0.0, float(touch_tol_atr)) * atr_f
+  max_width = max(0.0, float(box_max_atr)) * atr_f
+  min_touches = max(1, int(min_touches_per_side))
+
+  # end = last inclusive index of the box; leave >=1 bar after for break.
+  for end in range(len(df) - 2, min_bars - 2, -1):
+    for width in range(min_bars, min(max_bars, end + 1) + 1):
+      start = end - width + 1
+      if start < 0:
+        continue
+      window = df.iloc[start : end + 1]
+      box_high = float(window["high"].max())
+      box_low = float(window["low"].min())
+      span = box_high - box_low
+      if span <= 0 or span > max_width:
+        continue
+      hi_touches = 0
+      lo_touches = 0
+      for i in range(len(window)):
+        bar = window.iloc[i]
+        if float(bar["high"]) >= box_high - tol:
+          hi_touches += 1
+        if float(bar["low"]) <= box_low + tol:
+          lo_touches += 1
+      if hi_touches < min_touches or lo_touches < min_touches:
+        continue
+      return {
+        "box_low": box_low,
+        "box_high": box_high,
+        "box_bars": int(width),
+        "box_start_index": int(start),
+        "box_end_index": int(end),
+        "compression_atr": span / atr_f,
+        "touch_count": int(hi_touches + lo_touches),
+        "high_touches": int(hi_touches),
+        "low_touches": int(lo_touches),
+      }
+  return None
+
+
+def _breakout_rejection(bar: Any, *, side: str, level: float) -> bool:
+  """Wick/touch through the broken level then close back in trade direction."""
+  if side == "BUY":
+    return float(bar["low"]) <= level and float(bar["close"]) > level
+  return float(bar["high"]) >= level and float(bar["close"]) < level
+
+
+def _breakout_touch(bar: Any, *, side: str, level: float) -> bool:
+  if side == "BUY":
+    return float(bar["low"]) <= level
+  return float(bar["high"]) >= level
+
+
 def detect_breakout_retest(
   df: pd.DataFrame,
   *,
@@ -381,48 +458,34 @@ def detect_breakout_retest(
   min_displacement: float,
   retest_lookback_bars: int = 1,
   break_lookback_bars: int | None = None,
+  require_retest_rejection: bool = True,
 ) -> dict[str, Any] | None:
-  """Require accepted break → return → hold, not wick-only break.
+  """Compression-level break → acceptance → rejection retest → hold.
 
-  2026-08-23 dig: the retest touch was only ever checked on ``df.iloc[-1]``,
-  the single newest bar - a genuine break-then-pullback happening 2-3 bars
-  ago (routine in practice: the pullback touches the level, then price
-  continues away from it for a bar or two before this function next runs)
-  was invisible the moment the touch bar wasn't literally the bar this call
-  happened to run on. Range Sweep's ``detect_sweep_reclaim`` already fixed
-  the identical bug on 2026-08-06 ("discovery matches activation age (slow
-  M5 rebuild must not skip the only reclaim bar forever)") via a
-  ``lookback_bars`` scan; this widens only the "has it touched the level
-  yet" half the same way, reusing the same ``activation.
-  trigger_maximum_age_bars`` default (2) callers already pass Range Sweep,
-  not a new parameter. The reclaim signal itself stays anchored to the
-  current bar exactly as before - only the touch precondition looks back,
-  so a stale reclaim from several bars ago can never fire a fresh entry.
+  States: ``no_box`` | ``wait_break`` | ``wait_retest`` | ``failed_break`` |
+  ``armed`` (pattern payload). See docs/scalping/OWN_BREAKOUT_TECHNIQUE.md.
 
-  2026-08-25 dig: break scan was hard-coded to the last 3 bars, so a clean
-  break 4–8 M1 bars earlier (common before the retest arrives) never
-  registered — ``auto_trade:funnel:XAU:hfs:breakout_retest`` stayed empty
-  while Range Sweep printed. Widen the break window independently. Hold
-  only requires close beyond the broken level; forcing a same-color body
-  killed valid retest holds that closed flat/slightly mixed.
+  Retest lookback (2026-08-23) and break lookback (2026-08-25) lessons kept:
+  touch/rejection scan is not newest-bar-only; break window defaults wide
+  enough for break → pullback → hold on M1.
   """
   if df is None or len(df) < 5:
-    return None
+    return {"state": "no_box", "accepted": False, "reason": "insufficient_bars"}
   side = str(direction).upper()
   high = float(box_high)
   low = float(box_low)
   if high <= low:
-    return None
+    return {"state": "no_box", "accepted": False, "reason": "invalid_box"}
 
   retest_lb = max(1, int(retest_lookback_bars or 1))
-  # Default break window: enough room for break → pullback → hold inside
-  # a short M1 episode without inventing a multi-session hunt.
   break_lb = (
     max(3, int(break_lookback_bars))
     if break_lookback_bars is not None
     else max(8, retest_lb + 4)
   )
   break_lb = min(break_lb, max(3, len(df) - 1))
+  level = high if side == "BUY" else low
+  min_disp = max(0.0, float(min_displacement))
 
   accepted_i = None
   for i in range(len(df) - break_lb, len(df)):
@@ -432,64 +495,152 @@ def detect_breakout_retest(
     close = float(bar["close"])
     open_ = float(bar["open"])
     if side == "BUY":
-      if close > high and (close - high) >= min_displacement and close > open_:
+      if close > high and (close - high) >= min_disp and close > open_:
         accepted_i = i
     else:
-      if close < low and (low - close) >= min_displacement and close < open_:
+      if close < low and (low - close) >= min_disp and close < open_:
         accepted_i = i
-  if accepted_i is None or accepted_i >= len(df) - 1:
-    return {"state": "wait_retest", "accepted": False}
 
-  # Has price touched back to the level anywhere since the break, within
-  # the lookback window? (Widened half of the fix - was df.iloc[-1] only.)
-  bars_since_break = len(df) - accepted_i - 1
-  window = max(1, min(retest_lb, bars_since_break))
-  touched = False
-  for offset in range(1, window + 1):
-    bar = df.iloc[-offset]
-    if side == "BUY":
-      if float(bar["low"]) <= high:
-        touched = True
-        break
-    else:
-      if float(bar["high"]) >= low:
-        touched = True
-        break
-  if not touched:
-    return {"state": "wait_retest", "accepted": True, "accepted_index": accepted_i}
-
-  # Hold: newest bar must close beyond the broken level. Body color is not
-  # required — a retest that closes above resistance (BUY) or below support
-  # (SELL) is the hold, even if the candle is mixed.
-  last = df.iloc[-1]
-  last_ts = _ts(df.index[-1])
-  if side == "BUY":
-    if float(last["close"]) < high:
-      return None  # failed hold
+  if accepted_i is None:
     return {
-      "pattern": "breakout_retest",
-      "direction": "BUY",
-      "bar_ts": last_ts,
-      "level": high,
-      "close": float(last["close"]),
-      "accepted_break": True,
-      "correct_key_level_role": True,
-      "retest_of_broken_level": True,
-      "directionally_valid_close": True,
-      "target_room_beyond_breakout": True,
+      "state": "wait_break",
+      "accepted": False,
+      "level": level,
+      "box_high": high,
+      "box_low": low,
     }
 
-  if float(last["close"]) > low:
-    return None
+  # Failed break: any close after the break through the opposite box side.
+  for i in range(accepted_i + 1, len(df)):
+    close = float(df.iloc[i]["close"])
+    if side == "BUY" and close < low:
+      return {
+        "state": "failed_break",
+        "accepted": True,
+        "accepted_index": accepted_i,
+        "level": level,
+        "reason": "opposite_side_close",
+      }
+    if side == "SELL" and close > high:
+      return {
+        "state": "failed_break",
+        "accepted": True,
+        "accepted_index": accepted_i,
+        "level": level,
+        "reason": "opposite_side_close",
+      }
+
+  # Acceptance: at least one post-break bar that does not fully reclaim
+  # into the box (close remains beyond the broken boundary).
+  accepted_hold = False
+  for i in range(accepted_i + 1, len(df)):
+    close = float(df.iloc[i]["close"])
+    if side == "BUY" and close >= high:
+      accepted_hold = True
+      break
+    if side == "SELL" and close <= low:
+      accepted_hold = True
+      break
+  if not accepted_hold and accepted_i >= len(df) - 1:
+    return {
+      "state": "wait_retest",
+      "accepted": True,
+      "accepted_index": accepted_i,
+      "level": level,
+      "reason": "awaiting_acceptance",
+    }
+  if not accepted_hold:
+    # Post-break bars exist but all closed back through the broken level.
+    last_close = float(df.iloc[-1]["close"])
+    if (side == "BUY" and last_close < high) or (side == "SELL" and last_close > low):
+      return {
+        "state": "failed_break",
+        "accepted": True,
+        "accepted_index": accepted_i,
+        "level": level,
+        "reason": "reclaimed_into_box",
+      }
+    return {
+      "state": "wait_retest",
+      "accepted": True,
+      "accepted_index": accepted_i,
+      "level": level,
+    }
+
+  bars_since_break = len(df) - accepted_i - 1
+  window = max(1, min(retest_lb, bars_since_break))
+  retest_i = None
+  for offset in range(1, window + 1):
+    idx = len(df) - offset
+    if idx <= accepted_i:
+      continue
+    bar = df.iloc[idx]
+    if require_retest_rejection:
+      if _breakout_rejection(bar, side=side, level=level):
+        retest_i = idx
+        break
+    elif _breakout_touch(bar, side=side, level=level):
+      retest_i = idx
+      break
+
+  if retest_i is None:
+    return {
+      "state": "wait_retest",
+      "accepted": True,
+      "accepted_index": accepted_i,
+      "level": level,
+      "reason": (
+        "awaiting_rejection_retest"
+        if require_retest_rejection
+        else "awaiting_retest_touch"
+      ),
+    }
+
+  last = df.iloc[-1]
+  last_close = float(last["close"])
+  last_ts = _ts(df.index[-1])
+  if side == "BUY":
+    if last_close < high:
+      return {
+        "state": "failed_break",
+        "accepted": True,
+        "accepted_index": accepted_i,
+        "level": level,
+        "reason": "failed_hold",
+      }
+  else:
+    if last_close > low:
+      return {
+        "state": "failed_break",
+        "accepted": True,
+        "accepted_index": accepted_i,
+        "level": level,
+        "reason": "failed_hold",
+      }
+
+  break_bar = df.iloc[accepted_i]
+  break_disp = (
+    float(break_bar["close"]) - high
+    if side == "BUY"
+    else low - float(break_bar["close"])
+  )
   return {
+    "state": "armed",
     "pattern": "breakout_retest",
-    "direction": "SELL",
+    "direction": side,
     "bar_ts": last_ts,
-    "level": low,
-    "close": float(last["close"]),
+    "level": level,
+    "close": last_close,
+    "accepted": True,
+    "accepted_index": accepted_i,
+    "retest_index": retest_i,
     "accepted_break": True,
     "correct_key_level_role": True,
     "retest_of_broken_level": True,
+    "retest_rejection": bool(require_retest_rejection),
     "directionally_valid_close": True,
     "target_room_beyond_breakout": True,
+    "break_displacement": break_disp,
+    "box_high": high,
+    "box_low": low,
   }

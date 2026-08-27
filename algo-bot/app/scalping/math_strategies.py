@@ -5,6 +5,7 @@ These evaluators do **not** publish trades. They encode the Phase 5 models:
 1. Liquidity Sweep Reversal
 2. Impulse Pullback Continuation
 3. Range Edge Mean Reversion
+4. Breakout Retest Continuation (observe-only)
 
 Live HFS discovery remains in ``strategies.py`` until shadow/paper promote.
 """
@@ -346,4 +347,114 @@ def evaluate_range_edge_mean_reversion(
     },
     range_position=p,
     range_quality_atr=rq,
+  )
+
+
+def evaluate_breakout_retest_continuation(
+  *,
+  direction: str,
+  price: float,
+  atr: float,
+  box_low: float,
+  box_high: float,
+  level: float,
+  barrier: float | None = None,
+  spread: float = 0.0,
+  slippage: float = 0.0,
+  buffer: float = 0.0,
+  target_min_price: float,
+  break_displacement: float | None = None,
+  min_break_atr: float = 0.25,
+  retest_rejection: bool = True,
+  accepted_break: bool = True,
+  failed_break: bool = False,
+  utc_hour: int | None = None,
+) -> MathGateResult:
+  """Observe-only: displacement, room beyond break, retest quality, failed-break veto."""
+  direction = direction.upper()
+  features = build_feature_vector(
+    price=price,
+    atr=atr,
+    range_low=box_low,
+    range_high=box_high,
+    level=level,
+    zone_low=box_low,
+    zone_high=box_high,
+    direction=direction,
+    barrier=barrier,
+    spread=spread,
+    slippage=slippage,
+    buffer=buffer,
+    utc_hour=utc_hour,
+  )
+
+  if failed_break:
+    return _block(
+      "breakout_retest_continuation",
+      "failed_break_veto",
+      features,
+      box_low=box_low,
+      box_high=box_high,
+    )
+  if not accepted_break:
+    return _block(
+      "breakout_retest_continuation",
+      "break_not_accepted",
+      features,
+    )
+  if not retest_rejection:
+    return _block(
+      "breakout_retest_continuation",
+      "retest_rejection_missing",
+      features,
+    )
+
+  width = float(box_high) - float(box_low)
+  if atr <= 0 or width <= 0:
+    return _block(
+      "breakout_retest_continuation",
+      "invalid_compression_box",
+      features,
+    )
+
+  disp = break_displacement
+  if disp is None:
+    disp = (price - level) if direction == "BUY" else (level - price)
+  disp_atr = float(disp) / atr if atr > 0 else 0.0
+  if disp_atr < float(min_break_atr):
+    return _block(
+      "breakout_retest_continuation",
+      "displacement_below_minimum",
+      features,
+      displacement_atr=disp_atr,
+      min_break_atr=min_break_atr,
+    )
+
+  if not room_sufficient(features.room_net_price, target_min_price):
+    return _block(
+      "breakout_retest_continuation",
+      "room_net_below_target_min",
+      features,
+      room_net=features.room_net_price,
+    )
+
+  compression_atr = width / atr
+  return _pass(
+    "breakout_retest_continuation",
+    "breakout_retest_ok",
+    features,
+    {
+      "location": float(
+        (features.location_buy if direction == "BUY" else features.location_sell) or 0.5
+      ),
+      "trigger": min(1.0, 0.55 + 0.2 * disp_atr),
+      "momentum": min(1.0, disp_atr),
+      "structure": min(1.0, max(0.0, 1.2 - compression_atr)),
+      "room": min(1.0, float(features.room_net_atr or 0.0)),
+      "cost": min(1.0, float(features.execution_cost_atr or 0.0)),
+      "exhaustion": float(features.exhaustion or 0.0),
+    },
+    displacement_atr=disp_atr,
+    compression_atr=compression_atr,
+    retest_rejection=True,
   )

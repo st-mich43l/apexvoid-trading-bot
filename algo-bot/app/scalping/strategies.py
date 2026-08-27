@@ -14,6 +14,7 @@ from app.scalping.microstructure import (
   detect_impulse_pullback,
   detect_momentum_ignition,
   detect_sweep_reclaim,
+  find_compression_box,
   macro_momentum_direction,
 )
 from app.scalping.models import (
@@ -436,6 +437,90 @@ def discover_impulse_pullback(
   return out
 
 
+def _breakout_cfg(cfg: Any) -> Any:
+  return getattr(_hfs_cfg(cfg), "breakout", None)
+
+
+def _breakout_knobs(cfg: Any, *, atr: float, pip_size: float) -> dict[str, Any]:
+  bo = _breakout_cfg(cfg)
+  act = getattr(_hfs_cfg(cfg), "activation", None)
+  box_max_atr = _parse_float(bo, "box_max_atr", 1.5)
+  min_break_atr = _parse_float(bo, "min_break_atr", 0.25)
+  min_box_bars = int(getattr(bo, "min_box_bars", 8) or 8) if bo is not None else 8
+  max_box_bars = int(getattr(bo, "max_box_bars", 20) or 20) if bo is not None else 20
+  touch_tol_atr = _parse_float(bo, "touch_tol_atr", 0.20)
+  min_touches = int(getattr(bo, "min_touches_per_side", 2) or 2) if bo is not None else 2
+  require_rej = bool(getattr(bo, "require_retest_rejection", True)) if bo is not None else True
+  # Prefer explicit breakout lookback; floor so trigger_age=2 cannot sterilize.
+  configured_retest = getattr(bo, "retest_lookback_bars", None) if bo is not None else None
+  if configured_retest is not None:
+    retest_lookback = max(4, int(configured_retest or 4))
+  else:
+    retest_lookback = max(4, int(getattr(act, "trigger_maximum_age_bars", 2) or 2))
+  min_disp = max(pip_size * 3, float(atr) * min_break_atr)
+  return {
+    "box_max_atr": box_max_atr,
+    "min_break_atr": min_break_atr,
+    "min_box_bars": min_box_bars,
+    "max_box_bars": max_box_bars,
+    "touch_tol_atr": touch_tol_atr,
+    "min_touches_per_side": min_touches,
+    "require_retest_rejection": require_rej,
+    "retest_lookback_bars": retest_lookback,
+    "min_displacement": min_disp,
+  }
+
+
+def diagnose_breakout_reject(
+  context: ScalpContextSnapshot,
+  m1_df: pd.DataFrame,
+  cfg: Any,
+  *,
+  pip_size: float,
+) -> str | None:
+  """Dominant reject/state code for Redis ``breakout:{reason}`` telemetry."""
+  if not _enabled(cfg, "breakout_retest"):
+    return "disabled"
+  if ARCHETYPE_BREAKOUT_RETEST not in context.permitted_archetypes:
+    return "not_permitted"
+  knobs = _breakout_knobs(cfg, atr=float(context.atr or 0.0), pip_size=pip_size)
+  box = find_compression_box(
+    m1_df,
+    atr=float(context.atr or 0.0),
+    min_box_bars=knobs["min_box_bars"],
+    max_box_bars=knobs["max_box_bars"],
+    box_max_atr=knobs["box_max_atr"],
+    min_touches_per_side=knobs["min_touches_per_side"],
+    touch_tol_atr=knobs["touch_tol_atr"],
+  )
+  if box is None:
+    return "no_box"
+  states: list[str] = []
+  for direction in ("BUY", "SELL"):
+    ev = detect_breakout_retest(
+      m1_df,
+      direction=direction,
+      box_high=float(box["box_high"]),
+      box_low=float(box["box_low"]),
+      min_displacement=knobs["min_displacement"],
+      retest_lookback_bars=knobs["retest_lookback_bars"],
+      require_retest_rejection=knobs["require_retest_rejection"],
+    )
+    if ev is None:
+      continue
+    state = str(ev.get("state") or "")
+    if state == "armed" or ev.get("accepted_break"):
+      return "armed"
+    if state:
+      states.append(state)
+  # Prefer the most advanced non-armed state for telemetry.
+  priority = ("failed_break", "wait_retest", "wait_break", "no_box")
+  for code in priority:
+    if code in states:
+      return code
+  return states[0] if states else "wait_break"
+
+
 def discover_breakout_retest(
   context: ScalpContextSnapshot,
   micro: MicroStructure,
@@ -449,19 +534,25 @@ def discover_breakout_retest(
     return []
   if ARCHETYPE_BREAKOUT_RETEST not in context.permitted_archetypes:
     return []
-  low = context.active_range_low
-  high = context.active_range_high
-  if low is None or high is None:
+
+  knobs = _breakout_knobs(cfg, atr=float(context.atr or 0.0), pip_size=pip_size)
+  box = find_compression_box(
+    m1_df,
+    atr=float(context.atr or 0.0),
+    min_box_bars=knobs["min_box_bars"],
+    max_box_bars=knobs["max_box_bars"],
+    box_max_atr=knobs["box_max_atr"],
+    min_touches_per_side=knobs["min_touches_per_side"],
+    touch_tol_atr=knobs["touch_tol_atr"],
+  )
+  if box is None:
     return []
 
+  low = float(box["box_low"])
+  high = float(box["box_high"])
   min_net = _parse_float(getattr(_hfs_cfg(cfg), "target", None), "minimum_net_target_pips", 15.0)
   buffer = max(pip_size * 2, context.atr * 0.1)
-  min_disp = max(pip_size * 3, context.atr * 0.15)
-  act = getattr(_hfs_cfg(cfg), "activation", None)
-  # Breakout needs a wider retest window than Range Sweep's edge reclaim:
-  # break → pullback → hold routinely spans 3–5 M1 bars. Floor at 4 so a
-  # global trigger_maximum_age_bars=2 does not sterilize the archetype.
-  retest_lookback = max(4, int(getattr(act, "trigger_maximum_age_bars", 2) or 2))
+  retest_lookback = knobs["retest_lookback_bars"]
   out: list[ScalpOpportunity] = []
 
   for direction in ("BUY", "SELL"):
@@ -470,10 +561,11 @@ def discover_breakout_retest(
       direction=direction,
       box_high=high,
       box_low=low,
-      min_displacement=min_disp,
+      min_displacement=knobs["min_displacement"],
       retest_lookback_bars=retest_lookback,
+      require_retest_rejection=knobs["require_retest_rejection"],
     )
-    if ev is None or ev.get("state") == "wait_retest" or not ev.get("accepted_break"):
+    if ev is None or ev.get("state") != "armed" or not ev.get("accepted_break"):
       continue
     entry = float(ev["close"])
     level = float(ev["level"])
@@ -498,6 +590,7 @@ def discover_breakout_retest(
     if stop is None or target is None:
       continue
     target_price, target_pips = target
+    room_ok = room is not None and float(room) >= float(target_pips)
     source = deterministic_id(
       "box",
       context.symbol,
@@ -536,12 +629,22 @@ def discover_breakout_retest(
       source_identity=source,
       measured={
         "strategy": STRATEGY_DISPLAY[ARCHETYPE_BREAKOUT_RETEST],
+        "compression_box": {
+          "box_low": low,
+          "box_high": high,
+          "box_bars": box.get("box_bars"),
+          "compression_atr": box.get("compression_atr"),
+          "touch_count": box.get("touch_count"),
+        },
         "breakout_evidence": {
-          "accepted_break": True,
-          "correct_key_level_role": True,
-          "retest_of_broken_level": True,
-          "directionally_valid_close": True,
-          "target_room_beyond_breakout": True,
+          "accepted_break": bool(ev.get("accepted_break")),
+          "correct_key_level_role": bool(ev.get("correct_key_level_role")),
+          "retest_of_broken_level": bool(ev.get("retest_of_broken_level")),
+          "retest_rejection": bool(ev.get("retest_rejection")),
+          "directionally_valid_close": bool(ev.get("directionally_valid_close")),
+          "target_room_beyond_breakout": bool(room_ok),
+          "break_displacement": ev.get("break_displacement"),
+          "state": "armed",
         },
       },
     ))
@@ -740,7 +843,13 @@ def idle_discovery_reasons(
   if ARCHETYPE_IMPULSE_PULLBACK in context.permitted_archetypes and _enabled(cfg, "impulse_pullback"):
     reasons.append("impulse_pullback:not_matched")
   if ARCHETYPE_BREAKOUT_RETEST in context.permitted_archetypes and _enabled(cfg, "breakout_retest"):
-    reasons.append("breakout_retest:not_matched")
+    code = diagnose_breakout_reject(context, m1_df, cfg, pip_size=pip_size)
+    if code and code != "armed":
+      reasons.append(f"breakout_retest:{code}")
+    elif code == "armed":
+      reasons.append("breakout_retest:armed_but_unbookable")
+    else:
+      reasons.append("breakout_retest:not_matched")
   if ARCHETYPE_MOMENTUM_CHASE in context.permitted_archetypes and _enabled(cfg, "momentum_chase"):
     reasons.append("momentum_chase:not_matched")
   return reasons or ["no_microstructure_match"]
