@@ -322,8 +322,8 @@ async def process_m1_bar(
   except Exception:
     log.exception("stale scalp active prune failed symbol=%s", symbol)
 
-  # Stamp Liquidity Sweep math onto range_sweep discoveries (observe-only).
-  # Live included so prod Redis can compare math vs publish without blocking.
+  # Observe-only research stamps (features + math counterfactual) on every
+  # discovery. Never flips allow/block — see docs/scalping/OWN_SCALP_MECHANISM.md.
   if (
     mode in {"shadow", "paper", "live"}
     and opportunities
@@ -335,7 +335,7 @@ async def process_m1_bar(
     try:
       from datetime import datetime, timezone
 
-      from app.scalping.rollout import annotate_range_sweep_math_gate
+      from app.scalping.research_stamp import annotate_opportunities_research
 
       last_bar = m1.iloc[-1]
       utc_hour = datetime.fromtimestamp(int(bar_ts), tz=timezone.utc).hour
@@ -344,31 +344,24 @@ async def process_m1_bar(
         or 10
       ) * pip
       spread_price = float(ask) - float(bid)
-      annotated: list = []
-      for opportunity in opportunities:
-        if opportunity.direction.upper() == "BUY":
-          opp_barrier = context.nearest_resistance_low
-        else:
-          opp_barrier = context.nearest_support_high
-        annotated.append(
-          annotate_range_sweep_math_gate(
-            opportunity,
-            atr=float(context.atr or 0.0) or pip * 50,
-            range_low=float(context.active_range_low),
-            range_high=float(context.active_range_high),
-            barrier=opp_barrier,
-            bar_open=float(last_bar["open"]),
-            bar_high=float(last_bar["high"]),
-            bar_low=float(last_bar["low"]),
-            bar_close=float(last_bar["close"]),
-            spread=spread_price,
-            target_min_price=target_min,
-            utc_hour=utc_hour,
-          )
-        )
-      opportunities = annotated
+      opportunities = annotate_opportunities_research(
+        list(opportunities),
+        atr=float(context.atr or 0.0) or pip * 50,
+        range_low=float(context.active_range_low),
+        range_high=float(context.active_range_high),
+        nearest_resistance_low=context.nearest_resistance_low,
+        nearest_support_high=context.nearest_support_high,
+        bar_open=float(last_bar["open"]),
+        bar_high=float(last_bar["high"]),
+        bar_low=float(last_bar["low"]),
+        bar_close=float(last_bar["close"]),
+        spread=spread_price,
+        target_min_price=target_min,
+        session=str(context.session or ""),
+        utc_hour=utc_hour,
+      )
     except Exception:
-      log.exception("range_sweep math gate annotate failed symbol=%s", symbol)
+      log.exception("scalp research stamp failed symbol=%s", symbol)
 
   scored: list = []
   for opportunity in opportunities:
@@ -673,6 +666,13 @@ async def process_m1_bar(
           liquidity_level=float(context.active_range_high),
           barrier=context.nearest_support_high,
         )
+        from app.scalping.research_stamp import research_agree_rows
+
+        agree_rows = research_agree_rows(
+          list(opportunities),
+          session=str(context.session or ""),
+          bar_ts=int(bar_ts),
+        )
         payload = {
           "buy": buy_shadow.to_dict(),
           "sell": sell_shadow.to_dict(),
@@ -684,6 +684,19 @@ async def process_m1_bar(
             for o in opportunities
             if (o.measured or {}).get("math_liquidity_sweep") is not None
           ),
+          "research": {
+            "live_discovered": len(opportunities),
+            "agree_rows": agree_rows,
+            "math_agree_true": sum(
+              1 for r in agree_rows if r.get("math_agree") is True
+            ),
+            "math_agree_false": sum(
+              1 for r in agree_rows if r.get("math_agree") is False
+            ),
+            "math_agree_unknown": sum(
+              1 for r in agree_rows if r.get("math_agree") is None
+            ),
+          },
         }
         result["math_shadow"] = payload
         await set_last(client, "math_shadow", symbol, payload)

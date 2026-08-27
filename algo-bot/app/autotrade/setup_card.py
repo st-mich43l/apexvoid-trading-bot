@@ -1873,6 +1873,10 @@ async def ensure_plan_published_root_card(
   stop_price = await published_plan_stop_price(client, match.match_id)
 
   existing = await load_forming_card(client, match.match_id)
+  had_live_card = (
+    existing is not None and int(existing.get("message_id") or 0) > 0
+  )
+
   if existing is not None and int(existing.get("message_id") or 0) > 0:
     existing_text = str(existing.get("text") or "")
     if not forming_card_matches_strategy(existing_text, match):
@@ -1947,12 +1951,13 @@ async def ensure_plan_published_root_card(
       digits=card_price_digits(str(match.symbol)),
       edit_fn=resolved_edit,
     )
-  log.info(
-    "plan_published_root_card_created setup_id=%s message_id=%s "
-    "reply_anchor=forming_message+telegram_root",
-    match.match_id,
-    message_id,
-  )
+  if not had_live_card:
+    log.info(
+      "plan_published_root_card_created setup_id=%s message_id=%s "
+      "reply_anchor=forming_message+telegram_root",
+      match.match_id,
+      message_id,
+    )
   return message_id
 
 

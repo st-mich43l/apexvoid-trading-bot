@@ -12,6 +12,17 @@ dated section after deployment.
 
 ## Unreleased
 
+### Added
+- Own scalp mechanism research track: design doc
+  ``docs/scalping/OWN_SCALP_MECHANISM.md``; observe-only
+  ``scalp_features`` + ``math_counterfactual`` stamps on all M1 discoveries;
+  ``app.scalping.performance`` join (archetype × session × math_agree).
+  **No hard gates** — live allow/block unchanged; gates deferred to data.
+
+### Fixed
+- Suppress repeat owner Telegram ``Engine ready`` / session bootstrap
+  messages when cTrader reconnects (6h cooldown per event type).
+
 ### Changed
 - M1 scalp strategies drop the **HFS** display tag (`Range Sweep Scalp`,
   ``Impulse Pullback Scalp``, ``Breakout Retest Scalp``,
