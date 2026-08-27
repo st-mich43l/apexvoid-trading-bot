@@ -63,8 +63,11 @@ def _select_target(
   preference and may fall back to exactly 1:1 when clean room cannot hold it.
 
   XAU publish turns a selected 1:2 into TP1@1R (50%) + TP2@2R (50%) with
-  the protective stop left fixed. A fixed-RR instrument expands the selected
-  final target into its configured R ladder during execution-policy planning.
+  SL moved to BE after TP1 books (runner protected). A selected 1:1
+  publishes a **single** target and books **full volume** at that print
+  (close_ratio=1.0; no BE trail needed). A fixed-RR instrument expands
+  the selected final target into its configured R ladder during
+  execution-policy planning.
   """
   if room_pips is None or pip_size <= 0 or stop_pips is None or stop_pips <= 0:
     return None
