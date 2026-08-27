@@ -20,6 +20,9 @@ dated section after deployment.
   **No hard gates** — live allow/block unchanged; gates deferred to data.
 
 ### Fixed
+- Session bootstrap owner DM shows an explicit ``Balance $…`` line (parsed
+  from the ready event) and suppresses lone live-grant ⚠️ DMs during the
+  same 6h cooldown window.
 - Session bootstrap owner DM also absorbs startup ``warning`` events (e.g.
   live-account token grant) so restart no longer sends a separate ⚠️ message
   alongside Engine ready.

@@ -203,6 +203,10 @@ _SESSION_NOTIFY_COOLDOWN_TYPES = frozenset({
 _SESSION_NOTIFY_COOLDOWN_SECONDS = 6 * 3600
 _SESSION_BOOTSTRAP_BATCH_KEY = "auto_trade:session_bootstrap_batch"
 _SESSION_NOTIFY_SENT_KEY = "auto_trade:session_notify:sent"
+_READY_BALANCE_RE = re.compile(
+  r"(?i)\bbalance\s+([0-9][0-9,]*(?:\.[0-9]+)?)\b"
+)
+_LIVE_GRANT_WARNING_RE = re.compile(r"(?i)token grants live account")
 
 _AUTO_NAME_RE = re.compile(r"(?i)\bauto[\s-]*(?:trade|trader)\b")
 _OPENED_RE = re.compile(
@@ -2159,7 +2163,17 @@ async def _stash_session_bootstrap_line(
 
 def _format_session_bootstrap_message(batch: dict[str, str]) -> str:
   lines = ["🤖 <b>ApexVoid Algo</b>", "✅ <b>Engine ready</b>"]
-  ready = batch.get("ready")
+  ready = str(batch.get("ready") or "").strip()
+  balance_match = _READY_BALANCE_RE.search(ready)
+  if balance_match:
+    try:
+      balance_val = float(balance_match.group(1).replace(",", ""))
+    except ValueError:
+      balance_val = None
+    if balance_val is not None:
+      lines.extend(["", f"💰 Balance <b>${balance_val:,.2f}</b>"])
+    ready = _READY_BALANCE_RE.sub("", ready)
+    ready = re.sub(r"\s{2,}", " ", ready).strip(" :")
   if ready:
     lines.extend(["", escape(ready)])
   warning = batch.get("warning")
@@ -2231,14 +2245,18 @@ async def _deliver_auto_trade_event(
 ) -> bool:
   event_type = str(event.get("type") or "")
   if profile == "internal" and event_type == "warning":
+    message = _clean_message(
+      event.get("message", ""),
+      symbol=_event_symbol(event),
+    )
     if await _session_bootstrap_pending(client):
-      message = _clean_message(
-        event.get("message", ""),
-        symbol=_event_symbol(event),
-      )
       await _stash_session_bootstrap_line(
         client, event_type, message, append=True,
       )
+      return False
+    # Same 6h window as Engine ready: live-grant noise is session-bootstrap
+    # only — don't leave a lone ⚠️ DM when the ready batch was suppressed.
+    if _LIVE_GRANT_WARNING_RE.search(message):
       return False
   if profile == "internal" and event_type in _SESSION_NOTIFY_COOLDOWN_TYPES:
     message = _clean_message(
