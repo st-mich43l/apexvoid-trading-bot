@@ -193,6 +193,15 @@ _V7_NOTIFY_DEDUP_TYPES = frozenset({
   "warning",
 })
 
+# cTrader reconnect republishes ready/config_health/account_capability on
+# every session bootstrap — suppress repeat owner DMs for a cooldown window.
+_SESSION_NOTIFY_COOLDOWN_TYPES = frozenset({
+  "ready",
+  "account_capability",
+  "config_health",
+})
+_SESSION_NOTIFY_COOLDOWN_SECONDS = 6 * 3600
+
 _AUTO_NAME_RE = re.compile(r"(?i)\bauto[\s-]*(?:trade|trader)\b")
 _OPENED_RE = re.compile(
   r"(?i)^(BUY|SELL)\s+([\d.,]+)\s+lots?\s+filled\s+([\d.,]+),\s*"
@@ -2122,6 +2131,19 @@ async def _deliver_auto_trade_event(
   send=None,
 ) -> bool:
   event_type = str(event.get("type") or "")
+  if (
+    profile == "internal"
+    and event_type in _SESSION_NOTIFY_COOLDOWN_TYPES
+  ):
+    cooldown_key = f"auto_trade:session_notify:{event_type}"
+    claimed = await client.set(
+      cooldown_key,
+      "1",
+      nx=True,
+      ex=_SESSION_NOTIFY_COOLDOWN_SECONDS,
+    )
+    if not claimed:
+      return False
   if event_type == "setup_status":
     if profile != "internal":
       return False
