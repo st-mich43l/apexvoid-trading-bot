@@ -664,6 +664,7 @@ async def _prepare_activation(
     evaluate_killzone_gate,
     evaluate_reaction_publish_window,
     reaction_require_killzone,
+    reaction_require_publish_window,
     technique_enforce,
   )
 
@@ -719,10 +720,11 @@ async def _prepare_activation(
       )
       return None
   else:
+    # Optional clock sterilizer (prod off). Structure/technique decide.
     win = evaluate_reaction_publish_window(
       ts=now,
       cfg=inst,
-      require=enforce_pack,
+      require=enforce_pack and reaction_require_publish_window(inst),
     )
     if not win.allowed:
       # DEBUG, not INFO: the spot-tick loop re-evaluates every still-pending

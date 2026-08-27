@@ -4859,6 +4859,7 @@ async def _publish_trade_plan_v8(
     evaluate_killzone_gate,
     evaluate_reaction_publish_window,
     reaction_require_killzone,
+    reaction_require_publish_window,
     technique_enforce,
     technique_require_sweep_body,
   )
@@ -4912,10 +4913,11 @@ async def _publish_trade_plan_v8(
       )
       return None
   else:
+    # Optional clock sterilizer (prod off). Structure/technique decide.
     win = evaluate_reaction_publish_window(
       ts=spot_ts,
       cfg=inst,
-      require=enforce_pack,
+      require=enforce_pack and reaction_require_publish_window(inst),
     )
     if not win.allowed:
       log.info(
