@@ -50,7 +50,8 @@ def _hfs_target_ladder(
 
   XAU discovery picks exactly 1:2 or 1:1 room:
 
-  - **1:2** → ladder ``(1R, 2R)`` with equal close ratios (50% / 50%).
+  - **1:2** → ladder ``(1R, 2R)`` with equal close ratios (50% / 50%);
+    after TP1 books, management moves SL to BE for the runner.
   - **1:1** → single target at 1R; equal-ratio builder assigns
     ``close_ratio=1.0`` so the engine books **full volume** at that print.
 

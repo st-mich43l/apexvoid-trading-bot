@@ -6196,12 +6196,11 @@ async def _publish_trade_plan_v8(
     )
     return None
   try:
-    # Native XAU HFS 1:2 keeps its original stop fixed. Instrument-owned
-    # fixed-RR ladders use their declared TP1 BE and explicit trail contract.
-    hfs_one_to_two = (
-      is_hfs_strategy(str(match_for_plan.strategy))
-      and len(tuple(match_for_plan.targets_pips or ())) == 2
-    )
+    # Native XAU HFS 1:2: after TP1 books (50%), move SL to BE for the
+    # runner — same contract as other multi-target plans. C# runtime only
+    # applies BE when HighestBookedTargetIndex advances (actual broker
+    # close), so deferred/touch-only TP1 cannot arm BE. 1:1 single-exit
+    # plans still leave be_after unset via closes_at_first_target.
     plan = build_trade_plan_from_strategy_match(
       match_for_plan,
       plan_id=_v8_plan_id(match_for_plan),
@@ -6229,7 +6228,7 @@ async def _publish_trade_plan_v8(
       same_direction_size_fraction=float(
         runtime_config.risk.position_limits.same_direction_stack_size_fraction
       ),
-      be_after_target_index=None if hfs_one_to_two else 0,
+      be_after_target_index=0,
       approved_measured=gate_measured if fixed_rr_target else None,
     )
   except TradePlanBuildRejected as exc:
