@@ -194,13 +194,15 @@ _V7_NOTIFY_DEDUP_TYPES = frozenset({
 })
 
 # cTrader reconnect republishes ready/config_health/account_capability on
-# every session bootstrap — suppress repeat owner DMs for a cooldown window.
+# every session bootstrap — batch into one owner DM; cooldown suppresses repeats.
 _SESSION_NOTIFY_COOLDOWN_TYPES = frozenset({
   "ready",
   "account_capability",
   "config_health",
 })
 _SESSION_NOTIFY_COOLDOWN_SECONDS = 6 * 3600
+_SESSION_BOOTSTRAP_BATCH_KEY = "auto_trade:session_bootstrap_batch"
+_SESSION_NOTIFY_SENT_KEY = "auto_trade:session_notify:sent"
 
 _AUTO_NAME_RE = re.compile(r"(?i)\bauto[\s-]*(?:trade|trader)\b")
 _OPENED_RE = re.compile(
@@ -2122,6 +2124,91 @@ async def _correlate_strategy_route(client, event: dict) -> None:
   await pipe.execute()
 
 
+async def _stash_session_bootstrap_line(
+  client,
+  event_type: str,
+  message: str,
+) -> dict[str, str]:
+  raw = await client.get(_SESSION_BOOTSTRAP_BATCH_KEY)
+  batch: dict[str, str] = {}
+  if raw:
+    try:
+      loaded = json.loads(raw.decode() if isinstance(raw, bytes) else raw)
+      if isinstance(loaded, dict):
+        batch = {str(k): str(v) for k, v in loaded.items() if v}
+    except (TypeError, ValueError, json.JSONDecodeError):
+      batch = {}
+  if message:
+    batch[event_type] = message
+  await client.set(
+    _SESSION_BOOTSTRAP_BATCH_KEY,
+    json.dumps(batch, separators=(",", ":"), sort_keys=True),
+    ex=120,
+  )
+  return batch
+
+
+def _format_session_bootstrap_message(batch: dict[str, str]) -> str:
+  lines = ["🤖 <b>ApexVoid Algo</b>", "✅ <b>Engine ready</b>"]
+  ready = batch.get("ready")
+  if ready:
+    lines.extend(["", escape(ready)])
+  config = batch.get("config_health")
+  if config:
+    lines.extend(["", f"🩺 {escape(config)}"])
+  capability = batch.get("account_capability")
+  if capability:
+    lines.extend(["", f"🧾 {escape(capability)}"])
+  return "\n".join(lines)
+
+
+def _should_flush_session_bootstrap(
+  event_type: str,
+  batch: dict[str, str],
+) -> bool:
+  if not batch.get("ready"):
+    return False
+  if event_type == "account_capability":
+    return True
+  # Reconnect path publishes ready only (no config_health prelude).
+  if event_type == "ready" and "config_health" not in batch:
+    return True
+  return False
+
+
+async def _flush_session_bootstrap_notify(
+  client,
+  *,
+  chat_id: int,
+  send=None,
+) -> bool:
+  raw = await client.get(_SESSION_BOOTSTRAP_BATCH_KEY)
+  batch: dict[str, str] = {}
+  if raw:
+    try:
+      loaded = json.loads(raw.decode() if isinstance(raw, bytes) else raw)
+      if isinstance(loaded, dict):
+        batch = {str(k): str(v) for k, v in loaded.items() if v}
+    except (TypeError, ValueError, json.JSONDecodeError):
+      batch = {}
+  if not batch.get("ready"):
+    return False
+  claimed = await client.set(
+    _SESSION_NOTIFY_SENT_KEY,
+    "1",
+    nx=True,
+    ex=_SESSION_NOTIFY_COOLDOWN_SECONDS,
+  )
+  if not claimed:
+    await client.delete(_SESSION_BOOTSTRAP_BATCH_KEY)
+    return False
+  text = _format_session_bootstrap_message(batch)
+  await client.delete(_SESSION_BOOTSTRAP_BATCH_KEY)
+  send_fn = send or send_scanner_with_retry
+  await send_fn(text, chat_id=chat_id)
+  return True
+
+
 async def _deliver_auto_trade_event(
   client,
   event: dict,
@@ -2131,19 +2218,17 @@ async def _deliver_auto_trade_event(
   send=None,
 ) -> bool:
   event_type = str(event.get("type") or "")
-  if (
-    profile == "internal"
-    and event_type in _SESSION_NOTIFY_COOLDOWN_TYPES
-  ):
-    cooldown_key = f"auto_trade:session_notify:{event_type}"
-    claimed = await client.set(
-      cooldown_key,
-      "1",
-      nx=True,
-      ex=_SESSION_NOTIFY_COOLDOWN_SECONDS,
+  if profile == "internal" and event_type in _SESSION_NOTIFY_COOLDOWN_TYPES:
+    message = _clean_message(
+      event.get("message", ""),
+      symbol=_event_symbol(event),
     )
-    if not claimed:
+    batch = await _stash_session_bootstrap_line(client, event_type, message)
+    if not _should_flush_session_bootstrap(event_type, batch):
       return False
+    return await _flush_session_bootstrap_notify(
+      client, chat_id=chat_id, send=send,
+    )
   if event_type == "setup_status":
     if profile != "internal":
       return False
