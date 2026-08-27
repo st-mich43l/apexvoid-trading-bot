@@ -2124,10 +2124,16 @@ async def _correlate_strategy_route(client, event: dict) -> None:
   await pipe.execute()
 
 
+async def _session_bootstrap_pending(client) -> bool:
+  return not bool(await client.get(_SESSION_NOTIFY_SENT_KEY))
+
+
 async def _stash_session_bootstrap_line(
   client,
   event_type: str,
   message: str,
+  *,
+  append: bool = False,
 ) -> dict[str, str]:
   raw = await client.get(_SESSION_BOOTSTRAP_BATCH_KEY)
   batch: dict[str, str] = {}
@@ -2139,7 +2145,10 @@ async def _stash_session_bootstrap_line(
     except (TypeError, ValueError, json.JSONDecodeError):
       batch = {}
   if message:
-    batch[event_type] = message
+    if append and batch.get(event_type):
+      batch[event_type] = f"{batch[event_type]}\n{message}"
+    else:
+      batch[event_type] = message
   await client.set(
     _SESSION_BOOTSTRAP_BATCH_KEY,
     json.dumps(batch, separators=(",", ":"), sort_keys=True),
@@ -2153,6 +2162,9 @@ def _format_session_bootstrap_message(batch: dict[str, str]) -> str:
   ready = batch.get("ready")
   if ready:
     lines.extend(["", escape(ready)])
+  warning = batch.get("warning")
+  if warning:
+    lines.extend(["", f"⚠️ {escape(warning)}"])
   config = batch.get("config_health")
   if config:
     lines.extend(["", f"🩺 {escape(config)}"])
@@ -2218,6 +2230,16 @@ async def _deliver_auto_trade_event(
   send=None,
 ) -> bool:
   event_type = str(event.get("type") or "")
+  if profile == "internal" and event_type == "warning":
+    if await _session_bootstrap_pending(client):
+      message = _clean_message(
+        event.get("message", ""),
+        symbol=_event_symbol(event),
+      )
+      await _stash_session_bootstrap_line(
+        client, event_type, message, append=True,
+      )
+      return False
   if profile == "internal" and event_type in _SESSION_NOTIFY_COOLDOWN_TYPES:
     message = _clean_message(
       event.get("message", ""),

@@ -20,6 +20,9 @@ dated section after deployment.
   **No hard gates** — live allow/block unchanged; gates deferred to data.
 
 ### Fixed
+- Session bootstrap owner DM also absorbs startup ``warning`` events (e.g.
+  live-account token grant) so restart no longer sends a separate ⚠️ message
+  alongside Engine ready.
 - Suppress repeat owner Telegram ``Engine ready`` / session bootstrap
   messages when cTrader reconnects — batch config/ready/capability into
   **one** DM per restart (6h cooldown).
