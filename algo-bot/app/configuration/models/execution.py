@@ -219,6 +219,22 @@ class ExecutionTechniqueConfig(FrozenConfigModel):
       default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, True),),
       validation_summary='Pydantic required/type coercion only',
     )
+    reaction_require_publish_window: bool = config_field(
+      True,
+      canonical_env='AUTO_TRADE_TECHNIQUE_REACTION_REQUIRE_PUBLISH_WINDOW',
+      owner=ConfigOwner.PYTHON,
+      reload=ReloadPolicy.NEW_SETUP_ONLY,
+      runtime_reload=ReloadPolicy.RESTART,
+      unit=ConfigUnit.BOOLEAN,
+      risk=RiskClassification.EXECUTION_SAFETY,
+      description=(
+        'When true with enforce, block non-scalp publish/activation outside '
+        'reaction_publish_windows. Prod trading-bot.yml defaults this off; '
+        'structure and strategy technique decide regardless of UTC hour.'
+      ),
+      default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, True),),
+      validation_summary='Pydantic required/type coercion only',
+    )
     hfs_require_killzone: bool = config_field(
       True,
       canonical_env='AUTO_TRADE_TECHNIQUE_HFS_REQUIRE_KILLZONE',

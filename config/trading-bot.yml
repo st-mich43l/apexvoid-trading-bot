@@ -106,6 +106,9 @@ execution:
     london_window_hours: 3
     ny_window_hours: 3
     reaction_require_killzone: false
+    # Non-scalp: structure + strategy technique decide; do not sterilize by
+    # UTC publish windows. Weak volume/momentum hours are analysis rejects.
+    reaction_require_publish_window: false
     # Scalp: structure + technique decide; do not sterilize by UTC killzone.
     # Weak volume/momentum hours are rejected by analysis, not the clock.
     hfs_require_killzone: false

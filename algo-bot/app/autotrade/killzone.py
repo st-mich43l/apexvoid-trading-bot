@@ -74,6 +74,18 @@ def reaction_require_killzone(
   return require
 
 
+def reaction_require_publish_window(cfg: Any | None) -> bool:
+  """Whether non-scalp publish/arm must sit inside reaction_publish_windows.
+
+  Owner 2026-08-27: structure + strategy technique decide entries; UTC session
+  windows are optional ops sterilizers (prod off), not analysis gates.
+  """
+  section = getattr(getattr(cfg, "execution", None), "technique", None)
+  if section is None:
+    return False
+  return bool(getattr(section, "reaction_require_publish_window", False))
+
+
 def key_level_min_grade(cfg: Any | None) -> str:
   """Minimum ZoneWatch grade for Key Level Reaction (``A`` or ``B``)."""
   key = getattr(
