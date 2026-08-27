@@ -426,6 +426,8 @@ def discover_impulse_pullback(
       measured={
         "strategy": STRATEGY_DISPLAY[ARCHETYPE_IMPULSE_PULLBACK],
         "retracement": ev.get("retracement"),
+        "impulse_origin": ev.get("origin"),
+        "impulse_extreme": ev.get("extreme"),
       },
     ))
   return out
