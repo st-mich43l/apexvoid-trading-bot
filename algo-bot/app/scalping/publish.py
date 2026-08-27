@@ -48,10 +48,16 @@ def _hfs_target_ladder(
 ) -> tuple[int, tuple[int, ...]]:
   """Final TP pips + published ladder.
 
-  XAU HFS books 1R then 2R from the clamped stop when discovery selected
-  a 1:2 room target. A fixed-RR instrument carries one provisional final
-  target here; execution policy expands it into the configured R ladder
-  from the final stop. A shorter native room still publishes one exit.
+  XAU discovery picks exactly 1:2 or 1:1 room:
+
+  - **1:2** → ladder ``(1R, 2R)`` with equal close ratios (50% / 50%).
+  - **1:1** → single target at 1R; equal-ratio builder assigns
+    ``close_ratio=1.0`` so the engine books **full volume** at that print.
+
+  A fixed-RR instrument carries one provisional final target here;
+  execution policy expands it into the configured R ladder from the final
+  stop. Cap the far leg at the discovery target so a 1:1 room selection
+  never invents a second print beyond available room.
   """
   from app.core.instrument_geometry import fixed_reward_risk
 
@@ -59,8 +65,14 @@ def _hfs_target_ladder(
   if fixed_reward_risk(opportunity.symbol, cfg) is not None:
     return final_pips, (final_pips,)
   stop = max(1, int(round(float(opportunity.expected_stop_pips))))
-  # 1:2 books as (1R, 2R). Cap the far leg at the discovery target so a
-  # 1:1 room selection does not invent a second print beyond available room.
+  try:
+    rr = float(opportunity.expected_reward_risk)
+  except (TypeError, ValueError):
+    rr = (final_pips / stop) if stop else 1.0
+  # Explicit 1:1 (or target ≤ stop after rounding) → one full-size exit.
+  if rr <= 1.05 or final_pips <= stop:
+    return final_pips, (final_pips,)
+  # 1:2 books as (1R, 2R). Cap the far leg at the discovery target.
   first = stop
   last = max(first, min(final_pips, stop * 2))
   if last <= first:

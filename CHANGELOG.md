@@ -20,6 +20,8 @@ dated section after deployment.
   **No hard gates** — live allow/block unchanged; gates deferred to data.
 
 ### Fixed
+- Scalp **1:1** discoveries publish a single TP and book **full volume**
+  at that target (``close_ratio=1.0``); **1:2** still splits 50/50 at 1R+2R.
 - Session bootstrap owner DM shows an explicit ``Balance $…`` line (parsed
   from the ready event) and suppresses lone live-grant ⚠️ DMs during the
   same 6h cooldown window.
