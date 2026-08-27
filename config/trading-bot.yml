@@ -658,6 +658,17 @@ strategies:
       cooldown_after_loss_minutes: 5
       daily_loss_limit_r: 3.0
       session_loss_limit_r: 2.0
+    # ApexVoid Breakout Retest — M1 compression box (not M5 24-bar envelope).
+    # See docs/scalping/OWN_BREAKOUT_TECHNIQUE.md
+    breakout:
+      box_max_atr: 1.5
+      min_break_atr: 0.25
+      min_box_bars: 8
+      max_box_bars: 20
+      retest_lookback_bars: 5
+      require_retest_rejection: true
+      min_touches_per_side: 2
+      touch_tol_atr: 0.20
   breakout:
     break_retest_enabled: true
     breakout_enabled: true

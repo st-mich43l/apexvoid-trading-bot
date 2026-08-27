@@ -13,6 +13,11 @@ dated section after deployment.
 ## Unreleased
 
 ### Added
+- ApexVoid **Breakout Retest** technique: M1 compression box (not M5 24-bar
+  envelope), displacement break → rejection retest → hold, per-reason Redis
+  ``scalp:metric:{SYM}:breakout:{reason}``, observe-only
+  ``breakout_retest_continuation`` math stamp. See
+  ``docs/scalping/OWN_BREAKOUT_TECHNIQUE.md``.
 - Own scalp mechanism research track: design doc
   ``docs/scalping/OWN_SCALP_MECHANISM.md``; observe-only
   ``scalp_features`` + ``math_counterfactual`` stamps on all M1 discoveries;

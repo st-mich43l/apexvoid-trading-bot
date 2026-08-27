@@ -52,7 +52,11 @@ from app.scalping.risk import (
   reconcile_open_positions,
   save_risk,
 )
-from app.scalping.strategies import discover_all, idle_discovery_reasons
+from app.scalping.strategies import (
+  diagnose_breakout_reject,
+  discover_all,
+  idle_discovery_reasons,
+)
 from app.scalping.telemetry import incr, record_cycle, set_last
 from app.autotrade import worker
 
@@ -252,6 +256,16 @@ async def process_m1_bar(
     else []
   )
   strat_ms = (time.perf_counter() - t_strat) * 1000.0
+
+  # Per-reason breakout telemetry every cycle (quiet archetype diagnosis).
+  try:
+    breakout_reason = diagnose_breakout_reject(
+      context, m1, cfg, pip_size=pip,
+    )
+    if breakout_reason:
+      await incr(client, symbol, f"breakout:{breakout_reason}")
+  except Exception:
+    log.exception("breakout reject telemetry failed symbol=%s", symbol)
 
   quote = await _load_quote(client, symbol)
   if quote is None:

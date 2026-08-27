@@ -132,8 +132,8 @@
     "zone_reconcile_mode": "shadow",
     "zone_scale_undersized_policy": "single_entry"
   },
-  "contract_fingerprint": "b81aae5175b0401e2d8e2bfb917fcddc3d2f3a1cfd7e6a2c3a4937ff5d04fe3b",
-  "effective_configuration_fingerprint": "9254879f87dda6784f3211ed8e2de6a82338e0eae2dbd1cdbbb335ee9bc44280",
+  "contract_fingerprint": "8b37d428a86adad3fd3a503ac77b926f6b0e096c2d4e338aaf7a3f8000b0f6ad",
+  "effective_configuration_fingerprint": "576b1d2eb5cf790b3c51c2928899cd0d46ea012959307fab8f6e66f7d59a4fdc",
   "feed": {
     "backfill_bars": 1500,
     "bar_quality_lookback": 6,
@@ -519,7 +519,7 @@
         },
         "technique": {
           "enforce": true,
-          "hfs_require_killzone": true,
+          "hfs_require_killzone": false,
           "include_late_ny": true,
           "london_window_hours": 3,
           "ny_window_hours": 3,
@@ -920,9 +920,19 @@
           },
           "archetypes": {
             "breakout_retest_enabled": true,
-            "impulse_pullback_enabled": false,
-            "momentum_chase_enabled": false,
+            "impulse_pullback_enabled": true,
+            "momentum_chase_enabled": true,
             "range_sweep_enabled": true
+          },
+          "breakout": {
+            "box_max_atr": "1.5",
+            "max_box_bars": 20,
+            "min_box_bars": 8,
+            "min_break_atr": "0.25",
+            "min_touches_per_side": 2,
+            "require_retest_rejection": true,
+            "retest_lookback_bars": 5,
+            "touch_tol_atr": "0.2"
           },
           "context": {
             "current_context_ttl_seconds": 3600,
@@ -1438,7 +1448,7 @@
         },
         "technique": {
           "enforce": true,
-          "hfs_require_killzone": true,
+          "hfs_require_killzone": false,
           "include_late_ny": true,
           "london_window_hours": 3,
           "ny_window_hours": 3,
@@ -1875,9 +1885,19 @@
           },
           "archetypes": {
             "breakout_retest_enabled": true,
-            "impulse_pullback_enabled": false,
-            "momentum_chase_enabled": false,
+            "impulse_pullback_enabled": true,
+            "momentum_chase_enabled": true,
             "range_sweep_enabled": true
+          },
+          "breakout": {
+            "box_max_atr": "1.5",
+            "max_box_bars": 20,
+            "min_box_bars": 8,
+            "min_break_atr": "0.25",
+            "min_touches_per_side": 2,
+            "require_retest_rejection": true,
+            "retest_lookback_bars": 5,
+            "touch_tol_atr": "0.2"
           },
           "context": {
             "current_context_ttl_seconds": 3600,
@@ -2393,7 +2413,7 @@
         },
         "technique": {
           "enforce": true,
-          "hfs_require_killzone": true,
+          "hfs_require_killzone": false,
           "include_late_ny": true,
           "london_window_hours": 3,
           "ny_window_hours": 3,
@@ -2794,9 +2814,19 @@
           },
           "archetypes": {
             "breakout_retest_enabled": true,
-            "impulse_pullback_enabled": false,
-            "momentum_chase_enabled": false,
+            "impulse_pullback_enabled": true,
+            "momentum_chase_enabled": true,
             "range_sweep_enabled": true
+          },
+          "breakout": {
+            "box_max_atr": "1.5",
+            "max_box_bars": 20,
+            "min_box_bars": 8,
+            "min_break_atr": "0.25",
+            "min_touches_per_side": 2,
+            "require_retest_rejection": true,
+            "retest_lookback_bars": 5,
+            "touch_tol_atr": "0.2"
           },
           "context": {
             "current_context_ttl_seconds": 3600,
@@ -3312,7 +3342,7 @@
         },
         "technique": {
           "enforce": true,
-          "hfs_require_killzone": true,
+          "hfs_require_killzone": false,
           "include_late_ny": true,
           "london_window_hours": 3,
           "ny_window_hours": 3,
@@ -3725,9 +3755,19 @@
           },
           "archetypes": {
             "breakout_retest_enabled": true,
-            "impulse_pullback_enabled": false,
-            "momentum_chase_enabled": false,
+            "impulse_pullback_enabled": true,
+            "momentum_chase_enabled": true,
             "range_sweep_enabled": true
+          },
+          "breakout": {
+            "box_max_atr": "1.5",
+            "max_box_bars": 20,
+            "min_box_bars": 8,
+            "min_break_atr": "0.25",
+            "min_touches_per_side": 2,
+            "require_retest_rejection": true,
+            "retest_lookback_bars": 5,
+            "touch_tol_atr": "0.2"
           },
           "context": {
             "current_context_ttl_seconds": 3600,
@@ -4247,7 +4287,7 @@
         },
         "technique": {
           "enforce": true,
-          "hfs_require_killzone": true,
+          "hfs_require_killzone": false,
           "include_late_ny": true,
           "london_window_hours": 3,
           "ny_window_hours": 3,
@@ -4490,9 +4530,19 @@
           },
           "archetypes": {
             "breakout_retest_enabled": true,
-            "impulse_pullback_enabled": false,
-            "momentum_chase_enabled": false,
+            "impulse_pullback_enabled": true,
+            "momentum_chase_enabled": true,
             "range_sweep_enabled": true
+          },
+          "breakout": {
+            "box_max_atr": "1.5",
+            "max_box_bars": 20,
+            "min_box_bars": 8,
+            "min_break_atr": "0.25",
+            "min_touches_per_side": 2,
+            "require_retest_rejection": true,
+            "retest_lookback_bars": 5,
+            "touch_tol_atr": "0.2"
           },
           "context": {
             "current_context_ttl_seconds": 3600,
@@ -4873,7 +4923,7 @@
         },
         "technique": {
           "enforce": true,
-          "hfs_require_killzone": true,
+          "hfs_require_killzone": false,
           "include_late_ny": true,
           "london_window_hours": 3,
           "ny_window_hours": 3,
@@ -5266,9 +5316,19 @@
           },
           "archetypes": {
             "breakout_retest_enabled": true,
-            "impulse_pullback_enabled": false,
-            "momentum_chase_enabled": false,
+            "impulse_pullback_enabled": true,
+            "momentum_chase_enabled": true,
             "range_sweep_enabled": true
+          },
+          "breakout": {
+            "box_max_atr": "1.5",
+            "max_box_bars": 20,
+            "min_box_bars": 8,
+            "min_break_atr": "0.25",
+            "min_touches_per_side": 2,
+            "require_retest_rejection": true,
+            "retest_lookback_bars": 5,
+            "touch_tol_atr": "0.2"
           },
           "context": {
             "current_context_ttl_seconds": 3600,
@@ -5655,7 +5715,7 @@
         },
         "technique": {
           "enforce": true,
-          "hfs_require_killzone": true,
+          "hfs_require_killzone": false,
           "include_late_ny": true,
           "london_window_hours": 3,
           "ny_window_hours": 3,
@@ -6084,9 +6144,19 @@
           },
           "archetypes": {
             "breakout_retest_enabled": true,
-            "impulse_pullback_enabled": false,
-            "momentum_chase_enabled": false,
+            "impulse_pullback_enabled": true,
+            "momentum_chase_enabled": true,
             "range_sweep_enabled": true
+          },
+          "breakout": {
+            "box_max_atr": "1.5",
+            "max_box_bars": 20,
+            "min_box_bars": 8,
+            "min_break_atr": "0.25",
+            "min_touches_per_side": 2,
+            "require_retest_rejection": true,
+            "retest_lookback_bars": 5,
+            "touch_tol_atr": "0.2"
           },
           "context": {
             "current_context_ttl_seconds": 3600,
@@ -6473,7 +6543,7 @@
         },
         "technique": {
           "enforce": true,
-          "hfs_require_killzone": true,
+          "hfs_require_killzone": false,
           "include_late_ny": true,
           "london_window_hours": 3,
           "ny_window_hours": 3,
@@ -6866,9 +6936,19 @@
           },
           "archetypes": {
             "breakout_retest_enabled": true,
-            "impulse_pullback_enabled": false,
-            "momentum_chase_enabled": false,
+            "impulse_pullback_enabled": true,
+            "momentum_chase_enabled": true,
             "range_sweep_enabled": true
+          },
+          "breakout": {
+            "box_max_atr": "1.5",
+            "max_box_bars": 20,
+            "min_box_bars": 8,
+            "min_break_atr": "0.25",
+            "min_touches_per_side": 2,
+            "require_retest_rejection": true,
+            "retest_lookback_bars": 5,
+            "touch_tol_atr": "0.2"
           },
           "context": {
             "current_context_ttl_seconds": 3600,
@@ -7255,7 +7335,7 @@
         },
         "technique": {
           "enforce": true,
-          "hfs_require_killzone": true,
+          "hfs_require_killzone": false,
           "include_late_ny": true,
           "london_window_hours": 3,
           "ny_window_hours": 3,
@@ -7660,9 +7740,19 @@
           },
           "archetypes": {
             "breakout_retest_enabled": true,
-            "impulse_pullback_enabled": false,
-            "momentum_chase_enabled": false,
+            "impulse_pullback_enabled": true,
+            "momentum_chase_enabled": true,
             "range_sweep_enabled": true
+          },
+          "breakout": {
+            "box_max_atr": "1.5",
+            "max_box_bars": 20,
+            "min_box_bars": 8,
+            "min_break_atr": "0.25",
+            "min_touches_per_side": 2,
+            "require_retest_rejection": true,
+            "retest_lookback_bars": 5,
+            "touch_tol_atr": "0.2"
           },
           "context": {
             "current_context_ttl_seconds": 3600,
@@ -8049,7 +8139,7 @@
         },
         "technique": {
           "enforce": true,
-          "hfs_require_killzone": true,
+          "hfs_require_killzone": false,
           "include_late_ny": true,
           "london_window_hours": 3,
           "ny_window_hours": 3,
@@ -8284,9 +8374,19 @@
           },
           "archetypes": {
             "breakout_retest_enabled": true,
-            "impulse_pullback_enabled": false,
-            "momentum_chase_enabled": false,
+            "impulse_pullback_enabled": true,
+            "momentum_chase_enabled": true,
             "range_sweep_enabled": true
+          },
+          "breakout": {
+            "box_max_atr": "1.5",
+            "max_box_bars": 20,
+            "min_box_bars": 8,
+            "min_break_atr": "0.25",
+            "min_touches_per_side": 2,
+            "require_retest_rejection": true,
+            "retest_lookback_bars": 5,
+            "touch_tol_atr": "0.2"
           },
           "context": {
             "current_context_ttl_seconds": 3600,
