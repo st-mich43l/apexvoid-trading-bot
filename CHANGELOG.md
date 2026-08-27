@@ -21,7 +21,8 @@ dated section after deployment.
 
 ### Fixed
 - Suppress repeat owner Telegram ``Engine ready`` / session bootstrap
-  messages when cTrader reconnects (6h cooldown per event type).
+  messages when cTrader reconnects — batch config/ready/capability into
+  **one** DM per restart (6h cooldown).
 
 ### Changed
 - M1 scalp strategies drop the **HFS** display tag (`Range Sweep Scalp`,
