@@ -3095,26 +3095,21 @@ async def _handle_event(
   )
   actionable_results = list(actionability.actionable)
   actionability_decisions = list(actionability.decisions)
+  gated_decisions = list(actionability.gated)
+  demoted_hard_decisions = list(actionability.demoted_hard)
   public_results_by_key = {
     _telemetry_result_key(result): result for result in observed_results
   }
   displayed_by_key = {
     _telemetry_result_key(result): result for result in observed_results
   }
+  for result in actionable_results:
+    await increment_metric(client, "scanner_setup_actionable", symbol=symbol)
   for result, decision in actionability_decisions:
-    await increment_metric(
-      client,
-      (
-        "scanner_actionability_gated"
-        if decision.hard_block else "scanner_actionability_observed"
-      ),
-      symbol=symbol,
-    )
-    await increment_metric(client, decision.reason_code, symbol=symbol)
-    # Soft preference / allow telemetry is DEBUG — INFO was drowning the
-    # cycle with measured dumps for setups that immediately suppress
-    # (Momentum Ride mid-range, quote_outside_zone, etc.). Hard gates stay
-    # INFO so kills remain visible in prod tails.
+    if not decision.hard_block:
+      await increment_metric(
+        client, "scanner_actionability_observed", symbol=symbol,
+      )
     _log = log.info if decision.hard_block else log.debug
     _log(
       "scanner result actionability-%s symbol=%s tf=%s setup=%s "
@@ -3127,20 +3122,44 @@ async def _handle_event(
       decision.reason_code,
       decision.measured,
     )
-    if decision.hard_block:
-      blocked = replace(
+  for result, decision in gated_decisions:
+    await increment_metric(
+      client, "scanner_actionability_gated", symbol=symbol,
+    )
+    await increment_metric(
+      client,
+      f"scanner_actionability_gated:{decision.reason_code}",
+      symbol=symbol,
+    )
+    blocked = replace(
+      result,
+      execution_eligibility=_static_execution_eligibility(
         result,
-        execution_eligibility=_static_execution_eligibility(
-          result,
-          current_map,
-          allowed=False,
-          reason_code=decision.reason_code,
-          message=decision.message,
-          measured=decision.measured,
-          hard_block=True,
-        ),
-      )
-      displayed_by_key[_telemetry_result_key(result)] = blocked
+        current_map,
+        allowed=False,
+        reason_code=decision.reason_code,
+        message=decision.message,
+        measured=decision.measured,
+        hard_block=True,
+      ),
+    )
+    displayed_by_key[_telemetry_result_key(result)] = blocked
+  for result, decision in demoted_hard_decisions:
+    await increment_metric(
+      client,
+      f"scanner_actionability_demoted:{decision.reason_code}",
+      symbol=symbol,
+    )
+    log.debug(
+      "scanner result actionability-demoted symbol=%s tf=%s setup=%s "
+      "direction=%s reason=%s measured=%s",
+      symbol,
+      exec_tf,
+      result.setup,
+      result.direction,
+      decision.reason_code,
+      decision.measured,
+    )
   eligibility_gated: list[
     tuple[DetectionResult, str, dict[str, Any]]
   ] = []

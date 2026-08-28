@@ -371,6 +371,20 @@ Schema is owned by `algo-bot` `store.init_db()`; see [schema.sql](schema.sql).
 
 ---
 
+## Autonomous Algo Diagnostics
+
+Owner-only DM commands (require `TELEGRAM_OWNER_ID`):
+
+| Command | Description |
+|---|---|
+| `/algo_status` | Live auto-trade status card (positions, watches, gates) |
+| `/algo_funnel [SYMBOL]` | Discovery → activation funnel from `auto_trade:metrics:{SYMBOL}` with top block reasons per stage |
+| `/scan_report [SYMBOL] [hours]` | Scanner digest for the last N hours |
+
+The funnel stages are: `detected → actionable → match_published → zonewatch_armed → activation_allowed → plan_published`.
+
+---
+
 ## Quick Reference Card
 
 | What you type | Where | What happens |

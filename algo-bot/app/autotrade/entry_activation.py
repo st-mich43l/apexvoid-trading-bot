@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Mapping
 
+import logging
+
 from app.analysis.entry_location import EntryLocationDecision
 from app.analysis.m1_trigger import M1TriggerResult
 from app.autotrade.execution_policy import (
@@ -23,6 +25,9 @@ from app.autotrade.strategy_taxonomy import (
   is_technique_or_confluence,
   is_zone_strategy,
 )
+
+
+log = logging.getLogger(__name__)
 
 
 ACTIVATION_REACTION = "reaction_reversal"
@@ -503,6 +508,83 @@ def evaluate_entry_activation(
     return _result(reason=m1_fail_reason, would_block=True, hard=True)
 
   return _result(reason="entry_activation_allowed", would_block=False)
+
+
+ACTIVATION_BLOCK_REASON_CODES = frozenset({
+  "zone_decisively_broken",
+  "entry_location_context_missing",
+  "entry_location_htf_range_missing",
+  "buy_in_premium",
+  "sell_in_discount",
+  "buy_at_range_extreme",
+  "sell_at_range_extreme",
+  "range_entry_near_equilibrium",
+  "range_buy_not_at_discount_edge",
+  "range_sell_not_at_premium_edge",
+  "quote_outside_zone",
+  "reaction_trigger_missing",
+  "reaction_trigger_before_zone_touch",
+  "reaction_trigger_stale",
+  "reaction_trigger_wrong_direction",
+  "confirmation_requires_sweep_body",
+  "demand_requires_sweep_reclaim",
+  "sell_not_proximal",
+  "key_buy_into_impulse",
+  "impulse_against_block",
+  "breakout_retest_evidence_missing",
+  "trend_pullback_evidence_missing",
+  "momentum_continuation_evidence_missing",
+  "momentum_cannot_reuse_reversal_trigger",
+})
+
+
+async def emit_activation_gate_metrics(
+  client: Any,
+  *,
+  symbol: str,
+  strategy: str | None,
+  direction: str | None,
+  decision: EntryActivationDecision | EntryLocationDecision,
+  allowed: bool,
+) -> None:
+  """Increment activation allow/block counters with strategy/direction tags."""
+  from app.autotrade.lifecycle import increment_metric
+
+  reason = str(decision.reason_code or "unknown")
+  dimensions = {
+    "strategy": str(strategy or ""),
+    "direction": str(direction or "").upper(),
+  }
+  try:
+    if allowed:
+      await increment_metric(
+        client, "activation_allowed", symbol=symbol, dimensions=dimensions,
+      )
+      await increment_metric(
+        client,
+        f"activation_allowed:{reason}",
+        symbol=symbol,
+        dimensions=dimensions,
+      )
+      return
+    if not getattr(decision, "hard_block", False):
+      return
+    await increment_metric(
+      client, "activation_blocked", symbol=symbol, dimensions=dimensions,
+    )
+    await increment_metric(
+      client,
+      f"activation_blocked:{reason}",
+      symbol=symbol,
+      dimensions=dimensions,
+    )
+  except Exception:
+    log.exception(
+      "activation gate metrics failed symbol=%s reason=%s allowed=%s",
+      symbol,
+      reason,
+      allowed,
+    )
 
 
 def apply_trigger_to_match(match: Any, trigger: M1TriggerResult | None) -> Any:

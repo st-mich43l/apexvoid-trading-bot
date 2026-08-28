@@ -2302,6 +2302,18 @@ async def _record_gate_reject(client: Any, symbol: str, condition: str) -> None:
     )
 
 
+async def _increment_strategy_match_blocked(
+  client: Any,
+  symbol: str,
+  reason: str,
+) -> None:
+  """Aggregate plus reason-specific strategy-match gate counters."""
+  await increment_metric(client, "strategy_match_blocked", symbol=symbol)
+  await increment_metric(
+    client, f"strategy_match_blocked:{reason}", symbol=symbol,
+  )
+
+
 async def _record_guard_evaluation(
   client: Any,
   symbol: str,
@@ -3489,7 +3501,9 @@ async def _publish_strategy_match(
       "mode_check", "blocked", "auto_trade_disabled",
       "autonomous execution is disabled", retained=False,
     )
-    await increment_metric(client, "strategy_match_blocked", symbol=symbol)
+    await _increment_strategy_match_blocked(
+      client, symbol, "auto_trade_disabled",
+    )
     return None
   if not runtime_config.runtime.auto_trade.strategy_match_enabled:
     await _consume_strategy_match(client, symbol, match)
@@ -3498,7 +3512,9 @@ async def _publish_strategy_match(
       "new StrategyMatch routing is disabled; existing positions remain managed",
       retained=False,
     )
-    await increment_metric(client, "strategy_match_blocked", symbol=symbol)
+    await _increment_strategy_match_blocked(
+      client, symbol, "strategy_match_disabled",
+    )
     return None
   if not _strategy_mode_enabled(match):
     await _consume_strategy_match(client, symbol, match)
@@ -3506,7 +3522,9 @@ async def _publish_strategy_match(
       "mode_check", "blocked", "strategy_disabled",
       f"{match.strategy} execution is disabled", retained=False,
     )
-    await increment_metric(client, "strategy_match_blocked", symbol=symbol)
+    await _increment_strategy_match_blocked(
+      client, symbol, "strategy_disabled",
+    )
     return None
   if match.symbol != symbol.upper():
     await route(
@@ -3515,7 +3533,9 @@ async def _publish_strategy_match(
       retained=False,
     )
     await _consume_strategy_match(client, symbol, match)
-    await increment_metric(client, "strategy_match_blocked", symbol=symbol)
+    await _increment_strategy_match_blocked(
+      client, symbol, "symbol_mismatch",
+    )
     return None
   if match.confluence < max(1, runtime_config.actionability.gates.min_confluence):
     await route(
@@ -3533,7 +3553,9 @@ async def _publish_strategy_match(
       retained=False,
     )
     await _consume_strategy_match(client, symbol, match)
-    await increment_metric(client, "strategy_match_blocked", symbol=symbol)
+    await _increment_strategy_match_blocked(
+      client, symbol, "confluence_below_minimum",
+    )
     return None
   guard_mode = resolve_guard_mode()
   source_summary = (
@@ -3566,6 +3588,9 @@ async def _publish_strategy_match(
       )
       await _consume_strategy_match(client, symbol, match)
       await _record_gate_reject(client, symbol, "range_edge_not_chop")
+      await _increment_strategy_match_blocked(
+        client, symbol, "range_edge_not_chop",
+      )
       await route(
         "mode_check", "blocked", "range_edge_not_chop",
         regime_outcome.message, measured=regime_outcome.measured,

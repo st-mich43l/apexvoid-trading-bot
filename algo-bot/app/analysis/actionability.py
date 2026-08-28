@@ -52,6 +52,7 @@ class ActionabilityResolution:
   decisions: tuple[tuple[DetectionResult, ActionabilityDecision], ...]
   conflicts: tuple[dict[str, Any], ...]
   entry_locations: tuple[tuple[DetectionResult, EntryLocationDecision], ...] = ()
+  demoted_hard: tuple[tuple[DetectionResult, ActionabilityDecision], ...] = ()
 
 
 def _structural(result: DetectionResult) -> bool:
@@ -705,10 +706,12 @@ def resolve_actionability(
   )
   demoted_decisions: dict[int, list[ActionabilityDecision]] = {}
   demoted_gated: dict[int, ActionabilityDecision] = {}
+  demoted_hard: list[tuple[DetectionResult, ActionabilityDecision]] = []
   for index, decision_list in decisions.items():
     kept: list[ActionabilityDecision] = []
     for decision in decision_list:
       if decision.hard_block and decision.reason_code not in hard_reasons:
+        demoted_hard.append((observed[index], decision))
         decision = replace(
           decision,
           allowed=True,
@@ -765,6 +768,7 @@ def resolve_actionability(
     ),
     tuple(conflicts),
     tuple(entry_location_pairs),
+    tuple(demoted_hard),
   )
 
 

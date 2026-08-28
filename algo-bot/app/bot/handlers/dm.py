@@ -13,6 +13,7 @@ from aiogram.types import Message
 
 from app.signals.chart_analysis import analyse_chart_image
 from app.autotrade.delivery import auto_trade_status_text, set_auto_trade_paused
+from app.autotrade.funnel_diagnostics import auto_trade_funnel_text
 from app.signals.manual_execution import request_close_all
 from app.core.config import runtime_config
 from app.analysis import scanner
@@ -239,6 +240,28 @@ async def handle_auto_status(msg: Message) -> None:
       "⚠️ <b>Algo bot status send failed</b>\n"
       "Telegram rejected the status card. Try again shortly."
     )
+
+
+@router.message(Command("algo_funnel", "algo funnel"), F.chat.type == "private")
+async def handle_algo_funnel(msg: Message) -> None:
+  if not _is_owner(msg):
+    return
+  raw = _command_args(msg).strip()
+  symbol = raw.split()[0].upper() if raw else (
+    runtime_config.market_data.scanner.symbols.split(",")[0].strip().upper()
+  )
+  try:
+    text = await auto_trade_funnel_text(symbol)
+  except Exception:
+    log.exception("algo_funnel failed symbol=%s", symbol)
+    await msg.answer(
+      "⚠️ <b>Algo funnel unavailable</b>\n"
+      "Could not read Redis metrics — check bot logs."
+    )
+    return
+  if len(text) > 4000:
+    text = text[:3990] + "\n… (truncated)"
+  await msg.answer(text)
 
 
 @router.message(Command("scan_report"), F.chat.type == "private")
