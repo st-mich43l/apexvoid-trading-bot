@@ -1,6 +1,6 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "c8d409206e2fff900f411fb045e64c994d1f7283cc7315bba36ced9f3fba7c44",
+  "configuration_contract_fingerprint_sha256": "42edd6bd009e4678610a16ba4537904e0aa574ab14a7a1833d439b596c3f7b0d",
   "excluded_ctrader_only_count": 49,
   "excluded_paths": [
     "bootstrap.ctrader.connection.host",
@@ -53,7 +53,7 @@
     "risk.sizing.add_require_risk_free",
     "risk.sizing.risk_pct"
   ],
-  "included_leaf_count": 491,
+  "included_leaf_count": 492,
   "included_paths": [
     "actionability.contested_corridor.gap_atr",
     "actionability.counter_bias.allowed",
@@ -437,6 +437,7 @@
     "strategies.high_frequency_scalp.activation.rearm_distance_atr",
     "strategies.high_frequency_scalp.activation.trigger_maximum_age_bars",
     "strategies.high_frequency_scalp.archetypes.breakout_retest_enabled",
+    "strategies.high_frequency_scalp.archetypes.impulse_pullback_allowed_sessions",
     "strategies.high_frequency_scalp.archetypes.impulse_pullback_enabled",
     "strategies.high_frequency_scalp.archetypes.range_sweep_enabled",
     "strategies.high_frequency_scalp.breakout.box_max_atr",
@@ -550,6 +551,6 @@
   "included_secret_count": 6,
   "included_shared_field_count": 96,
   "projection_model": "app.configuration.models.python_runtime.PythonRuntimeConfig",
-  "source_fingerprint_sha256": "c8d409206e2fff900f411fb045e64c994d1f7283cc7315bba36ced9f3fba7c44",
+  "source_fingerprint_sha256": "42edd6bd009e4678610a16ba4537904e0aa574ab14a7a1833d439b596c3f7b0d",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

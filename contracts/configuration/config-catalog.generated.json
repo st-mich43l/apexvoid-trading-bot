@@ -1,20 +1,20 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "c8d409206e2fff900f411fb045e64c994d1f7283cc7315bba36ced9f3fba7c44",
-  "configuration_document_fingerprint_sha256": "d00c8b1958602cfee96385930672c534223ca934a3578e25e1c202a59c3e072d",
+  "configuration_contract_fingerprint_sha256": "42edd6bd009e4678610a16ba4537904e0aa574ab14a7a1833d439b596c3f7b0d",
+  "configuration_document_fingerprint_sha256": "761920507385d2c06ca2c0011771ea63b7e3a3f947e7e46ed70cecfdd7390590",
   "counts": {
     "algorithm_constants": 57,
-    "configurable": 473,
+    "configurable": 474,
     "known_conflicts": 30,
     "owners": {
       "ctrader": 49,
-      "python": 395,
+      "python": 396,
       "shared": 96
     },
     "protocol_constants": 10,
     "secrets": 9,
     "shared": 96,
-    "total_items": 540
+    "total_items": 541
   },
   "items": [
     {
@@ -16085,6 +16085,43 @@
     {
       "algorithm_constant": false,
       "allowed_values": [],
+      "canonical_env": "HFS_IMPULSE_PULLBACK_ALLOWED_SESSIONS",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {},
+      "default": "london",
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": "london"
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Comma-separated UTC session names (classify_session) allowed for impulse pullback. Empty or \"all\" disables the gate.",
+      "display_id": "config:strategies.high_frequency_scalp.archetypes.impulse_pullback_allowed_sessions",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.high_frequency_scalp.archetypes.impulse_pullback_allowed_sessions",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "strategy_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "str",
+      "unit": "string",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
       "canonical_env": "HFS_IMPULSE_PULLBACK_ENABLED",
       "catalog_version": 2,
       "configurable": true,
@@ -20259,6 +20296,6 @@
       "validation_summary": "Pydantic required/type coercion only"
     }
   ],
-  "source_fingerprint_sha256": "c8d409206e2fff900f411fb045e64c994d1f7283cc7315bba36ced9f3fba7c44",
+  "source_fingerprint_sha256": "42edd6bd009e4678610a16ba4537904e0aa574ab14a7a1833d439b596c3f7b0d",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

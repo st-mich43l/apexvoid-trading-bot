@@ -16,6 +16,7 @@ from app.scalping.microstructure import (
   find_compression_box,
   macro_momentum_direction,
 )
+from app.scalping.context import is_impulse_pullback_session_allowed
 from app.scalping.models import (
   ARCHETYPE_BREAKOUT_RETEST,
   ARCHETYPE_IMPULSE_PULLBACK,
@@ -326,6 +327,8 @@ def discover_impulse_pullback(
   if not _enabled(cfg, "impulse_pullback"):
     return []
   if ARCHETYPE_IMPULSE_PULLBACK not in context.permitted_archetypes:
+    return []
+  if not is_impulse_pullback_session_allowed(context.session, cfg):
     return []
 
   loc = getattr(_hfs_cfg(cfg), "location", None)
@@ -705,7 +708,10 @@ def idle_discovery_reasons(
         if sell_ev is not None and pos is not None and pos < sell_min:
           reasons.append("range_sweep:sell_location_blocked")
   if ARCHETYPE_IMPULSE_PULLBACK in context.permitted_archetypes and _enabled(cfg, "impulse_pullback"):
-    reasons.append("impulse_pullback:not_matched")
+    if not is_impulse_pullback_session_allowed(context.session, cfg):
+      reasons.append(f"impulse_pullback:outside_allowed_session:{context.session}")
+    else:
+      reasons.append("impulse_pullback:not_matched")
   if ARCHETYPE_BREAKOUT_RETEST in context.permitted_archetypes and _enabled(cfg, "breakout_retest"):
     code = diagnose_breakout_reject(context, m1_df, cfg, pip_size=pip_size)
     if code and code != "armed":
