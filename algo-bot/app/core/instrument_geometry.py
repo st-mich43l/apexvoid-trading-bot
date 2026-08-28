@@ -27,20 +27,55 @@ def price_digits(symbol: str) -> int:
   return int(_effective(symbol).units.price_digits)
 
 
-def fixed_reward_risk(symbol: str, cfg=None) -> float | None:
-  """Configured fixed-RR target, or ``None`` for pip-ladder instruments."""
+def _instrument_targeting(symbol: str, cfg=None):
   source = runtime_config if cfg is None else cfg
   targeting = getattr(source, "targeting", None)
+  if targeting is not None:
+    return targeting
+  resolver = getattr(source, "for_instrument", None)
+  if not callable(resolver):
+    return None
+  return resolver(symbol).targeting
+
+
+def fixed_reward_risk(symbol: str, cfg=None) -> float | None:
+  """Configured fixed-RR target, or ``None`` for pip-ladder instruments.
+
+  Instrument-level only. For technique publish/activation use
+  ``technique_fixed_rr_targeting`` so M1 scalp strategies keep their own book.
+  """
+  targeting = _instrument_targeting(symbol, cfg)
   if targeting is None:
-    resolver = getattr(source, "for_instrument", None)
-    if not callable(resolver):
-      return None
-    targeting = resolver(symbol).targeting
+    return None
   mode = getattr(targeting.mode, "value", targeting.mode)
   if str(mode) != InstrumentTargetMode.FIXED_RR.value:
     return None
   ratio = float(targeting.reward_risk or 0.0)
   return ratio if ratio > 0 else None
+
+
+def technique_fixed_rr_targeting(
+  symbol: str,
+  strategy: str | None = None,
+  cfg=None,
+):
+  """Instrument fixed_rr targeting for technique only — never M1 scalp.
+
+  XAU hosts both structure fixed_rr technique and M1 scalping. Scalp matches
+  must not expand into the technique 1R/1.5R/2R close ladder.
+  """
+  if strategy:
+    from app.autotrade.strategy_taxonomy import is_m1_scalp_strategy
+
+    if is_m1_scalp_strategy(strategy):
+      return None
+  targeting = _instrument_targeting(symbol, cfg)
+  if targeting is None:
+    return None
+  mode = getattr(targeting.mode, "value", targeting.mode)
+  if str(mode) != InstrumentTargetMode.FIXED_RR.value:
+    return None
+  return targeting
 
 
 def analysis_runtime(symbol: str):

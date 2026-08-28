@@ -15,6 +15,9 @@ SUPPORTED_INSTRUMENT_TIMEFRAMES = frozenset({"H1", "M15", "M5", "M1", "H4", "D1"
 
 # Compatibility policy: inherit global trading domains from the resolved root.
 XAU_CURRENT_V1_POLICY = "xau_current_v1"
+# XAU technique structure fixed_rr (same 2R close split as fx_fixed_2r_v1).
+# M1 scalping stays on its own discovery book — see technique_fixed_rr_targeting.
+XAU_FIXED_2R_V1_POLICY = "xau_fixed_2r_v1"
 FX_FIXED_2R_V1_POLICY = "fx_fixed_2r_v1"
 # 2026 GBP/JPY dig: ATR(14) ~180 pips/day vs EURUSD's ~70, and moves reverse
 # hard once they've run -- front-load profit-taking (40/25/35 instead of the
@@ -25,6 +28,7 @@ FX_FIXED_2R_FRONTLOAD_V1_POLICY = "fx_fixed_2r_frontload_v1"
 REGISTERED_INSTRUMENT_POLICIES = frozenset({
   FX_FIXED_2R_V1_POLICY,
   FX_FIXED_2R_FRONTLOAD_V1_POLICY,
+  XAU_FIXED_2R_V1_POLICY,
   XAU_CURRENT_V1_POLICY,
 })
 
@@ -34,6 +38,7 @@ REGISTERED_INSTRUMENT_POLICIES = frozenset({
 FIXED_RR_POLICY_CLOSE_RATIOS: dict[str, tuple[float, float, float]] = {
   FX_FIXED_2R_V1_POLICY: (0.25, 0.25, 0.50),
   FX_FIXED_2R_FRONTLOAD_V1_POLICY: (0.40, 0.25, 0.35),
+  XAU_FIXED_2R_V1_POLICY: (0.25, 0.25, 0.50),
 }
 
 
@@ -607,6 +612,16 @@ def resolve_manual_profile(
   )
 
 
+def _instrument_hosts_m1_scalping(instrument: InstrumentConfig) -> bool:
+  """True when this instrument may run the M1 scalping lane.
+
+  Gold (XAU) hosts scalping even after technique moves to fixed_rr. FX
+  fixed_rr books must never opt into M1 cycles.
+  """
+  canonical = str(instrument.canonical_symbol or "").strip().upper()
+  return canonical in {"XAU", "XAUUSD"}
+
+
 def compose_instrument_domain_overrides(
   instrument: InstrumentConfig,
 ) -> dict[str, Any]:
@@ -637,7 +652,10 @@ def compose_instrument_domain_overrides(
     ratio = float(instrument.targeting.reward_risk or 2.0)
     composed["execution.range.min_rr"] = ratio
     composed["execution.reaction.room_stop_min_rr"] = ratio
-    composed["strategies.scalping.policy.minimum_reward_risk"] = ratio
+    # FX fixed_rr packs are not M1-scalp hosts. XAU hosts scalping and must
+    # keep strategies.scalping.policy.minimum_reward_risk (1.10) untouched.
+    if not _instrument_hosts_m1_scalping(instrument):
+      composed["strategies.scalping.policy.minimum_reward_risk"] = ratio
     if envelope is not None:
       composed["execution.range.min_target_pips"] = int(
         round(float(envelope.min_pips) * ratio)

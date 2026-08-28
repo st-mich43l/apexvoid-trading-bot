@@ -26,13 +26,24 @@ LIVE_SYMBOL = "XAU"
 
 
 def _instrument_allows_scalping(instrument_cfg: Any) -> bool:
-  """M1 scalping is gold ladder-pip only — never FX ``fixed_rr`` books.
+  """M1 scalping hosts: gold (including technique fixed_rr) — never FX books.
 
   Live 2026-08-20: treating every live instrument as scalp-eligible ran M1
   cycles on EURUSD/GBPJPY/GBPUSD/USDJPY together with XAU, pegged the
   algo-bot container at ~100% CPU, and starved Telegram ``/trade`` responses
   for minutes. FX stays reaction + manual /algo.
+
+  XAU technique may use ``fixed_rr`` for structure TP/SL while still hosting
+  the M1 scalping lane on its own discovery book.
   """
+  identity = getattr(instrument_cfg, "identity", None)
+  canonical = str(
+    getattr(identity, "canonical_symbol", None)
+    or getattr(instrument_cfg, "canonical_symbol", "")
+    or ""
+  ).strip().upper()
+  if canonical in {"XAU", "XAUUSD"}:
+    return True
   targeting = getattr(instrument_cfg, "targeting", None)
   mode = getattr(targeting, "mode", None)
   if mode is None:

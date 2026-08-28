@@ -55,16 +55,11 @@ def _hfs_target_ladder(
   - **1:1** → single target at 1R; equal-ratio builder assigns
     ``close_ratio=1.0`` so the engine books **full volume** at that print.
 
-  A fixed-RR instrument carries one provisional final target here;
-  execution policy expands it into the configured R ladder from the final
-  stop. Cap the far leg at the discovery target so a 1:1 room selection
-  never invents a second print beyond available room.
+  Technique ``fixed_rr`` on XAU must not collapse this ladder — scalp keeps
+  its own 1R/2R book; technique R expansion applies only to non-scalp
+  strategies in execution policy.
   """
-  from app.core.instrument_geometry import fixed_reward_risk
-
   final_pips = max(1, int(round(float(opportunity.expected_target_pips))))
-  if fixed_reward_risk(opportunity.symbol, cfg) is not None:
-    return final_pips, (final_pips,)
   stop = max(1, int(round(float(opportunity.expected_stop_pips))))
   try:
     rr = float(opportunity.expected_reward_risk)
