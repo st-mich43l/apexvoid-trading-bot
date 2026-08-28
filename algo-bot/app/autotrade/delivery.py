@@ -17,6 +17,8 @@ from app.autotrade import units
 from app.autotrade.event_integrity import (
   contradictory_archived_tp,
   terminal_loss_at_protective_stop,
+  close_at_protective_stop,
+  close_at_breakeven,
 )
 from app.autotrade.volume_pips import (
   format_signed_pips,
@@ -564,6 +566,20 @@ _CLOSE_REASON_LABELS = {
   "manual_or_external_close": "✋ Closed manually on platform",
 }
 
+
+def _use_stop_close_format(event: dict, *, reason: str, cleaned: str) -> bool:
+  if terminal_loss_at_protective_stop(event):
+    return True
+  if reason == "manual_or_external_close" and close_at_protective_stop(event):
+    return True
+  if _NO_TP_ARCHIVED_RE.search(cleaned or ""):
+    return True
+  if reason == "stop_loss_or_take_profit" and (
+    (_resolve_close_pips(event, cleaned, allow_stop_fallback=True) or 0) < 0
+  ):
+    return True
+  return False
+
 _HIGHEST_TP_ARCHIVED_RE = re.compile(
   r"(?i)highest\s+TP\s+archived\s+(?P<target>TP\d+)"
 )
@@ -707,13 +723,14 @@ def _format_position_closed(event: dict, message: str) -> str:
     at = _PLAN_CLOSED_AT_RE.search(cleaned)
     if at is not None:
       lines.append(f"@ <b>{escape(at.group('price'))}</b>")
-  elif no_tp is not None or terminal_loss_at_protective_stop(event) or (
-    reason == "stop_loss_or_take_profit"
-    and (_resolve_close_pips(event, cleaned, allow_stop_fallback=True) or 0) < 0
-  ):
+  elif _use_stop_close_format(event, reason=reason, cleaned=cleaned):
     lines.append(" · ".join(_sl_close_result_parts(event, cleaned, html=True)))
   else:
     reason_label = _CLOSE_REASON_LABELS.get(reason)
+    if close_at_breakeven(event, cleaned):
+      reason_label = "🛡 Closed at BE stop"
+    elif reason_label and close_at_protective_stop(event):
+      reason_label = None
     if reason_label:
       lines.append(reason_label)
     if event.get("previous_state") != "partially_closed":
@@ -1501,8 +1518,7 @@ def _format_position_closed_compact_line(event: dict, message: str) -> str:
       return f"🏁 POSITION CLOSED · @ {escape(at.group('price'))}"
     return "🏁 POSITION CLOSED"
   if (
-    no_tp is not None
-    or reason == "stop_loss_or_take_profit"
+    _use_stop_close_format(event, reason=reason, cleaned=cleaned)
     or terminal_loss_at_protective_stop(event)
   ):
     parts = ["🏁 POSITION CLOSED", *_sl_close_result_parts(
@@ -1510,6 +1526,10 @@ def _format_position_closed_compact_line(event: dict, message: str) -> str:
     )]
     return " · ".join(parts)
   reason_label = _CLOSE_REASON_LABELS.get(reason)
+  if close_at_breakeven(event, cleaned):
+    reason_label = "🛡 Closed at BE stop"
+  elif reason_label and close_at_protective_stop(event):
+    reason_label = None
   parts = ["🏁 POSITION CLOSED"]
   if reason_label:
     parts.append(reason_label)

@@ -735,6 +735,8 @@ public sealed class TradePlanRuntime(
     return false;
   }
 
+  private const decimal ProtectiveStopNearPips = 5m;
+
   private bool LooksLikeProtectiveStopHit(
     TradePlan plan,
     TradePlanRuntimeState state,
@@ -749,7 +751,9 @@ public sealed class TradePlanRuntime(
       return false;
     }
     var pipSize = PipSizeFor(plan.Symbol);
-    var tolerance = Math.Max(pipSize, 2m * pipSize);
+    // Live quote after an SL fill often pulls back a few pips (2026-08-28
+    // XAU Flip Zone: exit 4604.16 vs stop 4604.47 misread as manual).
+    var tolerance = Math.Max(pipSize * ProtectiveStopNearPips, 2m * pipSize);
     return Math.Abs(exitEstimate - stop) <= tolerance;
   }
 
@@ -792,6 +796,14 @@ public sealed class TradePlanRuntime(
   {
     if (lookup.Reason != PositionCloseReason.Unknown)
     {
+      if (
+        lookup.Reason == PositionCloseReason.ManualOrExternalOrder
+        && lookup.ExecutionPrice is decimal manualExit
+        && LooksLikeProtectiveStopHit(plan, state, manualExit)
+      )
+      {
+        return PositionCloseReason.StopLossOrTakeProfit;
+      }
       return lookup.Reason;
     }
     // Promote Unknown → SL/TP only when the deal lookup recovered a real
@@ -3086,7 +3098,14 @@ public sealed class TradePlanRuntime(
         var liveExit = liveExitHint ?? ExecutableQuote(plan, quote);
         if (liveExit is decimal exit)
         {
-          var fallbackIsStop = LooksLikeStopOut(plan, state, exit);
+          var fallbackIsStop = LooksLikeStopOut(plan, state, exit)
+            || (
+              (state.BreakEvenApplied || state.HighestBookedTargetIndex >= 0)
+              && (
+                state.CurrentStop != 0
+                || state.GroupAbsoluteStop is not null
+              )
+            );
           var fallbackReason = fallbackIsStop
             ? PositionCloseReason.StopLossOrTakeProfit
             : PositionCloseReason.ManualOrExternalOrder;
@@ -3269,6 +3288,52 @@ public sealed class TradePlanRuntime(
         reasonCode: "manual_or_external_close"
       );
       return next;
+    }
+
+    if (stillOpen == 0 && allManual)
+    {
+      var manualExit = reasons
+        .Select(item => item.ExitPrice)
+        .FirstOrDefault(price => price is not null)
+        ?? liveExitHint;
+      if (
+        manualExit is decimal exit
+        && (
+          LooksLikeStopOut(plan, state, exit)
+          || state.BreakEvenApplied
+          || state.HighestBookedTargetIndex >= 0
+        )
+      )
+      {
+        var stopExit =
+          state.CurrentStop != 0 ? state.CurrentStop
+          : state.GroupAbsoluteStop ?? plan.Stop.Price;
+        var bookedExit =
+          stopExit > 0
+          && ExitBeyondProtectiveStop(plan, state, exit)
+            ? stopExit
+            : exit;
+        var patched = reasons
+          .Select(item => (
+            item.Leg,
+            PositionCloseReason.StopLossOrTakeProfit,
+            (decimal?)(item.ExitPrice ?? bookedExit)
+          ))
+          .ToList();
+        return await FinalizeBrokerAbsentCloseAsync(
+          symbol,
+          plan,
+          state,
+          legs,
+          patched,
+          terminalReason: "group_stop_loss",
+          eventKey: "group_stop_loss",
+          reasonCode: "stop_loss_or_take_profit",
+          closeKind: "stop_loss_or_take_profit",
+          previousGroupStage,
+          cancellationToken
+        );
+      }
     }
 
     if (stillOpen == 0 && (allManual || (allHaveExitPrice && !allMissingAreSl)))
