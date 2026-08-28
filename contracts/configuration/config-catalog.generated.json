@@ -1,20 +1,20 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "c8452b112182a8ce9f519c6524d4b513dbbc635cee552e44b515c7d2963a8132",
-  "configuration_document_fingerprint_sha256": "da60002e3d47e4b8e1d693cde27000a36a60ae5017b0e0fc653c94f5b1cd7471",
+  "configuration_contract_fingerprint_sha256": "3a56ddf72bc10703e2ad5f619a2d4ad31038c685c462a0fce5aeaf27f0b89dc6",
+  "configuration_document_fingerprint_sha256": "8f3ab6e030692cab757d6e9dfb9b8d9494d7a10035573e68fb2d53bf8e04d58a",
   "counts": {
     "algorithm_constants": 57,
-    "configurable": 481,
+    "configurable": 479,
     "known_conflicts": 30,
     "owners": {
       "ctrader": 49,
-      "python": 403,
+      "python": 401,
       "shared": 96
     },
     "protocol_constants": 10,
     "secrets": 9,
     "shared": 96,
-    "total_items": 548
+    "total_items": 546
   },
   "items": [
     {
@@ -4337,6 +4337,43 @@
       "terminal_deprecation_reason": null,
       "type": "float",
       "unit": "price",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "CONFLUENCE_TECHNIQUE_BONUS_SCORE",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {},
+      "default": 2.5,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 2.5
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Per extra overlapping technique added to Confluence Zone band score.",
+      "display_id": "config:analysis.zones.confluence.technique_bonus_score",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "analysis.zones.confluence.technique_bonus_score",
+      "protocol_constant": false,
+      "reload_policy": "next_scanner_cycle",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "analysis_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "float",
+      "unit": "score",
       "validation_summary": "Pydantic required/type coercion only"
     },
     {
@@ -16095,117 +16132,6 @@
     {
       "algorithm_constant": false,
       "allowed_values": [],
-      "canonical_env": "COUNTER_EXTREME_PD",
-      "catalog_version": 2,
-      "configurable": true,
-      "constraints": {},
-      "default": 0.25,
-      "default_contexts": [
-        {
-          "context": "python_schema",
-          "value": 0.25
-        }
-      ],
-      "deprecated": false,
-      "deprecated_aliases": [],
-      "description": "Controls  (fraction).",
-      "display_id": "config:strategies.counter_trend.extreme_pd",
-      "evidence_notes": [],
-      "introduced_in": "config-catalog-v2",
-      "kind": "configurable",
-      "mismatch_policy": "not_reported",
-      "owner": "python",
-      "path": "strategies.counter_trend.extreme_pd",
-      "protocol_constant": false,
-      "reload_policy": "new_setup_only",
-      "replacement_path": null,
-      "required": false,
-      "risk_classification": "strategy_behavior",
-      "runtime_reload_policy": "restart",
-      "secret": false,
-      "shared_with_ctrader": false,
-      "terminal_deprecation_reason": null,
-      "type": "float",
-      "unit": "fraction",
-      "validation_summary": "Pydantic required/type coercion only"
-    },
-    {
-      "algorithm_constant": false,
-      "allowed_values": [],
-      "canonical_env": "COUNTER_LEVEL_MIN_TOUCHES",
-      "catalog_version": 2,
-      "configurable": true,
-      "constraints": {},
-      "default": 3,
-      "default_contexts": [
-        {
-          "context": "python_schema",
-          "value": 3
-        }
-      ],
-      "deprecated": false,
-      "deprecated_aliases": [],
-      "description": "Controls  (count).",
-      "display_id": "config:strategies.counter_trend.level_min_touches",
-      "evidence_notes": [],
-      "introduced_in": "config-catalog-v2",
-      "kind": "configurable",
-      "mismatch_policy": "not_reported",
-      "owner": "python",
-      "path": "strategies.counter_trend.level_min_touches",
-      "protocol_constant": false,
-      "reload_policy": "new_setup_only",
-      "replacement_path": null,
-      "required": false,
-      "risk_classification": "strategy_behavior",
-      "runtime_reload_policy": "restart",
-      "secret": false,
-      "shared_with_ctrader": false,
-      "terminal_deprecation_reason": null,
-      "type": "int",
-      "unit": "count",
-      "validation_summary": "Pydantic required/type coercion only"
-    },
-    {
-      "algorithm_constant": false,
-      "allowed_values": [],
-      "canonical_env": "COUNTER_MIN_ZONE_SCORE",
-      "catalog_version": 2,
-      "configurable": true,
-      "constraints": {},
-      "default": 10.0,
-      "default_contexts": [
-        {
-          "context": "python_schema",
-          "value": 10.0
-        }
-      ],
-      "deprecated": false,
-      "deprecated_aliases": [],
-      "description": "Controls .",
-      "display_id": "config:strategies.counter_trend.min_zone_score",
-      "evidence_notes": [],
-      "introduced_in": "config-catalog-v2",
-      "kind": "configurable",
-      "mismatch_policy": "not_reported",
-      "owner": "python",
-      "path": "strategies.counter_trend.min_zone_score",
-      "protocol_constant": false,
-      "reload_policy": "new_setup_only",
-      "replacement_path": null,
-      "required": false,
-      "risk_classification": "strategy_behavior",
-      "runtime_reload_policy": "restart",
-      "secret": false,
-      "shared_with_ctrader": false,
-      "terminal_deprecation_reason": null,
-      "type": "float",
-      "unit": "score",
-      "validation_summary": "Pydantic required/type coercion only"
-    },
-    {
-      "algorithm_constant": false,
-      "allowed_values": [],
       "canonical_env": "AUTO_TRADE_MAP_COUNTER_BIAS_ENABLED",
       "catalog_version": 2,
       "configurable": true,
@@ -20655,6 +20581,6 @@
       "validation_summary": "Pydantic required/type coercion only"
     }
   ],
-  "source_fingerprint_sha256": "c8452b112182a8ce9f519c6524d4b513dbbc635cee552e44b515c7d2963a8132",
+  "source_fingerprint_sha256": "3a56ddf72bc10703e2ad5f619a2d4ad31038c685c462a0fce5aeaf27f0b89dc6",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

@@ -120,6 +120,7 @@
       "analysis.triggers.m1.wick_fraction",
       "analysis.zones.alert_ttl",
       "analysis.zones.confluence.merge_gap_price",
+      "analysis.zones.confluence.technique_bonus_score",
       "analysis.zones.discovery.maximum_width_atr",
       "analysis.zones.merge_max_width",
       "analysis.zones.merge_overlap",
@@ -368,9 +369,6 @@
       "strategies.breakout.break_retest_enabled",
       "strategies.breakout.breakout_enabled",
       "strategies.counter_trend.allow_counter_trend",
-      "strategies.counter_trend.extreme_pd",
-      "strategies.counter_trend.level_min_touches",
-      "strategies.counter_trend.min_zone_score",
       "strategies.mapped_zone.counter_bias_enabled",
       "strategies.mapped_zone.enabled",
       "strategies.matching.multiple_matches_enabled",
@@ -518,7 +516,7 @@
     "XAU_ZONE_PREFERRED_MAX_WIDTH_PRICE": "instruments.XAU.analysis.zones.preferred_maximum_width_price",
     "XAU_ZONE_PREFERRED_MIN_WIDTH_PRICE": "instruments.XAU.analysis.zones.preferred_minimum_width_price"
   },
-  "fingerprint": "c8452b112182a8ce9f519c6524d4b513dbbc635cee552e44b515c7d2963a8132",
+  "fingerprint": "3a56ddf72bc10703e2ad5f619a2d4ad31038c685c462a0fce5aeaf27f0b89dc6",
   "instrument_schema": {
     "active_projection_symbol": "XAU",
     "optional": [

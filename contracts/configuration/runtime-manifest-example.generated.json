@@ -132,8 +132,8 @@
     "zone_reconcile_mode": "shadow",
     "zone_scale_undersized_policy": "single_entry"
   },
-  "contract_fingerprint": "c8452b112182a8ce9f519c6524d4b513dbbc635cee552e44b515c7d2963a8132",
-  "effective_configuration_fingerprint": "0747458f5c226b8461784daf782db3c1047a20c17fe0f5875ab779994d28f669",
+  "contract_fingerprint": "3a56ddf72bc10703e2ad5f619a2d4ad31038c685c462a0fce5aeaf27f0b89dc6",
+  "effective_configuration_fingerprint": "42982c225598cfb7fc67d0e5bbffd203c7d1cb80f68069dff17ae6d6dcf1ef4c",
   "feed": {
     "backfill_bars": 1500,
     "bar_quality_lookback": 6,
@@ -916,10 +916,7 @@
           "breakout_enabled": true
         },
         "counter_trend": {
-          "allow_counter_trend": true,
-          "extreme_pd": "0.25",
-          "level_min_touches": 3,
-          "min_zone_score": "10"
+          "allow_counter_trend": true
         },
         "mapped_zone": {
           "counter_bias_enabled": true,
@@ -1890,10 +1887,7 @@
           "breakout_enabled": true
         },
         "counter_trend": {
-          "allow_counter_trend": true,
-          "extreme_pd": "0.25",
-          "level_min_touches": 3,
-          "min_zone_score": "10"
+          "allow_counter_trend": true
         },
         "mapped_zone": {
           "counter_bias_enabled": true,
@@ -2828,10 +2822,7 @@
           "breakout_enabled": true
         },
         "counter_trend": {
-          "allow_counter_trend": true,
-          "extreme_pd": "0.25",
-          "level_min_touches": 3,
-          "min_zone_score": "10"
+          "allow_counter_trend": true
         },
         "mapped_zone": {
           "counter_bias_enabled": true,
@@ -3778,10 +3769,7 @@
           "breakout_enabled": true
         },
         "counter_trend": {
-          "allow_counter_trend": true,
-          "extreme_pd": "0.25",
-          "level_min_touches": 3,
-          "min_zone_score": "10"
+          "allow_counter_trend": true
         },
         "mapped_zone": {
           "counter_bias_enabled": true,
@@ -4712,10 +4700,7 @@
           "breakout_enabled": true
         },
         "counter_trend": {
-          "allow_counter_trend": true,
-          "extreme_pd": "0.25",
-          "level_min_touches": 3,
-          "min_zone_score": "10"
+          "allow_counter_trend": true
         },
         "mapped_zone": {
           "counter_bias_enabled": true,
@@ -5515,10 +5500,7 @@
           "breakout_enabled": true
         },
         "counter_trend": {
-          "allow_counter_trend": true,
-          "extreme_pd": "0.25",
-          "level_min_touches": 3,
-          "min_zone_score": "10"
+          "allow_counter_trend": true
         },
         "mapped_zone": {
           "counter_bias_enabled": true,
@@ -6352,10 +6334,7 @@
           "breakout_enabled": true
         },
         "counter_trend": {
-          "allow_counter_trend": true,
-          "extreme_pd": "0.25",
-          "level_min_touches": 3,
-          "min_zone_score": "10"
+          "allow_counter_trend": true
         },
         "mapped_zone": {
           "counter_bias_enabled": true,
@@ -7153,10 +7132,7 @@
           "breakout_enabled": true
         },
         "counter_trend": {
-          "allow_counter_trend": true,
-          "extreme_pd": "0.25",
-          "level_min_touches": 3,
-          "min_zone_score": "10"
+          "allow_counter_trend": true
         },
         "mapped_zone": {
           "counter_bias_enabled": true,
@@ -7966,10 +7942,7 @@
           "breakout_enabled": true
         },
         "counter_trend": {
-          "allow_counter_trend": true,
-          "extreme_pd": "0.25",
-          "level_min_touches": 3,
-          "min_zone_score": "10"
+          "allow_counter_trend": true
         },
         "mapped_zone": {
           "counter_bias_enabled": true,
@@ -8759,10 +8732,7 @@
           "breakout_enabled": true
         },
         "counter_trend": {
-          "allow_counter_trend": true,
-          "extreme_pd": "0.25",
-          "level_min_touches": 3,
-          "min_zone_score": "10"
+          "allow_counter_trend": true
         },
         "mapped_zone": {
           "counter_bias_enabled": true,

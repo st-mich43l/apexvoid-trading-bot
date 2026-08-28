@@ -94,25 +94,9 @@ def clamped_position(raw: float | None) -> float | None:
 
 
 def location_archetype(strategy: str) -> str:
-  name = str(strategy or "")
-  family = strategy_family(name)
-  if family == FAMILY_RANGE_REVERSION or is_range_strategy(name):
-    return ARCHETYPE_RANGE_REVERSION
-  if family == FAMILY_TREND_PULLBACK or name == "Trend Pullback":
-    return ARCHETYPE_TREND_PULLBACK
-  if family == FAMILY_BREAKOUT_RETEST or name in {"Break & Retest", "Box Breakout"}:
-    return ARCHETYPE_BREAKOUT_RETEST
-  if family in {
-    FAMILY_LIQUIDITY_REVERSAL,
-    FAMILY_MAPPED_ZONE_REACTION,
-  } or is_liquidity_strategy(name) or is_reaction_strategy(name) or is_zone_strategy(name):
-    return ARCHETYPE_REVERSAL
-  if name in {"Breakout Continuation", "Momentum Ride"}:
-    return ARCHETYPE_MOMENTUM
-  # Demand/Supply legacy display names land as zone family above.
-  if "Reaction" in name or "Fade" in name:
-    return ARCHETYPE_REVERSAL
-  return ARCHETYPE_UNKNOWN
+  from app.autotrade.strategy_registry import location_archetype as registry_location
+
+  return registry_location(strategy)
 
 
 def parse_strict_pd_archetypes(raw: str) -> frozenset[str]:

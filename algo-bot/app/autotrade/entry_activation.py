@@ -60,32 +60,9 @@ class EntryActivationDecision:
 
 
 def activation_archetype(strategy: str) -> str:
-  name = str(strategy or "")
-  family = strategy_family(name)
-  if family == FAMILY_BREAKOUT_RETEST or name in {"Break & Retest", "Box Breakout"}:
-    return ACTIVATION_BREAKOUT_RETEST
-  if family == FAMILY_TREND_PULLBACK or name == "Trend Pullback":
-    return ACTIVATION_TREND_PULLBACK
-  if family == FAMILY_MOMENTUM_CONTINUATION or name in {
-    "Breakout Continuation",
-    "Momentum Ride",
-  }:
-    return ACTIVATION_MOMENTUM
-  if (
-    family in {
-      FAMILY_RANGE_REVERSION,
-      FAMILY_LIQUIDITY_REVERSAL,
-      FAMILY_MAPPED_ZONE_REACTION,
-    }
-    or is_range_strategy(name)
-    or is_liquidity_strategy(name)
-    or is_reaction_strategy(name)
-    or is_zone_strategy(name)
-    or "Reaction" in name
-    or "Fade" in name
-  ):
-    return ACTIVATION_REACTION
-  return ACTIVATION_UNKNOWN
+  from app.autotrade.strategy_registry import activation_archetype as registry_activation
+
+  return registry_activation(strategy)
 
 
 def _mode(cfg: Any) -> str:

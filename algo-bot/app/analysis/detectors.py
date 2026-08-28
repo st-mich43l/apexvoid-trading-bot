@@ -3,6 +3,7 @@
 from dataclasses import dataclass, field, replace
 import logging
 import math
+from collections import Counter
 from types import SimpleNamespace
 from typing import Callable, Protocol
 
@@ -38,7 +39,7 @@ from app.analysis.trendlines import Trendline, value_at
 from app.analysis.execution_eligibility import ExecutionEligibility
 from app.analysis.structural_reaction_support import (
   CONFIRM_REJECTION_CHOCH,
-  bias_relationship,
+  bias_relationship as resolve_bias_relationship,
   box_structural_id,
   equal_level_structural_id,
   evaluate_structural_reaction,
@@ -59,6 +60,19 @@ from app.analysis.technique_detectors import (
 )
 
 log = logging.getLogger(__name__)
+
+COUNTER_BIAS_BELOW_MINIMUM_CONFLUENCE = "counter_bias_below_minimum_confluence"
+_discovery_rejections: Counter[str] = Counter()
+
+
+def drain_discovery_rejections() -> dict[str, int]:
+  counts = dict(_discovery_rejections)
+  _discovery_rejections.clear()
+  return counts
+
+
+def _record_discovery_rejection(reason: str) -> None:
+  _discovery_rejections[reason] += 1
 
 _EPS = 1e-9
 _BUY_ZONE_SIDE = "de" + "mand"
@@ -152,9 +166,7 @@ class DetectorSettings:
   breakout_accept_bars: int = 2
   breakout_max_age_bars: int = 6
   allow_counter_trend: bool = True
-  counter_min_zone_score: float = 10.0
-  counter_extreme_pd: float = 0.25
-  counter_level_min_touches: int = 3
+  counter_bias_minimum_confluence: int = 3
   range_scalp_enabled: bool = True
   range_scalp_lookback: int = 48
   range_scalp_cluster_atr: float = 0.25
@@ -424,9 +436,9 @@ def detector_settings_from(config: object | None = None) -> DetectorSettings:
     breakout_accept_bars=analysis.breakout.accept_bars,
     breakout_max_age_bars=analysis.breakout.max_age_bars,
     allow_counter_trend=strategies.counter_trend.allow_counter_trend,
-    counter_min_zone_score=strategies.counter_trend.min_zone_score,
-    counter_extreme_pd=strategies.counter_trend.extreme_pd,
-    counter_level_min_touches=strategies.counter_trend.level_min_touches,
+    counter_bias_minimum_confluence=int(
+      actionability.counter_bias.minimum_confluence
+    ),
     range_scalp_enabled=strategies.range_reversion.range_edge.enabled,
     range_scalp_lookback=strategies.range_reversion.range_edge.lookback,
     range_scalp_cluster_atr=strategies.range_reversion.range_edge.cluster_atr,
@@ -693,6 +705,18 @@ def _exec(ctx: DetectionContext) -> tuple[pd.DataFrame, IndicatorSet, StructureS
     ctx.indicators[ctx.tf],
     ctx.structures[ctx.tf],
   )
+
+
+def _uses_counter_bias_direction(ctx: DetectionContext) -> bool:
+  if not ctx.settings.allow_counter_trend:
+    return False
+  local_bias = ctx.structures[ctx.tf].bias
+  if local_bias not in {"up", "down"}:
+    return False
+  htf_bias = (ctx.htf_bias or "").casefold()
+  if htf_bias not in {"up", "down"}:
+    return False
+  return local_bias != htf_bias
 
 
 def _direction(ctx: DetectionContext) -> str | None:
@@ -1267,6 +1291,17 @@ def _finish(
       full_reasons = [*full_reasons, tag]
   if confluence < ctx.settings.confluence_floor:
     return None
+  relationship = (
+    bias_relationship
+    if bias_relationship is not None
+    else resolve_bias_relationship(ctx.htf_bias, direction)
+  )
+  if (
+    relationship == "counter_bias"
+    and confluence < ctx.settings.counter_bias_minimum_confluence
+  ):
+    _record_discovery_rejection(COUNTER_BIAS_BELOW_MINIMUM_CONFLUENCE)
+    return None
   math_pd = None
   if st.dealing_range is not None:
     math_pd = float(st.dealing_range.position)
@@ -1291,7 +1326,7 @@ def _finish(
     touch_bar_ts=touch_bar_ts,
     source_touches=source_touches,
     source_score=source_score,
-    bias_relationship=bias_relationship,
+    bias_relationship=relationship,
     math_fib_ratio=(None if fib_hit is None else float(fib_hit.ratio)),
     math_velocity=(
       None if mom is None else float(getattr(mom, "velocity", 0.0))
@@ -2170,160 +2205,6 @@ def fade_scalp(ctx: DetectionContext) -> DetectionResult | None:
   return None
 
 
-def zone_reaction(ctx: DetectionContext) -> DetectionResult | None:
-  if not ctx.settings.allow_counter_trend or ctx.htf_bias not in {"up", "down"}:
-    return None
-  df, ind, st = _exec(ctx)
-  if len(df) < 5:
-    return None
-  direction = "BUY" if ctx.htf_bias == "down" else "SELL"
-  if not _counter_pd_gate(st, direction, ctx.settings):
-    return None
-  price = _current_price(ctx, df)
-  atr = _atr(ind)
-  candidate = _counter_zone_candidate(ctx, df, st, direction, price, atr)
-  if candidate is None:
-    candidate = _counter_level_candidate(ctx, df, st, direction, price, atr)
-  if candidate is None:
-    return None
-
-  zone, level, mode, reasons, confirmation_target = candidate
-  if _in_chop(ctx) and not _chop_edge_ok(ctx, zone, direction):
-    return None
-  confirmation = _counter_confirmation(
-    df,
-    st,
-    zone,
-    direction,
-    confirmation_target,
-    ctx.settings,
-  )
-  if confirmation is None:
-    return None
-  if _in_chop(ctx) and confirmation != "sweep A":
-    return None
-  range_reason = _chop_range_reason(ctx)
-  reasons = [
-    f"HTF bias {ctx.htf_bias}",
-    *reasons,
-    confirmation,
-    *([range_reason] if range_reason else []),
-    _pd_reason(st),
-    *_counter_target_reasons(st, price, direction, mode),
-  ]
-  return _finish(
-    ctx,
-    "Zone Reaction",
-    direction,
-    level,
-    zone,
-    price,
-    atr,
-    reasons,
-    mode,
-  )
-
-
-def _counter_zone_candidate(
-  ctx: DetectionContext,
-  df: pd.DataFrame,
-  st: StructureSet,
-  direction: str,
-  price: float,
-  atr: float,
-) -> tuple[Zone, float, str, list[str], Level | None] | None:
-  zones = [
-    zone for zone in _candidate_zones(st, direction)
-    if (
-      zone.touches == 0
-      and float(getattr(zone, "score", 0.0)) >= ctx.settings.counter_min_zone_score
-      and _last_touches_zone(df, zone)
-    )
-  ]
-  selected = _best_valid_zone(zones, price, atr, direction, ctx.settings)
-  if selected is None:
-    return None
-  zone, proximal = selected
-  mode = "counter_swing" if _counter_swing_zone(zone) else "counter_reaction"
-  reasons = ["fresh counter zone"]
-  if mode == "counter_swing":
-    reasons.append("fresh HTF OB")
-  reasons = _add_proximal_reason(reasons, proximal)
-  return zone, _zone_key(zone, price, direction), mode, reasons, None
-
-
-def _counter_level_candidate(
-  ctx: DetectionContext,
-  df: pd.DataFrame,
-  st: StructureSet,
-  direction: str,
-  price: float,
-  atr: float,
-) -> tuple[Zone, float, str, list[str], Level | None] | None:
-  band = max(_EPS, ctx.settings.proximal_band_atr * max(0.0, atr))
-  for level in sorted(st.levels, key=lambda item: abs(item.price - price)):
-    if level.touches < ctx.settings.counter_level_min_touches:
-      continue
-    if not _level_touched_last(df, level.price, max(level.band, band)):
-      continue
-    zone = _pseudo_level_zone(level.price, band, direction, f"key {_number(level.price)} x{level.touches}")
-    if not _entry_valid_for_settings(zone, price, atr, direction, ctx.settings):
-      continue
-    return (
-      zone,
-      _zone_key(zone, price, direction),
-      "counter_reaction",
-      [f"key {_number(level.price)} x{level.touches}"],
-      level,
-    )
-  for line in sorted(
-    st.trendlines,
-    key=lambda item: abs(value_at(item, len(df) - 1) - price),
-  ):
-    if line.broken:
-      continue
-    if direction == "BUY" and line.kind != "support":
-      continue
-    if direction == "SELL" and line.kind != "resistance":
-      continue
-    line_price = value_at(line, len(df) - 1)
-    if not _level_touched_last(df, line_price, band):
-      continue
-    reason = f"TL {line.kind} ×{line.touches}"
-    zone = _pseudo_level_zone(
-      line_price,
-      band,
-      direction,
-      reason,
-      source="trendline",
-    )
-    if not _entry_valid_for_settings(zone, price, atr, direction, ctx.settings):
-      continue
-    return (
-      zone,
-      _zone_key(zone, price, direction),
-      "counter_reaction",
-      [reason],
-      None,
-    )
-  for session in sorted(st.session_levels, key=lambda item: abs(item.price - price)):
-    if session.swept or not _counter_session_side(session.name, direction):
-      continue
-    if not _level_touched_last(df, session.price, band):
-      continue
-    zone = _pseudo_level_zone(session.price, band, direction, session.name)
-    if not _entry_valid_for_settings(zone, price, atr, direction, ctx.settings):
-      continue
-    return (
-      zone,
-      _zone_key(zone, price, direction),
-      "counter_reaction",
-      [session.name],
-      None,
-    )
-  return None
-
-
 def _pseudo_level_zone(
   price: float,
   band: float,
@@ -2343,50 +2224,6 @@ def _pseudo_level_zone(
   )
 
 
-def _counter_confirmation(
-  df: pd.DataFrame,
-  st: StructureSet,
-  zone: Zone,
-  direction: str,
-  level: Level | None,
-  settings: DetectorSettings,
-) -> str | None:
-  grab = _zone_grab(st, zone, direction, settings.pip_size)
-  if grab is None and level is not None:
-    grab = _level_grab(st, level, direction)
-  if grab is not None and grab.grade == "A":
-    return "sweep A"
-  if _rejection(df, direction) and _recent_choch(st, direction, len(df), settings):
-    return "rejection + CHoCH"
-  return None
-
-
-def _counter_pd_gate(
-  st: StructureSet,
-  direction: str,
-  settings: DetectorSettings,
-) -> bool:
-  range_ = st.dealing_range
-  if range_ is None:
-    return False
-  extreme = max(0.0, min(0.5, settings.counter_extreme_pd))
-  if direction == "BUY":
-    return range_.position <= extreme + _EPS
-  return range_.position >= 1.0 - extreme - _EPS
-
-
-def _pd_reason(st: StructureSet) -> str:
-  if st.dealing_range is None:
-    return "PD unknown"
-  return f"PD {st.dealing_range.position:.2f}"
-
-
-def _counter_swing_zone(zone: Zone) -> bool:
-  sources = set(zone.sources or ([zone.source] if zone.source else []))
-  has_structure = bool(sources & {"order_block", "breaker"})
-  return has_structure and "HTF zone" in set(zone.score_reasons or [])
-
-
 def _recent_choch(
   st: StructureSet,
   direction: str,
@@ -2400,43 +2237,6 @@ def _recent_choch(
     item.kind == "CHoCH" and item.direction == wanted and item.index >= earliest
     for item in st.breaks
   )
-
-
-def _level_touched_last(df: pd.DataFrame, price: float, band: float) -> bool:
-  if df.empty:
-    return False
-  row = df.iloc[-1]
-  return (
-    float(row["low"]) <= price + max(0.0, band)
-    and float(row["high"]) >= price - max(0.0, band)
-  )
-
-
-def _counter_session_side(name: str, direction: str) -> bool:
-  if direction == "BUY":
-    return _is_low_session_level(name)
-  return _is_high_session_level(name)
-
-
-def _counter_target_reasons(
-  st: StructureSet,
-  price: float,
-  direction: str,
-  mode: str,
-) -> list[str]:
-  if mode == "counter_swing":
-    if st.dealing_range is not None:
-      return [f"TP anchor EQ {_number(st.dealing_range.eq)}"]
-    return ["TP anchor opposing HTF zone"]
-  session = _nearest_session_tp(st.session_levels, price, direction)
-  if session is not None:
-    return [f"TP anchor {session.name}"]
-  pool = _nearest_opposing_pool(st, price, direction)
-  if pool is not None:
-    return [f"TP anchor liquidity {_number(pool.level)}"]
-  if st.dealing_range is not None:
-    return [f"TP anchor EQ {_number(st.dealing_range.eq)}"]
-  return []
 
 
 def _nearest_opposing_pool(
@@ -2584,7 +2384,7 @@ def _structural_finish(
   source_score: float | None = None,
   factors: ConfluenceFactors | None = None,
 ) -> DetectionResult | None:
-  relationship = bias_relationship(ctx.htf_bias, direction)
+  relationship = resolve_bias_relationship(ctx.htf_bias, direction)
   full_reasons = [
     f"HTF bias {ctx.htf_bias}",
     *reasons,

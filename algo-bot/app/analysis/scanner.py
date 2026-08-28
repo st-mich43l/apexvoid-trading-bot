@@ -3043,6 +3043,11 @@ async def _handle_event(
     return found
 
   detected = await asyncio.to_thread(_run_detectors)
+  from app.analysis.detectors import drain_discovery_rejections
+
+  for reason, count in drain_discovery_rejections().items():
+    for _ in range(count):
+      await increment_metric(client, reason, symbol=symbol)
   for result in detected:
     metric_name = {
       "Key Level Reaction": "key_level_reaction_detected",
