@@ -232,10 +232,21 @@ def apply_forming_card_price(text: str, price: float, *, digits: int = 2) -> str
 def parse_forming_card_symbol(text: str) -> str | None:
   if not text:
     return None
+  for line in text.splitlines():
+    stripped = line.strip()
+    activated = _ACTIVATED_HEADER_RE.match(stripped)
+    if activated is not None:
+      return str(activated.group("symbol")).upper()
+    forming = _CARD_HEADER_RE.match(stripped)
+    if forming is not None:
+      return str(forming.group("symbol")).upper()
   match = _CARD_HEADLINE_SYMBOL_RE.search(text)
   if match is None:
     return None
-  return str(match.group(1)).upper()
+  symbol = str(match.group(1)).upper()
+  if symbol in {"POSITION", "TERMINAL"}:
+    return None
+  return symbol
 
 
 def parse_forming_card_price_now(text: str) -> float | None:
@@ -1649,6 +1660,50 @@ def _price_text(value: float, *, symbol: str) -> str:
   return f"{float(value):,.{digits}f}"
 
 
+def _target_reference_price(match: StrategyMatch) -> float | None:
+  """Reference for displayed TP pip offsets on the root card."""
+  direction = str(match.direction or "").upper()
+  try:
+    if direction == "BUY" and match.entry_low is not None:
+      return float(match.entry_low)
+    if direction == "SELL" and match.entry_high is not None:
+      return float(match.entry_high)
+    if match.key_level is not None:
+      return float(match.key_level)
+    if match.entry_low is not None and match.entry_high is not None:
+      return (float(match.entry_low) + float(match.entry_high)) / 2.0
+    if match.current_price is not None:
+      return float(match.current_price)
+  except (TypeError, ValueError):
+    return None
+  return None
+
+
+def _target_pip_offset(
+  target_price: float,
+  *,
+  reference: float,
+  direction: str,
+  symbol: str,
+) -> int:
+  try:
+    pip = float(pip_for(symbol))
+    ref = float(reference)
+    price = float(target_price)
+  except (KeyError, TypeError, ValueError):
+    return 0
+  if pip <= 0 or not (math.isfinite(ref) and math.isfinite(price)):
+    return 0
+  side = str(direction or "").upper()
+  if side == "BUY":
+    delta = price - ref
+  elif side == "SELL":
+    delta = ref - price
+  else:
+    delta = abs(price - ref)
+  return max(0, int(round(delta / pip)))
+
+
 def quote_inside_entry_zone(
   price: float | None,
   entry_low: float | None,
@@ -1734,10 +1789,20 @@ def _trade_area_targets_line(
 
   if prices:
     parts: list[str] = []
+    reference = _target_reference_price(match)
+    direction = str(match.direction or "").upper()
     for index, price in enumerate(prices):
       label = f"TP{index + 1}"
       price_text = _price_text(price, symbol=symbol)
-      if index < len(pips):
+      if reference is not None:
+        offset = _target_pip_offset(
+          price,
+          reference=reference,
+          direction=direction,
+          symbol=symbol,
+        )
+        parts.append(f"{label} {price_text} (+{offset})")
+      elif index < len(pips):
         parts.append(f"{label} {price_text} (+{pips[index]})")
       else:
         parts.append(f"{label} {price_text}")
