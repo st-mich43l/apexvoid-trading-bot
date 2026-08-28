@@ -29,6 +29,15 @@ ARCHETYPE_BREAKOUT_RETEST = "breakout_retest"
 ARCHETYPE_MOMENTUM = "momentum"
 ARCHETYPE_UNKNOWN = "unknown"
 
+VALID_STRICT_PD_ARCHETYPES = frozenset({
+  ARCHETYPE_REVERSAL,
+  ARCHETYPE_RANGE_REVERSION,
+  ARCHETYPE_TREND_PULLBACK,
+  ARCHETYPE_BREAKOUT_RETEST,
+  ARCHETYPE_MOMENTUM,
+  ARCHETYPE_UNKNOWN,
+})
+
 MODE_OFF = "off"
 MODE_SHADOW = "shadow"
 MODE_ENFORCE = "enforce"
@@ -104,6 +113,19 @@ def location_archetype(strategy: str) -> str:
   if "Reaction" in name or "Fade" in name:
     return ARCHETYPE_REVERSAL
   return ARCHETYPE_UNKNOWN
+
+
+def parse_strict_pd_archetypes(raw: str) -> frozenset[str]:
+  """Parse comma-separated strict-PD archetype tokens; unknown tokens raise."""
+  text = str(raw or "").strip()
+  if not text:
+    return frozenset()
+  tokens = [part.strip().lower() for part in text.split(",") if part.strip()]
+  unknown = set(tokens) - VALID_STRICT_PD_ARCHETYPES
+  if unknown:
+    unknown_list = ", ".join(sorted(unknown))
+    raise ValueError(f"unknown strict PD archetypes: {unknown_list}")
+  return frozenset(tokens)
 
 
 def _valid_bounds(low: float | None, high: float | None) -> bool:
@@ -273,7 +295,14 @@ def evaluate_entry_location(
   strict_pd = True if tech is None else bool(
     getattr(tech, "strict_premium_discount", True),
   )
-  htf_pd = bool(technique_enforce(cfg) and strict_pd)
+  strict_pd_archetypes = parse_strict_pd_archetypes(
+    getattr(tech, "strict_premium_discount_archetypes", "reversal,range_reversion"),
+  )
+  htf_pd = bool(
+    technique_enforce(cfg)
+    and strict_pd
+    and archetype in strict_pd_archetypes
+  )
   measured: dict[str, Any] = {
     "mode": mode,
     "archetype": archetype,
@@ -289,6 +318,7 @@ def evaluate_entry_location(
     "zone_position": context.zone_position,
     "direction": str(direction or "").upper(),
     "htf_premium_discount": htf_pd,
+    "strict_pd_archetypes": sorted(strict_pd_archetypes),
   }
 
   if mode == MODE_OFF:
@@ -406,6 +436,17 @@ def evaluate_entry_location(
       would_block = True
     elif side == "SELL" and pos < sell_min:
       reason = "sell_at_range_extreme"
+      would_block = True
+
+  elif archetype == ARCHETYPE_MOMENTUM:
+    section = getattr(root, "momentum", None) if root else None
+    buy_min = _float_cfg(section, "momentum_buy_minimum_position", 0.15)
+    sell_max = _float_cfg(section, "momentum_sell_maximum_position", 0.85)
+    if side == "BUY" and pos <= buy_min:
+      reason = "momentum_buy_at_range_low"
+      would_block = True
+    elif side == "SELL" and pos >= sell_max:
+      reason = "momentum_sell_at_range_high"
       would_block = True
 
   elif archetype in {ARCHETYPE_REVERSAL, ARCHETYPE_UNKNOWN}:

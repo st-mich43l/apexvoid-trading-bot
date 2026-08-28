@@ -134,6 +134,7 @@ class DetectorSettings:
   daily_rollover_utc_hour: int = 21
   eq_band: float = 0.10
   strict_pd_gate: bool = False
+  strict_pd_archetypes: frozenset[str] = frozenset({"reversal", "range_reversion"})
   sweep_body_frac: float = 0.5
   sweep_react_bars: int = 3
   inducement_band_atr: float = 0.3
@@ -297,6 +298,18 @@ def _fib_cfg(analysis: object) -> object:
   )
 
 
+def _strict_pd_archetypes_from_config(execution: object) -> frozenset[str]:
+  from app.analysis.entry_location import parse_strict_pd_archetypes
+
+  technique = getattr(execution, "technique", None)
+  raw = getattr(
+    technique,
+    "strict_premium_discount_archetypes",
+    "reversal,range_reversion",
+  )
+  return parse_strict_pd_archetypes(raw)
+
+
 def detector_settings_from(config: object | None = None) -> DetectorSettings:
   """Build detector settings from the app config for every PA consumer.
 
@@ -383,6 +396,7 @@ def detector_settings_from(config: object | None = None) -> DetectorSettings:
         )
       )
     ),
+    strict_pd_archetypes=_strict_pd_archetypes_from_config(execution),
     sweep_body_frac=analysis.liquidity.sweep.body_frac,
     sweep_react_bars=analysis.liquidity.sweep.react_bars,
     inducement_band_atr=analysis.measurements.inducement_band_atr,
@@ -891,6 +905,8 @@ def _pd_gate(
   ctx: "DetectionContext | None" = None,
   setup: str = "",
 ) -> bool:
+  from app.analysis.entry_location import location_archetype
+
   range_ = st.dealing_range
   if range_ is None:
     return True
@@ -902,7 +918,12 @@ def _pd_gate(
   else:
     loose = range_.zone != "discount"
     strict = range_.zone == "premium"
-  if settings.strict_pd_gate and loose and not strict and ctx is not None:
+  archetype = location_archetype(setup)
+  use_strict = (
+    settings.strict_pd_gate
+    and archetype in settings.strict_pd_archetypes
+  )
+  if use_strict and loose and not strict and ctx is not None:
     # Diagnostic (2026-08-11): execution.technique.strict_premium_discount
     # narrows BUY to discount-only / SELL to premium-only with zero
     # telemetry anywhere - unlike every other gate in this pipeline, there
@@ -912,10 +933,10 @@ def _pd_gate(
     # mode is removing. Does not change the returned decision.
     log.info(
       "pd gate strict-only rejection symbol=%s tf=%s setup=%s direction=%s "
-      "zone=%s",
-      ctx.symbol, ctx.tf, setup, direction, range_.zone,
+      "zone=%s archetype=%s",
+      ctx.symbol, ctx.tf, setup, direction, range_.zone, archetype,
     )
-  return strict if settings.strict_pd_gate else loose
+  return strict if use_strict else loose
 
 
 def _in_chop(ctx: DetectionContext) -> bool:

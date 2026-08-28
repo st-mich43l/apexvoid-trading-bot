@@ -386,8 +386,8 @@
     }
   ],
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "d9e06207415d007ccd8340863196737e86e4d0bd6ae24f9d5c064fc6cc7b0b0d",
+  "configuration_contract_fingerprint_sha256": "a4327e119712986e6ddd91a38d0caa57b90882f2b4b194e3c952fd74f18e1adb",
   "count": 64,
-  "source_fingerprint_sha256": "d9e06207415d007ccd8340863196737e86e4d0bd6ae24f9d5c064fc6cc7b0b0d",
+  "source_fingerprint_sha256": "a4327e119712986e6ddd91a38d0caa57b90882f2b4b194e3c952fd74f18e1adb",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

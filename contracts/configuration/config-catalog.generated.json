@@ -1,20 +1,20 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "d9e06207415d007ccd8340863196737e86e4d0bd6ae24f9d5c064fc6cc7b0b0d",
-  "configuration_document_fingerprint_sha256": "0a010538a7a0c0ea3f0a5270822ed2f7ad8abb9974352c0ab0e2ece71b5e2a0e",
+  "configuration_contract_fingerprint_sha256": "a4327e119712986e6ddd91a38d0caa57b90882f2b4b194e3c952fd74f18e1adb",
+  "configuration_document_fingerprint_sha256": "d0795d29c06dc748135600930cf9bd57b7a6143e9872435ed059f3de62a3bfd3",
   "counts": {
     "algorithm_constants": 57,
-    "configurable": 475,
+    "configurable": 478,
     "known_conflicts": 30,
     "owners": {
       "ctrader": 49,
-      "python": 397,
+      "python": 400,
       "shared": 96
     },
     "protocol_constants": 10,
     "secrets": 9,
     "shared": 96,
-    "total_items": 542
+    "total_items": 545
   },
   "items": [
     {
@@ -329,6 +329,86 @@
       "type": "str",
       "unit": "enum",
       "validation_summary": "Pydantic type coercion + field validator"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "ENTRY_LOCATION_MOMENTUM_BUY_MIN_POSITION",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 0,
+        "le": 1
+      },
+      "default": 0.15,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 0.15
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Block momentum BUY entries at or below this range position (fade of continuation).",
+      "display_id": "config:actionability.entry_location.momentum.momentum_buy_minimum_position",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "actionability.entry_location.momentum.momentum_buy_minimum_position",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "execution_safety",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "float",
+      "unit": "fraction",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "ENTRY_LOCATION_MOMENTUM_SELL_MAX_POSITION",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 0,
+        "le": 1
+      },
+      "default": 0.85,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 0.85
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Block momentum SELL entries at or above this range position (fade of continuation).",
+      "display_id": "config:actionability.entry_location.momentum.momentum_sell_maximum_position",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "actionability.entry_location.momentum.momentum_sell_maximum_position",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "execution_safety",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "float",
+      "unit": "fraction",
+      "validation_summary": "Pydantic required/type coercion only"
     },
     {
       "algorithm_constant": false,
@@ -10905,6 +10985,43 @@
     {
       "algorithm_constant": false,
       "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_STRICT_PD_ARCHETYPES",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {},
+      "default": "reversal,range_reversion",
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": "reversal,range_reversion"
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Comma-separated location archetypes to which strict_premium_discount applies. Empty string disables the rule entirely. Setting it to \"reversal,range_reversion,trend_pullback,breakout_retest,momentum,unknown\" restores pre-PR-B behaviour.",
+      "display_id": "config:execution.technique.strict_premium_discount_archetypes",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "execution.technique.strict_premium_discount_archetypes",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "strategy_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "str",
+      "unit": "string",
+      "validation_summary": "Comma-separated archetype tokens; unknown tokens raise"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
       "canonical_env": "AUTO_TRADE_TREND_HARD_ENTRY_DRIFT_PIPS",
       "catalog_version": 2,
       "configurable": true,
@@ -20419,6 +20536,6 @@
       "validation_summary": "Pydantic required/type coercion only"
     }
   ],
-  "source_fingerprint_sha256": "d9e06207415d007ccd8340863196737e86e4d0bd6ae24f9d5c064fc6cc7b0b0d",
+  "source_fingerprint_sha256": "a4327e119712986e6ddd91a38d0caa57b90882f2b4b194e3c952fd74f18e1adb",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

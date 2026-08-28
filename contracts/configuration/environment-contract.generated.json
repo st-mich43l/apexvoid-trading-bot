@@ -1,7 +1,7 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "d9e06207415d007ccd8340863196737e86e4d0bd6ae24f9d5c064fc6cc7b0b0d",
-  "count": 475,
+  "configuration_contract_fingerprint_sha256": "a4327e119712986e6ddd91a38d0caa57b90882f2b4b194e3c952fd74f18e1adb",
+  "count": 478,
   "deprecated_alias_count": 64,
   "entries": [
     {
@@ -2584,6 +2584,22 @@
       "unit": "count"
     },
     {
+      "canonical_env": "AUTO_TRADE_STRICT_PD_ARCHETYPES",
+      "default": "reversal,range_reversion",
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Comma-separated location archetypes to which strict_premium_discount applies. Empty string disables the rule entirely. Setting it to \"reversal,range_reversion,trend_pullback,breakout_retest,momentum,unknown\" restores pre-PR-B behaviour.",
+      "display_id": "config:execution.technique.strict_premium_discount_archetypes",
+      "owner": "python",
+      "path": "execution.technique.strict_premium_discount_archetypes",
+      "replacement_path": null,
+      "required": false,
+      "secret": false,
+      "shared_with_ctrader": false,
+      "type": "str",
+      "unit": "string"
+    },
+    {
       "canonical_env": "AUTO_TRADE_STRUCTURAL_GUARD_MODE",
       "default": "balanced",
       "deprecated": false,
@@ -4331,6 +4347,38 @@
       "shared_with_ctrader": false,
       "type": "str",
       "unit": "enum"
+    },
+    {
+      "canonical_env": "ENTRY_LOCATION_MOMENTUM_BUY_MIN_POSITION",
+      "default": 0.15,
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Block momentum BUY entries at or below this range position (fade of continuation).",
+      "display_id": "config:actionability.entry_location.momentum.momentum_buy_minimum_position",
+      "owner": "python",
+      "path": "actionability.entry_location.momentum.momentum_buy_minimum_position",
+      "replacement_path": null,
+      "required": false,
+      "secret": false,
+      "shared_with_ctrader": false,
+      "type": "float",
+      "unit": "fraction"
+    },
+    {
+      "canonical_env": "ENTRY_LOCATION_MOMENTUM_SELL_MAX_POSITION",
+      "default": 0.85,
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Block momentum SELL entries at or above this range position (fade of continuation).",
+      "display_id": "config:actionability.entry_location.momentum.momentum_sell_maximum_position",
+      "owner": "python",
+      "path": "actionability.entry_location.momentum.momentum_sell_maximum_position",
+      "replacement_path": null,
+      "required": false,
+      "secret": false,
+      "shared_with_ctrader": false,
+      "type": "float",
+      "unit": "fraction"
     },
     {
       "canonical_env": "ENTRY_LOCATION_RANGE_BUY_MAX_POSITION",
@@ -7744,6 +7792,6 @@
   ],
   "secret_count": 9,
   "shared_with_ctrader_count": 87,
-  "source_fingerprint_sha256": "d9e06207415d007ccd8340863196737e86e4d0bd6ae24f9d5c064fc6cc7b0b0d",
+  "source_fingerprint_sha256": "a4327e119712986e6ddd91a38d0caa57b90882f2b4b194e3c952fd74f18e1adb",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

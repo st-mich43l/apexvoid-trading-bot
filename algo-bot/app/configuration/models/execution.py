@@ -288,6 +288,23 @@ class ExecutionTechniqueConfig(FrozenConfigModel):
       default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, True),),
       validation_summary='Pydantic required/type coercion only',
     )
+    strict_premium_discount_archetypes: str = config_field(
+      'reversal,range_reversion',
+      canonical_env='AUTO_TRADE_STRICT_PD_ARCHETYPES',
+      owner=ConfigOwner.PYTHON,
+      reload=ReloadPolicy.NEW_SETUP_ONLY,
+      runtime_reload=ReloadPolicy.RESTART,
+      unit=ConfigUnit.STRING,
+      risk=RiskClassification.STRATEGY_BEHAVIOR,
+      description=(
+        'Comma-separated location archetypes to which strict_premium_discount '
+        'applies. Empty string disables the rule entirely. Setting it to '
+        '"reversal,range_reversion,trend_pullback,breakout_retest,momentum,unknown" '
+        'restores pre-PR-B behaviour.'
+      ),
+      default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 'reversal,range_reversion'),),
+      validation_summary='Comma-separated archetype tokens; unknown tokens raise',
+    )
     mad_hard_gate_enabled: bool = config_field(
       False,
       canonical_env='AUTO_TRADE_TECHNIQUE_MAD_HARD_GATE_ENABLED',
@@ -304,6 +321,12 @@ class ExecutionTechniqueConfig(FrozenConfigModel):
       default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, False),),
       validation_summary='Pydantic required/type coercion only',
     )
+
+    @model_validator(mode='after')
+    def validate_strict_pd_archetypes(self):
+      from app.analysis.entry_location import parse_strict_pd_archetypes
+      parse_strict_pd_archetypes(self.strict_premium_discount_archetypes)
+      return self
 
 
 class ExecutionConfig(FrozenConfigModel):

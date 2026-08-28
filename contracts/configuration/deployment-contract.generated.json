@@ -21,6 +21,8 @@
       "actionability.entry_location.breakout_retest.allow_directional_expansion",
       "actionability.entry_location.missing_context_policy",
       "actionability.entry_location.mode",
+      "actionability.entry_location.momentum.momentum_buy_minimum_position",
+      "actionability.entry_location.momentum.momentum_sell_maximum_position",
       "actionability.entry_location.range_reversion.buy_maximum_position",
       "actionability.entry_location.range_reversion.equilibrium_exclusion_width",
       "actionability.entry_location.range_reversion.sell_minimum_position",
@@ -258,6 +260,7 @@
       "execution.technique.require_sweep_body",
       "execution.technique.scalp_require_killzone",
       "execution.technique.strict_premium_discount",
+      "execution.technique.strict_premium_discount_archetypes",
       "execution.trend.hard_entry_drift_pips",
       "execution.trend.max_entry_drift_atr",
       "execution.trend.min_entry_drift_pips",
@@ -512,7 +515,7 @@
     "XAU_ZONE_PREFERRED_MAX_WIDTH_PRICE": "instruments.XAU.analysis.zones.preferred_maximum_width_price",
     "XAU_ZONE_PREFERRED_MIN_WIDTH_PRICE": "instruments.XAU.analysis.zones.preferred_minimum_width_price"
   },
-  "fingerprint": "d9e06207415d007ccd8340863196737e86e4d0bd6ae24f9d5c064fc6cc7b0b0d",
+  "fingerprint": "a4327e119712986e6ddd91a38d0caa57b90882f2b4b194e3c952fd74f18e1adb",
   "instrument_schema": {
     "active_projection_symbol": "XAU",
     "optional": [
