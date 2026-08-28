@@ -132,8 +132,8 @@
     "zone_reconcile_mode": "shadow",
     "zone_scale_undersized_policy": "single_entry"
   },
-  "contract_fingerprint": "c8d409206e2fff900f411fb045e64c994d1f7283cc7315bba36ced9f3fba7c44",
-  "effective_configuration_fingerprint": "c44776754801da4490bc52317998b5734f180db8818db2bddd338e7c8bff0704",
+  "contract_fingerprint": "42edd6bd009e4678610a16ba4537904e0aa574ab14a7a1833d439b596c3f7b0d",
+  "effective_configuration_fingerprint": "61ab0c5f8414a3f80fcd70bca3696d277ddba440e7d34db034edbf36495a7ee1",
   "feed": {
     "backfill_bars": 1500,
     "bar_quality_lookback": 6,
@@ -921,6 +921,7 @@
           },
           "archetypes": {
             "breakout_retest_enabled": true,
+            "impulse_pullback_allowed_sessions": "london",
             "impulse_pullback_enabled": true,
             "range_sweep_enabled": true
           },
@@ -1886,6 +1887,7 @@
           },
           "archetypes": {
             "breakout_retest_enabled": true,
+            "impulse_pullback_allowed_sessions": "london",
             "impulse_pullback_enabled": true,
             "range_sweep_enabled": true
           },
@@ -2815,6 +2817,7 @@
           },
           "archetypes": {
             "breakout_retest_enabled": true,
+            "impulse_pullback_allowed_sessions": "london",
             "impulse_pullback_enabled": true,
             "range_sweep_enabled": true
           },
@@ -3756,6 +3759,7 @@
           },
           "archetypes": {
             "breakout_retest_enabled": true,
+            "impulse_pullback_allowed_sessions": "london",
             "impulse_pullback_enabled": true,
             "range_sweep_enabled": true
           },
@@ -4531,6 +4535,7 @@
           },
           "archetypes": {
             "breakout_retest_enabled": true,
+            "impulse_pullback_allowed_sessions": "london",
             "impulse_pullback_enabled": true,
             "range_sweep_enabled": true
           },
@@ -5317,6 +5322,7 @@
           },
           "archetypes": {
             "breakout_retest_enabled": true,
+            "impulse_pullback_allowed_sessions": "london",
             "impulse_pullback_enabled": true,
             "range_sweep_enabled": true
           },
@@ -6145,6 +6151,7 @@
           },
           "archetypes": {
             "breakout_retest_enabled": true,
+            "impulse_pullback_allowed_sessions": "london",
             "impulse_pullback_enabled": true,
             "range_sweep_enabled": true
           },
@@ -6937,6 +6944,7 @@
           },
           "archetypes": {
             "breakout_retest_enabled": true,
+            "impulse_pullback_allowed_sessions": "london",
             "impulse_pullback_enabled": true,
             "range_sweep_enabled": true
           },
@@ -7741,6 +7749,7 @@
           },
           "archetypes": {
             "breakout_retest_enabled": true,
+            "impulse_pullback_allowed_sessions": "london",
             "impulse_pullback_enabled": true,
             "range_sweep_enabled": true
           },
@@ -8375,6 +8384,7 @@
           },
           "archetypes": {
             "breakout_retest_enabled": true,
+            "impulse_pullback_allowed_sessions": "london",
             "impulse_pullback_enabled": true,
             "range_sweep_enabled": true
           },

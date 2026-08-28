@@ -368,6 +368,7 @@
       "strategies.high_frequency_scalp.activation.rearm_distance_atr",
       "strategies.high_frequency_scalp.activation.trigger_maximum_age_bars",
       "strategies.high_frequency_scalp.archetypes.breakout_retest_enabled",
+      "strategies.high_frequency_scalp.archetypes.impulse_pullback_allowed_sessions",
       "strategies.high_frequency_scalp.archetypes.impulse_pullback_enabled",
       "strategies.high_frequency_scalp.archetypes.range_sweep_enabled",
       "strategies.high_frequency_scalp.breakout.box_max_atr",
@@ -510,7 +511,7 @@
     "XAU_ZONE_PREFERRED_MAX_WIDTH_PRICE": "instruments.XAU.analysis.zones.preferred_maximum_width_price",
     "XAU_ZONE_PREFERRED_MIN_WIDTH_PRICE": "instruments.XAU.analysis.zones.preferred_minimum_width_price"
   },
-  "fingerprint": "c8d409206e2fff900f411fb045e64c994d1f7283cc7315bba36ced9f3fba7c44",
+  "fingerprint": "42edd6bd009e4678610a16ba4537904e0aa574ab14a7a1833d439b596c3f7b0d",
   "instrument_schema": {
     "active_projection_symbol": "XAU",
     "optional": [

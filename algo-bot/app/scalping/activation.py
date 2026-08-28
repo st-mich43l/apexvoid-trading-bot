@@ -9,7 +9,7 @@ from app.analysis.entry_location import (
   build_entry_location_context,
   evaluate_entry_location,
 )
-from app.scalping.context import is_hfs_symbol
+from app.scalping.context import is_hfs_symbol, is_impulse_pullback_session_allowed
 from app.scalping.models import (
   ARCHETYPE_BREAKOUT_RETEST,
   ARCHETYPE_IMPULSE_PULLBACK,
@@ -129,6 +129,16 @@ def evaluate_scalp_activation(
       return ScalpDecision(False, True, "scalp_impulse_chase_too_far", 0.0, measured)
   else:
     measured["chase_entry"] = False
+
+  if opportunity.archetype == ARCHETYPE_IMPULSE_PULLBACK:
+    if not is_impulse_pullback_session_allowed(context.session, cfg):
+      return ScalpDecision(
+        False,
+        True,
+        "scalp_impulse_outside_allowed_session",
+        0.0,
+        {**measured, "session": context.session},
+      )
 
   # HTF agreement for impulse (activation belt-and-suspenders with discovery).
   htf = str(context.htf_bias or "unknown").casefold()

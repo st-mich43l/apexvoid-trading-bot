@@ -137,6 +137,26 @@ def permitted_archetypes_for_session(
   return tuple(item for item in _HFS_ARCHETYPES if item in enabled)
 
 
+def impulse_pullback_allowed_sessions(cfg: Any | None) -> frozenset[str] | None:
+  """Return allowed UTC session names for impulse pullback, or None if unrestricted."""
+  arch = getattr(
+    getattr(getattr(cfg, "strategies", None), "high_frequency_scalp", None),
+    "archetypes",
+    None,
+  )
+  raw = str(getattr(arch, "impulse_pullback_allowed_sessions", "london") or "").strip()
+  if not raw or raw.casefold() in {"all", "*"}:
+    return None
+  return frozenset(part.strip().casefold() for part in raw.split(",") if part.strip())
+
+
+def is_impulse_pullback_session_allowed(session: str, cfg: Any | None) -> bool:
+  allowed = impulse_pullback_allowed_sessions(cfg)
+  if allowed is None:
+    return True
+  return str(session or "").casefold() in allowed
+
+
 def _enabled_hfs_archetypes(cfg: Any | None) -> frozenset[str]:
   arch = getattr(
     getattr(getattr(cfg, "strategies", None), "high_frequency_scalp", None),
