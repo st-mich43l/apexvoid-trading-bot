@@ -1,8 +1,9 @@
 """MAD-0: Manipulation / Accumulation / Distribution phase + Asia range seal.
 
-Live telemetry for the demo host. Does not change allow/block by itself —
-stamps ``measured.mad`` / ``scalp:asia_range:*`` / math_shadow so we can
-trace expectancy and enhance gates later.
+Shared Asia phase clock for technique (FX fixed_rr) and telemetry. Soft use:
+accumulation → Range Edge Scalp confluence. When
+``execution.technique.mad_hard_gate_enabled`` is on with enforce, FX technique
+publish/activation applies ``mad_hard_gate`` live (HFS/scalping remains exempt).
 """
 
 from __future__ import annotations
@@ -165,7 +166,7 @@ class MadFeatureScores:
 
 @dataclass(frozen=True)
 class MadGatePreview:
-  """Observe-only gate — ``would_block`` is not applied to live publish in MAD-1."""
+  """MAD hard-gate preview — live on FX technique when ``mad_hard_gate_enabled``."""
 
   would_block: bool
   reason_code: str
@@ -174,8 +175,9 @@ class MadGatePreview:
     return {"would_block": self.would_block, "reason_code": self.reason_code}
 
 
-# Math shadow + HFS families evaluated for MAD-1 ``would_gate`` stamps.
+# Math shadow + technique/HFS families evaluated for ``would_gate`` stamps.
 SHADOW_GATE_STRATEGIES: tuple[str, ...] = (
+  "structural_reaction",
   "liquidity_sweep_reversal",
   "range_edge_mean_reversion",
   "impulse_pullback_continuation",
@@ -183,13 +185,17 @@ SHADOW_GATE_STRATEGIES: tuple[str, ...] = (
   "breakout_retest",
 )
 
-_IMPULSE_GATE_STRATEGIES = frozenset({
+# Continuation (post-displacement): needs manip (Judas reclaim) or expand (accepted break).
+_CONTINUATION_GATE_STRATEGIES = frozenset({
   "impulse_pullback_continuation",
   "impulse_pullback",
   "impulse",
+  "breakout_retest",
 })
 
-_RANGE_GATE_STRATEGIES = frozenset({
+# Mean-reversion / structural reaction: do not fade distribution (expand).
+_REVERSAL_GATE_STRATEGIES = frozenset({
+  "structural_reaction",
   "liquidity_sweep_reversal",
   "range_edge_mean_reversion",
   "range_sweep",
@@ -197,6 +203,10 @@ _RANGE_GATE_STRATEGIES = frozenset({
   "range_scalp",
   "hfs_range",
 })
+
+# Legacy aliases — same rules as above.
+_IMPULSE_GATE_STRATEGIES = _CONTINUATION_GATE_STRATEGIES
+_RANGE_GATE_STRATEGIES = _REVERSAL_GATE_STRATEGIES
 
 
 def _rq_accum_score(rq: float | None, *, building: bool = False) -> float:
@@ -254,23 +264,153 @@ def compute_mad_features(snap: MadPhaseSnapshot) -> MadFeatureScores:
   )
 
 
+def technique_mad_hard_gate_enabled(cfg: Any | None) -> bool:
+  """True when FX technique lane should apply live ``mad_hard_gate``."""
+  tech = getattr(getattr(cfg, "execution", None), "technique", None)
+  if tech is None:
+    return False
+  return bool(getattr(tech, "mad_hard_gate_enabled", False))
+
+
+def mad_gate_strategy_for_setup(
+  setup: str,
+  *,
+  family: str | None = None,
+  strategy_mode: str | None = None,
+) -> str | None:
+  """Map ZoneWatch / technique setup to ``mad_hard_gate`` strategy key.
+
+  Uses ``strategy_taxonomy`` exact names — no substring guessing on registered
+  strategies. Unregistered legacy labels fall back to ``family`` / ``mode``.
+  """
+  from app.autotrade.strategy_taxonomy import (
+    canonical_family,
+    is_hfs_strategy,
+    is_liquidity_strategy,
+    is_range_strategy,
+    is_reaction_strategy,
+    is_technique_or_confluence,
+    is_zone_strategy,
+  )
+
+  name = str(setup or "").strip()
+  if not name:
+    return None
+
+  fam = str(family or "").casefold()
+  mode = str(strategy_mode or "").casefold()
+
+  if is_hfs_strategy(name):
+    lower = name.casefold()
+    if "impulse" in lower or "momentum" in lower:
+      return "impulse_pullback_continuation"
+    if "breakout" in lower:
+      return "breakout_retest"
+    if "range sweep" in lower or "range_sweep" in lower:
+      return "range_sweep"
+
+  if (
+    is_range_strategy(name)
+    or fam in {"range", "range_scalp", "range_edge", "range_reversion"}
+    or mode == "range_scalp"
+  ):
+    return "range_edge_mean_reversion"
+
+  if is_liquidity_strategy(name) or fam in {"liquidity", "sweep", "fade"}:
+    return "liquidity_sweep_reversal"
+
+  if (
+    is_reaction_strategy(name)
+    or is_zone_strategy(name)
+    or is_technique_or_confluence(name)
+    or fam in {
+      "reaction",
+      "zone",
+      "key_level",
+      "supply_demand",
+      "order_block",
+      "fvg",
+      "ifvg",
+      "crt",
+      "supply",
+      "demand",
+      "confluence",
+    }
+  ):
+    return "structural_reaction"
+
+  canon = canonical_family(name)
+  if canon in {"reaction", "zone"}:
+    return "structural_reaction"
+  if canon == "liquidity":
+    return "liquidity_sweep_reversal"
+  if canon == "range":
+    return "range_edge_mean_reversion"
+  if canon == "scalp":
+    return "impulse_pullback_continuation"
+
+  return None
+
+
+async def evaluate_technique_mad_gate(
+  client: Any,
+  *,
+  symbol: str,
+  strategy: str,
+  cfg: Any | None,
+  family: str | None = None,
+  strategy_mode: str | None = None,
+) -> tuple[bool, str, dict[str, Any]]:
+  """Return (allowed, reason_code, measured) for FX technique MAD hard gate."""
+  from app.autotrade.killzone import technique_enforce
+
+  if not technique_mad_hard_gate_enabled(cfg):
+    return True, "mad_gate_disabled", {}
+  if not technique_enforce(cfg):
+    return True, "technique_pack_off", {}
+  gate_key = mad_gate_strategy_for_setup(
+    strategy,
+    family=family,
+    strategy_mode=strategy_mode,
+  )
+  if gate_key is None:
+    return True, "mad_gate_not_applicable", {}
+  snap = await load_mad_phase(client, symbol)
+  phase = snap.phase if snap else None
+  preview = mad_hard_gate(phase=phase, strategy=gate_key)
+  measured = {
+    "mad_phase": phase,
+    "mad_gate_strategy": gate_key,
+    "mad_gate": preview.to_dict(),
+  }
+  if preview.would_block:
+    return False, preview.reason_code, measured
+  return True, preview.reason_code, measured
+
+
 def mad_hard_gate(*, phase: str | None, strategy: str) -> MadGatePreview:
-  """Preview hard gate for MAD-4 — observe-only in MAD-1 (not wired to publish)."""
+  """Hard gate by MAD phase × strategy family.
+
+  Reversal families (range, liquidity sweep, structural reaction) block during
+  ``expand`` — do not fade distribution. Continuation families (impulse,
+  breakout retest) require ``manip`` or ``expand`` — need displacement first.
+  ``unclear`` is always neutral (no block).
+  """
   p = str(phase or "").casefold()
   strat = str(strategy or "").casefold()
   if not p or p == PHASE_UNCLEAR:
     return MadGatePreview(would_block=False, reason_code="mad_gate_neutral_unclear")
-  if strat in _IMPULSE_GATE_STRATEGIES:
+  if strat in _CONTINUATION_GATE_STRATEGIES:
     if p not in EXPANSION_PHASES:
       return MadGatePreview(
         would_block=True,
         reason_code="mad_gate_impulse_needs_manip_or_expand",
       )
-  if strat in _RANGE_GATE_STRATEGIES:
+  if strat in _REVERSAL_GATE_STRATEGIES:
     if p == PHASE_EXPAND:
       return MadGatePreview(
         would_block=True,
-        reason_code="mad_gate_range_avoid_expand",
+        reason_code="mad_gate_reversal_avoid_expand",
       )
   return MadGatePreview(would_block=False, reason_code="mad_gate_allowed")
 
@@ -611,7 +751,11 @@ async def save_mad_phase(
 ) -> None:
   import json
 
-  payload = json.dumps(phase.to_dict(), separators=(",", ":"), sort_keys=True)
+  payload = json.dumps(
+    enrich_mad_payload_for_shadow(phase),
+    separators=(",", ":"),
+    sort_keys=True,
+  )
   ttl = max(3600, int(ttl_seconds))
   pipe = client.pipeline(transaction=False)
   pipe.set(mad_phase_key(symbol), payload, ex=ttl)

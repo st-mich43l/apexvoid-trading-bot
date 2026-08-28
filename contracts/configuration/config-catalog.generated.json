@@ -1,20 +1,20 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "42edd6bd009e4678610a16ba4537904e0aa574ab14a7a1833d439b596c3f7b0d",
-  "configuration_document_fingerprint_sha256": "761920507385d2c06ca2c0011771ea63b7e3a3f947e7e46ed70cecfdd7390590",
+  "configuration_contract_fingerprint_sha256": "354d961c37977232d925d8cc31710a50ee87a7992850e98d59d81bb23a31c548",
+  "configuration_document_fingerprint_sha256": "a440ebc12a1e0d12dd61f11155fd90d6ff39c0806977ca98cff3acc4750db7f4",
   "counts": {
     "algorithm_constants": 57,
-    "configurable": 474,
+    "configurable": 475,
     "known_conflicts": 30,
     "owners": {
       "ctrader": 49,
-      "python": 396,
+      "python": 397,
       "shared": 96
     },
     "protocol_constants": 10,
     "secrets": 9,
     "shared": 96,
-    "total_items": 541
+    "total_items": 542
   },
   "items": [
     {
@@ -10642,6 +10642,43 @@
     {
       "algorithm_constant": false,
       "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_TECHNIQUE_MAD_HARD_GATE_ENABLED",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {},
+      "default": true,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": true
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "When true with enforce, FX fixed_rr technique publish/activation applies live mad_hard_gate (phase × strategy). HFS/scalping exempt.",
+      "display_id": "config:execution.technique.mad_hard_gate_enabled",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "execution.technique.mad_hard_gate_enabled",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "execution_safety",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "bool",
+      "unit": "boolean",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
       "canonical_env": "AUTO_TRADE_TECHNIQUE_NY_WINDOW_HOURS",
       "catalog_version": 2,
       "configurable": true,
@@ -20296,6 +20333,6 @@
       "validation_summary": "Pydantic required/type coercion only"
     }
   ],
-  "source_fingerprint_sha256": "42edd6bd009e4678610a16ba4537904e0aa574ab14a7a1833d439b596c3f7b0d",
+  "source_fingerprint_sha256": "354d961c37977232d925d8cc31710a50ee87a7992850e98d59d81bb23a31c548",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }
