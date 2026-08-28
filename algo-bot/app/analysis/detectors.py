@@ -203,6 +203,7 @@ class DetectorSettings:
   technique_ifvg_enabled: bool = True
   technique_crt_enabled: bool = True
   confluence_zone_enabled: bool = True
+  confluence_technique_bonus_score: float = 2.5
   zone_reaction_fallback_enabled: bool = False
   crt_min_atr: float = 1.5
   crt_reclaim_bars: int = 6
@@ -478,6 +479,9 @@ def detector_settings_from(config: object | None = None) -> DetectorSettings:
     technique_ifvg_enabled=bool(strategies.technique.ifvg.enabled),
     technique_crt_enabled=bool(strategies.technique.crt.enabled),
     confluence_zone_enabled=bool(strategies.technique.confluence.enabled),
+    confluence_technique_bonus_score=float(
+      analysis.zones.confluence.technique_bonus_score
+    ),
     zone_reaction_fallback_enabled=bool(
       strategies.technique.zone_reaction_fallback.enabled
     ),
