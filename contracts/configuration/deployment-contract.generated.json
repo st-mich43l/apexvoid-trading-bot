@@ -111,6 +111,7 @@
       "analysis.swings.fractal_size",
       "analysis.swings.zigzag.atr_mult",
       "analysis.swings.zigzag.pct",
+      "analysis.techniques.validation_enabled",
       "analysis.trendlines.maximum_slope_atr",
       "analysis.trendlines.minimum_touches",
       "analysis.trendlines.tolerance_atr",
@@ -177,6 +178,8 @@
       "delivery.telegram.single_root_card",
       "delivery.telegram.telegram_channel_id",
       "delivery.telegram.telegram_owner_id",
+      "execution.activation.m5_authoritative_fallback",
+      "execution.activation.m5_confirmation_maximum_age_bars",
       "execution.activation.mode",
       "execution.activation.reaction_trigger_maximum_age_bars",
       "execution.broker_recovery.absence_confirmations",
@@ -515,7 +518,7 @@
     "XAU_ZONE_PREFERRED_MAX_WIDTH_PRICE": "instruments.XAU.analysis.zones.preferred_maximum_width_price",
     "XAU_ZONE_PREFERRED_MIN_WIDTH_PRICE": "instruments.XAU.analysis.zones.preferred_minimum_width_price"
   },
-  "fingerprint": "a4327e119712986e6ddd91a38d0caa57b90882f2b4b194e3c952fd74f18e1adb",
+  "fingerprint": "c8452b112182a8ce9f519c6524d4b513dbbc635cee552e44b515c7d2963a8132",
   "instrument_schema": {
     "active_projection_symbol": "XAU",
     "optional": [

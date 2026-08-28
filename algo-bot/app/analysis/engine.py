@@ -197,6 +197,7 @@ class AnalysisSettings:
   crt_h1_lookback_bars: int = 3
   fvg_entry_max_width_price: float = 5.0
   fvg_max_atr: float = 2.0
+  technique_validation_enabled: bool = True
 
 
 @dataclass(frozen=True)
@@ -250,6 +251,7 @@ class TimeframeAnalysis:
   zone_reconcile_trimmed: int = 0
   zone_reconcile_candidate_difference_count: int = 0
   technique_instances: list[TechniqueInstance] = field(default_factory=list)
+  technique_validation_rejects: dict[str, int] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -318,17 +320,25 @@ def _attach_technique_instances(
   updated: dict[str, TimeframeAnalysis] = {}
   for tf, analysis in per_tf.items():
     exec_atr = atr_scalar(analysis.atr)
-    instances = collect_technique_instances(
+    price = float(analysis.df.iloc[-1]["close"]) if not analysis.df.empty else 0.0
+    instances, rejects = collect_technique_instances(
       sd_zones=analysis.supply_demand_zones,
       ob_zones=analysis.order_blocks,
       fvg_zones=analysis.fvg_zones,
       df=analysis.df,
+      price=price,
+      atr=exec_atr,
       h1_df=h1_df if tf.upper() != "H1" else None,
       h1_atr=h1_atr,
       exec_atr=exec_atr,
       settings=geom,
+      validation_enabled=settings.technique_validation_enabled,
     )
-    updated[tf] = replace(analysis, technique_instances=instances)
+    updated[tf] = replace(
+      analysis,
+      technique_instances=instances,
+      technique_validation_rejects=rejects,
+    )
   return updated
 
 

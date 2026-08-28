@@ -1,7 +1,7 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "a4327e119712986e6ddd91a38d0caa57b90882f2b4b194e3c952fd74f18e1adb",
-  "count": 478,
+  "configuration_contract_fingerprint_sha256": "c8452b112182a8ce9f519c6524d4b513dbbc635cee552e44b515c7d2963a8132",
+  "count": 481,
   "deprecated_alias_count": 64,
   "entries": [
     {
@@ -4269,6 +4269,38 @@
       "unit": "atr"
     },
     {
+      "canonical_env": "ENTRY_ACTIVATION_M5_AUTHORITATIVE_FALLBACK",
+      "default": "off",
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "When M1 trigger is absent/stale, allow M5-authoritative in-zone activation: off, quote_inside, or quote_inside_fresh.",
+      "display_id": "config:execution.activation.m5_authoritative_fallback",
+      "owner": "python",
+      "path": "execution.activation.m5_authoritative_fallback",
+      "replacement_path": null,
+      "required": false,
+      "secret": false,
+      "shared_with_ctrader": false,
+      "type": "str",
+      "unit": "enum"
+    },
+    {
+      "canonical_env": "ENTRY_ACTIVATION_M5_CONFIRMATION_MAX_AGE_BARS",
+      "default": 6,
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Maximum closed M5 bars since structural confirmation for quote_inside_fresh fallback.",
+      "display_id": "config:execution.activation.m5_confirmation_maximum_age_bars",
+      "owner": "python",
+      "path": "execution.activation.m5_confirmation_maximum_age_bars",
+      "replacement_path": null,
+      "required": false,
+      "secret": false,
+      "shared_with_ctrader": false,
+      "type": "int",
+      "unit": "bars"
+    },
+    {
       "canonical_env": "ENTRY_ACTIVATION_MODE",
       "default": "shadow",
       "deprecated": false,
@@ -7198,6 +7230,22 @@
       "unit": "bars"
     },
     {
+      "canonical_env": "TECHNIQUE_VALIDATION_ENABLED",
+      "default": true,
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Run validate_technique_instance when collecting technique instances.",
+      "display_id": "config:analysis.techniques.validation_enabled",
+      "owner": "python",
+      "path": "analysis.techniques.validation_enabled",
+      "replacement_path": null,
+      "required": false,
+      "secret": false,
+      "shared_with_ctrader": false,
+      "type": "bool",
+      "unit": "boolean"
+    },
+    {
       "canonical_env": "TELEGRAM_BOT_TOKEN",
       "default": "<redacted>",
       "deprecated": false,
@@ -7792,6 +7840,6 @@
   ],
   "secret_count": 9,
   "shared_with_ctrader_count": 87,
-  "source_fingerprint_sha256": "a4327e119712986e6ddd91a38d0caa57b90882f2b4b194e3c952fd74f18e1adb",
+  "source_fingerprint_sha256": "c8452b112182a8ce9f519c6524d4b513dbbc635cee552e44b515c7d2963a8132",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

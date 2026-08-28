@@ -171,10 +171,15 @@ def optimize_crt_entry_zone(
   direction: str,
   max_width_price: float = CRT_ENTRY_MAX_WIDTH_PRICE,
 ) -> tuple[Zone, bool]:
-  """Clip CRT tradeable entry to the proximal reclaim band.
+  """Clip CRT tradeable entry to the swept reclaim extreme.
 
-  Full H1 candle stays structural (stop / mitigation). BUY keeps the swept
-  low edge; SELL keeps the swept high edge — same proximal contract as FVG.
+  Full H1 candle stays structural (stop / mitigation). Unlike FVG/SD/OB
+  (``optimize_imbalance_entry_zone`` / ``optimize_technique_entry_zone``),
+  which keep the *proximal* edge (supply → low, demand → high), CRT keeps
+  the *swept* edge: BUY → low (sweep below range), SELL → high (sweep above).
+  That is the far edge for supply and the far edge for demand — intentional.
+  ``proximal_retest()`` on a clipped CRT sell therefore checks ``low`` (=
+  ``high - width``), not the supply proximal bottom.
   """
   try:
     low = float(zone.low)
@@ -357,7 +362,7 @@ def instance_from_zone(
   )
 
 
-def is_unmitigated(
+def not_invalidated(
   *,
   side: str,
   low: float,
@@ -367,7 +372,7 @@ def is_unmitigated(
   atr: float,
   settings: TechniqueGeometrySettings,
 ) -> bool:
-  """No close through the far edge after origin."""
+  """No close through the far edge after origin (invalidation, not mitigation)."""
   if df.empty or origin_index < 0:
     return True
   e = epsilon(pip_size=settings.pip_size, atr=atr, settings=settings)
@@ -379,6 +384,10 @@ def is_unmitigated(
     if side == "sell" and close > float(high) + e:
       return False
   return True
+
+
+# Deprecated alias — ``mitigated`` in ``measured`` is first-touch consumption.
+is_unmitigated = not_invalidated  # noqa: F841 — one-release alias
 
 
 def proximal_retest(
@@ -458,11 +467,14 @@ def validate_technique_instance(
   atr: float,
   settings: TechniqueGeometrySettings,
   require_reaction: bool = True,
+  reasons: list[str] | None = None,
 ) -> bool:
   direction = "BUY" if instance.side == "buy" else "SELL"
   if instance.measured.get("mitigated"):
+    if reasons is not None:
+      reasons.append("mitigated")
     return False
-  if not is_unmitigated(
+  if not not_invalidated(
     side=instance.side,
     low=instance.low,
     high=instance.high,
@@ -471,6 +483,8 @@ def validate_technique_instance(
     atr=atr,
     settings=settings,
   ):
+    if reasons is not None:
+      reasons.append("not_invalidated")
     return False
   if not proximal_retest(
     side=instance.side,
@@ -480,11 +494,15 @@ def validate_technique_instance(
     atr=atr,
     settings=settings,
   ):
+    if reasons is not None:
+      reasons.append("proximal_retest")
     return False
   max_atr = settings.max_zone_atr
   if instance.technique == TECHNIQUE_FVG:
     width = instance.high - instance.low
     if width < settings.fvg_min_pips * settings.pip_size:
+      if reasons is not None:
+        reasons.append("fvg_min_width")
       return False
     max_atr = settings.fvg_max_atr
     if not fvg_not_fully_filled(
@@ -494,14 +512,22 @@ def validate_technique_instance(
       df=df,
       origin_index=instance.origin_index,
     ):
+      if reasons is not None:
+        reasons.append("fvg_not_fully_filled")
       return False
   if not width_within_atr(instance.low, instance.high, atr, max_atr):
+    if reasons is not None:
+      reasons.append("width_within_atr")
     return False
   if instance.technique == TECHNIQUE_OB:
     body_frac = float(instance.measured.get("body_frac", 0.0))
     if body_frac < settings.momentum_body_frac:
+      if reasons is not None:
+        reasons.append("ob_momentum_body")
       return False
     if not instance.measured.get("has_bos"):
+      if reasons is not None:
+        reasons.append("ob_missing_bos")
       return False
   if require_reaction and not has_structural_confirmation(
     df,
@@ -510,6 +536,8 @@ def validate_technique_instance(
     high=instance.high,
     lookback_bars=settings.structural_reaction_lookback_bars,
   ):
+    if reasons is not None:
+      reasons.append("structural_confirmation")
     return False
   return True
 
@@ -746,15 +774,18 @@ def collect_technique_instances(
   ob_zones: Sequence[Zone],
   fvg_zones: Sequence[Zone],
   df: pd.DataFrame,
+  price: float,
+  atr: float,
   h1_df: pd.DataFrame | None = None,
   h1_atr: float = 0.0,
   exec_atr: float = 0.0,
   settings: TechniqueGeometrySettings | None = None,
-) -> list[TechniqueInstance]:
+  validation_enabled: bool = True,
+) -> tuple[list[TechniqueInstance], dict[str, int]]:
   """Unmerged technique instances for detector routing (map merge stays separate)."""
   settings = settings or TechniqueGeometrySettings()
   entry_max_width_price = float(settings.fvg_entry_max_width_price)
-  instances: list[TechniqueInstance] = []
+  pending: list[TechniqueInstance] = []
   for zone in sd_zones:
     if zone.mitigated:
       continue
@@ -762,7 +793,7 @@ def collect_technique_instances(
       zone, technique=TECHNIQUE_SD, entry_max_width_price=entry_max_width_price,
     )
     if item is not None:
-      instances.append(item)
+      pending.append(item)
   for zone in ob_zones:
     if zone.mitigated or zone.break_kind is None:
       continue
@@ -770,7 +801,7 @@ def collect_technique_instances(
       zone, technique=TECHNIQUE_OB, entry_max_width_price=entry_max_width_price,
     )
     if item is not None:
-      instances.append(item)
+      pending.append(item)
   for zone in fvg_zones:
     if zone.mitigated:
       continue
@@ -778,20 +809,39 @@ def collect_technique_instances(
       zone, technique=TECHNIQUE_FVG, entry_max_width_price=entry_max_width_price,
     )
     if item is not None:
-      instances.append(item)
-  instances = enrich_ob_instances(instances, df)
-  instances.extend(discover_ifvg_instances(
+      pending.append(item)
+  pending = enrich_ob_instances(pending, df)
+  pending.extend(discover_ifvg_instances(
     fvg_zones, df, settings=settings, entry_max_width_price=entry_max_width_price,
   ))
   if h1_df is not None and not h1_df.empty:
-    instances.extend(discover_crt_instances(
+    pending.extend(discover_crt_instances(
       h1_df,
       df,
       h1_atr=h1_atr,
       exec_atr=exec_atr,
       settings=settings,
     ))
-  return instances
+  if not validation_enabled:
+    return pending, {}
+  instances: list[TechniqueInstance] = []
+  rejects: dict[str, int] = {}
+  for item in pending:
+    fail_reasons: list[str] = []
+    if validate_technique_instance(
+      item,
+      df,
+      price=price,
+      atr=atr,
+      settings=settings,
+      require_reaction=False,
+      reasons=fail_reasons,
+    ):
+      instances.append(item)
+    else:
+      for reason in fail_reasons:
+        rejects[reason] = rejects.get(reason, 0) + 1
+  return instances, rejects
 
 
 def instances_for_technique(

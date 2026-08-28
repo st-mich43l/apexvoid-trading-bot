@@ -194,6 +194,7 @@ class DetectorSettings:
   crt_h1_lookback_bars: int = 3
   fvg_max_atr: float = 2.0
   fvg_entry_max_width_price: float = 5.0
+  technique_validation_enabled: bool = True
   # Recovery mission (2026-07-30): these six sources were live around
   # 2026-07-28 and were deliberately dropped from DEFAULT_DETECTORS during
   # the P0 zone/M1 simplification without their own enable flags, leaving
@@ -285,6 +286,7 @@ class DetectorSettings:
       crt_h1_lookback_bars=self.crt_h1_lookback_bars,
       fvg_entry_max_width_price=self.fvg_entry_max_width_price,
       fvg_max_atr=self.fvg_max_atr,
+      technique_validation_enabled=self.technique_validation_enabled,
     )
 
 
@@ -469,6 +471,7 @@ def detector_settings_from(config: object | None = None) -> DetectorSettings:
     fvg_entry_max_width_price=float(
       strategies.technique.fvg.entry_max_width_price
     ),
+    technique_validation_enabled=bool(analysis.techniques.validation_enabled),
     box_breakout_enabled=bool(strategies.selection.box_breakout_enabled),
     trend_pullback_enabled=bool(strategies.trend.pullback_enabled),
     break_retest_enabled=bool(strategies.breakout.break_retest_enabled),

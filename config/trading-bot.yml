@@ -54,6 +54,9 @@ analysis:
       patterns: body_close,strong_close,engulfing,wick_rejection,pin_bar,hammer
       strong_close_pct: 0.2
       wick_fraction: 0.5
+  techniques:
+    # PR-D: filter technique instances via validate_technique_instance predicates.
+    validation_enabled: true
   zones:
     confluence:
       merge_gap_price: 1.0

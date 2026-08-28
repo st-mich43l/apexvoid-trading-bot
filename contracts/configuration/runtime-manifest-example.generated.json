@@ -132,8 +132,8 @@
     "zone_reconcile_mode": "shadow",
     "zone_scale_undersized_policy": "single_entry"
   },
-  "contract_fingerprint": "a4327e119712986e6ddd91a38d0caa57b90882f2b4b194e3c952fd74f18e1adb",
-  "effective_configuration_fingerprint": "c28be71944ea86d4b9569c453e60243b9102ca86e46d62bf8ada525a11677d3f",
+  "contract_fingerprint": "c8452b112182a8ce9f519c6524d4b513dbbc635cee552e44b515c7d2963a8132",
+  "effective_configuration_fingerprint": "0747458f5c226b8461784daf782db3c1047a20c17fe0f5875ab779994d28f669",
   "feed": {
     "backfill_bars": 1500,
     "bar_quality_lookback": 6,
@@ -416,6 +416,8 @@
       },
       "execution": {
         "activation": {
+          "m5_authoritative_fallback": "off",
+          "m5_confirmation_maximum_age_bars": 6,
           "mode": "enforce",
           "reaction_trigger_maximum_age_bars": 3
         },
@@ -1352,6 +1354,8 @@
       },
       "execution": {
         "activation": {
+          "m5_authoritative_fallback": "off",
+          "m5_confirmation_maximum_age_bars": 6,
           "mode": "enforce",
           "reaction_trigger_maximum_age_bars": 3
         },
@@ -2324,6 +2328,8 @@
       },
       "execution": {
         "activation": {
+          "m5_authoritative_fallback": "off",
+          "m5_confirmation_maximum_age_bars": 6,
           "mode": "enforce",
           "reaction_trigger_maximum_age_bars": 3
         },
@@ -3260,6 +3266,8 @@
       },
       "execution": {
         "activation": {
+          "m5_authoritative_fallback": "off",
+          "m5_confirmation_maximum_age_bars": 6,
           "mode": "enforce",
           "reaction_trigger_maximum_age_bars": 3
         },
@@ -4212,6 +4220,8 @@
       },
       "execution": {
         "activation": {
+          "m5_authoritative_fallback": "off",
+          "m5_confirmation_maximum_age_bars": 6,
           "mode": "enforce",
           "reaction_trigger_maximum_age_bars": 3
         },
@@ -5013,6 +5023,8 @@
       },
       "execution": {
         "activation": {
+          "m5_authoritative_fallback": "off",
+          "m5_confirmation_maximum_age_bars": 6,
           "mode": "enforce",
           "reaction_trigger_maximum_age_bars": 3
         },
@@ -5812,6 +5824,8 @@
       },
       "execution": {
         "activation": {
+          "m5_authoritative_fallback": "off",
+          "m5_confirmation_maximum_age_bars": 6,
           "mode": "enforce",
           "reaction_trigger_maximum_age_bars": 3
         },
@@ -6647,6 +6661,8 @@
       },
       "execution": {
         "activation": {
+          "m5_authoritative_fallback": "off",
+          "m5_confirmation_maximum_age_bars": 6,
           "mode": "enforce",
           "reaction_trigger_maximum_age_bars": 3
         },
@@ -7446,6 +7462,8 @@
       },
       "execution": {
         "activation": {
+          "m5_authoritative_fallback": "off",
+          "m5_confirmation_maximum_age_bars": 6,
           "mode": "enforce",
           "reaction_trigger_maximum_age_bars": 3
         },
@@ -8257,6 +8275,8 @@
       },
       "execution": {
         "activation": {
+          "m5_authoritative_fallback": "off",
+          "m5_confirmation_maximum_age_bars": 6,
           "mode": "enforce",
           "reaction_trigger_maximum_age_bars": 3
         },

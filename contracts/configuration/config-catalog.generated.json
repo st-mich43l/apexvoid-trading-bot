@@ -1,20 +1,20 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "a4327e119712986e6ddd91a38d0caa57b90882f2b4b194e3c952fd74f18e1adb",
-  "configuration_document_fingerprint_sha256": "d0795d29c06dc748135600930cf9bd57b7a6143e9872435ed059f3de62a3bfd3",
+  "configuration_contract_fingerprint_sha256": "c8452b112182a8ce9f519c6524d4b513dbbc635cee552e44b515c7d2963a8132",
+  "configuration_document_fingerprint_sha256": "da60002e3d47e4b8e1d693cde27000a36a60ae5017b0e0fc653c94f5b1cd7471",
   "counts": {
     "algorithm_constants": 57,
-    "configurable": 478,
+    "configurable": 481,
     "known_conflicts": 30,
     "owners": {
       "ctrader": 49,
-      "python": 400,
+      "python": 403,
       "shared": 96
     },
     "protocol_constants": 10,
     "secrets": 9,
     "shared": 96,
-    "total_items": 545
+    "total_items": 548
   },
   "items": [
     {
@@ -3943,6 +3943,43 @@
       "validation_summary": "Pydantic required/type coercion only"
     },
     {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "TECHNIQUE_VALIDATION_ENABLED",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {},
+      "default": true,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": true
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Run validate_technique_instance when collecting technique instances.",
+      "display_id": "config:analysis.techniques.validation_enabled",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "analysis.techniques.validation_enabled",
+      "protocol_constant": false,
+      "reload_policy": "next_scanner_cycle",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "analysis_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "bool",
+      "unit": "boolean",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
       "algorithm_constant": true,
       "allowed_values": [],
       "canonical_env": null,
@@ -7732,6 +7769,88 @@
       "terminal_deprecation_reason": null,
       "type": "Optional[int]",
       "unit": "count",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [
+        "off",
+        "quote_inside",
+        "quote_inside_fresh"
+      ],
+      "canonical_env": "ENTRY_ACTIVATION_M5_AUTHORITATIVE_FALLBACK",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "pattern": "^(off|quote_inside|quote_inside_fresh)$"
+      },
+      "default": "off",
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": "off"
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "When M1 trigger is absent/stale, allow M5-authoritative in-zone activation: off, quote_inside, or quote_inside_fresh.",
+      "display_id": "config:execution.activation.m5_authoritative_fallback",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "execution.activation.m5_authoritative_fallback",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "execution_safety",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "str",
+      "unit": "enum",
+      "validation_summary": "Pydantic type coercion + field validator"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "ENTRY_ACTIVATION_M5_CONFIRMATION_MAX_AGE_BARS",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 1
+      },
+      "default": 6,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 6
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Maximum closed M5 bars since structural confirmation for quote_inside_fresh fallback.",
+      "display_id": "config:execution.activation.m5_confirmation_maximum_age_bars",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "execution.activation.m5_confirmation_maximum_age_bars",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "execution_safety",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "int",
+      "unit": "bars",
       "validation_summary": "Pydantic required/type coercion only"
     },
     {
@@ -20536,6 +20655,6 @@
       "validation_summary": "Pydantic required/type coercion only"
     }
   ],
-  "source_fingerprint_sha256": "a4327e119712986e6ddd91a38d0caa57b90882f2b4b194e3c952fd74f18e1adb",
+  "source_fingerprint_sha256": "c8452b112182a8ce9f519c6524d4b513dbbc635cee552e44b515c7d2963a8132",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }
