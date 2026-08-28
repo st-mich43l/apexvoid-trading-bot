@@ -101,6 +101,7 @@ class AnalysisZonesSymbolContractConfig(FrozenConfigModel):
 
 class AnalysisZonesConfluenceConfig(FrozenConfigModel):
     merge_gap_price: float = config_field(1.0, canonical_env='ZONE_MERGE_GAP', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEXT_SCANNER_CYCLE, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.PRICE, risk=RiskClassification.ANALYSIS_BEHAVIOR, description='Controls  (price).', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 1.0),), validation_summary='Pydantic required/type coercion only')
+    technique_bonus_score: float = config_field(2.5, canonical_env='CONFLUENCE_TECHNIQUE_BONUS_SCORE', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEXT_SCANNER_CYCLE, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.SCORE, risk=RiskClassification.ANALYSIS_BEHAVIOR, description='Per extra overlapping technique added to Confluence Zone band score.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 2.5),), validation_summary='Pydantic required/type coercion only')
 
 class AnalysisZonesConfig(FrozenConfigModel):
     alert_ttl: int = config_field(14400, canonical_env='ZONE_ALERT_TTL', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEXT_SCANNER_CYCLE, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.SECONDS, risk=RiskClassification.ANALYSIS_BEHAVIOR, description='Controls  (seconds).', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 14400),), validation_summary='Pydantic required/type coercion only')

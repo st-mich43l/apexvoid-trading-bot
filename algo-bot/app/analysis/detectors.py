@@ -37,11 +37,13 @@ from app.analysis.structure import (
 from app.analysis.trendlines import Trendline, value_at
 from app.analysis.execution_eligibility import ExecutionEligibility
 from app.analysis.structural_reaction_support import (
+  CONFIRM_REJECTION_CHOCH,
   bias_relationship,
   box_structural_id,
   equal_level_structural_id,
   evaluate_structural_reaction,
   key_level_structural_id,
+  momentum_impulse_structural_id,
   session_level_structural_id,
   trendline_structural_id,
   zone_structural_id,
@@ -172,6 +174,8 @@ class DetectorSettings:
   regime_min_directional_swings: int = 3
   regime_min_displacement_atr: float = 4.0
   structural_reaction_lookback_bars: int = 3
+  snap_back_extension_source: str = "impulse"
+  engulfing_minimum_range_atr: float = 0.5
   key_level_reaction_enabled: bool = True
   key_level_require_explicit_role: bool = False
   key_level_require_htf_alignment: bool = False
@@ -885,6 +889,44 @@ def _zone_distance(zone: Zone, price: float, direction: str) -> float:
   return abs(zone.low - price)
 
 
+def _snap_back_extension_distance(
+  st: StructureSet,
+  price: float,
+  direction: str,
+  zone: Zone,
+  source: str,
+) -> float:
+  if source == "zone":
+    return _zone_distance(zone, price, direction)
+  if direction == "BUY":
+    lows = [swing.price for swing in st.swings if swing.kind == "low"]
+    if not lows:
+      return _zone_distance(zone, price, direction)
+    return max(0.0, price - lows[-1])
+  highs = [swing.price for swing in st.swings if swing.kind == "high"]
+  if not highs:
+    return _zone_distance(zone, price, direction)
+  return max(0.0, highs[-1] - price)
+
+
+def _broken_impulse_swing(st: StructureSet, direction: str) -> Swing | None:
+  if direction == "BUY":
+    highs = [swing for swing in st.swings if swing.kind == "high"]
+    return highs[-1] if highs else None
+  lows = [swing for swing in st.swings if swing.kind == "low"]
+  return lows[-1] if lows else None
+
+
+def _factors_for_confirmation(
+  factors: ConfluenceFactors | None,
+  confirmation,
+) -> ConfluenceFactors:
+  base = factors or ConfluenceFactors()
+  if confirmation.confirmation_type != CONFIRM_REJECTION_CHOCH:
+    return base
+  return replace(base, structural_agreement=True, choch=True)
+
+
 def _zone_key(zone: Zone, price: float, direction: str) -> float:
   if direction == "BUY":
     return zone.high if zone.high <= price + _EPS else zone.low
@@ -992,6 +1034,7 @@ class ConfluenceFactors:
   session_context: bool = False
   structural_agreement: bool = False
   fib_touch: bool = False
+  choch: bool = False
 
 
 _FACTOR_HTF_ALIGN_WEIGHT = 4.0
@@ -1001,6 +1044,7 @@ _FACTOR_WICK_REJECTION_WEIGHT = 3.0
 _FACTOR_DISPLACEMENT_WEIGHT = 3.0
 _FACTOR_SESSION_CONTEXT_WEIGHT = 2.0
 _FACTOR_STRUCTURAL_AGREEMENT_WEIGHT = 3.0
+_FACTOR_CHOCH_WEIGHT = 2.0
 _FACTOR_FIB_TOUCH_WEIGHT = 2.5
 
 
@@ -1024,6 +1068,7 @@ def _confluence_from_factors(
       _FACTOR_STRUCTURAL_AGREEMENT_WEIGHT
       if factors.structural_agreement else 0.0
     )
+    + (_FACTOR_CHOCH_WEIGHT if factors.choch else 0.0)
     + (_fib_touch_weight(settings) if factors.fib_touch else 0.0)
   )
   return 3 if score >= STAR_THREE_SCORE else 2 if score >= STAR_TWO_SCORE else 1
@@ -1357,6 +1402,8 @@ def trend_pullback(ctx: DetectionContext) -> DetectionResult | None:
     lookback_bars=lookback,
     grabs=_zone_grabs_for(st, zone, direction, ctx.settings.pip_size),
     has_choch=_recent_choch_flag(st, direction, len(df), ctx.settings, lookback),
+    atr=atr,
+    engulfing_minimum_range_atr=ctx.settings.engulfing_minimum_range_atr,
   )
   if conf is None:
     return None
@@ -1700,7 +1747,6 @@ def snap_back(ctx: DetectionContext) -> DetectionResult | None:
   structural_agreement = False
   if selected is not None:
     zone, proximal = selected
-    distance = _zone_distance(zone, price, direction)
     level = _zone_key(zone, price, direction)
     touches = zone.touches
     structural_agreement = True  # zone drawn from structural swing zones
@@ -1712,12 +1758,17 @@ def snap_back(ctx: DetectionContext) -> DetectionResult | None:
     zone = entry_zone(
       df, nearest.price, direction, pip_size=ctx.settings.pip_size,
     )
-    distance = _zone_distance(zone, price, direction)
     level = nearest.price
     touches = nearest.touches
     structural_source = "key_level"
     structural_kind = nearest.kind
     structural_id_value = key_level_structural_id(ctx.symbol, ctx.tf, nearest)
+  extension_source = str(
+    ctx.settings.snap_back_extension_source or "impulse",
+  ).casefold()
+  distance = _snap_back_extension_distance(
+    st, price, direction, zone, extension_source,
+  )
   if distance < atr * ctx.settings.snap_atr_mult:
     return None
   grab = _zone_grab(st, zone, direction, ctx.settings.pip_size)
@@ -1732,6 +1783,8 @@ def snap_back(ctx: DetectionContext) -> DetectionResult | None:
     lookback_bars=lookback,
     grabs=[grab],
     has_choch=_recent_choch_flag(st, direction, len(df), ctx.settings, lookback),
+    atr=atr,
+    engulfing_minimum_range_atr=ctx.settings.engulfing_minimum_range_atr,
   )
   if conf is None:
     return None
@@ -1740,12 +1793,15 @@ def snap_back(ctx: DetectionContext) -> DetectionResult | None:
     f"sweep {grab.grade}",
   ]
   reasons = _add_proximal_reason(reasons, proximal)
-  factors = ConfluenceFactors(
-    htf_aligned=ctx.htf_bias == _bias_for_direction(direction),
-    touches=touches,
-    wick_rejection=True,
-    displacement_grade=grab.grade == "A",
-    structural_agreement=structural_agreement,
+  factors = _factors_for_confirmation(
+    ConfluenceFactors(
+      htf_aligned=ctx.htf_bias == _bias_for_direction(direction),
+      touches=touches,
+      wick_rejection=True,
+      displacement_grade=grab.grade == "A",
+      structural_agreement=structural_agreement,
+    ),
+    conf,
   )
   return _structural_finish(
     ctx,
@@ -1807,6 +1863,12 @@ def momentum_ride(ctx: DetectionContext) -> DetectionResult | None:
     return None
   price = _current_price(ctx, df)
   atr = _atr(ind)
+  impulse_swing = _broken_impulse_swing(st, direction)
+  structural_id = (
+    momentum_impulse_structural_id(ctx.symbol, ctx.tf, direction, impulse_swing)
+    if impulse_swing is not None
+    else None
+  )
   selected = _best_valid_zone(
     _candidate_zones(st, direction),
     price,
@@ -1828,8 +1890,14 @@ def momentum_ride(ctx: DetectionContext) -> DetectionResult | None:
     return _finish(
       ctx, "Momentum Ride", direction, level_price, zone, price, atr, reasons,
       factors=factors,
+      structural_source="momentum_impulse",
+      structural_id=structural_id,
     )
-  level = _nearest_level(st.levels, price, direction)
+  min_touches = max(1, int(ctx.settings.key_level_min_touches))
+  eligible_levels = [
+    item for item in st.levels if item.touches >= min_touches
+  ]
+  level = _nearest_level(eligible_levels, price, direction)
   if level is None:
     return None
   zone = entry_zone(
@@ -1844,6 +1912,8 @@ def momentum_ride(ctx: DetectionContext) -> DetectionResult | None:
   return _finish(
     ctx, "Momentum Ride", direction, level.price, zone, price, atr, reasons,
     factors=factors,
+    structural_source="momentum_impulse",
+    structural_id=structural_id,
   )
 
 
@@ -1929,9 +1999,14 @@ def range_edge_scalp(ctx: DetectionContext) -> DetectionResult | None:
       direction=direction,
       low=float(zone.low),
       high=float(zone.high),
-      lookback_bars=lookback,
+      touch_lookback_bars=lookback,
+      confirmation_lookback_bars=base_lookback,
       grabs=_zone_grabs_for(st, zone, direction, ctx.settings.pip_size),
-      has_choch=_recent_choch_flag(st, direction, len(df), ctx.settings, lookback),
+      has_choch=_recent_choch_flag(
+        st, direction, len(df), ctx.settings, base_lookback,
+      ),
+      atr=atr,
+      engulfing_minimum_range_atr=ctx.settings.engulfing_minimum_range_atr,
     )
     if confirmation is None:
       continue
@@ -2026,6 +2101,8 @@ def fade_scalp(ctx: DetectionContext) -> DetectionResult | None:
       lookback_bars=lookback,
       grabs=[grab],
       has_choch=_recent_choch_flag(st, direction, len(df), ctx.settings, lookback),
+      atr=atr,
+      engulfing_minimum_range_atr=ctx.settings.engulfing_minimum_range_atr,
     )
     if conf is None:
       continue
@@ -2497,7 +2574,7 @@ def _structural_finish(
     atr,
     full_reasons,
     mode=relationship,
-    factors=factors,
+    factors=_factors_for_confirmation(factors, confirmation),
     confirmation=confirmation.confirmation_type,
     structural_source=structural_source,
     structural_id=structural_id,
@@ -2658,6 +2735,8 @@ def key_level_reaction(ctx: DetectionContext) -> DetectionResult | None:
         has_choch=_recent_choch_flag(
           st, direction, len(df), ctx.settings, lookback,
         ),
+        atr=atr,
+        engulfing_minimum_range_atr=ctx.settings.engulfing_minimum_range_atr,
       )
       if conf is None:
         continue
@@ -2829,6 +2908,8 @@ def _sd_zone_reaction(
     lookback_bars=lookback,
     grabs=_zone_grabs_for(st, zone, direction, ctx.settings.pip_size),
     has_choch=_recent_choch_flag(st, direction, len(df), ctx.settings, lookback),
+    atr=atr,
+    engulfing_minimum_range_atr=ctx.settings.engulfing_minimum_range_atr,
   )
   if conf is None:
     return None
@@ -2893,6 +2974,8 @@ def session_level_reaction(ctx: DetectionContext) -> DetectionResult | None:
       lookback_bars=lookback,
       grabs=[],
       has_choch=_recent_choch_flag(st, direction, len(df), ctx.settings, lookback),
+      atr=atr,
+      engulfing_minimum_range_atr=ctx.settings.engulfing_minimum_range_atr,
     )
     if conf is None:
       continue
@@ -2967,6 +3050,8 @@ def trendline_reaction(ctx: DetectionContext) -> DetectionResult | None:
       lookback_bars=lookback,
       grabs=[],
       has_choch=_recent_choch_flag(st, direction, len(df), ctx.settings, lookback),
+      atr=atr,
+      engulfing_minimum_range_atr=ctx.settings.engulfing_minimum_range_atr,
     )
     if conf is None:
       continue
