@@ -597,7 +597,7 @@ _ROOM_SYNCED_STOP_STRATEGIES = frozenset(REACTION_STRATEGIES)
 
 # Range scalp family: thin room (15/20) tracks TP; independent of reaction.
 # HFS must share this path — otherwise TradePlan falls through to the XAU
-# reaction envelope (40–60) and ignores strategies.high_frequency_scalp.stop
+# reaction envelope (40–60) and ignores strategies.scalping.stop
 # (live dig 2026-08-25: Range Sweep ledger stops 24–62 vs HFS max 22).
 _SCALP_ROOM_SYNCED_STOP_STRATEGIES = frozenset(RANGE_STRATEGIES | HFS_STRATEGIES)
 
@@ -695,7 +695,7 @@ def stop_bounds_for_reaction_room(
   if is_scalp:
     if str(strategy) in HFS_STRATEGIES:
       hfs_stop = getattr(
-        getattr(getattr(cfg, "strategies", None), "high_frequency_scalp", None),
+        getattr(getattr(cfg, "strategies", None), "scalping", None),
         "stop",
         None,
       )
@@ -1185,7 +1185,7 @@ def stop_bounds_for_strategy(
   # Supply use the same numeric envelope as an independent family default.
   if str(strategy) in HFS_STRATEGIES:
     hfs_stop = getattr(
-      getattr(getattr(cfg, "strategies", None), "high_frequency_scalp", None),
+      getattr(getattr(cfg, "strategies", None), "scalping", None),
       "stop",
       None,
     )

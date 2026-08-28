@@ -31,8 +31,8 @@ from app.scalping.models import (
 from app.runtime.price_identity import rounded_price
 
 
-def _hfs_cfg(cfg: Any) -> Any:
-  return getattr(getattr(cfg, "strategies", None), "high_frequency_scalp", None)
+def _scalping_cfg(cfg: Any) -> Any:
+  return getattr(getattr(cfg, "strategies", None), "scalping", None)
 
 
 def _parse_float(section: Any, name: str, default: float) -> float:
@@ -95,7 +95,7 @@ def _stop_pips(
   structural: float,
   cfg: Any,
 ) -> float | None:
-  stop_cfg = getattr(_hfs_cfg(cfg), "stop", None)
+  stop_cfg = getattr(_scalping_cfg(cfg), "stop", None)
   mn = _parse_float(stop_cfg, "minimum_pips", 12.0)
   mx = _parse_float(stop_cfg, "maximum_pips", 30.0)
   value = abs(float(structural))
@@ -120,7 +120,7 @@ def _fights_fresh_macro_momentum(
   -- its own 30-bar lookback never saw the move that made that level
   matter. range_sweep has the identical blind spot at a range edge.
   """
-  mom_cfg = getattr(_hfs_cfg(cfg), "momentum", None)
+  mom_cfg = getattr(_scalping_cfg(cfg), "momentum", None)
   lookback = int(_parse_float(mom_cfg, "macro_veto_lookback_bars", 60.0))
   min_displacement_atr = _parse_float(mom_cfg, "macro_veto_min_displacement_atr", 2.5)
   macro = macro_momentum_direction(
@@ -137,7 +137,7 @@ def _technique_require_sweep_body(cfg: Any) -> bool:
 
 def _enabled(cfg: Any, name: str) -> bool:
   """Archetype enable flags are fail-closed when missing (not default-on)."""
-  root = _hfs_cfg(cfg)
+  root = _scalping_cfg(cfg)
   arch = getattr(root, "archetypes", None)
   attr = f"{name}_enabled"
   return bool(getattr(arch, attr, False))
@@ -164,7 +164,7 @@ def discover_range_sweep(
   if width_pips < 25:
     return []
 
-  loc = getattr(_hfs_cfg(cfg), "location", None)
+  loc = getattr(_scalping_cfg(cfg), "location", None)
   buy_max = _parse_float(loc, "range_buy_maximum_position", 0.35)
   sell_min = _parse_float(loc, "range_sell_minimum_position", 0.65)
   pos = context.dealing_range_position
@@ -174,8 +174,8 @@ def discover_range_sweep(
 
   out: list[ScalpOpportunity] = []
   buffer = max(pip_size * 2, context.atr * 0.05)
-  min_net = _parse_float(getattr(_hfs_cfg(cfg), "target", None), "minimum_net_target_pips", 15.0)
-  act = getattr(_hfs_cfg(cfg), "activation", None)
+  min_net = _parse_float(getattr(_scalping_cfg(cfg), "target", None), "minimum_net_target_pips", 15.0)
+  act = getattr(_scalping_cfg(cfg), "activation", None)
   lookback = max(1, int(getattr(act, "trigger_maximum_age_bars", 2) or 2))
 
   # BUY lower edge
@@ -331,11 +331,11 @@ def discover_impulse_pullback(
   if not is_impulse_pullback_session_allowed(context.session, cfg):
     return []
 
-  loc = getattr(_hfs_cfg(cfg), "location", None)
+  loc = getattr(_scalping_cfg(cfg), "location", None)
   buy_max = _parse_float(loc, "pullback_buy_maximum_position", 0.60)
   sell_min = _parse_float(loc, "pullback_sell_minimum_position", 0.40)
-  min_net = _parse_float(getattr(_hfs_cfg(cfg), "target", None), "minimum_net_target_pips", 15.0)
-  buffer = max(pip_size * 2, context.atr * _parse_float(getattr(_hfs_cfg(cfg), "stop", None), "buffer_atr", 0.10))
+  min_net = _parse_float(getattr(_scalping_cfg(cfg), "target", None), "minimum_net_target_pips", 15.0)
+  buffer = max(pip_size * 2, context.atr * _parse_float(getattr(_scalping_cfg(cfg), "stop", None), "buffer_atr", 0.10))
   out: list[ScalpOpportunity] = []
   pos = context.dealing_range_position
   htf = str(context.htf_bias or "unknown").casefold()
@@ -434,12 +434,12 @@ def discover_impulse_pullback(
 
 
 def _breakout_cfg(cfg: Any) -> Any:
-  return getattr(_hfs_cfg(cfg), "breakout", None)
+  return getattr(_scalping_cfg(cfg), "breakout", None)
 
 
 def _breakout_knobs(cfg: Any, *, atr: float, pip_size: float) -> dict[str, Any]:
   bo = _breakout_cfg(cfg)
-  act = getattr(_hfs_cfg(cfg), "activation", None)
+  act = getattr(_scalping_cfg(cfg), "activation", None)
   box_max_atr = _parse_float(bo, "box_max_atr", 1.5)
   min_break_atr = _parse_float(bo, "min_break_atr", 0.25)
   min_box_bars = int(getattr(bo, "min_box_bars", 8) or 8) if bo is not None else 8
@@ -546,7 +546,7 @@ def discover_breakout_retest(
 
   low = float(box["box_low"])
   high = float(box["box_high"])
-  min_net = _parse_float(getattr(_hfs_cfg(cfg), "target", None), "minimum_net_target_pips", 15.0)
+  min_net = _parse_float(getattr(_scalping_cfg(cfg), "target", None), "minimum_net_target_pips", 15.0)
   buffer = max(pip_size * 2, context.atr * 0.1)
   retest_lookback = knobs["retest_lookback_bars"]
   out: list[ScalpOpportunity] = []
@@ -687,7 +687,7 @@ def idle_discovery_reasons(
       if width_pips < 25:
         reasons.append("range_sweep:range_too_narrow")
       # near_equilibrium is telemetry-only / not an absolute mute (owner 2026-08-06).
-      act = getattr(_hfs_cfg(cfg), "activation", None)
+      act = getattr(_scalping_cfg(cfg), "activation", None)
       lookback = max(1, int(getattr(act, "trigger_maximum_age_bars", 2) or 2))
       buffer = max(pip_size * 2, context.atr * 0.05)
       buy_ev = detect_sweep_reclaim(
@@ -700,7 +700,7 @@ def idle_discovery_reasons(
         reasons.append("range_sweep:no_edge_sweep_reclaim")
       else:
         pos = context.dealing_range_position
-        loc = getattr(_hfs_cfg(cfg), "location", None)
+        loc = getattr(_scalping_cfg(cfg), "location", None)
         buy_max = _parse_float(loc, "range_buy_maximum_position", 0.35)
         sell_min = _parse_float(loc, "range_sell_minimum_position", 0.65)
         if buy_ev is not None and pos is not None and pos > buy_max:

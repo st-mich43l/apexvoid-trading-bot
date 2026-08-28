@@ -85,6 +85,12 @@
       "type": "str"
     },
     {
+      "canonical_env": "AUTO_TRADE_TECHNIQUE_SCALP_REQUIRE_KILLZONE",
+      "deprecated_alias": "AUTO_TRADE_TECHNIQUE_HFS_REQUIRE_KILLZONE",
+      "path": "execution.technique.scalp_require_killzone",
+      "type": "bool"
+    },
+    {
       "canonical_env": "AUTO_TRADE_TARGET_PLANS_PIPS",
       "deprecated_alias": "AUTO_TRADE_TP_PIPS",
       "path": "execution.targeting.default_ladder_pips",
@@ -95,6 +101,258 @@
       "deprecated_alias": "CTRADER_EXPECTED_BROKER",
       "path": "contract.account.expected_broker",
       "type": "string"
+    },
+    {
+      "canonical_env": "SCALPING_BREAKOUT_BOX_MAX_ATR",
+      "deprecated_alias": "HFS_BREAKOUT_BOX_MAX_ATR",
+      "path": "strategies.scalping.breakout.box_max_atr",
+      "type": "float"
+    },
+    {
+      "canonical_env": "SCALPING_BREAKOUT_MAX_BOX_BARS",
+      "deprecated_alias": "HFS_BREAKOUT_MAX_BOX_BARS",
+      "path": "strategies.scalping.breakout.max_box_bars",
+      "type": "int"
+    },
+    {
+      "canonical_env": "SCALPING_BREAKOUT_MIN_BOX_BARS",
+      "deprecated_alias": "HFS_BREAKOUT_MIN_BOX_BARS",
+      "path": "strategies.scalping.breakout.min_box_bars",
+      "type": "int"
+    },
+    {
+      "canonical_env": "SCALPING_BREAKOUT_MIN_BREAK_ATR",
+      "deprecated_alias": "HFS_BREAKOUT_MIN_BREAK_ATR",
+      "path": "strategies.scalping.breakout.min_break_atr",
+      "type": "float"
+    },
+    {
+      "canonical_env": "SCALPING_BREAKOUT_MIN_TOUCHES_PER_SIDE",
+      "deprecated_alias": "HFS_BREAKOUT_MIN_TOUCHES_PER_SIDE",
+      "path": "strategies.scalping.breakout.min_touches_per_side",
+      "type": "int"
+    },
+    {
+      "canonical_env": "SCALPING_BREAKOUT_REQUIRE_RETEST_REJECTION",
+      "deprecated_alias": "HFS_BREAKOUT_REQUIRE_RETEST_REJECTION",
+      "path": "strategies.scalping.breakout.require_retest_rejection",
+      "type": "bool"
+    },
+    {
+      "canonical_env": "SCALPING_BREAKOUT_RETEST_ENABLED",
+      "deprecated_alias": "HFS_BREAKOUT_RETEST_ENABLED",
+      "path": "strategies.scalping.archetypes.breakout_retest_enabled",
+      "type": "bool"
+    },
+    {
+      "canonical_env": "SCALPING_BREAKOUT_RETEST_LOOKBACK_BARS",
+      "deprecated_alias": "HFS_BREAKOUT_RETEST_LOOKBACK_BARS",
+      "path": "strategies.scalping.breakout.retest_lookback_bars",
+      "type": "int"
+    },
+    {
+      "canonical_env": "SCALPING_BREAKOUT_TOUCH_TOL_ATR",
+      "deprecated_alias": "HFS_BREAKOUT_TOUCH_TOL_ATR",
+      "path": "strategies.scalping.breakout.touch_tol_atr",
+      "type": "float"
+    },
+    {
+      "canonical_env": "SCALPING_COOLDOWN_AFTER_LOSS_MINUTES",
+      "deprecated_alias": "HFS_COOLDOWN_AFTER_LOSS_MINUTES",
+      "path": "strategies.scalping.risk.cooldown_after_loss_minutes",
+      "type": "int"
+    },
+    {
+      "canonical_env": "SCALPING_CURRENT_CONTEXT_TTL_SECONDS",
+      "deprecated_alias": "HFS_CURRENT_CONTEXT_TTL_SECONDS",
+      "path": "strategies.scalping.context.current_context_ttl_seconds",
+      "type": "int"
+    },
+    {
+      "canonical_env": "SCALPING_DAILY_LOSS_LIMIT_R",
+      "deprecated_alias": "HFS_DAILY_LOSS_LIMIT_R",
+      "path": "strategies.scalping.risk.daily_loss_limit_r",
+      "type": "float"
+    },
+    {
+      "canonical_env": "SCALPING_HISTORIC_CONTEXT_TTL_SECONDS",
+      "deprecated_alias": "HFS_HISTORIC_CONTEXT_TTL_SECONDS",
+      "path": "strategies.scalping.context.historic_context_ttl_seconds",
+      "type": "int"
+    },
+    {
+      "canonical_env": "SCALPING_IMPULSE_PULLBACK_ALLOWED_SESSIONS",
+      "deprecated_alias": "HFS_IMPULSE_PULLBACK_ALLOWED_SESSIONS",
+      "path": "strategies.scalping.archetypes.impulse_pullback_allowed_sessions",
+      "type": "str"
+    },
+    {
+      "canonical_env": "SCALPING_IMPULSE_PULLBACK_ENABLED",
+      "deprecated_alias": "HFS_IMPULSE_PULLBACK_ENABLED",
+      "path": "strategies.scalping.archetypes.impulse_pullback_enabled",
+      "type": "bool"
+    },
+    {
+      "canonical_env": "SCALPING_M1_LOOKBACK_BARS",
+      "deprecated_alias": "HFS_M1_LOOKBACK_BARS",
+      "path": "strategies.scalping.context.m1_lookback_bars",
+      "type": "int"
+    },
+    {
+      "canonical_env": "SCALPING_MAXIMUM_ACTIVE_OPPORTUNITIES",
+      "deprecated_alias": "HFS_MAXIMUM_ACTIVE_OPPORTUNITIES",
+      "path": "strategies.scalping.policy.maximum_active_opportunities",
+      "type": "int"
+    },
+    {
+      "canonical_env": "SCALPING_MAXIMUM_CHASE_PIPS",
+      "deprecated_alias": "HFS_MAXIMUM_CHASE_PIPS",
+      "path": "strategies.scalping.activation.maximum_chase_pips",
+      "type": "float"
+    },
+    {
+      "canonical_env": "SCALPING_MAXIMUM_CONCURRENT_POSITIONS",
+      "deprecated_alias": "HFS_MAXIMUM_CONCURRENT_POSITIONS",
+      "path": "strategies.scalping.risk.maximum_concurrent_positions",
+      "type": "int"
+    },
+    {
+      "canonical_env": "SCALPING_MAXIMUM_CONSECUTIVE_LOSSES",
+      "deprecated_alias": "HFS_MAXIMUM_CONSECUTIVE_LOSSES",
+      "path": "strategies.scalping.risk.maximum_consecutive_losses",
+      "type": "int"
+    },
+    {
+      "canonical_env": "SCALPING_MAXIMUM_DAILY_TRADES",
+      "deprecated_alias": "HFS_MAXIMUM_DAILY_TRADES",
+      "path": "strategies.scalping.risk.maximum_daily_trades",
+      "type": "int"
+    },
+    {
+      "canonical_env": "SCALPING_MAXIMUM_M5_AGE_SECONDS",
+      "deprecated_alias": "HFS_MAXIMUM_M5_AGE_SECONDS",
+      "path": "strategies.scalping.context.maximum_m5_age_seconds",
+      "type": "int"
+    },
+    {
+      "canonical_env": "SCALPING_MAXIMUM_OPPORTUNITIES_PER_CYCLE",
+      "deprecated_alias": "HFS_MAXIMUM_OPPORTUNITIES_PER_CYCLE",
+      "path": "strategies.scalping.policy.maximum_opportunities_per_cycle",
+      "type": "int"
+    },
+    {
+      "canonical_env": "SCALPING_MAXIMUM_SESSION_TRADES",
+      "deprecated_alias": "HFS_MAXIMUM_SESSION_TRADES",
+      "path": "strategies.scalping.risk.maximum_session_trades",
+      "type": "int"
+    },
+    {
+      "canonical_env": "SCALPING_MAXIMUM_SPREAD_PIPS",
+      "deprecated_alias": "HFS_MAXIMUM_SPREAD_PIPS",
+      "path": "strategies.scalping.policy.maximum_spread_pips",
+      "type": "float"
+    },
+    {
+      "canonical_env": "SCALPING_MINIMUM_NET_TARGET_PIPS",
+      "deprecated_alias": "HFS_MINIMUM_NET_TARGET_PIPS",
+      "path": "strategies.scalping.target.minimum_net_target_pips",
+      "type": "float"
+    },
+    {
+      "canonical_env": "SCALPING_MINIMUM_REWARD_RISK",
+      "deprecated_alias": "HFS_MINIMUM_REWARD_RISK",
+      "path": "strategies.scalping.policy.minimum_reward_risk",
+      "type": "float"
+    },
+    {
+      "canonical_env": "SCALPING_MODE",
+      "deprecated_alias": "HFS_MODE",
+      "path": "strategies.scalping.mode",
+      "type": "str"
+    },
+    {
+      "canonical_env": "SCALPING_PREFERRED_LADDER_PIPS",
+      "deprecated_alias": "HFS_PREFERRED_LADDER_PIPS",
+      "path": "strategies.scalping.target.preferred_ladder_pips",
+      "type": "str"
+    },
+    {
+      "canonical_env": "SCALPING_PULLBACK_BUY_MAX_POSITION",
+      "deprecated_alias": "HFS_PULLBACK_BUY_MAX_POSITION",
+      "path": "strategies.scalping.location.pullback_buy_maximum_position",
+      "type": "float"
+    },
+    {
+      "canonical_env": "SCALPING_PULLBACK_SELL_MIN_POSITION",
+      "deprecated_alias": "HFS_PULLBACK_SELL_MIN_POSITION",
+      "path": "strategies.scalping.location.pullback_sell_minimum_position",
+      "type": "float"
+    },
+    {
+      "canonical_env": "SCALPING_RANGE_BUY_MAX_POSITION",
+      "deprecated_alias": "HFS_RANGE_BUY_MAX_POSITION",
+      "path": "strategies.scalping.location.range_buy_maximum_position",
+      "type": "float"
+    },
+    {
+      "canonical_env": "SCALPING_RANGE_SELL_MIN_POSITION",
+      "deprecated_alias": "HFS_RANGE_SELL_MIN_POSITION",
+      "path": "strategies.scalping.location.range_sell_minimum_position",
+      "type": "float"
+    },
+    {
+      "canonical_env": "SCALPING_RANGE_SWEEP_ENABLED",
+      "deprecated_alias": "HFS_RANGE_SWEEP_ENABLED",
+      "path": "strategies.scalping.archetypes.range_sweep_enabled",
+      "type": "bool"
+    },
+    {
+      "canonical_env": "SCALPING_REARM_DISTANCE_ATR",
+      "deprecated_alias": "HFS_REARM_DISTANCE_ATR",
+      "path": "strategies.scalping.activation.rearm_distance_atr",
+      "type": "float"
+    },
+    {
+      "canonical_env": "SCALPING_RISK_FRACTION_PER_TRADE",
+      "deprecated_alias": "HFS_RISK_FRACTION_PER_TRADE",
+      "path": "strategies.scalping.risk.risk_fraction_per_trade",
+      "type": "float"
+    },
+    {
+      "canonical_env": "SCALPING_RISK_MODE",
+      "deprecated_alias": "HFS_RISK_MODE",
+      "path": "strategies.scalping.risk.mode",
+      "type": "str"
+    },
+    {
+      "canonical_env": "SCALPING_SESSION_LOSS_LIMIT_R",
+      "deprecated_alias": "HFS_SESSION_LOSS_LIMIT_R",
+      "path": "strategies.scalping.risk.session_loss_limit_r",
+      "type": "float"
+    },
+    {
+      "canonical_env": "SCALPING_STOP_BUFFER_ATR",
+      "deprecated_alias": "HFS_STOP_BUFFER_ATR",
+      "path": "strategies.scalping.stop.buffer_atr",
+      "type": "float"
+    },
+    {
+      "canonical_env": "SCALPING_STOP_MAXIMUM_PIPS",
+      "deprecated_alias": "HFS_STOP_MAXIMUM_PIPS",
+      "path": "strategies.scalping.stop.maximum_pips",
+      "type": "float"
+    },
+    {
+      "canonical_env": "SCALPING_STOP_MINIMUM_PIPS",
+      "deprecated_alias": "HFS_STOP_MINIMUM_PIPS",
+      "path": "strategies.scalping.stop.minimum_pips",
+      "type": "float"
+    },
+    {
+      "canonical_env": "SCALPING_TRIGGER_MAXIMUM_AGE_BARS",
+      "deprecated_alias": "HFS_TRIGGER_MAXIMUM_AGE_BARS",
+      "path": "strategies.scalping.activation.trigger_maximum_age_bars",
+      "type": "int"
     },
     {
       "canonical_env": "DATABASE_URL",
@@ -128,8 +386,8 @@
     }
   ],
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "354d961c37977232d925d8cc31710a50ee87a7992850e98d59d81bb23a31c548",
-  "count": 21,
-  "source_fingerprint_sha256": "354d961c37977232d925d8cc31710a50ee87a7992850e98d59d81bb23a31c548",
+  "configuration_contract_fingerprint_sha256": "f790897c73533a6a78895c180a001834e4d2df8fd10b6e9cbf36a49a34e6a981",
+  "count": 64,
+  "source_fingerprint_sha256": "f790897c73533a6a78895c180a001834e4d2df8fd10b6e9cbf36a49a34e6a981",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

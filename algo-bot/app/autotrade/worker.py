@@ -74,7 +74,7 @@ from app.autotrade.strategy_match import (
 )
 from app.autotrade.strategy_taxonomy import (
   bypasses_opposing_structure_gates,
-  is_hfs_strategy,
+  is_m1_scalp_strategy,
   is_reaction_strategy,
   is_scalp_strategy,
   is_technique_or_confluence,
@@ -2793,7 +2793,7 @@ def _strategy_mode_enabled(match: StrategyMatch) -> bool:
   if family in {"hfs", "scalp"} or match.strategy_mode in {
     "hfs_scalp", "scalp_m1",
   } or (match.structural_source or "").casefold() == "hfs":
-    hfs = getattr(runtime_config.strategies, "high_frequency_scalp", None)
+    hfs = getattr(runtime_config.strategies, "scalping", None)
     mode = str(getattr(hfs, "mode", "off") or "off").casefold()
     return mode == "live"
   if match.is_range_edge or family in {"range", "range_reversion"}:
@@ -4878,7 +4878,9 @@ async def _publish_trade_plan_v8(
     # Optional clock sterilizer (prod off). Discovery permits are structure/
     # technique driven; weak volume/momentum is rejected by analysis.
     require_kz = False if tech is None else bool(
-      getattr(tech, "hfs_require_killzone", False),
+      getattr(tech, "scalp_require_killzone", None)
+      if getattr(tech, "scalp_require_killzone", None) is not None
+      else getattr(tech, "hfs_require_killzone", False),
     )
     from app.scalping.context import classify_session
 
@@ -5038,7 +5040,7 @@ async def _publish_trade_plan_v8(
   # as waiting_retest_entry_zone until price returned — by then envelope /
   # stack / thesis often killed the plan (Aug 20 HFS gold dig). Treat chase
   # as immediately executable for those families, matching activation.
-  candidate_allows_chase = is_hfs_strategy(str(match.strategy)) or is_scalp_strategy(
+  candidate_allows_chase = is_m1_scalp_strategy(str(match.strategy)) or is_scalp_strategy(
     str(match.strategy or ""),
     family=str(getattr(match, "family", "") or "") or None,
     strategy_mode=str(getattr(match, "strategy_mode", "") or "") or None,

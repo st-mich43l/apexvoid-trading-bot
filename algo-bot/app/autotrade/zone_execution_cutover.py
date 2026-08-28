@@ -680,7 +680,9 @@ async def _prepare_activation(
   if candidate_is_scalp:
     # Optional clock sterilizer (prod off). Structure/technique decide entries.
     require_kz = False if tech is None else bool(
-      getattr(tech, "hfs_require_killzone", False),
+      getattr(tech, "scalp_require_killzone", None)
+      if getattr(tech, "scalp_require_killzone", None) is not None
+      else getattr(tech, "hfs_require_killzone", False)
     )
     from app.scalping.context import classify_session
 

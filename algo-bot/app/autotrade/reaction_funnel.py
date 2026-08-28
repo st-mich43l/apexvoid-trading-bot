@@ -1,12 +1,12 @@
 """Scalp vs reaction funnel counters for ZoneWatch / trade lifecycle visibility.
 
-Reaction fills can vanish from short-TTL Redis event streams while HFS
-dominates the journal. These counters (and compact complete lifecycle
-events) keep the scalp/reaction split measurable without relying on stream
-retention.
+Reaction fills can vanish from short-TTL Redis event streams while M1
+scalping dominates the journal. These counters (and compact complete
+lifecycle events) keep the scalp/reaction split measurable without relying
+on stream retention.
 
-HFS also writes per-archetype keys so Impulse vs Range vs Breakout can be
-read without joining Postgres.
+M1 scalping also writes per-archetype keys so Impulse vs Range vs Breakout
+can be read without joining Postgres.
 """
 
 from __future__ import annotations
@@ -139,10 +139,10 @@ def funnel_key(symbol: str, bucket: str) -> str:
   return f"auto_trade:funnel:{str(symbol or 'XAU').upper()}:{bucket}"
 
 
-def hfs_archetype_funnel_key(symbol: str, archetype: str) -> str:
+def scalp_archetype_funnel_key(symbol: str, archetype: str) -> str:
   return (
     f"auto_trade:funnel:{str(symbol or 'XAU').upper()}:"
-    f"hfs:{str(archetype or 'unknown')}"
+    f"scalp:{str(archetype or 'unknown')}"
   )
 
 
@@ -162,7 +162,8 @@ async def bump_funnel(
 
   When ``once_key`` is set, only the first bump for that key counts
   (e.g. one waiting_reaction_trigger per zone watch episode).
-  HFS strategies also increment ``auto_trade:funnel:{sym}:hfs:{archetype}``.
+  M1 scalp strategies also increment ``auto_trade:funnel:{sym}:scalp:{archetype}``.
+  Legacy ``…:hfs:{archetype}`` keys are no longer written.
   """
   if once_key:
     try:
@@ -190,7 +191,7 @@ async def bump_funnel(
     pipe.expire(key, _FUNNEL_TTL_SECONDS)
     resolved_archetype = archetype or archetype_from_strategy(strategy)
     if bucket == BUCKET_SCALP and resolved_archetype:
-      arch_key = hfs_archetype_funnel_key(symbol, resolved_archetype)
+      arch_key = scalp_archetype_funnel_key(symbol, resolved_archetype)
       pipe.hincrby(arch_key, stage, 1)
       if reason_code:
         pipe.hincrby(arch_key, f"{stage}:{reason_code}", 1)
@@ -232,7 +233,7 @@ async def _maybe_log_funnel_snapshot(
     reaction = await client.hgetall(funnel_key(sym, BUCKET_REACTION)) or {}
     scalp = await client.hgetall(funnel_key(sym, BUCKET_SCALP)) or {}
     impulse = await client.hgetall(
-      hfs_archetype_funnel_key(sym, "impulse_pullback"),
+      scalp_archetype_funnel_key(sym, "impulse_pullback"),
     ) or {}
   except Exception:
     return
