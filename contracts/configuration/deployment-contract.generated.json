@@ -254,6 +254,7 @@
       "execution.technique.ny_window_hours",
       "execution.technique.reaction_publish_windows",
       "execution.technique.reaction_require_killzone",
+      "execution.technique.reaction_require_publish_window",
       "execution.technique.require_sweep_body",
       "execution.technique.strict_premium_discount",
       "execution.trend.hard_entry_drift_pips",
@@ -368,7 +369,6 @@
       "strategies.high_frequency_scalp.activation.trigger_maximum_age_bars",
       "strategies.high_frequency_scalp.archetypes.breakout_retest_enabled",
       "strategies.high_frequency_scalp.archetypes.impulse_pullback_enabled",
-      "strategies.high_frequency_scalp.archetypes.momentum_chase_enabled",
       "strategies.high_frequency_scalp.archetypes.range_sweep_enabled",
       "strategies.high_frequency_scalp.breakout.box_max_atr",
       "strategies.high_frequency_scalp.breakout.max_box_bars",
@@ -510,7 +510,7 @@
     "XAU_ZONE_PREFERRED_MAX_WIDTH_PRICE": "instruments.XAU.analysis.zones.preferred_maximum_width_price",
     "XAU_ZONE_PREFERRED_MIN_WIDTH_PRICE": "instruments.XAU.analysis.zones.preferred_minimum_width_price"
   },
-  "fingerprint": "8b37d428a86adad3fd3a503ac77b926f6b0e096c2d4e338aaf7a3f8000b0f6ad",
+  "fingerprint": "c8d409206e2fff900f411fb045e64c994d1f7283cc7315bba36ced9f3fba7c44",
   "instrument_schema": {
     "active_projection_symbol": "XAU",
     "optional": [

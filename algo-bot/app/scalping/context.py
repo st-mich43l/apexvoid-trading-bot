@@ -14,7 +14,6 @@ from app.analysis.types import Swing
 from app.scalping.models import (
   ARCHETYPE_BREAKOUT_RETEST,
   ARCHETYPE_IMPULSE_PULLBACK,
-  ARCHETYPE_MOMENTUM_CHASE,
   ARCHETYPE_RANGE_SWEEP,
   CONTEXT_VERSION,
   ScalpContextSnapshot,
@@ -114,7 +113,6 @@ _HFS_ARCHETYPES: tuple[str, ...] = (
   ARCHETYPE_RANGE_SWEEP,
   ARCHETYPE_IMPULSE_PULLBACK,
   ARCHETYPE_BREAKOUT_RETEST,
-  ARCHETYPE_MOMENTUM_CHASE,
 )
 
 def permitted_archetypes_for_session(
@@ -152,8 +150,6 @@ def _enabled_hfs_archetypes(cfg: Any | None) -> frozenset[str]:
     allowed.append(ARCHETYPE_IMPULSE_PULLBACK)
   if bool(getattr(arch, "breakout_retest_enabled", True)):
     allowed.append(ARCHETYPE_BREAKOUT_RETEST)
-  if bool(getattr(arch, "momentum_chase_enabled", False)):
-    allowed.append(ARCHETYPE_MOMENTUM_CHASE)
   return frozenset(allowed)
 
 

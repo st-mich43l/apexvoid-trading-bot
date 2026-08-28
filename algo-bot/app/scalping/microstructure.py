@@ -264,8 +264,7 @@ def macro_momentum_direction(
   30 bars, too narrow to see a move that size; m5_structure and htf_bias
   had nothing to say either ("range" / "unknown"). This is a wider,
   displacement-only read (no directional-bar-count, no freshness
-  requirement -- unlike detect_momentum_ignition, which is for *entering*
-  a chase, this is only ever used as a veto against fading one).
+  requirement -- this is only ever used as a veto against fading one).
   """
   if df is None or len(df) < lookback_bars or atr <= 0:
     return None
@@ -274,102 +273,6 @@ def macro_momentum_direction(
   if abs(displacement) / atr < min_displacement_atr:
     return None
   return "BUY" if displacement > 0 else "SELL"
-
-
-def detect_momentum_ignition(
-  df: pd.DataFrame,
-  *,
-  direction: str,
-  atr: float,
-  min_displacement_atr: float = 1.0,  # owner-tuned 2026-08-11, was 1.2
-  lookback_bars: int = 5,
-  min_directional_bars: int = 2,  # redefine 2026-08-26: was 4
-) -> dict[str, Any] | None:
-  """A live, still-accelerating thrust -- chase it, don't wait for a pullback.
-
-  impulse_pullback deliberately waits for a 25-75% retracement before
-  entering. That leaves a straight, uninterrupted run with nothing to catch
-  it: the market can travel the entire distance a scalp would have wanted
-  before ever handing back the pullback impulse_pullback is waiting for.
-  This fires while the thrust is still in progress -- most of the last
-  ``lookback_bars`` bars directional, net displacement past
-  ``min_displacement_atr``, and the newest bar still making a fresh extreme
-  (not basing/stalling, which is impulse_pullback's job, not this one's).
-  """
-  if df is None or len(df) < lookback_bars or atr <= 0:
-    return None
-  side = str(direction).upper()
-  window = df.tail(lookback_bars)
-  opens = window["open"].astype(float)
-  closes = window["close"].astype(float)
-  highs = window["high"].astype(float)
-  lows = window["low"].astype(float)
-  last = window.iloc[-1]
-
-  # Diagnostic (2026-08-11): owner report - momentum_chase fires rarely
-  # even on visibly impulsive candles. Every rejection path below used to
-  # return a bare None, indistinguishable from every other - the caller's
-  # "not_matched" telemetry couldn't tell "wrong number of directional
-  # bars" from "displacement fell short" from "last bar isn't a fresh
-  # extreme" (momentum_stalling, the only one that already carried a
-  # reason). All four now carry a reason plus the measured value that
-  # missed, so a real distribution can be read from production instead of
-  # guessing which of these four independent, all-mandatory conditions is
-  # actually the bottleneck.
-  if side == "BUY":
-    directional = int((closes > opens).sum())
-    if directional < min_directional_bars:
-      return {
-        "rejected": True, "reason": "insufficient_directional_bars",
-        "directional_bars": directional, "min_directional_bars": min_directional_bars,
-      }
-    displacement = float(closes.iloc[-1] - opens.iloc[0])
-    if displacement <= 0 or displacement / atr < min_displacement_atr:
-      return {
-        "rejected": True, "reason": "insufficient_displacement",
-        "displacement_atr": displacement / atr if atr > 0 else 0.0,
-        "min_displacement_atr": min_displacement_atr,
-      }
-    if float(last["close"]) <= float(last["open"]):
-      return {"rejected": True, "reason": "last_bar_not_directional"}
-    if float(last["high"]) < float(highs.iloc[:-1].max()):
-      return {"rejected": True, "reason": "momentum_stalling"}
-    return {
-      "pattern": "momentum_ignition",
-      "direction": "BUY",
-      "bar_ts": _ts(window.index[-1]),
-      "extreme": float(lows.min()),
-      "close": float(closes.iloc[-1]),
-      "directional_bars": directional,
-      "displacement_atr": displacement / atr,
-    }
-
-  directional = int((closes < opens).sum())
-  if directional < min_directional_bars:
-    return {
-      "rejected": True, "reason": "insufficient_directional_bars",
-      "directional_bars": directional, "min_directional_bars": min_directional_bars,
-    }
-  displacement = float(opens.iloc[0] - closes.iloc[-1])
-  if displacement <= 0 or displacement / atr < min_displacement_atr:
-    return {
-      "rejected": True, "reason": "insufficient_displacement",
-      "displacement_atr": displacement / atr if atr > 0 else 0.0,
-      "min_displacement_atr": min_displacement_atr,
-    }
-  if float(last["close"]) >= float(last["open"]):
-    return {"rejected": True, "reason": "last_bar_not_directional"}
-  if float(last["low"]) > float(lows.iloc[:-1].min()):
-    return {"rejected": True, "reason": "momentum_stalling"}
-  return {
-    "pattern": "momentum_ignition",
-    "direction": "SELL",
-    "bar_ts": _ts(window.index[-1]),
-    "extreme": float(highs.max()),
-    "close": float(closes.iloc[-1]),
-    "directional_bars": directional,
-    "displacement_atr": displacement / atr,
-  }
 
 
 def find_compression_box(

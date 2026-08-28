@@ -1,7 +1,7 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "8b37d428a86adad3fd3a503ac77b926f6b0e096c2d4e338aaf7a3f8000b0f6ad",
-  "configuration_document_fingerprint_sha256": "501f0daf42bb649d2ffe96841f5807bf9fb331ad6421cb5d92ef2ff3f3da2c5f",
+  "configuration_contract_fingerprint_sha256": "c8d409206e2fff900f411fb045e64c994d1f7283cc7315bba36ced9f3fba7c44",
+  "configuration_document_fingerprint_sha256": "d00c8b1958602cfee96385930672c534223ca934a3578e25e1c202a59c3e072d",
   "counts": {
     "algorithm_constants": 57,
     "configurable": 473,
@@ -10755,6 +10755,43 @@
     {
       "algorithm_constant": false,
       "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_TECHNIQUE_REACTION_REQUIRE_PUBLISH_WINDOW",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {},
+      "default": true,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": true
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "When true with enforce, block non-scalp publish/activation outside reaction_publish_windows. Prod trading-bot.yml defaults this off; structure and strategy technique decide regardless of UTC hour.",
+      "display_id": "config:execution.technique.reaction_require_publish_window",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "execution.technique.reaction_require_publish_window",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "execution_safety",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "bool",
+      "unit": "boolean",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
       "canonical_env": "AUTO_TRADE_TECHNIQUE_REQUIRE_SWEEP_BODY",
       "catalog_version": 2,
       "configurable": true,
@@ -16085,43 +16122,6 @@
     {
       "algorithm_constant": false,
       "allowed_values": [],
-      "canonical_env": "HFS_MOMENTUM_CHASE_ENABLED",
-      "catalog_version": 2,
-      "configurable": true,
-      "constraints": {},
-      "default": false,
-      "default_contexts": [
-        {
-          "context": "python_schema",
-          "value": false
-        }
-      ],
-      "deprecated": false,
-      "deprecated_aliases": [],
-      "description": "Enable momentum ignition chase HFS archetype (off by default after quality dig).",
-      "display_id": "config:strategies.high_frequency_scalp.archetypes.momentum_chase_enabled",
-      "evidence_notes": [],
-      "introduced_in": "config-catalog-v2",
-      "kind": "configurable",
-      "mismatch_policy": "not_reported",
-      "owner": "python",
-      "path": "strategies.high_frequency_scalp.archetypes.momentum_chase_enabled",
-      "protocol_constant": false,
-      "reload_policy": "new_setup_only",
-      "replacement_path": null,
-      "required": false,
-      "risk_classification": "strategy_behavior",
-      "runtime_reload_policy": "restart",
-      "secret": false,
-      "shared_with_ctrader": false,
-      "terminal_deprecation_reason": null,
-      "type": "bool",
-      "unit": "boolean",
-      "validation_summary": "Pydantic required/type coercion only"
-    },
-    {
-      "algorithm_constant": false,
-      "allowed_values": [],
       "canonical_env": "HFS_RANGE_SWEEP_ENABLED",
       "catalog_version": 2,
       "configurable": true,
@@ -20259,6 +20259,6 @@
       "validation_summary": "Pydantic required/type coercion only"
     }
   ],
-  "source_fingerprint_sha256": "8b37d428a86adad3fd3a503ac77b926f6b0e096c2d4e338aaf7a3f8000b0f6ad",
+  "source_fingerprint_sha256": "c8d409206e2fff900f411fb045e64c994d1f7283cc7315bba36ced9f3fba7c44",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

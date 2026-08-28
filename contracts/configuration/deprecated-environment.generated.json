@@ -128,8 +128,8 @@
     }
   ],
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "8b37d428a86adad3fd3a503ac77b926f6b0e096c2d4e338aaf7a3f8000b0f6ad",
+  "configuration_contract_fingerprint_sha256": "c8d409206e2fff900f411fb045e64c994d1f7283cc7315bba36ced9f3fba7c44",
   "count": 21,
-  "source_fingerprint_sha256": "8b37d428a86adad3fd3a503ac77b926f6b0e096c2d4e338aaf7a3f8000b0f6ad",
+  "source_fingerprint_sha256": "c8d409206e2fff900f411fb045e64c994d1f7283cc7315bba36ced9f3fba7c44",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }
