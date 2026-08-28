@@ -251,6 +251,7 @@
       "execution.technique.hfs_require_killzone",
       "execution.technique.include_late_ny",
       "execution.technique.london_window_hours",
+      "execution.technique.mad_hard_gate_enabled",
       "execution.technique.ny_window_hours",
       "execution.technique.reaction_publish_windows",
       "execution.technique.reaction_require_killzone",
@@ -511,7 +512,7 @@
     "XAU_ZONE_PREFERRED_MAX_WIDTH_PRICE": "instruments.XAU.analysis.zones.preferred_maximum_width_price",
     "XAU_ZONE_PREFERRED_MIN_WIDTH_PRICE": "instruments.XAU.analysis.zones.preferred_minimum_width_price"
   },
-  "fingerprint": "42edd6bd009e4678610a16ba4537904e0aa574ab14a7a1833d439b596c3f7b0d",
+  "fingerprint": "354d961c37977232d925d8cc31710a50ee87a7992850e98d59d81bb23a31c548",
   "instrument_schema": {
     "active_projection_symbol": "XAU",
     "optional": [

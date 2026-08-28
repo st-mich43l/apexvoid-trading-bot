@@ -287,6 +287,21 @@ class ExecutionTechniqueConfig(FrozenConfigModel):
       default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, True),),
       validation_summary='Pydantic required/type coercion only',
     )
+    mad_hard_gate_enabled: bool = config_field(
+      True,
+      canonical_env='AUTO_TRADE_TECHNIQUE_MAD_HARD_GATE_ENABLED',
+      owner=ConfigOwner.PYTHON,
+      reload=ReloadPolicy.NEW_SETUP_ONLY,
+      runtime_reload=ReloadPolicy.RESTART,
+      unit=ConfigUnit.BOOLEAN,
+      risk=RiskClassification.EXECUTION_SAFETY,
+      description=(
+        'When true with enforce, FX fixed_rr technique publish/activation '
+        'applies live mad_hard_gate (phase × strategy). HFS/scalping exempt.'
+      ),
+      default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, True),),
+      validation_summary='Pydantic required/type coercion only',
+    )
 
 
 class ExecutionConfig(FrozenConfigModel):

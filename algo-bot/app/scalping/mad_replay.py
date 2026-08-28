@@ -34,6 +34,13 @@ _STRATEGY_FOR_GATE: dict[str, str] = {
   "impulse_pullback_continuation": "impulse_pullback_continuation",
   "impulse_pullback": "impulse_pullback",
   "breakout_retest": "breakout_retest",
+  "key_level_reaction": "structural_reaction",
+  "key level reaction": "structural_reaction",
+  "supply zone": "structural_reaction",
+  "order block": "structural_reaction",
+  "fvg": "structural_reaction",
+  "ifvg": "structural_reaction",
+  "zone reaction": "structural_reaction",
 }
 
 

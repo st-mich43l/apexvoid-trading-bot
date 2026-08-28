@@ -13,6 +13,12 @@ dated section after deployment.
 ## Unreleased
 
 ### Added
+- **FX MAD hard gate (technique lane):** `execution.technique.mad_hard_gate_enabled`
+  applies live `mad_hard_gate` at ZoneWatch activation for fixed_rr pairs.
+  Full taxonomy mapping: L3 Reaction / Zone / OB / FVG → `structural_reaction`
+  (block `expand`); range + liquidity → reversal rule; impulse/breakout →
+  continuation rule. Redis `mad:phase:*` persists `features` / `would_gate`.
+  See `docs/scalping/MAD.md` and `docs/scalping/MAD_SOURCES.md`.
 - ApexVoid **Breakout Retest** technique: M1 compression box (not M5 24-bar
   envelope), displacement break → rejection retest → hold, per-reason Redis
   ``scalp:metric:{SYM}:breakout:{reason}``, observe-only
