@@ -60,21 +60,24 @@ SCALP_M1_STRATEGIES = frozenset({
   "Momentum Chase Scalp",
 })
 
-# Legacy publish / open-plan labels — still classified as M1 scalp.
-HFS_STRATEGIES = frozenset({
+# M1 scalp set including legacy ``HFS *`` open-plan / historical labels.
+M1_SCALP_STRATEGIES = frozenset({
   *SCALP_M1_STRATEGIES,
   "HFS Range Sweep",
   "HFS Impulse Pullback",
   "HFS Breakout Retest",
   "HFS Momentum Chase",
 })
+# Back-compat alias — prefer M1_SCALP_STRATEGIES / is_m1_scalp_strategy.
+HFS_STRATEGIES = M1_SCALP_STRATEGIES
 
 CANONICAL_FAMILY_REACTION = "reaction"
 CANONICAL_FAMILY_ZONE = "zone"
 CANONICAL_FAMILY_LIQUIDITY = "liquidity"
 CANONICAL_FAMILY_RANGE = "range"
 CANONICAL_FAMILY_SCALP = "scalp"
-CANONICAL_FAMILY_HFS = "hfs"  # legacy alias of scalp
+CANONICAL_FAMILY_HFS = "hfs"  # legacy family stamp on open plans
+CANONICAL_FAMILY_SCALP_LEGACY_HFS = CANONICAL_FAMILY_HFS
 CANONICAL_FAMILY_UNKNOWN = "unknown"
 
 _SCALP_FAMILIES = frozenset({"scalp", "hfs", "range", "range_reversion"})
@@ -82,7 +85,7 @@ _SCALP_MODES = frozenset({
   "scalp_m1", "hfs_scalp", "range_scalp", "auto_box_scalp",
 })
 _M1_SCALP_MODES = frozenset({"scalp_m1", "hfs_scalp"})
-_M1_SCALP_FAMILIES = frozenset({CANONICAL_FAMILY_SCALP, CANONICAL_FAMILY_HFS})
+_M1_SCALP_FAMILIES = frozenset({CANONICAL_FAMILY_SCALP, CANONICAL_FAMILY_SCALP_LEGACY_HFS})
 
 
 def is_reaction_strategy(name: str) -> bool:
@@ -114,10 +117,14 @@ def is_range_strategy(name: str) -> bool:
   return str(name or "") in RANGE_STRATEGIES
 
 
-def is_hfs_strategy(name: str) -> bool:
+def is_m1_scalp_strategy(name: str) -> bool:
   """True for M1 scalp archetypes (canonical + legacy ``HFS *`` labels)."""
   key = str(name or "")
-  return key in HFS_STRATEGIES or key.startswith("HFS ")
+  return key in M1_SCALP_STRATEGIES or key.startswith("HFS ")
+
+
+# Back-compat — prefer is_m1_scalp_strategy.
+is_hfs_strategy = is_m1_scalp_strategy
 
 
 def is_scalp_strategy(
@@ -127,7 +134,7 @@ def is_scalp_strategy(
   strategy_mode: str | None = None,
 ) -> bool:
   """Range Box / Range Edge / M1 scalp — own native room, not HTF opposing."""
-  if is_range_strategy(name) or is_hfs_strategy(name):
+  if is_range_strategy(name) or is_m1_scalp_strategy(name):
     return True
   if str(family or "").casefold() in _SCALP_FAMILIES:
     return True
@@ -152,7 +159,7 @@ def bypasses_opposing_structure_gates(
   (select_range_target / configured floor). Raw reaction ladders alone
   do not unlock the bypass.
   """
-  if is_hfs_strategy(name):
+  if is_m1_scalp_strategy(name):
     return True
   if str(strategy_mode or "").casefold() in _M1_SCALP_MODES:
     return True
@@ -189,7 +196,7 @@ def canonical_family(name: str) -> str:
     return CANONICAL_FAMILY_LIQUIDITY
   if key in RANGE_STRATEGIES:
     return CANONICAL_FAMILY_RANGE
-  if is_hfs_strategy(key):
+  if is_m1_scalp_strategy(key):
     # Prefer ``scalp``; legacy family ``hfs`` remains accepted on open plans.
     return CANONICAL_FAMILY_SCALP
   return CANONICAL_FAMILY_UNKNOWN

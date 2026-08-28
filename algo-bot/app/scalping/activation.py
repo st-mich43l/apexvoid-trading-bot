@@ -9,7 +9,7 @@ from app.analysis.entry_location import (
   build_entry_location_context,
   evaluate_entry_location,
 )
-from app.scalping.context import is_hfs_symbol, is_impulse_pullback_session_allowed
+from app.scalping.context import is_scalping_symbol, is_impulse_pullback_session_allowed
 from app.scalping.models import (
   ARCHETYPE_BREAKOUT_RETEST,
   ARCHETYPE_IMPULSE_PULLBACK,
@@ -21,8 +21,15 @@ from app.scalping.models import (
 )
 
 
-def _hfs(cfg: Any) -> Any:
-  return getattr(getattr(cfg, "strategies", None), "high_frequency_scalp", None)
+def _scalping_cfg(cfg: Any) -> Any:
+  strategies = getattr(cfg, "strategies", None)
+  return getattr(strategies, "scalping", None) or getattr(
+    strategies, "high_frequency_scalp", None,
+  )
+
+
+# Back-compat.
+_hfs = _scalping_cfg
 
 
 def _enforce_location_cfg(hfs: Any) -> SimpleNamespace:
@@ -76,14 +83,14 @@ def evaluate_scalp_activation(
   cfg: Any,
   expected_slippage_pips: float = 1.0,
 ) -> ScalpDecision:
-  hfs = _hfs(cfg)
+  hfs = _scalping_cfg(cfg)
   measured: dict[str, Any] = {
     "opportunity_id": opportunity.opportunity_id,
     "archetype": opportunity.archetype,
     "direction": opportunity.direction,
   }
 
-  if not is_hfs_symbol(opportunity.symbol, cfg):
+  if not is_scalping_symbol(opportunity.symbol, cfg):
     return ScalpDecision(False, True, "scalp_symbol_not_enabled", 0.0, measured)
 
   # Quote freshness (60s hard cap inside HFS)

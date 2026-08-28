@@ -637,7 +637,7 @@ def compose_instrument_domain_overrides(
     ratio = float(instrument.targeting.reward_risk or 2.0)
     composed["execution.range.min_rr"] = ratio
     composed["execution.reaction.room_stop_min_rr"] = ratio
-    composed["strategies.high_frequency_scalp.policy.minimum_reward_risk"] = ratio
+    composed["strategies.scalping.policy.minimum_reward_risk"] = ratio
     if envelope is not None:
       composed["execution.range.min_target_pips"] = int(
         round(float(envelope.min_pips) * ratio)

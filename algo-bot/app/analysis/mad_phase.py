@@ -285,7 +285,7 @@ def mad_gate_strategy_for_setup(
   """
   from app.autotrade.strategy_taxonomy import (
     canonical_family,
-    is_hfs_strategy,
+    is_m1_scalp_strategy,
     is_liquidity_strategy,
     is_range_strategy,
     is_reaction_strategy,
@@ -300,7 +300,7 @@ def mad_gate_strategy_for_setup(
   fam = str(family or "").casefold()
   mode = str(strategy_mode or "").casefold()
 
-  if is_hfs_strategy(name):
+  if is_m1_scalp_strategy(name):
     lower = name.casefold()
     if "impulse" in lower or "momentum" in lower:
       return "impulse_pullback_continuation"

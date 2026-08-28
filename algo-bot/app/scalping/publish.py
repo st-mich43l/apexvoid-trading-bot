@@ -99,7 +99,7 @@ def build_hfs_strategy_match(
     symbol=opportunity.symbol,
     strategy=strategy,
     direction=opportunity.direction,
-    structural_source="hfs",
+    structural_source="scalp",
     structural_id=structural_id,
     touch_bar_ts=touch,
     confirmation_bar_ts=confirm,
@@ -177,7 +177,7 @@ def build_hfs_strategy_match(
     tier="A",
     family="scalp",
     # Keep structural_source=hfs so open-plan thesis ids stay compatible.
-    structural_source="hfs",
+    structural_source="scalp",
     structural_zone_id=structural_id,
     structural_zone_low=float(opportunity.zone_low),
     structural_zone_high=float(opportunity.zone_high),

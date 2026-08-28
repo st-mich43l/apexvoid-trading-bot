@@ -12,6 +12,14 @@ dated section after deployment.
 
 ## Unreleased
 
+### Changed
+- **Erase HFS product lane:** M1 engine is ``strategies.scalping`` (YAML still
+  loads ``high_frequency_scalp``). Env ``SCALPING_*`` replaces ``HFS_*``
+  (deprecated aliases kept). Funnel keys ``…:scalp:{archetype}``,
+  ``structural_source=scalp``, ``execution.technique.scalp_require_killzone``.
+  Legacy ``HFS *`` strategy labels remain accepted for open plans / history.
+  Docs: ``TECHNIQUE_SCALP_REDEFINE.md``, ``SCALP_UNIFY_M1_M5.md``.
+
 ### Added
 - **FX MAD hard gate (technique lane):** `execution.technique.mad_hard_gate_enabled`
   applies live `mad_hard_gate` at ZoneWatch activation for fixed_rr pairs.

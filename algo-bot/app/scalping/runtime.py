@@ -17,7 +17,7 @@ from app.persistence import redis_state
 from app.scalping.activation import evaluate_scalp_activation
 from app.scalping.context import (
   is_context_fresh,
-  is_hfs_symbol,
+  is_scalping_symbol,
   load_current_context,
   save_context,
 )
@@ -64,13 +64,13 @@ from app.autotrade import worker
 log = logging.getLogger(__name__)
 
 
-def _hfs(cfg: Any = None) -> Any:
+def _scalping_cfg(cfg: Any = None) -> Any:
   cfg = cfg or runtime_config
-  return getattr(getattr(cfg, "strategies", None), "high_frequency_scalp", None)
+  return getattr(getattr(cfg, "strategies", None), "scalping", None)
 
 
 def _mode(cfg: Any = None) -> str:
-  section = _hfs(cfg)
+  section = _scalping_cfg(cfg)
   mode = str(getattr(section, "mode", "off") or "off").strip().lower()
   return mode if mode in {"off", "shadow", "paper", "live"} else "off"
 
@@ -121,7 +121,7 @@ async def _ensure_context(
   force: bool = False,
 ):
   existing = await load_current_context(client, symbol, cfg)
-  ctx_cfg = getattr(_hfs(cfg), "context", None)
+  ctx_cfg = getattr(_scalping_cfg(cfg), "context", None)
   max_age = int(getattr(ctx_cfg, "maximum_m5_age_seconds", 420) or 420)
   if (
     existing is not None
@@ -184,7 +184,7 @@ async def process_m1_bar(
   if mode == "off":
     result["reason"] = "scalp_mode_off"
     return result
-  if not is_hfs_symbol(symbol, cfg):
+  if not is_scalping_symbol(symbol, cfg):
     result["reason"] = "scalp_symbol_not_enabled"
     return result
 
@@ -204,7 +204,7 @@ async def process_m1_bar(
     result["reason"] = "scalp_context_missing"
     await incr(client, symbol, "opportunity_blocked:scalp_context_missing")
     return result
-  ctx_cfg = getattr(_hfs(cfg), "context", None)
+  ctx_cfg = getattr(_scalping_cfg(cfg), "context", None)
   max_age = int(getattr(ctx_cfg, "maximum_m5_age_seconds", 420) or 420)
   soft_age = max(max_age * 2, max_age + 300)
   context_age = int(now) - int(getattr(context, "m5_bar_ts", now) or now)
@@ -354,7 +354,7 @@ async def process_m1_bar(
       last_bar = m1.iloc[-1]
       utc_hour = datetime.fromtimestamp(int(bar_ts), tz=timezone.utc).hour
       target_min = float(
-        getattr(getattr(_hfs(cfg), "target", None), "minimum_net_target_pips", 10)
+        getattr(getattr(_scalping_cfg(cfg), "target", None), "minimum_net_target_pips", 10)
         or 10
       ) * pip
       spread_price = float(ask) - float(bid)
@@ -459,7 +459,7 @@ async def process_m1_bar(
     )
     scored.append((opportunity, decision, score))
 
-  policy = getattr(_hfs(cfg), "policy", None)
+  policy = getattr(_scalping_cfg(cfg), "policy", None)
   maximum = int(getattr(policy, "maximum_opportunities_per_cycle", 3) or 3)
   ranked = rank_opportunities(scored, maximum=maximum)
 
@@ -649,7 +649,7 @@ async def process_m1_bar(
         mid = (float(quote[0]) + float(quote[1])) / 2.0
         utc_hour = datetime.fromtimestamp(int(bar_ts), tz=timezone.utc).hour
         target_min = float(
-          getattr(getattr(_hfs(cfg), "target", None), "minimum_net_target_pips", 10)
+          getattr(getattr(_scalping_cfg(cfg), "target", None), "minimum_net_target_pips", 10)
           or 10
         ) * pip
         spread_price = float(quote[1]) - float(quote[0])
@@ -733,7 +733,7 @@ async def handle_closed_bar(
   if parsed is None:
     return
   symbol, tf, bar_ts = parsed
-  if not is_hfs_symbol(symbol):
+  if not is_scalping_symbol(symbol):
     return
   if tf == "M5":
     await _ensure_context(
@@ -778,7 +778,7 @@ async def handle_closed_bar(
 async def scalp_m1_event_loop() -> None:
   """Deprecated: closed bars are owned by bar_event_dispatcher_loop."""
   if _mode() == "off":
-    log.info("HFS scalping disabled: strategies.high_frequency_scalp.mode=off")
+    log.info("M1 scalping disabled: strategies.scalping.mode=off")
     return
   log.info(
     "scalp_m1_event_loop idle; bar_event_dispatcher_loop owns live HFS symbols"

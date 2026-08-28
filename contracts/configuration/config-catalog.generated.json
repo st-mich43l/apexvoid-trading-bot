@@ -1,7 +1,7 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "354d961c37977232d925d8cc31710a50ee87a7992850e98d59d81bb23a31c548",
-  "configuration_document_fingerprint_sha256": "a440ebc12a1e0d12dd61f11155fd90d6ff39c0806977ca98cff3acc4750db7f4",
+  "configuration_contract_fingerprint_sha256": "f790897c73533a6a78895c180a001834e4d2df8fd10b6e9cbf36a49a34e6a981",
+  "configuration_document_fingerprint_sha256": "4216e7f36c1f7b458edc932dd8253fbd12ab9edcb59d5b70fe720ee89204f682",
   "counts": {
     "algorithm_constants": 57,
     "configurable": 475,
@@ -10529,43 +10529,6 @@
     {
       "algorithm_constant": false,
       "allowed_values": [],
-      "canonical_env": "AUTO_TRADE_TECHNIQUE_HFS_REQUIRE_KILLZONE",
-      "catalog_version": 2,
-      "configurable": true,
-      "constraints": {},
-      "default": true,
-      "default_contexts": [
-        {
-          "context": "python_schema",
-          "value": true
-        }
-      ],
-      "deprecated": false,
-      "deprecated_aliases": [],
-      "description": "When true with enforce, block HFS publish/activation outside killzone. Prod trading-bot.yml defaults this off; discovery permits are structure/technique-driven regardless.",
-      "display_id": "config:execution.technique.hfs_require_killzone",
-      "evidence_notes": [],
-      "introduced_in": "config-catalog-v2",
-      "kind": "configurable",
-      "mismatch_policy": "not_reported",
-      "owner": "python",
-      "path": "execution.technique.hfs_require_killzone",
-      "protocol_constant": false,
-      "reload_policy": "new_setup_only",
-      "replacement_path": null,
-      "required": false,
-      "risk_classification": "execution_safety",
-      "runtime_reload_policy": "restart",
-      "secret": false,
-      "shared_with_ctrader": false,
-      "terminal_deprecation_reason": null,
-      "type": "bool",
-      "unit": "boolean",
-      "validation_summary": "Pydantic required/type coercion only"
-    },
-    {
-      "algorithm_constant": false,
-      "allowed_values": [],
       "canonical_env": "AUTO_TRADE_TECHNIQUE_INCLUDE_LATE_NY",
       "catalog_version": 2,
       "configurable": true,
@@ -10850,6 +10813,45 @@
       "mismatch_policy": "not_reported",
       "owner": "python",
       "path": "execution.technique.require_sweep_body",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "execution_safety",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "bool",
+      "unit": "boolean",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_TECHNIQUE_SCALP_REQUIRE_KILLZONE",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {},
+      "default": true,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": true
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [
+        "AUTO_TRADE_TECHNIQUE_HFS_REQUIRE_KILLZONE"
+      ],
+      "description": "When true with enforce, block M1 scalping publish/activation outside killzone. Prod trading-bot.yml defaults this off; discovery permits are structure/technique-driven regardless.",
+      "display_id": "config:execution.technique.scalp_require_killzone",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "execution.technique.scalp_require_killzone",
       "protocol_constant": false,
       "reload_policy": "new_setup_only",
       "replacement_path": null,
@@ -15968,1646 +15970,6 @@
     {
       "algorithm_constant": false,
       "allowed_values": [],
-      "canonical_env": "HFS_MAXIMUM_CHASE_PIPS",
-      "catalog_version": 2,
-      "configurable": true,
-      "constraints": {
-        "ge": 0
-      },
-      "default": 40.0,
-      "default_contexts": [
-        {
-          "context": "python_schema",
-          "value": 40.0
-        }
-      ],
-      "deprecated": false,
-      "deprecated_aliases": [],
-      "description": "Miss opportunity beyond this chase distance.",
-      "display_id": "config:strategies.high_frequency_scalp.activation.maximum_chase_pips",
-      "evidence_notes": [],
-      "introduced_in": "config-catalog-v2",
-      "kind": "configurable",
-      "mismatch_policy": "not_reported",
-      "owner": "python",
-      "path": "strategies.high_frequency_scalp.activation.maximum_chase_pips",
-      "protocol_constant": false,
-      "reload_policy": "new_setup_only",
-      "replacement_path": null,
-      "required": false,
-      "risk_classification": "execution_safety",
-      "runtime_reload_policy": "restart",
-      "secret": false,
-      "shared_with_ctrader": false,
-      "terminal_deprecation_reason": null,
-      "type": "float",
-      "unit": "pips",
-      "validation_summary": "Pydantic required/type coercion only"
-    },
-    {
-      "algorithm_constant": false,
-      "allowed_values": [],
-      "canonical_env": "HFS_REARM_DISTANCE_ATR",
-      "catalog_version": 2,
-      "configurable": true,
-      "constraints": {
-        "ge": 0
-      },
-      "default": 0.25,
-      "default_contexts": [
-        {
-          "context": "python_schema",
-          "value": 0.25
-        }
-      ],
-      "deprecated": false,
-      "deprecated_aliases": [],
-      "description": "Minimum distance to rearm an episode.",
-      "display_id": "config:strategies.high_frequency_scalp.activation.rearm_distance_atr",
-      "evidence_notes": [],
-      "introduced_in": "config-catalog-v2",
-      "kind": "configurable",
-      "mismatch_policy": "not_reported",
-      "owner": "python",
-      "path": "strategies.high_frequency_scalp.activation.rearm_distance_atr",
-      "protocol_constant": false,
-      "reload_policy": "new_setup_only",
-      "replacement_path": null,
-      "required": false,
-      "risk_classification": "strategy_behavior",
-      "runtime_reload_policy": "restart",
-      "secret": false,
-      "shared_with_ctrader": false,
-      "terminal_deprecation_reason": null,
-      "type": "float",
-      "unit": "atr",
-      "validation_summary": "Pydantic required/type coercion only"
-    },
-    {
-      "algorithm_constant": false,
-      "allowed_values": [],
-      "canonical_env": "HFS_TRIGGER_MAXIMUM_AGE_BARS",
-      "catalog_version": 2,
-      "configurable": true,
-      "constraints": {
-        "ge": 1
-      },
-      "default": 2,
-      "default_contexts": [
-        {
-          "context": "python_schema",
-          "value": 2
-        }
-      ],
-      "deprecated": false,
-      "deprecated_aliases": [],
-      "description": "Max closed M1 bars since trigger.",
-      "display_id": "config:strategies.high_frequency_scalp.activation.trigger_maximum_age_bars",
-      "evidence_notes": [],
-      "introduced_in": "config-catalog-v2",
-      "kind": "configurable",
-      "mismatch_policy": "not_reported",
-      "owner": "python",
-      "path": "strategies.high_frequency_scalp.activation.trigger_maximum_age_bars",
-      "protocol_constant": false,
-      "reload_policy": "new_setup_only",
-      "replacement_path": null,
-      "required": false,
-      "risk_classification": "execution_safety",
-      "runtime_reload_policy": "restart",
-      "secret": false,
-      "shared_with_ctrader": false,
-      "terminal_deprecation_reason": null,
-      "type": "int",
-      "unit": "bars",
-      "validation_summary": "Pydantic required/type coercion only"
-    },
-    {
-      "algorithm_constant": false,
-      "allowed_values": [],
-      "canonical_env": "HFS_BREAKOUT_RETEST_ENABLED",
-      "catalog_version": 2,
-      "configurable": true,
-      "constraints": {},
-      "default": true,
-      "default_contexts": [
-        {
-          "context": "python_schema",
-          "value": true
-        }
-      ],
-      "deprecated": false,
-      "deprecated_aliases": [],
-      "description": "Enable micro breakout-retest HFS archetype.",
-      "display_id": "config:strategies.high_frequency_scalp.archetypes.breakout_retest_enabled",
-      "evidence_notes": [],
-      "introduced_in": "config-catalog-v2",
-      "kind": "configurable",
-      "mismatch_policy": "not_reported",
-      "owner": "python",
-      "path": "strategies.high_frequency_scalp.archetypes.breakout_retest_enabled",
-      "protocol_constant": false,
-      "reload_policy": "new_setup_only",
-      "replacement_path": null,
-      "required": false,
-      "risk_classification": "strategy_behavior",
-      "runtime_reload_policy": "restart",
-      "secret": false,
-      "shared_with_ctrader": false,
-      "terminal_deprecation_reason": null,
-      "type": "bool",
-      "unit": "boolean",
-      "validation_summary": "Pydantic required/type coercion only"
-    },
-    {
-      "algorithm_constant": false,
-      "allowed_values": [],
-      "canonical_env": "HFS_IMPULSE_PULLBACK_ALLOWED_SESSIONS",
-      "catalog_version": 2,
-      "configurable": true,
-      "constraints": {},
-      "default": "london",
-      "default_contexts": [
-        {
-          "context": "python_schema",
-          "value": "london"
-        }
-      ],
-      "deprecated": false,
-      "deprecated_aliases": [],
-      "description": "Comma-separated UTC session names (classify_session) allowed for impulse pullback. Empty or \"all\" disables the gate.",
-      "display_id": "config:strategies.high_frequency_scalp.archetypes.impulse_pullback_allowed_sessions",
-      "evidence_notes": [],
-      "introduced_in": "config-catalog-v2",
-      "kind": "configurable",
-      "mismatch_policy": "not_reported",
-      "owner": "python",
-      "path": "strategies.high_frequency_scalp.archetypes.impulse_pullback_allowed_sessions",
-      "protocol_constant": false,
-      "reload_policy": "new_setup_only",
-      "replacement_path": null,
-      "required": false,
-      "risk_classification": "strategy_behavior",
-      "runtime_reload_policy": "restart",
-      "secret": false,
-      "shared_with_ctrader": false,
-      "terminal_deprecation_reason": null,
-      "type": "str",
-      "unit": "string",
-      "validation_summary": "Pydantic required/type coercion only"
-    },
-    {
-      "algorithm_constant": false,
-      "allowed_values": [],
-      "canonical_env": "HFS_IMPULSE_PULLBACK_ENABLED",
-      "catalog_version": 2,
-      "configurable": true,
-      "constraints": {},
-      "default": true,
-      "default_contexts": [
-        {
-          "context": "python_schema",
-          "value": true
-        }
-      ],
-      "deprecated": false,
-      "deprecated_aliases": [],
-      "description": "Enable impulse pullback continuation HFS archetype (on by default for L1 continuation).",
-      "display_id": "config:strategies.high_frequency_scalp.archetypes.impulse_pullback_enabled",
-      "evidence_notes": [],
-      "introduced_in": "config-catalog-v2",
-      "kind": "configurable",
-      "mismatch_policy": "not_reported",
-      "owner": "python",
-      "path": "strategies.high_frequency_scalp.archetypes.impulse_pullback_enabled",
-      "protocol_constant": false,
-      "reload_policy": "new_setup_only",
-      "replacement_path": null,
-      "required": false,
-      "risk_classification": "strategy_behavior",
-      "runtime_reload_policy": "restart",
-      "secret": false,
-      "shared_with_ctrader": false,
-      "terminal_deprecation_reason": null,
-      "type": "bool",
-      "unit": "boolean",
-      "validation_summary": "Pydantic required/type coercion only"
-    },
-    {
-      "algorithm_constant": false,
-      "allowed_values": [],
-      "canonical_env": "HFS_RANGE_SWEEP_ENABLED",
-      "catalog_version": 2,
-      "configurable": true,
-      "constraints": {},
-      "default": true,
-      "default_contexts": [
-        {
-          "context": "python_schema",
-          "value": true
-        }
-      ],
-      "deprecated": false,
-      "deprecated_aliases": [],
-      "description": "Enable micro range sweep reversal HFS archetype.",
-      "display_id": "config:strategies.high_frequency_scalp.archetypes.range_sweep_enabled",
-      "evidence_notes": [],
-      "introduced_in": "config-catalog-v2",
-      "kind": "configurable",
-      "mismatch_policy": "not_reported",
-      "owner": "python",
-      "path": "strategies.high_frequency_scalp.archetypes.range_sweep_enabled",
-      "protocol_constant": false,
-      "reload_policy": "new_setup_only",
-      "replacement_path": null,
-      "required": false,
-      "risk_classification": "strategy_behavior",
-      "runtime_reload_policy": "restart",
-      "secret": false,
-      "shared_with_ctrader": false,
-      "terminal_deprecation_reason": null,
-      "type": "bool",
-      "unit": "boolean",
-      "validation_summary": "Pydantic required/type coercion only"
-    },
-    {
-      "algorithm_constant": false,
-      "allowed_values": [],
-      "canonical_env": "HFS_BREAKOUT_BOX_MAX_ATR",
-      "catalog_version": 2,
-      "configurable": true,
-      "constraints": {
-        "ge": 0.1
-      },
-      "default": 1.5,
-      "default_contexts": [
-        {
-          "context": "python_schema",
-          "value": 1.5
-        }
-      ],
-      "deprecated": false,
-      "deprecated_aliases": [],
-      "description": "Max M1 compression box width in ATR for Breakout Retest.",
-      "display_id": "config:strategies.high_frequency_scalp.breakout.box_max_atr",
-      "evidence_notes": [],
-      "introduced_in": "config-catalog-v2",
-      "kind": "configurable",
-      "mismatch_policy": "not_reported",
-      "owner": "python",
-      "path": "strategies.high_frequency_scalp.breakout.box_max_atr",
-      "protocol_constant": false,
-      "reload_policy": "new_setup_only",
-      "replacement_path": null,
-      "required": false,
-      "risk_classification": "strategy_behavior",
-      "runtime_reload_policy": "restart",
-      "secret": false,
-      "shared_with_ctrader": false,
-      "terminal_deprecation_reason": null,
-      "type": "float",
-      "unit": "atr",
-      "validation_summary": "Pydantic required/type coercion only"
-    },
-    {
-      "algorithm_constant": false,
-      "allowed_values": [],
-      "canonical_env": "HFS_BREAKOUT_MAX_BOX_BARS",
-      "catalog_version": 2,
-      "configurable": true,
-      "constraints": {
-        "ge": 4
-      },
-      "default": 20,
-      "default_contexts": [
-        {
-          "context": "python_schema",
-          "value": 20
-        }
-      ],
-      "deprecated": false,
-      "deprecated_aliases": [],
-      "description": "Maximum M1 bars in the compression box.",
-      "display_id": "config:strategies.high_frequency_scalp.breakout.max_box_bars",
-      "evidence_notes": [],
-      "introduced_in": "config-catalog-v2",
-      "kind": "configurable",
-      "mismatch_policy": "not_reported",
-      "owner": "python",
-      "path": "strategies.high_frequency_scalp.breakout.max_box_bars",
-      "protocol_constant": false,
-      "reload_policy": "new_setup_only",
-      "replacement_path": null,
-      "required": false,
-      "risk_classification": "strategy_behavior",
-      "runtime_reload_policy": "restart",
-      "secret": false,
-      "shared_with_ctrader": false,
-      "terminal_deprecation_reason": null,
-      "type": "int",
-      "unit": "bars",
-      "validation_summary": "Pydantic required/type coercion only"
-    },
-    {
-      "algorithm_constant": false,
-      "allowed_values": [],
-      "canonical_env": "HFS_BREAKOUT_MIN_BOX_BARS",
-      "catalog_version": 2,
-      "configurable": true,
-      "constraints": {
-        "ge": 3
-      },
-      "default": 8,
-      "default_contexts": [
-        {
-          "context": "python_schema",
-          "value": 8
-        }
-      ],
-      "deprecated": false,
-      "deprecated_aliases": [],
-      "description": "Minimum M1 bars in the compression box.",
-      "display_id": "config:strategies.high_frequency_scalp.breakout.min_box_bars",
-      "evidence_notes": [],
-      "introduced_in": "config-catalog-v2",
-      "kind": "configurable",
-      "mismatch_policy": "not_reported",
-      "owner": "python",
-      "path": "strategies.high_frequency_scalp.breakout.min_box_bars",
-      "protocol_constant": false,
-      "reload_policy": "new_setup_only",
-      "replacement_path": null,
-      "required": false,
-      "risk_classification": "strategy_behavior",
-      "runtime_reload_policy": "restart",
-      "secret": false,
-      "shared_with_ctrader": false,
-      "terminal_deprecation_reason": null,
-      "type": "int",
-      "unit": "bars",
-      "validation_summary": "Pydantic required/type coercion only"
-    },
-    {
-      "algorithm_constant": false,
-      "allowed_values": [],
-      "canonical_env": "HFS_BREAKOUT_MIN_BREAK_ATR",
-      "catalog_version": 2,
-      "configurable": true,
-      "constraints": {
-        "ge": 0
-      },
-      "default": 0.25,
-      "default_contexts": [
-        {
-          "context": "python_schema",
-          "value": 0.25
-        }
-      ],
-      "deprecated": false,
-      "deprecated_aliases": [],
-      "description": "Minimum close displacement beyond the box in ATR.",
-      "display_id": "config:strategies.high_frequency_scalp.breakout.min_break_atr",
-      "evidence_notes": [],
-      "introduced_in": "config-catalog-v2",
-      "kind": "configurable",
-      "mismatch_policy": "not_reported",
-      "owner": "python",
-      "path": "strategies.high_frequency_scalp.breakout.min_break_atr",
-      "protocol_constant": false,
-      "reload_policy": "new_setup_only",
-      "replacement_path": null,
-      "required": false,
-      "risk_classification": "strategy_behavior",
-      "runtime_reload_policy": "restart",
-      "secret": false,
-      "shared_with_ctrader": false,
-      "terminal_deprecation_reason": null,
-      "type": "float",
-      "unit": "atr",
-      "validation_summary": "Pydantic required/type coercion only"
-    },
-    {
-      "algorithm_constant": false,
-      "allowed_values": [],
-      "canonical_env": "HFS_BREAKOUT_MIN_TOUCHES_PER_SIDE",
-      "catalog_version": 2,
-      "configurable": true,
-      "constraints": {
-        "ge": 1
-      },
-      "default": 2,
-      "default_contexts": [
-        {
-          "context": "python_schema",
-          "value": 2
-        }
-      ],
-      "deprecated": false,
-      "deprecated_aliases": [],
-      "description": "Minimum touches of each compression extreme.",
-      "display_id": "config:strategies.high_frequency_scalp.breakout.min_touches_per_side",
-      "evidence_notes": [],
-      "introduced_in": "config-catalog-v2",
-      "kind": "configurable",
-      "mismatch_policy": "not_reported",
-      "owner": "python",
-      "path": "strategies.high_frequency_scalp.breakout.min_touches_per_side",
-      "protocol_constant": false,
-      "reload_policy": "new_setup_only",
-      "replacement_path": null,
-      "required": false,
-      "risk_classification": "strategy_behavior",
-      "runtime_reload_policy": "restart",
-      "secret": false,
-      "shared_with_ctrader": false,
-      "terminal_deprecation_reason": null,
-      "type": "int",
-      "unit": "count",
-      "validation_summary": "Pydantic required/type coercion only"
-    },
-    {
-      "algorithm_constant": false,
-      "allowed_values": [],
-      "canonical_env": "HFS_BREAKOUT_REQUIRE_RETEST_REJECTION",
-      "catalog_version": 2,
-      "configurable": true,
-      "constraints": {},
-      "default": true,
-      "default_contexts": [
-        {
-          "context": "python_schema",
-          "value": true
-        }
-      ],
-      "deprecated": false,
-      "deprecated_aliases": [],
-      "description": "Require wick/reclaim rejection on the retest (not touch-only).",
-      "display_id": "config:strategies.high_frequency_scalp.breakout.require_retest_rejection",
-      "evidence_notes": [],
-      "introduced_in": "config-catalog-v2",
-      "kind": "configurable",
-      "mismatch_policy": "not_reported",
-      "owner": "python",
-      "path": "strategies.high_frequency_scalp.breakout.require_retest_rejection",
-      "protocol_constant": false,
-      "reload_policy": "new_setup_only",
-      "replacement_path": null,
-      "required": false,
-      "risk_classification": "strategy_behavior",
-      "runtime_reload_policy": "restart",
-      "secret": false,
-      "shared_with_ctrader": false,
-      "terminal_deprecation_reason": null,
-      "type": "bool",
-      "unit": "boolean",
-      "validation_summary": "Pydantic required/type coercion only"
-    },
-    {
-      "algorithm_constant": false,
-      "allowed_values": [],
-      "canonical_env": "HFS_BREAKOUT_RETEST_LOOKBACK_BARS",
-      "catalog_version": 2,
-      "configurable": true,
-      "constraints": {
-        "ge": 1
-      },
-      "default": 5,
-      "default_contexts": [
-        {
-          "context": "python_schema",
-          "value": 5
-        }
-      ],
-      "deprecated": false,
-      "deprecated_aliases": [],
-      "description": "Bars to scan for rejection retest after an accepted break.",
-      "display_id": "config:strategies.high_frequency_scalp.breakout.retest_lookback_bars",
-      "evidence_notes": [],
-      "introduced_in": "config-catalog-v2",
-      "kind": "configurable",
-      "mismatch_policy": "not_reported",
-      "owner": "python",
-      "path": "strategies.high_frequency_scalp.breakout.retest_lookback_bars",
-      "protocol_constant": false,
-      "reload_policy": "new_setup_only",
-      "replacement_path": null,
-      "required": false,
-      "risk_classification": "strategy_behavior",
-      "runtime_reload_policy": "restart",
-      "secret": false,
-      "shared_with_ctrader": false,
-      "terminal_deprecation_reason": null,
-      "type": "int",
-      "unit": "bars",
-      "validation_summary": "Pydantic required/type coercion only"
-    },
-    {
-      "algorithm_constant": false,
-      "allowed_values": [],
-      "canonical_env": "HFS_BREAKOUT_TOUCH_TOL_ATR",
-      "catalog_version": 2,
-      "configurable": true,
-      "constraints": {
-        "ge": 0
-      },
-      "default": 0.2,
-      "default_contexts": [
-        {
-          "context": "python_schema",
-          "value": 0.2
-        }
-      ],
-      "deprecated": false,
-      "deprecated_aliases": [],
-      "description": "Touch band around box extremes in ATR.",
-      "display_id": "config:strategies.high_frequency_scalp.breakout.touch_tol_atr",
-      "evidence_notes": [],
-      "introduced_in": "config-catalog-v2",
-      "kind": "configurable",
-      "mismatch_policy": "not_reported",
-      "owner": "python",
-      "path": "strategies.high_frequency_scalp.breakout.touch_tol_atr",
-      "protocol_constant": false,
-      "reload_policy": "new_setup_only",
-      "replacement_path": null,
-      "required": false,
-      "risk_classification": "strategy_behavior",
-      "runtime_reload_policy": "restart",
-      "secret": false,
-      "shared_with_ctrader": false,
-      "terminal_deprecation_reason": null,
-      "type": "float",
-      "unit": "atr",
-      "validation_summary": "Pydantic required/type coercion only"
-    },
-    {
-      "algorithm_constant": false,
-      "allowed_values": [],
-      "canonical_env": "HFS_CURRENT_CONTEXT_TTL_SECONDS",
-      "catalog_version": 2,
-      "configurable": true,
-      "constraints": {
-        "ge": 60
-      },
-      "default": 3600,
-      "default_contexts": [
-        {
-          "context": "python_schema",
-          "value": 3600
-        }
-      ],
-      "deprecated": false,
-      "deprecated_aliases": [],
-      "description": "TTL for current immutable M5 scalp context.",
-      "display_id": "config:strategies.high_frequency_scalp.context.current_context_ttl_seconds",
-      "evidence_notes": [],
-      "introduced_in": "config-catalog-v2",
-      "kind": "configurable",
-      "mismatch_policy": "not_reported",
-      "owner": "python",
-      "path": "strategies.high_frequency_scalp.context.current_context_ttl_seconds",
-      "protocol_constant": false,
-      "reload_policy": "new_setup_only",
-      "replacement_path": null,
-      "required": false,
-      "risk_classification": "strategy_behavior",
-      "runtime_reload_policy": "restart",
-      "secret": false,
-      "shared_with_ctrader": false,
-      "terminal_deprecation_reason": null,
-      "type": "int",
-      "unit": "seconds",
-      "validation_summary": "Pydantic required/type coercion only"
-    },
-    {
-      "algorithm_constant": false,
-      "allowed_values": [],
-      "canonical_env": "HFS_HISTORIC_CONTEXT_TTL_SECONDS",
-      "catalog_version": 2,
-      "configurable": true,
-      "constraints": {
-        "ge": 3600
-      },
-      "default": 86400,
-      "default_contexts": [
-        {
-          "context": "python_schema",
-          "value": 86400
-        }
-      ],
-      "deprecated": false,
-      "deprecated_aliases": [],
-      "description": "TTL for historic scalp context snapshots.",
-      "display_id": "config:strategies.high_frequency_scalp.context.historic_context_ttl_seconds",
-      "evidence_notes": [],
-      "introduced_in": "config-catalog-v2",
-      "kind": "configurable",
-      "mismatch_policy": "not_reported",
-      "owner": "python",
-      "path": "strategies.high_frequency_scalp.context.historic_context_ttl_seconds",
-      "protocol_constant": false,
-      "reload_policy": "new_setup_only",
-      "replacement_path": null,
-      "required": false,
-      "risk_classification": "strategy_behavior",
-      "runtime_reload_policy": "restart",
-      "secret": false,
-      "shared_with_ctrader": false,
-      "terminal_deprecation_reason": null,
-      "type": "int",
-      "unit": "seconds",
-      "validation_summary": "Pydantic required/type coercion only"
-    },
-    {
-      "algorithm_constant": false,
-      "allowed_values": [],
-      "canonical_env": "HFS_M1_LOOKBACK_BARS",
-      "catalog_version": 2,
-      "configurable": true,
-      "constraints": {
-        "ge": 20
-      },
-      "default": 60,
-      "default_contexts": [
-        {
-          "context": "python_schema",
-          "value": 60
-        }
-      ],
-      "deprecated": false,
-      "deprecated_aliases": [],
-      "description": "Bounded M1 lookback for microstructure.",
-      "display_id": "config:strategies.high_frequency_scalp.context.m1_lookback_bars",
-      "evidence_notes": [],
-      "introduced_in": "config-catalog-v2",
-      "kind": "configurable",
-      "mismatch_policy": "not_reported",
-      "owner": "python",
-      "path": "strategies.high_frequency_scalp.context.m1_lookback_bars",
-      "protocol_constant": false,
-      "reload_policy": "new_setup_only",
-      "replacement_path": null,
-      "required": false,
-      "risk_classification": "strategy_behavior",
-      "runtime_reload_policy": "restart",
-      "secret": false,
-      "shared_with_ctrader": false,
-      "terminal_deprecation_reason": null,
-      "type": "int",
-      "unit": "bars",
-      "validation_summary": "Pydantic required/type coercion only"
-    },
-    {
-      "algorithm_constant": false,
-      "allowed_values": [],
-      "canonical_env": "HFS_MAXIMUM_M5_AGE_SECONDS",
-      "catalog_version": 2,
-      "configurable": true,
-      "constraints": {
-        "ge": 60
-      },
-      "default": 420,
-      "default_contexts": [
-        {
-          "context": "python_schema",
-          "value": 420
-        }
-      ],
-      "deprecated": false,
-      "deprecated_aliases": [],
-      "description": "Fail closed when pinned M5 context is older than this.",
-      "display_id": "config:strategies.high_frequency_scalp.context.maximum_m5_age_seconds",
-      "evidence_notes": [],
-      "introduced_in": "config-catalog-v2",
-      "kind": "configurable",
-      "mismatch_policy": "not_reported",
-      "owner": "python",
-      "path": "strategies.high_frequency_scalp.context.maximum_m5_age_seconds",
-      "protocol_constant": false,
-      "reload_policy": "new_setup_only",
-      "replacement_path": null,
-      "required": false,
-      "risk_classification": "strategy_behavior",
-      "runtime_reload_policy": "restart",
-      "secret": false,
-      "shared_with_ctrader": false,
-      "terminal_deprecation_reason": null,
-      "type": "int",
-      "unit": "seconds",
-      "validation_summary": "Pydantic required/type coercion only"
-    },
-    {
-      "algorithm_constant": false,
-      "allowed_values": [],
-      "canonical_env": "HFS_PULLBACK_BUY_MAX_POSITION",
-      "catalog_version": 2,
-      "configurable": true,
-      "constraints": {
-        "ge": 0,
-        "le": 1
-      },
-      "default": 0.6,
-      "default_contexts": [
-        {
-          "context": "python_schema",
-          "value": 0.6
-        }
-      ],
-      "deprecated": false,
-      "deprecated_aliases": [],
-      "description": "Max dealing-range position for HFS pullback BUY.",
-      "display_id": "config:strategies.high_frequency_scalp.location.pullback_buy_maximum_position",
-      "evidence_notes": [],
-      "introduced_in": "config-catalog-v2",
-      "kind": "configurable",
-      "mismatch_policy": "not_reported",
-      "owner": "python",
-      "path": "strategies.high_frequency_scalp.location.pullback_buy_maximum_position",
-      "protocol_constant": false,
-      "reload_policy": "new_setup_only",
-      "replacement_path": null,
-      "required": false,
-      "risk_classification": "execution_safety",
-      "runtime_reload_policy": "restart",
-      "secret": false,
-      "shared_with_ctrader": false,
-      "terminal_deprecation_reason": null,
-      "type": "float",
-      "unit": "fraction",
-      "validation_summary": "Pydantic required/type coercion only"
-    },
-    {
-      "algorithm_constant": false,
-      "allowed_values": [],
-      "canonical_env": "HFS_PULLBACK_SELL_MIN_POSITION",
-      "catalog_version": 2,
-      "configurable": true,
-      "constraints": {
-        "ge": 0,
-        "le": 1
-      },
-      "default": 0.4,
-      "default_contexts": [
-        {
-          "context": "python_schema",
-          "value": 0.4
-        }
-      ],
-      "deprecated": false,
-      "deprecated_aliases": [],
-      "description": "Min dealing-range position for HFS pullback SELL.",
-      "display_id": "config:strategies.high_frequency_scalp.location.pullback_sell_minimum_position",
-      "evidence_notes": [],
-      "introduced_in": "config-catalog-v2",
-      "kind": "configurable",
-      "mismatch_policy": "not_reported",
-      "owner": "python",
-      "path": "strategies.high_frequency_scalp.location.pullback_sell_minimum_position",
-      "protocol_constant": false,
-      "reload_policy": "new_setup_only",
-      "replacement_path": null,
-      "required": false,
-      "risk_classification": "execution_safety",
-      "runtime_reload_policy": "restart",
-      "secret": false,
-      "shared_with_ctrader": false,
-      "terminal_deprecation_reason": null,
-      "type": "float",
-      "unit": "fraction",
-      "validation_summary": "Pydantic required/type coercion only"
-    },
-    {
-      "algorithm_constant": false,
-      "allowed_values": [],
-      "canonical_env": "HFS_RANGE_BUY_MAX_POSITION",
-      "catalog_version": 2,
-      "configurable": true,
-      "constraints": {
-        "ge": 0,
-        "le": 1
-      },
-      "default": 0.35,
-      "default_contexts": [
-        {
-          "context": "python_schema",
-          "value": 0.35
-        }
-      ],
-      "deprecated": false,
-      "deprecated_aliases": [],
-      "description": "Max dealing-range position for HFS range-sweep BUY.",
-      "display_id": "config:strategies.high_frequency_scalp.location.range_buy_maximum_position",
-      "evidence_notes": [],
-      "introduced_in": "config-catalog-v2",
-      "kind": "configurable",
-      "mismatch_policy": "not_reported",
-      "owner": "python",
-      "path": "strategies.high_frequency_scalp.location.range_buy_maximum_position",
-      "protocol_constant": false,
-      "reload_policy": "new_setup_only",
-      "replacement_path": null,
-      "required": false,
-      "risk_classification": "execution_safety",
-      "runtime_reload_policy": "restart",
-      "secret": false,
-      "shared_with_ctrader": false,
-      "terminal_deprecation_reason": null,
-      "type": "float",
-      "unit": "fraction",
-      "validation_summary": "Pydantic required/type coercion only"
-    },
-    {
-      "algorithm_constant": false,
-      "allowed_values": [],
-      "canonical_env": "HFS_RANGE_SELL_MIN_POSITION",
-      "catalog_version": 2,
-      "configurable": true,
-      "constraints": {
-        "ge": 0,
-        "le": 1
-      },
-      "default": 0.65,
-      "default_contexts": [
-        {
-          "context": "python_schema",
-          "value": 0.65
-        }
-      ],
-      "deprecated": false,
-      "deprecated_aliases": [],
-      "description": "Min dealing-range position for HFS range-sweep SELL.",
-      "display_id": "config:strategies.high_frequency_scalp.location.range_sell_minimum_position",
-      "evidence_notes": [],
-      "introduced_in": "config-catalog-v2",
-      "kind": "configurable",
-      "mismatch_policy": "not_reported",
-      "owner": "python",
-      "path": "strategies.high_frequency_scalp.location.range_sell_minimum_position",
-      "protocol_constant": false,
-      "reload_policy": "new_setup_only",
-      "replacement_path": null,
-      "required": false,
-      "risk_classification": "execution_safety",
-      "runtime_reload_policy": "restart",
-      "secret": false,
-      "shared_with_ctrader": false,
-      "terminal_deprecation_reason": null,
-      "type": "float",
-      "unit": "fraction",
-      "validation_summary": "Pydantic required/type coercion only"
-    },
-    {
-      "algorithm_constant": false,
-      "allowed_values": [
-        "off",
-        "shadow",
-        "paper",
-        "live"
-      ],
-      "canonical_env": "HFS_MODE",
-      "catalog_version": 2,
-      "configurable": true,
-      "constraints": {
-        "pattern": "^(off|shadow|paper|live)$"
-      },
-      "default": "live",
-      "default_contexts": [
-        {
-          "context": "python_schema",
-          "value": "live"
-        }
-      ],
-      "deprecated": false,
-      "deprecated_aliases": [],
-      "description": "HFS runtime mode: off, shadow, paper, or live.",
-      "display_id": "config:strategies.high_frequency_scalp.mode",
-      "evidence_notes": [],
-      "introduced_in": "config-catalog-v2",
-      "kind": "configurable",
-      "mismatch_policy": "not_reported",
-      "owner": "python",
-      "path": "strategies.high_frequency_scalp.mode",
-      "protocol_constant": false,
-      "reload_policy": "new_setup_only",
-      "replacement_path": null,
-      "required": false,
-      "risk_classification": "execution_safety",
-      "runtime_reload_policy": "restart",
-      "secret": false,
-      "shared_with_ctrader": false,
-      "terminal_deprecation_reason": null,
-      "type": "str",
-      "unit": "enum",
-      "validation_summary": "Pydantic type coercion + field validator"
-    },
-    {
-      "algorithm_constant": false,
-      "allowed_values": [],
-      "canonical_env": "HFS_MAXIMUM_ACTIVE_OPPORTUNITIES",
-      "catalog_version": 2,
-      "configurable": true,
-      "constraints": {
-        "ge": 1
-      },
-      "default": 10,
-      "default_contexts": [
-        {
-          "context": "python_schema",
-          "value": 10
-        }
-      ],
-      "deprecated": false,
-      "deprecated_aliases": [],
-      "description": "Cap on concurrently active scalp opportunities.",
-      "display_id": "config:strategies.high_frequency_scalp.policy.maximum_active_opportunities",
-      "evidence_notes": [],
-      "introduced_in": "config-catalog-v2",
-      "kind": "configurable",
-      "mismatch_policy": "not_reported",
-      "owner": "python",
-      "path": "strategies.high_frequency_scalp.policy.maximum_active_opportunities",
-      "protocol_constant": false,
-      "reload_policy": "new_setup_only",
-      "replacement_path": null,
-      "required": false,
-      "risk_classification": "strategy_behavior",
-      "runtime_reload_policy": "restart",
-      "secret": false,
-      "shared_with_ctrader": false,
-      "terminal_deprecation_reason": null,
-      "type": "int",
-      "unit": "count",
-      "validation_summary": "Pydantic required/type coercion only"
-    },
-    {
-      "algorithm_constant": false,
-      "allowed_values": [],
-      "canonical_env": "HFS_MAXIMUM_OPPORTUNITIES_PER_CYCLE",
-      "catalog_version": 2,
-      "configurable": true,
-      "constraints": {
-        "ge": 1
-      },
-      "default": 3,
-      "default_contexts": [
-        {
-          "context": "python_schema",
-          "value": 3
-        }
-      ],
-      "deprecated": false,
-      "deprecated_aliases": [],
-      "description": "Ranked opportunities retained per M1 cycle.",
-      "display_id": "config:strategies.high_frequency_scalp.policy.maximum_opportunities_per_cycle",
-      "evidence_notes": [],
-      "introduced_in": "config-catalog-v2",
-      "kind": "configurable",
-      "mismatch_policy": "not_reported",
-      "owner": "python",
-      "path": "strategies.high_frequency_scalp.policy.maximum_opportunities_per_cycle",
-      "protocol_constant": false,
-      "reload_policy": "new_setup_only",
-      "replacement_path": null,
-      "required": false,
-      "risk_classification": "strategy_behavior",
-      "runtime_reload_policy": "restart",
-      "secret": false,
-      "shared_with_ctrader": false,
-      "terminal_deprecation_reason": null,
-      "type": "int",
-      "unit": "count",
-      "validation_summary": "Pydantic required/type coercion only"
-    },
-    {
-      "algorithm_constant": false,
-      "allowed_values": [],
-      "canonical_env": "HFS_MAXIMUM_SPREAD_PIPS",
-      "catalog_version": 2,
-      "configurable": true,
-      "constraints": {
-        "ge": 0
-      },
-      "default": 5.0,
-      "default_contexts": [
-        {
-          "context": "python_schema",
-          "value": 5.0
-        }
-      ],
-      "deprecated": false,
-      "deprecated_aliases": [],
-      "description": "Hard block when spread exceeds this.",
-      "display_id": "config:strategies.high_frequency_scalp.policy.maximum_spread_pips",
-      "evidence_notes": [],
-      "introduced_in": "config-catalog-v2",
-      "kind": "configurable",
-      "mismatch_policy": "not_reported",
-      "owner": "python",
-      "path": "strategies.high_frequency_scalp.policy.maximum_spread_pips",
-      "protocol_constant": false,
-      "reload_policy": "new_setup_only",
-      "replacement_path": null,
-      "required": false,
-      "risk_classification": "execution_safety",
-      "runtime_reload_policy": "restart",
-      "secret": false,
-      "shared_with_ctrader": false,
-      "terminal_deprecation_reason": null,
-      "type": "float",
-      "unit": "pips",
-      "validation_summary": "Pydantic required/type coercion only"
-    },
-    {
-      "algorithm_constant": false,
-      "allowed_values": [],
-      "canonical_env": "HFS_MINIMUM_REWARD_RISK",
-      "catalog_version": 2,
-      "configurable": true,
-      "constraints": {
-        "ge": 0
-      },
-      "default": 1.1,
-      "default_contexts": [
-        {
-          "context": "python_schema",
-          "value": 1.1
-        }
-      ],
-      "deprecated": false,
-      "deprecated_aliases": [],
-      "description": "Minimum net reward/risk for HFS entries.",
-      "display_id": "config:strategies.high_frequency_scalp.policy.minimum_reward_risk",
-      "evidence_notes": [],
-      "introduced_in": "config-catalog-v2",
-      "kind": "configurable",
-      "mismatch_policy": "not_reported",
-      "owner": "python",
-      "path": "strategies.high_frequency_scalp.policy.minimum_reward_risk",
-      "protocol_constant": false,
-      "reload_policy": "new_setup_only",
-      "replacement_path": null,
-      "required": false,
-      "risk_classification": "execution_safety",
-      "runtime_reload_policy": "restart",
-      "secret": false,
-      "shared_with_ctrader": false,
-      "terminal_deprecation_reason": null,
-      "type": "float",
-      "unit": "multiplier",
-      "validation_summary": "Pydantic required/type coercion only"
-    },
-    {
-      "algorithm_constant": false,
-      "allowed_values": [],
-      "canonical_env": "HFS_COOLDOWN_AFTER_LOSS_MINUTES",
-      "catalog_version": 2,
-      "configurable": true,
-      "constraints": {
-        "ge": 0
-      },
-      "default": 5,
-      "default_contexts": [
-        {
-          "context": "python_schema",
-          "value": 5
-        }
-      ],
-      "deprecated": false,
-      "deprecated_aliases": [],
-      "description": "Cooldownoldown after consecutive loss streak.",
-      "display_id": "config:strategies.high_frequency_scalp.risk.cooldown_after_loss_minutes",
-      "evidence_notes": [],
-      "introduced_in": "config-catalog-v2",
-      "kind": "configurable",
-      "mismatch_policy": "not_reported",
-      "owner": "python",
-      "path": "strategies.high_frequency_scalp.risk.cooldown_after_loss_minutes",
-      "protocol_constant": false,
-      "reload_policy": "new_setup_only",
-      "replacement_path": null,
-      "required": false,
-      "risk_classification": "execution_safety",
-      "runtime_reload_policy": "restart",
-      "secret": false,
-      "shared_with_ctrader": false,
-      "terminal_deprecation_reason": null,
-      "type": "int",
-      "unit": "minutes",
-      "validation_summary": "Pydantic required/type coercion only"
-    },
-    {
-      "algorithm_constant": false,
-      "allowed_values": [],
-      "canonical_env": "HFS_DAILY_LOSS_LIMIT_R",
-      "catalog_version": 2,
-      "configurable": true,
-      "constraints": {
-        "ge": 0
-      },
-      "default": 3.0,
-      "default_contexts": [
-        {
-          "context": "python_schema",
-          "value": 3.0
-        }
-      ],
-      "deprecated": false,
-      "deprecated_aliases": [],
-      "description": "Daily realized R loss limit.",
-      "display_id": "config:strategies.high_frequency_scalp.risk.daily_loss_limit_r",
-      "evidence_notes": [],
-      "introduced_in": "config-catalog-v2",
-      "kind": "configurable",
-      "mismatch_policy": "not_reported",
-      "owner": "python",
-      "path": "strategies.high_frequency_scalp.risk.daily_loss_limit_r",
-      "protocol_constant": false,
-      "reload_policy": "new_setup_only",
-      "replacement_path": null,
-      "required": false,
-      "risk_classification": "execution_safety",
-      "runtime_reload_policy": "restart",
-      "secret": false,
-      "shared_with_ctrader": false,
-      "terminal_deprecation_reason": null,
-      "type": "float",
-      "unit": "multiplier",
-      "validation_summary": "Pydantic required/type coercion only"
-    },
-    {
-      "algorithm_constant": false,
-      "allowed_values": [],
-      "canonical_env": "HFS_MAXIMUM_CONCURRENT_POSITIONS",
-      "catalog_version": 2,
-      "configurable": true,
-      "constraints": {
-        "ge": 1
-      },
-      "default": 1,
-      "default_contexts": [
-        {
-          "context": "python_schema",
-          "value": 1
-        }
-      ],
-      "deprecated": false,
-      "deprecated_aliases": [],
-      "description": "One XAU scalp position at a time initially.",
-      "display_id": "config:strategies.high_frequency_scalp.risk.maximum_concurrent_positions",
-      "evidence_notes": [],
-      "introduced_in": "config-catalog-v2",
-      "kind": "configurable",
-      "mismatch_policy": "not_reported",
-      "owner": "python",
-      "path": "strategies.high_frequency_scalp.risk.maximum_concurrent_positions",
-      "protocol_constant": false,
-      "reload_policy": "new_setup_only",
-      "replacement_path": null,
-      "required": false,
-      "risk_classification": "execution_safety",
-      "runtime_reload_policy": "restart",
-      "secret": false,
-      "shared_with_ctrader": false,
-      "terminal_deprecation_reason": null,
-      "type": "int",
-      "unit": "count",
-      "validation_summary": "Pydantic required/type coercion only"
-    },
-    {
-      "algorithm_constant": false,
-      "allowed_values": [],
-      "canonical_env": "HFS_MAXIMUM_CONSECUTIVE_LOSSES",
-      "catalog_version": 2,
-      "configurable": true,
-      "constraints": {
-        "ge": 1
-      },
-      "default": 3,
-      "default_contexts": [
-        {
-          "context": "python_schema",
-          "value": 3
-        }
-      ],
-      "deprecated": false,
-      "deprecated_aliases": [],
-      "description": "Loss streak before cooldown.",
-      "display_id": "config:strategies.high_frequency_scalp.risk.maximum_consecutive_losses",
-      "evidence_notes": [],
-      "introduced_in": "config-catalog-v2",
-      "kind": "configurable",
-      "mismatch_policy": "not_reported",
-      "owner": "python",
-      "path": "strategies.high_frequency_scalp.risk.maximum_consecutive_losses",
-      "protocol_constant": false,
-      "reload_policy": "new_setup_only",
-      "replacement_path": null,
-      "required": false,
-      "risk_classification": "execution_safety",
-      "runtime_reload_policy": "restart",
-      "secret": false,
-      "shared_with_ctrader": false,
-      "terminal_deprecation_reason": null,
-      "type": "int",
-      "unit": "count",
-      "validation_summary": "Pydantic required/type coercion only"
-    },
-    {
-      "algorithm_constant": false,
-      "allowed_values": [],
-      "canonical_env": "HFS_MAXIMUM_DAILY_TRADES",
-      "catalog_version": 2,
-      "configurable": true,
-      "constraints": {
-        "ge": 1
-      },
-      "default": 30,
-      "default_contexts": [
-        {
-          "context": "python_schema",
-          "value": 30
-        }
-      ],
-      "deprecated": false,
-      "deprecated_aliases": [],
-      "description": "Hard daily trade cap for HFS.",
-      "display_id": "config:strategies.high_frequency_scalp.risk.maximum_daily_trades",
-      "evidence_notes": [],
-      "introduced_in": "config-catalog-v2",
-      "kind": "configurable",
-      "mismatch_policy": "not_reported",
-      "owner": "python",
-      "path": "strategies.high_frequency_scalp.risk.maximum_daily_trades",
-      "protocol_constant": false,
-      "reload_policy": "new_setup_only",
-      "replacement_path": null,
-      "required": false,
-      "risk_classification": "execution_safety",
-      "runtime_reload_policy": "restart",
-      "secret": false,
-      "shared_with_ctrader": false,
-      "terminal_deprecation_reason": null,
-      "type": "int",
-      "unit": "count",
-      "validation_summary": "Pydantic required/type coercion only"
-    },
-    {
-      "algorithm_constant": false,
-      "allowed_values": [],
-      "canonical_env": "HFS_MAXIMUM_SESSION_TRADES",
-      "catalog_version": 2,
-      "configurable": true,
-      "constraints": {
-        "ge": 1
-      },
-      "default": 12,
-      "default_contexts": [
-        {
-          "context": "python_schema",
-          "value": 12
-        }
-      ],
-      "deprecated": false,
-      "deprecated_aliases": [],
-      "description": "Hard session trade cap for HFS.",
-      "display_id": "config:strategies.high_frequency_scalp.risk.maximum_session_trades",
-      "evidence_notes": [],
-      "introduced_in": "config-catalog-v2",
-      "kind": "configurable",
-      "mismatch_policy": "not_reported",
-      "owner": "python",
-      "path": "strategies.high_frequency_scalp.risk.maximum_session_trades",
-      "protocol_constant": false,
-      "reload_policy": "new_setup_only",
-      "replacement_path": null,
-      "required": false,
-      "risk_classification": "execution_safety",
-      "runtime_reload_policy": "restart",
-      "secret": false,
-      "shared_with_ctrader": false,
-      "terminal_deprecation_reason": null,
-      "type": "int",
-      "unit": "count",
-      "validation_summary": "Pydantic required/type coercion only"
-    },
-    {
-      "algorithm_constant": false,
-      "allowed_values": [
-        "shadow",
-        "paper",
-        "live"
-      ],
-      "canonical_env": "HFS_RISK_MODE",
-      "catalog_version": 2,
-      "configurable": true,
-      "constraints": {
-        "pattern": "^(shadow|paper|live)$"
-      },
-      "default": "live",
-      "default_contexts": [
-        {
-          "context": "python_schema",
-          "value": "live"
-        }
-      ],
-      "deprecated": false,
-      "deprecated_aliases": [],
-      "description": "HFS risk accounting mode.",
-      "display_id": "config:strategies.high_frequency_scalp.risk.mode",
-      "evidence_notes": [],
-      "introduced_in": "config-catalog-v2",
-      "kind": "configurable",
-      "mismatch_policy": "not_reported",
-      "owner": "python",
-      "path": "strategies.high_frequency_scalp.risk.mode",
-      "protocol_constant": false,
-      "reload_policy": "new_setup_only",
-      "replacement_path": null,
-      "required": false,
-      "risk_classification": "execution_safety",
-      "runtime_reload_policy": "restart",
-      "secret": false,
-      "shared_with_ctrader": false,
-      "terminal_deprecation_reason": null,
-      "type": "str",
-      "unit": "enum",
-      "validation_summary": "Pydantic type coercion + field validator"
-    },
-    {
-      "algorithm_constant": false,
-      "allowed_values": [],
-      "canonical_env": "HFS_RISK_FRACTION_PER_TRADE",
-      "catalog_version": 2,
-      "configurable": true,
-      "constraints": {
-        "ge": 0,
-        "le": 1
-      },
-      "default": 0.1,
-      "default_contexts": [
-        {
-          "context": "python_schema",
-          "value": 0.1
-        }
-      ],
-      "deprecated": false,
-      "deprecated_aliases": [],
-      "description": "Constant risk fraction — never martingale.",
-      "display_id": "config:strategies.high_frequency_scalp.risk.risk_fraction_per_trade",
-      "evidence_notes": [],
-      "introduced_in": "config-catalog-v2",
-      "kind": "configurable",
-      "mismatch_policy": "not_reported",
-      "owner": "python",
-      "path": "strategies.high_frequency_scalp.risk.risk_fraction_per_trade",
-      "protocol_constant": false,
-      "reload_policy": "new_setup_only",
-      "replacement_path": null,
-      "required": false,
-      "risk_classification": "execution_safety",
-      "runtime_reload_policy": "restart",
-      "secret": false,
-      "shared_with_ctrader": false,
-      "terminal_deprecation_reason": null,
-      "type": "float",
-      "unit": "fraction",
-      "validation_summary": "Pydantic required/type coercion only"
-    },
-    {
-      "algorithm_constant": false,
-      "allowed_values": [],
-      "canonical_env": "HFS_SESSION_LOSS_LIMIT_R",
-      "catalog_version": 2,
-      "configurable": true,
-      "constraints": {
-        "ge": 0
-      },
-      "default": 2.0,
-      "default_contexts": [
-        {
-          "context": "python_schema",
-          "value": 2.0
-        }
-      ],
-      "deprecated": false,
-      "deprecated_aliases": [],
-      "description": "Session realized R loss limit.",
-      "display_id": "config:strategies.high_frequency_scalp.risk.session_loss_limit_r",
-      "evidence_notes": [],
-      "introduced_in": "config-catalog-v2",
-      "kind": "configurable",
-      "mismatch_policy": "not_reported",
-      "owner": "python",
-      "path": "strategies.high_frequency_scalp.risk.session_loss_limit_r",
-      "protocol_constant": false,
-      "reload_policy": "new_setup_only",
-      "replacement_path": null,
-      "required": false,
-      "risk_classification": "execution_safety",
-      "runtime_reload_policy": "restart",
-      "secret": false,
-      "shared_with_ctrader": false,
-      "terminal_deprecation_reason": null,
-      "type": "float",
-      "unit": "multiplier",
-      "validation_summary": "Pydantic required/type coercion only"
-    },
-    {
-      "algorithm_constant": false,
-      "allowed_values": [],
-      "canonical_env": "HFS_STOP_BUFFER_ATR",
-      "catalog_version": 2,
-      "configurable": true,
-      "constraints": {
-        "ge": 0
-      },
-      "default": 0.1,
-      "default_contexts": [
-        {
-          "context": "python_schema",
-          "value": 0.1
-        }
-      ],
-      "deprecated": false,
-      "deprecated_aliases": [],
-      "description": "ATR buffer beyond structural stop.",
-      "display_id": "config:strategies.high_frequency_scalp.stop.buffer_atr",
-      "evidence_notes": [],
-      "introduced_in": "config-catalog-v2",
-      "kind": "configurable",
-      "mismatch_policy": "not_reported",
-      "owner": "python",
-      "path": "strategies.high_frequency_scalp.stop.buffer_atr",
-      "protocol_constant": false,
-      "reload_policy": "new_setup_only",
-      "replacement_path": null,
-      "required": false,
-      "risk_classification": "execution_safety",
-      "runtime_reload_policy": "restart",
-      "secret": false,
-      "shared_with_ctrader": false,
-      "terminal_deprecation_reason": null,
-      "type": "float",
-      "unit": "atr",
-      "validation_summary": "Pydantic required/type coercion only"
-    },
-    {
-      "algorithm_constant": false,
-      "allowed_values": [],
-      "canonical_env": "HFS_STOP_MAXIMUM_PIPS",
-      "catalog_version": 2,
-      "configurable": true,
-      "constraints": {
-        "ge": 1
-      },
-      "default": 30.0,
-      "default_contexts": [
-        {
-          "context": "python_schema",
-          "value": 30.0
-        }
-      ],
-      "deprecated": false,
-      "deprecated_aliases": [],
-      "description": "Maximum scalp stop size.",
-      "display_id": "config:strategies.high_frequency_scalp.stop.maximum_pips",
-      "evidence_notes": [],
-      "introduced_in": "config-catalog-v2",
-      "kind": "configurable",
-      "mismatch_policy": "not_reported",
-      "owner": "python",
-      "path": "strategies.high_frequency_scalp.stop.maximum_pips",
-      "protocol_constant": false,
-      "reload_policy": "new_setup_only",
-      "replacement_path": null,
-      "required": false,
-      "risk_classification": "execution_safety",
-      "runtime_reload_policy": "restart",
-      "secret": false,
-      "shared_with_ctrader": false,
-      "terminal_deprecation_reason": null,
-      "type": "float",
-      "unit": "pips",
-      "validation_summary": "Pydantic required/type coercion only"
-    },
-    {
-      "algorithm_constant": false,
-      "allowed_values": [],
-      "canonical_env": "HFS_STOP_MINIMUM_PIPS",
-      "catalog_version": 2,
-      "configurable": true,
-      "constraints": {
-        "ge": 1
-      },
-      "default": 12.0,
-      "default_contexts": [
-        {
-          "context": "python_schema",
-          "value": 12.0
-        }
-      ],
-      "deprecated": false,
-      "deprecated_aliases": [],
-      "description": "Minimum scalp stop size.",
-      "display_id": "config:strategies.high_frequency_scalp.stop.minimum_pips",
-      "evidence_notes": [],
-      "introduced_in": "config-catalog-v2",
-      "kind": "configurable",
-      "mismatch_policy": "not_reported",
-      "owner": "python",
-      "path": "strategies.high_frequency_scalp.stop.minimum_pips",
-      "protocol_constant": false,
-      "reload_policy": "new_setup_only",
-      "replacement_path": null,
-      "required": false,
-      "risk_classification": "execution_safety",
-      "runtime_reload_policy": "restart",
-      "secret": false,
-      "shared_with_ctrader": false,
-      "terminal_deprecation_reason": null,
-      "type": "float",
-      "unit": "pips",
-      "validation_summary": "Pydantic required/type coercion only"
-    },
-    {
-      "algorithm_constant": false,
-      "allowed_values": [],
-      "canonical_env": "HFS_MINIMUM_NET_TARGET_PIPS",
-      "catalog_version": 2,
-      "configurable": true,
-      "constraints": {
-        "ge": 1
-      },
-      "default": 15.0,
-      "default_contexts": [
-        {
-          "context": "python_schema",
-          "value": 15.0
-        }
-      ],
-      "deprecated": false,
-      "deprecated_aliases": [],
-      "description": "Minimum net target after spread/slippage.",
-      "display_id": "config:strategies.high_frequency_scalp.target.minimum_net_target_pips",
-      "evidence_notes": [],
-      "introduced_in": "config-catalog-v2",
-      "kind": "configurable",
-      "mismatch_policy": "not_reported",
-      "owner": "python",
-      "path": "strategies.high_frequency_scalp.target.minimum_net_target_pips",
-      "protocol_constant": false,
-      "reload_policy": "new_setup_only",
-      "replacement_path": null,
-      "required": false,
-      "risk_classification": "execution_safety",
-      "runtime_reload_policy": "restart",
-      "secret": false,
-      "shared_with_ctrader": false,
-      "terminal_deprecation_reason": null,
-      "type": "float",
-      "unit": "pips",
-      "validation_summary": "Pydantic required/type coercion only"
-    },
-    {
-      "algorithm_constant": false,
-      "allowed_values": [],
-      "canonical_env": "HFS_PREFERRED_LADDER_PIPS",
-      "catalog_version": 2,
-      "configurable": true,
-      "constraints": {},
-      "default": "20,25,30",
-      "default_contexts": [
-        {
-          "context": "python_schema",
-          "value": "20,25,30"
-        }
-      ],
-      "deprecated": false,
-      "deprecated_aliases": [],
-      "description": "Comma-separated preferred scalp targets in pips.",
-      "display_id": "config:strategies.high_frequency_scalp.target.preferred_ladder_pips",
-      "evidence_notes": [],
-      "introduced_in": "config-catalog-v2",
-      "kind": "configurable",
-      "mismatch_policy": "not_reported",
-      "owner": "python",
-      "path": "strategies.high_frequency_scalp.target.preferred_ladder_pips",
-      "protocol_constant": false,
-      "reload_policy": "new_setup_only",
-      "replacement_path": null,
-      "required": false,
-      "risk_classification": "strategy_behavior",
-      "runtime_reload_policy": "restart",
-      "secret": false,
-      "shared_with_ctrader": false,
-      "terminal_deprecation_reason": null,
-      "type": "str",
-      "unit": "string",
-      "validation_summary": "Pydantic required/type coercion only"
-    },
-    {
-      "algorithm_constant": false,
-      "allowed_values": [],
       "canonical_env": "AUTO_TRADE_MAP_COUNTER_BIAS_ENABLED",
       "catalog_version": 2,
       "configurable": true,
@@ -19137,6 +17499,1730 @@
     {
       "algorithm_constant": false,
       "allowed_values": [],
+      "canonical_env": "SCALPING_MAXIMUM_CHASE_PIPS",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 0
+      },
+      "default": 40.0,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 40.0
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [
+        "HFS_MAXIMUM_CHASE_PIPS"
+      ],
+      "description": "Miss opportunity beyond this chase distance.",
+      "display_id": "config:strategies.scalping.activation.maximum_chase_pips",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.activation.maximum_chase_pips",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "execution_safety",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "float",
+      "unit": "pips",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "SCALPING_REARM_DISTANCE_ATR",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 0
+      },
+      "default": 0.25,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 0.25
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [
+        "HFS_REARM_DISTANCE_ATR"
+      ],
+      "description": "Minimum distance to rearm an episode.",
+      "display_id": "config:strategies.scalping.activation.rearm_distance_atr",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.activation.rearm_distance_atr",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "strategy_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "float",
+      "unit": "atr",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "SCALPING_TRIGGER_MAXIMUM_AGE_BARS",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 1
+      },
+      "default": 2,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 2
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [
+        "HFS_TRIGGER_MAXIMUM_AGE_BARS"
+      ],
+      "description": "Max closed M1 bars since trigger.",
+      "display_id": "config:strategies.scalping.activation.trigger_maximum_age_bars",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.activation.trigger_maximum_age_bars",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "execution_safety",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "int",
+      "unit": "bars",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "SCALPING_BREAKOUT_RETEST_ENABLED",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {},
+      "default": true,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": true
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [
+        "HFS_BREAKOUT_RETEST_ENABLED"
+      ],
+      "description": "Enable micro breakout-retest scalping archetype.",
+      "display_id": "config:strategies.scalping.archetypes.breakout_retest_enabled",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.archetypes.breakout_retest_enabled",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "strategy_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "bool",
+      "unit": "boolean",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "SCALPING_IMPULSE_PULLBACK_ALLOWED_SESSIONS",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {},
+      "default": "london",
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": "london"
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [
+        "HFS_IMPULSE_PULLBACK_ALLOWED_SESSIONS"
+      ],
+      "description": "Comma-separated UTC session names (classify_session) allowed for impulse pullback. Empty or \"all\" disables the gate.",
+      "display_id": "config:strategies.scalping.archetypes.impulse_pullback_allowed_sessions",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.archetypes.impulse_pullback_allowed_sessions",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "strategy_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "str",
+      "unit": "string",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "SCALPING_IMPULSE_PULLBACK_ENABLED",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {},
+      "default": true,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": true
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [
+        "HFS_IMPULSE_PULLBACK_ENABLED"
+      ],
+      "description": "Enable impulse pullback continuation scalping archetype (on by default for L1 continuation).",
+      "display_id": "config:strategies.scalping.archetypes.impulse_pullback_enabled",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.archetypes.impulse_pullback_enabled",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "strategy_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "bool",
+      "unit": "boolean",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "SCALPING_RANGE_SWEEP_ENABLED",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {},
+      "default": true,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": true
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [
+        "HFS_RANGE_SWEEP_ENABLED"
+      ],
+      "description": "Enable micro range sweep reversal scalping archetype.",
+      "display_id": "config:strategies.scalping.archetypes.range_sweep_enabled",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.archetypes.range_sweep_enabled",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "strategy_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "bool",
+      "unit": "boolean",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "SCALPING_BREAKOUT_BOX_MAX_ATR",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 0.1
+      },
+      "default": 1.5,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 1.5
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [
+        "HFS_BREAKOUT_BOX_MAX_ATR"
+      ],
+      "description": "Max M1 compression box width in ATR for Breakout Retest.",
+      "display_id": "config:strategies.scalping.breakout.box_max_atr",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.breakout.box_max_atr",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "strategy_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "float",
+      "unit": "atr",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "SCALPING_BREAKOUT_MAX_BOX_BARS",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 4
+      },
+      "default": 20,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 20
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [
+        "HFS_BREAKOUT_MAX_BOX_BARS"
+      ],
+      "description": "Maximum M1 bars in the compression box.",
+      "display_id": "config:strategies.scalping.breakout.max_box_bars",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.breakout.max_box_bars",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "strategy_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "int",
+      "unit": "bars",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "SCALPING_BREAKOUT_MIN_BOX_BARS",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 3
+      },
+      "default": 8,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 8
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [
+        "HFS_BREAKOUT_MIN_BOX_BARS"
+      ],
+      "description": "Minimum M1 bars in the compression box.",
+      "display_id": "config:strategies.scalping.breakout.min_box_bars",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.breakout.min_box_bars",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "strategy_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "int",
+      "unit": "bars",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "SCALPING_BREAKOUT_MIN_BREAK_ATR",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 0
+      },
+      "default": 0.25,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 0.25
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [
+        "HFS_BREAKOUT_MIN_BREAK_ATR"
+      ],
+      "description": "Minimum close displacement beyond the box in ATR.",
+      "display_id": "config:strategies.scalping.breakout.min_break_atr",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.breakout.min_break_atr",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "strategy_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "float",
+      "unit": "atr",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "SCALPING_BREAKOUT_MIN_TOUCHES_PER_SIDE",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 1
+      },
+      "default": 2,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 2
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [
+        "HFS_BREAKOUT_MIN_TOUCHES_PER_SIDE"
+      ],
+      "description": "Minimum touches of each compression extreme.",
+      "display_id": "config:strategies.scalping.breakout.min_touches_per_side",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.breakout.min_touches_per_side",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "strategy_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "int",
+      "unit": "count",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "SCALPING_BREAKOUT_REQUIRE_RETEST_REJECTION",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {},
+      "default": true,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": true
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [
+        "HFS_BREAKOUT_REQUIRE_RETEST_REJECTION"
+      ],
+      "description": "Require wick/reclaim rejection on the retest (not touch-only).",
+      "display_id": "config:strategies.scalping.breakout.require_retest_rejection",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.breakout.require_retest_rejection",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "strategy_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "bool",
+      "unit": "boolean",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "SCALPING_BREAKOUT_RETEST_LOOKBACK_BARS",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 1
+      },
+      "default": 5,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 5
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [
+        "HFS_BREAKOUT_RETEST_LOOKBACK_BARS"
+      ],
+      "description": "Bars to scan for rejection retest after an accepted break.",
+      "display_id": "config:strategies.scalping.breakout.retest_lookback_bars",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.breakout.retest_lookback_bars",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "strategy_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "int",
+      "unit": "bars",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "SCALPING_BREAKOUT_TOUCH_TOL_ATR",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 0
+      },
+      "default": 0.2,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 0.2
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [
+        "HFS_BREAKOUT_TOUCH_TOL_ATR"
+      ],
+      "description": "Touch band around box extremes in ATR.",
+      "display_id": "config:strategies.scalping.breakout.touch_tol_atr",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.breakout.touch_tol_atr",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "strategy_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "float",
+      "unit": "atr",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "SCALPING_CURRENT_CONTEXT_TTL_SECONDS",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 60
+      },
+      "default": 3600,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 3600
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [
+        "HFS_CURRENT_CONTEXT_TTL_SECONDS"
+      ],
+      "description": "TTL for current immutable M5 scalp context.",
+      "display_id": "config:strategies.scalping.context.current_context_ttl_seconds",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.context.current_context_ttl_seconds",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "strategy_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "int",
+      "unit": "seconds",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "SCALPING_HISTORIC_CONTEXT_TTL_SECONDS",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 3600
+      },
+      "default": 86400,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 86400
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [
+        "HFS_HISTORIC_CONTEXT_TTL_SECONDS"
+      ],
+      "description": "TTL for historic scalp context snapshots.",
+      "display_id": "config:strategies.scalping.context.historic_context_ttl_seconds",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.context.historic_context_ttl_seconds",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "strategy_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "int",
+      "unit": "seconds",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "SCALPING_M1_LOOKBACK_BARS",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 20
+      },
+      "default": 60,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 60
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [
+        "HFS_M1_LOOKBACK_BARS"
+      ],
+      "description": "Bounded M1 lookback for microstructure.",
+      "display_id": "config:strategies.scalping.context.m1_lookback_bars",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.context.m1_lookback_bars",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "strategy_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "int",
+      "unit": "bars",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "SCALPING_MAXIMUM_M5_AGE_SECONDS",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 60
+      },
+      "default": 420,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 420
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [
+        "HFS_MAXIMUM_M5_AGE_SECONDS"
+      ],
+      "description": "Fail closed when pinned M5 context is older than this.",
+      "display_id": "config:strategies.scalping.context.maximum_m5_age_seconds",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.context.maximum_m5_age_seconds",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "strategy_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "int",
+      "unit": "seconds",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "SCALPING_PULLBACK_BUY_MAX_POSITION",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 0,
+        "le": 1
+      },
+      "default": 0.6,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 0.6
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [
+        "HFS_PULLBACK_BUY_MAX_POSITION"
+      ],
+      "description": "Max dealing-range position for scalping pullback BUY.",
+      "display_id": "config:strategies.scalping.location.pullback_buy_maximum_position",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.location.pullback_buy_maximum_position",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "execution_safety",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "float",
+      "unit": "fraction",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "SCALPING_PULLBACK_SELL_MIN_POSITION",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 0,
+        "le": 1
+      },
+      "default": 0.4,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 0.4
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [
+        "HFS_PULLBACK_SELL_MIN_POSITION"
+      ],
+      "description": "Min dealing-range position for scalping pullback SELL.",
+      "display_id": "config:strategies.scalping.location.pullback_sell_minimum_position",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.location.pullback_sell_minimum_position",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "execution_safety",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "float",
+      "unit": "fraction",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "SCALPING_RANGE_BUY_MAX_POSITION",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 0,
+        "le": 1
+      },
+      "default": 0.35,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 0.35
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [
+        "HFS_RANGE_BUY_MAX_POSITION"
+      ],
+      "description": "Max dealing-range position for scalping range-sweep BUY.",
+      "display_id": "config:strategies.scalping.location.range_buy_maximum_position",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.location.range_buy_maximum_position",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "execution_safety",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "float",
+      "unit": "fraction",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "SCALPING_RANGE_SELL_MIN_POSITION",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 0,
+        "le": 1
+      },
+      "default": 0.65,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 0.65
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [
+        "HFS_RANGE_SELL_MIN_POSITION"
+      ],
+      "description": "Min dealing-range position for scalping range-sweep SELL.",
+      "display_id": "config:strategies.scalping.location.range_sell_minimum_position",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.location.range_sell_minimum_position",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "execution_safety",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "float",
+      "unit": "fraction",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [
+        "off",
+        "shadow",
+        "paper",
+        "live"
+      ],
+      "canonical_env": "SCALPING_MODE",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "pattern": "^(off|shadow|paper|live)$"
+      },
+      "default": "live",
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": "live"
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [
+        "HFS_MODE"
+      ],
+      "description": "Scalping runtime mode: off, shadow, paper, or live.",
+      "display_id": "config:strategies.scalping.mode",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.mode",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "execution_safety",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "str",
+      "unit": "enum",
+      "validation_summary": "Pydantic type coercion + field validator"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "SCALPING_MAXIMUM_ACTIVE_OPPORTUNITIES",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 1
+      },
+      "default": 10,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 10
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [
+        "HFS_MAXIMUM_ACTIVE_OPPORTUNITIES"
+      ],
+      "description": "Cap on concurrently active scalp opportunities.",
+      "display_id": "config:strategies.scalping.policy.maximum_active_opportunities",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.policy.maximum_active_opportunities",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "strategy_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "int",
+      "unit": "count",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "SCALPING_MAXIMUM_OPPORTUNITIES_PER_CYCLE",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 1
+      },
+      "default": 3,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 3
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [
+        "HFS_MAXIMUM_OPPORTUNITIES_PER_CYCLE"
+      ],
+      "description": "Ranked opportunities retained per M1 cycle.",
+      "display_id": "config:strategies.scalping.policy.maximum_opportunities_per_cycle",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.policy.maximum_opportunities_per_cycle",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "strategy_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "int",
+      "unit": "count",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "SCALPING_MAXIMUM_SPREAD_PIPS",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 0
+      },
+      "default": 5.0,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 5.0
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [
+        "HFS_MAXIMUM_SPREAD_PIPS"
+      ],
+      "description": "Hard block when spread exceeds this.",
+      "display_id": "config:strategies.scalping.policy.maximum_spread_pips",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.policy.maximum_spread_pips",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "execution_safety",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "float",
+      "unit": "pips",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "SCALPING_MINIMUM_REWARD_RISK",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 0
+      },
+      "default": 1.1,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 1.1
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [
+        "HFS_MINIMUM_REWARD_RISK"
+      ],
+      "description": "Minimum net reward/risk for scalping entries.",
+      "display_id": "config:strategies.scalping.policy.minimum_reward_risk",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.policy.minimum_reward_risk",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "execution_safety",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "float",
+      "unit": "multiplier",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "SCALPING_COOLDOWN_AFTER_LOSS_MINUTES",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 0
+      },
+      "default": 5,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 5
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [
+        "HFS_COOLDOWN_AFTER_LOSS_MINUTES"
+      ],
+      "description": "Cooldownoldown after consecutive loss streak.",
+      "display_id": "config:strategies.scalping.risk.cooldown_after_loss_minutes",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.risk.cooldown_after_loss_minutes",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "execution_safety",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "int",
+      "unit": "minutes",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "SCALPING_DAILY_LOSS_LIMIT_R",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 0
+      },
+      "default": 3.0,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 3.0
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [
+        "HFS_DAILY_LOSS_LIMIT_R"
+      ],
+      "description": "Daily realized R loss limit.",
+      "display_id": "config:strategies.scalping.risk.daily_loss_limit_r",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.risk.daily_loss_limit_r",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "execution_safety",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "float",
+      "unit": "multiplier",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "SCALPING_MAXIMUM_CONCURRENT_POSITIONS",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 1
+      },
+      "default": 1,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 1
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [
+        "HFS_MAXIMUM_CONCURRENT_POSITIONS"
+      ],
+      "description": "One XAU scalp position at a time initially.",
+      "display_id": "config:strategies.scalping.risk.maximum_concurrent_positions",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.risk.maximum_concurrent_positions",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "execution_safety",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "int",
+      "unit": "count",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "SCALPING_MAXIMUM_CONSECUTIVE_LOSSES",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 1
+      },
+      "default": 3,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 3
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [
+        "HFS_MAXIMUM_CONSECUTIVE_LOSSES"
+      ],
+      "description": "Loss streak before cooldown.",
+      "display_id": "config:strategies.scalping.risk.maximum_consecutive_losses",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.risk.maximum_consecutive_losses",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "execution_safety",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "int",
+      "unit": "count",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "SCALPING_MAXIMUM_DAILY_TRADES",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 1
+      },
+      "default": 30,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 30
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [
+        "HFS_MAXIMUM_DAILY_TRADES"
+      ],
+      "description": "Hard daily trade cap for HFS.",
+      "display_id": "config:strategies.scalping.risk.maximum_daily_trades",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.risk.maximum_daily_trades",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "execution_safety",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "int",
+      "unit": "count",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "SCALPING_MAXIMUM_SESSION_TRADES",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 1
+      },
+      "default": 12,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 12
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [
+        "HFS_MAXIMUM_SESSION_TRADES"
+      ],
+      "description": "Hard session trade cap for HFS.",
+      "display_id": "config:strategies.scalping.risk.maximum_session_trades",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.risk.maximum_session_trades",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "execution_safety",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "int",
+      "unit": "count",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [
+        "shadow",
+        "paper",
+        "live"
+      ],
+      "canonical_env": "SCALPING_RISK_MODE",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "pattern": "^(shadow|paper|live)$"
+      },
+      "default": "live",
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": "live"
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [
+        "HFS_RISK_MODE"
+      ],
+      "description": "Scalping risk accounting mode.",
+      "display_id": "config:strategies.scalping.risk.mode",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.risk.mode",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "execution_safety",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "str",
+      "unit": "enum",
+      "validation_summary": "Pydantic type coercion + field validator"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "SCALPING_RISK_FRACTION_PER_TRADE",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 0,
+        "le": 1
+      },
+      "default": 0.1,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 0.1
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [
+        "HFS_RISK_FRACTION_PER_TRADE"
+      ],
+      "description": "Constant risk fraction — never martingale.",
+      "display_id": "config:strategies.scalping.risk.risk_fraction_per_trade",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.risk.risk_fraction_per_trade",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "execution_safety",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "float",
+      "unit": "fraction",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "SCALPING_SESSION_LOSS_LIMIT_R",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 0
+      },
+      "default": 2.0,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 2.0
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [
+        "HFS_SESSION_LOSS_LIMIT_R"
+      ],
+      "description": "Session realized R loss limit.",
+      "display_id": "config:strategies.scalping.risk.session_loss_limit_r",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.risk.session_loss_limit_r",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "execution_safety",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "float",
+      "unit": "multiplier",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "SCALPING_STOP_BUFFER_ATR",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 0
+      },
+      "default": 0.1,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 0.1
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [
+        "HFS_STOP_BUFFER_ATR"
+      ],
+      "description": "ATR buffer beyond structural stop.",
+      "display_id": "config:strategies.scalping.stop.buffer_atr",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.stop.buffer_atr",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "execution_safety",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "float",
+      "unit": "atr",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "SCALPING_STOP_MAXIMUM_PIPS",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 1
+      },
+      "default": 30.0,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 30.0
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [
+        "HFS_STOP_MAXIMUM_PIPS"
+      ],
+      "description": "Maximum scalp stop size.",
+      "display_id": "config:strategies.scalping.stop.maximum_pips",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.stop.maximum_pips",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "execution_safety",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "float",
+      "unit": "pips",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "SCALPING_STOP_MINIMUM_PIPS",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 1
+      },
+      "default": 12.0,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 12.0
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [
+        "HFS_STOP_MINIMUM_PIPS"
+      ],
+      "description": "Minimum scalp stop size.",
+      "display_id": "config:strategies.scalping.stop.minimum_pips",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.stop.minimum_pips",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "execution_safety",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "float",
+      "unit": "pips",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "SCALPING_MINIMUM_NET_TARGET_PIPS",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 1
+      },
+      "default": 15.0,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 15.0
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [
+        "HFS_MINIMUM_NET_TARGET_PIPS"
+      ],
+      "description": "Minimum net target after spread/slippage.",
+      "display_id": "config:strategies.scalping.target.minimum_net_target_pips",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.target.minimum_net_target_pips",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "execution_safety",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "float",
+      "unit": "pips",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "SCALPING_PREFERRED_LADDER_PIPS",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {},
+      "default": "20,25,30",
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": "20,25,30"
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [
+        "HFS_PREFERRED_LADDER_PIPS"
+      ],
+      "description": "Comma-separated preferred scalp targets in pips.",
+      "display_id": "config:strategies.scalping.target.preferred_ladder_pips",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.target.preferred_ladder_pips",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "strategy_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "str",
+      "unit": "string",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
       "canonical_env": "AUTO_TRADE_BOX_BREAKOUT_ENABLED",
       "catalog_version": 2,
       "configurable": true,
@@ -20333,6 +20419,6 @@
       "validation_summary": "Pydantic required/type coercion only"
     }
   ],
-  "source_fingerprint_sha256": "354d961c37977232d925d8cc31710a50ee87a7992850e98d59d81bb23a31c548",
+  "source_fingerprint_sha256": "f790897c73533a6a78895c180a001834e4d2df8fd10b6e9cbf36a49a34e6a981",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

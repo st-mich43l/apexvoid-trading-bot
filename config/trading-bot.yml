@@ -111,7 +111,7 @@ execution:
     reaction_require_publish_window: false
     # Scalp: structure + technique decide; do not sterilize by UTC killzone.
     # Weak volume/momentum hours are rejected by analysis, not the clock.
-    hfs_require_killzone: false
+    scalp_require_killzone: false
     require_sweep_body: false
     strict_premium_discount: true
     # FX fixed_rr: live MAD phase × strategy hard gate on technique publish.
@@ -614,11 +614,11 @@ strategies:
       # Proximal entry width for FVG/iFVG/imbalance (price). Full gap stays
       # structural; every strategy clips tradeable entry to this band.
       entry_max_width_price: 5.0
-  high_frequency_scalp:
-    # Live: publish TradePlan V7 via worker.try_publish_executable_signal when
-    # activation + risk pass. Requires runtime.auto_trade.enabled=true.
-    # HFS cycles are XAU / ladder-pip only — FX fixed_rr books are excluded
-    # in app.scalping.context._hfs_symbols (do not enable FX HFS here).
+  scalping:
+    # Live M1 scalping: publish TradePlan when activation + risk pass.
+    # Requires runtime.auto_trade.enabled=true. XAU / ladder-pip only —
+    # FX fixed_rr books are excluded in app.scalping.context._scalping_symbols.
+    # YAML key ``high_frequency_scalp`` remains accepted as a load alias.
     mode: live
     archetypes:
       range_sweep_enabled: true

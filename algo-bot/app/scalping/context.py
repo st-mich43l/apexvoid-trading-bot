@@ -25,11 +25,11 @@ from app.runtime.price_identity import rounded_price
 LIVE_SYMBOL = "XAU"
 
 
-def _instrument_allows_hfs(instrument_cfg: Any) -> bool:
-  """HFS is gold ladder-pip only — never FX ``fixed_rr`` books.
+def _instrument_allows_scalping(instrument_cfg: Any) -> bool:
+  """M1 scalping is gold ladder-pip only — never FX ``fixed_rr`` books.
 
-  Live 2026-08-20: treating every live instrument as HFS-eligible ran M1
-  scalp cycles on EURUSD/GBPJPY/GBPUSD/USDJPY together with XAU, pegged the
+  Live 2026-08-20: treating every live instrument as scalp-eligible ran M1
+  cycles on EURUSD/GBPJPY/GBPUSD/USDJPY together with XAU, pegged the
   algo-bot container at ~100% CPU, and starved Telegram ``/trade`` responses
   for minutes. FX stays reaction + manual /algo.
   """
@@ -41,7 +41,7 @@ def _instrument_allows_hfs(instrument_cfg: Any) -> bool:
   return str(value).casefold() != "fixed_rr"
 
 
-def _hfs_symbols(cfg: Any | None = None) -> set[str]:
+def _scalping_symbols(cfg: Any | None = None) -> set[str]:
   if cfg is None:
     from app.core.config import runtime_config
 
@@ -57,7 +57,7 @@ def _hfs_symbols(cfg: Any | None = None) -> set[str]:
           effective = for_instrument(symbol)
         except Exception:
           continue
-        if not _instrument_allows_hfs(effective):
+        if not _instrument_allows_scalping(effective):
           continue
       allowed.add(symbol)
     return allowed or {LIVE_SYMBOL}
@@ -66,7 +66,7 @@ def _hfs_symbols(cfg: Any | None = None) -> set[str]:
     rollout = getattr(identity.rollout, "value", identity.rollout)
     if str(rollout).lower() != "live":
       return set()
-    if not _instrument_allows_hfs(cfg):
+    if not _instrument_allows_scalping(cfg):
       return set()
     return {
       str(identity.instrument_id).upper(),
@@ -77,8 +77,13 @@ def _hfs_symbols(cfg: Any | None = None) -> set[str]:
   return {LIVE_SYMBOL}
 
 
-def is_hfs_symbol(symbol: str, cfg: Any | None = None) -> bool:
-  return str(symbol).upper() in _hfs_symbols(cfg)
+def is_scalping_symbol(symbol: str, cfg: Any | None = None) -> bool:
+  return str(symbol).upper() in _scalping_symbols(cfg)
+
+
+# Back-compat aliases during HFS → scalping rename.
+is_hfs_symbol = is_scalping_symbol
+_hfs_symbols = _scalping_symbols
 
 
 def classify_session(ts: int, cfg: Any | None = None) -> str:
@@ -130,7 +135,7 @@ def permitted_archetypes_for_session(
   hour args are retained for call-site compatibility / telemetry only.
 
   Optional publish/activation killzone remains behind
-  ``execution.technique.hfs_require_killzone`` (prod default off).
+  ``execution.technique.scalp_require_killzone`` (prod default off).
   """
   del session, ts, hour  # clock is not a discovery permit gate
   enabled = _enabled_hfs_archetypes(cfg)
@@ -140,7 +145,7 @@ def permitted_archetypes_for_session(
 def impulse_pullback_allowed_sessions(cfg: Any | None) -> frozenset[str] | None:
   """Return allowed UTC session names for impulse pullback, or None if unrestricted."""
   arch = getattr(
-    getattr(getattr(cfg, "strategies", None), "high_frequency_scalp", None),
+    getattr(getattr(cfg, "strategies", None), "scalping", None),
     "archetypes",
     None,
   )
@@ -159,7 +164,7 @@ def is_impulse_pullback_session_allowed(session: str, cfg: Any | None) -> bool:
 
 def _enabled_hfs_archetypes(cfg: Any | None) -> frozenset[str]:
   arch = getattr(
-    getattr(getattr(cfg, "strategies", None), "high_frequency_scalp", None),
+    getattr(getattr(cfg, "strategies", None), "scalping", None),
     "archetypes",
     None,
   )
@@ -233,7 +238,7 @@ def is_context_fresh(
   max_age_seconds: int,
   cfg: Any | None = None,
 ) -> bool:
-  if snapshot.symbol.upper() not in _hfs_symbols(cfg):
+  if snapshot.symbol.upper() not in _scalping_symbols(cfg):
     return False
   age = int(now) - int(snapshot.m5_bar_ts)
   return age <= max(0, int(max_age_seconds))
@@ -255,7 +260,7 @@ def build_scalp_context_snapshot(
   regime: str = "range",
 ) -> ScalpContextSnapshot | None:
   """Build an immutable M5 context. Fail closed for non-live / malformed."""
-  if not is_hfs_symbol(symbol, cfg):
+  if not is_scalping_symbol(symbol, cfg):
     return None
   if m5 is None or m5.empty or not math.isfinite(price) or price <= 0:
     return None
@@ -371,7 +376,7 @@ async def load_current_context(
   symbol: str,
   cfg: Any | None = None,
 ) -> ScalpContextSnapshot | None:
-  if not is_hfs_symbol(symbol, cfg):
+  if not is_scalping_symbol(symbol, cfg):
     return None
   raw = await client.get(current_context_key(symbol))
   if raw is None:

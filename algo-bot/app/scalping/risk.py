@@ -59,7 +59,7 @@ def risk_key(symbol: str) -> str:
 
 def risk_fraction(cfg: Any) -> float:
   """Constant fraction — never scales with losses or inactivity."""
-  hfs = getattr(getattr(cfg, "strategies", None), "high_frequency_scalp", None)
+  hfs = getattr(getattr(cfg, "strategies", None), "scalping", None)
   risk = getattr(hfs, "risk", None)
   try:
     return float(getattr(risk, "risk_fraction_per_trade", 0.10) or 0.10)
@@ -74,7 +74,7 @@ def evaluate_risk(
   session: str,
   now: int,
 ) -> ScalpDecision:
-  hfs = getattr(getattr(cfg, "strategies", None), "high_frequency_scalp", None)
+  hfs = getattr(getattr(cfg, "strategies", None), "scalping", None)
   risk = getattr(hfs, "risk", None)
   measured = {
     "daily_trades": state.daily_trades,
@@ -222,7 +222,7 @@ def apply_loss_streak_cooldown_reset(
   the case where the bot sat out the cooldown without a win.
   """
   risk = getattr(
-    getattr(getattr(cfg, "strategies", None), "high_frequency_scalp", None),
+    getattr(getattr(cfg, "strategies", None), "scalping", None),
     "risk",
     None,
   )

@@ -235,18 +235,19 @@ class ExecutionTechniqueConfig(FrozenConfigModel):
       default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, True),),
       validation_summary='Pydantic required/type coercion only',
     )
-    hfs_require_killzone: bool = config_field(
+    scalp_require_killzone: bool = config_field(
       True,
-      canonical_env='AUTO_TRADE_TECHNIQUE_HFS_REQUIRE_KILLZONE',
+      canonical_env='AUTO_TRADE_TECHNIQUE_SCALP_REQUIRE_KILLZONE',
+      deprecated_env_aliases=('AUTO_TRADE_TECHNIQUE_HFS_REQUIRE_KILLZONE',),
       owner=ConfigOwner.PYTHON,
       reload=ReloadPolicy.NEW_SETUP_ONLY,
       runtime_reload=ReloadPolicy.RESTART,
       unit=ConfigUnit.BOOLEAN,
       risk=RiskClassification.EXECUTION_SAFETY,
       description=(
-        'When true with enforce, block HFS publish/activation outside killzone. '
-        'Prod trading-bot.yml defaults this off; discovery permits are '
-        'structure/technique-driven regardless.'
+        'When true with enforce, block M1 scalping publish/activation outside '
+        'killzone. Prod trading-bot.yml defaults this off; discovery permits '
+        'are structure/technique-driven regardless.'
       ),
       default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, True),),
       validation_summary='Pydantic required/type coercion only',
