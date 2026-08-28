@@ -13,6 +13,12 @@ dated section after deployment.
 ## Unreleased
 
 ### Changed
+- **MAD soft quality only:** Remove live MAD hard gate from ZoneWatch
+  activation. `execution.technique.mad_hard_gate_enabled` defaults **false**
+  (must stay off in prod). MAD informs entry quality / structure analysis:
+  `accum` → Range Edge soft confluence; `manip` → reaction/liquidity soft
+  confluence; detections stamp `mad_{phase}` when clear. `mad_hard_gate` /
+  `would_gate` remain research/replay only. See `docs/scalping/MAD.md`.
 - **Erase HFS product lane:** M1 engine is ``strategies.scalping`` (YAML still
   loads ``high_frequency_scalp``). Env ``SCALPING_*`` replaces ``HFS_*``
   (deprecated aliases kept). Funnel keys ``…:scalp:{archetype}``,
@@ -21,12 +27,6 @@ dated section after deployment.
   Docs: ``TECHNIQUE_SCALP_REDEFINE.md``, ``SCALP_UNIFY_M1_M5.md``.
 
 ### Added
-- **FX MAD hard gate (technique lane):** `execution.technique.mad_hard_gate_enabled`
-  applies live `mad_hard_gate` at ZoneWatch activation for fixed_rr pairs.
-  Full taxonomy mapping: L3 Reaction / Zone / OB / FVG → `structural_reaction`
-  (block `expand`); range + liquidity → reversal rule; impulse/breakout →
-  continuation rule. Redis `mad:phase:*` persists `features` / `would_gate`.
-  See `docs/scalping/MAD.md` and `docs/scalping/MAD_SOURCES.md`.
 - ApexVoid **Breakout Retest** technique: M1 compression box (not M5 24-bar
   envelope), displacement break → rejection retest → hold, per-reason Redis
   ``scalp:metric:{SYM}:breakout:{reason}``, observe-only

@@ -438,7 +438,7 @@
     }
   ],
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "f790897c73533a6a78895c180a001834e4d2df8fd10b6e9cbf36a49a34e6a981",
+  "configuration_contract_fingerprint_sha256": "d9e06207415d007ccd8340863196737e86e4d0bd6ae24f9d5c064fc6cc7b0b0d",
   "counts": {
     "account": 24,
     "bootstrap": 4,
@@ -539,7 +539,7 @@
     }
   ],
   "manifest_version": 2,
-  "source_fingerprint_sha256": "f790897c73533a6a78895c180a001834e4d2df8fd10b6e9cbf36a49a34e6a981",
+  "source_fingerprint_sha256": "d9e06207415d007ccd8340863196737e86e4d0bd6ae24f9d5c064fc6cc7b0b0d",
   "source_model": "app.configuration.models.root.ApexVoidConfig",
   "unclassified_properties": []
 }

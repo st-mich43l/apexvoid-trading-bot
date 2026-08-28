@@ -114,8 +114,8 @@ execution:
     scalp_require_killzone: false
     require_sweep_body: false
     strict_premium_discount: true
-    # FX fixed_rr: live MAD phase × strategy hard gate on technique publish.
-    mad_hard_gate_enabled: true
+    # MAD is entry quality / structure analysis only — never block activation.
+    mad_hard_gate_enabled: false
   activation:
     # Enforce with entry_location: wait for M1 reaction + honor location blocks.
     # Ansible: apexvoid_trading_bot_config.execution.activation

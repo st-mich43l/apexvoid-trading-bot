@@ -961,43 +961,6 @@ async def _prepare_activation(
         )
     return None
 
-  from app.core.instrument_geometry import fixed_reward_risk
-  from app.analysis.mad_phase import evaluate_technique_mad_gate
-
-  if fixed_reward_risk(record.symbol, inst) is not None:
-    mad_allowed, mad_reason, mad_measured = await evaluate_technique_mad_gate(
-      client,
-      symbol=record.symbol,
-      strategy=match.strategy,
-      cfg=inst,
-      family=str(getattr(match, "family", "") or ""),
-      strategy_mode=str(getattr(match, "strategy_mode", "") or ""),
-    )
-    if not mad_allowed:
-      log.info(
-        "entry activation blocked mad_hard_gate symbol=%s strategy=%s "
-        "zone_id=%s reason=%s phase=%s",
-        record.symbol,
-        match.strategy,
-        record.zone_id,
-        mad_reason,
-        mad_measured.get("mad_phase"),
-      )
-      await _record_policy_telemetry(
-        client,
-        symbol=record.symbol,
-        kind="activation",
-        reason_code=mad_reason,
-        payload={
-          "symbol": record.symbol,
-          "zone_id": record.zone_id,
-          "strategy": match.strategy,
-          "direction": record.direction,
-          **mad_measured,
-        },
-      )
-      return None
-
   stamped = apply_trigger_to_match(match, trigger)
   return replace(
     stamped,

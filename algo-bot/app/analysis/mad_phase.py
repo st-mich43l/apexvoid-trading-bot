@@ -1,9 +1,9 @@
 """MAD-0: Manipulation / Accumulation / Distribution phase + Asia range seal.
 
-Shared Asia phase clock for technique (FX fixed_rr) and telemetry. Soft use:
-accumulation → Range Edge Scalp confluence. When
-``execution.technique.mad_hard_gate_enabled`` is on with enforce, FX technique
-publish/activation applies ``mad_hard_gate`` live (HFS/scalping remains exempt).
+Shared Asia phase clock for technique structure analysis and entry-quality
+soft confluence. ``mad_hard_gate`` / ``would_gate`` remain research stamps only
+— they must not block trade-plan publish or activation
+(``mad_hard_gate_enabled`` defaults false; live path does not call the gate).
 """
 
 from __future__ import annotations
@@ -121,25 +121,36 @@ def mad_last_key(symbol: str) -> str:
   return f"scalp:last_mad:{str(symbol).upper()}"
 
 
-# Owner 2026-08-26: MAD must not drive HFS/scalping. Soft affinity is only
-# accumulation → Range Edge Scalp (technique). No manip/expand bonuses, no
-# Impulse/Momentum/Range Sweep/reaction MAD nudges.
+# Soft entry-quality families (never hard-block trade plans).
+# M1 scalping: no MAD ranking/gates. Technique: soft confluence only.
 RANGE_EDGE_MAD_FAMILIES = frozenset({
   "range_scalp",
   "range_edge",
   "range_edge_mean_reversion",
+})
+REACTION_MAD_FAMILIES = frozenset({
+  "reaction",
+  "liquidity",
+  "structural_reaction",
+  "liquidity_sweep_reversal",
 })
 RANGE_SCALP_PHASES = frozenset({PHASE_ACCUM})
 EXPANSION_PHASES = frozenset({PHASE_EXPAND, PHASE_MANIP})
 
 
 def mad_soft_bonus(*, phase: str | None, family: str) -> float:
-  """Soft confluence nudge — accumulation for Range Edge Scalp only."""
+  """Soft confluence for entry quality / structure — never a hard gate.
+
+  - ``accum`` favors Range Edge mean-reversion inside the Asia box
+  - ``manip`` favors structural reaction / liquidity fade after Asia sweep-reclaim
+  Impulse / expand do not receive soft favor (owner: no MAD ranking of
+  continuation via soft score either).
+  """
   p = str(phase or "").casefold()
   fam = str(family or "").casefold()
-  if p != PHASE_ACCUM:
-    return 0.0
-  if fam in RANGE_EDGE_MAD_FAMILIES:
+  if p == PHASE_ACCUM and fam in RANGE_EDGE_MAD_FAMILIES:
+    return 0.12
+  if p == PHASE_MANIP and fam in REACTION_MAD_FAMILIES:
     return 0.12
   return 0.0
 
@@ -166,7 +177,7 @@ class MadFeatureScores:
 
 @dataclass(frozen=True)
 class MadGatePreview:
-  """MAD hard-gate preview — live on FX technique when ``mad_hard_gate_enabled``."""
+  """Research preview of phase × strategy affinity (observe / mad_replay only)."""
 
   would_block: bool
   reason_code: str
@@ -265,7 +276,7 @@ def compute_mad_features(snap: MadPhaseSnapshot) -> MadFeatureScores:
 
 
 def technique_mad_hard_gate_enabled(cfg: Any | None) -> bool:
-  """True when FX technique lane should apply live ``mad_hard_gate``."""
+  """Reserved research flag — must stay false in prod (no live activation block)."""
   tech = getattr(getattr(cfg, "execution", None), "technique", None)
   if tech is None:
     return False
@@ -361,7 +372,7 @@ async def evaluate_technique_mad_gate(
   family: str | None = None,
   strategy_mode: str | None = None,
 ) -> tuple[bool, str, dict[str, Any]]:
-  """Return (allowed, reason_code, measured) for FX technique MAD hard gate."""
+  """Research helper: phase × strategy preview. Not wired into activation."""
   from app.autotrade.killzone import technique_enforce
 
   if not technique_mad_hard_gate_enabled(cfg):
@@ -389,12 +400,11 @@ async def evaluate_technique_mad_gate(
 
 
 def mad_hard_gate(*, phase: str | None, strategy: str) -> MadGatePreview:
-  """Hard gate by MAD phase × strategy family.
+  """Counterfactual phase × strategy affinity for research / ``would_gate``.
 
-  Reversal families (range, liquidity sweep, structural reaction) block during
-  ``expand`` — do not fade distribution. Continuation families (impulse,
-  breakout retest) require ``manip`` or ``expand`` — need displacement first.
-  ``unclear`` is always neutral (no block).
+  Reversal families prefer not to fade ``expand``. Continuation families prefer
+  ``manip`` or ``expand``. ``unclear`` is always neutral. Live activation must
+  not call this as a publish veto.
   """
   p = str(phase or "").casefold()
   strat = str(strategy or "").casefold()
