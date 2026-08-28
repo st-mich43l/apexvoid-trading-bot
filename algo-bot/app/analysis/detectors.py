@@ -1044,12 +1044,16 @@ def _merge_score_reasons(base: list[str], zone: Zone) -> list[str]:
 
 
 def _mad_family_for_setup(setup: str, mode: str) -> str:
-  """Map detector setup to MAD soft-bonus family."""
+  """Map detector setup to MAD entry-quality soft family."""
   if str(mode or "").casefold() == "range_scalp":
     return "range_scalp"
   name = str(setup or "").casefold()
   if "range edge" in name or "range scalp" in name:
     return "range_scalp"
+  if "liquidity" in name or (
+    "sweep" in name and "range" not in name
+  ):
+    return "liquidity"
   if "momentum" in name or "impulse" in name or "trend" in name:
     return "impulse"
   return "reaction"
@@ -1152,17 +1156,19 @@ def _finish(
   if include_score_reasons:
     full_reasons = _merge_score_reasons(full_reasons, zone)
   confluence = _confluence_from_zone(zone, factors, ctx.settings)
-  # Owner: MAD applies only as accumulation soft favor on Range Edge Scalp.
+  # MAD is entry quality + structure analysis only — soft confluence nudge,
+  # never a hard block on trade-plan publish / activation.
   mad_family = _mad_family_for_setup(setup, mode)
-  if mad_family == "range_scalp":
-    from app.analysis.mad_phase import mad_soft_bonus
+  from app.analysis.mad_phase import PHASE_UNCLEAR, mad_soft_bonus
 
-    mad_bonus = mad_soft_bonus(phase=ctx.mad_phase, family="range_scalp")
-    if mad_bonus >= 0.1:
-      confluence += 1
-      tag = f"mad_{ctx.mad_phase}"
-      if tag not in full_reasons:
-        full_reasons = [*full_reasons, tag]
+  mad_bonus = mad_soft_bonus(phase=ctx.mad_phase, family=mad_family)
+  if mad_bonus >= 0.1:
+    confluence += 1
+  phase = str(ctx.mad_phase or "").casefold()
+  if phase and phase != PHASE_UNCLEAR:
+    tag = f"mad_{phase}"
+    if tag not in full_reasons:
+      full_reasons = [*full_reasons, tag]
   if confluence < ctx.settings.confluence_floor:
     return None
   math_pd = None

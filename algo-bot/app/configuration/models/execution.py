@@ -289,7 +289,7 @@ class ExecutionTechniqueConfig(FrozenConfigModel):
       validation_summary='Pydantic required/type coercion only',
     )
     mad_hard_gate_enabled: bool = config_field(
-      True,
+      False,
       canonical_env='AUTO_TRADE_TECHNIQUE_MAD_HARD_GATE_ENABLED',
       owner=ConfigOwner.PYTHON,
       reload=ReloadPolicy.NEW_SETUP_ONLY,
@@ -297,10 +297,11 @@ class ExecutionTechniqueConfig(FrozenConfigModel):
       unit=ConfigUnit.BOOLEAN,
       risk=RiskClassification.EXECUTION_SAFETY,
       description=(
-        'When true with enforce, FX fixed_rr technique publish/activation '
-        'applies live mad_hard_gate (phase × strategy). HFS/scalping exempt.'
+        'Reserved observe/research switch. Must stay false in prod — MAD is '
+        'entry-quality / structure analysis only and must not block trade-plan '
+        'publish or activation.'
       ),
-      default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, True),),
+      default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, False),),
       validation_summary='Pydantic required/type coercion only',
     )
 

@@ -1,7 +1,7 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "f790897c73533a6a78895c180a001834e4d2df8fd10b6e9cbf36a49a34e6a981",
-  "configuration_document_fingerprint_sha256": "4216e7f36c1f7b458edc932dd8253fbd12ab9edcb59d5b70fe720ee89204f682",
+  "configuration_contract_fingerprint_sha256": "d9e06207415d007ccd8340863196737e86e4d0bd6ae24f9d5c064fc6cc7b0b0d",
+  "configuration_document_fingerprint_sha256": "0a010538a7a0c0ea3f0a5270822ed2f7ad8abb9974352c0ab0e2ece71b5e2a0e",
   "counts": {
     "algorithm_constants": 57,
     "configurable": 475,
@@ -10609,16 +10609,16 @@
       "catalog_version": 2,
       "configurable": true,
       "constraints": {},
-      "default": true,
+      "default": false,
       "default_contexts": [
         {
           "context": "python_schema",
-          "value": true
+          "value": false
         }
       ],
       "deprecated": false,
       "deprecated_aliases": [],
-      "description": "When true with enforce, FX fixed_rr technique publish/activation applies live mad_hard_gate (phase × strategy). HFS/scalping exempt.",
+      "description": "Reserved observe/research switch. Must stay false in prod — MAD is entry-quality / structure analysis only and must not block trade-plan publish or activation.",
       "display_id": "config:execution.technique.mad_hard_gate_enabled",
       "evidence_notes": [],
       "introduced_in": "config-catalog-v2",
@@ -20419,6 +20419,6 @@
       "validation_summary": "Pydantic required/type coercion only"
     }
   ],
-  "source_fingerprint_sha256": "f790897c73533a6a78895c180a001834e4d2df8fd10b6e9cbf36a49a34e6a981",
+  "source_fingerprint_sha256": "d9e06207415d007ccd8340863196737e86e4d0bd6ae24f9d5c064fc6cc7b0b0d",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }
