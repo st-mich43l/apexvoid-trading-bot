@@ -46,6 +46,7 @@ from app.analysis.m1_trigger import evaluate_m1_trigger_window, latest_eligible_
 from app.analysis.ohlc_source import RedisOHLCSource, window_for_timeframe
 from app.autotrade.entry_activation import (
   apply_trigger_to_match,
+  emit_activation_gate_metrics,
   evaluate_entry_activation,
 )
 from app.autotrade.execution_confirmation import (
@@ -892,6 +893,14 @@ async def _prepare_activation(
     kind="activation",
     reason_code=activation.reason_code,
     payload=activation_payload,
+  )
+  await emit_activation_gate_metrics(
+    client,
+    symbol=record.symbol,
+    strategy=match.strategy,
+    direction=record.direction,
+    decision=activation,
+    allowed=activation.allowed,
   )
   from app.autotrade.reaction_funnel import (
     STAGE_ACTIVATION_ALLOWED,
