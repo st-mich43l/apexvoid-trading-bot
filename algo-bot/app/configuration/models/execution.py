@@ -148,10 +148,17 @@ class ExecutionTrendConfig(FrozenConfigModel):
 class ExecutionActivationConfig(FrozenConfigModel):
     mode: str = config_field('shadow', canonical_env='ENTRY_ACTIVATION_MODE', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.ENUM, risk=RiskClassification.EXECUTION_SAFETY, description='Entry-activation policy mode: off, shadow (record only), or enforce reaction triggers.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 'shadow'),), allowed_values=('off', 'shadow', 'enforce'), validation_summary='Pydantic type coercion + field validator', pattern='^(off|shadow|enforce)$')
     reaction_trigger_maximum_age_bars: int = config_field(2, canonical_env='ENTRY_ACTIVATION_REACTION_TRIGGER_MAX_AGE_BARS', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.BARS, risk=RiskClassification.EXECUTION_SAFETY, description='Maximum closed M1 bars since trigger for reaction activation.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 2),), validation_summary='Pydantic required/type coercion only', ge=1)
+    m5_authoritative_fallback: str = config_field('off', canonical_env='ENTRY_ACTIVATION_M5_AUTHORITATIVE_FALLBACK', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.ENUM, risk=RiskClassification.EXECUTION_SAFETY, description='When M1 trigger is absent/stale, allow M5-authoritative in-zone activation: off, quote_inside, or quote_inside_fresh.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 'off'),), allowed_values=('off', 'quote_inside', 'quote_inside_fresh'), validation_summary='Pydantic type coercion + field validator', pattern='^(off|quote_inside|quote_inside_fresh)$')
+    m5_confirmation_maximum_age_bars: int = config_field(6, canonical_env='ENTRY_ACTIVATION_M5_CONFIRMATION_MAX_AGE_BARS', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.BARS, risk=RiskClassification.EXECUTION_SAFETY, description='Maximum closed M5 bars since structural confirmation for quote_inside_fresh fallback.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 6),), validation_summary='Pydantic required/type coercion only', ge=1)
 
     @field_validator('mode', mode='before')
     @classmethod
     def normalize_activation_mode(cls, value):
+        return value.strip().lower() if isinstance(value, str) else value
+
+    @field_validator('m5_authoritative_fallback', mode='before')
+    @classmethod
+    def normalize_m5_authoritative_fallback(cls, value):
         return value.strip().lower() if isinstance(value, str) else value
 
 class ExecutionTechniqueConfig(FrozenConfigModel):
