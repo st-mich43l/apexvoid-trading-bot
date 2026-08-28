@@ -181,14 +181,11 @@ SHADOW_GATE_STRATEGIES: tuple[str, ...] = (
   "impulse_pullback_continuation",
   "range_sweep",
   "breakout_retest",
-  "momentum_chase",
 )
 
 _IMPULSE_GATE_STRATEGIES = frozenset({
   "impulse_pullback_continuation",
-  "momentum_chase",
   "impulse_pullback",
-  "momentum",
   "impulse",
 })
 

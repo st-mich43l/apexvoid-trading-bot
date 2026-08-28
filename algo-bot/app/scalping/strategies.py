@@ -1,4 +1,4 @@
-"""Scalping strategy discovery (four archetypes)."""
+"""Scalping strategy discovery (three archetypes)."""
 
 from __future__ import annotations
 
@@ -12,7 +12,6 @@ log = logging.getLogger(__name__)
 from app.scalping.microstructure import (
   detect_breakout_retest,
   detect_impulse_pullback,
-  detect_momentum_ignition,
   detect_sweep_reclaim,
   find_compression_box,
   macro_momentum_direction,
@@ -20,7 +19,6 @@ from app.scalping.microstructure import (
 from app.scalping.models import (
   ARCHETYPE_BREAKOUT_RETEST,
   ARCHETYPE_IMPULSE_PULLBACK,
-  ARCHETYPE_MOMENTUM_CHASE,
   ARCHETYPE_RANGE_SWEEP,
   OPPORTUNITY_VERSION,
   ScalpContextSnapshot,
@@ -120,7 +118,6 @@ def _fights_fresh_macro_momentum(
   was the pre-crash level, mid-reclaim of a flash crash under an hour old
   -- its own 30-bar lookback never saw the move that made that level
   matter. range_sweep has the identical blind spot at a range edge.
-  Doesn't apply to momentum_chase, which *is* the fresh-move entry.
   """
   mom_cfg = getattr(_hfs_cfg(cfg), "momentum", None)
   lookback = int(_parse_float(mom_cfg, "macro_veto_lookback_bars", 60.0))
@@ -138,11 +135,7 @@ def _technique_require_sweep_body(cfg: Any) -> bool:
 
 
 def _enabled(cfg: Any, name: str) -> bool:
-  """Archetype enable flags are fail-closed when missing (not default-on).
-
-  Live 2026-08-12: ``momentum_chase`` had no yaml/schema field so
-  ``getattr(..., True)`` kept publishing a −13.8 avg archetype.
-  """
+  """Archetype enable flags are fail-closed when missing (not default-on)."""
   root = _hfs_cfg(cfg)
   arch = getattr(root, "archetypes", None)
   attr = f"{name}_enabled"
@@ -651,134 +644,6 @@ def discover_breakout_retest(
   return out
 
 
-def discover_momentum_chase(
-  context: ScalpContextSnapshot,
-  micro: MicroStructure,
-  m1_df: pd.DataFrame,
-  cfg: Any,
-  *,
-  pip_size: float,
-  now: int,
-) -> list[ScalpOpportunity]:
-  """Chase a live, still-accelerating thrust instead of waiting for it to
-  pause. The other three archetypes all require some kind of pause first
-  (retracement, retest, sweep+reclaim) -- none of them fire on a straight,
-  uninterrupted run, which can cover the entire distance a scalp would have
-  wanted before ever handing back the setup they're waiting for.
-  """
-  if not _enabled(cfg, "momentum_chase"):
-    return []
-  if ARCHETYPE_MOMENTUM_CHASE not in context.permitted_archetypes:
-    return []
-
-  loc = getattr(_hfs_cfg(cfg), "location", None)
-  # A chase is trend-following by nature; the ceiling here only exists so
-  # it doesn't buy the very top / sell the very bottom of the permitted
-  # range, not to mute it the way the mean-reverting archetypes are muted.
-  buy_max = _parse_float(loc, "momentum_buy_maximum_position", 0.85)
-  sell_min = _parse_float(loc, "momentum_sell_minimum_position", 0.15)
-  min_net = _parse_float(getattr(_hfs_cfg(cfg), "target", None), "minimum_net_target_pips", 15.0)
-  mom_cfg = getattr(_hfs_cfg(cfg), "momentum", None)
-  # Owner 2026-08-26 redefine: sharp London legs die on 4 same-direction
-  # bars — default 2 so real dumps can qualify without waiting for a pause.
-  min_displacement_atr = _parse_float(mom_cfg, "min_displacement_atr", 1.0)
-  lookback_bars = int(_parse_float(mom_cfg, "lookback_bars", 5.0))
-  min_directional_bars = int(_parse_float(mom_cfg, "min_directional_bars", 2.0))
-  buffer = max(pip_size * 2, context.atr * 0.15)
-  out: list[ScalpOpportunity] = []
-  pos = context.dealing_range_position
-
-  for direction in ("BUY", "SELL"):
-    if direction == "BUY" and pos is not None and pos > buy_max:
-      continue
-    if direction == "SELL" and pos is not None and pos < sell_min:
-      continue
-    ev = detect_momentum_ignition(
-      m1_df,
-      direction=direction,
-      atr=context.atr,
-      min_displacement_atr=min_displacement_atr,
-      lookback_bars=lookback_bars,
-      min_directional_bars=min_directional_bars,
-    )
-    if ev is None or ev.get("rejected"):
-      if isinstance(ev, dict):
-        log.info(
-          "momentum ignition rejected symbol=%s direction=%s reason=%s "
-          "measured=%s",
-          context.symbol, direction, ev.get("reason"),
-          {k: v for k, v in ev.items() if k not in ("rejected", "reason")},
-        )
-      continue
-    # Continuation — never require sweep-reclaim (range_sweep owns that).
-    entry = float(ev["close"])
-    if direction == "BUY":
-      stop_price = float(ev["extreme"]) - buffer
-      stop = _stop_pips(structural=(entry - stop_price) / pip_size, cfg=cfg)
-      room = context.buy_corridor_room_pips
-    else:
-      stop_price = float(ev["extreme"]) + buffer
-      stop = _stop_pips(structural=(stop_price - entry) / pip_size, cfg=cfg)
-      room = context.sell_corridor_room_pips
-    target = _select_target(
-      direction=direction,
-      entry=entry,
-      room_pips=room,
-      stop_pips=stop,
-      min_net=min_net,
-      pip_size=pip_size,
-      symbol=context.symbol,
-      cfg=cfg,
-    )
-    if stop is None or target is None:
-      continue
-    target_price, target_pips = target
-    source = deterministic_id(
-      "momentum",
-      context.symbol,
-      direction,
-      rounded_price(entry, pip_size),
-      int(ev["bar_ts"]),
-    )
-    oid = deterministic_id(
-      context.symbol, ARCHETYPE_MOMENTUM_CHASE, direction, context.context_id, source,
-    )
-    band = max(buffer, pip_size * 3)
-    out.append(ScalpOpportunity(
-      version=OPPORTUNITY_VERSION,
-      opportunity_id=oid,
-      context_id=context.context_id,
-      symbol=context.symbol,
-      archetype=ARCHETYPE_MOMENTUM_CHASE,
-      direction=direction,
-      discovered_at=int(now),
-      source_bar_ts=int(ev["bar_ts"]),
-      zone_low=entry - band,
-      zone_high=entry + band,
-      key_level=entry,
-      trigger_type=str(ev["pattern"]),
-      trigger_bar_ts=int(ev["bar_ts"]),
-      trigger_price=entry,
-      invalidation_price=stop_price,
-      expected_target_price=target_price,
-      expected_target_pips=target_pips,
-      expected_stop_pips=stop,
-      expected_reward_risk=target_pips / stop,
-      location_position=pos,
-      score=0.0,
-      reasons=("momentum_ignition",),
-      expires_at=int(now) + 15 * 60,
-      episode_id=source,
-      source_identity=source,
-      measured={
-        "strategy": STRATEGY_DISPLAY[ARCHETYPE_MOMENTUM_CHASE],
-        "displacement_atr": ev.get("displacement_atr"),
-        "directional_bars": ev.get("directional_bars"),
-      },
-    ))
-  return out
-
-
 def discover_all(
   context: ScalpContextSnapshot,
   micro: MicroStructure,
@@ -792,7 +657,6 @@ def discover_all(
   found.extend(discover_range_sweep(context, micro, m1_df, cfg, pip_size=pip_size, now=now))
   found.extend(discover_impulse_pullback(context, micro, m1_df, cfg, pip_size=pip_size, now=now))
   found.extend(discover_breakout_retest(context, micro, m1_df, cfg, pip_size=pip_size, now=now))
-  found.extend(discover_momentum_chase(context, micro, m1_df, cfg, pip_size=pip_size, now=now))
   # Deduplicate by opportunity_id
   by_id = {item.opportunity_id: item for item in found}
   return list(by_id.values())
@@ -850,6 +714,4 @@ def idle_discovery_reasons(
       reasons.append("breakout_retest:armed_but_unbookable")
     else:
       reasons.append("breakout_retest:not_matched")
-  if ARCHETYPE_MOMENTUM_CHASE in context.permitted_archetypes and _enabled(cfg, "momentum_chase"):
-    reasons.append("momentum_chase:not_matched")
   return reasons or ["no_microstructure_match"]

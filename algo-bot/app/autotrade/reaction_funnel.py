@@ -5,7 +5,7 @@ dominates the journal. These counters (and compact complete lifecycle
 events) keep the scalp/reaction split measurable without relying on stream
 retention.
 
-HFS also writes per-archetype keys so Impulse vs Momentum vs Range can be
+HFS also writes per-archetype keys so Impulse vs Range vs Breakout can be
 read without joining Postgres.
 """
 
@@ -234,9 +234,6 @@ async def _maybe_log_funnel_snapshot(
     impulse = await client.hgetall(
       hfs_archetype_funnel_key(sym, "impulse_pullback"),
     ) or {}
-    momentum = await client.hgetall(
-      hfs_archetype_funnel_key(sym, "momentum_chase"),
-    ) or {}
   except Exception:
     return
 
@@ -252,13 +249,12 @@ async def _maybe_log_funnel_snapshot(
 
   log.info(
     "reaction funnel snapshot symbol=%s trigger_bucket=%s reaction=%s "
-    "scalp=%s hfs_impulse=%s hfs_momentum=%s",
+    "scalp=%s hfs_impulse=%s",
     sym,
     bucket,
     json.dumps(_decode(reaction), sort_keys=True),
     json.dumps(_decode(scalp), sort_keys=True),
     json.dumps(_decode(impulse), sort_keys=True),
-    json.dumps(_decode(momentum), sort_keys=True),
   )
 
 

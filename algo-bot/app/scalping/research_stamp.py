@@ -20,7 +20,6 @@ from app.scalping.math_strategies import (
 from app.scalping.models import (
   ARCHETYPE_BREAKOUT_RETEST,
   ARCHETYPE_IMPULSE_PULLBACK,
-  ARCHETYPE_MOMENTUM_CHASE,
   ARCHETYPE_RANGE_SWEEP,
   ScalpOpportunity,
 )
@@ -196,17 +195,6 @@ def _math_counterfactual(
     payload = gate.to_dict()
     payload["math_model"] = "breakout_retest_continuation"
     return payload
-
-  if archetype == ARCHETYPE_MOMENTUM_CHASE:
-    return {
-      "math_model": None,
-      "allowed": None,
-      "hard_block": False,
-      "reason_code": "no_math_model_yet",
-      "score_inputs": {},
-      "features": {},
-      "measured": {"archetype": archetype},
-    }
 
   # Research alias only — does not publish technique Range Edge from scalp.
   gate = evaluate_range_edge_mean_reversion(

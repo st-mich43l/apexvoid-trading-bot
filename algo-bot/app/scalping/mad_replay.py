@@ -33,7 +33,6 @@ _STRATEGY_FOR_GATE: dict[str, str] = {
   "range_edge": "range_edge",
   "impulse_pullback_continuation": "impulse_pullback_continuation",
   "impulse_pullback": "impulse_pullback",
-  "momentum_chase": "momentum_chase",
   "breakout_retest": "breakout_retest",
 }
 
@@ -152,7 +151,7 @@ def strategy_baselines(rows: Sequence[dict[str, Any]]) -> dict[str, Any]:
     }:
       return "range_family"
     if key in {
-      "impulse_pullback_continuation", "impulse_pullback", "momentum_chase",
+      "impulse_pullback_continuation", "impulse_pullback",
     }:
       return "impulse_family"
     return "other"

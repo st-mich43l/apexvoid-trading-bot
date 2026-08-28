@@ -14,14 +14,12 @@ OPPORTUNITY_VERSION = 1
 ARCHETYPE_RANGE_SWEEP = "range_sweep"
 ARCHETYPE_IMPULSE_PULLBACK = "impulse_pullback"
 ARCHETYPE_BREAKOUT_RETEST = "breakout_retest"
-ARCHETYPE_MOMENTUM_CHASE = "momentum_chase"
 
 # Canonical display names — no "HFS" tag. Legacy "HFS *" still accepted.
 STRATEGY_DISPLAY = {
   ARCHETYPE_RANGE_SWEEP: "Range Sweep Scalp",
   ARCHETYPE_IMPULSE_PULLBACK: "Impulse Pullback Scalp",
   ARCHETYPE_BREAKOUT_RETEST: "Breakout Retest Scalp",
-  ARCHETYPE_MOMENTUM_CHASE: "Momentum Chase Scalp",
 }
 
 LEGACY_STRATEGY_DISPLAY = {

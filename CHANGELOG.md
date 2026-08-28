@@ -39,10 +39,15 @@ dated section after deployment.
   messages when cTrader reconnects — batch config/ready/capability into
   **one** DM per restart (6h cooldown).
 
+### Removed
+- **Momentum Chase Scalp** HFS archetype: discovery, ignition detector,
+  ``HFS_MOMENTUM_CHASE_ENABLED`` config, and live funnel counter removed
+  after production showed late chase fills with poor RR (4/4 recent live
+  trades hit SL). Legacy display aliases kept for historical fill stats.
+
 ### Changed
 - M1 scalp strategies drop the **HFS** display tag (`Range Sweep Scalp`,
-  ``Impulse Pullback Scalp``, ``Breakout Retest Scalp``,
-  ``Momentum Chase Scalp``). Publish uses ``family=scalp`` /
+  ``Impulse Pullback Scalp``, ``Breakout Retest Scalp``). Publish uses ``family=scalp`` /
   ``strategy_mode=scalp_m1``; legacy ``HFS *`` / ``hfs`` / ``hfs_scalp`` still
   accepted. Shared ``unified_context`` loads M1+M5 windows for the M1 loop.
   See ``docs/scalping/SCALP_UNIFY_M1_M5.md``.
