@@ -59,27 +59,15 @@ def _select_target(
   clears the minimum net target and fits the available room, there is no
   opportunity here at all, not a smaller/larger substitute target.
 
-  Instruments configured with ``fixed_rr`` keep their configured ratio as the
-  preference and may fall back to exactly 1:1 when clean room cannot hold it.
-
-  XAU publish turns a selected 1:2 into TP1@1R (50%) + TP2@2R (50%) with
-  SL moved to BE after TP1 books (runner protected). A selected 1:1
-  publishes a **single** target and books **full volume** at that print
-  (close_ratio=1.0; no BE trail needed). A fixed-RR instrument expands
-  the selected final target into its configured R ladder during
-  execution-policy planning.
+  Instruments configured with technique ``fixed_rr`` still discover scalp
+  targets as 1:2 then 1:1 — technique R expansion is applied only on
+  non-scalp strategies in execution policy.
   """
   if room_pips is None or pip_size <= 0 or stop_pips is None or stop_pips <= 0:
     return None
-  from app.core.instrument_geometry import fixed_reward_risk
-  configured_rr = fixed_reward_risk(symbol, cfg) if symbol else None
-  ratios = (
-    (configured_rr, 1.0)
-    if configured_rr is not None and configured_rr > 1.0
-    else (configured_rr,)
-    if configured_rr is not None
-    else (2.0, 1.0)
-  )
+  # Scalp discovery owns 1:2 / 1:1. Do not prefer instrument technique RR
+  # (XAU structure fixed_rr) here — that would change scalp geometry.
+  ratios = (2.0, 1.0)
   for reward_risk in ratios:
     target_pips = float(stop_pips) * reward_risk
     if target_pips < min_net or target_pips > float(room_pips):

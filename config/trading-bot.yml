@@ -324,6 +324,77 @@ instrument_packs:
       pip_size: 0.01
       price_digits: 3
       volume_units_per_lot: 10000000
+  # XAU technique structure fixed_rr (SL from structure, TP at R multiples).
+  # M1 scalping stays on strategies.scalping discovery book — do not treat
+  # this pack as FX-style "no scalp".
+  xau_fixed_2r_v1:
+    policy: xau_fixed_2r_v1
+    reaction_session: tokyo_london_ny
+    stop_envelope:
+      # Structure-first band replacing global reaction 40–60. Calibrate max
+      # from live Key Level stop distances (pack leaf only).
+      min_pips: 25
+      max_pips: 100
+      sl_distance: 10.0
+    activation:
+      require_sweep_body: false
+      trigger_maximum_age_bars: 3
+      max_spread_pips: 5
+    price_scale:
+      # Preserve production gold analysis geometry (schema/global defaults).
+      round_step: 5.0
+      market_map:
+        change_min: 1.0
+        fallback_radius_price: 30.0
+        scalp_radius_price: 15.0
+      zone_merge_gap_price: 1.0
+      zone_merge_max_width: 6.0
+      opposing_minimum_separation_price: 15.0
+      fvg_entry_max_width_price: 5.0
+    targeting:
+      mode: fixed_rr
+      reward_risk: 2.0
+      target_r_multiples:
+      - 1.0
+      - 1.5
+      - 2.0
+      close_ratios:
+      - 0.25
+      - 0.25
+      - 0.50
+      trail_after_r: 1.5
+      trail_to_r: 1.0
+      entry_clips: 2
+    manual:
+      enabled: true
+      algo_enabled: true
+      entry_mode: zone_ladder
+      risk_reference: shallow
+      risk_multiplier: 1.0
+      tp1_close_fraction: 0.40
+    market_data:
+      lookbacks:
+        h1_bars: 400
+        m15_bars: 250
+        m1_bars: 150
+        m5_bars: 150
+    timeframes:
+    - H1
+    - M15
+    - M5
+    - M1
+    contract:
+      contract_units_per_lot: 100.0
+      max_lots: 10.0
+      pip_size: 0.1
+      price_digits: 2
+      volume_units_per_lot: 10000
+    analysis:
+      zones:
+        major_maximum_width_price: 10.0
+        minimum_width_price: 3.0
+        preferred_maximum_width_price: 6.0
+        preferred_minimum_width_price: 3.0
 instruments:
   # Add a live FX pair by declaring `pack: <name>` (see `instrument_packs`
   # above) plus broker_symbol/canonical_symbol and only the leaves that
@@ -491,41 +562,14 @@ instruments:
       - 0.25
       - 0.50
   XAU:
+    pack: xau_fixed_2r_v1
     rollout: live
-    targeting:
-      entry_clips: 2
-    manual:
-      enabled: true
-      algo_enabled: true
-      entry_mode: zone_ladder
-      risk_reference: shallow
-      risk_multiplier: 1.0
-      tp1_close_fraction: 0.40
-    analysis:
-      zones:
-        major_maximum_width_price: 10.0
-        minimum_width_price: 3.0
-        preferred_maximum_width_price: 6.0
-        preferred_minimum_width_price: 3.0
+    # Technique: structure fixed_rr from pack (1R/1.5R/2R). Manual stays
+    # zone_ladder. M1 scalping keeps strategies.scalping discovery book.
     broker_symbol: XAU
     canonical_symbol: XAU
-    contract:
-      contract_units_per_lot: 100.0
-      max_lots: 10.0
-      pip_size: 0.1
-      price_digits: 2
-      volume_units_per_lot: 10000
-    market_data:
-      lookbacks:
-        h1_bars: 400
-        m15_bars: 250
-        m1_bars: 150
-        m5_bars: 150
-    timeframes:
-    - H1
-    - M15
-    - M5
-    - M1
+    aliases:
+    - XAUUSD
 lifecycle:
   candidate:
     execution_maximum_age_seconds: 420
@@ -616,8 +660,9 @@ strategies:
       entry_max_width_price: 5.0
   scalping:
     # Live M1 scalping: publish TradePlan when activation + risk pass.
-    # Requires runtime.auto_trade.enabled=true. XAU / ladder-pip only —
-    # FX fixed_rr books are excluded in app.scalping.context._scalping_symbols.
+    # Requires runtime.auto_trade.enabled=true. XAU hosts M1 scalping even
+    # when technique uses structure fixed_rr; FX fixed_rr books stay excluded
+    # in app.scalping.context._scalping_symbols.
     # YAML key ``high_frequency_scalp`` remains accepted as a load alias.
     mode: live
     archetypes:

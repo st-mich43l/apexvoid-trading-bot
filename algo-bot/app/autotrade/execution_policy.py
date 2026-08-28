@@ -53,13 +53,30 @@ def _instrument_digits(symbol: str, cfg: Any) -> int:
   return int(context.contract.instrument.price_digits or 2)
 
 
-def _instrument_fixed_targeting(symbol: str, cfg: Any) -> Any | None:
-  targeting = getattr(_instrument_context(symbol, cfg), "targeting", None)
-  if targeting is not None:
-    mode = getattr(targeting.mode, "value", targeting.mode)
-    if str(mode) == "fixed_rr":
-      return targeting
-  return None
+def _instrument_fixed_targeting(
+  symbol: str,
+  cfg: Any,
+  *,
+  strategy: str | None = None,
+) -> Any | None:
+  """Technique fixed_rr targeting only — M1 scalp strategies stay on scalp book."""
+  from app.core.instrument_geometry import technique_fixed_rr_targeting
+  from app.autotrade.strategy_taxonomy import is_m1_scalp_strategy
+
+  if strategy and is_m1_scalp_strategy(strategy):
+    return None
+  # Prefer the already-resolved instrument context when symbol is empty
+  # (evaluate_execution_policy passes instrument_cfg as cfg).
+  context = _instrument_context(symbol, cfg)
+  targeting = getattr(context, "targeting", None)
+  if targeting is None and symbol:
+    return technique_fixed_rr_targeting(symbol, strategy, cfg)
+  if targeting is None:
+    return None
+  mode = getattr(targeting.mode, "value", targeting.mode)
+  if str(mode) != "fixed_rr":
+    return None
+  return targeting
 
 
 def _instrument_volume_multiplier(instrument_cfg: Any) -> float:
@@ -1002,7 +1019,11 @@ def evaluate_execution_policy(
   instrument_volume_multiplier = 1.0
   if (
     not range_scalp
-    and _instrument_fixed_targeting("", instrument_cfg) is not None
+    and _instrument_fixed_targeting(
+      symbol,
+      instrument_cfg,
+      strategy=str(getattr(match, "strategy", "") or ""),
+    ) is not None
   ):
     instrument_volume_multiplier = _instrument_volume_multiplier(
       instrument_cfg,
@@ -1105,7 +1126,11 @@ def evaluate_execution_policy(
       measured,
       policy,
     )
-  fixed_targeting = _instrument_fixed_targeting("", instrument_cfg)
+  fixed_targeting = _instrument_fixed_targeting(
+    symbol,
+    instrument_cfg,
+    strategy=str(getattr(match, "strategy", "") or ""),
+  )
   if fixed_targeting is not None:
     preferred_reward_risk = float(fixed_targeting.reward_risk)
     entry_value = Decimal(str(planned_entry))

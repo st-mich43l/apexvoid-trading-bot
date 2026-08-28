@@ -133,7 +133,7 @@
     "zone_scale_undersized_policy": "single_entry"
   },
   "contract_fingerprint": "d9e06207415d007ccd8340863196737e86e4d0bd6ae24f9d5c064fc6cc7b0b0d",
-  "effective_configuration_fingerprint": "5fceadece5e5fdbcbe678aea908071de69ec5928a4a1e17550032d11d0dadf40",
+  "effective_configuration_fingerprint": "21873e834a4cd7a503e9625336981101ba864af74062841cb7b4a909b52db3f7",
   "feed": {
     "backfill_bars": 1500,
     "bar_quality_lookback": 6,
@@ -4189,7 +4189,7 @@
       "execution": {
         "activation": {
           "mode": "enforce",
-          "reaction_trigger_maximum_age_bars": 2
+          "reaction_trigger_maximum_age_bars": 3
         },
         "broker_recovery": {
           "absence_confirmations": 2
@@ -4212,7 +4212,7 @@
           "reaction_lookback_bars": 5,
           "thesis_lock_enabled": true,
           "track_distance_atr": "8",
-          "zone_min_width_abs": "1",
+          "zone_min_width_abs": "3",
           "zone_min_width_atr": "0.15"
         },
         "policy": {
@@ -4237,19 +4237,19 @@
           "hard_entry_drift_pips": "20",
           "max_entry_drift_atr": "1",
           "min_entry_drift_pips": "10",
-          "min_rr": "1",
-          "min_target_pips": "15",
-          "room_stop_floor_pips": 15,
+          "min_rr": "2",
+          "min_target_pips": 50,
+          "room_stop_floor_pips": 25,
           "tp_buffer_pips": "3"
         },
         "reaction": {
           "market_fraction": "0.8",
-          "room_stop_min_rr": "1",
+          "room_stop_min_rr": "2",
           "scale_fraction": "0.2",
           "scale_invalid_policy": "single_market",
           "scale_step_atr": "0.5",
-          "stop_max_pips": 60,
-          "stop_min_pips": 40
+          "stop_max_pips": 100,
+          "stop_min_pips": 25
         },
         "regime": {
           "direction_enabled": false,
@@ -4260,7 +4260,7 @@
         "scaling": {
           "add": {
             "level_buffer_atr": "1",
-            "min_stop_pips": 30,
+            "min_stop_pips": 25,
             "pullback_enabled": false,
             "pullback_max_retrace": "0.7",
             "pullback_min_retrace": "0.2",
@@ -4271,12 +4271,12 @@
         "stops": {
           "be_buffer_ticks": 6,
           "reaction": {
-            "room_floor_pips": 40
+            "room_floor_pips": 25
           },
-          "sl_distance": "6.5",
+          "sl_distance": "10",
           "stop_push_beyond_zone": true,
           "trend": {
-            "minimum_pips": 40
+            "minimum_pips": 25
           },
           "wick_stop_buffer_atr": "0.15"
         },
@@ -4299,7 +4299,7 @@
           "london_window_hours": 3,
           "mad_hard_gate_enabled": false,
           "ny_window_hours": 3,
-          "reaction_publish_windows": "7-11,13-16",
+          "reaction_publish_windows": "0-11,13-16",
           "reaction_require_killzone": false,
           "reaction_require_publish_window": false,
           "require_sweep_body": false,
@@ -4310,7 +4310,7 @@
           "hard_entry_drift_pips": "30",
           "max_entry_drift_atr": "1.5",
           "min_entry_drift_pips": "15",
-          "stop_max_pips": 60
+          "stop_max_pips": 100
         },
         "zone_scaling": {
           "fill_enabled": true,
@@ -4418,7 +4418,7 @@
         "target_close_ratios": [],
         "tp1_close_fraction": "0.4"
       },
-      "policy_name": "xau_current_v1",
+      "policy_name": "xau_fixed_2r_v1",
       "provenance": {
         "entries": [
           {
@@ -4430,8 +4430,8 @@
           {
             "path": "instruments.XAU.policy",
             "secret": false,
-            "source_kind": "derived_compatibility_rule",
-            "source_name": "default_xau_current_v1_policy"
+            "source_kind": "config_file",
+            "source_name": "instrument_policy"
           },
           {
             "path": "instruments.XAU.manual",
@@ -4446,22 +4446,172 @@
             "source_name": "instrument_registry"
           },
           {
+            "path": "analysis.levels.round_step",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.XAU.execution_pack"
+          },
+          {
+            "path": "analysis.market_map.change_min",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.XAU.execution_pack"
+          },
+          {
+            "path": "analysis.market_map.fallback_radius_price",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.XAU.execution_pack"
+          },
+          {
+            "path": "analysis.market_map.scalp_radius_price",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.XAU.execution_pack"
+          },
+          {
+            "path": "analysis.zones.confluence.merge_gap_price",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.XAU.execution_pack"
+          },
+          {
+            "path": "analysis.zones.merge_max_width",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.XAU.execution_pack"
+          },
+          {
+            "path": "execution.activation.reaction_trigger_maximum_age_bars",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.XAU.execution_pack"
+          },
+          {
+            "path": "execution.entry.max_spread_pips",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.XAU.execution_pack"
+          },
+          {
+            "path": "execution.mapped_zone.zone_min_width_abs",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.XAU.execution_pack"
+          },
+          {
+            "path": "execution.range.min_rr",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.XAU.execution_pack"
+          },
+          {
+            "path": "execution.range.min_target_pips",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.XAU.execution_pack"
+          },
+          {
+            "path": "execution.range.room_stop_floor_pips",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.XAU.execution_pack"
+          },
+          {
+            "path": "execution.reaction.room_stop_min_rr",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.XAU.execution_pack"
+          },
+          {
+            "path": "execution.reaction.stop_max_pips",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.XAU.execution_pack"
+          },
+          {
+            "path": "execution.reaction.stop_min_pips",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.XAU.execution_pack"
+          },
+          {
+            "path": "execution.scaling.add.min_stop_pips",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.XAU.execution_pack"
+          },
+          {
+            "path": "execution.stops.reaction.room_floor_pips",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.XAU.execution_pack"
+          },
+          {
+            "path": "execution.stops.sl_distance",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.XAU.execution_pack"
+          },
+          {
+            "path": "execution.stops.trend.minimum_pips",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.XAU.execution_pack"
+          },
+          {
+            "path": "execution.technique.reaction_publish_windows",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.XAU.execution_pack"
+          },
+          {
+            "path": "execution.technique.require_sweep_body",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.XAU.execution_pack"
+          },
+          {
+            "path": "execution.trend.stop_max_pips",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.XAU.execution_pack"
+          },
+          {
+            "path": "risk.exposure.opposing_minimum_separation_price",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.XAU.execution_pack"
+          },
+          {
+            "path": "strategies.technique.crt.entry_max_width_price",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.XAU.execution_pack"
+          },
+          {
+            "path": "strategies.technique.fvg.entry_max_width_price",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.XAU.execution_pack"
+          },
+          {
             "path": "execution.entry.maximum_chase_distance_pips",
             "secret": false,
             "source_kind": "config_file",
-            "source_name": "xau_current_v1"
+            "source_name": "xau_fixed_2r_v1"
           },
           {
             "path": "risk.sizing.mode",
             "secret": false,
             "source_kind": "config_file",
-            "source_name": "xau_current_v1"
+            "source_name": "xau_fixed_2r_v1"
           },
           {
             "path": "lifecycle.candidate.execution_maximum_age_seconds",
             "secret": false,
             "source_kind": "config_file",
-            "source_name": "xau_current_v1"
+            "source_name": "xau_fixed_2r_v1"
           }
         ]
       },
@@ -4720,13 +4870,21 @@
         }
       },
       "targeting": {
-        "close_ratios": [],
+        "close_ratios": [
+          "0.25",
+          "0.25",
+          "0.5"
+        ],
         "entry_clips": 2,
-        "mode": "ladder_pips",
-        "reward_risk": null,
-        "target_r_multiples": [],
-        "trail_after_r": null,
-        "trail_to_r": null
+        "mode": "fixed_rr",
+        "reward_risk": "2",
+        "target_r_multiples": [
+          "1",
+          "1.5",
+          "2"
+        ],
+        "trail_after_r": "1.5",
+        "trail_to_r": "1"
       },
       "units": {
         "contract_units_per_lot": "100",
@@ -8051,7 +8209,7 @@
       "execution": {
         "activation": {
           "mode": "enforce",
-          "reaction_trigger_maximum_age_bars": 2
+          "reaction_trigger_maximum_age_bars": 3
         },
         "broker_recovery": {
           "absence_confirmations": 2
@@ -8074,7 +8232,7 @@
           "reaction_lookback_bars": 5,
           "thesis_lock_enabled": true,
           "track_distance_atr": "8",
-          "zone_min_width_abs": "1",
+          "zone_min_width_abs": "3",
           "zone_min_width_atr": "0.15"
         },
         "policy": {
@@ -8099,19 +8257,19 @@
           "hard_entry_drift_pips": "20",
           "max_entry_drift_atr": "1",
           "min_entry_drift_pips": "10",
-          "min_rr": "1",
-          "min_target_pips": "15",
-          "room_stop_floor_pips": 15,
+          "min_rr": "2",
+          "min_target_pips": 50,
+          "room_stop_floor_pips": 25,
           "tp_buffer_pips": "3"
         },
         "reaction": {
           "market_fraction": "0.8",
-          "room_stop_min_rr": "1",
+          "room_stop_min_rr": "2",
           "scale_fraction": "0.2",
           "scale_invalid_policy": "single_market",
           "scale_step_atr": "0.5",
-          "stop_max_pips": 60,
-          "stop_min_pips": 40
+          "stop_max_pips": 100,
+          "stop_min_pips": 25
         },
         "regime": {
           "direction_enabled": false,
@@ -8122,7 +8280,7 @@
         "scaling": {
           "add": {
             "level_buffer_atr": "1",
-            "min_stop_pips": 30,
+            "min_stop_pips": 25,
             "pullback_enabled": false,
             "pullback_max_retrace": "0.7",
             "pullback_min_retrace": "0.2",
@@ -8133,12 +8291,12 @@
         "stops": {
           "be_buffer_ticks": 6,
           "reaction": {
-            "room_floor_pips": 40
+            "room_floor_pips": 25
           },
-          "sl_distance": "6.5",
+          "sl_distance": "10",
           "stop_push_beyond_zone": true,
           "trend": {
-            "minimum_pips": 40
+            "minimum_pips": 25
           },
           "wick_stop_buffer_atr": "0.15"
         },
@@ -8161,7 +8319,7 @@
           "london_window_hours": 3,
           "mad_hard_gate_enabled": false,
           "ny_window_hours": 3,
-          "reaction_publish_windows": "7-11,13-16",
+          "reaction_publish_windows": "0-11,13-16",
           "reaction_require_killzone": false,
           "reaction_require_publish_window": false,
           "require_sweep_body": false,
@@ -8172,7 +8330,7 @@
           "hard_entry_drift_pips": "30",
           "max_entry_drift_atr": "1.5",
           "min_entry_drift_pips": "15",
-          "stop_max_pips": 60
+          "stop_max_pips": 100
         },
         "zone_scaling": {
           "fill_enabled": true,
@@ -8273,7 +8431,7 @@
           "m5_bars": 150
         }
       },
-      "policy_name": "xau_current_v1",
+      "policy_name": "xau_fixed_2r_v1",
       "provenance": {
         "entries": [
           {
@@ -8285,8 +8443,8 @@
           {
             "path": "instruments.XAU.policy",
             "secret": false,
-            "source_kind": "derived_compatibility_rule",
-            "source_name": "default_xau_current_v1_policy"
+            "source_kind": "config_file",
+            "source_name": "instrument_policy"
           },
           {
             "path": "instruments.XAU.manual",
@@ -8301,22 +8459,172 @@
             "source_name": "instrument_registry"
           },
           {
+            "path": "analysis.levels.round_step",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.XAU.execution_pack"
+          },
+          {
+            "path": "analysis.market_map.change_min",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.XAU.execution_pack"
+          },
+          {
+            "path": "analysis.market_map.fallback_radius_price",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.XAU.execution_pack"
+          },
+          {
+            "path": "analysis.market_map.scalp_radius_price",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.XAU.execution_pack"
+          },
+          {
+            "path": "analysis.zones.confluence.merge_gap_price",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.XAU.execution_pack"
+          },
+          {
+            "path": "analysis.zones.merge_max_width",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.XAU.execution_pack"
+          },
+          {
+            "path": "execution.activation.reaction_trigger_maximum_age_bars",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.XAU.execution_pack"
+          },
+          {
+            "path": "execution.entry.max_spread_pips",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.XAU.execution_pack"
+          },
+          {
+            "path": "execution.mapped_zone.zone_min_width_abs",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.XAU.execution_pack"
+          },
+          {
+            "path": "execution.range.min_rr",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.XAU.execution_pack"
+          },
+          {
+            "path": "execution.range.min_target_pips",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.XAU.execution_pack"
+          },
+          {
+            "path": "execution.range.room_stop_floor_pips",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.XAU.execution_pack"
+          },
+          {
+            "path": "execution.reaction.room_stop_min_rr",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.XAU.execution_pack"
+          },
+          {
+            "path": "execution.reaction.stop_max_pips",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.XAU.execution_pack"
+          },
+          {
+            "path": "execution.reaction.stop_min_pips",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.XAU.execution_pack"
+          },
+          {
+            "path": "execution.scaling.add.min_stop_pips",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.XAU.execution_pack"
+          },
+          {
+            "path": "execution.stops.reaction.room_floor_pips",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.XAU.execution_pack"
+          },
+          {
+            "path": "execution.stops.sl_distance",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.XAU.execution_pack"
+          },
+          {
+            "path": "execution.stops.trend.minimum_pips",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.XAU.execution_pack"
+          },
+          {
+            "path": "execution.technique.reaction_publish_windows",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.XAU.execution_pack"
+          },
+          {
+            "path": "execution.technique.require_sweep_body",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.XAU.execution_pack"
+          },
+          {
+            "path": "execution.trend.stop_max_pips",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.XAU.execution_pack"
+          },
+          {
+            "path": "risk.exposure.opposing_minimum_separation_price",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.XAU.execution_pack"
+          },
+          {
+            "path": "strategies.technique.crt.entry_max_width_price",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.XAU.execution_pack"
+          },
+          {
+            "path": "strategies.technique.fvg.entry_max_width_price",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.XAU.execution_pack"
+          },
+          {
             "path": "execution.entry.maximum_chase_distance_pips",
             "secret": false,
             "source_kind": "config_file",
-            "source_name": "xau_current_v1"
+            "source_name": "xau_fixed_2r_v1"
           },
           {
             "path": "risk.sizing.mode",
             "secret": false,
             "source_kind": "config_file",
-            "source_name": "xau_current_v1"
+            "source_name": "xau_fixed_2r_v1"
           },
           {
             "path": "lifecycle.candidate.execution_maximum_age_seconds",
             "secret": false,
             "source_kind": "config_file",
-            "source_name": "xau_current_v1"
+            "source_name": "xau_fixed_2r_v1"
           }
         ]
       },
@@ -8574,13 +8882,21 @@
         }
       },
       "targeting": {
-        "close_ratios": [],
+        "close_ratios": [
+          "0.25",
+          "0.25",
+          "0.5"
+        ],
         "entry_clips": 2,
-        "mode": "ladder_pips",
-        "reward_risk": null,
-        "target_r_multiples": [],
-        "trail_after_r": null,
-        "trail_to_r": null
+        "mode": "fixed_rr",
+        "reward_risk": "2",
+        "target_r_multiples": [
+          "1",
+          "1.5",
+          "2"
+        ],
+        "trail_after_r": "1.5",
+        "trail_to_r": "1"
       },
       "units": {
         "contract_units_per_lot": "100",

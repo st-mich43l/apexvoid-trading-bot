@@ -13,6 +13,11 @@ dated section after deployment.
 ## Unreleased
 
 ### Changed
+- **XAU technique → structure fixed_rr:** Pack `xau_fixed_2r_v1` / policy
+  `xau_fixed_2r_v1` — SL from structure inside a 25–100 pip envelope, TP at
+  1R/1.5R/2R (25/25/50) like FX. M1 scalping unchanged via
+  `technique_fixed_rr_targeting` (scalp stays 1:2/1:1 discovery). See
+  `docs/runtime/multi-symbol-routing.md`.
 - **MAD soft quality only:** Remove live MAD hard gate from ZoneWatch
   activation. `execution.technique.mad_hard_gate_enabled` defaults **false**
   (must stay off in prod). MAD informs entry quality / structure analysis:
