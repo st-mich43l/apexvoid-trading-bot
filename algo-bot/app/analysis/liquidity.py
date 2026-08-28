@@ -13,14 +13,25 @@ def liquidity_pools(
   df: pd.DataFrame,
   equal_tol_atr: float = 0.15,
   atr: pd.Series | None = None,
+  max_cluster_span_multiple: float = 2.0,
 ) -> list[Pool]:
   if not swings:
     return []
   atr = atr if atr is not None else atr_series(df)
   band = atr_scalar(atr) * max(0.0, equal_tol_atr)
   pools = [
-    *_cluster_pools([s for s in swings if s.kind == "high"], "buy", band),
-    *_cluster_pools([s for s in swings if s.kind == "low"], "sell", band),
+    *_cluster_pools(
+      [s for s in swings if s.kind == "high"],
+      "buy",
+      band,
+      max_cluster_span_multiple,
+    ),
+    *_cluster_pools(
+      [s for s in swings if s.kind == "low"],
+      "sell",
+      band,
+      max_cluster_span_multiple,
+    ),
   ]
   highs = [s for s in swings if s.kind == "high"]
   lows = [s for s in swings if s.kind == "low"]
@@ -96,12 +107,20 @@ def liquidity_grabs(
   return grabs
 
 
-def _cluster_pools(swings: list[Swing], side: str, band: float) -> list[Pool]:
+def _cluster_pools(
+  swings: list[Swing],
+  side: str,
+  band: float,
+  max_cluster_span_multiple: float = 2.0,
+) -> list[Pool]:
+  from app.analysis.levels import _can_join_cluster
+
   pools: list[Pool] = []
   ordered = sorted(swings, key=lambda item: item.price)
   clusters: list[list[Swing]] = []
+  max_span = band * max(0.0, max_cluster_span_multiple)
   for swing in ordered:
-    if clusters and abs(_avg(clusters[-1]) - swing.price) <= band:
+    if clusters and _can_join_cluster(clusters[-1], swing, band, max_span):
       clusters[-1].append(swing)
     else:
       clusters.append([swing])

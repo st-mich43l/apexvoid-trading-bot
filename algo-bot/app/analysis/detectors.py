@@ -3,6 +3,7 @@
 from dataclasses import dataclass, field, replace
 import logging
 import math
+from collections import Counter
 from types import SimpleNamespace
 from typing import Callable, Protocol
 
@@ -37,11 +38,13 @@ from app.analysis.structure import (
 from app.analysis.trendlines import Trendline, value_at
 from app.analysis.execution_eligibility import ExecutionEligibility
 from app.analysis.structural_reaction_support import (
-  bias_relationship,
+  CONFIRM_REJECTION_CHOCH,
+  bias_relationship as resolve_bias_relationship,
   box_structural_id,
   equal_level_structural_id,
   evaluate_structural_reaction,
   key_level_structural_id,
+  momentum_impulse_structural_id,
   session_level_structural_id,
   trendline_structural_id,
   zone_structural_id,
@@ -57,6 +60,19 @@ from app.analysis.technique_detectors import (
 )
 
 log = logging.getLogger(__name__)
+
+COUNTER_BIAS_BELOW_MINIMUM_CONFLUENCE = "counter_bias_below_minimum_confluence"
+_discovery_rejections: Counter[str] = Counter()
+
+
+def drain_discovery_rejections() -> dict[str, int]:
+  counts = dict(_discovery_rejections)
+  _discovery_rejections.clear()
+  return counts
+
+
+def _record_discovery_rejection(reason: str) -> None:
+  _discovery_rejections[reason] += 1
 
 _EPS = 1e-9
 _BUY_ZONE_SIDE = "de" + "mand"
@@ -134,6 +150,7 @@ class DetectorSettings:
   daily_rollover_utc_hour: int = 21
   eq_band: float = 0.10
   strict_pd_gate: bool = False
+  strict_pd_archetypes: frozenset[str] = frozenset({"reversal", "range_reversion"})
   sweep_body_frac: float = 0.5
   sweep_react_bars: int = 3
   inducement_band_atr: float = 0.3
@@ -149,9 +166,7 @@ class DetectorSettings:
   breakout_accept_bars: int = 2
   breakout_max_age_bars: int = 6
   allow_counter_trend: bool = True
-  counter_min_zone_score: float = 10.0
-  counter_extreme_pd: float = 0.25
-  counter_level_min_touches: int = 3
+  counter_bias_minimum_confluence: int = 3
   range_scalp_enabled: bool = True
   range_scalp_lookback: int = 48
   range_scalp_cluster_atr: float = 0.25
@@ -171,6 +186,8 @@ class DetectorSettings:
   regime_min_directional_swings: int = 3
   regime_min_displacement_atr: float = 4.0
   structural_reaction_lookback_bars: int = 3
+  snap_back_extension_source: str = "impulse"
+  engulfing_minimum_range_atr: float = 0.5
   key_level_reaction_enabled: bool = True
   key_level_require_explicit_role: bool = False
   key_level_require_htf_alignment: bool = False
@@ -193,6 +210,9 @@ class DetectorSettings:
   crt_h1_lookback_bars: int = 3
   fvg_max_atr: float = 2.0
   fvg_entry_max_width_price: float = 5.0
+  technique_validation_enabled: bool = True
+  causal_structure: bool = False
+  max_cluster_span_multiple: float = 2.0
   # Recovery mission (2026-07-30): these six sources were live around
   # 2026-07-28 and were deliberately dropped from DEFAULT_DETECTORS during
   # the P0 zone/M1 simplification without their own enable flags, leaving
@@ -284,6 +304,9 @@ class DetectorSettings:
       crt_h1_lookback_bars=self.crt_h1_lookback_bars,
       fvg_entry_max_width_price=self.fvg_entry_max_width_price,
       fvg_max_atr=self.fvg_max_atr,
+      technique_validation_enabled=self.technique_validation_enabled,
+      causal_structure=self.causal_structure,
+      max_cluster_span_multiple=self.max_cluster_span_multiple,
     )
 
 
@@ -295,6 +318,18 @@ def _fib_cfg(analysis: object) -> object:
     deep_discount=0.382,
     deep_premium=0.618,
   )
+
+
+def _strict_pd_archetypes_from_config(execution: object) -> frozenset[str]:
+  from app.analysis.entry_location import parse_strict_pd_archetypes
+
+  technique = getattr(execution, "technique", None)
+  raw = getattr(
+    technique,
+    "strict_premium_discount_archetypes",
+    "reversal,range_reversion",
+  )
+  return parse_strict_pd_archetypes(raw)
 
 
 def detector_settings_from(config: object | None = None) -> DetectorSettings:
@@ -383,6 +418,7 @@ def detector_settings_from(config: object | None = None) -> DetectorSettings:
         )
       )
     ),
+    strict_pd_archetypes=_strict_pd_archetypes_from_config(execution),
     sweep_body_frac=analysis.liquidity.sweep.body_frac,
     sweep_react_bars=analysis.liquidity.sweep.react_bars,
     inducement_band_atr=analysis.measurements.inducement_band_atr,
@@ -400,9 +436,9 @@ def detector_settings_from(config: object | None = None) -> DetectorSettings:
     breakout_accept_bars=analysis.breakout.accept_bars,
     breakout_max_age_bars=analysis.breakout.max_age_bars,
     allow_counter_trend=strategies.counter_trend.allow_counter_trend,
-    counter_min_zone_score=strategies.counter_trend.min_zone_score,
-    counter_extreme_pd=strategies.counter_trend.extreme_pd,
-    counter_level_min_touches=strategies.counter_trend.level_min_touches,
+    counter_bias_minimum_confluence=int(
+      actionability.counter_bias.minimum_confluence
+    ),
     range_scalp_enabled=strategies.range_reversion.range_edge.enabled,
     range_scalp_lookback=strategies.range_reversion.range_edge.lookback,
     range_scalp_cluster_atr=strategies.range_reversion.range_edge.cluster_atr,
@@ -455,6 +491,7 @@ def detector_settings_from(config: object | None = None) -> DetectorSettings:
     fvg_entry_max_width_price=float(
       strategies.technique.fvg.entry_max_width_price
     ),
+    technique_validation_enabled=bool(analysis.techniques.validation_enabled),
     box_breakout_enabled=bool(strategies.selection.box_breakout_enabled),
     trend_pullback_enabled=bool(strategies.trend.pullback_enabled),
     break_retest_enabled=bool(strategies.breakout.break_retest_enabled),
@@ -548,8 +585,13 @@ def build_context(
   frames: dict[str, pd.DataFrame],
   settings: DetectorSettings,
   htf_order: list[str],
+  *,
+  causal_structure: bool | None = None,
 ) -> DetectionContext:
-  analysis_ctx = analyze(frames, settings.analysis_settings(), htf_order)
+  analysis_settings = settings.analysis_settings()
+  if causal_structure is not None:
+    analysis_settings = replace(analysis_settings, causal_structure=causal_structure)
+  analysis_ctx = analyze(frames, analysis_settings, htf_order)
   indicator_sets = {
     name: _indicator_set(df, settings.atr_length)
     for name, df in frames.items()
@@ -570,6 +612,24 @@ def build_context(
     settings=settings,
     regime=_exec_regime(analysis_ctx, tf),
     analysis=analysis_ctx,
+  )
+
+
+def replay_build_context(
+  symbol: str,
+  tf: str,
+  frames: dict[str, pd.DataFrame],
+  settings: DetectorSettings,
+  htf_order: list[str],
+) -> DetectionContext:
+  """Point-in-time structure for offline replay and research."""
+  return build_context(
+    symbol,
+    tf,
+    frames,
+    settings,
+    htf_order,
+    causal_structure=True,
   )
 
 
@@ -645,6 +705,18 @@ def _exec(ctx: DetectionContext) -> tuple[pd.DataFrame, IndicatorSet, StructureS
     ctx.indicators[ctx.tf],
     ctx.structures[ctx.tf],
   )
+
+
+def _uses_counter_bias_direction(ctx: DetectionContext) -> bool:
+  if not ctx.settings.allow_counter_trend:
+    return False
+  local_bias = ctx.structures[ctx.tf].bias
+  if local_bias not in {"up", "down"}:
+    return False
+  htf_bias = (ctx.htf_bias or "").casefold()
+  if htf_bias not in {"up", "down"}:
+    return False
+  return local_bias != htf_bias
 
 
 def _direction(ctx: DetectionContext) -> str | None:
@@ -868,6 +940,44 @@ def _zone_distance(zone: Zone, price: float, direction: str) -> float:
   return abs(zone.low - price)
 
 
+def _snap_back_extension_distance(
+  st: StructureSet,
+  price: float,
+  direction: str,
+  zone: Zone,
+  source: str,
+) -> float:
+  if source == "zone":
+    return _zone_distance(zone, price, direction)
+  if direction == "BUY":
+    lows = [swing.price for swing in st.swings if swing.kind == "low"]
+    if not lows:
+      return _zone_distance(zone, price, direction)
+    return max(0.0, price - lows[-1])
+  highs = [swing.price for swing in st.swings if swing.kind == "high"]
+  if not highs:
+    return _zone_distance(zone, price, direction)
+  return max(0.0, highs[-1] - price)
+
+
+def _broken_impulse_swing(st: StructureSet, direction: str) -> Swing | None:
+  if direction == "BUY":
+    highs = [swing for swing in st.swings if swing.kind == "high"]
+    return highs[-1] if highs else None
+  lows = [swing for swing in st.swings if swing.kind == "low"]
+  return lows[-1] if lows else None
+
+
+def _factors_for_confirmation(
+  factors: ConfluenceFactors | None,
+  confirmation,
+) -> ConfluenceFactors:
+  base = factors or ConfluenceFactors()
+  if confirmation.confirmation_type != CONFIRM_REJECTION_CHOCH:
+    return base
+  return replace(base, structural_agreement=True, choch=True)
+
+
 def _zone_key(zone: Zone, price: float, direction: str) -> float:
   if direction == "BUY":
     return zone.high if zone.high <= price + _EPS else zone.low
@@ -891,6 +1001,8 @@ def _pd_gate(
   ctx: "DetectionContext | None" = None,
   setup: str = "",
 ) -> bool:
+  from app.analysis.entry_location import location_archetype
+
   range_ = st.dealing_range
   if range_ is None:
     return True
@@ -902,7 +1014,12 @@ def _pd_gate(
   else:
     loose = range_.zone != "discount"
     strict = range_.zone == "premium"
-  if settings.strict_pd_gate and loose and not strict and ctx is not None:
+  archetype = location_archetype(setup)
+  use_strict = (
+    settings.strict_pd_gate
+    and archetype in settings.strict_pd_archetypes
+  )
+  if use_strict and loose and not strict and ctx is not None:
     # Diagnostic (2026-08-11): execution.technique.strict_premium_discount
     # narrows BUY to discount-only / SELL to premium-only with zero
     # telemetry anywhere - unlike every other gate in this pipeline, there
@@ -912,10 +1029,10 @@ def _pd_gate(
     # mode is removing. Does not change the returned decision.
     log.info(
       "pd gate strict-only rejection symbol=%s tf=%s setup=%s direction=%s "
-      "zone=%s",
-      ctx.symbol, ctx.tf, setup, direction, range_.zone,
+      "zone=%s archetype=%s",
+      ctx.symbol, ctx.tf, setup, direction, range_.zone, archetype,
     )
-  return strict if settings.strict_pd_gate else loose
+  return strict if use_strict else loose
 
 
 def _in_chop(ctx: DetectionContext) -> bool:
@@ -968,6 +1085,7 @@ class ConfluenceFactors:
   session_context: bool = False
   structural_agreement: bool = False
   fib_touch: bool = False
+  choch: bool = False
 
 
 _FACTOR_HTF_ALIGN_WEIGHT = 4.0
@@ -977,6 +1095,7 @@ _FACTOR_WICK_REJECTION_WEIGHT = 3.0
 _FACTOR_DISPLACEMENT_WEIGHT = 3.0
 _FACTOR_SESSION_CONTEXT_WEIGHT = 2.0
 _FACTOR_STRUCTURAL_AGREEMENT_WEIGHT = 3.0
+_FACTOR_CHOCH_WEIGHT = 2.0
 _FACTOR_FIB_TOUCH_WEIGHT = 2.5
 
 
@@ -1000,6 +1119,7 @@ def _confluence_from_factors(
       _FACTOR_STRUCTURAL_AGREEMENT_WEIGHT
       if factors.structural_agreement else 0.0
     )
+    + (_FACTOR_CHOCH_WEIGHT if factors.choch else 0.0)
     + (_fib_touch_weight(settings) if factors.fib_touch else 0.0)
   )
   return 3 if score >= STAR_THREE_SCORE else 2 if score >= STAR_TWO_SCORE else 1
@@ -1171,6 +1291,17 @@ def _finish(
       full_reasons = [*full_reasons, tag]
   if confluence < ctx.settings.confluence_floor:
     return None
+  relationship = (
+    bias_relationship
+    if bias_relationship is not None
+    else resolve_bias_relationship(ctx.htf_bias, direction)
+  )
+  if (
+    relationship == "counter_bias"
+    and confluence < ctx.settings.counter_bias_minimum_confluence
+  ):
+    _record_discovery_rejection(COUNTER_BIAS_BELOW_MINIMUM_CONFLUENCE)
+    return None
   math_pd = None
   if st.dealing_range is not None:
     math_pd = float(st.dealing_range.position)
@@ -1195,7 +1326,7 @@ def _finish(
     touch_bar_ts=touch_bar_ts,
     source_touches=source_touches,
     source_score=source_score,
-    bias_relationship=bias_relationship,
+    bias_relationship=relationship,
     math_fib_ratio=(None if fib_hit is None else float(fib_hit.ratio)),
     math_velocity=(
       None if mom is None else float(getattr(mom, "velocity", 0.0))
@@ -1333,6 +1464,8 @@ def trend_pullback(ctx: DetectionContext) -> DetectionResult | None:
     lookback_bars=lookback,
     grabs=_zone_grabs_for(st, zone, direction, ctx.settings.pip_size),
     has_choch=_recent_choch_flag(st, direction, len(df), ctx.settings, lookback),
+    atr=atr,
+    engulfing_minimum_range_atr=ctx.settings.engulfing_minimum_range_atr,
   )
   if conf is None:
     return None
@@ -1676,7 +1809,6 @@ def snap_back(ctx: DetectionContext) -> DetectionResult | None:
   structural_agreement = False
   if selected is not None:
     zone, proximal = selected
-    distance = _zone_distance(zone, price, direction)
     level = _zone_key(zone, price, direction)
     touches = zone.touches
     structural_agreement = True  # zone drawn from structural swing zones
@@ -1688,12 +1820,17 @@ def snap_back(ctx: DetectionContext) -> DetectionResult | None:
     zone = entry_zone(
       df, nearest.price, direction, pip_size=ctx.settings.pip_size,
     )
-    distance = _zone_distance(zone, price, direction)
     level = nearest.price
     touches = nearest.touches
     structural_source = "key_level"
     structural_kind = nearest.kind
     structural_id_value = key_level_structural_id(ctx.symbol, ctx.tf, nearest)
+  extension_source = str(
+    ctx.settings.snap_back_extension_source or "impulse",
+  ).casefold()
+  distance = _snap_back_extension_distance(
+    st, price, direction, zone, extension_source,
+  )
   if distance < atr * ctx.settings.snap_atr_mult:
     return None
   grab = _zone_grab(st, zone, direction, ctx.settings.pip_size)
@@ -1708,6 +1845,8 @@ def snap_back(ctx: DetectionContext) -> DetectionResult | None:
     lookback_bars=lookback,
     grabs=[grab],
     has_choch=_recent_choch_flag(st, direction, len(df), ctx.settings, lookback),
+    atr=atr,
+    engulfing_minimum_range_atr=ctx.settings.engulfing_minimum_range_atr,
   )
   if conf is None:
     return None
@@ -1716,12 +1855,15 @@ def snap_back(ctx: DetectionContext) -> DetectionResult | None:
     f"sweep {grab.grade}",
   ]
   reasons = _add_proximal_reason(reasons, proximal)
-  factors = ConfluenceFactors(
-    htf_aligned=ctx.htf_bias == _bias_for_direction(direction),
-    touches=touches,
-    wick_rejection=True,
-    displacement_grade=grab.grade == "A",
-    structural_agreement=structural_agreement,
+  factors = _factors_for_confirmation(
+    ConfluenceFactors(
+      htf_aligned=ctx.htf_bias == _bias_for_direction(direction),
+      touches=touches,
+      wick_rejection=True,
+      displacement_grade=grab.grade == "A",
+      structural_agreement=structural_agreement,
+    ),
+    conf,
   )
   return _structural_finish(
     ctx,
@@ -1783,6 +1925,12 @@ def momentum_ride(ctx: DetectionContext) -> DetectionResult | None:
     return None
   price = _current_price(ctx, df)
   atr = _atr(ind)
+  impulse_swing = _broken_impulse_swing(st, direction)
+  structural_id = (
+    momentum_impulse_structural_id(ctx.symbol, ctx.tf, direction, impulse_swing)
+    if impulse_swing is not None
+    else None
+  )
   selected = _best_valid_zone(
     _candidate_zones(st, direction),
     price,
@@ -1804,8 +1952,14 @@ def momentum_ride(ctx: DetectionContext) -> DetectionResult | None:
     return _finish(
       ctx, "Momentum Ride", direction, level_price, zone, price, atr, reasons,
       factors=factors,
+      structural_source="momentum_impulse",
+      structural_id=structural_id,
     )
-  level = _nearest_level(st.levels, price, direction)
+  min_touches = max(1, int(ctx.settings.key_level_min_touches))
+  eligible_levels = [
+    item for item in st.levels if item.touches >= min_touches
+  ]
+  level = _nearest_level(eligible_levels, price, direction)
   if level is None:
     return None
   zone = entry_zone(
@@ -1820,6 +1974,8 @@ def momentum_ride(ctx: DetectionContext) -> DetectionResult | None:
   return _finish(
     ctx, "Momentum Ride", direction, level.price, zone, price, atr, reasons,
     factors=factors,
+    structural_source="momentum_impulse",
+    structural_id=structural_id,
   )
 
 
@@ -1905,9 +2061,14 @@ def range_edge_scalp(ctx: DetectionContext) -> DetectionResult | None:
       direction=direction,
       low=float(zone.low),
       high=float(zone.high),
-      lookback_bars=lookback,
+      touch_lookback_bars=lookback,
+      confirmation_lookback_bars=base_lookback,
       grabs=_zone_grabs_for(st, zone, direction, ctx.settings.pip_size),
-      has_choch=_recent_choch_flag(st, direction, len(df), ctx.settings, lookback),
+      has_choch=_recent_choch_flag(
+        st, direction, len(df), ctx.settings, base_lookback,
+      ),
+      atr=atr,
+      engulfing_minimum_range_atr=ctx.settings.engulfing_minimum_range_atr,
     )
     if confirmation is None:
       continue
@@ -2002,6 +2163,8 @@ def fade_scalp(ctx: DetectionContext) -> DetectionResult | None:
       lookback_bars=lookback,
       grabs=[grab],
       has_choch=_recent_choch_flag(st, direction, len(df), ctx.settings, lookback),
+      atr=atr,
+      engulfing_minimum_range_atr=ctx.settings.engulfing_minimum_range_atr,
     )
     if conf is None:
       continue
@@ -2042,160 +2205,6 @@ def fade_scalp(ctx: DetectionContext) -> DetectionResult | None:
   return None
 
 
-def zone_reaction(ctx: DetectionContext) -> DetectionResult | None:
-  if not ctx.settings.allow_counter_trend or ctx.htf_bias not in {"up", "down"}:
-    return None
-  df, ind, st = _exec(ctx)
-  if len(df) < 5:
-    return None
-  direction = "BUY" if ctx.htf_bias == "down" else "SELL"
-  if not _counter_pd_gate(st, direction, ctx.settings):
-    return None
-  price = _current_price(ctx, df)
-  atr = _atr(ind)
-  candidate = _counter_zone_candidate(ctx, df, st, direction, price, atr)
-  if candidate is None:
-    candidate = _counter_level_candidate(ctx, df, st, direction, price, atr)
-  if candidate is None:
-    return None
-
-  zone, level, mode, reasons, confirmation_target = candidate
-  if _in_chop(ctx) and not _chop_edge_ok(ctx, zone, direction):
-    return None
-  confirmation = _counter_confirmation(
-    df,
-    st,
-    zone,
-    direction,
-    confirmation_target,
-    ctx.settings,
-  )
-  if confirmation is None:
-    return None
-  if _in_chop(ctx) and confirmation != "sweep A":
-    return None
-  range_reason = _chop_range_reason(ctx)
-  reasons = [
-    f"HTF bias {ctx.htf_bias}",
-    *reasons,
-    confirmation,
-    *([range_reason] if range_reason else []),
-    _pd_reason(st),
-    *_counter_target_reasons(st, price, direction, mode),
-  ]
-  return _finish(
-    ctx,
-    "Zone Reaction",
-    direction,
-    level,
-    zone,
-    price,
-    atr,
-    reasons,
-    mode,
-  )
-
-
-def _counter_zone_candidate(
-  ctx: DetectionContext,
-  df: pd.DataFrame,
-  st: StructureSet,
-  direction: str,
-  price: float,
-  atr: float,
-) -> tuple[Zone, float, str, list[str], Level | None] | None:
-  zones = [
-    zone for zone in _candidate_zones(st, direction)
-    if (
-      zone.touches == 0
-      and float(getattr(zone, "score", 0.0)) >= ctx.settings.counter_min_zone_score
-      and _last_touches_zone(df, zone)
-    )
-  ]
-  selected = _best_valid_zone(zones, price, atr, direction, ctx.settings)
-  if selected is None:
-    return None
-  zone, proximal = selected
-  mode = "counter_swing" if _counter_swing_zone(zone) else "counter_reaction"
-  reasons = ["fresh counter zone"]
-  if mode == "counter_swing":
-    reasons.append("fresh HTF OB")
-  reasons = _add_proximal_reason(reasons, proximal)
-  return zone, _zone_key(zone, price, direction), mode, reasons, None
-
-
-def _counter_level_candidate(
-  ctx: DetectionContext,
-  df: pd.DataFrame,
-  st: StructureSet,
-  direction: str,
-  price: float,
-  atr: float,
-) -> tuple[Zone, float, str, list[str], Level | None] | None:
-  band = max(_EPS, ctx.settings.proximal_band_atr * max(0.0, atr))
-  for level in sorted(st.levels, key=lambda item: abs(item.price - price)):
-    if level.touches < ctx.settings.counter_level_min_touches:
-      continue
-    if not _level_touched_last(df, level.price, max(level.band, band)):
-      continue
-    zone = _pseudo_level_zone(level.price, band, direction, f"key {_number(level.price)} x{level.touches}")
-    if not _entry_valid_for_settings(zone, price, atr, direction, ctx.settings):
-      continue
-    return (
-      zone,
-      _zone_key(zone, price, direction),
-      "counter_reaction",
-      [f"key {_number(level.price)} x{level.touches}"],
-      level,
-    )
-  for line in sorted(
-    st.trendlines,
-    key=lambda item: abs(value_at(item, len(df) - 1) - price),
-  ):
-    if line.broken:
-      continue
-    if direction == "BUY" and line.kind != "support":
-      continue
-    if direction == "SELL" and line.kind != "resistance":
-      continue
-    line_price = value_at(line, len(df) - 1)
-    if not _level_touched_last(df, line_price, band):
-      continue
-    reason = f"TL {line.kind} ×{line.touches}"
-    zone = _pseudo_level_zone(
-      line_price,
-      band,
-      direction,
-      reason,
-      source="trendline",
-    )
-    if not _entry_valid_for_settings(zone, price, atr, direction, ctx.settings):
-      continue
-    return (
-      zone,
-      _zone_key(zone, price, direction),
-      "counter_reaction",
-      [reason],
-      None,
-    )
-  for session in sorted(st.session_levels, key=lambda item: abs(item.price - price)):
-    if session.swept or not _counter_session_side(session.name, direction):
-      continue
-    if not _level_touched_last(df, session.price, band):
-      continue
-    zone = _pseudo_level_zone(session.price, band, direction, session.name)
-    if not _entry_valid_for_settings(zone, price, atr, direction, ctx.settings):
-      continue
-    return (
-      zone,
-      _zone_key(zone, price, direction),
-      "counter_reaction",
-      [session.name],
-      None,
-    )
-  return None
-
-
 def _pseudo_level_zone(
   price: float,
   band: float,
@@ -2215,50 +2224,6 @@ def _pseudo_level_zone(
   )
 
 
-def _counter_confirmation(
-  df: pd.DataFrame,
-  st: StructureSet,
-  zone: Zone,
-  direction: str,
-  level: Level | None,
-  settings: DetectorSettings,
-) -> str | None:
-  grab = _zone_grab(st, zone, direction, settings.pip_size)
-  if grab is None and level is not None:
-    grab = _level_grab(st, level, direction)
-  if grab is not None and grab.grade == "A":
-    return "sweep A"
-  if _rejection(df, direction) and _recent_choch(st, direction, len(df), settings):
-    return "rejection + CHoCH"
-  return None
-
-
-def _counter_pd_gate(
-  st: StructureSet,
-  direction: str,
-  settings: DetectorSettings,
-) -> bool:
-  range_ = st.dealing_range
-  if range_ is None:
-    return False
-  extreme = max(0.0, min(0.5, settings.counter_extreme_pd))
-  if direction == "BUY":
-    return range_.position <= extreme + _EPS
-  return range_.position >= 1.0 - extreme - _EPS
-
-
-def _pd_reason(st: StructureSet) -> str:
-  if st.dealing_range is None:
-    return "PD unknown"
-  return f"PD {st.dealing_range.position:.2f}"
-
-
-def _counter_swing_zone(zone: Zone) -> bool:
-  sources = set(zone.sources or ([zone.source] if zone.source else []))
-  has_structure = bool(sources & {"order_block", "breaker"})
-  return has_structure and "HTF zone" in set(zone.score_reasons or [])
-
-
 def _recent_choch(
   st: StructureSet,
   direction: str,
@@ -2272,43 +2237,6 @@ def _recent_choch(
     item.kind == "CHoCH" and item.direction == wanted and item.index >= earliest
     for item in st.breaks
   )
-
-
-def _level_touched_last(df: pd.DataFrame, price: float, band: float) -> bool:
-  if df.empty:
-    return False
-  row = df.iloc[-1]
-  return (
-    float(row["low"]) <= price + max(0.0, band)
-    and float(row["high"]) >= price - max(0.0, band)
-  )
-
-
-def _counter_session_side(name: str, direction: str) -> bool:
-  if direction == "BUY":
-    return _is_low_session_level(name)
-  return _is_high_session_level(name)
-
-
-def _counter_target_reasons(
-  st: StructureSet,
-  price: float,
-  direction: str,
-  mode: str,
-) -> list[str]:
-  if mode == "counter_swing":
-    if st.dealing_range is not None:
-      return [f"TP anchor EQ {_number(st.dealing_range.eq)}"]
-    return ["TP anchor opposing HTF zone"]
-  session = _nearest_session_tp(st.session_levels, price, direction)
-  if session is not None:
-    return [f"TP anchor {session.name}"]
-  pool = _nearest_opposing_pool(st, price, direction)
-  if pool is not None:
-    return [f"TP anchor liquidity {_number(pool.level)}"]
-  if st.dealing_range is not None:
-    return [f"TP anchor EQ {_number(st.dealing_range.eq)}"]
-  return []
 
 
 def _nearest_opposing_pool(
@@ -2456,7 +2384,7 @@ def _structural_finish(
   source_score: float | None = None,
   factors: ConfluenceFactors | None = None,
 ) -> DetectionResult | None:
-  relationship = bias_relationship(ctx.htf_bias, direction)
+  relationship = resolve_bias_relationship(ctx.htf_bias, direction)
   full_reasons = [
     f"HTF bias {ctx.htf_bias}",
     *reasons,
@@ -2473,7 +2401,7 @@ def _structural_finish(
     atr,
     full_reasons,
     mode=relationship,
-    factors=factors,
+    factors=_factors_for_confirmation(factors, confirmation),
     confirmation=confirmation.confirmation_type,
     structural_source=structural_source,
     structural_id=structural_id,
@@ -2634,6 +2562,8 @@ def key_level_reaction(ctx: DetectionContext) -> DetectionResult | None:
         has_choch=_recent_choch_flag(
           st, direction, len(df), ctx.settings, lookback,
         ),
+        atr=atr,
+        engulfing_minimum_range_atr=ctx.settings.engulfing_minimum_range_atr,
       )
       if conf is None:
         continue
@@ -2805,6 +2735,8 @@ def _sd_zone_reaction(
     lookback_bars=lookback,
     grabs=_zone_grabs_for(st, zone, direction, ctx.settings.pip_size),
     has_choch=_recent_choch_flag(st, direction, len(df), ctx.settings, lookback),
+    atr=atr,
+    engulfing_minimum_range_atr=ctx.settings.engulfing_minimum_range_atr,
   )
   if conf is None:
     return None
@@ -2869,6 +2801,8 @@ def session_level_reaction(ctx: DetectionContext) -> DetectionResult | None:
       lookback_bars=lookback,
       grabs=[],
       has_choch=_recent_choch_flag(st, direction, len(df), ctx.settings, lookback),
+      atr=atr,
+      engulfing_minimum_range_atr=ctx.settings.engulfing_minimum_range_atr,
     )
     if conf is None:
       continue
@@ -2943,6 +2877,8 @@ def trendline_reaction(ctx: DetectionContext) -> DetectionResult | None:
       lookback_bars=lookback,
       grabs=[],
       has_choch=_recent_choch_flag(st, direction, len(df), ctx.settings, lookback),
+      atr=atr,
+      engulfing_minimum_range_atr=ctx.settings.engulfing_minimum_range_atr,
     )
     if conf is None:
       continue

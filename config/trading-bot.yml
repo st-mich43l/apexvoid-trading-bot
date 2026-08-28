@@ -54,6 +54,9 @@ analysis:
       patterns: body_close,strong_close,engulfing,wick_rejection,pin_bar,hammer
       strong_close_pct: 0.2
       wick_fraction: 0.5
+  techniques:
+    # PR-D: filter technique instances via validate_technique_instance predicates.
+    validation_enabled: true
   zones:
     confluence:
       merge_gap_price: 1.0
@@ -114,6 +117,10 @@ execution:
     scalp_require_killzone: false
     require_sweep_body: false
     strict_premium_discount: true
+    # Strict PD only for reversal + range_reversion archetypes (not continuation).
+    # Measured asymmetry in trends: ~93% BUY allowed in downtrend vs ~4% SELL;
+    # applying strict PD to momentum/trend_pullback inverts their intended edge.
+    strict_premium_discount_archetypes: reversal,range_reversion
     # MAD is entry quality / structure analysis only — never block activation.
     mad_hard_gate_enabled: false
   activation:

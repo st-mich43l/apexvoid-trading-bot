@@ -60,6 +60,7 @@ def _confluence_bands_for_ctx(ctx: "DetectionContext"):
     max_width=(
       float(ctx.settings.max_merged_zone_atr) * max(atr, pip_size)
     ),
+    confluence_bonus=ctx.settings.confluence_technique_bonus_score,
   )
 
 
@@ -138,6 +139,8 @@ def _publish_technique(
     lookback_bars=lookback,
     grabs=_zone_grabs_for(st, zone, direction),
     has_choch=_recent_choch_flag(st, direction, len(df), ctx.settings, lookback),
+    atr=atr,
+    engulfing_minimum_range_atr=ctx.settings.engulfing_minimum_range_atr,
   )
   if conf is None:
     return None
@@ -183,6 +186,11 @@ def _publish_technique(
   return replace(result, confluence_tags=(instance.technique,))
 
 
+def _zone_distance(zone: Zone, price: float, direction: str) -> float:
+  from app.analysis.detectors import _zone_distance as detectors_zone_distance
+  return detectors_zone_distance(zone, price, direction)
+
+
 def _technique_reaction(
   ctx: "DetectionContext",
   *,
@@ -191,18 +199,39 @@ def _technique_reaction(
 ) -> "DetectionResult | None":
   if not enabled:
     return None
+  df, _ind, _st = _exec(ctx)
+  price = _current_price(ctx, df)
   bands = _confluence_bands_for_ctx(ctx)
+  min_overlap = ctx.settings.zone_merge_overlap
+  best: "DetectionResult | None" = None
+  best_distance = float("inf")
   for instance in _technique_instances(ctx):
     if instance.technique != technique:
       continue
-    if any(confluence_band_covers_instance(band, instance) for band in bands):
+    if any(
+      confluence_band_covers_instance(
+        band, instance, min_overlap=min_overlap,
+      )
+      for band in bands
+    ):
       continue
     result = _publish_technique(
       ctx, instance, setup=TECHNIQUE_SETUP_NAMES[technique],
     )
-    if result is not None:
-      return result
-  return None
+    if result is None:
+      continue
+    distance = _zone_distance(result.entry_zone, price, result.direction)
+    if (
+      best is None
+      or result.confluence > best.confluence
+      or (
+        result.confluence == best.confluence
+        and distance < best_distance
+      )
+    ):
+      best = result
+      best_distance = distance
+  return best
 
 
 def supply_demand_technique_reaction(ctx: "DetectionContext"):
@@ -277,6 +306,8 @@ def confluence_zone_reaction(ctx: "DetectionContext") -> "DetectionResult | None
       lookback_bars=lookback,
       grabs=_zone_grabs_for(st, zone, direction),
       has_choch=_recent_choch_flag(st, direction, len(df), ctx.settings, lookback),
+      atr=atr,
+      engulfing_minimum_range_atr=ctx.settings.engulfing_minimum_range_atr,
     )
     if conf is None:
       continue
@@ -287,7 +318,7 @@ def confluence_zone_reaction(ctx: "DetectionContext") -> "DetectionResult | None
     ]
     factors = ConfluenceFactors(
       htf_aligned=ctx.htf_bias == _bias_for_direction(direction),
-      touches=0,
+      touches=band.touches,
       wick_rejection=True,
       structural_agreement=True,
       displacement_grade=band.score >= STAR_TWO_SCORE,

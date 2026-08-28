@@ -101,6 +101,7 @@ class AnalysisZonesSymbolContractConfig(FrozenConfigModel):
 
 class AnalysisZonesConfluenceConfig(FrozenConfigModel):
     merge_gap_price: float = config_field(1.0, canonical_env='ZONE_MERGE_GAP', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEXT_SCANNER_CYCLE, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.PRICE, risk=RiskClassification.ANALYSIS_BEHAVIOR, description='Controls  (price).', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 1.0),), validation_summary='Pydantic required/type coercion only')
+    technique_bonus_score: float = config_field(2.5, canonical_env='CONFLUENCE_TECHNIQUE_BONUS_SCORE', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEXT_SCANNER_CYCLE, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.SCORE, risk=RiskClassification.ANALYSIS_BEHAVIOR, description='Per extra overlapping technique added to Confluence Zone band score.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 2.5),), validation_summary='Pydantic required/type coercion only')
 
 class AnalysisZonesConfig(FrozenConfigModel):
     alert_ttl: int = config_field(14400, canonical_env='ZONE_ALERT_TTL', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEXT_SCANNER_CYCLE, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.SECONDS, risk=RiskClassification.ANALYSIS_BEHAVIOR, description='Controls  (seconds).', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 14400),), validation_summary='Pydantic required/type coercion only')
@@ -160,6 +161,9 @@ class AnalysisFibonacciConfig(FrozenConfigModel):
     deep_discount: float = config_field(0.382, canonical_env='FIBONACCI_DEEP_DISCOUNT', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEXT_SCANNER_CYCLE, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.FRACTION, risk=RiskClassification.ANALYSIS_BEHAVIOR, description='PD position at or below this is deep_discount.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 0.382),), validation_summary='Pydantic required/type coercion only')
     deep_premium: float = config_field(0.618, canonical_env='FIBONACCI_DEEP_PREMIUM', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEXT_SCANNER_CYCLE, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.FRACTION, risk=RiskClassification.ANALYSIS_BEHAVIOR, description='PD position at or above this is deep_premium.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 0.618),), validation_summary='Pydantic required/type coercion only')
 
+class AnalysisTechniquesConfig(FrozenConfigModel):
+    validation_enabled: bool = config_field(True, canonical_env='TECHNIQUE_VALIDATION_ENABLED', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEXT_SCANNER_CYCLE, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.BOOLEAN, risk=RiskClassification.ANALYSIS_BEHAVIOR, description='Run validate_technique_instance when collecting technique instances.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, True),), validation_summary='Pydantic required/type coercion only')
+
 class AnalysisRangesConfig(FrozenConfigModel):
     lookback: int = config_field(50, canonical_env='RANGE_LOOKBACK', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEXT_SCANNER_CYCLE, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.BARS, risk=RiskClassification.ANALYSIS_BEHAVIOR, description='Controls  (bars).', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 50),), validation_summary='Pydantic required/type coercion only')
 
@@ -196,6 +200,7 @@ class AnalysisConfig(FrozenConfigModel):
     reactions: AnalysisReactionsConfig = Field(default_factory=AnalysisReactionsConfig)
     regime: AnalysisRegimeConfig = Field(default_factory=AnalysisRegimeConfig)
     swings: AnalysisSwingsConfig = Field(default_factory=AnalysisSwingsConfig)
+    techniques: AnalysisTechniquesConfig = Field(default_factory=AnalysisTechniquesConfig)
     trendlines: AnalysisTrendlinesConfig = Field(default_factory=AnalysisTrendlinesConfig)
     triggers: AnalysisTriggersConfig = Field(default_factory=AnalysisTriggersConfig)
     zones: AnalysisZonesConfig = Field(default_factory=AnalysisZonesConfig)

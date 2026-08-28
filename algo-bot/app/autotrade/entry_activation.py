@@ -41,6 +41,11 @@ MODE_SHADOW = "shadow"
 MODE_ENFORCE = "enforce"
 
 _SECONDS_PER_M1_BAR = 60
+_SECONDS_PER_M5_BAR = 300
+
+M5_FALLBACK_OFF = "off"
+M5_FALLBACK_QUOTE_INSIDE = "quote_inside"
+M5_FALLBACK_QUOTE_INSIDE_FRESH = "quote_inside_fresh"
 
 
 @dataclass(frozen=True)
@@ -55,32 +60,9 @@ class EntryActivationDecision:
 
 
 def activation_archetype(strategy: str) -> str:
-  name = str(strategy or "")
-  family = strategy_family(name)
-  if family == FAMILY_BREAKOUT_RETEST or name in {"Break & Retest", "Box Breakout"}:
-    return ACTIVATION_BREAKOUT_RETEST
-  if family == FAMILY_TREND_PULLBACK or name == "Trend Pullback":
-    return ACTIVATION_TREND_PULLBACK
-  if family == FAMILY_MOMENTUM_CONTINUATION or name in {
-    "Breakout Continuation",
-    "Momentum Ride",
-  }:
-    return ACTIVATION_MOMENTUM
-  if (
-    family in {
-      FAMILY_RANGE_REVERSION,
-      FAMILY_LIQUIDITY_REVERSAL,
-      FAMILY_MAPPED_ZONE_REACTION,
-    }
-    or is_range_strategy(name)
-    or is_liquidity_strategy(name)
-    or is_reaction_strategy(name)
-    or is_zone_strategy(name)
-    or "Reaction" in name
-    or "Fade" in name
-  ):
-    return ACTIVATION_REACTION
-  return ACTIVATION_UNKNOWN
+  from app.autotrade.strategy_registry import activation_archetype as registry_activation
+
+  return registry_activation(strategy)
 
 
 def _mode(cfg: Any) -> str:
@@ -97,6 +79,42 @@ def _max_age_bars(cfg: Any) -> int:
     return max(1, int(getattr(section, "reaction_trigger_maximum_age_bars", 2) or 2))
   except (TypeError, ValueError):
     return 2
+
+
+def _m5_fallback_mode(cfg: Any) -> str:
+  section = getattr(getattr(cfg, "execution", None), "activation", None)
+  if section is None:
+    return M5_FALLBACK_OFF
+  mode = str(
+    getattr(section, "m5_authoritative_fallback", M5_FALLBACK_OFF)
+    or M5_FALLBACK_OFF
+  ).strip().lower()
+  allowed = {
+    M5_FALLBACK_OFF,
+    M5_FALLBACK_QUOTE_INSIDE,
+    M5_FALLBACK_QUOTE_INSIDE_FRESH,
+  }
+  return mode if mode in allowed else M5_FALLBACK_OFF
+
+
+def _m5_max_age_bars(cfg: Any) -> int:
+  section = getattr(getattr(cfg, "execution", None), "activation", None)
+  try:
+    return max(
+      1,
+      int(getattr(section, "m5_confirmation_maximum_age_bars", 6) or 6),
+    )
+  except (TypeError, ValueError):
+    return 6
+
+
+def _parse_confirmation_ts(value: Any) -> int | None:
+  if value is None:
+    return None
+  try:
+    return int(value)
+  except (TypeError, ValueError):
+    return None
 
 
 def _trigger_ts(trigger: M1TriggerResult | None) -> int | None:
@@ -218,6 +236,7 @@ def evaluate_entry_activation(
   chase_pips: float | None = None,
   maximum_chase_pips: float | None = None,
   m5_authoritative: bool = False,
+  m5_confirmation_bar_ts: str | int | None = None,
   impulse_bars: list[Mapping[str, Any]] | None = None,
   zone_low: float | None = None,
   zone_high: float | None = None,
@@ -230,9 +249,10 @@ def evaluate_entry_activation(
   unchanged until enforce is enabled.
 
   Under technique.enforce, reaction families require a fresh post-tap M1
-  trigger. Instruments may keep sweep/body confirmation as a hard requirement
-  or soften it to a quality preference; M5-authoritative-in-zone does not
-  bypass a missing trigger.
+  trigger unless ``execution.activation.m5_authoritative_fallback`` allows
+  M5 structural confirmation in-zone (quote_inside or quote_inside_fresh).
+  Instruments may keep sweep/body confirmation as a hard requirement
+  or soften it to a quality preference.
   """
   if cfg is None:
     from app.core.config import runtime_config
@@ -276,6 +296,8 @@ def evaluate_entry_activation(
     "maximum_chase_pips": chase_cap,
     "chase_entry": chase_ok,
     "m5_authoritative": bool(m5_authoritative),
+    "m5_confirmation_bar_ts": m5_confirmation_bar_ts,
+    "m5_authoritative_fallback": _m5_fallback_mode(cfg),
     "impulse_against": False,
   }
 
@@ -381,8 +403,7 @@ def evaluate_entry_activation(
     return _result(reason="entry_activation_allowed", would_block=False)
 
   # Reaction / reversal / range / mapped / liquidity — prefer fresh M1;
-  # fall back to in-zone M5-authoritative confirmation when M1 is absent
-  # and technique.enforce is off.
+  # optionally fall back to in-zone M5-authoritative confirmation when M1 fails.
   from app.autotrade.killzone import (
     confirmation_is_sweep_body,
     technique_enforce,
@@ -390,6 +411,75 @@ def evaluate_entry_activation(
   )
 
   if requires_trigger:
+    side = str(direction or "").upper()
+    name = str(strategy or "")
+
+    if (
+      technique_enforce(cfg)
+      and side == "BUY"
+      and (is_zone_strategy(name) or "Demand" in name)
+      and not is_reaction_strategy(name)
+    ):
+      pattern = "" if trigger is None else str(trigger.pattern or "")
+      if pattern not in {"sweep_reclaim", "strong_reclaim"} and not demand_swept_and_reclaimed(
+        bars=impulse_bars,
+        zone_low=zone_low,
+        zone_high=zone_high,
+      ):
+        return _result(
+          reason="demand_requires_sweep_reclaim",
+          would_block=True,
+          hard=True,
+        )
+
+    if (
+      technique_enforce(cfg)
+      and side == "SELL"
+      and (
+        is_reaction_strategy(name)
+        or is_technique_or_confluence(name)
+      )
+      and not sell_quote_is_proximal(
+        price=execution_price,
+        zone_low=zone_low,
+        zone_high=zone_high,
+      )
+    ):
+      return _result(
+        reason="sell_not_proximal",
+        would_block=True,
+        hard=True,
+      )
+
+    if (
+      technique_enforce(cfg)
+      and side == "BUY"
+      and is_reaction_strategy(name)
+      and detect_expanding_up(impulse_bars)
+    ):
+      measured["impulse_against"] = True
+      return _result(
+        reason="key_buy_into_impulse",
+        would_block=True,
+        hard=True,
+      )
+
+    if (
+      technique_enforce(cfg)
+      and detect_impulse_against(
+        direction=direction,
+        bars=impulse_bars,
+        zone_low=zone_low,
+        zone_high=zone_high,
+      )
+    ):
+      measured["impulse_against"] = True
+      return _result(
+        reason="impulse_against_block",
+        would_block=True,
+        hard=True,
+      )
+
     m1_fail_reason: str | None = None
     if trigger is None:
       m1_fail_reason = "reaction_trigger_missing"
@@ -423,87 +513,33 @@ def evaluate_entry_activation(
               "preference_reason_code": "confirmation_without_sweep_body",
             })
 
-    side = str(direction or "").upper()
-    name = str(strategy or "")
-    if (
-      m1_fail_reason is None
-      and technique_enforce(cfg)
-      and side == "BUY"
-      and (is_zone_strategy(name) or "Demand" in name)
-      and not is_reaction_strategy(name)
-    ):
-      pattern = "" if trigger is None else str(trigger.pattern or "")
-      if pattern not in {"sweep_reclaim", "strong_reclaim"} and not demand_swept_and_reclaimed(
-        bars=impulse_bars,
-        zone_low=zone_low,
-        zone_high=zone_high,
-      ):
-        m1_fail_reason = "demand_requires_sweep_reclaim"
-
-    if (
-      m1_fail_reason is None
-      and technique_enforce(cfg)
-      and side == "SELL"
-      and (
-        is_reaction_strategy(name)
-        or is_technique_or_confluence(name)
-      )
-      and not sell_quote_is_proximal(
-        price=execution_price,
-        zone_low=zone_low,
-        zone_high=zone_high,
-      )
-    ):
-      return _result(
-        reason="sell_not_proximal",
-        would_block=True,
-        hard=True,
-      )
-
-    if (
-      m1_fail_reason is None
-      and technique_enforce(cfg)
-      and side == "BUY"
-      and is_reaction_strategy(name)
-      and detect_expanding_up(impulse_bars)
-    ):
-      measured["impulse_against"] = True
-      return _result(
-        reason="key_buy_into_impulse",
-        would_block=True,
-        hard=True,
-      )
-
-    if (
-      m1_fail_reason is None
-      and technique_enforce(cfg)
-      and detect_impulse_against(
-        direction=direction,
-        bars=impulse_bars,
-        zone_low=zone_low,
-        zone_high=zone_high,
-      )
-    ):
-      measured["impulse_against"] = True
-      return _result(
-        reason="impulse_against_block",
-        would_block=True,
-        hard=True,
-      )
-
     if m1_fail_reason is None:
       return _result(reason="entry_activation_allowed", would_block=False)
 
+    fallback = _m5_fallback_mode(cfg)
+    m5_ts = _parse_confirmation_ts(m5_confirmation_bar_ts)
+    measured["m5_fallback_mode"] = fallback
     if (
-      bool(m5_authoritative)
+      fallback != M5_FALLBACK_OFF
+      and bool(m5_authoritative)
       and bool(quote_inside)
-      and not technique_enforce(cfg)
     ):
-      measured["m1_fallback_reason"] = m1_fail_reason
-      return _result(
-        reason="reaction_m5_authoritative_in_zone",
-        would_block=False,
-      )
+      fresh_ok = True
+      if fallback == M5_FALLBACK_QUOTE_INSIDE_FRESH:
+        if m5_ts is None:
+          fresh_ok = False
+        else:
+          max_m5_age = _m5_max_age_bars(cfg)
+          m5_age_seconds = int(now) - m5_ts
+          fresh_ok = m5_age_seconds <= max_m5_age * _SECONDS_PER_M5_BAR
+          measured["m5_confirmation_age_seconds"] = m5_age_seconds
+          measured["m5_confirmation_max_age_bars"] = max_m5_age
+      if fresh_ok:
+        measured["m1_fallback_reason"] = m1_fail_reason
+        return _result(
+          reason="reaction_m5_authoritative_in_zone",
+          would_block=False,
+        )
 
     return _result(reason=m1_fail_reason, would_block=True, hard=True)
 
@@ -555,6 +591,11 @@ async def emit_activation_gate_metrics(
     "strategy": str(strategy or ""),
     "direction": str(direction or "").upper(),
   }
+  measured = getattr(decision, "measured", None) or {}
+  if reason == "reaction_m5_authoritative_in_zone":
+    m1_fail = measured.get("m1_fallback_reason")
+    if m1_fail:
+      dimensions["m1_fail_reason"] = str(m1_fail)
   try:
     if allowed:
       await increment_metric(

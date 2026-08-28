@@ -637,6 +637,7 @@ def _location_and_activation_for_record(
     chase_pips=chase_pips,
     maximum_chase_pips=maximum_chase_pips,
     m5_authoritative=bool(confirmation.m5_authoritative),
+    m5_confirmation_bar_ts=getattr(match, "m5_confirmation_bar_ts", None),
     impulse_bars=impulse_bars,
     zone_low=record.low,
     zone_high=record.high,

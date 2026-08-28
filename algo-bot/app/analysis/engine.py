@@ -197,6 +197,9 @@ class AnalysisSettings:
   crt_h1_lookback_bars: int = 3
   fvg_entry_max_width_price: float = 5.0
   fvg_max_atr: float = 2.0
+  technique_validation_enabled: bool = True
+  causal_structure: bool = False
+  max_cluster_span_multiple: float = 2.0
 
 
 @dataclass(frozen=True)
@@ -250,6 +253,7 @@ class TimeframeAnalysis:
   zone_reconcile_trimmed: int = 0
   zone_reconcile_candidate_difference_count: int = 0
   technique_instances: list[TechniqueInstance] = field(default_factory=list)
+  technique_validation_rejects: dict[str, int] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -318,17 +322,25 @@ def _attach_technique_instances(
   updated: dict[str, TimeframeAnalysis] = {}
   for tf, analysis in per_tf.items():
     exec_atr = atr_scalar(analysis.atr)
-    instances = collect_technique_instances(
+    price = float(analysis.df.iloc[-1]["close"]) if not analysis.df.empty else 0.0
+    instances, rejects = collect_technique_instances(
       sd_zones=analysis.supply_demand_zones,
       ob_zones=analysis.order_blocks,
       fvg_zones=analysis.fvg_zones,
       df=analysis.df,
+      price=price,
+      atr=exec_atr,
       h1_df=h1_df if tf.upper() != "H1" else None,
       h1_atr=h1_atr,
       exec_atr=exec_atr,
       settings=geom,
+      validation_enabled=settings.technique_validation_enabled,
     )
-    updated[tf] = replace(analysis, technique_instances=instances)
+    updated[tf] = replace(
+      analysis,
+      technique_instances=instances,
+      technique_validation_rejects=rejects,
+    )
   return updated
 
 
@@ -344,9 +356,15 @@ def _analyze_tf(
     settings.zigzag_pct,
     settings.zigzag_atr_mult,
     atr,
+    as_of=len(df) - 1 if settings.causal_structure else None,
   )
   structure = market_structure(swings)
-  breaks = structure_breaks(swings, df)
+  breaks = structure_breaks(
+    swings,
+    df,
+    causal=settings.causal_structure,
+    fractal_n=settings.swing_fractal_n,
+  )
   nested_cfg = _nested_cfg_from_analysis_settings(settings)
   diagonal_lines = find_trendlines(swings, df, atr, nested_cfg)
   levels = key_levels(
@@ -355,6 +373,7 @@ def _analyze_tf(
     settings.level_cluster_atr,
     settings.round_step,
     settings.key_level_min_touches,
+    settings.max_cluster_span_multiple,
   )
   legs = displacement(
     df,
@@ -376,7 +395,13 @@ def _analyze_tf(
   ob_zones = breaker_blocks(ob_zones, df)
   flip = flip_zones(levels, breaks)
   fvg_zones = fvg(df)
-  pools = liquidity_pools(swings, df, settings.equal_tol_atr, atr)
+  pools = liquidity_pools(
+    swings,
+    df,
+    settings.equal_tol_atr,
+    atr,
+    settings.max_cluster_span_multiple,
+  )
   sessions = [
     *session_levels(df, nested_cfg),
     *(weekly_levels or []),

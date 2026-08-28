@@ -62,6 +62,7 @@ class ReactionConfirmation:
   confirmation_bar_ts: str
   touch_index: int
   confirmation_index: int
+  has_choch: bool = False
 
 
 def bias_relationship(htf_bias: str, direction: str) -> str:
@@ -305,6 +306,9 @@ def engulfing_on_bar(
   row: pd.Series,
   prior_row: pd.Series,
   direction: str,
+  *,
+  atr: float = 0.0,
+  minimum_range_atr: float = 0.5,
 ) -> bool:
   """Bullish/bearish engulfing: this bar's body fully engulfs the prior
   bar's body, closing in the reaction direction.
@@ -321,17 +325,51 @@ def engulfing_on_bar(
   """
   open_ = float(row["open"])
   close = float(row["close"])
+  high = float(row["high"])
+  low = float(row["low"])
   prior_open = float(prior_row["open"])
   prior_close = float(prior_row["close"])
+  prior_high = float(prior_row["high"])
+  prior_low_px = float(prior_row["low"])
   body_low = min(open_, close)
   body_high = max(open_, close)
-  prior_low = min(prior_open, prior_close)
-  prior_high = max(prior_open, prior_close)
-  if body_low > prior_low or body_high < prior_high:
+  prior_body_low = min(prior_open, prior_close)
+  prior_body_high = max(prior_open, prior_close)
+  if body_low > prior_body_low or body_high < prior_body_high:
+    return False
+  prior_range = max(prior_high - prior_low_px, _EPS)
+  prior_body_frac = abs(prior_close - prior_open) / prior_range
+  prior_bullish = prior_close > prior_open + _EPS
+  prior_bearish = prior_close < prior_open - _EPS
+  prior_opposite = (
+    prior_body_frac < 0.1
+    or (direction == "BUY" and prior_bearish)
+    or (direction == "SELL" and prior_bullish)
+  )
+  if not prior_opposite:
+    return False
+  candle_range = high - low
+  if atr > 0 and candle_range < max(0.0, minimum_range_atr) * atr:
     return False
   if direction == "BUY":
     return close > open_
   return close < open_
+
+
+def momentum_impulse_structural_id(
+  symbol: str,
+  timeframe: str,
+  direction: str,
+  swing: Any,
+) -> str:
+  return structural_hash(
+    symbol.upper(),
+    timeframe.upper(),
+    "momentum_impulse",
+    direction.upper(),
+    _price_id(symbol, getattr(swing, "price", 0.0)),
+    int(getattr(swing, "index", -1)),
+  )
 
 
 def evaluate_structural_reaction(
@@ -340,24 +378,39 @@ def evaluate_structural_reaction(
   direction: str,
   low: float,
   high: float,
-  lookback_bars: int,
+  lookback_bars: int = 3,
+  touch_lookback_bars: int | None = None,
+  confirmation_lookback_bars: int | None = None,
   grabs: list[Grab] | None = None,
   has_choch: bool = False,
+  atr: float = 0.0,
+  engulfing_minimum_range_atr: float = 0.5,
 ) -> ReactionConfirmation | None:
   """Find touch + confirmation within a closed-bar lookback window.
 
   Touch and confirmation may be on different bars; confirmation must be on or
-  after the touch bar; both must fall inside the lookback from the latest bar.
+  after the touch bar. Touch discovery uses ``touch_lookback_bars``; the
+  confirmation search uses ``confirmation_lookback_bars`` (defaults to the
+  touch window when omitted). Legacy callers may pass only ``lookback_bars``,
+  which applies to both windows.
   """
   if df.empty:
     return None
-  lookback = max(1, int(lookback_bars))
+  touch_lb = max(
+    1,
+    int(touch_lookback_bars if touch_lookback_bars is not None else lookback_bars),
+  )
+  if confirmation_lookback_bars is not None:
+    confirm_lb = max(1, int(confirmation_lookback_bars))
+  else:
+    confirm_lb = touch_lb
   last = len(df) - 1
-  earliest = max(0, last - lookback + 1)
+  touch_earliest = max(0, last - touch_lb + 1)
+  confirm_earliest = max(0, last - confirm_lb + 1)
   side = direction.upper()
 
   touch_indexes: list[int] = []
-  for index in range(earliest, last + 1):
+  for index in range(touch_earliest, last + 1):
     if band_touched(df.iloc[index], low, high):
       touch_indexes.append(index)
   if not touch_indexes:
@@ -366,12 +419,12 @@ def evaluate_structural_reaction(
   grab_by_index = {
     int(grab.index): grab
     for grab in (grabs or [])
-    if earliest <= int(grab.index) <= last
+    if confirm_earliest <= int(grab.index) <= last
   }
 
   # Prefer the latest valid confirmation so stale touches without fresh
   # confirmation do not execute.
-  for confirm_index in range(last, earliest - 1, -1):
+  for confirm_index in range(last, confirm_earliest - 1, -1):
     row = df.iloc[confirm_index]
     touches_here = [idx for idx in touch_indexes if idx <= confirm_index]
     if not touches_here:
@@ -388,9 +441,12 @@ def evaluate_structural_reaction(
       confirmation = CONFIRM_STRONG_RECLAIM
     elif wick_rejection_on_bar(row, side):
       confirmation = CONFIRM_WICK_REJECTION
-    elif (
-      confirm_index > 0
-      and engulfing_on_bar(row, df.iloc[confirm_index - 1], side)
+    elif confirm_index > 0 and engulfing_on_bar(
+      row,
+      df.iloc[confirm_index - 1],
+      side,
+      atr=atr,
+      minimum_range_atr=engulfing_minimum_range_atr,
     ):
       confirmation = CONFIRM_ENGULFING
 
@@ -402,5 +458,6 @@ def evaluate_structural_reaction(
       confirmation_bar_ts=bar_ts(df, confirm_index),
       touch_index=touch_index,
       confirmation_index=confirm_index,
+      has_choch=confirmation == CONFIRM_REJECTION_CHOCH,
     )
   return None

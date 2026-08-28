@@ -578,8 +578,8 @@ def _build_one_strategy_match(
       None if result.structural_high is None else float(result.structural_high)
     ),
     touch_bar_ts=result.touch_bar_ts,
-    confirmation_bar_ts=result.confirmation_bar_ts,
-    reaction_type=result.confirmation_type or result.confirmation,
+    m5_confirmation_bar_ts=result.confirmation_bar_ts,
+    m5_reaction_type=result.confirmation_type or result.confirmation,
     structural_kind=result.structural_kind,
     structural_timeframe=result.structural_timeframe,
     htf_bias=str(getattr(ctx, "htf_bias", "") or ""),
@@ -2791,6 +2791,7 @@ async def _load_market_context_for_symbol(
     frames,
     settings,
     htf_order,
+    causal_structure=False,
   )
   ctx = _attach_price_context(ctx, spot, trigger, frames[exec_tf])
   # Shared MAD phase for technique detectors. Soft use: accumulation →
@@ -3002,6 +3003,14 @@ async def _handle_event(
         )
       if exec_analysis.zone_reconcile_aborted:
         await client.incr(f"auto_trade:zone_reconcile_aborted:{symbol.upper()}")
+      metric_key = f"auto_trade:metrics:{symbol.upper()}"
+      for predicate, count in exec_analysis.technique_validation_rejects.items():
+        if count > 0:
+          await client.hincrby(
+            metric_key,
+            f"technique_instance_rejected:{predicate}",
+            count,
+          )
       if exec_analysis.regime is not None:
         regime = exec_analysis.regime
         await client.hincrby(
@@ -3034,6 +3043,11 @@ async def _handle_event(
     return found
 
   detected = await asyncio.to_thread(_run_detectors)
+  from app.analysis.detectors import drain_discovery_rejections
+
+  for reason, count in drain_discovery_rejections().items():
+    for _ in range(count):
+      await increment_metric(client, reason, symbol=symbol)
   for result in detected:
     metric_name = {
       "Key Level Reaction": "key_level_reaction_detected",

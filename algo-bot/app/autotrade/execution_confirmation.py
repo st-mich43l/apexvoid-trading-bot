@@ -297,6 +297,21 @@ def parse_bar_timestamp(value: Any) -> int | None:
     return None
 
 
+def _m5_reaction_type(match: Any) -> str:
+  return str(
+    getattr(match, "m5_reaction_type", None)
+    or getattr(match, "reaction_type", None)
+    or ""
+  ).casefold()
+
+
+def _m5_confirmation_bar_ts(match: Any) -> Any:
+  return (
+    getattr(match, "m5_confirmation_bar_ts", None)
+    or getattr(match, "confirmation_bar_ts", None)
+  )
+
+
 def confirmation_policy_for(match: Any) -> ConfirmationPolicy:
   strategy = str(getattr(match, "strategy", "") or "")
   family = str(getattr(match, "family", "") or "").casefold()
@@ -307,7 +322,7 @@ def confirmation_policy_for(match: Any) -> ConfirmationPolicy:
     # non_reaction_m1_required (allow_same_cycle_publish=False) and the
     # TradePlan never formed - setups stayed CONFIRMED /
     # zone_watching_retest until expiry.
-    reaction_type = str(getattr(match, "reaction_type", "") or "").casefold()
+    reaction_type = _m5_reaction_type(match)
     entry_low = _finite_float(getattr(match, "entry_low", None))
     entry_high = _finite_float(getattr(match, "entry_high", None))
     metadata_valid = bool(
@@ -316,9 +331,7 @@ def confirmation_policy_for(match: Any) -> ConfirmationPolicy:
         or reaction_type in _AUTHORITATIVE_REACTIONS
       )
       and parse_bar_timestamp(getattr(match, "touch_bar_ts", None)) is not None
-      and parse_bar_timestamp(
-        getattr(match, "confirmation_bar_ts", None),
-      ) is not None
+      and parse_bar_timestamp(_m5_confirmation_bar_ts(match)) is not None
       and str(getattr(match, "structural_zone_id", "") or "").strip()
       and entry_low is not None
       and entry_high is not None
@@ -370,15 +383,13 @@ def confirmation_policy_for(match: Any) -> ConfirmationPolicy:
       reason_code="non_reaction_m1_required",
     )
 
-  reaction_type = str(getattr(match, "reaction_type", "") or "").casefold()
+  reaction_type = _m5_reaction_type(match)
   entry_low = _finite_float(getattr(match, "entry_low", None))
   entry_high = _finite_float(getattr(match, "entry_high", None))
   metadata_valid = bool(
     reaction_type in _AUTHORITATIVE_REACTIONS
     and parse_bar_timestamp(getattr(match, "touch_bar_ts", None)) is not None
-    and parse_bar_timestamp(
-      getattr(match, "confirmation_bar_ts", None),
-    ) is not None
+    and parse_bar_timestamp(_m5_confirmation_bar_ts(match)) is not None
     and str(getattr(match, "structural_zone_id", "") or "").strip()
     and entry_low is not None
     and entry_high is not None

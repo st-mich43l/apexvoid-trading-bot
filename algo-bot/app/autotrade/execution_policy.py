@@ -551,17 +551,9 @@ _DEFAULT_POLICIES: dict[str, ExecutionPolicy] = {
 
 
 def strategy_family(strategy: str) -> str:
-  # An unknown detector label is a contract error, not a trend pullback.
-  # Falling back here silently grants an unreviewed setup the pullback
-  # policy, including its drift and risk allowances.
-  key = str(strategy or "")
-  mapped = _STRATEGY_FAMILY.get(key)
-  if mapped is not None:
-    return mapped
-  # Forward-compatible HFS labels (publish falls back to "HFS {archetype}").
-  if key.startswith("HFS "):
-    return FAMILY_RANGE_REVERSION
-  return FAMILY_UNKNOWN
+  from app.autotrade.strategy_registry import strategy_family as registry_family
+
+  return registry_family(strategy)
 
 
 def policy_for(strategy: str, cfg: Any | None = None) -> ExecutionPolicy:

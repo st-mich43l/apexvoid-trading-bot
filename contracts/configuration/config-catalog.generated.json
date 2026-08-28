@@ -1,20 +1,20 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "d9e06207415d007ccd8340863196737e86e4d0bd6ae24f9d5c064fc6cc7b0b0d",
-  "configuration_document_fingerprint_sha256": "0a010538a7a0c0ea3f0a5270822ed2f7ad8abb9974352c0ab0e2ece71b5e2a0e",
+  "configuration_contract_fingerprint_sha256": "3a56ddf72bc10703e2ad5f619a2d4ad31038c685c462a0fce5aeaf27f0b89dc6",
+  "configuration_document_fingerprint_sha256": "8f3ab6e030692cab757d6e9dfb9b8d9494d7a10035573e68fb2d53bf8e04d58a",
   "counts": {
     "algorithm_constants": 57,
-    "configurable": 475,
+    "configurable": 479,
     "known_conflicts": 30,
     "owners": {
       "ctrader": 49,
-      "python": 397,
+      "python": 401,
       "shared": 96
     },
     "protocol_constants": 10,
     "secrets": 9,
     "shared": 96,
-    "total_items": 542
+    "total_items": 546
   },
   "items": [
     {
@@ -329,6 +329,86 @@
       "type": "str",
       "unit": "enum",
       "validation_summary": "Pydantic type coercion + field validator"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "ENTRY_LOCATION_MOMENTUM_BUY_MIN_POSITION",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 0,
+        "le": 1
+      },
+      "default": 0.15,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 0.15
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Block momentum BUY entries at or below this range position (fade of continuation).",
+      "display_id": "config:actionability.entry_location.momentum.momentum_buy_minimum_position",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "actionability.entry_location.momentum.momentum_buy_minimum_position",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "execution_safety",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "float",
+      "unit": "fraction",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "ENTRY_LOCATION_MOMENTUM_SELL_MAX_POSITION",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 0,
+        "le": 1
+      },
+      "default": 0.85,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 0.85
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Block momentum SELL entries at or above this range position (fade of continuation).",
+      "display_id": "config:actionability.entry_location.momentum.momentum_sell_maximum_position",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "actionability.entry_location.momentum.momentum_sell_maximum_position",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "execution_safety",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "float",
+      "unit": "fraction",
+      "validation_summary": "Pydantic required/type coercion only"
     },
     {
       "algorithm_constant": false,
@@ -3863,6 +3943,43 @@
       "validation_summary": "Pydantic required/type coercion only"
     },
     {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "TECHNIQUE_VALIDATION_ENABLED",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {},
+      "default": true,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": true
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Run validate_technique_instance when collecting technique instances.",
+      "display_id": "config:analysis.techniques.validation_enabled",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "analysis.techniques.validation_enabled",
+      "protocol_constant": false,
+      "reload_policy": "next_scanner_cycle",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "analysis_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "bool",
+      "unit": "boolean",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
       "algorithm_constant": true,
       "allowed_values": [],
       "canonical_env": null,
@@ -4220,6 +4337,43 @@
       "terminal_deprecation_reason": null,
       "type": "float",
       "unit": "price",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "CONFLUENCE_TECHNIQUE_BONUS_SCORE",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {},
+      "default": 2.5,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 2.5
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Per extra overlapping technique added to Confluence Zone band score.",
+      "display_id": "config:analysis.zones.confluence.technique_bonus_score",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "analysis.zones.confluence.technique_bonus_score",
+      "protocol_constant": false,
+      "reload_policy": "next_scanner_cycle",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "analysis_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "float",
+      "unit": "score",
       "validation_summary": "Pydantic required/type coercion only"
     },
     {
@@ -7658,6 +7812,88 @@
       "algorithm_constant": false,
       "allowed_values": [
         "off",
+        "quote_inside",
+        "quote_inside_fresh"
+      ],
+      "canonical_env": "ENTRY_ACTIVATION_M5_AUTHORITATIVE_FALLBACK",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "pattern": "^(off|quote_inside|quote_inside_fresh)$"
+      },
+      "default": "off",
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": "off"
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "When M1 trigger is absent/stale, allow M5-authoritative in-zone activation: off, quote_inside, or quote_inside_fresh.",
+      "display_id": "config:execution.activation.m5_authoritative_fallback",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "execution.activation.m5_authoritative_fallback",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "execution_safety",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "str",
+      "unit": "enum",
+      "validation_summary": "Pydantic type coercion + field validator"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "ENTRY_ACTIVATION_M5_CONFIRMATION_MAX_AGE_BARS",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 1
+      },
+      "default": 6,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 6
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Maximum closed M5 bars since structural confirmation for quote_inside_fresh fallback.",
+      "display_id": "config:execution.activation.m5_confirmation_maximum_age_bars",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "execution.activation.m5_confirmation_maximum_age_bars",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "execution_safety",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "int",
+      "unit": "bars",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [
+        "off",
         "shadow",
         "enforce"
       ],
@@ -10901,6 +11137,43 @@
       "type": "bool",
       "unit": "boolean",
       "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_STRICT_PD_ARCHETYPES",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {},
+      "default": "reversal,range_reversion",
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": "reversal,range_reversion"
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Comma-separated location archetypes to which strict_premium_discount applies. Empty string disables the rule entirely. Setting it to \"reversal,range_reversion,trend_pullback,breakout_retest,momentum,unknown\" restores pre-PR-B behaviour.",
+      "display_id": "config:execution.technique.strict_premium_discount_archetypes",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "execution.technique.strict_premium_discount_archetypes",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "strategy_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "str",
+      "unit": "string",
+      "validation_summary": "Comma-separated archetype tokens; unknown tokens raise"
     },
     {
       "algorithm_constant": false,
@@ -15859,117 +16132,6 @@
     {
       "algorithm_constant": false,
       "allowed_values": [],
-      "canonical_env": "COUNTER_EXTREME_PD",
-      "catalog_version": 2,
-      "configurable": true,
-      "constraints": {},
-      "default": 0.25,
-      "default_contexts": [
-        {
-          "context": "python_schema",
-          "value": 0.25
-        }
-      ],
-      "deprecated": false,
-      "deprecated_aliases": [],
-      "description": "Controls  (fraction).",
-      "display_id": "config:strategies.counter_trend.extreme_pd",
-      "evidence_notes": [],
-      "introduced_in": "config-catalog-v2",
-      "kind": "configurable",
-      "mismatch_policy": "not_reported",
-      "owner": "python",
-      "path": "strategies.counter_trend.extreme_pd",
-      "protocol_constant": false,
-      "reload_policy": "new_setup_only",
-      "replacement_path": null,
-      "required": false,
-      "risk_classification": "strategy_behavior",
-      "runtime_reload_policy": "restart",
-      "secret": false,
-      "shared_with_ctrader": false,
-      "terminal_deprecation_reason": null,
-      "type": "float",
-      "unit": "fraction",
-      "validation_summary": "Pydantic required/type coercion only"
-    },
-    {
-      "algorithm_constant": false,
-      "allowed_values": [],
-      "canonical_env": "COUNTER_LEVEL_MIN_TOUCHES",
-      "catalog_version": 2,
-      "configurable": true,
-      "constraints": {},
-      "default": 3,
-      "default_contexts": [
-        {
-          "context": "python_schema",
-          "value": 3
-        }
-      ],
-      "deprecated": false,
-      "deprecated_aliases": [],
-      "description": "Controls  (count).",
-      "display_id": "config:strategies.counter_trend.level_min_touches",
-      "evidence_notes": [],
-      "introduced_in": "config-catalog-v2",
-      "kind": "configurable",
-      "mismatch_policy": "not_reported",
-      "owner": "python",
-      "path": "strategies.counter_trend.level_min_touches",
-      "protocol_constant": false,
-      "reload_policy": "new_setup_only",
-      "replacement_path": null,
-      "required": false,
-      "risk_classification": "strategy_behavior",
-      "runtime_reload_policy": "restart",
-      "secret": false,
-      "shared_with_ctrader": false,
-      "terminal_deprecation_reason": null,
-      "type": "int",
-      "unit": "count",
-      "validation_summary": "Pydantic required/type coercion only"
-    },
-    {
-      "algorithm_constant": false,
-      "allowed_values": [],
-      "canonical_env": "COUNTER_MIN_ZONE_SCORE",
-      "catalog_version": 2,
-      "configurable": true,
-      "constraints": {},
-      "default": 10.0,
-      "default_contexts": [
-        {
-          "context": "python_schema",
-          "value": 10.0
-        }
-      ],
-      "deprecated": false,
-      "deprecated_aliases": [],
-      "description": "Controls .",
-      "display_id": "config:strategies.counter_trend.min_zone_score",
-      "evidence_notes": [],
-      "introduced_in": "config-catalog-v2",
-      "kind": "configurable",
-      "mismatch_policy": "not_reported",
-      "owner": "python",
-      "path": "strategies.counter_trend.min_zone_score",
-      "protocol_constant": false,
-      "reload_policy": "new_setup_only",
-      "replacement_path": null,
-      "required": false,
-      "risk_classification": "strategy_behavior",
-      "runtime_reload_policy": "restart",
-      "secret": false,
-      "shared_with_ctrader": false,
-      "terminal_deprecation_reason": null,
-      "type": "float",
-      "unit": "score",
-      "validation_summary": "Pydantic required/type coercion only"
-    },
-    {
-      "algorithm_constant": false,
-      "allowed_values": [],
       "canonical_env": "AUTO_TRADE_MAP_COUNTER_BIAS_ENABLED",
       "catalog_version": 2,
       "configurable": true,
@@ -20419,6 +20581,6 @@
       "validation_summary": "Pydantic required/type coercion only"
     }
   ],
-  "source_fingerprint_sha256": "d9e06207415d007ccd8340863196737e86e4d0bd6ae24f9d5c064fc6cc7b0b0d",
+  "source_fingerprint_sha256": "3a56ddf72bc10703e2ad5f619a2d4ad31038c685c462a0fce5aeaf27f0b89dc6",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

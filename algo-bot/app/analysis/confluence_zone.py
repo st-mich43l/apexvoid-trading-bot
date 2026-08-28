@@ -482,6 +482,7 @@ class ConfluenceBand:
   zone_id: str
   provenance: tuple[str, ...]
   score: float = 0.0
+  touches: int = 0
 
 
 def _technique_overlap_ratio(
@@ -508,6 +509,7 @@ def build_confluence_bands(
   source_tf: str = "M5",
   min_overlap: float = 0.5,
   max_width: float = 6.0,
+  confluence_bonus: float = 2.5,
 ) -> list[ConfluenceBand]:
   """Cluster technique instances into Confluence bands (>=2 distinct techniques).
 
@@ -560,10 +562,15 @@ def build_confluence_bands(
       atr=atr, pip_size=pip_size, source_tf=source_tf,
     )
     provenance = tuple(str(member.instance_id) for member in cluster)
-    score = max(
+    member_scores = [
       float((getattr(member, "measured", None) or {}).get("score", 0.0))
       for member in cluster
-    )
+    ]
+    member_touches = [
+      int((getattr(member, "measured", None) or {}).get("touches", 0))
+      for member in cluster
+    ]
+    score = max(member_scores) + confluence_bonus * (len(tags) - 1)
     bands.append(ConfluenceBand(
       low=low,
       high=high,
@@ -572,6 +579,7 @@ def build_confluence_bands(
       zone_id=zone_id,
       provenance=provenance,
       score=score,
+      touches=max(member_touches, default=0),
     ))
   return bands
 

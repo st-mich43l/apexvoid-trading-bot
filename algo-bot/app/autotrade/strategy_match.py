@@ -72,6 +72,9 @@ class StrategyMatch:
   touch_bar_ts: str | None = None
   confirmation_bar_ts: str | None = None
   reaction_type: str | None = None
+  # M5 structural confirmation from scanner/detector (distinct from M1 trigger).
+  m5_confirmation_bar_ts: str | None = None
+  m5_reaction_type: str | None = None
   # Explicit execution target semantics. ``targets_pips`` are always
   # fill-relative; ``absolute_target_price`` is a structural cap/target.
   target_model: str = "fill_relative"
@@ -221,6 +224,14 @@ class StrategyMatch:
         reaction_type=(
           None if payload.get("reaction_type") is None
           else str(payload["reaction_type"])
+        ),
+        m5_confirmation_bar_ts=(
+          None if payload.get("m5_confirmation_bar_ts") is None
+          else str(payload["m5_confirmation_bar_ts"])
+        ),
+        m5_reaction_type=(
+          None if payload.get("m5_reaction_type") is None
+          else str(payload["m5_reaction_type"])
         ),
         target_model=str(
           payload.get("target_model")

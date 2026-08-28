@@ -224,6 +224,10 @@ async def bar_event_dispatcher_loop() -> None:
   dispatcher = _PerSymbolBarDispatcher(client)
   await pubsub.subscribe(channel)
   log.info("bar event dispatcher started channel=%s", channel)
+  if runtime_config.runtime.scanner.enabled:
+    log.info(
+      "scanner structure mode causal=False (live confirmed-swing lookahead)",
+    )
   try:
     async for message in pubsub.listen():
       if message.get("type") != "message":

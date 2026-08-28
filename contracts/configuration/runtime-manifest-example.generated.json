@@ -132,8 +132,8 @@
     "zone_reconcile_mode": "shadow",
     "zone_scale_undersized_policy": "single_entry"
   },
-  "contract_fingerprint": "d9e06207415d007ccd8340863196737e86e4d0bd6ae24f9d5c064fc6cc7b0b0d",
-  "effective_configuration_fingerprint": "21873e834a4cd7a503e9625336981101ba864af74062841cb7b4a909b52db3f7",
+  "contract_fingerprint": "3a56ddf72bc10703e2ad5f619a2d4ad31038c685c462a0fce5aeaf27f0b89dc6",
+  "effective_configuration_fingerprint": "42982c225598cfb7fc67d0e5bbffd203c7d1cb80f68069dff17ae6d6dcf1ef4c",
   "feed": {
     "backfill_bars": 1500,
     "bar_quality_lookback": 6,
@@ -213,6 +213,10 @@
           },
           "missing_context_policy": "block",
           "mode": "enforce",
+          "momentum": {
+            "momentum_buy_minimum_position": "0.15",
+            "momentum_sell_maximum_position": "0.85"
+          },
           "range_reversion": {
             "buy_maximum_position": "0.4",
             "equilibrium_exclusion_width": "0.2",
@@ -412,6 +416,8 @@
       },
       "execution": {
         "activation": {
+          "m5_authoritative_fallback": "off",
+          "m5_confirmation_maximum_age_bars": 6,
           "mode": "enforce",
           "reaction_trigger_maximum_age_bars": 3
         },
@@ -528,7 +534,8 @@
           "reaction_require_publish_window": false,
           "require_sweep_body": false,
           "scalp_require_killzone": false,
-          "strict_premium_discount": true
+          "strict_premium_discount": true,
+          "strict_premium_discount_archetypes": "reversal,range_reversion"
         },
         "trend": {
           "hard_entry_drift_pips": "30",
@@ -909,10 +916,7 @@
           "breakout_enabled": true
         },
         "counter_trend": {
-          "allow_counter_trend": true,
-          "extreme_pd": "0.25",
-          "level_min_touches": 3,
-          "min_zone_score": "10"
+          "allow_counter_trend": true
         },
         "mapped_zone": {
           "counter_bias_enabled": true,
@@ -1144,6 +1148,10 @@
           },
           "missing_context_policy": "block",
           "mode": "enforce",
+          "momentum": {
+            "momentum_buy_minimum_position": "0.15",
+            "momentum_sell_maximum_position": "0.85"
+          },
           "range_reversion": {
             "buy_maximum_position": "0.4",
             "equilibrium_exclusion_width": "0.2",
@@ -1343,6 +1351,8 @@
       },
       "execution": {
         "activation": {
+          "m5_authoritative_fallback": "off",
+          "m5_confirmation_maximum_age_bars": 6,
           "mode": "enforce",
           "reaction_trigger_maximum_age_bars": 3
         },
@@ -1459,7 +1469,8 @@
           "reaction_require_publish_window": false,
           "require_sweep_body": false,
           "scalp_require_killzone": false,
-          "strict_premium_discount": true
+          "strict_premium_discount": true,
+          "strict_premium_discount_archetypes": "reversal,range_reversion"
         },
         "trend": {
           "hard_entry_drift_pips": "30",
@@ -1876,10 +1887,7 @@
           "breakout_enabled": true
         },
         "counter_trend": {
-          "allow_counter_trend": true,
-          "extreme_pd": "0.25",
-          "level_min_touches": 3,
-          "min_zone_score": "10"
+          "allow_counter_trend": true
         },
         "mapped_zone": {
           "counter_bias_enabled": true,
@@ -2111,6 +2119,10 @@
           },
           "missing_context_policy": "block",
           "mode": "enforce",
+          "momentum": {
+            "momentum_buy_minimum_position": "0.15",
+            "momentum_sell_maximum_position": "0.85"
+          },
           "range_reversion": {
             "buy_maximum_position": "0.4",
             "equilibrium_exclusion_width": "0.2",
@@ -2310,6 +2322,8 @@
       },
       "execution": {
         "activation": {
+          "m5_authoritative_fallback": "off",
+          "m5_confirmation_maximum_age_bars": 6,
           "mode": "enforce",
           "reaction_trigger_maximum_age_bars": 3
         },
@@ -2426,7 +2440,8 @@
           "reaction_require_publish_window": false,
           "require_sweep_body": false,
           "scalp_require_killzone": false,
-          "strict_premium_discount": true
+          "strict_premium_discount": true,
+          "strict_premium_discount_archetypes": "reversal,range_reversion"
         },
         "trend": {
           "hard_entry_drift_pips": "30",
@@ -2807,10 +2822,7 @@
           "breakout_enabled": true
         },
         "counter_trend": {
-          "allow_counter_trend": true,
-          "extreme_pd": "0.25",
-          "level_min_touches": 3,
-          "min_zone_score": "10"
+          "allow_counter_trend": true
         },
         "mapped_zone": {
           "counter_bias_enabled": true,
@@ -3042,6 +3054,10 @@
           },
           "missing_context_policy": "block",
           "mode": "enforce",
+          "momentum": {
+            "momentum_buy_minimum_position": "0.15",
+            "momentum_sell_maximum_position": "0.85"
+          },
           "range_reversion": {
             "buy_maximum_position": "0.4",
             "equilibrium_exclusion_width": "0.2",
@@ -3241,6 +3257,8 @@
       },
       "execution": {
         "activation": {
+          "m5_authoritative_fallback": "off",
+          "m5_confirmation_maximum_age_bars": 6,
           "mode": "enforce",
           "reaction_trigger_maximum_age_bars": 3
         },
@@ -3357,7 +3375,8 @@
           "reaction_require_publish_window": false,
           "require_sweep_body": false,
           "scalp_require_killzone": false,
-          "strict_premium_discount": true
+          "strict_premium_discount": true,
+          "strict_premium_discount_archetypes": "reversal,range_reversion"
         },
         "trend": {
           "hard_entry_drift_pips": "30",
@@ -3750,10 +3769,7 @@
           "breakout_enabled": true
         },
         "counter_trend": {
-          "allow_counter_trend": true,
-          "extreme_pd": "0.25",
-          "level_min_touches": 3,
-          "min_zone_score": "10"
+          "allow_counter_trend": true
         },
         "mapped_zone": {
           "counter_bias_enabled": true,
@@ -3985,6 +4001,10 @@
           },
           "missing_context_policy": "block",
           "mode": "enforce",
+          "momentum": {
+            "momentum_buy_minimum_position": "0.15",
+            "momentum_sell_maximum_position": "0.85"
+          },
           "range_reversion": {
             "buy_maximum_position": "0.4",
             "equilibrium_exclusion_width": "0.2",
@@ -4188,6 +4208,8 @@
       },
       "execution": {
         "activation": {
+          "m5_authoritative_fallback": "off",
+          "m5_confirmation_maximum_age_bars": 6,
           "mode": "enforce",
           "reaction_trigger_maximum_age_bars": 3
         },
@@ -4304,7 +4326,8 @@
           "reaction_require_publish_window": false,
           "require_sweep_body": false,
           "scalp_require_killzone": false,
-          "strict_premium_discount": true
+          "strict_premium_discount": true,
+          "strict_premium_discount_archetypes": "reversal,range_reversion"
         },
         "trend": {
           "hard_entry_drift_pips": "30",
@@ -4677,10 +4700,7 @@
           "breakout_enabled": true
         },
         "counter_trend": {
-          "allow_counter_trend": true,
-          "extreme_pd": "0.25",
-          "level_min_touches": 3,
-          "min_zone_score": "10"
+          "allow_counter_trend": true
         },
         "mapped_zone": {
           "counter_bias_enabled": true,
@@ -4914,6 +4934,10 @@
           },
           "missing_context_policy": "block",
           "mode": "enforce",
+          "momentum": {
+            "momentum_buy_minimum_position": "0.15",
+            "momentum_sell_maximum_position": "0.85"
+          },
           "range_reversion": {
             "buy_maximum_position": "0.4",
             "equilibrium_exclusion_width": "0.2",
@@ -4984,6 +5008,8 @@
       },
       "execution": {
         "activation": {
+          "m5_authoritative_fallback": "off",
+          "m5_confirmation_maximum_age_bars": 6,
           "mode": "enforce",
           "reaction_trigger_maximum_age_bars": 3
         },
@@ -5100,7 +5126,8 @@
           "reaction_require_publish_window": false,
           "require_sweep_body": false,
           "scalp_require_killzone": false,
-          "strict_premium_discount": true
+          "strict_premium_discount": true,
+          "strict_premium_discount_archetypes": "reversal,range_reversion"
         },
         "trend": {
           "hard_entry_drift_pips": "30",
@@ -5473,10 +5500,7 @@
           "breakout_enabled": true
         },
         "counter_trend": {
-          "allow_counter_trend": true,
-          "extreme_pd": "0.25",
-          "level_min_touches": 3,
-          "min_zone_score": "10"
+          "allow_counter_trend": true
         },
         "mapped_zone": {
           "counter_bias_enabled": true,
@@ -5708,6 +5732,10 @@
           },
           "missing_context_policy": "block",
           "mode": "enforce",
+          "momentum": {
+            "momentum_buy_minimum_position": "0.15",
+            "momentum_sell_maximum_position": "0.85"
+          },
           "range_reversion": {
             "buy_maximum_position": "0.4",
             "equilibrium_exclusion_width": "0.2",
@@ -5778,6 +5806,8 @@
       },
       "execution": {
         "activation": {
+          "m5_authoritative_fallback": "off",
+          "m5_confirmation_maximum_age_bars": 6,
           "mode": "enforce",
           "reaction_trigger_maximum_age_bars": 3
         },
@@ -5894,7 +5924,8 @@
           "reaction_require_publish_window": false,
           "require_sweep_body": false,
           "scalp_require_killzone": false,
-          "strict_premium_discount": true
+          "strict_premium_discount": true,
+          "strict_premium_discount_archetypes": "reversal,range_reversion"
         },
         "trend": {
           "hard_entry_drift_pips": "30",
@@ -6303,10 +6334,7 @@
           "breakout_enabled": true
         },
         "counter_trend": {
-          "allow_counter_trend": true,
-          "extreme_pd": "0.25",
-          "level_min_touches": 3,
-          "min_zone_score": "10"
+          "allow_counter_trend": true
         },
         "mapped_zone": {
           "counter_bias_enabled": true,
@@ -6538,6 +6566,10 @@
           },
           "missing_context_policy": "block",
           "mode": "enforce",
+          "momentum": {
+            "momentum_buy_minimum_position": "0.15",
+            "momentum_sell_maximum_position": "0.85"
+          },
           "range_reversion": {
             "buy_maximum_position": "0.4",
             "equilibrium_exclusion_width": "0.2",
@@ -6608,6 +6640,8 @@
       },
       "execution": {
         "activation": {
+          "m5_authoritative_fallback": "off",
+          "m5_confirmation_maximum_age_bars": 6,
           "mode": "enforce",
           "reaction_trigger_maximum_age_bars": 3
         },
@@ -6724,7 +6758,8 @@
           "reaction_require_publish_window": false,
           "require_sweep_body": false,
           "scalp_require_killzone": false,
-          "strict_premium_discount": true
+          "strict_premium_discount": true,
+          "strict_premium_discount_archetypes": "reversal,range_reversion"
         },
         "trend": {
           "hard_entry_drift_pips": "30",
@@ -7097,10 +7132,7 @@
           "breakout_enabled": true
         },
         "counter_trend": {
-          "allow_counter_trend": true,
-          "extreme_pd": "0.25",
-          "level_min_touches": 3,
-          "min_zone_score": "10"
+          "allow_counter_trend": true
         },
         "mapped_zone": {
           "counter_bias_enabled": true,
@@ -7332,6 +7364,10 @@
           },
           "missing_context_policy": "block",
           "mode": "enforce",
+          "momentum": {
+            "momentum_buy_minimum_position": "0.15",
+            "momentum_sell_maximum_position": "0.85"
+          },
           "range_reversion": {
             "buy_maximum_position": "0.4",
             "equilibrium_exclusion_width": "0.2",
@@ -7402,6 +7438,8 @@
       },
       "execution": {
         "activation": {
+          "m5_authoritative_fallback": "off",
+          "m5_confirmation_maximum_age_bars": 6,
           "mode": "enforce",
           "reaction_trigger_maximum_age_bars": 3
         },
@@ -7518,7 +7556,8 @@
           "reaction_require_publish_window": false,
           "require_sweep_body": false,
           "scalp_require_killzone": false,
-          "strict_premium_discount": true
+          "strict_premium_discount": true,
+          "strict_premium_discount_archetypes": "reversal,range_reversion"
         },
         "trend": {
           "hard_entry_drift_pips": "30",
@@ -7903,10 +7942,7 @@
           "breakout_enabled": true
         },
         "counter_trend": {
-          "allow_counter_trend": true,
-          "extreme_pd": "0.25",
-          "level_min_touches": 3,
-          "min_zone_score": "10"
+          "allow_counter_trend": true
         },
         "mapped_zone": {
           "counter_bias_enabled": true,
@@ -8138,6 +8174,10 @@
           },
           "missing_context_policy": "block",
           "mode": "enforce",
+          "momentum": {
+            "momentum_buy_minimum_position": "0.15",
+            "momentum_sell_maximum_position": "0.85"
+          },
           "range_reversion": {
             "buy_maximum_position": "0.4",
             "equilibrium_exclusion_width": "0.2",
@@ -8208,6 +8248,8 @@
       },
       "execution": {
         "activation": {
+          "m5_authoritative_fallback": "off",
+          "m5_confirmation_maximum_age_bars": 6,
           "mode": "enforce",
           "reaction_trigger_maximum_age_bars": 3
         },
@@ -8324,7 +8366,8 @@
           "reaction_require_publish_window": false,
           "require_sweep_body": false,
           "scalp_require_killzone": false,
-          "strict_premium_discount": true
+          "strict_premium_discount": true,
+          "strict_premium_discount_archetypes": "reversal,range_reversion"
         },
         "trend": {
           "hard_entry_drift_pips": "30",
@@ -8689,10 +8732,7 @@
           "breakout_enabled": true
         },
         "counter_trend": {
-          "allow_counter_trend": true,
-          "extreme_pd": "0.25",
-          "level_min_touches": 3,
-          "min_zone_score": "10"
+          "allow_counter_trend": true
         },
         "mapped_zone": {
           "counter_bias_enabled": true,

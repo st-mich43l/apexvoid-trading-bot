@@ -186,17 +186,6 @@ def match_bypasses_opposing_structure(match: object) -> bool:
 
 
 def canonical_family(name: str) -> str:
-  """Classify by exact registered name only — never by substring."""
-  key = str(name or "")
-  if key in REACTION_STRATEGIES:
-    return CANONICAL_FAMILY_REACTION
-  if key in ZONE_STRATEGIES:
-    return CANONICAL_FAMILY_ZONE
-  if key in LIQUIDITY_STRATEGIES:
-    return CANONICAL_FAMILY_LIQUIDITY
-  if key in RANGE_STRATEGIES:
-    return CANONICAL_FAMILY_RANGE
-  if is_m1_scalp_strategy(key):
-    # Prefer ``scalp``; legacy family ``hfs`` remains accepted on open plans.
-    return CANONICAL_FAMILY_SCALP
-  return CANONICAL_FAMILY_UNKNOWN
+  from app.autotrade.strategy_registry import canonical_family as registry_canonical
+
+  return registry_canonical(name)

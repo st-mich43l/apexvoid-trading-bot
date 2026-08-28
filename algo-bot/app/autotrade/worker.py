@@ -2800,44 +2800,9 @@ def _trend_group_id(
 
 
 def _strategy_mode_enabled(match: StrategyMatch) -> bool:
-  value = match.strategy.casefold()
-  family = (match.family or "").casefold()
-  if family in {"hfs", "scalp"} or match.strategy_mode in {
-    "hfs_scalp", "scalp_m1",
-  } or (match.structural_source or "").casefold() == "hfs":
-    hfs = getattr(runtime_config.strategies, "scalping", None)
-    mode = str(getattr(hfs, "mode", "off") or "off").casefold()
-    return mode == "live"
-  if match.is_range_edge or family in {"range", "range_reversion"}:
-    return runtime_config.strategies.range_reversion.enabled
-  if "mapped" in value or family in {"mapped_zone", "mapped_zone_reaction"}:
-    return runtime_config.strategies.mapped_zone.enabled
-  if family == "key_level" or value == "key level reaction":
-    return runtime_config.strategies.reaction.key_level.enabled
-  if family == "supply_demand" or value in {
-    "demand zone reaction", "supply zone reaction",
-  }:
-    if "demand" in value:
-      return runtime_config.strategies.reaction.demand.enabled
-    return runtime_config.strategies.reaction.supply.enabled
-  if family == "session_level" or value == "session level reaction":
-    return runtime_config.strategies.reaction.session_level.enabled
-  if family == "trendline" or value == "trendline reaction":
-    return runtime_config.strategies.reaction.trendline.enabled
-  if "liquidity" in value or "sweep" in value or family == "liquidity_reversal":
-    return runtime_config.strategies.reaction.liquidity_reversal.enabled
-  if "retest" in value or family == "breakout_retest":
-    return runtime_config.strategies.selection.retest_enabled
-  if "breakout" in value or "breakdown" in value:
-    return runtime_config.strategies.breakout.breakout_enabled
-  if (
-    "reaction" in value
-    or "rejection" in value
-    or "supply" in value
-    or "demand" in value
-  ):
-    return runtime_config.strategies.reaction.enabled
-  return runtime_config.runtime.auto_trade.strategy_match_enabled
+  from app.autotrade.strategy_registry import strategy_mode_enabled
+
+  return strategy_mode_enabled(match.strategy, runtime_config)
 
 
 def _trend_bias_metadata(

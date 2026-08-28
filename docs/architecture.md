@@ -136,7 +136,8 @@ See [configuration/configuration-architecture.md](configuration/configuration-ar
 - **ZoneWatch before setup.** Detected structure is retained until quote +
   activation prove executability — avoids card spam and ready-stream ACK loss.
 - **Techniques are zone-family, not reaction-family.** Exact-name taxonomy in
-  `strategy_taxonomy.py`; no substring classification.
+  `app/autotrade/strategy_registry.py` (single frozen table); no substring
+  classification. See **Adding a strategy** below.
 - **Multi-symbol, policy per instrument.** Production live set is XAU +
   EURUSD + GBPUSD + GBPJPY + USDJPY; each has its own pack (XAU ladder vs FX
   fixed-RR). See [runtime/multi-symbol-routing.md](runtime/multi-symbol-routing.md).
@@ -144,3 +145,38 @@ See [configuration/configuration-architecture.md](configuration/configuration-ar
   envelope, and demo-token checks block rather than guess.
 
 Doc index: [README.md](README.md).
+
+## Strategy registry (single table)
+
+Every live detector and publishable strategy label is one row in
+`app/autotrade/strategy_registry.py` (`StrategyRow`). The row carries:
+
+| Column | Purpose |
+|---|---|
+| `name` | Display name (primary lookup key) |
+| `detector_key` | `LIVE_DETECTOR_REGISTRY` name when applicable |
+| `detector_family` | Detector pipeline family (`key_level`, `supply_demand`, …) |
+| `execution_family` | Execution policy family (`strategy_family()`) |
+| `canonical_family` | Opposing-structure bypass bucket (`reaction`, `zone`, …) |
+| `location_archetype` | Premium/discount rules (`entry_location`) |
+| `activation_archetype` | M1/M5 activation rules (`entry_activation`) |
+| `enable_setting` | Dotted path into `runtime_config` for `_strategy_mode_enabled` |
+
+Import-time invariant: every `LIVE_DETECTOR_REGISTRY` entry has a matching
+`detector_key` row, and every `enable_setting` path resolves on the loaded
+runtime config.
+
+### Adding a strategy (checklist)
+
+1. Implement the detector and register it in `LIVE_DETECTOR_REGISTRY`
+   (`app/analysis/detectors.py`).
+2. Add one `StrategyRow` to `app/autotrade/strategy_registry.py` with all
+   columns filled — this replaces edits to `execution_policy._STRATEGY_FAMILY`,
+   `strategy_taxonomy` frozensets, and the `_strategy_mode_enabled` branch chain.
+3. Add or extend detector tests under `tests/test_detectors.py`.
+4. Add a registry parity row in `tests/test_strategy_registry.py` (legacy
+   function output must match the table for the new name).
+5. If the strategy introduces a new config toggle, declare it under
+   `app/configuration/models/` and document it in `config/trading-bot.yml`.
+6. Run `pytest tests/test_strategy_registry.py tests/test_config_catalog_v2.py`
+   — import-time registry validation must stay green.

@@ -1,7 +1,7 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "d9e06207415d007ccd8340863196737e86e4d0bd6ae24f9d5c064fc6cc7b0b0d",
-  "count": 475,
+  "configuration_contract_fingerprint_sha256": "3a56ddf72bc10703e2ad5f619a2d4ad31038c685c462a0fce5aeaf27f0b89dc6",
+  "count": 479,
   "deprecated_alias_count": 64,
   "entries": [
     {
@@ -2584,6 +2584,22 @@
       "unit": "count"
     },
     {
+      "canonical_env": "AUTO_TRADE_STRICT_PD_ARCHETYPES",
+      "default": "reversal,range_reversion",
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Comma-separated location archetypes to which strict_premium_discount applies. Empty string disables the rule entirely. Setting it to \"reversal,range_reversion,trend_pullback,breakout_retest,momentum,unknown\" restores pre-PR-B behaviour.",
+      "display_id": "config:execution.technique.strict_premium_discount_archetypes",
+      "owner": "python",
+      "path": "execution.technique.strict_premium_discount_archetypes",
+      "replacement_path": null,
+      "required": false,
+      "secret": false,
+      "shared_with_ctrader": false,
+      "type": "str",
+      "unit": "string"
+    },
+    {
       "canonical_env": "AUTO_TRADE_STRUCTURAL_GUARD_MODE",
       "default": "balanced",
       "deprecated": false,
@@ -3862,6 +3878,22 @@
       "unit": "fraction"
     },
     {
+      "canonical_env": "CONFLUENCE_TECHNIQUE_BONUS_SCORE",
+      "default": 2.5,
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Per extra overlapping technique added to Confluence Zone band score.",
+      "display_id": "config:analysis.zones.confluence.technique_bonus_score",
+      "owner": "python",
+      "path": "analysis.zones.confluence.technique_bonus_score",
+      "replacement_path": null,
+      "required": false,
+      "secret": false,
+      "shared_with_ctrader": false,
+      "type": "float",
+      "unit": "score"
+    },
+    {
       "canonical_env": "CONTESTED_CORRIDOR_GAP_ATR",
       "default": 0.5,
       "deprecated": false,
@@ -3876,54 +3908,6 @@
       "shared_with_ctrader": false,
       "type": "float",
       "unit": "atr"
-    },
-    {
-      "canonical_env": "COUNTER_EXTREME_PD",
-      "default": 0.25,
-      "deprecated": false,
-      "deprecated_aliases": [],
-      "description": "Controls  (fraction).",
-      "display_id": "config:strategies.counter_trend.extreme_pd",
-      "owner": "python",
-      "path": "strategies.counter_trend.extreme_pd",
-      "replacement_path": null,
-      "required": false,
-      "secret": false,
-      "shared_with_ctrader": false,
-      "type": "float",
-      "unit": "fraction"
-    },
-    {
-      "canonical_env": "COUNTER_LEVEL_MIN_TOUCHES",
-      "default": 3,
-      "deprecated": false,
-      "deprecated_aliases": [],
-      "description": "Controls  (count).",
-      "display_id": "config:strategies.counter_trend.level_min_touches",
-      "owner": "python",
-      "path": "strategies.counter_trend.level_min_touches",
-      "replacement_path": null,
-      "required": false,
-      "secret": false,
-      "shared_with_ctrader": false,
-      "type": "int",
-      "unit": "count"
-    },
-    {
-      "canonical_env": "COUNTER_MIN_ZONE_SCORE",
-      "default": 10.0,
-      "deprecated": false,
-      "deprecated_aliases": [],
-      "description": "Controls .",
-      "display_id": "config:strategies.counter_trend.min_zone_score",
-      "owner": "python",
-      "path": "strategies.counter_trend.min_zone_score",
-      "replacement_path": null,
-      "required": false,
-      "secret": false,
-      "shared_with_ctrader": false,
-      "type": "float",
-      "unit": "score"
     },
     {
       "canonical_env": "CTRADER_ACCESS_TOKEN",
@@ -4253,6 +4237,38 @@
       "unit": "atr"
     },
     {
+      "canonical_env": "ENTRY_ACTIVATION_M5_AUTHORITATIVE_FALLBACK",
+      "default": "off",
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "When M1 trigger is absent/stale, allow M5-authoritative in-zone activation: off, quote_inside, or quote_inside_fresh.",
+      "display_id": "config:execution.activation.m5_authoritative_fallback",
+      "owner": "python",
+      "path": "execution.activation.m5_authoritative_fallback",
+      "replacement_path": null,
+      "required": false,
+      "secret": false,
+      "shared_with_ctrader": false,
+      "type": "str",
+      "unit": "enum"
+    },
+    {
+      "canonical_env": "ENTRY_ACTIVATION_M5_CONFIRMATION_MAX_AGE_BARS",
+      "default": 6,
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Maximum closed M5 bars since structural confirmation for quote_inside_fresh fallback.",
+      "display_id": "config:execution.activation.m5_confirmation_maximum_age_bars",
+      "owner": "python",
+      "path": "execution.activation.m5_confirmation_maximum_age_bars",
+      "replacement_path": null,
+      "required": false,
+      "secret": false,
+      "shared_with_ctrader": false,
+      "type": "int",
+      "unit": "bars"
+    },
+    {
       "canonical_env": "ENTRY_ACTIVATION_MODE",
       "default": "shadow",
       "deprecated": false,
@@ -4331,6 +4347,38 @@
       "shared_with_ctrader": false,
       "type": "str",
       "unit": "enum"
+    },
+    {
+      "canonical_env": "ENTRY_LOCATION_MOMENTUM_BUY_MIN_POSITION",
+      "default": 0.15,
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Block momentum BUY entries at or below this range position (fade of continuation).",
+      "display_id": "config:actionability.entry_location.momentum.momentum_buy_minimum_position",
+      "owner": "python",
+      "path": "actionability.entry_location.momentum.momentum_buy_minimum_position",
+      "replacement_path": null,
+      "required": false,
+      "secret": false,
+      "shared_with_ctrader": false,
+      "type": "float",
+      "unit": "fraction"
+    },
+    {
+      "canonical_env": "ENTRY_LOCATION_MOMENTUM_SELL_MAX_POSITION",
+      "default": 0.85,
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Block momentum SELL entries at or above this range position (fade of continuation).",
+      "display_id": "config:actionability.entry_location.momentum.momentum_sell_maximum_position",
+      "owner": "python",
+      "path": "actionability.entry_location.momentum.momentum_sell_maximum_position",
+      "replacement_path": null,
+      "required": false,
+      "secret": false,
+      "shared_with_ctrader": false,
+      "type": "float",
+      "unit": "fraction"
     },
     {
       "canonical_env": "ENTRY_LOCATION_RANGE_BUY_MAX_POSITION",
@@ -7150,6 +7198,22 @@
       "unit": "bars"
     },
     {
+      "canonical_env": "TECHNIQUE_VALIDATION_ENABLED",
+      "default": true,
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Run validate_technique_instance when collecting technique instances.",
+      "display_id": "config:analysis.techniques.validation_enabled",
+      "owner": "python",
+      "path": "analysis.techniques.validation_enabled",
+      "replacement_path": null,
+      "required": false,
+      "secret": false,
+      "shared_with_ctrader": false,
+      "type": "bool",
+      "unit": "boolean"
+    },
+    {
       "canonical_env": "TELEGRAM_BOT_TOKEN",
       "default": "<redacted>",
       "deprecated": false,
@@ -7744,6 +7808,6 @@
   ],
   "secret_count": 9,
   "shared_with_ctrader_count": 87,
-  "source_fingerprint_sha256": "d9e06207415d007ccd8340863196737e86e4d0bd6ae24f9d5c064fc6cc7b0b0d",
+  "source_fingerprint_sha256": "3a56ddf72bc10703e2ad5f619a2d4ad31038c685c462a0fce5aeaf27f0b89dc6",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }
