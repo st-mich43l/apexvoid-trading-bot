@@ -1707,10 +1707,52 @@ def _format_math_line(match: StrategyMatch) -> str | None:
   return " · ".join(parts)
 
 
+def _trade_area_targets_line(
+  match: StrategyMatch,
+  *,
+  symbol: str,
+  target_prices: tuple[float, ...] | None = None,
+) -> str | None:
+  """Trade-area Targets line: absolute TP prices when known, else pip ladder."""
+  prices: list[float] = []
+  for raw in target_prices or ():
+    try:
+      price = float(raw)
+    except (TypeError, ValueError):
+      continue
+    if math.isfinite(price):
+      prices.append(price)
+
+  pips: list[int] = []
+  for raw in match.targets_pips or ():
+    try:
+      value = int(raw)
+    except (TypeError, ValueError):
+      continue
+    if value > 0:
+      pips.append(value)
+
+  if prices:
+    parts: list[str] = []
+    for index, price in enumerate(prices):
+      label = f"TP{index + 1}"
+      price_text = _price_text(price, symbol=symbol)
+      if index < len(pips):
+        parts.append(f"{label} {price_text} (+{pips[index]})")
+      else:
+        parts.append(f"{label} {price_text}")
+    return f"• <b>Targets:</b> <b>{' · '.join(parts)}</b>"
+  if pips:
+    ladder = " / ".join(f"+{value}" for value in pips)
+    return f"• <b>Targets:</b> <b>{ladder} pips</b>"
+  return None
+
+
 def format_plan_published_root_card(
   match: StrategyMatch,
   *,
   stop_price: float | None = None,
+  target_prices: tuple[float, ...] | None = None,
 ) -> str:
   """Root card after publish with scanner-style trade/context detail.
 
@@ -1800,6 +1842,12 @@ def format_plan_published_root_card(
   else:
     lines.append("• <b>Stop:</b> <b>SL</b>")
 
+  targets_line = _trade_area_targets_line(
+    match, symbol=symbol, target_prices=target_prices,
+  )
+  if targets_line:
+    lines.append(targets_line)
+
   lines.extend(["", "🧭 <b>Context</b>"])
   if htf_bias:
     lines.append(f"• <b>HTF bias:</b> {escape(htf_bias)}")
@@ -1829,6 +1877,34 @@ async def published_plan_stop_price(client, match_id: str) -> float | None:
     return float(plan.stop.price)
   except (TypeError, ValueError):
     return None
+
+
+async def published_plan_target_prices(
+  client, match_id: str,
+) -> tuple[float, ...]:
+  """Best-effort absolute TP prices from the published TradePlan (if present)."""
+  try:
+    from app.autotrade.setup_execution_aggregate import v8_plan_id
+    from app.autotrade.trade_plan_stream import read_trade_plan
+
+    plan = await read_trade_plan(client, v8_plan_id(match_id))
+  except Exception:
+    log.exception(
+      "plan_published_root_card_targets_lookup_failed setup_id=%s",
+      match_id,
+    )
+    return ()
+  if plan is None or not plan.targets:
+    return ()
+  prices: list[float] = []
+  for target in plan.targets:
+    try:
+      price = float(target.price)
+    except (TypeError, ValueError):
+      continue
+    if math.isfinite(price):
+      prices.append(price)
+  return tuple(prices)
 
 
 async def ensure_plan_published_root_card(
@@ -1871,6 +1947,7 @@ async def ensure_plan_published_root_card(
   resolved_send = send_fn or send_scanner_root_card_with_retry
   resolved_delete = delete_fn or delete_scanner_message
   stop_price = await published_plan_stop_price(client, match.match_id)
+  target_prices = await published_plan_target_prices(client, match.match_id)
 
   existing = await load_forming_card(client, match.match_id)
   had_live_card = (
@@ -1882,7 +1959,9 @@ async def ensure_plan_published_root_card(
     if not forming_card_matches_strategy(existing_text, match):
       # Confluence setup_id is shared across detectors — an older Key Level
       # (or wrong-direction) body must not stay as the Trend Pullback root.
-      replacement = format_plan_published_root_card(match, stop_price=stop_price)
+      replacement = format_plan_published_root_card(
+        match, stop_price=stop_price, target_prices=target_prices or None,
+      )
       upper_head = existing_text.splitlines()[0].upper() if existing_text else ""
       if "TERMINAL" in upper_head:
         snapshot = await load_forming_card_status_snapshot(client, match.match_id)
@@ -1927,7 +2006,9 @@ async def ensure_plan_published_root_card(
   message_id = await post_or_edit_forming_card(
     client,
     match.match_id,
-    format_plan_published_root_card(match, stop_price=stop_price),
+    format_plan_published_root_card(
+      match, stop_price=stop_price, target_prices=target_prices or None,
+    ),
     chat_id=int(owner_id),
     send_fn=resolved_send,
     edit_fn=resolved_edit,
