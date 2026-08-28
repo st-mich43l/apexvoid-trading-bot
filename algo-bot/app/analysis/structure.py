@@ -26,7 +26,19 @@ def market_structure(items: list[Swing]) -> str:
   return "range"
 
 
-def structure_breaks(swings: list[Swing], df: pd.DataFrame) -> list[Break]:
+def structure_breaks(
+  swings: list[Swing],
+  df: pd.DataFrame,
+  *,
+  causal: bool = False,
+  fractal_n: int = 2,
+) -> list[Break]:
+  if not causal:
+    return _structure_breaks_lookahead(swings, df)
+  return _structure_breaks_causal(swings, df, fractal_n)
+
+
+def _structure_breaks_lookahead(swings: list[Swing], df: pd.DataFrame) -> list[Break]:
   breaks: list[Break] = []
   trend = market_structure(swings)
   broken: set[tuple[str, float]] = set()
@@ -35,6 +47,43 @@ def structure_breaks(swings: list[Swing], df: pd.DataFrame) -> list[Break]:
     prior = [s for s in swings if int(s.index) < i]
     highs = [s for s in prior if s.kind == "high"]
     lows = [s for s in prior if s.kind == "low"]
+    if highs:
+      level = highs[-1].price
+      key = ("up", level)
+      if close > level and key not in broken:
+        broken.add(key)
+        breaks.append(Break(_break_kind(trend, "up"), "up", level, i, df.index[i]))
+    if lows:
+      level = lows[-1].price
+      key = ("down", level)
+      if close < level and key not in broken:
+        broken.add(key)
+        breaks.append(Break(_break_kind(trend, "down"), "down", level, i, df.index[i]))
+  return breaks
+
+
+def _structure_breaks_causal(
+  swings: list[Swing],
+  df: pd.DataFrame,
+  fractal_n: int,
+) -> list[Break]:
+  breaks: list[Break] = []
+  broken: set[tuple[str, float]] = set()
+  ordered = sorted(swings, key=lambda item: int(item.index))
+  swing_ptr = 0
+  confirmed: list[Swing] = []
+  for i in range(len(df)):
+    while (
+      swing_ptr < len(ordered)
+      and int(ordered[swing_ptr].index) + fractal_n <= i
+    ):
+      confirmed.append(ordered[swing_ptr])
+      swing_ptr += 1
+    prior = [s for s in confirmed if int(s.index) < i]
+    trend = market_structure(prior)
+    highs = [s for s in prior if s.kind == "high"]
+    lows = [s for s in prior if s.kind == "low"]
+    close = float(df["close"].iloc[i])
     if highs:
       level = highs[-1].price
       key = ("up", level)

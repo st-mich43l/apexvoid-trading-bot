@@ -198,6 +198,8 @@ class AnalysisSettings:
   fvg_entry_max_width_price: float = 5.0
   fvg_max_atr: float = 2.0
   technique_validation_enabled: bool = True
+  causal_structure: bool = False
+  max_cluster_span_multiple: float = 2.0
 
 
 @dataclass(frozen=True)
@@ -354,9 +356,15 @@ def _analyze_tf(
     settings.zigzag_pct,
     settings.zigzag_atr_mult,
     atr,
+    as_of=len(df) - 1 if settings.causal_structure else None,
   )
   structure = market_structure(swings)
-  breaks = structure_breaks(swings, df)
+  breaks = structure_breaks(
+    swings,
+    df,
+    causal=settings.causal_structure,
+    fractal_n=settings.swing_fractal_n,
+  )
   nested_cfg = _nested_cfg_from_analysis_settings(settings)
   diagonal_lines = find_trendlines(swings, df, atr, nested_cfg)
   levels = key_levels(
@@ -365,6 +373,7 @@ def _analyze_tf(
     settings.level_cluster_atr,
     settings.round_step,
     settings.key_level_min_touches,
+    settings.max_cluster_span_multiple,
   )
   legs = displacement(
     df,
@@ -386,7 +395,13 @@ def _analyze_tf(
   ob_zones = breaker_blocks(ob_zones, df)
   flip = flip_zones(levels, breaks)
   fvg_zones = fvg(df)
-  pools = liquidity_pools(swings, df, settings.equal_tol_atr, atr)
+  pools = liquidity_pools(
+    swings,
+    df,
+    settings.equal_tol_atr,
+    atr,
+    settings.max_cluster_span_multiple,
+  )
   sessions = [
     *session_levels(df, nested_cfg),
     *(weekly_levels or []),

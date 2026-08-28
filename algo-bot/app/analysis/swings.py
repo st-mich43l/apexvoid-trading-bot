@@ -14,26 +14,35 @@ def find_swings(
   zigzag_pct: float = 0.0,
   zigzag_atr_mult: float = 1.0,
   atr: pd.Series | None = None,
+  as_of: int | None = None,
 ) -> list[Swing]:
   if len(df) < (fractal_n * 2) + 1:
     return []
   atr = atr if atr is not None else atr_series(df)
-  candidates = _fractal_candidates(df, fractal_n)
+  candidates = _fractal_candidates(df, fractal_n, as_of)
   filtered = _zigzag_filter(candidates, atr, zigzag_pct, zigzag_atr_mult)
   return _label(filtered)
 
 
-def _fractal_candidates(df: pd.DataFrame, n: int) -> list[Swing]:
+def _fractal_candidates(
+  df: pd.DataFrame,
+  n: int,
+  as_of: int | None = None,
+) -> list[Swing]:
   candidates: list[Swing] = []
   for i in range(n, len(df) - n):
+    if as_of is not None and i + n > as_of:
+      continue
     window = df.iloc[i - n:i + n + 1]
     row = df.iloc[i]
     high = float(row["high"])
     low = float(row["low"])
     ts = df.index[i]
-    if high == float(window["high"].max()) and window["high"].eq(high).sum() == 1:
+    max_high = float(window["high"].max())
+    if high == max_high and all(float(df.iloc[j]["high"]) < high for j in range(i - n, i)):
       candidates.append(Swing(i, "high", high, ts=ts))
-    if low == float(window["low"].min()) and window["low"].eq(low).sum() == 1:
+    min_low = float(window["low"].min())
+    if low == min_low and all(float(df.iloc[j]["low"]) > low for j in range(i - n, i)):
       candidates.append(Swing(i, "low", low, ts=ts))
   return sorted(candidates, key=lambda item: (int(item.index), item.kind))
 

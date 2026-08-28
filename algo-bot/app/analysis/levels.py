@@ -16,9 +16,10 @@ def key_levels(
   level_cluster_atr: float = 0.5,
   round_step: float = 5.0,
   min_touches: int = 2,
+  max_cluster_span_multiple: float = 2.0,
 ) -> list[Level]:
   tolerance = atr_scalar(atr) * max(0.0, level_cluster_atr)
-  clusters = _price_clusters(swings, tolerance)
+  clusters = _price_clusters(swings, tolerance, max_cluster_span_multiple)
   levels = [
     Level(
       price=sum(item.price for item in cluster) / len(cluster),
@@ -48,14 +49,36 @@ def key_levels(
   return deduped
 
 
-def _price_clusters(swings: list[Swing], tolerance: float) -> list[list[Swing]]:
+def _price_clusters(
+  swings: list[Swing],
+  tolerance: float,
+  max_cluster_span_multiple: float = 2.0,
+) -> list[list[Swing]]:
   clusters: list[list[Swing]] = []
+  max_span = tolerance * max(0.0, max_cluster_span_multiple)
   for swing in sorted(swings, key=lambda item: item.price):
-    if clusters and abs(_avg(clusters[-1]) - swing.price) <= tolerance:
+    if clusters and _can_join_cluster(
+      clusters[-1],
+      swing,
+      tolerance,
+      max_span,
+    ):
       clusters[-1].append(swing)
     else:
       clusters.append([swing])
   return clusters
+
+
+def _can_join_cluster(
+  cluster: list[Swing],
+  swing: Swing,
+  tolerance: float,
+  max_span: float,
+) -> bool:
+  prices = [item.price for item in cluster] + [swing.price]
+  if max(prices) - min(prices) > max_span:
+    return False
+  return all(abs(item.price - swing.price) <= tolerance for item in cluster)
 
 
 def _round_levels(

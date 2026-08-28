@@ -2791,6 +2791,7 @@ async def _load_market_context_for_symbol(
     frames,
     settings,
     htf_order,
+    causal_structure=False,
   )
   ctx = _attach_price_context(ctx, spot, trigger, frames[exec_tf])
   # Shared MAD phase for technique detectors. Soft use: accumulation →

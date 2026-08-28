@@ -199,6 +199,8 @@ class DetectorSettings:
   fvg_max_atr: float = 2.0
   fvg_entry_max_width_price: float = 5.0
   technique_validation_enabled: bool = True
+  causal_structure: bool = False
+  max_cluster_span_multiple: float = 2.0
   # Recovery mission (2026-07-30): these six sources were live around
   # 2026-07-28 and were deliberately dropped from DEFAULT_DETECTORS during
   # the P0 zone/M1 simplification without their own enable flags, leaving
@@ -291,6 +293,8 @@ class DetectorSettings:
       fvg_entry_max_width_price=self.fvg_entry_max_width_price,
       fvg_max_atr=self.fvg_max_atr,
       technique_validation_enabled=self.technique_validation_enabled,
+      causal_structure=self.causal_structure,
+      max_cluster_span_multiple=self.max_cluster_span_multiple,
     )
 
 
@@ -569,8 +573,13 @@ def build_context(
   frames: dict[str, pd.DataFrame],
   settings: DetectorSettings,
   htf_order: list[str],
+  *,
+  causal_structure: bool | None = None,
 ) -> DetectionContext:
-  analysis_ctx = analyze(frames, settings.analysis_settings(), htf_order)
+  analysis_settings = settings.analysis_settings()
+  if causal_structure is not None:
+    analysis_settings = replace(analysis_settings, causal_structure=causal_structure)
+  analysis_ctx = analyze(frames, analysis_settings, htf_order)
   indicator_sets = {
     name: _indicator_set(df, settings.atr_length)
     for name, df in frames.items()
@@ -591,6 +600,24 @@ def build_context(
     settings=settings,
     regime=_exec_regime(analysis_ctx, tf),
     analysis=analysis_ctx,
+  )
+
+
+def replay_build_context(
+  symbol: str,
+  tf: str,
+  frames: dict[str, pd.DataFrame],
+  settings: DetectorSettings,
+  htf_order: list[str],
+) -> DetectionContext:
+  """Point-in-time structure for offline replay and research."""
+  return build_context(
+    symbol,
+    tf,
+    frames,
+    settings,
+    htf_order,
+    causal_structure=True,
   )
 
 
