@@ -968,16 +968,6 @@ def _broken_impulse_swing(st: StructureSet, direction: str) -> Swing | None:
   return lows[-1] if lows else None
 
 
-def _factors_for_confirmation(
-  factors: ConfluenceFactors | None,
-  confirmation,
-) -> ConfluenceFactors:
-  base = factors or ConfluenceFactors()
-  if confirmation.confirmation_type != CONFIRM_REJECTION_CHOCH:
-    return base
-  return replace(base, structural_agreement=True, choch=True)
-
-
 def _zone_key(zone: Zone, price: float, direction: str) -> float:
   if direction == "BUY":
     return zone.high if zone.high <= price + _EPS else zone.low
@@ -1086,6 +1076,16 @@ class ConfluenceFactors:
   structural_agreement: bool = False
   fib_touch: bool = False
   choch: bool = False
+
+
+def _factors_for_confirmation(
+  factors: ConfluenceFactors | None,
+  confirmation,
+) -> ConfluenceFactors:
+  base = factors or ConfluenceFactors()
+  if confirmation.confirmation_type != CONFIRM_REJECTION_CHOCH:
+    return base
+  return replace(base, structural_agreement=True, choch=True)
 
 
 _FACTOR_HTF_ALIGN_WEIGHT = 4.0
