@@ -1,20 +1,20 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "3a56ddf72bc10703e2ad5f619a2d4ad31038c685c462a0fce5aeaf27f0b89dc6",
-  "configuration_document_fingerprint_sha256": "8f3ab6e030692cab757d6e9dfb9b8d9494d7a10035573e68fb2d53bf8e04d58a",
+  "configuration_contract_fingerprint_sha256": "324ea8a6af5fa10e3c772c6d3d51eae7f8df1a2943d1cbd210bca94d1ab22eaf",
+  "configuration_document_fingerprint_sha256": "4c0d953b384f371569551b8c4c398a32893f34aeda51504d075ba0d63b515195",
   "counts": {
     "algorithm_constants": 57,
-    "configurable": 479,
+    "configurable": 478,
     "known_conflicts": 30,
     "owners": {
       "ctrader": 49,
-      "python": 401,
+      "python": 400,
       "shared": 96
     },
     "protocol_constants": 10,
     "secrets": 9,
     "shared": 96,
-    "total_items": 546
+    "total_items": 545
   },
   "items": [
     {
@@ -3242,43 +3242,6 @@
       "terminal_deprecation_reason": null,
       "type": "float",
       "unit": "atr",
-      "validation_summary": "Pydantic required/type coercion only"
-    },
-    {
-      "algorithm_constant": false,
-      "allowed_values": [],
-      "canonical_env": "REGIME_CHOP_ALERT_SHARE",
-      "catalog_version": 2,
-      "configurable": true,
-      "constraints": {},
-      "default": 0.75,
-      "default_contexts": [
-        {
-          "context": "python_schema",
-          "value": 0.75
-        }
-      ],
-      "deprecated": false,
-      "deprecated_aliases": [],
-      "description": "Controls  (fraction).",
-      "display_id": "config:analysis.measurements.regime_chop_alert_share",
-      "evidence_notes": [],
-      "introduced_in": "config-catalog-v2",
-      "kind": "configurable",
-      "mismatch_policy": "not_reported",
-      "owner": "python",
-      "path": "analysis.measurements.regime_chop_alert_share",
-      "protocol_constant": false,
-      "reload_policy": "next_scanner_cycle",
-      "replacement_path": null,
-      "required": false,
-      "risk_classification": "analysis_behavior",
-      "runtime_reload_policy": "restart",
-      "secret": false,
-      "shared_with_ctrader": false,
-      "terminal_deprecation_reason": null,
-      "type": "float",
-      "unit": "fraction",
       "validation_summary": "Pydantic required/type coercion only"
     },
     {
@@ -20581,6 +20544,6 @@
       "validation_summary": "Pydantic required/type coercion only"
     }
   ],
-  "source_fingerprint_sha256": "3a56ddf72bc10703e2ad5f619a2d4ad31038c685c462a0fce5aeaf27f0b89dc6",
+  "source_fingerprint_sha256": "324ea8a6af5fa10e3c772c6d3d51eae7f8df1a2943d1cbd210bca94d1ab22eaf",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

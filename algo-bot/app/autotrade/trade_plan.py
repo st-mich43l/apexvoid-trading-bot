@@ -1,12 +1,11 @@
 """TradePlan V8 — Python's sole trade-planning contract.
 
-V6 (`TradeCandidate`, `auto_trade_candidate_contract_version = 6`) lets both
+V6 (`TradeCandidate`, `auto_trade_candidate_contract_version = 6`) let both
 Python and C# resolve an execution route and compute a protective stop, then
-cross-validates the two independently derived answers. That's the dual
-planning bug documented in `docs/adr-trade-plan-v7-boundary.md`. V8 is the live TradePlan cutover (see `docs/adr-trade-plan-v8-cutover.md`).
-Python declares a single, complete, versioned plan: Python declares the exact entry
-instruction, the exact absolute stop, and the exact absolute targets; C#
-consumes the plan and never recomputes any of it.
+cross-validate the two independently derived answers. TradePlan V8 is the
+live contract (see `docs/adr-trade-plan-v8-cutover.md`): Python declares a
+single, complete, versioned plan — exact entry instruction, absolute stop,
+and absolute targets; C# consumes the plan and never recomputes any of it.
 
 There is no `planned_*` / `final_*` / `base_*` field family here, and no
 counterpart in `ctrader-engine` that independently derives a route or a stop
@@ -22,8 +21,7 @@ from decimal import Decimal
 from typing import Any, Mapping, Sequence
 
 TRADE_PLAN_VERSION = 8
-# Drain window: accept in-flight V7 plans when loading from Redis.
-TRADE_PLAN_SUPPORTED_VERSIONS = frozenset({7, 8})
+TRADE_PLAN_SUPPORTED_VERSIONS = frozenset({8})
 
 ENTRY_TYPE_MARKET_WATCH = "market_watch"
 ENTRY_TYPE_MARKET = "market"
@@ -46,7 +44,7 @@ DIRECTIONS = ("BUY", "SELL")
 
 
 class TradePlanError(ValueError):
-  """Raised when a TradePlan V7 payload is structurally invalid.
+  """Raised when a TradePlan V8 payload is structurally invalid.
 
   This is a *shape* error (missing/malformed field, stop on the wrong side,
   targets out of order) — never a "C# disagrees with the derived value"
@@ -629,7 +627,7 @@ class TradePlan:
   def validate(self) -> None:
     """Execution-safety shape checks only — never re-derives a value.
 
-    Mirrors exactly what the C# V7 executor is allowed to check: the stop is
+    Mirrors exactly what the C# TradePlan executor is allowed to check: the stop is
     finite and on the correct side of every possible entry price, and
     targets are ordered away from entry in the trade's direction. Anything
     beyond this (is the *strategy* right, is the *structure* right) is not

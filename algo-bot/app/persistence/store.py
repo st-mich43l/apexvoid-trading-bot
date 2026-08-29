@@ -652,10 +652,10 @@ def _resolve_auto_trade_stream(event: dict) -> str:
   stream = str(event.get("stream") or "").strip()
   if stream in {"algo_auto", "algo_manual"}:
     return stream
-  # V7 TradePlan events omit stream; attribute them as autonomous algo.
+  # TradePlan events omit stream; attribute them as autonomous algo.
   candidate = str(event.get("candidate_id") or "")
   group_id = str(event.get("group_id") or "")
-  if candidate.startswith(("v7:", "v8:")) or group_id.startswith(("v7:", "v8:")):
+  if candidate.startswith("v8:") or group_id.startswith("v8:"):
     return "algo_auto"
   setup = str(event.get("setup") or "").strip().lower()
   if setup == "manual algo":

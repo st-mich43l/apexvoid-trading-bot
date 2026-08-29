@@ -33,12 +33,12 @@ public sealed class AutoTradeEngine(
   private readonly object _reportLock = new();
   private readonly Func<DateTimeOffset> _clock = clock ?? (() => DateTimeOffset.UtcNow);
   private readonly Action<string> _log = log ?? Log;
-  // TradePlan V7 broker-execution runtime (docs/adr-trade-plan-v7-boundary.md) -
+  // TradePlan V8 broker-execution runtime (docs/adr-trade-plan-v8-cutover.md) -
   // composed into this engine's own session loop (see PollTradePlansAsync)
   // rather than given a separate RunSessionAsync/reconcile/heartbeat of its
   // own, so it shares this engine's readiness/gate machinery instead of
   // duplicating it. Deliberately a distinct class in its own source file so
-  // TradePlanExecutionEngineDependencyTests can scan every V7 file for
+  // TradePlanExecutionEngineDependencyTests can scan every TradePlan file for
   // forbidden analysis/route/stop symbols without tripping over this file's
   // legitimate V6 use of them elsewhere.
   private TradePlanRuntime? _tradePlanRuntime;
@@ -318,16 +318,16 @@ public sealed class AutoTradeEngine(
       try
       {
         TradePlanJson.AssertContractAvailable();
-        _log("V7 JSON contract self-test passed");
+        _log("TradePlan JSON contract self-test passed");
       }
       catch (Exception exception)
       {
         _log(
-          "V7 JSON contract self-test failed: "
+          "TradePlan JSON contract self-test failed: "
           + $"{exception.GetType().Name}: {exception.Message}"
         );
         throw new AutoTradeConfigurationException(
-          "Auto trade disabled: V7 JSON contract metadata is unavailable"
+          "Auto trade disabled: TradePlan JSON contract metadata is unavailable"
         );
       }
       await ReconcileAllBoundSymbolsAsync(cancellationToken);
@@ -1358,7 +1358,7 @@ public sealed class AutoTradeEngine(
     var trendCandidate = IsTrendCandidate(candidate);
     var strategyMatchCandidate = IsStrategyMatchCandidate(candidate);
     var manualAlgoCandidate = IsManualAlgoCandidate(candidate);
-    if (options.ContractMode is "v7_only" or "v8_only" && !manualAlgoCandidate)
+    if (options.ContractMode is "v8_only" && !manualAlgoCandidate)
     {
       // TradePlan is the sole autonomous order path in this mode - reject any
       // new V6 autonomous candidate before planning or broker calls, as
@@ -1368,9 +1368,7 @@ public sealed class AutoTradeEngine(
       // autonomous analysis output.
       return await RejectAsync(
         candidate,
-        options.ContractMode == "v8_only"
-          ? "legacy_candidate_disabled_in_v8_only"
-          : "legacy_candidate_disabled_in_v7_only",
+        "legacy_candidate_disabled_in_v8_only",
         cancellationToken
       );
     }
@@ -3425,7 +3423,7 @@ public sealed class AutoTradeEngine(
     // FX pair would have priced, stopped, and sized its order using XAU's
     // SymbolInfo/pip geometry/pip value instead of its own. Resolve from
     // the candidate's own symbol, same as ResolveInstrumentUnits already
-    // does for the (already-working) autonomous V7 path.
+    // does for the (already-working) autonomous TradePlan path.
     var symbol = ResolveBoundSymbol(candidate.Symbol)
       ?? throw new VolumePlanningException(
         $"manual algo candidate symbol {candidate.Symbol} is not a bound instrument"
@@ -6975,18 +6973,17 @@ public sealed class AutoTradeEngine(
         isNewManualFill = true;
       }
     }
-    // TradePlan ownership (v8|plan|thesis|L1, plus draining v7|) is never
-    // an av1/av2/av3/avz comment — hand it to TradePlanRuntime before the
-    // reconstruct failure log so multi-leg ladder fills are not treated as
-    // unowned orphans.
+    // TradePlan ownership (v8|plan|thesis|L1) is never an av1/av2/av3/avz
+    // comment — hand it to TradePlanRuntime before the reconstruct failure
+    // log so multi-leg ladder fills are not treated as unowned orphans.
     if (
       state is null
-      && TradePlanV7Ownership.TryParseV7Ownership(
+      && TradePlanOwnership.TryParseOwnership(
         position.Comment, position.ClientOrderId
       ) is not null
     )
     {
-      await TradePlans.TryAdoptV7BrokerPositionAsync(
+      await TradePlans.TryAdoptBrokerPositionAsync(
         _client, RequireSymbol(), position, cancellationToken
       );
       return;

@@ -157,7 +157,7 @@
       "final_action": "REWRITE_CANONICAL"
     },
     {
-      "file": "algo-bot/tests/test_publish_trade_plan_v7.py",
+      "file": "algo-bot/tests/test_publish_trade_plan_v8.py",
       "line": 15,
       "symbol": "app.core.config.settings",
       "role": "flat_settings_import",
@@ -521,7 +521,7 @@
       "final_action": "REWRITE_CANONICAL"
     },
     {
-      "file": "algo-bot/tests/test_trade_plan_v7_migration_mode.py",
+      "file": "algo-bot/tests/test_trade_plan_v8_migration_mode.py",
       "line": 23,
       "symbol": "app.core.config.settings",
       "role": "flat_settings_import",

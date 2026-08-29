@@ -1924,9 +1924,9 @@ def format_plan_published_root_card(
 
 
 async def published_plan_stop_price(client, match_id: str) -> float | None:
-  """Best-effort stop from the just-published TradePlan V7 (if present)."""
+  """Best-effort stop from the just-published TradePlan (if present)."""
   try:
-    from app.autotrade.setup_execution_aggregate import v8_plan_id, plan_id_candidates
+    from app.autotrade.setup_execution_aggregate import v8_plan_id
     from app.autotrade.trade_plan_stream import read_trade_plan
 
     plan = await read_trade_plan(client, v8_plan_id(match_id))
@@ -2180,9 +2180,9 @@ async def load_strategy_match_for_root_card(
   if legacy is not None and str(legacy.match_id) == setup_id:
     return legacy
 
-  plan_id = setup_id if setup_id.startswith(("v7:", "v8:")) else f"v8:{setup_id}"
+  plan_id = setup_id if setup_id.startswith("v8:") else f"v8:{setup_id}"
   plan_raw = await client.get(plan_key(plan_id))
-  if plan_raw is None and setup_id.startswith(("v7:", "v8:")):
+  if plan_raw is None and setup_id.startswith("v8:"):
     plan_raw = await client.get(plan_key(setup_id))
   if plan_raw is None:
     return None

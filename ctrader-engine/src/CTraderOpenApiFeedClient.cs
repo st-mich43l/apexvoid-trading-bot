@@ -600,7 +600,7 @@ public sealed class CTraderOpenApiFeedClient : ICTraderFeedClient, ICTraderTrade
       }
       // Broker-attached SL/TP orders use StopLossTakeProfit. Margin/equity
       // stop-outs often arrive as Market orders with IsStopOut=true — treat
-      // both as protective closes so V7 group tracking does not stall in
+      // both as protective closes so TradePlan group tracking does not stall in
       // recovery_required for ordinary stop hits.
       var isProtective =
         closingOrder.OrderType == ProtoOAOrderType.StopLossTakeProfit

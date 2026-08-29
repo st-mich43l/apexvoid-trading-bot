@@ -27,9 +27,7 @@ phase ledgers live under [`history/`](history/) and
 | Doc | Purpose |
 |---|---|
 | [redis-contract.md](redis-contract.md) | Bars / plans / events boundary |
-| [adr-trade-plan-v8-cutover.md](adr-trade-plan-v8-cutover.md) | Live TradePlan identity |
-| [adr-trade-plan-v7-boundary.md](adr-trade-plan-v7-boundary.md) | V7 boundary (still referenced by code) |
-| [trade-plan-v7-migration.md](trade-plan-v7-migration.md) | V7 migration notes |
+| [adr-trade-plan-v8-cutover.md](adr-trade-plan-v8-cutover.md) | Live TradePlan V8 identity (sole autonomous contract) |
 | [autotrade-config-contract.md](autotrade-config-contract.md) | Auto-trade config surface |
 | [autotrade-execution-integrity.md](autotrade-execution-integrity.md) | Execution integrity checks |
 | [p0-simple-zone-m1-baseline-map.md](p0-simple-zone-m1-baseline-map.md) | Zone / M1 baseline map (test-cited) |

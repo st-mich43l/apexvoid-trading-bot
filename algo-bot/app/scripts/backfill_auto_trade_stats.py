@@ -1,6 +1,6 @@
 """One-shot backfill of auto_trade_fills / auto_trade_results from Redis events.
 
-Replays ``auto_trade:events`` through ``record_auto_trade_event`` so V7
+Replays ``auto_trade:events`` through ``record_auto_trade_event`` so TradePlan
 ``order_filled`` / ``position_closed`` rows that were skipped before the
 trade_stats fix appear in ``/trade_stats``.
 

@@ -38,19 +38,19 @@ public sealed record TradePlanBreakEvenResult(
 );
 
 /// <summary>
-/// Pure decision logic for the V7 execution path. Every method here is a
+/// Pure decision logic for the TradePlan execution path. Every method here is a
 /// mechanical function of a TradePlan's own already-declared values plus
 /// live broker-observed inputs (quote, spread, fill price, account
 /// balance, tick size) - none of them classify regime, select a strategy,
 /// resolve an execution route, or compute a structural stop. See
-/// docs/adr-trade-plan-v7-boundary.md. The dependency boundary (this file
+/// docs/adr-trade-plan-v8-cutover.md. The dependency boundary (this file
 /// never calls StructureStopPlanner, ResolveExecutionRoute,
 /// BuildOpposingZoneContext, StructuralStopIdentityMatches, or
 /// PlansMatchWithinTolerance) is enforced by
 /// TradePlanExecutionEngineDependencyTests.cs.
 ///
 /// This is not yet wired into AutoTradeEngine.RunSessionAsync - broker
-/// order submission, fill reconciliation, and restart recovery for V7
+/// order submission, fill reconciliation, and restart recovery for TradePlan
 /// plans are a later phase. This class only decides *what* to do; a caller
 /// still has to actually call ICTraderTradeClient.
 /// </summary>
@@ -201,7 +201,7 @@ public static class TradePlanExecutionEngine
   /// snapshot. When sizing.mode=equity_table, volume comes from
   /// VolumePlanner.LotsForEquity(resolvedEquity) and RiskPercent is ignored.
   /// Plans without a sizing contract are rejected
-  /// (legacy_v7_sizing_contract_missing). For a limit_ladder entry, Slices
+  /// (sizing_contract_missing). For a limit_ladder entry, Slices
   /// are proportional to each entry LEG's own declared VolumeRatio (or
   /// sizing.leg_ratios when present) via SplitEntryVolume — never to
   /// plan.Targets.CloseRatio.
@@ -246,7 +246,7 @@ public static class TradePlanExecutionEngine
     }
     if (plan.Sizing is null)
     {
-      throw new TradePlanContractException("legacy_v7_sizing_contract_missing");
+      throw new TradePlanContractException("sizing_contract_missing");
     }
     if (plan.Sizing.Mode != "equity_table")
     {
@@ -426,7 +426,7 @@ public static class TradePlanExecutionEngine
   /// buffer, SELL desired = fill - buffer; never worsens an existing stop
   /// (BUY: max(current, desired), SELL: min(current, desired)). Uses only
   /// the broker-confirmed fill price - never the declared entry zone/order
-  /// price - per docs/adr-trade-plan-v7-boundary.md.
+  /// price - per docs/adr-trade-plan-v8-cutover.md.
   /// </summary>
   public static TradePlanBreakEvenResult CalculateBreakEven(
     TradePlan plan,

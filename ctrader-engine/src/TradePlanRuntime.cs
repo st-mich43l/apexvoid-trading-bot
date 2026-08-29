@@ -31,7 +31,7 @@ internal sealed class AccountReconcileSnapshotCycle(
   }
 }
 
-// V7 broker-execution runtime (Sections F-K of the TradePlan V7 cutover):
+// TradePlan broker-execution runtime (Sections F-K of the TradePlan V8 cutover):
 // consumes execution:trade_plans, arms the exact declared entry, submits
 // exactly what Python declared, tracks the broker-confirmed fill/targets/
 // stop, and persists enough state to restore after a restart. This is the
@@ -41,7 +41,7 @@ internal sealed class AccountReconcileSnapshotCycle(
 // Deliberately a separate file/class from AutoTradeEngine.cs (which still
 // legitimately calls ResolveExecutionRoute/StructureStopPlanner for the V6
 // path elsewhere in the same class) so TradePlanExecutionEngineDependencyTests
-// can scan every V7 runtime source file for those forbidden symbols without
+// can scan every TradePlan runtime source file for those forbidden symbols without
 // tripping over V6 code that must keep calling them. AutoTradeEngine composes
 // this class into its own RunSessionAsync loop (see PollTradePlansAsync)
 // rather than this class owning its own session/reconcile/heartbeat loop.
@@ -380,7 +380,7 @@ public static class TradePlanJson
         DeclaredRatio: 1m,
         IntendedVolume: state.RemainingVolume,
         IntendedLots: 0m,
-        ClientOrderId: TradePlanV7Ownership.FormatClientOrderId(state.PlanId, "L1"),
+        ClientOrderId: TradePlanOwnership.FormatClientOrderId(state.PlanId, "L1"),
         BrokerPositionId: positionId,
         FillPrice: state.EntryFillPrice,
         FilledVolume: state.RemainingVolume,
@@ -422,7 +422,7 @@ public static class TradePlanJson
         DeclaredRatio: 1m,
         IntendedVolume: 0,
         IntendedLots: 0m,
-        ClientOrderId: TradePlanV7Ownership.FormatClientOrderId(state.PlanId, "L1"),
+        ClientOrderId: TradePlanOwnership.FormatClientOrderId(state.PlanId, "L1"),
         BrokerOrderId: pending[0],
         Stage: TradePlanLegStages.Pending
       ));
@@ -854,8 +854,6 @@ public sealed class TradePlanRuntime(
   private static string TrackedPlansKey() => "execution:trade_plan_runtime_ids";
   private static string NotifyDedupKey(string planId, string eventKey) =>
     $"auto_trade:v8_notify:{planId}:{eventKey}";
-  private static string LegacyNotifyDedupKey(string planId, string eventKey) =>
-    $"auto_trade:v7_notify:{planId}:{eventKey}";
   private static readonly TimeSpan NotifyDedupTtl = TimeSpan.FromDays(7);
   // How long a submitted leg's BrokerOrderId must stay missing from the
   // broker's pending-order snapshot (no matching position either) before
@@ -901,25 +899,25 @@ public sealed class TradePlanRuntime(
 
   /// <summary>
   /// Adopts a broker position whose comment/ClientOrderId carries TradePlan
-  /// V8 (or draining V7) ownership into the matching tracked plan leg.
+  /// V8 ownership into the matching tracked plan leg.
   /// Idempotent: a leg already filled on the same broker position is a no-op
   /// so reconcile ticks do not re-log or re-amend every poll.
   /// </summary>
-  public Task<bool> TryAdoptV7BrokerPositionAsync(
+  public Task<bool> TryAdoptBrokerPositionAsync(
     TradingPosition position,
     CancellationToken cancellationToken
-  ) => TryAdoptV7BrokerPositionAsync(
+  ) => TryAdoptBrokerPositionAsync(
     client: null, symbol: null, position, cancellationToken
   );
 
-  public async Task<bool> TryAdoptV7BrokerPositionAsync(
+  public async Task<bool> TryAdoptBrokerPositionAsync(
     ICTraderTradeClient? client,
     SymbolInfo? symbol,
     TradingPosition position,
     CancellationToken cancellationToken
   )
   {
-    var ownership = TradePlanV7Ownership.TryParseV7Ownership(
+    var ownership = TradePlanOwnership.TryParseOwnership(
       position.Comment, position.ClientOrderId
     );
     if (ownership is null)
@@ -1586,19 +1584,13 @@ public sealed class TradePlanRuntime(
     if (!string.IsNullOrWhiteSpace(eventKey))
     {
       var stamp = clock().ToUnixTimeSeconds().ToString();
-      var claimedV8 = await store.TryClaimStringAsync(
+      var claimed = await store.TryClaimStringAsync(
         NotifyDedupKey(plan.PlanId, eventKey),
         stamp,
         NotifyDedupTtl,
         cancellationToken
       );
-      var claimedLegacy = await store.TryClaimStringAsync(
-        LegacyNotifyDedupKey(plan.PlanId, eventKey),
-        stamp,
-        NotifyDedupTtl,
-        cancellationToken
-      );
-      if (!claimedV8 || !claimedLegacy)
+      if (!claimed)
       {
         log(
           $"v8 notify dedup skipped plan_id={plan.PlanId} event_key={eventKey} type={type}"
@@ -1911,9 +1903,9 @@ public sealed class TradePlanRuntime(
     }
     if (!ShouldSubmitOrders)
     {
-      // shadow_v7 (or DryRun): the plan is valid and would have fired,
-      // but per docs/adr-trade-plan-v7-boundary.md shadow mode "places no
-      // orders from it". Left Received so the next poll re-evaluates it.
+      // DryRun / non-submitting contract mode: the plan is valid and would
+      // have fired, but places no orders. Left Received so the next poll
+      // re-evaluates it.
       log(
         $"v8 shadow: would submit id={plan.PlanId} entry_type={plan.Entry.Type}"
       );
@@ -1950,7 +1942,7 @@ public sealed class TradePlanRuntime(
   // EvaluateArmedPlansAsync removed — Armed is not part of the runtime.
 
   private bool ShouldSubmitOrders =>
-    options.ContractMode is "v7_primary" or "v7_only" or "v8_only"
+    options.ContractMode is "v8_only"
     && !options.DryRun;
 
   private async Task SubmitEntryAsync(
@@ -1983,10 +1975,10 @@ public sealed class TradePlanRuntime(
     {
       const string legId = "L1";
       var entryPrice = direction == TradeDirection.Buy ? quote.Ask : quote.Bid;
-      var comment = TradePlanV7Ownership.FormatComment(
+      var comment = TradePlanOwnership.FormatComment(
         plan.PlanId, plan.ThesisId, legId
       );
-      var clientOrderId = TradePlanV7Ownership.FormatClientOrderId(
+      var clientOrderId = TradePlanOwnership.FormatClientOrderId(
         plan.PlanId, legId
       );
       var execution = await client.PlaceMarketOrderAsync(
@@ -2120,10 +2112,10 @@ public sealed class TradePlanRuntime(
         continue;
       }
 
-      var legComment = TradePlanV7Ownership.FormatComment(
+      var legComment = TradePlanOwnership.FormatComment(
         plan.PlanId, plan.ThesisId, declared.LegId
       );
-      var legClientOrderId = TradePlanV7Ownership.FormatClientOrderId(
+      var legClientOrderId = TradePlanOwnership.FormatClientOrderId(
         plan.PlanId, declared.LegId
       );
       var useMarket = ResolveLegUsesMarket(declared, direction, quote);
@@ -2357,7 +2349,7 @@ public sealed class TradePlanRuntime(
       // Match broker positions onto legs via ownership tokens.
       foreach (var position in positions)
       {
-        var ownership = TradePlanV7Ownership.TryParseV7Ownership(
+        var ownership = TradePlanOwnership.TryParseOwnership(
           position.Comment, position.ClientOrderId
         );
         if (ownership is null || ownership.PlanId != state.PlanId)
@@ -3925,7 +3917,7 @@ public sealed class TradePlanRuntime(
         DeclaredRatio: item.Ratio,
         IntendedVolume: item.Volume,
         IntendedLots: item.Lots,
-        ClientOrderId: TradePlanV7Ownership.FormatClientOrderId(
+        ClientOrderId: TradePlanOwnership.FormatClientOrderId(
           plan.PlanId, item.LegId
         ),
         Stage: TradePlanLegStages.Planned

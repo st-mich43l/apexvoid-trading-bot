@@ -106,7 +106,7 @@
           "cancel_on_expiry": true
         },
         "provenance": {
-          "analysis_engine_version": "v7.0.0",
+          "analysis_engine_version": "v8.0.0",
           "market_map_id": "map-2024-07-03-001",
           "config_fingerprint": "abc123"
         }
@@ -296,7 +296,7 @@
           "cancel_on_expiry": true
         },
         "provenance": {
-          "analysis_engine_version": "v7.0.0",
+          "analysis_engine_version": "v8.0.0",
           "market_map_id": "map-2024-07-03-002",
           "config_fingerprint": "abc123"
         }
@@ -401,7 +401,7 @@
           "cancel_on_expiry": true
         },
         "provenance": {
-          "analysis_engine_version": "v7.0.0",
+          "analysis_engine_version": "v8.0.0",
           "market_map_id": "map-2024-07-03-003",
           "config_fingerprint": "abc123"
         }

@@ -1,4 +1,4 @@
-"""Setup lifecycle state machine for TradePlan V7 analysis (Phase 2).
+"""Setup lifecycle state machine for TradePlan V8 analysis (Phase 2).
 
 This is a distinct state machine from `app/autotrade/lifecycle.py`'s
 `LIFECYCLE_STATES`, which tracks V6 execution progress
