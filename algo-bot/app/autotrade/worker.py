@@ -7036,38 +7036,12 @@ async def _maybe_flag_regime_alert(
   symbol: str,
   shares: dict[str, float] | None,
 ) -> None:
-  """Flag (at most once per 24h per symbol) that the chop share is high
-  enough to warrant an owner DM. worker.py cannot import app.bot.client
-  (see the architecture-guard test at the bottom of this module), so it
-  only writes a Redis flag here; delivery.py's existing event-delivery
-  loop (which already imports send_scanner_with_retry) polls for it and
-  sends the actual Telegram message. See delivery.py's
-  `_check_regime_alerts` for the consuming side.
+  """No-op: chop-heavy regime owner DMs are retired (2026-08-29).
+
+  Kept as a call-site stub so regime-share accounting still runs without
+  writing pending alert keys or triggering Telegram noise.
   """
-  if not shares:
-    return
-  threshold = max(
-    0.0,
-    min(1.0, float(runtime_config.analysis.measurements.regime_chop_alert_share)),
-  )
-  chop_share = shares.get("chop", 0.0)
-  if chop_share <= threshold:
-    return
-  payload = json.dumps({
-    "symbol": symbol.upper(),
-    "chop_share": chop_share,
-    "trend_share": shares.get("trend", 0.0),
-    "breakout_share": shares.get("breakout", 0.0),
-    "flagged_at": int(datetime.now(timezone.utc).timestamp()),
-  })
-  # SETNX + TTL: only (re)flag once per cooldown window per symbol, even
-  # though this runs on every bar close while the condition holds.
-  await client.set(
-    _regime_alert_key(symbol),
-    payload,
-    ex=_REGIME_ALERT_COOLDOWN_SECONDS,
-    nx=True,
-  )
+  return
 
 
 def _status_payload(

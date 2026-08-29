@@ -62,7 +62,6 @@ _CURSOR_KEY = "auto_trade:telegram_event_cursor"
 _PAUSED_KEY = "auto_trade:paused"
 _STATS_KEY = "auto_trade:stats"
 _REGIME_ALERT_PENDING_PREFIX = "auto_trade:regime_alert_pending:"
-_REGIME_ALERT_SENT_TTL = 86400
 _REGIME_ALERT_POLL_SECONDS = 30.0
 _regime_alert_last_check_monotonic = 0.0
 _TRADE_MESSAGE_TTL = 7 * 24 * 3600
@@ -2903,16 +2902,12 @@ async def set_auto_trade_paused(paused: bool) -> None:
 
 
 async def _check_regime_alerts(client) -> None:
-  """Consume any regime mis-tuning flags worker.py wrote to Redis.
+  """Clear stale regime alert flags without DMing the owner.
 
-  worker.py cannot import app.bot.client (architecture guard test), so it
-  only flags a pending alert key; this function - called from the existing
-  auto_trade_events_loop poll below - is the delivery side that actually
-  sends the owner DM, deduping via a companion "sent" key so a flag never
-  fires twice within its cooldown window.
-
-  Never SCAN the whole Redis keyspace — only probe configured symbols.
-  Throttled so the owner delivery loop does not pay Redis on every tick.
+  Owner-reported 2026-08-29: the chop-heavy "Trend/breakout thresholds may
+  need tuning" DM is noise. Worker may still write pending keys until that
+  path is retired; drain them here so Redis does not accumulate, but never
+  send Telegram.
   """
   global _regime_alert_last_check_monotonic
   now = time.monotonic()
@@ -2938,38 +2933,8 @@ async def _check_regime_alerts(client) -> None:
 
   for symbol in symbols:
     key = f"{_REGIME_ALERT_PENDING_PREFIX}{symbol}"
-    raw = await client.get(key)
-    if not raw:
-      continue
-    sent_key = f"auto_trade:regime_alert_sent:{symbol}"
-    claimed = await client.set(
-      sent_key,
-      "1",
-      nx=True,
-      ex=_REGIME_ALERT_SENT_TTL,
-    )
-    if not claimed:
-      continue
-    try:
-      payload = json.loads(raw)
-    except (TypeError, json.JSONDecodeError):
+    if await client.get(key):
       await client.delete(key)
-      continue
-    chop = float(payload.get("chop_share", 0.0))
-    trend = float(payload.get("trend_share", 0.0))
-    breakout = float(payload.get("breakout_share", 0.0))
-    text = (
-      "⚠️ <b>ApexVoid Algo</b>\n"
-      f"Regime mix looks chop-heavy for {escape(symbol)}: "
-      f"chop {chop:.0%} · trend {trend:.0%} · breakout {breakout:.0%} "
-      "over the trailing 24h. Trend/breakout thresholds may need tuning."
-    )
-    if runtime_config.delivery.telegram.telegram_owner_id:
-      await send_scanner_with_retry(
-        text,
-        chat_id=runtime_config.delivery.telegram.telegram_owner_id,
-      )
-    await client.delete(key)
 
 
 async def _process_owner_entries(

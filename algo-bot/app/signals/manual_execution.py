@@ -28,7 +28,7 @@ import json
 import logging
 from typing import Any
 
-from app.bot.client import send_scanner_with_retry
+from app.bot.client import send_scanner_with_retry, send_with_retry
 from app.core.config import runtime_config
 from app.persistence import redis_state
 from app.persistence.store import (
@@ -248,8 +248,23 @@ def _target_text(event: dict, symbol: str) -> str:
 
 
 async def _send_executor_truth(text: str) -> None:
+  """Operational truth from the Auto Algo / scanner bot (rejects, dry-run)."""
   if runtime_config.delivery.telegram.telegram_owner_id:
     await send_scanner_with_retry(
+      text,
+      chat_id=runtime_config.delivery.telegram.telegram_owner_id,
+    )
+
+
+async def _send_owner_command_ack(text: str) -> None:
+  """Final /trade_* command result on the ApexVoid bot — never Auto Algo.
+
+  Owner DMs ``/trade_delete`` / ``/trade_modify`` on ApexVoid; the pending
+  ack already replies there. Broker confirm must not also DM via the
+  scanner bot (duplicate "Auto Algo" reply).
+  """
+  if runtime_config.delivery.telegram.telegram_owner_id:
+    await send_with_retry(
       text,
       chat_id=runtime_config.delivery.telegram.telegram_owner_id,
     )
@@ -952,7 +967,7 @@ async def _handle_manual_cancelled(event: dict) -> None:
     fresh = await get_manual_signal(sig["id"]) or sig
     rearmed = await trade_ops._rearm_algo_after_modify(fresh)
     if rearmed is None:
-      await _send_executor_truth(
+      await _send_owner_command_ack(
         f"⚠️ #{fresh.get('daily_seq') or fresh['id']} modify re-arm failed",
       )
       return
@@ -960,18 +975,19 @@ async def _handle_manual_cancelled(event: dict) -> None:
     text = trade_ops.render_result(
       result, rearmed.get("symbol", "XAU"), "vip",
     )
-    await _send_executor_truth(text)
+    await _send_owner_command_ack(text)
     return
   # /trade_delete asked to remove the typo card after broker cancel — not
   # leave a cancelled lifecycle row. Cancel path stays for /trade_cancel.
   if await consume_pending_delete(intent_token):
     result = await trade_ops._execute_delete(sig["id"])
     # Channel posts are already gone via delete_posts; post_result skips
-    # fan-out for delete. Owner still needs the final 🗑 deleted ack.
+    # fan-out for delete. Final 🗑 deleted ack stays on ApexVoid (command
+    # bot), not Auto Algo.
     text = trade_ops.render_result(
       result, sig.get("symbol", "XAU"), "vip",
     )
-    await _send_executor_truth(text)
+    await _send_owner_command_ack(text)
     return
   await set_execution_status(sig["id"], "cancelled")
   result = await trade_ops._execute_cancel(sig["id"])
