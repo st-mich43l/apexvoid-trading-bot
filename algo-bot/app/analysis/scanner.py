@@ -3043,9 +3043,15 @@ async def _handle_event(
     return found
 
   detected = await asyncio.to_thread(_run_detectors)
-  from app.analysis.detectors import drain_discovery_rejections
+  from app.analysis.detectors import (
+    drain_discovery_observations,
+    drain_discovery_rejections,
+  )
 
   for reason, count in drain_discovery_rejections().items():
+    for _ in range(count):
+      await increment_metric(client, reason, symbol=symbol)
+  for reason, count in drain_discovery_observations().items():
     for _ in range(count):
       await increment_metric(client, reason, symbol=symbol)
   for result in detected:

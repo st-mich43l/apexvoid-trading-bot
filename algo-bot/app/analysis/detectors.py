@@ -1,5 +1,7 @@
 """Pure price-action setup detectors for replayable scanner decisions."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field, replace
 import logging
 import math
@@ -49,7 +51,20 @@ from app.analysis.structural_reaction_support import (
   trendline_structural_id,
   zone_structural_id,
 )
-from app.analysis.zones import score_zones
+from app.analysis.zones import (
+  FRESH_SCORE,
+  GRAB_A_SCORE,
+  HTF_SCORE,
+  KEY_LEVEL_SCORE,
+  LIQUIDITY_SCORE,
+  PD_POSITION_SCORE,
+  ROUND_NUMBER_SCORE,
+  SESSION_LEVEL_SCORE,
+  SINGLE_TOUCH_SCORE,
+  SOURCE_SCORE_CAP,
+  TRENDLINE_SCORE,
+  score_zones,
+)
 from app.analysis.technique_detectors import (
   confluence_zone_reaction,
   crt_technique_reaction,
@@ -61,8 +76,8 @@ from app.analysis.technique_detectors import (
 
 log = logging.getLogger(__name__)
 
-COUNTER_BIAS_BELOW_MINIMUM_CONFLUENCE = "counter_bias_below_minimum_confluence"
 _discovery_rejections: Counter[str] = Counter()
+_discovery_observations: Counter[str] = Counter()
 
 
 def drain_discovery_rejections() -> dict[str, int]:
@@ -71,8 +86,18 @@ def drain_discovery_rejections() -> dict[str, int]:
   return counts
 
 
+def drain_discovery_observations() -> dict[str, int]:
+  counts = dict(_discovery_observations)
+  _discovery_observations.clear()
+  return counts
+
+
 def _record_discovery_rejection(reason: str) -> None:
   _discovery_rejections[reason] += 1
+
+
+def _record_discovery_observation(reason: str) -> None:
+  _discovery_observations[reason] += 1
 
 _EPS = 1e-9
 _BUY_ZONE_SIDE = "de" + "mand"
@@ -166,7 +191,6 @@ class DetectorSettings:
   breakout_accept_bars: int = 2
   breakout_max_age_bars: int = 6
   allow_counter_trend: bool = True
-  counter_bias_minimum_confluence: int = 3
   range_scalp_enabled: bool = True
   range_scalp_lookback: int = 48
   range_scalp_cluster_atr: float = 0.25
@@ -437,9 +461,6 @@ def detector_settings_from(config: object | None = None) -> DetectorSettings:
     breakout_accept_bars=analysis.breakout.accept_bars,
     breakout_max_age_bars=analysis.breakout.max_age_bars,
     allow_counter_trend=strategies.counter_trend.allow_counter_trend,
-    counter_bias_minimum_confluence=int(
-      actionability.counter_bias.minimum_confluence
-    ),
     range_scalp_enabled=strategies.range_reversion.range_edge.enabled,
     range_scalp_lookback=strategies.range_reversion.range_edge.lookback,
     range_scalp_cluster_atr=strategies.range_reversion.range_edge.cluster_atr,
@@ -1102,6 +1123,40 @@ _FACTOR_STRUCTURAL_AGREEMENT_WEIGHT = 3.0
 _FACTOR_CHOCH_WEIGHT = 2.0
 _FACTOR_FIB_TOUCH_WEIGHT = 2.5
 
+# Maximum attainable raw score of each rubric, used to normalise both onto a
+# common 0-1 scale before thresholding. _FACTOR_SCORE_MAX is the PR-E base
+# (touch cap at _FACTOR_TOUCH_CAP units) and intentionally excludes
+# _FACTOR_CHOCH_WEIGHT so STAR ratios stay bit-identical to the legacy 12/8
+# cut points; choch remains an additive bonus above that base.
+# _ZONE_SCORE_MAX is the sum of the SOURCE/KEY_LEVEL/ROUND/LIQUIDITY/HTF/
+# SESSION/PD/GRAB_A/TRENDLINE/FRESH/SINGLE_TOUCH weights in score_zones.
+_FACTOR_SCORE_MAX = (
+  _FACTOR_HTF_ALIGN_WEIGHT
+  + _FACTOR_TOUCH_CAP * _FACTOR_TOUCH_UNIT_WEIGHT
+  + _FACTOR_WICK_REJECTION_WEIGHT
+  + _FACTOR_DISPLACEMENT_WEIGHT
+  + _FACTOR_SESSION_CONTEXT_WEIGHT
+  + _FACTOR_STRUCTURAL_AGREEMENT_WEIGHT
+  + _FACTOR_FIB_TOUCH_WEIGHT
+)
+_ZONE_SCORE_MAX = (
+  SOURCE_SCORE_CAP
+  + KEY_LEVEL_SCORE
+  + ROUND_NUMBER_SCORE
+  + LIQUIDITY_SCORE
+  + HTF_SCORE
+  + SESSION_LEVEL_SCORE
+  + PD_POSITION_SCORE
+  + GRAB_A_SCORE
+  + TRENDLINE_SCORE
+  + FRESH_SCORE
+  + SINGLE_TOUCH_SCORE
+)
+# Cut points derived so the factor branch stays bit-identical to the legacy
+# raw 12.0 / 8.0 thresholds (STAR_* / _FACTOR_SCORE_MAX).
+_STAR_THREE_RATIO = STAR_THREE_SCORE / _FACTOR_SCORE_MAX
+_STAR_TWO_RATIO = STAR_TWO_SCORE / _FACTOR_SCORE_MAX
+
 
 def _fib_touch_weight(settings: DetectorSettings | None = None) -> float:
   if settings is None:
@@ -1109,11 +1164,11 @@ def _fib_touch_weight(settings: DetectorSettings | None = None) -> float:
   return max(0.0, float(settings.fibonacci_confluence_weight))
 
 
-def _confluence_from_factors(
+def _raw_factor_score(
   factors: ConfluenceFactors,
   settings: DetectorSettings | None = None,
-) -> int:
-  score = (
+) -> float:
+  return (
     (_FACTOR_HTF_ALIGN_WEIGHT if factors.htf_aligned else 0.0)
     + min(max(0, factors.touches), _FACTOR_TOUCH_CAP) * _FACTOR_TOUCH_UNIT_WEIGHT
     + (_FACTOR_WICK_REJECTION_WEIGHT if factors.wick_rejection else 0.0)
@@ -1126,7 +1181,22 @@ def _confluence_from_factors(
     + (_FACTOR_CHOCH_WEIGHT if factors.choch else 0.0)
     + (_fib_touch_weight(settings) if factors.fib_touch else 0.0)
   )
-  return 3 if score >= STAR_THREE_SCORE else 2 if score >= STAR_TWO_SCORE else 1
+
+
+def _stars_from_ratio(ratio: float) -> int:
+  if ratio >= _STAR_THREE_RATIO:
+    return 3
+  if ratio >= _STAR_TWO_RATIO:
+    return 2
+  return 1
+
+
+def _confluence_from_factors(
+  factors: ConfluenceFactors,
+  settings: DetectorSettings | None = None,
+) -> int:
+  score = _raw_factor_score(factors, settings)
+  return _stars_from_ratio(score / _FACTOR_SCORE_MAX)
 
 
 def _confluence_from_zone(
@@ -1139,7 +1209,7 @@ def _confluence_from_zone(
   if score > 0:
     if factors.fib_touch:
       score += _fib_touch_weight(settings)
-    stars = 3 if score >= STAR_THREE_SCORE else 2 if score >= STAR_TWO_SCORE else 1
+    stars = _stars_from_ratio(score / _ZONE_SCORE_MAX)
   else:
     stars = _confluence_from_factors(factors, settings)
   if getattr(zone, "touches", 0) >= 1:
@@ -1300,12 +1370,8 @@ def _finish(
     if bias_relationship is not None
     else resolve_bias_relationship(ctx.htf_bias, direction)
   )
-  if (
-    relationship == "counter_bias"
-    and confluence < ctx.settings.counter_bias_minimum_confluence
-  ):
-    _record_discovery_rejection(COUNTER_BIAS_BELOW_MINIMUM_CONFLUENCE)
-    return None
+  if relationship == "counter_bias":
+    _record_discovery_observation("counter_bias_published")
   math_pd = None
   if st.dealing_range is not None:
     math_pd = float(st.dealing_range.position)
@@ -1540,6 +1606,13 @@ def break_retest(ctx: DetectionContext) -> DetectionResult | None:
       f"TL {line.kind} ×{line.touches}",
       "retest rejection",
     ]
+    factors = ConfluenceFactors(
+      htf_aligned=ctx.htf_bias == _bias_for_direction(direction),
+      touches=line.touches,
+      wick_rejection=True,
+      displacement_grade=True,
+      structural_agreement=True,
+    )
     result = _finish(
       ctx,
       "Break & Retest",
@@ -1549,6 +1622,7 @@ def break_retest(ctx: DetectionContext) -> DetectionResult | None:
       price,
       atr,
       reasons,
+      factors=factors,
       structural_source="trendline",
       structural_id=trendline_structural_id(ctx.symbol, ctx.tf, line),
       structural_low=zone.low,
@@ -1677,17 +1751,27 @@ def box_breakout(ctx: DetectionContext) -> DetectionResult | None:
   if box.coiling:
     reasons.append("coil")
   key_level = box.box_low if direction == "BUY" else box.box_high
+  factors = ConfluenceFactors(
+    htf_aligned=ctx.htf_bias == _bias_for_direction(direction),
+    wick_rejection=entry_kind == "retest",
+    displacement_grade=True,
+    structural_agreement=True,
+    session_context=bool(st.session_levels),
+  )
+  # Keep score_reasons / coil tags on the entry zone, but let factors drive
+  # stars — raw score_zones totals often remap below confluence_floor after PR-E.
   return _finish(
     ctx,
     "Box Breakout",
     direction,
     key_level,
-    zone,
+    replace(zone, score=0.0),
     price,
     atr,
     reasons,
     chop_tp_cap=False,
     include_score_reasons=False,
+    factors=factors,
     structural_source="box_breakout",
     structural_id=box_structural_id(ctx.symbol, ctx.tf, box),
     structural_low=zone.low,
@@ -1959,11 +2043,10 @@ def momentum_ride(ctx: DetectionContext) -> DetectionResult | None:
       structural_source="momentum_impulse",
       structural_id=structural_id,
     )
-  min_touches = max(1, int(ctx.settings.key_level_min_touches))
-  eligible_levels = [
-    item for item in st.levels if item.touches >= min_touches
-  ]
-  level = _nearest_level(eligible_levels, price, direction)
+  # Momentum uses a level only as a proximity anchor after a confirmed
+  # impulse break — the thesis is the break, not prior level respect. Do not
+  # apply key_level_min_touches here (that gate belongs on key_level_reaction).
+  level = _nearest_level(st.levels, price, direction)
   if level is None:
     return None
   zone = entry_zone(
@@ -2086,6 +2169,13 @@ def range_edge_scalp(ctx: DetectionContext) -> DetectionResult | None:
       f"TP1 EQ {_number(scalp_range.eq)}",
       f"TP2 edge {_number(opposing_level)}",
     ]
+    factors = ConfluenceFactors(
+      htf_aligned=ctx.htf_bias in {_bias_for_direction(direction), "range"},
+      touches=barrier.touches,
+      wick_rejection=barrier.wick_rejections > 0,
+      displacement_grade=grade_a,
+      structural_agreement=True,
+    )
     return _finish(
       ctx,
       "Range Edge Scalp",
@@ -2097,6 +2187,7 @@ def range_edge_scalp(ctx: DetectionContext) -> DetectionResult | None:
       reasons,
       mode="range_scalp",
       chop_tp_cap=False,
+      factors=factors,
       confirmation=confirmation.confirmation_type,
       confirmation_bar_ts=confirmation.confirmation_bar_ts,
       touch_bar_ts=confirmation.touch_bar_ts,
@@ -2112,7 +2203,7 @@ def _barrier_zone(barrier: ScalpBarrier, direction: str) -> Zone:
     barrier.high,
     _BUY_ZONE_SIDE if direction == "BUY" else "supply",
     source="range_edge",
-    score=max(STAR_TWO_SCORE, barrier.score),
+    score=barrier.score,
     score_reasons=list(barrier.tags),
   )
 
@@ -2148,6 +2239,8 @@ def fade_scalp(ctx: DetectionContext) -> DetectionResult | None:
   atr = _atr(ind)
   lookback = max(1, int(ctx.settings.structural_reaction_lookback_bars))
   desired_kind = "equal_low" if direction == "BUY" else "equal_high"
+  best: DetectionResult | None = None
+  best_distance = float("inf")
   for level in st.equal_levels:
     if level.kind != desired_kind:
       continue
@@ -2204,9 +2297,20 @@ def fade_scalp(ctx: DetectionContext) -> DetectionResult | None:
       source_score=float(getattr(zone, "score", 0.0)),
       factors=factors,
     )
-    if result is not None:
-      return result
-  return None
+    if result is None:
+      continue
+    distance = _zone_distance(result.entry_zone, price, result.direction)
+    if (
+      best is None
+      or result.confluence > best.confluence
+      or (
+        result.confluence == best.confluence
+        and distance < best_distance
+      )
+    ):
+      best = result
+      best_distance = distance
+  return best
 
 
 def _pseudo_level_zone(
@@ -2223,7 +2327,7 @@ def _pseudo_level_zone(
     price + band,
     side,
     source=source,
-    score=STAR_TWO_SCORE,
+    score=0.0,
     score_reasons=[reason],
   )
 
@@ -2576,7 +2680,7 @@ def key_level_reaction(ctx: DetectionContext) -> DetectionResult | None:
         react_high,
         _BUY_ZONE_SIDE if direction == "BUY" else "supply",
         source="level",
-        score=STAR_TWO_SCORE,
+        score=0.0,
         score_reasons=[f"key {level.kind} x{level.touches}"],
       )
       if not _entry_valid_for_settings(
