@@ -412,7 +412,7 @@ _STRATEGY_FAMILY = {
   "One-Sided Range Reaction": FAMILY_RANGE_REVERSION,
   "Fade Scalp": FAMILY_RANGE_REVERSION,
   "Chop Zone Reaction": FAMILY_RANGE_REVERSION,
-  # M1 scalp live publishes through the same V7 plan builder; map to range
+  # M1 scalp live publishes through the same TradePlan builder; map to range
   # reversion so policy/stop planning runs. Native scalp room unlocks
   # opposing-structure bypass (strategy_taxonomy).
   "Range Sweep Scalp": FAMILY_RANGE_REVERSION,

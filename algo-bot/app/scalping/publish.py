@@ -1,4 +1,4 @@
-"""Live publication bridge: ScalpOpportunity → StrategyMatch → TradePlan V7."""
+"""Live publication bridge: ScalpOpportunity → StrategyMatch → TradePlan V8."""
 
 from __future__ import annotations
 

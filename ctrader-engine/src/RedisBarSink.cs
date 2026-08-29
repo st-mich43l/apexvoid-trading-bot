@@ -63,16 +63,16 @@ public interface IAutoTradeStore
   // it never collides with the candidate-stream cursor above.
   Task<string> GetCommandCursorAsync(CancellationToken cancellationToken);
   Task SetCommandCursorAsync(string cursor, CancellationToken cancellationToken);
-  // Dedicated cursor for the `execution:trade_plans` (TradePlan V7) stream -
+  // Dedicated cursor for the `execution:trade_plans` (TradePlan) stream -
   // an entirely separate namespace from the V6 candidate stream above, so a
-  // V7 read can never advance (or be advanced by) the V6 cursor.
+  // TradePlan read can never advance (or be advanced by) the V6 cursor.
   Task<string> GetTradePlanCursorAsync(CancellationToken cancellationToken) =>
     Task.FromResult("0-0");
   Task SetTradePlanCursorAsync(string cursor, CancellationToken cancellationToken) =>
     Task.CompletedTask;
-  // Generic string get/set/delete - used by the V7 runtime for plan/position
+  // Generic string get/set/delete - used by the TradePlan runtime for plan/position
   // state that doesn't fit the V6 candidate-lease vocabulary. Default no-ops
-  // so existing IAutoTradeStore fakes that predate TradePlan V7 keep
+  // so existing IAutoTradeStore fakes that predate TradePlan keep
   // compiling; TradePlanRuntimeTests uses a fake that overrides these for
   // real in-memory behavior.
   Task<string?> GetStringAsync(string key, CancellationToken cancellationToken) =>
@@ -84,7 +84,7 @@ public interface IAutoTradeStore
   ) => Task.CompletedTask;
   Task DeleteStringAsync(string key, CancellationToken cancellationToken) =>
     Task.CompletedTask;
-  // Atomic SETNX-with-TTL claim - the only primitive the V7 runtime needs
+  // Atomic SETNX-with-TTL claim - the only primitive the TradePlan runtime needs
   // for "at most one executor instance ever arms/submits this plan_id",
   // mirroring the exactly-once intent of the V6 candidate lease without
   // reusing its candidate_id/stream_event_id-shaped Lua machinery.
@@ -270,7 +270,7 @@ public interface IAutoTradeStore
     CancellationToken cancellationToken
   ) => Task.CompletedTask;
   // Recent closed bars for a symbol/timeframe, newest first - same shape
-  // RedisBarSink.ReadLatestAsync already exposes, added here so the V7
+  // RedisBarSink.ReadLatestAsync already exposes, added here so the TradePlan
   // runtime (which only holds an IAutoTradeStore, not a RedisBarSink) can
   // check what price actually did across a gap it wasn't polling for
   // (see TradePlanRuntime's recovery catch-up). Default empty so every
@@ -467,7 +467,7 @@ public sealed class StackExchangeRedisSeriesCommands :
   {
     // Mirrors RedisBarSink.ReadLatestAsync's own key/deserialize logic
     // exactly - that method lives on RedisBarSink, not on this store, and
-    // the V7 runtime only holds an IAutoTradeStore.
+    // the TradePlan runtime only holds an IAutoTradeStore.
     var entries = await ReadLatestAsync(
       RedisBarSink.Key(symbol, timeframe), count, cancellationToken
     );

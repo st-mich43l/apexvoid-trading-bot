@@ -25,25 +25,19 @@ def v8_plan_id(setup_id: str) -> str:
   return f"v8:{setup_id}"
 
 
-def v7_plan_id(setup_id: str) -> str:
-  """Drain alias — prefer v8_plan_id for new lookups."""
-  return f"v7:{setup_id}"
-
-
 def plan_id_candidates(setup_id: str) -> tuple[str, ...]:
-  """New v8 id first, then legacy v7 for dual-read during drain."""
+  """Return the v8 plan id for a setup (v8: prefix only)."""
   sid = str(setup_id or "")
-  if sid.startswith("v8:") or sid.startswith("v7:"):
-    other = ("v7:" + sid[3:],) if sid.startswith("v8:") else ("v8:" + sid[3:],)
-    return (sid, *other)
-  return (f"v8:{sid}", f"v7:{sid}")
+  if sid.startswith("v8:"):
+    return (sid,)
+  return (f"v8:{sid}",)
 
 
 def strip_plan_prefix(value: str | None) -> str | None:
   if value is None:
     return None
   text = str(value)
-  if text.startswith("v8:") or text.startswith("v7:"):
+  if text.startswith("v8:"):
     return text[3:]
   return text
 
@@ -136,12 +130,6 @@ async def resolve_setup_execution_aggregate(
 
   plan_id = v8_plan_id(setup_id)
   plan_state = await read_plan_state(client, plan_id)
-  if plan_state is None:
-    legacy_id = v7_plan_id(setup_id)
-    legacy_state = await read_plan_state(client, legacy_id)
-    if legacy_state is not None:
-      plan_id = legacy_id
-      plan_state = legacy_state
 
   effective_projection_state = _resolve_projection_state(
     setup_state=setup_state,

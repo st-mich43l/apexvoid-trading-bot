@@ -78,18 +78,18 @@ public sealed record AutoTradeOptions(
   int CandidateContractVersion = 6,
   // Cross-service contract handshake. Must match Python's
   // AUTO_TRADE_CONTRACT_MODE exactly (checked in AutoTradeConfigHealth) -
-  // see docs/adr-trade-plan-v7-boundary.md. "v7_only" is the sole
+  // see docs/adr-trade-plan-v8-cutover.md. "v8_only" is the sole
   // autonomous contract in real deployments (FromEnvironment resolves its
-  // own default to "v7_only", below). This bare record default stays
-  // "legacy_v6" deliberately: ProcessCandidateAsync (line ~1030) rejects
-  // every autonomous (non-manual-algo) candidate outright when
-  // ContractMode == "v7_only", and hundreds of pre-existing tests build
+  // own default to "v8_only", below). This bare record default stays
+  // "legacy_v6" deliberately: ProcessCandidateAsync rejects every
+  // autonomous (non-manual-algo) candidate outright when
+  // ContractMode == "v8_only", and hundreds of pre-existing tests build
   // AutoTradeOptions directly via a shared Options() helper that never
   // sets ContractMode, feeding autonomous V6 candidates through
-  // RunSessionAsync and asserting they get placed - "v7_only" here would
+  // RunSessionAsync and asserting they get placed - "v8_only" here would
   // make every one of those candidates rejected at the door, breaking
   // mechanical-execution tests (sizing, stops, targets, BE) that have
-  // nothing to do with the V7 autonomous-path boundary this task changed.
+  // nothing to do with the TradePlan autonomous-path boundary.
   string ContractMode = "legacy_v6",
   string TradePlanStream = "execution:trade_plans",
   bool ManualAlgoEnabled = false,
@@ -778,24 +778,13 @@ public sealed record AutoTradeOptions(
         + "version 6, symbols, and canonical symbol must be configured"
       );
     }
-    // Still accepts all four historical values, not just "v7_only" - unlike
-    // Python's Settings validation (which IS restricted to "v7_only" only,
-    // since Python is what actually decides whether to publish a V6
-    // candidate), this Validate() runs against whatever ContractMode a
-    // constructed AutoTradeOptions instance actually carries, including
-    // the deliberately-"legacy_v6" bare record default hundreds of
-    // pre-existing tests rely on (see the ContractMode field comment
-    // above). Real deployments still only ever reach "v7_only" (see
-    // FromEnvironment's default, below) or a value that fails the
-    // cross-service AutoTradeConfigHealth fatal-mismatch check against
-    // Python's "v7_only"-only manifest - so this stays lenient here
-    // without weakening the actual production guarantee.
-    if (ContractMode is not "legacy_v6" and not "shadow_v7"
-      and not "v7_primary" and not "v7_only" and not "v8_only")
+    // Accepts legacy_v6 (V6 manage / mechanical tests) and v8_only (live
+    // autonomous TradePlan). Historical prior TradePlan contract modes are gone.
+    if (ContractMode is not "legacy_v6" and not "v8_only")
     {
       throw new AutoTradeConfigurationException(
-        "Auto trade disabled: AUTO_TRADE_CONTRACT_MODE must be legacy_v6, "
-        + "shadow_v7, v7_primary, v7_only, or v8_only"
+        "Auto trade disabled: AUTO_TRADE_CONTRACT_MODE must be legacy_v6 "
+        + "or v8_only"
       );
     }
     if (StopLossDistance <= 0 || StopLossDistance > 6.5m)

@@ -1,4 +1,4 @@
-"""Persisted quote-in-zone execution handoff for TradePlan V7 setups.
+"""Persisted quote-in-zone execution handoff for TradePlan V8 setups.
 
 The scanner owns setup confirmation. This module owns only the execution
 timing that follows it: side-aware quote/zone evidence, retest state, and

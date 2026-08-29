@@ -233,15 +233,15 @@ from the general bot. Order message IDs are cached for seven days under
 scale-in updates reply to their trade root. A missing or rejected Telegram
 reply target falls back to a standalone card.
 
-## TradePlan V7 Stream (execution:*)
+## TradePlan Stream (execution:*)
 
 Deliberately a separate namespace from `auto_trade:*` above - see
-`docs/adr-trade-plan-v7-boundary.md`. A TradePlan V7 must never be
+`docs/adr-trade-plan-v8-cutover.md`. A TradePlan must never be
 reinterpreted as a V6 `TradeCandidate` or vice versa, so the two contracts
 never share a key prefix or a stream.
 
 ```text
-execution:trade_plans              XADD stream of published TradePlan V7 JSON
+execution:trade_plans              XADD stream of published TradePlan V8 JSON
 execution:plan:{plan_id}           Python plan JSON, short TTL from plan expiry
 execution:plan_dedup:{plan_id}     publication tombstone, seven-day default TTL
 execution:plan_state:{plan_id}     monotonic mechanical state

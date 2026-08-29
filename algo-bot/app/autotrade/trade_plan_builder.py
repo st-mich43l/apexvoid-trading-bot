@@ -1,11 +1,11 @@
-"""Build TradePlan V7 from an already-confirmed StrategyMatch.
+"""Build TradePlan V8 from an already-confirmed StrategyMatch.
 
-Per docs/adr-trade-plan-v7-boundary.md, this is a pure translation, not a
+Per docs/adr-trade-plan-v8-cutover.md, this is a pure translation, not a
 second decision: `StrategyMatch` already carries Python's confirmed
 strategy/direction/entry-zone/structural-invalidation-price/target-pip-ladder
 (the scanner "owns the complete price-action decision", per
 strategy_match.py's own docstring). This module reshapes that already-decided
-data into the V7 contract shape by calling the SAME `evaluate_execution_policy`
+data into the V8 contract shape by calling the SAME `evaluate_execution_policy`
 function the V6 path already uses for route/stop planning
 (app/autotrade/execution_policy.py) - it does not classify regime, resolve a
 route from scratch, or compute a stop independently. `entry.type` is whatever
@@ -27,7 +27,6 @@ import math
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Any, Mapping, Sequence
 
-from app.analysis.structural_reaction_support import v7_thesis_id
 from app.autotrade.execution_policy import evaluate_execution_policy
 from app.autotrade.strategy_match import StrategyMatch
 from app.autotrade.trade_plan import (
@@ -294,7 +293,7 @@ def build_trade_plan_from_strategy_match(
   same_direction_stack: bool = False,
   same_direction_size_fraction: float = 0.60,
 ) -> TradePlan:
-  """Translate a CONFIRMED StrategyMatch into a TradePlan V7.
+  """Translate a CONFIRMED StrategyMatch into a TradePlan V8.
 
   Raises TradePlanBuildRejected only for hard contract failures (missing
   thesis identity, empty targets, unresolved route, or unavailable stop).
@@ -328,14 +327,14 @@ def build_trade_plan_from_strategy_match(
   if not match.structural_zone_id:
     # Fail closed rather than fall back to match_id: match_id (and the V6
     # structural_thesis_id it's derived from) is re-hashed on every new
-    # confirmation timestamp, so using it as a V7 thesis_id would silently
+    # confirmation timestamp, so using it as a thesis_id would silently
     # let repeated confirmations of the same structure each look like a
     # brand new thesis - exactly what claim_active_thesis exists to
-    # prevent. See app.analysis.structural_reaction_support.v7_thesis_id.
+    # prevent. See app.analysis.structural_reaction_support.thesis_id.
     raise TradePlanBuildRejected(
       "missing_stable_thesis_id",
       f"StrategyMatch {match.match_id!r} has no structural_zone_id to "
-      "build a stable V7 thesis identity from",
+      "build a stable thesis identity from",
       {},
     )
   if not match.structural_kind:

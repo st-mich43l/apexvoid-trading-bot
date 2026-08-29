@@ -68,17 +68,9 @@ jobs:
         run: |
           set -euo pipefail
           # Allowlist only. Do not "run everything then deselect leftovers".
-          # The four --deselect nodes are retired V7 opposing-geometry
-          # fixtures that still live in those files; live TradePlan V8
-          # overlap/same-wall filtering is covered elsewhere.
           pytest -q \
             --junitxml=pytest-results.xml \
-            $(grep -E '^tests/' tests/ci_autotrade_paths.txt) \
-            --deselect=tests/test_trade_plan_builder.py::test_stop_inside_opposing_zone_surfaces_precise_reason_and_evidence \
-            --deselect=tests/test_publish_trade_plan_v8.py::test_final_v7_gate_rejects_entry_inside_opposing_structure \
-            --deselect=tests/test_publish_trade_plan_v8.py::test_final_v7_gate_rejects_sell_from_demand_containment \
-            --deselect=tests/test_publish_trade_plan_v8.py::test_range_edge_without_target_room_still_hits_opposing
-
+            $(grep -E '^tests/' tests/ci_autotrade_paths.txt)
       - name: Upload Python test results
         if: always()
         uses: actions/upload-artifact@v4

@@ -80,11 +80,11 @@ class StrategyMatch:
   target_model: str = "fill_relative"
   target_reference_price: str = "broker_fill"
   absolute_target_price: float | None = None
-  # Real analysis context for TradePlan V7 (app/autotrade/trade_plan_builder.py)
+  # Real analysis context for TradePlan V8 (app/autotrade/trade_plan_builder.py)
   # - populated from the DetectionResult/DetectionContext that produced this
   # match so the builder never has to derive bias/kind/timeframe from
   # direction (BUY => demand, BUY => bias up are exactly the forbidden
-  # shortcuts per docs/adr-trade-plan-v7-boundary.md). Additive, defaulted
+  # shortcuts per docs/adr-trade-plan-v8-cutover.md). Additive, defaulted
   # fields so older cached matches still round-trip.
   structural_kind: str | None = None
   structural_timeframe: str | None = None

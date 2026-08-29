@@ -64,7 +64,7 @@ from app.autotrade.strategy_match import (
 from app.analysis.structural_reaction_support import (
   STRUCTURAL_SETUPS,
   structural_thesis_id,
-  v7_thesis_id,
+  thesis_id as compute_thesis_id,
 )
 from app.autotrade.execution_policy import (
   FAMILY_RANGE_REVERSION,
@@ -673,7 +673,7 @@ async def _advance_setup_to_confirmed(
   """
   if not match.structural_zone_id or not match.family:
     return None
-  thesis_id = v7_thesis_id(
+  thesis_id = compute_thesis_id(
     symbol=symbol,
     strategy_family=match.family,
     direction=match.direction,

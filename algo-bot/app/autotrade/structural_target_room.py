@@ -1,4 +1,4 @@
-"""Pure opposing-structure target-room geometry shared by scanner and V7."""
+"""Pure opposing-structure target-room geometry shared by scanner and TradePlan."""
 
 from __future__ import annotations
 

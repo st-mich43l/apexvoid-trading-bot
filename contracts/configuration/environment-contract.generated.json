@@ -1,7 +1,7 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "3a56ddf72bc10703e2ad5f619a2d4ad31038c685c462a0fce5aeaf27f0b89dc6",
-  "count": 479,
+  "configuration_contract_fingerprint_sha256": "324ea8a6af5fa10e3c772c6d3d51eae7f8df1a2943d1cbd210bca94d1ab22eaf",
+  "count": 478,
   "deprecated_alias_count": 64,
   "entries": [
     {
@@ -5811,22 +5811,6 @@
       "unit": "url"
     },
     {
-      "canonical_env": "REGIME_CHOP_ALERT_SHARE",
-      "default": 0.75,
-      "deprecated": false,
-      "deprecated_aliases": [],
-      "description": "Controls  (fraction).",
-      "display_id": "config:analysis.measurements.regime_chop_alert_share",
-      "owner": "python",
-      "path": "analysis.measurements.regime_chop_alert_share",
-      "replacement_path": null,
-      "required": false,
-      "secret": false,
-      "shared_with_ctrader": false,
-      "type": "float",
-      "unit": "fraction"
-    },
-    {
       "canonical_env": "ROUND_STEP",
       "default": 5.0,
       "deprecated": false,
@@ -7808,6 +7792,6 @@
   ],
   "secret_count": 9,
   "shared_with_ctrader_count": 87,
-  "source_fingerprint_sha256": "3a56ddf72bc10703e2ad5f619a2d4ad31038c685c462a0fce5aeaf27f0b89dc6",
+  "source_fingerprint_sha256": "324ea8a6af5fa10e3c772c6d3d51eae7f8df1a2943d1cbd210bca94d1ab22eaf",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

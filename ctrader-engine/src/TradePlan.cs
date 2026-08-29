@@ -3,19 +3,17 @@ using System.Text.Json.Serialization;
 namespace ApexVoid.CTraderFeed;
 
 // TradePlan V8 — the only trade-planning contract the executor path may
-// consume for new publishes. Python is the sole author of every value here;
-// the executor parses and validates shape (ValidateTradePlan below) but
-// never recomputes a route or a stop to compare against these values. See
-// docs/adr-trade-plan-v8-cutover.md. During the drain window, version 7
-// in-flight plans remain acceptable for manage/fill/close.
+// consume. Python is the sole author of every value here; the executor
+// parses and validates shape (ValidateTradePlan below) but never recomputes
+// a route or a stop to compare against these values. See
+// docs/adr-trade-plan-v8-cutover.md.
 
 public static class TradePlanContract
 {
   public const int Version = 8;
 
-  /// <summary>Accepted plan versions during V7→V8 drain (manage in-flight V7).</summary>
   public static readonly IReadOnlySet<int> SupportedVersions =
-    new HashSet<int> { 7, 8 };
+    new HashSet<int> { 8 };
 
   public const string EntryTypeMarketWatch = "market_watch";
   public const string EntryTypeMarket = "market";

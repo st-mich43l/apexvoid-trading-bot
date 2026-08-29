@@ -61,9 +61,6 @@ log = logging.getLogger(__name__)
 _CURSOR_KEY = "auto_trade:telegram_event_cursor"
 _PAUSED_KEY = "auto_trade:paused"
 _STATS_KEY = "auto_trade:stats"
-_REGIME_ALERT_PENDING_PREFIX = "auto_trade:regime_alert_pending:"
-_REGIME_ALERT_POLL_SECONDS = 30.0
-_regime_alert_last_check_monotonic = 0.0
 _TRADE_MESSAGE_TTL = 7 * 24 * 3600
 _FULL_TP_RESULT_TTL = 24 * 3600
 # Live 2026-08-11: order_filled arrived and sent standalone (no reply_to)
@@ -136,7 +133,6 @@ TELEGRAM_SILENT_LIFECYCLE_TYPES = frozenset({
   # Generic "plan published" / Redis write is not a user-facing lifecycle
   # card under one-root-card mode — progress edits the root instead.
   "plan_published",
-  "v7_order_submitted",
   "v8_order_submitted",
 })
 # Preflight route outcomes remain in Redis, route history, metrics, and
@@ -173,7 +169,7 @@ _NOTIFY_TYPES = {
   "account_capability",
   "range_flip_attempted",
   "range_flip_filled",
-  # TradePlan V7 (docs/adr-trade-plan-v7-boundary.md Section M).
+  # TradePlan V8 lifecycle events.
   "plan_armed",
   "order_filled",
   "tp_booked",
@@ -183,7 +179,7 @@ _NOTIFY_TYPES = {
   "plan_cancelled",
 }
 
-_V7_NOTIFY_DEDUP_TYPES = frozenset({
+_TRADE_PLAN_NOTIFY_DEDUP_TYPES = frozenset({
   "order_filled",
   "tp_booked",
   "sl_moved",
@@ -757,7 +753,7 @@ def _format_strategy_route(event: dict) -> str | None:
   if status != "candidate_published":
     return None
   # "READY" is reserved for the executor accepting and arming a plan
-  # (see docs/adr-trade-plan-v7-boundary.md) - Python publishing a
+  # (see docs/adr-trade-plan-v8-cutover.md) - Python publishing a
   # candidate is not that, so this must not read "ready".
   headline = "🟢 <b>Algo bot PLAN PUBLISHED</b>"
   measured = event.get("measured") or {}
@@ -1024,7 +1020,7 @@ def render_auto_trade_event(
     "account_capability": "🧾 <b>Account capability</b>",
     "range_flip_attempted": "🔁 <b>Range flip attempted</b>",
     "range_flip_filled": "✅ <b>Range flip completed</b>",
-    # TradePlan V7 (docs/adr-trade-plan-v7-boundary.md Section M) - distinct
+    # TradePlan V8 lifecycle - distinct
     # wording from the V6 labels above so a published plan is never
     # confused with a merely-confirmed setup ("Do not say READY when
     # Python only publishes a plan").
@@ -1906,18 +1902,18 @@ def _is_bad_reply_target(error: TelegramBadRequest) -> bool:
 def _event_match_id(event: dict) -> str:
   """Resolve the setup/forming-card id for reply/edit threading.
 
-  TradePlan V7 events carry ``match_id`` = setup_id and ``candidate_id`` /
+  TradePlan V8 events carry ``match_id`` = setup_id and ``candidate_id`` /
   ``group_id`` = ``v8:{setup_id}``. Prefer the real setup id; when only a
-  plan id is present, strip the ``v7:`` / ``v8:`` prefix so we still find the root
+  plan id is present, strip the ``v8:`` prefix so we still find the root
   card instead of falling back to a standalone message.
   """
   for key in ("match_id", "setup_id"):
     value = str(event.get(key) or "").strip()
     if value:
-      return value[3:] if value.startswith(("v7:", "v8:")) else value
+      return value[3:] if value.startswith("v8:") else value
   for key in ("candidate_id", "plan_id", "group_id", "correlation_id"):
     value = str(event.get(key) or "").strip()
-    if value.startswith(("v7:", "v8:")) and len(value) > 3:
+    if value.startswith("v8:") and len(value) > 3:
       return value[3:]
   return str(event.get("candidate_id") or "").strip()
 
@@ -2356,7 +2352,7 @@ async def _deliver_auto_trade_event(
     )
     if not claimed:
       return False
-  if event_type in _V7_NOTIFY_DEDUP_TYPES:
+  if event_type in _TRADE_PLAN_NOTIFY_DEDUP_TYPES:
     plan_id = str(
       event.get("candidate_id") or event.get("group_id") or ""
     ).strip()
@@ -2371,19 +2367,13 @@ async def _deliver_auto_trade_event(
       # restarts. Use sha256 (not Python's salted hash()) so dedup survives
       # process restarts and matches across workers.
       digest = hashlib.sha256(event_key.encode("utf-8")).hexdigest()[:16]
-      claimed_v8 = await client.set(
+      claimed = await client.set(
         f"auto_trade:v8_notify:{plan_id}:{event_type}:{digest}",
         "1",
         nx=True,
         ex=_TRADE_MESSAGE_TTL,
       )
-      claimed_legacy = await client.set(
-        f"auto_trade:v7_notify:{plan_id}:{event_type}:{digest}",
-        "1",
-        nx=True,
-        ex=_TRADE_MESSAGE_TTL,
-      )
-      if not claimed_v8 or not claimed_legacy:
+      if not claimed:
         return False
   send = send or send_scanner_with_retry
   if profile == "internal":
@@ -2722,7 +2712,7 @@ async def _open_trade_plan_book_lines(client, *, limit: int = 3) -> list[str]:
   except Exception:
     log.exception("algo_status open-book load failed")
     return []
-  plans = [item for item in exposures if item.source in {"v8_plan", "v7_plan"} and item.plan_id]
+  plans = [item for item in exposures if item.source == "v8_plan" and item.plan_id]
   if not plans:
     return []
   lines: list[str] = []
@@ -2901,42 +2891,6 @@ async def set_auto_trade_paused(paused: bool) -> None:
     await client.delete(_PAUSED_KEY)
 
 
-async def _check_regime_alerts(client) -> None:
-  """Clear stale regime alert flags without DMing the owner.
-
-  Owner-reported 2026-08-29: the chop-heavy "Trend/breakout thresholds may
-  need tuning" DM is noise. Worker may still write pending keys until that
-  path is retired; drain them here so Redis does not accumulate, but never
-  send Telegram.
-  """
-  global _regime_alert_last_check_monotonic
-  now = time.monotonic()
-  if now - _regime_alert_last_check_monotonic < _REGIME_ALERT_POLL_SECONDS:
-    return
-  _regime_alert_last_check_monotonic = now
-
-  raw_symbols = getattr(runtime_config.contract.instrument, "symbols", "XAU")
-  if isinstance(raw_symbols, str):
-    symbols = {
-      part.strip().upper()
-      for part in raw_symbols.replace(";", ",").split(",")
-      if part.strip()
-    }
-  else:
-    symbols = {
-      str(symbol).upper()
-      for symbol in (raw_symbols or ())
-      if str(symbol).strip()
-    }
-  if not symbols:
-    symbols = {"XAU"}
-
-  for symbol in symbols:
-    key = f"{_REGIME_ALERT_PENDING_PREFIX}{symbol}"
-    if await client.get(key):
-      await client.delete(key)
-
-
 async def _process_owner_entries(
   client,
   entries,
@@ -3081,7 +3035,6 @@ async def _auto_trade_owner_events_loop(*, chat_id: int) -> None:
 
   while True:
     try:
-      await _check_regime_alerts(client)
       batches = await client.xread(
         {runtime_config.contract.streams.events: cursor},
         count=20,

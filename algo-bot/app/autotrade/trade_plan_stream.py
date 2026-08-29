@@ -1,9 +1,9 @@
-"""execution:trade_plans stream plumbing for TradePlan V7.
+"""execution:trade_plans stream plumbing for TradePlan V8.
 
 Key namespace (kept separate from the V6 auto_trade:* namespace so the two
 contracts never collide or get silently reinterpreted as each other):
 
-  execution:trade_plans          - XADD stream of published TradePlan V7 JSON
+  execution:trade_plans          - XADD stream of published TradePlan V8 JSON
   execution:plan:{plan_id}       - full plan JSON, TTL-bound
   execution:plan_dedup:{plan_id} - longer-lived publication tombstone
   execution:plan_state:{plan_id} - "published" | "armed" | ... lifecycle state
@@ -56,7 +56,7 @@ def plan_dedup_key(plan_id: str) -> str:
 
 
 async def publish_trade_plan(client: Any, plan: TradePlan) -> str:
-  """XADD a validated TradePlan V7 onto execution:trade_plans.
+  """XADD a validated TradePlan V8 onto execution:trade_plans.
 
   ``plan`` must already have passed ``TradePlan.validate()`` - this function
   does not re-derive or re-check any planning value, only publishes what

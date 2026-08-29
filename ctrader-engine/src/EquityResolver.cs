@@ -1,7 +1,7 @@
 namespace ApexVoid.CTraderFeed;
 
 /// <summary>
-/// Resolves the equity figure used for V7 equity-table sizing at arm/submit.
+/// Resolves the equity figure used for TradePlan equity-table sizing at arm/submit.
 /// OpenAPI.Net 1.4.4's <c>ProtoOATrader</c> has no Equity field, so the live
 /// feed client copies Balance into Equity and marks
 /// <see cref="TradingAccountSnapshot.EquitySource"/> as

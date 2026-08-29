@@ -222,7 +222,7 @@ def structural_thesis_id(
   )
 
 
-def v7_thesis_id(
+def thesis_id(
   *,
   symbol: str,
   strategy_family: str,
@@ -230,20 +230,20 @@ def v7_thesis_id(
   structural_id: str,
   version: int = 1,
 ) -> str:
-  """Stable TradePlan V7 thesis identity (docs/adr-trade-plan-v7-boundary.md).
+  """Stable TradePlan thesis identity.
 
   Deliberately narrower than structural_thesis_id() above: this excludes
   touch_bar_ts/confirmation_bar_ts on purpose. Those timestamps make
   structural_thesis_id() (and match_id, which reuses it) change on every
   new confirmation of the same structural reaction - correct for V6's
-  per-event dedup, but exactly what a V7 thesis must NOT do, since "a new
-  confirmation timestamp alone must not create a new thesis" is a hard
-  requirement. A thesis is identified purely by what structure it is: the
-  same (symbol, strategy_family, direction, structural_id) across any
+  per-event dedup, but exactly what a TradePlan thesis must NOT do, since
+  "a new confirmation timestamp alone must not create a new thesis" is a
+  hard requirement. A thesis is identified purely by what structure it is:
+  the same (symbol, strategy_family, direction, structural_id) across any
   number of re-confirmations is the same thesis.
   """
   return structural_hash(
-    "v7-thesis",
+    "thesis",
     f"v{version}",
     symbol.upper(),
     strategy_family,

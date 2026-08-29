@@ -117,7 +117,6 @@ from app.autotrade.multi_match import (
   strategy_matches_key,
 )
 from app.autotrade.lifecycle import emit_lifecycle, increment_metric
-from app.analysis.structural_reaction_support import v7_thesis_id
 from app.autotrade.setup_lifecycle import (
   ARMED,
   CANCELLED,
@@ -259,11 +258,6 @@ EXECUTION_TIMEFRAME = "M1"
 CONTEXT_TIMEFRAMES = ("M5", "M15", "H1")
 # Matches trend.py's own HTF-bias definition (classify_regime uses M15 too).
 _HTF_TIMEFRAME = "M15"
-# Regime instrumentation: rolling 24h chop/trend/breakout share per symbol,
-# used by delivery.py's /auto_status line and the mis-tuning alert below.
-_REGIME_HISTORY_WINDOW_SECONDS = 24 * 3600
-_REGIME_HISTORY_TTL_SECONDS = 26 * 3600
-_REGIME_ALERT_COOLDOWN_SECONDS = 24 * 3600
 
 # Injected at composition root (main/delivery). Worker must never import
 # app.bot.client — architecture-guard regression enforces this.
@@ -331,7 +325,7 @@ async def resolve_existing_v8_state(
   *,
   cycle_id: str | None = None,
 ) -> ExistingV8State:
-  """Resolve one setup's durable V7 truth before any dynamic preflight."""
+  """Resolve one setup's durable TradePlan truth before any dynamic preflight."""
   plan_id = _v8_plan_id(match)
   setup = await load_setup(client, match.match_id)
   plan_state = await read_plan_state(client, plan_id)
@@ -4475,7 +4469,7 @@ async def _record_v8_build_rejected(
   message: str,
   measured: dict[str, Any],
 ) -> None:
-  """Hard V7 reject: metric + terminalize setup so it does not keep watching."""
+  """Hard TradePlan reject: metric + terminalize setup so it does not keep watching."""
   await _record_gate_reject(client, symbol, f"v8_{reason_code}")
   terminal_state = (
     EXPIRED
@@ -4762,12 +4756,12 @@ async def _publish_trade_plan_v8(
   frames: dict[str, Any] | None = None,
   market_map: Any | None = None,
 ) -> str | None:
-  """Build and publish a TradePlan V7 from an already-CONFIRMED match.
+  """Build and publish a TradePlan V8 from an already-CONFIRMED match.
 
   Deliberately separate from _publish_strategy_match (the V6 path) rather
   than sharing its body: V6's function is full of V6-only concerns
   (candidate_id/group_id shaping, ZoneFillPlanner routing, ...) that must
-  not leak into the V7 contract. What IS shared are the same quality/safety
+  not leak into the V8 contract. What IS shared are the same quality/safety
   guard functions the V6 path already calls (opposing barrier, zone
   cooldown, overlapping-zone veto) - these are Python-side risk checks with
   no C#-side duplicate, not the dual-planning anti-pattern the ADR is
@@ -5923,7 +5917,7 @@ async def _publish_trade_plan_v8(
 
   # HTF veto: reject when the nearest opposing HTF zone is still untested and
   # ahead of the executable quote (defect 4: a short taken below untested
-  # supply). Preflight used to enforce this; V7 owns it now. Scalps with
+  # supply). Preflight used to enforce this; TradePlan owns it now. Scalps with
   # fitted native room skip HTF opposing — range/HFS room is the gate.
   if (
     runtime_config.actionability.gates.htf_veto_enabled
@@ -6348,7 +6342,7 @@ async def _publish_trade_plan_v8(
       )
     await publish_trade_plan(client, plan)
     await transition_setup(
-      client, setup_id, PLAN_PUBLISHED, reason_code="v7_stream_publish",
+      client, setup_id, PLAN_PUBLISHED, reason_code="v8_stream_publish",
     )
   except SetupLifecycleError:
     log.exception(
@@ -6976,74 +6970,6 @@ async def _publish_trend_candidate(
   return candidate_id
 
 
-def _regime_history_key(symbol: str) -> str:
-  return f"auto_trade:regime_history:{symbol.upper()}"
-
-
-def _regime_alert_key(symbol: str) -> str:
-  return f"auto_trade:regime_alert_pending:{symbol.upper()}"
-
-
-async def _record_regime(client: Any, symbol: str, state: str, now: int) -> None:
-  key = _regime_history_key(symbol)
-  await client.zadd(key, {f"{now}:{state}": now})
-  await client.zremrangebyscore(key, 0, now - _REGIME_HISTORY_WINDOW_SECONDS)
-  await client.expire(key, _REGIME_HISTORY_TTL_SECONDS)
-
-
-async def regime_share_24h(client: Any, symbol: str) -> dict[str, float] | None:
-  """Rolling 24h chop/trend/breakout share for ``symbol``.
-
-  Returns ``None`` when there isn't yet close to a full day of samples, so
-  callers (delivery.py's /auto_status) can show "warming up" instead of a
-  misleading split computed from a handful of bars.
-  """
-  key = _regime_history_key(symbol)
-  now = int(datetime.now(timezone.utc).timestamp())
-  await client.zremrangebyscore(key, 0, now - _REGIME_HISTORY_WINDOW_SECONDS)
-  members = await client.zrangebyscore(
-    key,
-    now - _REGIME_HISTORY_WINDOW_SECONDS,
-    now,
-  )
-  if not members:
-    return None
-  counts = {"chop": 0, "trend": 0, "breakout": 0}
-  oldest_ts: int | None = None
-  for member in members:
-    text = member.decode() if isinstance(member, bytes) else str(member)
-    ts_text, _, state = text.partition(":")
-    try:
-      ts = int(ts_text)
-    except ValueError:
-      continue
-    if oldest_ts is None or ts < oldest_ts:
-      oldest_ts = ts
-    if state in counts:
-      counts[state] += 1
-  total = sum(counts.values())
-  if total == 0 or oldest_ts is None:
-    return None
-  # Require the samples to span close to a full day before trusting the
-  # split - a freshly-started bot shouldn't alarm on a 100%/0% sliver.
-  if now - oldest_ts < _REGIME_HISTORY_WINDOW_SECONDS * 0.9:
-    return None
-  return {state: value / total for state, value in counts.items()}
-
-
-async def _maybe_flag_regime_alert(
-  client: Any,
-  symbol: str,
-  shares: dict[str, float] | None,
-) -> None:
-  """No-op: chop-heavy regime owner DMs are retired (2026-08-29).
-
-  Kept as a call-site stub so regime-share accounting still runs without
-  writing pending alert keys or triggering Telegram noise.
-  """
-  return
-
-
 def _status_payload(
   decision: AutoScalpDecision,
   *,
@@ -7435,9 +7361,9 @@ async def _admit_strategy_intent_for_cycle(
   """Admit or reject a StrategyMatch intent before cross-engine arbitration.
 
   Returns ``None`` when the intent should enter arbitration (including the
-  case where V7 already published a plan for it — V7 reconciles that itself).
+  case where TradePlan already published a plan for it — TradePlan reconciles that itself).
   A returned _AdmissionFailure records why the intent must be filtered out;
-  V7's own hard gates (HTF veto, overlap, news, zone-split, limit-side,
+  TradePlan's own hard gates (HTF veto, overlap, news, zone-split, limit-side,
   exposure) still run afterward if the intent is admitted and wins.
   """
   existing = await resolve_existing_v8_state(
@@ -7453,12 +7379,12 @@ async def _admit_strategy_intent_for_cycle(
         or "existing_v8_terminal"
       ),
       terminal=True,
-      message="durable V7 lifecycle is already terminal",
+      message="durable TradePlan lifecycle is already terminal",
       stage="publication_reconciliation",
       measured={"plan_id": existing.plan_id},
     )
   if existing.already_published:
-    # V7 will reconcile the existing plan when it runs; admit as-is.
+    # the TradePlan runtime will reconcile the existing plan when it runs; admit as-is.
     return None
   if not runtime_config.runtime.auto_trade.enabled:
     return _AdmissionFailure(
@@ -7649,9 +7575,9 @@ async def _strategy_publication_result(
     return CandidatePublicationResult.blocked("duplicate_thesis", reason)
   if reason in {"cycle_conflict", "conflict"}:
     return CandidatePublicationResult.blocked("cycle_conflict", reason)
-  # V7 returned None because the reaction is still waiting for its retest.
+  # publish returned None because the reaction is still waiting for its retest.
   # The old preflight kept this outside arbitration precisely so it wouldn't
-  # suppress executable lower-ranked intents; V7-cutover surfaces the same
+  # suppress executable lower-ranked intents; TradePlan-cutover surfaces the same
   # semantics as a terminal reject so ranked fallback can still publish.
   if (
     status == "waiting"
@@ -7954,13 +7880,6 @@ async def _handle_event(
     strategy_cfg,
     symbol=symbol,
   )
-  now_ts = int(datetime.now(timezone.utc).timestamp())
-  try:
-    await _record_regime(client, symbol, regime.state, now_ts)
-    shares = await regime_share_24h(client, symbol)
-    await _maybe_flag_regime_alert(client, symbol, shares)
-  except Exception:
-    log.exception("regime instrumentation failed symbol=%s", symbol)
   trend_decision = evaluate_trend_gate(
     frames,
     regime,
@@ -8153,7 +8072,7 @@ async def _handle_event(
       else:
         # Private intents (range / trend) are recorded as unavailable and
         # kept out of arbitration; the V6 candidate path is retired and no
-        # V7 equivalent publishes them.
+        # TradePlan equivalent publishes them.
         await _record_private_route(
           client,
           symbol=symbol,
@@ -8168,7 +8087,7 @@ async def _handle_event(
           spot_price=spot_price,
           status="blocked",
           reason_code="publication_unavailable",
-          message="private strategy has no active V7 publication path",
+          message="private strategy has no active TradePlan publication path",
           group_id=intent.proposed_group_id,
           retained=False,
           stage="publication",
@@ -8222,10 +8141,10 @@ async def _handle_event(
           )
           return publication_result
         try:
-          # V7 is the sole autonomous order path, per
-          # docs/adr-trade-plan-v7-boundary.md - the V6 candidate path is
+          # TradePlan V8 is the sole autonomous order path, per
+          # docs/adr-trade-plan-v8-cutover.md - the V6 candidate path is
           # removed entirely for autonomous publication (not gated behind a
-          # mode) so a confirmed setup can never arm both a V7 plan and a V6
+          # mode) so a confirmed setup can never arm both a TradePlan and a V6
           # candidate for the same thesis. Existing open V6 positions are
           # untouched; this only blocks new autonomous publication.
           published = await _publish_trade_plan_v8(
@@ -8268,9 +8187,9 @@ async def _handle_event(
         )
       elif intent.intent_id == box_intent_id:
         # Private M1 range gate is a V6-only autonomous detector (Section A/L
-        # of the V7 cutover) - it never feeds scanner.py's setup lifecycle, so
-        # it has no V7 equivalent and must not publish new autonomous
-        # candidates now that V7 is the sole autonomous path.
+        # of the TradePlan cutover) - it never feeds scanner.py's setup lifecycle, so
+        # it has no TradePlan equivalent and must not publish new autonomous
+        # candidates now that TradePlan V8 is the sole autonomous path.
         published = None
         box_candidate_id = published
         publication_result = (
@@ -8281,7 +8200,7 @@ async def _handle_event(
       elif intent.intent_id == trend_intent_id:
         # Private trend detector (trend.py) is likewise V6-only autonomous
         # analysis, parallel to (not fed by) scanner.py - see Section A/L. It
-        # must not publish new autonomous candidates now that V7 is the sole
+        # must not publish new autonomous candidates now that TradePlan V8 is the sole
         # autonomous path.
         published = None
         trend_candidate_id = published
@@ -8687,12 +8606,12 @@ async def try_publish_executable_signal(
   event_ts: str | None = None,
   source: RedisOHLCSource | None = None,
 ) -> PublishResult:
-  """The one authoritative CONFIRMED-zone -> TradePlan V7 pass (ADR P0).
+  """The one authoritative CONFIRMED-zone -> TradePlan V8 pass (ADR P0).
 
   Runs the exact same evaluation `_handle_event` already performs for a
   durable ready-stream wake-up (reload canonical setup, validate state,
   validate a fresh side-aware quote, validate quote-in-zone, validate any
-  required M1 trigger, build+publish TradePlan V7 atomically) but does it
+  required M1 trigger, build+publish TradePlan V8 atomically) but does it
   synchronously, in the caller's own processing cycle, instead of via a
   Redis stream round-trip to a separate consumer task. Callers that already
   know a match is CONFIRMED and structurally eligible (the scanner, right

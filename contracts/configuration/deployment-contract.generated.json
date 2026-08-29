@@ -92,7 +92,6 @@
       "analysis.measurements.eq_band",
       "analysis.measurements.inducement_band_atr",
       "analysis.measurements.max_merged_zone_atr",
-      "analysis.measurements.regime_chop_alert_share",
       "analysis.measurements.scanner_conflict_overlap",
       "analysis.measurements.strict_pd_gate",
       "analysis.measurements.tp_min_spacing_atr",
@@ -516,7 +515,7 @@
     "XAU_ZONE_PREFERRED_MAX_WIDTH_PRICE": "instruments.XAU.analysis.zones.preferred_maximum_width_price",
     "XAU_ZONE_PREFERRED_MIN_WIDTH_PRICE": "instruments.XAU.analysis.zones.preferred_minimum_width_price"
   },
-  "fingerprint": "3a56ddf72bc10703e2ad5f619a2d4ad31038c685c462a0fce5aeaf27f0b89dc6",
+  "fingerprint": "324ea8a6af5fa10e3c772c6d3d51eae7f8df1a2943d1cbd210bca94d1ab22eaf",
   "instrument_schema": {
     "active_projection_symbol": "XAU",
     "optional": [

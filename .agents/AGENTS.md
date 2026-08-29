@@ -51,10 +51,6 @@ export PYTHONPATH=.
 
 pytest -q \
   $(grep -E '^tests/' tests/ci_autotrade_paths.txt) \
-  --deselect=tests/test_trade_plan_builder.py::test_stop_inside_opposing_zone_surfaces_precise_reason_and_evidence \
-  --deselect=tests/test_publish_trade_plan_v8.py::test_final_v7_gate_rejects_entry_inside_opposing_structure \
-  --deselect=tests/test_publish_trade_plan_v8.py::test_final_v7_gate_rejects_sell_from_demand_containment \
-  --deselect=tests/test_publish_trade_plan_v8.py::test_range_edge_without_target_room_still_hits_opposing
 ```
 
 Also run tests for **your** change if they are outside the allowlist (e.g. `tests/test_mad_phase.py`). Those are for local/PR confidence; they do not replace fixing allowlisted failures.
