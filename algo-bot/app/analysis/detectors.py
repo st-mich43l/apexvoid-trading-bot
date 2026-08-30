@@ -214,7 +214,10 @@ class DetectorSettings:
   engulfing_minimum_range_atr: float = 0.5
   key_level_reaction_enabled: bool = True
   key_level_require_explicit_role: bool = False
+  # BUY-only HTF gate — never blocks Key Level SELL counter-bias.
+  # Deprecated: Key Level no longer HTF-vetoes; flag is a no-op.
   key_level_require_htf_alignment: bool = False
+  key_level_min_sell_zone_score: float = 0.0
   demand_reaction_enabled: bool = True
   supply_reaction_enabled: bool = True
   flip_zone_enabled: bool = True
@@ -488,6 +491,9 @@ def detector_settings_from(config: object | None = None) -> DetectorSettings:
     ),
     key_level_require_htf_alignment=bool(
       strategies.reaction.key_level.require_htf_alignment
+    ),
+    key_level_min_sell_zone_score=float(
+      strategies.reaction.key_level.min_sell_zone_score
     ),
     demand_reaction_enabled=bool(strategies.reaction.demand.enabled),
     supply_reaction_enabled=bool(strategies.reaction.supply.enabled),
@@ -2562,6 +2568,36 @@ def _opposing_zone_contradicts(
   return None
 
 
+def _nearest_same_side_zone_score(
+  st: StructureSet,
+  *,
+  price: float,
+  direction: str,
+) -> float | None:
+  """Nearest demand/supply zone score for Key Level SELL quality floor.
+
+  Matches the manual formula-replay nearest-zone feature (inside preferred,
+  else closest mid). KL itself publishes score=0; quality comes from nearby
+  structure, not the synthetic level band.
+  """
+  want = _BUY_ZONE_SIDE if direction == "BUY" else "supply"
+  best: Zone | None = None
+  best_dist: float | None = None
+  for zone in [*st.zones, *st.order_blocks]:
+    if getattr(zone, "side", None) != want:
+      continue
+    low = float(zone.low)
+    high = float(zone.high)
+    mid = (low + high) / 2.0
+    dist = 0.0 if low <= price <= high else abs(mid - price)
+    if best_dist is None or dist < best_dist:
+      best_dist = dist
+      best = zone
+  if best is None:
+    return None
+  return float(getattr(best, "score", 0.0) or 0.0)
+
+
 def key_level_reaction(ctx: DetectionContext) -> DetectionResult | None:
   if not ctx.settings.key_level_reaction_enabled:
     return None
@@ -2573,6 +2609,9 @@ def key_level_reaction(ctx: DetectionContext) -> DetectionResult | None:
   lookback = max(1, int(ctx.settings.structural_reaction_lookback_bars))
   band = max(_EPS, ctx.settings.proximal_band_atr * max(0.0, atr))
   min_touches = max(1, int(ctx.settings.key_level_min_touches))
+  min_sell_zone = float(
+    getattr(ctx.settings, "key_level_min_sell_zone_score", 0.0) or 0.0
+  )
   best: DetectionResult | None = None
   for level in sorted(st.levels, key=lambda item: abs(item.price - price)):
     if level.touches < min_touches:
@@ -2652,11 +2691,14 @@ def key_level_reaction(ctx: DetectionContext) -> DetectionResult | None:
       directions = ("BUY", "SELL")
     confirmed_here: list[DetectionResult] = []
     for direction in directions:
-      if (
-        bool(getattr(ctx.settings, "key_level_require_htf_alignment", False))
-        and ctx.htf_bias != _bias_for_direction(direction)
-      ):
-        continue
+      # Never HTF-veto Key Level (counter-bias must stay live). Quality is
+      # min_sell_zone_score / other score floors — not bias alignment.
+      if direction == "SELL" and min_sell_zone > 0.0:
+        nearest_score = _nearest_same_side_zone_score(
+          st, price=price, direction=direction,
+        )
+        if nearest_score is None or nearest_score < min_sell_zone:
+          continue
       level_price = (
         contra_level if direction == contra_direction else level.price
       )

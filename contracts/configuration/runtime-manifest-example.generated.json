@@ -132,8 +132,8 @@
     "zone_reconcile_mode": "shadow",
     "zone_scale_undersized_policy": "single_entry"
   },
-  "contract_fingerprint": "324ea8a6af5fa10e3c772c6d3d51eae7f8df1a2943d1cbd210bca94d1ab22eaf",
-  "effective_configuration_fingerprint": "1dff2a6590687cfdb29a30a14f7b23198c5c8e39aea7b424f2145e0b5eab8063",
+  "contract_fingerprint": "f3743d4cc3eb6b4937431197fcc3cd49485688aa9a83491c14cdf85123e71e5e",
+  "effective_configuration_fingerprint": "ea9b42f7b38c4ec1a9e632fbccf778a0e7f10dee73372efb907c6ef888431d0e",
   "feed": {
     "backfill_bars": 1500,
     "bar_quality_lookback": 6,
@@ -957,6 +957,7 @@
           "key_level": {
             "enabled": true,
             "min_grade": "B",
+            "min_sell_zone_score": "0",
             "require_explicit_role": false,
             "require_htf_alignment": false,
             "require_killzone": false
@@ -1776,12 +1777,6 @@
             "source_name": "instruments.GBPJPY.overrides"
           },
           {
-            "path": "strategies.reaction.key_level.require_htf_alignment",
-            "secret": false,
-            "source_kind": "instrument_override",
-            "source_name": "instruments.GBPJPY.overrides"
-          },
-          {
             "path": "strategies.reaction.key_level.require_killzone",
             "secret": false,
             "source_kind": "instrument_override",
@@ -1928,8 +1923,9 @@
           "key_level": {
             "enabled": true,
             "min_grade": "A",
+            "min_sell_zone_score": "0",
             "require_explicit_role": true,
-            "require_htf_alignment": true,
+            "require_htf_alignment": false,
             "require_killzone": true
           },
           "liquidity_reversal": {
@@ -2863,6 +2859,7 @@
           "key_level": {
             "enabled": true,
             "min_grade": "B",
+            "min_sell_zone_score": "0",
             "require_explicit_role": false,
             "require_htf_alignment": false,
             "require_killzone": false
@@ -3810,6 +3807,7 @@
           "key_level": {
             "enabled": true,
             "min_grade": "B",
+            "min_sell_zone_score": "0",
             "require_explicit_role": false,
             "require_htf_alignment": false,
             "require_killzone": false
@@ -4607,6 +4605,12 @@
             "source_name": "instruments.XAU.execution_pack"
           },
           {
+            "path": "strategies.reaction.key_level.min_sell_zone_score",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.XAU.overrides"
+          },
+          {
             "path": "strategies.technique.crt.entry_max_width_price",
             "secret": false,
             "source_kind": "instrument_override",
@@ -4741,6 +4745,7 @@
           "key_level": {
             "enabled": true,
             "min_grade": "B",
+            "min_sell_zone_score": "10",
             "require_explicit_role": false,
             "require_htf_alignment": false,
             "require_killzone": false
@@ -5541,6 +5546,7 @@
           "key_level": {
             "enabled": true,
             "min_grade": "B",
+            "min_sell_zone_score": "0",
             "require_explicit_role": false,
             "require_htf_alignment": false,
             "require_killzone": false
@@ -6224,12 +6230,6 @@
             "source_name": "instruments.GBPJPY.overrides"
           },
           {
-            "path": "strategies.reaction.key_level.require_htf_alignment",
-            "secret": false,
-            "source_kind": "instrument_override",
-            "source_name": "instruments.GBPJPY.overrides"
-          },
-          {
             "path": "strategies.reaction.key_level.require_killzone",
             "secret": false,
             "source_kind": "instrument_override",
@@ -6375,8 +6375,9 @@
           "key_level": {
             "enabled": true,
             "min_grade": "A",
+            "min_sell_zone_score": "0",
             "require_explicit_role": true,
-            "require_htf_alignment": true,
+            "require_htf_alignment": false,
             "require_killzone": true
           },
           "liquidity_reversal": {
@@ -7173,6 +7174,7 @@
           "key_level": {
             "enabled": true,
             "min_grade": "B",
+            "min_sell_zone_score": "0",
             "require_explicit_role": false,
             "require_htf_alignment": false,
             "require_killzone": false
@@ -7983,6 +7985,7 @@
           "key_level": {
             "enabled": true,
             "min_grade": "B",
+            "min_sell_zone_score": "0",
             "require_explicit_role": false,
             "require_htf_alignment": false,
             "require_killzone": false
@@ -8640,6 +8643,12 @@
             "source_name": "instruments.XAU.execution_pack"
           },
           {
+            "path": "strategies.reaction.key_level.min_sell_zone_score",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.XAU.overrides"
+          },
+          {
             "path": "strategies.technique.crt.entry_max_width_price",
             "secret": false,
             "source_kind": "instrument_override",
@@ -8773,6 +8782,7 @@
           "key_level": {
             "enabled": true,
             "min_grade": "B",
+            "min_sell_zone_score": "10",
             "require_explicit_role": false,
             "require_htf_alignment": false,
             "require_killzone": false

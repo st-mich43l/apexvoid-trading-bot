@@ -1,7 +1,7 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "324ea8a6af5fa10e3c772c6d3d51eae7f8df1a2943d1cbd210bca94d1ab22eaf",
-  "count": 478,
+  "configuration_contract_fingerprint_sha256": "f3743d4cc3eb6b4937431197fcc3cd49485688aa9a83491c14cdf85123e71e5e",
+  "count": 479,
   "deprecated_alias_count": 64,
   "entries": [
     {
@@ -1039,6 +1039,22 @@
       "unit": "enum"
     },
     {
+      "canonical_env": "AUTO_TRADE_KEY_LEVEL_MIN_SELL_ZONE_SCORE",
+      "default": 0.0,
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Minimum nearest same-side zone score for Key Level SELL (0 disables). Does not block counter-bias.",
+      "display_id": "config:strategies.reaction.key_level.min_sell_zone_score",
+      "owner": "python",
+      "path": "strategies.reaction.key_level.min_sell_zone_score",
+      "replacement_path": null,
+      "required": false,
+      "secret": false,
+      "shared_with_ctrader": false,
+      "type": "float",
+      "unit": "score"
+    },
+    {
       "canonical_env": "AUTO_TRADE_KEY_LEVEL_REACTION_ENABLED",
       "default": true,
       "deprecated": false,
@@ -1075,7 +1091,7 @@
       "default": false,
       "deprecated": false,
       "deprecated_aliases": [],
-      "description": "Require Key Level direction to match HTF bias.",
+      "description": "Deprecated no-op for Key Level: counter-bias is never HTF-vetoed. Use min_sell_zone_score for quality.",
       "display_id": "config:strategies.reaction.key_level.require_htf_alignment",
       "owner": "python",
       "path": "strategies.reaction.key_level.require_htf_alignment",
@@ -7792,6 +7808,6 @@
   ],
   "secret_count": 9,
   "shared_with_ctrader_count": 87,
-  "source_fingerprint_sha256": "324ea8a6af5fa10e3c772c6d3d51eae7f8df1a2943d1cbd210bca94d1ab22eaf",
+  "source_fingerprint_sha256": "f3743d4cc3eb6b4937431197fcc3cd49485688aa9a83491c14cdf85123e71e5e",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }
