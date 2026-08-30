@@ -1,20 +1,20 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "324ea8a6af5fa10e3c772c6d3d51eae7f8df1a2943d1cbd210bca94d1ab22eaf",
-  "configuration_document_fingerprint_sha256": "4c0d953b384f371569551b8c4c398a32893f34aeda51504d075ba0d63b515195",
+  "configuration_contract_fingerprint_sha256": "f3743d4cc3eb6b4937431197fcc3cd49485688aa9a83491c14cdf85123e71e5e",
+  "configuration_document_fingerprint_sha256": "43a8e1c08567e91dd1d1872d00a0b6395e0a9d48a1984aafc4af8efcb400a806",
   "counts": {
     "algorithm_constants": 57,
-    "configurable": 478,
+    "configurable": 479,
     "known_conflicts": 30,
     "owners": {
       "ctrader": 49,
-      "python": 400,
+      "python": 401,
       "shared": 96
     },
     "protocol_constants": 10,
     "secrets": 9,
     "shared": 96,
-    "total_items": 545
+    "total_items": 546
   },
   "items": [
     {
@@ -17135,6 +17135,43 @@
     {
       "algorithm_constant": false,
       "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_KEY_LEVEL_MIN_SELL_ZONE_SCORE",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {},
+      "default": 0.0,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 0.0
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Minimum nearest same-side zone score for Key Level SELL (0 disables). Counter-bias sells still allowed.",
+      "display_id": "config:strategies.reaction.key_level.min_sell_zone_score",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.reaction.key_level.min_sell_zone_score",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "strategy_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "float",
+      "unit": "score",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
       "canonical_env": "AUTO_TRADE_KEY_LEVEL_REQUIRE_EXPLICIT_ROLE",
       "catalog_version": 2,
       "configurable": true,
@@ -17185,7 +17222,7 @@
       ],
       "deprecated": false,
       "deprecated_aliases": [],
-      "description": "Require Key Level direction to match HTF bias.",
+      "description": "Require Key Level BUY to match HTF bias. Never blocks SELL counter-bias.",
       "display_id": "config:strategies.reaction.key_level.require_htf_alignment",
       "evidence_notes": [],
       "introduced_in": "config-catalog-v2",
@@ -20544,6 +20581,6 @@
       "validation_summary": "Pydantic required/type coercion only"
     }
   ],
-  "source_fingerprint_sha256": "324ea8a6af5fa10e3c772c6d3d51eae7f8df1a2943d1cbd210bca94d1ab22eaf",
+  "source_fingerprint_sha256": "f3743d4cc3eb6b4937431197fcc3cd49485688aa9a83491c14cdf85123e71e5e",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

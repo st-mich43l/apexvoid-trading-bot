@@ -79,6 +79,22 @@
       "env_name": null,
       "file": "algo-bot/app/configuration/runtime_manifest_boot.py",
       "line": 30
+    },
+    {
+      "allowed": false,
+      "api": "os.environ.get",
+      "classification": "UNKNOWN_BLOCKER",
+      "env_name": "DATABASE_URL",
+      "file": "algo-bot/app/scripts/manual_formula_replay.py",
+      "line": 366
+    },
+    {
+      "allowed": false,
+      "api": "os.environ.get",
+      "classification": "UNKNOWN_BLOCKER",
+      "env_name": "POSTGRES_DSN",
+      "file": "algo-bot/app/scripts/manual_formula_replay.py",
+      "line": 366
     }
   ],
   "allowed_sites": 10,
@@ -86,9 +102,10 @@
     "CANONICAL_SOURCE_COLLECTION_ALLOWED": 2,
     "DEPLOYMENT_OBSERVABILITY_ALLOWED": 3,
     "EARLY_BOOT_ALLOWED": 2,
-    "SCRIPT_TOOL_ALLOWED": 3
+    "SCRIPT_TOOL_ALLOWED": 3,
+    "UNKNOWN_BLOCKER": 2
   },
   "direct_production_env_forbidden": 0,
-  "total_access_sites": 10,
-  "unknown_blockers": 0
+  "total_access_sites": 12,
+  "unknown_blockers": 2
 }

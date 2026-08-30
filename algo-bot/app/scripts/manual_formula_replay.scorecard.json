@@ -1,0 +1,1166 @@
+{
+  "generated_at": "2026-08-30T02:35:41.123400+00:00",
+  "coverage": {
+    "charted_closed": 115,
+    "replayed": 115,
+    "errors": 0
+  },
+  "scorecard": {
+    "cells": [
+      {
+        "strategy": "Key Level Reaction",
+        "direction": "BUY",
+        "n": 26,
+        "wins": 15,
+        "losses": 11,
+        "win_pct": 57.7,
+        "avg_pips": 24.2,
+        "htf_aligned_n": 20,
+        "htf_aligned_win_pct": 65.0,
+        "htf_counter_n": 6,
+        "htf_counter_win_pct": 33.3,
+        "detector_fired_n": 11,
+        "detector_fired_win_pct": 72.7,
+        "detector_miss_n": 15,
+        "detector_miss_win_pct": 46.7,
+        "avg_zone_score_wins": 13.0,
+        "avg_zone_score_losses": 11.364,
+        "avg_entry_pos_wins": -0.095,
+        "avg_entry_pos_losses": -0.269,
+        "avg_confluence_wins": 2.0,
+        "avg_confluence_losses": 2.0,
+        "reason_hits_wins": [
+          {
+            "reason": "key level",
+            "n": 13
+          },
+          {
+            "reason": "FVG",
+            "n": 11
+          },
+          {
+            "reason": "HTF zone",
+            "n": 11
+          },
+          {
+            "reason": "S/D",
+            "n": 9
+          },
+          {
+            "reason": "breaker",
+            "n": 9
+          },
+          {
+            "reason": "liquidity pool",
+            "n": 8
+          },
+          {
+            "reason": "flip",
+            "n": 7
+          },
+          {
+            "reason": "discount",
+            "n": 6
+          }
+        ],
+        "reason_hits_losses": [
+          {
+            "reason": "FVG",
+            "n": 10
+          },
+          {
+            "reason": "HTF zone",
+            "n": 9
+          },
+          {
+            "reason": "key level",
+            "n": 7
+          },
+          {
+            "reason": "liquidity pool",
+            "n": 6
+          },
+          {
+            "reason": "S/D",
+            "n": 5
+          },
+          {
+            "reason": "sweep A",
+            "n": 4
+          },
+          {
+            "reason": "1 touch",
+            "n": 4
+          },
+          {
+            "reason": "breaker",
+            "n": 4
+          }
+        ]
+      },
+      {
+        "strategy": "Key Level Reaction",
+        "direction": "SELL",
+        "n": 26,
+        "wins": 17,
+        "losses": 9,
+        "win_pct": 65.4,
+        "avg_pips": 33.8,
+        "htf_aligned_n": 8,
+        "htf_aligned_win_pct": 50.0,
+        "htf_counter_n": 18,
+        "htf_counter_win_pct": 72.2,
+        "detector_fired_n": 15,
+        "detector_fired_win_pct": 66.7,
+        "detector_miss_n": 11,
+        "detector_miss_win_pct": 63.6,
+        "avg_zone_score_wins": 9.971,
+        "avg_zone_score_losses": 8.944,
+        "avg_entry_pos_wins": 1.427,
+        "avg_entry_pos_losses": 1.667,
+        "avg_confluence_wins": 2.0,
+        "avg_confluence_losses": 2.0,
+        "reason_hits_wins": [
+          {
+            "reason": "FVG",
+            "n": 15
+          },
+          {
+            "reason": "premium",
+            "n": 13
+          },
+          {
+            "reason": "key level",
+            "n": 12
+          },
+          {
+            "reason": "HTF zone",
+            "n": 10
+          },
+          {
+            "reason": "S/D",
+            "n": 9
+          },
+          {
+            "reason": "1 touch",
+            "n": 7
+          },
+          {
+            "reason": "liquidity pool",
+            "n": 7
+          },
+          {
+            "reason": "flip",
+            "n": 5
+          }
+        ],
+        "reason_hits_losses": [
+          {
+            "reason": "FVG",
+            "n": 8
+          },
+          {
+            "reason": "key level",
+            "n": 7
+          },
+          {
+            "reason": "HTF zone",
+            "n": 6
+          },
+          {
+            "reason": "S/D",
+            "n": 4
+          },
+          {
+            "reason": "premium",
+            "n": 4
+          },
+          {
+            "reason": "breaker",
+            "n": 2
+          },
+          {
+            "reason": "round 4580",
+            "n": 2
+          },
+          {
+            "reason": "TL confluence",
+            "n": 2
+          }
+        ]
+      },
+      {
+        "strategy": "Supply Demand",
+        "direction": "SELL",
+        "n": 20,
+        "wins": 14,
+        "losses": 6,
+        "win_pct": 70.0,
+        "avg_pips": 33.7,
+        "htf_aligned_n": 3,
+        "htf_aligned_win_pct": 33.3,
+        "htf_counter_n": 17,
+        "htf_counter_win_pct": 76.5,
+        "detector_fired_n": 0,
+        "detector_fired_win_pct": null,
+        "detector_miss_n": 20,
+        "detector_miss_win_pct": 70.0,
+        "avg_zone_score_wins": 8.679,
+        "avg_zone_score_losses": 8.917,
+        "avg_entry_pos_wins": 2.576,
+        "avg_entry_pos_losses": 1.599,
+        "avg_confluence_wins": null,
+        "avg_confluence_losses": null,
+        "reason_hits_wins": [
+          {
+            "reason": "FVG",
+            "n": 13
+          },
+          {
+            "reason": "key level",
+            "n": 11
+          },
+          {
+            "reason": "HTF zone",
+            "n": 9
+          },
+          {
+            "reason": "S/D",
+            "n": 8
+          },
+          {
+            "reason": "liquidity pool",
+            "n": 7
+          },
+          {
+            "reason": "premium",
+            "n": 4
+          },
+          {
+            "reason": "1 touch",
+            "n": 4
+          },
+          {
+            "reason": "round 4645",
+            "n": 3
+          }
+        ],
+        "reason_hits_losses": [
+          {
+            "reason": "HTF zone",
+            "n": 6
+          },
+          {
+            "reason": "FVG",
+            "n": 4
+          },
+          {
+            "reason": "liquidity pool",
+            "n": 4
+          },
+          {
+            "reason": "1 touch",
+            "n": 3
+          },
+          {
+            "reason": "S/D",
+            "n": 3
+          },
+          {
+            "reason": "key level",
+            "n": 2
+          },
+          {
+            "reason": "round 4625",
+            "n": 2
+          },
+          {
+            "reason": "breaker",
+            "n": 1
+          }
+        ]
+      },
+      {
+        "strategy": "Flip Zone",
+        "direction": "SELL",
+        "n": 12,
+        "wins": 8,
+        "losses": 4,
+        "win_pct": 66.7,
+        "avg_pips": 30.6,
+        "htf_aligned_n": 4,
+        "htf_aligned_win_pct": 50.0,
+        "htf_counter_n": 8,
+        "htf_counter_win_pct": 75.0,
+        "detector_fired_n": 0,
+        "detector_fired_win_pct": null,
+        "detector_miss_n": 12,
+        "detector_miss_win_pct": 66.7,
+        "avg_zone_score_wins": 10.438,
+        "avg_zone_score_losses": 10.875,
+        "avg_entry_pos_wins": 0.965,
+        "avg_entry_pos_losses": 0.776,
+        "avg_confluence_wins": null,
+        "avg_confluence_losses": null,
+        "reason_hits_wins": [
+          {
+            "reason": "FVG",
+            "n": 7
+          },
+          {
+            "reason": "key level",
+            "n": 7
+          },
+          {
+            "reason": "S/D",
+            "n": 6
+          },
+          {
+            "reason": "HTF zone",
+            "n": 5
+          },
+          {
+            "reason": "flip",
+            "n": 5
+          },
+          {
+            "reason": "premium",
+            "n": 4
+          },
+          {
+            "reason": "OB",
+            "n": 4
+          },
+          {
+            "reason": "breaker",
+            "n": 3
+          }
+        ],
+        "reason_hits_losses": [
+          {
+            "reason": "1 touch",
+            "n": 3
+          },
+          {
+            "reason": "FVG",
+            "n": 3
+          },
+          {
+            "reason": "S/D",
+            "n": 3
+          },
+          {
+            "reason": "key level",
+            "n": 3
+          },
+          {
+            "reason": "HTF zone",
+            "n": 3
+          },
+          {
+            "reason": "breaker",
+            "n": 2
+          },
+          {
+            "reason": "flip",
+            "n": 1
+          },
+          {
+            "reason": "round 4395",
+            "n": 1
+          }
+        ]
+      },
+      {
+        "strategy": "Supply Demand",
+        "direction": "BUY",
+        "n": 12,
+        "wins": 7,
+        "losses": 5,
+        "win_pct": 58.3,
+        "avg_pips": 53.4,
+        "htf_aligned_n": 9,
+        "htf_aligned_win_pct": 44.4,
+        "htf_counter_n": 3,
+        "htf_counter_win_pct": 100.0,
+        "detector_fired_n": 0,
+        "detector_fired_win_pct": null,
+        "detector_miss_n": 12,
+        "detector_miss_win_pct": 58.3,
+        "avg_zone_score_wins": 12.0,
+        "avg_zone_score_losses": 11.2,
+        "avg_entry_pos_wins": -1.0,
+        "avg_entry_pos_losses": -0.53,
+        "avg_confluence_wins": null,
+        "avg_confluence_losses": null,
+        "reason_hits_wins": [
+          {
+            "reason": "FVG",
+            "n": 6
+          },
+          {
+            "reason": "key level",
+            "n": 6
+          },
+          {
+            "reason": "HTF zone",
+            "n": 6
+          },
+          {
+            "reason": "S/D",
+            "n": 5
+          },
+          {
+            "reason": "liquidity pool",
+            "n": 4
+          },
+          {
+            "reason": "flip",
+            "n": 3
+          },
+          {
+            "reason": "sweep A",
+            "n": 3
+          },
+          {
+            "reason": "breaker",
+            "n": 2
+          }
+        ],
+        "reason_hits_losses": [
+          {
+            "reason": "S/D",
+            "n": 4
+          },
+          {
+            "reason": "FVG",
+            "n": 4
+          },
+          {
+            "reason": "key level",
+            "n": 4
+          },
+          {
+            "reason": "liquidity pool",
+            "n": 3
+          },
+          {
+            "reason": "discount",
+            "n": 3
+          },
+          {
+            "reason": "HTF zone",
+            "n": 3
+          },
+          {
+            "reason": "round 4605",
+            "n": 1
+          },
+          {
+            "reason": "OB",
+            "n": 1
+          }
+        ]
+      },
+      {
+        "strategy": "Order Block",
+        "direction": "SELL",
+        "n": 5,
+        "wins": 3,
+        "losses": 2,
+        "win_pct": 60.0,
+        "avg_pips": 33.2,
+        "htf_aligned_n": 1,
+        "htf_aligned_win_pct": null,
+        "htf_counter_n": 4,
+        "htf_counter_win_pct": 75.0,
+        "detector_fired_n": 0,
+        "detector_fired_win_pct": null,
+        "detector_miss_n": 5,
+        "detector_miss_win_pct": 60.0,
+        "avg_zone_score_wins": 8.5,
+        "avg_zone_score_losses": 8.75,
+        "avg_entry_pos_wins": 1.328,
+        "avg_entry_pos_losses": 1.443,
+        "avg_confluence_wins": null,
+        "avg_confluence_losses": null,
+        "reason_hits_wins": [
+          {
+            "reason": "FVG",
+            "n": 3
+          },
+          {
+            "reason": "premium",
+            "n": 2
+          },
+          {
+            "reason": "HTF zone",
+            "n": 2
+          },
+          {
+            "reason": "S/D",
+            "n": 1
+          },
+          {
+            "reason": "key level",
+            "n": 1
+          },
+          {
+            "reason": "round 4400",
+            "n": 1
+          },
+          {
+            "reason": "liquidity pool",
+            "n": 1
+          },
+          {
+            "reason": "sweep A",
+            "n": 1
+          }
+        ],
+        "reason_hits_losses": [
+          {
+            "reason": "premium",
+            "n": 2
+          },
+          {
+            "reason": "FVG",
+            "n": 1
+          },
+          {
+            "reason": "round 4525",
+            "n": 1
+          },
+          {
+            "reason": "HTF zone",
+            "n": 1
+          },
+          {
+            "reason": "S/D",
+            "n": 1
+          },
+          {
+            "reason": "key level",
+            "n": 1
+          },
+          {
+            "reason": "round 4645",
+            "n": 1
+          },
+          {
+            "reason": "liquidity pool",
+            "n": 1
+          }
+        ]
+      },
+      {
+        "strategy": "FVG",
+        "direction": "BUY",
+        "n": 4,
+        "wins": 2,
+        "losses": 2,
+        "win_pct": 50.0,
+        "avg_pips": 19.8,
+        "htf_aligned_n": 4,
+        "htf_aligned_win_pct": 50.0,
+        "htf_counter_n": 0,
+        "htf_counter_win_pct": null,
+        "detector_fired_n": 0,
+        "detector_fired_win_pct": null,
+        "detector_miss_n": 4,
+        "detector_miss_win_pct": 50.0,
+        "avg_zone_score_wins": 13.25,
+        "avg_zone_score_losses": 10.75,
+        "avg_entry_pos_wins": -0.644,
+        "avg_entry_pos_losses": -1.553,
+        "avg_confluence_wins": null,
+        "avg_confluence_losses": null,
+        "reason_hits_wins": [
+          {
+            "reason": "FVG",
+            "n": 2
+          },
+          {
+            "reason": "HTF zone",
+            "n": 2
+          },
+          {
+            "reason": "1 touch",
+            "n": 1
+          },
+          {
+            "reason": "S/D",
+            "n": 1
+          },
+          {
+            "reason": "OB",
+            "n": 1
+          },
+          {
+            "reason": "flip",
+            "n": 1
+          },
+          {
+            "reason": "breaker",
+            "n": 1
+          },
+          {
+            "reason": "key level",
+            "n": 1
+          }
+        ],
+        "reason_hits_losses": [
+          {
+            "reason": "key level",
+            "n": 2
+          },
+          {
+            "reason": "discount",
+            "n": 2
+          },
+          {
+            "reason": "HTF zone",
+            "n": 2
+          },
+          {
+            "reason": "S/D",
+            "n": 1
+          },
+          {
+            "reason": "round 4480",
+            "n": 1
+          },
+          {
+            "reason": "sweep A",
+            "n": 1
+          },
+          {
+            "reason": "1 touch",
+            "n": 1
+          },
+          {
+            "reason": "FVG",
+            "n": 1
+          }
+        ]
+      },
+      {
+        "strategy": "FVG",
+        "direction": "SELL",
+        "n": 4,
+        "wins": 2,
+        "losses": 2,
+        "win_pct": 50.0,
+        "avg_pips": 75.5,
+        "htf_aligned_n": 1,
+        "htf_aligned_win_pct": null,
+        "htf_counter_n": 3,
+        "htf_counter_win_pct": 33.3,
+        "detector_fired_n": 0,
+        "detector_fired_win_pct": null,
+        "detector_miss_n": 4,
+        "detector_miss_win_pct": 50.0,
+        "avg_zone_score_wins": 8.75,
+        "avg_zone_score_losses": 10.75,
+        "avg_entry_pos_wins": 0.923,
+        "avg_entry_pos_losses": 1.21,
+        "avg_confluence_wins": null,
+        "avg_confluence_losses": null,
+        "reason_hits_wins": [
+          {
+            "reason": "FVG",
+            "n": 2
+          },
+          {
+            "reason": "fresh",
+            "n": 1
+          },
+          {
+            "reason": "key level",
+            "n": 1
+          },
+          {
+            "reason": "premium",
+            "n": 1
+          },
+          {
+            "reason": "1 touch",
+            "n": 1
+          },
+          {
+            "reason": "S/D",
+            "n": 1
+          },
+          {
+            "reason": "round 4605",
+            "n": 1
+          },
+          {
+            "reason": "liquidity pool",
+            "n": 1
+          }
+        ],
+        "reason_hits_losses": [
+          {
+            "reason": "HTF zone",
+            "n": 2
+          },
+          {
+            "reason": "1 touch",
+            "n": 1
+          },
+          {
+            "reason": "FVG",
+            "n": 1
+          },
+          {
+            "reason": "key level",
+            "n": 1
+          },
+          {
+            "reason": "round 4615",
+            "n": 1
+          },
+          {
+            "reason": "liquidity pool",
+            "n": 1
+          },
+          {
+            "reason": "S/D",
+            "n": 1
+          },
+          {
+            "reason": "round 4610",
+            "n": 1
+          }
+        ]
+      }
+    ],
+    "trade_count": 115
+  },
+  "errors": [],
+  "feature_samples": {
+    "Supply Demand|SELL": [
+      {
+        "id": 56,
+        "pips": 37.0,
+        "htf": "up",
+        "htf_al": false,
+        "det": false,
+        "z": 10.5,
+        "pos": 2.1224
+      },
+      {
+        "id": 68,
+        "pips": 34.0,
+        "htf": "up",
+        "htf_al": false,
+        "det": false,
+        "z": 8.5,
+        "pos": 0.7903
+      },
+      {
+        "id": 93,
+        "pips": 45.0,
+        "htf": "up",
+        "htf_al": false,
+        "det": false,
+        "z": 3.0,
+        "pos": 0.7361
+      },
+      {
+        "id": 114,
+        "pips": 62.0,
+        "htf": "up",
+        "htf_al": false,
+        "det": false,
+        "z": 9.0,
+        "pos": 3.5521
+      },
+      {
+        "id": 117,
+        "pips": -38.0,
+        "htf": "up",
+        "htf_al": false,
+        "det": false,
+        "z": 5.0,
+        "pos": 2.7955
+      }
+    ],
+    "Flip Zone|SELL": [
+      {
+        "id": 57,
+        "pips": 43.0,
+        "htf": "up",
+        "htf_al": false,
+        "det": false,
+        "z": 10.5,
+        "pos": 2.2368
+      },
+      {
+        "id": 65,
+        "pips": -58.0,
+        "htf": "up",
+        "htf_al": false,
+        "det": false,
+        "z": 20.0,
+        "pos": 1.3007
+      },
+      {
+        "id": 75,
+        "pips": 31.0,
+        "htf": "down",
+        "htf_al": true,
+        "det": false,
+        "z": 9.5,
+        "pos": 1.7785
+      },
+      {
+        "id": 76,
+        "pips": 30.0,
+        "htf": "up",
+        "htf_al": false,
+        "det": false,
+        "z": 8.0,
+        "pos": 1.0946
+      },
+      {
+        "id": 80,
+        "pips": 31.0,
+        "htf": "up",
+        "htf_al": false,
+        "det": false,
+        "z": 10.0,
+        "pos": 0.5589
+      }
+    ],
+    "FVG|BUY": [
+      {
+        "id": 58,
+        "pips": 35.0,
+        "htf": "up",
+        "htf_al": true,
+        "det": false,
+        "z": 17.5,
+        "pos": -0.0029
+      },
+      {
+        "id": 101,
+        "pips": -5.0,
+        "htf": "up",
+        "htf_al": true,
+        "det": false,
+        "z": 11.5,
+        "pos": -3.0311
+      },
+      {
+        "id": 123,
+        "pips": -39.0,
+        "htf": "up",
+        "htf_al": true,
+        "det": false,
+        "z": 10.0,
+        "pos": -0.0758
+      },
+      {
+        "id": 165,
+        "pips": 88.0,
+        "htf": "up",
+        "htf_al": true,
+        "det": false,
+        "z": 9.0,
+        "pos": -1.2857
+      }
+    ],
+    "Key Level Reaction|BUY": [
+      {
+        "id": 59,
+        "pips": 33.0,
+        "htf": "up",
+        "htf_al": true,
+        "det": false,
+        "z": 5.5,
+        "pos": -0.0882
+      },
+      {
+        "id": 63,
+        "pips": 32.0,
+        "htf": "up",
+        "htf_al": true,
+        "det": true,
+        "z": 21.5,
+        "pos": -0.0874
+      },
+      {
+        "id": 64,
+        "pips": -60.0,
+        "htf": "up",
+        "htf_al": true,
+        "det": true,
+        "z": 16.5,
+        "pos": -0.8084
+      },
+      {
+        "id": 70,
+        "pips": 31.0,
+        "htf": "up",
+        "htf_al": true,
+        "det": false,
+        "z": 10.0,
+        "pos": -0.286
+      },
+      {
+        "id": 71,
+        "pips": -55.0,
+        "htf": "up",
+        "htf_al": true,
+        "det": false,
+        "z": 8.0,
+        "pos": 0.2322
+      }
+    ],
+    "Key Level Reaction|SELL": [
+      {
+        "id": 61,
+        "pips": 63.0,
+        "htf": "up",
+        "htf_al": false,
+        "det": true,
+        "z": 5.0,
+        "pos": 1.4851
+      },
+      {
+        "id": 73,
+        "pips": 36.0,
+        "htf": "up",
+        "htf_al": false,
+        "det": false,
+        "z": 3.0,
+        "pos": -0.2484
+      },
+      {
+        "id": 84,
+        "pips": 36.0,
+        "htf": "down",
+        "htf_al": true,
+        "det": true,
+        "z": 9.0,
+        "pos": 1.697
+      },
+      {
+        "id": 89,
+        "pips": -26.0,
+        "htf": "up",
+        "htf_al": false,
+        "det": true,
+        "z": 5.5,
+        "pos": 5.4946
+      },
+      {
+        "id": 92,
+        "pips": 35.0,
+        "htf": "down",
+        "htf_al": true,
+        "det": true,
+        "z": 9.5,
+        "pos": 2.1166
+      }
+    ],
+    "Order Block|SELL": [
+      {
+        "id": 62,
+        "pips": 100.0,
+        "htf": "up",
+        "htf_al": false,
+        "det": false,
+        "z": 14.5,
+        "pos": 2.0899
+      },
+      {
+        "id": 69,
+        "pips": 27.0,
+        "htf": "up",
+        "htf_al": false,
+        "det": false,
+        "z": 6.0,
+        "pos": 1.1496
+      },
+      {
+        "id": 111,
+        "pips": -5.0,
+        "htf": "up",
+        "htf_al": false,
+        "det": false,
+        "z": 7.0,
+        "pos": 1.8506
+      },
+      {
+        "id": 112,
+        "pips": 63.0,
+        "htf": "up",
+        "htf_al": false,
+        "det": false,
+        "z": 5.0,
+        "pos": 0.7457
+      },
+      {
+        "id": 175,
+        "pips": -19.0,
+        "htf": "down",
+        "htf_al": true,
+        "det": false,
+        "z": 10.5,
+        "pos": 1.0355
+      }
+    ],
+    "Supply Demand|BUY": [
+      {
+        "id": 77,
+        "pips": 211.0,
+        "htf": "up",
+        "htf_al": true,
+        "det": false,
+        "z": 16.5,
+        "pos": -2.1098
+      },
+      {
+        "id": 82,
+        "pips": 35.0,
+        "htf": "down",
+        "htf_al": false,
+        "det": false,
+        "z": 13.0,
+        "pos": -0.6845
+      },
+      {
+        "id": 83,
+        "pips": 136.0,
+        "htf": "down",
+        "htf_al": false,
+        "det": false,
+        "z": 9.5,
+        "pos": 0.0117
+      },
+      {
+        "id": 133,
+        "pips": -5.0,
+        "htf": "up",
+        "htf_al": true,
+        "det": false,
+        "z": 9.5,
+        "pos": -0.9172
+      },
+      {
+        "id": 162,
+        "pips": 68.0,
+        "htf": "up",
+        "htf_al": true,
+        "det": false,
+        "z": 15.0,
+        "pos": -0.4135
+      }
+    ],
+    "Order Block|BUY": [
+      {
+        "id": 79,
+        "pips": -62.0,
+        "htf": "up",
+        "htf_al": true,
+        "det": false,
+        "z": 13.0,
+        "pos": -0.0687
+      }
+    ],
+    "Flip Zone|BUY": [
+      {
+        "id": 136,
+        "pips": -60.0,
+        "htf": "up",
+        "htf_al": true,
+        "det": false,
+        "z": 5.0,
+        "pos": 0.2536
+      }
+    ],
+    "FVG|SELL": [
+      {
+        "id": 140,
+        "pips": -35.0,
+        "htf": "up",
+        "htf_al": false,
+        "det": false,
+        "z": 10.0,
+        "pos": 0.3306
+      },
+      {
+        "id": 147,
+        "pips": 30.0,
+        "htf": "up",
+        "htf_al": false,
+        "det": false,
+        "z": 8.0,
+        "pos": 0.4944
+      },
+      {
+        "id": 205,
+        "pips": 366.0,
+        "htf": "down",
+        "htf_al": true,
+        "det": false,
+        "z": 9.5,
+        "pos": 1.3513
+      },
+      {
+        "id": 211,
+        "pips": -59.0,
+        "htf": "up",
+        "htf_al": false,
+        "det": false,
+        "z": 11.5,
+        "pos": 2.0895
+      }
+    ],
+    "Confluence Zone|BUY": [
+      {
+        "id": 167,
+        "pips": -39.0,
+        "htf": "down",
+        "htf_al": false,
+        "det": false,
+        "z": 5.0,
+        "pos": -0.3831
+      }
+    ],
+    "Golden Fib|SELL": [
+      {
+        "id": 174,
+        "pips": -45.0,
+        "htf": "down",
+        "htf_al": true,
+        "det": false,
+        "z": 13.0,
+        "pos": 1.0377
+      },
+      {
+        "id": 207,
+        "pips": 81.0,
+        "htf": "down",
+        "htf_al": true,
+        "det": false,
+        "z": 3.0,
+        "pos": 0.4945
+      }
+    ],
+    "Confluence Zone|SELL": [
+      {
+        "id": 202,
+        "pips": -69.0,
+        "htf": "down",
+        "htf_al": true,
+        "det": false,
+        "z": 10.5,
+        "pos": 2.3029
+      }
+    ]
+  }
+}
