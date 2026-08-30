@@ -86,7 +86,7 @@
       "classification": "UNKNOWN_BLOCKER",
       "env_name": "DATABASE_URL",
       "file": "algo-bot/app/scripts/manual_formula_replay.py",
-      "line": 366
+      "line": 817
     },
     {
       "allowed": false,
@@ -94,7 +94,7 @@
       "classification": "UNKNOWN_BLOCKER",
       "env_name": "POSTGRES_DSN",
       "file": "algo-bot/app/scripts/manual_formula_replay.py",
-      "line": 366
+      "line": 817
     }
   ],
   "allowed_sites": 10,

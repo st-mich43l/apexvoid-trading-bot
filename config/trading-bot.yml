@@ -572,14 +572,14 @@ instruments:
     rollout: live
     # Technique: structure fixed_rr from pack (1R/1.5R/2R). Manual stays
     # zone_ladder. M1 scalping keeps strategies.scalping discovery book.
-    # Chart replay: raise Key Level SELL quality via nearest supply zone
-    # score ≥10. Never HTF-veto counter-bias.
+    # Withdrew min_sell_zone_score:10 (PR #449) — nearest-zone gap was ~1pt
+    # on n=26, inverted in 4/8 SELL cells, and the floor sat above most
+    # winning sample z scores. Field stays at default 0 (off); see
+    # docs/history/manual-formula-replay-key-level-floor-withdrawal.md.
     broker_symbol: XAU
     canonical_symbol: XAU
     aliases:
     - XAUUSD
-    overrides:
-      strategies.reaction.key_level.min_sell_zone_score: 10.0
 lifecycle:
   candidate:
     execution_maximum_age_seconds: 420
