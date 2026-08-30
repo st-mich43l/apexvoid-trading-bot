@@ -493,15 +493,13 @@ instruments:
     # ("volatility clusters"). Widen the news guard around either event
     # instead of the flat 30m single-event window every pair gets.
     # Dig 2026-08-25: Key Level was 0/4 (−118 pips). Keep the family live;
-    # raise quality (kz + explicit role + BUY-only HTF + grade A + 3 touches)
-    # instead of disabling strategies.reaction.key_level. require_htf_alignment
-    # never blocks SELL counter-bias.
+    # raise quality (kz + explicit role + grade A + 3 touches) instead of
+    # disabling the family. Do not HTF-veto counter-bias.
     overrides:
       actionability.gates.event_cluster_guard_enabled: true
       analysis.levels.minimum_key_touches: 3
       strategies.reaction.key_level.require_explicit_role: true
       strategies.reaction.key_level.require_killzone: true
-      strategies.reaction.key_level.require_htf_alignment: true
       strategies.reaction.key_level.min_grade: A
     # Front-loaded vs EURUSD/USDJPY's fx_fixed_2r_v1 25/25/50: GBPJPY's
     # moves happen fast and reverse hard, so lock in more of the win at
@@ -574,14 +572,13 @@ instruments:
     rollout: live
     # Technique: structure fixed_rr from pack (1R/1.5R/2R). Manual stays
     # zone_ladder. M1 scalping keeps strategies.scalping discovery book.
-    # Chart formula replay (manual closes): Key Level BUY needs HTF; SELL
-    # keeps counter-bias and uses nearest supply zone score ≥10 instead.
+    # Chart replay: raise Key Level SELL quality via nearest supply zone
+    # score ≥10. Never HTF-veto counter-bias.
     broker_symbol: XAU
     canonical_symbol: XAU
     aliases:
     - XAUUSD
     overrides:
-      strategies.reaction.key_level.require_htf_alignment: true
       strategies.reaction.key_level.min_sell_zone_score: 10.0
 lifecycle:
   candidate:

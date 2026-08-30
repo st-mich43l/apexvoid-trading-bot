@@ -1,7 +1,7 @@
 {
   "catalog_version": 2,
   "configuration_contract_fingerprint_sha256": "f3743d4cc3eb6b4937431197fcc3cd49485688aa9a83491c14cdf85123e71e5e",
-  "configuration_document_fingerprint_sha256": "43a8e1c08567e91dd1d1872d00a0b6395e0a9d48a1984aafc4af8efcb400a806",
+  "configuration_document_fingerprint_sha256": "9a8b537f8d946adbfbe290c12e7b69216439fd84c2ff983593baed5f166c170b",
   "counts": {
     "algorithm_constants": 57,
     "configurable": 479,
@@ -17148,7 +17148,7 @@
       ],
       "deprecated": false,
       "deprecated_aliases": [],
-      "description": "Minimum nearest same-side zone score for Key Level SELL (0 disables). Counter-bias sells still allowed.",
+      "description": "Minimum nearest same-side zone score for Key Level SELL (0 disables). Does not block counter-bias.",
       "display_id": "config:strategies.reaction.key_level.min_sell_zone_score",
       "evidence_notes": [],
       "introduced_in": "config-catalog-v2",
@@ -17222,7 +17222,7 @@
       ],
       "deprecated": false,
       "deprecated_aliases": [],
-      "description": "Require Key Level BUY to match HTF bias. Never blocks SELL counter-bias.",
+      "description": "Deprecated no-op for Key Level: counter-bias is never HTF-vetoed. Use min_sell_zone_score for quality.",
       "display_id": "config:strategies.reaction.key_level.require_htf_alignment",
       "evidence_notes": [],
       "introduced_in": "config-catalog-v2",

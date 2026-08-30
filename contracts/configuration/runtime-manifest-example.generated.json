@@ -133,7 +133,7 @@
     "zone_scale_undersized_policy": "single_entry"
   },
   "contract_fingerprint": "f3743d4cc3eb6b4937431197fcc3cd49485688aa9a83491c14cdf85123e71e5e",
-  "effective_configuration_fingerprint": "6fbf4996c02b584f64d601fd19463a6e27e60caa563d37d363164049f0c6290e",
+  "effective_configuration_fingerprint": "ea9b42f7b38c4ec1a9e632fbccf778a0e7f10dee73372efb907c6ef888431d0e",
   "feed": {
     "backfill_bars": 1500,
     "bar_quality_lookback": 6,
@@ -1777,12 +1777,6 @@
             "source_name": "instruments.GBPJPY.overrides"
           },
           {
-            "path": "strategies.reaction.key_level.require_htf_alignment",
-            "secret": false,
-            "source_kind": "instrument_override",
-            "source_name": "instruments.GBPJPY.overrides"
-          },
-          {
             "path": "strategies.reaction.key_level.require_killzone",
             "secret": false,
             "source_kind": "instrument_override",
@@ -1931,7 +1925,7 @@
             "min_grade": "A",
             "min_sell_zone_score": "0",
             "require_explicit_role": true,
-            "require_htf_alignment": true,
+            "require_htf_alignment": false,
             "require_killzone": true
           },
           "liquidity_reversal": {
@@ -4617,12 +4611,6 @@
             "source_name": "instruments.XAU.overrides"
           },
           {
-            "path": "strategies.reaction.key_level.require_htf_alignment",
-            "secret": false,
-            "source_kind": "instrument_override",
-            "source_name": "instruments.XAU.overrides"
-          },
-          {
             "path": "strategies.technique.crt.entry_max_width_price",
             "secret": false,
             "source_kind": "instrument_override",
@@ -4759,7 +4747,7 @@
             "min_grade": "B",
             "min_sell_zone_score": "10",
             "require_explicit_role": false,
-            "require_htf_alignment": true,
+            "require_htf_alignment": false,
             "require_killzone": false
           },
           "liquidity_reversal": {
@@ -6242,12 +6230,6 @@
             "source_name": "instruments.GBPJPY.overrides"
           },
           {
-            "path": "strategies.reaction.key_level.require_htf_alignment",
-            "secret": false,
-            "source_kind": "instrument_override",
-            "source_name": "instruments.GBPJPY.overrides"
-          },
-          {
             "path": "strategies.reaction.key_level.require_killzone",
             "secret": false,
             "source_kind": "instrument_override",
@@ -6395,7 +6377,7 @@
             "min_grade": "A",
             "min_sell_zone_score": "0",
             "require_explicit_role": true,
-            "require_htf_alignment": true,
+            "require_htf_alignment": false,
             "require_killzone": true
           },
           "liquidity_reversal": {
@@ -8667,12 +8649,6 @@
             "source_name": "instruments.XAU.overrides"
           },
           {
-            "path": "strategies.reaction.key_level.require_htf_alignment",
-            "secret": false,
-            "source_kind": "instrument_override",
-            "source_name": "instruments.XAU.overrides"
-          },
-          {
             "path": "strategies.technique.crt.entry_max_width_price",
             "secret": false,
             "source_kind": "instrument_override",
@@ -8808,7 +8784,7 @@
             "min_grade": "B",
             "min_sell_zone_score": "10",
             "require_explicit_role": false,
-            "require_htf_alignment": true,
+            "require_htf_alignment": false,
             "require_killzone": false
           },
           "liquidity_reversal": {

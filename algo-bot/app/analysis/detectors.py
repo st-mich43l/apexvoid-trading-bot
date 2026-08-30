@@ -215,6 +215,7 @@ class DetectorSettings:
   key_level_reaction_enabled: bool = True
   key_level_require_explicit_role: bool = False
   # BUY-only HTF gate — never blocks Key Level SELL counter-bias.
+  # Deprecated: Key Level no longer HTF-vetoes; flag is a no-op.
   key_level_require_htf_alignment: bool = False
   key_level_min_sell_zone_score: float = 0.0
   demand_reaction_enabled: bool = True
@@ -2690,14 +2691,8 @@ def key_level_reaction(ctx: DetectionContext) -> DetectionResult | None:
       directions = ("BUY", "SELL")
     confirmed_here: list[DetectionResult] = []
     for direction in directions:
-      # HTF alignment is BUY-only. Counter-bias SELLs must never be killed
-      # by this gate (chart evidence: KL/SD/Flip SELL counter-HTF beat aligned).
-      if (
-        direction == "BUY"
-        and bool(getattr(ctx.settings, "key_level_require_htf_alignment", False))
-        and ctx.htf_bias != _bias_for_direction(direction)
-      ):
-        continue
+      # Never HTF-veto Key Level (counter-bias must stay live). Quality is
+      # min_sell_zone_score / other score floors — not bias alignment.
       if direction == "SELL" and min_sell_zone > 0.0:
         nearest_score = _nearest_same_side_zone_score(
           st, price=price, direction=direction,
