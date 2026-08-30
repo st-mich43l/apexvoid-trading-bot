@@ -261,6 +261,17 @@ async def init_db() -> None:
       "CREATE INDEX IF NOT EXISTS idx_manual_algo_charts_signal "
       "ON manual_algo_charts(signal_id, event)"
     )
+    for column_sql in (
+      "ALTER TABLE manual_algo_charts "
+      "ADD COLUMN IF NOT EXISTS bars_requested INT NOT NULL DEFAULT 0",
+      "ALTER TABLE manual_algo_charts "
+      "ADD COLUMN IF NOT EXISTS bars_stored INT NOT NULL DEFAULT 0",
+      "ALTER TABLE manual_algo_charts "
+      "ADD COLUMN IF NOT EXISTS bars_after_event INT NOT NULL DEFAULT 0",
+      "ALTER TABLE manual_algo_charts "
+      "ADD COLUMN IF NOT EXISTS capture_version INT NOT NULL DEFAULT 1",
+    ):
+      await db.execute(column_sql)
     await db.execute(
       "CREATE INDEX IF NOT EXISTS idx_manual_signals_parent_id "
       "ON manual_signals(parent_id)"
@@ -1174,6 +1185,10 @@ async def upsert_manual_algo_chart(
   window_start: int,
   window_end: int,
   bars: list,
+  bars_requested: int = 0,
+  bars_stored: int = 0,
+  bars_after_event: int = 0,
+  capture_version: int = 1,
 ) -> None:
   """Idempotent OHLC snapshot for one signal event and timeframe."""
   async with _connect() as db:
@@ -1181,14 +1196,19 @@ async def upsert_manual_algo_chart(
       """
       INSERT INTO manual_algo_charts
         (signal_id, event, captured_at, symbol, timeframe,
-         window_start, window_end, bars)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
+         window_start, window_end, bars,
+         bars_requested, bars_stored, bars_after_event, capture_version)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11, $12)
       ON CONFLICT (signal_id, event, timeframe) DO UPDATE SET
         captured_at = excluded.captured_at,
         symbol = excluded.symbol,
         window_start = excluded.window_start,
         window_end = excluded.window_end,
-        bars = excluded.bars
+        bars = excluded.bars,
+        bars_requested = excluded.bars_requested,
+        bars_stored = excluded.bars_stored,
+        bars_after_event = excluded.bars_after_event,
+        capture_version = excluded.capture_version
       """,
       signal_id,
       event,
@@ -1198,7 +1218,71 @@ async def upsert_manual_algo_chart(
       window_start,
       window_end,
       json.dumps(bars),
+      int(bars_requested),
+      int(bars_stored),
+      int(bars_after_event),
+      int(capture_version),
     )
+
+
+async def load_manual_algo_charts(
+  signal_id: int,
+  *,
+  event: str,
+  causal_only: bool = True,
+) -> dict[str, list[dict]]:
+  """Bars per timeframe for one signal event.
+
+  causal_only drops bars with t > captured_at, which is the only safe default
+  for anything that fits or scores strategy math.
+  """
+  rows = await load_manual_algo_chart_rows(
+    signal_id, event=event, causal_only=causal_only,
+  )
+  return {tf: row["bars"] for tf, row in rows.items()}
+
+
+async def load_manual_algo_chart_rows(
+  signal_id: int,
+  *,
+  event: str,
+  causal_only: bool = True,
+) -> dict[str, dict]:
+  """Per-timeframe bars plus capture adequacy fields for one signal event."""
+  async with _connect() as db:
+    rows = await db.fetch(
+      """
+      SELECT timeframe, captured_at, bars,
+             bars_requested, bars_stored, bars_after_event, capture_version
+      FROM manual_algo_charts
+      WHERE signal_id = $1 AND event = $2
+      """,
+      signal_id,
+      event,
+    )
+  out: dict[str, dict] = {}
+  for row in rows:
+    bars = row["bars"]
+    if isinstance(bars, str):
+      bars = json.loads(bars)
+    if not isinstance(bars, list):
+      bars = []
+    captured_at = int(row["captured_at"])
+    if causal_only:
+      bars = [
+        bar for bar in bars
+        if isinstance(bar, dict) and int(bar.get("t") or 0) <= captured_at
+      ]
+    tf = str(row["timeframe"]).upper()
+    out[tf] = {
+      "bars": bars,
+      "bars_requested": int(row["bars_requested"] or 0),
+      "bars_stored": int(row["bars_stored"] or 0),
+      "bars_after_event": int(row["bars_after_event"] or 0),
+      "capture_version": int(row["capture_version"] or 1),
+      "captured_at": captured_at,
+    }
+  return out
 
 
 async def _safe_snapshot_manual_chart(

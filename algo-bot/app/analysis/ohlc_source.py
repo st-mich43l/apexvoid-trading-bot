@@ -14,27 +14,34 @@ def _bar_key(symbol: str, tf: str) -> str:
   return f"bars:{symbol.upper()}:{tf.upper()}"
 
 
-_LOOKBACK_BY_TF = {
-  "H1": lambda: runtime_config.market_data.lookbacks.h1_bars,
-  "M15": lambda: runtime_config.market_data.lookbacks.m15_bars,
-  "M5": lambda: runtime_config.market_data.lookbacks.m5_bars,
-  "M1": lambda: runtime_config.market_data.lookbacks.m1_bars,
-}
-
-
-def window_for_timeframe(tf: str, *, default: int | None = None) -> int:
+def window_for_timeframe(
+  tf: str,
+  *,
+  default: int | None = None,
+  root: Any | None = None,
+) -> int:
   """Configured closed-bar lookback for one timeframe (H1/M15/M5/M1).
 
   The single place that resolves a timeframe string to a bar count -
   detectors and callers must never hardcode a per-timeframe lookback
   themselves. Falls back to `default` (or the canonical scanner window) for any
-  timeframe with no dedicated XAU_LOOKBACK_*_BARS setting (e.g. a symbol
-  extension that hasn't been given its own lookback tuning yet).
+  timeframe with no dedicated lookback setting.
+
+  ``root`` may be the global ``runtime_config`` or an instrument-scoped view
+  that exposes ``market_data.lookbacks`` (e.g. ``instrument_runtime_view``).
   """
-  lookback = _LOOKBACK_BY_TF.get(tf.upper())
-  if lookback is not None:
-    return max(50, int(lookback()))
-  fallback = runtime_config.market_data.scanner.window
+  cfg = runtime_config if root is None else root
+  lookbacks = cfg.market_data.lookbacks
+  key = tf.upper()
+  if key == "H1":
+    return max(50, int(lookbacks.h1_bars))
+  if key == "M15":
+    return max(50, int(lookbacks.m15_bars))
+  if key == "M5":
+    return max(50, int(lookbacks.m5_bars))
+  if key == "M1":
+    return max(50, int(lookbacks.m1_bars))
+  fallback = cfg.market_data.scanner.window
   return max(50, int(default if default is not None else fallback))
 
 
