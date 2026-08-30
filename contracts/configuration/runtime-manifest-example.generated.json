@@ -133,7 +133,7 @@
     "zone_scale_undersized_policy": "single_entry"
   },
   "contract_fingerprint": "f3743d4cc3eb6b4937431197fcc3cd49485688aa9a83491c14cdf85123e71e5e",
-  "effective_configuration_fingerprint": "ea9b42f7b38c4ec1a9e632fbccf778a0e7f10dee73372efb907c6ef888431d0e",
+  "effective_configuration_fingerprint": "4c9b0b7c3d7f35e755cfac9d412e05366b2c42478dfe2f2486f81b8357c0bb12",
   "feed": {
     "backfill_bars": 1500,
     "bar_quality_lookback": 6,
@@ -4605,12 +4605,6 @@
             "source_name": "instruments.XAU.execution_pack"
           },
           {
-            "path": "strategies.reaction.key_level.min_sell_zone_score",
-            "secret": false,
-            "source_kind": "instrument_override",
-            "source_name": "instruments.XAU.overrides"
-          },
-          {
             "path": "strategies.technique.crt.entry_max_width_price",
             "secret": false,
             "source_kind": "instrument_override",
@@ -4745,7 +4739,7 @@
           "key_level": {
             "enabled": true,
             "min_grade": "B",
-            "min_sell_zone_score": "10",
+            "min_sell_zone_score": "0",
             "require_explicit_role": false,
             "require_htf_alignment": false,
             "require_killzone": false
@@ -8643,12 +8637,6 @@
             "source_name": "instruments.XAU.execution_pack"
           },
           {
-            "path": "strategies.reaction.key_level.min_sell_zone_score",
-            "secret": false,
-            "source_kind": "instrument_override",
-            "source_name": "instruments.XAU.overrides"
-          },
-          {
             "path": "strategies.technique.crt.entry_max_width_price",
             "secret": false,
             "source_kind": "instrument_override",
@@ -8782,7 +8770,7 @@
           "key_level": {
             "enabled": true,
             "min_grade": "B",
-            "min_sell_zone_score": "10",
+            "min_sell_zone_score": "0",
             "require_explicit_role": false,
             "require_htf_alignment": false,
             "require_killzone": false

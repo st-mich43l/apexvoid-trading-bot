@@ -214,9 +214,6 @@ class DetectorSettings:
   engulfing_minimum_range_atr: float = 0.5
   key_level_reaction_enabled: bool = True
   key_level_require_explicit_role: bool = False
-  # BUY-only HTF gate — never blocks Key Level SELL counter-bias.
-  # Deprecated: Key Level no longer HTF-vetoes; flag is a no-op.
-  key_level_require_htf_alignment: bool = False
   key_level_min_sell_zone_score: float = 0.0
   demand_reaction_enabled: bool = True
   supply_reaction_enabled: bool = True
@@ -488,9 +485,6 @@ def detector_settings_from(config: object | None = None) -> DetectorSettings:
     key_level_reaction_enabled=bool(strategies.reaction.key_level.enabled),
     key_level_require_explicit_role=bool(
       strategies.reaction.key_level.require_explicit_role
-    ),
-    key_level_require_htf_alignment=bool(
-      strategies.reaction.key_level.require_htf_alignment
     ),
     key_level_min_sell_zone_score=float(
       strategies.reaction.key_level.min_sell_zone_score

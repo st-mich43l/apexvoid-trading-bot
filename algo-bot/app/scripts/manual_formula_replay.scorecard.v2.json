@@ -1,0 +1,1584 @@
+{
+  "generated_at": "2026-08-30T04:43:29.197538+00:00",
+  "scope": "discovery_only",
+  "settings_mode": "runtime",
+  "settings_fingerprint_sha256": "48736368b2975a6765878e8928f520c6f023b7d6e3ce9edfaf845a0a4c7736d7",
+  "scan_bars": 6,
+  "match_atr": 0.5,
+  "coverage": {
+    "charted_closed": 115,
+    "replayed": 115,
+    "errors": 0
+  },
+  "scorecard": {
+    "cells": [
+      {
+        "strategy": "Key Level Reaction",
+        "direction": "BUY",
+        "n": 26,
+        "wins": 15,
+        "losses": 11,
+        "cell_underpowered": false,
+        "win_rate": {
+          "pct": 57.7,
+          "n": 26,
+          "ci_low": 38.9,
+          "ci_high": 74.5
+        },
+        "win_pct": 57.7,
+        "avg_pips": 24.2,
+        "median_pips": 32.0,
+        "expectancy_pips": 24.154,
+        "avg_win_pips": 72.2,
+        "avg_loss_pips": -41.364,
+        "profit_factor": 2.38,
+        "avg_r": 16.347,
+        "expectancy_r": 16.347,
+        "htf_aligned_n": 20,
+        "htf_counter_n": 6,
+        "htf_confounded": true,
+        "htf_aligned_win_pct": null,
+        "htf_counter_win_pct": null,
+        "htf_aligned_win_rate": null,
+        "htf_counter_win_rate": null,
+        "htf_suppressed_reason": "confounded_with_direction",
+        "htf_fisher_p": null,
+        "detector_matched_n": 8,
+        "detector_miss_n": 18,
+        "detector_matched_win_rate": {
+          "pct": 62.5,
+          "n": 8,
+          "ci_low": 30.6,
+          "ci_high": 86.3
+        },
+        "detector_miss_win_rate": {
+          "pct": 55.6,
+          "n": 18,
+          "ci_low": 33.7,
+          "ci_high": 75.4
+        },
+        "detector_matched_win_pct": 62.5,
+        "detector_miss_win_pct": 55.6,
+        "detector_fisher_p": 1.0,
+        "detector_fired_at_fill_n": 11,
+        "avg_zone_score_wins": 13.0,
+        "avg_zone_score_losses": 11.364,
+        "avg_entry_pos_wins": 0.047,
+        "avg_entry_pos_losses": 0.062,
+        "dealing_range_brackets_pct": 19.2,
+        "avg_confluence_wins": 2.0,
+        "avg_confluence_losses": 2.0,
+        "avg_technique_near_wins": 0.133,
+        "avg_technique_near_losses": 0.182,
+        "technique_near_zero_pct": 84.6,
+        "nearest_zone_reason_hits_wins": [
+          {
+            "reason": "key level",
+            "n": 13
+          },
+          {
+            "reason": "FVG",
+            "n": 11
+          },
+          {
+            "reason": "HTF zone",
+            "n": 11
+          },
+          {
+            "reason": "S/D",
+            "n": 9
+          },
+          {
+            "reason": "breaker",
+            "n": 9
+          },
+          {
+            "reason": "liquidity pool",
+            "n": 8
+          },
+          {
+            "reason": "flip",
+            "n": 7
+          },
+          {
+            "reason": "discount",
+            "n": 6
+          }
+        ],
+        "nearest_zone_reason_hits_losses": [
+          {
+            "reason": "FVG",
+            "n": 10
+          },
+          {
+            "reason": "HTF zone",
+            "n": 9
+          },
+          {
+            "reason": "key level",
+            "n": 7
+          },
+          {
+            "reason": "liquidity pool",
+            "n": 6
+          },
+          {
+            "reason": "S/D",
+            "n": 5
+          },
+          {
+            "reason": "sweep A",
+            "n": 4
+          },
+          {
+            "reason": "1 touch",
+            "n": 4
+          },
+          {
+            "reason": "breaker",
+            "n": 4
+          }
+        ],
+        "detector_reason_hits_wins": [
+          {
+            "reason": "HTF bias unknown",
+            "n": 5
+          },
+          {
+            "reason": "bias neutral",
+            "n": 5
+          },
+          {
+            "reason": "key round x3",
+            "n": 3
+          },
+          {
+            "reason": "touches 3",
+            "n": 3
+          },
+          {
+            "reason": "engulfing",
+            "n": 2
+          },
+          {
+            "reason": "touches 4",
+            "n": 2
+          },
+          {
+            "reason": "strong_reclaim",
+            "n": 2
+          },
+          {
+            "reason": "mom v=",
+            "n": 2
+          }
+        ],
+        "detector_reason_hits_losses": [
+          {
+            "reason": "HTF bias unknown",
+            "n": 3
+          },
+          {
+            "reason": "bias neutral",
+            "n": 3
+          },
+          {
+            "reason": "key round x2",
+            "n": 1
+          },
+          {
+            "reason": "key round 4620.05 x2",
+            "n": 1
+          },
+          {
+            "reason": "touches 2",
+            "n": 1
+          },
+          {
+            "reason": "strong_reclaim",
+            "n": 1
+          },
+          {
+            "reason": "mom v=",
+            "n": 1
+          },
+          {
+            "reason": "TP anchor range high 4619.26",
+            "n": 1
+          }
+        ]
+      },
+      {
+        "strategy": "Key Level Reaction",
+        "direction": "SELL",
+        "n": 26,
+        "wins": 17,
+        "losses": 9,
+        "cell_underpowered": false,
+        "win_rate": {
+          "pct": 65.4,
+          "n": 26,
+          "ci_low": 46.2,
+          "ci_high": 80.6
+        },
+        "win_pct": 65.4,
+        "avg_pips": 33.8,
+        "median_pips": 35.5,
+        "expectancy_pips": 33.846,
+        "avg_win_pips": 76.706,
+        "avg_loss_pips": -47.111,
+        "profit_factor": 3.075,
+        "avg_r": 257.056,
+        "expectancy_r": 257.056,
+        "htf_aligned_n": 8,
+        "htf_counter_n": 18,
+        "htf_confounded": true,
+        "htf_aligned_win_pct": null,
+        "htf_counter_win_pct": null,
+        "htf_aligned_win_rate": null,
+        "htf_counter_win_rate": null,
+        "htf_suppressed_reason": "confounded_with_direction",
+        "htf_fisher_p": null,
+        "detector_matched_n": 8,
+        "detector_miss_n": 18,
+        "detector_matched_win_rate": {
+          "pct": 87.5,
+          "n": 8,
+          "ci_low": 52.9,
+          "ci_high": 97.8
+        },
+        "detector_miss_win_rate": {
+          "pct": 55.6,
+          "n": 18,
+          "ci_low": 33.7,
+          "ci_high": 75.4
+        },
+        "detector_matched_win_pct": 87.5,
+        "detector_miss_win_pct": 55.6,
+        "detector_fisher_p": 0.1902,
+        "detector_fired_at_fill_n": 15,
+        "avg_zone_score_wins": 9.971,
+        "avg_zone_score_losses": 8.944,
+        "avg_entry_pos_wins": 0.923,
+        "avg_entry_pos_losses": 0.746,
+        "dealing_range_brackets_pct": 11.5,
+        "avg_confluence_wins": 2.0,
+        "avg_confluence_losses": 2.0,
+        "avg_technique_near_wins": 0.118,
+        "avg_technique_near_losses": 0.0,
+        "technique_near_zero_pct": 92.3,
+        "nearest_zone_reason_hits_wins": [
+          {
+            "reason": "FVG",
+            "n": 15
+          },
+          {
+            "reason": "premium",
+            "n": 13
+          },
+          {
+            "reason": "key level",
+            "n": 12
+          },
+          {
+            "reason": "HTF zone",
+            "n": 10
+          },
+          {
+            "reason": "S/D",
+            "n": 9
+          },
+          {
+            "reason": "1 touch",
+            "n": 7
+          },
+          {
+            "reason": "liquidity pool",
+            "n": 7
+          },
+          {
+            "reason": "flip",
+            "n": 5
+          }
+        ],
+        "nearest_zone_reason_hits_losses": [
+          {
+            "reason": "FVG",
+            "n": 8
+          },
+          {
+            "reason": "key level",
+            "n": 7
+          },
+          {
+            "reason": "HTF zone",
+            "n": 6
+          },
+          {
+            "reason": "S/D",
+            "n": 4
+          },
+          {
+            "reason": "premium",
+            "n": 4
+          },
+          {
+            "reason": "breaker",
+            "n": 2
+          },
+          {
+            "reason": "round 4580",
+            "n": 2
+          },
+          {
+            "reason": "TL confluence",
+            "n": 2
+          }
+        ],
+        "detector_reason_hits_wins": [
+          {
+            "reason": "HTF bias unknown",
+            "n": 7
+          },
+          {
+            "reason": "bias neutral",
+            "n": 7
+          },
+          {
+            "reason": "mom v=",
+            "n": 4
+          },
+          {
+            "reason": "touches 3",
+            "n": 4
+          },
+          {
+            "reason": "strong_reclaim",
+            "n": 4
+          },
+          {
+            "reason": "sweep_reclaim",
+            "n": 2
+          },
+          {
+            "reason": "touches 2",
+            "n": 2
+          },
+          {
+            "reason": "key reaction x3",
+            "n": 2
+          }
+        ],
+        "detector_reason_hits_losses": [
+          {
+            "reason": "HTF bias unknown",
+            "n": 1
+          },
+          {
+            "reason": "key round x2",
+            "n": 1
+          },
+          {
+            "reason": "key round 4580 x2",
+            "n": 1
+          },
+          {
+            "reason": "touches 2",
+            "n": 1
+          },
+          {
+            "reason": "wick_rejection",
+            "n": 1
+          },
+          {
+            "reason": "bias neutral",
+            "n": 1
+          },
+          {
+            "reason": "fib 0.5",
+            "n": 1
+          },
+          {
+            "reason": "mom v=",
+            "n": 1
+          }
+        ]
+      },
+      {
+        "strategy": "Supply Demand",
+        "direction": "SELL",
+        "n": 20,
+        "wins": 14,
+        "losses": 6,
+        "cell_underpowered": false,
+        "win_rate": {
+          "pct": 70.0,
+          "n": 20,
+          "ci_low": 48.1,
+          "ci_high": 85.5
+        },
+        "win_pct": 70.0,
+        "avg_pips": 33.7,
+        "median_pips": 38.5,
+        "expectancy_pips": 33.7,
+        "avg_win_pips": 69.071,
+        "avg_loss_pips": -48.833,
+        "profit_factor": 3.3,
+        "avg_r": 320.351,
+        "expectancy_r": 320.351,
+        "htf_aligned_n": 3,
+        "htf_counter_n": 17,
+        "htf_confounded": true,
+        "htf_aligned_win_pct": null,
+        "htf_counter_win_pct": null,
+        "htf_aligned_win_rate": null,
+        "htf_counter_win_rate": null,
+        "htf_suppressed_reason": "confounded_with_direction",
+        "htf_fisher_p": null,
+        "detector_matched_n": 0,
+        "detector_miss_n": 20,
+        "detector_matched_win_rate": null,
+        "detector_miss_win_rate": {
+          "pct": 70.0,
+          "n": 20,
+          "ci_low": 48.1,
+          "ci_high": 85.5
+        },
+        "detector_matched_win_pct": null,
+        "detector_miss_win_pct": 70.0,
+        "detector_fisher_p": null,
+        "detector_fired_at_fill_n": 0,
+        "avg_zone_score_wins": 8.679,
+        "avg_zone_score_losses": 8.917,
+        "avg_entry_pos_wins": 0.975,
+        "avg_entry_pos_losses": 0.947,
+        "dealing_range_brackets_pct": 15.0,
+        "avg_confluence_wins": null,
+        "avg_confluence_losses": null,
+        "avg_technique_near_wins": 0.071,
+        "avg_technique_near_losses": 0.167,
+        "technique_near_zero_pct": 90.0,
+        "nearest_zone_reason_hits_wins": [
+          {
+            "reason": "FVG",
+            "n": 13
+          },
+          {
+            "reason": "key level",
+            "n": 11
+          },
+          {
+            "reason": "HTF zone",
+            "n": 9
+          },
+          {
+            "reason": "S/D",
+            "n": 8
+          },
+          {
+            "reason": "liquidity pool",
+            "n": 7
+          },
+          {
+            "reason": "premium",
+            "n": 4
+          },
+          {
+            "reason": "1 touch",
+            "n": 4
+          },
+          {
+            "reason": "round 4645",
+            "n": 3
+          }
+        ],
+        "nearest_zone_reason_hits_losses": [
+          {
+            "reason": "HTF zone",
+            "n": 6
+          },
+          {
+            "reason": "FVG",
+            "n": 4
+          },
+          {
+            "reason": "liquidity pool",
+            "n": 4
+          },
+          {
+            "reason": "1 touch",
+            "n": 3
+          },
+          {
+            "reason": "S/D",
+            "n": 3
+          },
+          {
+            "reason": "key level",
+            "n": 2
+          },
+          {
+            "reason": "round 4625",
+            "n": 2
+          },
+          {
+            "reason": "breaker",
+            "n": 1
+          }
+        ],
+        "detector_reason_hits_wins": [],
+        "detector_reason_hits_losses": []
+      },
+      {
+        "strategy": "Flip Zone",
+        "direction": "SELL",
+        "n": 12,
+        "wins": 8,
+        "losses": 4,
+        "cell_underpowered": true,
+        "win_rate": {
+          "pct": 66.7,
+          "n": 12,
+          "ci_low": 39.1,
+          "ci_high": 86.2
+        },
+        "win_pct": 66.7,
+        "avg_pips": 30.6,
+        "median_pips": 31.0,
+        "expectancy_pips": 30.583,
+        "avg_win_pips": 72.375,
+        "avg_loss_pips": -53.0,
+        "profit_factor": 2.731,
+        "avg_r": 99.09,
+        "expectancy_r": 99.09,
+        "htf_aligned_n": 4,
+        "htf_counter_n": 8,
+        "htf_confounded": true,
+        "htf_aligned_win_pct": null,
+        "htf_counter_win_pct": null,
+        "htf_aligned_win_rate": null,
+        "htf_counter_win_rate": null,
+        "htf_suppressed_reason": "confounded_with_direction",
+        "htf_fisher_p": null,
+        "detector_matched_n": 0,
+        "detector_miss_n": 12,
+        "detector_matched_win_rate": null,
+        "detector_miss_win_rate": {
+          "pct": 66.7,
+          "n": 12,
+          "ci_low": 39.1,
+          "ci_high": 86.2
+        },
+        "detector_matched_win_pct": null,
+        "detector_miss_win_pct": 66.7,
+        "detector_fisher_p": null,
+        "detector_fired_at_fill_n": 0,
+        "avg_zone_score_wins": 10.438,
+        "avg_zone_score_losses": 10.875,
+        "avg_entry_pos_wins": 0.823,
+        "avg_entry_pos_losses": 0.744,
+        "dealing_range_brackets_pct": 25.0,
+        "avg_confluence_wins": null,
+        "avg_confluence_losses": null,
+        "avg_technique_near_wins": 0.125,
+        "avg_technique_near_losses": 0.0,
+        "technique_near_zero_pct": 91.7,
+        "nearest_zone_reason_hits_wins": [
+          {
+            "reason": "FVG",
+            "n": 7
+          },
+          {
+            "reason": "key level",
+            "n": 7
+          },
+          {
+            "reason": "S/D",
+            "n": 6
+          },
+          {
+            "reason": "HTF zone",
+            "n": 5
+          },
+          {
+            "reason": "flip",
+            "n": 5
+          },
+          {
+            "reason": "premium",
+            "n": 4
+          },
+          {
+            "reason": "OB",
+            "n": 4
+          },
+          {
+            "reason": "breaker",
+            "n": 3
+          }
+        ],
+        "nearest_zone_reason_hits_losses": [
+          {
+            "reason": "1 touch",
+            "n": 3
+          },
+          {
+            "reason": "FVG",
+            "n": 3
+          },
+          {
+            "reason": "S/D",
+            "n": 3
+          },
+          {
+            "reason": "key level",
+            "n": 3
+          },
+          {
+            "reason": "HTF zone",
+            "n": 3
+          },
+          {
+            "reason": "breaker",
+            "n": 2
+          },
+          {
+            "reason": "flip",
+            "n": 1
+          },
+          {
+            "reason": "round 4395",
+            "n": 1
+          }
+        ],
+        "detector_reason_hits_wins": [],
+        "detector_reason_hits_losses": []
+      },
+      {
+        "strategy": "Supply Demand",
+        "direction": "BUY",
+        "n": 12,
+        "wins": 7,
+        "losses": 5,
+        "cell_underpowered": true,
+        "win_rate": {
+          "pct": 58.3,
+          "n": 12,
+          "ci_low": 32.0,
+          "ci_high": 80.7
+        },
+        "win_pct": 58.3,
+        "avg_pips": 53.4,
+        "median_pips": 33.0,
+        "expectancy_pips": 53.417,
+        "avg_win_pips": 120.429,
+        "avg_loss_pips": -40.4,
+        "profit_factor": 4.173,
+        "avg_r": 9.895,
+        "expectancy_r": 9.895,
+        "htf_aligned_n": 9,
+        "htf_counter_n": 3,
+        "htf_confounded": true,
+        "htf_aligned_win_pct": null,
+        "htf_counter_win_pct": null,
+        "htf_aligned_win_rate": null,
+        "htf_counter_win_rate": null,
+        "htf_suppressed_reason": "confounded_with_direction",
+        "htf_fisher_p": null,
+        "detector_matched_n": 0,
+        "detector_miss_n": 12,
+        "detector_matched_win_rate": null,
+        "detector_miss_win_rate": {
+          "pct": 58.3,
+          "n": 12,
+          "ci_low": 32.0,
+          "ci_high": 80.7
+        },
+        "detector_matched_win_pct": null,
+        "detector_miss_win_pct": 58.3,
+        "detector_fisher_p": null,
+        "detector_fired_at_fill_n": 0,
+        "avg_zone_score_wins": 12.0,
+        "avg_zone_score_losses": 11.2,
+        "avg_entry_pos_wins": 0.0,
+        "avg_entry_pos_losses": 0.0,
+        "dealing_range_brackets_pct": 0.0,
+        "avg_confluence_wins": null,
+        "avg_confluence_losses": null,
+        "avg_technique_near_wins": 0.0,
+        "avg_technique_near_losses": 0.2,
+        "technique_near_zero_pct": 91.7,
+        "nearest_zone_reason_hits_wins": [
+          {
+            "reason": "FVG",
+            "n": 6
+          },
+          {
+            "reason": "key level",
+            "n": 6
+          },
+          {
+            "reason": "HTF zone",
+            "n": 6
+          },
+          {
+            "reason": "S/D",
+            "n": 5
+          },
+          {
+            "reason": "liquidity pool",
+            "n": 4
+          },
+          {
+            "reason": "flip",
+            "n": 3
+          },
+          {
+            "reason": "sweep A",
+            "n": 3
+          },
+          {
+            "reason": "breaker",
+            "n": 2
+          }
+        ],
+        "nearest_zone_reason_hits_losses": [
+          {
+            "reason": "S/D",
+            "n": 4
+          },
+          {
+            "reason": "FVG",
+            "n": 4
+          },
+          {
+            "reason": "key level",
+            "n": 4
+          },
+          {
+            "reason": "liquidity pool",
+            "n": 3
+          },
+          {
+            "reason": "discount",
+            "n": 3
+          },
+          {
+            "reason": "HTF zone",
+            "n": 3
+          },
+          {
+            "reason": "round 4605",
+            "n": 1
+          },
+          {
+            "reason": "OB",
+            "n": 1
+          }
+        ],
+        "detector_reason_hits_wins": [],
+        "detector_reason_hits_losses": []
+      },
+      {
+        "strategy": "Order Block",
+        "direction": "SELL",
+        "n": 5,
+        "wins": 3,
+        "losses": 2,
+        "cell_underpowered": true,
+        "win_rate": null,
+        "win_pct": 60.0,
+        "avg_pips": 33.2,
+        "median_pips": 27.0,
+        "expectancy_pips": 33.2,
+        "avg_win_pips": 63.333,
+        "avg_loss_pips": -12.0,
+        "profit_factor": 7.917,
+        "avg_r": 35.443,
+        "expectancy_r": 35.443,
+        "htf_aligned_n": 1,
+        "htf_counter_n": 4,
+        "htf_confounded": true,
+        "htf_aligned_win_pct": null,
+        "htf_counter_win_pct": null,
+        "htf_aligned_win_rate": null,
+        "htf_counter_win_rate": null,
+        "htf_suppressed_reason": "confounded_with_direction",
+        "htf_fisher_p": null,
+        "detector_matched_n": 0,
+        "detector_miss_n": 5,
+        "detector_matched_win_rate": null,
+        "detector_miss_win_rate": null,
+        "detector_matched_win_pct": null,
+        "detector_miss_win_pct": null,
+        "detector_fisher_p": null,
+        "detector_fired_at_fill_n": 0,
+        "avg_zone_score_wins": 8.5,
+        "avg_zone_score_losses": 8.75,
+        "avg_entry_pos_wins": 1.0,
+        "avg_entry_pos_losses": 1.0,
+        "dealing_range_brackets_pct": 0.0,
+        "avg_confluence_wins": null,
+        "avg_confluence_losses": null,
+        "avg_technique_near_wins": 0.0,
+        "avg_technique_near_losses": 0.0,
+        "technique_near_zero_pct": 100.0,
+        "nearest_zone_reason_hits_wins": [
+          {
+            "reason": "FVG",
+            "n": 3
+          },
+          {
+            "reason": "premium",
+            "n": 2
+          },
+          {
+            "reason": "HTF zone",
+            "n": 2
+          },
+          {
+            "reason": "S/D",
+            "n": 1
+          },
+          {
+            "reason": "key level",
+            "n": 1
+          },
+          {
+            "reason": "round 4400",
+            "n": 1
+          },
+          {
+            "reason": "liquidity pool",
+            "n": 1
+          },
+          {
+            "reason": "sweep A",
+            "n": 1
+          }
+        ],
+        "nearest_zone_reason_hits_losses": [
+          {
+            "reason": "premium",
+            "n": 2
+          },
+          {
+            "reason": "FVG",
+            "n": 1
+          },
+          {
+            "reason": "round 4525",
+            "n": 1
+          },
+          {
+            "reason": "HTF zone",
+            "n": 1
+          },
+          {
+            "reason": "S/D",
+            "n": 1
+          },
+          {
+            "reason": "key level",
+            "n": 1
+          },
+          {
+            "reason": "round 4645",
+            "n": 1
+          },
+          {
+            "reason": "liquidity pool",
+            "n": 1
+          }
+        ],
+        "detector_reason_hits_wins": [],
+        "detector_reason_hits_losses": []
+      },
+      {
+        "strategy": "FVG",
+        "direction": "BUY",
+        "n": 4,
+        "wins": 2,
+        "losses": 2,
+        "cell_underpowered": true,
+        "win_rate": null,
+        "win_pct": 50.0,
+        "avg_pips": 19.8,
+        "median_pips": 15.0,
+        "expectancy_pips": 19.75,
+        "avg_win_pips": 61.5,
+        "avg_loss_pips": -22.0,
+        "profit_factor": 2.795,
+        "avg_r": 5.225,
+        "expectancy_r": 5.225,
+        "htf_aligned_n": 4,
+        "htf_counter_n": 0,
+        "htf_confounded": true,
+        "htf_aligned_win_pct": null,
+        "htf_counter_win_pct": null,
+        "htf_aligned_win_rate": null,
+        "htf_counter_win_rate": null,
+        "htf_suppressed_reason": "confounded_with_direction",
+        "htf_fisher_p": null,
+        "detector_matched_n": 0,
+        "detector_miss_n": 4,
+        "detector_matched_win_rate": null,
+        "detector_miss_win_rate": null,
+        "detector_matched_win_pct": null,
+        "detector_miss_win_pct": null,
+        "detector_fisher_p": null,
+        "detector_fired_at_fill_n": 0,
+        "avg_zone_score_wins": 13.25,
+        "avg_zone_score_losses": 10.75,
+        "avg_entry_pos_wins": 0.0,
+        "avg_entry_pos_losses": 0.0,
+        "dealing_range_brackets_pct": 0.0,
+        "avg_confluence_wins": null,
+        "avg_confluence_losses": null,
+        "avg_technique_near_wins": 0.0,
+        "avg_technique_near_losses": 0.0,
+        "technique_near_zero_pct": 100.0,
+        "nearest_zone_reason_hits_wins": [
+          {
+            "reason": "FVG",
+            "n": 2
+          },
+          {
+            "reason": "HTF zone",
+            "n": 2
+          },
+          {
+            "reason": "1 touch",
+            "n": 1
+          },
+          {
+            "reason": "S/D",
+            "n": 1
+          },
+          {
+            "reason": "OB",
+            "n": 1
+          },
+          {
+            "reason": "flip",
+            "n": 1
+          },
+          {
+            "reason": "breaker",
+            "n": 1
+          },
+          {
+            "reason": "key level",
+            "n": 1
+          }
+        ],
+        "nearest_zone_reason_hits_losses": [
+          {
+            "reason": "key level",
+            "n": 2
+          },
+          {
+            "reason": "discount",
+            "n": 2
+          },
+          {
+            "reason": "HTF zone",
+            "n": 2
+          },
+          {
+            "reason": "S/D",
+            "n": 1
+          },
+          {
+            "reason": "round 4480",
+            "n": 1
+          },
+          {
+            "reason": "sweep A",
+            "n": 1
+          },
+          {
+            "reason": "1 touch",
+            "n": 1
+          },
+          {
+            "reason": "FVG",
+            "n": 1
+          }
+        ],
+        "detector_reason_hits_wins": [],
+        "detector_reason_hits_losses": []
+      },
+      {
+        "strategy": "FVG",
+        "direction": "SELL",
+        "n": 4,
+        "wins": 2,
+        "losses": 2,
+        "cell_underpowered": true,
+        "win_rate": null,
+        "win_pct": 50.0,
+        "avg_pips": 75.5,
+        "median_pips": -2.5,
+        "expectancy_pips": 75.5,
+        "avg_win_pips": 198.0,
+        "avg_loss_pips": -47.0,
+        "profit_factor": 4.213,
+        "avg_r": 15.022,
+        "expectancy_r": 15.022,
+        "htf_aligned_n": 1,
+        "htf_counter_n": 3,
+        "htf_confounded": true,
+        "htf_aligned_win_pct": null,
+        "htf_counter_win_pct": null,
+        "htf_aligned_win_rate": null,
+        "htf_counter_win_rate": null,
+        "htf_suppressed_reason": "confounded_with_direction",
+        "htf_fisher_p": null,
+        "detector_matched_n": 0,
+        "detector_miss_n": 4,
+        "detector_matched_win_rate": null,
+        "detector_miss_win_rate": null,
+        "detector_matched_win_pct": null,
+        "detector_miss_win_pct": null,
+        "detector_fisher_p": null,
+        "detector_fired_at_fill_n": 0,
+        "avg_zone_score_wins": 8.75,
+        "avg_zone_score_losses": 10.75,
+        "avg_entry_pos_wins": 1.0,
+        "avg_entry_pos_losses": 1.0,
+        "dealing_range_brackets_pct": 0.0,
+        "avg_confluence_wins": null,
+        "avg_confluence_losses": null,
+        "avg_technique_near_wins": 0.0,
+        "avg_technique_near_losses": 0.0,
+        "technique_near_zero_pct": 100.0,
+        "nearest_zone_reason_hits_wins": [
+          {
+            "reason": "FVG",
+            "n": 2
+          },
+          {
+            "reason": "fresh",
+            "n": 1
+          },
+          {
+            "reason": "key level",
+            "n": 1
+          },
+          {
+            "reason": "premium",
+            "n": 1
+          },
+          {
+            "reason": "1 touch",
+            "n": 1
+          },
+          {
+            "reason": "S/D",
+            "n": 1
+          },
+          {
+            "reason": "round 4605",
+            "n": 1
+          },
+          {
+            "reason": "liquidity pool",
+            "n": 1
+          }
+        ],
+        "nearest_zone_reason_hits_losses": [
+          {
+            "reason": "HTF zone",
+            "n": 2
+          },
+          {
+            "reason": "1 touch",
+            "n": 1
+          },
+          {
+            "reason": "FVG",
+            "n": 1
+          },
+          {
+            "reason": "key level",
+            "n": 1
+          },
+          {
+            "reason": "round 4615",
+            "n": 1
+          },
+          {
+            "reason": "liquidity pool",
+            "n": 1
+          },
+          {
+            "reason": "S/D",
+            "n": 1
+          },
+          {
+            "reason": "round 4610",
+            "n": 1
+          }
+        ],
+        "detector_reason_hits_wins": [],
+        "detector_reason_hits_losses": []
+      }
+    ],
+    "trade_count": 115,
+    "diagnostics": {
+      "htf_bias_distribution": {
+        "up": 85,
+        "down": 30
+      },
+      "htf_direction_agreement": 0.7391,
+      "htf_direction_agreement_n": 115
+    }
+  },
+  "errors": [],
+  "feature_sample": [
+    {
+      "signal_id": 56,
+      "setup_tag": "demand",
+      "strategy": "Supply Demand",
+      "direction": "SELL",
+      "result_pips": 37.0,
+      "win": true,
+      "r_multiple": 740.0,
+      "fill": 4393.11,
+      "filled_at": 1786926709,
+      "bars": {
+        "M1": 89,
+        "M5": 30,
+        "M15": 10,
+        "H1": 2
+      },
+      "htf_bias": "up",
+      "htf_known": true,
+      "htf_aligned": false,
+      "entry_position_raw": 2.1224,
+      "entry_position": 1.0,
+      "dealing_range_brackets": false,
+      "atr_m5": 3.9364,
+      "nearest_zone_score": 10.5,
+      "nearest_zone_source": "supply_demand",
+      "nearest_zone_touches": 2,
+      "nearest_zone_reasons": [
+        "S/D",
+        "FVG",
+        "round 4380",
+        "liquidity pool",
+        "premium",
+        "HTF zone"
+      ],
+      "technique_near_count": 0,
+      "technique_near": [],
+      "detector_fired_any": false,
+      "detector_direction_match": false,
+      "detector_matched": false,
+      "detector_fired_at_fill": false,
+      "detector_offset_bars": null,
+      "detector_scanned_bars": 7,
+      "detector_fired": false,
+      "detector_setup": null,
+      "detector_confluence": null,
+      "detector_confirmation": null,
+      "detector_source_score": null,
+      "detector_reasons": [],
+      "detector_error": null
+    },
+    {
+      "signal_id": 57,
+      "setup_tag": "flip-zone",
+      "strategy": "Flip Zone",
+      "direction": "SELL",
+      "result_pips": 43.0,
+      "win": true,
+      "r_multiple": 59.7222,
+      "fill": 4403.78,
+      "filled_at": 1786928421,
+      "bars": {
+        "M1": 89,
+        "M5": 36,
+        "M15": 12,
+        "H1": 3
+      },
+      "htf_bias": "up",
+      "htf_known": true,
+      "htf_aligned": false,
+      "entry_position_raw": 2.2368,
+      "entry_position": 1.0,
+      "dealing_range_brackets": false,
+      "atr_m5": 4.0133,
+      "nearest_zone_score": 10.5,
+      "nearest_zone_source": "supply_demand",
+      "nearest_zone_touches": 2,
+      "nearest_zone_reasons": [
+        "S/D",
+        "FVG",
+        "round 4380",
+        "liquidity pool",
+        "premium",
+        "HTF zone"
+      ],
+      "technique_near_count": 0,
+      "technique_near": [],
+      "detector_fired_any": false,
+      "detector_direction_match": false,
+      "detector_matched": false,
+      "detector_fired_at_fill": false,
+      "detector_offset_bars": null,
+      "detector_scanned_bars": 7,
+      "detector_fired": false,
+      "detector_setup": null,
+      "detector_confluence": null,
+      "detector_confirmation": null,
+      "detector_source_score": null,
+      "detector_reasons": [],
+      "detector_error": null
+    },
+    {
+      "signal_id": 58,
+      "setup_tag": "fvg",
+      "strategy": "FVG",
+      "direction": "BUY",
+      "result_pips": 35.0,
+      "win": true,
+      "r_multiple": 13.5659,
+      "fill": 4382.52,
+      "filled_at": 1786970260,
+      "bars": {
+        "M1": 88,
+        "M5": 71,
+        "M15": 47,
+        "H1": 14
+      },
+      "htf_bias": "up",
+      "htf_known": true,
+      "htf_aligned": true,
+      "entry_position_raw": -0.0012,
+      "entry_position": 0.0,
+      "dealing_range_brackets": false,
+      "atr_m5": 3.4707,
+      "nearest_zone_score": 17.5,
+      "nearest_zone_source": "order_block",
+      "nearest_zone_touches": 1,
+      "nearest_zone_reasons": [
+        "1 touch",
+        "S/D",
+        "FVG",
+        "OB",
+        "flip",
+        "breaker",
+        "key level",
+        "round 4395",
+        "liquidity pool",
+        "sweep A",
+        "HTF zone",
+        "TL confluence"
+      ],
+      "technique_near_count": 0,
+      "technique_near": [],
+      "detector_fired_any": false,
+      "detector_direction_match": false,
+      "detector_matched": false,
+      "detector_fired_at_fill": false,
+      "detector_offset_bars": null,
+      "detector_scanned_bars": 7,
+      "detector_fired": false,
+      "detector_setup": null,
+      "detector_confluence": null,
+      "detector_confirmation": null,
+      "detector_source_score": null,
+      "detector_reasons": [],
+      "detector_error": null
+    },
+    {
+      "signal_id": 59,
+      "setup_tag": "key-level",
+      "strategy": "Key Level Reaction",
+      "direction": "BUY",
+      "result_pips": 33.0,
+      "win": true,
+      "r_multiple": 11.4983,
+      "fill": 4392.81,
+      "filled_at": 1786932492,
+      "bars": {
+        "M1": 89,
+        "M5": 49,
+        "M15": 16,
+        "H1": 4
+      },
+      "htf_bias": "up",
+      "htf_known": true,
+      "htf_aligned": true,
+      "entry_position_raw": -0.0667,
+      "entry_position": 0.0,
+      "dealing_range_brackets": false,
+      "atr_m5": 4.8129,
+      "nearest_zone_score": 5.5,
+      "nearest_zone_source": "supply_demand",
+      "nearest_zone_touches": 2,
+      "nearest_zone_reasons": [
+        "S/D",
+        "FVG",
+        "round 4390",
+        "discount"
+      ],
+      "technique_near_count": 0,
+      "technique_near": [],
+      "detector_fired_any": false,
+      "detector_direction_match": false,
+      "detector_matched": false,
+      "detector_fired_at_fill": false,
+      "detector_offset_bars": null,
+      "detector_scanned_bars": 7,
+      "detector_fired": false,
+      "detector_setup": null,
+      "detector_confluence": null,
+      "detector_confirmation": null,
+      "detector_source_score": null,
+      "detector_reasons": [],
+      "detector_error": null
+    },
+    {
+      "signal_id": 61,
+      "setup_tag": "key-level",
+      "strategy": "Key Level Reaction",
+      "direction": "SELL",
+      "result_pips": 63.0,
+      "win": true,
+      "r_multiple": 572.7273,
+      "fill": 4403.17,
+      "filled_at": 1786949545,
+      "bars": {
+        "M1": 89,
+        "M5": 71,
+        "M15": 35,
+        "H1": 8
+      },
+      "htf_bias": "up",
+      "htf_known": true,
+      "htf_aligned": false,
+      "entry_position_raw": 1.4858,
+      "entry_position": 1.0,
+      "dealing_range_brackets": false,
+      "atr_m5": 4.2257,
+      "nearest_zone_score": 5.0,
+      "nearest_zone_source": "bearish_fvg",
+      "nearest_zone_touches": 1,
+      "nearest_zone_reasons": [
+        "1 touch",
+        "FVG",
+        "round 4405",
+        "premium"
+      ],
+      "technique_near_count": 0,
+      "technique_near": [],
+      "detector_fired_any": true,
+      "detector_direction_match": true,
+      "detector_matched": true,
+      "detector_fired_at_fill": true,
+      "detector_offset_bars": 3,
+      "detector_scanned_bars": 7,
+      "detector_fired": true,
+      "detector_setup": "Key Level Reaction",
+      "detector_confluence": 2,
+      "detector_confirmation": "sweep_reclaim",
+      "detector_source_score": 5.0,
+      "detector_reasons": [
+        "HTF bias unknown",
+        "key round x5",
+        "key round 4399.22 x5",
+        "touches 5",
+        "sweep_reclaim",
+        "bias neutral",
+        "mom v=+0.07 a=-0.08",
+        "TP anchor range low 4392.74"
+      ],
+      "detector_error": null
+    },
+    {
+      "signal_id": 62,
+      "setup_tag": "ob",
+      "strategy": "Order Block",
+      "direction": "SELL",
+      "result_pips": 100.0,
+      "win": true,
+      "r_multiple": 33.3333,
+      "fill": 4414.11,
+      "filled_at": 1786975042,
+      "bars": {
+        "M1": 88,
+        "M5": 71,
+        "M15": 47,
+        "H1": 15
+      },
+      "htf_bias": "up",
+      "htf_known": true,
+      "htf_aligned": false,
+      "entry_position_raw": 4.0082,
+      "entry_position": 1.0,
+      "dealing_range_brackets": false,
+      "atr_m5": 3.76,
+      "nearest_zone_score": 14.5,
+      "nearest_zone_source": "supply_demand",
+      "nearest_zone_touches": 7,
+      "nearest_zone_reasons": [
+        "S/D",
+        "FVG",
+        "key level",
+        "round 4400",
+        "liquidity pool",
+        "premium",
+        "sweep A",
+        "HTF zone"
+      ],
+      "technique_near_count": 0,
+      "technique_near": [],
+      "detector_fired_any": false,
+      "detector_direction_match": false,
+      "detector_matched": false,
+      "detector_fired_at_fill": false,
+      "detector_offset_bars": null,
+      "detector_scanned_bars": 7,
+      "detector_fired": false,
+      "detector_setup": null,
+      "detector_confluence": null,
+      "detector_confirmation": null,
+      "detector_source_score": null,
+      "detector_reasons": [],
+      "detector_error": null
+    },
+    {
+      "signal_id": 63,
+      "setup_tag": "key-level",
+      "strategy": "Key Level Reaction",
+      "direction": "BUY",
+      "result_pips": 32.0,
+      "win": true,
+      "r_multiple": 11.5523,
+      "fill": 4395.71,
+      "filled_at": 1786956320,
+      "bars": {
+        "M1": 89,
+        "M5": 71,
+        "M15": 43,
+        "H1": 10
+      },
+      "htf_bias": "up",
+      "htf_known": true,
+      "htf_aligned": true,
+      "entry_position_raw": -1.0871,
+      "entry_position": 0.0,
+      "dealing_range_brackets": false,
+      "atr_m5": 3.6729,
+      "nearest_zone_score": 21.5,
+      "nearest_zone_source": "order_block",
+      "nearest_zone_touches": 1,
+      "nearest_zone_reasons": [
+        "1 touch",
+        "S/D",
+        "breaker",
+        "FVG",
+        "flip",
+        "OB",
+        "key level",
+        "round 4390",
+        "liquidity pool",
+        "ASIA_L",
+        "discount",
+        "sweep A",
+        "HTF zone",
+        "TL confluence"
+      ],
+      "technique_near_count": 0,
+      "technique_near": [],
+      "detector_fired_any": true,
+      "detector_direction_match": false,
+      "detector_matched": false,
+      "detector_fired_at_fill": true,
+      "detector_offset_bars": null,
+      "detector_scanned_bars": 7,
+      "detector_fired": true,
+      "detector_setup": "Key Level Reaction",
+      "detector_confluence": 2,
+      "detector_confirmation": "sweep_reclaim",
+      "detector_source_score": 3.0,
+      "detector_reasons": [
+        "HTF bias unknown",
+        "key reaction x3",
+        "key reaction 4397.89 x3",
+        "touches 3",
+        "sweep_reclaim",
+        "bias neutral",
+        "fib 0.786",
+        "mom v=-0.13 a=-0.23",
+        "TP anchor range low 4396.14"
+      ],
+      "detector_error": null
+    },
+    {
+      "signal_id": 64,
+      "setup_tag": "key-level",
+      "strategy": "Key Level Reaction",
+      "direction": "BUY",
+      "result_pips": -60.0,
+      "win": false,
+      "r_multiple": -20.0,
+      "fill": 4385.85,
+      "filled_at": 1786969605,
+      "bars": {
+        "M1": 88,
+        "M5": 71,
+        "M15": 47,
+        "H1": 14
+      },
+      "htf_bias": "up",
+      "htf_known": true,
+      "htf_aligned": true,
+      "entry_position_raw": -2.0337,
+      "entry_position": 0.0,
+      "dealing_range_brackets": false,
+      "atr_m5": 3.4186,
+      "nearest_zone_score": 16.5,
+      "nearest_zone_source": "order_block",
+      "nearest_zone_touches": 2,
+      "nearest_zone_reasons": [
+        "S/D",
+        "FVG",
+        "OB",
+        "key level",
+        "round 4395",
+        "liquidity pool",
+        "sweep A",
+        "HTF zone",
+        "TL confluence"
+      ],
+      "technique_near_count": 0,
+      "technique_near": [],
+      "detector_fired_any": true,
+      "detector_direction_match": false,
+      "detector_matched": false,
+      "detector_fired_at_fill": true,
+      "detector_offset_bars": null,
+      "detector_scanned_bars": 7,
+      "detector_fired": true,
+      "detector_setup": "Key Level Reaction",
+      "detector_confluence": 2,
+      "detector_confirmation": "strong_reclaim",
+      "detector_source_score": 3.0,
+      "detector_reasons": [
+        "HTF bias unknown",
+        "key round x3",
+        "key round 4395.62 x3",
+        "touches 3",
+        "strong_reclaim",
+        "bias neutral",
+        "mom v=-0.25 a=-0.22",
+        "TP anchor range low 4391.63"
+      ],
+      "detector_error": null
+    }
+  ]
+}
