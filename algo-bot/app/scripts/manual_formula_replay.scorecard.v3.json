@@ -1,0 +1,21 @@
+{
+  "generated_at": null,
+  "scope": "discovery_only",
+  "event_anchor": "issued",
+  "note": "PR-K: regenerate after deploy + backfill when capture_version=2 rows exist. Pre-PR-K captures are excluded by default; do not compare to scorecard.json / scorecard.v2.json.",
+  "coverage": {
+    "charted_closed": 0,
+    "replayed": 0,
+    "excluded_inadequate": 0,
+    "errors": 0
+  },
+  "scorecard": {
+    "cells": [],
+    "trade_count": 0,
+    "diagnostics": {
+      "capture_version_mix": {},
+      "htf_bias_distribution": {},
+      "htf_direction_agreement": null
+    }
+  }
+}

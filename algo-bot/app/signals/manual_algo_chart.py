@@ -1,6 +1,8 @@
 """Persist Redis OHLC around owner VIP trades for later formula fitting.
 
 Snapshots never raise into the Telegram / fill path. Empty Redis is a skip.
+Lookbacks resolve through ``window_for_timeframe`` (live scanner contract) —
+never a private per-TF hardcode.
 """
 from __future__ import annotations
 
@@ -9,23 +11,27 @@ import logging
 from typing import Any
 
 from app.analysis.ohlc_source import _normalize_price
+from app.analysis.ohlc_source import window_for_timeframe
 from app.persistence import redis_state
 from app.persistence import store
+from app.runtime.instrument_config import instrument_runtime_view
 
 log = logging.getLogger(__name__)
 
 TIMEFRAMES: tuple[str, ...] = ("M1", "M5", "M15", "H1")
 _BAR_SECONDS = {"M1": 60, "M5": 300, "M15": 900, "H1": 3600}
-_LOOKBACK = {"M1": 90, "M5": 72, "M15": 48, "H1": 36}
 _LOOKAHEAD = {"issued": {"M1": 0}, "filled": {"M1": 5}, "closed": {"M1": 15}}
+CAPTURE_VERSION = 2
 
 
-def _window(tf: str, event: str, ts: int) -> tuple[int, int]:
+def _window(tf: str, event: str, ts: int, *, symbol: str) -> tuple[int, int, int]:
+  """Return (start, end, bars_requested) for one TF around the event."""
   step = _BAR_SECONDS[tf]
-  start = int(ts) - _LOOKBACK[tf] * step
+  bars = window_for_timeframe(tf, root=instrument_runtime_view(symbol))
+  start = int(ts) - bars * step
   extra = int(_LOOKAHEAD.get(event, {}).get(tf, 0))
   end = int(ts) + extra * step
-  return start, end
+  return start, end, bars
 
 
 def parse_ohlc_payload(raw: Any, symbol: str = "XAU") -> dict[str, Any] | None:
@@ -74,8 +80,9 @@ async def snapshot_manual_algo_chart(
 ) -> int:
   """Write one row per timeframe. Returns how many timeframes stored."""
   stored = 0
+  captured_at = int(ts)
   for tf in TIMEFRAMES:
-    start, end = _window(tf, event, ts)
+    start, end, bars_requested = _window(tf, event, captured_at, symbol=symbol)
     try:
       bars = await fetch_ohlc_window(symbol, tf, start, end)
     except Exception:
@@ -88,15 +95,20 @@ async def snapshot_manual_algo_chart(
       continue
     if not bars:
       continue
+    bars_after_event = sum(1 for bar in bars if int(bar["t"]) > captured_at)
     await store.upsert_manual_algo_chart(
       signal_id=signal_id,
       event=event,
-      captured_at=int(ts),
+      captured_at=captured_at,
       symbol=str(symbol).upper(),
       timeframe=tf,
       window_start=start,
       window_end=end,
       bars=bars,
+      bars_requested=int(bars_requested),
+      bars_stored=len(bars),
+      bars_after_event=bars_after_event,
+      capture_version=CAPTURE_VERSION,
     )
     stored += 1
   return stored

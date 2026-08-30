@@ -121,7 +121,7 @@ def _rate(k: int, n: int, *, min_n: int = _RATE_MIN_N) -> dict[str, Any] | None:
   }
 
 
-def _bars_to_df(bars: list[dict[str, Any]], *, max_ts: int | None) -> pd.DataFrame:
+def _bars_to_df(bars: list[dict[str, Any]], *, max_ts: int | None = None) -> pd.DataFrame:
   rows = []
   for bar in bars:
     t = int(bar["t"])
@@ -144,6 +144,24 @@ def _bars_to_df(bars: list[dict[str, Any]], *, max_ts: int | None) -> pd.DataFra
   index = pd.to_datetime(df.pop("t"), unit="s", utc=True)
   df.index = pd.DatetimeIndex(index, name="time")
   return df[["open", "high", "low", "close", "volume"]]
+
+
+def _capture_adequate(meta_by_tf: dict[str, dict[str, Any]]) -> bool:
+  if not meta_by_tf:
+    return False
+  versions = {
+    int(row.get("capture_version") or 1) for row in meta_by_tf.values()
+  }
+  if any(version < 2 for version in versions):
+    return False
+  for row in meta_by_tf.values():
+    requested = int(row.get("bars_requested") or 0)
+    stored = int(row.get("bars_stored") or 0)
+    if requested <= 0:
+      return False
+    if stored < 0.9 * requested:
+      return False
+  return True
 
 
 def _truncate_frames(
@@ -467,6 +485,7 @@ def _feature_row(
   settings: DetectorSettings,
   scan_bars: int = 6,
   match_atr: float = 0.5,
+  capture_meta: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
   direction = str(signal["action"]).upper()
   fill = float(signal["broker_fill_price"] or signal["entry"] or 0)
@@ -520,6 +539,15 @@ def _feature_row(
 
   detector_reasons = list(getattr(detection, "reasons", ()) or []) if detection else []
   r_mult = _r_multiple(result, signal.get("entry"), signal.get("sl"))
+  meta = capture_meta or {}
+  capture_bars = {
+    tf: int(row.get("bars_stored") or len(frames.get(tf, [])))
+    for tf, row in meta.items()
+  }
+  if not capture_bars:
+    capture_bars = {tf: int(len(df)) for tf, df in frames.items()}
+  versions = [int(row.get("capture_version") or 1) for row in meta.values()]
+  capture_version = min(versions) if versions else 1
 
   return {
     "signal_id": int(signal["id"]),
@@ -532,6 +560,9 @@ def _feature_row(
     "fill": fill,
     "filled_at": int(signal["filled_at"] or 0),
     "bars": {tf: int(len(df)) for tf, df in frames.items()},
+    "capture_adequate": _capture_adequate(meta),
+    "capture_bars": capture_bars,
+    "capture_version": capture_version,
     "htf_bias": htf_bias,
     "htf_known": htf_known,
     "htf_aligned": htf_aligned if htf_known else None,
@@ -583,10 +614,14 @@ def _htf_diagnostics(rows: list[dict[str, Any]]) -> dict[str, Any]:
       if bool(r["htf_aligned"]) == (r["direction"] == "BUY")
     )
     agreement = round(agree / len(comparable), 4)
+  version_counts = Counter(int(r.get("capture_version") or 1) for r in rows)
   return {
     "htf_bias_distribution": dict(bias_counts),
     "htf_direction_agreement": agreement,
     "htf_direction_agreement_n": len(comparable),
+    "capture_version_mix": {
+      str(version): count for version, count in sorted(version_counts.items())
+    },
   }
 
 
@@ -647,6 +682,11 @@ def _scorecard(rows: list[dict[str, Any]]) -> dict[str, Any]:
         4,
       )
 
+    cell_versions = {
+      int(r.get("capture_version") or 1) for r in items
+    }
+    mixed_capture = len(cell_versions) > 1
+
     cell: dict[str, Any] = {
       "strategy": strategy,
       "direction": direction,
@@ -654,6 +694,8 @@ def _scorecard(rows: list[dict[str, Any]]) -> dict[str, Any]:
       "wins": len(wins),
       "losses": len(losses),
       "cell_underpowered": n < _CELL_POWER_N,
+      "mixed_capture": mixed_capture,
+      "capture_versions": sorted(cell_versions),
       "win_rate": _rate(len(wins), n),
       "win_pct": round(100.0 * len(wins) / n, 1),
       "avg_pips": round(sum(pips) / n, 1),
@@ -766,10 +808,14 @@ def _scorecard(rows: list[dict[str, Any]]) -> dict[str, Any]:
   }
 
 
-async def _load_trades(pool: asyncpg.Pool) -> list[dict[str, Any]]:
+async def _load_trades(
+  pool: asyncpg.Pool,
+  *,
+  event: str,
+) -> list[dict[str, Any]]:
   rows = await pool.fetch(
     """
-    SELECT s.id, s.setup_type, s.action, s.result_pips, s.filled_at,
+    SELECT s.id, s.setup_type, s.action, s.result_pips, s.filled_at, s.ts,
            s.broker_fill_price, s.entry, s.entry_end, s.sl, s.symbol
     FROM manual_signals s
     WHERE s.status = 'closed'
@@ -777,34 +823,37 @@ async def _load_trades(pool: asyncpg.Pool) -> list[dict[str, Any]]:
       AND s.filled_at IS NOT NULL
       AND EXISTS (
         SELECT 1 FROM manual_algo_charts c
-        WHERE c.signal_id = s.id AND c.event = 'filled'
+        WHERE c.signal_id = s.id AND c.event = $1
       )
     ORDER BY s.id
-    """
+    """,
+    event,
   )
   return [dict(row) for row in rows]
 
 
 async def _load_frames(
-  pool: asyncpg.Pool,
   signal_id: int,
-  filled_at: int,
-) -> dict[str, pd.DataFrame]:
-  charts = await pool.fetch(
-    """
-    SELECT timeframe, bars
-    FROM manual_algo_charts
-    WHERE signal_id = $1 AND event = 'filled'
-    """,
-    signal_id,
+  *,
+  event: str,
+) -> tuple[dict[str, pd.DataFrame], dict[str, dict[str, Any]]]:
+  from app.persistence import store as persistence
+
+  rows = await persistence.load_manual_algo_chart_rows(
+    signal_id, event=event, causal_only=True,
   )
   frames: dict[str, pd.DataFrame] = {}
-  for row in charts:
-    bars = row["bars"]
-    if isinstance(bars, str):
-      bars = json.loads(bars)
-    frames[str(row["timeframe"]).upper()] = _bars_to_df(bars, max_ts=int(filled_at))
-  return frames
+  meta: dict[str, dict[str, Any]] = {}
+  for tf, row in rows.items():
+    frames[tf] = _bars_to_df(list(row.get("bars") or []))
+    meta[tf] = {
+      "bars_requested": int(row.get("bars_requested") or 0),
+      "bars_stored": int(row.get("bars_stored") or 0),
+      "bars_after_event": int(row.get("bars_after_event") or 0),
+      "capture_version": int(row.get("capture_version") or 1),
+      "captured_at": int(row.get("captured_at") or 0),
+    }
+  return frames, meta
 
 
 async def run(
@@ -813,43 +862,53 @@ async def run(
   settings_mode: str = "runtime",
   scan_bars: int = 6,
   match_atr: float = 0.5,
+  event: str = "issued",
+  include_inadequate: bool = False,
 ) -> dict[str, Any]:
   dsn = os.environ.get("DATABASE_URL") or os.environ.get("POSTGRES_DSN")
   if not dsn:
     raise SystemExit("DATABASE_URL required")
   dsn = dsn.replace("postgresql+asyncpg://", "postgresql://")
   settings = _resolve_settings(settings_mode)
+  from app.persistence import store as persistence
+  await persistence.init_db()
   pool = await asyncpg.create_pool(dsn, min_size=1, max_size=4)
   assert pool is not None
   try:
-    trades = await _load_trades(pool)
+    trades = await _load_trades(pool, event=event)
     if limit:
       trades = trades[:limit]
     features: list[dict[str, Any]] = []
+    excluded_inadequate = 0
     errors: list[dict[str, Any]] = []
     for trade in trades:
       strategy = _strategy_for_tag(trade.get("setup_type"))
       try:
-        frames = await _load_frames(pool, int(trade["id"]), int(trade["filled_at"]))
+        frames, meta = await _load_frames(int(trade["id"]), event=event)
         if "M5" not in frames or frames["M5"].empty:
           errors.append({"signal_id": trade["id"], "error": "missing_m5"})
           continue
-        features.append(
-          _feature_row(
-            signal=trade,
-            frames=frames,
-            strategy=strategy,
-            settings=settings,
-            scan_bars=scan_bars,
-            match_atr=match_atr,
-          )
+        row = _feature_row(
+          signal=trade,
+          frames=frames,
+          strategy=strategy,
+          settings=settings,
+          scan_bars=scan_bars,
+          match_atr=match_atr,
+          capture_meta=meta,
         )
+        if not row.get("capture_adequate") and not include_inadequate:
+          excluded_inadequate += 1
+          continue
+        features.append(row)
       except Exception as exc:
         errors.append({"signal_id": trade["id"], "error": str(exc)})
     scorecard = _scorecard(features)
     return {
       "generated_at": datetime.now(timezone.utc).isoformat(),
       "scope": "discovery_only",
+      "event_anchor": event,
+      "include_inadequate": include_inadequate,
       "settings_mode": settings_mode,
       "settings_fingerprint_sha256": _settings_fingerprint(settings),
       "scan_bars": scan_bars,
@@ -857,6 +916,7 @@ async def run(
       "coverage": {
         "charted_closed": len(trades),
         "replayed": len(features),
+        "excluded_inadequate": excluded_inadequate,
         "errors": len(errors),
       },
       "scorecard": scorecard,
@@ -889,6 +949,17 @@ def main() -> None:
     default=0.5,
     help="ATR multiples from entry_zone edge for detector_matched",
   )
+  parser.add_argument(
+    "--event",
+    choices=("issued", "filled"),
+    default="issued",
+    help="Chart event anchor for discovery scoring (default: issued)",
+  )
+  parser.add_argument(
+    "--include-inadequate",
+    action="store_true",
+    help="Include capture_version < 2 / short windows in the scorecard",
+  )
   args = parser.parse_args()
   print(
     "manual_formula_replay scope=discovery_only "
@@ -901,6 +972,8 @@ def main() -> None:
       settings_mode=args.settings,
       scan_bars=args.scan_bars,
       match_atr=args.match_atr,
+      event=args.event,
+      include_inadequate=args.include_inadequate,
     )
   )
   text = json.dumps(payload, indent=2, default=str)
@@ -912,7 +985,9 @@ def main() -> None:
     sc = payload["scorecard"]
     print(
       f"replayed={payload['coverage']['replayed']} "
+      f"excluded_inadequate={payload['coverage']['excluded_inadequate']} "
       f"errors={payload['coverage']['errors']} "
+      f"event={payload['event_anchor']} "
       f"settings={payload['settings_mode']} "
       f"scan_bars={payload['scan_bars']}",
       file=sys.stderr,
@@ -920,6 +995,7 @@ def main() -> None:
     diag = sc.get("diagnostics") or {}
     print(
       f"htf_direction_agreement={diag.get('htf_direction_agreement')} "
+      f"capture_version_mix={diag.get('capture_version_mix')} "
       f"bias={diag.get('htf_bias_distribution')}",
       file=sys.stderr,
     )
@@ -930,6 +1006,7 @@ def main() -> None:
         f"det={cell['detector_matched_win_pct']} "
         f"miss={cell['detector_miss_win_pct']} "
         f"htf_suppressed={cell.get('htf_suppressed_reason')} "
+        f"mixed_capture={cell.get('mixed_capture')} "
         f"underpowered={cell.get('cell_underpowered')}",
         file=sys.stderr,
       )
