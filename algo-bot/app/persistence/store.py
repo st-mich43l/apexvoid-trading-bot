@@ -594,11 +594,13 @@ async def get_pips_records(
   query += " ORDER BY p.ts ASC, p.id ASC"
   async with _connect() as db:
     manual_rows = await db.fetch(query, *params)
+    # algo_manual must mirror manual_signals.result_pips / legs peak — never
+    # the diluted group_realized blend that group_result can overwrite with.
     algo_query = """
       SELECT r.group_id AS id, r.closed_at AS ts,
-             CASE WHEN r.result_pips >= 0 THEN '+' ELSE '-' END AS sign,
-             ABS(ROUND(r.result_pips))::INTEGER AS pips,
-             NULL::BIGINT AS signal_id,
+             CASE WHEN journal_pips >= 0 THEN '+' ELSE '-' END AS sign,
+             ABS(ROUND(journal_pips))::INTEGER AS pips,
+             ms.id AS signal_id,
              MIN(f.filled_at) AS signal_ts,
              MIN(f.direction) AS action,
              AVG(f.entry_price) AS entry,
@@ -612,9 +614,22 @@ async def get_pips_records(
              r.trade_key,
              COUNT(*)::BIGINT AS fill_count,
              AVG(f.stop_pips) AS stop_pips,
-             r.result_pips / NULLIF(AVG(f.stop_pips), 0) AS r_multiple
+             journal_pips / NULLIF(AVG(f.stop_pips), 0) AS r_multiple
       FROM auto_trade_results r
       JOIN auto_trade_fills f ON f.group_id = r.group_id
+      LEFT JOIN manual_signals ms
+        ON r.trade_stream = 'algo_manual'
+       AND r.trade_key = ('manual:' || ms.id::TEXT)
+      CROSS JOIN LATERAL (
+        SELECT COALESCE(
+          CASE
+            WHEN r.trade_stream = 'algo_manual' AND ms.result_pips IS NOT NULL
+              THEN ms.result_pips::DOUBLE PRECISION
+            ELSE NULL
+          END,
+          r.result_pips
+        ) AS journal_pips
+      ) journal
       WHERE r.closed_at >= $1 AND r.closed_at <= $2
     """
     algo_params: list = [start_ts, end_ts]
@@ -622,8 +637,9 @@ async def get_pips_records(
       algo_query += " AND f.symbol = $3"
       algo_params.append(symbol.upper())
     algo_query += (
-      " GROUP BY r.group_id, r.closed_at, r.result_pips, "
-      "r.trade_stream, r.trade_key ORDER BY r.closed_at ASC, r.group_id ASC"
+      " GROUP BY r.group_id, r.closed_at, journal_pips, "
+      "r.trade_stream, r.trade_key, ms.id "
+      "ORDER BY r.closed_at ASC, r.group_id ASC"
     )
     algo_rows = await db.fetch(algo_query, *algo_params)
 
@@ -1021,6 +1037,93 @@ async def _record_auto_trade_fill(event: dict) -> None:
     )
 
 
+def _prefer_journal_pips(
+  existing: float | None,
+  candidate: float | None,
+) -> float | None:
+  """Keep highest achieved TP; never let a diluted group blend wipe a win."""
+  if candidate is None:
+    return existing
+  if existing is None:
+    return float(candidate)
+  existing_f = float(existing)
+  candidate_f = float(candidate)
+  if existing_f > 0 and candidate_f > 0:
+    return max(existing_f, candidate_f)
+  if existing_f > 0 and candidate_f <= 0:
+    return existing_f
+  if candidate_f > 0 and existing_f <= 0:
+    return candidate_f
+  # Both non-positive: prefer the larger-magnitude loss (true SL over residual).
+  return candidate_f if abs(candidate_f) >= abs(existing_f) else existing_f
+
+
+async def _algo_manual_ledger_pips(trade_key: str) -> float | None:
+  """Source of truth for algo_manual: legs peak, else signal.result_pips."""
+  if not str(trade_key).startswith("manual:"):
+    return None
+  try:
+    signal_id = int(str(trade_key).split(":", 1)[1])
+  except (TypeError, ValueError):
+    return None
+  async with _connect() as db:
+    row = await db.fetchrow(
+      "SELECT result_pips, legs FROM manual_signals WHERE id = $1",
+      signal_id,
+    )
+  if row is None:
+    return None
+  raw_legs = row["legs"] or "[]"
+  try:
+    legs = json.loads(raw_legs) if isinstance(raw_legs, str) else list(raw_legs)
+  except (TypeError, json.JSONDecodeError):
+    legs = []
+  if legs:
+    peak = legs_achieved_pips(legs)
+    if peak != 0 or any(int(leg.get("pips") or 0) != 0 for leg in legs):
+      return float(peak)
+  if row["result_pips"] is not None:
+    try:
+      return float(row["result_pips"])
+    except (TypeError, ValueError):
+      return None
+  return None
+
+
+async def sync_algo_manual_results_from_signals() -> int:
+  """Rewrite algo_manual auto_trade_results from manual_signals ledger peaks."""
+  async with _connect() as db:
+    rows = await db.fetch(
+      """
+      SELECT r.group_id, r.trade_key, s.result_pips, s.legs
+      FROM auto_trade_results r
+      JOIN manual_signals s
+        ON r.trade_stream = 'algo_manual'
+       AND r.trade_key = ('manual:' || s.id::TEXT)
+      WHERE s.result_pips IS NOT NULL OR s.legs IS NOT NULL
+      """
+    )
+  updated = 0
+  for row in rows:
+    ledger = await _algo_manual_ledger_pips(str(row["trade_key"]))
+    if ledger is None:
+      continue
+    async with _connect() as db:
+      status = await db.execute(
+        """
+        UPDATE auto_trade_results
+        SET result_pips = $2
+        WHERE group_id = $1
+          AND correction_source IS NULL
+          AND result_pips IS DISTINCT FROM $2
+        """,
+        row["group_id"], float(ledger),
+      )
+    if status.endswith("1"):
+      updated += 1
+  return updated
+
+
 async def _record_auto_trade_result(event: dict) -> None:
   if (
     event.get("type") == "manual_closed"
@@ -1058,13 +1161,10 @@ async def _record_auto_trade_result(event: dict) -> None:
     if fill is None:
       return
   async with _connect() as db:
-    if (
-      event.get("type") == "position_closed"
-      and await db.fetchval(
-        "SELECT 1 FROM auto_trade_results WHERE group_id = $1", group_id,
-      )
-    ):
-      return
+    existing_pips = await db.fetchval(
+      "SELECT result_pips FROM auto_trade_results WHERE group_id = $1",
+      group_id,
+    )
     message = str(event.get("message") or "")
     message_cf = message.casefold()
     contradictory_tp = contradictory_archived_tp(event, message)
@@ -1119,6 +1219,17 @@ async def _record_auto_trade_result(event: dict) -> None:
           result_pips = float(winning_match.group(1))
         except (TypeError, ValueError):
           result_pips = None
+    # TP card text: "TP2 +71.7 pips" — actual peak, not planned target_pips.
+    if result_pips is None:
+      tp_match = re.search(
+        r"tp\d+\s+\+?(-?\d+(?:\.\d+)?)\s*pips?",
+        message_cf,
+      )
+      if tp_match is not None:
+        try:
+          result_pips = abs(float(tp_match.group(1)))
+        except (TypeError, ValueError):
+          result_pips = None
     if result_pips is None and event.get("type") in {
       "position_closed", "manual_closed",
     }:
@@ -1159,6 +1270,14 @@ async def _record_auto_trade_result(event: dict) -> None:
         ]
         if stops:
           result_pips = -sum(stops) / len(stops)
+    if fill["trade_stream"] == "algo_manual":
+      ledger = await _algo_manual_ledger_pips(str(fill["trade_key"]))
+      if ledger is not None:
+        result_pips = float(ledger)
+    result_pips = _prefer_journal_pips(
+      None if existing_pips is None else float(existing_pips),
+      None if result_pips is None else float(result_pips),
+    )
     if result_pips is None:
       log.warning(
         "auto_trade result skipped group_id=%s type=%s reason=unparseable_pips",
