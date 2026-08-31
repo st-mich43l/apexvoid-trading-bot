@@ -68,6 +68,11 @@ M1_SCALP_STRATEGIES = frozenset({
   "HFS Breakout Retest",
   "HFS Momentum Chase",
 })
+
+BREAKOUT_RETEST_SCALP_STRATEGIES = frozenset({
+  "Breakout Retest Scalp",
+  "HFS Breakout Retest",
+})
 # Back-compat alias — prefer M1_SCALP_STRATEGIES / is_m1_scalp_strategy.
 HFS_STRATEGIES = M1_SCALP_STRATEGIES
 
@@ -121,6 +126,11 @@ def is_m1_scalp_strategy(name: str) -> bool:
   """True for M1 scalp archetypes (canonical + legacy ``HFS *`` labels)."""
   key = str(name or "")
   return key in M1_SCALP_STRATEGIES or key.startswith("HFS ")
+
+
+def is_breakout_retest_scalp_strategy(name: str) -> bool:
+  """M1 breakout-retest scalps — enter inside the retest band only."""
+  return str(name or "") in BREAKOUT_RETEST_SCALP_STRATEGIES
 
 
 # Back-compat — prefer is_m1_scalp_strategy.

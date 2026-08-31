@@ -13,6 +13,7 @@ from typing import Any
 
 from app.autotrade.strategy_taxonomy import (
   REACTION_STRATEGIES,
+  is_breakout_retest_scalp_strategy,
   is_reaction_strategy,
   is_scalp_strategy,
   is_technique_or_confluence,
@@ -307,6 +308,17 @@ def resolve_execution_route_plan(
     str(strategy or ""),
     family=strategy_family,
   ) or is_technique_or_confluence(str(strategy or "")):
+    retest_only = is_breakout_retest_scalp_strategy(str(strategy or ""))
+    if retest_only and geometry != "inside":
+      return ExecutionRoutePlan(
+        ROUTE_MARKET,
+        _round_price(quote, digits),
+        (),
+        geometry,
+        "breakout retest: market_watch until quote inside retest band",
+        True,
+        immediate_market=False,
+      )
     # Trade-direction chase: quote already past the proximal edge. A micro-
     # grid into the abandoned zone rests L2–Ln on the wrong side of a
     # continuation (live 2026-08-21 HFS Range Sweep SELL: L1 0.04 filled,

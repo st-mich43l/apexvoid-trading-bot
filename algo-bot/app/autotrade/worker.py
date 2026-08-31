@@ -74,6 +74,7 @@ from app.autotrade.strategy_match import (
 )
 from app.autotrade.strategy_taxonomy import (
   bypasses_opposing_structure_gates,
+  is_breakout_retest_scalp_strategy,
   is_m1_scalp_strategy,
   is_reaction_strategy,
   is_scalp_strategy,
@@ -108,6 +109,8 @@ from app.autotrade.execution_confirmation import (
   save_execution_confirmation,
   scalp_maximum_chase_pips,
   scalp_zone_access,
+  ZONE_ACCESS_MOMENTUM_CHASE,
+  ZONE_ACCESS_RETEST_ONLY,
 )
 from app.autotrade.multi_match import (
   dedupe_matches,
@@ -5030,6 +5033,11 @@ async def _publish_trade_plan_v8(
     strategy_mode=str(getattr(match, "strategy_mode", "") or "") or None,
   )
   if candidate_allows_chase:
+    zone_access_mode = (
+      ZONE_ACCESS_RETEST_ONLY
+      if is_breakout_retest_scalp_strategy(str(match.strategy))
+      else ZONE_ACCESS_MOMENTUM_CHASE
+    )
     scalp_access = scalp_zone_access(
       match.direction,
       getattr(spot, "bid", None),
@@ -5042,6 +5050,7 @@ async def _publish_trade_plan_v8(
       ),
       pip_size=pip_size,
       maximum_chase_pips=scalp_maximum_chase_pips(inst),
+      zone_access_mode=zone_access_mode,
     )
     evidence = scalp_access.evidence
     execution_eligible = scalp_access.executable
