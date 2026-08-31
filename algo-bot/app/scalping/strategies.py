@@ -81,20 +81,32 @@ def _stop_pips(
   *,
   structural: float,
   cfg: Any,
-) -> float | None:
+) -> tuple[float | None, str | None]:
+  """Return ``(stop_pips, reject_reason)``.
+
+  The minimum is a widening floor: a stop tighter than ``minimum_pips`` is pushed
+  out to it, and the caller must move ``invalidation_price`` outward to match so
+  the two can never disagree. The maximum is a REJECT, not a clamp -- a
+  structural stop wider than the risk envelope means the setup does not fit the
+  model, and shrinking it produces a stop that is not structural and an RR that
+  is not true.
+
+  The 2026-08-06 clamp into ``[min, max]`` was added because returning ``None``
+  dropped the opportunity with ``discovered=0`` and no telemetry. That gap is
+  closed by idle-reason + ``opportunity_blocked:*stop_exceeds_maximum`` metrics
+  — not by falsifying the stop.
+  """
   stop_cfg = getattr(_scalping_cfg(cfg), "stop", None)
   mn = _parse_float(stop_cfg, "minimum_pips", 12.0)
   mx = _parse_float(stop_cfg, "maximum_pips", 30.0)
   value = abs(float(structural))
   if value <= 0:
-    return None
-  # Prod 2026-08-06: deep XAU wicks (> max) or tight reclaim (< min) used
-  # to return None and drop the whole opportunity with discovered=0 and no
-  # telemetry. Clamp into the HFS envelope like the main protective-stop
-  # path so edge sweeps still publish.
+    return None, "stop_not_positive"
   if mx < mn:
-    return None
-  return min(max(value, mn), mx)
+    return None, "stop_envelope_invalid"
+  if value > mx:
+    return None, "stop_exceeds_maximum"
+  return max(value, mn), None
 
 
 def _technique_require_sweep_body(cfg: Any) -> bool:
@@ -119,6 +131,7 @@ def discover_range_sweep(
   *,
   pip_size: float,
   now: int,
+  idle_reasons: list[str] | None = None,
 ) -> list[ScalpOpportunity]:
   if not _enabled(cfg, "range_sweep"):
     return []
@@ -141,6 +154,7 @@ def discover_range_sweep(
   # BUY/SELL by dealing position — do not blank the whole archetype here.
 
   out: list[ScalpOpportunity] = []
+  reasons = idle_reasons if idle_reasons is not None else []
   buffer = max(pip_size * 2, context.atr * 0.05)
   min_net = _parse_float(getattr(_scalping_cfg(cfg), "target", None), "minimum_net_target_pips", 15.0)
   act = getattr(_scalping_cfg(cfg), "activation", None)
@@ -157,56 +171,61 @@ def discover_range_sweep(
   if buy_ev is not None and (pos is None or pos <= buy_max):
       entry = float(buy_ev["close"])
       stop_price = float(buy_ev["extreme"]) - buffer
-      stop = _stop_pips(structural=(entry - stop_price) / pip_size, cfg=cfg)
-      target = _select_target(
-        direction="BUY",
-        entry=entry,
-        room_pips=context.buy_corridor_room_pips,
-        stop_pips=stop,
-        min_net=min_net,
-        pip_size=pip_size,
-        symbol=context.symbol,
-        cfg=cfg,
-      )
-      if stop is not None and target is not None:
-        target_price, target_pips = target
-        rr = target_pips / stop if stop else 0.0
-        source = deterministic_id(
-          "range", context.symbol, "BUY", rounded_price(low, pip_size),
-        )
-        oid = deterministic_id(
-          context.symbol, ARCHETYPE_RANGE_SWEEP, "BUY", context.context_id, source,
-        )
-        zone_low = low - buffer
-        zone_high = low + buffer * 2
-        out.append(ScalpOpportunity(
-          version=OPPORTUNITY_VERSION,
-          opportunity_id=oid,
-          context_id=context.context_id,
-          symbol=context.symbol,
-          archetype=ARCHETYPE_RANGE_SWEEP,
+      stop, reject = _stop_pips(structural=(entry - stop_price) / pip_size, cfg=cfg)
+      if stop is None:
+        if reject:
+          reasons.append(f"{ARCHETYPE_RANGE_SWEEP}:{reject}")
+      else:
+        invalidation = entry - stop * pip_size
+        target = _select_target(
           direction="BUY",
-          discovered_at=int(now),
-          source_bar_ts=int(buy_ev["bar_ts"]),
-          zone_low=zone_low,
-          zone_high=zone_high,
-          key_level=low,
-          trigger_type=str(buy_ev["pattern"]),
-          trigger_bar_ts=int(buy_ev["bar_ts"]),
-          trigger_price=entry,
-          invalidation_price=stop_price,
-          expected_target_price=target_price,
-          expected_target_pips=target_pips,
-          expected_stop_pips=stop,
-          expected_reward_risk=rr,
-          location_position=pos,
-          score=0.0,
-          reasons=("lower_edge_sweep_reclaim",),
-          expires_at=int(now) + 15 * 60,
-          episode_id=source,
-          source_identity=source,
-          measured={"strategy": STRATEGY_DISPLAY[ARCHETYPE_RANGE_SWEEP]},
-        ))
+          entry=entry,
+          room_pips=context.buy_corridor_room_pips,
+          stop_pips=stop,
+          min_net=min_net,
+          pip_size=pip_size,
+          symbol=context.symbol,
+          cfg=cfg,
+        )
+        if target is not None:
+          target_price, target_pips = target
+          rr = target_pips / stop if stop else 0.0
+          source = deterministic_id(
+            "range", context.symbol, "BUY", rounded_price(low, pip_size),
+          )
+          oid = deterministic_id(
+            context.symbol, ARCHETYPE_RANGE_SWEEP, "BUY", context.context_id, source,
+          )
+          zone_low = low - buffer
+          zone_high = low + buffer * 2
+          out.append(ScalpOpportunity(
+            version=OPPORTUNITY_VERSION,
+            opportunity_id=oid,
+            context_id=context.context_id,
+            symbol=context.symbol,
+            archetype=ARCHETYPE_RANGE_SWEEP,
+            direction="BUY",
+            discovered_at=int(now),
+            source_bar_ts=int(buy_ev["bar_ts"]),
+            zone_low=zone_low,
+            zone_high=zone_high,
+            key_level=low,
+            trigger_type=str(buy_ev["pattern"]),
+            trigger_bar_ts=int(buy_ev["bar_ts"]),
+            trigger_price=entry,
+            invalidation_price=invalidation,
+            expected_target_price=target_price,
+            expected_target_pips=target_pips,
+            expected_stop_pips=stop,
+            expected_reward_risk=rr,
+            location_position=pos,
+            score=0.0,
+            reasons=("lower_edge_sweep_reclaim",),
+            expires_at=int(now) + 15 * 60,
+            episode_id=source,
+            source_identity=source,
+            measured={"strategy": STRATEGY_DISPLAY[ARCHETYPE_RANGE_SWEEP]},
+          ))
 
   sell_ev = detect_sweep_reclaim(
     m1_df,
@@ -218,54 +237,59 @@ def discover_range_sweep(
   if sell_ev is not None and (pos is None or pos >= sell_min):
       entry = float(sell_ev["close"])
       stop_price = float(sell_ev["extreme"]) + buffer
-      stop = _stop_pips(structural=(stop_price - entry) / pip_size, cfg=cfg)
-      target = _select_target(
-        direction="SELL",
-        entry=entry,
-        room_pips=context.sell_corridor_room_pips,
-        stop_pips=stop,
-        min_net=min_net,
-        pip_size=pip_size,
-        symbol=context.symbol,
-        cfg=cfg,
-      )
-      if stop is not None and target is not None:
-        target_price, target_pips = target
-        rr = target_pips / stop if stop else 0.0
-        source = deterministic_id(
-          "range", context.symbol, "SELL", rounded_price(high, pip_size),
-        )
-        oid = deterministic_id(
-          context.symbol, ARCHETYPE_RANGE_SWEEP, "SELL", context.context_id, source,
-        )
-        out.append(ScalpOpportunity(
-          version=OPPORTUNITY_VERSION,
-          opportunity_id=oid,
-          context_id=context.context_id,
-          symbol=context.symbol,
-          archetype=ARCHETYPE_RANGE_SWEEP,
+      stop, reject = _stop_pips(structural=(stop_price - entry) / pip_size, cfg=cfg)
+      if stop is None:
+        if reject:
+          reasons.append(f"{ARCHETYPE_RANGE_SWEEP}:{reject}")
+      else:
+        invalidation = entry + stop * pip_size
+        target = _select_target(
           direction="SELL",
-          discovered_at=int(now),
-          source_bar_ts=int(sell_ev["bar_ts"]),
-          zone_low=high - buffer * 2,
-          zone_high=high + buffer,
-          key_level=high,
-          trigger_type=str(sell_ev["pattern"]),
-          trigger_bar_ts=int(sell_ev["bar_ts"]),
-          trigger_price=entry,
-          invalidation_price=stop_price,
-          expected_target_price=target_price,
-          expected_target_pips=target_pips,
-          expected_stop_pips=stop,
-          expected_reward_risk=rr,
-          location_position=pos,
-          score=0.0,
-          reasons=("upper_edge_sweep_reclaim",),
-          expires_at=int(now) + 15 * 60,
-          episode_id=source,
-          source_identity=source,
-          measured={"strategy": STRATEGY_DISPLAY[ARCHETYPE_RANGE_SWEEP]},
-        ))
+          entry=entry,
+          room_pips=context.sell_corridor_room_pips,
+          stop_pips=stop,
+          min_net=min_net,
+          pip_size=pip_size,
+          symbol=context.symbol,
+          cfg=cfg,
+        )
+        if target is not None:
+          target_price, target_pips = target
+          rr = target_pips / stop if stop else 0.0
+          source = deterministic_id(
+            "range", context.symbol, "SELL", rounded_price(high, pip_size),
+          )
+          oid = deterministic_id(
+            context.symbol, ARCHETYPE_RANGE_SWEEP, "SELL", context.context_id, source,
+          )
+          out.append(ScalpOpportunity(
+            version=OPPORTUNITY_VERSION,
+            opportunity_id=oid,
+            context_id=context.context_id,
+            symbol=context.symbol,
+            archetype=ARCHETYPE_RANGE_SWEEP,
+            direction="SELL",
+            discovered_at=int(now),
+            source_bar_ts=int(sell_ev["bar_ts"]),
+            zone_low=high - buffer * 2,
+            zone_high=high + buffer,
+            key_level=high,
+            trigger_type=str(sell_ev["pattern"]),
+            trigger_bar_ts=int(sell_ev["bar_ts"]),
+            trigger_price=entry,
+            invalidation_price=invalidation,
+            expected_target_price=target_price,
+            expected_target_pips=target_pips,
+            expected_stop_pips=stop,
+            expected_reward_risk=rr,
+            location_position=pos,
+            score=0.0,
+            reasons=("upper_edge_sweep_reclaim",),
+            expires_at=int(now) + 15 * 60,
+            episode_id=source,
+            source_identity=source,
+            measured={"strategy": STRATEGY_DISPLAY[ARCHETYPE_RANGE_SWEEP]},
+          ))
   return out
 
 
@@ -277,6 +301,7 @@ def discover_impulse_pullback(
   *,
   pip_size: float,
   now: int,
+  idle_reasons: list[str] | None = None,
 ) -> list[ScalpOpportunity]:
   if not _enabled(cfg, "impulse_pullback"):
     return []
@@ -291,6 +316,7 @@ def discover_impulse_pullback(
   min_net = _parse_float(getattr(_scalping_cfg(cfg), "target", None), "minimum_net_target_pips", 15.0)
   buffer = max(pip_size * 2, context.atr * _parse_float(getattr(_scalping_cfg(cfg), "stop", None), "buffer_atr", 0.10))
   out: list[ScalpOpportunity] = []
+  reasons = idle_reasons if idle_reasons is not None else []
   pos = context.dealing_range_position
 
   for direction in ("BUY", "SELL"):
@@ -306,14 +332,24 @@ def discover_impulse_pullback(
     # Continuation must not require sweep-reclaim (that gate belongs to
     # range_sweep). Owner 2026-08-26: require_sweep_body was killing L1.
     entry = float(ev["close"])
+    # Stop at the pullback extreme (local swing), not the impulse-leg origin.
     if direction == "BUY":
-      stop_price = float(ev["origin"]) - buffer
-      stop = _stop_pips(structural=(entry - stop_price) / pip_size, cfg=cfg)
+      stop_price = float(ev["pullback_extreme"]) - buffer
+      stop, reject = _stop_pips(structural=(entry - stop_price) / pip_size, cfg=cfg)
       room = context.buy_corridor_room_pips
     else:
-      stop_price = float(ev["origin"]) + buffer
-      stop = _stop_pips(structural=(stop_price - entry) / pip_size, cfg=cfg)
+      stop_price = float(ev["pullback_extreme"]) + buffer
+      stop, reject = _stop_pips(structural=(stop_price - entry) / pip_size, cfg=cfg)
       room = context.sell_corridor_room_pips
+    if stop is None:
+      if reject:
+        reasons.append(f"{ARCHETYPE_IMPULSE_PULLBACK}:{reject}")
+      continue
+    invalidation = (
+      entry - stop * pip_size
+      if direction == "BUY"
+      else entry + stop * pip_size
+    )
     target = _select_target(
       direction=direction,
       entry=entry,
@@ -324,7 +360,7 @@ def discover_impulse_pullback(
       symbol=context.symbol,
       cfg=cfg,
     )
-    if stop is None or target is None:
+    if target is None:
       continue
     target_price, target_pips = target
     if room is not None and target_pips > room * 0.9:
@@ -356,7 +392,7 @@ def discover_impulse_pullback(
       trigger_type=str(ev["pattern"]),
       trigger_bar_ts=int(ev["bar_ts"]),
       trigger_price=entry,
-      invalidation_price=stop_price,
+      invalidation_price=invalidation,
       expected_target_price=target_price,
       expected_target_pips=target_pips,
       expected_stop_pips=stop,
@@ -372,6 +408,7 @@ def discover_impulse_pullback(
         "retracement": ev.get("retracement"),
         "impulse_origin": ev.get("origin"),
         "impulse_extreme": ev.get("extreme"),
+        "pullback_extreme": ev.get("pullback_extreme"),
       },
     ))
   return out
@@ -469,6 +506,7 @@ def discover_breakout_retest(
   *,
   pip_size: float,
   now: int,
+  idle_reasons: list[str] | None = None,
 ) -> list[ScalpOpportunity]:
   if not _enabled(cfg, "breakout_retest"):
     return []
@@ -494,6 +532,7 @@ def discover_breakout_retest(
   buffer = max(pip_size * 2, context.atr * 0.1)
   retest_lookback = knobs["retest_lookback_bars"]
   out: list[ScalpOpportunity] = []
+  reasons = idle_reasons if idle_reasons is not None else []
 
   for direction in ("BUY", "SELL"):
     ev = detect_breakout_retest(
@@ -511,12 +550,21 @@ def discover_breakout_retest(
     level = float(ev["level"])
     if direction == "BUY":
       stop_price = min(float(m1_df["low"].iloc[-1]), level) - buffer
-      stop = _stop_pips(structural=(entry - stop_price) / pip_size, cfg=cfg)
+      stop, reject = _stop_pips(structural=(entry - stop_price) / pip_size, cfg=cfg)
       room = context.buy_corridor_room_pips
     else:
       stop_price = max(float(m1_df["high"].iloc[-1]), level) + buffer
-      stop = _stop_pips(structural=(stop_price - entry) / pip_size, cfg=cfg)
+      stop, reject = _stop_pips(structural=(stop_price - entry) / pip_size, cfg=cfg)
       room = context.sell_corridor_room_pips
+    if stop is None:
+      if reject:
+        reasons.append(f"{ARCHETYPE_BREAKOUT_RETEST}:{reject}")
+      continue
+    invalidation = (
+      entry - stop * pip_size
+      if direction == "BUY"
+      else entry + stop * pip_size
+    )
     target = _select_target(
       direction=direction,
       entry=entry,
@@ -527,7 +575,7 @@ def discover_breakout_retest(
       symbol=context.symbol,
       cfg=cfg,
     )
-    if stop is None or target is None:
+    if target is None:
       continue
     target_price, target_pips = target
     room_ok = room is not None and float(room) >= float(target_pips)
@@ -556,7 +604,7 @@ def discover_breakout_retest(
       trigger_type=str(ev["pattern"]),
       trigger_bar_ts=int(ev["bar_ts"]),
       trigger_price=entry,
-      invalidation_price=stop_price,
+      invalidation_price=invalidation,
       expected_target_price=target_price,
       expected_target_pips=target_pips,
       expected_stop_pips=stop,
@@ -599,11 +647,25 @@ def discover_all(
   *,
   pip_size: float,
   now: int,
+  idle_reasons: list[str] | None = None,
 ) -> list[ScalpOpportunity]:
   found: list[ScalpOpportunity] = []
-  found.extend(discover_range_sweep(context, micro, m1_df, cfg, pip_size=pip_size, now=now))
-  found.extend(discover_impulse_pullback(context, micro, m1_df, cfg, pip_size=pip_size, now=now))
-  found.extend(discover_breakout_retest(context, micro, m1_df, cfg, pip_size=pip_size, now=now))
+  reasons = idle_reasons if idle_reasons is not None else []
+  found.extend(
+    discover_range_sweep(
+      context, micro, m1_df, cfg, pip_size=pip_size, now=now, idle_reasons=reasons,
+    )
+  )
+  found.extend(
+    discover_impulse_pullback(
+      context, micro, m1_df, cfg, pip_size=pip_size, now=now, idle_reasons=reasons,
+    )
+  )
+  found.extend(
+    discover_breakout_retest(
+      context, micro, m1_df, cfg, pip_size=pip_size, now=now, idle_reasons=reasons,
+    )
+  )
   # Deduplicate by opportunity_id
   by_id = {item.opportunity_id: item for item in found}
   return list(by_id.values())

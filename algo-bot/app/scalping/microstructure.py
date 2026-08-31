@@ -200,12 +200,16 @@ def detect_impulse_pullback(
       return None
     if abs(current - extreme) / impulse_len < 0.05:
       return {"rejected": True, "reason": "continuation_overextended", "retracement": retracement}
+    # Pullback low (BUY): lowest low from the impulse extreme through now —
+    # the scalp invalidation, not the full impulse-leg origin.
+    pullback_extreme = float(lows_w.iloc[extreme_i:].min())
     return {
       "pattern": "impulse_pullback",
       "direction": "BUY",
       "bar_ts": _ts(window.index[-1]),
       "origin": origin,
       "extreme": extreme,
+      "pullback_extreme": pullback_extreme,
       "retracement": retracement,
       "preferred": preferred_low <= retracement <= preferred_high,
       "close": current,
@@ -235,12 +239,15 @@ def detect_impulse_pullback(
     return None
   if abs(current - extreme) / impulse_len < 0.05:
     return {"rejected": True, "reason": "continuation_overextended", "retracement": retracement}
+  # Pullback high (SELL): highest high from the impulse extreme through now.
+  pullback_extreme = float(highs_w.iloc[extreme_i:].max())
   return {
     "pattern": "impulse_pullback",
     "direction": "SELL",
     "bar_ts": _ts(window.index[-1]),
     "origin": origin,
     "extreme": extreme,
+    "pullback_extreme": pullback_extreme,
     "retracement": retracement,
     "preferred": preferred_low <= retracement <= preferred_high,
     "close": current,
