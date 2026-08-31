@@ -1,20 +1,20 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "c5f051078d32de03e63581cf4e71a80bb81c89f07032cc997c9d6d0aeb06bf4f",
-  "configuration_document_fingerprint_sha256": "b15fbbe23174f022519c9da1c9f251724c6ca041d0c56e8b18aaf33c92ddbb4e",
+  "configuration_contract_fingerprint_sha256": "052e43e73ad9756b8b6a95db493ec846e0d6856dc218662f89e796c09a3159e7",
+  "configuration_document_fingerprint_sha256": "1fd4d55e7f520ceed8108ed46e0617497a18faad36d41f6c26ff24d7a58c134d",
   "counts": {
     "algorithm_constants": 57,
-    "configurable": 479,
+    "configurable": 480,
     "known_conflicts": 30,
     "owners": {
       "ctrader": 49,
-      "python": 401,
+      "python": 402,
       "shared": 96
     },
     "protocol_constants": 10,
     "secrets": 9,
     "shared": 96,
-    "total_items": 546
+    "total_items": 547
   },
   "items": [
     {
@@ -17698,6 +17698,45 @@
     {
       "algorithm_constant": false,
       "allowed_values": [],
+      "canonical_env": "SCALPING_MAXIMUM_CHASE_STOP_FRACTION",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 0
+      },
+      "default": 0.15,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 0.15
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Chase cap as a fraction of planned stop pips; effective chase is min(maximum_chase_pips, stop_pips * fraction).",
+      "display_id": "config:strategies.scalping.activation.maximum_chase_stop_fraction",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.activation.maximum_chase_stop_fraction",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "execution_safety",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "float",
+      "unit": "fraction",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
       "canonical_env": "SCALPING_REARM_DISTANCE_ATR",
       "catalog_version": 2,
       "configurable": true,
@@ -20495,6 +20534,6 @@
       "validation_summary": "Pydantic required/type coercion only"
     }
   ],
-  "source_fingerprint_sha256": "c5f051078d32de03e63581cf4e71a80bb81c89f07032cc997c9d6d0aeb06bf4f",
+  "source_fingerprint_sha256": "052e43e73ad9756b8b6a95db493ec846e0d6856dc218662f89e796c09a3159e7",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

@@ -264,6 +264,7 @@ async def _emit_funnel_complete(client, event: dict) -> None:
   exit_path = EXIT_UNKNOWN
   realized_r_override: float | None = None
   opportunity_id: str | None = None
+  excursion_for_risk = None
   if group_id:
     trace = await load_exit_trace(client, group_id)
     if trace is not None:
@@ -277,6 +278,14 @@ async def _emit_funnel_complete(client, event: dict) -> None:
     bound = await load_bind(client, group_id)
     if bound:
       opportunity_id = str(bound.get("opportunity_id") or "") or None
+  if opportunity_id:
+    excursion_for_risk = await load_excursion(client, symbol, opportunity_id)
+    if (
+      excursion_for_risk is not None
+      and float(excursion_for_risk.stop_pips) > 0
+    ):
+      # Prefer realized fill-to-stop R unit stamped on the excursion.
+      stop_pips = float(excursion_for_risk.stop_pips)
 
   if (
     outcome != "fill"
@@ -284,8 +293,8 @@ async def _emit_funnel_complete(client, event: dict) -> None:
     and stop_pips > 0
     and exit_path != EXIT_UNKNOWN
   ):
-    excursion = None
-    if opportunity_id:
+    excursion = excursion_for_risk
+    if excursion is None and opportunity_id:
       excursion = await load_excursion(client, symbol, opportunity_id)
     ratios = (
       excursion.ladder_ratios if excursion is not None else (0.5, 0.5)

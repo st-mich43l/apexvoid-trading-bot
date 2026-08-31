@@ -51,6 +51,7 @@ from app.autotrade.entry_activation import (
 )
 from app.autotrade.execution_confirmation import (
   executable_quote_in_zone,
+  scalp_effective_chase_pips,
   scalp_maximum_chase_pips,
   scalp_zone_access,
 )
@@ -438,11 +439,35 @@ def _technique_chase_pips() -> float:
   return max(0.0, value)
 
 
+def _match_stop_pips(match: StrategyMatch | None, record: ZoneWatch) -> float | None:
+  """Planned stop distance from structure_swing to the worst zone edge."""
+  if match is None:
+    return None
+  try:
+    from app.autotrade import units
+
+    swing = float(match.structure_swing)
+    low = float(record.low)
+    high = float(record.high)
+    pip = float(units.pip_size(record.symbol))
+  except (TypeError, ValueError, AttributeError):
+    return None
+  if pip <= 0 or not math.isfinite(pip):
+    return None
+  side = str(record.direction or match.direction or "").upper()
+  worst = high if side == "BUY" else low
+  distance = abs(worst - swing) / pip
+  if not math.isfinite(distance) or distance <= 0:
+    return None
+  return distance
+
+
 def _scalp_access(
   record: ZoneWatch,
   quote: tuple[float, float, int],
   *,
   strategy: str | None = None,
+  stop_pips: float | None = None,
 ):
   """Inside / chase access for range scalp + techniques; strict inside otherwise."""
   from app.autotrade import units
@@ -462,7 +487,9 @@ def _scalp_access(
       record.high,
       tolerance,
       pip_size=pip,
-      maximum_chase_pips=scalp_maximum_chase_pips(runtime_config),
+      maximum_chase_pips=scalp_effective_chase_pips(
+        runtime_config, stop_pips=stop_pips,
+      ),
     )
   if strategy and is_technique_or_confluence(strategy):
     return scalp_zone_access(
@@ -1255,7 +1282,9 @@ async def _activate_match(
       record.symbol, match.strategy, record.zone_id,
     )
     return None
-  access = _scalp_access(record, quote, strategy=match.strategy)
+  access = _scalp_access(
+    record, quote, strategy=match.strategy, stop_pips=_match_stop_pips(match, record),
+  )
   evidence = access.evidence
   if not access.executable:
     decisive_break = await _closed_bar_decisive_break(
@@ -1268,7 +1297,7 @@ async def _activate_match(
       match.strategy,
       record.zone_id,
       (
-        "scalp_missed_chase"
+        "entry_cancelled_chase"
         if access.status == "chase_missed"
         else "quote_outside_zone"
       ),
@@ -1469,7 +1498,9 @@ async def _evaluate_record(
   match = await _load_candidate(client, record.zone_id)
   if match is None:
     return None
-  access = _scalp_access(record, quote, strategy=match.strategy)
+  access = _scalp_access(
+    record, quote, strategy=match.strategy, stop_pips=_match_stop_pips(match, record),
+  )
   evidence = access.evidence
   decisive_break = await _closed_bar_decisive_break(
     client, record, source=source,
@@ -1657,7 +1688,12 @@ async def _sync_strategy_match_cutover(
         symbol, tf, result.setup, result.direction, zone_id,
       )
       continue
-    access = _scalp_access(record, quote, strategy=str(result.setup))
+    access = _scalp_access(
+      record,
+      quote,
+      strategy=str(result.setup),
+      stop_pips=_match_stop_pips(match, record),
+    )
     evidence = access.evidence
     decisive_break = await _closed_bar_decisive_break(client, record)
     record, _ = await record_zone_presence(
@@ -1683,11 +1719,11 @@ async def _sync_strategy_match_cutover(
           client,
           zone_id,
           INVALIDATED,
-          reason_code="scalp_missed_chase",
+          reason_code="entry_cancelled_chase",
         )
         log.info(
           "zone watch cutover rejected symbol=%s tf=%s setup=%s direction=%s "
-          "reason=scalp_missed_chase zone_id=%s chase_pips=%s max_chase=%s",
+          "reason=entry_cancelled_chase zone_id=%s chase_pips=%s max_chase=%s",
           symbol, tf, result.setup, result.direction, zone_id,
           access.chase_pips, access.maximum_chase_pips,
         )

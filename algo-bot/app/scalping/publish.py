@@ -114,14 +114,21 @@ def build_scalp_strategy_match(
     pip = 0.1
   entry = float(opportunity.trigger_price)
   structure_swing = float(opportunity.invalidation_price)
-  derived_stop = abs(entry - structure_swing) / pip
+  # Risk is anchored on the worst-case fill inside the zone, not the trigger close.
+  worst_fill = (
+    float(opportunity.zone_high)
+    if str(opportunity.direction).upper() == "BUY"
+    else float(opportunity.zone_low)
+  )
+  derived_stop = abs(worst_fill - structure_swing) / pip
   expected_stop = float(opportunity.expected_stop_pips)
   if abs(derived_stop - expected_stop) > 1e-6:
     log.warning(
-      "scalp stop invariant broken opportunity_id=%s entry=%s "
-      "invalidation=%s derived_stop_pips=%s expected_stop_pips=%s",
+      "scalp stop invariant broken opportunity_id=%s trigger=%s "
+      "worst_fill=%s invalidation=%s derived_stop_pips=%s expected_stop_pips=%s",
       opportunity.opportunity_id,
       entry,
+      worst_fill,
       structure_swing,
       derived_stop,
       expected_stop,

@@ -410,6 +410,7 @@
       "strategies.scalp.scalp_post_impulse_range_enabled",
       "strategies.scalp.scalp_range_provisional_enabled",
       "strategies.scalping.activation.maximum_chase_pips",
+      "strategies.scalping.activation.maximum_chase_stop_fraction",
       "strategies.scalping.activation.rearm_distance_atr",
       "strategies.scalping.activation.trigger_maximum_age_bars",
       "strategies.scalping.archetypes.breakout_retest_enabled",
@@ -516,7 +517,7 @@
     "XAU_ZONE_PREFERRED_MAX_WIDTH_PRICE": "instruments.XAU.analysis.zones.preferred_maximum_width_price",
     "XAU_ZONE_PREFERRED_MIN_WIDTH_PRICE": "instruments.XAU.analysis.zones.preferred_minimum_width_price"
   },
-  "fingerprint": "c5f051078d32de03e63581cf4e71a80bb81c89f07032cc997c9d6d0aeb06bf4f",
+  "fingerprint": "052e43e73ad9756b8b6a95db493ec846e0d6856dc218662f89e796c09a3159e7",
   "instrument_schema": {
     "active_projection_symbol": "XAU",
     "optional": [

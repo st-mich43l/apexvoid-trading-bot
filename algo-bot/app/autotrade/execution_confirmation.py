@@ -482,6 +482,40 @@ def scalp_maximum_chase_pips(cfg: Any | None = None) -> float:
   return max(0.0, value)
 
 
+def scalp_maximum_chase_stop_fraction(cfg: Any | None = None) -> float:
+  """Fraction of planned stop pips allowed as chase (default 0.15)."""
+  if cfg is None:
+    try:
+      from app.core.config import runtime_config
+      cfg = runtime_config
+    except Exception:
+      return 0.15
+  scalping_cfg = getattr(getattr(cfg, "strategies", None), "scalping", None)
+  act = getattr(scalping_cfg, "activation", None)
+  try:
+    value = float(getattr(act, "maximum_chase_stop_fraction", 0.15) or 0.15)
+  except (TypeError, ValueError):
+    return 0.15
+  return max(0.0, value)
+
+
+def scalp_effective_chase_pips(
+  cfg: Any | None = None,
+  *,
+  stop_pips: float | None,
+) -> float:
+  """Effective chase cap: min(flat maximum_chase_pips, stop × fraction)."""
+  flat = scalp_maximum_chase_pips(cfg)
+  try:
+    stop = None if stop_pips is None else float(stop_pips)
+  except (TypeError, ValueError):
+    stop = None
+  if stop is None or not math.isfinite(stop) or stop <= 0:
+    return flat
+  frac = scalp_maximum_chase_stop_fraction(cfg)
+  return min(flat, stop * frac)
+
+
 def scalp_zone_access(
   direction: str,
   bid: Any,

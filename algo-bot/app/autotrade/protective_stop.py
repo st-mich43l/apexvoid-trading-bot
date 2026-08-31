@@ -477,6 +477,68 @@ def _apply_opposing_zone_push(
   )
 
 
+def plan_scalp_invalidation_stop(
+  *,
+  direction: str,
+  entry_price: Any,
+  structure_swing: Any,
+  zone_low: Any,
+  zone_high: Any,
+  pip_size: Any,
+  digits: int,
+) -> FinalProtectiveStopPlan:
+  """M1 scalp live SL is ``invalidation_price`` verbatim — no ATR/clamp rebuild.
+
+  Pip distance for sizing/reporting is measured from the worst-case fill
+  inside the published entry zone to the absolute invalidation.
+  """
+  side = str(direction).upper()
+  entry = decimal_value(entry_price, "entry_price")
+  swing = decimal_value(structure_swing, "structure_swing")
+  low = decimal_value(zone_low, "zone_low")
+  high = decimal_value(zone_high, "zone_high")
+  pip = decimal_value(pip_size, "pip_size")
+  if (
+    side not in {"BUY", "SELL"}
+    or entry <= 0
+    or swing <= 0
+    or low <= 0
+    or high <= 0
+    or low >= high
+    or pip <= 0
+    or digits < 0
+  ):
+    raise ProtectiveStopError("Scalp invalidation-stop inputs are invalid")
+  quantum = Decimal(1).scaleb(-digits)
+  stop_price = swing.quantize(quantum, rounding=ROUND_HALF_UP)
+  worst = high if side == "BUY" else low
+  distance = abs(worst - stop_price)
+  if distance <= 0:
+    raise ProtectiveStopError(
+      "Scalp invalidation is not on the losing side of the entry zone",
+    )
+  if side == "BUY" and not (stop_price < low):
+    raise ProtectiveStopError("Scalp BUY invalidation is not below the entry zone")
+  if side == "SELL" and not (stop_price > high):
+    raise ProtectiveStopError("Scalp SELL invalidation is not above the entry zone")
+  stop_pips = distance / pip
+  return FinalProtectiveStopPlan(
+    entry_price=entry,
+    base_stop_price=stop_price,
+    base_stop_pips=stop_pips,
+    final_stop_price=stop_price,
+    final_stop_distance=distance,
+    final_stop_pips=stop_pips,
+    raw_stop_price=stop_price,
+    clamped=False,
+    source="scalp_invalidation_verbatim",
+    adjustment="none",
+    adjustment_zone_id=None,
+    adjustment_zone_low=None,
+    adjustment_zone_high=None,
+  )
+
+
 def plan_protective_stop(
   *,
   direction: str,

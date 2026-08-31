@@ -12,6 +12,7 @@ from app.analysis.entry_location import (
 from app.autotrade.execution_confirmation import (
   ZONE_ACCESS_MOMENTUM_CHASE,
   ZONE_ACCESS_RETEST_ONLY,
+  scalp_effective_chase_pips,
   scalp_zone_access,
 )
 from app.scalping.context import is_scalping_symbol, is_impulse_pullback_session_allowed
@@ -111,7 +112,9 @@ def evaluate_scalp_activation(
   if age_bars > max_age:
     return ScalpDecision(False, True, "reaction_trigger_stale", 0.0, measured)
 
-  chase = float(getattr(act, "maximum_chase_pips", 40.0) or 40.0)
+  chase = scalp_effective_chase_pips(
+    cfg, stop_pips=float(opportunity.expected_stop_pips),
+  )
   zone_mode = (
     ZONE_ACCESS_RETEST_ONLY
     if opportunity.archetype == ARCHETYPE_BREAKOUT_RETEST
@@ -130,12 +133,15 @@ def evaluate_scalp_activation(
   )
   measured["chase_pips"] = access.chase_pips
   measured["maximum_chase_pips"] = chase
+  measured["effective_chase_cap_pips"] = chase
   measured["zone_access_mode"] = zone_mode
   measured["quote_inside"] = access.status == "inside"
   if access.status == "approach_wait":
     return ScalpDecision(False, False, "quote_outside_zone", 0.0, measured)
   if access.status == "chase_missed":
-    return ScalpDecision(False, True, "scalp_missed_chase", 0.0, measured)
+    measured["chase_distance_pips"] = access.chase_pips
+    measured["entry_cancelled_chase"] = True
+    return ScalpDecision(False, True, "entry_cancelled_chase", 0.0, measured)
   if access.status == "invalid":
     return ScalpDecision(False, True, "scalp_quote_invalid", 0.0, measured)
   if access.status == "chase":
