@@ -1,8 +1,8 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "f3743d4cc3eb6b4937431197fcc3cd49485688aa9a83491c14cdf85123e71e5e",
+  "configuration_contract_fingerprint_sha256": "c5f051078d32de03e63581cf4e71a80bb81c89f07032cc997c9d6d0aeb06bf4f",
   "count": 479,
-  "deprecated_alias_count": 64,
+  "deprecated_alias_count": 21,
   "entries": [
     {
       "canonical_env": "ALERT_OVERLAP_SUPPRESS",
@@ -3021,9 +3021,7 @@
       "canonical_env": "AUTO_TRADE_TECHNIQUE_SCALP_REQUIRE_KILLZONE",
       "default": true,
       "deprecated": false,
-      "deprecated_aliases": [
-        "AUTO_TRADE_TECHNIQUE_HFS_REQUIRE_KILLZONE"
-      ],
+      "deprecated_aliases": [],
       "description": "When true with enforce, block M1 scalping publish/activation outside killzone. Prod trading-bot.yml defaults this off; discovery permits are structure/technique-driven regardless.",
       "display_id": "config:execution.technique.scalp_require_killzone",
       "owner": "python",
@@ -5846,9 +5844,7 @@
       "canonical_env": "SCALPING_BREAKOUT_BOX_MAX_ATR",
       "default": 1.5,
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_BREAKOUT_BOX_MAX_ATR"
-      ],
+      "deprecated_aliases": [],
       "description": "Max M1 compression box width in ATR for Breakout Retest.",
       "display_id": "config:strategies.scalping.breakout.box_max_atr",
       "owner": "python",
@@ -5864,9 +5860,7 @@
       "canonical_env": "SCALPING_BREAKOUT_MAX_BOX_BARS",
       "default": 20,
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_BREAKOUT_MAX_BOX_BARS"
-      ],
+      "deprecated_aliases": [],
       "description": "Maximum M1 bars in the compression box.",
       "display_id": "config:strategies.scalping.breakout.max_box_bars",
       "owner": "python",
@@ -5882,9 +5876,7 @@
       "canonical_env": "SCALPING_BREAKOUT_MIN_BOX_BARS",
       "default": 8,
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_BREAKOUT_MIN_BOX_BARS"
-      ],
+      "deprecated_aliases": [],
       "description": "Minimum M1 bars in the compression box.",
       "display_id": "config:strategies.scalping.breakout.min_box_bars",
       "owner": "python",
@@ -5900,9 +5892,7 @@
       "canonical_env": "SCALPING_BREAKOUT_MIN_BREAK_ATR",
       "default": 0.25,
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_BREAKOUT_MIN_BREAK_ATR"
-      ],
+      "deprecated_aliases": [],
       "description": "Minimum close displacement beyond the box in ATR.",
       "display_id": "config:strategies.scalping.breakout.min_break_atr",
       "owner": "python",
@@ -5918,9 +5908,7 @@
       "canonical_env": "SCALPING_BREAKOUT_MIN_TOUCHES_PER_SIDE",
       "default": 2,
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_BREAKOUT_MIN_TOUCHES_PER_SIDE"
-      ],
+      "deprecated_aliases": [],
       "description": "Minimum touches of each compression extreme.",
       "display_id": "config:strategies.scalping.breakout.min_touches_per_side",
       "owner": "python",
@@ -5936,9 +5924,7 @@
       "canonical_env": "SCALPING_BREAKOUT_REQUIRE_RETEST_REJECTION",
       "default": true,
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_BREAKOUT_REQUIRE_RETEST_REJECTION"
-      ],
+      "deprecated_aliases": [],
       "description": "Require wick/reclaim rejection on the retest (not touch-only).",
       "display_id": "config:strategies.scalping.breakout.require_retest_rejection",
       "owner": "python",
@@ -5954,9 +5940,7 @@
       "canonical_env": "SCALPING_BREAKOUT_RETEST_ENABLED",
       "default": true,
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_BREAKOUT_RETEST_ENABLED"
-      ],
+      "deprecated_aliases": [],
       "description": "Enable micro breakout-retest scalping archetype.",
       "display_id": "config:strategies.scalping.archetypes.breakout_retest_enabled",
       "owner": "python",
@@ -5972,9 +5956,7 @@
       "canonical_env": "SCALPING_BREAKOUT_RETEST_LOOKBACK_BARS",
       "default": 5,
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_BREAKOUT_RETEST_LOOKBACK_BARS"
-      ],
+      "deprecated_aliases": [],
       "description": "Bars to scan for rejection retest after an accepted break.",
       "display_id": "config:strategies.scalping.breakout.retest_lookback_bars",
       "owner": "python",
@@ -5990,9 +5972,7 @@
       "canonical_env": "SCALPING_BREAKOUT_TOUCH_TOL_ATR",
       "default": 0.2,
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_BREAKOUT_TOUCH_TOL_ATR"
-      ],
+      "deprecated_aliases": [],
       "description": "Touch band around box extremes in ATR.",
       "display_id": "config:strategies.scalping.breakout.touch_tol_atr",
       "owner": "python",
@@ -6008,9 +5988,7 @@
       "canonical_env": "SCALPING_COOLDOWN_AFTER_LOSS_MINUTES",
       "default": 5,
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_COOLDOWN_AFTER_LOSS_MINUTES"
-      ],
+      "deprecated_aliases": [],
       "description": "Cooldownoldown after consecutive loss streak.",
       "display_id": "config:strategies.scalping.risk.cooldown_after_loss_minutes",
       "owner": "python",
@@ -6026,9 +6004,7 @@
       "canonical_env": "SCALPING_CURRENT_CONTEXT_TTL_SECONDS",
       "default": 3600,
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_CURRENT_CONTEXT_TTL_SECONDS"
-      ],
+      "deprecated_aliases": [],
       "description": "TTL for current immutable M5 scalp context.",
       "display_id": "config:strategies.scalping.context.current_context_ttl_seconds",
       "owner": "python",
@@ -6044,9 +6020,7 @@
       "canonical_env": "SCALPING_DAILY_LOSS_LIMIT_R",
       "default": 3.0,
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_DAILY_LOSS_LIMIT_R"
-      ],
+      "deprecated_aliases": [],
       "description": "Daily realized R loss limit.",
       "display_id": "config:strategies.scalping.risk.daily_loss_limit_r",
       "owner": "python",
@@ -6062,9 +6036,7 @@
       "canonical_env": "SCALPING_HISTORIC_CONTEXT_TTL_SECONDS",
       "default": 86400,
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_HISTORIC_CONTEXT_TTL_SECONDS"
-      ],
+      "deprecated_aliases": [],
       "description": "TTL for historic scalp context snapshots.",
       "display_id": "config:strategies.scalping.context.historic_context_ttl_seconds",
       "owner": "python",
@@ -6080,9 +6052,7 @@
       "canonical_env": "SCALPING_IMPULSE_PULLBACK_ALLOWED_SESSIONS",
       "default": "london",
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_IMPULSE_PULLBACK_ALLOWED_SESSIONS"
-      ],
+      "deprecated_aliases": [],
       "description": "Comma-separated UTC session names (classify_session) allowed for impulse pullback. Empty or \"all\" disables the gate.",
       "display_id": "config:strategies.scalping.archetypes.impulse_pullback_allowed_sessions",
       "owner": "python",
@@ -6098,9 +6068,7 @@
       "canonical_env": "SCALPING_IMPULSE_PULLBACK_ENABLED",
       "default": true,
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_IMPULSE_PULLBACK_ENABLED"
-      ],
+      "deprecated_aliases": [],
       "description": "Enable impulse pullback continuation scalping archetype (on by default for L1 continuation).",
       "display_id": "config:strategies.scalping.archetypes.impulse_pullback_enabled",
       "owner": "python",
@@ -6116,9 +6084,7 @@
       "canonical_env": "SCALPING_M1_LOOKBACK_BARS",
       "default": 60,
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_M1_LOOKBACK_BARS"
-      ],
+      "deprecated_aliases": [],
       "description": "Bounded M1 lookback for microstructure.",
       "display_id": "config:strategies.scalping.context.m1_lookback_bars",
       "owner": "python",
@@ -6134,9 +6100,7 @@
       "canonical_env": "SCALPING_MAXIMUM_ACTIVE_OPPORTUNITIES",
       "default": 10,
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_MAXIMUM_ACTIVE_OPPORTUNITIES"
-      ],
+      "deprecated_aliases": [],
       "description": "Cap on concurrently active scalp opportunities.",
       "display_id": "config:strategies.scalping.policy.maximum_active_opportunities",
       "owner": "python",
@@ -6152,9 +6116,7 @@
       "canonical_env": "SCALPING_MAXIMUM_CHASE_PIPS",
       "default": 40.0,
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_MAXIMUM_CHASE_PIPS"
-      ],
+      "deprecated_aliases": [],
       "description": "Miss opportunity beyond this chase distance.",
       "display_id": "config:strategies.scalping.activation.maximum_chase_pips",
       "owner": "python",
@@ -6170,9 +6132,7 @@
       "canonical_env": "SCALPING_MAXIMUM_CONCURRENT_POSITIONS",
       "default": 1,
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_MAXIMUM_CONCURRENT_POSITIONS"
-      ],
+      "deprecated_aliases": [],
       "description": "One XAU scalp position at a time initially.",
       "display_id": "config:strategies.scalping.risk.maximum_concurrent_positions",
       "owner": "python",
@@ -6188,9 +6148,7 @@
       "canonical_env": "SCALPING_MAXIMUM_CONSECUTIVE_LOSSES",
       "default": 3,
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_MAXIMUM_CONSECUTIVE_LOSSES"
-      ],
+      "deprecated_aliases": [],
       "description": "Loss streak before cooldown.",
       "display_id": "config:strategies.scalping.risk.maximum_consecutive_losses",
       "owner": "python",
@@ -6206,10 +6164,8 @@
       "canonical_env": "SCALPING_MAXIMUM_DAILY_TRADES",
       "default": 30,
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_MAXIMUM_DAILY_TRADES"
-      ],
-      "description": "Hard daily trade cap for HFS.",
+      "deprecated_aliases": [],
+      "description": "Hard daily trade cap for M1 scalping.",
       "display_id": "config:strategies.scalping.risk.maximum_daily_trades",
       "owner": "python",
       "path": "strategies.scalping.risk.maximum_daily_trades",
@@ -6224,9 +6180,7 @@
       "canonical_env": "SCALPING_MAXIMUM_M5_AGE_SECONDS",
       "default": 420,
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_MAXIMUM_M5_AGE_SECONDS"
-      ],
+      "deprecated_aliases": [],
       "description": "Fail closed when pinned M5 context is older than this.",
       "display_id": "config:strategies.scalping.context.maximum_m5_age_seconds",
       "owner": "python",
@@ -6242,9 +6196,7 @@
       "canonical_env": "SCALPING_MAXIMUM_OPPORTUNITIES_PER_CYCLE",
       "default": 3,
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_MAXIMUM_OPPORTUNITIES_PER_CYCLE"
-      ],
+      "deprecated_aliases": [],
       "description": "Ranked opportunities retained per M1 cycle.",
       "display_id": "config:strategies.scalping.policy.maximum_opportunities_per_cycle",
       "owner": "python",
@@ -6260,10 +6212,8 @@
       "canonical_env": "SCALPING_MAXIMUM_SESSION_TRADES",
       "default": 12,
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_MAXIMUM_SESSION_TRADES"
-      ],
-      "description": "Hard session trade cap for HFS.",
+      "deprecated_aliases": [],
+      "description": "Hard session trade cap for M1 scalping.",
       "display_id": "config:strategies.scalping.risk.maximum_session_trades",
       "owner": "python",
       "path": "strategies.scalping.risk.maximum_session_trades",
@@ -6278,9 +6228,7 @@
       "canonical_env": "SCALPING_MAXIMUM_SPREAD_PIPS",
       "default": 5.0,
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_MAXIMUM_SPREAD_PIPS"
-      ],
+      "deprecated_aliases": [],
       "description": "Hard block when spread exceeds this.",
       "display_id": "config:strategies.scalping.policy.maximum_spread_pips",
       "owner": "python",
@@ -6296,9 +6244,7 @@
       "canonical_env": "SCALPING_MINIMUM_NET_TARGET_PIPS",
       "default": 15.0,
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_MINIMUM_NET_TARGET_PIPS"
-      ],
+      "deprecated_aliases": [],
       "description": "Minimum net target after spread/slippage.",
       "display_id": "config:strategies.scalping.target.minimum_net_target_pips",
       "owner": "python",
@@ -6314,9 +6260,7 @@
       "canonical_env": "SCALPING_MINIMUM_REWARD_RISK",
       "default": 1.1,
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_MINIMUM_REWARD_RISK"
-      ],
+      "deprecated_aliases": [],
       "description": "Minimum net reward/risk for scalping entries.",
       "display_id": "config:strategies.scalping.policy.minimum_reward_risk",
       "owner": "python",
@@ -6332,9 +6276,7 @@
       "canonical_env": "SCALPING_MODE",
       "default": "live",
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_MODE"
-      ],
+      "deprecated_aliases": [],
       "description": "Scalping runtime mode: off, shadow, paper, or live.",
       "display_id": "config:strategies.scalping.mode",
       "owner": "python",
@@ -6350,9 +6292,7 @@
       "canonical_env": "SCALPING_PREFERRED_LADDER_PIPS",
       "default": "20,25,30",
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_PREFERRED_LADDER_PIPS"
-      ],
+      "deprecated_aliases": [],
       "description": "Comma-separated preferred scalp targets in pips.",
       "display_id": "config:strategies.scalping.target.preferred_ladder_pips",
       "owner": "python",
@@ -6368,9 +6308,7 @@
       "canonical_env": "SCALPING_PULLBACK_BUY_MAX_POSITION",
       "default": 0.6,
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_PULLBACK_BUY_MAX_POSITION"
-      ],
+      "deprecated_aliases": [],
       "description": "Max dealing-range position for scalping pullback BUY.",
       "display_id": "config:strategies.scalping.location.pullback_buy_maximum_position",
       "owner": "python",
@@ -6386,9 +6324,7 @@
       "canonical_env": "SCALPING_PULLBACK_SELL_MIN_POSITION",
       "default": 0.4,
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_PULLBACK_SELL_MIN_POSITION"
-      ],
+      "deprecated_aliases": [],
       "description": "Min dealing-range position for scalping pullback SELL.",
       "display_id": "config:strategies.scalping.location.pullback_sell_minimum_position",
       "owner": "python",
@@ -6404,9 +6340,7 @@
       "canonical_env": "SCALPING_RANGE_BUY_MAX_POSITION",
       "default": 0.35,
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_RANGE_BUY_MAX_POSITION"
-      ],
+      "deprecated_aliases": [],
       "description": "Max dealing-range position for scalping range-sweep BUY.",
       "display_id": "config:strategies.scalping.location.range_buy_maximum_position",
       "owner": "python",
@@ -6422,9 +6356,7 @@
       "canonical_env": "SCALPING_RANGE_SELL_MIN_POSITION",
       "default": 0.65,
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_RANGE_SELL_MIN_POSITION"
-      ],
+      "deprecated_aliases": [],
       "description": "Min dealing-range position for scalping range-sweep SELL.",
       "display_id": "config:strategies.scalping.location.range_sell_minimum_position",
       "owner": "python",
@@ -6440,9 +6372,7 @@
       "canonical_env": "SCALPING_RANGE_SWEEP_ENABLED",
       "default": true,
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_RANGE_SWEEP_ENABLED"
-      ],
+      "deprecated_aliases": [],
       "description": "Enable micro range sweep reversal scalping archetype.",
       "display_id": "config:strategies.scalping.archetypes.range_sweep_enabled",
       "owner": "python",
@@ -6458,9 +6388,7 @@
       "canonical_env": "SCALPING_REARM_DISTANCE_ATR",
       "default": 0.25,
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_REARM_DISTANCE_ATR"
-      ],
+      "deprecated_aliases": [],
       "description": "Minimum distance to rearm an episode.",
       "display_id": "config:strategies.scalping.activation.rearm_distance_atr",
       "owner": "python",
@@ -6476,9 +6404,7 @@
       "canonical_env": "SCALPING_RISK_FRACTION_PER_TRADE",
       "default": 0.1,
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_RISK_FRACTION_PER_TRADE"
-      ],
+      "deprecated_aliases": [],
       "description": "Constant risk fraction — never martingale.",
       "display_id": "config:strategies.scalping.risk.risk_fraction_per_trade",
       "owner": "python",
@@ -6494,9 +6420,7 @@
       "canonical_env": "SCALPING_RISK_MODE",
       "default": "live",
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_RISK_MODE"
-      ],
+      "deprecated_aliases": [],
       "description": "Scalping risk accounting mode.",
       "display_id": "config:strategies.scalping.risk.mode",
       "owner": "python",
@@ -6512,9 +6436,7 @@
       "canonical_env": "SCALPING_SESSION_LOSS_LIMIT_R",
       "default": 2.0,
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_SESSION_LOSS_LIMIT_R"
-      ],
+      "deprecated_aliases": [],
       "description": "Session realized R loss limit.",
       "display_id": "config:strategies.scalping.risk.session_loss_limit_r",
       "owner": "python",
@@ -6530,9 +6452,7 @@
       "canonical_env": "SCALPING_STOP_BUFFER_ATR",
       "default": 0.1,
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_STOP_BUFFER_ATR"
-      ],
+      "deprecated_aliases": [],
       "description": "ATR buffer beyond structural stop.",
       "display_id": "config:strategies.scalping.stop.buffer_atr",
       "owner": "python",
@@ -6548,9 +6468,7 @@
       "canonical_env": "SCALPING_STOP_MAXIMUM_PIPS",
       "default": 30.0,
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_STOP_MAXIMUM_PIPS"
-      ],
+      "deprecated_aliases": [],
       "description": "Maximum scalp stop size.",
       "display_id": "config:strategies.scalping.stop.maximum_pips",
       "owner": "python",
@@ -6566,9 +6484,7 @@
       "canonical_env": "SCALPING_STOP_MINIMUM_PIPS",
       "default": 12.0,
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_STOP_MINIMUM_PIPS"
-      ],
+      "deprecated_aliases": [],
       "description": "Minimum scalp stop size.",
       "display_id": "config:strategies.scalping.stop.minimum_pips",
       "owner": "python",
@@ -6584,9 +6500,7 @@
       "canonical_env": "SCALPING_TRIGGER_MAXIMUM_AGE_BARS",
       "default": 2,
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_TRIGGER_MAXIMUM_AGE_BARS"
-      ],
+      "deprecated_aliases": [],
       "description": "Max closed M1 bars since trigger.",
       "display_id": "config:strategies.scalping.activation.trigger_maximum_age_bars",
       "owner": "python",
@@ -7808,6 +7722,6 @@
   ],
   "secret_count": 9,
   "shared_with_ctrader_count": 87,
-  "source_fingerprint_sha256": "f3743d4cc3eb6b4937431197fcc3cd49485688aa9a83491c14cdf85123e71e5e",
+  "source_fingerprint_sha256": "c5f051078d32de03e63581cf4e71a80bb81c89f07032cc997c9d6d0aeb06bf4f",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

@@ -74,6 +74,7 @@ from app.autotrade.strategy_match import (
 )
 from app.autotrade.strategy_taxonomy import (
   bypasses_opposing_structure_gates,
+  is_breakout_retest_scalp_strategy,
   is_m1_scalp_strategy,
   is_reaction_strategy,
   is_scalp_strategy,
@@ -108,6 +109,8 @@ from app.autotrade.execution_confirmation import (
   save_execution_confirmation,
   scalp_maximum_chase_pips,
   scalp_zone_access,
+  ZONE_ACCESS_MOMENTUM_CHASE,
+  ZONE_ACCESS_RETEST_ONLY,
 )
 from app.autotrade.multi_match import (
   dedupe_matches,
@@ -4862,13 +4865,11 @@ async def _publish_trade_plan_v8(
     # Optional clock sterilizer (prod off). Discovery permits are structure/
     # technique driven; weak volume/momentum is rejected by analysis.
     require_kz = False if tech is None else bool(
-      getattr(tech, "scalp_require_killzone", None)
-      if getattr(tech, "scalp_require_killzone", None) is not None
-      else getattr(tech, "hfs_require_killzone", False),
+      getattr(tech, "scalp_require_killzone", False),
     )
     from app.scalping.context import classify_session
 
-    hfs_session = classify_session(spot_ts, inst)
+    scalp_session = classify_session(spot_ts, inst)
     kz = evaluate_killzone_gate(
       ts=spot_ts,
       cfg=inst,
@@ -4882,7 +4883,7 @@ async def _publish_trade_plan_v8(
         match.match_id,
         kz.utc_hour,
         kz.killzone_name,
-        hfs_session,
+        scalp_session,
       )
       await _record_v8_build_rejected(
         client,
@@ -4893,7 +4894,7 @@ async def _publish_trade_plan_v8(
         {
           "killzone_name": kz.killzone_name,
           "utc_hour": kz.utc_hour,
-          "session": hfs_session,
+          "session": scalp_session,
           **kz.measured,
         },
       )
@@ -5030,6 +5031,11 @@ async def _publish_trade_plan_v8(
     strategy_mode=str(getattr(match, "strategy_mode", "") or "") or None,
   )
   if candidate_allows_chase:
+    zone_access_mode = (
+      ZONE_ACCESS_RETEST_ONLY
+      if is_breakout_retest_scalp_strategy(str(match.strategy))
+      else ZONE_ACCESS_MOMENTUM_CHASE
+    )
     scalp_access = scalp_zone_access(
       match.direction,
       getattr(spot, "bid", None),
@@ -5042,6 +5048,7 @@ async def _publish_trade_plan_v8(
       ),
       pip_size=pip_size,
       maximum_chase_pips=scalp_maximum_chase_pips(inst),
+      zone_access_mode=zone_access_mode,
     )
     evidence = scalp_access.evidence
     execution_eligible = scalp_access.executable

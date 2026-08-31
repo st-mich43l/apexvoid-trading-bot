@@ -245,7 +245,6 @@ class ExecutionTechniqueConfig(FrozenConfigModel):
     scalp_require_killzone: bool = config_field(
       True,
       canonical_env='AUTO_TRADE_TECHNIQUE_SCALP_REQUIRE_KILLZONE',
-      deprecated_env_aliases=('AUTO_TRADE_TECHNIQUE_HFS_REQUIRE_KILLZONE',),
       owner=ConfigOwner.PYTHON,
       reload=ReloadPolicy.NEW_SETUP_ONLY,
       runtime_reload=ReloadPolicy.RESTART,

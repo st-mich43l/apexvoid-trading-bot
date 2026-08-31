@@ -1,4 +1,4 @@
-"""One Redis ``bars:new`` subscriber for ZoneWatch M1, HFS, scanner, and worker.
+"""One Redis ``bars:new`` subscriber for ZoneWatch M1, scalping, scanner, and worker.
 
 Publish/activation handlers run first. Scanner detectors and the legacy worker
 gate run after so a heavy analysis tick cannot delay an already-watched zone.
@@ -43,9 +43,9 @@ async def dispatch_closed_bar(
 ) -> list[str]:
   """Run isolated handlers. Publish/activation first, analysis last.
 
-  Existing ZoneWatches and HFS must not wait on scanner detectors. Scanner
+  Existing ZoneWatches and M1 scalping must not wait on scanner detectors. Scanner
   still runs before the worker because the worker reads this bar's matches.
-  ZoneWatch, HFS, scanner, and worker share one OHLC window cache for this
+  ZoneWatch, scalping, scanner, and worker share one OHLC window cache for this
   bar. ZoneWatch still runs first. M1 does not prefetch H1/M15; M5 warms
   the HTF windows scanner needs.
   """
@@ -88,9 +88,9 @@ async def dispatch_closed_bar(
           "dispatcher OHLC prefetch failed symbol=%s tf=%s", symbol, tf,
         )
 
-    from app.scalping.runtime import handle_closed_bar as hfs_handle
+    from app.scalping.runtime import handle_closed_bar as scalp_handle
 
-    await _run("hfs", hfs_handle(data, client=client, source=source))
+    await _run("scalp", scalp_handle(data, client=client, source=source))
 
     if runtime_config.runtime.scanner.enabled:
       from app.analysis.scanner import _handle_event as scanner_handle
@@ -111,7 +111,7 @@ async def dispatch_closed_bar(
 class _PerSymbolBarDispatcher:
   """Keep per-symbol FIFO while allowing different symbols to make progress.
 
-  A single subscriber previously awaited the complete ZoneWatch/HFS/scanner/
+  A single subscriber previously awaited the complete ZoneWatch/scalping/scanner/
   worker chain before reading the next Pub/Sub message.  Five bars closing at
   the same instant therefore multiplied queue age by five.  Each worker owns
   its OHLC source/cache, so one symbol cannot clear another symbol's cache.

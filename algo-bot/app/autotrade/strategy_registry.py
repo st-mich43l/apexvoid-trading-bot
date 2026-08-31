@@ -345,10 +345,6 @@ _STRATEGY_ROWS: tuple[StrategyRow, ...] = (
   _m1_scalp_row("Impulse Pullback Scalp"),
   _m1_scalp_row("Breakout Retest Scalp"),
   _m1_scalp_row("Momentum Chase Scalp"),
-  _m1_scalp_row("HFS Range Sweep"),
-  _m1_scalp_row("HFS Impulse Pullback"),
-  _m1_scalp_row("HFS Breakout Retest"),
-  _m1_scalp_row("HFS Momentum Chase"),
 )
 
 # flip_supply shares the Flip Zone row (second detector registry entry).
@@ -369,28 +365,7 @@ def lookup_row(strategy: str) -> StrategyRow | None:
   key = str(strategy or "").strip()
   if not key:
     return None
-  row = STRATEGY_BY_NAME.get(key)
-  if row is not None:
-    return row
-  if key.startswith("HFS "):
-    suffix = key[4:].strip()
-    mapped = STRATEGY_BY_NAME.get(f"HFS {suffix}")
-    if mapped is not None:
-      return mapped
-    return StrategyRow(
-      name=key,
-      detector_family=FAMILY_DETECTOR_RANGE_REVERSION,
-      execution_family=FAMILY_EXEC_RANGE_REVERSION,
-      canonical_family=CANONICAL_FAMILY_SCALP,
-      location_archetype=ARCHETYPE_RANGE_REVERSION,
-      activation_archetype=ACTIVATION_REACTION,
-      enable_setting=_SCALPING_MODE_SETTING,
-      enable_requires_live_mode=True,
-      m5_authoritative=False,
-      is_scalp=True,
-      is_technique=False,
-    )
-  return None
+  return STRATEGY_BY_NAME.get(key)
 
 
 def strategy_family(strategy: str) -> str:

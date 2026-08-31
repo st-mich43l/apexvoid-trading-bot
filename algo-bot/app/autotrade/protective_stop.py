@@ -8,7 +8,7 @@ import math
 from typing import Any
 
 from app.autotrade.strategy_taxonomy import (
-  HFS_STRATEGIES,
+  M1_SCALP_STRATEGIES,
   RANGE_STRATEGIES,
   REACTION_STRATEGIES,
 )
@@ -596,10 +596,7 @@ _REACTION_FAMILY_STRATEGIES = REACTION_STRATEGIES
 _ROOM_SYNCED_STOP_STRATEGIES = frozenset(REACTION_STRATEGIES)
 
 # Range scalp family: thin room (15/20) tracks TP; independent of reaction.
-# HFS must share this path — otherwise TradePlan falls through to the XAU
-# reaction envelope (40–60) and ignores strategies.scalping.stop
-# (live dig 2026-08-25: Range Sweep ledger stops 24–62 vs HFS max 22).
-_SCALP_ROOM_SYNCED_STOP_STRATEGIES = frozenset(RANGE_STRATEGIES | HFS_STRATEGIES)
+_SCALP_ROOM_SYNCED_STOP_STRATEGIES = frozenset(RANGE_STRATEGIES | M1_SCALP_STRATEGIES)
 
 
 def uses_reaction_room_stop(strategy: str) -> bool:
@@ -693,24 +690,24 @@ def stop_bounds_for_reaction_room(
   if symbol and callable(resolver):
     execution = resolver(symbol).execution
   if is_scalp:
-    if str(strategy) in HFS_STRATEGIES:
-      hfs_stop = getattr(
+    if str(strategy) in M1_SCALP_STRATEGIES:
+      scalp_stop_cfg = getattr(
         getattr(getattr(cfg, "strategies", None), "scalping", None),
         "stop",
         None,
       )
       try:
-        floor_pips = int(float(getattr(hfs_stop, "minimum_pips", 12) or 12))
+        floor_pips = int(float(getattr(scalp_stop_cfg, "minimum_pips", 12) or 12))
       except (TypeError, ValueError):
         floor_pips = 12
       try:
-        cap_pips = int(float(getattr(hfs_stop, "maximum_pips", 30) or 30))
+        cap_pips = int(float(getattr(scalp_stop_cfg, "maximum_pips", 30) or 30))
       except (TypeError, ValueError):
         cap_pips = 30
       if cap_pips < floor_pips:
         cap_pips = floor_pips
       min_rr = 1.0
-      source = "hfs_stop_envelope"
+      source = "scalp_stop_envelope"
     else:
       min_rr = float(
         execution.range.min_rr
@@ -1184,23 +1181,23 @@ def stop_bounds_for_strategy(
   )
   # Reaction taxonomy fallback when room TP is unavailable. Zone / Demand /
   # Supply use the same numeric envelope as an independent family default.
-  if str(strategy) in HFS_STRATEGIES:
-    hfs_stop = getattr(
+  if str(strategy) in M1_SCALP_STRATEGIES:
+    scalp_stop_cfg = getattr(
       getattr(getattr(cfg, "strategies", None), "scalping", None),
       "stop",
       None,
     )
     try:
-      hfs_min = int(float(getattr(hfs_stop, "minimum_pips", 12) or 12))
+      scalp_min = int(float(getattr(scalp_stop_cfg, "minimum_pips", 12) or 12))
     except (TypeError, ValueError):
-      hfs_min = 12
+      scalp_min = 12
     try:
-      hfs_max = int(float(getattr(hfs_stop, "maximum_pips", 30) or 30))
+      scalp_max = int(float(getattr(scalp_stop_cfg, "maximum_pips", 30) or 30))
     except (TypeError, ValueError):
-      hfs_max = 30
-    if hfs_max < hfs_min:
-      hfs_max = hfs_min
-    return hfs_min, hfs_max
+      scalp_max = 30
+    if scalp_max < scalp_min:
+      scalp_max = scalp_min
+    return scalp_min, scalp_max
   if str(strategy) in _REACTION_FAMILY_STRATEGIES:
     return trend_min, trend_max
   return trend_min, trend_max

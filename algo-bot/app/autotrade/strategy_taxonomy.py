@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 REACTION_STRATEGIES = frozenset({
   "Key Level Reaction",
   "Session Level Reaction",
@@ -11,11 +13,8 @@ REACTION_STRATEGIES = frozenset({
 ZONE_STRATEGIES = frozenset({
   "Demand Zone",
   "Supply Zone",
-  # Canonical live name (side is BUY/SELL, not the strategy label):
   "Zone Reaction",
-  # Broken key-level role flip (source flip_zone); same Zone family:
   "Flip Zone",
-  # production legacy names that must remain Zone-family, NOT Reaction:
   "Demand Zone Reaction",
   "Supply Zone Reaction",
 })
@@ -32,7 +31,6 @@ CONFLUENCE_STRATEGIES = frozenset({
   "Confluence Zone",
 })
 
-# Union for convenience — technique + confluence are zone-family publishers.
 ZONE_STRATEGIES = frozenset({
   *ZONE_STRATEGIES,
   *TECHNIQUE_STRATEGIES,
@@ -52,40 +50,28 @@ RANGE_STRATEGIES = frozenset({
   "Chop Zone Reaction",
 })
 
-# Canonical M1 scalp display names (no "HFS" product tag).
-SCALP_M1_STRATEGIES = frozenset({
+M1_SCALP_STRATEGIES = frozenset({
   "Range Sweep Scalp",
   "Impulse Pullback Scalp",
   "Breakout Retest Scalp",
   "Momentum Chase Scalp",
 })
 
-# M1 scalp set including legacy ``HFS *`` open-plan / historical labels.
-M1_SCALP_STRATEGIES = frozenset({
-  *SCALP_M1_STRATEGIES,
-  "HFS Range Sweep",
-  "HFS Impulse Pullback",
-  "HFS Breakout Retest",
-  "HFS Momentum Chase",
+BREAKOUT_RETEST_SCALP_STRATEGIES = frozenset({
+  "Breakout Retest Scalp",
 })
-# Back-compat alias — prefer M1_SCALP_STRATEGIES / is_m1_scalp_strategy.
-HFS_STRATEGIES = M1_SCALP_STRATEGIES
 
 CANONICAL_FAMILY_REACTION = "reaction"
 CANONICAL_FAMILY_ZONE = "zone"
 CANONICAL_FAMILY_LIQUIDITY = "liquidity"
 CANONICAL_FAMILY_RANGE = "range"
 CANONICAL_FAMILY_SCALP = "scalp"
-CANONICAL_FAMILY_HFS = "hfs"  # legacy family stamp on open plans
-CANONICAL_FAMILY_SCALP_LEGACY_HFS = CANONICAL_FAMILY_HFS
 CANONICAL_FAMILY_UNKNOWN = "unknown"
 
-_SCALP_FAMILIES = frozenset({"scalp", "hfs", "range", "range_reversion"})
-_SCALP_MODES = frozenset({
-  "scalp_m1", "hfs_scalp", "range_scalp", "auto_box_scalp",
-})
-_M1_SCALP_MODES = frozenset({"scalp_m1", "hfs_scalp"})
-_M1_SCALP_FAMILIES = frozenset({CANONICAL_FAMILY_SCALP, CANONICAL_FAMILY_SCALP_LEGACY_HFS})
+_SCALP_FAMILIES = frozenset({"scalp", "range", "range_reversion"})
+_SCALP_MODES = frozenset({"scalp_m1", "range_scalp", "auto_box_scalp"})
+_M1_SCALP_MODES = frozenset({"scalp_m1"})
+_M1_SCALP_FAMILIES = frozenset({CANONICAL_FAMILY_SCALP})
 
 
 def is_reaction_strategy(name: str) -> bool:
@@ -118,13 +104,27 @@ def is_range_strategy(name: str) -> bool:
 
 
 def is_m1_scalp_strategy(name: str) -> bool:
-  """True for M1 scalp archetypes (canonical + legacy ``HFS *`` labels)."""
-  key = str(name or "")
-  return key in M1_SCALP_STRATEGIES or key.startswith("HFS ")
+  """True for canonical M1 scalping display names."""
+  return str(name or "") in M1_SCALP_STRATEGIES
 
 
-# Back-compat — prefer is_m1_scalp_strategy.
-is_hfs_strategy = is_m1_scalp_strategy
+def is_breakout_retest_scalp_strategy(name: str) -> bool:
+  """M1 breakout-retest scalps — enter inside the retest band only."""
+  return str(name or "") in BREAKOUT_RETEST_SCALP_STRATEGIES
+
+
+def is_m1_scalp_match(match: Any) -> bool:
+  """True when a StrategyMatch belongs to the M1 scalping lane."""
+  strategy = str(getattr(match, "strategy", "") or "")
+  family = str(getattr(match, "family", "") or "").casefold()
+  mode = str(getattr(match, "strategy_mode", "") or "").casefold()
+  source = str(getattr(match, "structural_source", "") or "").casefold()
+  return (
+    is_m1_scalp_strategy(strategy)
+    or family in _M1_SCALP_FAMILIES
+    or mode in _M1_SCALP_MODES
+    or source == "scalp"
+  )
 
 
 def is_scalp_strategy(
@@ -150,15 +150,7 @@ def bypasses_opposing_structure_gates(
   family: str | None = None,
   strategy_mode: str | None = None,
 ) -> bool:
-  """Scalp may ignore HTF map opposing when native room owns the trade.
-
-  M1 scalp always bypasses — its episode already sized stop/target; map
-  ``actionable_entries`` / HTF zones must not silence the scalp loop.
-
-  Range Box / Range Edge still require fitted ``full_take_profit_pips``
-  (select_range_target / configured floor). Raw reaction ladders alone
-  do not unlock the bypass.
-  """
+  """Scalp may ignore HTF map opposing when native room owns the trade."""
   if is_m1_scalp_strategy(name):
     return True
   if str(strategy_mode or "").casefold() in _M1_SCALP_MODES:

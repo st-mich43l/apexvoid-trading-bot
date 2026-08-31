@@ -9,6 +9,11 @@ from app.analysis.entry_location import (
   build_entry_location_context,
   evaluate_entry_location,
 )
+from app.autotrade.execution_confirmation import (
+  ZONE_ACCESS_MOMENTUM_CHASE,
+  ZONE_ACCESS_RETEST_ONLY,
+  scalp_zone_access,
+)
 from app.scalping.context import is_scalping_symbol, is_impulse_pullback_session_allowed
 from app.scalping.models import (
   ARCHETYPE_BREAKOUT_RETEST,
@@ -23,13 +28,7 @@ from app.scalping.models import (
 
 def _scalping_cfg(cfg: Any) -> Any:
   strategies = getattr(cfg, "strategies", None)
-  return getattr(strategies, "scalping", None) or getattr(
-    strategies, "high_frequency_scalp", None,
-  )
-
-
-# Back-compat.
-_hfs = _scalping_cfg
+  return getattr(strategies, "scalping", None)
 
 
 def _enforce_location_cfg(hfs: Any) -> SimpleNamespace:
@@ -113,27 +112,40 @@ def evaluate_scalp_activation(
     return ScalpDecision(False, True, "reaction_trigger_stale", 0.0, measured)
 
   chase = float(getattr(act, "maximum_chase_pips", 40.0) or 40.0)
-  if opportunity.direction == "BUY":
-    distance = (executable - opportunity.zone_high) / pip_size
-  else:
-    distance = (opportunity.zone_low - executable) / pip_size
-  measured["chase_pips"] = distance
+  zone_mode = (
+    ZONE_ACCESS_RETEST_ONLY
+    if opportunity.archetype == ARCHETYPE_BREAKOUT_RETEST
+    else ZONE_ACCESS_MOMENTUM_CHASE
+  )
+  access = scalp_zone_access(
+    opportunity.direction,
+    quote_bid,
+    quote_ask,
+    opportunity.zone_low,
+    opportunity.zone_high,
+    0.0,
+    pip_size=pip_size,
+    maximum_chase_pips=chase,
+    zone_access_mode=zone_mode,
+  )
+  measured["chase_pips"] = access.chase_pips
   measured["maximum_chase_pips"] = chase
-  if distance > chase:
-    return ScalpDecision(False, True, "scalp_missed_chase", 0.0, measured)
-
-  inside = opportunity.zone_low <= executable <= opportunity.zone_high
-  measured["quote_inside"] = inside
-  if not inside and distance <= 0:
-    # Still approaching the zone — wait for a touch / reclaim.
+  measured["zone_access_mode"] = zone_mode
+  measured["quote_inside"] = access.status == "inside"
+  if access.status == "approach_wait":
     return ScalpDecision(False, False, "quote_outside_zone", 0.0, measured)
-  if not inside and distance > 0:
-    # Price already ran through the zone in trade direction — momentum
-    # chase within maximum_chase_pips (owner: scalp must chase with momentum).
+  if access.status == "chase_missed":
+    return ScalpDecision(False, True, "scalp_missed_chase", 0.0, measured)
+  if access.status == "invalid":
+    return ScalpDecision(False, True, "scalp_quote_invalid", 0.0, measured)
+  if access.status == "chase":
     measured["chase_entry"] = True
-    # Impulse Pullback quality: late chase after pause setups is the bleed.
-    if opportunity.archetype == ARCHETYPE_IMPULSE_PULLBACK and distance > min(chase, 25.0):
-      return ScalpDecision(False, True, "scalp_impulse_chase_too_far", 0.0, measured)
+    if opportunity.archetype == ARCHETYPE_IMPULSE_PULLBACK:
+      distance = float(access.chase_pips or 0.0)
+      if distance > min(chase, 25.0):
+        return ScalpDecision(
+          False, True, "scalp_impulse_chase_too_far", 0.0, measured,
+        )
   else:
     measured["chase_entry"] = False
 

@@ -92,11 +92,6 @@ def is_scalping_symbol(symbol: str, cfg: Any | None = None) -> bool:
   return str(symbol).upper() in _scalping_symbols(cfg)
 
 
-# Back-compat aliases during HFS → scalping rename.
-is_hfs_symbol = is_scalping_symbol
-_hfs_symbols = _scalping_symbols
-
-
 def classify_session(ts: int, cfg: Any | None = None) -> str:
   """Return asia|london|new_york|london_ny_overlap|rollover."""
   hour = datetime.fromtimestamp(int(ts), tz=timezone.utc).hour
@@ -125,7 +120,7 @@ def classify_session(ts: int, cfg: Any | None = None) -> str:
   return "london"
 
 
-_HFS_ARCHETYPES: tuple[str, ...] = (
+_SCALP_ARCHETYPES: tuple[str, ...] = (
   ARCHETYPE_RANGE_SWEEP,
   ARCHETYPE_IMPULSE_PULLBACK,
   ARCHETYPE_BREAKOUT_RETEST,
@@ -138,7 +133,7 @@ def permitted_archetypes_for_session(
   hour: int | None = None,
   cfg: Any | None = None,
 ) -> tuple[str, ...]:
-  """Return enabled HFS archetypes — structure/technique decide, not the clock.
+  """Return enabled M1 scalp archetypes — structure/technique decide, not the clock.
 
   Owner 2026-08-26: scalp is valid in any session/timezone. Weak volume or
   momentum hours must be rejected by analysis (pattern quality, displacement,
@@ -149,8 +144,8 @@ def permitted_archetypes_for_session(
   ``execution.technique.scalp_require_killzone`` (prod default off).
   """
   del session, ts, hour  # clock is not a discovery permit gate
-  enabled = _enabled_hfs_archetypes(cfg)
-  return tuple(item for item in _HFS_ARCHETYPES if item in enabled)
+  enabled = _enabled_scalp_archetypes(cfg)
+  return tuple(item for item in _SCALP_ARCHETYPES if item in enabled)
 
 
 def impulse_pullback_allowed_sessions(cfg: Any | None) -> frozenset[str] | None:
@@ -173,7 +168,7 @@ def is_impulse_pullback_session_allowed(session: str, cfg: Any | None) -> bool:
   return str(session or "").casefold() in allowed
 
 
-def _enabled_hfs_archetypes(cfg: Any | None) -> frozenset[str]:
+def _enabled_scalp_archetypes(cfg: Any | None) -> frozenset[str]:
   arch = getattr(
     getattr(getattr(cfg, "strategies", None), "scalping", None),
     "archetypes",
