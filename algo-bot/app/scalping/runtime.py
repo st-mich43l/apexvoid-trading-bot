@@ -263,6 +263,22 @@ async def process_m1_bar(
   )
   micro_ms = (time.perf_counter() - t_micro) * 1000.0
 
+  # Live outcome instrumentation: accrue MFE/MAE from this M1 bar for every
+  # open scalp position (continues after TP1 / BE until full close).
+  if mode == "live" and m1 is not None and not getattr(m1, "empty", True):
+    try:
+      from app.scalping.outcomes import update_open_excursions_for_bar
+
+      last_bar = m1.iloc[-1]
+      await update_open_excursions_for_bar(
+        client,
+        symbol=symbol,
+        bar_high=float(last_bar["high"]),
+        bar_low=float(last_bar["low"]),
+      )
+    except Exception:
+      log.exception("scalp excursion update failed symbol=%s", symbol)
+
   t_strat = time.perf_counter()
   discovery_idle: list[str] = []
   opportunities = await asyncio.to_thread(
@@ -541,6 +557,16 @@ async def process_m1_bar(
       signal.to_json(),
       ex=7 * 24 * 3600,
     )
+    try:
+      from app.scalping.outcomes import opportunity_index_key
+
+      await client.set(
+        opportunity_index_key(symbol, opportunity.opportunity_id),
+        signal.signal_id,
+        ex=30 * 24 * 3600,
+      )
+    except Exception:
+      log.exception("scalp opportunity index write failed")
     if mode == "paper":
       await client.set(
         f"scalp:paper:{symbol.upper()}:{opportunity.opportunity_id}",
@@ -584,6 +610,18 @@ async def process_m1_bar(
             await save_lifecycle(client, symbol, done)
           # One live position at a time — stop after first successful handoff.
           if publish_result.status == worker.PUBLISH_STATUS_PUBLISHED:
+            try:
+              from app.scalping.outcomes import save_bind
+
+              await save_bind(
+                client,
+                match_id=match.match_id,
+                opportunity_id=opportunity.opportunity_id,
+                symbol=symbol,
+                signal_id=signal.signal_id,
+              )
+            except Exception:
+              log.exception("scalp match bind write failed")
             try:
               from app.autotrade.reaction_funnel import (
                 STAGE_PLAN_PUBLISHED,

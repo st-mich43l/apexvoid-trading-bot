@@ -271,6 +271,70 @@ class PaperOutcome:
 
 
 @dataclass(frozen=True)
+class ScalpLiveOutcome:
+  """Finalised live-scalp measurement. No trading behaviour — instrumentation."""
+
+  opportunity_id: str
+  episode_id: str
+  symbol: str
+  archetype: str
+  direction: str
+  session: str
+  htf_bias: str
+  regime: str
+
+  entry_price: float
+  invalidation_price: float
+  stop_pips: float
+  planned_target_pips: float
+  planned_rr: float
+
+  exit_path: str
+  realized_r: float
+  realized_pips: float
+  legs_filled: int
+
+  mfe_pips: float
+  mae_pips: float
+  bars_held: int
+  opened_at: int
+  closed_at: int
+  measured: dict[str, Any] = field(default_factory=dict)
+
+  def to_json(self) -> str:
+    return json.dumps(asdict(self), separators=(",", ":"), sort_keys=True)
+
+  @classmethod
+  def from_json(cls, raw: str | bytes) -> ScalpLiveOutcome:
+    data = json.loads(raw)
+    return cls(
+      opportunity_id=str(data["opportunity_id"]),
+      episode_id=str(data.get("episode_id") or ""),
+      symbol=str(data["symbol"]).upper(),
+      archetype=str(data.get("archetype") or ""),
+      direction=str(data.get("direction") or "").upper(),
+      session=str(data.get("session") or ""),
+      htf_bias=str(data.get("htf_bias") or ""),
+      regime=str(data.get("regime") or ""),
+      entry_price=float(data["entry_price"]),
+      invalidation_price=float(data["invalidation_price"]),
+      stop_pips=float(data["stop_pips"]),
+      planned_target_pips=float(data.get("planned_target_pips") or 0.0),
+      planned_rr=float(data.get("planned_rr") or 0.0),
+      exit_path=str(data.get("exit_path") or "unknown"),
+      realized_r=float(data.get("realized_r") or 0.0),
+      realized_pips=float(data.get("realized_pips") or 0.0),
+      legs_filled=int(data.get("legs_filled") or 0),
+      mfe_pips=float(data.get("mfe_pips") or 0.0),
+      mae_pips=float(data.get("mae_pips") or 0.0),
+      bars_held=int(data.get("bars_held") or 0),
+      opened_at=int(data.get("opened_at") or 0),
+      closed_at=int(data.get("closed_at") or 0),
+      measured=dict(data.get("measured") or {}),
+    )
+
+
+@dataclass(frozen=True)
 class ScalpLifecycleRecord:
   opportunity_id: str
   episode_id: str

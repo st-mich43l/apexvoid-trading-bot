@@ -64,6 +64,107 @@ def _complete_outcome(event: dict) -> str | None:
   return None
 
 
+async def _track_scalp_event(client, event: dict) -> None:
+  """Accumulate exit-path traces and open excursions for scalp events."""
+  from app.autotrade.reaction_funnel import BUCKET_SCALP, funnel_bucket, normalize_setup_type
+  from app.scalping.outcomes import (
+    ExitTrace,
+    apply_trace_event,
+    clear_excursion,
+    excursion_from_opportunity,
+    finalize_live_outcome,
+    classify_exit_path,
+    legs_for_exit_path,
+    load_bind,
+    load_excursion,
+    load_exit_trace,
+    reconcile_ledger_r,
+    resolve_stop_pips_from_signal,
+    save_excursion,
+    save_exit_trace,
+    save_live_outcome,
+    volume_weighted_r,
+    EXIT_UNKNOWN,
+  )
+  from app.scalping.models import ScalpOpportunity
+  from app.scalping.telemetry import incr
+
+  strategy = normalize_setup_type(
+    event.get("setup") or event.get("strategy") or event.get("setup_type")
+  )
+  if funnel_bucket(strategy, family=event.get("strategy_family")) != BUCKET_SCALP:
+    return
+
+  symbol = str(event.get("symbol") or "XAU")
+  group_id = event.get("group_id") or event.get("setup_id") or event.get("candidate_id")
+  if group_id is None:
+    return
+  gid = str(group_id)
+  trace = await load_exit_trace(client, gid)
+  if trace is None:
+    trace = ExitTrace(group_id=gid)
+  trace = apply_trace_event(trace, event)
+  await save_exit_trace(client, trace)
+
+  event_type = str(event.get("type") or "")
+  now = int(event.get("timestamp") or time.time())
+
+  # On fill: start excursion tracking if we can resolve the opportunity.
+  if event_type in {"opened", "add", "manual_opened", "order_filled"}:
+    bound = await load_bind(client, gid)
+    if bound:
+      opp_id = str(bound.get("opportunity_id") or "")
+      existing = await load_excursion(client, symbol, opp_id) if opp_id else None
+      if existing is None and opp_id:
+        stop = await resolve_stop_pips_from_signal(
+          client, symbol=symbol, opportunity_id=opp_id, group_id=gid,
+        )
+        signal_id = bound.get("signal_id")
+        opportunity = None
+        if signal_id:
+          raw = await client.get(f"scalp:signal:{symbol.upper()}:{signal_id}")
+          if raw:
+            try:
+              payload = json.loads(raw)
+              opportunity = ScalpOpportunity.from_json(
+                json.dumps(payload.get("opportunity") or {})
+              ) if payload.get("opportunity") else None
+            except Exception:
+              opportunity = None
+        entry = event.get("entry_price") or event.get("fill_price") or event.get("price")
+        try:
+          entry_price = float(entry) if entry is not None else None
+        except (TypeError, ValueError):
+          entry_price = None
+        if opportunity is not None and entry_price is not None and stop and stop > 0:
+          try:
+            from app.autotrade import units as _units
+            pip = float(_units.pip_size(symbol))
+          except Exception:
+            pip = 0.1
+          state = excursion_from_opportunity(
+            opportunity,
+            entry_price=entry_price,
+            group_id=gid,
+            match_id=str(bound.get("match_id") or gid),
+            opened_at=now,
+            pip_size=pip,
+          )
+          await save_excursion(client, state)
+
+  # Mid-trade BE / TP: bump legs_filled on the excursion.
+  if event_type in {"tp_booked", "take_profit", "group_sl_moved_to_be", "sl_moved"}:
+    bound = await load_bind(client, gid)
+    if bound:
+      opp_id = str(bound.get("opportunity_id") or "")
+      state = await load_excursion(client, symbol, opp_id) if opp_id else None
+      if state is not None and event_type in {"tp_booked", "take_profit"}:
+        state.legs_filled = max(int(state.legs_filled), 1)
+        if "tp2" in str(event.get("target") or event.get("message") or "").casefold():
+          state.legs_filled = max(int(state.legs_filled), 2)
+        await save_excursion(client, state)
+
+
 async def _emit_funnel_complete(client, event: dict) -> None:
   outcome = _complete_outcome(event)
   if outcome is None:
@@ -80,7 +181,25 @@ async def _emit_funnel_complete(client, event: dict) -> None:
     load_risk,
     record_scalp_outcome,
     save_risk,
+    unwrap_risk_state,
   )
+  from app.scalping.outcomes import (
+    classify_exit_path,
+    clear_excursion,
+    finalize_live_outcome,
+    legs_for_exit_path,
+    load_bind,
+    load_excursion,
+    load_exit_trace,
+    reconcile_ledger_r,
+    resolve_stop_pips_from_signal,
+    save_live_outcome,
+    volume_weighted_r,
+    EXIT_UNKNOWN,
+  )
+  from app.scalping.telemetry import incr
+  from app.scalping.lifecycle import load_lifecycle, save_lifecycle
+  from app.scalping.models import COMPLETED
 
   strategy = normalize_setup_type(
     event.get("setup")
@@ -121,49 +240,197 @@ async def _emit_funnel_complete(client, event: dict) -> None:
   if funnel_bucket(strategy, family=event.get("strategy_family")) != BUCKET_SCALP:
     return
   symbol = str(event.get("symbol") or "XAU")
+  group_id = (
+    None if event.get("group_id") is None else str(event.get("group_id"))
+  )
+  now = int(event.get("timestamp") or time.time())
+  result_pips = event.get("group_realized_pips")
+  if result_pips is None:
+    result_pips = event.get("result_pips")
+  try:
+    pips = float(result_pips or 0.0)
+  except (TypeError, ValueError):
+    pips = 0.0
+  stop_raw = event.get("stop_pips") or event.get("initial_stop_pips")
+  try:
+    stop_pips = float(stop_raw) if stop_raw is not None else None
+  except (TypeError, ValueError):
+    stop_pips = None
+  if stop_pips is None or stop_pips <= 0:
+    stop_pips = await resolve_stop_pips_from_signal(
+      client, symbol=symbol, group_id=group_id,
+    )
+
+  exit_path = EXIT_UNKNOWN
+  realized_r_override: float | None = None
+  opportunity_id: str | None = None
+  if group_id:
+    trace = await load_exit_trace(client, group_id)
+    if trace is not None:
+      # Ensure the completing event is folded in before classification.
+      from app.scalping.outcomes import apply_trace_event, save_exit_trace
+      trace = apply_trace_event(trace, event)
+      await save_exit_trace(client, trace)
+      exit_path = classify_exit_path(trace)
+      if exit_path == EXIT_UNKNOWN:
+        await incr(client, symbol, "exit_path_unknown")
+    bound = await load_bind(client, group_id)
+    if bound:
+      opportunity_id = str(bound.get("opportunity_id") or "") or None
+
+  if (
+    outcome != "fill"
+    and stop_pips is not None
+    and stop_pips > 0
+    and exit_path != EXIT_UNKNOWN
+  ):
+    excursion = None
+    if opportunity_id:
+      excursion = await load_excursion(client, symbol, opportunity_id)
+    ratios = (
+      excursion.ladder_ratios if excursion is not None else (0.5, 0.5)
+    )
+    multiples = (
+      excursion.ladder_r_multiples if excursion is not None else (1.0, 2.0)
+    )
+    leg_ratios, leg_r = legs_for_exit_path(
+      exit_path, ladder_ratios=ratios, ladder_r_multiples=multiples,
+    )
+    realized_r_override = volume_weighted_r(
+      exit_path=exit_path,
+      stop_pips=float(stop_pips),
+      leg_close_ratios=leg_ratios,
+      leg_r_multiples=leg_r,
+    )
+
   try:
     state = await load_risk(client, symbol)
-    now = int(event.get("timestamp") or time.time())
     state = apply_daily_reset(
       state, runtime_config, now=now, session=classify_session(now, runtime_config)
     )
-    result_pips = event.get("group_realized_pips")
-    if result_pips is None:
-      result_pips = event.get("result_pips")
-    try:
-      pips = float(result_pips or 0.0)
-    except (TypeError, ValueError):
-      pips = 0.0
-    stop_raw = event.get("stop_pips") or event.get("initial_stop_pips")
-    try:
-      stop_pips = float(stop_raw) if stop_raw is not None else None
-    except (TypeError, ValueError):
-      stop_pips = None
     if outcome == "fill":
-      state = record_scalp_outcome(
+      result = record_scalp_outcome(
         state,
         result_pips=0.0,
         stop_pips=stop_pips,
         now=now,
         opened=True,
-        group_id=(
-          None if event.get("group_id") is None else str(event.get("group_id"))
-        ),
+        group_id=group_id,
       )
     else:
-      state = record_scalp_outcome(
+      result = record_scalp_outcome(
         state,
         result_pips=pips,
         stop_pips=stop_pips,
         now=now,
         closed=True,
-        group_id=(
-          None if event.get("group_id") is None else str(event.get("group_id"))
-        ),
+        group_id=group_id,
+        r_multiple=realized_r_override,
       )
-    await save_risk(client, symbol, state)
+      if result.skipped_no_stop:
+        await incr(client, symbol, "risk_accrual_skipped_no_stop")
+        log.warning(
+          "hfs risk accrual skipped: no stop_pips group_id=%s stop_pips=%s",
+          group_id,
+          stop_pips,
+        )
+    await save_risk(client, symbol, unwrap_risk_state(result))
+    ledger_delta = result.accrued_r
   except Exception:
-    log.exception("hfs risk state update failed symbol=%s", symbol)
+    log.exception(
+      "hfs risk state update failed symbol=%s group_id=%s stop_pips=%s",
+      symbol,
+      group_id,
+      stop_pips,
+    )
+    return
+
+  # Finalise live outcome record on close.
+  if outcome == "fill" or not opportunity_id:
+    return
+  try:
+    excursion = await load_excursion(client, symbol, opportunity_id)
+    if excursion is None:
+      return
+    if stop_pips is not None and stop_pips > 0:
+      # Prefer the invariant stop already on the excursion; never recompute.
+      pass
+    live = finalize_live_outcome(
+      excursion,
+      exit_path=exit_path,
+      realized_pips=pips,
+      closed_at=now,
+    )
+    await save_live_outcome(client, live)
+    await clear_excursion(client, symbol, opportunity_id)
+    await reconcile_ledger_r(
+      client,
+      symbol=symbol,
+      opportunity_id=opportunity_id,
+      realized_r=live.realized_r,
+      ledger_delta=ledger_delta,
+    )
+    # Attach exit_path onto the scalp lifecycle measured dict when present.
+    try:
+      record = await load_lifecycle(client, symbol, opportunity_id)
+      if record is not None:
+        measured = {
+          **dict(record.measured),
+          "exit_path": exit_path,
+          "realized_r": live.realized_r,
+          "mfe_pips": live.mfe_pips,
+          "mae_pips": live.mae_pips,
+        }
+        from app.scalping.models import ScalpLifecycleRecord
+        updated = ScalpLifecycleRecord(
+          opportunity_id=record.opportunity_id,
+          episode_id=record.episode_id,
+          state=COMPLETED if record.state != COMPLETED else record.state,
+          context_id=record.context_id,
+          updated_at=now,
+          reason_code=exit_path,
+          measured=measured,
+        )
+        # Only force COMPLETED when transition allows; otherwise just patch measured.
+        from app.scalping.lifecycle import transition
+        moved = transition(record, COMPLETED, reason=exit_path, now=now)
+        if moved.reason_code == "invalid_transition":
+          updated = ScalpLifecycleRecord(
+            opportunity_id=record.opportunity_id,
+            episode_id=record.episode_id,
+            state=record.state,
+            context_id=record.context_id,
+            updated_at=now,
+            reason_code=record.reason_code,
+            measured=measured,
+          )
+          await save_lifecycle(client, symbol, updated)
+        else:
+          await save_lifecycle(
+            client,
+            symbol,
+            ScalpLifecycleRecord(
+              opportunity_id=moved.opportunity_id,
+              episode_id=moved.episode_id,
+              state=moved.state,
+              context_id=moved.context_id,
+              updated_at=moved.updated_at,
+              reason_code=moved.reason_code,
+              measured=measured,
+            ),
+          )
+    except Exception:
+      log.exception(
+        "scalp lifecycle exit_path attach failed opportunity_id=%s",
+        opportunity_id,
+      )
+  except Exception:
+    log.exception(
+      "scalp live outcome finalise failed symbol=%s group_id=%s opportunity_id=%s",
+      symbol,
+      group_id,
+      opportunity_id,
+    )
 
 
 async def process_auto_trade_stats_entries(
@@ -183,6 +450,14 @@ async def process_auto_trade_stats_entries(
       log.warning("Invalid auto-trade stats event %s: %s", entry_id, exc)
     else:
       await record_auto_trade_event(event)
+      try:
+        await _track_scalp_event(client, event)
+      except Exception:
+        log.exception(
+          "scalp outcome track failed entry_id=%s type=%s",
+          entry_id,
+          event.get("type") if isinstance(event, dict) else None,
+        )
       try:
         await _emit_funnel_complete(client, event)
       except Exception:
