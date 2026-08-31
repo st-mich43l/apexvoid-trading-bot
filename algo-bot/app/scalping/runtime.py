@@ -264,14 +264,32 @@ async def process_m1_bar(
   micro_ms = (time.perf_counter() - t_micro) * 1000.0
 
   t_strat = time.perf_counter()
+  discovery_idle: list[str] = []
   opportunities = await asyncio.to_thread(
-    discover_all, context, micro, m1, cfg, pip_size=pip, now=now,
+    discover_all,
+    context,
+    micro,
+    m1,
+    cfg,
+    pip_size=pip,
+    now=now,
+    idle_reasons=discovery_idle,
   )
   idle_reasons = (
     idle_discovery_reasons(context, m1, cfg, pip_size=pip)
     if not opportunities
     else []
   )
+  for reason in discovery_idle:
+    if reason not in idle_reasons:
+      idle_reasons.append(reason)
+  for reason in idle_reasons:
+    if reason.endswith(":stop_exceeds_maximum"):
+      await incr(
+        client,
+        symbol,
+        f"opportunity_blocked:{reason.replace(':', '_')}",
+      )
   strat_ms = (time.perf_counter() - t_strat) * 1000.0
 
   # Per-reason breakout telemetry every cycle (quiet archetype diagnosis).

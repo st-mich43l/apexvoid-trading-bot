@@ -112,12 +112,20 @@ def build_scalp_strategy_match(
     pip = 0.1 if str(opportunity.symbol).upper() in {"XAU", "XAUUSD"} else 0.0001
   if not math.isfinite(pip) or pip <= 0:
     pip = 0.1
-  stop_distance = max(pip, float(opportunity.expected_stop_pips) * pip)
   entry = float(opportunity.trigger_price)
-  if opportunity.direction.upper() == "BUY":
-    structure_swing = entry - stop_distance
-  else:
-    structure_swing = entry + stop_distance
+  structure_swing = float(opportunity.invalidation_price)
+  derived_stop = abs(entry - structure_swing) / pip
+  expected_stop = float(opportunity.expected_stop_pips)
+  if abs(derived_stop - expected_stop) > 1e-6:
+    log.warning(
+      "scalp stop invariant broken opportunity_id=%s entry=%s "
+      "invalidation=%s derived_stop_pips=%s expected_stop_pips=%s",
+      opportunity.opportunity_id,
+      entry,
+      structure_swing,
+      derived_stop,
+      expected_stop,
+    )
   # M1 scalp matches never pass through scanner.py detection, so static
   # eligibility is stamped here — the ScalpOpportunity pipeline already
   # ran activation gates.
