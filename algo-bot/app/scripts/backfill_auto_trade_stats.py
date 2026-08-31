@@ -175,6 +175,9 @@ async def backfill(
     stats["runtime_results_delta"] = (
       await _count("auto_trade_results") - before_reconcile
     )
+
+  synced = await store.sync_algo_manual_results_from_signals()
+  stats["algo_manual_synced"] = synced
   return stats
 
 
