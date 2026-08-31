@@ -245,6 +245,8 @@ class RecordScalpOutcomeResult:
 
   ``accrued_r`` is None when the close was skipped because ``stop_pips`` was
   missing — callers must treat that as a data-quality bug, not invent R.
+  Prefer the realized fill-to-invalidation distance as ``stop_pips`` (the R
+  unit); fall back to planned ``expected_stop_pips`` only when fill is absent.
   Attribute access forwards to ``state`` so existing call sites keep working.
   """
 

@@ -108,6 +108,7 @@ from app.autotrade.execution_confirmation import (
   parse_bar_timestamp,
   save_execution_confirmation,
   scalp_maximum_chase_pips,
+  scalp_effective_chase_pips,
   scalp_zone_access,
   ZONE_ACCESS_MOMENTUM_CHASE,
   ZONE_ACCESS_RETEST_ONLY,
@@ -5036,6 +5037,13 @@ async def _publish_trade_plan_v8(
       if is_breakout_retest_scalp_strategy(str(match.strategy))
       else ZONE_ACCESS_MOMENTUM_CHASE
     )
+    try:
+      side = str(match.direction).upper()
+      worst = float(match.entry_high if side == "BUY" else match.entry_low)
+      stop_pips = abs(worst - float(match.structure_swing)) / pip_size
+    except (TypeError, ValueError, AttributeError):
+      stop_pips = None
+    chase_cap = scalp_effective_chase_pips(inst, stop_pips=stop_pips)
     scalp_access = scalp_zone_access(
       match.direction,
       getattr(spot, "bid", None),
@@ -5047,7 +5055,7 @@ async def _publish_trade_plan_v8(
         float(inst.execution.entry.contract_tolerance_pips) * pip_size,
       ),
       pip_size=pip_size,
-      maximum_chase_pips=scalp_maximum_chase_pips(inst),
+      maximum_chase_pips=chase_cap,
       zone_access_mode=zone_access_mode,
     )
     evidence = scalp_access.evidence

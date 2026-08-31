@@ -12,7 +12,7 @@ import logging
 import math
 from typing import Any
 
-from app.scalping.models import ScalpLiveOutcome, ScalpOpportunity
+from app.scalping.models import LIVE_OUTCOME_VERSION, ScalpLiveOutcome, ScalpOpportunity
 from app.scalping.telemetry import incr
 
 
@@ -32,6 +32,38 @@ EXIT_UNKNOWN = "unknown"
 # Default 50/50 (1R, 2R) ladder used when leg ratios are not supplied.
 _DEFAULT_LADDER_RATIOS = (0.5, 0.5)
 _DEFAULT_LADDER_R = (1.0, 2.0)
+
+
+def resolve_risk_denominator(
+  *,
+  fill_price: float | None,
+  invalidation_price: float,
+  pip_size: float,
+  expected_stop_pips: float,
+) -> tuple[float, str, float | None]:
+  """Return ``(risk_unit_pips, source, planned_vs_realized_ratio)``.
+
+  Prefer fill-to-invalidation distance. Fall back to planned stop only when
+  the weighted fill is unavailable.
+  """
+  planned = max(1e-9, float(expected_stop_pips))
+  try:
+    fill = None if fill_price is None else float(fill_price)
+  except (TypeError, ValueError):
+    fill = None
+  pip = float(pip_size)
+  if (
+    fill is None
+    or not math.isfinite(fill)
+    or pip <= 0
+    or not math.isfinite(pip)
+  ):
+    return planned, "planned", None
+  realized = abs(fill - float(invalidation_price)) / pip
+  if not math.isfinite(realized) or realized <= 0:
+    return planned, "planned", None
+  ratio = realized / planned if planned > 0 else None
+  return realized, "realized", ratio
 
 
 def outcome_key(symbol: str, opportunity_id: str) -> str:
@@ -125,6 +157,10 @@ class ExcursionState:
   legs_filled: int = 0
   ladder_ratios: tuple[float, ...] = _DEFAULT_LADDER_RATIOS
   ladder_r_multiples: tuple[float, ...] = _DEFAULT_LADDER_R
+  expected_stop_pips: float = 0.0
+  risk_denominator_source: str = "planned"
+  planned_vs_realized_stop_ratio: float | None = None
+  version: int = LIVE_OUTCOME_VERSION
 
   def to_json(self) -> str:
     payload = asdict(self)
@@ -139,6 +175,8 @@ class ExcursionState:
     multiples = tuple(
       float(x) for x in (data.get("ladder_r_multiples") or _DEFAULT_LADDER_R)
     )
+    ratio = data.get("planned_vs_realized_stop_ratio")
+    expected = data.get("expected_stop_pips")
     return cls(
       opportunity_id=str(data["opportunity_id"]),
       episode_id=str(data.get("episode_id") or ""),
@@ -163,6 +201,12 @@ class ExcursionState:
       legs_filled=int(data.get("legs_filled") or 0),
       ladder_ratios=ratios or _DEFAULT_LADDER_RATIOS,
       ladder_r_multiples=multiples or _DEFAULT_LADDER_R,
+      expected_stop_pips=float(
+        expected if expected is not None else data.get("stop_pips") or 0.0
+      ),
+      risk_denominator_source=str(data.get("risk_denominator_source") or "planned"),
+      planned_vs_realized_stop_ratio=None if ratio is None else float(ratio),
+      version=int(data.get("version") or 1),
     )
 
 
@@ -326,10 +370,18 @@ def update_excursion_extremes(
     legs_filled=state.legs_filled,
     ladder_ratios=state.ladder_ratios,
     ladder_r_multiples=state.ladder_r_multiples,
+    expected_stop_pips=state.expected_stop_pips,
+    risk_denominator_source=state.risk_denominator_source,
+    planned_vs_realized_stop_ratio=state.planned_vs_realized_stop_ratio,
+    version=state.version,
   )
 
 
-def ladder_from_opportunity(opportunity: ScalpOpportunity) -> tuple[tuple[float, ...], tuple[float, ...]]:
+def ladder_from_opportunity(
+  opportunity: ScalpOpportunity,
+  *,
+  risk_unit_pips: float | None = None,
+) -> tuple[tuple[float, ...], tuple[float, ...]]:
   """Mirror publish._scalp_target_ladder close-ratio semantics."""
   try:
     from app.scalping.publish import _scalp_target_ladder
@@ -337,7 +389,12 @@ def ladder_from_opportunity(opportunity: ScalpOpportunity) -> tuple[tuple[float,
     _final, targets = _scalp_target_ladder(opportunity)
   except Exception:
     targets = ()
-  stop = max(1e-9, float(opportunity.expected_stop_pips))
+  stop = max(
+    1e-9,
+    float(risk_unit_pips)
+    if risk_unit_pips is not None
+    else float(opportunity.expected_stop_pips),
+  )
   if not targets:
     return _DEFAULT_LADDER_RATIOS, _DEFAULT_LADDER_R
   if len(targets) == 1:
@@ -359,12 +416,20 @@ def excursion_from_opportunity(
   htf_bias: str = "",
   regime: str = "",
 ) -> ExcursionState:
-  ratios, multiples = ladder_from_opportunity(opportunity)
+  expected_stop = float(opportunity.expected_stop_pips)
+  risk_unit, source, ratio = resolve_risk_denominator(
+    fill_price=entry_price,
+    invalidation_price=float(opportunity.invalidation_price),
+    pip_size=pip_size,
+    expected_stop_pips=expected_stop,
+  )
+  ratios, multiples = ladder_from_opportunity(
+    opportunity, risk_unit_pips=risk_unit,
+  )
   entry = float(entry_price)
-  stop = float(opportunity.expected_stop_pips)
   target = float(opportunity.expected_target_pips)
   planned_rr = float(opportunity.expected_reward_risk) if opportunity.expected_reward_risk else (
-    target / stop if stop > 0 else 0.0
+    target / expected_stop if expected_stop > 0 else 0.0
   )
   return ExcursionState(
     opportunity_id=opportunity.opportunity_id,
@@ -377,7 +442,7 @@ def excursion_from_opportunity(
     regime=str(regime or ""),
     entry_price=entry,
     invalidation_price=float(opportunity.invalidation_price),
-    stop_pips=stop,
+    stop_pips=float(risk_unit),
     planned_target_pips=target,
     planned_rr=planned_rr,
     group_id=_strip_v8(group_id),
@@ -390,6 +455,10 @@ def excursion_from_opportunity(
     legs_filled=0,
     ladder_ratios=ratios,
     ladder_r_multiples=multiples,
+    expected_stop_pips=expected_stop,
+    risk_denominator_source=source,
+    planned_vs_realized_stop_ratio=ratio,
+    version=LIVE_OUTCOME_VERSION,
   )
 
 
@@ -427,6 +496,7 @@ def finalize_live_outcome(
       filled = 1
     elif exit_path == EXIT_TP1_BE_TP2:
       filled = 2
+  expected_stop = float(excursion.expected_stop_pips or excursion.stop_pips)
   return ScalpLiveOutcome(
     opportunity_id=excursion.opportunity_id,
     episode_id=excursion.episode_id,
@@ -450,6 +520,15 @@ def finalize_live_outcome(
     bars_held=int(excursion.bars_held),
     opened_at=int(excursion.opened_at),
     closed_at=int(closed_at),
+    version=int(excursion.version or LIVE_OUTCOME_VERSION),
+    expected_stop_pips=expected_stop,
+    realized_risk_pips=(
+      float(excursion.stop_pips)
+      if excursion.risk_denominator_source == "realized"
+      else None
+    ),
+    planned_vs_realized_stop_ratio=excursion.planned_vs_realized_stop_ratio,
+    risk_denominator_source=str(excursion.risk_denominator_source or "planned"),
     measured={
       "ladder_ratios": list(excursion.ladder_ratios),
       "ladder_r_multiples": list(excursion.ladder_r_multiples),

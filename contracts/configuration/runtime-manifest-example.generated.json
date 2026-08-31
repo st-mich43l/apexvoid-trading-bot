@@ -132,8 +132,8 @@
     "zone_reconcile_mode": "shadow",
     "zone_scale_undersized_policy": "single_entry"
   },
-  "contract_fingerprint": "c5f051078d32de03e63581cf4e71a80bb81c89f07032cc997c9d6d0aeb06bf4f",
-  "effective_configuration_fingerprint": "d7a8eb265f13d460b700640c1f4caca8ad2de1225b33ffb6fb84443540e4ede4",
+  "contract_fingerprint": "052e43e73ad9756b8b6a95db493ec846e0d6856dc218662f89e796c09a3159e7",
+  "effective_configuration_fingerprint": "290e3749f3725f5c667fd8b65f2cb66b61ed3e8e4d24c0d86eab4fbf5e764621",
   "feed": {
     "backfill_bars": 1500,
     "bar_quality_lookback": 6,
@@ -986,6 +986,7 @@
         "scalping": {
           "activation": {
             "maximum_chase_pips": "40",
+            "maximum_chase_stop_fraction": "0.15",
             "rearm_distance_atr": "0.25",
             "trigger_maximum_age_bars": 2
           },
@@ -1952,6 +1953,7 @@
         "scalping": {
           "activation": {
             "maximum_chase_pips": "40",
+            "maximum_chase_stop_fraction": "0.15",
             "rearm_distance_atr": "0.25",
             "trigger_maximum_age_bars": 2
           },
@@ -2888,6 +2890,7 @@
         "scalping": {
           "activation": {
             "maximum_chase_pips": "40",
+            "maximum_chase_stop_fraction": "0.15",
             "rearm_distance_atr": "0.25",
             "trigger_maximum_age_bars": 2
           },
@@ -3836,6 +3839,7 @@
         "scalping": {
           "activation": {
             "maximum_chase_pips": "40",
+            "maximum_chase_stop_fraction": "0.15",
             "rearm_distance_atr": "0.25",
             "trigger_maximum_age_bars": 2
           },
@@ -4768,6 +4772,7 @@
         "scalping": {
           "activation": {
             "maximum_chase_pips": "40",
+            "maximum_chase_stop_fraction": "0.15",
             "rearm_distance_atr": "0.25",
             "trigger_maximum_age_bars": 2
           },
@@ -5569,6 +5574,7 @@
         "scalping": {
           "activation": {
             "maximum_chase_pips": "40",
+            "maximum_chase_stop_fraction": "0.15",
             "rearm_distance_atr": "0.25",
             "trigger_maximum_age_bars": 2
           },
@@ -6398,6 +6404,7 @@
         "scalping": {
           "activation": {
             "maximum_chase_pips": "40",
+            "maximum_chase_stop_fraction": "0.15",
             "rearm_distance_atr": "0.25",
             "trigger_maximum_age_bars": 2
           },
@@ -7197,6 +7204,7 @@
         "scalping": {
           "activation": {
             "maximum_chase_pips": "40",
+            "maximum_chase_stop_fraction": "0.15",
             "rearm_distance_atr": "0.25",
             "trigger_maximum_age_bars": 2
           },
@@ -8008,6 +8016,7 @@
         "scalping": {
           "activation": {
             "maximum_chase_pips": "40",
+            "maximum_chase_stop_fraction": "0.15",
             "rearm_distance_atr": "0.25",
             "trigger_maximum_age_bars": 2
           },
@@ -8799,6 +8808,7 @@
         "scalping": {
           "activation": {
             "maximum_chase_pips": "40",
+            "maximum_chase_stop_fraction": "0.15",
             "rearm_distance_atr": "0.25",
             "trigger_maximum_age_bars": 2
           },

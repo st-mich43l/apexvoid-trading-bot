@@ -306,6 +306,13 @@ async def process_m1_bar(
         symbol,
         f"opportunity_blocked:{reason.replace(':', '_')}",
       )
+    if reason.endswith(":stop_inside_zone"):
+      await incr(client, symbol, "scalp_stop_inside_zone")
+      await incr(
+        client,
+        symbol,
+        f"opportunity_blocked:{reason.replace(':', '_')}",
+      )
   strat_ms = (time.perf_counter() - t_strat) * 1000.0
 
   # Per-reason breakout telemetry every cycle (quiet archetype diagnosis).
@@ -476,11 +483,14 @@ async def process_m1_bar(
       pip_size=pip,
       cfg=cfg,
     )
-    if decision.reason_code == "scalp_missed_chase":
+    if decision.reason_code in {"scalp_missed_chase", "entry_cancelled_chase"}:
       if existing is not None:
-        missed = transition(existing, MISSED, reason="scalp_missed_chase", now=now)
+        missed = transition(
+          existing, MISSED, reason=decision.reason_code, now=now,
+        )
         await save_lifecycle(client, symbol, missed)
       await incr(client, symbol, "opportunity_missed")
+      await incr(client, symbol, "entry_cancelled_chase")
 
     if not risk.allowed:
       decision = risk

@@ -15,10 +15,12 @@ from app.autotrade.protective_stop import (
   opposing_zone_context_measured,
   plan_group_protective_stop,
   plan_protective_stop,
+  plan_scalp_invalidation_stop,
   primary_tp_pips_from_match,
   stop_bounds_for_reaction_room,
 )
 from app.autotrade.strategy_taxonomy import (
+  is_m1_scalp_strategy,
   is_reaction_strategy,
   is_scalp_strategy,
   is_technique_or_confluence,
@@ -926,7 +928,17 @@ def evaluate_execution_policy(
     digits = _instrument_digits("", instrument_cfg)
     structure_buffer_atr = float(execution.scaling.add.stop_buffer_atr)
     wick_buffer_atr = float(execution.stops.wick_stop_buffer_atr)
-    if use_group_stop:
+    if is_m1_scalp_strategy(strategy_name):
+      stop_plan = plan_scalp_invalidation_stop(
+        direction=direction,
+        entry_price=planned_entry,
+        structure_swing=getattr(match, "structure_swing", None),
+        zone_low=low,
+        zone_high=high,
+        pip_size=pip,
+        digits=digits,
+      )
+    elif use_group_stop:
       # Absolute group SL is structural (one price beyond zone/entries/swing).
       # Envelope distance uses declared leg ratios as relative weights only —
       # never a fake planning total lots. Live equity sizes broker volume later

@@ -10,6 +10,7 @@ from typing import Any
 
 CONTEXT_VERSION = 1
 OPPORTUNITY_VERSION = 1
+LIVE_OUTCOME_VERSION = 2
 
 ARCHETYPE_RANGE_SWEEP = "range_sweep"
 ARCHETYPE_IMPULSE_PULLBACK = "impulse_pullback"
@@ -299,6 +300,11 @@ class ScalpLiveOutcome:
   bars_held: int
   opened_at: int
   closed_at: int
+  version: int = LIVE_OUTCOME_VERSION
+  expected_stop_pips: float | None = None
+  realized_risk_pips: float | None = None
+  planned_vs_realized_stop_ratio: float | None = None
+  risk_denominator_source: str = "planned"
   measured: dict[str, Any] = field(default_factory=dict)
 
   def to_json(self) -> str:
@@ -307,6 +313,9 @@ class ScalpLiveOutcome:
   @classmethod
   def from_json(cls, raw: str | bytes) -> ScalpLiveOutcome:
     data = json.loads(raw)
+    expected = data.get("expected_stop_pips")
+    realized_risk = data.get("realized_risk_pips")
+    ratio = data.get("planned_vs_realized_stop_ratio")
     return cls(
       opportunity_id=str(data["opportunity_id"]),
       episode_id=str(data.get("episode_id") or ""),
@@ -330,6 +339,11 @@ class ScalpLiveOutcome:
       bars_held=int(data.get("bars_held") or 0),
       opened_at=int(data.get("opened_at") or 0),
       closed_at=int(data.get("closed_at") or 0),
+      version=int(data.get("version") or 1),
+      expected_stop_pips=None if expected is None else float(expected),
+      realized_risk_pips=None if realized_risk is None else float(realized_risk),
+      planned_vs_realized_stop_ratio=None if ratio is None else float(ratio),
+      risk_denominator_source=str(data.get("risk_denominator_source") or "planned"),
       measured=dict(data.get("measured") or {}),
     )
 
