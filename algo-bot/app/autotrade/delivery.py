@@ -36,6 +36,7 @@ from app.autotrade.setup_card import (
   card_price_digits,
   edit_forming_card_status,
   edit_forming_card_stop,
+  ensure_forming_card_targets,
   forming_message_key as _setup_card_forming_message_key,
   is_setup_terminal,
   kill_setup_card,
@@ -1631,16 +1632,17 @@ async def _mark_forming_card_position_activated(client, match_id: str) -> None:
   # A fill can never precede publication, so the plan's stop is guaranteed
   # to exist by now even if an earlier publish-time patch raced the card's
   # own creation and missed - re-apply it here so an activated position
-  # never shows a blank/placeholder Stop line.
+  # never shows a blank/placeholder Stop line. Same for Targets: scanner
+  # SETUP FORMING cards omit them, and publish may have only refreshed Stop.
   try:
     stop_price = await published_plan_stop_price(client, match_id)
+    card = await load_forming_card(client, match_id)
+    symbol = (
+      parse_forming_card_symbol(str(card["text"]))
+      if card and card.get("text")
+      else None
+    ) or "XAU"
     if stop_price is not None:
-      card = await load_forming_card(client, match_id)
-      symbol = (
-        parse_forming_card_symbol(str(card["text"]))
-        if card and card.get("text")
-        else None
-      ) or str(event.get("symbol") or "XAU")
       await edit_forming_card_stop(
         client,
         match_id,
@@ -1648,9 +1650,15 @@ async def _mark_forming_card_position_activated(client, match_id: str) -> None:
         digits=card_price_digits(symbol),
         edit_fn=edit_scanner_message_text,
       )
+    await ensure_forming_card_targets(
+      client,
+      match_id,
+      symbol=symbol,
+      edit_fn=edit_scanner_message_text,
+    )
   except Exception:
     log.exception(
-      "forming card POSITION ACTIVATED stop refresh failed setup_id=%s",
+      "forming card POSITION ACTIVATED stop/targets refresh failed setup_id=%s",
       match_id,
     )
 
