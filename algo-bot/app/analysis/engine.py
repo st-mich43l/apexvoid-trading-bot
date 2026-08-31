@@ -884,6 +884,72 @@ def _exec_regime(
   return per_tf[tf].regime
 
 
+@dataclass(frozen=True)
+class _TfLabelView:
+  """Duck-typed stand-in for TimeframeAnalysis, carrying only the fields the
+  label helpers read."""
+  structure: str
+  momentum: str
+  regime: Regime | None
+
+
+def analysis_labels(
+  df_by_tf: dict[str, pd.DataFrame],
+  settings: AnalysisSettings | None = None,
+  htf_order: list[str] | None = None,
+) -> tuple[str, str, str]:
+  """Return ``(htf_bias, exec_structure, regime_kind)`` without building the
+  full zone/technique stack. Values match ``analyze()`` exactly."""
+  settings = settings or AnalysisSettings()
+  frames = {
+    tf.upper(): df
+    for tf, df in df_by_tf.items()
+    if isinstance(df, pd.DataFrame) and not df.empty
+  }
+  if not frames:
+    return ("unknown", "unknown", "unknown")
+
+  per_tf: dict[str, _TfLabelView] = {}
+  for tf, df in frames.items():
+    atr = atr_series(df, settings.atr_length)
+    swings = find_swings(
+      df,
+      settings.swing_fractal_n,
+      settings.zigzag_pct,
+      settings.zigzag_atr_mult,
+      atr,
+      as_of=len(df) - 1 if settings.causal_structure else None,
+    )
+    structure = market_structure(swings)
+    range_ = dealing_range(
+      swings,
+      float(df["close"].iloc[-1]),
+      settings.eq_band,
+      deep_discount=settings.fibonacci_deep_discount,
+      deep_premium=settings.fibonacci_deep_premium,
+    )
+    regime_ = regime(df, atr, swings, structure, range_, settings)
+    mom = momentum_state(
+      df,
+      atr,
+      settings.momentum_velocity_lookback,
+      settings.momentum_velocity_bull_threshold,
+      settings.momentum_velocity_bear_threshold,
+    )
+    per_tf[tf] = _TfLabelView(
+      structure=structure,
+      momentum=mom.state,
+      regime=regime_,
+    )
+
+  htf_bias = _htf_bias(per_tf, htf_order or ["H1", "M15"])
+  exec_tf = sorted(per_tf, key=lambda item: (_tf_rank(item), item))[0]
+  exec_structure = per_tf[exec_tf].structure
+  r = _exec_regime(per_tf)
+  regime_kind = r.kind if r is not None else "unknown"
+  return htf_bias, exec_structure, regime_kind
+
+
 def _htf_bias(
   per_tf: dict[str, TimeframeAnalysis],
   htf_order: list[str],

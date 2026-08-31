@@ -13,7 +13,7 @@ from typing import Any
 
 import pandas as pd
 
-from app.analysis.engine import AnalysisSettings, analyze
+from app.analysis.engine import AnalysisSettings, analysis_labels
 from app.analysis.ohlc_source import RedisOHLCSource
 from app.runtime.price_identity import pip_price_digits
 from app.scalping.context import build_scalp_context_snapshot
@@ -45,32 +45,22 @@ def derive_scalp_analysis_labels(
   try:
     frames: dict[str, pd.DataFrame] = {}
     for key in ("H1", "M15", "M5"):
-      raw = windows.get(key) or windows.get(key.lower())
+      raw = windows.get(key)
+      if raw is None:
+        raw = windows.get(key.lower())
       if isinstance(raw, pd.DataFrame) and not raw.empty:
         frames[key] = raw
     if not frames:
       return ("unknown", "unknown", "unknown")
 
-    ctx = analyze(
+    htf_bias, m5_structure, regime_kind = analysis_labels(
       frames,
       AnalysisSettings(pip_size=float(pip_size)),
       htf_order=["H1", "M15"],
     )
-    htf_bias = str(ctx.htf_bias or "unknown")
     h1 = frames.get("H1")
     if h1 is None or len(h1) < _MIN_H1_WARMUP_BARS:
       htf_bias = "unknown"
-    m5_analysis = ctx.per_tf.get("M5")
-    m5_structure = (
-      str(m5_analysis.structure)
-      if m5_analysis is not None
-      else "unknown"
-    )
-    regime_kind = (
-      str(ctx.regime.kind)
-      if ctx.regime is not None
-      else "unknown"
-    )
     return (htf_bias, m5_structure, regime_kind)
   except Exception:
     log.exception("derive_scalp_analysis_labels failed")
