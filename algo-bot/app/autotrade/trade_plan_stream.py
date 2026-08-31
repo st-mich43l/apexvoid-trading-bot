@@ -117,8 +117,15 @@ async def publish_trade_plan(client: Any, plan: TradePlan) -> str:
 
 
 async def read_trade_plan(client: Any, plan_id: str) -> TradePlan | None:
-  """Look a plan up by id without scanning the stream."""
+  """Look a plan up by id without scanning the stream.
+
+  Prefer the canonical ``execution:plan:{id}`` key. When it has expired,
+  fall back to the C# recovery copy ``execution:plan_recovery:{id}`` so
+  root-card Stop/Targets patches still work after fill.
+  """
   raw = await client.get(plan_key(plan_id))
+  if raw is None:
+    raw = await client.get(f"execution:plan_recovery:{plan_id}")
   if raw is None:
     return None
   data = json.loads(raw.decode() if isinstance(raw, bytes) else raw)

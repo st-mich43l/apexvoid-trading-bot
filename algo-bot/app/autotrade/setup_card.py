@@ -338,6 +338,64 @@ def apply_forming_card_stop(text: str, stop_price: float, *, digits: int = 2) ->
   )
 
 
+def apply_forming_card_targets(text: str, targets_line: str) -> str:
+  """Insert or replace the Trade-area Targets line.
+
+  Scanner SETUP FORMING cards omit Targets; publish/fill must still surface
+  the plan TP ladder. Place after Stop when present, else after Key level,
+  else before Context.
+  """
+  if not text or not targets_line:
+    return text
+  line = targets_line.strip()
+  if not line.startswith("•"):
+    line = f"• {line}"
+  lines = text.splitlines()
+  has_targets = any(
+    stripped.startswith("• <b>Targets:</b>")
+    for stripped in (row.strip() for row in lines)
+  )
+  inserted = False
+  out: list[str] = []
+  for row in lines:
+    stripped = row.strip()
+    if stripped.startswith("• <b>Targets:</b>"):
+      if not inserted:
+        out.append(line)
+        inserted = True
+      continue
+    out.append(row)
+    if (
+      not has_targets
+      and not inserted
+      and stripped.startswith("• <b>Stop:</b>")
+    ):
+      out.append(line)
+      inserted = True
+  if not inserted and not has_targets:
+    rebuilt: list[str] = []
+    placed = False
+    for row in out:
+      stripped = row.strip()
+      if not placed and stripped.startswith("• <b>Key level:</b>"):
+        rebuilt.append(row)
+        rebuilt.append(line)
+        placed = True
+        continue
+      if (
+        not placed
+        and (
+          "🧭 <b>Context</b>" in row
+          or "📋 <b>Copy draft</b>" in row
+        )
+      ):
+        rebuilt.append(line)
+        placed = True
+      rebuilt.append(row)
+    out = rebuilt if placed else [*out, line]
+  return "\n".join(out)
+
+
 def forming_message_key(setup_id: str) -> str:
   return f"auto_trade:forming_message:{setup_id}"
 
@@ -1320,6 +1378,99 @@ async def edit_forming_card_stop(
   return True
 
 
+async def edit_forming_card_targets(
+  client,
+  setup_id: str,
+  targets_line: str,
+  *,
+  edit_fn: EditFn,
+) -> bool:
+  """Patch the root card Trade-area Targets line (insert if scanner omitted it)."""
+  card = await load_forming_card(client, setup_id)
+  if card is None or not card.get("text"):
+    return False
+  if int(card.get("message_id") or 0) <= 0:
+    return False
+  text = apply_forming_card_targets(str(card["text"]), targets_line)
+  if text == card["text"]:
+    return True
+  try:
+    await edit_fn(card["chat_id"], card["message_id"], text)
+  except TelegramBadRequest as exc:
+    if "message is not modified" in str(exc).casefold():
+      await save_forming_card(
+        client,
+        setup_id,
+        chat_id=card["chat_id"],
+        message_id=card["message_id"],
+        text=text,
+      )
+      return True
+    log.info(
+      "forming card targets edit failed setup_id=%s error=%s",
+      setup_id,
+      exc,
+    )
+    return False
+  await save_forming_card(
+    client,
+    setup_id,
+    chat_id=card["chat_id"],
+    message_id=card["message_id"],
+    text=text,
+  )
+  return True
+
+
+async def ensure_forming_card_targets(
+  client,
+  setup_id: str,
+  *,
+  symbol: str | None = None,
+  match: StrategyMatch | None = None,
+  target_prices: tuple[float, ...] | None = None,
+  edit_fn: EditFn,
+) -> bool:
+  """Ensure Trade-area Targets exist on the root card from plan/match."""
+  resolved_match = match
+  if resolved_match is None:
+    resolved_match = await load_strategy_match_for_root_card(
+      client,
+      setup_id,
+      symbol=str(symbol or "XAU"),
+    )
+  prices = target_prices
+  if prices is None:
+    prices = await published_plan_target_prices(client, setup_id)
+  if resolved_match is None and not prices:
+    return False
+  card_symbol = str(
+    (resolved_match.symbol if resolved_match is not None else None)
+    or symbol
+    or "XAU"
+  ).upper()
+  if resolved_match is None:
+    # Price-only fallback: TP labels without pip offsets.
+    parts = [
+      f"TP{index + 1} {_price_text(price, symbol=card_symbol)}"
+      for index, price in enumerate(prices or ())
+    ]
+    if not parts:
+      return False
+    targets_line = f"• <b>Targets:</b> <b>{' · '.join(parts)}</b>"
+  else:
+    targets_line = _trade_area_targets_line(
+      resolved_match,
+      symbol=card_symbol,
+      target_prices=prices or None,
+    )
+  if not targets_line:
+    return False
+  return await edit_forming_card_targets(
+    client, setup_id, targets_line, edit_fn=edit_fn,
+  )
+
+
 async def edit_forming_card_price(
   client,
   setup_id: str,
@@ -2073,7 +2224,8 @@ async def ensure_plan_published_root_card(
       )
       return message_id
     # Keep existing head status (no PLAN PUBLISHED advertisement). Still
-    # refresh Stop so BE/trail patches have a real Trade-area baseline.
+    # refresh Stop + Targets so scanner SETUP FORMING bodies (which omit
+    # Targets) and BE/trail patches have a real Trade-area baseline.
     if stop_price is not None:
       await edit_forming_card_stop(
         client,
@@ -2082,6 +2234,14 @@ async def ensure_plan_published_root_card(
         digits=card_price_digits(str(match.symbol)),
         edit_fn=resolved_edit,
       )
+    await ensure_forming_card_targets(
+      client,
+      match.match_id,
+      symbol=str(match.symbol),
+      match=match,
+      target_prices=target_prices or None,
+      edit_fn=resolved_edit,
+    )
     return int(existing["message_id"])
 
   message_id = await post_or_edit_forming_card(
@@ -2113,6 +2273,14 @@ async def ensure_plan_published_root_card(
       digits=card_price_digits(str(match.symbol)),
       edit_fn=resolved_edit,
     )
+  await ensure_forming_card_targets(
+    client,
+    match.match_id,
+    symbol=str(match.symbol),
+    match=match,
+    target_prices=target_prices or None,
+    edit_fn=resolved_edit,
+  )
   if not had_live_card:
     log.info(
       "plan_published_root_card_created setup_id=%s message_id=%s "
@@ -2134,10 +2302,19 @@ def strategy_match_from_trade_plan(plan: Any) -> StrategyMatch:
   high = float(entry.zone_high if entry.zone_high is not None else structure.high)
   mid = (low + high) / 2.0
   now = int(time.time())
+  symbol = str(plan.symbol).upper()
+  try:
+    from app.autotrade.units import pip_size as _pip_size
+
+    pip = float(_pip_size(symbol))
+  except Exception:
+    pip = 0.1 if symbol in {"XAU", "XAUUSD"} else 0.0001
+  if not math.isfinite(pip) or pip <= 0:
+    pip = 0.1
   return StrategyMatch(
     version=STRATEGY_MATCH_VERSION,
     match_id=str(plan.setup_id),
-    symbol=str(plan.symbol).upper(),
+    symbol=symbol,
     source_tf=str(analysis.formation_timeframe or "M1").upper(),
     event_ts=str(analysis.confirmation_bar_ts or plan.created_at),
     issued_at=int(plan.created_at or now),
@@ -2154,7 +2331,7 @@ def strategy_match_from_trade_plan(plan: Any) -> StrategyMatch:
     atr=max(0.1, high - low),
     structure_swing=float(structure.invalidation_price),
     targets_pips=tuple(
-      int(round(abs(float(target.price) - mid) / 0.1))
+      int(round(abs(float(target.price) - mid) / pip))
       for target in (plan.targets or ())
       if getattr(target, "price", None) is not None
     ) or (30,),
@@ -2200,6 +2377,10 @@ async def load_strategy_match_for_root_card(
   plan_raw = await client.get(plan_key(plan_id))
   if plan_raw is None and setup_id.startswith("v8:"):
     plan_raw = await client.get(plan_key(setup_id))
+  if plan_raw is None:
+    plan_raw = await client.get(f"execution:plan_recovery:{plan_id}")
+  if plan_raw is None and setup_id.startswith("v8:"):
+    plan_raw = await client.get(f"execution:plan_recovery:{setup_id}")
   if plan_raw is None:
     return None
   try:
