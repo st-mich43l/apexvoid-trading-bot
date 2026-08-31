@@ -50,33 +50,15 @@ RANGE_STRATEGIES = frozenset({
   "Chop Zone Reaction",
 })
 
-# Canonical M1 scalping display names (product lane: strategies.scalping).
-SCALP_M1_STRATEGIES = frozenset({
+M1_SCALP_STRATEGIES = frozenset({
   "Range Sweep Scalp",
   "Impulse Pullback Scalp",
   "Breakout Retest Scalp",
   "Momentum Chase Scalp",
 })
 
-# Read-only aliases on historical plans / Redis (never published anew).
-LEGACY_M1_SCALP_STRATEGY_ALIASES = frozenset({
-  "HFS Range Sweep",
-  "HFS Impulse Pullback",
-  "HFS Breakout Retest",
-  "HFS Momentum Chase",
-})
-
-M1_SCALP_STRATEGIES = frozenset({
-  *SCALP_M1_STRATEGIES,
-  *LEGACY_M1_SCALP_STRATEGY_ALIASES,
-})
-
 BREAKOUT_RETEST_SCALP_STRATEGIES = frozenset({
   "Breakout Retest Scalp",
-  *{
-    alias for alias in LEGACY_M1_SCALP_STRATEGY_ALIASES
-    if "Breakout Retest" in alias
-  },
 })
 
 CANONICAL_FAMILY_REACTION = "reaction"
@@ -84,19 +66,12 @@ CANONICAL_FAMILY_ZONE = "zone"
 CANONICAL_FAMILY_LIQUIDITY = "liquidity"
 CANONICAL_FAMILY_RANGE = "range"
 CANONICAL_FAMILY_SCALP = "scalp"
-# Legacy family stamp on open plans before scalping rename — read only.
-CANONICAL_FAMILY_LEGACY_SCALP = "hfs"
 CANONICAL_FAMILY_UNKNOWN = "unknown"
 
-_SCALP_FAMILIES = frozenset({"scalp", "hfs", "range", "range_reversion"})
-_SCALP_MODES = frozenset({
-  "scalp_m1", "hfs_scalp", "range_scalp", "auto_box_scalp",
-})
-_M1_SCALP_MODES = frozenset({"scalp_m1", "hfs_scalp"})
-_M1_SCALP_FAMILIES = frozenset({
-  CANONICAL_FAMILY_SCALP,
-  CANONICAL_FAMILY_LEGACY_SCALP,
-})
+_SCALP_FAMILIES = frozenset({"scalp", "range", "range_reversion"})
+_SCALP_MODES = frozenset({"scalp_m1", "range_scalp", "auto_box_scalp"})
+_M1_SCALP_MODES = frozenset({"scalp_m1"})
+_M1_SCALP_FAMILIES = frozenset({CANONICAL_FAMILY_SCALP})
 
 
 def is_reaction_strategy(name: str) -> bool:
@@ -129,9 +104,8 @@ def is_range_strategy(name: str) -> bool:
 
 
 def is_m1_scalp_strategy(name: str) -> bool:
-  """True for canonical M1 scalps and legacy ``HFS *`` plan labels."""
-  key = str(name or "")
-  return key in M1_SCALP_STRATEGIES or key.startswith("HFS ")
+  """True for canonical M1 scalping display names."""
+  return str(name or "") in M1_SCALP_STRATEGIES
 
 
 def is_breakout_retest_scalp_strategy(name: str) -> bool:
@@ -149,7 +123,7 @@ def is_m1_scalp_match(match: Any) -> bool:
     is_m1_scalp_strategy(strategy)
     or family in _M1_SCALP_FAMILIES
     or mode in _M1_SCALP_MODES
-    or source in {"scalp", "hfs"}
+    or source == "scalp"
   )
 
 

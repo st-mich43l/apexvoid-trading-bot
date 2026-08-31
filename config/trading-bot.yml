@@ -673,7 +673,6 @@ strategies:
     # Requires runtime.auto_trade.enabled=true. XAU hosts M1 scalping even
     # when technique uses structure fixed_rr; FX fixed_rr books stay excluded
     # in app.scalping.context._scalping_symbols.
-    # YAML key ``high_frequency_scalp`` remains accepted as a load alias.
     mode: live
     archetypes:
       range_sweep_enabled: true

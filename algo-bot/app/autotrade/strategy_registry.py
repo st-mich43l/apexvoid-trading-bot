@@ -362,35 +362,10 @@ STRATEGY_BY_DETECTOR_KEY["flip_supply_zone_reaction"] = _FLIP_ZONE_ROW
 
 
 def lookup_row(strategy: str) -> StrategyRow | None:
-  from app.autotrade.strategy_taxonomy import is_m1_scalp_strategy
-  from app.scalping.models import canonical_scalp_strategy_name
-
   key = str(strategy or "").strip()
   if not key:
     return None
-  row = STRATEGY_BY_NAME.get(key)
-  if row is not None:
-    return row
-  canonical = canonical_scalp_strategy_name(key)
-  if canonical != key:
-    row = STRATEGY_BY_NAME.get(canonical)
-    if row is not None:
-      return row
-  if key.startswith("HFS ") or is_m1_scalp_strategy(key):
-    return StrategyRow(
-      name=canonical if canonical != key else key,
-      detector_family=FAMILY_DETECTOR_RANGE_REVERSION,
-      execution_family=FAMILY_EXEC_RANGE_REVERSION,
-      canonical_family=CANONICAL_FAMILY_SCALP,
-      location_archetype=ARCHETYPE_RANGE_REVERSION,
-      activation_archetype=ACTIVATION_REACTION,
-      enable_setting=_SCALPING_MODE_SETTING,
-      enable_requires_live_mode=True,
-      m5_authoritative=False,
-      is_scalp=True,
-      is_technique=False,
-    )
-  return None
+  return STRATEGY_BY_NAME.get(key)
 
 
 def strategy_family(strategy: str) -> str:

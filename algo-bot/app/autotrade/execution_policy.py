@@ -419,11 +419,6 @@ _STRATEGY_FAMILY = {
   "Impulse Pullback Scalp": FAMILY_RANGE_REVERSION,
   "Breakout Retest Scalp": FAMILY_RANGE_REVERSION,
   "Momentum Chase Scalp": FAMILY_RANGE_REVERSION,
-  # Legacy HFS display names (open plans / historical events):
-  "HFS Range Sweep": FAMILY_RANGE_REVERSION,
-  "HFS Impulse Pullback": FAMILY_RANGE_REVERSION,
-  "HFS Breakout Retest": FAMILY_RANGE_REVERSION,
-  "HFS Momentum Chase": FAMILY_RANGE_REVERSION,
   "Trend Pullback": FAMILY_TREND_PULLBACK,
   "Break & Retest": FAMILY_BREAKOUT_RETEST,
   "Box Breakout": FAMILY_BREAKOUT_RETEST,

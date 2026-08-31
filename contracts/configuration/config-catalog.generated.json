@@ -1,7 +1,7 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "f3743d4cc3eb6b4937431197fcc3cd49485688aa9a83491c14cdf85123e71e5e",
-  "configuration_document_fingerprint_sha256": "9a8b537f8d946adbfbe290c12e7b69216439fd84c2ff983593baed5f166c170b",
+  "configuration_contract_fingerprint_sha256": "c5f051078d32de03e63581cf4e71a80bb81c89f07032cc997c9d6d0aeb06bf4f",
+  "configuration_document_fingerprint_sha256": "b15fbbe23174f022519c9da1c9f251724c6ca041d0c56e8b18aaf33c92ddbb4e",
   "counts": {
     "algorithm_constants": 57,
     "configurable": 479,
@@ -11040,9 +11040,7 @@
         }
       ],
       "deprecated": false,
-      "deprecated_aliases": [
-        "AUTO_TRADE_TECHNIQUE_HFS_REQUIRE_KILLZONE"
-      ],
+      "deprecated_aliases": [],
       "description": "When true with enforce, block M1 scalping publish/activation outside killzone. Prod trading-bot.yml defaults this off; discovery permits are structure/technique-driven regardless.",
       "display_id": "config:execution.technique.scalp_require_killzone",
       "evidence_notes": [],
@@ -17675,9 +17673,7 @@
         }
       ],
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_MAXIMUM_CHASE_PIPS"
-      ],
+      "deprecated_aliases": [],
       "description": "Miss opportunity beyond this chase distance.",
       "display_id": "config:strategies.scalping.activation.maximum_chase_pips",
       "evidence_notes": [],
@@ -17716,9 +17712,7 @@
         }
       ],
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_REARM_DISTANCE_ATR"
-      ],
+      "deprecated_aliases": [],
       "description": "Minimum distance to rearm an episode.",
       "display_id": "config:strategies.scalping.activation.rearm_distance_atr",
       "evidence_notes": [],
@@ -17757,9 +17751,7 @@
         }
       ],
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_TRIGGER_MAXIMUM_AGE_BARS"
-      ],
+      "deprecated_aliases": [],
       "description": "Max closed M1 bars since trigger.",
       "display_id": "config:strategies.scalping.activation.trigger_maximum_age_bars",
       "evidence_notes": [],
@@ -17796,9 +17788,7 @@
         }
       ],
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_BREAKOUT_RETEST_ENABLED"
-      ],
+      "deprecated_aliases": [],
       "description": "Enable micro breakout-retest scalping archetype.",
       "display_id": "config:strategies.scalping.archetypes.breakout_retest_enabled",
       "evidence_notes": [],
@@ -17835,9 +17825,7 @@
         }
       ],
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_IMPULSE_PULLBACK_ALLOWED_SESSIONS"
-      ],
+      "deprecated_aliases": [],
       "description": "Comma-separated UTC session names (classify_session) allowed for impulse pullback. Empty or \"all\" disables the gate.",
       "display_id": "config:strategies.scalping.archetypes.impulse_pullback_allowed_sessions",
       "evidence_notes": [],
@@ -17874,9 +17862,7 @@
         }
       ],
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_IMPULSE_PULLBACK_ENABLED"
-      ],
+      "deprecated_aliases": [],
       "description": "Enable impulse pullback continuation scalping archetype (on by default for L1 continuation).",
       "display_id": "config:strategies.scalping.archetypes.impulse_pullback_enabled",
       "evidence_notes": [],
@@ -17913,9 +17899,7 @@
         }
       ],
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_RANGE_SWEEP_ENABLED"
-      ],
+      "deprecated_aliases": [],
       "description": "Enable micro range sweep reversal scalping archetype.",
       "display_id": "config:strategies.scalping.archetypes.range_sweep_enabled",
       "evidence_notes": [],
@@ -17954,9 +17938,7 @@
         }
       ],
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_BREAKOUT_BOX_MAX_ATR"
-      ],
+      "deprecated_aliases": [],
       "description": "Max M1 compression box width in ATR for Breakout Retest.",
       "display_id": "config:strategies.scalping.breakout.box_max_atr",
       "evidence_notes": [],
@@ -17995,9 +17977,7 @@
         }
       ],
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_BREAKOUT_MAX_BOX_BARS"
-      ],
+      "deprecated_aliases": [],
       "description": "Maximum M1 bars in the compression box.",
       "display_id": "config:strategies.scalping.breakout.max_box_bars",
       "evidence_notes": [],
@@ -18036,9 +18016,7 @@
         }
       ],
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_BREAKOUT_MIN_BOX_BARS"
-      ],
+      "deprecated_aliases": [],
       "description": "Minimum M1 bars in the compression box.",
       "display_id": "config:strategies.scalping.breakout.min_box_bars",
       "evidence_notes": [],
@@ -18077,9 +18055,7 @@
         }
       ],
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_BREAKOUT_MIN_BREAK_ATR"
-      ],
+      "deprecated_aliases": [],
       "description": "Minimum close displacement beyond the box in ATR.",
       "display_id": "config:strategies.scalping.breakout.min_break_atr",
       "evidence_notes": [],
@@ -18118,9 +18094,7 @@
         }
       ],
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_BREAKOUT_MIN_TOUCHES_PER_SIDE"
-      ],
+      "deprecated_aliases": [],
       "description": "Minimum touches of each compression extreme.",
       "display_id": "config:strategies.scalping.breakout.min_touches_per_side",
       "evidence_notes": [],
@@ -18157,9 +18131,7 @@
         }
       ],
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_BREAKOUT_REQUIRE_RETEST_REJECTION"
-      ],
+      "deprecated_aliases": [],
       "description": "Require wick/reclaim rejection on the retest (not touch-only).",
       "display_id": "config:strategies.scalping.breakout.require_retest_rejection",
       "evidence_notes": [],
@@ -18198,9 +18170,7 @@
         }
       ],
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_BREAKOUT_RETEST_LOOKBACK_BARS"
-      ],
+      "deprecated_aliases": [],
       "description": "Bars to scan for rejection retest after an accepted break.",
       "display_id": "config:strategies.scalping.breakout.retest_lookback_bars",
       "evidence_notes": [],
@@ -18239,9 +18209,7 @@
         }
       ],
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_BREAKOUT_TOUCH_TOL_ATR"
-      ],
+      "deprecated_aliases": [],
       "description": "Touch band around box extremes in ATR.",
       "display_id": "config:strategies.scalping.breakout.touch_tol_atr",
       "evidence_notes": [],
@@ -18280,9 +18248,7 @@
         }
       ],
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_CURRENT_CONTEXT_TTL_SECONDS"
-      ],
+      "deprecated_aliases": [],
       "description": "TTL for current immutable M5 scalp context.",
       "display_id": "config:strategies.scalping.context.current_context_ttl_seconds",
       "evidence_notes": [],
@@ -18321,9 +18287,7 @@
         }
       ],
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_HISTORIC_CONTEXT_TTL_SECONDS"
-      ],
+      "deprecated_aliases": [],
       "description": "TTL for historic scalp context snapshots.",
       "display_id": "config:strategies.scalping.context.historic_context_ttl_seconds",
       "evidence_notes": [],
@@ -18362,9 +18326,7 @@
         }
       ],
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_M1_LOOKBACK_BARS"
-      ],
+      "deprecated_aliases": [],
       "description": "Bounded M1 lookback for microstructure.",
       "display_id": "config:strategies.scalping.context.m1_lookback_bars",
       "evidence_notes": [],
@@ -18403,9 +18365,7 @@
         }
       ],
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_MAXIMUM_M5_AGE_SECONDS"
-      ],
+      "deprecated_aliases": [],
       "description": "Fail closed when pinned M5 context is older than this.",
       "display_id": "config:strategies.scalping.context.maximum_m5_age_seconds",
       "evidence_notes": [],
@@ -18445,9 +18405,7 @@
         }
       ],
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_PULLBACK_BUY_MAX_POSITION"
-      ],
+      "deprecated_aliases": [],
       "description": "Max dealing-range position for scalping pullback BUY.",
       "display_id": "config:strategies.scalping.location.pullback_buy_maximum_position",
       "evidence_notes": [],
@@ -18487,9 +18445,7 @@
         }
       ],
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_PULLBACK_SELL_MIN_POSITION"
-      ],
+      "deprecated_aliases": [],
       "description": "Min dealing-range position for scalping pullback SELL.",
       "display_id": "config:strategies.scalping.location.pullback_sell_minimum_position",
       "evidence_notes": [],
@@ -18529,9 +18485,7 @@
         }
       ],
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_RANGE_BUY_MAX_POSITION"
-      ],
+      "deprecated_aliases": [],
       "description": "Max dealing-range position for scalping range-sweep BUY.",
       "display_id": "config:strategies.scalping.location.range_buy_maximum_position",
       "evidence_notes": [],
@@ -18571,9 +18525,7 @@
         }
       ],
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_RANGE_SELL_MIN_POSITION"
-      ],
+      "deprecated_aliases": [],
       "description": "Min dealing-range position for scalping range-sweep SELL.",
       "display_id": "config:strategies.scalping.location.range_sell_minimum_position",
       "evidence_notes": [],
@@ -18617,9 +18569,7 @@
         }
       ],
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_MODE"
-      ],
+      "deprecated_aliases": [],
       "description": "Scalping runtime mode: off, shadow, paper, or live.",
       "display_id": "config:strategies.scalping.mode",
       "evidence_notes": [],
@@ -18658,9 +18608,7 @@
         }
       ],
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_MAXIMUM_ACTIVE_OPPORTUNITIES"
-      ],
+      "deprecated_aliases": [],
       "description": "Cap on concurrently active scalp opportunities.",
       "display_id": "config:strategies.scalping.policy.maximum_active_opportunities",
       "evidence_notes": [],
@@ -18699,9 +18647,7 @@
         }
       ],
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_MAXIMUM_OPPORTUNITIES_PER_CYCLE"
-      ],
+      "deprecated_aliases": [],
       "description": "Ranked opportunities retained per M1 cycle.",
       "display_id": "config:strategies.scalping.policy.maximum_opportunities_per_cycle",
       "evidence_notes": [],
@@ -18740,9 +18686,7 @@
         }
       ],
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_MAXIMUM_SPREAD_PIPS"
-      ],
+      "deprecated_aliases": [],
       "description": "Hard block when spread exceeds this.",
       "display_id": "config:strategies.scalping.policy.maximum_spread_pips",
       "evidence_notes": [],
@@ -18781,9 +18725,7 @@
         }
       ],
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_MINIMUM_REWARD_RISK"
-      ],
+      "deprecated_aliases": [],
       "description": "Minimum net reward/risk for scalping entries.",
       "display_id": "config:strategies.scalping.policy.minimum_reward_risk",
       "evidence_notes": [],
@@ -18822,9 +18764,7 @@
         }
       ],
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_COOLDOWN_AFTER_LOSS_MINUTES"
-      ],
+      "deprecated_aliases": [],
       "description": "Cooldownoldown after consecutive loss streak.",
       "display_id": "config:strategies.scalping.risk.cooldown_after_loss_minutes",
       "evidence_notes": [],
@@ -18863,9 +18803,7 @@
         }
       ],
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_DAILY_LOSS_LIMIT_R"
-      ],
+      "deprecated_aliases": [],
       "description": "Daily realized R loss limit.",
       "display_id": "config:strategies.scalping.risk.daily_loss_limit_r",
       "evidence_notes": [],
@@ -18904,9 +18842,7 @@
         }
       ],
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_MAXIMUM_CONCURRENT_POSITIONS"
-      ],
+      "deprecated_aliases": [],
       "description": "One XAU scalp position at a time initially.",
       "display_id": "config:strategies.scalping.risk.maximum_concurrent_positions",
       "evidence_notes": [],
@@ -18945,9 +18881,7 @@
         }
       ],
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_MAXIMUM_CONSECUTIVE_LOSSES"
-      ],
+      "deprecated_aliases": [],
       "description": "Loss streak before cooldown.",
       "display_id": "config:strategies.scalping.risk.maximum_consecutive_losses",
       "evidence_notes": [],
@@ -18986,10 +18920,8 @@
         }
       ],
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_MAXIMUM_DAILY_TRADES"
-      ],
-      "description": "Hard daily trade cap for HFS.",
+      "deprecated_aliases": [],
+      "description": "Hard daily trade cap for M1 scalping.",
       "display_id": "config:strategies.scalping.risk.maximum_daily_trades",
       "evidence_notes": [],
       "introduced_in": "config-catalog-v2",
@@ -19027,10 +18959,8 @@
         }
       ],
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_MAXIMUM_SESSION_TRADES"
-      ],
-      "description": "Hard session trade cap for HFS.",
+      "deprecated_aliases": [],
+      "description": "Hard session trade cap for M1 scalping.",
       "display_id": "config:strategies.scalping.risk.maximum_session_trades",
       "evidence_notes": [],
       "introduced_in": "config-catalog-v2",
@@ -19072,9 +19002,7 @@
         }
       ],
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_RISK_MODE"
-      ],
+      "deprecated_aliases": [],
       "description": "Scalping risk accounting mode.",
       "display_id": "config:strategies.scalping.risk.mode",
       "evidence_notes": [],
@@ -19114,9 +19042,7 @@
         }
       ],
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_RISK_FRACTION_PER_TRADE"
-      ],
+      "deprecated_aliases": [],
       "description": "Constant risk fraction — never martingale.",
       "display_id": "config:strategies.scalping.risk.risk_fraction_per_trade",
       "evidence_notes": [],
@@ -19155,9 +19081,7 @@
         }
       ],
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_SESSION_LOSS_LIMIT_R"
-      ],
+      "deprecated_aliases": [],
       "description": "Session realized R loss limit.",
       "display_id": "config:strategies.scalping.risk.session_loss_limit_r",
       "evidence_notes": [],
@@ -19196,9 +19120,7 @@
         }
       ],
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_STOP_BUFFER_ATR"
-      ],
+      "deprecated_aliases": [],
       "description": "ATR buffer beyond structural stop.",
       "display_id": "config:strategies.scalping.stop.buffer_atr",
       "evidence_notes": [],
@@ -19237,9 +19159,7 @@
         }
       ],
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_STOP_MAXIMUM_PIPS"
-      ],
+      "deprecated_aliases": [],
       "description": "Maximum scalp stop size.",
       "display_id": "config:strategies.scalping.stop.maximum_pips",
       "evidence_notes": [],
@@ -19278,9 +19198,7 @@
         }
       ],
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_STOP_MINIMUM_PIPS"
-      ],
+      "deprecated_aliases": [],
       "description": "Minimum scalp stop size.",
       "display_id": "config:strategies.scalping.stop.minimum_pips",
       "evidence_notes": [],
@@ -19319,9 +19237,7 @@
         }
       ],
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_MINIMUM_NET_TARGET_PIPS"
-      ],
+      "deprecated_aliases": [],
       "description": "Minimum net target after spread/slippage.",
       "display_id": "config:strategies.scalping.target.minimum_net_target_pips",
       "evidence_notes": [],
@@ -19358,9 +19274,7 @@
         }
       ],
       "deprecated": false,
-      "deprecated_aliases": [
-        "HFS_PREFERRED_LADDER_PIPS"
-      ],
+      "deprecated_aliases": [],
       "description": "Comma-separated preferred scalp targets in pips.",
       "display_id": "config:strategies.scalping.target.preferred_ladder_pips",
       "evidence_notes": [],
@@ -20581,6 +20495,6 @@
       "validation_summary": "Pydantic required/type coercion only"
     }
   ],
-  "source_fingerprint_sha256": "f3743d4cc3eb6b4937431197fcc3cd49485688aa9a83491c14cdf85123e71e5e",
+  "source_fingerprint_sha256": "c5f051078d32de03e63581cf4e71a80bb81c89f07032cc997c9d6d0aeb06bf4f",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

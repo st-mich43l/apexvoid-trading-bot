@@ -22,28 +22,6 @@ STRATEGY_DISPLAY = {
   ARCHETYPE_BREAKOUT_RETEST: "Breakout Retest Scalp",
 }
 
-LEGACY_STRATEGY_DISPLAY = {
-  "HFS Range Sweep": "Range Sweep Scalp",
-  "HFS Impulse Pullback": "Impulse Pullback Scalp",
-  "HFS Breakout Retest": "Breakout Retest Scalp",
-  "HFS Momentum Chase": "Momentum Chase Scalp",
-}
-
-
-def canonical_scalp_strategy_name(name: str) -> str:
-  """Map legacy HFS labels onto canonical scalp display names."""
-  key = str(name or "").strip()
-  if key in LEGACY_STRATEGY_DISPLAY:
-    return LEGACY_STRATEGY_DISPLAY[key]
-  if key.startswith("HFS "):
-    rest = key[4:].strip()
-    for arch, label in STRATEGY_DISPLAY.items():
-      if rest.casefold() == arch.replace("_", " ").casefold():
-        return label
-      if rest.casefold() == label.casefold().removesuffix(" scalp"):
-        return label
-    return rest
-  return key
 
 DISCOVERED = "discovered"
 ARMED = "armed"

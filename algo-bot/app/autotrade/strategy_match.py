@@ -18,6 +18,7 @@ from app.core.symbols import digits_for
 from app.runtime.price_identity import price_token
 from app.analysis.execution_eligibility import ExecutionEligibility
 from app.analysis.structural_reaction_support import structural_thesis_id
+from app.autotrade.strategy_taxonomy import is_m1_scalp_match
 
 
 STRATEGY_MATCH_VERSION = 1
@@ -389,25 +390,15 @@ def _valid_match(match: StrategyMatch) -> bool:
     match.structure_swing,
   )
   range_values = (match.range_low, match.range_high)
-  hfs_fitted = (
+  scalp_fitted = (
     match.full_take_profit_pips is not None
     and match.full_take_profit_pips > 0
-    and (
-      match.family in {"hfs", "scalp"}
-      or match.strategy_mode in {"hfs_scalp", "scalp_m1"}
-      or str(match.strategy).startswith("HFS ")
-      or str(match.strategy) in {
-        "Range Sweep Scalp",
-        "Impulse Pullback Scalp",
-        "Breakout Retest Scalp",
-        "Momentum Chase Scalp",
-      }
-    )
+    and is_m1_scalp_match(match)
   )
   valid_range = (
     all(value is None for value in range_values)
     and match.range_id is None
-    and (match.full_take_profit_pips is None or hfs_fitted)
+    and (match.full_take_profit_pips is None or scalp_fitted)
   ) or (
     all(value is not None and math.isfinite(value) for value in range_values)
     and match.range_id is not None

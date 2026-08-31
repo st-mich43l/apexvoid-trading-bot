@@ -123,8 +123,8 @@
         "created_at": 1787560200,
         "expires_at": 1787561174,
         "analysis": {
-          "strategy": "HFS Range Sweep",
-          "strategy_family": "hfs",
+          "strategy": "Range Sweep Scalp",
+          "strategy_family": "scalp",
           "direction": "BUY",
           "context_timeframes": ["M1"],
           "formation_timeframe": "M1",

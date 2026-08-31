@@ -473,8 +473,8 @@ def scalp_maximum_chase_pips(cfg: Any | None = None) -> float:
       cfg = runtime_config
     except Exception:
       return 100.0
-  hfs = getattr(getattr(cfg, "strategies", None), "scalping", None)
-  act = getattr(hfs, "activation", None)
+  scalping_cfg = getattr(getattr(cfg, "strategies", None), "scalping", None)
+  act = getattr(scalping_cfg, "activation", None)
   try:
     value = float(getattr(act, "maximum_chase_pips", 100.0) or 100.0)
   except (TypeError, ValueError):

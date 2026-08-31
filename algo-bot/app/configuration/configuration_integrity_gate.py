@@ -40,7 +40,7 @@ BASELINE = {
   "python_projection_count": 497,
   "ctrader_only_count": 49,
   "environment_entry_count": 479,
-  "deprecated_alias_count": 64,
+  "deprecated_alias_count": 21,
   "shared_count": 96,
 }
 
