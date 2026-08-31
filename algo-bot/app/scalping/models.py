@@ -1,4 +1,4 @@
-"""Typed contracts for the M1 high-frequency scalping engine."""
+"""Typed contracts for the M1 scalping engine."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ ARCHETYPE_RANGE_SWEEP = "range_sweep"
 ARCHETYPE_IMPULSE_PULLBACK = "impulse_pullback"
 ARCHETYPE_BREAKOUT_RETEST = "breakout_retest"
 
-# Canonical display names — no "HFS" tag. Legacy "HFS *" still accepted.
+# Canonical display names for M1 scalping archetypes.
 STRATEGY_DISPLAY = {
   ARCHETYPE_RANGE_SWEEP: "Range Sweep Scalp",
   ARCHETYPE_IMPULSE_PULLBACK: "Impulse Pullback Scalp",

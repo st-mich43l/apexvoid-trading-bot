@@ -345,10 +345,6 @@ _STRATEGY_ROWS: tuple[StrategyRow, ...] = (
   _m1_scalp_row("Impulse Pullback Scalp"),
   _m1_scalp_row("Breakout Retest Scalp"),
   _m1_scalp_row("Momentum Chase Scalp"),
-  _m1_scalp_row("HFS Range Sweep"),
-  _m1_scalp_row("HFS Impulse Pullback"),
-  _m1_scalp_row("HFS Breakout Retest"),
-  _m1_scalp_row("HFS Momentum Chase"),
 )
 
 # flip_supply shares the Flip Zone row (second detector registry entry).
@@ -366,19 +362,23 @@ STRATEGY_BY_DETECTOR_KEY["flip_supply_zone_reaction"] = _FLIP_ZONE_ROW
 
 
 def lookup_row(strategy: str) -> StrategyRow | None:
+  from app.autotrade.strategy_taxonomy import is_m1_scalp_strategy
+  from app.scalping.models import canonical_scalp_strategy_name
+
   key = str(strategy or "").strip()
   if not key:
     return None
   row = STRATEGY_BY_NAME.get(key)
   if row is not None:
     return row
-  if key.startswith("HFS "):
-    suffix = key[4:].strip()
-    mapped = STRATEGY_BY_NAME.get(f"HFS {suffix}")
-    if mapped is not None:
-      return mapped
+  canonical = canonical_scalp_strategy_name(key)
+  if canonical != key:
+    row = STRATEGY_BY_NAME.get(canonical)
+    if row is not None:
+      return row
+  if key.startswith("HFS ") or is_m1_scalp_strategy(key):
     return StrategyRow(
-      name=key,
+      name=canonical if canonical != key else key,
       detector_family=FAMILY_DETECTOR_RANGE_REVERSION,
       execution_family=FAMILY_EXEC_RANGE_REVERSION,
       canonical_family=CANONICAL_FAMILY_SCALP,

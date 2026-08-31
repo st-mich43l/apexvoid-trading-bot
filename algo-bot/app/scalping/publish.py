@@ -42,7 +42,7 @@ def _structural_kind(opportunity: ScalpOpportunity) -> str:
   return "demand" if opportunity.direction.upper() == "BUY" else "supply"
 
 
-def _hfs_target_ladder(
+def _scalp_target_ladder(
   opportunity: ScalpOpportunity,
   cfg: Any | None = None,
 ) -> tuple[int, tuple[int, ...]]:
@@ -65,10 +65,8 @@ def _hfs_target_ladder(
     rr = float(opportunity.expected_reward_risk)
   except (TypeError, ValueError):
     rr = (final_pips / stop) if stop else 1.0
-  # Explicit 1:1 (or target ≤ stop after rounding) → one full-size exit.
   if rr <= 1.05 or final_pips <= stop:
     return final_pips, (final_pips,)
-  # 1:2 books as (1R, 2R). Cap the far leg at the discovery target.
   first = stop
   last = max(first, min(final_pips, stop * 2))
   if last <= first:
@@ -76,7 +74,7 @@ def _hfs_target_ladder(
   return last, (first, last)
 
 
-def build_hfs_strategy_match(
+def build_scalp_strategy_match(
   opportunity: ScalpOpportunity,
   context: ScalpContextSnapshot,
   *,
@@ -102,14 +100,10 @@ def build_hfs_strategy_match(
   mid = (float(quote_bid) + float(quote_ask)) / 2.0
   now = int(bar_ts)
   expires = max(now + 60, int(opportunity.expires_at))
-  target_pips, targets_pips = _hfs_target_ladder(opportunity, cfg)
+  target_pips, targets_pips = _scalp_target_ladder(opportunity, cfg)
   htf_bias = str(context.htf_bias or "range")
   if htf_bias in {"", "unknown"}:
     htf_bias = "range"
-  # Clamp structure_swing to the discovery stop envelope. Raw wick
-  # invalidation_price can sit 40–60+ pips away; TradePlan uses
-  # structure_swing as the protective-stop rail and was ignoring
-  # expected_stop_pips (dig 2026-08-25).
   try:
     from app.autotrade import units as _units
 
@@ -124,14 +118,9 @@ def build_hfs_strategy_match(
     structure_swing = entry - stop_distance
   else:
     structure_swing = entry + stop_distance
-  # HFS matches never pass through the classic scanner.py detection path,
-  # so _static_execution_eligibility() never runs for them. Without this,
-  # _admit_strategy_intent_for_cycle's static-eligibility gate (which only
-  # exempts strategy_mode == "mapped_zone_reaction") sees a bare
-  # source="scanner_strategy_match" intent with execution_eligibility=None
-  # and hard-rejects it as static_eligibility_missing -- every single HFS
-  # opportunity, unconditionally. The ScalpOpportunity pipeline already is
-  # this match's eligibility check, so mark it eligible by construction.
+  # M1 scalp matches never pass through scanner.py detection, so static
+  # eligibility is stamped here — the ScalpOpportunity pipeline already
+  # ran activation gates.
   eligibility = ExecutionEligibility(
     version=EXECUTION_ELIGIBILITY_VERSION,
     allowed=True,
@@ -166,12 +155,10 @@ def build_hfs_strategy_match(
     atr=float(context.atr or 1.0),
     structure_swing=float(structure_swing),
     targets_pips=targets_pips,
-    # Fitted scalp room unlocks opposing-structure bypass (native scalp room).
     full_take_profit_pips=target_pips,
     absolute_target_price=float(opportunity.expected_target_price),
     tier="A",
     family="scalp",
-    # Keep structural_source=hfs so open-plan thesis ids stay compatible.
     structural_source="scalp",
     structural_zone_id=structural_id,
     structural_zone_low=float(opportunity.zone_low),
@@ -192,11 +179,11 @@ def build_hfs_strategy_match(
       None if context.dealing_range_position is None
       else float(context.dealing_range_position)
     ),
-    math_fib_ratio=_hfs_math_fib_ratio(opportunity),
+    math_fib_ratio=_scalp_math_fib_ratio(opportunity),
   )
 
 
-def _hfs_math_fib_ratio(opportunity: Any) -> float | None:
+def _scalp_math_fib_ratio(opportunity: Any) -> float | None:
   measured = getattr(opportunity, "measured", None) or {}
   if isinstance(measured, dict) and measured.get("retracement") is not None:
     try:
@@ -206,16 +193,8 @@ def _hfs_math_fib_ratio(opportunity: Any) -> float | None:
   return None
 
 
-async def _persist_hfs_match(client: Any, match: StrategyMatch) -> StrategyMatch:
-  """Write HFS StrategyMatch into the same Redis keys the worker reads.
-
-  Live 2026-08-05: publish_hfs_live advanced setup lifecycle to CONFIRMED
-  but never persisted the match under strategy_match:/strategy_matches:.
-  try_publish → _handle_event then loaded zero matches for ready_match_id
-  and returned remained_watching / zone_watching_retest until expiry.
-  Mirror zone_execution_cutover._persist_match (without double-advancing
-  lifecycle — caller already did that).
-  """
+async def _persist_scalp_match(client: Any, match: StrategyMatch) -> StrategyMatch:
+  """Write scalp StrategyMatch into the same Redis keys the worker reads."""
   now = int(time.time())
   current_raw = await client.get(strategy_matches_key(match.symbol))
   current = deserialize_matches(current_raw) if current_raw else []
@@ -232,7 +211,7 @@ async def _persist_hfs_match(client: Any, match: StrategyMatch) -> StrategyMatch
   return match
 
 
-async def publish_hfs_live(
+async def publish_scalp_live(
   client: Any,
   match: StrategyMatch,
   *,
@@ -241,7 +220,7 @@ async def publish_hfs_live(
 ) -> worker.PublishResult | None:
   """Advance setup lifecycle and publish via the authoritative worker path."""
   if not bool(runtime_config.runtime.auto_trade.enabled):
-    log.warning("HFS live publish blocked: runtime.auto_trade.enabled=false")
+    log.warning("scalp live publish blocked: runtime.auto_trade.enabled=false")
     return worker.PublishResult(
       status=worker.PUBLISH_STATUS_REJECTED,
       plan_id="",
@@ -255,19 +234,14 @@ async def publish_hfs_live(
   )
   if lifecycle is None:
     log.warning(
-      "HFS live publish: setup lifecycle advance failed match_id=%s",
+      "scalp live publish: setup lifecycle advance failed match_id=%s",
       match.match_id,
     )
     return None
 
   _setup_id, thesis_id = lifecycle
   stamped = replace(match, thesis_id=str(thesis_id))
-  stamped = await _persist_hfs_match(client, stamped)
-  # Root-card creation lives centrally in worker._publish_trade_plan_v8
-  # (called from _handle_event, which this and every other publish route
-  # -- including this cycle's own independent arbitration re-discovering
-  # the same persisted match -- funnels through). Ensuring it here too
-  # would only be redundant with that single shared choke point.
+  stamped = await _persist_scalp_match(client, stamped)
   result = await worker.try_publish_executable_signal(
     client,
     stamped,
@@ -275,7 +249,7 @@ async def publish_hfs_live(
     event_ts=str(bar_ts),
   )
   log.info(
-    "HFS live publish match_id=%s status=%s reason=%s plan_id=%s",
+    "scalp live publish match_id=%s status=%s reason=%s plan_id=%s",
     stamped.match_id,
     getattr(result, "status", None),
     getattr(result, "reason_code", None),

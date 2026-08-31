@@ -15,6 +15,8 @@ import math
 import time
 from typing import Any
 
+from app.autotrade.strategy_taxonomy import is_m1_scalp_match, is_m1_scalp_strategy
+
 
 IMMEDIATE_CONFIRMATION = "immediate_confirmation"
 WAITING_RETEST = "waiting_retest"
@@ -57,17 +59,7 @@ _CONTINUATION_STRATEGIES = frozenset({
   "Momentum Ride",
   "Breakout Continuation",
 })
-_HFS_STRATEGIES = frozenset({
-  "Range Sweep Scalp",
-  "Impulse Pullback Scalp",
-  "Breakout Retest Scalp",
-  "Momentum Chase Scalp",
-  "HFS Range Sweep",
-  "HFS Impulse Pullback",
-  "HFS Breakout Retest",
-  "HFS Momentum Chase",
-})
-_HFS_TRIGGERS = frozenset({
+_M1_SCALP_TRIGGERS = frozenset({
   "sweep_reclaim",
   "impulse_pullback",
   "breakout_retest",
@@ -119,18 +111,8 @@ _AUTHORITATIVE_REACTIONS = frozenset({
 })
 
 
-def _is_hfs_match(match: Any) -> bool:
-  strategy = str(getattr(match, "strategy", "") or "")
-  family = str(getattr(match, "family", "") or "").casefold()
-  mode = str(getattr(match, "strategy_mode", "") or "").casefold()
-  source = str(getattr(match, "structural_source", "") or "").casefold()
-  return (
-    family in {"hfs", "scalp"}
-    or mode in {"hfs_scalp", "scalp_m1"}
-    or source == "hfs"
-    or strategy in _HFS_STRATEGIES
-    or strategy.startswith("HFS ")
-  )
+def _is_m1_scalp_confirmation_match(match: Any) -> bool:
+  return is_m1_scalp_match(match)
 
 
 @dataclass(frozen=True)
@@ -315,19 +297,16 @@ def _m5_confirmation_bar_ts(match: Any) -> Any:
 def confirmation_policy_for(match: Any) -> ConfirmationPolicy:
   strategy = str(getattr(match, "strategy", "") or "")
   family = str(getattr(match, "family", "") or "").casefold()
-  if _is_hfs_match(match):
-    # Live 2026-08-05: HFS activation already ran closed-bar M1 gates, then
-    # publish_hfs_live handed the match to try_publish. Without an HFS
-    # confirmation policy the worker classified family=hfs as
-    # non_reaction_m1_required (allow_same_cycle_publish=False) and the
-    # TradePlan never formed - setups stayed CONFIRMED /
-    # zone_watching_retest until expiry.
+  if _is_m1_scalp_confirmation_match(match):
+    # M1 scalp activation already ran closed-bar M1 gates before publish.
+    # Without a scalp confirmation policy the worker classified family=scalp
+    # as non_reaction_m1_required and the TradePlan never formed.
     reaction_type = _m5_reaction_type(match)
     entry_low = _finite_float(getattr(match, "entry_low", None))
     entry_high = _finite_float(getattr(match, "entry_high", None))
     metadata_valid = bool(
       (
-        reaction_type in _HFS_TRIGGERS
+        reaction_type in _M1_SCALP_TRIGGERS
         or reaction_type in _AUTHORITATIVE_REACTIONS
       )
       and parse_bar_timestamp(getattr(match, "touch_bar_ts", None)) is not None
@@ -345,7 +324,7 @@ def confirmation_policy_for(match: Any) -> ConfirmationPolicy:
       reaction_family=False,
       zone_family=False,
       metadata_valid=metadata_valid,
-      reason_code="hfs_authoritative" if metadata_valid else "confirmation_metadata_missing",
+      reason_code="m1_scalp_authoritative" if metadata_valid else "confirmation_metadata_missing",
     )
   if strategy in _CONTINUATION_STRATEGIES or family == "momentum_continuation":
     # Impulse/continuation is confirmed by the detector itself (strong body
@@ -487,7 +466,7 @@ ZONE_ACCESS_RETEST_ONLY = "retest_only"
 
 
 def scalp_maximum_chase_pips(cfg: Any | None = None) -> float:
-  """Shared scalp chase budget (Range Edge / Fade / HFS). Default 100."""
+  """Shared scalp chase budget (Range Edge / M1 scalping). Default 100."""
   if cfg is None:
     try:
       from app.core.config import runtime_config

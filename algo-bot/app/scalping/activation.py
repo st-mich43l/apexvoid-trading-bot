@@ -28,13 +28,7 @@ from app.scalping.models import (
 
 def _scalping_cfg(cfg: Any) -> Any:
   strategies = getattr(cfg, "strategies", None)
-  return getattr(strategies, "scalping", None) or getattr(
-    strategies, "high_frequency_scalp", None,
-  )
-
-
-# Back-compat.
-_hfs = _scalping_cfg
+  return getattr(strategies, "scalping", None)
 
 
 def _enforce_location_cfg(hfs: Any) -> SimpleNamespace:

@@ -1,4 +1,4 @@
-"""Shadow/paper M1 high-frequency scalping event loop."""
+"""Shadow/paper M1 scalping event loop."""
 
 from __future__ import annotations
 
@@ -41,7 +41,7 @@ from app.scalping.lifecycle import (
   transition,
 )
 from app.scalping.microstructure import build_micro_structure
-from app.scalping.publish import build_hfs_strategy_match, publish_hfs_live
+from app.scalping.publish import build_scalp_strategy_match, publish_scalp_live
 from app.scalping.ranking import rank_opportunities, score_opportunity
 from app.scalping.risk import (
   apply_daily_reset,
@@ -514,7 +514,7 @@ async def process_m1_bar(
 
     published_status = None
     if mode == "live":
-      match = build_hfs_strategy_match(
+      match = build_scalp_strategy_match(
         opportunity,
         context,
         bar_ts=bar_ts,
@@ -523,7 +523,7 @@ async def process_m1_bar(
         location_reason=str(decision.measured.get("location_reason") or ""),
         cfg=cfg,
       )
-      publish_result = await publish_hfs_live(
+      publish_result = await publish_scalp_live(
         client, match, symbol=symbol, bar_ts=bar_ts,
       )
       if publish_result is None:

@@ -4865,13 +4865,11 @@ async def _publish_trade_plan_v8(
     # Optional clock sterilizer (prod off). Discovery permits are structure/
     # technique driven; weak volume/momentum is rejected by analysis.
     require_kz = False if tech is None else bool(
-      getattr(tech, "scalp_require_killzone", None)
-      if getattr(tech, "scalp_require_killzone", None) is not None
-      else getattr(tech, "hfs_require_killzone", False),
+      getattr(tech, "scalp_require_killzone", False),
     )
     from app.scalping.context import classify_session
 
-    hfs_session = classify_session(spot_ts, inst)
+    scalp_session = classify_session(spot_ts, inst)
     kz = evaluate_killzone_gate(
       ts=spot_ts,
       cfg=inst,
@@ -4885,7 +4883,7 @@ async def _publish_trade_plan_v8(
         match.match_id,
         kz.utc_hour,
         kz.killzone_name,
-        hfs_session,
+        scalp_session,
       )
       await _record_v8_build_rejected(
         client,
@@ -4896,7 +4894,7 @@ async def _publish_trade_plan_v8(
         {
           "killzone_name": kz.killzone_name,
           "utc_hour": kz.utc_hour,
-          "session": hfs_session,
+          "session": scalp_session,
           **kz.measured,
         },
       )
