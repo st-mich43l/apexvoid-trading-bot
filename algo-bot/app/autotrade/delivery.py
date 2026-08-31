@@ -1848,10 +1848,35 @@ async def _deliver_compact_manage(
   if not match_id:
     return None
   if event_type in {"plan_expired", "plan_cancelled", "plan_rejected"}:
+    # Unfilled plans have no ORDER FILLED / POSITION CLOSED reply to carry
+    # the outcome. Paint PLAN EXPIRED/CANCELLED/REJECTED on the root status
+    # line, then stop live Price-now tracking. kill_setup_card alone used to
+    # leave WAITING FILL / SETUP FORMING forever (USDJPY stale-card incident).
+    status_line = {
+      "plan_expired": "⌛ <b>PLAN EXPIRED</b>",
+      "plan_cancelled": "🚫 <b>PLAN CANCELLED</b>",
+      "plan_rejected": "⛔ <b>PLAN REJECTED</b>",
+    }[event_type]
+    reason_code = str(event.get("reason_code") or event_type).strip()
+    try:
+      await edit_forming_card_status(
+        client,
+        match_id,
+        status_line,
+        state=event_type,
+        reason_code=reason_code,
+        edit_fn=edit_scanner_message_text,
+      )
+    except Exception:
+      log.exception(
+        "forming card %s status edit failed setup_id=%s",
+        event_type,
+        match_id,
+      )
     await kill_setup_card(
       client,
       match_id,
-      reason_code=str(event.get("reason_code") or event_type),
+      reason_code=reason_code or event_type,
       delete_fn=delete_scanner_message,
       edit_fn=edit_scanner_message_text,
     )

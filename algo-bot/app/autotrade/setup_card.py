@@ -96,6 +96,11 @@ CARD_STATUS_PRIORITY = {
   "order_filled": 150,
   "sl_moved": 155,
   "tp_booked": 160,
+  # Unfilled plan outcomes must outrank PLAN PUBLISHED so the root card
+  # can leave WAITING FILL / PLAN PUBLISHED after expire/cancel/reject.
+  "plan_expired": 200,
+  "plan_cancelled": 200,
+  "plan_rejected": 200,
   "terminal": 200,
 }
 
@@ -113,6 +118,11 @@ if current then
     if string.find(current, 'POSITION ACTIVATED', 1, true)
       or string.find(current, 'ORDER FILLED', 1, true) then
       current_priority = 150
+    elseif string.find(current, 'PLAN EXPIRED', 1, true)
+      or string.find(current, 'PLAN CANCELLED', 1, true)
+      or string.find(current, 'PLAN REJECTED', 1, true)
+      or string.find(current, 'TERMINAL', 1, true) then
+      current_priority = 200
     elseif string.find(current, 'PLAN PUBLISHED', 1, true) then
       current_priority = 100
     elseif string.find(current, 'WAITING RETEST', 1, true) then
@@ -151,6 +161,12 @@ def _infer_status_state(status_line: str) -> str:
     return "order_filled"
   if "EXECUTOR ARMED" in upper:
     return "executor_armed"
+  if "PLAN EXPIRED" in upper:
+    return "plan_expired"
+  if "PLAN CANCELLED" in upper:
+    return "plan_cancelled"
+  if "PLAN REJECTED" in upper:
+    return "plan_rejected"
   if "PLAN PUBLISHED" in upper:
     return "plan_published"
   if "TRIGGER READY" in upper:
