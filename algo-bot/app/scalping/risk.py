@@ -239,6 +239,23 @@ def apply_loss_streak_cooldown_reset(
   return state
 
 
+@dataclass(frozen=True)
+class RecordScalpOutcomeResult:
+  """Result of a risk-ledger update.
+
+  ``accrued_r`` is None when the close was skipped because ``stop_pips`` was
+  missing — callers must treat that as a data-quality bug, not invent R.
+  Attribute access forwards to ``state`` so existing call sites keep working.
+  """
+
+  state: ScalpRiskState
+  accrued_r: float | None = None
+  skipped_no_stop: bool = False
+
+  def __getattr__(self, name: str) -> Any:
+    return getattr(self.state, name)
+
+
 def record_scalp_outcome(
   state: ScalpRiskState,
   *,
@@ -248,12 +265,20 @@ def record_scalp_outcome(
   opened: bool = False,
   closed: bool = False,
   group_id: str | None = None,
-) -> ScalpRiskState:
-  """Update HFS risk counters from a fill or close. No martingale."""
+  r_multiple: float | None = None,
+) -> RecordScalpOutcomeResult:
+  """Update HFS risk counters from a fill or close. No martingale.
+
+  When ``closed`` and neither a positive ``stop_pips`` nor an explicit
+  ``r_multiple`` is provided, open-position bookkeeping still runs but R is
+  **not** accrued (the old 20.0 pip fallback is gone).
+  """
+  if isinstance(state, RecordScalpOutcomeResult):
+    state = state.state
   gid = _normalize_group_id(group_id)
   if opened:
     if gid is not None and gid in state.open_group_ids:
-      return state
+      return RecordScalpOutcomeResult(state=state, accrued_r=None)
     if gid is not None:
       state.open_group_ids.append(gid)
     state.open_positions = (
@@ -264,23 +289,42 @@ def record_scalp_outcome(
     state.daily_trades = int(state.daily_trades) + 1
     state.session_trades = int(state.session_trades) + 1
   if not closed:
-    return state
+    return RecordScalpOutcomeResult(state=state, accrued_r=None)
   if gid is not None and gid in state.open_group_ids:
     state.open_group_ids = [item for item in state.open_group_ids if item != gid]
     state.open_positions = len(state.open_group_ids)
   else:
     state.open_positions = max(0, int(state.open_positions) - 1)
-  risk_unit = float(stop_pips) if stop_pips and float(stop_pips) > 0 else 20.0
-  r_multiple = float(result_pips) / risk_unit
-  state.daily_r = float(state.daily_r) + r_multiple
-  state.session_r = float(state.session_r) + r_multiple
-  if float(result_pips) < 0:
+
+  if r_multiple is not None:
+    accrued = float(r_multiple)
+  else:
+    try:
+      risk_unit = float(stop_pips) if stop_pips is not None else 0.0
+    except (TypeError, ValueError):
+      risk_unit = 0.0
+    if risk_unit <= 0:
+      # Do not invent a denominator. Position book is already closed above.
+      return RecordScalpOutcomeResult(
+        state=state, accrued_r=None, skipped_no_stop=True,
+      )
+    accrued = float(result_pips) / risk_unit
+
+  state.daily_r = float(state.daily_r) + float(accrued)
+  state.session_r = float(state.session_r) + float(accrued)
+  if float(accrued) < 0:
     state.consecutive_losses = int(state.consecutive_losses) + 1
     state.last_loss_ts = int(now)
   else:
     state.consecutive_losses = 0
     state.last_loss_ts = None
-  return state
+  return RecordScalpOutcomeResult(state=state, accrued_r=float(accrued))
+
+
+def unwrap_risk_state(result: ScalpRiskState | RecordScalpOutcomeResult) -> ScalpRiskState:
+  if isinstance(result, RecordScalpOutcomeResult):
+    return result.state
+  return result
 
 
 async def load_risk(client: Any, symbol: str) -> ScalpRiskState:
