@@ -27,6 +27,7 @@ async def record_cycle(
   await set_last(client, "cycle", symbol, payload)
   for name in (
     "context_load_ms",
+    "analysis_labels_ms",
     "microstructure_ms",
     "strategy_evaluation_ms",
     "persistence_ms",

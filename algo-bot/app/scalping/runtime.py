@@ -111,6 +111,20 @@ async def _load_quote(client: Any, symbol: str) -> tuple[float, float, int] | No
     return None
 
 
+def _bias_alignment(htf_bias: str, direction: str) -> str:
+  bias = str(htf_bias or "unknown").casefold()
+  dir_u = str(direction or "").upper()
+  if bias == "up" and dir_u == "BUY":
+    return "aligned"
+  if bias == "down" and dir_u == "SELL":
+    return "aligned"
+  if bias == "up" and dir_u == "SELL":
+    return "counter"
+  if bias == "down" and dir_u == "BUY":
+    return "counter"
+  return "neutral"
+
+
 async def _ensure_context(
   client: Any,
   source: RedisOHLCSource,
@@ -119,7 +133,7 @@ async def _ensure_context(
   now: int,
   cfg: Any,
   force: bool = False,
-):
+) -> tuple[Any, float]:
   existing = await load_current_context(client, symbol, cfg)
   ctx_cfg = getattr(_scalping_cfg(cfg), "context", None)
   max_age = int(getattr(ctx_cfg, "maximum_m5_age_seconds", 420) or 420)
@@ -128,7 +142,7 @@ async def _ensure_context(
     and not force
     and is_context_fresh(existing, now, max_age, cfg)
   ):
-    return existing
+    return existing, 0.0
 
   windows = await load_scalp_ohlc_windows(
     source, symbol, m1_bars=1, m5_bars=120, m15_bars=120, h1_bars=120,
@@ -136,11 +150,11 @@ async def _ensure_context(
   m5 = windows["m5"]
   quote = await _load_quote(client, symbol)
   if quote is None or m5 is None or m5.empty:
-    return existing
+    return existing, 0.0
   bid, ask, _ = quote
   mid = (bid + ask) / 2.0
   pip = _pip_size(symbol, cfg)
-  snapshot, _micro = await asyncio.to_thread(
+  snapshot, _micro, analysis_labels_ms = await asyncio.to_thread(
     build_scalp_context_and_micro,
     symbol=symbol,
     windows=windows,
@@ -150,7 +164,7 @@ async def _ensure_context(
     cfg=cfg,
   )
   if snapshot is None:
-    return existing
+    return existing, analysis_labels_ms
   current_ttl = int(getattr(ctx_cfg, "current_context_ttl_seconds", 3600) or 3600)
   historic_ttl = int(getattr(ctx_cfg, "historic_context_ttl_seconds", 86400) or 86400)
   await save_context(
@@ -160,7 +174,7 @@ async def _ensure_context(
     historic_ttl=historic_ttl,
   )
   await set_last(client, "context", symbol, json.loads(snapshot.to_json()))
-  return snapshot
+  return snapshot, analysis_labels_ms
 
 
 async def process_m1_bar(
@@ -198,12 +212,15 @@ async def process_m1_bar(
   now = int(bar_ts)
 
   t_ctx = time.perf_counter()
-  context = await _ensure_context(client, source, symbol=symbol, now=now, cfg=cfg)
+  context, analysis_labels_ms = await _ensure_context(
+    client, source, symbol=symbol, now=now, cfg=cfg,
+  )
   context_ms = (time.perf_counter() - t_ctx) * 1000.0
   if context is None:
     result["reason"] = "scalp_context_missing"
     await incr(client, symbol, "opportunity_blocked:scalp_context_missing")
     return result
+  await incr(client, symbol, f"htf_bias:{context.htf_bias}")
   ctx_cfg = getattr(_scalping_cfg(cfg), "context", None)
   max_age = int(getattr(ctx_cfg, "maximum_m5_age_seconds", 420) or 420)
   soft_age = max(max_age * 2, max_age + 300)
@@ -465,6 +482,11 @@ async def process_m1_bar(
 
   t_persist = time.perf_counter()
   for opportunity, decision, score in ranked:
+    await incr(
+      client,
+      symbol,
+      f"bias_alignment:{_bias_alignment(context.htf_bias, opportunity.direction)}",
+    )
     await incr(client, symbol, "opportunity_allowed")
     try:
       from app.autotrade.reaction_funnel import (
@@ -612,6 +634,9 @@ async def process_m1_bar(
     "bar_ts": bar_ts,
     "context_id": context.context_id,
     "session": context.session,
+    "htf_bias": context.htf_bias,
+    "m5_structure": context.m5_structure,
+    "regime": context.regime,
     "discovered": len(opportunities),
     "allowed": len(ranked),
     "blocked": len(result["blocked"]),
@@ -620,6 +645,7 @@ async def process_m1_bar(
     "context_soft_stale": bool(result.get("context_soft_stale")),
     "context_age_seconds": result.get("context_age_seconds"),
     "context_load_ms": round(context_ms, 3),
+    "analysis_labels_ms": round(analysis_labels_ms, 3),
     "microstructure_ms": round(micro_ms, 3),
     "strategy_evaluation_ms": round(strat_ms, 3),
     "persistence_ms": round(persist_ms, 3),

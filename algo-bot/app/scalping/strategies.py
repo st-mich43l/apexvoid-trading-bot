@@ -14,7 +14,6 @@ from app.scalping.microstructure import (
   detect_impulse_pullback,
   detect_sweep_reclaim,
   find_compression_box,
-  macro_momentum_direction,
 )
 from app.scalping.context import is_impulse_pullback_session_allowed
 from app.scalping.models import (
@@ -98,25 +97,6 @@ def _stop_pips(
   return min(max(value, mn), mx)
 
 
-def _fights_fresh_macro_momentum(
-  m1_df: pd.DataFrame, *, direction: str, atr: float, cfg: Any,
-) -> bool:
-  """True when a wide-window move opposes this entry's own direction.
-
-  Live 2026-08-06: impulse_pullback sold the "top" of a range whose high
-  was the pre-crash level, mid-reclaim of a flash crash under an hour old
-  -- its own 30-bar lookback never saw the move that made that level
-  matter. range_sweep has the identical blind spot at a range edge.
-  """
-  mom_cfg = getattr(_scalping_cfg(cfg), "momentum", None)
-  lookback = int(_parse_float(mom_cfg, "macro_veto_lookback_bars", 60.0))
-  min_displacement_atr = _parse_float(mom_cfg, "macro_veto_min_displacement_atr", 2.5)
-  macro = macro_momentum_direction(
-    m1_df, atr=atr, min_displacement_atr=min_displacement_atr, lookback_bars=lookback,
-  )
-  return macro is not None and macro != str(direction).upper()
-
-
 def _technique_require_sweep_body(cfg: Any) -> bool:
   from app.autotrade.killzone import technique_require_sweep_body
 
@@ -174,14 +154,7 @@ def discover_range_sweep(
     tolerance=buffer,
     lookback_bars=lookback,
   )
-  if buy_ev is not None:
-    if pos is not None and pos > buy_max:
-      pass
-    elif _fights_fresh_macro_momentum(
-      m1_df, direction="BUY", atr=context.atr, cfg=cfg,
-    ):
-      pass
-    else:
+  if buy_ev is not None and (pos is None or pos <= buy_max):
       entry = float(buy_ev["close"])
       stop_price = float(buy_ev["extreme"]) - buffer
       stop = _stop_pips(structural=(entry - stop_price) / pip_size, cfg=cfg)
@@ -242,14 +215,7 @@ def discover_range_sweep(
     tolerance=buffer,
     lookback_bars=lookback,
   )
-  if sell_ev is not None:
-    if pos is not None and pos < sell_min:
-      pass
-    elif _fights_fresh_macro_momentum(
-      m1_df, direction="SELL", atr=context.atr, cfg=cfg,
-    ):
-      pass
-    else:
+  if sell_ev is not None and (pos is None or pos >= sell_min):
       entry = float(sell_ev["close"])
       stop_price = float(sell_ev["extreme"]) + buffer
       stop = _stop_pips(structural=(stop_price - entry) / pip_size, cfg=cfg)
@@ -326,17 +292,11 @@ def discover_impulse_pullback(
   buffer = max(pip_size * 2, context.atr * _parse_float(getattr(_scalping_cfg(cfg), "stop", None), "buffer_atr", 0.10))
   out: list[ScalpOpportunity] = []
   pos = context.dealing_range_position
-  htf = str(context.htf_bias or "unknown").casefold()
 
   for direction in ("BUY", "SELL"):
     if direction == "BUY" and pos is not None and pos > buy_max:
       continue
     if direction == "SELL" and pos is not None and pos < sell_min:
-      continue
-    # Live 2026-08-12: soft HTF penalty was not enough — hard-block counter-HTF.
-    if htf == "up" and direction == "SELL":
-      continue
-    if htf == "down" and direction == "BUY":
       continue
     ev = detect_impulse_pullback(m1_df, direction=direction)
     if ev is None:
@@ -345,10 +305,6 @@ def discover_impulse_pullback(
       continue
     # Continuation must not require sweep-reclaim (that gate belongs to
     # range_sweep). Owner 2026-08-26: require_sweep_body was killing L1.
-    if _fights_fresh_macro_momentum(
-      m1_df, direction=direction, atr=context.atr, cfg=cfg,
-    ):
-      continue
     entry = float(ev["close"])
     if direction == "BUY":
       stop_price = float(ev["origin"]) - buffer

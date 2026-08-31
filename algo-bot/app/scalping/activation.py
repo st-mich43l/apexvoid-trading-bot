@@ -159,14 +159,9 @@ def evaluate_scalp_activation(
         {**measured, "session": context.session},
       )
 
-  # HTF agreement for impulse (activation belt-and-suspenders with discovery).
+  # HTF bias is observed for telemetry — not an activation gate.
   htf = str(context.htf_bias or "unknown").casefold()
   measured["htf_bias"] = htf
-  if opportunity.archetype == ARCHETYPE_IMPULSE_PULLBACK:
-    if htf == "up" and opportunity.direction == "SELL":
-      return ScalpDecision(False, True, "scalp_htf_counter_bias", 0.0, measured)
-    if htf == "down" and opportunity.direction == "BUY":
-      return ScalpDecision(False, True, "scalp_htf_counter_bias", 0.0, measured)
 
   # Location — enforce inside HFS
   loc_ctx = build_entry_location_context(
