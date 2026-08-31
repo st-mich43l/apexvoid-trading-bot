@@ -698,6 +698,274 @@ def _resolve_fill_stop_pips(event: dict, symbol: str) -> float | None:
     return None
 
 
+_TERMINAL_RUNTIME_STAGES = frozenset({
+  "closed", "cancelled", "failed", "expired",
+})
+_TERMINAL_RUNTIME_GROUP_STAGES = frozenset({
+  "closed", "cancelled", "failed", "expired", "recovery_required",
+})
+_TERMINAL_RUNTIME_REASONS = frozenset({
+  "unknown_leg_close",
+  "group_stop_loss",
+  "manual_or_external_close",
+  "cancelled",
+  "expired",
+  "failed",
+})
+
+
+def _runtime_is_stats_terminal(runtime: dict) -> bool:
+  """True when a V8 plan_runtime should appear as a closed /trade_stats row."""
+  stage = str(runtime.get("Stage") or "").strip().lower()
+  group_stage = str(runtime.get("GroupStage") or "").strip().lower()
+  terminal = str(runtime.get("TerminalReason") or "").strip().lower()
+  try:
+    remaining = int(runtime.get("RemainingVolume") or 0)
+  except (TypeError, ValueError):
+    remaining = 0
+  legs = runtime.get("Legs") or []
+  legs_closed = bool(legs) and all(
+    str(leg.get("Stage") or "").strip().lower() == "closed"
+    for leg in legs
+  )
+  if remaining > 0 and group_stage != "recovery_required" and not legs_closed:
+    return False
+  if stage in _TERMINAL_RUNTIME_STAGES:
+    return True
+  if group_stage in _TERMINAL_RUNTIME_GROUP_STAGES:
+    return True
+  if terminal in _TERMINAL_RUNTIME_REASONS:
+    return True
+  return legs_closed
+
+
+def _signed_move_pips(
+  *,
+  direction: str | None,
+  entry: float,
+  exit_price: float,
+  symbol: str,
+) -> float:
+  move = float(exit_price) - float(entry)
+  if str(direction or "").upper() == "SELL":
+    move = -move
+  return move / pip_for(symbol or "XAU")
+
+
+def _result_pips_from_plan_runtime(
+  runtime: dict,
+  *,
+  recovery: dict | None = None,
+) -> float | None:
+  """Derive journal pips from retained executor runtime when stream events are gone."""
+  symbol = str(runtime.get("Symbol") or "XAU").upper()
+  direction = str(runtime.get("Direction") or "")
+  try:
+    entry = runtime.get("GroupWeightedFillPrice")
+    if entry is None:
+      entry = runtime.get("EntryFillPrice")
+    entry_f = float(entry) if entry is not None else None
+  except (TypeError, ValueError):
+    entry_f = None
+  raw_highest = runtime.get("HighestBookedTargetIndex")
+  try:
+    highest = int(raw_highest) if raw_highest is not None else -1
+  except (TypeError, ValueError):
+    highest = -1
+
+  if highest >= 0 and recovery:
+    targets = recovery.get("targets") or []
+    if isinstance(targets, list) and highest < len(targets):
+      target = targets[highest] or {}
+      try:
+        target_price = float(target.get("price"))
+      except (TypeError, ValueError):
+        target_price = None
+      if entry_f is not None and target_price is not None:
+        return abs(_signed_move_pips(
+          direction=direction,
+          entry=entry_f,
+          exit_price=target_price,
+          symbol=symbol,
+        ))
+
+  stop = runtime.get("CurrentStop")
+  if stop is None or float(stop or 0) == 0:
+    stop = runtime.get("GroupAbsoluteStop")
+  try:
+    stop_f = float(stop) if stop is not None else None
+  except (TypeError, ValueError):
+    stop_f = None
+  if entry_f is not None and stop_f is not None and stop_f > 0:
+    return _signed_move_pips(
+      direction=direction,
+      entry=entry_f,
+      exit_price=stop_f,
+      symbol=symbol,
+    )
+  return None
+
+
+def close_event_from_plan_runtime(
+  group_id: str,
+  runtime: dict,
+  *,
+  recovery: dict | None = None,
+  closed_at: int | None = None,
+) -> dict | None:
+  """Build a synthetic ``position_closed`` event from retained plan_runtime JSON."""
+  if not _runtime_is_stats_terminal(runtime):
+    return None
+  result_pips = _result_pips_from_plan_runtime(runtime, recovery=recovery)
+  if result_pips is None:
+    return None
+  symbol = str(runtime.get("Symbol") or "XAU").upper()
+  direction = runtime.get("Direction")
+  position_id = runtime.get("PositionId")
+  if position_id is None:
+    for leg in runtime.get("Legs") or []:
+      if leg.get("BrokerPositionId") is not None:
+        position_id = leg.get("BrokerPositionId")
+        break
+  stop = runtime.get("CurrentStop") or runtime.get("GroupAbsoluteStop")
+  try:
+    highest = int(runtime.get("HighestBookedTargetIndex") or -1)
+  except (TypeError, ValueError):
+    highest = -1
+  terminal = str(runtime.get("TerminalReason") or "plan_runtime_reconcile")
+  if highest >= 0:
+    message = (
+      f"PLAN CLOSED · highest TP archived TP{highest + 1} · "
+      f"runtime reconcile ({terminal})"
+    )
+    target_pips = abs(float(result_pips))
+  else:
+    message = (
+      f"PLAN CLOSED · no TP archived · losing {float(result_pips):.1f} pips · "
+      f"runtime reconcile ({terminal})"
+    )
+    target_pips = None
+  exit_price = stop
+  if highest >= 0 and recovery:
+    targets = recovery.get("targets") or []
+    if isinstance(targets, list) and highest < len(targets):
+      try:
+        exit_price = float((targets[highest] or {}).get("price"))
+      except (TypeError, ValueError):
+        pass
+  return {
+    "type": "position_closed",
+    "timestamp": int(closed_at or time.time()),
+    "group_id": group_id,
+    "candidate_id": group_id,
+    "position_id": position_id,
+    "symbol": symbol,
+    "direction": direction,
+    "setup": (
+      ((recovery or {}).get("analysis") or {}).get("strategy")
+      if recovery else None
+    ),
+    "stream": "algo_auto",
+    "price": exit_price,
+    "stop_loss": stop,
+    "target_pips": target_pips,
+    "group_realized_pips": float(result_pips),
+    "message": message,
+    "reason_code": terminal,
+    "state": "closed",
+  }
+
+
+async def list_orphan_auto_trade_group_ids() -> list[str]:
+  """Fill groups that never got an ``auto_trade_results`` row."""
+  async with _connect() as db:
+    rows = await db.fetch(
+      """
+      SELECT f.group_id
+      FROM auto_trade_fills f
+      LEFT JOIN auto_trade_results r ON r.group_id = f.group_id
+      WHERE r.group_id IS NULL
+      GROUP BY f.group_id
+      ORDER BY MIN(f.filled_at) ASC
+      """
+    )
+  return [str(row["group_id"]) for row in rows]
+
+
+async def reconcile_orphan_auto_trade_result(
+  group_id: str,
+  runtime: dict,
+  *,
+  recovery: dict | None = None,
+  closed_at: int | None = None,
+) -> bool:
+  """Insert a missing result from plan_runtime. Returns True when a row is written."""
+  event = close_event_from_plan_runtime(
+    group_id, runtime, recovery=recovery, closed_at=closed_at,
+  )
+  if event is None:
+    return False
+  async with _connect() as db:
+    exists = await db.fetchval(
+      "SELECT 1 FROM auto_trade_results WHERE group_id = $1", group_id,
+    )
+    fill = await db.fetchval(
+      "SELECT 1 FROM auto_trade_fills WHERE group_id = $1 LIMIT 1", group_id,
+    )
+  if exists or not fill:
+    return False
+  await _record_auto_trade_result(event)
+  async with _connect() as db:
+    return bool(await db.fetchval(
+      "SELECT 1 FROM auto_trade_results WHERE group_id = $1", group_id,
+    ))
+
+
+async def _ensure_fill_from_close_event(event: dict, group_id: str) -> None:
+  """When close beats fill in the stream, seed a minimal fill so the JOIN works."""
+  position_id = event.get("position_id")
+  stream = _resolve_auto_trade_stream(event)
+  if position_id is None or stream not in {"algo_auto", "algo_manual"}:
+    return
+  symbol = str(event.get("symbol") or "XAU").upper()
+  entry = (
+    event.get("entry_price")
+    or event.get("fill_price")
+    or event.get("group_weighted_fill_price")
+  )
+  stop_pips = None
+  if entry is not None and event.get("stop_loss") is not None:
+    try:
+      stop_pips = abs(float(entry) - float(event["stop_loss"])) / pip_for(symbol)
+    except (TypeError, ValueError, ZeroDivisionError):
+      stop_pips = None
+  if stop_pips is None:
+    stop_pips = _resolve_fill_stop_pips(
+      {**event, "price": entry if entry is not None else event.get("price")},
+      symbol,
+    )
+  from app.autotrade.reaction_funnel import normalize_setup_type
+
+  setup_type = normalize_setup_type(
+    event.get("setup") or event.get("setup_type") or event.get("strategy"),
+  )
+  trade_key = f"algo:{group_id}"
+  async with _connect() as db:
+    await db.execute(
+      """
+      INSERT INTO auto_trade_fills (
+        position_id, group_id, trade_key, trade_stream, symbol,
+        setup_type, direction, entry_price, stop_pips, volume, filled_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      ON CONFLICT (position_id) DO NOTHING
+      """,
+      int(position_id), group_id, trade_key, stream,
+      symbol, setup_type,
+      event.get("direction"), entry, stop_pips,
+      event.get("volume"), int(event.get("timestamp") or time.time()),
+    )
+
+
 async def _record_auto_trade_fill(event: dict) -> None:
   position_id = event.get("position_id")
   stream = _resolve_auto_trade_stream(event)
@@ -778,8 +1046,18 @@ async def _record_auto_trade_result(event: dict) -> None:
       "WHERE group_id = $1 ORDER BY filled_at ASC LIMIT 1",
       group_id,
     )
+  if fill is None:
+    await _ensure_fill_from_close_event(event, group_id)
+    async with _connect() as db:
+      fill = await db.fetchrow(
+        "SELECT trade_key, trade_stream, setup_type, direction, stop_pips, symbol "
+        "FROM auto_trade_fills "
+        "WHERE group_id = $1 ORDER BY filled_at ASC LIMIT 1",
+        group_id,
+      )
     if fill is None:
       return
+  async with _connect() as db:
     if (
       event.get("type") == "position_closed"
       and await db.fetchval(
@@ -793,6 +1071,16 @@ async def _record_auto_trade_result(event: dict) -> None:
     no_tp_archived = "no tp archived" in message_cf or contradictory_tp
     highest_tp_archived = (
       "highest tp archived" in message_cf and not contradictory_tp
+    )
+    reason = str(
+      event.get("reason_code") or event.get("close_reason") or ""
+    ).casefold()
+    terminal_loss_hint = (
+      no_tp_archived
+      or "unknown_leg_close" in reason
+      or "stop" in reason
+      or "manual_or_external" in reason
+      or "runtime reconcile" in message_cf
     )
     result_pips = None
     if highest_tp_archived and event.get("target_pips") is not None:
@@ -847,10 +1135,12 @@ async def _record_auto_trade_result(event: dict) -> None:
         for row in fills:
           if row["entry_price"] is None:
             continue
-          move = float(exit_price) - float(row["entry_price"])
-          if str(row["direction"]).upper() == "SELL":
-            move = -move
-          pips = move / pip_for(row["symbol"] or "XAU")
+          pips = _signed_move_pips(
+            direction=row["direction"],
+            entry=float(row["entry_price"]),
+            exit_price=float(exit_price),
+            symbol=row["symbol"] or "XAU",
+          )
           peak = pips if peak is None else max(peak, pips)
         if peak is not None:
           if highest_tp_archived:
@@ -860,8 +1150,8 @@ async def _record_auto_trade_result(event: dict) -> None:
               result_pips = peak
           elif no_tp_archived or not highest_tp_archived:
             result_pips = peak
-      if result_pips is None and no_tp_archived:
-        # Full SL, no broker exit price: approximate from planned stop.
+      if result_pips is None and terminal_loss_hint:
+        # Full SL / unknown close without parseable exit: planned stop.
         stops = [
           float(row["stop_pips"])
           for row in fills
@@ -870,6 +1160,11 @@ async def _record_auto_trade_result(event: dict) -> None:
         if stops:
           result_pips = -sum(stops) / len(stops)
     if result_pips is None:
+      log.warning(
+        "auto_trade result skipped group_id=%s type=%s reason=unparseable_pips",
+        group_id,
+        event.get("type"),
+      )
       return
     # Loss only for SL with no TP archived. A residual BE/SL after a booked
     # TP must never flip the trade into a loser in /trade_stats.
@@ -906,7 +1201,7 @@ async def _record_auto_trade_result(event: dict) -> None:
           booked_tp_count = max(booked_tp_count, int(event["target_index"]))
       except (TypeError, ValueError):
         pass
-    elif no_tp_archived:
+    elif no_tp_archived or terminal_loss_hint:
       booked_tp_count = 0
     await db.execute(
       """

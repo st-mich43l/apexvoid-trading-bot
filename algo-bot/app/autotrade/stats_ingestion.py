@@ -17,7 +17,10 @@ import time
 from app.core.config import runtime_config
 from app.autotrade.event_integrity import contradictory_archived_tp
 from app.persistence import redis_state
-from app.persistence.store import record_auto_trade_event
+from app.persistence.store import (
+  reconcile_orphan_auto_trade_result,
+  record_auto_trade_event,
+)
 
 log = logging.getLogger(__name__)
 
@@ -26,6 +29,38 @@ STATS_EVENT_CURSOR_KEY = "auto_trade:stats_event_cursor"
 
 def _text(value: object) -> str:
   return value.decode() if isinstance(value, bytes) else str(value)
+
+
+async def _maybe_reconcile_group_from_runtime(client, group_id: str | None) -> None:
+  """Recover /trade_stats rows when close never landed (unknown_leg_close)."""
+  if not group_id:
+    return
+  raw = await client.get(f"execution:plan_runtime:{group_id}")
+  if raw is None:
+    return
+  try:
+    runtime = json.loads(_text(raw))
+  except (TypeError, json.JSONDecodeError):
+    return
+  if not isinstance(runtime, dict):
+    return
+  recovery = None
+  recovery_raw = await client.get(f"execution:plan_recovery:{group_id}")
+  if recovery_raw is not None:
+    try:
+      loaded = json.loads(_text(recovery_raw))
+    except (TypeError, json.JSONDecodeError):
+      loaded = None
+    if isinstance(loaded, dict):
+      recovery = loaded
+  try:
+    await reconcile_orphan_auto_trade_result(
+      str(group_id), runtime, recovery=recovery,
+    )
+  except Exception:
+    log.exception(
+      "plan_runtime stats reconcile failed group_id=%s", group_id,
+    )
 
 
 def _complete_outcome(event: dict) -> str | None:
@@ -459,6 +494,18 @@ async def process_auto_trade_stats_entries(
       log.warning("Invalid auto-trade stats event %s: %s", entry_id, exc)
     else:
       await record_auto_trade_event(event)
+      event_type = str(event.get("type") or "")
+      group_id = event.get("group_id") or event.get("candidate_id")
+      if event_type in {
+        "opened", "add", "manual_opened", "order_filled", "warning",
+        "group_result", "position_closed", "manual_closed",
+      }:
+        # Close-before-fill / unknown_leg_close: fill or recovery warning may
+        # be the only chance to materialize the journal row.
+        await _maybe_reconcile_group_from_runtime(
+          client,
+          None if group_id is None else str(group_id),
+        )
       try:
         await _track_scalp_event(client, event)
       except Exception:
