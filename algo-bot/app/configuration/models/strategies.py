@@ -87,6 +87,22 @@ class StrategiesReactionSupplyConfig(FrozenConfigModel):
 
 class StrategiesReactionTrendlineConfig(FrozenConfigModel):
     enabled: bool = config_field(True, canonical_env='AUTO_TRADE_TRENDLINE_REACTION_ENABLED', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.BOOLEAN, risk=RiskClassification.STRATEGY_BEHAVIOR, description='Controls .', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, True),), validation_summary='Pydantic required/type coercion only')
+    reject_exhausted: bool = config_field(True, canonical_env='AUTO_TRADE_TRENDLINE_REJECT_EXHAUSTED', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.BOOLEAN, risk=RiskClassification.STRATEGY_BEHAVIOR, description='Skip trendline reaction when the line is marked exhausted.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, True),), validation_summary='Pydantic required/type coercion only')
+    maximum_bars_since_last_touch: int | None = config_field(None, canonical_env='AUTO_TRADE_TRENDLINE_MAX_BARS_SINCE_TOUCH', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.COUNT, risk=RiskClassification.STRATEGY_BEHAVIOR, description='Optional strategy override for stale last-touch age; None inherits analysis.trendlines.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, None),), validation_summary='Pydantic required/type coercion only')
+    maximum_fit_error_atr: float | None = config_field(None, canonical_env='AUTO_TRADE_TRENDLINE_MAX_FIT_ERROR_ATR', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.ATR, risk=RiskClassification.STRATEGY_BEHAVIOR, description='Optional strategy override for fit error; None inherits analysis.trendlines.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, None),), validation_summary='Pydantic required/type coercion only')
+    require_htf_aligned: bool = config_field(False, canonical_env='AUTO_TRADE_TRENDLINE_REQUIRE_HTF_ALIGNED', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.BOOLEAN, risk=RiskClassification.STRATEGY_BEHAVIOR, description='Require HTF bias aligned with trendline reaction direction.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, False),), validation_summary='Pydantic required/type coercion only')
+    require_killzone: bool = config_field(False, canonical_env='AUTO_TRADE_TRENDLINE_REQUIRE_KILLZONE', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.BOOLEAN, risk=RiskClassification.STRATEGY_BEHAVIOR, description='Require killzone for Trendline Reaction even when global reaction_require_killzone is off.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, False),), validation_summary='Pydantic required/type coercion only')
+    minimum_grade: str | None = config_field(None, canonical_env='AUTO_TRADE_TRENDLINE_MIN_GRADE', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.ENUM, risk=RiskClassification.STRATEGY_BEHAVIOR, description='Optional minimum ZoneWatch grade for Trendline Reaction; empty/None leaves unset.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, None),), allowed_values=('A', 'B'), validation_summary='Pydantic type coercion + field validator')
+
+    @field_validator('minimum_grade', mode='before')
+    @classmethod
+    def normalize_minimum_grade(cls, value):
+        if value is None:
+            return None
+        if isinstance(value, str):
+            stripped = value.strip()
+            return stripped.upper() if stripped else None
+        return value
 
 class StrategiesReactionConfig(FrozenConfigModel):
     demand: StrategiesReactionDemandConfig = Field(default_factory=StrategiesReactionDemandConfig)

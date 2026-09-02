@@ -132,8 +132,8 @@
     "zone_reconcile_mode": "shadow",
     "zone_scale_undersized_policy": "single_entry"
   },
-  "contract_fingerprint": "052e43e73ad9756b8b6a95db493ec846e0d6856dc218662f89e796c09a3159e7",
-  "effective_configuration_fingerprint": "874d91d1c2d51db41b5c007dbb6b7b1b49f6e401751102b39a2a941be1306663",
+  "contract_fingerprint": "36e0a6912b1022fcd26b7db86e23edfd0f9788c253fdb45cd80886ef248deec5",
+  "effective_configuration_fingerprint": "ca772abfb7a7e1f1d625b1f431ca70f707763d72bc42a68a1152ac5291e8a96c",
   "feed": {
     "backfill_bars": 1500,
     "bar_quality_lookback": 6,
@@ -973,7 +973,13 @@
             "enabled": true
           },
           "trendline": {
-            "enabled": true
+            "enabled": true,
+            "maximum_bars_since_last_touch": null,
+            "maximum_fit_error_atr": null,
+            "minimum_grade": null,
+            "reject_exhausted": true,
+            "require_htf_aligned": false,
+            "require_killzone": false
           }
         },
         "scalp": {
@@ -1939,7 +1945,13 @@
             "enabled": true
           },
           "trendline": {
-            "enabled": true
+            "enabled": true,
+            "maximum_bars_since_last_touch": null,
+            "maximum_fit_error_atr": null,
+            "minimum_grade": null,
+            "reject_exhausted": true,
+            "require_htf_aligned": false,
+            "require_killzone": false
           }
         },
         "scalp": {
@@ -2875,7 +2887,13 @@
             "enabled": true
           },
           "trendline": {
-            "enabled": true
+            "enabled": true,
+            "maximum_bars_since_last_touch": null,
+            "maximum_fit_error_atr": null,
+            "minimum_grade": null,
+            "reject_exhausted": true,
+            "require_htf_aligned": false,
+            "require_killzone": false
           }
         },
         "scalp": {
@@ -3823,7 +3841,13 @@
             "enabled": true
           },
           "trendline": {
-            "enabled": true
+            "enabled": true,
+            "maximum_bars_since_last_touch": null,
+            "maximum_fit_error_atr": null,
+            "minimum_grade": null,
+            "reject_exhausted": true,
+            "require_htf_aligned": false,
+            "require_killzone": false
           }
         },
         "scalp": {
@@ -4755,7 +4779,13 @@
             "enabled": true
           },
           "trendline": {
-            "enabled": true
+            "enabled": true,
+            "maximum_bars_since_last_touch": null,
+            "maximum_fit_error_atr": null,
+            "minimum_grade": null,
+            "reject_exhausted": true,
+            "require_htf_aligned": false,
+            "require_killzone": false
           }
         },
         "scalp": {
@@ -5556,7 +5586,13 @@
             "enabled": true
           },
           "trendline": {
-            "enabled": true
+            "enabled": true,
+            "maximum_bars_since_last_touch": null,
+            "maximum_fit_error_atr": null,
+            "minimum_grade": null,
+            "reject_exhausted": true,
+            "require_htf_aligned": false,
+            "require_killzone": false
           }
         },
         "scalp": {
@@ -6385,7 +6421,13 @@
             "enabled": true
           },
           "trendline": {
-            "enabled": true
+            "enabled": true,
+            "maximum_bars_since_last_touch": null,
+            "maximum_fit_error_atr": null,
+            "minimum_grade": null,
+            "reject_exhausted": true,
+            "require_htf_aligned": false,
+            "require_killzone": false
           }
         },
         "scalp": {
@@ -7184,7 +7226,13 @@
             "enabled": true
           },
           "trendline": {
-            "enabled": true
+            "enabled": true,
+            "maximum_bars_since_last_touch": null,
+            "maximum_fit_error_atr": null,
+            "minimum_grade": null,
+            "reject_exhausted": true,
+            "require_htf_aligned": false,
+            "require_killzone": false
           }
         },
         "scalp": {
@@ -7995,7 +8043,13 @@
             "enabled": true
           },
           "trendline": {
-            "enabled": true
+            "enabled": true,
+            "maximum_bars_since_last_touch": null,
+            "maximum_fit_error_atr": null,
+            "minimum_grade": null,
+            "reject_exhausted": true,
+            "require_htf_aligned": false,
+            "require_killzone": false
           }
         },
         "scalp": {
@@ -8786,7 +8840,13 @@
             "enabled": true
           },
           "trendline": {
-            "enabled": true
+            "enabled": true,
+            "maximum_bars_since_last_touch": null,
+            "maximum_fit_error_atr": null,
+            "minimum_grade": null,
+            "reject_exhausted": true,
+            "require_htf_aligned": false,
+            "require_killzone": false
           }
         },
         "scalp": {

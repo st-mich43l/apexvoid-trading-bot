@@ -775,6 +775,13 @@ strategies:
       enabled: true
     trendline:
       enabled: true
+      reject_exhausted: true
+      # optional per-strategy tightenings, omitted = inherit analysis.trendlines
+      # maximum_bars_since_last_touch:
+      # maximum_fit_error_atr:
+      # require_htf_aligned: false
+      # require_killzone: false
+      # minimum_grade:
   scalp:
     fade_scalp_enabled: true
     scalp_barrier_fallback_enabled: true

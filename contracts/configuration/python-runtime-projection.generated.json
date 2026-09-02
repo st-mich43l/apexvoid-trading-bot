@@ -1,6 +1,6 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "052e43e73ad9756b8b6a95db493ec846e0d6856dc218662f89e796c09a3159e7",
+  "configuration_contract_fingerprint_sha256": "36e0a6912b1022fcd26b7db86e23edfd0f9788c253fdb45cd80886ef248deec5",
   "excluded_ctrader_only_count": 49,
   "excluded_paths": [
     "bootstrap.ctrader.connection.host",
@@ -53,7 +53,7 @@
     "risk.sizing.add_require_risk_free",
     "risk.sizing.risk_pct"
   ],
-  "included_leaf_count": 498,
+  "included_leaf_count": 512,
   "included_paths": [
     "actionability.contested_corridor.gap_atr",
     "actionability.counter_bias.allowed",
@@ -162,8 +162,16 @@
     "analysis.techniques.validation_enabled",
     "analysis.trendlines.dedup_slope_percent",
     "analysis.trendlines.dedup_value_atr",
+    "analysis.trendlines.maximum_bars_since_last_touch",
+    "analysis.trendlines.maximum_fit_error_atr",
     "analysis.trendlines.maximum_slope_atr",
+    "analysis.trendlines.maximum_touches",
+    "analysis.trendlines.maximum_violations",
+    "analysis.trendlines.minimum_slope_atr",
+    "analysis.trendlines.minimum_span_bars",
+    "analysis.trendlines.minimum_touch_spacing_bars",
     "analysis.trendlines.minimum_touches",
+    "analysis.trendlines.pierce_tolerance_atr",
     "analysis.trendlines.tolerance_atr",
     "analysis.triggers.m1.patterns",
     "analysis.triggers.m1.strong_close_pct",
@@ -473,6 +481,12 @@
     "strategies.reaction.session_level.enabled",
     "strategies.reaction.supply.enabled",
     "strategies.reaction.trendline.enabled",
+    "strategies.reaction.trendline.maximum_bars_since_last_touch",
+    "strategies.reaction.trendline.maximum_fit_error_atr",
+    "strategies.reaction.trendline.minimum_grade",
+    "strategies.reaction.trendline.reject_exhausted",
+    "strategies.reaction.trendline.require_htf_aligned",
+    "strategies.reaction.trendline.require_killzone",
     "strategies.scalp.fade_scalp_enabled",
     "strategies.scalp.scalp_barrier_fallback_enabled",
     "strategies.scalp.scalp_barrier_fallback_min_confirmations",
@@ -557,6 +571,6 @@
   "included_secret_count": 6,
   "included_shared_field_count": 96,
   "projection_model": "app.configuration.models.python_runtime.PythonRuntimeConfig",
-  "source_fingerprint_sha256": "052e43e73ad9756b8b6a95db493ec846e0d6856dc218662f89e796c09a3159e7",
+  "source_fingerprint_sha256": "36e0a6912b1022fcd26b7db86e23edfd0f9788c253fdb45cd80886ef248deec5",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }
