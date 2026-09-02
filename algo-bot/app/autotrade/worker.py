@@ -490,6 +490,16 @@ class PrivatePolicySubject:
   strategy_mode: str | None = None
 
 
+
+def _collect_fixed_rr_metric_sink(
+  bucket: list[tuple[str, str, dict[str, str]]],
+):
+  """Sync sink that records fixed_rr room-rejection counters for later await."""
+  def _sink(name: str, symbol: str, dimensions: dict[str, str]) -> None:
+    bucket.append((name, symbol, dict(dimensions)))
+  return _sink
+
+
 def _fixed_rr_policy_targets(
   evaluation: Any,
 ) -> tuple[int, ...]:
@@ -6121,6 +6131,7 @@ async def _publish_trade_plan_v8(
         fixed_rr_room = max(0.0, float(raw_room))
       except (TypeError, ValueError):
         fixed_rr_room = None
+  fixed_rr_metrics: list[tuple[str, str, dict[str, str]]] = []
   gate_policy = evaluate_execution_policy(
     match_for_plan,
     spot_price=spot.price,
@@ -6129,8 +6140,16 @@ async def _publish_trade_plan_v8(
     pip_size=units.pip_size(symbol),
     cfg=None,
     available_target_room_pips=fixed_rr_room,
+    metric_sink=_collect_fixed_rr_metric_sink(fixed_rr_metrics),
     **opposing_kwargs,
   )
+  for metric_name, metric_symbol, metric_dims in fixed_rr_metrics:
+    await increment_metric(
+      client,
+      metric_name,
+      symbol=metric_symbol,
+      dimensions=metric_dims,
+    )
   gate_measured = dict(gate_policy.measured)
   if fixed_rr_target and not gate_policy.allowed:
     await _release_claims()

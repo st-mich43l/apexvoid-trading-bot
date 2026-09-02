@@ -237,14 +237,11 @@ instrument_packs:
       reward_risk: 2.0
       target_r_multiples:
       - 1.0
-      - 1.5
       - 2.0
       close_ratios:
-      - 0.25
-      - 0.25
-      - 0.50
-      trail_after_r: 1.5
-      trail_to_r: 1.0
+      - 0.5
+      - 0.5
+      breakeven_after_r: 1.0
       entry_clips: 2
     manual:
       enabled: true
@@ -302,10 +299,11 @@ instrument_packs:
       reward_risk: 2.0
       target_r_multiples:
       - 1.0
-      - 1.5
       - 2.0
-      trail_after_r: 1.5
-      trail_to_r: 1.0
+      close_ratios:
+      - 0.5
+      - 0.5
+      breakeven_after_r: 1.0
       entry_clips: 2
     manual:
       enabled: true
@@ -363,14 +361,11 @@ instrument_packs:
       reward_risk: 2.0
       target_r_multiples:
       - 1.0
-      - 1.5
       - 2.0
       close_ratios:
-      - 0.25
-      - 0.25
-      - 0.50
-      trail_after_r: 1.5
-      trail_to_r: 1.0
+      - 0.5
+      - 0.5
+      breakeven_after_r: 1.0
       entry_clips: 2
     manual:
       enabled: true
@@ -501,11 +496,8 @@ instruments:
       strategies.reaction.key_level.require_explicit_role: true
       strategies.reaction.key_level.require_killzone: true
       strategies.reaction.key_level.min_grade: A
-    # Front-loaded vs EURUSD/USDJPY's fx_fixed_2r_v1 25/25/50: GBPJPY's
-    # moves happen fast and reverse hard, so lock in more of the win at
-    # 1R instead of waiting out the full ladder and risking a violent
-    # snap-back giving it back. Same targeting mode/multiples/trail as the
-    # fx_jpy_cross_v1 pack (not repeated here) -- only close_ratios differ.
+    # Policy name retained for registry continuity. Close-ratio front-load
+    # retired: uniform 1R/2R 50/50 + breakeven_after_r=1.0 across fixed_rr.
     policy: fx_fixed_2r_frontload_v1
     reaction_session: tokyo_london
     stop_envelope:
@@ -519,10 +511,16 @@ instruments:
       opposing_minimum_separation_price: 0.25
       fvg_entry_max_width_price: 0.25
     targeting:
+      mode: fixed_rr
+      reward_risk: 2.0
+      target_r_multiples:
+      - 1.0
+      - 2.0
       close_ratios:
-      - 0.40
-      - 0.25
-      - 0.35
+      - 0.5
+      - 0.5
+      breakeven_after_r: 1.0
+      entry_clips: 2
   USDJPY:
     pack: fx_jpy_cross_v1
     rollout: live
@@ -563,14 +561,20 @@ instruments:
       opposing_minimum_separation_price: 0.15
       fvg_entry_max_width_price: 0.15
     targeting:
+      mode: fixed_rr
+      reward_risk: 2.0
+      target_r_multiples:
+      - 1.0
+      - 2.0
       close_ratios:
-      - 0.25
-      - 0.25
-      - 0.50
+      - 0.5
+      - 0.5
+      breakeven_after_r: 1.0
+      entry_clips: 2
   XAU:
     pack: xau_fixed_2r_v1
     rollout: live
-    # Technique: structure fixed_rr from pack (1R/1.5R/2R). Manual stays
+    # Technique: structure fixed_rr from pack (1R/2R 50/50 + BE). Manual stays
     # zone_ladder. M1 scalping keeps strategies.scalping discovery book.
     # Withdrew min_sell_zone_score:10 (PR #449) — nearest-zone gap was ~1pt
     # on n=26, inverted in 4/8 SELL cells, and the floor sat above most

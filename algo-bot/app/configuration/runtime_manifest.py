@@ -602,6 +602,7 @@ def upgrade_v1_payload_to_v2(payload: Mapping[str, Any]) -> dict[str, Any]:
           "reward_risk": None,
           "target_r_multiples": [],
           "close_ratios": [],
+          "breakeven_after_r": None,
           "trail_after_r": None,
           "trail_to_r": None,
         },

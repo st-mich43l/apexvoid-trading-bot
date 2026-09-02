@@ -19,11 +19,9 @@ XAU_CURRENT_V1_POLICY = "xau_current_v1"
 # M1 scalping stays on its own discovery book — see technique_fixed_rr_targeting.
 XAU_FIXED_2R_V1_POLICY = "xau_fixed_2r_v1"
 FX_FIXED_2R_V1_POLICY = "fx_fixed_2r_v1"
-# 2026 GBP/JPY dig: ATR(14) ~180 pips/day vs EURUSD's ~70, and moves reverse
-# hard once they've run -- front-load profit-taking (40/25/35 instead of the
-# standard 25/25/50) so more of the win is locked in before a violent
-# snap-back gives it back. Same 2R ladder/trail/entry_clips as
-# fx_fixed_2r_v1, only the close_ratios split differs.
+# Historical name kept for registry continuity. Close-ratio front-load was
+# retired in favor of the uniform 1R/2R 50/50 + breakeven contract shared
+# with fx_fixed_2r_v1 / xau_fixed_2r_v1.
 FX_FIXED_2R_FRONTLOAD_V1_POLICY = "fx_fixed_2r_frontload_v1"
 REGISTERED_INSTRUMENT_POLICIES = frozenset({
   FX_FIXED_2R_V1_POLICY,
@@ -32,14 +30,14 @@ REGISTERED_INSTRUMENT_POLICIES = frozenset({
   XAU_CURRENT_V1_POLICY,
 })
 
-# Required targeting.close_ratios per fixed_rr policy variant -- every other
-# fixed_rr field (reward_risk, target_r_multiples, trail_after_r, trail_to_r,
-# entry_clips) is shared across variants; only the close-ratio split differs.
-FIXED_RR_POLICY_CLOSE_RATIOS: dict[str, tuple[float, float, float]] = {
-  FX_FIXED_2R_V1_POLICY: (0.25, 0.25, 0.50),
-  FX_FIXED_2R_FRONTLOAD_V1_POLICY: (0.40, 0.25, 0.35),
-  XAU_FIXED_2R_V1_POLICY: (0.25, 0.25, 0.50),
-}
+# Policies that must carry the uniform fixed_rr targeting contract.
+# fx_fixed_2r_frontload_v1 previously differed only by GBPJPY 40/25/35 —
+# uniformity replaces that front-load deliberately.
+FIXED_RR_POLICIES = frozenset({
+  FX_FIXED_2R_V1_POLICY,
+  FX_FIXED_2R_FRONTLOAD_V1_POLICY,
+  XAU_FIXED_2R_V1_POLICY,
+})
 
 
 class InstrumentRollout(StrEnum):
@@ -53,6 +51,21 @@ class InstrumentRollout(StrEnum):
 class InstrumentTargetMode(StrEnum):
   LADDER_PIPS = "ladder_pips"
   FIXED_RR = "fixed_rr"
+
+
+# Uniform autonomous R:R ladder. Every fixed_rr instrument books 50% at 1R
+# and 50% at 2R, with the runner moving to breakeven once TP1 fills. The
+# 2R→1R room fallback is decided per trade in execution_policy.
+FIXED_RR_REQUIRED_TARGETING = {
+  "mode": InstrumentTargetMode.FIXED_RR,
+  "reward_risk": 2.0,
+  "target_r_multiples": (1.0, 2.0),
+  "close_ratios": (0.5, 0.5),
+  "breakeven_after_r": 1.0,
+  "trail_after_r": None,
+  "trail_to_r": None,
+  "entry_clips": 2,
+}
 
 
 class InstrumentManualEntryMode(StrEnum):
@@ -134,6 +147,9 @@ class InstrumentTargetingConfig(FrozenConfigModel):
   close_ratios: tuple[float, ...] = ()
   trail_after_r: float | None = Field(default=None, gt=0)
   trail_to_r: float | None = Field(default=None, gt=0)
+  # Move the runner's stop to the group weighted entry once this R multiple is
+  # booked. Mutually exclusive with the R-trail.
+  breakeven_after_r: float | None = Field(default=None, gt=0)
   # Instrument-owned DCA clip count for autonomous technique/scalp entries.
   # Production XAU and FX packs use shallow + deep clips.
   entry_clips: int = Field(default=5, ge=2, le=5)
@@ -170,10 +186,28 @@ class InstrumentTargetingConfig(FrozenConfigModel):
         raise ValueError("fixed_rr close_ratios must be positive")
       if not math.isclose(sum(ratios), 1.0, rel_tol=0.0, abs_tol=1e-9):
         raise ValueError("fixed_rr close_ratios must sum to 1.0")
+      if (
+        self.breakeven_after_r is not None
+        and self.trail_after_r is not None
+      ):
+        raise ValueError(
+          "fixed_rr breakeven_after_r and trail_after_r are mutually exclusive"
+        )
       if (self.trail_after_r is None) != (self.trail_to_r is None):
         raise ValueError(
           "fixed_rr trail_after_r and trail_to_r must be set together"
         )
+      if self.breakeven_after_r is not None:
+        breakeven_after = float(self.breakeven_after_r)
+        if not math.isfinite(breakeven_after):
+          raise ValueError("fixed_rr breakeven_after_r must be finite")
+        if not any(
+          math.isclose(breakeven_after, level, rel_tol=0.0, abs_tol=1e-9)
+          for level in levels
+        ):
+          raise ValueError(
+            "fixed_rr breakeven_after_r must equal one of target_r_multiples"
+          )
       if self.trail_after_r is not None and self.trail_to_r is not None:
         trail_after = float(self.trail_after_r)
         trail_to = float(self.trail_to_r)
@@ -201,6 +235,7 @@ class InstrumentTargetingConfig(FrozenConfigModel):
       or self.close_ratios
       or self.trail_after_r is not None
       or self.trail_to_r is not None
+      or self.breakeven_after_r is not None
     ):
       raise ValueError(
         "ladder_pips targeting must not set fixed-RR fields"
@@ -480,29 +515,39 @@ class InstrumentConfig(FrozenConfigModel):
       raise ValueError(
         "non-disabled instruments require contract configuration"
       )
-    required_close_ratios = FIXED_RR_POLICY_CLOSE_RATIOS.get(self.policy)
-    if required_close_ratios is not None and not (
-      self.targeting.mode is InstrumentTargetMode.FIXED_RR
-      and self.targeting.reward_risk == 2.0
-      and self.targeting.target_r_multiples == (1.0, 1.5, 2.0)
-      and self.targeting.close_ratios == required_close_ratios
-      and self.targeting.trail_after_r == 1.5
-      and self.targeting.trail_to_r == 1.0
-      and self.targeting.entry_clips == 2
-    ):
-      pct = tuple(f"{ratio:.0%}" for ratio in required_close_ratios)
-      raise ValueError(
-        f"{self.policy} requires targeting.mode=fixed_rr and "
-        f"targets 1R/1.5R/2R at {pct[0]}/{pct[1]}/{pct[2]}, "
-        "trailing 1.5R to 1R, entry_clips=2"
+    if self.policy in FIXED_RR_POLICIES:
+      required = FIXED_RR_REQUIRED_TARGETING
+      checks = (
+        ("mode", self.targeting.mode, required["mode"]),
+        ("reward_risk", self.targeting.reward_risk, required["reward_risk"]),
+        (
+          "target_r_multiples",
+          self.targeting.target_r_multiples,
+          required["target_r_multiples"],
+        ),
+        ("close_ratios", self.targeting.close_ratios, required["close_ratios"]),
+        (
+          "breakeven_after_r",
+          self.targeting.breakeven_after_r,
+          required["breakeven_after_r"],
+        ),
+        ("trail_after_r", self.targeting.trail_after_r, required["trail_after_r"]),
+        ("trail_to_r", self.targeting.trail_to_r, required["trail_to_r"]),
+        ("entry_clips", self.targeting.entry_clips, required["entry_clips"]),
       )
+      for field_name, actual, expected in checks:
+        if actual != expected:
+          raise ValueError(
+            f"{self.policy} targeting.{field_name} must be {expected!r}, "
+            f"got {actual!r}"
+          )
     if (
       self.targeting.mode is InstrumentTargetMode.FIXED_RR
-      and self.policy not in FIXED_RR_POLICY_CLOSE_RATIOS
+      and self.policy not in FIXED_RR_POLICIES
     ):
       raise ValueError(
         "fixed_rr targeting requires policy in "
-        + ", ".join(sorted(FIXED_RR_POLICY_CLOSE_RATIOS))
+        + ", ".join(sorted(FIXED_RR_POLICIES))
       )
     if self.reaction_session:
       resolve_reaction_session_windows(self.reaction_session)
@@ -510,7 +555,7 @@ class InstrumentConfig(FrozenConfigModel):
       InstrumentRollout.PAPER,
       InstrumentRollout.LIVE,
     }
-    if self.policy in FIXED_RR_POLICY_CLOSE_RATIOS and executable:
+    if self.policy in FIXED_RR_POLICIES and executable:
       if not self.reaction_session:
         raise ValueError(
           f"{self.policy} live/paper instruments require reaction_session "
@@ -648,7 +693,7 @@ def compose_instrument_domain_overrides(
       "execution.scaling.add.min_stop_pips": envelope.min_pips,
       "execution.stops.sl_distance": envelope.sl_distance,
     })
-  if instrument.policy in FIXED_RR_POLICY_CLOSE_RATIOS:
+  if instrument.policy in FIXED_RR_POLICIES:
     ratio = float(instrument.targeting.reward_risk or 2.0)
     composed["execution.range.min_rr"] = ratio
     composed["execution.reaction.room_stop_min_rr"] = ratio

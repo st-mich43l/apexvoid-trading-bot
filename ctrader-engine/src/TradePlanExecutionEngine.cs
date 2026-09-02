@@ -453,8 +453,9 @@ public static class TradePlanExecutionEngine
 
   /// <summary>
   /// Resolves the target whose absolute price should protect the runner.
-  /// Explicit plan management wins; legacy plans keep the established
-  /// two-targets-behind behavior based on NextTargetIndex.
+  /// Explicit plan management wins; short ladders (≤2 targets, typical
+  /// fixed_rr 1R/2R) never apply the legacy trail. Longer ladders keep the
+  /// established two-targets-behind behavior based on NextTargetIndex.
   /// </summary>
   public static int ResolveTrailTargetIndex(
     TradePlan plan,
@@ -474,6 +475,13 @@ public static class TradePlanExecutionEngine
         && highestBookedTargetIndex >= trailAfterIndex
           ? trailToIndex
           : -1;
+    }
+
+    // No explicit trail IDs: fixed_rr 1R/2R (and 1R fallback) stay at BE /
+    // structural stop. Legacy next-3 trail is for longer scalp ladders only.
+    if (plan.Targets.Count <= 2)
+    {
+      return -1;
     }
 
     var legacyTrailToIndex = nextTargetIndex - 3;

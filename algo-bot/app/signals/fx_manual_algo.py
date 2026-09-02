@@ -104,7 +104,7 @@ def build_fx_manual_contract(
       for value in runtime_config.for_instrument(symbol).targeting.target_r_multiples
     ]
     if not multiples:
-      multiples = [1.0, 1.5, 2.0]
+      multiples = [1.0, 2.0]
     tps = [
       round_price(
         symbol,

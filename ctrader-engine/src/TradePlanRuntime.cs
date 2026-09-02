@@ -1541,7 +1541,9 @@ public sealed class TradePlanRuntime(
     string? state = null,
     long? remainingVolume = null,
     decimal? groupRealizedPips = null,
-    string? reasonCode = null
+    string? reasonCode = null,
+    TradePlanRuntimeState? runtimeState = null,
+    int? highestBookedTargetIndex = null
   ) => PublishEventCoreAsync(
     type,
     message,
@@ -1556,7 +1558,9 @@ public sealed class TradePlanRuntime(
     state,
     remainingVolume,
     groupRealizedPips,
-    reasonCode
+    reasonCode,
+    runtimeState,
+    highestBookedTargetIndex
   );
 
   private async Task PublishEventCoreAsync(
@@ -1573,7 +1577,9 @@ public sealed class TradePlanRuntime(
     string? state,
     long? remainingVolume,
     decimal? groupRealizedPips,
-    string? reasonCode = null
+    string? reasonCode = null,
+    TradePlanRuntimeState? runtimeState = null,
+    int? highestBookedTargetIndex = null
   )
   {
     if (!string.IsNullOrWhiteSpace(eventKey))
@@ -1592,6 +1598,19 @@ public sealed class TradePlanRuntime(
         );
         return;
       }
+    }
+    bool? breakEvenApplied = null;
+    int? bookedIndex = null;
+    decimal? plannedRewardRisk = null;
+    bool? targetRoomFallbackUsed = null;
+    var isTerminalClose = type is "position_closed" or "group_result";
+    if (isTerminalClose)
+    {
+      breakEvenApplied = runtimeState?.BreakEvenApplied;
+      bookedIndex = highestBookedTargetIndex
+        ?? runtimeState?.HighestBookedTargetIndex;
+      plannedRewardRisk = plan.Targets.Count >= 2 ? 2.0m : 1.0m;
+      targetRoomFallbackUsed = plan.Targets.Count == 1;
     }
     await store.PublishAutoTradeEventAsync(
       options.EventStream,
@@ -1622,7 +1641,11 @@ public sealed class TradePlanRuntime(
         ReasonCode: reasonCode
           ?? (eventKey == "group_stop_loss"
             ? "stop_loss_or_take_profit"
-            : null)
+            : null),
+        BreakEvenApplied: breakEvenApplied,
+        HighestBookedTargetIndex: bookedIndex,
+        PlannedRewardRisk: plannedRewardRisk,
+        TargetRoomFallbackUsed: targetRoomFallbackUsed
       ),
       cancellationToken
     );
@@ -2553,7 +2576,26 @@ public sealed class TradePlanRuntime(
       }
 
       var currentPrice = plan.Analysis.Direction == "BUY" ? quote.Bid : quote.Ask;
-      var fillPrice = state.GroupWeightedFillPrice ?? state.EntryFillPrice;
+      decimal? fillPrice;
+      if (state.GroupWeightedFillPrice is decimal weightedFill)
+      {
+        fillPrice = weightedFill;
+      }
+      else
+      {
+        fillPrice = state.EntryFillPrice;
+        if (
+          fillPrice is not null
+          && plan.Management.BeAfterTargetId is not null
+          && !state.BreakEvenApplied
+        )
+        {
+          log(
+            $"v8 BE fill fallback to EntryFillPrice id={plan.PlanId} "
+            + $"fill={fillPrice} (GroupWeightedFillPrice unavailable)"
+          );
+        }
+      }
       var target = plan.Targets.ElementAtOrDefault(state.NextTargetIndex);
       if (target is not null && TradePlanExecutionEngine.HasReachedTarget(
         plan, target, currentPrice
@@ -2753,6 +2795,10 @@ public sealed class TradePlanRuntime(
           leg.BrokerPositionId is not null && leg.RemainingVolume > 0
         );
         var totalLegs = legs.Count(leg => leg.BrokerPositionId is not null);
+        var bookedTargetIndex = Math.Max(
+          state.HighestBookedTargetIndex,
+          IndexOfTarget(plan, target.TargetId)
+        );
         log(
           $"v8 target hit id={plan.PlanId} target={target.TargetId} "
           + $"lot={closedTotal} remaining={remainingAfter}"
@@ -2786,17 +2832,16 @@ public sealed class TradePlanRuntime(
           state: remainingAfter <= 0
             ? TradePlanGroupStages.Closed
             : TradePlanGroupStages.PartiallyClosed,
-          remainingVolume: remainingAfter
+          remainingVolume: remainingAfter,
+          runtimeState: state,
+          highestBookedTargetIndex: bookedTargetIndex
         );
         state = AggregateState(
           state with
           {
             Legs = legs,
             NextTargetIndex = state.NextTargetIndex + 1,
-            HighestBookedTargetIndex = Math.Max(
-              state.HighestBookedTargetIndex,
-              IndexOfTarget(plan, target.TargetId)
-            ),
+            HighestBookedTargetIndex = bookedTargetIndex,
             GroupStage = remainingAfter <= 0
               ? TradePlanGroupStages.Closed
               : TradePlanGroupStages.PartiallyClosed,
@@ -3272,7 +3317,8 @@ public sealed class TradePlanRuntime(
         groupRealizedPips: partialExit is decimal exit
           ? SignedExitPips(plan, state, exit)
           : null,
-        reasonCode: "manual_or_external_close"
+        reasonCode: "manual_or_external_close",
+        runtimeState: state
       );
       return next;
     }
@@ -3478,7 +3524,8 @@ public sealed class TradePlanRuntime(
       previousState: previousGroupStage,
       state: TradePlanGroupStages.Closed,
       groupRealizedPips: realizedPips,
-      reasonCode: reasonCode
+      reasonCode: reasonCode,
+      runtimeState: next
     );
     await PersistPlanExecutionStateAsync(
       plan.PlanId, "completed", null, cancellationToken, terminalReason

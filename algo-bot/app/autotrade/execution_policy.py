@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from decimal import Decimal, ROUND_HALF_UP
 import math
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, Callable
 
 from app.autotrade.execution_route import SCALP_MICRO_CLIPS, resolve_execution_route_plan
 from app.autotrade.protective_stop import (
@@ -644,6 +644,7 @@ def evaluate_execution_policy(
   executable_quote: float | None = None,
   trigger_wick_extreme: float | None = None,
   available_target_room_pips: float | None = None,
+  metric_sink: Callable[[str, str, dict[str, str]], None] | None = None,
 ) -> ExecutionPolicyEvaluation:
   """Enforce every declared setup policy before candidate publication."""
   if cfg is None:
@@ -1198,7 +1199,16 @@ def evaluate_execution_policy(
           "available_target_room_pips": round(available_room, 3),
           "preferred_target_pips": format(preferred_target_pips, "f"),
           "minimum_target_pips": format(fallback_target_pips, "f"),
+          "breakeven_after_r": None,
         })
+        if metric_sink is not None:
+          metric_sink(
+            "fixed_rr_room_below_1r",
+            symbol,
+            {
+              "setup": str(getattr(match, "strategy", "") or "unknown"),
+            },
+          )
         return ExecutionPolicyEvaluation(
           False,
           "fixed_rr_room_insufficient",
@@ -1218,6 +1228,13 @@ def evaluate_execution_policy(
       else Decimal("0")
     )
     reward_risk = float(actual_reward_risk)
+    # Preferred path keeps configured BE; 1R fallback is all-or-nothing with
+    # no runner, so breakeven_after_r is cleared.
+    resolved_breakeven_after_r = None
+    if not fallback_used:
+      raw_be = getattr(fixed_targeting, "breakeven_after_r", None)
+      if raw_be is not None:
+        resolved_breakeven_after_r = float(raw_be)
     measured.update({
       "target_policy_mode": "fixed_rr",
       "target_reward_risk": round(reward_risk, 4),
@@ -1238,6 +1255,7 @@ def evaluate_execution_policy(
         format(Decimal(str(value)), "f")
         for value in target_close_ratios
       ],
+      "breakeven_after_r": resolved_breakeven_after_r,
       "reward_risk": round(reward_risk, 4),
       "min_reward_risk": fallback_reward_risk,
     })
