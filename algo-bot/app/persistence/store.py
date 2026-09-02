@@ -29,6 +29,7 @@ manual_algo_charts
 """
 
 import json
+import math
 import re
 import time
 import asyncpg
@@ -338,6 +339,11 @@ async def init_db() -> None:
       "ALTER TABLE auto_trade_results ADD COLUMN IF NOT EXISTS symbol TEXT NOT NULL DEFAULT 'XAU'",
       "ALTER TABLE auto_trade_results ADD COLUMN IF NOT EXISTS correction_source TEXT",
       "ALTER TABLE auto_trade_results ADD COLUMN IF NOT EXISTS corrected_at BIGINT",
+      "ALTER TABLE auto_trade_results "
+      "ADD COLUMN IF NOT EXISTS planned_reward_risk DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_results "
+      "ADD COLUMN IF NOT EXISTS target_room_fallback_used BOOLEAN",
+      "ALTER TABLE auto_trade_results ADD COLUMN IF NOT EXISTS exit_path TEXT",
     ):
       await db.execute(stmt)
 
@@ -613,8 +619,19 @@ async def get_pips_records(
              r.trade_stream AS stream,
              r.trade_key,
              COUNT(*)::BIGINT AS fill_count,
-             AVG(f.stop_pips) AS stop_pips,
-             journal_pips / NULLIF(AVG(f.stop_pips), 0) AS r_multiple
+             NULLIF(
+               SUM(f.stop_pips * COALESCE(f.volume, 0))
+                 / NULLIF(SUM(COALESCE(f.volume, 0)), 0),
+               0
+             ) AS stop_pips,
+             journal_pips / NULLIF(
+               SUM(f.stop_pips * COALESCE(f.volume, 0))
+                 / NULLIF(SUM(COALESCE(f.volume, 0)), 0),
+               0
+             ) AS r_multiple,
+             r.planned_reward_risk,
+             r.target_room_fallback_used,
+             r.exit_path
       FROM auto_trade_results r
       JOIN auto_trade_fills f ON f.group_id = r.group_id
       LEFT JOIN manual_signals ms
@@ -638,7 +655,8 @@ async def get_pips_records(
       algo_params.append(symbol.upper())
     algo_query += (
       " GROUP BY r.group_id, r.closed_at, journal_pips, "
-      "r.trade_stream, r.trade_key, ms.id "
+      "r.trade_stream, r.trade_key, ms.id, "
+      "r.planned_reward_risk, r.target_room_fallback_used, r.exit_path "
       "ORDER BY r.closed_at ASC, r.group_id ASC"
     )
     algo_rows = await db.fetch(algo_query, *algo_params)
@@ -766,6 +784,118 @@ def _signed_move_pips(
   if str(direction or "").upper() == "SELL":
     move = -move
   return move / pip_for(symbol or "XAU")
+
+
+def _event_bool(event: dict, *keys: str) -> bool | None:
+  for key in keys:
+    raw = event.get(key)
+    if raw is None:
+      continue
+    if isinstance(raw, bool):
+      return raw
+    if isinstance(raw, (int, float)) and raw in (0, 1):
+      return bool(raw)
+    text = str(raw).strip().casefold()
+    if text in {"1", "true", "yes"}:
+      return True
+    if text in {"0", "false", "no"}:
+      return False
+  return None
+
+
+def _derive_exit_path(
+  event: dict,
+  *,
+  booked_tp_count: int | None,
+  break_even_applied: bool | None,
+) -> str | None:
+  """Classify terminal close path for fixed_rr journal analytics."""
+  explicit = event.get("exit_path") or event.get("ExitPath")
+  if explicit is not None and str(explicit).strip():
+    return str(explicit).strip()
+  reason = str(
+    event.get("reason_code") or event.get("close_reason") or ""
+  ).casefold()
+  message = str(event.get("message") or "").casefold()
+  event_type = str(event.get("type") or "").casefold()
+  if "expired" in reason or "expired" in message:
+    return "expired"
+  if (
+    event_type == "manual_closed"
+    or "manual" in reason
+    or "manual/external" in message
+    or "manual_or_external" in reason
+  ):
+    return "manual_close"
+  booked = booked_tp_count
+  if booked is None:
+    for key in (
+      "highest_booked_target_index",
+      "HighestBookedTargetIndex",
+      "target_index",
+    ):
+      raw = event.get(key)
+      if raw is None:
+        continue
+      try:
+        index = int(raw)
+      except (TypeError, ValueError):
+        continue
+      if index >= 0:
+        booked = index + 1
+        break
+  be = break_even_applied
+  if be is None:
+    be = _event_bool(
+      event, "break_even_applied", "BreakEvenApplied",
+    )
+  if be is None:
+    be = (
+      "close_at_breakeven" in message
+      or "moved to be" in message
+      or "sl moved to be" in message
+      or ("break-even" in message and "no tp" not in message)
+    )
+  if booked is not None and booked >= 2:
+    return "tp2_full"
+  if booked == 1:
+    return "tp1_be" if be else "tp1_stop"
+  if booked == 0:
+    return "full_stop"
+  if (
+    "no tp archived" in message
+    or "stop_loss" in reason
+    or "stop" in reason
+  ):
+    return "full_stop"
+  return None
+
+
+def _coerce_optional_float(value: object) -> float | None:
+  if value is None:
+    return None
+  try:
+    out = float(value)
+  except (TypeError, ValueError):
+    return None
+  if not math.isfinite(out):
+    return None
+  return out
+
+
+def _coerce_optional_bool(value: object) -> bool | None:
+  if value is None:
+    return None
+  if isinstance(value, bool):
+    return value
+  if isinstance(value, (int, float)) and value in (0, 1):
+    return bool(value)
+  text = str(value).strip().casefold()
+  if text in {"1", "true", "yes"}:
+    return True
+  if text in {"0", "false", "no"}:
+    return False
+  return None
 
 
 def _result_pips_from_plan_runtime(
@@ -1322,13 +1452,55 @@ async def _record_auto_trade_result(event: dict) -> None:
         pass
     elif no_tp_archived or terminal_loss_hint:
       booked_tp_count = 0
+    if event.get("booked_tp_count") is not None:
+      try:
+        booked_tp_count = int(event["booked_tp_count"])
+      except (TypeError, ValueError):
+        pass
+    elif event.get("highest_booked_target_index") is not None or (
+      event.get("HighestBookedTargetIndex") is not None
+    ):
+      raw_highest = event.get("highest_booked_target_index")
+      if raw_highest is None:
+        raw_highest = event.get("HighestBookedTargetIndex")
+      try:
+        highest = int(raw_highest)
+      except (TypeError, ValueError):
+        highest = None
+      if highest is not None and highest >= 0:
+        booked_tp_count = max(booked_tp_count or 0, highest + 1)
+    break_even_applied = _event_bool(
+      event, "break_even_applied", "BreakEvenApplied",
+    )
+    planned_reward_risk = _coerce_optional_float(
+      event.get("planned_reward_risk")
+      if event.get("planned_reward_risk") is not None
+      else event.get("PlannedRewardRisk")
+    )
+    if planned_reward_risk is None:
+      planned_reward_risk = _coerce_optional_float(
+        event.get("target_reward_risk")
+      )
+    target_room_fallback_used = _coerce_optional_bool(
+      event.get("target_room_fallback_used")
+      if event.get("target_room_fallback_used") is not None
+      else event.get("TargetRoomFallbackUsed")
+    )
+    exit_path = _derive_exit_path(
+      event,
+      booked_tp_count=booked_tp_count,
+      break_even_applied=break_even_applied,
+    )
     await db.execute(
       """
       INSERT INTO auto_trade_results (
         group_id, trade_key, trade_stream, result_pips, closed_at,
         setup_type, direction, session, killzone_name, stop_pips,
-        booked_tp_count, utc_hour, symbol
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        booked_tp_count, utc_hour, symbol,
+        planned_reward_risk, target_room_fallback_used, exit_path
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
+      )
       ON CONFLICT (group_id) DO UPDATE SET
         trade_key = excluded.trade_key,
         trade_stream = excluded.trade_stream,
@@ -1341,7 +1513,15 @@ async def _record_auto_trade_result(event: dict) -> None:
         stop_pips = COALESCE(excluded.stop_pips, auto_trade_results.stop_pips),
         booked_tp_count = COALESCE(excluded.booked_tp_count, auto_trade_results.booked_tp_count),
         utc_hour = COALESCE(excluded.utc_hour, auto_trade_results.utc_hour),
-        symbol = COALESCE(excluded.symbol, auto_trade_results.symbol)
+        symbol = COALESCE(excluded.symbol, auto_trade_results.symbol),
+        planned_reward_risk = COALESCE(
+          excluded.planned_reward_risk, auto_trade_results.planned_reward_risk
+        ),
+        target_room_fallback_used = COALESCE(
+          excluded.target_room_fallback_used,
+          auto_trade_results.target_room_fallback_used
+        ),
+        exit_path = COALESCE(excluded.exit_path, auto_trade_results.exit_path)
       WHERE auto_trade_results.correction_source IS NULL
       """,
       group_id, fill["trade_key"], fill["trade_stream"],
@@ -1349,6 +1529,7 @@ async def _record_auto_trade_result(event: dict) -> None:
       fill["setup_type"], fill["direction"], session, kz_name,
       fill["stop_pips"], booked_tp_count, utc_hour,
       fill["symbol"] or "XAU",
+      planned_reward_risk, target_room_fallback_used, exit_path,
     )
 
 

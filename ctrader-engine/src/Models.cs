@@ -463,7 +463,13 @@ public sealed record AutoTradeEvent(
   // thesis_id (all already-existing fields, reused rather than duplicated).
   // EntryType is the one genuinely new label TradePlan needs (market_watch/
   // single_limit/limit_ladder has no V6 analogue).
-  string? EntryType = null
+  string? EntryType = null,
+  // Terminal close analytics for fixed_rr journal (Python store.py).
+  bool? BreakEvenApplied = null,
+  int? HighestBookedTargetIndex = null,
+  decimal? PlannedRewardRisk = null,
+  bool? TargetRoomFallbackUsed = null,
+  string? ExitPath = null
 );
 
 public sealed record AutoTradeGroupPlan(

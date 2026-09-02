@@ -557,7 +557,36 @@ def build_trade_plan_from_strategy_match(
     len(targets) == 1
     and targets[0].close_ratio == Decimal("1")
   )
-  if be_after_target_index is None or not targets or closes_at_first_target:
+  # fixed_rr prefers measured breakeven_after_r (cleared on 1R fallback).
+  # Non-fixed_rr keeps the caller-supplied be_after_target_index.
+  if fixed_rr:
+    raw_be_r = measured.get("breakeven_after_r")
+    if (
+      raw_be_r is None
+      or not targets
+      or closes_at_first_target
+    ):
+      be_after_target_id = None
+    else:
+      be_r = float(raw_be_r)
+      planned_multiples = [
+        float(value)
+        for value in (measured.get("planned_target_r_multiples") or ())
+      ]
+      be_index = next(
+        (
+          index
+          for index, value in enumerate(planned_multiples)
+          if abs(value - be_r) <= 1e-9
+        ),
+        None,
+      )
+      be_after_target_id = (
+        targets[be_index].target_id
+        if be_index is not None and be_index < len(targets)
+        else None
+      )
+  elif be_after_target_index is None or not targets or closes_at_first_target:
     be_after_target_id = None
   else:
     be_after_target_id = targets[be_after_target_index].target_id
