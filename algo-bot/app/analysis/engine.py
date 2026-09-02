@@ -85,8 +85,16 @@ def _nested_cfg_from_analysis_settings(settings: AnalysisSettings) -> Any:
     "analysis": {
       "trendlines": {
         "tolerance_atr": settings.tl_tol_atr,
-        "minimum_touches": settings.tl_min_touches,
+        "pierce_tolerance_atr": settings.tl_pierce_tolerance_atr,
+        "minimum_slope_atr": settings.tl_min_slope_atr,
         "maximum_slope_atr": settings.tl_max_slope_atr,
+        "minimum_touches": settings.tl_min_touches,
+        "maximum_touches": settings.tl_max_touches,
+        "minimum_span_bars": settings.tl_min_span_bars,
+        "minimum_touch_spacing_bars": settings.tl_min_touch_spacing_bars,
+        "maximum_bars_since_last_touch": settings.tl_max_bars_since_last_touch,
+        "maximum_fit_error_atr": settings.tl_max_fit_error_atr,
+        "maximum_violations": settings.tl_max_violations,
       },
       "breakout": {
         "buffer_atr": settings.breakout_buffer_atr,
@@ -170,8 +178,16 @@ class AnalysisSettings:
   chop_range_atr: float = 4.0
   chop_lookback: int = 24
   tl_min_touches: int = 3
+  tl_max_touches: int = 4
   tl_tol_atr: float = 0.3
+  tl_pierce_tolerance_atr: float = 0.5
+  tl_min_slope_atr: float = 0.02
   tl_max_slope_atr: float = 0.15
+  tl_min_span_bars: int = 20
+  tl_min_touch_spacing_bars: int = 3
+  tl_max_bars_since_last_touch: int = 30
+  tl_max_fit_error_atr: float = 0.15
+  tl_max_violations: int = 2
   coil_contract: float = 0.8
   breakout_buffer_atr: float = 0.1
   breakout_accept_bars: int = 2
@@ -269,6 +285,9 @@ def analyze(
   df_by_tf: dict[str, pd.DataFrame],
   settings: AnalysisSettings | None = None,
   htf_order: list[str] | None = None,
+  *,
+  symbol: str = "",
+  metric_sink=None,
 ) -> AnalysisContext:
   settings = settings or AnalysisSettings()
   frames = {
@@ -278,7 +297,14 @@ def analyze(
   }
   weekly_levels = _weekly_session_levels(frames)
   per_tf = {
-    tf: _analyze_tf(df, settings, weekly_levels)
+    tf: _analyze_tf(
+      df,
+      settings,
+      weekly_levels,
+      timeframe=tf,
+      symbol=symbol,
+      metric_sink=metric_sink,
+    )
     for tf, df in frames.items()
   }
   htf_order = htf_order or ["H1", "M15"]
@@ -348,6 +374,10 @@ def _analyze_tf(
   df: pd.DataFrame,
   settings: AnalysisSettings,
   weekly_levels: list[SessionLevel] | None = None,
+  *,
+  timeframe: str = "",
+  symbol: str = "",
+  metric_sink=None,
 ) -> TimeframeAnalysis:
   atr = atr_series(df, settings.atr_length)
   swings = find_swings(
@@ -366,7 +396,15 @@ def _analyze_tf(
     fractal_n=settings.swing_fractal_n,
   )
   nested_cfg = _nested_cfg_from_analysis_settings(settings)
-  diagonal_lines = find_trendlines(swings, df, atr, nested_cfg)
+  diagonal_lines = find_trendlines(
+    swings,
+    df,
+    atr,
+    nested_cfg,
+    symbol=symbol,
+    timeframe=timeframe,
+    metric_sink=metric_sink,
+  )
   levels = key_levels(
     swings,
     atr,

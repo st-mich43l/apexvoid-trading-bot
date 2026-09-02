@@ -103,6 +103,8 @@ def _declared_type(
         return "Optional[str]"
       if inner == "int":
         return "Optional[int]"
+      if inner == "float":
+        return "Optional[float]"
   if origin is list and args:
     inner = (
       "string"

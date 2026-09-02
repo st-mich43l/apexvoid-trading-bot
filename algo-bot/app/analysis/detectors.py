@@ -40,7 +40,11 @@ from app.analysis.structure import (
 from app.analysis.trendlines import Trendline, value_at
 from app.analysis.execution_eligibility import ExecutionEligibility
 from app.analysis.structural_reaction_support import (
+  CONFIRM_ENGULFING,
   CONFIRM_REJECTION_CHOCH,
+  CONFIRM_STRONG_RECLAIM,
+  CONFIRM_SWEEP_RECLAIM,
+  CONFIRM_WICK_REJECTION,
   bias_relationship as resolve_bias_relationship,
   box_structural_id,
   equal_level_structural_id,
@@ -184,8 +188,16 @@ class DetectorSettings:
   chop_lookback: int = 24
   chop_edge_frac: float = 0.25
   tl_min_touches: int = 3
+  tl_max_touches: int = 4
   tl_tol_atr: float = 0.3
+  tl_pierce_tolerance_atr: float = 0.5
+  tl_min_slope_atr: float = 0.02
   tl_max_slope_atr: float = 0.15
+  tl_min_span_bars: int = 20
+  tl_min_touch_spacing_bars: int = 3
+  tl_max_bars_since_last_touch: int = 30
+  tl_max_fit_error_atr: float = 0.15
+  tl_max_violations: int = 2
   coil_contract: float = 0.8
   breakout_buffer_atr: float = 0.1
   breakout_accept_bars: int = 2
@@ -220,6 +232,12 @@ class DetectorSettings:
   flip_zone_enabled: bool = True
   session_level_reaction_enabled: bool = True
   trendline_reaction_enabled: bool = True
+  trendline_reject_exhausted: bool = True
+  trendline_maximum_bars_since_last_touch: int | None = None
+  trendline_maximum_fit_error_atr: float | None = None
+  trendline_require_htf_aligned: bool = False
+  trendline_require_killzone: bool = False
+  trendline_minimum_grade: str | None = None
   # Technique math publishers (feat/technique-math-strategies):
   technique_sd_enabled: bool = True
   technique_ob_enabled: bool = True
@@ -302,8 +320,16 @@ class DetectorSettings:
       chop_range_atr=self.chop_range_atr,
       chop_lookback=self.chop_lookback,
       tl_min_touches=self.tl_min_touches,
+      tl_max_touches=self.tl_max_touches,
       tl_tol_atr=self.tl_tol_atr,
+      tl_pierce_tolerance_atr=self.tl_pierce_tolerance_atr,
+      tl_min_slope_atr=self.tl_min_slope_atr,
       tl_max_slope_atr=self.tl_max_slope_atr,
+      tl_min_span_bars=self.tl_min_span_bars,
+      tl_min_touch_spacing_bars=self.tl_min_touch_spacing_bars,
+      tl_max_bars_since_last_touch=self.tl_max_bars_since_last_touch,
+      tl_max_fit_error_atr=self.tl_max_fit_error_atr,
+      tl_max_violations=self.tl_max_violations,
       coil_contract=self.coil_contract,
       breakout_buffer_atr=self.breakout_buffer_atr,
       breakout_accept_bars=self.breakout_accept_bars,
@@ -454,8 +480,24 @@ def detector_settings_from(config: object | None = None) -> DetectorSettings:
     chop_lookback=analysis.regime.chop.lookback,
     chop_edge_frac=analysis.regime.chop.edge_frac,
     tl_min_touches=analysis.trendlines.minimum_touches,
+    tl_max_touches=int(getattr(analysis.trendlines, "maximum_touches", 4)),
     tl_tol_atr=analysis.trendlines.tolerance_atr,
+    tl_pierce_tolerance_atr=float(
+      getattr(analysis.trendlines, "pierce_tolerance_atr", 0.5)
+    ),
+    tl_min_slope_atr=float(getattr(analysis.trendlines, "minimum_slope_atr", 0.02)),
     tl_max_slope_atr=analysis.trendlines.maximum_slope_atr,
+    tl_min_span_bars=int(getattr(analysis.trendlines, "minimum_span_bars", 20)),
+    tl_min_touch_spacing_bars=int(
+      getattr(analysis.trendlines, "minimum_touch_spacing_bars", 3)
+    ),
+    tl_max_bars_since_last_touch=int(
+      getattr(analysis.trendlines, "maximum_bars_since_last_touch", 30)
+    ),
+    tl_max_fit_error_atr=float(
+      getattr(analysis.trendlines, "maximum_fit_error_atr", 0.15)
+    ),
+    tl_max_violations=int(getattr(analysis.trendlines, "maximum_violations", 2)),
     coil_contract=analysis.measurements.coil_contract,
     breakout_buffer_atr=analysis.breakout.buffer_atr,
     breakout_accept_bars=analysis.breakout.accept_bars,
@@ -494,6 +536,24 @@ def detector_settings_from(config: object | None = None) -> DetectorSettings:
     flip_zone_enabled=flip_zone_enabled,
     session_level_reaction_enabled=bool(strategies.reaction.session_level.enabled),
     trendline_reaction_enabled=bool(strategies.reaction.trendline.enabled),
+    trendline_reject_exhausted=bool(
+      getattr(strategies.reaction.trendline, "reject_exhausted", True)
+    ),
+    trendline_maximum_bars_since_last_touch=(
+      getattr(strategies.reaction.trendline, "maximum_bars_since_last_touch", None)
+    ),
+    trendline_maximum_fit_error_atr=(
+      getattr(strategies.reaction.trendline, "maximum_fit_error_atr", None)
+    ),
+    trendline_require_htf_aligned=bool(
+      getattr(strategies.reaction.trendline, "require_htf_aligned", False)
+    ),
+    trendline_require_killzone=bool(
+      getattr(strategies.reaction.trendline, "require_killzone", False)
+    ),
+    trendline_minimum_grade=(
+      getattr(strategies.reaction.trendline, "minimum_grade", None) or None
+    ),
     technique_sd_enabled=bool(strategies.technique.sd.enabled),
     technique_ob_enabled=bool(strategies.technique.ob.enabled),
     technique_fvg_enabled=bool(strategies.technique.fvg.enabled),
@@ -544,6 +604,7 @@ class DetectionContext:
   # Shared MAD phase (Asia accum/manip/expand) — technique + HFS.
   mad_phase: str | None = None
   mad: dict[str, object] | None = None
+  metric_sink: Callable[[str, str, dict[str, str]], None] | None = None
 
 
 @dataclass(frozen=True)
@@ -612,11 +673,18 @@ def build_context(
   htf_order: list[str],
   *,
   causal_structure: bool | None = None,
+  metric_sink: Callable[[str, str, dict[str, str]], None] | None = None,
 ) -> DetectionContext:
   analysis_settings = settings.analysis_settings()
   if causal_structure is not None:
     analysis_settings = replace(analysis_settings, causal_structure=causal_structure)
-  analysis_ctx = analyze(frames, analysis_settings, htf_order)
+  analysis_ctx = analyze(
+    frames,
+    analysis_settings,
+    htf_order,
+    symbol=symbol,
+    metric_sink=metric_sink,
+  )
   indicator_sets = {
     name: _indicator_set(df, settings.atr_length)
     for name, df in frames.items()
@@ -637,6 +705,7 @@ def build_context(
     settings=settings,
     regime=_exec_regime(analysis_ctx, tf),
     analysis=analysis_ctx,
+    metric_sink=metric_sink,
   )
 
 
@@ -2999,6 +3068,14 @@ def trendline_reaction(ctx: DetectionContext) -> DetectionResult | None:
   lookback = max(1, int(ctx.settings.structural_reaction_lookback_bars))
   band = max(_EPS, ctx.settings.tl_tol_atr * max(0.0, atr))
   min_touches = max(2, int(ctx.settings.tl_min_touches))
+  reject_exhausted = bool(ctx.settings.trendline_reject_exhausted)
+  stale_limit = ctx.settings.trendline_maximum_bars_since_last_touch
+  if stale_limit is None:
+    stale_limit = ctx.settings.tl_max_bars_since_last_touch
+  fit_limit = ctx.settings.trendline_maximum_fit_error_atr
+  if fit_limit is None:
+    fit_limit = ctx.settings.tl_max_fit_error_atr
+  require_htf = bool(ctx.settings.trendline_require_htf_aligned)
   best: DetectionResult | None = None
   for line in sorted(
     st.trendlines,
@@ -3006,11 +3083,23 @@ def trendline_reaction(ctx: DetectionContext) -> DetectionResult | None:
   ):
     if line.broken or line.touches < min_touches:
       continue
+    if reject_exhausted and line.exhausted:
+      _emit_trendline_metric(ctx, "trendline_skipped_exhausted")
+      continue
+    if line.bars_since_last_touch > int(stale_limit):
+      _emit_trendline_metric(ctx, "trendline_skipped_stale")
+      continue
+    if line.fit_error_atr > float(fit_limit):
+      _emit_trendline_metric(ctx, "trendline_skipped_fit_error")
+      continue
     if line.kind == "support":
       direction = "BUY"
     elif line.kind == "resistance":
       direction = "SELL"
     else:
+      continue
+    if require_htf and ctx.htf_bias != _bias_for_direction(direction):
+      _emit_trendline_metric(ctx, "trendline_skipped_htf_misaligned")
       continue
     line_price = value_at(line, len(df) - 1)
     conf = evaluate_structural_reaction(
@@ -3032,11 +3121,16 @@ def trendline_reaction(ctx: DetectionContext) -> DetectionResult | None:
     )
     if not _entry_valid_for_settings(zone, price, atr, direction, ctx.settings):
       continue
+    confirmation_type = conf.confirmation_type
     factors = ConfluenceFactors(
       htf_aligned=ctx.htf_bias == _bias_for_direction(direction),
       touches=line.touches,
-      wick_rejection=True,
-      structural_agreement=True,
+      wick_rejection=confirmation_type == CONFIRM_WICK_REJECTION,
+      displacement_grade=confirmation_type == CONFIRM_ENGULFING,
+      structural_agreement=confirmation_type in {
+        CONFIRM_SWEEP_RECLAIM,
+        CONFIRM_STRONG_RECLAIM,
+      },
     )
     candidate = _structural_finish(
       ctx,
@@ -3061,6 +3155,13 @@ def trendline_reaction(ctx: DetectionContext) -> DetectionResult | None:
     ):
       best = candidate
   return best
+
+
+def _emit_trendline_metric(ctx: DetectionContext, name: str) -> None:
+  sink = ctx.metric_sink
+  if sink is None:
+    return
+  sink(name, ctx.symbol, {"tf": ctx.tf})
 
 
 
