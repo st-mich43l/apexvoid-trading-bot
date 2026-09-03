@@ -292,6 +292,7 @@ async def init_db() -> None:
         trade_stream TEXT            NOT NULL,
         symbol      TEXT             NOT NULL DEFAULT 'XAU',
         setup_type  TEXT,
+        setup_type_raw TEXT,
         direction   TEXT,
         entry_price DOUBLE PRECISION,
         stop_pips   DOUBLE PRECISION,
@@ -315,6 +316,8 @@ async def init_db() -> None:
       "ADD COLUMN IF NOT EXISTS correction_source TEXT",
       "ALTER TABLE auto_trade_fills "
       "ADD COLUMN IF NOT EXISTS corrected_at BIGINT",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS setup_type_raw TEXT",
       "ALTER TABLE auto_trade_fills "
       "ADD COLUMN IF NOT EXISTS confluence_v1 SMALLINT",
       "ALTER TABLE auto_trade_fills "
@@ -724,6 +727,72 @@ def _resolve_auto_trade_stream(event: dict) -> str:
   return stream
 
 
+def _event_setup_value(event: dict) -> str | None:
+  for key in ("setup", "setup_type", "strategy"):
+    value = event.get(key)
+    if value is not None and str(value).strip():
+      return str(value)
+  return None
+
+
+async def _record_unresolved_fill_setup(
+  event: dict,
+  *,
+  symbol: str,
+  stream: str,
+  raw_setup: str | None,
+) -> None:
+  """Make a missing or unknown fill label observable without blocking it."""
+  log.warning(
+    "fill setup unresolved symbol=%s stream=%s raw_setup=%r event_keys=%s",
+    symbol,
+    stream,
+    raw_setup,
+    ",".join(sorted(str(key) for key in event)),
+  )
+  try:
+    from app.autotrade.lifecycle import increment_metric
+    from app.persistence import redis_state
+
+    await increment_metric(
+      redis_state.get_client(),
+      "fill_setup_unresolved",
+      symbol=symbol,
+      dimensions={"stream": stream},
+    )
+  except Exception:
+    log.exception(
+      "fill setup unresolved metric failed symbol=%s stream=%s",
+      symbol,
+      stream,
+    )
+
+
+async def _resolve_fill_setup(
+  event: dict,
+  *,
+  symbol: str,
+  stream: str,
+) -> tuple[str | None, str | None]:
+  """Return canonical setup and raw unknown label for a persisted fill."""
+  from app.autotrade.reaction_funnel import (
+    is_known_setup_type,
+    normalize_setup_type,
+  )
+
+  raw_setup = _event_setup_value(event)
+  setup_type = normalize_setup_type(raw_setup)
+  unresolved = raw_setup is None or not is_known_setup_type(raw_setup)
+  if unresolved:
+    await _record_unresolved_fill_setup(
+      event,
+      symbol=symbol,
+      stream=stream,
+      raw_setup=raw_setup,
+    )
+  return setup_type, raw_setup if raw_setup is not None and unresolved else None
+
+
 def _resolve_fill_stop_pips(event: dict, symbol: str) -> float | None:
   raw = event.get("stop_pips")
   if raw is not None:
@@ -1102,10 +1171,10 @@ async def _ensure_fill_from_close_event(event: dict, group_id: str) -> None:
       {**event, "price": entry if entry is not None else event.get("price")},
       symbol,
     )
-  from app.autotrade.reaction_funnel import normalize_setup_type
-
-  setup_type = normalize_setup_type(
-    event.get("setup") or event.get("setup_type") or event.get("strategy"),
+  setup_type, setup_type_raw = await _resolve_fill_setup(
+    event,
+    symbol=symbol,
+    stream=stream,
   )
   trade_key = f"algo:{group_id}"
   async with _connect() as db:
@@ -1113,16 +1182,16 @@ async def _ensure_fill_from_close_event(event: dict, group_id: str) -> None:
       """
       INSERT INTO auto_trade_fills (
         position_id, group_id, trade_key, trade_stream, symbol,
-        setup_type, direction, entry_price, stop_pips, volume, filled_at,
+        setup_type, setup_type_raw, direction, entry_price, stop_pips, volume, filled_at,
         confluence_v1, confluence_v2, confluence_v2_raw,
         confluence_scoring_version
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
       )
       ON CONFLICT (position_id) DO NOTHING
       """,
       int(position_id), group_id, trade_key, stream,
-      symbol, setup_type,
+      symbol, setup_type, setup_type_raw,
       event.get("direction"), entry, stop_pips,
       event.get("volume"), int(event.get("timestamp") or time.time()),
       event.get("confluence_v1"), event.get("confluence_v2"),
@@ -1140,10 +1209,10 @@ async def _record_auto_trade_fill(event: dict) -> None:
   candidate_id = str(event.get("candidate_id") or "")
   symbol = str(event.get("symbol") or "XAU").upper()
   stop_pips = _resolve_fill_stop_pips(event, symbol)
-  from app.autotrade.reaction_funnel import normalize_setup_type
-
-  setup_type = normalize_setup_type(
-    event.get("setup") or event.get("setup_type") or event.get("strategy"),
+  setup_type, setup_type_raw = await _resolve_fill_setup(
+    event,
+    symbol=symbol,
+    stream=stream,
   )
   async with _connect() as db:
     if stream == "algo_manual" and candidate_id:
@@ -1164,11 +1233,11 @@ async def _record_auto_trade_fill(event: dict) -> None:
       """
       INSERT INTO auto_trade_fills (
         position_id, group_id, trade_key, trade_stream, symbol,
-        setup_type, direction, entry_price, stop_pips, volume, filled_at,
+        setup_type, setup_type_raw, direction, entry_price, stop_pips, volume, filled_at,
         confluence_v1, confluence_v2, confluence_v2_raw,
         confluence_scoring_version
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
       )
       ON CONFLICT (position_id) DO UPDATE SET
         group_id = excluded.group_id,
@@ -1176,6 +1245,9 @@ async def _record_auto_trade_fill(event: dict) -> None:
         trade_stream = excluded.trade_stream,
         symbol = excluded.symbol,
         setup_type = COALESCE(excluded.setup_type, auto_trade_fills.setup_type),
+        setup_type_raw = COALESCE(
+          excluded.setup_type_raw, auto_trade_fills.setup_type_raw
+        ),
         direction = COALESCE(excluded.direction, auto_trade_fills.direction),
         entry_price = COALESCE(excluded.entry_price, auto_trade_fills.entry_price),
         stop_pips = COALESCE(excluded.stop_pips, auto_trade_fills.stop_pips),
@@ -1187,7 +1259,7 @@ async def _record_auto_trade_fill(event: dict) -> None:
       WHERE auto_trade_fills.correction_source IS NULL
       """,
       int(position_id), group_id, trade_key, stream,
-      symbol, setup_type,
+      symbol, setup_type, setup_type_raw,
       event.get("direction"), event.get("price"), stop_pips,
       event.get("volume"), int(event.get("timestamp") or time.time()),
       event.get("confluence_v1"), event.get("confluence_v2"),
