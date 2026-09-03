@@ -64,6 +64,7 @@ public static class TradePlanExecutionEngine
   {
     if (
       plan.Analysis.StrategyFamily != "scalp"
+      || plan.Sizing.Mode != "risk"
       || plan.Targets.Count != 2
       || totalVolume <= 0
       || symbol.MinVolume <= 0
