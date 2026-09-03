@@ -612,8 +612,21 @@ def build_trade_plan_from_strategy_match(
     trail_to_target_id=trail_to_target_id,
   )
 
+  is_scalp_plan = (
+    str(match.family or "").casefold() == "scalp"
+    or str(match.strategy_mode or "").casefold() == "scalp_m1"
+  )
+  scalp_risk = getattr(
+    getattr(getattr(cfg_resolved, "strategies", None), "scalping", None),
+    "risk",
+    None,
+  )
+  scalp_risk_percent = Decimal(str(
+    getattr(scalp_risk, "risk_percent_per_trade", 0.5) or 0.5
+  ))
+  scalp_sizing_mode = str(getattr(scalp_risk, "sizing_mode", "risk") or "risk")
   risk = TradePlanRisk(
-    risk_percent=Decimal("1.0"),
+    risk_percent=scalp_risk_percent if is_scalp_plan else Decimal("1.0"),
     risk_multiplier=Decimal(str(measured.get(
       "effective_risk_multiplier", match.risk_multiplier,
     ))),
@@ -637,7 +650,11 @@ def build_trade_plan_from_strategy_match(
     leg_ratios = (first_leg_fraction, remainder)
   entry_distribution = str(measured.get("entry_distribution") or "zone_scale")
   sizing = TradePlanSizing(
-    mode="equity_table",
+    # Scalp sizing is bounded by SCALPING_RISK_PERCENT_PER_TRADE and uses
+    # the plan's declared worst-fill-to-stop distance in the executor. The
+    # one-position scalp cap is load-bearing: a higher cap needs a portfolio
+    # exposure budget before this per-trade mode can be expanded.
+    mode=scalp_sizing_mode if is_scalp_plan else "equity_table",
     table_version="owner_equity_v1",
     entry_distribution=entry_distribution,
     leg_ratios=leg_ratios,

@@ -107,6 +107,7 @@ def _stop_pips(
   *,
   structural: float,
   cfg: Any,
+  spread_pips: float = 0.0,
 ) -> tuple[float | None, str | None]:
   """Return ``(stop_pips, reject_reason)``.
 
@@ -130,6 +131,9 @@ def _stop_pips(
     return None, "stop_not_positive"
   if mx < mn:
     return None, "stop_envelope_invalid"
+  spread_floor = _parse_float(stop_cfg, "minimum_stop_spread_multiple", 4.0)
+  if spread_pips > 0 and value < spread_floor * spread_pips:
+    return None, "stop_below_spread_multiple"
   if value > mx:
     return None, "stop_exceeds_maximum"
   return max(value, mn), None
@@ -157,6 +161,7 @@ def discover_range_sweep(
   *,
   pip_size: float,
   now: int,
+  spread_pips: float = 0.0,
   idle_reasons: list[str] | None = None,
 ) -> list[ScalpOpportunity]:
   if not _enabled(cfg, "range_sweep"):
@@ -201,7 +206,9 @@ def discover_range_sweep(
       worst = _worst_fill(direction="BUY", zone_low=zone_low, zone_high=zone_high)
       stop_price = float(buy_ev["extreme"]) - buffer
       structural = (worst - stop_price) / pip_size
-      stop, reject = _stop_pips(structural=structural, cfg=cfg)
+      stop, reject = _stop_pips(
+        structural=structural, cfg=cfg, spread_pips=spread_pips,
+      )
       if stop is None:
         if reject:
           reasons.append(f"{ARCHETYPE_RANGE_SWEEP}:{reject}")
@@ -277,7 +284,9 @@ def discover_range_sweep(
       worst = _worst_fill(direction="SELL", zone_low=zone_low, zone_high=zone_high)
       stop_price = float(sell_ev["extreme"]) + buffer
       structural = (stop_price - worst) / pip_size
-      stop, reject = _stop_pips(structural=structural, cfg=cfg)
+      stop, reject = _stop_pips(
+        structural=structural, cfg=cfg, spread_pips=spread_pips,
+      )
       if stop is None:
         if reject:
           reasons.append(f"{ARCHETYPE_RANGE_SWEEP}:{reject}")
@@ -349,6 +358,7 @@ def discover_impulse_pullback(
   *,
   pip_size: float,
   now: int,
+  spread_pips: float = 0.0,
   idle_reasons: list[str] | None = None,
 ) -> list[ScalpOpportunity]:
   if not _enabled(cfg, "impulse_pullback"):
@@ -393,7 +403,9 @@ def discover_impulse_pullback(
       stop_price = float(ev["pullback_extreme"]) + buffer
       structural = (stop_price - worst) / pip_size
       room = context.sell_corridor_room_pips
-    stop, reject = _stop_pips(structural=structural, cfg=cfg)
+    stop, reject = _stop_pips(
+      structural=structural, cfg=cfg, spread_pips=spread_pips,
+    )
     if stop is None:
       if reject:
         reasons.append(f"{ARCHETYPE_IMPULSE_PULLBACK}:{reject}")
@@ -566,6 +578,7 @@ def discover_breakout_retest(
   *,
   pip_size: float,
   now: int,
+  spread_pips: float = 0.0,
   idle_reasons: list[str] | None = None,
 ) -> list[ScalpOpportunity]:
   if not _enabled(cfg, "breakout_retest"):
@@ -619,7 +632,9 @@ def discover_breakout_retest(
       stop_price = max(float(m1_df["high"].iloc[-1]), level) + buffer
       structural = (stop_price - worst) / pip_size
       room = context.sell_corridor_room_pips
-    stop, reject = _stop_pips(structural=structural, cfg=cfg)
+    stop, reject = _stop_pips(
+      structural=structural, cfg=cfg, spread_pips=spread_pips,
+    )
     if stop is None:
       if reject:
         reasons.append(f"{ARCHETYPE_BREAKOUT_RETEST}:{reject}")
@@ -719,23 +734,27 @@ def discover_all(
   *,
   pip_size: float,
   now: int,
+  spread_pips: float = 0.0,
   idle_reasons: list[str] | None = None,
 ) -> list[ScalpOpportunity]:
   found: list[ScalpOpportunity] = []
   reasons = idle_reasons if idle_reasons is not None else []
   found.extend(
     discover_range_sweep(
-      context, micro, m1_df, cfg, pip_size=pip_size, now=now, idle_reasons=reasons,
+      context, micro, m1_df, cfg, pip_size=pip_size, now=now,
+      spread_pips=spread_pips, idle_reasons=reasons,
     )
   )
   found.extend(
     discover_impulse_pullback(
-      context, micro, m1_df, cfg, pip_size=pip_size, now=now, idle_reasons=reasons,
+      context, micro, m1_df, cfg, pip_size=pip_size, now=now,
+      spread_pips=spread_pips, idle_reasons=reasons,
     )
   )
   found.extend(
     discover_breakout_retest(
-      context, micro, m1_df, cfg, pip_size=pip_size, now=now, idle_reasons=reasons,
+      context, micro, m1_df, cfg, pip_size=pip_size, now=now,
+      spread_pips=spread_pips, idle_reasons=reasons,
     )
   )
   # Deduplicate by opportunity_id

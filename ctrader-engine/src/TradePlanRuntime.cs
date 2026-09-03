@@ -1313,9 +1313,27 @@ public sealed class TradePlanRuntime(
       );
       var bound = BoundSymbol(plan.Symbol, symbol);
       var units = UnitsFor(plan.Symbol);
-      TradePlanExecutionEngine.CalculateVolume(
+      var volumePlan = TradePlanExecutionEngine.CalculateVolume(
         plan, equity, units.PipSize, units.PipValuePerLot, bound
       );
+      var degraded = TradePlanExecutionEngine.DegradeScalpLadderForMinVolume(
+        plan, volumePlan.TotalVolume, bound
+      );
+      if (degraded is not null)
+      {
+        plan = degraded;
+        await store.IncrementMetricAsync(
+          plan.Symbol, "ladder_degraded_min_volume", cancellationToken
+        );
+        await PublishEventAsync(
+          "warning",
+          "Scalp 1R/2R ladder degraded to a single final target because "
+            + "broker minimum volume cannot support two step-aligned exits",
+          plan,
+          cancellationToken,
+          reasonCode: "ladder_degraded_min_volume"
+        );
+      }
     }
     catch (Exception exception) when (
       exception is VolumePlanningException or TradePlanContractException
