@@ -38,6 +38,7 @@ class ConfigUnit(StrEnum):
   MILLISECONDS = "milliseconds"
   TICKS = "ticks"
   FRACTION = "fraction"
+  RATIO = "ratio"
   PERCENT = "percent"
   COUNT = "count"
   LOTS = "lots"

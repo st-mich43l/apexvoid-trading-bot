@@ -91,6 +91,10 @@ class TradePlanAnalysis:
   regime: str
   reasons: tuple[str, ...] = ()
   tags: tuple[str, ...] = ()
+  confluence_v1: int | None = None
+  confluence_v2: int | None = None
+  confluence_v2_raw: float | None = None
+  confluence_scoring_version: str | None = None
 
   def to_dict(self) -> dict:
     return {
@@ -108,6 +112,10 @@ class TradePlanAnalysis:
       "regime": self.regime,
       "reasons": list(self.reasons),
       "tags": list(self.tags),
+      "confluence_v1": self.confluence_v1,
+      "confluence_v2": self.confluence_v2,
+      "confluence_v2_raw": self.confluence_v2_raw,
+      "confluence_scoring_version": self.confluence_scoring_version,
     }
 
   @classmethod
@@ -127,6 +135,22 @@ class TradePlanAnalysis:
       regime=str(_require(data, "regime")),
       reasons=tuple(data.get("reasons") or ()),
       tags=tuple(data.get("tags") or ()),
+      confluence_v1=(
+        None if data.get("confluence_v1") is None
+        else int(data["confluence_v1"])
+      ),
+      confluence_v2=(
+        None if data.get("confluence_v2") is None
+        else int(data["confluence_v2"])
+      ),
+      confluence_v2_raw=(
+        None if data.get("confluence_v2_raw") is None
+        else float(data["confluence_v2_raw"])
+      ),
+      confluence_scoring_version=(
+        None if data.get("confluence_scoring_version") is None
+        else str(data["confluence_scoring_version"])
+      ),
     )
 
 

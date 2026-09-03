@@ -290,7 +290,14 @@ public sealed record TradeCandidate(
   IReadOnlyList<decimal>? PlannedLegEntryPrices = null,
   int? EntryPlanVersion = null,
   IReadOnlyList<int>? ManualTargetWeights = null,
-  bool ManualSingleEntry = false
+  bool ManualSingleEntry = false,
+  // Observed scoring telemetry. This is deliberately additive: the V6
+  // executor still gates on Confluence, while outcome persistence records
+  // both scorer variants for shadow-mode comparison.
+  int? ConfluenceV1 = null,
+  int? ConfluenceV2 = null,
+  double? ConfluenceV2Raw = null,
+  string? ConfluenceScoringVersion = null
 );
 
 public sealed record TradeStreamEntry(
@@ -469,7 +476,11 @@ public sealed record AutoTradeEvent(
   int? HighestBookedTargetIndex = null,
   decimal? PlannedRewardRisk = null,
   bool? TargetRoomFallbackUsed = null,
-  string? ExitPath = null
+  string? ExitPath = null,
+  int? ConfluenceV1 = null,
+  int? ConfluenceV2 = null,
+  double? ConfluenceV2Raw = null,
+  string? ConfluenceScoringVersion = null
 );
 
 public sealed record AutoTradeGroupPlan(

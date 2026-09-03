@@ -1645,7 +1645,11 @@ public sealed class TradePlanRuntime(
         BreakEvenApplied: breakEvenApplied,
         HighestBookedTargetIndex: bookedIndex,
         PlannedRewardRisk: plannedRewardRisk,
-        TargetRoomFallbackUsed: targetRoomFallbackUsed
+        TargetRoomFallbackUsed: targetRoomFallbackUsed,
+        ConfluenceV1: plan.Analysis.ConfluenceV1,
+        ConfluenceV2: plan.Analysis.ConfluenceV2,
+        ConfluenceV2Raw: plan.Analysis.ConfluenceV2Raw,
+        ConfluenceScoringVersion: plan.Analysis.ConfluenceScoringVersion
       ),
       cancellationToken
     );

@@ -1,20 +1,20 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "36e0a6912b1022fcd26b7db86e23edfd0f9788c253fdb45cd80886ef248deec5",
-  "configuration_document_fingerprint_sha256": "e32edfd7fa4e952fc882d70ea918ef0ef612112a1e12520afe6c4569def114ae",
+  "configuration_contract_fingerprint_sha256": "d9fc5a863b579b9bbf3ec96a21f0043b78a791c286daa645e6d8f91041b48b60",
+  "configuration_document_fingerprint_sha256": "6a60fc8fc4538b3077fccc782d924494c7a778a3b1d20b0afe2991e52a03ffbb",
   "counts": {
     "algorithm_constants": 57,
-    "configurable": 494,
+    "configurable": 499,
     "known_conflicts": 30,
     "owners": {
       "ctrader": 49,
-      "python": 416,
+      "python": 421,
       "shared": 96
     },
     "protocol_constants": 10,
     "secrets": 9,
     "shared": 96,
-    "total_items": 561
+    "total_items": 566
   },
   "items": [
     {
@@ -1946,6 +1946,206 @@
       "type": "int",
       "unit": "bars",
       "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [
+        "v1",
+        "v2"
+      ],
+      "canonical_env": "CONFLUENCE_SCORING_VERSION",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "pattern": "^(v1|v2)$"
+      },
+      "default": "v1",
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": "v1"
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Confluence scorer used for the detector gate. v1 remains the rollout default; v2 may be enabled per instrument override after replay fitting.",
+      "display_id": "config:analysis.confluence.scoring_version",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "analysis.confluence.scoring_version",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "analysis_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "str",
+      "unit": "enum",
+      "validation_summary": "Pydantic enum pattern plus allowed-values catalog metadata"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "CONFLUENCE_V2_MAD_WEIGHT",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 0.0
+      },
+      "default": 2.0,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 2.0
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "V2 score contribution weight for the MAD soft bonus.",
+      "display_id": "config:analysis.confluence.v2_mad_score_weight",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "analysis.confluence.v2_mad_score_weight",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "analysis_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "float",
+      "unit": "score",
+      "validation_summary": "Pydantic non-negative score"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "CONFLUENCE_V2_STAR_THREE_RATIO",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 0.0,
+        "le": 1.0
+      },
+      "default": 0.585,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 0.585
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "V2 normalized raw-score ratio required for three stars; placeholder pending replay fitting.",
+      "display_id": "config:analysis.confluence.v2_star_three_ratio",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "analysis.confluence.v2_star_three_ratio",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "analysis_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "float",
+      "unit": "ratio",
+      "validation_summary": "Pydantic ratio bounds plus model validator"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "CONFLUENCE_V2_STAR_TWO_RATIO",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 0.0,
+        "le": 1.0
+      },
+      "default": 0.39,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 0.39
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "V2 normalized raw-score ratio required for two stars; placeholder pending replay fitting.",
+      "display_id": "config:analysis.confluence.v2_star_two_ratio",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "analysis.confluence.v2_star_two_ratio",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "analysis_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "float",
+      "unit": "ratio",
+      "validation_summary": "Pydantic ratio bounds plus model validator"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "CONFLUENCE_V2_ZONE_QUALITY_WEIGHT",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 0.0
+      },
+      "default": 4.0,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 4.0
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "V2 weighted contribution for bounded scored-zone quality.",
+      "display_id": "config:analysis.confluence.v2_zone_quality_weight",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "analysis.confluence.v2_zone_quality_weight",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "analysis_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "float",
+      "unit": "score",
+      "validation_summary": "Pydantic non-negative score"
     },
     {
       "algorithm_constant": true,
@@ -21055,6 +21255,6 @@
       "validation_summary": "Pydantic required/type coercion only"
     }
   ],
-  "source_fingerprint_sha256": "36e0a6912b1022fcd26b7db86e23edfd0f9788c253fdb45cd80886ef248deec5",
+  "source_fingerprint_sha256": "d9fc5a863b579b9bbf3ec96a21f0043b78a791c286daa645e6d8f91041b48b60",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

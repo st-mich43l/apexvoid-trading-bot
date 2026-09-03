@@ -145,6 +145,11 @@ class StructureSet:
 class DetectorSettings:
   pip_size: float = 0.1
   confluence_floor: int = 2
+  confluence_scoring_version: str = "v1"
+  confluence_v2_star_three_ratio: float = 0.585
+  confluence_v2_star_two_ratio: float = 0.390
+  confluence_v2_zone_quality_weight: float = 4.0
+  confluence_v2_mad_score_weight: float = 2.0
   max_entry_atr: float = 2.0
   max_zone_width_atr: float = 1.5
   proximal_band_atr: float = 0.5
@@ -415,9 +420,21 @@ def detector_settings_from(config: object | None = None) -> DetectorSettings:
   except AttributeError:
     flip_zone_enabled = True
   fib = _fib_cfg(analysis)
+  confluence = getattr(analysis, "confluence", None) or SimpleNamespace(
+    scoring_version="v1",
+    v2_star_three_ratio=0.585,
+    v2_star_two_ratio=0.390,
+    v2_zone_quality_weight=4.0,
+    v2_mad_score_weight=2.0,
+  )
   return DetectorSettings(
     pip_size=pip_size,
     confluence_floor=market_data.scanner.confluence_floor,
+    confluence_scoring_version=str(confluence.scoring_version),
+    confluence_v2_star_three_ratio=float(confluence.v2_star_three_ratio),
+    confluence_v2_star_two_ratio=float(confluence.v2_star_two_ratio),
+    confluence_v2_zone_quality_weight=float(confluence.v2_zone_quality_weight),
+    confluence_v2_mad_score_weight=float(confluence.v2_mad_score_weight),
     max_entry_atr=actionability.gates.max_entry_atr,
     range_lookback=analysis.ranges.lookback,
     atr_length=analysis.atr.length,
@@ -648,6 +665,11 @@ class DetectionResult:
   math_velocity: float | None = None
   math_acceleration: float | None = None
   math_pd: float | None = None
+  # Shadow confluence outputs. ``confluence`` remains the selected gate.
+  confluence_v1: int | None = None
+  confluence_v2: int | None = None
+  confluence_v2_raw: float | None = None
+  confluence_scoring_version: str | None = None
 
 
 class SetupDetector(Protocol):
@@ -1154,13 +1176,11 @@ def _chop_range_reason(ctx: DetectionContext) -> str | None:
 
 @dataclass(frozen=True)
 class ConfluenceFactors:
-  """Named, independently-observable confluence factors, shared by every
-  detector in ``DEFAULT_DETECTORS``. Used only when a detector's zone was
-  synthesised rather than drawn from the scored zone engine (``zone.score``
-  is then 0 and carries no confluence signal of its own) - see
-  ``_confluence_from_zone``. Two detectors observing the same factor set
-  must produce the same confluence, since a reader can't tell which
-  detector produced a given star rating.
+  """Named, independently-observable confluence factors shared by detectors.
+
+  V1 uses these only for synthesised zones. V2 combines them with zone
+  quality on one scale, so identical observed evidence scores identically
+  regardless of a detector's zone provenance.
   """
   htf_aligned: bool = False
   touches: int = 0
@@ -1182,6 +1202,28 @@ def _factors_for_confirmation(
   return replace(base, structural_agreement=True, choch=True)
 
 
+def _reaction_factors(
+  confirmation,
+  *,
+  htf_aligned: bool,
+  touches: int,
+  session_context: bool,
+) -> ConfluenceFactors:
+  """Map actual reaction evidence into the common scoring rubric."""
+  confirmation_type = confirmation.confirmation_type
+  return ConfluenceFactors(
+    htf_aligned=htf_aligned,
+    touches=touches,
+    wick_rejection=confirmation_type == CONFIRM_WICK_REJECTION,
+    displacement_grade=confirmation_type == CONFIRM_ENGULFING,
+    structural_agreement=confirmation_type in {
+      CONFIRM_SWEEP_RECLAIM,
+      CONFIRM_STRONG_RECLAIM,
+    },
+    session_context=session_context,
+  )
+
+
 _FACTOR_HTF_ALIGN_WEIGHT = 4.0
 _FACTOR_TOUCH_UNIT_WEIGHT = 1.0
 _FACTOR_TOUCH_CAP = 3
@@ -1191,6 +1233,8 @@ _FACTOR_SESSION_CONTEXT_WEIGHT = 2.0
 _FACTOR_STRUCTURAL_AGREEMENT_WEIGHT = 3.0
 _FACTOR_CHOCH_WEIGHT = 2.0
 _FACTOR_FIB_TOUCH_WEIGHT = 2.5
+_ZONE_QUALITY_WEIGHT = 4.0
+_MAD_SCORE_WEIGHT = 2.0
 
 # Maximum attainable raw score of each rubric, used to normalise both onto a
 # common 0-1 scale before thresholding. _FACTOR_SCORE_MAX is the PR-E base
@@ -1225,6 +1269,7 @@ _ZONE_SCORE_MAX = (
 # raw 12.0 / 8.0 thresholds (STAR_* / _FACTOR_SCORE_MAX).
 _STAR_THREE_RATIO = STAR_THREE_SCORE / _FACTOR_SCORE_MAX
 _STAR_TWO_RATIO = STAR_TWO_SCORE / _FACTOR_SCORE_MAX
+_V2_SCORE_MAX = _FACTOR_SCORE_MAX + _ZONE_QUALITY_WEIGHT + _MAD_SCORE_WEIGHT
 
 
 def _fib_touch_weight(settings: DetectorSettings | None = None) -> float:
@@ -1256,6 +1301,54 @@ def _stars_from_ratio(ratio: float) -> int:
   if ratio >= _STAR_THREE_RATIO:
     return 3
   if ratio >= _STAR_TWO_RATIO:
+    return 2
+  return 1
+
+
+def _zone_quality_weight(settings: DetectorSettings | None = None) -> float:
+  if settings is None:
+    return _ZONE_QUALITY_WEIGHT
+  return max(0.0, float(settings.confluence_v2_zone_quality_weight))
+
+
+def _mad_score_weight(settings: DetectorSettings | None = None) -> float:
+  if settings is None:
+    return _MAD_SCORE_WEIGHT
+  return max(0.0, float(settings.confluence_v2_mad_score_weight))
+
+
+def _v2_score_max(settings: DetectorSettings | None = None) -> float:
+  return _FACTOR_SCORE_MAX + _zone_quality_weight(settings) + _mad_score_weight(settings)
+
+
+def _confluence_v2_score(
+  zone: Zone,
+  factors: ConfluenceFactors,
+  settings: DetectorSettings | None = None,
+  mad_bonus: float = 0.0,
+) -> float:
+  """One scale: observed factors plus a bounded zone-quality contribution."""
+  raw = _raw_factor_score(factors, settings)
+  zone_score = max(0.0, float(getattr(zone, "score", 0.0)))
+  zone_quality = _zone_quality_weight(settings) * min(
+    1.0, zone_score / _ZONE_SCORE_MAX,
+  )
+  return raw + zone_quality + max(0.0, float(mad_bonus)) * _mad_score_weight(settings)
+
+
+def _stars_from_v2_ratio(
+  ratio: float,
+  settings: DetectorSettings | None = None,
+) -> int:
+  three = (
+    0.585 if settings is None else float(settings.confluence_v2_star_three_ratio)
+  )
+  two = (
+    0.390 if settings is None else float(settings.confluence_v2_star_two_ratio)
+  )
+  if ratio >= three:
+    return 3
+  if ratio >= two:
     return 2
   return 1
 
@@ -1418,7 +1511,7 @@ def _finish(
   )
   if include_score_reasons:
     full_reasons = _merge_score_reasons(full_reasons, zone)
-  confluence = _confluence_from_zone(zone, factors, ctx.settings)
+  confluence_v1 = _confluence_from_zone(zone, factors, ctx.settings)
   # MAD is entry quality + structure analysis only — soft confluence nudge,
   # never a hard block on trade-plan publish / activation.
   mad_family = _mad_family_for_setup(setup, mode)
@@ -1426,7 +1519,15 @@ def _finish(
 
   mad_bonus = mad_soft_bonus(phase=ctx.mad_phase, family=mad_family)
   if mad_bonus >= 0.1:
-    confluence += 1
+    confluence_v1 += 1
+  confluence_v2_raw = _confluence_v2_score(
+    zone, factors, ctx.settings, mad_bonus,
+  )
+  confluence_v2 = _stars_from_v2_ratio(
+    confluence_v2_raw / _v2_score_max(ctx.settings), ctx.settings,
+  )
+  scoring_version = ctx.settings.confluence_scoring_version
+  confluence = confluence_v2 if scoring_version == "v2" else confluence_v1
   phase = str(ctx.mad_phase or "").casefold()
   if phase and phase != PHASE_UNCLEAR:
     tag = f"mad_{phase}"
@@ -1474,6 +1575,10 @@ def _finish(
       None if mom is None else float(getattr(mom, "acceleration", 0.0))
     ),
     math_pd=math_pd,
+    confluence_v1=confluence_v1,
+    confluence_v2=confluence_v2,
+    confluence_v2_raw=confluence_v2_raw,
+    confluence_scoring_version=scoring_version,
   )
 
 
@@ -1616,12 +1721,11 @@ def trend_pullback(ctx: DetectionContext) -> DetectionResult | None:
   reasons = _add_proximal_reason(reasons, proximal)
   if ctx.session_ok:
     reasons.append("session")
-  factors = ConfluenceFactors(
+  factors = _reaction_factors(
+    conf,
     htf_aligned=htf_aligned,
     touches=zone.touches,
-    wick_rejection=True,
     session_context=ctx.session_ok,
-    structural_agreement=True,  # zone drawn from structural swing zones
   )
   return _structural_finish(
     ctx,
@@ -2792,11 +2896,11 @@ def key_level_reaction(ctx: DetectionContext) -> DetectionResult | None:
         zone, price, atr, direction, ctx.settings,
       ):
         continue
-      factors = ConfluenceFactors(
+      factors = _reaction_factors(
+        conf,
         htf_aligned=ctx.htf_bias == _bias_for_direction(direction),
         touches=level.touches,
-        wick_rejection=True,
-        structural_agreement=True,
+        session_context=ctx.session_ok,
       )
       candidate = _structural_finish(
         ctx,
@@ -2953,12 +3057,11 @@ def _sd_zone_reaction(
   )
   if conf is None:
     return None
-  factors = ConfluenceFactors(
+  factors = _reaction_factors(
+    conf,
     htf_aligned=ctx.htf_bias == _bias_for_direction(direction),
     touches=int(zone.touches),
-    wick_rejection=True,
-    structural_agreement=True,
-    displacement_grade=float(getattr(zone, "score", 0.0)) >= STAR_TWO_SCORE,
+    session_context=ctx.session_ok,
   )
   reasons = [
     f"{side} zone {_number(zone.low)}-{_number(zone.high)}",
@@ -3026,11 +3129,11 @@ def session_level_reaction(ctx: DetectionContext) -> DetectionResult | None:
     zone = _pseudo_level_zone(session.price, band, direction, session.name)
     if not _entry_valid_for_settings(zone, price, atr, direction, ctx.settings):
       continue
-    factors = ConfluenceFactors(
+    factors = _reaction_factors(
+      conf,
       htf_aligned=ctx.htf_bias == _bias_for_direction(direction),
       touches=2,
-      wick_rejection=True,
-      structural_agreement=True,
+      session_context=ctx.session_ok,
     )
     candidate = _structural_finish(
       ctx,
@@ -3121,16 +3224,11 @@ def trendline_reaction(ctx: DetectionContext) -> DetectionResult | None:
     )
     if not _entry_valid_for_settings(zone, price, atr, direction, ctx.settings):
       continue
-    confirmation_type = conf.confirmation_type
-    factors = ConfluenceFactors(
+    factors = _reaction_factors(
+      conf,
       htf_aligned=ctx.htf_bias == _bias_for_direction(direction),
       touches=line.touches,
-      wick_rejection=confirmation_type == CONFIRM_WICK_REJECTION,
-      displacement_grade=confirmation_type == CONFIRM_ENGULFING,
-      structural_agreement=confirmation_type in {
-        CONFIRM_SWEEP_RECLAIM,
-        CONFIRM_STRONG_RECLAIM,
-      },
+      session_context=ctx.session_ok,
     )
     candidate = _structural_finish(
       ctx,

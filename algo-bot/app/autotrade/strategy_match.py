@@ -103,6 +103,11 @@ class StrategyMatch:
   math_velocity: float | None = None
   math_acceleration: float | None = None
   math_pd: float | None = None
+  # Shadow confluence telemetry. ``confluence`` remains the selected gate.
+  confluence_v1: int | None = None
+  confluence_v2: int | None = None
+  confluence_v2_raw: float | None = None
+  confluence_scoring_version: str | None = None
 
   @property
   def is_range_edge(self) -> bool:
@@ -308,6 +313,22 @@ class StrategyMatch:
         math_pd=(
           None if payload.get("math_pd") is None
           else float(payload["math_pd"])
+        ),
+        confluence_v1=(
+          None if payload.get("confluence_v1") is None
+          else int(payload["confluence_v1"])
+        ),
+        confluence_v2=(
+          None if payload.get("confluence_v2") is None
+          else int(payload["confluence_v2"])
+        ),
+        confluence_v2_raw=(
+          None if payload.get("confluence_v2_raw") is None
+          else float(payload["confluence_v2_raw"])
+        ),
+        confluence_scoring_version=(
+          None if payload.get("confluence_scoring_version") is None
+          else str(payload["confluence_scoring_version"])
         ),
       )
     except (KeyError, TypeError, ValueError, json.JSONDecodeError):

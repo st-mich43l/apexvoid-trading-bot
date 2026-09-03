@@ -22,6 +22,22 @@ class AnalysisMeasurementsConfig(FrozenConfigModel):
     strict_pd_gate: bool = config_field(False, canonical_env='STRICT_PD_GATE', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEXT_SCANNER_CYCLE, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.BOOLEAN, risk=RiskClassification.ANALYSIS_BEHAVIOR, description='Controls .', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, False),), validation_summary='Pydantic required/type coercion only')
     tp_min_spacing_atr: float = config_field(0.5, canonical_env='TP_MIN_SPACING_ATR', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEXT_SCANNER_CYCLE, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.ATR, risk=RiskClassification.ANALYSIS_BEHAVIOR, description='Controls  (atr).', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 0.5),), validation_summary='Pydantic required/type coercion only')
 
+
+class AnalysisConfluenceConfig(FrozenConfigModel):
+    """Versioned scoring controls; v2 remains shadow-only by default."""
+
+    scoring_version: str = config_field('v1', canonical_env='CONFLUENCE_SCORING_VERSION', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.ENUM, risk=RiskClassification.ANALYSIS_BEHAVIOR, description='Confluence scorer used for the detector gate. v1 remains the rollout default; v2 may be enabled per instrument override after replay fitting.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 'v1'),), allowed_values=('v1', 'v2'), pattern='^(v1|v2)$', validation_summary='Pydantic enum pattern plus allowed-values catalog metadata')
+    v2_star_three_ratio: float = config_field(0.585, canonical_env='CONFLUENCE_V2_STAR_THREE_RATIO', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.RATIO, risk=RiskClassification.ANALYSIS_BEHAVIOR, description='V2 normalized raw-score ratio required for three stars; placeholder pending replay fitting.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 0.585),), ge=0.0, le=1.0, validation_summary='Pydantic ratio bounds plus model validator')
+    v2_star_two_ratio: float = config_field(0.390, canonical_env='CONFLUENCE_V2_STAR_TWO_RATIO', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.RATIO, risk=RiskClassification.ANALYSIS_BEHAVIOR, description='V2 normalized raw-score ratio required for two stars; placeholder pending replay fitting.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 0.390),), ge=0.0, le=1.0, validation_summary='Pydantic ratio bounds plus model validator')
+    v2_zone_quality_weight: float = config_field(4.0, canonical_env='CONFLUENCE_V2_ZONE_QUALITY_WEIGHT', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.SCORE, risk=RiskClassification.ANALYSIS_BEHAVIOR, description='V2 weighted contribution for bounded scored-zone quality.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 4.0),), ge=0.0, validation_summary='Pydantic non-negative score')
+    v2_mad_score_weight: float = config_field(2.0, canonical_env='CONFLUENCE_V2_MAD_WEIGHT', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.SCORE, risk=RiskClassification.ANALYSIS_BEHAVIOR, description='V2 score contribution weight for the MAD soft bonus.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 2.0),), ge=0.0, validation_summary='Pydantic non-negative score')
+
+    @model_validator(mode='after')
+    def validate_v2_star_ratios(self):
+        if not self.v2_star_two_ratio < self.v2_star_three_ratio:
+            raise ValueError('v2_star_two_ratio must be < v2_star_three_ratio')
+        return self
+
 class AnalysisDetectorsScoringConfig(FrozenConfigModel):
     coil: float = config_field(1.5, canonical_env=None, owner=ConfigOwner.PYTHON, reload=ReloadPolicy.CODE_RELEASE, runtime_reload=ReloadPolicy.CODE_RELEASE, unit=ConfigUnit.SCORE, risk=RiskClassification.ANALYSIS_BEHAVIOR, kind=ConfigKind.ALGORITHM_CONSTANT, description='Config-like hardcoded value proposed at analysis.detectors.scoring.coil.', validation_summary='none; source constant')
 
@@ -203,6 +219,7 @@ class AnalysisSwingsConfig(FrozenConfigModel):
 class AnalysisConfig(FrozenConfigModel):
     atr: AnalysisAtrConfig = Field(default_factory=AnalysisAtrConfig)
     breakout: AnalysisBreakoutConfig = Field(default_factory=AnalysisBreakoutConfig)
+    confluence: AnalysisConfluenceConfig = Field(default_factory=AnalysisConfluenceConfig)
     detectors: AnalysisDetectorsConfig = Field(default_factory=AnalysisDetectorsConfig)
     displacement: AnalysisDisplacementConfig = Field(default_factory=AnalysisDisplacementConfig)
     levels: AnalysisLevelsConfig = Field(default_factory=AnalysisLevelsConfig)

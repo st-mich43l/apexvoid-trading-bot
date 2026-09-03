@@ -488,6 +488,10 @@ def build_trade_plan_from_strategy_match(
     regime=match.regime_kind or regime or "unknown",
     reasons=match.reasons,
     tags=match.tags,
+    confluence_v1=match.confluence_v1,
+    confluence_v2=match.confluence_v2,
+    confluence_v2_raw=match.confluence_v2_raw,
+    confluence_scoring_version=match.confluence_scoring_version,
   )
 
   source_structure = TradePlanSourceStructure(
