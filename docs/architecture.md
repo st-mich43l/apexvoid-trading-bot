@@ -136,8 +136,9 @@ See [configuration/configuration-architecture.md](configuration/configuration-ar
 - **ZoneWatch before setup.** Detected structure is retained until quote +
   activation prove executability — avoids card spam and ready-stream ACK loss.
 - **Techniques are zone-family, not reaction-family.** Exact-name taxonomy in
-  `app/autotrade/strategy_registry.py` (single frozen table); no substring
-  classification. See **Adding a strategy** below.
+  `app/autotrade/strategy_names.py` (single canonical naming registry); the
+  richer execution/enable-path table remains in `strategy_registry.py`. No
+  substring classification. See **Adding a strategy** below.
 - **Multi-symbol, policy per instrument.** Production live set is XAU +
   EURUSD + GBPUSD + GBPJPY + USDJPY; each has its own pack (XAU ladder vs FX
   fixed-RR). See [runtime/multi-symbol-routing.md](runtime/multi-symbol-routing.md).
@@ -148,8 +149,12 @@ Doc index: [README.md](README.md).
 
 ## Strategy registry (single table)
 
-Every live detector and publishable strategy label is one row in
-`app/autotrade/strategy_registry.py` (`StrategyRow`). The row carries:
+Every live detector and publishable strategy label has one canonical row in
+`app/autotrade/strategy_names.py` (`StrategyName`). The row carries the
+display name, canonical family, detector ID, historical aliases, and retired
+state. Execution-only metadata is carried by the corresponding
+`StrategyRow` in `app/autotrade/strategy_registry.py`, keyed to that canonical
+name. The execution row carries:
 
 | Column | Purpose |
 |---|---|
@@ -168,7 +173,8 @@ runtime config.
 
 ### Adding a strategy (checklist)
 
-1. Implement the detector and register it in `LIVE_DETECTOR_REGISTRY`
+1. Add the canonical name and detector ID to `app/autotrade/strategy_names.py`,
+   then implement the detector and register it in `LIVE_DETECTOR_REGISTRY`
    (`app/analysis/detectors.py`).
 2. Add one `StrategyRow` to `app/autotrade/strategy_registry.py` with all
    columns filled — this replaces edits to `execution_policy._STRATEGY_FAMILY`,

@@ -5,12 +5,18 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-CANONICAL_FAMILY_REACTION = "reaction"
-CANONICAL_FAMILY_ZONE = "zone"
-CANONICAL_FAMILY_LIQUIDITY = "liquidity"
-CANONICAL_FAMILY_RANGE = "range"
-CANONICAL_FAMILY_SCALP = "scalp"
-CANONICAL_FAMILY_UNKNOWN = "unknown"
+from app.autotrade.strategy_names import (
+  CANONICAL_FAMILY_BREAKOUT_RETEST,
+  CANONICAL_FAMILY_LIQUIDITY,
+  CANONICAL_FAMILY_MOMENTUM,
+  CANONICAL_FAMILY_RANGE,
+  CANONICAL_FAMILY_REACTION,
+  CANONICAL_FAMILY_SCALP,
+  CANONICAL_FAMILY_TREND_PULLBACK,
+  CANONICAL_FAMILY_UNKNOWN,
+  CANONICAL_FAMILY_ZONE,
+  resolve_strategy,
+)
 
 ARCHETYPE_REVERSAL = "reversal"
 ARCHETYPE_RANGE_REVERSION = "range_reversion"
@@ -233,7 +239,7 @@ _STRATEGY_ROWS: tuple[StrategyRow, ...] = (
     detector_key="box_breakout",
     detector_family=FAMILY_DETECTOR_BREAKOUT_RETEST,
     execution_family=FAMILY_EXEC_BREAKOUT_RETEST,
-    canonical_family=CANONICAL_FAMILY_UNKNOWN,
+    canonical_family=CANONICAL_FAMILY_BREAKOUT_RETEST,
     location_archetype=ARCHETYPE_BREAKOUT_RETEST,
     activation_archetype=ACTIVATION_BREAKOUT_RETEST,
     enable_setting="strategies.selection.box_breakout_enabled",
@@ -246,7 +252,7 @@ _STRATEGY_ROWS: tuple[StrategyRow, ...] = (
     detector_key="break_retest",
     detector_family=FAMILY_DETECTOR_BREAKOUT_RETEST,
     execution_family=FAMILY_EXEC_BREAKOUT_RETEST,
-    canonical_family=CANONICAL_FAMILY_UNKNOWN,
+    canonical_family=CANONICAL_FAMILY_BREAKOUT_RETEST,
     location_archetype=ARCHETYPE_BREAKOUT_RETEST,
     activation_archetype=ACTIVATION_BREAKOUT_RETEST,
     enable_setting="strategies.breakout.break_retest_enabled",
@@ -256,13 +262,13 @@ _STRATEGY_ROWS: tuple[StrategyRow, ...] = (
   ),
   StrategyRow(
     name="Trend Pullback",
-    detector_key="trend_pullback",
+    detector_key=None,
     detector_family=FAMILY_DETECTOR_TREND_PULLBACK,
     execution_family=FAMILY_EXEC_TREND_PULLBACK,
-    canonical_family=CANONICAL_FAMILY_UNKNOWN,
+    canonical_family=CANONICAL_FAMILY_TREND_PULLBACK,
     location_archetype=ARCHETYPE_TREND_PULLBACK,
     activation_archetype=ACTIVATION_TREND_PULLBACK,
-    enable_setting="strategies.trend.pullback_enabled",
+    enable_setting="strategies.trend.enabled",
     m5_authoritative=False,
     is_scalp=False,
     is_technique=False,
@@ -272,7 +278,7 @@ _STRATEGY_ROWS: tuple[StrategyRow, ...] = (
     detector_key="momentum_ride",
     detector_family=FAMILY_DETECTOR_MOMENTUM_CONTINUATION,
     execution_family=FAMILY_EXEC_MOMENTUM_CONTINUATION,
-    canonical_family=CANONICAL_FAMILY_UNKNOWN,
+    canonical_family=CANONICAL_FAMILY_MOMENTUM,
     location_archetype=ARCHETYPE_MOMENTUM,
     activation_archetype=ACTIVATION_MOMENTUM,
     enable_setting="strategies.selection.momentum_ride_enabled",
@@ -365,7 +371,8 @@ def lookup_row(strategy: str) -> StrategyRow | None:
   key = str(strategy or "").strip()
   if not key:
     return None
-  return STRATEGY_BY_NAME.get(key)
+  resolved = resolve_strategy(key)
+  return STRATEGY_BY_NAME.get(resolved.canonical if resolved else key)
 
 
 def strategy_family(strategy: str) -> str:

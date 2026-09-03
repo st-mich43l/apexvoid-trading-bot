@@ -21,6 +21,14 @@ from app.analysis.structural_reaction_support import (
 )
 from app.analysis.types import Zone
 from app.analysis.zones import fvg, order_blocks, supply_demand
+from app.autotrade.strategy_names import (
+  CONFLUENCE_ZONE,
+  CRT,
+  FVG,
+  IFVG,
+  ORDER_BLOCK,
+  SUPPLY_DEMAND,
+)
 
 TECHNIQUE_SD = "supply_demand"
 TECHNIQUE_OB = "order_block"
@@ -45,14 +53,14 @@ TECHNIQUE_SHORT = {
 }
 
 TECHNIQUE_SETUP_NAMES = {
-  TECHNIQUE_SD: "Supply Demand",
-  TECHNIQUE_OB: "Order Block",
-  TECHNIQUE_FVG: "FVG",
-  TECHNIQUE_IFVG: "iFVG",
-  TECHNIQUE_CRT: "CRT",
+  TECHNIQUE_SD: SUPPLY_DEMAND,
+  TECHNIQUE_OB: ORDER_BLOCK,
+  TECHNIQUE_FVG: FVG,
+  TECHNIQUE_IFVG: IFVG,
+  TECHNIQUE_CRT: CRT,
 }
 
-CONFLUENCE_SETUP_NAME = "Confluence Zone"
+CONFLUENCE_SETUP_NAME = CONFLUENCE_ZONE
 
 
 # Owner entry-band for FVG / iFVG / imbalance: keep the full gap for
