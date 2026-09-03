@@ -706,6 +706,7 @@ strategies:
       minimum_pips: 12
       maximum_pips: 30
       buffer_atr: 0.10
+      minimum_stop_spread_multiple: 4.0
     policy:
       minimum_reward_risk: 1.10
       maximum_opportunities_per_cycle: 3
@@ -714,6 +715,8 @@ strategies:
     risk:
       mode: live
       risk_fraction_per_trade: 0.10
+      risk_percent_per_trade: 0.5
+      sizing_mode: risk
       maximum_concurrent_positions: 1
       maximum_session_trades: 12
       maximum_daily_trades: 30

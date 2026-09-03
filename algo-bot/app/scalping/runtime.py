@@ -280,6 +280,11 @@ async def process_m1_bar(
       log.exception("scalp excursion update failed symbol=%s", symbol)
 
   t_strat = time.perf_counter()
+  quote = await _load_quote(client, symbol)
+  if quote is None:
+    result["reason"] = "scalp_quote_missing"
+    return result
+  bid, ask, qts = quote
   discovery_idle: list[str] = []
   opportunities = await asyncio.to_thread(
     discover_all,
@@ -289,6 +294,7 @@ async def process_m1_bar(
     cfg,
     pip_size=pip,
     now=now,
+    spread_pips=max(0.0, (float(ask) - float(bid)) / pip),
     idle_reasons=discovery_idle,
   )
   idle_reasons = (
@@ -313,6 +319,8 @@ async def process_m1_bar(
         symbol,
         f"opportunity_blocked:{reason.replace(':', '_')}",
       )
+    if reason.endswith(":stop_below_spread_multiple"):
+      await incr(client, symbol, "stop_below_spread_multiple")
   strat_ms = (time.perf_counter() - t_strat) * 1000.0
 
   # Per-reason breakout telemetry every cycle (quiet archetype diagnosis).
@@ -324,12 +332,6 @@ async def process_m1_bar(
       await incr(client, symbol, f"breakout:{breakout_reason}")
   except Exception:
     log.exception("breakout reject telemetry failed symbol=%s", symbol)
-
-  quote = await _load_quote(client, symbol)
-  if quote is None:
-    result["reason"] = "scalp_quote_missing"
-    return result
-  bid, ask, qts = quote
 
   risk_state = await load_risk(client, symbol)
   risk_state = apply_daily_reset(
