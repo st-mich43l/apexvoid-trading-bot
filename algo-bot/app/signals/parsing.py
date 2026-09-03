@@ -17,12 +17,14 @@ from app.signals.fx_manual_algo import build_fx_manual_contract, fx_manual_symbo
 # Matches: +100 pips / -50 pips / +1500Pips / -30 PIPS
 _PIPS_RE = re.compile(r'([+-])\s*(\d+)\s*pips?', re.IGNORECASE)
 
-# Setup defaults to key-level whenever the owner does not tag one (and is
-# not /scalp). Explicit ``/setup foo`` or ``/scalp`` wins. SL/TP presence
-# does not gate the setup default.
+# Setup defaults to key-level and two stars whenever the owner does not tag
+# one (and is not /scalp). Explicit ``/setup foo`` or ``/scalp`` wins, while
+# an explicit one-to-three-star suffix overrides the confidence default.
+# SL/TP presence does not gate either default.
 DEFAULT_SL_PIPS = 60
 DEFAULT_TP_PIPS = (30, 60, 100, 130, 200)
 DEFAULT_SETUP_TYPE = "key-level"
+DEFAULT_CONFLUENCE = 2
 
 # Manual signal template (DM to bot), sl/tp each optional:
 #   gold sell entry zone (4100-4105)
@@ -179,7 +181,7 @@ def _parse_fx_manual(raw: str) -> Optional[dict]:
     "tps": contract["tps"],
     "risk": risk,
     "setup_type": None,
-    "confluence": None,
+    "confluence": DEFAULT_CONFLUENCE,
     "target_weights": contract["target_weights"],
     "manual_single_entry": True,
     "visibility": "both",
@@ -219,7 +221,7 @@ def _parse_manual(text: str) -> Optional[dict]:
   raw, scalp_count = _SCALP_SUFFIX_RE.subn("", raw)
   raw, algo_count = _ALGO_SUFFIX_RE.subn("", raw)
   setup_type = None
-  confluence = None
+  confluence = DEFAULT_CONFLUENCE
   setup_match = _SETUP_SUFFIX_RE.search(raw)
   if (
     setup_match
