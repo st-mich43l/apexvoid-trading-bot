@@ -6460,7 +6460,7 @@ public sealed class AutoTradeEngine(
       StringComparer.Ordinal
     );
     var confirmedMissingPositionIds = new HashSet<long>();
-    var closeHistoryLookupAttempted = false;
+    string? closeHistoryLookupGroupId = null;
     foreach (var stale in trackedIds.Where(id => !openIds.Contains(id)))
     {
       // A single missing broker snapshot is only "suspected" missing, not
@@ -6507,15 +6507,18 @@ public sealed class AutoTradeEngine(
         ?? trackedStates.GetValueOrDefault(stale);
       if (state is not null)
       {
-        // One best-effort historical lookup per reconciliation pass. A slow
-        // deal API used to serially block every missing leg and starve price
-        // processing long enough for otherwise valid orders to go stale.
-        if (closeHistoryLookupAttempted)
+        var groupId = GroupId(state);
+        // One missing group per reconciliation pass. Siblings in the same
+        // ladder must still close together so their P/L remains canonical,
+        // but unrelated missing groups must not serially starve live quotes.
+        if (
+          closeHistoryLookupGroupId is not null
+          && closeHistoryLookupGroupId != groupId
+        )
         {
           continue;
         }
-        closeHistoryLookupAttempted = true;
-        var groupId = GroupId(state);
+        closeHistoryLookupGroupId ??= groupId;
         var trackedGroup = trackedStates.Values
           .Where(item => GroupId(item) == groupId)
           .ToArray();
