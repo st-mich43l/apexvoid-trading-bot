@@ -95,6 +95,17 @@ def normalize_setup_type(raw: str | None) -> str | None:
   return text
 
 
+def is_known_setup_type(raw: str | None) -> bool:
+  """Whether a non-empty setup label is in the canonical vocabulary."""
+  if raw is None:
+    return False
+  text = str(raw).strip()
+  if not text:
+    return False
+  base = text.split("·", 1)[0].strip()
+  return resolve_strategy(base) is not None or base in _STRATEGY_TO_ARCHETYPE
+
+
 def archetype_from_strategy(strategy: str | None) -> str | None:
   if not strategy:
     return None
