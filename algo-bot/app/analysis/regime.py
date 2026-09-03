@@ -8,9 +8,6 @@ import pandas as pd
 
 from app.analysis.math_utils import atr_at
 
-BREAKOUT_BUFFER_ATR = 0.1
-BREAKOUT_ACCEPT_BARS = 2
-BREAKOUT_MAX_AGE_BARS = 6
 DISPLACEMENT_BODY_FRAC = 0.6
 DISPLACEMENT_RANGE_ATR = 1.0
 
