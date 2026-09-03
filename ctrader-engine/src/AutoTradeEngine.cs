@@ -105,7 +105,11 @@ public sealed class AutoTradeEngine(
     string? ZoneId,
     string? StructuralZoneId,
     string? ReactionId,
-    string? ThesisId
+    string? ThesisId,
+    int? ConfluenceV1,
+    int? ConfluenceV2,
+    double? ConfluenceV2Raw,
+    string? ConfluenceScoringVersion
   );
 
   public bool Enabled => options.Enabled && !_disabled;
@@ -8960,7 +8964,11 @@ public sealed class AutoTradeEngine(
     decimal? riskMultiplier = null,
     string? targetModel = null,
     string? entryDistribution = null,
-    string? symbol = null
+    string? symbol = null,
+    int? confluenceV1 = null,
+    int? confluenceV2 = null,
+    double? confluenceV2Raw = null,
+    string? confluenceScoringVersion = null
   )
   {
     var transition = LifecycleTransitionForEvent(type, remainingVolume);
@@ -9032,6 +9040,10 @@ public sealed class AutoTradeEngine(
       structuralZoneId ??= remembered.StructuralZoneId;
       reactionId ??= remembered.ReactionId;
       thesisId ??= remembered.ThesisId;
+      confluenceV1 ??= remembered.ConfluenceV1;
+      confluenceV2 ??= remembered.ConfluenceV2;
+      confluenceV2Raw ??= remembered.ConfluenceV2Raw;
+      confluenceScoringVersion ??= remembered.ConfluenceScoringVersion;
     }
     var lifecycleId = Guid.NewGuid().ToString("N");
     var tradeEvent = new AutoTradeEvent(
@@ -9089,7 +9101,11 @@ public sealed class AutoTradeEngine(
       riskMultiplier,
       targetModel,
       entryDistribution,
-      mutatesLifecycle
+      mutatesLifecycle,
+      ConfluenceV1: confluenceV1,
+      ConfluenceV2: confluenceV2,
+      ConfluenceV2Raw: confluenceV2Raw,
+      ConfluenceScoringVersion: confluenceScoringVersion
     );
     await store.PublishAutoTradeEventAsync(
       options.EventStream,
@@ -10250,7 +10266,11 @@ public sealed class AutoTradeEngine(
       candidate.ZoneId,
       candidate.StructuralZoneId,
       candidate.ReactionId,
-      candidate.ThesisId
+      candidate.ThesisId,
+      candidate.ConfluenceV1,
+      candidate.ConfluenceV2,
+      candidate.ConfluenceV2Raw,
+      candidate.ConfluenceScoringVersion
     );
     if (!string.IsNullOrWhiteSpace(candidate.Symbol))
     {

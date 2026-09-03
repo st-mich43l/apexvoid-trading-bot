@@ -63,6 +63,11 @@
       "analysis.breakout.accept_bars",
       "analysis.breakout.buffer_atr",
       "analysis.breakout.max_age_bars",
+      "analysis.confluence.scoring_version",
+      "analysis.confluence.v2_mad_score_weight",
+      "analysis.confluence.v2_star_three_ratio",
+      "analysis.confluence.v2_star_two_ratio",
+      "analysis.confluence.v2_zone_quality_weight",
       "analysis.displacement.atr_mult",
       "analysis.fibonacci.confluence_weight",
       "analysis.fibonacci.deep_discount",
@@ -531,7 +536,7 @@
     "XAU_ZONE_PREFERRED_MAX_WIDTH_PRICE": "instruments.XAU.analysis.zones.preferred_maximum_width_price",
     "XAU_ZONE_PREFERRED_MIN_WIDTH_PRICE": "instruments.XAU.analysis.zones.preferred_minimum_width_price"
   },
-  "fingerprint": "36e0a6912b1022fcd26b7db86e23edfd0f9788c253fdb45cd80886ef248deec5",
+  "fingerprint": "d9fc5a863b579b9bbf3ec96a21f0043b78a791c286daa645e6d8f91041b48b60",
   "instrument_schema": {
     "active_projection_symbol": "XAU",
     "optional": [

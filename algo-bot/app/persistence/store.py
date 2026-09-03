@@ -297,6 +297,10 @@ async def init_db() -> None:
         stop_pips   DOUBLE PRECISION,
         volume      BIGINT,
         filled_at   BIGINT           NOT NULL,
+        confluence_v1 SMALLINT,
+        confluence_v2 SMALLINT,
+        confluence_v2_raw DOUBLE PRECISION,
+        confluence_scoring_version TEXT,
         correction_source TEXT,
         corrected_at BIGINT
       )
@@ -311,6 +315,14 @@ async def init_db() -> None:
       "ADD COLUMN IF NOT EXISTS correction_source TEXT",
       "ALTER TABLE auto_trade_fills "
       "ADD COLUMN IF NOT EXISTS corrected_at BIGINT",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS confluence_v1 SMALLINT",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS confluence_v2 SMALLINT",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS confluence_v2_raw DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS confluence_scoring_version TEXT",
     ):
       await db.execute(stmt)
     await db.execute(
@@ -1101,14 +1113,20 @@ async def _ensure_fill_from_close_event(event: dict, group_id: str) -> None:
       """
       INSERT INTO auto_trade_fills (
         position_id, group_id, trade_key, trade_stream, symbol,
-        setup_type, direction, entry_price, stop_pips, volume, filled_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        setup_type, direction, entry_price, stop_pips, volume, filled_at,
+        confluence_v1, confluence_v2, confluence_v2_raw,
+        confluence_scoring_version
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15
+      )
       ON CONFLICT (position_id) DO NOTHING
       """,
       int(position_id), group_id, trade_key, stream,
       symbol, setup_type,
       event.get("direction"), entry, stop_pips,
       event.get("volume"), int(event.get("timestamp") or time.time()),
+      event.get("confluence_v1"), event.get("confluence_v2"),
+      event.get("confluence_v2_raw"), event.get("confluence_scoring_version"),
     )
 
 
@@ -1146,8 +1164,12 @@ async def _record_auto_trade_fill(event: dict) -> None:
       """
       INSERT INTO auto_trade_fills (
         position_id, group_id, trade_key, trade_stream, symbol,
-        setup_type, direction, entry_price, stop_pips, volume, filled_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        setup_type, direction, entry_price, stop_pips, volume, filled_at,
+        confluence_v1, confluence_v2, confluence_v2_raw,
+        confluence_scoring_version
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15
+      )
       ON CONFLICT (position_id) DO UPDATE SET
         group_id = excluded.group_id,
         trade_key = excluded.trade_key,
@@ -1157,13 +1179,19 @@ async def _record_auto_trade_fill(event: dict) -> None:
         direction = COALESCE(excluded.direction, auto_trade_fills.direction),
         entry_price = COALESCE(excluded.entry_price, auto_trade_fills.entry_price),
         stop_pips = COALESCE(excluded.stop_pips, auto_trade_fills.stop_pips),
-        volume = COALESCE(excluded.volume, auto_trade_fills.volume)
+        volume = COALESCE(excluded.volume, auto_trade_fills.volume),
+        confluence_v1 = COALESCE(excluded.confluence_v1, auto_trade_fills.confluence_v1),
+        confluence_v2 = COALESCE(excluded.confluence_v2, auto_trade_fills.confluence_v2),
+        confluence_v2_raw = COALESCE(excluded.confluence_v2_raw, auto_trade_fills.confluence_v2_raw),
+        confluence_scoring_version = COALESCE(excluded.confluence_scoring_version, auto_trade_fills.confluence_scoring_version)
       WHERE auto_trade_fills.correction_source IS NULL
       """,
       int(position_id), group_id, trade_key, stream,
       symbol, setup_type,
       event.get("direction"), event.get("price"), stop_pips,
       event.get("volume"), int(event.get("timestamp") or time.time()),
+      event.get("confluence_v1"), event.get("confluence_v2"),
+      event.get("confluence_v2_raw"), event.get("confluence_scoring_version"),
     )
 
 

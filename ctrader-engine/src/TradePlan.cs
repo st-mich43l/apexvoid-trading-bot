@@ -53,7 +53,11 @@ public sealed record TradePlanAnalysis(
   string Bias,
   string Regime,
   IReadOnlyList<string>? Reasons = null,
-  IReadOnlyList<string>? Tags = null
+  IReadOnlyList<string>? Tags = null,
+  int? ConfluenceV1 = null,
+  int? ConfluenceV2 = null,
+  double? ConfluenceV2Raw = null,
+  string? ConfluenceScoringVersion = null
 );
 
 public sealed record TradePlanSourceStructure(
