@@ -173,8 +173,6 @@ def detect_impulse_pullback(
   lows = df["low"].astype(float)
   window = df.tail(30)
   if side == "BUY":
-    impulse_start_idx = int(window["low"].astype(float).idxmin()) if False else None
-    # Use positional min/max in last 30 bars
     lows_w = window["low"].astype(float)
     highs_w = window["high"].astype(float)
     origin_i = int(lows_w.values.argmin())

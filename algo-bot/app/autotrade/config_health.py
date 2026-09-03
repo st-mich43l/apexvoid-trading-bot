@@ -23,7 +23,6 @@ from app.configuration.environment_contract import (
 )
 from app.configuration.environment_option_resolution import (
   canonical_option_health,
-  deprecated_option_warnings,
   runtime_environment_mapping,
 )
 from app.configuration.profiles import get_profile

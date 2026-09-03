@@ -78,6 +78,11 @@ jobs:
           name: python-pytest-results
           path: algo-bot/pytest-results.xml
 
+      - name: Dead-code report
+        continue-on-error: true
+        working-directory: algo-bot
+        run: python -m vulture app tests/vulture_whitelist.py --min-confidence 90
+
   csharp:
     name: C# autotrade suite
     runs-on: ubuntu-latest
