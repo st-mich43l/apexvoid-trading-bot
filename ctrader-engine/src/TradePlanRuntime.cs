@@ -1322,6 +1322,9 @@ public sealed class TradePlanRuntime(
       if (degraded is not null)
       {
         plan = degraded;
+        await store.IncrementMetricAsync(
+          plan.Symbol, "ladder_degraded_min_volume", cancellationToken
+        );
         await PublishEventAsync(
           "warning",
           "Scalp 1R/2R ladder degraded to a single final target because "
