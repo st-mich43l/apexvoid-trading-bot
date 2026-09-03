@@ -62,6 +62,17 @@ def _enforce_location_cfg(hfs: Any) -> SimpleNamespace:
 
 
 def _strategy_name(opportunity: ScalpOpportunity) -> str:
+  # POLICY keys, not display names. Entry-location policy resolves through
+  # strategy_registry.location_archetype() on these legacy strings; publish.py
+  # uses STRATEGY_DISPLAY for the label that reaches Telegram and the DB.
+  # Collapsing the two namespaces changes which location policy applies and
+  # hard-blocks London impulse pullback activation (regression in PR #468).
+  if opportunity.archetype == ARCHETYPE_RANGE_SWEEP:
+    return "Range Edge Scalp"
+  if opportunity.archetype == ARCHETYPE_IMPULSE_PULLBACK:
+    return "Trend Pullback"
+  if opportunity.archetype == ARCHETYPE_BREAKOUT_RETEST:
+    return "Break & Retest"
   return STRATEGY_DISPLAY.get(opportunity.archetype, opportunity.archetype)
 
 
