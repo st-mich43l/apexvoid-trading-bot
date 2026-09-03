@@ -654,7 +654,7 @@ risk:
     mode: equity_table
     one_sided_range_risk_multiplier: 0.5
     post_impulse_risk_multiplier: 0.5
-    range_max_risk_multiplier: 2.0
+    range_max_risk_multiplier: 1.5
   tiers:
     a_multiplier: 1.0
     b_multiplier: 1.0
