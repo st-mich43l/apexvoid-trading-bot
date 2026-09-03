@@ -5370,71 +5370,6 @@ public sealed class AutoTradeEngine(
     return Math.Abs(exitEstimate - stopPrice) <= tolerance;
   }
 
-  // Live dig 2026-08-25 XAU manual #5: deal window missed the SL fill and
-  // the live bid kept printing the post-stop sweep (4622 vs SL 4629), so
-  // group_result booked -109 against a 60-pip stop. A quote strictly past
-  // the protective stop on the loss side is the continuing wick, not the
-  // fill we should journal.
-  private bool ExitBeyondProtectiveStop(
-    AutoTradePositionState state,
-    decimal exitEstimate
-  )
-  {
-    var stop = state.CurrentStopLoss ?? state.InitialStopLoss;
-    if (stop is not decimal stopPrice)
-    {
-      return false;
-    }
-    return state.Direction == TradeDirection.Buy
-      ? exitEstimate < stopPrice
-      : exitEstimate > stopPrice;
-  }
-
-  private decimal ResolveMissingPositionExit(
-    AutoTradePositionState state,
-    PositionCloseLookup closeLookup,
-    PositionCloseReason closeReason
-  )
-  {
-    if (closeLookup.ExecutionPrice is decimal recovered)
-    {
-      return recovered;
-    }
-    if (closeReason == PositionCloseReason.StopLossOrTakeProfit)
-    {
-      return state.CurrentStopLoss ?? state.InitialStopLoss ?? state.EntryPrice;
-    }
-    return LiveExitQuote(state) ?? state.EntryPrice;
-  }
-
-  private decimal? LiveExitQuote(AutoTradePositionState state)
-  {
-    SpotPrice? spot = null;
-    if (
-      !string.IsNullOrWhiteSpace(state.Symbol)
-      && _lastSpotBySymbol.TryGetValue(state.Symbol, out var bySymbol)
-    )
-    {
-      spot = bySymbol;
-    }
-    else if (
-      RedisSymbolFor(state.SymbolId) is string redisSymbol
-      && _lastSpotBySymbol.TryGetValue(redisSymbol, out var byId)
-    )
-    {
-      spot = byId;
-    }
-    else
-    {
-      spot = _lastSpot;
-    }
-    if (spot is null)
-    {
-      return null;
-    }
-    return state.Direction == TradeDirection.Buy ? spot.Bid : spot.Ask;
-  }
-
   private static string GroupId(AutoTradePositionState state) =>
     string.IsNullOrWhiteSpace(state.GroupId)
       ? GroupToken(state.CandidateId)
@@ -6561,21 +6496,8 @@ public sealed class AutoTradeEngine(
         );
         continue;
       }
-      await store.ClearPositionMissingAsync(stale, cancellationToken);
-      await store.IncrementMetricAsync(
-        RequireSymbol().RedisSymbol,
-        "position_missing_snapshot_confirmed",
-        cancellationToken
-      );
-      _log(
-        $"auto-trade position_missing_snapshot_confirmed position_id={stale}"
-          + $" confirmations={confirmations}"
-      );
       var state = _states.GetValueOrDefault(stale)
         ?? trackedStates.GetValueOrDefault(stale);
-      _states.Remove(stale);
-      await store.DeletePositionAsync(stale, cancellationToken);
-      confirmedMissingPositionIds.Add(stale);
       if (state is not null)
       {
         var groupId = GroupId(state);
@@ -6616,8 +6538,36 @@ public sealed class AutoTradeEngine(
         {
           _log(
             $"auto-trade position_close_reason_lookup_failed position_id={stale}: "
-              + exception.Message
+            + exception.Message
           );
+        }
+        // A broker snapshot only proves that the position is no longer open;
+        // it does not provide its close fill. Never turn a later live quote
+        // into realised P/L (manual #243: XAU SL filled 4496.12 but the
+        // next quote was 4492.80 and was incorrectly reported as -33 pips).
+        // Keep the durable state and retry historical deal lookup on the next
+        // confirmed-missing pass until cTrader publishes the closing deal.
+        if (closeLookup.ExecutionPrice is null)
+        {
+          await store.SavePositionMissingAsync(
+            stale,
+            new PositionMissingRecord(
+              confirmations,
+              missing?.FirstMissingAt ?? missingNow,
+              missingNow
+            ),
+            cancellationToken
+          );
+          await store.IncrementMetricAsync(
+            RequireSymbol().RedisSymbol,
+            "position_close_execution_price_pending",
+            cancellationToken
+          );
+          _log(
+            $"auto-trade position_close_execution_price_pending position_id={stale}"
+              + $" confirmations={confirmations}"
+          );
+          continue;
         }
         var closeReason = closeLookup.Reason;
         // Promote Unknown → SL/TP only when the deal lookup recovered a real
@@ -6633,31 +6583,22 @@ public sealed class AutoTradeEngine(
         {
           closeReason = PositionCloseReason.StopLossOrTakeProfit;
         }
-        // No recovered deal + live quote on/beyond the protective stop:
-        // the SL almost certainly filled and the quote is the continuing
-        // sweep (2026-08-25 manual #5 booked -109 from bid 4622 vs SL 4629).
-        // Promote to SL/TP so ResolveMissingPositionExit books the stop,
-        // not the wick. Do NOT invent SL from CurrentStopLoss alone when
-        // live is still between entry and stop (ambiguous manual/external).
-        if (
-          closeReason == PositionCloseReason.Unknown
-          && closeLookup.ExecutionPrice is null
-          && LiveExitQuote(state) is decimal liveExit
-          && (
-            LooksLikeProtectiveStopHit(state, liveExit)
-            || ExitBeyondProtectiveStop(state, liveExit)
-          )
-        )
-        {
-          closeReason = PositionCloseReason.StopLossOrTakeProfit;
-        }
-        // Manual / unconfirmed closes must not book P&L against the stop.
-        // Prefer the recovered deal fill, then the live quote, then entry.
-        var exitEstimate = ResolveMissingPositionExit(
-          state,
-          closeLookup,
-          closeReason
+        // The closing deal is the sole source of realised P/L. A current
+        // quote or configured stop is not a broker execution.
+        var exitEstimate = closeLookup.ExecutionPrice.Value;
+        await store.ClearPositionMissingAsync(stale, cancellationToken);
+        await store.IncrementMetricAsync(
+          RequireSymbol().RedisSymbol,
+          "position_missing_snapshot_confirmed",
+          cancellationToken
         );
+        _log(
+          $"auto-trade position_missing_snapshot_confirmed position_id={stale}"
+            + $" confirmations={confirmations}"
+        );
+        _states.Remove(stale);
+        await store.DeletePositionAsync(stale, cancellationToken);
+        confirmedMissingPositionIds.Add(stale);
         var remainingVolume = Math.Max(0, state.RemainingVolume);
         // Seed from the complete tracked group, not this leg's own (possibly
         // stale) field. Manual /algo groups commonly disappear together in
@@ -6795,6 +6736,14 @@ public sealed class AutoTradeEngine(
             cancellationToken
           );
         }
+      }
+      else
+      {
+        // No durable state remains to value. This is cleanup only; a tracked
+        // position always takes the broker-deal path above before removal.
+        await store.ClearPositionMissingAsync(stale, cancellationToken);
+        _states.Remove(stale);
+        await store.DeletePositionAsync(stale, cancellationToken);
       }
     }
     // Adopt bot-labeled positions and any still-tracked IDs present on the
