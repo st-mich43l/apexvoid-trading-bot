@@ -4,69 +4,35 @@ from __future__ import annotations
 
 from typing import Any
 
-REACTION_STRATEGIES = frozenset({
-  "Key Level Reaction",
-  "Session Level Reaction",
-  "Trendline Reaction",
-})
+from app.autotrade.strategy_names import (
+  CANONICAL_FAMILY_BREAKOUT_RETEST,
+  CANONICAL_FAMILY_LIQUIDITY,
+  CANONICAL_FAMILY_MOMENTUM,
+  CANONICAL_FAMILY_RANGE,
+  CANONICAL_FAMILY_REACTION,
+  CANONICAL_FAMILY_SCALP,
+  CANONICAL_FAMILY_TREND_PULLBACK,
+  CANONICAL_FAMILY_UNKNOWN,
+  CANONICAL_FAMILY_ZONE,
+  BREAKOUT_RETEST_SCALP,
+  STRATEGY_NAMES,
+  names_for_family,
+)
 
-ZONE_STRATEGIES = frozenset({
-  "Demand Zone",
-  "Supply Zone",
-  "Zone Reaction",
-  "Flip Zone",
-  "Demand Zone Reaction",
-  "Supply Zone Reaction",
-})
-
-TECHNIQUE_STRATEGIES = frozenset({
-  "Supply Demand",
-  "Order Block",
-  "FVG",
-  "iFVG",
-  "CRT",
-})
-
+REACTION_STRATEGIES = names_for_family(CANONICAL_FAMILY_REACTION)
+ZONE_STRATEGIES = names_for_family(CANONICAL_FAMILY_ZONE)
+TECHNIQUE_STRATEGIES = frozenset(
+  entry.canonical for entry in STRATEGY_NAMES
+  if entry.detector_id and entry.detector_id.endswith("_technique_reaction")
+)
 CONFLUENCE_STRATEGIES = frozenset({
-  "Confluence Zone",
+  entry.canonical for entry in STRATEGY_NAMES
+  if entry.detector_id == "confluence_zone_reaction"
 })
-
-ZONE_STRATEGIES = frozenset({
-  *ZONE_STRATEGIES,
-  *TECHNIQUE_STRATEGIES,
-  *CONFLUENCE_STRATEGIES,
-})
-
-LIQUIDITY_STRATEGIES = frozenset({
-  "Liquidity Sweep",
-  "Snap-Back",
-})
-
-RANGE_STRATEGIES = frozenset({
-  "Range Box Scalp",
-  "Range Edge Scalp",
-  "One-Sided Range Reaction",
-  "Fade Scalp",
-  "Chop Zone Reaction",
-})
-
-M1_SCALP_STRATEGIES = frozenset({
-  "Range Sweep Scalp",
-  "Impulse Pullback Scalp",
-  "Breakout Retest Scalp",
-  "Momentum Chase Scalp",
-})
-
-BREAKOUT_RETEST_SCALP_STRATEGIES = frozenset({
-  "Breakout Retest Scalp",
-})
-
-CANONICAL_FAMILY_REACTION = "reaction"
-CANONICAL_FAMILY_ZONE = "zone"
-CANONICAL_FAMILY_LIQUIDITY = "liquidity"
-CANONICAL_FAMILY_RANGE = "range"
-CANONICAL_FAMILY_SCALP = "scalp"
-CANONICAL_FAMILY_UNKNOWN = "unknown"
+LIQUIDITY_STRATEGIES = names_for_family(CANONICAL_FAMILY_LIQUIDITY)
+RANGE_STRATEGIES = names_for_family(CANONICAL_FAMILY_RANGE)
+M1_SCALP_STRATEGIES = names_for_family(CANONICAL_FAMILY_SCALP)
+BREAKOUT_RETEST_SCALP_STRATEGIES = frozenset({BREAKOUT_RETEST_SCALP})
 
 _SCALP_FAMILIES = frozenset({"scalp", "range", "range_reversion"})
 _SCALP_MODES = frozenset({"scalp_m1", "range_scalp", "auto_box_scalp"})

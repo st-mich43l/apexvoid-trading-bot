@@ -77,6 +77,18 @@ from app.analysis.technique_detectors import (
   order_block_technique_reaction,
   supply_demand_technique_reaction,
 )
+from app.autotrade.strategy_names import (
+  BREAK_AND_RETEST,
+  BOX_BREAKOUT,
+  FADE_SCALP,
+  FLIP_ZONE,
+  KEY_LEVEL_REACTION,
+  MOMENTUM_RIDE,
+  SNAP_BACK,
+  SESSION_LEVEL_REACTION,
+  TRENDLINE_REACTION,
+  ZONE_REACTION,
+)
 
 log = logging.getLogger(__name__)
 
@@ -272,8 +284,8 @@ class DetectorSettings:
   # confirmation logic that has not been re-verified against the current
   # pipeline (band-kind classification, canonical family merge).
   #
-  # 2026-07-31: trend_pullback/snap_back/fade_scalp retrofitted onto the
-  # shared evaluate_structural_reaction path (they already had a real M5
+  # 2026-07-31: snap_back/fade_scalp were retrofitted onto the shared
+  # evaluate_structural_reaction path (they already had a real M5
   # rejection/reaction gate, just never populated the confirmation
   # metadata the legacy pipeline needs to treat M1 as optional instead of
   # a hard, unconditional gate) and re-enabled below. box_breakout/
@@ -281,7 +293,6 @@ class DetectorSettings:
   # momentum_ride is live: impulse/continuation with its own confirmation
   # policy (not the reversal-shaped M1 gate).
   box_breakout_enabled: bool = False
-  trend_pullback_enabled: bool = True
   break_retest_enabled: bool = False
   momentum_ride_enabled: bool = True
   snap_back_enabled: bool = True
@@ -595,7 +606,6 @@ def detector_settings_from(config: object | None = None) -> DetectorSettings:
     ),
     technique_validation_enabled=bool(analysis.techniques.validation_enabled),
     box_breakout_enabled=bool(strategies.selection.box_breakout_enabled),
-    trend_pullback_enabled=bool(strategies.trend.pullback_enabled),
     break_retest_enabled=bool(strategies.breakout.break_retest_enabled),
     momentum_ride_enabled=bool(strategies.selection.momentum_ride_enabled),
     snap_back_enabled=bool(strategies.selection.snap_back_enabled),
@@ -1653,101 +1663,6 @@ def _nearest_session_tp(
   return min(candidates, key=lambda level: abs(level.price - price))
 
 
-def trend_pullback(ctx: DetectionContext) -> DetectionResult | None:
-  """Recovery mission (2026-07-31): retrofitted onto the shared
-  evaluate_structural_reaction confirmation path (same as demand/supply
-  zone reactions - it draws from the identical st.zones/order_blocks
-  pool), replacing the old bespoke _rejection(df, direction) check. That
-  bespoke check never populated structural_id/touch_bar_ts/
-  confirmation_bar_ts, which the legacy worker.py execution pipeline
-  requires to treat M1 as optional (confirmation_policy_for.metadata_valid)
-  - without it every setup would sit hard-gated behind an M1 pattern with
-  no fallback, the same "M1 confirms everything" bug already fixed for
-  the other reaction detectors.
-  """
-  df, ind, st = _exec(ctx)
-  if len(df) < 5:
-    return None
-  if _in_chop(ctx):
-    return None
-  direction = _confirmation_direction(ctx)
-  htf_aligned = (
-    direction is not None
-    and ctx.htf_bias == _bias_for_direction(direction)
-  )
-  if (
-    direction is None
-    or not _pd_gate(st, direction, ctx.settings, ctx=ctx, setup="Trend Pullback")
-    or (
-      not ctx.settings.allow_counter_trend
-      and st.bias != ctx.htf_bias
-    )
-  ):
-    return None
-  price = _current_price(ctx, df)
-  atr = _atr(ind)
-  lookback = max(1, int(ctx.settings.structural_reaction_lookback_bars))
-  selected = _best_valid_zone(
-    [
-      zone for zone in _candidate_zones(st, direction)
-      if _last_touches_zone(df, zone)
-    ],
-    price,
-    atr,
-    direction,
-    ctx.settings,
-  )
-  if selected is None:
-    return None
-  zone, proximal = selected
-  conf = evaluate_structural_reaction(
-    df,
-    direction=direction,
-    low=float(zone.low),
-    high=float(zone.high),
-    lookback_bars=lookback,
-    grabs=_zone_grabs_for(st, zone, direction, ctx.settings.pip_size),
-    has_choch=_recent_choch_flag(st, direction, len(df), ctx.settings, lookback),
-    atr=atr,
-    engulfing_minimum_range_atr=ctx.settings.engulfing_minimum_range_atr,
-  )
-  if conf is None:
-    return None
-  level = _zone_key(zone, price, direction)
-  reasons = [
-    "with_bias" if htf_aligned else "counter_bias",
-    "pullback into structure zone",
-  ]
-  reasons = _add_proximal_reason(reasons, proximal)
-  if ctx.session_ok:
-    reasons.append("session")
-  factors = _reaction_factors(
-    conf,
-    htf_aligned=htf_aligned,
-    touches=zone.touches,
-    session_context=ctx.session_ok,
-  )
-  return _structural_finish(
-    ctx,
-    setup="Trend Pullback",
-    direction=direction,
-    level=level,
-    zone=zone,
-    price=price,
-    atr=atr,
-    reasons=reasons,
-    structural_source="supply_demand",
-    structural_id=zone_structural_id(ctx.symbol, ctx.tf, zone),
-    structural_low=float(zone.low),
-    structural_high=float(zone.high),
-    structural_kind="demand" if direction == "BUY" else "supply",
-    confirmation=conf,
-    source_touches=int(zone.touches),
-    source_score=float(getattr(zone, "score", 0.0)),
-    factors=factors,
-  )
-
-
 def break_retest(ctx: DetectionContext) -> DetectionResult | None:
   df, ind, st = _exec(ctx)
   if len(df) < 5:
@@ -1757,7 +1672,7 @@ def break_retest(ctx: DetectionContext) -> DetectionResult | None:
   direction = _confirmation_direction(ctx)
   if (
     direction is None
-    or not _pd_gate(st, direction, ctx.settings, ctx=ctx, setup="Break & Retest")
+    or not _pd_gate(st, direction, ctx.settings, ctx=ctx, setup=BREAK_AND_RETEST)
     or not _rejection(df, direction)
   ):
     return None
@@ -1788,7 +1703,7 @@ def break_retest(ctx: DetectionContext) -> DetectionResult | None:
     )
     result = _finish(
       ctx,
-      "Break & Retest",
+      BREAK_AND_RETEST,
       direction,
       level_price,
       zone,
@@ -1832,7 +1747,7 @@ def break_retest(ctx: DetectionContext) -> DetectionResult | None:
       structural_agreement=True,  # zone.kind already matched direction above
     )
     result = _finish(
-      ctx, "Break & Retest", direction, level.price, zone, price, atr, reasons,
+      ctx, BREAK_AND_RETEST, direction, level.price, zone, price, atr, reasons,
       factors=factors,
       structural_source="key_level",
       structural_id=key_level_structural_id(ctx.symbol, ctx.tf, level),
@@ -1935,7 +1850,7 @@ def box_breakout(ctx: DetectionContext) -> DetectionResult | None:
   # stars — raw score_zones totals often remap below confluence_floor after PR-E.
   return _finish(
     ctx,
-    "Box Breakout",
+    BOX_BREAKOUT,
     direction,
     key_level,
     replace(zone, score=0.0),
@@ -2045,8 +1960,8 @@ def _box_tp1_reason(
 
 def snap_back(ctx: DetectionContext) -> DetectionResult | None:
   """Recovery mission (2026-07-31): retrofitted onto the shared
-  evaluate_structural_reaction confirmation path, same reasoning as
-  trend_pullback above - the old bespoke _rejection(df, direction) check
+  evaluate_structural_reaction confirmation path. The old bespoke
+  _rejection(df, direction) check
   never populated structural_id/touch_bar_ts/confirmation_bar_ts, which
   the legacy worker.py pipeline needs to treat M1 as optional rather than
   a hard, unconditional gate.
@@ -2055,7 +1970,7 @@ def snap_back(ctx: DetectionContext) -> DetectionResult | None:
   if len(df) < 5:
     return None
   direction = _confirmation_direction(ctx)
-  if direction is None or not _pd_gate(st, direction, ctx.settings, ctx=ctx, setup="Snap-Back"):
+  if direction is None or not _pd_gate(st, direction, ctx.settings, ctx=ctx, setup=SNAP_BACK):
     return None
   price = _current_price(ctx, df)
   atr = _atr(ind)
@@ -2128,7 +2043,7 @@ def snap_back(ctx: DetectionContext) -> DetectionResult | None:
   )
   return _structural_finish(
     ctx,
-    setup="Snap-Back",
+    setup=SNAP_BACK,
     direction=direction,
     level=level,
     zone=zone,
@@ -2178,7 +2093,7 @@ def momentum_ride(ctx: DetectionContext) -> DetectionResult | None:
   if _in_chop(ctx):
     return None
   direction = _confirmation_direction(ctx)
-  if direction is None or not _pd_gate(st, direction, ctx.settings, ctx=ctx, setup="Momentum Ride"):
+  if direction is None or not _pd_gate(st, direction, ctx.settings, ctx=ctx, setup=MOMENTUM_RIDE):
     return None
   if not _strong_body_break(df, st, direction, ctx.settings.momentum_body_frac):
     return None
@@ -2211,7 +2126,7 @@ def momentum_ride(ctx: DetectionContext) -> DetectionResult | None:
       structural_agreement=True,  # zone drawn from structural swing zones
     )
     return _finish(
-      ctx, "Momentum Ride", direction, level_price, zone, price, atr, reasons,
+      ctx, MOMENTUM_RIDE, direction, level_price, zone, price, atr, reasons,
       factors=factors,
       structural_source="momentum_impulse",
       structural_id=structural_id,
@@ -2232,7 +2147,7 @@ def momentum_ride(ctx: DetectionContext) -> DetectionResult | None:
     displacement_grade=True,  # gated above via _strong_body_break(...)
   )
   return _finish(
-    ctx, "Momentum Ride", direction, level.price, zone, price, atr, reasons,
+    ctx, MOMENTUM_RIDE, direction, level.price, zone, price, atr, reasons,
     factors=factors,
     structural_source="momentum_impulse",
     structural_id=structural_id,
@@ -2241,8 +2156,8 @@ def momentum_ride(ctx: DetectionContext) -> DetectionResult | None:
 
 def range_edge_scalp(ctx: DetectionContext) -> DetectionResult | None:
   """Confirmation retrofitted onto the shared evaluate_structural_reaction
-  path (2026-08-04 recovery mission, same reasoning as trend_pullback/
-  fade_scalp above). The old bespoke _range_edge_confirmation/
+  path (2026-08-04 recovery mission). The old bespoke
+  _range_edge_confirmation/
   _recent_rejection check required a strict single-candle wick-rejection
   shape inside a hard 3-bar (sweep_react_bars) window sized for M1
   granularity - but this detector runs on the M5 execution timeframe, and
@@ -2253,8 +2168,8 @@ def range_edge_scalp(ctx: DetectionContext) -> DetectionResult | None:
   production despite RANGE_SCALP_ENABLED and a live, qualifying barrier -
   confirmed against live XAU M5 data showing zero fires in 200+ recent
   setups while sibling detectors on the same shared path fired normally.
-  It also never populated touch_bar_ts/confirmation_bar_ts, the same gap
-  trend_pullback's docstring describes for its own old bespoke check.
+  It also never populated touch_bar_ts/confirmation_bar_ts, which the shared
+  execution pipeline requires for M1-optional confirmation.
 
   Root cause of the miss, confirmed against live XAU M5 data: the barrier's
   own wick-rejection candle sat just outside the fixed
@@ -2395,7 +2310,7 @@ def _barrier_touched_recently(
 def fade_scalp(ctx: DetectionContext) -> DetectionResult | None:
   """Recovery mission (2026-07-31): retrofitted onto the shared
   evaluate_structural_reaction confirmation path, same reasoning as
-  trend_pullback/snap_back above. Fade Scalp's family (range_reversion)
+  snap_back above. Fade Scalp's family (range_reversion)
   is shared with Range Edge Scalp, whose hard M1 requirement is
   intentional (no separate M5 reaction exists for that setup) - so this
   detector is registered under _REACTION_STRATEGIES individually rather
@@ -2406,7 +2321,7 @@ def fade_scalp(ctx: DetectionContext) -> DetectionResult | None:
   if len(df) < 5:
     return None
   direction = _confirmation_direction(ctx)
-  if direction is None or not _pd_gate(st, direction, ctx.settings, ctx=ctx, setup="Fade Scalp"):
+  if direction is None or not _pd_gate(st, direction, ctx.settings, ctx=ctx, setup=FADE_SCALP):
     return None
   price = _current_price(ctx, df)
   atr = _atr(ind)
@@ -2453,7 +2368,7 @@ def fade_scalp(ctx: DetectionContext) -> DetectionResult | None:
     )
     result = _structural_finish(
       ctx,
-      setup="Fade Scalp",
+      setup=FADE_SCALP,
       direction=direction,
       level=level.price,
       zone=zone,
@@ -2904,7 +2819,7 @@ def key_level_reaction(ctx: DetectionContext) -> DetectionResult | None:
       )
       candidate = _structural_finish(
         ctx,
-        setup="Key Level Reaction",
+        setup=KEY_LEVEL_REACTION,
         direction=direction,
         level=level_price,
         zone=zone,
@@ -2960,7 +2875,7 @@ def demand_zone_reaction(ctx: DetectionContext) -> DetectionResult | None:
     ctx,
     side="demand",
     direction="BUY",
-    setup="Zone Reaction",
+    setup=ZONE_REACTION,
     exclude_sources=("flip_zone",),
   )
 
@@ -2974,7 +2889,7 @@ def supply_zone_reaction(ctx: DetectionContext) -> DetectionResult | None:
     ctx,
     side="supply",
     direction="SELL",
-    setup="Zone Reaction",
+    setup=ZONE_REACTION,
     exclude_sources=("flip_zone",),
   )
 
@@ -2986,7 +2901,7 @@ def flip_demand_zone_reaction(ctx: DetectionContext) -> DetectionResult | None:
     ctx,
     side="demand",
     direction="BUY",
-    setup="Flip Zone",
+    setup=FLIP_ZONE,
     require_source="flip_zone",
     structural_source="flip_zone",
   )
@@ -2999,7 +2914,7 @@ def flip_supply_zone_reaction(ctx: DetectionContext) -> DetectionResult | None:
     ctx,
     side="supply",
     direction="SELL",
-    setup="Flip Zone",
+    setup=FLIP_ZONE,
     require_source="flip_zone",
     structural_source="flip_zone",
   )
@@ -3137,7 +3052,7 @@ def session_level_reaction(ctx: DetectionContext) -> DetectionResult | None:
     )
     candidate = _structural_finish(
       ctx,
-      setup="Session Level Reaction",
+      setup=SESSION_LEVEL_REACTION,
       direction=direction,
       level=session.price,
       zone=zone,
@@ -3232,7 +3147,7 @@ def trendline_reaction(ctx: DetectionContext) -> DetectionResult | None:
     )
     candidate = _structural_finish(
       ctx,
-      setup="Trendline Reaction",
+      setup=TRENDLINE_REACTION,
       direction=direction,
       level=line_price,
       zone=zone,
@@ -3274,7 +3189,6 @@ FAMILY_SESSION_LEVEL = "session_level"
 FAMILY_TRENDLINE = "trendline"
 FAMILY_RANGE_REVERSION = "range_reversion"
 FAMILY_BREAKOUT_RETEST = "breakout_retest"
-FAMILY_TREND_PULLBACK = "trend_pullback"
 FAMILY_MOMENTUM_CONTINUATION = "momentum_continuation"
 FAMILY_LIQUIDITY_REVERSAL = "liquidity_reversal"
 
@@ -3400,10 +3314,6 @@ LIVE_DETECTOR_REGISTRY: tuple[DetectorRegistration, ...] = (
       "config default pending a deliberate rollout decision, same as "
       "every other feature this pipeline ships dark by default"
     ),
-  ),
-  DetectorRegistration(
-    "trend_pullback", trend_pullback, FAMILY_TREND_PULLBACK,
-    lambda cfg: cfg.trend_pullback_enabled,
   ),
   DetectorRegistration(
     "momentum_ride", momentum_ride, FAMILY_MOMENTUM_CONTINUATION,

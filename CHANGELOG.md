@@ -12,6 +12,18 @@ dated section after deployment.
 
 ## Unreleased
 
+### Fixed
+- Canonicalize strategy names through `app/autotrade/strategy_names.py`,
+  including production HFS/manual aliases and unresolved-name telemetry.
+- Retire the duplicate `Trend Pullback` detector while preserving historical
+  resolution and in-flight management; demand/supply coverage remains on the
+  enabled Supply Demand and Order Block technique publishers.
+
+### Changed
+- `Break & Retest` and `Momentum Ride` now resolve to their registered
+  `breakout_retest` and `momentum_continuation` families instead of
+  `unknown`. See `docs/audits/PR-S-canonical-strategy-names.md`.
+
 ### Changed
 - **XAU technique → structure fixed_rr:** Pack `xau_fixed_2r_v1` / policy
   `xau_fixed_2r_v1` — SL from structure inside a 25–100 pip envelope, TP at

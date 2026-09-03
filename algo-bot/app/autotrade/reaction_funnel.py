@@ -14,9 +14,11 @@ from __future__ import annotations
 import json
 import logging
 import time
+import asyncio
 from typing import Any
 
 from app.autotrade.lifecycle import increment_metric
+from app.autotrade.strategy_names import SETUP_TYPE_ALIASES, resolve_strategy
 from app.autotrade.strategy_taxonomy import is_scalp_strategy
 from app.scalping.models import STRATEGY_DISPLAY
 
@@ -42,39 +44,35 @@ _STRATEGY_TO_ARCHETYPE = {
   display: archetype for archetype, display in STRATEGY_DISPLAY.items()
 }
 
-# Executor aliases seen in auto_trade_fills.setup_type.
-_SETUP_TYPE_ALIASES = {
-  "momentum": "Momentum Chase Scalp",
-  "momentum chase scalp": "Momentum Chase Scalp",
-  "impulse pullback": "Impulse Pullback Scalp",
-  "impulse pullback scalp": "Impulse Pullback Scalp",
-  "range sweep": "Range Sweep Scalp",
-  "range sweep scalp": "Range Sweep Scalp",
-  "breakout retest": "Breakout Retest Scalp",
-  "breakout retest scalp": "Breakout Retest Scalp",
-  "key-level": "Key Level Reaction",
-  "key level": "Key Level Reaction",
-  "key level reaction": "Key Level Reaction",
-  "flip-zone": "Flip Zone",
-  "flip zone": "Flip Zone",
-  "trendline": "Trendline Reaction",
-  "trendline reaction": "Trendline Reaction",
-  "session level": "Session Level Reaction",
-  "session-level": "Session Level Reaction",
-  "zone reaction": "Zone Reaction",
-  "supply demand": "Supply Demand",
-  "supply demand reaction": "Supply Demand",
-  "order block": "Order Block",
-  "order block reaction": "Order Block",
-  "fvg": "FVG",
-  "fvg reaction": "FVG",
-  "ifvg": "iFVG",
-  "ifvg reaction": "iFVG",
-  "crt": "CRT",
-  "crt reaction": "CRT",
-  "confluence zone": "Confluence Zone",
-  "trend pullback": "Trend Pullback",
-}
+# Compatibility export retained for callers and reports.  The values are
+# generated from the canonical registry, never maintained here.
+_SETUP_TYPE_ALIASES = SETUP_TYPE_ALIASES
+_unresolved_setup_names: set[str] = set()
+
+
+def _record_unresolved_setup_name(raw: str) -> None:
+  if raw in _unresolved_setup_names:
+    return
+  _unresolved_setup_names.add(raw)
+  log.warning("unmapped setup_type %r; preserving raw value", raw)
+  try:
+    loop = asyncio.get_running_loop()
+  except RuntimeError:
+    return
+
+  async def record() -> None:
+    try:
+      from app.persistence import redis_state
+
+      await increment_metric(
+        redis_state.get_client(),
+        "setup_name_unresolved",
+        dimensions={"raw": raw},
+      )
+    except Exception:
+      log.exception("unable to record unresolved setup_type %r", raw)
+
+  loop.create_task(record())
 
 
 def normalize_setup_type(raw: str | None) -> str | None:
@@ -86,13 +84,14 @@ def normalize_setup_type(raw: str | None) -> str | None:
     return None
   # Scale-in tags: "Key Level Reaction · add_momentum"
   base = text.split("·", 1)[0].strip()
-  mapped = _SETUP_TYPE_ALIASES.get(base.casefold())
-  if mapped is not None:
+  resolved = resolve_strategy(base)
+  if resolved is not None:
     if "·" in text:
-      return f"{mapped} ·{text.split('·', 1)[1]}"
-    return mapped
+      return f"{resolved.canonical} ·{text.split('·', 1)[1]}"
+    return resolved.canonical
   if base in _STRATEGY_TO_ARCHETYPE:
     return text if "·" in text else base
+  _record_unresolved_setup_name(text)
   return text
 
 

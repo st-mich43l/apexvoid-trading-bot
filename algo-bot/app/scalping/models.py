@@ -7,6 +7,12 @@ import hashlib
 import json
 from typing import Any
 
+from app.autotrade.strategy_names import (
+  BREAKOUT_RETEST_SCALP,
+  IMPULSE_PULLBACK_SCALP,
+  RANGE_SWEEP_SCALP,
+)
+
 
 CONTEXT_VERSION = 1
 OPPORTUNITY_VERSION = 1
@@ -18,9 +24,9 @@ ARCHETYPE_BREAKOUT_RETEST = "breakout_retest"
 
 # Canonical display names for M1 scalping archetypes.
 STRATEGY_DISPLAY = {
-  ARCHETYPE_RANGE_SWEEP: "Range Sweep Scalp",
-  ARCHETYPE_IMPULSE_PULLBACK: "Impulse Pullback Scalp",
-  ARCHETYPE_BREAKOUT_RETEST: "Breakout Retest Scalp",
+  ARCHETYPE_RANGE_SWEEP: RANGE_SWEEP_SCALP,
+  ARCHETYPE_IMPULSE_PULLBACK: IMPULSE_PULLBACK_SCALP,
+  ARCHETYPE_BREAKOUT_RETEST: BREAKOUT_RETEST_SCALP,
 }
 
 

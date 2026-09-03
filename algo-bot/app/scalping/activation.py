@@ -62,12 +62,6 @@ def _enforce_location_cfg(hfs: Any) -> SimpleNamespace:
 
 
 def _strategy_name(opportunity: ScalpOpportunity) -> str:
-  if opportunity.archetype == ARCHETYPE_RANGE_SWEEP:
-    return "Range Edge Scalp"
-  if opportunity.archetype == ARCHETYPE_IMPULSE_PULLBACK:
-    return "Trend Pullback"
-  if opportunity.archetype == ARCHETYPE_BREAKOUT_RETEST:
-    return "Break & Retest"
   return STRATEGY_DISPLAY.get(opportunity.archetype, opportunity.archetype)
 
 

@@ -797,5 +797,4 @@ strategies:
     allow_chase: true
     breakout_min_room_pips: 35
     enabled: true
-    pullback_enabled: true
 version: 1
