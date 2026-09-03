@@ -10,6 +10,7 @@ from app.persistence.store import (
 )
 from app.signals.pips_format import rr_entry
 from app.signals.fx_manual_algo import uses_entry_price_display
+from app.autotrade.strategy_names import resolve_strategy
 from app.core.symbols import digits_for, channels_for
 from app.bot.client import delete_message, send_sticker, send_with_retry
 
@@ -37,6 +38,22 @@ def _entry_line(sig: dict, symbol: str) -> str:
   )
 
 
+def _setup_line(sig: dict) -> str | None:
+  """Render the owner-selected setup using its canonical strategy name."""
+  raw_setup = sig.get("setup_type")
+  if raw_setup is None or not str(raw_setup).strip():
+    return None
+  setup = str(raw_setup).strip()
+  base, separator, suffix = setup.partition("·")
+  strategy = resolve_strategy(base.strip())
+  label = strategy.canonical if strategy is not None else base.strip()
+  if separator:
+    label = f"{label} ·{suffix}"
+  confluence = sig.get("confluence")
+  stars = f"  {'⭐' * int(confluence)}" if confluence else ""
+  return f"🏷 Setup:  <b>{escape(label)}</b>{stars}"
+
+
 def render_entry(sig: dict, tier: str) -> str:
   symbol = sig["symbol"]
   action = sig["action"]
@@ -51,11 +68,14 @@ def render_entry(sig: dict, tier: str) -> str:
     ),
     "",
     _entry_line(sig, symbol),
-    (
-      f"🛡 SL:     <b>{_price(sig['sl'], symbol)}</b>  ·  "
-      f"risk <b>{_price(risk, symbol)}</b>"
-    ),
   ]
+  setup_line = _setup_line(sig)
+  if setup_line:
+    lines.append(setup_line)
+  lines.append(
+    f"🛡 SL:     <b>{_price(sig['sl'], symbol)}</b>  ·  "
+    f"risk <b>{_price(risk, symbol)}</b>"
+  )
   for index, tp in enumerate(sig.get("tps") or []):
     lines.append(
       f"💰 TP{index + 1}:   <b>{_price(tp, symbol)}</b>  ·  "
