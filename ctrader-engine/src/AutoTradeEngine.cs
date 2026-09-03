@@ -10,6 +10,11 @@ public sealed class AutoTradeEngine(
   Action<string>? log = null
 )
 {
+  // Deal history is diagnostic for a position already absent from the
+  // broker snapshot. It must never repeatedly occupy the live quote/order
+  // channel; retry no more than once per minute after the absence is
+  // confirmed.
+  private const int CloseHistoryRetrySeconds = 60;
   // Owner-override commands for algo-armed/filled manual signals
   // (cancel_pending/close/move_sl). Not wired through AutoTradeOptions -
   // this stream name is a fixed constant matching Python's
@@ -6455,6 +6460,7 @@ public sealed class AutoTradeEngine(
       StringComparer.Ordinal
     );
     var confirmedMissingPositionIds = new HashSet<long>();
+    var closeHistoryLookupAttempted = false;
     foreach (var stale in trackedIds.Where(id => !openIds.Contains(id)))
     {
       // A single missing broker snapshot is only "suspected" missing, not
@@ -6468,10 +6474,11 @@ public sealed class AutoTradeEngine(
       // reach this reconcile-driven stale-detection loop.
       var missingNow = _clock().ToUnixTimeSeconds();
       var missing = await store.GetPositionMissingAsync(stale, cancellationToken);
-      if (
-        missing is not null
-        && missingNow - missing.LastCheckedAt < options.PositionMissingRecheckSeconds
-      )
+      var recheckSeconds = missing is not null
+        && missing.Confirmations >= options.PositionMissingConfirmations
+        ? CloseHistoryRetrySeconds
+        : options.PositionMissingRecheckSeconds;
+      if (missing is not null && missingNow - missing.LastCheckedAt < recheckSeconds)
       {
         continue;
       }
@@ -6500,6 +6507,14 @@ public sealed class AutoTradeEngine(
         ?? trackedStates.GetValueOrDefault(stale);
       if (state is not null)
       {
+        // One best-effort historical lookup per reconciliation pass. A slow
+        // deal API used to serially block every missing leg and starve price
+        // processing long enough for otherwise valid orders to go stale.
+        if (closeHistoryLookupAttempted)
+        {
+          continue;
+        }
+        closeHistoryLookupAttempted = true;
         var groupId = GroupId(state);
         var trackedGroup = trackedStates.Values
           .Where(item => GroupId(item) == groupId)
