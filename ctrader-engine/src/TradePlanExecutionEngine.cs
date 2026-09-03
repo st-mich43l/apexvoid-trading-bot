@@ -262,10 +262,9 @@ public static class TradePlanExecutionEngine
         $"equity {equity.Equity:N2} is below the $200 equity sizing floor"
       );
     }
-    // Python stamps RiskMultiplier (scalp = 2.0 for all quality tiers).
+    // Python stamps 1.5× for autonomous scalp plans.
     // Stop geometry stays unchanged — this scales volume only.
-    // Owner 2026-08-12: below $2k equity, scalp books 1.5× table lots
-    // (e.g. 0.10 → 0.15) instead of doubling.
+    // Keep a legacy plan with a higher multiplier capped at 1.5× below $2k.
     var riskMultiplier = plan.Risk.RiskMultiplier;
     if (riskMultiplier <= 0m)
     {
