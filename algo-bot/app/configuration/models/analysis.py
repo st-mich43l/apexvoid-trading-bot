@@ -153,6 +153,11 @@ class AnalysisBreakoutConfig(FrozenConfigModel):
     buffer_atr: float = config_field(0.1, canonical_env='BREAKOUT_BUFFER_ATR', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEXT_SCANNER_CYCLE, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.ATR, risk=RiskClassification.ANALYSIS_BEHAVIOR, description='Controls  (atr).', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 0.1),), validation_summary='Pydantic required/type coercion only')
     max_age_bars: int = config_field(6, canonical_env='BREAKOUT_MAX_AGE_BARS', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEXT_SCANNER_CYCLE, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.BARS, risk=RiskClassification.ANALYSIS_BEHAVIOR, description='Controls  (bars).', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 6),), validation_summary='Pydantic required/type coercion only')
 
+class AnalysisFlipZoneConfig(FrozenConfigModel):
+    accept_bars: int | None = config_field(None, canonical_env='FLIP_ZONE_ACCEPT_BARS', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEXT_SCANNER_CYCLE, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.BARS, risk=RiskClassification.ANALYSIS_BEHAVIOR, description='Consecutive accepted closes required before a key-level break mints a flip zone. None inherits analysis.breakout.accept_bars.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, None),), validation_summary='Pydantic required/type coercion only')
+    max_break_age_bars: int = config_field(48, canonical_env='FLIP_ZONE_MAX_BREAK_AGE_BARS', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEXT_SCANNER_CYCLE, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.BARS, risk=RiskClassification.ANALYSIS_BEHAVIOR, description='Maximum age of a structure break that may mint a flip zone.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 48),), validation_summary='Pydantic required/type coercion only')
+    band_body_fraction: float = config_field(0.5, canonical_env='FLIP_ZONE_BAND_BODY_FRACTION', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEXT_SCANNER_CYCLE, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.FRACTION, risk=RiskClassification.ANALYSIS_BEHAVIOR, description='Minimum flip-zone width as a fraction of the break candle body.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 0.5),), validation_summary='Pydantic required/type coercion only')
+
 class AnalysisRegimeChopConfig(FrozenConfigModel):
     edge_frac: float = config_field(0.25, canonical_env='CHOP_EDGE_FRAC', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEXT_SCANNER_CYCLE, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.FRACTION, risk=RiskClassification.ANALYSIS_BEHAVIOR, description='Controls  (fraction).', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 0.25),), validation_summary='Pydantic required/type coercion only')
     filter_enabled: bool = config_field(True, canonical_env='CHOP_FILTER_ENABLED', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEXT_SCANNER_CYCLE, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.BOOLEAN, risk=RiskClassification.ANALYSIS_BEHAVIOR, description='Controls .', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, True),), validation_summary='Pydantic required/type coercion only')
@@ -219,6 +224,7 @@ class AnalysisSwingsConfig(FrozenConfigModel):
 class AnalysisConfig(FrozenConfigModel):
     atr: AnalysisAtrConfig = Field(default_factory=AnalysisAtrConfig)
     breakout: AnalysisBreakoutConfig = Field(default_factory=AnalysisBreakoutConfig)
+    flip_zone: AnalysisFlipZoneConfig = Field(default_factory=AnalysisFlipZoneConfig)
     confluence: AnalysisConfluenceConfig = Field(default_factory=AnalysisConfluenceConfig)
     detectors: AnalysisDetectorsConfig = Field(default_factory=AnalysisDetectorsConfig)
     displacement: AnalysisDisplacementConfig = Field(default_factory=AnalysisDisplacementConfig)

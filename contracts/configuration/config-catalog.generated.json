@@ -1,20 +1,20 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "d9fc5a863b579b9bbf3ec96a21f0043b78a791c286daa645e6d8f91041b48b60",
-  "configuration_document_fingerprint_sha256": "6a60fc8fc4538b3077fccc782d924494c7a778a3b1d20b0afe2991e52a03ffbb",
+  "configuration_contract_fingerprint_sha256": "2d2146a4c50ede784894cdec04f5252c58d2e961da818fb80f95bb7507813275",
+  "configuration_document_fingerprint_sha256": "e1a5d5402217c31e1f3079bc5a2fbb8b2d4549f950c2e14045e0323462c1d847",
   "counts": {
     "algorithm_constants": 57,
-    "configurable": 499,
+    "configurable": 504,
     "known_conflicts": 30,
     "owners": {
       "ctrader": 49,
-      "python": 421,
+      "python": 426,
       "shared": 96
     },
     "protocol_constants": 10,
     "secrets": 9,
     "shared": 96,
-    "total_items": 566
+    "total_items": 571
   },
   "items": [
     {
@@ -2559,6 +2559,117 @@
       "terminal_deprecation_reason": null,
       "type": "float",
       "unit": "atr",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "FLIP_ZONE_ACCEPT_BARS",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {},
+      "default": null,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": null
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Consecutive accepted closes required before a key-level break mints a flip zone. None inherits analysis.breakout.accept_bars.",
+      "display_id": "config:analysis.flip_zone.accept_bars",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "analysis.flip_zone.accept_bars",
+      "protocol_constant": false,
+      "reload_policy": "next_scanner_cycle",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "analysis_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "Optional[int]",
+      "unit": "bars",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "FLIP_ZONE_BAND_BODY_FRACTION",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {},
+      "default": 0.5,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 0.5
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Minimum flip-zone width as a fraction of the break candle body.",
+      "display_id": "config:analysis.flip_zone.band_body_fraction",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "analysis.flip_zone.band_body_fraction",
+      "protocol_constant": false,
+      "reload_policy": "next_scanner_cycle",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "analysis_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "float",
+      "unit": "fraction",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "FLIP_ZONE_MAX_BREAK_AGE_BARS",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {},
+      "default": 48,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 48
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Maximum age of a structure break that may mint a flip zone.",
+      "display_id": "config:analysis.flip_zone.max_break_age_bars",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "analysis.flip_zone.max_break_age_bars",
+      "protocol_constant": false,
+      "reload_policy": "next_scanner_cycle",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "analysis_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "int",
+      "unit": "bars",
       "validation_summary": "Pydantic required/type coercion only"
     },
     {
@@ -15508,11 +15619,11 @@
       "catalog_version": 2,
       "configurable": true,
       "constraints": {},
-      "default": 2.0,
+      "default": 1.5,
       "default_contexts": [
         {
           "context": "python_schema",
-          "value": 2.0
+          "value": 1.5
         }
       ],
       "deprecated": false,
@@ -19827,6 +19938,46 @@
     {
       "algorithm_constant": false,
       "allowed_values": [],
+      "canonical_env": "SCALPING_RISK_PERCENT_PER_TRADE",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 0.01,
+        "le": 2.0
+      },
+      "default": 0.5,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 0.5
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Per-scalp account-risk budget in percent. Used only to size scalp TradePlans; risk_fraction_per_trade remains telemetry.",
+      "display_id": "config:strategies.scalping.risk.risk_percent_per_trade",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.risk.risk_percent_per_trade",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "execution_safety",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "float",
+      "unit": "percent",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
       "canonical_env": "SCALPING_SESSION_LOSS_LIMIT_R",
       "catalog_version": 2,
       "configurable": true,
@@ -19862,6 +20013,47 @@
       "type": "float",
       "unit": "multiplier",
       "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [
+        "risk"
+      ],
+      "canonical_env": "SCALPING_SIZING_MODE",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "pattern": "^risk$"
+      },
+      "default": "risk",
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": "risk"
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Sizing mode for scalp TradePlans only. Non-scalp lanes retain risk.sizing.mode.",
+      "display_id": "config:strategies.scalping.risk.sizing_mode",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.risk.sizing_mode",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "execution_safety",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "str",
+      "unit": "enum",
+      "validation_summary": "Pydantic type coercion + field validator"
     },
     {
       "algorithm_constant": false,
@@ -19978,6 +20170,45 @@
       "terminal_deprecation_reason": null,
       "type": "float",
       "unit": "pips",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "SCALPING_MINIMUM_STOP_SPREAD_MULTIPLE",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 1
+      },
+      "default": 4.0,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 4.0
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Reject a structural stop tighter than this multiple of the live spread; never widen structure to satisfy the cost floor.",
+      "display_id": "config:strategies.scalping.stop.minimum_stop_spread_multiple",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.stop.minimum_stop_spread_multiple",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "execution_safety",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "float",
+      "unit": "multiplier",
       "validation_summary": "Pydantic required/type coercion only"
     },
     {
@@ -21072,43 +21303,6 @@
     {
       "algorithm_constant": false,
       "allowed_values": [],
-      "canonical_env": "AUTO_TRADE_TREND_PULLBACK_ENABLED",
-      "catalog_version": 2,
-      "configurable": true,
-      "constraints": {},
-      "default": true,
-      "default_contexts": [
-        {
-          "context": "python_schema",
-          "value": true
-        }
-      ],
-      "deprecated": false,
-      "deprecated_aliases": [],
-      "description": "Controls .",
-      "display_id": "config:strategies.trend.pullback_enabled",
-      "evidence_notes": [],
-      "introduced_in": "config-catalog-v2",
-      "kind": "configurable",
-      "mismatch_policy": "not_reported",
-      "owner": "python",
-      "path": "strategies.trend.pullback_enabled",
-      "protocol_constant": false,
-      "reload_policy": "new_setup_only",
-      "replacement_path": null,
-      "required": false,
-      "risk_classification": "strategy_behavior",
-      "runtime_reload_policy": "restart",
-      "secret": false,
-      "shared_with_ctrader": false,
-      "terminal_deprecation_reason": null,
-      "type": "bool",
-      "unit": "boolean",
-      "validation_summary": "Pydantic required/type coercion only"
-    },
-    {
-      "algorithm_constant": false,
-      "allowed_values": [],
       "canonical_env": "AUTO_TRADE_DEMAND_ZONE_ENABLED",
       "catalog_version": 2,
       "configurable": true,
@@ -21255,6 +21449,6 @@
       "validation_summary": "Pydantic required/type coercion only"
     }
   ],
-  "source_fingerprint_sha256": "d9fc5a863b579b9bbf3ec96a21f0043b78a791c286daa645e6d8f91041b48b60",
+  "source_fingerprint_sha256": "2d2146a4c50ede784894cdec04f5252c58d2e961da818fb80f95bb7507813275",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

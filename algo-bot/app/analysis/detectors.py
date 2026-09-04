@@ -219,6 +219,9 @@ class DetectorSettings:
   breakout_buffer_atr: float = 0.1
   breakout_accept_bars: int = 2
   breakout_max_age_bars: int = 6
+  flip_zone_accept_bars: int | None = None
+  flip_zone_max_break_age_bars: int = 48
+  flip_band_body_fraction: float = 0.5
   allow_counter_trend: bool = True
   range_scalp_enabled: bool = True
   range_scalp_lookback: int = 48
@@ -350,6 +353,9 @@ class DetectorSettings:
       breakout_buffer_atr=self.breakout_buffer_atr,
       breakout_accept_bars=self.breakout_accept_bars,
       breakout_max_age_bars=self.breakout_max_age_bars,
+      flip_zone_accept_bars=self.flip_zone_accept_bars,
+      flip_zone_max_break_age_bars=self.flip_zone_max_break_age_bars,
+      flip_band_body_fraction=self.flip_band_body_fraction,
       range_scalp_lookback=self.range_scalp_lookback,
       range_scalp_cluster_atr=self.range_scalp_cluster_atr,
       range_scalp_min_touches=self.range_scalp_min_touches,
@@ -430,6 +436,7 @@ def detector_settings_from(config: object | None = None) -> DetectorSettings:
     flip_zone_enabled = bool(strategies.zone.flip.enabled)
   except AttributeError:
     flip_zone_enabled = True
+  flip_zone = getattr(analysis, "flip_zone", None)
   fib = _fib_cfg(analysis)
   confluence = getattr(analysis, "confluence", None) or SimpleNamespace(
     scoring_version="v1",
@@ -530,6 +537,13 @@ def detector_settings_from(config: object | None = None) -> DetectorSettings:
     breakout_buffer_atr=analysis.breakout.buffer_atr,
     breakout_accept_bars=analysis.breakout.accept_bars,
     breakout_max_age_bars=analysis.breakout.max_age_bars,
+    flip_zone_accept_bars=getattr(flip_zone, "accept_bars", None),
+    flip_zone_max_break_age_bars=int(
+      getattr(flip_zone, "max_break_age_bars", 48)
+    ),
+    flip_band_body_fraction=float(
+      getattr(flip_zone, "band_body_fraction", 0.5)
+    ),
     allow_counter_trend=strategies.counter_trend.allow_counter_trend,
     range_scalp_enabled=strategies.range_reversion.range_edge.enabled,
     range_scalp_lookback=strategies.range_reversion.range_edge.lookback,

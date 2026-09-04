@@ -13,6 +13,10 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- Flip Zone now requires the configured consecutive breakout closes, rejects
+  expired breaks, and anchors its entry band entirely on the valid side of the
+  broken level. A body-width floor prevents degenerate zones; reject metrics
+  expose acceptance, expiry, and anchor violations.
 - Canonicalize strategy names through `app/autotrade/strategy_names.py`,
   including production HFS/manual aliases and unresolved-name telemetry.
 - Retire the duplicate `Trend Pullback` detector while preserving historical
