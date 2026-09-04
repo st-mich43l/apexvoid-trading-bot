@@ -683,6 +683,10 @@ strategies:
       impulse_pullback_enabled: true
       # Hard gate: impulse pullback only during London UTC session (07–13).
       impulse_pullback_allowed_sessions: london
+      pullback_extreme_confirm_bars: 2
+      impulse_displacement_atr_multiple: 4.0
+      impulse_body_dominance: 0.5
+      pullback_corrective_ratio: 0.7
       breakout_retest_enabled: true
     context:
       maximum_m5_age_seconds: 420
@@ -694,6 +698,7 @@ strategies:
       range_sell_minimum_position: 0.65
       pullback_buy_maximum_position: 0.60
       pullback_sell_minimum_position: 0.40
+      level_proximity_atr_multiple: 1.0
     activation:
       trigger_maximum_age_bars: 2
       maximum_chase_pips: 40
@@ -707,6 +712,9 @@ strategies:
       maximum_pips: 30
       buffer_atr: 0.10
       minimum_stop_spread_multiple: 4.0
+      buffer_m1_atr_multiple: 1.2
+      buffer_minimum_spread_multiple: 1.5
+      zone_maximum_atr_multiple: 1.5
     policy:
       minimum_reward_risk: 1.10
       maximum_opportunities_per_cycle: 3

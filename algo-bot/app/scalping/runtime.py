@@ -6,8 +6,10 @@ import asyncio
 import json
 import logging
 import time
+from dataclasses import replace
 from typing import Any
 
+from app.analysis.engine import AnalysisSettings, scalp_structure
 from app.analysis.ohlc_source import RedisOHLCSource
 from app.autotrade import units
 from app.core.config import runtime_config
@@ -24,9 +26,11 @@ from app.scalping.context import (
 from app.scalping.unified_context import (
   build_scalp_context_and_micro,
   load_scalp_ohlc_windows,
+  scalp_structure_payload,
 )
 from app.scalping.models import (
   ARMED,
+  ARCHETYPE_IMPULSE_PULLBACK,
   DISCOVERED,
   EXECUTABLE,
   MISSED,
@@ -133,7 +137,7 @@ async def _ensure_context(
   now: int,
   cfg: Any,
   force: bool = False,
-) -> tuple[Any, float]:
+) -> tuple[Any, float, float]:
   existing = await load_current_context(client, symbol, cfg)
   ctx_cfg = getattr(_scalping_cfg(cfg), "context", None)
   max_age = int(getattr(ctx_cfg, "maximum_m5_age_seconds", 420) or 420)
@@ -142,15 +146,17 @@ async def _ensure_context(
     and not force
     and is_context_fresh(existing, now, max_age, cfg)
   ):
-    return existing, 0.0
+    return existing, 0.0, 0.0
+  m1_lookback = int(getattr(ctx_cfg, "m1_lookback_bars", 60) or 60)
 
   windows = await load_scalp_ohlc_windows(
-    source, symbol, m1_bars=1, m5_bars=120, m15_bars=120, h1_bars=120,
+    source, symbol, m1_bars=max(15, m1_lookback), m5_bars=120,
+    m15_bars=120, h1_bars=120,
   )
   m5 = windows["m5"]
   quote = await _load_quote(client, symbol)
   if quote is None or m5 is None or m5.empty:
-    return existing, 0.0
+    return existing, 0.0, 0.0
   bid, ask, _ = quote
   mid = (bid + ask) / 2.0
   pip = _pip_size(symbol, cfg)
@@ -163,8 +169,23 @@ async def _ensure_context(
     now=now,
     cfg=cfg,
   )
+  structure_t0 = time.perf_counter()
+  structure = await asyncio.to_thread(
+    scalp_structure,
+    m5,
+    AnalysisSettings(pip_size=pip),
+  )
+  scalp_structure_ms = (time.perf_counter() - structure_t0) * 1000.0
   if snapshot is None:
-    return existing, analysis_labels_ms
+    return existing, analysis_labels_ms, scalp_structure_ms
+  key_levels, zones = scalp_structure_payload(structure)
+  m5_closes = [float(value) for value in m5["close"].astype(float).tail(120)]
+  snapshot = replace(
+    snapshot,
+    key_levels=key_levels,
+    zones=zones,
+    measured={**snapshot.measured, "m5_closes": m5_closes},
+  )
   current_ttl = int(getattr(ctx_cfg, "current_context_ttl_seconds", 3600) or 3600)
   historic_ttl = int(getattr(ctx_cfg, "historic_context_ttl_seconds", 86400) or 86400)
   await save_context(
@@ -174,7 +195,7 @@ async def _ensure_context(
     historic_ttl=historic_ttl,
   )
   await set_last(client, "context", symbol, json.loads(snapshot.to_json()))
-  return snapshot, analysis_labels_ms
+  return snapshot, analysis_labels_ms, scalp_structure_ms
 
 
 async def process_m1_bar(
@@ -212,7 +233,7 @@ async def process_m1_bar(
   now = int(bar_ts)
 
   t_ctx = time.perf_counter()
-  context, analysis_labels_ms = await _ensure_context(
+  context, analysis_labels_ms, scalp_structure_ms = await _ensure_context(
     client, source, symbol=symbol, now=now, cfg=cfg,
   )
   context_ms = (time.perf_counter() - t_ctx) * 1000.0
@@ -321,6 +342,17 @@ async def process_m1_bar(
       )
     if reason.endswith(":stop_below_spread_multiple"):
       await incr(client, symbol, "stop_below_spread_multiple")
+    if reason.startswith(f"{ARCHETYPE_IMPULSE_PULLBACK}:"):
+      code = reason.split(":", 1)[1]
+      if code in {
+        "pullback_extreme_unconfirmed",
+        "impulse_no_displacement",
+        "pullback_not_corrective",
+        "impulse_no_level_reference",
+        "impulse_level_role_mismatch",
+        "impulse_zone_too_wide",
+      }:
+        await incr(client, symbol, code)
   strat_ms = (time.perf_counter() - t_strat) * 1000.0
 
   # Per-reason breakout telemetry every cycle (quiet archetype diagnosis).
@@ -714,6 +746,7 @@ async def process_m1_bar(
     "context_age_seconds": result.get("context_age_seconds"),
     "context_load_ms": round(context_ms, 3),
     "analysis_labels_ms": round(analysis_labels_ms, 3),
+    "scalp_structure_ms": round(scalp_structure_ms, 3),
     "microstructure_ms": round(micro_ms, 3),
     "strategy_evaluation_ms": round(strat_ms, 3),
     "persistence_ms": round(persist_ms, 3),

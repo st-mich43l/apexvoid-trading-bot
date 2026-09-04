@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import math
 from typing import Any
 
 import pandas as pd
@@ -16,6 +17,7 @@ from app.scalping.microstructure import (
   find_compression_box,
 )
 from app.scalping.context import is_impulse_pullback_session_allowed
+from app.analysis.key_level_role import classify_key_level_role
 from app.scalping.models import (
   ARCHETYPE_BREAKOUT_RETEST,
   ARCHETYPE_IMPULSE_PULLBACK,
@@ -139,6 +141,157 @@ def _stop_pips(
   return max(value, mn), None
 
 
+def _stop_buffer(
+  context: ScalpContextSnapshot,
+  cfg: Any,
+  pip_size: float,
+) -> float:
+  """Return the M1 volatility/spread floor beyond a structural level."""
+  root = _scalping_cfg(cfg)
+  stop_cfg = getattr(root, "stop", None)
+  policy = getattr(root, "policy", None)
+  m1_atr = _parse_float(context, "m1_atr", 0.0)
+  if not math.isfinite(m1_atr) or m1_atr <= 0:
+    m1_atr = max(float(pip_size) * 3.0, float(pip_size))
+  atr_multiple = _parse_float(stop_cfg, "buffer_m1_atr_multiple", 1.2)
+  spread_multiple = _parse_float(
+    stop_cfg, "buffer_minimum_spread_multiple", 1.5,
+  )
+  maximum_spread = _parse_float(policy, "maximum_spread_pips", 5.0)
+  return max(
+    m1_atr * atr_multiple,
+    float(pip_size) * maximum_spread * spread_multiple,
+  )
+
+
+def _impulse_reference(
+  context: ScalpContextSnapshot,
+  *,
+  direction: str,
+  pullback_extreme: float,
+  buffer: float,
+  cfg: Any,
+  pip_size: float,
+) -> dict[str, Any] | None:
+  """Choose an unmitigated M5 zone first, then a nearby canonical level."""
+  root = _scalping_cfg(cfg)
+  location = getattr(root, "location", None)
+  proximity_multiple = _parse_float(
+    location, "level_proximity_atr_multiple", 1.0,
+  )
+  m1_atr = max(float(context.m1_atr or 0.0), float(pip_size) * 3.0)
+  proximity = max(0.0, proximity_multiple * m1_atr)
+  side = "demand" if direction == "BUY" else "supply"
+  candidates: list[dict[str, Any]] = []
+
+  for zone in context.zones:
+    try:
+      bottom = float(zone["bottom"])
+      top = float(zone["top"])
+      zone_side = str(zone.get("side") or "").casefold()
+      if zone_side not in {side, direction.casefold()}:
+        continue
+      if bool(zone.get("mitigated", False)) or top <= bottom:
+        continue
+      if bottom <= pullback_extreme <= top:
+        distance = 0.0
+      else:
+        distance = min(
+          abs(pullback_extreme - bottom), abs(pullback_extreme - top),
+        )
+      if distance > proximity:
+        continue
+      candidates.append({
+        "kind": "zone",
+        "bottom": bottom,
+        "top": top,
+        "level": bottom if direction == "BUY" else top,
+        "distance": distance,
+        "score": float(zone.get("score") or 0.0),
+        "touches": int(zone.get("touches") or 0),
+        "zone_score": float(zone.get("score") or 0.0),
+        "zone_touches": int(zone.get("touches") or 0),
+      })
+    except (KeyError, TypeError, ValueError):
+      continue
+
+  if candidates:
+    reference = max(
+      candidates,
+      key=lambda item: (
+        item["score"], item["touches"], -item["distance"],
+      ),
+    )
+    maximum_zone_atr = _parse_float(
+      getattr(root, "stop", None), "zone_maximum_atr_multiple", 1.5,
+    )
+    if reference["top"] - reference["bottom"] > maximum_zone_atr * m1_atr:
+      return {"rejected": True, "reason": "impulse_zone_too_wide"}
+    return reference
+
+  levels: list[dict[str, Any]] = []
+  for level in context.key_levels:
+    try:
+      price = float(level["price"])
+      band = max(0.0, float(level.get("band") or 0.0))
+      distance = abs(price - pullback_extreme)
+      if distance > proximity + band:
+        continue
+      if direction == "BUY" and price > pullback_extreme + proximity:
+        continue
+      if direction == "SELL" and price < pullback_extreme - proximity:
+        continue
+      levels.append({
+        "kind": "level",
+        "level": price,
+        "raw_kind": str(level.get("kind") or ""),
+        "band": band,
+        "bottom": price,
+        "top": price,
+        "distance": distance,
+        "score": float(level.get("score") or 0.0),
+        "touches": int(level.get("touches") or 0),
+        "zone_score": 0.0,
+        "zone_touches": 0,
+      })
+    except (KeyError, TypeError, ValueError):
+      continue
+  if not levels:
+    return None
+  return min(levels, key=lambda item: (item["distance"], -item["touches"]))
+
+
+def _impulse_level_role(
+  context: ScalpContextSnapshot,
+  reference: dict[str, Any],
+  *,
+  direction: str,
+  cfg: Any,
+) -> str:
+  analysis = getattr(getattr(cfg, "analysis", None), "breakout", None)
+  accept_bars = int(getattr(analysis, "accept_bars", 2) or 2)
+  if reference["kind"] == "zone":
+    kind = "support" if direction == "BUY" else "resistance"
+    band_low = float(reference["bottom"])
+    band_high = float(reference["top"])
+  else:
+    raw_kind = str(reference.get("raw_kind") or "")
+    kind = raw_kind or ("support" if direction == "BUY" else "resistance")
+    band = max(0.0, float(reference.get("band") or 0.0))
+    band_low = float(reference["level"]) - band
+    band_high = float(reference["level"]) + band
+  closed = context.measured.get("m5_closes", [])
+  closed_bars = pd.DataFrame({"close": list(closed)})
+  return classify_key_level_role(
+    kind=kind,
+    level_price=float(reference["level"]),
+    band_low=band_low,
+    band_high=band_high,
+    closed_bars=closed_bars,
+    breakout_accept_bars=accept_bars,
+  ).role
+
+
 def _technique_require_sweep_body(cfg: Any) -> bool:
   from app.autotrade.killzone import technique_require_sweep_body
 
@@ -186,7 +339,7 @@ def discover_range_sweep(
 
   out: list[ScalpOpportunity] = []
   reasons = idle_reasons if idle_reasons is not None else []
-  buffer = max(pip_size * 2, context.atr * 0.05)
+  buffer = _stop_buffer(context, cfg, pip_size)
   min_net = _parse_float(getattr(_scalping_cfg(cfg), "target", None), "minimum_net_target_pips", 15.0)
   act = getattr(_scalping_cfg(cfg), "activation", None)
   lookback = max(1, int(getattr(act, "trigger_maximum_age_bars", 2) or 2))
@@ -372,7 +525,7 @@ def discover_impulse_pullback(
   buy_max = _parse_float(loc, "pullback_buy_maximum_position", 0.60)
   sell_min = _parse_float(loc, "pullback_sell_minimum_position", 0.40)
   min_net = _parse_float(getattr(_scalping_cfg(cfg), "target", None), "minimum_net_target_pips", 15.0)
-  buffer = max(pip_size * 2, context.atr * _parse_float(getattr(_scalping_cfg(cfg), "stop", None), "buffer_atr", 0.10))
+  buffer = _stop_buffer(context, cfg, pip_size)
   out: list[ScalpOpportunity] = []
   reasons = idle_reasons if idle_reasons is not None else []
   pos = context.dealing_range_position
@@ -382,25 +535,83 @@ def discover_impulse_pullback(
       continue
     if direction == "SELL" and pos is not None and pos < sell_min:
       continue
-    ev = detect_impulse_pullback(m1_df, direction=direction)
+    arch = getattr(_scalping_cfg(cfg), "archetypes", None)
+    ev = detect_impulse_pullback(
+      m1_df,
+      direction=direction,
+      pullback_extreme_confirm_bars=int(
+        getattr(arch, "pullback_extreme_confirm_bars", 2) or 2
+      ),
+    )
     if ev is None:
       continue
     if ev.get("rejected"):
+      reasons.append(
+        f"{ARCHETYPE_IMPULSE_PULLBACK}:{ev.get('reason', 'rejected')}"
+      )
       continue
-    # Continuation must not require sweep-reclaim (that gate belongs to
-    # range_sweep). Owner 2026-08-26: require_sweep_body was killing L1.
     entry = float(ev["close"])
-    # Stop at the pullback extreme (local swing), not the impulse-leg origin.
-    band = max(buffer, pip_size * 3)
-    zone_low = entry - band
-    zone_high = entry + band
+    m1_atr = max(float(context.m1_atr or 0.0), pip_size * 3.0)
+    impulse_len = float(ev.get("impulse_len") or 0.0)
+    body_dominance = float(ev.get("body_dominance") or 0.0)
+    displacement_multiple = impulse_len / m1_atr if m1_atr > 0 else 0.0
+    if displacement_multiple < _parse_float(
+      arch, "impulse_displacement_atr_multiple", 4.0,
+    ) or body_dominance < _parse_float(
+      arch, "impulse_body_dominance", 0.5,
+    ):
+      reasons.append(f"{ARCHETYPE_IMPULSE_PULLBACK}:impulse_no_displacement")
+      continue
+    mean_impulse_body = float(ev.get("mean_impulse_body") or 0.0)
+    mean_pullback_body = float(ev.get("mean_pullback_body") or 0.0)
+    if (
+      mean_impulse_body <= 0
+      or mean_pullback_body >= mean_impulse_body * _parse_float(
+        arch, "pullback_corrective_ratio", 0.7,
+      )
+    ):
+      reasons.append(f"{ARCHETYPE_IMPULSE_PULLBACK}:pullback_not_corrective")
+      continue
+    reference = _impulse_reference(
+      context,
+      direction=direction,
+      pullback_extreme=float(ev["pullback_extreme"]),
+      buffer=buffer,
+      cfg=cfg,
+      pip_size=pip_size,
+    )
+    if reference is None:
+      reasons.append(f"{ARCHETYPE_IMPULSE_PULLBACK}:impulse_no_level_reference")
+      continue
+    if reference.get("rejected"):
+      reasons.append(
+        f"{ARCHETYPE_IMPULSE_PULLBACK}:{reference.get('reason')}"
+      )
+      continue
+    key_level_role = _impulse_level_role(
+      context, reference, direction=direction, cfg=cfg,
+    )
+    expected_role = "support" if direction == "BUY" else "resistance"
+    if key_level_role != expected_role:
+      reasons.append(f"{ARCHETYPE_IMPULSE_PULLBACK}:impulse_level_role_mismatch")
+      continue
+    key_level = float(reference["level"])
+    if reference["kind"] == "zone":
+      zone_low = float(reference["bottom"])
+      zone_high = float(reference["top"])
+    elif direction == "BUY":
+      zone_low = key_level
+      zone_high = key_level + buffer
+    else:
+      zone_low = key_level - buffer
+      zone_high = key_level
     worst = _worst_fill(direction=direction, zone_low=zone_low, zone_high=zone_high)
     if direction == "BUY":
-      stop_price = float(ev["pullback_extreme"]) - buffer
+      stop_price = key_level - buffer
       structural = (worst - stop_price) / pip_size
       room = context.buy_corridor_room_pips
     else:
-      stop_price = float(ev["pullback_extreme"]) + buffer
+      stop_price = key_level + buffer
       structural = (stop_price - worst) / pip_size
       room = context.sell_corridor_room_pips
     stop, reject = _stop_pips(
@@ -445,6 +656,7 @@ def discover_impulse_pullback(
       direction,
       rounded_price(float(ev["origin"]), pip_size),
       rounded_price(float(ev["extreme"]), pip_size),
+      rounded_price(key_level, pip_size),
     )
     oid = deterministic_id(
       context.symbol, ARCHETYPE_IMPULSE_PULLBACK, direction, context.context_id, source,
@@ -460,7 +672,7 @@ def discover_impulse_pullback(
       source_bar_ts=int(ev["bar_ts"]),
       zone_low=zone_low,
       zone_high=zone_high,
-      key_level=entry,
+      key_level=key_level,
       trigger_type=str(ev["pattern"]),
       trigger_bar_ts=int(ev["bar_ts"]),
       trigger_price=entry,
@@ -481,6 +693,29 @@ def discover_impulse_pullback(
         "impulse_origin": ev.get("origin"),
         "impulse_extreme": ev.get("extreme"),
         "pullback_extreme": ev.get("pullback_extreme"),
+        "impulse_bars": ev.get("impulse_bars"),
+        "pullback_bars": ev.get("pullback_bars"),
+        "impulse_atr_multiple": displacement_multiple,
+        "body_dominance": body_dominance,
+        "preferred_fib": ev.get("preferred"),
+        "level_kind": reference["kind"],
+        "key_level_role": key_level_role,
+        "zone_score": reference.get("zone_score", 0.0),
+        "zone_touches": reference.get("zone_touches", 0),
+        "level_distance_pips": reference["distance"] / pip_size,
+        "m1_atr": m1_atr,
+        "session": context.session,
+        "htf_bias": context.htf_bias,
+        "bias_alignment": (
+          "aligned"
+          if (
+            (direction == "BUY" and context.htf_bias == "up")
+            or (direction == "SELL" and context.htf_bias == "down")
+          )
+          else "counter"
+          if context.htf_bias in {"up", "down"}
+          else "neutral"
+        ),
       },
     ))
   return out
@@ -602,7 +837,7 @@ def discover_breakout_retest(
   low = float(box["box_low"])
   high = float(box["box_high"])
   min_net = _parse_float(getattr(_scalping_cfg(cfg), "target", None), "minimum_net_target_pips", 15.0)
-  buffer = max(pip_size * 2, context.atr * 0.1)
+  buffer = _stop_buffer(context, cfg, pip_size)
   retest_lookback = knobs["retest_lookback_bars"]
   out: list[ScalpOpportunity] = []
   reasons = idle_reasons if idle_reasons is not None else []
@@ -786,7 +1021,7 @@ def idle_discovery_reasons(
       # near_equilibrium is telemetry-only / not an absolute mute (owner 2026-08-06).
       act = getattr(_scalping_cfg(cfg), "activation", None)
       lookback = max(1, int(getattr(act, "trigger_maximum_age_bars", 2) or 2))
-      buffer = max(pip_size * 2, context.atr * 0.05)
+      buffer = _stop_buffer(context, cfg, pip_size)
       buy_ev = detect_sweep_reclaim(
         m1_df, direction="BUY", edge_price=low, tolerance=buffer, lookback_bars=lookback,
       )

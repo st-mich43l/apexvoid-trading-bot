@@ -284,6 +284,48 @@ class AnalysisContext:
   regime: Regime | None = None
 
 
+@dataclass(frozen=True)
+class ScalpStructure:
+  """Canonical M5 levels/zones needed by the lightweight scalp lane."""
+
+  key_levels: tuple[Level, ...] = ()
+  zones: tuple[Zone, ...] = ()
+
+
+def scalp_structure(
+  m5: pd.DataFrame,
+  settings: AnalysisSettings | None = None,
+) -> ScalpStructure:
+  """Build scalp structure without the trendline/technique stack."""
+  if m5 is None or m5.empty:
+    return ScalpStructure()
+  settings = settings or AnalysisSettings()
+  atr = atr_series(m5, settings.atr_length)
+  swings = find_swings(
+    m5,
+    settings.swing_fractal_n,
+    settings.zigzag_pct,
+    settings.zigzag_atr_mult,
+    atr,
+  )
+  levels = key_levels(
+    swings,
+    atr,
+    settings.level_cluster_atr,
+    settings.round_step,
+    settings.key_level_min_touches,
+    settings.max_cluster_span_multiple,
+  )
+  legs = displacement(
+    m5,
+    atr,
+    settings.displacement_atr_mult,
+    settings.momentum_body_frac,
+  )
+  zones = mark_mitigation(supply_demand(m5, legs), m5)
+  return ScalpStructure(tuple(levels), tuple(zones))
+
+
 def analyze(
   df_by_tf: dict[str, pd.DataFrame],
   settings: AnalysisSettings | None = None,

@@ -92,6 +92,9 @@ class ScalpContextSnapshot:
   permitted_archetypes: tuple[str, ...]
 
   atr: float = 0.0
+  m1_atr: float = 0.0
+  key_levels: tuple[dict[str, Any], ...] = ()
+  zones: tuple[dict[str, Any], ...] = ()
   measured: dict[str, Any] = field(default_factory=dict)
 
   def to_json(self) -> str:
@@ -127,6 +130,15 @@ class ScalpContextSnapshot:
       session=str(data.get("session") or "unknown"),
       permitted_archetypes=tuple(data.get("permitted_archetypes") or ()),
       atr=float(data.get("atr") or 0.0),
+      m1_atr=float(data.get("m1_atr") or 0.0),
+      key_levels=tuple(
+        dict(item) for item in (data.get("key_levels") or ())
+        if isinstance(item, dict)
+      ),
+      zones=tuple(
+        dict(item) for item in (data.get("zones") or ())
+        if isinstance(item, dict)
+      ),
       measured=dict(data.get("measured") or {}),
     )
 

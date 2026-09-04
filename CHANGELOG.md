@@ -21,6 +21,11 @@ dated section after deployment.
 - Flip Zone now requires the shared key-level role authority to confirm a
   broken resistance/support for BUY/SELL, rejects unresolved or ambiguous
   anchors, and yields same-bar overlapping candidates to Key Level Reaction.
+- XAU M1 Impulse Pullback now rejects unconfirmed trigger-bar extremes,
+  weak displacement, non-corrective pullbacks, missing M5 references, broken
+  level roles, and over-wide zones instead of manufacturing a key level from
+  the trigger close. Structural stops are anchored to the selected M5 level
+  or unmitigated demand/supply zone.
 - Flip Zone now requires the configured consecutive breakout closes, rejects
   expired breaks, and anchors its entry band entirely on the valid side of the
   broken level. A body-width floor prevents degenerate zones; reject metrics
@@ -32,6 +37,9 @@ dated section after deployment.
   enabled Supply Demand and Order Block technique publishers.
 
 ### Changed
+- Scalp stop buffers now use true-range M1 ATR with a live-spread floor;
+  M5 scalp structure is rebuilt on M5 cadence and persists compact levels,
+  zones, M1 ATR, and discovery measurements for deterministic M1 decisions.
 - `Break & Retest` and `Momentum Ride` now resolve to their registered
   `breakout_retest` and `momentum_continuation` families instead of
   `unknown`. See `docs/audits/PR-S-canonical-strategy-names.md`.

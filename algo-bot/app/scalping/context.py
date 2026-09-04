@@ -264,6 +264,10 @@ def build_scalp_context_snapshot(
   htf_bias: str = "unknown",
   m5_structure: str = "range",
   regime: str = "range",
+  m1_atr: float = 0.0,
+  key_levels: tuple[dict[str, Any], ...] = (),
+  zones: tuple[dict[str, Any], ...] = (),
+  measured: dict[str, Any] | None = None,
 ) -> ScalpContextSnapshot | None:
   """Build an immutable M5 context. Fail closed for non-live / malformed."""
   if not is_scalping_symbol(symbol, cfg):
@@ -339,10 +343,14 @@ def build_scalp_context_snapshot(
     session=session,
     permitted_archetypes=permitted,
     atr=float(atr or 0.0),
+    m1_atr=float(m1_atr or 0.0),
+    key_levels=tuple(key_levels),
+    zones=tuple(zones),
     measured={
       "active_lookback": active_lookback,
       "price": float(price),
       "dealing_zone": None if dr is None else dr.zone,
+      **(measured or {}),
     },
   )
 
