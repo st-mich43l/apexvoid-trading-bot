@@ -27,6 +27,7 @@ from app.persistence.store import (
 from app.signals.broadcast import (
   broadcast_entry,
   delete_posts,
+  edit_entry_posts,
   fanout_update,
   replace_entry_posts,
 )
@@ -980,6 +981,12 @@ async def post_result(result: dict, symbol: str) -> str:
     return f"{base} · {rr}" if rr else base
 
   sent = await fanout_update(sig, _render, markup_fn=markup_fn)
+  if result["action"] == "sl":
+    # sig was re-fetched above after _execute_sl's write, so it already
+    # carries the new stop - patch the pinned card in place instead of
+    # leaving it frozen at the original SL/risk while only a reply shows
+    # the trailed value.
+    await edit_entry_posts(sig)
   if not is_final_close and result["action"] in _TRACKED_UPDATE_KINDS:
     payload = _update_payload(result)
     for post in sent:
