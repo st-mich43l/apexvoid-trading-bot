@@ -201,6 +201,10 @@ _STRATEGY_ROWS: tuple[StrategyRow, ...] = (
     is_technique=True,
   ),
   _zone_row(
+    # Production asymmetry: both Zone Reaction detectors also require the
+    # legacy zone-reaction fallback (default False and absent from YAML),
+    # while Flip Zone defaults True and is absent from YAML. Flip Zone is
+    # therefore the only live supply/demand-band publisher by default.
     "Demand Zone Reaction",
     detector_key="demand_zone_reaction",
     enable_setting="strategies.reaction.demand.enabled",

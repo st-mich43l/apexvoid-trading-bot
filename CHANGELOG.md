@@ -13,6 +13,14 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- Bound missing-position close reconciliation so delayed cTrader deal history
+  cannot leave a filled manual ladder stuck open forever; after five minutes
+  the last protective stop finalizes the state as an explicitly unconfirmed
+  estimate, and a delayed history lookup for one position cannot block a
+  second position from reconciling.
+- Flip Zone now requires the shared key-level role authority to confirm a
+  broken resistance/support for BUY/SELL, rejects unresolved or ambiguous
+  anchors, and yields same-bar overlapping candidates to Key Level Reaction.
 - Flip Zone now requires the configured consecutive breakout closes, rejects
   expired breaks, and anchors its entry band entirely on the valid side of the
   broken level. A body-width floor prevents degenerate zones; reject metrics
