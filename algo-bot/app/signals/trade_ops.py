@@ -12,6 +12,8 @@ from app.persistence.store import (
   get_manual_signal,
   get_open_signals,
   get_signal_cluster,
+  get_signal_updates,
+  insert_signal_update,
   mark_filled,
   set_note,
   signal_root,
@@ -32,7 +34,7 @@ from app.signals.fx_manual_algo import uses_entry_price_display
 from app.bot.keyboards import build_tp_close_kb
 from app.signals.pips_format import wing_icons
 from app.persistence.redis_state import clear_sl_alert, mark_tp_alert
-from app.core.symbols import digits_for, channel_for_symbol
+from app.core.symbols import digits_for, channel_for_symbol, pip_for
 
 
 def _display_seq(row: dict) -> int:
@@ -855,6 +857,43 @@ def render_result(
   return f"📝 {seq}note saved"
 
 
+# Update kinds tracked in manual_signal_updates purely so the terminal close
+# can delete every interim reply this signal accumulated - "close" here
+# means a partial (still-open) booked TP leg, not the terminal close.
+_TRACKED_UPDATE_KINDS = {"close", "tp_reached", "sl"}
+
+
+def _achieved_rr(sig: dict, net_pips: int) -> str | None:
+  """Realized R for a just-closed signal - same convention as reports.py's
+  ``_round_lines``: risk measured against the stop as originally placed
+  (a trailed/BE stop must not shrink the denominator), entry at the zone
+  midpoint. Kept identical so this number matches what a later /trade_stats
+  -style report shows for the same trade.
+  """
+  entry_end = sig.get("entry_end")
+  if entry_end is None:
+    entry_end = sig["entry"]
+  midpoint = (sig["entry"] + entry_end) / 2
+  original_sl = sig.get("original_sl")
+  if original_sl is None:
+    original_sl = sig["sl"]
+  risk_price = abs(midpoint - original_sl)
+  if risk_price <= 0:
+    return None
+  risk_pips = risk_price / pip_for(sig.get("symbol", "XAU"))
+  if risk_pips <= 0:
+    return None
+  return f"{net_pips / risk_pips:+.1f}R"
+
+
+def _update_payload(result: dict) -> dict:
+  if result["action"] == "close":
+    return {"tp_number": result.get("tp_number"), "pips": result["pips"]}
+  if result["action"] == "tp_reached":
+    return {"tp_number": result["tp_number"], "pips": result["pips"]}
+  return {"price": result.get("price")}
+
+
 async def post_result(result: dict, symbol: str) -> str:
   """Render and deliver one result through persisted fan-out paths."""
   text = render_result(result, symbol, "vip")
@@ -884,6 +923,21 @@ async def post_result(result: dict, symbol: str) -> str:
       lambda tier: text if tier == "vip" else None,
     )
     return text
+  # A genuine terminal close (TP ladder run out, or stopped out) - decisive
+  # for both booked closes (close_leg) and group closes (finalize_manual_
+  # group), both of which set row["closed"] only once, guarded by the same
+  # "WHERE status = 'open' FOR UPDATE" row lock a concurrent leg finishing
+  # at the same instant would simply lose. Sweep every interim TP/reached/SL
+  # reply this signal accumulated and reply the root card with one summary
+  # instead of leaving them all standing.
+  is_final_close = (
+    result["action"] == "close" and bool(result.get("row", {}).get("closed"))
+  )
+  updates: list[dict] = []
+  if is_final_close:
+    updates = await get_signal_updates(signal_id)
+    if updates:
+      await delete_posts(updates)
   markup_fn = None
   if result["action"] == "tp":
     # Same owner-only Close button the watcher attaches to auto TP alerts.
@@ -891,9 +945,25 @@ async def post_result(result: dict, symbol: str) -> str:
     markup_fn = (
       lambda tier: build_tp_close_kb(sid_, tp_, pips_) if tier == "vip" else None
     )
-  await fanout_update(
-    sig,
-    lambda tier: render_result(result, symbol, tier),
-    markup_fn=markup_fn,
-  )
+
+  def _render(tier: str) -> str:
+    base = render_result(result, symbol, tier)
+    if not is_final_close:
+      return base
+    show_pips = (
+      tier == "vip" or runtime_config.delivery.telegram.public_show_pips
+    )
+    if not show_pips:
+      return base
+    rr = _achieved_rr(sig, result["row"]["net"])
+    return f"{base} · {rr}" if rr else base
+
+  sent = await fanout_update(sig, _render, markup_fn=markup_fn)
+  if not is_final_close and result["action"] in _TRACKED_UPDATE_KINDS:
+    payload = _update_payload(result)
+    for post in sent:
+      await insert_signal_update(
+        signal_id, post["channel_id"], post["message_id"], post["tier"],
+        result["action"], payload,
+      )
   return text

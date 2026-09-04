@@ -190,13 +190,17 @@ async def fanout_update(
   render_fn: Callable[[str], str | None],
   sticker: str | None = None,
   markup_fn: Callable[[str], object] | None = None,
-) -> list:
+) -> list[dict]:
   """Reply only to persisted entry posts; never recompute visibility.
 
   ``markup_fn(tier)`` may return an inline keyboard to attach per tier (e.g. an
   owner-only action button on the VIP post but nothing on the public one).
+
+  Returns the same ``{signal_id, channel_id, message_id, tier}`` shape as
+  ``broadcast_entry`` (not the raw Telegram messages) so callers can persist
+  what was just sent without re-deriving channel/tier from the reply.
   """
-  sent_messages = []
+  sent_posts = []
   for post in await get_signal_posts(sig["id"]):
     text = render_fn(post["tier"])
     if text is None:
@@ -207,11 +211,16 @@ async def fanout_update(
       int(post["message_id"]),
       reply_markup=markup_fn(post["tier"]) if markup_fn else None,
     )
-    sent_messages.append(sent)
+    sent_posts.append({
+      "signal_id": sig["id"],
+      "channel_id": int(post["channel_id"]),
+      "message_id": sent.message_id,
+      "tier": post["tier"],
+    })
     if sticker:
       await _send_sticker(
         sticker,
         int(post["channel_id"]),
         sent.message_id,
       )
-  return sent_messages
+  return sent_posts

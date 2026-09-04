@@ -43,6 +43,14 @@ dated section after deployment.
   resolution and in-flight management; demand/supply coverage remains on the
   enabled Supply Demand and Order Block technique publishers.
 
+### Added
+- Manual algo channel cards now declutter on close: every interim TP/
+  reached/SL-move reply a signal accumulated during its life is deleted
+  once it's fully closed, and the root card gets one summary reply instead
+  — final pips plus the realized R (`net pips / risk against the stop as
+  originally placed`, same convention as the `/trade_stats`-style reports),
+  not a dozen scattered bubbles.
+
 ### Changed
 - Scalp stop buffers now use true-range M1 ATR with a live-spread floor;
   M5 scalp structure is rebuilt on M5 cadence and persists compact levels,

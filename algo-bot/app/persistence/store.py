@@ -377,6 +377,35 @@ async def init_db() -> None:
       "CREATE UNIQUE INDEX IF NOT EXISTS idx_signal_posts_message "
       "ON signal_posts(channel_id, message_id)"
     )
+
+    # ------------------------------------------------------------------
+    # Table: manual_signal_updates
+    # One row per delivered TP/TP-reached/SL-move reply for a manual /algo
+    # signal (unlike signal_posts, which is one row per root card). Tracked
+    # so the terminal close can delete every interim reply and replace them
+    # with a single summary, instead of leaving a dozen scattered bubbles
+    # behind - and so a later correction (see manual_signals #102, 2026-09)
+    # can find and fix the exact message that needs it.
+    # ------------------------------------------------------------------
+    await db.execute(
+      """
+      CREATE TABLE IF NOT EXISTS manual_signal_updates (
+        id         BIGSERIAL PRIMARY KEY,
+        signal_id  BIGINT NOT NULL REFERENCES manual_signals(id),
+        channel_id BIGINT NOT NULL,
+        message_id BIGINT NOT NULL,
+        tier       TEXT   NOT NULL,
+        kind       TEXT   NOT NULL,
+        payload    JSONB  NOT NULL,
+        created_at BIGINT NOT NULL
+      )
+      """
+    )
+    await db.execute(
+      "CREATE INDEX IF NOT EXISTS idx_manual_signal_updates_signal "
+      "ON manual_signal_updates(signal_id)"
+    )
+
     # Back-fill VIP posts for signals stored before signal_posts existed.
     await db.execute(
       """
@@ -1763,6 +1792,43 @@ async def get_signal_posts(signal_id: int) -> list[dict]:
       signal_id,
     )
   return [dict(row) for row in rows]
+
+
+async def insert_signal_update(
+  signal_id: int,
+  channel_id: int,
+  message_id: int,
+  tier: str,
+  kind: str,
+  payload: dict,
+) -> None:
+  """Record one delivered TP/TP-reached/SL-move reply for later cleanup.
+
+  Unlike ``insert_signal_post`` this is an append-only log - a signal fires
+  several of these over its life, all replying to the same root card.
+  """
+  async with _connect() as db:
+    await db.execute(
+      """
+      INSERT INTO manual_signal_updates
+        (signal_id, channel_id, message_id, tier, kind, payload, created_at)
+      VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7)
+      """,
+      signal_id, int(channel_id), message_id, tier, kind,
+      json.dumps(payload), int(time.time()),
+    )
+
+
+async def get_signal_updates(signal_id: int) -> list[dict]:
+  async with _connect() as db:
+    rows = await db.fetch(
+      "SELECT * FROM manual_signal_updates WHERE signal_id = $1 ORDER BY id",
+      signal_id,
+    )
+  return [
+    {**dict(row), "payload": json.loads(row["payload"])}
+    for row in rows
+  ]
 
 
 async def get_signal_by_post(
