@@ -695,6 +695,88 @@ public sealed class CTraderOpenApiFeedClient : ICTraderFeedClient, ICTraderTrade
     );
   }
 
+  // Every historical order in the window, for AutoTradeEngine to correlate
+  // against its own ClientOrderIds convention - see
+  // AutoTradeEngine.ReconcileOrphanedGroupPlansAsync. One unbounded scan
+  // (not per-leg) since the caller already knows every ClientOrderId it is
+  // looking for and can match them all against a single response.
+  public async Task<IReadOnlyList<HistoricalOrderMatch>> FindHistoricalOrdersAsync(
+    long fromTimestampMs,
+    long toTimestampMs,
+    CancellationToken cancellationToken
+  )
+  {
+    var (fromTimestamp, toTimestamp) = BuildDealListWindow(
+      fromTimestampMs, toTimestampMs, _clock().ToUnixTimeMilliseconds()
+    );
+    try
+    {
+      var response = await SendAndWaitAsync<ProtoOAOrderListRes>(
+        new ProtoOAOrderListReq
+        {
+          CtidTraderAccountId = options.AccountId,
+          FromTimestamp = fromTimestamp,
+          ToTimestamp = toTimestamp,
+        },
+        res => res.CtidTraderAccountId == options.AccountId,
+        cancellationToken,
+        DealListLookupTimeout
+      );
+      return response.Order
+        .Where(order => order.HasClientOrderId && !string.IsNullOrEmpty(order.ClientOrderId))
+        .Select(order => new HistoricalOrderMatch(
+          order.ClientOrderId,
+          order.HasOrderStatus && order.OrderStatus == ProtoOAOrderStatus.OrderStatusFilled,
+          order.HasPositionId ? order.PositionId : null,
+          order.TradeData.SymbolId,
+          order.HasExecutedVolume ? order.ExecutedVolume : 0
+        ))
+        .ToArray();
+    }
+    catch (Exception exception) when (exception is not OperationCanceledException)
+    {
+      Log(
+        $"historical_orders_lookup_failed window={fromTimestamp}-{toTimestamp}: "
+          + exception.Message
+      );
+      return [];
+    }
+  }
+
+  // Thin projection over the same windowed+fallback deal fetch
+  // DeterminePositionCloseReasonAsync already uses, keeping every closing
+  // deal's own entry/exit price instead of collapsing to one reason+price.
+  public async Task<IReadOnlyList<ClosingDeal>> GetClosingDealsAsync(
+    long positionId,
+    long fromTimestampMs,
+    long toTimestampMs,
+    CancellationToken cancellationToken
+  )
+  {
+    try
+    {
+      var dealsResponse = await FetchDealsByPositionIdAsync(
+        positionId, fromTimestampMs, toTimestampMs, cancellationToken
+      );
+      return dealsResponse.Deal
+        .Where(deal => deal.PositionId == positionId && deal.ClosePositionDetail is not null)
+        .Select(deal => new ClosingDeal(
+          Convert.ToDecimal(deal.ClosePositionDetail.EntryPrice),
+          Convert.ToDecimal(deal.ExecutionPrice),
+          deal.ClosePositionDetail.HasClosedVolume
+            ? deal.ClosePositionDetail.ClosedVolume
+            : deal.HasFilledVolume ? deal.FilledVolume : 0,
+          deal.ExecutionTimestamp
+        ))
+        .ToArray();
+    }
+    catch (Exception exception) when (exception is not OperationCanceledException)
+    {
+      Log($"closing_deals_lookup_failed position_id={positionId}: {exception.Message}");
+      return [];
+    }
+  }
+
   // Kept well under options.RequestTimeout (default 30s) — see the
   // FetchDealsByPositionIdAsync comment above for why this specific lookup
   // must not hold the shared request lock as long as a live order call.

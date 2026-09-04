@@ -69,4 +69,26 @@ public interface ICTraderTradeClient
     long approximateCloseTimestamp,
     CancellationToken cancellationToken
   ) => Task.FromResult(new PositionCloseLookup(PositionCloseReason.Unknown));
+
+  // Every historical order in the window, for the caller to match against
+  // its own ClientOrderIds - used to discover an AutoTradeGroupPlan whose
+  // legs filled (and, per GetClosingDealsAsync below, already closed too)
+  // entirely outside the engine's own tracked-position lifetime (a restart
+  // gap). Defaults to empty so a client that cannot look this up simply
+  // never surfaces an orphan rather than failing to compile.
+  Task<IReadOnlyList<HistoricalOrderMatch>> FindHistoricalOrdersAsync(
+    long fromTimestampMs,
+    long toTimestampMs,
+    CancellationToken cancellationToken
+  ) => Task.FromResult<IReadOnlyList<HistoricalOrderMatch>>([]);
+
+  // Every closing deal for a position, each carrying its own entry/exit
+  // price so the caller can compute realized pips the same way every other
+  // pips-bearing event in this system already does.
+  Task<IReadOnlyList<ClosingDeal>> GetClosingDealsAsync(
+    long positionId,
+    long fromTimestampMs,
+    long toTimestampMs,
+    CancellationToken cancellationToken
+  ) => Task.FromResult<IReadOnlyList<ClosingDeal>>([]);
 }

@@ -89,6 +89,31 @@ public sealed record PositionCloseLookup(
   decimal? ExecutionPrice = null
 );
 
+// One historical order the executor can correlate against its own
+// ClientOrderId convention, independent of whether that order is still
+// resting, was filled, or was cancelled/expired/rejected - the broker-truth
+// counterpart to a submitted-but-never-adopted AutoTradeGroupPlan leg (see
+// AutoTradeEngine.ReconcileOrphanedGroupPlansAsync).
+public sealed record HistoricalOrderMatch(
+  string ClientOrderId,
+  bool Filled,
+  long? PositionId,
+  long SymbolId,
+  long ExecutedVolume
+);
+
+// One closing deal for a position, carrying the SAME entry/exit prices the
+// broker itself used so realized pips can be computed with the existing
+// direction-adjusted (exit - entry) / pipSize convention (see
+// AutoTradeEngine.SignedPips) - never derived from GrossProfit/account
+// currency, which would need a separate, untested money-digits conversion.
+public sealed record ClosingDeal(
+  decimal EntryPrice,
+  decimal ExitPrice,
+  long ClosedVolume,
+  long ExecutionTimestamp
+);
+
 public sealed record TradingAccountSnapshot(
   long AccountId,
   bool IsLive,

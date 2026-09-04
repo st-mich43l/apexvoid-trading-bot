@@ -345,6 +345,7 @@ public sealed class AutoTradeEngine(
         );
       }
       await ReconcileAllBoundSymbolsAsync(cancellationToken);
+      await ReconcileOrphanedGroupPlansAsync(cancellationToken);
       _ready = true;
       await PublishReadinessAsync(
         true,
@@ -8004,6 +8005,190 @@ public sealed class AutoTradeEngine(
     {
       return null;
     }
+  }
+
+  // One-time startup sweep for AutoTradeGroupPlans this executor submitted
+  // orders for but never adopted into _states - the exact gap that let real
+  // manual /algo signals fill AND stop out with zero record anywhere
+  // (owner-reported 2026-09-04): the previous engine instance was mid-
+  // shutdown for a redeploy exactly when the broker pushed those fill/close
+  // notifications, so it never got the chance to publish them, and a fresh
+  // instance's own startup reconciliation only ever adopts positions still
+  // open right now (see ReconcileSymbolSnapshotAsync) - it has no path to
+  // learn what happened to one that already closed while nothing was
+  // listening. Runs once, right after the startup
+  // ReconcileAllBoundSymbolsAsync (so _states already reflects every
+  // position adoptable from the live snapshot) - not the recurring 15s
+  // reconcile loop, since this is a restart-gap concern, not an ongoing
+  // one, and every candidate here costs an extra OrderList + per-leg
+  // DealList broker round-trip.
+  //
+  // Deliberately does not retroactively catch plans saved before this
+  // fix shipped - GetGroupPlanIdsAsync only ever returns plans SaveGroupPlanAsync
+  // added to the new index, and that dual-write only exists from here on.
+  private async Task ReconcileOrphanedGroupPlansAsync(
+    CancellationToken cancellationToken
+  )
+  {
+    IReadOnlyList<string> groupIds;
+    try
+    {
+      groupIds = await store.GetGroupPlanIdsAsync(cancellationToken);
+    }
+    catch (Exception exception) when (exception is not OperationCanceledException)
+    {
+      _log($"orphaned_group_plan_scan_failed: {exception.Message}");
+      return;
+    }
+    if (groupIds.Count == 0)
+    {
+      return;
+    }
+    var client = RequireClient();
+    TradingReconcileSnapshot snapshot;
+    try
+    {
+      snapshot = await client.ReconcileAccountAsync(cancellationToken);
+    }
+    catch (Exception exception) when (exception is not OperationCanceledException)
+    {
+      _log($"orphaned_group_plan_scan_snapshot_failed: {exception.Message}");
+      return;
+    }
+    var liveClientOrderIds = snapshot.Positions
+      .Select(position => position.ClientOrderId)
+      .Concat(snapshot.PendingOrders.Select(order => order.ClientOrderId))
+      .Where(id => !string.IsNullOrEmpty(id))
+      .ToHashSet(StringComparer.Ordinal);
+    foreach (var groupId in groupIds)
+    {
+      cancellationToken.ThrowIfCancellationRequested();
+      if (_states.Values.Any(state => GroupId(state) == groupId))
+      {
+        continue; // already tracked normally - the live reconcile owns it
+      }
+      var plan = await LoadGroupPlanAsync(groupId, cancellationToken);
+      if (
+        plan is null
+        || plan.SubmittedAt is not long submittedAt
+        || plan.ClientOrderIds is not { Count: > 0 } clientOrderIds
+      )
+      {
+        continue; // nothing to correlate a closed position against
+      }
+      if (clientOrderIds.Any(liveClientOrderIds.Contains))
+      {
+        // Still resting or still open right now - either the normal
+        // pending-order path or the existing broker-position self-adoption
+        // path already owns this, not this scan.
+        continue;
+      }
+      await InvestigateOrphanedGroupPlanAsync(
+        client, plan, clientOrderIds, submittedAt, cancellationToken
+      );
+    }
+  }
+
+  private async Task InvestigateOrphanedGroupPlanAsync(
+    ICTraderTradeClient client,
+    AutoTradeGroupPlan plan,
+    IReadOnlyList<string> clientOrderIds,
+    long submittedAt,
+    CancellationToken cancellationToken
+  )
+  {
+    var fromMs = submittedAt * 1000L;
+    var nowMs = _clock().ToUnixTimeMilliseconds();
+    var historicalOrders = await client.FindHistoricalOrdersAsync(
+      fromMs, nowMs, cancellationToken
+    );
+    var filledLegs = historicalOrders
+      .Where(order =>
+        clientOrderIds.Contains(order.ClientOrderId, StringComparer.Ordinal)
+        && order.Filled
+        && order.PositionId is long)
+      .ToArray();
+    if (filledLegs.Length == 0)
+    {
+      // Never filled (still genuinely pending at the broker, or was
+      // cancelled/expired/rejected), or the broker's own history simply
+      // doesn't have it yet. Leave the plan for its own TTL / a later
+      // restart's scan rather than guessing.
+      return;
+    }
+    var symbolId = filledLegs[0].SymbolId;
+    var canonical = RedisSymbolFor(symbolId);
+    if (canonical is null)
+    {
+      _log(
+        $"orphaned_group_plan_unresolved_symbol group_id={plan.GroupId} "
+          + $"symbol_id={symbolId}"
+      );
+      return;
+    }
+    var pipSize = PipSizeForSymbol(canonical);
+    var direction = ParseDirection(plan.Direction);
+    var totalPipVolume = 0m;
+    var totalVolume = 0L;
+    decimal? firstEntryPrice = null;
+    foreach (var leg in filledLegs)
+    {
+      var positionId = leg.PositionId!.Value;
+      var deals = await client.GetClosingDealsAsync(
+        positionId, fromMs, nowMs, cancellationToken
+      );
+      foreach (var deal in deals)
+      {
+        firstEntryPrice ??= deal.EntryPrice;
+        var move = direction == TradeDirection.Buy
+          ? deal.ExitPrice - deal.EntryPrice
+          : deal.EntryPrice - deal.ExitPrice;
+        totalPipVolume += (move / pipSize) * deal.ClosedVolume;
+        totalVolume += deal.ClosedVolume;
+      }
+    }
+    if (totalVolume <= 0)
+    {
+      // Every filled leg's own PositionId is confirmed no-longer-open, but
+      // no closing deal was found for any of them - broker deal history is
+      // genuinely unavailable right now rather than the group being
+      // unresolved. Leave the plan in place; the next restart's scan gets
+      // another chance once the broker's own history catches up.
+      _log(
+        $"orphaned_group_plan_no_closing_deals group_id={plan.GroupId} "
+          + $"legs={filledLegs.Length}"
+      );
+      return;
+    }
+    // One consolidated group_result, exactly the shape a normal group close
+    // already publishes (see the stale-tracked-position path above) - this
+    // is deliberately NOT a per-leg TP-ladder replay. Reconstructing the
+    // exact booking sequence (which leg hit which configured target, in
+    // what order) from bare deal history would be guesswork; a single
+    // volume-weighted total is the same bypass finalize_manual_group
+    // already uses for any group whose legs closed independently.
+    var groupRealizedPips = totalPipVolume / totalVolume;
+    await PublishAsync(
+      "group_result",
+      $"group {plan.GroupId} reconciled after a restart gap: realised "
+        + $"{groupRealizedPips.ToString("0.0", CultureInfo.InvariantCulture)} "
+        + $"pips ({filledLegs.Length} leg(s) filled and closed while "
+        + "unmonitored)",
+      cancellationToken,
+      plan.CandidateId,
+      groupId: plan.GroupId,
+      groupRealizedPips: groupRealizedPips,
+      setup: plan.Setup,
+      matchId: plan.MatchId,
+      rangeId: plan.RangeId,
+      strategyFamily: plan.StrategyFamily,
+      direction: DirectionLabel(direction),
+      groupInitialVolume: totalVolume,
+      legEntryPrice: firstEntryPrice,
+      reasonCode: "orphaned_group_plan_reconciled",
+      symbol: canonical
+    );
+    await DeleteGroupPlanAsync(plan.GroupId, cancellationToken);
   }
 
   private static bool SameStrategyFamily(
