@@ -169,7 +169,6 @@ def _impulse_reference(
   *,
   direction: str,
   pullback_extreme: float,
-  buffer: float,
   cfg: Any,
   pip_size: float,
 ) -> dict[str, Any] | None:
@@ -192,6 +191,10 @@ def _impulse_reference(
       if zone_side not in {side, direction.casefold()}:
         continue
       if bool(zone.get("mitigated", False)) or top <= bottom:
+        continue
+      if direction == "BUY" and bottom > pullback_extreme:
+        continue
+      if direction == "SELL" and top < pullback_extreme:
         continue
       if bottom <= pullback_extreme <= top:
         distance = 0.0
@@ -276,7 +279,14 @@ def _impulse_level_role(
     band_high = float(reference["top"])
   else:
     raw_kind = str(reference.get("raw_kind") or "")
-    kind = raw_kind or ("support" if direction == "BUY" else "resistance")
+    raw_kind_lower = raw_kind.casefold()
+    explicit_role = any(
+      token in raw_kind_lower
+      for token in ("support", "resistance", "resist", "swing_low", "swing_high")
+    )
+    kind = raw_kind if explicit_role else (
+      "support" if direction == "BUY" else "resistance"
+    )
     band = max(0.0, float(reference.get("band") or 0.0))
     band_low = float(reference["level"]) - band
     band_high = float(reference["level"]) + band
@@ -290,6 +300,25 @@ def _impulse_level_role(
     closed_bars=closed_bars,
     breakout_accept_bars=accept_bars,
   ).role
+
+
+def _detect_impulse(
+  m1_df: pd.DataFrame,
+  *,
+  direction: str,
+  confirm_bars: int,
+) -> dict[str, Any] | None:
+  """Keep lightweight test doubles compatible with the extended detector."""
+  try:
+    return detect_impulse_pullback(
+      m1_df,
+      direction=direction,
+      pullback_extreme_confirm_bars=confirm_bars,
+    )
+  except TypeError as exc:
+    if "pullback_extreme_confirm_bars" not in str(exc):
+      raise
+    return detect_impulse_pullback(m1_df, direction=direction)
 
 
 def _technique_require_sweep_body(cfg: Any) -> bool:
@@ -536,10 +565,10 @@ def discover_impulse_pullback(
     if direction == "SELL" and pos is not None and pos < sell_min:
       continue
     arch = getattr(_scalping_cfg(cfg), "archetypes", None)
-    ev = detect_impulse_pullback(
+    ev = _detect_impulse(
       m1_df,
       direction=direction,
-      pullback_extreme_confirm_bars=int(
+      confirm_bars=int(
         getattr(arch, "pullback_extreme_confirm_bars", 2) or 2
       ),
     )
@@ -576,7 +605,6 @@ def discover_impulse_pullback(
       context,
       direction=direction,
       pullback_extreme=float(ev["pullback_extreme"]),
-      buffer=buffer,
       cfg=cfg,
       pip_size=pip_size,
     )
@@ -687,6 +715,7 @@ def discover_impulse_pullback(
       expires_at=int(now) + 15 * 60,
       episode_id=source,
       source_identity=source,
+      key_level_role=key_level_role,
       measured={
         "strategy": STRATEGY_DISPLAY[ARCHETYPE_IMPULSE_PULLBACK],
         "retracement": ev.get("retracement"),

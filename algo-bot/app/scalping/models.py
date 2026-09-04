@@ -176,6 +176,7 @@ class ScalpOpportunity:
   expires_at: int
   episode_id: str = ""
   source_identity: str = ""
+  key_level_role: str | None = None
   measured: dict[str, Any] = field(default_factory=dict)
 
   def to_json(self) -> str:
@@ -210,6 +211,9 @@ class ScalpOpportunity:
       expires_at=int(data["expires_at"]),
       episode_id=str(data.get("episode_id") or ""),
       source_identity=str(data.get("source_identity") or ""),
+      key_level_role=(
+        str(data["key_level_role"]) if data.get("key_level_role") else None
+      ),
       measured=dict(data.get("measured") or {}),
     )
 

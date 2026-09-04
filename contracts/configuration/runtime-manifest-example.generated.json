@@ -132,8 +132,8 @@
     "zone_reconcile_mode": "shadow",
     "zone_scale_undersized_policy": "single_entry"
   },
-  "contract_fingerprint": "2d2146a4c50ede784894cdec04f5252c58d2e961da818fb80f95bb7507813275",
-  "effective_configuration_fingerprint": "37f2991806f19995d1061a64b2c4b044c1404555af15bf66713955606b8c41ea",
+  "contract_fingerprint": "8183266e1dd5f12b9a6ef4bee626fa5d8bc02cd6c20db94e6c41eb51cdf811ab",
+  "effective_configuration_fingerprint": "cf05d314f6c75288c8c76481b0317ae5ad13bb1c8be26c889e9e40dee987a686",
   "feed": {
     "backfill_bars": 1500,
     "bar_quality_lookback": 6,
@@ -998,8 +998,12 @@
           },
           "archetypes": {
             "breakout_retest_enabled": true,
+            "impulse_body_dominance": "0.5",
+            "impulse_displacement_atr_multiple": "4",
             "impulse_pullback_allowed_sessions": "london",
             "impulse_pullback_enabled": true,
+            "pullback_corrective_ratio": "0.7",
+            "pullback_extreme_confirm_bars": 2,
             "range_sweep_enabled": true
           },
           "breakout": {
@@ -1019,6 +1023,7 @@
             "maximum_m5_age_seconds": 420
           },
           "location": {
+            "level_proximity_atr_multiple": "1",
             "pullback_buy_maximum_position": "0.6",
             "pullback_sell_minimum_position": "0.4",
             "range_buy_maximum_position": "0.35",
@@ -1046,9 +1051,12 @@
           },
           "stop": {
             "buffer_atr": "0.1",
+            "buffer_m1_atr_multiple": "1.2",
+            "buffer_minimum_spread_multiple": "1.5",
             "maximum_pips": "30",
             "minimum_pips": "12",
-            "minimum_stop_spread_multiple": "4"
+            "minimum_stop_spread_multiple": "4",
+            "zone_maximum_atr_multiple": "1.5"
           },
           "target": {
             "minimum_net_target_pips": "10",
@@ -1972,8 +1980,12 @@
           },
           "archetypes": {
             "breakout_retest_enabled": true,
+            "impulse_body_dominance": "0.5",
+            "impulse_displacement_atr_multiple": "4",
             "impulse_pullback_allowed_sessions": "london",
             "impulse_pullback_enabled": true,
+            "pullback_corrective_ratio": "0.7",
+            "pullback_extreme_confirm_bars": 2,
             "range_sweep_enabled": true
           },
           "breakout": {
@@ -1993,6 +2005,7 @@
             "maximum_m5_age_seconds": 420
           },
           "location": {
+            "level_proximity_atr_multiple": "1",
             "pullback_buy_maximum_position": "0.6",
             "pullback_sell_minimum_position": "0.4",
             "range_buy_maximum_position": "0.35",
@@ -2020,9 +2033,12 @@
           },
           "stop": {
             "buffer_atr": "0.1",
+            "buffer_m1_atr_multiple": "1.2",
+            "buffer_minimum_spread_multiple": "1.5",
             "maximum_pips": "30",
             "minimum_pips": "12",
-            "minimum_stop_spread_multiple": "4"
+            "minimum_stop_spread_multiple": "4",
+            "zone_maximum_atr_multiple": "1.5"
           },
           "target": {
             "minimum_net_target_pips": "10",
@@ -2916,8 +2932,12 @@
           },
           "archetypes": {
             "breakout_retest_enabled": true,
+            "impulse_body_dominance": "0.5",
+            "impulse_displacement_atr_multiple": "4",
             "impulse_pullback_allowed_sessions": "london",
             "impulse_pullback_enabled": true,
+            "pullback_corrective_ratio": "0.7",
+            "pullback_extreme_confirm_bars": 2,
             "range_sweep_enabled": true
           },
           "breakout": {
@@ -2937,6 +2957,7 @@
             "maximum_m5_age_seconds": 420
           },
           "location": {
+            "level_proximity_atr_multiple": "1",
             "pullback_buy_maximum_position": "0.6",
             "pullback_sell_minimum_position": "0.4",
             "range_buy_maximum_position": "0.35",
@@ -2964,9 +2985,12 @@
           },
           "stop": {
             "buffer_atr": "0.1",
+            "buffer_m1_atr_multiple": "1.2",
+            "buffer_minimum_spread_multiple": "1.5",
             "maximum_pips": "30",
             "minimum_pips": "12",
-            "minimum_stop_spread_multiple": "4"
+            "minimum_stop_spread_multiple": "4",
+            "zone_maximum_atr_multiple": "1.5"
           },
           "target": {
             "minimum_net_target_pips": "10",
@@ -3872,8 +3896,12 @@
           },
           "archetypes": {
             "breakout_retest_enabled": true,
+            "impulse_body_dominance": "0.5",
+            "impulse_displacement_atr_multiple": "4",
             "impulse_pullback_allowed_sessions": "london",
             "impulse_pullback_enabled": true,
+            "pullback_corrective_ratio": "0.7",
+            "pullback_extreme_confirm_bars": 2,
             "range_sweep_enabled": true
           },
           "breakout": {
@@ -3893,6 +3921,7 @@
             "maximum_m5_age_seconds": 420
           },
           "location": {
+            "level_proximity_atr_multiple": "1",
             "pullback_buy_maximum_position": "0.6",
             "pullback_sell_minimum_position": "0.4",
             "range_buy_maximum_position": "0.35",
@@ -3920,9 +3949,12 @@
           },
           "stop": {
             "buffer_atr": "0.1",
+            "buffer_m1_atr_multiple": "1.2",
+            "buffer_minimum_spread_multiple": "1.5",
             "maximum_pips": "30",
             "minimum_pips": "12",
-            "minimum_stop_spread_multiple": "4"
+            "minimum_stop_spread_multiple": "4",
+            "zone_maximum_atr_multiple": "1.5"
           },
           "target": {
             "minimum_net_target_pips": "10",
@@ -4812,8 +4844,12 @@
           },
           "archetypes": {
             "breakout_retest_enabled": true,
+            "impulse_body_dominance": "0.5",
+            "impulse_displacement_atr_multiple": "4",
             "impulse_pullback_allowed_sessions": "london",
             "impulse_pullback_enabled": true,
+            "pullback_corrective_ratio": "0.7",
+            "pullback_extreme_confirm_bars": 2,
             "range_sweep_enabled": true
           },
           "breakout": {
@@ -4833,6 +4869,7 @@
             "maximum_m5_age_seconds": 420
           },
           "location": {
+            "level_proximity_atr_multiple": "1",
             "pullback_buy_maximum_position": "0.6",
             "pullback_sell_minimum_position": "0.4",
             "range_buy_maximum_position": "0.35",
@@ -4860,9 +4897,12 @@
           },
           "stop": {
             "buffer_atr": "0.1",
+            "buffer_m1_atr_multiple": "1.2",
+            "buffer_minimum_spread_multiple": "1.5",
             "maximum_pips": "30",
             "minimum_pips": "12",
-            "minimum_stop_spread_multiple": "4"
+            "minimum_stop_spread_multiple": "4",
+            "zone_maximum_atr_multiple": "1.5"
           },
           "target": {
             "minimum_net_target_pips": "10",
@@ -5621,8 +5661,12 @@
           },
           "archetypes": {
             "breakout_retest_enabled": true,
+            "impulse_body_dominance": "0.5",
+            "impulse_displacement_atr_multiple": "4",
             "impulse_pullback_allowed_sessions": "london",
             "impulse_pullback_enabled": true,
+            "pullback_corrective_ratio": "0.7",
+            "pullback_extreme_confirm_bars": 2,
             "range_sweep_enabled": true
           },
           "breakout": {
@@ -5642,6 +5686,7 @@
             "maximum_m5_age_seconds": 420
           },
           "location": {
+            "level_proximity_atr_multiple": "1",
             "pullback_buy_maximum_position": "0.6",
             "pullback_sell_minimum_position": "0.4",
             "range_buy_maximum_position": "0.35",
@@ -5669,9 +5714,12 @@
           },
           "stop": {
             "buffer_atr": "0.1",
+            "buffer_m1_atr_multiple": "1.2",
+            "buffer_minimum_spread_multiple": "1.5",
             "maximum_pips": "30",
             "minimum_pips": "12",
-            "minimum_stop_spread_multiple": "4"
+            "minimum_stop_spread_multiple": "4",
+            "zone_maximum_atr_multiple": "1.5"
           },
           "target": {
             "minimum_net_target_pips": "10",
@@ -6458,8 +6506,12 @@
           },
           "archetypes": {
             "breakout_retest_enabled": true,
+            "impulse_body_dominance": "0.5",
+            "impulse_displacement_atr_multiple": "4",
             "impulse_pullback_allowed_sessions": "london",
             "impulse_pullback_enabled": true,
+            "pullback_corrective_ratio": "0.7",
+            "pullback_extreme_confirm_bars": 2,
             "range_sweep_enabled": true
           },
           "breakout": {
@@ -6479,6 +6531,7 @@
             "maximum_m5_age_seconds": 420
           },
           "location": {
+            "level_proximity_atr_multiple": "1",
             "pullback_buy_maximum_position": "0.6",
             "pullback_sell_minimum_position": "0.4",
             "range_buy_maximum_position": "0.35",
@@ -6506,9 +6559,12 @@
           },
           "stop": {
             "buffer_atr": "0.1",
+            "buffer_m1_atr_multiple": "1.2",
+            "buffer_minimum_spread_multiple": "1.5",
             "maximum_pips": "30",
             "minimum_pips": "12",
-            "minimum_stop_spread_multiple": "4"
+            "minimum_stop_spread_multiple": "4",
+            "zone_maximum_atr_multiple": "1.5"
           },
           "target": {
             "minimum_net_target_pips": "10",
@@ -7265,8 +7321,12 @@
           },
           "archetypes": {
             "breakout_retest_enabled": true,
+            "impulse_body_dominance": "0.5",
+            "impulse_displacement_atr_multiple": "4",
             "impulse_pullback_allowed_sessions": "london",
             "impulse_pullback_enabled": true,
+            "pullback_corrective_ratio": "0.7",
+            "pullback_extreme_confirm_bars": 2,
             "range_sweep_enabled": true
           },
           "breakout": {
@@ -7286,6 +7346,7 @@
             "maximum_m5_age_seconds": 420
           },
           "location": {
+            "level_proximity_atr_multiple": "1",
             "pullback_buy_maximum_position": "0.6",
             "pullback_sell_minimum_position": "0.4",
             "range_buy_maximum_position": "0.35",
@@ -7313,9 +7374,12 @@
           },
           "stop": {
             "buffer_atr": "0.1",
+            "buffer_m1_atr_multiple": "1.2",
+            "buffer_minimum_spread_multiple": "1.5",
             "maximum_pips": "30",
             "minimum_pips": "12",
-            "minimum_stop_spread_multiple": "4"
+            "minimum_stop_spread_multiple": "4",
+            "zone_maximum_atr_multiple": "1.5"
           },
           "target": {
             "minimum_net_target_pips": "10",
@@ -8084,8 +8148,12 @@
           },
           "archetypes": {
             "breakout_retest_enabled": true,
+            "impulse_body_dominance": "0.5",
+            "impulse_displacement_atr_multiple": "4",
             "impulse_pullback_allowed_sessions": "london",
             "impulse_pullback_enabled": true,
+            "pullback_corrective_ratio": "0.7",
+            "pullback_extreme_confirm_bars": 2,
             "range_sweep_enabled": true
           },
           "breakout": {
@@ -8105,6 +8173,7 @@
             "maximum_m5_age_seconds": 420
           },
           "location": {
+            "level_proximity_atr_multiple": "1",
             "pullback_buy_maximum_position": "0.6",
             "pullback_sell_minimum_position": "0.4",
             "range_buy_maximum_position": "0.35",
@@ -8132,9 +8201,12 @@
           },
           "stop": {
             "buffer_atr": "0.1",
+            "buffer_m1_atr_multiple": "1.2",
+            "buffer_minimum_spread_multiple": "1.5",
             "maximum_pips": "30",
             "minimum_pips": "12",
-            "minimum_stop_spread_multiple": "4"
+            "minimum_stop_spread_multiple": "4",
+            "zone_maximum_atr_multiple": "1.5"
           },
           "target": {
             "minimum_net_target_pips": "10",
@@ -8883,8 +8955,12 @@
           },
           "archetypes": {
             "breakout_retest_enabled": true,
+            "impulse_body_dominance": "0.5",
+            "impulse_displacement_atr_multiple": "4",
             "impulse_pullback_allowed_sessions": "london",
             "impulse_pullback_enabled": true,
+            "pullback_corrective_ratio": "0.7",
+            "pullback_extreme_confirm_bars": 2,
             "range_sweep_enabled": true
           },
           "breakout": {
@@ -8904,6 +8980,7 @@
             "maximum_m5_age_seconds": 420
           },
           "location": {
+            "level_proximity_atr_multiple": "1",
             "pullback_buy_maximum_position": "0.6",
             "pullback_sell_minimum_position": "0.4",
             "range_buy_maximum_position": "0.35",
@@ -8931,9 +9008,12 @@
           },
           "stop": {
             "buffer_atr": "0.1",
+            "buffer_m1_atr_multiple": "1.2",
+            "buffer_minimum_spread_multiple": "1.5",
             "maximum_pips": "30",
             "minimum_pips": "12",
-            "minimum_stop_spread_multiple": "4"
+            "minimum_stop_spread_multiple": "4",
+            "zone_maximum_atr_multiple": "1.5"
           },
           "target": {
             "minimum_net_target_pips": "10",

@@ -1,7 +1,7 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "2d2146a4c50ede784894cdec04f5252c58d2e961da818fb80f95bb7507813275",
-  "count": 504,
+  "configuration_contract_fingerprint_sha256": "8183266e1dd5f12b9a6ef4bee626fa5d8bc02cd6c20db94e6c41eb51cdf811ab",
+  "count": 512,
   "deprecated_alias_count": 21,
   "entries": [
     {
@@ -6257,6 +6257,38 @@
       "unit": "seconds"
     },
     {
+      "canonical_env": "SCALPING_IMPULSE_BODY_DOMINANCE",
+      "default": 0.5,
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Minimum impulse body-to-range dominance.",
+      "display_id": "config:strategies.scalping.archetypes.impulse_body_dominance",
+      "owner": "python",
+      "path": "strategies.scalping.archetypes.impulse_body_dominance",
+      "replacement_path": null,
+      "required": false,
+      "secret": false,
+      "shared_with_ctrader": false,
+      "type": "float",
+      "unit": "fraction"
+    },
+    {
+      "canonical_env": "SCALPING_IMPULSE_DISPLACEMENT_ATR_MULTIPLE",
+      "default": 4.0,
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Minimum M1 impulse displacement in M1 ATR multiples.",
+      "display_id": "config:strategies.scalping.archetypes.impulse_displacement_atr_multiple",
+      "owner": "python",
+      "path": "strategies.scalping.archetypes.impulse_displacement_atr_multiple",
+      "replacement_path": null,
+      "required": false,
+      "secret": false,
+      "shared_with_ctrader": false,
+      "type": "float",
+      "unit": "atr"
+    },
+    {
       "canonical_env": "SCALPING_IMPULSE_PULLBACK_ALLOWED_SESSIONS",
       "default": "london",
       "deprecated": false,
@@ -6287,6 +6319,22 @@
       "shared_with_ctrader": false,
       "type": "bool",
       "unit": "boolean"
+    },
+    {
+      "canonical_env": "SCALPING_LEVEL_PROXIMITY_ATR_MULTIPLE",
+      "default": 1.0,
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Maximum M1 ATR distance from an impulse pullback to its M5 reference.",
+      "display_id": "config:strategies.scalping.location.level_proximity_atr_multiple",
+      "owner": "python",
+      "path": "strategies.scalping.location.level_proximity_atr_multiple",
+      "replacement_path": null,
+      "required": false,
+      "secret": false,
+      "shared_with_ctrader": false,
+      "type": "float",
+      "unit": "atr"
     },
     {
       "canonical_env": "SCALPING_M1_LOOKBACK_BARS",
@@ -6561,6 +6609,38 @@
       "unit": "fraction"
     },
     {
+      "canonical_env": "SCALPING_PULLBACK_CORRECTIVE_RATIO",
+      "default": 0.7,
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Maximum pullback body relative to impulse body.",
+      "display_id": "config:strategies.scalping.archetypes.pullback_corrective_ratio",
+      "owner": "python",
+      "path": "strategies.scalping.archetypes.pullback_corrective_ratio",
+      "replacement_path": null,
+      "required": false,
+      "secret": false,
+      "shared_with_ctrader": false,
+      "type": "float",
+      "unit": "fraction"
+    },
+    {
+      "canonical_env": "SCALPING_PULLBACK_EXTREME_CONFIRM_BARS",
+      "default": 2,
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Closed M1 bars required to confirm an impulse pullback extreme.",
+      "display_id": "config:strategies.scalping.archetypes.pullback_extreme_confirm_bars",
+      "owner": "python",
+      "path": "strategies.scalping.archetypes.pullback_extreme_confirm_bars",
+      "replacement_path": null,
+      "required": false,
+      "secret": false,
+      "shared_with_ctrader": false,
+      "type": "int",
+      "unit": "bars"
+    },
+    {
       "canonical_env": "SCALPING_PULLBACK_SELL_MIN_POSITION",
       "default": 0.4,
       "deprecated": false,
@@ -6737,6 +6817,38 @@
       "unit": "atr"
     },
     {
+      "canonical_env": "SCALPING_STOP_BUFFER_M1_ATR_MULTIPLE",
+      "default": 1.2,
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "M1 ATR multiple used for the structural stop buffer.",
+      "display_id": "config:strategies.scalping.stop.buffer_m1_atr_multiple",
+      "owner": "python",
+      "path": "strategies.scalping.stop.buffer_m1_atr_multiple",
+      "replacement_path": null,
+      "required": false,
+      "secret": false,
+      "shared_with_ctrader": false,
+      "type": "float",
+      "unit": "atr"
+    },
+    {
+      "canonical_env": "SCALPING_STOP_BUFFER_MINIMUM_SPREAD_MULTIPLE",
+      "default": 1.5,
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Spread-based floor multiplier for the M1 stop buffer.",
+      "display_id": "config:strategies.scalping.stop.buffer_minimum_spread_multiple",
+      "owner": "python",
+      "path": "strategies.scalping.stop.buffer_minimum_spread_multiple",
+      "replacement_path": null,
+      "required": false,
+      "secret": false,
+      "shared_with_ctrader": false,
+      "type": "float",
+      "unit": "multiplier"
+    },
+    {
       "canonical_env": "SCALPING_STOP_MAXIMUM_PIPS",
       "default": 30.0,
       "deprecated": false,
@@ -6767,6 +6879,22 @@
       "shared_with_ctrader": false,
       "type": "float",
       "unit": "pips"
+    },
+    {
+      "canonical_env": "SCALPING_STOP_ZONE_MAXIMUM_ATR_MULTIPLE",
+      "default": 1.5,
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Maximum M5 reference-zone width in M1 ATR multiples.",
+      "display_id": "config:strategies.scalping.stop.zone_maximum_atr_multiple",
+      "owner": "python",
+      "path": "strategies.scalping.stop.zone_maximum_atr_multiple",
+      "replacement_path": null,
+      "required": false,
+      "secret": false,
+      "shared_with_ctrader": false,
+      "type": "float",
+      "unit": "atr"
     },
     {
       "canonical_env": "SCALPING_TRIGGER_MAXIMUM_AGE_BARS",
@@ -8122,6 +8250,6 @@
   ],
   "secret_count": 9,
   "shared_with_ctrader_count": 87,
-  "source_fingerprint_sha256": "2d2146a4c50ede784894cdec04f5252c58d2e961da818fb80f95bb7507813275",
+  "source_fingerprint_sha256": "8183266e1dd5f12b9a6ef4bee626fa5d8bc02cd6c20db94e6c41eb51cdf811ab",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

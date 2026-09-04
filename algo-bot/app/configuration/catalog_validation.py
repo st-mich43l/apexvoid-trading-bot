@@ -90,6 +90,7 @@ def catalog_semantic_errors(
       )
     if (
       entry.allowed_values
+      and entry.default is not None
       and entry.default not in ("<required>", "<redacted>")
       and entry.default not in entry.allowed_values
     ):

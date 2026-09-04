@@ -9,7 +9,7 @@ import time
 from dataclasses import replace
 from typing import Any
 
-from app.analysis.engine import AnalysisSettings, scalp_structure
+from app.analysis.engine import AnalysisSettings, ScalpStructure, scalp_structure
 from app.analysis.ohlc_source import RedisOHLCSource
 from app.autotrade import units
 from app.core.config import runtime_config
@@ -170,11 +170,15 @@ async def _ensure_context(
     cfg=cfg,
   )
   structure_t0 = time.perf_counter()
-  structure = await asyncio.to_thread(
-    scalp_structure,
-    m5,
-    AnalysisSettings(pip_size=pip),
-  )
+  try:
+    structure = await asyncio.to_thread(
+      scalp_structure,
+      m5,
+      AnalysisSettings(pip_size=pip),
+    )
+  except Exception:
+    log.exception("scalp structure build failed symbol=%s", symbol)
+    structure = ScalpStructure()
   scalp_structure_ms = (time.perf_counter() - structure_t0) * 1000.0
   if snapshot is None:
     return existing, analysis_labels_ms, scalp_structure_ms

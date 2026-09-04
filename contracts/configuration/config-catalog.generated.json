@@ -1,20 +1,20 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "2d2146a4c50ede784894cdec04f5252c58d2e961da818fb80f95bb7507813275",
-  "configuration_document_fingerprint_sha256": "e1a5d5402217c31e1f3079bc5a2fbb8b2d4549f950c2e14045e0323462c1d847",
+  "configuration_contract_fingerprint_sha256": "8183266e1dd5f12b9a6ef4bee626fa5d8bc02cd6c20db94e6c41eb51cdf811ab",
+  "configuration_document_fingerprint_sha256": "80512b571eb592b03e829ec6a3437b6ec5d3569627b487558abd09e202a63c1d",
   "counts": {
     "algorithm_constants": 57,
-    "configurable": 504,
+    "configurable": 512,
     "known_conflicts": 30,
     "owners": {
       "ctrader": 49,
-      "python": 426,
+      "python": 434,
       "shared": 96
     },
     "protocol_constants": 10,
     "secrets": 9,
     "shared": 96,
-    "total_items": 571
+    "total_items": 579
   },
   "items": [
     {
@@ -18684,6 +18684,86 @@
     {
       "algorithm_constant": false,
       "allowed_values": [],
+      "canonical_env": "SCALPING_IMPULSE_BODY_DOMINANCE",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 0,
+        "le": 1
+      },
+      "default": 0.5,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 0.5
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Minimum impulse body-to-range dominance.",
+      "display_id": "config:strategies.scalping.archetypes.impulse_body_dominance",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.archetypes.impulse_body_dominance",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "strategy_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "float",
+      "unit": "fraction",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "SCALPING_IMPULSE_DISPLACEMENT_ATR_MULTIPLE",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 1,
+        "le": 15
+      },
+      "default": 4.0,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 4.0
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Minimum M1 impulse displacement in M1 ATR multiples.",
+      "display_id": "config:strategies.scalping.archetypes.impulse_displacement_atr_multiple",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.archetypes.impulse_displacement_atr_multiple",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "strategy_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "float",
+      "unit": "atr",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
       "canonical_env": "SCALPING_IMPULSE_PULLBACK_ALLOWED_SESSIONS",
       "catalog_version": 2,
       "configurable": true,
@@ -18753,6 +18833,85 @@
       "terminal_deprecation_reason": null,
       "type": "bool",
       "unit": "boolean",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "SCALPING_PULLBACK_CORRECTIVE_RATIO",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 0,
+        "le": 1
+      },
+      "default": 0.7,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 0.7
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Maximum pullback body relative to impulse body.",
+      "display_id": "config:strategies.scalping.archetypes.pullback_corrective_ratio",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.archetypes.pullback_corrective_ratio",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "strategy_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "float",
+      "unit": "fraction",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "SCALPING_PULLBACK_EXTREME_CONFIRM_BARS",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 1
+      },
+      "default": 2,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 2
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Closed M1 bars required to confirm an impulse pullback extreme.",
+      "display_id": "config:strategies.scalping.archetypes.pullback_extreme_confirm_bars",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.archetypes.pullback_extreme_confirm_bars",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "strategy_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "int",
+      "unit": "bars",
       "validation_summary": "Pydantic required/type coercion only"
     },
     {
@@ -19256,6 +19415,45 @@
       "terminal_deprecation_reason": null,
       "type": "int",
       "unit": "seconds",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "SCALPING_LEVEL_PROXIMITY_ATR_MULTIPLE",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 0
+      },
+      "default": 1.0,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 1.0
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Maximum M1 ATR distance from an impulse pullback to its M5 reference.",
+      "display_id": "config:strategies.scalping.location.level_proximity_atr_multiple",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.location.level_proximity_atr_multiple",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "strategy_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "float",
+      "unit": "atr",
       "validation_summary": "Pydantic required/type coercion only"
     },
     {
@@ -20097,6 +20295,86 @@
     {
       "algorithm_constant": false,
       "allowed_values": [],
+      "canonical_env": "SCALPING_STOP_BUFFER_M1_ATR_MULTIPLE",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 0.25,
+        "le": 5
+      },
+      "default": 1.2,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 1.2
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "M1 ATR multiple used for the structural stop buffer.",
+      "display_id": "config:strategies.scalping.stop.buffer_m1_atr_multiple",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.stop.buffer_m1_atr_multiple",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "execution_safety",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "float",
+      "unit": "atr",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "SCALPING_STOP_BUFFER_MINIMUM_SPREAD_MULTIPLE",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 1,
+        "le": 5
+      },
+      "default": 1.5,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 1.5
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Spread-based floor multiplier for the M1 stop buffer.",
+      "display_id": "config:strategies.scalping.stop.buffer_minimum_spread_multiple",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.stop.buffer_minimum_spread_multiple",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "execution_safety",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "float",
+      "unit": "multiplier",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
       "canonical_env": "SCALPING_STOP_MAXIMUM_PIPS",
       "catalog_version": 2,
       "configurable": true,
@@ -20209,6 +20487,46 @@
       "terminal_deprecation_reason": null,
       "type": "float",
       "unit": "multiplier",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "SCALPING_STOP_ZONE_MAXIMUM_ATR_MULTIPLE",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 0.25,
+        "le": 5
+      },
+      "default": 1.5,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 1.5
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Maximum M5 reference-zone width in M1 ATR multiples.",
+      "display_id": "config:strategies.scalping.stop.zone_maximum_atr_multiple",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.stop.zone_maximum_atr_multiple",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "execution_safety",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "float",
+      "unit": "atr",
       "validation_summary": "Pydantic required/type coercion only"
     },
     {
@@ -21449,6 +21767,6 @@
       "validation_summary": "Pydantic required/type coercion only"
     }
   ],
-  "source_fingerprint_sha256": "2d2146a4c50ede784894cdec04f5252c58d2e961da818fb80f95bb7507813275",
+  "source_fingerprint_sha256": "8183266e1dd5f12b9a6ef4bee626fa5d8bc02cd6c20db94e6c41eb51cdf811ab",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

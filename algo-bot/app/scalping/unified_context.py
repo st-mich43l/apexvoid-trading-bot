@@ -8,13 +8,14 @@ Both ZoneWatch technique and M1 scalp loops consume the same OHLC windows and
 from __future__ import annotations
 
 import logging
+import math
 import time
 from typing import Any
 
 import pandas as pd
 
 from app.analysis.engine import AnalysisSettings, analysis_labels
-from app.analysis.engine import ScalpStructure, scalp_structure
+from app.analysis.engine import ScalpStructure
 from app.analysis.ohlc_source import RedisOHLCSource
 from app.runtime.price_identity import pip_price_digits
 from app.scalping.context import build_scalp_context_snapshot
@@ -56,7 +57,7 @@ def _m1_atr(m1: pd.DataFrame, *, pip_size: float) -> float:
       axis=1,
     ).max(axis=1).tail(14)
     value = float(true_range.mean())
-    return value if value > 0 and value == value else fallback
+    return value if value > 0 and math.isfinite(value) else fallback
   except (KeyError, TypeError, ValueError):
     return fallback
 
