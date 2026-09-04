@@ -335,6 +335,15 @@ def _build_strategy_match(
     built.append(match)
   if not built:
     return None, last_reason, last_measured
+  built, arbitration_events = _arbitrate_flip_zone_matches(
+    built,
+    overlap_threshold=float(ctx.settings.zone_merge_overlap),
+  )
+  if not built:
+    return None, "all_matches_arbitrated", {
+      "raw": len(results),
+      "arbitration_events": arbitration_events,
+    }
   atr = built[0].atr
   deduped, merge_events = dedupe_matches(built, atr=atr)
   for event in merge_events:
@@ -364,7 +373,72 @@ def _build_strategy_match(
     "matches": len(deduped),
     "raw": len(built),
     "all_matches": deduped,
+    "arbitration_events": arbitration_events,
   }
+
+
+def _match_trigger_bar(match: StrategyMatch) -> str:
+  """Use the scanner event as the authoritative same-bar identity."""
+  return str(match.event_ts or "")
+
+
+def _structural_band_overlap(left: StrategyMatch, right: StrategyMatch) -> float:
+  low = (
+    min(float(left.structural_zone_low), float(right.structural_zone_low))
+  )
+  high = (
+    max(float(left.structural_zone_high), float(right.structural_zone_high))
+  )
+  overlap = min(
+    float(left.structural_zone_high), float(right.structural_zone_high),
+  ) - max(
+    float(left.structural_zone_low), float(right.structural_zone_low),
+  )
+  smaller = min(
+    float(left.structural_zone_high) - float(left.structural_zone_low),
+    float(right.structural_zone_high) - float(right.structural_zone_low),
+  )
+  if overlap <= 0 or high <= low:
+    return 0.0
+  if smaller <= 0:
+    return 1.0
+  return overlap / smaller
+
+
+def _arbitrate_flip_zone_matches(
+  matches: list[StrategyMatch],
+  *,
+  overlap_threshold: float,
+) -> tuple[list[StrategyMatch], list[dict[str, str]]]:
+  """Keep Key Level Reaction over a same-bar overlapping Flip Zone."""
+  key_levels = [
+    item for item in matches if item.strategy == "Key Level Reaction"
+  ]
+  kept: list[StrategyMatch] = []
+  events: list[dict[str, str]] = []
+  threshold = max(0.0, float(overlap_threshold))
+  for item in matches:
+    if (
+      item.strategy == "Flip Zone"
+      and item.structural_zone_low is not None
+      and item.structural_zone_high is not None
+      and any(
+        level.direction == item.direction
+        and _match_trigger_bar(level) == _match_trigger_bar(item)
+        and level.structural_zone_low is not None
+        and level.structural_zone_high is not None
+        and _structural_band_overlap(level, item) >= threshold
+        for level in key_levels
+      )
+    ):
+      events.append({
+        "match_id": item.match_id,
+        "event": "flip_zone_superseded_by_key_level",
+        "strategy": item.strategy,
+      })
+      continue
+    kept.append(item)
+  return kept, events
 
 
 def _build_one_strategy_match(
@@ -818,6 +892,24 @@ async def _sync_strategy_match(
     ctx,
     executable_results,
   )
+  arbitration_events = (
+    measured.get("arbitration_events", [])
+    if isinstance(measured, dict) else []
+  )
+  for event in arbitration_events:
+    if event.get("event") == "flip_zone_superseded_by_key_level":
+      await increment_metric(
+        client,
+        "flip_zone_superseded_by_key_level",
+        symbol=symbol,
+      )
+      log.info(
+        "scanner candidate superseded symbol=%s tf=%s match_id=%s "
+        "reason=flip_zone_superseded_by_key_level",
+        symbol,
+        tf,
+        event.get("match_id"),
+      )
   if match is None:
     if not runtime_config.strategies.matching.multiple_matches_enabled:
       await client.delete(key)

@@ -15,6 +15,11 @@ public sealed class AutoTradeEngine(
   // channel; retry no more than once per minute after the absence is
   // confirmed.
   private const int CloseHistoryRetrySeconds = 60;
+  // Deal history can lag a broker position snapshot, but an unresolved
+  // position must not remain in durable state forever. After this bounded
+  // window, the last protective stop is retained as an explicitly
+  // unconfirmed estimate so a filled ladder can be finalized.
+  internal const int CloseHistoryMaxWaitSeconds = 300;
   // Owner-override commands for algo-armed/filled manual signals
   // (cancel_pending/close/move_sl). Not wired through AutoTradeOptions -
   // this stream name is a fixed constant matching Python's
@@ -6460,7 +6465,6 @@ public sealed class AutoTradeEngine(
       StringComparer.Ordinal
     );
     var confirmedMissingPositionIds = new HashSet<long>();
-    string? closeHistoryLookupGroupId = null;
     foreach (var stale in trackedIds.Where(id => !openIds.Contains(id)))
     {
       // A single missing broker snapshot is only "suspected" missing, not
@@ -6508,17 +6512,9 @@ public sealed class AutoTradeEngine(
       if (state is not null)
       {
         var groupId = GroupId(state);
-        // One missing group per reconciliation pass. Siblings in the same
-        // ladder must still close together so their P/L remains canonical,
-        // but unrelated missing groups must not serially starve live quotes.
-        if (
-          closeHistoryLookupGroupId is not null
-          && closeHistoryLookupGroupId != groupId
-        )
-        {
-          continue;
-        }
-        closeHistoryLookupGroupId ??= groupId;
+        // Process every missing group in this snapshot. Siblings in the same
+        // ladder still share the in-pass P/L aggregate below, while a slow
+        // deal-history lookup for one group must never block another group.
         var trackedGroup = trackedStates.Values
           .Where(item => GroupId(item) == groupId)
           .ToArray();
@@ -6563,9 +6559,38 @@ public sealed class AutoTradeEngine(
         // it does not provide its close fill. Never turn a later live quote
         // into realised P/L (manual #243: XAU SL filled 4496.12 but the
         // next quote was 4492.80 and was incorrectly reported as -33 pips).
-        // Keep the durable state and retry historical deal lookup on the next
-        // confirmed-missing pass until cTrader publishes the closing deal.
-        if (closeLookup.ExecutionPrice is null)
+        // Keep retrying historical deal lookup first. If cTrader still has
+        // not exposed a closing deal after the bounded window, use the last
+        // broker-confirmed protective stop as an explicitly unconfirmed
+        // estimate so a filled ladder cannot remain open forever.
+        var closePriceFallback = false;
+        var recoveredClosePrice = closeLookup.ExecutionPrice;
+        var closeReason = closeLookup.Reason;
+        var closeHistoryAge = missing is null
+          ? 0
+          : Math.Max(0, missingNow - missing.FirstMissingAt);
+        if (
+          recoveredClosePrice is null
+          && closeHistoryAge >= CloseHistoryMaxWaitSeconds
+          && state.CurrentStopLoss is decimal fallbackStop
+          && fallbackStop > 0m
+        )
+        {
+          recoveredClosePrice = fallbackStop;
+          closePriceFallback = true;
+          closeReason = PositionCloseReason.Unknown;
+          await store.IncrementMetricAsync(
+            RequireSymbol().RedisSymbol,
+            "position_close_execution_price_fallback",
+            cancellationToken
+          );
+          _log(
+            $"auto-trade position_close_execution_price_fallback "
+              + $"position_id={stale} price={fallbackStop} "
+              + $"age_seconds={closeHistoryAge}"
+          );
+        }
+        if (recoveredClosePrice is null)
         {
           await store.SavePositionMissingAsync(
             stale,
@@ -6587,7 +6612,6 @@ public sealed class AutoTradeEngine(
           );
           continue;
         }
-        var closeReason = closeLookup.Reason;
         // Promote Unknown → SL/TP only when the deal lookup recovered a real
         // execution price sitting on the protective stop. Defaulting the
         // exit estimate FROM CurrentStopLoss and then comparing to that same
@@ -6595,15 +6619,17 @@ public sealed class AutoTradeEngine(
         // fabricated "stop loss / take profit" with no TP5 book).
         if (
           closeReason == PositionCloseReason.Unknown
-          && closeLookup.ExecutionPrice is decimal recoveredExit
+          && !closePriceFallback
+          && recoveredClosePrice is decimal recoveredExit
           && LooksLikeProtectiveStopHit(state, recoveredExit)
         )
         {
           closeReason = PositionCloseReason.StopLossOrTakeProfit;
         }
-        // The closing deal is the sole source of realised P/L. A current
-        // quote or configured stop is not a broker execution.
-        var exitEstimate = closeLookup.ExecutionPrice.Value;
+        // A recovered closing deal is the source of realised P/L. The only
+        // exception is the bounded, explicitly unconfirmed stop fallback
+        // above; a current quote is never used as a close price.
+        var exitEstimate = recoveredClosePrice.Value;
         await store.ClearPositionMissingAsync(stale, cancellationToken);
         await store.IncrementMetricAsync(
           RequireSymbol().RedisSymbol,

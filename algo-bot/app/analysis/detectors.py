@@ -2694,6 +2694,48 @@ def _nearest_same_side_zone_score(
   return float(getattr(best, "score", 0.0) or 0.0)
 
 
+def _key_level_reaction_band(
+  level: Level,
+  ctx: DetectionContext,
+  atr: float,
+) -> float:
+  """Return the role-classification band shared by KL and Flip Zone."""
+  band = max(
+    _EPS,
+    ctx.settings.proximal_band_atr * max(0.0, atr),
+  )
+  return max(float(level.band), band)
+
+
+def _flip_zone_level(st: StructureSet, zone: Zone) -> Level | None:
+  """Return the key level a PR-N1 flip zone is anchored to."""
+  anchor = float(zone.bottom) if zone.side == "demand" else float(zone.top)
+  best: Level | None = None
+  best_gap: float | None = None
+  for level in st.levels:
+    gap = abs(float(level.price) - anchor)
+    if gap > max(float(level.band), 0.0) + _EPS:
+      continue
+    if best_gap is None or gap < best_gap:
+      best, best_gap = level, gap
+  return best
+
+
+def _flip_role_agrees(role: str, direction: str) -> bool:
+  """A flip is valid only when the role authority confirms its direction."""
+  if direction == "BUY":
+    return role == ROLE_BROKEN_RESISTANCE
+  if direction == "SELL":
+    return role == ROLE_BROKEN_SUPPORT
+  return False
+
+
+def _count(ctx: DetectionContext, name: str) -> None:
+  """Emit detector counters through the scanner's existing metric sink."""
+  if ctx.metric_sink is not None:
+    ctx.metric_sink(name, ctx.symbol, {"tf": ctx.tf})
+
+
 def key_level_reaction(ctx: DetectionContext) -> DetectionResult | None:
   if not ctx.settings.key_level_reaction_enabled:
     return None
@@ -2703,7 +2745,6 @@ def key_level_reaction(ctx: DetectionContext) -> DetectionResult | None:
   price = _current_price(ctx, df)
   atr = _atr(ind)
   lookback = max(1, int(ctx.settings.structural_reaction_lookback_bars))
-  band = max(_EPS, ctx.settings.proximal_band_atr * max(0.0, atr))
   min_touches = max(1, int(ctx.settings.key_level_min_touches))
   min_sell_zone = float(
     getattr(ctx.settings, "key_level_min_sell_zone_score", 0.0) or 0.0
@@ -2712,7 +2753,7 @@ def key_level_reaction(ctx: DetectionContext) -> DetectionResult | None:
   for level in sorted(st.levels, key=lambda item: abs(item.price - price)):
     if level.touches < min_touches:
       continue
-    zone_band = max(level.band, band)
+    zone_band = _key_level_reaction_band(level, ctx, atr)
     role = classify_key_level_role(
       kind=level.kind,
       level_price=level.price,
@@ -2918,6 +2959,7 @@ def flip_demand_zone_reaction(ctx: DetectionContext) -> DetectionResult | None:
     setup=FLIP_ZONE,
     require_source="flip_zone",
     structural_source="flip_zone",
+    enforce_key_level_role=True,
   )
 
 
@@ -2931,6 +2973,7 @@ def flip_supply_zone_reaction(ctx: DetectionContext) -> DetectionResult | None:
     setup=FLIP_ZONE,
     require_source="flip_zone",
     structural_source="flip_zone",
+    enforce_key_level_role=True,
   )
 
 
@@ -2943,6 +2986,7 @@ def _sd_zone_reaction(
   require_source: str | None = None,
   exclude_sources: tuple[str, ...] = (),
   structural_source: str = "supply_demand",
+  enforce_key_level_role: bool = False,
 ) -> DetectionResult | None:
   df, ind, st = _exec(ctx)
   if len(df) < 3:
@@ -2973,6 +3017,25 @@ def _sd_zone_reaction(
   else:
     zone, _proximal = selected
 
+  resolved_role: str | None = None
+  if enforce_key_level_role:
+    level = _flip_zone_level(st, zone)
+    if level is None:
+      _count(ctx, "flip_zone_level_unresolved")
+      return None
+    zone_band = _key_level_reaction_band(level, ctx, atr)
+    resolved_role = classify_key_level_role(
+      kind=level.kind,
+      level_price=float(level.price),
+      band_low=float(level.price) - zone_band,
+      band_high=float(level.price) + zone_band,
+      closed_bars=df,
+      breakout_accept_bars=ctx.settings.breakout_accept_bars,
+    ).role
+    if not _flip_role_agrees(resolved_role, direction):
+      _count(ctx, "flip_zone_role_contradiction")
+      return None
+
   conf = evaluate_structural_reaction(
     df,
     direction=direction,
@@ -2998,7 +3061,7 @@ def _sd_zone_reaction(
   ]
   if zone.touches:
     reasons.append(f"touches {zone.touches}")
-  return _structural_finish(
+  result = _structural_finish(
     ctx,
     setup=setup,
     direction=direction,
@@ -3017,6 +3080,9 @@ def _sd_zone_reaction(
     source_score=float(getattr(zone, "score", 0.0)),
     factors=factors,
   )
+  if result is not None and resolved_role is not None:
+    result = replace(result, key_level_role=resolved_role)
+  return result
 
 
 def session_level_reaction(ctx: DetectionContext) -> DetectionResult | None:
@@ -3185,10 +3251,7 @@ def trendline_reaction(ctx: DetectionContext) -> DetectionResult | None:
 
 
 def _emit_trendline_metric(ctx: DetectionContext, name: str) -> None:
-  sink = ctx.metric_sink
-  if sink is None:
-    return
-  sink(name, ctx.symbol, {"tf": ctx.tf})
+  _count(ctx, name)
 
 
 
