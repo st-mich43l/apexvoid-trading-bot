@@ -14,7 +14,10 @@ from app.analysis.execution_eligibility import (
   STATIC_ELIGIBLE,
   ExecutionEligibility,
 )
-from app.analysis.structural_reaction_support import structural_thesis_id
+from app.analysis.structural_reaction_support import (
+  bias_relationship,
+  structural_thesis_id,
+)
 from app.autotrade import worker
 from app.autotrade.multi_match import (
   dedupe_matches,
@@ -181,6 +184,7 @@ def build_scalp_strategy_match(
     structural_kind=_structural_kind(opportunity),
     structural_timeframe="M1",
     htf_bias=htf_bias,
+    bias_relationship=bias_relationship(htf_bias, opportunity.direction.upper()),
     regime_kind=str(context.regime or "range"),
     touch_bar_ts=touch,
     confirmation_bar_ts=confirm,

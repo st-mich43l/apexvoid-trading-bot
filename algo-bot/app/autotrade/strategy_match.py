@@ -91,6 +91,12 @@ class StrategyMatch:
   structural_timeframe: str | None = None
   htf_bias: str = ""
   regime_kind: str = ""
+  # Resolved with_bias/counter_bias/neutral (app.analysis.structural_reaction_
+  # support.bias_relationship). Distinct from strategy_mode, which also
+  # carries non-bias identities like "scalp_m1"/"range_scalp" that real
+  # trade-plan/taxonomy logic keys on — this field exists purely so card
+  # rendering has an unambiguous bias signal to switch on. Additive/optional.
+  bias_relationship: str | None = None
   execution_eligibility: ExecutionEligibility | None = None
   # Additive activation / location provenance (older Redis payloads omit these).
   entry_location_source: str | None = None
@@ -275,6 +281,10 @@ class StrategyMatch:
         ),
         htf_bias=str(payload.get("htf_bias") or ""),
         regime_kind=str(payload.get("regime_kind") or ""),
+        bias_relationship=(
+          None if payload.get("bias_relationship") is None
+          else str(payload["bias_relationship"])
+        ),
         execution_eligibility=ExecutionEligibility.from_dict(
           payload.get("execution_eligibility"),
         ),

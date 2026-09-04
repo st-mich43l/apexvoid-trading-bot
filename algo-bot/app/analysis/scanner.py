@@ -658,6 +658,7 @@ def _build_one_strategy_match(
     structural_timeframe=result.structural_timeframe,
     htf_bias=str(getattr(ctx, "htf_bias", "") or ""),
     regime_kind=str(getattr(getattr(ctx, "regime", None), "kind", "") or ""),
+    bias_relationship=result.bias_relationship or result.mode,
     execution_eligibility=result.execution_eligibility,
     math_fib_ratio=getattr(result, "math_fib_ratio", None),
     math_velocity=getattr(result, "math_velocity", None),
@@ -1519,19 +1520,11 @@ def _format_detection(
       f"{escape(result.execution_eligibility.reason_code)} · "
       f"{escape(result.execution_eligibility.message)}"
     )
-  if result.mode == "range_scalp":
-    lines.append("↔️ <b>Mode:</b> RANGE SCALP · two-sided local range")
-  elif result.mode == "counter_bias":
-    lines.append("⚠️ <b>Bias:</b> counter_bias")
-  elif result.mode == "with_bias":
-    lines.append("🧭 <b>Bias:</b> with_bias")
-  elif result.mode == "neutral":
-    lines.append("🧭 <b>Bias:</b> neutral")
-  elif result.mode != "with_trend":
-    label = "reaction scalp" if result.mode == "counter_reaction" else "counter swing"
-    lines.append(
-      f"⚠️ <b>Mode:</b> Counter-trend · {label}"
-    )
+  _bias = str(result.bias_relationship or "").strip()
+  if _bias == "with_bias":
+    lines.append("🧭 <b>Bias:</b> with bias")
+  elif _bias == "counter_bias":
+    lines.append("⚠️ <b>Bias:</b> counter bias")
   if result.structural_source:
     lines.append(
       f"🧱 <b>Structural source:</b> {escape(result.structural_source)}"

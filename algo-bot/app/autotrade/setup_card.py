@@ -1811,17 +1811,11 @@ def format_plan_published_root_card(
       f"{escape(setup_label)}</b> · {stars}"
     ),
   ]
-  if mode == "range_scalp":
-    lines.append("↔️ <b>Mode:</b> RANGE SCALP · two-sided local range")
-  elif mode == "counter_bias":
-    lines.append("⚠️ <b>Bias:</b> counter_bias")
-  elif mode in {"with_bias", "neutral"}:
-    lines.append(f"🧭 <b>Bias:</b> {escape(mode)}")
-  elif mode and mode != "with_trend":
-    label = (
-      "reaction scalp" if mode == "counter_reaction" else "counter swing"
-    )
-    lines.append(f"⚠️ <b>Mode:</b> Counter-trend · {label}")
+  bias = str(match.bias_relationship or "").strip()
+  if bias == "with_bias":
+    lines.append("🧭 <b>Bias:</b> with bias")
+  elif bias == "counter_bias":
+    lines.append("⚠️ <b>Bias:</b> counter bias")
   if match.structural_source:
     lines.append(
       f"🧱 <b>Structural source:</b> {escape(str(match.structural_source))}"
@@ -2072,6 +2066,7 @@ async def ensure_plan_published_root_card(
 
 def strategy_match_from_trade_plan(plan: Any) -> StrategyMatch:
   """Rebuild a minimal StrategyMatch so root-card formatting can recover."""
+  from app.analysis.structural_reaction_support import bias_relationship
   from app.autotrade.strategy_match import STRATEGY_MATCH_VERSION
 
   analysis = plan.analysis
@@ -2122,6 +2117,9 @@ def strategy_match_from_trade_plan(plan: Any) -> StrategyMatch:
     touch_bar_ts=str(analysis.formation_bar_ts or ""),
     structural_timeframe=str(structure.timeframe or analysis.formation_timeframe or ""),
     htf_bias=str(analysis.bias or ""),
+    bias_relationship=bias_relationship(
+      str(analysis.bias or ""), str(analysis.direction).upper(),
+    ),
   )
 
 
