@@ -87,7 +87,7 @@ async def _execute_close(
   specific configured target (app.signals.manual_execution._handle_take_
   profit already resolves this from the fill's target_pips), is surfaced
   in the result so render_result can label the channel card the same way
-  a watcher-detected TP does, instead of a bare "booked X%".
+  a watcher-detected TP does, instead of a bare, unlabeled close.
   """
   row = await close_leg(sid, pips, frac)
   if row is None:
@@ -815,8 +815,6 @@ def render_result(
       and not runtime_config.delivery.telegram.public_show_pips
     ):
       return f"🎯 {tp_label}partial booked"
-    booked = int(round(row["frac"] * 100))
-    remaining = int(round(row["remaining"] * 100))
     net_so_far = row.get("net")
     net_part = (
       f" · peaked {net_so_far:+d}"
@@ -824,9 +822,9 @@ def render_result(
       else ""
     )
     return (
-      f"🎯 {seq}{tp_label}booked {booked}% · {result['pips']:+d} pips"
+      f"🎯 {seq}{tp_label}{result['pips']:+d} pips"
       f"{_win_wings(result['pips']) if result['pips'] > 0 else ''}"
-      f"{net_part} · remaining {remaining}%"
+      f"{net_part}"
     )
   if action == "reopen":
     source = result["source"]

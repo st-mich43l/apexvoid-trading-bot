@@ -16,6 +16,10 @@ dated section after deployment.
 - Manual algo now notifies and trails through middle TP levels omitted by a
   broker-volume ladder; reached-but-unbooked levels never create fake ledger
   profit or consume execution volume.
+- Manual algo TP/partial-close channel cards drop the "booked X% · remaining
+  Y%" figures — they described the whole group's cumulative fill, not the
+  leg that just booked, and read as confusing/wrong next to the per-leg pips
+  figure. Cards now just show the TP label and pips.
 - Bound missing-position close reconciliation so delayed cTrader deal history
   cannot leave a filled manual ladder stuck open forever; after five minutes
   the last protective stop finalizes the state as an explicitly unconfirmed
