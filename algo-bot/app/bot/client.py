@@ -301,28 +301,6 @@ async def delete_message(chat_id: int | str, message_id: int) -> None:
   await bot.delete_message(int(chat_id), int(message_id))
 
 
-async def edit_message_text(
-  chat_id: int | str, message_id: int, text: str,
-) -> Message | None:
-  """Edit a message the main bot itself sent (manual /algo signal cards).
-
-  Best-effort like delete_message's sibling delete_posts - an older message
-  can be outside Telegram's edit window, or the text can be byte-identical
-  to what's already posted (Telegram rejects a no-op edit), neither of
-  which should break the caller's real notification (already sent as a
-  reply before this runs).
-  """
-  try:
-    return await bot.edit_message_text(
-      chat_id=int(chat_id), message_id=int(message_id), text=text,
-    )
-  except Exception:
-    log.warning(
-      "could not edit message %s/%s", chat_id, message_id, exc_info=True,
-    )
-    return None
-
-
 async def edit_scanner_message_text(
   chat_id: int | str,
   message_id: int,

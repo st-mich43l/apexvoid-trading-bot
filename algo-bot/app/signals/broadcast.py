@@ -12,12 +12,7 @@ from app.signals.pips_format import rr_entry
 from app.signals.fx_manual_algo import uses_entry_price_display
 from app.autotrade.strategy_names import resolve_strategy
 from app.core.symbols import digits_for, channels_for
-from app.bot.client import (
-  delete_message,
-  edit_message_text,
-  send_sticker,
-  send_with_retry,
-)
+from app.bot.client import delete_message, send_sticker, send_with_retry
 
 log = logging.getLogger(__name__)
 
@@ -199,22 +194,6 @@ async def broadcast_entry(
     if sticker:
       await _send_sticker(sticker, channel_id, sent.message_id)
   return posts
-
-
-async def edit_entry_posts(sig: dict) -> None:
-  """Patch the persisted entry card(s) in place so SL/risk/R stay current.
-
-  Live 2026-09-04: a trailed stop only ever went out as a *reply*
-  (fanout_update) - the root card kept showing its original SL forever, so
-  anyone glancing at just the pinned card (not every reply underneath it)
-  saw a stale risk figure even after the stop had moved well past
-  breakeven. render_entry reads sig['sl'] live, so re-rendering with the
-  now-updated signal is enough; each post is patched best-effort so one
-  channel's failure doesn't block the others.
-  """
-  for post in await get_signal_posts(sig["id"]):
-    text = render_entry(sig, post["tier"])
-    await edit_message_text(post["channel_id"], post["message_id"], text)
 
 
 async def fanout_update(
