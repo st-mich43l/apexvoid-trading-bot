@@ -55,6 +55,16 @@ dated section after deployment.
   achieved them, not the advertised entry zone.
 
 ### Changed
+- Auto-algo root card (TradePlan V8 publish/`ORDER ACTIVATED` header):
+  renamed the "POSITION ACTIVATED" header to "ORDER ACTIVATED" (backward
+  compatible — a card already live before this deploy is still recognized
+  under the old wording); dropped the "→ Executor owns mechanical entry
+  and risk enforcement." footer line; each TP now gets its own line
+  instead of one ' · '-joined Targets line; and removed live price
+  tracking entirely (`forming_price_track_loop`, the 5s Telegram-edit
+  loop, and the "Price now (live)" line) — one more source of edit-flood
+  competing with ORDER FILLED / status replies for Telegram rate limits,
+  and not something the card needs to show.
 - Scalp stop buffers now use true-range M1 ATR with a live-spread floor;
   M5 scalp structure is rebuilt on M5 cadence and persists compact levels,
   zones, M1 ATR, and discovery measurements for deterministic M1 decisions.

@@ -1392,7 +1392,7 @@ def _split_manage_fill_and_tps(text: str) -> tuple[str, list[str]]:
   return "\n".join(fill_lines).rstrip(), append_lines
 
 
-POSITION_ACTIVATED_STATUS_LINE = "✅ <b>POSITION ACTIVATED</b>"
+POSITION_ACTIVATED_STATUS_LINE = "✅ <b>ORDER ACTIVATED</b>"
 
 
 def _format_order_filled_manage_body(event: dict) -> str:
@@ -1614,7 +1614,7 @@ def _upsert_manage_be_trail_line(text: str, trail_line: str) -> str:
 
 
 async def _mark_forming_card_position_activated(client, match_id: str) -> None:
-  """Move SETUP FORMING head from publish/queued → POSITION ACTIVATED."""
+  """Move SETUP FORMING head from publish/queued → ORDER ACTIVATED."""
   try:
     await edit_forming_card_status(
       client,
@@ -1626,7 +1626,7 @@ async def _mark_forming_card_position_activated(client, match_id: str) -> None:
     )
   except Exception:
     log.exception(
-      "forming card POSITION ACTIVATED edit failed setup_id=%s",
+      "forming card ORDER ACTIVATED edit failed setup_id=%s",
       match_id,
     )
   # A fill can never precede publication, so the plan's stop is guaranteed
@@ -1658,7 +1658,7 @@ async def _mark_forming_card_position_activated(client, match_id: str) -> None:
     )
   except Exception:
     log.exception(
-      "forming card POSITION ACTIVATED stop/targets refresh failed setup_id=%s",
+      "forming card ORDER ACTIVATED stop/targets refresh failed setup_id=%s",
       match_id,
     )
 
@@ -1671,7 +1671,7 @@ async def _deliver_compact_order_filled(
   chat_id: int,
   send,
 ) -> bool:
-  # Reply keeps ORDER FILLED; root SETUP FORMING card becomes POSITION ACTIVATED.
+  # Reply keeps ORDER FILLED; root SETUP FORMING card becomes ORDER ACTIVATED.
   body = _format_order_filled_manage_body(event)
   manage_id, manage_text = await _load_manage_message(client, match_id)
   new_text = body
@@ -1680,7 +1680,7 @@ async def _deliver_compact_order_filled(
     if tp_lines:
       new_text = f"{body}\n" + "\n".join(tp_lines)
   # Create a missing root first (publish can lag the fill), then rewrite
-  # WAITING FILL → POSITION ACTIVATED before the manage reply.
+  # WAITING FILL → ORDER ACTIVATED before the manage reply.
   await _ensure_root_card_for_manage_reply(
     client, event, match_id=match_id, chat_id=chat_id,
   )
