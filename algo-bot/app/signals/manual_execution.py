@@ -755,7 +755,33 @@ async def _handle_take_profit(event: dict, signal_id: int) -> None:
   result = await trade_ops._execute_close(
     signal_id, sig.get("symbol", "XAU"), pips, frac,
     tp_number=reached,
+    entry_price=event.get("leg_entry_price"),
   )
+  await trade_ops.post_result(result, sig.get("symbol", "XAU"))
+
+
+async def _handle_tp_reached(event: dict, signal_id: int) -> None:
+  """Fan out a ladder level that was reached but could not be booked."""
+  from app.signals import trade_ops
+
+  sig = await get_manual_signal(signal_id)
+  target_pips = event.get("target_pips")
+  if sig is None or target_pips is None:
+    return
+  reached = _tp_ordinal_reached(sig, target_pips)
+  if not reached:
+    log.warning(
+      "manual-algo tp_reached could not resolve target signal=%s target_pips=%s",
+      signal_id,
+      target_pips,
+    )
+    return
+  result = await trade_ops.do_tp_reached({
+    "sid": signal_id,
+    "symbol": sig.get("symbol", "XAU"),
+    "tp_number": reached,
+    "pips": int(target_pips),
+  })
   await trade_ops.post_result(result, sig.get("symbol", "XAU"))
 
 
@@ -790,6 +816,7 @@ async def _handle_position_closed(event: dict, signal_id: int) -> None:
   pips, frac = _leg_close_pips_and_frac(sig, event, float(price))
   result = await trade_ops._execute_close(
     signal_id, sig.get("symbol", "XAU"), pips, frac,
+    entry_price=event.get("leg_entry_price"),
   )
   await trade_ops.post_result(result, sig.get("symbol", "XAU"))
 
@@ -853,7 +880,10 @@ async def _handle_group_result(event: dict, signal_id: int) -> None:
   sig = await get_manual_signal(signal_id)
   symbol = (sig or {}).get("symbol", "XAU")
   resolved = await _resolve_group_close_pips(signal_id, float(pips))
-  result = await trade_ops._execute_group_close(signal_id, symbol, resolved)
+  result = await trade_ops._execute_group_close(
+    signal_id, symbol, resolved,
+    entry_price=event.get("leg_entry_price"),
+  )
   await trade_ops.post_result(result, symbol)
 
 
@@ -884,6 +914,7 @@ async def _handle_manual_closed(
   pips, frac = _leg_close_pips_and_frac(sig, event, float(price))
   result = await trade_ops._execute_close(
     signal_id, sig.get("symbol", "XAU"), pips, frac,
+    entry_price=event.get("leg_entry_price"),
   )
   await trade_ops.post_result(result, sig.get("symbol", "XAU"))
 
@@ -1077,6 +1108,8 @@ async def _handle_event(
     return  # not a manual-algo position this loop is tracking
   if event_type == "take_profit":
     await _handle_take_profit(event, signal_id)
+  elif event_type == "manual_tp_reached":
+    await _handle_tp_reached(event, signal_id)
   elif event_type == "position_closed":
     await _handle_position_closed(event, signal_id)
     if not (event.get("remaining_volume") or 0) > 0:

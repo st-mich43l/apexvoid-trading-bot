@@ -19,7 +19,6 @@ from aiogram.types import (
 from app.bot.telegram_actor import (
   PRIORITY_CARD,
   PRIORITY_LIFECYCLE,
-  PRIORITY_PRICE,
   submit as submit_telegram,
 )
 from app.core.config import runtime_config
@@ -321,23 +320,6 @@ async def edit_scanner_message_text(
     ),
     priority=priority,
     droppable=droppable,
-  )
-
-
-async def edit_scanner_price_now(
-  chat_id: int | str,
-  message_id: int,
-  text: str,
-  reply_markup: InlineKeyboardMarkup | None = None,
-) -> Message | None:
-  """Live Price-now edits — dropped while the actor is flood-paused."""
-  return await edit_scanner_message_text(
-    chat_id,
-    message_id,
-    text,
-    reply_markup,
-    droppable=True,
-    priority=PRIORITY_PRICE,
   )
 
 

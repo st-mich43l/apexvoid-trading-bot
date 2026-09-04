@@ -12,6 +12,8 @@ from app.persistence.store import (
   get_manual_signal,
   get_open_signals,
   get_signal_cluster,
+  get_signal_updates,
+  insert_signal_update,
   mark_filled,
   set_note,
   signal_root,
@@ -30,9 +32,10 @@ from app.signals.broadcast import (
 )
 from app.signals.fx_manual_algo import uses_entry_price_display
 from app.bot.keyboards import build_tp_close_kb
+from app.signals import pips_format
 from app.signals.pips_format import wing_icons
 from app.persistence.redis_state import clear_sl_alert, mark_tp_alert
-from app.core.symbols import digits_for, channel_for_symbol
+from app.core.symbols import digits_for, channel_for_symbol, pip_for
 
 
 def _display_seq(row: dict) -> int:
@@ -78,6 +81,7 @@ async def _execute_close(
   frac: float | None,
   reply_to: int | None = None,
   tp_number: int | None = None,
+  entry_price: float | None = None,
 ) -> dict:
   """The actual Postgres booking for a close - shared by the direct
   (non-algo, or algo-not-yet-filled) path and the broker-confirmed algo
@@ -87,9 +91,14 @@ async def _execute_close(
   specific configured target (app.signals.manual_execution._handle_take_
   profit already resolves this from the fill's target_pips), is surfaced
   in the result so render_result can label the channel card the same way
-  a watcher-detected TP does, instead of a bare "booked X%".
+  a watcher-detected TP does, instead of a bare, unlabeled close.
+
+  ``entry_price``, when known (the booking leg's own actual fill), is
+  carried onto the leg record so a later realized-R calc measures risk
+  against the SAME leg its pips came from - see pips_format.
+  legs_achieved_entry_price.
   """
-  row = await close_leg(sid, pips, frac)
+  row = await close_leg(sid, pips, frac, entry_price=entry_price)
   if row is None:
     return {"action": "close", "ok": False, "error": "not_open"}
   result = {
@@ -112,7 +121,9 @@ async def _execute_close(
   return result
 
 
-async def _execute_group_close(sid: int, symbol: str, pips: int) -> dict:
+async def _execute_group_close(
+  sid: int, symbol: str, pips: int, entry_price: float | None = None,
+) -> dict:
   """The manual-algo group-close counterpart to ``_execute_close`` - used
   only by app.signals.manual_execution._handle_group_result, once
   AutoTradeEngine.cs confirms a manual /algo signal's entire entry-leg
@@ -123,8 +134,12 @@ async def _execute_group_close(sid: int, symbol: str, pips: int) -> dict:
   "pure loss = last leg's own pips" rule is right for one entry's exit
   ladder but silently drops every sibling leg's result for several
   independently-priced entry legs (see finalize_manual_group docstring).
+
+  ``entry_price`` is the closing leg's own fill (the group_result event's
+  leg_entry_price) - a fallback R reference when no earlier TP leg was
+  ever booked (a pure stop-out has no other leg record to anchor R to).
   """
-  row = await finalize_manual_group(sid, pips)
+  row = await finalize_manual_group(sid, pips, entry_price=entry_price)
   if row is None:
     return {"action": "close", "ok": False, "error": "not_open"}
   net = row["net"]
@@ -665,6 +680,23 @@ async def do_tp(ctx: dict) -> dict:
   }
 
 
+async def do_tp_reached(ctx: dict) -> dict:
+  """Notify a reached ladder level without pretending volume was booked."""
+  from app.persistence import redis_state
+
+  if await redis_state.tp_ordinal_already_reached(
+    ctx["sid"], int(ctx["tp_number"]),
+  ):
+    return {"action": "tp_reached", "ok": False, "error": "already_reached"}
+  result = await do_tp(ctx)
+  if result.get("ok"):
+    await redis_state.mark_tp_ordinal_reached(
+      ctx["sid"], int(ctx["tp_number"]),
+    )
+    result["action"] = "tp_reached"
+  return result
+
+
 def render_result(
   result: dict,
   symbol: str,
@@ -734,6 +766,17 @@ def render_result(
       f"🎯 {seq}TP{result['tp_number']} "
       f"+{result['pips']} pips{_win_wings(result['pips'])}"
     )
+  if action == "tp_reached":
+    seq = f"#{result['seq']} " if tier == "vip" else ""
+    if (
+      tier == "public"
+      and not runtime_config.delivery.telegram.public_show_pips
+    ):
+      return f"🎯 TP{result['tp_number']} reached · no volume booked"
+    return (
+      f"🎯 {seq}TP{result['tp_number']} reached · "
+      f"+{result['pips']} pips · no volume booked"
+    )
   if action == "sl":
     seq = f"#{_display_seq(result['row'])} " if tier == "vip" else ""
     if result.get("pending"):
@@ -787,8 +830,6 @@ def render_result(
       and not runtime_config.delivery.telegram.public_show_pips
     ):
       return f"🎯 {tp_label}partial booked"
-    booked = int(round(row["frac"] * 100))
-    remaining = int(round(row["remaining"] * 100))
     net_so_far = row.get("net")
     net_part = (
       f" · peaked {net_so_far:+d}"
@@ -796,9 +837,9 @@ def render_result(
       else ""
     )
     return (
-      f"🎯 {seq}{tp_label}booked {booked}% · {result['pips']:+d} pips"
+      f"🎯 {seq}{tp_label}{result['pips']:+d} pips"
       f"{_win_wings(result['pips']) if result['pips'] > 0 else ''}"
-      f"{net_part} · remaining {remaining}%"
+      f"{net_part}"
     )
   if action == "reopen":
     source = result["source"]
@@ -827,6 +868,51 @@ def render_result(
     )
   seq = f"#{result['seq']} " if tier == "vip" else ""
   return f"📝 {seq}note saved"
+
+
+# Update kinds tracked in manual_signal_updates purely so the terminal close
+# can delete every interim reply this signal accumulated - "close" here
+# means a partial (still-open) booked TP leg, not the terminal close.
+_TRACKED_UPDATE_KINDS = {"close", "tp_reached", "sl"}
+
+
+def _achieved_rr(sig: dict, net_pips: int) -> str | None:
+  """Realized R for a just-closed signal.
+
+  A multi-leg manual /algo group fills shallow/mid/deep clips at different
+  prices - ``net_pips`` (legs_achieved_pips) already reports whichever
+  leg's own booking reached the deepest/furthest, so the risk denominator
+  must be measured from that SAME leg's own entry, not the advertised
+  zone. legs_achieved_entry_price returns exactly that (None for an older
+  signal with no per-leg entry_price recorded), in which case this falls
+  back to reports.py's ``_round_lines`` convention: risk against the stop
+  as originally placed (a trailed/BE stop must not shrink the
+  denominator), entry at the zone midpoint.
+  """
+  original_sl = sig.get("original_sl")
+  if original_sl is None:
+    original_sl = sig["sl"]
+  entry = pips_format.legs_achieved_entry_price(sig.get("legs") or [])
+  if entry is None:
+    entry_end = sig.get("entry_end")
+    if entry_end is None:
+      entry_end = sig["entry"]
+    entry = (sig["entry"] + entry_end) / 2
+  risk_price = abs(entry - original_sl)
+  if risk_price <= 0:
+    return None
+  risk_pips = risk_price / pip_for(sig.get("symbol", "XAU"))
+  if risk_pips <= 0:
+    return None
+  return f"{net_pips / risk_pips:+.1f}R"
+
+
+def _update_payload(result: dict) -> dict:
+  if result["action"] == "close":
+    return {"tp_number": result.get("tp_number"), "pips": result["pips"]}
+  if result["action"] == "tp_reached":
+    return {"tp_number": result["tp_number"], "pips": result["pips"]}
+  return {"price": result.get("price")}
 
 
 async def post_result(result: dict, symbol: str) -> str:
@@ -858,6 +944,21 @@ async def post_result(result: dict, symbol: str) -> str:
       lambda tier: text if tier == "vip" else None,
     )
     return text
+  # A genuine terminal close (TP ladder run out, or stopped out) - decisive
+  # for both booked closes (close_leg) and group closes (finalize_manual_
+  # group), both of which set row["closed"] only once, guarded by the same
+  # "WHERE status = 'open' FOR UPDATE" row lock a concurrent leg finishing
+  # at the same instant would simply lose. Sweep every interim TP/reached/SL
+  # reply this signal accumulated and reply the root card with one summary
+  # instead of leaving them all standing.
+  is_final_close = (
+    result["action"] == "close" and bool(result.get("row", {}).get("closed"))
+  )
+  updates: list[dict] = []
+  if is_final_close:
+    updates = await get_signal_updates(signal_id)
+    if updates:
+      await delete_posts(updates)
   markup_fn = None
   if result["action"] == "tp":
     # Same owner-only Close button the watcher attaches to auto TP alerts.
@@ -865,9 +966,25 @@ async def post_result(result: dict, symbol: str) -> str:
     markup_fn = (
       lambda tier: build_tp_close_kb(sid_, tp_, pips_) if tier == "vip" else None
     )
-  await fanout_update(
-    sig,
-    lambda tier: render_result(result, symbol, tier),
-    markup_fn=markup_fn,
-  )
+
+  def _render(tier: str) -> str:
+    base = render_result(result, symbol, tier)
+    if not is_final_close:
+      return base
+    show_pips = (
+      tier == "vip" or runtime_config.delivery.telegram.public_show_pips
+    )
+    if not show_pips:
+      return base
+    rr = _achieved_rr(sig, result["row"]["net"])
+    return f"{base} · {rr}" if rr else base
+
+  sent = await fanout_update(sig, _render, markup_fn=markup_fn)
+  if not is_final_close and result["action"] in _TRACKED_UPDATE_KINDS:
+    payload = _update_payload(result)
+    for post in sent:
+      await insert_signal_update(
+        signal_id, post["channel_id"], post["message_id"], post["tier"],
+        result["action"], payload,
+      )
   return text

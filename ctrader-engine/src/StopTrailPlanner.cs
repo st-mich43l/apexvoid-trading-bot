@@ -118,7 +118,27 @@ public static class StopTrailPlanner
     {
       return null;
     }
-    var completedTargetOrdinal = TargetOrdinal(state, completedTargetIndex);
+    return PlanForTargetOrdinal(
+      state,
+      TargetOrdinal(state, completedTargetIndex),
+      symbol,
+      pipSize,
+      breakEvenBufferTicks
+    );
+  }
+
+  public static StopTrailMove? PlanForTargetOrdinal(
+    AutoTradePositionState state,
+    int completedTargetOrdinal,
+    SymbolInfo symbol,
+    decimal pipSize,
+    int breakEvenBufferTicks
+  )
+  {
+    if (completedTargetOrdinal <= 0)
+    {
+      return null;
+    }
     decimal desired;
     string label;
     decimal? bufferPrice = null;

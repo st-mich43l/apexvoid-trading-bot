@@ -93,6 +93,22 @@ def legs_net_pips(legs: list[dict]) -> int:
   return legs_achieved_pips(legs)
 
 
+def legs_achieved_entry_price(legs: list[dict]) -> float | None:
+  """Entry price of the leg legs_achieved_pips selected (same peak-or-final
+  rule) — the risk-calc companion to it. A multi-leg manual /algo group
+  fills each clip at its own price, so realized R must be measured against
+  the SAME leg whose pips are being reported, not the advertised entry
+  zone. None when no leg carries its own entry_price (older events).
+  """
+  if not legs:
+    return None
+  values = [int(leg["pips"]) for leg in legs]
+  peak = max(values)
+  index = values.index(peak) if peak > 0 else len(values) - 1
+  entry_price = legs[index].get("entry_price")
+  return float(entry_price) if entry_price is not None else None
+
+
 def wing_icons(pips: int) -> str:
   """Return dollar-wing icons for positive pip wins.
 

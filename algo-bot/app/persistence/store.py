@@ -377,6 +377,35 @@ async def init_db() -> None:
       "CREATE UNIQUE INDEX IF NOT EXISTS idx_signal_posts_message "
       "ON signal_posts(channel_id, message_id)"
     )
+
+    # ------------------------------------------------------------------
+    # Table: manual_signal_updates
+    # One row per delivered TP/TP-reached/SL-move reply for a manual /algo
+    # signal (unlike signal_posts, which is one row per root card). Tracked
+    # so the terminal close can delete every interim reply and replace them
+    # with a single summary, instead of leaving a dozen scattered bubbles
+    # behind - and so a later correction (see manual_signals #102, 2026-09)
+    # can find and fix the exact message that needs it.
+    # ------------------------------------------------------------------
+    await db.execute(
+      """
+      CREATE TABLE IF NOT EXISTS manual_signal_updates (
+        id         BIGSERIAL PRIMARY KEY,
+        signal_id  BIGINT NOT NULL REFERENCES manual_signals(id),
+        channel_id BIGINT NOT NULL,
+        message_id BIGINT NOT NULL,
+        tier       TEXT   NOT NULL,
+        kind       TEXT   NOT NULL,
+        payload    JSONB  NOT NULL,
+        created_at BIGINT NOT NULL
+      )
+      """
+    )
+    await db.execute(
+      "CREATE INDEX IF NOT EXISTS idx_manual_signal_updates_signal "
+      "ON manual_signal_updates(signal_id)"
+    )
+
     # Back-fill VIP posts for signals stored before signal_posts existed.
     await db.execute(
       """
@@ -1765,6 +1794,43 @@ async def get_signal_posts(signal_id: int) -> list[dict]:
   return [dict(row) for row in rows]
 
 
+async def insert_signal_update(
+  signal_id: int,
+  channel_id: int,
+  message_id: int,
+  tier: str,
+  kind: str,
+  payload: dict,
+) -> None:
+  """Record one delivered TP/TP-reached/SL-move reply for later cleanup.
+
+  Unlike ``insert_signal_post`` this is an append-only log - a signal fires
+  several of these over its life, all replying to the same root card.
+  """
+  async with _connect() as db:
+    await db.execute(
+      """
+      INSERT INTO manual_signal_updates
+        (signal_id, channel_id, message_id, tier, kind, payload, created_at)
+      VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7)
+      """,
+      signal_id, int(channel_id), message_id, tier, kind,
+      json.dumps(payload), int(time.time()),
+    )
+
+
+async def get_signal_updates(signal_id: int) -> list[dict]:
+  async with _connect() as db:
+    rows = await db.fetch(
+      "SELECT * FROM manual_signal_updates WHERE signal_id = $1 ORDER BY id",
+      signal_id,
+    )
+  return [
+    {**dict(row), "payload": json.loads(row["payload"])}
+    for row in rows
+  ]
+
+
 async def get_signal_by_post(
   channel_id: int,
   message_id: int,
@@ -2141,8 +2207,15 @@ async def close_leg(
   row_id: int,
   pips: int,
   frac: float | None = None,
+  entry_price: float | None = None,
 ) -> dict | None:
-  """Book one scale-out leg and close the signal when no size remains."""
+  """Book one scale-out leg and close the signal when no size remains.
+
+  ``entry_price`` is this booking leg's own actual fill price (a multi-leg
+  manual /algo group's shallow/mid/deep clips each fill at their own price)
+  — carried on the leg record so a later realized-R calc can measure risk
+  against the SAME leg its reported pips came from.
+  """
   snapshot_close: tuple[int, int, str] | None = None
   async with _connect() as db:
     async with db.transaction():
@@ -2173,7 +2246,10 @@ async def close_leg(
         }
 
       now = int(time.time())
-      legs.append({"frac": close_frac, "pips": pips, "ts": now})
+      leg_record = {"frac": close_frac, "pips": pips, "ts": now}
+      if entry_price is not None:
+        leg_record["entry_price"] = entry_price
+      legs.append(leg_record)
       new_remaining = 1.0 - sum(float(leg["frac"]) for leg in legs)
       # Journal /trade_stats uses the highest TP/pips reached, not a
       # volume-fraction weighted blend that dilutes booked targets with a
@@ -2219,6 +2295,7 @@ async def close_leg(
 async def finalize_manual_group(
   row_id: int,
   result_pips: int,
+  entry_price: float | None = None,
 ) -> dict | None:
   """Close a manual /algo signal using AutoTradeEngine.cs's own final,
   authoritative group result (its ``group_result`` event's
@@ -2248,7 +2325,10 @@ async def finalize_manual_group(
       if row is None:
         return None
       legs = json.loads(row["legs"] or "[]")
-      legs.append({"frac": 1.0, "pips": result_pips, "ts": now})
+      leg_record = {"frac": 1.0, "pips": result_pips, "ts": now}
+      if entry_price is not None:
+        leg_record["entry_price"] = entry_price
+      legs.append(leg_record)
       # Channel TP cards already booked the highest target reached; the
       # close line must never report a lower number than those legs (e.g.
       # group_realized_pips from the last shallow leg after TP4 printed

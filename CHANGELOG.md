@@ -13,6 +13,13 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- Manual algo now notifies and trails through middle TP levels omitted by a
+  broker-volume ladder; reached-but-unbooked levels never create fake ledger
+  profit or consume execution volume.
+- Manual algo TP/partial-close channel cards drop the "booked X% · remaining
+  Y%" figures — they described the whole group's cumulative fill, not the
+  leg that just booked, and read as confusing/wrong next to the per-leg pips
+  figure. Cards now just show the TP label and pips.
 - Bound missing-position close reconciliation so delayed cTrader deal history
   cannot leave a filled manual ladder stuck open forever; after five minutes
   the last protective stop finalizes the state as an explicitly unconfirmed
@@ -36,7 +43,28 @@ dated section after deployment.
   resolution and in-flight management; demand/supply coverage remains on the
   enabled Supply Demand and Order Block technique publishers.
 
+### Added
+- Manual algo channel cards now declutter on close: every interim TP/
+  reached/SL-move reply a signal accumulated during its life is deleted
+  once it's fully closed, and the root card gets one summary reply instead
+  — final pips plus the realized R, not a dozen scattered bubbles.
+  AutoTradeEngine.cs now carries the booking leg's own `EntryPrice` on
+  every take_profit/position_closed/group_result event; a multi-leg
+  group's shallow/mid/deep clips fill at different prices, and both the
+  reported pips and the R denominator are measured from the SAME leg that
+  achieved them, not the advertised entry zone.
+
 ### Changed
+- Auto-algo root card (TradePlan V8 publish/`ORDER ACTIVATED` header):
+  renamed the "POSITION ACTIVATED" header to "ORDER ACTIVATED" (backward
+  compatible — a card already live before this deploy is still recognized
+  under the old wording); dropped the "→ Executor owns mechanical entry
+  and risk enforcement." footer line; each TP now gets its own line
+  instead of one ' · '-joined Targets line; and removed live price
+  tracking entirely (`forming_price_track_loop`, the 5s Telegram-edit
+  loop, and the "Price now (live)" line) — one more source of edit-flood
+  competing with ORDER FILLED / status replies for Telegram rate limits,
+  and not something the card needs to show.
 - Scalp stop buffers now use true-range M1 ATR with a live-spread floor;
   M5 scalp structure is rebuilt on M5 cadence and persists compact levels,
   zones, M1 ATR, and discovery measurements for deterministic M1 decisions.

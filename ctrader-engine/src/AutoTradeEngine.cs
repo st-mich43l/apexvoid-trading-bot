@@ -1222,6 +1222,7 @@ public sealed class AutoTradeEngine(
         rangeId: state.RangeId,
         strategyFamily: state.StrategyFamily,
         legRealizedPips: realizedPips,
+        legEntryPrice: state.EntryPrice,
         groupInitialVolume: groupInitialVolume,
         lotSize: symbol.LotSize
       );
@@ -1250,6 +1251,7 @@ public sealed class AutoTradeEngine(
       rangeId: state.RangeId,
       strategyFamily: state.StrategyFamily,
       legRealizedPips: realizedPips,
+      legEntryPrice: state.EntryPrice,
       groupInitialVolume: groupInitialVolume,
       lotSize: symbol.LotSize
     );
@@ -1273,7 +1275,8 @@ public sealed class AutoTradeEngine(
         stream: ExecutionStream(state),
         direction: DirectionLabel(state.Direction),
         groupInitialVolume: groupInitialVolume,
-        lotSize: symbol.LotSize
+        lotSize: symbol.LotSize,
+        legEntryPrice: state.EntryPrice
       );
       await MaybeDeleteGroupPlanAsync(groupId, cancellationToken);
     }
@@ -5564,6 +5567,15 @@ public sealed class AutoTradeEngine(
     {
       return;
     }
+    var selectedOrdinalsByGroup = _states.Values
+      .Where(item => item.SymbolId == symbol.SymbolId)
+      .GroupBy(GroupId)
+      .ToDictionary(
+        group => group.Key,
+        group => (IReadOnlySet<int>)group
+          .SelectMany(item => item.TargetOrdinals ?? [])
+          .ToHashSet()
+      );
     foreach (var original in _states.Values.ToArray())
     {
       if (original.SymbolId != symbol.SymbolId)
@@ -5571,6 +5583,19 @@ public sealed class AutoTradeEngine(
         continue;
       }
       var state = _states.GetValueOrDefault(original.PositionId, original);
+      if (state.Stream == "algo_manual")
+      {
+        selectedOrdinalsByGroup.TryGetValue(
+          GroupId(state), out var groupSelectedOrdinals
+        );
+        state = await NotifySkippedManualTargetsAsync(
+          state,
+          groupSelectedOrdinals,
+          spot,
+          symbol,
+          cancellationToken
+        );
+      }
       while (
         state.RemainingVolume > 0
         && state.NextTargetIndex < state.TargetsPips.Count
@@ -5637,7 +5662,20 @@ public sealed class AutoTradeEngine(
           && state.RemainingVolume - closeVolume < RequireSymbol().MinVolume
         )
         {
-          // Would leave an invalid dust remainder — skip partial, ride Full TP.
+          // Would leave an invalid dust remainder — skip the broker close,
+          // but manual /algo still needs the level notification and normal
+          // trailing before it rides the final target.
+          if (state.Stream == "algo_manual")
+          {
+            state = await NotifyManualTargetReachedAsync(
+              state,
+              targetOrdinal,
+              target,
+              targetPips,
+              symbol,
+              cancellationToken
+            );
+          }
           _log(
             $"range-box scale-out skipped at runtime for position "
             + $"{state.PositionId}: dust remainder after TP1"
@@ -5848,6 +5886,7 @@ public sealed class AutoTradeEngine(
           rangeId: state.RangeId,
           strategyFamily: state.StrategyFamily,
           legRealizedPips: realizedPips,
+          legEntryPrice: state.EntryPrice,
           groupInitialVolume: groupInitialVolume,
           lotSize: symbol.LotSize
         );
@@ -5913,7 +5952,8 @@ public sealed class AutoTradeEngine(
               stream: ExecutionStream(state),
               direction: DirectionLabel(state.Direction),
               groupInitialVolume: groupInitialVolume,
-              lotSize: symbol.LotSize
+              lotSize: symbol.LotSize,
+              legEntryPrice: state.EntryPrice
             );
             await MaybeDeleteGroupPlanAsync(groupId, cancellationToken);
           }
@@ -5974,6 +6014,123 @@ public sealed class AutoTradeEngine(
         await store.SavePositionAsync(state, cancellationToken);
       }
     }
+  }
+
+  private async Task<AutoTradePositionState> NotifySkippedManualTargetsAsync(
+    AutoTradePositionState state,
+    IReadOnlySet<int>? groupSelectedOrdinals,
+    SpotPrice spot,
+    SymbolInfo symbol,
+    CancellationToken cancellationToken
+  )
+  {
+    if (
+      state.TargetPrices is not { Count: > 0 } targetPrices
+      || state.TargetOrdinals is not { Count: > 0 } selectedOrdinals
+      || _spotSequence <= state.FillSourceQuoteSequence
+      || (
+        state.FillSourceQuoteTimestamp > 0
+        && spot.Timestamp < state.FillSourceQuoteTimestamp
+      )
+    )
+    {
+      return state;
+    }
+    var selectedForGroup = groupSelectedOrdinals is { Count: > 0 }
+      ? groupSelectedOrdinals
+      : (IReadOnlySet<int>)selectedOrdinals.ToHashSet();
+    var finalSelectedOrdinal = selectedForGroup.Max();
+    if (finalSelectedOrdinal <= 1)
+    {
+      return state;
+    }
+    var reached = (state.ReachedTargetOrdinals ?? []).ToHashSet();
+    var exitQuote = state.Direction == TradeDirection.Buy ? spot.Bid : spot.Ask;
+    for (var ordinal = 1; ordinal < finalSelectedOrdinal; ordinal++)
+    {
+      if (
+        selectedForGroup.Contains(ordinal)
+        || reached.Contains(ordinal)
+        || ordinal > targetPrices.Count
+      )
+      {
+        continue;
+      }
+      var target = targetPrices[ordinal - 1];
+      if (!TradePlanExecutionEngine.HasReachedExitTarget(
+        DirectionLabel(state.Direction), exitQuote, target
+      ))
+      {
+        continue;
+      }
+      var targetPips = decimal.ToInt32(decimal.Round(
+        Math.Abs(target - state.EntryPrice) / PipSizeForSymbol(symbol.RedisSymbol),
+        0,
+        MidpointRounding.AwayFromZero
+      ));
+      state = await NotifyManualTargetReachedAsync(
+        state,
+        ordinal,
+        target,
+        targetPips,
+        symbol,
+        cancellationToken
+      );
+      reached.Add(ordinal);
+    }
+    return state;
+  }
+
+  private async Task<AutoTradePositionState> NotifyManualTargetReachedAsync(
+    AutoTradePositionState state,
+    int ordinal,
+    decimal target,
+    int targetPips,
+    SymbolInfo symbol,
+    CancellationToken cancellationToken
+  )
+  {
+    var reached = (state.ReachedTargetOrdinals ?? []).ToHashSet();
+    if (reached.Contains(ordinal))
+    {
+      return state;
+    }
+    reached.Add(ordinal);
+    state = state with { ReachedTargetOrdinals = reached.Order().ToArray() };
+    _states[state.PositionId] = state;
+    await PublishAsync(
+      "manual_tp_reached",
+      $"TP{ordinal} reached at {target:N2} · no broker volume booked",
+      cancellationToken,
+      state.CandidateId,
+      state.PositionId,
+      targetPips,
+      volume: 0,
+      price: target,
+      groupId: GroupId(state),
+      trancheIndex: state.TrancheIndex,
+      setup: state.Setup,
+      regime: state.Regime,
+      confluence: state.Confluence,
+      stopPips: InitialStopPips(state),
+      targetsPips: state.TargetsPips,
+      stream: ExecutionStream(state),
+      direction: DirectionLabel(state.Direction),
+      remainingVolume: state.RemainingVolume,
+      matchId: state.MatchId,
+      rangeId: state.RangeId,
+      strategyFamily: state.StrategyFamily,
+      legRealizedPips: SignedPips(state, target),
+      groupInitialVolume: GroupInitialVolume([state]),
+      lotSize: symbol.LotSize,
+      targetPrices: state.TargetPrices,
+      reasonCode: "target_reached_not_booked_volume_floor"
+    );
+    state = await MoveStopAfterTargetOrdinalAsync(
+      state, ordinal, symbol, cancellationToken
+    );
+    await store.SavePositionAsync(state, cancellationToken);
+    return state;
   }
 
   /// <summary>
@@ -6160,6 +6317,29 @@ public sealed class AutoTradeEngine(
     var move = StopTrailPlanner.Plan(
       state,
       completedTargetIndex,
+      symbol,
+      options.PipSize,
+      options.BreakEvenBufferTicks
+    );
+    if (move is null)
+    {
+      return state;
+    }
+    return await ApplyStopTrailMoveAsync(
+      state, move, targetOrdinal, cancellationToken
+    );
+  }
+
+  private async Task<AutoTradePositionState> MoveStopAfterTargetOrdinalAsync(
+    AutoTradePositionState state,
+    int targetOrdinal,
+    SymbolInfo symbol,
+    CancellationToken cancellationToken
+  )
+  {
+    var move = StopTrailPlanner.PlanForTargetOrdinal(
+      state,
+      targetOrdinal,
       symbol,
       options.PipSize,
       options.BreakEvenBufferTicks
@@ -6724,7 +6904,8 @@ public sealed class AutoTradeEngine(
           remainingVolume: 0,
           legRealizedPips: remainingVolume > 0
             ? SignedPips(state, exitEstimate)
-            : null
+            : null,
+          legEntryPrice: state.EntryPrice
         );
         var trackedGroupStillOpen = trackedGroup.Any(item =>
           !confirmedMissingPositionIds.Contains(item.PositionId)
@@ -6751,7 +6932,8 @@ public sealed class AutoTradeEngine(
             stopPips: InitialStopPips(state),
             stream: ExecutionStream(state),
             direction: DirectionLabel(state.Direction),
-            groupInitialVolume: initialVolume
+            groupInitialVolume: initialVolume,
+            legEntryPrice: state.EntryPrice
           );
           await MaybeDeleteGroupPlanAsync(groupId, cancellationToken);
         }
@@ -8947,6 +9129,7 @@ public sealed class AutoTradeEngine(
     decimal? entryLow = null,
     decimal? entryHigh = null,
     decimal? legRealizedPips = null,
+    decimal? legEntryPrice = null,
     long? groupInitialVolume = null,
     long? lotSize = null,
     string? structuralSource = null,
@@ -9084,6 +9267,7 @@ public sealed class AutoTradeEngine(
       entryLow,
       entryHigh,
       legRealizedPips,
+      legEntryPrice,
       groupInitialVolume,
       lotSize,
       structuralSource,
