@@ -14,12 +14,26 @@ public sealed class AutoTradeEngine(
   // broker snapshot. It must never repeatedly occupy the live quote/order
   // channel; retry no more than once per minute after the absence is
   // confirmed.
-  private const int CloseHistoryRetrySeconds = 60;
+  internal const int CloseHistoryRetrySeconds = 60;
   // Deal history can lag a broker position snapshot, but an unresolved
   // position must not remain in durable state forever. After this bounded
   // window, the last protective stop is retained as an explicitly
   // unconfirmed estimate so a filled ladder can be finalized.
-  internal const int CloseHistoryMaxWaitSeconds = 300;
+  //
+  // Owner-reported 2026-09-04: a manual /algo SL hit sat unreported for
+  // ~5.5 minutes end to end. Traced production logs across a full day:
+  // position_close_execution_price_fallback fired for every single
+  // confirmed-missing position (17/17) - the deal-history lookup has a
+  // measured 0% success rate against this account/broker, so the previous
+  // 300s bound was pure dead weight, never once yielding a confirmed
+  // reason. Cut to 30s - long enough for a genuine late-arriving deal
+  // record to still resolve normally (the per-attempt 500ms timeout and
+  // 60s retry cadence above are untouched, so nothing about the actual
+  // lookup got riskier), short enough that the realistic case (which is
+  // now demonstrably the deal history never showing up) stops wasting
+  // minutes of real silence before the already-reliable stop-price
+  // fallback ships the notification.
+  internal const int CloseHistoryMaxWaitSeconds = 30;
   // Owner-override commands for algo-armed/filled manual signals
   // (cancel_pending/close/move_sl). Not wired through AutoTradeOptions -
   // this stream name is a fixed constant matching Python's
