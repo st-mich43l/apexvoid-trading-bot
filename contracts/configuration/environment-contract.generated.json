@@ -1,6 +1,6 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "8183266e1dd5f12b9a6ef4bee626fa5d8bc02cd6c20db94e6c41eb51cdf811ab",
+  "configuration_contract_fingerprint_sha256": "d9df287d026b38c837f2cc46d0293b30fe2d439023c6f8370ca319108a5da0c2",
   "count": 512,
   "deprecated_alias_count": 21,
   "entries": [
@@ -6786,10 +6786,10 @@
     },
     {
       "canonical_env": "SCALPING_SIZING_MODE",
-      "default": "risk",
+      "default": "equity_table",
       "deprecated": false,
       "deprecated_aliases": [],
-      "description": "Sizing mode for scalp TradePlans only. Non-scalp lanes retain risk.sizing.mode.",
+      "description": "Sizing mode for scalp TradePlans only. Non-scalp lanes retain risk.sizing.mode. equity_table sizes a scalp trade the same flat lot as any other trade (ignores risk_percent_per_trade); risk keeps the original risk-percent-of-stop-distance formula.",
       "display_id": "config:strategies.scalping.risk.sizing_mode",
       "owner": "python",
       "path": "strategies.scalping.risk.sizing_mode",
@@ -8250,6 +8250,6 @@
   ],
   "secret_count": 9,
   "shared_with_ctrader_count": 87,
-  "source_fingerprint_sha256": "8183266e1dd5f12b9a6ef4bee626fa5d8bc02cd6c20db94e6c41eb51cdf811ab",
+  "source_fingerprint_sha256": "d9df287d026b38c837f2cc46d0293b30fe2d439023c6f8370ca319108a5da0c2",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

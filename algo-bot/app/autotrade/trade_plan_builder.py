@@ -650,10 +650,13 @@ def build_trade_plan_from_strategy_match(
     leg_ratios = (first_leg_fraction, remainder)
   entry_distribution = str(measured.get("entry_distribution") or "zone_scale")
   sizing = TradePlanSizing(
-    # Scalp sizing is bounded by SCALPING_RISK_PERCENT_PER_TRADE and uses
-    # the plan's declared worst-fill-to-stop distance in the executor. The
-    # one-position scalp cap is load-bearing: a higher cap needs a portfolio
-    # exposure budget before this per-trade mode can be expanded.
+    # Owner 2026-09-04: scalp now defaults to the same equity_table lot as
+    # any other trade (SCALPING_SIZING_MODE=equity_table) instead of the
+    # smaller risk-percent-of-stop-distance formula the "risk" mode still
+    # supports for anyone who wants it back. The one-position scalp cap
+    # (maximum_concurrent_positions) is load-bearing either way - it's what
+    # keeps total scalp exposure bounded now that a single scalp position
+    # carries normal-trade-sized risk instead of a fraction of it.
     mode=scalp_sizing_mode if is_scalp_plan else "equity_table",
     table_version="owner_equity_v1",
     entry_distribution=entry_distribution,

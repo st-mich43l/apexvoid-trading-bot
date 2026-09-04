@@ -1,7 +1,7 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "8183266e1dd5f12b9a6ef4bee626fa5d8bc02cd6c20db94e6c41eb51cdf811ab",
-  "configuration_document_fingerprint_sha256": "80512b571eb592b03e829ec6a3437b6ec5d3569627b487558abd09e202a63c1d",
+  "configuration_contract_fingerprint_sha256": "d9df287d026b38c837f2cc46d0293b30fe2d439023c6f8370ca319108a5da0c2",
+  "configuration_document_fingerprint_sha256": "f29dde822ada4cf7236b353ebc72fc9fa657c5a44c63eac69736b9aac50c5b2f",
   "counts": {
     "algorithm_constants": 57,
     "configurable": 512,
@@ -20215,24 +20215,25 @@
     {
       "algorithm_constant": false,
       "allowed_values": [
-        "risk"
+        "risk",
+        "equity_table"
       ],
       "canonical_env": "SCALPING_SIZING_MODE",
       "catalog_version": 2,
       "configurable": true,
       "constraints": {
-        "pattern": "^risk$"
+        "pattern": "^(risk|equity_table)$"
       },
-      "default": "risk",
+      "default": "equity_table",
       "default_contexts": [
         {
           "context": "python_schema",
-          "value": "risk"
+          "value": "equity_table"
         }
       ],
       "deprecated": false,
       "deprecated_aliases": [],
-      "description": "Sizing mode for scalp TradePlans only. Non-scalp lanes retain risk.sizing.mode.",
+      "description": "Sizing mode for scalp TradePlans only. Non-scalp lanes retain risk.sizing.mode. equity_table sizes a scalp trade the same flat lot as any other trade (ignores risk_percent_per_trade); risk keeps the original risk-percent-of-stop-distance formula.",
       "display_id": "config:strategies.scalping.risk.sizing_mode",
       "evidence_notes": [],
       "introduced_in": "config-catalog-v2",
@@ -21767,6 +21768,6 @@
       "validation_summary": "Pydantic required/type coercion only"
     }
   ],
-  "source_fingerprint_sha256": "8183266e1dd5f12b9a6ef4bee626fa5d8bc02cd6c20db94e6c41eb51cdf811ab",
+  "source_fingerprint_sha256": "d9df287d026b38c837f2cc46d0293b30fe2d439023c6f8370ca319108a5da0c2",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

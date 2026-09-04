@@ -132,8 +132,8 @@
     "zone_reconcile_mode": "shadow",
     "zone_scale_undersized_policy": "single_entry"
   },
-  "contract_fingerprint": "8183266e1dd5f12b9a6ef4bee626fa5d8bc02cd6c20db94e6c41eb51cdf811ab",
-  "effective_configuration_fingerprint": "cf05d314f6c75288c8c76481b0317ae5ad13bb1c8be26c889e9e40dee987a686",
+  "contract_fingerprint": "d9df287d026b38c837f2cc46d0293b30fe2d439023c6f8370ca319108a5da0c2",
+  "effective_configuration_fingerprint": "02e19477c63779751bc12f9d12793c2b2a92ce5851cfe26929867d0aa4e9294b",
   "feed": {
     "backfill_bars": 1500,
     "bar_quality_lookback": 6,
@@ -992,7 +992,7 @@
         "scalping": {
           "activation": {
             "maximum_chase_pips": "40",
-            "maximum_chase_stop_fraction": "0.15",
+            "maximum_chase_stop_fraction": "0.3",
             "rearm_distance_atr": "0.25",
             "trigger_maximum_age_bars": 2
           },
@@ -1047,7 +1047,7 @@
             "risk_fraction_per_trade": "0.1",
             "risk_percent_per_trade": "0.5",
             "session_loss_limit_r": "2",
-            "sizing_mode": "risk"
+            "sizing_mode": "equity_table"
           },
           "stop": {
             "buffer_atr": "0.1",
@@ -1974,7 +1974,7 @@
         "scalping": {
           "activation": {
             "maximum_chase_pips": "40",
-            "maximum_chase_stop_fraction": "0.15",
+            "maximum_chase_stop_fraction": "0.3",
             "rearm_distance_atr": "0.25",
             "trigger_maximum_age_bars": 2
           },
@@ -2029,7 +2029,7 @@
             "risk_fraction_per_trade": "0.1",
             "risk_percent_per_trade": "0.5",
             "session_loss_limit_r": "2",
-            "sizing_mode": "risk"
+            "sizing_mode": "equity_table"
           },
           "stop": {
             "buffer_atr": "0.1",
@@ -2926,7 +2926,7 @@
         "scalping": {
           "activation": {
             "maximum_chase_pips": "40",
-            "maximum_chase_stop_fraction": "0.15",
+            "maximum_chase_stop_fraction": "0.3",
             "rearm_distance_atr": "0.25",
             "trigger_maximum_age_bars": 2
           },
@@ -2981,7 +2981,7 @@
             "risk_fraction_per_trade": "0.1",
             "risk_percent_per_trade": "0.5",
             "session_loss_limit_r": "2",
-            "sizing_mode": "risk"
+            "sizing_mode": "equity_table"
           },
           "stop": {
             "buffer_atr": "0.1",
@@ -3890,7 +3890,7 @@
         "scalping": {
           "activation": {
             "maximum_chase_pips": "40",
-            "maximum_chase_stop_fraction": "0.15",
+            "maximum_chase_stop_fraction": "0.3",
             "rearm_distance_atr": "0.25",
             "trigger_maximum_age_bars": 2
           },
@@ -3945,7 +3945,7 @@
             "risk_fraction_per_trade": "0.1",
             "risk_percent_per_trade": "0.5",
             "session_loss_limit_r": "2",
-            "sizing_mode": "risk"
+            "sizing_mode": "equity_table"
           },
           "stop": {
             "buffer_atr": "0.1",
@@ -4838,7 +4838,7 @@
         "scalping": {
           "activation": {
             "maximum_chase_pips": "40",
-            "maximum_chase_stop_fraction": "0.15",
+            "maximum_chase_stop_fraction": "0.3",
             "rearm_distance_atr": "0.25",
             "trigger_maximum_age_bars": 2
           },
@@ -4893,7 +4893,7 @@
             "risk_fraction_per_trade": "0.1",
             "risk_percent_per_trade": "0.5",
             "session_loss_limit_r": "2",
-            "sizing_mode": "risk"
+            "sizing_mode": "equity_table"
           },
           "stop": {
             "buffer_atr": "0.1",
@@ -5655,7 +5655,7 @@
         "scalping": {
           "activation": {
             "maximum_chase_pips": "40",
-            "maximum_chase_stop_fraction": "0.15",
+            "maximum_chase_stop_fraction": "0.3",
             "rearm_distance_atr": "0.25",
             "trigger_maximum_age_bars": 2
           },
@@ -5710,7 +5710,7 @@
             "risk_fraction_per_trade": "0.1",
             "risk_percent_per_trade": "0.5",
             "session_loss_limit_r": "2",
-            "sizing_mode": "risk"
+            "sizing_mode": "equity_table"
           },
           "stop": {
             "buffer_atr": "0.1",
@@ -6500,7 +6500,7 @@
         "scalping": {
           "activation": {
             "maximum_chase_pips": "40",
-            "maximum_chase_stop_fraction": "0.15",
+            "maximum_chase_stop_fraction": "0.3",
             "rearm_distance_atr": "0.25",
             "trigger_maximum_age_bars": 2
           },
@@ -6555,7 +6555,7 @@
             "risk_fraction_per_trade": "0.1",
             "risk_percent_per_trade": "0.5",
             "session_loss_limit_r": "2",
-            "sizing_mode": "risk"
+            "sizing_mode": "equity_table"
           },
           "stop": {
             "buffer_atr": "0.1",
@@ -7315,7 +7315,7 @@
         "scalping": {
           "activation": {
             "maximum_chase_pips": "40",
-            "maximum_chase_stop_fraction": "0.15",
+            "maximum_chase_stop_fraction": "0.3",
             "rearm_distance_atr": "0.25",
             "trigger_maximum_age_bars": 2
           },
@@ -7370,7 +7370,7 @@
             "risk_fraction_per_trade": "0.1",
             "risk_percent_per_trade": "0.5",
             "session_loss_limit_r": "2",
-            "sizing_mode": "risk"
+            "sizing_mode": "equity_table"
           },
           "stop": {
             "buffer_atr": "0.1",
@@ -8142,7 +8142,7 @@
         "scalping": {
           "activation": {
             "maximum_chase_pips": "40",
-            "maximum_chase_stop_fraction": "0.15",
+            "maximum_chase_stop_fraction": "0.3",
             "rearm_distance_atr": "0.25",
             "trigger_maximum_age_bars": 2
           },
@@ -8197,7 +8197,7 @@
             "risk_fraction_per_trade": "0.1",
             "risk_percent_per_trade": "0.5",
             "session_loss_limit_r": "2",
-            "sizing_mode": "risk"
+            "sizing_mode": "equity_table"
           },
           "stop": {
             "buffer_atr": "0.1",
@@ -8949,7 +8949,7 @@
         "scalping": {
           "activation": {
             "maximum_chase_pips": "40",
-            "maximum_chase_stop_fraction": "0.15",
+            "maximum_chase_stop_fraction": "0.3",
             "rearm_distance_atr": "0.25",
             "trigger_maximum_age_bars": 2
           },
@@ -9004,7 +9004,7 @@
             "risk_fraction_per_trade": "0.1",
             "risk_percent_per_trade": "0.5",
             "session_loss_limit_r": "2",
-            "sizing_mode": "risk"
+            "sizing_mode": "equity_table"
           },
           "stop": {
             "buffer_atr": "0.1",

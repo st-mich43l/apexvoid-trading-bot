@@ -702,7 +702,7 @@ strategies:
     activation:
       trigger_maximum_age_bars: 2
       maximum_chase_pips: 40
-      maximum_chase_stop_fraction: 0.15
+      maximum_chase_stop_fraction: 0.30
       rearm_distance_atr: 0.25
     target:
       preferred_ladder_pips: 10,15,20
@@ -724,7 +724,7 @@ strategies:
       mode: live
       risk_fraction_per_trade: 0.10
       risk_percent_per_trade: 0.5
-      sizing_mode: risk
+      sizing_mode: equity_table
       maximum_concurrent_positions: 1
       maximum_session_trades: 12
       maximum_daily_trades: 30
