@@ -163,6 +163,7 @@ def detect_impulse_pullback(
   max_retracement: float = 0.75,
   preferred_low: float = 0.382,
   preferred_high: float = 0.618,
+  pullback_extreme_confirm_bars: int = 2,
 ) -> dict[str, Any] | None:
   """Measure pullback against the most recent impulse leg."""
   if df is None or len(df) < 8:
@@ -198,9 +199,28 @@ def detect_impulse_pullback(
       return None
     if abs(current - extreme) / impulse_len < 0.05:
       return {"rejected": True, "reason": "continuation_overextended", "retracement": retracement}
-    # Pullback low (BUY): lowest low from the impulse extreme through now —
-    # the scalp invalidation, not the full impulse-leg origin.
-    pullback_extreme = float(lows_w.iloc[extreme_i:].min())
+    # The trigger bar is directional confirmation, not a confirmed structural
+    # low. Keep the last confirmation bars out of the level sample and reject
+    # when the running minimum is still in that unconfirmed tail.
+    confirm_bars = max(1, int(pullback_extreme_confirm_bars))
+    confirmed_end = len(window) - confirm_bars
+    confirmed = lows_w.iloc[extreme_i:confirmed_end]
+    tail = lows_w.iloc[max(extreme_i, confirmed_end):]
+    if confirmed.empty or (not tail.empty and float(tail.min()) <= float(confirmed.min())):
+      return {
+        "rejected": True,
+        "reason": "pullback_extreme_unconfirmed",
+        "retracement": retracement,
+      }
+    pullback_extreme = float(confirmed.min())
+    impulse = window.iloc[origin_i:extreme_i + 1]
+    pullback_bars = window.iloc[extreme_i + 1:]
+    impulse_body = (impulse["close"].astype(float) - impulse["open"].astype(float)).abs()
+    impulse_range = (impulse["high"].astype(float) - impulse["low"].astype(float)).abs()
+    pullback_body = (pullback_bars["close"].astype(float) - pullback_bars["open"].astype(float)).abs()
+    mean_impulse_range = float(impulse_range.mean()) if not impulse_range.empty else 0.0
+    mean_impulse_body = float(impulse_body.mean()) if not impulse_body.empty else 0.0
+    mean_pullback_body = float(pullback_body.mean()) if not pullback_body.empty else 0.0
     return {
       "pattern": "impulse_pullback",
       "direction": "BUY",
@@ -211,6 +231,17 @@ def detect_impulse_pullback(
       "retracement": retracement,
       "preferred": preferred_low <= retracement <= preferred_high,
       "close": current,
+      "origin_index": origin_i,
+      "extreme_index": extreme_i,
+      "impulse_bars": max(1, extreme_i - origin_i + 1),
+      "pullback_bars": len(pullback_bars),
+      "impulse_len": impulse_len,
+      "body_dominance": (
+        mean_impulse_body / mean_impulse_range
+        if mean_impulse_range > 0 else 0.0
+      ),
+      "mean_impulse_body": mean_impulse_body,
+      "mean_pullback_body": mean_pullback_body,
     }
 
   highs_w = window["high"].astype(float)
@@ -237,8 +268,25 @@ def detect_impulse_pullback(
     return None
   if abs(current - extreme) / impulse_len < 0.05:
     return {"rejected": True, "reason": "continuation_overextended", "retracement": retracement}
-  # Pullback high (SELL): highest high from the impulse extreme through now.
-  pullback_extreme = float(highs_w.iloc[extreme_i:].max())
+  confirm_bars = max(1, int(pullback_extreme_confirm_bars))
+  confirmed_end = len(window) - confirm_bars
+  confirmed = highs_w.iloc[extreme_i:confirmed_end]
+  tail = highs_w.iloc[max(extreme_i, confirmed_end):]
+  if confirmed.empty or (not tail.empty and float(tail.max()) >= float(confirmed.max())):
+    return {
+      "rejected": True,
+      "reason": "pullback_extreme_unconfirmed",
+      "retracement": retracement,
+    }
+  pullback_extreme = float(confirmed.max())
+  impulse = window.iloc[origin_i:extreme_i + 1]
+  pullback_bars = window.iloc[extreme_i + 1:]
+  impulse_body = (impulse["close"].astype(float) - impulse["open"].astype(float)).abs()
+  impulse_range = (impulse["high"].astype(float) - impulse["low"].astype(float)).abs()
+  pullback_body = (pullback_bars["close"].astype(float) - pullback_bars["open"].astype(float)).abs()
+  mean_impulse_range = float(impulse_range.mean()) if not impulse_range.empty else 0.0
+  mean_impulse_body = float(impulse_body.mean()) if not impulse_body.empty else 0.0
+  mean_pullback_body = float(pullback_body.mean()) if not pullback_body.empty else 0.0
   return {
     "pattern": "impulse_pullback",
     "direction": "SELL",
@@ -249,6 +297,17 @@ def detect_impulse_pullback(
     "retracement": retracement,
     "preferred": preferred_low <= retracement <= preferred_high,
     "close": current,
+    "origin_index": origin_i,
+    "extreme_index": extreme_i,
+    "impulse_bars": max(1, origin_i - extreme_i + 1),
+    "pullback_bars": len(pullback_bars),
+    "impulse_len": impulse_len,
+    "body_dominance": (
+      mean_impulse_body / mean_impulse_range
+      if mean_impulse_range > 0 else 0.0
+    ),
+    "mean_impulse_body": mean_impulse_body,
+    "mean_pullback_body": mean_pullback_body,
   }
 
 
