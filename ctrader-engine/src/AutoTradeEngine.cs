@@ -390,7 +390,14 @@ public sealed class AutoTradeEngine(
             () => ReconcileAllBoundSymbolsAsync(cancellationToken),
             cancellationToken
           );
-          nextReconcile = _clock().AddSeconds(15);
+          // Owner-reported 2026-09-04: a stop-loss that closes without a
+          // live broker push (only ever detected here, via the missing-
+          // snapshot quorum below) sat unreported for up to ~30-45s at the
+          // old 15s cadence - two PositionMissingConfirmations spaced this
+          // far apart. 5s keeps the same 2-confirmation safety margin (a
+          // single transient snapshot gap still never terminalises an open
+          // position) while cutting that floor to roughly 5-10s.
+          nextReconcile = _clock().AddSeconds(5);
         }
         // Owner-override commands (/trade_close, /trade_sl, /trade_cancel on
         // an algo-armed/filled signal) share this loop/gate/thread rather
