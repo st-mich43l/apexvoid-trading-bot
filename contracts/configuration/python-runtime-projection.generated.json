@@ -1,6 +1,6 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "d9fc5a863b579b9bbf3ec96a21f0043b78a791c286daa645e6d8f91041b48b60",
+  "configuration_contract_fingerprint_sha256": "2d2146a4c50ede784894cdec04f5252c58d2e961da818fb80f95bb7507813275",
   "excluded_ctrader_only_count": 49,
   "excluded_paths": [
     "bootstrap.ctrader.connection.host",
@@ -53,7 +53,7 @@
     "risk.sizing.add_require_risk_free",
     "risk.sizing.risk_pct"
   ],
-  "included_leaf_count": 517,
+  "included_leaf_count": 522,
   "included_paths": [
     "actionability.contested_corridor.gap_atr",
     "actionability.counter_bias.allowed",
@@ -122,6 +122,9 @@
     "analysis.fibonacci.deep_premium",
     "analysis.fibonacci.enabled",
     "analysis.fibonacci.epsilon_atr",
+    "analysis.flip_zone.accept_bars",
+    "analysis.flip_zone.band_body_fraction",
+    "analysis.flip_zone.max_break_age_bars",
     "analysis.levels.equal_tol_atr",
     "analysis.levels.level_cluster_atr",
     "analysis.levels.minimum_key_touches",
@@ -534,10 +537,13 @@
     "strategies.scalping.risk.maximum_session_trades",
     "strategies.scalping.risk.mode",
     "strategies.scalping.risk.risk_fraction_per_trade",
+    "strategies.scalping.risk.risk_percent_per_trade",
     "strategies.scalping.risk.session_loss_limit_r",
+    "strategies.scalping.risk.sizing_mode",
     "strategies.scalping.stop.buffer_atr",
     "strategies.scalping.stop.maximum_pips",
     "strategies.scalping.stop.minimum_pips",
+    "strategies.scalping.stop.minimum_stop_spread_multiple",
     "strategies.scalping.target.minimum_net_target_pips",
     "strategies.scalping.target.preferred_ladder_pips",
     "strategies.selection.box_breakout_enabled",
@@ -567,7 +573,6 @@
     "strategies.trend.level_buffer_atr",
     "strategies.trend.min_height_atr",
     "strategies.trend.minimum_bos",
-    "strategies.trend.pullback_enabled",
     "strategies.zone.demand.enabled",
     "strategies.zone.enabled",
     "strategies.zone.flip.enabled",
@@ -576,6 +581,6 @@
   "included_secret_count": 6,
   "included_shared_field_count": 96,
   "projection_model": "app.configuration.models.python_runtime.PythonRuntimeConfig",
-  "source_fingerprint_sha256": "d9fc5a863b579b9bbf3ec96a21f0043b78a791c286daa645e6d8f91041b48b60",
+  "source_fingerprint_sha256": "2d2146a4c50ede784894cdec04f5252c58d2e961da818fb80f95bb7507813275",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

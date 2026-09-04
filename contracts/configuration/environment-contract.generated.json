@@ -1,7 +1,7 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "d9fc5a863b579b9bbf3ec96a21f0043b78a791c286daa645e6d8f91041b48b60",
-  "count": 499,
+  "configuration_contract_fingerprint_sha256": "2d2146a4c50ede784894cdec04f5252c58d2e961da818fb80f95bb7507813275",
+  "count": 504,
   "deprecated_alias_count": 21,
   "entries": [
     {
@@ -1954,7 +1954,7 @@
     },
     {
       "canonical_env": "AUTO_TRADE_RANGE_MAX_RISK_MULTIPLIER",
-      "default": 2.0,
+      "default": 1.5,
       "deprecated": false,
       "deprecated_aliases": [],
       "description": "Controls  (multiplier).",
@@ -3358,22 +3358,6 @@
       "shared_with_ctrader": false,
       "type": "float",
       "unit": "pips"
-    },
-    {
-      "canonical_env": "AUTO_TRADE_TREND_PULLBACK_ENABLED",
-      "default": true,
-      "deprecated": false,
-      "deprecated_aliases": [],
-      "description": "Controls .",
-      "display_id": "config:strategies.trend.pullback_enabled",
-      "owner": "python",
-      "path": "strategies.trend.pullback_enabled",
-      "replacement_path": null,
-      "required": false,
-      "secret": false,
-      "shared_with_ctrader": false,
-      "type": "bool",
-      "unit": "boolean"
     },
     {
       "canonical_env": "AUTO_TRADE_TREND_STOP_MAX_PIPS",
@@ -4841,6 +4825,54 @@
       "shared_with_ctrader": false,
       "type": "float",
       "unit": "atr"
+    },
+    {
+      "canonical_env": "FLIP_ZONE_ACCEPT_BARS",
+      "default": null,
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Consecutive accepted closes required before a key-level break mints a flip zone. None inherits analysis.breakout.accept_bars.",
+      "display_id": "config:analysis.flip_zone.accept_bars",
+      "owner": "python",
+      "path": "analysis.flip_zone.accept_bars",
+      "replacement_path": null,
+      "required": false,
+      "secret": false,
+      "shared_with_ctrader": false,
+      "type": "Optional[int]",
+      "unit": "bars"
+    },
+    {
+      "canonical_env": "FLIP_ZONE_BAND_BODY_FRACTION",
+      "default": 0.5,
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Minimum flip-zone width as a fraction of the break candle body.",
+      "display_id": "config:analysis.flip_zone.band_body_fraction",
+      "owner": "python",
+      "path": "analysis.flip_zone.band_body_fraction",
+      "replacement_path": null,
+      "required": false,
+      "secret": false,
+      "shared_with_ctrader": false,
+      "type": "float",
+      "unit": "fraction"
+    },
+    {
+      "canonical_env": "FLIP_ZONE_MAX_BREAK_AGE_BARS",
+      "default": 48,
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Maximum age of a structure break that may mint a flip zone.",
+      "display_id": "config:analysis.flip_zone.max_break_age_bars",
+      "owner": "python",
+      "path": "analysis.flip_zone.max_break_age_bars",
+      "replacement_path": null,
+      "required": false,
+      "secret": false,
+      "shared_with_ctrader": false,
+      "type": "int",
+      "unit": "bars"
     },
     {
       "canonical_env": "GIT_SHA",
@@ -6465,6 +6497,22 @@
       "unit": "multiplier"
     },
     {
+      "canonical_env": "SCALPING_MINIMUM_STOP_SPREAD_MULTIPLE",
+      "default": 4.0,
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Reject a structural stop tighter than this multiple of the live spread; never widen structure to satisfy the cost floor.",
+      "display_id": "config:strategies.scalping.stop.minimum_stop_spread_multiple",
+      "owner": "python",
+      "path": "strategies.scalping.stop.minimum_stop_spread_multiple",
+      "replacement_path": null,
+      "required": false,
+      "secret": false,
+      "shared_with_ctrader": false,
+      "type": "float",
+      "unit": "multiplier"
+    },
+    {
       "canonical_env": "SCALPING_MODE",
       "default": "live",
       "deprecated": false,
@@ -6625,6 +6673,22 @@
       "unit": "enum"
     },
     {
+      "canonical_env": "SCALPING_RISK_PERCENT_PER_TRADE",
+      "default": 0.5,
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Per-scalp account-risk budget in percent. Used only to size scalp TradePlans; risk_fraction_per_trade remains telemetry.",
+      "display_id": "config:strategies.scalping.risk.risk_percent_per_trade",
+      "owner": "python",
+      "path": "strategies.scalping.risk.risk_percent_per_trade",
+      "replacement_path": null,
+      "required": false,
+      "secret": false,
+      "shared_with_ctrader": false,
+      "type": "float",
+      "unit": "percent"
+    },
+    {
       "canonical_env": "SCALPING_SESSION_LOSS_LIMIT_R",
       "default": 2.0,
       "deprecated": false,
@@ -6639,6 +6703,22 @@
       "shared_with_ctrader": false,
       "type": "float",
       "unit": "multiplier"
+    },
+    {
+      "canonical_env": "SCALPING_SIZING_MODE",
+      "default": "risk",
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Sizing mode for scalp TradePlans only. Non-scalp lanes retain risk.sizing.mode.",
+      "display_id": "config:strategies.scalping.risk.sizing_mode",
+      "owner": "python",
+      "path": "strategies.scalping.risk.sizing_mode",
+      "replacement_path": null,
+      "required": false,
+      "secret": false,
+      "shared_with_ctrader": false,
+      "type": "str",
+      "unit": "enum"
     },
     {
       "canonical_env": "SCALPING_STOP_BUFFER_ATR",
@@ -8042,6 +8122,6 @@
   ],
   "secret_count": 9,
   "shared_with_ctrader_count": 87,
-  "source_fingerprint_sha256": "d9fc5a863b579b9bbf3ec96a21f0043b78a791c286daa645e6d8f91041b48b60",
+  "source_fingerprint_sha256": "2d2146a4c50ede784894cdec04f5252c58d2e961da818fb80f95bb7507813275",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

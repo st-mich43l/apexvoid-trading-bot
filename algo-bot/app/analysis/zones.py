@@ -74,6 +74,7 @@ SESSION_LEVEL_SCORE = 2.0
 PD_POSITION_SCORE = 2.0
 GRAB_A_SCORE = 2.0
 TRENDLINE_SCORE = 1.5
+_FLIP_EPS = 1e-9
 
 log = logging.getLogger(__name__)
 
@@ -185,10 +186,46 @@ def breaker_blocks(order_blocks: list[Zone], df: pd.DataFrame) -> list[Zone]:
   return zones
 
 
-def flip_zones(levels: list[Level], breaks: list[Break]) -> list[Zone]:
+def flip_zones(
+  levels: list[Level],
+  breaks: list[Break],
+  df: pd.DataFrame,
+  *,
+  accept_bars: int = 2,
+  max_break_age_bars: int | None = None,
+  band_body_fraction: float = 0.5,
+  metric_sink=None,
+  symbol: str | None = None,
+  timeframe: str | None = None,
+) -> list[Zone]:
+  required = max(1, int(accept_bars))
+  closes = df["close"].astype(float).tolist()
+
+  def _accepted(index: int, level_price: float, direction: str) -> bool:
+    if index < 0 or index + required > len(closes):
+      return False
+    for offset in range(required):
+      close = closes[index + offset]
+      if direction == "up" and not close > level_price:
+        return False
+      if direction == "down" and not close < level_price:
+        return False
+    return True
+
   zones: list[Zone] = []
   seen: set[tuple[float, str]] = set()
   for item in breaks:
+    if (
+      max_break_age_bars is not None
+      and len(closes) - 1 - item.index > int(max_break_age_bars)
+    ):
+      if metric_sink is not None:
+        metric_sink("flip_zone_break_expired", symbol, {"tf": timeframe})
+      continue
+    if not _accepted(item.index, item.level, item.direction):
+      if metric_sink is not None:
+        metric_sink("flip_zone_break_not_accepted", symbol, {"tf": timeframe})
+      continue
     for level in levels:
       if abs(item.level - level.price) > max(level.band, 0.0):
         continue
@@ -196,17 +233,49 @@ def flip_zones(levels: list[Level], breaks: list[Break]) -> list[Zone]:
       key = (round(level.price, 6), side)
       if key in seen:
         continue
-      seen.add(key)
-      zones.append(Zone(
-        bottom=level.price - level.band,
-        top=level.price + level.band,
+      band = max(level.band, 0.0)
+      if item.direction == "up":
+        bottom = level.price
+        top = level.price + band
+      else:
+        bottom = level.price - band
+        top = level.price
+      row = df.iloc[item.index]
+      body = abs(float(row["close"]) - float(row["open"]))
+      width = max(top - bottom, body * float(band_body_fraction))
+      if item.direction == "up":
+        top = bottom + width
+      else:
+        bottom = top - width
+      zone = Zone(
+        bottom=bottom,
+        top=top,
         side=side,
         origin_index=item.index,
         created_ts=item.ts,
         source="flip_zone",
         break_kind=item.kind,
         break_index=item.index,
-      ))
+      )
+      invalid_anchor = (
+        not math.isfinite(zone.bottom)
+        or not math.isfinite(zone.top)
+        or (
+          side == "demand"
+          and zone.bottom < level.price - _FLIP_EPS
+        )
+        or (
+          side == "supply"
+          and zone.top > level.price + _FLIP_EPS
+        )
+        or zone.top - zone.bottom <= 0
+      )
+      if invalid_anchor:
+        if metric_sink is not None:
+          metric_sink("flip_zone_anchor_violation", symbol, {"tf": timeframe})
+        continue
+      seen.add(key)
+      zones.append(zone)
   return zones
 
 

@@ -192,6 +192,9 @@ class AnalysisSettings:
   breakout_buffer_atr: float = 0.1
   breakout_accept_bars: int = 2
   breakout_max_age_bars: int = 6
+  flip_zone_accept_bars: int | None = None
+  flip_zone_max_break_age_bars: int = 48
+  flip_band_body_fraction: float = 0.5
   range_scalp_lookback: int = 36
   range_scalp_cluster_atr: float = 0.20
   range_scalp_min_touches: int = 3
@@ -431,7 +434,22 @@ def _analyze_tf(
   sd_zones = breaker_blocks(sd_zones, df)
   ob_zones = order_blocks(df, legs, breaks, settings.zone_width)
   ob_zones = breaker_blocks(ob_zones, df)
-  flip = flip_zones(levels, breaks)
+  flip_accept = (
+    settings.breakout_accept_bars
+    if settings.flip_zone_accept_bars is None
+    else settings.flip_zone_accept_bars
+  )
+  flip = flip_zones(
+    levels,
+    breaks,
+    df,
+    accept_bars=flip_accept,
+    max_break_age_bars=settings.flip_zone_max_break_age_bars,
+    band_body_fraction=settings.flip_band_body_fraction,
+    metric_sink=metric_sink,
+    symbol=symbol,
+    timeframe=timeframe,
+  )
   fvg_zones = fvg(df)
   pools = liquidity_pools(
     swings,
