@@ -665,6 +665,23 @@ async def do_tp(ctx: dict) -> dict:
   }
 
 
+async def do_tp_reached(ctx: dict) -> dict:
+  """Notify a reached ladder level without pretending volume was booked."""
+  from app.persistence import redis_state
+
+  if await redis_state.tp_ordinal_already_reached(
+    ctx["sid"], int(ctx["tp_number"]),
+  ):
+    return {"action": "tp_reached", "ok": False, "error": "already_reached"}
+  result = await do_tp(ctx)
+  if result.get("ok"):
+    await redis_state.mark_tp_ordinal_reached(
+      ctx["sid"], int(ctx["tp_number"]),
+    )
+    result["action"] = "tp_reached"
+  return result
+
+
 def render_result(
   result: dict,
   symbol: str,
@@ -733,6 +750,17 @@ def render_result(
     return (
       f"🎯 {seq}TP{result['tp_number']} "
       f"+{result['pips']} pips{_win_wings(result['pips'])}"
+    )
+  if action == "tp_reached":
+    seq = f"#{result['seq']} " if tier == "vip" else ""
+    if (
+      tier == "public"
+      and not runtime_config.delivery.telegram.public_show_pips
+    ):
+      return f"🎯 TP{result['tp_number']} reached · no volume booked"
+    return (
+      f"🎯 {seq}TP{result['tp_number']} reached · "
+      f"+{result['pips']} pips · no volume booked"
     )
   if action == "sl":
     seq = f"#{_display_seq(result['row'])} " if tier == "vip" else ""

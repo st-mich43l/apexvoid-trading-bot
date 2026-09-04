@@ -13,6 +13,9 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- Manual algo now notifies and trails through middle TP levels omitted by a
+  broker-volume ladder; reached-but-unbooked levels never create fake ledger
+  profit or consume execution volume.
 - Bound missing-position close reconciliation so delayed cTrader deal history
   cannot leave a filled manual ladder stuck open forever; after five minutes
   the last protective stop finalizes the state as an explicitly unconfirmed

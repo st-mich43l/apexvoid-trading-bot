@@ -379,6 +379,24 @@ async def mark_tp_ordinal_booked(row_id: int, ordinal: int) -> None:
   await client.expire(key, _PROGRESS_TTL)
 
 
+def _tp_reached_ordinals_key(row_id: int) -> str:
+  return f"manual_signal:tp_reached:{row_id}"
+
+
+async def tp_ordinal_already_reached(row_id: int, ordinal: int) -> bool:
+  """Deduplicate notify-only TP progress separately from booked TPs."""
+  return bool(
+    await _get_client().sismember(_tp_reached_ordinals_key(row_id), ordinal)
+  )
+
+
+async def mark_tp_ordinal_reached(row_id: int, ordinal: int) -> None:
+  client = _get_client()
+  key = _tp_reached_ordinals_key(row_id)
+  await client.sadd(key, ordinal)
+  await client.expire(key, _PROGRESS_TTL)
+
+
 async def set_runner_pips(row_id: int, pips: int) -> None:
   """Advance the best post-TP profit alert (monotonic in pips)."""
   client = _get_client()

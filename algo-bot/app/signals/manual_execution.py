@@ -759,6 +759,31 @@ async def _handle_take_profit(event: dict, signal_id: int) -> None:
   await trade_ops.post_result(result, sig.get("symbol", "XAU"))
 
 
+async def _handle_tp_reached(event: dict, signal_id: int) -> None:
+  """Fan out a ladder level that was reached but could not be booked."""
+  from app.signals import trade_ops
+
+  sig = await get_manual_signal(signal_id)
+  target_pips = event.get("target_pips")
+  if sig is None or target_pips is None:
+    return
+  reached = _tp_ordinal_reached(sig, target_pips)
+  if not reached:
+    log.warning(
+      "manual-algo tp_reached could not resolve target signal=%s target_pips=%s",
+      signal_id,
+      target_pips,
+    )
+    return
+  result = await trade_ops.do_tp_reached({
+    "sid": signal_id,
+    "symbol": sig.get("symbol", "XAU"),
+    "tp_number": reached,
+    "pips": int(target_pips),
+  })
+  await trade_ops.post_result(result, sig.get("symbol", "XAU"))
+
+
 async def _handle_position_closed(event: dict, signal_id: int) -> None:
   """A broker-detected close (stop loss, or an unconfirmed disappearance)
   for ONE entry leg. A manual /algo signal's entry can be several
@@ -1077,6 +1102,8 @@ async def _handle_event(
     return  # not a manual-algo position this loop is tracking
   if event_type == "take_profit":
     await _handle_take_profit(event, signal_id)
+  elif event_type == "manual_tp_reached":
+    await _handle_tp_reached(event, signal_id)
   elif event_type == "position_closed":
     await _handle_position_closed(event, signal_id)
     if not (event.get("remaining_volume") or 0) > 0:

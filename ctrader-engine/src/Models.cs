@@ -370,7 +370,11 @@ public sealed record AutoTradePositionState(
   // (worst-case) entry. Mid/deep clips keep their own actual fill for PnL,
   // but lifecycle risk metadata must retain this group-level initial stop
   // distance instead of shrinking it as deeper clips fill.
-  decimal? InitialRiskStopPips = null
+  decimal? InitialRiskStopPips = null,
+  // Manual ladders can omit broker-untradeable middle targets. Keep those
+  // levels durable once price has reached them so notification-only progress
+  // and trailing are emitted exactly once across restarts.
+  IReadOnlyList<int>? ReachedTargetOrdinals = null
 );
 
 public sealed record RedisClaimPayload(
