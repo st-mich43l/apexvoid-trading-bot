@@ -64,6 +64,17 @@ def render_entry(sig: dict, tier: str) -> str:
   action = sig["action"]
   entry_reference = rr_entry(sig)
   risk = abs(entry_reference - sig["sl"])
+  # Live 2026-09-04: editing the pinned card after a stop trail re-ran this
+  # with the now-current (near-BE) sl, and R-multiples are TP-distance /
+  # risk - as risk shrinks toward zero the ratio blows up into nonsense
+  # (a 343.8R line went out live). Each TP's R must stay pinned to the
+  # ORIGINAL risk, same convention trade_ops._achieved_rr already uses for
+  # the close line - only the SL/risk display itself should track the live
+  # trail.
+  original_sl = sig.get("original_sl")
+  if original_sl is None:
+    original_sl = sig["sl"]
+  original_risk = abs(entry_reference - original_sl)
   seq = f"  #{sig['daily_seq']}" if tier == "vip" else ""
   action_icon = "📈" if action == "BUY" else "📉"
   lines = [
@@ -84,7 +95,7 @@ def render_entry(sig: dict, tier: str) -> str:
   for index, tp in enumerate(sig.get("tps") or []):
     lines.append(
       f"💰 TP{index + 1}:   <b>{_price(tp, symbol)}</b>  ·  "
-      f"<b>{_rr(tp, entry_reference, risk)}</b>"
+      f"<b>{_rr(tp, entry_reference, original_risk)}</b>"
     )
   if sig.get("guard_text"):
     lines.extend(["", sig["guard_text"]])
