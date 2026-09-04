@@ -47,9 +47,12 @@ dated section after deployment.
 - Manual algo channel cards now declutter on close: every interim TP/
   reached/SL-move reply a signal accumulated during its life is deleted
   once it's fully closed, and the root card gets one summary reply instead
-  — final pips plus the realized R (`net pips / risk against the stop as
-  originally placed`, same convention as the `/trade_stats`-style reports),
-  not a dozen scattered bubbles.
+  — final pips plus the realized R, not a dozen scattered bubbles.
+  AutoTradeEngine.cs now carries the booking leg's own `EntryPrice` on
+  every take_profit/position_closed/group_result event; a multi-leg
+  group's shallow/mid/deep clips fill at different prices, and both the
+  reported pips and the R denominator are measured from the SAME leg that
+  achieved them, not the advertised entry zone.
 
 ### Changed
 - Scalp stop buffers now use true-range M1 ATR with a live-spread floor;

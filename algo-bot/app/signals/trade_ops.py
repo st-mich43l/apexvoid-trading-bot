@@ -32,6 +32,7 @@ from app.signals.broadcast import (
 )
 from app.signals.fx_manual_algo import uses_entry_price_display
 from app.bot.keyboards import build_tp_close_kb
+from app.signals import pips_format
 from app.signals.pips_format import wing_icons
 from app.persistence.redis_state import clear_sl_alert, mark_tp_alert
 from app.core.symbols import digits_for, channel_for_symbol, pip_for
@@ -80,6 +81,7 @@ async def _execute_close(
   frac: float | None,
   reply_to: int | None = None,
   tp_number: int | None = None,
+  entry_price: float | None = None,
 ) -> dict:
   """The actual Postgres booking for a close - shared by the direct
   (non-algo, or algo-not-yet-filled) path and the broker-confirmed algo
@@ -90,8 +92,13 @@ async def _execute_close(
   profit already resolves this from the fill's target_pips), is surfaced
   in the result so render_result can label the channel card the same way
   a watcher-detected TP does, instead of a bare, unlabeled close.
+
+  ``entry_price``, when known (the booking leg's own actual fill), is
+  carried onto the leg record so a later realized-R calc measures risk
+  against the SAME leg its pips came from - see pips_format.
+  legs_achieved_entry_price.
   """
-  row = await close_leg(sid, pips, frac)
+  row = await close_leg(sid, pips, frac, entry_price=entry_price)
   if row is None:
     return {"action": "close", "ok": False, "error": "not_open"}
   result = {
@@ -114,7 +121,9 @@ async def _execute_close(
   return result
 
 
-async def _execute_group_close(sid: int, symbol: str, pips: int) -> dict:
+async def _execute_group_close(
+  sid: int, symbol: str, pips: int, entry_price: float | None = None,
+) -> dict:
   """The manual-algo group-close counterpart to ``_execute_close`` - used
   only by app.signals.manual_execution._handle_group_result, once
   AutoTradeEngine.cs confirms a manual /algo signal's entire entry-leg
@@ -125,8 +134,12 @@ async def _execute_group_close(sid: int, symbol: str, pips: int) -> dict:
   "pure loss = last leg's own pips" rule is right for one entry's exit
   ladder but silently drops every sibling leg's result for several
   independently-priced entry legs (see finalize_manual_group docstring).
+
+  ``entry_price`` is the closing leg's own fill (the group_result event's
+  leg_entry_price) - a fallback R reference when no earlier TP leg was
+  ever booked (a pure stop-out has no other leg record to anchor R to).
   """
-  row = await finalize_manual_group(sid, pips)
+  row = await finalize_manual_group(sid, pips, entry_price=entry_price)
   if row is None:
     return {"action": "close", "ok": False, "error": "not_open"}
   net = row["net"]
@@ -864,20 +877,28 @@ _TRACKED_UPDATE_KINDS = {"close", "tp_reached", "sl"}
 
 
 def _achieved_rr(sig: dict, net_pips: int) -> str | None:
-  """Realized R for a just-closed signal - same convention as reports.py's
-  ``_round_lines``: risk measured against the stop as originally placed
-  (a trailed/BE stop must not shrink the denominator), entry at the zone
-  midpoint. Kept identical so this number matches what a later /trade_stats
-  -style report shows for the same trade.
+  """Realized R for a just-closed signal.
+
+  A multi-leg manual /algo group fills shallow/mid/deep clips at different
+  prices - ``net_pips`` (legs_achieved_pips) already reports whichever
+  leg's own booking reached the deepest/furthest, so the risk denominator
+  must be measured from that SAME leg's own entry, not the advertised
+  zone. legs_achieved_entry_price returns exactly that (None for an older
+  signal with no per-leg entry_price recorded), in which case this falls
+  back to reports.py's ``_round_lines`` convention: risk against the stop
+  as originally placed (a trailed/BE stop must not shrink the
+  denominator), entry at the zone midpoint.
   """
-  entry_end = sig.get("entry_end")
-  if entry_end is None:
-    entry_end = sig["entry"]
-  midpoint = (sig["entry"] + entry_end) / 2
   original_sl = sig.get("original_sl")
   if original_sl is None:
     original_sl = sig["sl"]
-  risk_price = abs(midpoint - original_sl)
+  entry = pips_format.legs_achieved_entry_price(sig.get("legs") or [])
+  if entry is None:
+    entry_end = sig.get("entry_end")
+    if entry_end is None:
+      entry_end = sig["entry"]
+    entry = (sig["entry"] + entry_end) / 2
+  risk_price = abs(entry - original_sl)
   if risk_price <= 0:
     return None
   risk_pips = risk_price / pip_for(sig.get("symbol", "XAU"))

@@ -755,6 +755,7 @@ async def _handle_take_profit(event: dict, signal_id: int) -> None:
   result = await trade_ops._execute_close(
     signal_id, sig.get("symbol", "XAU"), pips, frac,
     tp_number=reached,
+    entry_price=event.get("leg_entry_price"),
   )
   await trade_ops.post_result(result, sig.get("symbol", "XAU"))
 
@@ -815,6 +816,7 @@ async def _handle_position_closed(event: dict, signal_id: int) -> None:
   pips, frac = _leg_close_pips_and_frac(sig, event, float(price))
   result = await trade_ops._execute_close(
     signal_id, sig.get("symbol", "XAU"), pips, frac,
+    entry_price=event.get("leg_entry_price"),
   )
   await trade_ops.post_result(result, sig.get("symbol", "XAU"))
 
@@ -878,7 +880,10 @@ async def _handle_group_result(event: dict, signal_id: int) -> None:
   sig = await get_manual_signal(signal_id)
   symbol = (sig or {}).get("symbol", "XAU")
   resolved = await _resolve_group_close_pips(signal_id, float(pips))
-  result = await trade_ops._execute_group_close(signal_id, symbol, resolved)
+  result = await trade_ops._execute_group_close(
+    signal_id, symbol, resolved,
+    entry_price=event.get("leg_entry_price"),
+  )
   await trade_ops.post_result(result, symbol)
 
 
@@ -909,6 +914,7 @@ async def _handle_manual_closed(
   pips, frac = _leg_close_pips_and_frac(sig, event, float(price))
   result = await trade_ops._execute_close(
     signal_id, sig.get("symbol", "XAU"), pips, frac,
+    entry_price=event.get("leg_entry_price"),
   )
   await trade_ops.post_result(result, sig.get("symbol", "XAU"))
 

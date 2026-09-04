@@ -2207,8 +2207,15 @@ async def close_leg(
   row_id: int,
   pips: int,
   frac: float | None = None,
+  entry_price: float | None = None,
 ) -> dict | None:
-  """Book one scale-out leg and close the signal when no size remains."""
+  """Book one scale-out leg and close the signal when no size remains.
+
+  ``entry_price`` is this booking leg's own actual fill price (a multi-leg
+  manual /algo group's shallow/mid/deep clips each fill at their own price)
+  — carried on the leg record so a later realized-R calc can measure risk
+  against the SAME leg its reported pips came from.
+  """
   snapshot_close: tuple[int, int, str] | None = None
   async with _connect() as db:
     async with db.transaction():
@@ -2239,7 +2246,10 @@ async def close_leg(
         }
 
       now = int(time.time())
-      legs.append({"frac": close_frac, "pips": pips, "ts": now})
+      leg_record = {"frac": close_frac, "pips": pips, "ts": now}
+      if entry_price is not None:
+        leg_record["entry_price"] = entry_price
+      legs.append(leg_record)
       new_remaining = 1.0 - sum(float(leg["frac"]) for leg in legs)
       # Journal /trade_stats uses the highest TP/pips reached, not a
       # volume-fraction weighted blend that dilutes booked targets with a
@@ -2285,6 +2295,7 @@ async def close_leg(
 async def finalize_manual_group(
   row_id: int,
   result_pips: int,
+  entry_price: float | None = None,
 ) -> dict | None:
   """Close a manual /algo signal using AutoTradeEngine.cs's own final,
   authoritative group result (its ``group_result`` event's
@@ -2314,7 +2325,10 @@ async def finalize_manual_group(
       if row is None:
         return None
       legs = json.loads(row["legs"] or "[]")
-      legs.append({"frac": 1.0, "pips": result_pips, "ts": now})
+      leg_record = {"frac": 1.0, "pips": result_pips, "ts": now}
+      if entry_price is not None:
+        leg_record["entry_price"] = entry_price
+      legs.append(leg_record)
       # Channel TP cards already booked the highest target reached; the
       # close line must never report a lower number than those legs (e.g.
       # group_realized_pips from the last shallow leg after TP4 printed

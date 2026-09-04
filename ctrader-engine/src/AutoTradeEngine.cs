@@ -1222,6 +1222,7 @@ public sealed class AutoTradeEngine(
         rangeId: state.RangeId,
         strategyFamily: state.StrategyFamily,
         legRealizedPips: realizedPips,
+        legEntryPrice: state.EntryPrice,
         groupInitialVolume: groupInitialVolume,
         lotSize: symbol.LotSize
       );
@@ -1250,6 +1251,7 @@ public sealed class AutoTradeEngine(
       rangeId: state.RangeId,
       strategyFamily: state.StrategyFamily,
       legRealizedPips: realizedPips,
+      legEntryPrice: state.EntryPrice,
       groupInitialVolume: groupInitialVolume,
       lotSize: symbol.LotSize
     );
@@ -1273,7 +1275,8 @@ public sealed class AutoTradeEngine(
         stream: ExecutionStream(state),
         direction: DirectionLabel(state.Direction),
         groupInitialVolume: groupInitialVolume,
-        lotSize: symbol.LotSize
+        lotSize: symbol.LotSize,
+        legEntryPrice: state.EntryPrice
       );
       await MaybeDeleteGroupPlanAsync(groupId, cancellationToken);
     }
@@ -5883,6 +5886,7 @@ public sealed class AutoTradeEngine(
           rangeId: state.RangeId,
           strategyFamily: state.StrategyFamily,
           legRealizedPips: realizedPips,
+          legEntryPrice: state.EntryPrice,
           groupInitialVolume: groupInitialVolume,
           lotSize: symbol.LotSize
         );
@@ -5948,7 +5952,8 @@ public sealed class AutoTradeEngine(
               stream: ExecutionStream(state),
               direction: DirectionLabel(state.Direction),
               groupInitialVolume: groupInitialVolume,
-              lotSize: symbol.LotSize
+              lotSize: symbol.LotSize,
+              legEntryPrice: state.EntryPrice
             );
             await MaybeDeleteGroupPlanAsync(groupId, cancellationToken);
           }
@@ -6899,7 +6904,8 @@ public sealed class AutoTradeEngine(
           remainingVolume: 0,
           legRealizedPips: remainingVolume > 0
             ? SignedPips(state, exitEstimate)
-            : null
+            : null,
+          legEntryPrice: state.EntryPrice
         );
         var trackedGroupStillOpen = trackedGroup.Any(item =>
           !confirmedMissingPositionIds.Contains(item.PositionId)
@@ -6926,7 +6932,8 @@ public sealed class AutoTradeEngine(
             stopPips: InitialStopPips(state),
             stream: ExecutionStream(state),
             direction: DirectionLabel(state.Direction),
-            groupInitialVolume: initialVolume
+            groupInitialVolume: initialVolume,
+            legEntryPrice: state.EntryPrice
           );
           await MaybeDeleteGroupPlanAsync(groupId, cancellationToken);
         }
@@ -9122,6 +9129,7 @@ public sealed class AutoTradeEngine(
     decimal? entryLow = null,
     decimal? entryHigh = null,
     decimal? legRealizedPips = null,
+    decimal? legEntryPrice = null,
     long? groupInitialVolume = null,
     long? lotSize = null,
     string? structuralSource = null,
@@ -9259,6 +9267,7 @@ public sealed class AutoTradeEngine(
       entryLow,
       entryHigh,
       legRealizedPips,
+      legEntryPrice,
       groupInitialVolume,
       lotSize,
       structuralSource,
