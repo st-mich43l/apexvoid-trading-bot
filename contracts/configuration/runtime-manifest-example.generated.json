@@ -133,7 +133,7 @@
     "zone_scale_undersized_policy": "single_entry"
   },
   "contract_fingerprint": "734a6325ae3bf9c41917fe74dcd4cee5b357a81b89162fe645a02b3948a94140",
-  "effective_configuration_fingerprint": "549a901f6e380aa1a78c739dba9b5b955c10b80cc5f5313c4ab8da98fa2782fb",
+  "effective_configuration_fingerprint": "3420d9c12b166f81d59b216a3a8016ffc0a6b5becdfa99ee3b1b6c6c901304bd",
   "feed": {
     "backfill_bars": 1500,
     "bar_quality_lookback": 6,
@@ -4117,7 +4117,7 @@
           "guard_mode": "observe"
         },
         "target_room": {
-          "barrier_buffer_atr": "0.5",
+          "barrier_buffer_atr": "0.15",
           "minimum_capped_target_pips": "15",
           "scalp_barrier_buffer_atr": "0.15",
           "scalp_minimum_capped_target_pips": "8"
@@ -4529,6 +4529,12 @@
             "secret": false,
             "source_kind": "config_file",
             "source_name": "instrument_registry"
+          },
+          {
+            "path": "actionability.target_room.barrier_buffer_atr",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.XAU.overrides"
           },
           {
             "path": "analysis.levels.round_step",
@@ -8369,7 +8375,7 @@
           "guard_mode": "observe"
         },
         "target_room": {
-          "barrier_buffer_atr": "0.5",
+          "barrier_buffer_atr": "0.15",
           "minimum_capped_target_pips": "15",
           "scalp_barrier_buffer_atr": "0.15",
           "scalp_minimum_capped_target_pips": "8"
@@ -8641,6 +8647,12 @@
             "secret": false,
             "source_kind": "config_file",
             "source_name": "instrument_registry"
+          },
+          {
+            "path": "actionability.target_room.barrier_buffer_atr",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.XAU.overrides"
           },
           {
             "path": "analysis.levels.round_step",

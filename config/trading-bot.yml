@@ -397,6 +397,17 @@ instrument_packs:
         minimum_width_price: 3.0
         preferred_maximum_width_price: 6.0
         preferred_minimum_width_price: 3.0
+    # Dig 2026-09-05: barrier_buffer_atr's global default (0.5) is tuned for
+    # FX, where an ATR multiple is a few pips. XAU's ATR is dollar-denominated
+    # (M5/H1 ATR routinely $2-12+), so 0.5x buffered away 40-115+ pips of
+    # opposing-structure room in production -- comparable to or larger than
+    # XAU's own stop envelope (25-100 pips) -- turning real, tradeable room
+    # into a false zero-room reject before the fixed_rr ladder ever ran.
+    # Owner's manual XAU trades routinely use 60-100 pip stops near the same
+    # structure and still run past it. 0.15 matches the existing
+    # scalp_barrier_buffer_atr precedent's order of magnitude.
+    overrides:
+      actionability.target_room.barrier_buffer_atr: 0.15
 instruments:
   # Add a live FX pair by declaring `pack: <name>` (see `instrument_packs`
   # above) plus broker_symbol/canonical_symbol and only the leaves that

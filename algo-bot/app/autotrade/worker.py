@@ -3740,7 +3740,7 @@ async def _publish_strategy_match(
     barrier_outcome = _opposing_barrier_decision(
       match.direction, spot.price, match.target_price, match.atr,
       htf_zones or [], htf_levels or [],
-      runtime_config.actionability.target_room.barrier_buffer_atr,
+      instrument_geometry.structural_barrier_buffer_atr(symbol),
       source=source,
       guard_mode=guard_mode,
     )
@@ -5750,8 +5750,8 @@ async def _publish_trade_plan_v8(
     actionable_entries=room_entries,
     atr=execution_match.atr,
     pip_size=pip_size,
-    barrier_buffer_atr=float(
-      runtime_config.actionability.target_room.barrier_buffer_atr
+    barrier_buffer_atr=instrument_geometry.structural_barrier_buffer_atr(
+      symbol,
     ),
     min_capped_target_pips=float(
       runtime_config.actionability.target_room.minimum_capped_target_pips
@@ -5904,7 +5904,7 @@ async def _publish_trade_plan_v8(
     match_for_plan.target_price,
     match_for_plan.atr,
     htf_zones or [], htf_levels or [],
-    runtime_config.actionability.target_room.barrier_buffer_atr,
+    instrument_geometry.structural_barrier_buffer_atr(symbol),
     source=source,
     guard_mode=guard_mode,
   )
@@ -6713,7 +6713,7 @@ async def _publish_trend_candidate(
     barrier_outcome = _opposing_barrier_decision(
       trend_decision.direction, entry_reference, None, trend_decision.atr,
       htf_zones or [], htf_levels or [],
-      runtime_config.actionability.target_room.barrier_buffer_atr,
+      instrument_geometry.structural_barrier_buffer_atr(symbol),
       source=source,
       guard_mode=guard_mode,
     )

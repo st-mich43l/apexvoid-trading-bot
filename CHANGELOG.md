@@ -13,6 +13,16 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- XAU technique/reaction opposing-structure room check now uses a
+  `barrier_buffer_atr` of 0.15 instead of the FX-tuned global 0.5
+  (`instruments.XAU.overrides`). XAU's ATR is dollar-denominated, so the
+  0.5x buffer was regularly consuming 40-115+ pips of real opposing-zone
+  room — comparable to or larger than XAU's own 25-100 pip stop envelope —
+  turning genuinely tradeable setups (owner's manual trades routinely run
+  60-100 pip stops through the same structure) into false zero-room
+  rejects before the fixed_rr ladder ever ran. FX instruments are
+  unaffected; the original zero/negative-room hard-kill (2026-08-06,
+  `fix/hard-kill-opposing-below-cost-room`) is unchanged.
 - Manual algo now notifies and trails through middle TP levels omitted by a
   broker-volume ladder; reached-but-unbooked levels never create fake ledger
   profit or consume execution volume.
