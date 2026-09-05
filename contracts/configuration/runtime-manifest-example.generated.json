@@ -132,8 +132,8 @@
     "zone_reconcile_mode": "shadow",
     "zone_scale_undersized_policy": "single_entry"
   },
-  "contract_fingerprint": "d9df287d026b38c837f2cc46d0293b30fe2d439023c6f8370ca319108a5da0c2",
-  "effective_configuration_fingerprint": "02e19477c63779751bc12f9d12793c2b2a92ce5851cfe26929867d0aa4e9294b",
+  "contract_fingerprint": "734a6325ae3bf9c41917fe74dcd4cee5b357a81b89162fe645a02b3948a94140",
+  "effective_configuration_fingerprint": "549a901f6e380aa1a78c739dba9b5b955c10b80cc5f5313c4ab8da98fa2782fb",
   "feed": {
     "backfill_bars": 1500,
     "bar_quality_lookback": 6,
@@ -1053,7 +1053,7 @@
             "buffer_atr": "0.1",
             "buffer_m1_atr_multiple": "1.2",
             "buffer_minimum_spread_multiple": "1.5",
-            "maximum_pips": "30",
+            "maximum_pips": "45",
             "minimum_pips": "12",
             "minimum_stop_spread_multiple": "4",
             "zone_maximum_atr_multiple": "1.5"
@@ -2035,7 +2035,7 @@
             "buffer_atr": "0.1",
             "buffer_m1_atr_multiple": "1.2",
             "buffer_minimum_spread_multiple": "1.5",
-            "maximum_pips": "30",
+            "maximum_pips": "45",
             "minimum_pips": "12",
             "minimum_stop_spread_multiple": "4",
             "zone_maximum_atr_multiple": "1.5"
@@ -2987,7 +2987,7 @@
             "buffer_atr": "0.1",
             "buffer_m1_atr_multiple": "1.2",
             "buffer_minimum_spread_multiple": "1.5",
-            "maximum_pips": "30",
+            "maximum_pips": "45",
             "minimum_pips": "12",
             "minimum_stop_spread_multiple": "4",
             "zone_maximum_atr_multiple": "1.5"
@@ -3951,7 +3951,7 @@
             "buffer_atr": "0.1",
             "buffer_m1_atr_multiple": "1.2",
             "buffer_minimum_spread_multiple": "1.5",
-            "maximum_pips": "30",
+            "maximum_pips": "45",
             "minimum_pips": "12",
             "minimum_stop_spread_multiple": "4",
             "zone_maximum_atr_multiple": "1.5"
@@ -4899,7 +4899,7 @@
             "buffer_atr": "0.1",
             "buffer_m1_atr_multiple": "1.2",
             "buffer_minimum_spread_multiple": "1.5",
-            "maximum_pips": "30",
+            "maximum_pips": "45",
             "minimum_pips": "12",
             "minimum_stop_spread_multiple": "4",
             "zone_maximum_atr_multiple": "1.5"
@@ -5716,7 +5716,7 @@
             "buffer_atr": "0.1",
             "buffer_m1_atr_multiple": "1.2",
             "buffer_minimum_spread_multiple": "1.5",
-            "maximum_pips": "30",
+            "maximum_pips": "45",
             "minimum_pips": "12",
             "minimum_stop_spread_multiple": "4",
             "zone_maximum_atr_multiple": "1.5"
@@ -6561,7 +6561,7 @@
             "buffer_atr": "0.1",
             "buffer_m1_atr_multiple": "1.2",
             "buffer_minimum_spread_multiple": "1.5",
-            "maximum_pips": "30",
+            "maximum_pips": "45",
             "minimum_pips": "12",
             "minimum_stop_spread_multiple": "4",
             "zone_maximum_atr_multiple": "1.5"
@@ -7376,7 +7376,7 @@
             "buffer_atr": "0.1",
             "buffer_m1_atr_multiple": "1.2",
             "buffer_minimum_spread_multiple": "1.5",
-            "maximum_pips": "30",
+            "maximum_pips": "45",
             "minimum_pips": "12",
             "minimum_stop_spread_multiple": "4",
             "zone_maximum_atr_multiple": "1.5"
@@ -8203,7 +8203,7 @@
             "buffer_atr": "0.1",
             "buffer_m1_atr_multiple": "1.2",
             "buffer_minimum_spread_multiple": "1.5",
-            "maximum_pips": "30",
+            "maximum_pips": "45",
             "minimum_pips": "12",
             "minimum_stop_spread_multiple": "4",
             "zone_maximum_atr_multiple": "1.5"
@@ -9010,7 +9010,7 @@
             "buffer_atr": "0.1",
             "buffer_m1_atr_multiple": "1.2",
             "buffer_minimum_spread_multiple": "1.5",
-            "maximum_pips": "30",
+            "maximum_pips": "45",
             "minimum_pips": "12",
             "minimum_stop_spread_multiple": "4",
             "zone_maximum_atr_multiple": "1.5"

@@ -260,7 +260,14 @@ class StrategiesScalpingStopConfig(FrozenConfigModel):
     minimum_stop_spread_multiple: float = config_field(4.0, canonical_env='SCALPING_MINIMUM_STOP_SPREAD_MULTIPLE', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.MULTIPLIER, risk=RiskClassification.EXECUTION_SAFETY, description='Reject a structural stop tighter than this multiple of the live spread; never widen structure to satisfy the cost floor.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 4.0),), validation_summary='Pydantic required/type coercion only', ge=1)
     # Dig 2026-08-25: TradePlan ignored this cap (reaction 40–60). Owner raised
     # max to 30 so Range Sweep structure room can plan without clipping too hard.
-    maximum_pips: float = config_field(30.0, canonical_env='SCALPING_STOP_MAXIMUM_PIPS', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.PIPS, risk=RiskClassification.EXECUTION_SAFETY, description='Maximum scalp stop size.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 30.0),), validation_summary='Pydantic required/type coercion only', ge=1)
+    # PR-L7 (2026-09-04) then raised the M1 buffer floor to max(m1_atr*1.2,
+    # pip*spread*1.5) -- a calm-session buffer alone now runs ~8 pips and a
+    # volatile one 20-30+, so 30 left little to no room for the actual
+    # structural distance. Raised to 45 so the buffer widening doesn't starve
+    # every archetype's stop budget (measured: stop_exceeds_maximum was the
+    # single largest scalp reject reason in prod, 260 hits vs 78 for every
+    # new PR-L7 semantic gate combined).
+    maximum_pips: float = config_field(45.0, canonical_env='SCALPING_STOP_MAXIMUM_PIPS', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.PIPS, risk=RiskClassification.EXECUTION_SAFETY, description='Maximum scalp stop size.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 45.0),), validation_summary='Pydantic required/type coercion only', ge=1)
     minimum_pips: float = config_field(12.0, canonical_env='SCALPING_STOP_MINIMUM_PIPS', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.PIPS, risk=RiskClassification.EXECUTION_SAFETY, description='Minimum scalp stop size.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 12.0),), validation_summary='Pydantic required/type coercion only', ge=1)
 
 class StrategiesScalpingPolicyConfig(FrozenConfigModel):

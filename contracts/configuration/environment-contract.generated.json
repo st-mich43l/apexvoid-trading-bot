@@ -1,6 +1,6 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "d9df287d026b38c837f2cc46d0293b30fe2d439023c6f8370ca319108a5da0c2",
+  "configuration_contract_fingerprint_sha256": "734a6325ae3bf9c41917fe74dcd4cee5b357a81b89162fe645a02b3948a94140",
   "count": 512,
   "deprecated_alias_count": 21,
   "entries": [
@@ -6850,7 +6850,7 @@
     },
     {
       "canonical_env": "SCALPING_STOP_MAXIMUM_PIPS",
-      "default": 30.0,
+      "default": 45.0,
       "deprecated": false,
       "deprecated_aliases": [],
       "description": "Maximum scalp stop size.",
@@ -8250,6 +8250,6 @@
   ],
   "secret_count": 9,
   "shared_with_ctrader_count": 87,
-  "source_fingerprint_sha256": "d9df287d026b38c837f2cc46d0293b30fe2d439023c6f8370ca319108a5da0c2",
+  "source_fingerprint_sha256": "734a6325ae3bf9c41917fe74dcd4cee5b357a81b89162fe645a02b3948a94140",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

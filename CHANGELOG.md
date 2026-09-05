@@ -68,6 +68,14 @@ dated section after deployment.
 - Scalp stop buffers now use true-range M1 ATR with a live-spread floor;
   M5 scalp structure is rebuilt on M5 cadence and persists compact levels,
   zones, M1 ATR, and discovery measurements for deterministic M1 decisions.
+- `strategies.scalping.stop.maximum_pips`: 30 → 45. The 30-pip cap predated
+  the M1-ATR stop buffer above and was never revisited after that buffer
+  landed; a calm-session buffer alone now runs ~8 pips and a volatile one
+  20-30+, leaving little to no room for the actual structural distance.
+  `stop_exceeds_maximum` was the single largest scalp reject reason in prod
+  (260 hits across all three archetypes vs 78 for every new PR-L7 semantic
+  gate combined) — this was the dominant cause of low scalp throughput, not
+  the new discovery-quality gates.
 - `Break & Retest` and `Momentum Ride` now resolve to their registered
   `breakout_retest` and `momentum_continuation` families instead of
   `unknown`. See `docs/audits/PR-S-canonical-strategy-names.md`.

@@ -1,7 +1,7 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "d9df287d026b38c837f2cc46d0293b30fe2d439023c6f8370ca319108a5da0c2",
-  "configuration_document_fingerprint_sha256": "f29dde822ada4cf7236b353ebc72fc9fa657c5a44c63eac69736b9aac50c5b2f",
+  "configuration_contract_fingerprint_sha256": "734a6325ae3bf9c41917fe74dcd4cee5b357a81b89162fe645a02b3948a94140",
+  "configuration_document_fingerprint_sha256": "48e0a1bdb0f67e739df9ccd87c27ddd45a0166400f5a4ce352b4a5b2e62274cf",
   "counts": {
     "algorithm_constants": 57,
     "configurable": 512,
@@ -20382,11 +20382,11 @@
       "constraints": {
         "ge": 1
       },
-      "default": 30.0,
+      "default": 45.0,
       "default_contexts": [
         {
           "context": "python_schema",
-          "value": 30.0
+          "value": 45.0
         }
       ],
       "deprecated": false,
@@ -21768,6 +21768,6 @@
       "validation_summary": "Pydantic required/type coercion only"
     }
   ],
-  "source_fingerprint_sha256": "d9df287d026b38c837f2cc46d0293b30fe2d439023c6f8370ca319108a5da0c2",
+  "source_fingerprint_sha256": "734a6325ae3bf9c41917fe74dcd4cee5b357a81b89162fe645a02b3948a94140",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

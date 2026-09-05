@@ -709,7 +709,7 @@ strategies:
       minimum_net_target_pips: 10
     stop:
       minimum_pips: 12
-      maximum_pips: 30
+      maximum_pips: 45
       buffer_atr: 0.10
       minimum_stop_spread_multiple: 4.0
       buffer_m1_atr_multiple: 1.2
