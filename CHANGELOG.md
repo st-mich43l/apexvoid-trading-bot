@@ -13,6 +13,15 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- Trade-stats session breakdown (Asia/London/NY) now classifies each trade's
+  hour in UTC instead of `delivery.presentation.seq_reset_tz`
+  (Asia/Ho_Chi_Minh, UTC+7). `asia_start`/`london_start`/`ny_start` (22/7/13)
+  are fixed UTC session-open hours; converting to ICT before comparing
+  against them shifted every boundary by 7 hours, so ~83% of trades landed
+  in the wrong session bucket (e.g. a real London-session trade at 08:00 UTC
+  showed as ICT 15:00, which fell in the NY window). Affects the weekly
+  recap, `/trade_stats`, and `/algo_status`'s scorecard — all three called
+  `build_stats`/`build_stats_by_symbol` with the wrong timezone argument.
 - XAU technique/reaction opposing-structure room check now uses a
   `barrier_buffer_atr` of 0.15 instead of the FX-tuned global 0.5
   (`instruments.XAU.overrides`). XAU's ATR is dollar-denominated, so the

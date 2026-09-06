@@ -977,12 +977,14 @@ async def handle_trade_stats(msg: Message) -> None:
   records = await get_pips_records(start_ts, end_ts, symbol)
   signals = await get_all_signals(symbol)
   label = f"{symbol} {period}" if symbol else period
-  tz = runtime_config.delivery.presentation.seq_reset_tz
   sessions = runtime_config.market_data.sessions
+  # asia_start/london_start/ny_start are fixed UTC session-open hours
+  # (22/7/13) -- not seq_reset_tz, which is the viewer-local day boundary
+  # and unrelated to global market session classification.
   stats = build_stats(
     records,
     signals,
-    tz,
+    "UTC",
     sessions.asia_start,
     sessions.london_start,
     sessions.ny_start,
@@ -992,7 +994,7 @@ async def handle_trade_stats(msg: Message) -> None:
     stats_by_symbol = build_stats_by_symbol(
       records,
       signals,
-      tz,
+      "UTC",
       sessions.asia_start,
       sessions.london_start,
       sessions.ny_start,
