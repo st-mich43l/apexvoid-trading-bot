@@ -21,7 +21,6 @@ from app.autotrade.strategy_match import (
   strategy_match_key,
 )
 from app.autotrade.scale_context import AutoScaleContext
-from app.autotrade.map_strategy import ActionableMapEntry
 from app.autotrade.trend import RegimeInfo, TrendDecision
 from app.analysis.types import Level, Zone
 from app.analysis.market_map import MapEntry, MarketMap
@@ -345,87 +344,6 @@ async def test_worker_routes_scanner_strategy_without_regime_confirmation(
   assert status["strategy_match"]["id"] == match.match_id
   assert status["strategy_match"]["strategy"] == "Liquidity Sweep"
   assert status["direction"] == "BUY"
-
-
-@pytest.mark.asyncio
-async def test_worker_routes_m1_market_map_reaction_as_its_own_strategy(
-  monkeypatch,
-):
-  client = redis_state.get_client()
-  now = int(datetime.now(timezone.utc).timestamp())
-  match = replace(
-    _strategy_match(now),
-    match_id=strategy_match_id(
-      "XAU",
-      "M1",
-      str(now),
-      "Mapped Zone Reaction",
-      "SELL",
-      4016.5,
-      4017.4,
-    ),
-    source_tf="M1",
-    event_ts=str(now),
-    strategy="Mapped Zone Reaction",
-    strategy_mode="mapped_zone_reaction",
-    direction="SELL",
-    reasons=("M30 bias down", "M1 touch + rejection"),
-    structure_swing=4017.4,
-  )
-  map_decision = worker.MarketMapStrategyDecision(
-    "candidate",
-    match.reasons,
-    match,
-    (4016.5, 4017.4),
-  )
-  install_runtime_overrides(monkeypatch, legacy_overrides={"auto_trade_enabled": True})
-  install_runtime_overrides(monkeypatch, legacy_overrides={"auto_trade_symbols": "XAU"})
-  install_runtime_overrides(monkeypatch, legacy_overrides={"auto_trade_stream": "auto_trade:test"})
-  install_runtime_overrides(monkeypatch, legacy_overrides={"auto_trade_min_confluence": 2})
-  monkeypatch.setattr(worker, "event_in_window", AsyncMock(return_value=None))
-  source = AsyncMock()
-  source.window = AsyncMock(return_value=_frame())
-  monkeypatch.setattr(
-    worker,
-    "_load_spot",
-    AsyncMock(return_value=worker.AutoTradeSpot(4017.2, now, True)),
-  )
-  monkeypatch.setattr(
-    worker,
-    "evaluate_auto_scalp_gate",
-    lambda *args, **kwargs: AutoScalpDecision("waiting_for_box"),
-  )
-  monkeypatch.setattr(
-    worker,
-    "evaluate_market_map_strategy",
-    lambda *args, **kwargs: map_decision,
-  )
-  monkeypatch.setattr(
-    worker,
-    "evaluate_trend_gate",
-    lambda *args, **kwargs: TrendDecision("no_setup"),
-  )
-  monkeypatch.setattr(
-    worker,
-    "classify_regime",
-    lambda *args, **kwargs: RegimeInfo(
-      "trend", "down", 2, 1.1, True, None, ("isolated map test",),
-    ),
-  )
-
-  await worker._handle_event(
-    f"XAU:M1:{now}", source=source, client=client,
-  )
-
-  # Market Map no longer originates a leftover match. Idle M1 skips pandas
-  # gates and does not publish.
-  entries = await client.xrange("auto_trade:test")
-  assert len(entries) == 0, await client.get(
-    "auto_trade:last_route_outcome:XAU"
-  )
-  status = json.loads(await client.get("auto_trade:last_gate:XAU"))
-  assert status["state"] == "idle_no_match"
-  assert status["gate_source"] == "idle_no_match"
 
 
 @pytest.mark.asyncio
@@ -1322,50 +1240,6 @@ async def test_record_gate_reject_increments_condition_counter():
     "auto_trade:gate_reject:XAU:waiting_for_box", "count",
   )
   assert int(count) == 2
-
-
-@pytest.mark.asyncio
-async def test_market_map_actionable_snapshot_and_degenerate_counter_have_ttl():
-  client = redis_state.get_client()
-  decision = worker.MarketMapStrategyDecision(
-    "waiting_for_touch",
-    ("no mapped SELL zone within reach",),
-    entries_seen=3,
-    actionable_entries=(
-      ActionableMapEntry(
-        "sell", 4087.0, 4095.0, "zone", 8.0, False, 14.12,
-      ),
-    ),
-    filter_counts=(
-      ("side", 1),
-      ("actionable", 0),
-      ("degenerate_width", 1),
-      ("distance", 1),
-    ),
-  )
-
-  await worker._record_market_map_strategy_telemetry(
-    client,
-    "XAU",
-    decision,
-  )
-
-  payload = json.loads(
-    await client.get("auto_trade:map_strategy:actionable:XAU")
-  )
-  assert payload == [{
-    "contains_price": False,
-    "hi": 4095.0,
-    "lo": 4087.0,
-    "score": 8.0,
-    "side": "sell",
-    "tier": "zone",
-  }]
-  ttl = await client.ttl("auto_trade:map_strategy:actionable:XAU")
-  assert 0 < ttl <= 3600
-  assert int(await client.get(
-    "auto_trade:map_zone_rejected:XAU:degenerate_width"
-  )) == 1
 
 
 @pytest.mark.asyncio

@@ -12,6 +12,21 @@ dated section after deployment.
 
 ## Unreleased
 
+### Removed
+- Market Map's candidate-generation role in `worker.py` (Stage 1 of a
+  broader owner-directed purge — "we work on technique zone not
+  calculate opposing zone blindly"). `evaluate_market_map_strategy`'s
+  `.match` has been confirmed dead in production (a prior cutover already
+  stopped it promoting any zone to a trade candidate; zero occurrences of
+  "Market Map" as a live strategy name in production funnel telemetry).
+  The call, its telemetry write (`auto_trade:map_strategy:actionable:*`,
+  never read back anywhere), the disabled `market_map_guard_enabled`
+  variable (computed but never used), and the status-payload debug fields
+  it fed are all removed. `structural_target_room.py`'s opposing-zone room
+  check (the "major tier" wall, already being superseded by technique-
+  native `structure_swing` math per #493/#494) and Market Map's own
+  data-collection pipeline are untouched — later stages.
+
 ### Changed
 - Auto-algo root card TP lines now show an R-multiple ("+1R", "+1.5R")
   instead of a raw pip count ("+21") — a bare pip figure reads as
