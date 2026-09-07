@@ -171,6 +171,71 @@ async def test_order_filled_falls_back_standalone_after_the_wait_expires(
   assert reason != ""
 
 
+@pytest.mark.asyncio
+async def test_ensure_root_card_for_manage_reply_finds_root_via_telegram_root_key_alone(
+  monkeypatch,
+):
+  # 2026-09 (owner-reported duplicate root card): forming_message_key and
+  # telegram_root_message_key are written together by save_forming_card and
+  # are supposed to always name the same message. If forming_message_key is
+  # ever unreadable while telegram_root_message_key still names the real
+  # root - this seeds exactly that split - the old code (a direct
+  # load_forming_card check with no fallback) wrongly concluded no root
+  # existed and created a second one. It must instead find the real root via
+  # telegram_root_message_key and never attempt to create anything.
+  client = redis_state.get_client()
+  match_id = "root-key-split"
+  await client.set(
+    setup_card.telegram_root_message_key(match_id),
+    '{"chat_id":123,"root_message_id":9009,"updated_at":1}',
+  )
+
+  async def fail_if_called(*_args, **_kwargs):
+    raise AssertionError(
+      "ensure_root_card_for_setup_id must not be called when "
+      "telegram_root_message_key already names the real root"
+    )
+
+  monkeypatch.setattr(setup_card, "ensure_root_card_for_setup_id", fail_if_called)
+
+  message_id = await delivery._ensure_root_card_for_manage_reply(
+    client,
+    {"type": "take_profit", "symbol": "XAU"},
+    match_id=match_id,
+    chat_id=123,
+  )
+
+  assert message_id == 9009
+
+
+@pytest.mark.asyncio
+async def test_forming_reply_lookup_logs_identity_mismatch(monkeypatch, caplog):
+  # Companion coverage: when the two keys actively disagree (both present,
+  # different message ids - a re-post raced ahead of a cleanup, or vice
+  # versa), forming_message_key still wins for the reply target, but the
+  # mismatch must be logged loudly so it's caught the moment it happens
+  # instead of requiring after-the-fact archaeology once Telegram history is
+  # gone.
+  client = redis_state.get_client()
+  match_id = "root-key-mismatch"
+  await setup_card.save_forming_card(
+    client, match_id, chat_id=123, message_id=7001,
+  )
+  await client.set(
+    setup_card.telegram_root_message_key(match_id),
+    '{"chat_id":123,"root_message_id":7099,"updated_at":1}',
+  )
+
+  with caplog.at_level("ERROR", logger="app.autotrade.delivery"):
+    message_id = await delivery._lookup_forming_reply_message_id(client, match_id)
+
+  assert message_id == 7001
+  assert any(
+    "forming_reply_identity_mismatch" in record.message
+    for record in caplog.records
+  )
+
+
 def test_compact_route_line_never_shows_a_preflight_pass_through_code():
   # preflight_reason_code lingers as whatever the last preflight-stage
   # event recorded - once a candidate clears every preflight check that's
