@@ -128,6 +128,29 @@ def _map(
   )
 
 
+def _map_to_zones(market_map: MarketMap) -> list[Zone]:
+  """2026-09 (Market Map purge stage 4): resolve_actionability now reads
+  technique-native ``Zone`` data, not Market Map. structural_target_room's
+  zone_opposing_entries derives "major" vs "zone" tier the same way
+  build_map itself does (score_reasons containing "HTF Zone", plus fresh/
+  score) - reproduce that here from each fixture's ``tier=`` so existing
+  "major"-tier fixtures still round-trip to "major" through the real
+  formula instead of silently collapsing to "zone".
+  """
+  zones = []
+  for entry in market_map.actionable_entries:
+    is_major = entry.tier == "major"
+    zones.append(Zone(
+      entry.lo,
+      entry.hi,
+      "demand" if entry.side == "buy" else "supply",
+      score=entry.score,
+      score_reasons=["HTF Zone"] if is_major else [],
+      touches=0 if is_major else 1,
+    ))
+  return zones
+
+
 def _cfg(
   *,
   guard_mode: str = "balanced",
@@ -182,7 +205,7 @@ def test_buy_under_overlapping_sell_major_hard_blocks_below_cost_room(
   resolution = resolve_actionability(
     symbol="XAU",
     observed_results=[buy],
-    market_map=market_map,
+    zones=_map_to_zones(market_map),
     context=SimpleNamespace(htf_bias="down"),
     atr=2.0,
     pip_size=0.1,
@@ -221,7 +244,7 @@ def test_scalp_keeps_ladder_when_room_fits_swing_hard_blocks_when_below_cost():
   scalp_resolution = resolve_actionability(
     symbol="XAU",
     observed_results=[scalp],
-    market_map=market_map,
+    zones=_map_to_zones(market_map),
     context=SimpleNamespace(htf_bias="down"),
     atr=2.0,
     pip_size=0.1,
@@ -245,7 +268,7 @@ def test_scalp_keeps_ladder_when_room_fits_swing_hard_blocks_when_below_cost():
   swing_resolution = resolve_actionability(
     symbol="XAU",
     observed_results=[swing],
-    market_map=market_map,
+    zones=_map_to_zones(market_map),
     context=SimpleNamespace(htf_bias="down"),
     atr=2.0,
     pip_size=0.1,
@@ -275,7 +298,7 @@ def test_scalp_not_hard_killed_by_zero_usable_htf_opposing_room():
   resolution = resolve_actionability(
     symbol="XAU",
     observed_results=[scalp],
-    market_map=market_map,
+    zones=_map_to_zones(market_map),
     context=SimpleNamespace(htf_bias="up"),
     atr=4.53,
     pip_size=0.1,
@@ -307,7 +330,7 @@ def test_raw_room_zero_major_hard_gates():
   resolution = resolve_actionability(
     symbol="XAU",
     observed_results=[buy],
-    market_map=market_map,
+    zones=_map_to_zones(market_map),
     context=SimpleNamespace(htf_bias="down"),
     atr=2.0,
     pip_size=0.1,
@@ -350,7 +373,7 @@ def test_trimmed_zone_touching_opposing_edge_is_not_misreported_as_contained():
   resolution = resolve_actionability(
     symbol="XAU",
     observed_results=[buy],
-    market_map=market_map,
+    zones=_map_to_zones(market_map),
     context=SimpleNamespace(htf_bias="up"),
     atr=2.0,
     pip_size=0.1,
@@ -381,7 +404,7 @@ def test_target_room_below_cost_is_soft_when_actionability_gate_is_off():
   resolution = resolve_actionability(
     symbol="XAU",
     observed_results=[buy],
-    market_map=market_map,
+    zones=_map_to_zones(market_map),
     context=SimpleNamespace(htf_bias="down"),
     atr=2.0,
     pip_size=0.1,
@@ -415,7 +438,7 @@ def test_target_room_hard_blocks_below_cost_when_actionability_gate_is_on():
   resolution = resolve_actionability(
     symbol="XAU",
     observed_results=[buy],
-    market_map=market_map,
+    zones=_map_to_zones(market_map),
     context=SimpleNamespace(htf_bias="down"),
     atr=2.0,
     pip_size=0.1,
@@ -455,7 +478,7 @@ def test_partial_overlap_trims_the_zone_instead_of_killing_the_whole_setup():
   resolution = resolve_actionability(
     symbol="XAU",
     observed_results=[buy],
-    market_map=market_map,
+    zones=_map_to_zones(market_map),
     context=SimpleNamespace(htf_bias="down"),
     atr=2.0,
     pip_size=0.1,
@@ -493,7 +516,7 @@ def test_full_overlap_by_a_major_still_rejects_nothing_left_to_trim_into():
   resolution = resolve_actionability(
     symbol="XAU",
     observed_results=[buy],
-    market_map=market_map,
+    zones=_map_to_zones(market_map),
     context=SimpleNamespace(htf_bias="down"),
     atr=2.0,
     pip_size=0.1,
@@ -533,7 +556,7 @@ def test_full_overlap_by_a_weak_zone_does_not_hard_reject():
   resolution = resolve_actionability(
     symbol="XAU",
     observed_results=[buy],
-    market_map=market_map,
+    zones=_map_to_zones(market_map),
     context=SimpleNamespace(htf_bias="down"),
     atr=2.0,
     pip_size=0.1,
@@ -563,7 +586,7 @@ def test_room_below_the_ladder_keeps_configured_ladder():
   resolution = resolve_actionability(
     symbol="XAU",
     observed_results=[buy],
-    market_map=market_map,
+    zones=_map_to_zones(market_map),
     context=SimpleNamespace(htf_bias="down"),
     atr=2.0,
     pip_size=0.1,
@@ -596,7 +619,7 @@ def test_room_below_the_floor_still_keeps_configured_ladder():
   resolution = resolve_actionability(
     symbol="XAU",
     observed_results=[buy],
-    market_map=market_map,
+    zones=_map_to_zones(market_map),
     context=SimpleNamespace(htf_bias="down"),
     atr=2.0,
     pip_size=0.1,
@@ -684,7 +707,7 @@ def test_counter_bias_reaction_is_observed_when_disabled():
   resolution = resolve_actionability(
     symbol="XAU",
     observed_results=[buy],
-    market_map=_map(price=4100.5),
+    zones=_map_to_zones(_map(price=4100.5)),
     context=SimpleNamespace(htf_bias="down"),
     atr=2.0,
     pip_size=0.1,
@@ -707,7 +730,7 @@ def test_with_bias_reaction_is_unaffected_by_counter_bias_disabled():
   resolution = resolve_actionability(
     symbol="XAU",
     observed_results=[sell],
-    market_map=_map(price=4100.5),
+    zones=_map_to_zones(_map(price=4100.5)),
     context=SimpleNamespace(htf_bias="down"),
     atr=2.0,
     pip_size=0.1,
@@ -731,7 +754,7 @@ def test_invalid_geometry_is_always_analysis_only():
   resolution = resolve_actionability(
     symbol="XAU",
     observed_results=[result],
-    market_map=_map(price=4100.5),
+    zones=_map_to_zones(_map(price=4100.5)),
     context=SimpleNamespace(htf_bias="up"),
     atr=2.0,
     pip_size=0.1,
@@ -852,7 +875,7 @@ def test_equal_opposing_observations_remain_raw_but_both_are_not_actionable():
   resolution = resolve_actionability(
     symbol="XAU",
     observed_results=[buy, sell],
-    market_map=_map(price=4100.5),
+    zones=_map_to_zones(_map(price=4100.5)),
     context=SimpleNamespace(htf_bias="range"),
     atr=2.0,
     pip_size=0.1,
@@ -887,7 +910,7 @@ def test_confluence_margin_never_picks_a_side_out_of_a_contested_corridor():
   resolution = resolve_actionability(
     symbol="XAU",
     observed_results=[buy, sell],
-    market_map=no_room,
+    zones=_map_to_zones(no_room),
     context=SimpleNamespace(htf_bias="up"),
     atr=1.0,
     pip_size=0.1,
@@ -915,10 +938,10 @@ def test_distant_map_room_does_not_rescue_an_overlapping_pair():
   resolution = resolve_actionability(
     symbol="XAU",
     observed_results=[buy, sell],
-    market_map=_map(
+    zones=_map_to_zones(_map(
       _entry("sell", 4120.0, 4123.0, tier="major"),
       price=4100.5,
-    ),
+    )),
     context=SimpleNamespace(htf_bias="up"),
     atr=1.0,
     pip_size=0.1,
@@ -943,7 +966,7 @@ def test_nearby_non_overlapping_bands_remain_watched():
   resolution = resolve_actionability(
     symbol="XAU",
     observed_results=[buy, sell],
-    market_map=_map(price=4005.0),
+    zones=_map_to_zones(_map(price=4005.0)),
     context=SimpleNamespace(htf_bias="down"),
     atr=2.0,
     pip_size=0.1,
@@ -965,7 +988,7 @@ def test_bands_well_separated_beyond_the_gap_threshold_are_not_contested():
   resolution = resolve_actionability(
     symbol="XAU",
     observed_results=[buy, sell],
-    market_map=_map(price=4002.0),
+    zones=_map_to_zones(_map(price=4002.0)),
     context=SimpleNamespace(htf_bias="down"),
     atr=2.0,
     pip_size=0.1,
@@ -984,7 +1007,7 @@ def test_proposed_entry_inside_opposing_band_is_executable_conflict():
   resolution = resolve_actionability(
     symbol="XAU",
     observed_results=[buy, sell],
-    market_map=_map(price=4099.0),
+    zones=_map_to_zones(_map(price=4099.0)),
     context=SimpleNamespace(htf_bias="range"),
     atr=2.0,
     pip_size=0.1,
@@ -1019,7 +1042,7 @@ def test_valid_direction_with_structural_room_remains_actionable(
   resolution = resolve_actionability(
     symbol="XAU",
     observed_results=[result],
-    market_map=_map(barrier, price=result.current_price),
+    zones=_map_to_zones(_map(barrier, price=result.current_price)),
     context=SimpleNamespace(
       htf_bias="up" if direction == "BUY" else "down",
     ),
@@ -1078,7 +1101,7 @@ def test_role_ambiguity_is_telemetry_only_never_a_hard_block():
   resolution = resolve_actionability(
     symbol="XAU",
     observed_results=[result],
-    market_map=_map(price=100.0),
+    zones=_map_to_zones(_map(price=100.0)),
     context=SimpleNamespace(htf_bias="up"),
     atr=1.0,
     pip_size=0.1,
@@ -1522,7 +1545,7 @@ def test_weak_map_zone_zero_raw_room_does_not_hard_block():
   resolution = resolve_actionability(
     symbol="XAU",
     observed_results=[buy],
-    market_map=market_map,
+    zones=_map_to_zones(market_map),
     context=SimpleNamespace(htf_bias="down"),
     atr=2.0,
     pip_size=0.1,
@@ -1621,7 +1644,7 @@ def test_v8_resolve_actionability_allows_glued_sell_wall():
   resolution = resolve_actionability(
     symbol="XAU",
     observed_results=[sell],
-    market_map=market_map,
+    zones=_map_to_zones(market_map),
     context=SimpleNamespace(htf_bias="up"),
     atr=4.0,
     pip_size=0.1,
@@ -1742,10 +1765,10 @@ def test_barrier_capped_target_is_used_by_reward_risk_pre_gate(monkeypatch):
   resolution = resolve_actionability(
     symbol="XAU",
     observed_results=[result],
-    market_map=_map(
+    zones=_map_to_zones(_map(
       _entry("sell", 4105.0, 4108.0, tier="zone"),
       price=4100.5,
-    ),
+    )),
     context=ctx,
     atr=2.0,
     pip_size=0.1,
@@ -1810,7 +1833,7 @@ def test_recent_displacement_beyond_barrier_lets_a_contained_buy_through():
   resolution = resolve_actionability(
     symbol="XAU",
     observed_results=[buy],
-    market_map=market_map,
+    zones=_map_to_zones(market_map),
     context=ctx,
     atr=2.0,
     pip_size=0.1,
@@ -1851,7 +1874,7 @@ def test_no_displacement_still_blocks_as_before():
   resolution = resolve_actionability(
     symbol="XAU",
     observed_results=[buy],
-    market_map=market_map,
+    zones=_map_to_zones(market_map),
     context=ctx,
     atr=2.0,
     pip_size=0.1,
@@ -1894,7 +1917,7 @@ def test_displacement_override_disabled_by_default_lookback_zero():
   resolution = resolve_actionability(
     symbol="XAU",
     observed_results=[buy],
-    market_map=market_map,
+    zones=_map_to_zones(market_map),
     context=ctx,
     atr=2.0,
     pip_size=0.1,
@@ -1916,7 +1939,7 @@ def test_empty_market_map_is_valid_and_unavailable_map_retains_candidate():
   available = resolve_actionability(
     symbol="XAU",
     observed_results=[result],
-    market_map=_map(price=4100.5),
+    zones=_map_to_zones(_map(price=4100.5)),
     context=SimpleNamespace(htf_bias="up"),
     atr=1.0,
     pip_size=0.1,
@@ -1925,7 +1948,7 @@ def test_empty_market_map_is_valid_and_unavailable_map_retains_candidate():
   unavailable = resolve_actionability(
     symbol="XAU",
     observed_results=[result],
-    market_map=None,
+    zones=None,
     context=SimpleNamespace(htf_bias="up"),
     atr=1.0,
     pip_size=0.1,
@@ -1955,7 +1978,7 @@ def test_gate_false_retains_contextual_observations_including_contested():
   resolution = resolve_actionability(
     symbol="XAU",
     observed_results=[buy, sell],
-    market_map=_map(price=4100.5),
+    zones=_map_to_zones(_map(price=4100.5)),
     context=SimpleNamespace(htf_bias="range"),
     atr=2.0,
     pip_size=0.1,

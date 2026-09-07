@@ -16,7 +16,7 @@ import pandas as pd
 import pytest
 
 from app.analysis.market_map import MapEntry, MarketMap, render_market_map
-from app.autotrade import map_strategy, worker
+from app.autotrade import worker
 from app.autotrade.gate import AutoScalpBox, AutoScalpDecision, AutoScalpRail
 from app.autotrade.range_context import RangeBarrier, RangeContext
 from app.autotrade.range_lifecycle import (
@@ -238,84 +238,6 @@ def test_box_broken_never_coexists_with_armed_rails():
   assert payload["state"] != "ARMED"
 
 
-def test_m1_touch_one_bar_ago_plus_rejection_reaches_waiting_for_touch():
-  # M1 mapped-zone reaction is retired as a setup source (P2): a touch +
-  # rejection sequence that used to produce "candidate" now only proves the
-  # zone is tracked/executable ("waiting_for_touch"), with no trigger.
-  demand = _demand()
-  m1 = _m1_frame([
-    {"open": 4054.0, "high": 4055.5, "low": 4053.0, "close": 4054.2, "volume": 1},
-    {
-      "open": 4054.0,
-      "high": 4055.0,
-      "low": 4053.1,
-      "close": 4055.0,
-      "volume": 1,
-    },
-  ])
-  selected, state, _ = map_strategy._select_reaction(
-    _map(demand, price=4055.0),
-    m1,
-    4055.0,
-    atr=2.0,
-    proximal_band_atr=0.5,
-    cfg=_cfg(),
-  )
-  assert state == "waiting_for_touch"
-  assert selected is None
-
-
-def test_m1_touch_three_bars_ago_plus_continuation_reaches_waiting_for_touch():
-  demand = _demand()
-  m1 = _m1_frame([
-    {"open": 4054.5, "high": 4055.8, "low": 4053.0, "close": 4053.4, "volume": 1},
-    {"open": 4053.5, "high": 4054.2, "low": 4053.0, "close": 4054.1, "volume": 1},
-    {"open": 4054.2, "high": 4055.2, "low": 4054.0, "close": 4055.0, "volume": 1},
-    {"open": 4055.0, "high": 4055.6, "low": 4054.8, "close": 4055.4, "volume": 1},
-  ])
-  selected, state, _ = map_strategy._select_reaction(
-    _map(demand, price=4055.4),
-    m1,
-    4055.4,
-    atr=2.0,
-    proximal_band_atr=0.5,
-    cfg=_cfg(),
-  )
-  assert state == "waiting_for_touch"
-  assert selected is None
-
-
-def test_reaction_older_than_lookback_is_rejected():
-  demand = _demand()
-  # 6 bars: touch+reject at the start, then continuation outside lookback=5
-  # when only last 5 are searched — touch falls out of window.
-  rows = [
-    {"open": 4054.5, "high": 4055.8, "low": 4053.0, "close": 4053.2, "volume": 1},
-    {"open": 4053.3, "high": 4054.0, "low": 4053.0, "close": 4053.9, "volume": 1},
-  ]
-  rows.extend(
-    {
-      "open": 4058.0,
-      "high": 4059.0,
-      "low": 4057.5,
-      "close": 4058.5,
-      "volume": 1,
-    }
-    for _ in range(5)
-  )
-  m1 = _m1_frame(rows)
-  selected, state, _ = map_strategy._select_reaction(
-    _map(demand, price=4058.5),
-    m1,
-    4058.5,
-    atr=2.0,
-    proximal_band_atr=0.5,
-    cfg=_cfg(auto_trade_map_reaction_lookback_bars=5),
-  )
-  assert selected is None
-  assert state in {"waiting_for_touch", "entry_moved", "no_zone_in_range"}
-
-
 def test_actionable_map_entry_appears_in_rendered_market_map():
   hidden = _demand()
   visible = MapEntry(
@@ -360,25 +282,6 @@ def test_evaluator_and_renderer_use_same_map_id():
   market_map = _map(demand)
   rendered = _map(demand)
   assert market_map.map_id == rendered.map_id
-  selected, state, reasons = map_strategy._select_reaction(
-    market_map,
-    _m1_frame([
-      {
-        "open": 4054.0,
-        "high": 4055.5,
-        "low": 4053.0,
-        "close": 4055.0,
-        "volume": 1,
-      },
-    ]),
-    4055.0,
-    atr=2.0,
-    proximal_band_atr=0.5,
-    cfg=_cfg(),
-    rendered_map=rendered,
-  )
-  assert "absent from rendered" not in " ".join(reasons)
-  assert state in {"candidate", "waiting_for_reaction", "waiting_for_touch"}
 
 
 @pytest.mark.asyncio
