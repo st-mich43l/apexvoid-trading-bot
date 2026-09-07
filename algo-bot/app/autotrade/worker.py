@@ -218,11 +218,7 @@ from app.autotrade.range_lifecycle import (
 )
 from app.autotrade.map_strategy import (
   MarketMap,
-  MarketMapStrategyDecision,
   decode_market_map,
-  evaluate_market_map_strategy,
-  market_map_actionable_key,
-  market_map_display_key,
   market_map_key,
 )
 from app.autotrade.scale_context import AutoScaleContext, build_auto_scale_context
@@ -2388,33 +2384,6 @@ async def _record_guard_evaluation(
       "guard-evaluation counter failed symbol=%s guard=%s outcome=%s",
       symbol, outcome.guard, outcome.outcome,
     )
-
-
-async def _record_market_map_strategy_telemetry(
-  client: Any,
-  symbol: str,
-  decision: MarketMapStrategyDecision,
-) -> None:
-  """Expose the exact entry set the Market Map strategy evaluated."""
-  try:
-    payload = [
-      entry.payload()
-      for entry in decision.actionable_entries
-    ]
-    await client.set(
-      market_map_actionable_key(symbol),
-      json.dumps(payload, separators=(",", ":"), sort_keys=True),
-      ex=3600,
-    )
-    counts = dict(decision.filter_counts)
-    rejected = int(counts.get("degenerate_width", 0))
-    if rejected:
-      await client.incrby(
-        f"auto_trade:map_zone_rejected:{symbol.upper()}:degenerate_width",
-        rejected,
-      )
-  except Exception:
-    log.exception("Market Map strategy telemetry failed symbol=%s", symbol)
 
 
 def _candidate_id(
@@ -7120,7 +7089,6 @@ def _status_payload(
   trend_decision: TrendDecision | None = None,
   gate_source: str = "private_ohlc",
   strategy_match: StrategyMatch | None = None,
-  market_map_decision: MarketMapStrategyDecision | None = None,
   breakout_retest: dict[str, Any] | None = None,
   resolved_range: RangeContext | None = None,
   box_eligibility: RangeExecutionEligibility | None = None,
@@ -7174,14 +7142,6 @@ def _status_payload(
       else "trend_disabled"
     )
     direction = trend_decision.direction
-  elif (
-    market_map_decision is not None
-    and market_map_decision.state != "candidate"
-    and decision.state != "candidate"
-    and decision.state != "box_broken"
-  ):
-    state = market_map_decision.state
-    reasons = market_map_decision.reasons
   selected_strategy = None
   selected_timeframe = None
   if strategy_match is not None and candidate_id is not None:
@@ -7261,60 +7221,6 @@ def _status_payload(
     "candidate_id": candidate_id,
     "published": candidate_id is not None,
     "gate_source": gate_source,
-    "market_map_state": (
-      None if market_map_decision is None else market_map_decision.state
-    ),
-    "market_map_reasons": (
-      [] if market_map_decision is None else list(market_map_decision.reasons)
-    ),
-    "market_map_entries_seen": (
-      0 if market_map_decision is None else market_map_decision.entries_seen
-    ),
-    "market_map_entries_actionable": (
-      0
-      if market_map_decision is None
-      else len(market_map_decision.actionable_entries)
-    ),
-    "market_map_top": (
-      []
-      if market_map_decision is None
-      else [
-        {
-          **entry.payload(),
-          "distance": entry.distance,
-        }
-        for entry in market_map_decision.actionable_entries[:3]
-      ]
-    ),
-    "market_map_filter_counts": (
-      {}
-      if market_map_decision is None
-      else dict(market_map_decision.filter_counts)
-    ),
-    "market_map_track_limit": (
-      None
-      if market_map_decision is None
-      else market_map_decision.track_limit
-    ),
-    "market_map_execute_limit": (
-      None
-      if market_map_decision is None
-      else market_map_decision.execute_limit
-    ),
-    "market_map_id": (
-      None if market_map_decision is None else market_map_decision.map_id
-    ),
-    "market_map_reaction": (
-      None
-      if market_map_decision is None
-      or market_map_decision.reaction_type is None
-      else {
-        "touch_bar_ts": market_map_decision.touch_bar_ts,
-        "confirmation_bar_ts": market_map_decision.confirmation_bar_ts,
-        "reaction_age_bars": market_map_decision.reaction_age_bars,
-        "reaction_type": market_map_decision.reaction_type,
-      }
-    ),
     "breakout_retest": breakout_retest,
     "selected_strategy": selected_strategy,
     "selected_timeframe": selected_timeframe,
@@ -7965,34 +7871,8 @@ async def _handle_event(
   cached_market_map = decode_market_map(
     await client.get(market_map_key(symbol))
   )
-  guard_market_map = (
-    cached_market_map
-    if runtime_config.actionability.gates.market_map_guard_enabled
-    else None
-  )
-  displayed_market_map = decode_market_map(
-    await client.get(market_map_display_key(symbol))
-  )
   strategy_cfg = instrument_runtime_view(symbol)
-  market_map_decision = evaluate_market_map_strategy(
-    frames,
-    symbol=symbol,
-    event_ts=event_ts,
-    spot_price=(
-      spot.price if spot is not None and spot.fresh else None
-    ),
-    cfg=strategy_cfg,
-    market_map=cached_market_map,
-    rendered_map=displayed_market_map,
-  )
-  await _record_market_map_strategy_telemetry(
-    client,
-    symbol,
-    market_map_decision,
-  )
   strategy_matches = list(scanner_strategy_matches)
-  if ready_match_id is None and market_map_decision.match is not None:
-    strategy_matches.append(market_map_decision.match)
   if runtime_config.strategies.matching.multiple_matches_enabled and strategy_matches:
     strategy_matches, _ = dedupe_matches(
       strategy_matches,
@@ -8008,8 +7888,6 @@ async def _handle_event(
     if len(strategy_matches) > 1
     else "scanner_strategy_match"
     if scanner_strategy_matches
-    else "market_map_strategy"
-    if market_map_decision.match is not None
     else "private_ohlc"
   )
   regime = classify_regime(
@@ -8600,7 +8478,6 @@ async def _handle_event(
     trend_decision=trend_decision,
     gate_source=gate_source,
     strategy_match=status_strategy_match,
-    market_map_decision=market_map_decision,
     breakout_retest=await load_breakout_retest_watch(client, symbol),
     resolved_range=resolved_range,
     box_eligibility=box_eligibility,
