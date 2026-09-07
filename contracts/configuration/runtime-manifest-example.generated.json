@@ -133,7 +133,7 @@
     "zone_scale_undersized_policy": "single_entry"
   },
   "contract_fingerprint": "734a6325ae3bf9c41917fe74dcd4cee5b357a81b89162fe645a02b3948a94140",
-  "effective_configuration_fingerprint": "3420d9c12b166f81d59b216a3a8016ffc0a6b5becdfa99ee3b1b6c6c901304bd",
+  "effective_configuration_fingerprint": "f89b719da5c1bfa59e82331c1590111326d9c27641a61df7bb8e40e4071f9410",
   "feed": {
     "backfill_bars": 1500,
     "bar_quality_lookback": 6,
@@ -649,6 +649,7 @@
           "0.25",
           "0.5"
         ],
+        "target_r_multiples": [],
         "tp1_close_fraction": null
       },
       "policy_name": "fx_fixed_2r_v1",
@@ -1601,6 +1602,7 @@
           "0.25",
           "0.35"
         ],
+        "target_r_multiples": [],
         "tp1_close_fraction": null
       },
       "policy_name": "fx_fixed_2r_frontload_v1",
@@ -2583,6 +2585,7 @@
           "0.25",
           "0.5"
         ],
+        "target_r_multiples": [],
         "tp1_close_fraction": null
       },
       "policy_name": "fx_fixed_2r_v1",
@@ -3535,6 +3538,7 @@
           "0.25",
           "0.5"
         ],
+        "target_r_multiples": [],
         "tp1_close_fraction": null
       },
       "policy_name": "fx_fixed_2r_v1",
@@ -4321,19 +4325,19 @@
           "hard_entry_drift_pips": "20",
           "max_entry_drift_atr": "1",
           "min_entry_drift_pips": "10",
-          "min_rr": "2",
-          "min_target_pips": 50,
-          "room_stop_floor_pips": 25,
+          "min_rr": "3",
+          "min_target_pips": 150,
+          "room_stop_floor_pips": 50,
           "tp_buffer_pips": "3"
         },
         "reaction": {
           "market_fraction": "0.8",
-          "room_stop_min_rr": "2",
+          "room_stop_min_rr": "3",
           "scale_fraction": "0.2",
           "scale_invalid_policy": "single_market",
           "scale_step_atr": "0.5",
           "stop_max_pips": 100,
-          "stop_min_pips": 25
+          "stop_min_pips": 50
         },
         "regime": {
           "direction_enabled": false,
@@ -4344,7 +4348,7 @@
         "scaling": {
           "add": {
             "level_buffer_atr": "1",
-            "min_stop_pips": 25,
+            "min_stop_pips": 50,
             "pullback_enabled": false,
             "pullback_max_retrace": "0.7",
             "pullback_min_retrace": "0.2",
@@ -4355,12 +4359,12 @@
         "stops": {
           "be_buffer_ticks": 6,
           "reaction": {
-            "room_floor_pips": 25
+            "room_floor_pips": 50
           },
           "sl_distance": "10",
           "stop_push_beyond_zone": true,
           "trend": {
-            "minimum_pips": 25
+            "minimum_pips": 50
           },
           "wick_stop_buffer_atr": "0.15"
         },
@@ -4501,6 +4505,7 @@
         "risk_multiplier": "1",
         "risk_reference": "shallow",
         "target_close_ratios": [],
+        "target_r_multiples": [],
         "tp1_close_fraction": "0.4"
       },
       "policy_name": "xau_fixed_2r_v1",
@@ -4976,17 +4981,21 @@
         }
       },
       "targeting": {
-        "breakeven_after_r": "1",
+        "breakeven_after_r": "0.5",
         "close_ratios": [
-          "0.5",
-          "0.5"
+          "0.4",
+          "0.2",
+          "0.2",
+          "0.2"
         ],
         "entry_clips": 2,
         "mode": "fixed_rr",
-        "reward_risk": "2",
+        "reward_risk": "3",
         "target_r_multiples": [
+          "0.5",
           "1",
-          "2"
+          "2",
+          "3"
         ],
         "trail_after_r": null,
         "trail_to_r": null
@@ -5311,6 +5320,7 @@
           "0.25",
           "0.5"
         ],
+        "target_r_multiples": [],
         "tp1_close_fraction": null
       },
       "market_data": {
@@ -6126,6 +6136,7 @@
           "0.25",
           "0.35"
         ],
+        "target_r_multiples": [],
         "tp1_close_fraction": null
       },
       "market_data": {
@@ -6971,6 +6982,7 @@
           "0.25",
           "0.5"
         ],
+        "target_r_multiples": [],
         "tp1_close_fraction": null
       },
       "market_data": {
@@ -7786,6 +7798,7 @@
           "0.25",
           "0.5"
         ],
+        "target_r_multiples": [],
         "tp1_close_fraction": null
       },
       "market_data": {
@@ -8446,19 +8459,19 @@
           "hard_entry_drift_pips": "20",
           "max_entry_drift_atr": "1",
           "min_entry_drift_pips": "10",
-          "min_rr": "2",
-          "min_target_pips": 50,
-          "room_stop_floor_pips": 25,
+          "min_rr": "3",
+          "min_target_pips": 150,
+          "room_stop_floor_pips": 50,
           "tp_buffer_pips": "3"
         },
         "reaction": {
           "market_fraction": "0.8",
-          "room_stop_min_rr": "2",
+          "room_stop_min_rr": "3",
           "scale_fraction": "0.2",
           "scale_invalid_policy": "single_market",
           "scale_step_atr": "0.5",
           "stop_max_pips": 100,
-          "stop_min_pips": 25
+          "stop_min_pips": 50
         },
         "regime": {
           "direction_enabled": false,
@@ -8469,7 +8482,7 @@
         "scaling": {
           "add": {
             "level_buffer_atr": "1",
-            "min_stop_pips": 25,
+            "min_stop_pips": 50,
             "pullback_enabled": false,
             "pullback_max_retrace": "0.7",
             "pullback_min_retrace": "0.2",
@@ -8480,12 +8493,12 @@
         "stops": {
           "be_buffer_ticks": 6,
           "reaction": {
-            "room_floor_pips": 25
+            "room_floor_pips": 50
           },
           "sl_distance": "10",
           "stop_push_beyond_zone": true,
           "trend": {
-            "minimum_pips": 25
+            "minimum_pips": 50
           },
           "wick_stop_buffer_atr": "0.15"
         },
@@ -8611,6 +8624,7 @@
         "risk_multiplier": "1",
         "risk_reference": "shallow",
         "target_close_ratios": [],
+        "target_r_multiples": [],
         "tp1_close_fraction": "0.4"
       },
       "market_data": {
@@ -9093,17 +9107,21 @@
         }
       },
       "targeting": {
-        "breakeven_after_r": "1",
+        "breakeven_after_r": "0.5",
         "close_ratios": [
-          "0.5",
-          "0.5"
+          "0.4",
+          "0.2",
+          "0.2",
+          "0.2"
         ],
         "entry_clips": 2,
         "mode": "fixed_rr",
-        "reward_risk": "2",
+        "reward_risk": "3",
         "target_r_multiples": [
+          "0.5",
           "1",
-          "2"
+          "2",
+          "3"
         ],
         "trail_after_r": null,
         "trail_to_r": null
