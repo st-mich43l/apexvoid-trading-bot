@@ -13,6 +13,21 @@ dated section after deployment.
 ## Unreleased
 
 ### Removed
+- Market Map as the data source for the entry-containment hard block
+  (Stage 3 of the owner-directed purge — "these technique calculate swing
+  right? so we can migrate to scanner, detector and clean").
+  `evaluate_structural_target_room`'s `opposing_entry_overlap` /
+  `opposing_entry_contained` / `opposing_major_no_room` reject reasons now
+  read opposing structure from `htf_zones` (the same technique-native
+  displacement/supply-demand zone scan `_opposing_barrier_decision`
+  already used, computed fresh from OHLC frames every M1 cycle) instead of
+  `cached_market_map.actionable_entries`. A new `_zone_opposing_entries`
+  adapter in `worker.py` converts `Zone` objects into the minimal shape
+  the room check duck-types on (`side`/`lo`/`hi`/`tier`/`tags`/
+  `contains_price`), always tagged `"zone"` tier to match the treatment
+  Market Map's own `"zone"` tier already got. `market_map` itself is not
+  removed yet — it still feeds the unrelated confluence-claim resolution
+  and demand/supply overlap-thesis veto, candidates for a later stage.
 - Market Map's "major tier" opposing-wall room cap on the fixed_rr ladder
   (Stage 2 of the owner-directed purge). `_fixed_rr_adaptive_room_pips`
   and `_technique_swing_room_pips` are gone — the fixed_rr ladder is no

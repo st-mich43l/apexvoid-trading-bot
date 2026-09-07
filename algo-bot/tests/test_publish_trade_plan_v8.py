@@ -23,6 +23,7 @@ import pandas as pd
 import pytest
 
 from app.analysis.market_map import MapEntry, MarketMap
+from app.analysis.types import Zone
 from app.analysis.execution_eligibility import (
   EXECUTION_ELIGIBILITY_VERSION,
   STATIC_ELIGIBLE,
@@ -1217,6 +1218,11 @@ async def test_scalp_m1_publishes_inside_opposing_structure():
 async def test_final_gate_keeps_configured_ladder_with_opposing_structure():
   """Owner 2026-08-06: opposing geometry is not a reason to shrink the
   configured partial ladder into a solo TP before publish.
+
+  2026-09: the room check now reads htf_zones (scanner/detector-native),
+  not Market Map -- htf_zones= is what actually drives room_entries since
+  the Stage 3 migration; market_map= is passed too only because it still
+  feeds the unrelated confluence-claim/overlap-thesis checks.
   """
   client = redis_state.get_client()
   match = _match(
@@ -1243,6 +1249,7 @@ async def test_final_gate_keeps_configured_ladder_with_opposing_structure():
     ["supply"],
     10.0,
   ))
+  htf_zones = [Zone(bottom=4096.0, top=4098.0, side="supply", score=10.0)]
 
   plan_id = await worker._publish_trade_plan_v8(
     client,
@@ -1251,6 +1258,7 @@ async def test_final_gate_keeps_configured_ladder_with_opposing_structure():
     match,
     frames={"M1": _m1_trigger_bar()},
     market_map=market_map,
+    htf_zones=htf_zones,
   )
 
   assert plan_id is not None

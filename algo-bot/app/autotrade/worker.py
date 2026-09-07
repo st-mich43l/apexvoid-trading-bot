@@ -1352,6 +1352,49 @@ def _htf_levels(
   )
 
 
+@dataclass(frozen=True)
+class _ZoneOpposingEntry:
+  """Minimal opposing-structure shape evaluate_structural_target_room reads
+  (``side``/``lo``/``hi``/``tier``/``tags``/``contains_price``) -- built
+  from the same htf_zones() _opposing_barrier_decision already uses, not
+  Market Map.
+  """
+  side: str
+  lo: float
+  hi: float
+  tier: str = "zone"
+  tags: tuple[str, ...] = ()
+  contains_price: bool = False
+  score: float = 0.0
+
+
+def _zone_opposing_entries(
+  zones: list[Zone],
+) -> tuple[_ZoneOpposingEntry, ...]:
+  """Technique-native opposing entries for the target-room check.
+
+  2026-09 (owner: "these technique calculate swing right? so we can
+  migrate to scanner, detector and clean"). Every entry is "zone" tier --
+  matching the treatment Market Map's own "zone" tier already gets since
+  #493 (hard-blocks on containment, never caps the adaptive room
+  fallback after stage 2 of this purge removed that cap entirely).
+  Unsided round-number/reaction key levels (``htf_levels``) are not
+  included: they only ever got the same lenient, near-zero-effect
+  treatment Market Map's own "level" tier already has, so there's no
+  safety value being dropped by leaving them out of this migration.
+  """
+  return tuple(
+    _ZoneOpposingEntry(
+      side="buy" if zone.side == "demand" else "sell",
+      lo=zone.low,
+      hi=zone.high,
+      score=zone.score,
+    )
+    for zone in zones
+    if zone.side in ("demand", "supply") and not zone.mitigated
+  )
+
+
 def _barrier_id(
   source_type: str,
   side: str,
@@ -5649,10 +5692,10 @@ async def _publish_trade_plan_v8(
   room_entries = (
     ()
     if (
-      market_map is None
+      not htf_zones
       or match_bypasses_opposing_structure(execution_match)
     )
-    else tuple(getattr(market_map, "actionable_entries", ()) or ())
+    else _zone_opposing_entries(htf_zones)
   )
   displacement_lookback = max(
     0, int(runtime_config.execution.policy.displacement_override_lookback_bars),
