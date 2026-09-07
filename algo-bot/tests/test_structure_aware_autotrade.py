@@ -241,9 +241,13 @@ def test_quality_tiers_and_risk_multipliers():
   assert risk_multiplier_for_tier("A") == 1.0
   assert risk_multiplier_for_tier("C") == 1.0
   assert risk_multiplier_for_tier("A", post_impulse=True) == 0.5
-  assert risk_multiplier_for_tier("A", range_scalp=True) == 1.5
-  assert risk_multiplier_for_tier("B", range_scalp=True) == 1.5
-  assert risk_multiplier_for_tier("C", range_scalp=True) == 1.5
+  # Owner 2026-09-07: scalp books the same flat equity-table lot as any
+  # other trade now (PR #486's equity_table sizing_mode default) - the
+  # prior 1.5x here was a leftover from the old risk-percent sizing
+  # formula and had started silently re-inflating every scalp position.
+  assert risk_multiplier_for_tier("A", range_scalp=True) == 1.0
+  assert risk_multiplier_for_tier("B", range_scalp=True) == 1.0
+  assert risk_multiplier_for_tier("C", range_scalp=True) == 1.0
 
 
 def test_evaluate_ignores_stale_tier_b_half_size_stamp():
