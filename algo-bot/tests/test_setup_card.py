@@ -1199,6 +1199,34 @@ def test_root_card_shows_target_prices_with_pip_offsets():
     stop_price=4045.0,
     target_prices=(4050.73, 4052.73, 4054.73),
   )
+  assert "• <b>TP1:</b> <b>4,050.73 (+0.5R)</b>" in text
+  assert "• <b>TP2:</b> <b>4,052.73 (+1.1R)</b>" in text
+  assert "• <b>TP3:</b> <b>4,054.73 (+1.6R)</b>" in text
+
+
+def test_root_card_shows_clean_r_multiples_for_a_uniform_fixed_rr_ladder():
+  """A real 1R/2R fixed_rr trade reads as '+1R'/'+2R', not '+1.0R'/'+2.0R'."""
+  from dataclasses import replace
+
+  match = replace(
+    _strategy_match_for_card("setup-fixed-rr-ladder"), direction="SELL",
+    entry_low=4048.73, entry_high=4048.73,
+  )
+  text = setup_card.format_plan_published_root_card(
+    match,
+    stop_price=4058.73,
+    target_prices=(4038.73, 4028.73),
+  )
+  assert "• <b>TP1:</b> <b>4,038.73 (+1R)</b>" in text
+  assert "• <b>TP2:</b> <b>4,028.73 (+2R)</b>" in text
+
+
+def test_root_card_target_prices_fall_back_to_pips_without_a_stop():
+  """No stop known yet -- still shows the raw pip offset, not a bogus R."""
+  match = _strategy_match_for_card("setup-tp-levels-no-stop")
+  text = setup_card.format_plan_published_root_card(
+    match, target_prices=(4050.73, 4052.73, 4054.73),
+  )
   assert "• <b>TP1:</b> <b>4,050.73 (+20)</b>" in text
   assert "• <b>TP2:</b> <b>4,052.73 (+40)</b>" in text
   assert "• <b>TP3:</b> <b>4,054.73 (+60)</b>" in text
@@ -1237,9 +1265,9 @@ def test_fx_root_card_shows_target_levels_with_instrument_digits(monkeypatch):
     stop_price=1.36380,
     target_prices=(1.36620, 1.36820, 1.37020),
   )
-  assert "• <b>TP1:</b> <b>1.36620 (+20)</b>" in text
-  assert "• <b>TP2:</b> <b>1.36820 (+40)</b>" in text
-  assert "• <b>TP3:</b> <b>1.37020 (+60)</b>" in text
+  assert "• <b>TP1:</b> <b>1.36620 (+5R)</b>" in text
+  assert "• <b>TP2:</b> <b>1.36820 (+10R)</b>" in text
+  assert "• <b>TP3:</b> <b>1.37020 (+15R)</b>" in text
   assert "1.36 " not in text  # must not collapse FX to 2dp
 
 
