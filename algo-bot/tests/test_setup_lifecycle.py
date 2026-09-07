@@ -9,6 +9,7 @@ an explicit condition, and one-active-TradePlan-per-thesis claiming.
 from __future__ import annotations
 
 import asyncio
+import time
 
 import pytest
 
@@ -368,3 +369,44 @@ async def test_concurrent_transitions_from_a_stale_read_never_silently_overwrite
     "the slow, stale-read transition must never have overwritten the "
     "faster competing transition's result"
   )
+
+
+def test_active_setup_ttl_floor_survives_a_quiet_weekend():
+  """Owner-reported live bug: a filled position's canonical record must
+  not lapse just because nothing touched it for a normal weekend gap
+  (fill Friday, market closed until Sunday night, ~60h of silence). The
+  record's TTL re-anchors from ``expires_at`` (the setup's short business
+  deadline), not from activation, so once ``now`` is past it the floor
+  alone decides how long the record survives with no further event.
+
+  A too-short floor let this record vanish mid-weekend on a real USDJPY
+  position; startup reconciliation then read load_setup() as None and
+  deleted the still-needed forming-card Telegram mapping, so the next
+  real event (order_filled / position_closed) found no card and posted a
+  duplicate root card instead of threading onto the original.
+  """
+  weekend_ago = int(time.time()) - 3 * 24 * 3600
+  record = SetupRecord(
+    setup_id="ttl-weekend-gap",
+    thesis_id="thesis-1",
+    symbol="USDJPY",
+    state=PLAN_BUILT,
+    expires_at=weekend_ago,
+  )
+
+  ttl = setup_lifecycle._ttl_for(record)
+
+  assert ttl >= 30 * 24 * 3600
+
+
+def test_terminal_setup_ttl_floor_is_at_least_thirty_days():
+  record = SetupRecord(
+    setup_id="ttl-terminal",
+    thesis_id="thesis-1",
+    symbol="XAU",
+    state=CONSUMED,
+  )
+
+  ttl = setup_lifecycle._ttl_for(record)
+
+  assert ttl == 30 * 24 * 3600
