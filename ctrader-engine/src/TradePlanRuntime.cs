@@ -2846,7 +2846,9 @@ public sealed class TradePlanRuntime(
           cancellationToken,
           positionId: state.PositionId,
           price: lastExecution?.ExecutionPrice,
-          targetPips: ArchivedTargetPips(plan, state, target.TargetId),
+          targetPips: ArchivedTargetPips(
+            plan, state, target.TargetId, lastExecution?.ExecutionPrice
+          ),
           volume: closedTotal,
           eventKey: remainingAfter <= 0
             ? $"tp_completed_{target.TargetId}_closed"
@@ -4041,7 +4043,8 @@ public sealed class TradePlanRuntime(
   private int? ArchivedTargetPips(
     TradePlan plan,
     TradePlanRuntimeState state,
-    string targetId
+    string targetId,
+    decimal? actualExitPrice = null
   )
   {
     var weightedFill = state.GroupWeightedFillPrice ?? state.EntryFillPrice;
@@ -4059,6 +4062,17 @@ public sealed class TradePlanRuntime(
     {
       return null;
     }
+    // Prefer the real close execution price over the planned target price --
+    // slippage/spread mean they rarely match exactly, and the Telegram line
+    // this feeds always shows the real fill price right next to this figure
+    // (e.g. "TP1 · Fill: 154.362 · Achieved: +Npips"). Computing the pips
+    // from a different price than the one displayed made the two numbers
+    // visibly inconsistent (live 2026-09-07: Fill showed 154.362 but
+    // Achieved was computed from the 154.357 target, off by 0.5 pip).
+    // Falls back to the planned target price only when no real exit price
+    // is available (e.g. FinalizeBrokerAbsentCloseAsync, where deal history
+    // itself is the thing that's missing).
+    var exitPrice = actualExitPrice ?? plan.Targets[index].Price;
     // Report realized direction vs fill — never abs() a losing chase-through
     // TP as "+1 pip achieved".
     var buy = string.Equals(
@@ -4067,8 +4081,8 @@ public sealed class TradePlanRuntime(
       StringComparison.OrdinalIgnoreCase
     );
     var raw = buy
-      ? (plan.Targets[index].Price - fillPrice) / pipSize
-      : (fillPrice - plan.Targets[index].Price) / pipSize;
+      ? (exitPrice - fillPrice) / pipSize
+      : (fillPrice - exitPrice) / pipSize;
     if (raw <= 0)
     {
       return null;

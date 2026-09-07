@@ -13,6 +13,12 @@ dated section after deployment.
 ## Unreleased
 
 ### Changed
+- Auto-algo root card TP lines now show an R-multiple ("+1R", "+1.5R")
+  instead of a raw pip count ("+21") — a bare pip figure reads as
+  meaningless without the stop distance next to it, especially now that
+  XAU's ladder is no longer uniformly 1R/2R across levels. Falls back to
+  the previous pip-count display when a stop price isn't resolvable yet
+  (e.g. an early forming-card render).
 - Manual `/algo` TP levels are now a bot-calculated R-multiple ladder
   (0.5R / 1R / 2R / 3R, four levels) instead of owner-typed prices or the
   pip-default ladder — owner-reported: hand-picked levels made some trades
@@ -32,6 +38,16 @@ dated section after deployment.
   per policy so XAU can diverge from FX deliberately.
 
 ### Fixed
+- `tp_booked`/`position_closed` events computed "Achieved: Npips" from the
+  planned target price instead of the real close execution price, while
+  the "Fill:" price shown right next to it on the same line was always the
+  real one — live 2026-09-07, a USDJPY TP1 showed "Fill: 154.362" next to
+  "Achieved: +10.0 pips", but 10.0 pips only reconciled against the
+  154.357 *target*, not the 154.362 fill actually booked (off by 0.5
+  pip). Now derives the pips from the same real execution price the Fill
+  line displays; falls back to the planned target price only when no real
+  exit price is available (broker-absent close reconciliation, where deal
+  history itself is what's missing).
 - Auto-algo root card Redis identity keys (`forming_message_key` /
   `telegram_root_message_key` / `forming_status_key`, and the canonical
   `analysis:setup:{setup_id}` record) had a 24h TTL floor that re-anchors

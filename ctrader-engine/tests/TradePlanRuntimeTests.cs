@@ -2090,6 +2090,42 @@ public sealed class TradePlanRuntimeTests
   }
 
   [Fact]
+  public async Task TpBookedArchivedPipsUseTheRealFillNotThePlannedTarget()
+  {
+    // TP1's declared target (4090.50) deliberately differs from what
+    // FakeTradePlanTradingClient.ClosePositionAsync always actually fills
+    // at (4096.0m, simulating real slippage/spread) -- the Telegram line
+    // this feeds shows both numbers together ("Fill: 4096.00 · Achieved:
+    // Npips"), so ArchivedTargetPips must derive N from the same 4096.00
+    // fill, not the 4090.50 target, or the two numbers visibly disagree.
+    var targets = """
+      [
+        {"target_id": "TP1", "type": "absolute", "price": "4090.50", "close_ratio": "0.5"},
+        {"target_id": "TP2", "type": "absolute", "price": "4104.00", "close_ratio": "0.5"}
+      ]
+      """;
+    var store = new FakeTradePlanStore();
+    store.EnqueuePlan(PlanJson(targetsJson: targets));
+    var client = new FakeTradePlanTradingClient { AccountBalance = 3000m };
+    var runtime = new TradePlanRuntime(Options(), store, () => DateTimeOffset.UtcNow, _ => { });
+    await runtime.PollAsync(
+      client, Symbol, new SpotPrice("XAU", 4089.05m, 4089.10m, 1), CancellationToken.None
+    );
+    // Price reaches TP1's declared 4090.50 -- the fake still fills the
+    // close at its own fixed 4096.0m, well past the declared target.
+    await runtime.PollAsync(
+      client, Symbol, new SpotPrice("XAU", 4090.55m, 4090.60m, 2), CancellationToken.None
+    );
+
+    var tpBooked = Assert.Single(store.Events, e => e.Type == "tp_booked");
+    Assert.Equal(4096.0m, tpBooked.Price);
+    // Weighted fill is ~4089.06 (see the sibling test's BE-stop amendment
+    // for the same entry setup) -- (4096.00 - fill)/pip, NOT
+    // (4090.50 - fill)/pip (which would round to ~14).
+    Assert.Equal(70, tpBooked.TargetPips);
+  }
+
+  [Fact]
   public async Task BeStopOutAfterTp1FinalizesInsteadOfRecoveryRequired()
   {
     var store = new FakeTradePlanStore();
