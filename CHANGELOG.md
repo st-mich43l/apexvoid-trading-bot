@@ -13,6 +13,20 @@ dated section after deployment.
 ## Unreleased
 
 ### Removed
+- Market Map's "major tier" opposing-wall room cap on the fixed_rr ladder
+  (Stage 2 of the owner-directed purge). `_fixed_rr_adaptive_room_pips`
+  and `_technique_swing_room_pips` are gone — the fixed_rr ladder is no
+  longer capped by any external opposing-structure scan; it's sized
+  entirely from the technique's own configured R-multiples. The prior
+  design let the technique's own `structure_swing` widen a major-tier
+  Market Map wall but never remove it, and defaulted to unconstrained
+  room whenever no major wall existed — a widen-only mechanism has
+  nothing left to widen once there's no wall to widen from, so this is a
+  clean no-op removal, not a narrowing: the common case (no major wall)
+  behaves identically; the rare "major wall present" case now also gets
+  the full ladder instead of a capped one. Deleted
+  `tests/test_fixed_rr_adaptive_room.py` (180 lines, 13 tests) — its
+  entire subject no longer exists.
 - Market Map's candidate-generation role in `worker.py` (Stage 1 of a
   broader owner-directed purge — "we work on technique zone not
   calculate opposing zone blindly"). `evaluate_market_map_strategy`'s
