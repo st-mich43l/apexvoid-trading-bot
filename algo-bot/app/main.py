@@ -19,7 +19,6 @@ from app.signals.watcher import watcher_loop
 from app.signals.calendar import calendar_sync_loop
 from app.signals.weekly_report import weekly_report_loop
 from app.analysis.bar_event_dispatcher import bar_event_dispatcher_loop
-from app.analysis.market_map_delivery import market_map_scan_loop
 from app.autotrade.delivery import auto_trade_events_loop
 from app.autotrade.stats_ingestion import (
   auto_trade_stats_ingestion_loop,
@@ -146,7 +145,9 @@ async def main() -> None:
   # strategy_match_ready_loop removed from production startup: ZoneWatch →
   # direct TradePlan is authoritative. Legacy parsers remain for one release.
   _spawn_supervised("setup_expiry_sweeper_loop", setup_expiry_sweeper_loop)
-  _spawn_supervised("market_map_scan_loop", market_map_scan_loop)
+  # market_map_scan_loop removed from production startup 2026-09
+  # (owner-directed Market Map purge): the periodic owner digest push is
+  # retired along with Market Map's role as a trading-decision input.
   _spawn_supervised("auto_trade_events_loop", auto_trade_events_loop)
   _spawn_supervised("auto_trade_stats_ingestion_loop", auto_trade_stats_ingestion_loop)
   _spawn_supervised("bridge_intents_loop", bridge_intents_loop)
