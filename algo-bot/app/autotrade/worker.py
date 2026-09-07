@@ -82,9 +82,11 @@ from app.autotrade.strategy_taxonomy import (
   match_bypasses_opposing_structure,
 )
 from app.autotrade.structural_target_room import (
+  ZoneOpposingEntry,
   evaluate_structural_target_room,
   filter_displaced_opposing_entries,
   filter_shared_boundary_opposing_entries,
+  zone_opposing_entries,
   zone_proximal_room_reference,
 )
 from app.autotrade.execution_confirmation import (
@@ -216,11 +218,7 @@ from app.autotrade.range_lifecycle import (
   retire_range_context,
   status_label_for_retired,
 )
-from app.autotrade.map_strategy import (
-  MarketMap,
-  decode_market_map,
-  market_map_key,
-)
+from app.autotrade.map_strategy import MarketMap
 from app.autotrade.scale_context import AutoScaleContext, build_auto_scale_context
 from app.autotrade.trend import (
   RegimeInfo,
@@ -1352,47 +1350,12 @@ def _htf_levels(
   )
 
 
-@dataclass(frozen=True)
-class _ZoneOpposingEntry:
-  """Minimal opposing-structure shape evaluate_structural_target_room reads
-  (``side``/``lo``/``hi``/``tier``/``tags``/``contains_price``) -- built
-  from the same htf_zones() _opposing_barrier_decision already uses, not
-  Market Map.
-  """
-  side: str
-  lo: float
-  hi: float
-  tier: str = "zone"
-  tags: tuple[str, ...] = ()
-  contains_price: bool = False
-  score: float = 0.0
-
-
-def _zone_opposing_entries(
-  zones: list[Zone],
-) -> tuple[_ZoneOpposingEntry, ...]:
-  """Technique-native opposing entries for the target-room check.
-
-  2026-09 (owner: "these technique calculate swing right? so we can
-  migrate to scanner, detector and clean"). Every entry is "zone" tier --
-  matching the treatment Market Map's own "zone" tier already gets since
-  #493 (hard-blocks on containment, never caps the adaptive room
-  fallback after stage 2 of this purge removed that cap entirely).
-  Unsided round-number/reaction key levels (``htf_levels``) are not
-  included: they only ever got the same lenient, near-zero-effect
-  treatment Market Map's own "level" tier already has, so there's no
-  safety value being dropped by leaving them out of this migration.
-  """
-  return tuple(
-    _ZoneOpposingEntry(
-      side="buy" if zone.side == "demand" else "sell",
-      lo=zone.low,
-      hi=zone.high,
-      score=zone.score,
-    )
-    for zone in zones
-    if zone.side in ("demand", "supply") and not zone.mitigated
-  )
+# _ZoneOpposingEntry/_zone_opposing_entries moved to structural_target_room.py
+# (2026-09, Market Map purge stage 4) so actionability.py's scanner-side
+# opposing-zone check can share the identical technique-native adapter
+# instead of Market Map, not just this module's own TradePlan-time check.
+_ZoneOpposingEntry = ZoneOpposingEntry
+_zone_opposing_entries = zone_opposing_entries
 
 
 def _barrier_id(
@@ -2052,54 +2015,27 @@ async def _zone_cooldown_reason(
   )
 
 
-def _has_overlapping_zones(market_map: MarketMap | None) -> bool:
-  """True when the published Market Map itself contains a BUY and a SELL
-  band whose ranges intersect at all - a self-contradiction in the map, not
-  yet necessarily where any candidate is entering. Feeds the observability
-  counter regardless of the veto flag or any specific candidate.
+def _has_overlapping_zones(zones: list[Zone] | None) -> bool:
+  """True when the technique-native HTF zone scan itself contains a BUY
+  and a SELL band whose ranges intersect at all - a self-contradiction in
+  the structure, not yet necessarily where any candidate is entering.
+  Feeds the observability counter regardless of the veto flag or any
+  specific candidate.
   """
-  if market_map is None:
-    return False
+  entries = zone_opposing_entries(zones)
+  buys = [entry for entry in entries if entry.side == "buy"]
+  sells = [entry for entry in entries if entry.side == "sell"]
   return any(
     buy.lo <= sell.hi and sell.lo <= buy.hi
-    for buy in market_map.buys
-    for sell in market_map.sells
-  )
-
-
-def _overlapping_zone_conflict_reason(
-  entry_reference: float,
-  market_map: MarketMap | None,
-) -> str | None:
-  """Veto an entry that falls inside both a demand (BUY) and a supply
-  (SELL) band on the same published Market Map (23 Jul 2026 incident: BUY
-  4,112-4,122 and SELL 4,116-4,127 overlapped 4,116-4,122; the fill landed
-  inside it). Direction-agnostic - a price the map calls both a floor and a
-  ceiling is not a tradeable location in either direction.
-  """
-  if market_map is None:
-    return None
-  demand_hit = next(
-    (entry for entry in market_map.buys if entry.lo <= entry_reference <= entry.hi),
-    None,
-  )
-  supply_hit = next(
-    (entry for entry in market_map.sells if entry.lo <= entry_reference <= entry.hi),
-    None,
-  )
-  if demand_hit is None or supply_hit is None:
-    return None
-  return (
-    f"entry {entry_reference:.5f} inside both demand "
-    f"{demand_hit.lo:.5f}-{demand_hit.hi:.5f} and supply "
-    f"{supply_hit.lo:.5f}-{supply_hit.hi:.5f}"
+    for buy in buys
+    for sell in sells
   )
 
 
 def _resolve_overlap_thesis(
   direction: str,
   entry_reference: float,
-  market_map: MarketMap | None,
+  htf_zones: list[Zone] | None,
   m1: Any,
   atr: float | None,
   cfg: Any | None = None,
@@ -2110,7 +2046,7 @@ def _resolve_overlap_thesis(
   M1 reaction-lookback memory ``map_strategy.py`` already computes for its
   own reaction selection (PR #100), instead of the previous unconditional
   "both directions are dead" veto. Never trims or deletes either band from
-  the Market Map itself - this only decides whether THIS candidate's
+  the HTF zone scan itself - this only decides whether THIS candidate's
   thesis has directional confirmation.
   """
   from app.autotrade.map_strategy import _reaction_in_lookback
@@ -2118,14 +2054,15 @@ def _resolve_overlap_thesis(
   if cfg is None:
     cfg = instrument_runtime_view(symbol)
   guard_mode = resolve_guard_mode(cfg)
-  if market_map is None:
-    return GuardOutcome("overlap", OUTCOME_ALLOW, "no_map", "no market map", False)
+  if not htf_zones:
+    return GuardOutcome("overlap", OUTCOME_ALLOW, "no_map", "no HTF zones", False)
+  entries = zone_opposing_entries(htf_zones)
   demand_hit = next(
-    (entry for entry in market_map.buys if entry.lo <= entry_reference <= entry.hi),
+    (entry for entry in entries if entry.side == "buy" and entry.lo <= entry_reference <= entry.hi),
     None,
   )
   supply_hit = next(
-    (entry for entry in market_map.sells if entry.lo <= entry_reference <= entry.hi),
+    (entry for entry in entries if entry.side == "sell" and entry.lo <= entry_reference <= entry.hi),
     None,
   )
   if demand_hit is None or supply_hit is None:
@@ -3096,7 +3033,7 @@ async def _publish_candidate(
     or guard_mode == GUARD_MODE_OBSERVE
   ):
     overlap_outcome = _resolve_overlap_thesis(
-      decision.direction, entry_reference, market_map, m1,
+      decision.direction, entry_reference, htf_zones, m1,
       scale_context.atr, None, symbol=symbol,
     )
     if overlap_outcome.reason_code not in ("no_map", "no_overlap"):
@@ -3823,7 +3760,7 @@ async def _publish_strategy_match(
     overlap_outcome = _resolve_overlap_thesis(
       match.direction,
       spot.price,
-      market_map,
+      htf_zones,
       m1,
       match.atr,
       None,
@@ -4735,12 +4672,12 @@ async def _persist_v8_confirmation_phase(
 def _resolve_match_confluence_claim_id(
   symbol: str,
   match: StrategyMatch,
-  market_map: Any | None,
+  htf_zones: list[Zone] | None,
 ) -> str | None:
   """Use scanner's merged zone identity; resolve only for legacy matches."""
   if match.confluence_zone_id:
     return match.confluence_zone_id
-  if market_map is None:
+  if not htf_zones:
     return None
   other_members = [
     ConfluenceMember(
@@ -4756,7 +4693,7 @@ def _resolve_match_confluence_claim_id(
       ),
       score=float(entry.score),
     )
-    for entry in getattr(market_map, "actionable_entries", None) or []
+    for entry in zone_opposing_entries(htf_zones)
   ]
   return resolve_confluence_zone_id(
     match.entry_low,
@@ -4786,7 +4723,6 @@ async def _publish_trade_plan_v8(
   htf_levels: list[Level] | None = None,
   regime: RegimeInfo | None = None,
   frames: dict[str, Any] | None = None,
-  market_map: Any | None = None,
 ) -> str | None:
   """Build and publish a TradePlan V8 from an already-CONFIRMED match.
 
@@ -5859,7 +5795,7 @@ async def _publish_trade_plan_v8(
   zone_claim_id = _resolve_match_confluence_claim_id(
     symbol,
     match_for_plan,
-    market_map,
+    htf_zones,
   )
   if zone_claim_id is not None:
     zone_claimed = await claim_confluence_zone(
@@ -5996,7 +5932,7 @@ async def _publish_trade_plan_v8(
   overlap_outcome = _resolve_overlap_thesis(
     match_for_plan.direction,
     entry_reference,
-    market_map,
+    htf_zones,
     None if frames is None else frames.get("M1"),
     float(match_for_plan.atr),
     None,
@@ -6769,7 +6705,7 @@ async def _publish_trend_candidate(
     or guard_mode == GUARD_MODE_OBSERVE
   ):
     overlap_outcome = _resolve_overlap_thesis(
-      trend_decision.direction, entry_reference, market_map, trend_m1,
+      trend_decision.direction, entry_reference, htf_zones, trend_m1,
       trend_decision.atr, None, symbol=symbol,
     )
     if overlap_outcome.reason_code not in ("no_map", "no_overlap"):
@@ -7804,9 +7740,6 @@ async def _handle_event(
     private_decision=private_decision,
     spot=spot,
   )
-  cached_market_map = decode_market_map(
-    await client.get(market_map_key(symbol))
-  )
   strategy_cfg = instrument_runtime_view(symbol)
   strategy_matches = list(scanner_strategy_matches)
   if runtime_config.strategies.matching.multiple_matches_enabled and strategy_matches:
@@ -8108,10 +8041,6 @@ async def _handle_event(
             htf_levels=htf_levels,
             regime=regime,
             frames=frames,
-            # Final structural geometry is a correctness boundary, not an
-            # optional soft guard. Use the canonical cached Market Map even
-            # when the legacy guard toggle is disabled.
-            market_map=cached_market_map,
           )
         finally:
           await release_owned_lock(client, route_lock, route_lock_token)
@@ -8377,7 +8306,7 @@ async def _handle_event(
         publication_reason_code="candidate_published",
         winner_intent_id=trend_intent_id,
       )
-  if _has_overlapping_zones(cached_market_map):
+  if _has_overlapping_zones(htf_zones):
     await client.incr(f"auto_trade:zone_overlap:{symbol.upper()}")
   candidate_ids = [
     *strategy_candidate_ids,

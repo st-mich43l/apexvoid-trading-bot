@@ -20,16 +20,18 @@ from app.analysis.key_level_role import (
   ROLE_SUPPORT,
   classify_key_level_role,
 )
-from app.analysis.market_map import MapEntry, MarketMap
 from app.analysis.structural_reaction_support import STRUCTURAL_SETUPS
+from app.analysis.types import Zone
 from app.autotrade.strategy_taxonomy import (
   is_scalp_strategy,
   is_technique_or_confluence,
 )
 from app.autotrade.structural_target_room import (
+  ZoneOpposingEntry,
   evaluate_structural_target_room,
   filter_displaced_opposing_entries,
   filter_shared_boundary_opposing_entries,
+  zone_opposing_entries,
   zone_proximal_room_reference,
 )
 
@@ -41,7 +43,7 @@ class ActionabilityDecision:
   message: str
   hard_block: bool
   measured: dict[str, Any]
-  opposing_entry: MapEntry | None = None
+  opposing_entry: ZoneOpposingEntry | None = None
 
 
 @dataclass(frozen=True)
@@ -191,7 +193,7 @@ def _band_overlap(
 def _map_conflict(
   first: DetectionResult,
   second: DetectionResult,
-  entries: Sequence[MapEntry],
+  entries: Sequence[ZoneOpposingEntry],
 ) -> bool:
   """Whether opposing observations resolve into contradictory map space."""
   first_side = "buy" if first.direction.upper() == "BUY" else "sell"
@@ -235,12 +237,12 @@ def _result_payload(result: DetectionResult) -> dict[str, Any]:
 
 
 def _entries_excluding_displaced_barriers(
-  entries: Sequence[MapEntry],
+  entries: Sequence[ZoneOpposingEntry],
   *,
   result: DetectionResult,
   context: Any,
   cfg: Any,
-) -> tuple[Sequence[MapEntry], dict[str, Any]]:
+) -> tuple[Sequence[ZoneOpposingEntry], dict[str, Any]]:
   """See structural_target_room.filter_displaced_opposing_entries: excludes
   an opposing barrier the candidate's own recent execution-tf closes have
   already closed decisively beyond, rather than hard-blocking on a barrier
@@ -284,7 +286,7 @@ _ZONE_TRIM_EPS = 1e-9
 
 def _trim_zone_against_overlapping_barrier(
   result: DetectionResult,
-  entries: Sequence[MapEntry],
+  entries: Sequence[ZoneOpposingEntry],
 ) -> DetectionResult:
   """Recovery mission (2026-07-31): a partially-overlapping opposing
   barrier used to hard-reject the whole candidate (opposing_entry_overlap)
@@ -351,7 +353,7 @@ def _decision(
   measured: dict[str, Any],
   *,
   hard_block: bool = True,
-  opposing_entry: MapEntry | None = None,
+  opposing_entry: ZoneOpposingEntry | None = None,
 ) -> ActionabilityDecision:
   return ActionabilityDecision(
     not hard_block,
@@ -391,7 +393,7 @@ def resolve_actionability(
   *,
   symbol: str,
   observed_results: Sequence[DetectionResult],
-  market_map: MarketMap | None,
+  zones: list[Zone] | None,
   context: Any,
   atr: float,
   pip_size: float,
@@ -400,13 +402,18 @@ def resolve_actionability(
   """Resolve semantic, cross-side, and opposing-room hard geometry.
 
   ``cfg`` defaults to the authority-neutral canonical ``runtime_config``;
-  tests may inject a canonical-shaped override.
+  tests may inject a canonical-shaped override. ``zones`` is the scanner's
+  own technique-native HTF supply/demand scan (2026-09, Market Map purge
+  stage 4 - "these technique calculate swing right? so we can migrate to
+  scanner, detector and clean"), not Market Map.
   """
   if cfg is None:
     from app.core.config import runtime_config
     cfg = runtime_config
   observed = tuple(observed_results)
-  entries = () if market_map is None else tuple(market_map.actionable_entries)
+  entries = zone_opposing_entries(
+    zones, major_score=float(cfg.analysis.market_map.major_score),
+  )
   gated: dict[int, ActionabilityDecision] = {}
   decisions: dict[int, list[ActionabilityDecision]] = {}
   conflicts: list[dict[str, Any]] = []
@@ -453,11 +460,11 @@ def resolve_actionability(
       ))
 
   for index, result in enumerate(observed):
-    if _structural(result) and market_map is None:
-      # Missing Market Map is telemetry only — never drop the candidate.
+    if _structural(result) and not zones:
+      # Missing HTF zone context is telemetry only — never drop the candidate.
       record(index, _decision(
         "context_degraded",
-        "current Market Map context is unavailable",
+        "current opposing zone context is unavailable",
         {
           "symbol": symbol,
           "htf_bias": getattr(context, "htf_bias", None),

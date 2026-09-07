@@ -96,6 +96,7 @@ from app.autotrade.setup_lifecycle import (
 )
 from app.autotrade.setup_card import kill_setup_card
 from app.autotrade import worker as autotrade_worker
+from app.autotrade.structural_target_room import zone_meets_execution_width
 
 _PRE_CONFIRMED_CHAIN = (DISCOVERED, WATCHING, TOUCHED, FORMING, CONFIRMED)
 from app.autotrade.lifecycle import emit_lifecycle, increment_metric
@@ -213,6 +214,41 @@ def _price_text(value: float, symbol: str, *, grouped: bool = False) -> str:
 def _pip_size(symbol: str) -> float:
   # Fail closed — never return 1.0 for an unknown instrument.
   return pip_for(symbol)
+
+
+def _htf_opposing_zones(analysis: Any, *, symbol: str) -> list[Zone] | None:
+  """Technique-native HTF supply/demand zones for resolve_actionability's
+  opposing-room check (2026-09, Market Map purge stage 4 - "these
+  technique calculate swing right? so we can migrate to scanner, detector
+  and clean"). The scanner already computes this per M15 cycle
+  (analysis.per_tf["M15"].zones, mitigation-marked); this only applies the
+  same execution-width gate worker.py's own independent M15 zone scan
+  (_htf_zones) applies, so both opposing-room checks share one definition
+  of a usable wall. Side/mitigation filtering happens downstream in
+  zone_opposing_entries.
+  """
+  per_tf = getattr(analysis, "per_tf", None) or {}
+  htf = per_tf.get(autotrade_worker._HTF_TIMEFRAME)
+  if htf is None:
+    return None
+  atr_values = htf.atr
+  current_atr = (
+    float(atr_values.iloc[-1])
+    if atr_values is not None and not atr_values.empty
+    and math.isfinite(float(atr_values.iloc[-1]))
+    else 0.0
+  )
+  policy = runtime_config.execution.policy
+  return [
+    zone for zone in htf.zones
+    if zone_meets_execution_width(
+      zone,
+      atr=current_atr,
+      pip_size=_pip_size(symbol),
+      max_width_atr=float(policy.execution_zone_max_width_atr),
+      max_width_pips=float(policy.execution_zone_max_width_pips),
+    )
+  ]
 
 
 def _level_bucket(symbol: str, level: float, bucket_pips: int) -> str:
@@ -3198,7 +3234,7 @@ async def _handle_event(
   actionability = resolve_actionability(
     symbol=symbol,
     observed_results=observed_results,
-    market_map=current_map,
+    zones=_htf_opposing_zones(analysis, symbol=symbol),
     context=ctx,
     atr=invalidation_atr,
     pip_size=_pip_size(symbol),

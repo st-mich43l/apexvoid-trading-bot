@@ -7,9 +7,104 @@ import logging
 import math
 from typing import Any, Iterable
 
+from app.analysis.types import Zone
 from app.core.log_throttle import log_at_most
 
 log = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class ZoneOpposingEntry:
+  """Minimal opposing-structure shape this module's own functions read
+  (``side``/``lo``/``hi``/``tier``/``tags``/``contains_price``) -- adapts a
+  technique-native ``Zone`` (the same displacement/supply-demand detector
+  data both the scanner's actionability gate and TradePlan build from)
+  instead of Market Map.
+  """
+  side: str
+  lo: float
+  hi: float
+  tier: str = "zone"
+  tags: tuple[str, ...] = ()
+  contains_price: bool = False
+  score: float = 0.0
+
+
+def zone_meets_execution_width(
+  zone: Zone,
+  *,
+  atr: float,
+  pip_size: float,
+  max_width_atr: float,
+  max_width_pips: float,
+) -> bool:
+  """True when ``zone`` is narrow enough to be a meaningful execution wall.
+
+  Mirrors the M1 HTF veto's own execution-zone width gate so a caller
+  feeding this module raw per-timeframe zones (not already filtered, as
+  the M1 veto's own zone scan is) gets the same treatment.
+  """
+  width = float(zone.high - zone.low)
+  if not math.isfinite(width) or width <= 0 or pip_size <= 0 or atr <= 0:
+    return False
+  return not (
+    width / atr > max_width_atr or width / pip_size > max_width_pips
+  )
+
+
+def _zone_tier(zone: Zone, *, major_score: float) -> str:
+  """Mirrors market_map.py's own tier formula exactly (``_zone_entry``):
+  ``"major" if htf and (fresh or score >= major_score) else "zone"``. A
+  zone only ever carries the "HTF Zone" score reason when it was scored
+  through the full multi-timeframe pipeline (``_apply_mtf_zone_scores``,
+  what builds the scanner's own ``per_tf`` analysis) - a caller working
+  from a bare single-timeframe zone scan (no MTF scoring applied) will
+  therefore always get "zone" tier here, same as before this function
+  existed, with no separate code path needed for that caller.
+  """
+  htf = any(
+    str(reason).casefold() == "htf zone"
+    for reason in (zone.score_reasons or ())
+  )
+  fresh = int(zone.touches) == 0
+  return "major" if htf and (fresh or zone.score >= major_score) else "zone"
+
+
+def zone_opposing_entries(
+  zones: Iterable[Zone] | None,
+  *,
+  major_score: float = 12.0,
+) -> tuple[ZoneOpposingEntry, ...]:
+  """Technique-native opposing entries for the target-room check.
+
+  2026-09 (owner: "these technique calculate swing right? so we can
+  migrate to scanner, detector and clean"). Tier is derived the same way
+  Market Map's own build_map derives it (see ``_zone_tier``) so a
+  genuinely major wall still hard-blocks the way it always has -
+  "zone"/"level" tier gets the weaker treatment
+  (``_WEAK_OPPOSING_TIERS``), "major" does not. ``major_score`` defaults
+  to the schema default for ``analysis.market_map.major_score``; pass the
+  configured value when available. Unsided round-number/reaction key
+  levels are not included: they only ever got the same lenient, near-
+  zero-effect treatment Market Map's own "level" tier already had, so
+  there's no safety value dropped by leaving them out. Callers that need
+  an execution-width gate (the M1 HTF veto's own zone scan already has
+  one applied) should pre-filter with ``zone_meets_execution_width``
+  before calling this.
+  """
+  if not zones:
+    return ()
+  return tuple(
+    ZoneOpposingEntry(
+      side="buy" if zone.side == "demand" else "sell",
+      lo=zone.low,
+      hi=zone.high,
+      tier=_zone_tier(zone, major_score=major_score),
+      score=zone.score,
+    )
+    for zone in zones
+    if zone.side in ("demand", "supply") and not zone.mitigated
+  )
 
 
 @dataclass(frozen=True)

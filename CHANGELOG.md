@@ -13,6 +13,45 @@ dated section after deployment.
 ## Unreleased
 
 ### Removed
+- Stopped the automatic Market Map owner Telegram digest
+  (`market_map_scan_loop`, previously spawned unconditionally at
+  startup) — owner-reported it was still sending after the trading-
+  decision purge stages. `/trade_map` (on-demand) is unaffected.
+- Market Map as the data source for the scanner's primary actionability
+  gate (Stage 4 of the owner-directed purge). `resolve_actionability`
+  (called from `scanner.py`'s main per-cycle loop — the actual gate that
+  decides which detected setups are actionable, not just TradePlan's own
+  secondary re-check from Stage 3) now reads the scanner's own
+  multi-timeframe-scored M15 zone data (`analysis.per_tf["M15"].zones`)
+  instead of `market_map.actionable_entries`, via the `zone_opposing_entries`
+  adapter shared with Stage 3's worker.py migration (now living in
+  `structural_target_room.py`). Tier is derived with the same formula
+  `build_map` itself uses (`"major" if htf and (fresh or score >=
+  major_score) else "zone"`, keyed off the zone's own `score_reasons`/
+  `touches`/`score`) so a genuinely major wall still hard-blocks exactly
+  as before — this was caught and fixed after an initial version that
+  always assigned "zone" tier silently dropped two real hard-block cases
+  in `test_scanner_actionability.py`.
+- `worker.py`'s remaining Market Map consumers: the overlap-thesis veto
+  (`_resolve_overlap_thesis`), the confluence-claim resolver
+  (`_resolve_match_confluence_claim_id`), and the map-self-contradiction
+  telemetry counter (`_has_overlapping_zones`) all now read `htf_zones`
+  instead of `market_map`/`cached_market_map`. The `market_map` parameter
+  is gone from `_publish_trade_plan_v8` entirely, and the dead
+  `_overlapping_zone_conflict_reason` (superseded by
+  `_resolve_overlap_thesis`, never called outside its own tests) is
+  deleted.
+- `map_strategy.py`'s fully-dead nearest-actionable-zone selection tree
+  (`evaluate_market_map_strategy`, `_select_reaction`/
+  `_select_reaction_detailed`, `ActionableMapEntry`,
+  `MarketMapStrategyDecision`, and their exclusive helpers) — its `.match`
+  result was already confirmed dead in Stage 1; the selection function
+  itself turned out to have zero production callers either. Deleted
+  `tests/test_auto_map_strategy.py` (734 lines, 21 tests, all exercising
+  only this dead tree) and the 4 tests in
+  `test_map_reaction_range_retirement.py` that exercised it too.
+  `_reaction_in_lookback`/`_touches`/`_rejects` (still used by `worker.py`'s
+  overlap-thesis guard and `scale_context.py`) are untouched.
 - Market Map as the data source for the entry-containment hard block
   (Stage 3 of the owner-directed purge — "these technique calculate swing
   right? so we can migrate to scanner, detector and clean").
