@@ -1225,12 +1225,23 @@ async def _ensure_root_card_for_manage_reply(
   Waits out scanner flood and retries once — never give up on the first
   RetryAfter when a setup_id is known.
   """
-  from app.autotrade.setup_card import ensure_root_card_for_setup_id, load_forming_card
+  from app.autotrade.setup_card import ensure_root_card_for_setup_id
   from app.bot.client import note_scanner_flood, wait_out_scanner_flood
 
-  existing = await load_forming_card(client, match_id)
-  if existing is not None and int(existing.get("message_id") or 0) > 0:
-    return int(existing["message_id"])
+  # 2026-09 (owner-reported duplicate root card): this used to check only
+  # forming_message_key via load_forming_card directly. telegram_root_key is
+  # the more durable of the two identity keys (see setup_card.py's TTL
+  # floor); if forming_message_key was ever unreadable for any transient
+  # reason while telegram_root_key still correctly named the real root, this
+  # function wrongly concluded "no root exists" and created a second one via
+  # ensure_root_card_for_setup_id below - every later reply then threaded
+  # onto that second message while the real root sat with none. Route
+  # through the same lookup _forming_reply_message_id already uses for
+  # replies, so "does a root exist" and "where do replies go" can never
+  # disagree.
+  existing_message_id = await _lookup_forming_reply_message_id(client, match_id)
+  if existing_message_id is not None and existing_message_id > 0:
+    return existing_message_id
 
   for attempt in range(1, 3):
     try:
@@ -1958,14 +1969,36 @@ async def _lookup_forming_reply_message_id(
   # Prefer the live forming card address over telegram_root — root can go
   # stale if the card was re-posted while the root key lagged behind.
   card = await load_forming_card(client, match_id)
+  card_message_id = 0
   if card is not None:
     try:
-      message_id = int(card["message_id"])
+      card_message_id = int(card["message_id"])
     except (KeyError, TypeError, ValueError):
-      message_id = 0
-    if message_id > 0:
-      return message_id
+      card_message_id = 0
   root_id = await load_telegram_root_message_id(client, match_id)
+  # 2026-09 (owner-reported): a "duplicate root card" complaint - replies
+  # threaded onto a second message while the first, real root sat with no
+  # replies at all - traces to exactly this pair disagreeing. Both keys are
+  # supposed to name the same message; when they don't, one of them was
+  # re-pointed by a race instead of an edit. Surfacing the mismatch here is
+  # cheap and is the only way to catch the next occurrence before the owner
+  # has to notice and report it from the Telegram side.
+  if (
+    card_message_id > 0
+    and root_id is not None
+    and root_id > 0
+    and card_message_id != root_id
+  ):
+    log.error(
+      "forming_reply_identity_mismatch setup_id=%s forming_message_id=%s "
+      "telegram_root_message_id=%s — using forming_message_id; a reply is "
+      "about to thread onto a different message than the setup's root",
+      match_id,
+      card_message_id,
+      root_id,
+    )
+  if card_message_id > 0:
+    return card_message_id
   if root_id is not None and root_id > 0:
     return root_id
   return None
