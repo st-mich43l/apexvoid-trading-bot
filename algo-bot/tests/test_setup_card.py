@@ -162,6 +162,33 @@ async def test_edit_failure_falls_back_to_a_fresh_post():
   }
 
 
+@pytest.mark.asyncio
+async def test_forming_card_ttl_survives_a_weekend_not_just_a_day():
+  """Owner-reported live bug: a 24h TTL floor on the card's own identity
+  keys let a Friday fill's mapping expire mid-weekend with no further
+  event to refresh it, so Monday's first real event found no card and
+  posted a duplicate instead of threading onto the original. The floor
+  must comfortably outlive any realistic single silent gap.
+  """
+  client = redis_state.get_client()
+  await _confirmed_setup(client, "setup-ttl")
+  await setup_card.save_forming_card(
+    client, "setup-ttl", chat_id=123, message_id=4242, text="body",
+  )
+  await setup_card.save_forming_card_status(
+    client, "setup-ttl", "✅ <b>ORDER ACTIVATED</b>", state="order_filled",
+  )
+
+  message_ttl = await client.ttl(setup_card.forming_message_key("setup-ttl"))
+  root_ttl = await client.ttl(setup_card.telegram_root_message_key("setup-ttl"))
+  status_ttl = await client.ttl(setup_card.forming_status_key("setup-ttl"))
+
+  a_weekend = 3 * 24 * 3600
+  assert message_ttl > a_weekend
+  assert root_ttl > a_weekend
+  assert status_ttl > a_weekend
+
+
 def test_apply_forming_card_stop_does_not_duplicate_existing_stop():
   """Card already has Stop after Key level — patch must not insert a second."""
   original = "\n".join([

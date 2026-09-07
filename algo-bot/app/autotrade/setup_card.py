@@ -73,6 +73,20 @@ SendFn = Callable[..., Awaitable[Any]]
 EditFn = Callable[[int, int, str], Awaitable[Any]]
 DeleteFn = Callable[[int, int], Awaitable[Any]]
 
+# Floor for the forming/root card's own Redis identity keys
+# (forming_message_key / telegram_root_message_key / forming_status_key) -
+# deliberately independent of the shared candidate storage_ttl_seconds
+# (24h default, used elsewhere for genuinely short-lived candidate/lease
+# records). A card's identity must survive as long as the position it
+# threads for can plausibly stay open with no intervening event - a 24h
+# floor here let a Friday fill's mapping expire over a quiet weekend, so
+# Monday's first real event (order_filled / position_closed) found no
+# card and posted a duplicate instead of threading onto the original
+# (confirmed live on a USDJPY position). See setup_lifecycle.py's matching
+# SETUP_AUDIT_RETENTION_SECONDS - both must stay long enough that neither
+# expires first while the other still holds.
+_FORMING_CARD_MIN_TTL_SECONDS = 30 * 24 * 3600
+
 CARD_STATUS_PRIORITY = {
   "analysis_only": 0,
   "queued": 10,
@@ -624,7 +638,8 @@ async def save_forming_card_status(
   state = state or _infer_status_state(status_line)
   priority = CARD_STATUS_PRIORITY.get(state, 0)
   effective_ttl = ttl or max(
-    86400, runtime_config.lifecycle.candidate.storage_ttl_seconds,
+    _FORMING_CARD_MIN_TTL_SECONDS,
+    runtime_config.lifecycle.candidate.storage_ttl_seconds,
   )
   payload = json.dumps(
     {
@@ -756,7 +771,8 @@ async def save_forming_card(
   ttl: int | None = None,
 ) -> None:
   effective_ttl = ttl or max(
-    86400, runtime_config.lifecycle.candidate.storage_ttl_seconds,
+    _FORMING_CARD_MIN_TTL_SECONDS,
+    runtime_config.lifecycle.candidate.storage_ttl_seconds,
   )
   payload = json.dumps(
     {"chat_id": chat_id, "message_id": message_id, "text": text},
