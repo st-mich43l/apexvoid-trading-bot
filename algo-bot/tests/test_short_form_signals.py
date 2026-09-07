@@ -16,6 +16,12 @@ pytestmark = pytest.mark.no_database
 PIP = pip_for("XAU")
 
 
+# 2026-09 (owner-reported): manual /algo TP levels are now a bot-calculated
+# 0.5R/1R/2R/3R ladder, not the pip-default DEFAULT_TP_PIPS ladder below (and
+# not whatever the owner types as tp - see MANUAL_ALGO_DEFAULT_TARGET_R_MULTIPLES).
+_R_MULTIPLES = (0.5, 1.0, 2.0, 3.0)
+
+
 def test_owner_short_form_example_auto_fills_sl_tp_and_setup():
   # Owner's own example: "xau buy 4078-75 / algo" -> sl always 60 pips,
   # that is 4072 (entry_high 4078 - 6.0).
@@ -26,8 +32,9 @@ def test_owner_short_form_example_auto_fills_sl_tp_and_setup():
   assert parsed["entry"] == pytest.approx(4075.0)
   assert parsed["entry_end"] == pytest.approx(4078.0)
   assert parsed["sl"] == pytest.approx(4072.0)
+  risk = 4078.0 - 4072.0
   assert parsed["tps"] == [
-    pytest.approx(4078.0 + pips * PIP) for pips in DEFAULT_TP_PIPS
+    pytest.approx(4078.0 + r * risk) for r in _R_MULTIPLES
   ]
   assert parsed["setup_type"] == DEFAULT_SETUP_TYPE
   assert parsed["execution_mode"] == "algo"
@@ -35,13 +42,15 @@ def test_owner_short_form_example_auto_fills_sl_tp_and_setup():
 
 def test_owner_manual_sl_example_keeps_explicit_stop():
   # Owner's own example: "xau buy 4078-75 / sl 4070 / algo" must follow the
-  # owner's stop price exactly, not the 60-pip default.
+  # owner's stop price exactly, not the 60-pip default - the R ladder is
+  # measured from that exact stop.
   parsed = _parse_manual("xau buy 4078-75 / sl 4070 / algo")
 
   assert parsed is not None
   assert parsed["sl"] == pytest.approx(4070.0)
+  risk = 4078.0 - 4070.0
   assert parsed["tps"] == [
-    pytest.approx(4078.0 + pips * PIP) for pips in DEFAULT_TP_PIPS
+    pytest.approx(4078.0 + r * risk) for r in _R_MULTIPLES
   ]
   assert parsed["setup_type"] == DEFAULT_SETUP_TYPE
 
@@ -53,8 +62,9 @@ def test_short_form_sell_defaults_sl_above_and_tp_below_entry():
   assert parsed["action"] == "SELL"
   # rr_entry for SELL is entry_low (4100).
   assert parsed["sl"] == pytest.approx(4100.0 + DEFAULT_SL_PIPS * PIP)
+  risk = DEFAULT_SL_PIPS * PIP
   assert parsed["tps"] == [
-    pytest.approx(4100.0 - pips * PIP) for pips in DEFAULT_TP_PIPS
+    pytest.approx(4100.0 - r * risk) for r in _R_MULTIPLES
   ]
 
 
@@ -66,13 +76,18 @@ def test_short_form_explicit_setup_tag_overrides_default():
   assert parsed["sl"] == pytest.approx(4072.0)
 
 
-def test_short_form_explicit_tp_only_still_defaults_sl_and_setup():
+def test_short_form_explicit_tp_is_ignored_in_algo_mode():
+  # algo mode always uses the bot-calculated R ladder now, even when the
+  # owner still types explicit tp values - same result as no tp at all.
   parsed = _parse_manual("xau buy 4078-75 / tp 88/98 / algo")
 
   assert parsed is not None
   assert parsed["sl"] == pytest.approx(4072.0)
   assert parsed["setup_type"] == DEFAULT_SETUP_TYPE
-  assert parsed["tps"] == [4088.0, 4098.0]
+  risk = 4078.0 - 4072.0
+  assert parsed["tps"] == [
+    pytest.approx(4078.0 + r * risk) for r in _R_MULTIPLES
+  ]
 
 
 def test_full_form_signal_with_both_sl_and_tp_defaults_key_level():
@@ -151,7 +166,10 @@ def test_configured_non_xau_zone_ladder_accepts_explicit_contract(monkeypatch):
   from app.signals import parsing
 
   effective = SimpleNamespace(
-    manual=SimpleNamespace(entry_mode=SimpleNamespace(value="zone_ladder")),
+    manual=SimpleNamespace(
+      entry_mode=SimpleNamespace(value="zone_ladder"),
+      target_r_multiples=(),
+    ),
   )
   config = SimpleNamespace(
     live_instruments=lambda: ("XAU", "XAG"),
@@ -173,7 +191,12 @@ def test_configured_non_xau_zone_ladder_accepts_explicit_contract(monkeypatch):
   assert parsed["entry"] == pytest.approx(31.80)
   assert parsed["entry_end"] == pytest.approx(32.10)
   assert parsed["sl"] == pytest.approx(31.50)
-  assert parsed["tps"] == [32.80, 33.50]
+  # algo mode ignores the owner-typed tp too - bot-calculated R ladder from
+  # entry (32.10) and this stop (31.50), risk 0.60.
+  risk = 32.10 - 31.50
+  assert parsed["tps"] == [
+    pytest.approx(32.10 + r * risk) for r in _R_MULTIPLES
+  ]
 
 
 def test_configured_non_xau_zone_ladder_requires_explicit_sl_and_tp(monkeypatch):

@@ -25,6 +25,9 @@ DEFAULT_SL_PIPS = 60
 DEFAULT_TP_PIPS = (30, 60, 100, 130, 200)
 DEFAULT_SETUP_TYPE = "key-level"
 DEFAULT_CONFLUENCE = 2
+# 2026-09 (owner-reported): manual /algo TP levels for an instrument with no
+# explicit InstrumentManualConfig.target_r_multiples override.
+MANUAL_ALGO_DEFAULT_TARGET_R_MULTIPLES = (0.5, 1.0, 2.0, 3.0)
 
 # Manual signal template (DM to bot), sl/tp each optional:
 #   gold sell entry zone (4100-4105)
@@ -303,7 +306,22 @@ def _parse_manual(text: str) -> Optional[dict]:
       rr_entry - DEFAULT_SL_PIPS * pip if action == 'BUY'
       else rr_entry + DEFAULT_SL_PIPS * pip
     )
-  if (tp_raw or '').strip():
+  risk = abs(rr_entry - sl)
+  if algo_count:
+    # 2026-09 (owner-reported): manual /algo TP levels are now bot-
+    # calculated R multiples, not owner-typed prices or the pip-default
+    # ladder below - hand-picked levels made some trades read as scalps.
+    # Overrides any explicit tp the owner still types; see
+    # InstrumentManualConfig.target_r_multiples.
+    r_multiples = (
+      runtime_config.for_instrument(symbol).manual.target_r_multiples
+      or MANUAL_ALGO_DEFAULT_TARGET_R_MULTIPLES
+    )
+    tps = [
+      rr_entry + r_mult * risk if action == 'BUY' else rr_entry - r_mult * risk
+      for r_mult in r_multiples
+    ]
+  elif (tp_raw or '').strip():
     tps = [
       (
         _expand_tp(float(v), rr_entry, action)
@@ -319,7 +337,6 @@ def _parse_manual(text: str) -> Optional[dict]:
     ]
   if not tps:
     return None
-  risk = abs(rr_entry - sl)
   return {
     'action': action,
     'symbol': symbol,

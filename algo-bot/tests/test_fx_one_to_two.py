@@ -284,8 +284,10 @@ def test_fx_targeting_is_explicit_configuration_not_symbol_detection():
     assert effective.targeting.entry_clips == 2
     assert effective.execution.technique.require_sweep_body is False
     assert fixed_reward_risk(symbol, cfg) == 2.0
-  assert fixed_reward_risk("XAU", cfg) == 2.0
-  assert fixed_reward_risk("XAUUSD", cfg) == 2.0
+  # XAU deliberately diverges from the FX policies' shared 1R/2R shape -
+  # see test_xau_technique_uses_the_owner_requested_r_ladder below.
+  assert fixed_reward_risk("XAU", cfg) == 3.0
+  assert fixed_reward_risk("XAUUSD", cfg) == 3.0
 
 
 def test_hfs_fixed_rr_prefers_two_r_then_falls_back_to_one_r():
@@ -362,7 +364,7 @@ def test_fx_reaction_stop_envelopes_diverge_while_gold_uses_structure_band():
   assert eurusd_measured["fixed_rr_targeting"] is True
   assert (gbpjpy_min, gbpjpy_max) == (15, 30)
   assert gbpjpy_measured["fixed_rr_targeting"] is True
-  assert (gold_min, gold_max) == (25, 100)
+  assert (gold_min, gold_max) == (50, 100)
   assert gold_measured["fixed_rr_targeting"] is True
 
 
@@ -642,13 +644,22 @@ def test_gbpjpy_sell_uses_uniform_two_r_contract():
   assert plan.management.trail_to_target_id is None
 
 
-def test_xau_technique_shares_uniform_fixed_rr_ladder():
+def test_xau_technique_uses_the_owner_requested_r_ladder():
+  """2026-09: XAU deliberately diverges from the FX policies' shared 1R/2R
+  shape onto the same 4-level R ladder as manual /algo (0.5R/1R/2R/3R) -
+  the uniform-across-fixed_rr contract is now per-policy, not global.
+  """
   cfg = _load_production_example().config
   xau = cfg.for_instrument("XAU")
-  assert xau.targeting.target_r_multiples == (1.0, 2.0)
-  assert xau.targeting.close_ratios == (0.5, 0.5)
-  assert xau.targeting.breakeven_after_r == 1.0
+  assert xau.targeting.target_r_multiples == (0.5, 1.0, 2.0, 3.0)
+  assert xau.targeting.close_ratios == (0.4, 0.2, 0.2, 0.2)
+  assert xau.targeting.breakeven_after_r == 0.5
   assert xau.targeting.trail_after_r is None
+  # FX keeps the old shape unchanged.
+  eurusd = cfg.for_instrument("EURUSD")
+  assert eurusd.targeting.target_r_multiples == (1.0, 2.0)
+  assert eurusd.targeting.close_ratios == (0.5, 0.5)
+  assert eurusd.targeting.breakeven_after_r == 1.0
 
 
 def test_xau_gets_a_smaller_opposing_barrier_buffer_than_fx():
